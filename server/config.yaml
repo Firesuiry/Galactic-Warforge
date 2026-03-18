@@ -1,0 +1,16 @@
+battlefield:
+  map_seed: "seed-001"
+  max_tick_rate: 10
+  victory_rule: "elimination"
+  map_width: 32
+  map_height: 32
+
+players:
+  - player_id: "p1"
+    key: "key_player_1"
+  - player_id: "p2"
+    key: "key_player_2"
+
+server:
+  port: 8080
+  rate_limit: 20

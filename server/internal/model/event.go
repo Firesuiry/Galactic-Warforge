@@ -1,0 +1,30 @@
+package model
+
+// EventType enumerates game event categories
+type EventType string
+
+const (
+	EvtCommandResult  EventType = "command_result"
+	EvtEntityCreated  EventType = "entity_created"
+	EvtEntityMoved    EventType = "entity_moved"
+	EvtDamageApplied  EventType = "damage_applied"
+	EvtEntityDestroyed EventType = "entity_destroyed"
+	EvtResourceChanged EventType = "resource_changed"
+	EvtTickCompleted  EventType = "tick_completed"
+)
+
+// GameEvent is a single game event pushed to SSE subscribers
+type GameEvent struct {
+	EventID         string         `json:"event_id"`
+	Tick            int64          `json:"tick"`
+	EventType       EventType      `json:"event_type"`
+	VisibilityScope string         `json:"visibility_scope"` // player_id or "all"
+	Payload         map[string]any `json:"payload"`
+}
+
+// TickSummary is a lightweight summary pushed at tick boundary
+type TickSummary struct {
+	Tick      int64 `json:"tick"`
+	EventCount int  `json:"event_count"`
+	DurationMs int64 `json:"duration_ms"`
+}
