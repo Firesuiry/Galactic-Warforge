@@ -1,43 +1,41 @@
-# SiliconWorld (游戏项目)
+# SiliconWorld
 
-**概览**
-Go 后端 + Node.js CLI 客户端。后端在 `server/`，CLI 在 `client-cli/`。
+**一句话定位**
+一款由 AI Agent 协同驱动的多人星际工业战争游戏，融合戴森球式自动化建设与红警式基地对抗，在三层宇宙地图中展开探索、扩张与混战。
 
-**环境要求**
-- Go 1.20+（用于编译服务端）
-- Node.js 18+、npm（用于 CLI）
+**核心概念**
+- 星际题材的工业建造 + 战争对抗
+- 三层宇宙地图：星系层 / 恒星系层 / 星球层
+- 服务端权威计算，客户端以指挥、看板与 Agent 协作为主
+- AI Agent 是一等公民：可授权自治、可审计、可回收
 
-**启动后端**
-- 开发端口（与 CLI 默认一致：`http://localhost:18080`）
-```bash
-cd server
-go build -o server ./cmd/server
-./server -config config-dev.yaml -map-config map.yaml
-```
-- 生产端口（默认 `8080`）
-```bash
-cd server
-go build -o server ./cmd/server
-./server -config config.yaml -map-config map.yaml
-```
+**核心玩法循环**
+1. 立足生存：采集、发电、冶炼、制造，建立基础基地与防御
+2. 自动化扩张：完善工业链与物流网络，跨星体扩展
+3. 科技突破：主科技树推进 + 外源科技分支（虫族 / 星灵）
+4. 军事博弈：战争迷雾下的侦察、封锁、突袭与决战
+5. AI 协同：从“下达命令”转为“设定目标、授予权限、监督结果”
 
-**启动 CLI**
-```bash
-cd client-cli
-npm install
-npm run dev
-```
+**世界结构**
+- 星系层：远征与全局战略、长距离航线与战略控制点
+- 恒星系层：行星开发、轨道封锁、运输与局部作战
+- 星球层：基地建设、资源采集、战术战斗与前线推进
 
-**可选环境变量**
-- `SW_SERVER`：覆盖服务端地址
-```bash
-SW_SERVER=http://localhost:8080 npm run dev
-```
+**AI Agent 设计**
+- 经济型：补建与产线平衡、资源调度、科研物资保障
+- 军事型：侦察、防御补位、威胁评估与部队调度
+- 探索型：规划远征与标注资源富集点、发现遗迹
+- 总指挥型：综合经济、科技、军事的全局决策
 
-**CLI 功能与命令**
-- 查询类：`health` `metrics` `summary` `galaxy` `system [id]` `planet [id]` `fogmap [id]` `fog [id]`
-- 动作类：`scan_galaxy [id]` `scan_system <id>` `scan_planet <id>` `raw <json>`
-- 工具类：`switch [player_id] [key]` `events [count]` `status` `help [command]` `clear` `quit` / `exit`
+**技术原则**
+- 逻辑与渲染彻底解耦
+- 所有状态由服务端权威维护
+- 所有操作抽象为统一命令
+- 迷雾与情报成为核心博弈
 
-**备注**
-- CLI 会持续打印 SSE 事件（tick 等），输出较多属正常现象。
+**MVP 方向**
+- 先做单星球闭环：采集、发电、冶炼、建造、战斗、迷雾
+- 先做两类 Agent：基地运营 + 侦察
+- 客户端以数据面板、命令终端与 Agent 控制为主
+
+如果你要更细的世界观、系统设计与 API 规划，请查看 `docs/设定.md`。
