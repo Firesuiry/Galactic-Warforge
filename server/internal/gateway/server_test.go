@@ -10,6 +10,8 @@ import (
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
 	"siliconworld/internal/gateway"
+	"siliconworld/internal/mapconfig"
+	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
 )
@@ -18,7 +20,7 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 	t.Helper()
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
-			MapSeed: "test", MaxTickRate: 10, MapWidth: 16, MapHeight: 16,
+			MapSeed: "test", MaxTickRate: 10,
 		},
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1"},
@@ -26,9 +28,15 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 		},
 		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
 	}
+	mapCfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
 	bus := gamecore.NewEventBus()
-	core := gamecore.New(cfg, q, bus)
+	core := gamecore.New(cfg, maps, q, bus)
 	srv := gateway.New(cfg, core, bus, q)
 	return srv, core
 }
@@ -100,7 +108,7 @@ func TestPostCommandsMissingRequestID(t *testing.T) {
 		IssuerType: "player",
 		IssuerID:   "p1",
 		Commands: []model.Command{
-			{Type: model.CmdBuild},
+			{Type: model.CmdScanGalaxy, Target: model.CommandTarget{GalaxyID: "galaxy-1"}},
 		},
 	}
 	body, _ := json.Marshal(payload)
@@ -124,13 +132,11 @@ func TestPostCommandsValid(t *testing.T) {
 		IssuerID:   "p1",
 		Commands: []model.Command{
 			{
-				Type: model.CmdBuild,
+				Type: model.CmdScanGalaxy,
 				Target: model.CommandTarget{
-					Layer:    "planet",
-					PlanetID: "planet-1",
-					Position: &model.Position{X: 5, Y: 5},
+					Layer:    "galaxy",
+					GalaxyID: "galaxy-1",
 				},
-				Payload: map[string]any{"building_type": "mine"},
 			},
 		},
 	}
@@ -164,7 +170,7 @@ func TestPostCommandsDuplicate(t *testing.T) {
 		IssuerType: "player",
 		IssuerID:   "p1",
 		Commands: []model.Command{
-			{Type: model.CmdBuild, Target: model.CommandTarget{Layer: "planet"}},
+			{Type: model.CmdScanGalaxy, Target: model.CommandTarget{GalaxyID: "galaxy-1"}},
 		},
 	}
 	body, _ := json.Marshal(payload)
@@ -198,7 +204,7 @@ func TestPostCommandsDuplicate(t *testing.T) {
 
 func TestGalaxyEndpoint(t *testing.T) {
 	srv, _ := newTestServer(t)
-	req := httptest.NewRequest("GET", "/galaxy", nil)
+	req := httptest.NewRequest("GET", "/world/galaxy", nil)
 	req.Header.Set("Authorization", "Bearer key1")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -217,7 +223,7 @@ func TestGalaxyEndpoint(t *testing.T) {
 
 func TestFogMapEndpoint(t *testing.T) {
 	srv, _ := newTestServer(t)
-	req := httptest.NewRequest("GET", "/fogmap", nil)
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/fog", nil)
 	req.Header.Set("Authorization", "Bearer key1")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -229,7 +235,7 @@ func TestFogMapEndpoint(t *testing.T) {
 
 func TestPlanetEndpoint(t *testing.T) {
 	srv, _ := newTestServer(t)
-	req := httptest.NewRequest("GET", "/planets/planet-1", nil)
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1", nil)
 	req.Header.Set("Authorization", "Bearer key1")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

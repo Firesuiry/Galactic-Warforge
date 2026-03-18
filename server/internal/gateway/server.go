@@ -71,7 +71,7 @@ func New(
 	q *queue.CommandQueue,
 ) *Server {
 	vis := visibility.New()
-	ql := query.New(vis)
+	ql := query.New(vis, core.Maps(), core.Discovery())
 
 	return &Server{
 		cfg:    cfg,
@@ -97,10 +97,10 @@ func (s *Server) Handler() http.Handler {
 
 	// World queries
 	mux.HandleFunc("GET /state/summary", s.auth(s.handleStateSummary))
-	mux.HandleFunc("GET /galaxy", s.auth(s.handleGalaxy))
-	mux.HandleFunc("GET /systems/{system_id}", s.auth(s.handleSystem))
-	mux.HandleFunc("GET /planets/{planet_id}", s.auth(s.handlePlanet))
-	mux.HandleFunc("GET /fogmap", s.auth(s.handleFogMap))
+	mux.HandleFunc("GET /world/galaxy", s.auth(s.handleGalaxy))
+	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
+	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
+	mux.HandleFunc("GET /world/planets/{planet_id}/fog", s.auth(s.handleFogMap))
 
 	// Commands
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
@@ -150,27 +150,44 @@ func (s *Server) handleStateSummary(w http.ResponseWriter, r *http.Request, play
 	writeJSON(w, http.StatusOK, sum)
 }
 
-// handleGalaxy returns GET /galaxy
+// handleGalaxy returns GET /world/galaxy
 func (s *Server) handleGalaxy(w http.ResponseWriter, r *http.Request, playerID string) {
-	writeJSON(w, http.StatusOK, s.ql.Galaxy())
+	writeJSON(w, http.StatusOK, s.ql.Galaxy(playerID))
 }
 
-// handleSystem returns GET /systems/{system_id}
+// handleSystem returns GET /world/systems/{system_id}
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID string) {
 	systemID := r.PathValue("system_id")
-	writeJSON(w, http.StatusOK, s.ql.System(systemID))
+	view, ok := s.ql.System(playerID, systemID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "system not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
-// handlePlanet returns GET /planets/{planet_id}
+// handlePlanet returns GET /world/planets/{planet_id}
 func (s *Server) handlePlanet(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
 	ws := s.core.World()
-	writeJSON(w, http.StatusOK, s.ql.Planet(ws, playerID))
+	view, ok := s.ql.Planet(ws, playerID, planetID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
-// handleFogMap returns GET /fogmap
+// handleFogMap returns GET /world/planets/{planet_id}/fog
 func (s *Server) handleFogMap(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
 	ws := s.core.World()
-	writeJSON(w, http.StatusOK, s.ql.FogMap(ws, playerID))
+	view, ok := s.ql.FogMap(ws, playerID, planetID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 // handleCommands handles POST /commands
@@ -304,13 +321,29 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 // validateCommandStructure does fast structural validation without world access
 func validateCommandStructure(cmd model.Command) error {
 	switch cmd.Type {
-	case model.CmdBuild, model.CmdMove, model.CmdAttack,
-		model.CmdProduce, model.CmdUpgrade, model.CmdDemolish:
+	case model.CmdScanGalaxy:
+		if cmd.Target.GalaxyID == "" {
+			return fmt.Errorf("scan_galaxy requires target.galaxy_id")
+		}
+		if cmd.Target.Layer != "" && cmd.Target.Layer != "galaxy" {
+			return fmt.Errorf("scan_galaxy target.layer must be galaxy")
+		}
+	case model.CmdScanSystem:
+		if cmd.Target.SystemID == "" {
+			return fmt.Errorf("scan_system requires target.system_id")
+		}
+		if cmd.Target.Layer != "" && cmd.Target.Layer != "system" {
+			return fmt.Errorf("scan_system target.layer must be system")
+		}
+	case model.CmdScanPlanet:
+		if cmd.Target.PlanetID == "" {
+			return fmt.Errorf("scan_planet requires target.planet_id")
+		}
+		if cmd.Target.Layer != "" && cmd.Target.Layer != "planet" {
+			return fmt.Errorf("scan_planet target.layer must be planet")
+		}
 	default:
 		return fmt.Errorf("unknown command type: %s", cmd.Type)
-	}
-	if cmd.Target.Layer == "" {
-		cmd.Target.Layer = "planet"
 	}
 	return nil
 }

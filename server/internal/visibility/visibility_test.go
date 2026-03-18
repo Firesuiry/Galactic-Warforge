@@ -8,7 +8,7 @@ import (
 )
 
 func buildTestWorld() *model.WorldState {
-	ws := model.NewWorldState(16, 16)
+	ws := model.NewWorldState("planet-1", 16, 16)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 

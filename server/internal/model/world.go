@@ -28,6 +28,7 @@ type WorldState struct {
 	mu sync.RWMutex
 
 	Tick      int64                   `json:"tick"`
+	PlanetID  string                  `json:"planet_id"`
 	MapWidth  int                     `json:"map_width"`
 	MapHeight int                     `json:"map_height"`
 	Players   map[string]*PlayerState `json:"players"`
@@ -43,8 +44,9 @@ type WorldState struct {
 }
 
 // NewWorldState creates an empty world state
-func NewWorldState(mapWidth, mapHeight int) *WorldState {
+func NewWorldState(planetID string, mapWidth, mapHeight int) *WorldState {
 	ws := &WorldState{
+		PlanetID:    planetID,
 		MapWidth:     mapWidth,
 		MapHeight:    mapHeight,
 		Players:      make(map[string]*PlayerState),

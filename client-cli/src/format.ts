@@ -42,7 +42,7 @@ export function fmtMetrics(m: MetricsSnapshot): string {
 
 export function fmtSummary(s: StateSummary): string {
   const lines: string[] = [
-    `Tick: ${chalk.cyan(s.tick)}  Map: ${s.map_width}x${s.map_height}`,
+    `Tick: ${chalk.cyan(s.tick)}  Active Planet: ${s.active_planet_id}  Map: ${s.map_width}x${s.map_height}`,
   ];
   if (s.winner) {
     lines.push(chalk.green(`Winner: ${s.winner}`));
@@ -60,30 +60,42 @@ export function fmtSummary(s: StateSummary): string {
 }
 
 export function fmtGalaxy(g: GalaxyView): string {
-  const lines = [`Galaxy: ${chalk.bold(g.name)}`, ''];
-  const headers = ['SystemID', 'Name'];
-  const rows = g.systems.map(s => [s.system_id, s.name]);
+  const name = g.name ?? '(unknown)';
+  const lines = [`Galaxy: ${chalk.bold(name)} (${g.galaxy_id})`, ''];
+  const headers = ['SystemID', 'Name', 'Discovered'];
+  const rows = (g.systems ?? []).map(s => [
+    s.system_id,
+    s.name ?? '(unknown)',
+    s.discovered ? chalk.green('yes') : chalk.dim('no'),
+  ]);
   lines.push(table(headers, rows));
   return lines.join('\n');
 }
 
 export function fmtSystem(s: SystemView): string {
   const lines = [
-    `System: ${chalk.bold(s.name)} (${s.system_id})`,
+    `System: ${chalk.bold(s.name ?? '(unknown)')} (${s.system_id})`,
     '',
   ];
-  const headers = ['PlanetID', 'Name'];
-  const rows = s.planets.map(p => [p.planet_id, p.name]);
+  const headers = ['PlanetID', 'Name', 'Discovered'];
+  const rows = (s.planets ?? []).map(p => [
+    p.planet_id,
+    p.name ?? '(unknown)',
+    p.discovered ? chalk.green('yes') : chalk.dim('no'),
+  ]);
   lines.push(table(headers, rows));
   return lines.join('\n');
 }
 
 export function fmtPlanet(p: PlanetView): string {
+  if (!p.discovered) {
+    return `Planet: ${chalk.bold(p.planet_id)}  ${chalk.dim('undiscovered')}`;
+  }
   const lines = [
     `Planet: ${chalk.bold(p.planet_id)}  Tick: ${chalk.cyan(p.tick)}  Map: ${p.map_width}x${p.map_height}`,
   ];
 
-  const buildings = Object.values(p.buildings);
+  const buildings = Object.values(p.buildings ?? {});
   if (buildings.length > 0) {
     lines.push('', chalk.bold('Buildings:'));
     const bHeaders = ['ID', 'Type', 'Owner', 'Pos', 'HP', 'Lvl', 'Active'];
@@ -101,7 +113,7 @@ export function fmtPlanet(p: PlanetView): string {
     lines.push('', 'No buildings.');
   }
 
-  const units = Object.values(p.units);
+  const units = Object.values(p.units ?? {});
   if (units.length > 0) {
     lines.push('', chalk.bold('Units:'));
     const uHeaders = ['ID', 'Type', 'Owner', 'Pos', 'HP', 'Moving'];
@@ -128,7 +140,8 @@ export function fmtCommandResponse(r: CommandResponse): string {
   ];
   if (r.results) {
     for (const res of r.results) {
-      const statusColor = res.status === 'ok' ? chalk.green : chalk.red;
+      const okStatuses = new Set(['executed', 'accepted']);
+      const statusColor = okStatuses.has(res.status) ? chalk.green : chalk.red;
       lines.push(`  [${res.command_index}] ${statusColor(res.status)} ${res.code}: ${res.message}`);
     }
   }
@@ -136,6 +149,9 @@ export function fmtCommandResponse(r: CommandResponse): string {
 }
 
 export function fmtFog(f: FogMapView): string {
+  if (!f.discovered) {
+    return `FogMap: ${f.planet_id}  ${chalk.dim('undiscovered')}`;
+  }
   const lines = [
     `FogMap: ${f.planet_id}  ${f.map_width}x${f.map_height}`,
     '',

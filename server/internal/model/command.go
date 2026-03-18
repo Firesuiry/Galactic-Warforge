@@ -10,11 +10,16 @@ const (
 	CmdProduce  CommandType = "produce"
 	CmdUpgrade  CommandType = "upgrade"
 	CmdDemolish CommandType = "demolish"
+	CmdScanGalaxy CommandType = "scan_galaxy"
+	CmdScanSystem CommandType = "scan_system"
+	CmdScanPlanet CommandType = "scan_planet"
 )
 
 // CommandTarget specifies what the command targets
 type CommandTarget struct {
 	Layer    string    `json:"layer"`
+	GalaxyID string    `json:"galaxy_id,omitempty"`
+	SystemID string    `json:"system_id,omitempty"`
 	PlanetID string    `json:"planet_id,omitempty"`
 	EntityID string    `json:"entity_id,omitempty"`
 	Position *Position `json:"position,omitempty"`

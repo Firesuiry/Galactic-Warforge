@@ -51,10 +51,10 @@ MVP 仅验证四件事：
 ### API
 
 - `GET /state/summary`
-- `GET /galaxy`
-- `GET /systems/{system_id}`
-- `GET /planets/{planet_id}`
-- `GET /fogmap`
+- `GET /world/galaxy`
+- `GET /world/systems/{system_id}`
+- `GET /world/planets/{planet_id}`
+- `GET /world/planets/{planet_id}/fog`
 - `POST /commands`
 - `GET /events/stream`
 
@@ -105,12 +105,12 @@ MVP 仅验证四件事：
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "build|move|attack|produce|upgrade|demolish",
+      "type": "scan_galaxy|scan_system|scan_planet",
       "target": {
-        "layer": "planet",
-        "planet_id": "planet-1",
-        "entity_id": "optional-target-id",
-        "position": {"x": 12, "y": 4, "z": 0}
+        "layer": "galaxy|system|planet",
+        "galaxy_id": "galaxy-1",
+        "system_id": "sys-1",
+        "planet_id": "planet-1-1"
       },
       "payload": {}
     }

@@ -1,0 +1,8 @@
+galaxy:
+  system_count: 2
+system:
+  planets_per_system: 3
+planet:
+  width: 32
+  height: 32
+  resource_density: 12

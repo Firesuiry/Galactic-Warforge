@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"siliconworld/internal/config"
+	"siliconworld/internal/mapmodel"
+	"siliconworld/internal/mapstate"
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
 )
@@ -122,6 +124,8 @@ func (cl *CommandLog) All() []commandLogEntry {
 // GameCore orchestrates the tick loop
 type GameCore struct {
 	cfg      *config.Config
+	maps     *mapmodel.Universe
+	discovery *mapstate.Discovery
 	world    *model.WorldState
 	queue    *queue.CommandQueue
 	bus      *EventBus
@@ -131,25 +135,29 @@ type GameCore struct {
 	stopCh   chan struct{}
 	winner   string
 	winnerMu sync.RWMutex
+	activePlanetID string
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
-func New(cfg *config.Config, q *queue.CommandQueue, bus *EventBus) *GameCore {
-	seed := int64(hashString(cfg.Battlefield.MapSeed))
-	rng := rand.New(rand.NewSource(seed))
+func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus *EventBus) *GameCore {
+	primary := maps.PrimaryPlanet()
+	if primary == nil {
+		log.Fatalf("map model has no planets")
+	}
+	rng := rand.New(rand.NewSource(primary.Seed))
 
-	ws := model.NewWorldState(cfg.Battlefield.MapWidth, cfg.Battlefield.MapHeight)
+	ws := model.NewWorldState(primary.ID, primary.Width, primary.Height)
 
 	// Place resource deposits pseudo-randomly
-	numDeposits := (cfg.Battlefield.MapWidth * cfg.Battlefield.MapHeight) / 8
+	numDeposits := (primary.Width * primary.Height * primary.ResourceDensity) / 100
 	for i := 0; i < numDeposits; i++ {
-		x := rng.Intn(cfg.Battlefield.MapWidth)
-		y := rng.Intn(cfg.Battlefield.MapHeight)
+		x := rng.Intn(primary.Width)
+		y := rng.Intn(primary.Height)
 		ws.Grid[y][x].ResourceDeposit = 50 + rng.Intn(150)
 	}
 
 	// Initialise player state and base buildings
-	basePositions := computeStartPositions(cfg, cfg.Battlefield.MapWidth, cfg.Battlefield.MapHeight)
+	basePositions := computeStartPositions(cfg, primary.Width, primary.Height)
 	for i, p := range cfg.Players {
 		ws.Players[p.PlayerID] = &model.PlayerState{
 			PlayerID:  p.PlayerID,
@@ -181,6 +189,8 @@ func New(cfg *config.Config, q *queue.CommandQueue, bus *EventBus) *GameCore {
 
 	return &GameCore{
 		cfg:    cfg,
+		maps:   maps,
+		discovery: mapstate.NewDiscovery(cfg.Players, maps),
 		world:  ws,
 		queue:  q,
 		bus:    bus,
@@ -188,12 +198,28 @@ func New(cfg *config.Config, q *queue.CommandQueue, bus *EventBus) *GameCore {
 		cmdLog: &CommandLog{},
 		rng:    rng,
 		stopCh: make(chan struct{}),
+		activePlanetID: primary.ID,
 	}
 }
 
 // World returns the world state (caller must use RLock/RUnlock)
 func (gc *GameCore) World() *model.WorldState {
 	return gc.world
+}
+
+// Maps returns the immutable map model.
+func (gc *GameCore) Maps() *mapmodel.Universe {
+	return gc.maps
+}
+
+// Discovery returns the discovery state.
+func (gc *GameCore) Discovery() *mapstate.Discovery {
+	return gc.discovery
+}
+
+// ActivePlanetID returns the currently simulated planet ID.
+func (gc *GameCore) ActivePlanetID() string {
+	return gc.activePlanetID
 }
 
 // Metrics returns the metrics object
@@ -340,6 +366,12 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 		res.CommandIndex = i
 
 		switch cmd.Type {
+		case model.CmdScanGalaxy:
+			res, evts = gc.execScanGalaxy(qr.PlayerID, cmd)
+		case model.CmdScanSystem:
+			res, evts = gc.execScanSystem(qr.PlayerID, cmd)
+		case model.CmdScanPlanet:
+			res, evts = gc.execScanPlanet(qr.PlayerID, cmd)
 		case model.CmdBuild:
 			res, evts = gc.execBuild(gc.world, qr.PlayerID, cmd)
 		case model.CmdMove:

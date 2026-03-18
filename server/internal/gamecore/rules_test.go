@@ -5,6 +5,8 @@ import (
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
+	"siliconworld/internal/mapconfig"
+	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
 )
@@ -16,8 +18,6 @@ func newTestCore(t *testing.T) *gamecore.GameCore {
 		Battlefield: config.BattlefieldConfig{
 			MapSeed:     "test-seed",
 			MaxTickRate: 10,
-			MapWidth:    16,
-			MapHeight:   16,
 		},
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1"},
@@ -25,9 +25,15 @@ func newTestCore(t *testing.T) *gamecore.GameCore {
 		},
 		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
 	}
+	mapCfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
 	bus := gamecore.NewEventBus()
-	return gamecore.New(cfg, q, bus)
+	return gamecore.New(cfg, maps, q, bus)
 }
 
 func TestInitialPlayerResources(t *testing.T) {
@@ -110,7 +116,7 @@ func TestManhattanDist(t *testing.T) {
 }
 
 func TestWorldInBounds(t *testing.T) {
-	ws := model.NewWorldState(16, 16)
+	ws := model.NewWorldState("planet-1", 16, 16)
 	if !ws.InBounds(0, 0) {
 		t.Error("(0,0) should be in bounds")
 	}

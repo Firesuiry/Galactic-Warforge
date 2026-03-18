@@ -43,10 +43,12 @@ export interface Unit {
   attack_target?: string;
 }
 
-export type CommandType = 'build' | 'move' | 'attack' | 'produce' | 'upgrade' | 'demolish';
+export type CommandType = 'scan_galaxy' | 'scan_system' | 'scan_planet';
 
 export interface CommandTarget {
   layer: string;
+  galaxy_id?: string;
+  system_id?: string;
   planet_id?: string;
   entity_id?: string;
   position?: Position;
@@ -94,24 +96,28 @@ export interface StateSummary {
   tick: number;
   players: Record<string, PlayerState>;
   winner?: string;
+  active_planet_id: string;
   map_width: number;
   map_height: number;
 }
 
 export interface PlanetView {
   planet_id: string;
+  name?: string;
+  discovered: boolean;
   map_width: number;
   map_height: number;
   tick: number;
-  buildings: Record<string, Building>;
-  units: Record<string, Unit>;
+  buildings?: Record<string, Building>;
+  units?: Record<string, Unit>;
 }
 
 export interface FogMapView {
   planet_id: string;
+  discovered: boolean;
   map_width: number;
   map_height: number;
-  visible: boolean[][];
+  visible?: boolean[][];
 }
 
 export interface GameEvent {
@@ -124,23 +130,28 @@ export interface GameEvent {
 
 export interface SystemRef {
   system_id: string;
-  name: string;
+  name?: string;
+  discovered: boolean;
 }
 
 export interface GalaxyView {
-  name: string;
-  systems: SystemRef[];
+  galaxy_id: string;
+  name?: string;
+  discovered: boolean;
+  systems?: SystemRef[];
 }
 
 export interface PlanetRef {
   planet_id: string;
-  name: string;
+  name?: string;
+  discovered: boolean;
 }
 
 export interface SystemView {
   system_id: string;
-  name: string;
-  planets: PlanetRef[];
+  name?: string;
+  discovered: boolean;
+  planets?: PlanetRef[];
 }
 
 export interface HealthResponse {

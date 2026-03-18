@@ -1,5 +1,5 @@
 import { cmdHealth, cmdMetrics, cmdSummary, cmdGalaxy, cmdSystem, cmdPlanet, cmdFogmap } from './query.js';
-import { cmdBuild, cmdMove, cmdAttack, cmdProduce, cmdUpgrade, cmdDemolish, cmdRaw } from './action.js';
+import { cmdScanGalaxy, cmdScanSystem, cmdScanPlanet, cmdRaw } from './action.js';
 import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
 import type { ReplContext } from '../types.js';
 
@@ -19,12 +19,9 @@ export const COMMANDS: Record<string, CommandEntry> = {
   planet:   { handler: cmdPlanet },
   fogmap:   { handler: cmdFogmap },
   fog:      { handler: cmdFog },
-  build:    { handler: cmdBuild, completions: ['mine', 'solar_plant', 'factory', 'turret'] },
-  move:     { handler: cmdMove },
-  attack:   { handler: cmdAttack },
-  produce:  { handler: cmdProduce, completions: ['worker', 'soldier'] },
-  upgrade:  { handler: cmdUpgrade },
-  demolish: { handler: cmdDemolish },
+  scan_galaxy: { handler: cmdScanGalaxy },
+  scan_system: { handler: cmdScanSystem },
+  scan_planet: { handler: cmdScanPlanet },
   raw:      { handler: cmdRaw },
   switch:   { handler: cmdSwitch },
   events:   { handler: cmdEvents },

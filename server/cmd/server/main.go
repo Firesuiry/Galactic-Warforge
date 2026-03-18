@@ -12,12 +12,15 @@ import (
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
+	"siliconworld/internal/mapconfig"
+	"siliconworld/internal/mapgen"
 	"siliconworld/internal/gateway"
 	"siliconworld/internal/queue"
 )
 
 func main() {
 	cfgPath := flag.String("config", "config.yaml", "path to config file")
+	mapCfgPath := flag.String("map-config", "map.yaml", "path to map config file")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -25,16 +28,27 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
+	mapCfg, err := mapconfig.Load(*mapCfgPath)
+	if err != nil {
+		log.Fatalf("load map config: %v", err)
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
+
 	log.Printf("SiliconWorld server starting")
 	log.Printf("  players: %d", len(cfg.Players))
 	log.Printf("  tick rate: %d/s", cfg.Battlefield.MaxTickRate)
-	log.Printf("  map: %dx%d", cfg.Battlefield.MapWidth, cfg.Battlefield.MapHeight)
+	log.Printf("  map: %d systems, %d planets/system, planet %dx%d",
+		mapCfg.Galaxy.SystemCount,
+		mapCfg.System.PlanetsPerSystem,
+		mapCfg.Planet.Width,
+		mapCfg.Planet.Height,
+	)
 	log.Printf("  port: %d", cfg.Server.Port)
 
 	// Wire up dependencies
 	q := queue.New()
 	bus := gamecore.NewEventBus()
-	core := gamecore.New(cfg, q, bus)
+	core := gamecore.New(cfg, maps, q, bus)
 	srv := gateway.New(cfg, core, bus, q)
 
 	// Start tick loop

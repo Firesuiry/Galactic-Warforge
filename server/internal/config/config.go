@@ -18,8 +18,6 @@ type BattlefieldConfig struct {
 	MapSeed     string `yaml:"map_seed"`
 	MaxTickRate int    `yaml:"max_tick_rate"`
 	VictoryRule string `yaml:"victory_rule"`
-	MapWidth    int    `yaml:"map_width"`
-	MapHeight   int    `yaml:"map_height"`
 }
 
 // ServerConfig holds HTTP server settings
@@ -59,12 +57,6 @@ func Load(path string) (*Config, error) {
 	// Set defaults
 	if cfg.Battlefield.MaxTickRate == 0 {
 		cfg.Battlefield.MaxTickRate = 10
-	}
-	if cfg.Battlefield.MapWidth == 0 {
-		cfg.Battlefield.MapWidth = 32
-	}
-	if cfg.Battlefield.MapHeight == 0 {
-		cfg.Battlefield.MapHeight = 32
 	}
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
