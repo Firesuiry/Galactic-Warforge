@@ -109,6 +109,7 @@ type BuildingFunctionModules struct {
 	Energy        *EnergyModule        `json:"energy,omitempty" yaml:"energy,omitempty"`
 	Research      *ResearchModule      `json:"research,omitempty" yaml:"research,omitempty"`
 	Combat        *CombatModule        `json:"combat,omitempty" yaml:"combat,omitempty"`
+	Launch        *LaunchModule        `json:"launch,omitempty" yaml:"launch,omitempty"`
 }
 
 // ProductionModule handles production throughput.
@@ -185,6 +186,19 @@ type ResearchModule struct {
 type CombatModule struct {
 	Attack int `json:"attack" yaml:"attack"`
 	Range  int `json:"range" yaml:"range"`
+}
+
+// LaunchModule handles launch-related parameters for EM Rail Ejector and Vertical Launching Silo.
+type LaunchModule struct {
+	EnergyPerLaunch   int     `json:"energy_per_launch" yaml:"energy_per_launch"`     // energy consumed per launch
+	SuccessRate      float64 `json:"success_rate" yaml:"success_rate"`                // launch success probability (0-1)
+	OrbitRadiusMin   float64 `json:"orbit_radius_min" yaml:"orbit_radius_min"`        // minimum orbit radius in AU
+	OrbitRadiusMax   float64 `json:"orbit_radius_max" yaml:"orbit_radius_max"`        // maximum orbit radius in AU
+	InclinationMax   float64 `json:"inclination_max" yaml:"inclination_max"`          // maximum inclination in degrees
+	LaunchInterval   int     `json:"launch_interval" yaml:"launch_interval"`          // ticks between launches
+	LaunchQueueSize  int     `json:"launch_queue_size" yaml:"launch_queue_size"`      // max launch queue size
+	RocketItemID     string  `json:"rocket_item_id,omitempty" yaml:"rocket_item_id,omitempty"` // rocket type to launch (for silo)
+	ProductionSpeed  int     `json:"production_speed" yaml:"production_speed"`        // rocket production speed (for silo)
 }
 
 // BuildingRuntimeDefinition defines runtime parameters for a building type.
@@ -457,6 +471,30 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			return fmt.Errorf("building runtime %s combat module invalid", def.ID)
 		}
 	}
+	if def.Functions.Launch != nil {
+		lm := def.Functions.Launch
+		if lm.EnergyPerLaunch < 0 {
+			return fmt.Errorf("building runtime %s launch module energy_per_launch invalid", def.ID)
+		}
+		if lm.SuccessRate < 0 || lm.SuccessRate > 1 {
+			return fmt.Errorf("building runtime %s launch module success_rate must be between 0 and 1", def.ID)
+		}
+		if lm.OrbitRadiusMin < 0 || lm.OrbitRadiusMax < 0 || lm.OrbitRadiusMin > lm.OrbitRadiusMax {
+			return fmt.Errorf("building runtime %s launch module orbit radius invalid", def.ID)
+		}
+		if lm.InclinationMax < 0 || lm.InclinationMax > 180 {
+			return fmt.Errorf("building runtime %s launch module inclination_max must be between 0 and 180", def.ID)
+		}
+		if lm.LaunchInterval < 0 {
+			return fmt.Errorf("building runtime %s launch module launch_interval invalid", def.ID)
+		}
+		if lm.LaunchQueueSize < 0 {
+			return fmt.Errorf("building runtime %s launch module launch_queue_size invalid", def.ID)
+		}
+		if lm.ProductionSpeed < 0 {
+			return fmt.Errorf("building runtime %s launch module production_speed invalid", def.ID)
+		}
+	}
 	return nil
 }
 
@@ -533,6 +571,10 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 	if m.Combat != nil {
 		val := *m.Combat
 		out.Combat = &val
+	}
+	if m.Launch != nil {
+		val := *m.Launch
+		out.Launch = &val
 	}
 	return out
 }
@@ -959,6 +1001,49 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Combat: &CombatModule{Attack: 15, Range: 5},
 			Energy: &EnergyModule{ConsumePerTick: 3},
+		},
+	},
+	{
+		ID: BuildingTypeEMRailEjector,
+		Params: BuildingRuntimeParams{
+			EnergyConsume: 30,
+		},
+		Functions: BuildingFunctionModules{
+			Launch: &LaunchModule{
+				EnergyPerLaunch: 300,
+				SuccessRate:     0.95,
+				OrbitRadiusMin:  0.5,
+				OrbitRadiusMax:  5.0,
+				InclinationMax:  90.0,
+				LaunchInterval:  60,
+				LaunchQueueSize: 10,
+			},
+			Energy: &EnergyModule{ConsumePerTick: 30},
+		},
+	},
+	{
+		ID: BuildingTypeVerticalLaunchingSilo,
+		Params: BuildingRuntimeParams{
+			Capacity:      1,
+			EnergyConsume: 50,
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1, AllowedItems: []string{ItemSmallCarrierRocket}},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
+			Launch: &LaunchModule{
+				EnergyPerLaunch:  500,
+				SuccessRate:      0.9,
+				OrbitRadiusMin:   0.5,
+				OrbitRadiusMax:   5.0,
+				InclinationMax:   90.0,
+				LaunchInterval:   120,
+				LaunchQueueSize:  20,
+				RocketItemID:     ItemSmallCarrierRocket,
+				ProductionSpeed:  1,
+			},
+			Energy: &EnergyModule{ConsumePerTick: 50},
 		},
 	},
 }

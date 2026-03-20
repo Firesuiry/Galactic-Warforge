@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"math/rand"
 
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
@@ -1306,6 +1307,48 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		if incl, ok := inclRaw.(float64); ok {
 			inclination = incl
 		}
+	}
+
+	// Validate orbit parameters against building's launch constraints
+	if building.Runtime.Functions.Launch != nil {
+		lm := building.Runtime.Functions.Launch
+		if orbitRadius < lm.OrbitRadiusMin {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("orbit_radius %.2f is below minimum %.2f", orbitRadius, lm.OrbitRadiusMin)
+			return res, nil
+		}
+		if orbitRadius > lm.OrbitRadiusMax {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("orbit_radius %.2f exceeds maximum %.2f", orbitRadius, lm.OrbitRadiusMax)
+			return res, nil
+		}
+		if inclination < -lm.InclinationMax {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("inclination %.2f is below minimum %.2f", inclination, -lm.InclinationMax)
+			return res, nil
+		}
+		if inclination > lm.InclinationMax {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("inclination %.2f exceeds maximum %.2f", inclination, lm.InclinationMax)
+			return res, nil
+		}
+	}
+
+	// Check launch success rate
+	launchSuccessRate := 1.0
+	if building.Runtime.Functions.Launch != nil {
+		launchSuccessRate = building.Runtime.Functions.Launch.SuccessRate
+	}
+	if rand.Float64() > launchSuccessRate {
+		// Launch failed, consume sails but no orbit entry
+		player.Inventory[model.ItemSolarSail] -= sailCount
+		if player.Inventory[model.ItemSolarSail] <= 0 {
+			delete(player.Inventory, model.ItemSolarSail)
+		}
+		res.Status = model.StatusFailed
+		res.Code = model.CodeValidationFailed
+		res.Message = "launch failed due to equipment malfunction"
+		return res, nil
 	}
 
 	// Consume solar sails from inventory
