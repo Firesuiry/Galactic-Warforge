@@ -504,6 +504,10 @@ func (gc *GameCore) processTick() {
 	turretEvts := settleTurrets(gc.world)
 	allEvents = append(allEvents, turretEvts...)
 
+	// 18.5 Enemy forces (spawn, spread, attack)
+	enemyEvts := gc.settleEnemyForces()
+	allEvents = append(allEvents, enemyEvts...)
+
 	// 19. Check victory
 	winner := checkVictory(gc.world)
 	if winner != "" {

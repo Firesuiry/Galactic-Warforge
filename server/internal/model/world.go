@@ -56,6 +56,7 @@ type WorldState struct {
 	PowerGrid         *PowerGridGraph                   `json:"-"`
 	Pipelines         *PipelineNetworkState             `json:"pipelines,omitempty"`
 	Construction      *ConstructionQueue                `json:"construction,omitempty"`
+	EnemyForces       *EnemyForceState                  `json:"enemy_forces,omitempty"`
 
 	// Tile occupancy: maps "x,y" -> entity ID
 	TileBuilding map[string]string   `json:"-"`
