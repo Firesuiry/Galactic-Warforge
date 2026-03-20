@@ -57,6 +57,7 @@ type WorldState struct {
 	Pipelines         *PipelineNetworkState             `json:"pipelines,omitempty"`
 	Construction      *ConstructionQueue                `json:"construction,omitempty"`
 	EnemyForces       *EnemyForceState                  `json:"enemy_forces,omitempty"`
+	Detections        map[string]*DetectionState        `json:"detections,omitempty"` // player_id -> detection state
 
 	// Tile occupancy: maps "x,y" -> entity ID
 	TileBuilding map[string]string   `json:"-"`

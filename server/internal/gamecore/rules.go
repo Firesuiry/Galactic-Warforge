@@ -1100,30 +1100,101 @@ func regenResourceNodes(ws *model.WorldState) {
 	}
 }
 
-// settleTurrets - turrets auto-attack enemies in range
+// settleTurrets - turrets auto-attack enemies in range (both units and enemy forces)
 func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 	var events []*model.GameEvent
 
 	for _, turret := range ws.Buildings {
-		if turret.Type != model.BuildingTypeGaussTurret || turret.Runtime.State != model.BuildingWorkRunning {
+		if turret.HP <= 0 || turret.Runtime.State != model.BuildingWorkRunning {
 			continue
 		}
+
 		combat := turret.Runtime.Functions.Combat
-		if combat == nil {
+		if combat == nil || combat.Attack <= 0 || combat.Range <= 0 {
 			continue
 		}
-		// Find enemy units in range
-		for _, unit := range ws.Units {
-			if unit.OwnerID == turret.OwnerID {
-				continue
+
+		// Check if turret type is a defense building
+		isDefenseTurret := model.IsDefenseBuilding(turret.Type)
+		if !isDefenseTurret && turret.Type != model.BuildingTypeGaussTurret {
+			continue
+		}
+
+		// Try to find a target - prioritize enemy forces, then enemy units
+		targetedForce := -1
+		targetedUnit := ""
+
+		// Find enemy forces in range
+		if ws.EnemyForces != nil {
+			for i, force := range ws.EnemyForces.Forces {
+				dist := manhattanDistTurret(turret.Position, force.Position)
+				if dist <= combat.Range {
+					targetedForce = i
+					break // one attack per turret per tick
+				}
 			}
-			if sameTeam(ws, unit.OwnerID, turret.OwnerID) {
-				continue
+		}
+
+		// If no enemy force target, find enemy unit target
+		if targetedForce < 0 {
+			for _, unit := range ws.Units {
+				if unit.OwnerID == turret.OwnerID {
+					continue
+				}
+				if sameTeam(ws, unit.OwnerID, turret.OwnerID) {
+					continue
+				}
+				dist := model.ManhattanDist(turret.Position, unit.Position)
+				if dist > combat.Range {
+					continue
+				}
+				targetedUnit = unit.ID
+				break
 			}
-			dist := model.ManhattanDist(turret.Position, unit.Position)
-			if dist > combat.Range {
-				continue
+		}
+
+		// Apply damage to the target
+		if targetedForce >= 0 {
+			// Attack enemy force
+			force := &ws.EnemyForces.Forces[targetedForce]
+			damage := combat.Attack
+			// Shield mitigation (30% damage to shield, 70% to HP)
+			if force.SpreadRadius > 0 { // using spreadRadius as shield proxy
+				shieldDamage := float64(damage) * 0.3
+				force.SpreadRadius -= shieldDamage * 0.01
+				if force.SpreadRadius < 0.1 {
+					force.SpreadRadius = 0.1
+				}
+				damage = int(float64(damage) * 0.7)
 			}
+
+			// Reduce force strength based on damage
+			force.Strength -= damage / 10
+			if force.Strength < 0 {
+				force.Strength = 0
+			}
+
+			events = append(events, &model.GameEvent{
+				EventType:       model.EvtDamageApplied,
+				VisibilityScope: "all",
+				Payload: map[string]any{
+					"attacker_id": turret.ID,
+					"target_id":   force.ID,
+					"damage":      damage,
+					"target_type": "enemy_force",
+					"remaining_strength": force.Strength,
+				},
+			})
+
+			// Remove destroyed enemy forces
+			if force.Strength <= 0 {
+				lastIdx := len(ws.EnemyForces.Forces) - 1
+				ws.EnemyForces.Forces[targetedForce] = ws.EnemyForces.Forces[lastIdx]
+				ws.EnemyForces.Forces = ws.EnemyForces.Forces[:lastIdx]
+			}
+		} else if targetedUnit != "" {
+			// Attack enemy unit
+			unit := ws.Units[targetedUnit]
 			damage := max(1, combat.Attack-unit.Defense)
 			unit.HP -= damage
 
@@ -1152,11 +1223,23 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 					},
 				})
 			}
-			break // one attack per turret per tick
 		}
 	}
 
 	return events
+}
+
+// manhattanDistTurret 计算炮塔到位置的距离
+func manhattanDistTurret(a, b model.Position) int {
+	dx := a.X - b.X
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := a.Y - b.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	return dx + dy
 }
 
 // checkVictory determines if a player has won (elimination: opponent lost base)
