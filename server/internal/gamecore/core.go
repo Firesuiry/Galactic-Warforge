@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -67,12 +68,21 @@ func (eb *EventBus) Publish(events []*model.GameEvent) {
 
 // Metrics captures per-tick performance data
 type Metrics struct {
-	mu             sync.Mutex
-	TickCount      int64
-	LastTickDur    time.Duration
-	CommandsTotal  int64
-	SSEConnections int
-	QueueBacklog   int
+	mu                 sync.Mutex
+	TickCount          int64
+	LastTickDur        time.Duration
+	CommandsTotal      int64
+	SSEConnections     int
+	QueueBacklog       int
+	TickDurationsMs    []float64 // Rolling window for p95/p99
+	maxDurWindow       int
+}
+
+func NewMetrics() *Metrics {
+	return &Metrics{
+		maxDurWindow: 1000, // Keep last 1000 ticks for percentile calculation
+		TickDurationsMs: make([]float64, 0, 1000),
+	}
 }
 
 func (m *Metrics) RecordTick(dur time.Duration, cmds int) {
@@ -81,6 +91,53 @@ func (m *Metrics) RecordTick(dur time.Duration, cmds int) {
 	m.TickCount++
 	m.LastTickDur = dur
 	m.CommandsTotal += int64(cmds)
+
+	// Store duration in rolling window
+	m.TickDurationsMs = append(m.TickDurationsMs, float64(dur.Milliseconds()))
+	if len(m.TickDurationsMs) > m.maxDurWindow {
+		m.TickDurationsMs = m.TickDurationsMs[len(m.TickDurationsMs)-m.maxDurWindow:]
+	}
+}
+
+// p95 returns the 95th percentile tick duration
+func (m *Metrics) p95() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.TickDurationsMs) == 0 {
+		return 0
+	}
+	n := int(float64(len(m.TickDurationsMs)) * 0.95)
+	if n < 1 {
+		n = 1
+	}
+	if n > len(m.TickDurationsMs) {
+		n = len(m.TickDurationsMs)
+	}
+	// Copy and sort
+	sorted := make([]float64, len(m.TickDurationsMs))
+	copy(sorted, m.TickDurationsMs)
+	sort.Float64s(sorted)
+	return sorted[n-1]
+}
+
+// p99 returns the 99th percentile tick duration
+func (m *Metrics) p99() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.TickDurationsMs) == 0 {
+		return 0
+	}
+	n := int(float64(len(m.TickDurationsMs)) * 0.99)
+	if n < 1 {
+		n = 1
+	}
+	if n > len(m.TickDurationsMs) {
+		n = len(m.TickDurationsMs)
+	}
+	sorted := make([]float64, len(m.TickDurationsMs))
+	copy(sorted, m.TickDurationsMs)
+	sort.Float64s(sorted)
+	return sorted[n-1]
 }
 
 func (m *Metrics) Snapshot() map[string]any {
@@ -92,6 +149,27 @@ func (m *Metrics) Snapshot() map[string]any {
 		"commands_total":   m.CommandsTotal,
 		"sse_connections":  m.SSEConnections,
 		"queue_backlog":    m.QueueBacklog,
+		"tick_p95_ms":      m.p95(),
+		"tick_p99_ms":      m.p99(),
+	}
+}
+
+// eventSlicePool pools event slices to reduce allocations
+var eventSlicePool = sync.Pool{
+	New: func() any {
+		return make([]*model.GameEvent, 0, 64)
+	},
+}
+
+// GetEventSlice gets a pooled event slice
+func GetEventSlice() []*model.GameEvent {
+	return eventSlicePool.Get().([]*model.GameEvent)
+}
+
+// PutEventSlice returns an event slice to the pool
+func PutEventSlice(es []*model.GameEvent) {
+	if cap(es) >= 64 { // Only pool reasonably sized slices
+		eventSlicePool.Put(es[:0])
 	}
 }
 
@@ -293,7 +371,7 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		world:            ws,
 		queue:            q,
 		bus:              bus,
-		metrics:          &Metrics{},
+		metrics:          NewMetrics(),
 		cmdLog:           &CommandLog{},
 		eventHistory:     NewEventHistory(cfg.Server.EventHistoryLimit),
 		alertHistory:     NewAlertHistory(cfg.Server.AlertHistoryLimit),
@@ -460,6 +538,10 @@ func (gc *GameCore) processTick() {
 	solarSailEvts := settleSolarSails(gc.world.Tick)
 	allEvents = append(allEvents, solarSailEvts...)
 
+	// 6.6 Settle Dyson spheres (energy calculation for structures)
+	dysonEvts := settleDysonSpheres(gc.world.Tick)
+	allEvents = append(allEvents, dysonEvts...)
+
 	// 7. Settle resources
 	resEvts := settleResources(gc.world)
 	allEvents = append(allEvents, resEvts...)
@@ -552,6 +634,12 @@ func (gc *GameCore) processTick() {
 	dur := time.Since(start)
 	gc.metrics.RecordTick(dur, len(batch))
 	gc.metrics.SSEConnections = gc.bus.SubscriberCount()
+
+	// Warn if tick is slow (p95 target: <100ms)
+	if dur > 100*time.Millisecond {
+		log.Printf("[WARN] slow tick %d: %v (p95: %.2fms, p99: %.2fms)",
+			currentTick, dur, gc.metrics.p95(), gc.metrics.p99())
+	}
 
 	allEvents = append(allEvents, &model.GameEvent{
 		EventID:         fmt.Sprintf("evt-%d-tick", currentTick),
