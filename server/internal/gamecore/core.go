@@ -203,6 +203,8 @@ type GameCore struct {
 	winnerMu       sync.RWMutex
 	activePlanetID string
 	executorUsage  map[string]int
+	combatUnits    *CombatUnitManager
+	orbitalPlatforms *OrbitalPlatformManager
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
@@ -227,11 +229,12 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	}
 	for i, p := range cfg.Players {
 		ps := &model.PlayerState{
-			PlayerID:  p.PlayerID,
-			TeamID:    p.TeamID,
-			Role:      p.Role,
-			Resources: model.Resources{Minerals: 200, Energy: 100},
-			IsAlive:   true,
+			PlayerID:    p.PlayerID,
+			TeamID:      p.TeamID,
+			Role:        p.Role,
+			Resources:   model.Resources{Minerals: 200, Energy: 100},
+			IsAlive:     true,
+			CombatTech:  &model.PlayerCombatTechState{PlayerID: p.PlayerID, UnlockedTechs: make(map[string]*model.CombatTech)},
 		}
 		ps.SetPermissions(p.Permissions)
 		ws.Players[p.PlayerID] = ps
@@ -283,22 +286,24 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	}
 
 	core := &GameCore{
-		cfg:            cfg,
-		maps:           maps,
-		discovery:      mapstate.NewDiscovery(cfg.Players, maps),
-		world:          ws,
-		queue:          q,
-		bus:            bus,
-		metrics:        &Metrics{},
-		cmdLog:         &CommandLog{},
-		eventHistory:   NewEventHistory(cfg.Server.EventHistoryLimit),
-		alertHistory:   NewAlertHistory(cfg.Server.AlertHistoryLimit),
-		monitor:        newProductionMonitor(cfg.Server.ProductionMonitor),
-		snapshotStore:  store,
-		rng:            rng,
-		stopCh:         make(chan struct{}),
-		activePlanetID: primary.ID,
-		executorUsage:  make(map[string]int),
+		cfg:              cfg,
+		maps:             maps,
+		discovery:        mapstate.NewDiscovery(cfg.Players, maps),
+		world:            ws,
+		queue:            q,
+		bus:              bus,
+		metrics:          &Metrics{},
+		cmdLog:           &CommandLog{},
+		eventHistory:     NewEventHistory(cfg.Server.EventHistoryLimit),
+		alertHistory:     NewAlertHistory(cfg.Server.AlertHistoryLimit),
+		monitor:          newProductionMonitor(cfg.Server.ProductionMonitor),
+		snapshotStore:    store,
+		rng:              rng,
+		stopCh:           make(chan struct{}),
+		activePlanetID:   primary.ID,
+		executorUsage:    make(map[string]int),
+		combatUnits:      NewCombatUnitManager(),
+		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
 	if store != nil {
 		snap := snapshot.Capture(core.world, core.discovery)
@@ -507,6 +512,18 @@ func (gc *GameCore) processTick() {
 	// 18.5 Enemy forces (spawn, spread, attack)
 	enemyEvts := gc.settleEnemyForces()
 	allEvents = append(allEvents, enemyEvts...)
+
+	// 18.6 Combat units (combat between units)
+	combatEvts := gc.settleCombat()
+	allEvents = append(allEvents, combatEvts...)
+
+	// 18.7 Orbital combat (orbital platforms vs enemy forces)
+	orbitalEvts := gc.settleOrbitalCombat()
+	allEvents = append(allEvents, orbitalEvts...)
+
+	// 18.8 Drone control
+	droneEvts := gc.settleDroneControl()
+	allEvents = append(allEvents, droneEvts...)
 
 	// 19. Check victory
 	winner := checkVictory(gc.world)

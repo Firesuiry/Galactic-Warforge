@@ -53,8 +53,8 @@ func (gc *GameCore) settleCombat() []*model.GameEvent {
 	var events []*model.GameEvent
 	ws := gc.world
 
-	// 初始化战斗单位管理器（如果需要，可以缓存）
-	manager := NewCombatUnitManager()
+	// 使用GameCore持有的战斗单位管理器
+	manager := gc.combatUnits
 
 	// 1. 单位攻击敌人
 	for _, unit := range manager.Units {

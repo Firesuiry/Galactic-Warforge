@@ -45,7 +45,8 @@ func (gc *GameCore) settleOrbitalCombat() []*model.GameEvent {
 	var events []*model.GameEvent
 	ws := gc.world
 
-	manager := NewOrbitalPlatformManager()
+	// 使用GameCore持有的轨道平台管理器
+	manager := gc.orbitalPlatforms
 
 	// 1. 更新所有轨道平台位置
 	for _, platform := range manager.Platforms {
