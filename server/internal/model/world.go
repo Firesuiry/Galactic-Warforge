@@ -24,6 +24,7 @@ type PlayerState struct {
 	Executor    *ExecutorState `json:"executor,omitempty"`
 	Tech        *PlayerTechState `json:"tech,omitempty"`
 	CombatTech  *PlayerCombatTechState `json:"combat_tech,omitempty"`
+	Stats       *PlayerStats `json:"stats,omitempty"`
 
 	permissionSet map[string]struct{} `json:"-"`
 }

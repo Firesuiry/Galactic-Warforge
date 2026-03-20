@@ -102,6 +102,7 @@ func (s *Server) Handler() http.Handler {
 
 	// World queries
 	mux.HandleFunc("GET /state/summary", s.auth(s.handleStateSummary))
+	mux.HandleFunc("GET /state/stats", s.auth(s.handleStateStats))
 	mux.HandleFunc("GET /world/galaxy", s.auth(s.handleGalaxy))
 	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
@@ -161,6 +162,13 @@ func (s *Server) handleStateSummary(w http.ResponseWriter, r *http.Request, play
 	ws := s.core.World()
 	sum := s.ql.Summary(ws, playerID, s.core.Winner())
 	writeJSON(w, http.StatusOK, sum)
+}
+
+// handleStateStats returns GET /state/stats
+func (s *Server) handleStateStats(w http.ResponseWriter, r *http.Request, playerID string) {
+	ws := s.core.World()
+	stats := s.ql.Stats(ws, playerID)
+	writeJSON(w, http.StatusOK, stats)
 }
 
 // handleGalaxy returns GET /world/galaxy

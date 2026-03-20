@@ -235,6 +235,7 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 			Resources:   model.Resources{Minerals: 200, Energy: 100},
 			IsAlive:     true,
 			CombatTech:  &model.PlayerCombatTechState{PlayerID: p.PlayerID, UnlockedTechs: make(map[string]*model.CombatTech)},
+			Stats:       model.NewPlayerStats(p.PlayerID),
 		}
 		ps.SetPermissions(p.Permissions)
 		ws.Players[p.PlayerID] = ps
@@ -524,6 +525,9 @@ func (gc *GameCore) processTick() {
 	// 18.8 Drone control
 	droneEvts := gc.settleDroneControl()
 	allEvents = append(allEvents, droneEvts...)
+
+	// 18.9 Update player stats
+	gc.settleStats()
 
 	// 19. Check victory
 	winner := checkVictory(gc.world)
