@@ -437,6 +437,10 @@ func (gc *GameCore) processTick() {
 	jobEvts := settleBuildingJobs(gc.world)
 	allEvents = append(allEvents, jobEvts...)
 
+	// 4.5 Settle research
+	researchEvts := settleResearch(gc.world)
+	allEvents = append(allEvents, researchEvts...)
+
 	// 5. Settle power generation
 	env := currentPlanetEnvironment(gc.maps, gc.world.PlanetID)
 	powerEvts := settlePowerGeneration(gc.world, env)
@@ -610,6 +614,10 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execCancelConstruction(gc.world, qr.PlayerID, cmd)
 		case model.CmdRestoreConstruction:
 			res, evts = gc.execRestoreConstruction(gc.world, qr.PlayerID, cmd)
+		case model.CmdStartResearch:
+			res, evts = gc.execStartResearch(gc.world, qr.PlayerID, cmd)
+		case model.CmdCancelResearch:
+			res, evts = gc.execCancelResearch(gc.world, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

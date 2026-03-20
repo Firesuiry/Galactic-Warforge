@@ -15,6 +15,7 @@ const (
 	EvtProductionAlert       EventType = "production_alert"
 	EvtConstructionPaused   EventType = "construction_paused"
 	EvtConstructionResumed  EventType = "construction_resumed"
+	EvtResearchCompleted     EventType = "research_completed"
 )
 
 // GameEvent is a single game event pushed to SSE subscribers
