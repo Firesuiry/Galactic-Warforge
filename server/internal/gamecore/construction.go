@@ -13,7 +13,8 @@ const (
 	MaterialPriorityLogistics = 1
 )
 
-// reserveConstructionMaterials validates and reserves materials for a construction task.
+// reserveConstructionMaterials validates and locks materials for a construction task.
+// It does NOT deduct materials - that happens at completion time via deductLockedMaterials.
 // Returns the reservation tracking what was locked and from which source.
 func reserveConstructionMaterials(ws *model.WorldState, task *model.ConstructionTask) (*model.MaterialReservation, error) {
 	if ws == nil || task == nil {
@@ -24,7 +25,7 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 		return nil, fmt.Errorf("player %s not found", task.PlayerID)
 	}
 
-	// Validate availability before deducting
+	// Validate availability (check but don't deduct)
 	if player.Resources.Minerals < task.Cost.Minerals {
 		return nil, fmt.Errorf("insufficient minerals: need %d, have %d", task.Cost.Minerals, player.Resources.Minerals)
 	}
@@ -35,17 +36,7 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 		return nil, fmt.Errorf("insufficient items: need %d %s", missing.Quantity, missing.ItemID)
 	}
 
-	// Deduct resources (this is the "locking" - immediate deduction)
-	player.Resources.Minerals -= task.Cost.Minerals
-	player.Resources.Energy -= task.Cost.Energy
-	if !player.DeductItems(task.Cost.Items) {
-		// Rollback mineral/energy deduction if item deduction fails
-		player.Resources.Minerals += task.Cost.Minerals
-		player.Resources.Energy += task.Cost.Energy
-		return nil, fmt.Errorf("failed to deduct items")
-	}
-
-	// Create reservation record
+	// Create reservation record (locking without deduction)
 	reservation := &model.MaterialReservation{
 		TaskID:   task.ID,
 		PlayerID: task.PlayerID,
@@ -61,29 +52,89 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 
 	// Add reservation to queue's material reservation tracker
 	if ws.Construction == nil || ws.Construction.MaterialRes == nil {
-		return reservation, nil // Reservation already deducted, just return the record
+		return reservation, nil
 	}
 	if err := ws.Construction.MaterialRes.AddReservation(reservation); err != nil {
-		// Log error but don't fail - materials are already deducted
-		// This is a tracking issue, not a resource issue
+		return nil, fmt.Errorf("failed to add material reservation: %w", err)
 	}
 
 	return reservation, nil
 }
 
+// deductLockedMaterials deducts the locked materials for a construction task.
+// This is called when construction completes successfully.
+// Returns error if deduction fails (which should cause task completion to fail).
+func deductLockedMaterials(ws *model.WorldState, task *model.ConstructionTask) error {
+	if ws == nil || task == nil {
+		return fmt.Errorf("world state or task is nil")
+	}
+	if task.MaterialsDeducted {
+		// Already deducted, nothing to do
+		return nil
+	}
+
+	player := ws.Players[task.PlayerID]
+	if player == nil {
+		return fmt.Errorf("player %s not found", task.PlayerID)
+	}
+
+	// Deduct minerals
+	player.Resources.Minerals -= task.Cost.Minerals
+	if player.Resources.Minerals < 0 {
+		// This shouldn't happen if reservation was correct, but handle it
+		player.Resources.Minerals = 0
+	}
+
+	// Deduct energy
+	player.Resources.Energy -= task.Cost.Energy
+	if player.Resources.Energy < 0 {
+		player.Resources.Energy = 0
+	}
+
+	// Deduct items
+	if !player.DeductItems(task.Cost.Items) {
+		// This shouldn't happen if reservation was correct, but handle it
+		// Rollback mineral and energy deduction
+		player.Resources.Minerals += task.Cost.Minerals
+		player.Resources.Energy += task.Cost.Energy
+		return fmt.Errorf("failed to deduct items for task %s", task.ID)
+	}
+
+	// Mark as deducted
+	task.MaterialsDeducted = true
+
+	// Remove the reservation (materials are now spent)
+	if ws.Construction != nil && ws.Construction.MaterialRes != nil {
+		ws.Construction.MaterialRes.RemoveReservation(task.ID)
+	}
+
+	return nil
+}
+
 // releaseConstructionReservation releases reserved materials back to the player.
 // This is called when a construction task is cancelled.
+// With T078 deduction-at-completion timing:
+// - If materials not yet deducted (MaterialsDeducted=false), just release the lock (no refund needed)
+// - If materials already deducted (MaterialsDeducted=true), refund based on remaining progress
 func releaseConstructionReservation(ws *model.WorldState, task *model.ConstructionTask) {
 	if ws == nil || task == nil {
 		return
 	}
 
-	// Get the reservation
+	// Remove the reservation from tracking
 	if ws.Construction != nil && ws.Construction.MaterialRes != nil {
 		ws.Construction.MaterialRes.RemoveReservation(task.ID)
 	}
 
-	// Refund the resources (using the existing refund logic)
+	// With T078 deduction-at-completion timing:
+	// - If MaterialsDeducted is false, we never deducted anything, so no refund needed
+	// - If MaterialsDeducted is true, we deducted at completion, so refund based on remaining progress
+	if !task.MaterialsDeducted {
+		// Materials were never deducted, nothing to refund
+		return
+	}
+
+	// Materials were deducted at completion, so refund based on remaining progress
 	refundConstructionRefund(ws, task)
 }
 
@@ -253,7 +304,12 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		if err != nil {
 			task.Error = err.Error()
 			_ = ws.Construction.Transition(task.ID, model.ConstructionCancelled)
-			refundConstructionCost(ws, task)
+			// T078: Only refund if materials were deducted. If MaterialsDeducted is true,
+			// it means deduction succeeded before the failure, so we refund based on remaining progress.
+			// If MaterialsDeducted is false, deduction never happened, so no refund.
+			if task.MaterialsDeducted {
+				refundConstructionRefund(ws, task)
+			}
 			completed = append(completed, id)
 			continue
 		}
@@ -334,6 +390,12 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	if ws == nil || task == nil {
 		return nil, fmt.Errorf("construction task missing")
 	}
+
+	// T078: Deduct locked materials at completion time (not at enqueue time)
+	if err := deductLockedMaterials(ws, task); err != nil {
+		return nil, fmt.Errorf("failed to deduct materials: %w", err)
+	}
+
 	pos := task.Position
 	if !ws.InBounds(pos.X, pos.Y) {
 		return nil, fmt.Errorf("construction position out of bounds")

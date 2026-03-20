@@ -34,6 +34,10 @@ type ConstructionTask struct {
 	SpeedBonus        float64           `json:"speed_bonus,omitempty"`
 	Priority          int               `json:"priority,omitempty"`
 	Error             string            `json:"error,omitempty"`
+	// MaterialsDeducted indicates whether materials have been deducted for this task.
+	// When false, materials are "locked" but not yet deducted (deducted at completion).
+	// When true, materials have been deducted (used for proper refund handling).
+	MaterialsDeducted bool `json:"materials_deducted,omitempty"`
 }
 
 // ConstructionQueue stores pending and active construction tasks.

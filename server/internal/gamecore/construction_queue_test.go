@@ -157,7 +157,6 @@ func TestConstructionMaterialReservation(t *testing.T) {
 		t.Fatalf("solar_panel building definition not found")
 	}
 	mCost := def.BuildCost.Minerals
-	eCost := def.BuildCost.Energy
 
 	cmd := model.Command{
 		Type:   model.CmdBuild,
@@ -171,15 +170,17 @@ func TestConstructionMaterialReservation(t *testing.T) {
 		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
 	}
 
-	// Verify resources were deducted
-	if player.Resources.Minerals != 1000-mCost {
-		t.Fatalf("expected minerals %d after build, got %d", 1000-mCost, player.Resources.Minerals)
+	// T078: With deduct-at-completion, resources are NOT deducted at enqueue time.
+	// They are only deducted when construction completes (via settleConstructionQueue).
+	// The reservation is created to lock the materials, but player keeps them until completion.
+	if player.Resources.Minerals != 1000 {
+		t.Fatalf("expected minerals 1000 after build (no deduction yet), got %d", player.Resources.Minerals)
 	}
-	if player.Resources.Energy != 500-eCost {
-		t.Fatalf("expected energy %d after build, got %d", 500-eCost, player.Resources.Energy)
+	if player.Resources.Energy != 500 {
+		t.Fatalf("expected energy 500 after build (no deduction yet), got %d", player.Resources.Energy)
 	}
 
-	// Verify material reservation was created
+	// Verify material reservation was created (locks the materials but doesn't deduct)
 	taskID := ws.Construction.Order[0]
 	if ws.Construction.MaterialRes == nil {
 		t.Fatalf("expected material reservation tracker to exist")
@@ -206,13 +207,6 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 	player.Resources.Energy = 500
 
 	pos1, _ := findTwoOpenTiles(ws)
-
-	def, ok := model.BuildingDefinitionByID("solar_panel")
-	if !ok {
-		t.Fatalf("solar_panel building definition not found")
-	}
-	mCost := def.BuildCost.Minerals
-	eCost := def.BuildCost.Energy
 
 	cmd := model.Command{
 		Type:   model.CmdBuild,
@@ -242,12 +236,14 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
 	}
 
-	// For pending (not started) tasks, full refund is expected
-	if player.Resources.Minerals != mineralsBeforeCancel+mCost {
-		t.Fatalf("expected minerals %d after cancel, got %d", mineralsBeforeCancel+mCost, player.Resources.Minerals)
+	// T078: With deduct-at-completion, resources are NOT deducted at enqueue time.
+	// When a pending task is cancelled, there are no resources to refund because
+	// they were never deducted - they were just locked.
+	if player.Resources.Minerals != mineralsBeforeCancel {
+		t.Fatalf("expected minerals %d after cancel (no deduction happened), got %d", mineralsBeforeCancel, player.Resources.Minerals)
 	}
-	if player.Resources.Energy != energyBeforeCancel+eCost {
-		t.Fatalf("expected energy %d after cancel, got %d", energyBeforeCancel+eCost, player.Resources.Energy)
+	if player.Resources.Energy != energyBeforeCancel {
+		t.Fatalf("expected energy %d after cancel (no deduction happened), got %d", energyBeforeCancel, player.Resources.Energy)
 	}
 
 	// Verify reservation was removed
@@ -266,13 +262,6 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 	player.Resources.Energy = 500
 
 	pos1, _ := findTwoOpenTiles(ws)
-
-	def, ok := model.BuildingDefinitionByID("solar_panel")
-	if !ok {
-		t.Fatalf("solar_panel building definition not found")
-	}
-	mCost := def.BuildCost.Minerals
-	eCost := def.BuildCost.Energy
 
 	cmd := model.Command{
 		Type:   model.CmdBuild,
@@ -300,9 +289,13 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
 	}
 
-	// After cancel, resources should be refunded
+	// T078: With deduct-at-completion, after cancel resources are still 1000
+	// (no deduction happened, so no refund)
 	mineralsAfterCancel := player.Resources.Minerals
 	energyAfterCancel := player.Resources.Energy
+	if mineralsAfterCancel != 1000 {
+		t.Fatalf("expected minerals 1000 after cancel, got %d", mineralsAfterCancel)
+	}
 
 	// Restore the construction
 	restoreCmd := model.Command{
@@ -316,12 +309,13 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 		t.Fatalf("expected restore to execute, got %s (%s)", restoreRes.Status, restoreRes.Message)
 	}
 
-	// After restore, resources should be re-deducted
-	if player.Resources.Minerals != mineralsAfterCancel-mCost {
-		t.Fatalf("expected minerals %d after restore, got %d", mineralsAfterCancel-mCost, player.Resources.Minerals)
+	// T078: With deduct-at-completion, restore only re-creates the reservation.
+	// Resources are still not deducted (deduction happens at completion).
+	if player.Resources.Minerals != mineralsAfterCancel {
+		t.Fatalf("expected minerals %d after restore (no deduction), got %d", mineralsAfterCancel, player.Resources.Minerals)
 	}
-	if player.Resources.Energy != energyAfterCancel-eCost {
-		t.Fatalf("expected energy %d after restore, got %d", energyAfterCancel-eCost, player.Resources.Energy)
+	if player.Resources.Energy != energyAfterCancel {
+		t.Fatalf("expected energy %d after restore (no deduction), got %d", energyAfterCancel, player.Resources.Energy)
 	}
 
 	// Verify reservation was re-created
