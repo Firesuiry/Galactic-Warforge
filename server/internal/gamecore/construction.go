@@ -213,6 +213,73 @@ func executorConcurrentLimit(ws *model.WorldState, playerID string) int {
 	return player.Executor.ConcurrentTasks
 }
 
+// checkMaterialsAvailable checks if a player has enough materials for a construction task.
+// T079: This is used to determine if construction should pause (insufficient materials)
+// or resume (materials now available).
+func checkMaterialsAvailable(ws *model.WorldState, task *model.ConstructionTask) bool {
+	if ws == nil || task == nil {
+		return false
+	}
+	player := ws.Players[task.PlayerID]
+	if player == nil {
+		return false
+	}
+
+	// Check minerals
+	if player.Resources.Minerals < task.Cost.Minerals {
+		return false
+	}
+	// Check energy
+	if player.Resources.Energy < task.Cost.Energy {
+		return false
+	}
+	// Check items
+	if _, ok := missingItem(player.Inventory, task.Cost.Items); ok {
+		return false
+	}
+	return true
+}
+
+// createConstructionPauseEvent creates a pause event for a construction task.
+// T079: Emitted when construction pauses due to insufficient materials.
+func createConstructionPauseEvent(task *model.ConstructionTask) *model.GameEvent {
+	if task == nil {
+		return nil
+	}
+	return &model.GameEvent{
+		EventType:       model.EvtConstructionPaused,
+		VisibilityScope: task.PlayerID,
+		Payload: map[string]any{
+			"task_id":    task.ID,
+			"reason":     "insufficient_materials",
+			"building":   task.BuildingType,
+			"position":   task.Position,
+			"remaining":  task.RemainingTicks,
+			"total":      task.TotalTicks,
+		},
+	}
+}
+
+// createConstructionResumeEvent creates a resume event for a construction task.
+// T079: Emitted when construction resumes after materials become available.
+func createConstructionResumeEvent(task *model.ConstructionTask) *model.GameEvent {
+	if task == nil {
+		return nil
+	}
+	return &model.GameEvent{
+		EventType:       model.EvtConstructionResumed,
+		VisibilityScope: task.PlayerID,
+		Payload: map[string]any{
+			"task_id":   task.ID,
+			"reason":    "materials_available",
+			"building":  task.BuildingType,
+			"position":  task.Position,
+			"remaining": task.RemainingTicks,
+			"total":     task.TotalTicks,
+		},
+	}
+}
+
 func countActiveConstructionByRegion(ws *model.WorldState) map[string]int {
 	counts := make(map[string]int)
 	if ws == nil || ws.Construction == nil {
@@ -244,11 +311,52 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 	activeByRegion := countActiveConstructionByRegion(ws)
 	regionLimit := gc.constructionRegionLimit()
 
-	for _, id := range ws.Construction.Order {
-		task := ws.Construction.Tasks[id]
-		if task == nil || task.State != model.ConstructionPending {
+	// T079: First pass - pause in-progress tasks that no longer have materials available
+	for _, task := range ws.Construction.Tasks {
+		if task == nil || task.State != model.ConstructionInProgress {
 			continue
 		}
+		if !checkMaterialsAvailable(ws, task) {
+			// Materials no longer available - pause the task
+			if err := ws.Construction.Transition(task.ID, model.ConstructionPaused); err == nil {
+				task.UpdateTick = currentTick
+				events = append(events, createConstructionPauseEvent(task))
+			}
+		}
+	}
+
+	// T079: Second pass - try to resume paused tasks if materials are now available
+	// and start new pending tasks
+	for _, id := range ws.Construction.Order {
+		task := ws.Construction.Tasks[id]
+		if task == nil {
+			continue
+		}
+
+		if task.State == model.ConstructionPaused {
+			// T079: Check if materials are now available to resume
+			if checkMaterialsAvailable(ws, task) {
+				if err := ws.Construction.Transition(task.ID, model.ConstructionInProgress); err == nil {
+					task.UpdateTick = currentTick
+					events = append(events, createConstructionResumeEvent(task))
+					// Don't count towards active limits - it was already counted when it was first started
+					continue
+				}
+			}
+			// Still no materials, skip this paused task
+			continue
+		}
+
+		if task.State != model.ConstructionPending {
+			continue
+		}
+
+		// T079: Before starting a pending task, verify materials are available
+		if !checkMaterialsAvailable(ws, task) {
+			// Materials not available, skip starting this task
+			continue
+		}
+
 		playerLimit := executorConcurrentLimit(ws, task.PlayerID)
 		if activeByPlayer[task.PlayerID] >= playerLimit {
 			continue
@@ -281,6 +389,15 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			continue
 		}
 		if task.StartTick >= currentTick {
+			continue
+		}
+		// T079: Check materials before processing tick - if insufficient, skip deduction
+		if !checkMaterialsAvailable(ws, task) {
+			// This shouldn't happen since we pause in the first pass, but handle it
+			if err := ws.Construction.Transition(task.ID, model.ConstructionPaused); err == nil {
+				task.UpdateTick = currentTick
+				events = append(events, createConstructionPauseEvent(task))
+			}
 			continue
 		}
 		if task.RemainingTicks > 0 {

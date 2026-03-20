@@ -4,15 +4,17 @@ package model
 type EventType string
 
 const (
-	EvtCommandResult        EventType = "command_result"
-	EvtEntityCreated        EventType = "entity_created"
-	EvtEntityMoved          EventType = "entity_moved"
-	EvtDamageApplied        EventType = "damage_applied"
-	EvtEntityDestroyed      EventType = "entity_destroyed"
-	EvtBuildingStateChanged EventType = "building_state_changed"
-	EvtResourceChanged      EventType = "resource_changed"
-	EvtTickCompleted        EventType = "tick_completed"
-	EvtProductionAlert      EventType = "production_alert"
+	EvtCommandResult         EventType = "command_result"
+	EvtEntityCreated         EventType = "entity_created"
+	EvtEntityMoved           EventType = "entity_moved"
+	EvtDamageApplied         EventType = "damage_applied"
+	EvtEntityDestroyed       EventType = "entity_destroyed"
+	EvtBuildingStateChanged  EventType = "building_state_changed"
+	EvtResourceChanged       EventType = "resource_changed"
+	EvtTickCompleted         EventType = "tick_completed"
+	EvtProductionAlert       EventType = "production_alert"
+	EvtConstructionPaused   EventType = "construction_paused"
+	EvtConstructionResumed  EventType = "construction_resumed"
 )
 
 // GameEvent is a single game event pushed to SSE subscribers

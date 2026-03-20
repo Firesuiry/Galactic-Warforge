@@ -324,3 +324,48 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 		t.Fatalf("expected material reservation to be re-created after restore")
 	}
 }
+
+// T079: Test that pending task doesn't start when materials are insufficient
+func TestConstructionPendingSkipsWhenMaterialsUnavailable(t *testing.T) {
+	core := newConstructionTestCore(t, 2, 2)
+	ws := core.world
+
+	// Give player just enough minerals for the reservation check at enqueue
+	// but not enough that we want to allow it to start
+	player := ws.Players["p1"]
+	player.Resources.Minerals = 1000
+	player.Resources.Energy = 500
+
+	pos1, _ := findTwoOpenTiles(ws)
+
+	cmd := model.Command{
+		Type:   model.CmdBuild,
+		Target: model.CommandTarget{Position: &model.Position{X: pos1.X, Y: pos1.Y}},
+		Payload: map[string]any{
+			"building_type": "solar_panel",
+		},
+	}
+	res, _ := core.execBuild(ws, "p1", cmd)
+	if res.Status != model.StatusExecuted {
+		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
+	}
+
+	taskID := ws.Construction.Order[0]
+	task := ws.Construction.Tasks[taskID]
+
+	// Verify task is pending
+	if task.State != model.ConstructionPending {
+		t.Fatalf("expected task to be pending, got %s", task.State)
+	}
+
+	// Now consume all minerals so materials become insufficient before the tick runs
+	player.Resources.Minerals = 0
+
+	// Process a tick - task should NOT start because materials are insufficient
+	core.processTick()
+
+	// Task should still be pending (skipped due to insufficient materials)
+	if task.State != model.ConstructionPending {
+		t.Fatalf("expected task to remain pending when materials unavailable, got %s", task.State)
+	}
+}
