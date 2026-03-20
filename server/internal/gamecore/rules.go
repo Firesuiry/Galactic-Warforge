@@ -1213,6 +1213,137 @@ func removeUnitFromTile(ws *model.WorldState, tileKey, unitID string) {
 	}
 }
 
+// execLaunchSolarSail handles the "launch_solar_sail" command.
+// Payload: {
+//   "building_id": "id of EM rail ejector or vertical launching silo",
+//   "orbit_radius": 1.0,  // optional, default 1.0 AU
+//   "inclination": 0.0,   // optional, default 0.0 degrees
+// }
+func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	buildingID, ok := cmd.Payload["building_id"]
+	if !ok {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.building_id required"
+		return res, nil
+	}
+	bid, ok := buildingID.(string)
+	if !ok || bid == "" {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.building_id must be a non-empty string"
+		return res, nil
+	}
+
+	building, ok := ws.Buildings[bid]
+	if !ok {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("building %s not found", bid)
+		return res, nil
+	}
+	if building.OwnerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot use building owned by another player"
+		return res, nil
+	}
+
+	// Only EM Rail Ejector and Vertical Launching Silo can launch solar sails
+	if building.Type != model.BuildingTypeEMRailEjector && building.Type != model.BuildingTypeVerticalLaunchingSilo {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "only EM Rail Ejector or Vertical Launching Silo can launch solar sails"
+		return res, nil
+	}
+
+	// Check building is running
+	if building.Runtime.State != model.BuildingWorkRunning {
+		res.Code = model.CodeValidationFailed
+		res.Message = "building is not operational"
+		return res, nil
+	}
+
+	// Check player has solar sails
+	player := ws.Players[playerID]
+	if player == nil || !player.IsAlive {
+		res.Code = model.CodeValidationFailed
+		res.Message = "player not found or not alive"
+		return res, nil
+	}
+
+	sailCount := 1
+	if countRaw, ok := cmd.Payload["count"]; ok {
+		if count, ok := countRaw.(float64); ok {
+			sailCount = int(count)
+			if sailCount <= 0 {
+				sailCount = 1
+			}
+			if sailCount > 10 {
+				sailCount = 10 // cap at 10 per launch
+			}
+		}
+	}
+
+	// Check inventory has enough solar sails
+	if player.Inventory == nil {
+		res.Code = model.CodeInsufficientResource
+		res.Message = "no solar sails in inventory"
+		return res, nil
+	}
+	if player.Inventory[model.ItemSolarSail] < sailCount {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d solar sails, have %d", sailCount, player.Inventory[model.ItemSolarSail])
+		return res, nil
+	}
+
+	// Get orbit parameters
+	orbitRadius := 1.0
+	if radiusRaw, ok := cmd.Payload["orbit_radius"]; ok {
+		if radius, ok := radiusRaw.(float64); ok && radius > 0 {
+			orbitRadius = radius
+		}
+	}
+	inclination := 0.0
+	if inclRaw, ok := cmd.Payload["inclination"]; ok {
+		if incl, ok := inclRaw.(float64); ok {
+			inclination = incl
+		}
+	}
+
+	// Consume solar sails from inventory
+	player.Inventory[model.ItemSolarSail] -= sailCount
+	if player.Inventory[model.ItemSolarSail] <= 0 {
+		delete(player.Inventory, model.ItemSolarSail)
+	}
+
+	// Get system ID from maps
+	systemID := ""
+	if gc.maps != nil {
+		planet, _ := gc.maps.Planet(ws.PlanetID)
+		if planet != nil {
+			systemID = planet.SystemID
+		}
+	}
+
+	// Launch solar sails
+	var events []*model.GameEvent
+	for i := 0; i < sailCount; i++ {
+		sail := LaunchSolarSail(playerID, systemID, orbitRadius, inclination, ws.Tick)
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtEntityCreated,
+			VisibilityScope: playerID,
+			Payload: map[string]any{
+				"entity_type": "solar_sail",
+				"entity_id":   sail.ID,
+				"sail":        sail,
+			},
+		})
+	}
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("launched %d solar sail(s) into orbit", sailCount)
+	return res, events
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a

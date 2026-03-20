@@ -338,6 +338,15 @@ var recipeCatalog = map[string]RecipeDefinition{
 		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
 		TechUnlock:    []string{"advanced_ammo"},
 	},
+	"solar_sail": {
+		ID:            "solar_sail",
+		Name:          "Solar Sail",
+		Inputs:        []ItemAmount{{ItemID: ItemGraphene, Quantity: 2}, {ItemID: ItemCarbonNanotube, Quantity: 1}},
+		Outputs:       []ItemAmount{{ItemID: ItemSolarSail, Quantity: 1}},
+		Duration:      30,
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
+		TechUnlock:    []string{"solar_sail"},
+	},
 }
 
 // Recipe returns a recipe definition by id.

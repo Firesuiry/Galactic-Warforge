@@ -85,6 +85,8 @@ const (
 
 	ItemAmmoBullet  = "ammo_bullet"
 	ItemAmmoMissile = "ammo_missile"
+
+	ItemSolarSail = "solar_sail"
 )
 
 // ItemDefinition defines immutable data for an item.
@@ -567,6 +569,14 @@ var itemCatalog = map[string]ItemDefinition{
 		Form:       ResourceSolid,
 		StackLimit: 50,
 		UnitVolume: 3,
+	},
+	ItemSolarSail: {
+		ID:         ItemSolarSail,
+		Name:       "Solar Sail",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
 	},
 }
 

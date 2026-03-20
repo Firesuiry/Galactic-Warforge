@@ -450,6 +450,10 @@ func (gc *GameCore) processTick() {
 	rayEvts := settleRayReceivers(gc.world)
 	allEvents = append(allEvents, rayEvts...)
 
+	// 6.5 Settle solar sails (orbit decay and energy production)
+	solarSailEvts := settleSolarSails(gc.world.Tick)
+	allEvents = append(allEvents, solarSailEvts...)
+
 	// 7. Settle resources
 	resEvts := settleResources(gc.world)
 	allEvents = append(allEvents, resEvts...)
@@ -618,6 +622,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execStartResearch(gc.world, qr.PlayerID, cmd)
 		case model.CmdCancelResearch:
 			res, evts = gc.execCancelResearch(gc.world, qr.PlayerID, cmd)
+		case model.CmdLaunchSolarSail:
+			res, evts = gc.execLaunchSolarSail(gc.world, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

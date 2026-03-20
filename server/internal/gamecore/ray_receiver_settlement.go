@@ -44,8 +44,17 @@ func settleRayReceivers(ws *model.WorldState) []*model.GameEvent {
 		if powerCap < 0 {
 			powerCap = 0
 		}
+
+		// Add solar sail energy to ray receiver input
+		solarSailEnergy := GetSolarSailEnergyForPlayer(player.PlayerID)
+		effectiveInput := module.InputPerTick + solarSailEnergy
+
+		// Create modified module with solar sail energy included
+		modifiedModule := *module
+		modifiedModule.InputPerTick = effectiveInput
+
 		result, err := model.ResolveRayReceiver(model.RayReceiverRequest{
-			Module:        module,
+			Module:        &modifiedModule,
 			PowerCapacity: powerCap,
 		})
 		if err != nil {
@@ -56,7 +65,7 @@ func settleRayReceivers(ws *model.WorldState) []*model.GameEvent {
 				BuildingID:     building.ID,
 				OwnerID:        building.OwnerID,
 				SourceKind:     model.PowerSourceRayReceiver,
-				BaseOutput:     module.InputPerTick,
+				BaseOutput:     effectiveInput,
 				EnvFactor:      module.ReceiveEfficiency,
 				FuelMultiplier: module.PowerEfficiency,
 				Output:         result.PowerOutput,

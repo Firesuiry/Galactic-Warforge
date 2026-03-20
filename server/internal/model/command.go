@@ -17,6 +17,7 @@ const (
 	CmdRestoreConstruction CommandType = "restore_construction"
 	CmdStartResearch      CommandType = "start_research"
 	CmdCancelResearch     CommandType = "cancel_research"
+	CmdLaunchSolarSail    CommandType = "launch_solar_sail"
 )
 
 // CommandTarget specifies what the command targets
