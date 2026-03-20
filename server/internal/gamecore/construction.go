@@ -155,6 +155,54 @@ func refundConstructionCost(ws *model.WorldState, task *model.ConstructionTask) 
 	player.AddItems(task.Cost.Items)
 }
 
+// refundConstructionRefund refunds a portion of the construction cost based on remaining progress.
+// For pending tasks (not yet started): full refund.
+// For in_progress tasks: refund proportional to remaining ticks / total ticks.
+func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask) {
+	if ws == nil || task == nil {
+		return
+	}
+	player := ws.Players[task.PlayerID]
+	if player == nil {
+		return
+	}
+	// Full refund for pending tasks
+	if task.State == model.ConstructionPending {
+		player.Resources.Minerals += task.Cost.Minerals
+		player.Resources.Energy += task.Cost.Energy
+		player.AddItems(task.Cost.Items)
+		return
+	}
+	// Partial refund for in_progress tasks: remaining / total
+	if task.TotalTicks <= 0 {
+		player.Resources.Minerals += task.Cost.Minerals
+		player.Resources.Energy += task.Cost.Energy
+		player.AddItems(task.Cost.Items)
+		return
+	}
+	ratio := float64(task.RemainingTicks) / float64(task.TotalTicks)
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	player.Resources.Minerals += int(float64(task.Cost.Minerals) * ratio)
+	player.Resources.Energy += int(float64(task.Cost.Energy) * ratio)
+	// Items: refund proportionally (round up to avoid losing items on small remainders)
+	refundItems := make([]model.ItemAmount, 0, len(task.Cost.Items))
+	for _, item := range task.Cost.Items {
+		refundQty := int(float64(item.Quantity) * ratio)
+		if refundQty > item.Quantity {
+			refundQty = item.Quantity
+		}
+		if refundQty > 0 {
+			refundItems = append(refundItems, model.ItemAmount{ItemID: item.ItemID, Quantity: refundQty})
+		}
+	}
+	player.AddItems(refundItems)
+}
+
 func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.ConstructionTask) ([]*model.GameEvent, error) {
 	if ws == nil || task == nil {
 		return nil, fmt.Errorf("construction task missing")

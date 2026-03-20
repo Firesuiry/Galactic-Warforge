@@ -4,15 +4,17 @@ package model
 type CommandType string
 
 const (
-	CmdBuild      CommandType = "build"
-	CmdMove       CommandType = "move"
-	CmdAttack     CommandType = "attack"
-	CmdProduce    CommandType = "produce"
-	CmdUpgrade    CommandType = "upgrade"
-	CmdDemolish   CommandType = "demolish"
-	CmdScanGalaxy CommandType = "scan_galaxy"
-	CmdScanSystem CommandType = "scan_system"
-	CmdScanPlanet CommandType = "scan_planet"
+	CmdBuild             CommandType = "build"
+	CmdMove              CommandType = "move"
+	CmdAttack            CommandType = "attack"
+	CmdProduce           CommandType = "produce"
+	CmdUpgrade           CommandType = "upgrade"
+	CmdDemolish          CommandType = "demolish"
+	CmdScanGalaxy        CommandType = "scan_galaxy"
+	CmdScanSystem        CommandType = "scan_system"
+	CmdScanPlanet        CommandType = "scan_planet"
+	CmdCancelConstruction CommandType = "cancel_construction"
+	CmdRestoreConstruction CommandType = "restore_construction"
 )
 
 // CommandTarget specifies what the command targets

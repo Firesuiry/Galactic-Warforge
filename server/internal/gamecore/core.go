@@ -606,6 +606,10 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execUpgrade(gc.world, qr.PlayerID, cmd)
 		case model.CmdDemolish:
 			res, evts = gc.execDemolish(gc.world, qr.PlayerID, cmd)
+		case model.CmdCancelConstruction:
+			res, evts = gc.execCancelConstruction(gc.world, qr.PlayerID, cmd)
+		case model.CmdRestoreConstruction:
+			res, evts = gc.execRestoreConstruction(gc.world, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

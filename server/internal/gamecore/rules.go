@@ -172,6 +172,133 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	return res, nil
 }
 
+// execCancelConstruction handles the "cancel_construction" command
+func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	taskIDRaw, ok := cmd.Payload["task_id"]
+	if !ok {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.task_id required"
+		return res, nil
+	}
+	taskID := fmt.Sprintf("%v", taskIDRaw)
+
+	if ws.Construction == nil {
+		res.Code = model.CodeEntityNotFound
+		res.Message = "construction queue not found"
+		return res, nil
+	}
+	task := ws.Construction.Tasks[taskID]
+	if task == nil {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("construction task %s not found", taskID)
+		return res, nil
+	}
+	if task.PlayerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot cancel construction task owned by another player"
+		return res, nil
+	}
+	if task.State != model.ConstructionPending && task.State != model.ConstructionInProgress {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("construction task cannot be cancelled in state %s", task.State)
+		return res, nil
+	}
+
+	// Refund based on remaining progress
+	refundConstructionRefund(ws, task)
+
+	if err := ws.Construction.Transition(taskID, model.ConstructionCancelled); err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+
+	// Remove from queue (releases tile reservation)
+	ws.Construction.Remove(taskID)
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("construction task %s cancelled", taskID)
+	return res, nil
+}
+
+// execRestoreConstruction handles the "restore_construction" command
+func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	taskIDRaw, ok := cmd.Payload["task_id"]
+	if !ok {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.task_id required"
+		return res, nil
+	}
+	taskID := fmt.Sprintf("%v", taskIDRaw)
+
+	if ws.Construction == nil {
+		res.Code = model.CodeEntityNotFound
+		res.Message = "construction queue not found"
+		return res, nil
+	}
+	task := ws.Construction.Tasks[taskID]
+	if task == nil {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("construction task %s not found", taskID)
+		return res, nil
+	}
+	if task.PlayerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot restore construction task owned by another player"
+		return res, nil
+	}
+	if task.State != model.ConstructionCancelled && task.State != model.ConstructionPaused {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("construction task cannot be restored in state %s", task.State)
+		return res, nil
+	}
+
+	// Check tile is still available for restore
+	tileKey := model.TileKey(task.Position.X, task.Position.Y)
+	if _, occupied := ws.TileBuilding[tileKey]; occupied {
+		res.Code = model.CodePositionOccupied
+		res.Message = "construction tile is now occupied by another building"
+		return res, nil
+	}
+	if ws.Construction.IsTileReserved(tileKey) && ws.Construction.ReservedTiles[tileKey] != taskID {
+		res.Code = model.CodePositionOccupied
+		res.Message = "construction tile is reserved by another construction task"
+		return res, nil
+	}
+
+	// Restore: move back to pending, re-reserve tile and requeue
+	task.State = model.ConstructionPending
+	task.UpdateTick = ws.Tick
+
+	// Re-reserve tile
+	if ws.Construction.ReservedTiles == nil {
+		ws.Construction.ReservedTiles = make(map[string]string)
+	}
+	ws.Construction.ReservedTiles[tileKey] = taskID
+
+	// Re-add to order if not present
+	inOrder := false
+	for _, id := range ws.Construction.Order {
+		if id == taskID {
+			inOrder = true
+			break
+		}
+	}
+	if !inOrder {
+		ws.Construction.Order = append(ws.Construction.Order, taskID)
+	}
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("construction task %s restored to pending", taskID)
+	return res, nil
+}
+
 // execMove handles the "move" command for a unit
 func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}

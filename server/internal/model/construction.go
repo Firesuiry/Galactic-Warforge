@@ -122,6 +122,7 @@ func (q *ConstructionQueue) Enqueue(task *ConstructionTask) error {
 }
 
 // Remove deletes a task and releases its reservation.
+// Cancelled tasks are kept in Tasks map (for restore) but removed from Order.
 func (q *ConstructionQueue) Remove(taskID string) {
 	if q == nil || taskID == "" {
 		return
@@ -132,8 +133,13 @@ func (q *ConstructionQueue) Remove(taskID string) {
 		if q.ReservedTiles != nil && q.ReservedTiles[tileKey] == taskID {
 			delete(q.ReservedTiles, tileKey)
 		}
+		// Keep cancelled tasks in Tasks map for potential restore
+		if task.State == ConstructionCancelled {
+			// Only remove from Order, keep in Tasks
+		} else {
+			delete(q.Tasks, taskID)
+		}
 	}
-	delete(q.Tasks, taskID)
 	for i, id := range q.Order {
 		if id == taskID {
 			q.Order = append(q.Order[:i], q.Order[i+1:]...)
