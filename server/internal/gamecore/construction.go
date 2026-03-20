@@ -6,6 +6,100 @@ import (
 	"siliconworld/internal/model"
 )
 
+// MaterialSourcePriority defines the priority order for material sources.
+// Lower number = higher priority.
+const (
+	MaterialPriorityLocal     = 0
+	MaterialPriorityLogistics = 1
+)
+
+// reserveConstructionMaterials validates and reserves materials for a construction task.
+// Returns the reservation tracking what was locked and from which source.
+func reserveConstructionMaterials(ws *model.WorldState, task *model.ConstructionTask) (*model.MaterialReservation, error) {
+	if ws == nil || task == nil {
+		return nil, fmt.Errorf("world state or task is nil")
+	}
+	player := ws.Players[task.PlayerID]
+	if player == nil {
+		return nil, fmt.Errorf("player %s not found", task.PlayerID)
+	}
+
+	// Validate availability before deducting
+	if player.Resources.Minerals < task.Cost.Minerals {
+		return nil, fmt.Errorf("insufficient minerals: need %d, have %d", task.Cost.Minerals, player.Resources.Minerals)
+	}
+	if player.Resources.Energy < task.Cost.Energy {
+		return nil, fmt.Errorf("insufficient energy: need %d, have %d", task.Cost.Energy, player.Resources.Energy)
+	}
+	if missing, ok := missingItem(player.Inventory, task.Cost.Items); ok {
+		return nil, fmt.Errorf("insufficient items: need %d %s", missing.Quantity, missing.ItemID)
+	}
+
+	// Deduct resources (this is the "locking" - immediate deduction)
+	player.Resources.Minerals -= task.Cost.Minerals
+	player.Resources.Energy -= task.Cost.Energy
+	if !player.DeductItems(task.Cost.Items) {
+		// Rollback mineral/energy deduction if item deduction fails
+		player.Resources.Minerals += task.Cost.Minerals
+		player.Resources.Energy += task.Cost.Energy
+		return nil, fmt.Errorf("failed to deduct items")
+	}
+
+	// Create reservation record
+	reservation := &model.MaterialReservation{
+		TaskID:   task.ID,
+		PlayerID: task.PlayerID,
+		Minerals: task.Cost.Minerals,
+		Energy:   task.Cost.Energy,
+		Items:    task.Cost.Items,
+		Source: model.MaterialSource{
+			Type:       model.MaterialSourceLocal,
+			BuildingID: "",
+			Priority:   MaterialPriorityLocal,
+		},
+	}
+
+	// Add reservation to queue's material reservation tracker
+	if ws.Construction == nil || ws.Construction.MaterialRes == nil {
+		return reservation, nil // Reservation already deducted, just return the record
+	}
+	if err := ws.Construction.MaterialRes.AddReservation(reservation); err != nil {
+		// Log error but don't fail - materials are already deducted
+		// This is a tracking issue, not a resource issue
+	}
+
+	return reservation, nil
+}
+
+// releaseConstructionReservation releases reserved materials back to the player.
+// This is called when a construction task is cancelled.
+func releaseConstructionReservation(ws *model.WorldState, task *model.ConstructionTask) {
+	if ws == nil || task == nil {
+		return
+	}
+
+	// Get the reservation
+	if ws.Construction != nil && ws.Construction.MaterialRes != nil {
+		ws.Construction.MaterialRes.RemoveReservation(task.ID)
+	}
+
+	// Refund the resources (using the existing refund logic)
+	refundConstructionRefund(ws, task)
+}
+
+// getAvailableConstructionMaterials returns available materials from all sources.
+// Currently only returns local player inventory; logistics integration is for future.
+func getAvailableConstructionMaterials(ws *model.WorldState, playerID string) (minerals, energy int, items model.ItemInventory) {
+	if ws == nil || playerID == "" {
+		return 0, 0, nil
+	}
+	player := ws.Players[playerID]
+	if player == nil {
+		return 0, 0, nil
+	}
+	return player.Resources.Minerals, player.Resources.Energy, player.Inventory
+}
+
 const (
 	constructionRegionSize          = 8
 	defaultConstructionDurationTick = 1

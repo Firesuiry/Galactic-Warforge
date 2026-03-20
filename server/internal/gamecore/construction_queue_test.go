@@ -139,3 +139,194 @@ func findTwoOpenTiles(ws *model.WorldState) (model.Position, model.Position) {
 	}
 	return *first, *first
 }
+
+func TestConstructionMaterialReservation(t *testing.T) {
+	core := newConstructionTestCore(t, 2, 2)
+	ws := core.world
+
+	// Give player some resources
+	player := ws.Players["p1"]
+	player.Resources.Minerals = 1000
+	player.Resources.Energy = 500
+
+	pos1, _ := findTwoOpenTiles(ws)
+
+	// Build a solar_panel (costs minerals and energy)
+	def, ok := model.BuildingDefinitionByID("solar_panel")
+	if !ok {
+		t.Fatalf("solar_panel building definition not found")
+	}
+	mCost := def.BuildCost.Minerals
+	eCost := def.BuildCost.Energy
+
+	cmd := model.Command{
+		Type:   model.CmdBuild,
+		Target: model.CommandTarget{Position: &model.Position{X: pos1.X, Y: pos1.Y}},
+		Payload: map[string]any{
+			"building_type": "solar_panel",
+		},
+	}
+	res, _ := core.execBuild(ws, "p1", cmd)
+	if res.Status != model.StatusExecuted {
+		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
+	}
+
+	// Verify resources were deducted
+	if player.Resources.Minerals != 1000-mCost {
+		t.Fatalf("expected minerals %d after build, got %d", 1000-mCost, player.Resources.Minerals)
+	}
+	if player.Resources.Energy != 500-eCost {
+		t.Fatalf("expected energy %d after build, got %d", 500-eCost, player.Resources.Energy)
+	}
+
+	// Verify material reservation was created
+	taskID := ws.Construction.Order[0]
+	if ws.Construction.MaterialRes == nil {
+		t.Fatalf("expected material reservation tracker to exist")
+	}
+	reservation := ws.Construction.MaterialRes.GetReservation(taskID)
+	if reservation == nil {
+		t.Fatalf("expected material reservation for task %s", taskID)
+	}
+	if reservation.Minerals != mCost {
+		t.Fatalf("expected reservation minerals %d, got %d", mCost, reservation.Minerals)
+	}
+	if reservation.Source.Type != model.MaterialSourceLocal {
+		t.Fatalf("expected source type LOCAL, got %v", reservation.Source.Type)
+	}
+}
+
+func TestConstructionMaterialRefundOnCancel(t *testing.T) {
+	core := newConstructionTestCore(t, 2, 2)
+	ws := core.world
+
+	// Give player some resources
+	player := ws.Players["p1"]
+	player.Resources.Minerals = 1000
+	player.Resources.Energy = 500
+
+	pos1, _ := findTwoOpenTiles(ws)
+
+	def, ok := model.BuildingDefinitionByID("solar_panel")
+	if !ok {
+		t.Fatalf("solar_panel building definition not found")
+	}
+	mCost := def.BuildCost.Minerals
+	eCost := def.BuildCost.Energy
+
+	cmd := model.Command{
+		Type:   model.CmdBuild,
+		Target: model.CommandTarget{Position: &model.Position{X: pos1.X, Y: pos1.Y}},
+		Payload: map[string]any{
+			"building_type": "solar_panel",
+		},
+	}
+	res, _ := core.execBuild(ws, "p1", cmd)
+	if res.Status != model.StatusExecuted {
+		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
+	}
+
+	taskID := ws.Construction.Order[0]
+	mineralsBeforeCancel := player.Resources.Minerals
+	energyBeforeCancel := player.Resources.Energy
+
+	// Cancel the construction
+	cancelCmd := model.Command{
+		Type: model.CmdCancelConstruction,
+		Payload: map[string]any{
+			"task_id": taskID,
+		},
+	}
+	cancelRes, _ := core.execCancelConstruction(ws, "p1", cancelCmd)
+	if cancelRes.Status != model.StatusExecuted {
+		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
+	}
+
+	// For pending (not started) tasks, full refund is expected
+	if player.Resources.Minerals != mineralsBeforeCancel+mCost {
+		t.Fatalf("expected minerals %d after cancel, got %d", mineralsBeforeCancel+mCost, player.Resources.Minerals)
+	}
+	if player.Resources.Energy != energyBeforeCancel+eCost {
+		t.Fatalf("expected energy %d after cancel, got %d", energyBeforeCancel+eCost, player.Resources.Energy)
+	}
+
+	// Verify reservation was removed
+	if ws.Construction.MaterialRes.GetReservation(taskID) != nil {
+		t.Fatalf("expected reservation to be removed after cancel")
+	}
+}
+
+func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
+	core := newConstructionTestCore(t, 2, 2)
+	ws := core.world
+
+	// Give player some resources
+	player := ws.Players["p1"]
+	player.Resources.Minerals = 1000
+	player.Resources.Energy = 500
+
+	pos1, _ := findTwoOpenTiles(ws)
+
+	def, ok := model.BuildingDefinitionByID("solar_panel")
+	if !ok {
+		t.Fatalf("solar_panel building definition not found")
+	}
+	mCost := def.BuildCost.Minerals
+	eCost := def.BuildCost.Energy
+
+	cmd := model.Command{
+		Type:   model.CmdBuild,
+		Target: model.CommandTarget{Position: &model.Position{X: pos1.X, Y: pos1.Y}},
+		Payload: map[string]any{
+			"building_type": "solar_panel",
+		},
+	}
+	res, _ := core.execBuild(ws, "p1", cmd)
+	if res.Status != model.StatusExecuted {
+		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
+	}
+
+	taskID := ws.Construction.Order[0]
+
+	// Cancel the construction
+	cancelCmd := model.Command{
+		Type: model.CmdCancelConstruction,
+		Payload: map[string]any{
+			"task_id": taskID,
+		},
+	}
+	cancelRes, _ := core.execCancelConstruction(ws, "p1", cancelCmd)
+	if cancelRes.Status != model.StatusExecuted {
+		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
+	}
+
+	// After cancel, resources should be refunded
+	mineralsAfterCancel := player.Resources.Minerals
+	energyAfterCancel := player.Resources.Energy
+
+	// Restore the construction
+	restoreCmd := model.Command{
+		Type: model.CmdRestoreConstruction,
+		Payload: map[string]any{
+			"task_id": taskID,
+		},
+	}
+	restoreRes, _ := core.execRestoreConstruction(ws, "p1", restoreCmd)
+	if restoreRes.Status != model.StatusExecuted {
+		t.Fatalf("expected restore to execute, got %s (%s)", restoreRes.Status, restoreRes.Message)
+	}
+
+	// After restore, resources should be re-deducted
+	if player.Resources.Minerals != mineralsAfterCancel-mCost {
+		t.Fatalf("expected minerals %d after restore, got %d", mineralsAfterCancel-mCost, player.Resources.Minerals)
+	}
+	if player.Resources.Energy != energyAfterCancel-eCost {
+		t.Fatalf("expected energy %d after restore, got %d", energyAfterCancel-eCost, player.Resources.Energy)
+	}
+
+	// Verify reservation was re-created
+	reservation := ws.Construction.MaterialRes.GetReservation(taskID)
+	if reservation == nil {
+		t.Fatalf("expected material reservation to be re-created after restore")
+	}
+}

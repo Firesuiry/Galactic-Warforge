@@ -38,10 +38,11 @@ type ConstructionTask struct {
 
 // ConstructionQueue stores pending and active construction tasks.
 type ConstructionQueue struct {
-	NextSeq       int64                        `json:"next_seq"`
-	Tasks         map[string]*ConstructionTask `json:"tasks"`
-	Order         []string                     `json:"order"`
-	ReservedTiles map[string]string            `json:"reserved_tiles,omitempty"`
+	NextSeq       int64                           `json:"next_seq"`
+	Tasks         map[string]*ConstructionTask    `json:"tasks"`
+	Order         []string                        `json:"order"`
+	ReservedTiles map[string]string               `json:"reserved_tiles,omitempty"`
+	MaterialRes   *ConstructionMaterialReservation `json:"material_res,omitempty"`
 }
 
 // NewConstructionQueue returns an initialized queue.
@@ -50,6 +51,7 @@ func NewConstructionQueue() *ConstructionQueue {
 		Tasks:         make(map[string]*ConstructionTask),
 		Order:         make([]string, 0),
 		ReservedTiles: make(map[string]string),
+		MaterialRes:   NewConstructionMaterialReservation(),
 	}
 }
 
@@ -66,6 +68,9 @@ func (q *ConstructionQueue) EnsureInit() {
 	}
 	if q.ReservedTiles == nil {
 		q.ReservedTiles = make(map[string]string)
+	}
+	if q.MaterialRes == nil {
+		q.MaterialRes = NewConstructionMaterialReservation()
 	}
 }
 
@@ -189,4 +194,90 @@ func (q *ConstructionQueue) RebuildReservations() {
 		key := TileKey(task.Position.X, task.Position.Y)
 		q.ReservedTiles[key] = id
 	}
+}
+
+// MaterialSourceType indicates the type of material source.
+type MaterialSourceType int
+
+const (
+	MaterialSourceLocal    MaterialSourceType = iota // player local inventory
+	MaterialSourceLogistics                          // logistics station
+)
+
+// MaterialSource represents a source of materials for construction.
+type MaterialSource struct {
+	Type       MaterialSourceType // source type
+	BuildingID string             // building ID for logistics stations, empty for local
+	Priority   int                // lower = higher priority
+}
+
+// MaterialReservation tracks reserved materials for a construction task.
+type MaterialReservation struct {
+	TaskID     string            `json:"task_id"`
+	PlayerID   string            `json:"player_id"`
+	Minerals   int               `json:"minerals"`
+	Energy     int               `json:"energy"`
+	Items      []ItemAmount      `json:"items,omitempty"`
+	Source     MaterialSource    `json:"source"`
+	ReservedAt int64             `json:"reserved_at"`
+}
+
+// ConstructionMaterialReservation tracks all material reservations for construction tasks.
+type ConstructionMaterialReservation struct {
+	NextSeq       int64                         `json:"next_seq"`
+	Reservations  map[string]*MaterialReservation // taskID -> reservation
+}
+
+// NewConstructionMaterialReservation returns an initialized material reservation tracker.
+func NewConstructionMaterialReservation() *ConstructionMaterialReservation {
+	return &ConstructionMaterialReservation{
+		Reservations: make(map[string]*MaterialReservation),
+	}
+}
+
+// EnsureInit initializes maps when nil.
+func (r *ConstructionMaterialReservation) EnsureInit() {
+	if r == nil {
+		return
+	}
+	if r.Reservations == nil {
+		r.Reservations = make(map[string]*MaterialReservation)
+	}
+}
+
+// GetReservation returns the reservation for a task.
+func (r *ConstructionMaterialReservation) GetReservation(taskID string) *MaterialReservation {
+	if r == nil || taskID == "" {
+		return nil
+	}
+	return r.Reservations[taskID]
+}
+
+// AddReservation adds a new material reservation.
+func (r *ConstructionMaterialReservation) AddReservation(res *MaterialReservation) error {
+	if r == nil {
+		return fmt.Errorf("material reservation is nil")
+	}
+	r.EnsureInit()
+	if res == nil {
+		return fmt.Errorf("reservation is nil")
+	}
+	if res.TaskID == "" {
+		return fmt.Errorf("reservation task_id required")
+	}
+	if r.Reservations[res.TaskID] != nil {
+		return fmt.Errorf("reservation for task %s already exists", res.TaskID)
+	}
+	r.NextSeq++
+	res.ReservedAt = r.NextSeq
+	r.Reservations[res.TaskID] = res
+	return nil
+}
+
+// RemoveReservation removes a material reservation.
+func (r *ConstructionMaterialReservation) RemoveReservation(taskID string) {
+	if r == nil || taskID == "" {
+		return
+	}
+	delete(r.Reservations, taskID)
 }

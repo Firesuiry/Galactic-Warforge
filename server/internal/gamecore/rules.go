@@ -104,7 +104,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		}
 	}
 
-	// Check resource cost
+	// Check resource cost (availability validation)
 	mCost, eCost := def.BuildCost.Minerals, def.BuildCost.Energy
 	player := ws.Players[playerID]
 	if player.Resources.Minerals < mCost {
@@ -152,17 +152,14 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
-	// Deduct resources (rollback on failure).
-	player.Resources.Minerals -= mCost
-	player.Resources.Energy -= eCost
-	if !player.DeductItems(def.BuildCost.Items) {
-		player.Resources.Minerals += mCost
-		player.Resources.Energy += eCost
+	// Reserve materials (validates availability and locks/deducts resources)
+	if _, err := reserveConstructionMaterials(ws, task); err != nil {
 		ws.Construction.Remove(taskID)
 		res.Code = model.CodeInsufficientResource
-		res.Message = "insufficient items for build"
+		res.Message = err.Error()
 		return res, nil
 	}
+
 	task.TotalTicks = max(1, defaultConstructionDurationTick)
 	task.RemainingTicks = task.TotalTicks
 
@@ -206,8 +203,8 @@ func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string
 		return res, nil
 	}
 
-	// Refund based on remaining progress
-	refundConstructionRefund(ws, task)
+	// Release material reservation and refund based on remaining progress
+	releaseConstructionReservation(ws, task)
 
 	if err := ws.Construction.Transition(taskID, model.ConstructionCancelled); err != nil {
 		res.Code = model.CodeValidationFailed
@@ -269,6 +266,16 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 		res.Code = model.CodePositionOccupied
 		res.Message = "construction tile is reserved by another construction task"
 		return res, nil
+	}
+
+	// For cancelled tasks, re-reserve materials (they were refunded on cancel)
+	// For paused tasks, materials remain reserved (handled by pause logic in T079)
+	if task.State == model.ConstructionCancelled {
+		if _, err := reserveConstructionMaterials(ws, task); err != nil {
+			res.Code = model.CodeInsufficientResource
+			res.Message = "insufficient resources to restore construction: " + err.Error()
+			return res, nil
+		}
 	}
 
 	// Restore: move back to pending, re-reserve tile and requeue
