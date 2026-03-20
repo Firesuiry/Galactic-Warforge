@@ -31,6 +31,7 @@ type ConstructionTask struct {
 	QueueIndex        int64             `json:"queue_index,omitempty"`
 	RemainingTicks    int               `json:"remaining_ticks,omitempty"`
 	TotalTicks        int               `json:"total_ticks,omitempty"`
+	SpeedBonus        float64           `json:"speed_bonus,omitempty"`
 	Priority          int               `json:"priority,omitempty"`
 	Error             string            `json:"error,omitempty"`
 }

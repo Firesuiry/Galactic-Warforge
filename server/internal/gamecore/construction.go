@@ -11,6 +11,25 @@ const (
 	defaultConstructionDurationTick = 1
 )
 
+// calculateConstructionSpeedBonus calculates the construction speed multiplier for a player.
+// This combines bonuses from buildings, tech, and environment.
+// Returns 1.0 if no bonuses apply (minimum speed).
+func calculateConstructionSpeedBonus(ws *model.WorldState, playerID string, buildingType model.BuildingType) float64 {
+	if ws == nil || playerID == "" {
+		return 1.0
+	}
+
+	bonus := 1.0
+
+	// Construction speed bonuses will be added here as they are implemented:
+	// - Tech bonuses from research tree (T008)
+	// - Building bonuses (e.g., Vertical Assembly building)
+	// - Environment/planet type bonuses
+	// For now, return base bonus of 1.0
+
+	return bonus
+}
+
 func constructionRegionKey(ws *model.WorldState, pos model.Position) string {
 	if ws == nil {
 		return ""
@@ -103,6 +122,10 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		if task.RemainingTicks <= 0 {
 			task.RemainingTicks = task.TotalTicks
 		}
+		// Calculate speed bonus only if not already set (preserves bonus on pause/resume)
+		if task.SpeedBonus == 0 {
+			task.SpeedBonus = calculateConstructionSpeedBonus(ws, task.PlayerID, task.BuildingType)
+		}
 		activeByPlayer[task.PlayerID]++
 		activeByRegion[task.RegionID]++
 	}
@@ -116,7 +139,17 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			continue
 		}
 		if task.RemainingTicks > 0 {
-			task.RemainingTicks--
+			ticksToDeduct := 1
+			if task.SpeedBonus > 1.0 {
+				ticksToDeduct = int(task.SpeedBonus)
+				if ticksToDeduct < 1 {
+					ticksToDeduct = 1
+				}
+			}
+			if ticksToDeduct > task.RemainingTicks {
+				ticksToDeduct = task.RemainingTicks
+			}
+			task.RemainingTicks -= ticksToDeduct
 		}
 		task.UpdateTick = currentTick
 		if task.RemainingTicks > 0 {
