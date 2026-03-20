@@ -33,7 +33,7 @@ func newTestCore(t *testing.T) *gamecore.GameCore {
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
 	bus := gamecore.NewEventBus()
-	return gamecore.New(cfg, maps, q, bus)
+	return gamecore.New(cfg, maps, q, bus, nil)
 }
 
 func TestInitialPlayerResources(t *testing.T) {
@@ -62,7 +62,7 @@ func TestBaseBuilding(t *testing.T) {
 
 	foundBases := 0
 	for _, b := range ws.Buildings {
-		if b.Type == model.BuildingTypeBase {
+		if b.Type == model.BuildingTypeBattlefieldAnalysisBase {
 			foundBases++
 		}
 	}
@@ -71,18 +71,37 @@ func TestBaseBuilding(t *testing.T) {
 	}
 }
 
-func TestBuildingStats(t *testing.T) {
-	stats := model.BuildingStats(model.BuildingTypeFactory, 1)
-	if stats.HP <= 0 {
-		t.Errorf("factory HP should be positive, got %d", stats.HP)
+func TestExecutorSpawnedForPlayer(t *testing.T) {
+	core := newTestCore(t)
+	ws := core.World()
+	ws.RLock()
+	defer ws.RUnlock()
+
+	p1 := ws.Players["p1"]
+	if p1 == nil || p1.Executor == nil {
+		t.Fatal("expected executor for player p1")
 	}
-	if stats.EnergyConsume <= 0 {
-		t.Errorf("factory should consume energy")
+	execUnit := ws.Units[p1.Executor.UnitID]
+	if execUnit == nil {
+		t.Fatalf("executor unit %s not found", p1.Executor.UnitID)
+	}
+	if execUnit.Type != model.UnitTypeExecutor {
+		t.Fatalf("expected executor unit type, got %s", execUnit.Type)
+	}
+}
+
+func TestBuildingStats(t *testing.T) {
+	profile := model.BuildingProfileFor(model.BuildingTypeAssemblingMachineMk1, 1)
+	if profile.MaxHP <= 0 {
+		t.Errorf("assembler HP should be positive, got %d", profile.MaxHP)
+	}
+	if profile.Runtime.Params.EnergyConsume <= 0 {
+		t.Errorf("assembler should consume energy")
 	}
 
-	stats2 := model.BuildingStats(model.BuildingTypeFactory, 2)
-	if stats2.MaxHP <= stats.MaxHP {
-		t.Errorf("level 2 factory should have more HP than level 1")
+	profile2 := model.BuildingProfileFor(model.BuildingTypeAssemblingMachineMk1, 2)
+	if profile2.MaxHP <= profile.MaxHP {
+		t.Errorf("level 2 assembler should have more HP than level 1")
 	}
 }
 
@@ -99,9 +118,9 @@ func TestUnitStats(t *testing.T) {
 }
 
 func TestBuildCost(t *testing.T) {
-	m, e := model.BuildingCost(model.BuildingTypeMine)
+	m, e := model.BuildingCost(model.BuildingTypeMiningMachine)
 	if m <= 0 {
-		t.Errorf("mine should cost minerals")
+		t.Errorf("mining machine should cost minerals")
 	}
 	_ = e
 }

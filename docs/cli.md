@@ -20,6 +20,7 @@ CLI 启动后会提示选择玩家：
 CLI 会自动连接 `SSE` 事件流并在终端中实时输出。
 - `events [count]` 可以查看最近事件缓冲区（默认 10 条）。
 - `switch` 切换玩家时会自动断开并重连事件流。
+- `connected` 事件会显示当前连接的玩家。
 
 **命令列表**
 
@@ -41,7 +42,7 @@ CLI 会自动连接 `SSE` 事件流并在终端中实时输出。
 | `scan_galaxy` | `[galaxy_id]` | 扫描星系（默认 `galaxy-1`） |
 | `scan_system` | `<system_id>` | 扫描系统 |
 | `scan_planet` | `<planet_id>` | 扫描行星 |
-| `raw` | `<json>` | 发送原始指令 JSON |
+| `raw` | `<json>` | 发送原始 `/commands` 请求 JSON |
 
 工具类：
 | 命令 | 参数 | 说明 |
@@ -74,9 +75,9 @@ scan_system sys-2
 scan_planet planet-2-1
 ```
 
-发送原始指令：
+发送原始请求：
 ```bash
-raw [{"type":"scan_system","target":{"layer":"system","system_id":"sys-2"}}]
+raw {"request_id":"req-1","issuer_type":"player","issuer_id":"p1","commands":[{"type":"scan_system","target":{"layer":"system","system_id":"sys-2"}}]}
 ```
 
 **默认值**
@@ -84,4 +85,3 @@ raw [{"type":"scan_system","target":{"layer":"system","system_id":"sys-2"}}]
 - 默认系统：`sys-1`
 - 默认行星：`planet-1-1`
 - 默认事件显示数量：`10`
-

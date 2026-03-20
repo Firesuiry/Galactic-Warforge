@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type {
   Building, Unit, StateSummary, PlanetView,
   CommandResponse, FogMapView, GalaxyView, SystemView,
-  HealthResponse, MetricsSnapshot, GameEvent,
+  HealthResponse, MetricsSnapshot, SseEvent,
 } from './types.js';
 
 // ── Simple table helpers ──────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export function fmtPlanet(p: PlanetView): string {
   const buildings = Object.values(p.buildings ?? {});
   if (buildings.length > 0) {
     lines.push('', chalk.bold('Buildings:'));
-    const bHeaders = ['ID', 'Type', 'Owner', 'Pos', 'HP', 'Lvl', 'Active'];
+    const bHeaders = ['ID', 'Type', 'Owner', 'Pos', 'HP', 'Lvl', 'State'];
     const bRows = buildings.map(b => [
       b.id,
       chalk.yellow(b.type),
@@ -106,7 +106,7 @@ export function fmtPlanet(p: PlanetView): string {
       `(${b.position.x},${b.position.y})`,
       `${b.hp}/${b.max_hp}`,
       String(b.level),
-      b.is_active ? chalk.green('yes') : chalk.red('no'),
+      b.runtime?.state ?? 'unknown',
     ]);
     lines.push(table(bHeaders, bRows));
   } else {
@@ -168,11 +168,15 @@ export function fmtFog(f: FogMapView): string {
   return lines.join('\n');
 }
 
-export function fmtEvent(e: GameEvent): string {
-  const tick = chalk.cyan(`[t${e.tick}]`);
-  const type = chalk.yellow(e.event_type);
-  const scope = chalk.dim(e.visibility_scope);
-  return `${tick} ${type} ${scope} ${JSON.stringify(e.payload)}`;
+export function fmtEvent(e: SseEvent): string {
+  if (e.type === 'connected') {
+    return `${chalk.green('[connected]')} player_id=${chalk.bold(e.player_id)}`;
+  }
+  const evt = e.event;
+  const tick = chalk.cyan(`[t${evt.tick}]`);
+  const type = chalk.yellow(evt.event_type);
+  const scope = chalk.dim(evt.visibility_scope);
+  return `${tick} ${type} ${scope} ${JSON.stringify(evt.payload)}`;
 }
 
 export function fmtError(msg: string): string {

@@ -72,10 +72,7 @@ export async function sendCommands(commands: Command[]): Promise<CommandResponse
     issuer_id: _playerId,
     commands,
   };
-  return apiFetch<CommandResponse>('/commands', {
-    method: 'POST',
-    body: JSON.stringify(req),
-  });
+  return sendCommandRequest(req);
 }
 
 export function cmdScanGalaxy(galaxyId = 'galaxy-1'): Promise<CommandResponse> {
@@ -99,7 +96,9 @@ export function cmdScanPlanet(planetId = DEFAULT_PLANET_ID): Promise<CommandResp
   }]);
 }
 
-export function sendRawCommands(rawJson: string): Promise<CommandResponse> {
-  const parsed = JSON.parse(rawJson) as Command[];
-  return sendCommands(parsed);
+export function sendCommandRequest(req: CommandRequest): Promise<CommandResponse> {
+  return apiFetch<CommandResponse>('/commands', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }

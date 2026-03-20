@@ -2,13 +2,47 @@ battlefield:
   map_seed: "seed-001"
   max_tick_rate: 10
   victory_rule: "elimination"
+  construction_region_concurrent_limit: 4
 
 players:
   - player_id: "p1"
     key: "key_player_1"
+    team_id: "team-1"
+    role: "commander"
+    permissions: ["*"]
+    executor:
+      build_efficiency: 1.0
+      operate_range: 6
+      concurrent_tasks: 2
+      research_boost: 0.0
   - player_id: "p2"
     key: "key_player_2"
+    team_id: "team-2"
+    role: "commander"
+    permissions: ["*"]
+    executor:
+      build_efficiency: 1.0
+      operate_range: 6
+      concurrent_tasks: 2
+      research_boost: 0.0
 
 server:
   port: 8080
   rate_limit: 20
+  event_history_limit: 2000
+  snapshot_max_events: 200
+  alert_history_limit: 1000
+  data_dir: "data"
+  snapshot_interval_ticks: 100
+  snapshot_retention_ticks: 6000
+  snapshot_retention_count: 60
+  snapshot_max_bytes: 2097152
+  snapshot_delta_max_bytes: 1048576
+  production_monitor:
+    sample_interval_ticks: 5
+    max_entities_per_sample: 500
+    backlog_warn_ratio: 0.6
+    backlog_critical_ratio: 0.9
+    shortage_ratio: 0.2
+    efficiency_warn_ratio: 0.5
+    alert_cooldown_ticks: 20

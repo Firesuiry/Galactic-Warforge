@@ -13,17 +13,21 @@ func buildTestWorld() *model.WorldState {
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 
 	// p1 base at (2,2), vision 5
-	ws.Buildings["b1"] = &model.Building{
-		ID: "b1", Type: model.BuildingTypeBase, OwnerID: "p1",
-		Position: model.Position{X: 2, Y: 2}, VisionRange: 5, IsActive: true,
+	b1 := &model.Building{
+		ID: "b1", Type: model.BuildingTypeBattlefieldAnalysisBase, OwnerID: "p1",
+		Position: model.Position{X: 2, Y: 2}, VisionRange: 5, Runtime: model.BuildingRuntime{State: model.BuildingWorkRunning},
 	}
+	model.InitBuildingStorage(b1)
+	ws.Buildings["b1"] = b1
 	ws.TileBuilding[model.TileKey(2, 2)] = "b1"
 
 	// p2 base at (14,14), vision 5
-	ws.Buildings["b2"] = &model.Building{
-		ID: "b2", Type: model.BuildingTypeBase, OwnerID: "p2",
-		Position: model.Position{X: 14, Y: 14}, VisionRange: 5, IsActive: true,
+	b2 := &model.Building{
+		ID: "b2", Type: model.BuildingTypeBattlefieldAnalysisBase, OwnerID: "p2",
+		Position: model.Position{X: 14, Y: 14}, VisionRange: 5, Runtime: model.BuildingRuntime{State: model.BuildingWorkRunning},
 	}
+	model.InitBuildingStorage(b2)
+	ws.Buildings["b2"] = b2
 	ws.TileBuilding[model.TileKey(14, 14)] = "b2"
 
 	// p1 unit at (4,4), vision 4
@@ -41,15 +45,14 @@ func buildTestWorld() *model.WorldState {
 	return ws
 }
 
-func TestVisibleTilesNotEmpty(t *testing.T) {
+func TestVisibleTileAtBase(t *testing.T) {
 	eng := visibility.New()
 	ws := buildTestWorld()
 	ws.RLock()
 	defer ws.RUnlock()
 
-	tiles := eng.VisibleTiles(ws, "p1")
-	if len(tiles) == 0 {
-		t.Error("p1 should have visible tiles from base and unit")
+	if !eng.IsVisible(ws, "p1", model.Position{X: 2, Y: 2}) {
+		t.Error("p1 base tile should be visible")
 	}
 }
 
@@ -91,30 +94,65 @@ func TestFogMapDimensions(t *testing.T) {
 	ws.RLock()
 	defer ws.RUnlock()
 
-	fog := eng.FogMap(ws, "p1")
-	if len(fog) != ws.MapHeight {
-		t.Errorf("fog height %d != map height %d", len(fog), ws.MapHeight)
+	fog := eng.FogState(ws, "p1")
+	if len(fog.Visible) != ws.MapHeight {
+		t.Errorf("fog height %d != map height %d", len(fog.Visible), ws.MapHeight)
 	}
-	if len(fog[0]) != ws.MapWidth {
-		t.Errorf("fog width %d != map width %d", len(fog[0]), ws.MapWidth)
+	if len(fog.Visible[0]) != ws.MapWidth {
+		t.Errorf("fog width %d != map width %d", len(fog.Visible[0]), ws.MapWidth)
+	}
+	if len(fog.Explored) != ws.MapHeight {
+		t.Errorf("explored height %d != map height %d", len(fog.Explored), ws.MapHeight)
+	}
+	if len(fog.Explored[0]) != ws.MapWidth {
+		t.Errorf("explored width %d != map width %d", len(fog.Explored[0]), ws.MapWidth)
 	}
 }
 
 func TestFilterEvent(t *testing.T) {
 	eng := visibility.New()
-	ws := buildTestWorld()
 
 	evtAll := &model.GameEvent{VisibilityScope: "all"}
 	evtP1 := &model.GameEvent{VisibilityScope: "p1"}
 	evtP2 := &model.GameEvent{VisibilityScope: "p2"}
 
-	if !eng.FilterEvent(ws, evtAll, "p1") {
+	if !eng.FilterEvent(evtAll, "p1") {
 		t.Error("broadcast event should be visible to p1")
 	}
-	if !eng.FilterEvent(ws, evtP1, "p1") {
+	if !eng.FilterEvent(evtP1, "p1") {
 		t.Error("p1 event should be visible to p1")
 	}
-	if eng.FilterEvent(ws, evtP2, "p1") {
+	if eng.FilterEvent(evtP2, "p1") {
 		t.Error("p2 event should NOT be visible to p1")
+	}
+}
+
+func TestExploredPersistsAfterMove(t *testing.T) {
+	eng := visibility.New()
+	ws := buildTestWorld()
+
+	ws.RLock()
+	fog := eng.FogState(ws, "p1")
+	ws.RUnlock()
+
+	if !fog.Visible[4][7] {
+		t.Fatal("tile (7,4) should be visible initially")
+	}
+
+	// Move unit away so tile (7,4) becomes unseen; bump tick to force update.
+	ws.Lock()
+	ws.Units["u1"].Position = model.Position{X: 12, Y: 12}
+	ws.Tick++
+	ws.Unlock()
+
+	ws.RLock()
+	fog = eng.FogState(ws, "p1")
+	ws.RUnlock()
+
+	if fog.Visible[4][7] {
+		t.Error("tile (7,4) should no longer be visible after move")
+	}
+	if !fog.Explored[4][7] {
+		t.Error("tile (7,4) should remain explored after losing visibility")
 	}
 }

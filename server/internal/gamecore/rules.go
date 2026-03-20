@@ -3,8 +3,21 @@ package gamecore
 import (
 	"fmt"
 
+	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
 )
+
+func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAmount, bool) {
+	for _, item := range cost {
+		if item.Quantity <= 0 {
+			continue
+		}
+		if inv == nil || inv[item.ItemID] < item.Quantity {
+			return item, true
+		}
+	}
+	return model.ItemAmount{}, false
+}
 
 // execBuild handles the "build" command
 func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
@@ -23,11 +36,22 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
+	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "target tile is not buildable"
+		return res, nil
+	}
+
 	// Check tile is unoccupied
 	tileKey := model.TileKey(pos.X, pos.Y)
 	if _, occupied := ws.TileBuilding[tileKey]; occupied {
 		res.Code = model.CodePositionOccupied
 		res.Message = "tile is already occupied by a building"
+		return res, nil
+	}
+	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) {
+		res.Code = model.CodePositionOccupied
+		res.Message = "tile is reserved for construction"
 		return res, nil
 	}
 
@@ -41,16 +65,47 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	btype := model.BuildingType(fmt.Sprintf("%v", btypeRaw))
 
 	// Validate building type
-	switch btype {
-	case model.BuildingTypeMine, model.BuildingTypeSolarPlant, model.BuildingTypeFactory, model.BuildingTypeTurret:
-	default:
+	def, ok := model.BuildingDefinitionByID(btype)
+	if !ok {
 		res.Code = model.CodeValidationFailed
 		res.Message = fmt.Sprintf("unknown building type: %s", btype)
 		return res, nil
 	}
+	if !def.Buildable {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("building type not buildable: %s", btype)
+		return res, nil
+	}
+	if def.RequiresResourceNode && ws.Grid[pos.Y][pos.X].ResourceNodeID == "" {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("%s must be built on a resource node", btype)
+		return res, nil
+	}
+	if btype == model.BuildingTypeOrbitalCollector {
+		planet, ok := gc.maps.Planet(ws.PlanetID)
+		if !ok || planet == nil || planet.Kind != mapmodel.PlanetKindGasGiant {
+			res.Code = model.CodeInvalidTarget
+			res.Message = "orbital collector must be built on a gas giant"
+			return res, nil
+		}
+	}
+
+	var conveyorDir model.ConveyorDirection
+	if model.IsConveyorBuilding(btype) {
+		conveyorDir = model.ConveyorEast
+		if dirRaw, ok := cmd.Payload["direction"]; ok {
+			dir := model.ConveyorDirection(fmt.Sprintf("%v", dirRaw))
+			if !dir.Valid() {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("invalid conveyor direction: %v", dirRaw)
+				return res, nil
+			}
+			conveyorDir = dir
+		}
+	}
 
 	// Check resource cost
-	mCost, eCost := model.BuildingCost(btype)
+	mCost, eCost := def.BuildCost.Minerals, def.BuildCost.Energy
 	player := ws.Players[playerID]
 	if player.Resources.Minerals < mCost {
 		res.Code = model.CodeInsufficientResource
@@ -62,50 +117,59 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		res.Message = fmt.Sprintf("need %d energy, have %d", eCost, player.Resources.Energy)
 		return res, nil
 	}
+	if missing, ok := missingItem(player.Inventory, def.BuildCost.Items); ok {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d %s for build", missing.Quantity, missing.ItemID)
+		return res, nil
+	}
 
-	// Deduct resources
+	_, _, execRes := gc.requireExecutor(ws, playerID, *pos)
+	if execRes != nil {
+		return *execRes, nil
+	}
+
+	if ws.Construction == nil {
+		ws.Construction = model.NewConstructionQueue()
+	} else {
+		ws.Construction.EnsureInit()
+	}
+
+	taskID := ws.NextEntityID("c")
+	task := &model.ConstructionTask{
+		ID:                taskID,
+		PlayerID:          playerID,
+		RegionID:          constructionRegionKey(ws, *pos),
+		BuildingType:      btype,
+		Position:          *pos,
+		ConveyorDirection: conveyorDir,
+		Cost:              def.BuildCost,
+		State:             model.ConstructionPending,
+		EnqueueTick:       ws.Tick,
+	}
+	if err := ws.Construction.Enqueue(task); err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+
+	// Deduct resources (rollback on failure).
 	player.Resources.Minerals -= mCost
 	player.Resources.Energy -= eCost
-
-	// Create building
-	stats := model.BuildingStats(btype, 1)
-	id := ws.NextEntityID("b")
-	b := &model.Building{
-		ID:            id,
-		Type:          btype,
-		OwnerID:       playerID,
-		Position:      *pos,
-		HP:            stats.HP,
-		MaxHP:         stats.MaxHP,
-		Level:         1,
-		VisionRange:   stats.VisionRange,
-		MineralRate:   stats.MineralRate,
-		EnergyRate:    stats.EnergyRate,
-		EnergyConsume: stats.EnergyConsume,
-		Attack:        stats.Attack,
-		AttackRange:   stats.AttackRange,
-		IsActive:      true,
+	if !player.DeductItems(def.BuildCost.Items) {
+		player.Resources.Minerals += mCost
+		player.Resources.Energy += eCost
+		ws.Construction.Remove(taskID)
+		res.Code = model.CodeInsufficientResource
+		res.Message = "insufficient items for build"
+		return res, nil
 	}
-	ws.Buildings[id] = b
-	ws.TileBuilding[tileKey] = id
-	ws.Grid[pos.Y][pos.X].BuildingID = id
-
-	events := []*model.GameEvent{
-		{
-			EventType:       model.EvtEntityCreated,
-			VisibilityScope: playerID,
-			Payload: map[string]any{
-				"entity_type": "building",
-				"entity_id":   id,
-				"building":    b,
-			},
-		},
-	}
+	task.TotalTicks = max(1, defaultConstructionDurationTick)
+	task.RemainingTicks = task.TotalTicks
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("building %s created at (%d,%d)", id, pos.X, pos.Y)
-	return res, events
+	res.Message = fmt.Sprintf("construction task %s queued at (%d,%d)", taskID, pos.X, pos.Y)
+	return res, nil
 }
 
 // execMove handles the "move" command for a unit
@@ -235,6 +299,11 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 		}
 		targetPos = targetUnit.Position
 		targetOwner = targetUnit.OwnerID
+		if sameTeam(ws, playerID, targetOwner) {
+			res.Code = model.CodeInvalidTarget
+			res.Message = "cannot attack allied unit"
+			return res, nil
+		}
 
 		dist := model.ManhattanDist(attacker.Position, targetPos)
 		if dist > attacker.AttackRange {
@@ -292,6 +361,11 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 		}
 		targetPos = targetBuilding.Position
 		targetOwner = targetBuilding.OwnerID
+		if sameTeam(ws, playerID, targetOwner) {
+			res.Code = model.CodeInvalidTarget
+			res.Message = "cannot attack allied building"
+			return res, nil
+		}
 
 		dist := model.ManhattanDist(attacker.Position, targetPos)
 		if dist > attacker.AttackRange {
@@ -351,21 +425,21 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 	return res, events
 }
 
-// execProduce handles the "produce" command to create units at a factory
+// execProduce handles the "produce" command to create units at a production building
 func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	factoryID := cmd.Target.EntityID
-	if factoryID == "" {
+	producerID := cmd.Target.EntityID
+	if producerID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id (factory) required"
+		res.Message = "target.entity_id (production building) required"
 		return res, nil
 	}
 
-	building, ok := ws.Buildings[factoryID]
+	building, ok := ws.Buildings[producerID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", factoryID)
+		res.Message = fmt.Sprintf("building %s not found", producerID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
@@ -373,9 +447,10 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 		res.Message = "cannot use building owned by another player"
 		return res, nil
 	}
-	if building.Type != model.BuildingTypeFactory {
+	def, ok := model.BuildingDefinitionByID(building.Type)
+	if !ok || !def.CanProduceUnits {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "can only produce units at a factory"
+		res.Message = "can only produce units at a production building"
 		return res, nil
 	}
 
@@ -409,11 +484,21 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 		return res, nil
 	}
 
-	// Find a free adjacent tile near factory
+	execState, _, execRes := gc.requireExecutor(ws, playerID, building.Position)
+	if execRes != nil {
+		return *execRes, nil
+	}
+	if !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+		res.Code = model.CodeExecutorBusy
+		res.Message = "executor is busy"
+		return res, nil
+	}
+
+	// Find a free adjacent tile near production building
 	spawnPos := findAdjacentFree(ws, building.Position)
 	if spawnPos == nil {
 		res.Code = model.CodePositionOccupied
-		res.Message = "no free tile adjacent to factory"
+		res.Message = "no free tile adjacent to production building"
 		return res, nil
 	}
 
@@ -460,6 +545,7 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 // execUpgrade handles upgrading a building
 func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
+	var events []*model.GameEvent
 
 	entityID := cmd.Target.EntityID
 	if entityID == "" {
@@ -479,10 +565,32 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		res.Message = "cannot upgrade building owned by another player"
 		return res, nil
 	}
+	if building.Job != nil {
+		res.Code = model.CodeDuplicate
+		res.Message = "building already has a job"
+		return res, nil
+	}
 
-	mCost, eCost := model.BuildingCost(building.Type)
-	upgradeCostM := mCost * building.Level
-	upgradeCostE := eCost * building.Level
+	rule := model.BuildingUpgradeRuleFor(building.Type)
+	if !rule.Allow {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "building upgrade not allowed"
+		return res, nil
+	}
+	if building.Level >= rule.MaxLevel {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("building already at max level %d", rule.MaxLevel)
+		return res, nil
+	}
+	if rule.RequireIdle && building.Runtime.State != model.BuildingWorkIdle {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "building must be idle to upgrade"
+		return res, nil
+	}
+
+	cost := model.BuildingUpgradeCost(building.Type, building.Level)
+	upgradeCostM := cost.Minerals
+	upgradeCostE := cost.Energy
 
 	player := ws.Players[playerID]
 	if player.Resources.Minerals < upgradeCostM {
@@ -495,32 +603,61 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		res.Message = fmt.Sprintf("need %d energy for upgrade", upgradeCostE)
 		return res, nil
 	}
+	if missing, ok := missingItem(player.Inventory, cost.Items); ok {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d %s for upgrade", missing.Quantity, missing.ItemID)
+		return res, nil
+	}
+
+	execState, _, execRes := gc.requireExecutor(ws, playerID, building.Position)
+	if execRes != nil {
+		return *execRes, nil
+	}
+	if !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+		res.Code = model.CodeExecutorBusy
+		res.Message = "executor is busy"
+		return res, nil
+	}
 
 	player.Resources.Minerals -= upgradeCostM
 	player.Resources.Energy -= upgradeCostE
-	building.Level++
-
-	newStats := model.BuildingStats(building.Type, building.Level)
-	building.MaxHP = newStats.MaxHP
-	if building.HP > building.MaxHP {
-		building.HP = building.MaxHP
+	if !player.DeductItems(cost.Items) {
+		player.Resources.Minerals += upgradeCostM
+		player.Resources.Energy += upgradeCostE
+		res.Code = model.CodeInsufficientResource
+		res.Message = "insufficient items for upgrade"
+		return res, nil
 	}
-	building.MineralRate = newStats.MineralRate
-	building.EnergyRate = newStats.EnergyRate
-	building.EnergyConsume = newStats.EnergyConsume
-	building.Attack = newStats.Attack
-	building.AttackRange = newStats.AttackRange
-	building.VisionRange = newStats.VisionRange
+
+	nextLevel := building.Level + 1
+	if rule.DurationTicks > 0 {
+		building.Job = &model.BuildingJob{
+			Type:           model.BuildingJobUpgrade,
+			RemainingTicks: rule.DurationTicks,
+			TargetLevel:    nextLevel,
+			PrevState:      building.Runtime.State,
+		}
+		if evt := applyBuildingState(building, model.BuildingWorkPaused, stateReasonPause); evt != nil {
+			events = append(events, evt)
+		}
+		res.Status = model.StatusExecuted
+		res.Code = model.CodeOK
+		res.Message = fmt.Sprintf("building %s upgrade started (level %d -> %d, %d ticks)", entityID, building.Level, nextLevel, rule.DurationTicks)
+		return res, events
+	}
+
+	applyUpgrade(building, nextLevel, building.Runtime.State)
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
 	res.Message = fmt.Sprintf("building %s upgraded to level %d", entityID, building.Level)
-	return res, nil
+	return res, events
 }
 
 // execDemolish handles demolishing a building
 func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
+	var events []*model.GameEvent
 
 	entityID := cmd.Target.EntityID
 	if entityID == "" {
@@ -540,35 +677,55 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		res.Message = "cannot demolish building owned by another player"
 		return res, nil
 	}
-	if building.Type == model.BuildingTypeBase {
+	if building.Type == model.BuildingTypeBattlefieldAnalysisBase {
 		res.Code = model.CodeInvalidTarget
 		res.Message = "cannot demolish your own base"
 		return res, nil
 	}
-
-	// Refund 50% of resources
-	mCost, eCost := model.BuildingCost(building.Type)
-	player := ws.Players[playerID]
-	player.Resources.Minerals += mCost / 2 * building.Level
-	player.Resources.Energy += eCost / 2 * building.Level
-
-	delete(ws.Buildings, entityID)
-	tileKey := model.TileKey(building.Position.X, building.Position.Y)
-	delete(ws.TileBuilding, tileKey)
-	ws.Grid[building.Position.Y][building.Position.X].BuildingID = ""
-
-	events := []*model.GameEvent{
-		{
-			EventType:       model.EvtEntityDestroyed,
-			VisibilityScope: playerID,
-			Payload: map[string]any{
-				"entity_id":   entityID,
-				"entity_type": "building",
-				"owner_id":    playerID,
-				"reason":      "demolish",
-			},
-		},
+	if building.Job != nil {
+		res.Code = model.CodeDuplicate
+		res.Message = "building already has a job"
+		return res, nil
 	}
+	rule := model.BuildingDemolishRuleFor(building.Type)
+	if !rule.Allow {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "building demolish not allowed"
+		return res, nil
+	}
+	if rule.RequireIdle && building.Runtime.State != model.BuildingWorkIdle {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "building must be idle to demolish"
+		return res, nil
+	}
+
+	execState, _, execRes := gc.requireExecutor(ws, playerID, building.Position)
+	if execRes != nil {
+		return *execRes, nil
+	}
+	if !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+		res.Code = model.CodeExecutorBusy
+		res.Message = "executor is busy"
+		return res, nil
+	}
+
+	if rule.DurationTicks > 0 {
+		building.Job = &model.BuildingJob{
+			Type:           model.BuildingJobDemolish,
+			RemainingTicks: rule.DurationTicks,
+			RefundRate:     rule.RefundRate,
+			PrevState:      building.Runtime.State,
+		}
+		if evt := applyBuildingState(building, model.BuildingWorkPaused, stateReasonPause); evt != nil {
+			events = append(events, evt)
+		}
+		res.Status = model.StatusExecuted
+		res.Code = model.CodeOK
+		res.Message = fmt.Sprintf("building %s demolish started (%d ticks)", entityID, rule.DurationTicks)
+		return res, events
+	}
+
+	events = demolishBuilding(ws, building, rule.RefundRate)
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
@@ -579,6 +736,9 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 // settleResources produces/consumes resources for all buildings each tick
 func settleResources(ws *model.WorldState) []*model.GameEvent {
 	var events []*model.GameEvent
+	settleEnergyStorage(ws)
+	coverage := model.ResolvePowerCoverage(ws)
+	allocations := model.ResolvePowerAllocations(ws, coverage)
 
 	for _, b := range ws.Buildings {
 		player := ws.Players[b.OwnerID]
@@ -586,22 +746,81 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 
-		if !b.IsActive {
+		if b.Runtime.State == model.BuildingWorkPaused || b.Runtime.State == model.BuildingWorkIdle {
 			continue
 		}
 
-		// Check energy availability for energy-consuming buildings
-		if b.EnergyConsume > 0 && player.Resources.Energy < b.EnergyConsume {
-			b.IsActive = false
+		maintenance := b.Runtime.Params.MaintenanceCost
+		totalEnergyCost := model.PowerDemandForBuilding(b)
+		effectiveEnergyCost := totalEnergyCost
+		powerRatio := 1.0
+
+		if maintenance.Minerals > 0 && player.Resources.Minerals < maintenance.Minerals {
+			if evt := applyBuildingState(b, model.BuildingWorkError, stateReasonFault); evt != nil {
+				evt.Payload["cause"] = "maintenance_insufficient"
+				events = append(events, evt)
+			}
 			continue
+		}
+
+		if totalEnergyCost > 0 {
+			cov, ok := coverage[b.ID]
+			if !ok || !cov.Connected {
+				reason := powerCoverageReasonToStateReason(cov.Reason)
+				if !ok {
+					reason = powerCoverageReasonToStateReason(model.PowerCoverageNoConnector)
+				}
+				if evt := applyBuildingState(b, model.BuildingWorkNoPower, reason); evt != nil {
+					events = append(events, evt)
+				}
+				continue
+			}
+			alloc, ok := allocations.Buildings[b.ID]
+			if !ok || alloc.Allocated <= 0 {
+				if evt := applyBuildingState(b, model.BuildingWorkNoPower, stateReasonUnderPower); evt != nil {
+					events = append(events, evt)
+				}
+				continue
+			}
+			powerRatio = alloc.Ratio
+			effectiveEnergyCost = alloc.Allocated
+		}
+
+		// Check energy availability for energy-consuming buildings
+		if totalEnergyCost > 0 && player.Resources.Energy < effectiveEnergyCost {
+			if evt := applyBuildingState(b, model.BuildingWorkNoPower, stateReasonUnderPower); evt != nil {
+				events = append(events, evt)
+			}
+			continue
+		}
+
+		if evt := applyBuildingState(b, model.BuildingWorkRunning, ""); evt != nil {
+			events = append(events, evt)
 		}
 
 		oldM := player.Resources.Minerals
 		oldE := player.Resources.Energy
 
-		player.Resources.Energy -= b.EnergyConsume
-		player.Resources.Minerals += b.MineralRate
-		player.Resources.Energy += b.EnergyRate
+		player.Resources.Minerals -= maintenance.Minerals
+		player.Resources.Energy -= effectiveEnergyCost
+
+		minerals := 0
+		if b.Runtime.Functions.Collect != nil {
+			minerals = b.Runtime.Functions.Collect.YieldPerTick
+			if def, ok := model.BuildingDefinitionByID(b.Type); ok && def.RequiresResourceNode {
+				minerals = mineResource(ws, b, minerals)
+			}
+		}
+		minerals = scaleByPowerRatio(minerals, powerRatio)
+		player.Resources.Minerals += minerals
+		if !model.IsPowerGeneratorModule(b.Runtime.Functions.Energy) {
+			energyGenerate := b.Runtime.Params.EnergyGenerate
+			if module := b.Runtime.Functions.Energy; module != nil && module.OutputPerTick > energyGenerate {
+				energyGenerate = module.OutputPerTick
+			}
+			energyGenerate = scaleByPowerRatio(energyGenerate, powerRatio)
+			player.Resources.Energy += energyGenerate
+		}
 
 		// Cap resources to avoid integer overflow
 		if player.Resources.Minerals > 10000 {
@@ -630,7 +849,120 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 		}
 	}
 
+	regenResourceNodes(ws)
+
 	return events
+}
+
+func scaleByPowerRatio(value int, ratio float64) int {
+	if value <= 0 {
+		return 0
+	}
+	if ratio >= 1 {
+		return value
+	}
+	if ratio <= 0 {
+		return 0
+	}
+	scaled := int(float64(value) * ratio)
+	if scaled < 0 {
+		return 0
+	}
+	if scaled > value {
+		return value
+	}
+	return scaled
+}
+
+func powerCoverageReasonToStateReason(reason model.PowerCoverageFailureReason) string {
+	switch reason {
+	case model.PowerCoverageNoConnector:
+		return "power_no_connector"
+	case model.PowerCoverageNoProvider:
+		return "power_no_provider"
+	case model.PowerCoverageOutOfRange:
+		return "power_out_of_range"
+	case model.PowerCoverageCapacityFull:
+		return "power_capacity_full"
+	default:
+		return stateReasonUnderPower
+	}
+}
+
+func mineResource(ws *model.WorldState, building *model.Building, yieldPerTick int) int {
+	if ws == nil || building == nil {
+		return 0
+	}
+	if yieldPerTick <= 0 {
+		return 0
+	}
+	if !ws.InBounds(building.Position.X, building.Position.Y) {
+		return 0
+	}
+	tile := ws.Grid[building.Position.Y][building.Position.X]
+	if tile.ResourceNodeID == "" {
+		return 0
+	}
+	node := ws.Resources[tile.ResourceNodeID]
+	if node == nil {
+		return 0
+	}
+
+	switch node.Behavior {
+	case "finite":
+		if node.Remaining <= 0 || node.CurrentYield <= 0 {
+			return 0
+		}
+		extracted := minInt(yieldPerTick, node.CurrentYield)
+		extracted = minInt(extracted, node.Remaining)
+		node.Remaining -= extracted
+		if node.Remaining == 0 {
+			node.CurrentYield = 0
+		}
+		return extracted
+	case "renewable":
+		if node.Remaining <= 0 || node.CurrentYield <= 0 {
+			return 0
+		}
+		extracted := minInt(yieldPerTick, node.CurrentYield)
+		extracted = minInt(extracted, node.Remaining)
+		node.Remaining -= extracted
+		return extracted
+	case "decay":
+		if node.CurrentYield <= 0 {
+			return 0
+		}
+		extracted := minInt(yieldPerTick, node.CurrentYield)
+		if node.DecayPerTick > 0 {
+			node.CurrentYield -= node.DecayPerTick
+			if node.CurrentYield < node.MinYield {
+				node.CurrentYield = node.MinYield
+			}
+		}
+		return extracted
+	default:
+		return 0
+	}
+}
+
+func regenResourceNodes(ws *model.WorldState) {
+	if ws == nil {
+		return
+	}
+	for _, node := range ws.Resources {
+		if node == nil {
+			continue
+		}
+		if node.Behavior != "renewable" || node.RegenPerTick <= 0 {
+			continue
+		}
+		if node.Remaining < node.MaxAmount {
+			node.Remaining += node.RegenPerTick
+			if node.Remaining > node.MaxAmount {
+				node.Remaining = node.MaxAmount
+			}
+		}
+	}
 }
 
 // settleTurrets - turrets auto-attack enemies in range
@@ -638,7 +970,11 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 	var events []*model.GameEvent
 
 	for _, turret := range ws.Buildings {
-		if turret.Type != model.BuildingTypeTurret || !turret.IsActive {
+		if turret.Type != model.BuildingTypeGaussTurret || turret.Runtime.State != model.BuildingWorkRunning {
+			continue
+		}
+		combat := turret.Runtime.Functions.Combat
+		if combat == nil {
 			continue
 		}
 		// Find enemy units in range
@@ -646,11 +982,14 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			if unit.OwnerID == turret.OwnerID {
 				continue
 			}
-			dist := model.ManhattanDist(turret.Position, unit.Position)
-			if dist > turret.AttackRange {
+			if sameTeam(ws, unit.OwnerID, turret.OwnerID) {
 				continue
 			}
-			damage := max(1, turret.Attack-unit.Defense)
+			dist := model.ManhattanDist(turret.Position, unit.Position)
+			if dist > combat.Range {
+				continue
+			}
+			damage := max(1, combat.Attack-unit.Defense)
 			unit.HP -= damage
 
 			events = append(events, &model.GameEvent{
@@ -689,7 +1028,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 func checkVictory(ws *model.WorldState) string {
 	playerBases := make(map[string]bool)
 	for _, b := range ws.Buildings {
-		if b.Type == model.BuildingTypeBase {
+		if b.Type == model.BuildingTypeBattlefieldAnalysisBase {
 			playerBases[b.OwnerID] = true
 		}
 	}
@@ -742,6 +1081,13 @@ func removeUnitFromTile(ws *model.WorldState, tileKey, unitID string) {
 
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

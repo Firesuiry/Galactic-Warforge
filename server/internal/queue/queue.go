@@ -51,6 +51,13 @@ func (q *CommandQueue) Len() int {
 	return len(q.pending)
 }
 
+// ClearPending drops all queued requests but keeps the deduplication set.
+func (q *CommandQueue) ClearPending() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.pending = nil
+}
+
 // HasSeen returns true if request_id has been processed before
 func (q *CommandQueue) HasSeen(requestID string) bool {
 	q.mu.Lock()

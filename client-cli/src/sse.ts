@@ -1,17 +1,17 @@
 import { SERVER_URL, SSE_BUFFER_SIZE } from './config.js';
-import type { GameEvent } from './types.js';
+import type { GameEvent, SseEvent } from './types.js';
 
-const eventBuffer: GameEvent[] = [];
+const eventBuffer: SseEvent[] = [];
 let sseController: AbortController | null = null;
 let sseRunning = false;
 let retryDelay = 1000;
-let onEventPrint: ((e: GameEvent) => void) | null = null;
+let onEventPrint: ((e: SseEvent) => void) | null = null;
 
-export function setEventPrinter(fn: (e: GameEvent) => void) {
+export function setEventPrinter(fn: (e: SseEvent) => void) {
   onEventPrint = fn;
 }
 
-export function getEventBuffer(): GameEvent[] {
+export function getEventBuffer(): SseEvent[] {
   return [...eventBuffer];
 }
 
@@ -79,7 +79,14 @@ function processBuffer(buffer: string): string {
     if (parsed.eventType === 'game' && parsed.data) {
       try {
         const evt = JSON.parse(parsed.data) as GameEvent;
-        pushEvent(evt);
+        pushEvent({ type: 'game', event: evt });
+      } catch { /* ignore */ }
+    } else if (parsed.eventType === 'connected' && parsed.data) {
+      try {
+        const payload = JSON.parse(parsed.data) as { player_id?: string };
+        if (payload.player_id) {
+          pushEvent({ type: 'connected', player_id: payload.player_id });
+        }
       } catch { /* ignore */ }
     }
   }
@@ -87,7 +94,7 @@ function processBuffer(buffer: string): string {
   return remaining;
 }
 
-function pushEvent(evt: GameEvent) {
+function pushEvent(evt: SseEvent) {
   if (eventBuffer.length >= SSE_BUFFER_SIZE) {
     eventBuffer.shift();
   }

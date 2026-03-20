@@ -4,13 +4,15 @@ package model
 type EventType string
 
 const (
-	EvtCommandResult  EventType = "command_result"
-	EvtEntityCreated  EventType = "entity_created"
-	EvtEntityMoved    EventType = "entity_moved"
-	EvtDamageApplied  EventType = "damage_applied"
-	EvtEntityDestroyed EventType = "entity_destroyed"
-	EvtResourceChanged EventType = "resource_changed"
-	EvtTickCompleted  EventType = "tick_completed"
+	EvtCommandResult        EventType = "command_result"
+	EvtEntityCreated        EventType = "entity_created"
+	EvtEntityMoved          EventType = "entity_moved"
+	EvtDamageApplied        EventType = "damage_applied"
+	EvtEntityDestroyed      EventType = "entity_destroyed"
+	EvtBuildingStateChanged EventType = "building_state_changed"
+	EvtResourceChanged      EventType = "resource_changed"
+	EvtTickCompleted        EventType = "tick_completed"
+	EvtProductionAlert      EventType = "production_alert"
 )
 
 // GameEvent is a single game event pushed to SSE subscribers
@@ -24,7 +26,17 @@ type GameEvent struct {
 
 // TickSummary is a lightweight summary pushed at tick boundary
 type TickSummary struct {
-	Tick      int64 `json:"tick"`
-	EventCount int  `json:"event_count"`
+	Tick       int64 `json:"tick"`
+	EventCount int   `json:"event_count"`
 	DurationMs int64 `json:"duration_ms"`
+}
+
+// EventSnapshotResponse is the response for GET /events/snapshot.
+type EventSnapshotResponse struct {
+	SinceTick         int64        `json:"since_tick,omitempty"`
+	AfterEventID      string       `json:"after_event_id,omitempty"`
+	AvailableFromTick int64        `json:"available_from_tick"`
+	NextEventID       string       `json:"next_event_id,omitempty"`
+	HasMore           bool         `json:"has_more"`
+	Events            []*GameEvent `json:"events"`
 }

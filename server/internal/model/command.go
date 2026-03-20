@@ -4,12 +4,12 @@ package model
 type CommandType string
 
 const (
-	CmdBuild    CommandType = "build"
-	CmdMove     CommandType = "move"
-	CmdAttack   CommandType = "attack"
-	CmdProduce  CommandType = "produce"
-	CmdUpgrade  CommandType = "upgrade"
-	CmdDemolish CommandType = "demolish"
+	CmdBuild      CommandType = "build"
+	CmdMove       CommandType = "move"
+	CmdAttack     CommandType = "attack"
+	CmdProduce    CommandType = "produce"
+	CmdUpgrade    CommandType = "upgrade"
+	CmdDemolish   CommandType = "demolish"
 	CmdScanGalaxy CommandType = "scan_galaxy"
 	CmdScanSystem CommandType = "scan_system"
 	CmdScanPlanet CommandType = "scan_planet"
@@ -44,25 +44,28 @@ type CommandRequest struct {
 type CommandStatus string
 
 const (
-	StatusAccepted  CommandStatus = "accepted"
-	StatusRejected  CommandStatus = "rejected"
-	StatusExecuted  CommandStatus = "executed"
-	StatusFailed    CommandStatus = "failed"
+	StatusAccepted CommandStatus = "accepted"
+	StatusRejected CommandStatus = "rejected"
+	StatusExecuted CommandStatus = "executed"
+	StatusFailed   CommandStatus = "failed"
 )
 
 // ResultCode is a machine-readable outcome code
 type ResultCode string
 
 const (
-	CodeOK                  ResultCode = "OK"
-	CodeInvalidTarget       ResultCode = "INVALID_TARGET"
-	CodeNotOwner            ResultCode = "NOT_OWNER"
-	CodeOutOfRange          ResultCode = "OUT_OF_RANGE"
+	CodeOK                   ResultCode = "OK"
+	CodeInvalidTarget        ResultCode = "INVALID_TARGET"
+	CodeNotOwner             ResultCode = "NOT_OWNER"
+	CodeOutOfRange           ResultCode = "OUT_OF_RANGE"
 	CodeInsufficientResource ResultCode = "INSUFFICIENT_RESOURCE"
-	CodeDuplicate           ResultCode = "DUPLICATE"
-	CodeValidationFailed    ResultCode = "VALIDATION_FAILED"
-	CodeEntityNotFound      ResultCode = "ENTITY_NOT_FOUND"
-	CodePositionOccupied    ResultCode = "POSITION_OCCUPIED"
+	CodeDuplicate            ResultCode = "DUPLICATE"
+	CodeValidationFailed     ResultCode = "VALIDATION_FAILED"
+	CodeEntityNotFound       ResultCode = "ENTITY_NOT_FOUND"
+	CodePositionOccupied     ResultCode = "POSITION_OCCUPIED"
+	CodeUnauthorized         ResultCode = "UNAUTHORIZED"
+	CodeExecutorUnavailable  ResultCode = "EXECUTOR_UNAVAILABLE"
+	CodeExecutorBusy         ResultCode = "EXECUTOR_BUSY"
 )
 
 // CommandResult is the per-command outcome within a response
@@ -83,7 +86,7 @@ type CommandResponse struct {
 
 // QueuedRequest is a request stored in the command queue, enriched with auth context
 type QueuedRequest struct {
-	Request    CommandRequest
-	PlayerID   string
+	Request     CommandRequest
+	PlayerID    string
 	EnqueueTick int64
 }

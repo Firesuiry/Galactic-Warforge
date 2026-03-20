@@ -1,6 +1,10 @@
 package model
 
-import "sync"
+import (
+	"sync"
+
+	"siliconworld/internal/terrain"
+)
 
 // Resources holds player resource counts
 type Resources struct {
@@ -10,34 +14,50 @@ type Resources struct {
 
 // PlayerState holds per-player game state
 type PlayerState struct {
-	PlayerID  string    `json:"player_id"`
-	Resources Resources `json:"resources"`
-	IsAlive   bool      `json:"is_alive"`
+	PlayerID    string         `json:"player_id"`
+	TeamID      string         `json:"team_id"`
+	Role        string         `json:"role"`
+	Resources   Resources      `json:"resources"`
+	Inventory   ItemInventory  `json:"inventory,omitempty"`
+	IsAlive     bool           `json:"is_alive"`
+	Permissions []string       `json:"permissions,omitempty"`
+	Executor    *ExecutorState `json:"executor,omitempty"`
+
+	permissionSet map[string]struct{} `json:"-"`
 }
 
 // MapTile represents a single grid cell
 type MapTile struct {
-	X               int    `json:"x"`
-	Y               int    `json:"y"`
-	ResourceDeposit int    `json:"resource_deposit"` // mineral deposit value
-	BuildingID      string `json:"building_id,omitempty"`
+	X              int              `json:"x"`
+	Y              int              `json:"y"`
+	ResourceNodeID string           `json:"resource_node_id,omitempty"`
+	BuildingID     string           `json:"building_id,omitempty"`
+	Terrain        terrain.TileType `json:"terrain"`
 }
 
 // WorldState is the authoritative game state
 type WorldState struct {
 	mu sync.RWMutex
 
-	Tick      int64                   `json:"tick"`
-	PlanetID  string                  `json:"planet_id"`
-	MapWidth  int                     `json:"map_width"`
-	MapHeight int                     `json:"map_height"`
-	Players   map[string]*PlayerState `json:"players"`
-	Buildings map[string]*Building    `json:"buildings"`
-	Units     map[string]*Unit        `json:"units"`
-	Grid      [][]MapTile             `json:"-"` // grid[y][x]
+	Tick              int64                             `json:"tick"`
+	PlanetID          string                            `json:"planet_id"`
+	MapWidth          int                               `json:"map_width"`
+	MapHeight         int                               `json:"map_height"`
+	Players           map[string]*PlayerState           `json:"players"`
+	Buildings         map[string]*Building              `json:"buildings"`
+	Units             map[string]*Unit                  `json:"units"`
+	Grid              [][]MapTile                       `json:"-"` // grid[y][x]
+	Resources         map[string]*ResourceNodeState     `json:"resources"`
+	LogisticsStations map[string]*LogisticsStationState `json:"-"`
+	LogisticsDrones   map[string]*LogisticsDroneState   `json:"-"`
+	LogisticsShips    map[string]*LogisticsShipState    `json:"-"`
+	PowerInputs       []PowerInput                      `json:"-"`
+	PowerGrid         *PowerGridGraph                   `json:"-"`
+	Pipelines         *PipelineNetworkState             `json:"pipelines,omitempty"`
+	Construction      *ConstructionQueue                `json:"construction,omitempty"`
 
 	// Tile occupancy: maps "x,y" -> entity ID
-	TileBuilding map[string]string `json:"-"`
+	TileBuilding map[string]string   `json:"-"`
 	TileUnits    map[string][]string `json:"-"`
 
 	EntityCounter int64 `json:"-"`
@@ -46,14 +66,20 @@ type WorldState struct {
 // NewWorldState creates an empty world state
 func NewWorldState(planetID string, mapWidth, mapHeight int) *WorldState {
 	ws := &WorldState{
-		PlanetID:    planetID,
-		MapWidth:     mapWidth,
-		MapHeight:    mapHeight,
-		Players:      make(map[string]*PlayerState),
-		Buildings:    make(map[string]*Building),
-		Units:        make(map[string]*Unit),
-		TileBuilding: make(map[string]string),
-		TileUnits:    make(map[string][]string),
+		PlanetID:          planetID,
+		MapWidth:          mapWidth,
+		MapHeight:         mapHeight,
+		Players:           make(map[string]*PlayerState),
+		Buildings:         make(map[string]*Building),
+		Units:             make(map[string]*Unit),
+		Resources:         make(map[string]*ResourceNodeState),
+		LogisticsStations: make(map[string]*LogisticsStationState),
+		LogisticsDrones:   make(map[string]*LogisticsDroneState),
+		LogisticsShips:    make(map[string]*LogisticsShipState),
+		TileBuilding:      make(map[string]string),
+		TileUnits:         make(map[string][]string),
+		PowerGrid:         NewPowerGridGraph(mapWidth, mapHeight),
+		Construction:      NewConstructionQueue(),
 	}
 
 	// Initialize grid
@@ -61,7 +87,7 @@ func NewWorldState(planetID string, mapWidth, mapHeight int) *WorldState {
 	for y := range ws.Grid {
 		ws.Grid[y] = make([]MapTile, mapWidth)
 		for x := range ws.Grid[y] {
-			ws.Grid[y][x] = MapTile{X: x, Y: y}
+			ws.Grid[y][x] = MapTile{X: x, Y: y, Terrain: terrain.TileBuildable}
 		}
 	}
 

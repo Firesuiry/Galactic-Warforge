@@ -12,9 +12,10 @@ import (
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
+	"siliconworld/internal/gateway"
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
-	"siliconworld/internal/gateway"
+	"siliconworld/internal/persistence"
 	"siliconworld/internal/queue"
 )
 
@@ -44,11 +45,23 @@ func main() {
 		mapCfg.Planet.Height,
 	)
 	log.Printf("  port: %d", cfg.Server.Port)
+	log.Printf("  data dir: %s", cfg.Server.DataDir)
 
 	// Wire up dependencies
+	policy := persistence.SnapshotPolicy{
+		IntervalTicks:    cfg.Server.SnapshotIntervalTicks,
+		RetentionTicks:   cfg.Server.SnapshotRetentionTicks,
+		RetentionCount:   cfg.Server.SnapshotRetentionCount,
+		MaxSnapshotBytes: cfg.Server.SnapshotMaxBytes,
+		MaxDeltaBytes:    cfg.Server.SnapshotDeltaMaxBytes,
+	}
+	store, err := persistence.New(cfg.Server.DataDir, policy)
+	if err != nil {
+		log.Fatalf("init persistence store: %v", err)
+	}
 	q := queue.New()
 	bus := gamecore.NewEventBus()
-	core := gamecore.New(cfg, maps, q, bus)
+	core := gamecore.New(cfg, maps, q, bus, store)
 	srv := gateway.New(cfg, core, bus, q)
 
 	// Start tick loop
