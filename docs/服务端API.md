@@ -481,10 +481,12 @@
 **GET /events/snapshot**
 - 说明: 事件快照查询（需认证），用于断线补拉
 - 查询参数:
+  - `event_types`（必填）：显式订阅的事件类型列表，逗号分隔；传 `all` 表示全部事件类型
   - `after_event_id`（推荐）：从指定事件之后开始返回
   - `since_tick`：从指定 tick 及以后开始返回（当 `after_event_id` 不可用时使用）
   - `limit`：最多返回事件数（默认 200，受服务端上限限制）
 - 响应字段:
+  - `event_types`：服务端实际采用的事件类型订阅列表
   - `since_tick` / `after_event_id`：原样回显请求游标（非空时返回）
   - `available_from_tick`：服务端当前仍可回溯到的最早 Tick
   - `next_event_id`：当前页最后一条事件 ID，可作为下一次增量拉取游标
@@ -512,6 +514,7 @@
 - 响应示例:
 ```json
 {
+  "event_types": ["command_result"],
   "available_from_tick": 100,
   "since_tick": 120,
   "next_event_id": "evt-123-5",
@@ -708,9 +711,13 @@
 
 **GET /events/stream**
 - 说明: SSE 事件流（需认证）
-- 事件格式: `event: connected` + `data: {"player_id":"p1"}`；`event: game` + `data: <GameEvent JSON>`
+- 查询参数:
+  - `event_types`（必填）：显式订阅的事件类型列表，逗号分隔；传 `all` 表示全部事件类型
+- 事件格式: `event: connected` + `data: {"player_id":"p1","event_types":["command_result"]}`；`event: game` + `data: <GameEvent JSON>`
 - `GameEvent.event_type` 取值与 `GET /events/snapshot` 一致；`payload` 结构随事件类型变化
-- 补充说明: CLI 默认会抑制实时打印 `resource_changed` / `threat_level_changed` / `tick_completed` 这类高频事件，但事件本身仍然会进入 SSE 缓冲，可通过 `events` 或 `GET /events/snapshot` 查看
+- 补充说明:
+  - 服务端不再默认自动推送全部事件；只有显式订阅的 `event_types` 才会进入该 SSE 连接
+  - 事件历史按类型独立保留，高频事件不会再把 `command_result` 这类低频关键事件挤出窗口
 - GameEvent 示例:
 ```json
 {

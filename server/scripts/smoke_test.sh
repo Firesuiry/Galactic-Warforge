@@ -143,7 +143,7 @@ test_replay() {
 # Test event snapshot
 test_events() {
     log_info "Testing event snapshot..."
-    RESP=$(curl -s -H "Authorization: Bearer $PLAYER_KEY" "$SERVER_URL/events/snapshot?limit=10")
+    RESP=$(curl -s -H "Authorization: Bearer $PLAYER_KEY" "$SERVER_URL/events/snapshot?event_types=command_result&limit=10")
     if echo "$RESP" | grep -q '"events"'; then
         log_pass "Event snapshot endpoint"
     else

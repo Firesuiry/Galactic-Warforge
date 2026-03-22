@@ -20,28 +20,36 @@ import (
 // EventBus broadcasts game events to all subscribers
 type EventBus struct {
 	mu          sync.RWMutex
-	subscribers map[string]chan *model.GameEvent // key: subscriber ID
+	subscribers map[string]*eventSubscriber // key: subscriber ID
+}
+
+type eventSubscriber struct {
+	ch          chan *model.GameEvent
+	eventFilter map[model.EventType]struct{}
 }
 
 func NewEventBus() *EventBus {
 	return &EventBus{
-		subscribers: make(map[string]chan *model.GameEvent),
+		subscribers: make(map[string]*eventSubscriber),
 	}
 }
 
-func (eb *EventBus) Subscribe(id string) chan *model.GameEvent {
+func (eb *EventBus) Subscribe(id string, eventTypes []model.EventType) chan *model.GameEvent {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 	ch := make(chan *model.GameEvent, 256)
-	eb.subscribers[id] = ch
+	eb.subscribers[id] = &eventSubscriber{
+		ch:          ch,
+		eventFilter: buildEventFilterSet(eventTypes),
+	}
 	return ch
 }
 
 func (eb *EventBus) Unsubscribe(id string) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
-	if ch, ok := eb.subscribers[id]; ok {
-		close(ch)
+	if sub, ok := eb.subscribers[id]; ok {
+		close(sub.ch)
 		delete(eb.subscribers, id)
 	}
 }
@@ -56,14 +64,36 @@ func (eb *EventBus) Publish(events []*model.GameEvent) {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 	for _, evt := range events {
-		for _, ch := range eb.subscribers {
+		for _, sub := range eb.subscribers {
+			if !matchesEventFilter(evt, sub.eventFilter) {
+				continue
+			}
 			select {
-			case ch <- evt:
+			case sub.ch <- evt:
 			default:
 				// drop if subscriber is slow
 			}
 		}
 	}
+}
+
+func buildEventFilterSet(eventTypes []model.EventType) map[model.EventType]struct{} {
+	if len(eventTypes) == 0 {
+		return nil
+	}
+	filter := make(map[model.EventType]struct{}, len(eventTypes))
+	for _, eventType := range eventTypes {
+		filter[eventType] = struct{}{}
+	}
+	return filter
+}
+
+func matchesEventFilter(evt *model.GameEvent, filter map[model.EventType]struct{}) bool {
+	if evt == nil || len(filter) == 0 {
+		return true
+	}
+	_, ok := filter[evt.EventType]
+	return ok
 }
 
 // Metrics captures per-tick performance data

@@ -1,4 +1,11 @@
-import { SERVER_URL, SSE_BUFFER_SIZE, SSE_SILENT_EVENT_TYPES, SSE_VERBOSE } from './config.js';
+import {
+  ALL_EVENT_TYPES,
+  DEFAULT_EVENT_TYPES,
+  SERVER_URL,
+  SSE_BUFFER_SIZE,
+  SSE_SILENT_EVENT_TYPES,
+  SSE_VERBOSE,
+} from './config.js';
 import type { GameEvent, SseEvent } from './types.js';
 
 const eventBuffer: SseEvent[] = [];
@@ -32,9 +39,13 @@ async function connectSSE(playerKey: string) {
 
   sseController = new AbortController();
   const signal = sseController.signal;
+  const eventTypes = SSE_VERBOSE ? [...ALL_EVENT_TYPES] : [...DEFAULT_EVENT_TYPES];
+  const query = new URLSearchParams({
+    event_types: eventTypes.join(','),
+  }).toString();
 
   try {
-    const res = await fetch(`${SERVER_URL}/events/stream`, {
+    const res = await fetch(`${SERVER_URL}/events/stream?${query}`, {
       headers: { Authorization: `Bearer ${playerKey}` },
       signal,
     });
@@ -83,9 +94,13 @@ function processBuffer(buffer: string): string {
       } catch { /* ignore */ }
     } else if (parsed.eventType === 'connected' && parsed.data) {
       try {
-        const payload = JSON.parse(parsed.data) as { player_id?: string };
+        const payload = JSON.parse(parsed.data) as { player_id?: string; event_types?: string[] };
         if (payload.player_id) {
-          pushEvent({ type: 'connected', player_id: payload.player_id });
+          pushEvent({
+            type: 'connected',
+            player_id: payload.player_id,
+            event_types: Array.isArray(payload.event_types) ? payload.event_types : undefined,
+          });
         }
       } catch { /* ignore */ }
     }

@@ -11,7 +11,7 @@
 ## 环境变量
 
 - `SW_SERVER`：服务端地址，默认 `http://localhost:18080`
-- `SW_SSE_VERBOSE=1`：显示所有实时 SSE 事件；默认会静音高频事件
+- `SW_SSE_VERBOSE=1`：主动订阅并显示所有实时 SSE 事件；默认只订阅低噪声关键事件
 
 ## 登录与事件流
 
@@ -20,9 +20,10 @@
   - `p1 / key_player_1`
   - `p2 / key_player_2`
 - 也可以输入自定义 `player_id` 与 `player_key`
-- CLI 会自动连接 `GET /events/stream`
-- 默认不会实时刷出 `resource_changed` / `threat_level_changed` / `tick_completed`，避免交互被刷屏
-- `events [count]` 可查看最近收到的 SSE 事件，包括上面这些被静音的高频事件
+- CLI 会自动连接 `GET /events/stream?event_types=...`
+- 默认只主动订阅低噪声关键事件，例如 `command_result`、`building_state_changed`、`research_completed`
+- `SW_SSE_VERBOSE=1` 时会改为显式订阅全部事件类型
+- `events [count]` 只显示当前 SSE 连接实际订阅到的事件
 - `switch [player_id] [key]` 会切换玩家并自动重连 SSE
 
 ## 命令总览
@@ -229,6 +230,8 @@ demolish_dyson sys-1 shell shell-1
 ```bash
 audit --player p1 --permission build --order desc --limit 20
 event_snapshot --since-tick 120 --limit 50
+event_snapshot --types command_result,building_state_changed --since-tick 120
+event_snapshot --all --since-tick 120 --limit 50
 alert_snapshot --since-tick 120 --limit 50
 ```
 
@@ -254,7 +257,7 @@ audit --player <id> --issuer-type <type> --issuer-id <id> --action <action> --re
 ## `event_snapshot` / `alert_snapshot` 选项
 
 ```bash
-event_snapshot --after-id <id> --since-tick <n> --limit <n>
+event_snapshot --types <a,b,c> --all --after-id <id> --since-tick <n> --limit <n>
 alert_snapshot --after-id <id> --since-tick <n> --limit <n>
 ```
 

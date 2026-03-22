@@ -361,8 +361,13 @@ func TestMetricsEndpoint(t *testing.T) {
 }
 
 func TestEventSnapshotEndpoint(t *testing.T) {
-	srv, _ := newTestServer(t)
-	req := httptest.NewRequest("GET", "/events/snapshot?since_tick=0", nil)
+	srv, core := newTestServer(t)
+	core.EventHistory().Record([]*model.GameEvent{
+		{EventID: "evt-10-1", Tick: 10, EventType: model.EvtTickCompleted, VisibilityScope: "all"},
+		{EventID: "evt-10-2", Tick: 10, EventType: model.EvtCommandResult, VisibilityScope: "p1"},
+	})
+
+	req := httptest.NewRequest("GET", "/events/snapshot?since_tick=0&event_types=command_result", nil)
 	req.Header.Set("Authorization", "Bearer key1")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -374,8 +379,35 @@ func TestEventSnapshotEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
-	if resp.Events == nil {
-		t.Error("events field should be present")
+	if len(resp.EventTypes) != 1 || resp.EventTypes[0] != model.EvtCommandResult {
+		t.Fatalf("unexpected event_types: %#v", resp.EventTypes)
+	}
+	if len(resp.Events) != 1 || resp.Events[0].EventType != model.EvtCommandResult {
+		t.Fatalf("expected only command_result events, got %#v", resp.Events)
+	}
+}
+
+func TestEventSnapshotRequiresEventTypes(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := httptest.NewRequest("GET", "/events/snapshot?since_tick=0", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestEventStreamRequiresEventTypes(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := httptest.NewRequest("GET", "/events/stream", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
 	}
 }
 

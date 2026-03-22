@@ -4,22 +4,61 @@ package model
 type EventType string
 
 const (
-	EvtCommandResult         EventType = "command_result"
-	EvtEntityCreated         EventType = "entity_created"
-	EvtEntityMoved           EventType = "entity_moved"
-	EvtDamageApplied         EventType = "damage_applied"
-	EvtEntityDestroyed       EventType = "entity_destroyed"
-	EvtBuildingStateChanged  EventType = "building_state_changed"
-	EvtResourceChanged       EventType = "resource_changed"
-	EvtTickCompleted         EventType = "tick_completed"
-	EvtProductionAlert       EventType = "production_alert"
+	EvtCommandResult        EventType = "command_result"
+	EvtEntityCreated        EventType = "entity_created"
+	EvtEntityMoved          EventType = "entity_moved"
+	EvtDamageApplied        EventType = "damage_applied"
+	EvtEntityDestroyed      EventType = "entity_destroyed"
+	EvtBuildingStateChanged EventType = "building_state_changed"
+	EvtResourceChanged      EventType = "resource_changed"
+	EvtTickCompleted        EventType = "tick_completed"
+	EvtProductionAlert      EventType = "production_alert"
 	EvtConstructionPaused   EventType = "construction_paused"
 	EvtConstructionResumed  EventType = "construction_resumed"
-	EvtResearchCompleted     EventType = "research_completed"
+	EvtResearchCompleted    EventType = "research_completed"
 	EvtThreatLevelChanged   EventType = "threat_level_changed"
 	EvtLootDropped          EventType = "loot_dropped"
 	EvtEntityUpdated        EventType = "entity_updated"
 )
+
+var allEventTypes = []EventType{
+	EvtCommandResult,
+	EvtEntityCreated,
+	EvtEntityMoved,
+	EvtDamageApplied,
+	EvtEntityDestroyed,
+	EvtBuildingStateChanged,
+	EvtResourceChanged,
+	EvtTickCompleted,
+	EvtProductionAlert,
+	EvtConstructionPaused,
+	EvtConstructionResumed,
+	EvtResearchCompleted,
+	EvtThreatLevelChanged,
+	EvtLootDropped,
+	EvtEntityUpdated,
+}
+
+var validEventTypes = func() map[EventType]struct{} {
+	out := make(map[EventType]struct{}, len(allEventTypes))
+	for _, eventType := range allEventTypes {
+		out[eventType] = struct{}{}
+	}
+	return out
+}()
+
+// AllEventTypes returns all supported event types.
+func AllEventTypes() []EventType {
+	out := make([]EventType, len(allEventTypes))
+	copy(out, allEventTypes)
+	return out
+}
+
+// IsKnownEventType reports whether eventType is supported by the server.
+func IsKnownEventType(eventType EventType) bool {
+	_, ok := validEventTypes[eventType]
+	return ok
+}
 
 // GameEvent is a single game event pushed to SSE subscribers
 type GameEvent struct {
@@ -39,6 +78,7 @@ type TickSummary struct {
 
 // EventSnapshotResponse is the response for GET /events/snapshot.
 type EventSnapshotResponse struct {
+	EventTypes        []EventType  `json:"event_types,omitempty"`
 	SinceTick         int64        `json:"since_tick,omitempty"`
 	AfterEventID      string       `json:"after_event_id,omitempty"`
 	AvailableFromTick int64        `json:"available_from_tick"`

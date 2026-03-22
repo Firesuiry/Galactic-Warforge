@@ -1,17 +1,21 @@
 package gamecore
 
 import (
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"siliconworld/internal/model"
 )
 
 // EventHistory stores recent game events for snapshot queries.
+// Each event type keeps an independent ring buffer so high-frequency
+// telemetry does not evict actionable events such as command results.
 type EventHistory struct {
 	mu     sync.RWMutex
 	limit  int
-	events []*model.GameEvent
-	index  map[string]int
+	events map[model.EventType][]*model.GameEvent
 }
 
 func NewEventHistory(limit int) *EventHistory {
@@ -19,12 +23,12 @@ func NewEventHistory(limit int) *EventHistory {
 		limit = 2000
 	}
 	return &EventHistory{
-		limit: limit,
-		index: make(map[string]int),
+		limit:  limit,
+		events: make(map[model.EventType][]*model.GameEvent),
 	}
 }
 
-// Record appends events to the history and enforces the size limit.
+// Record appends events to per-type history and enforces the per-type size limit.
 func (eh *EventHistory) Record(events []*model.GameEvent) {
 	if len(events) == 0 {
 		return
@@ -33,78 +37,73 @@ func (eh *EventHistory) Record(events []*model.GameEvent) {
 	defer eh.mu.Unlock()
 
 	for _, evt := range events {
-		eh.events = append(eh.events, evt)
-		eh.index[evt.EventID] = len(eh.events) - 1
-	}
-
-	if len(eh.events) <= eh.limit {
-		return
-	}
-
-	trim := len(eh.events) - eh.limit
-	for i := 0; i < trim; i++ {
-		delete(eh.index, eh.events[i].EventID)
-	}
-	eh.events = eh.events[trim:]
-
-	eh.index = make(map[string]int, len(eh.events))
-	for i, evt := range eh.events {
-		eh.index[evt.EventID] = i
+		if evt == nil {
+			continue
+		}
+		bucket := append(eh.events[evt.EventType], evt)
+		if len(bucket) > eh.limit {
+			bucket = append([]*model.GameEvent(nil), bucket[len(bucket)-eh.limit:]...)
+		}
+		eh.events[evt.EventType] = bucket
 	}
 }
 
-// Snapshot returns a slice of events after a given event ID or since a tick.
+// Snapshot returns events after a given event ID or since a tick.
 // The returned events are ordered and capped by limit.
-func (eh *EventHistory) Snapshot(afterEventID string, sinceTick int64, limit int) ([]*model.GameEvent, string, bool, int64) {
+func (eh *EventHistory) Snapshot(eventTypes []model.EventType, afterEventID string, sinceTick int64, limit int) ([]*model.GameEvent, string, bool, int64) {
 	eh.mu.RLock()
 	defer eh.mu.RUnlock()
 
 	if limit <= 0 {
-		limit = len(eh.events)
+		limit = eh.limit
 	}
 
-	availableFrom := int64(0)
-	if len(eh.events) > 0 {
-		availableFrom = eh.events[0].Tick
+	merged := eh.collectLocked(eventTypes)
+	if len(merged) == 0 {
+		return nil, "", false, 0
 	}
 
+	sort.Slice(merged, func(i, j int) bool {
+		return eventBefore(merged[i], merged[j])
+	})
+
+	availableFrom := merged[0].Tick
 	start := 0
 	useTickFallback := true
 	if afterEventID != "" {
-		if idx, ok := eh.index[afterEventID]; ok {
-			start = idx + 1
-			useTickFallback = false
-		}
-	}
-	if useTickFallback && sinceTick > 0 {
-		found := false
-		for i, evt := range eh.events {
-			if evt.Tick >= sinceTick {
-				start = i
-				found = true
+		for i, evt := range merged {
+			if evt.EventID == afterEventID {
+				start = i + 1
+				useTickFallback = false
 				break
 			}
 		}
-		if !found {
-			start = len(eh.events)
+	}
+	if useTickFallback && sinceTick > 0 {
+		start = len(merged)
+		for i, evt := range merged {
+			if evt.Tick >= sinceTick {
+				start = i
+				break
+			}
 		}
 	}
 
-	if start >= len(eh.events) {
+	if start >= len(merged) {
 		return nil, "", false, availableFrom
 	}
 
 	end := start + limit
-	if end > len(eh.events) {
-		end = len(eh.events)
+	if end > len(merged) {
+		end = len(merged)
 	}
 
-	result := append([]*model.GameEvent(nil), eh.events[start:end]...)
+	result := append([]*model.GameEvent(nil), merged[start:end]...)
 	nextEventID := ""
 	if len(result) > 0 {
 		nextEventID = result[len(result)-1].EventID
 	}
-	hasMore := end < len(eh.events)
+	hasMore := end < len(merged)
 	return result, nextEventID, hasMore, availableFrom
 }
 
@@ -112,21 +111,58 @@ func (eh *EventHistory) Snapshot(afterEventID string, sinceTick int64, limit int
 func (eh *EventHistory) TrimAfterTick(tick int64) int {
 	eh.mu.Lock()
 	defer eh.mu.Unlock()
-	if len(eh.events) == 0 {
-		return 0
-	}
-	keep := len(eh.events)
-	for keep > 0 && eh.events[keep-1].Tick > tick {
-		keep--
-	}
-	if keep == len(eh.events) {
-		return 0
-	}
-	removed := len(eh.events) - keep
-	eh.events = eh.events[:keep]
-	eh.index = make(map[string]int, len(eh.events))
-	for i, evt := range eh.events {
-		eh.index[evt.EventID] = i
+
+	removed := 0
+	for eventType, bucket := range eh.events {
+		keep := len(bucket)
+		for keep > 0 && bucket[keep-1].Tick > tick {
+			keep--
+		}
+		if keep == len(bucket) {
+			continue
+		}
+		removed += len(bucket) - keep
+		if keep == 0 {
+			delete(eh.events, eventType)
+			continue
+		}
+		eh.events[eventType] = append([]*model.GameEvent(nil), bucket[:keep]...)
 	}
 	return removed
+}
+
+func (eh *EventHistory) collectLocked(eventTypes []model.EventType) []*model.GameEvent {
+	merged := make([]*model.GameEvent, 0)
+	for _, eventType := range eventTypes {
+		merged = append(merged, eh.events[eventType]...)
+	}
+	return merged
+}
+
+func eventBefore(a, b *model.GameEvent) bool {
+	if a == nil || b == nil {
+		return a != nil
+	}
+	if a.Tick != b.Tick {
+		return a.Tick < b.Tick
+	}
+	return eventSequence(a) < eventSequence(b)
+}
+
+func eventSequence(evt *model.GameEvent) int64 {
+	if evt == nil {
+		return 0
+	}
+	parts := strings.Split(evt.EventID, "-")
+	if len(parts) < 3 {
+		return 0
+	}
+	if parts[2] == "tick" {
+		return 1<<62 - 1
+	}
+	seq, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return seq
 }

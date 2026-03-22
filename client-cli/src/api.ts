@@ -144,6 +144,7 @@ export function fetchAudit(params: AuditQueryParams = {}): Promise<AuditResponse
 // ── Event Snapshot ────────────────────────────────────────────────────────────
 
 export interface EventSnapshotParams {
+  event_types?: string[];
   after_event_id?: string;
   since_tick?: number;
   limit?: number;
@@ -153,6 +154,10 @@ export function fetchEventSnapshot(params: EventSnapshotParams = {}): Promise<Ev
   const searchParams = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined) {
+      if (k === 'event_types' && Array.isArray(v)) {
+        searchParams.set(k, v.join(','));
+        continue;
+      }
       searchParams.set(k, String(v));
     }
   }

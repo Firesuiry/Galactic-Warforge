@@ -449,6 +449,11 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 		writeError(w, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
+	eventTypes, err := parseEventTypesQuery(r, true)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -456,14 +461,22 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	subID := fmt.Sprintf("%s-%d", playerID, time.Now().UnixNano())
-	ch := s.bus.Subscribe(subID)
+	ch := s.bus.Subscribe(subID, eventTypes)
 	defer s.bus.Unsubscribe(subID)
 
 	log.Printf("[SSE] player %s connected (sub %s)", playerID, subID)
 	defer log.Printf("[SSE] player %s disconnected", playerID)
 
 	// Send a welcome ping
-	fmt.Fprintf(w, "event: connected\ndata: {\"player_id\":%q}\n\n", playerID)
+	connectedPayload, err := json.Marshal(map[string]any{
+		"player_id":   playerID,
+		"event_types": eventTypes,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build connected payload")
+		return
+	}
+	fmt.Fprintf(w, "event: connected\ndata: %s\n\n", connectedPayload)
 	flusher.Flush()
 
 	ctx := r.Context()
@@ -492,6 +505,11 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 // handleEventSnapshot handles GET /events/snapshot
 func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, playerID string) {
 	q := r.URL.Query()
+	eventTypes, err := parseEventTypesQuery(r, true)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	var sinceTick int64
 	if v := q.Get("since_tick"); v != "" {
@@ -520,7 +538,7 @@ func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, pla
 	}
 
 	afterEventID := q.Get("after_event_id")
-	events, nextEventID, hasMore, availableFrom := s.core.EventHistory().Snapshot(afterEventID, sinceTick, limit)
+	events, nextEventID, hasMore, availableFrom := s.core.EventHistory().Snapshot(eventTypes, afterEventID, sinceTick, limit)
 
 	filtered := make([]*model.GameEvent, 0, len(events))
 	for _, evt := range events {
@@ -530,6 +548,7 @@ func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, pla
 	}
 
 	resp := model.EventSnapshotResponse{
+		EventTypes:        eventTypes,
 		SinceTick:         sinceTick,
 		AfterEventID:      afterEventID,
 		AvailableFromTick: availableFrom,
@@ -538,6 +557,43 @@ func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, pla
 		Events:            filtered,
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func parseEventTypesQuery(r *http.Request, required bool) ([]model.EventType, error) {
+	rawValues, ok := r.URL.Query()["event_types"]
+	if required && (!ok || len(rawValues) == 0) {
+		return nil, fmt.Errorf("event_types is required")
+	}
+	if !ok || len(rawValues) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[model.EventType]struct{})
+	out := make([]model.EventType, 0, len(rawValues))
+	for _, rawValue := range rawValues {
+		for _, part := range strings.Split(rawValue, ",") {
+			token := strings.TrimSpace(part)
+			if token == "" {
+				continue
+			}
+			if token == "all" {
+				return model.AllEventTypes(), nil
+			}
+			eventType := model.EventType(token)
+			if !model.IsKnownEventType(eventType) {
+				return nil, fmt.Errorf("unknown event_types value: %s", token)
+			}
+			if _, exists := seen[eventType]; exists {
+				continue
+			}
+			seen[eventType] = struct{}{}
+			out = append(out, eventType)
+		}
+	}
+	if required && len(out) == 0 {
+		return nil, fmt.Errorf("event_types is required")
+	}
+	return out, nil
 }
 
 // handleProductionAlertSnapshot handles GET /alerts/production/snapshot

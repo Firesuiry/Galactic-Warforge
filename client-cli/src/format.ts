@@ -291,7 +291,8 @@ export function fmtFog(f: FogMapView): string {
 
 export function fmtEvent(e: SseEvent): string {
   if (e.type === 'connected') {
-    return `${chalk.green('[connected]')} player_id=${chalk.bold(e.player_id)}`;
+    const types = e.event_types?.length ? ` event_types=${chalk.dim(e.event_types.join(','))}` : '';
+    return `${chalk.green('[connected]')} player_id=${chalk.bold(e.player_id)}${types}`;
   }
   const evt = e.event;
   return `${chalk.cyan(`[t${evt.tick}]`)} ${chalk.yellow(evt.event_type)} ${chalk.dim(evt.visibility_scope)} ${JSON.stringify(evt.payload)}`;

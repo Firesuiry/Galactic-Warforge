@@ -3,6 +3,7 @@ import {
   fetchAudit, fetchEventSnapshot, fetchAlertSnapshot,
   sendReplay, sendRollback,
 } from '../api.js';
+import { ALL_EVENT_TYPES, DEFAULT_EVENT_TYPES } from '../config.js';
 import { fmtError } from '../format.js';
 import { getStringOption, hasFlag, parseArgs, parseIntegerArg } from './args.js';
 
@@ -96,13 +97,19 @@ export async function cmdEventSnapshot(args: string[]): Promise<string> {
 
   if (hasFlag(parsed, 'help')) {
     return `event_snapshot [options]
+  --types <a,b>      Explicit event types to query
+  --all              Query all event types
   --after-id <id>    After event ID
   --since-tick <n>   Since tick
   --limit <n>        Max events (default 200)`;
   }
 
   try {
+    const eventTypes = hasFlag(parsed, 'all')
+      ? [...ALL_EVENT_TYPES]
+      : (getStringOption(parsed, 'types')?.split(',').map(s => s.trim()).filter(Boolean) ?? [...DEFAULT_EVENT_TYPES]);
     const result = await fetchEventSnapshot({
+      event_types: eventTypes,
       after_event_id: getStringOption(parsed, 'after-id'),
       since_tick: parseOptionalInteger(getStringOption(parsed, 'since-tick'), 'since-tick'),
       limit: parseOptionalInteger(getStringOption(parsed, 'limit'), 'limit'),
@@ -113,6 +120,7 @@ export async function cmdEventSnapshot(args: string[]): Promise<string> {
 
     const lines: string[] = [
       `Events ${formatCursor(result.after_event_id, result.since_tick, 'from latest cursor')} (${result.events.length} events)`,
+      `Subscribed types: ${chalk.dim((result.event_types ?? eventTypes).join(','))}`,
       `Available from tick ${chalk.cyan(result.available_from_tick.toString())}`,
       result.has_more ? chalk.dim('(more events available)') : '',
       '',

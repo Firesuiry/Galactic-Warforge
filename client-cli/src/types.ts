@@ -408,6 +408,7 @@ export interface GameEvent {
 export interface ConnectedEvent {
   type: 'connected';
   player_id: string;
+  event_types?: string[];
 }
 
 export interface GameStreamEvent {
@@ -514,6 +515,7 @@ export interface GameEventDetail {
 }
 
 export interface EventSnapshotResponse {
+  event_types?: string[];
   available_from_tick: number;
   since_tick?: number;
   after_event_id?: string;
