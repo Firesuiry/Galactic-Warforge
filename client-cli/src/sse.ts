@@ -1,4 +1,4 @@
-import { SERVER_URL, SSE_BUFFER_SIZE } from './config.js';
+import { SERVER_URL, SSE_BUFFER_SIZE, SSE_SILENT_EVENT_TYPES, SSE_VERBOSE } from './config.js';
 import type { GameEvent, SseEvent } from './types.js';
 
 const eventBuffer: SseEvent[] = [];
@@ -99,7 +99,16 @@ function pushEvent(evt: SseEvent) {
     eventBuffer.shift();
   }
   eventBuffer.push(evt);
-  onEventPrint?.(evt);
+  if (shouldPrintEvent(evt)) {
+    onEventPrint?.(evt);
+  }
+}
+
+function shouldPrintEvent(evt: SseEvent): boolean {
+  if (SSE_VERBOSE || evt.type !== 'game') {
+    return true;
+  }
+  return !SSE_SILENT_EVENT_TYPES.has(evt.event.event_type);
 }
 
 function parseSSEBlock(block: string): { eventType: string; data: string } {

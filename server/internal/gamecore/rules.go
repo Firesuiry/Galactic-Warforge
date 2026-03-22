@@ -77,6 +77,49 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		res.Message = fmt.Sprintf("building type not buildable: %s", btype)
 		return res, nil
 	}
+
+	// Check tech unlock requirement
+	player := ws.Players[playerID]
+	if !CanBuildTech(player, model.TechUnlockBuilding, string(btype)) {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("building type %s requires research to unlock", btype)
+		return res, nil
+	}
+
+	recipeID := ""
+	if recipeRaw, ok := cmd.Payload["recipe_id"]; ok {
+		recipeID = fmt.Sprintf("%v", recipeRaw)
+		if recipeID != "" {
+			recipe, ok := model.Recipe(recipeID)
+			if !ok {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("unknown recipe: %s", recipeID)
+				return res, nil
+			}
+			if def := model.BuildingProfileFor(btype, 1); def.Runtime.Functions.Production == nil {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("building type %s does not support recipes", btype)
+				return res, nil
+			}
+			supportsRecipe := false
+			for _, allowed := range recipe.BuildingTypes {
+				if allowed == btype {
+					supportsRecipe = true
+					break
+				}
+			}
+			if !supportsRecipe {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("recipe %s not supported by building type %s", recipeID, btype)
+				return res, nil
+			}
+			if !CanUseRecipeTech(player, recipeID) {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("recipe %s requires research to unlock", recipeID)
+				return res, nil
+			}
+		}
+	}
 	if def.RequiresResourceNode && ws.Grid[pos.Y][pos.X].ResourceNodeID == "" {
 		res.Code = model.CodeInvalidTarget
 		res.Message = fmt.Sprintf("%s must be built on a resource node", btype)
@@ -107,7 +150,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 
 	// Check resource cost (availability validation)
 	mCost, eCost := def.BuildCost.Minerals, def.BuildCost.Energy
-	player := ws.Players[playerID]
+	player = ws.Players[playerID]
 	if player.Resources.Minerals < mCost {
 		res.Code = model.CodeInsufficientResource
 		res.Message = fmt.Sprintf("need %d minerals, have %d", mCost, player.Resources.Minerals)
@@ -143,6 +186,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		BuildingType:      btype,
 		Position:          *pos,
 		ConveyorDirection: conveyorDir,
+		RecipeID:          recipeID,
 		Cost:              def.BuildCost,
 		State:             model.ConstructionPending,
 		EnqueueTick:       ws.Tick,
@@ -588,6 +632,14 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 		res.Message = "can only produce units at a production building"
 		return res, nil
 	}
+	if ok, reason := buildingOperationalForCommand(ws, building); !ok {
+		res.Code = model.CodeInvalidTarget
+		if reason == "" {
+			reason = "not_operational"
+		}
+		res.Message = fmt.Sprintf("production building is not operational: %s", reason)
+		return res, nil
+	}
 
 	utypeRaw, ok := cmd.Payload["unit_type"]
 	if !ok {
@@ -941,12 +993,26 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 
 		minerals := 0
 		if b.Runtime.Functions.Collect != nil {
-			minerals = b.Runtime.Functions.Collect.YieldPerTick
+			syncCollectorResourceKind(ws, b)
+			collectYield := b.Runtime.Functions.Collect.YieldPerTick
 			if def, ok := model.BuildingDefinitionByID(b.Type); ok && def.RequiresResourceNode {
-				minerals = mineResource(ws, b, minerals)
+				collectYield = scaleByPowerRatio(collectYield, powerRatio)
+				if itemID := collectorOutputItemID(ws, b); itemID != "" && b.Storage != nil {
+					accepted, _, err := b.Storage.PreviewReceive(itemID, collectYield)
+					if err == nil && accepted > 0 {
+						mined := mineResource(ws, b, accepted)
+						if mined > 0 {
+							_, _, _ = b.Storage.Receive(itemID, mined)
+						}
+					}
+					collectYield = 0
+				} else {
+					minerals = mineResource(ws, b, collectYield)
+				}
+			} else {
+				minerals = scaleByPowerRatio(collectYield, powerRatio)
 			}
 		}
-		minerals = scaleByPowerRatio(minerals, powerRatio)
 		player.Resources.Minerals += minerals
 		if !model.IsPowerGeneratorModule(b.Runtime.Functions.Energy) {
 			energyGenerate := b.Runtime.Params.EnergyGenerate
@@ -1100,6 +1166,106 @@ func regenResourceNodes(ws *model.WorldState) {
 	}
 }
 
+func buildingOperationalForCommand(ws *model.WorldState, building *model.Building) (bool, string) {
+	if ws == nil || building == nil {
+		return false, ""
+	}
+	switch building.Runtime.State {
+	case model.BuildingWorkPaused, model.BuildingWorkError:
+		return false, building.Runtime.StateReason
+	}
+
+	demand := model.PowerDemandForBuilding(building)
+	if demand <= 0 {
+		return true, ""
+	}
+
+	coverage := model.ResolvePowerCoverage(ws)
+	cov, ok := coverage[building.ID]
+	if !ok || !cov.Connected {
+		reason := model.PowerCoverageNoConnector
+		if ok {
+			reason = cov.Reason
+		}
+		return false, powerCoverageReasonToStateReason(reason)
+	}
+
+	allocations := model.ResolvePowerAllocations(ws, coverage)
+	alloc, ok := allocations.Buildings[building.ID]
+	if !ok || alloc.Allocated <= 0 {
+		return false, stateReasonUnderPower
+	}
+	player := ws.Players[building.OwnerID]
+	if player == nil || player.Resources.Energy < alloc.Allocated {
+		return false, stateReasonUnderPower
+	}
+	return true, ""
+}
+
+func syncCollectorResourceKind(ws *model.WorldState, building *model.Building) {
+	if ws == nil || building == nil || building.Runtime.Functions.Collect == nil {
+		return
+	}
+	building.Runtime.Functions.Collect.ResourceKind = collectorResourceKind(ws, building)
+}
+
+func collectorOutputItemID(ws *model.WorldState, building *model.Building) string {
+	node := resourceNodeForBuilding(ws, building)
+	if node == nil {
+		return ""
+	}
+	switch node.Kind {
+	case string(mapmodel.ResourceIronOre):
+		return model.ItemIronOre
+	case string(mapmodel.ResourceCopperOre):
+		return model.ItemCopperOre
+	case string(mapmodel.ResourceStoneOre):
+		return model.ItemStoneOre
+	case string(mapmodel.ResourceSiliconOre):
+		return model.ItemSiliconOre
+	case string(mapmodel.ResourceTitaniumOre):
+		return model.ItemTitaniumOre
+	case string(mapmodel.ResourceCoal):
+		return model.ItemCoal
+	case string(mapmodel.ResourceCrudeOil):
+		return model.ItemCrudeOil
+	case string(mapmodel.ResourceWater):
+		return model.ItemWater
+	case string(mapmodel.ResourceFireIce):
+		return model.ItemFireIce
+	case string(mapmodel.ResourceFractalSilicon):
+		return model.ItemFractalSilicon
+	case string(mapmodel.ResourceGratingCrystal):
+		return model.ItemGratingCrystal
+	case string(mapmodel.ResourceMonopoleMagnet):
+		return model.ItemMonopoleMagnet
+	default:
+		return ""
+	}
+}
+
+func collectorResourceKind(ws *model.WorldState, building *model.Building) string {
+	node := resourceNodeForBuilding(ws, building)
+	if node == nil {
+		return ""
+	}
+	return node.Kind
+}
+
+func resourceNodeForBuilding(ws *model.WorldState, building *model.Building) *model.ResourceNodeState {
+	if ws == nil || building == nil {
+		return nil
+	}
+	if !ws.InBounds(building.Position.X, building.Position.Y) {
+		return nil
+	}
+	nodeID := ws.Grid[building.Position.Y][building.Position.X].ResourceNodeID
+	if nodeID == "" {
+		return nil
+	}
+	return ws.Resources[nodeID]
+}
+
 // settleTurrets - turrets auto-attack enemies in range (both units and enemy forces)
 func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 	var events []*model.GameEvent
@@ -1178,10 +1344,10 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 				EventType:       model.EvtDamageApplied,
 				VisibilityScope: "all",
 				Payload: map[string]any{
-					"attacker_id": turret.ID,
-					"target_id":   force.ID,
-					"damage":      damage,
-					"target_type": "enemy_force",
+					"attacker_id":        turret.ID,
+					"target_id":          force.ID,
+					"damage":             damage,
+					"target_type":        "enemy_force",
 					"remaining_strength": force.Strength,
 				},
 			})
@@ -1298,11 +1464,12 @@ func removeUnitFromTile(ws *model.WorldState, tileKey, unitID string) {
 }
 
 // execLaunchSolarSail handles the "launch_solar_sail" command.
-// Payload: {
-//   "building_id": "id of EM rail ejector or vertical launching silo",
-//   "orbit_radius": 1.0,  // optional, default 1.0 AU
-//   "inclination": 0.0,   // optional, default 0.0 degrees
-// }
+//
+//	Payload: {
+//	  "building_id": "id of EM rail ejector or vertical launching silo",
+//	  "orbit_radius": 1.0,  // optional, default 1.0 AU
+//	  "inclination": 0.0,   // optional, default 0.0 degrees
+//	}
 func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 

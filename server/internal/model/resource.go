@@ -8,12 +8,12 @@ type ResourceNodeState struct {
 	Behavior     string   `json:"behavior"`
 	Position     Position `json:"position"`
 	ClusterID    string   `json:"cluster_id,omitempty"`
-	MaxAmount    int      `json:"max_amount,omitempty"`
-	Remaining    int      `json:"remaining,omitempty"`
+	MaxAmount    int      `json:"max_amount"`
+	Remaining    int      `json:"remaining"`
 	BaseYield    int      `json:"base_yield"`
 	CurrentYield int      `json:"current_yield"`
-	MinYield     int      `json:"min_yield,omitempty"`
-	RegenPerTick int      `json:"regen_per_tick,omitempty"`
-	DecayPerTick int      `json:"decay_per_tick,omitempty"`
+	MinYield     int      `json:"min_yield"`
+	RegenPerTick int      `json:"regen_per_tick"`
+	DecayPerTick int      `json:"decay_per_tick"`
 	IsRare       bool     `json:"is_rare,omitempty"`
 }

@@ -86,6 +86,8 @@ func applyUpgrade(building *model.Building, level int, prevState model.BuildingW
 	}
 	building.VisionRange = newProfile.VisionRange
 	building.Runtime = newProfile.Runtime
+	model.InitBuildingStorage(building)
+	model.SyncBuildingProduction(building)
 	model.SyncBuildingConveyor(building)
 	model.SyncBuildingLogisticsStation(building)
 	if prevState != "" {

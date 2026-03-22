@@ -18,6 +18,7 @@ const (
 	EvtResearchCompleted     EventType = "research_completed"
 	EvtThreatLevelChanged   EventType = "threat_level_changed"
 	EvtLootDropped          EventType = "loot_dropped"
+	EvtEntityUpdated        EventType = "entity_updated"
 )
 
 // GameEvent is a single game event pushed to SSE subscribers

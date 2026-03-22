@@ -11,7 +11,7 @@ import (
 	"siliconworld/internal/queue"
 )
 
-func newBenchmarkCore(t *testing.B) *GameCore {
+func newBenchmarkCore(t testing.TB) *GameCore {
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
 			MapSeed:     "benchmark-seed",
@@ -24,14 +24,16 @@ func newBenchmarkCore(t *testing.B) *GameCore {
 		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
 	}
 	mapCfg := &mapconfig.Config{
-		Galaxy:      mapconfig.GalaxyConfig{SystemCount: 2},
-		System:      mapconfig.SystemConfig{PlanetsPerSystem: 2},
-		Planet:      mapconfig.PlanetConfig{Width: 64, Height: 64, ResourceDensity: 12},
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 2},
+		Planet: mapconfig.PlanetConfig{Width: 64, Height: 64, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
 	bus := NewEventBus()
-	return New(cfg, maps, q, bus, nil)
+	core := New(cfg, maps, q, bus, nil)
+	grantAllTechs(core.world, "p1", "p2")
+	return core
 }
 
 // BenchmarkTickThroughput measures how many ticks can be processed per second

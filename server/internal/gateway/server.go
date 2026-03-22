@@ -622,6 +622,11 @@ func validateCommandStructure(cmd model.Command) error {
 		if _, ok := cmd.Payload["building_type"]; !ok {
 			return fmt.Errorf("build requires payload.building_type")
 		}
+		if recipeID, ok := cmd.Payload["recipe_id"]; ok {
+			if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {
+				return fmt.Errorf("build payload.recipe_id must be a non-empty string when provided")
+			}
+		}
 	case model.CmdMove:
 		if cmd.Target.EntityID == "" {
 			return fmt.Errorf("move requires target.entity_id")
@@ -650,6 +655,70 @@ func validateCommandStructure(cmd model.Command) error {
 	case model.CmdDemolish:
 		if cmd.Target.EntityID == "" {
 			return fmt.Errorf("demolish requires target.entity_id")
+		}
+	case model.CmdCancelConstruction, model.CmdRestoreConstruction:
+		if _, ok := cmd.Payload["task_id"]; !ok {
+			return fmt.Errorf("%s requires payload.task_id", cmd.Type)
+		}
+	case model.CmdStartResearch, model.CmdCancelResearch:
+		if _, ok := cmd.Payload["tech_id"]; !ok {
+			return fmt.Errorf("%s requires payload.tech_id", cmd.Type)
+		}
+	case model.CmdLaunchSolarSail:
+		if _, ok := cmd.Payload["building_id"]; !ok {
+			return fmt.Errorf("launch_solar_sail requires payload.building_id")
+		}
+	case model.CmdBuildDysonNode:
+		if _, ok := cmd.Payload["system_id"]; !ok {
+			return fmt.Errorf("build_dyson_node requires payload.system_id")
+		}
+		if _, ok := cmd.Payload["layer_index"]; !ok {
+			return fmt.Errorf("build_dyson_node requires payload.layer_index")
+		}
+		if _, ok := cmd.Payload["latitude"]; !ok {
+			return fmt.Errorf("build_dyson_node requires payload.latitude")
+		}
+		if _, ok := cmd.Payload["longitude"]; !ok {
+			return fmt.Errorf("build_dyson_node requires payload.longitude")
+		}
+	case model.CmdBuildDysonFrame:
+		if _, ok := cmd.Payload["system_id"]; !ok {
+			return fmt.Errorf("build_dyson_frame requires payload.system_id")
+		}
+		if _, ok := cmd.Payload["layer_index"]; !ok {
+			return fmt.Errorf("build_dyson_frame requires payload.layer_index")
+		}
+		if _, ok := cmd.Payload["node_a_id"]; !ok {
+			return fmt.Errorf("build_dyson_frame requires payload.node_a_id")
+		}
+		if _, ok := cmd.Payload["node_b_id"]; !ok {
+			return fmt.Errorf("build_dyson_frame requires payload.node_b_id")
+		}
+	case model.CmdBuildDysonShell:
+		if _, ok := cmd.Payload["system_id"]; !ok {
+			return fmt.Errorf("build_dyson_shell requires payload.system_id")
+		}
+		if _, ok := cmd.Payload["layer_index"]; !ok {
+			return fmt.Errorf("build_dyson_shell requires payload.layer_index")
+		}
+		if _, ok := cmd.Payload["latitude_min"]; !ok {
+			return fmt.Errorf("build_dyson_shell requires payload.latitude_min")
+		}
+		if _, ok := cmd.Payload["latitude_max"]; !ok {
+			return fmt.Errorf("build_dyson_shell requires payload.latitude_max")
+		}
+		if _, ok := cmd.Payload["coverage"]; !ok {
+			return fmt.Errorf("build_dyson_shell requires payload.coverage")
+		}
+	case model.CmdDemolishDyson:
+		if _, ok := cmd.Payload["system_id"]; !ok {
+			return fmt.Errorf("demolish_dyson requires payload.system_id")
+		}
+		if _, ok := cmd.Payload["component_type"]; !ok {
+			return fmt.Errorf("demolish_dyson requires payload.component_type")
+		}
+		if _, ok := cmd.Payload["component_id"]; !ok {
+			return fmt.Errorf("demolish_dyson requires payload.component_id")
 		}
 	default:
 		return fmt.Errorf("unknown command type: %s", cmd.Type)

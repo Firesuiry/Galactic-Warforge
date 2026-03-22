@@ -23,6 +23,7 @@ type ConstructionTask struct {
 	Rotation          PlanRotation      `json:"rotation,omitempty"`
 	BlueprintParams   BlueprintParams   `json:"blueprint_params,omitempty"`
 	ConveyorDirection ConveyorDirection `json:"conveyor_direction,omitempty"`
+	RecipeID          string            `json:"recipe_id,omitempty"`
 	Cost              BuildCost         `json:"cost,omitempty"`
 	State             ConstructionState `json:"state"`
 	EnqueueTick       int64             `json:"enqueue_tick"`
@@ -42,10 +43,10 @@ type ConstructionTask struct {
 
 // ConstructionQueue stores pending and active construction tasks.
 type ConstructionQueue struct {
-	NextSeq       int64                           `json:"next_seq"`
-	Tasks         map[string]*ConstructionTask    `json:"tasks"`
-	Order         []string                        `json:"order"`
-	ReservedTiles map[string]string               `json:"reserved_tiles,omitempty"`
+	NextSeq       int64                            `json:"next_seq"`
+	Tasks         map[string]*ConstructionTask     `json:"tasks"`
+	Order         []string                         `json:"order"`
+	ReservedTiles map[string]string                `json:"reserved_tiles,omitempty"`
 	MaterialRes   *ConstructionMaterialReservation `json:"material_res,omitempty"`
 }
 
@@ -204,8 +205,8 @@ func (q *ConstructionQueue) RebuildReservations() {
 type MaterialSourceType int
 
 const (
-	MaterialSourceLocal    MaterialSourceType = iota // player local inventory
-	MaterialSourceLogistics                          // logistics station
+	MaterialSourceLocal     MaterialSourceType = iota // player local inventory
+	MaterialSourceLogistics                           // logistics station
 )
 
 // MaterialSource represents a source of materials for construction.
@@ -217,19 +218,19 @@ type MaterialSource struct {
 
 // MaterialReservation tracks reserved materials for a construction task.
 type MaterialReservation struct {
-	TaskID     string            `json:"task_id"`
-	PlayerID   string            `json:"player_id"`
-	Minerals   int               `json:"minerals"`
-	Energy     int               `json:"energy"`
-	Items      []ItemAmount      `json:"items,omitempty"`
-	Source     MaterialSource    `json:"source"`
-	ReservedAt int64             `json:"reserved_at"`
+	TaskID     string         `json:"task_id"`
+	PlayerID   string         `json:"player_id"`
+	Minerals   int            `json:"minerals"`
+	Energy     int            `json:"energy"`
+	Items      []ItemAmount   `json:"items,omitempty"`
+	Source     MaterialSource `json:"source"`
+	ReservedAt int64          `json:"reserved_at"`
 }
 
 // ConstructionMaterialReservation tracks all material reservations for construction tasks.
 type ConstructionMaterialReservation struct {
-	NextSeq       int64                         `json:"next_seq"`
-	Reservations  map[string]*MaterialReservation // taskID -> reservation
+	NextSeq      int64                           `json:"next_seq"`
+	Reservations map[string]*MaterialReservation // taskID -> reservation
 }
 
 // NewConstructionMaterialReservation returns an initialized material reservation tracker.

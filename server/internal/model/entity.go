@@ -32,6 +32,7 @@ type Building struct {
 	Conveyor          *ConveyorState          `json:"conveyor,omitempty"`
 	Sorter            *SorterState            `json:"sorter,omitempty"`
 	LogisticsStation  *LogisticsStationState  `json:"logistics_station,omitempty"`
+	Production        *ProductionState        `json:"production,omitempty"`
 	Job               *BuildingJob            `json:"job,omitempty"`
 	ProductionMonitor *ProductionMonitorState `json:"production_monitor,omitempty"`
 }

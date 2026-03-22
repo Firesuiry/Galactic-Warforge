@@ -3,20 +3,128 @@ import { setAuth, getAuth } from '../api.js';
 import { stopSSE, startSSE, getEventBuffer } from '../sse.js';
 import { fetchFogMap } from '../api.js';
 import { fmtFog, fmtEvent, fmtError } from '../format.js';
-import { DEFAULT_PLAYERS, DEFAULT_PLANET_ID } from '../config.js';
+import { DEFAULT_PLAYERS, DEFAULT_PLANET_ID, SERVER_URL } from '../config.js';
 import type { ReplContext } from '../types.js';
 
+const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
+  health: { desc: 'Server status and current tick' },
+  metrics: { desc: 'Runtime metrics' },
+  summary: { desc: 'Game summary (resources, players, map)' },
+  stats: { desc: 'Current player statistics' },
+  galaxy: { desc: 'Galaxy list' },
+  system: { usage: '[system_id]', desc: 'System details (default: sys-1)' },
+  planet: { usage: '[planet_id]', desc: 'Planet details: buildings + units + resources (default: planet-1-1)' },
+  fogmap: { usage: '[planet_id]', desc: 'Fog map raw JSON' },
+  fog: { usage: '[planet_id]', desc: 'ASCII fog grid render' },
+  scan_galaxy: { usage: '[galaxy_id]', desc: 'Discover all systems in a galaxy' },
+  scan_system: { usage: '<system_id>', desc: 'Discover a system' },
+  scan_planet: { usage: '<planet_id>', desc: 'Discover a planet' },
+  build: { usage: '<x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]', desc: 'Build any server-side buildable structure' },
+  move: { usage: '<entity_id> <x> <y> [--z <z>]', desc: 'Move entity to position' },
+  attack: { usage: '<entity_id> <target_id>', desc: 'Attack target entity' },
+  produce: { usage: '<entity_id> <unit_type>', desc: 'Produce unit (worker/soldier)' },
+  upgrade: { usage: '<entity_id>', desc: 'Upgrade building' },
+  demolish: { usage: '<entity_id>', desc: 'Demolish building' },
+  cancel_construction: { usage: '<task_id>', desc: 'Cancel queued or running construction task' },
+  restore_construction: { usage: '<task_id>', desc: 'Restore a cancelled construction task' },
+  start_research: { usage: '<tech_id>', desc: 'Start researching a technology' },
+  cancel_research: { usage: '<tech_id>', desc: 'Cancel a technology in progress or queue' },
+  launch_solar_sail: { usage: '<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]', desc: 'Launch solar sails from an ejector or silo' },
+  build_dyson_node: { usage: '<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]', desc: 'Build a Dyson sphere node' },
+  build_dyson_frame: { usage: '<system_id> <layer_index> <node_a_id> <node_b_id>', desc: 'Build a Dyson sphere frame' },
+  build_dyson_shell: { usage: '<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>', desc: 'Build a Dyson sphere shell' },
+  demolish_dyson: { usage: '<system_id> <node|frame|shell> <component_id>', desc: 'Demolish a Dyson sphere component' },
+  raw: { usage: '<json>', desc: 'Send raw /commands request JSON' },
+  switch: { usage: '[player_id] [key]', desc: 'Switch player' },
+  events: { usage: '[count]', desc: 'Show recent SSE events (default: 10)' },
+  status: { desc: 'Current player and connection status' },
+  audit: { usage: '[options]', desc: 'Query audit log' },
+  event_snapshot: { usage: '[options]', desc: 'Query event snapshot' },
+  alert_snapshot: { usage: '[options]', desc: 'Query production alert snapshot' },
+  replay: { usage: '[options]', desc: 'Replay tick range' },
+  rollback: { usage: '[options]', desc: 'Rollback to tick' },
+  help: { usage: '[command]', desc: 'Show help' },
+  clear: { desc: 'Clear screen' },
+  quit: { desc: 'Exit' },
+};
+
+const HELP_TEXT = [
+  chalk.bold('Commands:'),
+  '',
+  chalk.bold('  Query:'),
+  '    health          Server status and current tick',
+  '    metrics         Runtime metrics',
+  '    summary         Game summary',
+  '    stats           Current player statistics',
+  '    galaxy          Galaxy list',
+  '    system [id]     System details',
+  '    planet [id]     Planet details (buildings + units + resources)',
+  '    fogmap [id]     Fog map raw JSON',
+  '    fog    [id]     ASCII fog grid',
+  '',
+  chalk.bold('  Discovery:'),
+  '    scan_galaxy [id]   Discover all systems in a galaxy',
+  '    scan_system <id>   Discover a system',
+  '    scan_planet <id>   Discover a planet',
+  '',
+  chalk.bold('  Game Actions:'),
+  '    build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]',
+  '    move <entity_id> <x> <y> [--z <z>]',
+  '    attack <entity_id> <target>',
+  '    produce <entity_id> <type>',
+  '    upgrade <entity_id>',
+  '    demolish <entity_id>',
+  '    cancel_construction <task_id>',
+  '    restore_construction <task_id>',
+  '    start_research <tech_id>',
+  '    cancel_research <tech_id>',
+  '    launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]',
+  '    build_dyson_node <system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]',
+  '    build_dyson_frame <system_id> <layer_index> <node_a_id> <node_b_id>',
+  '    build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>',
+  '    demolish_dyson <system_id> <node|frame|shell> <component_id>',
+  '',
+  chalk.bold('  Admin/Debug:'),
+  '    audit [options]             Query audit log',
+  '    event_snapshot [options]    Query event snapshot',
+  '    alert_snapshot [options]    Query production alert snapshot',
+  '    replay [options]            Replay tick range',
+  '    rollback [options]          Rollback to tick',
+  '    raw <json>                  Send raw /commands request JSON',
+  '',
+  chalk.bold('  Util:'),
+  '    switch [player_id] [key]  Switch player',
+  '    events [count]            Show recent SSE events',
+  '    status                    Current player & server',
+  '    help [command]            Show help',
+  '    clear                     Clear screen',
+  '    quit / exit               Exit',
+].join('\n');
+
+function getCommandHelp(cmd: string): string {
+  const entry = HELP_ENTRIES[cmd];
+  if (!entry) {
+    return fmtError(`Unknown command: ${cmd}`);
+  }
+  return `${chalk.bold(cmd)} ${chalk.dim(entry.usage ?? '')}\n  ${entry.desc}`;
+}
+
+export function cmdHelp(args: string[]): string {
+  if (args[0]) {
+    return getCommandHelp(args[0]);
+  }
+  return HELP_TEXT;
+}
+
 export async function cmdSwitch(args: string[], ctx: ReplContext): Promise<string> {
-  let playerId = args[0];
+  const playerId = args[0];
   let playerKey = '';
 
   if (!playerId) {
-    // show available players
     const list = DEFAULT_PLAYERS.map((p, i) => `  [${i + 1}] ${p.id}`).join('\n');
-    return `Available players:\n${list}\nUsage: switch <player_id>`;
+    return `Available players:\n${list}\nUsage: switch <player_id> [key]`;
   }
 
-  // Check default players
   const found = DEFAULT_PLAYERS.find(p => p.id === playerId);
   if (found) {
     playerKey = found.key;
@@ -26,14 +134,9 @@ export async function cmdSwitch(args: string[], ctx: ReplContext): Promise<strin
     return fmtError('Unknown player. Usage: switch <player_id> [key]');
   }
 
-  // Stop existing SSE
   stopSSE();
-
-  // Set new auth
   setAuth(playerId, playerKey);
   ctx.currentPlayer = playerId;
-
-  // Restart SSE
   startSSE(playerKey);
 
   return chalk.green(`Switched to ${playerId}`);
@@ -61,71 +164,8 @@ export function cmdEvents(args: string[]): string {
 
 export function cmdStatus(_args: string[]): string {
   const { playerId } = getAuth();
-  const lines = [
+  return [
     `Current player: ${chalk.bold(playerId || '(none)')}`,
-    `Server: ${process.env.SW_SERVER ?? 'http://localhost:18080'}`,
-  ];
-  return lines.join('\n');
+    `Server: ${SERVER_URL}`,
+  ].join('\n');
 }
-
-export function cmdHelp(args: string[]): string {
-  if (args[0]) {
-    return getCommandHelp(args[0]);
-  }
-  return HELP_TEXT;
-}
-
-function getCommandHelp(cmd: string): string {
-  const entry = HELP_ENTRIES[cmd];
-  if (!entry) return fmtError(`Unknown command: ${cmd}`);
-  return `${chalk.bold(cmd)} ${chalk.dim(entry.usage ?? '')}\n  ${entry.desc}`;
-}
-
-const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
-  health:  { desc: 'Server status and current tick' },
-  metrics: { desc: 'Runtime metrics' },
-  summary: { desc: 'Game summary (resources, players, map)' },
-  galaxy:  { desc: 'Galaxy list' },
-  system:  { usage: '[system_id]', desc: 'System details (default: sys-1)' },
-  planet:  { usage: '[planet_id]', desc: 'Planet details: buildings + units (default: planet-1-1)' },
-  fogmap:  { usage: '[planet_id]', desc: 'Fog map raw JSON' },
-  fog:     { usage: '[planet_id]', desc: 'ASCII fog grid render' },
-  scan_galaxy: { usage: '[galaxy_id]', desc: 'Discover all systems in a galaxy' },
-  scan_system: { usage: '<system_id>', desc: 'Discover a system' },
-  scan_planet: { usage: '<planet_id>', desc: 'Discover a planet' },
-  raw:     { usage: '<json>', desc: 'Send raw /commands request JSON' },
-  switch:  { usage: '[player_id] [key]', desc: 'Switch player' },
-  events:  { usage: '[count]', desc: 'Show recent SSE events (default: 10)' },
-  status:  { desc: 'Current player and connection status' },
-  help:    { usage: '[command]', desc: 'Show help' },
-  clear:   { desc: 'Clear screen' },
-  quit:    { desc: 'Exit' },
-};
-
-const HELP_TEXT = [
-  chalk.bold('Commands:'),
-  '',
-  chalk.bold('  Query:'),
-  '    health          Server status and current tick',
-  '    metrics         Runtime metrics',
-  '    summary         Game summary',
-  '    galaxy          Galaxy list',
-  '    system [id]     System details',
-  '    planet [id]     Planet details (buildings + units)',
-  '    fogmap [id]     Fog map raw JSON',
-  '    fog    [id]     ASCII fog grid',
-  '',
-  chalk.bold('  Actions:'),
-  '    scan_galaxy [id]   Discover all systems in a galaxy',
-  '    scan_system <id>   Discover a system',
-  '    scan_planet <id>   Discover a planet',
-  '    raw <json>         Send raw /commands request JSON',
-  '',
-  chalk.bold('  Util:'),
-  '    switch [player_id] [key]  Switch player',
-  '    events [count]            Show recent SSE events',
-  '    status                    Current player & server',
-  '    help [command]            Show help',
-  '    clear                     Clear screen',
-  '    quit / exit               Exit',
-].join('\n');

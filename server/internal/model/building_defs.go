@@ -86,6 +86,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
 		BuildCost:   BuildCost{Minerals: 0, Energy: 0},
+		Buildable:   true,
 	},
 	{
 		ID:                   BuildingTypeMiningMachine,
@@ -110,6 +111,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCollect,
 		Subcategory: BuildingSubcategoryCollect,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeOilExtractor,
@@ -117,6 +119,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCollect,
 		Subcategory: BuildingSubcategoryCollect,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeOrbitalCollector,
@@ -133,6 +136,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeConveyorBeltMk2,
@@ -140,6 +144,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeConveyorBeltMk3,
@@ -147,6 +152,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSplitter,
@@ -154,6 +160,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeAutomaticPiler,
@@ -161,6 +168,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeTrafficMonitor,
@@ -168,6 +176,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSprayCoater,
@@ -175,6 +184,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSorterMk1,
@@ -182,6 +192,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSorterMk2,
@@ -189,6 +200,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSorterMk3,
@@ -196,6 +208,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypePileSorter,
@@ -210,6 +223,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryLogisticsHub,
 		Subcategory: BuildingSubcategoryLogisticsHub,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypePlanetaryLogisticsStation,
@@ -217,6 +231,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryLogisticsHub,
 		Subcategory: BuildingSubcategoryLogisticsHub,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeInterstellarLogisticsStation,
@@ -224,6 +239,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryLogisticsHub,
 		Subcategory: BuildingSubcategoryLogisticsHub,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeDepotMk1,
@@ -231,6 +247,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryStorage,
 		Subcategory: BuildingSubcategoryStorage,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeDepotMk2,
@@ -238,6 +255,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryStorage,
 		Subcategory: BuildingSubcategoryStorage,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeStorageTank,
@@ -245,6 +263,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryStorage,
 		Subcategory: BuildingSubcategoryStorage,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeArcSmelter,
@@ -289,6 +308,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryProduction,
 		Subcategory: BuildingSubcategoryProduction,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeAssemblingMachineMk3,
@@ -296,6 +316,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryProduction,
 		Subcategory: BuildingSubcategoryProduction,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeRecomposingAssembler,
@@ -310,6 +331,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryRefining,
 		Subcategory: BuildingSubcategoryRefining,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeFractionator,
@@ -317,6 +339,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryRefining,
 		Subcategory: BuildingSubcategoryRefining,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeChemicalPlant,
@@ -342,6 +365,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryProduction,
 		Subcategory: BuildingSubcategoryProduction,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeMatrixLab,
@@ -349,6 +373,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryResearch,
 		Subcategory: BuildingSubcategoryResearch,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSelfEvolutionLab,
@@ -363,6 +388,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPowerGrid,
 		Subcategory: BuildingSubcategoryPowerGrid,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeWirelessPowerTower,
@@ -370,6 +396,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPowerGrid,
 		Subcategory: BuildingSubcategoryPowerGrid,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSatelliteSubstation,
@@ -377,6 +404,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPowerGrid,
 		Subcategory: BuildingSubcategoryPowerGrid,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeWindTurbine,
@@ -384,6 +412,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPower,
 		Subcategory: BuildingSubcategoryPower,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeThermalPowerPlant,
@@ -391,6 +420,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPower,
 		Subcategory: BuildingSubcategoryPower,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSolarPanel,
@@ -407,6 +437,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPower,
 		Subcategory: BuildingSubcategoryPower,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeMiniFusionPowerPlant,
@@ -414,6 +445,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPower,
 		Subcategory: BuildingSubcategoryPower,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeEnergyExchanger,
@@ -428,6 +460,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPowerGrid,
 		Subcategory: BuildingSubcategoryPowerGrid,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeAccumulatorFull,
@@ -442,6 +475,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryDyson,
 		Subcategory: BuildingSubcategoryDyson,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeArtificialStar,
@@ -449,6 +483,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPower,
 		Subcategory: BuildingSubcategoryPower,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeGaussTurret,
@@ -465,6 +500,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeImplosionCannon,
@@ -472,6 +508,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeLaserTurret,
@@ -479,6 +516,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypePlasmaTurret,
@@ -486,6 +524,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSRPlasmaTurret,
@@ -507,6 +546,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypePlanetaryShieldGenerator,
@@ -521,6 +561,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryDyson,
 		Subcategory: BuildingSubcategoryDyson,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeVerticalLaunchingSilo,
@@ -528,6 +569,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryDyson,
 		Subcategory: BuildingSubcategoryDyson,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeFoundation,
@@ -535,5 +577,6 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		Buildable:   true,
 	},
 }

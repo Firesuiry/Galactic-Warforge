@@ -30,14 +30,14 @@ const (
 type TechType string
 
 const (
-	TechTypeMain         TechType = "main"
-	TechTypeEnergy       TechType = "energy"
-	TechTypeLogistics    TechType = "logistics"
-	TechTypeSmelting     TechType = "smelting"
-	TechTypeChemical     TechType = "chemical"
-	TechTypeCombat       TechType = "combat"
-	TechTypeMecha        TechType = "mecha"
-	TechTypeDyson        TechType = "dyson"
+	TechTypeMain      TechType = "main"
+	TechTypeEnergy    TechType = "energy"
+	TechTypeLogistics TechType = "logistics"
+	TechTypeSmelting  TechType = "smelting"
+	TechTypeChemical  TechType = "chemical"
+	TechTypeCombat    TechType = "combat"
+	TechTypeMecha     TechType = "mecha"
+	TechTypeDyson     TechType = "dyson"
 )
 
 // TechUnlockType indicates what a tech unlocks
@@ -66,48 +66,65 @@ type TechEffect struct {
 
 // TechDefinition defines immutable data for a technology
 type TechDefinition struct {
-	ID            string         `json:"id" yaml:"id"`
-	Name          string         `json:"name" yaml:"name"`
-	NameEN        string         `json:"name_en" yaml:"name_en"`
-	Category      TechCategory   `json:"category" yaml:"category"`
-	Type          TechType       `json:"type" yaml:"type"`
-	Level         int            `json:"level" yaml:"level"` // 0 = initial, 1+ = progression
-	Prerequisites []string       `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
-	Cost          []ItemAmount   `json:"cost" yaml:"cost"` // matrix cost
-	Unlocks       []TechUnlock   `json:"unlocks,omitempty" yaml:"unlocks,omitempty"`
-	Effects       []TechEffect   `json:"effects,omitempty" yaml:"effects,omitempty"`
-	MaxLevel      int            `json:"max_level,omitempty" yaml:"max_level,omitempty"` // 0 = not repeatable, 1+ = repeatable that many times, -1 = infinite
-	Hidden        bool           `json:"hidden,omitempty" yaml:"hidden,omitempty"`
+	ID            string       `json:"id" yaml:"id"`
+	Name          string       `json:"name" yaml:"name"`
+	NameEN        string       `json:"name_en" yaml:"name_en"`
+	Category      TechCategory `json:"category" yaml:"category"`
+	Type          TechType     `json:"type" yaml:"type"`
+	Level         int          `json:"level" yaml:"level"` // 0 = initial, 1+ = progression
+	Prerequisites []string     `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
+	Cost          []ItemAmount `json:"cost" yaml:"cost"` // matrix cost
+	Unlocks       []TechUnlock `json:"unlocks,omitempty" yaml:"unlocks,omitempty"`
+	Effects       []TechEffect `json:"effects,omitempty" yaml:"effects,omitempty"`
+	MaxLevel      int          `json:"max_level,omitempty" yaml:"max_level,omitempty"` // 0 = not repeatable, 1+ = repeatable that many times, -1 = infinite
+	Hidden        bool         `json:"hidden,omitempty" yaml:"hidden,omitempty"`
 }
 
 // ResearchState tracks the state of a research task
 type ResearchState string
 
 const (
-	ResearchPending   ResearchState = "pending"
+	ResearchPending    ResearchState = "pending"
 	ResearchInProgress ResearchState = "in_progress"
-	ResearchCompleted ResearchState = "completed"
-	ResearchCancelled ResearchState = "cancelled"
+	ResearchCompleted  ResearchState = "completed"
+	ResearchCancelled  ResearchState = "cancelled"
 )
 
 // PlayerResearch tracks a player's research progress
 type PlayerResearch struct {
-	TechID          string         `json:"tech_id"`
-	State           ResearchState  `json:"state"`
-	Progress        int64          `json:"progress"`         // current progress points
-	TotalCost       int64          `json:"total_cost"`      // total cost in points
-	CurrentLevel    int            `json:"current_level"`   // for repeatable techs
-	EnqueueTick     int64          `json:"enqueue_tick"`
-	CompleteTick    int64          `json:"complete_tick,omitempty"`
+	TechID       string        `json:"tech_id"`
+	State        ResearchState `json:"state"`
+	Progress     int64         `json:"progress"`      // current progress points
+	TotalCost    int64         `json:"total_cost"`    // total cost in points
+	CurrentLevel int           `json:"current_level"` // for repeatable techs
+	EnqueueTick  int64         `json:"enqueue_tick"`
+	CompleteTick int64         `json:"complete_tick,omitempty"`
 }
 
 // PlayerTechState tracks all tech research state for a player
 type PlayerTechState struct {
-	PlayerID        string                     `json:"player_id"`
-	CompletedTechs  map[string]int             `json:"completed_techs"`  // tech_id -> level (for repeatable)
-	CurrentResearch *PlayerResearch            `json:"current_research,omitempty"`
-	ResearchQueue   []*PlayerResearch         `json:"research_queue,omitempty"`
-	TotalResearched int64                      `json:"total_researched"` // total matrix consumed
+	PlayerID        string            `json:"player_id"`
+	CompletedTechs  map[string]int    `json:"completed_techs"` // tech_id -> level (for repeatable)
+	CurrentResearch *PlayerResearch   `json:"current_research,omitempty"`
+	ResearchQueue   []*PlayerResearch `json:"research_queue,omitempty"`
+	TotalResearched int64             `json:"total_researched"` // total matrix consumed
+}
+
+const initialTechID = "dyson_sphere_program"
+
+// DefaultCompletedTechs returns the default completed tech set for a new player.
+func DefaultCompletedTechs() map[string]int {
+	return map[string]int{
+		initialTechID: 1,
+	}
+}
+
+// NewPlayerTechState returns an initialized tech state for a player.
+func NewPlayerTechState(playerID string) *PlayerTechState {
+	return &PlayerTechState{
+		PlayerID:       playerID,
+		CompletedTechs: DefaultCompletedTechs(),
+	}
 }
 
 // HasTech checks if player has completed a tech
@@ -145,11 +162,12 @@ var (
 
 func init() {
 	techCatalogOnce.Do(func() {
+		normalized := normalizeTechDefinitions(defaultTechDefinitions)
 		techCatalog = &TechCatalog{
 			techs: make(map[string]*TechDefinition),
 		}
-		for _, def := range defaultTechDefinitions {
-			techCatalog.techs[def.ID] = &def
+		for i := range normalized {
+			techCatalog.techs[normalized[i].ID] = &normalized[i]
 		}
 	})
 }
@@ -1607,5 +1625,123 @@ var defaultTechDefinitions = []TechDefinition{
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "self_evolution_station"},
 		},
+	},
+}
+
+func normalizeTechDefinitions(defs []TechDefinition) []TechDefinition {
+	out := make([]TechDefinition, len(defs))
+	for i := range defs {
+		out[i] = defs[i]
+		out[i].Unlocks = normalizeTechUnlocks(defs[i].Unlocks)
+		switch out[i].ID {
+		case "plane_filter_smelting":
+			out[i].Unlocks = appendUniqueUnlock(out[i].Unlocks, TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypePlaneSmelter)})
+		case "quantum_printing":
+			out[i].Unlocks = appendUniqueUnlock(out[i].Unlocks, TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypeNegentropySmelter)})
+		}
+	}
+	return out
+}
+
+func normalizeTechUnlocks(unlocks []TechUnlock) []TechUnlock {
+	if len(unlocks) == 0 {
+		return nil
+	}
+
+	buildingIDs := make(map[string]struct{}, len(defaultBuildingDefinitions))
+	for _, def := range defaultBuildingDefinitions {
+		buildingIDs[string(def.ID)] = struct{}{}
+	}
+	recipeIDs := make(map[string]struct{}, len(recipeCatalog))
+	for id := range recipeCatalog {
+		recipeIDs[id] = struct{}{}
+	}
+
+	out := make([]TechUnlock, 0, len(unlocks))
+	for _, unlock := range unlocks {
+		for _, normalized := range expandTechUnlock(unlock) {
+			switch normalized.Type {
+			case TechUnlockBuilding:
+				if _, ok := buildingIDs[normalized.ID]; !ok {
+					continue
+				}
+			case TechUnlockRecipe:
+				if _, ok := recipeIDs[normalized.ID]; !ok {
+					continue
+				}
+			}
+			out = appendUniqueUnlock(out, normalized)
+		}
+	}
+	return out
+}
+
+func appendUniqueUnlock(unlocks []TechUnlock, unlock TechUnlock) []TechUnlock {
+	for _, existing := range unlocks {
+		if existing.Type == unlock.Type && existing.ID == unlock.ID && existing.Level == unlock.Level {
+			return unlocks
+		}
+	}
+	return append(unlocks, unlock)
+}
+
+func expandTechUnlock(unlock TechUnlock) []TechUnlock {
+	if aliases, ok := techUnlockAliases[unlock.Type][unlock.ID]; ok {
+		return aliases
+	}
+	return []TechUnlock{unlock}
+}
+
+var techUnlockAliases = map[TechUnlockType]map[string][]TechUnlock{
+	TechUnlockBuilding: {
+		"EM_rail":                {{Type: TechUnlockBuilding, ID: string(BuildingTypeEMRailEjector)}},
+		"EM_rail_launcher":       {{Type: TechUnlockBuilding, ID: string(BuildingTypeEMRailEjector)}},
+		"annihilation_reactor":   {{Type: TechUnlockBuilding, ID: string(BuildingTypeArtificialStar)}},
+		"assembler_mk1":          {{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk1)}},
+		"assembler_mk2":          {{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk2)}},
+		"assembler_mk3":          {{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk3)}},
+		"auto_stacker":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeAutomaticPiler)}},
+		"conveyor_mk1":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeConveyorBeltMk1)}},
+		"conveyor_mk2":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeConveyorBeltMk2)}},
+		"conveyor_mk3":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeConveyorBeltMk3)}},
+		"electric_motor":         {{Type: TechUnlockRecipe, ID: "motor"}},
+		"energy_pylon":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeSatelliteSubstation)}},
+		"flow_monitor":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeTrafficMonitor)}},
+		"fluid_tank":             {{Type: TechUnlockBuilding, ID: string(BuildingTypeStorageTank)}},
+		"geothermal_plant":       {{Type: TechUnlockBuilding, ID: string(BuildingTypeGeothermalPowerStation)}},
+		"high_energy_laser":      {{Type: TechUnlockBuilding, ID: string(BuildingTypeLaserTurret)}},
+		"logistics_bot":          {{Type: TechUnlockUnit, ID: "logistics_drone"}},
+		"logistics_vessel":       {{Type: TechUnlockUnit, ID: "logistics_ship"}},
+		"mini_fusion_plant":      {{Type: TechUnlockBuilding, ID: string(BuildingTypeMiniFusionPowerPlant)}},
+		"miniature_collider":     {{Type: TechUnlockBuilding, ID: string(BuildingTypeMiniatureParticleCollider)}},
+		"photon_combiner":        {{Type: TechUnlockRecipe, ID: "photon_combiner_from_grating"}},
+		"plasma_exciter":         {{Type: TechUnlockSpecial, ID: "plasma_exciter"}},
+		"power_pylon":            {{Type: TechUnlockBuilding, ID: string(BuildingTypeTeslaTower)}},
+		"prism":                  {{Type: TechUnlockSpecial, ID: "prism"}},
+		"pump":                   {{Type: TechUnlockBuilding, ID: string(BuildingTypeWaterPump)}},
+		"refinery":               {{Type: TechUnlockBuilding, ID: string(BuildingTypeOilRefinery)}},
+		"self_evolution_station": {{Type: TechUnlockBuilding, ID: string(BuildingTypeSelfEvolutionLab)}},
+		"small_carrier_rocket":   {{Type: TechUnlockSpecial, ID: "small_carrier_rocket"}},
+		"solar_sail":             {{Type: TechUnlockRecipe, ID: "solar_sail"}},
+		"stacker":                {{Type: TechUnlockBuilding, ID: string(BuildingTypeAutomaticPiler)}},
+		"star_lifter":            {{Type: TechUnlockUnit, ID: "logistics_ship"}},
+		"storage_mk1":            {{Type: TechUnlockBuilding, ID: string(BuildingTypeDepotMk1)}},
+		"storage_mk2":            {{Type: TechUnlockBuilding, ID: string(BuildingTypeDepotMk2)}},
+		"wireless_pylon":         {{Type: TechUnlockBuilding, ID: string(BuildingTypeWirelessPowerTower)}},
+	},
+	TechUnlockRecipe: {
+		"antimatter_fuel":     {{Type: TechUnlockRecipe, ID: "antimatter_fuel_rod"}},
+		"deuterium_fuel":      {{Type: TechUnlockRecipe, ID: "deuterium_fuel_rod"}},
+		"glass":               {{Type: TechUnlockRecipe, ID: "smelt_stone"}},
+		"graphene":            {{Type: TechUnlockRecipe, ID: "graphene_from_graphite"}, {Type: TechUnlockRecipe, ID: "graphene_from_fire_ice"}},
+		"graphite":            {{Type: TechUnlockRecipe, ID: "coal_to_graphite"}},
+		"high_purity_silicon": {{Type: TechUnlockRecipe, ID: "smelt_silicon"}},
+		"hydrogen_fuel":       {{Type: TechUnlockRecipe, ID: "hydrogen_fuel_rod"}},
+		"microcrystalline":    {{Type: TechUnlockRecipe, ID: "microcrystalline_component"}},
+		"missile":             {{Type: TechUnlockRecipe, ID: "ammo_missile"}},
+		"particle_container":  {{Type: TechUnlockRecipe, ID: "particle_container_from_monopole"}},
+		"refined_oil":         {{Type: TechUnlockRecipe, ID: "oil_fractionation"}},
+		"silicon_ore":         {{Type: TechUnlockRecipe, ID: "smelt_silicon"}},
+		"titanium":            {{Type: TechUnlockRecipe, ID: "smelt_titanium"}},
 	},
 }

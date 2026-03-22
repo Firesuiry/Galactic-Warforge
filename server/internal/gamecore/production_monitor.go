@@ -178,7 +178,7 @@ func (pm *productionMonitor) buildAlert(
 	tick int64,
 	alertType model.ProductionAlertType,
 	severity model.ProductionAlertSeverity,
-	stats model.ProductionStats,
+	stats model.MonitorStats,
 	details map[string]any,
 ) *model.ProductionAlert {
 	alertID := fmt.Sprintf("alert-%d-%s", tick, building.ID)

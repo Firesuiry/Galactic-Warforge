@@ -257,7 +257,7 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 	} else {
 		view.Buildings = map[string]*model.Building{}
 		view.Units = map[string]*model.Unit{}
-		view.Resources = []*model.ResourceNodeState{}
+		view.Resources = staticPlanetResources(planet)
 	}
 
 	return view, true
@@ -297,6 +297,36 @@ func sortedResources(ws *model.WorldState) []*model.ResourceNodeState {
 	for _, id := range ids {
 		res = append(res, ws.Resources[id])
 	}
+	return res
+}
+
+func staticPlanetResources(planet *mapmodel.Planet) []*model.ResourceNodeState {
+	if planet == nil || len(planet.Resources) == 0 {
+		return []*model.ResourceNodeState{}
+	}
+	res := make([]*model.ResourceNodeState, 0, len(planet.Resources))
+	for i := range planet.Resources {
+		node := planet.Resources[i]
+		res = append(res, &model.ResourceNodeState{
+			ID:           node.ID,
+			PlanetID:     node.PlanetID,
+			Kind:         string(node.Kind),
+			Behavior:     string(node.Behavior),
+			Position:     model.Position{X: node.Position.X, Y: node.Position.Y},
+			ClusterID:    node.ClusterID,
+			MaxAmount:    node.Total,
+			Remaining:    node.Total,
+			BaseYield:    node.BaseYield,
+			CurrentYield: node.BaseYield,
+			MinYield:     node.MinYield,
+			RegenPerTick: node.RegenPerTick,
+			DecayPerTick: node.DecayPerTick,
+			IsRare:       node.IsRare,
+		})
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].ID < res[j].ID
+	})
 	return res
 }
 

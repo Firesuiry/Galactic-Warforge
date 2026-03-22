@@ -20,17 +20,6 @@ type PowerCoverageResult struct {
 	ProviderID string
 }
 
-type providerCapacity struct {
-	Remaining int
-	Unlimited bool
-}
-
-type providerSlot struct {
-	ID        string
-	Remaining int
-	Unlimited bool
-}
-
 // ResolvePowerCoverage evaluates which buildings are connected to a power grid.
 func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 	results := make(map[string]PowerCoverageResult)
@@ -42,17 +31,15 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 		grid = BuildPowerGridGraph(ws)
 	}
 
-	providerCounts := make(map[string]int)
-	providerCaps := make(map[string]providerCapacity)
-	for id, building := range ws.Buildings {
+	ownerHasSource := make(map[string]bool)
+	for _, building := range ws.Buildings {
 		if building == nil {
 			continue
 		}
-		if !isPowerCoverageProvider(building) {
+		if !isPowerCoverageSource(building) {
 			continue
 		}
-		providerCounts[building.OwnerID]++
-		providerCaps[id] = powerProviderCapacity(building)
+		ownerHasSource[building.OwnerID] = true
 	}
 
 	consumers := make([]string, 0)
@@ -81,8 +68,7 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 			queue := []string{nodeID}
 			visited[nodeID] = struct{}{}
 			componentConsumers := make(map[string]struct{})
-			providerSlots := make([]providerSlot, 0)
-			providerAdded := make(map[string]struct{})
+			componentSource := ""
 
 			for len(queue) > 0 {
 				id := queue[0]
@@ -96,18 +82,8 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 					if needsPowerCoverage(building) {
 						componentConsumers[id] = struct{}{}
 					}
-					if isPowerCoverageProvider(building) {
-						if _, ok := providerAdded[id]; !ok {
-							cap := providerCaps[id]
-							if cap.Unlimited || cap.Remaining > 0 {
-								providerSlots = append(providerSlots, providerSlot{
-									ID:        id,
-									Remaining: cap.Remaining,
-									Unlimited: cap.Unlimited,
-								})
-							}
-							providerAdded[id] = struct{}{}
-						}
+					if componentSource == "" && isPowerCoverageSource(building) {
+						componentSource = id
 					}
 				}
 
@@ -133,33 +109,15 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 				consumerIDs = append(consumerIDs, id)
 			}
 			sort.Strings(consumerIDs)
-			sort.Slice(providerSlots, func(i, j int) bool {
-				return providerSlots[i].ID < providerSlots[j].ID
-			})
 
 			for _, cid := range consumerIDs {
-				assigned := false
-				for i := range providerSlots {
-					slot := &providerSlots[i]
-					if slot.Unlimited || slot.Remaining > 0 {
-						results[cid] = PowerCoverageResult{Connected: true, ProviderID: slot.ID}
-						if !slot.Unlimited {
-							slot.Remaining--
-						}
-						assigned = true
-						break
-					}
-				}
-				if assigned {
+				if componentSource != "" {
+					results[cid] = PowerCoverageResult{Connected: true, ProviderID: componentSource}
 					continue
 				}
-				reason := PowerCoverageCapacityFull
-				if len(providerSlots) == 0 {
-					if providerCounts[owner] == 0 {
-						reason = PowerCoverageNoProvider
-					} else {
-						reason = PowerCoverageOutOfRange
-					}
+				reason := PowerCoverageNoProvider
+				if ownerHasSource[owner] {
+					reason = PowerCoverageOutOfRange
 				}
 				results[cid] = PowerCoverageResult{Connected: false, Reason: reason}
 			}
@@ -179,7 +137,7 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 			results[id] = PowerCoverageResult{Connected: false, Reason: PowerCoverageNoConnector}
 			continue
 		}
-		if providerCounts[owner] == 0 {
+		if !ownerHasSource[owner] {
 			results[id] = PowerCoverageResult{Connected: false, Reason: PowerCoverageNoProvider}
 			continue
 		}
@@ -203,35 +161,15 @@ func needsPowerCoverage(building *Building) bool {
 	return false
 }
 
-func isPowerCoverageProvider(building *Building) bool {
+func isPowerCoverageSource(building *Building) bool {
 	if building == nil {
 		return false
-	}
-	if IsPowerGridBuilding(building.Type) {
-		return true
 	}
 	if IsPowerGeneratorModule(building.Runtime.Functions.Energy) {
 		return true
 	}
+	if building.Runtime.Functions.EnergyStorage != nil && building.EnergyStorage != nil && building.EnergyStorage.Energy > 0 {
+		return true
+	}
 	return building.Runtime.Params.EnergyGenerate > 0
-}
-
-func powerProviderCapacity(building *Building) providerCapacity {
-	connectors := powerGridConnectors(building)
-	if len(connectors) == 0 {
-		return providerCapacity{}
-	}
-	remaining := 0
-	unlimited := false
-	for _, conn := range connectors {
-		if conn.Capacity <= 0 {
-			unlimited = true
-			continue
-		}
-		remaining += conn.Capacity
-	}
-	if unlimited {
-		return providerCapacity{Unlimited: true}
-	}
-	return providerCapacity{Remaining: remaining}
 }

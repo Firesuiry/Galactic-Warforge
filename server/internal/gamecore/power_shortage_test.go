@@ -57,8 +57,8 @@ func TestPowerShortageSlowdown(t *testing.T) {
 	if low.Runtime.State != model.BuildingWorkRunning {
 		t.Fatalf("expected low priority running (slow), got %s", low.Runtime.State)
 	}
-	if ws.Players["p1"].Resources.Minerals != 12 {
-		t.Fatalf("expected minerals 12, got %d", ws.Players["p1"].Resources.Minerals)
+	if got := totalStorageItems(high.Storage) + totalStorageItems(low.Storage); got != 12 {
+		t.Fatalf("expected 12 ore buffered after partial power, got %d", got)
 	}
 	if ws.Players["p1"].Resources.Energy != 17 {
 		t.Fatalf("expected energy 17, got %d", ws.Players["p1"].Resources.Energy)
@@ -113,6 +113,7 @@ func addPowerTestBuilding(ws *model.WorldState, id string, btype model.BuildingT
 		Position: pos,
 		Runtime:  profile.Runtime,
 	}
+	model.InitBuildingStorage(building)
 	ws.Buildings[id] = building
 	return building
 }

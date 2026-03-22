@@ -26,6 +26,11 @@ func applyBuildingState(building *model.Building, next model.BuildingWorkState, 
 	if reason == "" {
 		reason = deriveBuildingStateReason(prev, next)
 	}
+	if next == model.BuildingWorkRunning || next == model.BuildingWorkIdle {
+		building.Runtime.StateReason = ""
+	} else {
+		building.Runtime.StateReason = reason
+	}
 	return &model.GameEvent{
 		EventType:       model.EvtBuildingStateChanged,
 		VisibilityScope: building.OwnerID,

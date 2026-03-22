@@ -1,7 +1,7 @@
 package gamecore
 
 import (
-	"math"
+	"math/rand"
 
 	"siliconworld/internal/model"
 )
@@ -19,7 +19,7 @@ func NewCombatUnitManager() *CombatUnitManager {
 }
 
 // SpawnCombatUnit 生成战斗单位
-func (m *CombatUnitManager) SpawnCombatUnit(ws *model.WorldState, unitType model.CombatUnitType, playerID string, pos model.Position, rng *math.Rand) *model.CombatUnit {
+func (m *CombatUnitManager) SpawnCombatUnit(ws *model.WorldState, unitType model.CombatUnitType, playerID string, pos model.Position, rng *rand.Rand) *model.CombatUnit {
 	stats := model.DefaultCombatUnitStats(unitType)
 	unit := &model.CombatUnit{
 		ID:            ws.NextEntityID("combat"),

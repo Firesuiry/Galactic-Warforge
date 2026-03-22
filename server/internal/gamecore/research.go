@@ -17,10 +17,7 @@ func settleResearch(ws *model.WorldState) []*model.GameEvent {
 
 		// Initialize tech state if needed
 		if player.Tech == nil {
-			player.Tech = &model.PlayerTechState{
-				PlayerID:       player.PlayerID,
-				CompletedTechs: make(map[string]int),
-			}
+			player.Tech = model.NewPlayerTechState(player.PlayerID)
 		}
 
 		// No active research, check queue
@@ -51,12 +48,16 @@ func settleResearch(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 
-		// Calculate research speed (base + boost from executor)
-		baseSpeed := int64(1)
-		if player.Executor != nil {
-			// Research boost from executor (e.g., 0.1 means 10% faster)
-			boost := int64(player.Executor.ResearchBoost * float64(baseSpeed))
-			baseSpeed += boost
+		// Calculate research speed (base + lab throughput + executor boost).
+		// Use a fixed-point approach with 1000-scale to preserve fractional progress.
+		baseSpeed := int64(1000) // 1000 units = 1 progress point
+		if labSpeed := playerResearchSpeed(ws, player.PlayerID); labSpeed > 0 {
+			baseSpeed += int64(labSpeed) * 1000
+		}
+		if player.Executor != nil && player.Executor.ResearchBoost > 0 {
+			// Apply boost: newSpeed = baseSpeed * (1 + boost)
+			boostFactor := int64(1000 + player.Executor.ResearchBoost*1000)
+			baseSpeed = baseSpeed * boostFactor / 1000
 		}
 
 		// Progress research
@@ -69,6 +70,26 @@ func settleResearch(ws *model.WorldState) []*model.GameEvent {
 	}
 
 	return events
+}
+
+func playerResearchSpeed(ws *model.WorldState, playerID string) int {
+	if ws == nil || playerID == "" {
+		return 0
+	}
+	speed := 0
+	for _, building := range ws.Buildings {
+		if building == nil || building.OwnerID != playerID {
+			continue
+		}
+		if building.Runtime.State != model.BuildingWorkRunning {
+			continue
+		}
+		if building.Runtime.Functions.Research == nil {
+			continue
+		}
+		speed += building.Runtime.Functions.Research.ResearchPerTick
+	}
+	return speed
 }
 
 // completeResearch marks a research as completed and applies unlocks
@@ -93,10 +114,10 @@ func completeResearch(player *model.PlayerState, research *model.PlayerResearch,
 		EventType:       "research_completed",
 		VisibilityScope: player.PlayerID,
 		Payload: map[string]any{
-			"tech_id":     research.TechID,
-			"tech_name":   def.Name,
-			"level":       currentLevel + 1,
-			"unlocks":     def.Unlocks,
+			"tech_id":       research.TechID,
+			"tech_name":     def.Name,
+			"level":         currentLevel + 1,
+			"unlocks":       def.Unlocks,
 			"complete_tick": tick,
 		},
 	})
@@ -160,10 +181,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 
 	// Initialize tech state if needed
 	if player.Tech == nil {
-		player.Tech = &model.PlayerTechState{
-			PlayerID:       playerID,
-			CompletedTechs: make(map[string]int),
-		}
+		player.Tech = model.NewPlayerTechState(playerID)
 	}
 
 	// Check if already researching or queued
@@ -216,14 +234,15 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	}
 
 	// Calculate total cost (for repeatable techs, could scale with level)
-	totalCost := calculateTechCost(def)
+	// Scale by 1000 to match baseSpeed scale for fixed-point arithmetic
+	totalCost := calculateTechCost(def) * 1000
 
 	// Create research state
 	research := &model.PlayerResearch{
-		TechID:      techID,
-		State:       model.ResearchPending,
-		Progress:    0,
-		TotalCost:   totalCost,
+		TechID:       techID,
+		State:        model.ResearchPending,
+		Progress:     0,
+		TotalCost:    totalCost,
 		CurrentLevel: player.Tech.CompletedTechs[techID],
 	}
 
@@ -336,6 +355,30 @@ func CanBuildTech(player *model.PlayerState, unlockType model.TechUnlockType, un
 		}
 	}
 	return false
+}
+
+// CanUseRecipeTech checks whether a player has unlocked the given recipe.
+func CanUseRecipeTech(player *model.PlayerState, recipeID string) bool {
+	if recipeID == "" {
+		return false
+	}
+	if player == nil || player.Tech == nil {
+		return false
+	}
+	if CanBuildTech(player, model.TechUnlockRecipe, recipeID) {
+		return true
+	}
+	for _, def := range model.AllTechDefinitions() {
+		if def == nil {
+			continue
+		}
+		for _, unlock := range def.Unlocks {
+			if unlock.Type == model.TechUnlockRecipe && unlock.ID == recipeID {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // TechCostForPlayer returns the cost breakdown for a tech based on player's current state

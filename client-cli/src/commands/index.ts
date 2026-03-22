@@ -1,6 +1,27 @@
-import { cmdHealth, cmdMetrics, cmdSummary, cmdGalaxy, cmdSystem, cmdPlanet, cmdFogmap } from './query.js';
-import { cmdScanGalaxy, cmdScanSystem, cmdScanPlanet, cmdRaw } from './action.js';
+import { cmdHealth, cmdMetrics, cmdSummary, cmdStats, cmdGalaxy, cmdSystem, cmdPlanet, cmdFogmap } from './query.js';
+import {
+  cmdScanGalaxy,
+  cmdScanSystem,
+  cmdScanPlanet,
+  cmdRaw,
+  cmdBuild,
+  cmdMove,
+  cmdAttack,
+  cmdProduce,
+  cmdUpgrade,
+  cmdDemolish,
+  cmdCancelConstruction,
+  cmdRestoreConstruction,
+  cmdStartResearch,
+  cmdCancelResearch,
+  cmdLaunchSolarSail,
+  cmdBuildDysonNode,
+  cmdBuildDysonFrame,
+  cmdBuildDysonShell,
+  cmdDemolishDyson,
+} from './action.js';
 import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
+import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdReplay, cmdRollback } from './debug.js';
 import type { ReplContext } from '../types.js';
 
 export type CommandHandler = (args: string[], ctx: ReplContext) => Promise<string> | string;
@@ -11,25 +32,46 @@ export interface CommandEntry {
 }
 
 export const COMMANDS: Record<string, CommandEntry> = {
-  health:   { handler: cmdHealth },
-  metrics:  { handler: cmdMetrics },
-  summary:  { handler: cmdSummary },
-  galaxy:   { handler: cmdGalaxy },
-  system:   { handler: cmdSystem },
-  planet:   { handler: cmdPlanet },
-  fogmap:   { handler: cmdFogmap },
-  fog:      { handler: cmdFog },
+  health: { handler: cmdHealth },
+  metrics: { handler: cmdMetrics },
+  summary: { handler: cmdSummary },
+  stats: { handler: cmdStats },
+  galaxy: { handler: cmdGalaxy },
+  system: { handler: cmdSystem },
+  planet: { handler: cmdPlanet },
+  fogmap: { handler: cmdFogmap },
+  fog: { handler: cmdFog },
   scan_galaxy: { handler: cmdScanGalaxy },
   scan_system: { handler: cmdScanSystem },
   scan_planet: { handler: cmdScanPlanet },
-  raw:      { handler: cmdRaw },
-  switch:   { handler: cmdSwitch },
-  events:   { handler: cmdEvents },
-  status:   { handler: cmdStatus },
-  help:     { handler: cmdHelp, completions: [] },
-  clear:    { handler: () => { process.stdout.write('\x1Bc'); return ''; } },
-  quit:     { handler: () => { process.exit(0); return ''; } },
-  exit:     { handler: () => { process.exit(0); return ''; } },
+  build: { handler: cmdBuild },
+  move: { handler: cmdMove },
+  attack: { handler: cmdAttack },
+  produce: { handler: cmdProduce },
+  upgrade: { handler: cmdUpgrade },
+  demolish: { handler: cmdDemolish },
+  cancel_construction: { handler: cmdCancelConstruction },
+  restore_construction: { handler: cmdRestoreConstruction },
+  start_research: { handler: cmdStartResearch },
+  cancel_research: { handler: cmdCancelResearch },
+  launch_solar_sail: { handler: cmdLaunchSolarSail },
+  build_dyson_node: { handler: cmdBuildDysonNode },
+  build_dyson_frame: { handler: cmdBuildDysonFrame },
+  build_dyson_shell: { handler: cmdBuildDysonShell },
+  demolish_dyson: { handler: cmdDemolishDyson },
+  raw: { handler: cmdRaw },
+  switch: { handler: cmdSwitch },
+  events: { handler: cmdEvents },
+  status: { handler: cmdStatus },
+  audit: { handler: cmdAudit },
+  event_snapshot: { handler: cmdEventSnapshot },
+  alert_snapshot: { handler: cmdAlertSnapshot },
+  replay: { handler: cmdReplay },
+  rollback: { handler: cmdRollback },
+  help: { handler: cmdHelp, completions: [] },
+  clear: { handler: () => { process.stdout.write('\x1Bc'); return ''; } },
+  quit: { handler: () => { process.exit(0); return ''; } },
+  exit: { handler: () => { process.exit(0); return ''; } },
 };
 
 export function getCommandNames(): string[] {

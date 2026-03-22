@@ -102,12 +102,12 @@ func (gc *GameCore) ApplyTechToUnit(playerID string, unit *model.CombatUnit) {
 	}
 
 	player := gc.world.Players[playerID]
-	if player == nil || player.Tech == nil {
+	if player == nil || player.CombatTech == nil {
 		return
 	}
 
 	// 应用战斗科技效果
-	for _, tech := range player.Tech.UnlockedTechs {
+	for _, tech := range player.CombatTech.UnlockedTechs {
 		model.ApplyTechToCombatUnit(unit, tech)
 	}
 }
@@ -119,7 +119,7 @@ func (gc *GameCore) settleDroneControl() []*model.GameEvent {
 	}
 
 	var events []*model.GameEvent
-	ws := gc.world
+	_ = gc.world
 
 	// 预留无人机控制逻辑
 	// 未来可以实现:

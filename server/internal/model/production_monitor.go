@@ -31,12 +31,12 @@ type ProductionAlert struct {
 	AlertType    ProductionAlertType     `json:"alert_type"`
 	Severity     ProductionAlertSeverity `json:"severity"`
 	Message      string                  `json:"message"`
-	Metrics      ProductionStats         `json:"metrics"`
+	Metrics      MonitorStats            `json:"metrics"`
 	Details      map[string]any          `json:"details,omitempty"`
 }
 
-// ProductionStats captures per-tick production monitoring data.
-type ProductionStats struct {
+// MonitorStats captures per-tick production monitoring data.
+type MonitorStats struct {
 	Throughput    int     `json:"throughput"`
 	Backlog       int     `json:"backlog"`
 	IdleRatio     float64 `json:"idle_ratio"`
@@ -53,7 +53,7 @@ type ProductionMonitorState struct {
 	TotalMoves   int64                         `json:"total_moves"`
 	LastMoveTick int64                         `json:"last_move_tick"`
 	LastAlertAt  map[ProductionAlertType]int64 `json:"last_alert_at,omitempty"`
-	LastStats    ProductionStats               `json:"last_stats"`
+	LastStats    MonitorStats               `json:"last_stats"`
 }
 
 // NewProductionMonitorState returns an initialized monitor state.
@@ -76,7 +76,7 @@ func (m *ProductionMonitorState) RegisterSample(tick int64, moved, backlog, thro
 		m.TotalMoves += int64(moved)
 		m.LastMoveTick = tick
 	}
-	stats := ProductionStats{
+	stats := MonitorStats{
 		Throughput:    throughput,
 		Backlog:       backlog,
 		InputShortage: inputShortage,

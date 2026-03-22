@@ -197,6 +197,7 @@ func buildBuildingCatalog(defs []BuildingDefinition) (map[BuildingType]BuildingD
 	}
 	catalog := make(map[BuildingType]BuildingDefinition, len(defs))
 	for _, def := range defs {
+		def = normalizeBuildableCost(def)
 		if err := validateBuildingDefinition(def); err != nil {
 			return nil, err
 		}
@@ -206,6 +207,70 @@ func buildBuildingCatalog(defs []BuildingDefinition) (map[BuildingType]BuildingD
 		catalog[def.ID] = def
 	}
 	return catalog, nil
+}
+
+func normalizeBuildableCost(def BuildingDefinition) BuildingDefinition {
+	if !def.Buildable {
+		return def
+	}
+	if def.BuildCost.Minerals > 0 || def.BuildCost.Energy > 0 || len(def.BuildCost.Items) > 0 {
+		return def
+	}
+	if override, ok := defaultBuildCostOverrides[def.ID]; ok {
+		def.BuildCost = override
+		return def
+	}
+	def.BuildCost = defaultBuildCostForCategory(def.Category)
+	return def
+}
+
+func defaultBuildCostForCategory(category BuildingCategory) BuildCost {
+	switch category {
+	case BuildingCategoryCollect:
+		return BuildCost{Minerals: 80, Energy: 30}
+	case BuildingCategoryTransport:
+		return BuildCost{Minerals: 20, Energy: 10}
+	case BuildingCategoryStorage:
+		return BuildCost{Minerals: 60, Energy: 20}
+	case BuildingCategoryProduction:
+		return BuildCost{Minerals: 120, Energy: 60}
+	case BuildingCategoryChemical, BuildingCategoryRefining:
+		return BuildCost{Minerals: 140, Energy: 70}
+	case BuildingCategoryPower:
+		return BuildCost{Minerals: 90, Energy: 30}
+	case BuildingCategoryPowerGrid:
+		return BuildCost{Minerals: 40, Energy: 20}
+	case BuildingCategoryResearch:
+		return BuildCost{Minerals: 120, Energy: 60}
+	case BuildingCategoryLogisticsHub:
+		return BuildCost{Minerals: 180, Energy: 80}
+	case BuildingCategoryDyson:
+		return BuildCost{Minerals: 260, Energy: 130}
+	case BuildingCategoryCommandSignal:
+		return BuildCost{Minerals: 100, Energy: 40}
+	default:
+		return BuildCost{Minerals: 50, Energy: 20}
+	}
+}
+
+var defaultBuildCostOverrides = map[BuildingType]BuildCost{
+	BuildingTypeBattlefieldAnalysisBase:      {Minerals: 120, Energy: 60},
+	BuildingTypeConveyorBeltMk1:              {Minerals: 4, Energy: 0},
+	BuildingTypeConveyorBeltMk2:              {Minerals: 8, Energy: 0},
+	BuildingTypeConveyorBeltMk3:              {Minerals: 12, Energy: 0},
+	BuildingTypeSorterMk1:                    {Minerals: 6, Energy: 0},
+	BuildingTypeSorterMk2:                    {Minerals: 10, Energy: 0},
+	BuildingTypeSorterMk3:                    {Minerals: 14, Energy: 0},
+	BuildingTypeTeslaTower:                   {Minerals: 20, Energy: 10},
+	BuildingTypeWirelessPowerTower:           {Minerals: 40, Energy: 20},
+	BuildingTypeSatelliteSubstation:          {Minerals: 80, Energy: 40},
+	BuildingTypeWindTurbine:                  {Minerals: 30, Energy: 0},
+	BuildingTypeFoundation:                   {Minerals: 10, Energy: 0},
+	BuildingTypeSignalTower:                  {Minerals: 50, Energy: 20},
+	BuildingTypeSprayCoater:                  {Minerals: 40, Energy: 20},
+	BuildingTypeLogisticsDistributor:         {Minerals: 30, Energy: 10},
+	BuildingTypePlanetaryLogisticsStation:    {Minerals: 240, Energy: 120},
+	BuildingTypeInterstellarLogisticsStation: {Minerals: 360, Energy: 180},
 }
 
 func validateBuildingDefinition(def BuildingDefinition) error {

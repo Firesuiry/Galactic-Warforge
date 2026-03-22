@@ -18,6 +18,7 @@ const (
 
 const (
 	DefaultPowerLineRange           = 1
+	DefaultTeslaTowerRange          = 4
 	DefaultWirelessPowerTowerRange  = 6
 	DefaultSatelliteSubstationRange = 10
 )
@@ -414,6 +415,8 @@ func powerGridConnectors(building *Building) []PowerConnector {
 
 func powerGridWirelessRange(btype BuildingType) int {
 	switch btype {
+	case BuildingTypeTeslaTower:
+		return DefaultTeslaTowerRange
 	case BuildingTypeWirelessPowerTower:
 		return DefaultWirelessPowerTowerRange
 	case BuildingTypeSatelliteSubstation:

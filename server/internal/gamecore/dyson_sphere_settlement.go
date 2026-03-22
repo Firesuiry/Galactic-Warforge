@@ -1,6 +1,9 @@
 package gamecore
 
 import (
+	"fmt"
+	"math"
+
 	"siliconworld/internal/model"
 )
 
@@ -41,7 +44,7 @@ func AddDysonNode(playerID, systemID string, layerIndex int, latitude, longitude
 	}
 
 	layer := &state.Layers[layerIndex]
-	nodeID := state.PlayerID + "-node-" + string(rune(layerIndex)) + "-" + formatFloat(latitude) + "-" + formatFloat(longitude)
+	nodeID := fmt.Sprintf("%s-node-l%d-lat%s-lon%s", state.PlayerID, layerIndex, formatDysonCoord(latitude), formatDysonCoord(longitude))
 	node := model.DysonNode{
 		ID:           nodeID,
 		LayerIndex:   layerIndex,
@@ -70,7 +73,7 @@ func AddDysonFrame(playerID, systemID string, layerIndex int, nodeAID, nodeBID s
 		return nil, nil
 	}
 
-	frameID := state.PlayerID + "-frame-" + nodeAID + "-" + nodeBID
+	frameID := fmt.Sprintf("%s-frame-l%d-%s-%s", state.PlayerID, layerIndex, nodeAID, nodeBID)
 	frame := model.DysonFrame{
 		ID:         frameID,
 		LayerIndex: layerIndex,
@@ -91,7 +94,7 @@ func AddDysonShell(playerID, systemID string, layerIndex int, latMin, latMax, co
 	}
 
 	layer := &state.Layers[layerIndex]
-	shellID := state.PlayerID + "-shell-" + string(rune(layerIndex)) + "-" + formatFloat(latMin)
+	shellID := fmt.Sprintf("%s-shell-l%d-lat%s-lat%s", state.PlayerID, layerIndex, formatDysonCoord(latMin), formatDysonCoord(latMax))
 	shell := model.DysonShell{
 		ID:           shellID,
 		LayerIndex:   layerIndex,
@@ -192,6 +195,10 @@ func ClearDysonSphereStates() {
 	dysonSphereStates = make(map[string]*model.DysonSphereState)
 }
 
-func formatFloat(f float64) string {
-	return string(rune(int(f*100))) + string(rune(int(f*10)%10))
+func formatDysonCoord(value float64) string {
+	scaled := int(math.Round(value * 100))
+	if scaled < 0 {
+		return fmt.Sprintf("m%d", -scaled)
+	}
+	return fmt.Sprintf("p%d", scaled)
 }

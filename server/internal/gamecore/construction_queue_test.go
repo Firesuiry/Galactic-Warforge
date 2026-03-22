@@ -35,7 +35,9 @@ func newConstructionTestCore(t *testing.T, playerLimit, regionLimit int) *GameCo
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
 	bus := NewEventBus()
-	return New(cfg, maps, q, bus, nil)
+	core := New(cfg, maps, q, bus, nil)
+	grantAllTechs(core.world, "p1")
+	return core
 }
 
 func TestConstructionQueueReservesTiles(t *testing.T) {

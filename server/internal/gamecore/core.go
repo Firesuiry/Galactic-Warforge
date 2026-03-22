@@ -68,19 +68,19 @@ func (eb *EventBus) Publish(events []*model.GameEvent) {
 
 // Metrics captures per-tick performance data
 type Metrics struct {
-	mu                 sync.Mutex
-	TickCount          int64
-	LastTickDur        time.Duration
-	CommandsTotal      int64
-	SSEConnections     int
-	QueueBacklog       int
-	TickDurationsMs    []float64 // Rolling window for p95/p99
-	maxDurWindow       int
+	mu              sync.Mutex
+	TickCount       int64
+	LastTickDur     time.Duration
+	CommandsTotal   int64
+	SSEConnections  int
+	QueueBacklog    int
+	TickDurationsMs []float64 // Rolling window for p95/p99
+	maxDurWindow    int
 }
 
 func NewMetrics() *Metrics {
 	return &Metrics{
-		maxDurWindow: 1000, // Keep last 1000 ticks for percentile calculation
+		maxDurWindow:    1000, // Keep last 1000 ticks for percentile calculation
 		TickDurationsMs: make([]float64, 0, 1000),
 	}
 }
@@ -102,55 +102,54 @@ func (m *Metrics) RecordTick(dur time.Duration, cmds int) {
 // p95 returns the 95th percentile tick duration
 func (m *Metrics) p95() float64 {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if len(m.TickDurationsMs) == 0 {
-		return 0
-	}
-	n := int(float64(len(m.TickDurationsMs)) * 0.95)
-	if n < 1 {
-		n = 1
-	}
-	if n > len(m.TickDurationsMs) {
-		n = len(m.TickDurationsMs)
-	}
-	// Copy and sort
 	sorted := make([]float64, len(m.TickDurationsMs))
 	copy(sorted, m.TickDurationsMs)
-	sort.Float64s(sorted)
-	return sorted[n-1]
+	m.mu.Unlock()
+	return percentile(sorted, 0.95)
 }
 
 // p99 returns the 99th percentile tick duration
 func (m *Metrics) p99() float64 {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if len(m.TickDurationsMs) == 0 {
+	sorted := make([]float64, len(m.TickDurationsMs))
+	copy(sorted, m.TickDurationsMs)
+	m.mu.Unlock()
+	return percentile(sorted, 0.99)
+}
+
+func percentile(values []float64, ratio float64) float64 {
+	if len(values) == 0 {
 		return 0
 	}
-	n := int(float64(len(m.TickDurationsMs)) * 0.99)
+	n := int(float64(len(values)) * ratio)
 	if n < 1 {
 		n = 1
 	}
-	if n > len(m.TickDurationsMs) {
-		n = len(m.TickDurationsMs)
+	if n > len(values) {
+		n = len(values)
 	}
-	sorted := make([]float64, len(m.TickDurationsMs))
-	copy(sorted, m.TickDurationsMs)
-	sort.Float64s(sorted)
-	return sorted[n-1]
+	sort.Float64s(values)
+	return values[n-1]
 }
 
 func (m *Metrics) Snapshot() map[string]any {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	tickCount := m.TickCount
+	lastTickDur := m.LastTickDur
+	commandsTotal := m.CommandsTotal
+	sseConnections := m.SSEConnections
+	queueBacklog := m.QueueBacklog
+	durations := make([]float64, len(m.TickDurationsMs))
+	copy(durations, m.TickDurationsMs)
+	m.mu.Unlock()
 	return map[string]any{
-		"tick_count":       m.TickCount,
-		"last_tick_dur_ms": m.LastTickDur.Milliseconds(),
-		"commands_total":   m.CommandsTotal,
-		"sse_connections":  m.SSEConnections,
-		"queue_backlog":    m.QueueBacklog,
-		"tick_p95_ms":      m.p95(),
-		"tick_p99_ms":      m.p99(),
+		"tick_count":       tickCount,
+		"last_tick_dur_ms": lastTickDur.Milliseconds(),
+		"commands_total":   commandsTotal,
+		"sse_connections":  sseConnections,
+		"queue_backlog":    queueBacklog,
+		"tick_p95_ms":      percentile(durations, 0.95),
+		"tick_p99_ms":      percentile(durations, 0.99),
 	}
 }
 
@@ -263,25 +262,25 @@ func (cl *CommandLog) TrimAfter(tick int64) int {
 
 // GameCore orchestrates the tick loop
 type GameCore struct {
-	cfg            *config.Config
-	maps           *mapmodel.Universe
-	discovery      *mapstate.Discovery
-	world          *model.WorldState
-	queue          *queue.CommandQueue
-	bus            *EventBus
-	metrics        *Metrics
-	cmdLog         *CommandLog
-	eventHistory   *EventHistory
-	alertHistory   *AlertHistory
-	snapshotStore  *persistence.Store
-	monitor        *productionMonitor
-	rng            *rand.Rand
-	stopCh         chan struct{}
-	winner         string
-	winnerMu       sync.RWMutex
-	activePlanetID string
-	executorUsage  map[string]int
-	combatUnits    *CombatUnitManager
+	cfg              *config.Config
+	maps             *mapmodel.Universe
+	discovery        *mapstate.Discovery
+	world            *model.WorldState
+	queue            *queue.CommandQueue
+	bus              *EventBus
+	metrics          *Metrics
+	cmdLog           *CommandLog
+	eventHistory     *EventHistory
+	alertHistory     *AlertHistory
+	snapshotStore    *persistence.Store
+	monitor          *productionMonitor
+	rng              *rand.Rand
+	stopCh           chan struct{}
+	winner           string
+	winnerMu         sync.RWMutex
+	activePlanetID   string
+	executorUsage    map[string]int
+	combatUnits      *CombatUnitManager
 	orbitalPlatforms *OrbitalPlatformManager
 }
 
@@ -307,13 +306,14 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	}
 	for i, p := range cfg.Players {
 		ps := &model.PlayerState{
-			PlayerID:    p.PlayerID,
-			TeamID:      p.TeamID,
-			Role:        p.Role,
-			Resources:   model.Resources{Minerals: 200, Energy: 100},
-			IsAlive:     true,
-			CombatTech:  &model.PlayerCombatTechState{PlayerID: p.PlayerID, UnlockedTechs: make(map[string]*model.CombatTech)},
-			Stats:       model.NewPlayerStats(p.PlayerID),
+			PlayerID:   p.PlayerID,
+			TeamID:     p.TeamID,
+			Role:       p.Role,
+			Resources:  model.Resources{Minerals: 200, Energy: 100},
+			IsAlive:    true,
+			Tech:       model.NewPlayerTechState(p.PlayerID),
+			CombatTech: &model.PlayerCombatTechState{PlayerID: p.PlayerID, UnlockedTechs: make(map[string]*model.CombatTech)},
+			Stats:      model.NewPlayerStats(p.PlayerID),
 		}
 		ps.SetPermissions(p.Permissions)
 		ws.Players[p.PlayerID] = ps
@@ -333,6 +333,7 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 			Runtime:     profile.Runtime,
 		}
 		model.InitBuildingStorage(base)
+		model.InitBuildingProduction(base)
 		model.InitBuildingConveyor(base)
 		model.InitBuildingSorter(base)
 		model.InitBuildingLogisticsStation(base)
@@ -564,6 +565,10 @@ func (gc *GameCore) processTick() {
 	// 12. Settle pipeline IO
 	settlePipelineIO(gc.world)
 
+	// 12.5 Settle production cycles
+	productionEvts := settleProduction(gc.world)
+	allEvents = append(allEvents, productionEvts...)
+
 	// 13. Settle storage buffers
 	settleStorage(gc.world)
 
@@ -737,6 +742,14 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execCancelResearch(gc.world, qr.PlayerID, cmd)
 		case model.CmdLaunchSolarSail:
 			res, evts = gc.execLaunchSolarSail(gc.world, qr.PlayerID, cmd)
+		case model.CmdBuildDysonNode:
+			res, evts = gc.execBuildDysonNode(gc.world, qr.PlayerID, cmd)
+		case model.CmdBuildDysonFrame:
+			res, evts = gc.execBuildDysonFrame(gc.world, qr.PlayerID, cmd)
+		case model.CmdBuildDysonShell:
+			res, evts = gc.execBuildDysonShell(gc.world, qr.PlayerID, cmd)
+		case model.CmdDemolishDyson:
+			res, evts = gc.execDemolishDyson(gc.world, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

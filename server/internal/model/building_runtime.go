@@ -90,9 +90,10 @@ type BuildingRuntimeParams struct {
 
 // BuildingRuntime captures the runtime parameters and state of a building instance.
 type BuildingRuntime struct {
-	Params    BuildingRuntimeParams   `json:"params"`
-	Functions BuildingFunctionModules `json:"functions,omitempty"`
-	State     BuildingWorkState       `json:"state"`
+	Params      BuildingRuntimeParams   `json:"params"`
+	Functions   BuildingFunctionModules `json:"functions,omitempty"`
+	State       BuildingWorkState       `json:"state"`
+	StateReason string                  `json:"state_reason,omitempty"`
 }
 
 // BuildingFunctionModules describes modular building capabilities.
@@ -190,15 +191,15 @@ type CombatModule struct {
 
 // LaunchModule handles launch-related parameters for EM Rail Ejector and Vertical Launching Silo.
 type LaunchModule struct {
-	EnergyPerLaunch   int     `json:"energy_per_launch" yaml:"energy_per_launch"`     // energy consumed per launch
-	SuccessRate      float64 `json:"success_rate" yaml:"success_rate"`                // launch success probability (0-1)
-	OrbitRadiusMin   float64 `json:"orbit_radius_min" yaml:"orbit_radius_min"`        // minimum orbit radius in AU
-	OrbitRadiusMax   float64 `json:"orbit_radius_max" yaml:"orbit_radius_max"`        // maximum orbit radius in AU
-	InclinationMax   float64 `json:"inclination_max" yaml:"inclination_max"`          // maximum inclination in degrees
-	LaunchInterval   int     `json:"launch_interval" yaml:"launch_interval"`          // ticks between launches
-	LaunchQueueSize  int     `json:"launch_queue_size" yaml:"launch_queue_size"`      // max launch queue size
-	RocketItemID     string  `json:"rocket_item_id,omitempty" yaml:"rocket_item_id,omitempty"` // rocket type to launch (for silo)
-	ProductionSpeed  int     `json:"production_speed" yaml:"production_speed"`        // rocket production speed (for silo)
+	EnergyPerLaunch int     `json:"energy_per_launch" yaml:"energy_per_launch"`               // energy consumed per launch
+	SuccessRate     float64 `json:"success_rate" yaml:"success_rate"`                         // launch success probability (0-1)
+	OrbitRadiusMin  float64 `json:"orbit_radius_min" yaml:"orbit_radius_min"`                 // minimum orbit radius in AU
+	OrbitRadiusMax  float64 `json:"orbit_radius_max" yaml:"orbit_radius_max"`                 // maximum orbit radius in AU
+	InclinationMax  float64 `json:"inclination_max" yaml:"inclination_max"`                   // maximum inclination in degrees
+	LaunchInterval  int     `json:"launch_interval" yaml:"launch_interval"`                   // ticks between launches
+	LaunchQueueSize int     `json:"launch_queue_size" yaml:"launch_queue_size"`               // max launch queue size
+	RocketItemID    string  `json:"rocket_item_id,omitempty" yaml:"rocket_item_id,omitempty"` // rocket type to launch (for silo)
+	ProductionSpeed int     `json:"production_speed" yaml:"production_speed"`                 // rocket production speed (for silo)
 }
 
 // BuildingRuntimeDefinition defines runtime parameters for a building type.
@@ -604,7 +605,8 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Collect: &CollectModule{ResourceKind: "minerals", YieldPerTick: 8},
+			Collect: &CollectModule{YieldPerTick: 8},
+			Storage: &StorageModule{Capacity: 48, Slots: 2, Buffer: 12, InputPriority: 1, OutputPriority: 2},
 			Energy:  &EnergyModule{ConsumePerTick: 2},
 		},
 	},
@@ -707,12 +709,16 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      1,
 			EnergyConsume: 4,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 24, Slots: 3, Buffer: 8, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
 			Energy:     &EnergyModule{ConsumePerTick: 4},
 		},
@@ -722,12 +728,16 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      2,
 			EnergyConsume: 6,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 36, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 2, RecipeSlots: 1},
 			Energy:     &EnergyModule{ConsumePerTick: 6},
 		},
@@ -737,12 +747,16 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      3,
 			EnergyConsume: 9,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 3},
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 3},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 48, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 3, RecipeSlots: 1},
 			Energy:     &EnergyModule{ConsumePerTick: 9},
 		},
@@ -752,12 +766,16 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      1,
 			EnergyConsume: 6,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 24, Slots: 4, Buffer: 8, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
 			Energy:     &EnergyModule{ConsumePerTick: 6},
 		},
@@ -767,14 +785,38 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      2,
 			EnergyConsume: 8,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 36, Slots: 5, Buffer: 12, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 2, RecipeSlots: 1},
 			Energy:     &EnergyModule{ConsumePerTick: 8},
+		},
+	},
+	{
+		ID: BuildingTypeMatrixLab,
+		Params: BuildingRuntimeParams{
+			Capacity:      1,
+			EnergyConsume: 4,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 36, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 2},
+			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
+			Research:   &ResearchModule{ResearchPerTick: 1},
+			Energy:     &EnergyModule{ConsumePerTick: 4},
 		},
 	},
 	{
@@ -983,12 +1025,16 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      1,
 			EnergyConsume: 5,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 24, Slots: 4, Buffer: 8, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
 			Energy:     &EnergyModule{ConsumePerTick: 5},
 		},
@@ -997,6 +1043,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		ID: BuildingTypeGaussTurret,
 		Params: BuildingRuntimeParams{
 			EnergyConsume: 3,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 		},
 		Functions: BuildingFunctionModules{
 			Combat: &CombatModule{Attack: 15, Range: 5},
@@ -1007,6 +1056,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		ID: BuildingTypeEMRailEjector,
 		Params: BuildingRuntimeParams{
 			EnergyConsume: 30,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 		},
 		Functions: BuildingFunctionModules{
 			Launch: &LaunchModule{
@@ -1026,22 +1078,26 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      1,
 			EnergyConsume: 50,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1, AllowedItems: []string{ItemSmallCarrierRocket}},
 			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 20, Slots: 1, Buffer: 6, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
 			Launch: &LaunchModule{
-				EnergyPerLaunch:  500,
-				SuccessRate:      0.9,
-				OrbitRadiusMin:   0.5,
-				OrbitRadiusMax:   5.0,
-				InclinationMax:   90.0,
-				LaunchInterval:   120,
-				LaunchQueueSize:  20,
-				RocketItemID:     ItemSmallCarrierRocket,
-				ProductionSpeed:  1,
+				EnergyPerLaunch: 500,
+				SuccessRate:     0.9,
+				OrbitRadiusMin:  0.5,
+				OrbitRadiusMax:  5.0,
+				InclinationMax:  90.0,
+				LaunchInterval:  120,
+				LaunchQueueSize: 20,
+				RocketItemID:    ItemSmallCarrierRocket,
+				ProductionSpeed: 1,
 			},
 			Energy: &EnergyModule{ConsumePerTick: 50},
 		},

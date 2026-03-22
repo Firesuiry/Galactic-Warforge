@@ -289,7 +289,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemCircuitBoard, Quantity: 1}, {ItemID: ItemEnergeticGraphite, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemMatrixBlue, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeMatrixLab},
 		TechUnlock:    []string{"matrix_blue"},
 	},
 	"matrix_red": {
@@ -298,7 +298,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemEnergeticGraphite, Quantity: 1}, {ItemID: ItemHydrogen, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemMatrixRed, Quantity: 1}},
 		Duration:      80,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeMatrixLab},
 		TechUnlock:    []string{"matrix_red"},
 	},
 	"matrix_yellow": {
@@ -307,7 +307,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemTitaniumIngot, Quantity: 1}, {ItemID: ItemPlastic, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemMatrixYellow, Quantity: 1}},
 		Duration:      90,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeMatrixLab},
 		TechUnlock:    []string{"matrix_yellow"},
 	},
 	"matrix_universe": {

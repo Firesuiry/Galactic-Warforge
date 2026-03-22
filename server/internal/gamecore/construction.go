@@ -250,12 +250,12 @@ func createConstructionPauseEvent(task *model.ConstructionTask) *model.GameEvent
 		EventType:       model.EvtConstructionPaused,
 		VisibilityScope: task.PlayerID,
 		Payload: map[string]any{
-			"task_id":    task.ID,
-			"reason":     "insufficient_materials",
-			"building":   task.BuildingType,
-			"position":   task.Position,
-			"remaining":  task.RemainingTicks,
-			"total":      task.TotalTicks,
+			"task_id":   task.ID,
+			"reason":    "insufficient_materials",
+			"building":  task.BuildingType,
+			"position":  task.Position,
+			"remaining": task.RemainingTicks,
+			"total":     task.TotalTicks,
 		},
 	}
 }
@@ -543,10 +543,15 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		Runtime:     profile.Runtime,
 	}
 	model.InitBuildingStorage(b)
+	model.InitBuildingProduction(b)
 	model.InitBuildingEnergyStorage(b)
 	model.InitBuildingConveyor(b)
 	model.InitBuildingSorter(b)
 	model.InitBuildingLogisticsStation(b)
+	syncCollectorResourceKind(ws, b)
+	if b.Production != nil {
+		b.Production.RecipeID = task.RecipeID
+	}
 	if b.Runtime.Functions.Production != nil {
 		b.ProductionMonitor = model.NewProductionMonitorState()
 	}

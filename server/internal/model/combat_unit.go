@@ -2,6 +2,7 @@ package model
 
 import (
 	"math"
+	"math/rand"
 )
 
 // CombatUnitType 战斗单位类型
@@ -236,7 +237,7 @@ func ProcessWeaponFire(unit *CombatUnit, target *CombatUnit, currentTick int64) 
 }
 
 // CalculateLoot 计算战斗掉落
-func CalculateLoot(enemy *EnemyForce, rng *math.Rand) []LootDrop {
+func CalculateLoot(enemy *EnemyForce, rng *rand.Rand) []LootDrop {
 	drops := make([]LootDrop, 0)
 
 	if enemy == nil {

@@ -50,7 +50,7 @@ func (gc *GameCore) updateProductionStats(player *model.PlayerState) {
 		if building.OwnerID != player.PlayerID {
 			continue
 		}
-		if building.Runtime == nil || building.Runtime.Functions.Production == nil {
+		if building.Runtime.Functions.Production == nil {
 			continue
 		}
 
@@ -81,21 +81,18 @@ func (gc *GameCore) updateEnergyStats(player *model.PlayerState) {
 		if building.OwnerID != player.PlayerID {
 			continue
 		}
-		if building.Runtime == nil {
-			continue
-		}
 
 		// 发电建筑
-		if building.Runtime.Functions.PowerGeneration > 0 {
-			stats.Generation += building.Runtime.Functions.PowerGeneration
+		if building.Runtime.Functions.Energy != nil && building.Runtime.Functions.Energy.OutputPerTick > 0 {
+			stats.Generation += building.Runtime.Functions.Energy.OutputPerTick
 		}
 		// 耗电建筑
-		if building.Runtime.Functions.PowerConsumption > 0 {
-			stats.Consumption += building.Runtime.Functions.PowerConsumption
+		if building.Runtime.Functions.Energy != nil && building.Runtime.Functions.Energy.ConsumePerTick > 0 {
+			stats.Consumption += building.Runtime.Functions.Energy.ConsumePerTick
 		}
 		// 储能建筑
-		if building.Runtime.Functions.EnergyStorage > 0 {
-			stats.Storage += building.Runtime.Functions.EnergyStorage
+		if building.Runtime.Functions.EnergyStorage != nil && building.Runtime.Functions.EnergyStorage.Capacity > 0 {
+			stats.Storage += building.Runtime.Functions.EnergyStorage.Capacity
 			stats.CurrentStored += building.HP // 假设HP代表当前储能
 		}
 	}
@@ -120,9 +117,17 @@ func (gc *GameCore) updateCombatStats(player *model.PlayerState) {
 	// 从Detections获取威胁等级
 	if gc.world.Detections != nil {
 		if det, ok := gc.world.Detections[player.PlayerID]; ok {
-			stats.ThreatLevel = det.ThreatLevel
-			if det.ThreatLevel > stats.HighestThreat {
-				stats.HighestThreat = det.ThreatLevel
+			// 从已知敌人中计算最大威胁等级
+			maxThreat := 0
+			for _, enemy := range det.KnownEnemies {
+				threatInt := int(enemy.ThreatLevel)
+				if threatInt > maxThreat {
+					maxThreat = threatInt
+				}
+			}
+			stats.ThreatLevel = maxThreat
+			if maxThreat > stats.HighestThreat {
+				stats.HighestThreat = maxThreat
 			}
 		}
 	}

@@ -339,7 +339,11 @@ func (gc *GameCore) applySignalTowerEffects(ws *model.WorldState) {
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
 			dist := calculateDistance(building.Position, force.Position)
-			effectiveRange := building.Runtime.VisionRange + int(rangeBonus)
+			visionRange := 10 // 默认信号塔视野范围
+		if building.Runtime.Functions.Combat != nil {
+			visionRange = building.Runtime.Functions.Combat.Range
+		}
+		effectiveRange := visionRange + int(rangeBonus)
 			if float64(dist) > float64(effectiveRange) {
 				continue
 			}
@@ -367,8 +371,7 @@ func (gc *GameCore) updateRadarDetection(ws *model.WorldState, currentTick int64
 
 		// 检查是否是雷达或信号塔（有检测功能）
 		isRadar := building.Type == model.BuildingTypeBattlefieldAnalysisBase
-		hasRadarFunc := building.Runtime.Functions != nil &&
-			building.Runtime.Functions.Combat != nil &&
+		hasRadarFunc := building.Runtime.Functions.Combat != nil &&
 			building.Runtime.Functions.Combat.Range > 0
 
 		if !isRadar && !hasRadarFunc {
@@ -459,7 +462,7 @@ func (gc *GameCore) applySlowFieldEffects(ws *model.WorldState) {
 		slowFactor := 0.5
 		rangeVal := 8
 
-		if building.Runtime.Functions != nil && building.Runtime.Functions.Combat != nil {
+		if building.Runtime.Functions.Combat != nil {
 			rangeVal = building.Runtime.Functions.Combat.Range
 		}
 

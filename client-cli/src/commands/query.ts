@@ -1,5 +1,5 @@
-import { fetchHealth, fetchMetrics, fetchSummary, fetchGalaxy, fetchSystem, fetchPlanet, fetchFogMap } from '../api.js';
-import { fmtHealth, fmtMetrics, fmtSummary, fmtGalaxy, fmtSystem, fmtPlanet, fmtError } from '../format.js';
+import { fetchHealth, fetchMetrics, fetchSummary, fetchStats, fetchGalaxy, fetchSystem, fetchPlanet, fetchFogMap } from '../api.js';
+import { fmtHealth, fmtMetrics, fmtSummary, fmtStats, fmtGalaxy, fmtSystem, fmtPlanet, fmtError } from '../format.js';
 import { DEFAULT_SYSTEM_ID, DEFAULT_PLANET_ID } from '../config.js';
 
 export async function cmdHealth(_args: string[]): Promise<string> {
@@ -21,6 +21,14 @@ export async function cmdMetrics(_args: string[]): Promise<string> {
 export async function cmdSummary(_args: string[]): Promise<string> {
   try {
     return fmtSummary(await fetchSummary());
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdStats(_args: string[]): Promise<string> {
+  try {
+    return fmtStats(await fetchStats());
   } catch (e) {
     return fmtError(String(e));
   }
