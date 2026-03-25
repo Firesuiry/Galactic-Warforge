@@ -107,6 +107,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
 	mux.HandleFunc("GET /world/planets/{planet_id}/fog", s.auth(s.handleFogMap))
+	mux.HandleFunc("GET /world/planets/{planet_id}/runtime", s.auth(s.handlePlanetRuntime))
+	mux.HandleFunc("GET /world/planets/{planet_id}/networks", s.auth(s.handlePlanetNetworks))
+	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
 
 	// Commands
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
@@ -209,6 +212,36 @@ func (s *Server) handleFogMap(w http.ResponseWriter, r *http.Request, playerID s
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
+}
+
+// handlePlanetRuntime returns GET /world/planets/{planet_id}/runtime
+func (s *Server) handlePlanetRuntime(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
+	ws := s.core.World()
+	view, ok := s.ql.PlanetRuntime(ws, playerID, planetID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handlePlanetNetworks returns GET /world/planets/{planet_id}/networks
+func (s *Server) handlePlanetNetworks(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
+	ws := s.core.World()
+	view, ok := s.ql.PlanetNetworks(ws, playerID, planetID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleCatalog returns GET /catalog
+func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, playerID string) {
+	_ = playerID
+	writeJSON(w, http.StatusOK, s.ql.Catalog())
 }
 
 // handleCommands handles POST /commands

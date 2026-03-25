@@ -1,0 +1,25 @@
+{
+  "name": "siliconworld-remotion",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate:audio": "python3 scripts/generate_audio.py",
+    "studio": "remotion studio",
+    "render": "npm run render:intro",
+    "render:intro": "remotion render src/index.ts SiliconWorldIntro out/siliconworld-intro.mp4",
+    "render:design": "remotion render src/index.ts GalacticWarFactoryDesign out/galactic-war-factory-design.mp4"
+  },
+  "dependencies": {
+    "@remotion/media": "4.0.438",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.438"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.438",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
+}

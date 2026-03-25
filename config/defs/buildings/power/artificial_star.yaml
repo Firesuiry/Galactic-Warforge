@@ -1,0 +1,75 @@
+spec_version: v1
+kind: building
+id: artificial_star
+name: Artificial Star
+category: power
+subcategory: power
+tech_tier: 1
+
+footprint:
+  width: 1
+  height: 1
+  rotatable: true
+
+placement:
+  allowed_terrain: [buildable_land]
+  require_resource_node: false
+  resource_node_types: []
+  near_equator_only: false
+  orbit_only: false
+  gas_giant_only: false
+
+build:
+  cost: []
+  build_ticks: 60
+  dismantle_refund_ratio: 1.0
+
+unlock:
+  required_tech: []
+  required_buildings: []
+  required_items: []
+
+power:
+  mode: producer
+  idle_mw: 0
+  work_mw: 0
+  peak_mw: 0
+  fuel_types: []
+  generation_mw: 1
+
+io:
+  input_ports: []
+  output_ports: []
+  fluid_input_ports: []
+  fluid_output_ports: []
+
+operation:
+  modes: [default]
+  default_mode: default
+  cycle_ticks: 60
+  recipe_pool: []
+  supports_proliferation: false
+  supports_overclock: false
+
+combat:
+  enabled: false
+  hp: 0
+  shield: 0
+  resistances: []
+  attack: null
+
+visibility:
+  detectable_level: 1
+  scout_radius: 0
+
+events:
+  emits:
+    - building_started
+    - building_stopped
+    - building_blocked
+    - building_no_power
+
+upgrade:
+  next_ids: []
+  inherit_runtime_buffer: true
+  upgrade_ticks: 120

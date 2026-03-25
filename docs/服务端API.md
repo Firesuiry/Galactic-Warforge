@@ -374,6 +374,258 @@
 }
 ```
 
+**GET /world/planets/{planet_id}/runtime**
+- 说明: 行星运行态只读视图（需认证）
+- 说明补充:
+  - 未发现行星只返回 `planet_id` + `discovered=false`
+  - 非当前 active 行星返回 `available=false`，并附带 `active_planet_id` / `tick`，前端可据此稳定降级显示
+  - 当前 active 行星返回物流、施工、敌情、侦测等动态读模型
+- 响应字段:
+  - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
+  - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
+  - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
+  - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
+  - `construction_tasks`：施工任务视图，包含 `id` / `player_id` / `region_id` / `building_type` / `position` / `rotation` / `blueprint_params` / `conveyor_direction` / `recipe_id` / `cost` / `state` / `enqueue_tick` / `start_tick` / `update_tick` / `queue_index` / `remaining_ticks` / `total_ticks` / `speed_bonus` / `priority` / `error` / `materials_deducted`
+  - `enemy_forces`：敌军视图，包含 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
+  - `detections`：侦测摘要，包含 `player_id` / `vision_range` / `known_enemy_count` / `detected_positions`
+- 响应示例:
+```json
+{
+  "planet_id": "planet-1-1",
+  "discovered": true,
+  "available": true,
+  "active_planet_id": "planet-1-1",
+  "tick": 120,
+  "logistics_stations": [
+    {
+      "building_id": "station-1",
+      "building_type": "planetary_logistics_station",
+      "owner_id": "p1",
+      "position": {"x": 4, "y": 4},
+      "drone_ids": ["drone-1"],
+      "ship_ids": ["ship-1"]
+    }
+  ],
+  "logistics_drones": [
+    {
+      "id": "drone-1",
+      "owner_id": "p1",
+      "station_id": "station-1",
+      "target_station_id": "station-1",
+      "capacity": 25,
+      "speed": 6,
+      "status": "idle",
+      "position": {"x": 4, "y": 4},
+      "remaining_ticks": 0,
+      "travel_ticks": 0,
+      "cargo": {"iron_ore": 12}
+    }
+  ],
+  "construction_tasks": [
+    {
+      "id": "c-1",
+      "player_id": "p1",
+      "building_type": "arc_smelter",
+      "position": {"x": 2, "y": 2},
+      "cost": {"minerals": 12, "energy": 4},
+      "state": "pending",
+      "enqueue_tick": 118
+    }
+  ],
+  "enemy_forces": [
+    {
+      "id": "enemy-force-1",
+      "type": "swarm",
+      "position": {"x": 10, "y": 10},
+      "strength": 25,
+      "target_player": "p1",
+      "spawn_tick": 40
+    }
+  ],
+  "detections": [
+    {
+      "player_id": "p1",
+      "vision_range": 12,
+      "known_enemy_count": 1,
+      "detected_positions": [{"x": 9, "y": 10}, {"x": 10, "y": 10}]
+    }
+  ],
+  "threat_level": 2,
+  "last_attack_tick": 88
+}
+```
+
+**GET /world/planets/{planet_id}/networks**
+- 说明: 行星网络读模型（需认证）
+- 说明补充:
+  - 未发现行星只返回 `planet_id` + `discovered=false`
+  - 非当前 active 行星返回 `available=false`，当前 active 行星返回电网/管网拓扑与分配结果
+- 响应字段:
+  - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick`
+  - `power_networks`：电网聚合，包含 `id` / `owner_id` / `supply` / `demand` / `allocated` / `net` / `shortage` / `node_ids`
+  - `power_nodes`：电网节点，包含 `building_id` / `owner_id` / `building_type` / `position` / `network_id` / `connectors`
+  - `power_links`：电力链路，包含 `from_building_id` / `to_building_id` / `kind` / `distance` / `from_position` / `to_position`
+  - `power_coverage`：建筑供电覆盖，包含 `building_id` / `owner_id` / `building_type` / `position` / `connected` / `reason` / `provider_id` / `network_id` / `demand` / `allocated` / `ratio` / `priority`
+  - `pipeline_nodes`：管网节点，包含 `id` / `position` / `buffer` / `pressure` / `fluid_id`
+  - `pipeline_segments`：管网边，包含 `id` / `from_node_id` / `to_node_id` / `from_position` / `to_position` / `flow_rate` / `pressure` / `capacity` / `attenuation` / `current_flow` / `buffer` / `fluid_id`
+  - `pipeline_endpoints`：建筑端点，包含 `id` / `node_id` / `building_id` / `owner_id` / `port_id` / `direction` / `position` / `capacity` / `allowed_items`
+- 响应示例:
+```json
+{
+  "planet_id": "planet-1-1",
+  "discovered": true,
+  "available": true,
+  "active_planet_id": "planet-1-1",
+  "tick": 120,
+  "power_networks": [
+    {
+      "id": "power-1",
+      "owner_id": "p1",
+      "supply": 12,
+      "demand": 3,
+      "allocated": 3,
+      "net": 9,
+      "shortage": false,
+      "node_ids": ["miner-1", "tesla-1"]
+    }
+  ],
+  "power_nodes": [
+    {
+      "building_id": "tesla-1",
+      "owner_id": "p1",
+      "building_type": "tesla_tower",
+      "position": {"x": 2, "y": 2},
+      "network_id": "power-1"
+    }
+  ],
+  "power_links": [
+    {
+      "from_building_id": "tesla-1",
+      "to_building_id": "miner-1",
+      "kind": "line",
+      "distance": 1,
+      "from_position": {"x": 2, "y": 2},
+      "to_position": {"x": 3, "y": 2}
+    }
+  ],
+  "power_coverage": [
+    {
+      "building_id": "miner-1",
+      "owner_id": "p1",
+      "building_type": "mining_machine",
+      "position": {"x": 3, "y": 2},
+      "connected": true,
+      "network_id": "power-1",
+      "demand": 3,
+      "allocated": 3,
+      "ratio": 1
+    }
+  ],
+  "pipeline_nodes": [
+    {
+      "id": "n-1",
+      "position": {"x": 5, "y": 5},
+      "buffer": 6,
+      "pressure": 2,
+      "fluid_id": "water"
+    }
+  ],
+  "pipeline_segments": [
+    {
+      "id": "s-1",
+      "from_node_id": "n-1",
+      "to_node_id": "n-2",
+      "from_position": {"x": 5, "y": 5},
+      "to_position": {"x": 7, "y": 5},
+      "flow_rate": 5,
+      "pressure": 1,
+      "capacity": 10,
+      "current_flow": 3,
+      "buffer": 2,
+      "fluid_id": "water"
+    }
+  ],
+  "pipeline_endpoints": [
+    {
+      "id": "pump-1:out-0",
+      "node_id": "n-1",
+      "building_id": "pump-1",
+      "owner_id": "p1",
+      "port_id": "out-0",
+      "direction": "output",
+      "position": {"x": 5, "y": 5},
+      "capacity": 6,
+      "allowed_items": ["water"]
+    }
+  ]
+}
+```
+
+**GET /catalog**
+- 说明: 客户端展示元数据总表（需认证）
+- 说明补充:
+  - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
+  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs`
+- 响应字段:
+  - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
+  - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
+  - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
+  - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `max_level` / `hidden` / `icon_key` / `color`
+- 响应示例:
+```json
+{
+  "buildings": [
+    {
+      "id": "mining_machine",
+      "name": "采矿机",
+      "category": "production",
+      "subcategory": "mining",
+      "footprint": {"width": 1, "height": 1},
+      "build_cost": {"minerals": 12},
+      "buildable": true,
+      "icon_key": "mining_machine",
+      "color": "#f59f00"
+    }
+  ],
+  "items": [
+    {
+      "id": "iron_ore",
+      "name": "铁矿",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1,
+      "icon_key": "iron_ore",
+      "color": "#adb5bd"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "mining-iron",
+      "name": "开采铁矿",
+      "inputs": [],
+      "outputs": [{"item_id": "iron_ore", "amount": 1}],
+      "duration": 4,
+      "energy_cost": 1,
+      "building_types": ["mining_machine"],
+      "icon_key": "mining-iron",
+      "color": "#adb5bd"
+    }
+  ],
+  "techs": [
+    {
+      "id": "tech-energy-1",
+      "name": "基础能源学",
+      "category": "energy",
+      "type": "energy",
+      "level": 1,
+      "icon_key": "tech-energy-1",
+      "color": "#ffd43b"
+    }
+  ]
+}
+```
+
 ---
 
 **POST /commands**

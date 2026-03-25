@@ -19,5 +19,37 @@ server/server
 *.test
 
 .env
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Local agent/tool state
+.codex/
+.taskmaster/
+latest
+task_finished.txt
 .env.local
 .env.*.local
+
+# Logs
+logs
+dev-debug.log
+# Dependency directories
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 
+.env
+
+server/data/snapshots/*

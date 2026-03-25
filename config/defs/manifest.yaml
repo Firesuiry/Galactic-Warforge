@@ -1,0 +1,12 @@
+spec_version: v1
+load_order:
+  items_glob: defs/items/**/*.yaml
+  buildings_glob: defs/buildings/**/*.yaml
+integrity:
+  require_unique_ids: true
+  require_reference_resolved: true
+  strict_unknown_fields: true
+runtime_policy:
+  hot_reload: false
+  fail_fast_on_boot: true
+

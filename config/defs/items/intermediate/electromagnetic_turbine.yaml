@@ -1,0 +1,37 @@
+spec_version: v1
+kind: item
+id: electromagnetic_turbine
+name: Electromagnetic Turbine
+category: intermediate
+form: solid
+stack_space: 1
+
+storage:
+  stack_size: 100
+  can_store_in_depot: true
+  can_store_in_tank: false
+  can_store_in_station: true
+
+transport:
+  belt_transportable: true
+  sorter_transportable: true
+  station_transportable: true
+  drone_transportable: true
+  vessel_transportable: true
+
+fuel:
+  is_fuel: false
+  fuel_value_mj: 0
+  fuel_type: none
+
+combat:
+  is_ammo: false
+  ammo_type: none
+  base_damage: 0
+
+production:
+  produced_by: []
+  consumed_by: []
+
+tags:
+  - intermediate
