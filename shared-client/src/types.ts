@@ -396,6 +396,7 @@ export interface PlanetView {
   terrain?: string[][];
   environment?: PlanetEnvironment;
   tick: number;
+  scene_bounds?: PlanetSceneBounds;
   buildings?: Record<string, Building>;
   units?: Record<string, Unit>;
   resources?: PlanetResource[];
@@ -459,6 +460,7 @@ export interface FogMapView {
   discovered: boolean;
   map_width: number;
   map_height: number;
+  scene_bounds?: PlanetSceneBounds;
   visible?: boolean[][];
   explored?: boolean[][];
 }

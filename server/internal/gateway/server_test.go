@@ -325,15 +325,15 @@ func TestGalaxyEndpoint(t *testing.T) {
 	}
 }
 
-func TestFogMapEndpoint(t *testing.T) {
+func TestFogMapEndpointIsRemoved(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/fog", nil)
 	req.Header.Set("Authorization", "Bearer key1")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
 	}
 }
 

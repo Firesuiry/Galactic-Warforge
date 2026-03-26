@@ -102,10 +102,10 @@ func ApplyDefaults(cfg *Config) {
 		cfg.System.MaxMoons = 4
 	}
 	if cfg.Planet.Width == 0 {
-		cfg.Planet.Width = 32
+		cfg.Planet.Width = 2000
 	}
 	if cfg.Planet.Height == 0 {
-		cfg.Planet.Height = 32
+		cfg.Planet.Height = 2000
 	}
 	if cfg.Planet.ResourceDensity == 0 {
 		cfg.Planet.ResourceDensity = 12

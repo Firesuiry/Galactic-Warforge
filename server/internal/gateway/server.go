@@ -109,7 +109,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/planets/{planet_id}/scene", s.auth(s.handlePlanetScene))
 	mux.HandleFunc("GET /world/planets/{planet_id}/inspect", s.auth(s.handlePlanetInspect))
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
-	mux.HandleFunc("GET /world/planets/{planet_id}/fog", s.auth(s.handleFogMap))
 	mux.HandleFunc("GET /world/planets/{planet_id}/runtime", s.auth(s.handlePlanetRuntime))
 	mux.HandleFunc("GET /world/planets/{planet_id}/networks", s.auth(s.handlePlanetNetworks))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
@@ -295,18 +294,6 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 		Unit:       view.Unit,
 		Resource:   view.Resource,
 	})
-}
-
-// handleFogMap returns GET /world/planets/{planet_id}/fog
-func (s *Server) handleFogMap(w http.ResponseWriter, r *http.Request, playerID string) {
-	planetID := r.PathValue("planet_id")
-	ws := s.core.World()
-	view, ok := s.ql.FogMap(ws, playerID, planetID)
-	if !ok {
-		writeError(w, http.StatusNotFound, "planet not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, view)
 }
 
 // handlePlanetRuntime returns GET /world/planets/{planet_id}/runtime

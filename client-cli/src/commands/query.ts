@@ -1,6 +1,16 @@
-import { fetchHealth, fetchMetrics, fetchSummary, fetchStats, fetchGalaxy, fetchSystem, fetchPlanet, fetchFogMap } from '../api.js';
-import { fmtHealth, fmtMetrics, fmtSummary, fmtStats, fmtGalaxy, fmtSystem, fmtPlanet, fmtError } from '../format.js';
+import { fetchHealth, fetchMetrics, fetchSummary, fetchStats, fetchGalaxy, fetchSystem, fetchPlanet, fetchPlanetInspect, fetchPlanetScene } from '../api.js';
 import { DEFAULT_SYSTEM_ID, DEFAULT_PLANET_ID } from '../config.js';
+import { fmtError, fmtGalaxy, fmtHealth, fmtMetrics, fmtPlanetSummary, fmtStats, fmtSummary, fmtSystem } from '../format.js';
+import type { PlanetSceneParams } from '../api.js';
+import { getStringOption, parseArgs, parseIntegerArg } from './args.js';
+
+function parseRequiredInteger(raw: string | undefined, label: string): number {
+  const value = parseIntegerArg(raw);
+  if (value === undefined) {
+    throw new Error(`${label} 必须是整数`);
+  }
+  return value;
+}
 
 export async function cmdHealth(_args: string[]): Promise<string> {
   try {
@@ -54,16 +64,47 @@ export async function cmdSystem(args: string[]): Promise<string> {
 export async function cmdPlanet(args: string[]): Promise<string> {
   const planetId = args[0] ?? DEFAULT_PLANET_ID;
   try {
-    return fmtPlanet(await fetchPlanet(planetId));
+    return fmtPlanetSummary(await fetchPlanet(planetId));
   } catch (e) {
     return fmtError(String(e));
   }
 }
 
-export async function cmdFogmap(args: string[]): Promise<string> {
-  const planetId = args[0] ?? DEFAULT_PLANET_ID;
+export async function cmdScene(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  const planetId = parsed.positionals[0] ?? DEFAULT_PLANET_ID;
+
   try {
-    return JSON.stringify(await fetchFogMap(planetId), null, 2);
+    const request: PlanetSceneParams = {
+      x: parseRequiredInteger(parsed.positionals[1], 'x'),
+      y: parseRequiredInteger(parsed.positionals[2], 'y'),
+      width: parseRequiredInteger(parsed.positionals[3], 'width'),
+      height: parseRequiredInteger(parsed.positionals[4], 'height'),
+      detailLevel: getStringOption(parsed, 'detail') as PlanetSceneParams['detailLevel'],
+      layers: getStringOption(parsed, 'layers')?.split(',').map((item) => item.trim()).filter(Boolean),
+    };
+    return JSON.stringify(await fetchPlanetScene(planetId, request), null, 2);
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdInspect(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  const planetId = parsed.positionals[0] ?? DEFAULT_PLANET_ID;
+  const entityKind = parsed.positionals[1];
+  const entityId = parsed.positionals[2];
+
+  if (!entityKind || !entityId) {
+    return fmtError('用法: inspect <planet_id> <building|unit|resource|sector> <entity_id>');
+  }
+
+  try {
+    return JSON.stringify(await fetchPlanetInspect(planetId, {
+      entityKind: entityKind as 'building' | 'unit' | 'resource' | 'sector',
+      entityId: entityKind === 'sector' ? undefined : entityId,
+      sectorId: entityKind === 'sector' ? entityId : undefined,
+    }), null, 2);
   } catch (e) {
     return fmtError(String(e));
   }

@@ -7,8 +7,8 @@ system:
   gas_giant_ratio: 0.35
   max_moons: 4
 planet:
-  width: 32
-  height: 32
+  width: 2000
+  height: 2000
   resource_density: 12
   terrain:
     water_ratio: 0.12

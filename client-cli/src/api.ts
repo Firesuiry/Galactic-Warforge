@@ -18,6 +18,7 @@ export type {
   DysonComponentType,
   EventSnapshotParams,
   LaunchSolarSailOptions,
+  PlanetSceneParams,
   ReplayRequest,
   RollbackRequest,
   UnitTypeName,
@@ -52,11 +53,12 @@ export const cmdUpgrade = client.cmdUpgrade;
 export const fetchAlertSnapshot = client.fetchAlertSnapshot;
 export const fetchAudit = client.fetchAudit;
 export const fetchEventSnapshot = client.fetchEventSnapshot;
-export const fetchFogMap = client.fetchFogMap;
 export const fetchGalaxy = client.fetchGalaxy;
 export const fetchHealth = client.fetchHealth;
 export const fetchMetrics = client.fetchMetrics;
 export const fetchPlanet = client.fetchPlanet;
+export const fetchPlanetInspect = client.fetchPlanetInspect;
+export const fetchPlanetScene = client.fetchPlanetScene;
 export const fetchStats = client.fetchStats;
 export const fetchSummary = client.fetchSummary;
 export const fetchSystem = client.fetchSystem;

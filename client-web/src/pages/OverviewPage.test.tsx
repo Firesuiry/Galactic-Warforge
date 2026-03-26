@@ -1,11 +1,12 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
 import { renderApp, jsonResponse } from '@/test/utils';
 import { useSessionStore } from '@/stores/session';
 
 describe('OverviewPage', () => {
-  it('展示摘要、统计、最近事件和最近告警', async () => {
+  it('展示大战略总览，并将情报默认折叠', async () => {
     useSessionStore.getState().setSession({
       serverUrl: 'http://localhost:5173',
       playerId: 'p1',
@@ -94,12 +95,19 @@ describe('OverviewPage', () => {
       return Promise.reject(new Error(`unexpected url ${url}`));
     }));
 
+    const user = userEvent.setup();
+
     renderApp(['/overview']);
 
     expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
     expect(screen.getByText('矿物 240')).toBeInTheDocument();
-    expect(screen.getByText('tech-energy-1')).toBeInTheDocument();
-    expect(screen.getByText('[t87] entity_created')).toBeInTheDocument();
+    expect(screen.getAllByText('tech-energy-1').length).toBeGreaterThan(0);
+    expect(screen.queryByText('[t87] entity_created')).not.toBeInTheDocument();
+    expect(screen.queryByText('电力不足')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '情报' }));
+
+    expect(await screen.findByText('[t87] entity_created')).toBeInTheDocument();
     expect(screen.getByText('电力不足')).toBeInTheDocument();
   });
 });

@@ -622,17 +622,15 @@ export function createFixtureFetch(serverUrl: string): typeof fetch {
       }
       return 'error' in inspect ? createErrorResponse(400, inspect.error) : createJsonResponse(inspect);
     }
+    if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/fog')) {
+      return createErrorResponse(404, 'not found');
+    }
     if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/networks')) {
       const planetId = pathname.split('/')[3] ?? '';
       const networks = scenario.networksByPlanet[planetId];
       return networks ? createJsonResponse(networks) : createErrorResponse(404, `unknown planet networks ${planetId}`);
     }
-    if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/fog')) {
-      const planetId = pathname.split('/')[3] ?? '';
-      const fog = scenario.fogByPlanet[planetId];
-      return fog ? createJsonResponse(fog) : createErrorResponse(404, `unknown planet fog ${planetId}`);
-    }
-    if (method === 'GET' && pathname.startsWith('/world/planets/')) {
+    if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.split('/').length === 4) {
       const planetId = pathname.split('/')[3] ?? '';
       const planet = scenario.planets[planetId];
       return planet ? createJsonResponse(buildPlanetSummary(planet)) : createErrorResponse(404, `unknown planet ${planetId}`);

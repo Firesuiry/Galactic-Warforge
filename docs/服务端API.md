@@ -145,8 +145,8 @@
     "p2": {"player_id":"p2","team_id":"team-2","role":"commander","is_alive":true}
   },
   "active_planet_id": "planet-1-1",
-  "map_width": 32,
-  "map_height": 32
+  "map_width": 2000,
+  "map_height": 2000
 }
 ```
 
@@ -250,76 +250,15 @@
 ```
 
 **GET /world/planets/{planet_id}**
-- 说明: 行星详情（需认证）
-- 说明补充: 未发现行星只返回 `planet_id` + `discovered=false`；非当前 active 行星的建筑、单位为空，但在已扫描/已发现状态下会返回该行星的静态资源点清单，便于做跨星资源规划
-- 响应字段: `planet_id` / `name` / `discovered` / `kind` / `orbit` / `moons` / `map_width` / `map_height` / `terrain` / `environment` / `tick` / `buildings` / `units` / `resources`
-- 坐标字段补充: 文档中的 `position` / `target.position` 均使用 `x` / `y` / 可选 `z`；当前行星平面玩法下 `z` 通常为 `0`，示例中可省略
-- `moons` 字段补充:
-  - `id` / `name` / `orbit`（`distance_au`/`period_days`/`inclination_deg`）
-- `resources` 资源点字段说明:
-  - `id` 资源点 ID
-  - `planet_id` 所属行星 ID
-  - `kind` 资源类型（如 `iron_ore`/`copper_ore`/`crude_oil`/`water` 等）
-  - `behavior` 衰减类型（`finite`/`decay`/`renewable`）
-  - `position` 坐标（`x`/`y`/可选 `z`）
-  - `remaining` 当前剩余量（`finite`/`renewable`）；值为 `0` 时也会明确返回 `0`
-  - `max_amount` 资源点上限（`finite`/`renewable`）；值为 `0` 时也会明确返回 `0`
-  - `base_yield` 初始产出上限
-  - `current_yield` 当前产出上限（油井衰减）
-  - `min_yield` 衰减下限；值为 `0` 时也会明确返回 `0`
-  - `regen_per_tick` 再生速度；值为 `0` 时也会明确返回 `0`
-  - `decay_per_tick` 衰减速度；值为 `0` 时也会明确返回 `0`
-  - `is_rare` 是否稀有资源
-  - `cluster_id` 资源簇 ID（体现分布形态）
-- `buildings` 建筑字段说明（map，key=building_id）:
-  - `id` / `type` / `owner_id` / `position` / `hp` / `max_hp` / `level` / `vision_range`
-  - `runtime` 运行参数
-    - `state` 工作状态（`idle`/`running`/`paused`/`no_power`/`error`）
-    - `state_reason` 当前状态原因；`running`/`idle` 时通常为空，`no_power`/`paused`/`error` 时可用于区分 `power_out_of_range` / `power_no_provider` / `under_power` / `pause` / `fault` 等原因
-    - `params` 运行参数（`energy_consume`/`energy_generate`/`power_priority`/`capacity`/`maintenance_cost`/`footprint`/`connection_points`/`io_ports`）
-    - `functions` 功能模块（`production`/`collect`/`orbital`/`transport`/`sorter`/`spray`/`storage`/`ray_receiver`/`energy_storage`/`energy`/`research`/`combat`/`launch`）
-    - `functions.production` 生产模块（`throughput`/`recipe_slots`）；`matrix_lab` 现已暴露生产模块
-    - `functions.collect` 采集模块（`resource_kind`/`yield_per_tick`）；资源采集建筑会在运行时把 `resource_kind` 同步为实际资源点类型（例如 `titanium_ore`）
-    - `functions.orbital` 轨道采集模块（`outputs`/`max_inventory`）
-    - `functions.spray` 喷涂模块（`throughput`/`max_level`）
-    - `functions.transport` 运输模块（`throughput`/`stack_limit`）
-    - `functions.sorter` 分拣模块（`speed`/`range`）
-    - `functions.storage` 仓储模块（`capacity`/`slots`/`buffer`/`input_priority`/`output_priority`）
-    - `functions.ray_receiver` 射线接收模块（`input_per_tick`/`receive_efficiency`/`power_output_per_tick`/`power_efficiency`/`photon_output_per_tick`/`photon_energy_cost`/`photon_efficiency`/`photon_item_id`/`mode`）
-      - `mode` 输出模式：`power`/`photon`/`hybrid`（默认 `hybrid`，优先供电，溢出转光子）
-    - `functions.energy_storage` 储能模块（`capacity`/`charge_per_tick`/`discharge_per_tick`/`charge_efficiency`/`discharge_efficiency`/`priority`/`initial_charge`）
-    - `functions.energy` 能源模块（`output_per_tick`/`consume_per_tick`/`buffer`/`source_kind`/`fuel_rules`）
-    - `functions.research` 研究模块（`research_per_tick`）
-    - `functions.combat` 战斗模块（`attack`/`range`）
-    - `functions.launch` 发射模块（`energy_per_launch`/`success_rate`/`orbit_radius_min`/`orbit_radius_max`/`inclination_max`/`launch_interval`/`launch_queue_size`/`rocket_item_id`/`production_speed`）
-  - `storage` 仓储状态（可选）
-    - `capacity` 总容量
-    - `slots` 可用槽位数量
-    - `buffer_capacity` 缓冲容量
-    - `priority`：`input` / `output` 两个数值优先级
-    - `inventory` 当前库存（map，key=item_id）
-    - `input_buffer` 输入缓冲（map，key=item_id）
-    - `output_buffer` 输出缓冲（map，key=item_id）
-  - `energy_storage` 储能状态（可选）：`energy`
-  - `conveyor` 传送带状态（可选）：`input`/`output`/`buffer`/`max_stack`/`throughput`；`buffer` 元素为 `item_id`/`quantity`/`spray`
-    - `input`/`output` 支持 `north|east|south|west|auto`，`auto` 表示按连接关系自动继承方向
-  - `sorter` 分拣器状态（可选）：`input_directions`/`output_directions`/`speed`/`range`/`filter`
-    - `input_directions`/`output_directions` 为方向优先级数组
-    - `filter` 支持 `mode`（`allow`/`deny`）与 `items`/`tags`
-  - `logistics_station` 物流站状态（可选）
-    - `priority`：`input` / `output`
-    - `settings` / `interstellar_settings`：按物品配置 `item_id` / `mode` / `local_storage`
-    - `inventory` 当前库存（map，key=item_id）
-    - `drone_capacity` 无人机容量
-    - `interstellar`：`enabled` / `warp_enabled` / `ship_slots` / `ship_capacity` / `ship_speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost`
-    - `cache` / `interstellar_cache`：`supply` / `demand` / `local`
-  - `production` 生产状态（可选）：`recipe_id` / `mode` / `remaining_ticks` / `pending_outputs` / `pending_byproducts`
-  - `production_monitor` 产线监控状态（可选）：`samples` / `idle_samples` / `total_moves` / `last_move_tick` / `last_alert_at` / `last_stats`
-  - `job` 建筑作业（升级/拆除进行中，可选）
-    - `type` 作业类型（`upgrade`/`demolish`）
-    - `remaining_ticks` 剩余 Tick
-    - `target_level` 目标等级（升级作业）
-    - `refund_rate` 返还率（拆除作业）
+- 说明: 行星概要（需认证）
+- 说明补充:
+  - 该接口只返回轻量摘要，不再返回整张 `terrain` / `fog` / `buildings` / `units`
+  - 未发现行星只返回 `planet_id` + `discovered=false`
+- 响应字段:
+  - `planet_id` / `name` / `discovered` / `kind`
+  - `map_width` / `map_height`
+  - `tick`
+  - `building_count` / `unit_count` / `resource_count`
 - 响应示例:
 ```json
 {
@@ -327,50 +266,112 @@
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
-  "orbit": {"distance_au":1.0,"period_days":365,"inclination_deg":1.2},
-  "moons": [{"id":"planet-1-1-moon-1","name":"Moon-planet-1-1-1","orbit":{"distance_au":0.02,"period_days":30,"inclination_deg":0.1}}],
-  "map_width": 32,
-  "map_height": 32,
-  "terrain": [["buildable","water"],["buildable","lava"]],
-  "environment": {
-    "wind_factor": 1.1,
-    "light_factor": 0.9,
-    "tidal_locked": false,
-    "day_length_hours": 24
-  },
+  "map_width": 2000,
+  "map_height": 2000,
   "tick": 120,
-  "buildings": {},
-  "units": {},
-  "resources": [
-    {
-      "id": "planet-1-1-res-1",
-      "planet_id": "planet-1-1",
-      "kind": "iron_ore",
-      "behavior": "finite",
-      "position": {"x": 10, "y": 8},
-      "remaining": 120,
-      "max_amount": 120,
-      "base_yield": 4,
-      "current_yield": 4,
-      "is_rare": false,
-      "cluster_id": "planet-1-1-cluster-1"
-    }
-  ]
+  "building_count": 84,
+  "unit_count": 12,
+  "resource_count": 463
 }
 ```
 
-**GET /world/planets/{planet_id}/fog**
-- 说明: 行星迷雾（需认证）
-- 说明补充: 未发现行星只返回 `planet_id` + `discovered=false`；非当前 active 行星返回全 false 的 `visible`，`explored` 为已探索缓存（无缓存则全 false）
+**GET /world/planets/{planet_id}/scene**
+- 说明: 行星场景视窗（需认证）
+- 查询参数:
+  - `x` / `y`: 左上角坐标，必填整数
+  - `width` / `height`: 视窗大小，必填正整数
+  - `detail_level`: 可选，`tile` 或 `sector`，默认 `tile`
+- 规则补充:
+  - `tile` 模式单次最多返回 `256x256`
+  - 响应中的 `bounds` 是服务端实际裁剪后的范围
+  - `tile` 模式返回裁剪后的 `terrain` / `fog` / `buildings` / `units` / `resources`
+  - `sector` 模式返回 `sectors`
 - 响应示例:
 ```json
 {
   "planet_id": "planet-1-1",
   "discovered": true,
-  "map_width": 32,
-  "map_height": 32,
-  "visible": [[true,false],[false,true]],
-  "explored": [[true,true],[false,true]]
+  "detail_level": "tile",
+  "map_width": 2000,
+  "map_height": 2000,
+  "tick": 120,
+  "bounds": {
+    "min_x": 96,
+    "min_y": 160,
+    "max_x": 127,
+    "max_y": 191
+  },
+  "terrain": [["buildable", "buildable"], ["water", "buildable"]],
+  "fog": {
+    "visible": [[true, true], [false, true]],
+    "explored": [[true, true], [true, true]]
+  },
+  "buildings": {
+    "assembler-1": {
+      "id": "assembler-1",
+      "type": "assembling_machine_mk1",
+      "owner_id": "p1",
+      "position": {"x": 100, "y": 170, "z": 0},
+      "hp": 160,
+      "max_hp": 160,
+      "level": 2,
+      "vision_range": 7,
+      "runtime": {
+        "state": "running",
+        "params": {
+          "energy_consume": 8,
+          "energy_generate": 0,
+          "capacity": 60,
+          "maintenance_cost": {"minerals": 0, "energy": 1},
+          "footprint": {"width": 2, "height": 2}
+        }
+      }
+    }
+  },
+  "units": {},
+  "resources": []
+}
+```
+
+**GET /world/planets/{planet_id}/inspect**
+- 说明: 行星对象详情检视（需认证）
+- 查询参数:
+  - `entity_kind`: 必填，`building` / `unit` / `resource` / `sector`
+  - `entity_id` 或 `sector_id`: 二选一
+- 响应字段:
+  - `planet_id` / `discovered`
+  - `entity_kind` / `entity_id`
+  - `title`
+  - 与目标类型对应的 `building` / `unit` / `resource`
+- 响应示例:
+```json
+{
+  "planet_id": "planet-1-1",
+  "discovered": true,
+  "entity_kind": "building",
+  "entity_id": "assembler-1",
+  "title": "assembling_machine_mk1",
+  "building": {
+    "id": "assembler-1",
+    "type": "assembling_machine_mk1",
+    "owner_id": "p1",
+    "position": {"x": 100, "y": 170, "z": 0},
+    "hp": 160,
+    "max_hp": 160,
+    "level": 2,
+    "vision_range": 7,
+    "runtime": {
+      "state": "paused",
+      "state_reason": "power_low",
+      "params": {
+        "energy_consume": 8,
+        "energy_generate": 0,
+        "capacity": 60,
+        "maintenance_cost": {"minerals": 0, "energy": 1},
+        "footprint": {"width": 2, "height": 2}
+      }
+    }
+  }
 }
 ```
 

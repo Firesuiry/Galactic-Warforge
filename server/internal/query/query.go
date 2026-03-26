@@ -6,7 +6,6 @@ import (
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/mapstate"
 	"siliconworld/internal/model"
-	"siliconworld/internal/terrain"
 	"siliconworld/internal/visibility"
 )
 
@@ -254,69 +253,6 @@ func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) 
 	return view, true
 }
 
-// PlanetView is the detailed planet view including fog-clipped entities.
-type PlanetView struct {
-	PlanetID    string                      `json:"planet_id"`
-	Name        string                      `json:"name,omitempty"`
-	Discovered  bool                        `json:"discovered"`
-	Kind        mapmodel.PlanetKind         `json:"kind,omitempty"`
-	Orbit       *mapmodel.Orbit             `json:"orbit,omitempty"`
-	Moons       []mapmodel.Moon             `json:"moons,omitempty"`
-	MapWidth    int                         `json:"map_width"`
-	MapHeight   int                         `json:"map_height"`
-	Tick        int64                       `json:"tick"`
-	Terrain     [][]terrain.TileType        `json:"terrain,omitempty"`
-	Environment *mapmodel.PlanetEnvironment `json:"environment,omitempty"`
-	Buildings   map[string]*model.Building  `json:"buildings,omitempty"`
-	Units       map[string]*model.Unit      `json:"units,omitempty"`
-	Resources   []*model.ResourceNodeState  `json:"resources,omitempty"`
-}
-
-// Planet returns the detailed planet view filtered by player visibility.
-func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*PlanetView, bool) {
-	planet, ok := ql.maps.Planet(planetID)
-	if !ok {
-		return nil, false
-	}
-	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
-	view := &PlanetView{
-		PlanetID:   planet.ID,
-		Discovered: discovered,
-	}
-	if !discovered {
-		return view, true
-	}
-
-	ws.RLock()
-	defer ws.RUnlock()
-
-	view.Name = planet.Name
-	view.Kind = planet.Kind
-	orbit := planet.Orbit
-	view.Orbit = &orbit
-	if len(planet.Moons) > 0 {
-		view.Moons = append([]mapmodel.Moon(nil), planet.Moons...)
-	}
-	view.MapWidth = planet.Width
-	view.MapHeight = planet.Height
-	view.Tick = ws.Tick
-	view.Terrain = planet.Terrain
-	env := planet.Environment
-	view.Environment = &env
-
-	if ws.PlanetID == planetID {
-		view.Buildings = ql.vis.FilterBuildings(ws, playerID)
-		view.Units = ql.vis.FilterUnits(ws, playerID)
-		view.Resources = sortedResources(ws)
-	} else {
-		view.Buildings = map[string]*model.Building{}
-		view.Units = map[string]*model.Unit{}
-		view.Resources = staticPlanetResources(planet)
-	}
-
-	return view, true
-}
-
 func maskedDistanceMatrix(matrix [][]float64, systems []SystemRef, discovered bool) [][]float64 {
 	if !discovered || len(matrix) == 0 || len(systems) == 0 {
 		return nil
@@ -382,48 +318,6 @@ func staticPlanetResources(planet *mapmodel.Planet) []*model.ResourceNodeState {
 		return res[i].ID < res[j].ID
 	})
 	return res
-}
-
-// FogMapView is the fog-of-war grid.
-type FogMapView struct {
-	PlanetID   string   `json:"planet_id"`
-	Discovered bool     `json:"discovered"`
-	MapWidth   int      `json:"map_width"`
-	MapHeight  int      `json:"map_height"`
-	Visible    [][]bool `json:"visible,omitempty"`
-	Explored   [][]bool `json:"explored,omitempty"`
-}
-
-// FogMap returns the visibility grid for a player.
-func (ql *Layer) FogMap(ws *model.WorldState, playerID, planetID string) (*FogMapView, bool) {
-	planet, ok := ql.maps.Planet(planetID)
-	if !ok {
-		return nil, false
-	}
-	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
-	view := &FogMapView{
-		PlanetID:   planet.ID,
-		Discovered: discovered,
-	}
-	if !discovered {
-		return view, true
-	}
-
-	view.MapWidth = planet.Width
-	view.MapHeight = planet.Height
-
-	if ws.PlanetID == planetID {
-		ws.RLock()
-		defer ws.RUnlock()
-		fog := ql.vis.FogState(ws, playerID)
-		view.Visible = fog.Visible
-		view.Explored = fog.Explored
-	} else {
-		view.Visible = blankFog(planet.Width, planet.Height)
-		view.Explored = ql.vis.ExploredSnapshot(planet.ID, planet.Width, planet.Height, playerID)
-	}
-
-	return view, true
 }
 
 func blankFog(w, h int) [][]bool {

@@ -11,7 +11,6 @@ import type {
   CommandRequest,
   CommandResponse,
   EventSnapshotResponse,
-  FogMapView,
   GalaxyView,
   HealthResponse,
   CatalogView,
@@ -23,7 +22,6 @@ import type {
   PlanetSceneDetailLevel,
   PlanetSceneView,
   PlanetSummaryView,
-  PlanetView,
   PlayerStatsSnapshot,
   Position,
   ReplayResponse,
@@ -274,10 +272,6 @@ export function createApiClient(options: ApiClientOptions) {
     });
     const query = searchParams.toString();
     return apiFetch<PlanetInspectView>(`/world/planets/${planetId}/inspect?${query}`);
-  }
-
-  function fetchFogMap(planetId: string): Promise<FogMapView> {
-    return apiFetch<FogMapView>(`/world/planets/${planetId}/fog`);
   }
 
   function fetchPlanetRuntime(planetId: string): Promise<PlanetRuntimeView> {
@@ -548,7 +542,6 @@ export function createApiClient(options: ApiClientOptions) {
     fetchAudit,
     fetchCatalog,
     fetchEventSnapshot,
-    fetchFogMap,
     fetchGalaxy,
     fetchHealth,
     fetchMetrics,

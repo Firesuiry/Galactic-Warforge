@@ -40,7 +40,7 @@
 - 健康与指标：`GET /health`、`GET /metrics`
 - 审计：`GET /audit`
 - 状态查询：`GET /state/summary`、`GET /state/stats`
-- 世界查询：`GET /world/galaxy`、`GET /world/systems/{system_id}`、`GET /world/planets/{planet_id}`、`GET /world/planets/{planet_id}/fog`
+- 世界查询：`GET /world/galaxy`、`GET /world/systems/{system_id}`、`GET /world/planets/{planet_id}`、`GET /world/planets/{planet_id}/scene`、`GET /world/planets/{planet_id}/inspect`
 - 命令：`POST /commands`
 - 事件：`GET /events/stream`（SSE）、`GET /events/snapshot`
 - 产线告警：`GET /alerts/production/snapshot`

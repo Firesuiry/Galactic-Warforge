@@ -110,22 +110,34 @@ describe('Galaxy navigation', () => {
           tick: 99,
           map_width: 64,
           map_height: 64,
-          terrain: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => 'buildable')),
-          buildings: {},
-          units: {},
-          resources: [],
-          environment: { wind_factor: 0.8 },
+          building_count: 0,
+          unit_count: 0,
+          resource_count: 0,
         }));
       }
 
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
+      if (url.includes('/world/planets/planet-1-1/scene')) {
         return Promise.resolve(jsonResponse({
           planet_id: 'planet-1-1',
           discovered: true,
+          detail_level: 'tile',
+          tick: 99,
           map_width: 64,
           map_height: 64,
-          visible: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),
-          explored: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),
+          bounds: {
+            min_x: 0,
+            min_y: 0,
+            max_x: 3,
+            max_y: 3,
+          },
+          terrain: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => 'buildable')),
+          fog: {
+            visible: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),
+            explored: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),
+          },
+          buildings: {},
+          units: {},
+          resources: [],
         }));
       }
 

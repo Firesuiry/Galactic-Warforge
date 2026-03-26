@@ -71,4 +71,21 @@ describe('fixture fetch', () => {
     });
     expect(payload.building?.id).toBe('assembler-1');
   });
+
+  it('不再提供整张 fog 全量接口', async () => {
+    const serverUrl = createFixtureServerUrl('baseline');
+    const fetchFn = createFixtureFetch(serverUrl);
+
+    const response = await fetchFn(`${serverUrl}/world/planets/planet-1-1/fog`, {
+      headers: {
+        Authorization: 'Bearer key_player_1',
+      },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'not found',
+    });
+  });
 });

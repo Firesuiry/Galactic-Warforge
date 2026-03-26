@@ -93,10 +93,23 @@ export function formatPosition(position?: Position | null) {
 }
 
 export function getTerrainTile(planet: PlanetView, x: number, y: number) {
+  if (planet.scene_bounds) {
+    const localX = x - planet.scene_bounds.min_x;
+    const localY = y - planet.scene_bounds.min_y;
+    return planet.terrain?.[localY]?.[localX] ?? 'unknown';
+  }
   return planet.terrain?.[y]?.[x] ?? 'unknown';
 }
 
 export function getFogState(fog: FogMapView | undefined, x: number, y: number) {
+  if (fog?.scene_bounds) {
+    const localX = x - fog.scene_bounds.min_x;
+    const localY = y - fog.scene_bounds.min_y;
+    return {
+      visible: Boolean(fog.visible?.[localY]?.[localX]),
+      explored: Boolean(fog.explored?.[localY]?.[localX]),
+    };
+  }
   return {
     visible: Boolean(fog?.visible?.[y]?.[x]),
     explored: Boolean(fog?.explored?.[y]?.[x]),
@@ -319,7 +332,7 @@ export function resolveSelectionFromQueryValue(planet: PlanetView, raw: string |
 }
 
 export function getViewportTileBounds(
-  planet: PlanetView,
+  planet: Pick<PlanetView, 'map_width' | 'map_height'>,
   camera: PlanetCameraSnapshot,
   tileSize: number,
   viewportWidth: number,

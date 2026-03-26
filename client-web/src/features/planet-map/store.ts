@@ -112,7 +112,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     sseStatus: 'idle',
     lastEventId: '',
     lastFullSyncAt: null,
-    debugOpen: true,
+    debugOpen: false,
     focusRequest: null,
   };
 }

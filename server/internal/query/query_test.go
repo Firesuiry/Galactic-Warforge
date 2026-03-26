@@ -11,7 +11,7 @@ import (
 	"siliconworld/internal/visibility"
 )
 
-func TestPlanetShowsStaticResourcesAfterDiscovery(t *testing.T) {
+func TestPlanetSummaryShowsStaticResourceCountAfterDiscovery(t *testing.T) {
 	cfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
@@ -26,11 +26,11 @@ func TestPlanetShowsStaticResourcesAfterDiscovery(t *testing.T) {
 	discovery.DiscoverPlanet("p1", targetPlanetID)
 
 	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().Width, maps.PrimaryPlanet().Height)
-	view, ok := ql.Planet(ws, "p1", targetPlanetID)
+	view, ok := ql.PlanetSummary(ws, "p1", targetPlanetID)
 	if !ok {
-		t.Fatal("expected planet view")
+		t.Fatal("expected planet summary")
 	}
-	if len(view.Resources) == 0 {
-		t.Fatal("expected discovered non-active planet to expose static resources")
+	if view.ResourceCount == 0 {
+		t.Fatal("expected discovered non-active planet to expose static resource count")
 	}
 }

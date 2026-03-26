@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 import { renderApp, jsonResponse, sseResponse } from '@/test/utils';
 import { useSessionStore } from '@/stores/session';
 
-function createPlanetPayload() {
+function createPlanetSummaryPayload() {
   return {
     planet_id: 'planet-1-1',
     name: 'Gaia',
@@ -14,15 +14,45 @@ function createPlanetPayload() {
     map_width: 4,
     map_height: 4,
     tick: 120,
+    building_count: 1,
+    unit_count: 1,
+    resource_count: 1,
+  };
+}
+
+function createScenePayload() {
+  return {
+    planet_id: 'planet-1-1',
+    discovered: true,
+    detail_level: 'tile',
+    map_width: 4,
+    map_height: 4,
+    tick: 120,
+    bounds: {
+      min_x: 0,
+      min_y: 0,
+      max_x: 3,
+      max_y: 3,
+    },
     terrain: [
       ['buildable', 'buildable', 'buildable', 'water'],
       ['buildable', 'buildable', 'buildable', 'water'],
       ['blocked', 'buildable', 'buildable', 'lava'],
       ['buildable', 'buildable', 'buildable', 'buildable'],
     ],
-    environment: {
-      wind_factor: 0.8,
-      light_factor: 1.1,
+    fog: {
+      visible: [
+        [true, true, true, false],
+        [true, true, true, false],
+        [false, true, true, false],
+        [false, false, false, false],
+      ],
+      explored: [
+        [true, true, true, false],
+        [true, true, true, false],
+        [true, true, true, false],
+        [true, true, false, false],
+      ],
     },
     buildings: {
       'miner-1': {
@@ -83,27 +113,6 @@ function createPlanetPayload() {
         current_yield: 3,
         is_rare: false,
       },
-    ],
-  };
-}
-
-function createFogPayload() {
-  return {
-    planet_id: 'planet-1-1',
-    discovered: true,
-    map_width: 4,
-    map_height: 4,
-    visible: [
-      [true, true, true, false],
-      [true, true, true, false],
-      [false, true, true, false],
-      [false, false, false, false],
-    ],
-    explored: [
-      [true, true, true, false],
-      [true, true, true, false],
-      [true, true, true, false],
-      [true, true, false, false],
     ],
   };
 }
@@ -239,7 +248,7 @@ describe('PlanetPage', () => {
     });
   });
 
-  it('渲染地图、迷雾、事件和实体详情侧栏', async () => {
+  it('以 summary + scene 渲染地图，并默认折叠情报面板', async () => {
     const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
 
@@ -250,10 +259,10 @@ describe('PlanetPage', () => {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
+        return Promise.resolve(jsonResponse(createPlanetSummaryPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -263,6 +272,16 @@ describe('PlanetPage', () => {
       }
       if (url.endsWith('/catalog')) {
         return Promise.resolve(jsonResponse(createCatalogPayload()));
+      }
+      if (url.includes('/world/planets/planet-1-1/inspect')) {
+        return Promise.resolve(jsonResponse({
+          planet_id: 'planet-1-1',
+          discovered: true,
+          entity_kind: 'building',
+          entity_id: 'miner-1',
+          title: 'mining_machine',
+          building: createScenePayload().buildings['miner-1'],
+        }));
       }
       if (url.includes('/events/snapshot')) {
         return Promise.resolve(jsonResponse({
@@ -337,7 +356,12 @@ describe('PlanetPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '行星地图' })).toBeInTheDocument();
-    expect(screen.getByText('事件时间线')).toBeInTheDocument();
+    expect(screen.queryByText('事件时间线')).not.toBeInTheDocument();
+    expect(screen.queryByText('告警面板')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '情报' }));
+
+    expect(await screen.findByText('事件时间线')).toBeInTheDocument();
     expect(screen.getByText('告警面板')).toBeInTheDocument();
     expect(screen.getByText('miner-1 idle -> running')).toBeInTheDocument();
     expect(screen.getByText('miner-1 · 矿物输入不足')).toBeInTheDocument();
@@ -345,9 +369,9 @@ describe('PlanetPage', () => {
     await user.click(screen.getAllByRole('button', { name: '定位' })[0]);
 
     expect(await screen.findByText('建筑详情')).toBeInTheDocument();
-    expect(screen.getByText('mining_machine')).toBeInTheDocument();
+    expect(screen.getAllByText('mining_machine').length).toBeGreaterThan(0);
     expect(screen.getByText('running')).toBeInTheDocument();
-    expect(screen.getByText('调试面板')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/world/planets/planet-1-1/scene'))).toBe(true);
   });
 
   it('接收 SSE 后会把新事件和新告警并入页面并触发快照重拉', async () => {
@@ -383,10 +407,10 @@ describe('PlanetPage', () => {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
+        return Promise.resolve(jsonResponse(createPlanetSummaryPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -445,6 +469,7 @@ describe('PlanetPage', () => {
     renderApp(['/planet/planet-1-1']);
 
     expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: '情报' }));
     expect(await screen.findByText('[t121] production_alert')).toBeInTheDocument();
     expect(screen.getByText('miner-1 · 产线堵塞')).toBeInTheDocument();
 
@@ -465,10 +490,10 @@ describe('PlanetPage', () => {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
+        return Promise.resolve(jsonResponse(createPlanetSummaryPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -563,10 +588,10 @@ describe('PlanetPage', () => {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
+        return Promise.resolve(jsonResponse(createPlanetSummaryPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -614,8 +639,8 @@ describe('PlanetPage', () => {
     renderApp(['/planet/planet-1-1']);
 
     expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
-
-    expect(screen.getByRole('button', { name: '收起调试' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开调试' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '展开调试' }));
     await user.click(screen.getByRole('button', { name: '导出视角 JSON' }));
 
     await waitFor(() => {

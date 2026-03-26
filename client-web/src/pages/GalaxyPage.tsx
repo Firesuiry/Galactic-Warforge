@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
@@ -13,6 +15,8 @@ export function GalaxyPage() {
     queryFn: () => client.fetchGalaxy(),
   });
 
+  const [selectedSystemId, setSelectedSystemId] = useState('');
+
   if (galaxyQuery.isLoading) {
     return <div className="panel">正在加载银河总览...</div>;
   }
@@ -26,40 +30,77 @@ export function GalaxyPage() {
   }
 
   const galaxy = galaxyQuery.data;
+  const systems = galaxy.systems ?? [];
+  const selectedSystem = (
+    systems.find((system) => system.system_id === selectedSystemId)
+    ?? systems.find((system) => system.discovered)
+    ?? systems[0]
+    ?? null
+  );
 
   return (
-    <div className="page-grid">
-      <section className="panel page-hero">
+    <div className="page-grid strategic-page">
+      <section className="panel page-hero strategic-hero">
         <div className="page-header">
-          <p className="eyebrow">T006 银河 / 星系 / 行星导航页</p>
+          <p className="eyebrow">Galaxy Command Map</p>
           <h1>{galaxy.name || galaxy.galaxy_id}</h1>
           <p className="subtle-text">
-            已发现 {galaxy.systems?.filter((system) => system.discovered).length ?? 0} / {galaxy.systems?.length ?? 0} 个恒星系
+            已发现 {systems.filter((system) => system.discovered).length} / {systems.length} 个恒星系
           </p>
         </div>
       </section>
 
-      <section className="card-grid">
-        {(galaxy.systems ?? []).map((system) => (
-          <article key={system.system_id} className="panel entity-card">
-            <div className="entity-card__header">
-              <strong>{system.name || system.system_id}</strong>
-              <span className={system.discovered ? 'badge badge--ok' : 'badge'}>
-                {system.discovered ? '已发现' : '未发现'}
-              </span>
-            </div>
-            <div className="entity-card__body">
-              <span>坐标：{system.position ? `${system.position.x}, ${system.position.y}` : '未知'}</span>
-              {system.discovered ? (
-                <Link className="primary-link" to={`/system/${system.system_id}`}>
-                  进入星系
-                </Link>
-              ) : (
-                <span className="subtle-text">等待扫描</span>
-              )}
-            </div>
-          </article>
-        ))}
+      <section className="strategic-layout">
+        <aside className="strategic-rail">
+          <button className="secondary-button strategic-rail__link" type="button">筛选</button>
+          <button className="secondary-button strategic-rail__link" type="button">发现状态</button>
+          <button className="secondary-button strategic-rail__link" type="button">情报</button>
+        </aside>
+
+        <section className="panel strategic-main">
+          <div className="galaxy-map">
+            {systems.map((system) => (
+              <button
+                className={system.system_id === selectedSystem?.system_id ? 'galaxy-node galaxy-node--active' : 'galaxy-node'}
+                key={system.system_id}
+                onClick={() => setSelectedSystemId(system.system_id)}
+                type="button"
+              >
+                <strong>{system.name || system.system_id}</strong>
+                <span>{system.position ? `${system.position.x}, ${system.position.y}` : '未知坐标'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <aside className="panel strategic-side">
+          <section className="planet-side-section">
+            <div className="section-title">恒星系情报</div>
+            {selectedSystem ? (
+              <dl className="planet-kv-list">
+                <div>
+                  <dt>名称</dt>
+                  <dd>{selectedSystem.name || selectedSystem.system_id}</dd>
+                </div>
+                <div>
+                  <dt>状态</dt>
+                  <dd>{selectedSystem.discovered ? '已发现' : '未发现'}</dd>
+                </div>
+                <div>
+                  <dt>坐标</dt>
+                  <dd>{selectedSystem.position ? `${selectedSystem.position.x}, ${selectedSystem.position.y}` : '未知'}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="subtle-text">暂无可选恒星系。</p>
+            )}
+            {selectedSystem?.discovered ? (
+              <Link className="primary-link" to={`/system/${selectedSystem.system_id}`}>
+                进入星系
+              </Link>
+            ) : null}
+          </section>
+        </aside>
       </section>
     </div>
   );

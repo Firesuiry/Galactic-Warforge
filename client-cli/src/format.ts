@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import type {
-  StateSummary, PlanetView,
-  CommandResponse, FogMapView, GalaxyView, SystemView,
+  CommandResponse, GalaxyView, PlanetSceneView, PlanetSummaryView, StateSummary, SystemView,
   HealthResponse, MetricsSnapshot, PlayerStatsSnapshot, SseEvent, Building,
 } from './types.js';
 
@@ -172,79 +171,16 @@ export function fmtSystem(s: SystemView): string {
   return lines.join('\n');
 }
 
-export function fmtPlanet(p: PlanetView): string {
+export function fmtPlanetSummary(p: PlanetSummaryView): string {
   if (!p.discovered) {
     return `Planet: ${chalk.bold(p.planet_id)}  ${chalk.dim('undiscovered')}`;
   }
 
-  const lines = [
+  return [
     `Planet: ${chalk.bold(p.name ?? p.planet_id)} (${p.planet_id})  Tick: ${chalk.cyan(p.tick)}  Map: ${p.map_width}x${p.map_height}`,
-  ];
-  if (p.kind) {
-    lines.push(`Kind: ${p.kind}`);
-  }
-  if (p.environment) {
-    lines.push(
-      `Environment: wind=${p.environment.wind_factor ?? '-'} light=${p.environment.light_factor ?? '-'} day_hours=${p.environment.day_length_hours ?? '-'}`
-    );
-  }
-
-  const buildings = Object.values(p.buildings ?? {});
-  if (buildings.length > 0) {
-    lines.push('', chalk.bold('Buildings:'));
-    const bHeaders = ['ID', 'Type', 'Owner', 'Pos', 'HP', 'Lvl', 'State', 'Ops'];
-    const bRows = buildings.map(b => [
-      b.id,
-      chalk.yellow(b.type),
-      b.owner_id,
-      `(${b.position.x},${b.position.y})`,
-      `${b.hp}/${b.max_hp}`,
-      String(b.level),
-      fmtStateLabel(b.runtime?.state, b.runtime?.state_reason),
-      fmtBuildingOps(b),
-    ]);
-    lines.push(table(bHeaders, bRows));
-  } else {
-    lines.push('', 'No buildings.');
-  }
-
-  const units = Object.values(p.units ?? {});
-  if (units.length > 0) {
-    lines.push('', chalk.bold('Units:'));
-    const uHeaders = ['ID', 'Type', 'Owner', 'Pos', 'HP', 'Moving'];
-    const uRows = units.map(u => [
-      u.id,
-      chalk.cyan(u.type),
-      u.owner_id,
-      `(${u.position.x},${u.position.y})`,
-      `${u.hp}/${u.max_hp}`,
-      u.is_moving ? chalk.yellow('yes') : 'no',
-    ]);
-    lines.push(table(uHeaders, uRows));
-  } else {
-    lines.push('', 'No units.');
-  }
-
-  const resources = p.resources ?? [];
-  if (resources.length > 0) {
-    lines.push('', chalk.bold(`Resources (${resources.length}):`));
-    const rHeaders = ['ID', 'Kind', 'Pos', 'Remaining', 'Yield'];
-    const rRows = resources.slice(0, 12).map(resource => [
-      resource.id,
-      resource.kind,
-      `(${resource.position.x},${resource.position.y})`,
-      String(resource.remaining ?? '-'),
-      String(resource.current_yield ?? resource.base_yield ?? '-'),
-    ]);
-    lines.push(table(rHeaders, rRows));
-    if (resources.length > 12) {
-      lines.push(chalk.dim(`... ${resources.length - 12} more resource nodes`));
-    }
-  } else {
-    lines.push('', 'No resource nodes visible.');
-  }
-
-  return lines.join('\n');
+    `Kind: ${p.kind ?? '-'}`,
+    `Counts: buildings=${p.building_count} units=${p.unit_count} resources=${p.resource_count}`,
+  ].join('\n');
 }
 
 export function fmtCommandResponse(r: CommandResponse): string {
@@ -258,23 +194,30 @@ export function fmtCommandResponse(r: CommandResponse): string {
   return lines.join('\n');
 }
 
-export function fmtFog(f: FogMapView): string {
-  if (!f.discovered) {
-    return `FogMap: ${f.planet_id}  ${chalk.dim('undiscovered')}`;
+export function fmtFogScene(scene: PlanetSceneView): string {
+  if (!scene.discovered) {
+    return `Fog: ${scene.planet_id}  ${chalk.dim('undiscovered')}`;
   }
+  const fog = scene.fog;
+  const bounds = scene.bounds;
+  if (!fog || !fog.visible || !fog.explored) {
+    return `Fog: ${scene.planet_id}  ${chalk.dim('scene payload missing fog layer')}`;
+  }
+  const width = bounds.max_x - bounds.min_x + 1;
+  const height = bounds.max_y - bounds.min_y + 1;
 
   const lines = [
-    `FogMap: ${f.planet_id}  ${f.map_width}x${f.map_height}`,
+    `Fog: ${scene.planet_id}  x=${bounds.min_x}..${bounds.max_x}  y=${bounds.min_y}..${bounds.max_y}  size=${width}x${height}`,
     chalk.dim('#=visible +=explored .=unknown'),
     '',
   ];
-  const colNums = Array.from({ length: f.map_width }, (_, i) => (i % 10).toString()).join('');
+  const colNums = Array.from({ length: width }, (_, i) => ((bounds.min_x + i) % 10).toString()).join('');
   lines.push(`  ${chalk.dim(colNums)}`);
 
-  for (let y = 0; y < f.map_height; y += 1) {
-    const rowStr = Array.from({ length: f.map_width }, (_, x) => {
-      const visible = f.visible?.[y]?.[x] ?? false;
-      const explored = f.explored?.[y]?.[x] ?? false;
+  for (let y = 0; y < height; y += 1) {
+    const rowStr = Array.from({ length: width }, (_, x) => {
+      const visible = fog.visible?.[y]?.[x] ?? false;
+      const explored = fog.explored?.[y]?.[x] ?? false;
       if (visible) {
         return chalk.green('#');
       }
@@ -283,7 +226,7 @@ export function fmtFog(f: FogMapView): string {
       }
       return chalk.dim('.');
     }).join('');
-    lines.push(`${String(y).padStart(2, ' ')} ${rowStr}`);
+    lines.push(`${String(bounds.min_y + y).padStart(4, ' ')} ${rowStr}`);
   }
 
   return lines.join('\n');
