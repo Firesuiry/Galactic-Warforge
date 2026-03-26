@@ -371,6 +371,19 @@ export interface PlanetResource {
   cluster_id?: string;
 }
 
+export interface PlanetSummaryView {
+  planet_id: string;
+  name?: string;
+  discovered: boolean;
+  kind?: string;
+  map_width: number;
+  map_height: number;
+  tick: number;
+  building_count: number;
+  unit_count: number;
+  resource_count: number;
+}
+
 export interface PlanetView {
   planet_id: string;
   name?: string;
@@ -386,6 +399,59 @@ export interface PlanetView {
   buildings?: Record<string, Building>;
   units?: Record<string, Unit>;
   resources?: PlanetResource[];
+}
+
+export type PlanetSceneDetailLevel = 'tile' | 'sector';
+
+export interface PlanetSceneBounds {
+  min_x: number;
+  min_y: number;
+  max_x: number;
+  max_y: number;
+}
+
+export interface PlanetSceneFogView {
+  visible?: boolean[][];
+  explored?: boolean[][];
+}
+
+export interface PlanetSectorView {
+  sector_x: number;
+  sector_y: number;
+  building_count: number;
+  unit_count: number;
+  resource_count: number;
+  visible_tiles: number;
+  explored_tiles: number;
+}
+
+export interface PlanetSceneView {
+  planet_id: string;
+  discovered: boolean;
+  detail_level: PlanetSceneDetailLevel;
+  map_width: number;
+  map_height: number;
+  tick: number;
+  bounds: PlanetSceneBounds;
+  terrain?: string[][];
+  fog?: PlanetSceneFogView;
+  buildings?: Record<string, Building>;
+  units?: Record<string, Unit>;
+  resources?: PlanetResource[];
+  sectors?: PlanetSectorView[];
+}
+
+export type PlanetInspectEntityKind = 'building' | 'unit' | 'resource' | 'sector';
+
+export interface PlanetInspectView {
+  planet_id: string;
+  discovered: boolean;
+  entity_kind?: PlanetInspectEntityKind;
+  entity_id?: string;
+  title?: string;
+  building?: Building;
+  unit?: Unit;
+  resource?: PlanetResource;
 }
 
 export interface FogMapView {

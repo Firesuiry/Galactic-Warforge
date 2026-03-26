@@ -337,8 +337,39 @@ func TestFogMapEndpoint(t *testing.T) {
 	}
 }
 
-func TestPlanetEndpoint(t *testing.T) {
-	srv, _ := newTestServer(t)
+func TestPlanetEndpointReturnsSummaryModel(t *testing.T) {
+	srv, core := newTestServer(t)
+	ws := core.World()
+	ws.Lock()
+	ws.Buildings["summary-building"] = &model.Building{
+		ID:          "summary-building",
+		Type:        model.BuildingTypeMiningMachine,
+		OwnerID:     "p1",
+		Position:    model.Position{X: 1, Y: 1},
+		HP:          100,
+		MaxHP:       100,
+		Level:       1,
+		VisionRange: 4,
+	}
+	ws.Units["summary-unit"] = &model.Unit{
+		ID:          "summary-unit",
+		Type:        "worker",
+		OwnerID:     "p1",
+		Position:    model.Position{X: 2, Y: 2},
+		HP:          24,
+		MaxHP:       24,
+		VisionRange: 3,
+	}
+	ws.Resources["summary-resource"] = &model.ResourceNodeState{
+		ID:       "summary-resource",
+		PlanetID: ws.PlanetID,
+		Position: model.Position{X: 3, Y: 3},
+	}
+	expectedBuildingCount := len(ws.Buildings)
+	expectedUnitCount := len(ws.Units)
+	expectedResourceCount := len(ws.Resources)
+	ws.Unlock()
+
 	req := httptest.NewRequest("GET", "/world/planets/planet-1-1", nil)
 	req.Header.Set("Authorization", "Bearer key1")
 	rec := httptest.NewRecorder()
@@ -346,6 +377,136 @@ func TestPlanetEndpoint(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body["building_count"] != float64(expectedBuildingCount) {
+		t.Fatalf("unexpected building_count: %v", body["building_count"])
+	}
+	if body["unit_count"] != float64(expectedUnitCount) {
+		t.Fatalf("unexpected unit_count: %v", body["unit_count"])
+	}
+	if body["resource_count"] != float64(expectedResourceCount) {
+		t.Fatalf("unexpected resource_count: %v", body["resource_count"])
+	}
+	if _, ok := body["terrain"]; ok {
+		t.Fatal("planet summary should not expose terrain payload")
+	}
+	if _, ok := body["buildings"]; ok {
+		t.Fatal("planet summary should not expose building payload")
+	}
+}
+
+func TestPlanetSceneEndpointTranslatesViewportQuery(t *testing.T) {
+	srv, core := newTestServer(t)
+	ws := core.World()
+	ws.Lock()
+	ws.Buildings["scene-in"] = &model.Building{
+		ID:          "scene-in",
+		Type:        model.BuildingTypeMiningMachine,
+		OwnerID:     "p1",
+		Position:    model.Position{X: 3, Y: 4},
+		HP:          100,
+		MaxHP:       100,
+		Level:       1,
+		VisionRange: 4,
+	}
+	ws.Buildings["scene-out"] = &model.Building{
+		ID:          "scene-out",
+		Type:        model.BuildingTypeMiningMachine,
+		OwnerID:     "p1",
+		Position:    model.Position{X: 10, Y: 10},
+		HP:          100,
+		MaxHP:       100,
+		Level:       1,
+		VisionRange: 4,
+	}
+	ws.Unlock()
+
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/scene?x=2&y=3&width=4&height=2&detail_level=tile&layers=terrain,buildings", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body["detail_level"] != "tile" {
+		t.Fatalf("unexpected detail_level: %v", body["detail_level"])
+	}
+	bounds, ok := body["bounds"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected bounds object, got %T", body["bounds"])
+	}
+	if bounds["min_x"] != float64(2) || bounds["min_y"] != float64(3) || bounds["max_x"] != float64(5) || bounds["max_y"] != float64(4) {
+		t.Fatalf("unexpected bounds: %+v", bounds)
+	}
+	terrainRows, ok := body["terrain"].([]any)
+	if !ok || len(terrainRows) != 2 {
+		t.Fatalf("expected 2 cropped terrain rows, got %#v", body["terrain"])
+	}
+	firstRow, ok := terrainRows[0].([]any)
+	if !ok || len(firstRow) != 4 {
+		t.Fatalf("expected terrain row width 4, got %#v", terrainRows[0])
+	}
+	buildings, ok := body["buildings"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected buildings payload, got %T", body["buildings"])
+	}
+	if _, exists := buildings["scene-in"]; !exists {
+		t.Fatal("expected in-bounds building in scene payload")
+	}
+	if _, exists := buildings["scene-out"]; exists {
+		t.Fatal("did not expect out-of-bounds building in scene payload")
+	}
+}
+
+func TestPlanetInspectEndpointReturnsStructuredEntityPayload(t *testing.T) {
+	srv, core := newTestServer(t)
+	ws := core.World()
+	ws.Lock()
+	ws.Buildings["inspect-building"] = &model.Building{
+		ID:          "inspect-building",
+		Type:        model.BuildingTypeMiningMachine,
+		OwnerID:     "p1",
+		Position:    model.Position{X: 4, Y: 5},
+		HP:          120,
+		MaxHP:       150,
+		Level:       2,
+		VisionRange: 5,
+	}
+	ws.Unlock()
+
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/inspect?entity_kind=building&entity_id=inspect-building", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body["entity_kind"] != "building" {
+		t.Fatalf("unexpected entity_kind: %v", body["entity_kind"])
+	}
+	if body["entity_id"] != "inspect-building" {
+		t.Fatalf("unexpected entity_id: %v", body["entity_id"])
+	}
+	building, ok := body["building"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected building payload, got %T", body["building"])
+	}
+	if building["id"] != "inspect-building" {
+		t.Fatalf("unexpected building id: %v", building["id"])
 	}
 }
 

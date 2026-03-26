@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,6 +106,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /state/stats", s.auth(s.handleStateStats))
 	mux.HandleFunc("GET /world/galaxy", s.auth(s.handleGalaxy))
 	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
+	mux.HandleFunc("GET /world/planets/{planet_id}/scene", s.auth(s.handlePlanetScene))
+	mux.HandleFunc("GET /world/planets/{planet_id}/inspect", s.auth(s.handlePlanetInspect))
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
 	mux.HandleFunc("GET /world/planets/{planet_id}/fog", s.auth(s.handleFogMap))
 	mux.HandleFunc("GET /world/planets/{planet_id}/runtime", s.auth(s.handlePlanetRuntime))
@@ -194,12 +197,104 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID s
 func (s *Server) handlePlanet(w http.ResponseWriter, r *http.Request, playerID string) {
 	planetID := r.PathValue("planet_id")
 	ws := s.core.World()
-	view, ok := s.ql.Planet(ws, playerID, planetID)
+	view, ok := s.ql.PlanetSummary(ws, playerID, planetID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
+}
+
+// handlePlanetScene returns GET /world/planets/{planet_id}/scene
+func (s *Server) handlePlanetScene(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
+	q := r.URL.Query()
+
+	x, err := parseRequiredIntQuery(q, "x")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	y, err := parseRequiredIntQuery(q, "y")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	width, err := parsePositiveIntQuery(q, "width")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	height, err := parsePositiveIntQuery(q, "height")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ws := s.core.World()
+	view, ok := s.ql.PlanetScene(ws, playerID, planetID, query.PlanetSceneRequest{
+		DetailLevel: q.Get("detail_level"),
+		MinX:        x,
+		MinY:        y,
+		MaxX:        x + width - 1,
+		MaxY:        y + height - 1,
+	})
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+type planetInspectResponse struct {
+	PlanetID   string                   `json:"planet_id"`
+	Discovered bool                     `json:"discovered"`
+	EntityKind string                   `json:"entity_kind,omitempty"`
+	EntityID   string                   `json:"entity_id,omitempty"`
+	Title      string                   `json:"title,omitempty"`
+	Building   *model.Building          `json:"building,omitempty"`
+	Unit       *model.Unit              `json:"unit,omitempty"`
+	Resource   *model.ResourceNodeState `json:"resource,omitempty"`
+}
+
+// handlePlanetInspect returns GET /world/planets/{planet_id}/inspect
+func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
+	q := r.URL.Query()
+	entityKind := q.Get("entity_kind")
+	if entityKind == "" {
+		writeError(w, http.StatusBadRequest, "entity_kind is required")
+		return
+	}
+	entityID := q.Get("entity_id")
+	if entityID == "" {
+		entityID = q.Get("sector_id")
+	}
+	if entityID == "" {
+		writeError(w, http.StatusBadRequest, "entity_id or sector_id is required")
+		return
+	}
+
+	ws := s.core.World()
+	view, ok := s.ql.PlanetInspect(ws, playerID, planetID, query.PlanetInspectRequest{
+		TargetType: entityKind,
+		TargetID:   entityID,
+	})
+	if !ok {
+		writeError(w, http.StatusNotFound, "target not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, planetInspectResponse{
+		PlanetID:   view.PlanetID,
+		Discovered: view.Discovered,
+		EntityKind: entityKind,
+		EntityID:   entityID,
+		Title:      view.Title,
+		Building:   view.Building,
+		Unit:       view.Unit,
+		Resource:   view.Resource,
+	})
 }
 
 // handleFogMap returns GET /world/planets/{planet_id}/fog
@@ -627,6 +722,29 @@ func parseEventTypesQuery(r *http.Request, required bool) ([]model.EventType, er
 		return nil, fmt.Errorf("event_types is required")
 	}
 	return out, nil
+}
+
+func parseRequiredIntQuery(q url.Values, key string) (int, error) {
+	raw := strings.TrimSpace(q.Get(key))
+	if raw == "" {
+		return 0, fmt.Errorf("%s is required", key)
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", key)
+	}
+	return value, nil
+}
+
+func parsePositiveIntQuery(q url.Values, key string) (int, error) {
+	value, err := parseRequiredIntQuery(q, key)
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return value, nil
 }
 
 // handleProductionAlertSnapshot handles GET /alerts/production/snapshot

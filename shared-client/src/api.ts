@@ -16,8 +16,13 @@ import type {
   HealthResponse,
   CatalogView,
   MetricsSnapshot,
+  PlanetInspectEntityKind,
+  PlanetInspectView,
   PlanetNetworksView,
   PlanetRuntimeView,
+  PlanetSceneDetailLevel,
+  PlanetSceneView,
+  PlanetSummaryView,
   PlanetView,
   PlayerStatsSnapshot,
   Position,
@@ -69,6 +74,21 @@ export interface AlertSnapshotParams {
   after_alert_id?: string;
   since_tick?: number;
   limit?: number;
+}
+
+export interface PlanetSceneParams {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  detailLevel?: PlanetSceneDetailLevel;
+  layers?: string[];
+}
+
+export interface PlanetInspectParams {
+  entityKind: PlanetInspectEntityKind;
+  entityId?: string;
+  sectorId?: string;
 }
 
 export interface ReplayRequest {
@@ -227,8 +247,33 @@ export function createApiClient(options: ApiClientOptions) {
     return apiFetch<SystemView>(`/world/systems/${systemId}`);
   }
 
-  function fetchPlanet(planetId: string): Promise<PlanetView> {
-    return apiFetch<PlanetView>(`/world/planets/${planetId}`);
+  function fetchPlanet(planetId: string): Promise<PlanetSummaryView> {
+    return apiFetch<PlanetSummaryView>(`/world/planets/${planetId}`);
+  }
+
+  function fetchPlanetScene(planetId: string, params: PlanetSceneParams): Promise<PlanetSceneView> {
+    const searchParams = new URLSearchParams();
+    addParams(searchParams, {
+      x: params.x,
+      y: params.y,
+      width: params.width,
+      height: params.height,
+      detail_level: params.detailLevel,
+      layers: params.layers,
+    });
+    const query = searchParams.toString();
+    return apiFetch<PlanetSceneView>(`/world/planets/${planetId}/scene?${query}`);
+  }
+
+  function fetchPlanetInspect(planetId: string, params: PlanetInspectParams): Promise<PlanetInspectView> {
+    const searchParams = new URLSearchParams();
+    addParams(searchParams, {
+      entity_kind: params.entityKind,
+      entity_id: params.entityId,
+      sector_id: params.sectorId,
+    });
+    const query = searchParams.toString();
+    return apiFetch<PlanetInspectView>(`/world/planets/${planetId}/inspect?${query}`);
   }
 
   function fetchFogMap(planetId: string): Promise<FogMapView> {
@@ -509,6 +554,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchMetrics,
     fetchPlanetNetworks,
     fetchPlanet,
+    fetchPlanetInspect,
+    fetchPlanetScene,
     fetchPlanetRuntime,
     fetchStats,
     fetchSummary,
