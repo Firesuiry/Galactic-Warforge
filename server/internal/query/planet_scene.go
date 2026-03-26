@@ -43,17 +43,17 @@ type PlanetSectorView struct {
 }
 
 type PlanetSceneView struct {
-	PlanetID    string               `json:"planet_id"`
-	Discovered  bool                 `json:"discovered"`
-	DetailLevel string               `json:"detail_level"`
-	MapWidth    int                  `json:"map_width"`
-	MapHeight   int                  `json:"map_height"`
-	Tick        int64                `json:"tick"`
-	Bounds      PlanetSceneBounds    `json:"bounds"`
-	Terrain     [][]terrain.TileType `json:"terrain,omitempty"`
-	Fog         PlanetSceneFogView   `json:"fog,omitempty"`
-	Buildings   map[string]*model.Building
-	Units       map[string]*model.Unit
+	PlanetID    string                     `json:"planet_id"`
+	Discovered  bool                       `json:"discovered"`
+	DetailLevel string                     `json:"detail_level"`
+	MapWidth    int                        `json:"map_width"`
+	MapHeight   int                        `json:"map_height"`
+	Tick        int64                      `json:"tick"`
+	Bounds      PlanetSceneBounds          `json:"bounds"`
+	Terrain     [][]terrain.TileType       `json:"terrain,omitempty"`
+	Fog         PlanetSceneFogView         `json:"fog,omitempty"`
+	Buildings   map[string]*model.Building `json:"buildings,omitempty"`
+	Units       map[string]*model.Unit     `json:"units,omitempty"`
 	Resources   []*model.ResourceNodeState `json:"resources,omitempty"`
 	Sectors     []PlanetSectorView         `json:"sectors,omitempty"`
 }
@@ -82,7 +82,7 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 	var units map[string]*model.Unit
 	var resources []*model.ResourceNodeState
 
-	if ws.PlanetID == planetID {
+	if ws != nil && ws.PlanetID == planetID {
 		ws.RLock()
 		defer ws.RUnlock()
 		view.Tick = ws.Tick
