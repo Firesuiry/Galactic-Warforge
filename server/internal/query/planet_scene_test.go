@@ -138,6 +138,36 @@ func TestPlanetSceneSectorModeReturnsAggregatedSectors(t *testing.T) {
 	}
 }
 
+func TestPlanetSceneSectorModeDoesNotApplyTileClamp(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 400, 300)
+	ws.Buildings["b-far"] = &model.Building{ID: "b-far", OwnerID: "p1", Position: model.Position{X: 300, Y: 10}, VisionRange: 2}
+	ws.Resources["r-far"] = &model.ResourceNodeState{ID: "r-far", PlanetID: planetID, Position: model.Position{X: 280, Y: 280}}
+
+	req := PlanetSceneRequest{
+		DetailLevel: "sector",
+		MinX:        -20,
+		MinY:        -20,
+		MaxX:        500,
+		MaxY:        500,
+	}
+	view, ok := ql.PlanetScene(ws, "p1", planetID, req)
+	if !ok {
+		t.Fatal("expected sector scene view")
+	}
+	if view.Bounds.MinX != 0 || view.Bounds.MinY != 0 || view.Bounds.MaxX != 399 || view.Bounds.MaxY != 299 {
+		t.Fatalf("unexpected sector bounds: %+v", view.Bounds)
+	}
+
+	sec90 := findSector(view.Sectors, 9, 0)
+	if sec90 == nil || sec90.BuildingCount != 1 {
+		t.Fatalf("unexpected sector(9,0) aggregate: %+v", sec90)
+	}
+	sec88 := findSector(view.Sectors, 8, 8)
+	if sec88 == nil || sec88.ResourceCount != 1 {
+		t.Fatalf("unexpected sector(8,8) aggregate: %+v", sec88)
+	}
+}
+
 func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.WorldState, string) {
 	t.Helper()
 

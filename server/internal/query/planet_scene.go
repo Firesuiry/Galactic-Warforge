@@ -64,13 +64,18 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 		return nil, false
 	}
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
+	detailLevel := normalizeSceneDetailLevel(req.DetailLevel)
+	maxSpan := max(planet.Width, planet.Height)
+	if detailLevel == "tile" {
+		maxSpan = maxTileSceneSpan
+	}
 	view := &PlanetSceneView{
 		PlanetID:    planet.ID,
 		Discovered:  discovered,
-		DetailLevel: normalizeSceneDetailLevel(req.DetailLevel),
+		DetailLevel: detailLevel,
 		MapWidth:    planet.Width,
 		MapHeight:   planet.Height,
-		Bounds:      clampSceneBounds(req, planet.Width, planet.Height, maxTileSceneSpan),
+		Bounds:      clampSceneBounds(req, planet.Width, planet.Height, maxSpan),
 	}
 	if !discovered {
 		return view, true
