@@ -115,6 +115,34 @@ func TestE2E_ResearchUnlockBuildChain(t *testing.T) {
 	}
 }
 
+func TestE2E_CollectorsRequireResourceNodes(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+	grantTechs(ws, "p1", "fluid_storage", "plasma_refining")
+
+	pos, err := findOpenTile(ws, 2)
+	if err != nil {
+		t.Fatalf("find open tile: %v", err)
+	}
+
+	for _, btype := range []string{"water_pump", "oil_extractor"} {
+		buildCmd := model.Command{
+			Type:   model.CmdBuild,
+			Target: model.CommandTarget{Position: pos},
+			Payload: map[string]any{
+				"building_type": btype,
+			},
+		}
+		res, _ := core.execBuild(ws, "p1", buildCmd)
+		if res.Status != model.StatusFailed {
+			t.Fatalf("%s should fail on non-resource tile, got %s", btype, res.Status)
+		}
+		if res.Code != model.CodeInvalidTarget {
+			t.Fatalf("%s should return INVALID_TARGET, got %s", btype, res.Code)
+		}
+	}
+}
+
 func TestE2E_ProductionChain(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()

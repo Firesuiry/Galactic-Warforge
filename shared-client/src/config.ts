@@ -32,16 +32,12 @@ export const ALL_EVENT_TYPES = [
 export const DEFAULT_EVENT_TYPES = [
   'command_result',
   'entity_created',
-  'entity_moved',
-  'damage_applied',
   'entity_destroyed',
   'building_state_changed',
-  'production_alert',
   'construction_paused',
   'construction_resumed',
   'research_completed',
   'loot_dropped',
-  'entity_updated',
 ] as const;
 
 export const DEFAULT_SSE_SILENT_EVENT_TYPES = new Set([

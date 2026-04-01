@@ -26,12 +26,14 @@ __pycache__/
 
 # Local agent/tool state
 .codex/
+.superpowers/
 .taskmaster/
 latest
 task_finished.txt
 .env.local
 .env.*.local
 .worktrees/
+docs/img/
 
 # Logs
 logs

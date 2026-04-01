@@ -1498,10 +1498,10 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	// Only EM Rail Ejector and Vertical Launching Silo can launch solar sails
-	if building.Type != model.BuildingTypeEMRailEjector && building.Type != model.BuildingTypeVerticalLaunchingSilo {
+	// Solar sails are launched by the EM Rail Ejector. Vertical silos are reserved for rockets.
+	if building.Type != model.BuildingTypeEMRailEjector {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "only EM Rail Ejector or Vertical Launching Silo can launch solar sails"
+		res.Message = "only EM Rail Ejector can launch solar sails"
 		return res, nil
 	}
 
@@ -1533,15 +1533,16 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		}
 	}
 
-	// Check inventory has enough solar sails
-	if player.Inventory == nil {
+	// Check launch building has enough loaded solar sails.
+	if building.Storage == nil {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "no solar sails in inventory"
+		res.Message = "launch building has no solar sail storage"
 		return res, nil
 	}
-	if player.Inventory[model.ItemSolarSail] < sailCount {
+	loadedSails := building.Storage.OutputQuantity(model.ItemSolarSail)
+	if loadedSails < sailCount {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d solar sails, have %d", sailCount, player.Inventory[model.ItemSolarSail])
+		res.Message = fmt.Sprintf("need %d solar sails loaded, have %d", sailCount, loadedSails)
 		return res, nil
 	}
 
@@ -1591,9 +1592,11 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	}
 	if rand.Float64() > launchSuccessRate {
 		// Launch failed, consume sails but no orbit entry
-		player.Inventory[model.ItemSolarSail] -= sailCount
-		if player.Inventory[model.ItemSolarSail] <= 0 {
-			delete(player.Inventory, model.ItemSolarSail)
+		provided, _, err := building.Storage.Provide(model.ItemSolarSail, sailCount)
+		if err != nil || provided != sailCount {
+			res.Code = model.CodeInsufficientResource
+			res.Message = "failed to consume loaded solar sails"
+			return res, nil
 		}
 		res.Status = model.StatusFailed
 		res.Code = model.CodeValidationFailed
@@ -1601,10 +1604,12 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	// Consume solar sails from inventory
-	player.Inventory[model.ItemSolarSail] -= sailCount
-	if player.Inventory[model.ItemSolarSail] <= 0 {
-		delete(player.Inventory, model.ItemSolarSail)
+	// Consume solar sails from the ejector's local storage.
+	provided, _, err := building.Storage.Provide(model.ItemSolarSail, sailCount)
+	if err != nil || provided != sailCount {
+		res.Code = model.CodeInsufficientResource
+		res.Message = "failed to consume loaded solar sails"
+		return res, nil
 	}
 
 	// Get system ID from maps

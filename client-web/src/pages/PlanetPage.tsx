@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { ALL_EVENT_TYPES } from '@shared/config';
@@ -11,8 +11,8 @@ import { usePlanetRealtimeSync } from '@/features/planet-map/use-planet-realtime
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { usePlanetViewStore } from '@/features/planet-map/store';
-import { PLANET_ZOOM_LEVELS } from '@/features/planet-map/store';
-import { useEffect, useMemo, useRef } from 'react';
+import { getPlanetZoomLevel, resolvePlanetZoomIndex } from '@/features/planet-map/store';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createFixtureFetch, isFixtureServerUrl } from '@/fixtures';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -27,6 +27,7 @@ export function PlanetPage() {
   const { planetId = '' } = useParams();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const restoredViewRef = useRef('');
+  const [detailTab, setDetailTab] = useState<'entity' | 'commands'>('entity');
   const {
     hydrateRecentAlerts,
     hydrateRecentEvents,
@@ -34,10 +35,13 @@ export function PlanetPage() {
     recentAlerts,
     recentEvents,
     resetForPlanet,
+    sceneWindow,
+    selected,
     setLayers,
     setLastEventId,
     setSelected,
     setZoomIndex,
+    zoomIndex,
     requestFocus,
   } = usePlanetViewStore(useShallow((state) => ({
     hydrateRecentAlerts: state.hydrateRecentAlerts,
@@ -46,22 +50,21 @@ export function PlanetPage() {
     recentAlerts: state.recentAlerts,
     recentEvents: state.recentEvents,
     resetForPlanet: state.resetForPlanet,
+    sceneWindow: state.sceneWindow,
+    selected: state.selected,
     setLayers: state.setLayers,
     setLastEventId: state.setLastEventId,
     setSelected: state.setSelected,
     setZoomIndex: state.setZoomIndex,
+    zoomIndex: state.camera.zoomIndex,
     requestFocus: state.requestFocus,
   })));
+  const activeZoomLevel = getPlanetZoomLevel(zoomIndex);
 
-  const planetQuery = useQuery({
-    queryKey: ['planet', session.serverUrl, session.playerId, planetId],
-    queryFn: () => client.fetchPlanet(planetId),
-    enabled: Boolean(planetId),
-  });
-
-  const fogQuery = useQuery({
-    queryKey: ['planet-fog', session.serverUrl, session.playerId, planetId],
-    queryFn: () => client.fetchFogMap(planetId),
+  const sceneQuery = useQuery({
+    queryKey: ['planet-scene', session.serverUrl, session.playerId, planetId, sceneWindow.x, sceneWindow.y, sceneWindow.width, sceneWindow.height],
+    queryFn: () => client.fetchPlanetScene(planetId, sceneWindow),
+    placeholderData: keepPreviousData,
     enabled: Boolean(planetId),
   });
 
@@ -110,6 +113,14 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
+  const overviewQuery = useQuery({
+    queryKey: ['planet-overview', session.serverUrl, session.playerId, planetId, activeZoomLevel.overviewStep],
+    queryFn: () => client.fetchPlanetOverview(planetId, {
+      step: activeZoomLevel.overviewStep ?? 100,
+    }),
+    enabled: Boolean(planetId) && activeZoomLevel.mode === 'overview',
+  });
+
   const { pullMissedEvents } = usePlanetRealtimeSync({
     client,
     fetchFn: realtimeFetchFn,
@@ -122,10 +133,17 @@ export function PlanetPage() {
   useEffect(() => {
     restoredViewRef.current = '';
     resetForPlanet(planetId);
+    setDetailTab('entity');
   }, [planetId, resetForPlanet]);
 
   useEffect(() => {
-    if (!planetQuery.data) {
+    if (selected) {
+      setDetailTab('entity');
+    }
+  }, [selected]);
+
+  useEffect(() => {
+    if (!sceneQuery.data) {
       return;
     }
     const signature = `${planetId}?${searchParams.toString()}`;
@@ -133,14 +151,12 @@ export function PlanetPage() {
       return;
     }
 
-    const zoomParam = Number(searchParams.get('zoom') ?? '');
-    if (Number.isFinite(zoomParam)) {
-      const zoomIndex = PLANET_ZOOM_LEVELS.reduce((bestIndex, currentZoom, index) => (
-        Math.abs(currentZoom - zoomParam) < Math.abs(PLANET_ZOOM_LEVELS[bestIndex] - zoomParam)
-          ? index
-          : bestIndex
-      ), 0);
-      setZoomIndex(zoomIndex);
+    const zoomRaw = searchParams.get('zoom');
+    if (zoomRaw !== null && zoomRaw.trim() !== '') {
+      const zoomParam = Number(zoomRaw);
+      if (Number.isFinite(zoomParam)) {
+        setZoomIndex(resolvePlanetZoomIndex(zoomParam));
+      }
     }
 
     const layerPatch = parseEnabledLayers(searchParams.get('layers'), usePlanetViewStore.getState().layers);
@@ -148,19 +164,26 @@ export function PlanetPage() {
       setLayers(layerPatch);
     }
 
-    const focusX = Number(searchParams.get('x') ?? '');
-    const focusY = Number(searchParams.get('y') ?? '');
-    if (Number.isFinite(focusX) && Number.isFinite(focusY)) {
-      requestFocus({ x: Math.round(focusX), y: Math.round(focusY) });
+    const focusXRaw = searchParams.get('x');
+    const focusYRaw = searchParams.get('y');
+    if (
+      focusXRaw !== null && focusXRaw.trim() !== ''
+      && focusYRaw !== null && focusYRaw.trim() !== ''
+    ) {
+      const focusX = Number(focusXRaw);
+      const focusY = Number(focusYRaw);
+      if (Number.isFinite(focusX) && Number.isFinite(focusY)) {
+        requestFocus({ x: Math.round(focusX), y: Math.round(focusY) });
+      }
     }
 
-    const sharedSelection = resolveSelectionFromQueryValue(planetQuery.data, searchParams.get('select'));
+    const sharedSelection = resolveSelectionFromQueryValue(sceneQuery.data, searchParams.get('select'));
     if (sharedSelection) {
       setSelected(sharedSelection);
     }
 
     restoredViewRef.current = signature;
-  }, [planetId, planetQuery.data, requestFocus, searchParams, setLayers, setSelected, setZoomIndex]);
+  }, [planetId, sceneQuery.data, requestFocus, searchParams, setLayers, setSelected, setZoomIndex]);
 
   useEffect(() => {
     if (!eventQuery.data) {
@@ -189,8 +212,8 @@ export function PlanetPage() {
   }, [alertQuery.data, hydrateRecentAlerts, markFullSync]);
 
   const isLoading = [
-    planetQuery.isLoading,
-    fogQuery.isLoading,
+    sceneQuery.isLoading,
+    activeZoomLevel.mode === 'overview' ? overviewQuery.isLoading : false,
     runtimeQuery.isLoading,
     networksQuery.isLoading,
     catalogQuery.isLoading,
@@ -204,9 +227,17 @@ export function PlanetPage() {
     return <div className="panel">正在加载行星观察页...</div>;
   }
 
-  const error = planetQuery.error || fogQuery.error || runtimeQuery.error || networksQuery.error || catalogQuery.error || summaryQuery.error || statsQuery.error || eventQuery.error || alertQuery.error;
+  const error = sceneQuery.error
+    || (activeZoomLevel.mode === 'overview' ? overviewQuery.error : null)
+    || runtimeQuery.error
+    || networksQuery.error
+    || catalogQuery.error
+    || summaryQuery.error
+    || statsQuery.error
+    || eventQuery.error
+    || alertQuery.error;
 
-  if (error || !planetQuery.data || !fogQuery.data || !runtimeQuery.data || !networksQuery.data || !catalogQuery.data) {
+  if (error || !sceneQuery.data || !runtimeQuery.data || !networksQuery.data || !catalogQuery.data) {
     return (
       <div className="panel error-banner" role="alert">
         {error instanceof Error ? error.message : '行星数据加载失败'}
@@ -214,8 +245,7 @@ export function PlanetPage() {
     );
   }
 
-  const planet = planetQuery.data;
-  const fog = fogQuery.data;
+  const planet = sceneQuery.data;
   const runtime = runtimeQuery.data;
   const networks = networksQuery.data;
   const catalog = catalogQuery.data;
@@ -225,7 +255,7 @@ export function PlanetPage() {
   const currentResearchName = getTechDisplayName(catalog, currentPlayer?.tech?.current_research?.tech_id ?? '');
 
   return (
-    <div className="page-grid">
+    <div className="page-grid page-grid--planet">
       <section className="panel page-hero">
         <div className="page-header">
           <p className="eyebrow">T007-T012 行星观察端</p>
@@ -255,11 +285,12 @@ export function PlanetPage() {
         <section className="panel planet-map-shell">
           <PlanetMapCanvas
             catalog={catalog}
-            fog={fog}
+            fog={planet}
             networks={networks}
             onCanvasReady={(canvas) => {
               canvasRef.current = canvas;
             }}
+            overview={overviewQuery.data}
             planet={planet}
             runtime={runtime}
           />
@@ -270,12 +301,12 @@ export function PlanetPage() {
             networks={networks}
             onPullEvents={pullMissedEvents}
             onRefreshFog={async () => {
-              await fogQuery.refetch();
+              await sceneQuery.refetch();
               markFullSync();
             }}
             onRefreshPlanet={async () => {
               await Promise.all([
-                planetQuery.refetch(),
+                sceneQuery.refetch(),
                 runtimeQuery.refetch(),
                 networksQuery.refetch(),
                 summaryQuery.refetch(),
@@ -289,8 +320,33 @@ export function PlanetPage() {
         </section>
 
         <aside className="panel planet-detail-shell">
-          <PlanetEntityPanel catalog={catalog} fog={fog} networks={networks} planet={planet} runtime={runtime} stats={stats} summary={summary} />
-          <PlanetCommandPanel catalog={catalog} client={client} planet={planet} />
+          <div className="segmented-control planet-detail-tabs" role="tablist" aria-label="右侧面板">
+            <button
+              aria-selected={detailTab === 'entity'}
+              className={detailTab === 'entity' ? 'segmented-control__button segmented-control__button--active' : 'segmented-control__button'}
+              onClick={() => setDetailTab('entity')}
+              role="tab"
+              type="button"
+            >
+              详情
+            </button>
+            <button
+              aria-selected={detailTab === 'commands'}
+              className={detailTab === 'commands' ? 'segmented-control__button segmented-control__button--active' : 'segmented-control__button'}
+              onClick={() => setDetailTab('commands')}
+              role="tab"
+              type="button"
+            >
+              命令
+            </button>
+          </div>
+          <div className="planet-detail-shell__content">
+            {detailTab === 'entity' ? (
+              <PlanetEntityPanel catalog={catalog} fog={planet} networks={networks} planet={planet} runtime={runtime} stats={stats} summary={summary} />
+            ) : (
+              <PlanetCommandPanel catalog={catalog} client={client} planet={planet} />
+            )}
+          </div>
         </aside>
       </section>
 

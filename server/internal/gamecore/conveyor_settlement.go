@@ -10,6 +10,7 @@ type conveyorTransfer struct {
 	sourceID string
 	targetID string
 	qty      int
+	itemID   string
 }
 
 func settleConveyors(ws *model.WorldState) {
@@ -57,30 +58,16 @@ func settleConveyors(ws *model.WorldState) {
 	}
 
 	allocations := make(map[string][]conveyorTransfer, len(conveyors))
+	remainingOffers := make(map[string]int, len(offers))
 	for _, sourceID := range ids {
-		remaining := offers[sourceID]
-		if remaining <= 0 {
-			continue
-		}
-		for _, targetID := range outputTargets[sourceID] {
-			if remaining <= 0 {
-				break
-			}
-			available := capacities[targetID]
-			if available <= 0 {
-				continue
-			}
-			take := minInt(remaining, available)
-			if take <= 0 {
-				continue
-			}
-			allocations[sourceID] = append(allocations[sourceID], conveyorTransfer{
-				sourceID: sourceID,
-				targetID: targetID,
-				qty:      take,
-			})
-			remaining -= take
-			capacities[targetID] -= take
+		remainingOffers[sourceID] = offers[sourceID]
+	}
+	allocationOrder := conveyorAllocationOrder(ids, ws.Tick)
+	for {
+		progress := allocateConveyorRound(allocationOrder, outputTargets, remainingOffers, capacities, allocations, conveyors, true)
+		progress = allocateConveyorRound(allocationOrder, outputTargets, remainingOffers, capacities, allocations, conveyors, false) || progress
+		if !progress {
+			break
 		}
 	}
 
@@ -101,10 +88,137 @@ func settleConveyors(ws *model.WorldState) {
 			if target == nil || target.Conveyor == nil {
 				continue
 			}
-			moved := source.Conveyor.Take(tr.qty)
+			moved := takeConveyorTransferItems(source.Conveyor, tr.itemID, tr.qty)
 			target.Conveyor.AppendStacks(moved)
 		}
 	}
+}
+
+func conveyorAllocationOrder(ids []string, tick int64) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	offset := int(tick % int64(len(ids)))
+	if offset == 0 {
+		return append([]string(nil), ids...)
+	}
+	order := make([]string, 0, len(ids))
+	order = append(order, ids[offset:]...)
+	order = append(order, ids[:offset]...)
+	return order
+}
+
+func allocateConveyorRound(
+	order []string,
+	outputTargets map[string][]string,
+	remainingOffers map[string]int,
+	capacities map[string]int,
+	allocations map[string][]conveyorTransfer,
+	conveyors map[string]*model.Building,
+	preferDiversity bool,
+) bool {
+	progress := false
+	for _, sourceID := range order {
+		if remainingOffers[sourceID] <= 0 {
+			continue
+		}
+		source := conveyors[sourceID]
+		if source == nil || source.Conveyor == nil {
+			continue
+		}
+		for _, targetID := range outputTargets[sourceID] {
+			if capacities[targetID] <= 0 {
+				continue
+			}
+			target := conveyors[targetID]
+			if target == nil || target.Conveyor == nil {
+				continue
+			}
+			itemID, ok := conveyorTransferItem(target.Conveyor, source.Conveyor, preferDiversity)
+			if !ok {
+				continue
+			}
+			allocations[sourceID] = append(allocations[sourceID], conveyorTransfer{
+				sourceID: sourceID,
+				targetID: targetID,
+				qty:      1,
+				itemID:   itemID,
+			})
+			remainingOffers[sourceID]--
+			capacities[targetID]--
+			progress = true
+			break
+		}
+	}
+	return progress
+}
+
+func conveyorTransferItem(target, source *model.ConveyorState, preferDiversity bool) (string, bool) {
+	if source == nil || len(source.Buffer) == 0 {
+		return "", false
+	}
+	if !preferDiversity {
+		itemID := source.Buffer[0].ItemID
+		return itemID, itemID != ""
+	}
+	if target == nil || len(target.Buffer) == 0 {
+		return "", false
+	}
+	existing := make(map[string]struct{}, len(target.Buffer))
+	for _, stack := range target.Buffer {
+		if stack.ItemID == "" {
+			continue
+		}
+		existing[stack.ItemID] = struct{}{}
+	}
+	for _, stack := range source.Buffer {
+		if stack.ItemID == "" {
+			continue
+		}
+		if _, ok := existing[stack.ItemID]; ok {
+			continue
+		}
+		return stack.ItemID, true
+	}
+	return "", false
+}
+
+func takeConveyorTransferItems(conveyor *model.ConveyorState, itemID string, qty int) []model.ItemStack {
+	if conveyor == nil || qty <= 0 {
+		return nil
+	}
+	if itemID == "" {
+		return conveyor.Take(qty)
+	}
+	remaining := qty
+	var taken []model.ItemStack
+	for remaining > 0 {
+		index := firstConveyorStackIndex(conveyor, itemID)
+		if index < 0 {
+			break
+		}
+		partial := conveyor.TakeAt(index, remaining)
+		if len(partial) == 0 {
+			break
+		}
+		taken = append(taken, partial...)
+		for _, stack := range partial {
+			remaining -= stack.Quantity
+		}
+	}
+	return taken
+}
+
+func firstConveyorStackIndex(conveyor *model.ConveyorState, itemID string) int {
+	if conveyor == nil || itemID == "" {
+		return -1
+	}
+	for index, stack := range conveyor.Buffer {
+		if stack.ItemID == itemID && stack.Quantity > 0 {
+			return index
+		}
+	}
+	return -1
 }
 
 var conveyorDirOrder = []model.ConveyorDirection{

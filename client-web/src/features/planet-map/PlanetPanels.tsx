@@ -11,7 +11,6 @@ import type {
   PlanetNetworksView,
   PlanetResource,
   PlanetRuntimeView,
-  PlanetView,
   PlayerStatsSnapshot,
   StateSummary,
   Unit,
@@ -36,10 +35,11 @@ import {
   selectionLabel,
   summarizeAlert,
   summarizeEvent,
+  type PlanetRenderView,
   toTilePoint,
   getTechDisplayName,
 } from '@/features/planet-map/model';
-import { PLANET_ZOOM_LEVELS, usePlanetViewStore } from '@/features/planet-map/store';
+import { getPlanetRenderTileSize, getPlanetZoomLabel, getPlanetZoomScale, PLANET_ZOOM_LEVELS, usePlanetViewStore } from '@/features/planet-map/store';
 
 function formatRatio(value: number | undefined) {
   if (value === undefined) {
@@ -64,7 +64,7 @@ function downloadData(filename: string, content: string, contentType: string) {
 
 interface PlanetLayerPanelProps {
   networks?: PlanetNetworksView;
-  planet: PlanetView;
+  planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
 }
 
@@ -88,6 +88,9 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
   })));
 
   const resources = useMemo(() => getResourceList(planet), [planet]);
+  const buildingCount = 'building_count' in planet ? planet.building_count : undefined;
+  const unitCount = 'unit_count' in planet ? planet.unit_count : undefined;
+  const resourceCount = 'resource_count' in planet ? planet.resource_count : undefined;
 
   return (
     <div className="planet-panel-stack">
@@ -109,11 +112,11 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           {PLANET_ZOOM_LEVELS.map((zoomLevel, index) => (
             <button
               className={index === camera.zoomIndex ? 'secondary-button zoom-button zoom-button--active' : 'secondary-button zoom-button'}
-              key={zoomLevel}
+              key={zoomLevel.label}
               onClick={() => setZoomIndex(index)}
               type="button"
             >
-              {zoomLevel}px
+              {zoomLevel.label}
             </button>
           ))}
           <button className="secondary-button zoom-button" onClick={resetCamera} type="button">
@@ -131,15 +134,15 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           </div>
           <div>
             <dt>建筑</dt>
-            <dd>{Object.keys(planet.buildings ?? {}).length}</dd>
+            <dd>{buildingCount ?? Object.keys(planet.buildings ?? {}).length}</dd>
           </div>
           <div>
             <dt>单位</dt>
-            <dd>{Object.keys(planet.units ?? {}).length}</dd>
+            <dd>{unitCount ?? Object.keys(planet.units ?? {}).length}</dd>
           </div>
           <div>
             <dt>资源点</dt>
-            <dd>{resources.length}</dd>
+            <dd>{resourceCount ?? resources.length}</dd>
           </div>
           <div>
             <dt>Hover</dt>
@@ -168,9 +171,11 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
         </dl>
       </section>
 
-      <section className="planet-side-section">
-        <div className="section-title">图例</div>
-        <div className="legend-list">
+      <details className="planet-disclosure">
+        <summary className="planet-disclosure__summary">
+          <span className="section-title">图例</span>
+        </summary>
+        <div className="planet-disclosure__body legend-list">
           <span><i className="legend-swatch legend-swatch--terrain" />可建造地形</span>
           <span><i className="legend-swatch legend-swatch--water" />水域</span>
           <span><i className="legend-swatch legend-swatch--lava" />岩浆</span>
@@ -184,38 +189,42 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           <span><i className="legend-swatch legend-swatch--threat" />敌情</span>
           <span><i className="legend-swatch legend-swatch--fog" />未探索区域</span>
         </div>
-      </section>
+      </details>
 
-      <section className="planet-side-section">
-        <div className="section-title">读模型状态</div>
-        <dl className="planet-kv-list">
-          <div>
-            <dt>runtime</dt>
-            <dd>{runtime?.available ? 'live' : 'inactive'}</dd>
-          </div>
-          <div>
-            <dt>networks</dt>
-            <dd>{networks?.available ? 'live' : 'inactive'}</dd>
-          </div>
-          <div>
-            <dt>电力链路</dt>
-            <dd>{networks?.power_links?.length ?? 0}</dd>
-          </div>
-          <div>
-            <dt>管网段</dt>
-            <dd>{networks?.pipeline_segments?.length ?? 0}</dd>
-          </div>
-        </dl>
-      </section>
+      <details className="planet-disclosure">
+        <summary className="planet-disclosure__summary">
+          <span className="section-title">读模型状态</span>
+        </summary>
+        <div className="planet-disclosure__body">
+          <dl className="planet-kv-list">
+            <div>
+              <dt>runtime</dt>
+              <dd>{runtime?.available ? 'live' : 'inactive'}</dd>
+            </div>
+            <div>
+              <dt>networks</dt>
+              <dd>{networks?.available ? 'live' : 'inactive'}</dd>
+            </div>
+            <div>
+              <dt>电力链路</dt>
+              <dd>{networks?.power_links?.length ?? 0}</dd>
+            </div>
+            <div>
+              <dt>管网段</dt>
+              <dd>{networks?.pipeline_segments?.length ?? 0}</dd>
+            </div>
+          </dl>
+        </div>
+      </details>
     </div>
   );
 }
 
 interface PlanetEntityPanelProps {
   catalog?: CatalogView;
-  fog?: FogMapView;
+  fog?: FogMapView | PlanetRenderView;
   networks?: PlanetNetworksView;
-  planet: PlanetView;
+  planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   stats?: PlayerStatsSnapshot;
   summary?: StateSummary;
@@ -498,7 +507,7 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
 interface PlanetActivityPanelProps {
   alerts: AlertEntry[];
   events: GameEventDetail[];
-  planet: PlanetView;
+  planet: PlanetRenderView;
 }
 
 export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPanelProps) {
@@ -599,7 +608,7 @@ interface PlanetDebugPanelProps {
   onPullEvents: () => Promise<void>;
   onRefreshFog: () => Promise<unknown>;
   onRefreshPlanet: () => Promise<unknown>;
-  planet: PlanetView;
+  planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
 }
 
@@ -662,11 +671,17 @@ export function PlanetDebugPanel({
     if (typeof window === 'undefined') {
       return '';
     }
-    const tileSize = PLANET_ZOOM_LEVELS[camera.zoomIndex];
+    const tileSize = getPlanetRenderTileSize(
+      camera.zoomIndex,
+      canvas?.clientWidth || planet.map_width,
+      canvas?.clientHeight || planet.map_height,
+      planet.map_width,
+      planet.map_height,
+    );
     const viewportWidth = canvas?.clientWidth || (planet.map_width * tileSize);
     const viewportHeight = canvas?.clientHeight || (planet.map_height * tileSize);
     const bounds = getViewportTileBounds(planet, camera, tileSize, viewportWidth, viewportHeight);
-    const params = buildViewLinkSearchParams(selected, layers, bounds, tileSize);
+    const params = buildViewLinkSearchParams(selected, layers, bounds, getPlanetZoomScale(camera.zoomIndex));
     const url = new URL(window.location.href);
     url.search = params.toString();
     return url.toString();
@@ -683,7 +698,13 @@ export function PlanetDebugPanel({
   }
 
   function exportViewportJson() {
-    const tileSize = PLANET_ZOOM_LEVELS[camera.zoomIndex];
+    const tileSize = getPlanetRenderTileSize(
+      camera.zoomIndex,
+      canvas?.clientWidth || planet.map_width,
+      canvas?.clientHeight || planet.map_height,
+      planet.map_width,
+      planet.map_height,
+    );
     const viewportWidth = canvas?.clientWidth || (planet.map_width * tileSize);
     const viewportHeight = canvas?.clientHeight || (planet.map_height * tileSize);
     const payload = buildViewportExport({
@@ -742,7 +763,7 @@ export function PlanetDebugPanel({
             </div>
             <div>
               <dt>缩放</dt>
-              <dd>{PLANET_ZOOM_LEVELS[camera.zoomIndex]} px</dd>
+              <dd>{getPlanetZoomLabel(camera.zoomIndex)}</dd>
             </div>
             <div>
               <dt>Hover</dt>
@@ -759,7 +780,7 @@ export function PlanetDebugPanel({
               重拉行星
             </button>
             <button className="secondary-button" onClick={() => { void onRefreshFog(); }} type="button">
-              重拉迷雾
+              重拉场景
             </button>
             <button className="secondary-button" onClick={() => { void onPullEvents(); }} type="button">
               补拉事件

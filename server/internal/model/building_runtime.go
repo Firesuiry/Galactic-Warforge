@@ -611,6 +611,42 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeWaterPump,
+		Params: BuildingRuntimeParams{
+			Capacity:      8,
+			EnergyConsume: 2,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1, AllowedItems: []string{ItemWater}},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Collect: &CollectModule{YieldPerTick: 8},
+			Storage: &StorageModule{Capacity: 60, Slots: 1, Buffer: 20, InputPriority: 1, OutputPriority: 2},
+			Energy:  &EnergyModule{ConsumePerTick: 2},
+		},
+	},
+	{
+		ID: BuildingTypeOilExtractor,
+		Params: BuildingRuntimeParams{
+			Capacity:      8,
+			EnergyConsume: 2,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1, AllowedItems: []string{ItemCrudeOil}},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Collect: &CollectModule{YieldPerTick: 8},
+			Storage: &StorageModule{Capacity: 60, Slots: 1, Buffer: 20, InputPriority: 1, OutputPriority: 2},
+			Energy:  &EnergyModule{ConsumePerTick: 2},
+		},
+	},
+	{
 		ID: BuildingTypeOrbitalCollector,
 		Params: BuildingRuntimeParams{
 			EnergyConsume: 4,
@@ -629,7 +665,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 	{
 		ID: BuildingTypeConveyorBeltMk1,
 		Functions: BuildingFunctionModules{
-			Transport: &TransportModule{Throughput: 2, StackLimit: 1},
+			Transport: &TransportModule{Throughput: 2, StackLimit: 2},
 		},
 	},
 	{
@@ -1059,8 +1095,12 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemSolarSail}},
+			},
 		},
 		Functions: BuildingFunctionModules{
+			Storage: &StorageModule{Capacity: 20, Slots: 1, Buffer: 6, InputPriority: 2, OutputPriority: 0},
 			Launch: &LaunchModule{
 				EnergyPerLaunch: 300,
 				SuccessRate:     0.95,

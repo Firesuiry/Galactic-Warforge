@@ -108,6 +108,55 @@ function createFogPayload() {
   };
 }
 
+function createScenePayload() {
+  const planet = createPlanetPayload();
+  const fog = createFogPayload();
+  return {
+    planet_id: planet.planet_id,
+    name: planet.name,
+    discovered: planet.discovered,
+    kind: planet.kind,
+    map_width: planet.map_width,
+    map_height: planet.map_height,
+    tick: planet.tick,
+    bounds: { x: 0, y: 0, width: 4, height: 4 },
+    terrain: planet.terrain,
+    environment: planet.environment,
+    visible: fog.visible,
+    explored: fog.explored,
+    buildings: planet.buildings,
+    units: planet.units,
+    resources: planet.resources,
+    building_count: Object.keys(planet.buildings ?? {}).length,
+    unit_count: Object.keys(planet.units ?? {}).length,
+    resource_count: planet.resources?.length ?? 0,
+  };
+}
+
+function createOverviewPayload() {
+  return {
+    planet_id: 'planet-1-1',
+    name: 'Gaia',
+    discovered: true,
+    kind: 'terrestrial',
+    map_width: 4,
+    map_height: 4,
+    tick: 120,
+    step: 100,
+    cells_width: 1,
+    cells_height: 1,
+    terrain: [['buildable']],
+    visible: [[true]],
+    explored: [[true]],
+    resource_counts: [[1]],
+    building_counts: [[1]],
+    unit_counts: [[1]],
+    building_count: 1,
+    unit_count: 1,
+    resource_count: 1,
+  };
+}
+
 function createSummaryPayload() {
   return {
     tick: 120,
@@ -249,11 +298,8 @@ describe('PlanetPage', () => {
       if (url.endsWith('/state/stats')) {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
-      }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -347,6 +393,7 @@ describe('PlanetPage', () => {
     expect(await screen.findByText('建筑详情')).toBeInTheDocument();
     expect(screen.getByText('mining_machine')).toBeInTheDocument();
     expect(screen.getByText('running')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '展开调试' }));
     expect(screen.getByText('调试面板')).toBeInTheDocument();
   });
 
@@ -382,11 +429,8 @@ describe('PlanetPage', () => {
       if (url.endsWith('/state/stats')) {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
-      }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -464,11 +508,8 @@ describe('PlanetPage', () => {
       if (url.endsWith('/state/stats')) {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
-      }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -532,6 +573,7 @@ describe('PlanetPage', () => {
     renderApp(['/planet/planet-1-1']);
 
     expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: '命令' }));
 
     await user.click(screen.getByRole('button', { name: '扫描当前行星' }));
 
@@ -541,18 +583,8 @@ describe('PlanetPage', () => {
     expect(commandRequests[0]?.commands?.[0]?.target?.planet_id).toBe('planet-1-1');
   });
 
-  it('调试面板可以导出当前视角 JSON', async () => {
-    let exportedHref = '';
-    let exportedDownload = '';
-    const anchorClick = vi.fn(function captureAnchor(this: HTMLAnchorElement) {
-      exportedHref = this.href;
-      exportedDownload = this.download;
-    });
-    Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
-      configurable: true,
-      value: anchorClick,
-    });
-
+  it('切到全局缩放时会请求行星总览并显示总览状态', async () => {
+    let overviewCalls = 0;
     const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
 
@@ -562,11 +594,12 @@ describe('PlanetPage', () => {
       if (url.endsWith('/state/stats')) {
         return Promise.resolve(jsonResponse(createStatsPayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1')) {
-        return Promise.resolve(jsonResponse(createPlanetPayload()));
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
       }
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
-        return Promise.resolve(jsonResponse(createFogPayload()));
+      if (url.includes('/world/planets/planet-1-1/overview')) {
+        overviewCalls += 1;
+        return Promise.resolve(jsonResponse(createOverviewPayload()));
       }
       if (url.endsWith('/world/planets/planet-1-1/runtime')) {
         return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -615,6 +648,86 @@ describe('PlanetPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
 
+    await user.click(screen.getByRole('button', { name: '1px/100tile' }));
+
+    expect(await screen.findByText('缩放 1px/100tile')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(overviewCalls).toBeGreaterThan(0);
+    });
+  });
+
+  it('调试面板可以导出当前视角 JSON', async () => {
+    let exportedHref = '';
+    let exportedDownload = '';
+    const anchorClick = vi.fn(function captureAnchor(this: HTMLAnchorElement) {
+      exportedHref = this.href;
+      exportedDownload = this.download;
+    });
+    Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+      configurable: true,
+      value: anchorClick,
+    });
+
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse(createSummaryPayload()));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse(createStatsPayload()));
+      }
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse(createScenePayload()));
+      }
+      if (url.endsWith('/world/planets/planet-1-1/runtime')) {
+        return Promise.resolve(jsonResponse(createRuntimePayload()));
+      }
+      if (url.endsWith('/world/planets/planet-1-1/networks')) {
+        return Promise.resolve(jsonResponse(createNetworksPayload()));
+      }
+      if (url.endsWith('/catalog')) {
+        return Promise.resolve(jsonResponse(createCatalogPayload()));
+      }
+      if (url.includes('/events/snapshot')) {
+        return Promise.resolve(jsonResponse({
+          event_types: ['building_state_changed'],
+          available_from_tick: 1,
+          next_event_id: 'evt-10',
+          has_more: false,
+          events: [],
+        }));
+      }
+      if (url.includes('/alerts/production/snapshot')) {
+        return Promise.resolve(jsonResponse({
+          available_from_tick: 1,
+          has_more: false,
+          alerts: [],
+        }));
+      }
+      if (url.includes('/events/stream')) {
+        return Promise.resolve(sseResponse([
+          {
+            event: 'connected',
+            data: {
+              player_id: 'p1',
+              event_types: ['building_state_changed'],
+            },
+          },
+        ], init?.signal as AbortSignal));
+      }
+
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+
+    renderApp(['/planet/planet-1-1']);
+
+    expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '展开调试' }));
     expect(screen.getByRole('button', { name: '收起调试' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '导出视角 JSON' }));
 

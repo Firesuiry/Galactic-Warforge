@@ -1,15 +1,15 @@
 galaxy:
-  system_count: 2
+  system_count: 1
   width: 1000
   height: 1000
 system:
-  planets_per_system: 3
+  planets_per_system: 1
   gas_giant_ratio: 0.35
   max_moons: 4
 planet:
-  width: 32
-  height: 32
-  resource_density: 12
+  width: 2000
+  height: 2000
+  resource_density: 2
   terrain:
     water_ratio: 0.12
     lava_ratio: 0.04

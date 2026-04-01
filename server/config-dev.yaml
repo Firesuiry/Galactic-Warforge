@@ -33,11 +33,11 @@ server:
   snapshot_max_events: 200
   alert_history_limit: 1000
   data_dir: "data"
-  snapshot_interval_ticks: 100
-  snapshot_retention_ticks: 6000
-  snapshot_retention_count: 60
-  snapshot_max_bytes: 2097152
-  snapshot_delta_max_bytes: 1048576
+  snapshot_interval_ticks: 5000
+  snapshot_retention_ticks: 30000
+  snapshot_retention_count: 6
+  snapshot_max_bytes: 268435456
+  snapshot_delta_max_bytes: 134217728
   production_monitor:
     sample_interval_ticks: 5
     max_entities_per_sample: 500

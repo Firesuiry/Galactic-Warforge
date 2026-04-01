@@ -16,6 +16,8 @@ import type {
   HealthResponse,
   CatalogView,
   MetricsSnapshot,
+  PlanetOverviewView,
+  PlanetSceneView,
   PlanetNetworksView,
   PlanetRuntimeView,
   PlanetView,
@@ -69,6 +71,17 @@ export interface AlertSnapshotParams {
   after_alert_id?: string;
   since_tick?: number;
   limit?: number;
+}
+
+export interface PlanetSceneParams {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PlanetOverviewParams {
+  step: number;
 }
 
 export interface ReplayRequest {
@@ -233,6 +246,20 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchFogMap(planetId: string): Promise<FogMapView> {
     return apiFetch<FogMapView>(`/world/planets/${planetId}/fog`);
+  }
+
+  function fetchPlanetScene(planetId: string, params: PlanetSceneParams): Promise<PlanetSceneView> {
+    const searchParams = new URLSearchParams();
+    addParams(searchParams, params);
+    const query = searchParams.toString();
+    return apiFetch<PlanetSceneView>(`/world/planets/${planetId}/scene${query ? `?${query}` : ''}`);
+  }
+
+  function fetchPlanetOverview(planetId: string, params: PlanetOverviewParams): Promise<PlanetOverviewView> {
+    const searchParams = new URLSearchParams();
+    addParams(searchParams, params);
+    const query = searchParams.toString();
+    return apiFetch<PlanetOverviewView>(`/world/planets/${planetId}/overview${query ? `?${query}` : ''}`);
   }
 
   function fetchPlanetRuntime(planetId: string): Promise<PlanetRuntimeView> {
@@ -509,6 +536,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchMetrics,
     fetchPlanetNetworks,
     fetchPlanet,
+    fetchPlanetOverview,
+    fetchPlanetScene,
     fetchPlanetRuntime,
     fetchStats,
     fetchSummary,

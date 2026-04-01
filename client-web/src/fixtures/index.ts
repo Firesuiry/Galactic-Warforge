@@ -12,6 +12,8 @@ import type {
   GalaxyView,
   HealthResponse,
   MetricsSnapshot,
+  PlanetSceneView,
+  PlanetOverviewView,
   PlanetNetworksView,
   PlanetRuntimeView,
   PlanetView,
@@ -216,6 +218,141 @@ function sliceAlerts(response: AlertSnapshotResponse, params: AlertSnapshotParam
   };
 }
 
+function clampSceneBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  maxWidth: number,
+  maxHeight: number,
+) {
+  const nextWidth = Math.max(1, Math.min(width || 160, maxWidth));
+  const nextHeight = Math.max(1, Math.min(height || 160, maxHeight));
+  const nextX = Math.max(0, Math.min(x || 0, Math.max(0, maxWidth - nextWidth)));
+  const nextY = Math.max(0, Math.min(y || 0, Math.max(0, maxHeight - nextHeight)));
+  return {
+    x: nextX,
+    y: nextY,
+    width: nextWidth,
+    height: nextHeight,
+  };
+}
+
+function sliceMatrix<T>(grid: T[][] | undefined, bounds: { x: number; y: number; width: number; height: number }) {
+  if (!grid?.length) {
+    return [];
+  }
+  return Array.from({ length: bounds.height }, (_, rowIndex) => (
+    [...(grid[bounds.y + rowIndex]?.slice(bounds.x, bounds.x + bounds.width) ?? [])]
+  ));
+}
+
+function filterRecordByBounds<T extends { position: { x: number; y: number } }>(
+  record: Record<string, T> | undefined,
+  bounds: { x: number; y: number; width: number; height: number },
+) {
+  return Object.fromEntries(
+    Object.entries(record ?? {}).filter(([, value]) => (
+      value.position.x >= bounds.x &&
+      value.position.x < bounds.x + bounds.width &&
+      value.position.y >= bounds.y &&
+      value.position.y < bounds.y + bounds.height
+    )),
+  );
+}
+
+function filterResourcesByBounds(
+  resources: PlanetView['resources'],
+  bounds: { x: number; y: number; width: number; height: number },
+) {
+  return [...(resources ?? [])].filter((resource) => (
+    resource.position.x >= bounds.x &&
+    resource.position.x < bounds.x + bounds.width &&
+    resource.position.y >= bounds.y &&
+    resource.position.y < bounds.y + bounds.height
+  ));
+}
+
+function buildPlanetScene(planet: PlanetView, fog: FogMapView | undefined, x: number, y: number, width: number, height: number): PlanetSceneView {
+  const bounds = clampSceneBounds(x, y, width, height, planet.map_width, planet.map_height);
+  return {
+    planet_id: planet.planet_id,
+    name: planet.name,
+    discovered: planet.discovered,
+    kind: planet.kind,
+    map_width: planet.map_width,
+    map_height: planet.map_height,
+    tick: planet.tick,
+    bounds,
+    terrain: sliceMatrix(planet.terrain, bounds),
+    environment: planet.environment,
+    visible: sliceMatrix(fog?.visible, bounds),
+    explored: sliceMatrix(fog?.explored, bounds),
+    buildings: filterRecordByBounds(planet.buildings, bounds),
+    units: filterRecordByBounds(planet.units, bounds),
+    resources: filterResourcesByBounds(planet.resources, bounds),
+    building_count: Object.keys(planet.buildings ?? {}).length,
+    unit_count: Object.keys(planet.units ?? {}).length,
+    resource_count: planet.resources?.length ?? 0,
+  };
+}
+
+function buildPlanetOverview(planet: PlanetView, fog: FogMapView | undefined, step: number): PlanetOverviewView {
+  const nextStep = Math.max(1, step || 100);
+  const cellsWidth = Math.max(1, Math.ceil(planet.map_width / nextStep));
+  const cellsHeight = Math.max(1, Math.ceil(planet.map_height / nextStep));
+  const terrain = Array.from({ length: cellsHeight }, (_, cellY) => (
+    Array.from({ length: cellsWidth }, (_, cellX) => (
+      planet.terrain?.[cellY * nextStep]?.[cellX * nextStep] ?? 'unknown'
+    ))
+  ));
+  const visible = Array.from({ length: cellsHeight }, (_, cellY) => (
+    Array.from({ length: cellsWidth }, (_, cellX) => (
+      Boolean(fog?.visible?.[cellY * nextStep]?.[cellX * nextStep])
+    ))
+  ));
+  const explored = Array.from({ length: cellsHeight }, (_, cellY) => (
+    Array.from({ length: cellsWidth }, (_, cellX) => (
+      Boolean(fog?.explored?.[cellY * nextStep]?.[cellX * nextStep])
+    ))
+  ));
+  const buildingCounts = Array.from({ length: cellsHeight }, () => Array.from({ length: cellsWidth }, () => 0));
+  const unitCounts = Array.from({ length: cellsHeight }, () => Array.from({ length: cellsWidth }, () => 0));
+  const resourceCounts = Array.from({ length: cellsHeight }, () => Array.from({ length: cellsWidth }, () => 0));
+
+  Object.values(planet.buildings ?? {}).forEach((building) => {
+    buildingCounts[Math.floor(building.position.y / nextStep)]![Math.floor(building.position.x / nextStep)] += 1;
+  });
+  Object.values(planet.units ?? {}).forEach((unit) => {
+    unitCounts[Math.floor(unit.position.y / nextStep)]![Math.floor(unit.position.x / nextStep)] += 1;
+  });
+  (planet.resources ?? []).forEach((resource) => {
+    resourceCounts[Math.floor(resource.position.y / nextStep)]![Math.floor(resource.position.x / nextStep)] += 1;
+  });
+
+  return {
+    planet_id: planet.planet_id,
+    name: planet.name,
+    discovered: planet.discovered,
+    kind: planet.kind,
+    map_width: planet.map_width,
+    map_height: planet.map_height,
+    tick: planet.tick,
+    step: nextStep,
+    cells_width: cellsWidth,
+    cells_height: cellsHeight,
+    terrain,
+    visible,
+    explored,
+    building_counts: buildingCounts,
+    unit_counts: unitCounts,
+    resource_counts: resourceCounts,
+    building_count: Object.keys(planet.buildings ?? {}).length,
+    unit_count: Object.keys(planet.units ?? {}).length,
+    resource_count: planet.resources?.length ?? 0,
+  };
+}
+
 function createSseResponse(blocks: FixtureSseBlock[], signal?: AbortSignal) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -297,6 +434,33 @@ export function createFixtureFetch(serverUrl: string): typeof fetch {
       const planetId = pathname.split('/')[3] ?? '';
       const runtime = scenario.runtimeByPlanet[planetId];
       return runtime ? createJsonResponse(runtime) : createErrorResponse(404, `unknown planet runtime ${planetId}`);
+    }
+    if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/scene')) {
+      const planetId = pathname.split('/')[3] ?? '';
+      const planet = scenario.planets[planetId];
+      if (!planet) {
+        return createErrorResponse(404, `unknown planet ${planetId}`);
+      }
+      return createJsonResponse(buildPlanetScene(
+        planet,
+        scenario.fogByPlanet[planetId],
+        Number(url.searchParams.get('x') ?? 0),
+        Number(url.searchParams.get('y') ?? 0),
+        Number(url.searchParams.get('width') ?? 160),
+        Number(url.searchParams.get('height') ?? 160),
+      ));
+    }
+    if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/overview')) {
+      const planetId = pathname.split('/')[3] ?? '';
+      const planet = scenario.planets[planetId];
+      if (!planet) {
+        return createErrorResponse(404, `unknown planet ${planetId}`);
+      }
+      return createJsonResponse(buildPlanetOverview(
+        planet,
+        scenario.fogByPlanet[planetId],
+        Number(url.searchParams.get('step') ?? 100),
+      ));
     }
     if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/networks')) {
       const planetId = pathname.split('/')[3] ?? '';

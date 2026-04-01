@@ -6,8 +6,92 @@ import type { SseStatus } from '@shared/sse';
 import type { PlanetLayerKey, SelectedEntity, TilePoint } from '@/features/planet-map/model';
 import { mergeRecentAlerts, mergeRecentEvents } from '@/features/planet-map/model';
 
-export const PLANET_ZOOM_LEVELS = [12, 24, 32] as const;
-export const DEFAULT_PLANET_ZOOM_INDEX = 1;
+export interface PlanetZoomLevel {
+  label: string;
+  mode: 'overview' | 'scene';
+  scale: number;
+  overviewStep?: number;
+  tileSize?: number;
+}
+
+export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
+  {
+    label: '1px/100tile',
+    mode: 'overview',
+    scale: 0.01,
+    overviewStep: 100,
+  },
+  {
+    label: '12px',
+    mode: 'scene',
+    scale: 12,
+    tileSize: 12,
+  },
+  {
+    label: '24px',
+    mode: 'scene',
+    scale: 24,
+    tileSize: 24,
+  },
+  {
+    label: '32px',
+    mode: 'scene',
+    scale: 32,
+    tileSize: 32,
+  },
+];
+export const DEFAULT_PLANET_ZOOM_INDEX = 2;
+
+export function getPlanetZoomLevel(zoomIndex: number) {
+  return PLANET_ZOOM_LEVELS[Math.min(Math.max(zoomIndex, 0), PLANET_ZOOM_LEVELS.length - 1)] ?? PLANET_ZOOM_LEVELS[DEFAULT_PLANET_ZOOM_INDEX];
+}
+
+export function getPlanetZoomScale(zoomIndex: number) {
+  return getPlanetZoomLevel(zoomIndex).scale;
+}
+
+export function getPlanetZoomLabel(zoomIndex: number) {
+  return getPlanetZoomLevel(zoomIndex).label;
+}
+
+export function isPlanetOverviewZoom(zoomIndex: number) {
+  return getPlanetZoomLevel(zoomIndex).mode === 'overview';
+}
+
+export function getPlanetRenderTileSize(
+  zoomIndex: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  mapWidth: number,
+  mapHeight: number,
+) {
+  const zoomLevel = getPlanetZoomLevel(zoomIndex);
+  if (zoomLevel.mode === 'overview') {
+    return Math.max(
+      Math.min(
+        viewportWidth / Math.max(mapWidth, 1),
+        viewportHeight / Math.max(mapHeight, 1),
+      ),
+      0.01,
+    );
+  }
+  return zoomLevel.tileSize ?? 12;
+}
+
+export function resolvePlanetZoomIndex(scale: number) {
+  return PLANET_ZOOM_LEVELS.reduce((bestIndex, currentZoom, index) => (
+    Math.abs(currentZoom.scale - scale) < Math.abs(PLANET_ZOOM_LEVELS[bestIndex].scale - scale)
+      ? index
+      : bestIndex
+  ), DEFAULT_PLANET_ZOOM_INDEX);
+}
+
+export interface PlanetSceneWindow {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface PlanetLayerState {
   terrain: boolean;
@@ -40,6 +124,7 @@ interface PlanetViewState {
   planetId: string;
   layers: PlanetLayerState;
   camera: PlanetCameraState;
+  sceneWindow: PlanetSceneWindow;
   hoveredTile: TilePoint | null;
   selected: SelectedEntity | null;
   recentEvents: GameEventDetail[];
@@ -58,6 +143,7 @@ interface PlanetViewActions {
   setHoveredTile: (tile: TilePoint | null) => void;
   setSelected: (selection: SelectedEntity | null) => void;
   setCamera: (camera: Partial<PlanetCameraState>) => void;
+  setSceneWindow: (sceneWindow: PlanetSceneWindow) => void;
   setLayers: (layers: Partial<PlanetLayerState>) => void;
   setZoomIndex: (zoomIndex: number) => void;
   setSseStatus: (status: SseStatus) => void;
@@ -100,11 +186,21 @@ function createDefaultCamera(): PlanetCameraState {
   };
 }
 
+function createDefaultSceneWindow(): PlanetSceneWindow {
+  return {
+    x: 0,
+    y: 0,
+    width: 160,
+    height: 160,
+  };
+}
+
 function createInitialState(planetId = ''): PlanetViewState {
   return {
     planetId,
     layers: createDefaultLayers(),
     camera: createDefaultCamera(),
+    sceneWindow: createDefaultSceneWindow(),
     hoveredTile: null,
     selected: null,
     recentEvents: [],
@@ -112,7 +208,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     sseStatus: 'idle',
     lastEventId: '',
     lastFullSyncAt: null,
-    debugOpen: true,
+    debugOpen: false,
     focusRequest: null,
   };
 }
@@ -153,6 +249,16 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
         ...camera,
       },
     }));
+  },
+  setSceneWindow: (sceneWindow) => {
+    set((state) => (
+      state.sceneWindow.x === sceneWindow.x
+      && state.sceneWindow.y === sceneWindow.y
+      && state.sceneWindow.width === sceneWindow.width
+      && state.sceneWindow.height === sceneWindow.height
+        ? state
+        : { sceneWindow }
+    ));
   },
   setLayers: (layers) => {
     set((state) => ({
@@ -230,6 +336,7 @@ export function resetPlanetViewStore() {
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setSelected: usePlanetViewStore.getState().setSelected,
     setCamera: usePlanetViewStore.getState().setCamera,
+    setSceneWindow: usePlanetViewStore.getState().setSceneWindow,
     setLayers: usePlanetViewStore.getState().setLayers,
     setZoomIndex: usePlanetViewStore.getState().setZoomIndex,
     setSseStatus: usePlanetViewStore.getState().setSseStatus,

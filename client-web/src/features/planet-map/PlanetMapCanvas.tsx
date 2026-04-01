@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useShallow } from 'zustand/react/shallow';
 
-import type { CatalogView, FogMapView, PlanetNetworksView, PlanetRuntimeView, PlanetView } from '@shared/types';
+import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from '@shared/types';
 
 import {
+  buildSceneWindow,
   clamp,
   getBuildingDisplayName,
   getBuildingFootprint,
@@ -14,18 +15,27 @@ import {
   getResourceList,
   getTerrainTile,
   getUnitList,
+  type PlanetRenderView,
   resolveSelectionAtTile,
   selectionLabel,
   toTilePoint,
 } from '@/features/planet-map/model';
-import { PLANET_ZOOM_LEVELS, usePlanetViewStore } from '@/features/planet-map/store';
+import {
+  DEFAULT_PLANET_ZOOM_INDEX,
+  getPlanetRenderTileSize,
+  getPlanetZoomLevel,
+  isPlanetOverviewZoom,
+  PLANET_ZOOM_LEVELS,
+  usePlanetViewStore,
+} from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
 interface PlanetMapCanvasProps {
   catalog?: CatalogView;
-  fog?: FogMapView;
+  fog?: FogMapView | PlanetSceneView;
   networks?: PlanetNetworksView;
-  planet: PlanetView;
+  overview?: PlanetOverviewView;
+  planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
 }
@@ -66,8 +76,8 @@ function getViewportDefaults(): ViewportSize {
   };
 }
 
-function createInitialCamera(viewport: ViewportSize, planet: PlanetView, zoomIndex: number) {
-  const tileSize = PLANET_ZOOM_LEVELS[zoomIndex];
+function createInitialCamera(viewport: ViewportSize, planet: PlanetRenderView, zoomIndex: number) {
+  const tileSize = getPlanetRenderTileSize(zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
   const worldWidth = planet.map_width * tileSize;
   const worldHeight = planet.map_height * tileSize;
   return {
@@ -76,8 +86,8 @@ function createInitialCamera(viewport: ViewportSize, planet: PlanetView, zoomInd
   };
 }
 
-function centerCameraOnTile(viewport: ViewportSize, zoomIndex: number, x: number, y: number) {
-  const tileSize = PLANET_ZOOM_LEVELS[zoomIndex];
+function centerCameraOnTile(viewport: ViewportSize, planet: PlanetRenderView, zoomIndex: number, x: number, y: number) {
+  const tileSize = getPlanetRenderTileSize(zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
   return {
     offsetX: (viewport.width / 2) - ((x + 0.5) * tileSize),
     offsetY: (viewport.height / 2) - ((y + 0.5) * tileSize),
@@ -91,7 +101,7 @@ function pointToTile(
   offsetX: number,
   offsetY: number,
   tileSize: number,
-  planet: PlanetView,
+  planet: PlanetRenderView,
 ) {
   const x = Math.floor((clientX - rect.left - offsetX) / tileSize);
   const y = Math.floor((clientY - rect.top - offsetY) / tileSize);
@@ -115,10 +125,47 @@ function drawCenteredLabel(context: CanvasRenderingContext2D, text: string, x: n
   context.restore();
 }
 
-export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCanvasReady }: PlanetMapCanvasProps) {
+function drawOverviewHeatmap(
+  context: CanvasRenderingContext2D,
+  counts: number[][] | undefined,
+  tileSize: number,
+  step: number,
+  offsetX: number,
+  offsetY: number,
+  color: string,
+) {
+  if (!counts || counts.length === 0) {
+    return;
+  }
+  const maxCount = counts.reduce(
+    (best, row) => Math.max(best, ...row),
+    0,
+  );
+  if (maxCount <= 0) {
+    return;
+  }
+  const cellSize = Math.max(tileSize * step, 1);
+  counts.forEach((row, cellY) => {
+    row.forEach((count, cellX) => {
+      if (count <= 0) {
+        return;
+      }
+      context.fillStyle = color.replace('{alpha}', (0.18 + ((count / maxCount) * 0.55)).toFixed(3));
+      context.fillRect(
+        offsetX + (cellX * cellSize),
+        offsetY + (cellY * cellSize),
+        Math.max(cellSize - 1, 1),
+        Math.max(cellSize - 1, 1),
+      );
+    });
+  });
+}
+
+export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runtime, onCanvasReady }: PlanetMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragStateRef = useRef<{ pointerX: number; pointerY: number; offsetX: number; offsetY: number } | null>(null);
+  const previousZoomIndexRef = useRef(DEFAULT_PLANET_ZOOM_INDEX);
   const [viewport, setViewport] = useState<ViewportSize>(getViewportDefaults);
 
   const {
@@ -130,6 +177,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
     consumeFocusRequest,
     requestFocus,
     setCamera,
+    setSceneWindow,
     setHoveredTile,
     setSelected,
   } = usePlanetViewStore(useShallow((state) => ({
@@ -141,6 +189,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
     consumeFocusRequest: state.consumeFocusRequest,
     requestFocus: state.requestFocus,
     setCamera: state.setCamera,
+    setSceneWindow: state.setSceneWindow,
     setHoveredTile: state.setHoveredTile,
     setSelected: state.setSelected,
   })));
@@ -149,7 +198,6 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
   const buildingList = useMemo(() => getBuildingList(planet), [planet]);
   const unitList = useMemo(() => getUnitList(planet), [planet]);
   const resourceList = useMemo(() => getResourceList(planet), [planet]);
-  const tileSize = PLANET_ZOOM_LEVELS[camera.zoomIndex];
   const logisticsDrones = runtime?.available ? runtime.logistics_drones ?? [] : [];
   const logisticsShips = runtime?.available ? runtime.logistics_ships ?? [] : [];
   const constructionTasks = runtime?.available ? runtime.construction_tasks ?? [] : [];
@@ -159,6 +207,9 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
   const powerCoverage = networks?.available ? networks.power_coverage ?? [] : [];
   const pipelineNodes = networks?.available ? networks.pipeline_nodes ?? [] : [];
   const pipelineSegments = networks?.available ? networks.pipeline_segments ?? [] : [];
+  const zoomLevel = getPlanetZoomLevel(camera.zoomIndex);
+  const overviewMode = isPlanetOverviewZoom(camera.zoomIndex);
+  const tileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -207,21 +258,44 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
   }, [camera.ready, camera.zoomIndex, planet.map_height, planet.map_width, setCamera, viewport]);
 
   useEffect(() => {
+    if (!camera.ready || overviewMode) {
+      return;
+    }
+    const nextSceneWindow = buildSceneWindow(planet, camera, tileSize, viewport.width, viewport.height);
+    setSceneWindow(nextSceneWindow);
+  }, [camera, overviewMode, planet, setSceneWindow, tileSize, viewport.height, viewport.width]);
+
+  useEffect(() => {
+    const previousZoomMode = getPlanetZoomLevel(previousZoomIndexRef.current).mode;
+    if (camera.ready && previousZoomMode !== zoomLevel.mode && zoomLevel.mode === 'overview') {
+      const nextCamera = createInitialCamera(viewport, planet, camera.zoomIndex);
+      setCamera({
+        ...nextCamera,
+        ready: true,
+      });
+    }
+    previousZoomIndexRef.current = camera.zoomIndex;
+  }, [camera.ready, camera.zoomIndex, planet, setCamera, viewport, zoomLevel.mode]);
+
+  useEffect(() => {
     if (!focusRequest) {
       return;
     }
+    const targetZoomIndex = overviewMode ? DEFAULT_PLANET_ZOOM_INDEX : camera.zoomIndex;
     const nextCamera = centerCameraOnTile(
       viewport,
-      camera.zoomIndex,
+      planet,
+      targetZoomIndex,
       focusRequest.position.x,
       focusRequest.position.y,
     );
     setCamera({
       ...nextCamera,
+      zoomIndex: targetZoomIndex,
       ready: true,
     });
     consumeFocusRequest(focusRequest.nonce);
-  }, [camera.zoomIndex, consumeFocusRequest, focusRequest, setCamera, viewport]);
+  }, [camera.zoomIndex, consumeFocusRequest, focusRequest, overviewMode, planet, setCamera, viewport]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -249,6 +323,90 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
     const startY = clamp(Math.floor((-camera.offsetY) / tileSize) - 1, 0, Math.max(planet.map_height - 1, 0));
     const endX = clamp(Math.ceil((viewport.width - camera.offsetX) / tileSize) + 1, 0, planet.map_width);
     const endY = clamp(Math.ceil((viewport.height - camera.offsetY) / tileSize) + 1, 0, planet.map_height);
+
+    if (overviewMode && overview) {
+      const step = Math.max(overview.step || 1, 1);
+      const cellSize = Math.max(tileSize * step, 1);
+      const terrain = overview.terrain ?? [];
+
+      if (layers.terrain) {
+        terrain.forEach((row, cellY) => {
+          row.forEach((tile, cellX) => {
+            context.fillStyle = terrainColors[tile] ?? terrainColors.unknown;
+            context.fillRect(
+              camera.offsetX + (cellX * cellSize),
+              camera.offsetY + (cellY * cellSize),
+              Math.max(cellSize, 1),
+              Math.max(cellSize, 1),
+            );
+          });
+        });
+      }
+
+      if (layers.grid && cellSize >= 10) {
+        context.strokeStyle = 'rgba(210, 226, 255, 0.12)';
+        context.lineWidth = 1;
+        for (let x = 0; x <= overview.cells_width; x += 1) {
+          const screenX = camera.offsetX + (x * cellSize);
+          context.beginPath();
+          context.moveTo(screenX, camera.offsetY);
+          context.lineTo(screenX, camera.offsetY + (overview.cells_height * cellSize));
+          context.stroke();
+        }
+        for (let y = 0; y <= overview.cells_height; y += 1) {
+          const screenY = camera.offsetY + (y * cellSize);
+          context.beginPath();
+          context.moveTo(camera.offsetX, screenY);
+          context.lineTo(camera.offsetX + (overview.cells_width * cellSize), screenY);
+          context.stroke();
+        }
+      }
+
+      if (layers.resources) {
+        drawOverviewHeatmap(context, overview.resource_counts, tileSize, step, camera.offsetX, camera.offsetY, 'rgba(210, 192, 111, {alpha})');
+      }
+      if (layers.buildings) {
+        drawOverviewHeatmap(context, overview.building_counts, tileSize, step, camera.offsetX, camera.offsetY, 'rgba(36, 201, 182, {alpha})');
+      }
+      if (layers.units) {
+        drawOverviewHeatmap(context, overview.unit_counts, tileSize, step, camera.offsetX, camera.offsetY, 'rgba(145, 255, 112, {alpha})');
+      }
+
+      if (layers.fog) {
+        const visible = overview.visible ?? [];
+        const explored = overview.explored ?? [];
+        for (let cellY = 0; cellY < overview.cells_height; cellY += 1) {
+          for (let cellX = 0; cellX < overview.cells_width; cellX += 1) {
+            const isVisible = Boolean(visible[cellY]?.[cellX]);
+            const isExplored = Boolean(explored[cellY]?.[cellX]);
+            if (isVisible) {
+              continue;
+            }
+            context.fillStyle = isExplored ? 'rgba(7, 11, 20, 0.4)' : 'rgba(0, 0, 0, 0.86)';
+            context.fillRect(
+              camera.offsetX + (cellX * cellSize),
+              camera.offsetY + (cellY * cellSize),
+              Math.max(cellSize, 1),
+              Math.max(cellSize, 1),
+            );
+          }
+        }
+      }
+
+      if (layers.selection) {
+        const highlightTile = selected ? toTilePoint(selected.position) : hoveredTile;
+        if (highlightTile) {
+          const cellX = Math.floor(highlightTile.x / step);
+          const cellY = Math.floor(highlightTile.y / step);
+          const screenX = camera.offsetX + (cellX * cellSize);
+          const screenY = camera.offsetY + (cellY * cellSize);
+          context.strokeStyle = selected ? '#ffd166' : 'rgba(255, 255, 255, 0.7)';
+          context.lineWidth = selected ? 3 : 2;
+          context.strokeRect(screenX + 1, screenY + 1, Math.max(cellSize - 2, 2), Math.max(cellSize - 2, 2));
+        }
+      }
+      return;
+    }
 
     if (layers.terrain) {
       for (let y = startY; y < endY; y += 1) {
@@ -508,6 +666,8 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
     fog,
     hoveredTile,
     layers,
+    overview,
+    overviewMode,
     planet,
     resourceList,
     selected,
@@ -537,6 +697,9 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
   }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (overviewMode) {
+      return;
+    }
     dragStateRef.current = {
       pointerX: event.clientX,
       pointerY: event.clientY,
@@ -581,8 +744,8 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
       return;
     }
 
-    const currentTileSize = PLANET_ZOOM_LEVELS[camera.zoomIndex];
-    const nextTileSize = PLANET_ZOOM_LEVELS[nextZoomIndex];
+    const currentTileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+    const nextTileSize = getPlanetRenderTileSize(nextZoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
     const worldX = (event.clientX - rect.left - camera.offsetX) / currentTileSize;
     const worldY = (event.clientY - rect.top - camera.offsetY) / currentTileSize;
 
@@ -603,7 +766,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
     if (!tile) {
       return;
     }
-    const selection = resolveSelectionAtTile(planet, tile.x, tile.y);
+    const selection = overviewMode ? null : resolveSelectionAtTile(planet, tile.x, tile.y);
     setSelected(selection ?? {
       kind: 'tile',
       position: {
@@ -621,6 +784,23 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
     }
     const tile = pointToTile(event.clientX, event.clientY, rect, camera.offsetX, camera.offsetY, tileSize, planet);
     if (!tile) {
+      return;
+    }
+    if (overviewMode) {
+      const nextCamera = centerCameraOnTile(viewport, planet, DEFAULT_PLANET_ZOOM_INDEX, tile.x, tile.y);
+      setCamera({
+        ...nextCamera,
+        zoomIndex: DEFAULT_PLANET_ZOOM_INDEX,
+        ready: true,
+      });
+      setSelected({
+        kind: 'tile',
+        position: {
+          x: tile.x,
+          y: tile.y,
+          z: 0,
+        },
+      });
       return;
     }
     requestFocus(tile);
@@ -645,7 +825,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, planet, runtime, onCan
         role="img"
       />
       <div className="planet-map-canvas__status">
-        <span>缩放 {tileSize}px/tile</span>
+        <span>{overviewMode ? `缩放 ${zoomLevel.label}` : `缩放 ${tileSize}px/tile`}</span>
         <span>
           Hover {hoveredTile ? `(${hoveredTile.x}, ${hoveredTile.y})` : '-'}
         </span>

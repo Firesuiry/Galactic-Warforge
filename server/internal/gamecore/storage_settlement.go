@@ -10,6 +10,7 @@ func settleStorage(ws *model.WorldState) {
 		if building == nil || building.Storage == nil {
 			continue
 		}
-		building.Storage.Tick()
+		building.Storage.FlushInput()
+		refillBuildingOutputBuffer(building)
 	}
 }

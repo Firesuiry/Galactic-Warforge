@@ -29,7 +29,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   restore_construction: { usage: '<task_id>', desc: 'Restore a cancelled construction task' },
   start_research: { usage: '<tech_id>', desc: 'Start researching a technology' },
   cancel_research: { usage: '<tech_id>', desc: 'Cancel a technology in progress or queue' },
-  launch_solar_sail: { usage: '<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]', desc: 'Launch solar sails from an ejector or silo' },
+  launch_solar_sail: { usage: '<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]', desc: 'Launch loaded solar sails from an EM Rail Ejector' },
   build_dyson_node: { usage: '<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]', desc: 'Build a Dyson sphere node' },
   build_dyson_frame: { usage: '<system_id> <layer_index> <node_a_id> <node_b_id>', desc: 'Build a Dyson sphere frame' },
   build_dyson_shell: { usage: '<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>', desc: 'Build a Dyson sphere shell' },

@@ -6,11 +6,14 @@ import type {
   GameEventDetail,
   PlanetNetworksView,
   PlanetResource,
+  PlanetSceneView,
   PlanetRuntimeView,
   PlanetView,
   Position,
   Unit,
 } from '@shared/types';
+
+import type { PlanetSceneWindow } from '@/features/planet-map/store';
 
 export type PlanetLayerKey =
   | 'terrain'
@@ -74,6 +77,8 @@ export interface ViewportTileBounds {
   centerY: number;
 }
 
+export type PlanetRenderView = PlanetView | PlanetSceneView;
+
 export function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -92,26 +97,43 @@ export function formatPosition(position?: Position | null) {
   return `(${position.x}, ${position.y}, ${position.z ?? 0})`;
 }
 
-export function getTerrainTile(planet: PlanetView, x: number, y: number) {
+function hasSceneBounds(planet: PlanetRenderView): planet is PlanetSceneView {
+  return 'bounds' in planet;
+}
+
+export function getTerrainTile(planet: PlanetRenderView, x: number, y: number) {
+  if (hasSceneBounds(planet)) {
+    const localX = x - planet.bounds.x;
+    const localY = y - planet.bounds.y;
+    return planet.terrain?.[localY]?.[localX] ?? 'unknown';
+  }
   return planet.terrain?.[y]?.[x] ?? 'unknown';
 }
 
-export function getFogState(fog: FogMapView | undefined, x: number, y: number) {
+export function getFogState(fog: FogMapView | PlanetSceneView | undefined, x: number, y: number) {
+  if (fog && 'bounds' in fog) {
+    const localX = x - fog.bounds.x;
+    const localY = y - fog.bounds.y;
+    return {
+      visible: Boolean(fog.visible?.[localY]?.[localX]),
+      explored: Boolean(fog.explored?.[localY]?.[localX]),
+    };
+  }
   return {
     visible: Boolean(fog?.visible?.[y]?.[x]),
     explored: Boolean(fog?.explored?.[y]?.[x]),
   };
 }
 
-export function getBuildingList(planet: PlanetView) {
+export function getBuildingList(planet: PlanetRenderView) {
   return Object.values(planet.buildings ?? {}).sort((left, right) => left.id.localeCompare(right.id));
 }
 
-export function getUnitList(planet: PlanetView) {
+export function getUnitList(planet: PlanetRenderView) {
   return Object.values(planet.units ?? {}).sort((left, right) => left.id.localeCompare(right.id));
 }
 
-export function getResourceList(planet: PlanetView) {
+export function getResourceList(planet: PlanetRenderView) {
   return [...(planet.resources ?? [])].sort((left, right) => left.id.localeCompare(right.id));
 }
 
@@ -129,7 +151,7 @@ export function tileContainsBuilding(building: Building, x: number, y: number) {
   return x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height;
 }
 
-export function resolveSelectionAtTile(planet: PlanetView, x: number, y: number): SelectedEntity | null {
+export function resolveSelectionAtTile(planet: PlanetRenderView, x: number, y: number): SelectedEntity | null {
   const building = getBuildingList(planet).find((candidate) => tileContainsBuilding(candidate, x, y));
   if (building) {
     return {
@@ -166,7 +188,7 @@ export function resolveSelectionAtTile(planet: PlanetView, x: number, y: number)
   return null;
 }
 
-export function findSelectionEntity(planet: PlanetView, selection: SelectedEntity | null) {
+export function findSelectionEntity(planet: PlanetRenderView, selection: SelectedEntity | null) {
   if (!selection) {
     return null;
   }
@@ -270,7 +292,7 @@ export function selectionToQueryValue(selection: SelectedEntity | null) {
   return `${selection.kind}:${selection.id}`;
 }
 
-export function resolveSelectionFromQueryValue(planet: PlanetView, raw: string | null): SelectedEntity | null {
+export function resolveSelectionFromQueryValue(planet: PlanetRenderView, raw: string | null): SelectedEntity | null {
   if (!raw) {
     return null;
   }
@@ -319,7 +341,7 @@ export function resolveSelectionFromQueryValue(planet: PlanetView, raw: string |
 }
 
 export function getViewportTileBounds(
-  planet: PlanetView,
+  planet: PlanetRenderView,
   camera: PlanetCameraSnapshot,
   tileSize: number,
   viewportWidth: number,
@@ -472,7 +494,7 @@ export function extractAlertFromEvent(event: GameEventDetail): AlertEntry | null
   };
 }
 
-export function resolveSelectionFromEvent(planet: PlanetView, event: GameEventDetail): SelectedEntity | null {
+export function resolveSelectionFromEvent(planet: PlanetRenderView, event: GameEventDetail): SelectedEntity | null {
   const payload = event.payload ?? {};
   const buildingId = asString(payload.building_id);
   if (buildingId && planet.buildings?.[buildingId]) {
@@ -523,7 +545,7 @@ export function resolveSelectionFromEvent(planet: PlanetView, event: GameEventDe
   return null;
 }
 
-export function resolveSelectionFromAlert(planet: PlanetView, alert: AlertEntry): SelectedEntity | null {
+export function resolveSelectionFromAlert(planet: PlanetRenderView, alert: AlertEntry): SelectedEntity | null {
   const building = planet.buildings?.[alert.building_id];
   if (!building) {
     return null;
@@ -584,7 +606,6 @@ export function shouldRefreshPlanet(event: GameEventDetail, planetId: string) {
     'damage_applied',
     'entity_destroyed',
     'building_state_changed',
-    'resource_changed',
     'construction_paused',
     'construction_resumed',
     'entity_updated',
@@ -596,7 +617,7 @@ export function shouldRefreshFog(event: GameEventDetail, planetId: string) {
   if (!eventAffectsPlanet(event, planetId)) {
     return false;
   }
-  return ['entity_created', 'entity_moved', 'entity_destroyed', 'entity_updated', 'tick_completed'].includes(event.event_type);
+  return ['entity_created', 'entity_moved', 'entity_destroyed', 'entity_updated'].includes(event.event_type);
 }
 
 export function shouldRefreshAlerts(event: GameEventDetail) {
@@ -611,7 +632,7 @@ export function shouldRefreshStats(event: GameEventDetail) {
   return ['tick_completed', 'production_alert', 'research_completed', 'threat_level_changed'].includes(event.event_type);
 }
 
-export function buildSelectionExport(planet: PlanetView, selection: SelectedEntity | null): SelectionExportPayload {
+export function buildSelectionExport(planet: PlanetRenderView, selection: SelectedEntity | null): SelectionExportPayload {
   return {
     selection,
     entity: findSelectionEntity(planet, selection),
@@ -619,7 +640,7 @@ export function buildSelectionExport(planet: PlanetView, selection: SelectedEnti
 }
 
 export function buildViewportExport(options: {
-  planet: PlanetView;
+  planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   networks?: PlanetNetworksView;
   catalog?: CatalogView;
@@ -698,5 +719,47 @@ export function buildViewportExport(options: {
       power_coverage: powerCoverage,
       pipeline_nodes: pipelineNodes,
     },
+  };
+}
+
+const SCENE_WINDOW_ALIGNMENT = 32;
+const SCENE_WINDOW_PADDING = 24;
+const MIN_SCENE_WINDOW_SIZE = 96;
+const MAX_SCENE_WINDOW_SIZE = 192;
+
+export function buildSceneWindow(
+  planet: PlanetRenderView,
+  camera: PlanetCameraSnapshot,
+  tileSize: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): PlanetSceneWindow {
+  const bounds = getViewportTileBounds(planet, camera, tileSize, viewportWidth, viewportHeight);
+  const visibleWidth = Math.max(1, bounds.maxX - bounds.minX + 1);
+  const visibleHeight = Math.max(1, bounds.maxY - bounds.minY + 1);
+
+  const width = clamp(
+    visibleWidth + (SCENE_WINDOW_PADDING * 2),
+    MIN_SCENE_WINDOW_SIZE,
+    Math.min(MAX_SCENE_WINDOW_SIZE, planet.map_width),
+  );
+  const height = clamp(
+    visibleHeight + (SCENE_WINDOW_PADDING * 2),
+    MIN_SCENE_WINDOW_SIZE,
+    Math.min(MAX_SCENE_WINDOW_SIZE, planet.map_height),
+  );
+
+  const centerX = Math.floor((bounds.minX + bounds.maxX) / 2);
+  const centerY = Math.floor((bounds.minY + bounds.maxY) / 2);
+  const rawX = centerX - Math.floor(width / 2);
+  const rawY = centerY - Math.floor(height / 2);
+  const alignedX = Math.floor(rawX / SCENE_WINDOW_ALIGNMENT) * SCENE_WINDOW_ALIGNMENT;
+  const alignedY = Math.floor(rawY / SCENE_WINDOW_ALIGNMENT) * SCENE_WINDOW_ALIGNMENT;
+
+  return {
+    x: clamp(alignedX, 0, Math.max(planet.map_width - width, 0)),
+    y: clamp(alignedY, 0, Math.max(planet.map_height - height, 0)),
+    width,
+    height,
   };
 }

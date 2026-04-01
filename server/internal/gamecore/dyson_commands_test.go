@@ -121,3 +121,97 @@ func TestDysonCommandsRequireResearchUnlock(t *testing.T) {
 		t.Fatalf("expected validation failure without unlock, got %s", res.Code)
 	}
 }
+
+func TestLaunchSolarSailConsumesLoadedPayload(t *testing.T) {
+	ClearSolarSailOrbits()
+	core := newE2ETestCore(t)
+	ws := core.World()
+	grantTechs(ws, "p1", "solar_sail_orbit")
+
+	ejector := newEMRailEjectorBuilding("ejector-1", model.Position{X: 6, Y: 6}, "p1")
+	ejector.Runtime.State = model.BuildingWorkRunning
+	ejector.Storage.EnsureInventory()[model.ItemSolarSail] = 3
+	attachBuilding(ws, ejector)
+
+	cmd := model.Command{
+		Type: model.CmdLaunchSolarSail,
+		Payload: map[string]any{
+			"building_id":  ejector.ID,
+			"count":        float64(2),
+			"orbit_radius": 1.2,
+			"inclination":  5.0,
+		},
+	}
+	res, events := core.execLaunchSolarSail(ws, "p1", cmd)
+	if res.Code != model.CodeOK {
+		t.Fatalf("launch solar sail failed: %s (%s)", res.Code, res.Message)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 entity_created events, got %d", len(events))
+	}
+	if got := ejector.Storage.OutputQuantity(model.ItemSolarSail); got != 1 {
+		t.Fatalf("expected 1 remaining loaded solar sail, got %d", got)
+	}
+
+	orbit := GetSolarSailOrbit("p1")
+	if orbit == nil || len(orbit.Sails) != 2 {
+		t.Fatalf("expected 2 solar sails in orbit, got %#v", orbit)
+	}
+}
+
+func TestLaunchSolarSailRejectsNonEjectorTarget(t *testing.T) {
+	ClearSolarSailOrbits()
+	core := newE2ETestCore(t)
+	ws := core.World()
+	grantTechs(ws, "p1", "solar_sail_orbit")
+
+	silo := newVerticalLaunchingSiloBuilding("silo-1", model.Position{X: 8, Y: 8}, "p1")
+	silo.Runtime.State = model.BuildingWorkRunning
+	attachBuilding(ws, silo)
+
+	cmd := model.Command{
+		Type: model.CmdLaunchSolarSail,
+		Payload: map[string]any{
+			"building_id": silo.ID,
+		},
+	}
+	res, _ := core.execLaunchSolarSail(ws, "p1", cmd)
+	if res.Code != model.CodeInvalidTarget {
+		t.Fatalf("expected invalid target for silo launch, got %s (%s)", res.Code, res.Message)
+	}
+}
+
+func newEMRailEjectorBuilding(id string, pos model.Position, owner string) *model.Building {
+	profile := model.BuildingProfileFor(model.BuildingTypeEMRailEjector, 1)
+	b := &model.Building{
+		ID:          id,
+		Type:        model.BuildingTypeEMRailEjector,
+		OwnerID:     owner,
+		Position:    pos,
+		Runtime:     profile.Runtime,
+		VisionRange: profile.VisionRange,
+		MaxHP:       profile.MaxHP,
+		HP:          profile.MaxHP,
+		Level:       1,
+	}
+	model.InitBuildingStorage(b)
+	return b
+}
+
+func newVerticalLaunchingSiloBuilding(id string, pos model.Position, owner string) *model.Building {
+	profile := model.BuildingProfileFor(model.BuildingTypeVerticalLaunchingSilo, 1)
+	b := &model.Building{
+		ID:          id,
+		Type:        model.BuildingTypeVerticalLaunchingSilo,
+		OwnerID:     owner,
+		Position:    pos,
+		Runtime:     profile.Runtime,
+		VisionRange: profile.VisionRange,
+		MaxHP:       profile.MaxHP,
+		HP:          profile.MaxHP,
+		Level:       1,
+	}
+	model.InitBuildingStorage(b)
+	model.InitBuildingProduction(b)
+	return b
+}

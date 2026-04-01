@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { DEFAULT_GALAXY_ID, DEFAULT_SYSTEM_ID } from '@shared/config';
 import type { ApiClient } from '@shared/api';
-import type { CatalogView, PlanetView } from '@shared/types';
+import type { CatalogView } from '@shared/types';
 
-import { getBuildingDisplayName, getTechDisplayName } from '@/features/planet-map/model';
+import { getBuildingDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
 interface PlanetCommandPanelProps {
   catalog?: CatalogView;
   client: ApiClient;
-  planet: PlanetView;
+  planet: PlanetRenderView;
 }
 
 export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPanelProps) {

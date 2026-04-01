@@ -89,7 +89,6 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Name:          "Oil Fractionation",
 		Inputs:        []ItemAmount{{ItemID: ItemCrudeOil, Quantity: 2}},
 		Outputs:       []ItemAmount{{ItemID: ItemRefinedOil, Quantity: 1}},
-		Byproducts:    []ItemAmount{{ItemID: ItemHydrogen, Quantity: 1}},
 		Duration:      60,
 		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
 		TechUnlock:    []string{"oil_processing"},

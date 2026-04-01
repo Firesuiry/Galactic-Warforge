@@ -177,6 +177,32 @@ func (c *ConveyorState) Take(qty int) []ItemStack {
 	return taken
 }
 
+// TakeAt removes up to qty items from the stack at the provided buffer index.
+func (c *ConveyorState) TakeAt(index, qty int) []ItemStack {
+	if c == nil || qty <= 0 || index < 0 || index >= len(c.Buffer) {
+		return nil
+	}
+	stack := c.Buffer[index]
+	if stack.Quantity <= 0 {
+		return nil
+	}
+	take := minInt(qty, stack.Quantity)
+	if take <= 0 {
+		return nil
+	}
+	taken := []ItemStack{{
+		ItemID:   stack.ItemID,
+		Quantity: take,
+		Spray:    cloneSprayState(stack.Spray),
+	}}
+	if take == stack.Quantity {
+		c.Buffer = append(c.Buffer[:index], c.Buffer[index+1:]...)
+		return taken
+	}
+	c.Buffer[index].Quantity -= take
+	return taken
+}
+
 // AppendStacks appends stacks to the buffer (caller ensures capacity).
 func (c *ConveyorState) AppendStacks(stacks []ItemStack) {
 	if c == nil {
@@ -218,6 +244,44 @@ func (c *ConveyorState) PrependStacks(stacks []ItemStack) {
 		newBuf = append(newBuf, c.Buffer[1:]...)
 	} else {
 		newBuf = append(newBuf, c.Buffer...)
+	}
+	c.Buffer = newBuf
+}
+
+// InsertAt inserts stacks before the provided buffer index while preserving order.
+func (c *ConveyorState) InsertAt(index int, stacks []ItemStack) {
+	if c == nil || len(stacks) == 0 {
+		return
+	}
+	if index < 0 {
+		index = 0
+	}
+	if index > len(c.Buffer) {
+		index = len(c.Buffer)
+	}
+	newBuf := make([]ItemStack, 0, len(c.Buffer)+len(stacks))
+	appendOne := func(stack ItemStack) {
+		if stack.Quantity <= 0 {
+			return
+		}
+		if len(newBuf) > 0 && canMergeStacks(newBuf[len(newBuf)-1], stack) {
+			newBuf[len(newBuf)-1].Quantity += stack.Quantity
+			return
+		}
+		newBuf = append(newBuf, ItemStack{
+			ItemID:   stack.ItemID,
+			Quantity: stack.Quantity,
+			Spray:    cloneSprayState(stack.Spray),
+		})
+	}
+	for _, stack := range c.Buffer[:index] {
+		appendOne(stack)
+	}
+	for _, stack := range stacks {
+		appendOne(stack)
+	}
+	for _, stack := range c.Buffer[index:] {
+		appendOne(stack)
 	}
 	c.Buffer = newBuf
 }

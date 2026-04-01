@@ -60,48 +60,28 @@ func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.B
 	}
 	portPos := portWorldPosition(building, port)
 
-	for _, dir := range conveyorDirOrder {
-		if portRemaining <= 0 {
+	for portRemaining > 0 {
+		candidate, ok := selectInputCandidate(ws, conveyors, building, port, portPos)
+		if !ok {
 			return
 		}
-		dx, dy := dir.Delta()
-		nx := portPos.X + dx
-		ny := portPos.Y + dy
-		if !ws.InBounds(nx, ny) {
-			continue
-		}
-		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
-		if neighborID == "" {
-			continue
-		}
-		neighbor := conveyors[neighborID]
-		if neighbor == nil || neighbor.Conveyor == nil {
-			continue
-		}
-		if neighbor.OwnerID != building.OwnerID {
-			continue
-		}
-		if neighbor.Conveyor.Output != dir.Opposite() {
-			continue
-		}
-		stack, ok := peekConveyorFront(neighbor.Conveyor)
-		if !ok || stack.Quantity <= 0 {
-			continue
-		}
-		limit := minInt(portRemaining, stack.Quantity)
-		accepted, _, err := model.StoragePortPreviewInput(building, port.ID, stack.ItemID, limit)
+		limit := minInt(portRemaining, candidate.quantity)
+		accepted, _, err := model.StoragePortPreviewInput(building, port.ID, candidate.itemID, limit)
 		if err != nil || accepted <= 0 {
-			continue
+			return
 		}
-		moved := neighbor.Conveyor.Take(accepted)
-		inserted, _, err := model.StoragePortInput(building, port.ID, stack.ItemID, accepted)
+		moved := candidate.conveyor.Conveyor.TakeAt(candidate.buffer, accepted)
+		if len(moved) == 0 {
+			return
+		}
+		inserted, _, err := model.StoragePortInput(building, port.ID, candidate.itemID, accepted)
 		if err != nil {
-			neighbor.Conveyor.PrependStacks(moved)
-			continue
+			candidate.conveyor.Conveyor.InsertAt(candidate.buffer, moved)
+			return
 		}
 		if inserted < accepted {
 			_, rollback := splitStacksByQty(moved, inserted)
-			neighbor.Conveyor.PrependStacks(rollback)
+			candidate.conveyor.Conveyor.InsertAt(candidate.buffer, rollback)
 		}
 		portRemaining -= inserted
 	}
@@ -117,10 +97,70 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 	}
 	portPos := portWorldPosition(building, port)
 
-	for _, dir := range conveyorDirOrder {
-		if portRemaining <= 0 {
+	for portRemaining > 0 {
+		candidate, ok := selectOutputCandidate(ws, conveyors, building, port, portPos)
+		if !ok {
 			return
 		}
+		available := candidate.conveyor.Conveyor.AvailableCapacity()
+		if available <= 0 {
+			return
+		}
+		limit := minInt(portRemaining, available)
+		outputQty := building.Storage.OutputQuantity(candidate.itemID)
+		if outputQty <= 0 {
+			return
+		}
+		take := minInt(limit, outputQty)
+		if take <= 0 {
+			return
+		}
+		beforeOut := 0
+		if building.Storage.OutputBuffer != nil {
+			beforeOut = building.Storage.OutputBuffer[candidate.itemID]
+		}
+		provided, _, err := model.StoragePortOutput(building, port.ID, candidate.itemID, take)
+		if err != nil || provided <= 0 {
+			return
+		}
+		removedFromOutput := minInt(beforeOut, provided)
+		removedFromInventory := provided - removedFromOutput
+		accepted, remaining, err := candidate.conveyor.Conveyor.Insert(candidate.itemID, provided)
+		if err != nil {
+			rollbackStorageOutput(building.Storage, candidate.itemID, removedFromOutput, removedFromInventory, provided)
+			return
+		}
+		if remaining > 0 {
+			rollbackStorageOutput(building.Storage, candidate.itemID, removedFromOutput, removedFromInventory, remaining)
+		}
+		portRemaining -= accepted
+		if remaining > 0 {
+			return
+		}
+	}
+}
+
+type outputCandidate struct {
+	order     int
+	dir       model.ConveyorDirection
+	itemID    string
+	conveyor  *model.Building
+	duplicate bool
+}
+
+func selectOutputCandidate(
+	ws *model.WorldState,
+	conveyors map[string]*model.Building,
+	building *model.Building,
+	port model.IOPort,
+	portPos model.Position,
+) (outputCandidate, bool) {
+	if ws == nil || building == nil {
+		return outputCandidate{}, false
+	}
+	baseOrder := outputDirectionOrder(building, port)
+	candidates := make([]outputCandidate, 0, len(baseOrder))
+	for idx, dir := range baseOrder {
 		dx, dy := dir.Delta()
 		nx := portPos.X + dx
 		ny := portPos.Y + dy
@@ -141,48 +181,46 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 		if !allowsInput(conveyorAllowedInputs(neighbor), dir.Opposite()) {
 			continue
 		}
-		for portRemaining > 0 {
-			available := neighbor.Conveyor.AvailableCapacity()
-			if available <= 0 {
-				break
-			}
-			limit := minInt(portRemaining, available)
-			itemID := selectOutputItem(building.Storage, port)
-			if itemID == "" {
-				return
-			}
-			outputQty := building.Storage.OutputQuantity(itemID)
-			if outputQty <= 0 {
-				break
-			}
-			take := minInt(limit, outputQty)
-			if take <= 0 {
-				break
-			}
-			beforeOut := 0
-			if building.Storage.OutputBuffer != nil {
-				beforeOut = building.Storage.OutputBuffer[itemID]
-			}
-			provided, _, err := model.StoragePortOutput(building, port.ID, itemID, take)
-			if err != nil || provided <= 0 {
-				return
-			}
-			removedFromOutput := minInt(beforeOut, provided)
-			removedFromInventory := provided - removedFromOutput
-			accepted, remaining, err := neighbor.Conveyor.Insert(itemID, provided)
-			if err != nil {
-				rollbackStorageOutput(building.Storage, itemID, removedFromOutput, removedFromInventory, provided)
-				return
-			}
-			if remaining > 0 {
-				rollbackStorageOutput(building.Storage, itemID, removedFromOutput, removedFromInventory, remaining)
-			}
-			portRemaining -= accepted
-			if remaining > 0 {
-				return
-			}
+		if neighbor.Conveyor.AvailableCapacity() <= 0 {
+			continue
+		}
+		itemID := selectOutputItem(building, port, dir)
+		if itemID == "" {
+			continue
+		}
+		if building.Storage.OutputQuantity(itemID) <= 0 {
+			continue
+		}
+		candidates = append(candidates, outputCandidate{
+			order:     idx,
+			dir:       dir,
+			itemID:    itemID,
+			conveyor:  neighbor,
+			duplicate: conveyorHasItem(neighbor.Conveyor, itemID),
+		})
+	}
+	if len(candidates) == 0 {
+		return outputCandidate{}, false
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].duplicate != candidates[j].duplicate {
+			return !candidates[i].duplicate
+		}
+		return candidates[i].order < candidates[j].order
+	})
+	return candidates[0], true
+}
+
+func conveyorHasItem(conveyor *model.ConveyorState, itemID string) bool {
+	if conveyor == nil || itemID == "" {
+		return false
+	}
+	for _, stack := range conveyor.Buffer {
+		if stack.ItemID == itemID && stack.Quantity > 0 {
+			return true
 		}
 	}
+	return false
 }
 
 func portWorldPosition(building *model.Building, port model.IOPort) model.Position {
@@ -190,6 +228,38 @@ func portWorldPosition(building *model.Building, port model.IOPort) model.Positi
 		X: building.Position.X + port.Offset.X,
 		Y: building.Position.Y + port.Offset.Y,
 	}
+}
+
+func outputDirectionOrder(building *model.Building, port model.IOPort) []model.ConveyorDirection {
+	if building == nil || building.Storage == nil {
+		return conveyorDirOrder
+	}
+	if isByproductOutputPort(&port) {
+		return []model.ConveyorDirection{
+			model.ConveyorWest,
+			model.ConveyorEast,
+			model.ConveyorSouth,
+			model.ConveyorNorth,
+		}
+	}
+	if isMainOutputPort(&port) {
+		return conveyorDirOrder
+	}
+	byproducts := buildingRecipeByproductItems(building)
+	if len(byproducts) == 0 {
+		return conveyorDirOrder
+	}
+	for _, itemID := range byproducts {
+		if building.Storage.OutputQuantity(itemID) > 0 {
+			return []model.ConveyorDirection{
+				model.ConveyorWest,
+				model.ConveyorEast,
+				model.ConveyorSouth,
+				model.ConveyorNorth,
+			}
+		}
+	}
+	return conveyorDirOrder
 }
 
 func portCapacity(port model.IOPort) int {
@@ -210,20 +280,148 @@ func sortedIOPorts(ports []model.IOPort) []model.IOPort {
 	return out
 }
 
-func selectOutputItem(storage *model.StorageState, port model.IOPort) string {
-	if storage == nil {
+func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, portPos model.Position) (buildingInputCandidate, bool) {
+	if ws == nil || building == nil {
+		return buildingInputCandidate{}, false
+	}
+	needs := buildingRecipeInputNeeds(building)
+	var best buildingInputCandidate
+	found := false
+	for idx, dir := range conveyorDirOrder {
+		dx, dy := dir.Delta()
+		nx := portPos.X + dx
+		ny := portPos.Y + dy
+		if !ws.InBounds(nx, ny) {
+			continue
+		}
+		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
+		if neighborID == "" {
+			continue
+		}
+		neighbor := conveyors[neighborID]
+		if neighbor == nil || neighbor.Conveyor == nil {
+			continue
+		}
+		if neighbor.OwnerID != building.OwnerID {
+			continue
+		}
+		if neighbor.Conveyor.Output != dir.Opposite() {
+			continue
+		}
+		candidate, ok := selectConveyorInputCandidate(building, neighbor, port, dir, idx, needs)
+		if !ok {
+			continue
+		}
+		if !found || compareInputCandidates(building, candidate, best) {
+			best = candidate
+			found = true
+		}
+	}
+	return best, found
+}
+
+func selectConveyorInputCandidate(
+	building *model.Building,
+	conveyor *model.Building,
+	port model.IOPort,
+	dir model.ConveyorDirection,
+	order int,
+	needs map[string]int,
+) (buildingInputCandidate, bool) {
+	if conveyor == nil || conveyor.Conveyor == nil || len(conveyor.Conveyor.Buffer) == 0 {
+		return buildingInputCandidate{}, false
+	}
+	if len(needs) == 0 {
+		stack, ok := peekConveyorFront(conveyor.Conveyor)
+		if !ok || !ioPortAllowsItem(port, stack.ItemID) {
+			return buildingInputCandidate{}, false
+		}
+		return buildingInputCandidate{
+			order:    order,
+			buffer:   0,
+			dir:      dir,
+			conveyor: conveyor,
+			itemID:   stack.ItemID,
+			quantity: stack.Quantity,
+		}, true
+	}
+
+	var best buildingInputCandidate
+	found := false
+	for idx, stack := range conveyor.Conveyor.Buffer {
+		if stack.Quantity <= 0 {
+			continue
+		}
+		if !ioPortAllowsItem(port, stack.ItemID) {
+			continue
+		}
+		if _, ok := needs[stack.ItemID]; !ok {
+			continue
+		}
+		candidate := buildingInputCandidate{
+			order:    order,
+			buffer:   idx,
+			dir:      dir,
+			conveyor: conveyor,
+			itemID:   stack.ItemID,
+			quantity: stack.Quantity,
+		}
+		if !found || compareInputCandidates(building, candidate, best) {
+			best = candidate
+			found = true
+		}
+	}
+	if !found {
+		return buildingInputCandidate{}, false
+	}
+	return best, true
+}
+
+func selectConveyorInputStack(
+	conveyor *model.ConveyorState,
+	port model.IOPort,
+	needs map[string]int,
+) (model.ItemStack, int, bool) {
+	if conveyor == nil || len(conveyor.Buffer) == 0 {
+		return model.ItemStack{}, 0, false
+	}
+	if len(needs) == 0 {
+		stack, ok := peekConveyorFront(conveyor)
+		if !ok || !ioPortAllowsItem(port, stack.ItemID) {
+			return model.ItemStack{}, 0, false
+		}
+		return stack, 0, true
+	}
+	for idx, stack := range conveyor.Buffer {
+		if stack.Quantity <= 0 {
+			continue
+		}
+		if !ioPortAllowsItem(port, stack.ItemID) {
+			continue
+		}
+		if _, ok := needs[stack.ItemID]; !ok {
+			continue
+		}
+		return stack, idx, true
+	}
+	return model.ItemStack{}, 0, false
+}
+
+func selectOutputItem(building *model.Building, port model.IOPort, dir model.ConveyorDirection) string {
+	if building == nil || building.Storage == nil {
 		return ""
 	}
-	if len(port.AllowedItems) > 0 {
-		for _, itemID := range port.AllowedItems {
-			if storage.OutputQuantity(itemID) > 0 {
+	allowed := buildingDirectionalOutputAllowList(building, &port, dir)
+	if len(allowed) > 0 {
+		for _, itemID := range allowed {
+			if building.Storage.OutputQuantity(itemID) > 0 {
 				return itemID
 			}
 		}
 		return ""
 	}
-	for _, itemID := range storage.OutputCandidates() {
-		if storage.OutputQuantity(itemID) > 0 {
+	for _, itemID := range building.Storage.OutputCandidates() {
+		if building.Storage.OutputQuantity(itemID) > 0 {
 			return itemID
 		}
 	}

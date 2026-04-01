@@ -160,6 +160,139 @@ func TestConveyorSettlementMergeFromMultipleInputs(t *testing.T) {
 	}
 }
 
+func TestConveyorSettlementMergeSharesCapacityAcrossSources(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 3, 3)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+
+	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorNorth)
+	target.Conveyor.Throughput = 2
+	target.Conveyor.MaxStack = 2
+
+	east := newConveyorBuilding("east", model.Position{X: 2, Y: 1}, model.ConveyorWest)
+	east.Conveyor.Throughput = 2
+	east.Conveyor.MaxStack = 2
+
+	south := newConveyorBuilding("south", model.Position{X: 1, Y: 2}, model.ConveyorNorth)
+	south.Conveyor.Throughput = 2
+	south.Conveyor.MaxStack = 2
+
+	attachBuilding(ws, target)
+	attachBuilding(ws, east)
+	attachBuilding(ws, south)
+
+	if _, _, err := east.Conveyor.Insert(model.ItemStoneOre, 2); err != nil {
+		t.Fatalf("insert into east belt: %v", err)
+	}
+	if _, _, err := south.Conveyor.Insert(model.ItemWater, 2); err != nil {
+		t.Fatalf("insert into south belt: %v", err)
+	}
+
+	settleConveyors(ws)
+
+	if got := target.Conveyor.TotalItems(); got != 2 {
+		t.Fatalf("expected target items 2, got %d", got)
+	}
+	if got := conveyorItemQty(target.Conveyor, model.ItemStoneOre); got != 1 {
+		t.Fatalf("expected target stone_ore 1, got %d", got)
+	}
+	if got := conveyorItemQty(target.Conveyor, model.ItemWater); got != 1 {
+		t.Fatalf("expected target water 1, got %d", got)
+	}
+	if got := east.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("expected east items 1, got %d", got)
+	}
+	if got := south.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("expected south items 1, got %d", got)
+	}
+}
+
+func TestConveyorSettlementMergePrefersDifferentItemsWhenTargetPartiallyFull(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 3, 3)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+
+	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorNorth)
+	target.Conveyor.Throughput = 2
+	target.Conveyor.MaxStack = 2
+
+	east := newConveyorBuilding("east", model.Position{X: 2, Y: 1}, model.ConveyorWest)
+	east.Conveyor.Throughput = 2
+	east.Conveyor.MaxStack = 2
+
+	south := newConveyorBuilding("south", model.Position{X: 1, Y: 2}, model.ConveyorNorth)
+	south.Conveyor.Throughput = 2
+	south.Conveyor.MaxStack = 2
+
+	attachBuilding(ws, target)
+	attachBuilding(ws, east)
+	attachBuilding(ws, south)
+
+	if _, _, err := target.Conveyor.Insert(model.ItemStoneOre, 1); err != nil {
+		t.Fatalf("insert into target belt: %v", err)
+	}
+	if _, _, err := east.Conveyor.Insert(model.ItemStoneOre, 2); err != nil {
+		t.Fatalf("insert into east belt: %v", err)
+	}
+	if _, _, err := south.Conveyor.Insert(model.ItemWater, 2); err != nil {
+		t.Fatalf("insert into south belt: %v", err)
+	}
+
+	settleConveyors(ws)
+
+	if got := target.Conveyor.TotalItems(); got != 2 {
+		t.Fatalf("expected target items 2, got %d", got)
+	}
+	if got := conveyorItemQty(target.Conveyor, model.ItemStoneOre); got != 1 {
+		t.Fatalf("expected target stone_ore 1, got %d", got)
+	}
+	if got := conveyorItemQty(target.Conveyor, model.ItemWater); got != 1 {
+		t.Fatalf("expected target water 1, got %d", got)
+	}
+}
+
+func TestConveyorSettlementSingleMixedSourcePrefersDifferentItemWhenTargetPartiallyFull(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 3, 3)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+
+	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorNorth)
+	target.Conveyor.Throughput = 2
+	target.Conveyor.MaxStack = 2
+
+	source := newConveyorBuilding("source", model.Position{X: 1, Y: 2}, model.ConveyorNorth)
+	source.Conveyor.Throughput = 2
+	source.Conveyor.MaxStack = 2
+
+	attachBuilding(ws, target)
+	attachBuilding(ws, source)
+
+	if _, _, err := target.Conveyor.Insert(model.ItemWater, 1); err != nil {
+		t.Fatalf("insert into target belt: %v", err)
+	}
+	if _, _, err := source.Conveyor.Insert(model.ItemWater, 1); err != nil {
+		t.Fatalf("insert water into source belt: %v", err)
+	}
+	if _, _, err := source.Conveyor.Insert(model.ItemStoneOre, 1); err != nil {
+		t.Fatalf("insert stone into source belt: %v", err)
+	}
+
+	settleConveyors(ws)
+
+	if got := target.Conveyor.TotalItems(); got != 2 {
+		t.Fatalf("expected target items 2, got %d", got)
+	}
+	if got := conveyorItemQty(target.Conveyor, model.ItemWater); got != 1 {
+		t.Fatalf("expected target water 1, got %d", got)
+	}
+	if got := conveyorItemQty(target.Conveyor, model.ItemStoneOre); got != 1 {
+		t.Fatalf("expected target stone_ore 1, got %d", got)
+	}
+	if got := source.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("expected source items 1, got %d", got)
+	}
+	if got := conveyorItemQty(source.Conveyor, model.ItemWater); got != 1 {
+		t.Fatalf("expected source to retain front water stack, got %d", got)
+	}
+}
+
 func TestConveyorSettlementSplitAndTurnPriority(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 3, 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
@@ -195,4 +328,17 @@ func TestConveyorSettlementSplitAndTurnPriority(t *testing.T) {
 	if got := source.Conveyor.TotalItems(); got != 0 {
 		t.Fatalf("expected source items 0, got %d", got)
 	}
+}
+
+func conveyorItemQty(conveyor *model.ConveyorState, itemID string) int {
+	if conveyor == nil {
+		return 0
+	}
+	total := 0
+	for _, stack := range conveyor.Buffer {
+		if stack.ItemID == itemID {
+			total += stack.Quantity
+		}
+	}
+	return total
 }

@@ -21,8 +21,9 @@
   - `p2 / key_player_2`
 - 也可以输入自定义 `player_id` 与 `player_key`
 - CLI 会自动连接 `GET /events/stream?event_types=...`
-- 默认只主动订阅低噪声关键事件，例如 `command_result`、`building_state_changed`、`research_completed`
-- `SW_SSE_VERBOSE=1` 时会改为显式订阅全部事件类型
+- 默认只主动订阅低噪声关键事件：`command_result`、`entity_created`、`entity_destroyed`、`building_state_changed`、`construction_paused`、`construction_resumed`、`research_completed`、`loot_dropped`
+- `production_alert` 改为默认不进入 CLI 实时流，避免后期空转产线持续刷屏；需要看告警时请用 `alert_snapshot`
+- `SW_SSE_VERBOSE=1` 时会改为显式订阅全部事件类型；像 `production_alert`、`damage_applied`、`entity_updated` 这类高频事件默认不会进入 CLI 实时流
 - `events [count]` 只显示当前 SSE 连接实际订阅到的事件
 - `switch [player_id] [key]` 会切换玩家并自动重连 SSE
 
@@ -62,7 +63,7 @@
 | `restore_construction` | `<task_id>` | 恢复施工任务 |
 | `start_research` | `<tech_id>` | 开始研究 |
 | `cancel_research` | `<tech_id>` | 取消研究 |
-| `launch_solar_sail` | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]` | 发射太阳帆 |
+| `launch_solar_sail` | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]` | 从电磁发射器发射已装载的太阳帆 |
 | `build_dyson_node` | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]` | 建戴森球节点 |
 | `build_dyson_frame` | `<system_id> <layer_index> <node_a_id> <node_b_id>` | 建戴森球框架 |
 | `build_dyson_shell` | `<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>` | 建戴森球壳面 |
@@ -99,6 +100,12 @@
 - 冶炼生产科研：`arc_smelter`、`assembling_machine_mk1`、`chemical_plant`、`matrix_lab`、`fractionator`、`oil_refinery` 等
 - 电力与防御：`wind_turbine`、`tesla_tower`、`solar_panel`、`thermal_power_plant`、`ray_receiver`、`gauss_turret`、`missile_turret` 等
 - 戴森相关：`em_rail_ejector`、`vertical_launching_silo`
+
+资源点约束也会直接按服务端规则生效：
+
+- `mining_machine` 必须压在矿点上
+- `water_pump` 必须压在 `water` 资源点上
+- `oil_extractor` 必须压在 `crude_oil` 资源点上
 
 如果建筑支持初始配方，直接使用 `--recipe`：
 
@@ -217,6 +224,8 @@ attack u-3 enemy-1
 
 ### 太阳帆与戴森球
 
+`launch_solar_sail` 当前只接受 `em_rail_ejector`，而且要先把 `solar_sail` 装进发射器本地存储。
+
 ```bash
 launch_solar_sail b-30 --count 5 --orbit-radius 1.2 --inclination 5
 build_dyson_node sys-1 0 10 20 --orbit-radius 1.2
@@ -260,6 +269,9 @@ audit --player <id> --issuer-type <type> --issuer-id <id> --action <action> --re
 event_snapshot --types <a,b,c> --all --after-id <id> --since-tick <n> --limit <n>
 alert_snapshot --after-id <id> --since-tick <n> --limit <n>
 ```
+
+- `event_snapshot` 未显式传 `--types` 时，会使用与默认 SSE 相同的低噪声事件集合
+- 想排查高频事件时，使用 `event_snapshot --types damage_applied,entity_updated ...` 或 `event_snapshot --all ...`
 
 ## `replay` / `rollback` 选项
 

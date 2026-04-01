@@ -22,6 +22,10 @@ func StoragePortInput(building *Building, portID, itemID string, qty int) (int, 
 	}
 	requested := qty
 	limit := applyPortCapacity(port, qty)
+	limit = applyProductionInputLimit(building, itemID, limit)
+	if limit <= 0 {
+		return 0, requested, nil
+	}
 	accepted, remaining, err := building.Storage.Receive(itemID, limit)
 	if err != nil {
 		return 0, qty, err
@@ -50,6 +54,10 @@ func StoragePortPreviewInput(building *Building, portID, itemID string, qty int)
 	}
 	requested := qty
 	limit := applyPortCapacity(port, qty)
+	limit = applyProductionInputLimit(building, itemID, limit)
+	if limit <= 0 {
+		return 0, requested, nil
+	}
 	accepted, remaining, err := building.Storage.PreviewReceive(itemID, limit)
 	if err != nil {
 		return 0, qty, err
@@ -118,4 +126,60 @@ func applyPortCapacity(port IOPort, qty int) int {
 		return port.Capacity
 	}
 	return qty
+}
+
+func applyProductionInputLimit(building *Building, itemID string, qty int) int {
+	if building == nil || building.Storage == nil || qty <= 0 {
+		return qty
+	}
+	if building.Runtime.Functions.Production == nil || building.Production == nil || building.Production.RecipeID == "" {
+		return qty
+	}
+	recipe, ok := Recipe(building.Production.RecipeID)
+	if !ok {
+		return qty
+	}
+
+	required := 0
+	for _, input := range recipe.Inputs {
+		if input.ItemID == itemID {
+			required += input.Quantity
+		}
+	}
+	if required <= 0 {
+		return 0
+	}
+
+	window := productionInputWindow(building)
+	maxBuffered := required * window
+	current := storageItemQuantity(building.Storage.InputBuffer, itemID) + storageItemQuantity(building.Storage.Inventory, itemID)
+	if current >= maxBuffered {
+		return 0
+	}
+	remaining := maxBuffered - current
+	if qty > remaining {
+		return remaining
+	}
+	return qty
+}
+
+func productionInputWindow(building *Building) int {
+	window := 2
+	if building == nil || building.Runtime.Functions.Production == nil {
+		return window
+	}
+	if throughput := building.Runtime.Functions.Production.Throughput; throughput > window {
+		return throughput
+	}
+	return window
+}
+
+func storageItemQuantity(inv ItemInventory, itemID string) int {
+	if inv == nil || itemID == "" {
+		return 0
+	}
+	if qty := inv[itemID]; qty > 0 {
+		return qty
+	}
+	return 0
 }

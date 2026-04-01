@@ -26,10 +26,9 @@ interface UsePlanetRealtimeSyncOptions {
 }
 
 interface InvalidationFlags {
-  planet: boolean;
+  scene: boolean;
   runtime: boolean;
   networks: boolean;
-  fog: boolean;
   summary: boolean;
   stats: boolean;
   alerts: boolean;
@@ -37,10 +36,9 @@ interface InvalidationFlags {
 
 function createInvalidationFlags(): InvalidationFlags {
   return {
-    planet: false,
+    scene: false,
     runtime: false,
     networks: false,
-    fog: false,
     summary: false,
     stats: false,
     alerts: false,
@@ -104,10 +102,9 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
     if (sawEvent) {
       usePlanetViewStore.getState().markFullSync();
       scheduleInvalidation({
-        planet: true,
+        scene: true,
         runtime: true,
         networks: true,
-        fog: true,
         summary: true,
         stats: true,
         alerts: true,
@@ -118,10 +115,9 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
   function scheduleInvalidation(nextFlags: Partial<InvalidationFlags>) {
     const current = pendingInvalidationsRef.current;
     pendingInvalidationsRef.current = {
-      planet: current.planet || Boolean(nextFlags.planet),
+      scene: current.scene || Boolean(nextFlags.scene),
       runtime: current.runtime || Boolean(nextFlags.runtime),
       networks: current.networks || Boolean(nextFlags.networks),
-      fog: current.fog || Boolean(nextFlags.fog),
       summary: current.summary || Boolean(nextFlags.summary),
       stats: current.stats || Boolean(nextFlags.stats),
       alerts: current.alerts || Boolean(nextFlags.alerts),
@@ -136,9 +132,9 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       pendingInvalidationsRef.current = createInvalidationFlags();
       invalidateTimerRef.current = null;
 
-      if (flags.planet) {
+      if (flags.scene) {
         void queryClient.invalidateQueries({
-          queryKey: ['planet', options.serverUrl, options.playerId, options.planetId],
+          queryKey: ['planet-scene', options.serverUrl, options.playerId, options.planetId],
         });
       }
       if (flags.runtime) {
@@ -149,11 +145,6 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       if (flags.networks) {
         void queryClient.invalidateQueries({
           queryKey: ['planet-networks', options.serverUrl, options.playerId, options.planetId],
-        });
-      }
-      if (flags.fog) {
-        void queryClient.invalidateQueries({
-          queryKey: ['planet-fog', options.serverUrl, options.playerId, options.planetId],
         });
       }
       if (flags.summary) {
@@ -196,10 +187,9 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       }
 
       scheduleInvalidation({
-        planet: shouldRefreshPlanet(event, options.planetId),
+        scene: shouldRefreshPlanet(event, options.planetId) || shouldRefreshFog(event, options.planetId),
         runtime: shouldRefreshPlanet(event, options.planetId) || shouldRefreshStats(event) || shouldRefreshSummary(event),
         networks: shouldRefreshPlanet(event, options.planetId) || event.event_type === 'building_state_changed',
-        fog: shouldRefreshFog(event, options.planetId),
         summary: shouldRefreshSummary(event),
         stats: shouldRefreshStats(event),
         alerts: shouldRefreshAlerts(event),

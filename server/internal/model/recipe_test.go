@@ -48,13 +48,26 @@ func TestRecipesReferenceItems(t *testing.T) {
 }
 
 func TestByproductRecipes(t *testing.T) {
-	fractionation, ok := Recipe("oil_fractionation")
-	if !ok || len(fractionation.Byproducts) == 0 {
-		t.Fatalf("oil_fractionation should have byproducts")
-	}
 	fireIce, ok := Recipe("graphene_from_fire_ice")
 	if !ok || len(fireIce.Byproducts) == 0 {
 		t.Fatalf("graphene_from_fire_ice should have byproducts")
+	}
+}
+
+func TestOilFractionationCurrentRecipeIsSingleOutput(t *testing.T) {
+	fractionation, ok := Recipe("oil_fractionation")
+	if !ok {
+		t.Fatal("oil_fractionation recipe missing")
+	}
+	if len(fractionation.Byproducts) != 0 {
+		t.Fatalf("expected oil_fractionation to have no byproducts, got %+v", fractionation.Byproducts)
+	}
+	if len(fractionation.Outputs) != 1 {
+		t.Fatalf("expected oil_fractionation to have exactly one output, got %+v", fractionation.Outputs)
+	}
+	output := fractionation.Outputs[0]
+	if output.ItemID != ItemRefinedOil || output.Quantity != 1 {
+		t.Fatalf("expected oil_fractionation to output 1 refined_oil, got %+v", output)
 	}
 }
 

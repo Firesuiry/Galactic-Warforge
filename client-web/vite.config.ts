@@ -29,6 +29,7 @@ export default defineConfig({
       '/metrics': createProxyEntry(),
       '/state': createProxyEntry(),
       '/world': createProxyEntry(),
+      '/catalog': createProxyEntry(),
       '/events': createProxyEntry(),
       '/alerts': createProxyEntry(),
       '/commands': createProxyEntry(),

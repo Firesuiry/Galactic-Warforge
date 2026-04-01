@@ -197,3 +197,96 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 		t.Fatalf("expected depot to receive titanium ore, got %d", got)
 	}
 }
+
+func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 3, 1)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
+
+	pump := &model.Building{
+		ID:       "pump",
+		Type:     model.BuildingTypeWaterPump,
+		OwnerID:  "p1",
+		Position: model.Position{X: 0, Y: 0},
+		Runtime:  model.BuildingProfileFor(model.BuildingTypeWaterPump, 1).Runtime,
+	}
+	model.InitBuildingStorage(pump)
+	pump.Runtime.Params.EnergyConsume = 0
+	if pump.Runtime.Functions.Energy != nil {
+		pump.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
+	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
+	depot := newDepotBuilding("depot", model.Position{X: 2, Y: 0})
+	attachBuilding(ws, pump)
+	attachBuilding(ws, belt)
+	attachBuilding(ws, depot)
+
+	ws.Resources["r1"] = &model.ResourceNodeState{
+		ID:           "r1",
+		PlanetID:     ws.PlanetID,
+		Kind:         "water",
+		Behavior:     "renewable",
+		Position:     pump.Position,
+		MaxAmount:    100,
+		Remaining:    100,
+		BaseYield:    5,
+		CurrentYield: 5,
+		RegenPerTick: 2,
+	}
+	ws.Grid[0][0].ResourceNodeID = "r1"
+
+	settleResources(ws)
+	settleStorage(ws)
+	settleBuildingIO(ws)
+	settleBuildingIO(ws)
+	settleStorage(ws)
+
+	if got := depot.Storage.OutputQuantity(model.ItemWater); got == 0 {
+		t.Fatalf("expected depot to receive water, got %d", got)
+	}
+}
+
+func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 3, 1)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
+
+	extractor := &model.Building{
+		ID:       "extractor",
+		Type:     model.BuildingTypeOilExtractor,
+		OwnerID:  "p1",
+		Position: model.Position{X: 0, Y: 0},
+		Runtime:  model.BuildingProfileFor(model.BuildingTypeOilExtractor, 1).Runtime,
+	}
+	model.InitBuildingStorage(extractor)
+	extractor.Runtime.Params.EnergyConsume = 0
+	if extractor.Runtime.Functions.Energy != nil {
+		extractor.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
+	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
+	depot := newDepotBuilding("depot", model.Position{X: 2, Y: 0})
+	attachBuilding(ws, extractor)
+	attachBuilding(ws, belt)
+	attachBuilding(ws, depot)
+
+	ws.Resources["r1"] = &model.ResourceNodeState{
+		ID:           "r1",
+		PlanetID:     ws.PlanetID,
+		Kind:         "crude_oil",
+		Behavior:     "decay",
+		Position:     extractor.Position,
+		BaseYield:    5,
+		CurrentYield: 5,
+		MinYield:     2,
+		DecayPerTick: 1,
+	}
+	ws.Grid[0][0].ResourceNodeID = "r1"
+
+	settleResources(ws)
+	settleStorage(ws)
+	settleBuildingIO(ws)
+	settleBuildingIO(ws)
+	settleStorage(ws)
+
+	if got := depot.Storage.OutputQuantity(model.ItemCrudeOil); got == 0 {
+		t.Fatalf("expected depot to receive crude oil, got %d", got)
+	}
+}

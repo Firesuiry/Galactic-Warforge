@@ -388,6 +388,56 @@ export interface PlanetView {
   resources?: PlanetResource[];
 }
 
+export interface SceneBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PlanetSceneView {
+  planet_id: string;
+  name?: string;
+  discovered: boolean;
+  kind?: string;
+  map_width: number;
+  map_height: number;
+  tick: number;
+  bounds: SceneBounds;
+  terrain?: string[][];
+  environment?: PlanetEnvironment;
+  visible?: boolean[][];
+  explored?: boolean[][];
+  buildings?: Record<string, Building>;
+  units?: Record<string, Unit>;
+  resources?: PlanetResource[];
+  building_count?: number;
+  unit_count?: number;
+  resource_count?: number;
+}
+
+export interface PlanetOverviewView {
+  planet_id: string;
+  name?: string;
+  discovered: boolean;
+  kind?: string;
+  map_width: number;
+  map_height: number;
+  tick: number;
+  step: number;
+  cells_width: number;
+  cells_height: number;
+  terrain?: string[][];
+  visible?: boolean[][];
+  explored?: boolean[][];
+  resource_counts?: number[][];
+  building_counts?: number[][];
+  unit_counts?: number[][];
+  building_count?: number;
+  unit_count?: number;
+  resource_count?: number;
+}
+
 export interface FogMapView {
   planet_id: string;
   discovered: boolean;

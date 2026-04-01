@@ -160,3 +160,57 @@ func TestStoragePortIO(t *testing.T) {
 		t.Fatalf("expected output provide 1/0, got %d/%d", provided, remaining)
 	}
 }
+
+func TestStoragePortInputCapsProductionRecipeInputs(t *testing.T) {
+	profile := BuildingProfileFor(BuildingTypeAssemblingMachineMk1, 1)
+	building := &Building{
+		ID:          "assembler-1",
+		Type:        BuildingTypeAssemblingMachineMk1,
+		OwnerID:     "p1",
+		Position:    Position{X: 1, Y: 1},
+		HP:          profile.MaxHP,
+		MaxHP:       profile.MaxHP,
+		Level:       1,
+		VisionRange: profile.VisionRange,
+		Runtime:     profile.Runtime,
+		Production:  &ProductionState{RecipeID: "oil_fractionation", Mode: BonusModeSpeed},
+	}
+	InitBuildingStorage(building)
+	InitBuildingProduction(building)
+	building.Runtime.Params.IOPorts[0].Capacity = 10
+
+	previewAccepted, previewRemaining, err := StoragePortPreviewInput(building, "in-0", ItemCrudeOil, 10)
+	if err != nil {
+		t.Fatalf("preview input error: %v", err)
+	}
+	if previewAccepted != 4 || previewRemaining != 6 {
+		t.Fatalf("expected preview accept 4/6, got %d/%d", previewAccepted, previewRemaining)
+	}
+
+	accepted, remaining, err := StoragePortInput(building, "in-0", ItemCrudeOil, 10)
+	if err != nil {
+		t.Fatalf("input error: %v", err)
+	}
+	if accepted != 4 || remaining != 6 {
+		t.Fatalf("expected input accept 4/6, got %d/%d", accepted, remaining)
+	}
+
+	accepted, remaining, err = StoragePortInput(building, "in-0", ItemCrudeOil, 1)
+	if err != nil {
+		t.Fatalf("second input error: %v", err)
+	}
+	if accepted != 0 || remaining != 1 {
+		t.Fatalf("expected second input accept 0/1, got %d/%d", accepted, remaining)
+	}
+
+	totalCrudeOil := 0
+	if building.Storage.InputBuffer != nil {
+		totalCrudeOil += building.Storage.InputBuffer[ItemCrudeOil]
+	}
+	if building.Storage.Inventory != nil {
+		totalCrudeOil += building.Storage.Inventory[ItemCrudeOil]
+	}
+	if totalCrudeOil != 4 {
+		t.Fatalf("expected capped crude oil total 4, got %d", totalCrudeOil)
+	}
+}

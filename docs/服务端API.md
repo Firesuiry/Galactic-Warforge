@@ -252,6 +252,7 @@
 **GET /world/planets/{planet_id}**
 - 说明: 行星详情（需认证）
 - 说明补充: 未发现行星只返回 `planet_id` + `discovered=false`；非当前 active 行星的建筑、单位为空，但在已扫描/已发现状态下会返回该行星的静态资源点清单，便于做跨星资源规划
+- 使用建议: 该接口会返回整张地形矩阵；大地图场景下适合离线分析、调试或 CLI 使用，`client-web` 行星页首屏应改走 `/world/planets/{planet_id}/scene` 拉取局部场景
 - 响应字段: `planet_id` / `name` / `discovered` / `kind` / `orbit` / `moons` / `map_width` / `map_height` / `terrain` / `environment` / `tick` / `buildings` / `units` / `resources`
 - 坐标字段补充: 文档中的 `position` / `target.position` 均使用 `x` / `y` / 可选 `z`；当前行星平面玩法下 `z` 通常为 `0`，示例中可省略
 - `moons` 字段补充:
@@ -286,6 +287,7 @@
     - `functions.sorter` 分拣模块（`speed`/`range`）
     - `functions.storage` 仓储模块（`capacity`/`slots`/`buffer`/`input_priority`/`output_priority`）
     - `functions.ray_receiver` 射线接收模块（`input_per_tick`/`receive_efficiency`/`power_output_per_tick`/`power_efficiency`/`photon_output_per_tick`/`photon_energy_cost`/`photon_efficiency`/`photon_item_id`/`mode`）
+      - `input_per_tick` 表示接收上限；当前服务端不会为 `ray_receiver` 注入免费基础能量，实际有效输入取决于太阳帆轨道能与已建戴森层总产能之和
       - `mode` 输出模式：`power`/`photon`/`hybrid`（默认 `hybrid`，优先供电，溢出转光子）
     - `functions.energy_storage` 储能模块（`capacity`/`charge_per_tick`/`discharge_per_tick`/`charge_efficiency`/`discharge_efficiency`/`priority`/`initial_charge`）
     - `functions.energy` 能源模块（`output_per_tick`/`consume_per_tick`/`buffer`/`source_kind`/`fuel_rules`）
@@ -314,6 +316,7 @@
     - `interstellar`：`enabled` / `warp_enabled` / `ship_slots` / `ship_capacity` / `ship_speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost`
     - `cache` / `interstellar_cache`：`supply` / `demand` / `local`
   - `production` 生产状态（可选）：`recipe_id` / `mode` / `remaining_ticks` / `pending_outputs` / `pending_byproducts`
+    - `pending_byproducts` 仅在配方定义了副产物时出现；当前 `oil_fractionation` 已简化为只产 `refined_oil`，因此该配方不会再在 `pending_byproducts` 或建筑仓储里产生 `hydrogen`
   - `production_monitor` 产线监控状态（可选）：`samples` / `idle_samples` / `total_moves` / `last_move_tick` / `last_alert_at` / `last_stats`
   - `job` 建筑作业（升级/拆除进行中，可选）
     - `type` 作业类型（`upgrade`/`demolish`）
@@ -329,8 +332,8 @@
   "kind": "rocky",
   "orbit": {"distance_au":1.0,"period_days":365,"inclination_deg":1.2},
   "moons": [{"id":"planet-1-1-moon-1","name":"Moon-planet-1-1-1","orbit":{"distance_au":0.02,"period_days":30,"inclination_deg":0.1}}],
-  "map_width": 32,
-  "map_height": 32,
+  "map_width": 2000,
+  "map_height": 2000,
   "terrain": [["buildable","water"],["buildable","lava"]],
   "environment": {
     "wind_factor": 1.1,
@@ -359,16 +362,103 @@
 }
 ```
 
+**GET /world/planets/{planet_id}/overview**
+- 说明: 行星全局总览读模型（需认证）
+- 说明补充:
+  - 用于整颗行星的全局缩放渲染，按固定步长对原始地图做下采样聚合
+  - 该接口不返回逐 tile 级别建筑、单位、资源明细，而是返回聚合后的地形、迷雾和计数矩阵
+  - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `step` / `cells_width` / `cells_height`
+  - `client-web` 行星观察页在“极小缩放看全局”场景应优先使用该接口，而不是把 `/scene` 压到亚像素渲染
+- 查询参数:
+  - `step`: 下采样步长；表示一个 overview cell 覆盖多少个原始 tile。默认 `100`，最小 `1`，超出地图尺寸时会自动夹紧到地图最大边长
+- 响应字段:
+  - `planet_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
+  - `step`: 本次实际使用的下采样步长
+  - `cells_width` / `cells_height`: 总览矩阵尺寸，等于 `ceil(map_width / step)` 与 `ceil(map_height / step)`
+  - `terrain`: 聚合后的地形矩阵，每个 cell 取该范围内的主导地形
+  - `visible` / `explored`: 聚合后的迷雾矩阵，只要该 cell 内任意 tile 可见或已探索，就记为 `true`
+  - `resource_counts` / `building_counts` / `unit_counts`: 每个 cell 内资源点、可见建筑、可见单位数量
+  - `building_count` / `unit_count` / `resource_count`: 当前整颗行星的可见建筑总数、可见单位总数、资源总数
+- 响应示例:
+```json
+{
+  "planet_id": "planet-1-1",
+  "name": "Planet-1-1",
+  "discovered": true,
+  "kind": "rocky",
+  "map_width": 2000,
+  "map_height": 2000,
+  "tick": 4059,
+  "step": 100,
+  "cells_width": 20,
+  "cells_height": 20,
+  "terrain": [["buildable","water"],["buildable","lava"]],
+  "visible": [[true,false],[false,true]],
+  "explored": [[true,true],[false,true]],
+  "resource_counts": [[12,3],[0,1]],
+  "building_counts": [[2,0],[0,1]],
+  "unit_counts": [[1,0],[0,0]],
+  "building_count": 3,
+  "unit_count": 1,
+  "resource_count": 8416
+}
+```
+
+**GET /world/planets/{planet_id}/scene**
+- 说明: 行星局部场景读模型（需认证）
+- 说明补充:
+  - 用于大地图视窗渲染，只返回指定窗口内的地形、迷雾、建筑、单位、资源
+  - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `bounds`
+  - 当前服务端会对窗口做裁剪: `width` / `height` 默认 `160`，最大 `256`；超出地图边界时会自动回收至合法范围
+- 查询参数:
+  - `x` / `y`: 场景窗口左上角坐标
+  - `width` / `height`: 场景窗口尺寸
+- 响应字段:
+  - `planet_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
+  - `bounds`: 本次实际返回的窗口范围，字段为 `x` / `y` / `width` / `height`
+  - `terrain`: 当前窗口内的地形切片
+  - `visible` / `explored`: 当前窗口内的迷雾切片
+  - `buildings` / `units` / `resources`: 当前窗口内可见实体
+  - `building_count` / `unit_count` / `resource_count`: 当前整颗行星的可见实体总数或资源总数，便于前端补充概览信息
+- 响应示例:
+```json
+{
+  "planet_id": "planet-1-1",
+  "name": "Planet-1-1",
+  "discovered": true,
+  "kind": "rocky",
+  "map_width": 2000,
+  "map_height": 2000,
+  "tick": 4059,
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 96
+  },
+  "terrain": [["buildable","water"],["buildable","lava"]],
+  "visible": [[true,false],[false,true]],
+  "explored": [[true,true],[false,true]],
+  "buildings": {},
+  "units": {},
+  "resources": [],
+  "building_count": 0,
+  "unit_count": 0,
+  "resource_count": 8416
+}
+```
+
 **GET /world/planets/{planet_id}/fog**
 - 说明: 行星迷雾（需认证）
 - 说明补充: 未发现行星只返回 `planet_id` + `discovered=false`；非当前 active 行星返回全 false 的 `visible`，`explored` 为已探索缓存（无缓存则全 false）
+- 使用建议: 该接口仍返回整张迷雾矩阵；`client-web` 大地图页面应优先复用 `/scene` 中的 `visible` / `explored` 切片，避免首屏加载整图迷雾
 - 响应示例:
 ```json
 {
   "planet_id": "planet-1-1",
   "discovered": true,
-  "map_width": 32,
-  "map_height": 32,
+  "map_width": 2000,
+  "map_height": 2000,
   "visible": [[true,false],[false,true]],
   "explored": [[true,true],[false,true]]
 }
@@ -681,14 +771,14 @@
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
   - `scan_system`：`target.system_id` 必填；`target.layer` 可填 `system`
   - `scan_planet`：`target.planet_id` 必填；`target.layer` 可填 `planet`
-  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；`orbital_collector` 仅允许在气态行星建造；命令成功后进入施工队列，建造完成触发 `entity_created`
+  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；命令成功后进入施工队列，建造完成触发 `entity_created`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝
   - `upgrade` / `demolish`：`target.entity_id` 必填
   - `cancel_construction` / `restore_construction`：`payload.task_id` 必填
   - `start_research` / `cancel_research`：`payload.tech_id` 必填
-  - `launch_solar_sail`：`payload.building_id` 必填；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`
+  - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`
   - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选（缺省时自动补层）；要求玩家已解锁 `dyson_component`
   - `build_dyson_frame`：`payload.system_id` / `payload.layer_index` / `payload.node_a_id` / `payload.node_b_id` 必填；要求玩家已解锁 `dyson_component`
   - `build_dyson_shell`：`payload.system_id` / `payload.layer_index` / `payload.latitude_min` / `payload.latitude_max` / `payload.coverage` 必填；要求玩家已解锁 `dyson_component`

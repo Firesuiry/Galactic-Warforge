@@ -45,9 +45,16 @@ func settleRayReceivers(ws *model.WorldState) []*model.GameEvent {
 			powerCap = 0
 		}
 
-		// Add solar sail energy to ray receiver input
-		solarSailEnergy := GetSolarSailEnergyForPlayer(player.PlayerID)
-		effectiveInput := module.InputPerTick + solarSailEnergy
+		// Ray receivers only convert externally available Dyson energy.
+		// `InputPerTick` is the receiver's intake ceiling, not free baseline energy.
+		availableDysonEnergy := GetSolarSailEnergyForPlayer(player.PlayerID) + GetDysonSphereEnergyForPlayer(player.PlayerID)
+		effectiveInput := availableDysonEnergy
+		if module.InputPerTick > 0 && effectiveInput > module.InputPerTick {
+			effectiveInput = module.InputPerTick
+		}
+		if effectiveInput <= 0 {
+			continue
+		}
 
 		// Create modified module with solar sail energy included
 		modifiedModule := *module

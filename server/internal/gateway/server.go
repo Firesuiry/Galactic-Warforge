@@ -106,6 +106,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/galaxy", s.auth(s.handleGalaxy))
 	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
+	mux.HandleFunc("GET /world/planets/{planet_id}/overview", s.auth(s.handlePlanetOverview))
+	mux.HandleFunc("GET /world/planets/{planet_id}/scene", s.auth(s.handlePlanetScene))
 	mux.HandleFunc("GET /world/planets/{planet_id}/fog", s.auth(s.handleFogMap))
 	mux.HandleFunc("GET /world/planets/{planet_id}/runtime", s.auth(s.handlePlanetRuntime))
 	mux.HandleFunc("GET /world/planets/{planet_id}/networks", s.auth(s.handlePlanetNetworks))
@@ -195,6 +197,37 @@ func (s *Server) handlePlanet(w http.ResponseWriter, r *http.Request, playerID s
 	planetID := r.PathValue("planet_id")
 	ws := s.core.World()
 	view, ok := s.ql.Planet(ws, playerID, planetID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handlePlanetOverview returns GET /world/planets/{planet_id}/overview
+func (s *Server) handlePlanetOverview(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
+	req := query.PlanetOverviewRequest{
+		Step: parseQueryInt(r, "step", 0),
+	}
+	view, ok := s.ql.PlanetOverview(s.core.World(), playerID, planetID, req)
+	if !ok {
+		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handlePlanetScene returns GET /world/planets/{planet_id}/scene
+func (s *Server) handlePlanetScene(w http.ResponseWriter, r *http.Request, playerID string) {
+	planetID := r.PathValue("planet_id")
+	req := query.PlanetSceneRequest{
+		X:      parseQueryInt(r, "x", 0),
+		Y:      parseQueryInt(r, "y", 0),
+		Width:  parseQueryInt(r, "width", 0),
+		Height: parseQueryInt(r, "height", 0),
+	}
+	view, ok := s.ql.PlanetScene(s.core.World(), playerID, planetID, req)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -473,6 +506,21 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request, playerID
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func parseQueryInt(r *http.Request, key string, fallback int) int {
+	if r == nil {
+		return fallback
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 // handleEventStream handles GET /events/stream (SSE)

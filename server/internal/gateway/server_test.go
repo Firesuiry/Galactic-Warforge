@@ -349,6 +349,47 @@ func TestPlanetEndpoint(t *testing.T) {
 	}
 }
 
+func TestPlanetSceneEndpoint(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/scene?x=2&y=3&width=8&height=6", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if _, ok := body["bounds"]; !ok {
+		t.Fatalf("expected bounds in scene response: %v", body)
+	}
+}
+
+func TestPlanetOverviewEndpoint(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/overview?step=4", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body["step"] != float64(4) {
+		t.Fatalf("expected step=4 in overview response: %v", body)
+	}
+	if _, ok := body["cells_width"]; !ok {
+		t.Fatalf("expected cells_width in overview response: %v", body)
+	}
+}
+
 func TestMetricsEndpoint(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req := httptest.NewRequest("GET", "/metrics", nil)

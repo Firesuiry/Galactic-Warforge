@@ -67,8 +67,8 @@ def main() -> int:
         current_hour = beijing_time.hour
         formatted_time = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"当前北京时间 {formatted_time}")
-        if current_hour > 8:
-            print(f"当前北京时间 {formatted_time} 不在 0-8 点之间，等待 10 分钟后重试")
+        if current_hour > 7 and current_hour < 21:
+            print(f"当前北京时间 {formatted_time} 不在 7-21 点之间，等待 10 分钟后重试")
             time.sleep(600)
             continue
 
