@@ -1,6 +1,6 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 现已覆盖 `docs/服务端API.md` 中公开的服务端查询接口，以及 `docs/玩家玩法指南.md` 中玩家可直接使用的 18 类核心命令。
+`client-cli` 当前覆盖常用查询接口与 `docs/玩家玩法指南.md` 中玩家可直接使用的 18 类核心命令；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。
 
 ## 启动
 
@@ -39,9 +39,10 @@
 | `stats` | 无 | 查询 `GET /state/stats` |
 | `galaxy` | 无 | 查询 `GET /world/galaxy` |
 | `system` | `[system_id]` | 查询 `GET /world/systems/{system_id}`，默认 `sys-1` |
-| `planet` | `[planet_id]` | 查询 `GET /world/planets/{planet_id}`，默认 `planet-1-1` |
-| `fogmap` | `[planet_id]` | 查询 `GET /world/planets/{planet_id}/fog` 原始 JSON |
-| `fog` | `[planet_id]` | 行星迷雾 ASCII 渲染，`#` 为当前可见，`+` 为已探索，`.` 为未知 |
+| `planet` | `[planet_id]` | 查询 `GET /world/planets/{planet_id}` 行星概要，默认 `planet-1-1` |
+| `scene` | `[planet_id] <x> <y> <width> <height>` | 查询 `GET /world/planets/{planet_id}/scene` 原始 JSON |
+| `inspect` | `<planet_id> <building\|unit\|resource\|sector> <entity_id>` | 查询 `GET /world/planets/{planet_id}/inspect` 原始 JSON |
+| `fog` | `[planet_id] [x y width height]` | 通过 `/scene` 拉取局部迷雾并做 ASCII 渲染，默认窗口 `0 0 32 16` |
 | `audit` | `[options]` | 查询 `GET /audit` |
 | `event_snapshot` | `[options]` | 查询 `GET /events/snapshot` |
 | `alert_snapshot` | `[options]` | 查询 `GET /alerts/production/snapshot` |
@@ -154,14 +155,12 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - Tick replay
 - Tick rollback
 
-### 4. `planet` 输出会直接显示停机原因与关键运行摘要
+### 4. 行星查询已经拆成 `planet / scene / inspect / fog`
 
-- `State` 列会显示 `state:reason`，例如 `no_power:power_out_of_range`
-- `Ops` 列会压缩显示关键模块状态，例如：
-  - `collect=titanium_ore@8`
-  - `recipe=gear`
-  - `research=1/t`
-  - `storage=titanium_ore:8`
+- `planet` 只显示轻量概要，适合快速确认行星规模与对象数量
+- `scene` 直接返回当前视窗原始 JSON，适合调试地图裁剪与图层
+- `inspect` 直接返回目标对象详情 JSON，适合定位建筑、单位、资源
+- `fog` 不再请求整张迷雾，而是按窗口渲染局部迷雾 ASCII
 
 ## 常用示例
 
@@ -171,7 +170,9 @@ build 11 6 conveyor_belt_mk3 --direction auto
 summary
 stats
 planet
-fog
+scene planet-1-1 96 160 32 32
+inspect planet-1-1 building assembler-1
+fog planet-1-1 96 160 32 16
 galaxy
 system sys-1
 ```

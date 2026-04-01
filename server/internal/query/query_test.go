@@ -6,12 +6,14 @@ import (
 	"siliconworld/internal/config"
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
+	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/mapstate"
 	"siliconworld/internal/model"
+	"siliconworld/internal/terrain"
 	"siliconworld/internal/visibility"
 )
 
-func TestPlanetShowsStaticResourcesAfterDiscovery(t *testing.T) {
+func TestPlanetSummaryShowsStaticResourceCountAfterDiscovery(t *testing.T) {
 	cfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
@@ -26,12 +28,68 @@ func TestPlanetShowsStaticResourcesAfterDiscovery(t *testing.T) {
 	discovery.DiscoverPlanet("p1", targetPlanetID)
 
 	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().Width, maps.PrimaryPlanet().Height)
-	view, ok := ql.Planet(ws, "p1", targetPlanetID)
+	view, ok := ql.PlanetSummary(ws, "p1", targetPlanetID)
 	if !ok {
-		t.Fatal("expected planet view")
+		t.Fatal("expected planet summary")
 	}
-	if len(view.Resources) == 0 {
-		t.Fatal("expected discovered non-active planet to expose static resources")
+	if view.ResourceCount == 0 {
+		t.Fatal("expected discovered non-active planet to expose static resource count")
+	}
+}
+
+func TestPlanetSummaryCountsOnlyVisibleDynamicEntities(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 64, 64)
+	ws.Buildings["radar"] = &model.Building{
+		ID:          "radar",
+		OwnerID:     "p1",
+		Position:    model.Position{X: 5, Y: 5},
+		VisionRange: 12,
+	}
+	ws.Buildings["enemy-visible"] = &model.Building{
+		ID:          "enemy-visible",
+		OwnerID:     "p2",
+		Position:    model.Position{X: 10, Y: 10},
+		VisionRange: 2,
+	}
+	ws.Buildings["enemy-hidden"] = &model.Building{
+		ID:          "enemy-hidden",
+		OwnerID:     "p2",
+		Position:    model.Position{X: 48, Y: 48},
+		VisionRange: 2,
+	}
+	ws.Units["worker"] = &model.Unit{
+		ID:          "worker",
+		OwnerID:     "p1",
+		Position:    model.Position{X: 6, Y: 5},
+		VisionRange: 4,
+	}
+	ws.Units["enemy-visible"] = &model.Unit{
+		ID:          "enemy-visible",
+		OwnerID:     "p2",
+		Position:    model.Position{X: 9, Y: 9},
+		VisionRange: 2,
+	}
+	ws.Units["enemy-hidden"] = &model.Unit{
+		ID:          "enemy-hidden",
+		OwnerID:     "p2",
+		Position:    model.Position{X: 52, Y: 52},
+		VisionRange: 2,
+	}
+	ws.Resources["r-1"] = &model.ResourceNodeState{ID: "r-1", PlanetID: planetID, Position: model.Position{X: 8, Y: 8}}
+	ws.Resources["r-2"] = &model.ResourceNodeState{ID: "r-2", PlanetID: planetID, Position: model.Position{X: 50, Y: 50}}
+
+	view, ok := ql.PlanetSummary(ws, "p1", planetID)
+	if !ok {
+		t.Fatal("expected summary view")
+	}
+	if view.BuildingCount != 2 {
+		t.Fatalf("expected 2 visible buildings, got %d", view.BuildingCount)
+	}
+	if view.UnitCount != 2 {
+		t.Fatalf("expected 2 visible units, got %d", view.UnitCount)
+	}
+	if view.ResourceCount != 2 {
+		t.Fatalf("expected total resource count 2, got %d", view.ResourceCount)
 	}
 }
 
@@ -113,4 +171,51 @@ func TestPlanetOverviewAggregatesWholePlanet(t *testing.T) {
 	if view.ResourceCount == 0 {
 		t.Fatal("expected overview to expose total resources")
 	}
+}
+
+func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.WorldState, string) {
+	t.Helper()
+
+	planetID := "planet-1"
+	terrainGrid := make([][]terrain.TileType, height)
+	for y := 0; y < height; y++ {
+		row := make([]terrain.TileType, width)
+		for x := 0; x < width; x++ {
+			row[x] = terrain.TileBuildable
+		}
+		terrainGrid[y] = row
+	}
+
+	universe := &mapmodel.Universe{
+		Galaxies: map[string]*mapmodel.Galaxy{
+			"galaxy-1": {ID: "galaxy-1", SystemIDs: []string{"sys-1"}},
+		},
+		Systems: map[string]*mapmodel.System{
+			"sys-1": {ID: "sys-1", GalaxyID: "galaxy-1", PlanetIDs: []string{planetID}},
+		},
+		Planets: map[string]*mapmodel.Planet{
+			planetID: {
+				ID:       planetID,
+				SystemID: "sys-1",
+				Kind:     mapmodel.PlanetKindRocky,
+				Width:    width,
+				Height:   height,
+				Terrain:  terrainGrid,
+				Resources: []mapmodel.ResourceNode{
+					{ID: "static-r-1", PlanetID: planetID, Position: mapmodel.GridPos{X: 1, Y: 1}, Kind: mapmodel.ResourceIronOre, Behavior: mapmodel.ResourceFinite, Total: 100, BaseYield: 1},
+				},
+			},
+		},
+		PrimaryGalaxyID: "galaxy-1",
+		PrimaryPlanetID: planetID,
+	}
+
+	discovery := mapstate.NewDiscovery([]config.PlayerConfig{
+		{PlayerID: "p1"},
+		{PlayerID: "p2"},
+	}, universe)
+	ql := New(visibility.New(), universe, discovery)
+	ws := model.NewWorldState(planetID, width, height)
+	ws.Tick = 1
+	return ql, ws, planetID
 }

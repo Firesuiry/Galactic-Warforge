@@ -18,8 +18,11 @@ test('行星地图主视图截图基线', async ({ page }) => {
   await openFixtureMode(page);
   await page.goto('/planet/planet-1-1');
   await expect(page.getByRole('heading', { name: 'Gaia' })).toBeVisible();
-  await page.getByRole('button', { name: '收起调试' }).click();
-  await expect(page.getByRole('button', { name: '展开调试' })).toBeVisible();
+  const expandDebugButton = page.getByRole('button', { name: '展开调试' });
+  if (!(await expandDebugButton.isVisible())) {
+    await page.getByRole('button', { name: '收起调试' }).click();
+    await expect(expandDebugButton).toBeVisible();
+  }
   await page.waitForTimeout(500);
 
   const mapShell = page.locator('.planet-map-shell');
@@ -42,7 +45,7 @@ test('行星地图主视图截图基线', async ({ page }) => {
 
 test('回放 digest 截图基线', async ({ page }) => {
   await openFixtureMode(page);
-  await page.getByRole('link', { name: '回放' }).click();
+  await page.getByRole('navigation').getByRole('link', { name: '回放' }).click();
   await expect(page.getByRole('heading', { name: 'Replay 调试台' })).toBeVisible();
   await expect(page.getByLabel('to_tick')).toHaveValue('128');
   await page.getByRole('button', { name: '执行 replay' }).click();

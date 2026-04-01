@@ -37,6 +37,41 @@ describe('shared api client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('会为行星概要接口请求轻量 summary 载荷', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = new URL(String(input));
+
+      expect(url.pathname).toBe('/world/planets/planet-1-1');
+
+      return Promise.resolve(jsonResponse({
+        planet_id: 'planet-1-1',
+        discovered: true,
+        map_width: 2000,
+        map_height: 2000,
+        tick: 128,
+        building_count: 3,
+        unit_count: 2,
+        resource_count: 5,
+      }));
+    });
+
+    const client = createApiClient({
+      serverUrl: 'http://localhost:5173',
+      fetchFn: fetchMock as typeof fetch,
+      auth: {
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+      },
+    });
+
+    await expect(client.fetchPlanet('planet-1-1')).resolves.toMatchObject({
+      building_count: 3,
+      unit_count: 2,
+      resource_count: 5,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('会为行星场景接口序列化视口参数', async () => {
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = new URL(String(input));
@@ -123,6 +158,63 @@ describe('shared api client', () => {
       step: 100,
       cells_width: 20,
       cells_height: 20,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('会为行星检视接口序列化实体定位参数', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = new URL(String(input));
+
+      expect(url.pathname).toBe('/world/planets/planet-1-1/inspect');
+      expect(url.searchParams.get('entity_kind')).toBe('building');
+      expect(url.searchParams.get('entity_id')).toBe('assembler-1');
+      expect(url.searchParams.get('sector_id')).toBeNull();
+
+      return Promise.resolve(jsonResponse({
+        planet_id: 'planet-1-1',
+        discovered: true,
+        entity_kind: 'building',
+        entity_id: 'assembler-1',
+        title: 'assembler',
+        building: {
+          id: 'assembler-1',
+          type: 'assembler',
+          owner_id: 'p1',
+          position: { x: 4, y: 2, z: 0 },
+          hp: 160,
+          max_hp: 160,
+          level: 2,
+          vision_range: 7,
+          runtime: {
+            params: {
+              energy_consume: 8,
+              energy_generate: 0,
+              capacity: 60,
+              maintenance_cost: { minerals: 0, energy: 1 },
+              footprint: { width: 2, height: 2 },
+            },
+            state: 'paused',
+          },
+        },
+      }));
+    });
+
+    const client = createApiClient({
+      serverUrl: 'http://localhost:5173',
+      fetchFn: fetchMock as typeof fetch,
+      auth: {
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+      },
+    });
+
+    await expect(client.fetchPlanetInspect('planet-1-1', {
+      entityKind: 'building',
+      entityId: 'assembler-1',
+    })).resolves.toMatchObject({
+      entity_kind: 'building',
+      entity_id: 'assembler-1',
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

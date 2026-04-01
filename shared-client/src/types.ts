@@ -371,6 +371,19 @@ export interface PlanetResource {
   cluster_id?: string;
 }
 
+export interface PlanetSummaryView {
+  planet_id: string;
+  name?: string;
+  discovered: boolean;
+  kind?: string;
+  map_width: number;
+  map_height: number;
+  tick: number;
+  building_count: number;
+  unit_count: number;
+  resource_count: number;
+}
+
 export interface PlanetView {
   planet_id: string;
   name?: string;
@@ -436,6 +449,19 @@ export interface PlanetOverviewView {
   building_count?: number;
   unit_count?: number;
   resource_count?: number;
+}
+
+export type PlanetInspectEntityKind = 'building' | 'unit' | 'resource' | 'sector';
+
+export interface PlanetInspectView {
+  planet_id: string;
+  discovered: boolean;
+  entity_kind?: PlanetInspectEntityKind;
+  entity_id?: string;
+  title?: string;
+  building?: Building;
+  unit?: Unit;
+  resource?: PlanetResource;
 }
 
 export interface FogMapView {

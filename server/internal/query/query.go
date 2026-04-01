@@ -200,6 +200,60 @@ func (ql *Layer) System(playerID, systemID string) (*SystemView, bool) {
 	return view, true
 }
 
+// PlanetSummaryView is a lightweight planet snapshot for list/overview usage.
+type PlanetSummaryView struct {
+	PlanetID      string              `json:"planet_id"`
+	Name          string              `json:"name,omitempty"`
+	Discovered    bool                `json:"discovered"`
+	Kind          mapmodel.PlanetKind `json:"kind,omitempty"`
+	MapWidth      int                 `json:"map_width"`
+	MapHeight     int                 `json:"map_height"`
+	Tick          int64               `json:"tick"`
+	BuildingCount int                 `json:"building_count"`
+	UnitCount     int                 `json:"unit_count"`
+	ResourceCount int                 `json:"resource_count"`
+}
+
+// PlanetSummary returns a lightweight planet summary without heavy map payloads.
+func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) (*PlanetSummaryView, bool) {
+	planet, ok := ql.maps.Planet(planetID)
+	if !ok {
+		return nil, false
+	}
+	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
+	view := &PlanetSummaryView{
+		PlanetID:   planet.ID,
+		Discovered: discovered,
+	}
+	if !discovered {
+		return view, true
+	}
+
+	view.Name = planet.Name
+	view.Kind = planet.Kind
+	view.MapWidth = planet.Width
+	view.MapHeight = planet.Height
+
+	if ws == nil {
+		view.ResourceCount = len(planet.Resources)
+		return view, true
+	}
+
+	ws.RLock()
+	defer ws.RUnlock()
+	view.Tick = ws.Tick
+
+	if ws.PlanetID == planetID {
+		view.BuildingCount = len(ql.vis.FilterBuildings(ws, playerID))
+		view.UnitCount = len(ql.vis.FilterUnits(ws, playerID))
+		view.ResourceCount = len(ws.Resources)
+		return view, true
+	}
+
+	view.ResourceCount = len(planet.Resources)
+	return view, true
+}
+
 // PlanetView is the detailed planet view including fog-clipped entities.
 type PlanetView struct {
 	PlanetID    string                      `json:"planet_id"`

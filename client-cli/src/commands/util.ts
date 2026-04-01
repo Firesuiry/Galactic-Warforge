@@ -1,10 +1,11 @@
 import chalk from 'chalk';
 import { setAuth, getAuth } from '../api.js';
 import { stopSSE, startSSE, getEventBuffer } from '../sse.js';
-import { fetchFogMap } from '../api.js';
-import { fmtFog, fmtEvent, fmtError } from '../format.js';
+import { fetchPlanetScene } from '../api.js';
+import { fmtEvent, fmtError, fmtFogScene } from '../format.js';
 import { DEFAULT_PLAYERS, DEFAULT_PLANET_ID, SERVER_URL } from '../config.js';
 import type { ReplContext } from '../types.js';
+import { parseArgs, parseIntegerArg } from './args.js';
 
 const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   health: { desc: 'Server status and current tick' },
@@ -13,9 +14,10 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   stats: { desc: 'Current player statistics' },
   galaxy: { desc: 'Galaxy list' },
   system: { usage: '[system_id]', desc: 'System details (default: sys-1)' },
-  planet: { usage: '[planet_id]', desc: 'Planet details: buildings + units + resources (default: planet-1-1)' },
-  fogmap: { usage: '[planet_id]', desc: 'Fog map raw JSON' },
-  fog: { usage: '[planet_id]', desc: 'ASCII fog grid render' },
+  planet: { usage: '[planet_id]', desc: 'Planet summary (default: planet-1-1)' },
+  scene: { usage: '[planet_id] <x> <y> <width> <height>', desc: 'Planet scene raw JSON' },
+  inspect: { usage: '<planet_id> <building|unit|resource|sector> <entity_id>', desc: 'Planet inspect raw JSON' },
+  fog: { usage: '[planet_id] [x y width height]', desc: 'ASCII fog slice via /scene (default: 0 0 32 16)' },
   scan_galaxy: { usage: '[galaxy_id]', desc: 'Discover all systems in a galaxy' },
   scan_system: { usage: '<system_id>', desc: 'Discover a system' },
   scan_planet: { usage: '<planet_id>', desc: 'Discover a planet' },
@@ -58,9 +60,10 @@ const HELP_TEXT = [
   '    stats           Current player statistics',
   '    galaxy          Galaxy list',
   '    system [id]     System details',
-  '    planet [id]     Planet details (buildings + units + resources)',
-  '    fogmap [id]     Fog map raw JSON',
-  '    fog    [id]     ASCII fog grid',
+  '    planet [id]     Planet summary',
+  '    scene [id] <x> <y> <w> <h>',
+  '    inspect <planet_id> <kind> <entity_id>',
+  '    fog [id] [x y w h]  ASCII fog slice',
   '',
   chalk.bold('  Discovery:'),
   '    scan_galaxy [id]   Discover all systems in a galaxy',
@@ -143,10 +146,25 @@ export async function cmdSwitch(args: string[], ctx: ReplContext): Promise<strin
 }
 
 export async function cmdFog(args: string[]): Promise<string> {
-  const planetId = args[0] ?? DEFAULT_PLANET_ID;
+  const parsed = parseArgs(args);
+  const planetId = parsed.positionals[0] ?? DEFAULT_PLANET_ID;
+  const x = parseIntegerArg(parsed.positionals[1]) ?? 0;
+  const y = parseIntegerArg(parsed.positionals[2]) ?? 0;
+  const width = parseIntegerArg(parsed.positionals[3]) ?? 32;
+  const height = parseIntegerArg(parsed.positionals[4]) ?? 16;
+
+  if (width <= 0 || height <= 0) {
+    return fmtError('width 和 height 必须是正整数');
+  }
+
   try {
-    const fogMap = await fetchFogMap(planetId);
-    return fmtFog(fogMap);
+    const scene = await fetchPlanetScene(planetId, {
+      x,
+      y,
+      width,
+      height,
+    });
+    return fmtFogScene(scene);
   } catch (e) {
     return fmtError(String(e));
   }

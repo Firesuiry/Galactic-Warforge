@@ -12,10 +12,12 @@ import type {
   GalaxyView,
   HealthResponse,
   MetricsSnapshot,
+  PlanetInspectView,
   PlanetSceneView,
   PlanetOverviewView,
   PlanetNetworksView,
   PlanetRuntimeView,
+  PlanetSummaryView,
   PlanetView,
   PlayerStatsSnapshot,
   ReplayDigest,
@@ -273,6 +275,78 @@ function filterResourcesByBounds(
   ));
 }
 
+function buildPlanetSummary(planet: PlanetView): PlanetSummaryView {
+  return {
+    planet_id: planet.planet_id,
+    name: planet.name,
+    discovered: planet.discovered,
+    kind: planet.kind,
+    map_width: planet.map_width,
+    map_height: planet.map_height,
+    tick: planet.tick,
+    building_count: Object.keys(planet.buildings ?? {}).length,
+    unit_count: Object.keys(planet.units ?? {}).length,
+    resource_count: planet.resources?.length ?? 0,
+  };
+}
+
+function buildPlanetInspect(planet: PlanetView, entityKind: string, entityId: string): PlanetInspectView | null {
+  switch (entityKind) {
+    case 'building': {
+      const building = planet.buildings?.[entityId];
+      if (!building) {
+        return null;
+      }
+      return {
+        planet_id: planet.planet_id,
+        discovered: planet.discovered,
+        entity_kind: 'building',
+        entity_id: entityId,
+        title: building.type,
+        building,
+      };
+    }
+    case 'unit': {
+      const unit = planet.units?.[entityId];
+      if (!unit) {
+        return null;
+      }
+      return {
+        planet_id: planet.planet_id,
+        discovered: planet.discovered,
+        entity_kind: 'unit',
+        entity_id: entityId,
+        title: unit.type,
+        unit,
+      };
+    }
+    case 'resource': {
+      const resource = planet.resources?.find((candidate) => candidate.id === entityId);
+      if (!resource) {
+        return null;
+      }
+      return {
+        planet_id: planet.planet_id,
+        discovered: planet.discovered,
+        entity_kind: 'resource',
+        entity_id: entityId,
+        title: resource.kind,
+        resource,
+      };
+    }
+    case 'sector':
+      return {
+        planet_id: planet.planet_id,
+        discovered: planet.discovered,
+        entity_kind: 'sector',
+        entity_id: entityId,
+        title: `Sector ${entityId}`,
+      };
+    default:
+      return null;
+  }
+}
+
 function buildPlanetScene(planet: PlanetView, fog: FogMapView | undefined, x: number, y: number, width: number, height: number): PlanetSceneView {
   const bounds = clampSceneBounds(x, y, width, height, planet.map_width, planet.map_height);
   return {
@@ -462,20 +536,37 @@ export function createFixtureFetch(serverUrl: string): typeof fetch {
         Number(url.searchParams.get('step') ?? 100),
       ));
     }
+    if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/inspect')) {
+      const planetId = pathname.split('/')[3] ?? '';
+      const planet = scenario.planets[planetId];
+      if (!planet) {
+        return createErrorResponse(404, `unknown planet ${planetId}`);
+      }
+
+      const entityKind = url.searchParams.get('entity_kind');
+      if (!entityKind) {
+        return createErrorResponse(400, 'entity_kind is required');
+      }
+      const entityId = url.searchParams.get('entity_id') ?? url.searchParams.get('sector_id') ?? '';
+      if (!entityId) {
+        return createErrorResponse(400, 'entity_id or sector_id is required');
+      }
+
+      const inspect = buildPlanetInspect(planet, entityKind, entityId);
+      return inspect ? createJsonResponse(inspect) : createErrorResponse(404, 'target not found');
+    }
     if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/networks')) {
       const planetId = pathname.split('/')[3] ?? '';
       const networks = scenario.networksByPlanet[planetId];
       return networks ? createJsonResponse(networks) : createErrorResponse(404, `unknown planet networks ${planetId}`);
     }
     if (method === 'GET' && pathname.startsWith('/world/planets/') && pathname.endsWith('/fog')) {
-      const planetId = pathname.split('/')[3] ?? '';
-      const fog = scenario.fogByPlanet[planetId];
-      return fog ? createJsonResponse(fog) : createErrorResponse(404, `unknown planet fog ${planetId}`);
+      return createErrorResponse(404, 'not found');
     }
     if (method === 'GET' && pathname.startsWith('/world/planets/')) {
       const planetId = pathname.split('/').at(-1) ?? '';
       const planet = scenario.planets[planetId];
-      return planet ? createJsonResponse(planet) : createErrorResponse(404, `unknown planet ${planetId}`);
+      return planet ? createJsonResponse(buildPlanetSummary(planet)) : createErrorResponse(404, `unknown planet ${planetId}`);
     }
     if (method === 'GET' && pathname === '/events/snapshot') {
       const eventTypes = url.searchParams.get('event_types');

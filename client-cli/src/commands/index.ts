@@ -1,4 +1,4 @@
-import { cmdHealth, cmdMetrics, cmdSummary, cmdStats, cmdGalaxy, cmdSystem, cmdPlanet, cmdFogmap } from './query.js';
+import { cmdHealth, cmdMetrics, cmdSummary, cmdStats, cmdGalaxy, cmdInspect, cmdPlanet, cmdScene, cmdSystem } from './query.js';
 import {
   cmdScanGalaxy,
   cmdScanSystem,
@@ -39,7 +39,8 @@ export const COMMANDS: Record<string, CommandEntry> = {
   galaxy: { handler: cmdGalaxy },
   system: { handler: cmdSystem },
   planet: { handler: cmdPlanet },
-  fogmap: { handler: cmdFogmap },
+  scene: { handler: cmdScene },
+  inspect: { handler: cmdInspect },
   fog: { handler: cmdFog },
   scan_galaxy: { handler: cmdScanGalaxy },
   scan_system: { handler: cmdScanSystem },

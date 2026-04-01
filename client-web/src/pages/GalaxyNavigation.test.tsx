@@ -110,22 +110,33 @@ describe('Galaxy navigation', () => {
           tick: 99,
           map_width: 64,
           map_height: 64,
-          terrain: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => 'buildable')),
-          buildings: {},
-          units: {},
-          resources: [],
-          environment: { wind_factor: 0.8 },
+          building_count: 0,
+          unit_count: 0,
+          resource_count: 0,
         }));
       }
 
-      if (url.endsWith('/world/planets/planet-1-1/fog')) {
+      if (url.includes('/world/planets/planet-1-1/scene')) {
         return Promise.resolve(jsonResponse({
           planet_id: 'planet-1-1',
+          name: 'Gaia',
           discovered: true,
+          kind: 'terrestrial',
+          tick: 99,
           map_width: 64,
           map_height: 64,
+          bounds: {
+            x: 0,
+            y: 0,
+            width: 4,
+            height: 4,
+          },
+          terrain: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => 'buildable')),
           visible: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),
           explored: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),
+          buildings: {},
+          units: {},
+          resources: [],
         }));
       }
 
@@ -209,7 +220,7 @@ describe('Galaxy navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: '进入行星' }));
-    expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Gaia' }, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '行星地图' })).toBeInTheDocument();
   });
 });

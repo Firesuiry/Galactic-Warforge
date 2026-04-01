@@ -11,16 +11,17 @@ import type {
   CommandRequest,
   CommandResponse,
   EventSnapshotResponse,
-  FogMapView,
   GalaxyView,
   HealthResponse,
   CatalogView,
   MetricsSnapshot,
+  PlanetInspectEntityKind,
+  PlanetInspectView,
   PlanetOverviewView,
   PlanetSceneView,
   PlanetNetworksView,
   PlanetRuntimeView,
-  PlanetView,
+  PlanetSummaryView,
   PlayerStatsSnapshot,
   Position,
   ReplayResponse,
@@ -82,6 +83,12 @@ export interface PlanetSceneParams {
 
 export interface PlanetOverviewParams {
   step: number;
+}
+
+export interface PlanetInspectParams {
+  entityKind: PlanetInspectEntityKind;
+  entityId?: string;
+  sectorId?: string;
 }
 
 export interface ReplayRequest {
@@ -240,12 +247,8 @@ export function createApiClient(options: ApiClientOptions) {
     return apiFetch<SystemView>(`/world/systems/${systemId}`);
   }
 
-  function fetchPlanet(planetId: string): Promise<PlanetView> {
-    return apiFetch<PlanetView>(`/world/planets/${planetId}`);
-  }
-
-  function fetchFogMap(planetId: string): Promise<FogMapView> {
-    return apiFetch<FogMapView>(`/world/planets/${planetId}/fog`);
+  function fetchPlanet(planetId: string): Promise<PlanetSummaryView> {
+    return apiFetch<PlanetSummaryView>(`/world/planets/${planetId}`);
   }
 
   function fetchPlanetScene(planetId: string, params: PlanetSceneParams): Promise<PlanetSceneView> {
@@ -260,6 +263,17 @@ export function createApiClient(options: ApiClientOptions) {
     addParams(searchParams, params);
     const query = searchParams.toString();
     return apiFetch<PlanetOverviewView>(`/world/planets/${planetId}/overview${query ? `?${query}` : ''}`);
+  }
+
+  function fetchPlanetInspect(planetId: string, params: PlanetInspectParams): Promise<PlanetInspectView> {
+    const searchParams = new URLSearchParams();
+    addParams(searchParams, {
+      entity_kind: params.entityKind,
+      entity_id: params.entityId,
+      sector_id: params.sectorId,
+    });
+    const query = searchParams.toString();
+    return apiFetch<PlanetInspectView>(`/world/planets/${planetId}/inspect${query ? `?${query}` : ''}`);
   }
 
   function fetchPlanetRuntime(planetId: string): Promise<PlanetRuntimeView> {
@@ -530,12 +544,12 @@ export function createApiClient(options: ApiClientOptions) {
     fetchAudit,
     fetchCatalog,
     fetchEventSnapshot,
-    fetchFogMap,
     fetchGalaxy,
     fetchHealth,
     fetchMetrics,
     fetchPlanetNetworks,
     fetchPlanet,
+    fetchPlanetInspect,
     fetchPlanetOverview,
     fetchPlanetScene,
     fetchPlanetRuntime,
