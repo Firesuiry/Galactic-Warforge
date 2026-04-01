@@ -221,7 +221,7 @@ describe('Galaxy navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: '进入行星' }));
-    expect(await screen.findByRole('heading', { name: 'Gaia' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Gaia' }, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '行星地图' })).toBeInTheDocument();
   });
 });

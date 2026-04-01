@@ -44,7 +44,7 @@ export function TopNav() {
           <span>玩家 {session.playerId}</span>
           <span>
             {isFixtureServerUrl(session.serverUrl)
-              ? `样例 ${fixtureScenario?.label ?? fixtureId}`
+              ? `样例：${fixtureScenario?.label ?? fixtureId}`
               : `服务 ${session.serverUrl || '(同源)'}`}
           </span>
         </div>

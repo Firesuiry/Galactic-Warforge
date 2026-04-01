@@ -17,6 +17,7 @@ func TestPlanetSummaryProvidesCountsWithoutHeavyPayload(t *testing.T) {
 	ws.Buildings["b-1"] = &model.Building{ID: "b-1", OwnerID: "p1", Position: model.Position{X: 5, Y: 5}, VisionRange: 1}
 	ws.Buildings["b-2"] = &model.Building{ID: "b-2", OwnerID: "p2", Position: model.Position{X: 50, Y: 50}, VisionRange: 1}
 	ws.Units["u-1"] = &model.Unit{ID: "u-1", OwnerID: "p1", Position: model.Position{X: 6, Y: 5}, VisionRange: 1}
+	ws.Units["u-2"] = &model.Unit{ID: "u-2", OwnerID: "p2", Position: model.Position{X: 60, Y: 60}, VisionRange: 1}
 	ws.Resources["r-1"] = &model.ResourceNodeState{ID: "r-1", PlanetID: planetID, Position: model.Position{X: 10, Y: 10}}
 	ws.Resources["r-2"] = &model.ResourceNodeState{ID: "r-2", PlanetID: planetID, Position: model.Position{X: 20, Y: 20}}
 
@@ -24,7 +25,7 @@ func TestPlanetSummaryProvidesCountsWithoutHeavyPayload(t *testing.T) {
 	if !ok {
 		t.Fatal("expected summary view")
 	}
-	if view.BuildingCount != 2 || view.UnitCount != 1 || view.ResourceCount != 2 {
+	if view.BuildingCount != 1 || view.UnitCount != 1 || view.ResourceCount != 2 {
 		t.Fatalf("unexpected summary counts: buildings=%d units=%d resources=%d", view.BuildingCount, view.UnitCount, view.ResourceCount)
 	}
 	if view.MapWidth != 400 || view.MapHeight != 300 {

@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
 import type { FogMapView, PlanetView } from '@shared/types';
@@ -106,12 +106,10 @@ export function PlanetPage() {
       layers: DEFAULT_SCENE_LAYERS,
     };
   }, [camera, planetQuery.data]);
-  const deferredSceneRequest = useDeferredValue(sceneRequest);
-
   const sceneQuery = useQuery({
-    queryKey: ['planet-scene', session.serverUrl, session.playerId, planetId, deferredSceneRequest],
-    queryFn: () => client.fetchPlanetScene(planetId, deferredSceneRequest!),
-    enabled: Boolean(planetId && deferredSceneRequest),
+    queryKey: ['planet-scene', session.serverUrl, session.playerId, planetId, sceneRequest],
+    queryFn: () => client.fetchPlanetScene(planetId, sceneRequest!),
+    enabled: Boolean(planetId && sceneRequest),
   });
 
   const runtimeQuery = useQuery({
@@ -290,8 +288,8 @@ export function PlanetPage() {
   const stats = statsQuery.data;
   const currentPlayer = summary?.players?.[session.playerId];
   const currentResearchName = getTechDisplayName(catalog, currentPlayer?.tech?.current_research?.tech_id ?? '');
-  const sceneBoundsLabel = deferredSceneRequest
-    ? `${deferredSceneRequest.x},${deferredSceneRequest.y} · ${deferredSceneRequest.width}x${deferredSceneRequest.height}`
+  const sceneBoundsLabel = sceneRequest
+    ? `${sceneRequest.x},${sceneRequest.y} · ${sceneRequest.width}x${sceneRequest.height}`
     : '-';
   const inspectLabel = inspectQuery.data?.title
     || inspectQuery.data?.entity_id

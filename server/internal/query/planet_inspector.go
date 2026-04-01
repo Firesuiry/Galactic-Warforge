@@ -36,6 +36,9 @@ func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, 
 
 	switch req.TargetType {
 	case "building":
+		if ws.PlanetID != planetID {
+			return nil, false
+		}
 		ws.RLock()
 		defer ws.RUnlock()
 		building := ws.Buildings[req.TargetID]
@@ -47,6 +50,48 @@ func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, 
 		}
 		view.Title = string(building.Type)
 		view.Building = building
+		return view, true
+	case "unit":
+		if ws.PlanetID != planetID {
+			return nil, false
+		}
+		ws.RLock()
+		defer ws.RUnlock()
+		unit := ws.Units[req.TargetID]
+		if unit == nil {
+			return nil, false
+		}
+		if unit.OwnerID != playerID && !ql.vis.IsVisible(ws, playerID, unit.Position) {
+			return nil, false
+		}
+		view.Title = string(unit.Type)
+		view.Unit = unit
+		return view, true
+	case "resource":
+		if ws.PlanetID == planetID {
+			ws.RLock()
+			resource := ws.Resources[req.TargetID]
+			ws.RUnlock()
+			if resource != nil {
+				if !ql.vis.IsVisible(ws, playerID, resource.Position) {
+					return nil, false
+				}
+				view.Title = resource.Kind
+				view.Resource = resource
+				return view, true
+			}
+		}
+		for _, resource := range staticPlanetResources(planet) {
+			if resource.ID != req.TargetID {
+				continue
+			}
+			view.Title = resource.Kind
+			view.Resource = resource
+			return view, true
+		}
+		return nil, false
+	case "sector":
+		view.Title = "Sector " + req.TargetID
 		return view, true
 	default:
 		return nil, false

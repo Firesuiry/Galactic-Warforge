@@ -14,6 +14,7 @@ import (
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
+	"siliconworld/internal/visibility"
 )
 
 func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
@@ -365,8 +366,9 @@ func TestPlanetEndpointReturnsSummaryModel(t *testing.T) {
 		PlanetID: ws.PlanetID,
 		Position: model.Position{X: 3, Y: 3},
 	}
-	expectedBuildingCount := len(ws.Buildings)
-	expectedUnitCount := len(ws.Units)
+	vis := visibility.New()
+	expectedBuildingCount := len(vis.FilterBuildings(ws, "p1"))
+	expectedUnitCount := len(vis.FilterUnits(ws, "p1"))
 	expectedResourceCount := len(ws.Resources)
 	ws.Unlock()
 

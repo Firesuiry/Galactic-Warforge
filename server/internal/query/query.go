@@ -243,8 +243,8 @@ func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) 
 	view.Tick = ws.Tick
 
 	if ws.PlanetID == planetID {
-		view.BuildingCount = len(ws.Buildings)
-		view.UnitCount = len(ws.Units)
+		view.BuildingCount = len(ql.vis.FilterBuildings(ws, playerID))
+		view.UnitCount = len(ql.vis.FilterUnits(ws, playerID))
 		view.ResourceCount = len(sortedResources(ws))
 		return view, true
 	}
