@@ -35,11 +35,29 @@ func TestExportSaveFileIncludesRuntimeAndDebugState(t *testing.T) {
 	if save.RuntimeState.Winner != "p1" {
 		t.Fatalf("expected winner p1, got %q", save.RuntimeState.Winner)
 	}
+	if save.RuntimeState.ActivePlanetID != "planet-1-1" {
+		t.Fatalf("expected active planet restored, got %q", save.RuntimeState.ActivePlanetID)
+	}
 	if len(save.DebugState.CommandLog) != 1 || len(save.DebugState.AuditLog) != 1 {
-		t.Fatalf("expected debug state exported, got %+v", save.DebugState)
+		t.Fatalf("expected command/audit debug state exported, got %+v", save.DebugState)
+	}
+	if len(save.DebugState.EventHistory[model.EvtCommandResult]) != 1 {
+		t.Fatalf("expected event history exported")
+	}
+	if len(save.DebugState.AlertHistory) != 1 {
+		t.Fatalf("expected alert history exported")
 	}
 	if save.DebugState.BaseSnapshot == nil {
 		t.Fatalf("expected base snapshot for replay/rollback anchor")
+	}
+	if save.Snapshot == nil || save.Snapshot.World == nil {
+		t.Fatalf("expected exported snapshot world payload")
+	}
+	if len(save.Snapshot.World.Players) == 0 {
+		t.Fatalf("expected exported snapshot to include world state")
+	}
+	if save.Snapshot.Discovery == nil || len(save.Snapshot.Discovery.Players) == 0 {
+		t.Fatalf("expected exported snapshot to include discovery state")
 	}
 }
 
@@ -73,11 +91,25 @@ func TestNewFromSaveRestoresTickWinnerAndHistories(t *testing.T) {
 	if core.Winner() != "p2" {
 		t.Fatalf("expected winner restored")
 	}
+	if core.ActivePlanetID() != maps.PrimaryPlanetID {
+		t.Fatalf("expected active planet restored")
+	}
 	if len(core.GetCommandLog().All()) != 1 {
 		t.Fatalf("expected command log restored")
 	}
 	if len(core.AlertHistory().All()) != 1 {
 		t.Fatalf("expected alert history restored")
+	}
+	events, _, _, _ := core.EventHistory().Snapshot([]model.EventType{model.EvtCommandResult}, "", 0, 10)
+	if len(events) != 1 || events[0].EventID != "evt-9-1" {
+		t.Fatalf("expected event history restored")
+	}
+	audit := core.snapshotStore.AuditEntries()
+	if len(audit) != 1 || audit[0].Action != "command" {
+		t.Fatalf("expected audit log restored")
+	}
+	if core.Discovery() == nil || !core.Discovery().IsPlanetDiscovered("p1", maps.PrimaryPlanetID) {
+		t.Fatalf("expected discovery restored")
 	}
 	if snap := core.snapshotStore.SnapshotAtOrBefore(28); snap == nil {
 		t.Fatalf("expected restored runtime snapshots")
@@ -100,6 +132,51 @@ func TestNewFromSaveClampsHistoriesToRuntimeLimits(t *testing.T) {
 	events, _, _, _ := core.EventHistory().Snapshot([]model.EventType{model.EvtCommandResult}, "", 0, 10)
 	if len(events) != 1 {
 		t.Fatalf("expected event history limit applied, got %d", len(events))
+	}
+}
+
+func TestSaveWritesThroughGameDir(t *testing.T) {
+	core := newSaveStateHarness(t)
+	core.world.Tick = 51
+	core.activePlanetID = "planet-1-1"
+	core.winner = "p2"
+	core.cmdLog.Append(commandLogEntry{Tick: 51, PlayerID: "p2", RequestID: "req-save"})
+	core.eventHistory.Record([]*model.GameEvent{{EventID: "evt-51-1", Tick: 51, EventType: model.EvtCommandResult}})
+	core.alertHistory.Record([]*model.ProductionAlert{{AlertID: "alert-51", Tick: 51, PlayerID: "p2"}})
+	core.snapshotStore.ReplaceAudit([]*model.AuditEntry{{Tick: 51, PlayerID: "p2", Action: "command"}})
+
+	res, err := core.Save("auto")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if res.Trigger != "auto" {
+		t.Fatalf("expected trigger auto, got %q", res.Trigger)
+	}
+	if res.Tick != 51 {
+		t.Fatalf("expected tick 51, got %d", res.Tick)
+	}
+	if res.SavedAt.IsZero() {
+		t.Fatalf("expected saved_at set")
+	}
+	if res.Path != core.gameDir.SavePath() {
+		t.Fatalf("expected save path %q, got %q", core.gameDir.SavePath(), res.Path)
+	}
+
+	meta, save, err := core.gameDir.Load()
+	if err != nil {
+		t.Fatalf("load after save: %v", err)
+	}
+	if meta == nil || save == nil {
+		t.Fatalf("expected meta/save payload")
+	}
+	if save.Tick != 51 || save.RuntimeState.Winner != "p2" || save.RuntimeState.ActivePlanetID != "planet-1-1" {
+		t.Fatalf("expected save payload persisted runtime state")
+	}
+	if len(save.DebugState.CommandLog) != 1 || len(save.DebugState.EventHistory[model.EvtCommandResult]) != 1 || len(save.DebugState.AlertHistory) != 1 || len(save.DebugState.AuditLog) != 1 {
+		t.Fatalf("expected persisted debug state")
+	}
+	if save.SavedAt.IsZero() || !save.SavedAt.Equal(res.SavedAt) {
+		t.Fatalf("expected SaveResult saved_at to match written save")
 	}
 }
 
