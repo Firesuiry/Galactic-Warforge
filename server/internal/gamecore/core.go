@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"siliconworld/internal/config"
+	"siliconworld/internal/gamedir"
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/mapstate"
 	"siliconworld/internal/model"
@@ -233,6 +234,12 @@ func (cl *CommandLog) All() []commandLogEntry {
 	return cp
 }
 
+func (cl *CommandLog) ReplaceAll(entries []commandLogEntry) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.entries = append([]commandLogEntry(nil), entries...)
+}
+
 // Range returns a copy of log entries in the tick window [fromTick, toTick].
 func (cl *CommandLog) Range(fromTick, toTick int64) []commandLogEntry {
 	if toTick < fromTick {
@@ -312,6 +319,10 @@ type GameCore struct {
 	executorUsage    map[string]int
 	combatUnits      *CombatUnitManager
 	orbitalPlatforms *OrbitalPlatformManager
+	saveMu           sync.Mutex
+	gameDir          *gamedir.Dir
+	saveMeta         *gamedir.MetaFile
+	baseSnapshot     *snapshot.Snapshot
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
