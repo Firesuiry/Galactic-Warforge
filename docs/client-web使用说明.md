@@ -71,7 +71,7 @@ VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 
 登录页默认是“在线服务端”模式：
 
-1. 输入服务地址，通常使用 `http://localhost:5173`
+1. 输入 Web 地址，通常使用 `http://localhost:5173`（通过同源代理转发到 Go 服务端）
 2. 输入 `player_id`
 3. 输入 `player_key`
 4. 点击“连接并进入总览”

@@ -282,7 +282,7 @@ func TestLoadRejectsInvalidSnapshotPayloads(t *testing.T) {
 	})
 }
 
-func TestLoadRejectsFingerprintMismatchWhenSaveMutated(t *testing.T) {
+func TestLoadHealsFingerprintMismatchWhenSaveMutated(t *testing.T) {
 	dir := Open(t.TempDir())
 	meta := minimalMeta()
 	save := minimalSave(11)
@@ -303,8 +303,57 @@ func TestLoadRejectsFingerprintMismatchWhenSaveMutated(t *testing.T) {
 		t.Fatalf("write torn save: %v", err)
 	}
 
-	if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "fingerprint") {
-		t.Fatalf("expected fingerprint mismatch error, got %v", err)
+	healedMeta, healedSave, err := dir.Load()
+	if err != nil {
+		t.Fatalf("expected load to heal meta mismatch, got %v", err)
+	}
+	if healedMeta.SaveFingerprint != fingerprintBytes(data) {
+		t.Fatalf("expected save fingerprint healed, got %q", healedMeta.SaveFingerprint)
+	}
+	if !healedMeta.LastSavedAt.Equal(loadedSave.SavedAt) {
+		t.Fatalf("expected healed last_saved_at %s, got %s", loadedSave.SavedAt.Format(time.RFC3339Nano), healedMeta.LastSavedAt.Format(time.RFC3339Nano))
+	}
+	if !healedSave.SavedAt.Equal(loadedSave.SavedAt) {
+		t.Fatalf("expected save saved_at preserved, got %s", healedSave.SavedAt.Format(time.RFC3339Nano))
+	}
+
+	persistedMeta := &MetaFile{}
+	if err := dir.readJSON(dir.MetaPath(), persistedMeta); err != nil {
+		t.Fatalf("read healed meta: %v", err)
+	}
+	if persistedMeta.SaveFingerprint != fingerprintBytes(data) {
+		t.Fatalf("expected healed meta persisted, got %q", persistedMeta.SaveFingerprint)
+	}
+}
+
+func TestWriteJSONBytesAtomicSyncsFileAndDirectory(t *testing.T) {
+	dir := Open(t.TempDir())
+	oldSyncFile := syncFile
+	oldSyncDir := syncDir
+	t.Cleanup(func() {
+		syncFile = oldSyncFile
+		syncDir = oldSyncDir
+	})
+
+	var fileSyncs int
+	var dirSyncs int
+	syncFile = func(f *os.File) error {
+		fileSyncs++
+		return nil
+	}
+	syncDir = func(root string) error {
+		dirSyncs++
+		return nil
+	}
+
+	if err := dir.writeJSONBytesAtomic(dir.SavePath(), []byte("{}")); err != nil {
+		t.Fatalf("write json bytes atomically: %v", err)
+	}
+	if fileSyncs != 1 {
+		t.Fatalf("expected 1 file sync, got %d", fileSyncs)
+	}
+	if dirSyncs != 1 {
+		t.Fatalf("expected 1 dir sync, got %d", dirSyncs)
 	}
 }
 

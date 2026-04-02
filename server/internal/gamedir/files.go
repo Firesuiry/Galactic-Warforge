@@ -17,6 +17,19 @@ import (
 
 const currentFormatVersion = 1
 
+var syncFile = func(file *os.File) error {
+	return file.Sync()
+}
+
+var syncDir = func(root string) error {
+	dir, err := os.Open(root)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
+}
+
 // Dir represents a single game save directory.
 type Dir struct {
 	root string
@@ -176,11 +189,12 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 		return nil, nil, err
 	}
 	actualFingerprint := fingerprintBytes(saveData)
-	if meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint {
-		return nil, nil, fmt.Errorf("save fingerprint mismatch")
-	}
-	if !meta.LastSavedAt.Equal(save.SavedAt) {
-		return nil, nil, fmt.Errorf("inconsistent save timestamps: meta.last_saved_at=%s save.saved_at=%s", meta.LastSavedAt.Format(time.RFC3339Nano), save.SavedAt.Format(time.RFC3339Nano))
+	if meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint || !meta.LastSavedAt.Equal(save.SavedAt) {
+		healedMeta := *meta
+		if err := d.writeMeta(&healedMeta, save.SavedAt, actualFingerprint); err != nil {
+			return nil, nil, fmt.Errorf("heal meta.json: %w", err)
+		}
+		meta = &healedMeta
 	}
 	return meta, save, nil
 }
@@ -244,13 +258,35 @@ func (d *Dir) writeJSONBytesAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(d.root, 0o755); err != nil {
 		return fmt.Errorf("create game dir: %w", err)
 	}
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+	tmpFile, err := os.CreateTemp(d.root, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
 		return fmt.Errorf("write temp file: %w", err)
 	}
+	if err := syncFile(tmpFile); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename temp file: %w", err)
+	}
+	removeTemp = false
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("sync game dir: %w", err)
 	}
 	return nil
 }

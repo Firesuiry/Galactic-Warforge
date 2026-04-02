@@ -32,6 +32,7 @@
 - 纯运行参数仍允许被本次外部配置覆盖，包括：`server.port`、`server.rate_limit`、`server.event_history_limit`、`server.snapshot_max_events`、`server.alert_history_limit`、`server.auto_save_interval_seconds`。
 - 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
 - 第一版不做多槽位或命名存档点，自动保存与手动保存都会覆盖同一份 `save.json`。
+- 第一版不持久化 RNG 状态；续档后未来随机事件不保证与不停服持续运行时完全一致。
 
 **GET /health**
 - 说明: 健康检查（无需认证）
