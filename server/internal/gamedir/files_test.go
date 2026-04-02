@@ -3,7 +3,9 @@ package gamedir
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -323,6 +325,55 @@ func TestLoadHealsFingerprintMismatchWhenSaveMutated(t *testing.T) {
 	}
 	if persistedMeta.SaveFingerprint != fingerprintBytes(data) {
 		t.Fatalf("expected healed meta persisted, got %q", persistedMeta.SaveFingerprint)
+	}
+}
+
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return len(p) - 1, nil
+}
+
+func TestWriteAllRejectsShortWrite(t *testing.T) {
+	err := writeAll(shortWriter{}, []byte("abc"))
+	if !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("expected io.ErrShortWrite, got %v", err)
+	}
+}
+
+func TestWriteJSONBytesAtomicSyncsParentDirWhenCreatingRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "nested", "game")
+	dir := Open(root)
+	oldSyncFile := syncFile
+	oldSyncDir := syncDir
+	t.Cleanup(func() {
+		syncFile = oldSyncFile
+		syncDir = oldSyncDir
+	})
+
+	var synced []string
+	syncFile = func(f *os.File) error {
+		return nil
+	}
+	syncDir = func(root string) error {
+		synced = append(synced, root)
+		return nil
+	}
+
+	if err := dir.writeJSONBytesAtomic(dir.SavePath(), []byte("{}")); err != nil {
+		t.Fatalf("write json bytes atomically: %v", err)
+	}
+	expected := []string{filepath.Dir(root), root}
+	if len(synced) != len(expected) {
+		t.Fatalf("expected %d dir syncs, got %d (%v)", len(expected), len(synced), synced)
+	}
+	for i := range expected {
+		if synced[i] != expected[i] {
+			t.Fatalf("expected sync order %v, got %v", expected, synced)
+		}
 	}
 }
 

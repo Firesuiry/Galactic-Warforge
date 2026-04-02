@@ -1,10 +1,13 @@
 package gamedir
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -28,6 +31,11 @@ var syncDir = func(root string) error {
 	}
 	defer dir.Close()
 	return dir.Sync()
+}
+
+func writeAll(w io.Writer, data []byte) error {
+	_, err := io.Copy(w, bytes.NewReader(data))
+	return err
 }
 
 // Dir represents a single game save directory.
@@ -255,8 +263,20 @@ func (d *Dir) writeJSONAtomic(path string, payload any) error {
 }
 
 func (d *Dir) writeJSONBytesAtomic(path string, data []byte) error {
+	createdRoot := false
+	if _, err := os.Stat(d.root); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("stat game dir: %w", err)
+		}
+		createdRoot = true
+	}
 	if err := os.MkdirAll(d.root, 0o755); err != nil {
 		return fmt.Errorf("create game dir: %w", err)
+	}
+	if createdRoot {
+		if err := syncDir(filepath.Dir(d.root)); err != nil {
+			return fmt.Errorf("sync parent dir: %w", err)
+		}
 	}
 	tmpFile, err := os.CreateTemp(d.root, filepath.Base(path)+".*.tmp")
 	if err != nil {
@@ -270,7 +290,7 @@ func (d *Dir) writeJSONBytesAtomic(path string, data []byte) error {
 		}
 	}()
 
-	if _, err := tmpFile.Write(data); err != nil {
+	if err := writeAll(tmpFile, data); err != nil {
 		_ = tmpFile.Close()
 		return fmt.Errorf("write temp file: %w", err)
 	}

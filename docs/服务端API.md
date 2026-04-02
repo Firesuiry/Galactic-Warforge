@@ -27,7 +27,7 @@
 - 启动规则：
   - 目录不存在或为空：按本次外部 `config` 与 `map-config` 新建一局，并在开始对外服务前立即写出首个 `meta.json` 与 `save.json`。
   - 目录中同时存在合法 `meta.json` 与 `save.json`：直接继续上一局。
-  - 目录里只存在其中一个文件，或目录非空但不是完整存档：服务端拒绝启动。
+  - 目录里只存在其中一个文件，或目录非空但不是完整存档：服务端拒绝启动，需人工清理或重建该目录。
 - 续档时，目录内部保存的 `battlefield`、`players`、`map_config` 优先于本次外部配置。
 - 纯运行参数仍允许被本次外部配置覆盖，包括：`server.port`、`server.rate_limit`、`server.event_history_limit`、`server.snapshot_max_events`、`server.alert_history_limit`、`server.auto_save_interval_seconds`。
 - 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
