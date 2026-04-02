@@ -43,12 +43,13 @@ type ServerConfig struct {
 	AlertHistoryLimit int    `yaml:"alert_history_limit"` // max production alerts kept for snapshot queries
 	DataDir           string `yaml:"data_dir"`            // snapshot/audit storage root
 	// Snapshot storage policy (tick-based).
-	SnapshotIntervalTicks  int64                   `yaml:"snapshot_interval_ticks"`  // full snapshot interval
-	SnapshotRetentionTicks int64                   `yaml:"snapshot_retention_ticks"` // retain snapshots within last N ticks
-	SnapshotRetentionCount int                     `yaml:"snapshot_retention_count"` // retain at most N snapshots
-	SnapshotMaxBytes       int64                   `yaml:"snapshot_max_bytes"`       // soft max snapshot JSON size
-	SnapshotDeltaMaxBytes  int64                   `yaml:"snapshot_delta_max_bytes"` // soft max delta JSON size
-	ProductionMonitor      ProductionMonitorConfig `yaml:"production_monitor"`
+	SnapshotIntervalTicks   int64                   `yaml:"snapshot_interval_ticks"`  // full snapshot interval
+	SnapshotRetentionTicks  int64                   `yaml:"snapshot_retention_ticks"` // retain snapshots within last N ticks
+	SnapshotRetentionCount  int                     `yaml:"snapshot_retention_count"` // retain at most N snapshots
+	SnapshotMaxBytes        int64                   `yaml:"snapshot_max_bytes"`       // soft max snapshot JSON size
+	SnapshotDeltaMaxBytes   int64                   `yaml:"snapshot_delta_max_bytes"` // soft max delta JSON size
+	AutoSaveIntervalSeconds int                     `yaml:"auto_save_interval_seconds"`
+	ProductionMonitor       ProductionMonitorConfig `yaml:"production_monitor"`
 }
 
 // ProductionMonitorConfig configures production monitoring sampling and alert thresholds.
@@ -102,11 +103,12 @@ func ApplyDefaults(cfg *Config) error {
 		return fmt.Errorf("nil config")
 	}
 	const (
-		defaultSnapshotIntervalTicks  int64 = 100
-		defaultSnapshotRetentionCount       = 60
-		defaultSnapshotMaxBytes       int64 = 2 * 1024 * 1024
-		defaultSnapshotDeltaMaxBytes  int64 = 1 * 1024 * 1024
-		defaultAlertHistoryLimit            = 1000
+		defaultSnapshotIntervalTicks   int64 = 100
+		defaultSnapshotRetentionCount        = 60
+		defaultSnapshotMaxBytes        int64 = 2 * 1024 * 1024
+		defaultSnapshotDeltaMaxBytes   int64 = 1 * 1024 * 1024
+		defaultAlertHistoryLimit             = 1000
+		defaultAutoSaveIntervalSeconds       = 60
 	)
 	if cfg.Battlefield.MaxTickRate == 0 {
 		cfg.Battlefield.MaxTickRate = 10
@@ -134,6 +136,12 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Server.DataDir == "" {
 		cfg.Server.DataDir = "data"
+	}
+	if cfg.Server.AutoSaveIntervalSeconds == 0 {
+		cfg.Server.AutoSaveIntervalSeconds = defaultAutoSaveIntervalSeconds
+	}
+	if cfg.Server.AutoSaveIntervalSeconds < 0 {
+		return fmt.Errorf("server.auto_save_interval_seconds must be >= 0")
 	}
 	if cfg.Server.SnapshotIntervalTicks == 0 {
 		cfg.Server.SnapshotIntervalTicks = defaultSnapshotIntervalTicks

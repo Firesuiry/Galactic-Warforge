@@ -33,6 +33,7 @@ server:
   snapshot_max_events: 200
   alert_history_limit: 1000
   data_dir: "data"
+  auto_save_interval_seconds: 60
   snapshot_interval_ticks: 5000
   snapshot_retention_ticks: 30000
   snapshot_retention_count: 6
