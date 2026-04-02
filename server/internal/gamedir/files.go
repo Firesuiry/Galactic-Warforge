@@ -59,11 +59,11 @@ type CommandLogEntry struct {
 
 // DebugState stores optional debug/replay related persisted state.
 type DebugState struct {
-	BaseSnapshot int64                    `json:"base_snapshot,omitempty"`
-	CommandLog   []CommandLogEntry        `json:"command_log,omitempty"`
-	EventHistory []*model.GameEvent       `json:"event_history,omitempty"`
-	AlertHistory []*model.ProductionAlert `json:"alert_history,omitempty"`
-	AuditLog     []*model.AuditEntry      `json:"audit_log,omitempty"`
+	BaseSnapshot *snapshot.Snapshot                     `json:"base_snapshot,omitempty"`
+	CommandLog   []CommandLogEntry                      `json:"command_log,omitempty"`
+	EventHistory map[model.EventType][]*model.GameEvent `json:"event_history,omitempty"`
+	AlertHistory []*model.ProductionAlert               `json:"alert_history,omitempty"`
+	AuditLog     []*model.AuditEntry                    `json:"audit_log,omitempty"`
 }
 
 // SaveFile is the mutable runtime save stored in save.json.

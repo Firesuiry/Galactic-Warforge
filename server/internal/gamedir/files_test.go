@@ -47,7 +47,21 @@ func TestWriteRoundTrip(t *testing.T) {
 		},
 		RuntimeState: RuntimeState{ActivePlanetID: "planet-1-1", Winner: "p1"},
 		DebugState: DebugState{
-			BaseSnapshot: 10,
+			BaseSnapshot: &snapshot.Snapshot{
+				Version: snapshot.CurrentVersion,
+				Tick:    10,
+				World: &snapshot.WorldSnapshot{
+					Tick:      10,
+					PlanetID:  "planet-1-1",
+					MapWidth:  1,
+					MapHeight: 1,
+					Players:   map[string]*model.PlayerState{},
+					Buildings: map[string]*snapshot.BuildingSnapshot{},
+					Units:     map[string]*model.Unit{},
+					Resources: map[string]*model.ResourceNodeState{},
+					Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+				},
+			},
 			CommandLog: []CommandLogEntry{{
 				Tick:        12,
 				PlayerID:    "p1",
@@ -58,7 +72,9 @@ func TestWriteRoundTrip(t *testing.T) {
 				Commands:    []model.Command{{Type: model.CmdBuild}},
 				Results:     []model.CommandResult{{CommandIndex: 0, Status: model.StatusExecuted, Code: model.CodeOK}},
 			}},
-			EventHistory: []*model.GameEvent{{EventID: "evt-1", Tick: 12, EventType: model.EvtTickCompleted}},
+			EventHistory: map[model.EventType][]*model.GameEvent{
+				model.EvtTickCompleted: {{EventID: "evt-1", Tick: 12, EventType: model.EvtTickCompleted}},
+			},
 			AlertHistory: []*model.ProductionAlert{{AlertID: "alert-1", Tick: 12, PlayerID: "p1"}},
 			AuditLog:     []*model.AuditEntry{{Tick: 12, PlayerID: "p1", Action: "command"}},
 		},
@@ -99,7 +115,7 @@ func TestWriteRoundTrip(t *testing.T) {
 	if len(entry.Commands) != 1 || len(entry.Results) != 1 {
 		t.Fatalf("expected commands/results restored")
 	}
-	if gotSave.DebugState.BaseSnapshot != 10 || len(gotSave.DebugState.EventHistory) != 1 || len(gotSave.DebugState.AlertHistory) != 1 || len(gotSave.DebugState.AuditLog) != 1 {
+	if gotSave.DebugState.BaseSnapshot == nil || gotSave.DebugState.BaseSnapshot.Tick != 10 || len(gotSave.DebugState.EventHistory[model.EvtTickCompleted]) != 1 || len(gotSave.DebugState.AlertHistory) != 1 || len(gotSave.DebugState.AuditLog) != 1 {
 		t.Fatalf("expected debug state restored")
 	}
 }
