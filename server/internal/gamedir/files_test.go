@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/mapconfig"
@@ -265,6 +266,33 @@ func TestLoadRejectsInvalidSnapshotPayloads(t *testing.T) {
 			t.Fatalf("expected invalid base snapshot rejected, got %v", err)
 		}
 	})
+}
+
+func TestLoadRejectsTornStateWhenSaveIsNewerThanMeta(t *testing.T) {
+	dir := Open(t.TempDir())
+	meta := minimalMeta()
+	save := minimalSave(11)
+	if err := dir.WriteInitial(meta, save); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+
+	_, loadedSave, err := dir.Load()
+	if err != nil {
+		t.Fatalf("load baseline: %v", err)
+	}
+	loadedSave.SavedAt = loadedSave.SavedAt.Add(time.Second)
+	loadedSave.Tick = 12
+	data, err := json.Marshal(loadedSave)
+	if err != nil {
+		t.Fatalf("marshal torn save: %v", err)
+	}
+	if err := os.WriteFile(dir.SavePath(), data, 0o644); err != nil {
+		t.Fatalf("write torn save: %v", err)
+	}
+
+	if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "inconsistent") {
+		t.Fatalf("expected torn-state consistency error, got %v", err)
+	}
 }
 
 func minimalMeta() *MetaFile {

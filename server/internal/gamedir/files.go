@@ -157,6 +157,9 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	if err := validateSave(save); err != nil {
 		return nil, nil, fmt.Errorf("parse save.json: %w", err)
 	}
+	if !meta.LastSavedAt.Equal(save.SavedAt) {
+		return nil, nil, fmt.Errorf("inconsistent save timestamps: meta.last_saved_at=%s save.saved_at=%s", meta.LastSavedAt.Format(time.RFC3339Nano), save.SavedAt.Format(time.RFC3339Nano))
+	}
 	return meta, save, nil
 }
 
