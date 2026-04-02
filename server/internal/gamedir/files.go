@@ -35,6 +35,7 @@ type MetaFile struct {
 	LastSavedAt       time.Time        `json:"last_saved_at"`
 	ConfigFingerprint string           `json:"config_fingerprint"`
 	MapFingerprint    string           `json:"map_fingerprint"`
+	SaveFingerprint   string           `json:"save_fingerprint"`
 	GameplayConfig    GameplayConfig   `json:"gameplay_config"`
 	MapConfig         mapconfig.Config `json:"map_config"`
 }
@@ -118,28 +119,31 @@ func (d *Dir) WriteInitial(meta *MetaFile, save *SaveFile) error {
 		return fmt.Errorf("write initial: %w", err)
 	}
 	now := time.Now().UTC()
-	if err := d.writeSave(save, now); err != nil {
+	saveFingerprint, err := d.writeSave(save, now)
+	if err != nil {
 		return err
 	}
-	if err := d.writeMeta(meta, now); err != nil {
+	if err := d.writeMeta(meta, now, saveFingerprint); err != nil {
 		return err
 	}
 	return nil
 }
 
-// WriteSave updates save.json atomically. If meta is provided it is also updated.
+// WriteSave updates save.json atomically and then meta.json.
 func (d *Dir) WriteSave(meta *MetaFile, save *SaveFile) error {
+	if meta == nil {
+		return fmt.Errorf("write save: nil meta")
+	}
 	if err := validateSave(save); err != nil {
 		return fmt.Errorf("write save: %w", err)
 	}
 	now := time.Now().UTC()
-	if err := d.writeSave(save, now); err != nil {
+	saveFingerprint, err := d.writeSave(save, now)
+	if err != nil {
 		return err
 	}
-	if meta != nil {
-		if err := d.writeMeta(meta, now); err != nil {
-			return err
-		}
+	if err := d.writeMeta(meta, now, saveFingerprint); err != nil {
+		return err
 	}
 	return nil
 }
@@ -150,12 +154,21 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	if err := d.readJSON(d.MetaPath(), meta); err != nil {
 		return nil, nil, err
 	}
+
+	saveData, err := os.ReadFile(d.SavePath())
+	if err != nil {
+		return nil, nil, fmt.Errorf("read save.json: %w", err)
+	}
 	save := &SaveFile{}
-	if err := d.readJSON(d.SavePath(), save); err != nil {
-		return nil, nil, err
+	if err := json.Unmarshal(saveData, save); err != nil {
+		return nil, nil, fmt.Errorf("parse save.json: %w", err)
 	}
 	if err := validateSave(save); err != nil {
 		return nil, nil, fmt.Errorf("parse save.json: %w", err)
+	}
+	actualFingerprint := fingerprintBytes(saveData)
+	if meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint {
+		return nil, nil, fmt.Errorf("save fingerprint mismatch")
 	}
 	if !meta.LastSavedAt.Equal(save.SavedAt) {
 		return nil, nil, fmt.Errorf("inconsistent save timestamps: meta.last_saved_at=%s save.saved_at=%s", meta.LastSavedAt.Format(time.RFC3339Nano), save.SavedAt.Format(time.RFC3339Nano))
@@ -163,7 +176,7 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	return meta, save, nil
 }
 
-func (d *Dir) writeMeta(meta *MetaFile, savedAt time.Time) error {
+func (d *Dir) writeMeta(meta *MetaFile, savedAt time.Time, saveFingerprint string) error {
 	if meta == nil {
 		return fmt.Errorf("write meta.json: nil meta")
 	}
@@ -180,24 +193,29 @@ func (d *Dir) writeMeta(meta *MetaFile, savedAt time.Time) error {
 	if meta.MapFingerprint == "" {
 		meta.MapFingerprint = fingerprint(meta.MapConfig)
 	}
+	meta.SaveFingerprint = saveFingerprint
 	if err := d.writeJSONAtomic(d.MetaPath(), meta); err != nil {
 		return fmt.Errorf("write meta.json: %w", err)
 	}
 	return nil
 }
 
-func (d *Dir) writeSave(save *SaveFile, savedAt time.Time) error {
+func (d *Dir) writeSave(save *SaveFile, savedAt time.Time) (string, error) {
 	if save == nil {
-		return fmt.Errorf("write save.json: nil save")
+		return "", fmt.Errorf("write save.json: nil save")
 	}
 	if save.FormatVersion == 0 {
 		save.FormatVersion = currentFormatVersion
 	}
 	save.SavedAt = savedAt
-	if err := d.writeJSONAtomic(d.SavePath(), save); err != nil {
-		return fmt.Errorf("write save.json: %w", err)
+	saveData, err := json.MarshalIndent(save, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("write save.json: marshal json: %w", err)
 	}
-	return nil
+	if err := d.writeJSONBytesAtomic(d.SavePath(), saveData); err != nil {
+		return "", fmt.Errorf("write save.json: %w", err)
+	}
+	return fingerprintBytes(saveData), nil
 }
 
 func (d *Dir) readJSON(path string, out any) error {
@@ -212,12 +230,16 @@ func (d *Dir) readJSON(path string, out any) error {
 }
 
 func (d *Dir) writeJSONAtomic(path string, payload any) error {
-	if err := os.MkdirAll(d.root, 0o755); err != nil {
-		return fmt.Errorf("create game dir: %w", err)
-	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal json: %w", err)
+	}
+	return d.writeJSONBytesAtomic(path, data)
+}
+
+func (d *Dir) writeJSONBytesAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(d.root, 0o755); err != nil {
+		return fmt.Errorf("create game dir: %w", err)
 	}
 	tmpPath := path + ".tmp"
 	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
@@ -263,6 +285,11 @@ func fingerprint(v any) string {
 	if err != nil {
 		return ""
 	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func fingerprintBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }

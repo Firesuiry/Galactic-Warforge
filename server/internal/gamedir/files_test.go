@@ -98,6 +98,9 @@ func TestWriteRoundTrip(t *testing.T) {
 	if gotMeta.ConfigFingerprint == "" || gotMeta.MapFingerprint == "" {
 		t.Fatalf("expected metadata fingerprints to be persisted")
 	}
+	if gotMeta.SaveFingerprint == "" {
+		t.Fatalf("expected save fingerprint persisted")
+	}
 	if gotSave.Tick != 12 {
 		t.Fatalf("expected tick 12, got %d", gotSave.Tick)
 	}
@@ -152,6 +155,16 @@ func TestWriteSaveAtomicallyReplacesFile(t *testing.T) {
 	}
 	if _, err := os.Stat(dir.SavePath() + ".tmp"); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected no temp file left behind, got %v", err)
+	}
+}
+
+func TestWriteSaveRejectsNilMeta(t *testing.T) {
+	dir := Open(t.TempDir())
+	if err := dir.WriteInitial(minimalMeta(), minimalSave(3)); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+	if err := dir.WriteSave(nil, minimalSave(4)); err == nil {
+		t.Fatalf("expected nil meta rejected")
 	}
 }
 
@@ -268,7 +281,7 @@ func TestLoadRejectsInvalidSnapshotPayloads(t *testing.T) {
 	})
 }
 
-func TestLoadRejectsTornStateWhenSaveIsNewerThanMeta(t *testing.T) {
+func TestLoadRejectsFingerprintMismatchWhenSaveMutated(t *testing.T) {
 	dir := Open(t.TempDir())
 	meta := minimalMeta()
 	save := minimalSave(11)
@@ -290,8 +303,8 @@ func TestLoadRejectsTornStateWhenSaveIsNewerThanMeta(t *testing.T) {
 		t.Fatalf("write torn save: %v", err)
 	}
 
-	if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "inconsistent") {
-		t.Fatalf("expected torn-state consistency error, got %v", err)
+	if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "fingerprint") {
+		t.Fatalf("expected fingerprint mismatch error, got %v", err)
 	}
 }
 
