@@ -1,4 +1,6 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
@@ -14,6 +16,7 @@ export function TopNav() {
   const clearSession = useSessionStore((state) => state.clearSession);
   const fixtureId = parseFixtureIdFromServerUrl(session.serverUrl);
   const fixtureScenario = fixtureId ? getFixtureScenario(fixtureId) : null;
+  const [saveMessage, setSaveMessage] = useState('');
 
   const summaryQuery = useQuery({
     queryKey: ['shell-summary', session.serverUrl, session.playerId],
@@ -27,14 +30,34 @@ export function TopNav() {
     enabled: Boolean(session.playerId),
   });
 
+  const saveMutation = useMutation({
+    mutationFn: () => client.sendSave({ reason: 'manual' }),
+    onSuccess: (result) => {
+      setSaveMessage(`已保存到 tick ${result.tick}`);
+    },
+    onError: (error) => {
+      setSaveMessage(error instanceof Error ? error.message : '保存失败');
+    },
+  });
+
+  useEffect(() => {
+    setSaveMessage('');
+  }, [session.playerId, session.playerKey, session.serverUrl]);
+
   function handleLogout() {
     clearSession();
     queryClient.clear();
     navigate('/login', { replace: true });
   }
 
+  function handleSave() {
+    setSaveMessage('');
+    saveMutation.mutate();
+  }
+
   const currentPlayer = summaryQuery.data?.players?.[session.playerId];
   const energyStats = statsQuery.data?.energy_stats;
+  const saveDisabled = isFixtureServerUrl(session.serverUrl) || saveMutation.isPending;
 
   return (
     <header className="top-nav">
@@ -61,6 +84,9 @@ export function TopNav() {
         <span className="top-nav__chip">
           活跃行星 {summaryQuery.data?.active_planet_id ?? '-'}
         </span>
+        {saveMessage ? (
+          <span className="top-nav__chip top-nav__chip--accent">{saveMessage}</span>
+        ) : null}
       </div>
 
       <nav className="top-nav__links">
@@ -74,6 +100,15 @@ export function TopNav() {
           回放
         </NavLink>
       </nav>
+
+      <button
+        className="secondary-button top-nav__save"
+        type="button"
+        onClick={handleSave}
+        disabled={saveDisabled}
+      >
+        {saveMutation.isPending ? '保存中...' : '保存'}
+      </button>
 
       <button className="secondary-button top-nav__logout" type="button" onClick={handleLogout}>
         退出

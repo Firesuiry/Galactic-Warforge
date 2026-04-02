@@ -21,7 +21,7 @@ import {
   cmdDemolishDyson,
 } from './action.js';
 import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
-import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdReplay, cmdRollback } from './debug.js';
+import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdSave, cmdReplay, cmdRollback } from './debug.js';
 import type { ReplContext } from '../types.js';
 
 export type CommandHandler = (args: string[], ctx: ReplContext) => Promise<string> | string;
@@ -67,6 +67,7 @@ export const COMMANDS: Record<string, CommandEntry> = {
   audit: { handler: cmdAudit },
   event_snapshot: { handler: cmdEventSnapshot },
   alert_snapshot: { handler: cmdAlertSnapshot },
+  save: { handler: cmdSave },
   replay: { handler: cmdReplay },
   rollback: { handler: cmdRollback },
   help: { handler: cmdHelp, completions: [] },

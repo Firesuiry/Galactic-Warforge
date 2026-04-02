@@ -376,8 +376,8 @@ export function createApiClient(options: ApiClientOptions) {
   }
 
   function sendSave(request: SaveRequest = {}): Promise<SaveResponse> {
-    return apiFetch<SaveResponse>("/save", {
-      method: "POST",
+    return apiFetch<SaveResponse>('/save', {
+      method: 'POST',
       body: JSON.stringify(request),
     });
   }
@@ -476,12 +476,6 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function sendSave(request: SaveRequest = {}): Promise<SaveResponse> {
-    return apiFetch<SaveResponse>("/save", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-  }
 
   function cmdBuildDysonNode(buildOptions: BuildDysonNodeOptions) {
     return sendSingleCommand({
@@ -497,12 +491,6 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function sendSave(request: SaveRequest = {}): Promise<SaveResponse> {
-    return apiFetch<SaveResponse>("/save", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-  }
 
   function cmdBuildDysonFrame(buildOptions: BuildDysonFrameOptions) {
     return sendSingleCommand({
@@ -517,12 +505,6 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function sendSave(request: SaveRequest = {}): Promise<SaveResponse> {
-    return apiFetch<SaveResponse>("/save", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-  }
 
   function cmdBuildDysonShell(buildOptions: BuildDysonShellOptions) {
     return sendSingleCommand({

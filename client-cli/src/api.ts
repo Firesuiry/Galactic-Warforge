@@ -67,4 +67,5 @@ export const sendCommandRequest = client.sendCommandRequest;
 export const sendCommands = client.sendCommands;
 export const sendReplay = client.sendReplay;
 export const sendRollback = client.sendRollback;
+export const sendSave = client.sendSave;
 export const setAuth = client.setAuth;

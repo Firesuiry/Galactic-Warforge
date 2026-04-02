@@ -1038,8 +1038,17 @@ a {
   background: rgba(117, 181, 165, 0.16);
 }
 
+.top-nav__save {
+  min-width: 88px;
+}
+
 .top-nav__logout {
   min-width: 74px;
+}
+
+.top-nav__chip--accent {
+  border-color: rgba(117, 181, 165, 0.32);
+  background: rgba(117, 181, 165, 0.16);
 }
 
 .strategic-page {
