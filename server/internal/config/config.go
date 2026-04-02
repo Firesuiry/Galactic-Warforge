@@ -41,7 +41,7 @@ type ServerConfig struct {
 	EventHistoryLimit int    `yaml:"event_history_limit"` // max events kept for snapshot queries
 	SnapshotMaxEvents int    `yaml:"snapshot_max_events"` // max events returned by snapshot endpoint
 	AlertHistoryLimit int    `yaml:"alert_history_limit"` // max production alerts kept for snapshot queries
-	DataDir           string `yaml:"data_dir"`            // snapshot/audit storage root
+	DataDir           string `yaml:"data_dir"`            // single-game working directory (meta.json + save.json)
 	// Snapshot storage policy (tick-based).
 	SnapshotIntervalTicks   int64                   `yaml:"snapshot_interval_ticks"`  // full snapshot interval
 	SnapshotRetentionTicks  int64                   `yaml:"snapshot_retention_ticks"` // retain snapshots within last N ticks

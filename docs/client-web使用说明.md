@@ -53,6 +53,7 @@ npm run dev
 - `/events`
 - `/alerts`
 - `/commands`
+- `/save`
 - `/replay`
 - `/rollback`
 - `/audit`
@@ -80,6 +81,7 @@ VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 - 浏览器请求会先打到 Vite，再经 proxy 转发到 Go 服务端
 - 登录时会先校验 `/health` 和 `/state/summary`
 - 会话保存在浏览器本地存储中，刷新后仍可继续使用
+- 顶栏 `保存` 按钮只在在线服务端模式可用，点击后会调用 `POST /save` 并显示 `已保存到 tick ...` 反馈
 
 ### 3.2 离线样例模式
 
@@ -98,6 +100,8 @@ VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 - runtime / networks / catalog
 - replay 调试页
 
+说明：fixture 模式下不会真的连服务端，因此顶栏 `保存` 按钮会保持禁用。
+
 ## 4. 主要页面能力
 
 ### 4.1 总览页
@@ -105,6 +109,7 @@ VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 - 查看世界摘要
 - 查看玩家统计
 - 查看最近事件与告警
+- 通过顶栏 `保存` 按钮手动刷新当前游戏目录中的 `save.json`
 
 ### 4.2 星图导航
 
@@ -191,6 +196,7 @@ npm test
 - 银河 / 星系 / 行星导航
 - 行星页快照拉取与 SSE
 - 命令面板提交
+- 顶栏保存按钮（成功 / 失败 / fixture 禁用）
 - 视角 JSON 导出
 - 回放页
 

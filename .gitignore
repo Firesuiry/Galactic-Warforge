@@ -12,6 +12,8 @@ pnpm-debug.log*
 
 dist/
 coverage/
+client-web/test-results/
+client-web/playwright-report/
 *.log
 
 server/server

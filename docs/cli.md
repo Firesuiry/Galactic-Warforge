@@ -1,6 +1,6 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 当前覆盖常用查询接口与 `docs/玩家玩法指南.md` 中玩家可直接使用的 18 类核心命令；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。
+`client-cli` 当前覆盖常用查询接口与 `docs/玩家玩法指南.md` 中玩家可直接使用的 18 类核心命令，并补齐了手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。
 
 ## 启动
 
@@ -75,6 +75,7 @@
 
 | 命令 | 参数 | 说明 |
 | --- | --- | --- |
+| `save` | `[--reason <text>]` | 调用 `POST /save`，刷新当前游戏目录中的 `save.json` |
 | `replay` | `[options]` | 调用 `POST /replay` |
 | `rollback` | `[options]` | 调用 `POST /rollback` |
 
@@ -152,6 +153,7 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - 审计日志
 - 事件快照补拉
 - 产线告警快照
+- 手动保存当前游戏目录
 - Tick replay
 - Tick rollback
 
@@ -248,6 +250,8 @@ alert_snapshot --since-tick 120 --limit 50
 ### 调试控制
 
 ```bash
+save
+save --reason before-dyson
 replay --from 120 --to 180 --speed 5 --verify true
 rollback --to 120
 ```
@@ -273,6 +277,15 @@ alert_snapshot --after-id <id> --since-tick <n> --limit <n>
 
 - `event_snapshot` 未显式传 `--types` 时，会使用与默认 SSE 相同的低噪声事件集合
 - 想排查高频事件时，使用 `event_snapshot --types damage_applied,entity_updated ...` 或 `event_snapshot --all ...`
+
+## `save` 选项
+
+```bash
+save --reason <text>
+```
+
+- `--reason` 可选，用来给这次手动保存打标签；不传时仍会正常保存。
+- `save` 不会新建多槽位，只会刷新服务端当前 `server.data_dir` 下的 `save.json`。
 
 ## `replay` / `rollback` 选项
 

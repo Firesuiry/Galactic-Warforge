@@ -32,8 +32,8 @@ server:
   event_history_limit: 2000
   snapshot_max_events: 200
   alert_history_limit: 1000
-  data_dir: "data"
-  auto_save_interval_seconds: 60
+  data_dir: "data" # single-game working directory; reuse it to continue this game
+  auto_save_interval_seconds: 60 # 0 disables autosave
   snapshot_interval_ticks: 5000
   snapshot_retention_ticks: 30000
   snapshot_retention_count: 6
