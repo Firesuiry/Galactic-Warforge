@@ -17,6 +17,23 @@
 
 ---
 
+**启动与存档目录**
+- `server.data_dir` 现在表示“单局游戏工作目录”，目录结构固定为：
+```text
+<game_dir>/
+  meta.json
+  save.json
+```
+- 启动规则：
+  - 目录不存在或为空：按本次外部 `config` 与 `map-config` 新建一局，并在开始对外服务前立即写出首个 `meta.json` 与 `save.json`。
+  - 目录中同时存在合法 `meta.json` 与 `save.json`：直接继续上一局。
+  - 目录里只存在其中一个文件，或目录非空但不是完整存档：服务端拒绝启动，需人工清理或重建该目录。
+- 续档时，目录内部保存的 `battlefield`、`players`、`map_config` 优先于本次外部配置。
+- 纯运行参数仍允许被本次外部配置覆盖，包括：`server.port`、`server.rate_limit`、`server.event_history_limit`、`server.snapshot_max_events`、`server.alert_history_limit`、`server.auto_save_interval_seconds`。
+- 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
+- 第一版不做多槽位或命名存档点，自动保存与手动保存都会覆盖同一份 `save.json`。
+- 第一版不持久化 RNG 状态；续档后未来随机事件不保证与不停服持续运行时完全一致。
+
 **GET /health**
 - 说明: 健康检查（无需认证）
 - 响应:
@@ -865,6 +882,34 @@
 ```
 
 ---
+
+**POST /save**
+- 说明: 手动触发一次存档写入（需认证），把当前世界状态刷新到 `server.data_dir/save.json`。
+- 请求体:
+```json
+{
+  "reason": "manual"
+}
+```
+- 字段说明:
+  - `reason`: 可选，保存触发标签；Web 顶栏默认传 `manual`，CLI 可通过 `save --reason <text>` 自定义。
+- 响应字段:
+  - `ok`: 固定为 `true`
+  - `tick`: 本次保存时的世界 tick
+  - `saved_at`: 实际落盘时间（RFC3339）
+  - `path`: 本次刷新的 `save.json` 路径
+  - `trigger`: 本次保存触发标签
+- 响应示例:
+```json
+{
+  "ok": true,
+  "tick": 4386,
+  "saved_at": "2026-04-02T12:10:00Z",
+  "path": "/tmp/sw-game/save.json",
+  "trigger": "manual"
+}
+```
+- 补充说明: 该接口不会创建历史存档点，只会覆盖当前工作目录中的 `save.json`；如果游戏目录未挂载或磁盘写入失败，会返回 `500`。
 
 **POST /replay**
 - 说明: Tick 重放控制接口（需认证），基于最近快照重放命令日志，用于一致性校验与调试。

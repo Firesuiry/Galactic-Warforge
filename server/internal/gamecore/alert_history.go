@@ -49,6 +49,25 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 	}
 }
 
+func (ah *AlertHistory) All() []*model.ProductionAlert {
+	ah.mu.RLock()
+	defer ah.mu.RUnlock()
+	return cloneAlerts(ah.alerts)
+}
+
+func (ah *AlertHistory) ReplaceAll(alerts []*model.ProductionAlert) {
+	ah.mu.Lock()
+	defer ah.mu.Unlock()
+	ah.alerts = cloneAlerts(alerts)
+	if len(ah.alerts) > ah.limit {
+		ah.alerts = ah.alerts[len(ah.alerts)-ah.limit:]
+	}
+	ah.index = make(map[string]int, len(ah.alerts))
+	for i, alert := range ah.alerts {
+		ah.index[alert.AlertID] = i
+	}
+}
+
 // Snapshot returns alerts after a given alert ID or since a tick.
 func (ah *AlertHistory) Snapshot(afterAlertID string, sinceTick int64, limit int) ([]*model.ProductionAlert, string, bool, int64) {
 	ah.mu.RLock()
@@ -119,4 +138,19 @@ func (ah *AlertHistory) TrimAfterTick(tick int64) int {
 		ah.index[alert.AlertID] = i
 	}
 	return removed
+}
+
+func cloneAlerts(alerts []*model.ProductionAlert) []*model.ProductionAlert {
+	if len(alerts) == 0 {
+		return nil
+	}
+	out := make([]*model.ProductionAlert, 0, len(alerts))
+	for _, alert := range alerts {
+		if alert == nil {
+			continue
+		}
+		cp := *alert
+		out = append(out, &cp)
+	}
+	return out
 }

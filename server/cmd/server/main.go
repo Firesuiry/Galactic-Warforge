@@ -10,13 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"siliconworld/internal/config"
-	"siliconworld/internal/gamecore"
 	"siliconworld/internal/gateway"
-	"siliconworld/internal/mapconfig"
-	"siliconworld/internal/mapgen"
-	"siliconworld/internal/persistence"
-	"siliconworld/internal/queue"
+	"siliconworld/internal/startup"
 )
 
 func main() {
@@ -24,55 +19,34 @@ func main() {
 	mapCfgPath := flag.String("map-config", "map.yaml", "path to map config file")
 	flag.Parse()
 
-	cfg, err := config.Load(*cfgPath)
+	app, err := startup.LoadRuntime(*cfgPath, *mapCfgPath)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		log.Fatalf("load runtime: %v", err)
 	}
 
-	mapCfg, err := mapconfig.Load(*mapCfgPath)
-	if err != nil {
-		log.Fatalf("load map config: %v", err)
+	primary := app.Maps.PrimaryPlanet()
+	primarySize := "unknown"
+	if primary != nil {
+		primarySize = fmt.Sprintf("%dx%d", primary.Width, primary.Height)
 	}
-	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 
 	log.Printf("SiliconWorld server starting")
-	log.Printf("  players: %d", len(cfg.Players))
-	log.Printf("  tick rate: %d/s", cfg.Battlefield.MaxTickRate)
-	log.Printf("  map: %d systems, %d planets/system, planet %dx%d",
-		mapCfg.Galaxy.SystemCount,
-		mapCfg.System.PlanetsPerSystem,
-		mapCfg.Planet.Width,
-		mapCfg.Planet.Height,
-	)
-	log.Printf("  port: %d", cfg.Server.Port)
-	log.Printf("  data dir: %s", cfg.Server.DataDir)
+	log.Printf("  players: %d", len(app.Config.Players))
+	log.Printf("  tick rate: %d/s", app.Config.Battlefield.MaxTickRate)
+	log.Printf("  systems: %d", len(app.Maps.SystemOrder))
+	log.Printf("  primary planet: %s", primarySize)
+	log.Printf("  port: %d", app.Config.Server.Port)
+	log.Printf("  data dir: %s", app.Config.Server.DataDir)
 
-	// Wire up dependencies
-	policy := persistence.SnapshotPolicy{
-		IntervalTicks:    cfg.Server.SnapshotIntervalTicks,
-		RetentionTicks:   cfg.Server.SnapshotRetentionTicks,
-		RetentionCount:   cfg.Server.SnapshotRetentionCount,
-		MaxSnapshotBytes: cfg.Server.SnapshotMaxBytes,
-		MaxDeltaBytes:    cfg.Server.SnapshotDeltaMaxBytes,
-	}
-	store, err := persistence.New(cfg.Server.DataDir, policy)
-	if err != nil {
-		log.Fatalf("init persistence store: %v", err)
-	}
-	q := queue.New()
-	bus := gamecore.NewEventBus()
-	core := gamecore.New(cfg, maps, q, bus, store)
-	srv := gateway.New(cfg, core, bus, q)
+	srv := gateway.New(app.Config, app.Core, app.Bus, app.Queue)
 
-	// Start tick loop
-	go core.Run()
+	go app.Core.Run()
 
-	// Start HTTP server
 	httpSrv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Addr:         fmt.Sprintf(":%d", app.Config.Server.Port),
 		Handler:      srv.Handler(),
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 0, // SSE needs no write timeout
+		WriteTimeout: 0,
 		IdleTimeout:  120 * time.Second,
 	}
 
@@ -83,12 +57,11 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("shutting down...")
-	core.Stop()
+	app.Stop()
 	log.Println("done")
 }

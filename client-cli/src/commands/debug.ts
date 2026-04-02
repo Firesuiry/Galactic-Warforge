@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import {
   fetchAudit, fetchEventSnapshot, fetchAlertSnapshot,
-  sendReplay, sendRollback,
+  sendReplay, sendRollback, sendSave,
 } from '../api.js';
 import { ALL_EVENT_TYPES, DEFAULT_EVENT_TYPES } from '../config.js';
 import { fmtError } from '../format.js';
@@ -179,6 +179,35 @@ export async function cmdAlertSnapshot(args: string[]): Promise<string> {
   } catch (e) {
     return fmtError(e instanceof Error ? e.message : String(e));
   }
+}
+
+export async function runSaveCommand(
+  args: string[],
+  saveFn: typeof sendSave = sendSave,
+): Promise<string> {
+  const parsed = parseArgs(args);
+
+  if (hasFlag(parsed, "help")) {
+    return `save [--reason <text>]
+  --reason <text>   Optional save trigger label`;
+  }
+
+  try {
+    const result = await saveFn({
+      reason: getStringOption(parsed, "reason"),
+    });
+    return [
+      `Saved at tick ${result.tick}`,
+      `Time: ${result.saved_at}`,
+      `Path: ${result.path}`,
+    ].join("\n");
+  } catch (e) {
+    return fmtError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+export async function cmdSave(args: string[]): Promise<string> {
+  return runSaveCommand(args);
 }
 
 export async function cmdReplay(args: string[]): Promise<string> {

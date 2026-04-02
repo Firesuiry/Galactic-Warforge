@@ -1,52 +1,33 @@
 package persistence
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"siliconworld/internal/model"
 	"siliconworld/internal/snapshot"
 )
 
-// Store persists audit logs and tick snapshots
+// Store persists audit logs and tick snapshots in runtime memory.
 type Store struct {
-	mu          sync.Mutex
-	dataDir     string
-	snapshotDir string
-	deltaDir    string
-	policy      SnapshotPolicy
-	auditLog    []*model.AuditEntry
-	snapshots   []snapshotRecord
-	deltas      []deltaRecord
+	mu        sync.Mutex
+	dataDir   string
+	policy    SnapshotPolicy
+	auditLog  []*model.AuditEntry
+	snapshots []snapshotRecord
+	deltas    []deltaRecord
 }
 
 func New(dataDir string, policy SnapshotPolicy) (*Store, error) {
 	if dataDir == "" {
 		return nil, fmt.Errorf("data dir is required")
 	}
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create data dir: %w", err)
-	}
-	snapshotDir := filepath.Join(dataDir, "snapshots")
-	deltaDir := filepath.Join(dataDir, "deltas")
-	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create snapshot dir: %w", err)
-	}
-	if err := os.MkdirAll(deltaDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create delta dir: %w", err)
-	}
 	return &Store{
-		dataDir:     dataDir,
-		snapshotDir: snapshotDir,
-		deltaDir:    deltaDir,
-		policy:      policy.Normalize(),
+		dataDir: dataDir,
+		policy:  policy.Normalize(),
 	}, nil
 }
 
@@ -57,14 +38,21 @@ func (s *Store) SnapshotPolicy() SnapshotPolicy {
 	return s.policy
 }
 
-// AppendAudit records an audit entry in memory and optionally to disk
+// AppendAudit records an audit entry in memory.
 func (s *Store) AppendAudit(entry *model.AuditEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.auditLog = append(s.auditLog, entry)
 }
 
-// SaveSnapshot saves a world state snapshot
+// ReplaceAudit replaces all in-memory audit entries.
+func (s *Store) ReplaceAudit(entries []*model.AuditEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.auditLog = append([]*model.AuditEntry(nil), entries...)
+}
+
+// SaveSnapshot saves a world state snapshot in memory with retention pruning.
 func (s *Store) SaveSnapshot(snap *snapshot.Snapshot) {
 	if snap == nil {
 		return
@@ -77,19 +65,15 @@ func (s *Store) SaveSnapshot(snap *snapshot.Snapshot) {
 	rec := snapshotRecord{
 		Snapshot:  snap,
 		Tick:      snap.Tick,
-		Path:      s.snapshotPath(snap.Tick),
 		SizeBytes: int64(len(data)),
-		SavedAt:   time.Now().UTC(),
 	}
 	if s.policy.MaxSnapshotBytes > 0 && rec.SizeBytes > s.policy.MaxSnapshotBytes {
 		log.Printf("[Persistence] snapshot %d size %d exceeds limit %d", rec.Tick, rec.SizeBytes, s.policy.MaxSnapshotBytes)
 	}
 
-	var droppedSnapshots []snapshotRecord
-	var droppedDeltas []deltaRecord
-
 	s.mu.Lock()
-	// Upsert by tick (replace if same tick)
+	defer s.mu.Unlock()
+
 	insertAt := sort.Search(len(s.snapshots), func(i int) bool {
 		return s.snapshots[i].Tick >= rec.Tick
 	})
@@ -105,17 +89,51 @@ func (s *Store) SaveSnapshot(snap *snapshot.Snapshot) {
 	if len(s.snapshots) > 0 {
 		latestTick = s.snapshots[len(s.snapshots)-1].Tick
 	}
-	droppedSnapshots = append(droppedSnapshots, s.pruneSnapshotsLocked(latestTick)...)
+	s.pruneSnapshotsLocked(latestTick)
 	minTick := s.oldestSnapshotTickLocked()
-	droppedDeltas = append(droppedDeltas, s.pruneDeltasLocked(minTick)...)
-	s.mu.Unlock()
+	s.pruneDeltasLocked(minTick)
+}
 
-	if err := os.WriteFile(rec.Path, data, 0o644); err != nil {
-		log.Printf("[Persistence] write snapshot: %v", err)
+// ReplaceSnapshots replaces all in-memory snapshots without applying retention.
+func (s *Store) ReplaceSnapshots(snaps ...*snapshot.Snapshot) {
+	byTick := make(map[int64]snapshotRecord, len(snaps))
+	for _, snap := range snaps {
+		if snap == nil {
+			continue
+		}
+		data, err := snapshot.Encode(snap)
+		if err != nil {
+			log.Printf("[Persistence] marshal snapshot: %v", err)
+			continue
+		}
+		rec := snapshotRecord{
+			Snapshot:  snap,
+			Tick:      snap.Tick,
+			SizeBytes: int64(len(data)),
+		}
+		if s.policy.MaxSnapshotBytes > 0 && rec.SizeBytes > s.policy.MaxSnapshotBytes {
+			log.Printf("[Persistence] snapshot %d size %d exceeds limit %d", rec.Tick, rec.SizeBytes, s.policy.MaxSnapshotBytes)
+		}
+		// Duplicate tick resolution: last argument wins.
+		byTick[rec.Tick] = rec
 	}
 
-	s.deleteSnapshotFiles(droppedSnapshots)
-	s.deleteDeltaFiles(droppedDeltas)
+	ticks := make([]int64, 0, len(byTick))
+	for tick := range byTick {
+		ticks = append(ticks, tick)
+	}
+	sort.Slice(ticks, func(i, j int) bool {
+		return ticks[i] < ticks[j]
+	})
+
+	recs := make([]snapshotRecord, 0, len(ticks))
+	for _, tick := range ticks {
+		recs = append(recs, byTick[tick])
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.snapshots = recs
 }
 
 // MaybeSaveSnapshot persists a snapshot only when the policy interval matches.
@@ -142,57 +160,30 @@ func (s *Store) SaveDelta(kind string, fromTick, toTick int64, payload []byte) e
 		return fmt.Errorf("delta payload is empty")
 	}
 
-	path := s.deltaPath(kind, fromTick, toTick)
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
-		return fmt.Errorf("write delta: %w", err)
-	}
-
 	rec := deltaRecord{
 		Kind:      kind,
 		FromTick:  fromTick,
 		ToTick:    toTick,
-		Path:      path,
 		SizeBytes: int64(len(payload)),
-		SavedAt:   time.Now().UTC(),
 	}
 	if s.policy.MaxDeltaBytes > 0 && rec.SizeBytes > s.policy.MaxDeltaBytes {
 		log.Printf("[Persistence] delta %s %d-%d size %d exceeds limit %d", kind, fromTick, toTick, rec.SizeBytes, s.policy.MaxDeltaBytes)
 	}
 
-	var dropped []deltaRecord
-	s.mu.Lock()
-	s.deltas = append(s.deltas, rec)
-	minTick := s.oldestSnapshotTickLocked()
-	dropped = append(dropped, s.pruneDeltasLocked(minTick)...)
-	s.mu.Unlock()
-
-	s.deleteDeltaFiles(dropped)
-	return nil
-}
-
-// FlushAuditLog writes the in-memory audit log to disk
-func (s *Store) FlushAuditLog() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	path := filepath.Join(s.dataDir, "audit.jsonl")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("open audit log: %w", err)
-	}
-	defer f.Close()
-
-	enc := json.NewEncoder(f)
-	for _, entry := range s.auditLog {
-		if err := enc.Encode(entry); err != nil {
-			return fmt.Errorf("write audit entry: %w", err)
-		}
-	}
-	s.auditLog = nil
+	s.deltas = append(s.deltas, rec)
+	minTick := s.oldestSnapshotTickLocked()
+	s.pruneDeltasLocked(minTick)
 	return nil
 }
 
-// AuditEntries returns a copy of all in-memory audit entries
+// FlushAuditLog is a no-op for memory-only persistence.
+func (s *Store) FlushAuditLog() error {
+	return nil
+}
+
+// AuditEntries returns a copy of all in-memory audit entries.
 func (s *Store) AuditEntries() []*model.AuditEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -325,7 +316,7 @@ func (s *Store) TrimAuditAfterTick(tick int64) int {
 	return removed
 }
 
-// Snapshots returns all in-memory snapshots
+// Snapshots returns all in-memory snapshots.
 func (s *Store) Snapshots() []*snapshot.Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -414,79 +405,47 @@ func (s *Store) SnapshotStats() SnapshotStats {
 
 // TrimAfter drops snapshots and deltas strictly after the given tick.
 func (s *Store) TrimAfter(tick int64) (int, int) {
-	var droppedSnapshots []snapshotRecord
-	var droppedDeltas []deltaRecord
-
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	droppedSnapshots := 0
 	if len(s.snapshots) > 0 {
 		cut := sort.Search(len(s.snapshots), func(i int) bool {
 			return s.snapshots[i].Tick > tick
 		})
 		if cut < len(s.snapshots) {
-			droppedSnapshots = append(droppedSnapshots, s.snapshots[cut:]...)
+			droppedSnapshots = len(s.snapshots) - cut
 			s.snapshots = s.snapshots[:cut]
 		}
 	}
+
+	droppedDeltas := 0
 	if len(s.deltas) > 0 {
 		kept := s.deltas[:0]
 		for _, rec := range s.deltas {
 			if rec.FromTick > tick || rec.ToTick > tick {
-				droppedDeltas = append(droppedDeltas, rec)
+				droppedDeltas++
 				continue
 			}
 			kept = append(kept, rec)
 		}
 		s.deltas = kept
 	}
-	s.mu.Unlock()
 
-	s.deleteSnapshotFiles(droppedSnapshots)
-	s.deleteDeltaFiles(droppedDeltas)
-
-	return len(droppedSnapshots), len(droppedDeltas)
+	return droppedSnapshots, droppedDeltas
 }
 
 type snapshotRecord struct {
 	Snapshot  *snapshot.Snapshot
 	Tick      int64
-	Path      string
 	SizeBytes int64
-	SavedAt   time.Time
 }
 
 type deltaRecord struct {
 	Kind      string
 	FromTick  int64
 	ToTick    int64
-	Path      string
 	SizeBytes int64
-	SavedAt   time.Time
-}
-
-func (s *Store) snapshotPath(tick int64) string {
-	return filepath.Join(s.snapshotDir, fmt.Sprintf("snapshot-%d.json", tick))
-}
-
-func (s *Store) deltaPath(kind string, fromTick, toTick int64) string {
-	return filepath.Join(s.deltaDir, fmt.Sprintf("delta-%d-%d-%s.jsonl", fromTick, toTick, sanitizeKind(kind)))
-}
-
-func sanitizeKind(kind string) string {
-	if kind == "" {
-		return "unknown"
-	}
-	kind = strings.TrimSpace(kind)
-	buf := make([]byte, 0, len(kind))
-	for i := 0; i < len(kind); i++ {
-		ch := kind[i]
-		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
-			buf = append(buf, ch)
-		}
-	}
-	if len(buf) == 0 {
-		return "unknown"
-	}
-	return strings.ToLower(string(buf))
 }
 
 func (s *Store) pruneSnapshotsLocked(latestTick int64) []snapshotRecord {
@@ -535,20 +494,4 @@ func (s *Store) oldestSnapshotTickLocked() int64 {
 		return 0
 	}
 	return s.snapshots[0].Tick
-}
-
-func (s *Store) deleteSnapshotFiles(records []snapshotRecord) {
-	for _, rec := range records {
-		if err := os.Remove(rec.Path); err != nil && !os.IsNotExist(err) {
-			log.Printf("[Persistence] remove snapshot %s: %v", rec.Path, err)
-		}
-	}
-}
-
-func (s *Store) deleteDeltaFiles(records []deltaRecord) {
-	for _, rec := range records {
-		if err := os.Remove(rec.Path); err != nil && !os.IsNotExist(err) {
-			log.Printf("[Persistence] remove delta %s: %v", rec.Path, err)
-		}
-	}
 }

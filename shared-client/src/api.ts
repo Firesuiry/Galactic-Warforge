@@ -26,6 +26,8 @@ import type {
   Position,
   ReplayResponse,
   RollbackResponse,
+  SaveRequest,
+  SaveResponse,
   StateSummary,
   SystemView,
 } from './types.js';
@@ -373,6 +375,13 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function sendSave(request: SaveRequest = {}): Promise<SaveResponse> {
+    return apiFetch<SaveResponse>('/save', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
   function cmdBuild(position: Position, buildingType: string, buildOptions: BuildOptions = {}) {
     return sendSingleCommand({
       type: 'build',
@@ -467,6 +476,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+
   function cmdBuildDysonNode(buildOptions: BuildDysonNodeOptions) {
     return sendSingleCommand({
       type: 'build_dyson_node',
@@ -481,6 +491,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+
   function cmdBuildDysonFrame(buildOptions: BuildDysonFrameOptions) {
     return sendSingleCommand({
       type: 'build_dyson_frame',
@@ -493,6 +504,7 @@ export function createApiClient(options: ApiClientOptions) {
       },
     });
   }
+
 
   function cmdBuildDysonShell(buildOptions: BuildDysonShellOptions) {
     return sendSingleCommand({
@@ -562,6 +574,7 @@ export function createApiClient(options: ApiClientOptions) {
     sendCommands,
     sendReplay,
     sendRollback,
+    sendSave,
     setAuth,
     setServerUrl,
   };

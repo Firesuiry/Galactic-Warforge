@@ -115,6 +115,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Commands
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
+	mux.HandleFunc("POST /save", s.auth(s.handleSave))
 
 	// SSE event stream
 	mux.HandleFunc("GET /events/stream", s.auth(s.handleEventStream))
@@ -513,6 +514,32 @@ func (s *Server) handleAuditQuery(w http.ResponseWriter, r *http.Request, player
 		Entries: entries,
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleSave handles POST /save
+func (s *Server) handleSave(w http.ResponseWriter, r *http.Request, playerID string) {
+	var req model.SaveRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+	trigger := strings.TrimSpace(req.Reason)
+	if trigger == "" {
+		trigger = "manual"
+	}
+	result, err := s.core.Save(trigger)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, model.SaveResponse{
+		Ok:      true,
+		Tick:    result.Tick,
+		SavedAt: result.SavedAt,
+		Path:    result.Path,
+		Trigger: result.Trigger,
+	})
 }
 
 // handleReplay handles POST /replay

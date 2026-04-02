@@ -131,12 +131,50 @@ func (eh *EventHistory) TrimAfterTick(tick int64) int {
 	return removed
 }
 
+func (eh *EventHistory) Export() map[model.EventType][]*model.GameEvent {
+	eh.mu.RLock()
+	defer eh.mu.RUnlock()
+	out := make(map[model.EventType][]*model.GameEvent, len(eh.events))
+	for eventType, bucket := range eh.events {
+		out[eventType] = cloneGameEvents(bucket)
+	}
+	return out
+}
+
+func (eh *EventHistory) ReplaceAll(events map[model.EventType][]*model.GameEvent) {
+	eh.mu.Lock()
+	defer eh.mu.Unlock()
+	eh.events = make(map[model.EventType][]*model.GameEvent, len(events))
+	for eventType, bucket := range events {
+		b := cloneGameEvents(bucket)
+		if len(b) > eh.limit {
+			b = b[len(b)-eh.limit:]
+		}
+		eh.events[eventType] = b
+	}
+}
+
 func (eh *EventHistory) collectLocked(eventTypes []model.EventType) []*model.GameEvent {
 	merged := make([]*model.GameEvent, 0)
 	for _, eventType := range eventTypes {
 		merged = append(merged, eh.events[eventType]...)
 	}
 	return merged
+}
+
+func cloneGameEvents(events []*model.GameEvent) []*model.GameEvent {
+	if len(events) == 0 {
+		return nil
+	}
+	out := make([]*model.GameEvent, 0, len(events))
+	for _, evt := range events {
+		if evt == nil {
+			continue
+		}
+		cp := *evt
+		out = append(out, &cp)
+	}
+	return out
 }
 
 func eventBefore(a, b *model.GameEvent) bool {
