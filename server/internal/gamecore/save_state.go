@@ -42,9 +42,8 @@ func (gc *GameCore) ExportSaveFile(trigger string) (*gamedir.SaveFile, error) {
 		return nil, fmt.Errorf("game core is nil")
 	}
 	gc.saveMu.Lock()
-	base := gc.baseSnapshot
-	gc.saveMu.Unlock()
-	return gc.exportSaveFileWithBase(trigger, base)
+	defer gc.saveMu.Unlock()
+	return gc.exportSaveFileWithBase(trigger, gc.baseSnapshot)
 }
 
 func (gc *GameCore) exportSaveFileWithBase(trigger string, base *snapshot.Snapshot) (*gamedir.SaveFile, error) {
@@ -107,11 +106,10 @@ func (gc *GameCore) Save(trigger string) (*SaveResult, error) {
 	}
 
 	gc.saveMu.Lock()
+	defer gc.saveMu.Unlock()
+
 	dir := gc.gameDir
 	meta := gc.saveMeta
-	base := gc.baseSnapshot
-	gc.saveMu.Unlock()
-
 	if dir == nil {
 		return nil, fmt.Errorf("game dir not attached")
 	}
@@ -119,7 +117,7 @@ func (gc *GameCore) Save(trigger string) (*SaveResult, error) {
 		return nil, fmt.Errorf("save meta not attached")
 	}
 
-	save, err := gc.exportSaveFileWithBase(trigger, base)
+	save, err := gc.exportSaveFileWithBase(trigger, gc.baseSnapshot)
 	if err != nil {
 		return nil, err
 	}

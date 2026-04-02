@@ -527,6 +527,9 @@ func (gc *GameCore) Stop() {
 func (gc *GameCore) processTick() {
 	start := time.Now()
 
+	gc.saveMu.Lock()
+	defer gc.saveMu.Unlock()
+
 	gc.world.Lock()
 
 	gc.world.Tick++

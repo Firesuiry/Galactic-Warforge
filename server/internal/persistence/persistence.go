@@ -94,7 +94,7 @@ func (s *Store) SaveSnapshot(snap *snapshot.Snapshot) {
 	s.pruneDeltasLocked(minTick)
 }
 
-// ReplaceSnapshots replaces all in-memory snapshots and reapplies retention.
+// ReplaceSnapshots replaces all in-memory snapshots without applying retention.
 func (s *Store) ReplaceSnapshots(snaps ...*snapshot.Snapshot) {
 	byTick := make(map[int64]snapshotRecord, len(snaps))
 	for _, snap := range snaps {
@@ -134,11 +134,6 @@ func (s *Store) ReplaceSnapshots(snaps ...*snapshot.Snapshot) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshots = recs
-	if len(s.snapshots) > 0 {
-		latestTick := s.snapshots[len(s.snapshots)-1].Tick
-		s.pruneSnapshotsLocked(latestTick)
-	}
-	s.pruneDeltasLocked(s.oldestSnapshotTickLocked())
 }
 
 // MaybeSaveSnapshot persists a snapshot only when the policy interval matches.

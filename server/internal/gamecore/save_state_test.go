@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"testing"
+	"time"
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamedir"
@@ -177,6 +178,70 @@ func TestSaveWritesThroughGameDir(t *testing.T) {
 	}
 	if save.SavedAt.IsZero() || !save.SavedAt.Equal(res.SavedAt) {
 		t.Fatalf("expected SaveResult saved_at to match written save")
+	}
+}
+
+func TestProcessTickBlockedBySaveMutex(t *testing.T) {
+	core := newSaveStateHarness(t)
+	core.saveMu.Lock()
+
+	done := make(chan struct{})
+	go func() {
+		core.processTick()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatalf("expected processTick to block on saveMu")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	if got := core.World().Tick; got != 0 {
+		t.Fatalf("expected tick unchanged while saveMu held, got %d", got)
+	}
+
+	core.saveMu.Unlock()
+
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("expected processTick to continue after releasing saveMu")
+	}
+
+	if got := core.World().Tick; got != 1 {
+		t.Fatalf("expected tick to advance after unblocking, got %d", got)
+	}
+}
+
+func TestNewFromSaveKeepsBaseSnapshotWhenRetentionIsLow(t *testing.T) {
+	cfg, maps, q, bus, store := newSaveHarnessDeps(t)
+	cfg.Server.SnapshotRetentionCount = 1
+	cfg.Server.SnapshotRetentionTicks = 1
+	base := snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps))
+	base.Tick = 3
+	current := snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps))
+	current.Tick = 28
+	save := &gamedir.SaveFile{
+		FormatVersion: 1,
+		Tick:          28,
+		Snapshot:      current,
+		RuntimeState:  gamedir.RuntimeState{ActivePlanetID: maps.PrimaryPlanetID, Winner: "p2"},
+		DebugState: gamedir.DebugState{
+			BaseSnapshot: base,
+		},
+	}
+
+	core, err := NewFromSave(cfg, maps, q, bus, store, save)
+	if err != nil {
+		t.Fatalf("restore core: %v", err)
+	}
+
+	if snap := core.snapshotStore.SnapshotAt(3); snap == nil {
+		t.Fatalf("expected base snapshot retained in store")
+	}
+	if snap := core.snapshotStore.SnapshotAt(28); snap == nil {
+		t.Fatalf("expected current snapshot retained in store")
 	}
 }
 
