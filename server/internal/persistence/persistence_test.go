@@ -203,6 +203,39 @@ func TestStoreFlushAuditLogHasNoDiskSideEffect(t *testing.T) {
 	}
 }
 
+func TestStoreReplaceSnapshotsSkipsInvalidAndLastWins(t *testing.T) {
+	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+		IntervalTicks:  1,
+		RetentionCount: 8,
+		RetentionTicks: 100,
+	})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	firstTick2 := testSnapshot(2)
+	firstTick2.World.PlanetID = "planet-first"
+	lastTick2 := testSnapshot(2)
+	lastTick2.World.PlanetID = "planet-last"
+	invalid := &snapshot.Snapshot{Version: 0, Tick: 3}
+
+	store.ReplaceSnapshots(testSnapshot(1), firstTick2, invalid, lastTick2)
+
+	snaps := store.Snapshots()
+	if len(snaps) != 2 {
+		t.Fatalf("expected only valid snapshots retained, got %d", len(snaps))
+	}
+	if snaps[0].Tick != 1 || snaps[1].Tick != 2 {
+		t.Fatalf("expected ticks 1 and 2, got %d and %d", snaps[0].Tick, snaps[1].Tick)
+	}
+	if snaps[1].World == nil || snaps[1].World.PlanetID != "planet-last" {
+		t.Fatalf("expected duplicate tick to keep last snapshot")
+	}
+	if snap := store.SnapshotAtOrBefore(3); snap == nil || snap.Tick != 2 {
+		t.Fatalf("expected invalid tick 3 snapshot skipped")
+	}
+}
+
 func testSnapshot(tick int64) *snapshot.Snapshot {
 	return &snapshot.Snapshot{
 		Version:   snapshot.CurrentVersion,

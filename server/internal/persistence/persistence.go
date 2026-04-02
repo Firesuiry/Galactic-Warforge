@@ -96,36 +96,44 @@ func (s *Store) SaveSnapshot(snap *snapshot.Snapshot) {
 
 // ReplaceSnapshots replaces all in-memory snapshots and reapplies retention.
 func (s *Store) ReplaceSnapshots(snaps ...*snapshot.Snapshot) {
-	recs := make([]snapshotRecord, 0, len(snaps))
+	byTick := make(map[int64]snapshotRecord, len(snaps))
 	for _, snap := range snaps {
 		if snap == nil {
 			continue
 		}
-		rec := snapshotRecord{Snapshot: snap, Tick: snap.Tick}
-		if data, err := snapshot.Encode(snap); err != nil {
+		data, err := snapshot.Encode(snap)
+		if err != nil {
 			log.Printf("[Persistence] marshal snapshot: %v", err)
-		} else {
-			rec.SizeBytes = int64(len(data))
-		}
-		recs = append(recs, rec)
-	}
-
-	sort.Slice(recs, func(i, j int) bool {
-		return recs[i].Tick < recs[j].Tick
-	})
-
-	compacted := recs[:0]
-	for _, rec := range recs {
-		if len(compacted) > 0 && compacted[len(compacted)-1].Tick == rec.Tick {
-			compacted[len(compacted)-1] = rec
 			continue
 		}
-		compacted = append(compacted, rec)
+		rec := snapshotRecord{
+			Snapshot:  snap,
+			Tick:      snap.Tick,
+			SizeBytes: int64(len(data)),
+		}
+		if s.policy.MaxSnapshotBytes > 0 && rec.SizeBytes > s.policy.MaxSnapshotBytes {
+			log.Printf("[Persistence] snapshot %d size %d exceeds limit %d", rec.Tick, rec.SizeBytes, s.policy.MaxSnapshotBytes)
+		}
+		// Duplicate tick resolution: last argument wins.
+		byTick[rec.Tick] = rec
+	}
+
+	ticks := make([]int64, 0, len(byTick))
+	for tick := range byTick {
+		ticks = append(ticks, tick)
+	}
+	sort.Slice(ticks, func(i, j int) bool {
+		return ticks[i] < ticks[j]
+	})
+
+	recs := make([]snapshotRecord, 0, len(ticks))
+	for _, tick := range ticks {
+		recs = append(recs, byTick[tick])
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.snapshots = append([]snapshotRecord(nil), compacted...)
+	s.snapshots = recs
 	if len(s.snapshots) > 0 {
 		latestTick := s.snapshots[len(s.snapshots)-1].Tick
 		s.pruneSnapshotsLocked(latestTick)

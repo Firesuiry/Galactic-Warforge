@@ -111,10 +111,17 @@ func (d *Dir) SavePath() string {
 
 // WriteInitial writes the first full save state.
 func (d *Dir) WriteInitial(meta *MetaFile, save *SaveFile) error {
-	if err := d.writeMeta(meta); err != nil {
+	if meta == nil {
+		return fmt.Errorf("write initial: nil meta")
+	}
+	if err := validateSave(save); err != nil {
+		return fmt.Errorf("write initial: %w", err)
+	}
+	now := time.Now().UTC()
+	if err := d.writeSave(save, now); err != nil {
 		return err
 	}
-	if err := d.writeSave(save); err != nil {
+	if err := d.writeMeta(meta, now); err != nil {
 		return err
 	}
 	return nil
@@ -122,13 +129,17 @@ func (d *Dir) WriteInitial(meta *MetaFile, save *SaveFile) error {
 
 // WriteSave updates save.json atomically. If meta is provided it is also updated.
 func (d *Dir) WriteSave(meta *MetaFile, save *SaveFile) error {
+	if err := validateSave(save); err != nil {
+		return fmt.Errorf("write save: %w", err)
+	}
+	now := time.Now().UTC()
+	if err := d.writeSave(save, now); err != nil {
+		return err
+	}
 	if meta != nil {
-		if err := d.writeMeta(meta); err != nil {
+		if err := d.writeMeta(meta, now); err != nil {
 			return err
 		}
-	}
-	if err := d.writeSave(save); err != nil {
-		return err
 	}
 	return nil
 }
@@ -143,21 +154,23 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	if err := d.readJSON(d.SavePath(), save); err != nil {
 		return nil, nil, err
 	}
+	if err := validateSave(save); err != nil {
+		return nil, nil, fmt.Errorf("parse save.json: %w", err)
+	}
 	return meta, save, nil
 }
 
-func (d *Dir) writeMeta(meta *MetaFile) error {
+func (d *Dir) writeMeta(meta *MetaFile, savedAt time.Time) error {
 	if meta == nil {
 		return fmt.Errorf("write meta.json: nil meta")
 	}
 	if meta.FormatVersion == 0 {
 		meta.FormatVersion = currentFormatVersion
 	}
-	now := time.Now().UTC()
 	if meta.CreatedAt.IsZero() {
-		meta.CreatedAt = now
+		meta.CreatedAt = savedAt
 	}
-	meta.LastSavedAt = now
+	meta.LastSavedAt = savedAt
 	if meta.ConfigFingerprint == "" {
 		meta.ConfigFingerprint = fingerprint(meta.GameplayConfig)
 	}
@@ -170,14 +183,14 @@ func (d *Dir) writeMeta(meta *MetaFile) error {
 	return nil
 }
 
-func (d *Dir) writeSave(save *SaveFile) error {
+func (d *Dir) writeSave(save *SaveFile, savedAt time.Time) error {
 	if save == nil {
 		return fmt.Errorf("write save.json: nil save")
 	}
 	if save.FormatVersion == 0 {
 		save.FormatVersion = currentFormatVersion
 	}
-	save.SavedAt = time.Now().UTC()
+	save.SavedAt = savedAt
 	if err := d.writeJSONAtomic(d.SavePath(), save); err != nil {
 		return fmt.Errorf("write save.json: %w", err)
 	}
@@ -210,6 +223,34 @@ func (d *Dir) writeJSONAtomic(path string, payload any) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
+}
+
+func validateSave(save *SaveFile) error {
+	if save == nil {
+		return fmt.Errorf("nil save")
+	}
+	if err := validateSnapshotStrict("snapshot", save.Snapshot); err != nil {
+		return err
+	}
+	if save.DebugState.BaseSnapshot != nil {
+		if err := validateSnapshotStrict("base_snapshot", save.DebugState.BaseSnapshot); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateSnapshotStrict(field string, snap *snapshot.Snapshot) error {
+	if snap == nil {
+		return fmt.Errorf("%s is nil", field)
+	}
+	if snap.Version != snapshot.CurrentVersion {
+		return fmt.Errorf("%s has invalid version %d", field, snap.Version)
+	}
+	if snap.World == nil {
+		return fmt.Errorf("%s missing world state", field)
 	}
 	return nil
 }

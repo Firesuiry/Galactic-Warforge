@@ -1,6 +1,7 @@
 package gamedir
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -180,6 +181,90 @@ func TestNewMetaFileSetsMetadata(t *testing.T) {
 	if meta.ConfigFingerprint == "" || meta.MapFingerprint == "" {
 		t.Fatalf("expected fingerprints generated")
 	}
+}
+
+func TestWriteInitialRejectsInvalidSnapshotWithoutWritingMeta(t *testing.T) {
+	dir := Open(t.TempDir())
+	bad := minimalSave(3)
+	bad.Snapshot = &snapshot.Snapshot{Version: 0, Tick: 3}
+
+	if err := dir.WriteInitial(minimalMeta(), bad); err == nil {
+		t.Fatalf("expected invalid save rejected")
+	}
+	if _, err := os.Stat(dir.MetaPath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected meta.json absent after failed write, got %v", err)
+	}
+	if _, err := os.Stat(dir.SavePath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected save.json absent after failed write, got %v", err)
+	}
+}
+
+func TestWriteSaveRejectsInvalidSnapshotWithoutAdvancingMeta(t *testing.T) {
+	dir := Open(t.TempDir())
+	meta := minimalMeta()
+	save := minimalSave(5)
+	if err := dir.WriteInitial(meta, save); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+	beforeMeta, beforeSave, err := dir.Load()
+	if err != nil {
+		t.Fatalf("load before write: %v", err)
+	}
+
+	bad := minimalSave(6)
+	bad.Snapshot = &snapshot.Snapshot{Version: 0, Tick: 6}
+	metaUpdate := *beforeMeta
+	if err := dir.WriteSave(&metaUpdate, bad); err == nil {
+		t.Fatalf("expected invalid save rejected")
+	}
+
+	afterMeta, afterSave, err := dir.Load()
+	if err != nil {
+		t.Fatalf("load after failed write: %v", err)
+	}
+	if !afterMeta.LastSavedAt.Equal(beforeMeta.LastSavedAt) {
+		t.Fatalf("expected meta last_saved_at unchanged on failed save")
+	}
+	if afterSave.Tick != beforeSave.Tick {
+		t.Fatalf("expected save tick unchanged on failed save, got %d", afterSave.Tick)
+	}
+}
+
+func TestLoadRejectsInvalidSnapshotPayloads(t *testing.T) {
+	dir := Open(t.TempDir())
+	if err := dir.WriteInitial(minimalMeta(), minimalSave(7)); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+
+	t.Run("invalid-snapshot", func(t *testing.T) {
+		bad := minimalSave(8)
+		bad.Snapshot = &snapshot.Snapshot{Version: 0, Tick: 8}
+		data, err := json.Marshal(bad)
+		if err != nil {
+			t.Fatalf("marshal bad save: %v", err)
+		}
+		if err := os.WriteFile(dir.SavePath(), data, 0o644); err != nil {
+			t.Fatalf("write bad save: %v", err)
+		}
+		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "snapshot") {
+			t.Fatalf("expected invalid snapshot rejected, got %v", err)
+		}
+	})
+
+	t.Run("invalid-base-snapshot", func(t *testing.T) {
+		bad := minimalSave(9)
+		bad.DebugState.BaseSnapshot = &snapshot.Snapshot{Version: 0, Tick: 9}
+		data, err := json.Marshal(bad)
+		if err != nil {
+			t.Fatalf("marshal bad save: %v", err)
+		}
+		if err := os.WriteFile(dir.SavePath(), data, 0o644); err != nil {
+			t.Fatalf("write bad save: %v", err)
+		}
+		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "base_snapshot") {
+			t.Fatalf("expected invalid base snapshot rejected, got %v", err)
+		}
+	})
 }
 
 func minimalMeta() *MetaFile {
