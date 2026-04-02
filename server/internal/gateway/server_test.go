@@ -9,11 +9,13 @@ import (
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
+	"siliconworld/internal/gamedir"
 	"siliconworld/internal/gateway"
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
+	"siliconworld/internal/snapshot"
 	"siliconworld/internal/visibility"
 )
 
@@ -629,4 +631,54 @@ func TestProductionAlertSnapshotEndpoint(t *testing.T) {
 	if resp.Alerts == nil {
 		t.Error("alerts field should be present")
 	}
+}
+
+func TestSaveEndpoint(t *testing.T) {
+	srv, core := newTestServer(t)
+	core.AttachGameDir(gamedir.Open(t.TempDir()), minimalSaveMetaFile(), snapshot.Capture(core.World(), core.Discovery()))
+
+	body := bytes.NewBufferString(`{"reason":"manual"}`)
+	req := httptest.NewRequest("POST", "/save", body)
+	req.Header.Set("Authorization", "Bearer key1")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp model.SaveResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if !resp.Ok || resp.Trigger != "manual" {
+		t.Fatalf("unexpected save response: %+v", resp)
+	}
+}
+
+func TestSaveEndpointPropagatesPersistenceFailure(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest("POST", "/save", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+}
+
+func minimalSaveMetaFile() *gamedir.MetaFile {
+	return gamedir.NewMetaFile(&config.Config{
+		Battlefield: config.BattlefieldConfig{MapSeed: "test", MaxTickRate: 10},
+		Players: []config.PlayerConfig{
+			{PlayerID: "p1", Key: "key1"},
+			{PlayerID: "p2", Key: "key2"},
+		},
+	}, &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	})
 }

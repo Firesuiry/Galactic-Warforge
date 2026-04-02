@@ -985,6 +985,18 @@ export interface AlertSnapshotResponse {
   alerts: AlertEntry[];
 }
 
+export interface SaveRequest {
+  reason?: string;
+}
+
+export interface SaveResponse {
+  ok: boolean;
+  tick: number;
+  saved_at: string;
+  path: string;
+  trigger: string;
+}
+
 export interface ReplayDigest {
   tick: number;
   players: number;

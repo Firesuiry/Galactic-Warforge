@@ -218,4 +218,39 @@ describe('shared api client', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('会向 /save 发送 POST 并解析保存响应', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      expect(url.pathname).toBe('/save');
+      expect(init?.method).toBe('POST');
+      expect(init?.body).toBe(JSON.stringify({ reason: 'manual' }));
+
+      return Promise.resolve(jsonResponse({
+        ok: true,
+        tick: 88,
+        saved_at: '2026-04-02T12:00:00Z',
+        path: '/tmp/game/save.json',
+        trigger: 'manual',
+      }));
+    });
+
+    const client = createApiClient({
+      serverUrl: 'http://localhost:5173',
+      fetchFn: fetchMock as typeof fetch,
+      auth: {
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+      },
+    });
+
+    await expect(client.sendSave({ reason: 'manual' })).resolves.toMatchObject({
+      ok: true,
+      tick: 88,
+      trigger: 'manual',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
 });
