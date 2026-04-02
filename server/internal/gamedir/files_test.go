@@ -150,6 +150,7 @@ func TestWriteSaveAtomicallyReplacesFile(t *testing.T) {
 		t.Fatalf("write initial: %v", err)
 	}
 	save.Tick = 6
+	save.Snapshot.Tick = 6
 	if err := dir.WriteSave(meta, save); err != nil {
 		t.Fatalf("write save: %v", err)
 	}
@@ -294,7 +295,6 @@ func TestLoadRejectsFingerprintMismatchWhenSaveMutated(t *testing.T) {
 		t.Fatalf("load baseline: %v", err)
 	}
 	loadedSave.SavedAt = loadedSave.SavedAt.Add(time.Second)
-	loadedSave.Tick = 12
 	data, err := json.Marshal(loadedSave)
 	if err != nil {
 		t.Fatalf("marshal torn save: %v", err)
@@ -305,6 +305,103 @@ func TestLoadRejectsFingerprintMismatchWhenSaveMutated(t *testing.T) {
 
 	if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "fingerprint") {
 		t.Fatalf("expected fingerprint mismatch error, got %v", err)
+	}
+}
+
+func TestWriteInitialRejectsUnknownFormatVersions(t *testing.T) {
+	t.Run("meta", func(t *testing.T) {
+		dir := Open(t.TempDir())
+		meta := minimalMeta()
+		meta.FormatVersion = currentFormatVersion + 1
+		if err := dir.WriteInitial(meta, minimalSave(2)); err == nil || !strings.Contains(err.Error(), "format_version") {
+			t.Fatalf("expected meta format version rejected, got %v", err)
+		}
+	})
+
+	t.Run("save", func(t *testing.T) {
+		dir := Open(t.TempDir())
+		save := minimalSave(2)
+		save.FormatVersion = currentFormatVersion + 1
+		if err := dir.WriteInitial(minimalMeta(), save); err == nil || !strings.Contains(err.Error(), "format_version") {
+			t.Fatalf("expected save format version rejected, got %v", err)
+		}
+	})
+}
+
+func TestLoadRejectsUnknownFormatVersions(t *testing.T) {
+	t.Run("meta", func(t *testing.T) {
+		dir := Open(t.TempDir())
+		if err := dir.WriteInitial(minimalMeta(), minimalSave(3)); err != nil {
+			t.Fatalf("write initial: %v", err)
+		}
+		meta, _, err := dir.Load()
+		if err != nil {
+			t.Fatalf("load baseline: %v", err)
+		}
+		meta.FormatVersion = currentFormatVersion + 1
+		data, err := json.Marshal(meta)
+		if err != nil {
+			t.Fatalf("marshal meta: %v", err)
+		}
+		if err := os.WriteFile(dir.MetaPath(), data, 0o644); err != nil {
+			t.Fatalf("write meta: %v", err)
+		}
+		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "meta format_version") {
+			t.Fatalf("expected meta format version rejected, got %v", err)
+		}
+	})
+
+	t.Run("save", func(t *testing.T) {
+		dir := Open(t.TempDir())
+		if err := dir.WriteInitial(minimalMeta(), minimalSave(3)); err != nil {
+			t.Fatalf("write initial: %v", err)
+		}
+		_, save, err := dir.Load()
+		if err != nil {
+			t.Fatalf("load baseline: %v", err)
+		}
+		save.FormatVersion = currentFormatVersion + 1
+		data, err := json.Marshal(save)
+		if err != nil {
+			t.Fatalf("marshal save: %v", err)
+		}
+		if err := os.WriteFile(dir.SavePath(), data, 0o644); err != nil {
+			t.Fatalf("write save: %v", err)
+		}
+		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "save format_version") {
+			t.Fatalf("expected save format version rejected, got %v", err)
+		}
+	})
+}
+
+func TestWriteInitialRejectsTickMismatch(t *testing.T) {
+	dir := Open(t.TempDir())
+	save := minimalSave(4)
+	save.Snapshot.Tick = 5
+	if err := dir.WriteInitial(minimalMeta(), save); err == nil || !strings.Contains(err.Error(), "tick mismatch") {
+		t.Fatalf("expected tick mismatch rejected, got %v", err)
+	}
+}
+
+func TestLoadRejectsTickMismatchPayload(t *testing.T) {
+	dir := Open(t.TempDir())
+	if err := dir.WriteInitial(minimalMeta(), minimalSave(4)); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+	_, save, err := dir.Load()
+	if err != nil {
+		t.Fatalf("load baseline: %v", err)
+	}
+	save.Tick = save.Snapshot.Tick + 1
+	data, err := json.Marshal(save)
+	if err != nil {
+		t.Fatalf("marshal save: %v", err)
+	}
+	if err := os.WriteFile(dir.SavePath(), data, 0o644); err != nil {
+		t.Fatalf("write save: %v", err)
+	}
+	if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "tick mismatch") {
+		t.Fatalf("expected tick mismatch rejected, got %v", err)
 	}
 }
 

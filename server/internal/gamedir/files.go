@@ -115,7 +115,10 @@ func (d *Dir) WriteInitial(meta *MetaFile, save *SaveFile) error {
 	if meta == nil {
 		return fmt.Errorf("write initial: nil meta")
 	}
-	if err := validateSave(save); err != nil {
+	if err := normalizeMetaForWrite(meta); err != nil {
+		return fmt.Errorf("write initial: %w", err)
+	}
+	if err := normalizeSaveForWrite(save); err != nil {
 		return fmt.Errorf("write initial: %w", err)
 	}
 	now := time.Now().UTC()
@@ -134,7 +137,10 @@ func (d *Dir) WriteSave(meta *MetaFile, save *SaveFile) error {
 	if meta == nil {
 		return fmt.Errorf("write save: nil meta")
 	}
-	if err := validateSave(save); err != nil {
+	if err := normalizeMetaForWrite(meta); err != nil {
+		return fmt.Errorf("write save: %w", err)
+	}
+	if err := normalizeSaveForWrite(save); err != nil {
 		return fmt.Errorf("write save: %w", err)
 	}
 	now := time.Now().UTC()
@@ -154,6 +160,9 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	if err := d.readJSON(d.MetaPath(), meta); err != nil {
 		return nil, nil, err
 	}
+	if err := validateMeta(meta); err != nil {
+		return nil, nil, err
+	}
 
 	saveData, err := os.ReadFile(d.SavePath())
 	if err != nil {
@@ -164,7 +173,7 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 		return nil, nil, fmt.Errorf("parse save.json: %w", err)
 	}
 	if err := validateSave(save); err != nil {
-		return nil, nil, fmt.Errorf("parse save.json: %w", err)
+		return nil, nil, err
 	}
 	actualFingerprint := fingerprintBytes(saveData)
 	if meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint {
@@ -179,9 +188,6 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 func (d *Dir) writeMeta(meta *MetaFile, savedAt time.Time, saveFingerprint string) error {
 	if meta == nil {
 		return fmt.Errorf("write meta.json: nil meta")
-	}
-	if meta.FormatVersion == 0 {
-		meta.FormatVersion = currentFormatVersion
 	}
 	if meta.CreatedAt.IsZero() {
 		meta.CreatedAt = savedAt
@@ -203,9 +209,6 @@ func (d *Dir) writeMeta(meta *MetaFile, savedAt time.Time, saveFingerprint strin
 func (d *Dir) writeSave(save *SaveFile, savedAt time.Time) (string, error) {
 	if save == nil {
 		return "", fmt.Errorf("write save.json: nil save")
-	}
-	if save.FormatVersion == 0 {
-		save.FormatVersion = currentFormatVersion
 	}
 	save.SavedAt = savedAt
 	saveData, err := json.MarshalIndent(save, "", "  ")
@@ -252,12 +255,48 @@ func (d *Dir) writeJSONBytesAtomic(path string, data []byte) error {
 	return nil
 }
 
+func normalizeMetaForWrite(meta *MetaFile) error {
+	if meta == nil {
+		return fmt.Errorf("meta is nil")
+	}
+	if meta.FormatVersion == 0 {
+		meta.FormatVersion = currentFormatVersion
+	}
+	return validateMeta(meta)
+}
+
+func normalizeSaveForWrite(save *SaveFile) error {
+	if save == nil {
+		return fmt.Errorf("save is nil")
+	}
+	if save.FormatVersion == 0 {
+		save.FormatVersion = currentFormatVersion
+	}
+	return validateSave(save)
+}
+
+func validateMeta(meta *MetaFile) error {
+	if meta == nil {
+		return fmt.Errorf("meta is nil")
+	}
+	if meta.FormatVersion != currentFormatVersion {
+		return fmt.Errorf("meta format_version %d unsupported", meta.FormatVersion)
+	}
+	return nil
+}
+
 func validateSave(save *SaveFile) error {
 	if save == nil {
-		return fmt.Errorf("nil save")
+		return fmt.Errorf("save is nil")
+	}
+	if save.FormatVersion != currentFormatVersion {
+		return fmt.Errorf("save format_version %d unsupported", save.FormatVersion)
 	}
 	if err := validateSnapshotStrict("snapshot", save.Snapshot); err != nil {
 		return err
+	}
+	if save.Tick != save.Snapshot.Tick {
+		return fmt.Errorf("save tick mismatch: save=%d snapshot=%d", save.Tick, save.Snapshot.Tick)
 	}
 	if save.DebugState.BaseSnapshot != nil {
 		if err := validateSnapshotStrict("base_snapshot", save.DebugState.BaseSnapshot); err != nil {
