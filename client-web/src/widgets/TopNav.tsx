@@ -101,6 +101,9 @@ export function TopNav() {
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/galaxy">
           星图
         </NavLink>
+        <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/agents">
+          智能体
+        </NavLink>
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/replay">
           回放
         </NavLink>

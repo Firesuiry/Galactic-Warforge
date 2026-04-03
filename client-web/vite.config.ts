@@ -7,6 +7,7 @@ import { configDefaults } from 'vitest/config';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const proxyTarget = process.env.VITE_SW_PROXY_TARGET ?? 'http://localhost:18080';
+const agentProxyTarget = process.env.VITE_SW_AGENT_PROXY_TARGET ?? 'http://localhost:18180';
 
 function createProxyEntry() {
   return {
@@ -25,6 +26,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/agent-api': {
+        target: agentProxyTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/agent-api/, ''),
+      },
       '/health': createProxyEntry(),
       '/metrics': createProxyEntry(),
       '/state': createProxyEntry(),

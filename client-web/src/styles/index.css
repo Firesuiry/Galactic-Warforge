@@ -202,6 +202,84 @@ button {
   gap: 12px;
 }
 
+.agent-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(280px, 340px);
+  gap: 16px;
+}
+
+.agent-workspace__column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-list__button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.agent-list__button--active {
+  background: rgba(86, 137, 255, 0.2);
+}
+
+.agent-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 220px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.agent-thread__message {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.agent-thread__message p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.agent-thread__message--assistant {
+  border-color: rgba(86, 137, 255, 0.3);
+}
+
+.agent-thread__message--tool {
+  border-color: rgba(96, 218, 162, 0.3);
+}
+
+.agent-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agent-context {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .section-title {
   font-size: 1rem;
   font-weight: 700;

@@ -65,6 +65,27 @@ cd /home/firesuiry/develop/siliconWorld/client-web
 VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 ```
 
+### 2.4 启动本地 Agent 网关
+
+AI 面板不直接在浏览器里调模型，也不直接起本机 CLI。需要额外启动本地 `agent-gateway`：
+
+```bash
+cd /home/firesuiry/develop/siliconWorld/agent-gateway
+npm install
+npm run dev
+```
+
+默认监听：
+
+- `http://localhost:18180`
+
+`client-web/vite.config.ts` 会把 `/agent-api` 代理到该地址。若网关地址不同，可覆盖：
+
+```bash
+cd /home/firesuiry/develop/siliconWorld/client-web
+VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
+```
+
 ## 3. 登录与日常使用
 
 ### 3.1 在线服务端模式
@@ -116,6 +137,7 @@ VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 - `/galaxy`：银河总览
 - `/system/:systemId`：恒星系详情
 - `/planet/:planetId`：行星观察页
+- `/agents`：AI 智能体工作台
 
 ### 4.3 行星观察页
 
@@ -145,6 +167,30 @@ VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev
 - 输入 `from_tick` / `to_tick`
 - 执行 `/replay`
 - 查看 replay digest / snapshot digest / drift 信息
+
+### 4.5 AI 智能体工作台
+
+顶栏新增 `智能体` 入口，进入 `/agents` 后可进行以下操作：
+
+- 创建模型模板
+  - OpenAI 兼容 HTTP：`base_url`、`api_key`、`model`
+  - `codex` CLI：`command`、`workdir`、`model`
+  - `claude` CLI：`command`、`workdir`、`model`
+- 基于模板创建实例，实例会绑定当前登录会话的：
+  - `serverUrl`
+  - `playerId`
+  - `playerKey`
+- 向实例发送自然语言目标，Agent 会：
+  - 调模型生成结构化动作
+  - 通过受控 CLI 白名单执行游戏操作
+  - 把消息、工具调用和执行日志写回线程
+- 导出模板 / 导入 Bundle
+
+说明：
+
+- 当前 AI 面板默认使用本地 `agent-gateway`
+- fixture 模式下允许浏览模板和实例，但执行入口会被禁用
+- AI 使用的是受控 CLI 命令面，不会直接获得任意 shell
 
 ## 5. 调试与组件开发
 
@@ -194,6 +240,7 @@ npm test
 - 登录
 - 总览
 - 银河 / 星系 / 行星导航
+- AI 工作台基础路由与导航
 - 行星页快照拉取与 SSE
 - 命令面板提交
 - 顶栏保存按钮（成功 / 失败 / fixture 禁用）
