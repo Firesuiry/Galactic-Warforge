@@ -38,4 +38,37 @@ describe('agent loop', () => {
     assert.deepEqual(calls, ['scan_planet planet-1-1']);
     assert.equal(result.finalMessage, '扫描完成，未发现阻塞。');
   });
+
+  it('starts from provided conversation history when available', async () => {
+    const seenHistories: Array<Array<{ role: string; content: string }>> = [];
+
+    await runAgentLoop({
+      maxSteps: 1,
+      provider: {
+        async runTurn(input) {
+          seenHistories.push(input.history.map((entry) => ({ ...entry })));
+          return {
+            assistantMessage: '收到。',
+            actions: [{ type: 'final_answer', message: '收到。' }],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run() {
+          return 'ok';
+        },
+      },
+      initialContext: { goal: '忽略这个 goal' },
+      initialHistory: [
+        { role: 'user', content: '玩家：检查星球A' },
+        { role: 'assistant', content: '建造官：收到。' },
+      ],
+    });
+
+    assert.deepEqual(seenHistories[0], [
+      { role: 'user', content: '玩家：检查星球A' },
+      { role: 'assistant', content: '建造官：收到。' },
+    ]);
+  });
 });

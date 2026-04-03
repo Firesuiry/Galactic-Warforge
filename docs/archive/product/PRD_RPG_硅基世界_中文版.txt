@@ -1,0 +1,761 @@
+<overview>
+
+## Problem Statement
+SiliconWorld 当前已有较完整的服务端与 CLI 能力，但文档分散在架构说明、设计分册、API/CLI 手册与已完成任务中，缺少一份“面向依赖关系与实施顺序”的统一 PRD。结果是：
+- 新功能扩展时，容易只看单模块，忽略跨系统依赖（如电网对生产、可见性对事件、快照对回放）。
+- 任务拆分粒度不一致，导致执行阶段出现返工与顺序冲突。
+- 缺少统一的可测目标，难以衡量“可用闭环”是否达成。
+
+本 PRD 要解决的问题是：将“戴森球式工业 + 战斗对抗 + 三层世界 + 服务端权威 Tick + 命令驱动 + CLI 交互”沉淀为可解析、可分解、可执行的依赖图。
+
+## Target Users
+1. 服务端开发者（Go）
+- 工作流：实现世界模拟、命令执行、可见性裁剪、快照回放与审计。
+- 目标：在不引入兼容层的前提下快速演进核心规则。
+
+2. 客户端 CLI 开发者（TypeScript）
+- 工作流：将查询/操作/调试能力封装为 REPL 命令，支持玩家与 AI 上层系统使用。
+- 目标：稳定调用服务端 API，快速验证玩法闭环。
+
+3. 玩法策划与测试
+- 工作流：通过 API/CLI 验证建造、物流、生产、战斗、科研、戴森球的闭环行为。
+- 目标：可复现、可回放、可审计，便于定位问题。
+
+4. AI Agent 编排侧（客户端外置）
+- 工作流：将 AI 规划转换为标准命令提交服务端。
+- 目标：统一命令契约、稳定事件反馈、低延迟查询。
+
+## Success Metrics
+- Tick 稳定性：在 `10 tick/s` 基线下，`p95` 单 Tick 结算耗时 `< 100ms`。
+- 命令时效：命令从接收到执行完成的延迟 `p95 <= 2 ticks`。
+- 权威一致性：相同输入序列在同版本下回放一致率 `100%`。
+- 可见性安全：越权信息泄漏问题为 `0`（按查询与事件双通道验收）。
+- 工业闭环可用性：采集->运输->生产->科研->解锁链路持续运行 `>= 60 min` 无致命中断。
+- 审计可追溯：关键命令（建造/移动/战斗/研究/回放/回滚）审计记录覆盖率 `100%`。
+
+</overview>
+
+---
+
+<functional-decomposition>
+
+## Capability Tree
+
+### Capability: 世界与地图管理
+维护星系/恒星系/行星三层世界与行星平面网格，提供可复现的初始化与查询基础。
+
+#### Feature: 三层宇宙生成与加载
+- **Description**: 基于地图配置与种子生成可复现的星系、恒星系、行星数据。
+- **Inputs**: `map.yaml`、战场种子、启动配置。
+- **Outputs**: `maps`（星系/恒星/行星结构及参数）。
+- **Behavior**: 启动时一次性生成世界静态结构并注入运行时。
+
+#### Feature: 行星网格与资源点建模
+- **Description**: 管理二维地图地形、占格与资源点分布。
+- **Inputs**: 行星参数、地形规则、资源分布规则。
+- **Outputs**: `terrain[y][x]`、资源点集合、可建性约束。
+- **Behavior**: 为建造、物流、战斗、可见性提供统一空间基座。
+
+#### Feature: 发现状态与扫描推进
+- **Description**: 维护玩家对星系/恒星系/行星的发现状态。
+- **Inputs**: 扫描类命令、当前发现快照。
+- **Outputs**: 发现状态变更与事件。
+- **Behavior**: 按命令与规则推进可见范围，未发现目标返回裁剪结果。
+
+### Capability: 玩家、权限与执行体
+以“上帝视角玩家 + 执行体机器人”模型承载操作能力与约束。
+
+#### Feature: 玩家身份与权限控制
+- **Description**: 维护玩家身份、队伍、权限与资源可见边界。
+- **Inputs**: 启动玩家配置、认证 key、命令类型。
+- **Outputs**: 授权结果、玩家态查询视图。
+- **Behavior**: 无权限命令拒绝，玩家仅可见自身敏感字段。
+
+#### Feature: 执行体任务约束
+- **Description**: 对建造/升级/拆除等操作执行操作范围与并发限制。
+- **Inputs**: 执行体参数、任务目标坐标、当前任务槽状态。
+- **Outputs**: 任务受理结果、失败原因。
+- **Behavior**: 校验可达性、并发槽位与状态后入队执行。
+
+### Capability: 命令接入与队列调度
+统一接收客户端意图命令并在 Tick 边界执行。
+
+#### Feature: 命令网关鉴权与结构校验
+- **Description**: 处理 Bearer 鉴权、基础字段校验、限流与幂等前置检查。
+- **Inputs**: HTTP 请求、认证头、命令请求体。
+- **Outputs**: 接收回执、拒绝错误、入队请求。
+- **Behavior**: 拒绝非法请求；合法请求写入命令队列等待 Tick 执行。
+
+#### Feature: 队列去重与批处理
+- **Description**: 在队列层进行 `request_id` 去重并按 Tick 批处理。
+- **Inputs**: 已接收命令、当前 Tick。
+- **Outputs**: 待执行批次、重复请求判定结果。
+- **Behavior**: 保证命令有序与幂等，避免重复执行。
+
+### Capability: Tick 结算与核心模拟
+在权威 Tick 中推进经济、物流、能源、战斗、科技、戴森球与建造生命周期。
+
+#### Feature: 建筑生命周期结算
+- **Description**: 处理建造排队、施工进度、升级、拆除与返还。
+- **Inputs**: 建造类命令、资源库存、建筑定义、执行体状态。
+- **Outputs**: 建筑状态变更、施工事件。
+- **Behavior**: 按规则推进建造任务并在完成时写入实体状态。
+
+#### Feature: 工业与物流结算
+- **Description**: 推进采集、传送带、分拣、仓储、站点调度与星际物流。
+- **Inputs**: 建筑运行参数、库存、运输任务、功耗状态。
+- **Outputs**: 物品流转结果、堵塞/断链事件、统计快照。
+- **Behavior**: 依赖电力状态按顺序推进物料流与任务状态。
+
+#### Feature: 能源与电网结算
+- **Description**: 按连通域聚合供需并分配电力与储能充放电。
+- **Inputs**: 发电端/负载端状态、电网拓扑、优先级策略。
+- **Outputs**: 供电结果、缺电停机状态、缺电事件。
+- **Behavior**: 关键负载优先供电，极端短缺触发降载或停机。
+
+#### Feature: 战斗与威胁结算
+- **Description**: 推进侦测、锁定、伤害与防御逻辑。
+- **Inputs**: 敌我单位、武器参数、护盾状态、战斗科技。
+- **Outputs**: 受击/击毁/告警事件与单位状态更新。
+- **Behavior**: 按 Tick 完成目标选择与伤害结算并发布战报。
+
+#### Feature: 科研与解锁结算
+- **Description**: 推进研究进度并解锁建筑、配方和能力。
+- **Inputs**: 研究命令、矩阵消耗、前置科技状态。
+- **Outputs**: 科技解锁状态、解锁事件。
+- **Behavior**: 校验前置后推进进度，完成时应用增益。
+
+#### Feature: 戴森系统结算
+- **Description**: 处理太阳帆轨道产能、结构建造与射线接收联动。
+- **Inputs**: 发射状态、结构完成度、应力参数、接收站模式。
+- **Outputs**: 轨道产能、临界光子/电力产出、异常告警。
+- **Behavior**: 太阳帆衰减与结构产能共同决定全局能源补给。
+
+### Capability: 查询、可见性与事件分发
+提供按玩家裁剪的状态查询与实时事件。
+
+#### Feature: 多层查询视图
+- **Description**: 提供摘要、星系、恒星系、行星、迷雾等查询接口。
+- **Inputs**: 当前世界快照、玩家身份、目标层级 ID。
+- **Outputs**: 裁剪后的 JSON 视图。
+- **Behavior**: 不可见对象降级或隐藏，避免泄漏敌方信息。
+
+#### Feature: SSE 实时事件流
+- **Description**: 推送命令执行、生产、战斗、科技、告警等事件。
+- **Inputs**: Tick 事件总线、订阅玩家身份。
+- **Outputs**: SSE 事件序列。
+- **Behavior**: 按可见性过滤事件并写入客户端缓冲。
+
+#### Feature: 调试事件快照
+- **Description**: 提供事件窗口与生产告警快照查询。
+- **Inputs**: 历史事件缓冲、过滤参数。
+- **Outputs**: 事件/告警快照。
+- **Behavior**: 支持开发调试与回归定位。
+
+### Capability: 持久化、快照、回放与审计
+保证可恢复、可回放、可追责。
+
+#### Feature: 快照与持久化策略
+- **Description**: 按 Tick 策略保存快照、增量与保留窗口。
+- **Inputs**: 世界状态、快照策略配置。
+- **Outputs**: 快照文件、增量记录、过期清理结果。
+- **Behavior**: 周期持久化并执行保留策略。
+
+#### Feature: 命令审计日志
+- **Description**: 记录命令来源、权限判定、执行结果与关键细节。
+- **Inputs**: 命令请求、执行阶段状态、结果码。
+- **Outputs**: 可检索审计记录。
+- **Behavior**: 覆盖受理前、执行中、执行后关键节点。
+
+#### Feature: 回放与回滚控制
+- **Description**: 基于快照与命令日志重建历史或回退状态。
+- **Inputs**: 回放/回滚指令、快照点、命令日志。
+- **Outputs**: 回放进度、回滚结果、一致性校验信息。
+- **Behavior**: 确保状态变更可验证且可追溯。
+
+### Capability: CLI 交互与命令编排
+为玩家与外部 AI 编排层提供统一终端入口。
+
+#### Feature: REPL 命令体系
+- **Description**: 提供查询、操作、调试、工具类命令并支持补全。
+- **Inputs**: 用户输入命令行、当前玩家上下文。
+- **Outputs**: 格式化结果输出。
+- **Behavior**: 分发到 API 层并统一处理错误展示。
+
+#### Feature: 玩家会话与切换
+- **Description**: 支持默认玩家/自定义 key 登录与会话切换。
+- **Inputs**: 玩家 ID、key、服务器地址。
+- **Outputs**: 鉴权上下文与连接状态。
+- **Behavior**: 切换时重建 SSE 连接并更新提示符。
+
+#### Feature: 原始命令透传
+- **Description**: 允许直接提交 JSON 请求用于调试新命令。
+- **Inputs**: 原始命令 JSON。
+- **Outputs**: 服务端响应原文。
+- **Behavior**: 绕过高层封装，便于验证协议兼容性。
+
+</functional-decomposition>
+
+---
+
+<structural-decomposition>
+
+## Repository Structure
+
+```text
+project-root/
+├── server/
+│   ├── cmd/server/main.go                 # 进程入口与依赖装配
+│   ├── internal/config/                   # 启动配置加载
+│   ├── internal/mapconfig/                # 地图配置模型
+│   ├── internal/mapgen/                   # 星图与行星生成
+│   ├── internal/mapmodel/                 # 天体/环境/资源静态模型
+│   ├── internal/mapstate/                 # 发现状态
+│   ├── internal/model/                    # 领域模型与规则基础类型
+│   ├── internal/queue/                    # 命令队列与幂等去重
+│   ├── internal/gamecore/                 # Tick 主循环与结算子系统
+│   ├── internal/visibility/               # 可见性裁剪引擎
+│   ├── internal/query/                    # 查询层（摘要/星图/行星/统计）
+│   ├── internal/snapshot/                 # 世界快照克隆与序列化辅助
+│   ├── internal/persistence/              # 快照存储与保留策略
+│   ├── internal/gateway/                  # HTTP API、SSE、鉴权与限流
+│   └── tests/                             # 集成测试
+├── client-cli/
+│   └── src/
+│       ├── main.ts                        # CLI 启动流程
+│       ├── repl.ts                        # 交互循环与补全
+│       ├── api.ts                         # HTTP API 调用
+│       ├── sse.ts                         # SSE 订阅
+│       ├── commands/                      # 命令处理器（query/action/util/debug）
+│       └── format.ts                      # 终端格式化输出
+└── docs/
+```
+
+## Module Definitions
+
+### Module: `server/internal/model`
+- **Maps to capability**: 世界与地图管理、玩家与执行体、Tick 结算与核心模拟（基础模型）
+- **Responsibility**: 承载实体、命令、配方、建筑、电网、物流、战斗、科技、戴森球等统一领域类型与规则函数。
+- **File structure**:
+  ```text
+  model/
+  ├── world.go
+  ├── command.go
+  ├── building_*.go
+  ├── logistics_*.go
+  ├── power_*.go
+  ├── tech.go / combat_tech.go
+  ├── dyson_sphere.go / solar_sail_orbit.go
+  └── ...
+  ```
+- **Exports**:
+  - 领域结构体与常量（供 core/query/gateway 复用）。
+  - 规则辅助函数（供结算过程调用）。
+
+### Module: `server/internal/mapgen` + `mapmodel` + `mapstate`
+- **Maps to capability**: 世界与地图管理
+- **Responsibility**: 生成三层地图静态结构、资源分布与发现状态维护。
+- **Exports**:
+  - `Generate(...)`：生成世界地图。
+  - 发现状态读写与快照函数。
+
+### Module: `server/internal/queue`
+- **Maps to capability**: 命令接入与队列调度
+- **Responsibility**: 命令入队、出队、幂等去重、批处理支撑。
+- **Exports**:
+  - `New()`：创建命令队列。
+  - 队列读写与去重接口。
+
+### Module: `server/internal/gamecore`
+- **Maps to capability**: Tick 结算与核心模拟、持久化/回放/审计
+- **Responsibility**: 驱动 Tick 主循环并调用各子结算模块；维护事件总线、统计、回放回滚流程。
+- **File structure**:
+  ```text
+  gamecore/
+  ├── core.go
+  ├── construction*.go
+  ├── logistics*.go
+  ├── power*.go
+  ├── research.go
+  ├── combat*.go
+  ├── dyson_*.go / solar_sail_*.go
+  ├── replay.go / rollback.go
+  ├── audit.go / event_history.go
+  └── ...
+  ```
+- **Exports**:
+  - `New(...)` / `Run()` / `Stop()`。
+  - 世界状态、事件、统计、回放回滚控制接口。
+
+### Module: `server/internal/visibility`
+- **Maps to capability**: 查询、可见性与事件分发
+- **Responsibility**: 计算玩家可见集合并执行信息裁剪。
+- **Exports**:
+  - `New()` 与可见性判定/过滤能力。
+
+### Module: `server/internal/query`
+- **Maps to capability**: 查询、可见性与事件分发
+- **Responsibility**: 基于世界状态输出摘要、星图、行星、迷雾与统计视图。
+- **Exports**:
+  - `Summary(...)`、`Galaxy(...)`、`System(...)`、`Planet(...)`、`FogMap(...)`、`Stats(...)`。
+
+### Module: `server/internal/snapshot` + `persistence`
+- **Maps to capability**: 持久化、快照、回放与审计
+- **Responsibility**: 快照生成、存储策略、保留策略与恢复支撑。
+- **Exports**:
+  - 快照克隆/序列化函数。
+  - 存储实现与策略配置。
+
+### Module: `server/internal/gateway`
+- **Maps to capability**: 命令接入与队列调度、查询与事件分发
+- **Responsibility**: 提供 HTTP/SSE 接口、鉴权、限流、命令受理、调试入口。
+- **Exports**:
+  - `New(...)` / `Handler()`。
+  - 路由：`/commands`、`/state/*`、`/world/*`、`/events/*`、`/audit`、`/replay`、`/rollback`。
+
+### Module: `client-cli/src/api.ts` + `sse.ts`
+- **Maps to capability**: CLI 交互与命令编排
+- **Responsibility**: 承接服务端 HTTP 与 SSE 交互。
+- **Exports**:
+  - 查询与操作 API 函数。
+  - SSE 启停与事件回调。
+
+### Module: `client-cli/src/repl.ts` + `commands/*`
+- **Maps to capability**: CLI 交互与命令编排
+- **Responsibility**: 命令解析、自动补全、上下文切换、结果展示。
+- **Exports**:
+  - `startRepl(...)`。
+  - `dispatch(...)` 与各命令处理器。
+
+</structural-decomposition>
+
+---
+
+<dependency-graph>
+
+## Dependency Chain
+
+### Foundation Layer (Phase 0)
+No dependencies - these are built first.
+
+- **config-loader** (`server/internal/config`, `server/internal/mapconfig`): 提供启动配置与地图配置。
+- **domain-model** (`server/internal/model`, `server/internal/mapmodel`): 提供统一领域模型与规则类型。
+- **map-generation** (`server/internal/mapgen`, `server/internal/mapstate`, `server/internal/terrain`): 提供世界生成与发现状态。
+
+### Runtime Orchestration Layer (Phase 1)
+- **command-queue** (`server/internal/queue`): Depends on [[domain-model]]
+- **tick-core** (`server/internal/gamecore`): Depends on [[config-loader], [domain-model], [map-generation], [command-queue]]
+- **visibility-engine** (`server/internal/visibility`): Depends on [[domain-model], [map-generation]]
+
+### Service Interface Layer (Phase 2)
+- **query-layer** (`server/internal/query`): Depends on [[tick-core], [visibility-engine], [map-generation]]
+- **persistence-layer** (`server/internal/snapshot`, `server/internal/persistence`): Depends on [[domain-model], [tick-core]]
+- **gateway-api** (`server/internal/gateway`): Depends on [[tick-core], [query-layer], [command-queue], [visibility-engine], [persistence-layer]]
+
+### Client Interaction Layer (Phase 3)
+- **cli-api-sse** (`client-cli/src/api.ts`, `client-cli/src/sse.ts`): Depends on [[gateway-api]]
+- **cli-repl-commands** (`client-cli/src/repl.ts`, `client-cli/src/commands/*`): Depends on [[cli-api-sse]]
+- **cli-bootstrap** (`client-cli/src/main.ts`): Depends on [[cli-repl-commands]]
+
+### Reliability & Observability Layer (Phase 4)
+- **audit-replay-rollback** (core + gateway debug endpoints): Depends on [[tick-core], [persistence-layer], [gateway-api]]
+- **integration-tests** (`server/tests`, `client-cli` smoke): Depends on [[gateway-api], [cli-bootstrap], [audit-replay-rollback]]
+
+</dependency-graph>
+
+---
+
+<implementation-roadmap>
+
+## Development Phases
+
+### Phase 0: 领域与世界基座
+**Goal**: 建立可复现世界、统一领域模型与配置装配能力。
+
+**Entry Criteria**: 仓库可编译，已有 Go/Node 开发环境。
+
+**Tasks**:
+- [ ] 完成配置模型与加载器（depends on: [none])
+  - Acceptance criteria: 启动参数可加载并校验；错误配置可返回明确错误。
+  - Test strategy: 配置加载单元测试（有效/缺失/非法值）。
+
+- [ ] 完成世界生成与发现状态（depends on: [none])
+  - Acceptance criteria: 同一 seed 生成结果稳定；发现状态可持久化到快照。
+  - Test strategy: 固定 seed 回归测试 + discovery 快照测试。
+
+- [ ] 完成核心领域模型基线（depends on: [none])
+  - Acceptance criteria: 玩家/建筑/命令/物流/电网/科技/战斗/戴森球核心结构可被引用。
+  - Test strategy: 模型约束单元测试（边界值、默认值、序列化）。
+
+**Exit Criteria**: `gamecore` 可基于基础模型实例化世界状态。
+
+**Delivers**: 可启动的最小世界状态与稳定模型层。
+
+---
+
+### Phase 1: Tick 内核与命令执行闭环
+**Goal**: 打通“命令入队 -> Tick 执行 -> 状态变化 -> 事件产出”最小主链路。
+
+**Entry Criteria**: Phase 0 complete
+
+**Tasks**:
+- [ ] 实现命令队列去重与批处理（depends on: [[Phase 0 - 核心领域模型基线]])
+  - Acceptance criteria: 重复 `request_id` 不重复执行。
+  - Test strategy: queue 幂等与并发测试。
+
+- [ ] 实现 Tick 主循环与基础结算顺序（depends on: [[Phase 0 - 世界生成与发现状态], [Phase 0 - 核心领域模型基线]])
+  - Acceptance criteria: Tick 连续推进，基础建造/资源变化可观察。
+  - Test strategy: core tick 回归测试。
+
+- [ ] 实现建筑生命周期与基础工业结算（depends on: [[Tick 主循环与基础结算顺序]])
+  - Acceptance criteria: 建造、升级、拆除流程可执行。
+  - Test strategy: construction 与 building job 测试。
+
+- [ ] 实现基础事件总线（depends on: [[Tick 主循环与基础结算顺序]])
+  - Acceptance criteria: 命令执行与关键状态变化会产出事件。
+  - Test strategy: 事件顺序与可见字段测试。
+
+**Exit Criteria**: 服务端可在无 UI 情况下完成最小玩法推进。
+
+**Delivers**: 命令驱动的可运行权威模拟内核。
+
+---
+
+### Phase 2: 玩法子系统完整化
+**Goal**: 完成物流、能源、科研、战斗、戴森球等核心玩法闭环。
+
+**Entry Criteria**: Phase 1 complete
+
+**Tasks**:
+- [ ] 完成物流网络（传送带/分拣/站点/星际）（depends on: [[Phase 1 - Tick 主循环]])
+  - Acceptance criteria: 物品可跨建筑、跨站点稳定流转。
+  - Test strategy: conveyor/sorter/logistics 单元+集成测试。
+
+- [ ] 完成电网拓扑与供需分配（depends on: [[Phase 1 - Tick 主循环]])
+  - Acceptance criteria: 缺电触发降载，关键负载优先供电。
+  - Test strategy: power shortage 与聚合测试。
+
+- [ ] 完成科研系统与解锁联动（depends on: [[物流网络], [电网拓扑]])
+  - Acceptance criteria: 研究完成可解锁建筑/能力并影响结算。
+  - Test strategy: research 状态推进与解锁测试。
+
+- [ ] 完成战斗与威胁系统（depends on: [[电网拓扑], [Tick 主循环]])
+  - Acceptance criteria: 攻防结算与战斗事件闭环。
+  - Test strategy: combat 与防御联动测试。
+
+- [ ] 完成戴森系统结算（depends on: [[科研系统], [电网拓扑]])
+  - Acceptance criteria: 太阳帆/结构产能可转化为电力或光子产出。
+  - Test strategy: solar sail / ray receiver / dyson 结算测试。
+
+**Exit Criteria**: 生产、能源、科研、战斗、戴森球形成连续可运行链路。
+
+**Delivers**: 具备完整中后期玩法的权威模拟。
+
+---
+
+### Phase 3: 查询接口与 CLI 可操作化
+**Goal**: 打通可见性裁剪查询、SSE 分发与 CLI 完整交互。
+
+**Entry Criteria**: Phase 2 complete
+
+**Tasks**:
+- [ ] 完成查询层与可见性裁剪（depends on: [[Phase 2 - 玩法子系统完整化]])
+  - Acceptance criteria: `summary/galaxy/system/planet/fog` 接口可用且信息不越权。
+  - Test strategy: visibility/query 组合测试。
+
+- [ ] 完成网关接口（depends on: [[查询层与可见性裁剪], [Phase 1 - 命令队列]])
+  - Acceptance criteria: `/commands`、`/events/stream`、世界查询接口全可调用。
+  - Test strategy: gateway handler 测试与认证测试。
+
+- [ ] 完成 CLI REPL 与命令集（depends on: [[网关接口]])
+  - Acceptance criteria: 查询、操作、调试命令均可稳定使用。
+  - Test strategy: CLI 命令 smoke 测试（health/summary/build/raw/switch/events）。
+
+**Exit Criteria**: 玩家可仅通过 CLI 完成主要玩法操作与调试。
+
+**Delivers**: 可用于开发联调和 AI 接入的标准命令入口。
+
+---
+
+### Phase 4: 可靠性与运维能力
+**Goal**: 完成快照、审计、回放回滚与端到端回归保障。
+
+**Entry Criteria**: Phase 3 complete
+
+**Tasks**:
+- [ ] 完成快照保留与恢复（depends on: [[Phase 1 - Tick 主循环]])
+  - Acceptance criteria: 按策略保存快照并可恢复运行。
+  - Test strategy: persistence/snapshot 测试。
+
+- [ ] 完成审计查询与过滤（depends on: [[网关接口], [命令执行闭环]])
+  - Acceptance criteria: 可按玩家、命令类型、Tick、时间过滤审计日志。
+  - Test strategy: audit API 集成测试。
+
+- [ ] 完成回放与回滚工具链（depends on: [[快照保留与恢复], [审计查询]])
+  - Acceptance criteria: 回放重建一致，回滚后可继续推进。
+  - Test strategy: replay/rollback 一致性测试。
+
+- [ ] 建立端到端回归集（depends on: [[全部功能可用]])
+  - Acceptance criteria: 关键链路回归可自动执行并稳定通过。
+  - Test strategy: server tests + CLI smoke + 长跑稳定性测试。
+
+**Exit Criteria**: 系统具备“可运行、可观测、可恢复、可追责”的工程闭环。
+
+**Delivers**: 面向持续演进的稳定版本基座。
+
+</implementation-roadmap>
+
+---
+
+<test-strategy>
+
+## Test Pyramid
+
+```text
+        /\
+       /E2E\       ← 10% (端到端与长流程验证)
+      /------\
+     /Integration\ ← 25% (模块交互与接口契约)
+    /------------\
+   /  Unit Tests  \ ← 65% (规则函数与结算单元)
+  /----------------\
+```
+
+## Coverage Requirements
+- Line coverage: 85% minimum
+- Branch coverage: 75% minimum
+- Function coverage: 90% minimum
+- Statement coverage: 85% minimum
+
+## Critical Test Scenarios
+
+### Tick 结算主链
+**Happy path**:
+- 命令入队后在后续 Tick 正常执行并产出事件。
+- Expected: 命令结果、状态变化、事件三者一致。
+
+**Edge cases**:
+- 同 Tick 大量命令并发、同玩家高频提交。
+- Expected: 限流/排队生效，系统不崩溃且结果可追溯。
+
+**Error cases**:
+- 非法参数、越权命令、重复 request_id。
+- Expected: 返回标准错误码，状态不被污染。
+
+**Integration points**:
+- queue + gamecore + gateway。
+- Expected: 接收、执行、返回与审计链路完整。
+
+### 物流与生产链
+**Happy path**:
+- 采集->传送->生产->入库完整推进。
+- Expected: 库存按配方变化，吞吐符合档位。
+
+**Edge cases**:
+- 缓冲区接近满、上游供给波动。
+- Expected: 出现可解释的拥塞/空转状态。
+
+**Error cases**:
+- 断电、断链、目标站不可达。
+- Expected: 任务重试或冻结，告警事件可见。
+
+**Integration points**:
+- logistics + power + production monitor。
+- Expected: 缺电会影响吞吐，恢复供电后可续跑。
+
+### 可见性与查询
+**Happy path**:
+- 玩家仅看到己方资源与视野内敌情。
+- Expected: 查询字段按身份裁剪。
+
+**Edge cases**:
+- 切换玩家、扫描前后对比。
+- Expected: 发现状态变化正确反映在响应中。
+
+**Error cases**:
+- 请求不存在的系统/行星。
+- Expected: 返回 404，不泄漏内部信息。
+
+**Integration points**:
+- visibility + query + gateway + SSE。
+- Expected: 查询和事件裁剪规则一致。
+
+### 回放与回滚
+**Happy path**:
+- 基于快照和命令日志重建指定 Tick。
+- Expected: 核心状态 hash 与原运行一致。
+
+**Edge cases**:
+- 快照边界附近回滚。
+- Expected: 状态恢复后可继续执行后续命令。
+
+**Error cases**:
+- 快照损坏/缺失。
+- Expected: 返回可诊断错误并停止危险操作。
+
+**Integration points**:
+- persistence + snapshot + replay/rollback + audit。
+- Expected: 审计可追踪每次恢复/回退动作。
+
+## Test Generation Guidelines
+- 单元测试优先覆盖纯规则函数与边界条件（资源不足、越权、并发槽位不足、短缺供电）。
+- 集成测试围绕“命令->Tick->查询->事件->审计”完整链路编写，避免只测 HTTP 200。
+- 回放一致性测试必须包含固定 seed 与固定命令序列。
+- 对关键经济链（矿物、能量、矩阵）建立快照断言，避免静默回归。
+- CLI 侧最少保留一组 smoke 脚本验证关键命令可达。
+
+</test-strategy>
+
+---
+
+<architecture>
+
+## System Components
+- 命令接入层：`gateway` 负责鉴权、限流、路由与 SSE。
+- 调度层：`queue` 负责命令缓存、去重与 Tick 边界批处理。
+- 模拟层：`gamecore` 负责所有权威规则结算。
+- 数据层：`model` + `map*` 提供领域模型与世界静态结构。
+- 可见层：`visibility` + `query` 提供裁剪后的读取视图。
+- 可靠性层：`snapshot` + `persistence` + `audit/replay/rollback`。
+- 客户端层：`client-cli` 作为标准交互壳与调试入口。
+
+## Data Models
+- 世界模型：`WorldState`、星系/系统/行星、Tick 与活动行星。
+- 玩家模型：身份、权限、资源、库存、科技、执行体参数。
+- 建筑模型：定义与实例、运行参数、I/O 缓冲、作业状态。
+- 物流模型：传送带、分拣、仓储、站点、无人机/运输舰任务。
+- 电网模型：节点、连通域、供需聚合、优先级分配。
+- 战斗模型：敌我实体、伤害参数、威胁等级与告警。
+- 戴森模型：太阳帆轨道、结构完成度、应力与产能去向。
+- 审计与回放模型：命令日志、事件历史、快照与回滚记录。
+
+## Technology Stack
+- 服务端：Go（`server`），`net/http` + 并发原语，YAML 配置。
+- 客户端 CLI：Node.js + TypeScript，REPL + SSE。
+- 协议：REST JSON + SSE。
+- 数据持久化：文件型快照/日志（当前实现）。
+
+**Decision: 服务端权威 Tick + 命令驱动**
+- **Rationale**: 保证多人对局一致性、可回放与可审计。
+- **Trade-offs**: 客户端不直接改状态，交互延迟受 Tick 节奏约束。
+- **Alternatives considered**: 客户端预测/对等同步（放弃，难以保证审计与一致性）。
+
+**Decision: 客户端 AI 逻辑外置，服务端只接收标准命令**
+- **Rationale**: 降低服务端复杂度，避免与模型调用强耦合。
+- **Trade-offs**: AI 质量与策略可靠性由客户端侧负责。
+- **Alternatives considered**: 服务端内置 Agent Runtime（放弃，边界不清、运维复杂度高）。
+
+**Decision: 行星层采用二维平面网格**
+- **Rationale**: 大幅降低建造/路径/占格/测试复杂度。
+- **Trade-offs**: 牺牲部分真实天体表现。
+- **Alternatives considered**: 球面经纬度建模（放弃，当前阶段收益低于成本）。
+
+</architecture>
+
+---
+
+<risks>
+
+## Technical Risks
+**Risk**: Tick 结算链条持续膨胀导致性能下降
+- **Impact**: High - 影响实时性与可玩性
+- **Likelihood**: Medium
+- **Mitigation**: 明确结算顺序、分阶段 profiling、热点模块优化（物流/战斗/电网）
+- **Fallback**: 降低默认 tick_rate，启用分层降级结算策略
+
+**Risk**: 子系统交叉规则引发隐式耦合（如电网影响生产与战斗）
+- **Impact**: High
+- **Likelihood**: High
+- **Mitigation**: 以领域模型为唯一契约，禁止跨模块直接写状态，强化集成测试
+- **Fallback**: 将耦合逻辑回收至 `gamecore` 单点编排
+
+**Risk**: 回放与在线结算出现不一致
+- **Impact**: High
+- **Likelihood**: Medium
+- **Mitigation**: 固定 seed、固定命令序列、一致性 hash 对账
+- **Fallback**: 禁用问题版本回滚能力并保留审计导出
+
+## Dependency Risks
+**Risk**: API/CLI 文档与实际实现偏移
+- **Impact**: Medium
+- **Likelihood**: Medium
+- **Mitigation**: 接口变更必须同步更新 `docs/dev/服务端API.md` 与 `docs/dev/客户端CLI.md`
+- **Fallback**: 引入自动化契约检查与文档差异告警
+
+**Risk**: Node/Go 本地环境差异影响联调
+- **Impact**: Medium
+- **Likelihood**: Medium
+- **Mitigation**: 固定版本并在 README 中明确启动步骤
+- **Fallback**: 提供最小 smoke 脚本做环境自检
+
+## Scope Risks
+**Risk**: 一次性追求“全戴森球能力”导致任务过大
+- **Impact**: High
+- **Likelihood**: High
+- **Mitigation**: 严格按 Phase 与依赖图拆分，先达成可运行闭环再扩展复杂玩法
+- **Fallback**: 暂停低优先级链路（如部分高级战斗/终局链）
+
+**Risk**: 外部 AI 能力诉求侵入服务端边界
+- **Impact**: Medium
+- **Likelihood**: Medium
+- **Mitigation**: 保持“服务端只收命令、只做权威结算”的边界原则
+- **Fallback**: 通过客户端编排层适配，不改服务端核心契约
+
+</risks>
+
+---
+
+<appendix>
+
+## References
+- `README.md`
+- `docs/archive/design/服务端架构与功能设计.md`
+- `docs/dev/服务端API.md`
+- `docs/dev/客户端CLI.md`
+- `docs/player/上手与验证.md`
+- `docs/archive/design/00-总设计.md`
+- `docs/archive/design/01-世界与地图系统.md`
+- `docs/archive/design/02-玩家与执行体系统.md`
+- `docs/archive/design/03-建筑系统.md`
+- `docs/archive/design/04-物流与生产系统.md`
+- `docs/archive/design/05-能源与电网系统.md`
+- `docs/archive/design/06-科技系统.md`
+- `docs/archive/design/07-戴森球系统.md`
+- `docs/archive/design/08-战斗与防御系统.md`
+- `docs/archive/design/09-命令事件与可见性系统.md`
+- `docs/archive/reference/戴森球计划-服务端逻辑功能清单.md`
+
+## Glossary
+- Tick: 服务端统一结算时间步。
+- 权威模拟: 仅服务端可修改世界状态。
+- 命令驱动: 客户端提交意图，服务端校验并执行。
+- 可见性裁剪: 按玩家视野过滤查询与事件。
+- 执行体: 玩家绑定的机器人执行单元。
+- 回放: 基于日志重建历史过程。
+- 回滚: 恢复到历史快照并继续运行。
+
+## Open Questions
+- 是否需要将多行星并行 Tick 从“单活动行星”扩展为“多活动行星”模型？
+- 回放一致性是否需要引入统一状态 hash API 供外部校验？
+- CLI 是否要内置脚本模式（批量命令）以支持自动化回归？
+- 戴森球高阶参数（应力、多层壳体）是否需要独立配置中心？
+
+</appendix>
+
+---
+
+<task-master-integration>
+# How Task Master Uses This PRD
+
+当执行 `task-master parse-prd docs/PRD_RPG_硅基世界_中文版.txt` 时：
+1. `### Capability:` 会被解析为主任务。
+2. `#### Feature:` 会被解析为子任务。
+3. `Depends on [[...]]` 会形成任务依赖边。
+4. `Development Phases` 会提供任务优先级与执行顺序。
+5. `test-strategy` 会为测试生成提供上下文。
+
+建议：
+- 优先使用 `--research` 以提升任务拆分质量。
+- 对过大 Capability 使用 `task-master expand` 做二次拆分。
+
+</task-master-integration>

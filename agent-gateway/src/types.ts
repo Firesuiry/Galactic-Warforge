@@ -50,9 +50,14 @@ export interface AgentInstance {
   serverUrl: string;
   playerId: string;
   playerKeySecretId: string;
-  status: 'idle' | 'running' | 'paused' | 'error' | 'completed';
+  status: 'idle' | 'queued' | 'running' | 'cooldown' | 'paused' | 'error' | 'completed';
   goal: string;
   activeThreadId: string;
+  role?: 'worker' | 'manager' | 'director';
+  policy?: AgentPolicy;
+  supervisorAgentIds?: string[];
+  managedAgentIds?: string[];
+  activeConversationIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +81,64 @@ export interface AgentThread {
   messages: AgentMessage[];
   toolCalls: Array<{ type: string; payload: Record<string, unknown> }>;
   executionLogs: AgentExecutionLog[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentPolicy {
+  planetIds: string[];
+  commandCategories: string[];
+  canCreateChannel: boolean;
+  canManageMembers: boolean;
+  canInviteByPlanet: boolean;
+  canCreateSchedules: boolean;
+  canDirectMessageAgentIds: string[];
+  canDispatchAgentIds: string[];
+}
+
+export interface Conversation {
+  id: string;
+  workspaceId: string;
+  type: 'channel' | 'dm';
+  name: string;
+  topic: string;
+  memberIds: string[];
+  createdByType: 'player' | 'agent';
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MentionTarget {
+  type: 'agent';
+  id: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  senderType: 'player' | 'agent' | 'system' | 'schedule';
+  senderId: string;
+  kind: 'chat' | 'system' | 'tool' | 'schedule';
+  content: string;
+  mentions: MentionTarget[];
+  trigger: 'player_message' | 'agent_message' | 'schedule_message' | 'system_message';
+  createdAt: string;
+}
+
+export interface ScheduleJob {
+  id: string;
+  workspaceId: string;
+  name: string;
+  creatorType: 'player' | 'agent';
+  creatorId: string;
+  targetType: 'agent_dm' | 'conversation';
+  targetId: string;
+  intervalSeconds: number;
+  messageTemplate: string;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunAt?: string;
   createdAt: string;
   updatedAt: string;
 }

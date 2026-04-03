@@ -1,5 +1,5 @@
 import { setAuth, setServerUrl } from './api.js';
-import { AGENT_ALLOWED_COMMANDS } from './command-catalog.js';
+import { AGENT_ALLOWED_COMMANDS, getAllowedCommandsByCategories, getCommandCategory } from './command-catalog.js';
 import { dispatch } from './commands/index.js';
 
 export interface GameCliRuntimeContext {
@@ -8,15 +8,45 @@ export interface GameCliRuntimeContext {
   playerKey: string;
 }
 
-export function getAgentAllowedCommands() {
-  return [...AGENT_ALLOWED_COMMANDS];
+export interface AgentCommandRuntimePolicy {
+  allowedCategories?: string[];
+  allowedPlanetIds?: string[];
 }
 
-export async function runCommandLine(line: string, context: GameCliRuntimeContext) {
-  const commandName = line.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+function extractExplicitPlanetIds(line: string) {
+  return line
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.startsWith('planet-'));
+}
 
-  if (!AGENT_ALLOWED_COMMANDS.includes(commandName as typeof AGENT_ALLOWED_COMMANDS[number]) && commandName !== 'help') {
+export function getAgentAllowedCommands(policy?: AgentCommandRuntimePolicy) {
+  return policy?.allowedCategories?.length
+    ? getAllowedCommandsByCategories(policy.allowedCategories)
+    : [...AGENT_ALLOWED_COMMANDS];
+}
+
+export async function runCommandLine(line: string, context: GameCliRuntimeContext, policy?: AgentCommandRuntimePolicy) {
+  const commandName = line.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  const allowedCommands = getAgentAllowedCommands(policy);
+
+  if (policy?.allowedCategories?.length && commandName !== 'help') {
+    const category = getCommandCategory(commandName);
+    if (!category || !policy.allowedCategories.includes(category)) {
+      throw new Error(`command category not allowed for agent: ${commandName}`);
+    }
+  }
+
+  if (!allowedCommands.includes(commandName as typeof AGENT_ALLOWED_COMMANDS[number]) && commandName !== 'help') {
     throw new Error(`command not allowed for agent: ${commandName}`);
+  }
+
+  if (policy?.allowedPlanetIds?.length) {
+    const explicitPlanetIds = extractExplicitPlanetIds(line);
+    const disallowedPlanetId = explicitPlanetIds.find((planetId) => !policy.allowedPlanetIds?.includes(planetId));
+    if (disallowedPlanetId) {
+      throw new Error(`planet not allowed for agent: ${disallowedPlanetId}`);
+    }
   }
 
   setServerUrl(context.serverUrl);

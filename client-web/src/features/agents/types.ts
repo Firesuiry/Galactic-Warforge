@@ -2,41 +2,55 @@ export interface AgentGatewayHealth {
   status: string;
 }
 
-export interface AgentTemplateSummary {
-  id: string;
-  name: string;
-  providerKind: 'openai_compatible_http' | 'codex_cli' | 'claude_code_cli';
-  description?: string;
-  defaultModel?: string;
+export interface AgentPolicyView {
+  planetIds: string[];
+  commandCategories: string[];
+  canCreateChannel: boolean;
+  canManageMembers: boolean;
+  canInviteByPlanet: boolean;
+  canCreateSchedules: boolean;
+  canDirectMessageAgentIds: string[];
+  canDispatchAgentIds: string[];
 }
 
-export interface AgentInstanceSummary {
+export interface AgentProfileView {
   id: string;
   name: string;
   templateId: string;
   serverUrl: string;
   playerId: string;
-  status: 'idle' | 'running' | 'paused' | 'error' | 'completed';
-  goal: string;
-  activeThreadId: string;
+  status: 'idle' | 'queued' | 'running' | 'cooldown' | 'paused' | 'error' | 'completed';
+  role?: 'worker' | 'manager' | 'director';
+  policy?: AgentPolicyView;
 }
 
-export interface AgentThreadView {
+export interface ConversationView {
   id: string;
-  agentId: string;
-  title: string;
-  messages: Array<{
-    role: 'user' | 'assistant' | 'tool';
-    content: string;
-    createdAt: string;
+  type: 'channel' | 'dm';
+  name: string;
+  topic: string;
+  memberIds: string[];
+}
+
+export interface ConversationMessageView {
+  id: string;
+  conversationId: string;
+  senderType: 'player' | 'agent' | 'system' | 'schedule';
+  senderId: string;
+  kind: 'chat' | 'system' | 'tool' | 'schedule';
+  content: string;
+  mentions: Array<{
+    type: 'agent';
+    id: string;
   }>;
-  toolCalls: Array<{
-    type: string;
-    payload: Record<string, unknown>;
-  }>;
-  executionLogs: Array<{
-    level: 'info' | 'error';
-    message: string;
-    createdAt: string;
-  }>;
+  createdAt: string;
+}
+
+export interface ScheduleView {
+  id: string;
+  targetType: 'agent_dm' | 'conversation';
+  targetId: string;
+  intervalSeconds: number;
+  messageTemplate: string;
+  enabled: boolean;
 }

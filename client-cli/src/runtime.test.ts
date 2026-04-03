@@ -20,4 +20,14 @@ describe('game cli runtime', () => {
 
     assert.match(output, /save \[--reason <text>\]/);
   });
+
+  it('rejects commands outside allowed categories', async () => {
+    await assert.rejects(() => runCommandLine('attack unit-1 target-1', {
+      currentPlayer: 'p1',
+      serverUrl: 'http://localhost:18080',
+      playerKey: 'key_player_1',
+    }, {
+      allowedCategories: ['observe'],
+    }), /command category not allowed/);
+  });
 });

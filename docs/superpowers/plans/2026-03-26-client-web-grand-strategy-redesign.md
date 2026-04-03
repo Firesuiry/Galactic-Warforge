@@ -1185,8 +1185,8 @@ git commit -m "feat: redesign overview galaxy and system pages"
 - Modify: `shared-client/src/api.ts`
 - Modify: `client-web/src/fixtures/index.ts`
 - Modify: `client-web/src/fixtures/scenarios/baseline.ts`
-- Modify: `docs/服务端API.md`
-- Modify: `docs/client-web使用说明.md`
+- Modify: `docs/dev/服务端API.md`
+- Modify: `docs/dev/client-web.md`
 
 - [ ] **Step 1: 写失败测试，锁住两个最终约束：默认 `2000x2000`，旧 `/fog` 接口不再保留**
 
@@ -1304,8 +1304,8 @@ git add server/internal/mapconfig/config_test.go \
         shared-client/src/api.ts \
         client-web/src/fixtures/index.ts \
         client-web/src/fixtures/scenarios/baseline.ts \
-        docs/服务端API.md \
-        docs/client-web使用说明.md
+        docs/dev/服务端API.md \
+        docs/dev/client-web.md
 git commit -m "refactor: finalize scene-driven planet api and large map defaults"
 ```
 

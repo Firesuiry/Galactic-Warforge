@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import time
@@ -29,9 +28,10 @@ def run_codex_exec(repo_root: Path, requirement_text: str) -> int:
     )
     return result.returncode
 
+
 def run_minimax_exec(repo_root: Path, requirement_text: str) -> int:
     result = subprocess.run(
-        ["claude", "--settings","/home/firesuiry/develop/minimax_settings.json", "--dangerously-skip-permissions","-p", requirement_text,"--verbose"],
+        ["claude", "--settings", "/home/firesuiry/develop/minimax_settings.json", "--dangerously-skip-permissions", "-p", requirement_text, "--verbose"],
         cwd=str(repo_root),
         check=False,
     )
@@ -40,9 +40,9 @@ def run_minimax_exec(repo_root: Path, requirement_text: str) -> int:
 
 def main() -> int:
     repo_root = get_repo_root()
-    task_dir = repo_root / "docs" / "task"
-    running_task_dir = repo_root / "docs" / "running_task"
-    requirement_path = repo_root / "docs" / "任务要求.txt"
+    task_dir = repo_root / "docs" / "process" / "task"
+    running_task_dir = repo_root / "docs" / "process" / "running_task"
+    requirement_path = repo_root / "docs" / "process" / "任务要求.txt"
 
     if not requirement_path.exists() or not requirement_path.is_file():
         print(f"未找到任务要求文件: {requirement_path}", file=sys.stderr)
@@ -56,7 +56,7 @@ def main() -> int:
     while True:
         task_files = list_task_files(task_dir) + list_task_files(running_task_dir)
         if not task_files:
-            print("docs/task 和 docs/running_task 下没有文件，结束。")
+            print("docs/process/task 和 docs/process/running_task 下没有文件，结束。")
             return 0
 
         print(f"检测到 {len(task_files)} 个任务文件，执行 codex exec ...")

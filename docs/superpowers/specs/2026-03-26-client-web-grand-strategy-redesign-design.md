@@ -51,8 +51,8 @@
 - 将事件时间线与告警合并为统一情报面板，并默认折叠。
 - 将部分次级信息改为局部弹出窗，避免长期挤占主视区。
 - 更新相关文档，至少包括：
-  - `docs/服务端API.md`
-  - `docs/client-web使用说明.md`
+  - `docs/dev/服务端API.md`
+  - `docs/dev/client-web.md`
   - 任何因 API 或页面结构变化而失效的 Web 相关说明
 
 ### 3.2 范围外
@@ -429,7 +429,7 @@
 
 - 重构行星相关 API
 - 增加 `summary / scene / inspect` 型读模型
-- 更新 `docs/服务端API.md`
+- 更新 `docs/dev/服务端API.md`
 
 ### 10.3 实施包 C：client-web 全站骨架重做
 
@@ -492,7 +492,7 @@
 
 ## 13. 相关文档
 
-- `docs/client-web可视化客户端技术方案.md`
-- `docs/client-web使用说明.md`
-- `docs/服务端API.md`
-- `docs/design/00-总设计.md`
+- `docs/archive/design/client-web可视化客户端技术方案.md`
+- `docs/dev/client-web.md`
+- `docs/dev/服务端API.md`
+- `docs/archive/design/00-总设计.md`

@@ -55,7 +55,7 @@
 - 能最短路径补齐玩家闭环
 - 与现有命令驱动服务端保持一致
 - 改动面明显小于单独开一套物流资源接口
-- 同时修复 `docs/server_dsp_gap_analysis.md` 当前指出的两类核心缺口
+- 同时修复 `docs/archive/analysis/server_dsp_gap_analysis.md` 当前指出的两类核心缺口
 
 ## 5. 服务端设计
 
@@ -225,10 +225,10 @@ CLI 只做参数解析与命令转发，不做业务侧缓存。
 
 需要同步更新以下文档：
 
-- `docs/服务端API.md`
-- `docs/cli.md`
-- `docs/server_dsp_gap_analysis.md`
-- `docs/玩家玩法指南.md`
+- `docs/dev/服务端API.md`
+- `docs/dev/客户端CLI.md`
+- `docs/archive/analysis/server_dsp_gap_analysis.md`
+- `docs/player/玩法指南.md`
 
 更新目标：
 

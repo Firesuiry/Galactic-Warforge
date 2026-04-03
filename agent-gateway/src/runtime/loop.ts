@@ -16,12 +16,13 @@ export async function runAgentLoop(input: {
   provider: { runTurn: (request: RunTurnInput) => Promise<RunTurnResult> };
   cliRuntime: { run: (commandLine: string) => Promise<string> };
   initialContext: { goal: string };
+  initialHistory?: Array<{ role: string; content: string }>;
   onAssistantMessage?: (message: string) => void;
   onToolCall?: (commandLine: string, result: string) => void;
 }) {
-  const history: Array<{ role: string; content: string }> = [
-    { role: 'user', content: input.initialContext.goal },
-  ];
+  const history: Array<{ role: string; content: string }> = input.initialHistory
+    ? [...input.initialHistory]
+    : [{ role: 'user', content: input.initialContext.goal }];
   let finalMessage = '';
 
   for (let step = 0; step < input.maxSteps; step += 1) {

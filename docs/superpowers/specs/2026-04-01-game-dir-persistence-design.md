@@ -58,10 +58,10 @@
 - 新增 CLI `save` 命令。
 - 在 Web 顶栏增加手动保存按钮。
 - 更新相关文档，至少包括：
-  - `docs/服务端API.md`
-  - `docs/cli.md`
-  - `docs/玩家玩法指南.md`
-  - `docs/client-web使用说明.md`
+  - `docs/dev/服务端API.md`
+  - `docs/dev/客户端CLI.md`
+  - `docs/player/玩法指南.md`
+  - `docs/dev/client-web.md`
 
 ### 3.2 范围外
 
@@ -452,15 +452,15 @@ Web 的手动保存入口放在顶栏 `TopNav`。
 
 本次实现完成后必须同步以下文档：
 
-- `docs/服务端API.md`
+- `docs/dev/服务端API.md`
   - 新增 `POST /save`
   - 更新 `data_dir` 的真实语义
   - 说明新局/续档行为
-- `docs/cli.md`
+- `docs/dev/客户端CLI.md`
   - 新增 `save`
-- `docs/玩家玩法指南.md`
+- `docs/player/玩法指南.md`
   - 增加“如何新开一局 / 如何继续上一局”
-- `docs/client-web使用说明.md`
+- `docs/dev/client-web.md`
   - 说明顶栏手动保存入口
 
 ## 14. 非目标与限制

@@ -58,3 +58,4 @@ dev-debug.log
 .env
 
 server/data/snapshots/*
+agent-gateway/data/

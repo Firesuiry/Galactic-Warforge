@@ -1,15 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
 
 import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
-import { runClaudeTurn } from '../providers/claude-cli.js';
-import { runCodexTurn } from '../providers/codex-cli.js';
-import { runOpenAICompatibleTurn } from '../providers/openai-compatible.js';
-import { ensureActionSchemaFile } from '../runtime/action-schema.js';
 import { runAgentLoop } from '../runtime/loop.js';
 import type { GatewayEvent } from '../runtime/events.js';
-import type { AgentInstance, AgentTemplate, AgentThread, CliProviderConfig, OpenAICompatibleProviderConfig } from '../types.js';
+import { runTemplateTurn } from '../runtime/turn.js';
+import type { AgentInstance, AgentPolicy, AgentTemplate, AgentThread, CliProviderConfig, OpenAICompatibleProviderConfig } from '../types.js';
 
 interface AgentStore {
   list: () => Promise<AgentInstance[]>;
@@ -46,6 +42,19 @@ interface AgentRouteContext {
   eventBus: EventBus;
 }
 
+function createDefaultPolicy(): AgentPolicy {
+  return {
+    planetIds: [],
+    commandCategories: [],
+    canCreateChannel: false,
+    canManageMembers: false,
+    canInviteByPlanet: false,
+    canCreateSchedules: false,
+    canDirectMessageAgentIds: [],
+    canDispatchAgentIds: [],
+  };
+}
+
 async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
@@ -58,64 +67,6 @@ async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
 function writeJson(response: ServerResponse, statusCode: number, payload: unknown) {
   response.writeHead(statusCode, { 'content-type': 'application/json' });
   response.end(JSON.stringify(payload));
-}
-
-function buildPrompt(template: AgentTemplate, history: Array<{ role: string; content: string }>) {
-  const tools = getAgentAllowedCommands().join(', ');
-  const transcript = history.map((entry) => `${entry.role}: ${entry.content}`).join('\n');
-  return [
-    template.systemPrompt || '你是 SiliconWorld 智能体。',
-    '你必须返回 JSON，字段为 assistantMessage/actions/done。',
-    '允许的 game.cli 命令如下：',
-    tools,
-    '历史对话：',
-    transcript,
-  ].join('\n\n');
-}
-
-async function runTemplateTurn(context: AgentRouteContext, template: AgentTemplate, history: Array<{ role: string; content: string }>) {
-  const prompt = buildPrompt(template, history);
-
-  if (template.providerKind === 'openai_compatible_http') {
-    const providerConfig = template.providerConfig as OpenAICompatibleProviderConfig;
-    const apiKey = await context.secretStore.readValue(providerConfig.apiKeySecretId);
-    return runOpenAICompatibleTurn({
-      baseUrl: providerConfig.baseUrl,
-      apiKey,
-      model: providerConfig.model || template.defaultModel,
-      systemPrompt: template.systemPrompt,
-      userPrompt: prompt,
-    });
-  }
-
-  if (template.providerKind === 'codex_cli') {
-    const providerConfig = template.providerConfig as CliProviderConfig;
-    const schemaFile = await ensureActionSchemaFile(context.dataRoot);
-    return runCodexTurn({
-      command: providerConfig.command,
-      model: providerConfig.model || template.defaultModel,
-      prompt,
-      schemaFile,
-      workdir: providerConfig.workdir,
-    });
-  }
-
-  const providerConfig = template.providerConfig as CliProviderConfig;
-  return runClaudeTurn({
-    command: providerConfig.command,
-    model: providerConfig.model || template.defaultModel,
-    prompt,
-    schemaJson: JSON.stringify({
-      type: 'object',
-      required: ['assistantMessage', 'actions', 'done'],
-      properties: {
-        assistantMessage: { type: 'string' },
-        actions: { type: 'array' },
-        done: { type: 'boolean' },
-      },
-    }),
-    systemPrompt: template.systemPrompt,
-  });
 }
 
 async function appendThreadMessage(
@@ -155,6 +106,11 @@ export async function handleAgentRoutes(
       playerId: string;
       playerKey: string;
       goal?: string;
+      role?: 'worker' | 'manager' | 'director';
+      policy?: Partial<AgentPolicy>;
+      supervisorAgentIds?: string[];
+      managedAgentIds?: string[];
+      activeConversationIds?: string[];
     }>(request);
     const now = new Date().toISOString();
     const id = payload.id || randomUUID();
@@ -173,6 +129,18 @@ export async function handleAgentRoutes(
       status: 'idle',
       goal: payload.goal ?? '',
       activeThreadId: threadId,
+      role: payload.role ?? 'worker',
+      policy: {
+        ...createDefaultPolicy(),
+        ...payload.policy,
+        planetIds: payload.policy?.planetIds ?? [],
+        commandCategories: payload.policy?.commandCategories ?? [],
+        canDirectMessageAgentIds: payload.policy?.canDirectMessageAgentIds ?? [],
+        canDispatchAgentIds: payload.policy?.canDispatchAgentIds ?? [],
+      },
+      supervisorAgentIds: payload.supervisorAgentIds ?? [],
+      managedAgentIds: payload.managedAgentIds ?? [],
+      activeConversationIds: payload.activeConversationIds ?? [],
       createdAt: now,
       updatedAt: now,
     };
@@ -277,7 +245,15 @@ export async function handleAgentRoutes(
         const result = await runAgentLoop({
           maxSteps: template.toolPolicy.maxSteps,
           provider: {
-            runTurn: (input) => runTemplateTurn(context, template, input.history.length > 0 ? input.history : history),
+            runTurn: (input) => runTemplateTurn({
+              dataRoot: context.dataRoot,
+              template,
+              secretStore: context.secretStore,
+              history: input.history,
+              allowedCommands: getAgentAllowedCommands({
+                allowedCategories: agent.policy?.commandCategories,
+              }),
+            }),
           },
           cliRuntime: {
             run: async (commandLine) => {
@@ -285,6 +261,9 @@ export async function handleAgentRoutes(
                 currentPlayer: agent.playerId,
                 serverUrl: agent.serverUrl,
                 playerKey,
+              }, {
+                allowedCategories: agent.policy?.commandCategories,
+                allowedPlanetIds: agent.policy?.planetIds,
               });
               const currentThread = await context.threadStore.get(thread.id);
               if (currentThread) {
@@ -304,6 +283,7 @@ export async function handleAgentRoutes(
             },
           },
           initialContext: { goal: payload.content },
+          initialHistory: history,
           onAssistantMessage: async (message) => {
             await appendThreadMessage(context.threadStore, thread.id, 'assistant', message);
             context.eventBus.emit({ agentId: agent.id, type: 'assistant_message', payload: { message } });

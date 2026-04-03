@@ -1,0 +1,24 @@
+按以下流程执行任务：
+1. 检查 `docs/process/task` 是否有任务；无任务则结束。
+2. 选择一个“前提任务已全部完成”的任务；没有可执行任务则跳转步骤C1。（完成就是任务在 `docs/process/finished_task` 文件夹里）
+3. 将该任务文件移动到 `docs/process/running_task`。
+4. 判断是否复杂：复杂则跳转到步骤B1；不复杂则继续。
+5. 判断当前任务要求是否需要进行调研和架构设计，如果需要则跳转到步骤D1，不需要则继续。
+6. 实现并测试；实现前先阅读 `docs/process/rules` 下规则。
+7. 回写任务结果；若无法完成，写明原因并结束（文件保留在 `docs/process/running_task`）。
+8. 若任务完成，将文件移动到 `docs/process/finished_task`，跳转到步骤Z1.
+
+# 复杂任务处理
+B1. 拆分为多个子任务，子任务文件放入 `docs/process/task`，编号按 `docs/process/task`、`docs/process/running_task`、`docs/process/finished_task` 三目录最大序号递增。生成的子任务不能有前提任务。
+B2. 在当前父任务中写入 `前提任务`（那些子任务），并将父任务移回 `docs/process/task`，结束。
+
+# 无可用任务
+C1. 检查`docs/process/running_task`中是否有任务，如果有，将其全部移动到`docs/process/task`文件夹中，之后结束。
+C2. 如果没有，直接结束。
+
+# 任务调研设计
+D1. 阅读任务及描述，完成任务调研及架构设计（需阅读 `docs/process/rules/架构设计规范.md`），将调研设计结果保存为 md 文件（文件名命名为任务ID.md），放到 `docs/process/detail` 下，并在原有任务中写明要参考的调研设计结果文件路径。
+D2. 将任务文件移回 `docs/process/task`，跳转到步骤Z1.
+
+# 结束操作
+Z1. 提交git commit并推送到远程，结束.

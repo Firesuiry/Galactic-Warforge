@@ -8,7 +8,7 @@
 - `shared-client`：对 SiliconWorld 服务端查询接口、事件接口、`/commands` 的共享 TypeScript 封装。
 - `client-cli`：面向人类玩家的 Node CLI，已经覆盖查询、建造、移动、研究、物流、回放、保存等常用命令。
 
-当前不存在可直接复用的正式 Agent 托管接口。`docs/设定.md` 中虽然描述了未来的 `/agents` API，但现有 `server/` 实现并未提供对应能力。因此，在 `client-web` 中增加 AI 交互面板时，最稳妥的第一阶段落点不是 `server/`，而是一个本地 Agent 网关进程。
+当前不存在可直接复用的正式 Agent 托管接口。`docs/archive/product/设定.md` 中虽然描述了未来的 `/agents` API，但现有 `server/` 实现并未提供对应能力。因此，在 `client-web` 中增加 AI 交互面板时，最稳妥的第一阶段落点不是 `server/`，而是一个本地 Agent 网关进程。
 
 本轮已经确认的约束如下：
 
