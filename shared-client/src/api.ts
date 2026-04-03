@@ -14,6 +14,8 @@ import type {
   GalaxyView,
   HealthResponse,
   CatalogView,
+  ConfigureLogisticsSlotOptions,
+  ConfigureLogisticsStationOptions,
   MetricsSnapshot,
   PlanetInspectEntityKind,
   PlanetInspectView,
@@ -431,6 +433,40 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdConfigureLogisticsStation(buildingId: string, options: ConfigureLogisticsStationOptions = {}) {
+    const payload: Record<string, unknown> = {
+      ...(options.inputPriority !== undefined ? { input_priority: options.inputPriority } : {}),
+      ...(options.outputPriority !== undefined ? { output_priority: options.outputPriority } : {}),
+      ...(options.droneCapacity !== undefined ? { drone_capacity: options.droneCapacity } : {}),
+    };
+    const interstellar: Record<string, unknown> = {
+      ...(options.interstellar?.enabled !== undefined ? { enabled: options.interstellar.enabled } : {}),
+      ...(options.interstellar?.warpEnabled !== undefined ? { warp_enabled: options.interstellar.warpEnabled } : {}),
+      ...(options.interstellar?.shipSlots !== undefined ? { ship_slots: options.interstellar.shipSlots } : {}),
+    };
+    if (Object.keys(interstellar).length > 0) {
+      payload.interstellar = interstellar;
+    }
+    return sendSingleCommand({
+      type: 'configure_logistics_station',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload,
+    });
+  }
+
+  function cmdConfigureLogisticsSlot(buildingId: string, options: ConfigureLogisticsSlotOptions) {
+    return sendSingleCommand({
+      type: 'configure_logistics_slot',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: {
+        scope: options.scope,
+        item_id: options.itemId,
+        mode: options.mode,
+        local_storage: options.localStorage,
+      },
+    });
+  }
+
   function cmdCancelConstruction(taskId: string) {
     return sendSingleCommand({
       type: 'cancel_construction',
@@ -541,6 +577,8 @@ export function createApiClient(options: ApiClientOptions) {
     cmdBuildDysonShell,
     cmdCancelConstruction,
     cmdCancelResearch,
+    cmdConfigureLogisticsSlot,
+    cmdConfigureLogisticsStation,
     cmdDemolish,
     cmdDemolishDyson,
     cmdLaunchSolarSail,

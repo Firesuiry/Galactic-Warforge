@@ -503,14 +503,47 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 	player.AddItems(refundItems)
 }
 
+func rollbackConstructionDeduction(ws *model.WorldState, task *model.ConstructionTask) {
+	if ws == nil || task == nil || !task.MaterialsDeducted {
+		return
+	}
+	player := ws.Players[task.PlayerID]
+	if player == nil {
+		return
+	}
+	player.Resources.Minerals += task.Cost.Minerals
+	player.Resources.Energy += task.Cost.Energy
+	player.AddItems(task.Cost.Items)
+	task.MaterialsDeducted = false
+}
+
+// Allows tests to force provisioning failures after construction has staged world state.
+var provisionConstructionStationFleet = ensureStationFleet
+
+func ensureStationFleet(ws *model.WorldState, building *model.Building) error {
+	if ws == nil || building == nil || building.LogisticsStation == nil {
+		return nil
+	}
+	if err := ensureStationDronesToCapacity(ws, building); err != nil {
+		return err
+	}
+	if !model.IsInterstellarLogisticsBuilding(building.Type) {
+		return nil
+	}
+	target := building.LogisticsStation.ShipSlotCapacityValue()
+	for model.StationShipCount(ws, building.ID) < target {
+		shipID := ws.NextEntityID("ship")
+		ship := model.NewLogisticsShipState(shipID, building.ID, building.Position)
+		if err := model.RegisterLogisticsShip(ws, ship); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.ConstructionTask) ([]*model.GameEvent, error) {
 	if ws == nil || task == nil {
 		return nil, fmt.Errorf("construction task missing")
-	}
-
-	// T078: Deduct locked materials at completion time (not at enqueue time)
-	if err := deductLockedMaterials(ws, task); err != nil {
-		return nil, fmt.Errorf("failed to deduct materials: %w", err)
 	}
 
 	pos := task.Position
@@ -555,8 +588,12 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	if b.Runtime.Functions.Production != nil {
 		b.ProductionMonitor = model.NewProductionMonitorState()
 	}
-	model.RegisterLogisticsStation(ws, b)
-	model.RegisterPowerGridBuilding(ws, b)
+
+	// T078: Deduct locked materials at completion time (not at enqueue time).
+	// After this point, any failure must fully roll back spent materials and staged world state.
+	if err := deductLockedMaterials(ws, task); err != nil {
+		return nil, fmt.Errorf("failed to deduct materials: %w", err)
+	}
 	if b.Conveyor != nil && task.ConveyorDirection.Valid() {
 		b.Conveyor.Output = task.ConveyorDirection
 		b.Conveyor.Input = task.ConveyorDirection.Opposite()
@@ -564,6 +601,27 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	ws.Buildings[id] = b
 	ws.TileBuilding[tileKey] = id
 	ws.Grid[pos.Y][pos.X].BuildingID = id
+
+	rollback := func() {
+		removeStationFleet(ws, id)
+		model.UnregisterLogisticsStation(ws, id)
+		model.UnregisterPowerGridBuilding(ws, id)
+		delete(ws.Buildings, id)
+		delete(ws.TileBuilding, tileKey)
+		ws.Grid[pos.Y][pos.X].BuildingID = ""
+		rollbackConstructionDeduction(ws, task)
+	}
+
+	if b.LogisticsStation != nil {
+		model.RegisterLogisticsStation(ws, b)
+		if b.Type == model.BuildingTypePlanetaryLogisticsStation || b.Type == model.BuildingTypeInterstellarLogisticsStation {
+			if err := provisionConstructionStationFleet(ws, b); err != nil {
+				rollback()
+				return nil, fmt.Errorf("auto provision station fleet: %w", err)
+			}
+		}
+	}
+	model.RegisterPowerGridBuilding(ws, b)
 
 	events := []*model.GameEvent{
 		{

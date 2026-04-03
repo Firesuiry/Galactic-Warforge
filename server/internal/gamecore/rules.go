@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 
 	"siliconworld/internal/mapmodel"
@@ -1654,4 +1655,322 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	building, station, execRes := requireOwnedLogisticsStation(ws, playerID, cmd.Target.EntityID)
+	if execRes != nil {
+		return *execRes, nil
+	}
+
+	previousDroneCapacity := station.DroneCapacityValue()
+	droneCapacityUpdated := false
+	staged := station.Clone()
+
+	if raw, ok := cmd.Payload["drone_capacity"]; ok {
+		droneCapacity, err := payloadValueInt(raw)
+		if err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.drone_capacity must be numeric"
+			return res, nil
+		}
+		staged.DroneCapacity = droneCapacity
+		droneCapacityUpdated = true
+	}
+	if raw, ok := cmd.Payload["input_priority"]; ok {
+		inputPriority, err := payloadValueInt(raw)
+		if err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.input_priority must be numeric"
+			return res, nil
+		}
+		staged.Priority.Input = inputPriority
+	}
+	if raw, ok := cmd.Payload["output_priority"]; ok {
+		outputPriority, err := payloadValueInt(raw)
+		if err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.output_priority must be numeric"
+			return res, nil
+		}
+		staged.Priority.Output = outputPriority
+	}
+
+	if raw, ok := cmd.Payload["interstellar"]; ok {
+		if !supportsInterstellarConfigCommand(building) {
+			res.Code = model.CodeValidationFailed
+			res.Message = "planetary logistics station does not support interstellar config"
+			return res, nil
+		}
+		payload, ok := raw.(map[string]any)
+		if !ok {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.interstellar must be an object"
+			return res, nil
+		}
+		if err := applyMinimalInterstellarConfig(&staged.Interstellar, payload); err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = err.Error()
+			return res, nil
+		}
+	}
+
+	staged.Normalize()
+
+	if droneCapacityUpdated && staged.DroneCapacityValue() > previousDroneCapacity {
+		originalStation := station.Clone()
+		registryHadEntry := false
+		var originalRegistryStation *model.LogisticsStationState
+		if ws.LogisticsStations != nil {
+			originalRegistryStation, registryHadEntry = ws.LogisticsStations[building.ID]
+			if registryHadEntry {
+				ws.LogisticsStations[building.ID] = station
+			}
+		}
+
+		*station = *staged
+		createdDroneIDs, err := ensureStationDronesToCapacityTracking(ws, building)
+		if err != nil {
+			*station = *originalStation
+			if ws.LogisticsStations != nil {
+				if registryHadEntry {
+					ws.LogisticsStations[building.ID] = originalRegistryStation
+				} else {
+					delete(ws.LogisticsStations, building.ID)
+				}
+			}
+			unregisterLogisticsDrones(ws, createdDroneIDs)
+			res.Code = model.CodeValidationFailed
+			res.Message = err.Error()
+			return res, nil
+		}
+	} else {
+		*station = *staged
+	}
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("logistics station %s configured", building.ID)
+	return res, nil
+}
+
+func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	building, station, execRes := requireOwnedLogisticsStation(ws, playerID, cmd.Target.EntityID)
+	if execRes != nil {
+		return *execRes, nil
+	}
+
+	scope, err := payloadStrictString(cmd.Payload, "scope")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	itemID, err := payloadStrictString(cmd.Payload, "item_id")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	modeRaw, err := payloadStrictString(cmd.Payload, "mode")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	mode := model.LogisticsStationMode(modeRaw)
+	if !mode.Valid() {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.mode must be one of none|supply|demand|both"
+		return res, nil
+	}
+	localStorage, err := payloadStrictInt(cmd.Payload, "local_storage")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+
+	setting := model.LogisticsStationItemSetting{
+		ItemID:       itemID,
+		Mode:         mode,
+		LocalStorage: localStorage,
+	}
+
+	switch scope {
+	case "planetary":
+		err = station.UpsertSetting(setting)
+	case "interstellar":
+		if !supportsInterstellarConfigCommand(building) {
+			res.Code = model.CodeValidationFailed
+			res.Message = "planetary logistics station does not support interstellar scope"
+			return res, nil
+		}
+		err = station.UpsertInterstellarSetting(setting)
+	default:
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.scope must be planetary or interstellar"
+		return res, nil
+	}
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+
+	station.Normalize()
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("logistics slot configured for %s", itemID)
+	return res, nil
+}
+
+func supportsInterstellarConfigCommand(building *model.Building) bool {
+	return building != nil && building.Type == model.BuildingTypeInterstellarLogisticsStation
+}
+
+func isConfigurableLogisticsStationType(buildingType model.BuildingType) bool {
+	return buildingType == model.BuildingTypePlanetaryLogisticsStation || buildingType == model.BuildingTypeInterstellarLogisticsStation
+}
+
+func requireOwnedLogisticsStation(ws *model.WorldState, playerID, buildingID string) (*model.Building, *model.LogisticsStationState, *model.CommandResult) {
+	res := model.CommandResult{Status: model.StatusFailed}
+	if buildingID == "" {
+		res.Code = model.CodeValidationFailed
+		res.Message = "target.entity_id required"
+		return nil, nil, &res
+	}
+
+	building, ok := ws.Buildings[buildingID]
+	if !ok {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		return nil, nil, &res
+	}
+	if building.OwnerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot configure building owned by another player"
+		return nil, nil, &res
+	}
+	if !isConfigurableLogisticsStationType(building.Type) || building.LogisticsStation == nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = "target building is not a logistics station"
+		return nil, nil, &res
+	}
+	return building, building.LogisticsStation, nil
+}
+
+func payloadStrictString(payload map[string]any, key string) (string, error) {
+	raw, ok := payload[key]
+	if !ok {
+		return "", fmt.Errorf("payload.%s required", key)
+	}
+	value, ok := raw.(string)
+	if !ok || value == "" {
+		return "", fmt.Errorf("payload.%s must be a non-empty string", key)
+	}
+	return value, nil
+}
+
+func payloadStrictInt(payload map[string]any, key string) (int, error) {
+	raw, ok := payload[key]
+	if !ok {
+		return 0, fmt.Errorf("payload.%s required", key)
+	}
+	value, err := payloadValueInt(raw)
+	if err != nil {
+		return 0, fmt.Errorf("payload.%s must be integer", key)
+	}
+	return value, nil
+}
+
+func applyMinimalInterstellarConfig(cfg *model.LogisticsStationInterstellarConfig, payload map[string]any) error {
+	if cfg == nil {
+		return fmt.Errorf("interstellar config required")
+	}
+	if raw, ok := payload["enabled"]; ok {
+		enabled, err := payloadValueBool(raw)
+		if err != nil {
+			return fmt.Errorf("payload.interstellar.enabled must be boolean")
+		}
+		cfg.Enabled = enabled
+	}
+	if raw, ok := payload["warp_enabled"]; ok {
+		warpEnabled, err := payloadValueBool(raw)
+		if err != nil {
+			return fmt.Errorf("payload.interstellar.warp_enabled must be boolean")
+		}
+		cfg.WarpEnabled = warpEnabled
+	}
+	if raw, ok := payload["ship_slots"]; ok {
+		shipSlots, err := payloadValueInt(raw)
+		if err != nil {
+			return fmt.Errorf("payload.interstellar.ship_slots must be numeric")
+		}
+		cfg.ShipSlots = shipSlots
+	}
+	return nil
+}
+
+func payloadValueInt(raw any) (int, error) {
+	switch value := raw.(type) {
+	case int:
+		return value, nil
+	case int32:
+		return int(value), nil
+	case int64:
+		return int(value), nil
+	case float64:
+		if math.Trunc(value) != value {
+			return 0, fmt.Errorf("fractional number not allowed")
+		}
+		return int(value), nil
+	case float32:
+		if math.Trunc(float64(value)) != float64(value) {
+			return 0, fmt.Errorf("fractional number not allowed")
+		}
+		return int(value), nil
+	default:
+		return 0, fmt.Errorf("integer required")
+	}
+}
+
+func payloadValueBool(raw any) (bool, error) {
+	value, ok := raw.(bool)
+	if !ok {
+		return false, fmt.Errorf("boolean required")
+	}
+	return value, nil
+}
+
+func ensureStationDronesToCapacity(ws *model.WorldState, building *model.Building) error {
+	_, err := ensureStationDronesToCapacityTracking(ws, building)
+	return err
+}
+
+func ensureStationDronesToCapacityTracking(ws *model.WorldState, building *model.Building) ([]string, error) {
+	if ws == nil || building == nil || building.LogisticsStation == nil {
+		return nil, nil
+	}
+	target := building.LogisticsStation.DroneCapacityValue()
+	createdDroneIDs := make([]string, 0)
+	for model.StationDroneCount(ws, building.ID) < target {
+		droneID := ws.NextEntityID("drone")
+		drone := model.NewLogisticsDroneState(droneID, building.ID, building.Position)
+		if err := model.RegisterLogisticsDrone(ws, drone); err != nil {
+			return createdDroneIDs, err
+		}
+		createdDroneIDs = append(createdDroneIDs, droneID)
+	}
+	return createdDroneIDs, nil
+}
+
+func unregisterLogisticsDrones(ws *model.WorldState, droneIDs []string) {
+	for _, droneID := range droneIDs {
+		model.UnregisterLogisticsDrone(ws, droneID)
+	}
 }

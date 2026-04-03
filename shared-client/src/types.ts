@@ -168,6 +168,29 @@ export interface Unit {
   attack_target?: string;
 }
 
+export type LogisticsScope = 'planetary' | 'interstellar';
+export type LogisticsMode = 'none' | 'supply' | 'demand' | 'both';
+
+export interface ConfigureLogisticsStationInterstellarOptions {
+  enabled?: boolean;
+  warpEnabled?: boolean;
+  shipSlots?: number;
+}
+
+export interface ConfigureLogisticsStationOptions {
+  inputPriority?: number;
+  outputPriority?: number;
+  droneCapacity?: number;
+  interstellar?: ConfigureLogisticsStationInterstellarOptions;
+}
+
+export interface ConfigureLogisticsSlotOptions {
+  scope: LogisticsScope;
+  itemId: string;
+  mode: LogisticsMode;
+  localStorage: number;
+}
+
 export type CommandType =
   | 'scan_galaxy'
   | 'scan_system'
@@ -178,6 +201,8 @@ export type CommandType =
   | 'produce'
   | 'upgrade'
   | 'demolish'
+  | 'configure_logistics_station'
+  | 'configure_logistics_slot'
   | 'cancel_construction'
   | 'restore_construction'
   | 'start_research'

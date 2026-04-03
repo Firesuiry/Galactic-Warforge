@@ -45,7 +45,12 @@ describe('TopNav save', () => {
           tick: 12,
           active_planet_id: 'planet-1-1',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: {
+              player_id: 'p1',
+              resources: { minerals: 1, energy: 1 },
+              inventory: { iron_ore: 7, copper_ore: 2 },
+              is_alive: true,
+            },
           },
         }));
       }
@@ -73,6 +78,7 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
+    expect(await screen.findByText('矿产 铁矿 7 · 铜矿 2')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '保存' }));
 
     expect(await screen.findByText('已保存到 tick 12')).toBeInTheDocument();
@@ -87,7 +93,12 @@ describe('TopNav save', () => {
           tick: 12,
           active_planet_id: 'planet-1-1',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: {
+              player_id: 'p1',
+              resources: { minerals: 1, energy: 1 },
+              inventory: { silicon_ore: 5 },
+              is_alive: true,
+            },
           },
         }));
       }
@@ -108,6 +119,7 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
+    expect(await screen.findByText('矿产 硅矿 5')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '保存' }));
 
     expect(await screen.findByText('disk full')).toBeInTheDocument();

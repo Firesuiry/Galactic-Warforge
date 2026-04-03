@@ -23,6 +23,10 @@ export type {
   RollbackRequest,
   UnitTypeName,
 } from '../../shared-client/src/api.js';
+export type {
+  ConfigureLogisticsSlotOptions,
+  ConfigureLogisticsStationOptions,
+} from '../../shared-client/src/types.js';
 
 const client = createApiClient({
   serverUrl: SERVER_URL,
@@ -39,6 +43,8 @@ export const cmdBuildDysonNode = client.cmdBuildDysonNode;
 export const cmdBuildDysonShell = client.cmdBuildDysonShell;
 export const cmdCancelConstruction = client.cmdCancelConstruction;
 export const cmdCancelResearch = client.cmdCancelResearch;
+export const cmdConfigureLogisticsSlot = client.cmdConfigureLogisticsSlot;
+export const cmdConfigureLogisticsStation = client.cmdConfigureLogisticsStation;
 export const cmdDemolish = client.cmdDemolish;
 export const cmdDemolishDyson = client.cmdDemolishDyson;
 export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;

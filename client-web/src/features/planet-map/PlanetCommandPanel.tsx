@@ -1,67 +1,179 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DEFAULT_GALAXY_ID, DEFAULT_SYSTEM_ID } from '@shared/config';
-import type { ApiClient } from '@shared/api';
-import type { CatalogView } from '@shared/types';
+import { DEFAULT_GALAXY_ID, DEFAULT_SYSTEM_ID } from "@shared/config";
+import type { ApiClient } from "@shared/api";
+import type { CatalogView, PlanetRuntimeView } from "@shared/types";
 
-import { getBuildingDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
-import { usePlanetViewStore } from '@/features/planet-map/store';
+import {
+  findLogisticsStation,
+  getBuildingDisplayName,
+  getItemDisplayName,
+  getTechDisplayName,
+  isLogisticsStationBuildingType,
+  listOwnLogisticsStations,
+  type PlanetRenderView,
+} from "@/features/planet-map/model";
+import { usePlanetViewStore } from "@/features/planet-map/store";
 
 interface PlanetCommandPanelProps {
   catalog?: CatalogView;
   client: ApiClient;
   planet: PlanetRenderView;
+  runtime?: PlanetRuntimeView;
 }
 
-export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPanelProps) {
+type LogisticsScope = "planetary" | "interstellar";
+type LogisticsMode = "none" | "supply" | "demand" | "both";
+
+function toOptionalInt(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getScopeSettings(
+  runtime: PlanetRuntimeView | undefined,
+  buildingId: string,
+  scope: LogisticsScope,
+) {
+  const station = findLogisticsStation(runtime, buildingId);
+  if (!station?.state) {
+    return undefined;
+  }
+  return scope === "interstellar"
+    ? station.state.interstellar_settings
+    : station.state.settings;
+}
+
+function getPreferredSlotItemId(
+  runtime: PlanetRuntimeView | undefined,
+  buildingId: string,
+  scope: LogisticsScope,
+  fallbackItemId: string,
+) {
+  const settings = getScopeSettings(runtime, buildingId, scope);
+  return Object.values(settings ?? {})[0]?.item_id ?? fallbackItemId;
+}
+
+export function PlanetCommandPanel({
+  catalog,
+  client,
+  planet,
+  runtime,
+}: PlanetCommandPanelProps) {
   const selected = usePlanetViewStore((state) => state.selected);
+  const playerId = client.getAuth().playerId;
   const [scanGalaxyId, setScanGalaxyId] = useState(DEFAULT_GALAXY_ID);
   const [scanSystemId, setScanSystemId] = useState(DEFAULT_SYSTEM_ID);
   const [buildX, setBuildX] = useState(0);
   const [buildY, setBuildY] = useState(0);
-  const [buildingType, setBuildingType] = useState('');
-  const [buildDirection, setBuildDirection] = useState<'north' | 'east' | 'south' | 'west' | 'auto'>('auto');
-  const [recipeId, setRecipeId] = useState('');
-  const [moveUnitId, setMoveUnitId] = useState('');
+  const [buildingType, setBuildingType] = useState("");
+  const [buildDirection, setBuildDirection] = useState<
+    "north" | "east" | "south" | "west" | "auto"
+  >("auto");
+  const [recipeId, setRecipeId] = useState("");
+  const [moveUnitId, setMoveUnitId] = useState("");
   const [moveX, setMoveX] = useState(0);
   const [moveY, setMoveY] = useState(0);
-  const [researchId, setResearchId] = useState('');
-  const [demolishId, setDemolishId] = useState('');
-  const [busyAction, setBusyAction] = useState('');
-  const [resultMessage, setResultMessage] = useState('');
-  const [resultTone, setResultTone] = useState<'ok' | 'error'>('ok');
+  const [researchId, setResearchId] = useState("");
+  const [demolishId, setDemolishId] = useState("");
+  const [stationConfigBuildingId, setStationConfigBuildingId] = useState("");
+  const [slotConfigBuildingId, setSlotConfigBuildingId] = useState("");
+  const [droneCapacity, setDroneCapacity] = useState("");
+  const [inputPriority, setInputPriority] = useState("");
+  const [outputPriority, setOutputPriority] = useState("");
+  const [interstellarEnabled, setInterstellarEnabled] = useState(false);
+  const [warpEnabled, setWarpEnabled] = useState(false);
+  const [shipSlots, setShipSlots] = useState("");
+  const [slotScope, setSlotScope] = useState<LogisticsScope>("planetary");
+  const [slotItemId, setSlotItemId] = useState("");
+  const [slotMode, setSlotMode] = useState<LogisticsMode>("supply");
+  const [slotLocalStorage, setSlotLocalStorage] = useState("");
+  const [busyAction, setBusyAction] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
+  const [resultTone, setResultTone] = useState<"ok" | "error">("ok");
 
   const ownBuildings = useMemo(
-    () => Object.values(planet.buildings ?? {}).filter((building) => building.owner_id === client.getAuth().playerId),
-    [client, planet.buildings],
+    () =>
+      Object.values(planet.buildings ?? {}).filter(
+        (building) => building.owner_id === playerId,
+      ),
+    [planet.buildings, playerId],
   );
   const ownUnits = useMemo(
-    () => Object.values(planet.units ?? {}).filter((unit) => unit.owner_id === client.getAuth().playerId),
-    [client, planet.units],
+    () =>
+      Object.values(planet.units ?? {}).filter(
+        (unit) => unit.owner_id === playerId,
+      ),
+    [planet.units, playerId],
+  );
+  const ownLogisticsStations = useMemo(
+    () => listOwnLogisticsStations(planet, runtime, playerId),
+    [planet, runtime, playerId],
+  );
+  const logisticsItems = useMemo(
+    () =>
+      [...(catalog?.items ?? [])].sort((left, right) =>
+        left.name.localeCompare(right.name, "zh-CN"),
+      ),
+    [catalog?.items],
   );
   const buildableBuildings = useMemo(
-    () => [...(catalog?.buildings ?? [])]
-      .filter((entry) => entry.buildable)
-      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')),
+    () =>
+      [...(catalog?.buildings ?? [])]
+        .filter((entry) => entry.buildable)
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
     [catalog?.buildings],
   );
   const recipesForBuilding = useMemo(
-    () => [...(catalog?.recipes ?? [])]
-      .filter((recipe) => recipe.building_types?.includes(buildingType))
-      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')),
+    () =>
+      [...(catalog?.recipes ?? [])]
+        .filter((recipe) => recipe.building_types?.includes(buildingType))
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
     [buildingType, catalog?.recipes],
   );
   const techOptions = useMemo(
-    () => [...(catalog?.techs ?? [])]
-      .filter((tech) => !tech.hidden)
-      .sort((left, right) => {
-        if (left.level !== right.level) {
-          return left.level - right.level;
-        }
-        return left.name.localeCompare(right.name, 'zh-CN');
-      }),
+    () =>
+      [...(catalog?.techs ?? [])]
+        .filter((tech) => !tech.hidden)
+        .sort((left, right) => {
+          if (left.level !== right.level) {
+            return left.level - right.level;
+          }
+          return left.name.localeCompare(right.name, "zh-CN");
+        }),
     [catalog?.techs],
   );
+  const selectedLogisticsStationId = useMemo(() => {
+    if (selected?.kind !== "building") {
+      return "";
+    }
+    const building = (planet.buildings ?? {})[selected.id];
+    if (
+      !building ||
+      building.owner_id !== playerId ||
+      !isLogisticsStationBuildingType(building.type)
+    ) {
+      return "";
+    }
+    return findLogisticsStation(runtime, selected.id) ? selected.id : "";
+  }, [planet.buildings, playerId, runtime, selected]);
+  const stationConfigStation = useMemo(
+    () => findLogisticsStation(runtime, stationConfigBuildingId),
+    [runtime, stationConfigBuildingId],
+  );
+  const slotConfigStation = useMemo(
+    () => findLogisticsStation(runtime, slotConfigBuildingId),
+    [runtime, slotConfigBuildingId],
+  );
+  const stationConfigSupportsInterstellar =
+    stationConfigStation?.building_type === "interstellar_logistics_station";
+  const slotConfigSupportsInterstellar =
+    slotConfigStation?.building_type === "interstellar_logistics_station";
+  const slotScopeOptions = slotConfigSupportsInterstellar
+    ? ["planetary", "interstellar"]
+    : ["planetary"];
+  const previousSlotConfigContextRef = useRef("");
+  const previousSlotSettingsContextRef = useRef("");
 
   useEffect(() => {
     if (buildableBuildings.length > 0 && !buildingType) {
@@ -82,26 +194,149 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
       setMoveX(selected.position.x);
       setMoveY(selected.position.y);
     }
-    if (selected?.kind === 'building') {
+    if (selected?.kind === "building") {
       setDemolishId(selected.id);
     }
-    if (selected?.kind === 'unit') {
+    if (selected?.kind === "unit") {
       setMoveUnitId(selected.id);
     }
   }, [selected]);
 
-  async function runCommand(actionLabel: string, execute: () => Promise<{ accepted: boolean; results: Array<{ message: string }> }>) {
+  useEffect(() => {
+    if (selectedLogisticsStationId) {
+      setStationConfigBuildingId(selectedLogisticsStationId);
+      setSlotConfigBuildingId(selectedLogisticsStationId);
+    }
+  }, [selectedLogisticsStationId]);
+
+  useEffect(() => {
+    const fallbackId = ownLogisticsStations[0]?.building_id ?? "";
+    if (
+      !selectedLogisticsStationId &&
+      !ownLogisticsStations.some(
+        (station) => station.building_id === stationConfigBuildingId,
+      )
+    ) {
+      setStationConfigBuildingId(fallbackId);
+    }
+    if (
+      !selectedLogisticsStationId &&
+      !ownLogisticsStations.some(
+        (station) => station.building_id === slotConfigBuildingId,
+      )
+    ) {
+      setSlotConfigBuildingId(fallbackId);
+    }
+  }, [
+    ownLogisticsStations,
+    selectedLogisticsStationId,
+    slotConfigBuildingId,
+    stationConfigBuildingId,
+  ]);
+
+  useEffect(() => {
+    const state = stationConfigStation?.state;
+    setDroneCapacity(
+      state?.drone_capacity !== undefined ? String(state.drone_capacity) : "",
+    );
+    setInputPriority(
+      state?.priority.input !== undefined ? String(state.priority.input) : "",
+    );
+    setOutputPriority(
+      state?.priority.output !== undefined ? String(state.priority.output) : "",
+    );
+    if (stationConfigSupportsInterstellar) {
+      setInterstellarEnabled(Boolean(state?.interstellar.enabled));
+      setWarpEnabled(Boolean(state?.interstellar.warp_enabled));
+      setShipSlots(
+        state?.interstellar.ship_slots !== undefined
+          ? String(state.interstellar.ship_slots)
+          : "",
+      );
+      return;
+    }
+    setInterstellarEnabled(false);
+    setWarpEnabled(false);
+    setShipSlots("");
+  }, [stationConfigStation, stationConfigSupportsInterstellar]);
+
+  useEffect(() => {
+    if (!slotConfigSupportsInterstellar && slotScope !== "planetary") {
+      setSlotScope("planetary");
+    }
+  }, [slotConfigSupportsInterstellar, slotScope]);
+
+  useEffect(() => {
+    const fallbackItemId = logisticsItems[0]?.id ?? "";
+    const preferredItemId = getPreferredSlotItemId(
+      runtime,
+      slotConfigBuildingId,
+      slotScope,
+      fallbackItemId,
+    );
+    const slotConfigContext = `${slotConfigBuildingId}:${slotScope}`;
+    const selectionStillAvailable =
+      slotItemId !== "" &&
+      logisticsItems.some((item) => item.id === slotItemId);
+
+    if (
+      previousSlotConfigContextRef.current !== slotConfigContext ||
+      !selectionStillAvailable
+    ) {
+      setSlotItemId(preferredItemId);
+    }
+
+    previousSlotConfigContextRef.current = slotConfigContext;
+  }, [
+    logisticsItems,
+    runtime,
+    slotConfigBuildingId,
+    slotItemId,
+    slotScope,
+  ]);
+
+  useEffect(() => {
+    const settings = getScopeSettings(runtime, slotConfigBuildingId, slotScope);
+    const setting = slotItemId ? settings?.[slotItemId] : undefined;
+    const slotSettingsContext =
+      `${slotConfigBuildingId}:${slotScope}:${slotItemId}`;
+
+    if (previousSlotSettingsContextRef.current !== slotSettingsContext) {
+      if (setting) {
+        setSlotMode(setting.mode);
+        setSlotLocalStorage(String(setting.local_storage));
+      } else {
+        setSlotMode("supply");
+        setSlotLocalStorage("");
+      }
+    }
+
+    previousSlotSettingsContextRef.current = slotSettingsContext;
+  }, [runtime, slotConfigBuildingId, slotItemId, slotScope]);
+
+  async function runCommand(
+    actionLabel: string,
+    execute: () => Promise<{
+      accepted: boolean;
+      results: Array<{ message: string }>;
+    }>,
+  ) {
     setBusyAction(actionLabel);
-    setResultMessage('');
+    setResultMessage("");
     try {
       const response = await execute();
-      setResultTone(response.accepted ? 'ok' : 'error');
-      setResultMessage(response.results.map((result) => result.message).join(' / ') || `${actionLabel} 已发送`);
+      setResultTone(response.accepted ? "ok" : "error");
+      setResultMessage(
+        response.results.map((result) => result.message).join(" / ") ||
+          `${actionLabel} 已发送`,
+      );
     } catch (error) {
-      setResultTone('error');
-      setResultMessage(error instanceof Error ? error.message : `${actionLabel} 失败`);
+      setResultTone("error");
+      setResultMessage(
+        error instanceof Error ? error.message : `${actionLabel} 失败`,
+      );
     } finally {
-      setBusyAction('');
+      setBusyAction("");
     }
   }
 
@@ -110,10 +345,17 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
       <section className="planet-side-section">
         <div className="section-title">命令操作面板</div>
         <p className="subtle-text">
-          当前页直接支持扫描、建造、移动、研究、拆除。所有命令都走同一套 `/commands` 契约。
+          当前页直接支持扫描、建造、移动、研究、拆除和物流配置。所有命令都走同一套
+          `/commands` 契约。
         </p>
         {resultMessage ? (
-          <div className={resultTone === 'ok' ? 'command-result command-result--ok' : 'command-result command-result--error'}>
+          <div
+            className={
+              resultTone === "ok"
+                ? "command-result command-result--ok"
+                : "command-result command-result--error"
+            }
+          >
             {resultMessage}
           </div>
         ) : null}
@@ -124,12 +366,19 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
         <div className="compact-form-grid">
           <label className="field">
             <span>galaxy_id</span>
-            <input onChange={(event) => setScanGalaxyId(event.target.value)} value={scanGalaxyId} />
+            <input
+              onChange={(event) => setScanGalaxyId(event.target.value)}
+              value={scanGalaxyId}
+            />
           </label>
           <button
             className="secondary-button"
-            disabled={busyAction !== ''}
-            onClick={() => { void runCommand('scan_galaxy', () => client.cmdScanGalaxy(scanGalaxyId)); }}
+            disabled={busyAction !== ""}
+            onClick={() => {
+              void runCommand("scan_galaxy", () =>
+                client.cmdScanGalaxy(scanGalaxyId),
+              );
+            }}
             type="button"
           >
             扫描银河
@@ -137,12 +386,19 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
 
           <label className="field">
             <span>system_id</span>
-            <input onChange={(event) => setScanSystemId(event.target.value)} value={scanSystemId} />
+            <input
+              onChange={(event) => setScanSystemId(event.target.value)}
+              value={scanSystemId}
+            />
           </label>
           <button
             className="secondary-button"
-            disabled={busyAction !== ''}
-            onClick={() => { void runCommand('scan_system', () => client.cmdScanSystem(scanSystemId)); }}
+            disabled={busyAction !== ""}
+            onClick={() => {
+              void runCommand("scan_system", () =>
+                client.cmdScanSystem(scanSystemId),
+              );
+            }}
             type="button"
           >
             扫描星系
@@ -154,8 +410,12 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
           </label>
           <button
             className="secondary-button"
-            disabled={busyAction !== ''}
-            onClick={() => { void runCommand('scan_planet', () => client.cmdScanPlanet(planet.planet_id)); }}
+            disabled={busyAction !== ""}
+            onClick={() => {
+              void runCommand("scan_planet", () =>
+                client.cmdScanPlanet(planet.planet_id),
+              );
+            }}
             type="button"
           >
             扫描当前行星
@@ -168,15 +428,26 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
         <div className="compact-form-grid">
           <label className="field">
             <span>x</span>
-            <input onChange={(event) => setBuildX(Number(event.target.value) || 0)} type="number" value={buildX} />
+            <input
+              onChange={(event) => setBuildX(Number(event.target.value) || 0)}
+              type="number"
+              value={buildX}
+            />
           </label>
           <label className="field">
             <span>y</span>
-            <input onChange={(event) => setBuildY(Number(event.target.value) || 0)} type="number" value={buildY} />
+            <input
+              onChange={(event) => setBuildY(Number(event.target.value) || 0)}
+              type="number"
+              value={buildY}
+            />
           </label>
           <label className="field field--span-2">
             <span>building_type</span>
-            <select onChange={(event) => setBuildingType(event.target.value)} value={buildingType}>
+            <select
+              onChange={(event) => setBuildingType(event.target.value)}
+              value={buildingType}
+            >
               {buildableBuildings.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {entry.name} · {entry.id}
@@ -186,7 +457,12 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
           </label>
           <label className="field">
             <span>direction</span>
-            <select onChange={(event) => setBuildDirection(event.target.value as typeof buildDirection)} value={buildDirection}>
+            <select
+              onChange={(event) =>
+                setBuildDirection(event.target.value as typeof buildDirection)
+              }
+              value={buildDirection}
+            >
               <option value="auto">auto</option>
               <option value="north">north</option>
               <option value="east">east</option>
@@ -196,7 +472,10 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
           </label>
           <label className="field">
             <span>recipe_id</span>
-            <select onChange={(event) => setRecipeId(event.target.value)} value={recipeId}>
+            <select
+              onChange={(event) => setRecipeId(event.target.value)}
+              value={recipeId}
+            >
               <option value="">无</option>
               {recipesForBuilding.map((recipe) => (
                 <option key={recipe.id} value={recipe.id}>
@@ -207,16 +486,14 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
           </label>
           <button
             className="primary-button field--span-2"
-            disabled={busyAction !== '' || !buildingType}
+            disabled={busyAction !== "" || !buildingType}
             onClick={() => {
-              void runCommand('build', () => client.cmdBuild(
-                { x: buildX, y: buildY, z: 0 },
-                buildingType,
-                {
+              void runCommand("build", () =>
+                client.cmdBuild({ x: buildX, y: buildY, z: 0 }, buildingType, {
                   direction: buildDirection,
                   ...(recipeId ? { recipeId } : {}),
-                },
-              ));
+                }),
+              );
             }}
             type="button"
           >
@@ -230,7 +507,10 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
         <div className="compact-form-grid">
           <label className="field field--span-2">
             <span>unit_id</span>
-            <select onChange={(event) => setMoveUnitId(event.target.value)} value={moveUnitId}>
+            <select
+              onChange={(event) => setMoveUnitId(event.target.value)}
+              value={moveUnitId}
+            >
               <option value="">选择单位</option>
               {ownUnits.map((unit) => (
                 <option key={unit.id} value={unit.id}>
@@ -241,19 +521,246 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
           </label>
           <label className="field">
             <span>x</span>
-            <input onChange={(event) => setMoveX(Number(event.target.value) || 0)} type="number" value={moveX} />
+            <input
+              onChange={(event) => setMoveX(Number(event.target.value) || 0)}
+              type="number"
+              value={moveX}
+            />
           </label>
           <label className="field">
             <span>y</span>
-            <input onChange={(event) => setMoveY(Number(event.target.value) || 0)} type="number" value={moveY} />
+            <input
+              onChange={(event) => setMoveY(Number(event.target.value) || 0)}
+              type="number"
+              value={moveY}
+            />
           </label>
           <button
             className="secondary-button field--span-2"
-            disabled={busyAction !== '' || !moveUnitId}
-            onClick={() => { void runCommand('move', () => client.cmdMove(moveUnitId, { x: moveX, y: moveY, z: 0 })); }}
+            disabled={busyAction !== "" || !moveUnitId}
+            onClick={() => {
+              void runCommand("move", () =>
+                client.cmdMove(moveUnitId, { x: moveX, y: moveY, z: 0 }),
+              );
+            }}
             type="button"
           >
             移动单位
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">物流站配置</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>building_id</span>
+            <select
+              onChange={(event) =>
+                setStationConfigBuildingId(event.target.value)
+              }
+              value={stationConfigBuildingId}
+            >
+              <option value="">选择物流站</option>
+              {ownLogisticsStations.map((station) => (
+                <option key={station.building_id} value={station.building_id}>
+                  {station.building_id} ·{" "}
+                  {getBuildingDisplayName(catalog, station.building_type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>drone_capacity</span>
+            <input
+              onChange={(event) => setDroneCapacity(event.target.value)}
+              type="number"
+              value={droneCapacity}
+            />
+          </label>
+          <label className="field">
+            <span>input_priority</span>
+            <input
+              onChange={(event) => setInputPriority(event.target.value)}
+              type="number"
+              value={inputPriority}
+            />
+          </label>
+          <label className="field">
+            <span>output_priority</span>
+            <input
+              onChange={(event) => setOutputPriority(event.target.value)}
+              type="number"
+              value={outputPriority}
+            />
+          </label>
+          {stationConfigSupportsInterstellar ? (
+            <>
+              <label className="field">
+                <span>interstellar_enabled</span>
+                <input
+                  checked={interstellarEnabled}
+                  onChange={(event) =>
+                    setInterstellarEnabled(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+              </label>
+              <label className="field">
+                <span>warp_enabled</span>
+                <input
+                  checked={warpEnabled}
+                  onChange={(event) => setWarpEnabled(event.target.checked)}
+                  type="checkbox"
+                />
+              </label>
+              <label className="field">
+                <span>ship_slots</span>
+                <input
+                  onChange={(event) => setShipSlots(event.target.value)}
+                  type="number"
+                  value={shipSlots}
+                />
+              </label>
+            </>
+          ) : null}
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !stationConfigBuildingId}
+            onClick={() => {
+              const nextDroneCapacity = toOptionalInt(droneCapacity);
+              const nextInputPriority = toOptionalInt(inputPriority);
+              const nextOutputPriority = toOptionalInt(outputPriority);
+              const nextShipSlots = toOptionalInt(shipSlots);
+              void runCommand("configure_logistics_station", () =>
+                client.cmdConfigureLogisticsStation(stationConfigBuildingId, {
+                  ...(nextDroneCapacity !== undefined
+                    ? { droneCapacity: nextDroneCapacity }
+                    : {}),
+                  ...(nextInputPriority !== undefined
+                    ? { inputPriority: nextInputPriority }
+                    : {}),
+                  ...(nextOutputPriority !== undefined
+                    ? { outputPriority: nextOutputPriority }
+                    : {}),
+                  ...(stationConfigSupportsInterstellar
+                    ? {
+                        interstellar: {
+                          enabled: interstellarEnabled,
+                          warpEnabled,
+                          ...(nextShipSlots !== undefined
+                            ? { shipSlots: nextShipSlots }
+                            : {}),
+                        },
+                      }
+                    : {}),
+                }),
+              );
+            }}
+            type="button"
+          >
+            提交物流站配置
+          </button>
+          {ownLogisticsStations.length === 0 ? (
+            <p className="subtle-text field--span-2">当前玩家还没有物流站。</p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">物流槽位配置</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>building_id</span>
+            <select
+              onChange={(event) => setSlotConfigBuildingId(event.target.value)}
+              value={slotConfigBuildingId}
+            >
+              <option value="">选择物流站</option>
+              {ownLogisticsStations.map((station) => (
+                <option key={station.building_id} value={station.building_id}>
+                  {station.building_id} ·{" "}
+                  {getBuildingDisplayName(catalog, station.building_type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>scope</span>
+            <select
+              onChange={(event) =>
+                setSlotScope(event.target.value as LogisticsScope)
+              }
+              value={slotScope}
+            >
+              {slotScopeOptions.map((scope) => (
+                <option key={scope} value={scope}>
+                  {scope}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field--span-2">
+            <span>item_id</span>
+            <select
+              onChange={(event) => setSlotItemId(event.target.value)}
+              value={slotItemId}
+            >
+              <option value="">选择物品</option>
+              {logisticsItems.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {getItemDisplayName(catalog, item.id)} · {item.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>mode</span>
+            <select
+              onChange={(event) =>
+                setSlotMode(event.target.value as LogisticsMode)
+              }
+              value={slotMode}
+            >
+              <option value="none">none</option>
+              <option value="supply">supply</option>
+              <option value="demand">demand</option>
+              <option value="both">both</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>local_storage</span>
+            <input
+              onChange={(event) => setSlotLocalStorage(event.target.value)}
+              type="number"
+              value={slotLocalStorage}
+            />
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={
+              busyAction !== "" ||
+              !slotConfigBuildingId ||
+              !slotItemId ||
+              slotLocalStorage === ""
+            }
+            onClick={() => {
+              const localStorage = toOptionalInt(slotLocalStorage);
+              if (localStorage === undefined) {
+                return;
+              }
+              void runCommand("configure_logistics_slot", () =>
+                client.cmdConfigureLogisticsSlot(slotConfigBuildingId, {
+                  scope: slotScope,
+                  itemId: slotItemId,
+                  mode: slotMode,
+                  localStorage,
+                }),
+              );
+            }}
+            type="button"
+          >
+            提交物流槽位配置
           </button>
         </div>
       </section>
@@ -263,7 +770,10 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
         <div className="compact-form-grid">
           <label className="field field--span-2">
             <span>tech_id</span>
-            <select onChange={(event) => setResearchId(event.target.value)} value={researchId}>
+            <select
+              onChange={(event) => setResearchId(event.target.value)}
+              value={researchId}
+            >
               {techOptions.map((tech) => (
                 <option key={tech.id} value={tech.id}>
                   {getTechDisplayName(catalog, tech.id)} · Lv.{tech.level}
@@ -273,8 +783,12 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
           </label>
           <button
             className="secondary-button field--span-2"
-            disabled={busyAction !== '' || !researchId}
-            onClick={() => { void runCommand('start_research', () => client.cmdStartResearch(researchId)); }}
+            disabled={busyAction !== "" || !researchId}
+            onClick={() => {
+              void runCommand("start_research", () =>
+                client.cmdStartResearch(researchId),
+              );
+            }}
             type="button"
           >
             开始研究
@@ -287,19 +801,25 @@ export function PlanetCommandPanel({ catalog, client, planet }: PlanetCommandPan
         <div className="compact-form-grid">
           <label className="field field--span-2">
             <span>building_id</span>
-            <select onChange={(event) => setDemolishId(event.target.value)} value={demolishId}>
+            <select
+              onChange={(event) => setDemolishId(event.target.value)}
+              value={demolishId}
+            >
               <option value="">选择建筑</option>
               {ownBuildings.map((building) => (
                 <option key={building.id} value={building.id}>
-                  {building.id} · {getBuildingDisplayName(catalog, building.type)}
+                  {building.id} ·{" "}
+                  {getBuildingDisplayName(catalog, building.type)}
                 </option>
               ))}
             </select>
           </label>
           <button
             className="secondary-button field--span-2"
-            disabled={busyAction !== '' || !demolishId}
-            onClick={() => { void runCommand('demolish', () => client.cmdDemolish(demolishId)); }}
+            disabled={busyAction !== "" || !demolishId}
+            onClick={() => {
+              void runCommand("demolish", () => client.cmdDemolish(demolishId));
+            }}
             type="button"
           >
             拆除建筑

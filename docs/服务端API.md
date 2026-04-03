@@ -679,7 +679,7 @@
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|cancel_construction|restore_construction|start_research|cancel_research|launch_solar_sail|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|launch_solar_sail|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -695,6 +695,18 @@
         "task_id": "c-1",
         "tech_id": "electromagnetism",
         "building_id": "b-1",
+        "input_priority": 1,
+        "output_priority": 1,
+        "drone_capacity": 10,
+        "interstellar": {
+          "enabled": true,
+          "warp_enabled": false,
+          "ship_slots": 2
+        },
+        "scope": "planetary|interstellar",
+        "item_id": "iron_ore",
+        "mode": "none|supply|demand|both",
+        "local_storage": 100,
         "count": 1,
         "system_id": "sys-1",
         "layer_index": 0,
@@ -725,6 +737,8 @@
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝
   - `upgrade` / `demolish`：`target.entity_id` 必填
+  - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`
+  - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `payload.item_id` + `payload.mode` + `payload.local_storage` 必填；`payload.scope` 取 `planetary|interstellar`；`payload.mode` 取 `none|supply|demand|both`；`interstellar` 作用域只允许星际物流站
   - `cancel_construction` / `restore_construction`：`payload.task_id` 必填
   - `start_research` / `cancel_research`：`payload.tech_id` 必填
   - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`
@@ -732,6 +746,8 @@
   - `build_dyson_frame`：`payload.system_id` / `payload.layer_index` / `payload.node_a_id` / `payload.node_b_id` 必填；要求玩家已解锁 `dyson_component`
   - `build_dyson_shell`：`payload.system_id` / `payload.layer_index` / `payload.latitude_min` / `payload.latitude_max` / `payload.coverage` 必填；要求玩家已解锁 `dyson_component`
   - `demolish_dyson`：`payload.system_id` / `payload.component_type` / `payload.component_id` 必填
+- 物流补充说明：`planetary_logistics_station` 完工后会自动补齐默认容量对应的无人机；`interstellar_logistics_station` 还会自动补齐默认货船
+- 物流补充说明：当前已支持在 active planet 内形成 `造站 -> 配槽位 -> 自动配送` 的闭环；物流无人机或货船会在后续 tick 自动派出
 - 升级/拆除规则补充:
   - 受建筑定义中的 `upgrade` / `demolish` 规则约束（允许与否、最大等级、耗时、返还率、是否要求停机）。
   - 若 `duration_ticks > 0`，命令执行会创建 `job` 并将建筑状态置为 `paused`，在作业完成 Tick 时生效：升级后恢复原工作状态，拆除后释放占格并返还资源。

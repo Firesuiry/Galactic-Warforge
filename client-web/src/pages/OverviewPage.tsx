@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
+import { formatMineralInventory } from '@/features/mineral-summary';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
@@ -64,6 +65,7 @@ export function OverviewPage() {
   const alerts = alertQuery.data?.alerts ?? [];
   const currentPlayer = summary.players[session.playerId];
   const resources = currentPlayer?.resources;
+  const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
   const currentResearch = currentPlayer?.tech?.current_research;
   const recommendedAlert = alerts[0];
 
@@ -102,8 +104,8 @@ export function OverviewPage() {
             </div>
             <div className="campaign-board__grid">
               <article className="campaign-card">
-                <span className="campaign-card__label">资源池</span>
-                <strong>矿物 {formatNumber(resources?.minerals)}</strong>
+                <span className="campaign-card__label">矿产库存</span>
+                <strong>{mineralSummary}</strong>
                 <span>能量 {formatNumber(resources?.energy)}</span>
               </article>
               <article className="campaign-card">
@@ -161,8 +163,8 @@ export function OverviewPage() {
             <div className="section-title">玩家状态</div>
             <dl className="planet-kv-list">
               <div>
-                <dt>矿物</dt>
-                <dd>{formatNumber(resources?.minerals)}</dd>
+                <dt>矿产</dt>
+                <dd>{mineralSummary}</dd>
               </div>
               <div>
                 <dt>能量</dt>

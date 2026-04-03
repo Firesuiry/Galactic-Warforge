@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useNavigate } from 'react-router-dom';
 
+import { formatMineralInventory } from '@/features/mineral-summary';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -56,6 +57,7 @@ export function TopNav() {
   }
 
   const currentPlayer = summaryQuery.data?.players?.[session.playerId];
+  const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
   const energyStats = statsQuery.data?.energy_stats;
   const saveDisabled = isFixtureServerUrl(session.serverUrl) || saveMutation.isPending;
 
@@ -76,7 +78,10 @@ export function TopNav() {
       <div className="top-nav__status">
         <span className="top-nav__chip">tick {summaryQuery.data?.tick ?? '-'}</span>
         <span className="top-nav__chip">
-          资源 {currentPlayer?.resources?.minerals ?? 0} / {currentPlayer?.resources?.energy ?? 0}
+          矿产 {mineralSummary}
+        </span>
+        <span className="top-nav__chip">
+          能量 {currentPlayer?.resources?.energy ?? 0}
         </span>
         <span className="top-nav__chip">
           电力 {energyStats ? `${energyStats.generation}/${energyStats.consumption}` : '-'}

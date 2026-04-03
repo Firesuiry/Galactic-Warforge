@@ -1,6 +1,6 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 当前覆盖常用查询接口与 `docs/玩家玩法指南.md` 中玩家可直接使用的 18 类核心命令，并补齐了手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。
+`client-cli` 当前覆盖常用查询接口与 `docs/玩家玩法指南.md` 中玩家可直接使用的 20 类核心命令，已补齐物流站配置命令与手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。
 
 ## 启动
 
@@ -31,64 +31,66 @@
 
 ### 查询类
 
-| 命令 | 参数 | 说明 |
-| --- | --- | --- |
-| `health` | 无 | 查询 `GET /health` |
-| `metrics` | 无 | 查询 `GET /metrics` |
-| `summary` | 无 | 查询 `GET /state/summary` |
-| `stats` | 无 | 查询 `GET /state/stats` |
-| `galaxy` | 无 | 查询 `GET /world/galaxy` |
-| `system` | `[system_id]` | 查询 `GET /world/systems/{system_id}`，默认 `sys-1` |
-| `planet` | `[planet_id]` | 查询 `GET /world/planets/{planet_id}` 行星概要，默认 `planet-1-1` |
-| `scene` | `[planet_id] <x> <y> <width> <height>` | 查询 `GET /world/planets/{planet_id}/scene` 原始 JSON |
-| `inspect` | `<planet_id> <building\|unit\|resource\|sector> <entity_id>` | 查询 `GET /world/planets/{planet_id}/inspect` 原始 JSON |
-| `fog` | `[planet_id] [x y width height]` | 通过 `/scene` 拉取局部迷雾并做 ASCII 渲染，默认窗口 `0 0 32 16` |
-| `audit` | `[options]` | 查询 `GET /audit` |
-| `event_snapshot` | `[options]` | 查询 `GET /events/snapshot` |
-| `alert_snapshot` | `[options]` | 查询 `GET /alerts/production/snapshot` |
+| 命令             | 参数                                                         | 说明                                                              |
+| ---------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `health`         | 无                                                           | 查询 `GET /health`                                                |
+| `metrics`        | 无                                                           | 查询 `GET /metrics`                                               |
+| `summary`        | 无                                                           | 查询 `GET /state/summary`                                         |
+| `stats`          | 无                                                           | 查询 `GET /state/stats`                                           |
+| `galaxy`         | 无                                                           | 查询 `GET /world/galaxy`                                          |
+| `system`         | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}`，默认 `sys-1`               |
+| `planet`         | `[planet_id]`                                                | 查询 `GET /world/planets/{planet_id}` 行星概要，默认 `planet-1-1` |
+| `scene`          | `[planet_id] <x> <y> <width> <height>`                       | 查询 `GET /world/planets/{planet_id}/scene` 原始 JSON             |
+| `inspect`        | `<planet_id> <building\|unit\|resource\|sector> <entity_id>` | 查询 `GET /world/planets/{planet_id}/inspect` 原始 JSON           |
+| `fog`            | `[planet_id] [x y width height]`                             | 通过 `/scene` 拉取局部迷雾并做 ASCII 渲染，默认窗口 `0 0 32 16`   |
+| `audit`          | `[options]`                                                  | 查询 `GET /audit`                                                 |
+| `event_snapshot` | `[options]`                                                  | 查询 `GET /events/snapshot`                                       |
+| `alert_snapshot` | `[options]`                                                  | 查询 `GET /alerts/production/snapshot`                            |
 
 ### 玩家操作类
 
-| 命令 | 参数 | 说明 |
-| --- | --- | --- |
-| `scan_galaxy` | `[galaxy_id]` | 扫描银河，默认 `galaxy-1` |
-| `scan_system` | `<system_id>` | 扫描恒星系 |
-| `scan_planet` | `<planet_id>` | 扫描行星 |
-| `build` | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]` | 建造任意服务端可建建筑 |
-| `move` | `<entity_id> <x> <y> [--z <z>]` | 移动单位 |
-| `attack` | `<entity_id> <target_entity_id>` | 攻击单位或建筑 |
-| `produce` | `<entity_id> <worker\|soldier>` | 生产单位 |
-| `upgrade` | `<entity_id>` | 升级建筑 |
-| `demolish` | `<entity_id>` | 拆除建筑 |
-| `cancel_construction` | `<task_id>` | 取消施工任务 |
-| `restore_construction` | `<task_id>` | 恢复施工任务 |
-| `start_research` | `<tech_id>` | 开始研究 |
-| `cancel_research` | `<tech_id>` | 取消研究 |
-| `launch_solar_sail` | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]` | 从电磁发射器发射已装载的太阳帆 |
-| `build_dyson_node` | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]` | 建戴森球节点 |
-| `build_dyson_frame` | `<system_id> <layer_index> <node_a_id> <node_b_id>` | 建戴森球框架 |
-| `build_dyson_shell` | `<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>` | 建戴森球壳面 |
-| `demolish_dyson` | `<system_id> <node\|frame\|shell> <component_id>` | 拆戴森球结构 |
-| `raw` | `<json>` | 直接发送完整 `/commands` 请求体 |
+| 命令                          | 参数                                                                                                                                                                           | 说明                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| `scan_galaxy`                 | `[galaxy_id]`                                                                                                                                                                  | 扫描银河，默认 `galaxy-1`              |
+| `scan_system`                 | `<system_id>`                                                                                                                                                                  | 扫描恒星系                             |
+| `scan_planet`                 | `<planet_id>`                                                                                                                                                                  | 扫描行星                               |
+| `build`                       | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]`                                                                                                 | 建造任意服务端可建建筑                 |
+| `move`                        | `<entity_id> <x> <y> [--z <z>]`                                                                                                                                                | 移动单位                               |
+| `attack`                      | `<entity_id> <target_entity_id>`                                                                                                                                               | 攻击单位或建筑                         |
+| `produce`                     | `<entity_id> <worker\|soldier>`                                                                                                                                                | 生产单位                               |
+| `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
+| `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
+| `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>]` | 配置物流站无人机容量、优先级与星际开关 |
+| `configure_logistics_slot`    | `<building_id> <planetary\|interstellar> <item_id> <none\|supply\|demand\|both> <local_storage>`                                                                               | 配置物流站单物品供需槽位               |
+| `cancel_construction`         | `<task_id>`                                                                                                                                                                    | 取消施工任务                           |
+| `restore_construction`        | `<task_id>`                                                                                                                                                                    | 恢复施工任务                           |
+| `start_research`              | `<tech_id>`                                                                                                                                                                    | 开始研究                               |
+| `cancel_research`             | `<tech_id>`                                                                                                                                                                    | 取消研究                               |
+| `launch_solar_sail`           | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]`                                                                                                         | 从电磁发射器发射已装载的太阳帆         |
+| `build_dyson_node`            | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]`                                                                                                        | 建戴森球节点                           |
+| `build_dyson_frame`           | `<system_id> <layer_index> <node_a_id> <node_b_id>`                                                                                                                            | 建戴森球框架                           |
+| `build_dyson_shell`           | `<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>`                                                                                                           | 建戴森球壳面                           |
+| `demolish_dyson`              | `<system_id> <node\|frame\|shell> <component_id>`                                                                                                                              | 拆戴森球结构                           |
+| `raw`                         | `<json>`                                                                                                                                                                       | 直接发送完整 `/commands` 请求体        |
 
 ### 调试与运维类
 
-| 命令 | 参数 | 说明 |
-| --- | --- | --- |
-| `save` | `[--reason <text>]` | 调用 `POST /save`，刷新当前游戏目录中的 `save.json` |
-| `replay` | `[options]` | 调用 `POST /replay` |
-| `rollback` | `[options]` | 调用 `POST /rollback` |
+| 命令       | 参数                | 说明                                                |
+| ---------- | ------------------- | --------------------------------------------------- |
+| `save`     | `[--reason <text>]` | 调用 `POST /save`，刷新当前游戏目录中的 `save.json` |
+| `replay`   | `[options]`         | 调用 `POST /replay`                                 |
+| `rollback` | `[options]`         | 调用 `POST /rollback`                               |
 
 ### 工具类
 
-| 命令 | 参数 | 说明 |
-| --- | --- | --- |
-| `switch` | `[player_id] [key]` | 切换玩家 |
-| `events` | `[count]` | 显示最近事件，默认 10 |
-| `status` | 无 | 显示当前玩家与服务端地址 |
-| `help` | `[command]` | 查看帮助 |
-| `clear` | 无 | 清屏 |
-| `quit` / `exit` | 无 | 退出 |
+| 命令            | 参数                | 说明                     |
+| --------------- | ------------------- | ------------------------ |
+| `switch`        | `[player_id] [key]` | 切换玩家                 |
+| `events`        | `[count]`           | 显示最近事件，默认 10    |
+| `status`        | 无                  | 显示当前玩家与服务端地址 |
+| `help`          | `[command]`         | 查看帮助                 |
+| `clear`         | 无                  | 清屏                     |
+| `quit` / `exit` | 无                  | 退出                     |
 
 ## 重点说明
 
@@ -123,13 +125,15 @@ build 10 6 conveyor_belt_mk1 --direction east
 build 11 6 conveyor_belt_mk3 --direction auto
 ```
 
-### 2. 玩法指南中的 18 类核心命令都已有独立 CLI 命令
+### 2. 玩法指南中的 20 类核心命令都已有独立 CLI 命令
 
 已覆盖：
 
 - `build`
 - `upgrade`
 - `demolish`
+- `configure_logistics_station`
+- `configure_logistics_slot`
 - `cancel_construction`
 - `restore_construction`
 - `start_research`
@@ -146,7 +150,29 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `build_dyson_shell`
 - `demolish_dyson`
 
-### 3. 调试查询接口也已补齐
+### 3. 单星球物流现在可直接操作
+
+当前 CLI 已经打通了收敛版的 `造站 -> 配槽位 -> 自动配送` 物流闭环：
+
+- 先用 `build` 建 `planetary_logistics_station` 或 `interstellar_logistics_station`
+- 物流站完工后，服务端会自动补齐默认容量对应的物流单位；星际站还会额外补货船
+- 用 `configure_logistics_station` 调整无人机容量、输入/输出优先级，以及 `interstellar` 里的启用 / 曲速 / 货船槽位
+- 用 `configure_logistics_slot` 为某个 `item_id` 设置 `planetary` 或 `interstellar` 作用域下的 `supply` / `demand` / `both`
+- 当前自动配送闭环最完整的范围仍是 active planet；多星球长期经营限制仍在服务端
+- 如果你更习惯图形界面，同一套配置也可以在 Web 行星页完成：选中己方物流站后，右侧“详情”页签看结构化状态，右侧“命令”页签用“物流站配置 / 物流槽位配置”直接发命令
+
+常用流程示例：
+
+```bash
+configure_logistics_station b-20 --drone-capacity 12 --input-priority 3 --output-priority 2
+configure_logistics_slot b-20 planetary iron_ore supply 20
+configure_logistics_slot b-21 planetary iron_ore demand 60
+configure_logistics_station b-30 --interstellar-enabled true --warp-enabled true --ship-slots 2
+configure_logistics_slot b-30 interstellar hydrogen supply 50
+configure_logistics_slot b-31 interstellar hydrogen demand 80
+```
+
+### 4. 调试查询接口也已补齐
 
 除玩法主命令外，CLI 还支持：
 
@@ -157,7 +183,7 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - Tick replay
 - Tick rollback
 
-### 4. 行星查询已经拆成 `planet / scene / inspect / fog`
+### 5. 行星查询已经拆成 `planet / scene / inspect / fog`
 
 - `planet` 只显示轻量概要，适合快速确认行星规模与对象数量
 - `scene` 直接返回当前视窗原始 JSON，适合调试地图裁剪与图层
@@ -214,6 +240,19 @@ cancel_construction c-1
 restore_construction c-1
 upgrade b-12
 demolish b-18
+```
+
+### 单星球物流
+
+`configure_logistics_station` 用来改站点参数，`configure_logistics_slot` 用来设单物品供需。通常先让源站 `supply`，再让目标站 `demand`。
+
+```bash
+configure_logistics_station b-20 --drone-capacity 12 --input-priority 3 --output-priority 2
+configure_logistics_slot b-20 planetary iron_ore supply 20
+configure_logistics_slot b-21 planetary iron_ore demand 60
+configure_logistics_station b-30 --interstellar-enabled true --warp-enabled true --ship-slots 2
+configure_logistics_slot b-30 interstellar hydrogen supply 50
+configure_logistics_slot b-31 interstellar hydrogen demand 80
 ```
 
 ### 单位与战斗

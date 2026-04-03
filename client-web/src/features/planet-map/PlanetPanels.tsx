@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState } from "react";
 
-import { useShallow } from 'zustand/react/shallow';
+import { useShallow } from "zustand/react/shallow";
 
 import type {
   AlertEntry,
@@ -14,13 +14,15 @@ import type {
   PlayerStatsSnapshot,
   StateSummary,
   Unit,
-} from '@shared/types';
+} from "@shared/types";
 
 import {
   buildSelectionExport,
   buildViewLinkSearchParams,
   buildViewportExport,
+  findLogisticsStation,
   findSelectionEntity,
+  formatItemInventorySummary,
   formatPosition,
   getBuildingDisplayName,
   getFogState,
@@ -28,6 +30,9 @@ import {
   getResourceList,
   getTerrainTile,
   getViewportTileBounds,
+  getTechDisplayName,
+  isLogisticsStationBuildingType,
+  listLogisticsStationSettings,
   PLANET_LAYER_LABELS,
   resolveSelectionFromAlert,
   resolveSelectionFromEvent,
@@ -35,28 +40,33 @@ import {
   selectionLabel,
   summarizeAlert,
   summarizeEvent,
-  type PlanetRenderView,
   toTilePoint,
-  getTechDisplayName,
-} from '@/features/planet-map/model';
-import { getPlanetRenderTileSize, getPlanetZoomLabel, getPlanetZoomScale, PLANET_ZOOM_LEVELS, usePlanetViewStore } from '@/features/planet-map/store';
+  type PlanetRenderView,
+} from "@/features/planet-map/model";
+import {
+  getPlanetRenderTileSize,
+  getPlanetZoomLabel,
+  getPlanetZoomScale,
+  PLANET_ZOOM_LEVELS,
+  usePlanetViewStore,
+} from "@/features/planet-map/store";
 
 function formatRatio(value: number | undefined) {
   if (value === undefined) {
-    return '-';
+    return "-";
   }
   return `${Math.round(value * 100)}%`;
 }
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
-    return '尚未同步';
+    return "尚未同步";
   }
-  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false });
+  return new Date(timestamp).toLocaleTimeString("zh-CN", { hour12: false });
 }
 
 function downloadData(filename: string, content: string, contentType: string) {
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = `data:${contentType};charset=utf-8,${encodeURIComponent(content)}`;
   link.download = filename;
   link.click();
@@ -68,7 +78,11 @@ interface PlanetLayerPanelProps {
   runtime?: PlanetRuntimeView;
 }
 
-export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanelProps) {
+export function PlanetLayerPanel({
+  networks,
+  planet,
+  runtime,
+}: PlanetLayerPanelProps) {
   const {
     camera,
     hoveredTile,
@@ -77,20 +91,24 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
     selected,
     setZoomIndex,
     toggleLayer,
-  } = usePlanetViewStore(useShallow((state) => ({
-    camera: state.camera,
-    hoveredTile: state.hoveredTile,
-    layers: state.layers,
-    resetCamera: state.resetCamera,
-    selected: state.selected,
-    setZoomIndex: state.setZoomIndex,
-    toggleLayer: state.toggleLayer,
-  })));
+  } = usePlanetViewStore(
+    useShallow((state) => ({
+      camera: state.camera,
+      hoveredTile: state.hoveredTile,
+      layers: state.layers,
+      resetCamera: state.resetCamera,
+      selected: state.selected,
+      setZoomIndex: state.setZoomIndex,
+      toggleLayer: state.toggleLayer,
+    })),
+  );
 
   const resources = useMemo(() => getResourceList(planet), [planet]);
-  const buildingCount = 'building_count' in planet ? planet.building_count : undefined;
-  const unitCount = 'unit_count' in planet ? planet.unit_count : undefined;
-  const resourceCount = 'resource_count' in planet ? planet.resource_count : undefined;
+  const buildingCount =
+    "building_count" in planet ? planet.building_count : undefined;
+  const unitCount = "unit_count" in planet ? planet.unit_count : undefined;
+  const resourceCount =
+    "resource_count" in planet ? planet.resource_count : undefined;
 
   return (
     <div className="planet-panel-stack">
@@ -104,14 +122,20 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
                 onChange={() => toggleLayer(key as keyof typeof layers)}
                 type="checkbox"
               />
-              <span>{PLANET_LAYER_LABELS[key as keyof typeof PLANET_LAYER_LABELS]}</span>
+              <span>
+                {PLANET_LAYER_LABELS[key as keyof typeof PLANET_LAYER_LABELS]}
+              </span>
             </label>
           ))}
         </div>
         <div className="zoom-actions">
           {PLANET_ZOOM_LEVELS.map((zoomLevel, index) => (
             <button
-              className={index === camera.zoomIndex ? 'secondary-button zoom-button zoom-button--active' : 'secondary-button zoom-button'}
+              className={
+                index === camera.zoomIndex
+                  ? "secondary-button zoom-button zoom-button--active"
+                  : "secondary-button zoom-button"
+              }
               key={zoomLevel.label}
               onClick={() => setZoomIndex(index)}
               type="button"
@@ -119,7 +143,11 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
               {zoomLevel.label}
             </button>
           ))}
-          <button className="secondary-button zoom-button" onClick={resetCamera} type="button">
+          <button
+            className="secondary-button zoom-button"
+            onClick={resetCamera}
+            type="button"
+          >
             重置视角
           </button>
         </div>
@@ -130,11 +158,15 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
         <dl className="planet-kv-list">
           <div>
             <dt>地图大小</dt>
-            <dd>{planet.map_width} x {planet.map_height}</dd>
+            <dd>
+              {planet.map_width} x {planet.map_height}
+            </dd>
           </div>
           <div>
             <dt>建筑</dt>
-            <dd>{buildingCount ?? Object.keys(planet.buildings ?? {}).length}</dd>
+            <dd>
+              {buildingCount ?? Object.keys(planet.buildings ?? {}).length}
+            </dd>
           </div>
           <div>
             <dt>单位</dt>
@@ -146,7 +178,7 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           </div>
           <div>
             <dt>Hover</dt>
-            <dd>{hoveredTile ? `${hoveredTile.x}, ${hoveredTile.y}` : '-'}</dd>
+            <dd>{hoveredTile ? `${hoveredTile.x}, ${hoveredTile.y}` : "-"}</dd>
           </div>
           <div>
             <dt>选中</dt>
@@ -154,7 +186,10 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           </div>
           <div>
             <dt>物流</dt>
-            <dd>{(runtime?.logistics_drones?.length ?? 0) + (runtime?.logistics_ships?.length ?? 0)}</dd>
+            <dd>
+              {(runtime?.logistics_drones?.length ?? 0) +
+                (runtime?.logistics_ships?.length ?? 0)}
+            </dd>
           </div>
           <div>
             <dt>施工</dt>
@@ -162,7 +197,10 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           </div>
           <div>
             <dt>网络</dt>
-            <dd>{(networks?.power_networks?.length ?? 0) + (networks?.pipeline_nodes?.length ?? 0)}</dd>
+            <dd>
+              {(networks?.power_networks?.length ?? 0) +
+                (networks?.pipeline_nodes?.length ?? 0)}
+            </dd>
           </div>
           <div>
             <dt>威胁</dt>
@@ -176,18 +214,54 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           <span className="section-title">图例</span>
         </summary>
         <div className="planet-disclosure__body legend-list">
-          <span><i className="legend-swatch legend-swatch--terrain" />可建造地形</span>
-          <span><i className="legend-swatch legend-swatch--water" />水域</span>
-          <span><i className="legend-swatch legend-swatch--lava" />岩浆</span>
-          <span><i className="legend-swatch legend-swatch--building" />建筑</span>
-          <span><i className="legend-swatch legend-swatch--unit" />单位</span>
-          <span><i className="legend-swatch legend-swatch--resource" />资源点</span>
-          <span><i className="legend-swatch legend-swatch--logistics" />物流轨迹</span>
-          <span><i className="legend-swatch legend-swatch--power" />电网</span>
-          <span><i className="legend-swatch legend-swatch--pipeline" />管网</span>
-          <span><i className="legend-swatch legend-swatch--construction" />施工任务</span>
-          <span><i className="legend-swatch legend-swatch--threat" />敌情</span>
-          <span><i className="legend-swatch legend-swatch--fog" />未探索区域</span>
+          <span>
+            <i className="legend-swatch legend-swatch--terrain" />
+            可建造地形
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--water" />
+            水域
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--lava" />
+            岩浆
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--building" />
+            建筑
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--unit" />
+            单位
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--resource" />
+            资源点
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--logistics" />
+            物流轨迹
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--power" />
+            电网
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--pipeline" />
+            管网
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--construction" />
+            施工任务
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--threat" />
+            敌情
+          </span>
+          <span>
+            <i className="legend-swatch legend-swatch--fog" />
+            未探索区域
+          </span>
         </div>
       </details>
 
@@ -199,11 +273,11 @@ export function PlanetLayerPanel({ networks, planet, runtime }: PlanetLayerPanel
           <dl className="planet-kv-list">
             <div>
               <dt>runtime</dt>
-              <dd>{runtime?.available ? 'live' : 'inactive'}</dd>
+              <dd>{runtime?.available ? "live" : "inactive"}</dd>
             </div>
             <div>
               <dt>networks</dt>
-              <dd>{networks?.available ? 'live' : 'inactive'}</dd>
+              <dd>{networks?.available ? "live" : "inactive"}</dd>
             </div>
             <div>
               <dt>电力链路</dt>
@@ -230,13 +304,26 @@ interface PlanetEntityPanelProps {
   summary?: StateSummary;
 }
 
-export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, stats, summary }: PlanetEntityPanelProps) {
-  const { selected } = usePlanetViewStore(useShallow((state) => ({
-    selected: state.selected,
-  })));
+export function PlanetEntityPanel({
+  catalog,
+  fog,
+  networks,
+  planet,
+  runtime,
+  stats,
+  summary,
+}: PlanetEntityPanelProps) {
+  const { selected } = usePlanetViewStore(
+    useShallow((state) => ({
+      selected: state.selected,
+    })),
+  );
 
   const entity = findSelectionEntity(planet, selected);
-  const currentResearchId = Object.values(summary?.players ?? {}).find((player) => player.tech?.current_research)?.tech?.current_research?.tech_id ?? '';
+  const currentResearchId =
+    Object.values(summary?.players ?? {}).find(
+      (player) => player.tech?.current_research,
+    )?.tech?.current_research?.tech_id ?? "";
 
   if (!selected) {
     return (
@@ -260,15 +347,23 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
             </div>
             <div>
               <dt>电力</dt>
-              <dd>{stats ? `${stats.energy_stats.generation} / ${stats.energy_stats.consumption}` : '-'}</dd>
+              <dd>
+                {stats
+                  ? `${stats.energy_stats.generation} / ${stats.energy_stats.consumption}`
+                  : "-"}
+              </dd>
             </div>
             <div>
               <dt>物流吞吐</dt>
-              <dd>{stats?.logistics_stats.throughput ?? '-'}</dd>
+              <dd>{stats?.logistics_stats.throughput ?? "-"}</dd>
             </div>
             <div>
               <dt>当前研究</dt>
-              <dd>{currentResearchId ? getTechDisplayName(catalog, currentResearchId) : '无'}</dd>
+              <dd>
+                {currentResearchId
+                  ? getTechDisplayName(catalog, currentResearchId)
+                  : "无"}
+              </dd>
             </div>
           </dl>
         </section>
@@ -276,13 +371,15 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
     );
   }
 
-  if (selected.kind === 'tile') {
+  if (selected.kind === "tile") {
     const tile = toTilePoint(selected.position);
     const fogState = getFogState(fog, tile.x, tile.y);
-    const constructionTasks = (runtime?.construction_tasks ?? []).filter((task) => (
-      task.position.x === tile.x && task.position.y === tile.y
-    ));
-    const pipelineNode = (networks?.pipeline_nodes ?? []).find((node) => node.position.x === tile.x && node.position.y === tile.y);
+    const constructionTasks = (runtime?.construction_tasks ?? []).filter(
+      (task) => task.position.x === tile.x && task.position.y === tile.y,
+    );
+    const pipelineNode = (networks?.pipeline_nodes ?? []).find(
+      (node) => node.position.x === tile.x && node.position.y === tile.y,
+    );
     return (
       <div className="planet-panel-stack">
         <section className="planet-side-section">
@@ -298,19 +395,21 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
             </div>
             <div>
               <dt>可见</dt>
-              <dd>{fogState.visible ? '是' : '否'}</dd>
+              <dd>{fogState.visible ? "是" : "否"}</dd>
             </div>
             <div>
               <dt>已探索</dt>
-              <dd>{fogState.explored ? '是' : '否'}</dd>
+              <dd>{fogState.explored ? "是" : "否"}</dd>
             </div>
             <div>
               <dt>施工任务</dt>
-              <dd>{constructionTasks.map((task) => task.id).join(', ') || '-'}</dd>
+              <dd>
+                {constructionTasks.map((task) => task.id).join(", ") || "-"}
+              </dd>
             </div>
             <div>
               <dt>管网节点</dt>
-              <dd>{pipelineNode?.id ?? '-'}</dd>
+              <dd>{pipelineNode?.id ?? "-"}</dd>
             </div>
           </dl>
         </section>
@@ -318,11 +417,24 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
     );
   }
 
-  if (selected.kind === 'building' && entity) {
+  if (selected.kind === "building" && entity) {
     const building = entity as Building;
     const buildingName = getBuildingDisplayName(catalog, building.type);
-    const powerCoverage = networks?.power_coverage?.find((coverage) => coverage.building_id === building.id);
-    const logisticsStation = runtime?.logistics_stations?.find((station) => station.building_id === building.id);
+    const powerCoverage = networks?.power_coverage?.find(
+      (coverage) => coverage.building_id === building.id,
+    );
+    const logisticsStation = findLogisticsStation(runtime, building.id);
+    const showLogisticsDetails =
+      isLogisticsStationBuildingType(building.type) &&
+      Boolean(logisticsStation);
+    const planetarySettings = listLogisticsStationSettings(
+      catalog,
+      logisticsStation?.state?.settings,
+    );
+    const interstellarSettings = listLogisticsStationSettings(
+      catalog,
+      logisticsStation?.state?.interstellar_settings,
+    );
     return (
       <div className="planet-panel-stack">
         <section className="planet-side-section">
@@ -354,11 +466,13 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
             </div>
             <div>
               <dt>停机原因</dt>
-              <dd>{building.runtime.state_reason || '-'}</dd>
+              <dd>{building.runtime.state_reason || "-"}</dd>
             </div>
             <div>
               <dt>血量</dt>
-              <dd>{building.hp} / {building.max_hp}</dd>
+              <dd>
+                {building.hp} / {building.max_hp}
+              </dd>
             </div>
             <div>
               <dt>等级</dt>
@@ -373,11 +487,17 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
 
         <section className="planet-side-section">
           <div className="section-title">库存与任务</div>
-          <pre className="json-preview">{JSON.stringify({
-            storage: building.storage ?? {},
-            production: building.production ?? {},
-            job: building.job ?? {},
-          }, null, 2)}</pre>
+          <pre className="json-preview">
+            {JSON.stringify(
+              {
+                storage: building.storage ?? {},
+                production: building.production ?? {},
+                job: building.job ?? {},
+              },
+              null,
+              2,
+            )}
+          </pre>
         </section>
 
         <section className="planet-side-section">
@@ -385,11 +505,21 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
           <dl className="planet-kv-list">
             <div>
               <dt>供电</dt>
-              <dd>{powerCoverage ? (powerCoverage.connected ? '已接入' : `未接入:${powerCoverage.reason || 'unknown'}`) : '-'}</dd>
+              <dd>
+                {powerCoverage
+                  ? powerCoverage.connected
+                    ? "已接入"
+                    : `未接入:${powerCoverage.reason || "unknown"}`
+                  : "-"}
+              </dd>
             </div>
             <div>
               <dt>电力分配</dt>
-              <dd>{powerCoverage ? `${powerCoverage.allocated ?? 0}/${powerCoverage.demand ?? 0}` : '-'}</dd>
+              <dd>
+                {powerCoverage
+                  ? `${powerCoverage.allocated ?? 0}/${powerCoverage.demand ?? 0}`
+                  : "-"}
+              </dd>
             </div>
             <div>
               <dt>物流无人机</dt>
@@ -400,15 +530,200 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
               <dd>{logisticsStation?.ship_ids?.length ?? 0}</dd>
             </div>
           </dl>
-          {logisticsStation?.state ? (
-            <pre className="json-preview">{JSON.stringify(logisticsStation.state, null, 2)}</pre>
-          ) : null}
         </section>
+
+        {showLogisticsDetails ? (
+          <>
+            <section className="planet-side-section">
+              <div className="section-title">物流站基础</div>
+              <dl className="planet-kv-list">
+                <div>
+                  <dt>站点类型</dt>
+                  <dd>
+                    {getBuildingDisplayName(
+                      catalog,
+                      logisticsStation?.building_type ?? building.type,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>无人机数</dt>
+                  <dd>{logisticsStation?.drone_ids?.length ?? 0}</dd>
+                </div>
+                <div>
+                  <dt>货船数</dt>
+                  <dd>{logisticsStation?.ship_ids?.length ?? 0}</dd>
+                </div>
+                <div>
+                  <dt>无人机容量</dt>
+                  <dd>{logisticsStation?.state?.drone_capacity ?? "-"}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="planet-side-section">
+              <div className="section-title">优先级</div>
+              <dl className="planet-kv-list">
+                <div>
+                  <dt>input_priority</dt>
+                  <dd>{logisticsStation?.state?.priority.input ?? "-"}</dd>
+                </div>
+                <div>
+                  <dt>output_priority</dt>
+                  <dd>{logisticsStation?.state?.priority.output ?? "-"}</dd>
+                </div>
+              </dl>
+            </section>
+
+            {building.type === "interstellar_logistics_station" ? (
+              <section className="planet-side-section">
+                <div className="section-title">星际配置</div>
+                <dl className="planet-kv-list">
+                  <div>
+                    <dt>enabled</dt>
+                    <dd>
+                      {logisticsStation?.state?.interstellar.enabled
+                        ? "是"
+                        : "否"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>warp_enabled</dt>
+                    <dd>
+                      {logisticsStation?.state?.interstellar.warp_enabled
+                        ? "是"
+                        : "否"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>ship_slots</dt>
+                    <dd>
+                      {logisticsStation?.state?.interstellar.ship_slots ?? "-"}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            ) : null}
+
+            <section className="planet-side-section">
+              <div className="section-title">行星槽位</div>
+              {planetarySettings.length > 0 ? (
+                <ul className="timeline-list timeline-list--dense">
+                  {planetarySettings.map((setting) => (
+                    <li key={`planetary-${setting.item_id}`}>
+                      <strong>{setting.item_name}</strong>
+                      <span>
+                        {setting.item_id} · {setting.mode} · local_storage{" "}
+                        {setting.local_storage}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="subtle-text">暂无槽位</p>
+              )}
+            </section>
+
+            {building.type === "interstellar_logistics_station" ? (
+              <section className="planet-side-section">
+                <div className="section-title">星际槽位</div>
+                {interstellarSettings.length > 0 ? (
+                  <ul className="timeline-list timeline-list--dense">
+                    {interstellarSettings.map((setting) => (
+                      <li key={`interstellar-${setting.item_id}`}>
+                        <strong>{setting.item_name}</strong>
+                        <span>
+                          {setting.item_id} · {setting.mode} · local_storage{" "}
+                          {setting.local_storage}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="subtle-text">暂无槽位</p>
+                )}
+              </section>
+            ) : null}
+
+            <section className="planet-side-section">
+              <div className="section-title">库存与缓存摘要</div>
+              <dl className="planet-kv-list">
+                <div>
+                  <dt>inventory</dt>
+                  <dd>
+                    {formatItemInventorySummary(
+                      catalog,
+                      logisticsStation?.state?.inventory,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>cache.supply</dt>
+                  <dd>
+                    {formatItemInventorySummary(
+                      catalog,
+                      logisticsStation?.state?.cache?.supply,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>cache.demand</dt>
+                  <dd>
+                    {formatItemInventorySummary(
+                      catalog,
+                      logisticsStation?.state?.cache?.demand,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>cache.local</dt>
+                  <dd>
+                    {formatItemInventorySummary(
+                      catalog,
+                      logisticsStation?.state?.cache?.local,
+                    )}
+                  </dd>
+                </div>
+                {building.type === "interstellar_logistics_station" ? (
+                  <>
+                    <div>
+                      <dt>interstellar_cache.supply</dt>
+                      <dd>
+                        {formatItemInventorySummary(
+                          catalog,
+                          logisticsStation?.state?.interstellar_cache?.supply,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>interstellar_cache.demand</dt>
+                      <dd>
+                        {formatItemInventorySummary(
+                          catalog,
+                          logisticsStation?.state?.interstellar_cache?.demand,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>interstellar_cache.local</dt>
+                      <dd>
+                        {formatItemInventorySummary(
+                          catalog,
+                          logisticsStation?.state?.interstellar_cache?.local,
+                        )}
+                      </dd>
+                    </div>
+                  </>
+                ) : null}
+              </dl>
+            </section>
+          </>
+        ) : null}
       </div>
     );
   }
 
-  if (selected.kind === 'unit' && entity) {
+  if (selected.kind === "unit" && entity) {
     const unit = entity as Unit;
     return (
       <div className="planet-panel-stack">
@@ -433,19 +748,25 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
             </div>
             <div>
               <dt>血量</dt>
-              <dd>{unit.hp} / {unit.max_hp}</dd>
+              <dd>
+                {unit.hp} / {unit.max_hp}
+              </dd>
             </div>
             <div>
               <dt>攻击 / 防御</dt>
-              <dd>{unit.attack} / {unit.defense}</dd>
+              <dd>
+                {unit.attack} / {unit.defense}
+              </dd>
             </div>
             <div>
               <dt>移动状态</dt>
-              <dd>{unit.is_moving ? '移动中' : '待命'}</dd>
+              <dd>{unit.is_moving ? "移动中" : "待命"}</dd>
             </div>
             <div>
               <dt>目标</dt>
-              <dd>{unit.attack_target || formatPosition(unit.target_pos) || '-'}</dd>
+              <dd>
+                {unit.attack_target || formatPosition(unit.target_pos) || "-"}
+              </dd>
             </div>
           </dl>
         </section>
@@ -453,7 +774,7 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
     );
   }
 
-  if (selected.kind === 'resource' && entity) {
+  if (selected.kind === "resource" && entity) {
     const resource = entity as PlanetResource;
     return (
       <div className="planet-panel-stack">
@@ -478,15 +799,15 @@ export function PlanetEntityPanel({ catalog, fog, networks, planet, runtime, sta
             </div>
             <div>
               <dt>剩余量</dt>
-              <dd>{resource.remaining ?? '-'}</dd>
+              <dd>{resource.remaining ?? "-"}</dd>
             </div>
             <div>
               <dt>当前产率</dt>
-              <dd>{resource.current_yield ?? '-'}</dd>
+              <dd>{resource.current_yield ?? "-"}</dd>
             </div>
             <div>
               <dt>稀有资源</dt>
-              <dd>{resource.is_rare ? '是' : '否'}</dd>
+              <dd>{resource.is_rare ? "是" : "否"}</dd>
             </div>
           </dl>
         </section>
@@ -510,23 +831,34 @@ interface PlanetActivityPanelProps {
   planet: PlanetRenderView;
 }
 
-export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPanelProps) {
-  const [eventFilter, setEventFilter] = useState('all');
-  const { requestFocus, setSelected } = usePlanetViewStore(useShallow((state) => ({
-    requestFocus: state.requestFocus,
-    setSelected: state.setSelected,
-  })));
+export function PlanetActivityPanel({
+  alerts,
+  events,
+  planet,
+}: PlanetActivityPanelProps) {
+  const [eventFilter, setEventFilter] = useState("all");
+  const { requestFocus, setSelected } = usePlanetViewStore(
+    useShallow((state) => ({
+      requestFocus: state.requestFocus,
+      setSelected: state.setSelected,
+    })),
+  );
 
   const eventTypes = useMemo(
-    () => ['all', ...new Set(events.map((event) => event.event_type))],
+    () => ["all", ...new Set(events.map((event) => event.event_type))],
     [events],
   );
   const filteredEvents = useMemo(
-    () => (eventFilter === 'all' ? events : events.filter((event) => event.event_type === eventFilter)),
+    () =>
+      eventFilter === "all"
+        ? events
+        : events.filter((event) => event.event_type === eventFilter),
     [eventFilter, events],
   );
 
-  function focusSelection(selection: ReturnType<typeof resolveSelectionFromEvent>) {
+  function focusSelection(
+    selection: ReturnType<typeof resolveSelectionFromEvent>,
+  ) {
     if (!selection) {
       return;
     }
@@ -541,9 +873,14 @@ export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPa
           <div className="section-title">事件时间线</div>
           <label className="planet-filter">
             <span>过滤</span>
-            <select onChange={(event) => setEventFilter(event.target.value)} value={eventFilter}>
+            <select
+              onChange={(event) => setEventFilter(event.target.value)}
+              value={eventFilter}
+            >
               {eventTypes.map((type) => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>
+                  {type}
+                </option>
               ))}
             </select>
           </label>
@@ -553,10 +890,14 @@ export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPa
           {filteredEvents.map((event) => (
             <li key={event.event_id}>
               <div className="timeline-list__row">
-                <strong>[t{event.tick}] {event.event_type}</strong>
+                <strong>
+                  [t{event.tick}] {event.event_type}
+                </strong>
                 <button
                   className="secondary-button timeline-action"
-                  onClick={() => focusSelection(resolveSelectionFromEvent(planet, event))}
+                  onClick={() =>
+                    focusSelection(resolveSelectionFromEvent(planet, event))
+                  }
                   type="button"
                 >
                   定位
@@ -565,7 +906,9 @@ export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPa
               <span>{summarizeEvent(event)}</span>
               <details>
                 <summary>payload</summary>
-                <pre className="json-preview">{JSON.stringify(event.payload, null, 2)}</pre>
+                <pre className="json-preview">
+                  {JSON.stringify(event.payload, null, 2)}
+                </pre>
               </details>
             </li>
           ))}
@@ -579,10 +922,14 @@ export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPa
           {alerts.map((alert) => (
             <li key={alert.alert_id}>
               <div className="timeline-list__row">
-                <strong>[t{alert.tick}] {alert.alert_type}</strong>
+                <strong>
+                  [t{alert.tick}] {alert.alert_type}
+                </strong>
                 <button
                   className="secondary-button timeline-action"
-                  onClick={() => focusSelection(resolveSelectionFromAlert(planet, alert))}
+                  onClick={() =>
+                    focusSelection(resolveSelectionFromAlert(planet, alert))
+                  }
                   type="button"
                 >
                   定位
@@ -590,7 +937,8 @@ export function PlanetActivityPanel({ alerts, events, planet }: PlanetActivityPa
               </div>
               <span>{summarizeAlert(alert)}</span>
               <span className="subtle-text">
-                吞吐 {alert.metrics.throughput} · 堆积 {alert.metrics.backlog} · 效率 {formatRatio(alert.metrics.efficiency)}
+                吞吐 {alert.metrics.throughput} · 堆积 {alert.metrics.backlog} ·
+                效率 {formatRatio(alert.metrics.efficiency)}
               </span>
             </li>
           ))}
@@ -634,26 +982,28 @@ export function PlanetDebugPanel({
     selected,
     sseStatus,
     toggleDebugOpen,
-  } = usePlanetViewStore(useShallow((state) => ({
-    camera: state.camera,
-    debugOpen: state.debugOpen,
-    hoveredTile: state.hoveredTile,
-    lastEventId: state.lastEventId,
-    lastFullSyncAt: state.lastFullSyncAt,
-    layers: state.layers,
-    requestFocus: state.requestFocus,
-    selected: state.selected,
-    sseStatus: state.sseStatus,
-    toggleDebugOpen: state.toggleDebugOpen,
-  })));
-  const [shareMessage, setShareMessage] = useState('');
+  } = usePlanetViewStore(
+    useShallow((state) => ({
+      camera: state.camera,
+      debugOpen: state.debugOpen,
+      hoveredTile: state.hoveredTile,
+      lastEventId: state.lastEventId,
+      lastFullSyncAt: state.lastFullSyncAt,
+      layers: state.layers,
+      requestFocus: state.requestFocus,
+      selected: state.selected,
+      sseStatus: state.sseStatus,
+      toggleDebugOpen: state.toggleDebugOpen,
+    })),
+  );
+  const [shareMessage, setShareMessage] = useState("");
 
   function exportScreenshot() {
     if (!canvas?.toDataURL) {
       return;
     }
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/png');
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
     link.download = `${planet.planet_id}-tick-${currentTick}.png`;
     link.click();
   }
@@ -663,13 +1013,13 @@ export function PlanetDebugPanel({
     downloadData(
       `${planet.planet_id}-selection.json`,
       JSON.stringify(payload, null, 2),
-      'application/json',
+      "application/json",
     );
   }
 
   function buildShareUrl() {
-    if (typeof window === 'undefined') {
-      return '';
+    if (typeof window === "undefined") {
+      return "";
     }
     const tileSize = getPlanetRenderTileSize(
       camera.zoomIndex,
@@ -678,10 +1028,21 @@ export function PlanetDebugPanel({
       planet.map_width,
       planet.map_height,
     );
-    const viewportWidth = canvas?.clientWidth || (planet.map_width * tileSize);
-    const viewportHeight = canvas?.clientHeight || (planet.map_height * tileSize);
-    const bounds = getViewportTileBounds(planet, camera, tileSize, viewportWidth, viewportHeight);
-    const params = buildViewLinkSearchParams(selected, layers, bounds, getPlanetZoomScale(camera.zoomIndex));
+    const viewportWidth = canvas?.clientWidth || planet.map_width * tileSize;
+    const viewportHeight = canvas?.clientHeight || planet.map_height * tileSize;
+    const bounds = getViewportTileBounds(
+      planet,
+      camera,
+      tileSize,
+      viewportWidth,
+      viewportHeight,
+    );
+    const params = buildViewLinkSearchParams(
+      selected,
+      layers,
+      bounds,
+      getPlanetZoomScale(camera.zoomIndex),
+    );
     const url = new URL(window.location.href);
     url.search = params.toString();
     return url.toString();
@@ -689,12 +1050,12 @@ export function PlanetDebugPanel({
 
   async function copyShareLink() {
     const url = buildShareUrl();
-    if (!url || typeof navigator === 'undefined' || !navigator.clipboard) {
-      setShareMessage('当前环境不支持剪贴板');
+    if (!url || typeof navigator === "undefined" || !navigator.clipboard) {
+      setShareMessage("当前环境不支持剪贴板");
       return;
     }
     await navigator.clipboard.writeText(url);
-    setShareMessage('视角链接已复制');
+    setShareMessage("视角链接已复制");
   }
 
   function exportViewportJson() {
@@ -705,8 +1066,8 @@ export function PlanetDebugPanel({
       planet.map_width,
       planet.map_height,
     );
-    const viewportWidth = canvas?.clientWidth || (planet.map_width * tileSize);
-    const viewportHeight = canvas?.clientHeight || (planet.map_height * tileSize);
+    const viewportWidth = canvas?.clientWidth || planet.map_width * tileSize;
+    const viewportHeight = canvas?.clientHeight || planet.map_height * tileSize;
     const payload = buildViewportExport({
       planet,
       runtime,
@@ -723,18 +1084,20 @@ export function PlanetDebugPanel({
     downloadData(
       `${planet.planet_id}-viewport.json`,
       JSON.stringify(payload, null, 2),
-      'application/json',
+      "application/json",
     );
   }
 
   return (
-    <div className={debugOpen ? 'debug-panel debug-panel--open' : 'debug-panel'}>
+    <div
+      className={debugOpen ? "debug-panel debug-panel--open" : "debug-panel"}
+    >
       <button
         className="secondary-button debug-panel__toggle"
         onClick={toggleDebugOpen}
         type="button"
       >
-        {debugOpen ? '收起调试' : '展开调试'}
+        {debugOpen ? "收起调试" : "展开调试"}
       </button>
 
       {debugOpen ? (
@@ -751,7 +1114,7 @@ export function PlanetDebugPanel({
             </div>
             <div>
               <dt>最后事件</dt>
-              <dd>{lastEventId || '-'}</dd>
+              <dd>{lastEventId || "-"}</dd>
             </div>
             <div>
               <dt>最近全量同步</dt>
@@ -759,7 +1122,9 @@ export function PlanetDebugPanel({
             </div>
             <div>
               <dt>相机</dt>
-              <dd>{Math.round(camera.offsetX)}, {Math.round(camera.offsetY)}</dd>
+              <dd>
+                {Math.round(camera.offsetX)}, {Math.round(camera.offsetY)}
+              </dd>
             </div>
             <div>
               <dt>缩放</dt>
@@ -767,34 +1132,72 @@ export function PlanetDebugPanel({
             </div>
             <div>
               <dt>Hover</dt>
-              <dd>{hoveredTile ? `${hoveredTile.x}, ${hoveredTile.y}` : '-'}</dd>
+              <dd>
+                {hoveredTile ? `${hoveredTile.x}, ${hoveredTile.y}` : "-"}
+              </dd>
             </div>
             <div>
               <dt>选中 ID</dt>
-              <dd>{selectionEntityId(selected) || '-'}</dd>
+              <dd>{selectionEntityId(selected) || "-"}</dd>
             </div>
           </dl>
 
           <div className="debug-panel__actions">
-            <button className="secondary-button" onClick={() => { void onRefreshPlanet(); }} type="button">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                void onRefreshPlanet();
+              }}
+              type="button"
+            >
               重拉行星
             </button>
-            <button className="secondary-button" onClick={() => { void onRefreshFog(); }} type="button">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                void onRefreshFog();
+              }}
+              type="button"
+            >
               重拉场景
             </button>
-            <button className="secondary-button" onClick={() => { void onPullEvents(); }} type="button">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                void onPullEvents();
+              }}
+              type="button"
+            >
               补拉事件
             </button>
-            <button className="secondary-button" onClick={exportScreenshot} type="button">
+            <button
+              className="secondary-button"
+              onClick={exportScreenshot}
+              type="button"
+            >
               导出 PNG
             </button>
-            <button className="secondary-button" onClick={exportSelectionJson} type="button">
+            <button
+              className="secondary-button"
+              onClick={exportSelectionJson}
+              type="button"
+            >
               导出 JSON
             </button>
-            <button className="secondary-button" onClick={() => { void copyShareLink(); }} type="button">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                void copyShareLink();
+              }}
+              type="button"
+            >
               复制视角链接
             </button>
-            <button className="secondary-button" onClick={exportViewportJson} type="button">
+            <button
+              className="secondary-button"
+              onClick={exportViewportJson}
+              type="button"
+            >
               导出视角 JSON
             </button>
             {selected ? (

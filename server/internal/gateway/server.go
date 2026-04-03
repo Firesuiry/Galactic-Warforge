@@ -859,6 +859,26 @@ func validateCommandStructure(cmd model.Command) error {
 		if cmd.Target.EntityID == "" {
 			return fmt.Errorf("demolish requires target.entity_id")
 		}
+	case model.CmdConfigureLogisticsStation:
+		if cmd.Target.EntityID == "" {
+			return fmt.Errorf("configure_logistics_station requires target.entity_id")
+		}
+	case model.CmdConfigureLogisticsSlot:
+		if cmd.Target.EntityID == "" {
+			return fmt.Errorf("configure_logistics_slot requires target.entity_id")
+		}
+		if _, ok := cmd.Payload["scope"]; !ok {
+			return fmt.Errorf("configure_logistics_slot requires payload.scope")
+		}
+		if _, ok := cmd.Payload["item_id"]; !ok {
+			return fmt.Errorf("configure_logistics_slot requires payload.item_id")
+		}
+		if _, ok := cmd.Payload["mode"]; !ok {
+			return fmt.Errorf("configure_logistics_slot requires payload.mode")
+		}
+		if _, ok := cmd.Payload["local_storage"]; !ok {
+			return fmt.Errorf("configure_logistics_slot requires payload.local_storage")
+		}
 	case model.CmdCancelConstruction, model.CmdRestoreConstruction:
 		if _, ok := cmd.Payload["task_id"]; !ok {
 			return fmt.Errorf("%s requires payload.task_id", cmd.Type)

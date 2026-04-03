@@ -9,6 +9,8 @@ import {
   cmdProduce as apiProduce,
   cmdUpgrade as apiUpgrade,
   cmdDemolish as apiDemolish,
+  cmdConfigureLogisticsStation as apiConfigureLogisticsStation,
+  cmdConfigureLogisticsSlot as apiConfigureLogisticsSlot,
   cmdCancelConstruction as apiCancelConstruction,
   cmdRestoreConstruction as apiRestoreConstruction,
   cmdStartResearch as apiStartResearch,
@@ -18,6 +20,7 @@ import {
   cmdBuildDysonFrame as apiBuildDysonFrame,
   cmdBuildDysonShell as apiBuildDysonShell,
   cmdDemolishDyson as apiDemolishDyson,
+  type ConfigureLogisticsStationOptions,
   type Direction,
   type DysonComponentType,
 } from '../api.js';
@@ -28,6 +31,8 @@ import { getStringOption, parseArgs, parseIntegerArg, parseNumberArg } from './a
 const DIRECTIONS = new Set<Direction>(['north', 'east', 'south', 'west', 'auto']);
 const UNIT_TYPES = new Set(['worker', 'soldier']);
 const DYSON_COMPONENT_TYPES = new Set<DysonComponentType>(['node', 'frame', 'shell']);
+const LOGISTICS_SCOPES = new Set(['planetary', 'interstellar']);
+const LOGISTICS_MODES = new Set(['none', 'supply', 'demand', 'both']);
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -47,6 +52,19 @@ function requireNumber(raw: string | undefined, label: string): number {
     throw new Error(`${label} 必须是数字`);
   }
   return value;
+}
+
+function parseBooleanOption(raw: string | boolean | undefined, label: string): boolean | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (raw === true || raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  throw new Error(`${label} 必须是 true 或 false`);
 }
 
 function parsePosition(xRaw: string | undefined, yRaw: string | undefined, zRaw?: string): Position {
@@ -193,6 +211,70 @@ export async function cmdDemolish(args: string[]): Promise<string> {
   }
   try {
     return fmtCommandResponse(await apiDemolish(args[0]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdConfigureLogisticsStation(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 1) {
+    return fmtError('Usage: configure_logistics_station <building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true|false>] [--warp-enabled <true|false>] [--ship-slots <n>]');
+  }
+  try {
+    const options: ConfigureLogisticsStationOptions = {};
+    const inputPriority = getStringOption(parsed, 'input-priority');
+    const outputPriority = getStringOption(parsed, 'output-priority');
+    const droneCapacity = getStringOption(parsed, 'drone-capacity');
+    const shipSlots = getStringOption(parsed, 'ship-slots');
+    const interstellarEnabled = parseBooleanOption(parsed.options['interstellar-enabled'], 'interstellar-enabled');
+    const warpEnabled = parseBooleanOption(parsed.options['warp-enabled'], 'warp-enabled');
+
+    if (inputPriority !== undefined) {
+      options.inputPriority = requireInt(inputPriority, 'input-priority');
+    }
+    if (outputPriority !== undefined) {
+      options.outputPriority = requireInt(outputPriority, 'output-priority');
+    }
+    if (droneCapacity !== undefined) {
+      options.droneCapacity = requireInt(droneCapacity, 'drone-capacity');
+    }
+    if (interstellarEnabled !== undefined || warpEnabled !== undefined || shipSlots !== undefined) {
+      options.interstellar = {};
+      if (interstellarEnabled !== undefined) {
+        options.interstellar.enabled = interstellarEnabled;
+      }
+      if (warpEnabled !== undefined) {
+        options.interstellar.warpEnabled = warpEnabled;
+      }
+      if (shipSlots !== undefined) {
+        options.interstellar.shipSlots = requireInt(shipSlots, 'ship-slots');
+      }
+    }
+
+    return fmtCommandResponse(await apiConfigureLogisticsStation(parsed.positionals[0], options));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdConfigureLogisticsSlot(args: string[]): Promise<string> {
+  if (args.length < 5) {
+    return fmtError('Usage: configure_logistics_slot <building_id> <planetary|interstellar> <item_id> <none|supply|demand|both> <local_storage>');
+  }
+  if (!LOGISTICS_SCOPES.has(args[1])) {
+    return fmtError('scope 必须是 planetary 或 interstellar');
+  }
+  if (!LOGISTICS_MODES.has(args[3])) {
+    return fmtError('mode 必须是 none/supply/demand/both');
+  }
+  try {
+    return fmtCommandResponse(await apiConfigureLogisticsSlot(args[0], {
+      scope: args[1] as 'planetary' | 'interstellar',
+      itemId: args[2],
+      mode: args[3] as 'none' | 'supply' | 'demand' | 'both',
+      localStorage: requireInt(args[4], 'local_storage'),
+    }));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }

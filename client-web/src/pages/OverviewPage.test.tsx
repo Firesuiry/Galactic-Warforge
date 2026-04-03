@@ -26,6 +26,11 @@ describe('OverviewPage', () => {
               player_id: 'p1',
               is_alive: true,
               resources: { minerals: 240, energy: 140 },
+              inventory: {
+                iron_ore: 24,
+                silicon_ore: 8,
+                stone_ore: 3,
+              },
               tech: {
                 player_id: 'p1',
                 current_research: {
@@ -100,7 +105,8 @@ describe('OverviewPage', () => {
     renderApp(['/overview']);
 
     expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
-    expect(screen.getByText('矿物 240')).toBeInTheDocument();
+    expect(screen.getAllByText('铁矿 24 · 石矿 3 · 硅矿 8').length).toBeGreaterThan(0);
+    expect(screen.queryByText('矿物 240')).not.toBeInTheDocument();
     expect(screen.getAllByText('tech-energy-1').length).toBeGreaterThan(0);
     expect(screen.queryByText('[t87] entity_created')).not.toBeInTheDocument();
     expect(screen.queryByText('电力不足')).not.toBeInTheDocument();
