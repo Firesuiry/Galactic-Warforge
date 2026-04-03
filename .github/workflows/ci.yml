@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
 
     steps:
       - name: Checkout code
@@ -19,21 +22,16 @@ jobs:
         with:
           go-version: '1.22'
           cache: true
+          cache-dependency-path: server/go.sum
 
       - name: Install dependencies
-        run: |
-          cd server
-          go mod download
+        run: go mod download
 
       - name: Run unit tests
-        run: |
-          cd server
-          go test -v -race -coverprofile=coverage.out ./...
+        run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Run E2E tests
-        run: |
-          cd server
-          go test -v -run TestE2E ./internal/gamecore/
+        run: go test -v -run TestE2E ./internal/gamecore/
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -43,6 +41,9 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
 
     steps:
       - name: Checkout code
@@ -53,14 +54,17 @@ jobs:
         with:
           go-version: '1.22'
           cache: true
+          cache-dependency-path: server/go.sum
 
       - name: Run go vet
-        run: |
-          cd server
-          go vet ./...
+        run: go vet ./...
 
-  build:
+  build-server:
     runs-on: ubuntu-latest
+    needs: [test, lint]
+    defaults:
+      run:
+        working-directory: server
 
     steps:
       - name: Checkout code
@@ -71,14 +75,36 @@ jobs:
         with:
           go-version: '1.22'
           cache: true
+          cache-dependency-path: server/go.sum
 
-      - name: Build server
+      - name: Build complete server package
         run: |
-          cd server
-          go build -o siliconworld ./cmd/server
+          rm -rf dist/server
+          mkdir -p dist/server
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/server/siliconworld ./cmd/server
+          cp config-dev.yaml dist/server/config.yaml
+          cp config-dev.yaml dist/server/config-dev.yaml
+          cp map.yaml dist/server/map.yaml
 
-      - name: Build client
+      - name: Smoke test packaged server
         run: |
-          cd client
-          npm ci
-          npm run build
+          cd dist/server
+          ./siliconworld > server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18080/health > health.json; then
+              cat health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "packaged server did not become ready in time"
+          sed -n '1,200p' server.log || true
+          exit 1
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: siliconworld-server-linux-amd64
+          path: server/dist/server
