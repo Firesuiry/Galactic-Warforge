@@ -22,8 +22,10 @@ import {
 } from '@/features/planet-map/model';
 import {
   DEFAULT_PLANET_ZOOM_INDEX,
+  DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX,
   getPlanetRenderTileSize,
   getPlanetZoomLevel,
+  getPlanetZoomStatusLabel,
   isPlanetOverviewZoom,
   PLANET_ZOOM_LEVELS,
   usePlanetViewStore,
@@ -210,6 +212,9 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
   const zoomLevel = getPlanetZoomLevel(camera.zoomIndex);
   const overviewMode = isPlanetOverviewZoom(camera.zoomIndex);
   const tileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+  const sceneZoomStatusLabel = zoomLevel.mode === 'scene' && zoomLevel.tileSize !== undefined && zoomLevel.tileSize !== tileSize
+    ? `${zoomLevel.label} (实际 ${tileSize}px/tile)`
+    : `${tileSize}px/tile`;
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -281,7 +286,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     if (!focusRequest) {
       return;
     }
-    const targetZoomIndex = overviewMode ? DEFAULT_PLANET_ZOOM_INDEX : camera.zoomIndex;
+    const targetZoomIndex = overviewMode ? DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX : camera.zoomIndex;
     const nextCamera = centerCameraOnTile(
       viewport,
       planet,
@@ -787,10 +792,10 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
       return;
     }
     if (overviewMode) {
-      const nextCamera = centerCameraOnTile(viewport, planet, DEFAULT_PLANET_ZOOM_INDEX, tile.x, tile.y);
+      const nextCamera = centerCameraOnTile(viewport, planet, DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX, tile.x, tile.y);
       setCamera({
         ...nextCamera,
-        zoomIndex: DEFAULT_PLANET_ZOOM_INDEX,
+        zoomIndex: DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX,
         ready: true,
       });
       setSelected({
@@ -825,7 +830,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
         role="img"
       />
       <div className="planet-map-canvas__status">
-        <span>{overviewMode ? `缩放 ${zoomLevel.label}` : `缩放 ${tileSize}px/tile`}</span>
+        <span>{overviewMode ? `缩放 ${getPlanetZoomStatusLabel(camera.zoomIndex, planet.map_width, planet.map_height)}` : `缩放 ${sceneZoomStatusLabel}`}</span>
         <span>
           Hover {hoveredTile ? `(${hoveredTile.x}, ${hoveredTile.y})` : '-'}
         </span>

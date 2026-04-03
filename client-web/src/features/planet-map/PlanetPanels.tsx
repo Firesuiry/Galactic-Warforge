@@ -45,8 +45,8 @@ import {
 } from "@/features/planet-map/model";
 import {
   getPlanetRenderTileSize,
-  getPlanetZoomLabel,
   getPlanetZoomScale,
+  getPlanetZoomStatusLabel,
   PLANET_ZOOM_LEVELS,
   usePlanetViewStore,
 } from "@/features/planet-map/store";
@@ -1128,7 +1128,13 @@ export function PlanetDebugPanel({
             </div>
             <div>
               <dt>缩放</dt>
-              <dd>{getPlanetZoomLabel(camera.zoomIndex)}</dd>
+              <dd>
+                {getPlanetZoomStatusLabel(
+                  camera.zoomIndex,
+                  planet.map_width,
+                  planet.map_height,
+                )}
+              </dd>
             </div>
             <div>
               <dt>Hover</dt>

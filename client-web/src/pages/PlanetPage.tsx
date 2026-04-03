@@ -23,6 +23,7 @@ import { useApiClient } from "@/hooks/use-api-client";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
+  getPlanetOverviewRequestStep,
   getPlanetZoomLevel,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
@@ -131,6 +132,12 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
+  const overviewRequestStep = getPlanetOverviewRequestStep(
+    zoomIndex,
+    sceneQuery.data?.map_width ?? 0,
+    sceneQuery.data?.map_height ?? 0,
+  );
+
   const eventQuery = useQuery({
     queryKey: [
       "events-snapshot",
@@ -163,13 +170,15 @@ export function PlanetPage() {
       session.serverUrl,
       session.playerId,
       planetId,
-      activeZoomLevel.overviewStep,
+      overviewRequestStep,
     ],
     queryFn: () =>
       client.fetchPlanetOverview(planetId, {
-        step: activeZoomLevel.overviewStep ?? 100,
+        step: overviewRequestStep ?? 100,
       }),
-    enabled: Boolean(planetId) && activeZoomLevel.mode === "overview",
+    enabled: Boolean(planetId) &&
+      activeZoomLevel.mode === "overview" &&
+      overviewRequestStep !== undefined,
   });
 
   const { pullMissedEvents } = usePlanetRealtimeSync({

@@ -939,7 +939,7 @@ export function buildViewportExport(options: {
 const SCENE_WINDOW_ALIGNMENT = 32;
 const SCENE_WINDOW_PADDING = 24;
 const MIN_SCENE_WINDOW_SIZE = 96;
-const MAX_SCENE_WINDOW_SIZE = 192;
+const MAX_SCENE_WINDOW_SIZE = 320;
 
 export function buildSceneWindow(
   planet: PlanetRenderView,

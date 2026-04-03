@@ -22,25 +22,40 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
     overviewStep: 100,
   },
   {
+    label: '1px/20tile',
+    mode: 'overview',
+    scale: 0.05,
+    overviewStep: 20,
+  },
+  {
+    label: '1px/4tile',
+    mode: 'overview',
+    scale: 0.25,
+    overviewStep: 4,
+  },
+  {
+    label: '1px',
+    mode: 'scene',
+    scale: 1,
+    tileSize: 1,
+  },
+  {
+    label: '4px',
+    mode: 'scene',
+    scale: 4,
+    tileSize: 4,
+  },
+  {
     label: '12px',
     mode: 'scene',
     scale: 12,
     tileSize: 12,
   },
-  {
-    label: '24px',
-    mode: 'scene',
-    scale: 24,
-    tileSize: 24,
-  },
-  {
-    label: '32px',
-    mode: 'scene',
-    scale: 32,
-    tileSize: 32,
-  },
 ];
-export const DEFAULT_PLANET_ZOOM_INDEX = 2;
+export const DEFAULT_PLANET_ZOOM_INDEX = 5;
+export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = 4;
+export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
+export const MAX_PLANET_SCENE_TILES_PER_AXIS = 320;
 
 export function getPlanetZoomLevel(zoomIndex: number) {
   return PLANET_ZOOM_LEVELS[Math.min(Math.max(zoomIndex, 0), PLANET_ZOOM_LEVELS.length - 1)] ?? PLANET_ZOOM_LEVELS[DEFAULT_PLANET_ZOOM_INDEX];
@@ -52,6 +67,46 @@ export function getPlanetZoomScale(zoomIndex: number) {
 
 export function getPlanetZoomLabel(zoomIndex: number) {
   return getPlanetZoomLevel(zoomIndex).label;
+}
+
+export function getPlanetOverviewRequestStep(
+  zoomIndex: number,
+  mapWidth: number,
+  mapHeight: number,
+) {
+  const zoomLevel = getPlanetZoomLevel(zoomIndex);
+  if (zoomLevel.mode !== 'overview') {
+    return undefined;
+  }
+
+  const requestedStep = Math.max(zoomLevel.overviewStep ?? 100, 1);
+  if (mapWidth <= 0 || mapHeight <= 0) {
+    return requestedStep;
+  }
+
+  const protectedStep = Math.max(
+    Math.ceil(mapWidth / MAX_PLANET_OVERVIEW_CELLS_PER_AXIS),
+    Math.ceil(mapHeight / MAX_PLANET_OVERVIEW_CELLS_PER_AXIS),
+    1,
+  );
+  return Math.max(requestedStep, protectedStep);
+}
+
+export function getPlanetZoomStatusLabel(
+  zoomIndex: number,
+  mapWidth: number,
+  mapHeight: number,
+) {
+  const zoomLevel = getPlanetZoomLevel(zoomIndex);
+  if (zoomLevel.mode !== 'overview') {
+    return zoomLevel.label;
+  }
+
+  const actualStep = getPlanetOverviewRequestStep(zoomIndex, mapWidth, mapHeight);
+  if (!actualStep || actualStep === zoomLevel.overviewStep) {
+    return zoomLevel.label;
+  }
+  return `${zoomLevel.label} (实际 1px/${actualStep}tile)`;
 }
 
 export function isPlanetOverviewZoom(zoomIndex: number) {
@@ -75,7 +130,14 @@ export function getPlanetRenderTileSize(
       0.01,
     );
   }
-  return zoomLevel.tileSize ?? 12;
+
+  const requestedTileSize = zoomLevel.tileSize ?? 12;
+  const protectedTileSize = Math.max(
+    Math.ceil(viewportWidth / MAX_PLANET_SCENE_TILES_PER_AXIS),
+    Math.ceil(viewportHeight / MAX_PLANET_SCENE_TILES_PER_AXIS),
+    1,
+  );
+  return Math.max(requestedTileSize, protectedTileSize);
 }
 
 export function resolvePlanetZoomIndex(scale: number) {

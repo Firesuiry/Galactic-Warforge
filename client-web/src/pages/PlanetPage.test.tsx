@@ -133,7 +133,7 @@ function createScenePayload() {
   };
 }
 
-function createOverviewPayload() {
+function createOverviewPayload(step = 100) {
   return {
     planet_id: "planet-1-1",
     name: "Gaia",
@@ -142,9 +142,9 @@ function createOverviewPayload() {
     map_width: 4,
     map_height: 4,
     tick: 120,
-    step: 100,
-    cells_width: 1,
-    cells_height: 1,
+    step,
+    cells_width: Math.max(1, Math.ceil(4 / step)),
+    cells_height: Math.max(1, Math.ceil(4 / step)),
     terrain: [["buildable"]],
     visible: [[true]],
     explored: [[true]],
@@ -154,6 +154,32 @@ function createOverviewPayload() {
     building_count: 1,
     unit_count: 1,
     resource_count: 1,
+  };
+}
+
+function createLargeScenePayload() {
+  return {
+    planet_id: "planet-1-1",
+    name: "Gaia",
+    discovered: true,
+    kind: "terrestrial",
+    map_width: 2000,
+    map_height: 2000,
+    tick: 120,
+    bounds: { x: 0, y: 0, width: 96, height: 96 },
+    terrain: [],
+    environment: {
+      wind_factor: 0.8,
+      light_factor: 1.1,
+    },
+    visible: [],
+    explored: [],
+    buildings: {},
+    units: {},
+    resources: [],
+    building_count: 0,
+    unit_count: 0,
+    resource_count: 0,
   };
 }
 
@@ -1151,7 +1177,7 @@ describe("PlanetPage", () => {
     expect(commandRequests[0]?.commands?.[0]?.payload?.local_storage).toBe(80);
   });
 
-  it("切到全局缩放时会请求行星总览并显示总览状态", async () => {
+  it("切到 1px/4tile 缩放时，小地图会按 step=4 请求行星总览", async () => {
     let overviewCalls = 0;
     const fetchMock = vi.fn(
       (input: string | URL | Request, init?: RequestInit) => {
@@ -1168,7 +1194,9 @@ describe("PlanetPage", () => {
         }
         if (url.includes("/world/planets/planet-1-1/overview")) {
           overviewCalls += 1;
-          return Promise.resolve(jsonResponse(createOverviewPayload()));
+          const parsedUrl = new URL(url);
+          expect(parsedUrl.searchParams.get("step")).toBe("4");
+          return Promise.resolve(jsonResponse(createOverviewPayload(4)));
         }
         if (url.endsWith("/world/planets/planet-1-1/runtime")) {
           return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -1229,12 +1257,111 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "1px/100tile" }));
+    await user.click(screen.getByRole("button", { name: "1px/4tile" }));
 
-    expect(await screen.findByText("缩放 1px/100tile")).toBeInTheDocument();
+    expect(await screen.findByText("缩放 1px/4tile")).toBeInTheDocument();
     await waitFor(() => {
       expect(overviewCalls).toBeGreaterThan(0);
     });
+  });
+
+  it("大地图切到 1px/4tile 缩放时会抬高总览 step，避免单次响应过大", async () => {
+    let requestedOverviewStep = "";
+
+    const fetchMock = vi.fn(
+      (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.endsWith("/state/summary")) {
+          return Promise.resolve(jsonResponse(createSummaryPayload()));
+        }
+        if (url.endsWith("/state/stats")) {
+          return Promise.resolve(jsonResponse(createStatsPayload()));
+        }
+        if (url.includes("/world/planets/planet-1-1/scene")) {
+          return Promise.resolve(jsonResponse(createLargeScenePayload()));
+        }
+        if (url.includes("/world/planets/planet-1-1/overview")) {
+          const parsedUrl = new URL(url);
+          requestedOverviewStep = parsedUrl.searchParams.get("step") ?? "";
+          return Promise.resolve(
+            jsonResponse({
+              ...createOverviewPayload(16),
+              map_width: 2000,
+              map_height: 2000,
+              step: 16,
+              cells_width: 125,
+              cells_height: 125,
+            }),
+          );
+        }
+        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
+          return Promise.resolve(jsonResponse(createRuntimePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/networks")) {
+          return Promise.resolve(jsonResponse(createNetworksPayload()));
+        }
+        if (url.endsWith("/catalog")) {
+          return Promise.resolve(jsonResponse(createCatalogPayload()));
+        }
+        if (url.includes("/events/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              event_types: ["building_state_changed"],
+              available_from_tick: 1,
+              next_event_id: "evt-10",
+              has_more: false,
+              events: [],
+            }),
+          );
+        }
+        if (url.includes("/alerts/production/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              available_from_tick: 1,
+              has_more: false,
+              alerts: [],
+            }),
+          );
+        }
+        if (url.includes("/events/stream")) {
+          return Promise.resolve(
+            sseResponse(
+              [
+                {
+                  event: "connected",
+                  data: {
+                    player_id: "p1",
+                    event_types: ["building_state_changed"],
+                  },
+                },
+              ],
+              init?.signal as AbortSignal,
+            ),
+          );
+        }
+
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+
+    renderApp(["/planet/planet-1-1"]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Gaia" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1px/4tile" }));
+
+    await waitFor(() => {
+      expect(requestedOverviewStep).toBe("16");
+    });
+    expect(
+      await screen.findByText("缩放 1px/4tile (实际 1px/16tile)"),
+    ).toBeInTheDocument();
   });
 
   it("调试面板可以导出当前视角 JSON", async () => {
