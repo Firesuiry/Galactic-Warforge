@@ -4,6 +4,7 @@ import { AppShell } from '@/app/layout/AppShell';
 import { OnlyGuests, RequireSession } from '@/features/auth/route-guards';
 import { useHasSession } from '@/hooks/use-session';
 import { GalaxyPage } from '@/pages/GalaxyPage';
+import { AgentsPage } from '@/pages/AgentsPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { OverviewPage } from '@/pages/OverviewPage';
@@ -36,6 +37,7 @@ export function AppRoutes() {
         )}
       >
         <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
         <Route path="/galaxy" element={<GalaxyPage />} />
         <Route path="/system/:systemId" element={<SystemPage />} />
         <Route path="/planet/:planetId" element={<PlanetPage />} />

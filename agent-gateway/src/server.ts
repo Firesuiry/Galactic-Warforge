@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import path from 'node:path';
 
+import { exportBundle } from './export/bundle.js';
 import { handleAgentRoutes } from './routes/agents.js';
 import { handleTemplateRoutes } from './routes/templates.js';
 import { createEventBus } from './runtime/events.js';
@@ -38,6 +39,15 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
   const secretStore = createSecretStore(path.join(options.dataRoot, 'secrets'));
   const eventBus = createEventBus();
 
+  async function readJsonBody<T>(request: import('node:http').IncomingMessage): Promise<T> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const raw = Buffer.concat(chunks).toString('utf8');
+    return JSON.parse(raw) as T;
+  }
+
   const server = createServer(async (request, response) => {
     if (request.url === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -68,6 +78,47 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         secretStore,
         eventBus,
       });
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/export') {
+      const payload = await readJsonBody<{ includeSecrets?: boolean }>(request);
+      const templates = await templateStore.list();
+      const agents = await agentStore.list();
+      const threads = await threadStore.list();
+
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        ...exportBundle({
+          templates,
+          includeSecrets: Boolean(payload.includeSecrets),
+          encryptedSecrets: [],
+        }),
+        agents,
+        threads,
+      }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/import') {
+      const payload = await readJsonBody<{
+        templates?: Array<Awaited<ReturnType<typeof templateStore.list>>[number]>;
+        agents?: Array<Awaited<ReturnType<typeof agentStore.list>>[number]>;
+        threads?: Array<Awaited<ReturnType<typeof threadStore.list>>[number]>;
+      }>(request);
+
+      await Promise.all((payload.templates ?? []).map((template) => templateStore.save(template)));
+      await Promise.all((payload.agents ?? []).map((agent) => agentStore.save(agent)));
+      await Promise.all((payload.threads ?? []).map((thread) => threadStore.save(thread)));
+
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        imported: {
+          templates: payload.templates?.length ?? 0,
+          agents: payload.agents?.length ?? 0,
+          threads: payload.threads?.length ?? 0,
+        },
+      }));
       return;
     }
 
