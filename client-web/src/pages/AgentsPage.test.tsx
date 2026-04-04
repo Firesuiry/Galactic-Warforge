@@ -14,7 +14,7 @@ describe('AgentsPage', () => {
     });
   });
 
-  it('renders the IM workspace with conversations, messages, and agent policy details', async () => {
+  it('renders the IM workspace with conversations, messages, and a channel settings entry', async () => {
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
@@ -108,9 +108,530 @@ describe('AgentsPage', () => {
 
     expect(await screen.findByText('星球A协作')).toBeTruthy();
     expect(await screen.findByText('@建造官 检查产线')).toBeInTheDocument();
-    expect(screen.getAllByText('运行中').length).toBeGreaterThan(0);
-    expect(screen.getByText('建造')).toBeInTheDocument();
-    expect(screen.getByText('每 300 秒')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '频道设置' })).toBeInTheDocument();
+  });
+
+  it('switches between channel and member panes', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'conv-1',
+            type: 'channel',
+            name: '星球A协作',
+            topic: '协调建设',
+            memberIds: ['player:p1', 'agent:agent-builder'],
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'agent-builder',
+            name: '建造官',
+            templateId: 'tpl-1',
+            serverUrl: 'http://localhost:18080',
+            playerId: 'p1',
+            status: 'running',
+            role: 'worker',
+            policy: {
+              planetIds: ['planet-a'],
+              commandCategories: ['build'],
+              canCreateChannel: false,
+              canManageMembers: false,
+              canInviteByPlanet: false,
+              canCreateSchedules: false,
+              canDirectMessageAgentIds: [],
+              canDispatchAgentIds: [],
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    expect(await screen.findByRole('button', { name: '频道' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '成员' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: '成员' }));
+
+    expect(screen.getByRole('button', { name: '成员' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByRole('button', { name: '新建成员' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /建造官/ })).toBeInTheDocument();
+  });
+
+  it('invites an existing member from channel settings', async () => {
+    const user = userEvent.setup();
+    const conversations = [
+      {
+        id: 'conv-1',
+        type: 'channel',
+        name: '星球A协作',
+        topic: '协调建设',
+        memberIds: ['player:p1'],
+      },
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse(conversations));
+      }
+      if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'agent-builder',
+            name: '建造官',
+            templateId: 'tpl-1',
+            serverUrl: 'http://localhost:18080',
+            playerId: 'p1',
+            status: 'running',
+            role: 'worker',
+            policy: {
+              planetIds: ['planet-a'],
+              commandCategories: ['build'],
+              canCreateChannel: false,
+              canManageMembers: false,
+              canInviteByPlanet: false,
+              canCreateSchedules: false,
+              canDirectMessageAgentIds: [],
+              canDispatchAgentIds: [],
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/members') && method === 'POST') {
+        conversations[0] = {
+          ...conversations[0],
+          memberIds: ['player:p1', 'agent:agent-builder'],
+        };
+        return Promise.resolve(jsonResponse({
+          conversationId: 'conv-1',
+          memberIds: conversations[0].memberIds,
+        }));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '频道设置' }));
+    await user.selectOptions(screen.getByLabelText('选择成员'), 'agent-builder');
+    await user.click(screen.getByRole('button', { name: '添加到频道' }));
+
+    expect(await screen.findByText('建造官')).toBeInTheDocument();
+  });
+
+  it('creates a member after creating a template inline', async () => {
+    const user = userEvent.setup();
+    const templates: Array<Record<string, unknown>> = [];
+    const agents: Array<Record<string, unknown>> = [];
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/agents') && method === 'GET') {
+        return Promise.resolve(jsonResponse(agents));
+      }
+      if (url.endsWith('/agent-api/agents') && method === 'POST') {
+        const payload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'agent-builder',
+          name: payload.name,
+          templateId: payload.templateId,
+          serverUrl: payload.serverUrl,
+          playerId: payload.playerId,
+          status: 'idle',
+          role: 'worker',
+          policy: {
+            planetIds: [],
+            commandCategories: [],
+            canCreateChannel: false,
+            canManageMembers: false,
+            canInviteByPlanet: false,
+            canCreateSchedules: false,
+            canDirectMessageAgentIds: [],
+            canDispatchAgentIds: [],
+          },
+        };
+        agents.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/templates') && method === 'GET') {
+        return Promise.resolve(jsonResponse(templates));
+      }
+      if (url.endsWith('/agent-api/templates') && method === 'POST') {
+        const payload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'tpl-builder',
+          name: payload.name,
+          description: payload.description ?? '',
+          providerKind: payload.providerKind,
+          defaultModel: payload.defaultModel,
+          systemPrompt: payload.systemPrompt,
+          toolPolicy: payload.toolPolicy,
+          providerConfig: payload.providerConfig,
+        };
+        templates.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(screen.getByRole('button', { name: '新建成员' }));
+    await user.click(screen.getByRole('button', { name: '新建模板' }));
+    await user.type(await screen.findByLabelText('模板名称'), '建造模板');
+    await user.click(screen.getByRole('button', { name: '保存模板' }));
+    await user.type(await screen.findByLabelText('成员名称'), '建造官');
+    await user.click(screen.getByRole('button', { name: '保存成员' }));
+
+    expect(await screen.findByRole('heading', { name: '建造官' })).toBeInTheDocument();
+    expect(screen.getByText('建造模板')).toBeInTheDocument();
+  });
+
+  it('opens or creates a dm from member detail', async () => {
+    const user = userEvent.setup();
+    const conversations: Array<Record<string, unknown>> = [];
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse(conversations));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'POST') {
+        const payload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'dm-1',
+          type: payload.type,
+          name: payload.name,
+          topic: payload.topic,
+          memberIds: payload.memberIds,
+        };
+        conversations.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'agent-builder',
+            name: '建造官',
+            templateId: 'tpl-builder',
+            serverUrl: 'http://localhost:18080',
+            playerId: 'p1',
+            status: 'idle',
+            role: 'worker',
+            policy: {
+              planetIds: ['planet-a'],
+              commandCategories: ['build'],
+              canCreateChannel: false,
+              canManageMembers: false,
+              canInviteByPlanet: false,
+              canCreateSchedules: false,
+              canDirectMessageAgentIds: [],
+              canDispatchAgentIds: [],
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/templates')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'tpl-builder',
+            name: '建造模板',
+            description: '负责建设',
+            providerKind: 'codex_cli',
+            defaultModel: 'gpt-5-codex',
+            systemPrompt: '负责建设。',
+            toolPolicy: {
+              cliEnabled: true,
+              maxSteps: 8,
+              maxToolCallsPerTurn: 4,
+              commandWhitelist: ['build'],
+            },
+            providerConfig: {
+              command: 'codex',
+              model: 'gpt-5-codex',
+              workdir: '/tmp',
+              argsTemplate: [],
+              envOverrides: {},
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/conversations/dm-1/messages')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(await screen.findByRole('button', { name: /建造官/ }));
+    await user.click(screen.getByRole('button', { name: '发起私聊' }));
+
+    expect(await screen.findByRole('heading', { name: /私聊/ })).toBeInTheDocument();
+  });
+
+  it('manages member-owned schedules from member detail', async () => {
+    const user = userEvent.setup();
+    const schedules: Array<Record<string, unknown>> = [
+      {
+        id: 'schedule-1',
+        ownerAgentId: 'agent-builder',
+        targetType: 'agent_dm',
+        targetId: 'agent-builder',
+        intervalSeconds: 300,
+        messageTemplate: '@建造官 每五分钟汇报一次',
+        enabled: true,
+      },
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'agent-builder',
+            name: '建造官',
+            templateId: 'tpl-builder',
+            serverUrl: 'http://localhost:18080',
+            playerId: 'p1',
+            status: 'idle',
+            role: 'worker',
+            policy: {
+              planetIds: ['planet-a'],
+              commandCategories: ['build'],
+              canCreateChannel: false,
+              canManageMembers: false,
+              canInviteByPlanet: false,
+              canCreateSchedules: false,
+              canDirectMessageAgentIds: [],
+              canDispatchAgentIds: [],
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/templates')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'tpl-builder',
+            name: '建造模板',
+            description: '负责建设',
+            providerKind: 'codex_cli',
+            defaultModel: 'gpt-5-codex',
+            systemPrompt: '负责建设。',
+            toolPolicy: {
+              cliEnabled: true,
+              maxSteps: 8,
+              maxToolCallsPerTurn: 4,
+              commandWhitelist: ['build'],
+            },
+            providerConfig: {
+              command: 'codex',
+              model: 'gpt-5-codex',
+              workdir: '/tmp',
+              argsTemplate: [],
+              envOverrides: {},
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/schedules') && method === 'GET') {
+        return Promise.resolve(jsonResponse(schedules));
+      }
+      if (url.endsWith('/agent-api/schedules') && method === 'POST') {
+        const payload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'schedule-2',
+          ownerAgentId: payload.ownerAgentId,
+          targetType: payload.targetType,
+          targetId: payload.targetId,
+          intervalSeconds: payload.intervalSeconds,
+          messageTemplate: payload.messageTemplate,
+          enabled: true,
+        };
+        schedules.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/schedules/schedule-1') && method === 'PATCH') {
+        const payload = JSON.parse(String(init?.body));
+        schedules[0] = {
+          ...schedules[0],
+          ...payload,
+        };
+        return Promise.resolve(jsonResponse(schedules[0]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(await screen.findByRole('button', { name: /建造官/ }));
+
+    expect(await screen.findByText('每 300 秒发送一次')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '停用任务' }));
+    expect(await screen.findByText('已停用')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('任务间隔（秒）'));
+    await user.type(screen.getByLabelText('任务间隔（秒）'), '600');
+    await user.type(screen.getByLabelText('任务内容'), '@建造官 每十分钟汇报一次');
+    await user.click(screen.getByRole('button', { name: '创建定时任务' }));
+
+    expect(await screen.findByText('每 600 秒发送一次')).toBeInTheDocument();
   });
 
   it('lets the player create a channel and send a message from the composer', async () => {

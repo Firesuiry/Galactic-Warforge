@@ -280,6 +280,215 @@ button {
   gap: 8px;
 }
 
+.agent-workspace-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.agent-workspace-shell__content {
+  min-height: 0;
+}
+
+.agent-workspace-shell__content--channels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  min-height: 0;
+}
+
+.channel-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.channel-workspace__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.channel-workspace__header h2 {
+  margin: 0;
+}
+
+.channel-workspace__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.channel-workspace__meta {
+  color: #9ab0dc;
+  font-size: 0.85rem;
+}
+
+.channel-workspace--settings {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
+    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
+}
+
+.channel-workspace__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.channel-workspace__empty {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.agent-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, rgba(19, 28, 51, 0.98), rgba(13, 20, 38, 0.94)),
+    radial-gradient(circle at top, rgba(90, 177, 255, 0.16), transparent 45%);
+}
+
+.agent-sidebar__header h1 {
+  margin: 0;
+}
+
+.agent-sidebar__pane-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.agent-sidebar__pane-button {
+  justify-content: center;
+}
+
+.agent-sidebar__pane-button--active {
+  border-color: rgba(83, 177, 255, 0.28);
+  background: linear-gradient(135deg, rgba(32, 85, 184, 0.36), rgba(30, 186, 181, 0.16));
+}
+
+.agent-sidebar__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-sidebar__list-button {
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.agent-sidebar__list-button strong {
+  font-size: 0.98rem;
+}
+
+.agent-sidebar__list-button span {
+  color: #9fb0d3;
+  font-size: 0.86rem;
+}
+
+.agent-sidebar__list-button--active {
+  border-color: rgba(83, 177, 255, 0.28);
+  background: linear-gradient(135deg, rgba(32, 85, 184, 0.36), rgba(30, 186, 181, 0.16));
+}
+
+.agent-members-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.agent-members-view__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-members-view__header h2 {
+  margin: 0;
+}
+
+.agent-members-view__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-members-view__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.agent-members-view__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.agent-members-view__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-members-view__section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-members-view__placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.agent-members-view__inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agent-template-manager {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
+    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
+}
+
 .agent-im {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 320px;

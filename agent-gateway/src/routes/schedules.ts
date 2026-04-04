@@ -9,6 +9,7 @@ interface AgentStore {
 
 interface ScheduleStore {
   list: () => Promise<ScheduleJob[]>;
+  get: (id: string) => Promise<ScheduleJob | null>;
   save: (schedule: ScheduleJob) => Promise<void>;
 }
 
@@ -60,6 +61,7 @@ export async function handleScheduleRoutes(
       id?: string;
       workspaceId?: string;
       name?: string;
+      ownerAgentId: string;
       creatorType: 'player' | 'agent';
       creatorId: string;
       targetType: 'agent_dm' | 'conversation';
@@ -78,6 +80,7 @@ export async function handleScheduleRoutes(
       id: payload.id ?? randomUUID(),
       workspaceId: payload.workspaceId ?? 'workspace-default',
       name: payload.name ?? '定时任务',
+      ownerAgentId: payload.ownerAgentId,
       creatorType: payload.creatorType,
       creatorId: payload.creatorId,
       targetType: payload.targetType,
@@ -91,6 +94,25 @@ export async function handleScheduleRoutes(
     };
     await context.scheduleStore.save(schedule);
     writeJson(response, 201, schedule);
+    return;
+  }
+
+  if (request.method === 'PATCH' && url.pathname.match(/^\/schedules\/[^/]+$/)) {
+    const scheduleId = url.pathname.split('/')[2] ?? '';
+    const schedule = await context.scheduleStore.get(scheduleId);
+    if (!schedule) {
+      writeJson(response, 404, { error: 'schedule_not_found' });
+      return;
+    }
+
+    const payload = await readJsonBody<Partial<Pick<ScheduleJob, 'targetType' | 'targetId' | 'intervalSeconds' | 'messageTemplate' | 'enabled'>>>(request);
+    const updated: ScheduleJob = {
+      ...schedule,
+      ...payload,
+      updatedAt: new Date().toISOString(),
+    };
+    await context.scheduleStore.save(updated);
+    writeJson(response, 200, updated);
     return;
   }
 

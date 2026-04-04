@@ -130,6 +130,7 @@ export interface ScheduleJob {
   id: string;
   workspaceId: string;
   name: string;
+  ownerAgentId: string;
   creatorType: 'player' | 'agent';
   creatorId: string;
   targetType: 'agent_dm' | 'conversation';

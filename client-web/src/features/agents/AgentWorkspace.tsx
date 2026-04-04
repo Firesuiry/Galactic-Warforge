@@ -1,279 +1,152 @@
 import type { FormEvent } from 'react';
 
+import { AgentsSidebar, type AgentsPane } from './AgentsSidebar';
+import { ChannelWorkspaceView } from './ChannelWorkspaceView';
+import { MemberWorkspaceView } from './MemberWorkspaceView';
 import type {
   AgentProfileView,
+  AgentTemplateView,
   ConversationMessageView,
   ConversationView,
   ScheduleView,
 } from './types';
-import {
-  translateAgentCommandCategory,
-  translateAgentMessageKind,
-  translateAgentStatus,
-} from '@/i18n/translate';
 
 interface AgentWorkspaceProps {
   gatewayOnline: boolean;
   fixtureMode: boolean;
+  activePane: AgentsPane;
+  channelView: 'chat' | 'settings';
   conversations: ConversationView[];
   selectedConversationId: string;
   messages: ConversationMessageView[];
   messagesLoading: boolean;
   agents: AgentProfileView[];
+  selectedAgentId: string;
+  templates: AgentTemplateView[];
   schedules: ScheduleView[];
   showCreateChannel: boolean;
+  showCreateMember: boolean;
+  showTemplateManager: boolean;
   channelName: string;
   channelTopic: string;
+  memberName: string;
+  memberTemplateId: string;
+  templateName: string;
+  templateDescription: string;
   messageInput: string;
   invitePlanetId: string;
+  inviteAgentId: string;
   scheduleIntervalSeconds: string;
   scheduleMessage: string;
+  onPaneChange: (pane: AgentsPane) => void;
   onSelectConversation: (conversationId: string) => void;
+  onSelectAgent: (agentId: string) => void;
   onToggleCreateChannel: () => void;
+  onOpenCreateMember: () => void;
+  onOpenTemplateManager: () => void;
+  onCloseTemplateManager: () => void;
   onChannelNameChange: (value: string) => void;
   onChannelTopicChange: (value: string) => void;
+  onMemberNameChange: (value: string) => void;
+  onMemberTemplateIdChange: (value: string) => void;
+  onTemplateNameChange: (value: string) => void;
+  onTemplateDescriptionChange: (value: string) => void;
   onMessageInputChange: (value: string) => void;
   onInvitePlanetIdChange: (value: string) => void;
+  onInviteAgentIdChange: (value: string) => void;
   onScheduleIntervalChange: (value: string) => void;
   onScheduleMessageChange: (value: string) => void;
+  onCreateTemplate: (event: FormEvent<HTMLFormElement>) => void;
+  onCreateMember: (event: FormEvent<HTMLFormElement>) => void;
   onCreateChannel: (event: FormEvent<HTMLFormElement>) => void;
   onSendMessage: (event: FormEvent<HTMLFormElement>) => void;
+  onAddConversationMembers: (event: FormEvent<HTMLFormElement>) => void;
   onInviteByPlanet: (event: FormEvent<HTMLFormElement>) => void;
   onCreateSchedule: (event: FormEvent<HTMLFormElement>) => void;
+  onOpenChannelSettings: () => void;
+  onBackToChannelChat: () => void;
   onStartDm: (agentId: string) => void;
-}
-
-function formatMemberLabel(memberId: string, agents: AgentProfileView[]) {
-  if (memberId.startsWith('player:')) {
-    return `玩家 ${memberId.slice('player:'.length)}`;
-  }
-  const agentId = memberId.slice('agent:'.length);
-  return agents.find((agent) => agent.id === agentId)?.name ?? agentId;
+  onToggleScheduleEnabled: (scheduleId: string, enabled: boolean) => void;
 }
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
   const selectedConversation = props.conversations.find((conversation) => conversation.id === props.selectedConversationId);
-  const selectedConversationSchedules = selectedConversation
-    ? props.schedules.filter((schedule) => schedule.targetType === 'conversation' && schedule.targetId === selectedConversation.id)
-    : [];
-  const selectedConversationAgents = selectedConversation
-    ? selectedConversation.memberIds
-      .filter((memberId) => memberId.startsWith('agent:'))
-      .map((memberId) => props.agents.find((agent) => agent.id === memberId.slice('agent:'.length)))
-      .filter((agent): agent is AgentProfileView => Boolean(agent))
-    : [];
-
-  function formatMessageAuthor(message: ConversationMessageView) {
-    if (message.senderType === 'player') {
-      return '玩家';
-    }
-    if (message.senderType === 'agent') {
-      return props.agents.find((agent) => agent.id === message.senderId)?.name ?? message.senderId;
-    }
-    return translateAgentMessageKind(message.kind);
-  }
 
   return (
-    <div className="agent-im">
-      <aside className="panel agent-im__sidebar">
-        <div className="agent-im__sidebar-header">
-          <div>
-            <h1>智能体协作台</h1>
-            <p className="subtle-text">
-              {props.gatewayOnline ? '本地 Agent 网关在线。' : '本地 Agent 网关不可达。'}
-              {props.fixtureMode ? ' 当前为离线样例模式，发送和管理入口会禁用。' : ''}
-            </p>
-          </div>
-          <button className="secondary-button" onClick={props.onToggleCreateChannel} type="button">
-            新建频道
-          </button>
+    <div className="agent-workspace-shell">
+      <AgentsSidebar
+        gatewayOnline={props.gatewayOnline}
+        fixtureMode={props.fixtureMode}
+        activePane={props.activePane}
+        conversations={props.conversations}
+        selectedConversationId={props.selectedConversationId}
+        agents={props.agents}
+        selectedAgentId={props.selectedAgentId}
+        showCreateChannel={props.showCreateChannel}
+        channelName={props.channelName}
+        channelTopic={props.channelTopic}
+        onPaneChange={props.onPaneChange}
+        onSelectConversation={props.onSelectConversation}
+        onSelectAgent={props.onSelectAgent}
+        onToggleCreateChannel={props.onToggleCreateChannel}
+        onChannelNameChange={props.onChannelNameChange}
+        onChannelTopicChange={props.onChannelTopicChange}
+        onCreateChannel={props.onCreateChannel}
+        onOpenCreateMember={props.onOpenCreateMember}
+      />
+
+      {props.activePane === 'channels' ? (
+        <div className="agent-workspace-shell__content">
+          <ChannelWorkspaceView
+            mode={props.channelView}
+            fixtureMode={props.fixtureMode}
+            conversation={selectedConversation}
+            messages={props.messages}
+            messagesLoading={props.messagesLoading}
+            agents={props.agents}
+            messageInput={props.messageInput}
+            invitePlanetId={props.invitePlanetId}
+            inviteAgentId={props.inviteAgentId}
+            onMessageInputChange={props.onMessageInputChange}
+            onInvitePlanetIdChange={props.onInvitePlanetIdChange}
+            onInviteAgentIdChange={props.onInviteAgentIdChange}
+            onSendMessage={props.onSendMessage}
+            onInviteByPlanet={props.onInviteByPlanet}
+            onAddMembers={props.onAddConversationMembers}
+            onOpenSettings={props.onOpenChannelSettings}
+            onBackToChat={props.onBackToChannelChat}
+          />
         </div>
-
-        <form className="agent-im__composer-card" onSubmit={props.onCreateChannel}>
-          <label className="field">
-            <span>频道名称</span>
-            <input aria-label="频道名称" value={props.channelName} onChange={(event) => props.onChannelNameChange(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>频道主题</span>
-            <input aria-label="频道主题" value={props.channelTopic} onChange={(event) => props.onChannelTopicChange(event.target.value)} />
-          </label>
-          <button className="primary-button" disabled={props.fixtureMode} type="submit">创建频道</button>
-        </form>
-
-        <div className="section-title">频道</div>
-        <ul className="agent-im__conversation-list">
-          {props.conversations.filter((conversation) => conversation.type === 'channel').map((conversation) => (
-            <li key={conversation.id}>
-              <button
-                className={conversation.id === props.selectedConversationId ? 'secondary-button agent-im__conversation-button agent-im__conversation-button--active' : 'secondary-button agent-im__conversation-button'}
-                onClick={() => props.onSelectConversation(conversation.id)}
-                type="button"
-              >
-                <strong>{conversation.name}</strong>
-                <span>{conversation.topic || '无主题'}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <div className="section-title">私聊</div>
-        <ul className="agent-im__conversation-list">
-          {props.conversations.filter((conversation) => conversation.type === 'dm').map((conversation) => (
-            <li key={conversation.id}>
-              <button
-                className={conversation.id === props.selectedConversationId ? 'secondary-button agent-im__conversation-button agent-im__conversation-button--active' : 'secondary-button agent-im__conversation-button'}
-                onClick={() => props.onSelectConversation(conversation.id)}
-                type="button"
-              >
-                <strong>{conversation.name}</strong>
-                <span>私聊</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <div className="section-title">智能体目录</div>
-        <ul className="agent-im__agent-list">
-          {props.agents.map((agent) => (
-            <li key={agent.id} className="agent-im__agent-card">
-              <div>
-                <strong>{agent.name}</strong>
-                <div className="subtle-text">{translateAgentStatus(agent.status)}</div>
-              </div>
-              <button className="secondary-button" onClick={() => props.onStartDm(agent.id)} type="button">
-                私聊
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
-
-      <main className="panel agent-im__thread">
-        <div className="agent-im__thread-header">
-          <div>
-            <h2>{selectedConversation?.name ?? '选择一个会话'}</h2>
-            <p className="subtle-text">{selectedConversation?.topic || '在频道里通过 @ 或私聊推动协作。'}</p>
-          </div>
-          {selectedConversation ? (
-            <div className="agent-im__thread-meta">
-              <span>{selectedConversation.type === 'channel' ? '频道' : '私聊'}</span>
-              <span>{selectedConversation.memberIds.length} 名成员</span>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="agent-im__messages">
-          {props.messagesLoading ? (
-            <p className="subtle-text">正在加载消息...</p>
-          ) : props.messages.length > 0 ? props.messages.map((message) => (
-            <article key={message.id} className={`agent-im__message agent-im__message--${message.senderType}`}>
-              <header>
-                <strong>{formatMessageAuthor(message)}</strong>
-              </header>
-              <p>{message.content}</p>
-            </article>
-          )) : (
-            <p className="subtle-text">当前会话暂无消息。</p>
-          )}
-        </div>
-
-        <form className="agent-im__composer" onSubmit={props.onSendMessage}>
-          <label className="field">
-            <span>发送消息</span>
-            <textarea
-              aria-label="发送消息"
-              rows={4}
-              value={props.messageInput}
-              onChange={(event) => props.onMessageInputChange(event.target.value)}
-            />
-          </label>
-          <button className="primary-button" disabled={!selectedConversation || props.fixtureMode} type="submit">
-            发送
-          </button>
-        </form>
-      </main>
-
-      <aside className="panel agent-im__details">
-        <div className="section-title">成员与权限</div>
-        {selectedConversation ? (
-          <ul className="agent-im__detail-list">
-            {selectedConversation.memberIds.map((memberId) => {
-              const agent = memberId.startsWith('agent:')
-                ? props.agents.find((entry) => entry.id === memberId.slice('agent:'.length))
-                : undefined;
-              return (
-                <li key={memberId} className="agent-im__detail-card">
-                  <strong>{formatMemberLabel(memberId, props.agents)}</strong>
-                  {agent?.policy?.planetIds.length ? <span>星球 {agent.policy.planetIds.join(', ')}</span> : null}
-                  {agent?.policy?.commandCategories.length ? (
-                    <div className="agent-im__tag-row">
-                      {agent.policy.commandCategories.map((category) => (
-                        <span key={category} className="agent-im__tag">{translateAgentCommandCategory(category)}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="subtle-text">选择会话后可查看成员和权限范围。</p>
-        )}
-
-        <form className="agent-im__composer-card" onSubmit={props.onInviteByPlanet}>
-          <div className="section-title">按星球拉人</div>
-          <label className="field">
-            <span>星球 ID</span>
-            <input value={props.invitePlanetId} onChange={(event) => props.onInvitePlanetIdChange(event.target.value)} />
-          </label>
-          <button className="secondary-button" disabled={!selectedConversation || props.fixtureMode} type="submit">
-            按星球拉人
-          </button>
-        </form>
-
-        <div className="section-title">定时任务</div>
-        <ul className="agent-im__detail-list">
-          {selectedConversationSchedules.length > 0 ? selectedConversationSchedules.map((schedule) => (
-            <li key={schedule.id} className="agent-im__detail-card">
-              <strong>{schedule.messageTemplate}</strong>
-              <span>每 {schedule.intervalSeconds} 秒</span>
-            </li>
-          )) : (
-            <li className="agent-im__detail-card">
-              <span className="subtle-text">当前会话暂无定时任务。</span>
-            </li>
-          )}
-        </ul>
-
-        <form className="agent-im__composer-card" onSubmit={props.onCreateSchedule}>
-          <label className="field">
-            <span>间隔秒数</span>
-            <input value={props.scheduleIntervalSeconds} onChange={(event) => props.onScheduleIntervalChange(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>任务消息</span>
-            <textarea rows={3} value={props.scheduleMessage} onChange={(event) => props.onScheduleMessageChange(event.target.value)} />
-          </label>
-          <button className="secondary-button" disabled={!selectedConversation || props.fixtureMode} type="submit">
-            创建定时任务
-          </button>
-        </form>
-
-        {selectedConversationAgents.length > 0 ? (
-          <>
-            <div className="section-title">会话内智能体</div>
-            <ul className="agent-im__detail-list">
-              {selectedConversationAgents.map((agent) => (
-                <li key={agent.id} className="agent-im__detail-card">
-                  <strong>{agent.name}</strong>
-                  <span>{translateAgentStatus(agent.status)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-      </aside>
+      ) : (
+        <MemberWorkspaceView
+          fixtureMode={props.fixtureMode}
+          agents={props.agents}
+          templates={props.templates}
+          schedules={props.schedules}
+          selectedAgentId={props.selectedAgentId}
+          showCreateMember={props.showCreateMember}
+          showTemplateManager={props.showTemplateManager}
+          memberName={props.memberName}
+          memberTemplateId={props.memberTemplateId}
+          templateName={props.templateName}
+          templateDescription={props.templateDescription}
+          scheduleIntervalSeconds={props.scheduleIntervalSeconds}
+          scheduleMessage={props.scheduleMessage}
+          onMemberNameChange={props.onMemberNameChange}
+          onMemberTemplateIdChange={props.onMemberTemplateIdChange}
+          onOpenTemplateManager={props.onOpenTemplateManager}
+          onCloseTemplateManager={props.onCloseTemplateManager}
+          onTemplateNameChange={props.onTemplateNameChange}
+          onTemplateDescriptionChange={props.onTemplateDescriptionChange}
+          onCreateTemplate={props.onCreateTemplate}
+          onCreateMember={props.onCreateMember}
+          onStartDm={props.onStartDm}
+          onScheduleIntervalChange={props.onScheduleIntervalChange}
+          onScheduleMessageChange={props.onScheduleMessageChange}
+          onCreateSchedule={props.onCreateSchedule}
+          onToggleScheduleEnabled={props.onToggleScheduleEnabled}
+        />
+      )}
     </div>
   );
 }

@@ -1,9 +1,15 @@
 import type {
   AgentGatewayHealth,
   AgentProfileView,
+  AgentTemplateView,
+  AddConversationMembersPayload,
   ConversationMessageView,
   ConversationView,
+  CreateAgentPayload,
+  CreateSchedulePayload,
+  CreateTemplatePayload,
   ScheduleView,
+  UpdateSchedulePayload,
 } from './types';
 
 async function expectJson<T>(input: Promise<Response>): Promise<T> {
@@ -21,6 +27,26 @@ export function fetchGatewayHealth() {
 
 export function fetchAgents() {
   return expectJson<AgentProfileView[]>(fetch('/agent-api/agents'));
+}
+
+export function createAgent(payload: CreateAgentPayload) {
+  return expectJson<AgentProfileView>(fetch('/agent-api/agents', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
+}
+
+export function fetchTemplates() {
+  return expectJson<AgentTemplateView[]>(fetch('/agent-api/templates'));
+}
+
+export function createTemplate(payload: CreateTemplatePayload) {
+  return expectJson<AgentTemplateView>(fetch('/agent-api/templates', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
 }
 
 export function fetchConversations() {
@@ -70,20 +96,29 @@ export function inviteConversationMembersByPlanet(conversationId: string, payloa
   }));
 }
 
+export function addConversationMembers(conversationId: string, payload: AddConversationMembersPayload) {
+  return expectJson<{ conversationId: string; memberIds: string[] }>(fetch(`/agent-api/conversations/${conversationId}/members`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
+}
+
 export function fetchSchedules() {
   return expectJson<ScheduleView[]>(fetch('/agent-api/schedules'));
 }
 
-export function createSchedule(payload: {
-  creatorType: 'player' | 'agent';
-  creatorId: string;
-  targetType: 'agent_dm' | 'conversation';
-  targetId: string;
-  intervalSeconds: number;
-  messageTemplate: string;
-}) {
+export function createSchedule(payload: CreateSchedulePayload) {
   return expectJson<ScheduleView>(fetch('/agent-api/schedules', {
     method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
+}
+
+export function updateSchedule(scheduleId: string, payload: UpdateSchedulePayload) {
+  return expectJson<ScheduleView>(fetch(`/agent-api/schedules/${scheduleId}`, {
+    method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   }));
