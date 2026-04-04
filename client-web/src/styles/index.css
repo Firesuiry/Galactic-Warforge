@@ -299,6 +299,56 @@ button {
   min-height: 0;
 }
 
+.channel-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.channel-workspace__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.channel-workspace__header h2 {
+  margin: 0;
+}
+
+.channel-workspace__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.channel-workspace__meta {
+  color: #9ab0dc;
+  font-size: 0.85rem;
+}
+
+.channel-workspace--settings {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
+    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
+}
+
+.channel-workspace__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.channel-workspace__empty {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .agent-sidebar {
   display: flex;
   flex-direction: column;

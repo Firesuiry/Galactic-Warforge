@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AgentWorkspace } from '@/features/agents/AgentWorkspace';
 import {
+  addConversationMembers,
   createConversation,
   createSchedule,
   fetchAgents,
@@ -25,11 +26,13 @@ export function AgentsPage() {
   const [activePane, setActivePane] = useState<'channels' | 'members'>('channels');
   const [selectedConversationId, setSelectedConversationId] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [channelView, setChannelView] = useState<'chat' | 'settings'>('chat');
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateMember, setShowCreateMember] = useState(false);
   const [channelName, setChannelName] = useState('');
   const [channelTopic, setChannelTopic] = useState('');
   const [messageInput, setMessageInput] = useState('');
+  const [inviteAgentId, setInviteAgentId] = useState('');
   const [invitePlanetId, setInvitePlanetId] = useState('');
   const [scheduleIntervalSeconds, setScheduleIntervalSeconds] = useState('300');
   const [scheduleMessage, setScheduleMessage] = useState('@建造官 每五分钟同步一次当前状态');
@@ -84,6 +87,7 @@ export function AgentsPage() {
     mutationFn: createConversation,
     onSuccess: (conversation) => {
       setActivePane('channels');
+      setChannelView('chat');
       setSelectedConversationId(conversation.id);
       setChannelName('');
       setChannelTopic('');
@@ -113,6 +117,19 @@ export function AgentsPage() {
     }),
     onSuccess: () => {
       setInvitePlanetId('');
+      void queryClient.invalidateQueries({ queryKey: ['agent-conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
+    },
+  });
+
+  const addConversationMembersMutation = useMutation({
+    mutationFn: ({ conversationId, memberIds }: { conversationId: string; memberIds: string[] }) => addConversationMembers(conversationId, {
+      actorType: 'player',
+      actorId: session.playerId,
+      memberIds,
+    }),
+    onSuccess: () => {
+      setInviteAgentId('');
       void queryClient.invalidateQueries({ queryKey: ['agent-conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
     },
@@ -236,6 +253,7 @@ export function AgentsPage() {
 
   function handleSelectConversation(conversationId: string) {
     setActivePane('channels');
+    setChannelView('chat');
     setShowCreateMember(false);
     setSelectedConversationId(conversationId);
   }
@@ -255,12 +273,25 @@ export function AgentsPage() {
 
   function handleToggleCreateChannel() {
     setActivePane('channels');
+    setChannelView('chat');
     setShowCreateChannel((current) => !current);
   }
 
   function handleOpenCreateMember() {
     setActivePane('members');
     setShowCreateMember(true);
+  }
+
+  function handleAddConversationMembers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedConversationId || !inviteAgentId || fixtureMode) {
+      return;
+    }
+
+    void addConversationMembersMutation.mutate({
+      conversationId: selectedConversationId,
+      memberIds: [`agent:${inviteAgentId}`],
+    });
   }
 
   if (coreLoading) {
@@ -281,6 +312,7 @@ export function AgentsPage() {
       gatewayOnline={healthQuery.data?.status === 'ok'}
       fixtureMode={fixtureMode}
       activePane={activePane}
+      channelView={channelView}
       conversations={conversations}
       selectedConversationId={selectedConversation?.id ?? ''}
       messages={messages}
@@ -293,6 +325,7 @@ export function AgentsPage() {
       channelName={channelName}
       channelTopic={channelTopic}
       messageInput={messageInput}
+      inviteAgentId={inviteAgentId}
       invitePlanetId={invitePlanetId}
       scheduleIntervalSeconds={scheduleIntervalSeconds}
       scheduleMessage={scheduleMessage}
@@ -304,13 +337,17 @@ export function AgentsPage() {
       onChannelNameChange={setChannelName}
       onChannelTopicChange={setChannelTopic}
       onMessageInputChange={setMessageInput}
+      onInviteAgentIdChange={setInviteAgentId}
       onInvitePlanetIdChange={setInvitePlanetId}
       onScheduleIntervalChange={setScheduleIntervalSeconds}
       onScheduleMessageChange={setScheduleMessage}
       onCreateChannel={handleCreateChannel}
       onSendMessage={handleSendMessage}
+      onAddConversationMembers={handleAddConversationMembers}
       onInviteByPlanet={handleInviteByPlanet}
       onCreateSchedule={handleCreateSchedule}
+      onOpenChannelSettings={() => setChannelView('settings')}
+      onBackToChannelChat={() => setChannelView('chat')}
     />
   );
 }
