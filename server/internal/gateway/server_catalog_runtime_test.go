@@ -6,7 +6,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"siliconworld/internal/config"
+	"siliconworld/internal/gamecore"
+	"siliconworld/internal/gateway"
+	"siliconworld/internal/mapconfig"
+	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
+	"siliconworld/internal/queue"
 )
 
 func TestPlanetRuntimeEndpoint(t *testing.T) {
@@ -49,6 +55,81 @@ func TestPlanetRuntimeEndpoint(t *testing.T) {
 	}
 	if _, ok := body["logistics_stations"]; !ok {
 		t.Fatalf("expected logistics_stations in body: %v", body)
+	}
+}
+
+func newTwoPlanetRuntimeServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
+	t.Helper()
+	cfg := &config.Config{
+		Battlefield: config.BattlefieldConfig{
+			MapSeed:               "runtime-two-planet",
+			MaxTickRate:           10,
+			InitialActivePlanetID: "planet-1-2",
+		},
+		Players: []config.PlayerConfig{
+			{PlayerID: "p1", Key: "key1"},
+			{PlayerID: "p2", Key: "key2"},
+		},
+		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+	}
+	mapCfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 2, GasGiantRatio: 0},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
+	q := queue.New()
+	bus := gamecore.NewEventBus()
+	core := gamecore.New(cfg, maps, q, bus, nil)
+	return gateway.New(cfg, core, bus, q), core
+}
+
+func TestPlanetRuntimeEndpointUsesLoadedPlanetRuntime(t *testing.T) {
+	srv, core := newTwoPlanetRuntimeServer(t)
+
+	ws := core.WorldForPlanet("planet-1-1")
+	if ws == nil {
+		t.Fatal("expected loaded runtime for planet-1-1")
+	}
+	ws.Lock()
+	ws.Buildings["station-planet-1-1"] = &model.Building{
+		ID:          "station-planet-1-1",
+		Type:        model.BuildingTypePlanetaryLogisticsStation,
+		OwnerID:     "p1",
+		Position:    model.Position{X: 4, Y: 4},
+		HP:          100,
+		MaxHP:       100,
+		Level:       1,
+		VisionRange: 6,
+		Runtime: model.BuildingRuntime{
+			Params: model.BuildingRuntimeParams{Footprint: model.Footprint{Width: 1, Height: 1}},
+			State:  model.BuildingWorkRunning,
+		},
+	}
+	ws.LogisticsStations["station-planet-1-1"] = model.NewLogisticsStationState()
+	ws.Unlock()
+
+	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/runtime", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body["planet_id"] != "planet-1-1" {
+		t.Fatalf("unexpected planet_id: %v", body["planet_id"])
+	}
+	if body["active_planet_id"] != "planet-1-2" {
+		t.Fatalf("expected active_planet_id planet-1-2, got %v", body["active_planet_id"])
+	}
+	if available, ok := body["available"].(bool); !ok || !available {
+		t.Fatalf("expected loaded non-active runtime to be available, got %v", body["available"])
 	}
 }
 

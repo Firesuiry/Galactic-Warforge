@@ -191,6 +191,8 @@ export interface ConfigureLogisticsSlotOptions {
   localStorage: number;
 }
 
+export type RayReceiverMode = 'power' | 'photon' | 'hybrid';
+
 export type CommandType =
   | 'scan_galaxy'
   | 'scan_system'
@@ -207,7 +209,11 @@ export type CommandType =
   | 'restore_construction'
   | 'start_research'
   | 'cancel_research'
+  | 'transfer_item'
+  | 'switch_active_planet'
+  | 'set_ray_receiver_mode'
   | 'launch_solar_sail'
+  | 'launch_rocket'
   | 'build_dyson_node'
   | 'build_dyson_frame'
   | 'build_dyson_shell'
@@ -270,6 +276,9 @@ export interface TechQueueEntry {
   progress: number;
   total_cost: number;
   current_level?: number;
+  required_cost?: ItemAmount[];
+  consumed_cost?: Record<string, number>;
+  blocked_reason?: string;
   enqueue_tick?: number;
   complete_tick?: number;
 }
@@ -345,6 +354,7 @@ export interface PlayerState {
   inventory?: ItemInventory;
   permissions?: string[];
   executor?: ExecutorState;
+  executors?: Record<string, ExecutorState>;
   tech?: TechState;
   combat_tech?: CombatTechState;
   stats?: PlayerStatsSnapshot;
@@ -565,6 +575,8 @@ export interface LogisticsShipView {
   id: string;
   owner_id: string;
   station_id: string;
+  origin_planet_id?: string;
+  target_planet_id?: string;
   target_station_id?: string;
   capacity: number;
   speed: number;
@@ -787,6 +799,7 @@ export interface BuildingCatalogEntry {
   footprint: Footprint;
   build_cost: BuildCost;
   buildable: boolean;
+  default_recipe_id?: string;
   requires_resource_node?: boolean;
   can_produce_units?: boolean;
   unlock_tech?: string[];

@@ -70,6 +70,9 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 			planetSeed := int64(hashString(seed + ":" + planetID))
 			planetRNG := newRNG(fmt.Sprintf("planet:%d", planetSeed))
 			kind := choosePlanetKind(rng, orbitAU, sys.Star, cfg.System.GasGiantRatio)
+			if override, ok := cfg.Overrides.Planets[planetID]; ok && override.Kind != "" {
+				kind = mapmodel.PlanetKind(override.Kind)
+			}
 			orbit := mapmodel.Orbit{
 				DistanceAU:     orbitAU,
 				PeriodDays:     orbitPeriodDays(orbitAU, sys.Star.Mass),

@@ -11,12 +11,15 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		return nil
 	}
 	cp := &model.PlayerState{
-		PlayerID:  ps.PlayerID,
-		TeamID:    ps.TeamID,
-		Role:      ps.Role,
-		Resources: ps.Resources,
-		Inventory: ps.Inventory.Clone(),
-		IsAlive:   ps.IsAlive,
+		PlayerID:   ps.PlayerID,
+		TeamID:     ps.TeamID,
+		Role:       ps.Role,
+		Resources:  ps.Resources,
+		Inventory:  ps.Inventory.Clone(),
+		IsAlive:    ps.IsAlive,
+		Tech:       clonePlayerTechState(ps.Tech),
+		CombatTech: clonePlayerCombatTechState(ps.CombatTech),
+		Stats:      clonePlayerStats(ps.Stats),
 	}
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
@@ -25,7 +28,92 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		exec := *ps.Executor
 		cp.Executor = &exec
 	}
+	if len(ps.Executors) > 0 {
+		cp.Executors = make(map[string]*model.ExecutorState, len(ps.Executors))
+		for planetID, exec := range ps.Executors {
+			if exec == nil {
+				continue
+			}
+			copyExec := *exec
+			cp.Executors[planetID] = &copyExec
+		}
+	}
 	return cp
+}
+
+func clonePlayerResearch(research *model.PlayerResearch) *model.PlayerResearch {
+	if research == nil {
+		return nil
+	}
+	cp := *research
+	cp.RequiredCost = append([]model.ItemAmount(nil), research.RequiredCost...)
+	if len(research.ConsumedCost) > 0 {
+		cp.ConsumedCost = make(map[string]int, len(research.ConsumedCost))
+		for itemID, qty := range research.ConsumedCost {
+			cp.ConsumedCost[itemID] = qty
+		}
+	}
+	return &cp
+}
+
+func clonePlayerTechState(tech *model.PlayerTechState) *model.PlayerTechState {
+	if tech == nil {
+		return nil
+	}
+	cp := &model.PlayerTechState{
+		PlayerID:        tech.PlayerID,
+		CompletedTechs:  make(map[string]int, len(tech.CompletedTechs)),
+		CurrentResearch: clonePlayerResearch(tech.CurrentResearch),
+		ResearchQueue:   make([]*model.PlayerResearch, 0, len(tech.ResearchQueue)),
+		TotalResearched: tech.TotalResearched,
+	}
+	for techID, level := range tech.CompletedTechs {
+		cp.CompletedTechs[techID] = level
+	}
+	for _, queued := range tech.ResearchQueue {
+		cp.ResearchQueue = append(cp.ResearchQueue, clonePlayerResearch(queued))
+	}
+	return cp
+}
+
+func clonePlayerCombatTechState(state *model.PlayerCombatTechState) *model.PlayerCombatTechState {
+	if state == nil {
+		return nil
+	}
+	cp := &model.PlayerCombatTechState{
+		PlayerID:         state.PlayerID,
+		UnlockedTechs:    make(map[string]*model.CombatTech, len(state.UnlockedTechs)),
+		CurrentResearch:  nil,
+		ResearchProgress: state.ResearchProgress,
+	}
+	for id, tech := range state.UnlockedTechs {
+		if tech == nil {
+			continue
+		}
+		copyTech := *tech
+		cp.UnlockedTechs[id] = &copyTech
+	}
+	if state.CurrentResearch != nil {
+		copyTech := *state.CurrentResearch
+		cp.CurrentResearch = &copyTech
+	}
+	return cp
+}
+
+func clonePlayerStats(stats *model.PlayerStats) *model.PlayerStats {
+	if stats == nil {
+		return nil
+	}
+	cp := *stats
+	cp.ProductionStats.ByBuildingType = make(map[string]int, len(stats.ProductionStats.ByBuildingType))
+	for key, value := range stats.ProductionStats.ByBuildingType {
+		cp.ProductionStats.ByBuildingType[key] = value
+	}
+	cp.ProductionStats.ByItem = make(map[string]int, len(stats.ProductionStats.ByItem))
+	for key, value := range stats.ProductionStats.ByItem {
+		cp.ProductionStats.ByItem[key] = value
+	}
+	return &cp
 }
 
 func cloneUnit(unit *model.Unit) *model.Unit {

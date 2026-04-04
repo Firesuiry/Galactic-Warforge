@@ -10,6 +10,12 @@ players:
     team_id: "team-1"
     role: "commander"
     permissions: ["*"]
+    bootstrap:
+      minerals: 200
+      energy: 100
+      inventory:
+        - item_id: "electromagnetic_matrix"
+          quantity: 50
     executor:
       build_efficiency: 1.0
       operate_range: 6
@@ -20,6 +26,12 @@ players:
     team_id: "team-2"
     role: "commander"
     permissions: ["*"]
+    bootstrap:
+      minerals: 200
+      energy: 100
+      inventory:
+        - item_id: "electromagnetic_matrix"
+          quantity: 50
     executor:
       build_efficiency: 1.0
       operate_range: 6

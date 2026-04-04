@@ -123,9 +123,9 @@ func TestOrbitalCollectorDispatchesToInterstellarStation(t *testing.T) {
 		t.Fatalf("register ship: %v", err)
 	}
 
-	settleInterstellarDispatch(ws)
+	settleInterstellarDispatch(map[string]*model.WorldState{ws.PlanetID: ws}, nil)
 	for i := 0; i < 10; i++ {
-		settleLogisticsShips(ws)
+		settleLogisticsShips(map[string]*model.WorldState{ws.PlanetID: ws})
 	}
 
 	if got := target.LogisticsStation.Inventory[model.ItemHydrogen]; got == 0 {

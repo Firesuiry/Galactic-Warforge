@@ -303,6 +303,7 @@ type GameCore struct {
 	maps             *mapmodel.Universe
 	discovery        *mapstate.Discovery
 	world            *model.WorldState
+	worlds           map[string]*model.WorldState
 	queue            *queue.CommandQueue
 	bus              *EventBus
 	metrics          *Metrics
@@ -330,87 +331,27 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	if err := config.ApplyDefaults(cfg); err != nil {
 		log.Fatalf("invalid config: %v", err)
 	}
-	primary := maps.PrimaryPlanet()
-	if primary == nil {
+	if maps.PrimaryPlanet() == nil {
 		log.Fatalf("map model has no planets")
 	}
-	rng := rand.New(rand.NewSource(primary.Seed))
-
-	ws := model.NewWorldState(primary.ID, primary.Width, primary.Height)
-	applyPlanetTerrain(ws, primary)
-	applyPlanetResources(ws, primary)
-
-	// Initialise player state and base buildings
-	basePositions := computeStartPositions(cfg, primary.Width, primary.Height)
-	for i := range basePositions {
-		basePositions[i] = findNearestBuildable(ws, basePositions[i])
+	registry := bootstrapInitialRuntimeRegistry(cfg, maps)
+	activeWorld := registry.Worlds[registry.ActivePlanetID]
+	if activeWorld == nil {
+		log.Fatalf("active planet runtime %s missing", registry.ActivePlanetID)
 	}
-	for i, p := range cfg.Players {
-		ps := &model.PlayerState{
-			PlayerID:   p.PlayerID,
-			TeamID:     p.TeamID,
-			Role:       p.Role,
-			Resources:  model.Resources{Minerals: 200, Energy: 100},
-			IsAlive:    true,
-			Tech:       model.NewPlayerTechState(p.PlayerID),
-			CombatTech: &model.PlayerCombatTechState{PlayerID: p.PlayerID, UnlockedTechs: make(map[string]*model.CombatTech)},
-			Stats:      model.NewPlayerStats(p.PlayerID),
-		}
-		ps.SetPermissions(p.Permissions)
-		ws.Players[p.PlayerID] = ps
-
-		pos := basePositions[i%len(basePositions)]
-		profile := model.BuildingProfileFor(model.BuildingTypeBattlefieldAnalysisBase, 1)
-		id := ws.NextEntityID("b")
-		base := &model.Building{
-			ID:          id,
-			Type:        model.BuildingTypeBattlefieldAnalysisBase,
-			OwnerID:     p.PlayerID,
-			Position:    pos,
-			HP:          profile.MaxHP,
-			MaxHP:       profile.MaxHP,
-			Level:       1,
-			VisionRange: profile.VisionRange,
-			Runtime:     profile.Runtime,
-		}
-		model.InitBuildingStorage(base)
-		model.InitBuildingProduction(base)
-		model.InitBuildingConveyor(base)
-		model.InitBuildingSorter(base)
-		model.InitBuildingLogisticsStation(base)
-		model.RegisterLogisticsStation(ws, base)
-		ws.Buildings[id] = base
-		tileKey := model.TileKey(pos.X, pos.Y)
-		ws.TileBuilding[tileKey] = id
-		ws.Grid[pos.Y][pos.X].BuildingID = id
-
-		execPos := findNearestOpenTile(ws, pos)
-		execStats := model.UnitStats(model.UnitTypeExecutor)
-		execID := ws.NextEntityID("u")
-		executor := &model.Unit{
-			ID:          execID,
-			Type:        model.UnitTypeExecutor,
-			OwnerID:     p.PlayerID,
-			Position:    execPos,
-			HP:          execStats.HP,
-			MaxHP:       execStats.MaxHP,
-			Attack:      execStats.Attack,
-			Defense:     execStats.Defense,
-			AttackRange: execStats.AttackRange,
-			MoveRange:   execStats.MoveRange,
-			VisionRange: execStats.VisionRange,
-		}
-		ws.Units[execID] = executor
-		execKey := model.TileKey(execPos.X, execPos.Y)
-		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)
-		ps.Executor = model.NewExecutorState(execID, p.Executor.BuildEfficiency, p.Executor.OperateRange, p.Executor.ConcurrentTasks, p.Executor.ResearchBoost)
+	activePlanet, _ := maps.Planet(registry.ActivePlanetID)
+	rngSeed := int64(1)
+	if activePlanet != nil {
+		rngSeed = activePlanet.Seed
 	}
+	rng := rand.New(rand.NewSource(rngSeed))
 
 	core := &GameCore{
 		cfg:              cfg,
 		maps:             maps,
 		discovery:        mapstate.NewDiscovery(cfg.Players, maps),
-		world:            ws,
+		world:            activeWorld,
+		worlds:           registry.Worlds,
 		queue:            q,
 		bus:              bus,
 		metrics:          NewMetrics(),
@@ -421,16 +362,66 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		snapshotStore:    store,
 		rng:              rng,
 		stopCh:           make(chan struct{}),
-		activePlanetID:   primary.ID,
+		activePlanetID:   registry.ActivePlanetID,
 		executorUsage:    make(map[string]int),
 		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
+	for _, planetID := range core.sortedPlanetIDs() {
+		planet, _ := maps.Planet(planetID)
+		systemID := ""
+		galaxyID := ""
+		if planet != nil {
+			systemID = planet.SystemID
+			if system, ok := maps.System(planet.SystemID); ok && system != nil {
+				galaxyID = system.GalaxyID
+			}
+		}
+		for _, player := range cfg.Players {
+			if galaxyID != "" {
+				core.discovery.DiscoverGalaxy(player.PlayerID, galaxyID)
+			}
+			if systemID != "" {
+				core.discovery.DiscoverSystem(player.PlayerID, systemID)
+			}
+			core.discovery.DiscoverPlanet(player.PlayerID, planetID)
+		}
+	}
 	if store != nil {
-		snap := snapshot.Capture(core.world, core.discovery)
+		snap := snapshot.CaptureRuntime(core.worlds, core.activePlanetID, core.discovery)
 		store.SaveSnapshot(snap)
 	}
 	return core
+}
+
+func applyPlayerBootstrap(ps *model.PlayerState, bootstrap config.PlayerBootstrapConfig) {
+	if ps == nil {
+		return
+	}
+	if !hasBootstrap(bootstrap) {
+		return
+	}
+	ps.Resources.Minerals = bootstrap.Minerals
+	ps.Resources.Energy = bootstrap.Energy
+	for _, item := range bootstrap.Inventory {
+		if item.ItemID == "" || item.Quantity <= 0 {
+			continue
+		}
+		ps.EnsureInventory()[item.ItemID] += item.Quantity
+	}
+	for _, techID := range bootstrap.CompletedTechs {
+		if techID == "" || ps.Tech == nil {
+			continue
+		}
+		ps.Tech.CompletedTechs[techID] = 1
+	}
+}
+
+func hasBootstrap(bootstrap config.PlayerBootstrapConfig) bool {
+	return bootstrap.Minerals != 0 ||
+		bootstrap.Energy != 0 ||
+		len(bootstrap.Inventory) > 0 ||
+		len(bootstrap.CompletedTechs) > 0
 }
 
 // World returns the world state (caller must use RLock/RUnlock)
@@ -530,154 +521,109 @@ func (gc *GameCore) processTick() {
 	gc.saveMu.Lock()
 	defer gc.saveMu.Unlock()
 
-	gc.world.Lock()
-
-	gc.world.Tick++
-	currentTick := gc.world.Tick
-	gc.executorUsage = countActiveExecutorUsage(gc.world)
-
 	var allEvents []*model.GameEvent
-
-	// 1. Drain command queue
 	batch := gc.queue.Drain()
 	gc.metrics.QueueBacklog = gc.queue.Len()
-
-	// 2. Execute commands
-	for _, qr := range batch {
-		results, evts := gc.executeRequest(qr)
-		allEvents = append(allEvents, evts...)
-		gc.cmdLog.Append(commandLogEntry{
-			Tick:        currentTick,
-			PlayerID:    qr.PlayerID,
-			RequestID:   qr.Request.RequestID,
-			IssuerType:  qr.Request.IssuerType,
-			IssuerID:    qr.Request.IssuerID,
-			EnqueueTick: qr.EnqueueTick,
-			Commands:    qr.Request.Commands,
-			Results:     results,
-		})
-	}
-
-	// 3. Progress construction queue
-	constructionEvts := gc.settleConstructionQueue(gc.world)
-	allEvents = append(allEvents, constructionEvts...)
-
-	// 4. Progress building jobs
-	jobEvts := settleBuildingJobs(gc.world)
-	allEvents = append(allEvents, jobEvts...)
-
-	// 4.5 Settle research
-	researchEvts := settleResearch(gc.world)
-	allEvents = append(allEvents, researchEvts...)
-
-	// 5. Settle power generation
-	env := currentPlanetEnvironment(gc.maps, gc.world.PlanetID)
-	powerEvts := settlePowerGeneration(gc.world, env)
-	allEvents = append(allEvents, powerEvts...)
-
-	// 6. Settle ray receivers
-	rayEvts := settleRayReceivers(gc.world)
-	allEvents = append(allEvents, rayEvts...)
-
-	// 6.5 Settle solar sails (orbit decay and energy production)
-	solarSailEvts := settleSolarSails(gc.world.Tick)
-	allEvents = append(allEvents, solarSailEvts...)
-
-	// 6.6 Settle Dyson spheres (energy calculation for structures)
-	dysonEvts := settleDysonSpheres(gc.world.Tick)
-	allEvents = append(allEvents, dysonEvts...)
-
-	// 7. Settle resources
-	resEvts := settleResources(gc.world)
-	allEvents = append(allEvents, resEvts...)
-
-	// 8. Settle orbital collectors
-	settleOrbitalCollectors(gc.world, gc.maps)
-
-	// 9. Settle conveyors
-	settleConveyors(gc.world)
-
-	// 10. Settle sorters
-	settleSorters(gc.world)
-
-	// 11. Settle building IO
-	settleBuildingIO(gc.world)
-
-	// 11.5 Settle pipeline flow
-	settlePipelineFlow(gc.world)
-
-	// 12. Settle pipeline IO
-	settlePipelineIO(gc.world)
-
-	// 12.5 Settle production cycles
-	productionEvts := settleProduction(gc.world)
-	allEvents = append(allEvents, productionEvts...)
-
-	// 13. Settle storage buffers
-	settleStorage(gc.world)
-
-	// 13.5 Production monitoring
-	if gc.monitor != nil {
-		monEvts, alerts := gc.monitor.settleProductionMonitoring(gc.world, currentTick)
-		allEvents = append(allEvents, monEvts...)
-		if gc.alertHistory != nil && len(alerts) > 0 {
-			gc.alertHistory.Record(alerts)
+	currentTick := int64(0)
+	gc.withLockedWorlds(func() {
+		worlds := gc.sortedWorlds()
+		for _, ws := range worlds {
+			ws.Tick++
 		}
-	}
 
-	// 14. Dispatch interstellar logistics
-	settleInterstellarDispatch(gc.world)
+		if gc.world == nil {
+			gc.world = gc.WorldForPlanet(gc.activePlanetID)
+		}
+		if gc.world != nil {
+			currentTick = gc.world.Tick
+			gc.executorUsage = countActiveExecutorUsage(gc.world)
+		}
 
-	// 15. Settle logistics ships
-	settleLogisticsShips(gc.world)
+		for _, qr := range batch {
+			results, evts := gc.executeRequest(qr)
+			allEvents = append(allEvents, evts...)
+			gc.cmdLog.Append(commandLogEntry{
+				Tick:        currentTick,
+				PlayerID:    qr.PlayerID,
+				RequestID:   qr.Request.RequestID,
+				IssuerType:  qr.Request.IssuerType,
+				IssuerID:    qr.Request.IssuerID,
+				EnqueueTick: qr.EnqueueTick,
+				Commands:    qr.Request.Commands,
+				Results:     results,
+			})
+		}
 
-	// 16. Dispatch logistics
-	settleLogisticsDispatch(gc.world)
+		worlds = gc.sortedWorlds()
+		for _, ws := range worlds {
+			allEvents = append(allEvents, gc.settleConstructionQueue(ws)...)
+			allEvents = append(allEvents, settleBuildingJobs(ws)...)
+		}
 
-	// 17. Settle logistics drones
-	settleLogisticsDrones(gc.world)
+		allEvents = append(allEvents, settleResearch(gc.worlds)...)
 
-	// 18. Turret auto-attack
-	turretEvts := settleTurrets(gc.world)
-	allEvents = append(allEvents, turretEvts...)
+		for _, ws := range worlds {
+			env := currentPlanetEnvironment(gc.maps, ws.PlanetID)
+			allEvents = append(allEvents, settlePowerGeneration(ws, env)...)
+			allEvents = append(allEvents, settleRayReceivers(ws)...)
+			settlePlanetaryShields(ws)
+			allEvents = append(allEvents, settleSolarSails(ws.Tick)...)
+			allEvents = append(allEvents, settleDysonSpheres(ws.Tick)...)
+			allEvents = append(allEvents, settleResources(ws)...)
 
-	// 18.5 Enemy forces (spawn, spread, attack)
-	enemyEvts := gc.settleEnemyForces()
-	allEvents = append(allEvents, enemyEvts...)
+			settleOrbitalCollectors(ws, gc.maps)
+			settleConveyors(ws)
+			settleSorters(ws)
+			settleBuildingIO(ws)
+			settlePipelineFlow(ws)
+			settlePipelineIO(ws)
+			allEvents = append(allEvents, settleProduction(ws)...)
+			settleStorage(ws)
 
-	// 18.6 Combat units (combat between units)
-	combatEvts := gc.settleCombat()
-	allEvents = append(allEvents, combatEvts...)
+			if gc.monitor != nil {
+				monEvts, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
+				allEvents = append(allEvents, monEvts...)
+				if gc.alertHistory != nil && len(alerts) > 0 {
+					gc.alertHistory.Record(alerts)
+				}
+			}
 
-	// 18.7 Orbital combat (orbital platforms vs enemy forces)
-	orbitalEvts := gc.settleOrbitalCombat()
-	allEvents = append(allEvents, orbitalEvts...)
+			settleLogisticsDispatch(ws)
+			settleLogisticsDrones(ws)
+		}
 
-	// 18.8 Drone control
-	droneEvts := gc.settleDroneControl()
-	allEvents = append(allEvents, droneEvts...)
+		settleInterstellarDispatch(gc.worlds, gc.maps)
+		settleLogisticsShips(gc.worlds)
 
-	// 18.9 Update player stats
-	gc.settleStats()
+		activeWorld := gc.WorldForPlanet(gc.activePlanetID)
+		if activeWorld == nil {
+			activeWorld = gc.world
+		}
+		gc.world = activeWorld
+		if gc.world != nil {
+			allEvents = append(allEvents, settleTurrets(gc.world)...)
+			allEvents = append(allEvents, gc.settleEnemyForces()...)
+			allEvents = append(allEvents, gc.settleCombat()...)
+			allEvents = append(allEvents, gc.settleOrbitalCombat()...)
+			allEvents = append(allEvents, gc.settleDroneControl()...)
+			gc.settleStats()
 
-	// 19. Check victory
-	winner := checkVictory(gc.world)
-	if winner != "" {
-		gc.winnerMu.Lock()
-		gc.winner = winner
-		gc.winnerMu.Unlock()
-		log.Printf("[GameCore] player %s wins at tick %d", winner, currentTick)
-	}
+			winner := checkVictory(gc.world)
+			if winner != "" {
+				gc.winnerMu.Lock()
+				gc.winner = winner
+				gc.winnerMu.Unlock()
+				log.Printf("[GameCore] player %s wins at tick %d", winner, currentTick)
+			}
+		}
 
-	// 20. Stamp tick and event IDs
-	evtCounter := int64(0)
-	for _, evt := range allEvents {
-		evtCounter++
-		evt.Tick = currentTick
-		evt.EventID = fmt.Sprintf("evt-%d-%d", currentTick, evtCounter)
-	}
-
-	gc.world.Unlock()
+		evtCounter := int64(0)
+		for _, evt := range allEvents {
+			evtCounter++
+			evt.Tick = currentTick
+			evt.EventID = fmt.Sprintf("evt-%d-%d", currentTick, evtCounter)
+		}
+	})
 
 	// 21. Publish events
 	dur := time.Since(start)
@@ -708,7 +654,7 @@ func (gc *GameCore) processTick() {
 	if gc.snapshotStore != nil {
 		policy := gc.snapshotStore.SnapshotPolicy()
 		if policy.ShouldSnapshot(currentTick) {
-			snap := snapshot.Capture(gc.world, gc.discovery)
+			snap := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery)
 			gc.snapshotStore.SaveSnapshot(snap)
 			if oldest := gc.snapshotStore.OldestSnapshotTick(); oldest > 0 {
 				gc.cmdLog.TrimBefore(oldest)
@@ -788,8 +734,14 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execStartResearch(gc.world, qr.PlayerID, cmd)
 		case model.CmdCancelResearch:
 			res, evts = gc.execCancelResearch(gc.world, qr.PlayerID, cmd)
+		case model.CmdTransferItem:
+			res, evts = gc.execTransferItem(gc.world, qr.PlayerID, cmd)
+		case model.CmdSwitchActivePlanet:
+			res, evts = gc.execSwitchActivePlanet(qr.PlayerID, cmd)
 		case model.CmdLaunchSolarSail:
 			res, evts = gc.execLaunchSolarSail(gc.world, qr.PlayerID, cmd)
+		case model.CmdLaunchRocket:
+			res, evts = gc.execLaunchRocket(gc.world, qr.PlayerID, cmd)
 		case model.CmdBuildDysonNode:
 			res, evts = gc.execBuildDysonNode(gc.world, qr.PlayerID, cmd)
 		case model.CmdBuildDysonFrame:
@@ -798,6 +750,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execBuildDysonShell(gc.world, qr.PlayerID, cmd)
 		case model.CmdDemolishDyson:
 			res, evts = gc.execDemolishDyson(gc.world, qr.PlayerID, cmd)
+		case model.CmdSetRayReceiverMode:
+			res, evts = gc.execSetRayReceiverMode(gc.world, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

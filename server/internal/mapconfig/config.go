@@ -69,11 +69,20 @@ type PlanetConfig struct {
 	Resources       ResourceConfig    `yaml:"resources"`
 }
 
+type PlanetOverride struct {
+	Kind string `yaml:"kind"`
+}
+
+type OverridesConfig struct {
+	Planets map[string]PlanetOverride `yaml:"planets,omitempty"`
+}
+
 // Config is the root map configuration.
 type Config struct {
-	Galaxy GalaxyConfig `yaml:"galaxy"`
-	System SystemConfig `yaml:"system"`
-	Planet PlanetConfig `yaml:"planet"`
+	Galaxy    GalaxyConfig    `yaml:"galaxy"`
+	System    SystemConfig    `yaml:"system"`
+	Planet    PlanetConfig    `yaml:"planet"`
+	Overrides OverridesConfig `yaml:"overrides,omitempty"`
 }
 
 // ApplyDefaults fills missing config values with defaults.

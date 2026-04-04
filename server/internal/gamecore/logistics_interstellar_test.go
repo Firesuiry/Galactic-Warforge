@@ -50,7 +50,7 @@ func TestInterstellarDispatchWarpEnergyCost(t *testing.T) {
 		t.Fatalf("register ship: %v", err)
 	}
 
-	settleInterstellarDispatch(ws)
+	settleInterstellarDispatch(map[string]*model.WorldState{ws.PlanetID: ws}, nil)
 
 	if ship.Status != model.LogisticsShipTakeoff {
 		t.Fatalf("expected takeoff status, got %s", ship.Status)
@@ -116,10 +116,10 @@ func TestInterstellarShipDelivery(t *testing.T) {
 		t.Fatalf("register ship: %v", err)
 	}
 
-	settleInterstellarDispatch(ws)
+	settleInterstellarDispatch(map[string]*model.WorldState{ws.PlanetID: ws}, nil)
 
 	for i := 0; i < 10; i++ {
-		settleLogisticsShips(ws)
+		settleLogisticsShips(map[string]*model.WorldState{ws.PlanetID: ws})
 	}
 
 	if ship.Status != model.LogisticsShipIdle {

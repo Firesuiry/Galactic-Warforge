@@ -47,6 +47,32 @@ func TestRareResourcesPresent(t *testing.T) {
 	}
 }
 
+func TestMidLateItemsPresent(t *testing.T) {
+	cases := []struct {
+		itemID     string
+		category   ItemCategory
+		stackLimit int
+	}{
+		{itemID: ItemTitaniumCrystal, category: ItemCategoryComponent, stackLimit: 100},
+		{itemID: ItemTitaniumAlloy, category: ItemCategoryMaterial, stackLimit: 100},
+		{itemID: ItemFrameMaterial, category: ItemCategoryComponent, stackLimit: 100},
+		{itemID: ItemQuantumChip, category: ItemCategoryComponent, stackLimit: 50},
+	}
+
+	for _, tc := range cases {
+		def, ok := Item(tc.itemID)
+		if !ok {
+			t.Fatalf("missing item %s", tc.itemID)
+		}
+		if def.Category != tc.category {
+			t.Fatalf("item %s category mismatch: want %s got %s", tc.itemID, tc.category, def.Category)
+		}
+		if def.StackLimit != tc.stackLimit {
+			t.Fatalf("item %s stack limit mismatch: want %d got %d", tc.itemID, tc.stackLimit, def.StackLimit)
+		}
+	}
+}
+
 func TestStackRules(t *testing.T) {
 	if err := ValidateStack(ItemIronOre, 0); err == nil {
 		t.Fatalf("expected error for zero quantity")

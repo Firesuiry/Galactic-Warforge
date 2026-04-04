@@ -32,3 +32,34 @@ describe('logistics command registration', () => {
     assert.match(slotHelp, /configure_logistics_slot <building_id> <planetary\|interstellar>/);
   });
 });
+
+describe('rocket command registration', () => {
+  it('registers launch_rocket in command table', async () => {
+    assert.ok(COMMANDS.launch_rocket);
+
+    const help = await dispatch('help launch_rocket', { currentPlayer: 'p1', rl: {} });
+    assert.match(help, /launch_rocket <building_id> <system_id>/);
+  });
+});
+
+describe('transfer command registration', () => {
+  it('registers transfer in command table', async () => {
+    assert.ok(COMMANDS.transfer);
+
+    const help = await dispatch('help transfer', { currentPlayer: 'p1', rl: {} });
+    assert.match(help, /transfer <building_id> <item_id> <quantity>/);
+  });
+});
+
+describe('multi-planet command registration', () => {
+  it('registers switch_active_planet and set_ray_receiver_mode in command table', async () => {
+    assert.ok(COMMANDS.switch_active_planet);
+    assert.ok(COMMANDS.set_ray_receiver_mode);
+
+    const switchHelp = await dispatch('help switch_active_planet', { currentPlayer: 'p1', rl: {} });
+    assert.match(switchHelp, /switch_active_planet <planet_id>/);
+
+    const rayHelp = await dispatch('help set_ray_receiver_mode', { currentPlayer: 'p1', rl: {} });
+    assert.match(rayHelp, /set_ray_receiver_mode <building_id> <power\|photon\|hybrid>/);
+  });
+});

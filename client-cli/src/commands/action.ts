@@ -15,6 +15,10 @@ import {
   cmdRestoreConstruction as apiRestoreConstruction,
   cmdStartResearch as apiStartResearch,
   cmdCancelResearch as apiCancelResearch,
+  cmdTransferItem as apiTransferItem,
+  cmdSwitchActivePlanet as apiSwitchActivePlanet,
+  cmdSetRayReceiverMode as apiSetRayReceiverMode,
+  cmdLaunchRocket as apiLaunchRocket,
   cmdLaunchSolarSail as apiLaunchSolarSail,
   cmdBuildDysonNode as apiBuildDysonNode,
   cmdBuildDysonFrame as apiBuildDysonFrame,
@@ -23,6 +27,7 @@ import {
   type ConfigureLogisticsStationOptions,
   type Direction,
   type DysonComponentType,
+  type RayReceiverMode,
 } from '../api.js';
 import { fmtCommandResponse, fmtError } from '../format.js';
 import type { CommandRequest, Position } from '../types.js';
@@ -33,6 +38,7 @@ const UNIT_TYPES = new Set(['worker', 'soldier']);
 const DYSON_COMPONENT_TYPES = new Set<DysonComponentType>(['node', 'frame', 'shell']);
 const LOGISTICS_SCOPES = new Set(['planetary', 'interstellar']);
 const LOGISTICS_MODES = new Set(['none', 'supply', 'demand', 'both']);
+const RAY_RECEIVER_MODES = new Set<RayReceiverMode>(['power', 'photon', 'hybrid']);
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -337,6 +343,63 @@ export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
       orbitRadius: orbitRadiusRaw !== undefined ? requireNumber(orbitRadiusRaw, 'orbit-radius') : undefined,
       inclination: inclinationRaw !== undefined ? requireNumber(inclinationRaw, 'inclination') : undefined,
+    }));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdTransfer(args: string[]): Promise<string> {
+  if (args.length < 3) {
+    return fmtError('Usage: transfer <building_id> <item_id> <quantity>');
+  }
+  try {
+    return fmtCommandResponse(await apiTransferItem(
+      args[0],
+      args[1],
+      requireInt(args[2], 'quantity'),
+    ));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdSwitchActivePlanet(args: string[]): Promise<string> {
+  if (args.length < 1) {
+    return fmtError('Usage: switch_active_planet <planet_id>');
+  }
+  try {
+    return fmtCommandResponse(await apiSwitchActivePlanet(args[0]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdSetRayReceiverMode(args: string[]): Promise<string> {
+  if (args.length < 2) {
+    return fmtError('Usage: set_ray_receiver_mode <building_id> <power|photon|hybrid>');
+  }
+  if (!RAY_RECEIVER_MODES.has(args[1] as RayReceiverMode)) {
+    return fmtError('mode 必须是 power/photon/hybrid');
+  }
+  try {
+    return fmtCommandResponse(await apiSetRayReceiverMode(args[0], args[1] as RayReceiverMode));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdLaunchRocket(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>]');
+  }
+  try {
+    const layerRaw = getStringOption(parsed, 'layer');
+    const countRaw = getStringOption(parsed, 'count');
+    return fmtCommandResponse(await apiLaunchRocket(parsed.positionals[0], parsed.positionals[1], {
+      layerIndex: layerRaw !== undefined ? requireInt(layerRaw, 'layer') : undefined,
+      count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
     }));
   } catch (e) {
     return fmtError(toErrorMessage(e));

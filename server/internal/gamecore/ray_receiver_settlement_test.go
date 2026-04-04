@@ -106,6 +106,44 @@ func TestSettleRayReceiversConsumeDysonSphereEnergyUpToInputCap(t *testing.T) {
 	}
 }
 
+func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
+	ClearSolarSailOrbits()
+	ClearDysonSphereStates()
+	core := newE2ETestCore(t)
+	ws := core.World()
+
+	receiver := newRayReceiverBuilding("receiver-1", model.Position{X: 6, Y: 6}, "p1")
+	receiver.Runtime.Functions.RayReceiver.InputPerTick = 1000
+	receiver.Runtime.Functions.RayReceiver.PowerOutputPerTick = 1000
+	attachBuilding(ws, receiver)
+
+	AddDysonLayer("p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+		t.Fatalf("add dyson shell: %v", err)
+	}
+	settleDysonSpheres(ws.Tick)
+
+	player := ws.Players["p1"]
+	player.Resources.Energy = 0
+	ws.PowerInputs = nil
+	settleRayReceivers(ws)
+	baseEnergyGain := player.Resources.Energy
+
+	player.Resources.Energy = 0
+	ws.PowerInputs = nil
+	state := GetDysonSphereState("p1")
+	if state == nil || len(state.Layers) == 0 {
+		t.Fatal("expected dyson sphere state")
+	}
+	state.Layers[0].ConstructionBonus = 0.20
+	settleDysonSpheres(ws.Tick + 1)
+	settleRayReceivers(ws)
+
+	if player.Resources.Energy <= baseEnergyGain {
+		t.Fatalf("expected rocket bonus to increase ray receiver income, base=%d boosted=%d", baseEnergyGain, player.Resources.Energy)
+	}
+}
+
 func newRayReceiverBuilding(id string, pos model.Position, owner string) *model.Building {
 	profile := model.BuildingProfileFor(model.BuildingTypeRayReceiver, 1)
 	b := &model.Building{

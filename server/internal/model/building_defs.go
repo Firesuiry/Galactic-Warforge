@@ -99,11 +99,14 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		RequiresResourceNode: true,
 	},
 	{
-		ID:          BuildingTypeAdvancedMiningMachine,
-		Name:        "Advanced Mining Machine",
-		Category:    BuildingCategoryCollect,
-		Subcategory: BuildingSubcategoryCollect,
-		Footprint:   defaultFootprint,
+		ID:                   BuildingTypeAdvancedMiningMachine,
+		Name:                 "Advanced Mining Machine",
+		Category:             BuildingCategoryCollect,
+		Subcategory:          BuildingSubcategoryCollect,
+		Footprint:            defaultFootprint,
+		BuildCost:            BuildCost{Minerals: 120, Energy: 60},
+		Buildable:            true,
+		RequiresResourceNode: true,
 	},
 	{
 		ID:                   BuildingTypeWaterPump,
@@ -218,6 +221,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 40, Energy: 20},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeLogisticsDistributor,
@@ -326,6 +331,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryProduction,
 		Subcategory: BuildingSubcategoryProduction,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 220, Energy: 120},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeOilRefinery,
@@ -383,6 +390,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryResearch,
 		Subcategory: BuildingSubcategoryResearch,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 400, Energy: 200},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeTeslaTower,
@@ -455,6 +464,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryPowerGrid,
 		Subcategory: BuildingSubcategoryPowerGrid,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 180, Energy: 80},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeAccumulator,
@@ -534,6 +545,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 300, Energy: 150},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeJammerTower,
@@ -541,6 +554,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 120, Energy: 60},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeSignalTower,
@@ -556,6 +571,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 500, Energy: 250},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeEMRailEjector,
@@ -566,12 +583,13 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Buildable:   true,
 	},
 	{
-		ID:          BuildingTypeVerticalLaunchingSilo,
-		Name:        "Vertical Launching Silo",
-		Category:    BuildingCategoryDyson,
-		Subcategory: BuildingSubcategoryDyson,
-		Footprint:   defaultFootprint,
-		Buildable:   true,
+		ID:              BuildingTypeVerticalLaunchingSilo,
+		Name:            "Vertical Launching Silo",
+		Category:        BuildingCategoryDyson,
+		Subcategory:     BuildingSubcategoryDyson,
+		Footprint:       defaultFootprint,
+		Buildable:       true,
+		DefaultRecipeID: "small_carrier_rocket",
 	},
 	{
 		ID:          BuildingTypeFoundation,

@@ -172,6 +172,95 @@ func TestBootstrapRejectsPartialSaveDir(t *testing.T) {
 	}
 }
 
+func TestBootstrapUsesInitialActivePlanetAndPlayerBootstrap(t *testing.T) {
+	root := t.TempDir()
+	cfgPath := filepath.Join(root, "config.yaml")
+	mapCfgPath := filepath.Join(root, "map.yaml")
+	gameDir := filepath.Join(root, "game")
+
+	configContent := fmt.Sprintf(`battlefield:
+  map_seed: bootstrap-seed
+  max_tick_rate: 10
+  initial_active_planet_id: planet-1-2
+players:
+  - player_id: p1
+    key: key1
+    bootstrap:
+      minerals: 4321
+      energy: 876
+      inventory:
+        - item_id: frame_material
+          quantity: 6
+        - item_id: quantum_chip
+          quantity: 4
+      completed_techs:
+        - gas_giants
+        - vertical_launching
+server:
+  data_dir: %s
+`, gameDir)
+	if err := os.WriteFile(cfgPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	mapContent := `galaxy:
+  system_count: 1
+system:
+  planets_per_system: 3
+  gas_giant_ratio: 0
+planet:
+  width: 16
+  height: 16
+  resource_density: 8
+overrides:
+  planets:
+    planet-1-2:
+      kind: gas_giant
+`
+	if err := os.WriteFile(mapCfgPath, []byte(mapContent), 0o644); err != nil {
+		t.Fatalf("write map config: %v", err)
+	}
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	defer app.Stop()
+
+	if app.Core.World().PlanetID != "planet-1-2" {
+		t.Fatalf("expected active world planet planet-1-2, got %s", app.Core.World().PlanetID)
+	}
+	if app.Core.ActivePlanetID() != "planet-1-2" {
+		t.Fatalf("expected active planet id planet-1-2, got %s", app.Core.ActivePlanetID())
+	}
+	if app.Maps.Planets["planet-1-2"] == nil || app.Maps.Planets["planet-1-2"].Kind != "gas_giant" {
+		t.Fatalf("expected planet-1-2 to be gas giant, got %+v", app.Maps.Planets["planet-1-2"])
+	}
+	if app.Core.Discovery() == nil {
+		t.Fatal("expected discovery state to exist")
+	}
+	if !app.Core.Discovery().IsSystemDiscovered("p1", "sys-1") {
+		t.Fatal("expected active planet system to be discovered for bootstrap player")
+	}
+	if !app.Core.Discovery().IsPlanetDiscovered("p1", "planet-1-2") {
+		t.Fatal("expected active planet to be discovered for bootstrap player")
+	}
+
+	player := app.Core.World().Players["p1"]
+	if player == nil {
+		t.Fatal("expected bootstrap player p1")
+	}
+	if player.Resources.Minerals != 4321 || player.Resources.Energy != 876 {
+		t.Fatalf("unexpected bootstrap resources: %+v", player.Resources)
+	}
+	if player.Inventory[model.ItemFrameMaterial] != 6 || player.Inventory[model.ItemQuantumChip] != 4 {
+		t.Fatalf("unexpected bootstrap inventory: %+v", player.Inventory)
+	}
+	if player.Tech == nil || player.Tech.CompletedTechs["gas_giants"] == 0 || player.Tech.CompletedTechs["vertical_launching"] == 0 {
+		t.Fatalf("expected bootstrap techs applied, got %+v", player.Tech)
+	}
+}
+
 type savedGameOptions struct {
 	Seed      string
 	PlanetW   int

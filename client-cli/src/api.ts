@@ -17,6 +17,7 @@ export type {
   Direction,
   DysonComponentType,
   EventSnapshotParams,
+  LaunchRocketOptions,
   LaunchSolarSailOptions,
   PlanetSceneParams,
   ReplayRequest,
@@ -26,6 +27,7 @@ export type {
 export type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
+  RayReceiverMode,
 } from '../../shared-client/src/types.js';
 
 const client = createApiClient({
@@ -47,6 +49,7 @@ export const cmdConfigureLogisticsSlot = client.cmdConfigureLogisticsSlot;
 export const cmdConfigureLogisticsStation = client.cmdConfigureLogisticsStation;
 export const cmdDemolish = client.cmdDemolish;
 export const cmdDemolishDyson = client.cmdDemolishDyson;
+export const cmdLaunchRocket = client.cmdLaunchRocket;
 export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;
 export const cmdMove = client.cmdMove;
 export const cmdProduce = client.cmdProduce;
@@ -54,7 +57,10 @@ export const cmdRestoreConstruction = client.cmdRestoreConstruction;
 export const cmdScanGalaxy = client.cmdScanGalaxy;
 export const cmdScanPlanet = client.cmdScanPlanet;
 export const cmdScanSystem = client.cmdScanSystem;
+export const cmdSetRayReceiverMode = client.cmdSetRayReceiverMode;
 export const cmdStartResearch = client.cmdStartResearch;
+export const cmdSwitchActivePlanet = client.cmdSwitchActivePlanet;
+export const cmdTransferItem = client.cmdTransferItem;
 export const cmdUpgrade = client.cmdUpgrade;
 export const fetchAlertSnapshot = client.fetchAlertSnapshot;
 export const fetchAudit = client.fetchAudit;

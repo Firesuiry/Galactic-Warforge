@@ -100,6 +100,7 @@ type BuildingDefinition struct {
 	Demolish             BuildingDemolishRule `json:"demolish,omitempty" yaml:"demolish,omitempty"`
 	UnlockTech           []string             `json:"unlock_tech,omitempty" yaml:"unlock_tech,omitempty"`
 	Buildable            bool                 `json:"buildable" yaml:"buildable"`
+	DefaultRecipeID      string               `json:"default_recipe_id,omitempty" yaml:"default_recipe_id,omitempty"`
 	RequiresResourceNode bool                 `json:"requires_resource_node,omitempty" yaml:"requires_resource_node,omitempty"`
 	CanProduceUnits      bool                 `json:"can_produce_units,omitempty" yaml:"can_produce_units,omitempty"`
 }
@@ -295,6 +296,15 @@ func validateBuildingDefinition(def BuildingDefinition) error {
 	for _, item := range def.BuildCost.Items {
 		if item.ItemID == "" || item.Quantity <= 0 {
 			return fmt.Errorf("building %s has invalid item cost", def.ID)
+		}
+	}
+	if def.DefaultRecipeID != "" {
+		recipe, ok := Recipe(def.DefaultRecipeID)
+		if !ok {
+			return fmt.Errorf("building %s default recipe %s not found", def.ID, def.DefaultRecipeID)
+		}
+		if !recipeAllowsBuilding(recipe, def.ID) {
+			return fmt.Errorf("building %s default recipe %s not supported", def.ID, def.DefaultRecipeID)
 		}
 	}
 	if err := validateBuildingUpgradeRule(def); err != nil {

@@ -14,25 +14,58 @@ const CurrentVersion = 1
 
 // Snapshot captures a tick-level world snapshot with versioned payload.
 type Snapshot struct {
-	Version   int                         `json:"version"`
-	Tick      int64                       `json:"tick"`
-	Timestamp time.Time                   `json:"timestamp"`
-	World     *WorldSnapshot              `json:"world"`
-	Discovery *mapstate.DiscoverySnapshot `json:"discovery,omitempty"`
+	Version        int                         `json:"version"`
+	Tick           int64                       `json:"tick"`
+	Timestamp      time.Time                   `json:"timestamp"`
+	ActivePlanetID string                      `json:"active_planet_id,omitempty"`
+	Players        map[string]*model.PlayerState `json:"players,omitempty"`
+	PlanetWorlds   map[string]*WorldSnapshot   `json:"planet_worlds,omitempty"`
+	World          *WorldSnapshot              `json:"world,omitempty"`
+	Discovery      *mapstate.DiscoverySnapshot `json:"discovery,omitempty"`
 }
 
 // Capture builds a full snapshot from runtime state.
 func Capture(world *model.WorldState, discovery *mapstate.Discovery) *Snapshot {
-	worldSnap := CaptureWorld(world)
-	tick := int64(0)
-	if worldSnap != nil {
-		tick = worldSnap.Tick
+	if world == nil {
+		return &Snapshot{Version: CurrentVersion, Timestamp: time.Now().UTC()}
 	}
+	return CaptureRuntime(map[string]*model.WorldState{world.PlanetID: world}, world.PlanetID, discovery)
+}
+
+// CaptureRuntime builds a snapshot from a multi-planet runtime registry.
+func CaptureRuntime(worlds map[string]*model.WorldState, activePlanetID string, discovery *mapstate.Discovery) *Snapshot {
 	snap := &Snapshot{
-		Version:   CurrentVersion,
-		Tick:      tick,
-		Timestamp: time.Now().UTC(),
-		World:     worldSnap,
+		Version:        CurrentVersion,
+		Timestamp:      time.Now().UTC(),
+		ActivePlanetID: activePlanetID,
+		Players:        make(map[string]*model.PlayerState),
+		PlanetWorlds:   make(map[string]*WorldSnapshot),
+	}
+	for planetID, world := range worlds {
+		if world == nil {
+			continue
+		}
+		worldSnap := CaptureWorld(world)
+		snap.PlanetWorlds[planetID] = worldSnap
+		if planetID == activePlanetID {
+			snap.World = worldSnap
+			snap.Tick = worldSnap.Tick
+		}
+		if len(snap.Players) == 0 {
+			for playerID, player := range world.Players {
+				snap.Players[playerID] = clonePlayer(player)
+			}
+		}
+	}
+	if snap.World == nil {
+		for planetID, worldSnap := range snap.PlanetWorlds {
+			snap.World = worldSnap
+			snap.ActivePlanetID = planetID
+			if worldSnap != nil {
+				snap.Tick = worldSnap.Tick
+			}
+			break
+		}
 	}
 	if discovery != nil {
 		snap.Discovery = discovery.Snapshot()
@@ -54,7 +87,7 @@ func Encode(snap *Snapshot) ([]byte, error) {
 	if snap.Timestamp.IsZero() {
 		snap.Timestamp = time.Now().UTC()
 	}
-	if snap.World == nil {
+	if snap.World == nil && len(snap.PlanetWorlds) == 0 {
 		return nil, errors.New("snapshot missing world state")
 	}
 	return json.MarshalIndent(snap, "", "  ")
@@ -83,10 +116,74 @@ func (snap *Snapshot) RestoreWorld() (*model.WorldState, error) {
 	if snap == nil {
 		return nil, errors.New("snapshot is nil")
 	}
-	if snap.World == nil {
+	if snap.World != nil {
+		return snap.World.Restore()
+	}
+	if len(snap.PlanetWorlds) == 0 {
 		return nil, errors.New("snapshot missing world state")
 	}
-	return snap.World.Restore()
+	if snap.ActivePlanetID != "" {
+		if worldSnap := snap.PlanetWorlds[snap.ActivePlanetID]; worldSnap != nil {
+			return worldSnap.Restore()
+		}
+	}
+	for _, worldSnap := range snap.PlanetWorlds {
+		if worldSnap != nil {
+			return worldSnap.Restore()
+		}
+	}
+	return nil, errors.New("snapshot missing world state")
+}
+
+// RestoreRuntime rebuilds multi-planet runtime worlds sharing one player state map.
+func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, error) {
+	if snap == nil {
+		return nil, "", errors.New("snapshot is nil")
+	}
+	if len(snap.PlanetWorlds) == 0 {
+		world, err := snap.RestoreWorld()
+		if err != nil {
+			return nil, "", err
+		}
+		worlds := map[string]*model.WorldState{world.PlanetID: world}
+		activePlanetID := snap.ActivePlanetID
+		if activePlanetID == "" {
+			activePlanetID = world.PlanetID
+		}
+		return worlds, activePlanetID, nil
+	}
+	worlds := make(map[string]*model.WorldState, len(snap.PlanetWorlds))
+	for planetID, worldSnap := range snap.PlanetWorlds {
+		if worldSnap == nil {
+			continue
+		}
+		world, err := worldSnap.Restore()
+		if err != nil {
+			return nil, "", err
+		}
+		worlds[planetID] = world
+	}
+	sharedPlayers := cloneSnapshotPlayers(snap.Players)
+	if len(sharedPlayers) == 0 {
+		for _, world := range worlds {
+			sharedPlayers = cloneSnapshotPlayers(world.Players)
+			break
+		}
+	}
+	for _, world := range worlds {
+		world.Players = sharedPlayers
+	}
+	activePlanetID := snap.ActivePlanetID
+	if activePlanetID == "" {
+		for planetID := range worlds {
+			activePlanetID = planetID
+			break
+		}
+	}
+	for _, player := range sharedPlayers {
+		player.SyncLegacyExecutor(activePlanetID)
+	}
+	return worlds, activePlanetID, nil
 }
 
 // RestoreDiscovery rebuilds discovery state from the snapshot payload.
@@ -98,4 +195,15 @@ func (snap *Snapshot) RestoreDiscovery() (*mapstate.Discovery, error) {
 		return nil, nil
 	}
 	return snap.Discovery.Restore(), nil
+}
+
+func cloneSnapshotPlayers(players map[string]*model.PlayerState) map[string]*model.PlayerState {
+	if len(players) == 0 {
+		return nil
+	}
+	out := make(map[string]*model.PlayerState, len(players))
+	for playerID, player := range players {
+		out[playerID] = clonePlayer(player)
+	}
+	return out
 }

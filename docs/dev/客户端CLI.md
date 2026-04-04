@@ -1,6 +1,6 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 当前覆盖常用查询接口与 `docs/player/玩法指南.md` 中玩家可直接使用的 20 类核心命令，已补齐物流站配置命令与手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。
+`client-cli` 当前覆盖常用查询接口与 `docs/player/玩法指南.md` 中玩家可直接使用的 24 类核心命令，已补齐 `switch_active_planet`、`set_ray_receiver_mode`、`launch_rocket`、`transfer`、物流站配置命令与手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。T091 收口后，`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab` 也都直接走通用 `build` 命令验证，不需要额外 CLI 子命令。
 
 ## 启动
 
@@ -21,11 +21,12 @@
   - `p2 / key_player_2`
 - 也可以输入自定义 `player_id` 与 `player_key`
 - CLI 会自动连接 `GET /events/stream?event_types=...`
-- 默认只主动订阅低噪声关键事件：`command_result`、`entity_created`、`entity_destroyed`、`building_state_changed`、`construction_paused`、`construction_resumed`、`research_completed`、`loot_dropped`
+- 默认只主动订阅低噪声关键事件：`command_result`、`entity_created`、`entity_destroyed`、`building_state_changed`、`construction_paused`、`construction_resumed`、`research_completed`、`loot_dropped`、`rocket_launched`
 - `production_alert` 改为默认不进入 CLI 实时流，避免后期空转产线持续刷屏；需要看告警时请用 `alert_snapshot`
 - `SW_SSE_VERBOSE=1` 时会改为显式订阅全部事件类型；像 `production_alert`、`damage_applied`、`entity_updated` 这类高频事件默认不会进入 CLI 实时流
 - `events [count]` 只显示当前 SSE 连接实际订阅到的事件
 - `switch [player_id] [key]` 会切换玩家并自动重连 SSE
+- REPL 现在会串行处理输入；连续粘贴多条命令时，会按输入顺序依次发送，避免 `ACCEPTED request_id` 与后续 `command_result` 乱序
 
 ## 命令总览
 
@@ -66,7 +67,11 @@
 | `restore_construction`        | `<task_id>`                                                                                                                                                                    | 恢复施工任务                           |
 | `start_research`              | `<tech_id>`                                                                                                                                                                    | 开始研究                               |
 | `cancel_research`             | `<tech_id>`                                                                                                                                                                    | 取消研究                               |
+| `switch_active_planet`        | `<planet_id>`                                                                                                                                                                  | 切换当前 active planet                 |
+| `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid>`                                                                                                                                        | 切换射线接收站模式                     |
+| `transfer`                    | `<building_id> <item_id> <quantity>`                                                                                                                                           | 把玩家背包物品装入建筑本地存储         |
 | `launch_solar_sail`           | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]`                                                                                                         | 从电磁发射器发射已装载的太阳帆         |
+| `launch_rocket`               | `<building_id> <system_id> [--layer <n>] [--count <n>]`                                                                                                                        | 从垂直发射井向戴森层发射已装载的火箭   |
 | `build_dyson_node`            | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]`                                                                                                        | 建戴森球节点                           |
 | `build_dyson_frame`           | `<system_id> <layer_index> <node_a_id> <node_b_id>`                                                                                                                            | 建戴森球框架                           |
 | `build_dyson_shell`           | `<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>`                                                                                                           | 建戴森球壳面                           |
@@ -98,11 +103,11 @@
 
 `build` 不再限制少量硬编码建筑类型，而是直接接受服务端文档中的 `building_type`。例如：
 
-- 基地与采集：`battlefield_analysis_base`、`mining_machine`、`water_pump`、`oil_extractor`、`orbital_collector`
-- 输送与分拣：`conveyor_belt_mk1`、`conveyor_belt_mk2`、`conveyor_belt_mk3`、`splitter`、`automatic_piler`、`traffic_monitor`、`spray_coater`、`sorter_mk1`、`sorter_mk2`、`sorter_mk3`
+- 基地与采集：`battlefield_analysis_base`、`mining_machine`、`advanced_mining_machine`、`water_pump`、`oil_extractor`、`orbital_collector`
+- 输送与分拣：`conveyor_belt_mk1`、`conveyor_belt_mk2`、`conveyor_belt_mk3`、`splitter`、`automatic_piler`、`traffic_monitor`、`spray_coater`、`sorter_mk1`、`sorter_mk2`、`sorter_mk3`、`pile_sorter`
 - 仓储与物流：`depot_mk1`、`depot_mk2`、`storage_tank`、`logistics_distributor`、`planetary_logistics_station`、`interstellar_logistics_station`
-- 冶炼生产科研：`arc_smelter`、`assembling_machine_mk1`、`chemical_plant`、`matrix_lab`、`fractionator`、`oil_refinery` 等
-- 电力与防御：`wind_turbine`、`tesla_tower`、`solar_panel`、`thermal_power_plant`、`ray_receiver`、`gauss_turret`、`missile_turret` 等
+- 冶炼生产科研：`arc_smelter`、`assembling_machine_mk1`、`chemical_plant`、`matrix_lab`、`recomposing_assembler`、`fractionator`、`oil_refinery` 等
+- 电力与防御：`wind_turbine`、`tesla_tower`、`solar_panel`、`thermal_power_plant`、`energy_exchanger`、`ray_receiver`、`gauss_turret`、`missile_turret` 等
 - 戴森相关：`em_rail_ejector`、`vertical_launching_silo`
 
 资源点约束也会直接按服务端规则生效：
@@ -118,6 +123,12 @@ build 12 8 arc_smelter --recipe smelt_iron
 build 14 8 assembling_machine_mk1 --recipe gear
 ```
 
+`vertical_launching_silo` 现在有服务端默认配方，建造时即使不传 `--recipe` 也会自动挂上 `small_carrier_rocket`：
+
+```bash
+build 24 12 vertical_launching_silo
+```
+
 如果是传送带类建筑，可带方向：
 
 ```bash
@@ -125,7 +136,7 @@ build 10 6 conveyor_belt_mk1 --direction east
 build 11 6 conveyor_belt_mk3 --direction auto
 ```
 
-### 2. 玩法指南中的 20 类核心命令都已有独立 CLI 命令
+### 2. 玩法指南中的 24 类核心命令都已有独立 CLI 命令
 
 已覆盖：
 
@@ -138,6 +149,9 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `restore_construction`
 - `start_research`
 - `cancel_research`
+- `switch_active_planet`
+- `set_ray_receiver_mode`
+- `transfer`
 - `produce`
 - `move`
 - `attack`
@@ -145,20 +159,22 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `scan_system`
 - `scan_planet`
 - `launch_solar_sail`
+- `launch_rocket`
 - `build_dyson_node`
 - `build_dyson_frame`
 - `build_dyson_shell`
 - `demolish_dyson`
 
-### 3. 单星球物流现在可直接操作
+### 3. 物流与多星球最小闭环现在可直接操作
 
-当前 CLI 已经打通了收敛版的 `造站 -> 配槽位 -> 自动配送` 物流闭环：
+当前 CLI 已经打通了收敛版的 `造站 -> 配槽位 -> 自动配送 -> 切星球继续经营` 闭环：
 
 - 先用 `build` 建 `planetary_logistics_station` 或 `interstellar_logistics_station`
 - 物流站完工后，服务端会自动补齐默认容量对应的物流单位；星际站还会额外补货船
 - 用 `configure_logistics_station` 调整无人机容量、输入/输出优先级，以及 `interstellar` 里的启用 / 曲速 / 货船槽位
 - 用 `configure_logistics_slot` 为某个 `item_id` 设置 `planetary` 或 `interstellar` 作用域下的 `supply` / `demand` / `both`
-- 当前自动配送闭环最完整的范围仍是 active planet；多星球长期经营限制仍在服务端
+- 用 `switch_active_planet` 在“已发现 + 已加载 + 当前玩家有 foothold”的星球之间切换当前操作焦点
+- 同一恒星系、已加载行星之间的星际物流货船现在可以跨行星派发；是否能形成闭环取决于两端物流站配置与该星球 runtime 是否已加载
 - 如果你更习惯图形界面，同一套配置也可以在 Web 行星页完成：选中己方物流站后，右侧“详情”页签看结构化状态，右侧“命令”页签用“物流站配置 / 物流槽位配置”直接发命令
 
 常用流程示例：
@@ -170,9 +186,19 @@ configure_logistics_slot b-21 planetary iron_ore demand 60
 configure_logistics_station b-30 --interstellar-enabled true --warp-enabled true --ship-slots 2
 configure_logistics_slot b-30 interstellar hydrogen supply 50
 configure_logistics_slot b-31 interstellar hydrogen demand 80
+switch_active_planet planet-1-1
 ```
 
-### 4. 调试查询接口也已补齐
+### 4. 科研命令现在要求真实矩阵
+
+`start_research` 不再是旧版“抽象研究点排队”。
+
+- 至少需要 1 个处于 `running` 的研究站
+- `matrix_lab` 不设置 `recipe_id` 时会作为研究站；设置了 `recipe_id` 时则按普通生产建筑运行
+- 研究开始前，所需每种矩阵都必须已经出现在研究站本地库存里
+- 研究推进会真实消耗研究站本地库存中的矩阵；如果缺实验室或缺矩阵，可在 `summary` 的 `tech.current_research.blocked_reason` 里看到 `waiting_lab` / `waiting_matrix`
+
+### 5. 调试查询接口也已补齐
 
 除玩法主命令外，CLI 还支持：
 
@@ -183,7 +209,7 @@ configure_logistics_slot b-31 interstellar hydrogen demand 80
 - Tick replay
 - Tick rollback
 
-### 5. 行星查询已经拆成 `planet / scene / inspect / fog`
+### 6. 行星查询已经拆成 `planet / scene / inspect / fog`
 
 - `planet` 只显示轻量概要，适合快速确认行星规模与对象数量
 - `scene` 直接返回当前视窗原始 JSON，适合调试地图裁剪与图层
@@ -213,10 +239,9 @@ scan_system sys-2
 scan_planet planet-2-1
 ```
 
-### 开局工业化
+### 已解锁早期科技后的工业化
 
 ```bash
-start_research electromagnetism
 build 8 8 wind_turbine
 build 9 8 tesla_tower
 build 12 10 mining_machine
@@ -224,13 +249,13 @@ build 14 10 conveyor_belt_mk1 --direction east
 build 16 10 depot_mk1
 ```
 
-### 冶炼与制造
+### 科研验证
 
 ```bash
-build 18 10 arc_smelter --recipe smelt_iron
-build 20 10 assembling_machine_mk1 --recipe gear
-build 22 10 matrix_lab
-start_research basic_logistics_system
+inspect planet-1-2 building b-40
+transfer b-40 electromagnetic_matrix 10
+start_research electromagnetism
+summary
 ```
 
 ### 施工控制
@@ -266,15 +291,68 @@ attack u-3 enemy-1
 
 ### 太阳帆与戴森球
 
-`launch_solar_sail` 当前只接受 `em_rail_ejector`，而且要先把 `solar_sail` 装进发射器本地存储。
+`launch_solar_sail` 当前只接受 `em_rail_ejector`，而 `launch_rocket` 当前只接受 `vertical_launching_silo`；两者都要求目标建筑本地已经装载好对应载荷。最直接的公开装填方式就是先用 `transfer`。
 
 ```bash
+transfer b-30 solar_sail 5
+transfer b-31 small_carrier_rocket 2
 launch_solar_sail b-30 --count 5 --orbit-radius 1.2 --inclination 5
+launch_rocket b-31 sys-1 --layer 0 --count 2
 build_dyson_node sys-1 0 10 20 --orbit-radius 1.2
 build_dyson_frame sys-1 0 node-1 node-2
 build_dyson_shell sys-1 0 -15 15 0.4
 demolish_dyson sys-1 shell shell-1
 ```
+
+### 官方 Midgame 场景
+
+如果你要验证 `gas_giants`、`orbital_collector`、`vertical_launching_silo`、`launch_solar_sail` 和 `launch_rocket`，推荐先用服务端的官方场景启动：
+
+```bash
+cd /home/firesuiry/develop/siliconWorld/server
+env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
+  go run ./cmd/server -config config-midgame.yaml -map-config map-midgame.yaml
+```
+
+进入 CLI 后，先确认当前运行态已经落在气态行星上，再继续建造：
+
+```bash
+summary
+system sys-1
+switch_active_planet planet-1-1
+switch_active_planet planet-1-2
+build <x> <y> tesla_tower
+build <x> <y> wind_turbine
+build <x> <y> wind_turbine
+# 继续补 wind_turbine，直到 stats.energy_stats.generation >= 84
+stats
+build <x> <y> orbital_collector
+build <x> <y> vertical_launching_silo
+build <x> <y> em_rail_ejector
+build <x> <y> jammer_tower
+build <x> <y> sr_plasma_turret
+build <x> <y> planetary_shield_generator
+build <x> <y> self_evolution_lab
+build <x> <y> self_evolution_lab --recipe electromagnetic_matrix
+transfer <silo_id> small_carrier_rocket 1
+transfer <ejector_id> solar_sail 3
+build_dyson_node sys-1 0 10 20 --orbit-radius 1.2
+launch_solar_sail <ejector_id> --count 1
+launch_rocket <silo_id> sys-1 --layer 0 --count 1
+set_ray_receiver_mode <receiver_id> power
+```
+
+说明：
+
+- `summary` 中应看到 `active_planet_id = planet-1-2`
+- `system sys-1` 中应能看到 `planet-1-2.kind = gas_giant`
+- `switch_active_planet` 只允许切到“已发现 + 已加载 + 你在该星球已有 foothold”的目标；来回切换后，后续 `build` / `inspect` / `transfer` 都会以新的 active planet 为当前操作焦点
+- 当前官方 seed 下，想同时让 `orbital_collector`、`vertical_launching_silo`、`em_rail_ejector` 都进入 `running`，实测需要把 `stats.energy_stats.generation` 堆到至少 `84`；按当前风力系数约等于基地原有发电 + `8` 台 `wind_turbine`
+- 如果还要同时验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`，需要继续补风机；推荐先让戴森链路跑通，再逐个补建并用 `inspect` 观察运行态
+- `transfer` 会从当前玩家背包扣减物品，并把物品装进目标建筑本地存储
+- `launch_rocket` 只有在目标层已存在 `build_dyson_*` scaffold 且 silo 本地已装载 `small_carrier_rocket` 时才会成功
+- `set_ray_receiver_mode` 的 `photon` 模式要求玩家已解锁 `dirac_inversion`；官方 midgame 场景默认可先用 `power` 或 `hybrid` 验证命令链路
+- 官方 midgame 现已额外预置 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution`，因此 4 个新建筑可以直接通过通用 `build` 验证；`dirac_inversion` 仍未预置
 
 ### 审计与事件补拉
 

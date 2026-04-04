@@ -52,6 +52,8 @@ type LogisticsShipView struct {
 	ID                   string                    `json:"id"`
 	OwnerID              string                    `json:"owner_id"`
 	StationID            string                    `json:"station_id"`
+	OriginPlanetID       string                    `json:"origin_planet_id,omitempty"`
+	TargetPlanetID       string                    `json:"target_planet_id,omitempty"`
 	TargetStationID      string                    `json:"target_station_id,omitempty"`
 	Capacity             int                       `json:"capacity"`
 	Speed                int                       `json:"speed"`
@@ -115,8 +117,8 @@ type DetectionView struct {
 	DetectedPositions []model.Position `json:"detected_positions,omitempty"`
 }
 
-// PlanetRuntime returns dynamic runtime state for the current active planet.
-func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID string) (*PlanetRuntimeView, bool) {
+// PlanetRuntime returns dynamic runtime state for a loaded planet runtime.
+func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activePlanetID string) (*PlanetRuntimeView, bool) {
 	planet, ok := ql.maps.Planet(planetID)
 	if !ok {
 		return nil, false
@@ -124,8 +126,9 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID string) 
 	_ = planet
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	view := &PlanetRuntimeView{
-		PlanetID:   planetID,
-		Discovered: discovered,
+		PlanetID:       planetID,
+		Discovered:     discovered,
+		ActivePlanetID: activePlanetID,
 	}
 	if !discovered || ws == nil {
 		return view, true
@@ -135,7 +138,6 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID string) 
 	defer ws.RUnlock()
 
 	view.Tick = ws.Tick
-	view.ActivePlanetID = ws.PlanetID
 	if ws.PlanetID != planetID {
 		return view, true
 	}
@@ -275,6 +277,8 @@ func collectLogisticsShips(ws *model.WorldState, playerID string) []LogisticsShi
 			ID:                   ship.ID,
 			OwnerID:              ownerID,
 			StationID:            ship.StationID,
+			OriginPlanetID:       ship.OriginPlanetID,
+			TargetPlanetID:       ship.TargetPlanetID,
 			TargetStationID:      ship.TargetStationID,
 			Capacity:             ship.Capacity,
 			Speed:                ship.Speed,

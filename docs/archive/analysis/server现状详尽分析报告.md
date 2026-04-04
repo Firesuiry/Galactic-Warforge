@@ -3,6 +3,11 @@
 > 2026-03-22 修复回写：
 > - 断点A/B/C/D/E 已完成修复并通过 `/home/firesuiry/sdk/go1.25.0/bin/go test ./...`。
 > - 本文中的 2026-03-21 统计项保留为历史快照；涉及修复结论处已追加“已修复”标注。
+>
+> 2026-04-03 T091 更新：
+> - `switch_active_planet`、`set_ray_receiver_mode` 已补齐网关结构校验并走通公开 API。
+> - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab` 已补齐 `buildable/runtime/tech` 与玩法结算闭环。
+> - `dark_fog_matrix` 已进入运行时 item catalog；`planetary_shield_generator` 的敌袭吸伤会在 `damage_applied` 事件中暴露 `shield_absorbed` / `shield_remaining`。
 
 ## 1. 报告范围与方法
 - 分析范围：`server/` 目录（`cmd`、`internal` 全量模块）。
@@ -106,7 +111,7 @@
 - `Buildable: true`（可通过 `build` 放置）数量：10
 - 具有显式运行时模块定义（runtime definitions）数量：35
 
-更新：2026-03-22 已扩展可建造建筑范围，`Buildable: true` 数量已提升至 53。
+更新：2026-04-03 当前 `Buildable: true` 数量已提升至 61，显式 runtime definitions 数量已提升至 44。
 
 ### 5.2 建筑分类（定义层）
 - `Transport`: 11
@@ -729,6 +734,8 @@
 - `traffic_monitor`
 - `water_pump`
 - `wireless_power_tower`
+
+> 2026-04-03 补充：`jammer_tower`、`planetary_shield_generator`、`self_evolution_lab`、`sr_plasma_turret` 已不再属于“仅建筑定义存在”类别；当前运行时已经具备 buildable、科技入口与结算闭环。
 
 ## 附录I：科技配方ID不一致清单（2026-03-21 历史快照，运行时已修复）
 > 2026-03-22 更新：以下清单对应修复前的静态比对结果；当前运行时已通过配方解锁规范化与对齐测试消除无效引用。**【已修复，2026-03-22】**

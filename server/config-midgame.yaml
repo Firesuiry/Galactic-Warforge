@@ -1,0 +1,120 @@
+battlefield:
+  map_seed: "midgame-seed-001"
+  max_tick_rate: 10
+  victory_rule: "elimination"
+  initial_active_planet_id: "planet-1-2"
+  construction_region_concurrent_limit: 4
+
+players:
+  - player_id: "p1"
+    key: "key_player_1"
+    team_id: "team-1"
+    role: "commander"
+    permissions: ["*"]
+    executor:
+      build_efficiency: 1.0
+      operate_range: 6
+      concurrent_tasks: 2
+      research_boost: 0.0
+    bootstrap:
+      minerals: 5000
+      energy: 3000
+      inventory:
+        - item_id: frame_material
+          quantity: 16
+        - item_id: deuterium_fuel_rod
+          quantity: 16
+        - item_id: quantum_chip
+          quantity: 16
+        - item_id: solar_sail
+          quantity: 16
+        - item_id: small_carrier_rocket
+          quantity: 4
+      completed_techs:
+        - electromagnetism
+        - basic_logistics_system
+        - automatic_metallurgy
+        - basic_assembling_processes
+        - high_strength_crystal
+        - titanium_alloy
+        - lightweight_structure
+        - dyson_component
+        - interstellar_logistics
+        - interstellar_power
+        - signal_tower
+        - plasma_turret
+        - gas_giants
+        - gravity_matrix
+        - planetary_shield
+        - self_evolution
+        - quantum_chip
+        - solar_sail_orbit
+        - ray_receiver
+        - vertical_launching
+  - player_id: "p2"
+    key: "key_player_2"
+    team_id: "team-2"
+    role: "commander"
+    permissions: ["*"]
+    executor:
+      build_efficiency: 1.0
+      operate_range: 6
+      concurrent_tasks: 2
+      research_boost: 0.0
+    bootstrap:
+      minerals: 5000
+      energy: 3000
+      inventory:
+        - item_id: frame_material
+          quantity: 16
+        - item_id: deuterium_fuel_rod
+          quantity: 16
+        - item_id: quantum_chip
+          quantity: 16
+        - item_id: solar_sail
+          quantity: 16
+        - item_id: small_carrier_rocket
+          quantity: 4
+      completed_techs:
+        - electromagnetism
+        - basic_logistics_system
+        - automatic_metallurgy
+        - basic_assembling_processes
+        - high_strength_crystal
+        - titanium_alloy
+        - lightweight_structure
+        - dyson_component
+        - interstellar_logistics
+        - interstellar_power
+        - signal_tower
+        - plasma_turret
+        - gas_giants
+        - gravity_matrix
+        - planetary_shield
+        - self_evolution
+        - quantum_chip
+        - solar_sail_orbit
+        - ray_receiver
+        - vertical_launching
+
+server:
+  port: 18080
+  rate_limit: 20
+  event_history_limit: 2000
+  snapshot_max_events: 200
+  alert_history_limit: 1000
+  data_dir: "data-midgame"
+  auto_save_interval_seconds: 60
+  snapshot_interval_ticks: 5000
+  snapshot_retention_ticks: 30000
+  snapshot_retention_count: 6
+  snapshot_max_bytes: 268435456
+  snapshot_delta_max_bytes: 134217728
+  production_monitor:
+    sample_interval_ticks: 5
+    max_entities_per_sample: 500
+    backlog_warn_ratio: 0.6
+    backlog_critical_ratio: 0.9
+    shortage_ratio: 0.2
+    efficiency_warn_ratio: 0.5
+    alert_cooldown_ticks: 20

@@ -79,6 +79,15 @@ func TestE2E_ResearchUnlockBuildChain(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 
+	lab := newBuilding("lab-e2e", model.BuildingTypeMatrixLab, "p1", model.Position{X: 6, Y: 6})
+	lab.Runtime.State = model.BuildingWorkRunning
+	if _, _, err := lab.Storage.Load(model.ItemElectromagneticMatrix, 10); err != nil {
+		t.Fatalf("load research matrices: %v", err)
+	}
+	placeBuilding(ws, lab)
+	power := newBuilding("power-e2e", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
+	placeBuilding(ws, power)
+
 	startCmd := model.Command{
 		Type: model.CmdStartResearch,
 		Payload: map[string]any{
@@ -91,6 +100,7 @@ func TestE2E_ResearchUnlockBuildChain(t *testing.T) {
 	}
 
 	for i := 0; i < 50; i++ {
+		lab.Runtime.State = model.BuildingWorkRunning
 		core.processTick()
 	}
 
@@ -219,6 +229,57 @@ func TestE2E_ProductionChain(t *testing.T) {
 
 	if got := assembler.Storage.OutputQuantity(model.ItemGear); got <= 0 {
 		t.Fatalf("expected produced gear in assembler storage, got %d", got)
+	}
+}
+
+func TestE2E_VerticalLaunchingSiloUsesDefaultRocketRecipe(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+	grantTechs(ws, "p1", "vertical_launching")
+
+	player := ws.Players["p1"]
+	player.Resources.Minerals = 10000
+	player.Resources.Energy = 10000
+
+	pos, err := findOpenTile(ws, 2)
+	if err != nil {
+		t.Fatalf("find open tile: %v", err)
+	}
+
+	res, _ := core.execBuild(ws, "p1", model.Command{
+		Type:   model.CmdBuild,
+		Target: model.CommandTarget{Position: pos},
+		Payload: map[string]any{
+			"building_type": string(model.BuildingTypeVerticalLaunchingSilo),
+		},
+	})
+	if res.Status != model.StatusExecuted {
+		t.Fatalf("build silo failed: %s (%s)", res.Status, res.Message)
+	}
+
+	var silo *model.Building
+	for i := 0; i < 80; i++ {
+		core.processTick()
+		ws.RLock()
+		for _, building := range ws.Buildings {
+			if building != nil && building.OwnerID == "p1" && building.Type == model.BuildingTypeVerticalLaunchingSilo {
+				silo = building
+				break
+			}
+		}
+		ws.RUnlock()
+		if silo != nil {
+			break
+		}
+	}
+	if silo == nil {
+		t.Fatal("expected silo to be constructed")
+	}
+	if silo.Production == nil {
+		t.Fatal("expected silo to have production state")
+	}
+	if silo.Production.RecipeID != "small_carrier_rocket" {
+		t.Fatalf("expected silo default recipe small_carrier_rocket, got %q", silo.Production.RecipeID)
 	}
 }
 

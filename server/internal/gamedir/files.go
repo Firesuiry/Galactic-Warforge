@@ -369,7 +369,7 @@ func validateSnapshotStrict(field string, snap *snapshot.Snapshot) error {
 	if snap.Version != snapshot.CurrentVersion {
 		return fmt.Errorf("%s has invalid version %d", field, snap.Version)
 	}
-	if snap.World == nil {
+	if snap.World == nil && len(snap.PlanetWorlds) == 0 {
 		return fmt.Errorf("%s missing world state", field)
 	}
 	return nil

@@ -27,6 +27,7 @@ export const ALL_EVENT_TYPES = [
   'threat_level_changed',
   'loot_dropped',
   'entity_updated',
+  'rocket_launched',
 ] as const;
 
 export const DEFAULT_EVENT_TYPES = [
@@ -38,6 +39,7 @@ export const DEFAULT_EVENT_TYPES = [
   'construction_resumed',
   'research_completed',
   'loot_dropped',
+  'rocket_launched',
 ] as const;
 
 export const DEFAULT_SSE_SILENT_EVENT_TYPES = new Set([

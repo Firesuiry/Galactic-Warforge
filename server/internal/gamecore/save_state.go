@@ -47,14 +47,14 @@ func (gc *GameCore) ExportSaveFile(trigger string) (*gamedir.SaveFile, error) {
 }
 
 func (gc *GameCore) exportSaveFileWithBase(trigger string, base *snapshot.Snapshot) (*gamedir.SaveFile, error) {
-	if gc.world == nil {
+	if gc.world == nil || len(gc.worlds) == 0 {
 		return nil, fmt.Errorf("world is nil")
 	}
 	if strings.TrimSpace(trigger) == "" {
 		trigger = "manual"
 	}
 
-	current := snapshot.Capture(gc.world, gc.discovery)
+	current := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery)
 	if current == nil {
 		return nil, fmt.Errorf("capture snapshot: nil snapshot")
 	}
@@ -156,11 +156,17 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	world, err := save.Snapshot.RestoreWorld()
+	worlds, activePlanetID, err := save.Snapshot.RestoreRuntime()
 	if err != nil {
-		return nil, fmt.Errorf("restore world: %w", err)
+		return nil, fmt.Errorf("restore runtime: %w", err)
 	}
-	world.Tick = save.Tick
+	activeWorld := worlds[activePlanetID]
+	if activeWorld == nil {
+		return nil, fmt.Errorf("active world %s missing in save", activePlanetID)
+	}
+	for _, world := range worlds {
+		world.Tick = save.Tick
+	}
 	discovery, err := save.Snapshot.RestoreDiscovery()
 	if err != nil {
 		return nil, fmt.Errorf("restore discovery: %w", err)
@@ -170,8 +176,8 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 	}
 
 	seed := int64(1)
-	if world != nil && world.PlanetID != "" {
-		if planet, ok := maps.Planet(world.PlanetID); ok && planet != nil {
+	if activeWorld != nil && activeWorld.PlanetID != "" {
+		if planet, ok := maps.Planet(activeWorld.PlanetID); ok && planet != nil {
 			seed = planet.Seed
 		}
 	} else if primary := maps.PrimaryPlanet(); primary != nil {
@@ -182,7 +188,8 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		cfg:              cfg,
 		maps:             maps,
 		discovery:        discovery,
-		world:            world,
+		world:            activeWorld,
+		worlds:           worlds,
 		queue:            q,
 		bus:              bus,
 		metrics:          NewMetrics(),
@@ -193,15 +200,16 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		snapshotStore:    store,
 		rng:              rand.New(rand.NewSource(seed)),
 		stopCh:           make(chan struct{}),
-		activePlanetID:   save.RuntimeState.ActivePlanetID,
+		activePlanetID:   activePlanetID,
 		executorUsage:    make(map[string]int),
 		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 		baseSnapshot:     chooseBaseSnapshot(save.DebugState.BaseSnapshot, save.Snapshot),
 	}
-	if core.activePlanetID == "" && world != nil {
-		core.activePlanetID = world.PlanetID
+	if core.activePlanetID == "" && activeWorld != nil {
+		core.activePlanetID = activeWorld.PlanetID
 	}
+	core.setActivePlanet(core.activePlanetID)
 	core.winner = save.RuntimeState.Winner
 
 	core.cmdLog.ReplaceAll(importCommandLog(save.DebugState.CommandLog))

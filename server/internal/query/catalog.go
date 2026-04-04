@@ -18,6 +18,7 @@ type BuildingCatalogEntry struct {
 	Footprint            model.Footprint           `json:"footprint"`
 	BuildCost            model.BuildCost           `json:"build_cost"`
 	Buildable            bool                      `json:"buildable"`
+	DefaultRecipeID      string                    `json:"default_recipe_id,omitempty"`
 	RequiresResourceNode bool                      `json:"requires_resource_node,omitempty"`
 	CanProduceUnits      bool                      `json:"can_produce_units,omitempty"`
 	UnlockTech           []string                  `json:"unlock_tech,omitempty"`
@@ -83,6 +84,7 @@ func (ql *Layer) Catalog() *CatalogView {
 			Footprint:            def.Footprint,
 			BuildCost:            model.BuildCost{Minerals: def.BuildCost.Minerals, Energy: def.BuildCost.Energy, Items: buildCostItems},
 			Buildable:            def.Buildable,
+			DefaultRecipeID:      def.DefaultRecipeID,
 			RequiresResourceNode: def.RequiresResourceNode,
 			CanProduceUnits:      def.CanProduceUnits,
 			UnlockTech:           append([]string(nil), def.UnlockTech...),

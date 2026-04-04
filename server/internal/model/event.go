@@ -19,6 +19,7 @@ const (
 	EvtThreatLevelChanged   EventType = "threat_level_changed"
 	EvtLootDropped          EventType = "loot_dropped"
 	EvtEntityUpdated        EventType = "entity_updated"
+	EvtRocketLaunched       EventType = "rocket_launched"
 )
 
 var allEventTypes = []EventType{
@@ -37,6 +38,7 @@ var allEventTypes = []EventType{
 	EvtThreatLevelChanged,
 	EvtLootDropped,
 	EvtEntityUpdated,
+	EvtRocketLaunched,
 }
 
 var validEventTypes = func() map[EventType]struct{} {

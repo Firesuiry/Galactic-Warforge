@@ -204,13 +204,17 @@ func executorConcurrentLimit(ws *model.WorldState, playerID string) int {
 		return 1
 	}
 	player := ws.Players[playerID]
-	if player == nil || player.Executor == nil {
+	if player == nil {
 		return 1
 	}
-	if player.Executor.ConcurrentTasks <= 0 {
+	exec := player.ExecutorForPlanet(ws.PlanetID)
+	if exec == nil {
 		return 1
 	}
-	return player.Executor.ConcurrentTasks
+	if exec.ConcurrentTasks <= 0 {
+		return 1
+	}
+	return exec.ConcurrentTasks
 }
 
 // checkMaterialsAvailable checks if a player has enough materials for a construction task.
@@ -583,7 +587,13 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	model.InitBuildingLogisticsStation(b)
 	syncCollectorResourceKind(ws, b)
 	if b.Production != nil {
-		b.Production.RecipeID = task.RecipeID
+		recipeID := task.RecipeID
+		if recipeID == "" {
+			if def, ok := model.BuildingDefinitionByID(task.BuildingType); ok {
+				recipeID = def.DefaultRecipeID
+			}
+		}
+		b.Production.RecipeID = recipeID
 	}
 	if b.Runtime.Functions.Production != nil {
 		b.ProductionMonitor = model.NewProductionMonitorState()

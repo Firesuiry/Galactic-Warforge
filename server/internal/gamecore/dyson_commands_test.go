@@ -181,6 +181,84 @@ func TestLaunchSolarSailRejectsNonEjectorTarget(t *testing.T) {
 	}
 }
 
+func TestLaunchRocketConsumesStoredRocketAndBoostsLayer(t *testing.T) {
+	ClearDysonSphereStates()
+	core := newE2ETestCore(t)
+	ws := core.World()
+	grantTechs(ws, "p1", "vertical_launching", "lightweight_structure")
+
+	silo := newVerticalLaunchingSiloBuilding("silo-1", model.Position{X: 8, Y: 8}, "p1")
+	silo.Runtime.State = model.BuildingWorkRunning
+	silo.Storage.EnsureInventory()[model.ItemSmallCarrierRocket] = 2
+	attachBuilding(ws, silo)
+
+	AddDysonLayer("p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonNode("p1", "sys-1", 0, 10, 20); err != nil {
+		t.Fatalf("add dyson node: %v", err)
+	}
+
+	cmd := model.Command{
+		Type: model.CmdLaunchRocket,
+		Payload: map[string]any{
+			"building_id": silo.ID,
+			"system_id":   "sys-1",
+			"layer_index": 0,
+			"count":       float64(2),
+		},
+	}
+	res, events := core.execLaunchRocket(ws, "p1", cmd)
+	if res.Code != model.CodeOK {
+		t.Fatalf("launch rocket failed: %s (%s)", res.Code, res.Message)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one rocket launch event, got %d", len(events))
+	}
+	if events[0].EventType != model.EvtRocketLaunched {
+		t.Fatalf("expected rocket_launched event, got %s", events[0].EventType)
+	}
+	if got := silo.Storage.OutputQuantity(model.ItemSmallCarrierRocket); got != 0 {
+		t.Fatalf("expected silo rockets consumed, got %d", got)
+	}
+
+	state := GetDysonSphereState("p1")
+	if state == nil || len(state.Layers) == 0 {
+		t.Fatal("expected dyson layer state")
+	}
+	layer := state.Layers[0]
+	if layer.RocketLaunches != 2 {
+		t.Fatalf("expected rocket launches 2, got %d", layer.RocketLaunches)
+	}
+	if layer.ConstructionBonus != 0.04 {
+		t.Fatalf("expected construction bonus 0.04, got %v", layer.ConstructionBonus)
+	}
+}
+
+func TestLaunchRocketRequiresExistingDysonScaffold(t *testing.T) {
+	ClearDysonSphereStates()
+	core := newE2ETestCore(t)
+	ws := core.World()
+	grantTechs(ws, "p1", "vertical_launching")
+
+	silo := newVerticalLaunchingSiloBuilding("silo-1", model.Position{X: 8, Y: 8}, "p1")
+	silo.Runtime.State = model.BuildingWorkRunning
+	silo.Storage.EnsureInventory()[model.ItemSmallCarrierRocket] = 1
+	attachBuilding(ws, silo)
+
+	AddDysonLayer("p1", "sys-1", 0, 1.2)
+
+	res, _ := core.execLaunchRocket(ws, "p1", model.Command{
+		Type: model.CmdLaunchRocket,
+		Payload: map[string]any{
+			"building_id": silo.ID,
+			"system_id":   "sys-1",
+			"layer_index": 0,
+		},
+	})
+	if res.Code != model.CodeValidationFailed {
+		t.Fatalf("expected validation failure without dyson scaffold, got %s (%s)", res.Code, res.Message)
+	}
+}
+
 func newEMRailEjectorBuilding(id string, pos model.Position, owner string) *model.Building {
 	profile := model.BuildingProfileFor(model.BuildingTypeEMRailEjector, 1)
 	b := &model.Building{

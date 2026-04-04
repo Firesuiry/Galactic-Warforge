@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"siliconworld/internal/mapconfig"
+	"siliconworld/internal/mapmodel"
 )
 
 func testMapConfig() *mapconfig.Config {
@@ -105,5 +106,36 @@ func TestResourceNodesBuildable(t *testing.T) {
 				t.Fatalf("resource node placed on non-buildable tile on %s", planet.ID)
 			}
 		}
+	}
+}
+
+func TestGenerateAppliesPlanetKindOverrides(t *testing.T) {
+	cfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{
+			SystemCount: 1,
+		},
+		System: mapconfig.SystemConfig{
+			PlanetsPerSystem: 3,
+			GasGiantRatio:    0,
+		},
+		Planet: mapconfig.PlanetConfig{
+			Width:           16,
+			Height:          16,
+			ResourceDensity: 10,
+		},
+		Overrides: mapconfig.OverridesConfig{
+			Planets: map[string]mapconfig.PlanetOverride{
+				"planet-1-2": {Kind: string(mapmodel.PlanetKindGasGiant)},
+			},
+		},
+	}
+
+	universe := Generate(cfg, "override-seed")
+	planet := universe.Planets["planet-1-2"]
+	if planet == nil {
+		t.Fatal("expected overridden planet to exist")
+	}
+	if planet.Kind != mapmodel.PlanetKindGasGiant {
+		t.Fatalf("expected override to force gas giant, got %s", planet.Kind)
 	}
 }

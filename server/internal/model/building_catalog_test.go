@@ -39,3 +39,50 @@ func TestBuildableDefinitionsHaveCost(t *testing.T) {
 		}
 	}
 }
+
+func TestVerticalLaunchingSiloDefaultRecipeAndIO(t *testing.T) {
+	def, ok := BuildingDefinitionByID(BuildingTypeVerticalLaunchingSilo)
+	if !ok {
+		t.Fatal("vertical_launching_silo missing from building catalog")
+	}
+	if def.DefaultRecipeID != "small_carrier_rocket" {
+		t.Fatalf("expected silo default recipe small_carrier_rocket, got %q", def.DefaultRecipeID)
+	}
+
+	runtimeDef, ok := BuildingRuntimeDefinitionByID(BuildingTypeVerticalLaunchingSilo)
+	if !ok {
+		t.Fatal("vertical_launching_silo missing runtime definition")
+	}
+
+	var inputPort *IOPort
+	var outputPort *IOPort
+	for i := range runtimeDef.Params.IOPorts {
+		port := &runtimeDef.Params.IOPorts[i]
+		switch port.ID {
+		case "in-0":
+			inputPort = port
+		case "out-0":
+			outputPort = port
+		}
+	}
+
+	if inputPort == nil {
+		t.Fatal("silo input port in-0 missing")
+	}
+	if inputPort.Direction != PortInput {
+		t.Fatalf("silo input port direction mismatch: got %s", inputPort.Direction)
+	}
+	if len(inputPort.AllowedItems) != 0 {
+		t.Fatalf("silo input port should accept recipe inputs generically, got %+v", inputPort.AllowedItems)
+	}
+
+	if outputPort == nil {
+		t.Fatal("silo output port out-0 missing")
+	}
+	if outputPort.Direction != PortOutput {
+		t.Fatalf("silo output port direction mismatch: got %s", outputPort.Direction)
+	}
+	if len(outputPort.AllowedItems) != 1 || outputPort.AllowedItems[0] != ItemSmallCarrierRocket {
+		t.Fatalf("silo output port should export only small_carrier_rocket, got %+v", outputPort.AllowedItems)
+	}
+}

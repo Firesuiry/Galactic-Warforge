@@ -11,7 +11,9 @@ func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T
 	cases := []model.Command{
 		{Type: model.CmdStartResearch, Payload: map[string]any{"tech_id": "electromagnetism"}},
 		{Type: model.CmdCancelResearch, Payload: map[string]any{"tech_id": "electromagnetism"}},
+		{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": "b-1", "item_id": model.ItemSolarSail, "quantity": 2}},
 		{Type: model.CmdLaunchSolarSail, Payload: map[string]any{"building_id": "b-1"}},
+		{Type: model.CmdLaunchRocket, Payload: map[string]any{"building_id": "b-1", "system_id": "sys-1"}},
 		{Type: model.CmdCancelConstruction, Payload: map[string]any{"task_id": "c-1"}},
 		{Type: model.CmdRestoreConstruction, Payload: map[string]any{"task_id": "c-1"}},
 		{Type: model.CmdBuildDysonNode, Payload: map[string]any{"system_id": "sys-1", "layer_index": 0, "latitude": 10.0, "longitude": 20.0}},
@@ -23,6 +25,129 @@ func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T
 	for _, cmd := range cases {
 		if err := validateCommandStructure(cmd); err != nil {
 			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, err)
+		}
+	}
+}
+
+func TestValidateCommandStructureAllowsPlanetAndRayReceiverCommands(t *testing.T) {
+	cases := []model.Command{
+		{Type: model.CmdSwitchActivePlanet, Payload: map[string]any{"planet_id": "planet-1-1"}},
+		{Type: model.CmdSetRayReceiverMode, Payload: map[string]any{"building_id": "rr-1", "mode": "power"}},
+	}
+
+	for _, cmd := range cases {
+		if err := validateCommandStructure(cmd); err != nil {
+			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, err)
+		}
+	}
+}
+
+func TestValidateCommandStructureRejectsIncompleteLaunchRocket(t *testing.T) {
+	cases := []struct {
+		cmd model.Command
+		msg string
+	}{
+		{
+			cmd: model.Command{
+				Type:    model.CmdLaunchRocket,
+				Payload: map[string]any{"system_id": "sys-1"},
+			},
+			msg: "payload.building_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdLaunchRocket,
+				Payload: map[string]any{"building_id": "b-1"},
+			},
+			msg: "payload.system_id",
+		},
+	}
+
+	for _, cs := range cases {
+		err := validateCommandStructure(cs.cmd)
+		if err == nil {
+			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
+		}
+		if !strings.Contains(err.Error(), cs.msg) {
+			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		}
+	}
+}
+
+func TestValidateCommandStructureRejectsIncompleteTransferItem(t *testing.T) {
+	cases := []struct {
+		cmd model.Command
+		msg string
+	}{
+		{
+			cmd: model.Command{
+				Type:    model.CmdTransferItem,
+				Payload: map[string]any{"item_id": model.ItemSolarSail, "quantity": 1},
+			},
+			msg: "payload.building_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTransferItem,
+				Payload: map[string]any{"building_id": "b-1", "quantity": 1},
+			},
+			msg: "payload.item_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTransferItem,
+				Payload: map[string]any{"building_id": "b-1", "item_id": model.ItemSolarSail},
+			},
+			msg: "payload.quantity",
+		},
+	}
+
+	for _, cs := range cases {
+		err := validateCommandStructure(cs.cmd)
+		if err == nil {
+			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
+		}
+		if !strings.Contains(err.Error(), cs.msg) {
+			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		}
+	}
+}
+
+func TestValidateCommandStructureRejectsIncompletePlanetAndRayReceiverCommands(t *testing.T) {
+	cases := []struct {
+		cmd model.Command
+		msg string
+	}{
+		{
+			cmd: model.Command{
+				Type:    model.CmdSwitchActivePlanet,
+				Payload: map[string]any{},
+			},
+			msg: "payload.planet_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdSetRayReceiverMode,
+				Payload: map[string]any{"mode": "power"},
+			},
+			msg: "payload.building_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdSetRayReceiverMode,
+				Payload: map[string]any{"building_id": "rr-1"},
+			},
+			msg: "payload.mode",
+		},
+	}
+
+	for _, cs := range cases {
+		err := validateCommandStructure(cs.cmd)
+		if err == nil {
+			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
+		}
+		if !strings.Contains(err.Error(), cs.msg) {
+			t.Fatalf("expected error about %s, got %v", cs.msg, err)
 		}
 	}
 }

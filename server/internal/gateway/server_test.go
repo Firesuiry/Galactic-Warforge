@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
@@ -42,6 +43,61 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 	core := gamecore.New(cfg, maps, q, bus, nil)
 	srv := gateway.New(cfg, core, bus, q)
 	return srv, core
+}
+
+func postCommandRequest(t *testing.T, srv *gateway.Server, req model.CommandRequest) model.CommandResponse {
+	t.Helper()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal command request: %v", err)
+	}
+	httpReq := httptest.NewRequest("POST", "/commands", bytes.NewReader(body))
+	httpReq.Header.Set("Authorization", "Bearer key1")
+	httpReq.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httpReq)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp model.CommandResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode command response: %v", err)
+	}
+	return resp
+}
+
+func getAuthorizedJSON(t *testing.T, srv *gateway.Server, path string) map[string]any {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", path, nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for %s, got %d: %s", path, rec.Code, rec.Body.String())
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s response: %v", path, err)
+	}
+	return body
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, cond func() bool, failure string) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal(failure)
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -162,6 +218,96 @@ func TestPostCommandsValid(t *testing.T) {
 	}
 	if !resp.Accepted {
 		t.Error("expected accepted=true")
+	}
+}
+
+func TestSwitchActivePlanetCommandUpdatesSummaryEndpoint(t *testing.T) {
+	srv, core := newTwoPlanetRuntimeServer(t)
+	go core.Run()
+	defer core.Stop()
+
+	resp := postCommandRequest(t, srv, model.CommandRequest{
+		RequestID:  "req-switch-active-planet",
+		IssuerType: "player",
+		IssuerID:   "p1",
+		Commands: []model.Command{{
+			Type:    model.CmdSwitchActivePlanet,
+			Payload: map[string]any{"planet_id": "planet-1-1"},
+		}},
+	})
+	if !resp.Accepted {
+		t.Fatalf("expected switch_active_planet request to be accepted, got %+v", resp.Results)
+	}
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return core.ActivePlanetID() == "planet-1-1"
+	}, "switch_active_planet was not applied by tick loop")
+
+	body := getAuthorizedJSON(t, srv, "/state/summary")
+	if body["active_planet_id"] != "planet-1-1" {
+		t.Fatalf("expected summary.active_planet_id to be planet-1-1, got %v", body["active_planet_id"])
+	}
+}
+
+func TestSetRayReceiverModeCommandUpdatesInspectEndpoint(t *testing.T) {
+	srv, core := newTestServer(t)
+
+	profile := model.BuildingProfileFor(model.BuildingTypeRayReceiver, 1)
+	receiver := &model.Building{
+		ID:          "rr-1",
+		Type:        model.BuildingTypeRayReceiver,
+		OwnerID:     "p1",
+		Position:    model.Position{X: 4, Y: 4},
+		HP:          profile.MaxHP,
+		MaxHP:       profile.MaxHP,
+		Level:       1,
+		VisionRange: profile.VisionRange,
+		Runtime:     profile.Runtime,
+	}
+	core.World().Buildings[receiver.ID] = receiver
+
+	go core.Run()
+	defer core.Stop()
+
+	resp := postCommandRequest(t, srv, model.CommandRequest{
+		RequestID:  "req-set-ray-mode",
+		IssuerType: "player",
+		IssuerID:   "p1",
+		Commands: []model.Command{{
+			Type: model.CmdSetRayReceiverMode,
+			Payload: map[string]any{
+				"building_id": receiver.ID,
+				"mode":        "power",
+			},
+		}},
+	})
+	if !resp.Accepted {
+		t.Fatalf("expected set_ray_receiver_mode request to be accepted, got %+v", resp.Results)
+	}
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return receiver.Runtime.Functions.RayReceiver != nil && receiver.Runtime.Functions.RayReceiver.Mode == model.RayReceiverModePower
+	}, "set_ray_receiver_mode was not applied by tick loop")
+
+	body := getAuthorizedJSON(t, srv, "/world/planets/planet-1-1/inspect?entity_kind=building&entity_id=rr-1")
+	buildingBody, ok := body["building"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected inspect response to include building payload, got %v", body)
+	}
+	runtimeBody, ok := buildingBody["runtime"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected inspect response to include runtime payload, got %v", buildingBody)
+	}
+	functionsBody, ok := runtimeBody["functions"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected inspect response to include runtime.functions, got %v", runtimeBody)
+	}
+	rayBody, ok := functionsBody["ray_receiver"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected inspect response to include ray_receiver runtime, got %v", functionsBody)
+	}
+	if rayBody["mode"] != string(model.RayReceiverModePower) {
+		t.Fatalf("expected inspect runtime ray receiver mode power, got %v", rayBody["mode"])
 	}
 }
 

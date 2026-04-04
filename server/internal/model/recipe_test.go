@@ -153,6 +153,72 @@ func TestRecipeDependencies(t *testing.T) {
 	}
 }
 
+func TestMidLateRecipesPresent(t *testing.T) {
+	cases := []struct {
+		recipeID       string
+		buildingType   BuildingType
+		outputItemID   string
+		outputQuantity int
+	}{
+		{recipeID: "titanium_crystal", buildingType: BuildingTypeAssemblingMachineMk1, outputItemID: ItemTitaniumCrystal, outputQuantity: 1},
+		{recipeID: "titanium_alloy", buildingType: BuildingTypeArcSmelter, outputItemID: ItemTitaniumAlloy, outputQuantity: 2},
+		{recipeID: "frame_material", buildingType: BuildingTypeAssemblingMachineMk1, outputItemID: ItemFrameMaterial, outputQuantity: 1},
+		{recipeID: "quantum_chip", buildingType: BuildingTypeAssemblingMachineMk1, outputItemID: ItemQuantumChip, outputQuantity: 1},
+		{recipeID: "small_carrier_rocket", buildingType: BuildingTypeVerticalLaunchingSilo, outputItemID: ItemSmallCarrierRocket, outputQuantity: 1},
+	}
+
+	for _, tc := range cases {
+		recipe, ok := Recipe(tc.recipeID)
+		if !ok {
+			t.Fatalf("missing recipe %s", tc.recipeID)
+		}
+		if len(recipe.Outputs) != 1 {
+			t.Fatalf("recipe %s should have exactly one primary output, got %+v", tc.recipeID, recipe.Outputs)
+		}
+		if recipe.Outputs[0].ItemID != tc.outputItemID || recipe.Outputs[0].Quantity != tc.outputQuantity {
+			t.Fatalf("recipe %s output mismatch: got %+v", tc.recipeID, recipe.Outputs[0])
+		}
+		supported := false
+		for _, candidate := range recipe.BuildingTypes {
+			if candidate == tc.buildingType {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			t.Fatalf("recipe %s should support %s", tc.recipeID, tc.buildingType)
+		}
+	}
+}
+
+func TestSelfEvolutionLabSupportsCanonicalMatrixRecipes(t *testing.T) {
+	recipeIDs := []string{
+		"electromagnetic_matrix",
+		"energy_matrix",
+		"structure_matrix",
+		"information_matrix",
+		"gravity_matrix",
+		"universe_matrix",
+	}
+
+	for _, recipeID := range recipeIDs {
+		recipe, ok := Recipe(recipeID)
+		if !ok {
+			t.Fatalf("expected recipe %s to exist", recipeID)
+		}
+		supported := false
+		for _, btype := range recipe.BuildingTypes {
+			if btype == BuildingTypeSelfEvolutionLab {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			t.Fatalf("expected recipe %s to support %s, got %+v", recipeID, BuildingTypeSelfEvolutionLab, recipe.BuildingTypes)
+		}
+	}
+}
+
 func isRecyclingRecipe(recipe RecipeDefinition) bool {
 	if strings.Contains(recipe.ID, "recycling") {
 		return true

@@ -90,35 +90,38 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	recipeID := ""
 	if recipeRaw, ok := cmd.Payload["recipe_id"]; ok {
 		recipeID = fmt.Sprintf("%v", recipeRaw)
-		if recipeID != "" {
-			recipe, ok := model.Recipe(recipeID)
-			if !ok {
-				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("unknown recipe: %s", recipeID)
-				return res, nil
+	}
+	if recipeID == "" && def.DefaultRecipeID != "" {
+		recipeID = def.DefaultRecipeID
+	}
+	if recipeID != "" {
+		recipe, ok := model.Recipe(recipeID)
+		if !ok {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("unknown recipe: %s", recipeID)
+			return res, nil
+		}
+		if def := model.BuildingProfileFor(btype, 1); def.Runtime.Functions.Production == nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("building type %s does not support recipes", btype)
+			return res, nil
+		}
+		supportsRecipe := false
+		for _, allowed := range recipe.BuildingTypes {
+			if allowed == btype {
+				supportsRecipe = true
+				break
 			}
-			if def := model.BuildingProfileFor(btype, 1); def.Runtime.Functions.Production == nil {
-				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("building type %s does not support recipes", btype)
-				return res, nil
-			}
-			supportsRecipe := false
-			for _, allowed := range recipe.BuildingTypes {
-				if allowed == btype {
-					supportsRecipe = true
-					break
-				}
-			}
-			if !supportsRecipe {
-				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("recipe %s not supported by building type %s", recipeID, btype)
-				return res, nil
-			}
-			if !CanUseRecipeTech(player, recipeID) {
-				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("recipe %s requires research to unlock", recipeID)
-				return res, nil
-			}
+		}
+		if !supportsRecipe {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("recipe %s not supported by building type %s", recipeID, btype)
+			return res, nil
+		}
+		if !CanUseRecipeTech(player, recipeID) {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("recipe %s requires research to unlock", recipeID)
+			return res, nil
 		}
 	}
 	if def.RequiresResourceNode && ws.Grid[pos.Y][pos.X].ResourceNodeID == "" {
@@ -1655,6 +1658,107 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	buildingID, err := payloadStrictString(cmd.Payload, "building_id")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	itemID, err := payloadStrictString(cmd.Payload, "item_id")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	quantity, err := payloadStrictInt(cmd.Payload, "quantity")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	if quantity <= 0 {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.quantity must be positive"
+		return res, nil
+	}
+	if _, ok := model.Item(itemID); !ok {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("unknown item: %s", itemID)
+		return res, nil
+	}
+
+	building, ok := ws.Buildings[buildingID]
+	if !ok {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		return res, nil
+	}
+	if building.OwnerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot use building owned by another player"
+		return res, nil
+	}
+	if building.Storage == nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = "target building has no storage"
+		return res, nil
+	}
+
+	player := ws.Players[playerID]
+	if player == nil || !player.IsAlive {
+		res.Code = model.CodeValidationFailed
+		res.Message = "player not found or not alive"
+		return res, nil
+	}
+	if player.Inventory[itemID] < quantity {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d %s in inventory, have %d", quantity, itemID, player.Inventory[itemID])
+		return res, nil
+	}
+
+	accepted, remaining, err := building.Storage.Load(itemID, quantity)
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	if accepted <= 0 {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("building %s cannot accept %s", buildingID, itemID)
+		return res, nil
+	}
+
+	inv := player.EnsureInventory()
+	inv[itemID] -= accepted
+	if inv[itemID] <= 0 {
+		delete(inv, itemID)
+	}
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	if remaining > 0 {
+		res.Message = fmt.Sprintf("transferred %d %s into %s (%d remaining)", accepted, itemID, buildingID, remaining)
+	} else {
+		res.Message = fmt.Sprintf("transferred %d %s into %s", accepted, itemID, buildingID)
+	}
+
+	return res, []*model.GameEvent{{
+		EventType:       model.EvtEntityUpdated,
+		VisibilityScope: playerID,
+		Payload: map[string]any{
+			"building_id":   buildingID,
+			"item_id":       itemID,
+			"transferred":   accepted,
+			"source":        "player_inventory",
+			"remaining":     remaining,
+			"inventory_qty": inv[itemID],
+		},
+	}}
 }
 
 func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {

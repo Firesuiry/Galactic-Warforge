@@ -15,21 +15,35 @@ type ExecutorConfig struct {
 	ResearchBoost   float64 `yaml:"research_boost"`
 }
 
+type BootstrapItemConfig struct {
+	ItemID   string `yaml:"item_id"`
+	Quantity int    `yaml:"quantity"`
+}
+
+type PlayerBootstrapConfig struct {
+	Minerals       int                   `yaml:"minerals"`
+	Energy         int                   `yaml:"energy"`
+	Inventory      []BootstrapItemConfig `yaml:"inventory,omitempty"`
+	CompletedTechs []string              `yaml:"completed_techs,omitempty"`
+}
+
 // PlayerConfig holds player identity, auth key, and permissions.
 type PlayerConfig struct {
-	PlayerID    string         `yaml:"player_id"`
-	Key         string         `yaml:"key"`
-	TeamID      string         `yaml:"team_id"`
-	Role        string         `yaml:"role"`
-	Permissions []string       `yaml:"permissions"`
-	Executor    ExecutorConfig `yaml:"executor"`
+	PlayerID    string                `yaml:"player_id"`
+	Key         string                `yaml:"key"`
+	TeamID      string                `yaml:"team_id"`
+	Role        string                `yaml:"role"`
+	Permissions []string              `yaml:"permissions"`
+	Executor    ExecutorConfig        `yaml:"executor"`
+	Bootstrap   PlayerBootstrapConfig `yaml:"bootstrap"`
 }
 
 // BattlefieldConfig holds battlefield parameters
 type BattlefieldConfig struct {
-	MapSeed     string `yaml:"map_seed"`
-	MaxTickRate int    `yaml:"max_tick_rate"`
-	VictoryRule string `yaml:"victory_rule"`
+	MapSeed               string `yaml:"map_seed"`
+	MaxTickRate           int    `yaml:"max_tick_rate"`
+	VictoryRule           string `yaml:"victory_rule"`
+	InitialActivePlanetID string `yaml:"initial_active_planet_id,omitempty"`
 	// ConstructionRegionConcurrentLimit caps in-progress construction tasks per region.
 	ConstructionRegionConcurrentLimit int `yaml:"construction_region_concurrent_limit"`
 }

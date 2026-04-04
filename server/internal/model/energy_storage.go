@@ -80,7 +80,7 @@ func NetworkHasEnergyHub(ws *WorldState, network *PowerNetwork) bool {
 	}
 	for _, id := range network.NodeIDs {
 		building := ws.Buildings[id]
-		if building != nil && building.Type == BuildingTypeEnergyExchanger {
+		if building != nil && building.Runtime.Functions.EnergyExchanger != nil {
 			return true
 		}
 	}

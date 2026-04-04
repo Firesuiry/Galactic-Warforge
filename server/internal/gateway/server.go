@@ -196,7 +196,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID s
 // handlePlanet returns GET /world/planets/{planet_id}
 func (s *Server) handlePlanet(w http.ResponseWriter, r *http.Request, playerID string) {
 	planetID := r.PathValue("planet_id")
-	ws := s.core.World()
+	ws := s.core.WorldForPlanet(planetID)
 	view, ok := s.ql.PlanetSummary(ws, playerID, planetID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
@@ -211,7 +211,7 @@ func (s *Server) handlePlanetOverview(w http.ResponseWriter, r *http.Request, pl
 	req := query.PlanetOverviewRequest{
 		Step: parseQueryInt(r, "step", 0),
 	}
-	view, ok := s.ql.PlanetOverview(s.core.World(), playerID, planetID, req)
+	view, ok := s.ql.PlanetOverview(s.core.WorldForPlanet(planetID), playerID, planetID, req)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -228,7 +228,7 @@ func (s *Server) handlePlanetScene(w http.ResponseWriter, r *http.Request, playe
 		Width:  parseQueryInt(r, "width", 0),
 		Height: parseQueryInt(r, "height", 0),
 	}
-	view, ok := s.ql.PlanetScene(s.core.World(), playerID, planetID, req)
+	view, ok := s.ql.PlanetScene(s.core.WorldForPlanet(planetID), playerID, planetID, req)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -265,7 +265,7 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 		return
 	}
 
-	ws := s.core.World()
+	ws := s.core.WorldForPlanet(planetID)
 	view, ok := s.ql.PlanetInspect(ws, playerID, planetID, query.PlanetInspectRequest{
 		TargetType: entityKind,
 		TargetID:   entityID,
@@ -290,8 +290,8 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 // handlePlanetRuntime returns GET /world/planets/{planet_id}/runtime
 func (s *Server) handlePlanetRuntime(w http.ResponseWriter, r *http.Request, playerID string) {
 	planetID := r.PathValue("planet_id")
-	ws := s.core.World()
-	view, ok := s.ql.PlanetRuntime(ws, playerID, planetID)
+	ws := s.core.WorldForPlanet(planetID)
+	view, ok := s.ql.PlanetRuntime(ws, playerID, planetID, s.core.ActivePlanetID())
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -302,8 +302,8 @@ func (s *Server) handlePlanetRuntime(w http.ResponseWriter, r *http.Request, pla
 // handlePlanetNetworks returns GET /world/planets/{planet_id}/networks
 func (s *Server) handlePlanetNetworks(w http.ResponseWriter, r *http.Request, playerID string) {
 	planetID := r.PathValue("planet_id")
-	ws := s.core.World()
-	view, ok := s.ql.PlanetNetworks(ws, playerID, planetID)
+	ws := s.core.WorldForPlanet(planetID)
+	view, ok := s.ql.PlanetNetworks(ws, playerID, planetID, s.core.ActivePlanetID())
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -887,9 +887,37 @@ func validateCommandStructure(cmd model.Command) error {
 		if _, ok := cmd.Payload["tech_id"]; !ok {
 			return fmt.Errorf("%s requires payload.tech_id", cmd.Type)
 		}
+	case model.CmdTransferItem:
+		if _, ok := cmd.Payload["building_id"]; !ok {
+			return fmt.Errorf("transfer_item requires payload.building_id")
+		}
+		if _, ok := cmd.Payload["item_id"]; !ok {
+			return fmt.Errorf("transfer_item requires payload.item_id")
+		}
+		if _, ok := cmd.Payload["quantity"]; !ok {
+			return fmt.Errorf("transfer_item requires payload.quantity")
+		}
+	case model.CmdSwitchActivePlanet:
+		if _, ok := cmd.Payload["planet_id"]; !ok {
+			return fmt.Errorf("switch_active_planet requires payload.planet_id")
+		}
+	case model.CmdSetRayReceiverMode:
+		if _, ok := cmd.Payload["building_id"]; !ok {
+			return fmt.Errorf("set_ray_receiver_mode requires payload.building_id")
+		}
+		if _, ok := cmd.Payload["mode"]; !ok {
+			return fmt.Errorf("set_ray_receiver_mode requires payload.mode")
+		}
 	case model.CmdLaunchSolarSail:
 		if _, ok := cmd.Payload["building_id"]; !ok {
 			return fmt.Errorf("launch_solar_sail requires payload.building_id")
+		}
+	case model.CmdLaunchRocket:
+		if _, ok := cmd.Payload["building_id"]; !ok {
+			return fmt.Errorf("launch_rocket requires payload.building_id")
+		}
+		if _, ok := cmd.Payload["system_id"]; !ok {
+			return fmt.Errorf("launch_rocket requires payload.system_id")
 		}
 	case model.CmdBuildDysonNode:
 		if _, ok := cmd.Payload["system_id"]; !ok {

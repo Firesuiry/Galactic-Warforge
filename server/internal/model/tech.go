@@ -92,13 +92,16 @@ const (
 
 // PlayerResearch tracks a player's research progress
 type PlayerResearch struct {
-	TechID       string        `json:"tech_id"`
-	State        ResearchState `json:"state"`
-	Progress     int64         `json:"progress"`      // current progress points
-	TotalCost    int64         `json:"total_cost"`    // total cost in points
-	CurrentLevel int           `json:"current_level"` // for repeatable techs
-	EnqueueTick  int64         `json:"enqueue_tick"`
-	CompleteTick int64         `json:"complete_tick,omitempty"`
+	TechID        string         `json:"tech_id"`
+	State         ResearchState  `json:"state"`
+	Progress      int64          `json:"progress"`
+	TotalCost     int64          `json:"total_cost"`
+	CurrentLevel  int            `json:"current_level"`
+	RequiredCost  []ItemAmount   `json:"required_cost,omitempty"`
+	ConsumedCost  map[string]int `json:"consumed_cost,omitempty"`
+	BlockedReason string         `json:"blocked_reason,omitempty"`
+	EnqueueTick   int64          `json:"enqueue_tick"`
+	CompleteTick  int64          `json:"complete_tick,omitempty"`
 }
 
 // PlayerTechState tracks all tech research state for a player
@@ -220,7 +223,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Category: TechCategoryMain,
 		Type:     TechTypeMain,
 		Level:    0,
-		Unlocks:  []TechUnlock{{Type: TechUnlockSpecial, ID: "electromagnetic_matrix"}},
+		Unlocks:  []TechUnlock{{Type: TechUnlockBuilding, ID: "matrix_lab"}},
 	},
 
 	// Level 1
@@ -232,7 +235,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Type:          TechTypeMain,
 		Level:         1,
 		Prerequisites: []string{"dyson_sphere_program"},
-		Cost:          []ItemAmount{{ItemID: "mag_coil", Quantity: 10}, {ItemID: "circuit_board", Quantity: 10}},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "wind_turbine"},
 			{Type: TechUnlockBuilding, ID: "power_pylon"},
@@ -249,7 +252,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Type:          TechTypeLogistics,
 		Level:         2,
 		Prerequisites: []string{"electromagnetism"},
-		Cost:          []ItemAmount{{ItemID: "circuit_board", Quantity: 10}, {ItemID: "gear", Quantity: 10}},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "conveyor_mk1"},
 			{Type: TechUnlockBuilding, ID: "sorter_mk1"},
@@ -264,7 +267,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Type:          TechTypeSmelting,
 		Level:         2,
 		Prerequisites: []string{"electromagnetism"},
-		Cost:          []ItemAmount{{ItemID: "mag_coil", Quantity: 10}, {ItemID: "circuit_board", Quantity: 10}},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "arc_smelter"},
 			{Type: TechUnlockRecipe, ID: "glass"},
@@ -278,9 +281,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Type:          TechTypeMain,
 		Level:         2,
 		Prerequisites: []string{"electromagnetism"},
-		Cost:          []ItemAmount{{ItemID: "mag_coil", Quantity: 10}, {ItemID: "circuit_board", Quantity: 10}},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "matrix_lab"},
 			{Type: TechUnlockSpecial, ID: "electromagnetic_matrix"},
 		},
 	},
@@ -292,7 +294,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Type:          TechTypeSmelting,
 		Level:         2,
 		Prerequisites: []string{"electromagnetism"},
-		Cost:          []ItemAmount{{ItemID: "circuit_board", Quantity: 10}, {ItemID: "gear", Quantity: 10}},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "assembler_mk1"},
 		},
@@ -775,6 +777,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 400}, {ItemID: "energy_matrix", Quantity: 400}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "signal_tower"},
+			{Type: TechUnlockBuilding, ID: "jammer_tower"},
 		},
 	},
 	{
@@ -951,8 +954,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"efficient_logistics"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 500}, {ItemID: "structure_matrix", Quantity: 50}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "auto_stacker"},
-			{Type: TechUnlockBuilding, ID: "stacker"},
+			{Type: TechUnlockBuilding, ID: string(BuildingTypePileSorter)},
 		},
 	},
 	{
@@ -1061,7 +1063,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"energy_storage", "interstellar_logistics"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1200}, {ItemID: "energy_matrix", Quantity: 1200}, {ItemID: "structure_matrix", Quantity: 120}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "energy_pylon"},
+			{Type: TechUnlockBuilding, ID: string(BuildingTypeEnergyExchanger)},
 		},
 	},
 	{
@@ -1262,6 +1264,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 1000}, {ItemID: "structure_matrix", Quantity: 1000}, {ItemID: "information_matrix", Quantity: 500}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "plasma_turret"},
+			{Type: TechUnlockBuilding, ID: "sr_plasma_turret"},
 		},
 	},
 	{
@@ -1288,7 +1291,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 500}, {ItemID: "information_matrix", Quantity: 500}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "vertical_launching_silo"},
-			{Type: TechUnlockBuilding, ID: "small_carrier_rocket"},
+			{Type: TechUnlockRecipe, ID: "small_carrier_rocket"},
 		},
 	},
 	{
@@ -1386,6 +1389,32 @@ var defaultTechDefinitions = []TechDefinition{
 		},
 	},
 	{
+		ID:            "planetary_shield",
+		Name:          "行星护盾",
+		NameEN:        "Planetary Shield",
+		Category:      TechCategoryBranch,
+		Type:          TechTypeCombat,
+		Level:         11,
+		Prerequisites: []string{"plasma_turret", "interstellar_power", "energy_shield"},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 800}, {ItemID: "structure_matrix", Quantity: 800}, {ItemID: "information_matrix", Quantity: 400}},
+		Unlocks: []TechUnlock{
+			{Type: TechUnlockBuilding, ID: string(BuildingTypePlanetaryShieldGenerator)},
+		},
+	},
+	{
+		ID:            "self_evolution",
+		Name:          "自演化研究站",
+		NameEN:        "Self-Evolution Lab",
+		Category:      TechCategoryBranch,
+		Type:          TechTypeMain,
+		Level:         11,
+		Prerequisites: []string{"gravity_matrix", "quantum_chip", "research_speed"},
+		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 600}, {ItemID: "structure_matrix", Quantity: 600}, {ItemID: "information_matrix", Quantity: 600}},
+		Unlocks: []TechUnlock{
+			{Type: TechUnlockBuilding, ID: string(BuildingTypeSelfEvolutionLab)},
+		},
+	},
+	{
 		ID:            "photon_mining",
 		Name:          "光子聚焦采矿",
 		NameEN:        "Photon Spotlight Mining",
@@ -1395,7 +1424,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"quantum_printing"},
 		Cost:          []ItemAmount{{ItemID: "information_matrix", Quantity: 200}, {ItemID: "gravity_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "laser_mining"},
+			{Type: TechUnlockBuilding, ID: string(BuildingTypeAdvancedMiningMachine)},
 		},
 	},
 	{
@@ -1489,8 +1518,9 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"dirac_inversion"},
 		Cost:          []ItemAmount{{ItemID: "energy_matrix", Quantity: 4000}, {ItemID: "gravity_matrix", Quantity: 2000}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "annihilation_reactor"},
-			{Type: TechUnlockRecipe, ID: "antimatter_fuel"},
+			{Type: TechUnlockBuilding, ID: string(BuildingTypeRecomposingAssembler)},
+			{Type: TechUnlockRecipe, ID: "annihilation_constraint_sphere"},
+			{Type: TechUnlockRecipe, ID: "antimatter_fuel_rod"},
 			{Type: TechUnlockBuilding, ID: "artificial_star"},
 		},
 	},
@@ -1721,7 +1751,6 @@ var techUnlockAliases = map[TechUnlockType]map[string][]TechUnlock{
 		"pump":                   {{Type: TechUnlockBuilding, ID: string(BuildingTypeWaterPump)}},
 		"refinery":               {{Type: TechUnlockBuilding, ID: string(BuildingTypeOilRefinery)}},
 		"self_evolution_station": {{Type: TechUnlockBuilding, ID: string(BuildingTypeSelfEvolutionLab)}},
-		"small_carrier_rocket":   {{Type: TechUnlockSpecial, ID: "small_carrier_rocket"}},
 		"solar_sail":             {{Type: TechUnlockRecipe, ID: "solar_sail"}},
 		"stacker":                {{Type: TechUnlockBuilding, ID: string(BuildingTypeAutomaticPiler)}},
 		"star_lifter":            {{Type: TechUnlockUnit, ID: "logistics_ship"}},

@@ -109,8 +109,8 @@ type PipelineEndpointView struct {
 	AllowedItems []string            `json:"allowed_items,omitempty"`
 }
 
-// PlanetNetworks returns network topology and power allocation views for the active planet.
-func (ql *Layer) PlanetNetworks(ws *model.WorldState, playerID, planetID string) (*PlanetNetworksView, bool) {
+// PlanetNetworks returns network topology and power allocation views for a loaded planet runtime.
+func (ql *Layer) PlanetNetworks(ws *model.WorldState, playerID, planetID, activePlanetID string) (*PlanetNetworksView, bool) {
 	planet, ok := ql.maps.Planet(planetID)
 	if !ok {
 		return nil, false
@@ -118,8 +118,9 @@ func (ql *Layer) PlanetNetworks(ws *model.WorldState, playerID, planetID string)
 	_ = planet
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	view := &PlanetNetworksView{
-		PlanetID:   planetID,
-		Discovered: discovered,
+		PlanetID:       planetID,
+		Discovered:     discovered,
+		ActivePlanetID: activePlanetID,
 	}
 	if !discovered || ws == nil {
 		return view, true
@@ -129,7 +130,6 @@ func (ql *Layer) PlanetNetworks(ws *model.WorldState, playerID, planetID string)
 	defer ws.RUnlock()
 
 	view.Tick = ws.Tick
-	view.ActivePlanetID = ws.PlanetID
 	if ws.PlanetID != planetID {
 		return view, true
 	}

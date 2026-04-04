@@ -2,56 +2,67 @@ package gamecore
 
 import "siliconworld/internal/model"
 
-func settleLogisticsShips(ws *model.WorldState) {
-	if ws == nil || len(ws.LogisticsShips) == 0 {
-		return
-	}
-	for _, ship := range ws.LogisticsShips {
-		if ship == nil {
+func settleLogisticsShips(worlds map[string]*model.WorldState) {
+	for originPlanetID, ws := range worlds {
+		if ws == nil || len(ws.LogisticsShips) == 0 {
 			continue
 		}
-		ship.Normalize()
-		switch ship.Status {
-		case model.LogisticsShipIdle:
-			continue
-		case model.LogisticsShipTakeoff:
-			ship.RemainingTicks = tickDown(ship.RemainingTicks)
-			if ship.RemainingTicks <= 0 {
-				ship.Status = model.LogisticsShipInFlight
-				ship.RemainingTicks = clampTicks(ship.TravelTicks, 1)
+		for _, ship := range ws.LogisticsShips {
+			if ship == nil {
+				continue
 			}
-		case model.LogisticsShipInFlight:
-			ship.RemainingTicks = tickDown(ship.RemainingTicks)
-			if ship.RemainingTicks <= 0 {
-				ship.Status = model.LogisticsShipLanding
-				ship.RemainingTicks = clampTicks(model.DefaultLogisticsShipLandingTicks, 1)
-				if ship.TargetPos != nil {
-					ship.Position = *ship.TargetPos
+			ship.Normalize()
+			switch ship.Status {
+			case model.LogisticsShipIdle:
+				continue
+			case model.LogisticsShipTakeoff:
+				ship.RemainingTicks = tickDown(ship.RemainingTicks)
+				if ship.RemainingTicks <= 0 {
+					ship.Status = model.LogisticsShipInFlight
+					ship.RemainingTicks = clampTicks(ship.TravelTicks, 1)
 				}
-			}
-		case model.LogisticsShipLanding:
-			ship.RemainingTicks = tickDown(ship.RemainingTicks)
-			if ship.RemainingTicks <= 0 {
-				deliverLogisticsShipCargo(ws, ship)
+			case model.LogisticsShipInFlight:
+				ship.RemainingTicks = tickDown(ship.RemainingTicks)
+				if ship.RemainingTicks <= 0 {
+					ship.Status = model.LogisticsShipLanding
+					ship.RemainingTicks = clampTicks(model.DefaultLogisticsShipLandingTicks, 1)
+					if ship.TargetPos != nil {
+						ship.Position = *ship.TargetPos
+					}
+				}
+			case model.LogisticsShipLanding:
+				ship.RemainingTicks = tickDown(ship.RemainingTicks)
+				if ship.RemainingTicks <= 0 {
+					deliverLogisticsShipCargo(worlds, originPlanetID, ship)
+					ship.Status = model.LogisticsShipIdle
+					if ship.TargetPos != nil {
+						ship.Position = *ship.TargetPos
+					}
+					ship.TargetPos = nil
+					ship.TargetPlanetID = ""
+					ship.TargetStationID = ""
+					ship.TravelTicks = 0
+					ship.Warped = false
+					ship.EnergyCost = 0
+					ship.WarpItemSpent = 0
+				}
+			default:
 				ship.Status = model.LogisticsShipIdle
-				if ship.TargetPos != nil {
-					ship.Position = *ship.TargetPos
-				}
-				ship.TargetPos = nil
-				ship.TargetStationID = ""
-				ship.TravelTicks = 0
-				ship.Warped = false
-				ship.EnergyCost = 0
-				ship.WarpItemSpent = 0
 			}
-		default:
-			ship.Status = model.LogisticsShipIdle
 		}
 	}
 }
 
-func deliverLogisticsShipCargo(ws *model.WorldState, ship *model.LogisticsShipState) {
-	if ws == nil || ship == nil || ship.TargetStationID == "" || len(ship.Cargo) == 0 {
+func deliverLogisticsShipCargo(worlds map[string]*model.WorldState, originPlanetID string, ship *model.LogisticsShipState) {
+	if ship == nil || ship.TargetStationID == "" || len(ship.Cargo) == 0 {
+		return
+	}
+	targetPlanetID := ship.TargetPlanetID
+	if targetPlanetID == "" {
+		targetPlanetID = originPlanetID
+	}
+	ws := worlds[targetPlanetID]
+	if ws == nil {
 		return
 	}
 	station := ws.LogisticsStations[ship.TargetStationID]

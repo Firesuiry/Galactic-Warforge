@@ -126,7 +126,7 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		},
 	}
 
-	view, ok := ql.PlanetRuntime(ws, "p1", planetID)
+	view, ok := ql.PlanetRuntime(ws, "p1", planetID, planetID)
 	if !ok {
 		t.Fatal("expected runtime view")
 	}
@@ -223,7 +223,7 @@ func TestPlanetNetworksReturnsOwnPowerAndPipelineViews(t *testing.T) {
 		},
 	}
 
-	view, ok := ql.PlanetNetworks(ws, "p1", planetID)
+	view, ok := ql.PlanetNetworks(ws, "p1", planetID, planetID)
 	if !ok {
 		t.Fatal("expected networks view")
 	}
@@ -261,6 +261,20 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	}
 	if mining == nil || mining.Name == "" || mining.Color == "" || mining.IconKey == "" {
 		t.Fatalf("expected mining machine metadata, got %+v", mining)
+	}
+
+	var silo *BuildingCatalogEntry
+	for i := range view.Buildings {
+		if view.Buildings[i].ID == model.BuildingTypeVerticalLaunchingSilo {
+			silo = &view.Buildings[i]
+			break
+		}
+	}
+	if silo == nil {
+		t.Fatal("expected vertical launching silo metadata")
+	}
+	if silo.DefaultRecipeID != "small_carrier_rocket" {
+		t.Fatalf("expected silo default recipe small_carrier_rocket, got %+v", silo)
 	}
 
 	foundTech := false

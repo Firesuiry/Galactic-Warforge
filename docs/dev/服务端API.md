@@ -34,6 +34,32 @@
 - 第一版不做多槽位或命名存档点，自动保存与手动保存都会覆盖同一份 `save.json`。
 - 第一版不持久化 RNG 状态；续档后未来随机事件不保证与不停服持续运行时完全一致。
 
+**普通新局默认入口**
+- `config-dev.yaml + map.yaml` 现在就是一条可直接从 fresh save 起步的官方路线。
+- 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`，但这门 0 级科技现在会直接解锁 `matrix_lab` 建造权限，保证第一台研究站可合法落地。
+- `config-dev.yaml` 会为每名玩家预置一份最小启动包：
+  - `minerals = 200`
+  - `energy = 100`
+  - `inventory`: `electromagnetic_matrix x50`
+- 这份启动包的用途不是跳过前期，而是覆盖默认新局到第一条自给电磁矩阵产线之间的前期科研真空段；研究系统仍然要求真实 `running` 研究站与真实矩阵消耗。
+
+**官方中后期场景**
+- 服务端现在提供一套官方 midgame 场景：`config-midgame.yaml + map-midgame.yaml`
+- 启动命令：
+```bash
+cd /home/firesuiry/develop/siliconWorld/server
+env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
+  go run ./cmd/server -config config-midgame.yaml -map-config map-midgame.yaml
+```
+- `battlefield.initial_active_planet_id` 可指定新开局默认进入哪颗行星；若为空，仍使用地图主行星；续档时不覆盖存档中的 active planet。当前官方场景固定为 `planet-1-2`。
+- `players[].bootstrap` 可为官方场景预置 `minerals` / `energy` / `inventory[]` / `completed_techs[]`。当前官方场景会给每名玩家预置：
+  - `minerals = 5000`
+  - `energy = 3000`
+  - `inventory`: `frame_material x16`、`deuterium_fuel_rod x16`、`quantum_chip x16`、`solar_sail x16`、`small_carrier_rocket x4`
+  - `completed_techs`: `electromagnetism`、`basic_logistics_system`、`automatic_metallurgy`、`basic_assembling_processes`、`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`dyson_component`、`interstellar_logistics`、`interstellar_power`、`signal_tower`、`plasma_turret`、`gas_giants`、`gravity_matrix`、`planetary_shield`、`self_evolution`、`quantum_chip`、`solar_sail_orbit`、`ray_receiver`、`vertical_launching`
+- 当前官方 midgame 场景故意**不**预置 `dirac_inversion`，以便继续用 `set_ray_receiver_mode ... photon` 验证科技门禁；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`。
+- `map` 配置新增 `overrides.planets.<planet_id>.kind`，可强制把某颗行星覆盖成 `gas_giant`、`rocky` 或 `ice`，不再依赖 seed 抽卡。当前 `map-midgame.yaml` 把 `planet-1-2` 强制设成 `gas_giant`，用于验证 `orbital_collector` 与戴森中后期路线。
+
 **GET /health**
 - 说明: 健康检查（无需认证）
 - 响应:
@@ -129,7 +155,7 @@
 - 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`）；`winner` 已决出胜者时存在；`active_planet_id` 当前被模拟的行星；`map_width` / `map_height` 当前行星尺寸
 - `players` 字段补充:
   - 所有玩家均返回 `player_id` / `team_id` / `role` / `is_alive`
-  - 仅自身玩家返回完整状态，常用字段包括 `resources` / `inventory` / `permissions` / `executor` / `tech` / `combat_tech` / `stats`
+  - 仅自身玩家返回完整状态，常用字段包括 `resources` / `inventory` / `permissions` / `executor` / `executors` / `tech` / `combat_tech` / `stats`
   - `inventory` 物品库存，键为 `item_id`，值为数量
   - `executor` 字段说明:
     - `unit_id` 执行体单位 ID
@@ -137,9 +163,12 @@
     - `operate_range` 操作范围
     - `concurrent_tasks` 并发任务上限（建造/升级/拆除等执行体任务）
     - `research_boost` 研究辅助加成（数值参数）
+  - `executors`：按 `planet_id` 组织的执行体映射；字段结构与 `executor` 相同。`executor` 仍保留为当前 active planet 上下文的兼容镜像
   - `tech` 字段说明:
     - `player_id` / `completed_techs` / `current_research` / `research_queue` / `total_researched`
-    - `current_research` / `research_queue` 元素字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `enqueue_tick` / `complete_tick`
+    - `current_research` / `research_queue` 元素字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason` / `enqueue_tick` / `complete_tick`
+    - `progress` / `total_cost` 现在对应真实矩阵消耗进度；`required_cost` / `consumed_cost` 中的矩阵物品统一使用 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`
+    - `blocked_reason` 当前常见值为 `waiting_lab` / `waiting_matrix` / `invalid_tech`
   - `combat_tech` 字段说明:
     - `player_id` / `unlocked_techs` / `current_research` / `research_progress`
     - `unlocked_techs` / `current_research` 中的科技对象字段：`id` / `name` / `type` / `level` / `max_level` / `research_cost` / `effects`
@@ -271,7 +300,9 @@
 - 说明补充:
   - 该接口只返回轻量摘要，不再返回整张 `terrain` / `fog` / `buildings` / `units`
   - 未发现行星只保证 `planet_id` 与 `discovered=false`
-  - `building_count` / `unit_count` 对当前 active 行星按玩家可见性统计，`resource_count` 返回当前已知总资源点数
+  - 服务端现在按 `{planet_id}` 直接读取对应行星 runtime，而不是借用当前 active planet 的世界状态
+  - 只要目标行星 runtime 已加载，`tick` / `building_count` / `unit_count` 就来自该行星自身，并按当前玩家可见性统计
+  - 若目标行星已发现但 runtime 尚未加载，`building_count` / `unit_count` 保持 `0`；`resource_count` 仍返回当前已知总资源点数
 - 响应字段:
   - `planet_id` / `name` / `discovered` / `kind`
   - `map_width` / `map_height`
@@ -299,6 +330,8 @@
   - 用于整颗行星的全局缩放渲染，按固定步长对原始地图做下采样聚合
   - 该接口不返回逐 tile 级别建筑、单位、资源明细，而是返回聚合后的地形、迷雾和计数矩阵
   - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `step` / `cells_width` / `cells_height`
+  - 只要目标行星 runtime 已加载，就会返回该行星自己的当前迷雾与聚合计数，不要求它是 active planet
+  - 若目标行星已发现但 runtime 尚未加载，当前会回退为静态地形骨架与空计数矩阵，不会混入别的行星运行态
   - `client-web` 行星观察页在“极小缩放看全局”场景应优先使用该接口，而不是把 `/scene` 压到亚像素渲染
 - 查询参数:
   - `step`: 下采样步长；表示一个 overview cell 覆盖多少个原始 tile。默认 `100`，最小 `1`，超出地图尺寸时会自动夹紧到地图最大边长
@@ -340,6 +373,8 @@
 - 说明补充:
   - 用于大地图视窗渲染，只返回指定窗口内的地形、迷雾、建筑、单位、资源
   - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `bounds`
+  - 只要目标行星 runtime 已加载，就会返回该行星窗口内的实时迷雾和实体，不要求它是 active planet
+  - 若目标行星已发现但 runtime 尚未加载，当前仅返回静态 `terrain` / `environment` / `bounds`，不返回迷雾与实体明细
   - 当前服务端会对窗口做裁剪：`width` / `height` 默认 `160`，最大 `256`；超出地图边界时会自动回收至合法范围
 - 查询参数:
   - `x` / `y`: 场景窗口左上角坐标
@@ -390,6 +425,8 @@
   - `title`
   - 与目标类型对应的 `building` / `unit` / `resource`
 - 说明补充:
+  - 建筑 / 单位 / 资源检视都会优先按 `{planet_id}` 对应的行星 runtime 解析，不再限定当前 active planet
+  - 建筑 / 单位完整详情依赖目标行星 runtime 已加载；资源检视在 runtime 不可用时仍可回退到静态地图资源
   - 对建筑和单位，服务端会再次按可见性校验；不可见目标返回 `404`
   - `sector` 当前返回轻量标题信息，便于前端右侧详情栏稳定落点
 - 响应示例:
@@ -417,13 +454,14 @@
 - 说明: 行星运行态只读视图（需认证）
 - 说明补充:
   - 未发现行星只返回 `planet_id` + `discovered=false`
-  - 非当前 active 行星返回 `available=false`，并附带 `active_planet_id` / `tick`，前端可据此稳定降级显示
-  - 当前 active 行星返回物流、施工、敌情、侦测等动态读模型
+  - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
+  - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
+  - 当前 active 行星仍承载最完整的战斗/敌情/侦测结算；非 active 但已加载行星重点用于查看物流、施工和运行态
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
   - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
-  - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
+  - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `origin_planet_id` / `target_planet_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
   - `construction_tasks`：施工任务视图，包含 `id` / `player_id` / `region_id` / `building_type` / `position` / `rotation` / `blueprint_params` / `conveyor_direction` / `recipe_id` / `cost` / `state` / `enqueue_tick` / `start_tick` / `update_tick` / `queue_index` / `remaining_ticks` / `total_ticks` / `speed_bonus` / `priority` / `error` / `materials_deducted`
   - `enemy_forces`：敌军视图，包含 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
   - `detections`：侦测摘要，包含 `player_id` / `vision_range` / `known_enemy_count` / `detected_positions`
@@ -433,7 +471,7 @@
   "planet_id": "planet-1-1",
   "discovered": true,
   "available": true,
-  "active_planet_id": "planet-1-1",
+  "active_planet_id": "planet-1-2",
   "tick": 120,
   "logistics_stations": [
     {
@@ -498,7 +536,8 @@
 - 说明: 行星网络读模型（需认证）
 - 说明补充:
   - 未发现行星只返回 `planet_id` + `discovered=false`
-  - 非当前 active 行星返回 `available=false`，当前 active 行星返回电网/管网拓扑与分配结果
+  - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
+  - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick`
   - `power_networks`：电网聚合，包含 `id` / `owner_id` / `supply` / `demand` / `allocated` / `net` / `shortage` / `node_ids`
@@ -606,7 +645,7 @@
   - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
   - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs`
 - 响应字段:
-  - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
+  - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
   - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `max_level` / `hidden` / `icon_key` / `color`
@@ -664,6 +703,14 @@
   ]
 }
 ```
+- 戴森相关 catalog 补充：
+  - `items` 中矩阵物品统一只暴露 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`；旧别名 `matrix_blue` / `matrix_red` / `matrix_yellow` / `matrix_universe` 已从主 catalog 移除。
+  - `buildings` 中以下此前长期处于“有定义但无玩家入口”的建筑现在都已进入 `buildable=true` 主线建筑集，并通过 `unlock_tech` 暴露真实科技前置：
+    - `advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`energy_exchanger`
+    - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`
+  - `buildings` 中 `vertical_launching_silo` 当前会暴露 `default_recipe_id = "small_carrier_rocket"`。
+  - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
+  - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip` 也都会对外暴露对应 recipe 解锁。
 
 ---
 
@@ -679,7 +726,7 @@
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|launch_solar_sail|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -689,7 +736,7 @@
         "position": {"x": 10, "y": 12}
       },
       "payload": {
-        "building_type": "当前服务端 Buildable=true 的建筑 ID，例如 mining_machine|wind_turbine|tesla_tower|solar_panel|arc_smelter|assembling_machine_mk1|chemical_plant|conveyor_belt_mk1|depot_mk1|planetary_logistics_station|em_rail_ejector",
+        "building_type": "当前服务端 Buildable=true 的建筑 ID，例如 mining_machine|advanced_mining_machine|wind_turbine|tesla_tower|solar_panel|arc_smelter|assembling_machine_mk1|recomposing_assembler|chemical_plant|pile_sorter|conveyor_belt_mk1|depot_mk1|planetary_logistics_station|energy_exchanger|orbital_collector|em_rail_ejector|vertical_launching_silo|ray_receiver|jammer_tower|sr_plasma_turret|planetary_shield_generator|self_evolution_lab",
         "direction": "north|east|south|west|auto",
         "recipe_id": "gear|smelt_iron|plastic",
         "task_id": "c-1",
@@ -732,7 +779,7 @@
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
   - `scan_system`：`target.system_id` 必填；`target.layer` 可填 `system`
   - `scan_planet`：`target.planet_id` 必填；`target.layer` 可填 `planet`
-  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；命令成功后进入施工队列，建造完成触发 `entity_created`
+  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝
@@ -740,14 +787,52 @@
   - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`
   - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `payload.item_id` + `payload.mode` + `payload.local_storage` 必填；`payload.scope` 取 `planetary|interstellar`；`payload.mode` 取 `none|supply|demand|both`；`interstellar` 作用域只允许星际物流站
   - `cancel_construction` / `restore_construction`：`payload.task_id` 必填
-  - `start_research` / `cancel_research`：`payload.tech_id` 必填
+  - `start_research`：`payload.tech_id` 必填；前置科技必须满足；至少需要 1 个处于 `running` 且未设置 `recipe_id` 的研究站（`matrix_lab` 或 `self_evolution_lab`）；所需每种矩阵都必须已经出现在研究站本地库存里；后续 tick 会真实消耗研究站库存中的矩阵推进 `progress`
+  - `cancel_research`：`payload.tech_id` 必填
+  - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量
+  - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
+  - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`photon` 模式要求玩家已解锁 `dirac_inversion`
   - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`
+  - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件
   - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选（缺省时自动补层）；要求玩家已解锁 `dyson_component`
   - `build_dyson_frame`：`payload.system_id` / `payload.layer_index` / `payload.node_a_id` / `payload.node_b_id` 必填；要求玩家已解锁 `dyson_component`
   - `build_dyson_shell`：`payload.system_id` / `payload.layer_index` / `payload.latitude_min` / `payload.latitude_max` / `payload.coverage` 必填；要求玩家已解锁 `dyson_component`
   - `demolish_dyson`：`payload.system_id` / `payload.component_type` / `payload.component_id` 必填
+- 戴森脚手架补充说明：`build_dyson_node` / `build_dyson_frame` / `build_dyson_shell` 当前仍是实验性直连入口，主要做科技校验与结构写入，不额外扣建筑材料；真正把已生产火箭转成戴森层收益的入口是 `launch_rocket`。
+- 戴森中后期最小请求示例：
+```json
+{
+  "request_id": "dyson-midgame-001",
+  "issuer_type": "player",
+  "issuer_id": "p1",
+  "commands": [
+    {
+      "type": "transfer_item",
+      "target": {"layer": "planet", "entity_id": "b-31"},
+      "payload": {
+        "building_id": "b-31",
+        "item_id": "small_carrier_rocket",
+        "quantity": 1
+      }
+    },
+    {
+      "type": "launch_rocket",
+      "target": {"layer": "system", "system_id": "sys-1"},
+      "payload": {
+        "building_id": "b-31",
+        "system_id": "sys-1",
+        "layer_index": 0,
+        "count": 1
+      }
+    }
+  ]
+}
+```
+- 示例补充说明：
+  - 如果 `vertical_launching_silo` 还没自行产出火箭，可以先用 `transfer_item` 把背包里的 `small_carrier_rocket` 装进建筑本地存储。
+  - `launch_rocket` 执行前，目标层必须已经存在至少一个 `build_dyson_*` 生成的脚手架。
 - 物流补充说明：`planetary_logistics_station` 完工后会自动补齐默认容量对应的无人机；`interstellar_logistics_station` 还会自动补齐默认货船
-- 物流补充说明：当前已支持在 active planet 内形成 `造站 -> 配槽位 -> 自动配送` 的闭环；物流无人机或货船会在后续 tick 自动派出
+- 物流补充说明：当前已支持在同一恒星系、已加载行星之间形成最小星际物流闭环；物流货船视图会暴露 `origin_planet_id` / `target_planet_id`，后续 tick 会跨行星派发与结算
 - 升级/拆除规则补充:
   - 受建筑定义中的 `upgrade` / `demolish` 规则约束（允许与否、最大等级、耗时、返还率、是否要求停机）。
   - 若 `duration_ticks > 0`，命令执行会创建 `job` 并将建筑状态置为 `paused`，在作业完成 Tick 时生效：升级后恢复原工作状态，拆除后释放占格并返还资源。
@@ -815,9 +900,12 @@
   - `threat_level_changed`
   - `loot_dropped`
   - `entity_updated`
+  - `rocket_launched`
 - 事件类型补充:
+  - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id`/`building_type`/`prev_state`/`next_state`/`reason`；当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败新增原因：`power_no_connector`/`power_no_provider`/`power_out_of_range`/`power_capacity_full`。
   - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。
+  - `rocket_launched` 戴森火箭发射事件，payload 包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`。
 - 响应示例:
 ```json
 {
@@ -1053,6 +1141,7 @@
 - 补充说明:
   - 服务端不再默认自动推送全部事件；只有显式订阅的 `event_types` 才会进入该 SSE 连接
   - 事件历史按类型独立保留，高频事件不会再把 `command_result` 这类低频关键事件挤出窗口
+  - `rocket_launched` 事件 payload 当前包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`
 - GameEvent 示例:
 ```json
 {

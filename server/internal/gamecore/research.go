@@ -2,35 +2,25 @@ package gamecore
 
 import (
 	"fmt"
+	"math"
+	"sort"
 
 	"siliconworld/internal/model"
 )
 
-// settleResearch processes research progress for all players
-func settleResearch(ws *model.WorldState) []*model.GameEvent {
+// settleResearch processes research progress for all players using real matrix items.
+func settleResearch(worlds map[string]*model.WorldState) []*model.GameEvent {
 	var events []*model.GameEvent
 
-	for _, player := range ws.Players {
+	for _, player := range researchPlayers(worlds) {
 		if player == nil || !player.IsAlive {
 			continue
 		}
-
-		// Initialize tech state if needed
 		if player.Tech == nil {
 			player.Tech = model.NewPlayerTechState(player.PlayerID)
 		}
-
-		// No active research, check queue
 		if player.Tech.CurrentResearch == nil {
-			if len(player.Tech.ResearchQueue) > 0 {
-				// Start next research from queue
-				player.Tech.CurrentResearch = player.Tech.ResearchQueue[0]
-				player.Tech.ResearchQueue = player.Tech.ResearchQueue[1:]
-				if player.Tech.CurrentResearch != nil {
-					player.Tech.CurrentResearch.State = model.ResearchInProgress
-					player.Tech.CurrentResearch.EnqueueTick = ws.Tick
-				}
-			}
+			advanceQueuedResearch(player, currentResearchTick(worlds))
 			continue
 		}
 
@@ -39,55 +29,136 @@ func settleResearch(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 
-		// Get tech definition
 		def, ok := model.TechDefinitionByID(research.TechID)
 		if !ok {
-			// Tech not found, cancel research
 			research.State = model.ResearchCancelled
+			research.BlockedReason = "invalid_tech"
 			player.Tech.CurrentResearch = nil
+			advanceQueuedResearch(player, currentResearchTick(worlds))
 			continue
 		}
 
-		// Calculate research speed (base + lab throughput + executor boost).
-		// Use a fixed-point approach with 1000-scale to preserve fractional progress.
-		baseSpeed := int64(1000) // 1000 units = 1 progress point
-		if labSpeed := playerResearchSpeed(ws, player.PlayerID); labSpeed > 0 {
-			baseSpeed += int64(labSpeed) * 1000
-		}
-		if player.Executor != nil && player.Executor.ResearchBoost > 0 {
-			// Apply boost: newSpeed = baseSpeed * (1 + boost)
-			boostFactor := int64(1000 + player.Executor.ResearchBoost*1000)
-			baseSpeed = baseSpeed * boostFactor / 1000
+		labs := runningResearchLabs(worlds, player.PlayerID)
+		if len(labs) == 0 {
+			research.BlockedReason = "waiting_lab"
+			continue
 		}
 
-		// Progress research
-		research.Progress += baseSpeed
+		progressed := consumeResearchProgress(labs, research, researchThroughput(player, labs))
+		if progressed <= 0 {
+			research.BlockedReason = "waiting_matrix"
+			continue
+		}
+		research.BlockedReason = ""
 
-		// Check if research is complete
 		if research.Progress >= research.TotalCost {
-			completeResearch(player, research, def, ws.Tick, &events)
+			completeResearch(player, research, def, currentResearchTick(worlds), &events)
 		}
 	}
 
 	return events
 }
 
-func playerResearchSpeed(ws *model.WorldState, playerID string) int {
-	if ws == nil || playerID == "" {
-		return 0
+func researchPlayers(worlds map[string]*model.WorldState) map[string]*model.PlayerState {
+	if len(worlds) == 0 {
+		return nil
 	}
+	planetIDs := make([]string, 0, len(worlds))
+	for planetID := range worlds {
+		planetIDs = append(planetIDs, planetID)
+	}
+	sort.Strings(planetIDs)
+	for _, planetID := range planetIDs {
+		if ws := worlds[planetID]; ws != nil && ws.Players != nil {
+			return ws.Players
+		}
+	}
+	return nil
+}
+
+func currentResearchTick(worlds map[string]*model.WorldState) int64 {
+	var tick int64
+	for _, ws := range worlds {
+		if ws != nil && ws.Tick > tick {
+			tick = ws.Tick
+		}
+	}
+	return tick
+}
+
+func advanceQueuedResearch(player *model.PlayerState, tick int64) {
+	if player == nil || player.Tech == nil || len(player.Tech.ResearchQueue) == 0 {
+		return
+	}
+	player.Tech.CurrentResearch = player.Tech.ResearchQueue[0]
+	player.Tech.ResearchQueue = player.Tech.ResearchQueue[1:]
+	if player.Tech.CurrentResearch != nil {
+		player.Tech.CurrentResearch.State = model.ResearchInProgress
+		player.Tech.CurrentResearch.EnqueueTick = tick
+		player.Tech.CurrentResearch.BlockedReason = ""
+	}
+}
+
+func isResearchLab(building *model.Building) bool {
+	if building == nil || building.Runtime.Functions.Research == nil {
+		return false
+	}
+	if building.Production == nil {
+		return true
+	}
+	return building.Production.RecipeID == ""
+}
+
+func runningResearchLabs(worlds map[string]*model.WorldState, playerID string) []*model.Building {
+	var labs []*model.Building
+	for _, ws := range worlds {
+		if ws == nil {
+			continue
+		}
+		for _, building := range ws.Buildings {
+			if building == nil || building.OwnerID != playerID {
+				continue
+			}
+			if building.Runtime.State != model.BuildingWorkRunning {
+				continue
+			}
+			if !isResearchLab(building) {
+				continue
+			}
+			labs = append(labs, building)
+		}
+	}
+	return labs
+}
+
+func researchThroughput(player *model.PlayerState, labs []*model.Building) int {
 	speed := 0
-	for _, building := range ws.Buildings {
-		if building == nil || building.OwnerID != playerID {
-			continue
-		}
-		if building.Runtime.State != model.BuildingWorkRunning {
-			continue
-		}
-		if building.Runtime.Functions.Research == nil {
+	for _, building := range labs {
+		if building == nil || building.Runtime.Functions.Research == nil {
 			continue
 		}
 		speed += building.Runtime.Functions.Research.ResearchPerTick
+	}
+	if speed <= 0 {
+		return 0
+	}
+	boost := 0.0
+	if player != nil {
+		if len(player.Executors) > 0 {
+			for _, exec := range player.Executors {
+				if exec != nil && exec.ResearchBoost > boost {
+					boost = exec.ResearchBoost
+				}
+			}
+		} else if player.Executor != nil {
+			boost = player.Executor.ResearchBoost
+		}
+	}
+	if boost > 0 {
+		speed = int(math.Ceil(float64(speed) * (1 + boost)))
+	}
+	if speed < 1 {
+		speed = 1
 	}
 	return speed
 }
@@ -96,6 +167,7 @@ func playerResearchSpeed(ws *model.WorldState, playerID string) int {
 func completeResearch(player *model.PlayerState, research *model.PlayerResearch, def *model.TechDefinition, tick int64, events *[]*model.GameEvent) {
 	research.State = model.ResearchCompleted
 	research.CompleteTick = tick
+	research.BlockedReason = ""
 
 	// Record completed tech
 	if player.Tech.CompletedTechs == nil {
@@ -127,14 +199,7 @@ func completeResearch(player *model.PlayerState, research *model.PlayerResearch,
 
 	// Clear current research and start next from queue
 	player.Tech.CurrentResearch = nil
-	if len(player.Tech.ResearchQueue) > 0 {
-		player.Tech.CurrentResearch = player.Tech.ResearchQueue[0]
-		player.Tech.ResearchQueue = player.Tech.ResearchQueue[1:]
-		if player.Tech.CurrentResearch != nil {
-			player.Tech.CurrentResearch.State = model.ResearchInProgress
-			player.Tech.CurrentResearch.EnqueueTick = tick
-		}
-	}
+	advanceQueuedResearch(player, tick)
 }
 
 // applyTechUnlocks applies the effects of a completed tech
@@ -233,17 +298,42 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 	}
 
-	// Calculate total cost (for repeatable techs, could scale with level)
-	// Scale by 1000 to match baseSpeed scale for fixed-point arithmetic
-	totalCost := calculateTechCost(def) * 1000
+	labs := runningResearchLabs(gc.worlds, playerID)
+	if len(labs) == 0 {
+		res.Code = model.CodeValidationFailed
+		res.Message = "at least one running research lab is required"
+		return res, nil
+	}
+	for _, cost := range def.Cost {
+		if cost.ItemID == "" || cost.Quantity <= 0 {
+			continue
+		}
+		total := 0
+		for _, lab := range labs {
+			if lab == nil || lab.Storage == nil {
+				continue
+			}
+			total += lab.Storage.OutputQuantity(cost.ItemID)
+		}
+		if total <= 0 {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("missing %s in research labs", cost.ItemID)
+			return res, nil
+		}
+	}
+
+	totalCost := calculateTechCost(def)
 
 	// Create research state
 	research := &model.PlayerResearch{
-		TechID:       techID,
-		State:        model.ResearchPending,
-		Progress:     0,
-		TotalCost:    totalCost,
-		CurrentLevel: player.Tech.CompletedTechs[techID],
+		TechID:        techID,
+		State:         model.ResearchPending,
+		Progress:      0,
+		TotalCost:     totalCost,
+		CurrentLevel:  player.Tech.CompletedTechs[techID],
+		RequiredCost:  append([]model.ItemAmount(nil), def.Cost...),
+		ConsumedCost:  make(map[string]int, len(def.Cost)),
+		BlockedReason: "",
 	}
 
 	// Add to queue (research starts immediately if nothing is being researched)
@@ -286,14 +376,7 @@ func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cm
 		player.Tech.CurrentResearch = nil
 
 		// Start next from queue
-		if len(player.Tech.ResearchQueue) > 0 {
-			player.Tech.CurrentResearch = player.Tech.ResearchQueue[0]
-			player.Tech.ResearchQueue = player.Tech.ResearchQueue[1:]
-			if player.Tech.CurrentResearch != nil {
-				player.Tech.CurrentResearch.State = model.ResearchInProgress
-				player.Tech.CurrentResearch.EnqueueTick = ws.Tick
-			}
-		}
+		advanceQueuedResearch(player, ws.Tick)
 
 		res.Status = model.StatusExecuted
 		res.Code = model.CodeOK
@@ -334,6 +417,56 @@ func calculateTechCost(def *model.TechDefinition) int64 {
 		return 100
 	}
 	return total
+}
+
+func consumeResearchProgress(labs []*model.Building, research *model.PlayerResearch, budget int) int {
+	if research == nil || budget <= 0 || len(research.RequiredCost) == 0 || len(labs) == 0 {
+		return 0
+	}
+	if research.ConsumedCost == nil {
+		research.ConsumedCost = make(map[string]int, len(research.RequiredCost))
+	}
+
+	progressed := 0
+	for _, cost := range research.RequiredCost {
+		remaining := cost.Quantity - research.ConsumedCost[cost.ItemID]
+		for remaining > 0 && budget > 0 {
+			consumedThisRound := false
+			for _, lab := range labs {
+				if lab == nil || lab.Storage == nil {
+					continue
+				}
+				available := lab.Storage.OutputQuantity(cost.ItemID)
+				if available <= 0 {
+					continue
+				}
+				take := minInt(minInt(available, remaining), budget)
+				if take <= 0 {
+					continue
+				}
+				provided, _, err := lab.Storage.Provide(cost.ItemID, take)
+				if err != nil || provided <= 0 {
+					continue
+				}
+				research.ConsumedCost[cost.ItemID] += provided
+				research.Progress += int64(provided)
+				progressed += provided
+				budget -= provided
+				remaining -= provided
+				consumedThisRound = true
+				if budget <= 0 {
+					break
+				}
+			}
+			if !consumedThisRound {
+				break
+			}
+		}
+		if budget <= 0 {
+			break
+		}
+	}
+	return progressed
 }
 
 // CanBuildTech checks if a player can build something that requires a tech unlock

@@ -38,6 +38,8 @@ var validLogisticsShipStatuses = map[LogisticsShipStatus]struct{}{
 type LogisticsShipState struct {
 	ID                   string              `json:"id"`
 	StationID            string              `json:"station_id"`
+	OriginPlanetID       string              `json:"origin_planet_id,omitempty"`
+	TargetPlanetID       string              `json:"target_planet_id,omitempty"`
 	TargetStationID      string              `json:"target_station_id,omitempty"`
 	Capacity             int                 `json:"capacity"`
 	Speed                int                 `json:"speed"`
@@ -187,7 +189,7 @@ func (s *LogisticsShipState) Unload(itemID string, qty int) (int, int, error) {
 }
 
 // BeginTrip starts a takeoff towards the target.
-func (s *LogisticsShipState) BeginTrip(targetStationID string, targetPos Position, distance int, warped bool) error {
+func (s *LogisticsShipState) BeginTrip(targetPlanetID, targetStationID string, targetPos Position, distance int, warped bool) error {
 	if s == nil {
 		return fmt.Errorf("ship required")
 	}
@@ -195,6 +197,7 @@ func (s *LogisticsShipState) BeginTrip(targetStationID string, targetPos Positio
 		return fmt.Errorf("ship not idle")
 	}
 	s.Normalize()
+	s.TargetPlanetID = targetPlanetID
 	s.TargetStationID = targetStationID
 	s.TargetPos = &Position{X: targetPos.X, Y: targetPos.Y, Z: targetPos.Z}
 	s.Status = LogisticsShipTakeoff

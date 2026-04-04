@@ -26,6 +26,7 @@ import type {
   PlanetSummaryView,
   PlayerStatsSnapshot,
   Position,
+  RayReceiverMode,
   ReplayResponse,
   RollbackResponse,
   SaveRequest,
@@ -120,6 +121,11 @@ export interface LaunchSolarSailOptions {
   count?: number;
   orbitRadius?: number;
   inclination?: number;
+}
+
+export interface LaunchRocketOptions {
+  layerIndex?: number;
+  count?: number;
 }
 
 export interface BuildDysonNodeOptions {
@@ -499,6 +505,37 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdTransferItem(buildingId: string, itemId: string, quantity: number) {
+    return sendSingleCommand({
+      type: 'transfer_item',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: {
+        building_id: buildingId,
+        item_id: itemId,
+        quantity,
+      },
+    });
+  }
+
+  function cmdSwitchActivePlanet(planetId: string) {
+    return sendSingleCommand({
+      type: 'switch_active_planet',
+      target: { layer: 'planet', planet_id: planetId },
+      payload: { planet_id: planetId },
+    });
+  }
+
+  function cmdSetRayReceiverMode(buildingId: string, mode: RayReceiverMode) {
+    return sendSingleCommand({
+      type: 'set_ray_receiver_mode',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: {
+        building_id: buildingId,
+        mode,
+      },
+    });
+  }
+
   function cmdLaunchSolarSail(buildingId: string, launchOptions: LaunchSolarSailOptions = {}) {
     return sendSingleCommand({
       type: 'launch_solar_sail',
@@ -508,6 +545,19 @@ export function createApiClient(options: ApiClientOptions) {
         ...(launchOptions.count !== undefined ? { count: launchOptions.count } : {}),
         ...(launchOptions.orbitRadius !== undefined ? { orbit_radius: launchOptions.orbitRadius } : {}),
         ...(launchOptions.inclination !== undefined ? { inclination: launchOptions.inclination } : {}),
+      },
+    });
+  }
+
+  function cmdLaunchRocket(buildingId: string, systemId: string, launchOptions: LaunchRocketOptions = {}) {
+    return sendSingleCommand({
+      type: 'launch_rocket',
+      target: { layer: 'system', system_id: systemId },
+      payload: {
+        building_id: buildingId,
+        system_id: systemId,
+        ...(launchOptions.layerIndex !== undefined ? { layer_index: launchOptions.layerIndex } : {}),
+        ...(launchOptions.count !== undefined ? { count: launchOptions.count } : {}),
       },
     });
   }
@@ -581,6 +631,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdConfigureLogisticsStation,
     cmdDemolish,
     cmdDemolishDyson,
+    cmdLaunchRocket,
     cmdLaunchSolarSail,
     cmdMove,
     cmdProduce,
@@ -588,7 +639,10 @@ export function createApiClient(options: ApiClientOptions) {
     cmdScanGalaxy,
     cmdScanPlanet,
     cmdScanSystem,
+    cmdSetRayReceiverMode,
     cmdStartResearch,
+    cmdSwitchActivePlanet,
+    cmdTransferItem,
     cmdUpgrade,
     fetchAlertSnapshot,
     fetchAudit,

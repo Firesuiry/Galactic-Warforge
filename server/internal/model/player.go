@@ -31,6 +31,51 @@ func NewExecutorState(unitID string, buildEfficiency float64, operateRange, conc
 	}
 }
 
+func cloneExecutorState(exec *ExecutorState) *ExecutorState {
+	if exec == nil {
+		return nil
+	}
+	clone := *exec
+	return &clone
+}
+
+// SetPlanetExecutor registers an executor for a specific planet and keeps the legacy field aligned.
+func (ps *PlayerState) SetPlanetExecutor(planetID string, exec *ExecutorState) {
+	if ps == nil || planetID == "" || exec == nil {
+		return
+	}
+	if ps.Executors == nil {
+		ps.Executors = make(map[string]*ExecutorState)
+	}
+	ps.Executors[planetID] = cloneExecutorState(exec)
+	if ps.Executor == nil {
+		ps.Executor = cloneExecutorState(exec)
+	}
+}
+
+// ExecutorForPlanet returns the executor bound to a planet, falling back to the legacy field.
+func (ps *PlayerState) ExecutorForPlanet(planetID string) *ExecutorState {
+	if ps == nil {
+		return nil
+	}
+	if ps.Executors != nil {
+		if exec := ps.Executors[planetID]; exec != nil {
+			return exec
+		}
+	}
+	return ps.Executor
+}
+
+// SyncLegacyExecutor makes the legacy Executor field mirror the current planet context.
+func (ps *PlayerState) SyncLegacyExecutor(planetID string) {
+	if ps == nil {
+		return
+	}
+	if exec := ps.ExecutorForPlanet(planetID); exec != nil {
+		ps.Executor = cloneExecutorState(exec)
+	}
+}
+
 // SetPermissions normalizes and sets permissions on the player state.
 func (ps *PlayerState) SetPermissions(perms []string) {
 	ps.Permissions = normalizePermissions(perms)

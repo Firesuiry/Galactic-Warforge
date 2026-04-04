@@ -98,19 +98,21 @@ type BuildingRuntime struct {
 
 // BuildingFunctionModules describes modular building capabilities.
 type BuildingFunctionModules struct {
-	Production    *ProductionModule    `json:"production,omitempty" yaml:"production,omitempty"`
-	Collect       *CollectModule       `json:"collect,omitempty" yaml:"collect,omitempty"`
-	Orbital       *OrbitalModule       `json:"orbital,omitempty" yaml:"orbital,omitempty"`
-	Transport     *TransportModule     `json:"transport,omitempty" yaml:"transport,omitempty"`
-	Sorter        *SorterModule        `json:"sorter,omitempty" yaml:"sorter,omitempty"`
-	Spray         *SprayModule         `json:"spray,omitempty" yaml:"spray,omitempty"`
-	Storage       *StorageModule       `json:"storage,omitempty" yaml:"storage,omitempty"`
-	RayReceiver   *RayReceiverModule   `json:"ray_receiver,omitempty" yaml:"ray_receiver,omitempty"`
-	EnergyStorage *EnergyStorageModule `json:"energy_storage,omitempty" yaml:"energy_storage,omitempty"`
-	Energy        *EnergyModule        `json:"energy,omitempty" yaml:"energy,omitempty"`
-	Research      *ResearchModule      `json:"research,omitempty" yaml:"research,omitempty"`
-	Combat        *CombatModule        `json:"combat,omitempty" yaml:"combat,omitempty"`
-	Launch        *LaunchModule        `json:"launch,omitempty" yaml:"launch,omitempty"`
+	Production      *ProductionModule      `json:"production,omitempty" yaml:"production,omitempty"`
+	Collect         *CollectModule         `json:"collect,omitempty" yaml:"collect,omitempty"`
+	Orbital         *OrbitalModule         `json:"orbital,omitempty" yaml:"orbital,omitempty"`
+	Transport       *TransportModule       `json:"transport,omitempty" yaml:"transport,omitempty"`
+	Sorter          *SorterModule          `json:"sorter,omitempty" yaml:"sorter,omitempty"`
+	Spray           *SprayModule           `json:"spray,omitempty" yaml:"spray,omitempty"`
+	Storage         *StorageModule         `json:"storage,omitempty" yaml:"storage,omitempty"`
+	RayReceiver     *RayReceiverModule     `json:"ray_receiver,omitempty" yaml:"ray_receiver,omitempty"`
+	EnergyExchanger *EnergyExchangerModule `json:"energy_exchanger,omitempty" yaml:"energy_exchanger,omitempty"`
+	EnergyStorage   *EnergyStorageModule   `json:"energy_storage,omitempty" yaml:"energy_storage,omitempty"`
+	Energy          *EnergyModule          `json:"energy,omitempty" yaml:"energy,omitempty"`
+	Research        *ResearchModule        `json:"research,omitempty" yaml:"research,omitempty"`
+	Combat          *CombatModule          `json:"combat,omitempty" yaml:"combat,omitempty"`
+	Shield          *ShieldModule          `json:"shield,omitempty" yaml:"shield,omitempty"`
+	Launch          *LaunchModule          `json:"launch,omitempty" yaml:"launch,omitempty"`
 }
 
 // ProductionModule handles production throughput.
@@ -158,6 +160,11 @@ type StorageModule struct {
 	OutputPriority int `json:"output_priority" yaml:"output_priority"`
 }
 
+// EnergyExchangerModule marks a building as a playable power-storage hub.
+type EnergyExchangerModule struct {
+	Hub bool `json:"hub" yaml:"hub"`
+}
+
 // EnergyStorageModule handles power storage capacity and charge/discharge rules.
 type EnergyStorageModule struct {
 	Capacity            int     `json:"capacity" yaml:"capacity"`
@@ -187,6 +194,13 @@ type ResearchModule struct {
 type CombatModule struct {
 	Attack int `json:"attack" yaml:"attack"`
 	Range  int `json:"range" yaml:"range"`
+}
+
+// ShieldModule handles planetary shield charge and capacity.
+type ShieldModule struct {
+	Capacity      int `json:"capacity" yaml:"capacity"`
+	ChargePerTick int `json:"charge_per_tick" yaml:"charge_per_tick"`
+	CurrentCharge int `json:"current_charge" yaml:"current_charge"`
 }
 
 // LaunchModule handles launch-related parameters for EM Rail Ejector and Vertical Launching Silo.
@@ -400,6 +414,9 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			return fmt.Errorf("building runtime %s storage module invalid", def.ID)
 		}
 	}
+	if def.Functions.EnergyExchanger != nil && !def.Functions.EnergyExchanger.Hub {
+		return fmt.Errorf("building runtime %s energy exchanger module invalid", def.ID)
+	}
 	if def.Functions.RayReceiver != nil {
 		module := def.Functions.RayReceiver
 		if module.InputPerTick < 0 || module.PowerOutputPerTick < 0 || module.PhotonOutputPerTick < 0 {
@@ -470,6 +487,15 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 	if def.Functions.Combat != nil {
 		if def.Functions.Combat.Attack < 0 || def.Functions.Combat.Range < 0 {
 			return fmt.Errorf("building runtime %s combat module invalid", def.ID)
+		}
+	}
+	if def.Functions.Shield != nil {
+		module := def.Functions.Shield
+		if module.Capacity <= 0 || module.ChargePerTick <= 0 {
+			return fmt.Errorf("building runtime %s shield module invalid", def.ID)
+		}
+		if module.CurrentCharge < 0 || module.CurrentCharge > module.Capacity {
+			return fmt.Errorf("building runtime %s shield module charge invalid", def.ID)
 		}
 	}
 	if def.Functions.Launch != nil {
@@ -573,6 +599,10 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 		val := *m.Combat
 		out.Combat = &val
 	}
+	if m.Shield != nil {
+		val := *m.Shield
+		out.Shield = &val
+	}
 	if m.Launch != nil {
 		val := *m.Launch
 		out.Launch = &val
@@ -600,6 +630,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			Capacity:      8,
 			EnergyConsume: 2,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 			IOPorts: []IOPort{
 				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
@@ -608,6 +641,24 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			Collect: &CollectModule{YieldPerTick: 8},
 			Storage: &StorageModule{Capacity: 48, Slots: 2, Buffer: 12, InputPriority: 1, OutputPriority: 2},
 			Energy:  &EnergyModule{ConsumePerTick: 2},
+		},
+	},
+	{
+		ID: BuildingTypeAdvancedMiningMachine,
+		Params: BuildingRuntimeParams{
+			Capacity:      12,
+			EnergyConsume: 6,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Collect: &CollectModule{YieldPerTick: 16},
+			Storage: &StorageModule{Capacity: 96, Slots: 3, Buffer: 24, InputPriority: 1, OutputPriority: 2},
+			Energy:  &EnergyModule{ConsumePerTick: 6},
 		},
 	},
 	{
@@ -650,6 +701,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		ID: BuildingTypeOrbitalCollector,
 		Params: BuildingRuntimeParams{
 			EnergyConsume: 4,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 		},
 		Functions: BuildingFunctionModules{
 			Orbital: &OrbitalModule{
@@ -856,6 +910,26 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeSelfEvolutionLab,
+		Params: BuildingRuntimeParams{
+			Capacity:      3,
+			EnergyConsume: 16,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 72, Slots: 6, Buffer: 24, InputPriority: 2, OutputPriority: 2},
+			Production: &ProductionModule{Throughput: 3, RecipeSlots: 1},
+			Research:   &ResearchModule{ResearchPerTick: 3},
+			Energy:     &EnergyModule{ConsumePerTick: 16},
+		},
+	},
+	{
 		ID: BuildingTypeTeslaTower,
 		Params: BuildingRuntimeParams{
 			ConnectionPoints: []ConnectionPoint{
@@ -884,6 +958,18 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Params: BuildingRuntimeParams{
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			EnergyExchanger: &EnergyExchangerModule{Hub: true},
+			EnergyStorage: &EnergyStorageModule{
+				Capacity:            400,
+				ChargePerTick:       80,
+				DischargePerTick:    80,
+				ChargeEfficiency:    0.95,
+				DischargeEfficiency: 0.95,
+				Priority:            2,
+				InitialCharge:       0,
 			},
 		},
 	},
@@ -1076,6 +1162,25 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeRecomposingAssembler,
+		Params: BuildingRuntimeParams{
+			Capacity:      2,
+			EnergyConsume: 12,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 48, Slots: 6, Buffer: 16, InputPriority: 2, OutputPriority: 1},
+			Production: &ProductionModule{Throughput: 2, RecipeSlots: 2},
+			Energy:     &EnergyModule{ConsumePerTick: 12},
+		},
+	},
+	{
 		ID: BuildingTypeGaussTurret,
 		Params: BuildingRuntimeParams{
 			EnergyConsume: 3,
@@ -1086,6 +1191,45 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Combat: &CombatModule{Attack: 15, Range: 5},
 			Energy: &EnergyModule{ConsumePerTick: 3},
+		},
+	},
+	{
+		ID: BuildingTypeSRPlasmaTurret,
+		Params: BuildingRuntimeParams{
+			EnergyConsume: 20,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Combat: &CombatModule{Attack: 60, Range: 12},
+			Energy: &EnergyModule{ConsumePerTick: 20},
+		},
+	},
+	{
+		ID: BuildingTypeJammerTower,
+		Params: BuildingRuntimeParams{
+			EnergyConsume: 6,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Combat: &CombatModule{Attack: 0, Range: 8},
+			Energy: &EnergyModule{ConsumePerTick: 6},
+		},
+	},
+	{
+		ID: BuildingTypePlanetaryShieldGenerator,
+		Params: BuildingRuntimeParams{
+			EnergyConsume: 50,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Shield: &ShieldModule{Capacity: 1000, ChargePerTick: 5, CurrentCharge: 0},
+			Energy: &EnergyModule{ConsumePerTick: 50},
 		},
 	},
 	{
@@ -1122,7 +1266,8 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 			IOPorts: []IOPort{
-				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1, AllowedItems: []string{ItemSmallCarrierRocket}},
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1, AllowedItems: []string{ItemSmallCarrierRocket}},
 			},
 		},
 		Functions: BuildingFunctionModules{

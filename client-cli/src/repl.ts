@@ -6,6 +6,15 @@ import type { ReplContext } from './types.js';
 
 export type { ReplContext };
 
+export function createSerialLineProcessor<T>(handler: (value: T) => Promise<void> | void) {
+  let pending = Promise.resolve();
+  return (value: T) => {
+    const run = pending.then(() => handler(value));
+    pending = run.catch(() => undefined);
+    return run;
+  };
+}
+
 function makePrompt(playerId: string): string {
   return chalk.bold.blue(`[${playerId}]`) + chalk.bold(' > ');
 }
@@ -15,7 +24,6 @@ function completer(line: string): [string[], string] {
   const commandNames = getCommandNames();
 
   if (parts.length <= 1) {
-    // Complete command name
     const hits = commandNames.filter(c => c.startsWith(line));
     return [hits.length ? hits : commandNames, line];
   }
@@ -29,7 +37,6 @@ function completer(line: string): [string[], string] {
     return [hits.length ? hits : entry.completions, partial];
   }
 
-  // Player completion for switch command
   if (cmdName === 'switch' && parts.length === 2) {
     const partial = parts[1];
     const ids = DEFAULT_PLAYERS.map(p => p.id);
@@ -37,7 +44,6 @@ function completer(line: string): [string[], string] {
     return [hits.length ? hits : ids, partial];
   }
 
-  // Help command: complete with command names
   if (cmdName === 'help' && parts.length === 2) {
     const partial = parts[1];
     const hits = commandNames.filter(c => c.startsWith(partial));
@@ -57,10 +63,7 @@ export function startRepl(playerId: string): ReplContext {
   });
 
   const ctx: ReplContext = { currentPlayer: playerId, rl };
-
-  rl.prompt();
-
-  rl.on('line', async (line: string) => {
+  const processLine = createSerialLineProcessor(async (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) {
       rl.setPrompt(makePrompt(ctx.currentPlayer));
@@ -79,6 +82,12 @@ export function startRepl(playerId: string): ReplContext {
 
     rl.setPrompt(makePrompt(ctx.currentPlayer));
     rl.prompt();
+  });
+
+  rl.prompt();
+
+  rl.on('line', (line: string) => {
+    void processLine(line);
   });
 
   rl.on('close', () => {

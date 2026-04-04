@@ -198,6 +198,49 @@ func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) 
 	return accepted, remaining, nil
 }
 
+// Load stores player-delivered items directly into local storage so they can be
+// consumed immediately by building logic such as production or launch.
+func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
+	if s == nil {
+		return 0, qty, fmt.Errorf("storage required")
+	}
+	if err := validateItemQuantity(itemID, qty); err != nil {
+		return 0, qty, err
+	}
+	if !s.canAcceptNewItem(itemID) {
+		return 0, qty, nil
+	}
+
+	accepted := 0
+	remaining := qty
+
+	if remaining > 0 {
+		available := s.availableInventory()
+		if available > 0 {
+			take := minInt(available, remaining)
+			if take > 0 {
+				addToInventory(s.EnsureInventory(), itemID, take)
+				accepted += take
+				remaining -= take
+			}
+		}
+	}
+
+	if remaining > 0 {
+		available := s.InputBufferCapacity() - s.UsedInputBuffer()
+		if available > 0 {
+			take := minInt(available, remaining)
+			if take > 0 {
+				addToInventory(s.EnsureInputBuffer(), itemID, take)
+				accepted += take
+				remaining -= take
+			}
+		}
+	}
+
+	return accepted, remaining, nil
+}
+
 // OutputQuantity returns total quantity available for output for an item.
 func (s *StorageState) OutputQuantity(itemID string) int {
 	if s == nil || itemID == "" {

@@ -8,7 +8,7 @@ import (
 
 func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, target model.Position) (*model.ExecutorState, *model.Unit, *model.CommandResult) {
 	player := ws.Players[playerID]
-	if player == nil || player.Executor == nil {
+	if player == nil {
 		res := model.CommandResult{
 			Status:  model.StatusFailed,
 			Code:    model.CodeExecutorUnavailable,
@@ -16,7 +16,15 @@ func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, targe
 		}
 		return nil, nil, &res
 	}
-	execState := player.Executor
+	execState := player.ExecutorForPlanet(ws.PlanetID)
+	if execState == nil {
+		res := model.CommandResult{
+			Status:  model.StatusFailed,
+			Code:    model.CodeExecutorUnavailable,
+			Message: "executor not available",
+		}
+		return nil, nil, &res
+	}
 	execUnit, ok := ws.Units[execState.UnitID]
 	if !ok {
 		res := model.CommandResult{

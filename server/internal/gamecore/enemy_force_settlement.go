@@ -6,20 +6,20 @@ import (
 
 // EnemyForceConfig 敌对势力生成配置
 type EnemyForceConfig struct {
-	SpawnIntervalTicks int64   // 生成间隔tick
-	SpawnMargin       int     // 生成边界距
-	MaxForces         int     // 最大势力数量
-	BaseStrength      int     // 基础实力
-	StrengthVariance  int     // 实力方差
+	SpawnIntervalTicks int64 // 生成间隔tick
+	SpawnMargin        int   // 生成边界距
+	MaxForces          int   // 最大势力数量
+	BaseStrength       int   // 基础实力
+	StrengthVariance   int   // 实力方差
 }
 
 func defaultEnemyForceConfig() EnemyForceConfig {
 	return EnemyForceConfig{
-		SpawnIntervalTicks: 200,  // 20秒
-		SpawnMargin:       5,
-		MaxForces:         20,
-		BaseStrength:      10,
-		StrengthVariance:  5,
+		SpawnIntervalTicks: 200, // 20秒
+		SpawnMargin:        5,
+		MaxForces:          20,
+		BaseStrength:       10,
+		StrengthVariance:   5,
 	}
 }
 
@@ -39,8 +39,8 @@ func (gc *GameCore) settleEnemyForces() []*model.GameEvent {
 	// 确保EnemyForces已初始化
 	if ws.EnemyForces == nil {
 		ws.EnemyForces = &model.EnemyForceState{
-			SystemID:   ws.PlanetID,
-			Forces:     make([]model.EnemyForce, 0),
+			SystemID:    ws.PlanetID,
+			Forces:      make([]model.EnemyForce, 0),
 			ThreatLevel: model.ThreatLevelNone,
 			LastAttack:  0,
 		}
@@ -254,8 +254,11 @@ func (gc *GameCore) executeEnemyAttack(ws *model.WorldState, rhythm model.Attack
 			}
 			damage -= defense
 
+			shieldAbsorbed, remainingDamage := absorbPlanetaryShieldDamage(ws, player.PlayerID, damage)
+			shieldRemaining := totalPlanetaryShieldCharge(ws, player.PlayerID)
+
 			// 应用伤害
-			targetBuilding.HP -= damage
+			targetBuilding.HP -= remainingDamage
 			if targetBuilding.HP < 0 {
 				targetBuilding.HP = 0
 			}
@@ -264,12 +267,14 @@ func (gc *GameCore) executeEnemyAttack(ws *model.WorldState, rhythm model.Attack
 				EventType:       model.EvtDamageApplied,
 				VisibilityScope: player.PlayerID,
 				Payload: map[string]any{
-					"entity_id":  targetBuilding.ID,
-					"entity_type": "building",
-					"damage":    damage,
-					"hp":        targetBuilding.HP,
-					"max_hp":    targetBuilding.MaxHP,
-					"source":    "enemy_force",
+					"entity_id":        targetBuilding.ID,
+					"entity_type":      "building",
+					"damage":           remainingDamage,
+					"hp":               targetBuilding.HP,
+					"max_hp":           targetBuilding.MaxHP,
+					"source":           "enemy_force",
+					"shield_absorbed":  shieldAbsorbed,
+					"shield_remaining": shieldRemaining,
 				},
 			})
 
@@ -279,9 +284,9 @@ func (gc *GameCore) executeEnemyAttack(ws *model.WorldState, rhythm model.Attack
 					EventType:       model.EvtEntityDestroyed,
 					VisibilityScope: player.PlayerID,
 					Payload: map[string]any{
-						"entity_id":  targetBuilding.ID,
+						"entity_id":   targetBuilding.ID,
 						"entity_type": "building",
-						"source":    "enemy_force",
+						"source":      "enemy_force",
 					},
 				})
 			}
@@ -340,10 +345,10 @@ func (gc *GameCore) applySignalTowerEffects(ws *model.WorldState) {
 			force := &ws.EnemyForces.Forces[i]
 			dist := calculateDistance(building.Position, force.Position)
 			visionRange := 10 // 默认信号塔视野范围
-		if building.Runtime.Functions.Combat != nil {
-			visionRange = building.Runtime.Functions.Combat.Range
-		}
-		effectiveRange := visionRange + int(rangeBonus)
+			if building.Runtime.Functions.Combat != nil {
+				visionRange = building.Runtime.Functions.Combat.Range
+			}
+			effectiveRange := visionRange + int(rangeBonus)
 			if float64(dist) > float64(effectiveRange) {
 				continue
 			}
@@ -394,10 +399,10 @@ func (gc *GameCore) updateRadarDetection(ws *model.WorldState, currentTick int64
 			detection := ws.Detections[building.OwnerID]
 			if detection == nil {
 				detection = &model.DetectionState{
-					PlayerID:         building.OwnerID,
-					KnownEnemies:    make([]model.EnemyIntel, 0),
+					PlayerID:          building.OwnerID,
+					KnownEnemies:      make([]model.EnemyIntel, 0),
 					DetectedPositions: make([]model.Position, 0),
-					VisionRange:      float64(rangeVal),
+					VisionRange:       float64(rangeVal),
 				}
 				ws.Detections[building.OwnerID] = detection
 			}
@@ -418,11 +423,11 @@ func (gc *GameCore) updateRadarDetection(ws *model.WorldState, currentTick int64
 			if !found {
 				// 添加新敌人情报
 				intel := model.EnemyIntel{
-					EnemyID:    force.ID,
-					Type:       string(force.Type),
-					Position:   force.Position,
-					Strength:   force.Strength,
-					LastSeen:   currentTick,
+					EnemyID:     force.ID,
+					Type:        string(force.Type),
+					Position:    force.Position,
+					Strength:    force.Strength,
+					LastSeen:    currentTick,
 					ThreatLevel: 0,
 				}
 				detection.KnownEnemies = append(detection.KnownEnemies, intel)

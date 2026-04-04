@@ -62,6 +62,10 @@ const (
 	ItemCircuitBoard                 = "circuit_board"
 	ItemMicrocrystalline             = "microcrystalline_component"
 	ItemProcessor                    = "processor"
+	ItemTitaniumCrystal              = "titanium_crystal"
+	ItemTitaniumAlloy                = "titanium_alloy"
+	ItemFrameMaterial                = "frame_material"
+	ItemQuantumChip                  = "quantum_chip"
 	ItemPhotonCombiner               = "photon_combiner"
 	ItemCriticalPhoton               = "critical_photon"
 	ItemAntimatter                   = "antimatter"
@@ -78,6 +82,14 @@ const (
 	ItemProliferatorMk2   = "proliferator_mk2"
 	ItemProliferatorMk3   = "proliferator_mk3"
 
+	ItemElectromagneticMatrix = "electromagnetic_matrix"
+	ItemEnergyMatrix          = "energy_matrix"
+	ItemStructureMatrix       = "structure_matrix"
+	ItemInformationMatrix     = "information_matrix"
+	ItemGravityMatrix         = "gravity_matrix"
+	ItemDarkFogMatrix         = "dark_fog_matrix"
+	ItemUniverseMatrix        = "universe_matrix"
+
 	ItemMatrixBlue     = "matrix_blue"
 	ItemMatrixRed      = "matrix_red"
 	ItemMatrixYellow   = "matrix_yellow"
@@ -86,7 +98,7 @@ const (
 	ItemAmmoBullet  = "ammo_bullet"
 	ItemAmmoMissile = "ammo_missile"
 
-	ItemSolarSail         = "solar_sail"
+	ItemSolarSail          = "solar_sail"
 	ItemSmallCarrierRocket = "small_carrier_rocket"
 )
 
@@ -411,6 +423,38 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 100,
 		UnitVolume: 1,
 	},
+	ItemTitaniumCrystal: {
+		ID:         ItemTitaniumCrystal,
+		Name:       "Titanium Crystal",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemTitaniumAlloy: {
+		ID:         ItemTitaniumAlloy,
+		Name:       "Titanium Alloy",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemFrameMaterial: {
+		ID:         ItemFrameMaterial,
+		Name:       "Frame Material",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemQuantumChip: {
+		ID:         ItemQuantumChip,
+		Name:       "Quantum Chip",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 1,
+	},
 	ItemPhotonCombiner: {
 		ID:         ItemPhotonCombiner,
 		Name:       "Photon Combiner",
@@ -523,32 +567,56 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 100,
 		UnitVolume: 1,
 	},
-	ItemMatrixBlue: {
-		ID:         ItemMatrixBlue,
+	ItemElectromagneticMatrix: {
+		ID:         ItemElectromagneticMatrix,
 		Name:       "Electromagnetic Matrix",
 		Category:   ItemCategoryMatrix,
 		Form:       ResourceSolid,
 		StackLimit: 20,
 		UnitVolume: 1,
 	},
-	ItemMatrixRed: {
-		ID:         ItemMatrixRed,
+	ItemEnergyMatrix: {
+		ID:         ItemEnergyMatrix,
 		Name:       "Energy Matrix",
 		Category:   ItemCategoryMatrix,
 		Form:       ResourceSolid,
 		StackLimit: 20,
 		UnitVolume: 1,
 	},
-	ItemMatrixYellow: {
-		ID:         ItemMatrixYellow,
+	ItemStructureMatrix: {
+		ID:         ItemStructureMatrix,
 		Name:       "Structure Matrix",
 		Category:   ItemCategoryMatrix,
 		Form:       ResourceSolid,
 		StackLimit: 20,
 		UnitVolume: 1,
 	},
-	ItemMatrixUniverse: {
-		ID:         ItemMatrixUniverse,
+	ItemInformationMatrix: {
+		ID:         ItemInformationMatrix,
+		Name:       "Information Matrix",
+		Category:   ItemCategoryMatrix,
+		Form:       ResourceSolid,
+		StackLimit: 20,
+		UnitVolume: 1,
+	},
+	ItemGravityMatrix: {
+		ID:         ItemGravityMatrix,
+		Name:       "Gravity Matrix",
+		Category:   ItemCategoryMatrix,
+		Form:       ResourceSolid,
+		StackLimit: 20,
+		UnitVolume: 1,
+	},
+	ItemDarkFogMatrix: {
+		ID:         ItemDarkFogMatrix,
+		Name:       "Dark Fog Matrix",
+		Category:   ItemCategoryMatrix,
+		Form:       ResourceSolid,
+		StackLimit: 20,
+		UnitVolume: 1,
+	},
+	ItemUniverseMatrix: {
+		ID:         ItemUniverseMatrix,
 		Name:       "Universe Matrix",
 		Category:   ItemCategoryMatrix,
 		Form:       ResourceSolid,
