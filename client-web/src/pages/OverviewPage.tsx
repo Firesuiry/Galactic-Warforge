@@ -6,6 +6,12 @@ import { Link } from 'react-router-dom';
 import { formatMineralInventory } from '@/features/mineral-summary';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import {
+  translateAlertType,
+  translateEventType,
+  translateTechId,
+  translateUi,
+} from '@/i18n/translate';
 
 function formatNumber(value: number | undefined) {
   return value ?? 0;
@@ -73,7 +79,7 @@ export function OverviewPage() {
     <div className="page-grid strategic-page">
       <section className="panel page-hero strategic-hero">
         <div className="page-header">
-          <p className="eyebrow">Campaign Overview</p>
+          <p className="eyebrow">{translateUi('page.campaign_overview')}</p>
           <h1>全局总览</h1>
           <p className="subtle-text">
             当前 tick {summary.tick}，活跃行星{' '}
@@ -110,7 +116,7 @@ export function OverviewPage() {
               </article>
               <article className="campaign-card">
                 <span className="campaign-card__label">研究</span>
-                <strong>{currentResearch?.tech_id ?? '暂无研究'}</strong>
+                <strong>{currentResearch ? translateTechId(currentResearch.tech_id) : '暂无研究'}</strong>
                 <span>{currentResearch ? `${currentResearch.progress}/${currentResearch.total_cost}` : '等待队列'}</span>
               </article>
               <article className="campaign-card">
@@ -135,7 +141,7 @@ export function OverviewPage() {
                     {events.length === 0 ? <li>暂无事件</li> : null}
                     {events.slice().reverse().map((event) => (
                       <li key={event.event_id}>
-                        <strong>[t{event.tick}] {event.event_type}</strong>
+                        <strong>[t{event.tick}] {translateEventType(event.event_type)}</strong>
                         <span>{formatPayload(event.payload)}</span>
                       </li>
                     ))}
@@ -147,7 +153,7 @@ export function OverviewPage() {
                     {alerts.length === 0 ? <li>暂无告警</li> : null}
                     {alerts.slice().reverse().map((alert) => (
                       <li key={alert.alert_id}>
-                        <strong>[t{alert.tick}] {alert.alert_type}</strong>
+                        <strong>[t{alert.tick}] {translateAlertType(alert.alert_type)}</strong>
                         <span>{alert.message}</span>
                       </li>
                     ))}
@@ -172,7 +178,7 @@ export function OverviewPage() {
               </div>
               <div>
                 <dt>研究</dt>
-                <dd>{currentResearch?.tech_id ?? '暂无研究'}</dd>
+                <dd>{currentResearch ? translateTechId(currentResearch.tech_id) : '暂无研究'}</dd>
               </div>
               <div>
                 <dt>威胁</dt>

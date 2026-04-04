@@ -6,6 +6,11 @@ import type {
   ConversationView,
   ScheduleView,
 } from './types';
+import {
+  translateAgentCommandCategory,
+  translateAgentMessageKind,
+  translateAgentStatus,
+} from '@/i18n/translate';
 
 interface AgentWorkspaceProps {
   gatewayOnline: boolean;
@@ -57,6 +62,16 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
       .map((memberId) => props.agents.find((agent) => agent.id === memberId.slice('agent:'.length)))
       .filter((agent): agent is AgentProfileView => Boolean(agent))
     : [];
+
+  function formatMessageAuthor(message: ConversationMessageView) {
+    if (message.senderType === 'player') {
+      return '玩家';
+    }
+    if (message.senderType === 'agent') {
+      return props.agents.find((agent) => agent.id === message.senderId)?.name ?? message.senderId;
+    }
+    return translateAgentMessageKind(message.kind);
+  }
 
   return (
     <div className="agent-im">
@@ -124,7 +139,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             <li key={agent.id} className="agent-im__agent-card">
               <div>
                 <strong>{agent.name}</strong>
-                <div className="subtle-text">{agent.status}</div>
+                <div className="subtle-text">{translateAgentStatus(agent.status)}</div>
               </div>
               <button className="secondary-button" onClick={() => props.onStartDm(agent.id)} type="button">
                 私聊
@@ -154,7 +169,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           ) : props.messages.length > 0 ? props.messages.map((message) => (
             <article key={message.id} className={`agent-im__message agent-im__message--${message.senderType}`}>
               <header>
-                <strong>{message.senderType === 'player' ? '玩家' : message.senderType === 'agent' ? message.senderId : message.kind}</strong>
+                <strong>{formatMessageAuthor(message)}</strong>
               </header>
               <p>{message.content}</p>
             </article>
@@ -194,7 +209,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                   {agent?.policy?.commandCategories.length ? (
                     <div className="agent-im__tag-row">
                       {agent.policy.commandCategories.map((category) => (
-                        <span key={category} className="agent-im__tag">{category}</span>
+                        <span key={category} className="agent-im__tag">{translateAgentCommandCategory(category)}</span>
                       ))}
                     </div>
                   ) : null}
@@ -252,7 +267,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               {selectedConversationAgents.map((agent) => (
                 <li key={agent.id} className="agent-im__detail-card">
                   <strong>{agent.name}</strong>
-                  <span>{agent.status}</span>
+                  <span>{translateAgentStatus(agent.status)}</span>
                 </li>
               ))}
             </ul>

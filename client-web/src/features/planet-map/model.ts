@@ -16,6 +16,13 @@ import type {
 } from "@shared/types";
 
 import type { PlanetSceneWindow } from "@/features/planet-map/store";
+import {
+  translateBuildingState,
+  translateBuildingType,
+  translateEventType,
+  translateItemId,
+  translateTechId,
+} from "@/i18n/translate";
 
 export type PlanetLayerKey =
   | "terrain"
@@ -294,21 +301,24 @@ export function getBuildingDisplayName(
   catalog: CatalogView | undefined,
   buildingType: string,
 ) {
-  return getBuildingCatalogEntry(catalog, buildingType)?.name ?? buildingType;
+  return translateBuildingType(
+    buildingType,
+    getBuildingCatalogEntry(catalog, buildingType)?.name,
+  );
 }
 
 export function getItemDisplayName(
   catalog: CatalogView | undefined,
   itemId: string,
 ) {
-  return getItemCatalogEntry(catalog, itemId)?.name ?? itemId;
+  return translateItemId(itemId, getItemCatalogEntry(catalog, itemId)?.name);
 }
 
 export function getTechDisplayName(
   catalog: CatalogView | undefined,
   techId: string,
 ) {
-  return getTechCatalogEntry(catalog, techId)?.name ?? techId;
+  return translateTechId(techId, getTechCatalogEntry(catalog, techId)?.name);
 }
 
 export function isLogisticsStationBuildingType(buildingType: string) {
@@ -594,7 +604,7 @@ export function summarizeEvent(event: GameEventDetail) {
     case "entity_updated":
       return `${asString(payload.entity_id) || "entity"} 属性已更新`;
     case "building_state_changed":
-      return `${asString(payload.building_id) || "building"} ${asString(payload.prev_state) || "unknown"} -> ${asString(payload.next_state) || "unknown"}`;
+      return `${translateEventType(event.event_type)} · ${asString(payload.building_id) || "building"} ${translateBuildingState(asString(payload.prev_state) || "unknown")} -> ${translateBuildingState(asString(payload.next_state) || "unknown")}`;
     case "resource_changed":
       return `${asString(payload.resource_id) || "resource"} 储量变化`;
     case "production_alert": {

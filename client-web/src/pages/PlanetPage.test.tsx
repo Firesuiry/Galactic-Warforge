@@ -688,14 +688,16 @@ describe("PlanetPage", () => {
     expect(screen.queryByText("资源 240 / 140")).not.toBeInTheDocument();
     expect(screen.getByText("事件时间线")).toBeInTheDocument();
     expect(screen.getByText("告警面板")).toBeInTheDocument();
-    expect(screen.getByText("miner-1 idle -> running")).toBeInTheDocument();
+    expect(
+      screen.getByText("建筑状态变更 · miner-1 空闲 -> 运行中"),
+    ).toBeInTheDocument();
     expect(screen.getByText("miner-1 · 矿物输入不足")).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "定位" })[0]);
 
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
-    expect(screen.getByText("mining_machine")).toBeInTheDocument();
-    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getByText("采矿机")).toBeInTheDocument();
+    expect(screen.getByText("运行中")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "展开调试" }));
     expect(screen.getByText("调试面板")).toBeInTheDocument();
   });
@@ -806,7 +808,7 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("[t121] production_alert"),
+      await screen.findByText("[t121] 产线告警"),
     ).toBeInTheDocument();
     expect(screen.getByText("miner-1 · 产线堵塞")).toBeInTheDocument();
 
@@ -1027,12 +1029,12 @@ describe("PlanetPage", () => {
 
     expect(await screen.findByText("物流站配置")).toBeInTheDocument();
     expect(
-      (screen.getAllByLabelText("building_id") as HTMLSelectElement[]).some(
+      (screen.getAllByLabelText("物流站") as HTMLSelectElement[]).some(
         (element) => element.value === "pls-1",
       ),
     ).toBe(true);
-    await user.clear(screen.getByLabelText("drone_capacity"));
-    await user.type(screen.getByLabelText("drone_capacity"), "12");
+    await user.clear(screen.getByLabelText("无人机容量"));
+    await user.type(screen.getByLabelText("无人机容量"), "12");
     await user.click(screen.getByRole("button", { name: "提交物流站配置" }));
 
     expect(await screen.findByText("station updated")).toBeInTheDocument();
@@ -1154,11 +1156,11 @@ describe("PlanetPage", () => {
     await user.click(screen.getByRole("tab", { name: "命令" }));
 
     expect(await screen.findByText("物流槽位配置")).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("scope"), "interstellar");
-    await user.selectOptions(screen.getByLabelText("item_id"), "hydrogen");
-    await user.selectOptions(screen.getByLabelText("mode"), "demand");
-    await user.clear(screen.getByLabelText("local_storage"));
-    await user.type(screen.getByLabelText("local_storage"), "80");
+    await user.selectOptions(screen.getByLabelText("物流范围"), "interstellar");
+    await user.selectOptions(screen.getByLabelText("物品"), "hydrogen");
+    await user.selectOptions(screen.getByLabelText("物流模式"), "demand");
+    await user.clear(screen.getByLabelText("本地库存"));
+    await user.type(screen.getByLabelText("本地库存"), "80");
     await user.click(screen.getByRole("button", { name: "提交物流槽位配置" }));
 
     expect(await screen.findByText("slot updated")).toBeInTheDocument();

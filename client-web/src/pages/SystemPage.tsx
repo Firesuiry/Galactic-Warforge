@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { translatePlanetKind, translateUi } from '@/i18n/translate';
 
 export function SystemPage() {
   const client = useApiClient();
@@ -45,7 +46,7 @@ export function SystemPage() {
     <div className="page-grid strategic-page">
       <section className="panel page-hero strategic-hero">
         <div className="page-header">
-          <p className="eyebrow">System Targeting</p>
+          <p className="eyebrow">{translateUi('page.system_targeting')}</p>
           <h1>{system.name || system.system_id}</h1>
           <p className="subtle-text">
             {system.discovered ? '选择目标行星并切入主战区。' : '该星系尚未发现。'}
@@ -72,7 +73,7 @@ export function SystemPage() {
                 type="button"
               >
                 <strong>{planet.name || planet.planet_id}</strong>
-                <span>{planet.kind || '未知类型'}</span>
+                <span>{translatePlanetKind(planet.kind)}</span>
               </button>
             ))}
           </div>
@@ -89,7 +90,7 @@ export function SystemPage() {
                 </div>
                 <div>
                   <dt>类型</dt>
-                  <dd>{selectedPlanet.kind || '未知'}</dd>
+                  <dd>{translatePlanetKind(selectedPlanet.kind)}</dd>
                 </div>
                 <div>
                   <dt>状态</dt>

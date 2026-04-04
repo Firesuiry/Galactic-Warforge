@@ -44,6 +44,15 @@ import {
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import {
+  translateAlertType,
+  translateBuildingState,
+  translateEventType,
+  translateLogisticsMode,
+  translatePowerCoverageReason,
+  translateUi,
+  translateUnitType,
+} from "@/i18n/translate";
+import {
   getPlanetRenderTileSize,
   getPlanetZoomScale,
   getPlanetZoomStatusLabel,
@@ -273,11 +282,11 @@ export function PlanetLayerPanel({
           <dl className="planet-kv-list">
             <div>
               <dt>runtime</dt>
-              <dd>{runtime?.available ? "live" : "inactive"}</dd>
+              <dd>{runtime?.available ? translateUi("online") : translateUi("inactive")}</dd>
             </div>
             <div>
               <dt>networks</dt>
-              <dd>{networks?.available ? "live" : "inactive"}</dd>
+              <dd>{networks?.available ? translateUi("online") : translateUi("inactive")}</dd>
             </div>
             <div>
               <dt>电力链路</dt>
@@ -462,7 +471,7 @@ export function PlanetEntityPanel({
             </div>
             <div>
               <dt>状态</dt>
-              <dd>{building.runtime.state}</dd>
+              <dd>{translateBuildingState(building.runtime.state)}</dd>
             </div>
             <div>
               <dt>停机原因</dt>
@@ -509,7 +518,7 @@ export function PlanetEntityPanel({
                 {powerCoverage
                   ? powerCoverage.connected
                     ? "已接入"
-                    : `未接入:${powerCoverage.reason || "unknown"}`
+                    : `未接入:${translatePowerCoverageReason(powerCoverage.reason)}`
                   : "-"}
               </dd>
             </div>
@@ -565,11 +574,11 @@ export function PlanetEntityPanel({
               <div className="section-title">优先级</div>
               <dl className="planet-kv-list">
                 <div>
-                  <dt>input_priority</dt>
+                  <dt>输入优先级</dt>
                   <dd>{logisticsStation?.state?.priority.input ?? "-"}</dd>
                 </div>
                 <div>
-                  <dt>output_priority</dt>
+                  <dt>输出优先级</dt>
                   <dd>{logisticsStation?.state?.priority.output ?? "-"}</dd>
                 </div>
               </dl>
@@ -580,7 +589,7 @@ export function PlanetEntityPanel({
                 <div className="section-title">星际配置</div>
                 <dl className="planet-kv-list">
                   <div>
-                    <dt>enabled</dt>
+                    <dt>启用星际运输</dt>
                     <dd>
                       {logisticsStation?.state?.interstellar.enabled
                         ? "是"
@@ -588,7 +597,7 @@ export function PlanetEntityPanel({
                     </dd>
                   </div>
                   <div>
-                    <dt>warp_enabled</dt>
+                    <dt>启用曲速</dt>
                     <dd>
                       {logisticsStation?.state?.interstellar.warp_enabled
                         ? "是"
@@ -596,7 +605,7 @@ export function PlanetEntityPanel({
                     </dd>
                   </div>
                   <div>
-                    <dt>ship_slots</dt>
+                    <dt>货船槽位</dt>
                     <dd>
                       {logisticsStation?.state?.interstellar.ship_slots ?? "-"}
                     </dd>
@@ -613,7 +622,7 @@ export function PlanetEntityPanel({
                     <li key={`planetary-${setting.item_id}`}>
                       <strong>{setting.item_name}</strong>
                       <span>
-                        {setting.item_id} · {setting.mode} · local_storage{" "}
+                        {setting.item_id} · {translateLogisticsMode(setting.mode)} · 本地库存{" "}
                         {setting.local_storage}
                       </span>
                     </li>
@@ -633,7 +642,7 @@ export function PlanetEntityPanel({
                       <li key={`interstellar-${setting.item_id}`}>
                         <strong>{setting.item_name}</strong>
                         <span>
-                          {setting.item_id} · {setting.mode} · local_storage{" "}
+                          {setting.item_id} · {translateLogisticsMode(setting.mode)} · 本地库存{" "}
                           {setting.local_storage}
                         </span>
                       </li>
@@ -649,7 +658,7 @@ export function PlanetEntityPanel({
               <div className="section-title">库存与缓存摘要</div>
               <dl className="planet-kv-list">
                 <div>
-                  <dt>inventory</dt>
+                  <dt>{translateUi("field.inventory")}</dt>
                   <dd>
                     {formatItemInventorySummary(
                       catalog,
@@ -658,7 +667,7 @@ export function PlanetEntityPanel({
                   </dd>
                 </div>
                 <div>
-                  <dt>cache.supply</dt>
+                  <dt>{translateUi("field.input_cache")}</dt>
                   <dd>
                     {formatItemInventorySummary(
                       catalog,
@@ -667,7 +676,7 @@ export function PlanetEntityPanel({
                   </dd>
                 </div>
                 <div>
-                  <dt>cache.demand</dt>
+                  <dt>{translateUi("field.demand_cache")}</dt>
                   <dd>
                     {formatItemInventorySummary(
                       catalog,
@@ -676,7 +685,7 @@ export function PlanetEntityPanel({
                   </dd>
                 </div>
                 <div>
-                  <dt>cache.local</dt>
+                  <dt>{translateUi("field.local_cache")}</dt>
                   <dd>
                     {formatItemInventorySummary(
                       catalog,
@@ -687,7 +696,7 @@ export function PlanetEntityPanel({
                 {building.type === "interstellar_logistics_station" ? (
                   <>
                     <div>
-                      <dt>interstellar_cache.supply</dt>
+                      <dt>星际供给缓存</dt>
                       <dd>
                         {formatItemInventorySummary(
                           catalog,
@@ -696,7 +705,7 @@ export function PlanetEntityPanel({
                       </dd>
                     </div>
                     <div>
-                      <dt>interstellar_cache.demand</dt>
+                      <dt>星际需求缓存</dt>
                       <dd>
                         {formatItemInventorySummary(
                           catalog,
@@ -705,7 +714,7 @@ export function PlanetEntityPanel({
                       </dd>
                     </div>
                     <div>
-                      <dt>interstellar_cache.local</dt>
+                      <dt>星际本地缓存</dt>
                       <dd>
                         {formatItemInventorySummary(
                           catalog,
@@ -736,7 +745,7 @@ export function PlanetEntityPanel({
             </div>
             <div>
               <dt>类型</dt>
-              <dd>{unit.type}</dd>
+              <dd>{translateUnitType(unit.type)}</dd>
             </div>
             <div>
               <dt>所属</dt>
@@ -872,14 +881,14 @@ export function PlanetActivityPanel({
         <div className="planet-activity-header">
           <div className="section-title">事件时间线</div>
           <label className="planet-filter">
-            <span>过滤</span>
+            <span>{translateUi("field.event_filter")}</span>
             <select
               onChange={(event) => setEventFilter(event.target.value)}
               value={eventFilter}
             >
               {eventTypes.map((type) => (
                 <option key={type} value={type}>
-                  {type}
+                  {type === "all" ? "全部事件" : translateEventType(type)}
                 </option>
               ))}
             </select>
@@ -891,7 +900,7 @@ export function PlanetActivityPanel({
             <li key={event.event_id}>
               <div className="timeline-list__row">
                 <strong>
-                  [t{event.tick}] {event.event_type}
+                  [t{event.tick}] {translateEventType(event.event_type)}
                 </strong>
                 <button
                   className="secondary-button timeline-action"
@@ -923,7 +932,7 @@ export function PlanetActivityPanel({
             <li key={alert.alert_id}>
               <div className="timeline-list__row">
                 <strong>
-                  [t{alert.tick}] {alert.alert_type}
+                  [t{alert.tick}] {translateAlertType(alert.alert_type)}
                 </strong>
                 <button
                   className="secondary-button timeline-action"

@@ -153,7 +153,7 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
-    const itemSelect = await screen.findByLabelText("item_id");
+    const itemSelect = await screen.findByLabelText("物品");
     await waitFor(() => {
       expect((itemSelect as HTMLSelectElement).value).toBe(
         "annihilation_constraint_sphere",
@@ -172,7 +172,7 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
-    expect((screen.getByLabelText("item_id") as HTMLSelectElement).value).toBe(
+    expect((screen.getByLabelText("物品") as HTMLSelectElement).value).toBe(
       "silicon_ore",
     );
   });
@@ -193,9 +193,9 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
-    const itemSelect = await screen.findByLabelText("item_id");
-    const modeSelect = screen.getByLabelText("mode");
-    const localStorageInput = screen.getByLabelText("local_storage");
+    const itemSelect = await screen.findByLabelText("物品");
+    const modeSelect = screen.getByLabelText("物流模式");
+    const localStorageInput = screen.getByLabelText("本地库存");
 
     await user.selectOptions(itemSelect, "silicon_ore");
     await user.selectOptions(modeSelect, "demand");
@@ -214,11 +214,11 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
-    expect((screen.getByLabelText("mode") as HTMLSelectElement).value).toBe(
+    expect((screen.getByLabelText("物流模式") as HTMLSelectElement).value).toBe(
       "demand",
     );
     expect(
-      (screen.getByLabelText("local_storage") as HTMLInputElement).value,
+      (screen.getByLabelText("本地库存") as HTMLInputElement).value,
     ).toBe("60");
   });
 });

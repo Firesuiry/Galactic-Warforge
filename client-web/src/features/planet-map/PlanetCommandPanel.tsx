@@ -14,6 +14,14 @@ import {
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import { usePlanetViewStore } from "@/features/planet-map/store";
+import {
+  translateCommandType,
+  translateDirection,
+  translateLogisticsMode,
+  translateLogisticsScope,
+  translateUi,
+  translateUnitType,
+} from "@/i18n/translate";
 
 interface PlanetCommandPanelProps {
   catalog?: CatalogView;
@@ -52,6 +60,10 @@ function getPreferredSlotItemId(
 ) {
   const settings = getScopeSettings(runtime, buildingId, scope);
   return Object.values(settings ?? {})[0]?.item_id ?? fallbackItemId;
+}
+
+function fieldLabel(key: string) {
+  return translateUi(`field.${key}`);
 }
 
 export function PlanetCommandPanel({
@@ -328,12 +340,14 @@ export function PlanetCommandPanel({
       setResultTone(response.accepted ? "ok" : "error");
       setResultMessage(
         response.results.map((result) => result.message).join(" / ") ||
-          `${actionLabel} 已发送`,
+          `${translateCommandType(actionLabel)} 已发送`,
       );
     } catch (error) {
       setResultTone("error");
       setResultMessage(
-        error instanceof Error ? error.message : `${actionLabel} 失败`,
+        error instanceof Error
+          ? error.message
+          : `${translateCommandType(actionLabel)} 失败`,
       );
     } finally {
       setBusyAction("");
@@ -365,7 +379,7 @@ export function PlanetCommandPanel({
         <div className="section-title">扫描</div>
         <div className="compact-form-grid">
           <label className="field">
-            <span>galaxy_id</span>
+            <span>{fieldLabel("galaxy_id")}</span>
             <input
               onChange={(event) => setScanGalaxyId(event.target.value)}
               value={scanGalaxyId}
@@ -385,7 +399,7 @@ export function PlanetCommandPanel({
           </button>
 
           <label className="field">
-            <span>system_id</span>
+            <span>{fieldLabel("system_id")}</span>
             <input
               onChange={(event) => setScanSystemId(event.target.value)}
               value={scanSystemId}
@@ -405,7 +419,7 @@ export function PlanetCommandPanel({
           </button>
 
           <label className="field">
-            <span>planet_id</span>
+            <span>{fieldLabel("planet_id")}</span>
             <input readOnly value={planet.planet_id} />
           </label>
           <button
@@ -427,7 +441,7 @@ export function PlanetCommandPanel({
         <div className="section-title">建造</div>
         <div className="compact-form-grid">
           <label className="field">
-            <span>x</span>
+            <span>{fieldLabel("x")}</span>
             <input
               onChange={(event) => setBuildX(Number(event.target.value) || 0)}
               type="number"
@@ -435,7 +449,7 @@ export function PlanetCommandPanel({
             />
           </label>
           <label className="field">
-            <span>y</span>
+            <span>{fieldLabel("y")}</span>
             <input
               onChange={(event) => setBuildY(Number(event.target.value) || 0)}
               type="number"
@@ -443,35 +457,35 @@ export function PlanetCommandPanel({
             />
           </label>
           <label className="field field--span-2">
-            <span>building_type</span>
+            <span>{fieldLabel("building_type")}</span>
             <select
               onChange={(event) => setBuildingType(event.target.value)}
               value={buildingType}
             >
               {buildableBuildings.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.name} · {entry.id}
+                  {getBuildingDisplayName(catalog, entry.id)} · {entry.id}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>direction</span>
+            <span>{fieldLabel("direction")}</span>
             <select
               onChange={(event) =>
                 setBuildDirection(event.target.value as typeof buildDirection)
               }
               value={buildDirection}
             >
-              <option value="auto">auto</option>
-              <option value="north">north</option>
-              <option value="east">east</option>
-              <option value="south">south</option>
-              <option value="west">west</option>
+              <option value="auto">{translateDirection("auto")}</option>
+              <option value="north">{translateDirection("north")}</option>
+              <option value="east">{translateDirection("east")}</option>
+              <option value="south">{translateDirection("south")}</option>
+              <option value="west">{translateDirection("west")}</option>
             </select>
           </label>
           <label className="field">
-            <span>recipe_id</span>
+            <span>{fieldLabel("recipe_id")}</span>
             <select
               onChange={(event) => setRecipeId(event.target.value)}
               value={recipeId}
@@ -506,7 +520,7 @@ export function PlanetCommandPanel({
         <div className="section-title">移动</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
-            <span>unit_id</span>
+            <span>{fieldLabel("unit_id")}</span>
             <select
               onChange={(event) => setMoveUnitId(event.target.value)}
               value={moveUnitId}
@@ -514,13 +528,13 @@ export function PlanetCommandPanel({
               <option value="">选择单位</option>
               {ownUnits.map((unit) => (
                 <option key={unit.id} value={unit.id}>
-                  {unit.id} · {unit.type}
+                  {unit.id} · {translateUnitType(unit.type)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>x</span>
+            <span>{fieldLabel("x")}</span>
             <input
               onChange={(event) => setMoveX(Number(event.target.value) || 0)}
               type="number"
@@ -528,7 +542,7 @@ export function PlanetCommandPanel({
             />
           </label>
           <label className="field">
-            <span>y</span>
+            <span>{fieldLabel("y")}</span>
             <input
               onChange={(event) => setMoveY(Number(event.target.value) || 0)}
               type="number"
@@ -554,7 +568,7 @@ export function PlanetCommandPanel({
         <div className="section-title">物流站配置</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
-            <span>building_id</span>
+            <span>{fieldLabel("logistics_station")}</span>
             <select
               onChange={(event) =>
                 setStationConfigBuildingId(event.target.value)
@@ -571,7 +585,7 @@ export function PlanetCommandPanel({
             </select>
           </label>
           <label className="field">
-            <span>drone_capacity</span>
+            <span>{fieldLabel("drone_capacity")}</span>
             <input
               onChange={(event) => setDroneCapacity(event.target.value)}
               type="number"
@@ -579,7 +593,7 @@ export function PlanetCommandPanel({
             />
           </label>
           <label className="field">
-            <span>input_priority</span>
+            <span>{fieldLabel("input_priority")}</span>
             <input
               onChange={(event) => setInputPriority(event.target.value)}
               type="number"
@@ -587,7 +601,7 @@ export function PlanetCommandPanel({
             />
           </label>
           <label className="field">
-            <span>output_priority</span>
+            <span>{fieldLabel("output_priority")}</span>
             <input
               onChange={(event) => setOutputPriority(event.target.value)}
               type="number"
@@ -597,7 +611,7 @@ export function PlanetCommandPanel({
           {stationConfigSupportsInterstellar ? (
             <>
               <label className="field">
-                <span>interstellar_enabled</span>
+                <span>{fieldLabel("interstellar_enabled")}</span>
                 <input
                   checked={interstellarEnabled}
                   onChange={(event) =>
@@ -607,7 +621,7 @@ export function PlanetCommandPanel({
                 />
               </label>
               <label className="field">
-                <span>warp_enabled</span>
+                <span>{fieldLabel("warp_enabled")}</span>
                 <input
                   checked={warpEnabled}
                   onChange={(event) => setWarpEnabled(event.target.checked)}
@@ -615,7 +629,7 @@ export function PlanetCommandPanel({
                 />
               </label>
               <label className="field">
-                <span>ship_slots</span>
+                <span>{fieldLabel("ship_slots")}</span>
                 <input
                   onChange={(event) => setShipSlots(event.target.value)}
                   type="number"
@@ -671,7 +685,7 @@ export function PlanetCommandPanel({
         <div className="section-title">物流槽位配置</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
-            <span>building_id</span>
+            <span>{fieldLabel("logistics_station")}</span>
             <select
               onChange={(event) => setSlotConfigBuildingId(event.target.value)}
               value={slotConfigBuildingId}
@@ -686,7 +700,7 @@ export function PlanetCommandPanel({
             </select>
           </label>
           <label className="field">
-            <span>scope</span>
+            <span>{fieldLabel("scope")}</span>
             <select
               onChange={(event) =>
                 setSlotScope(event.target.value as LogisticsScope)
@@ -695,13 +709,13 @@ export function PlanetCommandPanel({
             >
               {slotScopeOptions.map((scope) => (
                 <option key={scope} value={scope}>
-                  {scope}
+                  {translateLogisticsScope(scope)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field field--span-2">
-            <span>item_id</span>
+            <span>{fieldLabel("item_id")}</span>
             <select
               onChange={(event) => setSlotItemId(event.target.value)}
               value={slotItemId}
@@ -715,21 +729,21 @@ export function PlanetCommandPanel({
             </select>
           </label>
           <label className="field">
-            <span>mode</span>
+            <span>{fieldLabel("mode")}</span>
             <select
               onChange={(event) =>
                 setSlotMode(event.target.value as LogisticsMode)
               }
               value={slotMode}
             >
-              <option value="none">none</option>
-              <option value="supply">supply</option>
-              <option value="demand">demand</option>
-              <option value="both">both</option>
+              <option value="none">{translateLogisticsMode("none")}</option>
+              <option value="supply">{translateLogisticsMode("supply")}</option>
+              <option value="demand">{translateLogisticsMode("demand")}</option>
+              <option value="both">{translateLogisticsMode("both")}</option>
             </select>
           </label>
           <label className="field">
-            <span>local_storage</span>
+            <span>{fieldLabel("local_storage")}</span>
             <input
               onChange={(event) => setSlotLocalStorage(event.target.value)}
               type="number"
@@ -769,7 +783,7 @@ export function PlanetCommandPanel({
         <div className="section-title">研究</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
-            <span>tech_id</span>
+            <span>{fieldLabel("tech_id")}</span>
             <select
               onChange={(event) => setResearchId(event.target.value)}
               value={researchId}
@@ -800,7 +814,7 @@ export function PlanetCommandPanel({
         <div className="section-title">拆除</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
-            <span>building_id</span>
+            <span>{fieldLabel("building_id")}</span>
             <select
               onChange={(event) => setDemolishId(event.target.value)}
               value={demolishId}

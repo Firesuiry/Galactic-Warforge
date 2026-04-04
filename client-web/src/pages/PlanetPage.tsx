@@ -21,6 +21,7 @@ import {
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
 import { useApiClient } from "@/hooks/use-api-client";
 import { useSessionSnapshot } from "@/hooks/use-session";
+import { translatePlanetKind } from "@/i18n/translate";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
   getPlanetOverviewRequestStep,
@@ -357,8 +358,8 @@ export function PlanetPage() {
           <p className="eyebrow">T007-T012 行星观察端</p>
           <h1>{planet.name || planet.planet_id}</h1>
           <p className="subtle-text">
-            tick {planet.tick} · {planet.kind || "unknown"} · {planet.map_width}{" "}
-            x {planet.map_height}
+            tick {planet.tick} · {translatePlanetKind(planet.kind)} ·{" "}
+            {planet.map_width} x {planet.map_height}
           </p>
         </div>
         <div className="hero-actions">

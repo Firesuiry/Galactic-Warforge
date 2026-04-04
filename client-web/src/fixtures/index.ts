@@ -27,6 +27,11 @@ import type {
 } from '@shared/types';
 
 import { baselineFixtureScenario } from '@/fixtures/scenarios/baseline';
+import {
+  translateBuildingType,
+  translateItemId,
+  translateUnitType,
+} from '@/i18n/translate';
 
 export interface FixtureSseBlock {
   event: string;
@@ -302,7 +307,7 @@ function buildPlanetInspect(planet: PlanetView, entityKind: string, entityId: st
         discovered: planet.discovered,
         entity_kind: 'building',
         entity_id: entityId,
-        title: building.type,
+        title: translateBuildingType(building.type),
         building,
       };
     }
@@ -316,7 +321,7 @@ function buildPlanetInspect(planet: PlanetView, entityKind: string, entityId: st
         discovered: planet.discovered,
         entity_kind: 'unit',
         entity_id: entityId,
-        title: unit.type,
+        title: translateUnitType(unit.type),
         unit,
       };
     }
@@ -330,7 +335,7 @@ function buildPlanetInspect(planet: PlanetView, entityKind: string, entityId: st
         discovered: planet.discovered,
         entity_kind: 'resource',
         entity_id: entityId,
-        title: resource.kind,
+        title: translateItemId(resource.kind),
         resource,
       };
     }
@@ -340,7 +345,7 @@ function buildPlanetInspect(planet: PlanetView, entityKind: string, entityId: st
         discovered: planet.discovered,
         entity_kind: 'sector',
         entity_id: entityId,
-        title: `Sector ${entityId}`,
+        title: `区域 ${entityId}`,
       };
     default:
       return null;

@@ -107,13 +107,13 @@ describe('OverviewPage', () => {
     expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
     expect(screen.getAllByText('铁矿 24 · 石矿 3 · 硅矿 8').length).toBeGreaterThan(0);
     expect(screen.queryByText('矿物 240')).not.toBeInTheDocument();
-    expect(screen.getAllByText('tech-energy-1').length).toBeGreaterThan(0);
-    expect(screen.queryByText('[t87] entity_created')).not.toBeInTheDocument();
+    expect(screen.getAllByText('基础能源学').length).toBeGreaterThan(0);
+    expect(screen.queryByText('[t87] 实体已创建')).not.toBeInTheDocument();
     expect(screen.queryByText('电力不足')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '情报' }));
 
-    expect(await screen.findByText('[t87] entity_created')).toBeInTheDocument();
+    expect(await screen.findByText('[t87] 实体已创建')).toBeInTheDocument();
     expect(screen.getByText('电力不足')).toBeInTheDocument();
   });
 });

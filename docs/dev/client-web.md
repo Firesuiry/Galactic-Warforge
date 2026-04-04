@@ -121,6 +121,24 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 支持给会话创建周期性定时任务，按固定间隔投递一段消息，驱动 agent 做持续巡检或汇报
 - 右栏会显示会话内 agent 的运行时硬限制摘要，包括星球范围和命令类别
 
+### 3.7 中英翻译配置
+
+当前 `client-web` 已增加统一翻译层，用于把用户可见的英文枚举、类型名、状态名、命令名和关键字段标签翻成中文。
+
+核心文件：
+
+- `client-web/src/i18n/translation-config.ts`
+  - 维护静态词典
+- `client-web/src/i18n/translate.ts`
+  - 提供统一翻译函数和回退逻辑
+
+维护约束：
+
+- 页面组件不要直接渲染 `event_type`、`alert_type`、`kind`、`mode`、`scope` 这类英文协议值，统一走翻译函数
+- 建筑、物品、科技优先使用 `catalog` 中文名；目录缺失时再回退到本地翻译词典
+- 翻译只影响显示层，不改变请求 payload、查询参数、路由参数和服务端协议值
+- 新增英文枚举时，优先补 `translation-config.ts`，不要在页面里散写 `if/else`
+
 ## 4. 回归与验证方式
 
 ### 4.1 必做浏览器回归

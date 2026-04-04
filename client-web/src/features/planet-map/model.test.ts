@@ -1,6 +1,7 @@
 import type { PlanetView } from '@shared/types';
 
 import {
+  getBuildingDisplayName,
   mergeRecentEvents,
   resolveSelectionAtTile,
   summarizeEvent,
@@ -127,5 +128,29 @@ describe('planet map model helpers', () => {
     expect(merged).toHaveLength(2);
     expect(merged[0].event_id).toBe('evt-2');
     expect(summarizeEvent(merged[0])).toContain('tick 12');
+  });
+
+  it('已知类型和状态摘要走中文翻译，未知值回退原值', () => {
+    expect(getBuildingDisplayName(undefined, 'planetary_logistics_station')).toBe(
+      '行星物流站',
+    );
+
+    expect(
+      summarizeEvent({
+        event_id: 'evt-3',
+        tick: 13,
+        event_type: 'building_state_changed',
+        visibility_scope: 'p1',
+        payload: {
+          building_id: 'miner-1',
+          prev_state: 'idle',
+          next_state: 'running',
+        },
+      }),
+    ).toContain('空闲 -> 运行中');
+
+    expect(getBuildingDisplayName(undefined, 'unknown_building')).toBe(
+      'unknown_building',
+    );
   });
 });

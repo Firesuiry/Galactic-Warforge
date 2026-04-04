@@ -108,7 +108,8 @@ describe('AgentsPage', () => {
 
     expect(await screen.findByText('星球A协作')).toBeTruthy();
     expect(await screen.findByText('@建造官 检查产线')).toBeInTheDocument();
-    expect(screen.getByText('build')).toBeInTheDocument();
+    expect(screen.getAllByText('运行中').length).toBeGreaterThan(0);
+    expect(screen.getByText('建造')).toBeInTheDocument();
     expect(screen.getByText('每 300 秒')).toBeInTheDocument();
   });
 

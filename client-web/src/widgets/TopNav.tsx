@@ -7,6 +7,7 @@ import { formatMineralInventory } from '@/features/mineral-summary';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { translateUi } from '@/i18n/translate';
 import { useSessionStore } from '@/stores/session';
 
 export function TopNav() {
@@ -64,7 +65,7 @@ export function TopNav() {
   return (
     <header className="top-nav">
       <div className="top-nav__brand">
-        <div className="top-nav__title">SiliconWorld Command</div>
+        <div className="top-nav__title">{translateUi('app.command_center')}</div>
         <div className="top-nav__meta">
           <span>玩家 {session.playerId}</span>
           <span>

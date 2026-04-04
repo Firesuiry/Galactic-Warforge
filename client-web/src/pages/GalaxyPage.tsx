@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { translateUi } from '@/i18n/translate';
 
 export function GalaxyPage() {
   const client = useApiClient();
@@ -42,7 +43,7 @@ export function GalaxyPage() {
     <div className="page-grid strategic-page">
       <section className="panel page-hero strategic-hero">
         <div className="page-header">
-          <p className="eyebrow">Galaxy Command Map</p>
+          <p className="eyebrow">{translateUi('page.galaxy_command_map')}</p>
           <h1>{galaxy.name || galaxy.galaxy_id}</h1>
           <p className="subtle-text">
             已发现 {systems.filter((system) => system.discovered).length} / {systems.length} 个恒星系
