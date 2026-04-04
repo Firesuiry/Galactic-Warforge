@@ -60,6 +60,18 @@ async function canInviteByPlanet(
   return Boolean(actor?.policy?.canInviteByPlanet);
 }
 
+async function canManageMembers(
+  actorType: 'player' | 'agent',
+  actorId: string,
+  agentStore: AgentStore,
+) {
+  if (actorType === 'player') {
+    return true;
+  }
+  const actor = await agentStore.get(actorId);
+  return Boolean(actor?.policy?.canManageMembers);
+}
+
 export async function handleConversationRoutes(
   request: IncomingMessage,
   response: ServerResponse,
@@ -164,6 +176,35 @@ export async function handleConversationRoutes(
     await context.messageStore.append(message);
     context.onMessageAccepted?.(conversation, message);
     writeJson(response, 202, { accepted: true, message });
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname.match(/^\/conversations\/[^/]+\/members$/)) {
+    const conversationId = url.pathname.split('/')[2] ?? '';
+    const conversation = await context.conversationStore.get(conversationId);
+    if (!conversation) {
+      writeJson(response, 404, { error: 'conversation_not_found' });
+      return;
+    }
+
+    const payload = await readJsonBody<{
+      actorType: 'player' | 'agent';
+      actorId: string;
+      memberIds: string[];
+    }>(request);
+
+    if (!await canManageMembers(payload.actorType, payload.actorId, context.agentStore)) {
+      writeJson(response, 403, { error: 'manage_members_not_allowed' });
+      return;
+    }
+
+    conversation.memberIds = dedupe([...conversation.memberIds, ...payload.memberIds]);
+    conversation.updatedAt = new Date().toISOString();
+    await context.conversationStore.save(conversation);
+    writeJson(response, 200, {
+      conversationId,
+      memberIds: conversation.memberIds,
+    });
     return;
   }
 

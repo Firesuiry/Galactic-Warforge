@@ -14,6 +14,7 @@ describe('scheduler', () => {
         id: 'schedule-a',
         workspaceId: 'workspace-default',
         name: 'A星巡检',
+        ownerAgentId: 'agent-director',
         creatorType: 'player',
         creatorId: 'p1',
         targetType: 'conversation',

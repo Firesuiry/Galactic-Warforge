@@ -220,6 +220,19 @@ describe('gateway server', () => {
     });
     assert.equal(createConversationResponse.status, 201);
 
+    const addMembersResponse = await fetch(`${server.url}/conversations/conv-a/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        actorType: 'player',
+        actorId: 'p1',
+        memberIds: ['agent:agent-builder'],
+      }),
+    });
+    assert.equal(addMembersResponse.status, 200);
+    const addedMembers = await addMembersResponse.json() as { memberIds: string[] };
+    assert.ok(addedMembers.memberIds.includes('agent:agent-builder'));
+
     const inviteResponse = await fetch(`${server.url}/conversations/conv-a/members/invite-by-planet`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -255,6 +268,7 @@ describe('gateway server', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         id: 'schedule-a',
+        ownerAgentId: 'agent-director',
         creatorType: 'player',
         creatorId: 'p1',
         targetType: 'conversation',
@@ -265,11 +279,31 @@ describe('gateway server', () => {
     });
     assert.equal(scheduleResponse.status, 201);
 
+    const updateScheduleResponse = await fetch(`${server.url}/schedules/schedule-a`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        intervalSeconds: 600,
+        enabled: false,
+      }),
+    });
+    assert.equal(updateScheduleResponse.status, 200);
+    const updatedSchedule = await updateScheduleResponse.json() as {
+      ownerAgentId: string;
+      enabled: boolean;
+      intervalSeconds: number;
+    };
+    assert.equal(updatedSchedule.ownerAgentId, 'agent-director');
+    assert.equal(updatedSchedule.enabled, false);
+    assert.equal(updatedSchedule.intervalSeconds, 600);
+
     const schedulesResponse = await fetch(`${server.url}/schedules`);
     assert.equal(schedulesResponse.status, 200);
-    const schedules = await schedulesResponse.json() as Array<{ id: string }>;
+    const schedules = await schedulesResponse.json() as Array<{ id: string; ownerAgentId: string; enabled: boolean }>;
     assert.equal(schedules.length, 1);
     assert.equal(schedules[0]?.id, 'schedule-a');
+    assert.equal(schedules[0]?.ownerAgentId, 'agent-director');
+    assert.equal(schedules[0]?.enabled, false);
   });
 
   it('automatically wakes a mentioned agent and appends its reply to the conversation', async () => {

@@ -171,6 +171,7 @@ describe('collaboration stores', () => {
       id: 'schedule-a',
       workspaceId: 'workspace-default',
       name: 'A星巡检',
+      ownerAgentId: 'agent-director',
       creatorType: 'player',
       creatorId: 'p1',
       targetType: 'conversation',
@@ -192,5 +193,6 @@ describe('collaboration stores', () => {
     assert.equal(conversations[0]?.name, '星球A协作');
     assert.equal(messages[0]?.mentions[0]?.id, 'agent-director');
     assert.equal(schedules[0]?.intervalSeconds, 300);
+    assert.equal(schedules[0]?.ownerAgentId, 'agent-director');
   });
 });
