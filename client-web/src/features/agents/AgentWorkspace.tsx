@@ -2,8 +2,10 @@ import type { FormEvent } from 'react';
 
 import { AgentsSidebar, type AgentsPane } from './AgentsSidebar';
 import { ChannelWorkspaceView } from './ChannelWorkspaceView';
+import { MemberWorkspaceView } from './MemberWorkspaceView';
 import type {
   AgentProfileView,
+  AgentTemplateView,
   ConversationMessageView,
   ConversationView,
   ScheduleView,
@@ -20,11 +22,17 @@ interface AgentWorkspaceProps {
   messagesLoading: boolean;
   agents: AgentProfileView[];
   selectedAgentId: string;
+  templates: AgentTemplateView[];
   schedules: ScheduleView[];
   showCreateChannel: boolean;
   showCreateMember: boolean;
+  showTemplateManager: boolean;
   channelName: string;
   channelTopic: string;
+  memberName: string;
+  memberTemplateId: string;
+  templateName: string;
+  templateDescription: string;
   messageInput: string;
   invitePlanetId: string;
   inviteAgentId: string;
@@ -35,13 +43,21 @@ interface AgentWorkspaceProps {
   onSelectAgent: (agentId: string) => void;
   onToggleCreateChannel: () => void;
   onOpenCreateMember: () => void;
+  onOpenTemplateManager: () => void;
+  onCloseTemplateManager: () => void;
   onChannelNameChange: (value: string) => void;
   onChannelTopicChange: (value: string) => void;
+  onMemberNameChange: (value: string) => void;
+  onMemberTemplateIdChange: (value: string) => void;
+  onTemplateNameChange: (value: string) => void;
+  onTemplateDescriptionChange: (value: string) => void;
   onMessageInputChange: (value: string) => void;
   onInvitePlanetIdChange: (value: string) => void;
   onInviteAgentIdChange: (value: string) => void;
   onScheduleIntervalChange: (value: string) => void;
   onScheduleMessageChange: (value: string) => void;
+  onCreateTemplate: (event: FormEvent<HTMLFormElement>) => void;
+  onCreateMember: (event: FormEvent<HTMLFormElement>) => void;
   onCreateChannel: (event: FormEvent<HTMLFormElement>) => void;
   onSendMessage: (event: FormEvent<HTMLFormElement>) => void;
   onAddConversationMembers: (event: FormEvent<HTMLFormElement>) => void;
@@ -49,11 +65,12 @@ interface AgentWorkspaceProps {
   onCreateSchedule: (event: FormEvent<HTMLFormElement>) => void;
   onOpenChannelSettings: () => void;
   onBackToChannelChat: () => void;
+  onStartDm: (agentId: string) => void;
+  onToggleScheduleEnabled: (scheduleId: string, enabled: boolean) => void;
 }
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
   const selectedConversation = props.conversations.find((conversation) => conversation.id === props.selectedConversationId);
-  const selectedAgent = props.agents.find((agent) => agent.id === props.selectedAgentId);
 
   return (
     <div className="agent-workspace-shell">
@@ -101,54 +118,34 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           />
         </div>
       ) : (
-        <section className="panel agent-members-view">
-          <div className="agent-members-view__header">
-            <div>
-              <h2>{props.showCreateMember ? '新建成员' : selectedAgent?.name ?? '选择一个成员'}</h2>
-              <p className="subtle-text">
-                {props.showCreateMember
-                  ? '成员创建、模板绑定和权限编辑将在下一步接入。'
-                  : selectedAgent
-                    ? `当前状态 ${selectedAgent.status}，后续会在这里挂接模板、权限和定时任务。`
-                    : '从左侧选择成员，或直接创建一个新的成员。'}
-              </p>
-            </div>
-          </div>
-
-          {props.showCreateMember ? (
-            <div className="agent-members-view__placeholder">
-              <div className="section-title">新建成员入口已就位</div>
-              <p className="subtle-text">下一步会在这里补上成员表单、模板选择和保存流程。</p>
-            </div>
-          ) : selectedAgent ? (
-            <div className="agent-members-view__body">
-              <div className="agent-im__detail-card">
-                <strong>模板</strong>
-                <span>{selectedAgent.templateId}</span>
-              </div>
-              <div className="agent-im__detail-card">
-                <strong>运行状态</strong>
-                <span>{selectedAgent.status}</span>
-              </div>
-              <div className="agent-im__detail-card">
-                <strong>权限范围</strong>
-                {selectedAgent.policy?.planetIds.length ? <span>星球 {selectedAgent.policy.planetIds.join(', ')}</span> : <span>未配置星球范围</span>}
-                {selectedAgent.policy?.commandCategories.length ? (
-                  <div className="agent-im__tag-row">
-                    {selectedAgent.policy.commandCategories.map((category) => (
-                      <span key={category} className="agent-im__tag">{category}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div className="agent-members-view__placeholder">
-              <div className="section-title">还没有可查看的成员</div>
-              <p className="subtle-text">在左侧点击“新建成员”，后续可从这里进入成员详情、模板和定时任务。</p>
-            </div>
-          )}
-        </section>
+        <MemberWorkspaceView
+          fixtureMode={props.fixtureMode}
+          agents={props.agents}
+          templates={props.templates}
+          schedules={props.schedules}
+          selectedAgentId={props.selectedAgentId}
+          showCreateMember={props.showCreateMember}
+          showTemplateManager={props.showTemplateManager}
+          memberName={props.memberName}
+          memberTemplateId={props.memberTemplateId}
+          templateName={props.templateName}
+          templateDescription={props.templateDescription}
+          scheduleIntervalSeconds={props.scheduleIntervalSeconds}
+          scheduleMessage={props.scheduleMessage}
+          onMemberNameChange={props.onMemberNameChange}
+          onMemberTemplateIdChange={props.onMemberTemplateIdChange}
+          onOpenTemplateManager={props.onOpenTemplateManager}
+          onCloseTemplateManager={props.onCloseTemplateManager}
+          onTemplateNameChange={props.onTemplateNameChange}
+          onTemplateDescriptionChange={props.onTemplateDescriptionChange}
+          onCreateTemplate={props.onCreateTemplate}
+          onCreateMember={props.onCreateMember}
+          onStartDm={props.onStartDm}
+          onScheduleIntervalChange={props.onScheduleIntervalChange}
+          onScheduleMessageChange={props.onScheduleMessageChange}
+          onCreateSchedule={props.onCreateSchedule}
+          onToggleScheduleEnabled={props.onToggleScheduleEnabled}
+        />
       )}
     </div>
   );

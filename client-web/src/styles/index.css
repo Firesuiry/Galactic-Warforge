@@ -424,13 +424,46 @@ button {
   min-height: 0;
 }
 
+.agent-members-view__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .agent-members-view__header h2 {
   margin: 0;
+}
+
+.agent-members-view__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-members-view__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
 }
 
 .agent-members-view__body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.agent-members-view__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-members-view__section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
 }
 
@@ -442,6 +475,18 @@ button {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.agent-members-view__inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agent-template-manager {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
+    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
 }
 
 .agent-im {
