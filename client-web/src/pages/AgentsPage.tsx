@@ -22,8 +22,11 @@ export function AgentsPage() {
   const session = useSessionSnapshot();
   const queryClient = useQueryClient();
   const fixtureMode = isFixtureServerUrl(session.serverUrl);
+  const [activePane, setActivePane] = useState<'channels' | 'members'>('channels');
   const [selectedConversationId, setSelectedConversationId] = useState('');
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showCreateMember, setShowCreateMember] = useState(false);
   const [channelName, setChannelName] = useState('');
   const [channelTopic, setChannelTopic] = useState('');
   const [messageInput, setMessageInput] = useState('');
@@ -64,6 +67,13 @@ export function AgentsPage() {
     }
   }, [conversationsQuery.data, selectedConversationId]);
 
+  useEffect(() => {
+    const firstAgentId = agentsQuery.data?.[0]?.id ?? '';
+    if (!selectedAgentId && firstAgentId) {
+      setSelectedAgentId(firstAgentId);
+    }
+  }, [agentsQuery.data, selectedAgentId]);
+
   useConversationEvents(selectedConversationId, () => {
     void queryClient.invalidateQueries({ queryKey: ['agent-conversation-messages', selectedConversationId] });
     void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
@@ -73,6 +83,7 @@ export function AgentsPage() {
   const createConversationMutation = useMutation({
     mutationFn: createConversation,
     onSuccess: (conversation) => {
+      setActivePane('channels');
       setSelectedConversationId(conversation.id);
       setChannelName('');
       setChannelTopic('');
@@ -109,6 +120,7 @@ export function AgentsPage() {
 
   const createScheduleMutation = useMutation({
     mutationFn: ({ targetId, intervalSeconds, messageTemplate }: { targetId: string; intervalSeconds: number; messageTemplate: string }) => createSchedule({
+      ownerAgentId: selectedConversation?.memberIds.find((memberId) => memberId.startsWith('agent:'))?.slice('agent:'.length) ?? selectedAgentId,
       creatorType: 'player',
       creatorId: session.playerId,
       targetType: 'conversation',
@@ -222,6 +234,35 @@ export function AgentsPage() {
     });
   }
 
+  function handleSelectConversation(conversationId: string) {
+    setActivePane('channels');
+    setShowCreateMember(false);
+    setSelectedConversationId(conversationId);
+  }
+
+  function handlePaneChange(pane: 'channels' | 'members') {
+    setActivePane(pane);
+    if (pane === 'channels') {
+      setShowCreateMember(false);
+    }
+  }
+
+  function handleSelectAgent(agentId: string) {
+    setActivePane('members');
+    setShowCreateMember(false);
+    setSelectedAgentId(agentId);
+  }
+
+  function handleToggleCreateChannel() {
+    setActivePane('channels');
+    setShowCreateChannel((current) => !current);
+  }
+
+  function handleOpenCreateMember() {
+    setActivePane('members');
+    setShowCreateMember(true);
+  }
+
   if (coreLoading) {
     return <div className="panel">正在加载智能体协作台...</div>;
   }
@@ -239,21 +280,27 @@ export function AgentsPage() {
     <AgentWorkspace
       gatewayOnline={healthQuery.data?.status === 'ok'}
       fixtureMode={fixtureMode}
+      activePane={activePane}
       conversations={conversations}
       selectedConversationId={selectedConversation?.id ?? ''}
       messages={messages}
       messagesLoading={messagesLoading}
       agents={agents}
+      selectedAgentId={selectedAgentId}
       schedules={schedules}
       showCreateChannel={showCreateChannel}
+      showCreateMember={showCreateMember}
       channelName={channelName}
       channelTopic={channelTopic}
       messageInput={messageInput}
       invitePlanetId={invitePlanetId}
       scheduleIntervalSeconds={scheduleIntervalSeconds}
       scheduleMessage={scheduleMessage}
-      onSelectConversation={setSelectedConversationId}
-      onToggleCreateChannel={() => setShowCreateChannel((current) => !current)}
+      onPaneChange={handlePaneChange}
+      onSelectConversation={handleSelectConversation}
+      onSelectAgent={handleSelectAgent}
+      onToggleCreateChannel={handleToggleCreateChannel}
+      onOpenCreateMember={handleOpenCreateMember}
       onChannelNameChange={setChannelName}
       onChannelTopicChange={setChannelTopic}
       onMessageInputChange={setMessageInput}
@@ -264,7 +311,6 @@ export function AgentsPage() {
       onSendMessage={handleSendMessage}
       onInviteByPlanet={handleInviteByPlanet}
       onCreateSchedule={handleCreateSchedule}
-      onStartDm={handleStartDm}
     />
   );
 }
