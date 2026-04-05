@@ -76,6 +76,7 @@ type TechDefinition struct {
 	Cost          []ItemAmount `json:"cost" yaml:"cost"` // matrix cost
 	Unlocks       []TechUnlock `json:"unlocks,omitempty" yaml:"unlocks,omitempty"`
 	Effects       []TechEffect `json:"effects,omitempty" yaml:"effects,omitempty"`
+	LeadsTo       []string     `json:"leads_to,omitempty" yaml:"leads_to,omitempty"`
 	MaxLevel      int          `json:"max_level,omitempty" yaml:"max_level,omitempty"` // 0 = not repeatable, 1+ = repeatable that many times, -1 = infinite
 	Hidden        bool         `json:"hidden,omitempty" yaml:"hidden,omitempty"`
 }
@@ -177,6 +178,7 @@ func init() {
 
 // TechDefinitionByID returns a tech definition by ID
 func TechDefinitionByID(id string) (*TechDefinition, bool) {
+	ensureTechCatalogDerived()
 	techCatalog.mu.RLock()
 	defer techCatalog.mu.RUnlock()
 	def, ok := techCatalog.techs[id]
@@ -185,6 +187,7 @@ func TechDefinitionByID(id string) (*TechDefinition, bool) {
 
 // AllTechDefinitions returns all tech definitions sorted by level
 func AllTechDefinitions() []*TechDefinition {
+	ensureTechCatalogDerived()
 	techCatalog.mu.RLock()
 	defer techCatalog.mu.RUnlock()
 	defs := make([]*TechDefinition, 0, len(techCatalog.techs))
@@ -202,6 +205,7 @@ func AllTechDefinitions() []*TechDefinition {
 
 // TechDefinitionsByType returns all techs of a given type
 func TechDefinitionsByType(typ TechType) []*TechDefinition {
+	ensureTechCatalogDerived()
 	techCatalog.mu.RLock()
 	defer techCatalog.mu.RUnlock()
 	defs := make([]*TechDefinition, 0)
@@ -1145,6 +1149,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "structure_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 1000}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockSpecial, ID: "satellite_power"},
+			{Type: TechUnlockBuilding, ID: string(BuildingTypeSatelliteSubstation)},
 		},
 	},
 	{

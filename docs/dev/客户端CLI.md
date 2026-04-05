@@ -105,11 +105,16 @@
 `build` 不再限制少量硬编码建筑类型，而是直接接受服务端文档中的 `building_type`。例如：
 
 - 基地与采集：`battlefield_analysis_base`、`mining_machine`、`advanced_mining_machine`、`water_pump`、`oil_extractor`、`orbital_collector`
-- 输送与分拣：`conveyor_belt_mk1`、`conveyor_belt_mk2`、`conveyor_belt_mk3`、`splitter`、`automatic_piler`、`traffic_monitor`、`spray_coater`、`sorter_mk1`、`sorter_mk2`、`sorter_mk3`、`pile_sorter`
+- 输送与分拣：`conveyor_belt_mk1`、`conveyor_belt_mk2`、`conveyor_belt_mk3`、`splitter`、`traffic_monitor`、`spray_coater`、`sorter_mk1`、`sorter_mk2`、`sorter_mk3`、`pile_sorter`
 - 仓储与物流：`depot_mk1`、`depot_mk2`、`storage_tank`、`logistics_distributor`、`planetary_logistics_station`、`interstellar_logistics_station`
 - 冶炼生产科研：`arc_smelter`、`assembling_machine_mk1`、`chemical_plant`、`matrix_lab`、`recomposing_assembler`、`fractionator`、`oil_refinery` 等
-- 电力与防御：`wind_turbine`、`tesla_tower`、`solar_panel`、`thermal_power_plant`、`energy_exchanger`、`ray_receiver`、`gauss_turret`、`missile_turret` 等
+- 电力与防御：`wind_turbine`、`tesla_tower`、`solar_panel`、`thermal_power_plant`、`energy_exchanger`、`ray_receiver`、`satellite_substation`、`gauss_turret`、`missile_turret` 等
 - 戴森相关：`em_rail_ejector`、`vertical_launching_silo`
+
+其中两条边界要以服务端 `/catalog` 为准：
+
+- `satellite_substation` 当前已经重新接回科技树，但需要先完成 `satellite_power`
+- `automatic_piler` 当前不在公开 `buildable=true` 建筑集里；CLI 不应再把它当成已闭合玩法入口
 
 资源点约束也会直接按服务端规则生效：
 

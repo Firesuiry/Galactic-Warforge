@@ -65,6 +65,7 @@ type TechCatalogEntry struct {
 	Cost          []model.ItemAmount `json:"cost,omitempty"`
 	Unlocks       []model.TechUnlock `json:"unlocks,omitempty"`
 	Effects       []model.TechEffect `json:"effects,omitempty"`
+	LeadsTo       []string           `json:"leads_to,omitempty"`
 	MaxLevel      int                `json:"max_level,omitempty"`
 	Hidden        bool               `json:"hidden,omitempty"`
 	IconKey       string             `json:"icon_key"`
@@ -132,7 +133,7 @@ func (ql *Layer) Catalog() *CatalogView {
 	techDefs := model.AllTechDefinitions()
 	techs := make([]TechCatalogEntry, 0, len(techDefs))
 	for _, tech := range techDefs {
-		if tech == nil {
+		if tech == nil || tech.Hidden {
 			continue
 		}
 		techs = append(techs, TechCatalogEntry{
@@ -146,6 +147,7 @@ func (ql *Layer) Catalog() *CatalogView {
 			Cost:          append([]model.ItemAmount(nil), tech.Cost...),
 			Unlocks:       append([]model.TechUnlock(nil), tech.Unlocks...),
 			Effects:       append([]model.TechEffect(nil), tech.Effects...),
+			LeadsTo:       append([]string(nil), tech.LeadsTo...),
 			MaxLevel:      tech.MaxLevel,
 			Hidden:        tech.Hidden,
 			IconKey:       tech.ID,

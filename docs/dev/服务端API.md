@@ -774,7 +774,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
   - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
-  - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `max_level` / `hidden` / `icon_key` / `color`
+  - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to` / `max_level` / `icon_key` / `color`
   - `units`：公开单位目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `visible_tech_id` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `hidden_reason`
 - 响应示例:
 ```json
@@ -849,6 +849,23 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       ],
       "icon_key": "electromagnetism",
       "color": "#9775fa"
+    },
+    {
+      "id": "particle_control",
+      "name": "粒子控制",
+      "name_en": "Particle Control",
+      "category": "branch",
+      "type": "chemical",
+      "level": 8,
+      "prerequisites": ["superconductor"],
+      "cost": [
+        {"item_id": "electromagnetic_matrix", "quantity": 800},
+        {"item_id": "energy_matrix", "quantity": 800},
+        {"item_id": "structure_matrix", "quantity": 200}
+      ],
+      "leads_to": ["information_matrix"],
+      "icon_key": "particle_control",
+      "color": "#fd7e14"
     }
   ],
   "units": [
@@ -895,10 +912,14 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 戴森相关 catalog 补充：
   - `items` 中矩阵物品统一只暴露 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`；旧别名 `matrix_blue` / `matrix_red` / `matrix_yellow` / `matrix_universe` 已从主 catalog 移除。
   - `items` / `recipes` 已补齐终局弹药 `antimatter_capsule` 与 `gravity_missile`，二者都通过 `recomposing_assembler` 进入真实生产闭环。
-  - 当前建筑科技前置的 authoritative 反查入口是 `techs[].unlocks`，不是 `buildings[].unlock_tech`；仓库默认 catalog 下后者通常为空，不应作为主科技索引来源。
-  - `buildings` 中以下此前长期处于“有定义但无玩家入口”的建筑现在都已进入 `buildable=true` 主线建筑集；对应科技前置请通过 `techs[].unlocks` 中的 building unlock 反查：
+  - `buildings[].unlock_tech` 现在是 authoritative 的反查入口，由公开科技树里的 `TechUnlockBuilding` 反向派生得到；例如 `satellite_substation.unlock_tech = ["satellite_power"]`。
+  - `/catalog.techs[]` 只返回当前公开科技；显式隐藏科技和经死胡同裁剪后不再公开的科技不会继续暴露给玩家。
+  - `/catalog.techs[].leads_to` 用于表达桥接科技的公开后继方向；如果某个科技当前没有直接 `unlock` / `effect`，但仍然会把玩家引向后续公开收益，这里会给出下一跳。
+  - `automatic_piler` 当前未公开：建筑仍保留在 catalog 中，但 `buildable = false`，不应再被当作当前版本可玩的建造入口。
+  - `buildings` 中以下此前长期处于“有定义但无玩家入口”的建筑现在都已进入 `buildable=true` 主线建筑集；对应科技前置请优先读取 `buildings[].unlock_tech`：
     - `advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`energy_exchanger`
     - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`
+    - `satellite_substation`
   - `buildings` 中 `vertical_launching_silo` 当前会暴露 `default_recipe_id = "small_carrier_rocket"`。
   - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`、`antimatter_capsule`、`gravity_missile`。
   - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip`、`mass_energy_storage`、`gravity_missile` 也都会对外暴露对应 recipe 解锁。
@@ -929,7 +950,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "position": {"x": 10, "y": 12}
       },
       "payload": {
-        "building_type": "当前服务端 Buildable=true 的建筑 ID，例如 mining_machine|advanced_mining_machine|wind_turbine|tesla_tower|solar_panel|arc_smelter|assembling_machine_mk1|recomposing_assembler|chemical_plant|pile_sorter|conveyor_belt_mk1|depot_mk1|planetary_logistics_station|energy_exchanger|orbital_collector|em_rail_ejector|vertical_launching_silo|ray_receiver|jammer_tower|sr_plasma_turret|planetary_shield_generator|self_evolution_lab",
+        "building_type": "当前服务端 Buildable=true 的建筑 ID，例如 mining_machine|advanced_mining_machine|wind_turbine|tesla_tower|satellite_substation|solar_panel|arc_smelter|assembling_machine_mk1|recomposing_assembler|chemical_plant|pile_sorter|conveyor_belt_mk1|depot_mk1|planetary_logistics_station|energy_exchanger|orbital_collector|em_rail_ejector|vertical_launching_silo|ray_receiver|jammer_tower|sr_plasma_turret|planetary_shield_generator|self_evolution_lab",
         "direction": "north|east|south|west|auto",
         "recipe_id": "gear|smelt_iron|plastic",
         "task_id": "c-1",

@@ -173,7 +173,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
-		Buildable:   true,
+		Buildable:   false,
 	},
 	{
 		ID:          BuildingTypeTrafficMonitor,

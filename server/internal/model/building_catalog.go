@@ -120,6 +120,7 @@ func init() {
 
 // BuildingDefinitionByID returns the definition for a building id.
 func BuildingDefinitionByID(id BuildingType) (BuildingDefinition, bool) {
+	ensureBuildingCatalogDerived()
 	buildingCatalogMu.RLock()
 	defer buildingCatalogMu.RUnlock()
 	def, ok := buildingCatalog[id]
@@ -128,6 +129,7 @@ func BuildingDefinitionByID(id BuildingType) (BuildingDefinition, bool) {
 
 // AllBuildingDefinitions returns a copy of building definitions.
 func AllBuildingDefinitions() []BuildingDefinition {
+	ensureBuildingCatalogDerived()
 	buildingCatalogMu.RLock()
 	defer buildingCatalogMu.RUnlock()
 	defs := make([]BuildingDefinition, 0, len(buildingCatalog))
@@ -143,16 +145,19 @@ func AllBuildingDefinitions() []BuildingDefinition {
 // RegisterBuildingDefinitions adds new building definitions without overwriting existing ones.
 func RegisterBuildingDefinitions(defs ...BuildingDefinition) error {
 	buildingCatalogMu.Lock()
-	defer buildingCatalogMu.Unlock()
 	for _, def := range defs {
 		if err := validateBuildingDefinition(def); err != nil {
+			buildingCatalogMu.Unlock()
 			return err
 		}
 		if _, exists := buildingCatalog[def.ID]; exists {
+			buildingCatalogMu.Unlock()
 			return fmt.Errorf("building %s already exists", def.ID)
 		}
 		buildingCatalog[def.ID] = def
 	}
+	buildingCatalogMu.Unlock()
+	markBuildingCatalogDerivedDirty()
 	return nil
 }
 
@@ -165,6 +170,7 @@ func ReplaceBuildingCatalog(defs []BuildingDefinition) error {
 	buildingCatalogMu.Lock()
 	buildingCatalog = catalog
 	buildingCatalogMu.Unlock()
+	markBuildingCatalogDerivedDirty()
 	return nil
 }
 

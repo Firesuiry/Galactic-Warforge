@@ -1,337 +1,366 @@
-# T104 最终实现方案：燃料型发电建筑运行态收口与人造恒星稳定供电
+# T103 最终实现方案：戴森科技树不可达建筑与空科技节点
 
 > 基于 `docs/process/design_claude.md` 与 `docs/process/design_codex.md` 的综合定稿。
 >
-> 本文不并列复述两份方案，而是对共同结论与分歧点做最终裁决，形成一份可直接执行的实现方案。
+> 本文不并列复述两份方案，而是结合 2026-04-05 当前代码实现做最终裁决，形成一份可直接落地的实现方案。
 
 ## 1. 最终结论
 
-T104 的真实问题已经明确：
+本次采用“**建筑分拆处理 + 科技图收口 + `/catalog` authoritative 化**”的综合方案。
 
-- 根因不在 `query`、`stats`、`networks` 或 Web/CLI 展示层；
-- 根因在于同一个 tick 内，燃料型发电建筑先在 `settlePowerGeneration` 中完成“有燃料 -> 发电 -> 消耗燃料”，随后又在 `settleResources` 中按“库存已空”被二次写回 `no_power/no_fuel`；
-- 这会导致 `artificial_star` 虽然短暂发过电，但玩家几乎无法从 `inspect` / `scene` / `building_state_changed` 上稳定观察到运行态，也很难把 `networks/stats` 的供电收益和建筑状态对应起来。
+最终裁决如下：
 
-最终方案确定为：
+1. `satellite_substation` 直接接回真实科技树，归属 `satellite_power`。
+2. `automatic_piler` 当前版本**不接回科技树**，而是从公开可建能力中下架；等 runtime 行为补齐后，再单独 reopen。
+3. `/catalog.buildings[].unlock_tech` 改成 authoritative 反向派生字段，不能继续长期为空。
+4. 空科技节点**不做“一刀切隐藏”**，而是基于前置图做“死胡同裁剪”。
+5. `/catalog.techs[]` 增加 `leads_to`，保留有后继价值的桥接科技，只移除真正死胡同科技。
 
-1. **把燃料型发电建筑的运行态真相 authoritative 收口到 `settlePowerGeneration`。**
-2. **移除 `settleResources` 对同类建筑的二次燃料可达性判定，只尊重前序已经写好的 `no_power/no_fuel` 结果。**
-3. **不新增任何“燃烧缓存”“剩余燃烧 tick”“展示层补丁状态”或额外 API 字段。**
-4. **本次规则一次覆盖 `artificial_star`、`thermal_power_plant`、`mini_fusion_power_plant` 三类燃料型发电建筑，不做单建筑特判。**
-5. **同步修改旧的 T099 测试语义，并新增独立 T104 回归测试，锁定运行态、事件、`inspect`、`scene`、`networks`、`stats` 的一致性。**
+这意味着：
 
-## 2. 综合裁决
+- 采纳 `design_claude.md` 对 `satellite_substation`、`unlock_tech` 反查的处理方向。
+- 采纳 `design_codex.md` 对 `automatic_piler` 和“桥接科技 vs 死胡同科技”的区分。
+- 不采纳“把 `automatic_piler` 直接挂到 `integrated_logistics`”。
+- 不采纳“所有空科技统一隐藏”。
 
-### 2.1 两份方案的一致主线
+## 2. 裁决依据
 
-`design_claude` 与 `design_codex` 在核心方向上并不冲突，已经达成以下共识：
+### 2.1 `satellite_substation` 已经是 runtime-backed 建筑，只缺科技入口
 
-- 本轮范围只覆盖 `docs/process/task/T104_戴森终局人造恒星装燃料后无法稳定供电.md`
-- 不需要新做一层 query/UI 补丁来掩盖 runtime 错误
-- 不需要新增持久化燃烧态字段
-- `ResolvePowerGeneration`、`FuelRules.consume_per_tick`、`PowerSettlementSnapshot` 这条主链路本身是可用的
-- `inspect/scene` 读 runtime，`networks/stats` 读 snapshot；只要 tick 语义收口正确，观察面会自然一致
+当前代码事实：
 
-因此最终方案继续沿用“直接修核心结算语义”的主轴，不采用任何展示层圆谎方案。
+- `server/internal/model/building_runtime.go` 已有 `BuildingTypeSatelliteSubstation` 独立 runtime 定义；
+- `server/internal/model/power_grid.go` 已把它纳入无线供电范围计算；
+- `server/internal/model/building_defs.go` 中它本来就是 `Buildable: true`。
 
-### 2.2 根因裁决
+所以它的问题是“科技树断线”，不是“建筑玩法没做完”。这部分应采用方案 A：接回科技树。
 
-最终认定的根因是：
+### 2.2 `automatic_piler` 现在不是“只差科技入口”，而是玩法未闭合
 
-- `settlePowerGeneration` 在 tick 前半段先判定有燃料，并通过 `ResolvePowerGeneration` 消耗燃料、写入 `ws.PowerInputs`
-- `finalizePowerSettlement` 再把这次发电固化进 `ws.PowerSnapshot`
-- 但 `settleResources` 又在 tick 后半段重新用 `fuelBasedGeneratorHasReachableFuel` 检查一次燃料
-- 当最后一根燃料恰好在本 tick 被消耗后，这个后置检查会立即把建筑覆写成 `no_power/no_fuel`
+当前代码事实：
 
-所以 T104 的本质是**同一事实被两个阶段重复定义**，而不是“燃料被消耗了两次”或“snapshot 算法错了”。
+- `server/internal/model/building_defs.go` 里 `automatic_piler` 仅有建筑定义，且当前 `Buildable: true`；
+- `server/internal/model/building_runtime.go` 里没有 `automatic_piler` 的专门 runtime 模块；
+- `server/internal/model/sorter.go` 的 `IsSorterBuilding(...)` 不包含 `automatic_piler`；
+- `server/internal/gamecore/*` 中没有 `automatic_piler` 的专属结算或行为引用。
 
-### 2.3 不采用的两个方向
+所以如果只是把它挂到 `integrated_logistics`，得到的不是“真实可玩入口”，而是“研究后能摆、但没有闭合玩法的空心建筑”。这不符合项目“直接收口真相”的准则。
 
-#### 方向 A：query / UI 层补展示态
+最终选择：当前版本先下架，不继续公开。
 
-不采用。原因：
+### 2.3 当前 19 个空科技不是同一种问题
 
-- 会制造第三个事实源；
-- runtime 仍然是错的；
-- `building_state_changed` 仍会抖动；
-- 违背项目“直接改核心定义，不靠兼容层圆谎”的准则。
+`normalizeTechUnlocks(...)` 会在初始化时过滤不存在的 recipe / building / unit unlock，因此这些科技在归一化后出现了空 `Unlocks`。
 
-#### 方向 B：新增燃烧状态机或持久化字段
+但按当前科技图，它们分成两类：
 
-不采用。原因：
+#### 需要保留可见的桥接科技
 
-- 对 T104 来说是过度设计；
-- 会引入存档、回放、回滚和状态同步的额外复杂度；
-- 当前 `FuelRules.consume_per_tick` 已足够表达目标语义。
+- `engine`
+- `steel_smelting`
+- `combustible_unit`
+- `crystal_smelting`
+- `polymer_chemical`
+- `high_strength_glass`
+- `particle_control`
+- `thruster`
 
-### 2.4 细节裁决一：是否强制新增 helper
+这些科技虽然当前没有直接 `unlock/effect`，但仍然是公开后继科技的前置，研究它们会把玩家引向真实可玩的下一段科技线。
 
-最终裁决：**不把新增 helper 作为本次必须项。**
+#### 需要隐藏的死胡同科技
 
-原因：
+- `casimir_crystal`
+- `crystal_explosive`
+- `crystal_shell`
+- `proliferator_mk2`
+- `proliferator_mk3`
+- `reformed_refinement`
+- `super_magnetic`
+- `supersonic_missile`
+- `titanium_ammo`
+- `wave_interference`
+- `xray_cracking`
 
-- 真正必须修改的行为点只有 `rules.go` 中的一处分支；
-- `fuel_generators.go` 当前只负责“是否存在可达燃料”的判定，职责已经清楚；
-- 为一个单一生产调用点额外抽 `fuelGeneratorStoppedByNoFuel(...)`，收益有限，容易把本次修复从“语义收口”扩散成“抽象整理”。
+这 11 个节点在当前公开树里既没有直接收益，也不会导向公开的真实收益，继续暴露只会制造“研究后什么都没发生”的假入口。
 
-最终要求是：
+因此不能采用“只要 `unlocks/effects` 为空就隐藏”的简单规则。
 
-- `server/internal/gamecore/rules.go` 必须改；
-- `server/internal/gamecore/power_generation.go` 应补注释，明确 authoritative 归属；
-- `fuel_generators.go` 是否新增私有 helper，由实现时的实际重复度决定，但不是设计强约束。
+### 2.4 `/catalog` 现在还没有 authoritative 反向信息
 
-### 2.5 细节裁决二：`building_state_changed` 事件的验收口径
+当前代码事实：
 
-最终裁决：
+- `server/internal/query/catalog.go` 已经暴露 `buildings[].unlock_tech`；
+- `server/internal/model/building_catalog.go` 里没有任何从科技树反向回填该字段的逻辑；
+- 结果是 `unlock_tech` 基本长期为空，只能靠 `techs[].unlocks` 人工反查。
 
-- **必须消除同一个 tick 内 `running -> no_power/no_fuel` 的反向闪烁。**
-- **不要求为了 T104 额外重写通用 `applyBuildingState` 机制。**
-
-原因：
-
-- 当前 `settleResources` 末尾仍会统一执行一次 `applyBuildingState(..., running, "")`，这可能带来“同状态、不同 reason”的原因清理事件；
-- 这属于现有通用状态机的次级噪音，不是 T104 的主 bug；
-- 本次必须修掉的是“已经真实发电却在同 tick 末被打回 `no_fuel`”这一错误语义。
-
-因此测试口径应写成：
-
-- 必须存在正确的 `no_power/no_fuel -> running(start)` 恢复事件；
-- 必须存在真正耗尽燃料后的 `running -> no_power/no_fuel` 事件；
-- 禁止再出现同 tick 的 `running -> no_power/no_fuel` 闪回；
-- 对 `running` 同状态 reason 清理事件按“允许存在但不作为主验收对象”处理。
+这与 `/catalog` 作为玩家公开元数据总表的定位不匹配。本次需要直接收口。
 
 ## 3. 最终语义定义
 
-### 3.1 单一 authoritative 规则
+### 3.1 玩家公开建筑的标准
 
-本次明确规定：
+一个建筑要对玩家公开为“当前可建”，至少要满足：
 
-- `runtime.state` 表示的是**刚刚完成结算的这个 tick 的工作结果**
-- 它不是“下一 tick 的预测状态”
+1. `Buildable = true`
+2. 有真实 runtime 支撑，而不是只有名字和基础定义
+3. 有真实可达的科技入口，或属于默认初始已完成科技
 
-因此当 `artificial_star` 在 tick N 成功消耗最后一根 `antimatter_fuel_rod` 并发出了 `+80` 供电时：
+按这个标准：
 
-- tick N 结束时仍然允许显示 `running`
-- tick N 的 `networks/stats` 必须体现这次供电
-- 此时建筑本地库存已经为 `0` 也是合法结果
-- 如果没有新燃料补入，则 tick N+1 才切换为 `no_power/no_fuel`
+- `satellite_substation` 满足 1 和 2，只差 3，所以补科技入口；
+- `automatic_piler` 目前不满足 2，因此不能继续公开。
 
-这条语义同样适用于：
+### 3.2 玩家公开科技的标准
 
-- `thermal_power_plant`
-- `mini_fusion_power_plant`
+一个科技节点对玩家可见，至少要满足以下之一：
 
-### 3.2 观察面一致性
+1. 有真实 `unlock`
+2. 有真实 `effect`
+3. 是可重复升级科技
+4. 虽然没有直接收益，但有公开的 `leads_to`，且最终能通向公开收益
 
-修复后，各观察面的关系应为：
+否则它就是公开死胡同，应当隐藏。
 
-- `inspect`：直接反映建筑 runtime 与本地存储
-- `scene`：直接复用建筑 runtime
-- `building_state_changed`：围绕真实结算后的 runtime 发事件
-- `GET /world/planets/{planet_id}/networks`：继续读取 `PowerSettlementSnapshot`
-- `GET /state/stats`：继续读取 `PowerSettlementSnapshot`
+### 3.3 `/catalog` 的职责
 
-也就是说，本次不额外发明“观察面专属语义”，而是让它们围绕同一个 tick 事实工作。
+`/catalog` 是玩家公开元数据接口，不是内部调试快照。它应直接表达玩家真实可见、真实可达的能力边界。
 
-## 4. 文件级实现设计
+因此本次确定：
 
-### 4.1 `server/internal/gamecore/rules.go`
+- `buildings[].unlock_tech` 必须 authoritative；
+- `techs[]` 必须能表达桥接科技的后继方向；
+- 真正 `hidden` 的死胡同科技不应再作为玩家公开目录的一部分暴露。
 
-这是本次唯一必须发生行为修改的文件。
+## 4. 模型与查询层设计
 
-当前错误分支是：
+### 4.1 `server/internal/model/tech.go`
 
-```go
-if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) && !fuelBasedGeneratorHasReachableFuel(b) {
-    if evt := applyBuildingState(b, model.BuildingWorkNoPower, stateReasonNoFuel); evt != nil {
-        events = append(events, evt)
-    }
-    continue
-}
-```
+本文件需要做四类改动。
 
-最终方案改为：
+#### 1. 补齐 `satellite_substation` 的真实科技入口
+
+在 `satellite_power.Unlocks` 中追加：
 
 ```go
-if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) {
-    if b.Runtime.State == model.BuildingWorkNoPower && b.Runtime.StateReason == stateReasonNoFuel {
-        continue
-    }
-}
+{Type: TechUnlockBuilding, ID: string(BuildingTypeSatelliteSubstation)}
 ```
 
-这段改动的含义是：
+#### 2. 增加科技图派生阶段
 
-- `settleResources` 不再重新检查“当前库存里还有没有燃料”
-- 如果前序阶段已经判定本 tick 无燃料并写成 `no_power/no_fuel`，这里直接跳过
-- 如果前序阶段已经判定本 tick 成功发电，那么这里不得再把它打回 `no_fuel`
+现有 `normalizeTechDefinitions(...)` 只做 unlock 归一化。本次改成两阶段派生：
 
-### 4.2 `server/internal/gamecore/power_generation.go`
+1. 归一化 `Unlocks`
+2. 基于 `Prerequisites` 构建反向图
+3. 迭代裁剪死胡同科技
+4. 回填每个公开科技的 `LeadsTo`
 
-本文件不需要改结构，但要明确其职责归属：
+推荐直接给 `TechDefinition` 增加派生字段：
 
-1. 检查燃料型发电建筑是否有可达燃料
-2. 无燃料时写入 `no_power/no_fuel`
-3. 从 `no_fuel` 恢复时写入 `running/start`
-4. 调用 `ResolvePowerGeneration(...)` 扣减燃料并写入 `ws.PowerInputs`
+```go
+LeadsTo []string `json:"leads_to,omitempty" yaml:"leads_to,omitempty"`
+```
 
-实现要求：
+这样 `model`、`query`、测试、未来 CLI/前端都消费同一份派生结果，不再各自临时建图。
 
-- 补充注释，明确“燃料型发电建筑的运行态由本阶段 authoritative 管理”
-- 不新增新的状态机层
-- 不改 `ResolvePowerGeneration(...)` 与 `consumeFuel(...)` 的已有逻辑
+#### 3. 死胡同裁剪规则
 
-### 4.3 明确保持不变的文件
+迭代标记 `Hidden=true` 的条件为：
 
-以下文件本轮不应承接行为层改动：
+- 当前不是显式隐藏 tech 以外的额外例外；
+- `MaxLevel == 0`
+- `len(Unlocks) == 0`
+- `len(Effects) == 0`
+- 所有公开后继都已被隐藏，或根本没有公开后继
 
-- `server/internal/model/power.go`
-- `server/internal/gamecore/fuel_generators.go`（除非实现时确实需要一个很小的私有 helper）
-- `server/internal/query/query.go`
-- `server/internal/query/networks.go`
-- `server/internal/query/planet_inspector.go`
-- `server/internal/gamecore/stats_settlement.go`
+这里必须做**迭代裁剪**，不能只看一层子节点。
 
-原因很明确：
+典型例子：
 
-- 这些模块消费的事实源已经正确；
-- 问题出在前序 runtime 语义被后序阶段覆写，而不是它们各自的公式错误。
+- `reformed_refinement` 先被判定为死胡同；
+- `xray_cracking` 的唯一公开后继就是 `reformed_refinement`；
+- 所以 `xray_cracking` 也应在下一轮被隐藏。
 
-## 5. 测试设计
+#### 4. `LeadsTo` 只保留公开后继
 
-### 5.1 必改旧测试：`server/internal/gamecore/t099_fuel_generator_state_test.go`
+桥接科技的 `LeadsTo` 应只包含最终仍公开的后继科技，不包含已经被裁掉的死胡同节点。
 
-当前旧测试把错误语义锁死了，必须同步修改。
+例如：
 
-其中至少要调整：
+- `particle_control.leads_to` 最终应保留 `information_matrix`，不保留 `casimir_crystal`
+- `high_strength_glass.leads_to` 最终应保留 `high_energy_laser`，不保留 `crystal_explosive`
 
-- `TestT099ArtificialStarFallsBackToNoFuelAfterLastRodIsConsumed`
+### 4.2 `server/internal/model/building_defs.go`
 
-旧预期：
+把 `automatic_piler.Buildable` 调整为 `false`。
 
-- 单根燃料在一个 `processTick()` 后立刻回到 `no_power/no_fuel`
+这是本次对外能力边界的直接收口，不再继续制造“可以 build，但实际上没有闭合玩法”的假入口。
 
-新预期：
+### 4.3 `server/internal/model/building_catalog.go` 与 `server/internal/model/catalog_derivation.go`
 
-1. 第 1 个 tick：
-   - `runtime.state = running`
-   - 允许库存已变成 `0`
-   - `PowerInput.Output = 80`
-   - `networks/stats` 能看到本 tick 的供电收益
-2. 第 2 个 tick（未补燃料）：
-   - 才回到 `no_power/no_fuel`
+实际实现中把 catalog 派生逻辑集中放到了 `catalog_derivation.go`，并由 `building_catalog.go` 的对外 getter 触发。
 
-### 5.2 新增测试文件：`server/internal/gamecore/t104_artificial_star_stable_power_test.go`
+`UnlockTech` 的 authoritative 回填逻辑是：
 
-新增独立 T104 回归，用来锁住“装燃料后可稳定供电”的目标语义，不把所有时序细节继续堆进 T099。
+1. 遍历所有**公开 tech**（`Hidden=false`）
+2. 找出其中的 `TechUnlockBuilding`
+3. 把 tech ID 反向写回对应 `BuildingDefinition.UnlockTech`
 
-建议覆盖以下场景：
+这一步不能依赖脆弱的 `init()` 文件顺序。当前实现采用：
 
-1. 空燃料基线
-   - `artificial_star` 无燃料时保持 `no_power/no_fuel`
-   - `networks/stats` 没有虚假供电
-2. 单根燃料最小运行期
-   - 第 1 个 tick 可观察到合法 `running`
-   - 第 2 个 tick 才回到 `no_power/no_fuel`
-3. 多根燃料持续时间
-   - 装入 `3` 根时，连续 `3` 个 tick 保持 `running`
-   - 第 `4` 个 tick 才回落
-4. 事件序列
-   - 存在 `no_power/no_fuel -> running(start)`
-   - 真实耗尽后才出现 `running -> no_power/no_fuel`
-   - 不再出现同 tick 闪回
-5. 共享分支回归
-   - `thermal_power_plant`
-   - `mini_fusion_power_plant`
-   - 两者也遵守同一规则
+- 增加一个统一的派生 `sync.Once`
+- 在对外 getter 首次读取 catalog 前完成：
+  - tech 图派生
+  - building `unlock_tech` 回填
 
-### 5.3 查询层验证方式
+这样避免了包内初始化顺序带来的隐式耦合，也让 `TechDefinitionByID` / `AllTechDefinitions` / `BuildingDefinitionByID` / `AllBuildingDefinitions` 看到的是同一份派生结果。
 
-T104 新测试不应只测内部函数，建议直接在 `GameCore + query` 组合层锁观察面：
+### 4.4 `server/internal/query/catalog.go`
 
-- `query.PlanetInspect(...)`
-- `query.PlanetScene(...)`
-- `query.PlanetNetworks(...)`
-- `ws.Players["p1"].Stats.EnergyStats`
+需要同步做两项改动：
 
-这样可以一次性把任务要求中的五条观察面一起锁住，而不是只证明内部函数返回值正确。
+1. `TechCatalogEntry` 新增 `LeadsTo []string`
+2. `/catalog.techs[]` 只输出公开科技，不再把 `Hidden=true` 的内部死胡同继续返回给玩家
 
-## 6. 文档同步设计
+最终 `GET /catalog` 的 tech 语义应是：
 
-实现完成后，必须同步以下文档：
+- 玩家拿到的就是“当前公开科技目录”
+- 桥接科技通过 `leads_to` 表达后继价值
+- 死胡同科技不再污染玩家视图
 
-- `docs/player/已知问题与回归.md`
+## 5. 文档层同步
+
+本次实现已经同步以下文档：
+
 - `docs/player/玩法指南.md`
+- `docs/dev/客户端CLI.md`
 - `docs/dev/服务端API.md`
+- `docs/player/已知问题与回归.md`
 
-同步要求：
+同步要求如下。
 
-1. `docs/player/已知问题与回归.md`
-   - 把 T104 从“当前缺口”改成“已修复”
-   - 保留原始复现现象与修复后的新语义
-2. `docs/player/玩法指南.md`
-   - 明确 `artificial_star` 使用 `antimatter_fuel_rod`
-   - 明确当前按 `consume_per_tick = 1` 逐 tick 消耗
-   - 明确“最后一根燃料被本 tick 消耗完时，该 tick 仍可观察到发电”
-3. `docs/dev/服务端API.md`
-   - 保持接口结构不变
-   - 仅更新燃料型发电建筑的运行态与观察面语义说明
-   - 明确 `networks/stats` 在燃料存在的发电 tick 内会持续反映真实供电
+### 5.1 `docs/player/玩法指南.md`
 
-## 7. 验证方案
+- 移除 `automatic_piler` 的“当前可建”表述
+- `satellite_substation` 明确标成 `satellite_power` 解锁
+- 科技树说明补充：存在“桥接科技”，其价值通过 `leads_to` 体现
 
-### 7.1 自动化验证
+### 5.2 `docs/dev/客户端CLI.md`
 
-至少执行：
+- `build` 示例和建筑列表移除 `automatic_piler`
+- 明确 `satellite_substation` 需要 `satellite_power`
+- 不再暗示所有 catalog 建筑都已形成完整玩法闭环
 
-```bash
-cd /home/firesuiry/develop/siliconWorld/server
-env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH go test ./internal/gamecore
-```
+### 5.3 `docs/dev/服务端API.md`
 
-重点确认：
+- `/catalog.buildings[].unlock_tech` 改为 authoritative 反查入口
+- `/catalog.techs[]` 新增 `leads_to`
+- 明确 `/catalog.techs[]` 只返回公开科技，不再输出隐藏死胡同节点
+- 说明 `automatic_piler` 当前未公开
 
-- 修改后的 T099 通过
-- 新增 T104 通过
-- 共享分支 `thermal_power_plant` / `mini_fusion_power_plant` 没有回归
+### 5.4 `docs/player/已知问题与回归.md`
 
-### 7.2 真实玩法验证
+- 把 T103 从“当前缺口”更新为“已收口”
+- 明确保留后续 reopen 项：`automatic_piler` runtime 行为补齐
 
-按任务文档中的终局复现路径，至少重放一次：
+## 6. 测试设计与实际落点
 
-1. 在 `planet-1-2` 建造 `artificial_star`
-2. `transfer <artificial_star_id> antimatter_fuel_rod 1`
-3. 再执行 `transfer <artificial_star_id> antimatter_fuel_rod 3`
-4. 依次检查：
-   - `inspect`
-   - `scene`
-   - `building_state_changed`
-   - `GET /world/planets/{planet_id}/networks`
-   - `GET /state/stats`
+### 6.1 建筑可达性回归
 
-预期：
+新增或扩展测试，覆盖：
 
-- 单根燃料至少形成一个可观察发电 tick
-- 3 根燃料连续支撑 3 个 tick，而不是约 2 tick 就掉空
-- 供电收益与建筑运行态对得上
+1. `satellite_substation`
+   - 默认新局玩家不能建
+   - 完成 `satellite_power` 后可以建
+2. `automatic_piler`
+   - `/catalog.buildings` 不再显示 `buildable=true`
+   - `build automatic_piler` 被 authoritative 拒绝为 `building type not buildable`
 
-## 8. 验收标准
+### 6.2 catalog 一致性回归
 
-1. `transfer <artificial_star_id> antimatter_fuel_rod <n>` 后，只要本 tick 成功发电，结算后的 `inspect/scene` 就应显示 `running`；如果最后一根燃料在本 tick 被消耗完，该 tick 仍允许显示 `running`。
-2. `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats.energy_stats` 在燃料存在且成功发电的 tick 内持续体现 `artificial_star` 的供电贡献。
-3. 多根燃料棒的持续时间与 `consume_per_tick` 一致，不再出现“3 根燃料棒仅维持约 2 tick 就全部消失”的现象。
-4. 燃料真正耗尽后，建筑才在下一 tick 回到 `no_power/no_fuel`。
-5. 本次修复一次覆盖 `artificial_star`、`thermal_power_plant`、`mini_fusion_power_plant` 三类燃料型发电建筑，不引入专属特判。
-6. 相关玩家文档与服务端 API 文档口径与实现保持一致。
+新增断言：
 
-## 9. 推荐落地顺序
+1. 所有 `buildable=true` 的公开建筑，都必须满足：
+   - 属于初始完成科技，或
+   - `unlock_tech` 非空
+2. `satellite_substation.unlock_tech == ["satellite_power"]`
+3. `automatic_piler.buildable == false`
 
-1. 修改 `server/internal/gamecore/rules.go`
-2. 在 `server/internal/gamecore/power_generation.go` 补充 authoritative 注释
-3. 修改 `server/internal/gamecore/t099_fuel_generator_state_test.go`
-4. 新增 `server/internal/gamecore/t104_artificial_star_stable_power_test.go`
-5. 同步更新 `docs/player/*` 与 `docs/dev/服务端API.md`
-6. 跑 `go test ./internal/gamecore`
-7. 做一次真实终局重放验证
+### 6.3 科技树回归
 
-这样可以用最小改动、最低耦合，把 T104 从“装了燃料但观察不到稳定供电”收口为一条真实成立的终局能源闭环。
+新增断言：
+
+1. 桥接科技仍公开，且 `leads_to` 非空
+2. 11 个死胡同科技不再出现在 `/catalog.techs[]`
+3. `/catalog.techs[]` 中不再存在同时满足下面条件的条目：
+   - `max_level == 0`
+   - `len(unlocks) == 0`
+   - `len(effects) == 0`
+   - `len(leads_to) == 0`
+
+### 6.4 实际测试落点
+
+- `server/internal/model/t103_catalog_derivation_test.go`
+- `server/internal/gateway/t103_catalog_api_test.go`
+- `server/internal/gamecore/t103_build_access_test.go`
+
+## 7. 对任务原始验收口径的修正
+
+任务原文把两个建筑绑定成同一条验收：
+
+- 未解锁前失败
+- 解锁后成功
+
+这对 `satellite_substation` 成立，但对当前 `automatic_piler` 不成立，因为它现在还没有闭合 runtime 玩法。
+
+如果继续强行要求两个建筑都走同一口径，只会逼实现做出一种表面正确、实际失真的方案：把 `automatic_piler` 塞回科技树，但继续公开一个空心建筑。
+
+因此本次最终验收应拆成两条：
+
+1. `satellite_substation`
+   - 未解锁前不能建
+   - 完成 `satellite_power` 后能建
+2. `automatic_piler`
+   - 当前版本不再公开
+   - 等 runtime 补齐后，再开独立 reopen 任务
+
+这才与当前代码现实、项目准则和玩家体验一致。
+
+## 8. 不在本次范围内
+
+以下问题在本次分析中已确认存在，但不属于 T103 直接收口范围：
+
+1. `automatic_piler` 的真实 runtime 设计与结算补齐
+2. `miniature_collider` 与 `strange_matter` 的循环前置
+3. `universe_matrix` 前置里引用未定义 `dyson_sphere_partial`
+4. 大量未实现 recipe 导致的更深层科技树断档
+
+这些问题应在后续单独立项，不与本次“玩家公开能力收口”混做一批。
+
+## 9. 实际落地文件
+
+1. `server/internal/model/tech.go`
+   - 给 `TechDefinition` 增加 `LeadsTo`
+   - 补 `satellite_power -> satellite_substation`
+2. `server/internal/model/catalog_derivation.go`
+   - 做 tech 图派生、死胡同裁剪与 `leads_to` 回填
+3. `server/internal/model/building_catalog.go`
+   - 在对外 getter 前触发派生，并支持 `unlock_tech` authoritative 回填
+4. `server/internal/model/building_defs.go`
+   - 下架 `automatic_piler`
+5. `server/internal/query/catalog.go`
+   - 输出 `leads_to`
+   - 过滤 hidden tech
+6. `server/internal/model/t103_catalog_derivation_test.go`
+   - 锁住 bridge tech / dead-end tech / `unlock_tech` / `automatic_piler` 边界
+7. `server/internal/gateway/t103_catalog_api_test.go`
+   - 锁住 `/catalog` 对外口径
+8. `server/internal/gamecore/t103_build_access_test.go`
+   - 锁住 authoritative 建造边界
+9. `docs/player/玩法指南.md`、`docs/dev/客户端CLI.md`、`docs/dev/服务端API.md`、`docs/player/已知问题与回归.md`
+   - 同步玩家与接口文档口径
+
+最终落地结果应是：
+
+- 玩家不会再看到“能摆但永远解锁不到”的建筑
+- 玩家不会再看到“研究了什么也不会发生”的公开死胡同科技
+- `/catalog`、文档、CLI 和 authoritative 规则重新收口到同一套真相
