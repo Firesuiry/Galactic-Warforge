@@ -332,10 +332,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 当前会公开两类 system-scoped runtime：
     - `solar_sail_orbit`
     - `fleets`
+  - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
 - 响应字段:
   - `system_id` / `discovered` / `available`
   - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
+  - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
 - 响应示例:
 ```json
 {
@@ -555,6 +557,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
   - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
   - `combat_squads` 与 `orbital_platforms` 现在来自持久化 `CombatRuntimeState`，会进入 save / replay / rollback
+  - `combat_squads` 由 `deploy_squad` 写入；当前 payload 来源是部署枢纽本地存储中的 `prototype` / `precision_drone`
   - 当前 active 行星仍承载最完整的敌情/侦测结算；非 active 但已加载行星也可以看到该行星自己的 authoritative combat runtime
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
@@ -566,6 +569,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `construction_tasks`：施工任务视图，包含 `id` / `player_id` / `region_id` / `building_type` / `position` / `rotation` / `blueprint_params` / `conveyor_direction` / `recipe_id` / `cost` / `state` / `enqueue_tick` / `start_tick` / `update_tick` / `queue_index` / `remaining_ticks` / `total_ticks` / `speed_bonus` / `priority` / `error` / `materials_deducted`
   - `enemy_forces`：敌军视图，包含 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
   - `detections`：侦测摘要，包含 `player_id` / `vision_range` / `known_enemy_count` / `detected_positions`
+- 用法补充:
+  - `enemy_forces[].id` 也是当前 `fleet_attack` 与 combat squad 自动交战会消费的 target ID 真相来源
 - 响应示例:
 ```json
 {
@@ -962,10 +967,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
-  - `deploy_squad`：`payload.building_id` + `payload.unit_type` + `payload.count` 必填；可选 `payload.planet_id`；目标建筑必须是当前玩家拥有、带 deployment module 与本地存储、并且当前 tick 处于可运行状态的部署枢纽；当前公开可部署单位是 `prototype` / `precision_drone`
-  - `commission_fleet`：`payload.building_id` + `payload.unit_type` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的单位是 `corvette` / `destroyer`
+  - `deploy_squad`：`payload.building_id` + `payload.unit_type` + `payload.count` 必填；可选 `payload.planet_id`；目标建筑必须是当前玩家拥有、带 deployment module 与本地存储、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该单位对应 `visible_tech_id`，并且枢纽本地存储里已有足量 `prototype` / `precision_drone` 载荷；若传 `planet_id`，目标行星 runtime 也必须已加载
+  - `commission_fleet`：`payload.building_id` + `payload.unit_type` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的单位是 `corvette` / `destroyer`，同样要求已解锁对应科技且部署枢纽本地存储内已有足量载荷
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
-  - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标
+  - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
   - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
   - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件
