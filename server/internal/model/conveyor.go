@@ -102,6 +102,25 @@ type ConveyorState struct {
 	Throughput int               `json:"throughput"`
 }
 
+// Clone returns a deep copy of the conveyor state.
+func (c *ConveyorState) Clone() *ConveyorState {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	if len(c.Buffer) > 0 {
+		out.Buffer = make([]ItemStack, len(c.Buffer))
+		for i, stack := range c.Buffer {
+			out.Buffer[i] = ItemStack{
+				ItemID:   stack.ItemID,
+				Quantity: stack.Quantity,
+				Spray:    cloneSprayState(stack.Spray),
+			}
+		}
+	}
+	return &out
+}
+
 // TotalItems returns total items currently on the belt segment.
 func (c *ConveyorState) TotalItems() int {
 	if c == nil {

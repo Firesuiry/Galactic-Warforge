@@ -156,7 +156,7 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",
-		"tick":   s.core.World().Tick,
+		"tick":   s.core.CurrentTick(),
 	})
 }
 

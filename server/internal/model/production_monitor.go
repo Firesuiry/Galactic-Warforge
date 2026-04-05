@@ -53,7 +53,7 @@ type ProductionMonitorState struct {
 	TotalMoves   int64                         `json:"total_moves"`
 	LastMoveTick int64                         `json:"last_move_tick"`
 	LastAlertAt  map[ProductionAlertType]int64 `json:"last_alert_at,omitempty"`
-	LastStats    MonitorStats               `json:"last_stats"`
+	LastStats    MonitorStats                  `json:"last_stats"`
 }
 
 // NewProductionMonitorState returns an initialized monitor state.
@@ -61,6 +61,21 @@ func NewProductionMonitorState() *ProductionMonitorState {
 	return &ProductionMonitorState{
 		LastAlertAt: make(map[ProductionAlertType]int64),
 	}
+}
+
+// Clone returns a deep copy of the production monitor state.
+func (m *ProductionMonitorState) Clone() *ProductionMonitorState {
+	if m == nil {
+		return nil
+	}
+	out := *m
+	if len(m.LastAlertAt) > 0 {
+		out.LastAlertAt = make(map[ProductionAlertType]int64, len(m.LastAlertAt))
+		for key, tick := range m.LastAlertAt {
+			out.LastAlertAt[key] = tick
+		}
+	}
+	return &out
 }
 
 // RegisterSample updates rolling counters for the building.

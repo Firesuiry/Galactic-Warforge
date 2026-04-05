@@ -134,7 +134,7 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	}
 	gc.executorUsage = countActiveExecutorUsage(gc.world)
 	gc.setVictoryState(replayCore.Victory())
-	gc.activePlanetID = gc.world.PlanetID
+	gc.setCurrentWorld(gc.world.PlanetID, gc.world)
 	gc.spaceRuntime = model.CloneSpaceRuntimeState(replayCore.spaceRuntime)
 
 	trimmedLogAfter := gc.cmdLog.TrimAfter(toTick)

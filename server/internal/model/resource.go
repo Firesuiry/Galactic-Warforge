@@ -17,3 +17,12 @@ type ResourceNodeState struct {
 	DecayPerTick int      `json:"decay_per_tick"`
 	IsRare       bool     `json:"is_rare,omitempty"`
 }
+
+// Clone returns a copy of the resource node state.
+func (r *ResourceNodeState) Clone() *ResourceNodeState {
+	if r == nil {
+		return nil
+	}
+	out := *r
+	return &out
+}

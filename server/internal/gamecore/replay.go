@@ -207,12 +207,7 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 }
 
 func (gc *GameCore) currentTick() int64 {
-	if gc == nil || gc.world == nil {
-		return 0
-	}
-	gc.world.RLock()
-	defer gc.world.RUnlock()
-	return gc.world.Tick
+	return gc.CurrentTick()
 }
 
 func compareCommandResults(expected, actual []model.CommandResult) int {

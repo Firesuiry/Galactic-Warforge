@@ -4,23 +4,23 @@ import "siliconworld/internal/model"
 
 // SystemRuntimeView exposes dynamic system-scoped runtime state.
 type SystemRuntimeView struct {
-	SystemID        string                     `json:"system_id"`
-	Discovered      bool                       `json:"discovered"`
-	Available       bool                       `json:"available"`
-	SolarSailOrbit  *model.SolarSailOrbitState `json:"solar_sail_orbit,omitempty"`
-	Fleets          []FleetRuntimeView         `json:"fleets,omitempty"`
+	SystemID       string                     `json:"system_id"`
+	Discovered     bool                       `json:"discovered"`
+	Available      bool                       `json:"available"`
+	SolarSailOrbit *model.SolarSailOrbitState `json:"solar_sail_orbit,omitempty"`
+	Fleets         []FleetRuntimeView         `json:"fleets,omitempty"`
 }
 
 // FleetRuntimeView is a compact fleet summary.
 type FleetRuntimeView struct {
-	FleetID         string                 `json:"fleet_id"`
-	OwnerID         string                 `json:"owner_id"`
-	SystemID        string                 `json:"system_id"`
-	SourceBuildingID string                `json:"source_building_id,omitempty"`
-	Formation       string                 `json:"formation"`
-	State           string                 `json:"state"`
-	Units           []model.FleetUnitStack `json:"units,omitempty"`
-	Target          *model.FleetTarget     `json:"target,omitempty"`
+	FleetID          string                 `json:"fleet_id"`
+	OwnerID          string                 `json:"owner_id"`
+	SystemID         string                 `json:"system_id"`
+	SourceBuildingID string                 `json:"source_building_id,omitempty"`
+	Formation        string                 `json:"formation"`
+	State            string                 `json:"state"`
+	Units            []model.FleetUnitStack `json:"units,omitempty"`
+	Target           *model.FleetTarget     `json:"target,omitempty"`
 }
 
 // FleetDetailView exposes one fleet in detail.
@@ -74,7 +74,7 @@ func (ql *Layer) Fleets(playerID string, spaceRuntime *model.SpaceRuntimeState) 
 	if spaceRuntime == nil {
 		return []FleetDetailView{}
 	}
-	var out []FleetDetailView
+	out := make([]FleetDetailView, 0)
 	for _, playerRuntime := range spaceRuntime.Players {
 		if playerRuntime == nil || playerRuntime.PlayerID != playerID {
 			continue

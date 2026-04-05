@@ -286,6 +286,9 @@ func TestSetRayReceiverModeCommandUpdatesInspectEndpoint(t *testing.T) {
 	}
 
 	waitForCondition(t, 2*time.Second, func() bool {
+		ws := core.World()
+		ws.RLock()
+		defer ws.RUnlock()
 		return receiver.Runtime.Functions.RayReceiver != nil && receiver.Runtime.Functions.RayReceiver.Mode == model.RayReceiverModePower
 	}, "set_ray_receiver_mode was not applied by tick loop")
 

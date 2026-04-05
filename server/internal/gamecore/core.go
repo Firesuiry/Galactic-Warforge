@@ -316,6 +316,7 @@ type GameCore struct {
 	stopCh           chan struct{}
 	victory          model.VictoryState
 	victoryMu        sync.RWMutex
+	runtimeMu        sync.RWMutex
 	activePlanetID   string
 	executorUsage    map[string]int
 	spaceRuntime     *model.SpaceRuntimeState
@@ -428,6 +429,11 @@ func hasBootstrap(bootstrap config.PlayerBootstrapConfig) bool {
 
 // World returns the world state (caller must use RLock/RUnlock)
 func (gc *GameCore) World() *model.WorldState {
+	if gc == nil {
+		return nil
+	}
+	gc.runtimeMu.RLock()
+	defer gc.runtimeMu.RUnlock()
 	return gc.world
 }
 
@@ -448,12 +454,13 @@ func (gc *GameCore) SpaceRuntime() *model.SpaceRuntimeState {
 
 // CanIssueCommand checks whether a player can issue a given command type.
 func (gc *GameCore) CanIssueCommand(playerID string, cmdType model.CommandType) bool {
-	if gc == nil || gc.world == nil {
+	ws := gc.World()
+	if ws == nil {
 		return false
 	}
-	gc.world.RLock()
-	defer gc.world.RUnlock()
-	player := gc.world.Players[playerID]
+	ws.RLock()
+	defer ws.RUnlock()
+	player := ws.Players[playerID]
 	if player == nil || !player.IsAlive {
 		return false
 	}
@@ -462,7 +469,33 @@ func (gc *GameCore) CanIssueCommand(playerID string, cmdType model.CommandType) 
 
 // ActivePlanetID returns the currently simulated planet ID.
 func (gc *GameCore) ActivePlanetID() string {
+	if gc == nil {
+		return ""
+	}
+	gc.runtimeMu.RLock()
+	defer gc.runtimeMu.RUnlock()
 	return gc.activePlanetID
+}
+
+// CurrentTick returns the current tick of the active world.
+func (gc *GameCore) CurrentTick() int64 {
+	ws := gc.World()
+	if ws == nil {
+		return 0
+	}
+	ws.RLock()
+	defer ws.RUnlock()
+	return ws.Tick
+}
+
+func (gc *GameCore) setCurrentWorld(planetID string, ws *model.WorldState) {
+	if gc == nil || ws == nil {
+		return
+	}
+	gc.runtimeMu.Lock()
+	defer gc.runtimeMu.Unlock()
+	gc.activePlanetID = planetID
+	gc.world = ws
 }
 
 // Metrics returns the metrics object
@@ -562,12 +595,17 @@ func (gc *GameCore) processTick() {
 			ws.Tick++
 		}
 
-		if gc.world == nil {
-			gc.world = gc.WorldForPlanet(gc.activePlanetID)
+		currentWorld := gc.World()
+		if currentWorld == nil {
+			activePlanetID := gc.ActivePlanetID()
+			currentWorld = gc.WorldForPlanet(activePlanetID)
+			if currentWorld != nil {
+				gc.setCurrentWorld(activePlanetID, currentWorld)
+			}
 		}
-		if gc.world != nil {
-			currentTick = gc.world.Tick
-			gc.executorUsage = countActiveExecutorUsage(gc.world)
+		if currentWorld != nil {
+			currentTick = currentWorld.Tick
+			gc.executorUsage = countActiveExecutorUsage(currentWorld)
 		}
 
 		for _, qr := range batch {
@@ -633,13 +671,16 @@ func (gc *GameCore) processTick() {
 		}
 		allEvents = append(allEvents, settleSpaceFleets(gc.worlds, gc.maps, gc.spaceRuntime, currentTick)...)
 
-		activeWorld := gc.WorldForPlanet(gc.activePlanetID)
+		activePlanetID := gc.ActivePlanetID()
+		activeWorld := gc.WorldForPlanet(activePlanetID)
 		if activeWorld == nil {
-			activeWorld = gc.world
+			activeWorld = currentWorld
 		}
-		gc.world = activeWorld
-		if gc.world != nil {
-			allEvents = append(allEvents, settleTurrets(gc.world)...)
+		if activeWorld != nil {
+			gc.setCurrentWorld(activePlanetID, activeWorld)
+		}
+		if activeWorld != nil {
+			allEvents = append(allEvents, settleTurrets(activeWorld)...)
 			allEvents = append(allEvents, gc.settleEnemyForces()...)
 			allEvents = append(allEvents, gc.settleCombat()...)
 			allEvents = append(allEvents, gc.settleOrbitalCombat()...)
@@ -647,7 +688,7 @@ func (gc *GameCore) processTick() {
 			gc.settleStats()
 
 			if !gc.Victory().Declared() {
-				victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, gc.world)
+				victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, activeWorld)
 				if gc.declareVictory(victory) {
 					allEvents = append(allEvents, victoryDeclaredEvent(victory))
 					gc.recordVictoryAudit(victory)

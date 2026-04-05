@@ -31,6 +31,19 @@ type SorterState struct {
 	Filter           SorterFilter        `json:"filter,omitempty"`
 }
 
+// Clone returns a deep copy of the sorter state.
+func (s *SorterState) Clone() *SorterState {
+	if s == nil {
+		return nil
+	}
+	out := *s
+	out.InputDirections = append([]ConveyorDirection(nil), s.InputDirections...)
+	out.OutputDirections = append([]ConveyorDirection(nil), s.OutputDirections...)
+	out.Filter.Items = append([]string(nil), s.Filter.Items...)
+	out.Filter.Tags = append([]string(nil), s.Filter.Tags...)
+	return &out
+}
+
 // IsSorterBuilding returns true for sorter buildings.
 func IsSorterBuilding(btype BuildingType) bool {
 	switch btype {

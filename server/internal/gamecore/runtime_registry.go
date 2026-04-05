@@ -210,8 +210,7 @@ func (gc *GameCore) setActivePlanet(planetID string) bool {
 	if ws == nil {
 		return false
 	}
-	gc.activePlanetID = planetID
-	gc.world = ws
+	gc.setCurrentWorld(planetID, ws)
 	for _, player := range ws.Players {
 		player.SyncLegacyExecutor(planetID)
 	}

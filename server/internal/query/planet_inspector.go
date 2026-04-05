@@ -59,7 +59,7 @@ func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, 
 			return nil, false
 		}
 		view.Title = string(building.Type)
-		view.Building = building
+		view.Building = building.Clone()
 		if snapshot := model.CurrentPowerSettlementSnapshot(ws); snapshot != nil {
 			if receiver, ok := snapshot.Receivers[building.ID]; ok {
 				view.Power = &BuildingPowerInspectView{
@@ -87,19 +87,19 @@ func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, 
 			return nil, false
 		}
 		view.Title = string(unit.Type)
-		view.Unit = unit
+		view.Unit = unit.Clone()
 		return view, true
 	case "resource":
 		if ws.PlanetID == planetID {
 			ws.RLock()
+			defer ws.RUnlock()
 			resource := ws.Resources[req.TargetID]
-			ws.RUnlock()
 			if resource != nil {
 				if !ql.vis.IsVisible(ws, playerID, resource.Position) {
 					return nil, false
 				}
 				view.Title = resource.Kind
-				view.Resource = resource
+				view.Resource = resource.Clone()
 				return view, true
 			}
 		}

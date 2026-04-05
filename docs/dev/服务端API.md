@@ -366,6 +366,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明补充:
   - 当前只返回当前玩家自己在 `space runtime` 中拥有的舰队
   - 返回字段与单舰详情一致，便于 CLI 直接列表示意
+  - 当玩家当前没有任何舰队时，响应体固定返回空数组 `[]`，不会返回 `null`
 - 响应字段:
   - `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target` / `weapon` / `shield` / `last_attack_tick`
 

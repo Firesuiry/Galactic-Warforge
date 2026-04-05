@@ -9,6 +9,17 @@ type ProductionState struct {
 	PendingByproducts []ItemAmount `json:"pending_byproducts,omitempty"`
 }
 
+// Clone returns a deep copy of the production state.
+func (p *ProductionState) Clone() *ProductionState {
+	if p == nil {
+		return nil
+	}
+	out := *p
+	out.PendingOutputs = append([]ItemAmount(nil), p.PendingOutputs...)
+	out.PendingByproducts = append([]ItemAmount(nil), p.PendingByproducts...)
+	return &out
+}
+
 // InitBuildingProduction ensures a building has initialized production state when applicable.
 func InitBuildingProduction(building *Building) {
 	if building == nil {

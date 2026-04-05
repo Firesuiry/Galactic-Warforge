@@ -37,6 +37,29 @@ type Building struct {
 	ProductionMonitor *ProductionMonitorState `json:"production_monitor,omitempty"`
 }
 
+// Clone returns a deep copy of the building state for read-only snapshots.
+func (b *Building) Clone() *Building {
+	if b == nil {
+		return nil
+	}
+	out := *b
+	out.Runtime = BuildingRuntime{
+		Params:      b.Runtime.Params.clone(),
+		Functions:   b.Runtime.Functions.clone(),
+		State:       b.Runtime.State,
+		StateReason: b.Runtime.StateReason,
+	}
+	out.Storage = b.Storage.Clone()
+	out.EnergyStorage = b.EnergyStorage.Clone()
+	out.Conveyor = b.Conveyor.Clone()
+	out.Sorter = b.Sorter.Clone()
+	out.LogisticsStation = b.LogisticsStation.Clone()
+	out.Production = b.Production.Clone()
+	out.Job = b.Job.Clone()
+	out.ProductionMonitor = b.ProductionMonitor.Clone()
+	return &out
+}
+
 // Unit represents a mobile unit entity
 type Unit struct {
 	ID           string    `json:"id"`
@@ -53,6 +76,19 @@ type Unit struct {
 	IsMoving     bool      `json:"is_moving"`
 	TargetPos    *Position `json:"target_pos,omitempty"`
 	AttackTarget string    `json:"attack_target,omitempty"` // entity ID
+}
+
+// Clone returns a deep copy of the unit state for read-only snapshots.
+func (u *Unit) Clone() *Unit {
+	if u == nil {
+		return nil
+	}
+	out := *u
+	if u.TargetPos != nil {
+		target := *u.TargetPos
+		out.TargetPos = &target
+	}
+	return &out
 }
 
 // BuildingCost returns the resource cost to build a building type.

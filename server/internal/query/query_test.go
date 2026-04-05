@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"testing"
 
 	"siliconworld/internal/config"
@@ -209,6 +210,67 @@ func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
 	}
 	if summary.Players["p2"].Inventory != nil {
 		t.Fatalf("expected enemy inventory to stay hidden, got %+v", summary.Players["p2"])
+	}
+}
+
+func TestFleetListReturnsNonNilEmptySlice(t *testing.T) {
+	ql, _, _ := newPlanetQueryFixture(t, 16, 16)
+	spaceRuntime := model.NewSpaceRuntimeState()
+	spaceRuntime.EnsurePlayerSystem("p1", "sys-1")
+
+	fleets := ql.Fleets("p1", spaceRuntime)
+	if fleets == nil {
+		t.Fatal("expected fleets to be a non-nil empty slice")
+	}
+
+	body, err := json.Marshal(fleets)
+	if err != nil {
+		t.Fatalf("marshal fleets: %v", err)
+	}
+	if string(body) != "[]" {
+		t.Fatalf("expected empty fleet list to marshal as [], got %s", string(body))
+	}
+}
+
+func TestFleetListIncludesFleetDetailsWhenPresent(t *testing.T) {
+	ql, _, _ := newPlanetQueryFixture(t, 16, 16)
+	spaceRuntime := model.NewSpaceRuntimeState()
+	systemRuntime := spaceRuntime.EnsurePlayerSystem("p1", "sys-1")
+	systemRuntime.Fleets["fleet-alpha"] = &model.SpaceFleet{
+		ID:               "fleet-alpha",
+		OwnerID:          "p1",
+		SystemID:         "sys-1",
+		SourceBuildingID: "base-1",
+		Formation:        model.FormationTypeWedge,
+		State:            model.FleetStateIdle,
+		Units:            []model.FleetUnitStack{{UnitType: "corvette", Count: 2}},
+		Weapon: model.WeaponState{
+			Type:     "laser",
+			Damage:   40,
+			FireRate: 10,
+			Range:    24,
+		},
+		Shield: model.ShieldState{
+			Level:         40,
+			MaxLevel:      40,
+			RechargeRate:  2,
+			RechargeDelay: 10,
+		},
+		LastAttackTick: 99,
+	}
+
+	fleets := ql.Fleets("p1", spaceRuntime)
+	if len(fleets) != 1 {
+		t.Fatalf("expected one fleet, got %+v", fleets)
+	}
+	if fleets[0].FleetID != "fleet-alpha" || fleets[0].SystemID != "sys-1" {
+		t.Fatalf("unexpected fleet view: %+v", fleets[0])
+	}
+	if fleets[0].Formation != string(model.FormationTypeWedge) {
+		t.Fatalf("expected wedge formation, got %+v", fleets[0])
+	}
+	if len(fleets[0].Units) != 1 || fleets[0].Units[0].UnitType != "corvette" {
+		t.Fatalf("expected corvette units, got %+v", fleets[0].Units)
 	}
 }
 

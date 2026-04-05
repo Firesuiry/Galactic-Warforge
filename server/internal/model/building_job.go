@@ -16,3 +16,12 @@ type BuildingJob struct {
 	RefundRate     float64           `json:"refund_rate,omitempty"`
 	PrevState      BuildingWorkState `json:"-"`
 }
+
+// Clone returns a copy of the building job state.
+func (j *BuildingJob) Clone() *BuildingJob {
+	if j == nil {
+		return nil
+	}
+	out := *j
+	return &out
+}

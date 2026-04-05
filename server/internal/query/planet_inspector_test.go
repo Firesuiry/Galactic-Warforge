@@ -42,6 +42,13 @@ func TestPlanetInspectBuildingReturnsStructuredDetails(t *testing.T) {
 	if view.Building.HP != 120 || view.Building.MaxHP != 150 || view.Building.Level != 2 {
 		t.Fatalf("unexpected building stats: %+v", view.Building)
 	}
+	if view.Building == ws.Buildings["b-inspect"] {
+		t.Fatal("expected inspect building payload to be a snapshot copy")
+	}
+	view.Building.HP = 1
+	if ws.Buildings["b-inspect"].HP != 120 {
+		t.Fatalf("expected inspect mutation not to affect world building, got %d", ws.Buildings["b-inspect"].HP)
+	}
 }
 
 func TestPlanetInspectUnitReturnsStructuredDetails(t *testing.T) {
