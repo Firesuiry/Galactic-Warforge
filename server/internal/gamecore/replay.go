@@ -60,9 +60,13 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 		return nil, fmt.Errorf("target tick %d precedes snapshot tick %d", toTick, snap.Tick)
 	}
 
-	world, err := snap.RestoreWorld()
+	worlds, activePlanetID, spaceRuntime, err := snap.RestoreRuntime()
 	if err != nil {
-		return nil, fmt.Errorf("restore world: %w", err)
+		return nil, fmt.Errorf("restore runtime: %w", err)
+	}
+	world := worlds[activePlanetID]
+	if world == nil {
+		return nil, fmt.Errorf("active world %s missing in replay snapshot", activePlanetID)
 	}
 	discovery, err := snap.RestoreDiscovery()
 	if err != nil {
@@ -73,11 +77,14 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 	}
 
 	replayCore := &GameCore{
-		cfg:           gc.cfg,
-		maps:          gc.maps,
-		discovery:     discovery,
-		world:         world,
-		executorUsage: make(map[string]int),
+		cfg:            gc.cfg,
+		maps:           gc.maps,
+		discovery:      discovery,
+		world:          world,
+		worlds:         worlds,
+		executorUsage:  make(map[string]int),
+		activePlanetID: activePlanetID,
+		spaceRuntime:   spaceRuntime,
 	}
 
 	entries := gc.cmdLog.Range(snap.Tick+1, toTick)
@@ -117,6 +124,13 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 
 		replayCore.settleConstructionQueue(replayCore.world)
 		settleBuildingJobs(replayCore.world)
+		env := currentPlanetEnvironment(replayCore.maps, replayCore.world.PlanetID)
+		settlePowerGeneration(replayCore.world, env)
+		settleSolarSails(replayCore.spaceRuntime, replayCore.world.Tick)
+		settleDysonSpheres(replayCore.world.Tick)
+		receiverViews := settleRayReceivers(replayCore.world, replayCore.maps, replayCore.spaceRuntime)
+		settlePlanetaryShields(replayCore.world)
+		finalizePowerSettlement(replayCore.world, receiverViews)
 		settleResources(replayCore.world)
 		settleConveyors(replayCore.world)
 		settleSorters(replayCore.world)
@@ -124,8 +138,14 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 		settleStorage(replayCore.world)
 		settleLogisticsDispatch(replayCore.world)
 		settleLogisticsDrones(replayCore.world)
+		for _, ws := range replayCore.sortedWorlds() {
+			settleCombatRuntime(ws, ws.Tick)
+		}
+		settleSpaceFleets(replayCore.worlds, replayCore.maps, replayCore.spaceRuntime, replayCore.world.Tick)
 		settleTurrets(replayCore.world)
-		_ = checkVictory(replayCore.world)
+		if !replayCore.Victory().Declared() {
+			replayCore.setVictoryState(resolveVictory(replayCore.cfg.Battlefield.VictoryRule, replayCore.worlds, replayCore.world))
+		}
 
 		if delay > 0 {
 			time.Sleep(delay)
@@ -133,7 +153,7 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 	}
 
 	durationMs := time.Since(start).Milliseconds()
-	digest := digestWorld(replayCore.world)
+	digest := digestRuntime(replayCore.world, replayCore.spaceRuntime)
 
 	var snapDigest *model.ReplayDigest
 	drift := false
@@ -144,7 +164,7 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 			if err != nil {
 				notes = append(notes, fmt.Sprintf("目标快照恢复失败: %v", err))
 			} else {
-				d := digestWorld(targetWorld)
+				d := digestRuntime(targetWorld, targetSnap.Space)
 				snapDigest = &d
 				if d.Hash != digest.Hash {
 					drift = true
@@ -216,7 +236,7 @@ func compareCommandResults(expected, actual []model.CommandResult) int {
 	return mismatch
 }
 
-func digestWorld(ws *model.WorldState) model.ReplayDigest {
+func digestRuntime(ws *model.WorldState, space *model.SpaceRuntimeState) model.ReplayDigest {
 	d := model.ReplayDigest{}
 	if ws == nil {
 		return d
@@ -244,13 +264,29 @@ func digestWorld(ws *model.WorldState) model.ReplayDigest {
 		}
 		d.ResourceRemaining += int64(r.Remaining)
 	}
+	if space != nil {
+		d.SpaceEntityCounter = space.EntityCounter
+		for _, playerRuntime := range space.Players {
+			if playerRuntime == nil {
+				continue
+			}
+			for _, systemRuntime := range playerRuntime.Systems {
+				if systemRuntime == nil || systemRuntime.SolarSailOrbit == nil {
+					continue
+				}
+				d.SolarSailSystems++
+				d.SolarSailCount += len(systemRuntime.SolarSailOrbit.Sails)
+				d.SolarSailTotalEnergy += systemRuntime.SolarSailOrbit.TotalEnergy
+			}
+		}
+	}
 
 	d.Hash = hashDigest(d)
 	return d
 }
 
 func hashDigest(d model.ReplayDigest) string {
-	raw := fmt.Sprintf("%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+	raw := fmt.Sprintf("%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
 		d.Tick,
 		d.Players,
 		d.AlivePlayers,
@@ -261,6 +297,10 @@ func hashDigest(d model.ReplayDigest) string {
 		d.TotalEnergy,
 		d.ResourceRemaining,
 		d.EntityCounter,
+		d.SpaceEntityCounter,
+		d.SolarSailCount,
+		d.SolarSailSystems,
+		d.SolarSailTotalEnergy,
 	)
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

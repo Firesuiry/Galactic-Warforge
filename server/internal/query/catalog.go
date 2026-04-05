@@ -4,10 +4,11 @@ import "siliconworld/internal/model"
 
 // CatalogView exposes front-end display metadata derived from server catalogs.
 type CatalogView struct {
-	Buildings []BuildingCatalogEntry `json:"buildings,omitempty"`
-	Items     []ItemCatalogEntry     `json:"items,omitempty"`
-	Recipes   []RecipeCatalogEntry   `json:"recipes,omitempty"`
-	Techs     []TechCatalogEntry     `json:"techs,omitempty"`
+	Buildings []BuildingCatalogEntry   `json:"buildings,omitempty"`
+	Items     []ItemCatalogEntry       `json:"items,omitempty"`
+	Recipes   []RecipeCatalogEntry     `json:"recipes,omitempty"`
+	Techs     []TechCatalogEntry       `json:"techs,omitempty"`
+	Units     []model.UnitCatalogEntry `json:"units,omitempty"`
 }
 
 type BuildingCatalogEntry struct {
@@ -152,11 +153,14 @@ func (ql *Layer) Catalog() *CatalogView {
 		})
 	}
 
+	units := model.PublicUnitCatalogEntries()
+
 	return &CatalogView{
 		Buildings: buildings,
 		Items:     items,
 		Recipes:   recipes,
 		Techs:     techs,
+		Units:     units,
 	}
 }
 

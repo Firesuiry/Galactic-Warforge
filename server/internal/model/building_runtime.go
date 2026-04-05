@@ -113,6 +113,7 @@ type BuildingFunctionModules struct {
 	Combat          *CombatModule          `json:"combat,omitempty" yaml:"combat,omitempty"`
 	Shield          *ShieldModule          `json:"shield,omitempty" yaml:"shield,omitempty"`
 	Launch          *LaunchModule          `json:"launch,omitempty" yaml:"launch,omitempty"`
+	Deployment      *DeploymentModule      `json:"deployment,omitempty" yaml:"deployment,omitempty"`
 }
 
 // ProductionModule handles production throughput.
@@ -214,6 +215,13 @@ type LaunchModule struct {
 	LaunchQueueSize int     `json:"launch_queue_size" yaml:"launch_queue_size"`               // max launch queue size
 	RocketItemID    string  `json:"rocket_item_id,omitempty" yaml:"rocket_item_id,omitempty"` // rocket type to launch (for silo)
 	ProductionSpeed int     `json:"production_speed" yaml:"production_speed"`                 // rocket production speed (for silo)
+}
+
+// DeploymentModule marks a building as a squad/fleet deployment hub.
+type DeploymentModule struct {
+	SquadCapacity int      `json:"squad_capacity" yaml:"squad_capacity"`
+	FleetCapacity int      `json:"fleet_capacity" yaml:"fleet_capacity"`
+	AllowedUnits  []string `json:"allowed_units,omitempty" yaml:"allowed_units,omitempty"`
 }
 
 // BuildingRuntimeDefinition defines runtime parameters for a building type.
@@ -607,6 +615,11 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 		val := *m.Launch
 		out.Launch = &val
 	}
+	if m.Deployment != nil {
+		val := *m.Deployment
+		val.AllowedUnits = append([]string(nil), m.Deployment.AllowedUnits...)
+		out.Deployment = &val
+	}
 	return out
 }
 
@@ -614,15 +627,24 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 	{
 		ID: BuildingTypeBattlefieldAnalysisBase,
 		Params: BuildingRuntimeParams{
-			Capacity:       2,
-			EnergyGenerate: 5,
+			Capacity:      4,
+			EnergyConsume: 2,
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
 		},
 		Functions: BuildingFunctionModules{
-			Collect: &CollectModule{ResourceKind: "minerals", YieldPerTick: 2},
-			Energy:  &EnergyModule{OutputPerTick: 5},
+			Storage: &StorageModule{Capacity: 60, Slots: 4, Buffer: 20, InputPriority: 2, OutputPriority: 1},
+			Energy:  &EnergyModule{ConsumePerTick: 2},
+			Deployment: &DeploymentModule{
+				SquadCapacity: 4,
+				FleetCapacity: 2,
+				AllowedUnits:  []string{ItemPrototype, ItemPrecisionDrone, ItemCorvette, ItemDestroyer},
+			},
 		},
 	},
 	{

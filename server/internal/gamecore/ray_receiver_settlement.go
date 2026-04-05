@@ -3,14 +3,21 @@ package gamecore
 import (
 	"sort"
 
+	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
 )
 
 const maxPlayerEnergy = 10000
 
-func settleRayReceivers(ws *model.WorldState) []*model.GameEvent {
+func settleRayReceivers(ws *model.WorldState, maps *mapmodel.Universe, spaceRuntime *model.SpaceRuntimeState) map[string]model.RayReceiverSettlementView {
 	if ws == nil || len(ws.Buildings) == 0 {
 		return nil
+	}
+	systemID := ""
+	if maps != nil {
+		if planet, ok := maps.Planet(ws.PlanetID); ok && planet != nil {
+			systemID = planet.SystemID
+		}
 	}
 
 	ids := make([]string, 0, len(ws.Buildings))
@@ -19,7 +26,7 @@ func settleRayReceivers(ws *model.WorldState) []*model.GameEvent {
 	}
 	sort.Strings(ids)
 
-	oldEnergy := make(map[string]int)
+	views := make(map[string]model.RayReceiverSettlementView)
 
 	for _, id := range ids {
 		building := ws.Buildings[id]
@@ -37,77 +44,60 @@ func settleRayReceivers(ws *model.WorldState) []*model.GameEvent {
 		if player == nil || !player.IsAlive {
 			continue
 		}
-		if _, ok := oldEnergy[player.PlayerID]; !ok {
-			oldEnergy[player.PlayerID] = player.Resources.Energy
+		mode := module.Mode
+		if mode == "" {
+			mode = model.RayReceiverModeHybrid
 		}
-		powerCap := maxPlayerEnergy - player.Resources.Energy
-		if powerCap < 0 {
-			powerCap = 0
+		view := model.RayReceiverSettlementView{
+			BuildingID:  building.ID,
+			Mode:        mode,
+			SettledTick: ws.Tick,
 		}
 
 		// Ray receivers only convert externally available Dyson energy.
 		// `InputPerTick` is the receiver's intake ceiling, not free baseline energy.
-		availableDysonEnergy := GetSolarSailEnergyForPlayer(player.PlayerID) + GetDysonSphereEnergyForPlayer(player.PlayerID)
+		availableDysonEnergy := GetSolarSailEnergy(spaceRuntime, player.PlayerID, systemID) + GetDysonSphereEnergyForPlayer(player.PlayerID)
+		view.AvailableDysonEnergy = availableDysonEnergy
 		effectiveInput := availableDysonEnergy
 		if module.InputPerTick > 0 && effectiveInput > module.InputPerTick {
 			effectiveInput = module.InputPerTick
 		}
-		if effectiveInput <= 0 {
-			continue
-		}
+		view.EffectiveInput = effectiveInput
 
-		// Create modified module with solar sail energy included
-		modifiedModule := *module
-		modifiedModule.InputPerTick = effectiveInput
+		if effectiveInput > 0 {
+			// `InputPerTick` is replaced with the actually available Dyson energy for this tick.
+			modifiedModule := *module
+			modifiedModule.Mode = mode
+			modifiedModule.InputPerTick = effectiveInput
 
-		result, err := model.ResolveRayReceiver(model.RayReceiverRequest{
-			Module:        &modifiedModule,
-			PowerCapacity: powerCap,
-		})
-		if err != nil {
-			continue
-		}
-		if result.PowerOutput > 0 {
-			ws.PowerInputs = append(ws.PowerInputs, model.PowerInput{
-				BuildingID:     building.ID,
-				OwnerID:        building.OwnerID,
-				SourceKind:     model.PowerSourceRayReceiver,
-				BaseOutput:     effectiveInput,
-				EnvFactor:      module.ReceiveEfficiency,
-				FuelMultiplier: module.PowerEfficiency,
-				Output:         result.PowerOutput,
+			result, err := model.ResolveRayReceiver(model.RayReceiverRequest{
+				Module:        &modifiedModule,
+				PowerCapacity: maxPlayerEnergy,
 			})
-			player.Resources.Energy += result.PowerOutput
-			if player.Resources.Energy > maxPlayerEnergy {
-				player.Resources.Energy = maxPlayerEnergy
-			}
-			if player.Resources.Energy < 0 {
-				player.Resources.Energy = 0
+			if err == nil {
+				view.PowerOutput = result.PowerOutput
+				view.PhotonOutput = result.PhotonOutput
+				if result.PowerOutput > 0 {
+					ws.PowerInputs = append(ws.PowerInputs, model.PowerInput{
+						BuildingID:     building.ID,
+						OwnerID:        building.OwnerID,
+						SourceKind:     model.PowerSourceRayReceiver,
+						BaseOutput:     effectiveInput,
+						EnvFactor:      module.ReceiveEfficiency,
+						FuelMultiplier: module.PowerEfficiency,
+						Output:         result.PowerOutput,
+					})
+				}
+				if result.PhotonOutput > 0 && building.Storage != nil {
+					_, _, _ = building.Storage.Receive(result.PhotonItemID, result.PhotonOutput)
+				}
 			}
 		}
-		if result.PhotonOutput > 0 && building.Storage != nil {
-			_, _, _ = building.Storage.Receive(result.PhotonItemID, result.PhotonOutput)
-		}
-	}
 
-	var events []*model.GameEvent
-	for playerID, prev := range oldEnergy {
-		player := ws.Players[playerID]
-		if player == nil || !player.IsAlive {
-			continue
-		}
-		if player.Resources.Energy == prev {
-			continue
-		}
-		events = append(events, &model.GameEvent{
-			EventType:       model.EvtResourceChanged,
-			VisibilityScope: playerID,
-			Payload: map[string]any{
-				"player_id": playerID,
-				"minerals":  player.Resources.Minerals,
-				"energy":    player.Resources.Energy,
-			},
-		})
+		views[id] = view
 	}
-	return events
+	if len(views) == 0 {
+		return nil
+	}
+	return views
 }

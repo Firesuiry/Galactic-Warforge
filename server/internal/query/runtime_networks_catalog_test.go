@@ -251,6 +251,40 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
+	unitIDs := map[string]bool{}
+	worldProduceCount := 0
+	deployableCount := 0
+	for _, entry := range view.Units {
+		unitIDs[entry.ID] = true
+		if !entry.Public {
+			t.Fatalf("expected public unit entry, got %+v", entry)
+		}
+		switch entry.ProductionMode {
+		case model.UnitProductionModeWorldProduce:
+			worldProduceCount++
+			if entry.RuntimeClass != model.UnitRuntimeClassWorld {
+				t.Fatalf("expected world_produce entries to be world units, got %+v", entry)
+			}
+		case model.UnitProductionModeFactoryRecipe:
+			deployableCount++
+			if len(entry.ProducerRecipes) == 0 || entry.DeployCommand == "" {
+				t.Fatalf("expected factory_recipe entries to expose recipes and deploy command, got %+v", entry)
+			}
+		default:
+			t.Fatalf("unexpected production mode in public unit catalog: %+v", entry)
+		}
+	}
+	if worldProduceCount != 2 {
+		t.Fatalf("expected exactly 2 world_produce units, got %d in %+v", worldProduceCount, view.Units)
+	}
+	if deployableCount != 4 {
+		t.Fatalf("expected exactly 4 factory_recipe deployable units, got %d in %+v", deployableCount, view.Units)
+	}
+	for _, id := range []string{"worker", "soldier", "prototype", "precision_drone", "corvette", "destroyer"} {
+		if !unitIDs[id] {
+			t.Fatalf("expected %s in catalog units, got %+v", id, view.Units)
+		}
+	}
 
 	var mining *BuildingCatalogEntry
 	for i := range view.Buildings {

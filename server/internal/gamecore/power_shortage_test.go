@@ -60,8 +60,8 @@ func TestPowerShortageSlowdown(t *testing.T) {
 	if got := totalStorageItems(high.Storage) + totalStorageItems(low.Storage); got != 12 {
 		t.Fatalf("expected 12 ore buffered after partial power, got %d", got)
 	}
-	if ws.Players["p1"].Resources.Energy != 17 {
-		t.Fatalf("expected energy 17, got %d", ws.Players["p1"].Resources.Energy)
+	if ws.Players["p1"].Resources.Energy != 20 {
+		t.Fatalf("expected energy unchanged before finalize, got %d", ws.Players["p1"].Resources.Energy)
 	}
 }
 
@@ -88,6 +88,39 @@ func TestPowerShortageRecovery(t *testing.T) {
 	}
 	if !hasPowerRestoreEvent(events, consumer.ID) {
 		t.Fatalf("expected power_restored event")
+	}
+}
+
+func TestPowerShortageRefreshesNoPowerReasonWhenCoverageBecomesUnderPower(t *testing.T) {
+	ws := newPowerTestWorld()
+	addPowerTestBuilding(ws, "gen-1", model.BuildingTypeWindTurbine, model.Position{X: 1, Y: 1})
+	consumer := addPowerTestBuilding(ws, "c-1", model.BuildingTypeMiningMachine, model.Position{X: 6, Y: 1})
+	addResourceNode(ws, "r-1", consumer.Position, 8)
+
+	ws.PowerInputs = nil
+	ws.PowerGrid = model.BuildPowerGridGraph(ws)
+
+	settleResources(ws)
+	if consumer.Runtime.State != model.BuildingWorkNoPower {
+		t.Fatalf("expected consumer no_power after disconnected tick, got %s", consumer.Runtime.State)
+	}
+	if consumer.Runtime.StateReason != "power_out_of_range" {
+		t.Fatalf("expected initial reason power_out_of_range, got %s", consumer.Runtime.StateReason)
+	}
+
+	addPowerTestBuilding(ws, "tower-1", model.BuildingTypeTeslaTower, model.Position{X: 4, Y: 1})
+	ws.PowerInputs = nil
+	ws.PowerGrid = model.BuildPowerGridGraph(ws)
+
+	events := settleResources(ws)
+	if consumer.Runtime.State != model.BuildingWorkNoPower {
+		t.Fatalf("expected consumer to remain no_power while supply is still zero, got %s", consumer.Runtime.State)
+	}
+	if consumer.Runtime.StateReason != stateReasonUnderPower {
+		t.Fatalf("expected no_power reason to refresh to under_power, got %s", consumer.Runtime.StateReason)
+	}
+	if !hasBuildingStateReasonEvent(events, consumer.ID, model.BuildingWorkNoPower, model.BuildingWorkNoPower, "power_out_of_range", stateReasonUnderPower) {
+		t.Fatalf("expected no_power reason-change event, got %+v", events)
 	}
 }
 
@@ -144,6 +177,30 @@ func hasPowerRestoreEvent(events []*model.GameEvent, buildingID string) bool {
 		if evt.Payload["building_id"] == buildingID && evt.Payload["reason"] == "power_restored" {
 			return true
 		}
+	}
+	return false
+}
+
+func hasBuildingStateReasonEvent(
+	events []*model.GameEvent,
+	buildingID string,
+	prevState, nextState model.BuildingWorkState,
+	prevReason, reason string,
+) bool {
+	for _, evt := range events {
+		if evt.EventType != model.EvtBuildingStateChanged {
+			continue
+		}
+		if evt.Payload["building_id"] != buildingID {
+			continue
+		}
+		if evt.Payload["prev_state"] != prevState || evt.Payload["next_state"] != nextState {
+			continue
+		}
+		if evt.Payload["prev_reason"] != prevReason || evt.Payload["reason"] != reason {
+			continue
+		}
+		return true
 	}
 	return false
 }

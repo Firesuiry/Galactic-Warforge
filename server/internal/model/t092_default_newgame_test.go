@@ -21,12 +21,14 @@ func TestT092DefaultNewGameTechEntryIsClosedLoopFriendly(t *testing.T) {
 	if !t092HasUnlock(t, "dyson_sphere_program", TechUnlockBuilding, string(BuildingTypeMatrixLab)) {
 		t.Fatalf("dyson_sphere_program should unlock %s for fresh research entry", BuildingTypeMatrixLab)
 	}
+	if !t092HasUnlock(t, "dyson_sphere_program", TechUnlockBuilding, string(BuildingTypeWindTurbine)) {
+		t.Fatalf("dyson_sphere_program should unlock %s for fresh power entry", BuildingTypeWindTurbine)
+	}
 	if t092HasUnlock(t, "dyson_sphere_program", TechUnlockSpecial, "electromagnetic_matrix") {
 		t.Fatal("dyson_sphere_program should not keep electromagnetic_matrix special semantics")
 	}
 
 	for _, buildingID := range []string{
-		string(BuildingTypeWindTurbine),
 		string(BuildingTypeTeslaTower),
 		string(BuildingTypeMiningMachine),
 	} {

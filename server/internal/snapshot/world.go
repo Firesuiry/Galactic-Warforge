@@ -23,6 +23,9 @@ type WorldSnapshot struct {
 	Resources       map[string]*model.ResourceNodeState   `json:"resources"`
 	Pipelines       *model.PipelineNetworkState           `json:"pipelines,omitempty"`
 	Construction    *model.ConstructionQueue              `json:"construction,omitempty"`
+	EnemyForces     *model.EnemyForceState                `json:"enemy_forces,omitempty"`
+	Detections      map[string]*model.DetectionState      `json:"detections,omitempty"`
+	CombatRuntime   *model.CombatRuntimeState             `json:"combat_runtime,omitempty"`
 	Terrain         [][]terrain.TileType                  `json:"terrain"`
 }
 
@@ -76,6 +79,9 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 		Resources:       make(map[string]*model.ResourceNodeState, len(ws.Resources)),
 		Pipelines:       clonePipelineNetworkState(ws.Pipelines),
 		Construction:    cloneConstructionQueue(ws.Construction),
+		EnemyForces:     cloneEnemyForceState(ws.EnemyForces),
+		Detections:      cloneDetections(ws.Detections),
+		CombatRuntime:   model.CloneCombatRuntimeState(ws.CombatRuntime),
 		Terrain:         cloneTerrain(ws.Grid, ws.MapWidth, ws.MapHeight),
 	}
 
@@ -187,6 +193,9 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 	}
 	ws.Pipelines = clonePipelineNetworkState(snap.Pipelines)
 	ws.Construction = cloneConstructionQueue(snap.Construction)
+	ws.EnemyForces = cloneEnemyForceState(snap.EnemyForces)
+	ws.Detections = cloneDetections(snap.Detections)
+	ws.CombatRuntime = model.CloneCombatRuntimeState(snap.CombatRuntime)
 	if ws.Construction == nil {
 		ws.Construction = model.NewConstructionQueue()
 	} else {
@@ -230,6 +239,32 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 	}
 
 	return ws, nil
+}
+
+func cloneEnemyForceState(state *model.EnemyForceState) *model.EnemyForceState {
+	if state == nil {
+		return nil
+	}
+	out := *state
+	out.Forces = append([]model.EnemyForce(nil), state.Forces...)
+	return &out
+}
+
+func cloneDetections(detections map[string]*model.DetectionState) map[string]*model.DetectionState {
+	if len(detections) == 0 {
+		return nil
+	}
+	out := make(map[string]*model.DetectionState, len(detections))
+	for playerID, detection := range detections {
+		if detection == nil {
+			continue
+		}
+		copy := *detection
+		copy.KnownEnemies = append([]model.EnemyIntel(nil), detection.KnownEnemies...)
+		copy.DetectedPositions = append([]model.Position(nil), detection.DetectedPositions...)
+		out[playerID] = &copy
+	}
+	return out
 }
 
 func validateTerrain(terrainGrid [][]terrain.TileType, width, height int) error {

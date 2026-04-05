@@ -18,6 +18,7 @@ type PowerCoverageResult struct {
 	Connected  bool
 	Reason     PowerCoverageFailureReason
 	ProviderID string
+	NetworkID  string
 }
 
 // ResolvePowerCoverage evaluates which buildings are connected to a power grid.
@@ -30,13 +31,15 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 	if grid == nil {
 		grid = BuildPowerGridGraph(ws)
 	}
+	networks := ResolvePowerNetworks(ws)
+	powerInputs := powerInputsByBuilding(ws.PowerInputs)
 
 	ownerHasSource := make(map[string]bool)
 	for _, building := range ws.Buildings {
 		if building == nil {
 			continue
 		}
-		if !isPowerCoverageSource(building) {
+		if !isPowerCoverageSource(building, powerInputs) {
 			continue
 		}
 		ownerHasSource[building.OwnerID] = true
@@ -82,7 +85,7 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 					if needsPowerCoverage(building) {
 						componentConsumers[id] = struct{}{}
 					}
-					if componentSource == "" && isPowerCoverageSource(building) {
+					if componentSource == "" && isPowerCoverageSource(building, powerInputs) {
 						componentSource = id
 					}
 				}
@@ -112,14 +115,22 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 
 			for _, cid := range consumerIDs {
 				if componentSource != "" {
-					results[cid] = PowerCoverageResult{Connected: true, ProviderID: componentSource}
+					results[cid] = PowerCoverageResult{
+						Connected:  true,
+						ProviderID: componentSource,
+						NetworkID:  networks.BuildingNetwork[cid],
+					}
 					continue
 				}
 				reason := PowerCoverageNoProvider
 				if ownerHasSource[owner] {
 					reason = PowerCoverageOutOfRange
 				}
-				results[cid] = PowerCoverageResult{Connected: false, Reason: reason}
+				results[cid] = PowerCoverageResult{
+					Connected: false,
+					Reason:    reason,
+					NetworkID: networks.BuildingNetwork[cid],
+				}
 			}
 		}
 	}
@@ -138,10 +149,18 @@ func ResolvePowerCoverage(ws *WorldState) map[string]PowerCoverageResult {
 			continue
 		}
 		if !ownerHasSource[owner] {
-			results[id] = PowerCoverageResult{Connected: false, Reason: PowerCoverageNoProvider}
+			results[id] = PowerCoverageResult{
+				Connected: false,
+				Reason:    PowerCoverageNoProvider,
+				NetworkID: networks.BuildingNetwork[id],
+			}
 			continue
 		}
-		results[id] = PowerCoverageResult{Connected: false, Reason: PowerCoverageOutOfRange}
+		results[id] = PowerCoverageResult{
+			Connected: false,
+			Reason:    PowerCoverageOutOfRange,
+			NetworkID: networks.BuildingNetwork[id],
+		}
 	}
 
 	return results
@@ -161,9 +180,12 @@ func needsPowerCoverage(building *Building) bool {
 	return false
 }
 
-func isPowerCoverageSource(building *Building) bool {
+func isPowerCoverageSource(building *Building, powerInputs map[string]int) bool {
 	if building == nil {
 		return false
+	}
+	if powerInputs != nil && powerInputs[building.ID] > 0 {
+		return true
 	}
 	if IsPowerGeneratorModule(building.Runtime.Functions.Energy) {
 		return true

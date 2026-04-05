@@ -159,6 +159,8 @@ func newSorterBuilding(id string, pos model.Position) *model.Building {
 
 func attachBuilding(ws *model.WorldState, b *model.Building) {
 	ws.Buildings[b.ID] = b
+	model.RegisterPowerGridBuilding(ws, b)
+	model.RegisterLogisticsStation(ws, b)
 	key := model.TileKey(b.Position.X, b.Position.Y)
 	ws.TileBuilding[key] = b.ID
 	ws.Grid[b.Position.Y][b.Position.X].BuildingID = b.ID

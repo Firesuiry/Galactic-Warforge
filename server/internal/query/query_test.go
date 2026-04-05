@@ -173,6 +173,45 @@ func TestPlanetOverviewAggregatesWholePlanet(t *testing.T) {
 	}
 }
 
+func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 20, 20)
+	ws.Players["p1"] = &model.PlayerState{
+		PlayerID:  "p1",
+		TeamID:    "p1",
+		IsAlive:   true,
+		Inventory: model.ItemInventory{"iron_ore": 8},
+		Stats:     model.NewPlayerStats("p1"),
+	}
+	ws.Players["p2"] = &model.PlayerState{
+		PlayerID: "p2",
+		TeamID:   "p2",
+		IsAlive:  true,
+	}
+
+	summary := ql.Summary(ws, "p1", model.VictoryState{
+		WinnerID:    "p1",
+		Reason:      "game_win",
+		VictoryRule: "hybrid",
+		TechID:      "mission_complete",
+	})
+
+	if summary.ActivePlanetID != planetID {
+		t.Fatalf("expected active planet %s, got %s", planetID, summary.ActivePlanetID)
+	}
+	if summary.Winner != "p1" {
+		t.Fatalf("expected winner p1, got %q", summary.Winner)
+	}
+	if summary.VictoryReason != "game_win" {
+		t.Fatalf("expected victory_reason game_win, got %q", summary.VictoryReason)
+	}
+	if summary.VictoryRule != "hybrid" {
+		t.Fatalf("expected victory_rule hybrid, got %q", summary.VictoryRule)
+	}
+	if summary.Players["p2"].Inventory != nil {
+		t.Fatalf("expected enemy inventory to stay hidden, got %+v", summary.Players["p2"])
+	}
+}
+
 func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.WorldState, string) {
 	t.Helper()
 

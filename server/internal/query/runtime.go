@@ -13,6 +13,8 @@ type PlanetRuntimeView struct {
 	Available         bool                   `json:"available"`
 	ActivePlanetID    string                 `json:"active_planet_id,omitempty"`
 	Tick              int64                  `json:"tick"`
+	CombatSquads      []model.CombatSquad    `json:"combat_squads,omitempty"`
+	OrbitalPlatforms  []model.OrbitalPlatform `json:"orbital_platforms,omitempty"`
 	LogisticsStations []LogisticsStationView `json:"logistics_stations,omitempty"`
 	LogisticsDrones   []LogisticsDroneView   `json:"logistics_drones,omitempty"`
 	LogisticsShips    []LogisticsShipView    `json:"logistics_ships,omitempty"`
@@ -156,6 +158,8 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 
 	view.LogisticsStations = collectLogisticsStations(ws, playerID, droneIDsByStation, shipIDsByStation)
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
+	view.CombatSquads = collectCombatSquads(ws, playerID)
+	view.OrbitalPlatforms = collectOrbitalPlatforms(ws, playerID)
 	view.EnemyForces = collectEnemyForces(ws, playerID)
 	view.Detections = collectDetections(ws, playerID)
 	if ws.EnemyForces != nil {
@@ -163,6 +167,52 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 		view.LastAttackTick = ws.EnemyForces.LastAttack
 	}
 	return view, true
+}
+
+func collectCombatSquads(ws *model.WorldState, playerID string) []model.CombatSquad {
+	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.Squads) == 0 {
+		return []model.CombatSquad{}
+	}
+	ids := make([]string, 0, len(ws.CombatRuntime.Squads))
+	for id, squad := range ws.CombatRuntime.Squads {
+		if squad == nil || squad.OwnerID != playerID {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.CombatSquad, 0, len(ids))
+	for _, id := range ids {
+		squad := ws.CombatRuntime.Squads[id]
+		if squad == nil {
+			continue
+		}
+		out = append(out, *squad)
+	}
+	return out
+}
+
+func collectOrbitalPlatforms(ws *model.WorldState, playerID string) []model.OrbitalPlatform {
+	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.OrbitalPlatforms) == 0 {
+		return []model.OrbitalPlatform{}
+	}
+	ids := make([]string, 0, len(ws.CombatRuntime.OrbitalPlatforms))
+	for id, platform := range ws.CombatRuntime.OrbitalPlatforms {
+		if platform == nil || platform.OwnerID != playerID {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.OrbitalPlatform, 0, len(ids))
+	for _, id := range ids {
+		platform := ws.CombatRuntime.OrbitalPlatforms[id]
+		if platform == nil {
+			continue
+		}
+		out = append(out, *platform)
+	}
+	return out
 }
 
 func collectLogisticsStations(

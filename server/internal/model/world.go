@@ -43,24 +43,27 @@ type MapTile struct {
 type WorldState struct {
 	mu sync.RWMutex
 
-	Tick              int64                             `json:"tick"`
-	PlanetID          string                            `json:"planet_id"`
-	MapWidth          int                               `json:"map_width"`
-	MapHeight         int                               `json:"map_height"`
-	Players           map[string]*PlayerState           `json:"players"`
-	Buildings         map[string]*Building              `json:"buildings"`
-	Units             map[string]*Unit                  `json:"units"`
-	Grid              [][]MapTile                       `json:"-"` // grid[y][x]
-	Resources         map[string]*ResourceNodeState     `json:"resources"`
-	LogisticsStations map[string]*LogisticsStationState `json:"-"`
-	LogisticsDrones   map[string]*LogisticsDroneState   `json:"-"`
-	LogisticsShips    map[string]*LogisticsShipState    `json:"-"`
-	PowerInputs       []PowerInput                      `json:"-"`
-	PowerGrid         *PowerGridGraph                   `json:"-"`
-	Pipelines         *PipelineNetworkState             `json:"pipelines,omitempty"`
-	Construction      *ConstructionQueue                `json:"construction,omitempty"`
-	EnemyForces       *EnemyForceState                  `json:"enemy_forces,omitempty"`
-	Detections        map[string]*DetectionState        `json:"detections,omitempty"` // player_id -> detection state
+	Tick               int64                             `json:"tick"`
+	PlanetID           string                            `json:"planet_id"`
+	MapWidth           int                               `json:"map_width"`
+	MapHeight          int                               `json:"map_height"`
+	Players            map[string]*PlayerState           `json:"players"`
+	Buildings          map[string]*Building              `json:"buildings"`
+	Units              map[string]*Unit                  `json:"units"`
+	Grid               [][]MapTile                       `json:"-"` // grid[y][x]
+	Resources          map[string]*ResourceNodeState     `json:"resources"`
+	LogisticsStations  map[string]*LogisticsStationState `json:"-"`
+	LogisticsDrones    map[string]*LogisticsDroneState   `json:"-"`
+	LogisticsShips     map[string]*LogisticsShipState    `json:"-"`
+	PowerInputs        []PowerInput                      `json:"-"`
+	PowerSnapshot      *PowerSettlementSnapshot          `json:"-"`
+	ProductionSnapshot *ProductionSettlementSnapshot     `json:"-"`
+	PowerGrid          *PowerGridGraph                   `json:"-"`
+	Pipelines          *PipelineNetworkState             `json:"pipelines,omitempty"`
+	Construction       *ConstructionQueue                `json:"construction,omitempty"`
+	EnemyForces        *EnemyForceState                  `json:"enemy_forces,omitempty"`
+	Detections         map[string]*DetectionState        `json:"detections,omitempty"` // player_id -> detection state
+	CombatRuntime      *CombatRuntimeState               `json:"combat_runtime,omitempty"`
 
 	// Tile occupancy: maps "x,y" -> entity ID
 	TileBuilding map[string]string   `json:"-"`
@@ -86,6 +89,7 @@ func NewWorldState(planetID string, mapWidth, mapHeight int) *WorldState {
 		TileUnits:         make(map[string][]string),
 		PowerGrid:         NewPowerGridGraph(mapWidth, mapHeight),
 		Construction:      NewConstructionQueue(),
+		CombatRuntime:     NewCombatRuntimeState(),
 	}
 
 	// Initialize grid

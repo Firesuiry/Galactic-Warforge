@@ -88,3 +88,23 @@ func (gc *GameCore) recordCommandAudit(qr *model.QueuedRequest, cmd model.Comman
 	}
 	gc.AppendAudit(entry)
 }
+
+func (gc *GameCore) recordVictoryAudit(victory model.VictoryState) {
+	if gc == nil || gc.snapshotStore == nil || gc.world == nil || !victory.Declared() {
+		return
+	}
+	entry := &model.AuditEntry{
+		Tick:     gc.world.Tick,
+		PlayerID: victory.WinnerID,
+		Action:   "victory",
+		Details: map[string]any{
+			"winner_id":    victory.WinnerID,
+			"reason":       victory.Reason,
+			"victory_rule": victory.VictoryRule,
+		},
+	}
+	if victory.TechID != "" {
+		entry.Details["tech_id"] = victory.TechID
+	}
+	gc.AppendAudit(entry)
+}

@@ -1,6 +1,31 @@
-import { fetchHealth, fetchMetrics, fetchSummary, fetchStats, fetchGalaxy, fetchSystem, fetchPlanet, fetchPlanetInspect, fetchPlanetScene } from '../api.js';
+import {
+  fetchFleet,
+  fetchFleets,
+  fetchGalaxy,
+  fetchHealth,
+  fetchMetrics,
+  fetchPlanet,
+  fetchPlanetInspect,
+  fetchPlanetScene,
+  fetchStats,
+  fetchSummary,
+  fetchSystem,
+  fetchSystemRuntime,
+} from '../api.js';
 import { DEFAULT_SYSTEM_ID, DEFAULT_PLANET_ID } from '../config.js';
-import { fmtError, fmtGalaxy, fmtHealth, fmtMetrics, fmtPlanetSummary, fmtStats, fmtSummary, fmtSystem } from '../format.js';
+import {
+  fmtError,
+  fmtFleetDetail,
+  fmtFleetList,
+  fmtGalaxy,
+  fmtHealth,
+  fmtMetrics,
+  fmtPlanetSummary,
+  fmtStats,
+  fmtSummary,
+  fmtSystem,
+  fmtSystemRuntime,
+} from '../format.js';
 import type { PlanetSceneParams } from '../api.js';
 import { parseArgs, parseIntegerArg } from './args.js';
 
@@ -65,6 +90,26 @@ export async function cmdPlanet(args: string[]): Promise<string> {
   const planetId = args[0] ?? DEFAULT_PLANET_ID;
   try {
     return fmtPlanetSummary(await fetchPlanet(planetId));
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdSystemRuntime(args: string[]): Promise<string> {
+  const systemId = args[0] ?? DEFAULT_SYSTEM_ID;
+  try {
+    return fmtSystemRuntime(await fetchSystemRuntime(systemId));
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdFleetStatus(args: string[]): Promise<string> {
+  try {
+    if (!args[0]) {
+      return fmtFleetList(await fetchFleets());
+    }
+    return fmtFleetDetail(await fetchFleet(args[0]));
   } catch (e) {
     return fmtError(String(e));
   }

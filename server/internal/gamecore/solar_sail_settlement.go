@@ -1,93 +1,101 @@
 package gamecore
 
-import (
-	"strconv"
-
-	"siliconworld/internal/model"
-)
+import "siliconworld/internal/model"
 
 var solarSailOrbitParams = model.DefaultSolarSailOrbitParams()
 
-// SolarSailOrbits holds all solar sail orbit state keyed by player ID.
-var solarSailOrbits = make(map[string]*model.SolarSailOrbitState)
+// LaunchSolarSail launches a solar sail into the authoritative space runtime.
+func LaunchSolarSail(spaceRuntime *model.SpaceRuntimeState, playerID, systemID string, orbitRadius, inclination float64, launchTick int64) *model.SolarSail {
+	if spaceRuntime == nil {
+		return nil
+	}
+	systemRuntime := spaceRuntime.EnsurePlayerSystem(playerID, systemID)
+	if systemRuntime == nil {
+		return nil
+	}
 
-// LaunchSolarSail launches a solar sail from a building (EM rail or silo).
-func LaunchSolarSail(playerID, systemID string, orbitRadius, inclination float64, launchTick int64) *model.SolarSail {
-	sail := &model.SolarSail{
-		ID:            "sail-" + playerID + "-" + strconv.FormatInt(launchTick, 10),
+	sail := model.SolarSail{
+		ID:            spaceRuntime.NextEntityID("sail"),
 		OrbitRadius:   orbitRadius,
 		Inclination:   inclination,
 		LaunchTick:    launchTick,
 		LifetimeTicks: solarSailOrbitParams.DefaultLifetime,
 		EnergyPerTick: solarSailOrbitParams.EnergyPerSail,
 	}
-
-	orbit, ok := solarSailOrbits[playerID]
-	if !ok {
-		orbit = &model.SolarSailOrbitState{
-			PlayerID:  playerID,
-			SystemID:  systemID,
+	if systemRuntime.SolarSailOrbit == nil {
+		systemRuntime.SolarSailOrbit = &model.SolarSailOrbitState{
+			PlayerID: playerID,
+			SystemID: systemID,
 			Sails:    make([]model.SolarSail, 0),
 		}
-		solarSailOrbits[playerID] = orbit
 	}
-
-	orbit.Sails = append(orbit.Sails, *sail)
-	orbit.TotalEnergy = model.SolarSailEnergyOutput(len(orbit.Sails), solarSailOrbitParams)
-
-	return sail
+	systemRuntime.SolarSailOrbit.Sails = append(systemRuntime.SolarSailOrbit.Sails, sail)
+	systemRuntime.SolarSailOrbit.TotalEnergy = model.SolarSailEnergyOutput(len(systemRuntime.SolarSailOrbit.Sails), solarSailOrbitParams)
+	return &sail
 }
 
-// GetSolarSailOrbit returns the orbit state for a player.
-func GetSolarSailOrbit(playerID string) *model.SolarSailOrbitState {
-	return solarSailOrbits[playerID]
+// GetSolarSailOrbit returns the orbit state for a player in a given system.
+func GetSolarSailOrbit(spaceRuntime *model.SpaceRuntimeState, playerID, systemID string) *model.SolarSailOrbitState {
+	if spaceRuntime == nil {
+		return nil
+	}
+	systemRuntime := spaceRuntime.PlayerSystem(playerID, systemID)
+	if systemRuntime == nil {
+		return nil
+	}
+	return systemRuntime.SolarSailOrbit
 }
 
 // settleSolarSails processes solar sail lifetime decay and energy output.
-func settleSolarSails(currentTick int64) []*model.GameEvent {
+func settleSolarSails(spaceRuntime *model.SpaceRuntimeState, currentTick int64) []*model.GameEvent {
+	if spaceRuntime == nil {
+		return nil
+	}
 	var events []*model.GameEvent
 
-	for playerID, orbit := range solarSailOrbits {
-		if orbit == nil {
+	for playerID, playerRuntime := range spaceRuntime.Players {
+		if playerRuntime == nil {
 			continue
 		}
-
-		// Decay sails and remove expired ones
-		var activeSails []model.SolarSail
-		for i := range orbit.Sails {
-			sail := &orbit.Sails[i]
-			age := currentTick - sail.LaunchTick
-			if age >= sail.LifetimeTicks {
-				// Sail has expired, emit event
-				events = append(events, &model.GameEvent{
-					EventType:       model.EvtEntityDestroyed,
-					VisibilityScope: playerID,
-					Payload: map[string]any{
-						"entity_id": sail.ID,
-						"reason":    "lifetime_expired",
-					},
-				})
+		for _, systemRuntime := range playerRuntime.Systems {
+			if systemRuntime == nil || systemRuntime.SolarSailOrbit == nil {
 				continue
 			}
-			activeSails = append(activeSails, *sail)
+			orbit := systemRuntime.SolarSailOrbit
+
+			activeSails := make([]model.SolarSail, 0, len(orbit.Sails))
+			for i := range orbit.Sails {
+				sail := orbit.Sails[i]
+				age := currentTick - sail.LaunchTick
+				if age >= sail.LifetimeTicks {
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtEntityDestroyed,
+						VisibilityScope: playerID,
+						Payload: map[string]any{
+							"entity_id": sail.ID,
+							"reason":    "lifetime_expired",
+						},
+					})
+					continue
+				}
+				activeSails = append(activeSails, sail)
+			}
+			orbit.Sails = activeSails
+			orbit.TotalEnergy = model.SolarSailEnergyOutput(len(orbit.Sails), solarSailOrbitParams)
 		}
-		orbit.Sails = activeSails
-		orbit.TotalEnergy = model.SolarSailEnergyOutput(len(orbit.Sails), solarSailOrbitParams)
 	}
 
 	return events
 }
 
-// GetSolarSailEnergyForPlayer returns total energy available from solar sails for a player.
-func GetSolarSailEnergyForPlayer(playerID string) int {
-	orbit := solarSailOrbits[playerID]
+// GetSolarSailEnergy returns total solar sail energy for a player in one system.
+func GetSolarSailEnergy(spaceRuntime *model.SpaceRuntimeState, playerID, systemID string) int {
+	orbit := GetSolarSailOrbit(spaceRuntime, playerID, systemID)
 	if orbit == nil {
 		return 0
 	}
 	return orbit.TotalEnergy
 }
 
-// ClearSolarSailOrbits clears all solar sail orbit state (for testing).
-func ClearSolarSailOrbits() {
-	solarSailOrbits = make(map[string]*model.SolarSailOrbitState)
-}
+// ClearSolarSailOrbits remains for backward-compatible tests; space runtime is now per-core.
+func ClearSolarSailOrbits() {}

@@ -1,7 +1,19 @@
 import chalk from 'chalk';
 import type {
-  CommandResponse, GalaxyView, PlanetSceneView, PlanetSummaryView, StateSummary, SystemView,
-  HealthResponse, MetricsSnapshot, PlayerStatsSnapshot, SseEvent, Building,
+  Building,
+  CommandResponse,
+  FleetDetailView,
+  FleetRuntimeView,
+  GalaxyView,
+  HealthResponse,
+  MetricsSnapshot,
+  PlanetSceneView,
+  PlanetSummaryView,
+  PlayerStatsSnapshot,
+  SseEvent,
+  StateSummary,
+  SystemRuntimeView,
+  SystemView,
 } from './types.js';
 
 function pad(s: string, len: number): string {
@@ -52,6 +64,21 @@ function fmtInventoryPreview(inv?: Record<string, number>, limit = 2): string {
   }
   const preview = entries.slice(0, limit).map(([item, qty]) => `${item}:${qty}`).join(',');
   return entries.length > limit ? `${preview},...` : preview;
+}
+
+function fmtFleetUnits(units?: Array<{ unit_type: string; count: number }>): string {
+  const entries = (units ?? []).filter((stack) => stack.count > 0);
+  if (entries.length === 0) {
+    return '-';
+  }
+  return entries.map((stack) => `${stack.unit_type}:${stack.count}`).join(', ');
+}
+
+function fmtFleetTarget(target?: { planet_id: string; target_id?: string }): string {
+  if (!target) {
+    return '-';
+  }
+  return target.target_id ? `${target.planet_id}/${target.target_id}` : target.planet_id;
 }
 
 function fmtBuildingOps(building: Building): string {
@@ -171,6 +198,36 @@ export function fmtSystem(s: SystemView): string {
   return lines.join('\n');
 }
 
+export function fmtSystemRuntime(runtime: SystemRuntimeView): string {
+  const lines = [
+    `System Runtime: ${chalk.bold(runtime.system_id)}`,
+    `Discovered: ${runtime.discovered ? chalk.green('yes') : chalk.dim('no')}  Available: ${runtime.available ? chalk.green('yes') : chalk.dim('no')}`,
+  ];
+  const orbit = runtime.solar_sail_orbit;
+  if (orbit) {
+    lines.push(`Solar sails: count=${orbit.sails.length}  total_energy=${orbit.total_energy}`);
+  } else {
+    lines.push('Solar sails: -');
+  }
+
+  const fleets = runtime.fleets ?? [];
+  lines.push('');
+  if (fleets.length === 0) {
+    lines.push(chalk.dim('No fleets in this system runtime.'));
+    return lines.join('\n');
+  }
+
+  const rows = fleets.map((fleet) => [
+    fleet.fleet_id,
+    fleet.state,
+    fleet.formation,
+    fmtFleetUnits(fleet.units),
+    fmtFleetTarget(fleet.target),
+  ]);
+  lines.push(table(['FleetID', 'State', 'Formation', 'Units', 'Target'], rows));
+  return lines.join('\n');
+}
+
 export function fmtPlanetSummary(p: PlanetSummaryView): string {
   if (!p.discovered) {
     return `Planet: ${chalk.bold(p.planet_id)}  ${chalk.dim('undiscovered')}`;
@@ -190,6 +247,42 @@ export function fmtCommandResponse(r: CommandResponse): string {
     const okStatuses = new Set(['executed', 'accepted']);
     const statusColor = okStatuses.has(res.status) ? chalk.green : chalk.red;
     lines.push(`  [${res.command_index}] ${statusColor(res.status)} ${res.code}: ${res.message}`);
+  }
+  return lines.join('\n');
+}
+
+export function fmtFleetList(fleets: FleetDetailView[]): string {
+  if (fleets.length === 0) {
+    return chalk.dim('No fleets found.');
+  }
+  const rows = fleets.map((fleet) => [
+    fleet.fleet_id,
+    fleet.system_id,
+    fleet.state,
+    fleet.formation,
+    fmtFleetUnits(fleet.units),
+    fmtFleetTarget(fleet.target),
+  ]);
+  return table(['FleetID', 'System', 'State', 'Formation', 'Units', 'Target'], rows);
+}
+
+export function fmtFleetDetail(fleet: FleetDetailView | FleetRuntimeView): string {
+  const lines = [
+    `Fleet: ${chalk.bold(fleet.fleet_id)}  System: ${fleet.system_id}`,
+    `State: ${fleet.state}  Formation: ${fleet.formation}  Units: ${fmtFleetUnits(fleet.units)}`,
+    `Target: ${fmtFleetTarget(fleet.target)}`,
+  ];
+  if ('source_building_id' in fleet && fleet.source_building_id) {
+    lines.push(`Source hub: ${fleet.source_building_id}`);
+  }
+  if ('weapon' in fleet && fleet.weapon) {
+    lines.push(`Weapon: ${fleet.weapon.type} dmg=${fleet.weapon.damage} rate=${fleet.weapon.fire_rate} range=${fleet.weapon.range}`);
+  }
+  if ('shield' in fleet && fleet.shield) {
+    lines.push(`Shield: ${fleet.shield.level}/${fleet.shield.max_level} recharge=${fleet.shield.recharge_rate} delay=${fleet.shield.recharge_delay}`);
+  }
+  if ('last_attack_tick' in fleet && fleet.last_attack_tick !== undefined) {
+    lines.push(`Last attack tick: ${fleet.last_attack_tick}`);
   }
   return lines.join('\n');
 }

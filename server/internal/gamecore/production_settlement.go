@@ -7,6 +7,12 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		return nil
 	}
 
+	snapshot := model.CurrentProductionSettlementSnapshot(ws)
+	if snapshot == nil {
+		snapshot = model.NewProductionSettlementSnapshot(ws.Tick)
+		ws.ProductionSnapshot = snapshot
+	}
+
 	var events []*model.GameEvent
 	for _, building := range ws.Buildings {
 		if building == nil || building.Runtime.Functions.Production == nil || building.Storage == nil {
@@ -29,11 +35,12 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		}
 
 		if len(state.PendingOutputs) > 0 || len(state.PendingByproducts) > 0 {
-			if !canStoreOutputs(building.Storage, state.PendingOutputs, state.PendingByproducts) {
+			combinedOutputs := combineItemAmounts(state.PendingOutputs, state.PendingByproducts)
+			if !canStoreOutputs(building.Storage, combinedOutputs) {
 				continue
 			}
-			combinedOutputs := append(cloneItemAmounts(state.PendingOutputs), cloneItemAmounts(state.PendingByproducts)...)
-			storeOutputs(building.Storage, state.PendingOutputs, state.PendingByproducts)
+			storeOutputs(building.Storage, combinedOutputs)
+			snapshot.RecordBuildingOutputs(building, combinedOutputs)
 			events = append(events, &model.GameEvent{
 				EventType:       model.EvtResourceChanged,
 				VisibilityScope: building.OwnerID,
@@ -78,6 +85,21 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
+func combineItemAmounts(groups ...[]model.ItemAmount) []model.ItemAmount {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	if total == 0 {
+		return nil
+	}
+	combined := make([]model.ItemAmount, 0, total)
+	for _, group := range groups {
+		combined = append(combined, cloneItemAmounts(group)...)
+	}
+	return combined
+}
+
 func collectRecipeInputs(storage *model.StorageState, recipe model.RecipeDefinition) ([]model.ItemStack, bool) {
 	if storage == nil {
 		return nil, false
@@ -105,12 +127,12 @@ func consumeRecipeInputs(storage *model.StorageState, recipe model.RecipeDefinit
 	}
 }
 
-func canStoreOutputs(storage *model.StorageState, outputs, byproducts []model.ItemAmount) bool {
+func canStoreOutputs(storage *model.StorageState, outputs []model.ItemAmount) bool {
 	if storage == nil {
 		return false
 	}
 	simulated := storage.Clone()
-	for _, stack := range append(cloneItemAmounts(outputs), cloneItemAmounts(byproducts)...) {
+	for _, stack := range cloneItemAmounts(outputs) {
 		accepted, remaining, err := simulated.Receive(stack.ItemID, stack.Quantity)
 		if err != nil || accepted != stack.Quantity || remaining != 0 {
 			return false
@@ -119,11 +141,11 @@ func canStoreOutputs(storage *model.StorageState, outputs, byproducts []model.It
 	return true
 }
 
-func storeOutputs(storage *model.StorageState, outputs, byproducts []model.ItemAmount) {
+func storeOutputs(storage *model.StorageState, outputs []model.ItemAmount) {
 	if storage == nil {
 		return
 	}
-	for _, stack := range append(cloneItemAmounts(outputs), cloneItemAmounts(byproducts)...) {
+	for _, stack := range cloneItemAmounts(outputs) {
 		_, _, _ = storage.Receive(stack.ItemID, stack.Quantity)
 	}
 }

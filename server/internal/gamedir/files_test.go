@@ -49,7 +49,13 @@ func TestWriteRoundTrip(t *testing.T) {
 				Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
 			},
 		},
-		RuntimeState: RuntimeState{ActivePlanetID: "planet-1-1", Winner: "p1"},
+		RuntimeState: RuntimeState{
+			ActivePlanetID: "planet-1-1",
+			Winner:         "p1",
+			VictoryReason:  "game_win",
+			VictoryRule:    "hybrid",
+			VictoryTechID:  "mission_complete",
+		},
 		DebugState: DebugState{
 			BaseSnapshot: &snapshot.Snapshot{
 				Version: snapshot.CurrentVersion,
@@ -111,6 +117,9 @@ func TestWriteRoundTrip(t *testing.T) {
 	}
 	if gotSave.RuntimeState.Winner != "p1" {
 		t.Fatalf("expected winner restored, got %q", gotSave.RuntimeState.Winner)
+	}
+	if gotSave.RuntimeState.VictoryReason != "game_win" || gotSave.RuntimeState.VictoryRule != "hybrid" || gotSave.RuntimeState.VictoryTechID != "mission_complete" {
+		t.Fatalf("expected victory metadata restored, got %+v", gotSave.RuntimeState)
 	}
 	if len(gotSave.DebugState.CommandLog) != 1 {
 		t.Fatalf("expected command log restored")

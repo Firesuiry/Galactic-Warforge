@@ -16,10 +16,16 @@ const (
 	EvtConstructionPaused   EventType = "construction_paused"
 	EvtConstructionResumed  EventType = "construction_resumed"
 	EvtResearchCompleted    EventType = "research_completed"
+	EvtVictoryDeclared      EventType = "victory_declared"
 	EvtThreatLevelChanged   EventType = "threat_level_changed"
 	EvtLootDropped          EventType = "loot_dropped"
 	EvtEntityUpdated        EventType = "entity_updated"
 	EvtRocketLaunched       EventType = "rocket_launched"
+	EvtSquadDeployed        EventType = "squad_deployed"
+	EvtFleetCommissioned   EventType = "fleet_commissioned"
+	EvtFleetAssigned       EventType = "fleet_assigned"
+	EvtFleetAttackStarted  EventType = "fleet_attack_started"
+	EvtFleetDisbanded      EventType = "fleet_disbanded"
 )
 
 var allEventTypes = []EventType{
@@ -35,10 +41,16 @@ var allEventTypes = []EventType{
 	EvtConstructionPaused,
 	EvtConstructionResumed,
 	EvtResearchCompleted,
+	EvtVictoryDeclared,
 	EvtThreatLevelChanged,
 	EvtLootDropped,
 	EvtEntityUpdated,
 	EvtRocketLaunched,
+	EvtSquadDeployed,
+	EvtFleetCommissioned,
+	EvtFleetAssigned,
+	EvtFleetAttackStarted,
+	EvtFleetDisbanded,
 }
 
 var validEventTypes = func() map[EventType]struct{} {

@@ -270,6 +270,11 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		res.Message = fmt.Sprintf("unknown tech: %s", techID)
 		return res, nil
 	}
+	if def.Hidden {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("tech %s is hidden and cannot be researched directly", techID)
+		return res, nil
+	}
 
 	// Check prerequisites
 	if !player.Tech.HasPrerequisites(def) {

@@ -8,16 +8,30 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
+MAX_RETRIES = 100
+BASE_RETRY_DELAY = 5
+
 def get_repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 def run_codex_exec(repo_root: Path, requirement_text: str) -> int:
     print(f"\n[Codex] 执行任务: {requirement_text}", flush=True)
-    result = subprocess.run(
-        ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", requirement_text],
-        cwd=str(repo_root),
-        check=False,
-    )
+
+    for attempt in range(MAX_RETRIES):
+        result = subprocess.run(
+            ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", requirement_text],
+            cwd=str(repo_root),
+            check=False,
+        )
+
+        if result.returncode == 0:
+            return result.returncode
+
+        if attempt < MAX_RETRIES - 1:
+            delay = BASE_RETRY_DELAY * (1.5 ** attempt)
+            print(f"[Codex] 任务执行失败 (返回码: {result.returncode})，{delay}秒后进行第 {attempt + 2}/{MAX_RETRIES} 次重试...", flush=True)
+            time.sleep(delay)
+
     return result.returncode
 
 def run_minimax_exec(repo_root: Path, requirement_text: str) -> int:
@@ -80,8 +94,8 @@ def main() -> int:
         now_bj = datetime.now(beijing_tz)
         if not (now_bj.hour >= 22 or now_bj.hour < 6):
             print(f"[{now_bj.strftime('%Y-%m-%d %H:%M:%S')}] 当前北京时间不在执行时间段(22:00-06:00)内，休眠300秒后重试...", flush=True)
-            time.sleep(300)
-            continue
+            # time.sleep(300)
+            # continue
 
         print("\n=============================================", flush=True)
         print("步骤 1: 探索游戏状态并生成任务", flush=True)
@@ -120,7 +134,7 @@ def main() -> int:
         print("\n=============================================", flush=True)
         print("步骤 5: 更新服务端API和游戏设计文件", flush=True)
         print("=============================================", flush=True)
-        step5_prompt = "根据刚才完成的戴森球计划相关功能实现，更新服务端的 API 文档和游戏设计文件。"
+        step5_prompt = "根据刚才完成的戴森球计划相关功能实现(docs/process/design_final.md)，更新服务端的 API 文档和游戏设计文件。并将修改的内容提交到远程仓库。"
         run_codex_exec(repo_root, step5_prompt)
 
         print("\n=============================================", flush=True)

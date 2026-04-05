@@ -18,7 +18,7 @@ func TestSettleRayReceiversRequiresDysonEnergy(t *testing.T) {
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
 
-	events := settleRayReceivers(ws)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
 
 	if player.Resources.Energy != 0 {
 		t.Fatalf("expected no energy gain without dyson energy, got %d", player.Resources.Energy)
@@ -26,11 +26,14 @@ func TestSettleRayReceiversRequiresDysonEnergy(t *testing.T) {
 	if got := receiver.Storage.OutputQuantity(model.ItemCriticalPhoton); got != 0 {
 		t.Fatalf("expected no photon output without dyson energy, got %d", got)
 	}
-	if len(events) != 0 {
-		t.Fatalf("expected no events without dyson energy, got %d", len(events))
+	if len(views) != 1 {
+		t.Fatalf("expected one receiver settlement view, got %d", len(views))
 	}
 	if len(ws.PowerInputs) != 0 {
 		t.Fatalf("expected no power inputs without dyson energy, got %d", len(ws.PowerInputs))
+	}
+	if got := views[receiver.ID].PowerOutput; got != 0 {
+		t.Fatalf("expected no power output without dyson energy, got %d", got)
 	}
 }
 
@@ -47,24 +50,27 @@ func TestSettleRayReceiversConsumeSolarSailEnergyUpToInputCap(t *testing.T) {
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
 
-	LaunchSolarSail("p1", "sys-1", 1.2, 5, 1)
+	LaunchSolarSail(core.spaceRuntime, "p1", "sys-1", 1.2, 5, 1)
 
-	events := settleRayReceivers(ws)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
 
-	if player.Resources.Energy != 7 {
-		t.Fatalf("expected power gain capped to 7, got %d", player.Resources.Energy)
+	if player.Resources.Energy != 0 {
+		t.Fatalf("expected no direct energy commit before finalize, got %d", player.Resources.Energy)
 	}
 	if got := receiver.Storage.OutputQuantity(model.ItemCriticalPhoton); got != 0 {
 		t.Fatalf("expected no photon output from a single capped sail, got %d", got)
 	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 resource change event, got %d", len(events))
+	if got := views[receiver.ID].PowerOutput; got != 7 {
+		t.Fatalf("expected power output capped to 7, got %d", got)
 	}
 	if len(ws.PowerInputs) != 1 {
 		t.Fatalf("expected 1 power input, got %d", len(ws.PowerInputs))
 	}
 	if ws.PowerInputs[0].BaseOutput != 10 {
 		t.Fatalf("expected base output capped at 10, got %d", ws.PowerInputs[0].BaseOutput)
+	}
+	if got := views[receiver.ID].EffectiveInput; got != 10 {
+		t.Fatalf("expected effective input 10, got %d", got)
 	}
 }
 
@@ -90,13 +96,13 @@ func TestSettleRayReceiversConsumeDysonSphereEnergyUpToInputCap(t *testing.T) {
 	}
 	settleDysonSpheres(ws.Tick)
 
-	events := settleRayReceivers(ws)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
 
-	if player.Resources.Energy != 60 {
-		t.Fatalf("expected 60 energy from capped dyson shell input, got %d", player.Resources.Energy)
+	if player.Resources.Energy != 0 {
+		t.Fatalf("expected no direct energy commit before finalize, got %d", player.Resources.Energy)
 	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 resource change event, got %d", len(events))
+	if got := views[receiver.ID].PowerOutput; got != 60 {
+		t.Fatalf("expected 60 power output from capped dyson shell input, got %d", got)
 	}
 	if len(ws.PowerInputs) != 1 {
 		t.Fatalf("expected 1 power input, got %d", len(ws.PowerInputs))
@@ -126,8 +132,8 @@ func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
 	ws.PowerInputs = nil
-	settleRayReceivers(ws)
-	baseEnergyGain := player.Resources.Energy
+	baseViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	basePowerGain := baseViews[receiver.ID].PowerOutput
 
 	player.Resources.Energy = 0
 	ws.PowerInputs = nil
@@ -137,10 +143,93 @@ func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
 	}
 	state.Layers[0].ConstructionBonus = 0.20
 	settleDysonSpheres(ws.Tick + 1)
-	settleRayReceivers(ws)
+	boostedViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
 
-	if player.Resources.Energy <= baseEnergyGain {
-		t.Fatalf("expected rocket bonus to increase ray receiver income, base=%d boosted=%d", baseEnergyGain, player.Resources.Energy)
+	if boostedViews[receiver.ID].PowerOutput <= basePowerGain {
+		t.Fatalf("expected rocket bonus to increase ray receiver income, base=%d boosted=%d", basePowerGain, boostedViews[receiver.ID].PowerOutput)
+	}
+}
+
+func TestSettleRayReceiversRespectModesAndKeepExistingPhotonStock(t *testing.T) {
+	cases := []struct {
+		name            string
+		mode            model.RayReceiverMode
+		seedPhotons     int
+		wantEnergyGain  int
+		wantPhotonDelta int
+	}{
+		{
+			name:            "power",
+			mode:            model.RayReceiverModePower,
+			seedPhotons:     3,
+			wantEnergyGain:  60,
+			wantPhotonDelta: 0,
+		},
+		{
+			name:            "photon",
+			mode:            model.RayReceiverModePhoton,
+			seedPhotons:     0,
+			wantEnergyGain:  0,
+			wantPhotonDelta: 2,
+		},
+		{
+			name:            "hybrid",
+			mode:            model.RayReceiverModeHybrid,
+			seedPhotons:     1,
+			wantEnergyGain:  60,
+			wantPhotonDelta: 1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ClearSolarSailOrbits()
+			ClearDysonSphereStates()
+
+			core := newE2ETestCore(t)
+			ws := core.World()
+
+			receiver := newRayReceiverBuilding("receiver-1", model.Position{X: 6, Y: 6}, "p1")
+			receiver.Runtime.State = model.BuildingWorkRunning
+			receiver.Runtime.Functions.RayReceiver.Mode = tc.mode
+			receiver.Storage.EnsureInventory()[model.ItemCriticalPhoton] = tc.seedPhotons
+			attachBuilding(ws, receiver)
+
+			AddDysonLayer("p1", "sys-1", 0, 1.2)
+			if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+				t.Fatalf("add dyson shell: %v", err)
+			}
+			settleDysonSpheres(ws.Tick)
+
+			player := ws.Players["p1"]
+			player.Resources.Energy = 0
+			ws.PowerInputs = nil
+
+			views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+			settleStorage(ws)
+			if player.Resources.Energy != 0 {
+				t.Fatalf("expected no direct energy commit in %s mode, got %d", tc.mode, player.Resources.Energy)
+			}
+			gotPhotons := receiver.Storage.OutputQuantity(model.ItemCriticalPhoton)
+			if delta := gotPhotons - tc.seedPhotons; delta != tc.wantPhotonDelta {
+				t.Fatalf("expected photon delta %d in %s mode, got %d (total=%d)", tc.wantPhotonDelta, tc.mode, delta, gotPhotons)
+			}
+			if tc.wantEnergyGain > 0 {
+				if len(ws.PowerInputs) != 1 {
+					t.Fatalf("expected one power input in %s mode, got %d", tc.mode, len(ws.PowerInputs))
+				}
+				if got := views[receiver.ID].PowerOutput; got != tc.wantEnergyGain {
+					t.Fatalf("expected power output %d in %s mode, got %d", tc.wantEnergyGain, tc.mode, got)
+				}
+			} else {
+				if len(ws.PowerInputs) != 0 {
+					t.Fatalf("expected no power inputs in %s mode, got %d", tc.mode, len(ws.PowerInputs))
+				}
+				if got := views[receiver.ID].PowerOutput; got != 0 {
+					t.Fatalf("expected no power output in %s mode, got %d", tc.mode, got)
+				}
+			}
+		})
 	}
 }
 

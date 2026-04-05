@@ -28,11 +28,24 @@ const (
 	FormationTypeWedge  FormationType = "wedge"  // 楔形
 )
 
-// FleetFormation 编队
-type FleetFormation struct {
-	Type     FormationType `json:"type"`      // 编队类型
-	LeaderID string       `json:"leader_id"` // 领队单位ID
-	MemberIDs []string     `json:"member_ids"` // 编队成员ID
+// FleetState describes the high-level fleet runtime state.
+type FleetState string
+
+const (
+	FleetStateIdle      FleetState = "idle"
+	FleetStateAttacking FleetState = "attacking"
+)
+
+// FleetTarget stores the current orbital-strike target.
+type FleetTarget struct {
+	PlanetID string `json:"planet_id"`
+	TargetID string `json:"target_id,omitempty"`
+}
+
+// FleetUnitStack stores unit counts by payload type.
+type FleetUnitStack struct {
+	UnitType string `json:"unit_type"`
+	Count    int    `json:"count"`
 }
 
 // OrbitalPlatform 轨道防御平台
@@ -171,10 +184,16 @@ func CalculateFormationPositions(leader *CombatUnit, formationType FormationType
 
 // SpaceFleet 太空舰队
 type SpaceFleet struct {
-	ID          string           `json:"id"`
-	OwnerID     string           `json:"owner_id"`
-	Name        string           `json:"name"`
-	Formation   FleetFormation  `json:"formation"`
-	Speed       float64          `json:"speed"`        // 舰队移动速度
-	CombatUnits []string         `json:"combat_units"` // 舰队中的战斗单位ID列表
+	ID               string           `json:"id"`
+	OwnerID          string           `json:"owner_id"`
+	SystemID         string           `json:"system_id"`
+	SourceBuildingID string           `json:"source_building_id,omitempty"`
+	Name             string           `json:"name,omitempty"`
+	Formation        FormationType    `json:"formation"`
+	State            FleetState       `json:"state"`
+	Units            []FleetUnitStack `json:"units,omitempty"`
+	Weapon           WeaponState      `json:"weapon"`
+	Shield           ShieldState      `json:"shield"`
+	Target           *FleetTarget     `json:"target,omitempty"`
+	LastAttackTick   int64            `json:"last_attack_tick,omitempty"`
 }

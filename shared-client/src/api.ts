@@ -11,6 +11,8 @@ import type {
   CommandRequest,
   CommandResponse,
   EventSnapshotResponse,
+  FleetDetailView,
+  FormationType,
   GalaxyView,
   HealthResponse,
   CatalogView,
@@ -32,6 +34,7 @@ import type {
   SaveRequest,
   SaveResponse,
   StateSummary,
+  SystemRuntimeView,
   SystemView,
 } from './types.js';
 import { resolveServerUrl } from './utils.js';
@@ -108,7 +111,7 @@ export interface RollbackRequest {
   to_tick?: number;
 }
 
-export type UnitTypeName = 'worker' | 'soldier';
+export type UnitTypeName = string;
 export type Direction = 'north' | 'east' | 'south' | 'west' | 'auto';
 export type DysonComponentType = 'node' | 'frame' | 'shell';
 
@@ -150,6 +153,18 @@ export interface BuildDysonShellOptions {
   latitudeMax: number;
   coverage: number;
 }
+
+export interface DeploySquadOptions {
+  count?: number;
+  planetId?: string;
+}
+
+export interface CommissionFleetOptions {
+  count?: number;
+  fleetId?: string;
+}
+
+export type FleetFormation = FormationType;
 
 function buildUrl(serverUrl: string, path: string): string {
   return resolveServerUrl(serverUrl, path);
@@ -257,6 +272,10 @@ export function createApiClient(options: ApiClientOptions) {
     return apiFetch<SystemView>(`/world/systems/${systemId}`);
   }
 
+  function fetchSystemRuntime(systemId: string): Promise<SystemRuntimeView> {
+    return apiFetch<SystemRuntimeView>(`/world/systems/${systemId}/runtime`);
+  }
+
   function fetchPlanet(planetId: string): Promise<PlanetSummaryView> {
     return apiFetch<PlanetSummaryView>(`/world/planets/${planetId}`);
   }
@@ -296,6 +315,14 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchCatalog(): Promise<CatalogView> {
     return apiFetch<CatalogView>('/catalog');
+  }
+
+  function fetchFleets(): Promise<FleetDetailView[]> {
+    return apiFetch<FleetDetailView[]>('/world/fleets');
+  }
+
+  function fetchFleet(fleetId: string): Promise<FleetDetailView> {
+    return apiFetch<FleetDetailView>(`/world/fleets/${fleetId}`);
   }
 
   async function sendCommands(commands: Command[]): Promise<CommandResponse> {
@@ -536,6 +563,73 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdDeploySquad(buildingId: string, unitType: UnitTypeName, options: DeploySquadOptions = {}) {
+    return sendSingleCommand({
+      type: 'deploy_squad',
+      target: {
+        layer: 'planet',
+        entity_id: buildingId,
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+      },
+      payload: {
+        building_id: buildingId,
+        unit_type: unitType,
+        count: options.count ?? 1,
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+      },
+    });
+  }
+
+  function cmdCommissionFleet(
+    buildingId: string,
+    unitType: UnitTypeName,
+    systemId: string,
+    options: CommissionFleetOptions = {},
+  ) {
+    return sendSingleCommand({
+      type: 'commission_fleet',
+      target: { layer: 'system', system_id: systemId, entity_id: buildingId },
+      payload: {
+        building_id: buildingId,
+        unit_type: unitType,
+        count: options.count ?? 1,
+        system_id: systemId,
+        ...(options.fleetId ? { fleet_id: options.fleetId } : {}),
+      },
+    });
+  }
+
+  function cmdFleetAssign(fleetId: string, formation: FleetFormation) {
+    return sendSingleCommand({
+      type: 'fleet_assign',
+      target: { layer: 'system', entity_id: fleetId },
+      payload: {
+        fleet_id: fleetId,
+        formation,
+      },
+    });
+  }
+
+  function cmdFleetAttack(fleetId: string, planetId: string, targetId: string) {
+    return sendSingleCommand({
+      type: 'fleet_attack',
+      target: { layer: 'system', entity_id: fleetId, planet_id: planetId },
+      payload: {
+        fleet_id: fleetId,
+        planet_id: planetId,
+        target_id: targetId,
+      },
+    });
+  }
+
+  function cmdFleetDisband(fleetId: string) {
+    return sendSingleCommand({
+      type: 'fleet_disband',
+      target: { layer: 'system', entity_id: fleetId },
+      payload: { fleet_id: fleetId },
+    });
+  }
+
   function cmdLaunchSolarSail(buildingId: string, launchOptions: LaunchSolarSailOptions = {}) {
     return sendSingleCommand({
       type: 'launch_solar_sail',
@@ -627,10 +721,15 @@ export function createApiClient(options: ApiClientOptions) {
     cmdBuildDysonShell,
     cmdCancelConstruction,
     cmdCancelResearch,
+    cmdCommissionFleet,
     cmdConfigureLogisticsSlot,
     cmdConfigureLogisticsStation,
     cmdDemolish,
     cmdDemolishDyson,
+    cmdDeploySquad,
+    cmdFleetAssign,
+    cmdFleetAttack,
+    cmdFleetDisband,
     cmdLaunchRocket,
     cmdLaunchSolarSail,
     cmdMove,
@@ -648,6 +747,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchAudit,
     fetchCatalog,
     fetchEventSnapshot,
+    fetchFleet,
+    fetchFleets,
     fetchGalaxy,
     fetchHealth,
     fetchMetrics,
@@ -660,6 +761,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchStats,
     fetchSummary,
     fetchSystem,
+    fetchSystemRuntime,
     getAuth,
     getServerUrl,
     sendCommandRequest,

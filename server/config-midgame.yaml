@@ -1,7 +1,7 @@
 battlefield:
   map_seed: "midgame-seed-001"
   max_tick_rate: 10
-  victory_rule: "elimination"
+  victory_rule: "hybrid"
   initial_active_planet_id: "planet-1-2"
   construction_region_concurrent_limit: 4
 
@@ -51,6 +51,9 @@ players:
         - solar_sail_orbit
         - ray_receiver
         - vertical_launching
+        - integrated_logistics
+        - photon_mining
+        - annihilation
   - player_id: "p2"
     key: "key_player_2"
     team_id: "team-2"
@@ -96,6 +99,9 @@ players:
         - solar_sail_orbit
         - ray_receiver
         - vertical_launching
+        - integrated_logistics
+        - photon_mining
+        - annihilation
 
 server:
   port: 18080

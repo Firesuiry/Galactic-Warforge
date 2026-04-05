@@ -246,3 +246,61 @@ func TestAnnihilationRecipesUseCanonicalTechID(t *testing.T) {
 		}
 	}
 }
+
+func TestT093EndgameAmmoItemsAndRecipesExist(t *testing.T) {
+	cases := []struct {
+		itemID    string
+		recipeID  string
+		inputs    []string
+		outputQty int
+	}{
+		{
+			itemID:    "antimatter_capsule",
+			recipeID:  "antimatter_capsule",
+			inputs:    []string{"antimatter", "annihilation_constraint_sphere", "titanium_alloy"},
+			outputQty: 1,
+		},
+		{
+			itemID:    "gravity_missile",
+			recipeID:  "gravity_missile",
+			inputs:    []string{"ammo_missile", "strange_matter", "gravity_matrix"},
+			outputQty: 1,
+		},
+	}
+
+	for _, tc := range cases {
+		item, ok := Item(tc.itemID)
+		if !ok {
+			t.Fatalf("expected runtime item %s to exist", tc.itemID)
+		}
+		if item.Category != ItemCategoryAmmo || item.Form != ResourceSolid {
+			t.Fatalf("expected %s to be solid ammo, got %+v", tc.itemID, item)
+		}
+
+		recipe, ok := Recipe(tc.recipeID)
+		if !ok {
+			t.Fatalf("expected recipe %s to exist", tc.recipeID)
+		}
+		if len(recipe.Outputs) != 1 || recipe.Outputs[0].ItemID != tc.itemID || recipe.Outputs[0].Quantity != tc.outputQty {
+			t.Fatalf("unexpected outputs for %s: %+v", tc.recipeID, recipe.Outputs)
+		}
+		if len(recipe.BuildingTypes) != 1 || recipe.BuildingTypes[0] != BuildingTypeRecomposingAssembler {
+			t.Fatalf("expected %s to use recomposing_assembler, got %+v", tc.recipeID, recipe.BuildingTypes)
+		}
+
+		required := make(map[string]bool, len(tc.inputs))
+		for _, inputID := range tc.inputs {
+			required[inputID] = false
+		}
+		for _, input := range recipe.Inputs {
+			if _, ok := required[input.ItemID]; ok {
+				required[input.ItemID] = true
+			}
+		}
+		for inputID, seen := range required {
+			if !seen {
+				t.Fatalf("expected recipe %s to require %s, got %+v", tc.recipeID, inputID, recipe.Inputs)
+			}
+		}
+	}
+}

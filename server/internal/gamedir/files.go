@@ -65,6 +65,9 @@ type MetaFile struct {
 type RuntimeState struct {
 	ActivePlanetID string `json:"active_planet_id,omitempty"`
 	Winner         string `json:"winner,omitempty"`
+	VictoryReason  string `json:"victory_reason,omitempty"`
+	VictoryRule    string `json:"victory_rule,omitempty"`
+	VictoryTechID  string `json:"victory_tech_id,omitempty"`
 }
 
 // CommandLogEntry stores a compact command history entry for debugging/replay.

@@ -54,14 +54,18 @@ func (gc *GameCore) exportSaveFileWithBase(trigger string, base *snapshot.Snapsh
 		trigger = "manual"
 	}
 
-	current := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery)
+	current := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery, gc.spaceRuntime)
 	if current == nil {
 		return nil, fmt.Errorf("capture snapshot: nil snapshot")
 	}
 
+	victory := gc.Victory()
 	runtimeState := gamedir.RuntimeState{
 		ActivePlanetID: gc.activePlanetID,
-		Winner:         gc.Winner(),
+		Winner:         victory.WinnerID,
+		VictoryReason:  victory.Reason,
+		VictoryRule:    victory.VictoryRule,
+		VictoryTechID:  victory.TechID,
 	}
 	if runtimeState.ActivePlanetID == "" && gc.world != nil {
 		runtimeState.ActivePlanetID = gc.world.PlanetID
@@ -156,7 +160,7 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	worlds, activePlanetID, err := save.Snapshot.RestoreRuntime()
+	worlds, activePlanetID, spaceRuntime, err := save.Snapshot.RestoreRuntime()
 	if err != nil {
 		return nil, fmt.Errorf("restore runtime: %w", err)
 	}
@@ -202,6 +206,7 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		stopCh:           make(chan struct{}),
 		activePlanetID:   activePlanetID,
 		executorUsage:    make(map[string]int),
+		spaceRuntime:     spaceRuntime,
 		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 		baseSnapshot:     chooseBaseSnapshot(save.DebugState.BaseSnapshot, save.Snapshot),
@@ -210,7 +215,12 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		core.activePlanetID = activeWorld.PlanetID
 	}
 	core.setActivePlanet(core.activePlanetID)
-	core.winner = save.RuntimeState.Winner
+	core.setVictoryState(model.VictoryState{
+		WinnerID:    save.RuntimeState.Winner,
+		Reason:      save.RuntimeState.VictoryReason,
+		VictoryRule: save.RuntimeState.VictoryRule,
+		TechID:      save.RuntimeState.VictoryTechID,
+	})
 
 	core.cmdLog.ReplaceAll(importCommandLog(save.DebugState.CommandLog))
 	core.eventHistory.ReplaceAll(save.DebugState.EventHistory)

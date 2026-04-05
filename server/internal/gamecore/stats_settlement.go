@@ -42,6 +42,15 @@ func (gc *GameCore) updateProductionStats(player *model.PlayerState) {
 	stats.TotalOutput = 0
 	stats.ByBuildingType = make(map[string]int)
 	stats.ByItem = make(map[string]int)
+	stats.Efficiency = 0
+
+	if snapshot := model.CurrentProductionSettlementSnapshot(gc.world); snapshot != nil {
+		if playerSnapshot, ok := snapshot.Players[player.PlayerID]; ok {
+			stats.TotalOutput = playerSnapshot.TotalOutput
+			stats.ByBuildingType = cloneIntMap(playerSnapshot.ByBuildingType)
+			stats.ByItem = cloneIntMap(playerSnapshot.ByItem)
+		}
+	}
 
 	var totalEfficiency float64
 	var buildingCount int
@@ -54,10 +63,6 @@ func (gc *GameCore) updateProductionStats(player *model.PlayerState) {
 			continue
 		}
 
-		throughput := building.Runtime.Functions.Production.Throughput
-		stats.TotalOutput += throughput
-		stats.ByBuildingType[string(building.Type)] += throughput
-
 		if building.ProductionMonitor != nil && building.ProductionMonitor.LastStats.Efficiency > 0 {
 			totalEfficiency += building.ProductionMonitor.LastStats.Efficiency
 			buildingCount++
@@ -69,33 +74,56 @@ func (gc *GameCore) updateProductionStats(player *model.PlayerState) {
 	}
 }
 
+func cloneIntMap(in map[string]int) map[string]int {
+	out := make(map[string]int, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
 // updateEnergyStats 更新能源统计
 func (gc *GameCore) updateEnergyStats(player *model.PlayerState) {
 	stats := &player.Stats.EnergyStats
-	stats.Generation = 0
-	stats.Consumption = 0
-	stats.Storage = 0
-	stats.CurrentStored = 0
+	aggregated := buildPlayerEnergyStats(gc.world, player.PlayerID)
+	shortageTicks := stats.ShortageTicks
+	if aggregated.ShortageTicks > 0 {
+		shortageTicks++
+	}
+	*stats = aggregated
+	stats.ShortageTicks = shortageTicks
+}
 
-	for _, building := range gc.world.Buildings {
-		if building.OwnerID != player.PlayerID {
-			continue
-		}
+func buildPlayerEnergyStats(ws *model.WorldState, playerID string) model.EnergyStats {
+	stats := model.EnergyStats{}
+	if ws == nil || playerID == "" {
+		return stats
+	}
 
-		// 发电建筑
-		if building.Runtime.Functions.Energy != nil && building.Runtime.Functions.Energy.OutputPerTick > 0 {
-			stats.Generation += building.Runtime.Functions.Energy.OutputPerTick
+	if snapshot := model.CurrentPowerSettlementSnapshot(ws); snapshot != nil {
+		if player, ok := snapshot.Players[playerID]; ok {
+			stats.Generation = player.Generation
+			stats.Consumption = player.Allocated
 		}
-		// 耗电建筑
-		if building.Runtime.Functions.Energy != nil && building.Runtime.Functions.Energy.ConsumePerTick > 0 {
-			stats.Consumption += building.Runtime.Functions.Energy.ConsumePerTick
-		}
-		// 储能建筑
-		if building.Runtime.Functions.EnergyStorage != nil && building.Runtime.Functions.EnergyStorage.Capacity > 0 {
-			stats.Storage += building.Runtime.Functions.EnergyStorage.Capacity
-			stats.CurrentStored += building.HP // 假设HP代表当前储能
+		for _, network := range snapshot.Allocations.Networks {
+			if network != nil && network.OwnerID == playerID && network.Shortage {
+				stats.ShortageTicks = 1
+				break
+			}
 		}
 	}
+	for _, building := range ws.Buildings {
+		if building == nil || building.OwnerID != playerID || building.Runtime.Functions.EnergyStorage == nil {
+			continue
+		}
+		if building.Runtime.Functions.EnergyStorage.Capacity > 0 {
+			stats.Storage += building.Runtime.Functions.EnergyStorage.Capacity
+		}
+		if building.EnergyStorage != nil && building.EnergyStorage.Energy > 0 {
+			stats.CurrentStored += building.EnergyStorage.Energy
+		}
+	}
+	return stats
 }
 
 // updateLogisticsStats 更新物流统计

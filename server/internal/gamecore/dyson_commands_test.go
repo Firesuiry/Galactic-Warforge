@@ -153,7 +153,7 @@ func TestLaunchSolarSailConsumesLoadedPayload(t *testing.T) {
 		t.Fatalf("expected 1 remaining loaded solar sail, got %d", got)
 	}
 
-	orbit := GetSolarSailOrbit("p1")
+	orbit := GetSolarSailOrbit(core.spaceRuntime, "p1", "sys-1")
 	if orbit == nil || len(orbit.Sails) != 2 {
 		t.Fatalf("expected 2 solar sails in orbit, got %#v", orbit)
 	}
@@ -273,6 +273,9 @@ func newEMRailEjectorBuilding(id string, pos model.Position, owner string) *mode
 		Level:       1,
 	}
 	model.InitBuildingStorage(b)
+	if b.Runtime.Functions.Launch != nil {
+		b.Runtime.Functions.Launch.SuccessRate = 1
+	}
 	return b
 }
 
@@ -291,5 +294,8 @@ func newVerticalLaunchingSiloBuilding(id string, pos model.Position, owner strin
 	}
 	model.InitBuildingStorage(b)
 	model.InitBuildingProduction(b)
+	if b.Runtime.Functions.Launch != nil {
+		b.Runtime.Functions.Launch.SuccessRate = 1
+	}
 	return b
 }

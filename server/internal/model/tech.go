@@ -223,7 +223,10 @@ var defaultTechDefinitions = []TechDefinition{
 		Category: TechCategoryMain,
 		Type:     TechTypeMain,
 		Level:    0,
-		Unlocks:  []TechUnlock{{Type: TechUnlockBuilding, ID: "matrix_lab"}},
+		Unlocks: []TechUnlock{
+			{Type: TechUnlockBuilding, ID: "matrix_lab"},
+			{Type: TechUnlockBuilding, ID: "wind_turbine"},
+		},
 	},
 
 	// Level 1
@@ -237,7 +240,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"dyson_sphere_program"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "wind_turbine"},
 			{Type: TechUnlockBuilding, ID: "power_pylon"},
 			{Type: TechUnlockBuilding, ID: "mining_machine"},
 		},
@@ -615,7 +617,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"battlefield_analysis", "plasma_control"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 200}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockUnit, ID: "prototype"},
+			{Type: TechUnlockRecipe, ID: "prototype"},
 		},
 	},
 
@@ -804,7 +806,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"prototype", "photon_conversion"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 400}, {ItemID: "energy_matrix", Quantity: 400}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockUnit, ID: "precision_drone"},
+			{Type: TechUnlockRecipe, ID: "precision_drone"},
 		},
 	},
 
@@ -1277,7 +1279,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"precision_drone", "information_matrix"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 600}, {ItemID: "structure_matrix", Quantity: 600}, {ItemID: "information_matrix", Quantity: 600}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockUnit, ID: "corvette"},
+			{Type: TechUnlockRecipe, ID: "corvette"},
 		},
 	},
 	{
@@ -1490,8 +1492,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"corvette", "gravity_matrix"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 800}, {ItemID: "structure_matrix", Quantity: 800}, {ItemID: "information_matrix", Quantity: 800}, {ItemID: "gravity_matrix", Quantity: 800}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockUnit, ID: "destroyer"},
-			{Type: TechUnlockUnit, ID: "corvette_attack_drone"},
+			{Type: TechUnlockRecipe, ID: "destroyer"},
 		},
 	},
 	{
@@ -1686,6 +1687,7 @@ func normalizeTechUnlocks(unlocks []TechUnlock) []TechUnlock {
 	for id := range recipeCatalog {
 		recipeIDs[id] = struct{}{}
 	}
+	unitIDs := runtimeSupportedUnitUnlocks()
 
 	out := make([]TechUnlock, 0, len(unlocks))
 	for _, unlock := range unlocks {
@@ -1699,11 +1701,22 @@ func normalizeTechUnlocks(unlocks []TechUnlock) []TechUnlock {
 				if _, ok := recipeIDs[normalized.ID]; !ok {
 					continue
 				}
+			case TechUnlockUnit:
+				if _, ok := unitIDs[normalized.ID]; !ok {
+					continue
+				}
 			}
 			out = appendUniqueUnlock(out, normalized)
 		}
 	}
 	return out
+}
+
+func runtimeSupportedUnitUnlocks() map[string]struct{} {
+	return map[string]struct{}{
+		"logistics_drone": {},
+		"logistics_ship":  {},
+	}
 }
 
 func appendUniqueUnlock(unlocks []TechUnlock, unlock TechUnlock) []TechUnlock {

@@ -97,6 +97,12 @@ const (
 
 	ItemAmmoBullet  = "ammo_bullet"
 	ItemAmmoMissile = "ammo_missile"
+	ItemAntimatterCapsule = "antimatter_capsule"
+	ItemGravityMissile    = "gravity_missile"
+	ItemPrototype         = "prototype"
+	ItemPrecisionDrone    = "precision_drone"
+	ItemCorvette          = "corvette"
+	ItemDestroyer         = "destroyer"
 
 	ItemSolarSail          = "solar_sail"
 	ItemSmallCarrierRocket = "small_carrier_rocket"
@@ -638,6 +644,54 @@ var itemCatalog = map[string]ItemDefinition{
 		Form:       ResourceSolid,
 		StackLimit: 50,
 		UnitVolume: 3,
+	},
+	ItemAntimatterCapsule: {
+		ID:         ItemAntimatterCapsule,
+		Name:       "Antimatter Capsule",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemGravityMissile: {
+		ID:         ItemGravityMissile,
+		Name:       "Gravity Missile",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemPrototype: {
+		ID:         ItemPrototype,
+		Name:       "Prototype Payload",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 2,
+	},
+	ItemPrecisionDrone: {
+		ID:         ItemPrecisionDrone,
+		Name:       "Precision Drone Payload",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 2,
+	},
+	ItemCorvette: {
+		ID:         ItemCorvette,
+		Name:       "Corvette Hull Payload",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 20,
+		UnitVolume: 4,
+	},
+	ItemDestroyer: {
+		ID:         ItemDestroyer,
+		Name:       "Destroyer Hull Payload",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 10,
+		UnitVolume: 6,
 	},
 	ItemSolarSail: {
 		ID:         ItemSolarSail,

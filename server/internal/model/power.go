@@ -168,10 +168,6 @@ func consumeFuel(storage *StorageState, itemID string, qty int) int {
 	if remaining > 0 {
 		take := removeFromInventory(storage.Inventory, itemID, remaining)
 		taken += take
-		remaining -= take
-	}
-	if remaining > 0 {
-		taken += removeFromInventory(storage.OutputBuffer, itemID, remaining)
 	}
 	return taken
 }

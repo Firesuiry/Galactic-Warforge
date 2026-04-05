@@ -1,7 +1,7 @@
 spec_version: v1
 kind: item
-id: gravity_missile_set
-name: Gravity Missile Set
+id: gravity_missile
+name: Gravity Missile
 category: combat
 form: solid
 stack_space: 1

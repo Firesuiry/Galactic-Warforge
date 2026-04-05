@@ -9,6 +9,7 @@ const (
 	stateReasonResume      = "resume"
 	stateReasonUnderPower  = "under_power"
 	stateReasonPowerReturn = "power_restored"
+	stateReasonNoFuel      = "no_fuel"
 	stateReasonFault       = "fault"
 	stateReasonFaultClear  = "fault_cleared"
 	stateReasonStateChange = "state_change"
@@ -19,18 +20,21 @@ func applyBuildingState(building *model.Building, next model.BuildingWorkState, 
 		return nil
 	}
 	prev := building.Runtime.State
-	if prev == next {
-		return nil
-	}
-	building.Runtime.State = next
+	prevReason := building.Runtime.StateReason
 	if reason == "" {
 		reason = deriveBuildingStateReason(prev, next)
 	}
+	nextReason := reason
 	if next == model.BuildingWorkRunning || next == model.BuildingWorkIdle {
-		building.Runtime.StateReason = ""
-	} else {
-		building.Runtime.StateReason = reason
+		nextReason = ""
 	}
+	stateChanged := prev != next
+	reasonChanged := prevReason != nextReason
+	if !stateChanged && !reasonChanged {
+		return nil
+	}
+	building.Runtime.State = next
+	building.Runtime.StateReason = nextReason
 	return &model.GameEvent{
 		EventType:       model.EvtBuildingStateChanged,
 		VisibilityScope: building.OwnerID,
@@ -39,6 +43,7 @@ func applyBuildingState(building *model.Building, next model.BuildingWorkState, 
 			"building_type": building.Type,
 			"prev_state":    prev,
 			"next_state":    next,
+			"prev_reason":   prevReason,
 			"reason":        reason,
 		},
 	}

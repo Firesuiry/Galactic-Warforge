@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { setAuth, getAuth } from '../api.js';
+import { fetchCatalog, setAuth, getAuth } from '../api.js';
 import { stopSSE, startSSE, getEventBuffer } from '../sse.js';
 import { fetchPlanetScene } from '../api.js';
 import { fmtEvent, fmtError, fmtFogScene } from '../format.js';
@@ -14,9 +14,11 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   stats: { desc: 'Current player statistics' },
   galaxy: { desc: 'Galaxy list' },
   system: { usage: '[system_id]', desc: 'System details (default: sys-1)' },
+  system_runtime: { usage: '[system_id]', desc: 'System runtime state including solar sails and fleets' },
   planet: { usage: '[planet_id]', desc: 'Planet summary (default: planet-1-1)' },
   scene: { usage: '[planet_id] <x> <y> <width> <height>', desc: 'Planet scene raw JSON' },
   inspect: { usage: '<planet_id> <building|unit|resource|sector> <entity_id>', desc: 'Planet inspect raw JSON' },
+  fleet_status: { usage: '[fleet_id]', desc: 'Fleet list or one fleet detail' },
   fog: { usage: '[planet_id] [x y width height]', desc: 'ASCII fog slice via /scene (default: 0 0 32 16)' },
   scan_galaxy: { usage: '[galaxy_id]', desc: 'Discover all systems in a galaxy' },
   scan_system: { usage: '<system_id>', desc: 'Discover a system' },
@@ -24,7 +26,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   build: { usage: '<x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]', desc: 'Build any server-side buildable structure' },
   move: { usage: '<entity_id> <x> <y> [--z <z>]', desc: 'Move entity to position' },
   attack: { usage: '<entity_id> <target_id>', desc: 'Attack target entity' },
-  produce: { usage: '<entity_id> <unit_type>', desc: 'Produce unit (worker/soldier)' },
+  produce: { usage: '<entity_id> <unit_type>', desc: 'Produce a server-public world unit' },
   upgrade: { usage: '<entity_id>', desc: 'Upgrade building' },
   demolish: { usage: '<entity_id>', desc: 'Demolish building' },
   configure_logistics_station: { usage: '<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true|false>] [--warp-enabled <true|false>] [--ship-slots <n>]', desc: 'Configure logistics station capacity, priority and interstellar switches' },
@@ -33,6 +35,11 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   restore_construction: { usage: '<task_id>', desc: 'Restore a cancelled construction task' },
   start_research: { usage: '<tech_id>', desc: 'Start researching a technology' },
   cancel_research: { usage: '<tech_id>', desc: 'Cancel a technology in progress or queue' },
+  deploy_squad: { usage: '<building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]', desc: 'Consume deployment payloads from a hub and create a combat squad' },
+  commission_fleet: { usage: '<building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]', desc: 'Consume fleet payloads from a hub and create or reinforce a fleet' },
+  fleet_assign: { usage: '<fleet_id> <line|vee|circle|wedge>', desc: 'Change a fleet formation' },
+  fleet_attack: { usage: '<fleet_id> <planet_id> <target_id>', desc: 'Order a fleet to attack a target in the same system' },
+  fleet_disband: { usage: '<fleet_id>', desc: 'Disband a fleet and remove it from runtime' },
   transfer: { usage: '<building_id> <item_id> <quantity>', desc: 'Load items from player inventory into building local storage' },
   switch_active_planet: { usage: '<planet_id>', desc: 'Switch current active planet to another loaded foothold planet' },
   set_ray_receiver_mode: { usage: '<building_id> <power|photon|hybrid>', desc: 'Switch ray receiver mode' },
@@ -67,9 +74,11 @@ const HELP_TEXT = [
   '    stats           Current player statistics',
   '    galaxy          Galaxy list',
   '    system [id]     System details',
+  '    system_runtime [id]  System runtime with sails and fleets',
   '    planet [id]     Planet summary',
   '    scene [id] <x> <y> <w> <h>',
   '    inspect <planet_id> <kind> <entity_id>',
+  '    fleet_status [id]    Fleet list or one fleet detail',
   '    fog [id] [x y w h]  ASCII fog slice',
   '',
   chalk.bold('  Discovery:'),
@@ -90,6 +99,11 @@ const HELP_TEXT = [
   '    restore_construction <task_id>',
   '    start_research <tech_id>',
   '    cancel_research <tech_id>',
+  '    deploy_squad <building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]',
+  '    commission_fleet <building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]',
+  '    fleet_assign <fleet_id> <line|vee|circle|wedge>',
+  '    fleet_attack <fleet_id> <planet_id> <target_id>',
+  '    fleet_disband <fleet_id>',
   '    transfer <building_id> <item_id> <quantity>',
   '    switch_active_planet <planet_id>',
   '    set_ray_receiver_mode <building_id> <power|photon|hybrid>',
@@ -118,15 +132,34 @@ const HELP_TEXT = [
   '    quit / exit               Exit',
 ].join('\n');
 
-function getCommandHelp(cmd: string): string {
+async function getProduceHelp(): Promise<string> {
+  const usage = '<entity_id> <unit_type>';
+  try {
+    const catalog = await fetchCatalog();
+    const units = (catalog.units ?? [])
+      .filter((entry) => entry.public && entry.production_mode === 'world_produce' && entry.runtime_class === 'world_unit')
+      .map((entry) => entry.id);
+    if (units.length > 0) {
+      return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit from /catalog.units: ${units.join(', ')}`;
+    }
+  } catch {
+    // Fall back to generic help when the server is unavailable.
+  }
+  return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit; available ids come from /catalog.units when the server is reachable`;
+}
+
+function getCommandHelp(cmd: string): string | Promise<string> {
   const entry = HELP_ENTRIES[cmd];
   if (!entry) {
     return fmtError(`Unknown command: ${cmd}`);
   }
+  if (cmd === 'produce') {
+    return getProduceHelp();
+  }
   return `${chalk.bold(cmd)} ${chalk.dim(entry.usage ?? '')}\n  ${entry.desc}`;
 }
 
-export function cmdHelp(args: string[]): string {
+export function cmdHelp(args: string[]): string | Promise<string> {
   if (args[0]) {
     return getCommandHelp(args[0]);
   }

@@ -87,3 +87,37 @@ func TestPowerCoverageRelayHasNoConsumerSlotLimit(t *testing.T) {
 		t.Fatalf("expected %s connected, got reason=%s", consumer2.ID, res2.Reason)
 	}
 }
+
+func TestPowerCoverageTreatsDynamicPowerInputsAsProvider(t *testing.T) {
+	ws := NewWorldState("p1", 10, 10)
+	ws.Players["player-1"] = &PlayerState{PlayerID: "player-1", IsAlive: true}
+	provider := newTestBuilding("rr-1", BuildingTypeRayReceiver, Position{X: 1, Y: 1})
+	consumer := newTestBuilding("c-1", BuildingTypeAssemblingMachineMk1, Position{X: 2, Y: 1})
+	ws.Buildings[provider.ID] = provider
+	ws.Buildings[consumer.ID] = consumer
+	ws.PowerInputs = []PowerInput{
+		{BuildingID: provider.ID, OwnerID: "player-1", SourceKind: PowerSourceRayReceiver, Output: 18},
+	}
+	ws.PowerGrid = BuildPowerGridGraph(ws)
+
+	networks := ResolvePowerNetworks(ws)
+	networkID := networks.BuildingNetwork[consumer.ID]
+	if networkID == "" {
+		t.Fatalf("expected consumer network membership, got %+v", networks)
+	}
+	if networks.Networks[networkID] == nil || networks.Networks[networkID].Supply <= 0 {
+		t.Fatalf("expected dynamic ray receiver power to reach network supply, got %+v", networks.Networks[networkID])
+	}
+
+	coverage := ResolvePowerCoverage(ws)
+	res, ok := coverage[consumer.ID]
+	if !ok {
+		t.Fatalf("missing coverage result for %s", consumer.ID)
+	}
+	if !res.Connected {
+		t.Fatalf("expected dynamic power input to count as provider, got reason=%s", res.Reason)
+	}
+	if res.ProviderID != provider.ID {
+		t.Fatalf("expected provider %s, got %s", provider.ID, res.ProviderID)
+	}
+}

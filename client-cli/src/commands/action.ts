@@ -15,6 +15,11 @@ import {
   cmdRestoreConstruction as apiRestoreConstruction,
   cmdStartResearch as apiStartResearch,
   cmdCancelResearch as apiCancelResearch,
+  cmdCommissionFleet as apiCommissionFleet,
+  cmdDeploySquad as apiDeploySquad,
+  cmdFleetAssign as apiFleetAssign,
+  cmdFleetAttack as apiFleetAttack,
+  cmdFleetDisband as apiFleetDisband,
   cmdTransferItem as apiTransferItem,
   cmdSwitchActivePlanet as apiSwitchActivePlanet,
   cmdSetRayReceiverMode as apiSetRayReceiverMode,
@@ -24,6 +29,7 @@ import {
   cmdBuildDysonFrame as apiBuildDysonFrame,
   cmdBuildDysonShell as apiBuildDysonShell,
   cmdDemolishDyson as apiDemolishDyson,
+  type FleetFormation,
   type ConfigureLogisticsStationOptions,
   type Direction,
   type DysonComponentType,
@@ -34,11 +40,13 @@ import type { CommandRequest, Position } from '../types.js';
 import { getStringOption, parseArgs, parseIntegerArg, parseNumberArg } from './args.js';
 
 const DIRECTIONS = new Set<Direction>(['north', 'east', 'south', 'west', 'auto']);
-const UNIT_TYPES = new Set(['worker', 'soldier']);
 const DYSON_COMPONENT_TYPES = new Set<DysonComponentType>(['node', 'frame', 'shell']);
 const LOGISTICS_SCOPES = new Set(['planetary', 'interstellar']);
 const LOGISTICS_MODES = new Set(['none', 'supply', 'demand', 'both']);
 const RAY_RECEIVER_MODES = new Set<RayReceiverMode>(['power', 'photon', 'hybrid']);
+const SQUAD_UNITS = new Set(['prototype', 'precision_drone']);
+const FLEET_UNITS = new Set(['corvette', 'destroyer']);
+const FLEET_FORMATIONS = new Set<FleetFormation>(['line', 'vee', 'circle', 'wedge']);
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -190,11 +198,8 @@ export async function cmdProduce(args: string[]): Promise<string> {
   if (args.length < 2) {
     return fmtError('Usage: produce <entity_id> <unit_type>');
   }
-  if (!UNIT_TYPES.has(args[1])) {
-    return fmtError('unit_type 必须是 worker 或 soldier');
-  }
   try {
-    return fmtCommandResponse(await apiProduce(args[0], args[1] as 'worker' | 'soldier'));
+    return fmtCommandResponse(await apiProduce(args[0], args[1]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -325,6 +330,85 @@ export async function cmdCancelResearch(args: string[]): Promise<string> {
   }
   try {
     return fmtCommandResponse(await apiCancelResearch(args[0]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdDeploySquad(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: deploy_squad <building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]');
+  }
+  if (!SQUAD_UNITS.has(parsed.positionals[1])) {
+    return fmtError('unit_type 必须是 prototype 或 precision_drone');
+  }
+  try {
+    const countRaw = getStringOption(parsed, 'count');
+    return fmtCommandResponse(await apiDeploySquad(parsed.positionals[0], parsed.positionals[1], {
+      count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
+      planetId: getStringOption(parsed, 'planet'),
+    }));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdCommissionFleet(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 3) {
+    return fmtError('Usage: commission_fleet <building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]');
+  }
+  if (!FLEET_UNITS.has(parsed.positionals[1])) {
+    return fmtError('unit_type 必须是 corvette 或 destroyer');
+  }
+  try {
+    const countRaw = getStringOption(parsed, 'count');
+    return fmtCommandResponse(await apiCommissionFleet(
+      parsed.positionals[0],
+      parsed.positionals[1],
+      parsed.positionals[2],
+      {
+        count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
+        fleetId: getStringOption(parsed, 'fleet-id'),
+      },
+    ));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdFleetAssign(args: string[]): Promise<string> {
+  if (args.length < 2) {
+    return fmtError('Usage: fleet_assign <fleet_id> <line|vee|circle|wedge>');
+  }
+  if (!FLEET_FORMATIONS.has(args[1] as FleetFormation)) {
+    return fmtError('formation 必须是 line/vee/circle/wedge');
+  }
+  try {
+    return fmtCommandResponse(await apiFleetAssign(args[0], args[1] as FleetFormation));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdFleetAttack(args: string[]): Promise<string> {
+  if (args.length < 3) {
+    return fmtError('Usage: fleet_attack <fleet_id> <planet_id> <target_id>');
+  }
+  try {
+    return fmtCommandResponse(await apiFleetAttack(args[0], args[1], args[2]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdFleetDisband(args: string[]): Promise<string> {
+  if (args.length < 1) {
+    return fmtError('Usage: fleet_disband <fleet_id>');
+  }
+  try {
+    return fmtCommandResponse(await apiFleetDisband(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }

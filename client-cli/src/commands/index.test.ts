@@ -12,8 +12,8 @@ describe('save command registration', () => {
     assert.match(out, /save \[--reason <text>\]/);
   });
 
-  it('shows dedicated help for save', () => {
-    const out = cmdHelp(['save']);
+  it('shows dedicated help for save', async () => {
+    const out = await cmdHelp(['save']);
     assert.match(out, /^save /);
     assert.match(out, /manual save/i);
   });
@@ -51,6 +51,15 @@ describe('transfer command registration', () => {
   });
 });
 
+describe('T101 produce help boundary', () => {
+  it('does not hardcode worker/soldier in produce help', async () => {
+    const help = await dispatch('help produce', { currentPlayer: 'p1', rl: {} });
+    assert.doesNotMatch(help, /worker\/soldier/);
+    assert.match(help, /server/i);
+    assert.doesNotMatch(help, /corvette|destroyer|precision_drone|prototype/);
+  });
+});
+
 describe('multi-planet command registration', () => {
   it('registers switch_active_planet and set_ray_receiver_mode in command table', async () => {
     assert.ok(COMMANDS.switch_active_planet);
@@ -61,5 +70,26 @@ describe('multi-planet command registration', () => {
 
     const rayHelp = await dispatch('help set_ray_receiver_mode', { currentPlayer: 'p1', rl: {} });
     assert.match(rayHelp, /set_ray_receiver_mode <building_id> <power\|photon\|hybrid>/);
+  });
+});
+
+describe('fleet command registration', () => {
+  it('registers fleet deployment, control and query commands', async () => {
+    assert.ok(COMMANDS.deploy_squad);
+    assert.ok(COMMANDS.commission_fleet);
+    assert.ok(COMMANDS.fleet_assign);
+    assert.ok(COMMANDS.fleet_attack);
+    assert.ok(COMMANDS.fleet_disband);
+    assert.ok(COMMANDS.fleet_status);
+    assert.ok(COMMANDS.system_runtime);
+
+    const deployHelp = await dispatch('help deploy_squad', { currentPlayer: 'p1', rl: {} });
+    assert.match(deployHelp, /deploy_squad <building_id> <prototype\|precision_drone>/);
+
+    const fleetHelp = await dispatch('help fleet_status', { currentPlayer: 'p1', rl: {} });
+    assert.match(fleetHelp, /fleet_status \[fleet_id\]/);
+
+    const systemRuntimeHelp = await dispatch('help system_runtime', { currentPlayer: 'p1', rl: {} });
+    assert.match(systemRuntimeHelp, /system_runtime \[system_id\]/);
   });
 });

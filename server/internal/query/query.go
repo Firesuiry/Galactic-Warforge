@@ -26,13 +26,15 @@ type StateSummary struct {
 	Tick           int64                         `json:"tick"`
 	Players        map[string]*model.PlayerState `json:"players"`
 	Winner         string                        `json:"winner,omitempty"`
+	VictoryReason  string                        `json:"victory_reason,omitempty"`
+	VictoryRule    string                        `json:"victory_rule,omitempty"`
 	ActivePlanetID string                        `json:"active_planet_id"`
 	MapWidth       int                           `json:"map_width"`
 	MapHeight      int                           `json:"map_height"`
 }
 
 // Summary returns a high-level view of the world (no fog clipping for own resources).
-func (ql *Layer) Summary(ws *model.WorldState, playerID string, winner string) *StateSummary {
+func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.VictoryState) *StateSummary {
 	ws.RLock()
 	defer ws.RUnlock()
 
@@ -57,7 +59,9 @@ func (ql *Layer) Summary(ws *model.WorldState, playerID string, winner string) *
 	return &StateSummary{
 		Tick:           ws.Tick,
 		Players:        players,
-		Winner:         winner,
+		Winner:         victory.WinnerID,
+		VictoryReason:  victory.Reason,
+		VictoryRule:    victory.VictoryRule,
 		ActivePlanetID: ws.PlanetID,
 		MapWidth:       ws.MapWidth,
 		MapHeight:      ws.MapHeight,

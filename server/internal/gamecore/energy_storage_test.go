@@ -23,6 +23,7 @@ func TestEnergyStorageRestoresPower(t *testing.T) {
 	ws.PowerInputs = nil
 	ws.PowerGrid = model.BuildPowerGridGraph(ws)
 
+	finalizePowerSettlement(ws, nil)
 	settleResources(ws)
 
 	if consumer.Runtime.State != model.BuildingWorkRunning {

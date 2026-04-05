@@ -5,9 +5,11 @@ import { getAgentAllowedCommands, runCommandLine } from './runtime.js';
 
 describe('game cli runtime', () => {
   it('lists command metadata for agent whitelist', () => {
-    const commands = getAgentAllowedCommands();
+    const commands = [...getAgentAllowedCommands()] as string[];
     assert.ok(commands.includes('summary'));
     assert.ok(commands.includes('build'));
+    assert.ok(commands.includes('deploy_squad'));
+    assert.ok(commands.includes('fleet_status'));
     assert.ok(!commands.includes('rollback'));
   });
 

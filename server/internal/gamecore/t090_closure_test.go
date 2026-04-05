@@ -42,6 +42,8 @@ func newTwoPlanetTestCore(t *testing.T) (*GameCore, *config.Config, *mapconfig.C
 
 func placeBuilding(ws *model.WorldState, building *model.Building) {
 	ws.Buildings[building.ID] = building
+	model.RegisterPowerGridBuilding(ws, building)
+	model.RegisterLogisticsStation(ws, building)
 	key := model.TileKey(building.Position.X, building.Position.Y)
 	ws.TileBuilding[key] = building.ID
 	ws.Grid[building.Position.Y][building.Position.X].BuildingID = building.ID

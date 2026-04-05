@@ -11,17 +11,21 @@ type ReplayRequest struct {
 
 // ReplayDigest summarizes a world state for consistency checks.
 type ReplayDigest struct {
-	Tick              int64  `json:"tick"`
-	Players           int    `json:"players"`
-	AlivePlayers      int    `json:"alive_players"`
-	Buildings         int    `json:"buildings"`
-	Units             int    `json:"units"`
-	Resources         int    `json:"resources"`
-	TotalMinerals     int    `json:"total_minerals"`
-	TotalEnergy       int    `json:"total_energy"`
-	ResourceRemaining int64  `json:"resource_remaining"`
-	EntityCounter     int64  `json:"entity_counter"`
-	Hash              string `json:"hash"`
+	Tick                 int64  `json:"tick"`
+	Players              int    `json:"players"`
+	AlivePlayers         int    `json:"alive_players"`
+	Buildings            int    `json:"buildings"`
+	Units                int    `json:"units"`
+	Resources            int    `json:"resources"`
+	TotalMinerals        int    `json:"total_minerals"`
+	TotalEnergy          int    `json:"total_energy"`
+	ResourceRemaining    int64  `json:"resource_remaining"`
+	EntityCounter        int64  `json:"entity_counter"`
+	SpaceEntityCounter   int64  `json:"space_entity_counter"`
+	SolarSailCount       int    `json:"solar_sail_count"`
+	SolarSailSystems     int    `json:"solar_sail_systems"`
+	SolarSailTotalEnergy int    `json:"solar_sail_total_energy"`
+	Hash                 string `json:"hash"`
 }
 
 // ReplayResponse describes the outcome of a replay run.

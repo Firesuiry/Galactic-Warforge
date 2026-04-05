@@ -41,9 +41,13 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 		return nil, fmt.Errorf("snapshot tick %d is after requested to_tick %d", snap.Tick, toTick)
 	}
 
-	world, err := snap.RestoreWorld()
+	worlds, activePlanetID, spaceRuntime, err := snap.RestoreRuntime()
 	if err != nil {
-		return nil, fmt.Errorf("restore world: %w", err)
+		return nil, fmt.Errorf("restore runtime: %w", err)
+	}
+	world := worlds[activePlanetID]
+	if world == nil {
+		return nil, fmt.Errorf("active world %s missing in rollback snapshot", activePlanetID)
 	}
 	discovery, err := snap.RestoreDiscovery()
 	if err != nil {
@@ -54,11 +58,14 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	}
 
 	replayCore := &GameCore{
-		cfg:           gc.cfg,
-		maps:          gc.maps,
-		discovery:     discovery,
-		world:         world,
-		executorUsage: make(map[string]int),
+		cfg:            gc.cfg,
+		maps:           gc.maps,
+		discovery:      discovery,
+		world:          world,
+		worlds:         worlds,
+		executorUsage:  make(map[string]int),
+		activePlanetID: activePlanetID,
+		spaceRuntime:   spaceRuntime,
 	}
 
 	entries := gc.cmdLog.Range(snap.Tick+1, toTick)
@@ -92,6 +99,13 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 
 		replayCore.settleConstructionQueue(replayCore.world)
 		settleBuildingJobs(replayCore.world)
+		env := currentPlanetEnvironment(replayCore.maps, replayCore.world.PlanetID)
+		settlePowerGeneration(replayCore.world, env)
+		settleSolarSails(replayCore.spaceRuntime, replayCore.world.Tick)
+		settleDysonSpheres(replayCore.world.Tick)
+		receiverViews := settleRayReceivers(replayCore.world, replayCore.maps, replayCore.spaceRuntime)
+		settlePlanetaryShields(replayCore.world)
+		finalizePowerSettlement(replayCore.world, receiverViews)
 		settleResources(replayCore.world)
 		settleConveyors(replayCore.world)
 		settleSorters(replayCore.world)
@@ -99,12 +113,18 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 		settleStorage(replayCore.world)
 		settleLogisticsDispatch(replayCore.world)
 		settleLogisticsDrones(replayCore.world)
+		for _, ws := range replayCore.sortedWorlds() {
+			settleCombatRuntime(ws, ws.Tick)
+		}
+		settleSpaceFleets(replayCore.worlds, replayCore.maps, replayCore.spaceRuntime, replayCore.world.Tick)
 		settleTurrets(replayCore.world)
-		_ = checkVictory(replayCore.world)
+		if !replayCore.Victory().Declared() {
+			replayCore.setVictoryState(resolveVictory(replayCore.cfg.Battlefield.VictoryRule, replayCore.worlds, replayCore.world))
+		}
 	}
 
 	durationMs := time.Since(start).Milliseconds()
-	digest := digestWorld(replayCore.world)
+	digest := digestRuntime(replayCore.world, replayCore.spaceRuntime)
 
 	applyWorldState(gc.world, replayCore.world)
 	if gc.discovery == nil {
@@ -113,11 +133,9 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 		gc.discovery.ReplaceFromSnapshot(replayCore.discovery.Snapshot())
 	}
 	gc.executorUsage = countActiveExecutorUsage(gc.world)
-	winner := checkVictory(gc.world)
-	gc.winnerMu.Lock()
-	gc.winner = winner
-	gc.winnerMu.Unlock()
+	gc.setVictoryState(replayCore.Victory())
 	gc.activePlanetID = gc.world.PlanetID
+	gc.spaceRuntime = model.CloneSpaceRuntimeState(replayCore.spaceRuntime)
 
 	trimmedLogAfter := gc.cmdLog.TrimAfter(toTick)
 	trimmedEvents := 0

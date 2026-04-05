@@ -11,7 +11,9 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 	if ws == nil {
 		return nil
 	}
+	var events []*model.GameEvent
 
+	ws.PowerSnapshot = nil
 	if ws.PowerInputs != nil {
 		ws.PowerInputs = ws.PowerInputs[:0]
 	}
@@ -25,8 +27,6 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-
-	generatedByPlayer := make(map[string]int)
 
 	for _, id := range ids {
 		building := ws.Buildings[id]
@@ -43,6 +43,19 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 		}
 		if building.Runtime.State == model.BuildingWorkPaused || building.Runtime.State == model.BuildingWorkIdle || building.Runtime.State == model.BuildingWorkError {
 			continue
+		}
+		if model.IsFuelBasedPowerSource(module.SourceKind) {
+			if !fuelBasedGeneratorHasReachableFuel(building) {
+				if evt := applyBuildingState(building, model.BuildingWorkNoPower, stateReasonNoFuel); evt != nil {
+					events = append(events, evt)
+				}
+				continue
+			}
+			if building.Runtime.State == model.BuildingWorkNoPower && building.Runtime.StateReason == stateReasonNoFuel {
+				if evt := applyBuildingState(building, model.BuildingWorkRunning, stateReasonStart); evt != nil {
+					events = append(events, evt)
+				}
+			}
 		}
 		factor := powerEnvFactor(module.SourceKind, env)
 		result, err := model.ResolvePowerGeneration(model.PowerGenerationRequest{
@@ -66,40 +79,6 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 			Output:         result.Output,
 			FuelUsed:       result.FuelUsed,
 		})
-		if result.Output > 0 {
-			generatedByPlayer[building.OwnerID] += result.Output
-		}
-	}
-
-	if len(generatedByPlayer) == 0 {
-		return nil
-	}
-
-	var events []*model.GameEvent
-	for playerID, delta := range generatedByPlayer {
-		player := ws.Players[playerID]
-		if player == nil || !player.IsAlive || delta <= 0 {
-			continue
-		}
-		oldE := player.Resources.Energy
-		player.Resources.Energy += delta
-		if player.Resources.Energy > 10000 {
-			player.Resources.Energy = 10000
-		}
-		if player.Resources.Energy < 0 {
-			player.Resources.Energy = 0
-		}
-		if oldE != player.Resources.Energy {
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtResourceChanged,
-				VisibilityScope: playerID,
-				Payload: map[string]any{
-					"player_id": playerID,
-					"minerals":  player.Resources.Minerals,
-					"energy":    player.Resources.Energy,
-				},
-			})
-		}
 	}
 	return events
 }

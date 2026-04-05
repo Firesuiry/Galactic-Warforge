@@ -8,14 +8,24 @@ type PlanetInspectRequest struct {
 }
 
 type PlanetInspectView struct {
-	PlanetID   string                   `json:"planet_id"`
-	Discovered bool                     `json:"discovered"`
-	TargetType string                   `json:"target_type,omitempty"`
-	TargetID   string                   `json:"target_id,omitempty"`
-	Title      string                   `json:"title,omitempty"`
-	Building   *model.Building          `json:"building,omitempty"`
-	Unit       *model.Unit              `json:"unit,omitempty"`
-	Resource   *model.ResourceNodeState `json:"resource,omitempty"`
+	PlanetID   string                    `json:"planet_id"`
+	Discovered bool                      `json:"discovered"`
+	TargetType string                    `json:"target_type,omitempty"`
+	TargetID   string                    `json:"target_id,omitempty"`
+	Title      string                    `json:"title,omitempty"`
+	Building   *model.Building           `json:"building,omitempty"`
+	Power      *BuildingPowerInspectView `json:"power,omitempty"`
+	Unit       *model.Unit               `json:"unit,omitempty"`
+	Resource   *model.ResourceNodeState  `json:"resource,omitempty"`
+}
+
+type BuildingPowerInspectView struct {
+	NetworkID            string `json:"network_id,omitempty"`
+	SettledTick          int64  `json:"settled_tick,omitempty"`
+	AvailableDysonEnergy int    `json:"available_dyson_energy,omitempty"`
+	EffectiveInput       int    `json:"effective_input,omitempty"`
+	PowerOutput          int    `json:"power_output,omitempty"`
+	PhotonOutput         int    `json:"photon_output,omitempty"`
 }
 
 func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, req PlanetInspectRequest) (*PlanetInspectView, bool) {
@@ -50,6 +60,18 @@ func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, 
 		}
 		view.Title = string(building.Type)
 		view.Building = building
+		if snapshot := model.CurrentPowerSettlementSnapshot(ws); snapshot != nil {
+			if receiver, ok := snapshot.Receivers[building.ID]; ok {
+				view.Power = &BuildingPowerInspectView{
+					NetworkID:            receiver.NetworkID,
+					SettledTick:          receiver.SettledTick,
+					AvailableDysonEnergy: receiver.AvailableDysonEnergy,
+					EffectiveInput:       receiver.EffectiveInput,
+					PowerOutput:          receiver.PowerOutput,
+					PhotonOutput:         receiver.PhotonOutput,
+				}
+			}
+		}
 		return view, true
 	case "unit":
 		if ws.PlanetID != planetID {

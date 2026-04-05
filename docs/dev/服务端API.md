@@ -33,9 +33,12 @@
 - 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
 - 第一版不做多槽位或命名存档点，自动保存与手动保存都会覆盖同一份 `save.json`。
 - 第一版不持久化 RNG 状态；续档后未来随机事件不保证与不停服持续运行时完全一致。
+- `save.json.runtime_state` 现在会额外持久化 `winner` / `victory_reason` / `victory_rule` / `victory_tech_id`，保证科技胜利、续档、回放、回滚后的胜利态一致。
+- `save.json.snapshot.space` 现在会持久化 top-level `SpaceRuntimeState`；太阳帆 orbit 已按 `player + system` 分桶进入同一份 snapshot-backed runtime，续档、回放、回滚会保留一致的空间实体计数与轨道状态。
 
 **普通新局默认入口**
 - `config-dev.yaml + map.yaml` 现在就是一条可直接从 fresh save 起步的官方路线。
+- `battlefield.victory_rule` 当前支持 `elimination`、`mission_complete`、`hybrid` 三种取值；仓库内当前提供的 `config.yaml`、`config-dev.yaml`、`config-midgame.yaml` 都显式设置为 `hybrid`，即 `mission_complete` 科研胜利与基地消灭胜同时有效。
 - 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`，但这门 0 级科技现在会直接解锁 `matrix_lab` 建造权限，保证第一台研究站可合法落地。
 - `config-dev.yaml` 会为每名玩家预置一份最小启动包：
   - `minerals = 200`
@@ -56,8 +59,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `minerals = 5000`
   - `energy = 3000`
   - `inventory`: `frame_material x16`、`deuterium_fuel_rod x16`、`quantum_chip x16`、`solar_sail x16`、`small_carrier_rocket x4`
-  - `completed_techs`: `electromagnetism`、`basic_logistics_system`、`automatic_metallurgy`、`basic_assembling_processes`、`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`dyson_component`、`interstellar_logistics`、`interstellar_power`、`signal_tower`、`plasma_turret`、`gas_giants`、`gravity_matrix`、`planetary_shield`、`self_evolution`、`quantum_chip`、`solar_sail_orbit`、`ray_receiver`、`vertical_launching`
-- 当前官方 midgame 场景故意**不**预置 `dirac_inversion`，以便继续用 `set_ray_receiver_mode ... photon` 验证科技门禁；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`。
+  - `completed_techs`: `electromagnetism`、`basic_logistics_system`、`automatic_metallurgy`、`basic_assembling_processes`、`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`dyson_component`、`interstellar_logistics`、`interstellar_power`、`signal_tower`、`plasma_turret`、`gas_giants`、`gravity_matrix`、`planetary_shield`、`self_evolution`、`quantum_chip`、`solar_sail_orbit`、`ray_receiver`、`vertical_launching`、`integrated_logistics`、`photon_mining`、`annihilation`
+- 这里的 `completed_techs` 是官方验证场景的直接完成列表，不会递归自动补全自然科研前置；因此 midgame 可以只预置 `integrated_logistics`、`photon_mining`、`annihilation` 三个叶子科技，同时继续保留 `dirac_inversion` 未完成。
+- 当前官方 midgame 场景故意**不**预置 `dirac_inversion` 与 `antimatter_fuel_rod`，以便继续同时验证 `set_ray_receiver_mode ... photon` 的科技门禁，以及 `artificial_star` 空燃料时的终局边界；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution` / `integrated_logistics` / `photon_mining` / `annihilation`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`artificial_star`。
 - `map` 配置新增 `overrides.planets.<planet_id>.kind`，可强制把某颗行星覆盖成 `gas_giant`、`rocky` 或 `ice`，不再依赖 seed 抽卡。当前 `map-midgame.yaml` 把 `planet-1-2` 强制设成 `gas_giant`，用于验证 `orbital_collector` 与戴森中后期路线。
 
 **GET /health**
@@ -97,7 +101,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 查询参数:
   - `player_id`：过滤玩家（为空则默认当前玩家）
   - `issuer_type` / `issuer_id`：过滤命令来源
-  - `action`：审计动作（当前为 `command`）
+  - `action`：审计动作（当前包括 `command`、`victory`）
   - `request_id`：过滤请求 ID
   - `permission`：过滤命令类型（如 `build`/`move`）
   - `permission_granted`：过滤权限校验结果（`true`/`false`）
@@ -112,7 +116,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `timestamp` / `tick` / `player_id` / `role`
   - `issuer_type` / `issuer_id` / `request_id`
   - `action` / `permission` / `permission_granted` / `permissions`
-  - `details`：命令细节（`command`、`status`、`code`、`message`、`stage`、`enqueue_tick` 等）
+  - `details`：当 `action=command` 时包含命令细节（`command`、`status`、`code`、`message`、`stage`、`enqueue_tick` 等）
+  - `details`：当 `action=victory` 时包含 `winner_id` / `reason` / `victory_rule`；若由 `mission_complete` 触发，还会带 `tech_id`
 - 响应示例:
 ```json
 {
@@ -152,7 +157,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 **GET /state/summary**
 - 说明: 世界摘要（需认证）
-- 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`）；`winner` 已决出胜者时存在；`active_planet_id` 当前被模拟的行星；`map_width` / `map_height` 当前行星尺寸
+- 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`）；`winner` 已决出胜者时存在；`victory_reason` / `victory_rule` 在已宣告胜利时返回；`active_planet_id` 当前被模拟的行星；`map_width` / `map_height` 当前行星尺寸
+- 胜负补充: 在仓库当前默认配置下，`victory_rule` 为 `hybrid`，因此 `winner` / `victory_reason` 可能来自 `mission_complete -> game_win`，也可能来自基地消灭胜
+- 能源补充: 当 `ray_receiver` 切到 `power` / `hybrid` 且已有太阳帆或戴森结构产能时，`summary.players[pid].resources.energy` 会跟随真实 tick 同步上涨，而不是只在查询层单独造数
+- 事实源补充: `GET /state/summary.players[pid].resources.energy`、`GET /state/stats.energy_stats`、`GET /world/planets/{planet_id}/networks` 当前共享同一份当 tick authoritative `PowerSettlementSnapshot`；`ray_receiver` 会先写入 `ws.PowerInputs` 与接收站结算视图，再由统一的 power finalize 阶段一次性回写最终资源与电网结果
 - `players` 字段补充:
   - 所有玩家均返回 `player_id` / `team_id` / `role` / `is_alive`
   - 仅自身玩家返回完整状态，常用字段包括 `resources` / `inventory` / `permissions` / `executor` / `executors` / `tech` / `combat_tech` / `stats`
@@ -177,6 +185,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 ```json
 {
   "tick": 120,
+  "winner": "p1",
+  "victory_reason": "game_win",
+  "victory_rule": "hybrid",
   "players": {
     "p1": {
       "player_id":"p1",
@@ -206,6 +217,24 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `energy_stats`：`generation` / `consumption` / `storage` / `current_stored` / `shortage_ticks`
   - `logistics_stats`：`throughput` / `avg_distance` / `avg_travel_time` / `deliveries`
   - `combat_stats`：`units_lost` / `enemies_killed` / `threat_level` / `highest_threat`
+- 生产统计口径补充:
+  - `total_output` / `by_building_type` / `by_item` 现在都只统计当前 active world、当前 tick 内真实落库 / 落站的 authoritative 产出数量，不再把建筑静态 `throughput` 当作产出
+  - 统计来源统一走同一份 `ProductionSettlementSnapshot`，当前覆盖：
+    - 配方建筑写入 `Storage` 的主产物与副产物
+    - `Collect` 建筑写入自身 `Storage` 的真实采集产出
+    - `Collect` 建筑直接写入 `player.resources.minerals` 的真实采集产出
+    - `orbital_collector` 写入 `logistics_station.inventory` 的真实轨采产出
+  - `by_building_type` 与 `by_item` 使用同一份真实事实源；`by_item["minerals"]` 是“直充矿物池产出”的统计标签，不是可搬运物品
+  - 若本 tick 没有任何真实产出，这三组字段都会回到 `0 / {} / {}`
+  - `efficiency` 仍是 `ProductionMonitor` 的采样均值，和真实落库数量分开统计
+- 能源统计口径补充:
+  - `generation` 现在按当前 active planet 上玩家所属 power network 的真实 `supply` 聚合，已包含 `ray_receiver power/hybrid` 的实际回灌和储能放电结果
+  - `consumption` 使用 power allocation 的真实 `allocated`
+  - `current_stored` 读取各储能建筑的 `energy_storage.energy`，不再复用建筑 HP
+  - `shortage_ticks` 只在本 tick 任一玩家网络 `shortage=true` 时累加
+  - 这些字段与 `/world/planets/{planet_id}/networks.power_networks` / `power_coverage` 共同来自同一份 `PowerSettlementSnapshot`，不会再出现“中途事件里短暂加电、最终 summary/stats/networks 又回退”的分叉
+- 作用域补充:
+  - `production_stats` / `energy_stats` 当前都只统计 active planet 对应 world 的 authoritative 快照，不会跨所有已加载行星做总汇总
 - 补充说明: 若玩家不存在或统计尚未初始化，仍会返回带 `player_id` / `tick` 的零值结构
 - 响应示例:
 ```json
@@ -292,6 +321,71 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     {"planet_id":"planet-1-1","name":"Planet-1-1","discovered":true,"kind":"rocky","orbit":{"distance_au":1.0,"period_days":365,"inclination_deg":1.2},"moon_count":1},
     {"planet_id":"planet-1-2","name":"","discovered":false}
   ]
+}
+```
+
+**GET /world/systems/{system_id}/runtime**
+- 说明: 恒星系 authoritative runtime 视图（需认证）
+- 说明补充:
+  - 未发现系统时仅返回 `system_id` + `discovered=false`
+  - 已发现但当前玩家在该系统还没有 runtime 载体时返回 `available=false`
+  - 当前会公开两类 system-scoped runtime：
+    - `solar_sail_orbit`
+    - `fleets`
+- 响应字段:
+  - `system_id` / `discovered` / `available`
+  - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
+  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
+- 响应示例:
+```json
+{
+  "system_id": "sys-1",
+  "discovered": true,
+  "available": true,
+  "fleets": [
+    {
+      "fleet_id": "fleet-demo",
+      "owner_id": "p1",
+      "system_id": "sys-1",
+      "source_building_id": "b-1",
+      "formation": "wedge",
+      "state": "idle",
+      "units": [{"unit_type": "corvette", "count": 1}]
+    }
+  ]
+}
+```
+
+**GET /world/fleets**
+- 说明: 当前玩家可见舰队列表（需认证）
+- 说明补充:
+  - 当前只返回当前玩家自己在 `space runtime` 中拥有的舰队
+  - 返回字段与单舰详情一致，便于 CLI 直接列表示意
+- 响应字段:
+  - `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target` / `weapon` / `shield` / `last_attack_tick`
+
+**GET /world/fleets/{fleet_id}**
+- 说明: 单舰队 authoritative 详情（需认证）
+- 响应字段:
+  - `fleet_id` / `owner_id` / `system_id` / `source_building_id`
+  - `formation` / `state`
+  - `units`
+  - `target`
+  - `weapon`
+  - `shield`
+  - `last_attack_tick`
+- 响应示例:
+```json
+{
+  "fleet_id": "fleet-demo",
+  "owner_id": "p1",
+  "system_id": "sys-1",
+  "source_building_id": "b-1",
+  "formation": "wedge",
+  "state": "idle",
+  "units": [{"unit_type": "corvette", "count": 1}],
+  "weapon": {"type": "laser", "damage": 40, "fire_rate": 10, "range": 24, "ammo_cost": 0},
+  "shield": {"level": 40, "max_level": 40, "recharge_rate": 2, "recharge_delay": 10}
 }
 ```
 
@@ -429,6 +523,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 建筑 / 单位完整详情依赖目标行星 runtime 已加载；资源检视在 runtime 不可用时仍可回退到静态地图资源
   - 对建筑和单位，服务端会再次按可见性校验；不可见目标返回 `404`
   - `sector` 当前返回轻量标题信息，便于前端右侧详情栏稳定落点
+  - 当建筑 `runtime.state = no_power` 时，`runtime.state_reason` 会按当前 tick 的真实覆盖/分配结果刷新；已接入电网但因 `shortage` 或分配结果为 `0` 而拿不到电时，原因统一写成 `under_power`，只有真实接线/覆盖失败时才会返回 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`
+  - `thermal_power_plant`、`mini_fusion_power_plant`、`artificial_star` 这三类燃料型发电建筑会额外暴露 `no_power/no_fuel`：当本 tick 在 `input_buffer + inventory` 中都找不到可达燃料时，不再显示为 `running`；装回燃料后的下一 tick 会恢复 `running`，而 `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats` 会同步反映真实供电变化
+  - `ray_receiver` 的 `runtime.functions.ray_receiver.mode` 就是当前真实生效模式；切到 `power` 后只会停止新的 `critical_photon` 增量，不会清空建筑输出缓冲里已经存在的历史光子库存
+  - 服务端内部 query 层已经维护 `ray_receiver` 的 `power` 结算视图，但当前公开 HTTP `inspect` 网关仍不会透传该子对象，也不会单独暴露 `available_dyson_energy` / `effective_input` / `power_output` / `photon_output` 这类逐 tick 电力结算字段；要验证 authoritative 回灌结果，请使用 `GET /state/summary`、`GET /state/stats` 与 `GET /world/planets/{planet_id}/networks`
 - 响应示例:
 ```json
 {
@@ -456,9 +554,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 未发现行星只返回 `planet_id` + `discovered=false`
   - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
   - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
-  - 当前 active 行星仍承载最完整的战斗/敌情/侦测结算；非 active 但已加载行星重点用于查看物流、施工和运行态
+  - `combat_squads` 与 `orbital_platforms` 现在来自持久化 `CombatRuntimeState`，会进入 save / replay / rollback
+  - 当前 active 行星仍承载最完整的敌情/侦测结算；非 active 但已加载行星也可以看到该行星自己的 authoritative combat runtime
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
+  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `unit_type` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `orbital_platforms`：轨道平台，包含 `id` / `owner_id` / `planet_id` / `orbit` / `hp` / `max_hp` / `weapon` / `ammo_capacity` / `ammo_count` / `last_fire_tick` / `is_active`
   - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
   - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `origin_planet_id` / `target_planet_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
@@ -473,6 +574,19 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "available": true,
   "active_planet_id": "planet-1-2",
   "tick": 120,
+  "combat_squads": [
+    {
+      "id": "squad-1",
+      "owner_id": "p1",
+      "planet_id": "planet-1-1",
+      "source_building_id": "b-1",
+      "unit_type": "prototype",
+      "count": 2,
+      "hp": 160,
+      "max_hp": 160,
+      "state": "idle"
+    }
+  ],
   "logistics_stations": [
     {
       "building_id": "station-1",
@@ -538,6 +652,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 未发现行星只返回 `planet_id` + `discovered=false`
   - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
   - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
+  - `power_networks` / `power_coverage` 整体按同一个 tick 的 authoritative `PowerSettlementSnapshot` 生成；`supply` / `allocated` / `shortage` / `reason` / `provider_id` 之间不再来自不同阶段的临时值
+  - `power_networks[].supply` 与 `GET /state/stats.energy_stats.generation` 同源；当前已包含 `ray_receiver power/hybrid` 在真实 tick 中写入的供电回灌
+  - `power_coverage.provider_id` 与 `power_networks` 现在共享同一份真实供电源口径；`ray_receiver`、储能放电等通过 `ws.PowerInputs` 注入的动态电源也会被识别为有效 provider，不再出现“`supply > 0` 但 `coverage` 仍说 `no_provider`”的分叉
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick`
   - `power_networks`：电网聚合，包含 `id` / `owner_id` / `supply` / `demand` / `allocated` / `net` / `shortage` / `node_ids`
@@ -643,32 +760,34 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 客户端展示元数据总表（需认证）
 - 说明补充:
   - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
-  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs`
+  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `units`
 - 响应字段:
   - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
   - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `max_level` / `hidden` / `icon_key` / `color`
+  - `units`：公开单位目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `visible_tech_id` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `hidden_reason`
 - 响应示例:
 ```json
 {
   "buildings": [
     {
       "id": "mining_machine",
-      "name": "采矿机",
-      "category": "production",
-      "subcategory": "mining",
+      "name": "Mining Machine",
+      "category": "collect",
+      "subcategory": "collect",
       "footprint": {"width": 1, "height": 1},
-      "build_cost": {"minerals": 12},
+      "build_cost": {"minerals": 50, "energy": 20},
       "buildable": true,
+      "requires_resource_node": true,
       "icon_key": "mining_machine",
-      "color": "#f59f00"
+      "color": "#48b589"
     }
   ],
   "items": [
     {
       "id": "iron_ore",
-      "name": "铁矿",
+      "name": "Iron Ore",
       "category": "ore",
       "form": "solid",
       "stack_limit": 100,
@@ -679,38 +798,89 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   ],
   "recipes": [
     {
-      "id": "mining-iron",
-      "name": "开采铁矿",
-      "inputs": [],
-      "outputs": [{"item_id": "iron_ore", "amount": 1}],
-      "duration": 4,
+      "id": "smelt_iron",
+      "name": "Smelt Iron",
+      "inputs": [{"item_id": "iron_ore", "quantity": 1}],
+      "outputs": [{"item_id": "iron_ingot", "quantity": 1}],
+      "duration": 60,
       "energy_cost": 1,
-      "building_types": ["mining_machine"],
-      "icon_key": "mining-iron",
-      "color": "#adb5bd"
+      "building_types": ["arc_smelter", "plane_smelter", "negentropy_smelter"],
+      "tech_unlock": ["smelting"],
+      "icon_key": "smelt_iron",
+      "color": "#74c0fc"
     }
   ],
   "techs": [
     {
-      "id": "tech-energy-1",
-      "name": "基础能源学",
-      "category": "energy",
-      "type": "energy",
+      "id": "electromagnetism",
+      "name": "电磁学",
+      "name_en": "Electromagnetism",
+      "category": "main",
+      "type": "main",
       "level": 1,
-      "icon_key": "tech-energy-1",
-      "color": "#ffd43b"
+      "prerequisites": ["dyson_sphere_program"],
+      "cost": [{"item_id": "electromagnetic_matrix", "quantity": 10}],
+      "unlocks": [
+        {"type": "building", "id": "wind_turbine"},
+        {"type": "building", "id": "tesla_tower"},
+        {"type": "building", "id": "mining_machine"}
+      ],
+      "icon_key": "electromagnetism",
+      "color": "#9775fa"
+    }
+  ],
+  "units": [
+    {
+      "id": "worker",
+      "name": "Worker",
+      "domain": "ground",
+      "runtime_class": "world_unit",
+      "public": true,
+      "production_mode": "world_produce",
+      "query_scopes": ["planet"],
+      "commands": ["move"]
+    },
+    {
+      "id": "prototype",
+      "name": "Prototype",
+      "domain": "ground",
+      "runtime_class": "combat_squad",
+      "public": true,
+      "visible_tech_id": "prototype",
+      "production_mode": "factory_recipe",
+      "producer_recipes": ["prototype"],
+      "deploy_command": "deploy_squad",
+      "query_scopes": ["planet_runtime"],
+      "commands": ["deploy_squad"]
+    },
+    {
+      "id": "corvette",
+      "name": "Corvette",
+      "domain": "space",
+      "runtime_class": "fleet_unit",
+      "public": true,
+      "visible_tech_id": "corvette",
+      "production_mode": "factory_recipe",
+      "producer_recipes": ["corvette"],
+      "deploy_command": "commission_fleet",
+      "query_scopes": ["system_runtime", "fleet"],
+      "commands": ["commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"]
     }
   ]
 }
 ```
 - 戴森相关 catalog 补充：
   - `items` 中矩阵物品统一只暴露 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`；旧别名 `matrix_blue` / `matrix_red` / `matrix_yellow` / `matrix_universe` 已从主 catalog 移除。
-  - `buildings` 中以下此前长期处于“有定义但无玩家入口”的建筑现在都已进入 `buildable=true` 主线建筑集，并通过 `unlock_tech` 暴露真实科技前置：
+  - `items` / `recipes` 已补齐终局弹药 `antimatter_capsule` 与 `gravity_missile`，二者都通过 `recomposing_assembler` 进入真实生产闭环。
+  - 当前建筑科技前置的 authoritative 反查入口是 `techs[].unlocks`，不是 `buildings[].unlock_tech`；仓库默认 catalog 下后者通常为空，不应作为主科技索引来源。
+  - `buildings` 中以下此前长期处于“有定义但无玩家入口”的建筑现在都已进入 `buildable=true` 主线建筑集；对应科技前置请通过 `techs[].unlocks` 中的 building unlock 反查：
     - `advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`energy_exchanger`
     - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`
   - `buildings` 中 `vertical_launching_silo` 当前会暴露 `default_recipe_id = "small_carrier_rocket"`。
-  - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
-  - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip` 也都会对外暴露对应 recipe 解锁。
+  - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`、`antimatter_capsule`、`gravity_missile`。
+  - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip`、`mass_energy_storage`、`gravity_missile` 也都会对外暴露对应 recipe 解锁。
+  - `techs` 中 `prototype`、`precision_drone`、`corvette`、`destroyer` 现在都是公开可研究科技；它们解锁的是载荷 recipe，不再污染 `produce` 语义。
+  - `units` 是 `produce`、`deploy_squad`、`commission_fleet`、CLI 帮助和 shared-client 共享的 authoritative 公开单位边界；`worker` / `soldier` 走 `world_produce`，`prototype` / `precision_drone` / `corvette` / `destroyer` 走 `factory_recipe + deploy_command`。
 
 ---
 
@@ -726,7 +896,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -769,7 +939,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "component_type": "node|frame|shell",
         "component_id": "shell-1",
         "target_entity_id": "entity-2",
-        "unit_type": "worker|soldier"
+        "unit_type": "当前 /catalog.units 中 public=true 的 unit id；produce 仅接受 world_produce world_unit，deploy/commission 接受 factory_recipe 高阶载荷"
       }
     }
   ]
@@ -782,7 +952,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
-  - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝
+  - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，例如 `worker`、`soldier`
   - `upgrade` / `demolish`：`target.entity_id` 必填
   - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`
   - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `payload.item_id` + `payload.mode` + `payload.local_storage` 必填；`payload.scope` 取 `planetary|interstellar`；`payload.mode` 取 `none|supply|demand|both`；`interstellar` 作用域只允许星际物流站
@@ -791,8 +961,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `cancel_research`：`payload.tech_id` 必填
   - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
-  - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`photon` 模式要求玩家已解锁 `dirac_inversion`
-  - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`
+  - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
+  - `deploy_squad`：`payload.building_id` + `payload.unit_type` + `payload.count` 必填；可选 `payload.planet_id`；目标建筑必须是当前玩家拥有、带 deployment module 与本地存储、并且当前 tick 处于可运行状态的部署枢纽；当前公开可部署单位是 `prototype` / `precision_drone`
+  - `commission_fleet`：`payload.building_id` + `payload.unit_type` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的单位是 `corvette` / `destroyer`
+  - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
+  - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标
+  - `fleet_disband`：`payload.fleet_id` 必填
+  - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
   - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件
   - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选（缺省时自动补层）；要求玩家已解锁 `dyson_component`
   - `build_dyson_frame`：`payload.system_id` / `payload.layer_index` / `payload.node_a_id` / `payload.node_b_id` 必填；要求玩家已解锁 `dyson_component`
@@ -897,15 +1072,29 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `construction_paused`
   - `construction_resumed`
   - `research_completed`
+  - `victory_declared`
   - `threat_level_changed`
   - `loot_dropped`
   - `entity_updated`
   - `rocket_launched`
+  - `squad_deployed`
+  - `fleet_commissioned`
+  - `fleet_assigned`
+  - `fleet_attack_started`
+  - `fleet_disbanded`
 - 事件类型补充:
+  - `resource_changed`：电力链路现在会在同一轮 authoritative 电力结算里只提交一次最终 `energy`；后续同 tick 的矿物/产出事件若继续复用 `resource_changed`，会沿用同一个最终 `energy` 值，不再在 `10000 -> 99xx -> 98xx` 间来回跳变。
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
-  - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id`/`building_type`/`prev_state`/`next_state`/`reason`；当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败新增原因：`power_no_connector`/`power_no_provider`/`power_out_of_range`/`power_capacity_full`。
+  - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。
   - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。
+  - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule`；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
+  - 若 `mission_complete` 在当前 tick 完成，事件顺序会先出现 `research_completed`，再出现 `victory_declared`。
   - `rocket_launched` 戴森火箭发射事件，payload 包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`。
+  - `squad_deployed`：地面小队部署事件，payload 包含 `squad_id` / `squad`；同时还会伴随一条 `entity_created(entity_type = "combat_squad")`。
+  - `fleet_commissioned`：舰队编成事件，payload 包含 `fleet_id` / `fleet`；同时还会伴随一条 `entity_created(entity_type = "fleet")`。
+  - `fleet_assigned`：舰队改编队事件，payload 包含 `fleet_id` / `formation`。
+  - `fleet_attack_started`：舰队开始攻击事件，payload 包含 `fleet_id` / `planet_id` / `target_id`；实际后续伤害仍通过 `damage_applied` / `entity_destroyed` 体现。
+  - `fleet_disbanded`：舰队解散事件，payload 包含 `fleet_id`。
 - 响应示例:
 ```json
 {
@@ -1039,6 +1228,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `result_mismatch_count`：仅在 `verify=true` 时返回
   - `snapshot_digest`：仅在 `verify=true` 且目标 tick 存在可恢复快照时返回
   - `notes`：可选说明信息，例如目标快照缺失时的提示
+  - `digest` / `snapshot_digest` 现在额外包含 `space_entity_counter` / `solar_sail_count` / `solar_sail_systems` / `solar_sail_total_energy`，用于覆盖 `space` runtime 一致性
 - 响应示例:
 ```json
 {
@@ -1064,6 +1254,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     "total_energy": 90,
     "resource_remaining": 9800,
     "entity_counter": 8,
+    "space_entity_counter": 4,
+    "solar_sail_count": 2,
+    "solar_sail_systems": 1,
+    "solar_sail_total_energy": 20,
     "hash": "..."
   },
   "snapshot_digest": {
@@ -1077,6 +1271,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     "total_energy": 90,
     "resource_remaining": 9800,
     "entity_counter": 8,
+    "space_entity_counter": 4,
+    "solar_sail_count": 2,
+    "solar_sail_systems": 1,
+    "solar_sail_total_energy": 20,
     "hash": "..."
   },
   "drift_detected": false
@@ -1098,6 +1296,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `to_tick` 不可超过当前世界 tick
 - 响应字段补充:
   - `notes`：可选说明信息
+  - `digest` 现在额外包含 `space_entity_counter` / `solar_sail_count` / `solar_sail_systems` / `solar_sail_total_energy`
 - 响应示例:
 ```json
 {
@@ -1125,6 +1324,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     "total_energy": 90,
     "resource_remaining": 9800,
     "entity_counter": 8,
+    "space_entity_counter": 0,
+    "solar_sail_count": 0,
+    "solar_sail_systems": 0,
+    "solar_sail_total_energy": 0,
     "hash": "..."
   }
 }
@@ -1142,6 +1345,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 服务端不再默认自动推送全部事件；只有显式订阅的 `event_types` 才会进入该 SSE 连接
   - 事件历史按类型独立保留，高频事件不会再把 `command_result` 这类低频关键事件挤出窗口
   - `rocket_launched` 事件 payload 当前包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`
+  - 高阶单位公开链路新增的 `squad_deployed` / `fleet_commissioned` / `fleet_assigned` / `fleet_attack_started` / `fleet_disbanded` 也会通过同一 SSE 通道推送，payload 结构与 `GET /events/snapshot` 一致
 - GameEvent 示例:
 ```json
 {

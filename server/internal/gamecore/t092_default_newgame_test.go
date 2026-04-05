@@ -55,6 +55,29 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 	if base == nil {
 		t.Fatal("expected p1 base building")
 	}
+	windPos, err := findAdjacentOpenTile(ws, base.Position)
+	if err != nil {
+		t.Fatalf("find adjacent wind tile: %v", err)
+	}
+	if windPos == nil {
+		t.Fatal("expected open tile next to base for first wind turbine")
+	}
+
+	buildWindRes, _ := core.execBuild(ws, "p1", model.Command{
+		Type:   model.CmdBuild,
+		Target: model.CommandTarget{Position: windPos},
+		Payload: map[string]any{
+			"building_type": string(model.BuildingTypeWindTurbine),
+		},
+	})
+	if buildWindRes.Code != model.CodeOK {
+		t.Fatalf("build first wind turbine: %s (%s)", buildWindRes.Code, buildWindRes.Message)
+	}
+
+	for i := 0; i < 8; i++ {
+		core.processTick()
+	}
+
 	labPos, err := findAdjacentOpenTile(ws, base.Position)
 	if err != nil {
 		t.Fatalf("find adjacent lab tile: %v", err)
@@ -83,7 +106,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 		t.Fatal("expected matrix_lab to be constructed")
 	}
 	if lab.Runtime.State != model.BuildingWorkRunning {
-		t.Fatalf("expected first matrix_lab to run on base power, got %s", lab.Runtime.State)
+		t.Fatalf("expected first matrix_lab to run after starter wind power is online, got %s", lab.Runtime.State)
 	}
 
 	for _, techID := range []string{

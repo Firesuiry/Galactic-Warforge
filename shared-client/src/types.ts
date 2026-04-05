@@ -168,6 +168,93 @@ export interface Unit {
   attack_target?: string;
 }
 
+export type WeaponType = 'gun' | 'cannon' | 'missile' | 'laser';
+
+export interface ShieldState {
+  level: number;
+  max_level: number;
+  recharge_rate: number;
+  recharge_delay: number;
+  last_hit_tick?: number;
+}
+
+export interface WeaponState {
+  type: WeaponType;
+  damage: number;
+  fire_rate: number;
+  range: number;
+  last_fire_tick?: number;
+  ammo_cost: number;
+}
+
+export interface OrbitPosition {
+  planet_id: string;
+  radius: number;
+  angle: number;
+  angular_speed: number;
+}
+
+export type CombatSquadState = 'idle' | 'engaging' | 'destroyed';
+
+export interface CombatSquad {
+  id: string;
+  owner_id: string;
+  planet_id: string;
+  source_building_id?: string;
+  unit_type: string;
+  count: number;
+  hp: number;
+  max_hp: number;
+  shield: ShieldState;
+  weapon: WeaponState;
+  state: CombatSquadState;
+  target_enemy_id?: string;
+  last_attack_tick?: number;
+}
+
+export interface OrbitalPlatform {
+  id: string;
+  owner_id: string;
+  planet_id: string;
+  orbit: OrbitPosition;
+  hp: number;
+  max_hp: number;
+  weapon: WeaponState;
+  ammo_capacity: number;
+  ammo_count: number;
+  last_fire_tick?: number;
+  is_active: boolean;
+}
+
+export interface SolarSail {
+  id: string;
+  orbit_radius: number;
+  inclination: number;
+  launch_tick: number;
+  lifetime_ticks: number;
+  energy_per_tick: number;
+}
+
+export interface SolarSailOrbitState {
+  player_id: string;
+  system_id: string;
+  sails: SolarSail[];
+  total_energy: number;
+}
+
+export interface FleetTarget {
+  planet_id: string;
+  target_id?: string;
+}
+
+export interface FleetUnitStack {
+  unit_type: string;
+  count: number;
+}
+
+export type FormationType = 'line' | 'vee' | 'circle' | 'wedge';
+export type FleetState = 'idle' | 'attacking';
+
 export type LogisticsScope = 'planetary' | 'interstellar';
 export type LogisticsMode = 'none' | 'supply' | 'demand' | 'both';
 
@@ -212,6 +299,11 @@ export type CommandType =
   | 'transfer_item'
   | 'switch_active_planet'
   | 'set_ray_receiver_mode'
+  | 'deploy_squad'
+  | 'commission_fleet'
+  | 'fleet_assign'
+  | 'fleet_attack'
+  | 'fleet_disband'
   | 'launch_solar_sail'
   | 'launch_rocket'
   | 'build_dyson_node'
@@ -676,6 +768,8 @@ export interface PlanetRuntimeView {
   available: boolean;
   active_planet_id?: string;
   tick: number;
+  combat_squads?: CombatSquad[];
+  orbital_platforms?: OrbitalPlatform[];
   logistics_stations?: LogisticsStationView[];
   logistics_drones?: LogisticsDroneView[];
   logistics_ships?: LogisticsShipView[];
@@ -862,11 +956,52 @@ export interface TechCatalogEntry {
   color: string;
 }
 
+export interface UnitCatalogEntry {
+  id: string;
+  name: string;
+  domain: string;
+  runtime_class: string;
+  public: boolean;
+  visible_tech_id?: string;
+  production_mode: string;
+  producer_recipes?: string[];
+  deploy_command?: string;
+  query_scopes?: string[];
+  commands?: string[];
+  hidden_reason?: string;
+}
+
+export interface FleetRuntimeView {
+  fleet_id: string;
+  owner_id: string;
+  system_id: string;
+  source_building_id?: string;
+  formation: FormationType;
+  state: FleetState;
+  units?: FleetUnitStack[];
+  target?: FleetTarget;
+}
+
+export interface FleetDetailView extends FleetRuntimeView {
+  weapon: WeaponState;
+  shield: ShieldState;
+  last_attack_tick?: number;
+}
+
+export interface SystemRuntimeView {
+  system_id: string;
+  discovered: boolean;
+  available: boolean;
+  solar_sail_orbit?: SolarSailOrbitState;
+  fleets?: FleetRuntimeView[];
+}
+
 export interface CatalogView {
   buildings?: BuildingCatalogEntry[];
   items?: ItemCatalogEntry[];
   recipes?: RecipeCatalogEntry[];
   techs?: TechCatalogEntry[];
+  units?: UnitCatalogEntry[];
 }
 
 export interface GameEvent {
@@ -1046,6 +1181,10 @@ export interface ReplayDigest {
   total_energy: number;
   resource_remaining: number;
   entity_counter: number;
+  space_entity_counter: number;
+  solar_sail_count: number;
+  solar_sail_systems: number;
+  solar_sail_total_energy: number;
   hash: string;
 }
 

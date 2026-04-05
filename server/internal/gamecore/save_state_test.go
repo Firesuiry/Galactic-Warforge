@@ -20,7 +20,12 @@ func TestExportSaveFileIncludesRuntimeAndDebugState(t *testing.T) {
 	core := newSaveStateHarness(t)
 	core.world.Tick = 37
 	core.activePlanetID = "planet-1-1"
-	core.winner = "p1"
+	core.victory = model.VictoryState{
+		WinnerID:    "p1",
+		Reason:      "game_win",
+		VictoryRule: "hybrid",
+		TechID:      "mission_complete",
+	}
 	core.cmdLog.Append(commandLogEntry{Tick: 37, PlayerID: "p1", RequestID: "req-1"})
 	core.eventHistory.Record([]*model.GameEvent{{EventID: "evt-37-1", Tick: 37, EventType: model.EvtCommandResult}})
 	core.alertHistory.Record([]*model.ProductionAlert{{AlertID: "alert-1", Tick: 37, PlayerID: "p1"}})
@@ -35,6 +40,9 @@ func TestExportSaveFileIncludesRuntimeAndDebugState(t *testing.T) {
 	}
 	if save.RuntimeState.Winner != "p1" {
 		t.Fatalf("expected winner p1, got %q", save.RuntimeState.Winner)
+	}
+	if save.RuntimeState.VictoryReason != "game_win" || save.RuntimeState.VictoryRule != "hybrid" || save.RuntimeState.VictoryTechID != "mission_complete" {
+		t.Fatalf("expected victory metadata exported, got %+v", save.RuntimeState)
 	}
 	if save.RuntimeState.ActivePlanetID != "planet-1-1" {
 		t.Fatalf("expected active planet restored, got %q", save.RuntimeState.ActivePlanetID)
@@ -68,7 +76,13 @@ func TestNewFromSaveRestoresTickWinnerAndHistories(t *testing.T) {
 		FormatVersion: 1,
 		Tick:          28,
 		Snapshot:      snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps)),
-		RuntimeState:  gamedir.RuntimeState{ActivePlanetID: maps.PrimaryPlanetID, Winner: "p2"},
+		RuntimeState: gamedir.RuntimeState{
+			ActivePlanetID: maps.PrimaryPlanetID,
+			Winner:         "p2",
+			VictoryReason:  "game_win",
+			VictoryRule:    "hybrid",
+			VictoryTechID:  "mission_complete",
+		},
 		DebugState: gamedir.DebugState{
 			BaseSnapshot: snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps)),
 			CommandLog:   []gamedir.CommandLogEntry{{Tick: 9, PlayerID: "p1", RequestID: "req-9"}},
@@ -91,6 +105,9 @@ func TestNewFromSaveRestoresTickWinnerAndHistories(t *testing.T) {
 	}
 	if core.Winner() != "p2" {
 		t.Fatalf("expected winner restored")
+	}
+	if victory := core.Victory(); victory.Reason != "game_win" || victory.VictoryRule != "hybrid" || victory.TechID != "mission_complete" {
+		t.Fatalf("expected victory metadata restored, got %+v", victory)
 	}
 	if core.ActivePlanetID() != maps.PrimaryPlanetID {
 		t.Fatalf("expected active planet restored")
@@ -140,7 +157,12 @@ func TestSaveWritesThroughGameDir(t *testing.T) {
 	core := newSaveStateHarness(t)
 	core.world.Tick = 51
 	core.activePlanetID = "planet-1-1"
-	core.winner = "p2"
+	core.victory = model.VictoryState{
+		WinnerID:    "p2",
+		Reason:      "game_win",
+		VictoryRule: "hybrid",
+		TechID:      "mission_complete",
+	}
 	core.cmdLog.Append(commandLogEntry{Tick: 51, PlayerID: "p2", RequestID: "req-save"})
 	core.eventHistory.Record([]*model.GameEvent{{EventID: "evt-51-1", Tick: 51, EventType: model.EvtCommandResult}})
 	core.alertHistory.Record([]*model.ProductionAlert{{AlertID: "alert-51", Tick: 51, PlayerID: "p2"}})
@@ -172,6 +194,9 @@ func TestSaveWritesThroughGameDir(t *testing.T) {
 	}
 	if save.Tick != 51 || save.RuntimeState.Winner != "p2" || save.RuntimeState.ActivePlanetID != "planet-1-1" {
 		t.Fatalf("expected save payload persisted runtime state")
+	}
+	if save.RuntimeState.VictoryReason != "game_win" || save.RuntimeState.VictoryRule != "hybrid" || save.RuntimeState.VictoryTechID != "mission_complete" {
+		t.Fatalf("expected victory metadata persisted, got %+v", save.RuntimeState)
 	}
 	if len(save.DebugState.CommandLog) != 1 || len(save.DebugState.EventHistory[model.EvtCommandResult]) != 1 || len(save.DebugState.AlertHistory) != 1 || len(save.DebugState.AuditLog) != 1 {
 		t.Fatalf("expected persisted debug state")
@@ -226,7 +251,13 @@ func TestNewFromSaveKeepsBaseSnapshotWhenRetentionIsLow(t *testing.T) {
 		FormatVersion: 1,
 		Tick:          28,
 		Snapshot:      current,
-		RuntimeState:  gamedir.RuntimeState{ActivePlanetID: maps.PrimaryPlanetID, Winner: "p2"},
+		RuntimeState: gamedir.RuntimeState{
+			ActivePlanetID: maps.PrimaryPlanetID,
+			Winner:         "p2",
+			VictoryReason:  "game_win",
+			VictoryRule:    "hybrid",
+			VictoryTechID:  "mission_complete",
+		},
 		DebugState: gamedir.DebugState{
 			BaseSnapshot: base,
 		},

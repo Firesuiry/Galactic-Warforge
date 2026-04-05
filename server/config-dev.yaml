@@ -1,7 +1,7 @@
 battlefield:
   map_seed: "seed-001"
   max_tick_rate: 10
-  victory_rule: "elimination"
+  victory_rule: "hybrid"
   construction_region_concurrent_limit: 4
 
 players:

@@ -105,12 +105,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /state/stats", s.auth(s.handleStateStats))
 	mux.HandleFunc("GET /world/galaxy", s.auth(s.handleGalaxy))
 	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
+	mux.HandleFunc("GET /world/systems/{system_id}/runtime", s.auth(s.handleSystemRuntime))
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
 	mux.HandleFunc("GET /world/planets/{planet_id}/overview", s.auth(s.handlePlanetOverview))
 	mux.HandleFunc("GET /world/planets/{planet_id}/scene", s.auth(s.handlePlanetScene))
 	mux.HandleFunc("GET /world/planets/{planet_id}/inspect", s.auth(s.handlePlanetInspect))
 	mux.HandleFunc("GET /world/planets/{planet_id}/runtime", s.auth(s.handlePlanetRuntime))
 	mux.HandleFunc("GET /world/planets/{planet_id}/networks", s.auth(s.handlePlanetNetworks))
+	mux.HandleFunc("GET /world/fleets", s.auth(s.handleFleets))
+	mux.HandleFunc("GET /world/fleets/{fleet_id}", s.auth(s.handleFleet))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
 
 	// Commands
@@ -166,7 +169,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 // handleStateSummary returns GET /state/summary
 func (s *Server) handleStateSummary(w http.ResponseWriter, r *http.Request, playerID string) {
 	ws := s.core.World()
-	sum := s.ql.Summary(ws, playerID, s.core.Winner())
+	sum := s.ql.Summary(ws, playerID, s.core.Victory())
 	writeJSON(w, http.StatusOK, sum)
 }
 
@@ -186,6 +189,17 @@ func (s *Server) handleGalaxy(w http.ResponseWriter, r *http.Request, playerID s
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID string) {
 	systemID := r.PathValue("system_id")
 	view, ok := s.ql.System(playerID, systemID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "system not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleSystemRuntime returns GET /world/systems/{system_id}/runtime
+func (s *Server) handleSystemRuntime(w http.ResponseWriter, r *http.Request, playerID string) {
+	systemID := r.PathValue("system_id")
+	view, ok := s.ql.SystemRuntime(playerID, systemID, s.core.SpaceRuntime())
 	if !ok {
 		writeError(w, http.StatusNotFound, "system not found")
 		return
@@ -306,6 +320,22 @@ func (s *Server) handlePlanetNetworks(w http.ResponseWriter, r *http.Request, pl
 	view, ok := s.ql.PlanetNetworks(ws, playerID, planetID, s.core.ActivePlanetID())
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleFleets returns GET /world/fleets
+func (s *Server) handleFleets(w http.ResponseWriter, r *http.Request, playerID string) {
+	writeJSON(w, http.StatusOK, s.ql.Fleets(playerID, s.core.SpaceRuntime()))
+}
+
+// handleFleet returns GET /world/fleets/{fleet_id}
+func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request, playerID string) {
+	fleetID := r.PathValue("fleet_id")
+	view, ok := s.ql.Fleet(playerID, fleetID, s.core.SpaceRuntime())
+	if !ok {
+		writeError(w, http.StatusNotFound, "fleet not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
@@ -850,6 +880,35 @@ func validateCommandStructure(cmd model.Command) error {
 		}
 		if _, ok := cmd.Payload["unit_type"]; !ok {
 			return fmt.Errorf("produce requires payload.unit_type")
+		}
+	case model.CmdDeploySquad:
+		for _, field := range []string{"building_id", "unit_type", "count"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("deploy_squad requires payload.%s", field)
+			}
+		}
+	case model.CmdCommissionFleet:
+		for _, field := range []string{"building_id", "unit_type", "count", "system_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("commission_fleet requires payload.%s", field)
+			}
+		}
+	case model.CmdFleetAssign:
+		if _, ok := cmd.Payload["fleet_id"]; !ok {
+			return fmt.Errorf("fleet_assign requires payload.fleet_id")
+		}
+		if _, ok := cmd.Payload["formation"]; !ok {
+			return fmt.Errorf("fleet_assign requires payload.formation")
+		}
+	case model.CmdFleetAttack:
+		for _, field := range []string{"fleet_id", "planet_id", "target_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("fleet_attack requires payload.%s", field)
+			}
+		}
+	case model.CmdFleetDisband:
+		if _, ok := cmd.Payload["fleet_id"]; !ok {
+			return fmt.Errorf("fleet_disband requires payload.fleet_id")
 		}
 	case model.CmdUpgrade:
 		if cmd.Target.EntityID == "" {

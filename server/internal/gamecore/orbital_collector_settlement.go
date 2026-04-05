@@ -54,6 +54,12 @@ func settleOrbitalCollectors(ws *model.WorldState, maps *mapmodel.Universe) {
 				continue
 			}
 			building.LogisticsStation.Inventory[output.ItemID] = current + add
+			if snapshot := model.CurrentProductionSettlementSnapshot(ws); snapshot != nil {
+				snapshot.RecordBuildingOutputs(building, []model.ItemAmount{{
+					ItemID:   output.ItemID,
+					Quantity: add,
+				}})
+			}
 		}
 		building.LogisticsStation.RefreshCapacityCache()
 	}

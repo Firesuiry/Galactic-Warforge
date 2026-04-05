@@ -1,6 +1,6 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 当前覆盖常用查询接口与 `docs/player/玩法指南.md` 中玩家可直接使用的 24 类核心命令，已补齐 `switch_active_planet`、`set_ray_receiver_mode`、`launch_rocket`、`transfer`、物流站配置命令与手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。T091 收口后，`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab` 也都直接走通用 `build` 命令验证，不需要额外 CLI 子命令。
+`client-cli` 当前覆盖常用查询接口与 `docs/player/玩法指南.md` 中玩家可直接使用的 31 类核心命令，已补齐 `switch_active_planet`、`set_ray_receiver_mode`、`launch_rocket`、`transfer`、5 个高阶舰队命令、2 个 runtime 查询命令、物流站配置命令与手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。到 T100 为止，`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler` 以及终局高阶舰队线都能在官方 midgame 或派生验证局直接回归。
 
 ## 启动
 
@@ -21,9 +21,10 @@
   - `p2 / key_player_2`
 - 也可以输入自定义 `player_id` 与 `player_key`
 - CLI 会自动连接 `GET /events/stream?event_types=...`
-- 默认只主动订阅低噪声关键事件：`command_result`、`entity_created`、`entity_destroyed`、`building_state_changed`、`construction_paused`、`construction_resumed`、`research_completed`、`loot_dropped`、`rocket_launched`
+- 默认只主动订阅低噪声关键事件：`command_result`、`entity_created`、`entity_destroyed`、`building_state_changed`、`construction_paused`、`construction_resumed`、`research_completed`、`victory_declared`、`loot_dropped`、`rocket_launched`
 - `production_alert` 改为默认不进入 CLI 实时流，避免后期空转产线持续刷屏；需要看告警时请用 `alert_snapshot`
 - `SW_SSE_VERBOSE=1` 时会改为显式订阅全部事件类型；像 `production_alert`、`damage_applied`、`entity_updated` 这类高频事件默认不会进入 CLI 实时流
+- `building_state_changed` 现在也可能表示“状态没变，但原因变了”；如果你看到 `prev_state == next_state`，请重点看 `prev_reason -> reason`，例如 `power_out_of_range -> under_power` 代表建筑已经接上电网，只是当前 tick 因短缺拿不到电
 - `events [count]` 只显示当前 SSE 连接实际订阅到的事件
 - `switch [player_id] [key]` 会切换玩家并自动重连 SSE
 - REPL 现在会串行处理输入；连续粘贴多条命令时，会按输入顺序依次发送，避免 `ACCEPTED request_id` 与后续 `command_result` 乱序
@@ -37,7 +38,7 @@
 | `health`         | 无                                                           | 查询 `GET /health`                                                |
 | `metrics`        | 无                                                           | 查询 `GET /metrics`                                               |
 | `summary`        | 无                                                           | 查询 `GET /state/summary`                                         |
-| `stats`          | 无                                                           | 查询 `GET /state/stats`                                           |
+| `stats`          | 无                                                           | 查询 `GET /state/stats`；其中 `production_stats` 表示当前 active world 当前 tick 的真实落库 / 落站产出 |
 | `galaxy`         | 无                                                           | 查询 `GET /world/galaxy`                                          |
 | `system`         | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}`，默认 `sys-1`               |
 | `planet`         | `[planet_id]`                                                | 查询 `GET /world/planets/{planet_id}` 行星概要，默认 `planet-1-1` |
@@ -58,7 +59,7 @@
 | `build`                       | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]`                                                                                                 | 建造任意服务端可建建筑                 |
 | `move`                        | `<entity_id> <x> <y> [--z <z>]`                                                                                                                                                | 移动单位                               |
 | `attack`                      | `<entity_id> <target_entity_id>`                                                                                                                                               | 攻击单位或建筑                         |
-| `produce`                     | `<entity_id> <worker\|soldier>`                                                                                                                                                | 生产单位                               |
+| `produce`                     | `<entity_id> <unit_type>`                                                                                                                                                      | 按服务端 `/catalog.units` 生产公开单位 |
 | `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
 | `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
 | `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>]` | 配置物流站无人机容量、优先级与星际开关 |
@@ -121,7 +122,16 @@
 ```bash
 build 12 8 arc_smelter --recipe smelt_iron
 build 14 8 assembling_machine_mk1 --recipe gear
+build 18 8 recomposing_assembler --recipe antimatter_capsule
+build 20 8 recomposing_assembler --recipe gravity_missile
 ```
+
+终局弹药没有新增专用 CLI 子命令，继续复用通用 `build ... --recipe ...` 即可。高阶舰队线现在已经公开，但入口明确分成两段：
+
+- `produce` 只保留给 `worker` / `soldier` 这类 `world_produce` 地表单位
+- `prototype` / `precision_drone` / `corvette` / `destroyer` 先通过配方做成载荷 item，再用部署命令进入 authoritative runtime
+- `help produce` 会读取服务端 `/catalog.units`，只展示 `production_mode=world_produce && runtime_class=world_unit` 的单位
+- 新增的舰队 CLI 命令会直接对齐 `/catalog.units[].deploy_command`
 
 `vertical_launching_silo` 现在有服务端默认配方，建造时即使不传 `--recipe` 也会自动挂上 `small_carrier_rocket`：
 
@@ -136,7 +146,7 @@ build 10 6 conveyor_belt_mk1 --direction east
 build 11 6 conveyor_belt_mk3 --direction auto
 ```
 
-### 2. 玩法指南中的 24 类核心命令都已有独立 CLI 命令
+### 2. 玩法指南中的 31 类核心命令都已有独立 CLI 命令
 
 已覆盖：
 
@@ -153,11 +163,18 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `set_ray_receiver_mode`
 - `transfer`
 - `produce`
+- `deploy_squad`
+- `commission_fleet`
+- `fleet_assign`
+- `fleet_attack`
+- `fleet_disband`
 - `move`
 - `attack`
 - `scan_galaxy`
 - `scan_system`
 - `scan_planet`
+- `fleet_status`
+- `system_runtime`
 - `launch_solar_sail`
 - `launch_rocket`
 - `build_dyson_node`
@@ -165,7 +182,35 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `build_dyson_shell`
 - `demolish_dyson`
 
-### 3. 物流与多星球最小闭环现在可直接操作
+### 3. 高阶舰队线现在有独立 CLI 闭环
+
+当前公开高阶单位的 CLI 路径已经固定成：
+
+1. 通过普通产线或测试物资拿到载荷 item：
+   - `prototype`
+   - `precision_drone`
+   - `corvette`
+   - `destroyer`
+2. 用 `transfer <building_id> <item_id> <quantity>` 把载荷装进部署枢纽本地存储
+3. 用部署命令生成 runtime 实体：
+   - `deploy_squad <building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]`
+   - `commission_fleet <building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]`
+4. 用运行态命令和查询继续控制：
+   - `fleet_assign <fleet_id> <line|vee|circle|wedge>`
+   - `fleet_attack <fleet_id> <planet_id> <target_id>`
+   - `fleet_disband <fleet_id>`
+   - `fleet_status [fleet_id]`
+   - `system_runtime [system_id]`
+
+当前约束：
+
+- 部署枢纽必须带电并处于 `running`
+- `battlefield_analysis_base` 现在就是默认部署枢纽
+- `fleet_attack` 当前只支持同一恒星系内目标
+- `fleet_status` 会显示舰队武器、护盾、编队与最近攻击 tick
+- `system_runtime` 会显示该系统当前太阳帆与舰队运行态
+
+### 4. 物流与多星球最小闭环现在可直接操作
 
 当前 CLI 已经打通了收敛版的 `造站 -> 配槽位 -> 自动配送 -> 切星球继续经营` 闭环：
 
@@ -189,7 +234,7 @@ configure_logistics_slot b-31 interstellar hydrogen demand 80
 switch_active_planet planet-1-1
 ```
 
-### 4. 科研命令现在要求真实矩阵
+### 5. 科研命令现在要求真实矩阵
 
 `start_research` 不再是旧版“抽象研究点排队”。
 
@@ -198,7 +243,7 @@ switch_active_planet planet-1-1
 - 研究开始前，所需每种矩阵都必须已经出现在研究站本地库存里
 - 研究推进会真实消耗研究站本地库存中的矩阵；如果缺实验室或缺矩阵，可在 `summary` 的 `tech.current_research.blocked_reason` 里看到 `waiting_lab` / `waiting_matrix`
 
-### 5. 调试查询接口也已补齐
+### 6. 调试查询接口也已补齐
 
 除玩法主命令外，CLI 还支持：
 
@@ -209,12 +254,15 @@ switch_active_planet planet-1-1
 - Tick replay
 - Tick rollback
 
-### 6. 行星查询已经拆成 `planet / scene / inspect / fog`
+### 7. 行星查询已经拆成 `planet / scene / inspect / fog`
 
 - `planet` 只显示轻量概要，适合快速确认行星规模与对象数量
 - `scene` 直接返回当前视窗原始 JSON，适合调试地图裁剪与图层
 - `inspect` 直接返回目标对象详情 JSON，适合定位建筑、单位、资源
 - `fog` 不再请求整张迷雾，而是按窗口渲染局部迷雾 ASCII
+- `stats.production_stats.total_output` / `by_building_type` / `by_item` 已改为 authoritative 真实产出口径；当前覆盖配方落库、采集落库、直充矿物池、轨采落站
+- `stats.production_stats.by_item["minerals"]` 表示“直接写入玩家矿物池”的采集产出统计标签，不是可转运物品
+- 空转、缺料、没配方但带生产模块的建筑，或没有真实入库 / 入站的采集建筑，不会再被算成“总产出”
 
 ## 常用示例
 
@@ -285,9 +333,22 @@ configure_logistics_slot b-31 interstellar hydrogen demand 80
 ```bash
 produce b-21 worker
 produce b-21 soldier
+transfer b-1 prototype 2
+deploy_squad b-1 prototype --count 2 --planet planet-1-2
+transfer b-1 corvette 1
+commission_fleet b-1 corvette sys-1 --count 1 --fleet-id fleet-demo
+fleet_assign fleet-demo wedge
+fleet_status fleet-demo
+system_runtime sys-1
 move u-3 18 14
 attack u-3 enemy-1
 ```
+
+注意：
+
+- `produce` 不再接受 `corvette` / `destroyer`
+- 高阶单位必须先进入部署枢纽本地存储，再走 `deploy_squad` / `commission_fleet`
+- 如果部署枢纽没接电，服务端会直接返回 `deployment hub is not operational: ...`
 
 ### 太阳帆与戴森球
 
@@ -334,6 +395,9 @@ build <x> <y> sr_plasma_turret
 build <x> <y> planetary_shield_generator
 build <x> <y> self_evolution_lab
 build <x> <y> self_evolution_lab --recipe electromagnetic_matrix
+build 8 6 recomposing_assembler
+build 8 7 pile_sorter
+build 10 7 advanced_mining_machine
 transfer <silo_id> small_carrier_rocket 1
 transfer <ejector_id> solar_sail 3
 build_dyson_node sys-1 0 10 20 --orbit-radius 1.2
@@ -345,14 +409,17 @@ set_ray_receiver_mode <receiver_id> power
 说明：
 
 - `summary` 中应看到 `active_planet_id = planet-1-2`
+- 如果已经通过 `mission_complete` 完成终局科研，`summary` 会额外返回 `winner` / `victory_reason` / `victory_rule`
 - `system sys-1` 中应能看到 `planet-1-2.kind = gas_giant`
 - `switch_active_planet` 只允许切到“已发现 + 已加载 + 你在该星球已有 foothold”的目标；来回切换后，后续 `build` / `inspect` / `transfer` 都会以新的 active planet 为当前操作焦点
-- 当前官方 seed 下，想同时让 `orbital_collector`、`vertical_launching_silo`、`em_rail_ejector` 都进入 `running`，实测需要把 `stats.energy_stats.generation` 堆到至少 `84`；按当前风力系数约等于基地原有发电 + `8` 台 `wind_turbine`
+- 当前官方 seed 下，想同时让 `orbital_collector`、`vertical_launching_silo`、`em_rail_ejector` 都进入 `running`，实测需要把 `stats.energy_stats.generation` 堆到至少 `84`；这个数字现在已经与 `/world/planets/{planet_id}/networks` 的真实网络供电口径对齐，包含 `ray_receiver power/hybrid` 的实际回灌
+- 当 `ray_receiver` 切到 `power` / `hybrid` 且太阳帆或戴森结构已经产能后，`summary.players.p1.resources.energy`、`stats.energy_stats.generation` 与 `/world/planets/{planet_id}/networks.power_networks[].supply` 应同步抬升
+- 用 `set_ray_receiver_mode <receiver_id> power` 验证时，应该比较切模式后的 `energy / generation / supply` 增量，并确认 `critical_photon` 不再继续增长；切换前已经存在的光子库存/缓冲不会被自动清零
 - 如果还要同时验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`，需要继续补风机；推荐先让戴森链路跑通，再逐个补建并用 `inspect` 观察运行态
 - `transfer` 会从当前玩家背包扣减物品，并把物品装进目标建筑本地存储
 - `launch_rocket` 只有在目标层已存在 `build_dyson_*` scaffold 且 silo 本地已装载 `small_carrier_rocket` 时才会成功
 - `set_ray_receiver_mode` 的 `photon` 模式要求玩家已解锁 `dirac_inversion`；官方 midgame 场景默认可先用 `power` 或 `hybrid` 验证命令链路
-- 官方 midgame 现已额外预置 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution`，因此 4 个新建筑可以直接通过通用 `build` 验证；`dirac_inversion` 仍未预置
+- 官方 midgame 现已额外预置 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution` / `integrated_logistics` / `photon_mining` / `annihilation`，因此 7 个中后期建筑都可以直接通过通用 `build` 验证；`dirac_inversion` 仍未预置
 
 ### 审计与事件补拉
 

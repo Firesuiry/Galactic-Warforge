@@ -314,10 +314,11 @@ type GameCore struct {
 	monitor          *productionMonitor
 	rng              *rand.Rand
 	stopCh           chan struct{}
-	winner           string
-	winnerMu         sync.RWMutex
+	victory          model.VictoryState
+	victoryMu        sync.RWMutex
 	activePlanetID   string
 	executorUsage    map[string]int
+	spaceRuntime     *model.SpaceRuntimeState
 	combatUnits      *CombatUnitManager
 	orbitalPlatforms *OrbitalPlatformManager
 	saveMu           sync.Mutex
@@ -364,6 +365,7 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		stopCh:           make(chan struct{}),
 		activePlanetID:   registry.ActivePlanetID,
 		executorUsage:    make(map[string]int),
+		spaceRuntime:     model.NewSpaceRuntimeState(),
 		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
@@ -388,7 +390,7 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		}
 	}
 	if store != nil {
-		snap := snapshot.CaptureRuntime(core.worlds, core.activePlanetID, core.discovery)
+		snap := snapshot.CaptureRuntime(core.worlds, core.activePlanetID, core.discovery, core.spaceRuntime)
 		store.SaveSnapshot(snap)
 	}
 	return core
@@ -439,6 +441,11 @@ func (gc *GameCore) Discovery() *mapstate.Discovery {
 	return gc.discovery
 }
 
+// SpaceRuntime returns the authoritative shared space runtime.
+func (gc *GameCore) SpaceRuntime() *model.SpaceRuntimeState {
+	return gc.spaceRuntime
+}
+
 // CanIssueCommand checks whether a player can issue a given command type.
 func (gc *GameCore) CanIssueCommand(playerID string, cmdType model.CommandType) bool {
 	if gc == nil || gc.world == nil {
@@ -480,9 +487,33 @@ func (gc *GameCore) AlertHistory() *AlertHistory {
 
 // Winner returns the winning player ID, or empty string if game is ongoing
 func (gc *GameCore) Winner() string {
-	gc.winnerMu.RLock()
-	defer gc.winnerMu.RUnlock()
-	return gc.winner
+	return gc.Victory().WinnerID
+}
+
+// Victory returns the resolved victory payload, or zero value while ongoing.
+func (gc *GameCore) Victory() model.VictoryState {
+	gc.victoryMu.RLock()
+	defer gc.victoryMu.RUnlock()
+	return gc.victory
+}
+
+func (gc *GameCore) declareVictory(victory model.VictoryState) bool {
+	if !victory.Declared() {
+		return false
+	}
+	gc.victoryMu.Lock()
+	defer gc.victoryMu.Unlock()
+	if gc.victory.Declared() {
+		return false
+	}
+	gc.victory = victory
+	return true
+}
+
+func (gc *GameCore) setVictoryState(victory model.VictoryState) {
+	gc.victoryMu.Lock()
+	defer gc.victoryMu.Unlock()
+	gc.victory = victory
 }
 
 // Run starts the tick loop (blocking); call in a goroutine
@@ -561,14 +592,17 @@ func (gc *GameCore) processTick() {
 		}
 
 		allEvents = append(allEvents, settleResearch(gc.worlds)...)
+		allEvents = append(allEvents, settleSolarSails(gc.spaceRuntime, currentTick)...)
 
 		for _, ws := range worlds {
+			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
+
 			env := currentPlanetEnvironment(gc.maps, ws.PlanetID)
 			allEvents = append(allEvents, settlePowerGeneration(ws, env)...)
-			allEvents = append(allEvents, settleRayReceivers(ws)...)
-			settlePlanetaryShields(ws)
-			allEvents = append(allEvents, settleSolarSails(ws.Tick)...)
 			allEvents = append(allEvents, settleDysonSpheres(ws.Tick)...)
+			receiverViews := settleRayReceivers(ws, gc.maps, gc.spaceRuntime)
+			settlePlanetaryShields(ws)
+			allEvents = append(allEvents, finalizePowerSettlement(ws, receiverViews)...)
 			allEvents = append(allEvents, settleResources(ws)...)
 
 			settleOrbitalCollectors(ws, gc.maps)
@@ -594,6 +628,10 @@ func (gc *GameCore) processTick() {
 
 		settleInterstellarDispatch(gc.worlds, gc.maps)
 		settleLogisticsShips(gc.worlds)
+		for _, ws := range worlds {
+			allEvents = append(allEvents, settleCombatRuntime(ws, ws.Tick)...)
+		}
+		allEvents = append(allEvents, settleSpaceFleets(gc.worlds, gc.maps, gc.spaceRuntime, currentTick)...)
 
 		activeWorld := gc.WorldForPlanet(gc.activePlanetID)
 		if activeWorld == nil {
@@ -608,12 +646,13 @@ func (gc *GameCore) processTick() {
 			allEvents = append(allEvents, gc.settleDroneControl()...)
 			gc.settleStats()
 
-			winner := checkVictory(gc.world)
-			if winner != "" {
-				gc.winnerMu.Lock()
-				gc.winner = winner
-				gc.winnerMu.Unlock()
-				log.Printf("[GameCore] player %s wins at tick %d", winner, currentTick)
+			if !gc.Victory().Declared() {
+				victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, gc.world)
+				if gc.declareVictory(victory) {
+					allEvents = append(allEvents, victoryDeclaredEvent(victory))
+					gc.recordVictoryAudit(victory)
+					log.Printf("[GameCore] player %s wins at tick %d (%s)", victory.WinnerID, currentTick, victory.Reason)
+				}
 			}
 		}
 
@@ -654,7 +693,7 @@ func (gc *GameCore) processTick() {
 	if gc.snapshotStore != nil {
 		policy := gc.snapshotStore.SnapshotPolicy()
 		if policy.ShouldSnapshot(currentTick) {
-			snap := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery)
+			snap := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery, gc.spaceRuntime)
 			gc.snapshotStore.SaveSnapshot(snap)
 			if oldest := gc.snapshotStore.OldestSnapshotTick(); oldest > 0 {
 				gc.cmdLog.TrimBefore(oldest)
@@ -718,6 +757,16 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execAttack(gc.world, qr.PlayerID, cmd)
 		case model.CmdProduce:
 			res, evts = gc.execProduce(gc.world, qr.PlayerID, cmd)
+		case model.CmdDeploySquad:
+			res, evts = gc.execDeploySquad(gc.world, qr.PlayerID, cmd)
+		case model.CmdCommissionFleet:
+			res, evts = gc.execCommissionFleet(gc.world, qr.PlayerID, cmd)
+		case model.CmdFleetAssign:
+			res, evts = gc.execFleetAssign(gc.world, qr.PlayerID, cmd)
+		case model.CmdFleetAttack:
+			res, evts = gc.execFleetAttack(gc.world, qr.PlayerID, cmd)
+		case model.CmdFleetDisband:
+			res, evts = gc.execFleetDisband(gc.world, qr.PlayerID, cmd)
 		case model.CmdUpgrade:
 			res, evts = gc.execUpgrade(gc.world, qr.PlayerID, cmd)
 		case model.CmdDemolish:

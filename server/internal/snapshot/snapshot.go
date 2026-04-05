@@ -14,14 +14,15 @@ const CurrentVersion = 1
 
 // Snapshot captures a tick-level world snapshot with versioned payload.
 type Snapshot struct {
-	Version        int                         `json:"version"`
-	Tick           int64                       `json:"tick"`
-	Timestamp      time.Time                   `json:"timestamp"`
-	ActivePlanetID string                      `json:"active_planet_id,omitempty"`
+	Version        int                           `json:"version"`
+	Tick           int64                         `json:"tick"`
+	Timestamp      time.Time                     `json:"timestamp"`
+	ActivePlanetID string                        `json:"active_planet_id,omitempty"`
 	Players        map[string]*model.PlayerState `json:"players,omitempty"`
-	PlanetWorlds   map[string]*WorldSnapshot   `json:"planet_worlds,omitempty"`
-	World          *WorldSnapshot              `json:"world,omitempty"`
-	Discovery      *mapstate.DiscoverySnapshot `json:"discovery,omitempty"`
+	PlanetWorlds   map[string]*WorldSnapshot     `json:"planet_worlds,omitempty"`
+	World          *WorldSnapshot                `json:"world,omitempty"`
+	Discovery      *mapstate.DiscoverySnapshot   `json:"discovery,omitempty"`
+	Space          *model.SpaceRuntimeState      `json:"space,omitempty"`
 }
 
 // Capture builds a full snapshot from runtime state.
@@ -29,17 +30,18 @@ func Capture(world *model.WorldState, discovery *mapstate.Discovery) *Snapshot {
 	if world == nil {
 		return &Snapshot{Version: CurrentVersion, Timestamp: time.Now().UTC()}
 	}
-	return CaptureRuntime(map[string]*model.WorldState{world.PlanetID: world}, world.PlanetID, discovery)
+	return CaptureRuntime(map[string]*model.WorldState{world.PlanetID: world}, world.PlanetID, discovery, nil)
 }
 
 // CaptureRuntime builds a snapshot from a multi-planet runtime registry.
-func CaptureRuntime(worlds map[string]*model.WorldState, activePlanetID string, discovery *mapstate.Discovery) *Snapshot {
+func CaptureRuntime(worlds map[string]*model.WorldState, activePlanetID string, discovery *mapstate.Discovery, space *model.SpaceRuntimeState) *Snapshot {
 	snap := &Snapshot{
 		Version:        CurrentVersion,
 		Timestamp:      time.Now().UTC(),
 		ActivePlanetID: activePlanetID,
 		Players:        make(map[string]*model.PlayerState),
 		PlanetWorlds:   make(map[string]*WorldSnapshot),
+		Space:          model.CloneSpaceRuntimeState(space),
 	}
 	for planetID, world := range worlds {
 		if world == nil {
@@ -136,21 +138,21 @@ func (snap *Snapshot) RestoreWorld() (*model.WorldState, error) {
 }
 
 // RestoreRuntime rebuilds multi-planet runtime worlds sharing one player state map.
-func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, error) {
+func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, *model.SpaceRuntimeState, error) {
 	if snap == nil {
-		return nil, "", errors.New("snapshot is nil")
+		return nil, "", nil, errors.New("snapshot is nil")
 	}
 	if len(snap.PlanetWorlds) == 0 {
 		world, err := snap.RestoreWorld()
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		worlds := map[string]*model.WorldState{world.PlanetID: world}
 		activePlanetID := snap.ActivePlanetID
 		if activePlanetID == "" {
 			activePlanetID = world.PlanetID
 		}
-		return worlds, activePlanetID, nil
+		return worlds, activePlanetID, model.CloneSpaceRuntimeState(snap.Space), nil
 	}
 	worlds := make(map[string]*model.WorldState, len(snap.PlanetWorlds))
 	for planetID, worldSnap := range snap.PlanetWorlds {
@@ -159,7 +161,7 @@ func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, er
 		}
 		world, err := worldSnap.Restore()
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		worlds[planetID] = world
 	}
@@ -183,7 +185,7 @@ func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, er
 	for _, player := range sharedPlayers {
 		player.SyncLegacyExecutor(activePlanetID)
 	}
-	return worlds, activePlanetID, nil
+	return worlds, activePlanetID, model.CloneSpaceRuntimeState(snap.Space), nil
 }
 
 // RestoreDiscovery rebuilds discovery state from the snapshot payload.

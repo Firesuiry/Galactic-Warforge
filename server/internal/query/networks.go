@@ -139,9 +139,15 @@ func (ql *Layer) PlanetNetworks(ws *model.WorldState, playerID, planetID, active
 	if grid == nil {
 		grid = model.BuildPowerGridGraph(ws)
 	}
-	coverage := model.ResolvePowerCoverage(ws)
-	allocations := model.ResolvePowerAllocations(ws, coverage)
-	networks := model.ResolvePowerNetworks(ws)
+	snapshot := model.CurrentPowerSettlementSnapshot(ws)
+	coverage := map[string]model.PowerCoverageResult{}
+	allocations := model.PowerAllocationState{}
+	networks := model.PowerNetworkState{}
+	if snapshot != nil {
+		coverage = snapshot.Coverage
+		allocations = snapshot.Allocations
+		networks = snapshot.Networks
+	}
 	view.PowerNetworks = collectPowerNetworks(networks, allocations, playerID)
 	view.PowerNodes = collectPowerNodes(ws, grid, networks, playerID)
 	view.PowerLinks = collectPowerLinks(ws, grid, playerID)
@@ -319,7 +325,7 @@ func collectPowerCoverage(
 			Connected:    cov.Connected,
 			Reason:       cov.Reason,
 			ProviderID:   cov.ProviderID,
-			NetworkID:    alloc.NetworkID,
+			NetworkID:    firstNonEmpty(cov.NetworkID, alloc.NetworkID),
 			Demand:       alloc.Demand,
 			Allocated:    alloc.Allocated,
 			Ratio:        alloc.Ratio,
@@ -327,6 +333,15 @@ func collectPowerCoverage(
 		})
 	}
 	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func collectPipelineViews(ws *model.WorldState, playerID string) ([]PipelineNodeView, []PipelineSegmentView, []PipelineEndpointView) {
