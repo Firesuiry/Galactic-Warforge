@@ -11,7 +11,7 @@ players:
     role: "commander"
     permissions: ["*"]
     bootstrap:
-      minerals: 200
+      minerals: 240
       energy: 100
       inventory:
         - item_id: "electromagnetic_matrix"
@@ -27,7 +27,7 @@ players:
     role: "commander"
     permissions: ["*"]
     bootstrap:
-      minerals: 200
+      minerals: 240
       energy: 100
       inventory:
         - item_id: "electromagnetic_matrix"

@@ -45,6 +45,10 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 			continue
 		}
 		if model.IsFuelBasedPowerSource(module.SourceKind) {
+			// Fuel-based generators publish the authoritative runtime result for
+			// this tick here. Later phases may consume resources, but they must not
+			// overwrite a successful generation tick with a post-consumption
+			// inventory check.
 			if !fuelBasedGeneratorHasReachableFuel(building) {
 				if evt := applyBuildingState(building, model.BuildingWorkNoPower, stateReasonNoFuel); evt != nil {
 					events = append(events, evt)

@@ -39,7 +39,7 @@ func TestT092ConfigDevBootstrapProvidesFreshResearchMatrices(t *testing.T) {
 		if player == nil {
 			t.Fatalf("expected player %s", playerID)
 		}
-		if player.Resources.Minerals != 200 || player.Resources.Energy != 100 {
+		if player.Resources.Minerals != 240 || player.Resources.Energy != 100 {
 			t.Fatalf("unexpected bootstrap resources for %s: %+v", playerID, player.Resources)
 		}
 		if player.Inventory[model.ItemElectromagneticMatrix] != 50 {

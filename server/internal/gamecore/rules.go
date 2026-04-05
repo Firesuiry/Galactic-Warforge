@@ -981,11 +981,10 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 			powerRatio = alloc.Ratio
 		}
 
-		if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) && !fuelBasedGeneratorHasReachableFuel(b) {
-			if evt := applyBuildingState(b, model.BuildingWorkNoPower, stateReasonNoFuel); evt != nil {
-				events = append(events, evt)
+		if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) {
+			if b.Runtime.State == model.BuildingWorkNoPower && b.Runtime.StateReason == stateReasonNoFuel {
+				continue
 			}
-			continue
 		}
 
 		if evt := applyBuildingState(b, model.BuildingWorkRunning, ""); evt != nil {

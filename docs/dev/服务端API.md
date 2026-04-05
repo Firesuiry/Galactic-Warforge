@@ -39,12 +39,14 @@
 **普通新局默认入口**
 - `config-dev.yaml + map.yaml` 现在就是一条可直接从 fresh save 起步的官方路线。
 - `battlefield.victory_rule` 当前支持 `elimination`、`mission_complete`、`hybrid` 三种取值；仓库内当前提供的 `config.yaml`、`config-dev.yaml`、`config-midgame.yaml` 都显式设置为 `hybrid`，即 `mission_complete` 科研胜利与基地消灭胜同时有效。
-- 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`，但这门 0 级科技现在会直接解锁 `matrix_lab` 建造权限，保证第一台研究站可合法落地。
+- 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`；这门 0 级科技现在会直接解锁 `matrix_lab + wind_turbine`，因此第一条真实入口是先补风机、再摆研究站。
 - `config-dev.yaml` 会为每名玩家预置一份最小启动包：
-  - `minerals = 200`
+  - `minerals = 240`
   - `energy = 100`
   - `inventory`: `electromagnetic_matrix x50`
+- `battlefield_analysis_base` 本身不发电；如果不先补 `wind_turbine`，第一台空 `matrix_lab` 会停在无电状态。
 - 这份启动包的用途不是跳过前期，而是覆盖默认新局到第一条自给电磁矩阵产线之间的前期科研真空段；研究系统仍然要求真实 `running` 研究站与真实矩阵消耗。
+- 当前默认图上一组可直接复现的 starter 闭环是：`build 3 2 wind_turbine` -> `build 2 3 matrix_lab` -> `transfer <matrix_lab_id> electromagnetic_matrix 10` -> `start_research electromagnetism` -> `build 4 2 tesla_tower` -> `build 5 1 mining_machine`；完成后首台研究站仍保留，且还剩 `20 minerals`。
 
 **官方中后期场景**
 - 服务端现在提供一套官方 midgame 场景：`config-midgame.yaml + map-midgame.yaml`
@@ -527,7 +529,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 对建筑和单位，服务端会再次按可见性校验；不可见目标返回 `404`
   - `sector` 当前返回轻量标题信息，便于前端右侧详情栏稳定落点
   - 当建筑 `runtime.state = no_power` 时，`runtime.state_reason` 会按当前 tick 的真实覆盖/分配结果刷新；已接入电网但因 `shortage` 或分配结果为 `0` 而拿不到电时，原因统一写成 `under_power`，只有真实接线/覆盖失败时才会返回 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`
-  - `thermal_power_plant`、`mini_fusion_power_plant`、`artificial_star` 这三类燃料型发电建筑会额外暴露 `no_power/no_fuel`：当本 tick 在 `input_buffer + inventory` 中都找不到可达燃料时，不再显示为 `running`；装回燃料后的下一 tick 会恢复 `running`，而 `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats` 会同步反映真实供电变化
+  - `thermal_power_plant`、`mini_fusion_power_plant`、`artificial_star` 这三类燃料型发电建筑会额外暴露 `no_power/no_fuel`：当本 tick 在 `input_buffer + inventory` 中都找不到可达燃料时，不再显示为 `running`；装回燃料后的下一 tick 会恢复 `running`
+  - 对燃料型发电建筑，`runtime.state` 表示“刚结算完的这个 tick 的真实结果”，不是下一 tick 预测值：如果最后一根燃料在当前 tick 被消耗完，但该 tick 已成功发电，那么 `inspect` / `scene` 仍会显示 `running`，同时 `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats` 会继续反映这个 tick 的真实供电；只有下一 tick 没有新燃料时才回到 `no_power/no_fuel`
   - `ray_receiver` 的 `runtime.functions.ray_receiver.mode` 就是当前真实生效模式；切到 `power` 后只会停止新的 `critical_photon` 增量，不会清空建筑输出缓冲里已经存在的历史光子库存
   - 服务端内部 query 层已经维护 `ray_receiver` 的 `power` 结算视图，但当前公开 HTTP `inspect` 网关仍不会透传该子对象，也不会单独暴露 `available_dyson_energy` / `effective_input` / `power_output` / `photon_output` 这类逐 tick 电力结算字段；要验证 authoritative 回灌结果，请使用 `GET /state/summary`、`GET /state/stats` 与 `GET /world/planets/{planet_id}/networks`
 - 响应示例:
@@ -659,7 +662,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
   - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
   - `power_networks` / `power_coverage` 整体按同一个 tick 的 authoritative `PowerSettlementSnapshot` 生成；`supply` / `allocated` / `shortage` / `reason` / `provider_id` 之间不再来自不同阶段的临时值
-  - `power_networks[].supply` 与 `GET /state/stats.energy_stats.generation` 同源；当前已包含 `ray_receiver power/hybrid` 在真实 tick 中写入的供电回灌
+  - `power_networks[].supply` 与 `GET /state/stats.energy_stats.generation` 同源；当前已包含 `ray_receiver power/hybrid` 在真实 tick 中写入的供电回灌，也会保留燃料型发电建筑“最后一根燃料已在本 tick 消耗完但该 tick 仍成功发电”的供电贡献
   - `power_coverage.provider_id` 与 `power_networks` 现在共享同一份真实供电源口径；`ray_receiver`、储能放电等通过 `ws.PowerInputs` 注入的动态电源也会被识别为有效 provider，不再出现“`supply > 0` 但 `coverage` 仍说 `no_provider`”的分叉
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick`
@@ -818,6 +821,20 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   ],
   "techs": [
     {
+      "id": "dyson_sphere_program",
+      "name": "戴森球计划",
+      "name_en": "Dyson Sphere Program",
+      "category": "main",
+      "type": "main",
+      "level": 0,
+      "unlocks": [
+        {"type": "building", "id": "matrix_lab"},
+        {"type": "building", "id": "wind_turbine"}
+      ],
+      "icon_key": "dyson_sphere_program",
+      "color": "#4dabf7"
+    },
+    {
       "id": "electromagnetism",
       "name": "电磁学",
       "name_en": "Electromagnetism",
@@ -827,7 +844,6 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "prerequisites": ["dyson_sphere_program"],
       "cost": [{"item_id": "electromagnetic_matrix", "quantity": 10}],
       "unlocks": [
-        {"type": "building", "id": "wind_turbine"},
         {"type": "building", "id": "tesla_tower"},
         {"type": "building", "id": "mining_machine"}
       ],
@@ -875,6 +891,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   ]
 }
 ```
+- 说明补充：服务端内部科技定义里的原始 unlock 仍可能写成 `power_pylon`，但对外 `/catalog.techs[].unlocks` 会统一归一化成 `tesla_tower`。
 - 戴森相关 catalog 补充：
   - `items` 中矩阵物品统一只暴露 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`；旧别名 `matrix_blue` / `matrix_red` / `matrix_yellow` / `matrix_universe` 已从主 catalog 移除。
   - `items` / `recipes` 已补齐终局弹药 `antimatter_capsule` 与 `gravity_missile`，二者都通过 `recomposing_assembler` 进入真实生产闭环。
@@ -1091,7 +1108,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 事件类型补充:
   - `resource_changed`：电力链路现在会在同一轮 authoritative 电力结算里只提交一次最终 `energy`；后续同 tick 的矿物/产出事件若继续复用 `resource_changed`，会沿用同一个最终 `energy` 值，不再在 `10000 -> 99xx -> 98xx` 间来回跳变。
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
-  - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。
+  - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。
   - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。
   - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule`；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
   - 若 `mission_complete` 在当前 tick 完成，事件顺序会先出现 `research_completed`，再出现 `victory_declared`。

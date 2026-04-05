@@ -36,12 +36,13 @@
 ## 本轮已确认可用的部分
 
 - 默认新局的科研门禁已经是真实矩阵驱动：
-  - `build 3 2 matrix_lab`
+  - `build 3 2 wind_turbine`
+  - `build 2 3 matrix_lab`
   - `start_research electromagnetism`
   - 返回 `VALIDATION_FAILED: missing electromagnetic_matrix in research labs`
-  - `transfer b-28 electromagnetic_matrix 10`
+  - `transfer <matrix_lab_id> electromagnetic_matrix 10`
   - 再执行 `start_research electromagnetism`
-  - `research_completed` 正常解锁 `wind_turbine`、`tesla_tower`、`mining_machine`
+  - `research_completed` 正常解锁 `tesla_tower`、`mining_machine`（`wind_turbine` 已由 `dyson_sphere_program` 开局提供）
 - 官方 midgame 下，以下 DSP 建筑已经能实际建造成功：
   - `orbital_collector`
   - `vertical_launching_silo`

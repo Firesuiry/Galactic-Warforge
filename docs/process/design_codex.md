@@ -1,776 +1,625 @@
-# T100 设计方案：终局高阶舰队线开放与公开玩法闭环（Codex）
+# T104 设计方案：燃料型发电建筑运行态与终局供电观察面收口（Codex）
 
-> 对应任务：`docs/process/task/T100_戴森深度试玩确认终局高阶舰队线仍未开放.md`
->
-> 当前 `docs/process/task/` 下只有这一项未完成任务。本设计只覆盖这一个问题，不再混入已经从当前任务文件移除的太阳帆或其他历史问题。
+## 1. 范围与设计结论
 
-## 1. 设计结论
+当前 `docs/process/task/` 下只有一个未完成任务：
 
-这次不再采用“继续隐藏并统一文档口径”的收口方案。
+- `docs/process/task/T104_戴森终局人造恒星装燃料后无法稳定供电.md`
 
-原因很直接：
+因此本设计只覆盖 T104，不再扩展到已经从当前任务目录移出的默认新局、戴森接收站、终局舰队线等历史问题。
 
-1. 这条线已经再次留在 `task/`，说明“只维持未开放口径”不能算问题解决。
-2. 当前真正缺的不是一个 `hidden=false` 开关，而是整条公开玩法链路。
-3. 如果继续把 `produce`、`/catalog`、CLI 帮助和战斗 runtime 分开修，会再次得到“局部可见、整体不可玩”的伪闭环。
+本轮结论：
 
-本方案推荐的唯一正式实现路径是：
+1. 不需要新造一套 query/UI 层“补丁状态”来掩盖现象。
+2. 也不需要引入新的“燃烧缓存”“剩余燃烧 tick”“发电中锁存器”持久字段。
+3. 推荐直接把**燃料型发电建筑的运行态真相**收口到 `settlePowerGeneration`，并取消 `settleResources` 对同一类建筑的二次 `no_fuel` 判定。
+4. `inspect` / `scene` 读的是建筑 runtime，`networks` / `stats` 读的是 `PowerSettlementSnapshot`。只要 tick 内状态归属收口正确，这几条观察面会自然一致。
 
-1. 保留 `produce` 的现有语义，只负责地表 `world_unit`。
-2. 终局高阶舰队线改成“工业制造载荷 + 部署命令生成 runtime 实体”的两段式公开模型。
-3. 先把行星战斗 runtime 和星系舰队 runtime 迁入 authoritative、可存档、可回放的宿主，再最后取消 `prototype / precision_drone / corvette / destroyer` 的隐藏状态。
+虽然验收中心是 `artificial_star`，但本次改动会触及共享分支：
 
-也就是说，**真正的公开动作放在最后一步**。在此之前，文档仍应维持“未开放”口径，避免再次出现半开放状态。
+- `artificial_star`
+- `thermal_power_plant`
+- `mini_fusion_power_plant`
 
-## 2. 当前代码事实
+设计上应一次收口这三类燃料型发电建筑，避免只给 `artificial_star` 打特判。
 
-当前仓库里，与这条线直接相关的真实状态如下。
+## 2. 现状审计
 
-### 2.1 科技层
+### 2.1 当前 tick 顺序
 
-- `server/internal/model/tech.go`
-  - `prototype`
-  - `precision_drone`
-  - `corvette`
-  - `destroyer`
-  仍然都是 `Hidden: true`。
-- `/catalog.techs` 当前会返回这些科技，只是带 `hidden=true`。
-- `server/internal/gamecore/research.go` 当前 `start_research` 只校验前置和材料，不校验 `Hidden`。也就是说，玩家只要知道 ID，就可能手动启动隐藏科技。这是现有“公开边界”仍然不干净的证据。
+当前 `server/internal/gamecore/core.go` 的关键顺序是：
 
-### 2.2 单位目录与 `produce`
+1. `settlePowerGeneration`
+2. `settleDysonSpheres`
+3. `settleRayReceivers`
+4. `finalizePowerSettlement`
+5. `settleResources`
 
-- `server/internal/model/unit_catalog.go`
-  - `/catalog.units` 当前 authoritative 公开目录只有 `worker`、`soldier`。
-- `server/internal/gamecore/rules.go` 的 `execProduce`
-  - 现在已经不再本地写死 `worker/soldier`；
-  - 但它只接受 `PublicProducibleWorldUnitByID()` 返回的公开地表单位。
-- `server/internal/model/building_defs.go`
-  - 当前只有 `assembling_machine_mk1` 暴露了 `CanProduceUnits: true`；
-  - 这进一步说明 `produce` 语义就是“在地表生产建筑旁边生成 world unit”，并不适合承载舰队线。
+这意味着：
 
-### 2.3 行星 / 太空运行态
+- 发电输入 `ws.PowerInputs` 在 `settlePowerGeneration` 阶段生成；
+- `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats` 依赖的 `ws.PowerSnapshot` 在 `finalizePowerSettlement` 阶段固化；
+- `settleResources` 是更靠后的资源结算阶段，不应再对同一类发电建筑重新定义“这一 tick 是否算有燃料在运行”。
 
-- `server/internal/model/space_runtime.go`
-  - 已经存在 snapshot-backed 的 `SpaceRuntimeState`；
-  - 当前主要承载 `SolarSailOrbit`；
-  - `Fleets` 只是占位数据结构，没有公开命令、查询和结算。
-- `server/internal/gamecore/combat_settlement.go`
-  - `CombatUnitManager` 仍是 `GameCore` 持有的临时 manager，不在快照里；
-  - 当前没有玩家可达命令去生成这些战斗单位。
-- `server/internal/gamecore/orbital_settlement.go`
-  - `OrbitalPlatformManager` 也是临时 manager，不在快照里。
-- `server/internal/gamecore/core.go`
-  - 战斗相关结算目前只对 `activeWorld` 执行；
-  - 对未来“多行星可部署 squad / 轨道单位 / 星系舰队”的公开玩法来说，这是结构性缺口。
+### 2.2 当前已有的正确链路
 
-### 2.4 查询面
+`server/internal/gamecore/power_generation.go` 已经具备一条相对完整的燃料发电链路：
 
-- `server/internal/query/query.go`
-  - `SystemView` 目前只包含恒星和行星静态视图；
-  - 不包含舰队、轨道单位或 system runtime。
-- `PlanetRuntimeView` 当前只暴露物流、施工、敌军探测等运行态；
-  - 没有公开的 combat squad / orbital platform 视图。
+1. 对燃料型发电建筑调用 `fuelBasedGeneratorHasReachableFuel`
+2. 无燃料则写入 `no_power / no_fuel`
+3. 从 `no_power / no_fuel` 恢复时写入 `running / start`
+4. 调用 `model.ResolvePowerGeneration(...)`
+5. `ResolvePowerGeneration` 内部通过 `consumeFuel(...)` 真正扣减 `input_buffer + inventory`
+6. 输出写入 `ws.PowerInputs`
 
-### 2.5 现有配置素材
+`server/internal/model/power.go` 的燃料消耗公式本身没有问题：
 
-- `config/defs/items/combat/` 下已经有：
-  - `prototype.yaml`
-  - `precision_drone.yaml`
-  - `corvette.yaml`
-  - `destroyer.yaml`
-  - `attack_drone.yaml`
-- 但这些文件现在还不是服务端 authoritative item/recipe/runtime 的真实来源，只能作为 ID 与命名参考，不能直接当成“已经实现”。
+- 以 `FuelRules.consume_per_tick` 为唯一消耗速率
+- `artificial_star` 当前定义为 `antimatter_fuel_rod` 每 tick 消耗 `1`
+- 输出仍然按 `OutputPerTick=80` 结算
 
-## 3. 方案比较
+### 2.3 当前真正冲突的地方
 
-### 3.1 方案 A：继续隐藏，只统一“未开放”口径
+`server/internal/gamecore/rules.go` 的 `settleResources` 里，当前还存在第二次燃料可达性检查：
+
+```go
+if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) && !fuelBasedGeneratorHasReachableFuel(b) {
+    if evt := applyBuildingState(b, model.BuildingWorkNoPower, stateReasonNoFuel); evt != nil {
+        events = append(events, evt)
+    }
+    continue
+}
+```
+
+这个分支的问题不是“又消耗了一次燃料”，而是它在更晚阶段重新定义了同一 tick 的运行态语义：
+
+- `settlePowerGeneration` 说：本 tick 有燃料，已经发过电
+- `settleResources` 又说：因为当前库存已经被消耗到 0，所以本 tick 末尾立刻回到 `no_power / no_fuel`
+
+于是出现两个玩家可见问题：
+
+1. `building_state_changed` 会出现过短窗口的 `running -> no_power/no_fuel`
+2. `inspect` / `scene` 在用户实际查询时经常已经只能看到 `no_power/no_fuel`
+
+### 2.4 为什么 `networks/stats` 不是主因
+
+本仓库当前 `networks` 和 `stats` 的数据源已经是统一的：
+
+- `finalizePowerSettlement` 生成 `ws.PowerSnapshot`
+- `query.PlanetNetworks(...)` 读取 `CurrentPowerSettlementSnapshot(ws)`
+- `buildPlayerEnergyStats(...)` 也读取 `CurrentPowerSettlementSnapshot(ws)`
+
+也就是说，`stats/networks` 本身不是两套公式。它们之所以在实测中“看起来也不稳定”，主要是因为可观察窗口太短，玩家往往在燃料已经被同 tick 回写成 `no_fuel` 后再去查。
+
+因此本轮不应该去重写 `query` 或 `stats` 聚合逻辑。
+
+### 2.5 当前测试里已经固化了旧语义
+
+`server/internal/gamecore/t099_fuel_generator_state_test.go` 里目前有一个关键断言：
+
+- 单根 `antimatter_fuel_rod` 经过一个 `processTick()` 后，`artificial_star` 直接回到 `no_power / no_fuel`
+
+这正是 T104 要修掉的旧语义，因此实现时必须同步改测试，否则旧测试会反向把错误行为重新锁死。
+
+## 3. 设计目标与非目标
+
+### 3.1 目标
+
+1. 只要本 tick 通过真实燃料结算成功发电，燃料型发电建筑在该 tick 的 settled runtime 就应保持 `running`。
+2. 只有在下一 tick 开始时再次检查发现无可达燃料，才切回 `no_power / no_fuel`。
+3. `inspect` / `scene` / `building_state_changed` / `networks` / `stats` 五条观察面围绕同一套 tick 语义工作。
+4. 保持现有 `FuelRules.consume_per_tick`、`PowerSettlementSnapshot`、公开 HTTP/CLI 接口结构不变。
+5. 对 `thermal_power_plant` / `mini_fusion_power_plant` 保持同一规则，避免共享逻辑分叉。
+
+### 3.2 非目标
+
+1. 本次不把燃料棒改成“一个物品天然持续多 tick”的新经济模型。
+2. 本次不新增公开 API 字段，也不新增 CLI 命令。
+3. 本次不重做 `query` 层的 `inspect` 或 `scene` 序列化结构。
+4. 本次不扩展到更多终局玩法平衡，例如 `artificial_star` 输出数值、燃料配方成本、midgame 物资投放量。
+
+## 4. 方案比较
+
+### 方案 A：只在 query / UI 侧补一个“本 tick 曾发电”的展示层
+
+做法：
+
+- 保留现有 runtime 逻辑不动；
+- 额外在 `inspect` / `scene` / Web 上做临时字段或事件缓存，让建筑在刚发过电时看起来像仍在运行。
 
 优点：
 
-- 改动最小。
-- 风险最低。
-- 能快速避免夸大表述。
+- 表面上改动小；
+- 能快速改善部分展示效果。
 
 缺点：
 
-- 不能完成 `task` 中“补齐公开玩法闭环”的核心目标。
-- 问题仍然要继续留在 `docs/process/task/`。
-- 只是再次延后，不是解决。
+- runtime 真相仍然是错的；
+- `building_state_changed` 仍会抖动；
+- 会制造“建筑状态一套、power snapshot 一套、前端展示再一套”的第三事实源；
+- 违反本项目“直接改核心定义，不靠适配层圆谎”的约束。
 
-结论：不选。
+结论：
 
-### 3.2 方案 B：直接取消隐藏，并把 `produce` 放宽到高阶单位
+- 不采用。
+
+### 方案 B：新增燃料发电建筑内部的“燃烧态/剩余燃烧 tick”状态机
+
+做法：
+
+- 为建筑新增持久化字段，例如 `ActiveFuel`、`BurnTicksRemaining`；
+- 每次装入燃料后，先把燃料转换成独立燃烧态，再按燃烧态持续供电。
 
 优点：
 
-- 表面上最短路径。
-- 可以快速让 `catalog` 与 CLI 看起来“支持更多单位”。
+- 理论上可以把“库存剩余”和“正在燃烧”区分得更细；
+- 如果以后要做更复杂燃料系统，有扩展空间。
 
 缺点：
 
-- `produce` 现有语义是地表建筑相邻格生成 world unit，本身就不适合 `corvette / destroyer`。
-- `CombatUnitManager`、`OrbitalPlatformManager` 仍不是 authoritative runtime。
-- `SystemView`、回放、存档、事件流都还没有舰队线的公开可观察结果。
-- 会再次制造“科技可见、命令可发、但玩法不是真实闭环”的伪实现。
+- 对当前问题来说过度设计；
+- 需要新增存档字段、回放/回滚兼容、更多状态同步代码；
+- 当前 `FuelRules.consume_per_tick` 已能表达 T104 需求，没必要再造第二层燃烧模型。
 
-结论：不选。
+结论：
 
-### 3.3 方案 C：两段式公开舰队线，最后再做 public cutover
+- 不采用。
 
-核心思想：
+### 方案 C：把燃料运行态 authoritative 收口到 `settlePowerGeneration`，`settleResources` 只尊重其结果
 
-1. 工业系统先制造“单位载荷 item”。
-2. 部署命令再把 item 消耗成 authoritative runtime 实体。
-3. 行星战斗和星系舰队分别落在各自的 authoritative runtime 宿主。
-4. 当且仅当研究、制造、部署、查询、战斗、回放都成立时，才把 4 项科技取消隐藏并对玩家公开。
+做法：
+
+- 保留现有 `ResolvePowerGeneration` 和 `PowerSnapshot`；
+- 删除 `settleResources` 中对燃料型发电建筑的二次 `no_fuel` 判定；
+- 让 `settlePowerGeneration` 成为唯一“本 tick 是否因燃料不足停机”的判定点。
 
 优点：
 
-- 语义清晰，不污染 `produce`。
-- 和现有工业 / 物流 / transfer / building local storage 体系一致。
-- 可自然满足任务要求中的“生产入口、部署/编队入口、轨道/星系级查询入口、可观察战斗结果”。
-- 能把未来舰队线继续扩展到更高阶体系，而不必再推倒重来。
+- 改动集中，符合当前架构；
+- 不引入新状态结构；
+- 直接修复 `inspect/scene/events` 的窗口问题；
+- `networks/stats` 已有统一 snapshot，能自然获益。
 
 缺点：
 
-- 范围最大。
-- 需要先做 runtime authoritative 化。
+- 需要重新定义一个细节语义：最后一根燃料在本 tick 被消耗完后，该 tick 末建筑仍可能显示 `running`，但库存已是 `0`。
 
-结论：采用方案 C。
+结论：
 
-## 4. 推荐架构
+- 推荐采用。
 
-### 4.1 公开能力模型：把“单位是什么、怎么产、怎么部署、去哪查”收口成单一真相来源
+## 5. 推荐方案：单一 authoritative 燃料结算语义
 
-当前 `UnitCatalogEntry` 只有 `domain / runtime_class / producible / commands`，对舰队线不够。
+### 5.1 新语义定义
 
-推荐把它扩成真正的公开能力目录：
+本次明确规定：
 
-```go
-type UnitProductionMode string
+- `runtime.state` 表示的是**刚刚完成结算的这个 tick 的工作结果**，不是“下一 tick 的预测状态”。
+- 因此，如果 `artificial_star` 在 tick N 成功消耗了最后一根 `antimatter_fuel_rod` 并发出了 `+80` 供电：
+  - tick N 结束时仍可显示 `running`
+  - tick N 的 `networks/stats` 仍应体现这次供电
+  - 此时本地库存已经为 `0` 是合法现象
+  - 如果没有新燃料补入，则 tick N+1 才切到 `no_power / no_fuel`
 
-const (
-    UnitProductionModeWorldProduce UnitProductionMode = "world_produce"
-    UnitProductionModeFactoryRecipe UnitProductionMode = "factory_recipe"
-    UnitProductionModeInternal UnitProductionMode = "internal"
-)
+这个定义正好满足 T104 的核心验收：
 
-type UnitCatalogEntry struct {
-    ID               string           `json:"id"`
-    Name             string           `json:"name"`
-    Domain           UnitDomain       `json:"domain"`
-    RuntimeClass     UnitRuntimeClass `json:"runtime_class"`
-    Public           bool             `json:"public"`
-    VisibleTechID    string           `json:"visible_tech_id,omitempty"`
-    ProductionMode   UnitProductionMode `json:"production_mode"`
-    ProducerRecipes  []string         `json:"producer_recipes,omitempty"`
-    DeployCommand    string           `json:"deploy_command,omitempty"`
-    QueryScopes      []string         `json:"query_scopes,omitempty"`
-    Commands         []string         `json:"commands,omitempty"`
-    HiddenReason     string           `json:"hidden_reason,omitempty"`
-}
-```
+- 有效发电 tick 可被玩家稳定观察到；
+- 不再出现“同一个 tick 里先 running 又立刻 no_fuel”的闪烁；
+- 多根燃料棒的持续时间与 `consume_per_tick` 一致。
 
-推荐的公开目录语义如下：
+### 5.2 模块职责重新收口
 
-| 单位 | Domain | RuntimeClass | ProductionMode | 公开生产入口 | 公开部署入口 | 查询面 |
-|------|--------|--------------|----------------|--------------|--------------|--------|
-| `worker` | `ground` | `world_unit` | `world_produce` | `produce` | 无 | `planet` |
-| `soldier` | `ground` | `world_unit` | `world_produce` | `produce` | 无 | `planet` |
-| `prototype` | `air` | `combat_squad` | `factory_recipe` | 通用生产配方 | `deploy_squad` | `planet_runtime` |
-| `precision_drone` | `air` | `combat_squad` | `factory_recipe` | 通用生产配方 | `deploy_squad` | `planet_runtime` |
-| `corvette` | `space` | `fleet_unit` | `factory_recipe` | 通用生产配方 | `commission_fleet` | `system_runtime` / `fleet` |
-| `destroyer` | `space` | `fleet_unit` | `factory_recipe` | 通用生产配方 | `commission_fleet` | `system_runtime` / `fleet` |
+#### A. `settlePowerGeneration`
 
-约束：
+继续作为以下事实的唯一来源：
 
-1. `/catalog.units` 直接由这份目录生成。
-2. CLI `help produce`、`help deploy_squad`、`help commission_fleet` 都从这份目录衍生。
-3. `produce` 只接受 `production_mode == world_produce` 且 `runtime_class == world_unit` 的条目。
-4. 以后如果再新增舰队单位，不能绕过这份目录去分别改服务端、CLI、shared-client。
+1. 当前 tick 是否有可达燃料
+2. 是否从 `no_power/no_fuel` 恢复到 `running`
+3. 本 tick 消耗了多少燃料
+4. 本 tick 产生了多少 `PowerInput`
 
-### 4.2 科技与研究：先修公开边界，再做最终公开
+这部分逻辑保留在：
 
-#### 4.2.1 研究入口要先堵上隐藏科技穿透
+- `server/internal/gamecore/power_generation.go`
+- `server/internal/gamecore/fuel_generators.go`
+- `server/internal/model/power.go`
 
-在 `server/internal/gamecore/research.go` 增加“公开可研究科技”判定：
+#### B. `finalizePowerSettlement`
 
-- 默认玩家只能 `start_research` 公开科技；
-- `hidden=true` 的科技不能再靠手输 ID 研究；
-- 内部测试或 bootstrap 如需直接授予，继续走现有 grant / config 逻辑，不复用公开命令。
+无需重构，继续负责：
 
-这样可以避免在功能尚未落地时，玩家通过 `start_research prototype` 提前穿透边界。
+1. 基于 `ws.PowerInputs` 生成 `ws.PowerSnapshot`
+2. 回写玩家 energy
+3. 作为 `networks/stats` 的唯一 authoritative snapshot
 
-#### 4.2.2 4 项科技的公开顺序
+涉及文件：
 
-这 4 项科技不在基础 runtime 改造完成前提前公开：
+- `server/internal/gamecore/power_settlement.go`
+- `server/internal/model/power_settlement.go`
+- `server/internal/gamecore/stats_settlement.go`
 
-- `prototype`
-- `precision_drone`
-- `corvette`
-- `destroyer`
+#### C. `settleResources`
 
-推荐切换规则：
+职责改为：
 
-1. phase 1-3 未完成时：
-  - 继续 `hidden=true`
-  - `/catalog.units` 不公开
-  - 文档继续写“未开放”
-2. phase 4 全部完成且测试通过后：
-  - 改成 `hidden=false`
-  - 恢复 `/catalog.techs[].unlocks` 对应的单位解锁
-  - `/catalog.units` 同步公开
+1. 不再重新读取燃料库存并覆写 `no_fuel`
+2. 只尊重前序阶段已经确定的停机态
+3. 对已经处于 `no_power/no_fuel` 的燃料型发电建筑，直接跳过后续资源结算
 
-这一步是**发布闸门**，不是开发初始动作。
+也就是说，`settleResources` 只做“尊重状态”，不再做“重新定义状态”。
 
-### 4.3 运行态宿主：把战斗相关 manager 迁入 authoritative runtime
+### 5.3 文件级改造设计
 
-#### 4.3.1 新增 `CombatRuntimeState`
+#### 5.3.1 `server/internal/gamecore/rules.go`
 
-`SpaceRuntimeState` 已经是 authoritative 的，但行星战斗和轨道平台仍是临时 manager。
-
-推荐新增并持久化：
+删除现有这段重复检查：
 
 ```go
-type CombatRuntimeState struct {
-    EntityCounter int64                          `json:"entity_counter"`
-    Planets       map[string]*PlanetCombatRuntime `json:"planets,omitempty"`
-}
-
-type PlanetCombatRuntime struct {
-    PlanetID          string                       `json:"planet_id"`
-    Squads            map[string]*CombatSquad     `json:"squads,omitempty"`
-    OrbitalPlatforms  map[string]*OrbitalPlatform `json:"orbital_platforms,omitempty"`
-}
-
-type CombatSquad struct {
-    ID               string         `json:"id"`
-    ArchetypeID      string         `json:"archetype_id"`
-    OwnerID          string         `json:"owner_id"`
-    PlanetID         string         `json:"planet_id"`
-    SourceBuildingID string         `json:"source_building_id"`
-    Position         Position       `json:"position"`
-    State            string         `json:"state"`
-    HP               int            `json:"hp"`
-    MaxHP            int            `json:"max_hp"`
-    Shield           ShieldState    `json:"shield"`
-    Weapon           WeaponState    `json:"weapon"`
-    AmmoInventory    int            `json:"ammo_inventory"`
+if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) && !fuelBasedGeneratorHasReachableFuel(b) {
+    if evt := applyBuildingState(b, model.BuildingWorkNoPower, stateReasonNoFuel); evt != nil {
+        events = append(events, evt)
+    }
+    continue
 }
 ```
 
-作用：
-
-1. 取代 `CombatUnitManager` 的临时状态。
-2. 取代 `OrbitalPlatformManager` 的临时状态。
-3. 进入 save / restore / replay / rollback。
-4. 能被 query 层公开读取。
-
-#### 4.3.2 扩展 `SpaceRuntimeState`
-
-`SpaceRuntimeState` 保留 top-level system-scope 宿主角色，但 `Fleets` 需要真正落地：
+替换为更窄的“尊重前序 no_fuel 结果”分支：
 
 ```go
-type FleetUnitInstance struct {
-    ID          string      `json:"id"`
-    ArchetypeID string      `json:"archetype_id"`
-    HP          int         `json:"hp"`
-    MaxHP       int         `json:"max_hp"`
-    Shield      ShieldState `json:"shield"`
-    Weapon      WeaponState `json:"weapon"`
-    Ammo        int         `json:"ammo"`
-}
-
-type FleetTarget struct {
-    PlanetID     string `json:"planet_id,omitempty"`
-    EnemyForceID string `json:"enemy_force_id,omitempty"`
-    FleetID      string `json:"fleet_id,omitempty"`
-}
-
-type SpaceFleet struct {
-    ID               string                       `json:"id"`
-    OwnerID          string                       `json:"owner_id"`
-    SystemID         string                       `json:"system_id"`
-    SourceBuildingID string                       `json:"source_building_id"`
-    Formation        FormationType                `json:"formation"`
-    State            string                       `json:"state"`
-    Units            map[string]*FleetUnitInstance `json:"units,omitempty"`
-    Target           *FleetTarget                 `json:"target,omitempty"`
+if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) {
+    if b.Runtime.State == model.BuildingWorkNoPower && b.Runtime.StateReason == stateReasonNoFuel {
+        continue
+    }
 }
 ```
 
-约束：
+这样做的结果：
 
-1. `corvette / destroyer` 只进入 `SpaceRuntimeState`，不落进 `ws.Units`。
-2. `prototype / precision_drone` 只进入 `CombatRuntimeState`，不滥用 `ws.Units`。
-3. `GameCore` 不再自己持有独立的战斗 manager 作为真相来源，而是只保留薄 wrapper。
+- 若本 tick 在 `settlePowerGeneration` 已成功发电，则 `settleResources` 不会再把它打回 `no_fuel`
+- 若本 tick 一开始就无燃料，前序已写入 `no_power/no_fuel`，这里会直接跳过，避免误写 `running`
 
-#### 4.3.3 Tick 结算位置要调整
+#### 5.3.2 `server/internal/gamecore/power_generation.go`
 
-当前 `core.go` 只在 `activeWorld` 上结算 `settleCombat()` / `settleOrbitalCombat()` / `settleDroneControl()`。
+这里不需要大改结构，但实现时应明确加注释，说明：
 
-真正开放后，推荐改成：
+- 燃料型发电建筑的 `no_fuel` / `running` 转换由本阶段 authoritative 管理；
+- 后续 `settleResources` 不得再重复检查燃料可达性。
 
-1. 行星 combat runtime 在 `sortedWorlds()` 循环里按 planet 结算。
-2. system fleet runtime 在 worlds 循环外按 system 结算。
-3. 不允许舰队线依赖“当前活动星球”才能更新。
+如果实现时想让语义更清晰，可以把现有逻辑抽成一个小 helper，例如：
 
-否则，多星球部署和星系舰队一公开就会出现静止或不可回放的问题。
+- `settleFuelGeneratorAvailability(...)`
+- 或 `fuelGeneratorStateBeforeGeneration(...)`
 
-### 4.4 生产模型：不扩 `produce`，改成“制造载荷 item”
+但这只是整理代码，不是新增能力；不要为了 T104 新造一层复杂策略对象。
 
-#### 4.4.1 把 4 个高阶单位先做成真实可制造 item
+#### 5.3.3 `server/internal/gamecore/fuel_generators.go`
 
-推荐把以下 ID 正式纳入 `server/internal/model/item.go` 和 `recipe.go` 的 authoritative 定义：
+建议补一个小的状态判断 helper，避免 `rules.go` 和其他测试重复硬编码：
 
-- `prototype`
-- `precision_drone`
-- `corvette`
-- `destroyer`
-
-它们不是地表 `UnitType`，而是**部署前的工业载荷 item**。
-
-推荐生产路径：
-
-| 载荷 item | 推荐生产建筑 | 公开 tech |
-|-----------|--------------|-----------|
-| `prototype` | `assembling_machine_mk2` | `prototype` |
-| `precision_drone` | `assembling_machine_mk3` | `precision_drone` |
-| `corvette` | `recomposing_assembler` | `corvette` |
-| `destroyer` | `recomposing_assembler` | `destroyer` |
-
-这样做的理由：
-
-1. 和现有工业生产体系兼容；
-2. 不需要再发明第二套“单位制造专用命令”；
-3. 玩家可通过已有 `build ... --recipe ...`、物流、`transfer` 完成真实生产准备；
-4. `produce` 不被污染。
-
-#### 4.4.2 `battlefield_analysis_base` 变成部署枢纽，不是生产机
-
-`battlefield_analysis_base` 当前已有 combat 建筑身份，但没有部署 runtime。
-
-推荐扩展它：
-
-1. 增加本地存储；
-2. 增加 deployment module；
-3. 支持 `transfer` 把高阶载荷 item 装入建筑；
-4. 部署命令只从该建筑本地存储扣物品。
-
-这样和现有 `launch_solar_sail` / `launch_rocket` 的交互方式一致，玩家语义清晰。
-
-### 4.5 公开命令面
-
-#### 4.5.1 现有 `produce` 的最终语义
-
-`produce <building_id> <unit_type>` 继续保留，但只服务当前公开的 world unit。
-
-推荐服务端行为：
-
-1. `worker / soldier`
-  - 正常按当前逻辑处理。
-2. 对公开但非 `world_produce` 的单位（未来如 `corvette`）：
-  - 返回 authoritative 引导错误；
-  - 例如：`unit corvette is not produced via produce; use commission_fleet`
-3. 对隐藏或不存在的单位：
-  - 继续返回统一的 validation 错误。
-
-这样可以一次性收口“`produce` 到底作用于什么目标”的玩家语义。
-
-#### 4.5.2 新增命令
-
-最小公开命令集如下：
-
-1. `deploy_squad <building_id> <prototype|precision_drone> --count <n> [--planet <id>]`
-2. `commission_fleet <building_id> <corvette|destroyer> --count <n> --system <id> [--fleet <fleet_id>]`
-3. `fleet_assign <fleet_id> <line|vee|circle|wedge>`
-4. `fleet_attack <fleet_id> <planet_id> <target_id>`
-5. `fleet_disband <fleet_id>`
-
-对应命令语义：
-
-- `deploy_squad`
-  - 从基地本地存储扣除 `prototype` 或 `precision_drone` item；
-  - 在目标 planet combat runtime 中生成 squad。
-- `commission_fleet`
-  - 从基地本地存储扣除 `corvette` 或 `destroyer` item；
-  - 在目标 `system_id` 的 `SpaceRuntimeState` 中创建或增补舰队。
-- `fleet_assign`
-  - 只改编队与 runtime 状态，不产生第二套队形数据源。
-- `fleet_attack`
-  - 先支持同一星系内对目标行星敌军的 orbital strike；
-  - 后续如新增 enemy fleet，可沿同一 target 结构扩展。
-- `fleet_disband`
-  - 把 runtime 中的舰队实体拆散并释放状态；
-  - 不自动返还 item，避免无损刷实体。
-
-#### 4.5.3 Command / API 层改动
-
-需要同步更新：
-
-- `server/internal/model/command.go`
-  - 新增 command type 常量。
-- `server/internal/gamecore/core.go`
-  - 增加命令分发。
-- `server/internal/gateway/server.go`
-  - 增加 payload 校验。
-- `shared-client/src/types.ts`
-  - 扩命令联合类型。
-- `shared-client/src/api.ts`
-  - 增加新的客户端方法。
-- `client-cli`
-  - 增加命令解析、帮助文本和输出格式。
-
-### 4.6 查询面
-
-#### 4.6.1 行星运行态
-
-扩展 `GET /world/planets/{planet_id}/runtime`：
-
-- `combat_squads[]`
-- `orbital_platforms[]`
-- `combat_alerts[]`（可选）
-
-这样 `prototype / precision_drone` 的部署和战斗结果可以直接在 planet runtime 看见。
-
-#### 4.6.2 星系运行态
-
-新增 `GET /world/systems/{system_id}/runtime`：
-
-```json
-{
-  "system_id": "sys-1",
-  "fleets": [...],
-  "solar_sail_orbit": {...},
-  "dyson_summary": {...}
-}
+```go
+func fuelGeneratorStoppedByNoFuel(building *model.Building) bool
 ```
 
-要求：
+职责仅限：
 
-1. 这不是静态 `SystemView` 的替代，而是 runtime 补充视图。
-2. 舰队线公开后，玩家必须能从这里看见：
-  - 舰队 ID
-  - 所属玩家
-  - 编队
-  - 成员构成
-  - 当前状态
-  - 当前目标
+- 判断当前建筑是否是燃料型发电建筑；
+- 且 runtime 是否已经是 `no_power/no_fuel`
 
-#### 4.6.3 舰队明细
+这属于低耦合的小抽象，能减少状态字符串散落。
 
-新增：
+#### 5.3.4 不需要改动的文件
 
-- `GET /world/fleets`
-- `GET /world/fleets/{fleet_id}`
+以下文件本轮应明确保持不动，避免误扩散：
 
-CLI 则新增：
+- `server/internal/model/power.go`
+- `server/internal/query/planet_inspector.go`
+- `server/internal/query/query.go` 中的 `PlanetScene`
+- `server/internal/query/networks.go`
+- `server/internal/gamecore/stats_settlement.go`
 
-- `fleet_status [fleet_id] [--system <id>]`
+原因很简单：
 
-这样既满足“轨道 / 星系级单位查询入口”，也避免玩家只能靠 SSE 盲猜状态。
+- 它们当前消费的事实源已经正确；
+- 问题在于前序 tick runtime 语义被后置阶段覆盖，而不是这些模块自己算法错了。
 
-### 4.7 战斗结算与可观察结果
+### 5.4 观察面一致性设计
 
-#### 4.7.1 行星 squad
+#### 5.4.1 `inspect`
 
-`prototype / precision_drone` 走 planet combat runtime：
+当前 `inspect` 已直接返回建筑 runtime 和 storage。
 
-1. 使用现有 `combat_unit.go` 的伤害、护盾、武器结构；
-2. 目标先只接现有 `EnemyForces`；
-3. 结算结果反映到：
-  - `planet runtime`
-  - SSE `damage_applied`
-  - SSE `entity_destroyed`
-  - 对应敌军数量 / 强度变化
+修复后应满足：
 
-#### 4.7.2 星系 fleet
+- 有燃料运行期：`runtime.state = running`
+- 最后一根燃料被本 tick 消耗完时：
+  - `runtime.state` 仍可为 `running`
+  - `storage.inventory + input_buffer` 已为 `0` 也是合法结果
+- 下一 tick 若未补燃料，才转为 `no_power / no_fuel`
 
-`corvette / destroyer` 走 `SpaceRuntimeState`：
+也就是说，`inspect` 不需要新字段，关键是 runtime 语义要正确。
 
-1. MVP 先支持对同一 `system_id` 下指定 `planet_id` 的 `EnemyForce` 做 orbital strike；
-2. 伤害模型复用 `WeaponState` / `ShieldState`，但空间距离按 system/orbit 规则简化，不复用地表 tile 距离；
-3. 结果反映到：
-  - `system runtime`
-  - `fleet detail`
-  - 目标 planet 上的 enemy force 变化
-  - SSE `damage_applied` / `entity_destroyed`
+#### 5.4.2 `scene`
 
-这样即使当前仓库还没有完整的 enemy fleet，也能用现有敌军模型交付“真实可观察的高阶舰队战斗结果”。
+`scene` 当前直接暴露视野内建筑对象。
 
-#### 4.7.3 事件
+因此实现层只要修正 runtime，`scene` 就会自动与 `inspect` 一致，不需要 scene 专用逻辑。
 
-推荐新增事件：
+#### 5.4.3 `building_state_changed`
 
-- `squad_deployed`
-- `fleet_commissioned`
-- `fleet_assigned`
-- `fleet_attack_started`
-- `fleet_disbanded`
+修复后事件序列应收敛为：
 
-同时继续复用：
+1. 无燃料时：
+   - `running -> no_power (reason=no_fuel)`，或保持 `no_power/no_fuel`
+2. 补燃料后首次成功发电的 tick：
+   - `no_power/no_fuel -> running (reason=start)`
+3. 中间连续有燃料的 tick：
+   - 不再反复抖动事件
+4. 最后一根燃料已经在上一 tick 用尽、下一 tick 开始无燃料时：
+   - `running -> no_power (reason=no_fuel)`
 
-- `entity_created`
-- `damage_applied`
-- `entity_destroyed`
+禁止再出现：
 
-原则：
+- 同一个 tick 中先 `running(start)` 又立刻 `no_power(no_fuel)`
 
-1. 事件 payload 里的实体 ID 必须来自 authoritative runtime；
-2. query、save/replay、事件三者用同一份实体状态；
-3. 不允许再出现“命令成功了，但 query 看不到 / replay 不存在”的分裂行为。
+#### 5.4.4 `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats`
 
-### 4.8 `corvette_attack_drone` 的处理
+两者继续维持现有 snapshot 事实源，不新增任何特殊分支。
 
-当前任务文件要求的公开目标只有：
+修复后的预期是：
 
-- `prototype`
-- `precision_drone`
-- `corvette`
-- `destroyer`
+- 在燃料存在且本 tick 成功发电的阶段：
+  - `power_networks[].supply` 包含 `artificial_star` 的 `+80`
+  - `stats.energy_stats.generation` 同步增长
+- 下一 tick 如果确实无燃料：
+  - 两者一起回落
 
-因此本轮推荐：
+### 5.5 为什么这次不需要改 `inspect` 的 power 子对象
 
-1. `corvette_attack_drone` 不作为玩家公开目录条目；
-2. 如需给 `destroyer` 增加附属无人机，作为 destroyer 的内部 child archetype 处理；
-3. 只有当其拥有独立公开生产、部署、查询语义时，才进入 `/catalog.units`。
+当前 `inspect.power` 主要是 `ray_receiver` 专用视图，燃料型发电建筑没有额外 power 结算子对象。
 
-这样可以避免再次出现“目录里多了一个名字，但玩家没有入口”的旧问题。
+这不是 T104 的缺口，原因是：
 
-## 5. 发布闸门：真正开放前，先维持“未实现”口径
+- `artificial_star` 的核心观察项本来就来自 `runtime + storage`
+- `供电收益` 则已经由 `networks/stats` 提供 authoritative 视图
 
-这一条不是保守，而是为了防止再次把半成品包装成已实现。
-
-推荐把实施过程拆成 4 个阶段：
-
-### 阶段 1：runtime authoritative 化
-
-- 新增 `CombatRuntimeState`
-- 扩展 `SpaceRuntimeState.Fleets`
-- 接入 save / restore / replay / rollback
-- `prototype / precision_drone / corvette / destroyer` 继续 `hidden=true`
-- 文档继续明确“未开放”
-
-### 阶段 2：工业载荷与部署命令
-
-- item / recipe 真正接入 authoritative catalog
-- `battlefield_analysis_base` 增加 deployment runtime
-- 新命令接入
-- 仍然不公开 4 项科技
-
-### 阶段 3：查询与战斗闭环
-
-- `planet runtime` / `system runtime` / `fleet detail` 查询完成
-- squad / fleet 战斗和事件闭环完成
-- 回放验证完成
-- 仍然不公开 4 项科技
-
-### 阶段 4：public cutover
-
-只有当以下条件同时成立，才允许改成公开：
-
-1. 研究可以真实推进；
-2. 载荷可以真实生产；
-3. 部署命令可用；
-4. query 能看到实体；
-5. 战斗结果和事件可观察；
-6. save / replay / rollback 不丢状态。
-
-然后再统一做：
-
-- `hidden=false`
-- `/catalog.units` 公开
-- CLI 帮助更新
-- 玩家文档改写为“已开放”
-
-在这之前，所有玩家文档都必须继续维持：
-
-> 这条高阶舰队线当前仍未开放，不能宣称 DSP 终局玩法已完整实现。
+如果未来要做“建筑级逐 tick 发电明细”接口，那是新任务；T104 不应顺手扩大范围。
 
 ## 6. 测试设计
 
-### 6.1 基础边界测试
+### 6.1 测试文件边界
 
-1. 隐藏科技不能通过 `start_research` 直接穿透。
-2. `produce b-1 worker`、`produce b-1 soldier` 行为不回退。
-3. `produce b-1 corvette` 在公开 cutover 后返回单一 authoritative 引导错误，而不是旧式模糊报错。
+推荐拆成两部分：
 
-### 6.2 生产与部署测试
+1. 修改现有 `server/internal/gamecore/t099_fuel_generator_state_test.go`
+2. 新增 `server/internal/gamecore/t104_artificial_star_stable_power_test.go`
 
-1. 研究 `prototype` 后，对应 recipe 出现在公开 catalog。
-2. 通过真实工厂把 `prototype` item 生产出来。
-3. `transfer` 把载荷装入 `battlefield_analysis_base`。
-4. `deploy_squad` 消耗载荷并在 `planet runtime` 里出现 squad。
-5. `commission_fleet` 消耗载荷并在 `system runtime` 里出现 fleet。
+理由：
 
-### 6.3 战斗与查询测试
+- T099 文件里已经有燃料发电建筑基础状态回归；
+- T104 需要新增“持续时间与观察面一致性”测试，不适合把所有时序细节都塞回 T099。
 
-1. `fleet_assign` 后 `fleet_status` 能看到 formation 变化。
-2. `fleet_attack` 后目标 enemy force 强度下降。
-3. SSE 能看到 `damage_applied` / `entity_destroyed`。
-4. `planet runtime` / `system runtime` / `fleet detail` 三处状态一致。
+### 6.2 必改旧测试
 
-### 6.4 持久化测试
+`TestT099ArtificialStarFallsBackToNoFuelAfterLastRodIsConsumed`
 
-1. save 后 restore，squad / fleet 仍存在。
-2. replay digest 包含 squad / fleet 统计。
-3. rollback 后 runtime 恢复到历史状态。
+旧预期：
 
-### 6.5 回归测试
+- 单根燃料经过一个 `processTick()` 后，立刻 `no_power/no_fuel`
 
-必须继续回归当前任务文件已明确“不要重复记录缺失”的既有链路：
+新预期应改成两段：
 
-- `orbital_collector`
-- `vertical_launching_silo`
-- `em_rail_ejector`
-- `ray_receiver`
-- `jammer_tower`
-- `sr_plasma_turret`
-- `planetary_shield_generator`
-- `self_evolution_lab`
-- `energy_exchanger`
+1. 第一个 tick：
+   - `runtime.state = running`
+   - `PowerInput.Output = 80`
+   - `networks/stats` 有正向收益
+2. 第二个 tick（未补燃料）：
+   - `runtime.state = no_power`
+   - `runtime.state_reason = no_fuel`
+
+### 6.3 新增测试矩阵
+
+#### 用例 1：空燃料基线不回归
+
+场景：
+
+- `artificial_star` 无燃料
+
+预期：
+
+- `runtime.state = no_power`
+- `runtime.state_reason = no_fuel`
+- `power_networks[].supply = 0`
+- `stats.energy_stats.generation` 不增加
+
+#### 用例 2：单根燃料至少形成一个可观测运行 tick
+
+场景：
+
+- 装入 `1` 根 `antimatter_fuel_rod`
+
+预期：
+
+- 第 1 个结算 tick：
+  - `inspect` 显示 `running`
+  - `scene` 中该建筑也为 `running`
+  - `networks/stats` 反映 `+80`
+  - 允许库存已经降到 `0`
+- 第 2 个结算 tick：
+  - 回到 `no_power/no_fuel`
+
+#### 用例 3：多根燃料按 `consume_per_tick` 持续
+
+场景：
+
+- 装入 `3` 根 `antimatter_fuel_rod`
+
+预期：
+
+- 连续 `3` 个 tick 保持 `running`
+- 连续 `3` 个 tick `supply/generation` 保持包含 `+80`
+- 第 `4` 个 tick 才回落为 `no_power/no_fuel`
+- 期间不会在中途出现 `running -> no_power -> running` 抖动
+
+#### 用例 4：事件序列不再抖动
+
+场景：
+
+- 从空燃料恢复，再耗尽
+
+预期：
+
+- 只出现一条 `no_power/no_fuel -> running(start)`
+- 只在下一次真正无燃料 tick 出现一条 `running -> no_power/no_fuel`
+- 不出现同 tick 反向翻转
+
+#### 用例 5：共享分支回归
+
+场景：
+
+- `thermal_power_plant` 装煤
+- `mini_fusion_power_plant` 装 `hydrogen_fuel_rod`
+
+预期：
+
+- 两类建筑也遵守同一“最后一根燃料消耗后的下一 tick 才 no_fuel”的语义
+
+### 6.4 查询层验证方式
+
+T104 的新测试建议在 `GameCore + query.Layer` 层完成，而不是只测内部函数：
+
+- 用 `newE2ETestCore(...)`
+- 用 `query.New(...)`
+- 同时调用：
+  - `PlanetInspect(...)`
+  - `PlanetScene(...)`
+  - `PlanetNetworks(...)`
+- 再读取 `ws.Players["p1"].Stats.EnergyStats`
+
+这样可以一次锁住任务要求中的五条观察面，而不必上升到网关 HTTP 用例。
+
+## 7. 文档同步设计
+
+### 7.1 `docs/player/已知问题与回归.md`
+
+实现完成后，这里需要把 T104 从“新增问题”改成“已修复回归”。
+
+建议保留的信息：
+
+- 真实复现环境
+- 问题曾经的表现
+- 修复后的新语义：
+  - 单根燃料至少形成一个可观察发电 tick
+  - 多根燃料按 `consume_per_tick` 持续
+  - 下一 tick 才回到 `no_power/no_fuel`
+
+### 7.2 `docs/player/玩法指南.md`
+
+在发电与电网一节补一段终局能源说明：
+
+- `artificial_star` 使用 `antimatter_fuel_rod`
+- 当前按 `1` 根 / tick 消耗
+- 成功发电的 settled tick 内会显示 `running`
+- 最后一根燃料在该 tick 被消耗完后，若未补料，则下一 tick 才转为 `no_power/no_fuel`
+
+这样玩家不会再误以为“库存为 0 但 state 还是 running”是新 bug。
+
+### 7.3 `docs/dev/服务端API.md`
+
+需要同步修正文档口径，重点有两处：
+
+1. `GET /world/planets/{planet_id}/inspect`
+   - 明确燃料型发电建筑的 `running/no_fuel` 语义是“按已结算 tick 展示”
+2. `building_state_changed`
+   - 明确补燃料后不会再同 tick 立刻抖回 `no_fuel`
+
+还应补一句说明：
+
+- 在最后一根燃料刚被本 tick 消耗完时，`inspect` 可能出现“`runtime.state=running` 但库存为 `0`”；
+- 这是因为该 tick 已经真实完成发电，下一 tick 若未补料才会进入 `no_power/no_fuel`。
+
+### 7.4 不需要改的文档
+
+本次不涉及 CLI 指令变化，因此：
+
+- `docs/dev/客户端CLI.md` 不需要因为 T104 单独改命令说明
+
+## 8. 风险与实现注意事项
+
+### 8.1 最大认知风险
+
+修复后最容易让人误解的一点是：
+
+- “为什么库存已经 0 了，建筑这一 tick 还是 running？”
+
+这不是新 bug，而是本设计刻意采用的 settled-tick 语义。
+
+如果不接受这个语义，就必须走方案 B，新增独立燃烧状态；但那对 T104 来说明显过重。
+
+### 8.2 共享分支风险
+
+因为 `rules.go` 改的是共享燃料发电逻辑，所以必须覆盖：
+
 - `artificial_star`
-- `recomposing_assembler`
-- `pile_sorter`
-- `advanced_mining_machine`
-- `build_dyson_*`
-- `launch_solar_sail`
-- `launch_rocket`
-- `set_ray_receiver_mode`
+- `thermal_power_plant`
+- `mini_fusion_power_plant`
 
-要求是不因舰队线改造发生回退。
+不能只回归 `artificial_star`。
 
-## 7. 文档同步要求
+### 8.3 不要做的事
 
-真正开放 cutover 发生后，必须同步更新：
+实现时应避免以下错误方向：
 
-- `docs/player/玩法指南.md`
-- `docs/player/已知问题与回归.md`
-- `docs/dev/客户端CLI.md`
-- `docs/dev/服务端API.md`
-- `docs/archive/reference/戴森球计划-服务端逻辑功能清单.md`
+1. 不要在 query 层缓存“上一次 running”
+2. 不要给 `artificial_star` 单独加特判
+3. 不要修改 `FuelRules.consume_per_tick` 来伪装持续时间
+4. 不要新增一套和 `PowerSnapshot` 平行的 generator stats 结构
 
-同步原则：
-
-1. `produce` 明确只负责 world unit。
-2. 高阶舰队线明确写成“生产载荷 + 部署命令”的两段式。
-3. 只在 phase 4 完成后，才允许把高阶舰队线从“未开放”改成“已开放”。
-
-## 8. 影响文件建议
-
-推荐会涉及以下模块。
-
-### 8.1 服务端模型
-
-- `server/internal/model/tech.go`
-- `server/internal/model/unit_catalog.go`
-- `server/internal/model/item.go`
-- `server/internal/model/recipe.go`
-- `server/internal/model/command.go`
-- `server/internal/model/space_runtime.go`
-- 新增 `server/internal/model/combat_runtime.go`
-- `server/internal/model/building_defs.go`
-- `server/internal/model/building_runtime.go`
-
-### 8.2 服务端 gamecore / query / gateway
-
-- `server/internal/gamecore/core.go`
-- `server/internal/gamecore/research.go`
-- `server/internal/gamecore/rules.go`
-- 新增 `server/internal/gamecore/deployment_commands.go`
-- 新增 `server/internal/gamecore/combat_runtime_settlement.go`
-- 新增 `server/internal/gamecore/space_fleet_settlement.go`
-- `server/internal/query/catalog.go`
-- `server/internal/query/query.go`
-- 新增 `server/internal/query/fleet_runtime.go`
-- `server/internal/gateway/server.go`
-- `server/internal/snapshot/snapshot.go`
-
-### 8.3 shared-client / CLI
-
-- `shared-client/src/types.ts`
-- `shared-client/src/api.ts`
-- `client-cli/src/api.ts`
-- `client-cli/src/commands/action.ts`
-- `client-cli/src/commands/util.ts`
-- `client-cli/src/commands/index.ts`
-- 相关 CLI tests
-
-## 9. 验收映射
-
-与当前任务文件的验收项对应如下。
+## 9. 与验收标准的逐条对应
 
 ### 验收 1
 
-> `/catalog.techs` 中 `prototype / precision_drone / corvette / destroyer` 不再只是隐藏名词，玩家可以通过公开科技树看到并推进这条线。
+> `transfer <artificial_star_id> antimatter_fuel_rod <n>` 后，只要燃料仍有剩余，`inspect` 中该建筑就持续显示 `running`。
 
 对应设计：
 
-- phase 4 cutover 时取消隐藏；
-- 研究入口改成公开科技 authoritative 校验；
-- 只有 runtime 与部署链路完成后才公开。
+- `settlePowerGeneration` 作为唯一燃料运行态判定点
+- `settleResources` 不再在同 tick 覆盖 `no_fuel`
 
 ### 验收 2
 
-> `/catalog.units` 与 CLI / API 中存在与这条线一致的公开入口，不再只剩 `worker / soldier`。
+> `GET /world/planets/{planet_id}/networks` 与 `GET /state/stats.energy_stats` 在燃料存在期间能持续看到 `artificial_star` 对供电的贡献。
 
 对应设计：
 
-- 扩展 `UnitCatalogEntry`；
-- `/catalog.units` 公开 4 个高阶单位条目；
-- CLI 帮助按 `production_mode` 和 `deploy_command` 正确展示入口。
+- 保持 `PowerSettlementSnapshot` 为唯一事实源
+- 修复运行窗口后，`networks/stats` 自然稳定可见
 
 ### 验收 3
 
-> 玩家能通过公开命令真实完成至少一条高阶单位链路：研究、生产、部署 / 查询、看到实际战斗或可观察运行结果。
+> 多根燃料棒的持续时间与 `consume_per_tick` 一致，不再出现“3 根燃料棒仅维持约 2 tick 就全部消失”的现象。
 
 对应设计：
 
-- `build ... --recipe ...` 生产载荷；
-- `deploy_squad` / `commission_fleet` 部署；
-- `planet runtime` / `system runtime` / `fleet detail` 查询；
-- `fleet_attack` / squad combat 产生真实事件和结果。
+- 不改 `FuelRules.consume_per_tick`
+- 只改 tick 内状态收口，保证 `3` 根就是 `3` 个发电 tick
 
 ### 验收 4
 
-> `produce` 的目标语义、帮助文本、错误口径与文档完全一致。
+> 燃料真正耗尽后，建筑才回到 `no_power / no_fuel`，并伴随一致的 `building_state_changed` 事件。
 
 对应设计：
 
-- `produce` 永远只做 world unit；
-- 高阶单位统一引导到部署命令；
-- CLI 和文档不再把 `produce` 当成舰队线入口。
+- 下一 tick 开始无燃料时才切 `no_power/no_fuel`
+- 事件流不再同 tick 自相矛盾
 
-### 验收 5
+## 10. 最终建议
 
-> 本轮已确认可用的中后期建筑与戴森主链不能回退。
+T104 不应被实现成“再补几条文档说明”或“给 query 打补丁”。
 
-对应设计：
+最直接、最符合当前仓库风格的做法是：
 
-- 将现有 midgame / Dyson 命令链路列入强制回归集；
-- 舰队线改造不碰现有戴森公开命令的外部语义。
+- 保留现有 `ResolvePowerGeneration + PowerSnapshot` 主链
+- 把燃料型发电建筑的运行态 authoritative 归属收口到 `settlePowerGeneration`
+- 让 `settleResources` 停止对同一类建筑做第二次燃料判定
 
-## 10. 不在本轮范围内
-
-本设计明确不把以下内容当成 T100 必须项：
-
-- `client-web` 的舰队线可视化页面
-- 跨星系舰队迁移与 warp 航线系统
-- 玩家对玩家的完整太空战争平衡
-- `destroyer` 自动释放附属攻击无人机的复杂 AI
-- 轨道轰炸、地面协同、多层指挥点系统
-
-这些都可以在高阶舰队线公开之后继续演进，但不应成为本轮最小可玩闭环的前置条件。
-
-## 11. 最终建议
-
-本任务不应该再做成“改几个 help 文案 + 取消隐藏”的表层修补。
-
-推荐的落地顺序是：
-
-1. 先把 combat / orbital / fleet runtime authoritative 化。
-2. 再把高阶单位做成真实工业载荷。
-3. 再开放部署命令、查询和战斗。
-4. 最后统一把科技树、`/catalog.units`、CLI 和文档切到公开状态。
-
-这样完成后，`docs/process/task/T100_戴森深度试玩确认终局高阶舰队线仍未开放.md` 才能真正从“未实现问题”转入完成记录，而不是再次被文档口径临时压住。
+这样改完之后，`artificial_star` 才会真正从“能建、能装燃料、但观察面像坏的”变成“终局供电可稳定观察、可自动化验收”的完成态。

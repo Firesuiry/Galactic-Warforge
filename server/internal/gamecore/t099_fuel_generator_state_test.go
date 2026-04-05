@@ -89,14 +89,36 @@ func TestT099ArtificialStarFallsBackToNoFuelAfterLastRodIsConsumed(t *testing.T)
 
 	core.processTick()
 
+	if star.Runtime.State != model.BuildingWorkRunning {
+		t.Fatalf("expected artificial star to stay running for the tick that consumed the last rod, got %s", star.Runtime.State)
+	}
+	if star.Runtime.StateReason != "" {
+		t.Fatalf("expected artificial star running reason cleared during the last powered tick, got %s", star.Runtime.StateReason)
+	}
+	if remaining := star.Storage.OutputQuantity(model.ItemAntimatterFuelRod); remaining != 0 {
+		t.Fatalf("expected antimatter fuel rod to be consumed, got %d remaining", remaining)
+	}
+	if output := powerInputOutputForBuildingT099(ws, star.ID); output != 80 {
+		t.Fatalf("expected artificial star output 80 on the last fueled tick, got %d", output)
+	}
+	networks := planetNetworksForT099(t, core, ws)
+	if supply := powerNetworkSupplyForBuildingT099(t, ws, star.ID, networks); supply != 80 {
+		t.Fatalf("expected artificial star network supply 80 on the last fueled tick, got %d", supply)
+	}
+	if generation := ws.Players["p1"].Stats.EnergyStats.Generation; generation != 80 {
+		t.Fatalf("expected player generation 80 on the last fueled tick, got %d", generation)
+	}
+
+	core.processTick()
+
 	if star.Runtime.State != model.BuildingWorkNoPower {
-		t.Fatalf("expected artificial star to fall back to no_power after consuming last rod, got %s", star.Runtime.State)
+		t.Fatalf("expected artificial star to fall back to no_power on the next tick after fuel exhaustion, got %s", star.Runtime.State)
 	}
 	if star.Runtime.StateReason != stateReasonNoFuel {
 		t.Fatalf("expected artificial star reason %s after fuel exhaustion, got %s", stateReasonNoFuel, star.Runtime.StateReason)
 	}
-	if remaining := star.Storage.OutputQuantity(model.ItemAntimatterFuelRod); remaining != 0 {
-		t.Fatalf("expected antimatter fuel rod to be consumed, got %d remaining", remaining)
+	if output := powerInputOutputForBuildingT099(ws, star.ID); output != 0 {
+		t.Fatalf("expected no artificial star output after the fuel is exhausted, got %d", output)
 	}
 }
 
