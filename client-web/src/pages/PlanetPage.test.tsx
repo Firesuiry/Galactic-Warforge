@@ -1366,6 +1366,85 @@ describe("PlanetPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("大地图切到 1px 缩放时会显示低缩放简化提示", async () => {
+    const fetchMock = vi.fn(
+      (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.endsWith("/state/summary")) {
+          return Promise.resolve(jsonResponse(createSummaryPayload()));
+        }
+        if (url.endsWith("/state/stats")) {
+          return Promise.resolve(jsonResponse(createStatsPayload()));
+        }
+        if (url.includes("/world/planets/planet-1-1/scene")) {
+          return Promise.resolve(jsonResponse(createLargeScenePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
+          return Promise.resolve(jsonResponse(createRuntimePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/networks")) {
+          return Promise.resolve(jsonResponse(createNetworksPayload()));
+        }
+        if (url.endsWith("/catalog")) {
+          return Promise.resolve(jsonResponse(createCatalogPayload()));
+        }
+        if (url.includes("/events/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              event_types: ["building_state_changed"],
+              available_from_tick: 1,
+              next_event_id: "evt-10",
+              has_more: false,
+              events: [],
+            }),
+          );
+        }
+        if (url.includes("/alerts/production/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              available_from_tick: 1,
+              has_more: false,
+              alerts: [],
+            }),
+          );
+        }
+        if (url.includes("/events/stream")) {
+          return Promise.resolve(
+            sseResponse(
+              [
+                {
+                  event: "connected",
+                  data: {
+                    player_id: "p1",
+                    event_types: ["building_state_changed"],
+                  },
+                },
+              ],
+              init?.signal as AbortSignal,
+            ),
+          );
+        }
+
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+
+    renderApp(["/planet/planet-1-1"]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Gaia" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1px" }));
+
+    expect(await screen.findByText("低缩放简化")).toBeInTheDocument();
+    expect(await screen.findByText("细网格已简化")).toBeInTheDocument();
+  });
+
   it("调试面板可以导出当前视角 JSON", async () => {
     let exportedHref = "";
     let exportedDownload = "";

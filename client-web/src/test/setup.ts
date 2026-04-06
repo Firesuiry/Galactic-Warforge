@@ -10,6 +10,7 @@ const canvasContextStub = {
   beginPath: vi.fn(),
   clearRect: vi.fn(),
   closePath: vi.fn(),
+  drawImage: vi.fn(),
   fill: vi.fn(),
   fillRect: vi.fn(),
   fillText: vi.fn(),

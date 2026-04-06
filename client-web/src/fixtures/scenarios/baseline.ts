@@ -832,6 +832,10 @@ const replayDigest = {
   total_energy: 380,
   resource_remaining: 1860,
   entity_counter: 44,
+  space_entity_counter: 0,
+  solar_sail_count: 0,
+  solar_sail_systems: 0,
+  solar_sail_total_energy: 0,
   hash: 'baseline-replay-128',
 } satisfies ReplayDigest;
 
