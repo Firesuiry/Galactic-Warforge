@@ -3,22 +3,23 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 
 import { getAgentAllowedCommands, runCommandLine } from '../../client-cli/src/runtime.js';
+import { ensureBuiltinMiniMaxProvider } from './bootstrap/minimax.js';
 import { exportBundle } from './export/bundle.js';
 import { handleAgentRoutes } from './routes/agents.js';
 import { handleConversationRoutes } from './routes/conversations.js';
+import { handleProviderRoutes } from './routes/providers.js';
 import { handleScheduleRoutes } from './routes/schedules.js';
-import { handleTemplateRoutes } from './routes/templates.js';
 import { createEventBus } from './runtime/events.js';
 import { runAgentLoop } from './runtime/loop.js';
 import { createMailboxController, resolveMentionTargetsFromContent } from './runtime/router.js';
 import { runDueSchedules } from './runtime/scheduler.js';
-import { runTemplateTurn, type AgentTurnRunner } from './runtime/turn.js';
+import { runProviderTurn, type AgentTurnRunner } from './runtime/turn.js';
 import { createAgentStore } from './store/agent-store.js';
 import { createConversationStore } from './store/conversation-store.js';
 import { createMessageStore } from './store/message-store.js';
+import { createProviderStore } from './store/provider-store.js';
 import { createScheduleStore } from './store/schedule-store.js';
 import { createSecretStore } from './store/secret-store.js';
-import { createTemplateStore } from './store/template-store.js';
 import { createThreadStore } from './store/thread-store.js';
 import type { Conversation, ConversationMessage, GatewayCapabilities, ScheduleJob } from './types.js';
 
@@ -32,13 +33,14 @@ export interface GatewayServerOptions {
   port: number;
   agentTurnRunner?: AgentTurnRunner;
   schedulerIntervalMs?: number;
+  bootstrapEnvFile?: string;
 }
 
 function buildCapabilities(): GatewayCapabilities {
   return {
     status: 'ok',
     providers: {
-      openai_compatible_http: { available: true },
+      http_api: { available: true },
       codex_cli: { available: false, reason: 'not_probed' },
       claude_code_cli: { available: false, reason: 'not_probed' },
     },
@@ -46,7 +48,7 @@ function buildCapabilities(): GatewayCapabilities {
 }
 
 export async function createGatewayServer(options: GatewayServerOptions): Promise<GatewayServerHandle> {
-  const templateStore = createTemplateStore(path.join(options.dataRoot, 'templates'));
+  const providerStore = createProviderStore(path.join(options.dataRoot, 'providers'));
   const agentStore = createAgentStore(path.join(options.dataRoot, 'agents'));
   const threadStore = createThreadStore(path.join(options.dataRoot, 'threads'));
   const conversationStore = createConversationStore(path.join(options.dataRoot, 'conversations'));
@@ -54,7 +56,15 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
   const scheduleStore = createScheduleStore(path.join(options.dataRoot, 'schedules'));
   const secretStore = createSecretStore(path.join(options.dataRoot, 'secrets'));
   const eventBus = createEventBus();
-  const agentTurnRunner = options.agentTurnRunner ?? runTemplateTurn;
+  const agentTurnRunner = options.agentTurnRunner ?? runProviderTurn;
+
+  if (options.bootstrapEnvFile) {
+    await ensureBuiltinMiniMaxProvider({
+      envFilePath: options.bootstrapEnvFile,
+      providerStore,
+      secretStore,
+    });
+  }
 
   function emitConversationEvent(conversationId: string, type: string, payload: unknown) {
     eventBus.emit({
@@ -81,12 +91,12 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         return;
       }
 
-      const template = await templateStore.get(agent.templateId);
-      if (!template) {
+      const provider = await providerStore.get(agent.providerId);
+      if (!provider) {
         agent.status = 'error';
         agent.updatedAt = new Date().toISOString();
         await agentStore.save(agent);
-        eventBus.emit({ agentId: agent.id, type: 'error', payload: { message: 'template_not_found' } });
+        eventBus.emit({ agentId: agent.id, type: 'error', payload: { message: 'provider_not_found' } });
         return;
       }
 
@@ -103,11 +113,11 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       try {
         const playerKey = await secretStore.readValue(agent.playerKeySecretId);
         await runAgentLoop({
-          maxSteps: template.toolPolicy.maxSteps,
+          maxSteps: provider.toolPolicy.maxSteps,
           provider: {
             runTurn: (input) => agentTurnRunner({
               dataRoot: options.dataRoot,
-              template,
+              provider,
               secretStore,
               history: input.history,
               allowedCommands: getAgentAllowedCommands({
@@ -159,10 +169,24 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         agent.status = 'error';
         agent.updatedAt = new Date().toISOString();
         await agentStore.save(agent);
+        const messageText = error instanceof Error ? error.message : String(error);
+        const systemMessage: ConversationMessage = {
+          id: randomUUID(),
+          conversationId: conversation.id,
+          senderType: 'system',
+          senderId: agent.id,
+          kind: 'system',
+          content: `${agent.name} 回复失败：${messageText}`,
+          mentions: [],
+          trigger: 'system_message',
+          createdAt: new Date().toISOString(),
+        };
+        await messageStore.append(systemMessage);
+        emitConversationEvent(conversation.id, 'message', systemMessage);
         eventBus.emit({
           agentId: agent.id,
           type: 'error',
-          payload: { message: error instanceof Error ? error.message : String(error) },
+          payload: { message: messageText },
         });
       }
     },
@@ -263,9 +287,9 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       return;
     }
 
-    if (request.url?.startsWith('/templates')) {
-      await handleTemplateRoutes(request, response, {
-        templateStore,
+    if (request.url?.startsWith('/providers')) {
+      await handleProviderRoutes(request, response, {
+        providerStore,
         secretStore,
       });
       return;
@@ -275,7 +299,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       await handleAgentRoutes(request, response, {
         dataRoot: options.dataRoot,
         agentStore,
-        templateStore,
+        providerStore,
         threadStore,
         secretStore,
         eventBus,
@@ -304,7 +328,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
 
     if (request.method === 'POST' && request.url === '/export') {
       const payload = await readJsonBody<{ includeSecrets?: boolean }>(request);
-      const templates = await templateStore.list();
+      const providers = await providerStore.list();
       const agents = await agentStore.list();
       const threads = await threadStore.list();
       const conversations = await conversationStore.list();
@@ -314,7 +338,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({
         ...exportBundle({
-          templates,
+          providers,
           includeSecrets: Boolean(payload.includeSecrets),
           encryptedSecrets: [],
         }),
@@ -329,7 +353,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
 
     if (request.method === 'POST' && request.url === '/import') {
       const payload = await readJsonBody<{
-        templates?: Array<Awaited<ReturnType<typeof templateStore.list>>[number]>;
+        providers?: Array<Awaited<ReturnType<typeof providerStore.list>>[number]>;
         agents?: Array<Awaited<ReturnType<typeof agentStore.list>>[number]>;
         threads?: Array<Awaited<ReturnType<typeof threadStore.list>>[number]>;
         conversations?: Array<Awaited<ReturnType<typeof conversationStore.list>>[number]>;
@@ -337,7 +361,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         schedules?: Array<Awaited<ReturnType<typeof scheduleStore.list>>[number]>;
       }>(request);
 
-      await Promise.all((payload.templates ?? []).map((template) => templateStore.save(template)));
+      await Promise.all((payload.providers ?? []).map((provider) => providerStore.save(provider)));
       await Promise.all((payload.agents ?? []).map((agent) => agentStore.save(agent)));
       await Promise.all((payload.threads ?? []).map((thread) => threadStore.save(thread)));
       await Promise.all((payload.conversations ?? []).map((conversation) => conversationStore.save(conversation)));
@@ -347,7 +371,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({
         imported: {
-          templates: payload.templates?.length ?? 0,
+          providers: payload.providers?.length ?? 0,
           agents: payload.agents?.length ?? 0,
           threads: payload.threads?.length ?? 0,
           conversations: payload.conversations?.length ?? 0,

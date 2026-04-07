@@ -7,16 +7,17 @@ import {
   addConversationMembers,
   createAgent,
   createConversation,
+  createProvider,
   createSchedule,
-  createTemplate,
   fetchAgents,
   fetchConversationMessages,
   fetchConversations,
   fetchGatewayHealth,
+  fetchProviders,
   fetchSchedules,
-  fetchTemplates,
   inviteConversationMembersByPlanet,
   sendConversationMessage,
+  updateAgent,
   updateSchedule,
 } from '@/features/agents/api';
 import { useConversationEvents } from '@/features/agents/use-agent-events';
@@ -33,13 +34,11 @@ export function AgentsPage() {
   const [channelView, setChannelView] = useState<'chat' | 'settings'>('chat');
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateMember, setShowCreateMember] = useState(false);
-  const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [showProviderManager, setShowProviderManager] = useState(false);
   const [channelName, setChannelName] = useState('');
   const [channelTopic, setChannelTopic] = useState('');
   const [memberName, setMemberName] = useState('');
-  const [memberTemplateId, setMemberTemplateId] = useState('');
-  const [templateName, setTemplateName] = useState('');
-  const [templateDescription, setTemplateDescription] = useState('');
+  const [memberProviderId, setMemberProviderId] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [inviteAgentId, setInviteAgentId] = useState('');
   const [invitePlanetId, setInvitePlanetId] = useState('');
@@ -61,10 +60,10 @@ export function AgentsPage() {
     queryFn: fetchAgents,
   });
 
-  const templatesQuery = useQuery({
-    queryKey: ['agent-templates'],
-    queryFn: fetchTemplates,
-    enabled: showCreateMember,
+  const providersQuery = useQuery({
+    queryKey: ['agent-providers'],
+    queryFn: fetchProviders,
+    enabled: activePane === 'members' || showCreateMember,
   });
 
   const schedulesQuery = useQuery({
@@ -93,11 +92,11 @@ export function AgentsPage() {
   }, [agentsQuery.data, selectedAgentId]);
 
   useEffect(() => {
-    const firstTemplateId = templatesQuery.data?.[0]?.id ?? '';
-    if (showCreateMember && !memberTemplateId && firstTemplateId) {
-      setMemberTemplateId(firstTemplateId);
+    const firstProviderId = providersQuery.data?.[0]?.id ?? '';
+    if (showCreateMember && !memberProviderId && firstProviderId) {
+      setMemberProviderId(firstProviderId);
     }
-  }, [memberTemplateId, showCreateMember, templatesQuery.data]);
+  }, [memberProviderId, showCreateMember, providersQuery.data]);
 
   useConversationEvents(selectedConversationId, () => {
     void queryClient.invalidateQueries({ queryKey: ['agent-conversation-messages', selectedConversationId] });
@@ -118,14 +117,12 @@ export function AgentsPage() {
     },
   });
 
-  const createTemplateMutation = useMutation({
-    mutationFn: createTemplate,
-    onSuccess: (template) => {
-      setMemberTemplateId(template.id);
-      setTemplateName('');
-      setTemplateDescription('');
-      setShowTemplateManager(false);
-      void queryClient.invalidateQueries({ queryKey: ['agent-templates'] });
+  const createProviderMutation = useMutation({
+    mutationFn: createProvider,
+    onSuccess: (provider) => {
+      setMemberProviderId(provider.id);
+      setShowProviderManager(false);
+      void queryClient.invalidateQueries({ queryKey: ['agent-providers'] });
     },
   });
 
@@ -135,9 +132,9 @@ export function AgentsPage() {
       setActivePane('members');
       setSelectedAgentId(agent.id);
       setShowCreateMember(false);
-      setShowTemplateManager(false);
+      setShowProviderManager(false);
       setMemberName('');
-      setMemberTemplateId(agent.templateId);
+      setMemberProviderId(agent.providerId);
       setScheduleMessage(`@${agent.name} 每五分钟同步一次当前状态`);
       void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
     },
@@ -204,12 +201,19 @@ export function AgentsPage() {
     },
   });
 
+  const updateAgentMutation = useMutation({
+    mutationFn: ({ agentId, payload }: { agentId: string; payload: Parameters<typeof updateAgent>[1] }) => updateAgent(agentId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
+    },
+  });
+
   const conversations = conversationsQuery.data ?? [];
   const agents = agentsQuery.data ?? [];
-  const templates = templatesQuery.data ?? [];
+  const providers = providersQuery.data ?? [];
   const schedules = schedulesQuery.data ?? [];
   const messages = messagesQuery.data ?? [];
-  const memberDataLoading = showCreateMember && templatesQuery.isLoading;
+  const memberDataLoading = (activePane === 'members' || showCreateMember) && providersQuery.isLoading;
   const coreLoading = healthQuery.isLoading || conversationsQuery.isLoading || agentsQuery.isLoading || schedulesQuery.isLoading || memberDataLoading;
   const messagesLoading = selectedConversationId !== '' && messagesQuery.isLoading;
 
@@ -320,14 +324,14 @@ export function AgentsPage() {
     setActivePane(pane);
     if (pane === 'channels') {
       setShowCreateMember(false);
-      setShowTemplateManager(false);
+      setShowProviderManager(false);
     }
   }
 
   function handleSelectAgent(agentId: string) {
     setActivePane('members');
     setShowCreateMember(false);
-    setShowTemplateManager(false);
+    setShowProviderManager(false);
     setSelectedAgentId(agentId);
   }
 
@@ -340,11 +344,9 @@ export function AgentsPage() {
   function handleOpenCreateMember() {
     setActivePane('members');
     setShowCreateMember(true);
-    setShowTemplateManager(false);
+    setShowProviderManager(false);
     setMemberName('');
-    setMemberTemplateId(templatesQuery.data?.[0]?.id ?? '');
-    setTemplateName('');
-    setTemplateDescription('');
+    setMemberProviderId(providersQuery.data?.[0]?.id ?? '');
   }
 
   function handleAddConversationMembers(event: FormEvent<HTMLFormElement>) {
@@ -359,46 +361,22 @@ export function AgentsPage() {
     });
   }
 
-  function handleCreateTemplate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!templateName.trim() || fixtureMode) {
+  function handleCreateProvider(payload: Parameters<typeof createProviderMutation.mutate>[0]) {
+    if (fixtureMode) {
       return;
     }
-
-    void createTemplateMutation.mutate({
-      name: templateName.trim(),
-      providerKind: 'codex_cli',
-      description: templateDescription.trim(),
-      defaultModel: 'gpt-5-codex',
-      systemPrompt: [
-        `你是 ${templateName.trim()}。`,
-        templateDescription.trim() ? `职责说明：${templateDescription.trim()}` : '职责说明：负责在 SiliconWorld 中执行协作任务。',
-      ].join('\n'),
-      toolPolicy: {
-        cliEnabled: true,
-        maxSteps: 8,
-        maxToolCallsPerTurn: 4,
-        commandWhitelist: ['build', 'overview', 'galaxy', 'planet'],
-      },
-      providerConfig: {
-        command: 'codex',
-        model: 'gpt-5-codex',
-        workdir: '/home/firesuiry/develop/siliconWorld',
-        argsTemplate: [],
-        envOverrides: {},
-      },
-    });
+    void createProviderMutation.mutate(payload);
   }
 
   function handleCreateMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!memberName.trim() || !memberTemplateId || fixtureMode) {
+    if (!memberName.trim() || !memberProviderId || fixtureMode) {
       return;
     }
 
     void createAgentMutation.mutate({
       name: memberName.trim(),
-      templateId: memberTemplateId,
+      providerId: memberProviderId,
       serverUrl: session.serverUrl,
       playerId: session.playerId,
       playerKey: session.playerKey,
@@ -409,10 +387,8 @@ export function AgentsPage() {
     return <div className="panel">正在加载智能体协作台...</div>;
   }
 
-  const templatesError = showCreateMember ? templatesQuery.error : null;
-
-  if (healthQuery.error || conversationsQuery.error || agentsQuery.error || templatesError || schedulesQuery.error || messagesQuery.error) {
-    const error = healthQuery.error || conversationsQuery.error || agentsQuery.error || templatesError || schedulesQuery.error || messagesQuery.error;
+  if (healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error) {
+    const error = healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error;
     return (
       <div className="panel error-banner" role="alert">
         {error instanceof Error ? error.message : '智能体协作台加载失败'}
@@ -432,17 +408,15 @@ export function AgentsPage() {
       messagesLoading={messagesLoading}
       agents={agents}
       selectedAgentId={selectedAgentId}
-      templates={templates}
+      providers={providers}
       schedules={schedules}
       showCreateChannel={showCreateChannel}
       showCreateMember={showCreateMember}
-      showTemplateManager={showTemplateManager}
+      showProviderManager={showProviderManager}
       channelName={channelName}
       channelTopic={channelTopic}
       memberName={memberName}
-      memberTemplateId={memberTemplateId}
-      templateName={templateName}
-      templateDescription={templateDescription}
+      memberProviderId={memberProviderId}
       messageInput={messageInput}
       inviteAgentId={inviteAgentId}
       invitePlanetId={invitePlanetId}
@@ -453,20 +427,18 @@ export function AgentsPage() {
       onSelectAgent={handleSelectAgent}
       onToggleCreateChannel={handleToggleCreateChannel}
       onOpenCreateMember={handleOpenCreateMember}
-      onOpenTemplateManager={() => setShowTemplateManager(true)}
-      onCloseTemplateManager={() => setShowTemplateManager(false)}
+      onOpenProviderManager={() => setShowProviderManager(true)}
+      onCloseProviderManager={() => setShowProviderManager(false)}
       onChannelNameChange={setChannelName}
       onChannelTopicChange={setChannelTopic}
       onMemberNameChange={setMemberName}
-      onMemberTemplateIdChange={setMemberTemplateId}
-      onTemplateNameChange={setTemplateName}
-      onTemplateDescriptionChange={setTemplateDescription}
+      onMemberProviderIdChange={setMemberProviderId}
       onMessageInputChange={setMessageInput}
       onInviteAgentIdChange={setInviteAgentId}
       onInvitePlanetIdChange={setInvitePlanetId}
       onScheduleIntervalChange={setScheduleIntervalSeconds}
       onScheduleMessageChange={setScheduleMessage}
-      onCreateTemplate={handleCreateTemplate}
+      onCreateProvider={handleCreateProvider}
       onCreateMember={handleCreateMember}
       onCreateChannel={handleCreateChannel}
       onSendMessage={handleSendMessage}
@@ -481,6 +453,18 @@ export function AgentsPage() {
           return;
         }
         void updateScheduleMutation.mutate({ scheduleId, enabled });
+      }}
+      onSaveAgentPolicy={(policy) => {
+        if (fixtureMode || !selectedAgentId) {
+          return;
+        }
+        void updateAgentMutation.mutate({ agentId: selectedAgentId, payload: { policy } });
+      }}
+      onSaveAgentProvider={(providerId) => {
+        if (fixtureMode || !selectedAgentId) {
+          return;
+        }
+        void updateAgentMutation.mutate({ agentId: selectedAgentId, payload: { providerId } });
       }}
     />
   );

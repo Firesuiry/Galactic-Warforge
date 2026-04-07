@@ -9,19 +9,19 @@ import { createAgentStore } from './agent-store.js';
 import { createConversationStore } from './conversation-store.js';
 import { listJsonFiles, writeJsonFile } from './file-store.js';
 import { createMessageStore } from './message-store.js';
+import { createProviderStore } from './provider-store.js';
 import { createScheduleStore } from './schedule-store.js';
 import { createSecretStore } from './secret-store.js';
-import { createTemplateStore } from './template-store.js';
 
-describe('template store', () => {
-  it('saves and reloads templates from disk', async () => {
+describe('provider store', () => {
+  it('saves and reloads providers from disk', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'sw-agent-templates-'));
-    const store = createTemplateStore(root);
+    const store = createProviderStore(root);
 
     await store.save({
-      id: 'tpl-http',
+      id: 'provider-http',
       name: 'HTTP Builder',
-      providerKind: 'openai_compatible_http',
+      providerKind: 'http_api',
       description: 'build things',
       defaultModel: 'gpt-5',
       systemPrompt: 'You are an operations agent.',
@@ -32,7 +32,8 @@ describe('template store', () => {
         commandWhitelist: ['summary', 'build'],
       },
       providerConfig: {
-        baseUrl: 'https://example.invalid/v1',
+        apiUrl: 'https://example.invalid/v1',
+        apiStyle: 'openai',
         apiKeySecretId: 'sec-1',
         model: 'gpt-5',
         extraHeaders: {},
@@ -41,9 +42,9 @@ describe('template store', () => {
       updatedAt: '2026-04-03T00:00:00.000Z',
     });
 
-    const templates = await store.list();
-    assert.equal(templates.length, 1);
-    assert.equal(templates[0]?.id, 'tpl-http');
+    const providers = await store.list();
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0]?.id, 'provider-http');
   });
 });
 
@@ -64,7 +65,7 @@ describe('secret store', () => {
 describe('bundle export', () => {
   it('omits encryptedSecrets by default', async () => {
     const bundle = exportBundle({
-      templates: [{ id: 'tpl-http', name: 'HTTP Builder' }],
+      providers: [{ id: 'provider-http', name: 'HTTP Builder' }],
       includeSecrets: false,
       encryptedSecrets: [{ id: 'sec-1', ciphertext: 'abc' }],
     });
@@ -119,11 +120,13 @@ describe('collaboration stores', () => {
     await agentStore.save({
       id: 'agent-director',
       name: '总管',
-      templateId: 'tpl-1',
+      providerId: 'provider-1',
       serverUrl: 'http://127.0.0.1:18081',
       playerId: 'p1',
       playerKeySecretId: 'secret-1',
       status: 'idle',
+      goal: '协调建设',
+      activeThreadId: 'thread-agent-director',
       role: 'director',
       policy: {
         planetIds: ['planet-a'],
@@ -189,7 +192,7 @@ describe('collaboration stores', () => {
     const messages = await messageStore.listByConversation('conv-a');
     const schedules = await scheduleStore.list();
 
-    assert.equal(agent?.policy.commandCategories[0], 'observe');
+    assert.equal(agent?.policy?.commandCategories[0], 'observe');
     assert.equal(conversations[0]?.name, '星球A协作');
     assert.equal(messages[0]?.mentions[0]?.id, 'agent-director');
     assert.equal(schedules[0]?.intervalSeconds, 300);

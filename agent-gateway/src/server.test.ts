@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -31,14 +31,14 @@ describe('gateway server', () => {
     assert.deepEqual(await capabilities.json(), {
       status: 'ok',
       providers: {
-        openai_compatible_http: { available: true },
+        http_api: { available: true },
         codex_cli: { available: false, reason: 'not_probed' },
         claude_code_cli: { available: false, reason: 'not_probed' },
       },
     });
   });
 
-  it('exports templates and imports bundles', async () => {
+  it('exports providers and imports bundles', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({
       dataRoot,
@@ -46,13 +46,13 @@ describe('gateway server', () => {
     });
     servers.push(server);
 
-    const createResponse = await fetch(`${server.url}/templates`, {
+    const createResponse = await fetch(`${server.url}/providers`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         name: 'HTTP Builder',
-        providerKind: 'openai_compatible_http',
-        description: 'template',
+        providerKind: 'http_api',
+        description: 'provider',
         defaultModel: 'gpt-5',
         systemPrompt: 'Return JSON.',
         toolPolicy: {
@@ -62,7 +62,8 @@ describe('gateway server', () => {
           commandWhitelist: [],
         },
         providerConfig: {
-          baseUrl: 'https://example.invalid/v1',
+          apiUrl: 'https://example.invalid/v1',
+          apiStyle: 'openai',
           apiKey: 'demo-key',
           model: 'gpt-5',
           extraHeaders: {},
@@ -77,18 +78,18 @@ describe('gateway server', () => {
       body: JSON.stringify({ includeSecrets: false }),
     });
     assert.equal(exportResponse.status, 200);
-    const bundle = await exportResponse.json() as { templates: Array<{ name: string }> };
-    assert.equal(bundle.templates.length, 1);
-    assert.equal(bundle.templates[0]?.name, 'HTTP Builder');
+    const bundle = await exportResponse.json() as { providers: Array<{ name: string }> };
+    assert.equal(bundle.providers.length, 1);
+    assert.equal(bundle.providers[0]?.name, 'HTTP Builder');
 
     const importResponse = await fetch(`${server.url}/import`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         manifest: { version: 1 },
-        templates: [{
-          id: 'tpl-imported',
-          name: 'Imported Template',
+        providers: [{
+          id: 'provider-imported',
+          name: 'Imported Provider',
           providerKind: 'codex_cli',
           description: '',
           defaultModel: 'gpt-5-codex',
@@ -113,10 +114,10 @@ describe('gateway server', () => {
     });
     assert.equal(importResponse.status, 200);
 
-    const templatesResponse = await fetch(`${server.url}/templates`);
+    const templatesResponse = await fetch(`${server.url}/providers`);
     const templates = await templatesResponse.json() as Array<{ id: string }>;
     assert.equal(templates.length, 2);
-    assert.ok(templates.some((template) => template.id === 'tpl-imported'));
+    assert.ok(templates.some((template) => template.id === 'provider-imported'));
   });
 
   it('creates conversations, invites agents by planet, posts messages, and manages schedules', async () => {
@@ -127,12 +128,12 @@ describe('gateway server', () => {
     });
     servers.push(server);
 
-    const templateResponse = await fetch(`${server.url}/templates`, {
+    const templateResponse = await fetch(`${server.url}/providers`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        id: 'tpl-director',
-        name: 'Director Template',
+        id: 'provider-director',
+        name: 'Director Provider',
         providerKind: 'codex_cli',
         description: '',
         defaultModel: 'gpt-5-codex',
@@ -160,7 +161,7 @@ describe('gateway server', () => {
       body: JSON.stringify({
         id: 'agent-director',
         name: '总管',
-        templateId: 'tpl-director',
+        providerId: 'provider-director',
         serverUrl: 'http://127.0.0.1:18081',
         playerId: 'p1',
         playerKey: 'key_player_1',
@@ -186,7 +187,7 @@ describe('gateway server', () => {
       body: JSON.stringify({
         id: 'agent-builder',
         name: '建造官',
-        templateId: 'tpl-director',
+        providerId: 'provider-director',
         serverUrl: 'http://127.0.0.1:18081',
         playerId: 'p1',
         playerKey: 'key_player_1',
@@ -204,6 +205,17 @@ describe('gateway server', () => {
       }),
     });
     assert.equal(builderResponse.status, 201);
+
+    const updateAgentResponse = await fetch(`${server.url}/agents/agent-builder`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        providerId: 'provider-director',
+      }),
+    });
+    assert.equal(updateAgentResponse.status, 200);
+    const updatedAgent = await updateAgentResponse.json() as { providerId: string };
+    assert.equal(updatedAgent.providerId, 'provider-director');
 
     const createConversationResponse = await fetch(`${server.url}/conversations`, {
       method: 'POST',
@@ -319,12 +331,12 @@ describe('gateway server', () => {
     });
     servers.push(server);
 
-    await fetch(`${server.url}/templates`, {
+    await fetch(`${server.url}/providers`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        id: 'tpl-director',
-        name: 'Director Template',
+        id: 'provider-director',
+        name: 'Director Provider',
         providerKind: 'codex_cli',
         description: '',
         defaultModel: 'gpt-5-codex',
@@ -351,7 +363,7 @@ describe('gateway server', () => {
       body: JSON.stringify({
         id: 'agent-builder',
         name: '建造官',
-        templateId: 'tpl-director',
+        providerId: 'provider-director',
         serverUrl: 'http://127.0.0.1:18081',
         playerId: 'p1',
         playerKey: 'key_player_1',
@@ -408,5 +420,243 @@ describe('gateway server', () => {
     assert.equal(messages[1]?.senderType, 'agent');
     assert.equal(messages[1]?.senderId, 'agent-builder');
     assert.match(messages[1]?.content ?? '', /检查星球A产线/);
+  });
+
+  it('auto replies in dm conversations through the codex cli provider', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const capturePath = path.join(tempDir, 'codex-capture.json');
+    const fakeCodexPath = path.join(tempDir, 'fake-codex.js');
+    await writeFile(fakeCodexPath, `#!/usr/bin/env node
+const { writeFileSync } = require('node:fs');
+const args = process.argv.slice(2);
+const execIndex = args.indexOf('exec');
+if (execIndex <= 0) {
+  console.error('missing exec subcommand or approval flags before exec');
+  process.exit(2);
+}
+if (args.includes('--ask-for-approval')) {
+  console.error('unexpected legacy approval flag position');
+  process.exit(2);
+}
+if (args.at(-1) === '-') {
+  console.error('prompt must be passed as an argument');
+  process.exit(2);
+}
+if (!(args.includes('-a') && args[args.indexOf('-a') + 1] === 'never')) {
+  console.error('missing root approval policy');
+  process.exit(2);
+}
+writeFileSync(process.env.CAPTURE_PATH, JSON.stringify({
+  args,
+  cwd: process.cwd(),
+  testFlag: process.env.TEST_FLAG ?? '',
+}));
+process.stdout.write(JSON.stringify({
+  assistantMessage: '已收到你的私聊',
+  actions: [],
+  done: true,
+}));
+`);
+    await chmod(fakeCodexPath, 0o755);
+
+    const server = await createGatewayServer({
+      dataRoot: tempDir,
+      port: 0,
+    });
+    servers.push(server);
+
+    const templateResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-codex',
+        name: 'Codex Worker',
+        providerKind: 'codex_cli',
+        description: 'codex template',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: '请直接回复消息。',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 2,
+          maxToolCallsPerTurn: 1,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: fakeCodexPath,
+          model: 'gpt-5-codex',
+          workdir: tempDir,
+          argsTemplate: ['--profile', 'test-profile'],
+          envOverrides: {
+            CAPTURE_PATH: capturePath,
+            TEST_FLAG: 'codex-ok',
+          },
+        },
+      }),
+    });
+    assert.equal(templateResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-helper',
+        name: '助手',
+        providerId: 'provider-codex',
+        serverUrl: 'http://127.0.0.1:18080',
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'dm-helper',
+        type: 'dm',
+        name: '与 助手 私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-helper'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const sendResponse = await fetch(`${server.url}/conversations/dm-helper/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '你好',
+      }),
+    });
+    assert.equal(sendResponse.status, 202);
+
+    let messages: Array<{ senderType: string; content: string }> = [];
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch(`${server.url}/conversations/dm-helper/messages`);
+      messages = await response.json() as Array<{ senderType: string; content: string }>;
+      if (messages.length >= 2) {
+        break;
+      }
+      await delay(50);
+    }
+
+    assert.equal(messages.length, 2);
+    assert.equal(messages[1]?.senderType, 'agent');
+    assert.equal(messages[1]?.content, '已收到你的私聊');
+
+    const capture = JSON.parse(await readFile(capturePath, 'utf8')) as {
+      args: string[];
+      cwd: string;
+      testFlag: string;
+    };
+    assert.equal(capture.cwd, tempDir);
+    assert.equal(capture.testFlag, 'codex-ok');
+    assert.ok(capture.args.includes('-a'));
+    assert.ok(capture.args.includes('never'));
+    assert.ok(capture.args.includes('exec'));
+    assert.ok(capture.args.includes('--profile'));
+    assert.ok(capture.args.includes('test-profile'));
+    assert.ok(!capture.args.includes('--ask-for-approval'));
+    assert.ok(capture.args.at(-1)?.includes('历史对话'));
+  });
+
+  it('appends a visible system error message when a dm agent turn fails', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => {
+        throw new Error('provider upstream 502');
+      },
+    });
+    servers.push(server);
+
+    const templateResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-codex',
+        name: 'Codex Worker',
+        providerKind: 'codex_cli',
+        description: 'codex template',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: '请直接回复消息。',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 2,
+          maxToolCallsPerTurn: 1,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: dataRoot,
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(templateResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-helper',
+        name: '助手',
+        providerId: 'provider-codex',
+        serverUrl: 'http://127.0.0.1:18080',
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'dm-helper',
+        type: 'dm',
+        name: '与 助手 私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-helper'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const sendResponse = await fetch(`${server.url}/conversations/dm-helper/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '你好',
+      }),
+    });
+    assert.equal(sendResponse.status, 202);
+
+    let messages: Array<{ senderType: string; kind: string; content: string }> = [];
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch(`${server.url}/conversations/dm-helper/messages`);
+      messages = await response.json() as Array<{ senderType: string; kind: string; content: string }>;
+      if (messages.length >= 2) {
+        break;
+      }
+      await delay(50);
+    }
+
+    assert.equal(messages.length, 2);
+    assert.equal(messages[1]?.senderType, 'system');
+    assert.equal(messages[1]?.kind, 'system');
+    assert.match(messages[1]?.content ?? '', /助手/);
+    assert.match(messages[1]?.content ?? '', /provider upstream 502/);
   });
 });

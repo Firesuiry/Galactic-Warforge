@@ -4,8 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
 import { runAgentLoop } from '../runtime/loop.js';
 import type { GatewayEvent } from '../runtime/events.js';
-import { runTemplateTurn } from '../runtime/turn.js';
-import type { AgentInstance, AgentPolicy, AgentTemplate, AgentThread, CliProviderConfig, OpenAICompatibleProviderConfig } from '../types.js';
+import { runProviderTurn } from '../runtime/turn.js';
+import type { AgentInstance, AgentPolicy, AgentThread, ModelProvider } from '../types.js';
 
 interface AgentStore {
   list: () => Promise<AgentInstance[]>;
@@ -13,8 +13,8 @@ interface AgentStore {
   save: (agent: AgentInstance) => Promise<void>;
 }
 
-interface TemplateStore {
-  get: (id: string) => Promise<AgentTemplate | null>;
+interface ProviderStore {
+  get: (id: string) => Promise<ModelProvider | null>;
 }
 
 interface ThreadStore {
@@ -36,7 +36,7 @@ interface EventBus {
 interface AgentRouteContext {
   dataRoot: string;
   agentStore: AgentStore;
-  templateStore: TemplateStore;
+  providerStore: ProviderStore;
   threadStore: ThreadStore;
   secretStore: SecretStore;
   eventBus: EventBus;
@@ -52,6 +52,18 @@ function createDefaultPolicy(): AgentPolicy {
     canCreateSchedules: false,
     canDirectMessageAgentIds: [],
     canDispatchAgentIds: [],
+  };
+}
+
+function normalizePolicy(policy?: Partial<AgentPolicy>, base?: AgentPolicy): AgentPolicy {
+  const fallback = base ?? createDefaultPolicy();
+  return {
+    ...fallback,
+    ...policy,
+    planetIds: policy?.planetIds ?? fallback.planetIds,
+    commandCategories: policy?.commandCategories ?? fallback.commandCategories,
+    canDirectMessageAgentIds: policy?.canDirectMessageAgentIds ?? fallback.canDirectMessageAgentIds,
+    canDispatchAgentIds: policy?.canDispatchAgentIds ?? fallback.canDispatchAgentIds,
   };
 }
 
@@ -101,7 +113,7 @@ export async function handleAgentRoutes(
     const payload = await readJsonBody<{
       id?: string;
       name: string;
-      templateId: string;
+      providerId: string;
       serverUrl: string;
       playerId: string;
       playerKey: string;
@@ -122,7 +134,7 @@ export async function handleAgentRoutes(
     const agent: AgentInstance = {
       id,
       name: payload.name,
-      templateId: payload.templateId,
+      providerId: payload.providerId,
       serverUrl: payload.serverUrl,
       playerId: payload.playerId,
       playerKeySecretId,
@@ -130,14 +142,7 @@ export async function handleAgentRoutes(
       goal: payload.goal ?? '',
       activeThreadId: threadId,
       role: payload.role ?? 'worker',
-      policy: {
-        ...createDefaultPolicy(),
-        ...payload.policy,
-        planetIds: payload.policy?.planetIds ?? [],
-        commandCategories: payload.policy?.commandCategories ?? [],
-        canDirectMessageAgentIds: payload.policy?.canDirectMessageAgentIds ?? [],
-        canDispatchAgentIds: payload.policy?.canDispatchAgentIds ?? [],
-      },
+      policy: normalizePolicy(payload.policy),
       supervisorAgentIds: payload.supervisorAgentIds ?? [],
       managedAgentIds: payload.managedAgentIds ?? [],
       activeConversationIds: payload.activeConversationIds ?? [],
@@ -158,6 +163,51 @@ export async function handleAgentRoutes(
     await context.agentStore.save(agent);
     await context.threadStore.save(thread);
     writeJson(response, 201, agent);
+    return;
+  }
+
+  if (request.method === 'PATCH' && url.pathname.match(/^\/agents\/[^/]+$/)) {
+    const id = url.pathname.split('/')[2] ?? '';
+    const agent = await context.agentStore.get(id);
+    if (!agent) {
+      writeJson(response, 404, { error: 'agent_not_found' });
+      return;
+    }
+
+    const payload = await readJsonBody<{
+      name?: string;
+      providerId?: string;
+      serverUrl?: string;
+      playerId?: string;
+      playerKey?: string;
+      goal?: string;
+      role?: 'worker' | 'manager' | 'director';
+      policy?: Partial<AgentPolicy>;
+      supervisorAgentIds?: string[];
+      managedAgentIds?: string[];
+      activeConversationIds?: string[];
+    }>(request);
+
+    if (typeof payload.playerKey === 'string' && payload.playerKey.trim() !== '') {
+      await context.secretStore.save(agent.playerKeySecretId, payload.playerKey);
+    }
+
+    const updated: AgentInstance = {
+      ...agent,
+      name: payload.name ?? agent.name,
+      providerId: payload.providerId ?? agent.providerId,
+      serverUrl: payload.serverUrl ?? agent.serverUrl,
+      playerId: payload.playerId ?? agent.playerId,
+      goal: payload.goal ?? agent.goal,
+      role: payload.role ?? agent.role,
+      policy: payload.policy ? normalizePolicy(payload.policy, agent.policy) : agent.policy,
+      supervisorAgentIds: payload.supervisorAgentIds ?? agent.supervisorAgentIds ?? [],
+      managedAgentIds: payload.managedAgentIds ?? agent.managedAgentIds ?? [],
+      activeConversationIds: payload.activeConversationIds ?? agent.activeConversationIds ?? [],
+      updatedAt: new Date().toISOString(),
+    };
+    await context.agentStore.save(updated);
+    writeJson(response, 200, updated);
     return;
   }
 
@@ -213,9 +263,9 @@ export async function handleAgentRoutes(
       return;
     }
 
-    const template = await context.templateStore.get(agent.templateId);
-    if (!template) {
-      writeJson(response, 404, { error: 'template_not_found' });
+    const provider = await context.providerStore.get(agent.providerId);
+    if (!provider) {
+      writeJson(response, 404, { error: 'provider_not_found' });
       return;
     }
 
@@ -243,11 +293,11 @@ export async function handleAgentRoutes(
         })) ?? [{ role: 'user', content: payload.content }];
 
         const result = await runAgentLoop({
-          maxSteps: template.toolPolicy.maxSteps,
+          maxSteps: provider.toolPolicy.maxSteps,
           provider: {
-            runTurn: (input) => runTemplateTurn({
+            runTurn: (input) => runProviderTurn({
               dataRoot: context.dataRoot,
-              template,
+              provider,
               secretStore: context.secretStore,
               history: input.history,
               allowedCommands: getAgentAllowedCommands({

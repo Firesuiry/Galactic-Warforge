@@ -1,10 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
+import { runCliCommand } from './cli-runner.js';
 import { parseProviderResult } from './index.js';
 import type { ProviderTurnResult } from './types.js';
-
-const execFileAsync = promisify(execFile);
 
 interface ClaudeTurnInput {
   command: string;
@@ -12,25 +8,27 @@ interface ClaudeTurnInput {
   prompt: string;
   schemaJson: string;
   systemPrompt?: string;
+  workdir?: string;
+  argsTemplate?: string[];
+  envOverrides?: Record<string, string>;
 }
 
 export async function runClaudeTurn(input: ClaudeTurnInput): Promise<ProviderTurnResult> {
-  const { stdout } = await execFileAsync(
-    input.command,
-    [
+  const { stdout } = await runCliCommand({
+    command: input.command,
+    args: [
       '-p',
       '--model', input.model,
       '--output-format', 'json',
       '--json-schema', input.schemaJson,
       '--permission-mode', 'dontAsk',
-      '--tools', '',
       ...(input.systemPrompt ? ['--system-prompt', input.systemPrompt] : []),
+      ...(input.argsTemplate ?? []),
       input.prompt,
     ],
-    {
-      maxBuffer: 1024 * 1024,
-    },
-  );
+    cwd: input.workdir,
+    envOverrides: input.envOverrides,
+  });
 
-  return parseProviderResult(stdout.trim());
+  return parseProviderResult(stdout);
 }

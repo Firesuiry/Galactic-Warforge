@@ -1,43 +1,63 @@
-import type { FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
-import { TemplateManagerView } from './TemplateManagerView';
+import { ProviderManagerView } from './ProviderManagerView';
 import type {
+  AgentPolicyView,
   AgentProfileView,
-  AgentTemplateView,
+  CreateProviderPayload,
+  ModelProviderView,
   ScheduleView,
 } from './types';
 
 interface MemberWorkspaceViewProps {
   fixtureMode: boolean;
   agents: AgentProfileView[];
-  templates: AgentTemplateView[];
+  providers: ModelProviderView[];
   schedules: ScheduleView[];
   selectedAgentId: string;
   showCreateMember: boolean;
-  showTemplateManager: boolean;
+  showProviderManager: boolean;
   memberName: string;
-  memberTemplateId: string;
-  templateName: string;
-  templateDescription: string;
+  memberProviderId: string;
   scheduleIntervalSeconds: string;
   scheduleMessage: string;
   onMemberNameChange: (value: string) => void;
-  onMemberTemplateIdChange: (value: string) => void;
-  onOpenTemplateManager: () => void;
-  onCloseTemplateManager: () => void;
-  onTemplateNameChange: (value: string) => void;
-  onTemplateDescriptionChange: (value: string) => void;
-  onCreateTemplate: (event: FormEvent<HTMLFormElement>) => void;
+  onMemberProviderIdChange: (value: string) => void;
+  onOpenProviderManager: () => void;
+  onCloseProviderManager: () => void;
+  onCreateProvider: (payload: CreateProviderPayload) => void;
   onCreateMember: (event: FormEvent<HTMLFormElement>) => void;
   onStartDm: (agentId: string) => void;
   onScheduleIntervalChange: (value: string) => void;
   onScheduleMessageChange: (value: string) => void;
   onCreateSchedule: (event: FormEvent<HTMLFormElement>) => void;
   onToggleScheduleEnabled: (scheduleId: string, enabled: boolean) => void;
+  onSavePolicy: (policy: AgentPolicyView) => void;
+  onSaveAgentProvider: (providerId: string) => void;
 }
 
-function formatTemplateName(templateId: string, templates: AgentTemplateView[]) {
-  return templates.find((template) => template.id === templateId)?.name ?? templateId;
+function createEmptyPolicy(): AgentPolicyView {
+  return {
+    planetIds: [],
+    commandCategories: [],
+    canCreateChannel: false,
+    canManageMembers: false,
+    canInviteByPlanet: false,
+    canCreateSchedules: false,
+    canDirectMessageAgentIds: [],
+    canDispatchAgentIds: [],
+  };
+}
+
+function parseCommaSeparated(value: string) {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function formatProviderName(providerId: string, providers: ModelProviderView[]) {
+  return providers.find((provider) => provider.id === providerId)?.name ?? providerId;
 }
 
 function formatScheduleTarget(schedule: ScheduleView, agent: AgentProfileView) {
@@ -49,13 +69,61 @@ function formatScheduleTarget(schedule: ScheduleView, agent: AgentProfileView) {
 
 export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
   const selectedAgent = props.agents.find((agent) => agent.id === props.selectedAgentId);
-  const selectedTemplate = selectedAgent
-    ? props.templates.find((template) => template.id === selectedAgent.templateId)
+  const selectedProvider = selectedAgent
+    ? props.providers.find((provider) => provider.id === selectedAgent.providerId)
     : undefined;
-  const selectedDraftTemplate = props.templates.find((template) => template.id === props.memberTemplateId);
+  const selectedDraftProvider = props.providers.find((provider) => provider.id === props.memberProviderId);
   const ownedSchedules = selectedAgent
     ? props.schedules.filter((schedule) => schedule.ownerAgentId === selectedAgent.id)
     : [];
+  const [planetIdsText, setPlanetIdsText] = useState('');
+  const [commandCategoriesText, setCommandCategoriesText] = useState('');
+  const [directMessageAgentIdsText, setDirectMessageAgentIdsText] = useState('');
+  const [dispatchAgentIdsText, setDispatchAgentIdsText] = useState('');
+  const [selectedAgentProviderId, setSelectedAgentProviderId] = useState('');
+  const [canCreateChannel, setCanCreateChannel] = useState(false);
+  const [canManageMembers, setCanManageMembers] = useState(false);
+  const [canInviteByPlanet, setCanInviteByPlanet] = useState(false);
+  const [canCreateSchedules, setCanCreateSchedules] = useState(false);
+
+  useEffect(() => {
+    const policy = selectedAgent?.policy ?? createEmptyPolicy();
+    setPlanetIdsText(policy.planetIds.join(', '));
+    setCommandCategoriesText(policy.commandCategories.join(', '));
+    setDirectMessageAgentIdsText(policy.canDirectMessageAgentIds.join(', '));
+    setDispatchAgentIdsText(policy.canDispatchAgentIds.join(', '));
+    setSelectedAgentProviderId(selectedAgent?.providerId ?? '');
+    setCanCreateChannel(policy.canCreateChannel);
+    setCanManageMembers(policy.canManageMembers);
+    setCanInviteByPlanet(policy.canInviteByPlanet);
+    setCanCreateSchedules(policy.canCreateSchedules);
+  }, [selectedAgent]);
+
+  function handleSavePolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAgent || props.fixtureMode) {
+      return;
+    }
+
+    props.onSavePolicy({
+      planetIds: parseCommaSeparated(planetIdsText),
+      commandCategories: parseCommaSeparated(commandCategoriesText),
+      canCreateChannel,
+      canManageMembers,
+      canInviteByPlanet,
+      canCreateSchedules,
+      canDirectMessageAgentIds: parseCommaSeparated(directMessageAgentIdsText),
+      canDispatchAgentIds: parseCommaSeparated(dispatchAgentIdsText),
+    });
+  }
+
+  function handleSaveAgentProvider(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAgentProviderId || props.fixtureMode) {
+      return;
+    }
+    props.onSaveAgentProvider(selectedAgentProviderId);
+  }
 
   return (
     <section className="panel agent-members-view">
@@ -66,7 +134,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
             {props.showCreateMember
               ? '成员先独立创建，再由频道设置把成员拉进不同协作频道。'
               : selectedAgent
-                ? `当前状态 ${selectedAgent.status}，可在这里管理模板、私聊入口和成员级定时任务。`
+                ? `当前状态 ${selectedAgent.status}，可在这里管理模型 Provider、私聊入口和成员级定时任务。`
                 : '从左侧选择成员，或直接创建一个新的成员。'}
           </p>
         </div>
@@ -91,25 +159,25 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               />
             </label>
             <label className="field">
-              <span>绑定模板</span>
+              <span>绑定模型 Provider</span>
               <select
-                aria-label="绑定模板"
-                value={props.memberTemplateId}
-                onChange={(event) => props.onMemberTemplateIdChange(event.target.value)}
+                aria-label="绑定模型 Provider"
+                value={props.memberProviderId}
+                onChange={(event) => props.onMemberProviderIdChange(event.target.value)}
               >
-                <option value="">请选择一个模板</option>
-                {props.templates.map((template) => (
-                  <option key={template.id} value={template.id}>{template.name}</option>
+                <option value="">请选择一个模型 Provider</option>
+                {props.providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>{provider.name}</option>
                 ))}
               </select>
             </label>
             <div className="agent-members-view__inline-actions">
-              <button className="secondary-button" onClick={props.onOpenTemplateManager} type="button">
-                新建模板
+              <button className="secondary-button" onClick={props.onOpenProviderManager} type="button">
+                新建模型 Provider
               </button>
               <button
                 className="primary-button"
-                disabled={!props.memberName.trim() || !props.memberTemplateId || props.fixtureMode}
+                disabled={!props.memberName.trim() || !props.memberProviderId || props.fixtureMode}
                 type="submit"
               >
                 保存成员
@@ -117,29 +185,25 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
             </div>
           </form>
 
-          {selectedDraftTemplate ? (
+          {selectedDraftProvider ? (
             <div className="agent-im__detail-card">
-              <strong>当前模板</strong>
-              <span>{selectedDraftTemplate.name}</span>
-              <span>{selectedDraftTemplate.description || '未填写模板说明'}</span>
+              <strong>当前模型 Provider</strong>
+              <span>{selectedDraftProvider.name}</span>
+              <span>{selectedDraftProvider.description || '未填写模型 Provider 说明'}</span>
             </div>
           ) : (
             <div className="agent-members-view__placeholder">
-              <div className="section-title">先选择模板</div>
-              <p className="subtle-text">成员创建时必须绑定模板。没有模板时，可直接在这里新建。</p>
+              <div className="section-title">先选择模型 Provider</div>
+              <p className="subtle-text">成员创建时必须绑定模型 Provider。没有 Provider 时，可直接在这里新建。</p>
             </div>
           )}
 
-          {props.showTemplateManager ? (
-            <TemplateManagerView
+          {props.showProviderManager ? (
+            <ProviderManagerView
               fixtureMode={props.fixtureMode}
-              templates={props.templates}
-              templateName={props.templateName}
-              templateDescription={props.templateDescription}
-              onTemplateNameChange={props.onTemplateNameChange}
-              onTemplateDescriptionChange={props.onTemplateDescriptionChange}
-              onCreateTemplate={props.onCreateTemplate}
-              onClose={props.onCloseTemplateManager}
+              providers={props.providers}
+              onCreateProvider={props.onCreateProvider}
+              onClose={props.onCloseProviderManager}
             />
           ) : null}
         </div>
@@ -147,9 +211,9 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
         <div className="agent-members-view__stack">
           <div className="agent-members-view__body">
             <div className="agent-im__detail-card">
-              <strong>模板</strong>
-              <span>{selectedTemplate?.name ?? formatTemplateName(selectedAgent.templateId, props.templates)}</span>
-              <span>{selectedTemplate?.description || '未填写模板说明'}</span>
+              <strong>模型 Provider</strong>
+              <span>{selectedProvider?.name ?? formatProviderName(selectedAgent.providerId, props.providers)}</span>
+              <span>{selectedProvider?.description || '未填写模型 Provider 说明'}</span>
             </div>
             <div className="agent-im__detail-card">
               <strong>运行状态</strong>
@@ -168,6 +232,122 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               ) : null}
             </div>
           </div>
+
+          <section className="agent-members-view__section">
+            <div className="agent-members-view__section-header">
+              <div>
+                <div className="section-title">模型 Provider 绑定</div>
+                <p className="subtle-text">可以在成员详情页切换当前成员绑定的模型 Provider。</p>
+              </div>
+            </div>
+
+            <form className="agent-im__composer-card" onSubmit={handleSaveAgentProvider}>
+              <label className="field">
+                <span>绑定模型 Provider</span>
+                <select
+                  aria-label="绑定模型 Provider"
+                  value={selectedAgentProviderId}
+                  onChange={(event) => setSelectedAgentProviderId(event.target.value)}
+                >
+                  <option value="">请选择一个模型 Provider</option>
+                  {props.providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>{provider.name}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="primary-button" disabled={!selectedAgentProviderId || props.fixtureMode} type="submit">
+                保存模型 Provider 绑定
+              </button>
+            </form>
+          </section>
+
+          <section className="agent-members-view__section">
+            <div className="agent-members-view__section-header">
+              <div>
+                <div className="section-title">权限配置</div>
+                <p className="subtle-text">在这里限定成员可操作的星球、命令分类和协作能力。</p>
+              </div>
+            </div>
+
+            <form className="agent-im__composer-card" onSubmit={handleSavePolicy}>
+              <label className="field">
+                <span>星球范围</span>
+                <input
+                  aria-label="星球范围"
+                  value={planetIdsText}
+                  onChange={(event) => setPlanetIdsText(event.target.value)}
+                />
+                <span className="field-hint">多个值用英文逗号分隔，例如 `planet-a, planet-b`。</span>
+              </label>
+              <label className="field">
+                <span>命令分类</span>
+                <input
+                  aria-label="命令分类"
+                  value={commandCategoriesText}
+                  onChange={(event) => setCommandCategoriesText(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>可私聊成员</span>
+                <input
+                  aria-label="可私聊成员"
+                  value={directMessageAgentIdsText}
+                  onChange={(event) => setDirectMessageAgentIdsText(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>可调度成员</span>
+                <input
+                  aria-label="可调度成员"
+                  value={dispatchAgentIdsText}
+                  onChange={(event) => setDispatchAgentIdsText(event.target.value)}
+                />
+              </label>
+
+              <div className="agent-form__checkbox-grid">
+                <label className="agent-form__checkbox">
+                  <input
+                    aria-label="允许创建频道"
+                    checked={canCreateChannel}
+                    onChange={(event) => setCanCreateChannel(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>允许创建频道</span>
+                </label>
+                <label className="agent-form__checkbox">
+                  <input
+                    aria-label="允许管理成员"
+                    checked={canManageMembers}
+                    onChange={(event) => setCanManageMembers(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>允许管理成员</span>
+                </label>
+                <label className="agent-form__checkbox">
+                  <input
+                    aria-label="允许按星球拉人"
+                    checked={canInviteByPlanet}
+                    onChange={(event) => setCanInviteByPlanet(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>允许按星球拉人</span>
+                </label>
+                <label className="agent-form__checkbox">
+                  <input
+                    aria-label="允许创建定时任务"
+                    checked={canCreateSchedules}
+                    onChange={(event) => setCanCreateSchedules(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>允许创建定时任务</span>
+                </label>
+              </div>
+
+              <button className="primary-button" disabled={props.fixtureMode} type="submit">
+                保存权限配置
+              </button>
+            </form>
+          </section>
 
           <section className="agent-members-view__section">
             <div className="agent-members-view__section-header">
@@ -229,7 +409,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
       ) : (
         <div className="agent-members-view__placeholder">
           <div className="section-title">还没有可查看的成员</div>
-          <p className="subtle-text">在左侧点击“新建成员”，随后可从这里进入成员详情、模板和定时任务。</p>
+          <p className="subtle-text">在左侧点击“新建成员”，随后可从这里进入成员详情、模型 Provider 和定时任务。</p>
         </div>
       )}
     </section>

@@ -4,10 +4,12 @@ import { AgentsSidebar, type AgentsPane } from './AgentsSidebar';
 import { ChannelWorkspaceView } from './ChannelWorkspaceView';
 import { MemberWorkspaceView } from './MemberWorkspaceView';
 import type {
+  AgentPolicyView,
   AgentProfileView,
-  AgentTemplateView,
   ConversationMessageView,
   ConversationView,
+  CreateProviderPayload,
+  ModelProviderView,
   ScheduleView,
 } from './types';
 
@@ -22,17 +24,15 @@ interface AgentWorkspaceProps {
   messagesLoading: boolean;
   agents: AgentProfileView[];
   selectedAgentId: string;
-  templates: AgentTemplateView[];
+  providers: ModelProviderView[];
   schedules: ScheduleView[];
   showCreateChannel: boolean;
   showCreateMember: boolean;
-  showTemplateManager: boolean;
+  showProviderManager: boolean;
   channelName: string;
   channelTopic: string;
   memberName: string;
-  memberTemplateId: string;
-  templateName: string;
-  templateDescription: string;
+  memberProviderId: string;
   messageInput: string;
   invitePlanetId: string;
   inviteAgentId: string;
@@ -43,20 +43,18 @@ interface AgentWorkspaceProps {
   onSelectAgent: (agentId: string) => void;
   onToggleCreateChannel: () => void;
   onOpenCreateMember: () => void;
-  onOpenTemplateManager: () => void;
-  onCloseTemplateManager: () => void;
+  onOpenProviderManager: () => void;
+  onCloseProviderManager: () => void;
   onChannelNameChange: (value: string) => void;
   onChannelTopicChange: (value: string) => void;
   onMemberNameChange: (value: string) => void;
-  onMemberTemplateIdChange: (value: string) => void;
-  onTemplateNameChange: (value: string) => void;
-  onTemplateDescriptionChange: (value: string) => void;
+  onMemberProviderIdChange: (value: string) => void;
   onMessageInputChange: (value: string) => void;
   onInvitePlanetIdChange: (value: string) => void;
   onInviteAgentIdChange: (value: string) => void;
   onScheduleIntervalChange: (value: string) => void;
   onScheduleMessageChange: (value: string) => void;
-  onCreateTemplate: (event: FormEvent<HTMLFormElement>) => void;
+  onCreateProvider: (payload: CreateProviderPayload) => void;
   onCreateMember: (event: FormEvent<HTMLFormElement>) => void;
   onCreateChannel: (event: FormEvent<HTMLFormElement>) => void;
   onSendMessage: (event: FormEvent<HTMLFormElement>) => void;
@@ -67,6 +65,8 @@ interface AgentWorkspaceProps {
   onBackToChannelChat: () => void;
   onStartDm: (agentId: string) => void;
   onToggleScheduleEnabled: (scheduleId: string, enabled: boolean) => void;
+  onSaveAgentPolicy: (policy: AgentPolicyView) => void;
+  onSaveAgentProvider: (providerId: string) => void;
 }
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
@@ -121,30 +121,28 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         <MemberWorkspaceView
           fixtureMode={props.fixtureMode}
           agents={props.agents}
-          templates={props.templates}
+          providers={props.providers}
           schedules={props.schedules}
           selectedAgentId={props.selectedAgentId}
           showCreateMember={props.showCreateMember}
-          showTemplateManager={props.showTemplateManager}
+          showProviderManager={props.showProviderManager}
           memberName={props.memberName}
-          memberTemplateId={props.memberTemplateId}
-          templateName={props.templateName}
-          templateDescription={props.templateDescription}
+          memberProviderId={props.memberProviderId}
           scheduleIntervalSeconds={props.scheduleIntervalSeconds}
           scheduleMessage={props.scheduleMessage}
           onMemberNameChange={props.onMemberNameChange}
-          onMemberTemplateIdChange={props.onMemberTemplateIdChange}
-          onOpenTemplateManager={props.onOpenTemplateManager}
-          onCloseTemplateManager={props.onCloseTemplateManager}
-          onTemplateNameChange={props.onTemplateNameChange}
-          onTemplateDescriptionChange={props.onTemplateDescriptionChange}
-          onCreateTemplate={props.onCreateTemplate}
+          onMemberProviderIdChange={props.onMemberProviderIdChange}
+          onOpenProviderManager={props.onOpenProviderManager}
+          onCloseProviderManager={props.onCloseProviderManager}
+          onCreateProvider={props.onCreateProvider}
           onCreateMember={props.onCreateMember}
           onStartDm={props.onStartDm}
           onScheduleIntervalChange={props.onScheduleIntervalChange}
           onScheduleMessageChange={props.onScheduleMessageChange}
           onCreateSchedule={props.onCreateSchedule}
           onToggleScheduleEnabled={props.onToggleScheduleEnabled}
+          onSavePolicy={props.onSaveAgentPolicy}
+          onSaveAgentProvider={props.onSaveAgentProvider}
         />
       )}
     </div>

@@ -1,10 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
+import { runCliCommand } from './cli-runner.js';
 import { parseProviderResult } from './index.js';
 import type { ProviderTurnResult } from './types.js';
-
-const execFileAsync = promisify(execFile);
 
 interface CodexTurnInput {
   command: string;
@@ -12,26 +8,27 @@ interface CodexTurnInput {
   prompt: string;
   schemaFile: string;
   workdir?: string;
+  argsTemplate?: string[];
+  envOverrides?: Record<string, string>;
 }
 
 export async function runCodexTurn(input: CodexTurnInput): Promise<ProviderTurnResult> {
-  const { stdout } = await execFileAsync(
-    input.command,
-    [
+  const { stdout } = await runCliCommand({
+    command: input.command,
+    args: [
+      '-a', 'never',
       'exec',
       '--model', input.model,
       '--sandbox', 'read-only',
-      '--ask-for-approval', 'never',
       '--skip-git-repo-check',
       ...(input.workdir ? ['--cd', input.workdir] : []),
       '--output-schema', input.schemaFile,
-      '-',
+      ...(input.argsTemplate ?? []),
+      input.prompt,
     ],
-    {
-      input: input.prompt,
-      maxBuffer: 1024 * 1024,
-    },
-  );
+    cwd: input.workdir,
+    envOverrides: input.envOverrides,
+  });
 
-  return parseProviderResult(stdout.trim());
+  return parseProviderResult(stdout);
 }

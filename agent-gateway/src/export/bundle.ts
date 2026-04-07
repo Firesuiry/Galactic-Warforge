@@ -4,12 +4,12 @@ export interface AgentExportBundle {
     exportedAt: string;
     appVersion: string;
   };
-  templates: unknown[];
+  providers: unknown[];
   encryptedSecrets?: unknown[];
 }
 
 export function exportBundle(input: {
-  templates: unknown[];
+  providers: unknown[];
   includeSecrets: boolean;
   encryptedSecrets: unknown[];
 }): AgentExportBundle {
@@ -19,7 +19,7 @@ export function exportBundle(input: {
       exportedAt: new Date().toISOString(),
       appVersion: '0.1.0',
     },
-    templates: input.templates,
+    providers: input.providers,
     ...(input.includeSecrets ? { encryptedSecrets: input.encryptedSecrets } : {}),
   };
 }

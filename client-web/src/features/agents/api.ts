@@ -1,14 +1,15 @@
 import type {
   AgentGatewayHealth,
   AgentProfileView,
-  AgentTemplateView,
   AddConversationMembersPayload,
   ConversationMessageView,
   ConversationView,
   CreateAgentPayload,
+  CreateProviderPayload,
   CreateSchedulePayload,
-  CreateTemplatePayload,
+  ModelProviderView,
   ScheduleView,
+  UpdateAgentPayload,
   UpdateSchedulePayload,
 } from './types';
 
@@ -37,12 +38,20 @@ export function createAgent(payload: CreateAgentPayload) {
   }));
 }
 
-export function fetchTemplates() {
-  return expectJson<AgentTemplateView[]>(fetch('/agent-api/templates'));
+export function updateAgent(agentId: string, payload: UpdateAgentPayload) {
+  return expectJson<AgentProfileView>(fetch(`/agent-api/agents/${agentId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
 }
 
-export function createTemplate(payload: CreateTemplatePayload) {
-  return expectJson<AgentTemplateView>(fetch('/agent-api/templates', {
+export function fetchProviders() {
+  return expectJson<ModelProviderView[]>(fetch('/agent-api/providers'));
+}
+
+export function createProvider(payload: CreateProviderPayload) {
+  return expectJson<ModelProviderView>(fetch('/agent-api/providers', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),

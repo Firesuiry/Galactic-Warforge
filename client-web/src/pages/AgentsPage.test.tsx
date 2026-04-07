@@ -38,7 +38,7 @@ describe('AgentsPage', () => {
           {
             id: 'agent-builder',
             name: '建造官',
-            templateId: 'tpl-1',
+            providerId: 'provider-1',
             serverUrl: 'http://localhost:18080',
             playerId: 'p1',
             status: 'running',
@@ -55,6 +55,9 @@ describe('AgentsPage', () => {
             },
           },
         ]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
         return Promise.resolve(jsonResponse([
@@ -137,7 +140,7 @@ describe('AgentsPage', () => {
           {
             id: 'agent-builder',
             name: '建造官',
-            templateId: 'tpl-1',
+            providerId: 'provider-1',
             serverUrl: 'http://localhost:18080',
             playerId: 'p1',
             status: 'running',
@@ -154,6 +157,9 @@ describe('AgentsPage', () => {
             },
           },
         ]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
         return Promise.resolve(jsonResponse([]));
@@ -222,7 +228,7 @@ describe('AgentsPage', () => {
           {
             id: 'agent-builder',
             name: '建造官',
-            templateId: 'tpl-1',
+            providerId: 'provider-1',
             serverUrl: 'http://localhost:18080',
             playerId: 'p1',
             status: 'running',
@@ -239,6 +245,9 @@ describe('AgentsPage', () => {
             },
           },
         ]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
         return Promise.resolve(jsonResponse([]));
@@ -310,7 +319,7 @@ describe('AgentsPage', () => {
         const created = {
           id: 'agent-builder',
           name: payload.name,
-          templateId: payload.templateId,
+          providerId: payload.providerId,
           serverUrl: payload.serverUrl,
           playerId: payload.playerId,
           status: 'idle',
@@ -329,10 +338,10 @@ describe('AgentsPage', () => {
         agents.push(created);
         return Promise.resolve(jsonResponse(created, { status: 201 }));
       }
-      if (url.endsWith('/agent-api/templates') && method === 'GET') {
+      if (url.endsWith('/agent-api/providers') && method === 'GET') {
         return Promise.resolve(jsonResponse(templates));
       }
-      if (url.endsWith('/agent-api/templates') && method === 'POST') {
+      if (url.endsWith('/agent-api/providers') && method === 'POST') {
         const payload = JSON.parse(String(init?.body));
         const created = {
           id: 'tpl-builder',
@@ -376,14 +385,334 @@ describe('AgentsPage', () => {
 
     await user.click(await screen.findByRole('button', { name: '成员' }));
     await user.click(screen.getByRole('button', { name: '新建成员' }));
-    await user.click(screen.getByRole('button', { name: '新建模板' }));
-    await user.type(await screen.findByLabelText('模板名称'), '建造模板');
-    await user.click(screen.getByRole('button', { name: '保存模板' }));
+    await user.click(screen.getByRole('button', { name: '新建模型 Provider' }));
+    await user.type(await screen.findByLabelText('模型 Provider 名称'), '建造 Provider');
+    await user.click(screen.getByRole('button', { name: '保存模型 Provider' }));
     await user.type(await screen.findByLabelText('成员名称'), '建造官');
     await user.click(screen.getByRole('button', { name: '保存成员' }));
 
     expect(await screen.findByRole('heading', { name: '建造官' })).toBeInTheDocument();
-    expect(screen.getByText('建造模板')).toBeInTheDocument();
+    expect(screen.getAllByText('建造 Provider').length).toBeGreaterThan(0);
+  });
+
+  it('captures provider config when creating a cli model provider inline', async () => {
+    const user = userEvent.setup();
+    const templates: Array<Record<string, unknown>> = [];
+    let templatePayload: Record<string, unknown> | null = null;
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/agents') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/providers') && method === 'GET') {
+        return Promise.resolve(jsonResponse(templates));
+      }
+      if (url.endsWith('/agent-api/providers') && method === 'POST') {
+        templatePayload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'tpl-claude',
+          ...templatePayload,
+        };
+        templates.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(screen.getByRole('button', { name: '新建成员' }));
+    await user.click(screen.getByRole('button', { name: '新建模型 Provider' }));
+
+    await user.type(await screen.findByLabelText('模型 Provider 名称'), '总管 Provider');
+    await user.type(screen.getByLabelText('模型 Provider 说明'), '负责统筹调度');
+    await user.selectOptions(screen.getByLabelText('Provider 类型'), 'claude_code_cli');
+    await user.clear(screen.getByLabelText('模型名称'));
+    await user.type(screen.getByLabelText('模型名称'), 'sonnet');
+    await user.clear(screen.getByLabelText('系统提示词'));
+    await user.type(screen.getByLabelText('系统提示词'), '你是总管。只做简洁回复。');
+    await user.clear(screen.getByLabelText('启动命令'));
+    await user.type(screen.getByLabelText('启动命令'), 'claude');
+    await user.clear(screen.getByLabelText('工作目录'));
+    await user.type(screen.getByLabelText('工作目录'), '/tmp/claude-workdir');
+    await user.type(screen.getByLabelText('启动参数'), '--append-system-prompt\n保持简洁');
+    await user.click(screen.getByRole('button', { name: '保存模型 Provider' }));
+
+    await waitFor(() => expect(templatePayload).not.toBeNull());
+    expect(templatePayload).toMatchObject({
+      name: '总管 Provider',
+      description: '负责统筹调度',
+      providerKind: 'claude_code_cli',
+      defaultModel: 'sonnet',
+      systemPrompt: '你是总管。只做简洁回复。',
+      providerConfig: {
+        command: 'claude',
+        model: 'sonnet',
+        workdir: '/tmp/claude-workdir',
+        argsTemplate: ['--append-system-prompt', '保持简洁'],
+      },
+    });
+  });
+
+  it('creates an api model provider and switches member provider binding', async () => {
+    const user = userEvent.setup();
+    const providers: Array<Record<string, unknown>> = [
+      {
+        id: 'provider-worker',
+        name: 'Worker Provider',
+        description: '默认 Provider',
+        providerKind: 'codex_cli',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: '负责建设。',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 8,
+          maxToolCallsPerTurn: 4,
+          commandWhitelist: ['build'],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      },
+    ];
+    const agents = [
+      {
+        id: 'agent-builder',
+        name: '建造官',
+        providerId: 'provider-worker',
+        serverUrl: 'http://localhost:18080',
+        playerId: 'p1',
+        status: 'idle',
+        role: 'worker',
+        policy: {
+          planetIds: [],
+          commandCategories: [],
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      },
+    ];
+    let createdProviderPayload: Record<string, unknown> | null = null;
+    let updatedAgentPayload: Record<string, unknown> | null = null;
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/agents') && method === 'GET') {
+        return Promise.resolve(jsonResponse(agents));
+      }
+      if (url.endsWith('/agent-api/agents/agent-builder') && method === 'PATCH') {
+        updatedAgentPayload = JSON.parse(String(init?.body));
+        agents[0] = {
+          ...agents[0],
+          ...updatedAgentPayload,
+        };
+        return Promise.resolve(jsonResponse(agents[0]));
+      }
+      if (url.endsWith('/agent-api/providers') && method === 'GET') {
+        return Promise.resolve(jsonResponse(providers));
+      }
+      if (url.endsWith('/agent-api/providers') && method === 'POST') {
+        createdProviderPayload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'provider-api',
+          ...createdProviderPayload,
+        };
+        providers.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(screen.getByRole('button', { name: '新建成员' }));
+    await user.click(screen.getByRole('button', { name: '新建模型 Provider' }));
+    await user.type(await screen.findByLabelText('模型 Provider 名称'), 'MiniMax Provider');
+    await user.type(screen.getByLabelText('模型 Provider 说明'), 'API 模式');
+    await user.selectOptions(screen.getByLabelText('Provider 类型'), 'http_api');
+    await user.clear(screen.getByLabelText('API URL'));
+    await user.type(screen.getByLabelText('API URL'), 'https://api.minimaxi.com/v1');
+    await user.selectOptions(screen.getByLabelText('接口类型'), 'openai');
+    await user.clear(screen.getByLabelText('模型名称'));
+    await user.type(screen.getByLabelText('模型名称'), 'MiniMax-M2.1');
+    await user.type(screen.getByLabelText('API Key'), 'sk-demo-value');
+    await user.click(screen.getByRole('button', { name: '保存模型 Provider' }));
+
+    expect(createdProviderPayload).toMatchObject({
+      name: 'MiniMax Provider',
+      providerKind: 'http_api',
+      providerConfig: {
+        apiUrl: 'https://api.minimaxi.com/v1',
+        apiStyle: 'openai',
+        model: 'MiniMax-M2.1',
+        apiKey: 'sk-demo-value',
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /^建造官/ }));
+    await user.selectOptions(await screen.findByLabelText('绑定模型 Provider'), 'provider-api');
+    await user.click(screen.getByRole('button', { name: '保存模型 Provider 绑定' }));
+
+    expect(updatedAgentPayload).toEqual({
+      providerId: 'provider-api',
+    });
+  });
+
+  it('captures api provider config when creating an http template inline', async () => {
+    const user = userEvent.setup();
+    const templates: Array<Record<string, unknown>> = [];
+    let templatePayload: Record<string, unknown> | null = null;
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/agents') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/providers') && method === 'GET') {
+        return Promise.resolve(jsonResponse(templates));
+      }
+      if (url.endsWith('/agent-api/providers') && method === 'POST') {
+        templatePayload = JSON.parse(String(init?.body));
+        const created = {
+          id: 'tpl-http',
+          ...templatePayload,
+        };
+        templates.push(created);
+        return Promise.resolve(jsonResponse(created, { status: 201 }));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(screen.getByRole('button', { name: '新建成员' }));
+    await user.click(screen.getByRole('button', { name: '新建模型 Provider' }));
+
+    await user.type(await screen.findByLabelText('模型 Provider 名称'), 'MiniMax Provider');
+    await user.selectOptions(screen.getByLabelText('Provider 类型'), 'http_api');
+    await user.clear(screen.getByLabelText('API URL'));
+    await user.clear(screen.getByLabelText('API URL'));
+    await user.type(screen.getByLabelText('API URL'), 'https://api.minimaxi.com/v1');
+    await user.selectOptions(screen.getByLabelText('接口类型'), 'openai');
+    await user.clear(screen.getByLabelText('模型名称'));
+    await user.type(screen.getByLabelText('模型名称'), 'MiniMax-M2.1');
+    await user.type(screen.getByLabelText('API Key'), 'sk-demo-value');
+    await user.click(screen.getByRole('button', { name: '保存模型 Provider' }));
+
+    await waitFor(() => expect(templatePayload).not.toBeNull());
+    expect(templatePayload).toMatchObject({
+      name: 'MiniMax Provider',
+      providerKind: 'http_api',
+      defaultModel: 'MiniMax-M2.1',
+      providerConfig: {
+        apiUrl: 'https://api.minimaxi.com/v1',
+        apiStyle: 'openai',
+        apiKey: 'sk-demo-value',
+        model: 'MiniMax-M2.1',
+      },
+    });
   });
 
   it('opens or creates a dm from member detail', async () => {
@@ -417,7 +746,7 @@ describe('AgentsPage', () => {
           {
             id: 'agent-builder',
             name: '建造官',
-            templateId: 'tpl-builder',
+            providerId: 'provider-builder',
             serverUrl: 'http://localhost:18080',
             playerId: 'p1',
             status: 'idle',
@@ -435,7 +764,7 @@ describe('AgentsPage', () => {
           },
         ]));
       }
-      if (url.endsWith('/agent-api/templates')) {
+      if (url.endsWith('/agent-api/providers')) {
         return Promise.resolve(jsonResponse([
           {
             id: 'tpl-builder',
@@ -497,6 +826,129 @@ describe('AgentsPage', () => {
     expect(await screen.findByRole('heading', { name: /私聊/ })).toBeInTheDocument();
   });
 
+  it('updates agent policy from member detail', async () => {
+    const user = userEvent.setup();
+    const agents = [
+      {
+        id: 'agent-builder',
+        name: '建造官',
+        providerId: 'provider-builder',
+        serverUrl: 'http://localhost:18080',
+        playerId: 'p1',
+        status: 'idle',
+        role: 'worker',
+        policy: {
+          planetIds: [],
+          commandCategories: [],
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      },
+    ];
+    let updatePayload: Record<string, unknown> | null = null;
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/agents') && method === 'GET') {
+        return Promise.resolve(jsonResponse(agents));
+      }
+      if (url.endsWith('/agent-api/agents/agent-builder') && method === 'PATCH') {
+        updatePayload = JSON.parse(String(init?.body));
+        agents[0] = {
+          ...agents[0],
+          ...updatePayload,
+          policy: {
+            ...agents[0].policy,
+            ...(updatePayload?.policy as Record<string, unknown>),
+          },
+        };
+        return Promise.resolve(jsonResponse(agents[0]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'tpl-builder',
+            name: '建造模板',
+            description: '负责建设',
+            providerKind: 'codex_cli',
+            defaultModel: 'gpt-5-codex',
+            systemPrompt: '负责建设。',
+            toolPolicy: {
+              cliEnabled: true,
+              maxSteps: 8,
+              maxToolCallsPerTurn: 4,
+              commandWhitelist: ['build'],
+            },
+            providerConfig: {
+              command: 'codex',
+              model: 'gpt-5-codex',
+              workdir: '/tmp',
+              argsTemplate: [],
+              envOverrides: {},
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    await user.click(await screen.findByRole('button', { name: '成员' }));
+    await user.click(await screen.findByRole('button', { name: /建造官/ }));
+    await user.clear(await screen.findByLabelText('星球范围'));
+    await user.type(screen.getByLabelText('星球范围'), 'planet-a, planet-b');
+    await user.clear(screen.getByLabelText('命令分类'));
+    await user.type(screen.getByLabelText('命令分类'), 'build, observe');
+    await user.click(screen.getByRole('checkbox', { name: '允许按星球拉人' }));
+    await user.click(screen.getByRole('checkbox', { name: '允许创建定时任务' }));
+    await user.click(screen.getByRole('button', { name: '保存权限配置' }));
+
+    await waitFor(() => expect(updatePayload).not.toBeNull());
+    expect(updatePayload).toMatchObject({
+      policy: {
+        planetIds: ['planet-a', 'planet-b'],
+        commandCategories: ['build', 'observe'],
+        canInviteByPlanet: true,
+        canCreateSchedules: true,
+      },
+    });
+  });
+
   it('manages member-owned schedules from member detail', async () => {
     const user = userEvent.setup();
     const schedules: Array<Record<string, unknown>> = [
@@ -526,7 +978,7 @@ describe('AgentsPage', () => {
           {
             id: 'agent-builder',
             name: '建造官',
-            templateId: 'tpl-builder',
+            providerId: 'provider-builder',
             serverUrl: 'http://localhost:18080',
             playerId: 'p1',
             status: 'idle',
@@ -544,7 +996,7 @@ describe('AgentsPage', () => {
           },
         ]));
       }
-      if (url.endsWith('/agent-api/templates')) {
+      if (url.endsWith('/agent-api/providers')) {
         return Promise.resolve(jsonResponse([
           {
             id: 'tpl-builder',
@@ -684,6 +1136,9 @@ describe('AgentsPage', () => {
       if (url.endsWith('/agent-api/agents')) {
         return Promise.resolve(jsonResponse([]));
       }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.includes('/agent-api/conversations/') && url.endsWith('/messages') && method === 'GET') {
         const conversationId = url.split('/agent-api/conversations/')[1]?.replace('/messages', '') ?? '';
         return Promise.resolve(jsonResponse(messages.get(conversationId) ?? []));
@@ -771,7 +1226,7 @@ describe('AgentsPage', () => {
           {
             id: 'agent-builder',
             name: '建造官',
-            templateId: 'tpl-1',
+            providerId: 'provider-1',
             serverUrl: 'http://localhost:18080',
             playerId: 'p1',
             status: 'running',
@@ -788,6 +1243,9 @@ describe('AgentsPage', () => {
             },
           },
         ]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/messages') && method === 'GET') {
         messageFetchCount += 1;
@@ -900,6 +1358,9 @@ describe('AgentsPage', () => {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/schedules')) {

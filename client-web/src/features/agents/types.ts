@@ -2,7 +2,7 @@ export interface AgentGatewayHealth {
   status: string;
 }
 
-export type AgentProviderKindView = 'openai_compatible_http' | 'codex_cli' | 'claude_code_cli';
+export type AgentProviderKindView = 'http_api' | 'codex_cli' | 'claude_code_cli';
 
 export interface AgentPolicyView {
   planetIds: string[];
@@ -15,16 +15,17 @@ export interface AgentPolicyView {
   canDispatchAgentIds: string[];
 }
 
-export interface AgentTemplateToolPolicyView {
+export interface ModelProviderToolPolicyView {
   cliEnabled: boolean;
   maxSteps: number;
   maxToolCallsPerTurn: number;
   commandWhitelist: string[];
 }
 
-export type AgentTemplateProviderConfigView =
+export type ModelProviderConfigView =
   | {
-      baseUrl: string;
+      apiUrl: string;
+      apiStyle: 'openai' | 'claude';
       apiKey?: string;
       apiKeySecretId?: string;
       hasSecret?: boolean;
@@ -39,33 +40,33 @@ export type AgentTemplateProviderConfigView =
       envOverrides?: Record<string, string>;
     };
 
-export interface AgentTemplateView {
+export interface ModelProviderView {
   id: string;
   name: string;
   providerKind: AgentProviderKindView;
   description: string;
   defaultModel: string;
   systemPrompt: string;
-  toolPolicy: AgentTemplateToolPolicyView;
-  providerConfig: AgentTemplateProviderConfigView;
+  toolPolicy: ModelProviderToolPolicyView;
+  providerConfig: ModelProviderConfigView;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface CreateTemplatePayload {
+export interface CreateProviderPayload {
   name: string;
   providerKind: AgentProviderKindView;
   description: string;
   defaultModel: string;
   systemPrompt: string;
-  toolPolicy: AgentTemplateToolPolicyView;
-  providerConfig: AgentTemplateProviderConfigView;
+  toolPolicy: ModelProviderToolPolicyView;
+  providerConfig: ModelProviderConfigView;
 }
 
 export interface AgentProfileView {
   id: string;
   name: string;
-  templateId: string;
+  providerId: string;
   serverUrl: string;
   playerId: string;
   status: 'idle' | 'queued' | 'running' | 'cooldown' | 'paused' | 'error' | 'completed';
@@ -76,10 +77,24 @@ export interface AgentProfileView {
 export interface CreateAgentPayload {
   id?: string;
   name: string;
-  templateId: string;
+  providerId: string;
   serverUrl: string;
   playerId: string;
   playerKey: string;
+  goal?: string;
+  role?: 'worker' | 'manager' | 'director';
+  policy?: Partial<AgentPolicyView>;
+  supervisorAgentIds?: string[];
+  managedAgentIds?: string[];
+  activeConversationIds?: string[];
+}
+
+export interface UpdateAgentPayload {
+  name?: string;
+  providerId?: string;
+  serverUrl?: string;
+  playerId?: string;
+  playerKey?: string;
   goal?: string;
   role?: 'worker' | 'manager' | 'director';
   policy?: Partial<AgentPolicyView>;

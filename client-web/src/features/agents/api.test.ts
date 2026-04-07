@@ -5,10 +5,11 @@ import { jsonResponse } from '@/test/utils';
 import {
   addConversationMembers,
   createAgent,
+  createProvider,
   createSchedule,
-  createTemplate,
-  fetchTemplates,
+  fetchProviders,
   updateSchedule,
+  updateAgent,
 } from './api';
 
 describe('agents api', () => {
@@ -16,13 +17,13 @@ describe('agents api', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fetches templates from the agent gateway', async () => {
+  it('fetches providers from the agent gateway', async () => {
     const fetchMock = vi.fn((input: string | URL | Request) => {
-      expect(String(input)).toBe('/agent-api/templates');
+      expect(String(input)).toBe('/agent-api/providers');
       return Promise.resolve(jsonResponse([
         {
-          id: 'tpl-builder',
-          name: '建造模板',
+          id: 'provider-builder',
+          name: '建造 Provider',
           description: '负责建设',
           providerKind: 'codex_cli',
           defaultModel: 'gpt-5-codex',
@@ -45,35 +46,42 @@ describe('agents api', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(fetchTemplates()).resolves.toEqual([
+    await expect(fetchProviders()).resolves.toEqual([
       expect.objectContaining({
-        id: 'tpl-builder',
-        name: '建造模板',
+        id: 'provider-builder',
+        name: '建造 Provider',
       }),
     ]);
   });
 
-  it('posts template, agent, member invite, and owned schedule payloads', async () => {
+  it('posts provider, agent, member invite, provider binding, and owned schedule payloads', async () => {
     const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
 
-      if (url === '/agent-api/templates' && method === 'POST') {
+      if (url === '/agent-api/providers' && method === 'POST') {
         expect(JSON.parse(String(init?.body))).toMatchObject({
-          name: '建造模板',
+          name: '建造 Provider',
           providerKind: 'codex_cli',
         });
-        return Promise.resolve(jsonResponse({ id: 'tpl-builder', name: '建造模板' }, { status: 201 }));
+        return Promise.resolve(jsonResponse({ id: 'provider-builder', name: '建造 Provider' }, { status: 201 }));
       }
 
       if (url === '/agent-api/agents' && method === 'POST') {
         expect(JSON.parse(String(init?.body))).toMatchObject({
           name: '建造官',
-          templateId: 'tpl-builder',
+          providerId: 'provider-builder',
           playerId: 'p1',
           playerKey: 'key_player_1',
         });
-        return Promise.resolve(jsonResponse({ id: 'agent-builder', name: '建造官', templateId: 'tpl-builder' }, { status: 201 }));
+        return Promise.resolve(jsonResponse({ id: 'agent-builder', name: '建造官', providerId: 'provider-builder' }, { status: 201 }));
+      }
+
+      if (url === '/agent-api/agents/agent-builder' && method === 'PATCH') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          providerId: 'provider-director',
+        });
+        return Promise.resolve(jsonResponse({ id: 'agent-builder', name: '建造官', providerId: 'provider-director' }));
       }
 
       if (url === '/agent-api/conversations/conv-a/members' && method === 'POST') {
@@ -121,8 +129,8 @@ describe('agents api', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await createTemplate({
-      name: '建造模板',
+    await createProvider({
+      name: '建造 Provider',
       providerKind: 'codex_cli',
       description: '负责建设',
       defaultModel: 'gpt-5-codex',
@@ -144,10 +152,14 @@ describe('agents api', () => {
 
     await createAgent({
       name: '建造官',
-      templateId: 'tpl-builder',
+      providerId: 'provider-builder',
       serverUrl: 'http://localhost:8080',
       playerId: 'p1',
       playerKey: 'key_player_1',
+    });
+
+    await updateAgent('agent-builder', {
+      providerId: 'provider-director',
     });
 
     await addConversationMembers('conv-a', {
@@ -170,6 +182,6 @@ describe('agents api', () => {
       enabled: false,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 });

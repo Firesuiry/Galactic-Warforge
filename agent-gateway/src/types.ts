@@ -1,4 +1,4 @@
-export type ProviderKind = 'openai_compatible_http' | 'codex_cli' | 'claude_code_cli';
+export type ProviderKind = 'http_api' | 'codex_cli' | 'claude_code_cli';
 
 export interface ProviderCapability {
   available: boolean;
@@ -10,8 +10,9 @@ export interface GatewayCapabilities {
   providers: Record<ProviderKind, ProviderCapability>;
 }
 
-export interface OpenAICompatibleProviderConfig {
-  baseUrl: string;
+export interface HttpApiProviderConfig {
+  apiUrl: string;
+  apiStyle: 'openai' | 'claude';
   apiKeySecretId: string;
   model: string;
   extraHeaders?: Record<string, string>;
@@ -25,7 +26,7 @@ export interface CliProviderConfig {
   envOverrides?: Record<string, string>;
 }
 
-export interface AgentTemplate {
+export interface ModelProvider {
   id: string;
   name: string;
   providerKind: ProviderKind;
@@ -38,7 +39,7 @@ export interface AgentTemplate {
     maxToolCallsPerTurn: number;
     commandWhitelist: string[];
   };
-  providerConfig: OpenAICompatibleProviderConfig | CliProviderConfig;
+  providerConfig: HttpApiProviderConfig | CliProviderConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,7 +47,7 @@ export interface AgentTemplate {
 export interface AgentInstance {
   id: string;
   name: string;
-  templateId: string;
+  providerId: string;
   serverUrl: string;
   playerId: string;
   playerKeySecretId: string;

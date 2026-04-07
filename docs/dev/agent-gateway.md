@@ -18,11 +18,18 @@ npm run dev
 
 - `SW_AGENT_GATEWAY_PORT`
 - `SW_AGENT_GATEWAY_DATA_DIR`
+- `SW_AGENT_GATEWAY_ENV_FILE`
+
+启动时如果 `SW_AGENT_GATEWAY_ENV_FILE` 指向的文件，或默认仓库根目录 `../.env` 中能解析到 MiniMax key，`agent-gateway` 会自动生成一个内置模型 Provider：
+
+- `builtin-minimax-api`
+- provider: `http_api`
+- model: `MiniMax-M2.1`
 
 ## 2. 当前职责
 
-- 存模板、实例、线程、会话、消息、定时任务和密钥
-- 调 OpenAI 兼容 HTTP 模型，或拉起本机 `codex` / `claude` CLI provider
+- 存模型 Provider、实例、线程、会话、消息、定时任务和密钥
+- 调 HTTP API 模型，或拉起本机 `codex` / `claude` CLI provider
 - 通过受控 `client-cli` 运行时执行游戏命令
 - 为 `client-web` 提供 `/agent-api` HTTP / SSE 接口
 - 在会话层处理自动唤醒、mailbox 串行消费和 heartbeat 式定时投递
@@ -74,6 +81,8 @@ npm run dev
 - `POST /conversations/:conversationId/members/invite-by-planet`
 
 当前 `POST /conversations` 可直接创建频道或私聊；`POST /conversations/:id/messages` 会解析 `@agentName` / `@agentId` 提及并写入 `mentions`。
+
+如果 agent turn 执行失败，当前会额外向会话写入一条 `system` 消息，避免前端表现成“私聊无回复”。
 
 ### 3.3 自动唤醒
 
@@ -158,11 +167,18 @@ agent 实例自身也保留：
 
 ## 6. Provider 与 CLI 边界
 
-### 6.1 支持的模板类型
+### 6.1 支持的模型 Provider 类型
 
-- `openai_compatible_http`
+- `http_api`
 - `codex_cli`
 - `claude_code_cli`
+
+前端模型 Provider 管理现在可以直接配置：
+
+- HTTP API provider 的 `apiUrl` / `apiStyle(openai|claude)` / `apiKey` / `model`
+- CLI provider 的命令、工作目录和启动参数
+
+当前 `http_api` 已支持 OpenAI 风格和 Claude 风格两种接口，并针对 MiniMax 实际返回的 `<think>...</think>` 前缀做了解析兼容，结构化 JSON 不再因为前置思维块而失败。
 
 ### 6.2 CLI 工具边界
 
@@ -199,7 +215,7 @@ agent 不直接拿 shell，只能走受控 `client-cli` 运行时。
 
 ```text
 agent-gateway/data/
-  templates/
+  providers/
   agents/
   threads/
   conversations/
@@ -211,7 +227,7 @@ agent-gateway/data/
 
 其中：
 
-- `templates/`：模板 JSON
+- `providers/`：模型 Provider JSON
 - `agents/`：实例 JSON
 - `threads/`：传统单 agent thread
 - `conversations/`：频道与私聊
