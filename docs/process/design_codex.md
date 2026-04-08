@@ -1,482 +1,572 @@
-# T103 设计方案：戴森科技树不可达建筑与空科技节点
+# T105 设计方案：无舰队时 `fleet_status` 崩溃与 `/world/fleets` 空值口径
 
-> 对应任务：`docs/process/finished_task/T103_戴森科技树不可达建筑与空科技节点.md`
+> 日期：2026-04-05
+>
+> 本文针对 `docs/process/finished_task/T105_无舰队时fleet_status崩溃与world_fleets空值口径.md`。
+> 该任务现已归档完成，本文保留为 T105 的设计记录。
 
-## 1. 目标
+## 1. 目标与边界
 
-本方案的目标不是“把 catalog 表面改顺眼”，而是把玩家公开能力、`/catalog`、研究树、CLI 帮助和 authoritative 规则收口到同一套真相。
+这次不是要“把 CLI 报错糊住”，而是把舰队查询链路的空状态协议收口为一套稳定真相：
 
-本次要解决三件事：
+1. `GET /world/fleets` 在“没有任何舰队”时必须返回稳定数组 `[]`，而不是 `null`。
+2. `client-cli fleet_status` 即使面对历史服务端或未来异常回包，也不能因为空值直接崩溃。
+3. 已有舰队时，现有的舰队列表、单舰详情、`system_runtime` 展示能力不能回退。
+4. API 文档与 CLI 文档必须把“空列表”与“详情未命中”的口径写清楚。
 
-1. `automatic_piler` 与 `satellite_substation` 不能继续处于“`buildable=true` 但没有真实科技路径”的状态。
-2. `/catalog.techs[]` 不能继续把“研究后没有直接收益、也不会把玩家引向后续真实科技”的死胡同节点暴露给玩家。
-3. 不能用“把所有空科技一刀切隐藏”这种方式误伤当前已经能玩的中后期分支。
+本次不做的事：
+
+- 不改 `system_runtime.fleets` 的 `omitempty` 语义。
+- 不把 `/world/fleets/{fleet_id}` 的未命中从 `404` 改成 `200 + null` 或其他变体。
+- 不顺手做全仓库 nil-slice 全局清洗；只修这条已经暴露给玩家的 authoritative 链路。
 
 ## 2. 当前代码事实
 
-### 2.1 真正没有科技解锁路径的玩家建筑，当前只有两个
+### 2.1 服务端空列表目前会被编码成 `null`
 
-基于当前 `server/internal/model/tech.go` 的归一化结果反查，`Buildable=true` 但没有任何 `TechUnlockBuilding` 对应科技入口的建筑只有：
+`server/internal/query/fleet_runtime.go` 中，`Layer.Fleets()` 当前逻辑是：
 
-- `automatic_piler`
-- `satellite_substation`
+- `spaceRuntime == nil` 时直接返回 `[]FleetDetailView{}`
+- 但正常存在 `spaceRuntime`、只是当前玩家没有舰队时，`out` 从未初始化为非 nil slice
+- 最终 `return out` 时返回的是 Go 的 nil slice
 
-也就是说，任务文档里指出的“不可达建筑”定位是准确的，这不是文档误报。
+`server/internal/gateway/server.go` 中 `handleFleets()` 直接：
 
-对应 authoritative 建造链路也很直接：
+```go
+writeJSON(w, http.StatusOK, s.ql.Fleets(playerID, s.core.SpaceRuntime()))
+```
 
-- `server/internal/gamecore/rules.go`
-  - 先检查 `def.Buildable`
-  - 再调用 `CanBuildTech(player, TechUnlockBuilding, buildingID)`
-- `server/internal/gamecore/research.go`
-  - `CanBuildTech(...)` 只认玩家已完成科技里真实存在的 `Unlocks`
+因此 HTTP 层会把 nil slice 编码成 JSON `null`，这正是任务文档里的复现结果。
 
-因此，只要科技树里没有 building unlock，`build` 就一定会拒绝。
+### 2.2 详情接口当前已经是明确的“未命中即 404”
 
-### 2.2 `/catalog.buildings[].unlock_tech` 现在基本不可用
+`server/internal/gateway/server.go` 的 `handleFleet()` 当前逻辑是：
 
-`server/internal/query/catalog.go` 已经暴露了 `unlock_tech` 字段，但 `server/internal/model/building_catalog.go` 当前没有任何从科技树反向回填的逻辑。
+- 查询不到舰队时：`writeError(w, http.StatusNotFound, "fleet not found")`
+- 查询到舰队时：返回正常对象
 
-结果是：
+所以详情接口的问题不是“也会返回 null”，而是文档和客户端要明确：列表接口的空态是 `[]`，详情接口的未命中态是 `404 fleet not found`。两者都应该是稳定协议，而不是让调用方去猜 `null`。
 
-- `/catalog.buildings[].buildable` 直接镜像 `BuildingDefinition.Buildable`
-- `/catalog.buildings[].unlock_tech` 基本一直为空
+### 2.3 shared-client 的类型承诺与真实返回不一致
 
-这会把两类问题混在一起：
+`shared-client/src/api.ts` 当前把：
 
-- 真没有科技路径的建筑
-- 实际有科技路径，但 catalog 元数据没有回填的建筑
+```ts
+function fetchFleets(): Promise<FleetDetailView[]> {
+  return apiFetch<FleetDetailView[]>('/world/fleets');
+}
+```
 
-这两类问题必须拆开处理，不能继续靠文档人工解释。
+类型声明成“永远返回数组”，但底层服务端现在实际可能回 `null`。这会把协议漂移向上传染给所有消费方。
 
-### 2.3 两个不可达建筑的成熟度其实不同
+### 2.4 CLI 当前在格式化阶段直接触发崩溃
 
-`satellite_substation` 当前已经有显式 runtime 定义：
+`client-cli/src/commands/query.ts` 的 `cmdFleetStatus()` 在无参数时直接：
 
-- `server/internal/model/building_runtime.go`
-  - 存在独立条目
-  - 有明确 `ConnectionPower` 连接点
+```ts
+return fmtFleetList(await fetchFleets());
+```
 
-`automatic_piler` 当前只有建筑定义，没有专门 runtime 模块，也没有任何结算逻辑引用：
+而 `client-cli/src/format.ts` 的 `fmtFleetList()` 当前第一行就读 `fleets.length`。只要传入的是 `null`，就会抛：
 
-- `server/internal/model/building_defs.go`
-  - 有 `Buildable=true`
-- `server/internal/model/building_runtime.go`
-  - 没有 `BuildingTypeAutomaticPiler` 的专门定义
-- `server/internal/gamecore/*`
-  - 没有任何 `automatic_piler` 专属结算或行为
+```text
+TypeError: Cannot read properties of null (reading 'length')
+```
 
-这意味着：
+值得注意的是，同文件的 `fmtSystemRuntime()` 已经采用了更稳的模式：
 
-- `satellite_substation` 是“功能基本在，只差科技入口”
-- `automatic_piler` 不是“只差科技入口”，它现在更像“名字已经进入公开列表，但 runtime 玩法还没有闭合”
+```ts
+const fleets = runtime.fleets ?? [];
+```
 
-任务原文把两个建筑绑定成同一档处理并不精确。设计上应该按成熟度拆开，而不是为了表面一致继续说谎。
+也就是说，CLI 内部其实已经有同类空值收口范式，只是 `fmtFleetList()` 没跟上。
 
-### 2.4 任务文档里的 19 个“空科技”，实际上分成两类
+### 2.5 现有测试没有锁住这条协议
 
-按当前 runtime 归一化后的 tech 数据看，这 19 个节点确实满足：
+本次调研里跑了两组现状校验：
 
-- `unlocks = []`
-- `effects = []`
-- `max_level = 0`
-- `hidden = false`
+```bash
+cd server
+env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
+  go test ./internal/query ./internal/gateway ./internal/gamecore -run 'Fleet|SystemRuntime'
+```
 
-但它们不是同一种问题。
+结果：
 
-#### 2.4.1 桥接科技：自己没有直接奖励，但能通往后续真实分支
+- `internal/query`：`[no tests to run]`
+- `internal/gateway`：`[no tests to run]`
+- `internal/gamecore`：现有舰队 happy path 测试通过
 
-这 8 个节点不该被当成死胡同：
+以及：
 
-| 科技 | 当前公开后继 |
-| --- | --- |
-| `engine` | `battlefield_analysis`、`missile_turret` |
-| `steel_smelting` | `environment_modification`、`titanium_smelting` |
-| `combustible_unit` | `missile_turret` |
-| `crystal_smelting` | `energy_storage`、`plane_filter_smelting` |
-| `polymer_chemical` | `high_strength_crystal` |
-| `high_strength_glass` | `high_energy_laser` |
-| `particle_control` | `information_matrix` |
-| `thruster` | `planetary_logistics` |
+```bash
+cd client-cli
+npm test -- --test-name-pattern='fleet|runtime|api exports'
+```
 
-这些科技当前的问题不是“应该隐藏”，而是 `/catalog.techs[]` 没有告诉玩家它们是桥接前置，所以它们在现有 API 里看起来像空节点。
+结果：
 
-#### 2.4.2 死胡同科技：既没有直接收益，也不会通向公开收益
+- 现有 CLI 测试通过
+- 但覆盖点主要是命令注册、runtime 白名单、API 导出存在性
+- 还没有“无舰队时 `fleet_status` 输出稳定文本”的行为测试
 
-这 11 个节点才应该从玩家公开科技树里移除：
+结论很直接：这条问题当前没有被测试锁死。
 
-- `casimir_crystal`
-- `crystal_explosive`
-- `crystal_shell`
-- `proliferator_mk2`
-- `proliferator_mk3`
-- `reformed_refinement`
-- `super_magnetic`
-- `supersonic_missile`
-- `titanium_ammo`
-- `wave_interference`
-- `xray_cracking`
+## 3. 方案比选
 
-注意 `xray_cracking` 之所以也归到死胡同，不是因为它自己没有后继，而是它唯一公开后继 `reformed_refinement` 仍然是空节点。这个分支需要整段一起收口。
+### 方案 A：只在 CLI 里做空值保护
 
-### 2.5 结论：不能采用“统一隐藏所有空科技”的简单方案
+做法：
 
-如果只按“`unlocks/effects` 为空就隐藏”做，会直接误伤：
+- 仅修改 `client-cli/src/format.ts` 或 `client-cli/src/commands/query.ts`
 
-- `engine`
-- `steel_smelting`
-- `crystal_smelting`
-- `particle_control`
-- `thruster`
+优点：
 
-以及它们后面当前已经有真实玩法收益的公开分支。
+- 改动最少
+- 能立即止住 CLI 崩溃
 
-这会把现有公开树再次切断，属于新的回归，不是修复。
+缺点：
 
-## 3. 设计原则
+- authoritative API 仍然返回错误口径 `null`
+- 其他调用方以后仍会踩同样的坑
+- 文档无法继续宣称 `/world/fleets` 是稳定数组接口
 
-### 3.1 authoritative 优先
+结论：不采用。它只是在消费层补洞，没有修协议真相。
 
-公开能力必须从 runtime-backed 数据推导，不能靠：
+### 方案 B：只修服务端列表返回
 
-- 文档手写白名单
-- CLI 硬编码帮助文案
-- catalog 静态字段自说自话
+做法：
 
-### 3.2 区分“可建造”和“应该公开给玩家”
+- 仅修改 `server/internal/query/fleet_runtime.go`
 
-对玩家来说，公开能力的标准不是“仓库里有个定义”，而是：
+优点：
 
-- 有真实科技入口
-- 有真实 runtime 行为
-- 文档和 CLI 能正确解释获取路径
+- authoritative 口径被修正
+- 绝大多数正常客户端都能恢复
 
-### 3.3 科技树要表达“直接收益”或“后继价值”二者之一
+缺点：
 
-一个科技节点对玩家可见，至少要满足下面之一：
+- CLI 仍然脆弱，一旦连到旧版本服务端或未来又有类似空值漂移，还是会直接崩
+- shared-client 的类型承诺依然没有被防御性兑现
 
-1. 有真实 `unlock`
-2. 有真实 `effect`
-3. 虽然没有直接奖励，但有可见的 `leads_to`，且最终能通向公开真实收益
+结论：不采用。它修了根因，但没有把调用链的防线补全。
 
-否则它就是公开死胡同，应该隐藏。
+### 方案 C：服务端 authoritative 收口 + shared-client 归一化 + CLI 展示兜底
 
-## 4. 总体方案
+做法：
 
-本方案采用“建筑按成熟度拆分 + 科技树按图收口”的方式，而不是把所有问题压成一个布尔开关。
+- 服务端保证 `/world/fleets` 空态返回 `[]`
+- shared-client 对 `fetchFleets()` 做局部归一化
+- CLI 在格式化层继续做 null-safe 兜底
+- 用服务端、API 层、CLI 三层测试锁回归
 
-### 4.1 建筑侧
+优点：
 
-- `satellite_substation`
-  - 接回真实科技树
-  - 归属 `satellite_power`
-- `automatic_piler`
-  - 当前版本先从公开可建能力中移除
-  - 等 runtime 行为补齐后，再重新开放并挂到 `integrated_logistics`
-- 所有 buildable 建筑
-  - 都由科技树反向回填 `unlock_tech`
+- authoritative 真相正确
+- 客户端对旧服务端和未来异常值更稳
+- 变更点集中，不需要搞全局 JSON 魔法
 
-### 4.2 科技树侧
+缺点：
 
-- 为 `/catalog.techs[]` 增加 `leads_to`
-- 用“死胡同裁剪”替代“空节点一刀切隐藏”
-- 桥接科技继续可见
-- 真正死胡同节点改为 `hidden=true`
+- 改动面比单点补丁大
+- 需要补几处测试
 
-## 5. 建筑方案细节
+结论：采用。这个方案同时满足“优雅实现”和“低耦合防回归”。
 
-### 5.1 `satellite_substation`：接回 `satellite_power`
+## 4. 推荐设计
 
-这是本次应当直接开放的建筑。
+### 4.1 服务端：在 query 层把舰队列表语义固定成“永远是数组”
 
-#### 改动
+目标文件：
 
-- `server/internal/model/tech.go`
-  - 在 `satellite_power.Unlocks` 中追加：
-    - `{Type: TechUnlockBuilding, ID: string(BuildingTypeSatelliteSubstation)}`
+- `server/internal/query/fleet_runtime.go`
 
-#### 原因
+推荐改法：
 
-- 科技名与建筑语义完全匹配
-- 当前 runtime 已有电网连接定义
-- 这是纯粹的“科技树断线”，不是功能未实现
+- 直接把 `out` 初始化为非 nil 空切片，而不是在 return 前做临时补丁
 
-#### 验收语义
+建议形态：
 
-- 默认新局玩家在未完成 `satellite_power` 前不能建造
-- 完成 `satellite_power` 后可以通过 `build` 成功进入施工队列
-- `/catalog.buildings` 中该建筑应回填：
-  - `buildable = true`
-  - `unlock_tech = ["satellite_power"]`
+```go
+func (ql *Layer) Fleets(playerID string, spaceRuntime *model.SpaceRuntimeState) []FleetDetailView {
+    if spaceRuntime == nil {
+        return []FleetDetailView{}
+    }
+    out := make([]FleetDetailView, 0)
+    ...
+    return out
+}
+```
 
-### 5.2 `automatic_piler`：当前版本先下架，不直接接回科技树
+这样做比“最后 `if out == nil { return []FleetDetailView{} }`”更直接，原因有两个：
 
-这里不推荐像 `design_claude.md` 那样直接把它塞进 `integrated_logistics`。
+1. 语义从函数入口就明确了：这是一个列表接口，不存在 `nil` 这种第三种状态。
+2. 不需要在函数尾部补救，逻辑更干净。
 
-原因很简单：那样只能做到“研究后能摆”，做不到“研究后有真实玩法”。当前代码里没有 `automatic_piler` 的专门 runtime 行为，继续对外开放只会把“不可达假入口”换成“可建但空心的假入口”。
+为什么不在 `handleFleets()` 或 `writeJSON()` 层做？
 
-#### 本次收口
+- `handleFleets()` 只负责 transport，不该知道 `nil` slice 在业务上代表什么。
+- `writeJSON()` 如果做全局 nil-slice 特判，会把仓库里其他接口的语义一起改变，风险过大。
+- `Fleets()` 本来就是构造视图对象的 authoritative 层，列表形态应该在这里定死。
 
-- `server/internal/model/building_defs.go`
-  - 把 `automatic_piler.Buildable` 改为 `false`
-- 同步从以下文档中移除“当前可建”口径：
-  - `docs/player/玩法指南.md`
-  - `docs/dev/客户端CLI.md`
-  - `docs/dev/服务端API.md`
+### 4.2 详情接口：继续保持 `404 fleet not found`
 
-#### 未来重新开放的前提
+目标文件：
 
-`automatic_piler` 只有在下面两项都完成后才应重新开放：
-
-1. 新增专门 runtime 模块
-   - 推荐新增 `PilerModule`
-   - 明确输入/输出方向、堆叠上限、吞吐规则
-2. 新增 authoritative 结算
-   - 基于现有 conveyor buffer / `MaxStack` 语义合并相邻同类物品
-   - 保证不是纯展示建筑
-
-#### 未来重开后的科技归属
-
-等 runtime 补齐后，再把它挂到：
-
-- `integrated_logistics`
-
-这个科技归属是合理的，但不应在 runtime 还空着时提前开放。
-
-## 6. 科技树方案细节
-
-### 6.1 给 `/catalog.techs[]` 增加 `leads_to`
-
-当前 tech catalog 只暴露：
-
-- `prerequisites`
-- `unlocks`
-- `effects`
-
-但没有暴露“这个科技会导向哪些后继科技”。这正是桥接科技被误判为空的根因。
-
-建议在以下位置新增 `leads_to`：
-
-- `server/internal/model/tech.go`
-  - 给 `TechDefinition` 增加派生字段，或新增只读 helper
-- `server/internal/query/catalog.go`
-  - 给 `TechCatalogEntry` 增加 `LeadsTo []string`
+- `server/internal/gateway/server.go`
 - `docs/dev/服务端API.md`
-  - 同步更新 `/catalog.techs[]` 字段说明
 
-`leads_to` 的来源不需要手填，直接由 prerequisites 反向建图得到。
+推荐结论：
 
-### 6.2 用“死胡同裁剪”替代“空字段裁剪”
+- `/world/fleets/{fleet_id}` 未命中时继续返回 `404`
+- 本次只把文档写清楚，不改协议形态
 
-推荐在 `normalizeTechDefinitions(...)` 之后增加第二阶段派生：
+原因：
 
-1. 先得到归一化后的 `Unlocks`
-2. 基于 `Prerequisites` 构建反向依赖图
-3. 迭代标记死胡同 tech
+- 详情接口与列表接口不是同一种资源语义
+- 列表“空”应是 `[]`
+- 详情“未命中”应是 `404`
+- 统一的不是“都返回数组”，而是“都不再用 `null` 作为调用方必须特殊猜测的协议分支”
 
-死胡同判定条件：
+这也满足任务里“未命中口径保持一致”的真正目的：让前端和 CLI 面对的是显式协议，而不是 `null`。
 
-- `Hidden == false`
-- `MaxLevel == 0`
-- `len(Unlocks) == 0`
-- `len(Effects) == 0`
-- 所有公开后继都已经被标记为隐藏，或根本没有公开后继
+### 4.3 shared-client：只在 `fetchFleets()` 做局部归一化，不做全局空值魔改
 
-这里必须做“迭代裁剪”，不能只看一层子节点。
+目标文件：
 
-例如：
+- `shared-client/src/api.ts`
 
-- `reformed_refinement` 是死胡同
-- `xray_cracking` 的唯一公开后继就是 `reformed_refinement`
-- 所以 `xray_cracking` 也必须跟着隐藏
+推荐改法：
 
-### 6.3 桥接科技保留可见，但必须带 `leads_to`
+```ts
+function fetchFleets(): Promise<FleetDetailView[]> {
+  return apiFetch<FleetDetailView[] | null>('/world/fleets').then((fleets) => fleets ?? []);
+}
+```
 
-保留可见的桥接节点如下：
+设计原则：
 
-- `engine`
-- `steel_smelting`
-- `combustible_unit`
-- `crystal_smelting`
-- `polymer_chemical`
-- `high_strength_glass`
-- `particle_control`
-- `thruster`
+- 只对 `fetchFleets()` 这个明确“应该返回数组”的接口做归一化
+- 不去修改通用 `apiFetch()`，避免把其他接口的 `null` 含义意外吞掉
 
-这些节点在裁剪完成后仍应满足：
+这样有两个价值：
 
-- `hidden = false`
-- `unlocks = []`
-- `effects = []`
-- `leads_to` 非空
+1. shared-client 的类型承诺终于和运行时行为一致。
+2. 即便 CLI 连接到旧服务端，也能拿到稳定数组。
 
-这样玩家在科技树里能看懂：
+附带收益：
 
-- 这不是直接奖励科技
-- 这是通往后继公开分支的桥接科技
+- 虽然 `client-web` 当前没有消费 `fetchFleets()`，但未来如果接入同一路径，也会自动受益。
 
-### 6.4 真正死胡同节点隐藏名单
+### 4.4 CLI：把 `fleet_status` 抽成可注入依赖的 helper，并在 formatter 继续兜底
 
-本次应直接转为 `hidden=true` 的节点：
+目标文件：
 
-- `casimir_crystal`
-- `crystal_explosive`
-- `crystal_shell`
-- `proliferator_mk2`
-- `proliferator_mk3`
-- `reformed_refinement`
-- `super_magnetic`
-- `supersonic_missile`
-- `titanium_ammo`
-- `wave_interference`
-- `xray_cracking`
+- `client-cli/src/commands/query.ts`
+- `client-cli/src/format.ts`
+- 新增 `client-cli/src/commands/query.test.ts`
 
-这些节点隐藏后：
+推荐改法分两层。
 
-- `start_research` 会按现有逻辑拒绝直接研究
-- `/catalog.techs[]` 不再把它们暴露给玩家
-- 玩家文档也不应再把它们写成当前开放树的一部分
+### 第一层：提炼可测试 helper
 
-## 7. 实现落点
+参照 `client-cli/src/commands/debug.ts` 中 `runSaveCommand(...)` 的模式，把当前 `cmdFleetStatus()` 改成：
 
-### 7.1 服务端模型层
+- 一个纯命令 helper，例如 `runFleetStatusCommand(args, deps)`
+- 一个薄包装 `cmdFleetStatus(args)`，只负责传真实依赖
 
-#### `server/internal/model/tech.go`
+建议依赖形态：
 
-需要增加三类改动：
+```ts
+interface FleetStatusDeps {
+  fetchFleets: () => Promise<FleetDetailView[] | null>;
+  fetchFleet: (fleetId: string) => Promise<FleetDetailView>;
+}
+```
 
-1. `satellite_power` 增加 `satellite_substation` building unlock
-2. 技术树反向图派生
-   - 计算 `leads_to`
-3. 死胡同裁剪
-   - 迭代设置派生 `Hidden`
+这样做的原因不是“为了抽象而抽象”，而是当前 ESM 直引 API 函数很难做局部 mock。抽成 helper 后，CLI 行为测试可以直接注入假数据，不需要碰全局 `fetch` 或模块替换。
 
-推荐不要把这套逻辑塞进 query 层临时拼装，而是直接在 tech catalog 初始化阶段完成派生。这样：
+### 第二层：formatter 自身继续 null-safe
 
-- `CanBuildTech(...)`
-- `/catalog`
-- 测试
+`client-cli/src/format.ts` 推荐把签名放宽为：
 
-都能看到同一份 tech 真相。
+```ts
+export function fmtFleetList(fleets?: FleetDetailView[] | null): string
+```
 
-#### `server/internal/model/building_catalog.go`
+内部第一步统一：
 
-需要新增“科技反向回填”步骤：
+```ts
+const stableFleets = fleets ?? [];
+```
 
-- 遍历所有非隐藏 tech
-- 找出其中的 `TechUnlockBuilding`
-- 把 tech ID 写回对应 `BuildingDefinition.UnlockTech`
+然后按空列表输出：
 
-这样 `/catalog.buildings[].unlock_tech` 才有 authoritative 含义。
+```ts
+chalk.dim('No fleets found.')
+```
 
-#### `server/internal/model/building_defs.go`
+为什么 shared-client 已经归一化了，CLI 还要兜底？
 
-需要把 `automatic_piler.Buildable` 调整为 `false`。
+- 因为 CLI 崩溃点就在 formatter，本地再做一次 `?? []` 成本极低
+- 这样 formatter 本身就和 `fmtSystemRuntime()` 的稳态写法一致
+- 即使未来其他调用方直接把 `null` 传进来，也不会炸
 
-这里不建议新增“仅 catalog 隐藏、但 runtime 仍允许 build”的双轨字段；那只会制造另一套真相。
+### 4.5 文档：把“空列表”和“详情未命中”明确写成协议
 
-### 7.2 查询层
+目标文件：
 
-#### `server/internal/query/catalog.go`
-
-需要：
-
-- 给 `TechCatalogEntry` 新增 `LeadsTo []string`
-- 输出派生后的 `hidden`
-- 输出派生后的 `unlock_tech`
-
-### 7.3 文档层
-
-需要同步更新：
-
-- `docs/player/玩法指南.md`
-  - 移除 `automatic_piler` 的“当前可建”表述
-  - 把 `satellite_substation` 明确标成 `satellite_power` 解锁
-  - 科技树说明补充“桥接科技会通过 `leads_to` 暴露后继方向”
+- `docs/dev/服务端API.md`
 - `docs/dev/客户端CLI.md`
-  - `build` 示例与建筑列表移除 `automatic_piler`
-  - 标明 `satellite_substation` 需要 `satellite_power`
-- `docs/dev/服务端API.md`
-  - `/catalog.techs[]` 新增 `leads_to`
-  - `/catalog.buildings[].unlock_tech` 改为 authoritative 反查入口之一
-  - 说明 `automatic_piler` 当前未公开
 
-## 8. 测试设计
+服务端 API 文档需要新增的明确口径：
 
-### 8.1 建筑可达性回归
+- `GET /world/fleets`
+  - 当前玩家无舰队时返回 `[]`
+  - 不返回 `null`
+  - 补一个空列表响应示例
+- `GET /world/fleets/{fleet_id}`
+  - 未命中时返回 `404 fleet not found`
 
-新增或扩展 gamecore/model 测试，至少覆盖：
+CLI 文档需要新增的明确口径：
 
-1. `satellite_substation`
-   - 新玩家不能建
-   - 完成 `satellite_power` 后可以建
-2. `automatic_piler`
-   - `/catalog.buildings` 不再显示 `buildable=true`
-   - `build automatic_piler` 被 authoritative 拒绝为 not buildable
+- `fleet_status`
+  - 无参数时查询舰队列表
+  - 当前无舰队时输出 `No fleets found.`
+  - 传 `fleet_id` 且不存在时，继续走现有错误输出分支，不暴露 JS `TypeError`
 
-### 8.2 catalog 一致性回归
+可选但建议的同步：
 
-新增断言：
+- `docs/player/已知问题与回归.md`
+  - 把 T105 从“当前问题”改成“已修复/待验证已收口”
 
-1. 所有 `buildable=true` 的公开建筑，必须满足下面之一：
-   - 属于初始完成科技解锁
-   - `unlock_tech` 非空
-2. `satellite_substation.unlock_tech == ["satellite_power"]`
-3. `automatic_piler` 不在公开可建集合
+## 5. 测试设计
 
-### 8.3 科技树回归
+### 5.1 服务端 query 测试：锁死 nil slice 根因
 
-新增断言：
+建议文件：
 
-1. 桥接科技仍可见且 `leads_to` 非空
-2. 死胡同科技全部 `hidden=true`
-3. `/catalog.techs[]` 中不再存在同时满足下面条件的公开节点：
-   - `hidden=false`
-   - `max_level=0`
-   - `len(unlocks)==0`
-   - `len(effects)==0`
-   - `len(leads_to)==0`
+- `server/internal/query/query_test.go`
+- 或拆成新文件 `server/internal/query/fleet_runtime_test.go`
 
-注意这里的回归条件必须升级，不能继续只看 `unlocks/effects`，否则桥接科技会被误判。
+推荐用例：
 
-## 9. 对任务原始验收口径的修正
+### 用例 1：当前玩家无舰队时返回非 nil 空切片
 
-任务原文里关于两个建筑的验收被写成：
+构造：
 
-- 未解锁前建造失败
-- 解锁后建造成功
+- 有 `SpaceRuntimeState`
+- 有当前玩家 runtime
+- 但所有 system runtime 下都没有舰队
 
-这对 `satellite_substation` 成立，但对当前的 `automatic_piler` 不成立，因为它还没有真实 runtime 行为。
+断言：
 
-如果继续强行要求两个建筑都走同一验收，会逼着实现做出一种很差的方案：
+- `Fleets("p1", runtime)` 返回长度为 0
+- 返回值不是 nil
 
-- 只是给 `automatic_piler` 补科技入口
-- 但继续把空心建筑公开给玩家
+### 用例 2：JSON 编码结果是 `[]`
 
-因此本方案建议把验收拆成两条：
+对上面的返回值直接 `json.Marshal(...)`
 
-1. `satellite_substation`
-   - 未解锁前不能建
-   - 解锁后能建
-2. `automatic_piler`
-   - 当前版本不再公开
-   - 等 runtime 补齐后，再单独开一条 reopen 任务
+断言：
 
-这比继续制造“可建但无玩法”的假入口更符合项目准则。
+- 编码结果严格等于 `[]`
 
-## 10. 最终建议
+这条测试能直接锁住根因，不会再让 nil slice 偷渡回来。
 
-本次不建议采用 `design_claude.md` 中“两个建筑都直接接回科技树 + 所有空科技自动隐藏”的方案。那个方案有两个关键问题：
+### 5.2 服务端 gateway 测试：锁死 HTTP 合约
 
-1. 它把 `automatic_piler` 当成了“只差科技入口”，忽略了当前并没有专门 runtime 行为。
-2. 它会把 `engine`、`steel_smelting`、`particle_control` 这类桥接科技误判为死节点，进而切断当前已经存在的公开分支。
+建议文件：
 
-推荐落地方案是：
+- `server/internal/gateway/server_test.go`
 
-1. 立即把 `satellite_substation` 接回 `satellite_power`。
-2. 立即把 `automatic_piler` 从公开可建能力中移除。
-3. 给 tech catalog 增加 `leads_to`，把桥接科技与死胡同科技区分开。
-4. 只隐藏真正的死胡同 tech 子树。
-5. 给 building catalog 反向回填 `unlock_tech`，让 `/catalog`、CLI、文档和 authoritative 规则从同一份数据推导。
+推荐新增用例：
 
-这样可以在不破坏现有中后期可玩分支的前提下，把 T103 里暴露出来的“公开口径不真实”问题一次收干净。
+### 用例 1：`GET /world/fleets` 在无舰队时返回空数组
+
+步骤：
+
+1. 用现有 `newTestServer(t)` 起服务
+2. 不做任何 `commission_fleet`
+3. 带 `Bearer key1` 请求 `GET /world/fleets`
+
+断言：
+
+- HTTP `200`
+- 响应 JSON 可以解成 `[]any`
+- 长度为 `0`
+- 原始 body 不为 `null`
+
+### 用例 2：`GET /world/fleets/{fleet_id}` 未命中仍是 404
+
+步骤：
+
+- 请求不存在的 `fleet_id`
+
+断言：
+
+- HTTP `404`
+- 错误文案包含 `fleet not found`
+
+这样可以防止后续有人误把详情接口也改成 `200 + null`。
+
+### 5.3 shared-client 测试：锁死归一化行为
+
+考虑到 `shared-client` 目录当前没有独立 test script，推荐把这条测试放在已有的 `client-cli` 测试体系里，直接导入 `createApiClient(...)`。
+
+建议文件：
+
+- `client-cli/src/api.test.ts`
+
+推荐用例：
+
+### 用例：旧服务端回 `null` 时，`fetchFleets()` 仍返回 `[]`
+
+做法：
+
+- 用 `createApiClient({ serverUrl: 'http://example.test', auth: { playerKey: 'key1' }, fetchFn: fakeFetch })`
+- 让 fake fetch 对 `/world/fleets` 返回 HTTP 200，body 为 `null`，并带 `Content-Type: application/json`
+
+断言：
+
+- `await client.fetchFleets()` 得到 `[]`
+
+这样不需要为 `shared-client` 单独引入新的测试命令，也能把归一化逻辑锁住。
+
+### 5.4 CLI 命令测试：锁死空列表输出与有舰队展示
+
+建议文件：
+
+- 新增 `client-cli/src/commands/query.test.ts`
+
+推荐用例：
+
+### 用例 1：空列表时输出 `No fleets found.`
+
+步骤：
+
+- 调 `runFleetStatusCommand([], { fetchFleets: async () => [], ... })`
+
+断言：
+
+- 输出包含 `No fleets found.`
+
+### 用例 2：依赖层返回 `null` 时仍稳定输出
+
+步骤：
+
+- 调 `runFleetStatusCommand([], { fetchFleets: async () => null, ... })`
+
+断言：
+
+- 输出包含 `No fleets found.`
+- 不抛异常
+
+### 用例 3：有舰队时仍列出关键信息
+
+步骤：
+
+- 注入一条舰队数据
+
+断言：
+
+- 输出包含 `FleetID`
+- 输出包含 `fleet-demo`
+- 输出包含 `sys-1`
+- 输出包含 `wedge` 或其他 formation
+- 输出包含单位栈文本
+
+这样既锁空态，又锁 happy path 不回退。
+
+## 6. 落地文件清单
+
+| 文件 | 改动类型 | 目的 |
+| --- | --- | --- |
+| `server/internal/query/fleet_runtime.go` | 修改 | 把 `/world/fleets` 的空态收口为非 nil 空切片 |
+| `server/internal/query/query_test.go` 或 `server/internal/query/fleet_runtime_test.go` | 新增/扩展 | 锁住 query 层空列表编码语义 |
+| `server/internal/gateway/server_test.go` | 扩展 | 锁住 HTTP `[]` 合约与详情 `404` |
+| `shared-client/src/api.ts` | 修改 | 仅对 `fetchFleets()` 做局部归一化 |
+| `client-cli/src/commands/query.ts` | 修改 | 提炼 `runFleetStatusCommand(...)` 便于测试 |
+| `client-cli/src/format.ts` | 修改 | `fmtFleetList()` 做 null-safe 兜底 |
+| `client-cli/src/api.test.ts` | 扩展 | 锁 shared-client 归一化行为 |
+| `client-cli/src/commands/query.test.ts` | 新增 | 锁 CLI 空列表输出与正常列表展示 |
+| `docs/dev/服务端API.md` | 修改 | 明确 `[]` 与 `404` 口径 |
+| `docs/dev/客户端CLI.md` | 修改 | 明确 `No fleets found.` 空态输出 |
+
+## 7. 验收与验证计划
+
+实现完成后，建议至少跑以下验证。
+
+### 7.1 自动化测试
+
+服务端：
+
+```bash
+cd /home/firesuiry/develop/siliconWorld/server
+env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
+  go test ./internal/query ./internal/gateway
+```
+
+CLI：
+
+```bash
+cd /home/firesuiry/develop/siliconWorld/client-cli
+npm test
+```
+
+### 7.2 手工回归
+
+默认新局与官方 midgame 都要验证一遍。
+
+空舰队场景：
+
+1. 登录 `p1`
+2. 不创建任何舰队
+3. 执行 `fleet_status`
+4. 直接请求 `GET /world/fleets`
+
+断言：
+
+- `fleet_status` 输出 `No fleets found.`
+- `GET /world/fleets` 返回 `[]`
+
+有舰队场景：
+
+1. `transfer`
+2. `commission_fleet`
+3. `fleet_assign`
+4. `fleet_status`
+5. `system_runtime`
+
+断言：
+
+- `fleet_status` 仍能展示 `fleet_id / system_id / formation / units`
+- `system_runtime` 中对应舰队仍可见
+
+## 8. 风险与注意事项
+
+### 8.1 不要把修复做成全局 JSON 特判
+
+如果在 `writeJSON()` 里做 nil-slice 统一替换，会影响整个服务端所有接口。这个问题当前只在 `Fleets()` 的 authoritative 列表语义上被确认，不应该用全局魔法扩大影响面。
+
+### 8.2 不要顺手改 `system_runtime.fleets`
+
+`SystemRuntimeView.Fleets` 目前带 `omitempty`，在无舰队时省略字段。这和 `/world/fleets` 作为“专门的列表资源”不是一个层级。本次只修列表接口，不混改复合视图语义。
+
+### 8.3 不要把详情未命中伪装成空对象
+
+`/world/fleets/{fleet_id}` 的语义是“单资源查询”。未命中继续走 `404` 才是正确协议；如果改成 `200 + null` 或 `200 + {}`，只会把调用方判断变复杂。
+
+## 9. 结论
+
+T105 的正确收口方式不是单点补丁，而是三层收口：
+
+1. 服务端把 `/world/fleets` 的 authoritative 空态固定为 `[]`
+2. shared-client 把 `fetchFleets()` 的类型承诺兑现为稳定数组
+3. CLI 在 formatter 与命令 helper 层继续兜底，并补上真正的行为测试
+
+这样修完后：
+
+- 玩家在“尚未拥有舰队”的正常状态下不会再撞 `TypeError`
+- API、shared-client、CLI 三层口径一致
+- 详情未命中与列表空态各自保持清晰且低耦合的协议语义
