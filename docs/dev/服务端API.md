@@ -332,13 +332,15 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明补充:
   - 未发现系统时仅返回 `system_id` + `discovered=false`
   - 已发现但当前玩家在该系统还没有 runtime 载体时返回 `available=false`
-  - 当前会公开两类 system-scoped runtime：
+  - 当前会公开三类 system-scoped runtime：
     - `solar_sail_orbit`
+    - `dyson_sphere`
     - `fleets`
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
 - 响应字段:
   - `system_id` / `discovered` / `available`
   - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
+  - `dyson_sphere`：包含 `player_id` / `system_id` / `layers` / `total_energy`；`layers[]` 下会继续返回 `nodes` / `frames` / `shells`
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
 - 响应示例:
@@ -347,6 +349,20 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "system_id": "sys-1",
   "discovered": true,
   "available": true,
+  "dyson_sphere": {
+    "player_id": "p1",
+    "system_id": "sys-1",
+    "layers": [
+      {
+        "layer_index": 0,
+        "orbit_radius": 1.2,
+        "nodes": [{"id": "node-1"}],
+        "frames": [],
+        "shells": [{"id": "shell-1", "coverage": 0.35}]
+      }
+    ],
+    "total_energy": 360
+  },
   "fleets": [
     {
       "fleet_id": "fleet-demo",
@@ -404,7 +420,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 只要目标行星 runtime 已加载，`tick` / `building_count` / `unit_count` 就来自该行星自身，并按当前玩家可见性统计
   - 若目标行星已发现但 runtime 尚未加载，`building_count` / `unit_count` 保持 `0`；`resource_count` 仍返回当前已知总资源点数
 - 响应字段:
-  - `planet_id` / `name` / `discovered` / `kind`
+  - `planet_id` / `system_id` / `name` / `discovered` / `kind`
   - `map_width` / `map_height`
   - `tick`
   - `building_count` / `unit_count` / `resource_count`
@@ -412,6 +428,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 ```json
 {
   "planet_id": "planet-1-1",
+  "system_id": "sys-1",
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
@@ -436,7 +453,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 查询参数:
   - `step`: 下采样步长；表示一个 overview cell 覆盖多少个原始 tile。默认 `100`，最小 `1`，超出地图尺寸时会自动夹紧到地图最大边长
 - 响应字段:
-  - `planet_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
+  - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
   - `step`: 本次实际使用的下采样步长
   - `cells_width` / `cells_height`: 总览矩阵尺寸，等于 `ceil(map_width / step)` 与 `ceil(map_height / step)`
   - `terrain`: 聚合后的地形矩阵，每个 cell 取该范围内的主导地形
@@ -447,6 +464,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 ```json
 {
   "planet_id": "planet-1-1",
+  "system_id": "sys-1",
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
@@ -480,7 +498,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `x` / `y`: 场景窗口左上角坐标
   - `width` / `height`: 场景窗口尺寸
 - 响应字段:
-  - `planet_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
+  - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
   - `bounds`: 本次实际返回的窗口范围，字段为 `x` / `y` / `width` / `height`
   - `terrain`: 当前窗口内的地形切片
   - `visible` / `explored`: 当前窗口内的迷雾切片
@@ -490,6 +508,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 ```json
 {
   "planet_id": "planet-1-1",
+  "system_id": "sys-1",
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
@@ -932,6 +951,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 **POST /commands**
 - 说明: 提交命令（需认证）
 - 说明补充: `issuer_type` 与 `issuer_id` 必填；当 `issuer_type=player` 时，`issuer_id` 必须与 Bearer key 对应的玩家一致；命令会进行权限校验（`permissions`），无权限则直接拒绝
+- authoritative 语义补充:
+  - `request_id` 同时承担幂等键与结果回写关联键；重复 `request_id` 不会再次入队
+  - HTTP `202` 与 `results[].status = accepted` 只表示“通过网关预校验并已入队到 `enqueue_tick`”，不是最终成功
+  - 每条命令的最终 authoritative 成功/失败结果必须以后续 `command_result` 事件为准；客户端应使用 `payload.request_id + command_index` 进行对账
 - 执行体约束: `build`/`produce`/`upgrade`/`demolish` 需要执行体在操作范围内；`upgrade`/`demolish` 超过并发上限会在执行阶段失败；`build` 超过并发上限时进入施工队列等待调度
 - 请求体:
 ```json
@@ -1128,6 +1151,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_attack_started`
   - `fleet_disbanded`
 - 事件类型补充:
+  - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。
   - `resource_changed`：电力链路现在会在同一轮 authoritative 电力结算里只提交一次最终 `energy`；后续同 tick 的矿物/产出事件若继续复用 `resource_changed`，会沿用同一个最终 `energy` 值，不再在 `10000 -> 99xx -> 98xx` 间来回跳变。
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。
@@ -1389,6 +1413,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 补充说明:
   - 服务端不再默认自动推送全部事件；只有显式订阅的 `event_types` 才会进入该 SSE 连接
   - 事件历史按类型独立保留，高频事件不会再把 `command_result` 这类低频关键事件挤出窗口
+  - 对命令类前端，建议至少订阅 `command_result`；`/commands` 的同步 `accepted` 只表示已受理，最终 authoritative 结果仍通过该事件流返回
   - `rocket_launched` 事件 payload 当前包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`
   - 高阶单位公开链路新增的 `squad_deployed` / `fleet_commissioned` / `fleet_assigned` / `fleet_attack_started` / `fleet_disbanded` 也会通过同一 SSE 通道推送，payload 结构与 `GET /events/snapshot` 一致
 - GameEvent 示例:

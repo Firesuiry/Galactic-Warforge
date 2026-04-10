@@ -8,6 +8,7 @@ type SystemRuntimeView struct {
 	Discovered     bool                       `json:"discovered"`
 	Available      bool                       `json:"available"`
 	SolarSailOrbit *model.SolarSailOrbitState `json:"solar_sail_orbit,omitempty"`
+	DysonSphere    *model.DysonSphereState    `json:"dyson_sphere,omitempty"`
 	Fleets         []FleetRuntimeView         `json:"fleets,omitempty"`
 }
 
@@ -59,6 +60,16 @@ func (ql *Layer) SystemRuntime(playerID, systemID string, spaceRuntime *model.Sp
 		orbitCopy := *systemRuntime.SolarSailOrbit
 		orbitCopy.Sails = append([]model.SolarSail(nil), systemRuntime.SolarSailOrbit.Sails...)
 		view.SolarSailOrbit = &orbitCopy
+	}
+	if state := model.GetDysonSphereState(spaceRuntime, playerID, systemID); state != nil {
+		stateCopy := *state
+		stateCopy.Layers = append([]model.DysonLayer(nil), state.Layers...)
+		for index := range stateCopy.Layers {
+			stateCopy.Layers[index].Nodes = append([]model.DysonNode(nil), state.Layers[index].Nodes...)
+			stateCopy.Layers[index].Frames = append([]model.DysonFrame(nil), state.Layers[index].Frames...)
+			stateCopy.Layers[index].Shells = append([]model.DysonShell(nil), state.Layers[index].Shells...)
+		}
+		view.DysonSphere = &stateCopy
 	}
 	for _, fleet := range systemRuntime.Fleets {
 		if fleet == nil {

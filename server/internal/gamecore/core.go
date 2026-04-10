@@ -631,13 +631,13 @@ func (gc *GameCore) processTick() {
 
 		allEvents = append(allEvents, settleResearch(gc.worlds)...)
 		allEvents = append(allEvents, settleSolarSails(gc.spaceRuntime, currentTick)...)
+		allEvents = append(allEvents, settleDysonSpheres(gc.spaceRuntime, currentTick)...)
 
 		for _, ws := range worlds {
 			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
 
 			env := currentPlanetEnvironment(gc.maps, ws.PlanetID)
 			allEvents = append(allEvents, settlePowerGeneration(ws, env)...)
-			allEvents = append(allEvents, settleDysonSpheres(ws.Tick)...)
 			receiverViews := settleRayReceivers(ws, gc.maps, gc.spaceRuntime)
 			settlePlanetaryShields(ws)
 			allEvents = append(allEvents, finalizePowerSettlement(ws, receiverViews)...)

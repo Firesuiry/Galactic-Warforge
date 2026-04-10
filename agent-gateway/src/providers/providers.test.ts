@@ -23,8 +23,31 @@ describe('provider result parser', () => {
     assert.equal(parsed.done, false);
   });
 
+  it('falls back to final_answer message when assistantMessage is omitted', () => {
+    const parsed = parseProviderResult(JSON.stringify({
+      actions: [{ type: 'final_answer', message: '已通知胡景去建造矿场。' }],
+      done: true,
+    }));
+
+    assert.equal(parsed.assistantMessage, '已通知胡景去建造矿场。');
+    assert.equal(parsed.actions[0]?.type, 'final_answer');
+    assert.equal(parsed.done, true);
+  });
+
+  it('falls back to an empty assistant message when assistantMessage is omitted mid-loop', () => {
+    const parsed = parseProviderResult(JSON.stringify({
+      actions: [{ type: 'game.cli', commandLine: 'scene planet-1-1 0 0 8 8' }],
+      done: false,
+    }));
+
+    assert.equal(parsed.assistantMessage, '');
+    assert.equal(parsed.actions[0]?.type, 'game.cli');
+    assert.equal(parsed.done, false);
+  });
+
   it('rejects malformed payloads', () => {
-    assert.throws(() => parseProviderResult('{"actions":[]}'), /assistantMessage/);
+    assert.throws(() => parseProviderResult('{"assistantMessage":"收到。","actions":{}}'), /actions/);
+    assert.throws(() => parseProviderResult('{"assistantMessage":"收到。","actions":[]}'), /done/);
   });
 
   it('accepts claude structured_output envelopes', () => {
@@ -45,6 +68,25 @@ describe('provider result parser', () => {
     const parsed = parseProviderResult(`<think>先思考一下</think>
 
 {"assistantMessage":"收到。","actions":[],"done":true}`);
+
+    assert.equal(parsed.assistantMessage, '收到。');
+    assert.deepEqual(parsed.actions, []);
+    assert.equal(parsed.done, true);
+  });
+
+  it('accepts minimax content with trailing non-json text', () => {
+    const parsed = parseProviderResult(`{"assistantMessage":"收到。","actions":[],"done":true}
+
+额外说明`);
+
+    assert.equal(parsed.assistantMessage, '收到。');
+    assert.deepEqual(parsed.actions, []);
+    assert.equal(parsed.done, true);
+  });
+
+  it('accepts the first json object when multiple payloads are concatenated', () => {
+    const parsed = parseProviderResult(`{"assistantMessage":"收到。","actions":[],"done":true}
+{"assistantMessage":"忽略我","actions":[],"done":false}`);
 
     assert.equal(parsed.assistantMessage, '收到。');
     assert.deepEqual(parsed.actions, []);

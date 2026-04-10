@@ -1,0 +1,333 @@
+import type { CommandType } from "./types.js";
+
+export type PublicCommandId = CommandType;
+
+export type PublicCommandCategory =
+  | "observe"
+  | "build"
+  | "research"
+  | "management"
+  | "dyson";
+
+export type CommandPermissionCategory =
+  | "observe"
+  | "build"
+  | "combat"
+  | "research"
+  | "management";
+
+export interface PublicCommandDefinition {
+  id: PublicCommandId;
+  apiCommandName: CommandType;
+  cliCommandName?: string;
+  category: PublicCommandCategory;
+  permissionCategory: CommandPermissionCategory;
+  layer: "galaxy" | "system" | "planet";
+  requiresActivePlanet: boolean;
+  webSurface: "required" | "optional" | "hidden";
+}
+
+export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
+  {
+    id: "scan_galaxy",
+    apiCommandName: "scan_galaxy",
+    cliCommandName: "scan_galaxy",
+    category: "observe",
+    permissionCategory: "observe",
+    layer: "galaxy",
+    requiresActivePlanet: false,
+    webSurface: "required",
+  },
+  {
+    id: "scan_system",
+    apiCommandName: "scan_system",
+    cliCommandName: "scan_system",
+    category: "observe",
+    permissionCategory: "observe",
+    layer: "system",
+    requiresActivePlanet: false,
+    webSurface: "required",
+  },
+  {
+    id: "scan_planet",
+    apiCommandName: "scan_planet",
+    cliCommandName: "scan_planet",
+    category: "observe",
+    permissionCategory: "observe",
+    layer: "planet",
+    requiresActivePlanet: false,
+    webSurface: "required",
+  },
+  {
+    id: "build",
+    apiCommandName: "build",
+    cliCommandName: "build",
+    category: "build",
+    permissionCategory: "build",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "move",
+    apiCommandName: "move",
+    cliCommandName: "move",
+    category: "build",
+    permissionCategory: "combat",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "attack",
+    apiCommandName: "attack",
+    cliCommandName: "attack",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "produce",
+    apiCommandName: "produce",
+    cliCommandName: "produce",
+    category: "build",
+    permissionCategory: "build",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "upgrade",
+    apiCommandName: "upgrade",
+    cliCommandName: "upgrade",
+    category: "build",
+    permissionCategory: "build",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "demolish",
+    apiCommandName: "demolish",
+    cliCommandName: "demolish",
+    category: "build",
+    permissionCategory: "build",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "configure_logistics_station",
+    apiCommandName: "configure_logistics_station",
+    cliCommandName: "configure_logistics_station",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "optional",
+  },
+  {
+    id: "configure_logistics_slot",
+    apiCommandName: "configure_logistics_slot",
+    cliCommandName: "configure_logistics_slot",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "optional",
+  },
+  {
+    id: "cancel_construction",
+    apiCommandName: "cancel_construction",
+    cliCommandName: "cancel_construction",
+    category: "build",
+    permissionCategory: "build",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "restore_construction",
+    apiCommandName: "restore_construction",
+    cliCommandName: "restore_construction",
+    category: "build",
+    permissionCategory: "build",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "start_research",
+    apiCommandName: "start_research",
+    cliCommandName: "start_research",
+    category: "research",
+    permissionCategory: "research",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "cancel_research",
+    apiCommandName: "cancel_research",
+    cliCommandName: "cancel_research",
+    category: "research",
+    permissionCategory: "research",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "transfer_item",
+    apiCommandName: "transfer_item",
+    cliCommandName: "transfer",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "switch_active_planet",
+    apiCommandName: "switch_active_planet",
+    cliCommandName: "switch_active_planet",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: false,
+    webSurface: "required",
+  },
+  {
+    id: "set_ray_receiver_mode",
+    apiCommandName: "set_ray_receiver_mode",
+    cliCommandName: "set_ray_receiver_mode",
+    category: "dyson",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "deploy_squad",
+    apiCommandName: "deploy_squad",
+    cliCommandName: "deploy_squad",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "commission_fleet",
+    apiCommandName: "commission_fleet",
+    cliCommandName: "commission_fleet",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "system",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+  {
+    id: "fleet_assign",
+    apiCommandName: "fleet_assign",
+    cliCommandName: "fleet_assign",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "system",
+    requiresActivePlanet: false,
+    webSurface: "hidden",
+  },
+  {
+    id: "fleet_attack",
+    apiCommandName: "fleet_attack",
+    cliCommandName: "fleet_attack",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "system",
+    requiresActivePlanet: false,
+    webSurface: "hidden",
+  },
+  {
+    id: "fleet_disband",
+    apiCommandName: "fleet_disband",
+    cliCommandName: "fleet_disband",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "system",
+    requiresActivePlanet: false,
+    webSurface: "hidden",
+  },
+  {
+    id: "launch_solar_sail",
+    apiCommandName: "launch_solar_sail",
+    cliCommandName: "launch_solar_sail",
+    category: "dyson",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "launch_rocket",
+    apiCommandName: "launch_rocket",
+    cliCommandName: "launch_rocket",
+    category: "dyson",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "build_dyson_node",
+    apiCommandName: "build_dyson_node",
+    cliCommandName: "build_dyson_node",
+    category: "dyson",
+    permissionCategory: "build",
+    layer: "system",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "build_dyson_frame",
+    apiCommandName: "build_dyson_frame",
+    cliCommandName: "build_dyson_frame",
+    category: "dyson",
+    permissionCategory: "build",
+    layer: "system",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "build_dyson_shell",
+    apiCommandName: "build_dyson_shell",
+    cliCommandName: "build_dyson_shell",
+    category: "dyson",
+    permissionCategory: "build",
+    layer: "system",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
+    id: "demolish_dyson",
+    apiCommandName: "demolish_dyson",
+    cliCommandName: "demolish_dyson",
+    category: "dyson",
+    permissionCategory: "build",
+    layer: "system",
+    requiresActivePlanet: true,
+    webSurface: "hidden",
+  },
+];
+
+export const PUBLIC_COMMAND_CATALOG = Object.fromEntries(
+  PUBLIC_COMMAND_DEFINITIONS.map((definition) => [definition.id, definition]),
+) as Record<PublicCommandId, PublicCommandDefinition>;
+
+export const REQUIRED_WEB_PUBLIC_COMMAND_IDS = PUBLIC_COMMAND_DEFINITIONS.filter(
+  (definition) => definition.webSurface === "required",
+).map((definition) => definition.id) as PublicCommandId[];
+
+export function getPublicCommandDefinition(id: string) {
+  return PUBLIC_COMMAND_CATALOG[id as PublicCommandId] ?? null;
+}

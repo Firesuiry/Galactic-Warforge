@@ -1,6 +1,8 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 当前覆盖常用查询接口与 `docs/player/玩法指南.md` 中玩家可直接使用的 31 类核心命令，已补齐 `switch_active_planet`、`set_ray_receiver_mode`、`launch_rocket`、`transfer`、5 个高阶舰队命令、2 个 runtime 查询命令、物流站配置命令与手动保存入口 `save`；行星读取链路已切换到 `summary / scene / inspect` 三段式模型。对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。到 T100 为止，`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler` 以及终局高阶舰队线都能在官方 midgame 或派生验证局直接回归。
+`client-cli` 当前除了游戏 `server` 常用查询与 31 类核心命令外，也补齐了最小 `agent-gateway` 管理入口：`agent_list`、`agent_create`、`agent_update`、`agent_message`、`agent_thread`。这样案例 1 中“创建李斯 -> 李斯创建胡景 -> 李斯委派胡景建矿场”已经可以直接通过 CLI 回归。原有行星读取链路继续使用 `summary / scene / inspect` 三段式模型；对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。到 T100 为止，`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler` 以及终局高阶舰队线都能在官方 midgame 或派生验证局直接回归。
+
+公共游戏命令目录现在以 `shared-client/src/command-catalog.ts` 为单一真相：CLI、Web 和文档都从这份目录对齐命令 alias、分类和公开范围。`client-cli/src/command-catalog.ts` 只在其上补 `health / summary / save` 这类 CLI 专属命令，不再手写第二份公共命令分类。
 
 ## 启动
 
@@ -11,6 +13,7 @@
 ## 环境变量
 
 - `SW_SERVER`：服务端地址，默认 `http://localhost:18080`
+- `SW_AGENT_GATEWAY`：agent-gateway 地址，默认 `http://127.0.0.1:18180`
 - `SW_SSE_VERBOSE=1`：主动订阅并显示所有实时 SSE 事件；默认只订阅低噪声关键事件
 
 ## 登录与事件流
@@ -79,6 +82,11 @@
 | `demolish_dyson`              | `<system_id> <node\|frame\|shell> <component_id>`                                                                                                                              | 拆戴森球结构                           |
 | `raw`                         | `<json>`                                                                                                                                                                       | 直接发送完整 `/commands` 请求体        |
 
+补充说明：
+
+- `transfer` 是 CLI alias，对应服务端命令 `transfer_item`
+- `shared-client/src/command-catalog.ts` 中声明的公共 CLI alias 都会自动进入 agent runtime 的命令白名单
+
 ### 调试与运维类
 
 | 命令       | 参数                | 说明                                                |
@@ -86,6 +94,16 @@
 | `save`     | `[--reason <text>]` | 调用 `POST /save`，刷新当前游戏目录中的 `save.json` |
 | `replay`   | `[options]`         | 调用 `POST /replay`                                 |
 | `rollback` | `[options]`         | 调用 `POST /rollback`                               |
+
+### Agent Gateway 类
+
+| 命令            | 参数                                                                                                                                                          | 说明                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `agent_list`    | 无                                                                                                                                                            | 列出当前 agent-gateway 中的 agent profile          |
+| `agent_create`  | `<name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]` | 创建一个绑定当前玩家 key 的 agent                  |
+| `agent_update`  | `<agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]`                    | 更新 agent role / policy                           |
+| `agent_message` | `<agent_id> <content>`                                                                                                                                       | 直接向单 agent thread 发送一条任务消息             |
+| `agent_thread`  | `<agent_id>`                                                                                                                                                 | 查看 agent thread 中的消息、tool call 与执行日志   |
 
 ### 工具类
 
@@ -97,6 +115,24 @@
 | `help`          | `[command]`         | 查看帮助                 |
 | `clear`         | 无                  | 清屏                     |
 | `quit` / `exit` | 无                  | 退出                     |
+
+## Case1 最小回归路径
+
+假设 `agent-gateway` 已有可用 provider `provider-case1`：
+
+```bash
+agent_create 李斯 --id agent-lisi --provider provider-case1 --role director --can-create-agents true --command-categories observe,build,combat,research,management --planet-ids planet-1-1
+agent_message agent-lisi 创建胡景，并赋予其建筑权限
+agent_list
+agent_message agent-lisi 新建一个矿场
+agent_thread agent-lisi
+```
+
+预期：
+
+- `agent_list` 中能看到新出现的 `agent-hujing`
+- `agent_thread agent-lisi` 中能看到“创建胡景”“通知胡景建矿场”相关回复
+- 实际建造命令由胡景通过 `agent-gateway -> client-cli runtime -> server /commands` 发出，而不是李斯自己直接 `build`
 
 ## 重点说明
 

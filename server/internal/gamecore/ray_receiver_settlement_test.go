@@ -87,14 +87,14 @@ func TestSettleRayReceiversConsumeDysonSphereEnergyUpToInputCap(t *testing.T) {
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
 
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
-	if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonShell(core.spaceRuntime, "p1", "sys-1", 0, -10, 10, 0.35); err != nil {
 		t.Fatalf("add dyson shell: %v", err)
 	}
-	if got := GetDysonSphereEnergyForPlayer("p1"); got != 0 {
+	if got := GetDysonSphereEnergy(core.spaceRuntime, "p1", "sys-1"); got != 0 {
 		t.Fatalf("expected dyson energy to remain unset before settlement, got %d", got)
 	}
-	settleDysonSpheres(ws.Tick)
+	settleDysonSpheres(core.spaceRuntime, ws.Tick)
 
 	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
 
@@ -123,11 +123,11 @@ func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
 	receiver.Runtime.Functions.RayReceiver.PowerOutputPerTick = 1000
 	attachBuilding(ws, receiver)
 
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
-	if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonShell(core.spaceRuntime, "p1", "sys-1", 0, -10, 10, 0.35); err != nil {
 		t.Fatalf("add dyson shell: %v", err)
 	}
-	settleDysonSpheres(ws.Tick)
+	settleDysonSpheres(core.spaceRuntime, ws.Tick)
 
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
@@ -137,12 +137,12 @@ func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
 
 	player.Resources.Energy = 0
 	ws.PowerInputs = nil
-	state := GetDysonSphereState("p1")
+	state := GetDysonSphereState(core.spaceRuntime, "p1", "sys-1")
 	if state == nil || len(state.Layers) == 0 {
 		t.Fatal("expected dyson sphere state")
 	}
 	state.Layers[0].ConstructionBonus = 0.20
-	settleDysonSpheres(ws.Tick + 1)
+	settleDysonSpheres(core.spaceRuntime, ws.Tick+1)
 	boostedViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
 
 	if boostedViews[receiver.ID].PowerOutput <= basePowerGain {
@@ -195,11 +195,11 @@ func TestSettleRayReceiversRespectModesAndKeepExistingPhotonStock(t *testing.T) 
 			receiver.Storage.EnsureInventory()[model.ItemCriticalPhoton] = tc.seedPhotons
 			attachBuilding(ws, receiver)
 
-			AddDysonLayer("p1", "sys-1", 0, 1.2)
-			if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+			AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+			if _, err := AddDysonShell(core.spaceRuntime, "p1", "sys-1", 0, -10, 10, 0.35); err != nil {
 				t.Fatalf("add dyson shell: %v", err)
 			}
-			settleDysonSpheres(ws.Tick)
+			settleDysonSpheres(core.spaceRuntime, ws.Tick)
 
 			player := ws.Players["p1"]
 			player.Resources.Energy = 0

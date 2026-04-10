@@ -2,10 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_GALAXY_ID, DEFAULT_SYSTEM_ID } from "@shared/config";
 import type { ApiClient } from "@shared/api";
-import type { CatalogView, PlanetRuntimeView } from "@shared/types";
+import type {
+  CatalogView,
+  CommandResponse,
+  PlanetRuntimeView,
+  StateSummary,
+  SystemRuntimeView,
+  SystemView,
+} from "@shared/types";
 
 import {
   findLogisticsStation,
+  formatItemInventorySummary,
   getBuildingDisplayName,
   getItemDisplayName,
   getTechDisplayName,
@@ -13,6 +21,10 @@ import {
   listOwnLogisticsStations,
   type PlanetRenderView,
 } from "@/features/planet-map/model";
+import {
+  usePlanetCommandStore,
+  type CommandJournalFocus,
+} from "@/features/planet-commands/store";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
   translateCommandType,
@@ -28,6 +40,9 @@ interface PlanetCommandPanelProps {
   client: ApiClient;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+  summary?: StateSummary;
+  system?: SystemView;
+  systemRuntime?: SystemRuntimeView;
 }
 
 type LogisticsScope = "planetary" | "interstellar";
@@ -71,8 +86,13 @@ export function PlanetCommandPanel({
   client,
   planet,
   runtime,
+  summary,
+  system,
+  systemRuntime,
 }: PlanetCommandPanelProps) {
   const selected = usePlanetViewStore((state) => state.selected);
+  const addJournalEntry = usePlanetCommandStore((state) => state.addJournalEntry);
+  const latestEntry = usePlanetCommandStore((state) => state.journal[0]);
   const playerId = client.getAuth().playerId;
   const [scanGalaxyId, setScanGalaxyId] = useState(DEFAULT_GALAXY_ID);
   const [scanSystemId, setScanSystemId] = useState(DEFAULT_SYSTEM_ID);
@@ -101,8 +121,43 @@ export function PlanetCommandPanel({
   const [slotMode, setSlotMode] = useState<LogisticsMode>("supply");
   const [slotLocalStorage, setSlotLocalStorage] = useState("");
   const [busyAction, setBusyAction] = useState("");
-  const [resultMessage, setResultMessage] = useState("");
-  const [resultTone, setResultTone] = useState<"ok" | "error">("ok");
+  const [transferBuildingId, setTransferBuildingId] = useState("");
+  const [transferItemId, setTransferItemId] = useState("");
+  const [transferQuantity, setTransferQuantity] = useState("10");
+  const [switchPlanetId, setSwitchPlanetId] = useState("");
+  const [switchPlanetManualId, setSwitchPlanetManualId] = useState("");
+  const [rayReceiverBuildingId, setRayReceiverBuildingId] = useState("");
+  const [rayReceiverMode, setRayReceiverMode] = useState<
+    "power" | "photon" | "hybrid"
+  >("power");
+  const [launchMode, setLaunchMode] = useState<"solar_sail" | "rocket">(
+    "solar_sail",
+  );
+  const [launchBuildingId, setLaunchBuildingId] = useState("");
+  const [launchCount, setLaunchCount] = useState("1");
+  const [launchOrbitRadius, setLaunchOrbitRadius] = useState("1.2");
+  const [launchInclination, setLaunchInclination] = useState("5");
+  const [launchLayerIndex, setLaunchLayerIndex] = useState("0");
+  const [dysonBuildType, setDysonBuildType] = useState<
+    "build_dyson_node" | "build_dyson_frame" | "build_dyson_shell"
+  >("build_dyson_node");
+  const [dysonSystemId, setDysonSystemId] = useState("");
+  const [dysonLayerIndex, setDysonLayerIndex] = useState("0");
+  const [dysonLatitude, setDysonLatitude] = useState("10");
+  const [dysonLongitude, setDysonLongitude] = useState("20");
+  const [dysonOrbitRadius, setDysonOrbitRadius] = useState("1.2");
+  const [dysonNodeAId, setDysonNodeAId] = useState("");
+  const [dysonNodeBId, setDysonNodeBId] = useState("");
+  const [dysonLatitudeMin, setDysonLatitudeMin] = useState("-15");
+  const [dysonLatitudeMax, setDysonLatitudeMax] = useState("15");
+  const [dysonCoverage, setDysonCoverage] = useState("0.4");
+  const currentResearchId =
+    summary?.players?.[playerId]?.tech?.current_research?.tech_id ?? researchId;
+  const currentSystemId =
+    planet.system_id ??
+    system?.system_id ??
+    systemRuntime?.system_id ??
+    DEFAULT_SYSTEM_ID;
 
   const ownBuildings = useMemo(
     () =>
@@ -155,6 +210,57 @@ export function PlanetCommandPanel({
         }),
     [catalog?.techs],
   );
+  const switchablePlanets = useMemo(
+    () => [...(system?.planets ?? [])].sort((left, right) =>
+      (left.name ?? left.planet_id).localeCompare(
+        right.name ?? right.planet_id,
+        "zh-CN",
+      ),
+    ),
+    [system?.planets],
+  );
+  const transferTargets = useMemo(
+    () =>
+      ownBuildings.filter(
+        (building) =>
+          !isLogisticsStationBuildingType(building.type) ||
+          Boolean(building.storage?.inventory),
+      ),
+    [ownBuildings],
+  );
+  const rayReceiverBuildings = useMemo(
+    () => ownBuildings.filter((building) => building.type === "ray_receiver"),
+    [ownBuildings],
+  );
+  const solarSailLaunchers = useMemo(
+    () => ownBuildings.filter((building) => building.type === "em_rail_ejector"),
+    [ownBuildings],
+  );
+  const rocketLaunchers = useMemo(
+    () =>
+      ownBuildings.filter(
+        (building) => building.type === "vertical_launching_silo",
+      ),
+    [ownBuildings],
+  );
+  const dysonLayers = useMemo(
+    () =>
+      [...(systemRuntime?.dyson_sphere?.layers ?? [])].sort(
+        (left, right) => left.layer_index - right.layer_index,
+      ),
+    [systemRuntime?.dyson_sphere?.layers],
+  );
+  const activeDysonLayer = useMemo(
+    () =>
+      dysonLayers.find(
+        (layer) => String(layer.layer_index) === dysonLayerIndex,
+      ) ?? dysonLayers[0],
+    [dysonLayerIndex, dysonLayers],
+  );
+  const dysonNodes = useMemo(
+    () => [...(activeDysonLayer?.nodes ?? [])],
+    [activeDysonLayer],
+  );
   const selectedLogisticsStationId = useMemo(() => {
     if (selected?.kind !== "building") {
       return "";
@@ -186,6 +292,11 @@ export function PlanetCommandPanel({
     : ["planetary"];
   const previousSlotConfigContextRef = useRef("");
   const previousSlotSettingsContextRef = useRef("");
+  const selectedOwnedBuildingId =
+    selected?.kind === "building" &&
+    ownBuildings.some((building) => building.id === selected.id)
+      ? selected.id
+      : "";
 
   useEffect(() => {
     if (buildableBuildings.length > 0 && !buildingType) {
@@ -198,6 +309,15 @@ export function PlanetCommandPanel({
       setResearchId(techOptions[0].id);
     }
   }, [researchId, techOptions]);
+
+  useEffect(() => {
+    if (scanSystemId === DEFAULT_SYSTEM_ID && currentSystemId) {
+      setScanSystemId(currentSystemId);
+    }
+    if (!dysonSystemId && currentSystemId) {
+      setDysonSystemId(currentSystemId);
+    }
+  }, [currentSystemId, dysonSystemId, scanSystemId]);
 
   useEffect(() => {
     if (selected?.position) {
@@ -213,6 +333,32 @@ export function PlanetCommandPanel({
       setMoveUnitId(selected.id);
     }
   }, [selected]);
+
+  useEffect(() => {
+    if (selectedOwnedBuildingId) {
+      setTransferBuildingId(selectedOwnedBuildingId);
+      if (
+        rayReceiverBuildings.some(
+          (building) => building.id === selectedOwnedBuildingId,
+        )
+      ) {
+        setRayReceiverBuildingId(selectedOwnedBuildingId);
+      }
+      if (
+        solarSailLaunchers.some(
+          (building) => building.id === selectedOwnedBuildingId,
+        ) ||
+        rocketLaunchers.some((building) => building.id === selectedOwnedBuildingId)
+      ) {
+        setLaunchBuildingId(selectedOwnedBuildingId);
+      }
+    }
+  }, [
+    rayReceiverBuildings,
+    rocketLaunchers,
+    selectedOwnedBuildingId,
+    solarSailLaunchers,
+  ]);
 
   useEffect(() => {
     if (selectedLogisticsStationId) {
@@ -326,29 +472,150 @@ export function PlanetCommandPanel({
     previousSlotSettingsContextRef.current = slotSettingsContext;
   }, [runtime, slotConfigBuildingId, slotItemId, slotScope]);
 
+  useEffect(() => {
+    if (!switchPlanetId && summary?.active_planet_id) {
+      setSwitchPlanetId(summary.active_planet_id);
+    }
+  }, [summary?.active_planet_id, switchPlanetId]);
+
+  useEffect(() => {
+    if (!transferBuildingId && transferTargets.length > 0) {
+      setTransferBuildingId(transferTargets[0].id);
+    }
+  }, [transferBuildingId, transferTargets]);
+
+  useEffect(() => {
+    const preferredMatrixItemId =
+      logisticsItems.find((item) => item.id === "electromagnetic_matrix")?.id ??
+      logisticsItems[0]?.id ??
+      "";
+    const activeTransferBuilding =
+      transferTargets.find((building) => building.id === transferBuildingId) ??
+      transferTargets[0];
+    const nextTransferItemId =
+      activeTransferBuilding?.type === "matrix_lab"
+        ? preferredMatrixItemId
+        : logisticsItems[0]?.id ?? "";
+
+    if (
+      nextTransferItemId &&
+      (!transferItemId ||
+        !logisticsItems.some((item) => item.id === transferItemId) ||
+        activeTransferBuilding?.type === "matrix_lab")
+    ) {
+      setTransferItemId(nextTransferItemId);
+    }
+  }, [logisticsItems, transferBuildingId, transferItemId, transferTargets]);
+
+  useEffect(() => {
+    if (
+      rayReceiverBuildings.length > 0 &&
+      !rayReceiverBuildings.some(
+        (building) => building.id === rayReceiverBuildingId,
+      )
+    ) {
+      setRayReceiverBuildingId(rayReceiverBuildings[0].id);
+    }
+  }, [rayReceiverBuildingId, rayReceiverBuildings]);
+
+  useEffect(() => {
+    const nextLaunchers =
+      launchMode === "solar_sail" ? solarSailLaunchers : rocketLaunchers;
+    if (
+      nextLaunchers.length > 0 &&
+      !nextLaunchers.some((building) => building.id === launchBuildingId)
+    ) {
+      setLaunchBuildingId(nextLaunchers[0].id);
+    }
+  }, [launchBuildingId, launchMode, rocketLaunchers, solarSailLaunchers]);
+
+  useEffect(() => {
+    if (dysonLayers.length > 0) {
+      const firstLayerIndex = String(dysonLayers[0].layer_index);
+      if (
+        !dysonLayers.some((layer) => String(layer.layer_index) === dysonLayerIndex)
+      ) {
+        setDysonLayerIndex(firstLayerIndex);
+      }
+      if (
+        !dysonLayers.some((layer) => String(layer.layer_index) === launchLayerIndex)
+      ) {
+        setLaunchLayerIndex(firstLayerIndex);
+      }
+    }
+  }, [dysonLayerIndex, dysonLayers, launchLayerIndex]);
+
+  useEffect(() => {
+    if (dysonNodes.length === 0) {
+      setDysonNodeAId("");
+      setDysonNodeBId("");
+      return;
+    }
+    if (!dysonNodes.some((node) => node.id === dysonNodeAId)) {
+      setDysonNodeAId(dysonNodes[0].id);
+    }
+    if (!dysonNodes.some((node) => node.id === dysonNodeBId)) {
+      setDysonNodeBId(dysonNodes[Math.min(1, dysonNodes.length - 1)]?.id ?? "");
+    }
+  }, [dysonNodeAId, dysonNodeBId, dysonNodes]);
+
+  const latestResultTone =
+    latestEntry?.status === "failed"
+      ? "error"
+      : latestEntry?.status === "succeeded"
+        ? "ok"
+        : "pending";
+  const latestResultMessage = latestEntry
+    ? latestEntry.status === "pending"
+      ? `${translateCommandType(latestEntry.commandType)} 已受理：${latestEntry.acceptedMessage}`
+      : latestEntry.authoritativeMessage ?? latestEntry.acceptedMessage
+    : "";
+
   async function runCommand(
     actionLabel: string,
-    execute: () => Promise<{
-      accepted: boolean;
-      results: Array<{ message: string }>;
-    }>,
+    execute: () => Promise<CommandResponse>,
+    options: {
+      planetId?: string;
+      focus?: CommandJournalFocus;
+    } = {},
   ) {
     setBusyAction(actionLabel);
-    setResultMessage("");
     try {
       const response = await execute();
-      setResultTone(response.accepted ? "ok" : "error");
-      setResultMessage(
+      const acceptedMessage =
         response.results.map((result) => result.message).join(" / ") ||
-          `${translateCommandType(actionLabel)} 已发送`,
-      );
+        `${translateCommandType(actionLabel)} 已受理`;
+
+      addJournalEntry({
+        requestId: response.request_id,
+        commandType: actionLabel,
+        planetId: options.planetId ?? planet.planet_id,
+        enqueueTick: response.enqueue_tick,
+        status: response.accepted ? "pending" : "failed",
+        acceptedMessage,
+        authoritativeCode: response.accepted
+          ? undefined
+          : response.results[0]?.code,
+        authoritativeMessage: response.accepted ? undefined : acceptedMessage,
+        focus: options.focus,
+      });
     } catch (error) {
-      setResultTone("error");
-      setResultMessage(
+      const message =
         error instanceof Error
           ? error.message
-          : `${translateCommandType(actionLabel)} 失败`,
-      );
+          : `${translateCommandType(actionLabel)} 失败`;
+      addJournalEntry({
+        requestId:
+          globalThis.crypto?.randomUUID?.() ??
+          `local-${actionLabel}-${Date.now()}`,
+        commandType: actionLabel,
+        planetId: options.planetId ?? planet.planet_id,
+        status: "failed",
+        acceptedMessage: `${translateCommandType(actionLabel)} 提交失败`,
+        authoritativeCode: "LOCAL_ERROR",
+        authoritativeMessage: message,
+        focus: options.focus,
+      });
     } finally {
       setBusyAction("");
     }
@@ -362,15 +629,20 @@ export function PlanetCommandPanel({
           当前页直接支持扫描、建造、移动、研究、拆除和物流配置。所有命令都走同一套
           `/commands` 契约。
         </p>
-        {resultMessage ? (
+        {latestEntry ? (
           <div
             className={
-              resultTone === "ok"
+              latestResultTone === "ok"
                 ? "command-result command-result--ok"
-                : "command-result command-result--error"
+                : latestResultTone === "error"
+                  ? "command-result command-result--error"
+                  : "command-result command-result--pending"
             }
           >
-            {resultMessage}
+            <strong>{latestResultMessage}</strong>
+            {latestEntry.nextHint ? (
+              <div className="subtle-text">{latestEntry.nextHint}</div>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -507,6 +779,11 @@ export function PlanetCommandPanel({
                   direction: buildDirection,
                   ...(recipeId ? { recipeId } : {}),
                 }),
+                {
+                  focus: {
+                    position: { x: buildX, y: buildY, z: 0 },
+                  },
+                },
               );
             }}
             type="button"
@@ -555,6 +832,12 @@ export function PlanetCommandPanel({
             onClick={() => {
               void runCommand("move", () =>
                 client.cmdMove(moveUnitId, { x: moveX, y: moveY, z: 0 }),
+                {
+                  focus: {
+                    entityId: moveUnitId,
+                    position: { x: moveX, y: moveY, z: 0 },
+                  },
+                },
               );
             }}
             type="button"
@@ -801,6 +1084,11 @@ export function PlanetCommandPanel({
             onClick={() => {
               void runCommand("start_research", () =>
                 client.cmdStartResearch(researchId),
+                {
+                  focus: {
+                    techId: researchId,
+                  },
+                },
               );
             }}
             type="button"
@@ -832,11 +1120,560 @@ export function PlanetCommandPanel({
             className="secondary-button field--span-2"
             disabled={busyAction !== "" || !demolishId}
             onClick={() => {
-              void runCommand("demolish", () => client.cmdDemolish(demolishId));
+              void runCommand("demolish", () => client.cmdDemolish(demolishId), {
+                focus: {
+                  entityId: demolishId,
+                },
+              });
             }}
             type="button"
           >
             拆除建筑
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">研究与装料</div>
+        <p className="subtle-text">
+          {currentResearchId
+            ? `当前研究 ${getTechDisplayName(catalog, currentResearchId)}。如果研究卡在缺矩阵，优先给 matrix_lab 装入 electromagnetic_matrix。`
+            : "可直接给建筑装入物料，研究站和中后期建筑共用这套装料入口。"}
+        </p>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>{fieldLabel("building_id")}</span>
+            <select
+              onChange={(event) => setTransferBuildingId(event.target.value)}
+              value={transferBuildingId}
+            >
+              <option value="">选择建筑</option>
+              {transferTargets.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.id} · {getBuildingDisplayName(catalog, building.type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field--span-2">
+            <span>装料物品</span>
+            <select
+              onChange={(event) => setTransferItemId(event.target.value)}
+              value={transferItemId}
+            >
+              <option value="">选择物品</option>
+              {logisticsItems.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {getItemDisplayName(catalog, item.id)} · {item.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>{fieldLabel("quantity")}</span>
+            <input
+              onChange={(event) => setTransferQuantity(event.target.value)}
+              type="number"
+              value={transferQuantity}
+            />
+          </label>
+          <div className="field field--span-2">
+            <span>{translateUi("field.inventory")}</span>
+            <div className="subtle-text">
+              {formatItemInventorySummary(
+                catalog,
+                transferTargets.find((building) => building.id === transferBuildingId)
+                  ?.storage?.inventory,
+              )}
+            </div>
+          </div>
+          <button
+            className="secondary-button field--span-2"
+            disabled={
+              busyAction !== "" ||
+              !transferBuildingId ||
+              !transferItemId ||
+              !toOptionalInt(transferQuantity)
+            }
+            onClick={() => {
+              const quantity = toOptionalInt(transferQuantity);
+              if (!quantity) {
+                return;
+              }
+              void runCommand(
+                "transfer_item",
+                () =>
+                  client.cmdTransferItem(
+                    transferBuildingId,
+                    transferItemId,
+                    quantity,
+                  ),
+                {
+                  focus: {
+                    entityId: transferBuildingId,
+                    itemId: transferItemId,
+                    techId: currentResearchId || undefined,
+                  },
+                },
+              );
+            }}
+            type="button"
+          >
+            装入建筑
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">跨星球</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>{fieldLabel("planet_id")}</span>
+            <select
+              onChange={(event) => setSwitchPlanetId(event.target.value)}
+              value={switchPlanetId}
+            >
+              <option value="">选择当前星系中的星球</option>
+              {switchablePlanets.map((targetPlanet) => (
+                <option key={targetPlanet.planet_id} value={targetPlanet.planet_id}>
+                  {targetPlanet.name ?? targetPlanet.planet_id} ·{" "}
+                  {targetPlanet.planet_id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field--span-2">
+            <span>手动输入目标星球</span>
+            <input
+              onChange={(event) => setSwitchPlanetManualId(event.target.value)}
+              placeholder="planet-1-2"
+              value={switchPlanetManualId}
+            />
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={
+              busyAction !== "" &&
+              busyAction !== "switch_active_planet"
+            }
+            onClick={() => {
+              const nextPlanetId =
+                switchPlanetManualId.trim() || switchPlanetId || planet.planet_id;
+              void runCommand(
+                "switch_active_planet",
+                () => client.cmdSwitchActivePlanet(nextPlanetId),
+                {
+                  planetId: nextPlanetId,
+                  focus: {
+                    planetId: nextPlanetId,
+                  },
+                },
+              );
+            }}
+            type="button"
+          >
+            切换 active planet
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">戴森建造</div>
+        <div className="compact-form-grid">
+          <label className="field">
+            <span>命令</span>
+            <select
+              onChange={(event) =>
+                setDysonBuildType(
+                  event.target.value as
+                    | "build_dyson_node"
+                    | "build_dyson_frame"
+                    | "build_dyson_shell",
+                )
+              }
+              value={dysonBuildType}
+            >
+              <option value="build_dyson_node">建造节点</option>
+              <option value="build_dyson_frame">建造框架</option>
+              <option value="build_dyson_shell">建造壳层</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{fieldLabel("system_id")}</span>
+            <input
+              onChange={(event) => setDysonSystemId(event.target.value)}
+              value={dysonSystemId}
+            />
+          </label>
+          <label className="field">
+            <span>Layer</span>
+            <select
+              onChange={(event) => setDysonLayerIndex(event.target.value)}
+              value={dysonLayerIndex}
+            >
+              {(dysonLayers.length > 0
+                ? dysonLayers
+                : [{ layer_index: 0, orbit_radius: 1.2, energy_output: 0 }]).map(
+                (layer) => (
+                  <option
+                    key={layer.layer_index}
+                    value={String(layer.layer_index)}
+                  >
+                    layer {layer.layer_index}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+
+          {dysonBuildType === "build_dyson_node" ? (
+            <>
+              <label className="field">
+                <span>纬度</span>
+                <input
+                  onChange={(event) => setDysonLatitude(event.target.value)}
+                  type="number"
+                  value={dysonLatitude}
+                />
+              </label>
+              <label className="field">
+                <span>经度</span>
+                <input
+                  onChange={(event) => setDysonLongitude(event.target.value)}
+                  type="number"
+                  value={dysonLongitude}
+                />
+              </label>
+              <label className="field">
+                <span>轨道半径</span>
+                <input
+                  onChange={(event) => setDysonOrbitRadius(event.target.value)}
+                  type="number"
+                  value={dysonOrbitRadius}
+                />
+              </label>
+            </>
+          ) : null}
+
+          {dysonBuildType === "build_dyson_frame" ? (
+            <>
+              <label className="field field--span-2">
+                <span>节点 A</span>
+                <select
+                  onChange={(event) => setDysonNodeAId(event.target.value)}
+                  value={dysonNodeAId}
+                >
+                  <option value="">选择节点</option>
+                  {dysonNodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field field--span-2">
+                <span>节点 B</span>
+                <select
+                  onChange={(event) => setDysonNodeBId(event.target.value)}
+                  value={dysonNodeBId}
+                >
+                  <option value="">选择节点</option>
+                  {dysonNodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+
+          {dysonBuildType === "build_dyson_shell" ? (
+            <>
+              <label className="field">
+                <span>最小纬度</span>
+                <input
+                  onChange={(event) => setDysonLatitudeMin(event.target.value)}
+                  type="number"
+                  value={dysonLatitudeMin}
+                />
+              </label>
+              <label className="field">
+                <span>最大纬度</span>
+                <input
+                  onChange={(event) => setDysonLatitudeMax(event.target.value)}
+                  type="number"
+                  value={dysonLatitudeMax}
+                />
+              </label>
+              <label className="field">
+                <span>覆盖率</span>
+                <input
+                  onChange={(event) => setDysonCoverage(event.target.value)}
+                  type="number"
+                  value={dysonCoverage}
+                />
+              </label>
+            </>
+          ) : null}
+
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !dysonSystemId}
+            onClick={() => {
+              const layerIndex = toOptionalInt(dysonLayerIndex) ?? 0;
+              if (dysonBuildType === "build_dyson_node") {
+                void runCommand(
+                  "build_dyson_node",
+                  () =>
+                    client.cmdBuildDysonNode({
+                      systemId: dysonSystemId,
+                      layerIndex,
+                      latitude: Number(dysonLatitude),
+                      longitude: Number(dysonLongitude),
+                      orbitRadius: Number(dysonOrbitRadius),
+                    }),
+                  {
+                    focus: {
+                      systemId: dysonSystemId,
+                    },
+                  },
+                );
+                return;
+              }
+              if (dysonBuildType === "build_dyson_frame") {
+                void runCommand(
+                  "build_dyson_frame",
+                  () =>
+                    client.cmdBuildDysonFrame({
+                      systemId: dysonSystemId,
+                      layerIndex,
+                      nodeAId: dysonNodeAId,
+                      nodeBId: dysonNodeBId,
+                    }),
+                  {
+                    focus: {
+                      systemId: dysonSystemId,
+                    },
+                  },
+                );
+                return;
+              }
+              void runCommand(
+                "build_dyson_shell",
+                () =>
+                  client.cmdBuildDysonShell({
+                    systemId: dysonSystemId,
+                    layerIndex,
+                    latitudeMin: Number(dysonLatitudeMin),
+                    latitudeMax: Number(dysonLatitudeMax),
+                    coverage: Number(dysonCoverage),
+                  }),
+                {
+                  focus: {
+                    systemId: dysonSystemId,
+                  },
+                },
+              );
+            }}
+            type="button"
+          >
+            提交戴森建造命令
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">戴森发射</div>
+        <div className="compact-form-grid">
+          <label className="field">
+            <span>发射类型</span>
+            <select
+              onChange={(event) =>
+                setLaunchMode(event.target.value as "solar_sail" | "rocket")
+              }
+              value={launchMode}
+            >
+              <option value="solar_sail">太阳帆</option>
+              <option value="rocket">火箭</option>
+            </select>
+          </label>
+          <label className="field field--span-2">
+            <span>{fieldLabel("building_id")}</span>
+            <select
+              onChange={(event) => setLaunchBuildingId(event.target.value)}
+              value={launchBuildingId}
+            >
+              <option value="">选择发射建筑</option>
+              {(launchMode === "solar_sail"
+                ? solarSailLaunchers
+                : rocketLaunchers
+              ).map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.id} · {getBuildingDisplayName(catalog, building.type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>数量</span>
+            <input
+              onChange={(event) => setLaunchCount(event.target.value)}
+              type="number"
+              value={launchCount}
+            />
+          </label>
+
+          {launchMode === "solar_sail" ? (
+            <>
+              <label className="field">
+                <span>轨道半径</span>
+                <input
+                  onChange={(event) => setLaunchOrbitRadius(event.target.value)}
+                  type="number"
+                  value={launchOrbitRadius}
+                />
+              </label>
+              <label className="field">
+                <span>倾角</span>
+                <input
+                  onChange={(event) => setLaunchInclination(event.target.value)}
+                  type="number"
+                  value={launchInclination}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="field">
+                <span>{fieldLabel("system_id")}</span>
+                <input readOnly value={dysonSystemId} />
+              </label>
+              <label className="field">
+                <span>Layer</span>
+                <select
+                  onChange={(event) => setLaunchLayerIndex(event.target.value)}
+                  value={launchLayerIndex}
+                >
+                  {(dysonLayers.length > 0
+                    ? dysonLayers
+                    : [
+                        {
+                          layer_index: 0,
+                          orbit_radius: 1.2,
+                          energy_output: 0,
+                        },
+                      ]).map((layer) => (
+                    <option
+                      key={layer.layer_index}
+                      value={String(layer.layer_index)}
+                    >
+                      layer {layer.layer_index}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !launchBuildingId}
+            onClick={() => {
+              const count = toOptionalInt(launchCount) ?? 1;
+              if (launchMode === "solar_sail") {
+                void runCommand(
+                  "launch_solar_sail",
+                  () =>
+                    client.cmdLaunchSolarSail(launchBuildingId, {
+                      count,
+                      orbitRadius: Number(launchOrbitRadius),
+                      inclination: Number(launchInclination),
+                    }),
+                  {
+                    focus: {
+                      entityId: launchBuildingId,
+                      systemId: dysonSystemId,
+                    },
+                  },
+                );
+                return;
+              }
+              void runCommand(
+                "launch_rocket",
+                () =>
+                  client.cmdLaunchRocket(launchBuildingId, dysonSystemId, {
+                    count,
+                    layerIndex: toOptionalInt(launchLayerIndex) ?? 0,
+                  }),
+                {
+                  focus: {
+                    entityId: launchBuildingId,
+                    systemId: dysonSystemId,
+                  },
+                },
+              );
+            }}
+            type="button"
+          >
+            提交发射命令
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">射线接收站</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>{fieldLabel("building_id")}</span>
+            <select
+              onChange={(event) => setRayReceiverBuildingId(event.target.value)}
+              value={rayReceiverBuildingId}
+            >
+              <option value="">选择射线接收站</option>
+              {rayReceiverBuildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.id} · {getBuildingDisplayName(catalog, building.type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>模式</span>
+            <select
+              onChange={(event) =>
+                setRayReceiverMode(
+                  event.target.value as "power" | "photon" | "hybrid",
+                )
+              }
+              value={rayReceiverMode}
+            >
+              <option value="power">power</option>
+              <option value="photon">photon</option>
+              <option value="hybrid">hybrid</option>
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !rayReceiverBuildingId}
+            onClick={() => {
+              void runCommand(
+                "set_ray_receiver_mode",
+                () =>
+                  client.cmdSetRayReceiverMode(
+                    rayReceiverBuildingId,
+                    rayReceiverMode,
+                  ),
+                {
+                  focus: {
+                    entityId: rayReceiverBuildingId,
+                  },
+                },
+              );
+            }}
+            type="button"
+          >
+            切换射线接收站模式
           </button>
         </div>
       </section>

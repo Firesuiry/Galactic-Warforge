@@ -127,6 +127,53 @@ func TestT101SaveRestorePreservesSpaceRuntime(t *testing.T) {
 	}
 }
 
+func TestT101SaveRestorePreservesDysonSphereRuntime(t *testing.T) {
+	core := newSaveStateHarness(t)
+
+	state := model.EnsureDysonSphereState(core.spaceRuntime, "p1", "sys-1")
+	state.AddLayer(0, 1.2)
+	state.Layers[0].Nodes = append(state.Layers[0].Nodes, model.DysonNode{
+		ID:           "node-save-t101",
+		LayerIndex:   0,
+		Latitude:     12,
+		Longitude:    24,
+		EnergyOutput: 10,
+		Built:        true,
+	})
+	state.Layers[0].Shells = append(state.Layers[0].Shells, model.DysonShell{
+		ID:           "shell-save-t101",
+		LayerIndex:   0,
+		LatitudeMin:  -10,
+		LatitudeMax:  10,
+		Coverage:     0.35,
+		EnergyOutput: 350,
+		Built:        true,
+	})
+	state.CalculateTotalEnergy(model.DefaultDysonStressParams())
+
+	save, err := core.ExportSaveFile("manual")
+	if err != nil {
+		t.Fatalf("export save: %v", err)
+	}
+
+	cfg, maps, q, bus, store := newSaveHarnessDeps(t)
+	restored, err := NewFromSave(cfg, maps, q, bus, store, save)
+	if err != nil {
+		t.Fatalf("restore from save: %v", err)
+	}
+
+	restoredState := model.GetDysonSphereState(restored.spaceRuntime, "p1", "sys-1")
+	if restoredState == nil {
+		t.Fatal("expected restored dyson sphere state")
+	}
+	if restoredState.TotalEnergy != state.TotalEnergy || len(restoredState.Layers) != 1 {
+		t.Fatalf("unexpected restored dyson sphere: %+v", restoredState)
+	}
+	if len(restoredState.Layers[0].Nodes) != 1 || restoredState.Layers[0].Nodes[0].ID != "node-save-t101" {
+		t.Fatalf("expected restored dyson sphere nodes, got %+v", restoredState.Layers[0].Nodes)
+	}
+}
+
 func TestT101ReplayAndRollbackPreserveSpaceRuntime(t *testing.T) {
 	cfg, maps, q, bus, store := newSaveHarnessDeps(t)
 	core := New(cfg, maps, q, bus, store)

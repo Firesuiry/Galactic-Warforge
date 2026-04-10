@@ -47,11 +47,11 @@ func TestT095OfficialMidgameRayReceiverPowerModeStopsPhotonGrowthAndBackfeedsGri
 		model.RegisterPowerGridBuilding(ws, building)
 	}
 
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
-	if _, err := AddDysonNode("p1", "sys-1", 0, 10, 20); err != nil {
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonNode(core.spaceRuntime, "p1", "sys-1", 0, 10, 20); err != nil {
 		t.Fatalf("add dyson node: %v", err)
 	}
-	if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+	if _, err := AddDysonShell(core.spaceRuntime, "p1", "sys-1", 0, -10, 10, 0.35); err != nil {
 		t.Fatalf("add dyson shell: %v", err)
 	}
 

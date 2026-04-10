@@ -71,4 +71,79 @@ describe('agent loop', () => {
       { role: 'assistant', content: '建造官：收到。' },
     ]);
   });
+
+  it('executes gateway agent and conversation actions before final completion', async () => {
+    const calls: string[] = [];
+
+    const result = await runAgentLoop({
+      maxSteps: 2,
+      provider: {
+        async runTurn(input) {
+          if (input.step === 0) {
+            return {
+              assistantMessage: '我先创建胡景并委派建矿场。',
+              actions: [
+                {
+                  type: 'agent.create',
+                  name: '胡景',
+                  role: 'worker',
+                  policy: {
+                    planetIds: ['planet-1-1'],
+                    commandCategories: ['build'],
+                    canCreateAgents: false,
+                    canCreateChannel: false,
+                    canManageMembers: false,
+                    canInviteByPlanet: false,
+                    canCreateSchedules: false,
+                    canDirectMessageAgentIds: [],
+                    canDispatchAgentIds: [],
+                  },
+                },
+                { type: 'conversation.ensure_dm', targetAgentId: 'agent-hujing' },
+                { type: 'conversation.send_message', conversationId: 'conv-hujing', content: '去新建一个矿场' },
+              ],
+              done: false,
+            };
+          }
+
+          return {
+            assistantMessage: '已安排完成。',
+            actions: [{ type: 'final_answer', message: '已安排完成。' }],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run() {
+          return 'ok';
+        },
+      },
+      gatewayRuntime: {
+        async createAgent(action) {
+          calls.push(`create:${String(action.name ?? '')}`);
+          return 'agent-created';
+        },
+        async ensureDirectConversation(action) {
+          calls.push(`ensure_dm:${String(action.targetAgentId ?? '')}`);
+          return 'conv-hujing';
+        },
+        async sendConversationMessage(action) {
+          calls.push(`send_message:${String(action.conversationId ?? '')}`);
+          return 'message-sent';
+        },
+        async updateAgent() {
+          calls.push('update');
+          return 'updated';
+        },
+      },
+      initialContext: { goal: '创建胡景并委派建矿场' },
+    });
+
+    assert.deepEqual(calls, [
+      'create:胡景',
+      'ensure_dm:agent-hujing',
+      'send_message:conv-hujing',
+    ]);
+    assert.equal(result.finalMessage, '已安排完成。');
+  });
 });

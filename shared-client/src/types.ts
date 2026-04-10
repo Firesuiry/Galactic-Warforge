@@ -500,6 +500,7 @@ export interface PlanetResource {
 
 export interface PlanetSummaryView {
   planet_id: string;
+  system_id?: string;
   name?: string;
   discovered: boolean;
   kind?: string;
@@ -513,6 +514,7 @@ export interface PlanetSummaryView {
 
 export interface PlanetView {
   planet_id: string;
+  system_id?: string;
   name?: string;
   discovered: boolean;
   kind?: string;
@@ -537,6 +539,7 @@ export interface SceneBounds {
 
 export interface PlanetSceneView {
   planet_id: string;
+  system_id?: string;
   name?: string;
   discovered: boolean;
   kind?: string;
@@ -558,6 +561,7 @@ export interface PlanetSceneView {
 
 export interface PlanetOverviewView {
   planet_id: string;
+  system_id?: string;
   name?: string;
   discovered: boolean;
   kind?: string;
@@ -988,11 +992,60 @@ export interface FleetDetailView extends FleetRuntimeView {
   last_attack_tick?: number;
 }
 
+export interface DysonNodeView {
+  id: string;
+  layer_index: number;
+  latitude: number;
+  longitude: number;
+  energy_output: number;
+  integrity: number;
+  built: boolean;
+}
+
+export interface DysonFrameView {
+  id: string;
+  layer_index: number;
+  node_a_id: string;
+  node_b_id: string;
+  integrity: number;
+  built: boolean;
+}
+
+export interface DysonShellView {
+  id: string;
+  layer_index: number;
+  latitude_min: number;
+  latitude_max: number;
+  coverage: number;
+  energy_output: number;
+  integrity: number;
+  built: boolean;
+}
+
+export interface DysonLayerView {
+  layer_index: number;
+  orbit_radius: number;
+  nodes?: DysonNodeView[];
+  frames?: DysonFrameView[];
+  shells?: DysonShellView[];
+  energy_output: number;
+  rocket_launches?: number;
+  construction_bonus?: number;
+}
+
+export interface DysonSphereView {
+  player_id: string;
+  system_id: string;
+  layers?: DysonLayerView[];
+  total_energy: number;
+}
+
 export interface SystemRuntimeView {
   system_id: string;
   discovered: boolean;
   available: boolean;
   solar_sail_orbit?: SolarSailOrbitState;
+  dyson_sphere?: DysonSphereView;
   fleets?: FleetRuntimeView[];
 }
 

@@ -31,6 +31,13 @@ import {
   cmdBuildDysonShell,
   cmdDemolishDyson,
 } from './action.js';
+import {
+  cmdAgentCreate,
+  cmdAgentList,
+  cmdAgentMessage,
+  cmdAgentThread,
+  cmdAgentUpdate,
+} from './agent.js';
 import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
 import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdSave, cmdReplay, cmdRollback } from './debug.js';
 import type { ReplContext } from '../types.js';
@@ -84,6 +91,11 @@ export const COMMANDS: Record<string, CommandEntry> = {
   build_dyson_frame: { handler: cmdBuildDysonFrame },
   build_dyson_shell: { handler: cmdBuildDysonShell },
   demolish_dyson: { handler: cmdDemolishDyson },
+  agent_list: { handler: cmdAgentList },
+  agent_create: { handler: cmdAgentCreate },
+  agent_update: { handler: cmdAgentUpdate },
+  agent_message: { handler: cmdAgentMessage },
+  agent_thread: { handler: cmdAgentThread },
   raw: { handler: cmdRaw },
   switch: { handler: cmdSwitch },
   events: { handler: cmdEvents },

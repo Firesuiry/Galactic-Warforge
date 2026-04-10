@@ -40,7 +40,7 @@ func TestDysonCommandsExecute(t *testing.T) {
 		t.Fatalf("build dyson node B failed: %s (%s)", res.Code, res.Message)
 	}
 
-	state := GetDysonSphereState("p1")
+	state := GetDysonSphereState(core.spaceRuntime, "p1", "sys-1")
 	if state == nil || len(state.Layers) == 0 || len(state.Layers[0].Nodes) != 2 {
 		t.Fatal("expected dyson nodes to be created")
 	}
@@ -192,8 +192,8 @@ func TestLaunchRocketConsumesStoredRocketAndBoostsLayer(t *testing.T) {
 	silo.Storage.EnsureInventory()[model.ItemSmallCarrierRocket] = 2
 	attachBuilding(ws, silo)
 
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
-	if _, err := AddDysonNode("p1", "sys-1", 0, 10, 20); err != nil {
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonNode(core.spaceRuntime, "p1", "sys-1", 0, 10, 20); err != nil {
 		t.Fatalf("add dyson node: %v", err)
 	}
 
@@ -220,7 +220,7 @@ func TestLaunchRocketConsumesStoredRocketAndBoostsLayer(t *testing.T) {
 		t.Fatalf("expected silo rockets consumed, got %d", got)
 	}
 
-	state := GetDysonSphereState("p1")
+	state := GetDysonSphereState(core.spaceRuntime, "p1", "sys-1")
 	if state == nil || len(state.Layers) == 0 {
 		t.Fatal("expected dyson layer state")
 	}
@@ -244,7 +244,7 @@ func TestLaunchRocketRequiresExistingDysonScaffold(t *testing.T) {
 	silo.Storage.EnsureInventory()[model.ItemSmallCarrierRocket] = 1
 	attachBuilding(ws, silo)
 
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
 
 	res, _ := core.execLaunchRocket(ws, "p1", model.Command{
 		Type: model.CmdLaunchRocket,

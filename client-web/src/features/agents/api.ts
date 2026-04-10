@@ -3,6 +3,7 @@ import type {
   AgentProfileView,
   AddConversationMembersPayload,
   ConversationMessageView,
+  ConversationTurnView,
   ConversationView,
   CreateAgentPayload,
   CreateProviderPayload,
@@ -81,12 +82,20 @@ export function fetchConversationMessages(conversationId: string) {
   return expectJson<ConversationMessageView[]>(fetch(`/agent-api/conversations/${conversationId}/messages`));
 }
 
+export function fetchConversationTurns(conversationId: string) {
+  return expectJson<ConversationTurnView[]>(fetch(`/agent-api/conversations/${conversationId}/turns`));
+}
+
 export function sendConversationMessage(conversationId: string, payload: {
   senderType: 'player' | 'agent' | 'system' | 'schedule';
   senderId: string;
   content: string;
 }) {
-  return expectJson<{ accepted: boolean }>(fetch(`/agent-api/conversations/${conversationId}/messages`, {
+  return expectJson<{
+    accepted: boolean;
+    message: ConversationMessageView;
+    turns: ConversationTurnView[];
+  }>(fetch(`/agent-api/conversations/${conversationId}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),

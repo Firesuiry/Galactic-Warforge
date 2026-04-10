@@ -50,12 +50,36 @@ npm run dev
 
 - `planetIds`: 允许运行命令时触达的星球范围
 - `commandCategories`: 允许执行的命令类别
+- `canCreateAgents`: 是否允许创建下级智能体
 - `canCreateChannel`: 是否允许建频道
 - `canManageMembers`: 是否允许管理成员
 - `canInviteByPlanet`: 是否允许按星球拉人
 - `canCreateSchedules`: 是否允许创建定时任务
 - `canDirectMessageAgentIds`: 可主动私聊的 agent 列表
 - `canDispatchAgentIds`: 可指挥的 agent 列表
+
+### 3.1.1 受控 runtime action
+
+agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
+
+- `agent.create`
+- `agent.update`
+- `conversation.ensure_dm`
+- `conversation.send_message`
+
+语义：
+
+- `agent.create`：创建下级智能体；当前默认复用创建者自己的 `serverUrl / playerId / playerKey / providerId`
+- `agent.update`：更新自己或受管下级的 role / goal / policy
+- `conversation.ensure_dm`：确保当前 agent 与目标下级存在 DM
+- `conversation.send_message`：向已有会话或目标下级 DM 投递一条消息
+
+运行时硬限制：
+
+- 只有 `policy.canCreateAgents=true` 的 agent 才能执行 `agent.create`
+- 新建或更新下级时，授予的 `commandCategories` / `planetIds` 不能超出创建者自身范围
+- 新建 agent 的角色不能高于创建者角色
+- agent 向其他 agent 发私聊或委派消息时，目标必须在 `managedAgentIds`，或命中 `canDispatchAgentIds / canDirectMessageAgentIds`
 
 ### 3.2 会话与消息
 
@@ -76,18 +100,36 @@ npm run dev
 - `GET /conversations`
 - `POST /conversations`
 - `GET /conversations/:conversationId/messages`
+- `GET /conversations/:conversationId/turns`
 - `POST /conversations/:conversationId/messages`
 - `GET /conversations/:conversationId/events`
 - `POST /conversations/:conversationId/members/invite-by-planet`
 
-当前 `POST /conversations` 可直接创建频道或私聊；`POST /conversations/:id/messages` 会解析 `@agentName` / `@agentId` 提及并写入 `mentions`。
+当前 `POST /conversations` 可直接创建频道或私聊；`POST /conversations/:id/messages` 会解析 `@agentName` / `@agentId` 提及并写入 `mentions`，并返回：
+
+- `accepted`
+- authoritative `message`
+- 当前消息触发的初始 `turns`
+
+消息字段补充：
+
+- `replyToMessageId`：最终回复或失败消息挂回原请求消息
+- `turnId`：消息所属的 turn
+
+`GET /conversations/:conversationId/turns` 返回 `ConversationTurn[]`，用于让前端把“玩家请求 -> turn 生命周期 -> 最终回复/失败”稳定分组，不再依赖消息到达顺序猜测。
 
 如果 agent turn 执行失败，当前会额外向会话写入一条 `system` 消息，避免前端表现成“私聊无回复”。
+
+补充：
+
+- `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 `game.cli`
+- 因此 CLI 侧可以直接通过 thread 入口完成“让李斯创建胡景并委派胡景建矿场”这类 case1 链路
 
 ### 3.3 自动唤醒
 
 - 频道内：只有被 `@` 到的 agent 会进入 mailbox
-- 私聊内：除发送者外的另一个 agent 会被自动唤醒
+- 私聊内：玩家 / system / schedule 消息默认会唤醒另一侧 agent；agent 自己的普通回复不会再反向自动唤醒对方，避免 agent-agent DM 形成“收到”回声环
+- 只有显式 `conversation.send_message` 这类委派消息会以 `agent_dispatch` 触发下一跳 agent 唤醒
 - 同一个 agent 的 mailbox 串行消费，避免并发跑多个 turn
 - agent 回复后会重新写回会话；如果回复里继续 `@` 其他会话成员，会继续触发后续唤醒
 
@@ -158,12 +200,20 @@ npm run dev
 当前主要推送：
 
 - `message`
+- `turn.updated`
+- `turn.completed`
+- `turn.failed`
 
 agent 实例自身也保留：
 
 - `GET /agents/:agentId/events`
 
-前端 `/agents` 页面目前主要订阅会话 SSE，用于消息流实时刷新。
+前端 `/agents` 页面现在会分别缓存：
+
+- `message` 事件：增量写入消息列表
+- `turn.*` 事件：增量写入 `ConversationTurn` 列表
+
+`client-web` 的 `/agents` 工作台已经从平铺消息流改成“请求卡片 + turn 状态 + 规划摘要 + 动作摘要 + 最终回复/失败原因”的结构。
 
 ## 6. Provider 与 CLI 边界
 
@@ -184,7 +234,12 @@ agent 实例自身也保留：
 
 agent 不直接拿 shell，只能走受控 `client-cli` 运行时。
 
-当前白名单命令来自 `client-cli/src/command-catalog.ts`，例如：
+当前白名单命令由两部分组成：
+
+- `shared-client/src/command-catalog.ts`：公共游戏命令与 CLI alias 的单一真相
+- `client-cli/src/command-catalog.ts`：在共享目录基础上补 query/save 等 CLI 专属入口
+
+例如：
 
 - `summary`
 - `stats`

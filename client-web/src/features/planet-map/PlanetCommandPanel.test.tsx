@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { usePlanetCommandStore } from "@/features/planet-commands/store";
 import { PlanetCommandPanel } from "@/features/planet-map/PlanetCommandPanel";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 
@@ -127,6 +128,7 @@ function createCatalog() {
 function createClient() {
   return {
     getAuth: () => ({ playerId: "p1", playerKey: "key_player_1" }),
+    cmdScanPlanet: vi.fn(),
     cmdConfigureLogisticsSlot: vi.fn(),
     cmdConfigureLogisticsStation: vi.fn(),
   };
@@ -135,6 +137,7 @@ function createClient() {
 describe("PlanetCommandPanel", () => {
   beforeEach(() => {
     usePlanetViewStore.getState().resetForPlanet("planet-1-1");
+    usePlanetCommandStore.getState().resetForPlanet("planet-1-1");
   });
 
   it("保留玩家手动选择的物流槽位物品，即使 runtime 刷新", async () => {
@@ -220,5 +223,71 @@ describe("PlanetCommandPanel", () => {
     expect(
       (screen.getByLabelText("本地库存") as HTMLInputElement).value,
     ).toBe("60");
+  });
+
+  it("提交命令后会写入 pending journal，并等待 authoritative 回写", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    client.cmdScanPlanet.mockResolvedValue({
+      request_id: "req-scan-1",
+      accepted: true,
+      enqueue_tick: 121,
+      results: [
+        {
+          command_index: 0,
+          status: "queued",
+          code: "OK",
+          message: "scan_planet accepted",
+        },
+      ],
+    });
+
+    render(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "扫描当前行星" }));
+
+    await waitFor(() => {
+      expect(client.cmdScanPlanet).toHaveBeenCalledWith("planet-1-1");
+    });
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      requestId: "req-scan-1",
+      commandType: "scan_planet",
+      planetId: "planet-1-1",
+      status: "pending",
+      acceptedMessage: "scan_planet accepted",
+      enqueueTick: 121,
+    });
+
+    act(() => {
+      usePlanetCommandStore.getState().ingestEvent({
+        event_id: "evt-command-result-1",
+        tick: 121,
+        event_type: "command_result",
+        visibility_scope: "p1",
+        payload: {
+          request_id: "req-scan-1",
+          code: "OK",
+          message: "planet scan complete",
+        },
+      } as never);
+    });
+
+    await waitFor(() => {
+      expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+        requestId: "req-scan-1",
+        status: "succeeded",
+        authoritativeCode: "OK",
+        authoritativeMessage: "planet scan complete",
+      });
+    });
   });
 });

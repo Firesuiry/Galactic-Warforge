@@ -62,8 +62,8 @@ func TestT094RayReceiverPowerAppearsInSummaryStatsAndNetworksSameTick(t *testing
 	baselineSupply := totalPowerNetworkSupply(baselineNetworks)
 
 	player.Resources.Energy = 0
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
-	if _, err := AddDysonShell("p1", "sys-1", 0, -10, 10, 0.35); err != nil {
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonShell(core.spaceRuntime, "p1", "sys-1", 0, -10, 10, 0.35); err != nil {
 		t.Fatalf("add dyson shell: %v", err)
 	}
 

@@ -16,6 +16,7 @@ type PlayerSpaceRuntime struct {
 type PlayerSystemRuntime struct {
 	SystemID       string                 `json:"system_id"`
 	SolarSailOrbit *SolarSailOrbitState   `json:"solar_sail_orbit,omitempty"`
+	DysonSphere    *DysonSphereState      `json:"dyson_sphere,omitempty"`
 	Fleets         map[string]*SpaceFleet `json:"fleets,omitempty"`
 }
 
@@ -80,6 +81,33 @@ func (rt *SpaceRuntimeState) PlayerSystem(playerID, systemID string) *PlayerSyst
 	return playerRuntime.Systems[systemID]
 }
 
+// EnsureDysonSphereState returns a player-system Dyson sphere state, creating it when missing.
+func EnsureDysonSphereState(rt *SpaceRuntimeState, playerID, systemID string) *DysonSphereState {
+	if rt == nil {
+		return nil
+	}
+	systemRuntime := rt.EnsurePlayerSystem(playerID, systemID)
+	if systemRuntime == nil {
+		return nil
+	}
+	if systemRuntime.DysonSphere == nil {
+		systemRuntime.DysonSphere = NewDysonSphereState(playerID, systemID)
+	}
+	return systemRuntime.DysonSphere
+}
+
+// GetDysonSphereState returns the Dyson sphere state for one player in one system.
+func GetDysonSphereState(rt *SpaceRuntimeState, playerID, systemID string) *DysonSphereState {
+	if rt == nil {
+		return nil
+	}
+	systemRuntime := rt.PlayerSystem(playerID, systemID)
+	if systemRuntime == nil {
+		return nil
+	}
+	return systemRuntime.DysonSphere
+}
+
 // CloneSpaceRuntimeState deep-copies space runtime state.
 func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 	if rt == nil {
@@ -110,6 +138,7 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 				orbitCopy.Sails = append([]SolarSail(nil), systemRuntime.SolarSailOrbit.Sails...)
 				systemCopy.SolarSailOrbit = &orbitCopy
 			}
+			systemCopy.DysonSphere = cloneDysonSphereState(systemRuntime.DysonSphere)
 			for fleetID, fleet := range systemRuntime.Fleets {
 				if fleet == nil {
 					continue
@@ -127,4 +156,18 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 		out.Players[playerID] = playerCopy
 	}
 	return out
+}
+
+func cloneDysonSphereState(state *DysonSphereState) *DysonSphereState {
+	if state == nil {
+		return nil
+	}
+	stateCopy := *state
+	stateCopy.Layers = append([]DysonLayer(nil), state.Layers...)
+	for index := range stateCopy.Layers {
+		stateCopy.Layers[index].Nodes = append([]DysonNode(nil), state.Layers[index].Nodes...)
+		stateCopy.Layers[index].Frames = append([]DysonFrame(nil), state.Layers[index].Frames...)
+		stateCopy.Layers[index].Shells = append([]DysonShell(nil), state.Layers[index].Shells...)
+	}
+	return &stateCopy
 }

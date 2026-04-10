@@ -2,8 +2,15 @@ import type { AgentInstance, Conversation, ConversationMessage } from '../types.
 
 type MailboxStatus = 'idle' | 'running';
 
+export interface MailboxEntry {
+  agentId: string;
+  turnId: string;
+  message: ConversationMessage;
+  conversation: Conversation;
+}
+
 interface MailboxControllerOptions {
-  runAgent: (input: { agentId: string; message: ConversationMessage; conversation: Conversation }) => Promise<void>;
+  runAgent: (input: MailboxEntry) => Promise<void>;
 }
 
 export function resolveAutoWakeTargets(input: {
@@ -11,6 +18,9 @@ export function resolveAutoWakeTargets(input: {
   message: ConversationMessage;
 }) {
   if (input.conversation.type === 'dm') {
+    if (input.message.senderType === 'agent' && input.message.trigger !== 'agent_dispatch') {
+      return [];
+    }
     return input.conversation.memberIds
       .filter((memberId) => memberId.startsWith('agent:'))
       .map((memberId) => memberId.slice('agent:'.length))
@@ -33,7 +43,7 @@ export function resolveMentionTargetsFromContent(content: string, agents: AgentI
 }
 
 export function createMailboxController(options: MailboxControllerOptions) {
-  const mailboxes = new Map<string, Array<{ message: ConversationMessage; conversation: Conversation }>>();
+  const mailboxes = new Map<string, MailboxEntry[]>();
   const statuses = new Map<string, MailboxStatus>();
   const drains = new Map<string, Promise<void>>();
 
@@ -58,11 +68,7 @@ export function createMailboxController(options: MailboxControllerOptions) {
           if (!next) {
             break;
           }
-          await options.runAgent({
-            agentId,
-            message: next.message,
-            conversation: next.conversation,
-          });
+          await options.runAgent(next);
           mailboxes.get(agentId)?.shift();
         }
       } finally {
@@ -75,11 +81,12 @@ export function createMailboxController(options: MailboxControllerOptions) {
   }
 
   return {
-    async accept(conversation: Conversation, message: ConversationMessage) {
-      const targets = resolveAutoWakeTargets({ conversation, message });
-      for (const agentId of targets) {
+    async accept(entries: MailboxEntry[]) {
+      const targets = [...new Set(entries.map((entry) => entry.agentId))];
+      for (const entry of entries) {
+        const agentId = entry.agentId;
         const mailbox = mailboxes.get(agentId) ?? [];
-        mailbox.push({ message, conversation });
+        mailbox.push(entry);
         mailboxes.set(agentId, mailbox);
         void drain(agentId);
       }

@@ -89,6 +89,7 @@ export interface AgentThread {
 export interface AgentPolicy {
   planetIds: string[];
   commandCategories: string[];
+  canCreateAgents: boolean;
   canCreateChannel: boolean;
   canManageMembers: boolean;
   canInviteByPlanet: boolean;
@@ -123,8 +124,33 @@ export interface ConversationMessage {
   kind: 'chat' | 'system' | 'tool' | 'schedule';
   content: string;
   mentions: MentionTarget[];
-  trigger: 'player_message' | 'agent_message' | 'schedule_message' | 'system_message';
+  trigger: 'player_message' | 'agent_message' | 'agent_dispatch' | 'schedule_message' | 'system_message';
+  replyToMessageId?: string;
+  turnId?: string;
   createdAt: string;
+}
+
+export interface ConversationTurnActionSummary {
+  type: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  detail: string;
+}
+
+export interface ConversationTurn {
+  id: string;
+  conversationId: string;
+  requestMessageId: string;
+  actorType: 'player' | 'agent' | 'schedule';
+  actorId: string;
+  targetAgentId: string;
+  status: 'accepted' | 'queued' | 'planning' | 'executing' | 'succeeded' | 'failed';
+  assistantPreview?: string;
+  assistantMessageId?: string;
+  finalMessageId?: string;
+  errorMessage?: string;
+  actionSummaries: ConversationTurnActionSummary[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ScheduleJob {

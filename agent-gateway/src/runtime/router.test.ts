@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { createMailboxController, resolveAutoWakeTargets } from './router.js';
 
 describe('conversation router', () => {
-  it('resolves mentioned agents in channels and opposite agents in dms', () => {
+  it('resolves mentioned agents in channels and only dispatch-style agent dms', () => {
     const channelTargets = resolveAutoWakeTargets({
       conversation: {
         id: 'conv-channel',
@@ -53,13 +53,43 @@ describe('conversation router', () => {
         kind: 'chat',
         content: '去查一下星球A电力',
         mentions: [],
-        trigger: 'agent_message',
+        trigger: 'agent_dispatch',
         createdAt: '2026-04-03T00:00:00.000Z',
       },
     });
 
     assert.deepEqual(channelTargets, ['agent-builder']);
     assert.deepEqual(dmTargets, ['agent-builder']);
+  });
+
+  it('does not auto wake the opposite agent for ordinary agent replies in dms', () => {
+    const dmTargets = resolveAutoWakeTargets({
+      conversation: {
+        id: 'conv-dm',
+        workspaceId: 'workspace-default',
+        type: 'dm',
+        name: '总管 / 建造官',
+        topic: '',
+        memberIds: ['agent:agent-director', 'agent:agent-builder'],
+        createdByType: 'player',
+        createdById: 'p1',
+        createdAt: '2026-04-03T00:00:00.000Z',
+        updatedAt: '2026-04-03T00:00:00.000Z',
+      },
+      message: {
+        id: 'msg-dm',
+        conversationId: 'conv-dm',
+        senderType: 'agent',
+        senderId: 'agent-director',
+        kind: 'chat',
+        content: '收到。',
+        mentions: [],
+        trigger: 'agent_message',
+        createdAt: '2026-04-03T00:00:00.000Z',
+      },
+    });
+
+    assert.deepEqual(dmTargets, []);
   });
 
   it('queues messages and runs a single agent serially', async () => {
@@ -91,29 +121,39 @@ describe('conversation router', () => {
       updatedAt: '2026-04-03T00:00:00.000Z',
     };
 
-    const firstRun = controller.accept(conversation, {
-      id: 'msg-1',
-      conversationId: 'conv-channel',
-      senderType: 'player',
-      senderId: 'p1',
-      kind: 'chat',
-      content: '@建造官 先查电力',
-      mentions: [{ type: 'agent', id: 'agent-builder' }],
-      trigger: 'player_message',
-      createdAt: '2026-04-03T00:00:00.000Z',
-    });
+    const firstRun = controller.accept([{
+      agentId: 'agent-builder',
+      turnId: 'turn-1',
+      conversation,
+      message: {
+        id: 'msg-1',
+        conversationId: 'conv-channel',
+        senderType: 'player',
+        senderId: 'p1',
+        kind: 'chat',
+        content: '@建造官 先查电力',
+        mentions: [{ type: 'agent', id: 'agent-builder' }],
+        trigger: 'player_message',
+        createdAt: '2026-04-03T00:00:00.000Z',
+      },
+    }]);
     await delay(10);
-    const secondRun = controller.accept(conversation, {
-      id: 'msg-2',
-      conversationId: 'conv-channel',
-      senderType: 'player',
-      senderId: 'p1',
-      kind: 'chat',
-      content: '@建造官 再查产线',
-      mentions: [{ type: 'agent', id: 'agent-builder' }],
-      trigger: 'player_message',
-      createdAt: '2026-04-03T00:00:01.000Z',
-    });
+    const secondRun = controller.accept([{
+      agentId: 'agent-builder',
+      turnId: 'turn-2',
+      conversation,
+      message: {
+        id: 'msg-2',
+        conversationId: 'conv-channel',
+        senderType: 'player',
+        senderId: 'p1',
+        kind: 'chat',
+        content: '@建造官 再查产线',
+        mentions: [{ type: 'agent', id: 'agent-builder' }],
+        trigger: 'player_message',
+        createdAt: '2026-04-03T00:00:01.000Z',
+      },
+    }]);
 
     assert.deepEqual(controller.mailboxFor('agent-builder'), ['msg-1', 'msg-2']);
     assert.equal(controller.statusOf('agent-builder'), 'running');

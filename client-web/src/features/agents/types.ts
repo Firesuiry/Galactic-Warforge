@@ -7,6 +7,7 @@ export type AgentProviderKindView = 'http_api' | 'codex_cli' | 'claude_code_cli'
 export interface AgentPolicyView {
   planetIds: string[];
   commandCategories: string[];
+  canCreateAgents?: boolean;
   canCreateChannel: boolean;
   canManageMembers: boolean;
   canInviteByPlanet: boolean;
@@ -128,7 +129,32 @@ export interface ConversationMessageView {
     type: 'agent';
     id: string;
   }>;
+  replyToMessageId?: string;
+  turnId?: string;
   createdAt: string;
+}
+
+export interface ConversationTurnActionSummaryView {
+  type: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  detail: string;
+}
+
+export interface ConversationTurnView {
+  id: string;
+  conversationId: string;
+  requestMessageId: string;
+  actorType: 'player' | 'agent' | 'schedule';
+  actorId: string;
+  targetAgentId: string;
+  status: 'accepted' | 'queued' | 'planning' | 'executing' | 'succeeded' | 'failed';
+  assistantPreview?: string;
+  assistantMessageId?: string;
+  finalMessageId?: string;
+  errorMessage?: string;
+  actionSummaries: ConversationTurnActionSummaryView[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ScheduleView {

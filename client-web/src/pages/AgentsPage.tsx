@@ -11,6 +11,7 @@ import {
   createSchedule,
   fetchAgents,
   fetchConversationMessages,
+  fetchConversationTurns,
   fetchConversations,
   fetchGatewayHealth,
   fetchProviders,
@@ -20,9 +21,29 @@ import {
   updateAgent,
   updateSchedule,
 } from '@/features/agents/api';
-import { useConversationEvents } from '@/features/agents/use-agent-events';
+import { useConversationEvents, type ConversationStreamEvent } from '@/features/agents/use-agent-events';
 import { isFixtureServerUrl } from '@/fixtures';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import type {
+  ConversationMessageView,
+  ConversationTurnView,
+} from '@/features/agents/types';
+
+function mergeById<T extends { id: string; createdAt: string }>(items: T[], nextItem: T) {
+  const existing = items.find((item) => item.id === nextItem.id);
+  const merged = existing
+    ? items.map((item) => item.id === nextItem.id ? nextItem : item)
+    : [...items, nextItem];
+  return merged.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+function mergeTurnById(items: ConversationTurnView[], nextItem: ConversationTurnView) {
+  const existing = items.find((item) => item.id === nextItem.id);
+  const merged = existing
+    ? items.map((item) => item.id === nextItem.id ? nextItem : item)
+    : [...items, nextItem];
+  return merged.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
 
 export function AgentsPage() {
   const session = useSessionSnapshot();
@@ -77,6 +98,12 @@ export function AgentsPage() {
     enabled: selectedConversationId !== '',
   });
 
+  const turnsQuery = useQuery({
+    queryKey: ['agent-conversation-turns', selectedConversationId],
+    queryFn: () => fetchConversationTurns(selectedConversationId),
+    enabled: selectedConversationId !== '',
+  });
+
   useEffect(() => {
     const firstConversationId = conversationsQuery.data?.[0]?.id ?? '';
     if (!selectedConversationId && firstConversationId) {
@@ -98,8 +125,21 @@ export function AgentsPage() {
     }
   }, [memberProviderId, showCreateMember, providersQuery.data]);
 
-  useConversationEvents(selectedConversationId, () => {
-    void queryClient.invalidateQueries({ queryKey: ['agent-conversation-messages', selectedConversationId] });
+  useConversationEvents(selectedConversationId, (event: ConversationStreamEvent) => {
+    if (event.type === 'message') {
+      const message = event.payload as ConversationMessageView;
+      queryClient.setQueryData<ConversationMessageView[]>(
+        ['agent-conversation-messages', selectedConversationId],
+        (current = []) => mergeById(current, message),
+      );
+    } else {
+      const turn = event.payload as ConversationTurnView;
+      queryClient.setQueryData<ConversationTurnView[]>(
+        ['agent-conversation-turns', selectedConversationId],
+        (current = []) => mergeTurnById(current, turn),
+      );
+    }
+    void queryClient.invalidateQueries({ queryKey: ['agent-conversations'] });
     void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
     void queryClient.invalidateQueries({ queryKey: ['agent-schedules'] });
   });
@@ -146,10 +186,20 @@ export function AgentsPage() {
       senderId: session.playerId,
       content,
     }),
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
       setMessageInput('');
-      void queryClient.invalidateQueries({ queryKey: ['agent-conversation-messages', selectedConversationId] });
-      scheduleConversationRefresh(selectedConversationId);
+      queryClient.setQueryData<ConversationMessageView[]>(
+        ['agent-conversation-messages', variables.conversationId],
+        (current = []) => mergeById(current, result.message),
+      );
+      queryClient.setQueryData<ConversationTurnView[]>(
+        ['agent-conversation-turns', variables.conversationId],
+        (current = []) => result.turns.reduce(
+          (merged, turn) => mergeTurnById(merged, turn),
+          current,
+        ),
+      );
+      scheduleConversationRefresh(variables.conversationId);
     },
   });
 
@@ -213,9 +263,11 @@ export function AgentsPage() {
   const providers = providersQuery.data ?? [];
   const schedules = schedulesQuery.data ?? [];
   const messages = messagesQuery.data ?? [];
+  const turns = turnsQuery.data ?? [];
   const memberDataLoading = (activePane === 'members' || showCreateMember) && providersQuery.isLoading;
   const coreLoading = healthQuery.isLoading || conversationsQuery.isLoading || agentsQuery.isLoading || schedulesQuery.isLoading || memberDataLoading;
   const messagesLoading = selectedConversationId !== '' && messagesQuery.isLoading;
+  const turnsLoading = selectedConversationId !== '' && turnsQuery.isLoading;
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedConversationId),
@@ -230,6 +282,8 @@ export function AgentsPage() {
     for (const delayMs of [250, 1000]) {
       globalThis.setTimeout(() => {
         void queryClient.invalidateQueries({ queryKey: ['agent-conversation-messages', conversationId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent-conversations'] });
+        void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
       }, delayMs);
     }
   }
@@ -387,8 +441,8 @@ export function AgentsPage() {
     return <div className="panel">正在加载智能体协作台...</div>;
   }
 
-  if (healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error) {
-    const error = healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error;
+  if (healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error || turnsQuery.error) {
+    const error = healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error || turnsQuery.error;
     return (
       <div className="panel error-banner" role="alert">
         {error instanceof Error ? error.message : '智能体协作台加载失败'}
@@ -406,6 +460,8 @@ export function AgentsPage() {
       selectedConversationId={selectedConversation?.id ?? ''}
       messages={messages}
       messagesLoading={messagesLoading}
+      turns={turns}
+      turnsLoading={turnsLoading}
       agents={agents}
       selectedAgentId={selectedAgentId}
       providers={providers}

@@ -56,7 +56,7 @@ func settleRayReceivers(ws *model.WorldState, maps *mapmodel.Universe, spaceRunt
 
 		// Ray receivers only convert externally available Dyson energy.
 		// `InputPerTick` is the receiver's intake ceiling, not free baseline energy.
-		availableDysonEnergy := GetSolarSailEnergy(spaceRuntime, player.PlayerID, systemID) + GetDysonSphereEnergyForPlayer(player.PlayerID)
+		availableDysonEnergy := GetSolarSailEnergy(spaceRuntime, player.PlayerID, systemID) + GetDysonSphereEnergy(spaceRuntime, player.PlayerID, systemID)
 		view.AvailableDysonEnergy = availableDysonEnergy
 		effectiveInput := availableDysonEnergy
 		if module.InputPerTick > 0 && effectiveInput > module.InputPerTick {

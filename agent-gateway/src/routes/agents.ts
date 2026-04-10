@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
 import { runAgentLoop } from '../runtime/loop.js';
 import type { GatewayEvent } from '../runtime/events.js';
-import { runProviderTurn } from '../runtime/turn.js';
+import { runProviderTurn, type AgentTurnRunner } from '../runtime/turn.js';
 import type { AgentInstance, AgentPolicy, AgentThread, ModelProvider } from '../types.js';
 
 interface AgentStore {
@@ -40,12 +40,18 @@ interface AgentRouteContext {
   threadStore: ThreadStore;
   secretStore: SecretStore;
   eventBus: EventBus;
+  createManagedAgent?: (actor: AgentInstance, action: Record<string, unknown>) => Promise<string>;
+  updateManagedAgent?: (actor: AgentInstance, action: Record<string, unknown>) => Promise<string>;
+  ensureDirectConversation?: (actor: AgentInstance, targetAgentId: string) => Promise<string>;
+  sendConversationMessage?: (actor: AgentInstance, action: Record<string, unknown>) => Promise<string>;
+  turnRunner?: AgentTurnRunner;
 }
 
 function createDefaultPolicy(): AgentPolicy {
   return {
     planetIds: [],
     commandCategories: [],
+    canCreateAgents: false,
     canCreateChannel: false,
     canManageMembers: false,
     canInviteByPlanet: false,
@@ -62,6 +68,7 @@ function normalizePolicy(policy?: Partial<AgentPolicy>, base?: AgentPolicy): Age
     ...policy,
     planetIds: policy?.planetIds ?? fallback.planetIds,
     commandCategories: policy?.commandCategories ?? fallback.commandCategories,
+    canCreateAgents: policy?.canCreateAgents ?? fallback.canCreateAgents,
     canDirectMessageAgentIds: policy?.canDirectMessageAgentIds ?? fallback.canDirectMessageAgentIds,
     canDispatchAgentIds: policy?.canDispatchAgentIds ?? fallback.canDispatchAgentIds,
   };
@@ -295,7 +302,7 @@ export async function handleAgentRoutes(
         const result = await runAgentLoop({
           maxSteps: provider.toolPolicy.maxSteps,
           provider: {
-            runTurn: (input) => runProviderTurn({
+            runTurn: (input) => (context.turnRunner ?? runProviderTurn)({
               dataRoot: context.dataRoot,
               provider,
               secretStore: context.secretStore,
@@ -303,6 +310,10 @@ export async function handleAgentRoutes(
               allowedCommands: getAgentAllowedCommands({
                 allowedCategories: agent.policy?.commandCategories,
               }),
+              contextSections: [
+                `当前智能体：${agent.name}`,
+                '可用 action: game.cli / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
+              ],
             }),
           },
           cliRuntime: {
@@ -330,6 +341,32 @@ export async function handleAgentRoutes(
                 await context.threadStore.save(currentThread);
               }
               return output;
+            },
+          },
+          gatewayRuntime: {
+            createAgent: async (action) => {
+              if (!context.createManagedAgent) {
+                throw new Error('agent.create is not supported in this route');
+              }
+              return context.createManagedAgent(agent, action);
+            },
+            updateAgent: async (action) => {
+              if (!context.updateManagedAgent) {
+                throw new Error('agent.update is not supported in this route');
+              }
+              return context.updateManagedAgent(agent, action);
+            },
+            ensureDirectConversation: async (action) => {
+              if (!context.ensureDirectConversation) {
+                throw new Error('conversation.ensure_dm is not supported in this route');
+              }
+              return context.ensureDirectConversation(agent, String(action.targetAgentId ?? ''));
+            },
+            sendConversationMessage: async (action) => {
+              if (!context.sendConversationMessage) {
+                throw new Error('conversation.send_message is not supported in this route');
+              }
+              return context.sendConversationMessage(agent, action);
             },
           },
           initialContext: { goal: payload.content },

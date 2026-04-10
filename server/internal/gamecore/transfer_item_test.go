@@ -59,8 +59,8 @@ func TestTransferItemAllowsImmediateRocketLaunch(t *testing.T) {
 	silo.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, silo)
 
-	AddDysonLayer("p1", "sys-1", 0, 1.2)
-	if _, err := AddDysonNode("p1", "sys-1", 0, 10, 20); err != nil {
+	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
+	if _, err := AddDysonNode(core.spaceRuntime, "p1", "sys-1", 0, 10, 20); err != nil {
 		t.Fatalf("add dyson node: %v", err)
 	}
 

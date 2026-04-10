@@ -7,7 +7,9 @@ import {
   createAgent,
   createProvider,
   createSchedule,
+  fetchConversationTurns,
   fetchProviders,
+  sendConversationMessage,
   updateSchedule,
   updateAgent,
 } from './api';
@@ -183,5 +185,94 @@ describe('agents api', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it('fetches conversation turns and preserves authoritative send response payloads', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url === '/agent-api/conversations/conv-a/turns' && method === 'GET') {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'turn-1',
+            conversationId: 'conv-a',
+            requestMessageId: 'msg-request',
+            actorType: 'player',
+            actorId: 'p1',
+            targetAgentId: 'agent-builder',
+            status: 'planning',
+            assistantPreview: '先检查矿机。',
+            actionSummaries: [],
+            createdAt: '2026-04-03T00:00:00.000Z',
+            updatedAt: '2026-04-03T00:00:01.000Z',
+          },
+        ]));
+      }
+
+      if (url === '/agent-api/conversations/conv-a/messages' && method === 'POST') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          senderType: 'player',
+          senderId: 'p1',
+          content: '@建造官 检查产线',
+        });
+        return Promise.resolve(jsonResponse({
+          accepted: true,
+          message: {
+            id: 'msg-request',
+            conversationId: 'conv-a',
+            senderType: 'player',
+            senderId: 'p1',
+            kind: 'chat',
+            content: '@建造官 检查产线',
+            mentions: [{ type: 'agent', id: 'agent-builder' }],
+            createdAt: '2026-04-03T00:00:00.000Z',
+          },
+          turns: [
+            {
+              id: 'turn-1',
+              conversationId: 'conv-a',
+              requestMessageId: 'msg-request',
+              actorType: 'player',
+              actorId: 'p1',
+              targetAgentId: 'agent-builder',
+              status: 'accepted',
+              actionSummaries: [],
+              createdAt: '2026-04-03T00:00:00.000Z',
+              updatedAt: '2026-04-03T00:00:00.000Z',
+            },
+          ],
+        }, { status: 202 }));
+      }
+
+      return Promise.reject(new Error(`unexpected request: ${method} ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchConversationTurns('conv-a')).resolves.toEqual([
+      expect.objectContaining({
+        id: 'turn-1',
+        assistantPreview: '先检查矿机。',
+      }),
+    ]);
+
+    await expect(sendConversationMessage('conv-a', {
+      senderType: 'player',
+      senderId: 'p1',
+      content: '@建造官 检查产线',
+    })).resolves.toEqual(
+      expect.objectContaining({
+        accepted: true,
+        message: expect.objectContaining({
+          id: 'msg-request',
+        }),
+        turns: [
+          expect.objectContaining({
+            id: 'turn-1',
+            requestMessageId: 'msg-request',
+          }),
+        ],
+      }),
+    );
   });
 });

@@ -87,8 +87,8 @@ func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd 
 		}
 	}
 
-	state := GetDysonSphereState(playerID)
-	if state == nil || state.SystemID != systemID {
+	state := GetDysonSphereState(gc.spaceRuntime, playerID, systemID)
+	if state == nil {
 		res.Code = model.CodeInvalidTarget
 		res.Message = fmt.Sprintf("dyson layer %d for system %s not found", layerIndex, systemID)
 		return res, nil

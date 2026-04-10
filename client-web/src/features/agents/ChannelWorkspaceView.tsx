@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import type {
   AgentProfileView,
   ConversationMessageView,
+  ConversationTurnActionSummaryView,
+  ConversationTurnView,
   ConversationView,
 } from './types';
 
@@ -12,6 +14,8 @@ interface ChannelWorkspaceViewProps {
   conversation?: ConversationView;
   messages: ConversationMessageView[];
   messagesLoading: boolean;
+  turns: ConversationTurnView[];
+  turnsLoading: boolean;
   agents: AgentProfileView[];
   messageInput: string;
   invitePlanetId: string;
@@ -32,6 +36,55 @@ function formatMemberLabel(memberId: string, agents: AgentProfileView[]) {
   }
   const agentId = memberId.slice('agent:'.length);
   return agents.find((agent) => agent.id === agentId)?.name ?? agentId;
+}
+
+function formatMessageSender(message: ConversationMessageView, agents: AgentProfileView[]) {
+  if (message.senderType === 'player') {
+    return '玩家';
+  }
+  if (message.senderType === 'agent') {
+    return agents.find((agent) => agent.id === message.senderId)?.name ?? message.senderId;
+  }
+  if (message.senderType === 'schedule') {
+    return '定时任务';
+  }
+  return '系统';
+}
+
+function formatTurnStatus(status: ConversationTurnView['status']) {
+  switch (status) {
+    case 'accepted':
+      return '已接收';
+    case 'queued':
+      return '排队中';
+    case 'planning':
+      return '规划中';
+    case 'executing':
+      return '执行中';
+    case 'succeeded':
+      return '已完成';
+    case 'failed':
+      return '失败';
+    default:
+      return status;
+  }
+}
+
+function formatActionStatus(status: ConversationTurnActionSummaryView['status']) {
+  switch (status) {
+    case 'pending':
+      return '待执行';
+    case 'succeeded':
+      return '已完成';
+    case 'failed':
+      return '失败';
+    default:
+      return status;
+  }
+}
+
+function formatTurnTarget(turn: ConversationTurnView, agents: AgentProfileView[]) {
+  return agents.find((agent) => agent.id === turn.targetAgentId)?.name ?? turn.targetAgentId;
 }
 
 export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
@@ -123,6 +176,37 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
     );
   }
 
+  const sortedMessages = [...props.messages].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const sortedTurns = [...props.turns].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const messagesById = new Map(sortedMessages.map((message) => [message.id, message]));
+  const requestMessages = sortedMessages.filter(
+    (message) => message.senderType === 'player' || message.senderType === 'schedule',
+  );
+  const requestMessageIds = new Set(requestMessages.map((message) => message.id));
+  const turnsByRequest = new Map<string, ConversationTurnView[]>();
+  const repliesByRequest = new Map<string, ConversationMessageView[]>();
+
+  for (const turn of sortedTurns) {
+    const existing = turnsByRequest.get(turn.requestMessageId) ?? [];
+    existing.push(turn);
+    turnsByRequest.set(turn.requestMessageId, existing);
+  }
+
+  for (const message of sortedMessages) {
+    if (!message.replyToMessageId) {
+      continue;
+    }
+    const existing = repliesByRequest.get(message.replyToMessageId) ?? [];
+    existing.push(message);
+    repliesByRequest.set(message.replyToMessageId, existing);
+  }
+
+  const standaloneMessages = sortedMessages.filter((message) => (
+    !requestMessageIds.has(message.id)
+    && !message.replyToMessageId
+    && !message.turnId
+  ));
+
   return (
     <section className="panel channel-workspace">
       <div className="channel-workspace__header">
@@ -141,17 +225,128 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
       </div>
 
       <div className="agent-im__messages">
-        {props.messagesLoading ? (
+        {props.messagesLoading || props.turnsLoading ? (
           <p className="subtle-text">正在加载消息...</p>
-        ) : props.messages.length > 0 ? props.messages.map((message) => (
-          <article key={message.id} className={`agent-im__message agent-im__message--${message.senderType}`}>
-            <header>
-              <strong>{message.senderType === 'player' ? '玩家' : message.senderType === 'agent' ? message.senderId : message.kind}</strong>
-            </header>
-            <p>{message.content}</p>
-          </article>
-        )) : (
+        ) : requestMessages.length === 0 && standaloneMessages.length === 0 ? (
           <p className="subtle-text">当前会话暂无消息。</p>
+        ) : (
+          <>
+            {requestMessages.map((requestMessage) => {
+              const requestTurns = turnsByRequest.get(requestMessage.id) ?? [];
+              const requestReplies = repliesByRequest.get(requestMessage.id) ?? [];
+              const usedReplyIds = new Set<string>();
+
+              return (
+                <article key={requestMessage.id} className="agent-im__detail-card">
+                  <header>
+                    <strong>{requestMessage.senderType === 'schedule' ? '定时请求' : '玩家请求'}</strong>
+                  </header>
+                  <p>{requestMessage.content}</p>
+
+                  {requestTurns.map((turn) => {
+                    const turnReplies = requestReplies.filter((reply) => {
+                      if (reply.turnId) {
+                        return reply.turnId === turn.id;
+                      }
+                      if (turn.finalMessageId) {
+                        return reply.id === turn.finalMessageId;
+                      }
+                      return requestTurns.length === 1;
+                    });
+                    const finalReply = turn.finalMessageId
+                      ? messagesById.get(turn.finalMessageId) ?? turnReplies[turnReplies.length - 1]
+                      : turnReplies[turnReplies.length - 1];
+                    const extraReplies = turnReplies.filter((reply) => reply.id !== finalReply?.id);
+
+                    if (finalReply) {
+                      usedReplyIds.add(finalReply.id);
+                    }
+                    for (const reply of extraReplies) {
+                      usedReplyIds.add(reply.id);
+                    }
+
+                    return (
+                      <section key={turn.id} className="agent-im__detail-card">
+                        <header>
+                          <strong>{formatTurnTarget(turn, props.agents)}</strong>
+                          <span>{formatTurnStatus(turn.status)}</span>
+                        </header>
+                        {turn.assistantPreview ? (
+                          <div>
+                            <div className="section-title">规划摘要</div>
+                            <p>{turn.assistantPreview}</p>
+                          </div>
+                        ) : null}
+                        {turn.actionSummaries.length > 0 ? (
+                          <div>
+                            <div className="section-title">动作摘要</div>
+                            <ul className="agent-im__detail-list">
+                              {turn.actionSummaries.map((summary, index) => (
+                                <li key={`${turn.id}:${summary.type}:${index}`} className="agent-im__detail-card">
+                                  <strong>{summary.type}</strong>
+                                  <span>{formatActionStatus(summary.status)}</span>
+                                  <span>{summary.detail}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {extraReplies.length > 0 ? (
+                          <div>
+                            <div className="section-title">阶段消息</div>
+                            <ul className="agent-im__detail-list">
+                              {extraReplies.map((reply) => (
+                                <li key={reply.id} className="agent-im__detail-card">
+                                  <strong>{formatMessageSender(reply, props.agents)}</strong>
+                                  <span>{reply.content}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {finalReply ? (
+                          <div>
+                            <div className="section-title">最终回复</div>
+                            <p>{finalReply.content}</p>
+                          </div>
+                        ) : null}
+                        {turn.errorMessage ? (
+                          <div>
+                            <div className="section-title">失败原因</div>
+                            <p>{turn.errorMessage}</p>
+                          </div>
+                        ) : null}
+                      </section>
+                    );
+                  })}
+
+                  {requestReplies
+                    .filter((reply) => !usedReplyIds.has(reply.id))
+                    .map((reply) => (
+                      <section key={reply.id} className="agent-im__detail-card">
+                        <header>
+                          <strong>{formatMessageSender(reply, props.agents)}</strong>
+                        </header>
+                        <p>{reply.content}</p>
+                      </section>
+                    ))}
+
+                  {requestTurns.length === 0 && requestReplies.length === 0 ? (
+                    <p className="subtle-text">消息已发送，等待 turn 生命周期回写。</p>
+                  ) : null}
+                </article>
+              );
+            })}
+
+            {standaloneMessages.map((message) => (
+              <article key={message.id} className={`agent-im__message agent-im__message--${message.senderType}`}>
+                <header>
+                  <strong>{formatMessageSender(message, props.agents)}</strong>
+                </header>
+                <p>{message.content}</p>
+              </article>
+            ))}
+          </>
         )}
       </div>
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { resolveMentionTargetsFromContent } from '../runtime/router.js';
-import type { AgentInstance, Conversation, ConversationMessage } from '../types.js';
+import type { AgentInstance, Conversation, ConversationMessage, ConversationTurn } from '../types.js';
 
 interface AgentStore {
   list: () => Promise<AgentInstance[]>;
@@ -20,11 +20,19 @@ interface MessageStore {
   append: (message: ConversationMessage) => Promise<void>;
 }
 
+interface TurnStore {
+  listByConversation: (conversationId: string) => Promise<ConversationTurn[]>;
+}
+
 interface ConversationRouteContext {
   agentStore: AgentStore;
   conversationStore: ConversationStore;
   messageStore: MessageStore;
-  onMessageAccepted?: (conversation: Conversation, message: ConversationMessage) => void;
+  turnStore: TurnStore;
+  onMessageAccepted?: (
+    conversation: Conversation,
+    message: ConversationMessage,
+  ) => Promise<ConversationTurn[]>;
   eventBus?: {
     subscribe: (channelId: string, listener: (event: { type: string; payload: unknown }) => void) => () => void;
   };
@@ -124,6 +132,17 @@ export async function handleConversationRoutes(
     return;
   }
 
+  if (request.method === 'GET' && url.pathname.match(/^\/conversations\/[^/]+\/turns$/)) {
+    const conversationId = url.pathname.split('/')[2] ?? '';
+    const conversation = await context.conversationStore.get(conversationId);
+    if (!conversation) {
+      writeJson(response, 404, { error: 'conversation_not_found' });
+      return;
+    }
+    writeJson(response, 200, await context.turnStore.listByConversation(conversationId));
+    return;
+  }
+
   if (request.method === 'GET' && url.pathname.match(/^\/conversations\/[^/]+\/events$/)) {
     const conversationId = url.pathname.split('/')[2] ?? '';
     response.writeHead(200, {
@@ -174,8 +193,8 @@ export async function handleConversationRoutes(
       createdAt: new Date().toISOString(),
     };
     await context.messageStore.append(message);
-    context.onMessageAccepted?.(conversation, message);
-    writeJson(response, 202, { accepted: true, message });
+    const turns = await context.onMessageAccepted?.(conversation, message) ?? [];
+    writeJson(response, 202, { accepted: true, message, turns });
     return;
   }
 

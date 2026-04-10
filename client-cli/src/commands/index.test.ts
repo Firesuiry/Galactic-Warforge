@@ -73,6 +73,22 @@ describe('multi-planet command registration', () => {
   });
 });
 
+describe('agent gateway command registration', () => {
+  it('registers agent management commands in command table', async () => {
+    assert.ok(COMMANDS.agent_list);
+    assert.ok(COMMANDS.agent_create);
+    assert.ok(COMMANDS.agent_update);
+    assert.ok(COMMANDS.agent_message);
+    assert.ok(COMMANDS.agent_thread);
+
+    const createHelp = await dispatch('help agent_create', { currentPlayer: 'p1', rl: {} });
+    assert.match(createHelp, /agent_create <name> --provider <provider_id>/);
+
+    const messageHelp = await dispatch('help agent_message', { currentPlayer: 'p1', rl: {} });
+    assert.match(messageHelp, /agent_message <agent_id> <content>/);
+  });
+});
+
 describe('fleet command registration', () => {
   it('registers fleet deployment, control and query commands', async () => {
     assert.ok(COMMANDS.deploy_squad);

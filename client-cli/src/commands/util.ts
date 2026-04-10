@@ -3,7 +3,7 @@ import { fetchCatalog, setAuth, getAuth } from '../api.js';
 import { stopSSE, startSSE, getEventBuffer } from '../sse.js';
 import { fetchPlanetScene } from '../api.js';
 import { fmtEvent, fmtError, fmtFogScene } from '../format.js';
-import { DEFAULT_PLAYERS, DEFAULT_PLANET_ID, SERVER_URL } from '../config.js';
+import { AGENT_GATEWAY_URL, DEFAULT_PLAYERS, DEFAULT_PLANET_ID, SERVER_URL } from '../config.js';
 import type { ReplContext } from '../types.js';
 import { parseArgs, parseIntegerArg } from './args.js';
 
@@ -49,6 +49,11 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   build_dyson_frame: { usage: '<system_id> <layer_index> <node_a_id> <node_b_id>', desc: 'Build a Dyson sphere frame' },
   build_dyson_shell: { usage: '<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>', desc: 'Build a Dyson sphere shell' },
   demolish_dyson: { usage: '<system_id> <node|frame|shell> <component_id>', desc: 'Demolish a Dyson sphere component' },
+  agent_list: { desc: 'List agent-gateway agent profiles' },
+  agent_create: { usage: '<name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]', desc: 'Create an agent-gateway agent profile bound to the current player key' },
+  agent_update: { usage: '<agent_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]', desc: 'Patch agent-gateway agent policy or role' },
+  agent_message: { usage: '<agent_id> <content>', desc: 'Send one direct task message to an agent thread' },
+  agent_thread: { usage: '<agent_id>', desc: 'Inspect one agent thread including messages, tool calls and logs' },
   raw: { usage: '<json>', desc: 'Send raw /commands request JSON' },
   switch: { usage: '[player_id] [key]', desc: 'Switch player' },
   events: { usage: '[count]', desc: 'Show recent SSE events (default: 10)' },
@@ -113,6 +118,13 @@ const HELP_TEXT = [
   '    build_dyson_frame <system_id> <layer_index> <node_a_id> <node_b_id>',
   '    build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>',
   '    demolish_dyson <system_id> <node|frame|shell> <component_id>',
+  '',
+  chalk.bold('  Agent Gateway:'),
+  '    agent_list',
+  '    agent_create <name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]',
+  '    agent_update <agent_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]',
+  '    agent_message <agent_id> <content>',
+  '    agent_thread <agent_id>',
   '',
   chalk.bold('  Admin/Debug:'),
   '    audit [options]             Query audit log',
@@ -232,5 +244,6 @@ export function cmdStatus(_args: string[]): string {
   return [
     `Current player: ${chalk.bold(playerId || '(none)')}`,
     `Server: ${SERVER_URL}`,
+    `Agent Gateway: ${AGENT_GATEWAY_URL}`,
   ].join('\n');
 }

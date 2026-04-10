@@ -574,6 +574,116 @@ describe("PlanetPage", () => {
     });
   });
 
+  it("默认首屏展示行星工作台与 active planet 上下文", async () => {
+    const fetchMock = vi.fn(
+      (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.endsWith("/state/summary")) {
+          return Promise.resolve(jsonResponse(createSummaryPayload()));
+        }
+        if (url.endsWith("/state/stats")) {
+          return Promise.resolve(jsonResponse(createStatsPayload()));
+        }
+        if (url.endsWith("/world/systems/sys-1")) {
+          return Promise.resolve(
+            jsonResponse({
+              system_id: "sys-1",
+              galaxy_id: "galaxy-1",
+              name: "Helios",
+              star_type: "main_sequence",
+              planets: [
+                {
+                  planet_id: "planet-1-1",
+                  name: "Gaia",
+                  kind: "terrestrial",
+                },
+              ],
+            }),
+          );
+        }
+        if (url.endsWith("/world/systems/sys-1/runtime")) {
+          return Promise.resolve(
+            jsonResponse({
+              system_id: "sys-1",
+              orbiting_fleets: [],
+              enemy_fleets: [],
+              solar_sails: [],
+              dyson_sphere: {
+                system_id: "sys-1",
+                layers: [],
+                ray_receivers: [],
+                sails: [],
+              },
+            }),
+          );
+        }
+        if (url.includes("/world/planets/planet-1-1/scene")) {
+          return Promise.resolve(jsonResponse(createScenePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
+          return Promise.resolve(jsonResponse(createRuntimePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/networks")) {
+          return Promise.resolve(jsonResponse(createNetworksPayload()));
+        }
+        if (url.endsWith("/catalog")) {
+          return Promise.resolve(jsonResponse(createCatalogPayload()));
+        }
+        if (url.includes("/events/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              event_types: ["building_state_changed"],
+              available_from_tick: 1,
+              next_event_id: "evt-10",
+              has_more: false,
+              events: [],
+            }),
+          );
+        }
+        if (url.includes("/alerts/production/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              available_from_tick: 1,
+              has_more: false,
+              alerts: [],
+            }),
+          );
+        }
+        if (url.includes("/events/stream")) {
+          return Promise.resolve(
+            sseResponse(
+              [
+                {
+                  event: "connected",
+                  data: {
+                    player_id: "p1",
+                    event_types: ["building_state_changed"],
+                  },
+                },
+              ],
+              init?.signal as AbortSignal,
+            ),
+          );
+        }
+
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp(["/planet/planet-1-1"]);
+
+    expect(await screen.findByText("当前路由行星")).toBeInTheDocument();
+    expect(screen.getByText("当前 active planet")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "扫描当前行星" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "命令" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("渲染地图、迷雾、事件和实体详情侧栏", async () => {
     const fetchMock = vi.fn(
       (input: string | URL | Request, init?: RequestInit) => {
@@ -910,11 +1020,11 @@ describe("PlanetPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "命令" }));
-
     await user.click(screen.getByRole("button", { name: "扫描当前行星" }));
 
-    expect(await screen.findByText("scan_planet accepted")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/已受理：scan_planet accepted/),
+    ).toBeInTheDocument();
     expect(commandRequests).toHaveLength(1);
     expect(commandRequests[0]?.commands?.[0]?.type).toBe("scan_planet");
     expect(commandRequests[0]?.commands?.[0]?.target?.planet_id).toBe(
@@ -1025,8 +1135,6 @@ describe("PlanetPage", () => {
     expect(screen.getByText("行星槽位")).toBeInTheDocument();
     expect(screen.getByText("库存与缓存摘要")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "命令" }));
-
     expect(await screen.findByText("物流站配置")).toBeInTheDocument();
     expect(
       (screen.getAllByLabelText("物流站") as HTMLSelectElement[]).some(
@@ -1037,7 +1145,9 @@ describe("PlanetPage", () => {
     await user.type(screen.getByLabelText("无人机容量"), "12");
     await user.click(screen.getByRole("button", { name: "提交物流站配置" }));
 
-    expect(await screen.findByText("station updated")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/已受理：station updated/),
+    ).toBeInTheDocument();
     expect(commandRequests).toHaveLength(1);
     expect(commandRequests[0]?.commands?.[0]?.type).toBe(
       "configure_logistics_station",
@@ -1153,8 +1263,6 @@ describe("PlanetPage", () => {
     expect(screen.getByText("星际配置")).toBeInTheDocument();
     expect(screen.getByText("星际槽位")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "命令" }));
-
     expect(await screen.findByText("物流槽位配置")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("物流范围"), "interstellar");
     await user.selectOptions(screen.getByLabelText("物品"), "hydrogen");
@@ -1163,7 +1271,9 @@ describe("PlanetPage", () => {
     await user.type(screen.getByLabelText("本地库存"), "80");
     await user.click(screen.getByRole("button", { name: "提交物流槽位配置" }));
 
-    expect(await screen.findByText("slot updated")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/已受理：slot updated/),
+    ).toBeInTheDocument();
     expect(commandRequests).toHaveLength(1);
     expect(commandRequests[0]?.commands?.[0]?.type).toBe(
       "configure_logistics_slot",

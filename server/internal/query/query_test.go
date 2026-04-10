@@ -274,6 +274,47 @@ func TestFleetListIncludesFleetDetailsWhenPresent(t *testing.T) {
 	}
 }
 
+func TestSystemRuntimeIncludesDysonSphereForDiscoveredSystem(t *testing.T) {
+	ql, _, _ := newPlanetQueryFixture(t, 16, 16)
+	spaceRuntime := model.NewSpaceRuntimeState()
+	state := model.EnsureDysonSphereState(spaceRuntime, "p1", "sys-1")
+	state.AddLayer(0, 1.2)
+	state.Layers[0].Nodes = append(state.Layers[0].Nodes, model.DysonNode{
+		ID:           "node-1",
+		LayerIndex:   0,
+		Latitude:     10,
+		Longitude:    20,
+		EnergyOutput: 10,
+		Built:        true,
+	})
+	state.Layers[0].Shells = append(state.Layers[0].Shells, model.DysonShell{
+		ID:           "shell-1",
+		LayerIndex:   0,
+		LatitudeMin:  -10,
+		LatitudeMax:  10,
+		Coverage:     0.35,
+		EnergyOutput: 350,
+		Built:        true,
+	})
+	state.TotalEnergy = 360
+
+	view, ok := ql.SystemRuntime("p1", "sys-1", spaceRuntime)
+	if !ok {
+		t.Fatal("expected system runtime view")
+	}
+	if view.DysonSphere == nil {
+		t.Fatal("expected dyson sphere view for discovered system")
+	}
+	if view.DysonSphere.SystemID != "sys-1" || len(view.DysonSphere.Layers) != 1 {
+		t.Fatalf("unexpected dyson sphere payload: %+v", view.DysonSphere)
+	}
+
+	view.DysonSphere.Layers[0].Nodes[0].ID = "mutated"
+	if got := model.GetDysonSphereState(spaceRuntime, "p1", "sys-1").Layers[0].Nodes[0].ID; got != "node-1" {
+		t.Fatalf("expected returned dyson sphere to be copied, got %q", got)
+	}
+}
+
 func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.WorldState, string) {
 	t.Helper()
 

@@ -97,13 +97,20 @@ def main() -> int:
             # time.sleep(300)
             # continue
 
-        print("\n=============================================", flush=True)
-        print("步骤 1: 探索游戏状态并生成任务", flush=True)
-        print("=============================================", flush=True)
-        step1_prompt = "深度试玩游戏，查看戴森球计划相关的建筑、科技树、玩法是否都已经实现。如果没有实现（不包括设定中明确不一致的地方），或者发现新的问题，请在 docs/process/task 目录下增加一个具体的文件，写清楚缺少的东西和改动需求。"
-        run_codex_exec(repo_root, step1_prompt)
+        # 检查是否有任务
+        task_files = list_task_files(task_dir)
+        if not task_files:
+            print("\n=============================================", flush=True)
+            print("步骤 1: 探索游戏状态并生成任务", flush=True)
+            print("=============================================", flush=True)
+            step1_prompt = """
+            深度试玩游戏(用cli和web端，主要用web端)，查看戴森球计划相关的建筑、科技树、玩法是否都已经实现，web端是否能正常游玩，UI功能设计是否优雅，易于操作。
+            另外还要测试web端的智能体功能是否正常，是否能指令智能体完成任务（包括建筑 创建新智能体 权限分配 科技研发等功能）。
+            如果没有实现（不包括设定中明确不一致的地方），或者发现其他的问题，请在 docs/process/task 目录下增加一个具体的文件，写清楚缺少的东西和改动需求。
+            """
+            run_codex_exec(repo_root, step1_prompt)
 
-        # 检查是否生成了新任务
+        # 再次检查是否有任务
         task_files = list_task_files(task_dir)
         if not task_files:
             print("docs/process/task 目录下没有新任务文件，可能戴森球计划相关功能已经实现。休眠后重试...", flush=True)

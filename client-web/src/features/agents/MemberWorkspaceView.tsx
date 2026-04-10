@@ -40,6 +40,7 @@ function createEmptyPolicy(): AgentPolicyView {
   return {
     planetIds: [],
     commandCategories: [],
+    canCreateAgents: false,
     canCreateChannel: false,
     canManageMembers: false,
     canInviteByPlanet: false,
@@ -81,6 +82,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
   const [directMessageAgentIdsText, setDirectMessageAgentIdsText] = useState('');
   const [dispatchAgentIdsText, setDispatchAgentIdsText] = useState('');
   const [selectedAgentProviderId, setSelectedAgentProviderId] = useState('');
+  const [canCreateAgents, setCanCreateAgents] = useState(false);
   const [canCreateChannel, setCanCreateChannel] = useState(false);
   const [canManageMembers, setCanManageMembers] = useState(false);
   const [canInviteByPlanet, setCanInviteByPlanet] = useState(false);
@@ -93,6 +95,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
     setDirectMessageAgentIdsText(policy.canDirectMessageAgentIds.join(', '));
     setDispatchAgentIdsText(policy.canDispatchAgentIds.join(', '));
     setSelectedAgentProviderId(selectedAgent?.providerId ?? '');
+    setCanCreateAgents(policy.canCreateAgents ?? false);
     setCanCreateChannel(policy.canCreateChannel);
     setCanManageMembers(policy.canManageMembers);
     setCanInviteByPlanet(policy.canInviteByPlanet);
@@ -108,6 +111,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
     props.onSavePolicy({
       planetIds: parseCommaSeparated(planetIdsText),
       commandCategories: parseCommaSeparated(commandCategoriesText),
+      canCreateAgents,
       canCreateChannel,
       canManageMembers,
       canInviteByPlanet,
@@ -305,6 +309,15 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               </label>
 
               <div className="agent-form__checkbox-grid">
+                <label className="agent-form__checkbox">
+                  <input
+                    aria-label="允许创建智能体"
+                    checked={canCreateAgents}
+                    onChange={(event) => setCanCreateAgents(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>允许创建智能体</span>
+                </label>
                 <label className="agent-form__checkbox">
                   <input
                     aria-label="允许创建频道"

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { useShallow } from "zustand/react/shallow";
 
+import { DEFAULT_SSE_SILENT_EVENT_TYPES } from "@shared/config";
 import type {
   AlertEntry,
   Building,
@@ -43,6 +44,7 @@ import {
   toTilePoint,
   type PlanetRenderView,
 } from "@/features/planet-map/model";
+import { usePlanetCommandStore } from "@/features/planet-commands/store";
 import {
   translateAlertType,
   translateBuildingState,
@@ -845,7 +847,8 @@ export function PlanetActivityPanel({
   events,
   planet,
 }: PlanetActivityPanelProps) {
-  const [eventFilter, setEventFilter] = useState("all");
+  const activityMode = usePlanetCommandStore((state) => state.activityMode);
+  const setActivityMode = usePlanetCommandStore((state) => state.setActivityMode);
   const { requestFocus, setSelected } = usePlanetViewStore(
     useShallow((state) => ({
       requestFocus: state.requestFocus,
@@ -853,16 +856,22 @@ export function PlanetActivityPanel({
     })),
   );
 
-  const eventTypes = useMemo(
-    () => ["all", ...new Set(events.map((event) => event.event_type))],
-    [events],
-  );
   const filteredEvents = useMemo(
-    () =>
-      eventFilter === "all"
-        ? events
-        : events.filter((event) => event.event_type === eventFilter),
-    [eventFilter, events],
+    () => {
+      if (activityMode === "all") {
+        return events;
+      }
+      if (activityMode === "command_only") {
+        return events.filter((event) => event.event_type === "command_result");
+      }
+      if (activityMode === "alerts_only") {
+        return events.filter((event) => event.event_type === "production_alert");
+      }
+      return events.filter(
+        (event) => !DEFAULT_SSE_SILENT_EVENT_TYPES.has(event.event_type),
+      );
+    },
+    [activityMode, events],
   );
 
   function focusSelection(
@@ -883,14 +892,21 @@ export function PlanetActivityPanel({
           <label className="planet-filter">
             <span>{translateUi("field.event_filter")}</span>
             <select
-              onChange={(event) => setEventFilter(event.target.value)}
-              value={eventFilter}
+              onChange={(event) =>
+                setActivityMode(
+                  event.target.value as
+                    | "key_feedback"
+                    | "all"
+                    | "command_only"
+                    | "alerts_only",
+                )
+              }
+              value={activityMode}
             >
-              {eventTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type === "all" ? "全部事件" : translateEventType(type)}
-                </option>
-              ))}
+              <option value="key_feedback">关键反馈</option>
+              <option value="all">全部事件</option>
+              <option value="command_only">仅命令</option>
+              <option value="alerts_only">仅告警</option>
             </select>
           </label>
         </div>

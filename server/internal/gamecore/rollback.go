@@ -102,7 +102,7 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 		env := currentPlanetEnvironment(replayCore.maps, replayCore.world.PlanetID)
 		settlePowerGeneration(replayCore.world, env)
 		settleSolarSails(replayCore.spaceRuntime, replayCore.world.Tick)
-		settleDysonSpheres(replayCore.world.Tick)
+		settleDysonSpheres(replayCore.spaceRuntime, replayCore.world.Tick)
 		receiverViews := settleRayReceivers(replayCore.world, replayCore.maps, replayCore.spaceRuntime)
 		settlePlanetaryShields(replayCore.world)
 		finalizePowerSettlement(replayCore.world, receiverViews)

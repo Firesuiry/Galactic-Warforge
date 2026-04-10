@@ -7,6 +7,7 @@ import type {
   AgentPolicyView,
   AgentProfileView,
   ConversationMessageView,
+  ConversationTurnView,
   ConversationView,
   CreateProviderPayload,
   ModelProviderView,
@@ -22,6 +23,8 @@ interface AgentWorkspaceProps {
   selectedConversationId: string;
   messages: ConversationMessageView[];
   messagesLoading: boolean;
+  turns: ConversationTurnView[];
+  turnsLoading: boolean;
   agents: AgentProfileView[];
   selectedAgentId: string;
   providers: ModelProviderView[];
@@ -103,6 +106,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             conversation={selectedConversation}
             messages={props.messages}
             messagesLoading={props.messagesLoading}
+            turns={props.turns}
+            turnsLoading={props.turnsLoading}
             agents={props.agents}
             messageInput={props.messageInput}
             invitePlanetId={props.invitePlanetId}

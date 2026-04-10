@@ -207,6 +207,7 @@ func (ql *Layer) System(playerID, systemID string) (*SystemView, bool) {
 // PlanetSummaryView is a lightweight planet snapshot for list/overview usage.
 type PlanetSummaryView struct {
 	PlanetID      string              `json:"planet_id"`
+	SystemID      string              `json:"system_id,omitempty"`
 	Name          string              `json:"name,omitempty"`
 	Discovered    bool                `json:"discovered"`
 	Kind          mapmodel.PlanetKind `json:"kind,omitempty"`
@@ -227,6 +228,7 @@ func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) 
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	view := &PlanetSummaryView{
 		PlanetID:   planet.ID,
+		SystemID:   planet.SystemID,
 		Discovered: discovered,
 	}
 	if !discovered {
@@ -261,6 +263,7 @@ func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) 
 // PlanetView is the detailed planet view including fog-clipped entities.
 type PlanetView struct {
 	PlanetID    string                      `json:"planet_id"`
+	SystemID    string                      `json:"system_id,omitempty"`
 	Name        string                      `json:"name,omitempty"`
 	Discovered  bool                        `json:"discovered"`
 	Kind        mapmodel.PlanetKind         `json:"kind,omitempty"`
@@ -298,6 +301,7 @@ type PlanetSceneRequest struct {
 
 type PlanetSceneView struct {
 	PlanetID      string                      `json:"planet_id"`
+	SystemID      string                      `json:"system_id,omitempty"`
 	Name          string                      `json:"name,omitempty"`
 	Discovered    bool                        `json:"discovered"`
 	Kind          mapmodel.PlanetKind         `json:"kind,omitempty"`
@@ -323,6 +327,7 @@ type PlanetOverviewRequest struct {
 
 type PlanetOverviewView struct {
 	PlanetID       string               `json:"planet_id"`
+	SystemID       string               `json:"system_id,omitempty"`
 	Name           string               `json:"name,omitempty"`
 	Discovered     bool                 `json:"discovered"`
 	Kind           mapmodel.PlanetKind  `json:"kind,omitempty"`
@@ -764,6 +769,7 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 	bounds := clampSceneBounds(req, planet.Width, planet.Height)
 	view := &PlanetSceneView{
 		PlanetID:   planet.ID,
+		SystemID:   planet.SystemID,
 		Discovered: discovered,
 		MapWidth:   planet.Width,
 		MapHeight:  planet.Height,
@@ -828,6 +834,7 @@ func (ql *Layer) PlanetOverview(ws *model.WorldState, playerID, planetID string,
 	cellsWidth, cellsHeight := overviewDimensions(planet.Width, planet.Height, step)
 	view := &PlanetOverviewView{
 		PlanetID:    planet.ID,
+		SystemID:    planet.SystemID,
 		Discovered:  discovered,
 		MapWidth:    planet.Width,
 		MapHeight:   planet.Height,

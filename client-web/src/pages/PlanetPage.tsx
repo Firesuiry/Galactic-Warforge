@@ -9,7 +9,13 @@ import {
   PlanetEntityPanel,
   PlanetLayerPanel,
 } from "@/features/planet-map/PlanetPanels";
-import { PlanetCommandPanel } from "@/features/planet-map/PlanetCommandPanel";
+import { PlanetCommandCenter } from "@/features/planet-commands/PlanetCommandCenter";
+import { PlanetOperationHeader } from "@/features/planet-commands/PlanetOperationHeader";
+import {
+  getLatestCommandEntry,
+  getPendingCommandCount,
+  usePlanetCommandStore,
+} from "@/features/planet-commands/store";
 import { PlanetMapCanvas } from "@/features/planet-map/PlanetMapCanvas";
 import { formatMineralInventory } from "@/features/mineral-summary";
 import {
@@ -28,7 +34,7 @@ import {
   getPlanetZoomLevel,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { createFixtureFetch, isFixtureServerUrl } from "@/fixtures";
 import { useShallow } from "zustand/react/shallow";
 
@@ -46,7 +52,6 @@ export function PlanetPage() {
   const { planetId = "" } = useParams();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const restoredViewRef = useRef("");
-  const [detailTab, setDetailTab] = useState<"entity" | "commands">("entity");
   const {
     hydrateRecentAlerts,
     hydrateRecentEvents,
@@ -55,7 +60,6 @@ export function PlanetPage() {
     recentEvents,
     resetForPlanet,
     sceneWindow,
-    selected,
     setLayers,
     setLastEventId,
     setSelected,
@@ -71,7 +75,6 @@ export function PlanetPage() {
       recentEvents: state.recentEvents,
       resetForPlanet: state.resetForPlanet,
       sceneWindow: state.sceneWindow,
-      selected: state.selected,
       setLayers: state.setLayers,
       setLastEventId: state.setLastEventId,
       setSelected: state.setSelected,
@@ -79,6 +82,13 @@ export function PlanetPage() {
       zoomIndex: state.camera.zoomIndex,
       requestFocus: state.requestFocus,
     })),
+  );
+  const resetCommandStore = usePlanetCommandStore((state) => state.resetForPlanet);
+  const latestCommandEntry = usePlanetCommandStore((state) =>
+    getLatestCommandEntry(state.journal),
+  );
+  const pendingCommandCount = usePlanetCommandStore((state) =>
+    getPendingCommandCount(state.journal),
   );
   const activeZoomLevel = getPlanetZoomLevel(zoomIndex);
 
@@ -102,6 +112,25 @@ export function PlanetPage() {
     queryKey: ["planet-runtime", session.serverUrl, session.playerId, planetId],
     queryFn: () => client.fetchPlanetRuntime(planetId),
     enabled: Boolean(planetId),
+  });
+
+  const systemId = sceneQuery.data?.system_id ?? "";
+
+  const systemQuery = useQuery({
+    queryKey: ["system", session.serverUrl, session.playerId, systemId],
+    queryFn: () => client.fetchSystem(systemId),
+    enabled: Boolean(sceneQuery.data?.system_id),
+  });
+
+  const systemRuntimeQuery = useQuery({
+    queryKey: [
+      "system-runtime",
+      session.serverUrl,
+      session.playerId,
+      systemId,
+    ],
+    queryFn: () => client.fetchSystemRuntime(systemId),
+    enabled: Boolean(sceneQuery.data?.system_id),
   });
 
   const networksQuery = useQuery({
@@ -194,14 +223,8 @@ export function PlanetPage() {
   useEffect(() => {
     restoredViewRef.current = "";
     resetForPlanet(planetId);
-    setDetailTab("entity");
-  }, [planetId, resetForPlanet]);
-
-  useEffect(() => {
-    if (selected) {
-      setDetailTab("entity");
-    }
-  }, [selected]);
+    resetCommandStore(planetId);
+  }, [planetId, resetCommandStore, resetForPlanet]);
 
   useEffect(() => {
     if (!sceneQuery.data) {
@@ -301,6 +324,8 @@ export function PlanetPage() {
     sceneQuery.isLoading,
     activeZoomLevel.mode === "overview" ? overviewQuery.isLoading : false,
     runtimeQuery.isLoading,
+    systemQuery.isLoading,
+    systemRuntimeQuery.isLoading,
     networksQuery.isLoading,
     catalogQuery.isLoading,
     summaryQuery.isLoading,
@@ -317,6 +342,8 @@ export function PlanetPage() {
     sceneQuery.error ||
     (activeZoomLevel.mode === "overview" ? overviewQuery.error : null) ||
     runtimeQuery.error ||
+    systemQuery.error ||
+    systemRuntimeQuery.error ||
     networksQuery.error ||
     catalogQuery.error ||
     summaryQuery.error ||
@@ -343,6 +370,8 @@ export function PlanetPage() {
   const networks = networksQuery.data;
   const catalog = catalogQuery.data;
   const summary = summaryQuery.data;
+  const system = systemQuery.data;
+  const systemRuntime = systemRuntimeQuery.data;
   const stats = statsQuery.data;
   const currentPlayer = summary?.players?.[session.playerId];
   const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
@@ -424,57 +453,33 @@ export function PlanetPage() {
         </section>
 
         <aside className="panel planet-detail-shell">
-          <div
-            className="segmented-control planet-detail-tabs"
-            role="tablist"
-            aria-label="右侧面板"
-          >
-            <button
-              aria-selected={detailTab === "entity"}
-              className={
-                detailTab === "entity"
-                  ? "segmented-control__button segmented-control__button--active"
-                  : "segmented-control__button"
-              }
-              onClick={() => setDetailTab("entity")}
-              role="tab"
-              type="button"
-            >
-              详情
-            </button>
-            <button
-              aria-selected={detailTab === "commands"}
-              className={
-                detailTab === "commands"
-                  ? "segmented-control__button segmented-control__button--active"
-                  : "segmented-control__button"
-              }
-              onClick={() => setDetailTab("commands")}
-              role="tab"
-              type="button"
-            >
-              命令
-            </button>
-          </div>
+          <PlanetOperationHeader
+            activePlanetId={summary?.active_planet_id ?? planet.planet_id}
+            latestEntry={latestCommandEntry}
+            pendingCount={pendingCommandCount}
+            routePlanetId={planet.planet_id}
+            routePlanetName={planet.name}
+            systemName={system?.name ?? system?.system_id}
+          />
           <div className="planet-detail-shell__content">
-            {detailTab === "entity" ? (
-              <PlanetEntityPanel
-                catalog={catalog}
-                fog={planet}
-                networks={networks}
-                planet={planet}
-                runtime={runtime}
-                stats={stats}
-                summary={summary}
-              />
-            ) : (
-              <PlanetCommandPanel
-                catalog={catalog}
-                client={client}
-                planet={planet}
-                runtime={runtime}
-              />
-            )}
+            <PlanetCommandCenter
+              catalog={catalog}
+              client={client}
+              planet={planet}
+              runtime={runtime}
+              summary={summary}
+              system={system}
+              systemRuntime={systemRuntime}
+            />
+            <PlanetEntityPanel
+              catalog={catalog}
+              fog={planet}
+              networks={networks}
+              planet={planet}
+              runtime={runtime}
+              stats={stats}
+              summary={summary}
+            />
           </div>
         </aside>
       </section>

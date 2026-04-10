@@ -34,8 +34,8 @@ func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cm
 		return res, nil
 	}
 
-	ensureDysonLayer(playerID, systemID, layerIndex, orbitRadius)
-	node, err := AddDysonNode(playerID, systemID, layerIndex, latitude, longitude)
+	ensureDysonLayer(gc.spaceRuntime, playerID, systemID, layerIndex, orbitRadius)
+	node, err := AddDysonNode(gc.spaceRuntime, playerID, systemID, layerIndex, latitude, longitude)
 	if err != nil || node == nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = "failed to build dyson node"
@@ -85,8 +85,8 @@ func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	ensureDysonLayer(playerID, systemID, layerIndex, orbitRadius)
-	frame, err := AddDysonFrame(playerID, systemID, layerIndex, nodeAID, nodeBID)
+	ensureDysonLayer(gc.spaceRuntime, playerID, systemID, layerIndex, orbitRadius)
+	frame, err := AddDysonFrame(gc.spaceRuntime, playerID, systemID, layerIndex, nodeAID, nodeBID)
 	if err != nil || frame == nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = "failed to build dyson frame"
@@ -142,8 +142,8 @@ func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	ensureDysonLayer(playerID, systemID, layerIndex, orbitRadius)
-	shell, err := AddDysonShell(playerID, systemID, layerIndex, latitudeMin, latitudeMax, coverage)
+	ensureDysonLayer(gc.spaceRuntime, playerID, systemID, layerIndex, orbitRadius)
+	shell, err := AddDysonShell(gc.spaceRuntime, playerID, systemID, layerIndex, latitudeMin, latitudeMax, coverage)
 	if err != nil || shell == nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = "failed to build dyson shell"
@@ -188,7 +188,7 @@ func (gc *GameCore) execDemolishDyson(ws *model.WorldState, playerID string, cmd
 		return res, nil
 	}
 
-	refunds, err := DemolishDysonComponent(playerID, systemID, componentType, componentID)
+	refunds, err := DemolishDysonComponent(gc.spaceRuntime, playerID, systemID, componentType, componentID)
 	if err != nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = err.Error()
@@ -216,8 +216,11 @@ func (gc *GameCore) execDemolishDyson(ws *model.WorldState, playerID string, cmd
 	}}
 }
 
-func ensureDysonLayer(playerID, systemID string, layerIndex int, orbitRadius float64) {
-	state := GetOrCreateDysonSphereState(playerID, systemID)
+func ensureDysonLayer(spaceRuntime *model.SpaceRuntimeState, playerID, systemID string, layerIndex int, orbitRadius float64) {
+	state := GetOrCreateDysonSphereState(spaceRuntime, playerID, systemID)
+	if state == nil {
+		return
+	}
 	for len(state.Layers) <= layerIndex {
 		index := len(state.Layers)
 		radius := orbitRadius

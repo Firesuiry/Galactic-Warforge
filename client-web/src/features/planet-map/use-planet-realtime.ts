@@ -14,6 +14,7 @@ import {
   shouldRefreshStats,
   shouldRefreshSummary,
 } from '@/features/planet-map/model';
+import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
 interface UsePlanetRealtimeSyncOptions {
@@ -80,6 +81,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       const store = usePlanetViewStore.getState();
       store.hydrateRecentEvents(response.events);
       response.events.forEach((event) => {
+        usePlanetCommandStore.getState().ingestEvent(event);
         const alert = extractAlertFromEvent(event);
         if (alert) {
           store.appendRecentAlert(alert);
@@ -180,6 +182,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       const store = usePlanetViewStore.getState();
       store.appendRecentEvent(event);
       store.setLastEventId(event.event_id);
+      usePlanetCommandStore.getState().ingestEvent(event);
 
       const alert = extractAlertFromEvent(event);
       if (alert) {

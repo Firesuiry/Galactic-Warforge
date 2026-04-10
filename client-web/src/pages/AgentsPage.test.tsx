@@ -73,6 +73,9 @@ describe('AgentsPage', () => {
           },
         ]));
       }
+      if (url.endsWith('/agent-api/conversations/conv-1/turns')) {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.endsWith('/agent-api/schedules')) {
         return Promise.resolve(jsonResponse([
           {
@@ -164,6 +167,9 @@ describe('AgentsPage', () => {
       if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
         return Promise.resolve(jsonResponse([]));
       }
+      if (url.endsWith('/agent-api/conversations/conv-1/turns')) {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.endsWith('/agent-api/schedules')) {
         return Promise.resolve(jsonResponse([]));
       }
@@ -250,6 +256,9 @@ describe('AgentsPage', () => {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/turns')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/members') && method === 'POST') {
@@ -792,6 +801,9 @@ describe('AgentsPage', () => {
       if (url.endsWith('/agent-api/conversations/dm-1/messages')) {
         return Promise.resolve(jsonResponse([]));
       }
+      if (url.endsWith('/agent-api/conversations/dm-1/turns')) {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.endsWith('/agent-api/schedules')) {
         return Promise.resolve(jsonResponse([]));
       }
@@ -1143,11 +1155,14 @@ describe('AgentsPage', () => {
         const conversationId = url.split('/agent-api/conversations/')[1]?.replace('/messages', '') ?? '';
         return Promise.resolve(jsonResponse(messages.get(conversationId) ?? []));
       }
+      if (url.includes('/agent-api/conversations/') && url.endsWith('/turns') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.includes('/agent-api/conversations/') && url.endsWith('/messages') && method === 'POST') {
         const conversationId = url.split('/agent-api/conversations/')[1]?.replace('/messages', '') ?? '';
         const payload = JSON.parse(String(init?.body));
         const bucket = messages.get(conversationId) ?? [];
-        bucket.push({
+        const message = {
           id: `msg-${bucket.length + 1}`,
           conversationId,
           senderType: payload.senderType,
@@ -1156,9 +1171,14 @@ describe('AgentsPage', () => {
           content: payload.content,
           mentions: [],
           createdAt: '2026-04-03T00:00:00.000Z',
-        });
+        };
+        bucket.push(message);
         messages.set(conversationId, bucket);
-        return Promise.resolve(jsonResponse({ accepted: true }, { status: 202 }));
+        return Promise.resolve(jsonResponse({
+          accepted: true,
+          message,
+          turns: [],
+        }, { status: 202 }));
       }
       if (url.endsWith('/agent-api/schedules')) {
         return Promise.resolve(jsonResponse([]));
@@ -1290,7 +1310,23 @@ describe('AgentsPage', () => {
         ]));
       }
       if (url.endsWith('/agent-api/conversations/conv-1/messages') && method === 'POST') {
-        return Promise.resolve(jsonResponse({ accepted: true }, { status: 202 }));
+        return Promise.resolve(jsonResponse({
+          accepted: true,
+          message: {
+            id: 'msg-player',
+            conversationId: 'conv-1',
+            senderType: 'player',
+            senderId: 'p1',
+            kind: 'chat',
+            content: '@建造官 检查产线',
+            mentions: [{ type: 'agent', id: 'agent-builder' }],
+            createdAt: '2026-04-03T00:00:00.000Z',
+          },
+          turns: [],
+        }, { status: 202 }));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/turns') && method === 'GET') {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith('/agent-api/schedules')) {
         return Promise.resolve(jsonResponse([]));
@@ -1373,5 +1409,137 @@ describe('AgentsPage', () => {
     await user.click(await screen.findByRole('link', { name: '智能体' }));
 
     expect(await screen.findByRole('heading', { name: '智能体协作台' })).toBeInTheDocument();
+  });
+
+  it('renders conversation turns as request lifecycle cards', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'conv-1',
+            type: 'channel',
+            name: '星球A协作',
+            topic: '协调建设',
+            memberIds: ['player:p1', 'agent:agent-builder'],
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'agent-builder',
+            name: '建造官',
+            providerId: 'provider-1',
+            serverUrl: 'http://localhost:18080',
+            playerId: 'p1',
+            status: 'running',
+            role: 'worker',
+            policy: {
+              planetIds: ['planet-a'],
+              commandCategories: ['build'],
+              canCreateChannel: false,
+              canManageMembers: false,
+              canInviteByPlanet: false,
+              canCreateSchedules: false,
+              canDirectMessageAgentIds: [],
+              canDispatchAgentIds: [],
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'msg-request',
+            conversationId: 'conv-1',
+            senderType: 'player',
+            senderId: 'p1',
+            kind: 'chat',
+            content: '@建造官 检查产线',
+            mentions: [{ type: 'agent', id: 'agent-builder' }],
+            createdAt: '2026-04-03T00:00:00.000Z',
+          },
+          {
+            id: 'msg-final',
+            conversationId: 'conv-1',
+            senderType: 'agent',
+            senderId: 'agent-builder',
+            kind: 'chat',
+            content: '已安排矿机检查。',
+            mentions: [],
+            replyToMessageId: 'msg-request',
+            turnId: 'turn-1',
+            createdAt: '2026-04-03T00:00:02.000Z',
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/turns')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'turn-1',
+            conversationId: 'conv-1',
+            requestMessageId: 'msg-request',
+            actorType: 'player',
+            actorId: 'p1',
+            targetAgentId: 'agent-builder',
+            status: 'succeeded',
+            assistantPreview: '先检查矿机和电力，再决定是否补建。',
+            finalMessageId: 'msg-final',
+            actionSummaries: [
+              {
+                type: 'conversation.send_message',
+                status: 'succeeded',
+                detail: '已向建造官发送检查指令。',
+              },
+            ],
+            createdAt: '2026-04-03T00:00:00.000Z',
+            updatedAt: '2026-04-03T00:00:02.000Z',
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-a',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    expect(await screen.findByText('@建造官 检查产线')).toBeInTheDocument();
+    expect(
+      await screen.findByText('先检查矿机和电力，再决定是否补建。'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('已向建造官发送检查指令。'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('已安排矿机检查。')).toBeInTheDocument();
   });
 });
