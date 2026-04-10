@@ -1040,12 +1040,21 @@ export interface DysonSphereView {
   total_energy: number;
 }
 
+export interface ActivePlanetDysonContextView {
+  planet_id: string;
+  em_rail_ejector_count: number;
+  vertical_launching_silo_count: number;
+  ray_receiver_count: number;
+  ray_receiver_modes?: Record<string, number>;
+}
+
 export interface SystemRuntimeView {
   system_id: string;
   discovered: boolean;
   available: boolean;
   solar_sail_orbit?: SolarSailOrbitState;
   dyson_sphere?: DysonSphereView;
+  active_planet_context?: ActivePlanetDysonContextView;
   fleets?: FleetRuntimeView[];
 }
 

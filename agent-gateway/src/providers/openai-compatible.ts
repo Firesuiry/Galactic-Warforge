@@ -42,7 +42,10 @@ function extractClaudeContent(payload: {
     ?.text;
 }
 
-export async function runOpenAICompatibleTurn(input: OpenAICompatibleTurnInput): Promise<ProviderTurnResult> {
+async function requestProviderContent(
+  input: OpenAICompatibleTurnInput,
+  userPrompt: string,
+) {
   const normalizedApiUrl = input.apiUrl.replace(/\/$/, '');
   const response = await fetch(
     input.apiStyle === 'claude' ? `${normalizedApiUrl}/messages` : `${normalizedApiUrl}/chat/completions`,
@@ -54,7 +57,7 @@ export async function runOpenAICompatibleTurn(input: OpenAICompatibleTurnInput):
           ? {
               model: input.model,
               system: input.systemPrompt,
-              messages: [{ role: 'user', content: input.userPrompt }],
+              messages: [{ role: 'user', content: userPrompt }],
               max_tokens: 1024,
             }
           : {
@@ -62,7 +65,7 @@ export async function runOpenAICompatibleTurn(input: OpenAICompatibleTurnInput):
               response_format: { type: 'json_object' },
               messages: [
                 { role: 'system', content: input.systemPrompt },
-                { role: 'user', content: input.userPrompt },
+                { role: 'user', content: userPrompt },
               ],
             },
       ),
@@ -85,7 +88,25 @@ export async function runOpenAICompatibleTurn(input: OpenAICompatibleTurnInput):
     throw new Error('http api response missing content');
   }
 
-  return parseProviderResult(content);
+  return content;
+}
+
+export async function runOpenAICompatibleTurn(input: OpenAICompatibleTurnInput): Promise<ProviderTurnResult> {
+  const firstContent = await requestProviderContent(input, input.userPrompt);
+  try {
+    return parseProviderResult(firstContent);
+  } catch {
+    const repairedContent = await requestProviderContent(
+      input,
+      [
+        input.userPrompt,
+        '上一次输出未通过校验。',
+        '请只返回一个合法 JSON 对象，且必须包含 assistantMessage/actions/done 三个字段。',
+        '不要输出 markdown、解释或额外文本。',
+      ].join('\n\n'),
+    );
+    return parseProviderResult(repairedContent);
+  }
 }
 
 export async function probeOpenAICompatible(

@@ -335,12 +335,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 当前会公开三类 system-scoped runtime：
     - `solar_sail_orbit`
     - `dyson_sphere`
+    - `active_planet_context`
     - `fleets`
+  - `active_planet_context` 只在当前 `active_planet_id` 属于该 system，且该 active world 已加载时返回；它不会跨其他行星做扫描补数
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
 - 响应字段:
   - `system_id` / `discovered` / `available`
   - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
   - `dyson_sphere`：包含 `player_id` / `system_id` / `layers` / `total_energy`；`layers[]` 下会继续返回 `nodes` / `frames` / `shells`
+  - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
+  - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
 - 响应示例:
@@ -362,6 +366,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       }
     ],
     "total_energy": 360
+  },
+  "active_planet_context": {
+    "planet_id": "planet-1-1",
+    "em_rail_ejector_count": 2,
+    "vertical_launching_silo_count": 1,
+    "ray_receiver_count": 2,
+    "ray_receiver_modes": {
+      "power": 1,
+      "photon": 1
+    }
   },
   "fleets": [
     {

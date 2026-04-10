@@ -23,6 +23,7 @@ import type {
   ReplayDigest,
   ReplayResponse,
   StateSummary,
+  SystemRuntimeView,
   SystemView,
 } from '@shared/types';
 
@@ -54,6 +55,7 @@ export interface FixtureScenario {
   statsByPlayer: Record<string, PlayerStatsSnapshot>;
   galaxy: GalaxyView;
   systems: Record<string, SystemView>;
+  systemRuntimeBySystem: Record<string, SystemRuntimeView>;
   planets: Record<string, PlanetView>;
   fogByPlanet: Record<string, FogMapView>;
   runtimeByPlanet: Record<string, PlanetRuntimeView>;
@@ -503,6 +505,11 @@ export function createFixtureFetch(serverUrl: string): typeof fetch {
     }
     if (method === 'GET' && pathname === '/world/galaxy') {
       return createJsonResponse(scenario.galaxy);
+    }
+    if (method === 'GET' && pathname.startsWith('/world/systems/') && pathname.endsWith('/runtime')) {
+      const systemId = pathname.split('/')[3] ?? '';
+      const runtime = scenario.systemRuntimeBySystem[systemId];
+      return runtime ? createJsonResponse(runtime) : createErrorResponse(404, `unknown system runtime ${systemId}`);
     }
     if (method === 'GET' && pathname.startsWith('/world/systems/')) {
       const systemId = pathname.split('/').at(-1) ?? '';

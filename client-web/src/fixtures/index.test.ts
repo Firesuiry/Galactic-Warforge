@@ -88,4 +88,31 @@ describe('fixture fetch', () => {
       error: 'not found',
     });
   });
+
+  it('为 system runtime 接口返回戴森运行态与 active planet 上下文', async () => {
+    const serverUrl = createFixtureServerUrl('baseline');
+    const fetchFn = createFixtureFetch(serverUrl);
+
+    const response = await fetchFn(`${serverUrl}/world/systems/sys-1/runtime`, {
+      headers: {
+        Authorization: 'Bearer key_player_1',
+      },
+    });
+
+    expect(response.ok).toBe(true);
+    const payload = await response.json();
+    expect(payload).toMatchObject({
+      system_id: 'sys-1',
+      dyson_sphere: {
+        total_energy: 1500,
+      },
+      solar_sail_orbit: {
+        total_energy: 900,
+      },
+      active_planet_context: {
+        planet_id: 'planet-1-1',
+        ray_receiver_count: 2,
+      },
+    });
+  });
 });

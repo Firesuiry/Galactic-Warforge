@@ -568,7 +568,7 @@ process.stdout.write(JSON.stringify({
     assert.ok(capture.args.at(-1)?.includes('历史对话'));
   });
 
-  it('appends a visible system error message when a dm agent turn fails', async () => {
+  it('appends a public system error message when a dm agent turn fails', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({
       dataRoot,
@@ -647,10 +647,13 @@ process.stdout.write(JSON.stringify({
     assert.equal(sendResponse.status, 202);
 
     let messages: Array<{ senderType: string; kind: string; content: string }> = [];
+    let turns: Array<{ status: string; errorCode?: string; errorMessage?: string }> = [];
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const response = await fetch(`${server.url}/conversations/dm-helper/messages`);
       messages = await response.json() as Array<{ senderType: string; kind: string; content: string }>;
-      if (messages.length >= 2) {
+      const turnsResponse = await fetch(`${server.url}/conversations/dm-helper/turns`);
+      turns = await turnsResponse.json() as typeof turns;
+      if (messages.length >= 2 && turns[0]?.status === 'failed') {
         break;
       }
       await delay(50);
@@ -660,7 +663,11 @@ process.stdout.write(JSON.stringify({
     assert.equal(messages[1]?.senderType, 'system');
     assert.equal(messages[1]?.kind, 'system');
     assert.match(messages[1]?.content ?? '', /助手/);
-    assert.match(messages[1]?.content ?? '', /provider upstream 502/);
+    assert.match(messages[1]?.content ?? '', /模型服务暂时不可用/);
+    assert.doesNotMatch(messages[1]?.content ?? '', /provider upstream 502/i);
+    assert.equal(turns[0]?.status, 'failed');
+    assert.equal(turns[0]?.errorCode, 'provider_unavailable');
+    assert.equal(turns[0]?.errorMessage, '模型服务暂时不可用，请稍后重试。');
   });
 
   it('supports case1 delegation: lisi creates hujing and dispatches mining construction', async () => {
@@ -1200,6 +1207,7 @@ process.stdout.write(JSON.stringify({
       id: string;
       requestMessageId: string;
       status: string;
+      errorCode?: string;
       errorMessage?: string;
     }> = [];
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -1213,7 +1221,8 @@ process.stdout.write(JSON.stringify({
 
     assert.equal(turns[0]?.requestMessageId, accepted.message.id);
     assert.equal(turns[0]?.status, 'failed');
-    assert.match(turns[0]?.errorMessage ?? '', /complete policy/i);
+    assert.equal(turns[0]?.errorCode, 'permission_denied');
+    assert.equal(turns[0]?.errorMessage, '当前智能体权限不足，无法执行该操作。');
 
     const messagesResponse = await fetch(`${server.url}/conversations/conv-invalid-create/messages`);
     const messages = await messagesResponse.json() as Array<{
@@ -1224,7 +1233,8 @@ process.stdout.write(JSON.stringify({
     }>;
     const failureMessage = messages.find((message) => message.senderType === 'system');
     assert.ok(failureMessage);
-    assert.match(failureMessage?.content ?? '', /complete policy/i);
+    assert.match(failureMessage?.content ?? '', /当前智能体权限不足/);
+    assert.doesNotMatch(failureMessage?.content ?? '', /complete policy/i);
     assert.equal(failureMessage?.replyToMessageId, accepted.message.id);
     assert.equal(failureMessage?.turnId, accepted.turns[0]?.id);
 

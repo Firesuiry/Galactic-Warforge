@@ -1,8 +1,14 @@
 import { create } from "zustand";
 
-import type { Position, GameEventDetail } from "@shared/types";
+import type {
+  CommandResponse,
+  EventSnapshotResponse,
+  GameEventDetail,
+  Position,
+} from "@shared/types";
 
 export type CommandJournalStatus = "pending" | "succeeded" | "failed";
+export type CommandAuthoritativeSource = "response" | "event" | "snapshot";
 
 export interface CommandJournalFocus {
   entityId?: string;
@@ -23,9 +29,11 @@ export interface PlanetCommandJournalEntry {
   acceptedMessage: string;
   authoritativeCode?: string;
   authoritativeMessage?: string;
+  authoritativeSource?: CommandAuthoritativeSource;
   relatedEventIds: string[];
   focus?: CommandJournalFocus;
   nextHint?: string;
+  pendingRecovery?: boolean;
 }
 
 export type PlanetActivityMode =
@@ -49,6 +57,16 @@ interface PlanetCommandActions {
       relatedEventIds?: string[];
     },
   ) => void;
+  reconcileAcceptedResponse: (input: {
+    commandType: string;
+    planetId: string;
+    response: CommandResponse;
+    focus?: CommandJournalFocus;
+    submittedAt?: number;
+  }) => void;
+  reconcileAuthoritativeEvent: (event: GameEventDetail) => void;
+  hydrateAuthoritativeSnapshot: (snapshot: EventSnapshotResponse) => void;
+  markPendingRecovery: (requestId: string) => void;
   ingestEvent: (event: GameEventDetail) => void;
 }
 
@@ -197,6 +215,27 @@ function resolveNextHint(entry: PlanetCommandJournalEntry) {
   return undefined;
 }
 
+function buildAcceptedMessage(commandType: string, response: CommandResponse) {
+  return response.results.map((result) => result.message).join(" / ")
+    || `${commandType} accepted`;
+}
+
+function mapJournalEntries(
+  entries: PlanetCommandJournalEntry[],
+  requestId: string,
+  updater: (entry: PlanetCommandJournalEntry) => PlanetCommandJournalEntry,
+) {
+  let changed = false;
+  const nextEntries = entries.map((entry) => {
+    if (entry.requestId !== requestId) {
+      return entry;
+    }
+    changed = true;
+    return updater(entry);
+  });
+  return { changed, nextEntries };
+}
+
 function upsertRelatedEvent(
   entry: PlanetCommandJournalEntry,
   event: GameEventDetail,
@@ -207,6 +246,27 @@ function upsertRelatedEvent(
   return {
     ...entry,
     relatedEventIds: [event.event_id, ...entry.relatedEventIds].slice(0, 8),
+  };
+}
+
+function reconcileCommandResultEntry(
+  entry: PlanetCommandJournalEntry,
+  event: GameEventDetail,
+  source: Exclude<CommandAuthoritativeSource, "response">,
+) {
+  const payload = asRecord(event.payload) ?? {};
+  const nextEntry = {
+    ...upsertRelatedEvent(entry, event),
+    status: resolveAuthoritativeStatus(payload),
+    authoritativeCode: asString(payload.code) || entry.authoritativeCode,
+    authoritativeMessage:
+      asString(payload.message) || entry.authoritativeMessage,
+    authoritativeSource: source,
+    pendingRecovery: false,
+  };
+  return {
+    ...nextEntry,
+    nextHint: resolveNextHint(nextEntry),
   };
 }
 
@@ -235,7 +295,46 @@ export const usePlanetCommandStore = create<
       };
     });
   },
-  ingestEvent: (event) => {
+  reconcileAcceptedResponse: (input) => {
+    set((state) => {
+      const acceptedMessage = buildAcceptedMessage(
+        input.commandType,
+        input.response,
+      );
+      const nextEntry: PlanetCommandJournalEntry = {
+        requestId: input.response.request_id,
+        commandType: input.commandType,
+        planetId: input.planetId,
+        submittedAt: input.submittedAt ?? Date.now(),
+        enqueueTick: input.response.enqueue_tick,
+        status: input.response.accepted ? "pending" : "failed",
+        acceptedMessage,
+        authoritativeCode: input.response.accepted
+          ? undefined
+          : input.response.results[0]?.code,
+        authoritativeMessage: input.response.accepted
+          ? undefined
+          : acceptedMessage,
+        authoritativeSource: input.response.accepted ? undefined : "response",
+        relatedEventIds: [],
+        focus: input.focus,
+        pendingRecovery: false,
+      };
+
+      return {
+        journal: [
+          {
+            ...nextEntry,
+            nextHint: resolveNextHint(nextEntry),
+          },
+          ...state.journal.filter(
+            (entry) => entry.requestId !== input.response.request_id,
+          ),
+        ].slice(0, 40),
+      };
+    });
+  },
+  reconcileAuthoritativeEvent: (event) => {
     set((state) => {
       if (state.journal.length === 0) {
         return state;
@@ -248,30 +347,16 @@ export const usePlanetCommandStore = create<
           return state;
         }
 
-        let didUpdate = false;
-        const nextJournal = state.journal.map((entry) => {
-          if (entry.requestId !== requestId) {
-            return entry;
-          }
-          didUpdate = true;
-          const nextEntry = {
-            ...upsertRelatedEvent(entry, event),
-            status: resolveAuthoritativeStatus(payload),
-            authoritativeCode: asString(payload.code) || entry.authoritativeCode,
-            authoritativeMessage:
-              asString(payload.message) || entry.authoritativeMessage,
-          };
-          return {
-            ...nextEntry,
-            nextHint: resolveNextHint(nextEntry),
-          };
-        });
-
-        if (!didUpdate) {
+        const { changed, nextEntries } = mapJournalEntries(
+          state.journal,
+          requestId,
+          (entry) => reconcileCommandResultEntry(entry, event, "event"),
+        );
+        if (!changed) {
           return state;
         }
         return {
-          journal: nextJournal,
+          journal: nextEntries,
         };
       }
 
@@ -291,6 +376,68 @@ export const usePlanetCommandStore = create<
         journal: nextJournal,
       };
     });
+  },
+  hydrateAuthoritativeSnapshot: (snapshot) => {
+    set((state) => {
+      if (state.journal.length === 0 || snapshot.events.length === 0) {
+        return state;
+      }
+
+      let nextJournal = state.journal;
+      let changed = false;
+      for (const event of snapshot.events) {
+        if (event.event_type !== "command_result") {
+          continue;
+        }
+        const payload = asRecord(event.payload) ?? {};
+        const requestId = asString(payload.request_id);
+        if (!requestId) {
+          continue;
+        }
+        const result = mapJournalEntries(
+          nextJournal,
+          requestId,
+          (entry) => reconcileCommandResultEntry(entry, event, "snapshot"),
+        );
+        if (!result.changed) {
+          continue;
+        }
+        changed = true;
+        nextJournal = result.nextEntries;
+      }
+
+      if (!changed) {
+        return state;
+      }
+      return {
+        journal: nextJournal,
+      };
+    });
+  },
+  markPendingRecovery: (requestId) => {
+    set((state) => {
+      const { changed, nextEntries } = mapJournalEntries(
+        state.journal,
+        requestId,
+        (entry) => (
+          entry.status === "pending"
+            ? {
+                ...entry,
+                pendingRecovery: true,
+              }
+            : entry
+        ),
+      );
+      if (!changed) {
+        return state;
+      }
+      return {
+        journal: nextEntries,
+      };
+    });
+  },
+  ingestEvent: (event) => {
+    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(event);
   },
 }));
 

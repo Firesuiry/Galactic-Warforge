@@ -199,7 +199,14 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID s
 // handleSystemRuntime returns GET /world/systems/{system_id}/runtime
 func (s *Server) handleSystemRuntime(w http.ResponseWriter, r *http.Request, playerID string) {
 	systemID := r.PathValue("system_id")
-	view, ok := s.ql.SystemRuntime(playerID, systemID, s.core.SpaceRuntime())
+	activePlanetID := s.core.ActivePlanetID()
+	view, ok := s.ql.SystemRuntime(
+		playerID,
+		systemID,
+		activePlanetID,
+		s.core.WorldForPlanet(activePlanetID),
+		s.core.SpaceRuntime(),
+	)
 	if !ok {
 		writeError(w, http.StatusNotFound, "system not found")
 		return

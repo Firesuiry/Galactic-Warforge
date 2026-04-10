@@ -11,6 +11,7 @@ import type {
   SystemView,
 } from "@shared/types";
 
+import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import {
   findLogisticsStation,
   formatItemInventorySummary,
@@ -140,7 +141,6 @@ export function PlanetCommandPanel({
   systemRuntime,
 }: PlanetCommandPanelProps) {
   const selected = usePlanetViewStore((state) => state.selected);
-  const addJournalEntry = usePlanetCommandStore((state) => state.addJournalEntry);
   const journal = usePlanetCommandStore((state) => state.journal);
   const latestEntry = usePlanetCommandStore((state) => state.journal[0]);
   const playerId = client.getAuth().playerId;
@@ -633,40 +633,16 @@ export function PlanetCommandPanel({
   ) {
     setBusyAction(actionLabel);
     try {
-      const response = await execute();
-      const acceptedMessage =
-        response.results.map((result) => result.message).join(" / ") ||
-        `${translateCommandType(actionLabel)} 已受理`;
-
-      addJournalEntry({
-        requestId: response.request_id,
+      await submitPlanetCommand({
         commandType: actionLabel,
         planetId: options.planetId ?? planet.planet_id,
-        enqueueTick: response.enqueue_tick,
-        status: response.accepted ? "pending" : "failed",
-        acceptedMessage,
-        authoritativeCode: response.accepted
-          ? undefined
-          : response.results[0]?.code,
-        authoritativeMessage: response.accepted ? undefined : acceptedMessage,
         focus: options.focus,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : `${translateCommandType(actionLabel)} 失败`;
-      addJournalEntry({
-        requestId:
-          globalThis.crypto?.randomUUID?.() ??
-          `local-${actionLabel}-${Date.now()}`,
-        commandType: actionLabel,
-        planetId: options.planetId ?? planet.planet_id,
-        status: "failed",
-        acceptedMessage: `${translateCommandType(actionLabel)} 提交失败`,
-        authoritativeCode: "LOCAL_ERROR",
-        authoritativeMessage: message,
-        focus: options.focus,
+        execute,
+        fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
+          event_types: ["command_result"],
+          limit: 50,
+        }),
+        recoveryTimeoutMs: 1600,
       });
     } finally {
       setBusyAction("");

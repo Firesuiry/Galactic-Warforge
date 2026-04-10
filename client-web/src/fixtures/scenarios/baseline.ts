@@ -12,6 +12,7 @@ import type {
   PlayerStatsSnapshot,
   ReplayDigest,
   StateSummary,
+  SystemRuntimeView,
   SystemView,
 } from '@shared/types';
 
@@ -125,6 +126,66 @@ const systems: Record<string, SystemView> = {
         kind: 'barren',
       },
     ],
+  },
+};
+
+const systemRuntimeBySystem: Record<string, SystemRuntimeView> = {
+  'sys-1': {
+    system_id: 'sys-1',
+    discovered: true,
+    available: true,
+    solar_sail_orbit: {
+      player_id: 'p1',
+      system_id: 'sys-1',
+      total_energy: 900,
+      sails: [
+        {
+          id: 'sail-1',
+          orbit_radius: 1.1,
+          inclination: 0.2,
+          launch_tick: 96,
+          lifetime_ticks: 1200,
+          energy_per_tick: 45,
+        },
+      ],
+    },
+    dyson_sphere: {
+      player_id: 'p1',
+      system_id: 'sys-1',
+      total_energy: 1500,
+      layers: [
+        {
+          layer_index: 0,
+          orbit_radius: 1.2,
+          energy_output: 1500,
+          rocket_launches: 7,
+          nodes: [
+            {
+              id: 'node-1',
+              layer_index: 0,
+              latitude: 10,
+              longitude: 20,
+              energy_output: 120,
+              integrity: 1,
+              built: true,
+            },
+          ],
+          frames: [],
+          shells: [],
+        },
+      ],
+    },
+    active_planet_context: {
+      planet_id: 'planet-1-1',
+      em_rail_ejector_count: 2,
+      vertical_launching_silo_count: 1,
+      ray_receiver_count: 2,
+      ray_receiver_modes: {
+        power: 1,
+        photon: 1,
+      },
+    },
+    fleets: [],
   },
 };
 
@@ -849,6 +910,7 @@ export const baselineFixtureScenario = {
   statsByPlayer,
   galaxy,
   systems,
+  systemRuntimeBySystem,
   planets,
   fogByPlanet,
   runtimeByPlanet,

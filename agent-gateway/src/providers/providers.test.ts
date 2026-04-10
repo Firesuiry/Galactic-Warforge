@@ -146,6 +146,41 @@ describe('http api provider', () => {
     assert.equal(parsed.done, true);
   });
 
+  it('retries once with a repair prompt when the first payload is schema-invalid', async () => {
+    let callCount = 0;
+    globalThis.fetch = (async () => {
+      callCount += 1;
+      return new Response(JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: callCount === 1
+                ? '{"assistantMessage":"第一次失败","actions":{}}'
+                : '{"assistantMessage":"修复成功","actions":[],"done":true}',
+            },
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const parsed = await runOpenAICompatibleTurn({
+      apiUrl: 'https://api.example.com',
+      apiStyle: 'openai',
+      apiKey: 'sk-demo-key',
+      model: 'gpt-5',
+      systemPrompt: '你是测试助手。',
+      userPrompt: '请回复收到',
+    } as never);
+
+    assert.equal(callCount, 2);
+    assert.equal(parsed.assistantMessage, '修复成功');
+    assert.deepEqual(parsed.actions, []);
+    assert.equal(parsed.done, true);
+  });
+
   it('supports http_api provider config with apiStyle', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-provider-http-api-'));
 
@@ -338,5 +373,42 @@ process.stdout.write(JSON.stringify({
     assert.ok(execIndex >= 0);
     assert.ok(skipIndex > execIndex);
     assert.equal(capture.args.at(-1), '请回复收到');
+  });
+
+  it('retries transient codex cli failures before surfacing an error', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'sw-agent-provider-test-'));
+    const counterPath = path.join(tempDir, 'codex-counter.txt');
+    const fakeCodexPath = path.join(tempDir, 'fake-codex-retry.js');
+    await writeFile(counterPath, '0');
+    await writeFile(fakeCodexPath, `#!/usr/bin/env node
+const { readFileSync, writeFileSync } = require('node:fs');
+const counterPath = process.env.COUNTER_PATH;
+const count = Number(readFileSync(counterPath, 'utf8'));
+writeFileSync(counterPath, String(count + 1));
+if (count === 0) {
+  console.error('502 Bad Gateway');
+  process.exit(1);
+}
+process.stdout.write(JSON.stringify({
+  assistantMessage: '重试成功',
+  actions: [],
+  done: true,
+}));
+`);
+    await chmod(fakeCodexPath, 0o755);
+
+    const parsed = await runCodexTurn({
+      command: fakeCodexPath,
+      model: 'gpt-5-codex',
+      prompt: '请回复收到',
+      schemaFile: path.join(process.cwd(), 'data/schemas/agent-turn.schema.json'),
+      workdir: tempDir,
+      envOverrides: {
+        COUNTER_PATH: counterPath,
+      },
+    });
+
+    assert.equal(parsed.assistantMessage, '重试成功');
+    assert.equal(await readFile(counterPath, 'utf8'), '2');
   });
 });

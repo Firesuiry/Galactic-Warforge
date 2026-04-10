@@ -4,12 +4,22 @@ import "siliconworld/internal/model"
 
 // SystemRuntimeView exposes dynamic system-scoped runtime state.
 type SystemRuntimeView struct {
-	SystemID       string                     `json:"system_id"`
-	Discovered     bool                       `json:"discovered"`
-	Available      bool                       `json:"available"`
-	SolarSailOrbit *model.SolarSailOrbitState `json:"solar_sail_orbit,omitempty"`
-	DysonSphere    *model.DysonSphereState    `json:"dyson_sphere,omitempty"`
-	Fleets         []FleetRuntimeView         `json:"fleets,omitempty"`
+	SystemID            string                         `json:"system_id"`
+	Discovered          bool                           `json:"discovered"`
+	Available           bool                           `json:"available"`
+	SolarSailOrbit      *model.SolarSailOrbitState     `json:"solar_sail_orbit,omitempty"`
+	DysonSphere         *model.DysonSphereState        `json:"dyson_sphere,omitempty"`
+	ActivePlanetContext *ActivePlanetDysonContextView  `json:"active_planet_context,omitempty"`
+	Fleets              []FleetRuntimeView             `json:"fleets,omitempty"`
+}
+
+// ActivePlanetDysonContextView summarizes Dyson-capable buildings on the current active planet.
+type ActivePlanetDysonContextView struct {
+	PlanetID                   string         `json:"planet_id"`
+	EMRailEjectorCount         int            `json:"em_rail_ejector_count"`
+	VerticalLaunchingSiloCount int            `json:"vertical_launching_silo_count"`
+	RayReceiverCount           int            `json:"ray_receiver_count"`
+	RayReceiverModes           map[string]int `json:"ray_receiver_modes,omitempty"`
 }
 
 // FleetRuntimeView is a compact fleet summary.
@@ -40,7 +50,11 @@ type FleetDetailView struct {
 }
 
 // SystemRuntime returns one system runtime view.
-func (ql *Layer) SystemRuntime(playerID, systemID string, spaceRuntime *model.SpaceRuntimeState) (*SystemRuntimeView, bool) {
+func (ql *Layer) SystemRuntime(
+	playerID, systemID, activePlanetID string,
+	activeWorld *model.WorldState,
+	spaceRuntime *model.SpaceRuntimeState,
+) (*SystemRuntimeView, bool) {
 	if _, ok := ql.maps.System(systemID); !ok {
 		return nil, false
 	}
@@ -51,6 +65,7 @@ func (ql *Layer) SystemRuntime(playerID, systemID string, spaceRuntime *model.Sp
 	if !view.Discovered || spaceRuntime == nil {
 		return view, true
 	}
+	view.ActivePlanetContext = ql.collectActivePlanetDysonContext(playerID, systemID, activePlanetID, activeWorld)
 	systemRuntime := spaceRuntime.PlayerSystem(playerID, systemID)
 	if systemRuntime == nil {
 		return view, true
@@ -78,6 +93,51 @@ func (ql *Layer) SystemRuntime(playerID, systemID string, spaceRuntime *model.Sp
 		view.Fleets = append(view.Fleets, fleetRuntimeView(fleet))
 	}
 	return view, true
+}
+
+func (ql *Layer) collectActivePlanetDysonContext(
+	playerID, systemID, activePlanetID string,
+	activeWorld *model.WorldState,
+) *ActivePlanetDysonContextView {
+	if activePlanetID == "" || activeWorld == nil || activeWorld.PlanetID != activePlanetID {
+		return nil
+	}
+	planet, ok := ql.maps.Planet(activePlanetID)
+	if !ok || planet.SystemID != systemID {
+		return nil
+	}
+
+	context := &ActivePlanetDysonContextView{
+		PlanetID:         activePlanetID,
+		RayReceiverModes: map[string]int{},
+	}
+
+	activeWorld.RLock()
+	defer activeWorld.RUnlock()
+
+	for _, building := range activeWorld.Buildings {
+		if building == nil || building.OwnerID != playerID {
+			continue
+		}
+		switch building.Type {
+		case model.BuildingTypeEMRailEjector:
+			context.EMRailEjectorCount++
+		case model.BuildingTypeVerticalLaunchingSilo:
+			context.VerticalLaunchingSiloCount++
+		case model.BuildingTypeRayReceiver:
+			context.RayReceiverCount++
+			mode := string(model.RayReceiverModeHybrid)
+			if building.Runtime.Functions.RayReceiver != nil && building.Runtime.Functions.RayReceiver.Mode != "" {
+				mode = string(building.Runtime.Functions.RayReceiver.Mode)
+			}
+			context.RayReceiverModes[mode]++
+		}
+	}
+
+	if len(context.RayReceiverModes) == 0 {
+		context.RayReceiverModes = nil
+	}
+	return context
 }
 
 // Fleets returns all fleets visible to the player.

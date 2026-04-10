@@ -19,6 +19,7 @@ import {
   resolveMentionTargetsFromContent,
 } from './runtime/router.js';
 import { runDueSchedules } from './runtime/scheduler.js';
+import { classifyPublicTurnError } from './runtime/provider-error.js';
 import { runProviderTurn, type AgentTurnRunner } from './runtime/turn.js';
 import { createAgentStore } from './store/agent-store.js';
 import { createConversationStore } from './store/conversation-store.js';
@@ -614,6 +615,9 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
             }));
           },
           onActionUpdate: async ({ actionIndex, action, status, detail }) => {
+            const safeDetail = status === 'failed'
+              ? classifyPublicTurnError(new Error(detail)).message
+              : detail;
             await persistTurn((turn) => ({
               ...turn,
               status: status === 'pending' ? 'executing' : turn.status,
@@ -622,7 +626,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
                   ? {
                       type: action.type,
                       status,
-                      detail: status === 'pending' ? summarizeAgentAction(action) : detail,
+                      detail: status === 'pending' ? summarizeAgentAction(action) : safeDetail,
                     }
                   : summary
               )),
@@ -661,14 +665,20 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         agent.status = 'error';
         agent.updatedAt = new Date().toISOString();
         await agentStore.save(agent);
-        const messageText = error instanceof Error ? error.message : String(error);
+        const publicError = classifyPublicTurnError(error);
+        console.error('agent turn failed', {
+          agentId: agent.id,
+          turnId: currentTurn.id,
+          code: publicError.code,
+          rawError: error instanceof Error ? error.message : String(error),
+        });
         const systemMessage: ConversationMessage = {
           id: randomUUID(),
           conversationId: conversation.id,
           senderType: 'system',
           senderId: agent.id,
           kind: 'system',
-          content: `${agent.name} 回复失败：${messageText}`,
+          content: `${agent.name} 回复失败：${publicError.message}`,
           mentions: [],
           trigger: 'system_message',
           replyToMessageId: currentTurn.requestMessageId,
@@ -680,13 +690,14 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         await persistTurn((turn) => ({
           ...turn,
           status: 'failed',
-          errorMessage: messageText,
+          errorCode: publicError.code,
+          errorMessage: publicError.message,
           updatedAt: new Date().toISOString(),
         }));
         eventBus.emit({
           agentId: agent.id,
           type: 'error',
-          payload: { message: messageText },
+          payload: { code: publicError.code, message: publicError.message },
         });
       }
     },

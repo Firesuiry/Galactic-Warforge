@@ -298,7 +298,7 @@ func TestSystemRuntimeIncludesDysonSphereForDiscoveredSystem(t *testing.T) {
 	})
 	state.TotalEnergy = 360
 
-	view, ok := ql.SystemRuntime("p1", "sys-1", spaceRuntime)
+	view, ok := ql.SystemRuntime("p1", "sys-1", "", nil, spaceRuntime)
 	if !ok {
 		t.Fatal("expected system runtime view")
 	}
@@ -315,10 +315,101 @@ func TestSystemRuntimeIncludesDysonSphereForDiscoveredSystem(t *testing.T) {
 	}
 }
 
+func TestSystemRuntimeIncludesActivePlanetContextForCurrentSystem(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 16, 16)
+	spaceRuntime := model.NewSpaceRuntimeState()
+
+	ws.Buildings["ejector-1"] = &model.Building{
+		ID:      "ejector-1",
+		Type:    model.BuildingTypeEMRailEjector,
+		OwnerID: "p1",
+		Runtime: model.BuildingRuntime{State: model.BuildingWorkIdle},
+	}
+	ws.Buildings["silo-1"] = &model.Building{
+		ID:      "silo-1",
+		Type:    model.BuildingTypeVerticalLaunchingSilo,
+		OwnerID: "p1",
+		Runtime: model.BuildingRuntime{State: model.BuildingWorkIdle},
+	}
+	ws.Buildings["receiver-1"] = &model.Building{
+		ID:      "receiver-1",
+		Type:    model.BuildingTypeRayReceiver,
+		OwnerID: "p1",
+		Runtime: model.BuildingRuntime{
+			State: model.BuildingWorkRunning,
+			Functions: model.BuildingFunctionModules{
+				RayReceiver: &model.RayReceiverModule{Mode: model.RayReceiverModePhoton},
+			},
+		},
+	}
+	ws.Buildings["receiver-2"] = &model.Building{
+		ID:      "receiver-2",
+		Type:    model.BuildingTypeRayReceiver,
+		OwnerID: "p1",
+		Runtime: model.BuildingRuntime{
+			State: model.BuildingWorkRunning,
+			Functions: model.BuildingFunctionModules{
+				RayReceiver: &model.RayReceiverModule{Mode: model.RayReceiverModePower},
+			},
+		},
+	}
+	ws.Buildings["receiver-foreign"] = &model.Building{
+		ID:      "receiver-foreign",
+		Type:    model.BuildingTypeRayReceiver,
+		OwnerID: "p2",
+		Runtime: model.BuildingRuntime{
+			State: model.BuildingWorkRunning,
+			Functions: model.BuildingFunctionModules{
+				RayReceiver: &model.RayReceiverModule{Mode: model.RayReceiverModeHybrid},
+			},
+		},
+	}
+
+	view, ok := ql.SystemRuntime("p1", "sys-1", planetID, ws, spaceRuntime)
+	if !ok {
+		t.Fatal("expected system runtime view")
+	}
+	if view.ActivePlanetContext == nil {
+		t.Fatal("expected active planet context")
+	}
+	if view.ActivePlanetContext.PlanetID != planetID {
+		t.Fatalf("expected active planet context for %s, got %+v", planetID, view.ActivePlanetContext)
+	}
+	if view.ActivePlanetContext.EMRailEjectorCount != 1 {
+		t.Fatalf("expected one ejector, got %+v", view.ActivePlanetContext)
+	}
+	if view.ActivePlanetContext.VerticalLaunchingSiloCount != 1 {
+		t.Fatalf("expected one silo, got %+v", view.ActivePlanetContext)
+	}
+	if view.ActivePlanetContext.RayReceiverCount != 2 {
+		t.Fatalf("expected two owned ray receivers, got %+v", view.ActivePlanetContext)
+	}
+	if got := view.ActivePlanetContext.RayReceiverModes[string(model.RayReceiverModePhoton)]; got != 1 {
+		t.Fatalf("expected photon mode count 1, got %+v", view.ActivePlanetContext.RayReceiverModes)
+	}
+	if got := view.ActivePlanetContext.RayReceiverModes[string(model.RayReceiverModePower)]; got != 1 {
+		t.Fatalf("expected power mode count 1, got %+v", view.ActivePlanetContext.RayReceiverModes)
+	}
+}
+
+func TestSystemRuntimeOmitsActivePlanetContextWhenActivePlanetNotInSystem(t *testing.T) {
+	ql, ws, _ := newPlanetQueryFixture(t, 16, 16)
+	spaceRuntime := model.NewSpaceRuntimeState()
+
+	view, ok := ql.SystemRuntime("p1", "sys-1", "planet-other", ws, spaceRuntime)
+	if !ok {
+		t.Fatal("expected system runtime view")
+	}
+	if view.ActivePlanetContext != nil {
+		t.Fatalf("expected no active planet context, got %+v", view.ActivePlanetContext)
+	}
+}
+
 func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.WorldState, string) {
 	t.Helper()
 
 	planetID := "planet-1"
+	otherPlanetID := "planet-2"
 	terrainGrid := make([][]terrain.TileType, height)
 	for y := 0; y < height; y++ {
 		row := make([]terrain.TileType, width)
@@ -334,6 +425,7 @@ func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.Worl
 		},
 		Systems: map[string]*mapmodel.System{
 			"sys-1": {ID: "sys-1", GalaxyID: "galaxy-1", PlanetIDs: []string{planetID}},
+			"sys-2": {ID: "sys-2", GalaxyID: "galaxy-1", PlanetIDs: []string{otherPlanetID}},
 		},
 		Planets: map[string]*mapmodel.Planet{
 			planetID: {
@@ -346,6 +438,14 @@ func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.Worl
 				Resources: []mapmodel.ResourceNode{
 					{ID: "static-r-1", PlanetID: planetID, Position: mapmodel.GridPos{X: 1, Y: 1}, Kind: mapmodel.ResourceIronOre, Behavior: mapmodel.ResourceFinite, Total: 100, BaseYield: 1},
 				},
+			},
+			otherPlanetID: {
+				ID:       otherPlanetID,
+				SystemID: "sys-2",
+				Kind:     mapmodel.PlanetKindRocky,
+				Width:    width,
+				Height:   height,
+				Terrain:  terrainGrid,
 			},
 		},
 		PrimaryGalaxyID: "galaxy-1",

@@ -147,6 +147,7 @@ export interface ConversationTurn {
   assistantPreview?: string;
   assistantMessageId?: string;
   finalMessageId?: string;
+  errorCode?: string;
   errorMessage?: string;
   actionSummaries: ConversationTurnActionSummary[];
   createdAt: string;

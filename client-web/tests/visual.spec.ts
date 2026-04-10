@@ -55,6 +55,14 @@ test('移动端行星页保留地图首屏并提供工作台切换', async ({ pa
   await expect(page.getByText('事件时间线')).toBeVisible();
 });
 
+test('system 页在 fixture 模式展示戴森运行态', async ({ page }) => {
+  await openFixtureMode(page);
+  await page.goto('/system/sys-1');
+  await expect(page.getByRole('heading', { name: 'Aster' })).toBeVisible();
+  await expect(page.locator('.system-situation__metric').filter({ hasText: '系统总产能' })).toContainText('1500');
+  await expect(page.locator('.planet-side-section').filter({ hasText: '当前 active planet' })).toContainText('Gaia');
+});
+
 test('回放 digest 截图基线', async ({ page }) => {
   await openFixtureMode(page);
   await page.getByRole('navigation').getByRole('link', { name: '回放' }).click();

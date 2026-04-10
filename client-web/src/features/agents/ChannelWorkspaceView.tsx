@@ -313,7 +313,10 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
                         {turn.errorMessage ? (
                           <div>
                             <div className="section-title">失败原因</div>
-                            <p>{turn.errorMessage}</p>
+                            <p>
+                              {turn.errorCode ? `${turn.errorCode}: ` : ''}
+                              {turn.errorMessage}
+                            </p>
                           </div>
                         ) : null}
                       </section>

@@ -151,6 +151,7 @@ export interface ConversationTurnView {
   assistantPreview?: string;
   assistantMessageId?: string;
   finalMessageId?: string;
+  errorCode?: string;
   errorMessage?: string;
   actionSummaries: ConversationTurnActionSummaryView[];
   createdAt: string;
