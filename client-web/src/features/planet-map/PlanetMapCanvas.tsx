@@ -57,8 +57,8 @@ interface ViewportSize {
   height: number;
 }
 
-const MIN_VIEWPORT_WIDTH = 520;
-const MIN_VIEWPORT_HEIGHT = 420;
+const MIN_VIEWPORT_WIDTH = 240;
+const MIN_VIEWPORT_HEIGHT = 240;
 
 const terrainColors: Record<string, string> = {
   buildable: '#27344d',
@@ -194,7 +194,7 @@ function areTilePointsEqual(left: TilePoint | null, right: TilePoint | null) {
 }
 
 export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runtime, onCanvasReady }: PlanetMapCanvasProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseFrameCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragStateRef = useRef<{ pointerX: number; pointerY: number; offsetX: number; offsetY: number } | null>(null);
@@ -345,12 +345,12 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
   );
 
   useEffect(() => {
-    if (!containerRef.current) {
+    if (!viewportRef.current) {
       return undefined;
     }
 
     function updateViewport() {
-      const rect = containerRef.current?.getBoundingClientRect();
+      const rect = viewportRef.current?.getBoundingClientRect();
       setViewport({
         width: Math.max(MIN_VIEWPORT_WIDTH, Math.floor(rect?.width || 0) || getViewportDefaults().width),
         height: Math.max(MIN_VIEWPORT_HEIGHT, Math.floor(rect?.height || 0) || getViewportDefaults().height),
@@ -362,7 +362,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => updateViewport());
-      resizeObserver.observe(containerRef.current);
+      resizeObserver.observe(viewportRef.current);
     } else {
       window.addEventListener('resize', updateViewport);
     }
@@ -1017,23 +1017,25 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
   }
 
   return (
-    <div className="planet-map-canvas" ref={containerRef}>
-      <canvas
-        aria-label="行星地图"
-        className="planet-map-canvas__surface"
-        data-camera-offset-x={camera.offsetX}
-        data-camera-offset-y={camera.offsetY}
-        data-tile-size={tileSize}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        onPointerDown={handlePointerDown}
-        onPointerLeave={handlePointerLeave}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onWheel={handleWheel}
-        ref={canvasRef}
-        role="img"
-      />
+    <div className="planet-map-canvas">
+      <div className="planet-map-canvas__viewport" ref={viewportRef}>
+        <canvas
+          aria-label="行星地图"
+          className="planet-map-canvas__surface"
+          data-camera-offset-x={camera.offsetX}
+          data-camera-offset-y={camera.offsetY}
+          data-tile-size={tileSize}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+          onPointerDown={handlePointerDown}
+          onPointerLeave={handlePointerLeave}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onWheel={handleWheel}
+          ref={canvasRef}
+          role="img"
+        />
+      </div>
       <div className="planet-map-canvas__status">
         <span>{overviewMode ? `缩放 ${getPlanetZoomStatusLabel(camera.zoomIndex, planet.map_width, planet.map_height)}` : `缩放 ${sceneZoomStatusLabel}`}</span>
         <span>

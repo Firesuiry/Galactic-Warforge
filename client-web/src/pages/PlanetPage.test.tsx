@@ -5,6 +5,22 @@ import { vi } from "vitest";
 import { renderApp, jsonResponse, sseResponse } from "@/test/utils";
 import { useSessionStore } from "@/stores/session";
 
+function stubMatchMedia(matches: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 function createPlanetPayload() {
   return {
     planet_id: "planet-1-1",
@@ -684,6 +700,124 @@ describe("PlanetPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("移动端提供工作台、选中对象和活动流切换，并默认保留地图首屏", async () => {
+    stubMatchMedia(true);
+
+    const fetchMock = vi.fn(
+      (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.endsWith("/state/summary")) {
+          return Promise.resolve(jsonResponse(createSummaryPayload()));
+        }
+        if (url.endsWith("/state/stats")) {
+          return Promise.resolve(jsonResponse(createStatsPayload()));
+        }
+        if (url.endsWith("/world/systems/sys-1")) {
+          return Promise.resolve(
+            jsonResponse({
+              system_id: "sys-1",
+              galaxy_id: "galaxy-1",
+              name: "Helios",
+              star_type: "main_sequence",
+              planets: [
+                {
+                  planet_id: "planet-1-1",
+                  name: "Gaia",
+                  kind: "terrestrial",
+                },
+              ],
+            }),
+          );
+        }
+        if (url.endsWith("/world/systems/sys-1/runtime")) {
+          return Promise.resolve(
+            jsonResponse({
+              system_id: "sys-1",
+              orbiting_fleets: [],
+              enemy_fleets: [],
+              solar_sails: [],
+              dyson_sphere: {
+                system_id: "sys-1",
+                layers: [],
+                ray_receivers: [],
+                sails: [],
+              },
+            }),
+          );
+        }
+        if (url.includes("/world/planets/planet-1-1/scene")) {
+          return Promise.resolve(jsonResponse(createScenePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
+          return Promise.resolve(jsonResponse(createRuntimePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/networks")) {
+          return Promise.resolve(jsonResponse(createNetworksPayload()));
+        }
+        if (url.endsWith("/catalog")) {
+          return Promise.resolve(jsonResponse(createCatalogPayload()));
+        }
+        if (url.includes("/events/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              event_types: ["building_state_changed"],
+              available_from_tick: 1,
+              next_event_id: "evt-10",
+              has_more: false,
+              events: [],
+            }),
+          );
+        }
+        if (url.includes("/alerts/production/snapshot")) {
+          return Promise.resolve(
+            jsonResponse({
+              available_from_tick: 1,
+              has_more: false,
+              alerts: [],
+            }),
+          );
+        }
+        if (url.includes("/events/stream")) {
+          return Promise.resolve(
+            sseResponse(
+              [
+                {
+                  event: "connected",
+                  data: {
+                    player_id: "p1",
+                    event_types: ["building_state_changed"],
+                  },
+                },
+              ],
+              init?.signal as AbortSignal,
+            ),
+          );
+        }
+
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+
+    renderApp(["/planet/planet-1-1"]);
+
+    expect(
+      await screen.findByRole("img", { name: "行星地图" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "工作台" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "选中对象" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "活动流" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "活动流" }));
+    expect(screen.getByText("事件时间线")).toBeInTheDocument();
+  });
+
   it("渲染地图、迷雾、事件和实体详情侧栏", async () => {
     const fetchMock = vi.fn(
       (input: string | URL | Request, init?: RequestInit) => {
@@ -1135,6 +1269,7 @@ describe("PlanetPage", () => {
     expect(screen.getByText("行星槽位")).toBeInTheDocument();
     expect(screen.getByText("库存与缓存摘要")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("tab", { name: "物流" }));
     expect(await screen.findByText("物流站配置")).toBeInTheDocument();
     expect(
       (screen.getAllByLabelText("物流站") as HTMLSelectElement[]).some(
@@ -1263,6 +1398,7 @@ describe("PlanetPage", () => {
     expect(screen.getByText("星际配置")).toBeInTheDocument();
     expect(screen.getByText("星际槽位")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("tab", { name: "物流" }));
     expect(await screen.findByText("物流槽位配置")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("物流范围"), "interstellar");
     await user.selectOptions(screen.getByLabelText("物品"), "hydrogen");

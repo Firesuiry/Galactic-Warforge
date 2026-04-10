@@ -24,6 +24,7 @@ import {
 import {
   usePlanetCommandStore,
   type CommandJournalFocus,
+  type PlanetCommandJournalEntry,
 } from "@/features/planet-commands/store";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
@@ -47,6 +48,44 @@ interface PlanetCommandPanelProps {
 
 type LogisticsScope = "planetary" | "interstellar";
 type LogisticsMode = "none" | "supply" | "demand" | "both";
+type CommandWorkflowId =
+  | "basic"
+  | "research"
+  | "logistics"
+  | "cross_planet"
+  | "dyson";
+
+const COMMAND_WORKFLOWS: Array<{
+  id: CommandWorkflowId;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "basic",
+    label: "基础操作",
+    description: "扫描、建造、移动和拆除都放在同一条开局操作链里。",
+  },
+  {
+    id: "research",
+    label: "研究与装料",
+    description: "先看研究状态，再直接给研究站、发射建筑或其他建筑装料。",
+  },
+  {
+    id: "logistics",
+    label: "物流",
+    description: "物流站总配置和槽位配置合并到同一条站点管理工作流。",
+  },
+  {
+    id: "cross_planet",
+    label: "跨星球",
+    description: "先确认观察行星与 active planet，再切换命令上下文。",
+  },
+  {
+    id: "dyson",
+    label: "戴森",
+    description: "把节点、框架、壳层、发射与射线接收站收口在戴森主链里。",
+  },
+];
 
 function toOptionalInt(value: string) {
   const parsed = Number.parseInt(value, 10);
@@ -81,6 +120,16 @@ function fieldLabel(key: string) {
   return translateUi(`field.${key}`);
 }
 
+function journalTone(entry: PlanetCommandJournalEntry) {
+  if (entry.status === "failed") {
+    return "error";
+  }
+  if (entry.status === "succeeded") {
+    return "ok";
+  }
+  return "pending";
+}
+
 export function PlanetCommandPanel({
   catalog,
   client,
@@ -92,8 +141,10 @@ export function PlanetCommandPanel({
 }: PlanetCommandPanelProps) {
   const selected = usePlanetViewStore((state) => state.selected);
   const addJournalEntry = usePlanetCommandStore((state) => state.addJournalEntry);
+  const journal = usePlanetCommandStore((state) => state.journal);
   const latestEntry = usePlanetCommandStore((state) => state.journal[0]);
   const playerId = client.getAuth().playerId;
+  const [activeWorkflow, setActiveWorkflow] = useState<CommandWorkflowId>("basic");
   const [scanGalaxyId, setScanGalaxyId] = useState(DEFAULT_GALAXY_ID);
   const [scanSystemId, setScanSystemId] = useState(DEFAULT_SYSTEM_ID);
   const [buildX, setBuildX] = useState(0);
@@ -570,6 +621,7 @@ export function PlanetCommandPanel({
       ? `${translateCommandType(latestEntry.commandType)} 已受理：${latestEntry.acceptedMessage}`
       : latestEntry.authoritativeMessage ?? latestEntry.acceptedMessage
     : "";
+  const recentEntries = journal.slice(0, 5);
 
   async function runCommand(
     actionLabel: string,
@@ -624,10 +676,9 @@ export function PlanetCommandPanel({
   return (
     <div className="planet-panel-stack">
       <section className="planet-side-section">
-        <div className="section-title">命令操作面板</div>
+        <div className="section-title">命令工作流</div>
         <p className="subtle-text">
-          当前页直接支持扫描、建造、移动、研究、拆除和物流配置。所有命令都走同一套
-          `/commands` 契约。
+          所有操作都走同一套 `/commands` authoritative 契约，但界面改成按玩家实际操作链来分组。
         </p>
         {latestEntry ? (
           <div
@@ -645,9 +696,81 @@ export function PlanetCommandPanel({
             ) : null}
           </div>
         ) : null}
+        <div
+          aria-label="工作流"
+          className="planet-command-workflows"
+          role="tablist"
+        >
+          {COMMAND_WORKFLOWS.map((workflow) => (
+            <button
+              aria-controls={`planet-workflow-panel-${workflow.id}`}
+              aria-selected={activeWorkflow === workflow.id}
+              className={
+                activeWorkflow === workflow.id
+                  ? "secondary-button planet-command-workflows__tab planet-command-workflows__tab--active"
+                  : "secondary-button planet-command-workflows__tab"
+              }
+              id={`planet-workflow-tab-${workflow.id}`}
+              key={workflow.id}
+              onClick={() => setActiveWorkflow(workflow.id)}
+              role="tab"
+              type="button"
+            >
+              {workflow.label}
+            </button>
+          ))}
+        </div>
+        <p className="subtle-text">
+          {COMMAND_WORKFLOWS.find((workflow) => workflow.id === activeWorkflow)
+            ?.description}
+        </p>
       </section>
 
       <section className="planet-side-section">
+        <div className="section-title">最近结果</div>
+        {recentEntries.length > 0 ? (
+          <ul className="timeline-list timeline-list--dense planet-command-history">
+            {recentEntries.map((entry) => (
+              <li key={entry.requestId}>
+                <div className="timeline-list__row">
+                  <strong>
+                    {translateCommandType(entry.commandType)} ·{" "}
+                    {entry.status === "pending"
+                      ? "待回写"
+                      : entry.status === "succeeded"
+                        ? "成功"
+                        : "失败"}
+                  </strong>
+                  <span
+                    className={`command-history-status command-history-status--${journalTone(entry)}`}
+                  >
+                    {entry.requestId}
+                  </span>
+                </div>
+                <span>
+                  {entry.status === "pending"
+                    ? entry.acceptedMessage
+                    : entry.authoritativeMessage ?? entry.acceptedMessage}
+                </span>
+                {entry.nextHint ? (
+                  <span className="subtle-text">{entry.nextHint}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="subtle-text">最近还没有 authoritative 命令结果。</p>
+        )}
+      </section>
+
+      {activeWorkflow === "basic" ? (
+        <>
+      <section
+        aria-labelledby="planet-workflow-tab-basic"
+        className="planet-side-section"
+        id="planet-workflow-panel-basic"
+        role="tabpanel"
+      >
         <div className="section-title">扫描</div>
         <div className="compact-form-grid">
           <label className="field">
@@ -848,6 +971,50 @@ export function PlanetCommandPanel({
       </section>
 
       <section className="planet-side-section">
+        <div className="section-title">拆除</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>{fieldLabel("building_id")}</span>
+            <select
+              onChange={(event) => setDemolishId(event.target.value)}
+              value={demolishId}
+            >
+              <option value="">选择建筑</option>
+              {ownBuildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.id} ·{" "}
+                  {getBuildingDisplayName(catalog, building.type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !demolishId}
+            onClick={() => {
+              void runCommand("demolish", () => client.cmdDemolish(demolishId), {
+                focus: {
+                  entityId: demolishId,
+                },
+              });
+            }}
+            type="button"
+          >
+            拆除建筑
+          </button>
+        </div>
+      </section>
+        </>
+      ) : null}
+
+      {activeWorkflow === "logistics" ? (
+        <>
+      <section
+        aria-labelledby="planet-workflow-tab-logistics"
+        className="planet-side-section"
+        id="planet-workflow-panel-logistics"
+        role="tabpanel"
+      >
         <div className="section-title">物流站配置</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
@@ -1061,8 +1228,17 @@ export function PlanetCommandPanel({
           </button>
         </div>
       </section>
+        </>
+      ) : null}
 
-      <section className="planet-side-section">
+      {activeWorkflow === "research" ? (
+        <>
+      <section
+        aria-labelledby="planet-workflow-tab-research"
+        className="planet-side-section"
+        id="planet-workflow-panel-research"
+        role="tabpanel"
+      >
         <div className="section-title">研究</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
@@ -1094,41 +1270,6 @@ export function PlanetCommandPanel({
             type="button"
           >
             开始研究
-          </button>
-        </div>
-      </section>
-
-      <section className="planet-side-section">
-        <div className="section-title">拆除</div>
-        <div className="compact-form-grid">
-          <label className="field field--span-2">
-            <span>{fieldLabel("building_id")}</span>
-            <select
-              onChange={(event) => setDemolishId(event.target.value)}
-              value={demolishId}
-            >
-              <option value="">选择建筑</option>
-              {ownBuildings.map((building) => (
-                <option key={building.id} value={building.id}>
-                  {building.id} ·{" "}
-                  {getBuildingDisplayName(catalog, building.type)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button field--span-2"
-            disabled={busyAction !== "" || !demolishId}
-            onClick={() => {
-              void runCommand("demolish", () => client.cmdDemolish(demolishId), {
-                focus: {
-                  entityId: demolishId,
-                },
-              });
-            }}
-            type="button"
-          >
-            拆除建筑
           </button>
         </div>
       </section>
@@ -1223,8 +1364,16 @@ export function PlanetCommandPanel({
           </button>
         </div>
       </section>
+        </>
+      ) : null}
 
-      <section className="planet-side-section">
+      {activeWorkflow === "cross_planet" ? (
+        <section
+          aria-labelledby="planet-workflow-tab-cross_planet"
+          className="planet-side-section"
+          id="planet-workflow-panel-cross_planet"
+          role="tabpanel"
+        >
         <div className="section-title">跨星球</div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
@@ -1275,9 +1424,17 @@ export function PlanetCommandPanel({
             切换 active planet
           </button>
         </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className="planet-side-section">
+      {activeWorkflow === "dyson" ? (
+        <>
+      <section
+        aria-labelledby="planet-workflow-tab-dyson"
+        className="planet-side-section"
+        id="planet-workflow-panel-dyson"
+        role="tabpanel"
+      >
         <div className="section-title">戴森建造</div>
         <div className="compact-form-grid">
           <label className="field">
@@ -1677,6 +1834,8 @@ export function PlanetCommandPanel({
           </button>
         </div>
       </section>
+        </>
+      ) : null}
     </div>
   );
 }

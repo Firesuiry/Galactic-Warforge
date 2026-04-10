@@ -853,6 +853,10 @@ button {
   height: 100%;
 }
 
+.planet-map-canvas__viewport {
+  min-height: 0;
+}
+
 .planet-map-canvas__surface {
   width: 100%;
   height: 100%;
@@ -1109,11 +1113,64 @@ button {
 
 .planet-detail-tabs {
   flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.planet-detail-tabs__tab {
+  flex: 1 1 96px;
+}
+
+.planet-detail-tabs__tab--active {
+  border-color: rgba(89, 227, 206, 0.4);
+  background: rgba(44, 193, 176, 0.16);
 }
 
 .planet-detail-shell__content {
   min-height: 0;
   overflow: auto;
+}
+
+.planet-detail-shell__content [hidden] {
+  display: none !important;
+}
+
+.planet-command-workflows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planet-command-workflows__tab {
+  flex: 1 1 120px;
+}
+
+.planet-command-workflows__tab--active {
+  border-color: rgba(89, 227, 206, 0.4);
+  background: rgba(44, 193, 176, 0.16);
+}
+
+.planet-command-history {
+  margin: 0;
+  padding-left: 0;
+}
+
+.command-history-status {
+  color: #a9bbdf;
+  font-size: 0.78rem;
+}
+
+.command-history-status--ok {
+  color: #aef0ca;
+}
+
+.command-history-status--error {
+  color: #ffd2d2;
+}
+
+.command-history-status--pending {
+  color: #ffe39e;
 }
 
 .planet-disclosure {
@@ -1176,6 +1233,14 @@ button {
     min-height: auto;
   }
 
+  .planet-map-canvas {
+    height: auto;
+  }
+
+  .planet-map-canvas__viewport {
+    height: clamp(280px, 48vh, 420px);
+  }
+
   .compact-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1209,6 +1274,16 @@ button {
     width: 100%;
     max-width: none;
     margin-top: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .planet-map-shell {
+    min-height: 360px;
+  }
+
+  .planet-detail-shell {
+    gap: 14px;
   }
 }
 

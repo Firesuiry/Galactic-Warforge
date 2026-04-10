@@ -125,6 +125,27 @@ function createCatalog() {
   };
 }
 
+function createSummary() {
+  return {
+    active_planet_id: "planet-1-1",
+    players: {
+      p1: {
+        player_id: "p1",
+        is_alive: true,
+        resources: {
+          minerals: 100,
+          energy: 80,
+        },
+        tech: {
+          current_research: {
+            tech_id: "electromagnetism",
+          },
+        },
+      },
+    },
+  };
+}
+
 function createClient() {
   return {
     getAuth: () => ({ playerId: "p1", playerKey: "key_player_1" }),
@@ -156,6 +177,7 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
+    await user.click(screen.getByRole("tab", { name: "物流" }));
     const itemSelect = await screen.findByLabelText("物品");
     await waitFor(() => {
       expect((itemSelect as HTMLSelectElement).value).toBe(
@@ -175,6 +197,7 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
+    await user.click(screen.getByRole("tab", { name: "物流" }));
     expect((screen.getByLabelText("物品") as HTMLSelectElement).value).toBe(
       "silicon_ore",
     );
@@ -196,6 +219,7 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
+    await user.click(screen.getByRole("tab", { name: "物流" }));
     const itemSelect = await screen.findByLabelText("物品");
     const modeSelect = screen.getByLabelText("物流模式");
     const localStorageInput = screen.getByLabelText("本地库存");
@@ -217,6 +241,7 @@ describe("PlanetCommandPanel", () => {
       />,
     );
 
+    await user.click(screen.getByRole("tab", { name: "物流" }));
     expect((screen.getByLabelText("物流模式") as HTMLSelectElement).value).toBe(
       "demand",
     );
@@ -289,5 +314,63 @@ describe("PlanetCommandPanel", () => {
         authoritativeMessage: "planet scan complete",
       });
     });
+  });
+
+  it("按工作流分组命令并展示最近结果历史", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+
+    act(() => {
+      usePlanetCommandStore.getState().addJournalEntry({
+        requestId: "req-research-1",
+        commandType: "start_research",
+        planetId: "planet-1-1",
+        status: "failed",
+        acceptedMessage: "start_research accepted",
+        authoritativeCode: "WAITING_MATRIX",
+        authoritativeMessage: "缺少 electromagnetic_matrix",
+        nextHint: "先把 electromagnetic_matrix 装入研究站，再继续启动研究。",
+      });
+      usePlanetCommandStore.getState().addJournalEntry({
+        requestId: "req-build-1",
+        commandType: "build",
+        planetId: "planet-1-1",
+        status: "succeeded",
+        acceptedMessage: "build accepted",
+        authoritativeCode: "OK",
+        authoritativeMessage: "wind_turbine 已开始施工",
+      });
+    });
+
+    render(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary() as never}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "基础操作" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "研究与装料" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "物流" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "跨星球" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "戴森" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "研究与装料" }));
+
+    expect(
+      screen.getByRole("button", { name: "开始研究" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "装入建筑" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("最近结果")).toBeInTheDocument();
+    expect(
+      screen.getByText("先把 electromagnetic_matrix 装入研究站，再继续启动研究。"),
+    ).toBeInTheDocument();
   });
 });

@@ -43,6 +43,18 @@ test('行星地图主视图截图基线', async ({ page }) => {
   expect(screenshot).toMatchSnapshot('planet-map-shell.png');
 });
 
+test('移动端行星页保留地图首屏并提供工作台切换', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openFixtureMode(page);
+  await page.goto('/planet/planet-1-1');
+  await expect(page.getByRole('img', { name: '行星地图' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '工作台' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '选中对象' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '活动流' })).toBeVisible();
+  await page.getByRole('tab', { name: '活动流' }).click();
+  await expect(page.getByText('事件时间线')).toBeVisible();
+});
+
 test('回放 digest 截图基线', async ({ page }) => {
   await openFixtureMode(page);
   await page.getByRole('navigation').getByRole('link', { name: '回放' }).click();

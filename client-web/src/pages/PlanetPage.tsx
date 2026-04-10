@@ -34,9 +34,39 @@ import {
   getPlanetZoomLevel,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFixtureFetch, isFixtureServerUrl } from "@/fixtures";
 import { useShallow } from "zustand/react/shallow";
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+    const mediaQuery = window.matchMedia(query);
+    const update = (event: MediaQueryListEvent | MediaQueryList) => {
+      setMatches(event.matches);
+    };
+
+    update(mediaQuery);
+    mediaQuery.addEventListener?.("change", update);
+    mediaQuery.addListener?.(update);
+
+    return () => {
+      mediaQuery.removeEventListener?.("change", update);
+      mediaQuery.removeListener?.(update);
+    };
+  }, [query]);
+
+  return matches;
+}
 
 export function PlanetPage() {
   const client = useApiClient();
@@ -91,6 +121,10 @@ export function PlanetPage() {
     getPendingCommandCount(state.journal),
   );
   const activeZoomLevel = getPlanetZoomLevel(zoomIndex);
+  const isCompactLayout = useMediaQuery("(max-width: 900px)");
+  const [compactPanel, setCompactPanel] = useState<
+    "workbench" | "selection" | "activity"
+  >("workbench");
 
   const sceneQuery = useQuery({
     queryKey: [
@@ -224,6 +258,7 @@ export function PlanetPage() {
     restoredViewRef.current = "";
     resetForPlanet(planetId);
     resetCommandStore(planetId);
+    setCompactPanel("workbench");
   }, [planetId, resetCommandStore, resetForPlanet]);
 
   useEffect(() => {
@@ -379,6 +414,89 @@ export function PlanetPage() {
     catalog,
     currentPlayer?.tech?.current_research?.tech_id ?? "",
   );
+  const detailPanels = (
+    <>
+      {isCompactLayout ? (
+        <div
+          aria-label="行星工作台面板"
+          className="planet-detail-tabs"
+          role="tablist"
+        >
+          {[
+            { id: "workbench", label: "工作台" },
+            { id: "selection", label: "选中对象" },
+            { id: "activity", label: "活动流" },
+          ].map((panel) => (
+            <button
+              aria-controls={`planet-compact-panel-${panel.id}`}
+              aria-selected={compactPanel === panel.id}
+              className={
+                compactPanel === panel.id
+                  ? "secondary-button planet-detail-tabs__tab planet-detail-tabs__tab--active"
+                  : "secondary-button planet-detail-tabs__tab"
+              }
+              id={`planet-compact-tab-${panel.id}`}
+              key={panel.id}
+              onClick={() =>
+                setCompactPanel(
+                  panel.id as "workbench" | "selection" | "activity",
+                )
+              }
+              role="tab"
+              type="button"
+            >
+              {panel.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="planet-detail-shell__content">
+        {!isCompactLayout || compactPanel === "workbench" ? (
+          <div
+            hidden={isCompactLayout && compactPanel !== "workbench"}
+            id="planet-compact-panel-workbench"
+            role={isCompactLayout ? "tabpanel" : undefined}
+          >
+            <PlanetCommandCenter
+              catalog={catalog}
+              client={client}
+              planet={planet}
+              runtime={runtime}
+              summary={summary}
+              system={system}
+              systemRuntime={systemRuntime}
+            />
+          </div>
+        ) : null}
+        {!isCompactLayout || compactPanel === "selection" ? (
+          <div
+            hidden={isCompactLayout && compactPanel !== "selection"}
+            id="planet-compact-panel-selection"
+            role={isCompactLayout ? "tabpanel" : undefined}
+          >
+            <PlanetEntityPanel
+              catalog={catalog}
+              fog={planet}
+              networks={networks}
+              planet={planet}
+              runtime={runtime}
+              stats={stats}
+              summary={summary}
+            />
+          </div>
+        ) : null}
+        {isCompactLayout && compactPanel === "activity" ? (
+          <div id="planet-compact-panel-activity" role="tabpanel">
+            <PlanetActivityPanel
+              alerts={recentAlerts}
+              events={recentEvents}
+              planet={planet}
+            />
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
 
   return (
     <div className="page-grid page-grid--planet">
@@ -407,13 +525,15 @@ export function PlanetPage() {
       </section>
 
       <section className="planet-workbench">
-        <aside className="panel planet-sidebar">
-          <PlanetLayerPanel
-            networks={networks}
-            planet={planet}
-            runtime={runtime}
-          />
-        </aside>
+        {!isCompactLayout ? (
+          <aside className="panel planet-sidebar">
+            <PlanetLayerPanel
+              networks={networks}
+              planet={planet}
+              runtime={runtime}
+            />
+          </aside>
+        ) : null}
 
         <section className="panel planet-map-shell">
           <PlanetMapCanvas
@@ -461,34 +581,17 @@ export function PlanetPage() {
             routePlanetName={planet.name}
             systemName={system?.name ?? system?.system_id}
           />
-          <div className="planet-detail-shell__content">
-            <PlanetCommandCenter
-              catalog={catalog}
-              client={client}
-              planet={planet}
-              runtime={runtime}
-              summary={summary}
-              system={system}
-              systemRuntime={systemRuntime}
-            />
-            <PlanetEntityPanel
-              catalog={catalog}
-              fog={planet}
-              networks={networks}
-              planet={planet}
-              runtime={runtime}
-              stats={stats}
-              summary={summary}
-            />
-          </div>
+          {detailPanels}
         </aside>
       </section>
 
-      <PlanetActivityPanel
-        alerts={recentAlerts}
-        events={recentEvents}
-        planet={planet}
-      />
+      {!isCompactLayout ? (
+        <PlanetActivityPanel
+          alerts={recentAlerts}
+          events={recentEvents}
+          planet={planet}
+        />
+      ) : null}
     </div>
   );
 }
