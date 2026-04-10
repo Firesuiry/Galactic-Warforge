@@ -139,7 +139,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 	}
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
-	systemRuntimeView, ok := ql.SystemRuntime("p1", "sys-1", core.spaceRuntime)
+	systemRuntimeView, ok := ql.SystemRuntime("p1", "sys-1", ws.PlanetID, ws, core.spaceRuntime)
 	if !ok || len(systemRuntimeView.Fleets) != 1 {
 		t.Fatalf("expected one fleet in system runtime view, got %+v", systemRuntimeView)
 	}

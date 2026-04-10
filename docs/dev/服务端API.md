@@ -331,8 +331,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 恒星系 authoritative runtime 视图（需认证）
 - 说明补充:
   - 未发现系统时仅返回 `system_id` + `discovered=false`
-  - 已发现但当前玩家在该系统还没有 runtime 载体时返回 `available=false`
-  - 当前会公开三类 system-scoped runtime：
+  - 已发现但当前玩家在该系统还没有 `space runtime` 载体时返回 `available=false`；如果当前 `active_planet_id` 正好属于该 system，仍可能同时带回 `active_planet_context`，因为它来自当前 active world 的聚合视图，而不是 `space runtime`
+  - 当前会公开四类 system-scoped runtime：
     - `solar_sail_orbit`
     - `dyson_sphere`
     - `active_planet_context`
@@ -342,7 +342,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 响应字段:
   - `system_id` / `discovered` / `available`
   - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
-  - `dyson_sphere`：包含 `player_id` / `system_id` / `layers` / `total_energy`；`layers[]` 下会继续返回 `nodes` / `frames` / `shells`
+  - `solar_sail_orbit.sails[]`：包含 `id` / `orbit_radius` / `inclination` / `launch_tick` / `lifetime_ticks` / `energy_per_tick`
+  - `dyson_sphere`：包含 `player_id` / `system_id` / `layers` / `total_energy`
+  - `dyson_sphere.layers[]`：包含 `layer_index` / `orbit_radius` / `energy_output` / `rocket_launches` / `construction_bonus` / `nodes` / `frames` / `shells`
+  - `dyson_sphere.layers[].nodes[]`：包含 `id` / `layer_index` / `latitude` / `longitude` / `energy_output` / `integrity` / `built`
+  - `dyson_sphere.layers[].frames[]`：包含 `id` / `layer_index` / `node_a_id` / `node_b_id` / `integrity` / `built`
+  - `dyson_sphere.layers[].shells[]`：包含 `id` / `layer_index` / `latitude_min` / `latitude_max` / `coverage` / `energy_output` / `integrity` / `built`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
@@ -360,9 +365,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       {
         "layer_index": 0,
         "orbit_radius": 1.2,
-        "nodes": [{"id": "node-1"}],
+        "energy_output": 360,
+        "rocket_launches": 2,
+        "construction_bonus": 0.2,
+        "nodes": [{"id": "node-1", "energy_output": 10, "built": true}],
         "frames": [],
-        "shells": [{"id": "shell-1", "coverage": 0.35}]
+        "shells": [{"id": "shell-1", "coverage": 0.35, "energy_output": 350, "built": true}]
       }
     ],
     "total_energy": 360
@@ -1170,7 +1178,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_attack_started`
   - `fleet_disbanded`
 - 事件类型补充:
-  - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。
+  - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
   - `resource_changed`：电力链路现在会在同一轮 authoritative 电力结算里只提交一次最终 `energy`；后续同 tick 的矿物/产出事件若继续复用 `resource_changed`，会沿用同一个最终 `energy` 值，不再在 `10000 -> 99xx -> 98xx` 间来回跳变。
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。

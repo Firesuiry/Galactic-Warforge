@@ -81,7 +81,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 ### 3.2 星图导航
 
 - `/galaxy`：银河总览
-- `/system/:systemId`：恒星系详情
+- `/system/:systemId`：恒星系详情；页面直接消费 `/world/systems/{systemId}/runtime`，展示 `dyson_sphere` / `solar_sail_orbit` / `active_planet_context` 聚合出的戴森态势、层级产能、火箭累计发射次数，以及当前 active planet 对戴森操作链路的支撑建筑
 - `/planet/:planetId`：行星观察页
 - `/agents`：AI 智能体工作台
 
@@ -93,7 +93,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 物流轨迹、电网、管网、施工、敌情图层
 - 行星工作台首屏：`PlanetOperationHeader` 会固定显示当前路由行星、当前 active planet、最近命令结果和待处理命令数
 - `PlanetCommandCenter` 作为首屏主操作区，已补齐 `transfer_item`、`switch_active_planet`、`build_dyson_*`、`launch_solar_sail`、`launch_rocket`、`set_ray_receiver_mode` 等 typed form 入口
-- 命令结果账本：提交后先显示 `pending`，再由后续 `command_result` authoritative 回写切到最终成功或失败，并附带下一步提示
+- 命令结果账本：提交后先显示 `pending`，再优先由 SSE `command_result` authoritative 回写切到最终成功或失败；如果等待超时，会补拉 `/events/snapshot?event_types=command_result` 对账，并附带下一步提示
 - 实体详情侧栏
 - 事件时间线与告警面板；活动流支持 `关键反馈 / 全部事件 / 仅命令 / 仅告警` 四种模式，默认会折叠 `tick_completed`、`resource_changed`、`threat_level_changed` 这类低信号事件
 - SSE 增量同步与补拉
