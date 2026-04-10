@@ -91,10 +91,14 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 - 地形、资源、建筑、单位、迷雾图层
 - 物流轨迹、电网、管网、施工、敌情图层
+- 行星工作台首屏：`PlanetOperationHeader` 会固定显示当前路由行星、当前 active planet、最近命令结果和待处理命令数
+- `PlanetCommandCenter` 作为首屏主操作区，已补齐 `transfer_item`、`switch_active_planet`、`build_dyson_*`、`launch_solar_sail`、`launch_rocket`、`set_ray_receiver_mode` 等 typed form 入口
+- 命令结果账本：提交后先显示 `pending`，再由后续 `command_result` authoritative 回写切到最终成功或失败，并附带下一步提示
 - 实体详情侧栏
-- 事件时间线与告警面板
+- 事件时间线与告警面板；活动流支持 `关键反馈 / 全部事件 / 仅命令 / 仅告警` 四种模式，默认会折叠 `tick_completed`、`resource_changed`、`threat_level_changed` 这类低信号事件
 - SSE 增量同步与补拉
-- 命令面板与调试面板
+- 调试面板
+- 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
 
 ### 3.4 回放调试页
 
@@ -104,11 +108,12 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 ### 3.5 AI 智能体工作台
 
-- `/agents` 已改成 IM 风格协作工作台，核心对象是会话、消息、成员、权限和定时任务
+- `/agents` 已改成 IM 风格协作工作台，核心对象是会话、消息、成员、权限、`ConversationTurn` 和定时任务
 - 左栏提供频道列表、私聊列表、智能体目录，以及创建频道入口
-- 中栏显示当前会话消息流，玩家可直接发送消息，用 `@智能体名` 或私聊唤醒对应 agent
+- 中栏不再只平铺消息流，而是按“玩家请求/定时请求 -> turn 生命周期 -> 阶段消息/最终回复/失败原因”分组显示
 - 右栏显示当前会话成员、agent 权限范围、按星球拉人入口和 heartbeat 式定时任务
-- 会话消息通过 `agent-gateway` 的 SSE 推送刷新，消息加载只影响消息区，不会整页回到 loading
+- turn 卡片会展示当前状态、规划摘要、动作摘要、最终回复和失败原因；回复消息通过 `replyToMessageId + turnId` 挂回原请求
+- 会话消息通过 `agent-gateway` 的 `message` 与 `turn.*` SSE 推送刷新，消息加载只影响消息区，不会整页回到 loading
 - 当前工作台不再把协作模型塞进 `server/`，浏览器只通过 `/agent-api` 与 `agent-gateway` 通信
 - 当 `serverUrl` 指向 fixture 模式时，工作台会进入只读，发送、建群、拉人、建定时任务入口会禁用
 
@@ -149,8 +154,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 兵力调配或单位信息是否能显示
 - 局势、网络态、详情面板是否正确回显
 - 表单提交后 UI 是否保持正确状态
+- 行星页在窄屏下是否仍保留地图首屏，并可在 `工作台 / 选中对象 / 活动流` 间切换
+- 命令提交后是否先进入 `pending`，再被后续 `command_result` 覆盖为最终结果
 - `/agents` 的频道切换、私聊、消息发送、按星球拉人、定时任务创建是否正常可见
-- agent 自动回复后，会话消息流是否能自动刷新
+- agent 自动回复后，请求卡片、turn 状态、最终回复和失败原因是否能自动刷新并挂回正确请求
 
 ### 4.2 常用验证组合
 

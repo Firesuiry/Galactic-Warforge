@@ -980,6 +980,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "task_id": "c-1",
         "tech_id": "electromagnetism",
         "building_id": "b-1",
+        "planet_id": "planet-1-1",
         "input_priority": 1,
         "output_priority": 1,
         "drone_capacity": 10,
@@ -992,7 +993,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "item_id": "iron_ore",
         "mode": "none|supply|demand|both",
         "local_storage": 100,
+        "quantity": 10,
         "count": 1,
+        "fleet_id": "fleet-1",
+        "formation": "line|vee|circle|wedge",
         "system_id": "sys-1",
         "layer_index": 0,
         "orbit_radius": 1.0,
@@ -1007,6 +1011,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "component_type": "node|frame|shell",
         "component_id": "shell-1",
         "target_entity_id": "entity-2",
+        "target_id": "enemy-1",
         "unit_type": "当前 /catalog.units 中 public=true 的 unit id；produce 仅接受 world_produce world_unit，deploy/commission 接受 factory_recipe 高阶载荷"
       }
     }
