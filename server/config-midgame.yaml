@@ -103,6 +103,87 @@ players:
         - photon_mining
         - annihilation
 
+scenario_bootstrap:
+  planets:
+    - planet_id: "planet-1-2"
+      buildings:
+        - owner_id: "p1"
+          building_type: "tesla_tower"
+          x: 5
+          y: 3
+          state: "running"
+        - owner_id: "p1"
+          building_type: "wind_turbine"
+          x: 4
+          y: 5
+          state: "running"
+        - owner_id: "p1"
+          building_type: "wind_turbine"
+          x: 6
+          y: 5
+          state: "running"
+        - owner_id: "p1"
+          building_type: "wind_turbine"
+          x: 8
+          y: 5
+          state: "running"
+        - owner_id: "p1"
+          building_type: "wind_turbine"
+          x: 10
+          y: 5
+          state: "running"
+        - owner_id: "p1"
+          building_type: "ray_receiver"
+          x: 8
+          y: 2
+          state: "running"
+          ray_receiver_mode: "power"
+        - owner_id: "p1"
+          building_type: "em_rail_ejector"
+          x: 10
+          y: 2
+          state: "running"
+          inventory:
+            - item_id: solar_sail
+              quantity: 4
+        - owner_id: "p1"
+          building_type: "vertical_launching_silo"
+          x: 10
+          y: 4
+          state: "running"
+          inventory:
+            - item_id: small_carrier_rocket
+              quantity: 2
+  systems:
+    - player_id: "p1"
+      system_id: "sys-1"
+      dyson_layers:
+        - layer_index: 0
+          orbit_radius: 1.2
+          nodes:
+            - latitude: 10
+              longitude: 20
+          shells:
+            - latitude_min: -15
+              latitude_max: 15
+              coverage: 0.35
+      solar_sail_orbit:
+        count: 8
+        orbit_radius: 1.2
+        inclination: 5
+    - player_id: "p2"
+      system_id: "sys-1"
+      dyson_layers:
+        - layer_index: 0
+          orbit_radius: 1.2
+          nodes:
+            - latitude: -12
+              longitude: 200
+      solar_sail_orbit:
+        count: 4
+        orbit_radius: 1.2
+        inclination: 5
+
 server:
   port: 18080
   rate_limit: 20

@@ -136,6 +136,13 @@ export interface ConversationTurnActionSummary {
   detail: string;
 }
 
+export type ConversationTurnOutcomeKind =
+  | 'reply_only'
+  | 'observed'
+  | 'acted'
+  | 'delegated'
+  | 'blocked';
+
 export interface ConversationTurn {
   id: string;
   conversationId: string;
@@ -147,6 +154,9 @@ export interface ConversationTurn {
   assistantPreview?: string;
   assistantMessageId?: string;
   finalMessageId?: string;
+  outcomeKind?: ConversationTurnOutcomeKind;
+  executedActionCount?: number;
+  repairCount?: number;
   errorCode?: string;
   errorMessage?: string;
   actionSummaries: ConversationTurnActionSummary[];

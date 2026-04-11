@@ -11,6 +11,7 @@ import { handleProviderRoutes } from './routes/providers.js';
 import { handleScheduleRoutes } from './routes/schedules.js';
 import type { CanonicalAgentAction } from './runtime/action-schema.js';
 import { createEventBus } from './runtime/events.js';
+import { summarizeGameCommandAction } from './runtime/game-command-executor.js';
 import { runAgentLoop } from './runtime/loop.js';
 import {
   createMailboxController,
@@ -156,8 +157,8 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
 
   function summarizeAgentAction(action: CanonicalAgentAction) {
     switch (action.type) {
-      case 'game.cli':
-        return action.commandLine;
+      case 'game.command':
+        return summarizeGameCommandAction(action);
       case 'memory.note':
         return action.note;
       case 'final_answer':
@@ -572,7 +573,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
               contextSections: [
                 `当前会话：${conversation.name}`,
                 `当前智能体：${agent.name}`,
-                '可用 action: game.cli / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
+                '可用 action: game.command / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
                 '如果本轮无需动作且已经完成，可直接返回 assistantMessage + [] + true。',
                 '如果同时返回 assistantMessage 与 final_answer，则以 final_answer 作为正式回复。',
               ],
@@ -602,7 +603,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
           },
           initialContext: { goal: history.at(-1)?.content ?? '' },
           initialHistory: history,
-          onTurnPrepared: async ({ assistantMessage, actions }) => {
+          onTurnPrepared: async ({ assistantMessage, actions, repairCount }) => {
             const actionSummaries: ConversationTurnActionSummary[] = actions.map((action) => ({
               type: action.type,
               status: 'pending',
@@ -612,6 +613,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
               ...turn,
               status: 'planning',
               assistantPreview: assistantMessage,
+              repairCount,
               actionSummaries,
               updatedAt: new Date().toISOString(),
             }));
@@ -655,6 +657,9 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         await persistTurn((turn) => ({
           ...turn,
           status: 'succeeded',
+          outcomeKind: result.outcomeKind,
+          executedActionCount: result.executedActionCount,
+          repairCount: result.repairCount,
           ...(finalMessageId ? { finalMessageId } : {}),
           updatedAt: new Date().toISOString(),
         }));
@@ -692,6 +697,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         await persistTurn((turn) => ({
           ...turn,
           status: 'failed',
+          outcomeKind: 'blocked',
           errorCode: publicError.code,
           errorMessage: publicError.message,
           updatedAt: new Date().toISOString(),

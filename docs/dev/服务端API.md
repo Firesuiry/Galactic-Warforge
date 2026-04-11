@@ -62,6 +62,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `energy = 3000`
   - `inventory`: `frame_material x16`、`deuterium_fuel_rod x16`、`quantum_chip x16`、`solar_sail x16`、`small_carrier_rocket x4`
   - `completed_techs`: `electromagnetism`、`basic_logistics_system`、`automatic_metallurgy`、`basic_assembling_processes`、`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`dyson_component`、`interstellar_logistics`、`interstellar_power`、`signal_tower`、`plasma_turret`、`gas_giants`、`gravity_matrix`、`planetary_shield`、`self_evolution`、`quantum_chip`、`solar_sail_orbit`、`ray_receiver`、`vertical_launching`、`integrated_logistics`、`photon_mining`、`annihilation`
+- `scenario_bootstrap` 会在 authoritative runtime 初始化阶段补真实场景锚点，而不是只改文档口径。当前官方 midgame 场景会额外预置：
+  - `scenario_bootstrap.planets[]`：在 `planet-1-2` 上直接落一组可运行的 `tesla_tower`、`wind_turbine`、`ray_receiver(power)`、`em_rail_ejector`、`vertical_launching_silo`
+  - `scenario_bootstrap.systems[]`：在 `sys-1` 上直接补最小戴森层节点、壳面与 `solar_sail_orbit`
+- 这批锚点会直接进入运行态，所以 `GET /state/summary.active_planet_id`、`GET /world/systems/{system_id}/runtime.active_planet_context`、`ray_receiver` 供能与发射建筑观察链路都会在 fresh midgame 启动后立即可验证
 - 这里的 `completed_techs` 是官方验证场景的直接完成列表，不会递归自动补全自然科研前置；因此 midgame 可以只预置 `integrated_logistics`、`photon_mining`、`annihilation` 三个叶子科技，同时继续保留 `dirac_inversion` 未完成。
 - 当前官方 midgame 场景故意**不**预置 `dirac_inversion` 与 `antimatter_fuel_rod`，以便继续同时验证 `set_ray_receiver_mode ... photon` 的科技门禁，以及 `artificial_star` 空燃料时的终局边界；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution` / `integrated_logistics` / `photon_mining` / `annihilation`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`artificial_star`。
 - 当前官方 midgame 场景同样**不**直接预置 `prototype` / `precision_drone` / `corvette` / `destroyer`；这些单位线现在已经是公开 API 能力，但仍要求玩家自己走 `research -> recipe -> transfer_item -> deploy_squad|commission_fleet` 这条最小闭环。

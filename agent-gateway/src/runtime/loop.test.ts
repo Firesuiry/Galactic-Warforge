@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { runAgentLoop } from './loop.js';
 
 describe('agent loop', () => {
-  it('executes cli actions until the provider marks the run done', async () => {
+  it('executes typed game commands until the provider marks the run done', async () => {
     const calls: string[] = [];
 
     const result = await runAgentLoop({
@@ -14,7 +14,7 @@ describe('agent loop', () => {
           if (input.step === 0) {
             return {
               assistantMessage: '先扫描当前行星。',
-              actions: [{ type: 'game.cli', commandLine: 'scan_planet planet-1-1' }],
+              actions: [{ type: 'game.command', command: 'scan_planet', args: { planetId: 'planet-1-1' } }],
               done: false,
             };
           }
@@ -61,13 +61,13 @@ describe('agent loop', () => {
       },
       initialContext: { goal: '忽略这个 goal' },
       initialHistory: [
-        { role: 'user', content: '玩家：检查星球A' },
+        { role: 'user', content: '玩家：收到吗？' },
         { role: 'assistant', content: '建造官：收到。' },
       ],
     });
 
     assert.deepEqual(seenHistories[0], [
-      { role: 'user', content: '玩家：检查星球A' },
+      { role: 'user', content: '玩家：收到吗？' },
       { role: 'assistant', content: '建造官：收到。' },
     ]);
   });
@@ -168,6 +168,68 @@ describe('agent loop', () => {
     });
 
     assert.equal(result.finalMessage, '已收到你的私聊');
+  });
+
+  it('repairs an observe turn when the first reply only plans but does not execute', async () => {
+    const calls: string[] = [];
+    let attempts = 0;
+
+    const result = await runAgentLoop({
+      maxSteps: 1,
+      provider: {
+        async runTurn() {
+          attempts += 1;
+          if (attempts === 1) {
+            return {
+              assistantMessage: '我准备先去扫描 planet-1-2。',
+              actions: [],
+              done: true,
+            };
+          }
+          return {
+            assistantMessage: '我已扫描 planet-1-2。',
+            actions: [{ type: 'game.command', command: 'scan_planet', args: { planetId: 'planet-1-2' } }],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run(commandLine) {
+          calls.push(commandLine);
+          return 'ok';
+        },
+      },
+      initialContext: { goal: '观察 planet-1-2 的情况' },
+    });
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(calls, ['scan_planet planet-1-2']);
+    assert.equal(result.finalMessage, '我已扫描 planet-1-2。');
+  });
+
+  it('fails the turn when an observe request still has no executed action after one repair', async () => {
+    await assert.rejects(
+      () =>
+        runAgentLoop({
+          maxSteps: 1,
+          provider: {
+            async runTurn() {
+              return {
+                assistantMessage: '我准备先观察，再告诉你结果。',
+                actions: [],
+                done: true,
+              };
+            },
+          },
+          cliRuntime: {
+            async run() {
+              return 'ok';
+            },
+          },
+          initialContext: { goal: '观察 planet-1-2 的情况' },
+        }),
+      /没有执行所需动作/i,
+    );
   });
 
   it('still prefers final_answer over assistantMessage when both are present', async () => {

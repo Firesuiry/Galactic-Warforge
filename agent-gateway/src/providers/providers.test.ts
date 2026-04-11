@@ -14,12 +14,12 @@ describe('provider result parser', () => {
   it('parses a valid structured agent response', () => {
     const parsed = parseProviderResult(JSON.stringify({
       assistantMessage: '我会先扫描当前行星。',
-      actions: [{ type: 'game.cli', commandLine: 'scan_planet planet-1-1' }],
+      actions: [{ type: 'game.command', command: 'scan_planet', args: { planetId: 'planet-1-1' } }],
       done: false,
     }));
 
     assert.equal(parsed.assistantMessage, '我会先扫描当前行星。');
-    assert.equal(parsed.actions[0]?.type, 'game.cli');
+    assert.equal(parsed.actions[0]?.type, 'game.command');
     assert.equal(parsed.done, false);
   });
 
@@ -36,12 +36,12 @@ describe('provider result parser', () => {
 
   it('falls back to an empty assistant message when assistantMessage is omitted mid-loop', () => {
     const parsed = parseProviderResult(JSON.stringify({
-      actions: [{ type: 'game.cli', commandLine: 'scene planet-1-1 0 0 8 8' }],
+      actions: [{ type: 'game.command', command: 'scan_planet', args: { planetId: 'planet-1-1' } }],
       done: false,
     }));
 
     assert.equal(parsed.assistantMessage, '');
-    assert.equal(parsed.actions[0]?.type, 'game.cli');
+    assert.equal(parsed.actions[0]?.type, 'game.command');
     assert.equal(parsed.done, false);
   });
 

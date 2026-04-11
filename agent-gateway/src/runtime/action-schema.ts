@@ -1,6 +1,12 @@
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import {
+  GAME_COMMAND_NAMES,
+  normalizeGameCommandAction,
+  type CanonicalGameCommandAction,
+} from './game-command-schema.js';
+
 export interface CanonicalAgentPolicy {
   planetIds: string[];
   commandCategories: string[];
@@ -13,8 +19,10 @@ export interface CanonicalAgentPolicy {
   canDispatchAgentIds: string[];
 }
 
+export type CanonicalAgentPolicyPatch = Partial<CanonicalAgentPolicy>;
+
 export type CanonicalAgentAction =
-  | { type: 'game.cli'; commandLine: string }
+  | CanonicalGameCommandAction
   | { type: 'memory.note'; note: string }
   | { type: 'final_answer'; message: string }
   | {
@@ -24,7 +32,7 @@ export type CanonicalAgentAction =
       role?: string;
       goal?: string;
       providerId?: string;
-      policy: CanonicalAgentPolicy;
+      policy?: CanonicalAgentPolicyPatch;
       supervisorAgentIds?: string[];
       managedAgentIds?: string[];
     }
@@ -34,7 +42,7 @@ export type CanonicalAgentAction =
       name?: string;
       role?: string;
       goal?: string;
-      policy?: CanonicalAgentPolicy;
+      policy?: CanonicalAgentPolicyPatch;
     }
   | { type: 'conversation.ensure_dm'; targetAgentId: string }
   | {
@@ -66,7 +74,7 @@ export const AGENT_ACTION_SCHEMA = {
           type: {
             type: 'string',
             enum: [
-              'game.cli',
+              'game.command',
               'memory.note',
               'final_answer',
               'agent.create',
@@ -75,7 +83,11 @@ export const AGENT_ACTION_SCHEMA = {
               'conversation.send_message',
             ],
           },
-          commandLine: { type: 'string' },
+          command: {
+            type: 'string',
+            enum: [...GAME_COMMAND_NAMES],
+          },
+          args: { type: 'object' },
           message: { type: 'string' },
           note: { type: 'string' },
           name: { type: 'string' },
@@ -86,20 +98,8 @@ export const AGENT_ACTION_SCHEMA = {
           targetAgentId: { type: 'string' },
           conversationId: { type: 'string' },
           content: { type: 'string' },
-          args: { type: 'object' },
           policy: {
             type: 'object',
-            required: [
-              'planetIds',
-              'commandCategories',
-              'canCreateAgents',
-              'canCreateChannel',
-              'canManageMembers',
-              'canInviteByPlanet',
-              'canCreateSchedules',
-              'canDirectMessageAgentIds',
-              'canDispatchAgentIds',
-            ],
             properties: {
               planetIds: { type: 'array', items: { type: 'string' } },
               commandCategories: { type: 'array', items: { type: 'string' } },
@@ -155,43 +155,76 @@ function normalizeBoolean(value: unknown, fieldName: string) {
   throw new Error(`${fieldName} must be a boolean`);
 }
 
-function normalizePolicy(value: unknown, fieldName: string) {
+function normalizeOptionalPolicy(value: unknown, fieldName: string) {
+  if (value === undefined) {
+    return undefined;
+  }
   const record = asRecord(value);
   if (!record) {
-    throw new Error(`${fieldName} requires complete policy`);
+    throw new Error(`${fieldName} must be an object`);
   }
 
-  const planetIds = asStringArray(record.planetIds);
-  const commandCategories = asStringArray(record.commandCategories);
-  const canDirectMessageAgentIds = asStringArray(record.canDirectMessageAgentIds);
-  const canDispatchAgentIds = asStringArray(record.canDispatchAgentIds);
-
-  if (
-    !planetIds
-    || !commandCategories
-    || !canDirectMessageAgentIds
-    || !canDispatchAgentIds
-  ) {
-    throw new Error(`${fieldName} requires complete policy`);
+  const policy: CanonicalAgentPolicyPatch = {};
+  if (record.planetIds !== undefined) {
+    const planetIds = asStringArray(record.planetIds);
+    if (!planetIds) {
+      throw new Error(`${fieldName}.planetIds must be a string array`);
+    }
+    policy.planetIds = planetIds;
+  }
+  if (record.commandCategories !== undefined) {
+    const commandCategories = asStringArray(record.commandCategories);
+    if (!commandCategories) {
+      throw new Error(`${fieldName}.commandCategories must be a string array`);
+    }
+    policy.commandCategories = commandCategories;
+  }
+  if (record.canCreateAgents !== undefined) {
+    policy.canCreateAgents = normalizeBoolean(record.canCreateAgents, `${fieldName}.canCreateAgents`);
+  }
+  if (record.canCreateChannel !== undefined) {
+    policy.canCreateChannel = normalizeBoolean(record.canCreateChannel, `${fieldName}.canCreateChannel`);
+  }
+  if (record.canManageMembers !== undefined) {
+    policy.canManageMembers = normalizeBoolean(record.canManageMembers, `${fieldName}.canManageMembers`);
+  }
+  if (record.canInviteByPlanet !== undefined) {
+    policy.canInviteByPlanet = normalizeBoolean(record.canInviteByPlanet, `${fieldName}.canInviteByPlanet`);
+  }
+  if (record.canCreateSchedules !== undefined) {
+    policy.canCreateSchedules = normalizeBoolean(record.canCreateSchedules, `${fieldName}.canCreateSchedules`);
+  }
+  if (record.canDirectMessageAgentIds !== undefined) {
+    const canDirectMessageAgentIds = asStringArray(record.canDirectMessageAgentIds);
+    if (!canDirectMessageAgentIds) {
+      throw new Error(`${fieldName}.canDirectMessageAgentIds must be a string array`);
+    }
+    policy.canDirectMessageAgentIds = canDirectMessageAgentIds;
+  }
+  if (record.canDispatchAgentIds !== undefined) {
+    const canDispatchAgentIds = asStringArray(record.canDispatchAgentIds);
+    if (!canDispatchAgentIds) {
+      throw new Error(`${fieldName}.canDispatchAgentIds must be a string array`);
+    }
+    policy.canDispatchAgentIds = canDispatchAgentIds;
   }
 
-  return {
-    planetIds,
-    commandCategories,
-    canCreateAgents: normalizeBoolean(record.canCreateAgents, `${fieldName}.canCreateAgents`),
-    canCreateChannel: normalizeBoolean(record.canCreateChannel, `${fieldName}.canCreateChannel`),
-    canManageMembers: normalizeBoolean(record.canManageMembers, `${fieldName}.canManageMembers`),
-    canInviteByPlanet: normalizeBoolean(record.canInviteByPlanet, `${fieldName}.canInviteByPlanet`),
-    canCreateSchedules: normalizeBoolean(record.canCreateSchedules, `${fieldName}.canCreateSchedules`),
-    canDirectMessageAgentIds,
-    canDispatchAgentIds,
-  } satisfies CanonicalAgentPolicy;
+  return policy;
 }
 
 function mergeActionArgs(action: Record<string, unknown>) {
   const args = asRecord(action.args);
   if (!args) {
     return action;
+  }
+  const wrapsNestedAction = typeof args.type === 'string'
+    || typeof args.command === 'string'
+    || args.args !== undefined;
+  if (wrapsNestedAction) {
+    return {
+      ...action,
+      ...args,
+    };
   }
   return {
     ...args,
@@ -230,12 +263,8 @@ function normalizeAction(action: unknown): CanonicalAgentAction {
     throw new Error('action.type is required');
   }
 
-  if (type === 'game.cli') {
-    const commandLine = asString(merged.commandLine);
-    if (!commandLine) {
-      throw new Error('game.cli requires commandLine');
-    }
-    return { type, commandLine };
+  if (type === 'game.command') {
+    return normalizeGameCommandAction(merged);
   }
 
   if (type === 'memory.note') {
@@ -267,16 +296,12 @@ function normalizeAction(action: unknown): CanonicalAgentAction {
       name,
       ...(asString(merged.role) ? { role: asString(merged.role) } : {}),
       ...(asString(merged.goal) ? { goal: asString(merged.goal) } : {}),
-      ...(asString(merged.providerId)
-        ? { providerId: asString(merged.providerId) }
+      ...(asString(merged.providerId) ? { providerId: asString(merged.providerId) } : {}),
+      ...(normalizeOptionalPolicy(merged.policy, 'agent.create') !== undefined
+        ? { policy: normalizeOptionalPolicy(merged.policy, 'agent.create') }
         : {}),
-      policy: normalizePolicy(merged.policy, 'agent.create'),
-      ...(supervisorAgentIds
-        ? { supervisorAgentIds }
-        : {}),
-      ...(managedAgentIds
-        ? { managedAgentIds }
-        : {}),
+      ...(supervisorAgentIds ? { supervisorAgentIds } : {}),
+      ...(managedAgentIds ? { managedAgentIds } : {}),
     };
   }
 
@@ -291,8 +316,8 @@ function normalizeAction(action: unknown): CanonicalAgentAction {
       ...(asString(merged.name) ? { name: asString(merged.name) } : {}),
       ...(asString(merged.role) ? { role: asString(merged.role) } : {}),
       ...(asString(merged.goal) ? { goal: asString(merged.goal) } : {}),
-      ...(merged.policy
-        ? { policy: normalizePolicy(merged.policy, 'agent.update') }
+      ...(normalizeOptionalPolicy(merged.policy, 'agent.update') !== undefined
+        ? { policy: normalizeOptionalPolicy(merged.policy, 'agent.update') }
         : {}),
     };
   }
@@ -352,9 +377,6 @@ export function normalizeProviderTurn(value: unknown): CanonicalAgentTurn {
 
 export function assertSupportedAction(action: Record<string, unknown>) {
   const normalized = normalizeAction(action);
-  if (normalized.type === 'game.cli' && typeof normalized.commandLine !== 'string') {
-    throw new Error('game.cli requires commandLine');
-  }
   if (normalized.type === 'final_answer' && typeof normalized.message !== 'string') {
     throw new Error('final_answer requires message');
   }

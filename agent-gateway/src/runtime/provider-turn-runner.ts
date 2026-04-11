@@ -5,6 +5,7 @@ import { runOpenAICompatibleTurn } from '../providers/openai-compatible.js';
 import type { ProviderTurnResult } from '../providers/types.js';
 import type { CliProviderConfig, HttpApiProviderConfig, ModelProvider } from '../types.js';
 import { ensureActionSchemaFile } from './action-schema.js';
+import { listSupportedGameCommandsForPrompt } from './game-command-schema.js';
 import { classifyPublicTurnError } from './provider-error.js';
 
 export interface SecretStore {
@@ -23,7 +24,7 @@ export interface AgentTurnRunnerInput {
 export type AgentTurnRunner = (input: AgentTurnRunnerInput) => Promise<ProviderTurnResult>;
 
 function buildPrompt(input: AgentTurnRunnerInput) {
-  const tools = (input.allowedCommands ?? getAgentAllowedCommands()).join(', ');
+  const tools = listSupportedGameCommandsForPrompt(input.allowedCommands ?? getAgentAllowedCommands()).join(', ');
   const transcript = input.history.map((entry) => `${entry.role}: ${entry.content}`).join('\n');
   return [
     input.provider.systemPrompt || '你是 SiliconWorld 智能体。',
@@ -31,7 +32,11 @@ function buildPrompt(input: AgentTurnRunnerInput) {
     '返回格式示例：{"assistantMessage":"收到。","actions":[],"done":true}',
     '如果本轮无需动作且已经完成，直接返回 assistantMessage + [] + true 即可。',
     '如果需要显式提交正式回复，也可以使用 final_answer；当两者同时存在时，以 final_answer 为准。',
-    '允许的 game.cli 命令如下：',
+    '游戏动作必须使用 typed game.command，例如 {"type":"game.command","command":"scan_planet","args":{"planetId":"planet-1-2"}}。',
+    '如果要建造，使用 {"type":"game.command","command":"build","args":{"x":5,"y":1,"buildingType":"mining_machine"}}。',
+    '如果要创建成员，可以只提供有意义的 partial policy，例如 {"type":"agent.create","name":"胡景","policy":{"planetIds":["planet-1-2"],"commandCategories":["build"]}}。',
+    '观察类请求不能只回复计划句，必须返回至少 1 条 observe 类 game.command；变更类请求也不能只回复承诺句。',
+    '当前允许的 game.command 如下：',
     tools,
     ...(input.contextSections ?? []),
     '历史对话：',

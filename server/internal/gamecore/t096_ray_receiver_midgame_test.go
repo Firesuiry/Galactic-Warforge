@@ -59,8 +59,6 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 
-	core.processTick()
-
 	baselineSummary := ql.Summary(ws, "p1", core.Victory())
 	baselineStats := ql.Stats(ws, "p1")
 	baselineNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)

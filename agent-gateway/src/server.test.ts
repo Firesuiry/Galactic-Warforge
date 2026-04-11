@@ -327,8 +327,8 @@ describe('gateway server', () => {
       dataRoot,
       port: 0,
       agentTurnRunner: async () => ({
-        assistantMessage: '收到，我现在检查星球A产线。',
-        actions: [{ type: 'final_answer', message: '收到，我现在检查星球A产线。' }],
+        assistantMessage: '收到，我马上同步当前安排。',
+        actions: [{ type: 'final_answer', message: '收到，我马上同步当前安排。' }],
         done: true,
       }),
     });
@@ -365,7 +365,7 @@ describe('gateway server', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         id: 'agent-builder',
-        name: '建造官',
+        name: '阿土',
         providerId: 'provider-director',
         serverUrl: 'http://127.0.0.1:18081',
         playerId: 'p1',
@@ -404,7 +404,7 @@ describe('gateway server', () => {
       body: JSON.stringify({
         senderType: 'player',
         senderId: 'p1',
-        content: '@建造官 检查星球A产线',
+        content: '@阿土 请同步当前安排',
       }),
     });
     assert.equal(postMessage.status, 202);
@@ -422,7 +422,7 @@ describe('gateway server', () => {
     assert.equal(messages.length, 2);
     assert.equal(messages[1]?.senderType, 'agent');
     assert.equal(messages[1]?.senderId, 'agent-builder');
-    assert.match(messages[1]?.content ?? '', /检查星球A产线/);
+    assert.match(messages[1]?.content ?? '', /同步当前安排/);
   });
 
   it('auto replies in dm conversations through the codex cli provider', async () => {
@@ -748,7 +748,11 @@ process.stdout.write(JSON.stringify({
           return {
             assistantMessage: '收到，我去建造 mining_machine。',
             actions: [
-              { type: 'game.cli', commandLine: 'build 5 1 mining_machine' },
+              {
+                type: 'game.command',
+                command: 'build',
+                args: { x: 5, y: 1, buildingType: 'mining_machine' },
+              },
               { type: 'final_answer', message: '矿场已开始施工。' },
             ],
             done: true,
@@ -1024,7 +1028,7 @@ process.stdout.write(JSON.stringify({
       body: JSON.stringify({
         senderType: 'player',
         senderId: 'p1',
-        content: '第一条：检查研究站',
+        content: '第一条：请回复 alpha',
       }),
     });
     assert.equal(firstMessageResponse.status, 202);
@@ -1043,7 +1047,7 @@ process.stdout.write(JSON.stringify({
       body: JSON.stringify({
         senderType: 'player',
         senderId: 'p1',
-        content: '第二条：检查电网',
+        content: '第二条：请回复 beta',
       }),
     });
     assert.equal(secondMessageResponse.status, 202);
@@ -1062,6 +1066,9 @@ process.stdout.write(JSON.stringify({
       status: string;
       assistantPreview?: string;
       finalMessageId?: string;
+      outcomeKind?: string;
+      executedActionCount?: number;
+      repairCount?: number;
     }> = [];
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const turnsResponse = await fetch(`${server.url}/conversations/conv-turns/turns`);
@@ -1075,6 +1082,9 @@ process.stdout.write(JSON.stringify({
     assert.equal(turns.length, 2);
     assert.ok(turns.every((turn) => turn.status === 'succeeded'));
     assert.match(turns[0]?.assistantPreview ?? '', /正在处理/);
+    assert.ok(turns.every((turn) => turn.outcomeKind === 'reply_only'));
+    assert.ok(turns.every((turn) => turn.executedActionCount === 0));
+    assert.ok(turns.every((turn) => turn.repairCount === 0));
 
     const messagesResponse = await fetch(`${server.url}/conversations/conv-turns/messages`);
     const messages = await messagesResponse.json() as Array<{
@@ -1190,12 +1200,19 @@ process.stdout.write(JSON.stringify({
       }),
     });
     assert.equal(messageResponse.status, 202);
+    const accepted = await messageResponse.json() as {
+      message: { id: string };
+      turns: Array<{ id: string }>;
+    };
 
     let turns: Array<{
       id: string;
       status: string;
       assistantPreview?: string;
       finalMessageId?: string;
+      outcomeKind?: string;
+      executedActionCount?: number;
+      repairCount?: number;
       errorCode?: string;
       errorMessage?: string;
     }> = [];
@@ -1212,6 +1229,9 @@ process.stdout.write(JSON.stringify({
     assert.equal(turns[0]?.status, 'succeeded');
     assert.equal(turns[0]?.assistantPreview, '已收到你的私聊');
     assert.ok(turns[0]?.finalMessageId);
+    assert.equal(turns[0]?.outcomeKind, 'reply_only');
+    assert.equal(turns[0]?.executedActionCount, 0);
+    assert.equal(turns[0]?.repairCount, 0);
     assert.equal(turns[0]?.errorCode, undefined);
 
     const messagesResponse = await fetch(`${server.url}/conversations/conv-no-final-answer/messages`);
@@ -1227,8 +1247,8 @@ process.stdout.write(JSON.stringify({
     assert.equal(agentReplies.length, 1);
     assert.equal(agentReplies[0]?.content, '已收到你的私聊');
     assert.equal(agentReplies[0]?.id, turns[0]?.finalMessageId);
-    assert.equal(agentReplies[0]?.replyToMessageId, turns[0] ? undefined : undefined);
-    assert.equal(agentReplies[0]?.turnId, turns[0]?.id);
+    assert.equal(agentReplies[0]?.replyToMessageId, accepted.message.id);
+    assert.equal(agentReplies[0]?.turnId, accepted.turns[0]?.id);
     assert.equal(messages.filter((message) => message.senderType === 'system').length, 0);
   });
 

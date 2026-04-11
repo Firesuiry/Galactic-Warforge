@@ -336,7 +336,10 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	if maps.PrimaryPlanet() == nil {
 		log.Fatalf("map model has no planets")
 	}
-	registry := bootstrapInitialRuntimeRegistry(cfg, maps)
+	registry, err := bootstrapInitialRuntimeRegistry(cfg, maps)
+	if err != nil {
+		log.Fatalf("invalid scenario bootstrap: %v", err)
+	}
 	activeWorld := registry.Worlds[registry.ActivePlanetID]
 	if activeWorld == nil {
 		log.Fatalf("active planet runtime %s missing", registry.ActivePlanetID)
@@ -366,9 +369,12 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		stopCh:           make(chan struct{}),
 		activePlanetID:   registry.ActivePlanetID,
 		executorUsage:    make(map[string]int),
-		spaceRuntime:     model.NewSpaceRuntimeState(),
+		spaceRuntime:     registry.SpaceRuntime,
 		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
+	}
+	if core.spaceRuntime == nil {
+		core.spaceRuntime = model.NewSpaceRuntimeState()
 	}
 	for _, planetID := range core.sortedPlanetIDs() {
 		planet, _ := maps.Planet(planetID)

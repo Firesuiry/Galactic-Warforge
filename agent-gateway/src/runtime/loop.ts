@@ -1,5 +1,15 @@
+import { PublicTurnError } from './provider-error.js';
 import type { CanonicalAgentAction } from './action-schema.js';
 import { normalizeProviderTurn } from './action-schema.js';
+import { executeGameCommand } from './game-command-executor.js';
+import { classifyTurnIntent } from './turn-intent.js';
+import {
+  buildRepairPrompt,
+  countsAsExecutedAction,
+  resolveTurnOutcomeKind,
+  validateTurnForIntent,
+  type TurnOutcomeKind,
+} from './turn-validator.js';
 
 interface RunTurnInput {
   step: number;
@@ -35,6 +45,7 @@ export async function runAgentLoop(input: {
     assistantMessage: string;
     actions: CanonicalAgentAction[];
     done: boolean;
+    repairCount: number;
   }) => Promise<void> | void;
   onActionUpdate?: (input: {
     step: number;
@@ -47,11 +58,25 @@ export async function runAgentLoop(input: {
   const history: Array<{ role: string; content: string }> = input.initialHistory
     ? [...input.initialHistory]
     : [{ role: 'user', content: input.initialContext.goal }];
+  const intent = classifyTurnIntent(history);
+  const executedActions: CanonicalAgentAction[] = [];
   let finalMessage = '';
+  let totalRepairCount = 0;
 
   for (let step = 0; step < input.maxSteps; step += 1) {
-    const rawTurn = await input.provider.runTurn({ step, history });
-    const turn = normalizeProviderTurn(rawTurn);
+    let turn = normalizeProviderTurn(await input.provider.runTurn({ step, history }));
+    let stepRepairCount = 0;
+    let validation = validateTurnForIntent(turn, intent, stepRepairCount, executedActions);
+
+    while (validation.needsRepair) {
+      history.push({ role: 'assistant', content: turn.assistantMessage });
+      history.push({ role: 'user', content: buildRepairPrompt(intent) });
+      stepRepairCount += 1;
+      totalRepairCount += 1;
+      turn = normalizeProviderTurn(await input.provider.runTurn({ step, history }));
+      validation = validateTurnForIntent(turn, intent, stepRepairCount, executedActions);
+    }
+
     history.push({ role: 'assistant', content: turn.assistantMessage });
     input.onAssistantMessage?.(turn.assistantMessage);
     await input.onTurnPrepared?.({
@@ -59,29 +84,39 @@ export async function runAgentLoop(input: {
       assistantMessage: turn.assistantMessage,
       actions: turn.actions,
       done: turn.done,
+      repairCount: stepRepairCount,
     });
 
+    if (!validation.valid) {
+      throw new PublicTurnError(
+        'provider_incomplete_execution',
+        validation.errorMessage ?? 'provider_incomplete_execution',
+      );
+    }
+
     for (const [actionIndex, action] of turn.actions.entries()) {
-      const pendingDetail = action.type;
       await input.onActionUpdate?.({
         step,
         actionIndex,
         action,
         status: 'pending',
-        detail: pendingDetail,
+        detail: action.type,
       });
 
       try {
-        if (action.type === 'game.cli') {
-          const output = await input.cliRuntime.run(action.commandLine);
-          history.push({ role: 'tool', content: output });
-          input.onToolCall?.(action.commandLine, output);
+        if (action.type === 'game.command') {
+          const execution = await executeGameCommand(action, input.cliRuntime);
+          history.push({ role: 'tool', content: execution.result });
+          input.onToolCall?.(execution.commandLine, execution.result);
+          if (countsAsExecutedAction(action)) {
+            executedActions.push(action);
+          }
           await input.onActionUpdate?.({
             step,
             actionIndex,
             action,
             status: 'succeeded',
-            detail: output,
+            detail: execution.result,
           });
           continue;
         }
@@ -104,6 +139,9 @@ export async function runAgentLoop(input: {
           }
           const result = await input.gatewayRuntime.createAgent(action);
           history.push({ role: 'tool', content: result });
+          if (countsAsExecutedAction(action)) {
+            executedActions.push(action);
+          }
           await input.onActionUpdate?.({
             step,
             actionIndex,
@@ -120,6 +158,9 @@ export async function runAgentLoop(input: {
           }
           const result = await input.gatewayRuntime.updateAgent(action);
           history.push({ role: 'tool', content: result });
+          if (countsAsExecutedAction(action)) {
+            executedActions.push(action);
+          }
           await input.onActionUpdate?.({
             step,
             actionIndex,
@@ -136,6 +177,9 @@ export async function runAgentLoop(input: {
           }
           const result = await input.gatewayRuntime.ensureDirectConversation(action);
           history.push({ role: 'tool', content: result });
+          if (countsAsExecutedAction(action)) {
+            executedActions.push(action);
+          }
           await input.onActionUpdate?.({
             step,
             actionIndex,
@@ -152,6 +196,9 @@ export async function runAgentLoop(input: {
           }
           const result = await input.gatewayRuntime.sendConversationMessage(action);
           history.push({ role: 'tool', content: result });
+          if (countsAsExecutedAction(action)) {
+            executedActions.push(action);
+          }
           await input.onActionUpdate?.({
             step,
             actionIndex,
@@ -186,17 +233,37 @@ export async function runAgentLoop(input: {
     }
 
     if (turn.done) {
+      const outcomeKind = resolveTurnOutcomeKind(executedActions);
       if (finalMessage.trim()) {
-        return { finalMessage, history };
+        return {
+          finalMessage,
+          history,
+          outcomeKind,
+          executedActionCount: executedActions.length,
+          repairCount: totalRepairCount,
+        };
       }
       if (turn.assistantMessage.trim()) {
-        return { finalMessage: turn.assistantMessage, history };
+        return {
+          finalMessage: turn.assistantMessage,
+          history,
+          outcomeKind,
+          executedActionCount: executedActions.length,
+          repairCount: totalRepairCount,
+        };
       }
-      if (!finalMessage.trim()) {
-        throw new Error('final_answer is required when done is true');
-      }
+      throw new PublicTurnError(
+        'provider_schema_invalid',
+        'provider_schema_invalid: done turn missing assistantMessage and final_answer',
+      );
     }
   }
 
   throw new Error('agent loop exceeded maxSteps');
 }
+
+export type RunAgentLoopResult = Awaited<ReturnType<typeof runAgentLoop>> & {
+  outcomeKind: TurnOutcomeKind;
+  executedActionCount: number;
+  repairCount: number;
+};

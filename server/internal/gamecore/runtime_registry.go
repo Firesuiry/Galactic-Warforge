@@ -11,6 +11,7 @@ import (
 type PlanetRuntimeRegistry struct {
 	ActivePlanetID string
 	Worlds         map[string]*model.WorldState
+	SpaceRuntime   *model.SpaceRuntimeState
 }
 
 func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
@@ -108,7 +109,7 @@ func seedPlayerOutposts(ws *model.WorldState, players []config.PlayerConfig) {
 	}
 }
 
-func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe) PlanetRuntimeRegistry {
+func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe) (PlanetRuntimeRegistry, error) {
 	activePlanet := maps.PrimaryPlanet()
 	if cfg.Battlefield.InitialActivePlanetID != "" {
 		if candidate, ok := maps.Planet(cfg.Battlefield.InitialActivePlanetID); ok && candidate != nil {
@@ -116,6 +117,7 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		}
 	}
 	players := buildSharedPlayers(cfg)
+	spaceRuntime := model.NewSpaceRuntimeState()
 
 	worlds := make(map[string]*model.WorldState)
 	planetIDs := []string{}
@@ -124,6 +126,12 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 	}
 	if activePlanet != nil && (len(planetIDs) == 0 || planetIDs[0] != activePlanet.ID) {
 		planetIDs = append(planetIDs, activePlanet.ID)
+	}
+	for _, preset := range cfg.ScenarioBootstrap.Planets {
+		if preset.PlanetID == "" {
+			continue
+		}
+		planetIDs = append(planetIDs, preset.PlanetID)
 	}
 	for _, planetID := range planetIDs {
 		if _, exists := worlds[planetID]; exists {
@@ -135,6 +143,9 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		}
 		seedPlayerOutposts(ws, cfg.Players)
 		worlds[planetID] = ws
+	}
+	if err := applyScenarioBootstrap(cfg, maps, worlds, spaceRuntime); err != nil {
+		return PlanetRuntimeRegistry{}, err
 	}
 
 	activePlanetID := ""
@@ -148,7 +159,8 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 	return PlanetRuntimeRegistry{
 		ActivePlanetID: activePlanetID,
 		Worlds:         worlds,
-	}
+		SpaceRuntime:   spaceRuntime,
+	}, nil
 }
 
 func (gc *GameCore) sortedPlanetIDs() []string {

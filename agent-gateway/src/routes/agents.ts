@@ -312,7 +312,7 @@ export async function handleAgentRoutes(
               }),
               contextSections: [
                 `当前智能体：${agent.name}`,
-                '可用 action: game.cli / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
+                '可用 action: game.command / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
               ],
             }),
           },
@@ -329,7 +329,7 @@ export async function handleAgentRoutes(
               const currentThread = await context.threadStore.get(thread.id);
               if (currentThread) {
                 currentThread.toolCalls.push({
-                  type: 'game.cli',
+                  type: 'game.command',
                   payload: { commandLine, output },
                 });
                 currentThread.executionLogs.push({

@@ -27,6 +27,58 @@ type PlayerBootstrapConfig struct {
 	CompletedTechs []string              `yaml:"completed_techs,omitempty"`
 }
 
+type ScenarioBootstrapBuildingConfig struct {
+	OwnerID         string                `yaml:"owner_id"`
+	BuildingType    string                `yaml:"building_type"`
+	X               int                   `yaml:"x"`
+	Y               int                   `yaml:"y"`
+	State           string                `yaml:"state,omitempty"`
+	RecipeID        string                `yaml:"recipe_id,omitempty"`
+	RayReceiverMode string                `yaml:"ray_receiver_mode,omitempty"`
+	Inventory       []BootstrapItemConfig `yaml:"inventory,omitempty"`
+}
+
+type ScenarioBootstrapPlanetConfig struct {
+	PlanetID  string                            `yaml:"planet_id"`
+	Buildings []ScenarioBootstrapBuildingConfig `yaml:"buildings,omitempty"`
+}
+
+type ScenarioBootstrapDysonNodeConfig struct {
+	Latitude  float64 `yaml:"latitude"`
+	Longitude float64 `yaml:"longitude"`
+}
+
+type ScenarioBootstrapDysonShellConfig struct {
+	LatitudeMin float64 `yaml:"latitude_min"`
+	LatitudeMax float64 `yaml:"latitude_max"`
+	Coverage    float64 `yaml:"coverage"`
+}
+
+type ScenarioBootstrapDysonLayerConfig struct {
+	LayerIndex  int                                 `yaml:"layer_index"`
+	OrbitRadius float64                             `yaml:"orbit_radius"`
+	Nodes       []ScenarioBootstrapDysonNodeConfig  `yaml:"nodes,omitempty"`
+	Shells      []ScenarioBootstrapDysonShellConfig `yaml:"shells,omitempty"`
+}
+
+type ScenarioBootstrapSolarSailOrbitConfig struct {
+	Count       int     `yaml:"count"`
+	OrbitRadius float64 `yaml:"orbit_radius"`
+	Inclination float64 `yaml:"inclination"`
+}
+
+type ScenarioBootstrapSystemConfig struct {
+	PlayerID       string                                 `yaml:"player_id"`
+	SystemID       string                                 `yaml:"system_id"`
+	DysonLayers    []ScenarioBootstrapDysonLayerConfig    `yaml:"dyson_layers,omitempty"`
+	SolarSailOrbit *ScenarioBootstrapSolarSailOrbitConfig `yaml:"solar_sail_orbit,omitempty"`
+}
+
+type ScenarioBootstrapConfig struct {
+	Planets []ScenarioBootstrapPlanetConfig `yaml:"planets,omitempty"`
+	Systems []ScenarioBootstrapSystemConfig `yaml:"systems,omitempty"`
+}
+
 // PlayerConfig holds player identity, auth key, and permissions.
 type PlayerConfig struct {
 	PlayerID    string                `yaml:"player_id"`
@@ -79,9 +131,10 @@ type ProductionMonitorConfig struct {
 
 // Config is the root configuration structure
 type Config struct {
-	Battlefield BattlefieldConfig `yaml:"battlefield"`
-	Players     []PlayerConfig    `yaml:"players"`
-	Server      ServerConfig      `yaml:"server"`
+	Battlefield       BattlefieldConfig       `yaml:"battlefield"`
+	Players           []PlayerConfig          `yaml:"players"`
+	ScenarioBootstrap ScenarioBootstrapConfig `yaml:"scenario_bootstrap,omitempty"`
+	Server            ServerConfig            `yaml:"server"`
 }
 
 // KeyToPlayer maps auth keys to player IDs

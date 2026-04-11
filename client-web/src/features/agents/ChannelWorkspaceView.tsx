@@ -87,6 +87,23 @@ function formatTurnTarget(turn: ConversationTurnView, agents: AgentProfileView[]
   return agents.find((agent) => agent.id === turn.targetAgentId)?.name ?? turn.targetAgentId;
 }
 
+function formatOutcomeKind(outcomeKind: ConversationTurnView['outcomeKind']) {
+  switch (outcomeKind) {
+    case 'reply_only':
+      return '纯回复';
+    case 'observed':
+      return '已观察';
+    case 'acted':
+      return '已执行动作';
+    case 'delegated':
+      return '已委派';
+    case 'blocked':
+      return '被阻塞';
+    default:
+      return null;
+  }
+}
+
 export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
   const currentMembers = props.conversation?.memberIds.map((memberId) => {
     const agent = memberId.startsWith('agent:')
@@ -270,6 +287,15 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
                         <header>
                           <strong>{formatTurnTarget(turn, props.agents)}</strong>
                           <span>{formatTurnStatus(turn.status)}</span>
+                          {formatOutcomeKind(turn.outcomeKind) ? (
+                            <span>{formatOutcomeKind(turn.outcomeKind)}</span>
+                          ) : null}
+                          {typeof turn.executedActionCount === 'number' ? (
+                            <span>{turn.executedActionCount} 动作</span>
+                          ) : null}
+                          {typeof turn.repairCount === 'number' && turn.repairCount > 0 ? (
+                            <span>修复 {turn.repairCount} 次</span>
+                          ) : null}
                         </header>
                         {turn.assistantPreview ? (
                           <div>
@@ -313,10 +339,14 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
                         {turn.errorMessage ? (
                           <div>
                             <div className="section-title">失败原因</div>
-                            <p>
-                              {turn.errorCode ? `${turn.errorCode}: ` : ''}
-                              {turn.errorMessage}
-                            </p>
+                            {turn.errorCode === 'provider_incomplete_execution' ? (
+                              <p>这轮只有规划，没有执行所需动作。</p>
+                            ) : (
+                              <p>
+                                {turn.errorCode ? `${turn.errorCode}: ` : ''}
+                                {turn.errorMessage}
+                              </p>
+                            )}
                           </div>
                         ) : null}
                       </section>

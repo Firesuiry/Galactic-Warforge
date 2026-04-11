@@ -60,8 +60,9 @@ npm run dev
 
 ### 3.1.1 受控 runtime action
 
-agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
+agent provider 现在以 typed `game.command` 作为唯一游戏动作入口，同时还可以返回以下受控 action：
 
+- `game.command`
 - `agent.create`
 - `agent.update`
 - `conversation.ensure_dm`
@@ -69,6 +70,7 @@ agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
 
 语义：
 
+- `game.command`：结构化游戏命令；例如 `{"type":"game.command","command":"scan_planet","args":{"planetId":"planet-1-2"}}`
 - `agent.create`：创建下级智能体；当前默认复用创建者自己的 `serverUrl / playerId / playerKey / providerId`
 - `agent.update`：更新自己或受管下级的 role / goal / policy
 - `conversation.ensure_dm`：确保当前 agent 与目标下级存在 DM
@@ -118,6 +120,12 @@ agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
 
 `GET /conversations/:conversationId/turns` 返回 `ConversationTurn[]`，用于让前端把“玩家请求 -> turn 生命周期 -> 最终回复/失败”稳定分组，不再依赖消息到达顺序猜测。
 
+turn 额外字段：
+
+- `outcomeKind`: `reply_only | observed | acted | delegated | blocked`
+- `executedActionCount`: 本轮真正执行的 `game.command` / 委派动作数量
+- `repairCount`: 该轮因“只规划不执行”触发的 repair 次数
+
 如果 agent turn 执行失败，当前会额外向会话写入一条 `system` 消息，避免前端表现成“私聊无回复”。
 
 补充约束：
@@ -127,11 +135,12 @@ agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
 - 若同时返回 `assistantMessage` 与 `final_answer`，正式回复仍以 `final_answer` 为准；若没有 `final_answer`，则 `done=true` 且非空 `assistantMessage` 会直接作为正式回复落库
 - provider 返回非 JSON 但去首尾空白后仍非空的纯文本时，gateway 会自动包装成 `assistantMessage + [] + true` 的完成态；空文本、空对象或其它结构错误仍公开为 `provider_schema_invalid`
 - 只有真正的空动作壳会被忽略，例如 `{}` 或只带空 `args` 的对象；带业务字段但缺 `type` 的残缺动作不会被吞掉，仍会判为 `provider_schema_invalid`
+- 如果用户请求带有观察、游戏变更或委派意图，而 provider 只返回计划句、不返回对应动作，runtime 会自动做 1 次 repair；若修复后仍无真实动作，则公开为 `provider_incomplete_execution`
 - 只有真正落库了正式回复消息的 turn 才会标记为 `succeeded`；这条正式回复既可能来自 `final_answer`，也可能来自 done 态的 `assistantMessage`
 
 补充：
 
-- `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 `game.cli`
+- `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 typed `game.command`
 - 因此 CLI 侧可以直接通过 thread 入口完成“让李斯创建胡景并委派胡景建矿场”这类 case1 链路
 
 ### 3.3 自动唤醒

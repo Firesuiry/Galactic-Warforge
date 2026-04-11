@@ -117,7 +117,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 左栏提供频道列表、私聊列表、智能体目录，以及创建频道入口
 - 中栏不再只平铺消息流，而是按“玩家请求/定时请求 -> turn 生命周期 -> 阶段消息/最终回复/失败原因”分组显示
 - 右栏显示当前会话成员、agent 权限范围、按星球拉人入口和 heartbeat 式定时任务
-- turn 卡片会展示当前状态、规划摘要、动作摘要、最终回复和失败原因；回复消息通过 `replyToMessageId + turnId` 挂回原请求
+- turn 卡片会展示当前状态、`outcomeKind` 结果徽标、规划摘要、动作摘要、执行动作数、repair 次数、最终回复和失败原因；回复消息通过 `replyToMessageId + turnId` 挂回原请求
 - turn 完成语义已与 `agent-gateway` 对齐：provider 可以直接用 `assistantMessage + [] + true` 成功结束一轮；纯文本回复也会被包装成成功 turn，只有真实结构错误才会显示 `system failure`
 - 模型 Provider 管理已把 `commandWhitelist` 可视化成按命令类别分组的白名单面板，默认展开完整 agent 命令集合；成员详情页会同时显示 Provider 命令覆盖范围，并提示与成员 `commandCategories` 的配置不一致
 - 会话消息通过 `agent-gateway` 的 `message` 与 `turn.*` SSE 推送刷新，消息加载只影响消息区，不会整页回到 loading

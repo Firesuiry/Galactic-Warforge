@@ -1,5 +1,6 @@
 export type PublicTurnErrorCode =
   | 'provider_schema_invalid'
+  | 'provider_incomplete_execution'
   | 'provider_unavailable'
   | 'provider_start_failed'
   | 'permission_denied'
@@ -8,6 +9,7 @@ export type PublicTurnErrorCode =
 
 const PUBLIC_ERROR_MESSAGES: Record<PublicTurnErrorCode, string> = {
   provider_schema_invalid: '模型返回结构无效，请稍后重试。',
+  provider_incomplete_execution: '这轮只有规划，没有执行所需动作。',
   provider_unavailable: '模型服务暂时不可用，请稍后重试。',
   provider_start_failed: '模型执行器启动失败，请检查 provider 配置。',
   permission_denied: '当前智能体权限不足，无法执行该操作。',
@@ -44,6 +46,13 @@ export function classifyPublicTurnError(error: unknown): PublicTurnError {
 
   const rawMessage = normalizeErrorMessage(error);
   const normalized = rawMessage.toLowerCase();
+
+  if (
+    normalized.includes('provider_incomplete_execution')
+    || normalized.includes('没有执行所需动作')
+  ) {
+    return new PublicTurnError('provider_incomplete_execution', rawMessage);
+  }
 
   if (
     normalized.includes('actions must be an array')

@@ -140,6 +140,13 @@ export interface ConversationTurnActionSummaryView {
   detail: string;
 }
 
+export type ConversationTurnOutcomeKindView =
+  | 'reply_only'
+  | 'observed'
+  | 'acted'
+  | 'delegated'
+  | 'blocked';
+
 export interface ConversationTurnView {
   id: string;
   conversationId: string;
@@ -151,6 +158,9 @@ export interface ConversationTurnView {
   assistantPreview?: string;
   assistantMessageId?: string;
   finalMessageId?: string;
+  outcomeKind?: ConversationTurnOutcomeKindView;
+  executedActionCount?: number;
+  repairCount?: number;
   errorCode?: string;
   errorMessage?: string;
   actionSummaries: ConversationTurnActionSummaryView[];

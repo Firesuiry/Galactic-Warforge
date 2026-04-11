@@ -2,14 +2,19 @@ package query
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"siliconworld/internal/config"
+	"siliconworld/internal/gamecore"
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/mapstate"
 	"siliconworld/internal/model"
+	"siliconworld/internal/queue"
 	"siliconworld/internal/terrain"
 	"siliconworld/internal/visibility"
 )
@@ -402,6 +407,61 @@ func TestSystemRuntimeOmitsActivePlanetContextWhenActivePlanetNotInSystem(t *tes
 	}
 	if view.ActivePlanetContext != nil {
 		t.Fatalf("expected no active planet context, got %+v", view.ActivePlanetContext)
+	}
+}
+
+func TestOfficialMidgameSystemRuntimeExposesDysonBootstrapAnchors(t *testing.T) {
+	cfgPath := filepath.Join("..", "..", "config-midgame.yaml")
+	mapCfgPath := filepath.Join("..", "..", "map-midgame.yaml")
+
+	rawCfg, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read midgame config: %v", err)
+	}
+
+	tempCfgPath := filepath.Join(t.TempDir(), "config-midgame.yaml")
+	rewritten := strings.Replace(string(rawCfg), `data_dir: "data-midgame"`, `data_dir: "`+t.TempDir()+`"`, 1)
+	if err := os.WriteFile(tempCfgPath, []byte(rewritten), 0o644); err != nil {
+		t.Fatalf("write temp midgame config: %v", err)
+	}
+
+	cfg, err := config.Load(tempCfgPath)
+	if err != nil {
+		t.Fatalf("load midgame config: %v", err)
+	}
+	mapCfg, err := mapconfig.Load(mapCfgPath)
+	if err != nil {
+		t.Fatalf("load midgame map config: %v", err)
+	}
+
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
+	core := gamecore.New(cfg, maps, queue.New(), gamecore.NewEventBus(), nil)
+	ql := New(visibility.New(), maps, core.Discovery())
+
+	view, ok := ql.SystemRuntime("p1", "sys-1", core.ActivePlanetID(), core.World(), core.SpaceRuntime())
+	if !ok {
+		t.Fatal("expected official midgame system runtime")
+	}
+	if !view.Available {
+		t.Fatalf("expected official midgame system runtime to be available, got %+v", view)
+	}
+	if view.ActivePlanetContext == nil || view.ActivePlanetContext.PlanetID != "planet-1-2" {
+		t.Fatalf("expected active planet dyson context for planet-1-2, got %+v", view.ActivePlanetContext)
+	}
+	if view.ActivePlanetContext.EMRailEjectorCount == 0 {
+		t.Fatalf("expected at least one ejector in active planet context, got %+v", view.ActivePlanetContext)
+	}
+	if view.ActivePlanetContext.VerticalLaunchingSiloCount == 0 {
+		t.Fatalf("expected at least one silo in active planet context, got %+v", view.ActivePlanetContext)
+	}
+	if view.ActivePlanetContext.RayReceiverCount == 0 {
+		t.Fatalf("expected at least one ray receiver in active planet context, got %+v", view.ActivePlanetContext)
+	}
+	if view.DysonSphere == nil || len(view.DysonSphere.Layers) == 0 {
+		t.Fatalf("expected dyson sphere view, got %+v", view.DysonSphere)
+	}
+	if view.SolarSailOrbit == nil || len(view.SolarSailOrbit.Sails) == 0 {
+		t.Fatalf("expected solar sail orbit view, got %+v", view.SolarSailOrbit)
 	}
 }
 
