@@ -28,6 +28,7 @@
 - 采矿 -> 物流 / 仓储 -> 冶炼 / 生产
 - 基础防御 -> 敌袭 -> 战斗结算
 - `client-web` 行星页现在已经把默认新局科研起步链与官方 midgame 戴森操作链做成纯 Web 可操作入口：阶段化研究工作台、typed form 装料/发射入口，以及带上下文的下一步提示
+- 官方 midgame 当前已经升级为“配置 + scenario_bootstrap”的 authoritative 验证局：不仅会把 active planet 切到气态行星并预置中后期科技/物资，还会直接补出最小 `ray_receiver` / `em_rail_ejector` / `vertical_launching_silo` / 戴森层 / `solar_sail_orbit` 锚点
 - 官方 midgame 场景下的 `轨道采集 -> 太阳帆 / 戴森脚手架 -> 火箭发射 -> 射线接收收益反馈`
 - 官方 midgame 场景下的 `高阶单位科研 -> recipe 生产 -> transfer_item -> deploy_squad|commission_fleet -> runtime 查询 / fleet_attack`
 

@@ -65,6 +65,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - `scenario_bootstrap` 会在 authoritative runtime 初始化阶段补真实场景锚点，而不是只改文档口径。当前官方 midgame 场景会额外预置：
   - `scenario_bootstrap.planets[]`：在 `planet-1-2` 上直接落一组可运行的 `tesla_tower`、`wind_turbine`、`ray_receiver(power)`、`em_rail_ejector`、`vertical_launching_silo`
   - `scenario_bootstrap.systems[]`：在 `sys-1` 上直接补最小戴森层节点、壳面与 `solar_sail_orbit`
+- `scenario_bootstrap.planets[]` 里的建筑不是 query 层伪造出来的展示数据。当前实现会先初始化目标 world，再通过与正常建造同源的 `completeConstructionTask()` 落建筑，随后才按配置回填 `state` / `ray_receiver_mode` / 建筑本地 `inventory`
+- 启动阶段会至少初始化地图主行星、`battlefield.initial_active_planet_id` 与 `scenario_bootstrap.planets[].planet_id` 涉及到的 world，然后按正常 `seedPlayerOutposts()` 铺基地/执行体并执行 `applyScenarioBootstrap()`；因此官方 midgame fresh 启动后就能在 `planet-1-1` 与 `planet-1-2` 间切换，同时直接观察 `planet-1-2` 的戴森验证锚点
 - 这批锚点会直接进入运行态，所以 `GET /state/summary.active_planet_id`、`GET /world/systems/{system_id}/runtime.active_planet_context`、`ray_receiver` 供能与发射建筑观察链路都会在 fresh midgame 启动后立即可验证
 - 这里的 `completed_techs` 是官方验证场景的直接完成列表，不会递归自动补全自然科研前置；因此 midgame 可以只预置 `integrated_logistics`、`photon_mining`、`annihilation` 三个叶子科技，同时继续保留 `dirac_inversion` 未完成。
 - 当前官方 midgame 场景故意**不**预置 `dirac_inversion` 与 `antimatter_fuel_rod`，以便继续同时验证 `set_ray_receiver_mode ... photon` 的科技门禁，以及 `artificial_star` 空燃料时的终局边界；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution` / `integrated_logistics` / `photon_mining` / `annihilation`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`artificial_star`。
@@ -344,6 +346,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     - `active_planet_context`
     - `fleets`
   - `active_planet_context` 只在当前 `active_planet_id` 属于该 system，且该 active world 已加载时返回；它不会跨其他行星做扫描补数
+  - `active_planet_context` 只是当前 active world 上玩家自有 `em_rail_ejector` / `vertical_launching_silo` / `ray_receiver` 的聚合计数，本身不等于该 system 已经存在 `space runtime`；不过当前官方 midgame 会同时用 `scenario_bootstrap` 预置行星锚点和 system runtime 锚点，所以 fresh 启动后通常会直接看到非零计数与 `available=true`
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
 - 响应字段:
   - `system_id` / `discovered` / `available`
