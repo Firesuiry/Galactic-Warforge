@@ -104,6 +104,17 @@ function formatOutcomeKind(outcomeKind: ConversationTurnView['outcomeKind']) {
   }
 }
 
+function formatTurnFailure(turn: ConversationTurnView) {
+  if (turn.errorCode === 'provider_incomplete_execution') {
+    if (turn.rawErrorMessage?.includes('最终结果')) {
+      return '动作已经执行，但还没有交付最终结果。';
+    }
+    return '这轮只有规划，没有执行所需动作。';
+  }
+
+  return `${turn.errorCode ? `${turn.errorCode}: ` : ''}${turn.errorMessage ?? ''}`;
+}
+
 export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
   const currentMembers = props.conversation?.memberIds.map((memberId) => {
     const agent = memberId.startsWith('agent:')
@@ -339,14 +350,19 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
                         {turn.errorMessage ? (
                           <div>
                             <div className="section-title">失败原因</div>
-                            {turn.errorCode === 'provider_incomplete_execution' ? (
-                              <p>这轮只有规划，没有执行所需动作。</p>
-                            ) : (
-                              <p>
-                                {turn.errorCode ? `${turn.errorCode}: ` : ''}
-                                {turn.errorMessage}
-                              </p>
-                            )}
+                            <p>{formatTurnFailure(turn)}</p>
+                            {turn.rawErrorMessage ? (
+                              <>
+                                <div className="section-title">真实错误</div>
+                                <p>{turn.rawErrorMessage}</p>
+                              </>
+                            ) : null}
+                            {turn.errorHint ? (
+                              <>
+                                <div className="section-title">建议处理</div>
+                                <p>{turn.errorHint}</p>
+                              </>
+                            ) : null}
                           </div>
                         ) : null}
                       </section>

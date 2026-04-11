@@ -1,551 +1,667 @@
-# 2026-04-11 Web 未实现功能最终实现方案
+# 2026-04-11 Web 与智能体回归问题最终实现方案
 
-本文档综合以下两份设计稿，形成唯一的最终实现方案：
+本文档基于以下两份设计稿综合收敛：
 
-- `docs/process/design_claude.md`
-- `docs/process/design_codex.md`
+- `docs/process/design_codex.md` 的当前工作区版本
+- `docs/process/design_claude.md` 的最近正式版本（当前工作区该文件已删除，因此以 `HEAD` 版本为准）
 
-覆盖范围仍限定为 `docs/process/task/` 下当前未实现的两项任务：
-
-1. Web 智能体工作台默认 Provider 回复链路修复
-2. Web 科研与科技树交互优化
-
-本最终方案的取舍原则如下：
-
-- 优先修正公共契约，不做只对单一 Provider 生效的兼容补丁。
-- 优先降低组件耦合，不把新增派生逻辑继续堆进超大文件。
-- 容错只覆盖“明确可判定的空壳输出”，不吞掉有语义但不完整的错误动作。
-- 测试与浏览器回归必须和设计同时落地，不能只改实现不补验证。
+最终方案以已归档任务 `docs/process/archive/20260411_142700/T106_2026-04-11_Web试玩与智能体回归问题.md` 为唯一任务边界，以当前仓库真实代码和真实试玩证据为准，不再沿用旧的“两项独立任务”口径。
 
 ---
 
-## 1. 最终结论概览
+## 1. 综合结论
 
-### 1.1 任务 A 结论
+两份设计稿里，`Codex` 方案对本轮真实问题边界判断更准确，应作为主方案；`Claude` 方案中仍有价值的内容，主要体现在以下两个方向：
 
-采用 `design_codex.md` 的主方向，吸收 `design_claude.md` 中对纯文本回复与 MiniMax prompt 的直接修正建议，形成以下最终决策：
+1. 研究工作流的数据分组与新手引导思路可以保留，但应落到现有 `research-workflow.ts` 派生层中，而不是继续把逻辑堆进 `PlanetCommandPanel.tsx`。
+2. provider repair 需要返回“字段级错误 + 最小正确示例”，这一点应吸收进 `agent-gateway` 的最终方案中。
 
-- 修公共 turn 契约，不做 `builtin-minimax-api` 专属适配层。
-- 支持“无工具动作、直接回复完成态”：
-  - `assistantMessage + actions: [] + done: true`
-  - 纯文本回复自动包装为上述完成态
-- `normalizeProviderTurn()` 只忽略真正的空动作壳，不吞掉残缺但有语义的非法动作。
-- `runAgentLoop()` 接受 `assistantMessage` 作为 done 态的正式回复兜底，但 `final_answer` 仍保持最高优先级。
-- 同步修改 `server.ts`、`provider-turn-runner.ts`、`bootstrap/minimax.ts` 的提示词，消除当前“runtime 允许一种语义、prompt 强制另一种语义”的冲突。
-- 补齐结构错误分类和回归测试。
+同时，`Claude` 方案里关于下面这些点，当前代码已经基本具备，不再作为本轮核心设计目标：
 
-不采用 `design_claude.md` 中“在 `runAgentLoop()` 外围对 normalize 全量 try-catch 并统一降级为成功回复”的做法。原因是这会把真实 schema 错误一并吞掉，违背项目的激进式演进准则。
+- `parseProviderResult()` 的纯文本回落
+- `normalizeProviderTurn()` 忽略真正空壳 action
+- prompt 允许 `assistantMessage + actions: [] + done: true`
 
-### 1.2 任务 B 结论
+因此，本轮最终方案不再围绕“让 provider 能回纯文本”展开，而是围绕 `T106` 暴露出的 6 个问题，收敛成 3 个实现主题：
 
-采用 `design_codex.md` 的主方向，吸收 `design_claude.md` 中对推荐路径、分组展示和文案示例的具体细节，形成以下最终决策：
-
-- 科研入口从扁平下拉改成阶段化研究工作台。
-- 新增独立的研究派生模块，避免继续膨胀 `PlanetCommandPanel.tsx`。
-- 研究状态以 `shared-client` 中的 `completed_techs?: string[]` 为主路径；如运行时仍遇到旧形态兼容，只在派生模块内部归一化，不向组件层扩散。
-- 命令日志 `focus` 扩展为携带 `buildingType` 与 `receiverMode`，让“下一步提示”基于上下文而不是只靠 `techId` 猜测。
-- 新增单元、组件和浏览器回归，覆盖默认新局与 midgame。
-
-不采用“继续保留下拉框只补说明文案”与“直接做完整科技树图谱”两类方案。前者无法解决阶段引导问题，后者超出当前任务范围且会提高移动端与测试成本。
+1. `client-web` 行星页建造工作流闭环
+2. `client-web` 研究页窄栏交互稳定化
+3. `agent-gateway` 智能体完成态与错误暴露收口
 
 ---
 
-## 2. 任务 A：Web 智能体工作台默认 Provider 回复链路修复
+## 2. 设计原则
 
-### 2.1 当前真实问题链路
+- 以 authoritative 结果为准，前端只做预检、解释和工作流收口，不伪造成功。
+- 默认暴露“玩家此刻最该做的事”，调试能力必须显式切到高级模式。
+- 能收敛到公共 runtime 契约的，一律不做 provider 专属补丁。
+- turn 成功的定义必须是“用户结果已经交付”，不是“中间动作已经触发”。
+- 已有接口如果阻碍优雅实现，直接改公开契约和调用点，不叠适配层。
+- 组件只负责渲染；派生、翻译、账本归因、turn 完成判断都拆到独立模块。
 
-当前失败不是单点问题，而是四层契约共同过严：
+---
 
-1. `agent-gateway/src/providers/index.ts`
-   - 纯文本回复无法被包装为合法 turn。
-   - 对“仅含 assistantMessage 的轻量 JSON 回复”缺少最小兼容。
-2. `agent-gateway/src/runtime/action-schema.ts`
-   - `actions.map(normalizeAction)` 遇到空对象会直接抛出 `action.type is required`。
-3. `agent-gateway/src/runtime/loop.ts`
-   - 即使 `assistantMessage` 非空，`done === true` 时仍强制要求 `final_answer`。
-4. `agent-gateway/src/server.ts`
-   - prompt 文案明确要求“正式回复必须通过 final_answer 提交”，与任务要求冲突。
+## 3. 当前代码现状与最终取舍
 
-最终结果是：
+### 3.1 已经完成、无需再作为主设计项的部分
 
-- provider 返回 `actions: [{}]` 会整轮失败；
-- provider 返回 `actions: []` 仍可能因为缺少 `final_answer` 失败；
-- 前端只能看到 `system failure`，玩家无法把 `/agents` 工作台跑通。
-
-### 2.2 设计目标
-
-- 允许最简单的完成态：`{ assistantMessage, actions: [], done: true }`
-- 允许 provider 返回纯文本，并自动包装为完成态
-- 只忽略真正的空动作占位，不吞掉真实非法动作
-- 保留 `final_answer` 的显式动作语义，但不再要求它是唯一完成出口
-- 将结构错误统一归类为 `provider_schema_invalid`
-
-### 2.3 最终方案
-
-#### A-1 Provider 解析层：支持纯文本与最小完成态
-
-目标文件：
+经核对当前代码，以下能力已存在：
 
 - `agent-gateway/src/providers/index.ts`
-- `agent-gateway/src/providers/providers.test.ts`
-
-最终规则：
-
-1. `parseProviderResult(raw)` 先继续走现有的结构化文本提取流程。
-2. 如果 `JSON.parse` 失败：
-   - 将 `raw.trim()` 包装为：
-     - `assistantMessage: raw.trim()`
-     - `actions: []`
-     - `done: true`
-3. 如果 `JSON.parse` 成功且是对象：
-   - 若 `assistantMessage` 是字符串，但 `actions` 缺失，则默认 `actions = []`
-   - 若 `assistantMessage` 非空、`actions` 为空数组且 `done` 缺失，则默认 `done = true`
-   - 其它结构仍保持严格校验，不做大范围“自动修复”
-
-这样兼顾两点：
-
-- 纯回复型 provider 不再被无谓打死
-- 工具调用型 provider 一旦返回残缺结构，仍会暴露真实错误
-
-#### A-2 Action 归一化层：只忽略真正的空动作壳
-
-目标文件：
-
+  - 非 JSON 文本会回落为 `assistantMessage + [] + done:true`
+  - 有 `assistantMessage` 且 `actions` 缺失时，会默认空数组
 - `agent-gateway/src/runtime/action-schema.ts`
-- `agent-gateway/src/runtime/action-schema.test.ts`
-
-最终规则：
-
-- 在 `normalizeProviderTurn()` 中增加一层显式预筛选，而不是在 `loop.ts` 末端兜底。
-- 仅以下两类 action 可被静默跳过：
-  - 空对象 `{}`
-  - 仅包含空 `args`，合并后仍无任何业务字段的对象
-- 以下动作仍必须报错：
-  - `{"type":"game.cli"}` 这类缺关键字段的动作
-  - `{"commandLine":"scan_planet planet-1-1"}` 这类无 `type` 但已携带业务字段的动作
-  - `{"type":"foo.bar"}` 这类未支持动作
-
-补充要求：
-
-- 跳过空动作时记录 `warn` 级别日志，便于后续定位 provider 输出质量问题。
-
-#### A-3 Loop 完成语义：允许 assistantMessage 直接完成 turn
-
-目标文件：
-
+  - 已会忽略真正空壳 action
 - `agent-gateway/src/runtime/loop.ts`
-- `agent-gateway/src/runtime/loop.test.ts`
-- `agent-gateway/src/server.test.ts`
-
-最终规则：
-
-1. 若本轮出现 `final_answer`，正式回复以 `final_answer.message` 为准。
-2. 若 `turn.done === true` 且本轮没有 `final_answer`：
-   - 当 `assistantMessage.trim() !== ""` 时，直接把它作为 `finalMessage`
-   - 当 `assistantMessage` 也为空时，才视为 schema invalid
-3. 若 `turn.done === false`：
-   - `assistantMessage` 仍只表示当前阶段说明，不结束 turn
-
-明确不做的事：
-
-- 不在 `runAgentLoop()` 外围对 `normalizeProviderTurn()` 做大而化之的 try-catch 成功兜底。
-- 结构错误依然要失败，并通过 `provider_schema_invalid` 暴露。
-
-#### A-4 Prompt 契约统一
-
-目标文件：
-
+  - `done=true` 时若没有 `final_answer`，可直接使用 `assistantMessage`
 - `agent-gateway/src/runtime/provider-turn-runner.ts`
-- `agent-gateway/src/server.ts`
-- `agent-gateway/src/bootstrap/minimax.ts`
+  - prompt 已允许 `assistantMessage + [] + true`
+- `client-web/src/features/planet-map/research-workflow.ts`
+  - 已存在研究分组和新手引导的派生层
+- `client-web/src/features/planet-commands/store.ts`
+  - 已有按 `buildingType` 生成部分 `transfer_item` 成功提示的基础
 
-最终要求：
+这意味着本轮不应再把“回复链路完全不可用”当成主问题，而应继续收口剩余的 correctness 与 usability 缺口。
 
-- 公共 prompt 明确说明：
-  - 必须返回 `assistantMessage/actions/done`
-  - 若本轮无需动作且已完成，可直接使用 `assistantMessage + [] + true`
-  - 若希望显式提交正式回复，也可使用 `final_answer`
-- 删除 `server.ts` 当前“assistantMessage 只能作为预览、正式回复必须通过 final_answer”的硬约束文案
-- MiniMax 默认系统提示增加最小合法示例，例如：
-  - `{"assistantMessage":"收到，我先观察当前状态。","actions":[],"done":true}`
+### 3.2 本轮真正待解决的缺口
 
-目标不是让某个 provider 特殊化，而是让所有 provider 看到同一份真实契约。
-
-#### A-5 错误分类收口
-
-目标文件：
-
-- `agent-gateway/src/runtime/provider-error.ts`
-- `agent-gateway/src/server.test.ts`
-
-需统一归类到 `provider_schema_invalid` 的错误至少包括：
-
-- `actions must be an array`
-- `done must be a boolean`
-- `action must be an object`
-- `action.type is required`
-- `provider turn must be an object`
-- `final_answer is required when done is true`
-- 结构化 JSON 解析失败
-
-保留现有分类边界：
-
-- `not supported` -> `unsupported_action`
-- 网络、超时、502 -> `provider_unavailable`
-- 执行器启动失败 -> `provider_start_failed`
-
-### 2.4 文件边界
-
-本任务最终改动边界如下：
-
-- 修改：`agent-gateway/src/providers/index.ts`
-- 修改：`agent-gateway/src/runtime/action-schema.ts`
-- 修改：`agent-gateway/src/runtime/loop.ts`
-- 修改：`agent-gateway/src/runtime/provider-error.ts`
-- 修改：`agent-gateway/src/runtime/provider-turn-runner.ts`
-- 修改：`agent-gateway/src/server.ts`
-- 修改：`agent-gateway/src/bootstrap/minimax.ts`
-- 修改：`agent-gateway/src/providers/providers.test.ts`
-- 修改：`agent-gateway/src/runtime/action-schema.test.ts`
-- 修改：`agent-gateway/src/runtime/loop.test.ts`
-- 修改：`agent-gateway/src/server.test.ts`
-- 修改：`client-web/tests/agent-platform.spec.ts`
-
-### 2.5 回归要求
-
-#### 自动化回归
-
-`agent-gateway` 至少补齐以下断言：
-
-1. `parseProviderResult()` 接受纯文本并回落成无动作完成态
-2. `parseProviderResult()` 接受仅含 `assistantMessage` 的轻量 JSON，并补全为完成态
-3. `normalizeProviderTurn()` 会忽略 `actions: [{}]`
-4. `normalizeProviderTurn()` 不会忽略带业务字段但缺 `type` 的残缺动作
-5. `runAgentLoop()` 在 `done=true + actions=[] + assistantMessage=非空` 时返回成功
-6. DM 集成测试中，provider 返回 `{"assistantMessage":"已收到你的私聊","actions":[{}],"done":true}` 时：
-   - turn 状态为 `succeeded`
-   - 会话中出现正式 agent 回复
-   - 不出现 system failure
-
-`client-web` 至少补一条 `/agents` 浏览器回归：
-
-- 发送私聊后，页面展示正式 agent 回复
-- 不出现“回复失败：执行失败，请稍后重试”
-- turn 详情面板显示成功态
-
-#### 手工复测
-
-修复完成后必须重新走真实浏览器链路：
-
-1. 打开 `/agents`
-2. 新建成员并绑定 `builtin-minimax-api`
-3. 保存权限范围
-4. 发送纯观察任务并确认收到正式回复
-5. 继续验证：
-   - 创建下级成员
-   - 分配权限
-   - 下级完成至少一次建造或科研
-   - authoritative 成功
-
-### 2.6 非目标
-
-- 不重做整个 agent action DSL
-- 不把所有 provider 输出错误都“修好”成成功回复
-- 不继续强制 `final_answer` 成为唯一完成通道
+| 问题组 | 最终判断 |
+| --- | --- |
+| 建造列表默认暴露过宽、距离/供电提示不闭环 | 需要新增建造派生层和事件账本归因 |
+| 研究页真实点击被拦截 | 不是 z-index 小修小补，而是窄栏布局模型错误 |
+| observe/agent.create/research 委派“动作发生了但结果没交付” | 需要新增 turn 完成态检查和 closeout repair |
+| 智能体参数构造脆弱、UI 吞错误 | 需要 schema 别名归一化、字段级 repair、前端展示真实错误 |
 
 ---
 
-## 3. 任务 B：Web 科研与科技树交互优化
+## 4. 最终方案 A：Web 行星页建造工作流闭环
 
-### 3.1 当前真实问题
+这一部分以 `design_codex.md` 为主，结论不变。
 
-当前 Web 科研闭环已经能跑通，但仍保留明显的调试面板感：
+### 4.1 新增纯派生层 `build-workflow.ts`
 
-1. `PlanetCommandPanel.tsx` 把所有科技按 level 排序后塞进单个扁平 `<select>`
-2. 页面不表达：
-   - 当前可研究
-   - 已完成
-   - 被什么前置锁住
-   - 需要什么矩阵
-   - 研究后解锁什么
-3. `store.ts` 的 `resolveNextHint()` 目前主要依赖 `techId`
-   - 研究站装料还勉强可用
-   - 到 `em_rail_ejector`、`vertical_launching_silo`、`ray_receiver` 就会出现上下文错误提示
-4. `PlanetCommandPanel.tsx` 已很大，继续堆状态判断会进一步恶化维护性
+新增：
 
-### 3.2 设计目标
+- `client-web/src/features/planet-map/build-workflow.ts`
 
-- 把科研入口改成阶段化工作流，而不是继续使用扁平下拉
-- 优先复用现有 `catalog.techs` 与 `summary.players[playerId].tech`
-- 默认新局首屏明确提示推荐科研路径
-- 装料与模式切换后的提示必须符合当前建筑上下文
-- 派生逻辑从组件中抽离，降低耦合
+职责：
 
-### 3.3 最终方案
+- 从 `catalog.buildings`、`summary.players[playerId]`、`planet.units`、`planet.buildings`、`networks.power_coverage`、当前选中坐标、最近相关账本条目中，统一派生建造工作流视图。
+- 不持久化，不直接发 API，不把逻辑散落在组件内。
 
-#### B-1 新增研究派生层
+建议输出结构：
 
-目标文件：
+```ts
+export interface BuildCatalogGroup {
+  recommended: BuildingCatalogEntry[];
+  unlocked: BuildingCatalogEntry[];
+  locked: BuildingCatalogEntry[];
+  debugOnly: BuildingCatalogEntry[];
+}
 
-- 新增：`client-web/src/features/planet-map/research-workflow.ts`
-- 新增：`client-web/src/features/planet-map/research-workflow.test.ts`
+export interface BuildReachability {
+  executorUnitId?: string;
+  executorPosition?: Position;
+  operateRange?: number;
+  distance?: number;
+  inRange: boolean;
+}
 
-该模块负责集中处理研究区的派生逻辑，至少提供：
+export interface BuildActionHint {
+  tone: "info" | "warning" | "error";
+  title: string;
+  detail: string;
+  suggestedAction?: "move_executor" | "build_power" | "inspect_power";
+}
 
-- `normalizeCompletedTechIds(techState)`
-  - 主路径按 `shared-client/src/types.ts` 中的 `completed_techs?: string[]` 处理
-  - 若运行时遇到旧形态兼容，只在这里统一归一化
-- `deriveResearchGroups(catalog, techState)`
-  - 产出 `current`、`available`、`completed`、`locked` 视图模型
-- `formatTechUnlockLabel(catalog, unlock)`
-  - 把建筑、配方、special unlock 转成可展示文案
-- `buildStarterGuide(techState)`
-  - 决定是否显示默认新局推荐路径
+export interface BuildWorkflowView {
+  catalog: BuildCatalogGroup;
+  reachability: BuildReachability;
+  preflightHints: BuildActionHint[];
+  postBuildHints: BuildActionHint[];
+}
+```
 
-核心要求：
+### 4.2 建造列表默认收口规则
 
-- `PlanetCommandPanel.tsx` 不再直接散落大量 `Set`、`filter`、`every` 与展示拼接逻辑
-- 研究状态判断只保留一个来源，便于测试和复用
+最终采用 `Codex` 的“默认玩家模式 + 显式高级模式”，并吸收 `Claude` 在研究分组中的“状态化可见性”思想。
 
-#### B-2 研究 UI 改成阶段化工作台
+默认模式只显示：
 
-目标文件：
+- `buildable === true`
+- 且当前玩家已通过 `unlock_tech` 解锁的建筑
 
-- 修改：`client-web/src/features/planet-map/PlanetCommandPanel.tsx`
-- 修改：`client-web/src/styles/index.css`
+默认列表分成两层：
 
-研究区最终结构分为四块：
+- `recommended`
+  - 当前阶段高频、应优先暴露给玩家的建筑
+- `unlocked`
+  - 已解锁但不是主推荐路径的建筑
 
-1. `当前研究`
-   - 展示 `current_research.tech_id`
-   - 展示 `progress / total_cost`
-   - 若有 `blocked_reason`，翻译为玩家可读提示
+高级模式才显示：
 
-2. `开局推荐路径`
-   - 当 `electromagnetism` 尚未完成时显示：
-     - `风机 -> 空研究站 -> 装 10 电磁矩阵 -> 研究 electromagnetism`
-   - 只在早期阶段展示，不污染 midgame
+- 全量已解锁建筑
+- 未解锁但需要调试查看的建筑，显式标记 `未解锁`
+- `unlock_tech` 缺失且 `buildable=true` 的目录异常项，显式标记 `目录异常`
 
-3. `科技阶段列表`
-   - 至少包含：
-     - `当前可研究`
-     - `已完成`
-     - `尚未满足前置`
-   - 推荐把 `当前研究` 独立成卡片，而不是混入列表
-   - 每个节点展示：
-     - 科技名
-     - 等级
-     - 前置科技
-     - 所需矩阵
-     - 解锁建筑 / 配方 / special
+默认工作流不再允许把 60 个建筑直接塞进一个大下拉里。
 
-4. `研究执行区`
-   - 保留“开始研究”按钮
-   - 选择目标改为点击 `当前可研究` 列表项，而不是 `<select>`
-   - `completed` / `locked` 项不可触发研究
+### 4.3 距离预检必须与服务端同源
 
-交互规则：
+Web 预检采用与 `server/internal/gamecore/executor.go` 相同的 `ManhattanDist` 规则。
 
-- 默认选中第一个 `available` 科技
-- 若当前有 `current_research`，优先突出显示其进度
-- `locked` 节点要明确显示缺失前置
-- 移动端保持纵向堆叠，不引入 graph/canvas
+前端需要直接展示：
 
-#### B-3 unlock 展示能力补齐
+- 当前执行体 ID
+- 执行体坐标
+- 当前目标坐标
+- `distance / operateRange`
 
-目标文件：
+当超范围时：
 
-- 修改：`client-web/src/features/planet-map/model.ts`
+- 不隐藏提交按钮
+- 显示阻塞提示
+- 提供“切到移动工作流并带入目标坐标”的次级动作
 
-新增轻量 helper：
+不在第一版引入自动寻路或自动找最近可达格。
 
-- `getRecipeDisplayName(catalog, recipeId)`
+### 4.4 建造后提示要继续跟随 authoritative 事件
+
+扩展 `client-web/src/features/planet-commands/store.ts`，把建造后的 `entity_created` 与 `building_state_changed` 继续收口到同一条 journal entry 上。
+
+推荐规则：
+
+1. `build` 提交后，先记录目标坐标
+2. 收到同坐标 `entity_created` 时，把新建 `building_id` 回写到 entry
+3. 收到对应 `building_state_changed` 后，基于 `state_reason` 生成下一步提示
+
+关键 reason 对应：
+
+- `power_out_of_range`
+  - 补供电塔
+- `power_no_provider`
+  - 补发电源
+- `under_power`
+  - 电网已接入但发电不足
+- `power_capacity_full`
+  - 电网节点满载，需要扩容
+
+### 4.5 错误翻译层单独抽出
+
+新增：
+
+- `client-web/src/features/planet-commands/error-hints.ts`
 
 用途：
 
-- 科技节点展示配方解锁
-- 避免在 `PlanetCommandPanel.tsx` 内自行遍历 catalog 做名称转换
+- 把 authoritative 错误翻译成可操作提示
+- 保留原始原因，不吞掉服务端信息
 
-#### B-4 命令日志上下文扩展
+文案结构统一为：
 
-目标文件：
+- 主文案：下一步该做什么
+- 次文案：`authoritative: ...`
 
-- 修改：`client-web/src/features/planet-commands/store.ts`
+例如：
+
+- `executor out of range: 7 > 6`
+  - 主文案：当前执行体距离目标 7 格，但可操作范围只有 6 格；先移动执行体再建造。
+- `power_out_of_range`
+  - 主文案：建筑未接入供电覆盖范围；先补供电塔。
+
+### 4.6 组件层改动
+
+主要改动文件：
+
+- `client-web/src/features/planet-map/PlanetCommandPanel.tsx`
+- `client-web/src/features/planet-commands/store.ts`
+- `client-web/src/features/planet-map/PlanetPanels.tsx`
+- `client-web/src/styles/index.css`
+
+具体要求：
+
+- `PlanetCommandPanel`
+  - 建造区顶部新增“建造前检查”
+  - 默认展示推荐/已解锁建筑
+  - 高级模式开关展开全量内容
+  - 最近结果区优先展示当前建造相关阻塞信息
+- `PlanetPanels`
+  - 建筑详情中的 `state_reason` 不再直接裸露原始字符串
+  - 增加“建议下一步”
+- 样式
+  - 阻塞提示优先级高于普通命令结果
+  - 高级模式视觉层级明确次于主流程
+
+---
+
+## 5. 最终方案 B：研究页窄栏交互稳定化
+
+这一部分采用“`Codex` 的布局判断 + `Claude` 的研究分组与新手引导细节”。
+
+### 5.1 总体取舍
+
+最终不采用：
+
+- 只修 z-index / pointer-events
+- 重新做全屏科技树页
+- 把研究状态派生重新塞回 `PlanetCommandPanel.tsx`
+
+最终采用：
+
+- 保留 `research-workflow.ts` 作为研究数据派生层
+- 保留研究分组、当前研究卡片、新手推荐路径、上下文提示
+- 但在 `268px` 的 `planet-detail-shell` 里，研究区必须改成单列窄栏工作流
+
+### 5.2 研究派生层的最终职责
+
+沿用并扩展：
+
+- `client-web/src/features/planet-map/research-workflow.ts`
+
+它继续负责：
+
+- `current / available / completed / locked` 分组
+- 当前研究进度和阻塞原因
+- 新手推荐路径
+- 科技卡片显示文案
+
+不再把这些 `useMemo` 重新散落到 `PlanetCommandPanel.tsx` 内部。
+
+### 5.3 研究区最终布局
+
+研究工作流在右侧操作区内改成单列堆叠：
+
+1. 当前研究 / 研究执行区
+2. 当前可研究
+3. 已完成
+4. 尚未满足前置
+
+其中：
+
+- `当前可研究` 是唯一高频真实点击主列表
+- `已完成` 与 `尚未满足前置` 使用折叠区或次级卡片
+- 新手推荐路径只在开局早期显示
+
+这部分吸收了 `Claude` 的分组与引导思路，但用 `Codex` 的“窄栏单列”来解决真实点击问题。
+
+### 5.4 交互与文案要求
+
+保留并收口以下体验：
+
+- 当前研究卡片
+  - 显示科技名、进度、阻塞原因
+- 开局推荐路径
+  - 仅在尚未完成 `electromagnetism` 时显示
+- 装料成功提示
+  - `matrix_lab`：装入研究站后提示可继续启动研究
+  - `em_rail_ejector`：提示可继续发射太阳帆
+  - `vertical_launching_silo`：提示可继续发射火箭
+  - `ray_receiver`：提示可切换发电/光子模式
+
+这里不新建第二套提示逻辑，直接基于现有 `store.ts` 扩展。
+
+### 5.5 CSS 与 DOM 约束
+
+关键样式要求：
+
+- `.research-groups`
+  - 固定为单列布局
+- `.research-group`
+  - `min-width: 0`
+- `.research-tech-list`
+  - `min-width: 0`
+- `.research-tech-card`
+  - `width: 100%`
+  - `min-width: 0`
+  - 长文本允许换行
+- 长标签文本
+  - `overflow-wrap: anywhere`
+
+如果后续真的需要宽屏多列，也必须基于容器宽度判断，而不是固定 `repeat(3, 1fr)`。
+
+### 5.6 真实点击回归要求
+
+`Playwright` 必须覆盖真实点击，不允许：
+
+- `force: true`
+- 直接绕过科技卡片，只测“开始研究”按钮
+
+最小回归路径：
+
+1. 打开行星页
+2. 切到“研究与装料”
+3. 真实点击 `电磁学`
+4. 断言没有 pointer interception
+5. 点击“开始研究”
+6. 验证命令成功发出
+
+---
+
+## 6. 最终方案 C：智能体完成态与错误暴露收口
+
+这一部分采用 `Codex` 的主判断，并吸收 `Claude` 在 repair 细节上的可执行建议。
+
+### 6.1 最终判断
+
+当前 `agent-gateway` 已经具备：
+
+- 纯文本回落
+- 空壳 action 忽略
+- `assistantMessage` 直出完成态
+
+但真正未解决的是：
+
+- `observe` 执行了动作，却没交付最终一句话总结
+- `agent.create` 仍可能停在规划句
+- `transfer_item + start_research` 参数构造脆弱
+- `/agents` 页面仍会吞掉真实错误
+
+所以本轮的中心不是 parser 容错，而是“结果交付完成态 + 字段级 repair + 错误可见性”。
+
+### 6.2 新增 `turn-completion.ts`
+
+新增：
+
+- `agent-gateway/src/runtime/turn-completion.ts`
+
+建议结构：
+
+```ts
+export interface TurnCompletionCheck {
+  complete: boolean;
+  needsCloseoutRepair: boolean;
+  reason?: "missing_final_delivery" | "still_planning";
+}
+```
+
+职责：
+
+- 在“动作是否发生”之外，再判断“用户结果是否已交付”
+
+判定规则：
+
+- `observe`
+  - 必须执行过 observe 类 `game.command`
+  - 最终回复不能停在“已提交/待结果返回/稍后总结”
+- `game_mutation`
+  - 如果用户要求“完成后回复结果”，最终回复必须给出结果
+- `agent_management`
+  - `agent.create` 成功后，最终回复必须明确说明已创建结果，而不是“我现在创建”
+
+### 6.3 `runAgentLoop` 改成两段式 repair
+
+保留现有动作修复，但增加收尾修复：
+
+1. 执行修复
+  - 缺少 intent 所需动作时触发
+2. 收尾修复
+  - 动作已执行，但最终回复仍未闭环时触发
+
+收尾修复 prompt 吸收 `Claude` 的“更具体 repair”思路，建议类似：
+
+> 你已经拿到工具执行结果。现在请只输出最终结论，不要再回复“已提交/待结果返回”。如果信息已经足够，请直接给用户一句话总结或明确结果。
+
+这样 observe 不会再停在“扫描成功，但结果待总结”。
+
+### 6.4 `game-command-schema` 增加字段别名归一化
+
+修改：
+
+- `agent-gateway/src/runtime/game-command-schema.ts`
+
+兼容常见 snake_case 别名：
+
+- `buildingId` / `building_id`
+- `itemId` / `item_id`
+- `techId` / `tech_id`
+- `planetId` / `planet_id`
+- `systemId` / `system_id`
+- `buildingType` / `building_type`
+
+这不是兼容旧业务接口，而是对 LLM 输出进行归一化。
+
+### 6.5 `openai-compatible` repair 必须返回字段级错误
+
+修改：
+
+- `agent-gateway/src/providers/openai-compatible.ts`
+
+不再只说“请返回合法 JSON”，而要把具体 schema 错误带回模型，并给最小正确示例。
+
+例如：
+
+```text
+上一轮结构错误：transfer_item requires buildingId。
+如果你要给 b-9 装料，必须返回：
+{"type":"game.command","command":"transfer_item","args":{"buildingId":"b-9","itemId":"electromagnetic_matrix","quantity":10}}
+请返回修正后的完整 JSON。
+```
+
+这部分直接吸收 `Claude` 的 repair 细化建议，但放到公共 `openai-compatible` runtime 中，而不是 MiniMax 特供。
+
+### 6.6 `provider-turn-runner` 增加 few-shot
+
+修改：
+
+- `agent-gateway/src/runtime/provider-turn-runner.ts`
+
+补三类关键示例：
+
+- observe
+- `agent.create`
+- `transfer_item + start_research`
+
+目标不是写很长 prompt，而是明确：
+
+- 第一轮做动作可 `done:false`
+- 结果到齐后必须收尾
+- 不允许“待结果返回”同时 `done:true`
+
+### 6.7 gateway 工具结果要更适合收尾复述
+
+修改：
+
+- `agent-gateway/src/runtime/loop.ts`
+- `agent-gateway/src/server.ts`
+
+`createAgent`、`updateAgent`、`ensureDirectConversation` 等工具结果应尽量返回结构化、可复述的信息，而不是只给含糊字符串。
+
+例如 `createAgent` 结果至少应包含：
+
+- `id`
+- `name`
+- `providerId`
+- `policy`
+
+这样 closeout reply 才能稳定产出“胡景已创建，权限已限制为 ...”。
+
+### 6.8 turn 失败时保留并展示真实错误
+
+修改：
+
+- `agent-gateway/src/types.ts`
+- `shared-client/src/types.ts`
+- `client-web/src/features/agents/ChannelWorkspaceView.tsx`
+- `client-web/src/pages/AgentsPage.tsx`
+
+建议扩展 turn 字段：
+
+```ts
+errorCode?: string;
+errorMessage?: string;
+rawErrorMessage?: string;
+errorHint?: string;
+```
+
+展示顺序：
+
+1. 失败原因
+2. 真实错误
+3. 建议处理
+
+例如：
+
+- `errorCode = provider_schema_invalid`
+- `rawErrorMessage = transfer_item requires buildingId`
+- `errorHint = 缺少目标建筑 ID，请明确研究站或装料建筑，例如 b-9。`
+
+### 6.9 `/agents` 页面成功态也要更严格
+
+前端不再仅按 `turn.status === succeeded` 就显示“成功完成”，还要结合返回内容是否已经进入最终交付态。
+
+至少在 UI 上做到：
+
+- observe 类任务只有拿到最终总结后，才展示为有效结果
+- `provider_incomplete_execution` 不再只显示固定一句“这轮只有规划”，而应区分：
+  - 缺动作
+  - 动作执行了但未收尾
+
+---
+
+## 7. 文件边界
+
+### 7.1 `client-web`
+
+- 新增：`client-web/src/features/planet-map/build-workflow.ts`
+- 新增：`client-web/src/features/planet-commands/error-hints.ts`
 - 修改：`client-web/src/features/planet-map/PlanetCommandPanel.tsx`
-- 修改：`client-web/src/features/planet-commands/store.test.ts`
-
-`CommandJournalFocus` 至少扩展以下字段：
-
-- `buildingType?: string`
-- `receiverMode?: "power" | "photon" | "hybrid"`
-
-命令提交时的填充规则：
-
-- `transfer_item`
-  - 从当前选中的目标建筑写入 `buildingType`
-  - 若目标为研究站，可继续附带 `techId`
-- `set_ray_receiver_mode`
-  - 写入 `buildingType = "ray_receiver"`
-  - 写入 `receiverMode`
-
-这样 `resolveNextHint()` 才能基于上下文而不是靠猜。
-
-#### B-5 下一步提示按上下文分派
-
-目标文件：
-
+- 修改：`client-web/src/features/planet-map/PlanetPanels.tsx`
+- 修改：`client-web/src/features/planet-map/research-workflow.ts`
 - 修改：`client-web/src/features/planet-commands/store.ts`
-- 修改：`client-web/src/features/planet-commands/store.test.ts`
-
-`resolveNextHint()` 最终规则：
-
-- `transfer_item + matrix_lab`
-  - `物料已装入研究站，下一步可启动 <techId>`
-- `transfer_item + em_rail_ejector`
-  - `太阳帆已装入电磁弹射器，下一步可发射太阳帆扩展戴森云`
-- `transfer_item + vertical_launching_silo`
-  - `火箭已装入发射井，下一步可发射火箭构建戴森球结构`
-- `set_ray_receiver_mode + power`
-  - `射线接收站已切到 power，下一步观察电网回灌是否生效`
-- `set_ray_receiver_mode + photon`
-  - `射线接收站已切到 photon，下一步观察光子产出与后续反物质链`
-- `set_ray_receiver_mode + hybrid`
-  - `射线接收站已切到 hybrid，下一步同时关注电网回灌与接收输出`
-- 其它上下文保留通用兜底提示
-
-这样可以同时修正：
-
-- 开局研究站装料提示
-- midgame 太阳帆/火箭装料提示
-- 射线接收站模式切换后的下一步提示
-
-#### B-6 样式方向
-
-目标文件：
-
 - 修改：`client-web/src/styles/index.css`
+- 修改：`client-web/src/features/agents/ChannelWorkspaceView.tsx`
+- 修改：`client-web/src/pages/AgentsPage.tsx`
 
-样式重点不是做新页面，而是建立清晰的信息层次：
+### 7.2 `agent-gateway`
 
-- `当前研究` 卡片单独突出
-- `当前可研究` 对比度最高
-- `已完成` 降低对比度
-- `锁定` 明确显示锁定态与前置缺失
-- `推荐路径` 用浅提示块承载
+- 新增：`agent-gateway/src/runtime/turn-completion.ts`
+- 修改：`agent-gateway/src/runtime/turn-validator.ts`
+- 修改：`agent-gateway/src/runtime/loop.ts`
+- 修改：`agent-gateway/src/runtime/game-command-schema.ts`
+- 修改：`agent-gateway/src/runtime/provider-turn-runner.ts`
+- 修改：`agent-gateway/src/providers/openai-compatible.ts`
+- 修改：`agent-gateway/src/server.ts`
+- 修改：`agent-gateway/src/types.ts`
 
-### 3.4 文件边界
+### 7.3 `shared-client`
 
-本任务最终改动边界如下：
+- 可能修改：`shared-client/src/types.ts`
 
-- 新增：`client-web/src/features/planet-map/research-workflow.ts`
-- 新增：`client-web/src/features/planet-map/research-workflow.test.ts`
-- 修改：`client-web/src/features/planet-map/PlanetCommandPanel.tsx`
-- 修改：`client-web/src/features/planet-commands/store.ts`
-- 修改：`client-web/src/features/planet-map/model.ts`
-- 修改：`client-web/src/styles/index.css`
-- 修改：`client-web/src/features/planet-map/PlanetCommandPanel.test.tsx`
-- 修改：`client-web/src/features/planet-commands/store.test.ts`
-- 新增：`client-web/tests/research-workflow.spec.ts`
-
-### 3.5 回归要求
-
-#### 单元与组件回归
-
-至少覆盖以下断言：
-
-1. 默认新局时显示：
-   - 推荐路径
-   - `当前可研究`
-   - `已完成`
-   - `尚未满足前置`
-2. `electromagnetism` 可被选中并触发 `start_research`
-3. 终局科技不再和开局科技混在同一扁平输入控件里
-4. `research-workflow.ts` 能正确派生 `available/completed/locked`
-5. `store.ts` 能根据 `buildingType` 生成不同提示
-6. `store.ts` 能根据 `receiverMode` 生成不同提示
-
-#### 浏览器回归
-
-至少两条：
-
-1. 默认新局
-   - 打开 `/planet/planet-1-1`
-   - 进入 `研究与装料`
-   - 看到推荐路径与分组研究列表
-   - 完成 `electromagnetism` 后，节点从“当前可研究”转入“已完成”
-
-2. midgame
-   - 给 `em_rail_ejector` 装 `solar_sail`
-   - 给 `vertical_launching_silo` 装 `small_carrier_rocket`
-   - 切换 `ray_receiver` 模式
-   - 分别看到正确的下一步提示
-
-建议：
-
-- Playwright 路由 stub 用于稳定断言
-- 再补一次真实浏览器手工走查，确认页面实际可玩
-
-### 3.6 非目标
-
-- 不新增服务端科技树专用接口
-- 不把研究页重做成独立整页
-- 不做完整可缩放科技树图谱
+仅在需要把 turn 错误字段同步到前端时修改。
 
 ---
 
-## 4. 实施顺序
+## 8. 实施顺序
 
-最终实施顺序固定如下：
+### 第 1 阶段：`agent-gateway` 完成态与错误暴露
 
-1. 先完成任务 A，恢复 `/agents` 的最小可玩链路
-2. 再完成任务 B 的研究派生层与研究 UI 分组
-3. 最后收口任务 B 的上下文提示与浏览器回归
+优先原因：
 
-原因：
+- 这是 correctness blocker
+- 直接影响 `/agents` 是否真的可用
 
-- 任务 A 当前是功能 blocker
-- 任务 B 属于体验与引导增强，但不阻塞基础研究能力
+本阶段完成后，至少应保证：
 
----
+- observe 能交付最终总结
+- `agent.create` 不再停在规划句
+- research 委派失败时能看到真实参数错误
 
-## 5. 风险与收口原则
+### 第 2 阶段：行星页建造工作流闭环
 
-### 5.1 任务 A
+本阶段完成后，至少应保证：
 
-风险：
+- 默认新局不再暴露大量未解锁建筑
+- 超距离建造会给出明确预检提示
+- 新建后缺电会有下一步建议
 
-- 如果把所有无 `type` 的动作都静默跳过，会掩盖真实 schema 错误
-- 如果不统一 prompt 契约，provider 仍会被错误引导
+### 第 3 阶段：研究页窄栏重排与真实点击回归
 
-收口原则：
+本阶段完成后，至少应保证：
 
-- 只忽略真正空动作
-- 有语义但不完整的动作继续失败
-- 失败要进入 `provider_schema_invalid`，而不是继续落到 `unknown`
-
-### 5.2 任务 B
-
-风险：
-
-- 如果研究状态派生继续直接堆在 `PlanetCommandPanel.tsx`，组件会进一步失控
-- 如果提示文案仍只依赖 `techId`，midgame 上下文错误会持续复发
-
-收口原则：
-
-- 研究派生逻辑收口到独立模块
-- 提示文案至少基于 `commandType + buildingType (+ receiverMode)` 决策
+- 研究卡片真实点击稳定
+- 研究区在窄栏中可读
+- 研究/装料提示与当前上下文一致
 
 ---
 
-## 6. 最终设计结论
+## 9. 测试与验收
 
-本轮两项任务都不需要新增后端业务接口，核心都是把现有真实能力正确暴露出来：
+### 9.1 单元 / 集成测试
 
-- 任务 A 的本质是修正 agent runtime 对“直接回复完成态”的公共契约
-- 任务 B 的本质是把已有科技与研究数据，从调试式输入控件重构为阶段化玩家工作流
+建议新增或修改：
 
-最终实现必须同时满足三件事：
+- `client-web/src/features/planet-map/build-workflow.test.ts`
+  - unlock 过滤
+  - Manhattan 距离计算
+  - 供电提示派生
+- `client-web/src/features/planet-commands/store.test.ts`
+  - `entity_created -> building_state_changed` 账本收口
+  - `executor out of range` 翻译
+  - `under_power / power_out_of_range` 翻译
+  - `transfer_item` 的上下文提示
+- `client-web/src/features/planet-map/PlanetCommandPanel.test.tsx`
+  - 默认模式不显示未解锁建筑
+  - 高级模式展开后才显示全量入口
+  - 研究区单列结构与可选科技点击
+- `agent-gateway/src/runtime/loop.test.ts`
+  - observe 已扫描但只回复计划句时，触发 closeout repair
+  - observe 最终无总结时判失败
+  - `agent.create` 成功后必须有最终结果回复
+  - snake_case 参数别名归一化
+- `agent-gateway/src/server.test.ts`
+  - turn 失败时持久化 `rawErrorMessage`
+  - turn 成功时 `finalMessage` 必须是用户结果，不是计划句
 
-- 能玩：默认新局与 `/agents` 主链路可跑通
-- 能测：单元、集成、浏览器回归都有收口
-- 能维护：公共契约清晰，新增派生逻辑不再继续放大耦合
+### 9.2 浏览器回归
+
+建议新增或修改：
+
+- `client-web/tests/research-workflow.spec.ts`
+  - 真实点击 `电磁学`
+  - 不出现 pointer interception
+  - 可继续“开始研究”
+- `client-web/tests/agent-platform.spec.ts`
+  - observe 私聊返回一句话总结
+  - 创建胡景成功，并能在成员列表中看到
+  - research 委派失败时展示具体参数错误
+- 可能新增：`client-web/tests/planet-build-workflow.spec.ts`
+  - 默认新局建造列表默认收口
+  - midgame 超范围建造给出距离提示
+  - midgame 新建建筑缺电时看到后续建议
+
+### 9.3 与 T106 对齐的验收矩阵
+
+| T106 验收项 | 最终设计落点 |
+| --- | --- |
+| 默认新局不再默认暴露大量未解锁建筑 | §4.2 |
+| 研究卡片真实点击稳定 | §5.3 ~ §5.6 |
+| midgame 超距离建造与缺电有下一步引导 | §4.3 ~ §4.5 |
+| observe 只有交付最终总结后才算成功 | §6.2 ~ §6.3 |
+| 创建下级成员链路可真实创建成功 | §6.2、§6.6、§6.7 |
+| 科研委派失败时能暴露真实错误，成功时可稳定执行 | §6.4 ~ §6.9 |
+| 已确认可用的戴森主链与 midgame 建筑不回退 | 全部改动均只收口工作流与 runtime 契约，不改玩法规则 |
+
+---
+
+## 10. 非目标
+
+本轮明确不做：
+
+- 新增专用 `build-advisor` 服务端接口
+- 把研究页改成独立全屏科技树
+- 为单个 provider 写特供分支
+- 新增游戏规则、建筑或科技
+- 通过吞掉 authoritative 错误来伪装成功
+- 把已经完成的“纯文本 turn 容错”重新作为主实现目标
+
+---
+
+## 11. 最终结论
+
+最终方案的核心不是再补一层“兼容”，而是把当前已经存在的 authoritative 能力和基础容错，继续收敛成对玩家和智能体都真正可用的闭环：
+
+- Web 端默认只暴露当前该做的事，并把失败原因翻译成下一步动作。
+- 研究页要尊重右侧窄栏宿主，不再把三列卡片硬塞进 `268px` 容器。
+- 智能体 turn 只有在真正交付用户结果后才允许成功，失败时必须把真实错误暴露出来。
+
+按本方案实施后，`T106` 的 6 项问题可以统一收口到同一套前端派生层、runtime 完成态检查和浏览器回归之下，不需要引入新的玩法系统，也不需要为某个 provider 单独打补丁。

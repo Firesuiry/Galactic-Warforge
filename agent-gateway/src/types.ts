@@ -159,6 +159,8 @@ export interface ConversationTurn {
   repairCount?: number;
   errorCode?: string;
   errorMessage?: string;
+  rawErrorMessage?: string;
+  errorHint?: string;
   actionSummaries: ConversationTurnActionSummary[];
   createdAt: string;
   updatedAt: string;

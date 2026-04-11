@@ -118,6 +118,31 @@ function isSubsetWithin(requested: string[] | undefined, allowed: string[] | und
   return requested.every((value) => allowedSet.has(value));
 }
 
+function buildTurnErrorHint(code: string | undefined, rawMessage: string) {
+  const normalized = rawMessage.toLowerCase();
+
+  if (code === 'provider_schema_invalid') {
+    if (normalized.includes('transfer_item requires buildingid')) {
+      return '缺少目标建筑 ID，请明确研究站或装料建筑，例如 b-9。';
+    }
+    if (normalized.includes('transfer_item requires itemid')) {
+      return '缺少装料物品 ID，请明确具体物品，例如 electromagnetic_matrix。';
+    }
+    if (normalized.includes('start_research requires techid')) {
+      return '缺少科技 ID，请明确要启动的科技，例如 basic_logistics_system。';
+    }
+    if (normalized.includes('build requires buildingtype')) {
+      return '缺少建筑类型，请明确 buildingType，例如 matrix_lab。';
+    }
+  }
+
+  if (code === 'provider_incomplete_execution' && normalized.includes('最终结果')) {
+    return '动作已经执行，但模型没有把最终结果交付出来；请重试，或要求它只回复一句话最终结论。';
+  }
+
+  return undefined;
+}
+
 export async function createGatewayServer(options: GatewayServerOptions): Promise<GatewayServerHandle> {
   const providerStore = createProviderStore(path.join(options.dataRoot, 'providers'));
   const agentStore = createAgentStore(path.join(options.dataRoot, 'agents'));
@@ -430,7 +455,12 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
     await threadStore.save(thread);
     await agentStore.save(child);
     await agentStore.save(actor);
-    return child.id;
+    return JSON.stringify({
+      id: child.id,
+      name: child.name,
+      providerId: child.providerId,
+      policy: child.policy,
+    });
   }
 
   async function updateManagedAgent(actor: AgentInstance, action: Record<string, unknown>) {
@@ -471,7 +501,12 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       updatedAt: new Date().toISOString(),
     };
     await agentStore.save(updated);
-    return updated.id;
+    return JSON.stringify({
+      id: updated.id,
+      name: updated.name,
+      role: updated.role,
+      policy: updated.policy,
+    });
   }
 
   async function sendAgentConversationMessage(
@@ -513,7 +548,11 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         dispatchToMailbox: true,
       },
     );
-    return message.id;
+    return JSON.stringify({
+      messageId: message.id,
+      conversationId: ensuredConversation.id,
+      targetAgentId: otherAgentIds[0] ?? action.targetAgentId,
+    });
   }
 
   const mailboxController = createMailboxController({
@@ -594,7 +633,11 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
             updateAgent: async (action) => updateManagedAgent(agent, action),
             ensureDirectConversation: async (action) => {
               const ensuredConversation = await ensureAgentDm(agent, String(action.targetAgentId));
-              return ensuredConversation.id;
+              return JSON.stringify({
+                conversationId: ensuredConversation.id,
+                name: ensuredConversation.name,
+                targetAgentId: action.targetAgentId,
+              });
             },
             sendConversationMessage: async (action) => sendAgentConversationMessage(agent, action, {
               turnId: currentTurn.id,
@@ -604,17 +647,18 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
           initialContext: { goal: history.at(-1)?.content ?? '' },
           initialHistory: history,
           onTurnPrepared: async ({ assistantMessage, actions, repairCount }) => {
-            const actionSummaries: ConversationTurnActionSummary[] = actions.map((action) => ({
-              type: action.type,
-              status: 'pending',
-              detail: summarizeAgentAction(action),
-            }));
             await persistTurn((turn) => ({
               ...turn,
               status: 'planning',
               assistantPreview: assistantMessage,
               repairCount,
-              actionSummaries,
+              actionSummaries: actions.length > 0
+                ? actions.map((action) => ({
+                    type: action.type,
+                    status: 'pending',
+                    detail: summarizeAgentAction(action),
+                  }))
+                : turn.actionSummaries,
               updatedAt: new Date().toISOString(),
             }));
           },
@@ -673,11 +717,13 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         agent.updatedAt = new Date().toISOString();
         await agentStore.save(agent);
         const publicError = classifyPublicTurnError(error);
+        const rawErrorMessage = publicError.rawMessage;
+        const errorHint = buildTurnErrorHint(publicError.code, rawErrorMessage);
         console.error('agent turn failed', {
           agentId: agent.id,
           turnId: currentTurn.id,
           code: publicError.code,
-          rawError: error instanceof Error ? error.message : String(error),
+          rawError: rawErrorMessage,
         });
         const systemMessage: ConversationMessage = {
           id: randomUUID(),
@@ -700,6 +746,8 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
           outcomeKind: 'blocked',
           errorCode: publicError.code,
           errorMessage: publicError.message,
+          rawErrorMessage,
+          ...(errorHint ? { errorHint } : {}),
           updatedAt: new Date().toISOString(),
         }));
         eventBus.emit({

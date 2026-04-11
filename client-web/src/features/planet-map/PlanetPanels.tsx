@@ -45,6 +45,7 @@ import {
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
+import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
 import {
   translateAlertType,
   translateBuildingState,
@@ -431,6 +432,9 @@ export function PlanetEntityPanel({
   if (selected.kind === "building" && entity) {
     const building = entity as Building;
     const buildingName = getBuildingDisplayName(catalog, building.type);
+    const stateReasonHint = resolvePlanetCommandHint({
+      reason: building.runtime.state_reason,
+    });
     const powerCoverage = networks?.power_coverage?.find(
       (coverage) => coverage.building_id === building.id,
     );
@@ -477,7 +481,11 @@ export function PlanetEntityPanel({
             </div>
             <div>
               <dt>停机原因</dt>
-              <dd>{building.runtime.state_reason || "-"}</dd>
+              <dd>{stateReasonHint?.title ?? "-"}</dd>
+            </div>
+            <div>
+              <dt>建议下一步</dt>
+              <dd>{stateReasonHint?.nextHint ?? "-"}</dd>
             </div>
             <div>
               <dt>血量</dt>

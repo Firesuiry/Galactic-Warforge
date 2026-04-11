@@ -21,8 +21,8 @@ export class PublicTurnError extends Error {
   code: PublicTurnErrorCode;
   rawMessage: string;
 
-  constructor(code: PublicTurnErrorCode, rawMessage: string) {
-    super(PUBLIC_ERROR_MESSAGES[code]);
+  constructor(code: PublicTurnErrorCode, rawMessage: string, publicMessage?: string) {
+    super(publicMessage ?? PUBLIC_ERROR_MESSAGES[code]);
     this.name = 'PublicTurnError';
     this.code = code;
     this.rawMessage = rawMessage;
@@ -59,6 +59,13 @@ export function classifyPublicTurnError(error: unknown): PublicTurnError {
     || normalized.includes('done must be a boolean')
     || normalized.includes('action must be an object')
     || normalized.includes('action.type is required')
+    || normalized.includes('requires buildingid')
+    || normalized.includes('requires itemid')
+    || normalized.includes('requires techid')
+    || normalized.includes('requires planetid')
+    || normalized.includes('requires systemid')
+    || normalized.includes('requires buildingtype')
+    || normalized.includes('requires integer')
     || normalized.includes('provider turn must be an object')
     || normalized.includes('final_answer is required')
     || normalized.includes('http api response missing content')

@@ -207,6 +207,80 @@ describe('agent loop', () => {
     assert.equal(result.finalMessage, '我已扫描 planet-1-2。');
   });
 
+  it('repairs an observe turn when the scan ran but the provider only says it will summarize later', async () => {
+    const calls: string[] = [];
+    let attempts = 0;
+
+    const result = await runAgentLoop({
+      maxSteps: 1,
+      provider: {
+        async runTurn() {
+          attempts += 1;
+          if (attempts === 1) {
+            return {
+              assistantMessage: '已提交扫描请求，待结果返回后再总结。',
+              actions: [{ type: 'game.command', command: 'scan_planet', args: { planetId: 'planet-1-2' } }],
+              done: true,
+            };
+          }
+          return {
+            assistantMessage: 'planet-1-2 当前局势稳定，没有发现新的阻塞。',
+            actions: [],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run(commandLine) {
+          calls.push(commandLine);
+          return 'planet-1-2 scan ok';
+        },
+      },
+      initialContext: { goal: '观察 planet-1-2 的情况，只回复一句话总结' },
+    });
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(calls, ['scan_planet planet-1-2']);
+    assert.equal(result.finalMessage, 'planet-1-2 当前局势稳定，没有发现新的阻塞。');
+  });
+
+  it('fails the turn when closeout repair still does not deliver the final observe summary', async () => {
+    let attempts = 0;
+    const calls: string[] = [];
+
+    await assert.rejects(
+      () =>
+        runAgentLoop({
+          maxSteps: 1,
+          provider: {
+            async runTurn() {
+              attempts += 1;
+              return {
+                assistantMessage: attempts === 1
+                  ? '我先扫描 planet-1-2，待结果返回后再总结。'
+                  : '扫描完成，稍后我会补一句总结。',
+                actions: attempts === 1
+                  ? [{ type: 'game.command', command: 'scan_planet', args: { planetId: 'planet-1-2' } }]
+                  : [],
+                done: true,
+              };
+            },
+          },
+          cliRuntime: {
+            async run(commandLine) {
+              calls.push(commandLine);
+              return 'planet-1-2 scan ok';
+            },
+          },
+          initialContext: { goal: '观察 planet-1-2 的情况，只回复一句话总结' },
+        }),
+      /最终总结|最终结果/i,
+    );
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(calls, ['scan_planet planet-1-2']);
+  });
+
   it('fails the turn when an observe request still has no executed action after one repair', async () => {
     await assert.rejects(
       () =>
@@ -230,6 +304,58 @@ describe('agent loop', () => {
         }),
       /没有执行所需动作/i,
     );
+  });
+
+  it('repairs agent.create when the first completion still stops at a planning sentence', async () => {
+    const calls: string[] = [];
+    let attempts = 0;
+
+    const result = await runAgentLoop({
+      maxSteps: 1,
+      provider: {
+        async runTurn() {
+          attempts += 1;
+          if (attempts === 1) {
+            return {
+              assistantMessage: '我现在创建胡景。',
+              actions: [
+                {
+                  type: 'agent.create',
+                  name: '胡景',
+                  role: 'worker',
+                  policy: {
+                    planetIds: ['planet-1-1'],
+                    commandCategories: ['build'],
+                  },
+                },
+              ],
+              done: true,
+            };
+          }
+          return {
+            assistantMessage: '胡景已创建，权限已限制为 planet-1-1 上的建造任务。',
+            actions: [],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run() {
+          return 'ok';
+        },
+      },
+      gatewayRuntime: {
+        async createAgent(action) {
+          calls.push(`create:${String(action.name ?? '')}`);
+          return 'created';
+        },
+      },
+      initialContext: { goal: '创建智能体胡景，并告诉我创建结果' },
+    });
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(calls, ['create:胡景']);
+    assert.equal(result.finalMessage, '胡景已创建，权限已限制为 planet-1-1 上的建造任务。');
   });
 
   it('still prefers final_answer over assistantMessage when both are present', async () => {

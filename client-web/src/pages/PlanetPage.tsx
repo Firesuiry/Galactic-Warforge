@@ -460,6 +460,7 @@ export function PlanetPage() {
             <PlanetCommandCenter
               catalog={catalog}
               client={client}
+              networks={networks}
               planet={planet}
               runtime={runtime}
               summary={summary}

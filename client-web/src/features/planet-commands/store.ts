@@ -7,6 +7,8 @@ import type {
   Position,
 } from "@shared/types";
 
+import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
+
 export type CommandJournalStatus = "pending" | "succeeded" | "failed";
 export type CommandAuthoritativeSource = "response" | "event" | "snapshot";
 
@@ -206,6 +208,14 @@ const ASYNC_AUTHORITATIVE_RULES: AsyncAuthoritativeRule[] = [
 ];
 
 function resolveNextHint(entry: PlanetCommandJournalEntry) {
+  const authoritativeHint = resolvePlanetCommandHint({
+    code: entry.authoritativeCode,
+    message: entry.authoritativeMessage,
+  });
+  if (authoritativeHint?.nextHint) {
+    return authoritativeHint.nextHint;
+  }
+
   const message = `${entry.authoritativeCode ?? ""} ${entry.authoritativeMessage ?? ""}`.toLowerCase();
 
   if (entry.commandType === "start_research") {
@@ -271,6 +281,54 @@ function resolveNextHint(entry: PlanetCommandJournalEntry) {
   }
 
   return undefined;
+}
+
+function reconcileBuildEntityCreatedEntry(
+  entry: PlanetCommandJournalEntry,
+  event: GameEventDetail,
+) {
+  const payload = asRecord(event.payload) ?? {};
+  const entityId = asString(payload.entity_id);
+  const nextEntry = {
+    ...upsertRelatedEvent(entry, event),
+    status: "succeeded" as const,
+    authoritativeCode: entry.authoritativeCode || "OK",
+    authoritativeMessage: entityId
+      ? `${entityId} 已创建`
+      : entry.authoritativeMessage,
+    authoritativeSource: "event" as const,
+    focus: {
+      ...entry.focus,
+      entityId: entityId || entry.focus?.entityId,
+      buildingType: asString(payload.type) || entry.focus?.buildingType,
+    },
+    pendingRecovery: false,
+  };
+  return {
+    ...nextEntry,
+    nextHint: resolveNextHint(nextEntry),
+  };
+}
+
+function reconcileBuildStateChangedEntry(
+  entry: PlanetCommandJournalEntry,
+  event: GameEventDetail,
+) {
+  const payload = asRecord(event.payload) ?? {};
+  const stateReason = asString(payload.reason);
+  const hint = resolvePlanetCommandHint({ reason: stateReason });
+  const nextEntry = {
+    ...upsertRelatedEvent(entry, event),
+    focus: {
+      ...entry.focus,
+      entityId: asString(payload.building_id) || entry.focus?.entityId,
+      buildingType: asString(payload.building_type) || entry.focus?.buildingType,
+    },
+  };
+  return {
+    ...nextEntry,
+    nextHint: hint?.nextHint ?? nextEntry.nextHint,
+  };
 }
 
 function buildAcceptedMessage(commandType: string, response: CommandResponse) {
@@ -371,6 +429,19 @@ function applyAuthoritativeEventToJournal(
   const nextEntries = journal.map((entry) => {
     if (!matchesFocus(entry.focus, event)) {
       return entry;
+    }
+
+    if (entry.commandType === "build" && event.event_type === "entity_created") {
+      changed = true;
+      return reconcileBuildEntityCreatedEntry(entry, event);
+    }
+
+    if (
+      entry.commandType === "build"
+      && event.event_type === "building_state_changed"
+    ) {
+      changed = true;
+      return reconcileBuildStateChangedEntry(entry, event);
     }
 
     const rule = ASYNC_AUTHORITATIVE_RULES.find(

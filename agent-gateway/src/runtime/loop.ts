@@ -2,6 +2,7 @@ import { PublicTurnError } from './provider-error.js';
 import type { CanonicalAgentAction } from './action-schema.js';
 import { normalizeProviderTurn } from './action-schema.js';
 import { executeGameCommand } from './game-command-executor.js';
+import { buildCloseoutRepairPrompt, checkTurnCompletion } from './turn-completion.js';
 import { classifyTurnIntent } from './turn-intent.js';
 import {
   buildRepairPrompt,
@@ -60,202 +61,224 @@ export async function runAgentLoop(input: {
     : [{ role: 'user', content: input.initialContext.goal }];
   const intent = classifyTurnIntent(history);
   const executedActions: CanonicalAgentAction[] = [];
-  let finalMessage = '';
   let totalRepairCount = 0;
 
   for (let step = 0; step < input.maxSteps; step += 1) {
-    let turn = normalizeProviderTurn(await input.provider.runTurn({ step, history }));
     let stepRepairCount = 0;
-    let validation = validateTurnForIntent(turn, intent, stepRepairCount, executedActions);
+    let closeoutRepairCount = 0;
 
-    while (validation.needsRepair) {
+    while (true) {
+      let turn = normalizeProviderTurn(await input.provider.runTurn({ step, history }));
+      let validation = validateTurnForIntent(turn, intent, stepRepairCount, executedActions);
+
+      while (validation.needsRepair) {
+        history.push({ role: 'assistant', content: turn.assistantMessage });
+        history.push({ role: 'user', content: buildRepairPrompt(intent) });
+        stepRepairCount += 1;
+        totalRepairCount += 1;
+        turn = normalizeProviderTurn(await input.provider.runTurn({ step, history }));
+        validation = validateTurnForIntent(turn, intent, stepRepairCount, executedActions);
+      }
+
       history.push({ role: 'assistant', content: turn.assistantMessage });
-      history.push({ role: 'user', content: buildRepairPrompt(intent) });
-      stepRepairCount += 1;
-      totalRepairCount += 1;
-      turn = normalizeProviderTurn(await input.provider.runTurn({ step, history }));
-      validation = validateTurnForIntent(turn, intent, stepRepairCount, executedActions);
-    }
-
-    history.push({ role: 'assistant', content: turn.assistantMessage });
-    input.onAssistantMessage?.(turn.assistantMessage);
-    await input.onTurnPrepared?.({
-      step,
-      assistantMessage: turn.assistantMessage,
-      actions: turn.actions,
-      done: turn.done,
-      repairCount: stepRepairCount,
-    });
-
-    if (!validation.valid) {
-      throw new PublicTurnError(
-        'provider_incomplete_execution',
-        validation.errorMessage ?? 'provider_incomplete_execution',
-      );
-    }
-
-    for (const [actionIndex, action] of turn.actions.entries()) {
-      await input.onActionUpdate?.({
+      input.onAssistantMessage?.(turn.assistantMessage);
+      await input.onTurnPrepared?.({
         step,
-        actionIndex,
-        action,
-        status: 'pending',
-        detail: action.type,
+        assistantMessage: turn.assistantMessage,
+        actions: turn.actions,
+        done: turn.done,
+        repairCount: stepRepairCount + closeoutRepairCount,
       });
 
-      try {
-        if (action.type === 'game.command') {
-          const execution = await executeGameCommand(action, input.cliRuntime);
-          history.push({ role: 'tool', content: execution.result });
-          input.onToolCall?.(execution.commandLine, execution.result);
-          if (countsAsExecutedAction(action)) {
-            executedActions.push(action);
-          }
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: execution.result,
-          });
-          continue;
-        }
+      if (!validation.valid) {
+        throw new PublicTurnError(
+          'provider_incomplete_execution',
+          validation.errorMessage ?? 'provider_incomplete_execution',
+        );
+      }
 
-        if (action.type === 'memory.note') {
-          history.push({ role: 'tool', content: action.note });
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: action.note,
-          });
-          continue;
-        }
+      let turnFinalMessage = '';
 
-        if (action.type === 'agent.create') {
-          if (!input.gatewayRuntime?.createAgent) {
-            throw new Error('agent.create is not supported in this runtime');
-          }
-          const result = await input.gatewayRuntime.createAgent(action);
-          history.push({ role: 'tool', content: result });
-          if (countsAsExecutedAction(action)) {
-            executedActions.push(action);
-          }
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: result,
-          });
-          continue;
-        }
-
-        if (action.type === 'agent.update') {
-          if (!input.gatewayRuntime?.updateAgent) {
-            throw new Error('agent.update is not supported in this runtime');
-          }
-          const result = await input.gatewayRuntime.updateAgent(action);
-          history.push({ role: 'tool', content: result });
-          if (countsAsExecutedAction(action)) {
-            executedActions.push(action);
-          }
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: result,
-          });
-          continue;
-        }
-
-        if (action.type === 'conversation.ensure_dm') {
-          if (!input.gatewayRuntime?.ensureDirectConversation) {
-            throw new Error('conversation.ensure_dm is not supported in this runtime');
-          }
-          const result = await input.gatewayRuntime.ensureDirectConversation(action);
-          history.push({ role: 'tool', content: result });
-          if (countsAsExecutedAction(action)) {
-            executedActions.push(action);
-          }
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: result,
-          });
-          continue;
-        }
-
-        if (action.type === 'conversation.send_message') {
-          if (!input.gatewayRuntime?.sendConversationMessage) {
-            throw new Error('conversation.send_message is not supported in this runtime');
-          }
-          const result = await input.gatewayRuntime.sendConversationMessage(action);
-          history.push({ role: 'tool', content: result });
-          if (countsAsExecutedAction(action)) {
-            executedActions.push(action);
-          }
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: result,
-          });
-          continue;
-        }
-
-        if (action.type === 'final_answer') {
-          finalMessage = action.message;
-          await input.onActionUpdate?.({
-            step,
-            actionIndex,
-            action,
-            status: 'succeeded',
-            detail: action.message,
-          });
-        }
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
+      for (const [actionIndex, action] of turn.actions.entries()) {
         await input.onActionUpdate?.({
           step,
           actionIndex,
           action,
-          status: 'failed',
-          detail,
+          status: 'pending',
+          detail: action.type,
         });
-        throw error;
-      }
-    }
 
-    if (turn.done) {
-      const outcomeKind = resolveTurnOutcomeKind(executedActions);
-      if (finalMessage.trim()) {
+        try {
+          if (action.type === 'game.command') {
+            const execution = await executeGameCommand(action, input.cliRuntime);
+            history.push({ role: 'tool', content: execution.result });
+            input.onToolCall?.(execution.commandLine, execution.result);
+            if (countsAsExecutedAction(action)) {
+              executedActions.push(action);
+            }
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: execution.result,
+            });
+            continue;
+          }
+
+          if (action.type === 'memory.note') {
+            history.push({ role: 'tool', content: action.note });
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: action.note,
+            });
+            continue;
+          }
+
+          if (action.type === 'agent.create') {
+            if (!input.gatewayRuntime?.createAgent) {
+              throw new Error('agent.create is not supported in this runtime');
+            }
+            const result = await input.gatewayRuntime.createAgent(action);
+            history.push({ role: 'tool', content: result });
+            if (countsAsExecutedAction(action)) {
+              executedActions.push(action);
+            }
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: result,
+            });
+            continue;
+          }
+
+          if (action.type === 'agent.update') {
+            if (!input.gatewayRuntime?.updateAgent) {
+              throw new Error('agent.update is not supported in this runtime');
+            }
+            const result = await input.gatewayRuntime.updateAgent(action);
+            history.push({ role: 'tool', content: result });
+            if (countsAsExecutedAction(action)) {
+              executedActions.push(action);
+            }
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: result,
+            });
+            continue;
+          }
+
+          if (action.type === 'conversation.ensure_dm') {
+            if (!input.gatewayRuntime?.ensureDirectConversation) {
+              throw new Error('conversation.ensure_dm is not supported in this runtime');
+            }
+            const result = await input.gatewayRuntime.ensureDirectConversation(action);
+            history.push({ role: 'tool', content: result });
+            if (countsAsExecutedAction(action)) {
+              executedActions.push(action);
+            }
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: result,
+            });
+            continue;
+          }
+
+          if (action.type === 'conversation.send_message') {
+            if (!input.gatewayRuntime?.sendConversationMessage) {
+              throw new Error('conversation.send_message is not supported in this runtime');
+            }
+            const result = await input.gatewayRuntime.sendConversationMessage(action);
+            history.push({ role: 'tool', content: result });
+            if (countsAsExecutedAction(action)) {
+              executedActions.push(action);
+            }
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: result,
+            });
+            continue;
+          }
+
+          if (action.type === 'final_answer') {
+            turnFinalMessage = action.message;
+            await input.onActionUpdate?.({
+              step,
+              actionIndex,
+              action,
+              status: 'succeeded',
+              detail: action.message,
+            });
+          }
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          await input.onActionUpdate?.({
+            step,
+            actionIndex,
+            action,
+            status: 'failed',
+            detail,
+          });
+          throw error;
+        }
+      }
+
+      if (!turn.done) {
+        break;
+      }
+
+      const deliveredMessage = turnFinalMessage.trim() || turn.assistantMessage.trim();
+      if (!deliveredMessage) {
+        throw new PublicTurnError(
+          'provider_schema_invalid',
+          'provider_schema_invalid: done turn missing assistantMessage and final_answer',
+        );
+      }
+
+      const completion = checkTurnCompletion({
+        intent,
+        finalMessage: deliveredMessage,
+        executedActions,
+      });
+
+      if (!completion.needsCloseoutRepair || completion.complete) {
         return {
-          finalMessage,
+          finalMessage: deliveredMessage,
           history,
-          outcomeKind,
+          outcomeKind: resolveTurnOutcomeKind(executedActions),
           executedActionCount: executedActions.length,
           repairCount: totalRepairCount,
         };
       }
-      if (turn.assistantMessage.trim()) {
-        return {
-          finalMessage: turn.assistantMessage,
-          history,
-          outcomeKind,
-          executedActionCount: executedActions.length,
-          repairCount: totalRepairCount,
-        };
+
+      if (closeoutRepairCount >= 1) {
+        throw new PublicTurnError(
+          'provider_incomplete_execution',
+          'provider_incomplete_execution: 动作已执行，但最终回复仍未交付最终结果',
+          '动作已执行，但还没有交付最终结果。',
+        );
       }
-      throw new PublicTurnError(
-        'provider_schema_invalid',
-        'provider_schema_invalid: done turn missing assistantMessage and final_answer',
-      );
+
+      closeoutRepairCount += 1;
+      totalRepairCount += 1;
+      history.push({
+        role: 'user',
+        content: buildCloseoutRepairPrompt(intent, completion.reason),
+      });
     }
   }
 

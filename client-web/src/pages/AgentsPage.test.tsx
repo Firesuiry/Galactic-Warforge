@@ -1542,4 +1542,118 @@ describe('AgentsPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('已安排矿机检查。')).toBeInTheDocument();
   });
+
+  it('shows failure reason, raw error, and recovery hint for failed turns', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/agent-api/health')) {
+        return Promise.resolve(jsonResponse({ status: 'ok' }));
+      }
+      if (url.endsWith('/agent-api/conversations') && method === 'GET') {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'conv-1',
+            type: 'dm',
+            name: '与 科研官 私聊',
+            topic: '科研委派',
+            memberIds: ['player:p1', 'agent:agent-researcher'],
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/agents')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'agent-researcher',
+            name: '科研官',
+            providerId: 'provider-1',
+            serverUrl: 'http://localhost:18080',
+            playerId: 'p1',
+            status: 'running',
+            role: 'worker',
+            policy: {
+              planetIds: ['planet-1-1'],
+              commandCategories: ['research'],
+              canCreateChannel: false,
+              canManageMembers: false,
+              canInviteByPlanet: false,
+              canCreateSchedules: false,
+              canDirectMessageAgentIds: [],
+              canDispatchAgentIds: [],
+            },
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/providers')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/messages')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'msg-1',
+            conversationId: 'conv-1',
+            senderType: 'player',
+            senderId: 'p1',
+            kind: 'chat',
+            content: '把 10 个 electromagnetic_matrix 装入 b-9，然后启动研究',
+            mentions: [],
+            createdAt: '2026-04-11T00:00:00.000Z',
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/conversations/conv-1/turns')) {
+        return Promise.resolve(jsonResponse([
+          {
+            id: 'turn-1',
+            conversationId: 'conv-1',
+            requestMessageId: 'msg-1',
+            actorType: 'player',
+            actorId: 'p1',
+            targetAgentId: 'agent-researcher',
+            status: 'failed',
+            errorCode: 'provider_schema_invalid',
+            errorMessage: '模型返回结构无效，请稍后重试。',
+            rawErrorMessage: 'transfer_item requires buildingId',
+            errorHint: '缺少目标建筑 ID，请明确研究站或装料建筑，例如 b-9。',
+            actionSummaries: [],
+            createdAt: '2026-04-11T00:00:01.000Z',
+            updatedAt: '2026-04-11T00:00:02.000Z',
+          },
+        ]));
+      }
+      if (url.endsWith('/agent-api/schedules')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 42,
+          active_planet_id: 'planet-1-1',
+          players: {
+            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 42,
+          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
+          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${method} ${url}`));
+    }));
+
+    renderApp(['/agents']);
+
+    expect(await screen.findByText('失败原因')).toBeInTheDocument();
+    expect(screen.getByText(/provider_schema_invalid/)).toBeInTheDocument();
+    expect(screen.getByText('transfer_item requires buildingId')).toBeInTheDocument();
+    expect(
+      screen.getByText('缺少目标建筑 ID，请明确研究站或装料建筑，例如 b-9。'),
+    ).toBeInTheDocument();
+  });
 });

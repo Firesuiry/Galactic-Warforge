@@ -1252,6 +1252,131 @@ process.stdout.write(JSON.stringify({
     assert.equal(messages.filter((message) => message.senderType === 'system').length, 0);
   });
 
+  it('persists raw schema errors and actionable hints when command args are incomplete', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => ({
+        assistantMessage: '开始装料。',
+        actions: [
+          {
+            type: 'game.command',
+            command: 'transfer_item',
+            args: {
+              itemId: 'electromagnetic_matrix',
+              quantity: 10,
+            },
+          },
+        ],
+        done: true,
+      }),
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-invalid-transfer',
+        name: 'Invalid Transfer Provider',
+        providerKind: 'codex_cli',
+        description: 'invalid transfer test',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 1,
+          maxToolCallsPerTurn: 2,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-invalid-transfer',
+        name: '科研官',
+        providerId: 'provider-invalid-transfer',
+        serverUrl: 'http://127.0.0.1:18081',
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'worker',
+        policy: {
+          planetIds: ['planet-1-1'],
+          commandCategories: ['research'],
+          canCreateAgents: false,
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'conv-invalid-transfer',
+        type: 'dm',
+        name: '与科研官私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-invalid-transfer'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const messageResponse = await fetch(`${server.url}/conversations/conv-invalid-transfer/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '把 10 个 electromagnetic_matrix 装入 b-9',
+      }),
+    });
+    assert.equal(messageResponse.status, 202);
+
+    let turns: Array<{
+      status: string;
+      errorCode?: string;
+      errorMessage?: string;
+      rawErrorMessage?: string;
+      errorHint?: string;
+    }> = [];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const turnsResponse = await fetch(`${server.url}/conversations/conv-invalid-transfer/turns`);
+      turns = await turnsResponse.json() as typeof turns;
+      if (turns[0]?.status === 'failed') {
+        break;
+      }
+      await delay(20);
+    }
+
+    assert.equal(turns[0]?.status, 'failed');
+    assert.equal(turns[0]?.errorCode, 'provider_schema_invalid');
+    assert.equal(turns[0]?.errorMessage, '模型返回结构无效，请稍后重试。');
+    assert.equal(turns[0]?.rawErrorMessage, 'transfer_item requires buildingId');
+    assert.match(turns[0]?.errorHint ?? '', /缺少目标建筑 ID/);
+    assert.match(turns[0]?.errorHint ?? '', /b-9/);
+  });
+
   it('fails the turn when agent.create policy is incomplete and keeps the failure bound to the request', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({

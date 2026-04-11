@@ -163,6 +163,8 @@ export interface ConversationTurnView {
   repairCount?: number;
   errorCode?: string;
   errorMessage?: string;
+  rawErrorMessage?: string;
+  errorHint?: string;
   actionSummaries: ConversationTurnActionSummaryView[];
   createdAt: string;
   updatedAt: string;

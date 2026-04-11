@@ -1267,13 +1267,14 @@ button {
 .research-groups {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .research-group {
   display: grid;
   gap: 10px;
   min-height: 0;
+  min-width: 0;
   padding: 12px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1287,17 +1288,21 @@ button {
 .research-tech-list {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .research-tech-card {
   display: grid;
   gap: 6px;
   padding: 12px;
+  width: 100%;
+  min-width: 0;
   text-align: left;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: inherit;
+  overflow-wrap: anywhere;
 }
 
 .research-tech-card--available {
@@ -1325,11 +1330,63 @@ button {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .research-execute {
   display: grid;
   gap: 12px;
+}
+
+.build-workflow-header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.build-preflight {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.build-preflight__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #c8d5f5;
+  font-size: 0.9rem;
+}
+
+.command-inline-hint {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.command-inline-hint--warning {
+  background: rgba(255, 214, 102, 0.08);
+  border: 1px solid rgba(255, 214, 102, 0.18);
+}
+
+.command-inline-hint--error {
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.22);
+}
+
+.command-inline-hint--info {
+  background: rgba(110, 170, 255, 0.1);
+  border: 1px solid rgba(110, 170, 255, 0.18);
+}
+
+.section-title--minor {
+  font-size: 0.95rem;
 }
 
 @media (max-width: 1100px) {

@@ -212,29 +212,40 @@ function createCatalog() {
         buildable: true,
       },
       {
+        id: "wind_turbine",
+        name: "风力涡轮机",
+        buildable: true,
+        unlock_tech: ["dyson_sphere_program"],
+      },
+      {
         id: "matrix_lab",
         name: "矩阵研究站",
         buildable: true,
+        unlock_tech: ["dyson_sphere_program"],
       },
       {
         id: "tesla_tower",
         name: "特斯拉塔",
         buildable: true,
+        unlock_tech: ["electromagnetism"],
       },
       {
         id: "em_rail_ejector",
         name: "电磁弹射器",
         buildable: true,
+        unlock_tech: ["electromagnetism"],
       },
       {
         id: "vertical_launching_silo",
         name: "垂直发射井",
         buildable: true,
+        unlock_tech: ["energy_matrix"],
       },
       {
         id: "ray_receiver",
         name: "射线接收站",
         buildable: true,
+        unlock_tech: ["energy_matrix"],
       },
     ],
     recipes: [
@@ -278,6 +289,8 @@ function createCatalog() {
 function createSummary(options?: {
   completedTechIds?: string[];
   currentResearch?: { tech_id: string; progress?: number; total_cost?: number } | null;
+  executorUnitId?: string;
+  operateRange?: number;
 }) {
   const currentResearch = options?.currentResearch === null
     ? undefined
@@ -301,6 +314,17 @@ function createSummary(options?: {
           completed_techs: options?.completedTechIds ?? ["dyson_sphere_program"],
           ...(currentResearch ? { current_research: currentResearch } : {}),
         },
+        ...(options?.executorUnitId
+          ? {
+              executor: {
+                unit_id: options.executorUnitId,
+                build_efficiency: 1,
+                operate_range: options.operateRange ?? 6,
+                concurrent_tasks: 1,
+                research_boost: 0,
+              },
+            }
+          : {}),
       },
     },
   };
@@ -637,5 +661,95 @@ describe("PlanetCommandPanel", () => {
     expect(screen.queryByText("开局推荐路径")).not.toBeInTheDocument();
     const completedGroup = screen.getByRole("region", { name: "已完成" });
     expect(within(completedGroup).getByText("电磁学")).toBeInTheDocument();
+  });
+
+  it("默认建造列表只显示已解锁建筑，高级模式展开后才显示未解锁与目录异常项", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+
+    render(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program"],
+        }) as never}
+      />,
+    );
+
+    expect(
+      screen.getByRole("option", { name: /风力涡轮机/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /矩阵研究站/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /特斯拉塔/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Planetary Logistics Station/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "显示高级建造" }));
+
+    expect(
+      screen.getByRole("option", { name: /特斯拉塔 · 未解锁/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Planetary Logistics Station · 目录异常/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("建造前检查展示执行体距离，并在超范围时提示切到移动工作流", () => {
+    const planet = createPlanet();
+    planet.units = {
+      "exec-1": {
+        id: "exec-1",
+        type: "executor",
+        owner_id: "p1",
+        position: { x: 1, y: 1, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        attack: 0,
+        defense: 0,
+        attack_range: 0,
+        move_range: 2,
+        vision_range: 4,
+        is_moving: false,
+      },
+    };
+
+    act(() => {
+      usePlanetViewStore.getState().setSelected({
+        kind: "tile",
+        position: { x: 5, y: 4, z: 0 },
+      });
+    });
+
+    render(
+      <PlanetCommandPanel
+        catalog={createCatalog() as never}
+        client={createClient() as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program"],
+          executorUnitId: "exec-1",
+          operateRange: 6,
+        }) as never}
+      />,
+    );
+
+    expect(screen.getByText("建造前检查")).toBeInTheDocument();
+    expect(screen.getByText(/执行体 exec-1/)).toBeInTheDocument();
+    expect(screen.getByText(/distance \/ operateRange = 7 \/ 6/)).toBeInTheDocument();
+    expect(
+      screen.getByText("当前执行体无法直接建造到目标坐标"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切到移动工作流" })).toBeInTheDocument();
   });
 });

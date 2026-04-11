@@ -180,6 +180,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     - `operate_range` 操作范围
     - `concurrent_tasks` 并发任务上限（建造/升级/拆除等执行体任务）
     - `research_boost` 研究辅助加成（数值参数）
+    - 当前 Web 建造前检查使用 `executor.unit_id + operate_range`，再结合对应行星视图里该执行体的 `position` 按 `ManhattanDist` 做预检；这只是客户端提示，不替代服务端执行阶段的最终校验
   - `executors`：按 `planet_id` 组织的执行体映射；字段结构与 `executor` 相同。`executor` 仍保留为当前 active planet 上下文的兼容镜像
   - `tech` 字段说明:
     - `player_id` / `completed_techs` / `current_research` / `research_queue` / `total_researched`
@@ -716,6 +717,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `power_networks` / `power_coverage` 整体按同一个 tick 的 authoritative `PowerSettlementSnapshot` 生成；`supply` / `allocated` / `shortage` / `reason` / `provider_id` 之间不再来自不同阶段的临时值
   - `power_networks[].supply` 与 `GET /state/stats.energy_stats.generation` 同源；当前已包含 `ray_receiver power/hybrid` 在真实 tick 中写入的供电回灌，也会保留燃料型发电建筑“最后一根燃料已在本 tick 消耗完但该 tick 仍成功发电”的供电贡献
   - `power_coverage.provider_id` 与 `power_networks` 现在共享同一份真实供电源口径；`ray_receiver`、储能放电等通过 `ws.PowerInputs` 注入的动态电源也会被识别为有效 provider，不再出现“`supply > 0` 但 `coverage` 仍说 `no_provider`”的分叉
+  - 对建造工作流，`power_coverage.reason` 与 `building_state_changed.payload.reason` 共享同一套病因口径；当前前端会直接消费 `under_power` / `power_out_of_range` / `power_no_provider` / `power_capacity_full` 这些 reason 来生成“下一步做什么”的提示
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick`
   - `power_networks`：电网聚合，包含 `id` / `owner_id` / `supply` / `demand` / `allocated` / `net` / `shortage` / `node_ids`
@@ -987,6 +989,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `request_id` 同时承担幂等键与结果回写关联键；重复 `request_id` 不会再次入队
   - HTTP `202` 与 `results[].status = accepted` 只表示“通过网关预校验并已入队到 `enqueue_tick`”，不是最终成功
   - 每条命令的最终 authoritative 成功/失败结果必须以后续 `command_result` 事件为准；客户端应使用 `payload.request_id + command_index` 进行对账
+  - 对 `build` 这类异步链路，`command_result(code=OK)` 通常只表示“施工任务已创建或已排队”；真正的建筑实体落地与后续停机病因需要继续结合 `entity_created` / `building_state_changed` 判断
 - 执行体约束: `build`/`produce`/`upgrade`/`demolish` 需要执行体在操作范围内；`upgrade`/`demolish` 超过并发上限会在执行阶段失败；`build` 超过并发上限时进入施工队列等待调度
 - 请求体:
 ```json
@@ -1054,7 +1057,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
   - `scan_system`：`target.system_id` 必填；`target.layer` 可填 `system`
   - `scan_planet`：`target.planet_id` 必填；`target.layer` 可填 `planet`
-  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`
+  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，例如 `worker`、`soldier`
@@ -1189,9 +1192,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_disbanded`
 - 事件类型补充:
   - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
+    - 对 `build`，如果这里只返回 `OK + construction task ... queued`，不要把它误判成“建筑已完全落地并可运行”；后续还应继续观察同坐标的 `entity_created` 与对应 `building_state_changed`
+    - 对 `build` 超范围失败，当前常见失败消息就是 `executor out of range: <distance> > <operate_range>`；客户端可以直接把这条 authoritative message 翻译成移动执行体的下一步提示
   - `resource_changed`：电力链路现在会在同一轮 authoritative 电力结算里只提交一次最终 `energy`；后续同 tick 的矿物/产出事件若继续复用 `resource_changed`，会沿用同一个最终 `energy` 值，不再在 `10000 -> 99xx -> 98xx` 间来回跳变。
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。
+    - 当前 Web 建造账本会把 `entity_created` 与后续 `building_state_changed` 收口到同一条结果，用于给新建建筑生成“补供电塔 / 补发电 / 扩容电网”这类下一步提示；如果你要实现同类客户端，至少需要同时订阅这两类事件
   - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。
   - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule`；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
   - 若 `mission_complete` 在当前 tick 完成，事件顺序会先出现 `research_completed`，再出现 `victory_declared`。

@@ -341,4 +341,105 @@ describe("planet command store", () => {
       );
     }
   });
+
+  it("把 build 的 entity_created 与 building_state_changed 收口到同一条账本", () => {
+    act(() => {
+      usePlanetCommandStore.getState().reconcileAcceptedResponse({
+        commandType: "build",
+        planetId: "planet-1-1",
+        focus: {
+          position: { x: 5, y: 4, z: 0 },
+          buildingType: "matrix_lab",
+        },
+        response: {
+          request_id: "req-build-1",
+          accepted: true,
+          enqueue_tick: 260,
+          results: [
+            {
+              command_index: 0,
+              status: "queued",
+              code: "OK",
+              message: "build accepted",
+            },
+          ],
+        },
+      });
+      usePlanetCommandStore.getState().reconcileAuthoritativeEvent({
+        event_id: "evt-created-1",
+        tick: 261,
+        event_type: "entity_created",
+        visibility_scope: "p1",
+        payload: {
+          entity_id: "lab-1",
+          type: "matrix_lab",
+          position: { x: 5, y: 4, z: 0 },
+        },
+      } as never);
+      usePlanetCommandStore.getState().reconcileAuthoritativeEvent({
+        event_id: "evt-state-1",
+        tick: 262,
+        event_type: "building_state_changed",
+        visibility_scope: "p1",
+        payload: {
+          building_id: "lab-1",
+          building_type: "matrix_lab",
+          prev_state: "idle",
+          next_state: "no_power",
+          reason: "power_out_of_range",
+        },
+      } as never);
+    });
+
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      requestId: "req-build-1",
+      relatedEventIds: ["evt-state-1", "evt-created-1"],
+      focus: {
+        entityId: "lab-1",
+        position: { x: 5, y: 4, z: 0 },
+      },
+      nextHint: "建筑未接入供电覆盖范围；先补供电塔。",
+    });
+  });
+
+  it("把 executor out of range 翻译成可操作的建造提示", () => {
+    act(() => {
+      usePlanetCommandStore.getState().reconcileAcceptedResponse({
+        commandType: "build",
+        planetId: "planet-1-1",
+        focus: {
+          position: { x: 5, y: 4, z: 0 },
+          buildingType: "matrix_lab",
+        },
+        response: {
+          request_id: "req-build-range",
+          accepted: true,
+          enqueue_tick: 263,
+          results: [
+            {
+              command_index: 0,
+              status: "queued",
+              code: "OK",
+              message: "build accepted",
+            },
+          ],
+        },
+      });
+      usePlanetCommandStore.getState().reconcileAuthoritativeEvent({
+        event_id: "evt-build-range",
+        tick: 264,
+        event_type: "command_result",
+        visibility_scope: "p1",
+        payload: {
+          request_id: "req-build-range",
+          code: "OUT_OF_RANGE",
+          message: "executor out of range: 7 > 6",
+        },
+      } as never);
+    });
+
+    expect(usePlanetCommandStore.getState().journal[0]?.nextHint).toBe(
+      "当前执行体距离目标 7 格，但可操作范围只有 6 格；先移动执行体再建造。",
+    );
+  });
 });

@@ -197,6 +197,58 @@ describe('http api provider', () => {
     assert.equal(parsed.done, true);
   });
 
+  it('returns field-level repair guidance when the first payload misses required command fields', async () => {
+    let callCount = 0;
+    const prompts: string[] = [];
+
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      callCount += 1;
+      const body = JSON.parse(String(init?.body)) as {
+        messages?: Array<{ role?: string; content?: string }>;
+      };
+      prompts.push(body.messages?.find((message) => message.role === 'user')?.content ?? '');
+
+      return new Response(JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: callCount === 1
+                ? '{"assistantMessage":"先装料再研究","actions":[{"type":"game.command","command":"transfer_item","args":{"itemId":"electromagnetic_matrix","quantity":10}}],"done":false}'
+                : '{"assistantMessage":"已修正","actions":[{"type":"game.command","command":"transfer_item","args":{"buildingId":"b-9","itemId":"electromagnetic_matrix","quantity":10}}],"done":false}',
+            },
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const parsed = await runOpenAICompatibleTurn({
+      apiUrl: 'https://api.example.com',
+      apiStyle: 'openai',
+      apiKey: 'sk-demo-key',
+      model: 'gpt-5',
+      systemPrompt: '你是测试助手。',
+      userPrompt: '把 10 个 electromagnetic_matrix 装入 b-9',
+    } as never);
+
+    assert.equal(callCount, 2);
+    assert.match(prompts[1] ?? '', /transfer_item requires buildingId/i);
+    assert.match(prompts[1] ?? '', /"command":"transfer_item"/);
+    assert.match(prompts[1] ?? '', /"buildingId":"b-9"/);
+    assert.equal(parsed.actions[0]?.type, 'game.command');
+    assert.deepEqual(parsed.actions[0], {
+      type: 'game.command',
+      command: 'transfer_item',
+      args: {
+        buildingId: 'b-9',
+        itemId: 'electromagnetic_matrix',
+        quantity: 10,
+      },
+    });
+  });
+
   it('supports http_api provider config with apiStyle', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-provider-http-api-'));
 

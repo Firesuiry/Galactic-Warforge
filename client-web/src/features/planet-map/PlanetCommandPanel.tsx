@@ -5,6 +5,7 @@ import type { ApiClient } from "@shared/api";
 import type {
   CatalogView,
   CommandResponse,
+  PlanetNetworksView,
   PlanetRuntimeView,
   StateSummary,
   SystemRuntimeView,
@@ -26,6 +27,7 @@ import {
   deriveResearchGroups,
   getResearchProgressPercent,
 } from "@/features/planet-map/research-workflow";
+import { deriveBuildWorkflowView } from "@/features/planet-map/build-workflow";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -45,6 +47,7 @@ import {
 interface PlanetCommandPanelProps {
   catalog?: CatalogView;
   client: ApiClient;
+  networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   summary?: StateSummary;
@@ -143,6 +146,7 @@ function journalTone(entry: PlanetCommandJournalEntry) {
 export function PlanetCommandPanel({
   catalog,
   client,
+  networks,
   planet,
   runtime,
   summary,
@@ -162,6 +166,7 @@ export function PlanetCommandPanel({
   const [buildDirection, setBuildDirection] = useState<
     "north" | "east" | "south" | "west" | "auto"
   >("auto");
+  const [showAdvancedBuild, setShowAdvancedBuild] = useState(false);
   const [recipeId, setRecipeId] = useState("");
   const [moveUnitId, setMoveUnitId] = useState("");
   const [moveX, setMoveX] = useState(0);
@@ -245,12 +250,26 @@ export function PlanetCommandPanel({
       ),
     [catalog?.items],
   );
-  const buildableBuildings = useMemo(
-    () =>
-      [...(catalog?.buildings ?? [])]
-        .filter((entry) => entry.buildable)
-        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
-    [catalog?.buildings],
+  const buildWorkflow = useMemo(
+    () => deriveBuildWorkflowView({
+      catalog,
+      journal,
+      networks,
+      planet,
+      playerId,
+      selectedPosition: { x: buildX, y: buildY, z: 0 },
+      summary,
+    }),
+    [buildX, buildY, catalog, journal, networks, planet, playerId, summary],
+  );
+  const visibleBuildOptions = useMemo(
+    () => [
+      ...buildWorkflow.catalog.recommended,
+      ...buildWorkflow.catalog.unlocked,
+      ...(showAdvancedBuild ? buildWorkflow.catalog.locked : []),
+      ...(showAdvancedBuild ? buildWorkflow.catalog.debugOnly : []),
+    ],
+    [buildWorkflow.catalog, showAdvancedBuild],
   );
   const recipesForBuilding = useMemo(
     () =>
@@ -373,10 +392,16 @@ export function PlanetCommandPanel({
   );
 
   useEffect(() => {
-    if (buildableBuildings.length > 0 && !buildingType) {
-      setBuildingType(buildableBuildings[0].id);
+    if (visibleBuildOptions.length === 0) {
+      if (buildingType) {
+        setBuildingType("");
+      }
+      return;
     }
-  }, [buildableBuildings, buildingType]);
+    if (!visibleBuildOptions.some((entry) => entry.id === buildingType)) {
+      setBuildingType(visibleBuildOptions[0].id);
+    }
+  }, [buildingType, visibleBuildOptions]);
 
   useEffect(() => {
     const nextResearchId = researchGroups.available[0]?.id ?? "";
@@ -654,6 +679,28 @@ export function PlanetCommandPanel({
     : "";
   const recentEntries = journal.slice(0, 5);
 
+  function getBuildOptionLabel(entry: (typeof visibleBuildOptions)[number]) {
+    const displayName = entry.name || getBuildingDisplayName(catalog, entry.id);
+    if (entry.visibility === "locked") {
+      return `${displayName} · 未解锁`;
+    }
+    if (entry.visibility === "debugOnly") {
+      return `${displayName} · 目录异常`;
+    }
+    return `${displayName} · ${entry.id}`;
+  }
+
+  function renderHintDetail(detail: string) {
+    const lines = detail
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length <= 1) {
+      return detail;
+    }
+    return lines[lines.length - 1];
+  }
+
   async function runCommand(
     actionLabel: string,
     execute: () => Promise<CommandResponse>,
@@ -841,6 +888,68 @@ export function PlanetCommandPanel({
 
       <section className="planet-side-section">
         <div className="section-title">建造</div>
+        <div className="build-workflow-header">
+          <button
+            className="secondary-button"
+            onClick={() => setShowAdvancedBuild((value) => !value)}
+            type="button"
+          >
+            {showAdvancedBuild ? "隐藏高级建造" : "显示高级建造"}
+          </button>
+          <span className="subtle-text">
+            默认只暴露已解锁主流程建筑；高级模式才显示未解锁与目录异常项。
+          </span>
+        </div>
+        <div className="build-preflight">
+          <div className="section-title section-title--minor">建造前检查</div>
+          {buildWorkflow.reachability.executorUnitId ? (
+            <div className="build-preflight__summary">
+              <span>
+                执行体 {buildWorkflow.reachability.executorUnitId}
+              </span>
+              <span>
+                distance / operateRange = {buildWorkflow.reachability.distance ?? "-"} /{" "}
+                {buildWorkflow.reachability.operateRange ?? "-"}
+              </span>
+            </div>
+          ) : (
+            <p className="subtle-text">当前没有可用执行体，无法做距离预检。</p>
+          )}
+          {buildWorkflow.preflightHints.map((hint) => (
+            <div
+              className={`command-inline-hint command-inline-hint--${hint.tone}`}
+              key={hint.title}
+            >
+              <strong>{hint.title}</strong>
+              <div className="subtle-text">{renderHintDetail(hint.detail)}</div>
+              {hint.suggestedAction === "move_executor" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setActiveWorkflow("basic");
+                    if (buildWorkflow.reachability.executorUnitId) {
+                      setMoveUnitId(buildWorkflow.reachability.executorUnitId);
+                    }
+                    setMoveX(buildX);
+                    setMoveY(buildY);
+                  }}
+                  type="button"
+                >
+                  切到移动工作流
+                </button>
+              ) : null}
+            </div>
+          ))}
+          {buildWorkflow.postBuildHints.map((hint) => (
+            <div
+              className={`command-inline-hint command-inline-hint--${hint.tone}`}
+              key={`${hint.title}:${hint.detail}`}
+            >
+              <strong>{hint.title}</strong>
+              <div className="subtle-text">{renderHintDetail(hint.detail)}</div>
+            </div>
+          ))}
+        </div>
         <div className="compact-form-grid">
           <label className="field">
             <span>{fieldLabel("x")}</span>
@@ -864,9 +973,9 @@ export function PlanetCommandPanel({
               onChange={(event) => setBuildingType(event.target.value)}
               value={buildingType}
             >
-              {buildableBuildings.map((entry) => (
+              {visibleBuildOptions.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {getBuildingDisplayName(catalog, entry.id)} · {entry.id}
+                  {getBuildOptionLabel(entry)}
                 </option>
               ))}
             </select>
@@ -911,6 +1020,7 @@ export function PlanetCommandPanel({
                 }),
                 {
                   focus: {
+                    buildingType,
                     position: { x: buildX, y: buildY, z: 0 },
                   },
                 },
@@ -989,8 +1099,7 @@ export function PlanetCommandPanel({
               <option value="">选择建筑</option>
               {ownBuildings.map((building) => (
                 <option key={building.id} value={building.id}>
-                  {building.id} ·{" "}
-                  {getBuildingDisplayName(catalog, building.type)}
+                  {building.id} · {building.type}
                 </option>
               ))}
             </select>

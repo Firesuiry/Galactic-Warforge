@@ -48,6 +48,15 @@ const OBSERVE_GAME_COMMANDS = new Set<CanonicalGameCommandName>([
 
 const BUILD_DIRECTIONS = new Set(['north', 'east', 'south', 'west', 'auto']);
 const RAY_RECEIVER_MODES = new Set(['power', 'photon', 'hybrid']);
+const ARG_ALIASES: Partial<Record<string, string[]>> = {
+  systemId: ['system_id'],
+  planetId: ['planet_id'],
+  buildingType: ['building_type'],
+  recipeId: ['recipe_id'],
+  techId: ['tech_id'],
+  buildingId: ['building_id'],
+  itemId: ['item_id'],
+};
 
 function asRecord(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -64,6 +73,15 @@ function asFiniteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function getArgValue(args: Record<string, unknown>, fieldName: string) {
+  for (const key of [fieldName, ...(ARG_ALIASES[fieldName] ?? [])]) {
+    if (args[key] !== undefined) {
+      return args[key];
+    }
+  }
+  return undefined;
+}
+
 function requireArgsRecord(value: unknown, command: CanonicalGameCommandName) {
   const args = asRecord(value);
   if (!args) {
@@ -77,7 +95,7 @@ function requireString(
   fieldName: string,
   command: CanonicalGameCommandName,
 ) {
-  const value = asString(args[fieldName]);
+  const value = asString(getArgValue(args, fieldName));
   if (!value) {
     throw new Error(`${command} requires ${fieldName}`);
   }
@@ -89,7 +107,7 @@ function requireInteger(
   fieldName: string,
   command: CanonicalGameCommandName,
 ) {
-  const value = asFiniteNumber(args[fieldName]);
+  const value = asFiniteNumber(getArgValue(args, fieldName));
   if (value === undefined || !Number.isInteger(value)) {
     throw new Error(`${command} requires integer ${fieldName}`);
   }
@@ -101,7 +119,7 @@ function optionalInteger(
   fieldName: string,
   command: CanonicalGameCommandName,
 ) {
-  if (args[fieldName] === undefined) {
+  if (getArgValue(args, fieldName) === undefined) {
     return undefined;
   }
   return requireInteger(args, fieldName, command);
@@ -143,22 +161,24 @@ export function normalizeGameCommandAction(action: Record<string, unknown>): Can
 
   if (command === 'build') {
     const args = requireArgsRecord(action.args, command);
-    const direction = asString(args.direction);
+    const direction = asString(getArgValue(args, 'direction'));
     if (direction && !BUILD_DIRECTIONS.has(direction)) {
       throw new Error('build direction must be north/east/south/west/auto');
     }
+    const z = optionalInteger(args, 'z', command);
+    const recipeId = asString(getArgValue(args, 'recipeId'));
     return {
       type: 'game.command',
       command,
       args: {
         x: requireInteger(args, 'x', command),
         y: requireInteger(args, 'y', command),
-        ...(optionalInteger(args, 'z', command) !== undefined
-          ? { z: optionalInteger(args, 'z', command) }
+        ...(z !== undefined
+          ? { z }
           : {}),
         buildingType: requireString(args, 'buildingType', command),
         ...(direction ? { direction: direction as 'north' | 'east' | 'south' | 'west' | 'auto' } : {}),
-        ...(asString(args.recipeId) ? { recipeId: asString(args.recipeId) } : {}),
+        ...(recipeId ? { recipeId } : {}),
       },
     };
   }
