@@ -93,4 +93,22 @@ describe('LoginPage', () => {
       expect(useSessionStore.getState().serverUrl).toBe(createFixtureServerUrl('baseline'));
     });
   });
+
+  it('在线模式明确提示填写 Web 入口地址，并把代理/CORS 失败转换成可理解错误', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Failed to fetch'))));
+    const user = userEvent.setup();
+
+    renderApp(['/login']);
+
+    expect(screen.getByLabelText('Web 入口地址')).toBeInTheDocument();
+    expect(screen.getByText(/游戏服务端地址已由当前 Web 入口代理处理/)).toBeInTheDocument();
+
+    const webEntryInput = screen.getByLabelText('Web 入口地址');
+    await user.clear(webEntryInput);
+    await user.type(webEntryInput, 'http://127.0.0.1:18081');
+    await user.click(screen.getByRole('button', { name: '连接并进入总览' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/请填写 Web 入口地址/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/不要直接填写游戏服务端端口/);
+  });
 });

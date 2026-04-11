@@ -120,6 +120,12 @@ agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
 
 如果 agent turn 执行失败，当前会额外向会话写入一条 `system` 消息，避免前端表现成“私聊无回复”。
 
+补充约束：
+
+- `assistantPreview` 只表示当前 turn 的规划/执行摘要，不是正式回复
+- provider 若在 `done=true` 时没有返回 `final_answer`，turn 会直接判为失败，公开错误码为 `provider_schema_invalid`
+- 只有真正落库了正式回复消息的 turn 才会标记为 `succeeded`
+
 补充：
 
 - `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 `game.cli`
@@ -227,6 +233,7 @@ agent 实例自身也保留：
 
 - HTTP API provider 的 `apiUrl` / `apiStyle(openai|claude)` / `apiKey` / `model`
 - CLI provider 的命令、工作目录和启动参数
+- `commandWhitelist`：按 `observe / build / research / management / combat` 分组的可视化白名单；内置 MiniMax Provider 和 Web 新建 Provider 默认都会展开完整 agent 命令集合
 
 当前 `http_api` 已支持 OpenAI 风格和 Claude 风格两种接口，并针对 MiniMax 实际返回的 `<think>...</think>` 前缀做了解析兼容，结构化 JSON 不再因为前置思维块而失败。
 

@@ -48,6 +48,7 @@ export function classifyPublicTurnError(error: unknown): PublicTurnError {
   if (
     normalized.includes('actions must be an array')
     || normalized.includes('done must be a boolean')
+    || normalized.includes('final_answer is required')
     || normalized.includes('http api response missing content')
     || normalized.includes('unexpected token')
     || normalized.includes('unexpected end of json')

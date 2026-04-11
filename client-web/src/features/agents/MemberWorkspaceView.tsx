@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
+import { getMissingPolicyCategories, getProviderCommandCoverageCategories } from './provider-command-catalog';
 import { ProviderManagerView } from './ProviderManagerView';
 import type {
   AgentPolicyView,
@@ -76,6 +77,12 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
   const selectedDraftProvider = props.providers.find((provider) => provider.id === props.memberProviderId);
   const ownedSchedules = selectedAgent
     ? props.schedules.filter((schedule) => schedule.ownerAgentId === selectedAgent.id)
+    : [];
+  const selectedProviderMissingCategories = selectedAgent && selectedProvider
+    ? getMissingPolicyCategories(
+        selectedProvider.toolPolicy.commandWhitelist,
+        selectedAgent.policy?.commandCategories ?? [],
+      )
     : [];
   const [planetIdsText, setPlanetIdsText] = useState('');
   const [commandCategoriesText, setCommandCategoriesText] = useState('');
@@ -194,6 +201,14 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               <strong>当前模型 Provider</strong>
               <span>{selectedDraftProvider.name}</span>
               <span>{selectedDraftProvider.description || '未填写模型 Provider 说明'}</span>
+              <span>
+                {selectedDraftProvider.toolPolicy.commandWhitelist.length > 0
+                  ? `命令白名单 ${selectedDraftProvider.toolPolicy.commandWhitelist.length} 项 · ${getProviderCommandCoverageCategories(selectedDraftProvider.toolPolicy.commandWhitelist).join(', ')}`
+                  : '命令白名单未限制'}
+              </span>
+              {selectedDraftProvider.toolPolicy.commandWhitelist.length > 0 ? (
+                <span>{selectedDraftProvider.toolPolicy.commandWhitelist.join(', ')}</span>
+              ) : null}
             </div>
           ) : (
             <div className="agent-members-view__placeholder">
@@ -218,6 +233,23 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               <strong>模型 Provider</strong>
               <span>{selectedProvider?.name ?? formatProviderName(selectedAgent.providerId, props.providers)}</span>
               <span>{selectedProvider?.description || '未填写模型 Provider 说明'}</span>
+              {selectedProvider ? (
+                <>
+                  <span>
+                    {selectedProvider.toolPolicy.commandWhitelist.length > 0
+                      ? `命令白名单 ${selectedProvider.toolPolicy.commandWhitelist.length} 项 · ${getProviderCommandCoverageCategories(selectedProvider.toolPolicy.commandWhitelist).join(', ')}`
+                      : '命令白名单未限制'}
+                  </span>
+                  {selectedProvider.toolPolicy.commandWhitelist.length > 0 ? (
+                    <span>{selectedProvider.toolPolicy.commandWhitelist.join(', ')}</span>
+                  ) : null}
+                  {selectedProviderMissingCategories.length > 0 ? (
+                    <span className="subtle-text">
+                      当前成员权限包含 {selectedProviderMissingCategories.join(', ')}，但 Provider 白名单未显式覆盖这些类别，请同步检查两边配置。
+                    </span>
+                  ) : null}
+                </>
+              ) : null}
             </div>
             <div className="agent-im__detail-card">
               <strong>运行状态</strong>

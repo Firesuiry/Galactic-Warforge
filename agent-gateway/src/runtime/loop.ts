@@ -186,6 +186,9 @@ export async function runAgentLoop(input: {
     }
 
     if (turn.done) {
+      if (!finalMessage.trim()) {
+        throw new Error('final_answer is required when done is true');
+      }
       return { finalMessage, history };
     }
   }

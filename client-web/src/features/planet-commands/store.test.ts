@@ -117,4 +117,48 @@ describe("planet command store", () => {
       pendingRecovery: false,
     });
   });
+
+  it("会用 research_completed 这类异步完成事件收口最终成功态", () => {
+    act(() => {
+      usePlanetCommandStore.getState().reconcileAcceptedResponse({
+        commandType: "start_research",
+        planetId: "planet-1-1",
+        focus: { techId: "electromagnetism" },
+        response: {
+          request_id: "req-research-2",
+          accepted: true,
+          enqueue_tick: 230,
+          results: [
+            {
+              command_index: 0,
+              status: "queued",
+              code: "OK",
+              message: "start_research accepted",
+            },
+          ],
+        },
+      });
+    });
+
+    act(() => {
+      usePlanetCommandStore.getState().reconcileAuthoritativeEvent({
+        event_id: "evt-research-completed-1",
+        tick: 233,
+        event_type: "research_completed",
+        visibility_scope: "p1",
+        payload: {
+          tech_id: "electromagnetism",
+        },
+      } as never);
+    });
+
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      requestId: "req-research-2",
+      status: "succeeded",
+      authoritativeCode: "OK",
+      authoritativeMessage: "electromagnetism 研究完成",
+      authoritativeSource: "event",
+      relatedEventIds: ["evt-research-completed-1"],
+    });
+  });
 });

@@ -1099,6 +1099,134 @@ process.stdout.write(JSON.stringify({
     )));
   });
 
+  it('fails the turn when provider finishes without final_answer and keeps preview separate from formal reply', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => ({
+        assistantMessage: '收到。',
+        actions: [],
+        done: true,
+      }),
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-no-final-answer',
+        name: 'No Final Answer Provider',
+        providerKind: 'codex_cli',
+        description: 'missing final answer test',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 1,
+          maxToolCallsPerTurn: 2,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-no-final-answer',
+        name: '最小回复测试成员',
+        providerId: 'provider-no-final-answer',
+        serverUrl: 'http://127.0.0.1:18081',
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'worker',
+        policy: {
+          planetIds: ['planet-1-1'],
+          commandCategories: ['observe'],
+          canCreateAgents: false,
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'conv-no-final-answer',
+        type: 'dm',
+        name: '与最小回复测试成员私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-no-final-answer'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const messageResponse = await fetch(`${server.url}/conversations/conv-no-final-answer/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '你好',
+      }),
+    });
+    assert.equal(messageResponse.status, 202);
+
+    let turns: Array<{
+      id: string;
+      status: string;
+      assistantPreview?: string;
+      finalMessageId?: string;
+      errorCode?: string;
+      errorMessage?: string;
+    }> = [];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const turnsResponse = await fetch(`${server.url}/conversations/conv-no-final-answer/turns`);
+      turns = await turnsResponse.json() as typeof turns;
+      if (turns.length === 1 && turns[0]?.status === 'failed') {
+        break;
+      }
+      await delay(20);
+    }
+
+    assert.equal(turns.length, 1);
+    assert.equal(turns[0]?.status, 'failed');
+    assert.equal(turns[0]?.assistantPreview, '收到。');
+    assert.equal(turns[0]?.finalMessageId, undefined);
+    assert.equal(turns[0]?.errorCode, 'provider_schema_invalid');
+
+    const messagesResponse = await fetch(`${server.url}/conversations/conv-no-final-answer/messages`);
+    const messages = await messagesResponse.json() as Array<{
+      senderType: string;
+      content: string;
+    }>;
+
+    assert.equal(messages.filter((message) => message.senderType === 'agent').length, 0);
+    assert.ok(messages.some((message) => (
+      message.senderType === 'system'
+      && message.content.includes('模型返回结构无效')
+    )));
+  });
+
   it('fails the turn when agent.create policy is incomplete and keeps the failure bound to the request', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({

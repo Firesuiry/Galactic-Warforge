@@ -26,6 +26,38 @@ function createInitialFormValue() {
   };
 }
 
+function getCurrentWebOrigin() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  return normalizeServerUrl(window.location.origin);
+}
+
+function formatConnectionError(
+  error: unknown,
+  connectionMode: 'server' | 'fixture',
+  serverUrl: string,
+) {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const normalizedMessage = rawMessage.toLowerCase();
+  const currentWebOrigin = getCurrentWebOrigin();
+
+  if (
+    connectionMode === 'server'
+    && currentWebOrigin
+    && normalizeServerUrl(serverUrl) !== currentWebOrigin
+    && (
+      normalizedMessage.includes('failed to fetch')
+      || normalizedMessage.includes('network')
+      || normalizedMessage.includes('fetch')
+    )
+  ) {
+    return `当前在线模式请填写 Web 入口地址（例如 ${currentWebOrigin}），不要直接填写游戏服务端端口（例如 18081 / 18082）。游戏服务端地址已由当前 Web 入口代理处理，浏览器直接访问会触发代理/CORS 失败。`;
+  }
+
+  return rawMessage;
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -86,7 +118,9 @@ export function LoginPage() {
       queryClient.clear();
       navigate('/overview', { replace: true });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(
+        formatConnectionError(error, connectionMode, nextValue.serverUrl),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -97,9 +131,9 @@ export function LoginPage() {
       <section className="panel login-panel">
         <div className="page-header">
           <p className="eyebrow">T004 登录页与会话管理</p>
-          <h1>连接 SiliconWorld 服务端</h1>
+          <h1>连接 SiliconWorld Web 入口</h1>
           <p className="subtle-text">
-            在线模式走 Vite 代理，离线模式会直接载入本地 fixtures。
+            在线模式通过当前 Web 入口代理访问游戏服务端，离线模式会直接载入本地 fixtures。
           </p>
         </div>
 
@@ -127,13 +161,17 @@ export function LoginPage() {
 
           {connectionMode === 'server' ? (
             <label className="field">
-              <span>服务地址</span>
+              <span>Web 入口地址</span>
               <input
+                aria-label="Web 入口地址"
                 name="serverUrl"
                 value={form.serverUrl}
                 onChange={(event) => updateField('serverUrl', event.target.value)}
-                placeholder="http://localhost:5173"
+                placeholder={getCurrentWebOrigin() || 'http://127.0.0.1:4173'}
               />
+              <span className="field-hint">
+                游戏服务端地址已由当前 Web 入口代理处理，无需直接填写 `18081 / 18082` 这类游戏服务端端口。
+              </span>
             </label>
           ) : (
             <label className="field">

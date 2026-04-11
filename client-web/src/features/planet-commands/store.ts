@@ -70,6 +70,21 @@ interface PlanetCommandActions {
   ingestEvent: (event: GameEventDetail) => void;
 }
 
+interface AsyncAuthoritativeRule {
+  commandType: string;
+  eventType: string;
+  resolveMessage: (
+    entry: PlanetCommandJournalEntry,
+    payload: Record<string, unknown>,
+  ) => string;
+}
+
+export const PLANET_COMMAND_RECOVERY_EVENT_TYPES = [
+  "command_result",
+  "research_completed",
+  "rocket_launched",
+] as const;
+
 function createInitialState(planetId = ""): PlanetCommandState {
   return {
     planetId,
@@ -166,6 +181,27 @@ function matchesFocus(
 
   return false;
 }
+
+const ASYNC_AUTHORITATIVE_RULES: AsyncAuthoritativeRule[] = [
+  {
+    commandType: "start_research",
+    eventType: "research_completed",
+    resolveMessage: (entry, payload) => (
+      `${asString(payload.tech_id) || entry.focus?.techId || "当前科技"} 研究完成`
+    ),
+  },
+  {
+    commandType: "launch_rocket",
+    eventType: "rocket_launched",
+    resolveMessage: (entry, payload) => {
+      const launcherId = asString(payload.building_id) || entry.focus?.entityId || "发射井";
+      const count = asNumber(payload.count);
+      return count && count > 1
+        ? `${launcherId} 已完成 ${count} 枚火箭发射`
+        : `${launcherId} 已完成火箭发射`;
+    },
+  },
+];
 
 function resolveNextHint(entry: PlanetCommandJournalEntry) {
   const message = `${entry.authoritativeCode ?? ""} ${entry.authoritativeMessage ?? ""}`.toLowerCase();
@@ -270,6 +306,67 @@ function reconcileCommandResultEntry(
   };
 }
 
+function reconcileAsyncAuthoritativeEntry(
+  entry: PlanetCommandJournalEntry,
+  event: GameEventDetail,
+  source: Exclude<CommandAuthoritativeSource, "response">,
+  rule: AsyncAuthoritativeRule,
+) {
+  const payload = asRecord(event.payload) ?? {};
+  const nextEntry = {
+    ...upsertRelatedEvent(entry, event),
+    status: "succeeded" as const,
+    authoritativeCode: entry.authoritativeCode || "OK",
+    authoritativeMessage: rule.resolveMessage(entry, payload),
+    authoritativeSource: source,
+    pendingRecovery: false,
+  };
+  return {
+    ...nextEntry,
+    nextHint: resolveNextHint(nextEntry),
+  };
+}
+
+function applyAuthoritativeEventToJournal(
+  journal: PlanetCommandJournalEntry[],
+  event: GameEventDetail,
+  source: Exclude<CommandAuthoritativeSource, "response">,
+) {
+  const payload = asRecord(event.payload) ?? {};
+  if (event.event_type === "command_result") {
+    const requestId = asString(payload.request_id);
+    if (!requestId) {
+      return { changed: false, nextEntries: journal };
+    }
+    return mapJournalEntries(
+      journal,
+      requestId,
+      (entry) => reconcileCommandResultEntry(entry, event, source),
+    );
+  }
+
+  let changed = false;
+  const nextEntries = journal.map((entry) => {
+    if (!matchesFocus(entry.focus, event)) {
+      return entry;
+    }
+
+    const rule = ASYNC_AUTHORITATIVE_RULES.find(
+      (candidate) => candidate.commandType === entry.commandType
+        && candidate.eventType === event.event_type,
+    );
+    if (!rule) {
+      changed = true;
+      return upsertRelatedEvent(entry, event);
+    }
+
+    changed = true;
+    return reconcileAsyncAuthoritativeEntry(entry, event, source, rule);
+  });
+
+  return { changed, nextEntries };
+}
+
 export const usePlanetCommandStore = create<
   PlanetCommandState & PlanetCommandActions
 >()((set) => ({
@@ -340,40 +437,16 @@ export const usePlanetCommandStore = create<
         return state;
       }
 
-      const payload = asRecord(event.payload) ?? {};
-      if (event.event_type === "command_result") {
-        const requestId = asString(payload.request_id);
-        if (!requestId) {
-          return state;
-        }
-
-        const { changed, nextEntries } = mapJournalEntries(
-          state.journal,
-          requestId,
-          (entry) => reconcileCommandResultEntry(entry, event, "event"),
-        );
-        if (!changed) {
-          return state;
-        }
-        return {
-          journal: nextEntries,
-        };
-      }
-
-      let changed = false;
-      const nextJournal = state.journal.map((entry) => {
-        if (!matchesFocus(entry.focus, event)) {
-          return entry;
-        }
-        changed = true;
-        return upsertRelatedEvent(entry, event);
-      });
-
+      const { changed, nextEntries } = applyAuthoritativeEventToJournal(
+        state.journal,
+        event,
+        "event",
+      );
       if (!changed) {
         return state;
       }
       return {
-        journal: nextJournal,
+        journal: nextEntries,
       };
     });
   },
@@ -386,18 +459,10 @@ export const usePlanetCommandStore = create<
       let nextJournal = state.journal;
       let changed = false;
       for (const event of snapshot.events) {
-        if (event.event_type !== "command_result") {
-          continue;
-        }
-        const payload = asRecord(event.payload) ?? {};
-        const requestId = asString(payload.request_id);
-        if (!requestId) {
-          continue;
-        }
-        const result = mapJournalEntries(
+        const result = applyAuthoritativeEventToJournal(
           nextJournal,
-          requestId,
-          (entry) => reconcileCommandResultEntry(entry, event, "snapshot"),
+          event,
+          "snapshot",
         );
         if (!result.changed) {
           continue;

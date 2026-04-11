@@ -1,5 +1,12 @@
 import { useState, type FormEvent } from 'react';
 
+import type { CommandPermissionCategory } from '@shared/command-catalog';
+
+import {
+  DEFAULT_PROVIDER_COMMAND_WHITELIST,
+  getProviderCommandCoverageCategories,
+  listProviderCommandsByCategory,
+} from './provider-command-catalog';
 import type { AgentProviderKindView, CreateProviderPayload, ModelProviderView } from './types';
 
 interface ProviderManagerViewProps {
@@ -11,6 +18,15 @@ interface ProviderManagerViewProps {
 
 const DEFAULT_WORKDIR = '/home/firesuiry/develop/siliconWorld';
 const DEFAULT_API_URL = 'https://api.minimaxi.com/v1';
+const PROVIDER_COMMAND_GROUPS = listProviderCommandsByCategory();
+
+const PROVIDER_CATEGORY_LABELS: Record<CommandPermissionCategory, string> = {
+  observe: '观察',
+  build: '建造',
+  research: '研究',
+  management: '管理',
+  combat: '战斗',
+};
 
 function getProviderDefaults(providerKind: AgentProviderKindView) {
   if (providerKind === 'http_api') {
@@ -59,6 +75,9 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
   const [command, setCommand] = useState(getProviderDefaults('codex_cli').command);
   const [workdir, setWorkdir] = useState(DEFAULT_WORKDIR);
   const [argsText, setArgsText] = useState('');
+  const [commandWhitelist, setCommandWhitelist] = useState<string[]>(
+    DEFAULT_PROVIDER_COMMAND_WHITELIST,
+  );
 
   function handleProviderKindChange(nextProviderKind: AgentProviderKindView) {
     const defaults = getProviderDefaults(nextProviderKind);
@@ -85,7 +104,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
         cliEnabled: true,
         maxSteps: 8,
         maxToolCallsPerTurn: 4,
-        commandWhitelist: ['build', 'overview', 'galaxy', 'planet'],
+        commandWhitelist,
       },
       providerConfig: providerKind === 'http_api'
         ? {
@@ -102,6 +121,31 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             argsTemplate: parseArgsText(argsText),
             envOverrides: {},
           },
+    });
+  }
+
+  function toggleCommand(commandId: string) {
+    setCommandWhitelist((current) => (
+      current.includes(commandId)
+        ? current.filter((entry) => entry !== commandId)
+        : [...current, commandId]
+    ));
+  }
+
+  function replaceGroupCommands(
+    permissionCategory: CommandPermissionCategory,
+    checked: boolean,
+  ) {
+    const groupCommands = PROVIDER_COMMAND_GROUPS
+      .find((group) => group.permissionCategory === permissionCategory)
+      ?.commands.map((definition) => definition.command) ?? [];
+    const groupCommandSet = new Set(groupCommands);
+
+    setCommandWhitelist((current) => {
+      if (checked) {
+        return [...new Set([...current, ...groupCommands])];
+      }
+      return current.filter((commandId) => !groupCommandSet.has(commandId));
     });
   }
 
@@ -124,6 +168,11 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
               <strong>{provider.name}</strong>
               <span>{provider.description || '未填写模型 Provider 说明'}</span>
               <span>{provider.providerKind} / {provider.defaultModel}</span>
+              <span>
+                {provider.toolPolicy.commandWhitelist.length > 0
+                  ? `命令白名单 ${provider.toolPolicy.commandWhitelist.length} 项 · ${getProviderCommandCoverageCategories(provider.toolPolicy.commandWhitelist).join(', ')}`
+                  : '命令白名单未限制'}
+              </span>
               {'command' in provider.providerConfig ? (
                 <>
                   <span>{`命令 ${provider.providerConfig.command}`}</span>
@@ -267,6 +316,58 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             </label>
           </>
         )}
+        <section className="agent-im__detail-card">
+          <div className="section-title">命令白名单</div>
+          <p className="subtle-text">
+            默认展开所有 agent 可用命令。成员权限页的命令分类应与这里的命令覆盖范围保持一致，避免出现“权限看起来开了，但 Provider 看不到对应命令”的配置陷阱。
+          </p>
+          {PROVIDER_COMMAND_GROUPS.map((group) => {
+            const checkedCount = group.commands.filter(
+              (definition) => commandWhitelist.includes(definition.command),
+            ).length;
+            const allChecked = checkedCount === group.commands.length;
+
+            return (
+              <fieldset key={group.permissionCategory} className="agent-im__detail-card">
+                <legend>{PROVIDER_CATEGORY_LABELS[group.permissionCategory]}</legend>
+                <div className="agent-members-view__inline-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={() => replaceGroupCommands(group.permissionCategory, true)}
+                    type="button"
+                  >
+                    全选本组
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => replaceGroupCommands(group.permissionCategory, false)}
+                    type="button"
+                  >
+                    清空本组
+                  </button>
+                  <span className="subtle-text">
+                    {allChecked
+                      ? '本组已全选'
+                      : `${checkedCount}/${group.commands.length} 已启用`}
+                  </span>
+                </div>
+                <div className="agent-form__checkbox-grid">
+                  {group.commands.map((definition) => (
+                    <label key={definition.command} className="agent-form__checkbox">
+                      <input
+                        aria-label={definition.label}
+                        checked={commandWhitelist.includes(definition.command)}
+                        onChange={() => toggleCommand(definition.command)}
+                        type="checkbox"
+                      />
+                      <span>{definition.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            );
+          })}
+        </section>
         <button className="primary-button" disabled={!providerName.trim() || props.fixtureMode} type="submit">
           保存模型 Provider
         </button>

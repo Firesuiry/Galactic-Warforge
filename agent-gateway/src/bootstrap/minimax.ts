@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { AGENT_ALLOWED_COMMANDS } from '../../../client-cli/src/command-catalog.js';
 import type { ModelProvider } from '../types.js';
 
 const BUILTIN_MINIMAX_PROVIDER_ID = 'builtin-minimax-api';
@@ -99,7 +100,7 @@ export async function ensureBuiltinMiniMaxProvider(input: EnsureBuiltinMiniMaxPr
       cliEnabled: true,
       maxSteps: 8,
       maxToolCallsPerTurn: 4,
-      commandWhitelist: ['build', 'overview', 'galaxy', 'planet'],
+      commandWhitelist: AGENT_ALLOWED_COMMANDS,
     },
     providerConfig: {
       apiUrl: BUILTIN_MINIMAX_BASE_URL,

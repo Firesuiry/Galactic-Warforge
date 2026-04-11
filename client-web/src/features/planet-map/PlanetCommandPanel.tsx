@@ -23,6 +23,7 @@ import {
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import {
+  PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
   type CommandJournalFocus,
   type PlanetCommandJournalEntry,
@@ -639,7 +640,7 @@ export function PlanetCommandPanel({
         focus: options.focus,
         execute,
         fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
-          event_types: ["command_result"],
+          event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
           limit: 50,
         }),
         recoveryTimeoutMs: 1600,
