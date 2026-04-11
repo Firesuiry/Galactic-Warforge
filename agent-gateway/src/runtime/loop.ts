@@ -186,10 +186,15 @@ export async function runAgentLoop(input: {
     }
 
     if (turn.done) {
+      if (finalMessage.trim()) {
+        return { finalMessage, history };
+      }
+      if (turn.assistantMessage.trim()) {
+        return { finalMessage: turn.assistantMessage, history };
+      }
       if (!finalMessage.trim()) {
         throw new Error('final_answer is required when done is true');
       }
-      return { finalMessage, history };
     }
   }
 

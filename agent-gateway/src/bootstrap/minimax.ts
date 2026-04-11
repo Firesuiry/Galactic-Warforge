@@ -95,7 +95,12 @@ export async function ensureBuiltinMiniMaxProvider(input: EnsureBuiltinMiniMaxPr
     providerKind: 'http_api',
     description: '启动时从仓库 .env 自动导入的 MiniMax API 模型 Provider。',
     defaultModel: BUILTIN_MINIMAX_MODEL,
-    systemPrompt: '你是智能体成员。请直接在当前会话中回复，并保持结论清晰。',
+    systemPrompt: [
+      '你是智能体成员。请直接在当前会话中回复，并保持结论清晰。',
+      '你必须返回 JSON，字段为 assistantMessage/actions/done。',
+      '如果本轮无需动作且已经完成，可以直接返回 {"assistantMessage":"收到，我先观察当前状态。","actions":[],"done":true}。',
+      '如果需要显式提交正式回复，也可以使用 final_answer。',
+    ].join(' '),
     toolPolicy: {
       cliEnabled: true,
       maxSteps: 8,

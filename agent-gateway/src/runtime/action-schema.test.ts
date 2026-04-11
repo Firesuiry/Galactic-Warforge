@@ -54,4 +54,34 @@ describe("action schema normalize", () => {
       /agent\.create requires complete policy/i,
     );
   });
+
+  it("skips empty action shells but keeps the turn itself valid", () => {
+    const normalized = normalizeProviderTurn({
+      assistantMessage: "已收到你的私聊",
+      done: true,
+      actions: [{}, { args: {} }],
+    });
+
+    assert.deepEqual(normalized, {
+      assistantMessage: "已收到你的私聊",
+      done: true,
+      actions: [],
+    } satisfies CanonicalAgentTurn);
+  });
+
+  it("does not swallow actions with business fields but missing type", () => {
+    assert.throws(
+      () =>
+        normalizeProviderTurn({
+          assistantMessage: "我先扫描当前行星。",
+          done: false,
+          actions: [
+            {
+              commandLine: "scan_planet planet-1-1",
+            },
+          ],
+        }),
+      /action\.type is required/i,
+    );
+  });
 });

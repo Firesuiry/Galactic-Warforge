@@ -146,4 +146,50 @@ describe('agent loop', () => {
     ]);
     assert.equal(result.finalMessage, '已安排完成。');
   });
+
+  it('accepts assistantMessage as the final reply when done is true and no final_answer exists', async () => {
+    const result = await runAgentLoop({
+      maxSteps: 1,
+      provider: {
+        async runTurn() {
+          return {
+            assistantMessage: '已收到你的私聊',
+            actions: [],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run() {
+          return 'ok';
+        },
+      },
+      initialContext: { goal: '回复私聊' },
+    });
+
+    assert.equal(result.finalMessage, '已收到你的私聊');
+  });
+
+  it('still prefers final_answer over assistantMessage when both are present', async () => {
+    const result = await runAgentLoop({
+      maxSteps: 1,
+      provider: {
+        async runTurn() {
+          return {
+            assistantMessage: '这是预览',
+            actions: [{ type: 'final_answer', message: '这是正式回复' }],
+            done: true,
+          };
+        },
+      },
+      cliRuntime: {
+        async run() {
+          return 'ok';
+        },
+      },
+      initialContext: { goal: '回复私聊' },
+    });
+
+    assert.equal(result.finalMessage, '这是正式回复');
+  });
 });

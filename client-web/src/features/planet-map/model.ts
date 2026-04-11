@@ -290,6 +290,13 @@ export function getItemCatalogEntry(
   return asCatalogMap(catalog?.items).get(itemId);
 }
 
+export function getRecipeCatalogEntry(
+  catalog: CatalogView | undefined,
+  recipeId: string,
+) {
+  return asCatalogMap(catalog?.recipes).get(recipeId);
+}
+
 export function getTechCatalogEntry(
   catalog: CatalogView | undefined,
   techId: string,
@@ -312,6 +319,13 @@ export function getItemDisplayName(
   itemId: string,
 ) {
   return translateItemId(itemId, getItemCatalogEntry(catalog, itemId)?.name);
+}
+
+export function getRecipeDisplayName(
+  catalog: CatalogView | undefined,
+  recipeId: string,
+) {
+  return getRecipeCatalogEntry(catalog, recipeId)?.name ?? recipeId;
 }
 
 export function getTechDisplayName(

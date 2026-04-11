@@ -177,9 +177,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `executors`：按 `planet_id` 组织的执行体映射；字段结构与 `executor` 相同。`executor` 仍保留为当前 active planet 上下文的兼容镜像
   - `tech` 字段说明:
     - `player_id` / `completed_techs` / `current_research` / `research_queue` / `total_researched`
+    - `completed_techs` 当前对外仍是 `{tech_id: level}` 的 level map；Web 研究派生层会在本地把它归一化成“已完成科技 ID 列表”，但接口本身尚未切到扁平 `string[]`
     - `current_research` / `research_queue` 元素字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason` / `enqueue_tick` / `complete_tick`
     - `progress` / `total_cost` 现在对应真实矩阵消耗进度；`required_cost` / `consumed_cost` 中的矩阵物品统一使用 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`
     - `blocked_reason` 当前常见值为 `waiting_lab` / `waiting_matrix` / `invalid_tech`
+    - 当前 `client-web` 的阶段化研究工作台主要依赖 `completed_techs`、`current_research.tech_id`、`progress`、`total_cost`、`required_cost`、`blocked_reason` 来派生“当前可研究 / 已完成 / 尚未满足前置”分组，以及“缺研究站 / 缺矩阵”提示
   - `combat_tech` 字段说明:
     - `player_id` / `unlocked_techs` / `current_research` / `research_progress`
     - `unlocked_techs` / `current_research` 中的科技对象字段：`id` / `name` / `type` / `level` / `max_level` / `research_cost` / `effects`

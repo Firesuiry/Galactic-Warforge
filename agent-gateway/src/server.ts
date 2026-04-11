@@ -171,7 +171,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
       case 'conversation.send_message':
         return action.content;
       default:
-        return action.type;
+        return action satisfies never;
     }
   }
 
@@ -522,10 +522,11 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         return;
       }
 
-      let currentTurn = await turnStore.get(turnId);
-      if (!currentTurn) {
+      const initialTurn = await turnStore.get(turnId);
+      if (!initialTurn) {
         return;
       }
+      let currentTurn: ConversationTurn = initialTurn;
 
       const persistTurn = async (
         updater: (turn: ConversationTurn) => ConversationTurn,
@@ -572,7 +573,8 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
                 `当前会话：${conversation.name}`,
                 `当前智能体：${agent.name}`,
                 '可用 action: game.cli / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
-                'assistantMessage 只能作为当前 turn 的规划/执行预览，正式回复必须通过 final_answer 提交。',
+                '如果本轮无需动作且已经完成，可直接返回 assistantMessage + [] + true。',
+                '如果同时返回 assistantMessage 与 final_answer，则以 final_answer 作为正式回复。',
               ],
             }),
           },

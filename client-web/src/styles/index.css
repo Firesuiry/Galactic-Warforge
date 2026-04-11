@@ -1216,6 +1216,122 @@ button {
   color: #ffd2d2;
 }
 
+.research-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.research-panel--current {
+  background:
+    linear-gradient(135deg, rgba(35, 83, 179, 0.28), rgba(19, 30, 55, 0.78)),
+    rgba(255, 255, 255, 0.03);
+  border-color: rgba(110, 170, 255, 0.26);
+}
+
+.research-panel--guide {
+  background: rgba(255, 214, 102, 0.08);
+  border-color: rgba(255, 214, 102, 0.18);
+}
+
+.research-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.research-panel__meta,
+.research-panel__details,
+.research-execute__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #c8d5f5;
+  font-size: 0.9rem;
+}
+
+.research-panel__hint {
+  color: #ffe39e;
+  font-size: 0.92rem;
+}
+
+.research-panel__guide-steps {
+  color: #ffe39e;
+  font-weight: 600;
+}
+
+.research-groups {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.research-group {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.research-group__title {
+  font-weight: 700;
+}
+
+.research-tech-list {
+  display: grid;
+  gap: 10px;
+}
+
+.research-tech-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+}
+
+.research-tech-card--available {
+  border-color: rgba(89, 227, 206, 0.2);
+  background: rgba(44, 193, 176, 0.08);
+}
+
+.research-tech-card--selected {
+  border-color: rgba(89, 227, 206, 0.44);
+  background: rgba(44, 193, 176, 0.18);
+}
+
+.research-tech-card--completed {
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.research-tech-card--locked {
+  border-style: dashed;
+  opacity: 0.78;
+}
+
+.research-tech-card__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.research-execute {
+  display: grid;
+  gap: 12px;
+}
+
 @media (max-width: 1100px) {
   .page-grid--planet {
     height: auto;
@@ -1231,6 +1347,10 @@ button {
   .planet-detail-shell,
   .planet-map-shell {
     min-height: auto;
+  }
+
+  .research-groups {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .planet-map-canvas {

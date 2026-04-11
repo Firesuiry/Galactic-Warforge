@@ -17,6 +17,8 @@ export interface CommandJournalFocus {
   planetId?: string;
   systemId?: string;
   itemId?: string;
+  buildingType?: string;
+  receiverMode?: "power" | "photon" | "hybrid";
 }
 
 export interface PlanetCommandJournalEntry {
@@ -217,10 +219,17 @@ function resolveNextHint(entry: PlanetCommandJournalEntry) {
 
   if (
     entry.commandType === "transfer_item"
-    && entry.focus?.techId
     && entry.status === "succeeded"
   ) {
-    return `物料已装入，下一步可继续启动 ${entry.focus.techId}。`;
+    if (entry.focus?.buildingType === "matrix_lab" && entry.focus.techId) {
+      return `物料已装入研究站，下一步可启动 ${entry.focus.techId}。`;
+    }
+    if (entry.focus?.buildingType === "em_rail_ejector") {
+      return "太阳帆已装入电磁弹射器，下一步可发射太阳帆扩展戴森云。";
+    }
+    if (entry.focus?.buildingType === "vertical_launching_silo") {
+      return "火箭已装入发射井，下一步可发射火箭构建戴森球结构。";
+    }
   }
 
   if (
@@ -240,9 +249,22 @@ function resolveNextHint(entry: PlanetCommandJournalEntry) {
   }
 
   if (
-    ["launch_solar_sail", "launch_rocket", "set_ray_receiver_mode"].includes(
-      entry.commandType,
-    )
+    entry.commandType === "set_ray_receiver_mode"
+    && entry.status === "succeeded"
+  ) {
+    if (entry.focus?.receiverMode === "power") {
+      return "射线接收站已切到 power，下一步观察电网回灌是否生效。";
+    }
+    if (entry.focus?.receiverMode === "photon") {
+      return "射线接收站已切到 photon，下一步观察光子产出与后续反物质链。";
+    }
+    if (entry.focus?.receiverMode === "hybrid") {
+      return "射线接收站已切到 hybrid，下一步同时关注电网回灌与接收输出。";
+    }
+  }
+
+  if (
+    ["launch_solar_sail", "launch_rocket"].includes(entry.commandType)
     && entry.status === "succeeded"
   ) {
     return "留意活动流中的 rocket_launched、research_completed 或电力变化事件。";

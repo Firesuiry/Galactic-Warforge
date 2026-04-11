@@ -29,6 +29,8 @@ function buildPrompt(input: AgentTurnRunnerInput) {
     input.provider.systemPrompt || '你是 SiliconWorld 智能体。',
     '你必须返回 JSON，字段为 assistantMessage/actions/done。',
     '返回格式示例：{"assistantMessage":"收到。","actions":[],"done":true}',
+    '如果本轮无需动作且已经完成，直接返回 assistantMessage + [] + true 即可。',
+    '如果需要显式提交正式回复，也可以使用 final_answer；当两者同时存在时，以 final_answer 为准。',
     '允许的 game.cli 命令如下：',
     tools,
     ...(input.contextSections ?? []),

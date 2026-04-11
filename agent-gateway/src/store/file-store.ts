@@ -30,5 +30,11 @@ export async function listJsonFiles<T>(dir: string): Promise<T[]> {
   await ensureDir(dir);
   const names = (await readdir(dir)).filter((name) => name.endsWith('.json'));
   const values = await Promise.all(names.map((name) => readJsonFile<T>(dir, name)));
-  return values.filter((value): value is T => Boolean(value));
+  const existingValues: T[] = [];
+  for (const value of values) {
+    if (value !== null) {
+      existingValues.push(value);
+    }
+  }
+  return existingValues;
 }

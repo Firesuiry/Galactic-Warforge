@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,6 +44,95 @@ function createPlanet() {
         type: "planetary_logistics_station",
         owner_id: "p1",
         position: { x: 1, y: 1, z: 0 },
+        hp: 120,
+        max_hp: 120,
+        level: 1,
+        vision_range: 2,
+        runtime: {
+          params: {
+            energy_consume: 0,
+            energy_generate: 0,
+            capacity: 0,
+            maintenance_cost: { minerals: 0, energy: 0 },
+            footprint: { width: 1, height: 1 },
+          },
+          functions: {},
+          state: "running",
+        },
+      },
+      "lab-1": {
+        id: "lab-1",
+        type: "matrix_lab",
+        owner_id: "p1",
+        position: { x: 2, y: 1, z: 0 },
+        hp: 120,
+        max_hp: 120,
+        level: 1,
+        vision_range: 2,
+        runtime: {
+          params: {
+            energy_consume: 0,
+            energy_generate: 0,
+            capacity: 0,
+            maintenance_cost: { minerals: 0, energy: 0 },
+            footprint: { width: 1, height: 1 },
+          },
+          functions: {},
+          state: "running",
+        },
+        storage: {
+          inventory: {
+            electromagnetic_matrix: 10,
+          },
+        },
+      },
+      "ejector-1": {
+        id: "ejector-1",
+        type: "em_rail_ejector",
+        owner_id: "p1",
+        position: { x: 3, y: 1, z: 0 },
+        hp: 120,
+        max_hp: 120,
+        level: 1,
+        vision_range: 2,
+        runtime: {
+          params: {
+            energy_consume: 0,
+            energy_generate: 0,
+            capacity: 0,
+            maintenance_cost: { minerals: 0, energy: 0 },
+            footprint: { width: 1, height: 1 },
+          },
+          functions: {},
+          state: "running",
+        },
+      },
+      "silo-1": {
+        id: "silo-1",
+        type: "vertical_launching_silo",
+        owner_id: "p1",
+        position: { x: 0, y: 2, z: 0 },
+        hp: 120,
+        max_hp: 120,
+        level: 1,
+        vision_range: 2,
+        runtime: {
+          params: {
+            energy_consume: 0,
+            energy_generate: 0,
+            capacity: 0,
+            maintenance_cost: { minerals: 0, energy: 0 },
+            footprint: { width: 1, height: 1 },
+          },
+          functions: {},
+          state: "running",
+        },
+      },
+      "ray-1": {
+        id: "ray-1",
+        type: "ray_receiver",
+        owner_id: "p1",
+        position: { x: 1, y: 2, z: 0 },
         hp: 120,
         max_hp: 120,
         level: 1,
@@ -111,6 +200,9 @@ function createCatalog() {
   return {
     items: [
       { id: "annihilation_constraint_sphere", name: "A Item" },
+      { id: "electromagnetic_matrix", name: "电磁矩阵" },
+      { id: "small_carrier_rocket", name: "小型运载火箭" },
+      { id: "solar_sail", name: "太阳帆" },
       { id: "silicon_ore", name: "S Item" },
     ],
     buildings: [
@@ -119,13 +211,82 @@ function createCatalog() {
         name: "Planetary Logistics Station",
         buildable: true,
       },
+      {
+        id: "matrix_lab",
+        name: "矩阵研究站",
+        buildable: true,
+      },
+      {
+        id: "tesla_tower",
+        name: "特斯拉塔",
+        buildable: true,
+      },
+      {
+        id: "em_rail_ejector",
+        name: "电磁弹射器",
+        buildable: true,
+      },
+      {
+        id: "vertical_launching_silo",
+        name: "垂直发射井",
+        buildable: true,
+      },
+      {
+        id: "ray_receiver",
+        name: "射线接收站",
+        buildable: true,
+      },
     ],
-    recipes: [],
-    techs: [],
+    recipes: [
+      {
+        id: "magnet_recipe",
+        name: "磁铁配方",
+      },
+    ],
+    techs: [
+      {
+        id: "dyson_sphere_program",
+        name: "戴森球计划",
+        level: 0,
+        prerequisites: [],
+        cost: [],
+        unlocks: [{ type: "building", id: "matrix_lab" }],
+      },
+      {
+        id: "electromagnetism",
+        name: "电磁学",
+        level: 1,
+        prerequisites: ["dyson_sphere_program"],
+        cost: [{ item_id: "electromagnetic_matrix", quantity: 10 }],
+        unlocks: [
+          { type: "building", id: "tesla_tower" },
+          { type: "recipe", id: "magnet_recipe" },
+        ],
+      },
+      {
+        id: "energy_matrix",
+        name: "能量矩阵",
+        level: 2,
+        prerequisites: ["electromagnetism"],
+        cost: [{ item_id: "electromagnetic_matrix", quantity: 20 }],
+        unlocks: [{ type: "special", id: "red_science" }],
+      },
+    ],
   };
 }
 
-function createSummary() {
+function createSummary(options?: {
+  completedTechIds?: string[];
+  currentResearch?: { tech_id: string; progress?: number; total_cost?: number } | null;
+}) {
+  const currentResearch = options?.currentResearch === null
+    ? undefined
+    : {
+        tech_id: options?.currentResearch?.tech_id ?? "electromagnetism",
+        progress: options?.currentResearch?.progress ?? 4,
+        total_cost: options?.currentResearch?.total_cost ?? 10,
+        blocked_reason: "waiting_matrix",
+      };
   return {
     active_planet_id: "planet-1-1",
     players: {
@@ -137,9 +298,8 @@ function createSummary() {
           energy: 80,
         },
         tech: {
-          current_research: {
-            tech_id: "electromagnetism",
-          },
+          completed_techs: options?.completedTechIds ?? ["dyson_sphere_program"],
+          ...(currentResearch ? { current_research: currentResearch } : {}),
         },
       },
     },
@@ -150,8 +310,16 @@ function createClient() {
   return {
     getAuth: () => ({ playerId: "p1", playerKey: "key_player_1" }),
     cmdScanPlanet: vi.fn(),
+    cmdStartResearch: vi.fn(),
+    cmdTransferItem: vi.fn(),
+    cmdSetRayReceiverMode: vi.fn(),
     cmdConfigureLogisticsSlot: vi.fn(),
     cmdConfigureLogisticsStation: vi.fn(),
+    fetchEventSnapshot: vi.fn().mockResolvedValue({
+      available_from_tick: 1,
+      has_more: false,
+      events: [],
+    }),
   };
 }
 
@@ -181,7 +349,7 @@ describe("PlanetCommandPanel", () => {
     const itemSelect = await screen.findByLabelText("物品");
     await waitFor(() => {
       expect((itemSelect as HTMLSelectElement).value).toBe(
-        "annihilation_constraint_sphere",
+        "electromagnetic_matrix",
       );
     });
 
@@ -362,9 +530,8 @@ describe("PlanetCommandPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "研究与装料" }));
 
-    expect(
-      screen.getByRole("button", { name: "开始研究" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("当前研究")).toBeInTheDocument();
+    expect(screen.getByText("开局推荐路径")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "装入建筑" }),
     ).toBeInTheDocument();
@@ -372,5 +539,103 @@ describe("PlanetCommandPanel", () => {
     expect(
       screen.getByText("先把 electromagnetic_matrix 装入研究站，再继续启动研究。"),
     ).toBeInTheDocument();
+  });
+
+  it("展示推荐路径与分组研究列表，并可启动当前可研究科技", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    client.cmdStartResearch.mockResolvedValue({
+      request_id: "req-research-ui-1",
+      accepted: true,
+      enqueue_tick: 140,
+      results: [
+        {
+          command_index: 0,
+          status: "queued",
+          code: "OK",
+          message: "start_research accepted",
+        },
+      ],
+    });
+
+    render(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program"],
+          currentResearch: null,
+        }) as never}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "研究与装料" }));
+
+    expect(screen.getByText("开局推荐路径")).toBeInTheDocument();
+    expect(
+      screen.getByText("风机 -> 空研究站 -> 装 10 电磁矩阵 -> 研究 electromagnetism"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("当前可研究")).toBeInTheDocument();
+    expect(screen.getByText("已完成")).toBeInTheDocument();
+    expect(screen.getByText("尚未满足前置")).toBeInTheDocument();
+
+    const availableGroup = screen.getByRole("region", { name: "当前可研究" });
+    const completedGroup = screen.getByRole("region", { name: "已完成" });
+    const lockedGroup = screen.getByRole("region", { name: "尚未满足前置" });
+
+    expect(within(availableGroup).getByRole("button", { name: /电磁学/ })).toBeInTheDocument();
+    expect(within(completedGroup).getByText("戴森球计划")).toBeInTheDocument();
+    expect(within(lockedGroup).getByText("能量矩阵")).toBeInTheDocument();
+
+    await user.click(within(availableGroup).getByRole("button", { name: /电磁学/ }));
+    await user.click(screen.getByRole("button", { name: "开始研究" }));
+
+    await waitFor(() => {
+      expect(client.cmdStartResearch).toHaveBeenCalledWith("electromagnetism");
+    });
+  });
+
+  it("研究完成后隐藏开局推荐，并把科技移动到已完成分组", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+
+    const { rerender } = render(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program"],
+          currentResearch: null,
+        }) as never}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "研究与装料" }));
+    expect(screen.getByText("开局推荐路径")).toBeInTheDocument();
+
+    rerender(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program", "electromagnetism"],
+          currentResearch: null,
+        }) as never}
+      />,
+    );
+
+    expect(screen.queryByText("开局推荐路径")).not.toBeInTheDocument();
+    const completedGroup = screen.getByRole("region", { name: "已完成" });
+    expect(within(completedGroup).getByText("电磁学")).toBeInTheDocument();
   });
 });

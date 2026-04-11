@@ -95,7 +95,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 物流轨迹、电网、管网、施工、敌情图层
 - 行星工作台首屏：`PlanetOperationHeader` 会固定显示当前路由行星、当前 active planet、最近命令结果和待处理命令数
 - `PlanetCommandCenter` 作为首屏主操作区，已补齐 `transfer_item`、`switch_active_planet`、`build_dyson_*`、`launch_solar_sail`、`launch_rocket`、`set_ray_receiver_mode` 等 typed form 入口
+- `研究与装料` 页签现在是阶段化研究工作台：顶部展示当前研究卡片与开局推荐路径，中部按 `当前可研究 / 已完成 / 尚未满足前置` 分组科技，点击卡片后再通过 `start_research` 真正提交命令
+- 研究派生逻辑已拆到独立模块；组件层主用 `summary.players[pid].tech.current_research` 与 `completed_techs` 推导 UI，若运行时仍遇到旧版 `completed_techs` level map，只在派生层内部归一化，不向组件扩散
 - 命令结果账本：提交后先显示 `pending`，再优先由 SSE authoritative 回写切到最终成功或失败；默认会收口 `command_result`，并把 `research_completed`、`rocket_launched` 这类异步完成事件也视作最终成功态。如果等待超时，会补拉 `/events/snapshot` 对账，并附带下一步提示
+- 命令结果账本的下一步提示现在带上下文：`transfer_item` 对 `matrix_lab` / `em_rail_ejector` / `vertical_launching_silo` 会分别提示后续研究、太阳帆发射或火箭发射；`set_ray_receiver_mode` 会根据 `power / photon / hybrid` 提示不同观察重点
 - 实体详情侧栏
 - 事件时间线与告警面板；活动流支持 `关键反馈 / 全部事件 / 仅命令 / 仅告警` 四种模式，默认会折叠 `tick_completed`、`resource_changed`、`threat_level_changed` 这类低信号事件
 - SSE 增量同步与补拉
@@ -115,6 +118,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 中栏不再只平铺消息流，而是按“玩家请求/定时请求 -> turn 生命周期 -> 阶段消息/最终回复/失败原因”分组显示
 - 右栏显示当前会话成员、agent 权限范围、按星球拉人入口和 heartbeat 式定时任务
 - turn 卡片会展示当前状态、规划摘要、动作摘要、最终回复和失败原因；回复消息通过 `replyToMessageId + turnId` 挂回原请求
+- turn 完成语义已与 `agent-gateway` 对齐：provider 可以直接用 `assistantMessage + [] + true` 成功结束一轮；纯文本回复也会被包装成成功 turn，只有真实结构错误才会显示 `system failure`
 - 模型 Provider 管理已把 `commandWhitelist` 可视化成按命令类别分组的白名单面板，默认展开完整 agent 命令集合；成员详情页会同时显示 Provider 命令覆盖范围，并提示与成员 `commandCategories` 的配置不一致
 - 会话消息通过 `agent-gateway` 的 `message` 与 `turn.*` SSE 推送刷新，消息加载只影响消息区，不会整页回到 loading
 - 当前工作台不再把协作模型塞进 `server/`，浏览器只通过 `/agent-api` 与 `agent-gateway` 通信

@@ -35,6 +35,14 @@ apikey:sk-demo-value`);
     assert.equal(templates[0]?.providerKind, 'http_api');
     assert.equal(templates[0]?.name, 'MiniMax API');
     assert.equal(templates[0]?.defaultModel, 'MiniMax-M2.1');
+    assert.match(
+      templates[0]?.systemPrompt ?? '',
+      /assistantMessage.*actions.*done/i,
+    );
+    assert.match(
+      templates[0]?.systemPrompt ?? '',
+      /"actions":\[\],"done":true/,
+    );
     assert.deepEqual(templates[0]?.providerConfig, {
       apiUrl: 'https://api.minimaxi.com/v1',
       apiStyle: 'openai',

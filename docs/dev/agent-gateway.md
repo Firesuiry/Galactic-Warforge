@@ -123,8 +123,11 @@ agent provider 现在除 `game.cli` 外，还可以返回以下受控 action：
 补充约束：
 
 - `assistantPreview` 只表示当前 turn 的规划/执行摘要，不是正式回复
-- provider 若在 `done=true` 时没有返回 `final_answer`，turn 会直接判为失败，公开错误码为 `provider_schema_invalid`
-- 只有真正落库了正式回复消息的 turn 才会标记为 `succeeded`
+- provider 必须返回 `assistantMessage/actions/done` 三字段 JSON；若本轮无需动作且已经完成，可直接返回 `assistantMessage + [] + true`
+- 若同时返回 `assistantMessage` 与 `final_answer`，正式回复仍以 `final_answer` 为准；若没有 `final_answer`，则 `done=true` 且非空 `assistantMessage` 会直接作为正式回复落库
+- provider 返回非 JSON 但去首尾空白后仍非空的纯文本时，gateway 会自动包装成 `assistantMessage + [] + true` 的完成态；空文本、空对象或其它结构错误仍公开为 `provider_schema_invalid`
+- 只有真正的空动作壳会被忽略，例如 `{}` 或只带空 `args` 的对象；带业务字段但缺 `type` 的残缺动作不会被吞掉，仍会判为 `provider_schema_invalid`
+- 只有真正落库了正式回复消息的 turn 才会标记为 `succeeded`；这条正式回复既可能来自 `final_answer`，也可能来自 done 态的 `assistantMessage`
 
 补充：
 

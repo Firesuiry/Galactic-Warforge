@@ -72,17 +72,53 @@ function normalizeStructuredJsonText(raw: string) {
 }
 
 export function parseProviderResult(raw: string): ProviderTurnResult {
-  const parsed = JSON.parse(normalizeStructuredJsonText(raw)) as Partial<ProviderTurnResult> & {
+  const normalizedText = normalizeStructuredJsonText(raw);
+  let parsed: (Partial<ProviderTurnResult> & {
     structured_output?: Partial<ProviderTurnResult>;
-  };
-  const normalized = typeof parsed.structured_output === 'object' && parsed.structured_output !== null
+  }) | null = null;
+
+  try {
+    parsed = JSON.parse(normalizedText) as Partial<ProviderTurnResult> & {
+      structured_output?: Partial<ProviderTurnResult>;
+    };
+  } catch {
+    const assistantMessage = normalizedText.trim();
+    if (!assistantMessage) {
+      throw new Error('provider turn must be an object');
+    }
+    return {
+      assistantMessage,
+      actions: [],
+      done: true,
+    };
+  }
+
+  const structured = typeof parsed.structured_output === 'object' && parsed.structured_output !== null
     ? parsed.structured_output
     : parsed;
+
+  if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
+    throw new Error('provider turn must be an object');
+  }
+
+  const normalized = {
+    ...structured,
+    actions:
+      structured.actions === undefined && typeof structured.assistantMessage === 'string'
+        ? []
+        : structured.actions,
+  } as Partial<ProviderTurnResult>;
 
   if (!Array.isArray(normalized.actions)) {
     throw new Error('actions must be an array');
   }
-  if (typeof normalized.done !== 'boolean') {
+  const done = typeof normalized.done === 'boolean'
+    ? normalized.done
+    : typeof normalized.assistantMessage === 'string' && normalized.assistantMessage.trim() !== ''
+      && normalized.actions.length === 0
+      ? true
+      : undefined;
+  if (typeof done !== 'boolean') {
     throw new Error('done must be a boolean');
   }
 
@@ -93,6 +129,7 @@ export function parseProviderResult(raw: string): ProviderTurnResult {
   return {
     ...normalized,
     assistantMessage,
+    done,
   } as ProviderTurnResult;
 }
 

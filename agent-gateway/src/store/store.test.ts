@@ -131,6 +131,7 @@ describe('collaboration stores', () => {
       policy: {
         planetIds: ['planet-a'],
         commandCategories: ['observe', 'management'],
+        canCreateAgents: false,
         canCreateChannel: true,
         canManageMembers: true,
         canInviteByPlanet: true,

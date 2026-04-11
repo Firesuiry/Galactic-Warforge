@@ -47,7 +47,7 @@ describe('provider result parser', () => {
 
   it('rejects malformed payloads', () => {
     assert.throws(() => parseProviderResult('{"assistantMessage":"收到。","actions":{}}'), /actions/);
-    assert.throws(() => parseProviderResult('{"assistantMessage":"收到。","actions":[]}'), /done/);
+    assert.throws(() => parseProviderResult('{"actions":[]}'), /done/);
   });
 
   it('accepts claude structured_output envelopes', () => {
@@ -89,6 +89,22 @@ describe('provider result parser', () => {
 {"assistantMessage":"忽略我","actions":[],"done":false}`);
 
     assert.equal(parsed.assistantMessage, '收到。');
+    assert.deepEqual(parsed.actions, []);
+    assert.equal(parsed.done, true);
+  });
+
+  it('wraps plain text replies into a completed assistant-only turn', () => {
+    const parsed = parseProviderResult('已收到你的私聊');
+
+    assert.equal(parsed.assistantMessage, '已收到你的私聊');
+    assert.deepEqual(parsed.actions, []);
+    assert.equal(parsed.done, true);
+  });
+
+  it('fills missing actions and done for assistant-only json replies', () => {
+    const parsed = parseProviderResult('{"assistantMessage":"收到，我先观察当前状态。"}');
+
+    assert.equal(parsed.assistantMessage, '收到，我先观察当前状态。');
     assert.deepEqual(parsed.actions, []);
     assert.equal(parsed.done, true);
   });

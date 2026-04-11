@@ -17,11 +17,15 @@ import {
   formatItemInventorySummary,
   getBuildingDisplayName,
   getItemDisplayName,
-  getTechDisplayName,
   isLogisticsStationBuildingType,
   listOwnLogisticsStations,
   type PlanetRenderView,
 } from "@/features/planet-map/model";
+import {
+  buildStarterGuide,
+  deriveResearchGroups,
+  getResearchProgressPercent,
+} from "@/features/planet-map/research-workflow";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -118,6 +122,10 @@ function getPreferredSlotItemId(
   return Object.values(settings ?? {})[0]?.item_id ?? fallbackItemId;
 }
 
+function isResearchBuildingType(buildingType: string) {
+  return buildingType === "matrix_lab" || buildingType === "self_evolution_lab";
+}
+
 function fieldLabel(key: string) {
   return translateUi(`field.${key}`);
 }
@@ -204,7 +212,8 @@ export function PlanetCommandPanel({
   const [dysonLatitudeMax, setDysonLatitudeMax] = useState("15");
   const [dysonCoverage, setDysonCoverage] = useState("0.4");
   const currentResearchId =
-    summary?.players?.[playerId]?.tech?.current_research?.tech_id ?? researchId;
+    summary?.players?.[playerId]?.tech?.current_research?.tech_id ?? "";
+  const playerTechState = summary?.players?.[playerId]?.tech;
   const currentSystemId =
     planet.system_id ??
     system?.system_id ??
@@ -250,17 +259,13 @@ export function PlanetCommandPanel({
         .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
     [buildingType, catalog?.recipes],
   );
-  const techOptions = useMemo(
-    () =>
-      [...(catalog?.techs ?? [])]
-        .filter((tech) => !tech.hidden)
-        .sort((left, right) => {
-          if (left.level !== right.level) {
-            return left.level - right.level;
-          }
-          return left.name.localeCompare(right.name, "zh-CN");
-        }),
-    [catalog?.techs],
+  const researchGroups = useMemo(
+    () => deriveResearchGroups(catalog, playerTechState),
+    [catalog, playerTechState],
+  );
+  const starterGuide = useMemo(
+    () => buildStarterGuide(playerTechState),
+    [playerTechState],
   );
   const switchablePlanets = useMemo(
     () => [...(system?.planets ?? [])].sort((left, right) =>
@@ -349,6 +354,23 @@ export function PlanetCommandPanel({
     ownBuildings.some((building) => building.id === selected.id)
       ? selected.id
       : "";
+  const selectedResearch = useMemo(
+    () =>
+      researchGroups.available.find((tech) => tech.id === researchId)
+      ?? researchGroups.available[0]
+      ?? null,
+    [researchGroups.available, researchId],
+  );
+  const selectedTransferBuilding = useMemo(
+    () =>
+      transferTargets.find((building) => building.id === transferBuildingId)
+      ?? transferTargets[0]
+      ?? null,
+    [transferBuildingId, transferTargets],
+  );
+  const currentResearchProgressPercent = getResearchProgressPercent(
+    playerTechState?.current_research,
+  );
 
   useEffect(() => {
     if (buildableBuildings.length > 0 && !buildingType) {
@@ -357,10 +379,18 @@ export function PlanetCommandPanel({
   }, [buildableBuildings, buildingType]);
 
   useEffect(() => {
-    if (techOptions.length > 0 && !researchId) {
-      setResearchId(techOptions[0].id);
+    const nextResearchId = researchGroups.available[0]?.id ?? "";
+    if (!nextResearchId && researchId) {
+      setResearchId("");
+      return;
     }
-  }, [researchId, techOptions]);
+    if (
+      nextResearchId &&
+      !researchGroups.available.some((tech) => tech.id === researchId)
+    ) {
+      setResearchId(nextResearchId);
+    }
+  }, [researchGroups.available, researchId]);
 
   useEffect(() => {
     if (scanSystemId === DEFAULT_SYSTEM_ID && currentSystemId) {
@@ -545,7 +575,7 @@ export function PlanetCommandPanel({
       transferTargets.find((building) => building.id === transferBuildingId) ??
       transferTargets[0];
     const nextTransferItemId =
-      activeTransferBuilding?.type === "matrix_lab"
+      activeTransferBuilding && isResearchBuildingType(activeTransferBuilding.type)
         ? preferredMatrixItemId
         : logisticsItems[0]?.id ?? "";
 
@@ -1210,137 +1240,324 @@ export function PlanetCommandPanel({
 
       {activeWorkflow === "research" ? (
         <>
-      <section
-        aria-labelledby="planet-workflow-tab-research"
-        className="planet-side-section"
-        id="planet-workflow-panel-research"
-        role="tabpanel"
-      >
-        <div className="section-title">研究</div>
-        <div className="compact-form-grid">
-          <label className="field field--span-2">
-            <span>{fieldLabel("tech_id")}</span>
-            <select
-              onChange={(event) => setResearchId(event.target.value)}
-              value={researchId}
-            >
-              {techOptions.map((tech) => (
-                <option key={tech.id} value={tech.id}>
-                  {getTechDisplayName(catalog, tech.id)} · Lv.{tech.level}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button field--span-2"
-            disabled={busyAction !== "" || !researchId}
-            onClick={() => {
-              void runCommand("start_research", () =>
-                client.cmdStartResearch(researchId),
-                {
-                  focus: {
-                    techId: researchId,
-                  },
-                },
-              );
-            }}
-            type="button"
+          <section
+            aria-labelledby="planet-workflow-tab-research"
+            className="planet-side-section"
+            id="planet-workflow-panel-research"
+            role="tabpanel"
           >
-            开始研究
-          </button>
-        </div>
-      </section>
+            <div className="section-title">研究工作台</div>
 
-      <section className="planet-side-section">
-        <div className="section-title">研究与装料</div>
-        <p className="subtle-text">
-          {currentResearchId
-            ? `当前研究 ${getTechDisplayName(catalog, currentResearchId)}。如果研究卡在缺矩阵，优先给 matrix_lab 装入 electromagnetic_matrix。`
-            : "可直接给建筑装入物料，研究站和中后期建筑共用这套装料入口。"}
-        </p>
-        <div className="compact-form-grid">
-          <label className="field field--span-2">
-            <span>{fieldLabel("building_id")}</span>
-            <select
-              onChange={(event) => setTransferBuildingId(event.target.value)}
-              value={transferBuildingId}
-            >
-              <option value="">选择建筑</option>
-              {transferTargets.map((building) => (
-                <option key={building.id} value={building.id}>
-                  {building.id} · {getBuildingDisplayName(catalog, building.type)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field field--span-2">
-            <span>装料物品</span>
-            <select
-              onChange={(event) => setTransferItemId(event.target.value)}
-              value={transferItemId}
-            >
-              <option value="">选择物品</option>
-              {logisticsItems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {getItemDisplayName(catalog, item.id)} · {item.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>{fieldLabel("quantity")}</span>
-            <input
-              onChange={(event) => setTransferQuantity(event.target.value)}
-              type="number"
-              value={transferQuantity}
-            />
-          </label>
-          <div className="field field--span-2">
-            <span>{translateUi("field.inventory")}</span>
-            <div className="subtle-text">
-              {formatItemInventorySummary(
-                catalog,
-                transferTargets.find((building) => building.id === transferBuildingId)
-                  ?.storage?.inventory,
-              )}
+            {researchGroups.current ? (
+              <article className="research-panel research-panel--current">
+                <div className="research-panel__header">
+                  <strong>当前研究</strong>
+                  <span>
+                    {researchGroups.current.name} · Lv.{researchGroups.current.level}
+                  </span>
+                </div>
+                <div className="research-panel__meta">
+                  <span>
+                    进度 {playerTechState?.current_research?.progress ?? 0}/
+                    {playerTechState?.current_research?.total_cost ?? 0}
+                  </span>
+                  <span>{currentResearchProgressPercent}%</span>
+                </div>
+                {researchGroups.current.blockedReasonLabel ? (
+                  <div className="research-panel__hint">
+                    当前阻塞：{researchGroups.current.blockedReasonLabel}
+                  </div>
+                ) : null}
+                <div className="research-panel__details">
+                  <span>
+                    前置：
+                    {researchGroups.current.prerequisiteLabels.length > 0
+                      ? researchGroups.current.prerequisiteLabels.join(" · ")
+                      : "无"}
+                  </span>
+                  <span>
+                    所需矩阵：
+                    {researchGroups.current.costLabels.length > 0
+                      ? researchGroups.current.costLabels.join(" · ")
+                      : "无"}
+                  </span>
+                  <span>
+                    解锁：
+                    {researchGroups.current.unlockLabels.length > 0
+                      ? researchGroups.current.unlockLabels.join(" · ")
+                      : "无"}
+                  </span>
+                </div>
+              </article>
+            ) : null}
+
+            {starterGuide ? (
+              <article className="research-panel research-panel--guide">
+                <div className="research-panel__header">
+                  <strong>开局推荐路径</strong>
+                </div>
+                <div className="research-panel__guide-steps">
+                  {starterGuide.steps.join(" -> ")}
+                </div>
+              </article>
+            ) : null}
+
+            <div className="research-groups">
+              <section
+                aria-label="当前可研究"
+                className="research-group"
+                role="region"
+              >
+                <div className="research-group__title">当前可研究</div>
+                {researchGroups.available.length > 0 ? (
+                  <div className="research-tech-list">
+                    {researchGroups.available.map((tech) => (
+                      <button
+                        className={
+                          selectedResearch?.id === tech.id
+                            ? "research-tech-card research-tech-card--available research-tech-card--selected"
+                            : "research-tech-card research-tech-card--available"
+                        }
+                        key={tech.id}
+                        onClick={() => setResearchId(tech.id)}
+                        type="button"
+                      >
+                        <span className="research-tech-card__title">
+                          <strong>{tech.name}</strong>
+                          <span>Lv.{tech.level}</span>
+                        </span>
+                        <span className="subtle-text">
+                          前置：
+                          {tech.prerequisiteLabels.length > 0
+                            ? tech.prerequisiteLabels.join(" · ")
+                            : "无"}
+                        </span>
+                        <span className="subtle-text">
+                          所需矩阵：
+                          {tech.costLabels.length > 0
+                            ? tech.costLabels.join(" · ")
+                            : "无"}
+                        </span>
+                        <span className="subtle-text">
+                          解锁：
+                          {tech.unlockLabels.length > 0
+                            ? tech.unlockLabels.join(" · ")
+                            : "无"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="subtle-text">当前没有可研究科技。</p>
+                )}
+              </section>
+
+              <section
+                aria-label="已完成"
+                className="research-group"
+                role="region"
+              >
+                <div className="research-group__title">已完成</div>
+                {researchGroups.completed.length > 0 ? (
+                  <div className="research-tech-list">
+                    {researchGroups.completed.map((tech) => (
+                      <div
+                        className="research-tech-card research-tech-card--completed"
+                        key={tech.id}
+                      >
+                        <span className="research-tech-card__title">
+                          <strong>{tech.name}</strong>
+                          <span>Lv.{tech.level}</span>
+                        </span>
+                        <span className="subtle-text">
+                          解锁：
+                          {tech.unlockLabels.length > 0
+                            ? tech.unlockLabels.join(" · ")
+                            : "无"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="subtle-text">当前还没有完成任何公开科技。</p>
+                )}
+              </section>
+
+              <section
+                aria-label="尚未满足前置"
+                className="research-group"
+                role="region"
+              >
+                <div className="research-group__title">尚未满足前置</div>
+                {researchGroups.locked.length > 0 ? (
+                  <div className="research-tech-list">
+                    {researchGroups.locked.map((tech) => (
+                      <div
+                        className="research-tech-card research-tech-card--locked"
+                        key={tech.id}
+                      >
+                        <span className="research-tech-card__title">
+                          <strong>{tech.name}</strong>
+                          <span>Lv.{tech.level}</span>
+                        </span>
+                        <span className="subtle-text">
+                          缺少前置：
+                          {tech.missingPrerequisiteLabels.join(" · ")}
+                        </span>
+                        <span className="subtle-text">
+                          所需矩阵：
+                          {tech.costLabels.length > 0
+                            ? tech.costLabels.join(" · ")
+                            : "无"}
+                        </span>
+                        <span className="subtle-text">
+                          解锁：
+                          {tech.unlockLabels.length > 0
+                            ? tech.unlockLabels.join(" · ")
+                            : "无"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="subtle-text">当前没有被前置锁住的公开科技。</p>
+                )}
+              </section>
             </div>
-          </div>
-          <button
-            className="secondary-button field--span-2"
-            disabled={
-              busyAction !== "" ||
-              !transferBuildingId ||
-              !transferItemId ||
-              !toOptionalInt(transferQuantity)
-            }
-            onClick={() => {
-              const quantity = toOptionalInt(transferQuantity);
-              if (!quantity) {
-                return;
-              }
-              void runCommand(
-                "transfer_item",
-                () =>
-                  client.cmdTransferItem(
-                    transferBuildingId,
-                    transferItemId,
-                    quantity,
-                  ),
-                {
-                  focus: {
-                    entityId: transferBuildingId,
-                    itemId: transferItemId,
-                    techId: currentResearchId || undefined,
-                  },
-                },
-              );
-            }}
-            type="button"
-          >
-            装入建筑
-          </button>
-        </div>
-      </section>
+          </section>
+
+          <section className="planet-side-section">
+            <div className="section-title">研究执行区</div>
+            <p className="subtle-text">
+              {selectedResearch
+                ? `已选目标 ${selectedResearch.name}，可直接提交开始研究。`
+                : "当前没有可直接启动的科技，可继续推进前置或等待当前研究完成。"}
+            </p>
+            {selectedResearch ? (
+              <div className="research-execute">
+                <div className="research-execute__details">
+                  <span>前置：{selectedResearch.prerequisiteLabels.join(" · ") || "无"}</span>
+                  <span>所需矩阵：{selectedResearch.costLabels.join(" · ") || "无"}</span>
+                  <span>解锁：{selectedResearch.unlockLabels.join(" · ") || "无"}</span>
+                </div>
+                <button
+                  className="secondary-button"
+                  disabled={busyAction !== "" || !selectedResearch}
+                  onClick={() => {
+                    void runCommand(
+                      "start_research",
+                      () => client.cmdStartResearch(selectedResearch.id),
+                      {
+                        focus: {
+                          techId: selectedResearch.id,
+                        },
+                      },
+                    );
+                  }}
+                  type="button"
+                >
+                  开始研究
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="planet-side-section">
+            <div className="section-title">研究与装料</div>
+            <p className="subtle-text">
+              {researchGroups.current
+                ? `当前研究 ${researchGroups.current.name}，如果卡在缺矩阵，优先给研究站装入所需矩阵。`
+                : selectedResearch
+                  ? `当前未在研究，可先启动 ${selectedResearch.name}，也可以先给研究站或中后期建筑装料。`
+                  : "可直接给研究站、发射建筑或其他建筑装料。"}
+            </p>
+            <div className="compact-form-grid">
+              <label className="field field--span-2">
+                <span>{fieldLabel("building_id")}</span>
+                <select
+                  onChange={(event) => setTransferBuildingId(event.target.value)}
+                  value={transferBuildingId}
+                >
+                  <option value="">选择建筑</option>
+                  {transferTargets.map((building) => (
+                    <option key={building.id} value={building.id}>
+                      {building.id} · {getBuildingDisplayName(catalog, building.type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field field--span-2">
+                <span>装料物品</span>
+                <select
+                  onChange={(event) => setTransferItemId(event.target.value)}
+                  value={transferItemId}
+                >
+                  <option value="">选择物品</option>
+                  {logisticsItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {getItemDisplayName(catalog, item.id)} · {item.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{fieldLabel("quantity")}</span>
+                <input
+                  onChange={(event) => setTransferQuantity(event.target.value)}
+                  type="number"
+                  value={transferQuantity}
+                />
+              </label>
+              <div className="field field--span-2">
+                <span>{translateUi("field.inventory")}</span>
+                <div className="subtle-text">
+                  {formatItemInventorySummary(
+                    catalog,
+                    selectedTransferBuilding?.storage?.inventory,
+                  )}
+                </div>
+              </div>
+              <button
+                className="secondary-button field--span-2"
+                disabled={
+                  busyAction !== "" ||
+                  !transferBuildingId ||
+                  !transferItemId ||
+                  !toOptionalInt(transferQuantity)
+                }
+                onClick={() => {
+                  const quantity = toOptionalInt(transferQuantity);
+                  if (!quantity) {
+                    return;
+                  }
+                  void runCommand(
+                    "transfer_item",
+                    () =>
+                      client.cmdTransferItem(
+                        transferBuildingId,
+                        transferItemId,
+                        quantity,
+                      ),
+                    {
+                      focus: {
+                        entityId: transferBuildingId,
+                        itemId: transferItemId,
+                        buildingType: selectedTransferBuilding?.type,
+                        techId:
+                          selectedTransferBuilding
+                            && isResearchBuildingType(selectedTransferBuilding.type)
+                            ? currentResearchId || selectedResearch?.id || undefined
+                            : undefined,
+                      },
+                    },
+                  );
+                }}
+                type="button"
+              >
+                装入建筑
+              </button>
+            </div>
+          </section>
         </>
       ) : null}
 
@@ -1801,6 +2018,8 @@ export function PlanetCommandPanel({
                 {
                   focus: {
                     entityId: rayReceiverBuildingId,
+                    buildingType: "ray_receiver",
+                    receiverMode: rayReceiverMode,
                   },
                 },
               );

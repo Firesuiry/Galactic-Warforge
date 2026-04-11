@@ -1099,14 +1099,14 @@ process.stdout.write(JSON.stringify({
     )));
   });
 
-  it('fails the turn when provider finishes without final_answer and keeps preview separate from formal reply', async () => {
+  it('accepts assistantMessage-only completion and binds the formal reply back to the request', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({
       dataRoot,
       port: 0,
       agentTurnRunner: async () => ({
-        assistantMessage: '收到。',
-        actions: [],
+        assistantMessage: '已收到你的私聊',
+        actions: [{}],
         done: true,
       }),
     });
@@ -1202,29 +1202,34 @@ process.stdout.write(JSON.stringify({
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const turnsResponse = await fetch(`${server.url}/conversations/conv-no-final-answer/turns`);
       turns = await turnsResponse.json() as typeof turns;
-      if (turns.length === 1 && turns[0]?.status === 'failed') {
+      if (turns.length === 1 && turns[0]?.status === 'succeeded') {
         break;
       }
       await delay(20);
     }
 
     assert.equal(turns.length, 1);
-    assert.equal(turns[0]?.status, 'failed');
-    assert.equal(turns[0]?.assistantPreview, '收到。');
-    assert.equal(turns[0]?.finalMessageId, undefined);
-    assert.equal(turns[0]?.errorCode, 'provider_schema_invalid');
+    assert.equal(turns[0]?.status, 'succeeded');
+    assert.equal(turns[0]?.assistantPreview, '已收到你的私聊');
+    assert.ok(turns[0]?.finalMessageId);
+    assert.equal(turns[0]?.errorCode, undefined);
 
     const messagesResponse = await fetch(`${server.url}/conversations/conv-no-final-answer/messages`);
     const messages = await messagesResponse.json() as Array<{
+      id: string;
       senderType: string;
       content: string;
+      replyToMessageId?: string;
+      turnId?: string;
     }>;
 
-    assert.equal(messages.filter((message) => message.senderType === 'agent').length, 0);
-    assert.ok(messages.some((message) => (
-      message.senderType === 'system'
-      && message.content.includes('模型返回结构无效')
-    )));
+    const agentReplies = messages.filter((message) => message.senderType === 'agent');
+    assert.equal(agentReplies.length, 1);
+    assert.equal(agentReplies[0]?.content, '已收到你的私聊');
+    assert.equal(agentReplies[0]?.id, turns[0]?.finalMessageId);
+    assert.equal(agentReplies[0]?.replyToMessageId, turns[0] ? undefined : undefined);
+    assert.equal(agentReplies[0]?.turnId, turns[0]?.id);
+    assert.equal(messages.filter((message) => message.senderType === 'system').length, 0);
   });
 
   it('fails the turn when agent.create policy is incomplete and keeps the failure bound to the request', async () => {

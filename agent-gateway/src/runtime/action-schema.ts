@@ -199,6 +199,25 @@ function mergeActionArgs(action: Record<string, unknown>) {
   };
 }
 
+function isIgnorableActionShell(action: unknown) {
+  const record = asRecord(action);
+  if (!record) {
+    return false;
+  }
+
+  if (Object.keys(record).length === 0) {
+    return true;
+  }
+
+  const args = asRecord(record.args);
+  if (!args || Object.keys(args).length > 0) {
+    return false;
+  }
+
+  const merged = mergeActionArgs(record);
+  return Object.keys(merged).every((key) => key === 'args');
+}
+
 function normalizeAction(action: unknown): CanonicalAgentAction {
   const record = asRecord(action);
   if (!record) {
@@ -240,6 +259,8 @@ function normalizeAction(action: unknown): CanonicalAgentAction {
     if (!name) {
       throw new Error('agent.create requires name');
     }
+    const supervisorAgentIds = asStringArray(merged.supervisorAgentIds);
+    const managedAgentIds = asStringArray(merged.managedAgentIds);
     return {
       type,
       ...(asString(merged.id) ? { id: asString(merged.id) } : {}),
@@ -250,11 +271,11 @@ function normalizeAction(action: unknown): CanonicalAgentAction {
         ? { providerId: asString(merged.providerId) }
         : {}),
       policy: normalizePolicy(merged.policy, 'agent.create'),
-      ...(asStringArray(merged.supervisorAgentIds)
-        ? { supervisorAgentIds: asStringArray(merged.supervisorAgentIds) }
+      ...(supervisorAgentIds
+        ? { supervisorAgentIds }
         : {}),
-      ...(asStringArray(merged.managedAgentIds)
-        ? { managedAgentIds: asStringArray(merged.managedAgentIds) }
+      ...(managedAgentIds
+        ? { managedAgentIds }
         : {}),
     };
   }
@@ -319,7 +340,13 @@ export function normalizeProviderTurn(value: unknown): CanonicalAgentTurn {
   return {
     assistantMessage: asString(record.assistantMessage),
     done: normalizeBoolean(record.done, 'done'),
-    actions: actions.map((action) => normalizeAction(action)),
+    actions: actions.flatMap((action) => {
+      if (isIgnorableActionShell(action)) {
+        console.warn('ignoring empty provider action shell');
+        return [];
+      }
+      return [normalizeAction(action)];
+    }),
   };
 }
 

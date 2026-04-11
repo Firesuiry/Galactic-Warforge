@@ -58,6 +58,17 @@ function createCatalogPayload() {
   };
 }
 
+function createSystemRuntimePayload() {
+  return {
+    system_id: 'sys-1',
+    discovered: true,
+    available: true,
+    dyson_sphere: {
+      layers: [],
+    },
+  };
+}
+
 describe('Galaxy navigation', () => {
   it('可从银河进入星系并继续进入已发现行星', async () => {
     useSessionStore.getState().setSession({
@@ -99,6 +110,10 @@ describe('Galaxy navigation', () => {
             },
           ],
         }));
+      }
+
+      if (url.endsWith('/world/systems/sys-1/runtime')) {
+        return Promise.resolve(jsonResponse(createSystemRuntimePayload()));
       }
 
       if (url.endsWith('/world/planets/planet-1-1')) {
