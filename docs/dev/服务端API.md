@@ -348,6 +348,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `dyson_sphere.layers[].nodes[]`：包含 `id` / `layer_index` / `latitude` / `longitude` / `energy_output` / `integrity` / `built`
   - `dyson_sphere.layers[].frames[]`：包含 `id` / `layer_index` / `node_a_id` / `node_b_id` / `integrity` / `built`
   - `dyson_sphere.layers[].shells[]`：包含 `id` / `layer_index` / `latitude_min` / `latitude_max` / `coverage` / `energy_output` / `integrity` / `built`
+  - `dyson_sphere.layers[].construction_bonus` 当前按 `min(0.5, rocket_launches * 0.02)` 结算；若该层已有壳面，`launch_rocket` 还会按顺序把第一个 `coverage < 1.0` 的壳面额外推进 `0.02` 覆盖率，并重算该壳面的 `energy_output`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
@@ -367,7 +368,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "orbit_radius": 1.2,
         "energy_output": 360,
         "rocket_launches": 2,
-        "construction_bonus": 0.2,
+        "construction_bonus": 0.04,
         "nodes": [{"id": "node-1", "energy_output": 10, "built": true}],
         "frames": [],
         "shells": [{"id": "shell-1", "coverage": 0.35, "energy_output": 350, "built": true}]
@@ -1062,13 +1063,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
-  - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
-  - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件
-  - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选（缺省时自动补层）；要求玩家已解锁 `dyson_component`
-  - `build_dyson_frame`：`payload.system_id` / `payload.layer_index` / `payload.node_a_id` / `payload.node_b_id` 必填；要求玩家已解锁 `dyson_component`
-  - `build_dyson_shell`：`payload.system_id` / `payload.layer_index` / `payload.latitude_min` / `payload.latitude_max` / `payload.coverage` 必填；要求玩家已解锁 `dyson_component`
-  - `demolish_dyson`：`payload.system_id` / `payload.component_type` / `payload.component_id` 必填
-- 戴森脚手架补充说明：`build_dyson_node` / `build_dyson_frame` / `build_dyson_shell` 当前仍是实验性直连入口，主要做科技校验与结构写入，不额外扣建筑材料；真正把已生产火箭转成戴森层收益的入口是 `launch_rocket`。
+  - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；若发射器配置了轨道半径/倾角约束，`payload.orbit_radius` / `payload.inclination` 还必须落在该建筑运行参数允许范围内；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
+  - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件；当前每枚火箭都会让目标层 `rocket_launches += 1`，并按 `min(0.5, rocket_launches * 0.02)` 重算 `construction_bonus`
+  - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选；要求玩家已解锁 `dyson_component`；若目标层不存在，服务端会先自动补层，层半径优先取 `payload.orbit_radius`，否则回退为 `1.0 + 0.5 * layer_index`
+  - `build_dyson_frame`：`payload.system_id` / `payload.layer_index` / `payload.node_a_id` / `payload.node_b_id` 必填；要求玩家已解锁 `dyson_component`；若目标层不存在，服务端会按同样规则自动补层；`node_a_id` / `node_b_id` 当前必须都已经存在于目标层
+  - `build_dyson_shell`：`payload.system_id` / `payload.layer_index` / `payload.latitude_min` / `payload.latitude_max` / `payload.coverage` 必填；要求玩家已解锁 `dyson_component`；若目标层不存在，服务端会按同样规则自动补层
+  - `demolish_dyson`：`payload.system_id` / `payload.component_type` / `payload.component_id` 必填；`payload.component_type` 当前只接受 `node|frame|shell`
+- 戴森脚手架补充说明：`build_dyson_node` / `build_dyson_frame` / `build_dyson_shell` 当前仍是实验性直连入口，主要做科技校验与结构写入，不额外扣建筑材料；真正把已生产火箭转成戴森层收益的入口是 `launch_rocket`。`demolish_dyson` 当前只移除 runtime 里的结构，并把简化退款估算写进 `entity_destroyed.payload.refunds`，不会自动把这些退款写回玩家背包或资源池。
 - 戴森中后期最小请求示例：
 ```json
 {
@@ -1185,7 +1186,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。
   - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule`；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
   - 若 `mission_complete` 在当前 tick 完成，事件顺序会先出现 `research_completed`，再出现 `victory_declared`。
-  - `rocket_launched` 戴森火箭发射事件，payload 包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`。
+  - `rocket_launched` 戴森火箭发射事件，payload 包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`；其中 `construction_bonus` 与 `GET /world/systems/{system_id}/runtime.dyson_sphere.layers[].construction_bonus` 共享同一份 tick 内 authoritative 结果。
   - `squad_deployed`：地面小队部署事件，payload 包含 `squad_id` / `squad`；同时还会伴随一条 `entity_created(entity_type = "combat_squad")`。
   - `fleet_commissioned`：舰队编成事件，payload 包含 `fleet_id` / `fleet`；同时还会伴随一条 `entity_created(entity_type = "fleet")`。
   - `fleet_assigned`：舰队改编队事件，payload 包含 `fleet_id` / `formation`。
