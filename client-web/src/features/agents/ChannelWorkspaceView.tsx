@@ -112,6 +112,10 @@ function formatTurnFailure(turn: ConversationTurnView) {
     return '这轮只有规划，没有执行所需动作。';
   }
 
+  if (turn.errorCode === 'loop_exhausted') {
+    return '智能体在最大步数内仍未完成这轮任务。';
+  }
+
   return `${turn.errorCode ? `${turn.errorCode}: ` : ''}${turn.errorMessage ?? ''}`;
 }
 

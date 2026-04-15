@@ -252,6 +252,7 @@ export function PlanetPage() {
     playerId: session.playerId,
     playerKey: session.playerKey,
     planetId,
+    systemId,
   });
 
   useEffect(() => {

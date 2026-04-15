@@ -140,6 +140,10 @@ function buildTurnErrorHint(code: string | undefined, rawMessage: string) {
     return '动作已经执行，但模型没有把最终结果交付出来；请重试，或要求它只回复一句话最终结论。';
   }
 
+  if (code === 'loop_exhausted' || normalized.includes('maxsteps')) {
+    return '智能体循环已耗尽最大步数，通常意味着它在重复观察或缺少关键参数；请缩小目标，或明确给出星球、建筑和科技 ID。';
+  }
+
   return undefined;
 }
 

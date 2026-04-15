@@ -1377,7 +1377,418 @@ process.stdout.write(JSON.stringify({
     assert.match(turns[0]?.errorHint ?? '', /b-9/);
   });
 
-  it('fails the turn when agent.create policy is incomplete and keeps the failure bound to the request', async () => {
+  it('persists loop exhaustion as a real failure cause instead of permission denied', async () => {
+    let scanCommandCount = 0;
+    const fakeGameServer = createServer(async (request, response) => {
+      if (request.method === 'POST' && request.url === '/commands') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        scanCommandCount += 1;
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          request_id: `scan-${scanCommandCount}`,
+          accepted: true,
+          commands: [
+            { command_index: 0, status: 'accepted', code: 'OK', message: 'accepted for scan' },
+          ],
+        }));
+        return;
+      }
+
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'not_found' }));
+    });
+    await new Promise<void>((resolve) => fakeGameServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = fakeGameServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('fake game server failed to bind');
+    }
+    helperServers.push({
+      url: `http://127.0.0.1:${address.port}`,
+      close: () => new Promise<void>((resolve, reject) => {
+        fakeGameServer.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+    });
+
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => ({
+        assistantMessage: '我先持续观察 planet-1-2。',
+        actions: [
+          {
+            type: 'game.command',
+            command: 'scan_planet',
+            args: {
+              planetId: 'planet-1-2',
+            },
+          },
+        ],
+        done: false,
+      }),
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-loop-exhausted',
+        name: 'Loop Exhausted Provider',
+        providerKind: 'codex_cli',
+        description: 'loop exhausted test',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 2,
+          maxToolCallsPerTurn: 2,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-loop-observer',
+        name: '观察官',
+        providerId: 'provider-loop-exhausted',
+        serverUrl: helperServers[0]?.url,
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'worker',
+        policy: {
+          planetIds: ['planet-1-2'],
+          commandCategories: ['observe'],
+          canCreateAgents: false,
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'conv-loop-exhausted',
+        type: 'dm',
+        name: '与观察官私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-loop-observer'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const messageResponse = await fetch(`${server.url}/conversations/conv-loop-exhausted/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '观察 planet-1-2，并告诉我结果',
+      }),
+    });
+    assert.equal(messageResponse.status, 202);
+    const accepted = await messageResponse.json() as {
+      message: { id: string };
+      turns: Array<{ id: string }>;
+    };
+
+    let turns: Array<{
+      requestMessageId: string;
+      status: string;
+      errorCode?: string;
+      errorMessage?: string;
+      rawErrorMessage?: string;
+      errorHint?: string;
+    }> = [];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const turnsResponse = await fetch(`${server.url}/conversations/conv-loop-exhausted/turns`);
+      turns = await turnsResponse.json() as typeof turns;
+      if (turns[0]?.status === 'failed') {
+        break;
+      }
+      await delay(20);
+    }
+
+    assert.equal(scanCommandCount, 2);
+    assert.equal(turns[0]?.requestMessageId, accepted.message.id);
+    assert.equal(turns[0]?.status, 'failed');
+    assert.equal(turns[0]?.errorCode, 'loop_exhausted');
+    assert.equal(turns[0]?.errorMessage, '智能体在最大步数内未完成任务。');
+    assert.equal(turns[0]?.rawErrorMessage, 'agent loop exceeded maxSteps');
+    assert.match(turns[0]?.errorHint ?? '', /最大步数/);
+
+    const messagesResponse = await fetch(`${server.url}/conversations/conv-loop-exhausted/messages`);
+    const messages = await messagesResponse.json() as Array<{
+      senderType: string;
+      content: string;
+      replyToMessageId?: string;
+      turnId?: string;
+    }>;
+    const failureMessage = messages.find((message) => message.senderType === 'system');
+    assert.ok(failureMessage);
+    assert.match(failureMessage?.content ?? '', /最大步数内未完成任务/);
+    assert.doesNotMatch(failureMessage?.content ?? '', /权限不足/);
+    assert.equal(failureMessage?.replyToMessageId, accepted.message.id);
+    assert.equal(failureMessage?.turnId, accepted.turns[0]?.id);
+  });
+
+  it('completes research delegation by executing transfer_item before start_research', async () => {
+    const gameCommands: Array<Record<string, unknown>> = [];
+    const fakeGameServer = createServer(async (request, response) => {
+      if (request.method === 'POST' && request.url === '/commands') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+        gameCommands.push(payload);
+        const command = (payload.commands as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
+        const commandType = String(command.type ?? 'unknown');
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          request_id: `req-${gameCommands.length}`,
+          accepted: true,
+          commands: [
+            { command_index: 0, status: 'accepted', code: 'OK', message: `${commandType} accepted` },
+          ],
+        }));
+        return;
+      }
+
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'not_found' }));
+    });
+    await new Promise<void>((resolve) => fakeGameServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = fakeGameServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('fake game server failed to bind');
+    }
+    helperServers.push({
+      url: `http://127.0.0.1:${address.port}`,
+      close: () => new Promise<void>((resolve, reject) => {
+        fakeGameServer.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+    });
+
+    let attempts = 0;
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          return {
+            assistantMessage: '先把矩阵装入研究站。',
+            actions: [
+              {
+                type: 'game.command',
+                command: 'transfer_item',
+                args: {
+                  buildingId: 'b-27',
+                  itemId: 'electromagnetic_matrix',
+                  quantity: 10,
+                },
+              },
+            ],
+            done: false,
+          };
+        }
+        if (attempts === 2) {
+          return {
+            assistantMessage: '继续启动科研。',
+            actions: [
+              {
+                type: 'game.command',
+                command: 'start_research',
+                args: {
+                  techId: 'basic_logistics_system',
+                },
+              },
+            ],
+            done: false,
+          };
+        }
+        return {
+          assistantMessage: '已把 10 个 electromagnetic_matrix 装入 b-27，并启动 basic_logistics_system 研究。',
+          actions: [],
+          done: true,
+        };
+      },
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-research-flow',
+        name: 'Research Flow Provider',
+        providerKind: 'codex_cli',
+        description: 'research flow test',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 4,
+          maxToolCallsPerTurn: 4,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-researcher',
+        name: '科研官',
+        providerId: 'provider-research-flow',
+        serverUrl: helperServers[0]?.url,
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'worker',
+        policy: {
+          planetIds: ['planet-1-1'],
+          commandCategories: ['research'],
+          canCreateAgents: false,
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'conv-research-flow',
+        type: 'dm',
+        name: '与科研官私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-researcher'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const messageResponse = await fetch(`${server.url}/conversations/conv-research-flow/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '在 planet-1-1 把 10 个 electromagnetic_matrix 装入 b-27，然后启动 basic_logistics_system 研究。',
+      }),
+    });
+    assert.equal(messageResponse.status, 202);
+    const accepted = await messageResponse.json() as {
+      message: { id: string };
+      turns: Array<{ id: string }>;
+    };
+
+    let turns: Array<{
+      status: string;
+      finalMessageId?: string;
+      outcomeKind?: string;
+      executedActionCount?: number;
+      errorCode?: string;
+    }> = [];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const turnsResponse = await fetch(`${server.url}/conversations/conv-research-flow/turns`);
+      turns = await turnsResponse.json() as typeof turns;
+      if (turns[0]?.status === 'succeeded') {
+        break;
+      }
+      await delay(20);
+    }
+
+    assert.equal(turns[0]?.status, 'succeeded');
+    assert.equal(turns[0]?.outcomeKind, 'acted');
+    assert.equal(turns[0]?.executedActionCount, 2);
+    assert.ok(turns[0]?.finalMessageId);
+    assert.equal(turns[0]?.errorCode, undefined);
+    assert.equal(gameCommands.length, 2);
+
+    const firstCommand = (gameCommands[0]?.commands as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
+    const secondCommand = (gameCommands[1]?.commands as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
+    assert.equal(firstCommand.type, 'transfer_item');
+    assert.deepEqual(firstCommand.payload, {
+      building_id: 'b-27',
+      item_id: 'electromagnetic_matrix',
+      quantity: 10,
+    });
+    assert.equal(secondCommand.type, 'start_research');
+    assert.deepEqual(secondCommand.payload, {
+      tech_id: 'basic_logistics_system',
+    });
+
+    const messagesResponse = await fetch(`${server.url}/conversations/conv-research-flow/messages`);
+    const messages = await messagesResponse.json() as Array<{
+      id: string;
+      senderType: string;
+      content: string;
+      replyToMessageId?: string;
+      turnId?: string;
+    }>;
+    const finalReply = messages.find((message) => message.id === turns[0]?.finalMessageId);
+    assert.ok(finalReply);
+    assert.match(finalReply?.content ?? '', /已把 10 个 electromagnetic_matrix 装入 b-27/);
+    assert.match(finalReply?.content ?? '', /basic_logistics_system/);
+    assert.equal(finalReply?.replyToMessageId, accepted.message.id);
+    assert.equal(finalReply?.turnId, accepted.turns[0]?.id);
+  });
+
+  it('fails the turn when agent.create exceeds creator policy and keeps the failure bound to the request', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({
       dataRoot,
@@ -1389,11 +1800,12 @@ process.stdout.write(JSON.stringify({
             type: 'agent.create',
             name: '胡景',
             policy: {
-              planetIds: ['planet-1-1'],
+              planetIds: ['planet-1-1', 'planet-1-2'],
+              commandCategories: ['build', 'research'],
             },
           },
         ],
-        done: false,
+        done: true,
       }),
     });
     servers.push(server);

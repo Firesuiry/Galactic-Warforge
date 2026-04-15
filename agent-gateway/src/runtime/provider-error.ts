@@ -3,6 +3,7 @@ export type PublicTurnErrorCode =
   | 'provider_incomplete_execution'
   | 'provider_unavailable'
   | 'provider_start_failed'
+  | 'loop_exhausted'
   | 'permission_denied'
   | 'unsupported_action'
   | 'unknown';
@@ -12,6 +13,7 @@ const PUBLIC_ERROR_MESSAGES: Record<PublicTurnErrorCode, string> = {
   provider_incomplete_execution: '这轮只有规划，没有执行所需动作。',
   provider_unavailable: '模型服务暂时不可用，请稍后重试。',
   provider_start_failed: '模型执行器启动失败，请检查 provider 配置。',
+  loop_exhausted: '智能体在最大步数内未完成任务。',
   permission_denied: '当前智能体权限不足，无法执行该操作。',
   unsupported_action: '当前智能体返回了不支持的动作。',
   unknown: '执行失败，请稍后重试。',
@@ -101,10 +103,20 @@ export function classifyPublicTurnError(error: unknown): PublicTurnError {
   }
 
   if (
+    normalized.includes('agent loop exceeded maxsteps')
+    || normalized.includes('agent loop exceeded max steps')
+  ) {
+    return new PublicTurnError('loop_exhausted', rawMessage);
+  }
+
+  if (
     normalized.includes('not allowed')
     || normalized.includes('permission denied')
     || normalized.includes('complete policy')
-    || normalized.includes('exceed')
+    || normalized.includes('child command categories exceed')
+    || normalized.includes('child planet scope exceeds')
+    || normalized.includes('updated command categories exceed')
+    || normalized.includes('updated planet scope exceeds')
     || normalized.includes('creator policy')
     || normalized.includes('scope exceeds')
   ) {

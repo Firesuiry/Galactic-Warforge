@@ -24,12 +24,14 @@ interface UsePlanetRealtimeSyncOptions {
   playerId: string;
   playerKey: string;
   planetId: string;
+  systemId?: string;
 }
 
 interface InvalidationFlags {
   scene: boolean;
   runtime: boolean;
   networks: boolean;
+  systemRuntime: boolean;
   summary: boolean;
   stats: boolean;
   alerts: boolean;
@@ -40,6 +42,7 @@ function createInvalidationFlags(): InvalidationFlags {
     scene: false,
     runtime: false,
     networks: false,
+    systemRuntime: false,
     summary: false,
     stats: false,
     alerts: false,
@@ -51,6 +54,19 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
   const pendingInvalidationsRef = useRef<InvalidationFlags>(createInvalidationFlags());
   const invalidateTimerRef = useRef<number | null>(null);
   const hasConnectedRef = useRef(false);
+  const latestQueryScopeRef = useRef({
+    serverUrl: options.serverUrl,
+    playerId: options.playerId,
+    planetId: options.planetId,
+    systemId: options.systemId ?? '',
+  });
+
+  latestQueryScopeRef.current = {
+    serverUrl: options.serverUrl,
+    playerId: options.playerId,
+    planetId: options.planetId,
+    systemId: options.systemId ?? '',
+  };
 
   const sseClient = useMemo(
     () => createSseClient({
@@ -107,6 +123,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
         scene: true,
         runtime: true,
         networks: true,
+        systemRuntime: true,
         summary: true,
         stats: true,
         alerts: true,
@@ -120,6 +137,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       scene: current.scene || Boolean(nextFlags.scene),
       runtime: current.runtime || Boolean(nextFlags.runtime),
       networks: current.networks || Boolean(nextFlags.networks),
+      systemRuntime: current.systemRuntime || Boolean(nextFlags.systemRuntime),
       summary: current.summary || Boolean(nextFlags.summary),
       stats: current.stats || Boolean(nextFlags.stats),
       alerts: current.alerts || Boolean(nextFlags.alerts),
@@ -131,37 +149,43 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
 
     invalidateTimerRef.current = window.setTimeout(() => {
       const flags = pendingInvalidationsRef.current;
+      const scope = latestQueryScopeRef.current;
       pendingInvalidationsRef.current = createInvalidationFlags();
       invalidateTimerRef.current = null;
 
       if (flags.scene) {
         void queryClient.invalidateQueries({
-          queryKey: ['planet-scene', options.serverUrl, options.playerId, options.planetId],
+          queryKey: ['planet-scene', scope.serverUrl, scope.playerId, scope.planetId],
         });
       }
       if (flags.runtime) {
         void queryClient.invalidateQueries({
-          queryKey: ['planet-runtime', options.serverUrl, options.playerId, options.planetId],
+          queryKey: ['planet-runtime', scope.serverUrl, scope.playerId, scope.planetId],
         });
       }
       if (flags.networks) {
         void queryClient.invalidateQueries({
-          queryKey: ['planet-networks', options.serverUrl, options.playerId, options.planetId],
+          queryKey: ['planet-networks', scope.serverUrl, scope.playerId, scope.planetId],
+        });
+      }
+      if (flags.systemRuntime && scope.systemId) {
+        void queryClient.invalidateQueries({
+          queryKey: ['system-runtime', scope.serverUrl, scope.playerId, scope.systemId],
         });
       }
       if (flags.summary) {
         void queryClient.invalidateQueries({
-          queryKey: ['summary', options.serverUrl, options.playerId],
+          queryKey: ['summary', scope.serverUrl, scope.playerId],
         });
       }
       if (flags.stats) {
         void queryClient.invalidateQueries({
-          queryKey: ['stats', options.serverUrl, options.playerId],
+          queryKey: ['stats', scope.serverUrl, scope.playerId],
         });
       }
       if (flags.alerts) {
         void queryClient.invalidateQueries({
-          queryKey: ['alerts-snapshot', options.serverUrl, options.playerId, options.planetId],
+          queryKey: ['alerts-snapshot', scope.serverUrl, scope.playerId, scope.planetId],
         });
       }
       usePlanetViewStore.getState().markFullSync();
@@ -189,12 +213,16 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
         store.appendRecentAlert(alert);
       }
 
+      const refreshPlanet = shouldRefreshPlanet(event, options.planetId);
+      const refreshSummary = shouldRefreshSummary(event);
+      const refreshStats = shouldRefreshStats(event);
       scheduleInvalidation({
-        scene: shouldRefreshPlanet(event, options.planetId) || shouldRefreshFog(event, options.planetId),
-        runtime: shouldRefreshPlanet(event, options.planetId) || shouldRefreshStats(event) || shouldRefreshSummary(event),
-        networks: shouldRefreshPlanet(event, options.planetId) || event.event_type === 'building_state_changed',
-        summary: shouldRefreshSummary(event),
-        stats: shouldRefreshStats(event),
+        scene: refreshPlanet || shouldRefreshFog(event, options.planetId),
+        runtime: refreshPlanet || refreshStats || refreshSummary,
+        networks: refreshPlanet || event.event_type === 'building_state_changed',
+        systemRuntime: refreshSummary || event.event_type === 'rocket_launched',
+        summary: refreshSummary,
+        stats: refreshStats,
         alerts: shouldRefreshAlerts(event),
       });
     });
