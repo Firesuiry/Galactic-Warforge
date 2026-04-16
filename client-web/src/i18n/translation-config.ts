@@ -26,6 +26,7 @@ export const TRANSLATIONS = {
   },
   techId: {
     "tech-energy-1": "基础能源学",
+    dirac_inversion: "狄拉克反演",
   },
   unitType: {
     worker: "工人",
@@ -51,8 +52,11 @@ export const TRANSLATIONS = {
   },
   alertType: {
     power_low: "电力不足",
+    power_shortage: "电力不足",
     input_shortage: "原料短缺",
     output_blocked: "产物阻塞",
+    throughput_drop: "产能下降",
+    backlog: "堆积升高",
   },
   severity: {
     info: "提示",
@@ -72,6 +76,7 @@ export const TRANSLATIONS = {
     no_provider: "无供电来源",
     out_of_range: "超出供电范围",
     capacity_full: "电网容量已满",
+    under_power: "发电不足",
   },
   direction: {
     auto: "自动",

@@ -21,6 +21,7 @@ import {
   buildSelectionExport,
   buildViewLinkSearchParams,
   buildViewportExport,
+  describeAlert,
   findLogisticsStation,
   findSelectionEntity,
   formatItemInventorySummary,
@@ -39,7 +40,6 @@ import {
   resolveSelectionFromEvent,
   selectionEntityId,
   selectionLabel,
-  summarizeAlert,
   summarizeEvent,
   toTilePoint,
   type PlanetRenderView,
@@ -47,7 +47,6 @@ import {
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
 import {
-  translateAlertType,
   translateBuildingState,
   translateEventType,
   translateLogisticsMode,
@@ -62,13 +61,6 @@ import {
   PLANET_ZOOM_LEVELS,
   usePlanetViewStore,
 } from "@/features/planet-map/store";
-
-function formatRatio(value: number | undefined) {
-  if (value === undefined) {
-    return "-";
-  }
-  return `${Math.round(value * 100)}%`;
-}
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -866,6 +858,13 @@ export function PlanetActivityPanel({
 
   const filteredEvents = useMemo(
     () => {
+      if (activityMode === "key_feedback") {
+        return events.filter(
+          (event) =>
+            event.event_type !== "production_alert"
+            && !DEFAULT_SSE_SILENT_EVENT_TYPES.has(event.event_type),
+        );
+      }
       if (activityMode === "all") {
         return events;
       }
@@ -952,11 +951,13 @@ export function PlanetActivityPanel({
         <div className="section-title">告警面板</div>
         <ul className="timeline-list timeline-list--dense">
           {alerts.length === 0 ? <li>暂无告警</li> : null}
-          {alerts.map((alert) => (
-            <li key={alert.alert_id}>
+          {alerts.map((alert) => {
+            const presentation = describeAlert(planet, alert);
+            return (
+              <li key={alert.alert_id}>
               <div className="timeline-list__row">
                 <strong>
-                  [t{alert.tick}] {translateAlertType(alert.alert_type)}
+                  [t{alert.tick}] {presentation.issueLabel.replace("问题：", "")}
                 </strong>
                 <button
                   className="secondary-button timeline-action"
@@ -968,13 +969,16 @@ export function PlanetActivityPanel({
                   定位
                 </button>
               </div>
-              <span>{summarizeAlert(alert)}</span>
-              <span className="subtle-text">
-                吞吐 {alert.metrics.throughput} · 堆积 {alert.metrics.backlog} ·
-                效率 {formatRatio(alert.metrics.efficiency)}
-              </span>
-            </li>
-          ))}
+                <span>{presentation.buildingLabel}</span>
+                <span>{presentation.issueLabel}</span>
+                <span>{presentation.recommendationLabel}</span>
+                <details>
+                  <summary>运行指标</summary>
+                  <div className="subtle-text">{presentation.metricsLabel}</div>
+                </details>
+              </li>
+            );
+          })}
         </ul>
       </section>
     </div>

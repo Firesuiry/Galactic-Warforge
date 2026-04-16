@@ -935,7 +935,8 @@ describe("PlanetPage", () => {
     expect(
       screen.getByText("建筑状态变更 · miner-1 空闲 -> 运行中"),
     ).toBeInTheDocument();
-    expect(screen.getByText("miner-1 · 矿物输入不足")).toBeInTheDocument();
+    expect(screen.getByText("采矿机 · (1, 1, 0)")).toBeInTheDocument();
+    expect(screen.getByText("问题：原料短缺")).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "定位" })[0]);
 
@@ -1052,9 +1053,10 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("[t121] 产线告警"),
+      await screen.findByText("[t121] 产物阻塞"),
     ).toBeInTheDocument();
-    expect(screen.getByText("miner-1 · 产线堵塞")).toBeInTheDocument();
+    expect(screen.getByText("采矿机 · (1, 1, 0)")).toBeInTheDocument();
+    expect(screen.getByText("问题：产物阻塞")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(alertSnapshotCalls).toBeGreaterThan(1);

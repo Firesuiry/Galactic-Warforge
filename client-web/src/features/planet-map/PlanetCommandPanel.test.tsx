@@ -706,6 +706,18 @@ describe("PlanetCommandPanel", () => {
 
   it("建造前检查展示执行体距离，并在超范围时提示切到移动工作流", () => {
     const planet = createPlanet();
+    planet.map_width = 8;
+    planet.map_height = 8;
+    planet.bounds = { x: 0, y: 0, width: 8, height: 8 };
+    planet.terrain = Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, () => "buildable"),
+    );
+    planet.visible = Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, () => true),
+    );
+    planet.explored = Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, () => true),
+    );
     planet.units = {
       "exec-1": {
         id: "exec-1",
@@ -750,6 +762,99 @@ describe("PlanetCommandPanel", () => {
     expect(
       screen.getByText("当前执行体无法直接建造到目标坐标"),
     ).toBeInTheDocument();
+    expect(screen.getByText(/建议落点/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "切到移动工作流" })).toBeInTheDocument();
+  });
+
+  it("移动前检查会为超范围目标生成多段路线，并可一键回填第一跳", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    planet.map_width = 12;
+    planet.map_height = 12;
+    planet.bounds = { x: 0, y: 0, width: 12, height: 12 };
+    planet.terrain = Array.from({ length: 12 }, () =>
+      Array.from({ length: 12 }, () => "buildable"),
+    );
+    planet.visible = Array.from({ length: 12 }, () =>
+      Array.from({ length: 12 }, () => true),
+    );
+    planet.explored = Array.from({ length: 12 }, () =>
+      Array.from({ length: 12 }, () => true),
+    );
+    planet.units = {
+      "exec-1": {
+        id: "exec-1",
+        type: "executor",
+        owner_id: "p1",
+        position: { x: 1, y: 1, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        attack: 0,
+        defense: 0,
+        attack_range: 0,
+        move_range: 4,
+        vision_range: 4,
+        is_moving: false,
+      },
+    };
+
+    act(() => {
+      usePlanetViewStore.getState().setSelected({
+        kind: "tile",
+        position: { x: 7, y: 4, z: 0 },
+      });
+    });
+
+    render(
+      <PlanetCommandPanel
+        catalog={createCatalog() as never}
+        client={createClient() as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program"],
+          executorUnitId: "exec-1",
+          operateRange: 6,
+        }) as never}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("单位"), "exec-1");
+
+    expect(screen.getByText("移动前检查")).toBeInTheDocument();
+    expect(screen.getByText(/distance \/ moveRange = 9 \/ 4/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/\(5, 1, 0\) -> \(7, 3, 0\) -> \(7, 4, 0\)/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "填入第一跳" }));
+
+    const xInputs = screen.getAllByLabelText("X 坐标") as HTMLInputElement[];
+    const yInputs = screen.getAllByLabelText("Y 坐标") as HTMLInputElement[];
+    expect(xInputs[1].value).toBe("5");
+    expect(yInputs[1].value).toBe("1");
+  });
+
+  it("未解锁 dirac_inversion 时禁用 photon 模式并直接提示前置科技", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PlanetCommandPanel
+        catalog={createCatalog() as never}
+        client={createClient() as never}
+        planet={createPlanet() as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({
+          completedTechIds: ["dyson_sphere_program", "energy_matrix"],
+        }) as never}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "戴森" }));
+
+    expect(
+      screen.getByRole("option", { name: /photon .*未解锁/ }),
+    ).toBeDisabled();
+    expect(screen.getByText(/缺少科技.*狄拉克反演/)).toBeInTheDocument();
   });
 });

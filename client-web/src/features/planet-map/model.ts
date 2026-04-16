@@ -17,6 +17,7 @@ import type {
 
 import type { PlanetSceneWindow } from "@/features/planet-map/store";
 import {
+  translateAlertType,
   translateBuildingState,
   translateBuildingType,
   translateEventType,
@@ -601,6 +602,57 @@ function extractPayloadPosition(payload: Record<string, unknown>) {
   return null;
 }
 
+function translateAlertIssue(alert: Pick<AlertEntry, "alert_type" | "message">) {
+  return translateAlertType(alert.alert_type, alert.message || "产线告警");
+}
+
+function buildAlertRecommendation(alert: AlertEntry) {
+  switch (alert.alert_type) {
+    case "throughput_drop":
+      return "优先补原料，并检查供电与输出链路";
+    case "input_shortage":
+      return "优先补原料，并检查输入物流是否断链";
+    case "output_blocked":
+      return "优先清理产物，并检查仓储与输出物流";
+    case "power_shortage":
+    case "power_low":
+      return "优先补发电设施，并确认电网覆盖是否接通";
+    case "backlog":
+      return "优先疏通输出链路，并检查是否有堆积节点";
+    default:
+      return "优先定位建筑状态，再检查供电、原料与输出链路";
+  }
+}
+
+export interface AlertPresentation {
+  buildingLabel: string;
+  issueLabel: string;
+  recommendationLabel: string;
+  metricsLabel: string;
+}
+
+export function describeAlert(
+  planet: PlanetRenderView,
+  alert: AlertEntry,
+  catalog?: CatalogView,
+): AlertPresentation {
+  const building = planet.buildings?.[alert.building_id];
+  const buildingName = getBuildingDisplayName(
+    catalog,
+    building?.type ?? alert.building_type,
+  );
+  const buildingLabel = building
+    ? `${buildingName} · ${formatPosition(building.position)}`
+    : buildingName;
+
+  return {
+    buildingLabel,
+    issueLabel: `问题：${translateAlertIssue(alert)}`,
+    recommendationLabel: `建议：${buildAlertRecommendation(alert)}`,
+    metricsLabel: `吞吐 ${alert.metrics.throughput} · 堆积 ${alert.metrics.backlog} · 效率 ${Math.round((alert.metrics.efficiency ?? 0) * 100)}%`,
+  };
+}
+
 export function summarizeEvent(event: GameEventDetail) {
   const payload = event.payload ?? {};
   switch (event.event_type) {
@@ -622,10 +674,13 @@ export function summarizeEvent(event: GameEventDetail) {
     case "resource_changed":
       return `${asString(payload.resource_id) || "resource"} 储量变化`;
     case "production_alert": {
-      const alert = asRecord(payload.alert);
-      return alert
-        ? asString(alert.message) || `${asString(alert.building_id)} 触发告警`
-        : "产线告警";
+      const alert = extractAlertFromEvent(event);
+      if (!alert) {
+        return "产线告警";
+      }
+      const issue = translateAlertIssue(alert);
+      const buildingLabel = translateBuildingType(alert.building_type);
+      return `${buildingLabel} ${issue}`;
     }
     case "research_completed":
       return `${asString(payload.tech_id) || "research"} 研究完成`;
@@ -646,8 +701,12 @@ export function summarizeEvent(event: GameEventDetail) {
   }
 }
 
-export function summarizeAlert(alert: AlertEntry) {
-  return `${alert.building_id} · ${alert.message}`;
+export function summarizeAlert(
+  planet: PlanetRenderView,
+  alert: AlertEntry,
+  catalog?: CatalogView,
+) {
+  return describeAlert(planet, alert, catalog).buildingLabel;
 }
 
 export function extractAlertFromEvent(

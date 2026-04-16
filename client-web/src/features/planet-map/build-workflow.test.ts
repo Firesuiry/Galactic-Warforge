@@ -35,6 +35,11 @@ function createCatalog() {
 function createPlanet() {
   return {
     planet_id: "planet-1-1",
+    map_width: 8,
+    map_height: 8,
+    terrain: Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, () => "buildable"),
+    ),
     buildings: {
       "lab-1": {
         id: "lab-1",
@@ -75,6 +80,15 @@ function createPlanet() {
         is_moving: false,
       },
     },
+    resources: [] as Array<{
+      id: string;
+      planet_id: string;
+      kind: string;
+      behavior: string;
+      position: { x: number; y: number; z: number };
+      remaining: number;
+      current_yield: number;
+    }>,
   };
 }
 
@@ -160,5 +174,64 @@ describe("build workflow", () => {
       suggestedAction: "build_power",
     });
     expect(view.postBuildHints[0]?.detail).toContain("authoritative: under_power");
+  });
+
+  it("对目标地块给出地形与占用诊断，并为超距建造生成建议落点", () => {
+    const planet = createPlanet();
+    planet.map_width = 12;
+    planet.map_height = 12;
+    planet.terrain = Array.from({ length: 12 }, () =>
+      Array.from({ length: 12 }, () => "buildable"),
+    );
+    planet.terrain[2][9] = "water";
+    planet.resources = [
+      {
+        id: "iron-1",
+        planet_id: "planet-1-1",
+        kind: "iron_ore",
+        behavior: "finite",
+        position: { x: 9, y: 2, z: 0 },
+        remaining: 900,
+        current_yield: 3,
+      },
+    ];
+    planet.units["exec-1"].move_range = 4;
+
+    const view = deriveBuildWorkflowView({
+      catalog: createCatalog() as never,
+      playerId: "p1",
+      planet: planet as never,
+      summary: createSummary() as never,
+      selectedPosition: { x: 9, y: 2, z: 0 },
+      buildingType: "wind_turbine",
+    });
+
+    expect(view.tileAssessment).toBeDefined();
+    expect(view.tileAssessment!).toMatchObject({
+      terrain: "water",
+      terrainBuildable: false,
+      blockingResourceId: "iron-1",
+      buildable: false,
+      footprint: { width: 1, height: 1 },
+    });
+    expect(view.tileAssessment!.blockedTiles).toEqual([
+      expect.objectContaining({
+        x: 9,
+        y: 2,
+        reason: "terrain",
+      }),
+      expect.objectContaining({
+        x: 9,
+        y: 2,
+        reason: "resource",
+        resourceId: "iron-1",
+      }),
+    ]);
+    expect(view.approachPlan).toMatchObject({
+      distanceGap: 3,
+      landingPosition: { x: 4, y: 1, z: 0 },
+      firstWaypoint: { x: 4, y: 1, z: 0 },
+      waypoints: [{ x: 4, y: 1, z: 0 }],
+    });
   });
 });

@@ -15,6 +15,7 @@ import type {
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import {
   findLogisticsStation,
+  formatPosition,
   formatItemInventorySummary,
   getBuildingDisplayName,
   getItemDisplayName,
@@ -26,8 +27,10 @@ import {
   buildStarterGuide,
   deriveResearchGroups,
   getResearchProgressPercent,
+  normalizeCompletedTechIds,
 } from "@/features/planet-map/research-workflow";
 import { deriveBuildWorkflowView } from "@/features/planet-map/build-workflow";
+import { deriveMoveWorkflowView } from "@/features/planet-map/move-workflow";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -40,6 +43,7 @@ import {
   translateDirection,
   translateLogisticsMode,
   translateLogisticsScope,
+  translateTechId,
   translateUi,
   translateUnitType,
 } from "@/i18n/translate";
@@ -250,9 +254,15 @@ export function PlanetCommandPanel({
       ),
     [catalog?.items],
   );
+  const completedTechIds = useMemo(
+    () => new Set(normalizeCompletedTechIds(playerTechState)),
+    [playerTechState],
+  );
+  const photonModeUnlocked = completedTechIds.has("dirac_inversion");
   const buildWorkflow = useMemo(
     () => deriveBuildWorkflowView({
       catalog,
+      buildingType,
       journal,
       networks,
       planet,
@@ -260,7 +270,26 @@ export function PlanetCommandPanel({
       selectedPosition: { x: buildX, y: buildY, z: 0 },
       summary,
     }),
-    [buildX, buildY, catalog, journal, networks, planet, playerId, summary],
+    [
+      buildX,
+      buildY,
+      buildingType,
+      catalog,
+      journal,
+      networks,
+      planet,
+      playerId,
+      summary,
+    ],
+  );
+  const moveWorkflow = useMemo(
+    () =>
+      deriveMoveWorkflowView({
+        planet,
+        targetPosition: { x: moveX, y: moveY, z: 0 },
+        unitId: moveUnitId,
+      }),
+    [moveUnitId, moveX, moveY, planet],
   );
   const visibleBuildOptions = useMemo(
     () => [
@@ -318,6 +347,20 @@ export function PlanetCommandPanel({
         (building) => building.type === "vertical_launching_silo",
       ),
     [ownBuildings],
+  );
+  const rayReceiverModeOptions = useMemo(
+    () => [
+      { value: "power", label: "power · 电网回灌", disabled: false },
+      { value: "hybrid", label: "hybrid · 发电 + 光子", disabled: false },
+      {
+        value: "photon",
+        label: photonModeUnlocked
+          ? "photon · 光子优先"
+          : `photon · 未解锁（需 ${translateTechId("dirac_inversion")}）`,
+        disabled: !photonModeUnlocked,
+      },
+    ] as const,
+    [photonModeUnlocked],
   );
   const dysonLayers = useMemo(
     () =>
@@ -626,6 +669,12 @@ export function PlanetCommandPanel({
   }, [rayReceiverBuildingId, rayReceiverBuildings]);
 
   useEffect(() => {
+    if (!photonModeUnlocked && rayReceiverMode === "photon") {
+      setRayReceiverMode("power");
+    }
+  }, [photonModeUnlocked, rayReceiverMode]);
+
+  useEffect(() => {
     const nextLaunchers =
       launchMode === "solar_sail" ? solarSailLaunchers : rocketLaunchers;
     if (
@@ -688,6 +737,41 @@ export function PlanetCommandPanel({
       return `${displayName} · 目录异常`;
     }
     return `${displayName} · ${entry.id}`;
+  }
+
+  function formatTerrainLabel(terrain: string) {
+    switch (terrain) {
+      case "buildable":
+        return "可建造地块";
+      case "blocked":
+        return "障碍地块";
+      case "water":
+        return "水域";
+      case "lava":
+        return "岩浆";
+      default:
+        return terrain;
+    }
+  }
+
+  function formatWaypointChain(positions: Array<{ x: number; y: number; z?: number }>) {
+    return positions
+      .map((position) =>
+        formatPosition({ x: position.x, y: position.y, z: position.z ?? 0 }),
+      )
+      .join(" -> ");
+  }
+
+  function describeBlockedTile(
+    tile: NonNullable<typeof buildWorkflow.tileAssessment>["blockedTiles"][number],
+  ) {
+    if (tile.reason === "terrain") {
+      return `${formatPosition({ x: tile.x, y: tile.y, z: 0 })} 为${formatTerrainLabel(tile.terrain)}`;
+    }
+    if (tile.reason === "building") {
+      return `${formatPosition({ x: tile.x, y: tile.y, z: 0 })} 已被建筑 ${tile.buildingId} 占用`;
+    }
+    return `${formatPosition({ x: tile.x, y: tile.y, z: 0 })} 已被资源点 ${tile.resourceId} 占用`;
   }
 
   function renderHintDetail(detail: string) {
@@ -915,6 +999,23 @@ export function PlanetCommandPanel({
           ) : (
             <p className="subtle-text">当前没有可用执行体，无法做距离预检。</p>
           )}
+          {buildWorkflow.tileAssessment ? (
+            <div className="build-preflight__summary">
+              <span>
+                目标地形 {formatTerrainLabel(buildWorkflow.tileAssessment.terrain)}
+              </span>
+              <span>
+                {buildWorkflow.tileAssessment.buildable
+                  ? "当前地块可直接建造"
+                  : "当前地块不可直接建造"}
+              </span>
+            </div>
+          ) : null}
+          {buildWorkflow.tileAssessment?.blockedTiles.map((tile) => (
+            <div className="subtle-text" key={`${tile.reason}:${tile.x}:${tile.y}`}>
+              {describeBlockedTile(tile)}
+            </div>
+          ))}
           {buildWorkflow.preflightHints.map((hint) => (
             <div
               className={`command-inline-hint command-inline-hint--${hint.tone}`}
@@ -930,8 +1031,11 @@ export function PlanetCommandPanel({
                     if (buildWorkflow.reachability.executorUnitId) {
                       setMoveUnitId(buildWorkflow.reachability.executorUnitId);
                     }
-                    setMoveX(buildX);
-                    setMoveY(buildY);
+                    const landing =
+                      buildWorkflow.approachPlan?.firstWaypoint
+                      ?? buildWorkflow.approachPlan?.landingPosition;
+                    setMoveX(landing?.x ?? buildX);
+                    setMoveY(landing?.y ?? buildY);
                   }}
                   type="button"
                 >
@@ -940,6 +1044,18 @@ export function PlanetCommandPanel({
               ) : null}
             </div>
           ))}
+          {buildWorkflow.approachPlan?.landingPosition ? (
+            <div className="command-inline-hint command-inline-hint--warning">
+              <strong>
+                建议落点 {formatPosition(buildWorkflow.approachPlan.landingPosition)}
+              </strong>
+              <div className="subtle-text">
+                目标还差 {buildWorkflow.approachPlan.distanceGap ?? 0} 格操作距离；
+                推荐移动路线{" "}
+                {formatWaypointChain(buildWorkflow.approachPlan.waypoints)}
+              </div>
+            </div>
+          ) : null}
           {buildWorkflow.postBuildHints.map((hint) => (
             <div
               className={`command-inline-hint command-inline-hint--${hint.tone}`}
@@ -1035,6 +1151,42 @@ export function PlanetCommandPanel({
 
       <section className="planet-side-section">
         <div className="section-title">移动</div>
+        <div className="build-preflight">
+          <div className="section-title section-title--minor">移动前检查</div>
+          {moveWorkflow.unitPosition ? (
+            <div className="build-preflight__summary">
+              <span>单位 {moveWorkflow.unitId}</span>
+              <span>
+                distance / moveRange = {moveWorkflow.distance ?? "-"} /{" "}
+                {moveWorkflow.moveRange ?? "-"}
+              </span>
+            </div>
+          ) : (
+            <p className="subtle-text">先选择单位，地图选点会直接回填目标坐标。</p>
+          )}
+          {moveWorkflow.unitPosition && moveWorkflow.inRange ? (
+            <div className="subtle-text">当前目标一步可达，可直接提交移动命令。</div>
+          ) : null}
+          {moveWorkflow.firstWaypoint ? (
+            <div className="command-inline-hint command-inline-hint--warning">
+              <strong>建议先走第一跳 {formatPosition(moveWorkflow.firstWaypoint)}</strong>
+              <div className="subtle-text">
+                目标还差 {moveWorkflow.distanceGap ?? 0} 格移动距离；推荐路线{" "}
+                {formatWaypointChain(moveWorkflow.waypoints)}
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setMoveX(moveWorkflow.firstWaypoint?.x ?? moveX);
+                  setMoveY(moveWorkflow.firstWaypoint?.y ?? moveY);
+                }}
+                type="button"
+              >
+                填入第一跳
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="compact-form-grid">
           <label className="field field--span-2">
             <span>{fieldLabel("unit_id")}</span>
@@ -2108,11 +2260,22 @@ export function PlanetCommandPanel({
               }
               value={rayReceiverMode}
             >
-              <option value="power">power</option>
-              <option value="photon">photon</option>
-              <option value="hybrid">hybrid</option>
+              {rayReceiverModeOptions.map((mode) => (
+                <option
+                  disabled={mode.disabled}
+                  key={mode.value}
+                  value={mode.value}
+                >
+                  {mode.label}
+                </option>
+              ))}
             </select>
           </label>
+          {!photonModeUnlocked ? (
+            <div className="subtle-text field--span-2">
+              缺少科技：{translateTechId("dirac_inversion")}，当前不能切到 photon。
+            </div>
+          ) : null}
           <button
             className="secondary-button field--span-2"
             disabled={busyAction !== "" || !rayReceiverBuildingId}

@@ -61,8 +61,11 @@ export function translateEventType(eventType: string | undefined | null) {
   return translateByDictionary(TRANSLATIONS.eventType, eventType, "事件已记录");
 }
 
-export function translateAlertType(alertType: string | undefined | null) {
-  return translateByDictionary(TRANSLATIONS.alertType, alertType, TRANSLATIONS.ui.unknown);
+export function translateAlertType(
+  alertType: string | undefined | null,
+  fallback: string = TRANSLATIONS.ui.unknown,
+) {
+  return translateByDictionary(TRANSLATIONS.alertType, alertType, fallback);
 }
 
 export function translateSeverity(severity: string | undefined | null) {

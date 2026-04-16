@@ -515,6 +515,12 @@ test("midgame 在浏览器中按建筑上下文展示装料与射线接收站提
   await page.getByRole("tab", { name: "戴森" }).click();
   const rayReceiverSection = page.locator(".planet-side-section").filter({ hasText: "射线接收站" });
   await rayReceiverSection.getByLabel("建筑 ID").selectOption("ray-1");
+  await expect(
+    rayReceiverSection.getByRole("option", { name: /photon .*未解锁/ }),
+  ).toHaveAttribute("disabled", "");
+  await expect(
+    rayReceiverSection.getByText("缺少科技：狄拉克反演，当前不能切到 photon。"),
+  ).toBeVisible();
   await rayReceiverSection.getByLabel("模式").selectOption("power");
   await rayReceiverSection.getByRole("button", { name: "切换射线接收站模式" }).click();
   await expect(
