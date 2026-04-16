@@ -91,6 +91,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `commands_total`：累计执行命令数
   - `sse_connections`：当前 SSE 连接数
   - `queue_backlog`：当前命令队列积压数
+  - `dropped_events`：EventBus 因消费者过慢而丢弃的事件累计数
   - `tick_p95_ms` / `tick_p99_ms`：最近滚动窗口 Tick 耗时分位数
 - 响应:
 ```json
@@ -100,6 +101,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "commands_total": 42,
   "sse_connections": 1,
   "queue_backlog": 0,
+  "dropped_events": 3,
   "tick_p95_ms": 9.0,
   "tick_p99_ms": 12.0
 }

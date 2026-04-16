@@ -206,9 +206,10 @@ func TestSaveWritesThroughGameDir(t *testing.T) {
 	}
 }
 
-func TestProcessTickBlockedBySaveMutex(t *testing.T) {
+func TestProcessTickIgnoresSaveMutex(t *testing.T) {
 	core := newSaveStateHarness(t)
 	core.saveMu.Lock()
+	defer core.saveMu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
@@ -218,24 +219,12 @@ func TestProcessTickBlockedBySaveMutex(t *testing.T) {
 
 	select {
 	case <-done:
-		t.Fatalf("expected processTick to block on saveMu")
-	case <-time.After(20 * time.Millisecond):
-	}
-
-	if got := core.World().Tick; got != 0 {
-		t.Fatalf("expected tick unchanged while saveMu held, got %d", got)
-	}
-
-	core.saveMu.Unlock()
-
-	select {
-	case <-done:
 	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("expected processTick to continue after releasing saveMu")
+		t.Fatalf("expected processTick to continue while saveMu is held")
 	}
 
 	if got := core.World().Tick; got != 1 {
-		t.Fatalf("expected tick to advance after unblocking, got %d", got)
+		t.Fatalf("expected tick to advance even when saveMu held, got %d", got)
 	}
 }
 

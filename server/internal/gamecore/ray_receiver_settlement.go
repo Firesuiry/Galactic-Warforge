@@ -5,6 +5,7 @@ import (
 
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
 )
 
 const maxPlayerEnergy = 10000
@@ -81,7 +82,7 @@ func settleRayReceivers(ws *model.WorldState, maps *mapmodel.Universe, spaceRunt
 					ws.PowerInputs = append(ws.PowerInputs, model.PowerInput{
 						BuildingID:     building.ID,
 						OwnerID:        building.OwnerID,
-						SourceKind:     model.PowerSourceRayReceiver,
+						SourceKind:     modelpower.PowerSourceRayReceiver,
 						BaseOutput:     effectiveInput,
 						EnvFactor:      module.ReceiveEfficiency,
 						FuelMultiplier: module.PowerEfficiency,

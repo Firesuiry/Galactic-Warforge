@@ -1,6 +1,9 @@
 package gamecore
 
-import "siliconworld/internal/model"
+import (
+	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
+)
 
 func settleEnergyStorage(ws *model.WorldState) {
 	if ws == nil {
@@ -33,7 +36,7 @@ func settleEnergyStorage(ws *model.WorldState) {
 				ws.PowerInputs = append(ws.PowerInputs, model.PowerInput{
 					BuildingID: action.BuildingID,
 					OwnerID:    network.OwnerID,
-					SourceKind: model.PowerSourceStorage,
+					SourceKind: modelpower.PowerSourceStorage,
 					Output:     action.DischargeOutput,
 				})
 			}
@@ -51,7 +54,7 @@ func filterStoragePowerInputs(inputs []model.PowerInput) []model.PowerInput {
 	}
 	out := inputs[:0]
 	for _, input := range inputs {
-		if input.SourceKind == model.PowerSourceStorage {
+		if input.SourceKind == modelpower.PowerSourceStorage {
 			continue
 		}
 		out = append(out, input)

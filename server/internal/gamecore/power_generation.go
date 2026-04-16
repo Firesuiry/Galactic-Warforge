@@ -5,6 +5,7 @@ import (
 
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
 )
 
 func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment) []*model.GameEvent {
@@ -38,13 +39,13 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 			continue
 		}
 		module := building.Runtime.Functions.Energy
-		if !model.IsPowerGeneratorModule(module) {
+		if !modelpower.IsPowerGeneratorModule(module) {
 			continue
 		}
 		if building.Runtime.State == model.BuildingWorkPaused || building.Runtime.State == model.BuildingWorkIdle || building.Runtime.State == model.BuildingWorkError {
 			continue
 		}
-		if model.IsFuelBasedPowerSource(module.SourceKind) {
+		if modelpower.IsFuelBasedPowerSource(module.SourceKind) {
 			// Fuel-based generators publish the authoritative runtime result for
 			// this tick here. Later phases may consume resources, but they must not
 			// overwrite a successful generation tick with a post-consumption
@@ -87,11 +88,11 @@ func settlePowerGeneration(ws *model.WorldState, env mapmodel.PlanetEnvironment)
 	return events
 }
 
-func powerEnvFactor(kind model.PowerSourceKind, env mapmodel.PlanetEnvironment) float64 {
+func powerEnvFactor(kind modelpower.PowerSourceKind, env mapmodel.PlanetEnvironment) float64 {
 	switch kind {
-	case model.PowerSourceWind:
+	case modelpower.PowerSourceWind:
 		return env.WindFactor
-	case model.PowerSourceSolar:
+	case modelpower.PowerSourceSolar:
 		return env.LightFactor
 	default:
 		return 1

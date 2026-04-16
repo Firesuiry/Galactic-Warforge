@@ -77,14 +77,18 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 	}
 
 	replayCore := &GameCore{
-		cfg:            gc.cfg,
-		maps:           gc.maps,
-		discovery:      discovery,
-		world:          world,
-		worlds:         worlds,
-		executorUsage:  make(map[string]int),
-		activePlanetID: activePlanetID,
-		spaceRuntime:   spaceRuntime,
+		cfg:              gc.cfg,
+		maps:             gc.maps,
+		discovery:        discovery,
+		world:            world,
+		worlds:           worlds,
+		executorUsage:    make(map[string]int),
+		activePlanetID:   activePlanetID,
+		spaceRuntime:     spaceRuntime,
+		alertHistory:     NewAlertHistory(gc.cfg.Server.AlertHistoryLimit),
+		monitor:          newProductionMonitor(gc.cfg.Server.ProductionMonitor),
+		combatUnits:      NewCombatUnitManager(),
+		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
 
 	entries := gc.cmdLog.Range(snap.Tick+1, toTick)
@@ -102,10 +106,9 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 	}
 
 	for tick := snap.Tick + 1; tick <= toTick; tick++ {
-		replayCore.world.Tick = tick
-		replayCore.executorUsage = countActiveExecutorUsage(replayCore.world)
+		frame := replayCore.advanceWorldsOneTick()
 
-		if tickEntries := entriesByTick[tick]; len(tickEntries) > 0 {
+		if tickEntries := entriesByTick[frame.currentTick]; len(tickEntries) > 0 {
 			for _, entry := range tickEntries {
 				qr := &model.QueuedRequest{
 					Request: model.CommandRequest{
@@ -122,30 +125,8 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 			}
 		}
 
-		replayCore.settleConstructionQueue(replayCore.world)
-		settleBuildingJobs(replayCore.world)
-		env := currentPlanetEnvironment(replayCore.maps, replayCore.world.PlanetID)
-		settlePowerGeneration(replayCore.world, env)
-		settleSolarSails(replayCore.spaceRuntime, replayCore.world.Tick)
-		settleDysonSpheres(replayCore.spaceRuntime, replayCore.world.Tick)
-		receiverViews := settleRayReceivers(replayCore.world, replayCore.maps, replayCore.spaceRuntime)
-		settlePlanetaryShields(replayCore.world)
-		finalizePowerSettlement(replayCore.world, receiverViews)
-		settleResources(replayCore.world)
-		settleConveyors(replayCore.world)
-		settleSorters(replayCore.world)
-		settleBuildingIO(replayCore.world)
-		settleStorage(replayCore.world)
-		settleLogisticsDispatch(replayCore.world)
-		settleLogisticsDrones(replayCore.world)
-		for _, ws := range replayCore.sortedWorlds() {
-			settleCombatRuntime(ws, ws.Tick)
-		}
-		settleSpaceFleets(replayCore.worlds, replayCore.maps, replayCore.spaceRuntime, replayCore.world.Tick)
-		settleTurrets(replayCore.world)
-		if !replayCore.Victory().Declared() {
-			replayCore.setVictoryState(resolveVictory(replayCore.cfg.Battlefield.VictoryRule, replayCore.worlds, replayCore.world))
-		}
+		_ = tick
+		_ = replayCore.runSettlementPipeline(frame)
 
 		if delay > 0 {
 			time.Sleep(delay)

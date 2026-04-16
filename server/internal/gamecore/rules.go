@@ -8,6 +8,7 @@ import (
 
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
 )
 
 func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAmount, bool) {
@@ -981,7 +982,7 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 			powerRatio = alloc.Ratio
 		}
 
-		if module := b.Runtime.Functions.Energy; module != nil && model.IsFuelBasedPowerSource(module.SourceKind) {
+		if module := b.Runtime.Functions.Energy; module != nil && modelpower.IsFuelBasedPowerSource(module.SourceKind) {
 			if b.Runtime.State == model.BuildingWorkNoPower && b.Runtime.StateReason == stateReasonNoFuel {
 				continue
 			}
@@ -1402,7 +1403,7 @@ func commandPowerSupplyForBuilding(building *model.Building, powerInputs map[str
 		return 0
 	}
 	module := building.Runtime.Functions.Energy
-	if model.IsPowerGeneratorModule(module) {
+	if modelpower.IsPowerGeneratorModule(module) {
 		if powerInputs != nil {
 			if output := powerInputs[building.ID]; output > 0 {
 				return output
@@ -1428,21 +1429,21 @@ func commandPowerSupplyForBuilding(building *model.Building, powerInputs map[str
 	return output
 }
 
-func estimatedCommandGeneratorOutput(building *model.Building, module *model.EnergyModule) int {
+func estimatedCommandGeneratorOutput(building *model.Building, module *modelpower.EnergyModule) int {
 	if building == nil || module == nil {
 		return 0
 	}
 	switch module.SourceKind {
-	case model.PowerSourceRayReceiver:
+	case modelpower.PowerSourceRayReceiver:
 		return 0
-	case model.PowerSourceThermal, model.PowerSourceFusion, model.PowerSourceArtificialStar:
+	case modelpower.PowerSourceThermal, modelpower.PowerSourceFusion, modelpower.PowerSourceArtificialStar:
 		return estimateFuelBasedCommandGeneratorOutput(building, module)
 	default:
 		return commandGeneratorBaseOutput(building, module)
 	}
 }
 
-func estimateFuelBasedCommandGeneratorOutput(building *model.Building, module *model.EnergyModule) int {
+func estimateFuelBasedCommandGeneratorOutput(building *model.Building, module *modelpower.EnergyModule) int {
 	base := commandGeneratorBaseOutput(building, module)
 	if base <= 0 || module == nil || len(module.FuelRules) == 0 {
 		return 0
@@ -1473,7 +1474,7 @@ func estimateFuelBasedCommandGeneratorOutput(building *model.Building, module *m
 	return 0
 }
 
-func commandGeneratorBaseOutput(building *model.Building, module *model.EnergyModule) int {
+func commandGeneratorBaseOutput(building *model.Building, module *modelpower.EnergyModule) int {
 	output := 0
 	if building != nil {
 		output = building.Runtime.Params.EnergyGenerate

@@ -65,3 +65,32 @@ func TestEventBusPublishesOnlySubscribedTypes(t *testing.T) {
 	default:
 	}
 }
+
+func TestEventBusCountsDroppedEvents(t *testing.T) {
+	bus := NewEventBus()
+	ch := bus.Subscribe("sub-1", nil)
+	defer bus.Unsubscribe("sub-1")
+
+	events := make([]*model.GameEvent, 0, 300)
+	for i := 0; i < 300; i++ {
+		events = append(events, &model.GameEvent{
+			EventID:   "evt-overflow",
+			Tick:      int64(i + 1),
+			EventType: model.EvtTickCompleted,
+		})
+	}
+
+	bus.Publish(events)
+
+	if got := bus.DroppedCount(); got != 44 {
+		t.Fatalf("expected 44 dropped events, got %d", got)
+	}
+
+	for i := 0; i < 256; i++ {
+		select {
+		case <-ch:
+		default:
+			t.Fatalf("expected buffered event %d to remain available", i)
+		}
+	}
+}

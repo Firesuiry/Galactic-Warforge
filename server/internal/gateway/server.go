@@ -163,7 +163,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleMetrics returns core runtime metrics
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	m := s.core.GetMetrics()
-	writeJSON(w, http.StatusOK, m.Snapshot())
+	snapshot := m.Snapshot()
+	if s.bus != nil {
+		snapshot["dropped_events"] = s.bus.DroppedCount()
+	}
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 // handleStateSummary returns GET /state/summary

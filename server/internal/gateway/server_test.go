@@ -712,6 +712,63 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpointIncludesDroppedEvents(t *testing.T) {
+	cfg := &config.Config{
+		Battlefield: config.BattlefieldConfig{MapSeed: "metrics-test", MaxTickRate: 10},
+		Players: []config.PlayerConfig{
+			{PlayerID: "p1", Key: "key1"},
+		},
+		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+	}
+	mapCfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
+	q := queue.New()
+	bus := gamecore.NewEventBus()
+	core := gamecore.New(cfg, maps, q, bus, nil)
+	srv := gateway.New(cfg, core, bus, q)
+
+	ch := bus.Subscribe("metrics-sub", nil)
+	defer bus.Unsubscribe("metrics-sub")
+
+	events := make([]*model.GameEvent, 0, 300)
+	for i := 0; i < 300; i++ {
+		events = append(events, &model.GameEvent{
+			EventID:   "evt-metrics",
+			Tick:      int64(i + 1),
+			EventType: model.EvtTickCompleted,
+		})
+	}
+	bus.Publish(events)
+
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if got := body["dropped_events"]; got != float64(44) {
+		t.Fatalf("expected dropped_events=44, got %v", got)
+	}
+
+	for i := 0; i < 256; i++ {
+		select {
+		case <-ch:
+		default:
+			t.Fatalf("expected event %d to remain buffered", i)
+		}
+	}
+}
+
 func TestEventSnapshotEndpoint(t *testing.T) {
 	srv, core := newTestServer(t)
 	core.EventHistory().Record([]*model.GameEvent{

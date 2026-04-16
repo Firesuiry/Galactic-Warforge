@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	modelpower "siliconworld/internal/model/power"
 )
 
 // BuildingWorkState captures the current operating state of a building.
@@ -98,22 +100,22 @@ type BuildingRuntime struct {
 
 // BuildingFunctionModules describes modular building capabilities.
 type BuildingFunctionModules struct {
-	Production      *ProductionModule      `json:"production,omitempty" yaml:"production,omitempty"`
-	Collect         *CollectModule         `json:"collect,omitempty" yaml:"collect,omitempty"`
-	Orbital         *OrbitalModule         `json:"orbital,omitempty" yaml:"orbital,omitempty"`
-	Transport       *TransportModule       `json:"transport,omitempty" yaml:"transport,omitempty"`
-	Sorter          *SorterModule          `json:"sorter,omitempty" yaml:"sorter,omitempty"`
-	Spray           *SprayModule           `json:"spray,omitempty" yaml:"spray,omitempty"`
-	Storage         *StorageModule         `json:"storage,omitempty" yaml:"storage,omitempty"`
-	RayReceiver     *RayReceiverModule     `json:"ray_receiver,omitempty" yaml:"ray_receiver,omitempty"`
-	EnergyExchanger *EnergyExchangerModule `json:"energy_exchanger,omitempty" yaml:"energy_exchanger,omitempty"`
-	EnergyStorage   *EnergyStorageModule   `json:"energy_storage,omitempty" yaml:"energy_storage,omitempty"`
-	Energy          *EnergyModule          `json:"energy,omitempty" yaml:"energy,omitempty"`
-	Research        *ResearchModule        `json:"research,omitempty" yaml:"research,omitempty"`
-	Combat          *CombatModule          `json:"combat,omitempty" yaml:"combat,omitempty"`
-	Shield          *ShieldModule          `json:"shield,omitempty" yaml:"shield,omitempty"`
-	Launch          *LaunchModule          `json:"launch,omitempty" yaml:"launch,omitempty"`
-	Deployment      *DeploymentModule      `json:"deployment,omitempty" yaml:"deployment,omitempty"`
+	Production      *ProductionModule        `json:"production,omitempty" yaml:"production,omitempty"`
+	Collect         *CollectModule           `json:"collect,omitempty" yaml:"collect,omitempty"`
+	Orbital         *OrbitalModule           `json:"orbital,omitempty" yaml:"orbital,omitempty"`
+	Transport       *TransportModule         `json:"transport,omitempty" yaml:"transport,omitempty"`
+	Sorter          *SorterModule            `json:"sorter,omitempty" yaml:"sorter,omitempty"`
+	Spray           *SprayModule             `json:"spray,omitempty" yaml:"spray,omitempty"`
+	Storage         *StorageModule           `json:"storage,omitempty" yaml:"storage,omitempty"`
+	RayReceiver     *RayReceiverModule       `json:"ray_receiver,omitempty" yaml:"ray_receiver,omitempty"`
+	EnergyExchanger *EnergyExchangerModule   `json:"energy_exchanger,omitempty" yaml:"energy_exchanger,omitempty"`
+	EnergyStorage   *EnergyStorageModule     `json:"energy_storage,omitempty" yaml:"energy_storage,omitempty"`
+	Energy          *modelpower.EnergyModule `json:"energy,omitempty" yaml:"energy,omitempty"`
+	Research        *ResearchModule          `json:"research,omitempty" yaml:"research,omitempty"`
+	Combat          *CombatModule            `json:"combat,omitempty" yaml:"combat,omitempty"`
+	Shield          *ShieldModule            `json:"shield,omitempty" yaml:"shield,omitempty"`
+	Launch          *LaunchModule            `json:"launch,omitempty" yaml:"launch,omitempty"`
+	Deployment      *DeploymentModule        `json:"deployment,omitempty" yaml:"deployment,omitempty"`
 }
 
 // ProductionModule handles production throughput.
@@ -175,15 +177,6 @@ type EnergyStorageModule struct {
 	DischargeEfficiency float64 `json:"discharge_efficiency" yaml:"discharge_efficiency"`
 	Priority            int     `json:"priority" yaml:"priority"`
 	InitialCharge       int     `json:"initial_charge" yaml:"initial_charge"`
-}
-
-// EnergyModule handles energy conversion/output.
-type EnergyModule struct {
-	OutputPerTick  int             `json:"output_per_tick" yaml:"output_per_tick"`
-	ConsumePerTick int             `json:"consume_per_tick" yaml:"consume_per_tick"`
-	Buffer         int             `json:"buffer" yaml:"buffer"`
-	SourceKind     PowerSourceKind `json:"source_kind,omitempty" yaml:"source_kind,omitempty"`
-	FuelRules      []FuelRule      `json:"fuel_rules,omitempty" yaml:"fuel_rules,omitempty"`
 }
 
 // ResearchModule handles research throughput.
@@ -477,10 +470,10 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 		if def.Functions.Energy.OutputPerTick < 0 || def.Functions.Energy.ConsumePerTick < 0 || def.Functions.Energy.Buffer < 0 {
 			return fmt.Errorf("building runtime %s energy module invalid", def.ID)
 		}
-		if def.Functions.Energy.SourceKind != "" && !IsPowerSourceKind(def.Functions.Energy.SourceKind) {
+		if def.Functions.Energy.SourceKind != "" && !modelpower.IsPowerSourceKind(def.Functions.Energy.SourceKind) {
 			return fmt.Errorf("building runtime %s invalid power source %s", def.ID, def.Functions.Energy.SourceKind)
 		}
-		if def.Functions.Energy.SourceKind != "" && IsFuelBasedPowerSource(def.Functions.Energy.SourceKind) && len(def.Functions.Energy.FuelRules) == 0 {
+		if def.Functions.Energy.SourceKind != "" && modelpower.IsFuelBasedPowerSource(def.Functions.Energy.SourceKind) && len(def.Functions.Energy.FuelRules) == 0 {
 			return fmt.Errorf("building runtime %s power source %s missing fuel rules", def.ID, def.Functions.Energy.SourceKind)
 		}
 		for _, rule := range def.Functions.Energy.FuelRules {
@@ -595,7 +588,7 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 	if m.Energy != nil {
 		val := *m.Energy
 		if len(m.Energy.FuelRules) > 0 {
-			val.FuelRules = append([]FuelRule(nil), m.Energy.FuelRules...)
+			val.FuelRules = append([]modelpower.FuelRule(nil), m.Energy.FuelRules...)
 		}
 		out.Energy = &val
 	}
@@ -639,7 +632,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Storage: &StorageModule{Capacity: 60, Slots: 4, Buffer: 20, InputPriority: 2, OutputPriority: 1},
-			Energy:  &EnergyModule{ConsumePerTick: 2},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 			Deployment: &DeploymentModule{
 				SquadCapacity: 4,
 				FleetCapacity: 2,
@@ -662,7 +655,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Collect: &CollectModule{YieldPerTick: 8},
 			Storage: &StorageModule{Capacity: 48, Slots: 2, Buffer: 12, InputPriority: 1, OutputPriority: 2},
-			Energy:  &EnergyModule{ConsumePerTick: 2},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 		},
 	},
 	{
@@ -680,7 +673,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Collect: &CollectModule{YieldPerTick: 16},
 			Storage: &StorageModule{Capacity: 96, Slots: 3, Buffer: 24, InputPriority: 1, OutputPriority: 2},
-			Energy:  &EnergyModule{ConsumePerTick: 6},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 6},
 		},
 	},
 	{
@@ -698,7 +691,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Collect: &CollectModule{YieldPerTick: 8},
 			Storage: &StorageModule{Capacity: 60, Slots: 1, Buffer: 20, InputPriority: 1, OutputPriority: 2},
-			Energy:  &EnergyModule{ConsumePerTick: 2},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 		},
 	},
 	{
@@ -716,7 +709,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Collect: &CollectModule{YieldPerTick: 8},
 			Storage: &StorageModule{Capacity: 60, Slots: 1, Buffer: 20, InputPriority: 1, OutputPriority: 2},
-			Energy:  &EnergyModule{ConsumePerTick: 2},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 		},
 	},
 	{
@@ -735,7 +728,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				},
 				MaxInventory: 1000,
 			},
-			Energy: &EnergyModule{ConsumePerTick: 4},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 4},
 		},
 	},
 	{
@@ -832,7 +825,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 24, Slots: 3, Buffer: 8, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 4},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 4},
 		},
 	},
 	{
@@ -851,7 +844,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 36, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 2, RecipeSlots: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 6},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 6},
 		},
 	},
 	{
@@ -870,7 +863,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 48, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 3, RecipeSlots: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 9},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 9},
 		},
 	},
 	{
@@ -889,7 +882,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 24, Slots: 4, Buffer: 8, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 6},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 6},
 		},
 	},
 	{
@@ -908,7 +901,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 36, Slots: 5, Buffer: 12, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 2, RecipeSlots: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 8},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 8},
 		},
 	},
 	{
@@ -928,7 +921,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			Storage:    &StorageModule{Capacity: 36, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 2},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
 			Research:   &ResearchModule{ResearchPerTick: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 4},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 4},
 		},
 	},
 	{
@@ -948,7 +941,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			Storage:    &StorageModule{Capacity: 72, Slots: 6, Buffer: 24, InputPriority: 2, OutputPriority: 2},
 			Production: &ProductionModule{Throughput: 3, RecipeSlots: 1},
 			Research:   &ResearchModule{ResearchPerTick: 3},
-			Energy:     &EnergyModule{ConsumePerTick: 16},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 16},
 		},
 	},
 	{
@@ -1067,7 +1060,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Energy: &EnergyModule{OutputPerTick: 10, SourceKind: PowerSourceWind},
+			Energy: &modelpower.EnergyModule{OutputPerTick: 10, SourceKind: modelpower.PowerSourceWind},
 		},
 	},
 	{
@@ -1083,10 +1076,10 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Storage: &StorageModule{Capacity: 50, Slots: 1, Buffer: 10, InputPriority: 2, OutputPriority: 0},
-			Energy: &EnergyModule{
+			Energy: &modelpower.EnergyModule{
 				OutputPerTick: 20,
-				SourceKind:    PowerSourceThermal,
-				FuelRules: []FuelRule{
+				SourceKind:    modelpower.PowerSourceThermal,
+				FuelRules: []modelpower.FuelRule{
 					{ItemID: ItemCoal, ConsumePerTick: 1, OutputMultiplier: 1},
 				},
 			},
@@ -1101,7 +1094,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Energy: &EnergyModule{OutputPerTick: 12, SourceKind: PowerSourceSolar},
+			Energy: &modelpower.EnergyModule{OutputPerTick: 12, SourceKind: modelpower.PowerSourceSolar},
 		},
 	},
 	{
@@ -1117,10 +1110,10 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Storage: &StorageModule{Capacity: 40, Slots: 1, Buffer: 10, InputPriority: 2, OutputPriority: 0},
-			Energy: &EnergyModule{
+			Energy: &modelpower.EnergyModule{
 				OutputPerTick: 40,
-				SourceKind:    PowerSourceFusion,
-				FuelRules: []FuelRule{
+				SourceKind:    modelpower.PowerSourceFusion,
+				FuelRules: []modelpower.FuelRule{
 					{ItemID: ItemHydrogenFuelRod, ConsumePerTick: 1, OutputMultiplier: 1},
 				},
 			},
@@ -1139,10 +1132,10 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Storage: &StorageModule{Capacity: 30, Slots: 1, Buffer: 10, InputPriority: 2, OutputPriority: 0},
-			Energy: &EnergyModule{
+			Energy: &modelpower.EnergyModule{
 				OutputPerTick: 80,
-				SourceKind:    PowerSourceArtificialStar,
-				FuelRules: []FuelRule{
+				SourceKind:    modelpower.PowerSourceArtificialStar,
+				FuelRules: []modelpower.FuelRule{
 					{ItemID: ItemAntimatterFuelRod, ConsumePerTick: 1, OutputMultiplier: 1},
 				},
 			},
@@ -1161,7 +1154,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Spray:  &SprayModule{Throughput: 6, MaxLevel: 3},
-			Energy: &EnergyModule{ConsumePerTick: 2},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 2},
 		},
 	},
 	{
@@ -1180,7 +1173,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 24, Slots: 4, Buffer: 8, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
-			Energy:     &EnergyModule{ConsumePerTick: 5},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 5},
 		},
 	},
 	{
@@ -1199,7 +1192,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		Functions: BuildingFunctionModules{
 			Storage:    &StorageModule{Capacity: 48, Slots: 6, Buffer: 16, InputPriority: 2, OutputPriority: 1},
 			Production: &ProductionModule{Throughput: 2, RecipeSlots: 2},
-			Energy:     &EnergyModule{ConsumePerTick: 12},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 12},
 		},
 	},
 	{
@@ -1212,7 +1205,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Combat: &CombatModule{Attack: 15, Range: 5},
-			Energy: &EnergyModule{ConsumePerTick: 3},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 3},
 		},
 	},
 	{
@@ -1225,7 +1218,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Combat: &CombatModule{Attack: 60, Range: 12},
-			Energy: &EnergyModule{ConsumePerTick: 20},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 20},
 		},
 	},
 	{
@@ -1238,7 +1231,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Combat: &CombatModule{Attack: 0, Range: 8},
-			Energy: &EnergyModule{ConsumePerTick: 6},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 6},
 		},
 	},
 	{
@@ -1251,7 +1244,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 		Functions: BuildingFunctionModules{
 			Shield: &ShieldModule{Capacity: 1000, ChargePerTick: 5, CurrentCharge: 0},
-			Energy: &EnergyModule{ConsumePerTick: 50},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 50},
 		},
 	},
 	{
@@ -1276,7 +1269,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				LaunchInterval:  60,
 				LaunchQueueSize: 10,
 			},
-			Energy: &EnergyModule{ConsumePerTick: 30},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 30},
 		},
 	},
 	{
@@ -1306,7 +1299,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				RocketItemID:    ItemSmallCarrierRocket,
 				ProductionSpeed: 1,
 			},
-			Energy: &EnergyModule{ConsumePerTick: 50},
+			Energy: &modelpower.EnergyModule{ConsumePerTick: 50},
 		},
 	},
 }

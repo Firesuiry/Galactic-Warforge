@@ -3,9 +3,11 @@ package gamecore
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"siliconworld/internal/config"
@@ -20,8 +22,9 @@ import (
 
 // EventBus broadcasts game events to all subscribers
 type EventBus struct {
-	mu          sync.RWMutex
-	subscribers map[string]*eventSubscriber // key: subscriber ID
+	mu           sync.RWMutex
+	subscribers  map[string]*eventSubscriber // key: subscriber ID
+	droppedCount atomic.Uint64
 }
 
 type eventSubscriber struct {
@@ -72,10 +75,17 @@ func (eb *EventBus) Publish(events []*model.GameEvent) {
 			select {
 			case sub.ch <- evt:
 			default:
-				// drop if subscriber is slow
+				eb.droppedCount.Add(1)
 			}
 		}
 	}
+}
+
+func (eb *EventBus) DroppedCount() uint64 {
+	if eb == nil {
+		return 0
+	}
+	return eb.droppedCount.Load()
 }
 
 func buildEventFilterSet(eventTypes []model.EventType) map[model.EventType]struct{} {
@@ -588,31 +598,13 @@ func (gc *GameCore) Stop() {
 func (gc *GameCore) processTick() {
 	start := time.Now()
 
-	gc.saveMu.Lock()
-	defer gc.saveMu.Unlock()
-
 	var allEvents []*model.GameEvent
 	batch := gc.queue.Drain()
 	gc.metrics.QueueBacklog = gc.queue.Len()
 	currentTick := int64(0)
 	gc.withLockedWorlds(func() {
-		worlds := gc.sortedWorlds()
-		for _, ws := range worlds {
-			ws.Tick++
-		}
-
-		currentWorld := gc.World()
-		if currentWorld == nil {
-			activePlanetID := gc.ActivePlanetID()
-			currentWorld = gc.WorldForPlanet(activePlanetID)
-			if currentWorld != nil {
-				gc.setCurrentWorld(activePlanetID, currentWorld)
-			}
-		}
-		if currentWorld != nil {
-			currentTick = currentWorld.Tick
-			gc.executorUsage = countActiveExecutorUsage(currentWorld)
-		}
+		frame := gc.advanceWorldsOneTick()
+		currentTick = frame.currentTick
 
 		for _, qr := range batch {
 			results, evts := gc.executeRequest(qr)
@@ -629,78 +621,12 @@ func (gc *GameCore) processTick() {
 			})
 		}
 
-		worlds = gc.sortedWorlds()
-		for _, ws := range worlds {
-			allEvents = append(allEvents, gc.settleConstructionQueue(ws)...)
-			allEvents = append(allEvents, settleBuildingJobs(ws)...)
-		}
+		phaseEvents := gc.runSettlementPipeline(frame)
+		allEvents = append(allEvents, phaseEvents...)
 
-		allEvents = append(allEvents, settleResearch(gc.worlds)...)
-		allEvents = append(allEvents, settleSolarSails(gc.spaceRuntime, currentTick)...)
-		allEvents = append(allEvents, settleDysonSpheres(gc.spaceRuntime, currentTick)...)
-
-		for _, ws := range worlds {
-			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
-
-			env := currentPlanetEnvironment(gc.maps, ws.PlanetID)
-			allEvents = append(allEvents, settlePowerGeneration(ws, env)...)
-			receiverViews := settleRayReceivers(ws, gc.maps, gc.spaceRuntime)
-			settlePlanetaryShields(ws)
-			allEvents = append(allEvents, finalizePowerSettlement(ws, receiverViews)...)
-			allEvents = append(allEvents, settleResources(ws)...)
-
-			settleOrbitalCollectors(ws, gc.maps)
-			settleConveyors(ws)
-			settleSorters(ws)
-			settleBuildingIO(ws)
-			settlePipelineFlow(ws)
-			settlePipelineIO(ws)
-			allEvents = append(allEvents, settleProduction(ws)...)
-			settleStorage(ws)
-
-			if gc.monitor != nil {
-				monEvts, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
-				allEvents = append(allEvents, monEvts...)
-				if gc.alertHistory != nil && len(alerts) > 0 {
-					gc.alertHistory.Record(alerts)
-				}
-			}
-
-			settleLogisticsDispatch(ws)
-			settleLogisticsDrones(ws)
-		}
-
-		settleInterstellarDispatch(gc.worlds, gc.maps)
-		settleLogisticsShips(gc.worlds)
-		for _, ws := range worlds {
-			allEvents = append(allEvents, settleCombatRuntime(ws, ws.Tick)...)
-		}
-		allEvents = append(allEvents, settleSpaceFleets(gc.worlds, gc.maps, gc.spaceRuntime, currentTick)...)
-
-		activePlanetID := gc.ActivePlanetID()
-		activeWorld := gc.WorldForPlanet(activePlanetID)
-		if activeWorld == nil {
-			activeWorld = currentWorld
-		}
-		if activeWorld != nil {
-			gc.setCurrentWorld(activePlanetID, activeWorld)
-		}
-		if activeWorld != nil {
-			allEvents = append(allEvents, settleTurrets(activeWorld)...)
-			allEvents = append(allEvents, gc.settleEnemyForces()...)
-			allEvents = append(allEvents, gc.settleCombat()...)
-			allEvents = append(allEvents, gc.settleOrbitalCombat()...)
-			allEvents = append(allEvents, gc.settleDroneControl()...)
-			gc.settleStats()
-
-			if !gc.Victory().Declared() {
-				victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, activeWorld)
-				if gc.declareVictory(victory) {
-					allEvents = append(allEvents, victoryDeclaredEvent(victory))
-					gc.recordVictoryAudit(victory)
-					log.Printf("[GameCore] player %s wins at tick %d (%s)", victory.WinnerID, currentTick, victory.Reason)
-				}
-			}
+		if hasVictoryDeclaredEvent(phaseEvents) {
+			victory := gc.Victory()
+			log.Printf("[GameCore] player %s wins at tick %d (%s)", victory.WinnerID, currentTick, victory.Reason)
 		}
 
 		evtCounter := int64(0)
@@ -894,9 +820,9 @@ func computeStartPositions(cfg *config.Config, w, h int) []model.Position {
 		positions[1] = model.Position{X: w - margin - 1, Y: h - margin - 1}
 	default:
 		for i := 0; i < n; i++ {
-			angle := float64(i) / float64(n) * 2 * 3.14159
-			cx := w/2 + int(float64(w/2-margin)*cosApprox(angle))
-			cy := h/2 + int(float64(h/2-margin)*sinApprox(angle))
+			angle := float64(i) / float64(n) * 2 * math.Pi
+			cx := w/2 + int(float64(w/2-margin)*math.Cos(angle))
+			cy := h/2 + int(float64(h/2-margin)*math.Sin(angle))
 			positions[i] = model.Position{X: cx, Y: cy}
 		}
 	}
@@ -1025,21 +951,4 @@ func hashString(s string) uint64 {
 		h *= 1099511628211
 	}
 	return h
-}
-
-// Approximations to avoid importing math
-func cosApprox(angle float64) float64 {
-	// Taylor series cos(x) ≈ 1 - x^2/2 + x^4/24 (rough)
-	x := angle
-	for x > 3.14159 {
-		x -= 2 * 3.14159
-	}
-	for x < -3.14159 {
-		x += 2 * 3.14159
-	}
-	return 1 - x*x/2 + x*x*x*x/24
-}
-
-func sinApprox(angle float64) float64 {
-	return cosApprox(angle - 3.14159/2)
 }

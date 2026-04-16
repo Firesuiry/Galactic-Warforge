@@ -167,6 +167,8 @@ func (gc *GameCore) sortedPlanetIDs() []string {
 	if gc == nil || len(gc.worlds) == 0 {
 		return nil
 	}
+	gc.runtimeMu.RLock()
+	defer gc.runtimeMu.RUnlock()
 	ids := make([]string, 0, len(gc.worlds))
 	for planetID := range gc.worlds {
 		ids = append(ids, planetID)
@@ -178,6 +180,8 @@ func (gc *GameCore) sortedPlanetIDs() []string {
 func (gc *GameCore) sortedWorlds() []*model.WorldState {
 	ids := gc.sortedPlanetIDs()
 	worlds := make([]*model.WorldState, 0, len(ids))
+	gc.runtimeMu.RLock()
+	defer gc.runtimeMu.RUnlock()
 	for _, planetID := range ids {
 		if ws := gc.worlds[planetID]; ws != nil {
 			worlds = append(worlds, ws)
@@ -190,10 +194,14 @@ func (gc *GameCore) WorldForPlanet(planetID string) *model.WorldState {
 	if gc == nil || planetID == "" {
 		return nil
 	}
+	gc.runtimeMu.RLock()
+	defer gc.runtimeMu.RUnlock()
 	return gc.worlds[planetID]
 }
 
 func (gc *GameCore) worldMapSnapshot() map[string]*model.WorldState {
+	gc.runtimeMu.RLock()
+	defer gc.runtimeMu.RUnlock()
 	out := make(map[string]*model.WorldState, len(gc.worlds))
 	for planetID, ws := range gc.worlds {
 		out[planetID] = ws

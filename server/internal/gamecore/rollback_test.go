@@ -9,6 +9,7 @@ import (
 	"siliconworld/internal/model"
 	"siliconworld/internal/persistence"
 	"siliconworld/internal/queue"
+	"siliconworld/internal/snapshot"
 )
 
 func TestRollbackRestoresState(t *testing.T) {
@@ -152,5 +153,72 @@ func TestRollbackRestoresState(t *testing.T) {
 	}
 	if snap := store.SnapshotAt(2); snap != nil {
 		t.Fatalf("expected snapshot at tick 2 trimmed")
+	}
+}
+
+func TestRollbackRestoresProductionStateBetweenSnapshots(t *testing.T) {
+	cfg := &config.Config{
+		Battlefield: config.BattlefieldConfig{
+			MapSeed:     "rollback-production-seed",
+			MaxTickRate: 10,
+		},
+		Players: []config.PlayerConfig{
+			{PlayerID: "p1", Key: "key1"},
+		},
+		Server: config.ServerConfig{
+			Port:                   9999,
+			RateLimit:              100,
+			SnapshotIntervalTicks:  10,
+			SnapshotRetentionCount: 16,
+			SnapshotRetentionTicks: 200,
+		},
+	}
+	mapCfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
+
+	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+		IntervalTicks:  10,
+		RetentionCount: 16,
+		RetentionTicks: 200,
+	})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	core := New(cfg, maps, queue.New(), NewEventBus(), store)
+	ws := core.World()
+
+	assembler := newProductionTestBuilding("assembler-rollback", model.BuildingTypeAssemblingMachineMk1, model.Position{X: 3, Y: 3}, "gear")
+	assembler.Storage.InputBuffer = model.ItemInventory{model.ItemIronIngot: 1}
+	attachBuilding(ws, assembler)
+	store.SaveSnapshot(snapshot.CaptureRuntime(core.worlds, core.activePlanetID, core.discovery, core.spaceRuntime))
+
+	for i := 0; i < 30; i++ {
+		core.processTick()
+	}
+
+	if got := assembler.Storage.OutputQuantity(model.ItemGear); got != 1 {
+		t.Fatalf("expected one gear before rollback, got %d", got)
+	}
+	if snap := store.SnapshotAt(20); snap == nil {
+		t.Fatal("expected snapshot at tick 20 for replay-based rollback")
+	}
+	if snap := store.SnapshotAt(25); snap != nil {
+		t.Fatal("expected no direct snapshot at tick 25")
+	}
+
+	resp, err := core.Rollback(model.RollbackRequest{ToTick: 25})
+	if err != nil {
+		t.Fatalf("rollback error: %v", err)
+	}
+	if resp.ToTick != 25 {
+		t.Fatalf("expected rollback target tick 25, got %+v", resp)
+	}
+	if got := assembler.Storage.OutputQuantity(model.ItemGear); got != 1 {
+		t.Fatalf("expected gear output restored after rollback replay, got %d", got)
 	}
 }

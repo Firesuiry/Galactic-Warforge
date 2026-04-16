@@ -9,6 +9,7 @@ import (
 	"siliconworld/internal/model"
 	"siliconworld/internal/persistence"
 	"siliconworld/internal/queue"
+	"siliconworld/internal/snapshot"
 )
 
 func TestReplayMatchesSnapshot(t *testing.T) {
@@ -101,6 +102,68 @@ func TestReplayMatchesSnapshot(t *testing.T) {
 	}
 	if resp.SnapshotDigest == nil {
 		t.Fatalf("expected snapshot digest for verification")
+	}
+}
+
+func TestReplayMatchesSnapshotWithProductionSettlement(t *testing.T) {
+	cfg := &config.Config{
+		Battlefield: config.BattlefieldConfig{
+			MapSeed:     "replay-production-seed",
+			MaxTickRate: 10,
+		},
+		Players: []config.PlayerConfig{
+			{PlayerID: "p1", Key: "key1"},
+		},
+		Server: config.ServerConfig{
+			Port:                   9999,
+			RateLimit:              100,
+			SnapshotIntervalTicks:  1,
+			SnapshotRetentionCount: 32,
+			SnapshotRetentionTicks: 128,
+		},
+	}
+	mapCfg := &mapconfig.Config{
+		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
+		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
+		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+	}
+	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
+
+	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+		IntervalTicks:  1,
+		RetentionCount: 32,
+		RetentionTicks: 128,
+	})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	core := New(cfg, maps, queue.New(), NewEventBus(), store)
+	ws := core.World()
+
+	assembler := newProductionTestBuilding("assembler-replay", model.BuildingTypeAssemblingMachineMk1, model.Position{X: 3, Y: 3}, "gear")
+	assembler.Storage.InputBuffer = model.ItemInventory{model.ItemIronIngot: 1}
+	attachBuilding(ws, assembler)
+	store.SaveSnapshot(snapshot.CaptureRuntime(core.worlds, core.activePlanetID, core.discovery, core.spaceRuntime))
+
+	for i := 0; i < 25; i++ {
+		core.processTick()
+	}
+
+	if got := assembler.Storage.OutputQuantity(model.ItemGear); got != 1 {
+		t.Fatalf("expected one gear after production settlement, got %d", got)
+	}
+
+	resp, err := core.Replay(model.ReplayRequest{
+		FromTick: 1,
+		ToTick:   25,
+		Verify:   true,
+	})
+	if err != nil {
+		t.Fatalf("replay error: %v", err)
+	}
+	if resp.DriftDetected {
+		t.Fatalf("expected production replay to match snapshot, notes: %v", resp.Notes)
 	}
 }
 

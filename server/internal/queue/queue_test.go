@@ -74,3 +74,31 @@ func TestDrainEmpty(t *testing.T) {
 		t.Fatalf("expected nil batch from empty queue, got %v", batch)
 	}
 }
+
+func TestPruneSeenExpiresOldRequestIDs(t *testing.T) {
+	q := queue.NewWithSeenRetention(2)
+
+	first := &model.QueuedRequest{
+		Request:     model.CommandRequest{RequestID: "req-expire"},
+		PlayerID:    "p1",
+		EnqueueTick: 1,
+	}
+	if !q.Enqueue(first) {
+		t.Fatal("expected first enqueue to succeed")
+	}
+
+	q.PruneSeen(4)
+
+	if q.HasSeen("req-expire") {
+		t.Fatal("expected expired request_id to be pruned")
+	}
+
+	second := &model.QueuedRequest{
+		Request:     model.CommandRequest{RequestID: "req-expire"},
+		PlayerID:    "p1",
+		EnqueueTick: 4,
+	}
+	if !q.Enqueue(second) {
+		t.Fatal("expected pruned request_id to be accepted again")
+	}
+}

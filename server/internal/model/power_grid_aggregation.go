@@ -1,6 +1,10 @@
 package model
 
-import "sort"
+import (
+	"sort"
+
+	modelpower "siliconworld/internal/model/power"
+)
 
 // PowerNetwork aggregates power supply/demand within a connected grid component.
 type PowerNetwork struct {
@@ -117,7 +121,7 @@ func powerSupplyForBuilding(building *Building, powerInputs map[string]int) int 
 		return 0
 	}
 	module := building.Runtime.Functions.Energy
-	if IsPowerGeneratorModule(module) {
+	if modelpower.IsPowerGeneratorModule(module) {
 		if powerInputs == nil {
 			return 0
 		}

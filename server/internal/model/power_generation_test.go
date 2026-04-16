@@ -1,11 +1,15 @@
 package model
 
-import "testing"
+import (
+	"testing"
+
+	modelpower "siliconworld/internal/model/power"
+)
 
 func TestResolvePowerGenerationWind(t *testing.T) {
-	module := &EnergyModule{
+	module := &modelpower.EnergyModule{
 		OutputPerTick: 10,
-		SourceKind:    PowerSourceWind,
+		SourceKind:    modelpower.PowerSourceWind,
 	}
 	result, err := ResolvePowerGeneration(PowerGenerationRequest{
 		Module:    module,
@@ -25,10 +29,10 @@ func TestResolvePowerGenerationWind(t *testing.T) {
 func TestResolvePowerGenerationThermalFuel(t *testing.T) {
 	storage := NewStorageState(StorageModule{Capacity: 10, Slots: 1, Buffer: 0})
 	storage.EnsureInventory()[ItemCoal] = 1
-	module := &EnergyModule{
+	module := &modelpower.EnergyModule{
 		OutputPerTick: 20,
-		SourceKind:    PowerSourceThermal,
-		FuelRules: []FuelRule{
+		SourceKind:    modelpower.PowerSourceThermal,
+		FuelRules: []modelpower.FuelRule{
 			{ItemID: ItemCoal, ConsumePerTick: 2, OutputMultiplier: 1},
 		},
 	}
@@ -54,10 +58,10 @@ func TestResolvePowerGenerationThermalFuel(t *testing.T) {
 func TestResolvePowerGenerationDoesNotConsumeFuelFromOutputBuffer(t *testing.T) {
 	storage := NewStorageState(StorageModule{Capacity: 10, Slots: 1, Buffer: 4})
 	storage.EnsureOutputBuffer()[ItemCoal] = 1
-	module := &EnergyModule{
+	module := &modelpower.EnergyModule{
 		OutputPerTick: 20,
-		SourceKind:    PowerSourceThermal,
-		FuelRules: []FuelRule{
+		SourceKind:    modelpower.PowerSourceThermal,
+		FuelRules: []modelpower.FuelRule{
 			{ItemID: ItemCoal, ConsumePerTick: 1, OutputMultiplier: 1},
 		},
 	}

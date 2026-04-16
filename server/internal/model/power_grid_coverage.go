@@ -1,6 +1,10 @@
 package model
 
-import "sort"
+import (
+	"sort"
+
+	modelpower "siliconworld/internal/model/power"
+)
 
 // PowerCoverageFailureReason describes why a building is not powered by the grid.
 type PowerCoverageFailureReason string
@@ -187,7 +191,7 @@ func isPowerCoverageSource(building *Building, powerInputs map[string]int) bool 
 	if powerInputs != nil && powerInputs[building.ID] > 0 {
 		return true
 	}
-	if IsPowerGeneratorModule(building.Runtime.Functions.Energy) {
+	if modelpower.IsPowerGeneratorModule(building.Runtime.Functions.Energy) {
 		return true
 	}
 	if building.Runtime.Functions.EnergyStorage != nil && building.EnergyStorage != nil && building.EnergyStorage.Energy > 0 {

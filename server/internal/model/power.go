@@ -3,52 +3,25 @@ package model
 import (
 	"fmt"
 	"math"
+
+	modelpower "siliconworld/internal/model/power"
 )
-
-// PowerSourceKind identifies the energy generation source.
-type PowerSourceKind string
-
-const (
-	PowerSourceWind           PowerSourceKind = "wind"
-	PowerSourceSolar          PowerSourceKind = "solar"
-	PowerSourceThermal        PowerSourceKind = "thermal"
-	PowerSourceFusion         PowerSourceKind = "fusion"
-	PowerSourceArtificialStar PowerSourceKind = "artificial_star"
-	PowerSourceRayReceiver    PowerSourceKind = "ray_receiver"
-	PowerSourceStorage        PowerSourceKind = "storage"
-)
-
-var validPowerSourceKinds = map[PowerSourceKind]struct{}{
-	PowerSourceWind:           {},
-	PowerSourceSolar:          {},
-	PowerSourceThermal:        {},
-	PowerSourceFusion:         {},
-	PowerSourceArtificialStar: {},
-	PowerSourceRayReceiver:    {},
-}
-
-// FuelRule defines a fuel consumption rule for power generation.
-type FuelRule struct {
-	ItemID           string  `json:"item_id" yaml:"item_id"`
-	ConsumePerTick   int     `json:"consume_per_tick" yaml:"consume_per_tick"`
-	OutputMultiplier float64 `json:"output_multiplier" yaml:"output_multiplier"`
-}
 
 // PowerInput describes a single generator output for grid settlement.
 type PowerInput struct {
-	BuildingID     string          `json:"building_id"`
-	OwnerID        string          `json:"owner_id"`
-	SourceKind     PowerSourceKind `json:"source_kind"`
-	BaseOutput     int             `json:"base_output"`
-	EnvFactor      float64         `json:"env_factor"`
-	FuelMultiplier float64         `json:"fuel_multiplier"`
-	Output         int             `json:"output"`
-	FuelUsed       []ItemAmount    `json:"fuel_used,omitempty"`
+	BuildingID     string                     `json:"building_id"`
+	OwnerID        string                     `json:"owner_id"`
+	SourceKind     modelpower.PowerSourceKind `json:"source_kind"`
+	BaseOutput     int                        `json:"base_output"`
+	EnvFactor      float64                    `json:"env_factor"`
+	FuelMultiplier float64                    `json:"fuel_multiplier"`
+	Output         int                        `json:"output"`
+	FuelUsed       []ItemAmount               `json:"fuel_used,omitempty"`
 }
 
 // PowerGenerationRequest describes inputs for resolving a generator tick.
 type PowerGenerationRequest struct {
-	Module    *EnergyModule
+	Module    *modelpower.EnergyModule
 	EnvFactor float64
 	Storage   *StorageState
 }
@@ -80,7 +53,7 @@ func ResolvePowerGeneration(req PowerGenerationRequest) (PowerGenerationResult, 
 	if kind == "" {
 		return result, nil
 	}
-	if !IsPowerSourceKind(kind) {
+	if !modelpower.IsPowerSourceKind(kind) {
 		return result, fmt.Errorf("invalid power source kind %s", kind)
 	}
 
@@ -93,11 +66,11 @@ func ResolvePowerGeneration(req PowerGenerationRequest) (PowerGenerationResult, 
 		return result, nil
 	}
 
-	if IsFuelBasedPowerSource(kind) {
+	if modelpower.IsFuelBasedPowerSource(kind) {
 		if len(req.Module.FuelRules) == 0 {
 			return result, fmt.Errorf("power source %s requires fuel rules", kind)
 		}
-		var selected *FuelRule
+		var selected *modelpower.FuelRule
 		consumed := 0
 		required := 0
 		for i := range req.Module.FuelRules {
@@ -134,28 +107,6 @@ func ResolvePowerGeneration(req PowerGenerationRequest) (PowerGenerationResult, 
 	}
 	result.Output = int(math.Round(output))
 	return result, nil
-}
-
-// IsPowerSourceKind validates a power source kind.
-func IsPowerSourceKind(kind PowerSourceKind) bool {
-	_, ok := validPowerSourceKinds[kind]
-	return ok
-}
-
-// IsFuelBasedPowerSource returns true for generators that consume fuel.
-func IsFuelBasedPowerSource(kind PowerSourceKind) bool {
-	return kind == PowerSourceThermal || kind == PowerSourceFusion || kind == PowerSourceArtificialStar
-}
-
-// IsPowerGeneratorModule returns true when the energy module describes a generator.
-func IsPowerGeneratorModule(module *EnergyModule) bool {
-	if module == nil {
-		return false
-	}
-	if module.SourceKind == "" {
-		return false
-	}
-	return IsPowerSourceKind(module.SourceKind)
 }
 
 func consumeFuel(storage *StorageState, itemID string, qty int) int {

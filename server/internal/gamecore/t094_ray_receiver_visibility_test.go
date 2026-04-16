@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
 	"siliconworld/internal/query"
 	"siliconworld/internal/visibility"
 )
@@ -107,7 +108,7 @@ func totalPowerNetworkSupply(view *query.PlanetNetworksView) int {
 
 func hasRayReceiverPowerInput(inputs []model.PowerInput) bool {
 	for _, input := range inputs {
-		if input.SourceKind == model.PowerSourceRayReceiver {
+		if input.SourceKind == modelpower.PowerSourceRayReceiver {
 			return true
 		}
 	}

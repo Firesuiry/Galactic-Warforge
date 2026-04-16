@@ -1,13 +1,16 @@
 package gamecore
 
-import "siliconworld/internal/model"
+import (
+	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
+)
 
 func fuelBasedGeneratorHasReachableFuel(building *model.Building) bool {
 	if building == nil {
 		return false
 	}
 	module := building.Runtime.Functions.Energy
-	if module == nil || !model.IsFuelBasedPowerSource(module.SourceKind) {
+	if module == nil || !modelpower.IsFuelBasedPowerSource(module.SourceKind) {
 		return false
 	}
 	storage := building.Storage

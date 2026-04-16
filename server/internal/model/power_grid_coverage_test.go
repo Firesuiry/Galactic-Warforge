@@ -1,6 +1,10 @@
 package model
 
-import "testing"
+import (
+	"testing"
+
+	modelpower "siliconworld/internal/model/power"
+)
 
 func TestPowerCoverageLineAdjacency(t *testing.T) {
 	ws := NewWorldState("p1", 10, 10)
@@ -96,7 +100,7 @@ func TestPowerCoverageTreatsDynamicPowerInputsAsProvider(t *testing.T) {
 	ws.Buildings[provider.ID] = provider
 	ws.Buildings[consumer.ID] = consumer
 	ws.PowerInputs = []PowerInput{
-		{BuildingID: provider.ID, OwnerID: "player-1", SourceKind: PowerSourceRayReceiver, Output: 18},
+		{BuildingID: provider.ID, OwnerID: "player-1", SourceKind: modelpower.PowerSourceRayReceiver, Output: 18},
 	}
 	ws.PowerGrid = BuildPowerGridGraph(ws)
 
