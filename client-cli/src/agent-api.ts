@@ -59,6 +59,16 @@ export interface AgentThreadView {
   messages: Array<{ role: string; content: string; createdAt?: string }>;
   toolCalls: Array<{ type: string; payload: Record<string, unknown> }>;
   executionLogs: Array<{ level: string; message: string; createdAt?: string }>;
+  lastTurn?: {
+    status: 'running' | 'completed' | 'failed';
+    outcomeKind?: 'reply_only' | 'observed' | 'acted' | 'delegated' | 'blocked';
+    executedActionCount: number;
+    repairCount: number;
+    errorCode?: string;
+    errorMessage?: string;
+    rawErrorMessage?: string;
+    finalMessage?: string;
+  };
 }
 
 function buildGatewayUrl(path: string) {

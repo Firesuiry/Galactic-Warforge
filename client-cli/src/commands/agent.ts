@@ -160,11 +160,24 @@ export async function cmdAgentThread(args: string[]): Promise<string> {
   }
   try {
     const thread = await fetchAgentThread(args[0]);
+    const summary = thread.lastTurn
+      ? [
+          `Last turn: ${thread.lastTurn.status}`,
+          `Outcome: ${thread.lastTurn.outcomeKind ?? '-'}`,
+          `Executed actions: ${thread.lastTurn.executedActionCount}`,
+          `Repair count: ${thread.lastTurn.repairCount}`,
+          ...(thread.lastTurn.errorCode ? [`Error code: ${thread.lastTurn.errorCode}`] : []),
+          ...(thread.lastTurn.errorMessage ? [`Error message: ${thread.lastTurn.errorMessage}`] : []),
+          ...(thread.lastTurn.rawErrorMessage ? [`Raw error: ${thread.lastTurn.rawErrorMessage}`] : []),
+          ...(thread.lastTurn.finalMessage ? [`Final message: ${thread.lastTurn.finalMessage}`] : []),
+        ]
+      : [];
     const messages = thread.messages.map((message) => `${message.role}: ${message.content}`);
     const tools = thread.toolCalls.map((call) => `tool:${call.type} ${JSON.stringify(call.payload)}`);
     const logs = thread.executionLogs.map((log) => `log:${log.level} ${log.message}`);
     return [
       `Thread: ${thread.id}`,
+      ...summary,
       ...messages,
       ...tools,
       ...logs,

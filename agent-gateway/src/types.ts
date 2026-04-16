@@ -82,6 +82,16 @@ export interface AgentThread {
   messages: AgentMessage[];
   toolCalls: Array<{ type: string; payload: Record<string, unknown> }>;
   executionLogs: AgentExecutionLog[];
+  lastTurn?: {
+    status: 'running' | 'completed' | 'failed';
+    outcomeKind?: ConversationTurnOutcomeKind;
+    executedActionCount: number;
+    repairCount: number;
+    errorCode?: string;
+    errorMessage?: string;
+    rawErrorMessage?: string;
+    finalMessage?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

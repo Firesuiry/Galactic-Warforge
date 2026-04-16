@@ -1788,6 +1788,332 @@ process.stdout.write(JSON.stringify({
     assert.equal(finalReply?.turnId, accepted.turns[0]?.id);
   });
 
+  it('persists gateway tool results into direct agent threads so follow-up delegation can use child ids', async () => {
+    const fakeGameCommands: Array<Record<string, unknown>> = [];
+    const fakeGameServer = createServer(async (request, response) => {
+      if (request.method === 'POST' && request.url === '/commands') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        fakeGameCommands.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>);
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          request_id: `req-${fakeGameCommands.length}`,
+          accepted: true,
+          commands: [
+            { command_index: 0, status: 'accepted', code: 'OK', message: 'accepted for build' },
+          ],
+        }));
+        return;
+      }
+
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'not_found' }));
+    });
+    await new Promise<void>((resolve) => fakeGameServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = fakeGameServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('fake game server failed to bind');
+    }
+    helperServers.push({
+      url: `http://127.0.0.1:${address.port}`,
+      close: () => new Promise<void>((resolve, reject) => {
+        fakeGameServer.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+    });
+
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async ({ history }) => {
+        const latestUserMessage = [...history].reverse().find((entry) => entry.role === 'user')?.content ?? '';
+        const hasCreateToolResult = history.some((entry) => (
+          entry.role === 'tool' && entry.content.includes('"id":"agent-hujing"')
+        ));
+        const isRepairPrompt = latestUserMessage.includes('上一轮只有规划');
+        const requestedCreate = latestUserMessage.includes('创建胡景')
+          || (isRepairPrompt && history.some((entry) => entry.role === 'user' && entry.content.includes('创建胡景')));
+        const requestedMine = latestUserMessage.includes('新建一个矿场')
+          || (isRepairPrompt && history.some((entry) => entry.role === 'user' && entry.content.includes('新建一个矿场')));
+
+        if (latestUserMessage.includes('去新建一个矿场')) {
+          return {
+            assistantMessage: '收到，我去建造 mining_machine。',
+            actions: [
+              {
+                type: 'game.command',
+                command: 'build',
+                args: { x: 5, y: 1, buildingType: 'mining_machine' },
+              },
+              { type: 'final_answer', message: '矿场已开始施工。' },
+            ],
+            done: true,
+          };
+        }
+
+        if (requestedMine) {
+          if (!hasCreateToolResult) {
+            return {
+              assistantMessage: '我会通知胡景去建矿场。',
+              actions: [],
+              done: true,
+            };
+          }
+          return {
+            assistantMessage: '我会通知胡景去建矿场。',
+            actions: [
+              { type: 'conversation.ensure_dm', targetAgentId: 'agent-hujing' },
+              {
+                type: 'conversation.send_message',
+                conversationId: 'dm-agent-lisi-agent-hujing',
+                content: '去新建一个矿场，在 5 1 建造 mining_machine',
+              },
+              { type: 'final_answer', message: '已通知胡景。' },
+            ],
+            done: true,
+          };
+        }
+
+        if (requestedCreate) {
+          return {
+            assistantMessage: '我会创建胡景并给他建筑权限。',
+            actions: [
+              {
+                type: 'agent.create',
+                id: 'agent-hujing',
+                name: '胡景',
+                role: 'worker',
+                policy: {
+                  commandCategories: ['build'],
+                  planetIds: ['planet-1-1'],
+                  canCreateAgents: false,
+                  canCreateChannel: false,
+                  canManageMembers: false,
+                  canInviteByPlanet: false,
+                  canCreateSchedules: false,
+                  canDispatchAgentIds: [],
+                  canDirectMessageAgentIds: [],
+                },
+              },
+              { type: 'final_answer', message: '胡景已创建。' },
+            ],
+            done: true,
+          };
+        }
+
+        return {
+          assistantMessage: '收到。',
+          actions: [{ type: 'final_answer', message: '收到。' }],
+          done: true,
+        };
+      },
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-direct-thread-case1',
+        name: 'Direct Thread Case1 Provider',
+        providerKind: 'codex_cli',
+        description: 'case1 thread persistence',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 2,
+          maxToolCallsPerTurn: 4,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-lisi',
+        name: '李斯',
+        providerId: 'provider-direct-thread-case1',
+        serverUrl: helperServers[0]?.url,
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'director',
+        policy: {
+          planetIds: ['planet-1-1'],
+          commandCategories: ['observe', 'build', 'combat', 'research', 'management'],
+          canCreateAgents: true,
+          canCreateChannel: true,
+          canManageMembers: true,
+          canInviteByPlanet: true,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const createResponse = await fetch(`${server.url}/agents/agent-lisi/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '创建胡景，并赋予其建筑权限' }),
+    });
+    assert.equal(createResponse.status, 202);
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const threadResponse = await fetch(`${server.url}/agents/agent-lisi/thread`);
+      const thread = await threadResponse.json() as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      if (thread.messages.some((message) => message.content.includes('胡景已创建'))) {
+        break;
+      }
+      await delay(20);
+    }
+
+    const delegateResponse = await fetch(`${server.url}/agents/agent-lisi/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '新建一个矿场' }),
+    });
+    assert.equal(delegateResponse.status, 202);
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (fakeGameCommands.length > 0) {
+        break;
+      }
+      await delay(20);
+    }
+
+    assert.equal(fakeGameCommands.length, 1);
+    const threadResponse = await fetch(`${server.url}/agents/agent-lisi/thread`);
+    const thread = await threadResponse.json() as {
+      messages: Array<{ role: string; content: string }>;
+      toolCalls: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    assert.ok(thread.messages.some((message) => (
+      message.role === 'tool' && message.content.includes('"id":"agent-hujing"')
+    )));
+    assert.ok(thread.toolCalls.some((call) => call.type === 'agent.create'));
+    assert.ok(thread.toolCalls.some((call) => call.type === 'conversation.ensure_dm'));
+    assert.ok(thread.toolCalls.some((call) => call.type === 'conversation.send_message'));
+  });
+
+  it('exposes last turn failure details in direct agent threads', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => ({
+        assistantMessage: '我会先创建胡景。',
+        actions: [],
+        done: true,
+      }),
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-direct-thread-failure',
+        name: 'Direct Thread Failure Provider',
+        providerKind: 'codex_cli',
+        description: 'thread failure',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 1,
+          maxToolCallsPerTurn: 2,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-planner',
+        name: '规划官',
+        providerId: 'provider-direct-thread-failure',
+        serverUrl: 'http://127.0.0.1:18081',
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'director',
+        policy: {
+          planetIds: ['planet-1-1'],
+          commandCategories: ['build', 'management'],
+          canCreateAgents: true,
+          canCreateChannel: true,
+          canManageMembers: true,
+          canInviteByPlanet: true,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const messageResponse = await fetch(`${server.url}/agents/agent-planner/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '创建胡景，并赋予其建筑权限' }),
+    });
+    assert.equal(messageResponse.status, 202);
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const agentStatusResponse = await fetch(`${server.url}/agents/agent-planner`);
+      const agent = await agentStatusResponse.json() as { status: string };
+      if (agent.status === 'error') {
+        break;
+      }
+      await delay(20);
+    }
+
+    const threadResponse = await fetch(`${server.url}/agents/agent-planner/thread`);
+    const thread = await threadResponse.json() as {
+      lastTurn?: {
+        status: string;
+        errorCode?: string;
+        errorMessage?: string;
+        executedActionCount?: number;
+      };
+    };
+    assert.equal(thread.lastTurn?.status, 'failed');
+    assert.equal(thread.lastTurn?.errorCode, 'provider_incomplete_execution');
+    assert.match(thread.lastTurn?.errorMessage ?? '', /只有规划，没有执行所需动作/);
+    assert.equal(thread.lastTurn?.executedActionCount, 0);
+  });
+
   it('fails the turn when agent.create exceeds creator policy and keeps the failure bound to the request', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
     const server = await createGatewayServer({

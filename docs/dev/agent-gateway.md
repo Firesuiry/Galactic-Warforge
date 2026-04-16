@@ -141,6 +141,8 @@ turn 额外字段：
 补充：
 
 - `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 typed `game.command`
+- 该 thread 入口会把 `agent.create / agent.update / conversation.ensure_dm / conversation.send_message` 的 tool 结果也持久化到 thread；后续同一 agent 的下一条消息会复用这些真实 tool 结果，而不是只看到助手自然语言
+- `GET /agents/:agentId/thread` 除消息、tool call、执行日志外，还会暴露最近一次 turn 的摘要：`status`、`outcomeKind`、`executedActionCount`、`repairCount`、`errorCode/errorMessage/rawErrorMessage`、`finalMessage`
 - 因此 CLI 侧可以直接通过 thread 入口完成“让李斯创建胡景并委派胡景建矿场”这类 case1 链路
 
 ### 3.3 自动唤醒

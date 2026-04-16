@@ -103,7 +103,7 @@
 | `agent_create`  | `<name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]` | 创建一个绑定当前玩家 key 的 agent                  |
 | `agent_update`  | `<agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]`                    | 更新 agent role / policy                           |
 | `agent_message` | `<agent_id> <content>`                                                                                                                                       | 直接向单 agent thread 发送一条任务消息             |
-| `agent_thread`  | `<agent_id>`                                                                                                                                                 | 查看 agent thread 中的消息、tool call 与执行日志   |
+| `agent_thread`  | `<agent_id>`                                                                                                                                                 | 查看 agent thread 中的消息、tool call、执行日志与最近一次 turn 摘要 |
 
 ### 工具类
 
@@ -132,6 +132,7 @@ agent_thread agent-lisi
 
 - `agent_list` 中能看到新出现的 `agent-hujing`
 - `agent_thread agent-lisi` 中能看到“创建胡景”“通知胡景建矿场”相关回复
+- `agent_thread agent-lisi` 中还能看到 `agent.create / conversation.ensure_dm / conversation.send_message` 的真实 tool 证据，以及最近一次 turn 的状态、执行动作数、失败码或最终结果
 - 实际建造命令由胡景通过 `agent-gateway -> client-cli runtime -> server /commands` 发出，而不是李斯自己直接 `build`
 
 ## 重点说明

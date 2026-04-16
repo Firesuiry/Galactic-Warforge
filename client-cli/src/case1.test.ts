@@ -102,7 +102,11 @@ describe('case1 cli flow', () => {
           return {
             assistantMessage: '收到，我去建造 mining_machine。',
             actions: [
-              { type: 'game.cli', commandLine: 'build 5 1 mining_machine' },
+              {
+                type: 'game.command',
+                command: 'build',
+                args: { x: 5, y: 1, buildingType: 'mining_machine' },
+              },
               { type: 'final_answer', message: '矿场已开始施工。' },
             ],
             done: true,

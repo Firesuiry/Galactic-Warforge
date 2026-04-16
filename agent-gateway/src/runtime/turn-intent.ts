@@ -15,6 +15,17 @@ export function classifyTurnIntent(history: Array<{ role: string; content: strin
     return 'reply_only';
   }
 
+  const mentionsAgentCreation = (
+    (latestUserMessage.includes('创建') || latestUserMessage.includes('新建') || latestUserMessage.includes('新增'))
+    && (latestUserMessage.includes('智能体') || latestUserMessage.includes('成员') || latestUserMessage.includes('下级'))
+  );
+  const mentionsAgentPolicy = (
+    latestUserMessage.includes('权限')
+    || latestUserMessage.includes('可调度')
+    || latestUserMessage.includes('managedagentids')
+    || latestUserMessage.includes('supervisor')
+  );
+
   if (includesAny(latestUserMessage, [
     'agent.create',
     'agent.update',
@@ -29,7 +40,7 @@ export function classifyTurnIntent(history: Array<{ role: string; content: strin
     '创建智能体',
     '更新智能体',
     '频道',
-  ])) {
+  ]) || mentionsAgentCreation || mentionsAgentPolicy) {
     return 'agent_management';
   }
 

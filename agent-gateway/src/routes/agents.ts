@@ -4,7 +4,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
 import { runAgentLoop } from '../runtime/loop.js';
 import type { GatewayEvent } from '../runtime/events.js';
+import { classifyPublicTurnError } from '../runtime/provider-error.js';
 import { runProviderTurn, type AgentTurnRunner } from '../runtime/turn.js';
+import { countsAsExecutedAction } from '../runtime/turn-validator.js';
 import type { AgentInstance, AgentPolicy, AgentThread, ModelProvider } from '../types.js';
 
 interface AgentStore {
@@ -102,6 +104,68 @@ async function appendThreadMessage(
   thread.messages.push({ role, content, createdAt: now });
   thread.updatedAt = now;
   await threadStore.save(thread);
+}
+
+async function updateThread(
+  threadStore: ThreadStore,
+  threadId: string,
+  updater: (thread: AgentThread, now: string) => void,
+) {
+  const thread = await threadStore.get(threadId);
+  if (!thread) {
+    throw new Error(`thread not found: ${threadId}`);
+  }
+  const now = new Date().toISOString();
+  updater(thread, now);
+  thread.updatedAt = now;
+  await threadStore.save(thread);
+}
+
+async function appendThreadToolResult(
+  threadStore: ThreadStore,
+  threadId: string,
+  type: string,
+  payload: Record<string, unknown>,
+  output: string,
+) {
+  await updateThread(threadStore, threadId, (thread, now) => {
+    thread.messages.push({ role: 'tool', content: output, createdAt: now });
+    thread.toolCalls.push({ type, payload });
+    thread.executionLogs.push({
+      level: 'info',
+      message: `${type} ${output}`,
+      createdAt: now,
+    });
+  });
+}
+
+async function buildManagedAgentContext(
+  agentStore: AgentStore,
+  agent: AgentInstance,
+) {
+  const relatedIds = [
+    ...(agent.managedAgentIds ?? []),
+    ...(agent.policy?.canDispatchAgentIds ?? []),
+    ...(agent.policy?.canDirectMessageAgentIds ?? []),
+  ];
+  const uniqueIds = [...new Set(relatedIds.filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const managedAgents = (await Promise.all(uniqueIds.map((id) => agentStore.get(id))))
+    .filter((candidate): candidate is AgentInstance => Boolean(candidate));
+  if (managedAgents.length === 0) {
+    return [];
+  }
+
+  return [
+    `当前可调度成员：${managedAgents.map((managedAgent) => (
+      `${managedAgent.name}(${managedAgent.id}) role=${managedAgent.role ?? 'worker'} `
+      + `categories=${managedAgent.policy?.commandCategories?.join(',') || '*'} `
+      + `planets=${managedAgent.policy?.planetIds?.join(',') || '*'}`
+    )).join('；')}`,
+  ];
 }
 
 export async function handleAgentRoutes(
@@ -284,6 +348,13 @@ export async function handleAgentRoutes(
     }
 
     await appendThreadMessage(context.threadStore, thread.id, 'user', payload.content);
+    await updateThread(context.threadStore, thread.id, (currentThread) => {
+      currentThread.lastTurn = {
+        status: 'running',
+        executedActionCount: 0,
+        repairCount: 0,
+      };
+    });
     agent.status = 'running';
     agent.goal = payload.content;
     agent.updatedAt = new Date().toISOString();
@@ -291,6 +362,9 @@ export async function handleAgentRoutes(
     context.eventBus.emit({ agentId: agent.id, type: 'status', payload: { status: 'running' } });
 
     void (async () => {
+      let executedActionCount = 0;
+      let repairCount = 0;
+
       try {
         const playerKey = await context.secretStore.readValue(agent.playerKeySecretId);
         const latestThread = await context.threadStore.get(thread.id);
@@ -298,6 +372,7 @@ export async function handleAgentRoutes(
           role: message.role,
           content: message.content,
         })) ?? [{ role: 'user', content: payload.content }];
+        const managedAgentContext = await buildManagedAgentContext(context.agentStore, agent);
 
         const result = await runAgentLoop({
           maxSteps: provider.toolPolicy.maxSteps,
@@ -313,6 +388,8 @@ export async function handleAgentRoutes(
               contextSections: [
                 `当前智能体：${agent.name}`,
                 '可用 action: game.command / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
+                '如果你已经创建过成员，后续轮次必须优先复用 thread 历史中的 tool 结果和成员 id，不要假装不知道已创建的成员。',
+                ...managedAgentContext,
               ],
             }),
           },
@@ -348,25 +425,45 @@ export async function handleAgentRoutes(
               if (!context.createManagedAgent) {
                 throw new Error('agent.create is not supported in this route');
               }
-              return context.createManagedAgent(agent, action);
+              const output = await context.createManagedAgent(agent, action);
+              await appendThreadToolResult(context.threadStore, thread.id, 'agent.create', {
+                ...action,
+                output,
+              }, output);
+              return output;
             },
             updateAgent: async (action) => {
               if (!context.updateManagedAgent) {
                 throw new Error('agent.update is not supported in this route');
               }
-              return context.updateManagedAgent(agent, action);
+              const output = await context.updateManagedAgent(agent, action);
+              await appendThreadToolResult(context.threadStore, thread.id, 'agent.update', {
+                ...action,
+                output,
+              }, output);
+              return output;
             },
             ensureDirectConversation: async (action) => {
               if (!context.ensureDirectConversation) {
                 throw new Error('conversation.ensure_dm is not supported in this route');
               }
-              return context.ensureDirectConversation(agent, String(action.targetAgentId ?? ''));
+              const output = await context.ensureDirectConversation(agent, String(action.targetAgentId ?? ''));
+              await appendThreadToolResult(context.threadStore, thread.id, 'conversation.ensure_dm', {
+                ...action,
+                output,
+              }, output);
+              return output;
             },
             sendConversationMessage: async (action) => {
               if (!context.sendConversationMessage) {
                 throw new Error('conversation.send_message is not supported in this route');
               }
-              return context.sendConversationMessage(agent, action);
+              const output = await context.sendConversationMessage(agent, action);
+              await appendThreadToolResult(context.threadStore, thread.id, 'conversation.send_message', {
+                ...action,
+                output,
+              }, output);
+              return output;
             },
           },
           initialContext: { goal: payload.content },
@@ -374,6 +471,14 @@ export async function handleAgentRoutes(
           onAssistantMessage: async (message) => {
             await appendThreadMessage(context.threadStore, thread.id, 'assistant', message);
             context.eventBus.emit({ agentId: agent.id, type: 'assistant_message', payload: { message } });
+          },
+          onTurnPrepared: async ({ repairCount: nextRepairCount }) => {
+            repairCount = nextRepairCount;
+          },
+          onActionUpdate: async (update) => {
+            if (update.status === 'succeeded' && countsAsExecutedAction(update.action)) {
+              executedActionCount += 1;
+            }
           },
           onToolCall: async (commandLine, output) => {
             await appendThreadMessage(context.threadStore, thread.id, 'tool', output);
@@ -384,19 +489,49 @@ export async function handleAgentRoutes(
         agent.status = 'completed';
         agent.updatedAt = new Date().toISOString();
         await context.agentStore.save(agent);
+        await updateThread(context.threadStore, thread.id, (currentThread) => {
+          currentThread.lastTurn = {
+            status: 'completed',
+            outcomeKind: result.outcomeKind,
+            executedActionCount: result.executedActionCount,
+            repairCount: result.repairCount,
+            finalMessage: result.finalMessage,
+          };
+        });
         context.eventBus.emit({
           agentId: agent.id,
           type: 'completed',
           payload: { finalMessage: result.finalMessage },
         });
       } catch (error) {
+        const publicError = classifyPublicTurnError(error);
         agent.status = 'error';
         agent.updatedAt = new Date().toISOString();
         await context.agentStore.save(agent);
+        await updateThread(context.threadStore, thread.id, (currentThread, now) => {
+          currentThread.executionLogs.push({
+            level: 'error',
+            message: `${publicError.code}: ${publicError.message}`,
+            createdAt: now,
+          });
+          currentThread.lastTurn = {
+            status: 'failed',
+            outcomeKind: 'blocked',
+            executedActionCount,
+            repairCount,
+            errorCode: publicError.code,
+            errorMessage: publicError.message,
+            rawErrorMessage: publicError.rawMessage,
+          };
+        });
         context.eventBus.emit({
           agentId: agent.id,
           type: 'error',
-          payload: { message: error instanceof Error ? error.message : String(error) },
+          payload: {
+            code: publicError.code,
+            message: publicError.message,
+            rawErrorMessage: publicError.rawMessage,
+          },
         });
       }
     })();

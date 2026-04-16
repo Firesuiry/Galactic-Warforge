@@ -39,6 +39,7 @@ function buildPrompt(input: AgentTurnRunnerInput) {
     'few-shot 1：observe 第 1 轮可返回 {"assistantMessage":"先扫描当前行星。","actions":[{"type":"game.command","command":"scan_planet","args":{"planetId":"planet-1-2"}}],"done":false}；拿到 tool 结果后，必须再返回一句最终总结，例如 {"assistantMessage":"planet-1-2 当前安全。","actions":[],"done":true}。',
     'few-shot 2：agent.create 第 1 轮执行创建后，如果还需要等 tool 结果，done 设为 false；拿到结果后必须明确说“谁已创建、权限是什么”，不要只写“我现在创建”。',
     'few-shot 3：研究委派可先返回 transfer_item，再根据 tool 结果继续返回 start_research；如果已经有完整结果，最终一轮必须直接交付“装料是否成功、研究是否已启动或缺什么参数”。',
+    'few-shot 4：如果 thread 历史里已经有 agent.create 的 tool 结果，后续再让你“新建一个矿场”时，必须直接复用该成员 id，返回 conversation.ensure_dm + conversation.send_message，不要假装不知道成员是谁。',
     '当前允许的 game.command 如下：',
     tools,
     ...(input.contextSections ?? []),
