@@ -1314,7 +1314,7 @@ process.stdout.write(JSON.stringify({
         role: 'worker',
         policy: {
           planetIds: ['planet-1-1'],
-          commandCategories: ['research'],
+          commandCategories: ['research', 'management'],
           canCreateAgents: false,
           canCreateChannel: false,
           canManageMembers: false,
@@ -1693,7 +1693,7 @@ process.stdout.write(JSON.stringify({
         role: 'worker',
         policy: {
           planetIds: ['planet-1-1'],
-          commandCategories: ['research'],
+          commandCategories: ['research', 'management'],
           canCreateAgents: false,
           canCreateChannel: false,
           canManageMembers: false,
@@ -1786,6 +1786,186 @@ process.stdout.write(JSON.stringify({
     assert.match(finalReply?.content ?? '', /basic_logistics_system/);
     assert.equal(finalReply?.replyToMessageId, accepted.message.id);
     assert.equal(finalReply?.turnId, accepted.turns[0]?.id);
+  });
+
+  it('keeps acted outcome when a mutation already executed but final closeout still fails', async () => {
+    const gameCommands: Array<Record<string, unknown>> = [];
+    const fakeGameServer = createServer(async (request, response) => {
+      if (request.method === 'POST' && request.url === '/commands') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+        gameCommands.push(payload);
+        const command = (payload.commands as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
+        const commandType = String(command.type ?? 'unknown');
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          request_id: `req-${gameCommands.length}`,
+          accepted: true,
+          commands: [
+            { command_index: 0, status: 'accepted', code: 'OK', message: `${commandType} accepted` },
+          ],
+        }));
+        return;
+      }
+
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'not_found' }));
+    });
+    await new Promise<void>((resolve) => fakeGameServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = fakeGameServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('fake game server failed to bind');
+    }
+    helperServers.push({
+      url: `http://127.0.0.1:${address.port}`,
+      close: () => new Promise<void>((resolve, reject) => {
+        fakeGameServer.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+    });
+
+    let attempts = 0;
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-gateway-test-'));
+    const server = await createGatewayServer({
+      dataRoot,
+      port: 0,
+      agentTurnRunner: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          return {
+            assistantMessage: '我先在 3,2 建造 wind_turbine，稍后再补 building id。',
+            actions: [
+              {
+                type: 'game.command',
+                command: 'build',
+                args: {
+                  x: 3,
+                  y: 2,
+                  buildingType: 'wind_turbine',
+                },
+              },
+            ],
+            done: true,
+          };
+        }
+        return {
+          assistantMessage: '建筑已经落地，我稍后再补最终 building id。',
+          actions: [],
+          done: true,
+        };
+      },
+    });
+    servers.push(server);
+
+    const providerResponse = await fetch(`${server.url}/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'provider-build-closeout-failure',
+        name: 'Build Closeout Failure Provider',
+        providerKind: 'codex_cli',
+        description: 'build closeout failure',
+        defaultModel: 'gpt-5-codex',
+        systemPrompt: 'Return JSON.',
+        toolPolicy: {
+          cliEnabled: true,
+          maxSteps: 2,
+          maxToolCallsPerTurn: 4,
+          commandWhitelist: [],
+        },
+        providerConfig: {
+          command: 'codex',
+          model: 'gpt-5-codex',
+          workdir: '/tmp',
+          argsTemplate: [],
+          envOverrides: {},
+        },
+      }),
+    });
+    assert.equal(providerResponse.status, 201);
+
+    const agentResponse = await fetch(`${server.url}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'agent-builder-closeout',
+        name: '建造官',
+        providerId: 'provider-build-closeout-failure',
+        serverUrl: helperServers[0]?.url,
+        playerId: 'p1',
+        playerKey: 'key_player_1',
+        role: 'worker',
+        policy: {
+          planetIds: ['planet-1-1'],
+          commandCategories: ['build'],
+          canCreateAgents: false,
+          canCreateChannel: false,
+          canManageMembers: false,
+          canInviteByPlanet: false,
+          canCreateSchedules: false,
+          canDirectMessageAgentIds: [],
+          canDispatchAgentIds: [],
+        },
+      }),
+    });
+    assert.equal(agentResponse.status, 201);
+
+    const conversationResponse = await fetch(`${server.url}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'conv-build-closeout-failure',
+        type: 'dm',
+        name: '与建造官私聊',
+        topic: '',
+        createdByType: 'player',
+        createdById: 'p1',
+        memberIds: ['player:p1', 'agent:agent-builder-closeout'],
+      }),
+    });
+    assert.equal(conversationResponse.status, 201);
+
+    const messageResponse = await fetch(`${server.url}/conversations/conv-build-closeout-failure/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderType: 'player',
+        senderId: 'p1',
+        content: '在 planet-1-1 的 3,2 真实建造一座 wind_turbine，并告诉我 building id。',
+      }),
+    });
+    assert.equal(messageResponse.status, 202);
+
+    let turns: Array<{
+      status: string;
+      outcomeKind?: string;
+      executedActionCount?: number;
+      errorCode?: string;
+      rawErrorMessage?: string;
+    }> = [];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const turnsResponse = await fetch(`${server.url}/conversations/conv-build-closeout-failure/turns`);
+      turns = await turnsResponse.json() as typeof turns;
+      if (turns[0]?.status === 'failed') {
+        break;
+      }
+      await delay(20);
+    }
+
+    assert.equal(gameCommands.length, 1);
+    assert.equal(turns[0]?.status, 'failed');
+    assert.equal(turns[0]?.outcomeKind, 'acted');
+    assert.equal(turns[0]?.executedActionCount, 1);
+    assert.equal(turns[0]?.errorCode, 'provider_incomplete_execution');
+    assert.match(turns[0]?.rawErrorMessage ?? '', /最终结果/);
   });
 
   it('persists gateway tool results into direct agent threads so follow-up delegation can use child ids', async () => {

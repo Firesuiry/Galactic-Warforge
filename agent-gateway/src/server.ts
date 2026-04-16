@@ -22,6 +22,7 @@ import {
 import { runDueSchedules } from './runtime/scheduler.js';
 import { classifyPublicTurnError } from './runtime/provider-error.js';
 import { runProviderTurn, type AgentTurnRunner } from './runtime/turn.js';
+import { countsAsExecutedAction, resolveTurnOutcomeKind } from './runtime/turn-validator.js';
 import { createAgentStore } from './store/agent-store.js';
 import { createConversationStore } from './store/conversation-store.js';
 import { createMessageStore } from './store/message-store.js';
@@ -578,6 +579,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         currentTurn = await updateTurn(turnId, updater);
         return currentTurn;
       };
+      const executedActions: CanonicalAgentAction[] = [];
 
       try {
         const provider = await providerStore.get(agent.providerId);
@@ -667,6 +669,9 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
             }));
           },
           onActionUpdate: async ({ actionIndex, action, status, detail }) => {
+            if (status === 'succeeded' && countsAsExecutedAction(action)) {
+              executedActions.push(action);
+            }
             const safeDetail = status === 'failed'
               ? classifyPublicTurnError(new Error(detail)).message
               : detail;
@@ -747,7 +752,10 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         await persistTurn((turn) => ({
           ...turn,
           status: 'failed',
-          outcomeKind: 'blocked',
+          outcomeKind: executedActions.length > 0
+            ? resolveTurnOutcomeKind(executedActions)
+            : 'blocked',
+          executedActionCount: executedActions.length,
           errorCode: publicError.code,
           errorMessage: publicError.message,
           rawErrorMessage,

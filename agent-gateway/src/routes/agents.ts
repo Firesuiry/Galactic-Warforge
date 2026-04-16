@@ -3,10 +3,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
 import { runAgentLoop } from '../runtime/loop.js';
+import type { CanonicalAgentAction } from '../runtime/action-schema.js';
 import type { GatewayEvent } from '../runtime/events.js';
 import { classifyPublicTurnError } from '../runtime/provider-error.js';
 import { runProviderTurn, type AgentTurnRunner } from '../runtime/turn.js';
-import { countsAsExecutedAction } from '../runtime/turn-validator.js';
+import { countsAsExecutedAction, resolveTurnOutcomeKind } from '../runtime/turn-validator.js';
 import type { AgentInstance, AgentPolicy, AgentThread, ModelProvider } from '../types.js';
 
 interface AgentStore {
@@ -364,6 +365,7 @@ export async function handleAgentRoutes(
     void (async () => {
       let executedActionCount = 0;
       let repairCount = 0;
+      const executedActions: CanonicalAgentAction[] = [];
 
       try {
         const playerKey = await context.secretStore.readValue(agent.playerKeySecretId);
@@ -478,6 +480,7 @@ export async function handleAgentRoutes(
           onActionUpdate: async (update) => {
             if (update.status === 'succeeded' && countsAsExecutedAction(update.action)) {
               executedActionCount += 1;
+              executedActions.push(update.action);
             }
           },
           onToolCall: async (commandLine, output) => {
@@ -516,7 +519,9 @@ export async function handleAgentRoutes(
           });
           currentThread.lastTurn = {
             status: 'failed',
-            outcomeKind: 'blocked',
+            outcomeKind: executedActions.length > 0
+              ? resolveTurnOutcomeKind(executedActions)
+              : 'blocked',
             executedActionCount,
             repairCount,
             errorCode: publicError.code,

@@ -1612,6 +1612,8 @@ describe('AgentsPage', () => {
             actorId: 'p1',
             targetAgentId: 'agent-researcher',
             status: 'failed',
+            outcomeKind: 'acted',
+            executedActionCount: 1,
             errorCode: 'provider_schema_invalid',
             errorMessage: '模型返回结构无效，请稍后重试。',
             rawErrorMessage: 'transfer_item requires buildingId',
@@ -1650,6 +1652,8 @@ describe('AgentsPage', () => {
     renderApp(['/agents']);
 
     expect(await screen.findByText('失败原因')).toBeInTheDocument();
+    expect(screen.getByText('已执行动作')).toBeInTheDocument();
+    expect(screen.getByText('1 动作')).toBeInTheDocument();
     expect(screen.getByText(/provider_schema_invalid/)).toBeInTheDocument();
     expect(screen.getByText('transfer_item requires buildingId')).toBeInTheDocument();
     expect(
