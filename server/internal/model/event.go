@@ -22,10 +22,12 @@ const (
 	EvtEntityUpdated        EventType = "entity_updated"
 	EvtRocketLaunched       EventType = "rocket_launched"
 	EvtSquadDeployed        EventType = "squad_deployed"
-	EvtFleetCommissioned   EventType = "fleet_commissioned"
-	EvtFleetAssigned       EventType = "fleet_assigned"
-	EvtFleetAttackStarted  EventType = "fleet_attack_started"
-	EvtFleetDisbanded      EventType = "fleet_disbanded"
+	EvtFleetCommissioned    EventType = "fleet_commissioned"
+	EvtFleetAssigned        EventType = "fleet_assigned"
+	EvtFleetAttackStarted   EventType = "fleet_attack_started"
+	EvtFleetDisbanded       EventType = "fleet_disbanded"
+	EvtBlueprintValidated   EventType = "blueprint_validated"
+	EvtBlueprintInvalidated EventType = "blueprint_invalidated"
 )
 
 var allEventTypes = []EventType{
@@ -51,6 +53,8 @@ var allEventTypes = []EventType{
 	EvtFleetAssigned,
 	EvtFleetAttackStarted,
 	EvtFleetDisbanded,
+	EvtBlueprintValidated,
+	EvtBlueprintInvalidated,
 }
 
 var validEventTypes = func() map[EventType]struct{} {

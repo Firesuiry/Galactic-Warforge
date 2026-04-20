@@ -11,15 +11,16 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		return nil
 	}
 	cp := &model.PlayerState{
-		PlayerID:   ps.PlayerID,
-		TeamID:     ps.TeamID,
-		Role:       ps.Role,
-		Resources:  ps.Resources,
-		Inventory:  ps.Inventory.Clone(),
-		IsAlive:    ps.IsAlive,
-		Tech:       clonePlayerTechState(ps.Tech),
-		CombatTech: clonePlayerCombatTechState(ps.CombatTech),
-		Stats:      clonePlayerStats(ps.Stats),
+		PlayerID:      ps.PlayerID,
+		TeamID:        ps.TeamID,
+		Role:          ps.Role,
+		Resources:     ps.Resources,
+		Inventory:     ps.Inventory.Clone(),
+		IsAlive:       ps.IsAlive,
+		Tech:          clonePlayerTechState(ps.Tech),
+		CombatTech:    clonePlayerCombatTechState(ps.CombatTech),
+		Stats:         clonePlayerStats(ps.Stats),
+		WarBlueprints: model.CloneWarBlueprintMap(ps.WarBlueprints),
 	}
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
