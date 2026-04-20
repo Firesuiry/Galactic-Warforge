@@ -222,6 +222,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 			SourceBuildingID: building.ID,
 			Formation:        model.FormationTypeLine,
 			State:            model.FleetStateIdle,
+			Subsystems:       model.DefaultSpaceFleetSubsystemState(),
 		}
 		systemRuntime.Fleets[fleetID] = fleet
 	}
@@ -485,6 +486,9 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 	totalDamage := 0
 	totalShield := 0.0
 	maxShield := 0.0
+	totalArmor := 0
+	totalStructure := 0
+	weapons := model.SpaceWeaponMix{}
 	oldCapacity := fleet.Sustainment.Capacity
 	newCapacity := model.WarSupplyStock{}
 	for _, stack := range fleet.Units {
@@ -496,6 +500,13 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 		totalShield += profile.FleetUnit.Shield.Level * float64(stack.Count)
 		maxShield += profile.FleetUnit.Shield.MaxLevel * float64(stack.Count)
 		if blueprint, ok := model.ResolveWarBlueprintForPlayer(ws.Players[playerID], stack.BlueprintID); ok {
+			combatProfile := model.ResolveWarBlueprintSpaceCombatProfile(blueprint)
+			totalArmor += combatProfile.Armor * stack.Count
+			totalStructure += combatProfile.Structure * stack.Count
+			weapons.DirectFire += combatProfile.Weapons.DirectFire * stack.Count
+			weapons.Missile += combatProfile.Weapons.Missile * stack.Count
+			weapons.PointDefense += combatProfile.Weapons.PointDefense * stack.Count
+			weapons.ElectronicWarfare += combatProfile.Weapons.ElectronicWarfare * stack.Count
 			capacity := model.InitWarSustainmentState(blueprint, profile, stack.Count).Capacity
 			newCapacity.Ammo += capacity.Ammo
 			newCapacity.Missiles += capacity.Missiles
@@ -505,18 +516,40 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 			newCapacity.RepairDrones += capacity.RepairDrones
 		}
 	}
+	if totalArmor <= 0 && totalStructure > 0 {
+		totalArmor = warMaxInt(1, totalStructure/4)
+	}
+	if totalStructure <= 0 {
+		totalStructure = warMaxInt(60, totalDamage)
+	}
+	if weapons.DirectFire > 0 {
+		totalDamage = weapons.DirectFire
+	} else if weapons.Missile > 0 {
+		totalDamage = weapons.Missile
+	}
+	weaponType := model.WeaponTypeLaser
+	if weapons.DirectFire <= 0 && weapons.Missile > 0 {
+		weaponType = model.WeaponTypeMissile
+	}
 	fleet.Weapon = model.WeaponState{
-		Type:         model.WeaponTypeLaser,
+		Type:         weaponType,
 		Damage:       totalDamage,
 		FireRate:     10,
 		Range:        24,
 		LastFireTick: fleet.LastAttackTick,
+		AmmoCost:     warMaxInt(0, 1),
 	}
+	fleet.Weapons = weapons
 	fleet.Shield = model.ShieldState{
 		Level:         totalShield,
 		MaxLevel:      maxShield,
 		RechargeRate:  2,
 		RechargeDelay: 10,
+	}
+	fleet.Armor = scaleDurabilityLayer(fleet.Armor, totalArmor)
+	fleet.Structure = scaleDurabilityLayer(fleet.Structure, totalStructure)
+	if fleet.Subsystems.Engine.State == "" {
+		fleet.Subsystems = model.DefaultSpaceFleetSubsystemState()
 	}
 	fleet.Sustainment.Capacity = newCapacity
 	fleet.Sustainment.Current = model.RefillForAddedCapacity(fleet.Sustainment.Current, oldCapacity, newCapacity)
@@ -543,6 +576,26 @@ func resolveWarBlueprintRuntimeProfile(ws *model.WorldState, playerID, blueprint
 		return model.WarBlueprintRuntimeProfile{}, false
 	}
 	return model.ResolveWarBlueprintRuntimeProfile(blueprint), true
+}
+
+func scaleDurabilityLayer(current model.DurabilityLayerState, maxLevel int) model.DurabilityLayerState {
+	if maxLevel <= 0 {
+		return model.DurabilityLayerState{}
+	}
+	if current.MaxLevel <= 0 {
+		return model.DurabilityLayerState{Level: maxLevel, MaxLevel: maxLevel}
+	}
+	level := current.Level
+	if current.MaxLevel > 0 {
+		level = int(float64(current.Level) / float64(current.MaxLevel) * float64(maxLevel))
+	}
+	if level <= 0 {
+		level = maxLevel
+	}
+	if level > maxLevel {
+		level = maxLevel
+	}
+	return model.DurabilityLayerState{Level: level, MaxLevel: maxLevel}
 }
 
 func warBlueprintDeployCommand(blueprint model.WarBlueprint) model.CommandType {

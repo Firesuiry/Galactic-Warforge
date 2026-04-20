@@ -343,12 +343,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明补充:
   - 未发现系统时仅返回 `system_id` + `discovered=false`
   - 已发现但当前玩家在该系统还没有 `space runtime` 载体时返回 `available=false`；如果当前 `active_planet_id` 正好属于该 system，仍可能同时带回 `active_planet_context`，因为它来自当前 active world 的聚合视图，而不是 `space runtime`
-  - 当前会公开四类 system-scoped runtime：
+  - 当前会公开六类 system-scoped runtime：
     - `solar_sail_orbit`
     - `dyson_sphere`
     - `active_planet_context`
     - `fleets`
     - `contacts`
+    - `battle_reports`
   - `active_planet_context` 只在当前 `active_planet_id` 属于该 system，且该 active world 已加载时返回；它不会跨其他行星做扫描补数
   - `active_planet_context` 只是当前 active world 上玩家自有 `em_rail_ejector` / `vertical_launching_silo` / `ray_receiver` 的聚合计数，本身不等于该 system 已经存在 `space runtime`；不过当前官方 midgame 会同时用 `scenario_bootstrap` 预置行星锚点和 system runtime 锚点，所以 fresh 启动后通常会直接看到非零计数与 `available=true`
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
@@ -364,18 +365,27 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `dyson_sphere.layers[].construction_bonus` 当前按 `min(0.5, rocket_launches * 0.02)` 结算；若该层已有壳面，`launch_rocket` 还会按顺序把第一个 `coverage < 1.0` 的壳面额外推进 `0.02` 覆盖率，并重算该壳面的 `energy_output`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
-  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `sustainment` / `target`
+  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `last_battle_report_id`
+  - `fleets[].weapons`：太空战火力画像，字段为 `direct_fire` / `missile` / `point_defense` / `electronic_warfare`
   - `fleets[].sustainment`：舰队 authoritative 补给态，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `repair_blocked` / `retreat_recommended` / `shortages` / `sources` / `last_resupply_tick` / `last_consumption_tick` / `repair`
   - `fleets[].sustainment.current` / `capacity`：六类军需库存，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
   - `fleets[].sustainment.sources[]`：最近一次补给来源，字段为 `source_id` / `source_type` / `label` / `planet_id` / `system_id` / `building_id` / `unit_id`
   - `fleets[].sustainment.sources[].source_type`：当前 authoritative 只会返回 `planetary_logistics_station` / `interstellar_logistics_station` / `orbital_supply_port` / `supply_ship` / `frontline_supply_drop`
   - `fleets[].sustainment.repair`：维修态，字段为 `tier` / `active` / `blocked_reason` / `hp_per_tick` / `shield_per_tick` / `remaining_damage` / `remaining_shield` / `remaining_ticks` / `completed_this_tick`
   - `fleets[].sustainment.repair.tier`：当前只会返回 `field_repair` / `frontline_repair_station` / `overhaul`
+  - `fleets[].armor` / `structure`：太空战分层耐久，字段为 `level` / `max_level`
+  - `fleets[].subsystems`：关键子系统状态，包含 `engine` / `fire_control` / `sensors` / `point_defense`；每个子系统都带 `integrity` / `state` / `effect`
+  - `fleets[].subsystems.*.state`：当前固定为 `operational` / `degraded` / `disabled`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
+  - `fleets[].last_battle_report_id`：最近一份太空战战报 ID；若舰队尚未参与 battle report 生成则为空
   - `contacts`：恒星系情报接触列表，包含 `id` / `scope_type` / `scope_id` / `contact_kind` / `entity_id` / `entity_type` / `domain` / `planet_id` / `system_id` / `level` / `classification` / `confirmed_type` / `strength_estimate` / `threat_level` / `last_updated_tick` / `signal_strength` / `lock_quality` / `jamming_penalty` / `missile_drift_risk` / `false_contact` / `sources`
   - `contacts[].level`：当前固定为 `unknown_signal` / `classified_contact` / `confirmed_type` / `fully_resolved`
   - `contacts[].sources[]`：当前至少会返回 `vision` / `active_radar` / `passive_em` / `infrared` / `signal_tower` / `recon_unit` 中实际参与本次判定的来源；`source_id`/`source_kind` 可直接追到建筑或舰队
   - 当前 system contacts 会真实受到主动/被动传感器组合、同星系 anchor 距离和目标电子战强度影响；强 ECM 目标还可能生成 `false_contact=true` 的幽灵接触
+  - `battle_reports`：该 system 下最近的太空战战报（当前按最新在前保留最多 12 条），字段为 `battle_id` / `tick` / `system_id` / `planet_id` / `fleet_id` / `owner_id` / `target_id` / `target_type` / `fleet_firepower` / `enemy_firepower` / `fleet_missile_salvo` / `enemy_missile_salvo` / `fleet_damage` / `target_strength_loss` / `subsystem_hits` / `retreat_triggered` / `target_destroyed` / `lock_quality` / `jamming_penalty`
+  - `battle_reports[].fleet_missile_salvo` / `enemy_missile_salvo`：字段为 `fired` / `intercepted` / `penetrated` / `drifted` / `damage`
+  - `battle_reports[].fleet_damage`：字段为 `shield` / `armor` / `structure` / `subsystem`
+  - `battle_reports[].subsystem_hits[]`：字段为 `subsystem` / `state` / `effect`
 - 响应示例:
 ```json
 {
@@ -430,8 +440,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 返回字段与单舰详情一致，便于 CLI 直接列表示意
   - 当玩家当前没有任何舰队时，响应体固定返回空数组 `[]`，不会返回 `null`
 - 响应字段:
-  - `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `sustainment` / `target` / `weapon` / `shield` / `last_attack_tick`
+  - `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapon` / `weapons` / `shield` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `last_attack_tick` / `last_battle_report`
   - `sustainment` 字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
+  - `weapons` / `armor` / `structure` / `subsystems` 字段结构与 `GET /world/systems/{system_id}/runtime.fleets[]` 一致
+  - `last_battle_report`：舰队最近一份太空战战报，字段结构与 `GET /world/systems/{system_id}/runtime.battle_reports[]` 一致；若还没有战报则省略
 
 **GET /world/fleets/{fleet_id}**
 - 说明: 单舰队 authoritative 详情（需认证）
@@ -443,8 +455,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `target`
   - `weapon`
   - `shield`
+  - `weapons`
+  - `armor` / `structure`
+  - `subsystems`
   - `last_attack_tick`
+  - `last_battle_report`
   - `sustainment` 字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
+  - `weapons` / `armor` / `structure` / `subsystems` / `last_battle_report` 字段结构与舰队列表和 `system runtime` 中对应字段一致
 - 响应示例:
 ```json
 {
@@ -1369,6 +1386,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assigned`
   - `fleet_attack_started`
   - `fleet_disbanded`
+  - `missile_salvo_fired`
+  - `point_defense_intercept`
+  - `battle_report_generated`
 - 事件类型补充:
   - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
     - 对 `build`，如果这里只返回 `OK + construction task ... queued`，不要把它误判成“建筑已完全落地并可运行”；后续还应继续观察同坐标的 `entity_created` 与对应 `building_state_changed`
@@ -1385,8 +1405,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `squad_deployed`：地面小队部署事件，payload 包含 `squad_id` / `squad`；同时还会伴随一条 `entity_created(entity_type = "combat_squad")`。
   - `fleet_commissioned`：舰队编成事件，payload 包含 `fleet_id` / `fleet`；同时还会伴随一条 `entity_created(entity_type = "fleet")`。
   - `fleet_assigned`：舰队改编队事件，payload 包含 `fleet_id` / `formation`。
-  - `fleet_attack_started`：舰队开始攻击事件，payload 包含 `fleet_id` / `planet_id` / `target_id`；实际后续伤害仍通过 `damage_applied` / `entity_destroyed` 体现。
+  - `fleet_attack_started`：舰队开始攻击事件，payload 包含 `fleet_id` / `planet_id` / `target_id`；后续太空战细节会继续通过 `missile_salvo_fired` / `point_defense_intercept` / `battle_report_generated` 与常规 `damage_applied` / `entity_destroyed` 体现。
   - `fleet_disbanded`：舰队解散事件，payload 包含 `fleet_id`。
+  - `missile_salvo_fired`：导弹齐射事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `launched` / `intercepted` / `drifted` / `lock_quality` / `jamming_penalty`；若来源是敌对势力还会额外写 `source = "enemy_force"`
+  - `point_defense_intercept`：点防拦截事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `intercepted` / `remaining`
+  - `battle_report_generated`：太空战战报生成事件，payload 包含 `battle_id` / `fleet_id` / `report`；`report` 结构与 `GET /world/systems/{system_id}/runtime.battle_reports[]` 一致
 - 响应示例:
 ```json
 {

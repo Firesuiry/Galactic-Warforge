@@ -19,6 +19,7 @@ type PlayerSystemRuntime struct {
 	DysonSphere    *DysonSphereState         `json:"dyson_sphere,omitempty"`
 	Fleets         map[string]*SpaceFleet    `json:"fleets,omitempty"`
 	SensorContacts map[string]*SensorContact `json:"sensor_contacts,omitempty"`
+	BattleReports  []*SpaceBattleReport      `json:"battle_reports,omitempty"`
 }
 
 // NewSpaceRuntimeState returns an initialized empty space runtime.
@@ -138,6 +139,7 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 				SystemID:       systemRuntime.SystemID,
 				Fleets:         make(map[string]*SpaceFleet, len(systemRuntime.Fleets)),
 				SensorContacts: cloneSensorContactMap(systemRuntime.SensorContacts),
+				BattleReports:  CloneSpaceBattleReports(systemRuntime.BattleReports),
 			}
 			if systemRuntime.SolarSailOrbit != nil {
 				orbitCopy := *systemRuntime.SolarSailOrbit
@@ -152,6 +154,7 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 				fleetCopy := *fleet
 				fleetCopy.Units = append([]FleetUnitStack(nil), fleet.Units...)
 				fleetCopy.Sustainment = fleet.Sustainment.Clone()
+				fleetCopy.Subsystems = fleet.Subsystems
 				if fleet.Target != nil {
 					targetCopy := *fleet.Target
 					fleetCopy.Target = &targetCopy
@@ -163,6 +166,19 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 		out.Players[playerID] = playerCopy
 	}
 	return out
+}
+
+const maxSpaceBattleReportsPerSystem = 12
+
+// AppendBattleReport stores a battle report in reverse chronological order.
+func (rt *PlayerSystemRuntime) AppendBattleReport(report *SpaceBattleReport) {
+	if rt == nil || report == nil {
+		return
+	}
+	rt.BattleReports = append([]*SpaceBattleReport{CloneSpaceBattleReport(report)}, rt.BattleReports...)
+	if len(rt.BattleReports) > maxSpaceBattleReportsPerSystem {
+		rt.BattleReports = rt.BattleReports[:maxSpaceBattleReportsPerSystem]
+	}
 }
 
 func cloneDysonSphereState(state *DysonSphereState) *DysonSphereState {

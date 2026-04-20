@@ -139,18 +139,31 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 					fleet.Target = nil
 					continue
 				}
+				lockQuality, jammingPenalty, driftRisk := resolveFleetBattleContactModifiers(targetWorld, fleet.OwnerID, target)
+				fleetDamageScale := fleetAttackScale(fleet, lockQuality)
+				enemyFirepower := enemyForceSpaceFirepower(target)
+				enemyPD := effectiveEnemyPointDefense(enemyFirepower, jammingPenalty)
 
-				damage := max(1, fleet.Weapon.Damage/4)
-				damage = applyTaskForceDamagePenalty(damage, profile, status)
-				damage = int(float64(damage) * sustainmentDamageMultiplier(&fleet.Sustainment))
-				if damage <= 0 {
-					continue
+				directDamage := max(0, int(float64(fleet.Weapons.DirectFire)*fleetDamageScale/18))
+				directDamage = applyTaskForceDamagePenalty(directDamage, profile, status)
+				if directDamage > 0 && directDamage < 1 {
+					directDamage = 1
 				}
-				target.Strength -= damage
+
+				fleetMissilesFired, fleetMissilesIntercepted, fleetMissilesDrifted, fleetMissileDamage := 0, 0, 0, 0
+				if fleet.Sustainment.Current.Missiles > 0 {
+					fleetMissilesFired, fleetMissilesIntercepted, fleetMissilesDrifted, fleetMissileDamage = settleFleetMissileSalvo(
+						fleet.Weapons,
+						enemyPD,
+						lockQuality,
+						driftRisk,
+					)
+				}
+				targetStrengthLoss := max(1, directDamage+fleetMissileDamage/6)
+				target.Strength -= targetStrengthLoss
 				fleet.LastAttackTick = currentTick
 				fleet.Weapon.LastFireTick = currentTick
 				settleAttackConsumption(&fleet.Sustainment, fleet.Weapon, currentTick)
-				rechargeShieldWithSustainment(&fleet.Shield, &fleet.Sustainment, currentTick)
 
 				events = append(events, &model.GameEvent{
 					EventType:       model.EvtDamageApplied,
@@ -160,11 +173,108 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 						"attacker_type": "fleet",
 						"target_id":     target.ID,
 						"target_type":   "enemy_force",
-						"damage":        damage,
+						"damage":        targetStrengthLoss,
 					},
 				})
+				if fleetMissilesFired > 0 {
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtMissileSalvoFired,
+						VisibilityScope: fleet.OwnerID,
+						Payload: map[string]any{
+							"fleet_id":        fleet.ID,
+							"target_id":       target.ID,
+							"target_type":     "enemy_force",
+							"launched":        fleetMissilesFired,
+							"intercepted":     fleetMissilesIntercepted,
+							"drifted":         fleetMissilesDrifted,
+							"lock_quality":    lockQuality,
+							"jamming_penalty": jammingPenalty,
+						},
+					})
+				}
+				if fleetMissilesIntercepted > 0 {
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtPointDefenseIntercept,
+						VisibilityScope: fleet.OwnerID,
+						Payload: map[string]any{
+							"fleet_id":    fleet.ID,
+							"target_id":   target.ID,
+							"target_type": "enemy_force",
+							"intercepted": fleetMissilesIntercepted,
+							"remaining":   max(0, fleetMissilesFired-fleetMissilesIntercepted-fleetMissilesDrifted),
+						},
+					})
+				}
+
+				enemyLockQuality := enemyAttackScale(fleet)
+				enemyDirectDamage := max(0, int(float64(enemyFirepower.DirectFire)*enemyLockQuality/14))
+				enemyMissilesFired, enemyMissilesIntercepted, enemyMissilesDrifted, enemyMissileDamage := settleEnemyMissileSalvo(
+					fleet,
+					enemyFirepower,
+					enemyLockQuality,
+				)
+				fleetDamage, subsystemHits := applySpaceFleetLayeredDamage(
+					fleet,
+					enemyDirectDamage+enemyMissileDamage,
+					enemyFirepower.ElectronicWarfare,
+					currentTick,
+				)
+				if enemyMissilesFired > 0 {
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtMissileSalvoFired,
+						VisibilityScope: fleet.OwnerID,
+						Payload: map[string]any{
+							"fleet_id":        fleet.ID,
+							"source":          "enemy_force",
+							"target_id":       fleet.ID,
+							"target_type":     "fleet",
+							"launched":        enemyMissilesFired,
+							"intercepted":     enemyMissilesIntercepted,
+							"drifted":         enemyMissilesDrifted,
+							"lock_quality":    enemyLockQuality,
+							"jamming_penalty": float64(fleet.Weapons.ElectronicWarfare) / 20,
+						},
+					})
+				}
+				if enemyMissilesIntercepted > 0 {
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtPointDefenseIntercept,
+						VisibilityScope: fleet.OwnerID,
+						Payload: map[string]any{
+							"fleet_id":    fleet.ID,
+							"source":      "fleet",
+							"target_id":   fleet.ID,
+							"target_type": "fleet",
+							"intercepted": enemyMissilesIntercepted,
+							"remaining":   max(0, enemyMissilesFired-enemyMissilesIntercepted-enemyMissilesDrifted),
+						},
+					})
+				}
+
+				report := &model.SpaceBattleReport{
+					BattleID:           spaceRuntime.NextEntityID("battle"),
+					Tick:               currentTick,
+					SystemID:           systemRuntime.SystemID,
+					PlanetID:           targetWorld.PlanetID,
+					FleetID:            fleet.ID,
+					OwnerID:            fleet.OwnerID,
+					TargetID:           target.ID,
+					TargetType:         "enemy_force",
+					FleetFirepower:     fleet.Weapons,
+					EnemyFirepower:     enemyFirepower,
+					FleetMissileSalvo:  model.SpaceMissileSalvoReport{Fired: fleetMissilesFired, Intercepted: fleetMissilesIntercepted, Penetrated: max(0, fleetMissilesFired-fleetMissilesIntercepted-fleetMissilesDrifted), Drifted: fleetMissilesDrifted, Damage: fleetMissileDamage},
+					EnemyMissileSalvo:  model.SpaceMissileSalvoReport{Fired: enemyMissilesFired, Intercepted: enemyMissilesIntercepted, Penetrated: max(0, enemyMissilesFired-enemyMissilesIntercepted-enemyMissilesDrifted), Drifted: enemyMissilesDrifted, Damage: enemyMissileDamage},
+					FleetDamage:        fleetDamage,
+					TargetStrengthLoss: targetStrengthLoss,
+					SubsystemHits:      subsystemHits,
+					LockQuality:        lockQuality,
+					JammingPenalty:     jammingPenalty,
+				}
+
+				rechargeShieldWithSustainment(&fleet.Shield, &fleet.Sustainment, currentTick)
 
 				if target.Strength <= 0 {
+					report.TargetDestroyed = true
 					events = append(events, &model.GameEvent{
 						EventType:       model.EvtEntityDestroyed,
 						VisibilityScope: "all",
@@ -178,7 +288,35 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 					removeEnemyForce(targetWorld, target.ID)
 					fleet.State = model.FleetStateIdle
 					fleet.Target = nil
+					systemRuntime.AppendBattleReport(report)
+					fleet.LastBattleReportID = report.BattleID
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtBattleReportGenerated,
+						VisibilityScope: fleet.OwnerID,
+						Payload: map[string]any{
+							"battle_id": report.BattleID,
+							"fleet_id":  fleet.ID,
+							"report":    report,
+						},
+					})
+					continue
 				}
+				if fleet.Sustainment.RetreatRecommended || shouldRetreatFleet(fleet, profile) {
+					report.RetreatTriggered = true
+					fleet.State = model.FleetStateIdle
+					fleet.Target = nil
+				}
+				systemRuntime.AppendBattleReport(report)
+				fleet.LastBattleReportID = report.BattleID
+				events = append(events, &model.GameEvent{
+					EventType:       model.EvtBattleReportGenerated,
+					VisibilityScope: fleet.OwnerID,
+					Payload: map[string]any{
+						"battle_id": report.BattleID,
+						"fleet_id":  fleet.ID,
+						"report":    report,
+					},
+				})
 			}
 		}
 	}
@@ -222,7 +360,13 @@ func shouldRetreatSquad(squad *model.CombatSquad, profile model.WarTaskForceStan
 }
 
 func shouldRetreatFleet(fleet *model.SpaceFleet, profile model.WarTaskForceStanceProfile) bool {
-	if fleet == nil || profile.RetreatLossThreshold <= 0 || fleet.Shield.MaxLevel <= 0 {
+	if fleet == nil || profile.RetreatLossThreshold <= 0 {
+		return false
+	}
+	if fleet.Structure.MaxLevel > 0 {
+		return float64(fleet.Structure.Level)/float64(fleet.Structure.MaxLevel) <= profile.RetreatLossThreshold
+	}
+	if fleet.Shield.MaxLevel <= 0 {
 		return false
 	}
 	return fleet.Shield.Level/fleet.Shield.MaxLevel <= profile.RetreatLossThreshold
@@ -339,6 +483,264 @@ func attackDelayed(currentTick, lastAttackTick int64, penalty float64) bool {
 		return false
 	}
 	return currentTick-lastAttackTick <= delayTicks
+}
+
+func resolveFleetBattleContactModifiers(ws *model.WorldState, playerID string, target *model.EnemyForce) (lockQuality, jammingPenalty, driftRisk float64) {
+	lockQuality = 0.6
+	jammingPenalty = 0
+	driftRisk = 0.15
+	if target == nil {
+		return lockQuality, jammingPenalty, driftRisk
+	}
+	if ws != nil && ws.SensorContacts != nil {
+		if state := ws.SensorContacts[playerID]; state != nil && state.Contacts != nil {
+			if contact := state.Contacts[target.ID]; contact != nil {
+				if contact.LockQuality > 0 {
+					lockQuality = contact.LockQuality
+				}
+				jammingPenalty = contact.JammingPenalty
+				driftRisk = contact.MissileDriftRisk
+				return clampBattleFloat(lockQuality, 0.15, 1), clampBattleFloat(jammingPenalty, 0, 99), clampBattleFloat(driftRisk, 0, 0.95)
+			}
+		}
+	}
+	profile := enemyForceTargetProfile(*target)
+	jammingPenalty = profile.JammingStrength
+	driftRisk = clampBattleFloat(profile.JammingStrength/12, 0, 0.8)
+	return clampBattleFloat(lockQuality, 0.15, 1), clampBattleFloat(jammingPenalty, 0, 99), clampBattleFloat(driftRisk, 0, 0.95)
+}
+
+func enemyForceSpaceFirepower(force *model.EnemyForce) model.SpaceWeaponMix {
+	if force == nil {
+		return model.SpaceWeaponMix{}
+	}
+	switch force.Type {
+	case model.EnemyForceTypeBeacon:
+		return model.SpaceWeaponMix{
+			DirectFire:        max(12, force.Strength/7),
+			Missile:           max(24, force.Strength/3),
+			PointDefense:      max(8, force.Strength/18),
+			ElectronicWarfare: max(10, force.Strength/20),
+		}
+	case model.EnemyForceTypeHive:
+		return model.SpaceWeaponMix{
+			DirectFire:        max(18, force.Strength/5),
+			Missile:           max(12, force.Strength/6),
+			PointDefense:      max(4, force.Strength/24),
+			ElectronicWarfare: max(4, force.Strength/30),
+		}
+	default:
+		return model.SpaceWeaponMix{
+			DirectFire:        max(14, force.Strength/6),
+			Missile:           max(10, force.Strength/8),
+			PointDefense:      max(3, force.Strength/30),
+			ElectronicWarfare: max(2, force.Strength/36),
+		}
+	}
+}
+
+func effectiveEnemyPointDefense(firepower model.SpaceWeaponMix, jammingPenalty float64) int {
+	value := float64(firepower.PointDefense) + jammingPenalty*0.3
+	if value < 0 {
+		value = 0
+	}
+	return int(math.Round(value))
+}
+
+func fleetAttackScale(fleet *model.SpaceFleet, lockQuality float64) float64 {
+	if fleet == nil {
+		return clampBattleFloat(lockQuality, 0.15, 1)
+	}
+	multiplier := sustainmentDamageMultiplier(&fleet.Sustainment)
+	multiplier *= 0.45 + 0.55*subsystemIntegrity(fleet.Subsystems.FireControl)
+	multiplier *= 0.55 + 0.45*subsystemIntegrity(fleet.Subsystems.Sensors)
+	multiplier *= clampBattleFloat(lockQuality, 0.15, 1)
+	return clampBattleFloat(multiplier, 0.1, 1.4)
+}
+
+func enemyAttackScale(fleet *model.SpaceFleet) float64 {
+	if fleet == nil {
+		return 1
+	}
+	multiplier := 0.85
+	multiplier -= float64(fleet.Weapons.ElectronicWarfare) / 220
+	multiplier -= (1 - subsystemIntegrity(fleet.Subsystems.Sensors)) * 0.15
+	return clampBattleFloat(multiplier, 0.25, 1)
+}
+
+func settleFleetMissileSalvo(weapons model.SpaceWeaponMix, enemyPointDefense int, lockQuality, driftRisk float64) (fired, intercepted, drifted, damage int) {
+	if weapons.Missile <= 0 {
+		return 0, 0, 0, 0
+	}
+	fired = max(1, weapons.Missile/26)
+	intercepted = min(fired, int(math.Round(float64(fired)*float64(enemyPointDefense)/float64(enemyPointDefense+weapons.Missile+12))))
+	remaining := max(0, fired-intercepted)
+	drifted = min(remaining, int(math.Round(float64(remaining)*clampBattleFloat(driftRisk, 0, 0.95))))
+	penetrated := max(0, remaining-drifted)
+	damage = int(math.Round(float64(penetrated*(12+weapons.Missile/10)) * clampBattleFloat(lockQuality, 0.15, 1)))
+	return fired, intercepted, drifted, damage
+}
+
+func settleEnemyMissileSalvo(fleet *model.SpaceFleet, firepower model.SpaceWeaponMix, attackScale float64) (fired, intercepted, drifted, damage int) {
+	if firepower.Missile <= 0 {
+		return 0, 0, 0, 0
+	}
+	fired = max(1, firepower.Missile/24)
+	pointDefense := int(math.Round(float64(fleet.Weapons.PointDefense) * subsystemIntegrity(fleet.Subsystems.PointDefense)))
+	intercepted = min(fired, int(math.Round(float64(fired)*float64(pointDefense)/float64(pointDefense+firepower.Missile+10))))
+	remaining := max(0, fired-intercepted)
+	driftResistance := clampBattleFloat(float64(fleet.Weapons.ElectronicWarfare)/float64(max(1, firepower.Missile+fleet.Weapons.ElectronicWarfare)), 0, 0.75)
+	drifted = min(remaining, int(math.Round(float64(remaining)*driftResistance)))
+	penetrated := max(0, remaining-drifted)
+	damage = int(math.Round(float64(penetrated*(10+firepower.Missile/12)) * clampBattleFloat(attackScale, 0.25, 1)))
+	return fired, intercepted, drifted, damage
+}
+
+func applySpaceFleetLayeredDamage(
+	fleet *model.SpaceFleet,
+	damage int,
+	electronicWarfare int,
+	currentTick int64,
+) (model.SpaceBattleDamageSummary, []model.SpaceBattleSubsystemHit) {
+	summary := model.SpaceBattleDamageSummary{}
+	if fleet == nil || damage <= 0 {
+		return summary, nil
+	}
+	remaining := damage
+	if fleet.Shield.Level > 0 {
+		absorbed := min(remaining, int(math.Ceil(fleet.Shield.Level)))
+		fleet.Shield.Level -= float64(absorbed)
+		fleet.Shield.LastHitTick = currentTick
+		summary.Shield = float64(absorbed)
+		remaining -= absorbed
+	}
+	if remaining > 0 && fleet.Armor.Level > 0 {
+		absorbed := min(remaining, fleet.Armor.Level)
+		fleet.Armor.Level -= absorbed
+		summary.Armor = absorbed
+		remaining -= absorbed
+	}
+	if remaining > 0 && fleet.Structure.Level > 0 {
+		absorbed := min(remaining, fleet.Structure.Level)
+		fleet.Structure.Level -= absorbed
+		summary.Structure = absorbed
+		remaining -= absorbed
+	}
+	pressure := summary.Structure + summary.Armor/2 + int(summary.Shield/4) + electronicWarfare/3
+	hits := degradeFleetSubsystems(&fleet.Subsystems, pressure)
+	summary.Subsystem = len(hits)
+	return summary, hits
+}
+
+func degradeFleetSubsystems(subsystems *model.SpaceFleetSubsystemState, pressure int) []model.SpaceBattleSubsystemHit {
+	if subsystems == nil || pressure <= 0 {
+		return nil
+	}
+	type subsystemEntry struct {
+		name   string
+		status *model.SpaceFleetSubsystemStatus
+	}
+	order := []subsystemEntry{
+		{name: "point_defense", status: &subsystems.PointDefense},
+		{name: "sensors", status: &subsystems.Sensors},
+		{name: "fire_control", status: &subsystems.FireControl},
+		{name: "engine", status: &subsystems.Engine},
+	}
+	hitCount := 1
+	switch {
+	case pressure >= 120:
+		hitCount = 3
+	case pressure >= 70:
+		hitCount = 2
+	}
+	baseLoss := clampBattleFloat(0.16+float64(pressure)/220, 0.16, 0.65)
+	hits := make([]model.SpaceBattleSubsystemHit, 0, hitCount)
+	for i := 0; i < hitCount && i < len(order); i++ {
+		status := order[i].status
+		status.Integrity -= baseLoss + float64(i)*0.06
+		if status.Integrity < 0 {
+			status.Integrity = 0
+		}
+		updateFleetSubsystemStatus(order[i].name, status)
+		hits = append(hits, model.SpaceBattleSubsystemHit{
+			Subsystem: order[i].name,
+			State:     status.State,
+			Effect:    status.Effect,
+		})
+	}
+	return hits
+}
+
+func updateFleetSubsystemStatus(name string, status *model.SpaceFleetSubsystemStatus) {
+	if status == nil {
+		return
+	}
+	switch {
+	case status.Integrity <= 0.35:
+		status.State = model.SpaceFleetSubsystemDisabled
+	case status.Integrity <= 0.75:
+		status.State = model.SpaceFleetSubsystemDegraded
+	default:
+		status.State = model.SpaceFleetSubsystemOperational
+	}
+	switch name {
+	case "engine":
+		switch status.State {
+		case model.SpaceFleetSubsystemDisabled:
+			status.Effect = "drive blackout"
+		case model.SpaceFleetSubsystemDegraded:
+			status.Effect = "reduced thrust"
+		default:
+			status.Effect = "normal thrust"
+		}
+	case "fire_control":
+		switch status.State {
+		case model.SpaceFleetSubsystemDisabled:
+			status.Effect = "weapon coordination lost"
+		case model.SpaceFleetSubsystemDegraded:
+			status.Effect = "hit chance reduced"
+		default:
+			status.Effect = "stable firing solution"
+		}
+	case "sensors":
+		switch status.State {
+		case model.SpaceFleetSubsystemDisabled:
+			status.Effect = "sensor picture lost"
+		case model.SpaceFleetSubsystemDegraded:
+			status.Effect = "lock quality degraded"
+		default:
+			status.Effect = "full lock resolution"
+		}
+	case "point_defense":
+		switch status.State {
+		case model.SpaceFleetSubsystemDisabled:
+			status.Effect = "intercept grid offline"
+		case model.SpaceFleetSubsystemDegraded:
+			status.Effect = "intercept grid saturated"
+		default:
+			status.Effect = "intercept grid online"
+		}
+	}
+}
+
+func subsystemIntegrity(status model.SpaceFleetSubsystemStatus) float64 {
+	if status.Integrity <= 0 {
+		if status.State == "" {
+			return 1
+		}
+		return 0
+	}
+	return clampBattleFloat(status.Integrity, 0, 1)
+}
+
+func clampBattleFloat(value, minValue, maxValue float64) float64 {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
 func playerStateFromWorlds(worlds map[string]*model.WorldState, playerID string) *model.PlayerState {

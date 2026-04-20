@@ -187,6 +187,76 @@ export interface WeaponState {
   ammo_cost: number;
 }
 
+export interface DurabilityLayerState {
+  level: number;
+  max_level: number;
+}
+
+export interface SpaceWeaponMix {
+  direct_fire?: number;
+  missile?: number;
+  point_defense?: number;
+  electronic_warfare?: number;
+}
+
+export type SpaceFleetSubsystemStateType = 'operational' | 'degraded' | 'disabled';
+
+export interface SpaceFleetSubsystemStatus {
+  integrity: number;
+  state: SpaceFleetSubsystemStateType;
+  effect?: string;
+}
+
+export interface SpaceFleetSubsystemState {
+  engine: SpaceFleetSubsystemStatus;
+  fire_control: SpaceFleetSubsystemStatus;
+  sensors: SpaceFleetSubsystemStatus;
+  point_defense: SpaceFleetSubsystemStatus;
+}
+
+export interface SpaceMissileSalvoReport {
+  fired?: number;
+  intercepted?: number;
+  penetrated?: number;
+  drifted?: number;
+  damage?: number;
+}
+
+export interface SpaceBattleDamageSummary {
+  shield?: number;
+  armor?: number;
+  structure?: number;
+  subsystem?: number;
+}
+
+export interface SpaceBattleSubsystemHit {
+  subsystem: string;
+  state: SpaceFleetSubsystemStateType;
+  effect?: string;
+}
+
+export interface SpaceBattleReport {
+  battle_id: string;
+  tick: number;
+  system_id: string;
+  planet_id?: string;
+  fleet_id: string;
+  owner_id: string;
+  target_id?: string;
+  target_type?: string;
+  fleet_firepower: SpaceWeaponMix;
+  enemy_firepower: SpaceWeaponMix;
+  fleet_missile_salvo?: SpaceMissileSalvoReport;
+  enemy_missile_salvo?: SpaceMissileSalvoReport;
+  fleet_damage?: SpaceBattleDamageSummary;
+  target_strength_loss?: number;
+  subsystem_hits?: SpaceBattleSubsystemHit[];
+  retreat_triggered?: boolean;
+  target_destroyed?: boolean;
+  lock_quality?: number;
+  jamming_penalty?: number;
+}
+
 export interface OrbitPosition {
   planet_id: string;
   radius: number;
@@ -1446,14 +1516,20 @@ export interface FleetRuntimeView {
   formation: FormationType;
   state: FleetState;
   units?: FleetUnitStack[];
+  weapons: SpaceWeaponMix;
   sustainment: WarSustainmentState;
+  armor: DurabilityLayerState;
+  structure: DurabilityLayerState;
+  subsystems: SpaceFleetSubsystemState;
   target?: FleetTarget;
+  last_battle_report_id?: string;
 }
 
 export interface FleetDetailView extends FleetRuntimeView {
   weapon: WeaponState;
   shield: ShieldState;
   last_attack_tick?: number;
+  last_battle_report?: SpaceBattleReport;
 }
 
 export interface DysonNodeView {
@@ -1521,6 +1597,7 @@ export interface SystemRuntimeView {
   active_planet_context?: ActivePlanetDysonContextView;
   fleets?: FleetRuntimeView[];
   contacts?: SensorContact[];
+  battle_reports?: SpaceBattleReport[];
 }
 
 export interface CatalogView {
