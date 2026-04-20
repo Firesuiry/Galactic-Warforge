@@ -304,6 +304,11 @@ export type CommandType =
   | 'fleet_assign'
   | 'fleet_attack'
   | 'fleet_disband'
+  | 'blueprint_create'
+  | 'blueprint_set_component'
+  | 'blueprint_validate'
+  | 'blueprint_finalize'
+  | 'blueprint_variant'
   | 'launch_solar_sail'
   | 'launch_rocket'
   | 'build_dyson_node'
@@ -338,6 +343,7 @@ export interface CommandResult {
   status: string;
   code: string;
   message: string;
+  validation?: WarBlueprintValidationResult;
 }
 
 export interface CommandResponse {
@@ -450,6 +456,7 @@ export interface PlayerState {
   tech?: TechState;
   combat_tech?: CombatTechState;
   stats?: PlayerStatsSnapshot;
+  war_blueprints?: Record<string, WarBlueprintDetailView>;
   is_alive: boolean;
 }
 
@@ -984,6 +991,7 @@ export interface WarBudgetProfile {
   rigidity_capacity?: number;
   heat_capacity?: number;
   maintenance_limit?: number;
+  signal_capacity?: number;
 }
 
 export interface WarSlotSpec {
@@ -1029,6 +1037,8 @@ export interface WarComponentCatalogEntry {
   rigidity_load?: number;
   heat_load?: number;
   maintenance?: number;
+  signal_load?: number;
+  stealth_rating?: number;
   tags?: string[];
 }
 
@@ -1059,6 +1069,62 @@ export interface WarfareCatalogView {
   base_hulls?: WarBaseHullCatalogEntry[];
   components?: WarComponentCatalogEntry[];
   public_blueprints?: WarPublicBlueprintCatalogEntry[];
+}
+
+export type WarBlueprintState =
+  | 'draft'
+  | 'validated'
+  | 'prototype'
+  | 'field_tested'
+  | 'adopted'
+  | 'obsolete';
+
+export interface WarBlueprintBudgetUsage {
+  power_output?: number;
+  power_draw?: number;
+  volume?: number;
+  mass?: number;
+  rigidity_load?: number;
+  heat_load?: number;
+  maintenance?: number;
+  signal_load?: number;
+  stealth_rating?: number;
+}
+
+export interface WarBlueprintValidationIssue {
+  code: string;
+  message: string;
+  slot_id?: string;
+  component_id?: string;
+  actual?: number;
+  limit?: number;
+}
+
+export interface WarBlueprintValidationResult {
+  valid: boolean;
+  limits?: WarBudgetProfile;
+  usage?: WarBlueprintBudgetUsage;
+  issues?: WarBlueprintValidationIssue[];
+}
+
+export interface WarBlueprintDetailView {
+  id: string;
+  owner_id?: string;
+  name: string;
+  source: string;
+  state: WarBlueprintState;
+  domain: string;
+  base_frame_id?: string;
+  base_hull_id?: string;
+  parent_blueprint_id?: string;
+  allowed_variant_slots?: string[];
+  components?: WarBlueprintComponentSlot[];
+  validation: WarBlueprintValidationResult;
+  allowed_actions?: string[];
+}
+
+export interface WarBlueprintListView {
+  blueprints: WarBlueprintDetailView[];
 }
 
 export interface FleetRuntimeView {

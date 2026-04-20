@@ -29,6 +29,11 @@ const (
 	CmdFleetAssign              CommandType = "fleet_assign"
 	CmdFleetAttack              CommandType = "fleet_attack"
 	CmdFleetDisband             CommandType = "fleet_disband"
+	CmdBlueprintCreate          CommandType = "blueprint_create"
+	CmdBlueprintSetComponent    CommandType = "blueprint_set_component"
+	CmdBlueprintValidate        CommandType = "blueprint_validate"
+	CmdBlueprintFinalize        CommandType = "blueprint_finalize"
+	CmdBlueprintVariant         CommandType = "blueprint_variant"
 	CmdBuildDysonNode            CommandType = "build_dyson_node"
 	CmdBuildDysonFrame           CommandType = "build_dyson_frame"
 	CmdBuildDysonShell           CommandType = "build_dyson_shell"
@@ -94,6 +99,7 @@ type CommandResult struct {
 	Status       CommandStatus `json:"status"`
 	Code         ResultCode    `json:"code"`
 	Message      string        `json:"message"`
+	Validation   *WarBlueprintValidationResult `json:"validation,omitempty"`
 }
 
 // CommandResponse is the HTTP response for POST /commands

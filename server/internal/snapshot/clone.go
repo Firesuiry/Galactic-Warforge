@@ -11,15 +11,16 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		return nil
 	}
 	cp := &model.PlayerState{
-		PlayerID:   ps.PlayerID,
-		TeamID:     ps.TeamID,
-		Role:       ps.Role,
-		Resources:  ps.Resources,
-		Inventory:  ps.Inventory.Clone(),
-		IsAlive:    ps.IsAlive,
-		Tech:       clonePlayerTechState(ps.Tech),
-		CombatTech: clonePlayerCombatTechState(ps.CombatTech),
-		Stats:      clonePlayerStats(ps.Stats),
+		PlayerID:      ps.PlayerID,
+		TeamID:        ps.TeamID,
+		Role:          ps.Role,
+		Resources:     ps.Resources,
+		Inventory:     ps.Inventory.Clone(),
+		IsAlive:       ps.IsAlive,
+		Tech:          clonePlayerTechState(ps.Tech),
+		CombatTech:    clonePlayerCombatTechState(ps.CombatTech),
+		Stats:         clonePlayerStats(ps.Stats),
+		WarBlueprints: cloneWarBlueprintMap(ps.WarBlueprints),
 	}
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
@@ -39,6 +40,24 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		}
 	}
 	return cp
+}
+
+func cloneWarBlueprintMap(blueprints map[string]*model.WarBlueprint) map[string]*model.WarBlueprint {
+	if len(blueprints) == 0 {
+		return nil
+	}
+	out := make(map[string]*model.WarBlueprint, len(blueprints))
+	for id, blueprint := range blueprints {
+		out[id] = cloneWarBlueprint(blueprint)
+	}
+	return out
+}
+
+func cloneWarBlueprint(blueprint *model.WarBlueprint) *model.WarBlueprint {
+	if blueprint == nil {
+		return nil
+	}
+	return blueprint.Clone()
 }
 
 func clonePlayerResearch(research *model.PlayerResearch) *model.PlayerResearch {

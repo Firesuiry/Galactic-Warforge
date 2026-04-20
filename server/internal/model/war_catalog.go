@@ -30,6 +30,7 @@ type WarBudgetProfile struct {
 	RigidityCapacity int `json:"rigidity_capacity,omitempty"`
 	HeatCapacity     int `json:"heat_capacity,omitempty"`
 	MaintenanceLimit int `json:"maintenance_limit,omitempty"`
+	SignalCapacity   int `json:"signal_capacity,omitempty"`
 }
 
 // WarSlotSpec describes one chassis slot that can accept a component.
@@ -79,6 +80,8 @@ type WarComponentCatalogEntry struct {
 	RigidityLoad     int                  `json:"rigidity_load,omitempty"`
 	HeatLoad         int                  `json:"heat_load,omitempty"`
 	Maintenance      int                  `json:"maintenance,omitempty"`
+	SignalLoad       int                  `json:"signal_load,omitempty"`
+	StealthRating    int                  `json:"stealth_rating,omitempty"`
 	Tags             []string             `json:"tags,omitempty"`
 }
 
@@ -135,7 +138,7 @@ var warBaseFrameEntries = []WarBaseFrameCatalogEntry{
 		Description:      "High mobility frame for scouts, drones and light frontline templates.",
 		SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainAir},
 		VisibleTechID:    "prototype",
-		Budgets:          WarBudgetProfile{PowerOutput: 120, SustainedDraw: 90, PeakDraw: 120, VolumeCapacity: 96, MassCapacity: 80, RigidityCapacity: 72, HeatCapacity: 68, MaintenanceLimit: 3},
+		Budgets:          WarBudgetProfile{PowerOutput: 200, SustainedDraw: 120, PeakDraw: 180, VolumeCapacity: 110, MassCapacity: 80, RigidityCapacity: 72, HeatCapacity: 68, MaintenanceLimit: 8, SignalCapacity: 14},
 		Slots: []WarSlotSpec{
 			{ID: "power_core", Category: WarComponentCategoryPower, Required: true},
 			{ID: "mobility", Category: WarComponentCategoryPropulsion, Required: true},
@@ -151,14 +154,14 @@ var warBaseFrameEntries = []WarBaseFrameCatalogEntry{
 		Role:             "frontline_generalist",
 		Description:      "Balanced frame for sustained ground pushes and escort duties.",
 		SupportedDomains: []UnitDomain{UnitDomainGround},
-		Budgets:          WarBudgetProfile{PowerOutput: 180, SustainedDraw: 140, PeakDraw: 180, VolumeCapacity: 144, MassCapacity: 132, RigidityCapacity: 118, HeatCapacity: 110, MaintenanceLimit: 5},
+		Budgets:          WarBudgetProfile{PowerOutput: 240, SustainedDraw: 180, PeakDraw: 240, VolumeCapacity: 144, MassCapacity: 132, RigidityCapacity: 118, HeatCapacity: 110, MaintenanceLimit: 10, SignalCapacity: 16},
 		Slots: []WarSlotSpec{
 			{ID: "power_core", Category: WarComponentCategoryPower, Required: true},
 			{ID: "mobility", Category: WarComponentCategoryPropulsion, Required: true},
 			{ID: "armor", Category: WarComponentCategoryDefense, Required: true},
 			{ID: "sensor", Category: WarComponentCategorySensor, Required: true},
 			{ID: "weapon_primary", Category: WarComponentCategoryWeapon, Required: true},
-			{ID: "weapon_aux", Category: WarComponentCategoryWeapon},
+			{ID: "weapon_aux", Category: WarComponentCategoryDefense},
 			{ID: "utility", Category: WarComponentCategoryUtility},
 		},
 	},
@@ -168,14 +171,14 @@ var warBaseFrameEntries = []WarBaseFrameCatalogEntry{
 		Role:             "breakthrough_guard",
 		Description:      "Armor-heavy frame for defensive anchors and siege escorts.",
 		SupportedDomains: []UnitDomain{UnitDomainGround},
-		Budgets:          WarBudgetProfile{PowerOutput: 260, SustainedDraw: 210, PeakDraw: 280, VolumeCapacity: 220, MassCapacity: 220, RigidityCapacity: 180, HeatCapacity: 160, MaintenanceLimit: 8},
+		Budgets:          WarBudgetProfile{PowerOutput: 320, SustainedDraw: 240, PeakDraw: 320, VolumeCapacity: 220, MassCapacity: 220, RigidityCapacity: 180, HeatCapacity: 160, MaintenanceLimit: 14, SignalCapacity: 18},
 		Slots: []WarSlotSpec{
 			{ID: "power_core", Category: WarComponentCategoryPower, Required: true},
 			{ID: "mobility", Category: WarComponentCategoryPropulsion, Required: true},
 			{ID: "armor", Category: WarComponentCategoryDefense, Required: true},
 			{ID: "sensor", Category: WarComponentCategorySensor, Required: true},
 			{ID: "weapon_primary", Category: WarComponentCategoryWeapon, Required: true},
-			{ID: "weapon_aux", Category: WarComponentCategoryWeapon},
+			{ID: "weapon_aux", Category: WarComponentCategoryDefense},
 			{ID: "utility_0", Category: WarComponentCategoryUtility},
 			{ID: "utility_1", Category: WarComponentCategoryUtility},
 		},
@@ -186,7 +189,7 @@ var warBaseFrameEntries = []WarBaseFrameCatalogEntry{
 		Role:             "high_commitment_assault",
 		Description:      "Oversized frame for shock assaults that require dedicated logistics.",
 		SupportedDomains: []UnitDomain{UnitDomainGround},
-		Budgets:          WarBudgetProfile{PowerOutput: 340, SustainedDraw: 270, PeakDraw: 360, VolumeCapacity: 280, MassCapacity: 300, RigidityCapacity: 240, HeatCapacity: 220, MaintenanceLimit: 11},
+		Budgets:          WarBudgetProfile{PowerOutput: 420, SustainedDraw: 320, PeakDraw: 420, VolumeCapacity: 280, MassCapacity: 300, RigidityCapacity: 240, HeatCapacity: 220, MaintenanceLimit: 18, SignalCapacity: 22},
 		Slots: []WarSlotSpec{
 			{ID: "power_core", Category: WarComponentCategoryPower, Required: true},
 			{ID: "mobility", Category: WarComponentCategoryPropulsion, Required: true},
@@ -208,7 +211,7 @@ var warBaseHullEntries = []WarBaseHullCatalogEntry{
 		Description:      "Fast response hull for patrol, harassment and screening.",
 		SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace},
 		VisibleTechID:    "corvette",
-		Budgets:          WarBudgetProfile{PowerOutput: 320, SustainedDraw: 240, PeakDraw: 320, VolumeCapacity: 260, MassCapacity: 220, RigidityCapacity: 200, HeatCapacity: 180, MaintenanceLimit: 8},
+		Budgets:          WarBudgetProfile{PowerOutput: 420, SustainedDraw: 300, PeakDraw: 420, VolumeCapacity: 260, MassCapacity: 220, RigidityCapacity: 200, HeatCapacity: 180, MaintenanceLimit: 12, SignalCapacity: 18},
 		Slots: []WarSlotSpec{
 			{ID: "reactor", Category: WarComponentCategoryPower, Required: true},
 			{ID: "drive", Category: WarComponentCategoryPropulsion, Required: true},
@@ -225,14 +228,14 @@ var warBaseHullEntries = []WarBaseHullCatalogEntry{
 		Description:      "Multi-role escort hull with stronger shields and point defense.",
 		SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace},
 		VisibleTechID:    "destroyer",
-		Budgets:          WarBudgetProfile{PowerOutput: 460, SustainedDraw: 360, PeakDraw: 460, VolumeCapacity: 380, MassCapacity: 340, RigidityCapacity: 310, HeatCapacity: 260, MaintenanceLimit: 12},
+		Budgets:          WarBudgetProfile{PowerOutput: 520, SustainedDraw: 400, PeakDraw: 520, VolumeCapacity: 380, MassCapacity: 340, RigidityCapacity: 310, HeatCapacity: 260, MaintenanceLimit: 16, SignalCapacity: 20},
 		Slots: []WarSlotSpec{
 			{ID: "reactor", Category: WarComponentCategoryPower, Required: true},
 			{ID: "drive", Category: WarComponentCategoryPropulsion, Required: true},
 			{ID: "armor", Category: WarComponentCategoryDefense, Required: true},
 			{ID: "sensor", Category: WarComponentCategorySensor, Required: true},
 			{ID: "weapon_primary", Category: WarComponentCategoryWeapon, Required: true},
-			{ID: "weapon_aux", Category: WarComponentCategoryWeapon},
+			{ID: "weapon_aux", Category: WarComponentCategoryDefense},
 			{ID: "utility", Category: WarComponentCategoryUtility},
 		},
 	},
@@ -242,7 +245,7 @@ var warBaseHullEntries = []WarBaseHullCatalogEntry{
 		Role:             "line_fire_support",
 		Description:      "Long-range hull reserved for heavier fleet doctrines.",
 		SupportedDomains: []UnitDomain{UnitDomainSpace},
-		Budgets:          WarBudgetProfile{PowerOutput: 640, SustainedDraw: 500, PeakDraw: 680, VolumeCapacity: 560, MassCapacity: 520, RigidityCapacity: 430, HeatCapacity: 360, MaintenanceLimit: 16},
+		Budgets:          WarBudgetProfile{PowerOutput: 700, SustainedDraw: 540, PeakDraw: 700, VolumeCapacity: 560, MassCapacity: 520, RigidityCapacity: 430, HeatCapacity: 360, MaintenanceLimit: 20, SignalCapacity: 24},
 		Slots: []WarSlotSpec{
 			{ID: "reactor", Category: WarComponentCategoryPower, Required: true},
 			{ID: "drive", Category: WarComponentCategoryPropulsion, Required: true},
@@ -259,7 +262,7 @@ var warBaseHullEntries = []WarBaseHullCatalogEntry{
 		Role:             "drone_missile_platform",
 		Description:      "Support hull built around hangars, datalinks and standoff fire.",
 		SupportedDomains: []UnitDomain{UnitDomainSpace},
-		Budgets:          WarBudgetProfile{PowerOutput: 620, SustainedDraw: 470, PeakDraw: 650, VolumeCapacity: 600, MassCapacity: 560, RigidityCapacity: 400, HeatCapacity: 340, MaintenanceLimit: 18},
+		Budgets:          WarBudgetProfile{PowerOutput: 700, SustainedDraw: 520, PeakDraw: 700, VolumeCapacity: 600, MassCapacity: 560, RigidityCapacity: 400, HeatCapacity: 340, MaintenanceLimit: 22, SignalCapacity: 24},
 		Slots: []WarSlotSpec{
 			{ID: "reactor", Category: WarComponentCategoryPower, Required: true},
 			{ID: "drive", Category: WarComponentCategoryPropulsion, Required: true},
@@ -276,7 +279,7 @@ var warBaseHullEntries = []WarBaseHullCatalogEntry{
 		Role:             "orbital_pressure",
 		Description:      "Slow heavy hull for orbital suppression and fortified pushes.",
 		SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace},
-		Budgets:          WarBudgetProfile{PowerOutput: 700, SustainedDraw: 560, PeakDraw: 760, VolumeCapacity: 660, MassCapacity: 680, RigidityCapacity: 520, HeatCapacity: 420, MaintenanceLimit: 22},
+		Budgets:          WarBudgetProfile{PowerOutput: 760, SustainedDraw: 600, PeakDraw: 760, VolumeCapacity: 660, MassCapacity: 680, RigidityCapacity: 520, HeatCapacity: 420, MaintenanceLimit: 26, SignalCapacity: 24},
 		Slots: []WarSlotSpec{
 			{ID: "reactor", Category: WarComponentCategoryPower, Required: true},
 			{ID: "drive", Category: WarComponentCategoryPropulsion, Required: true},
@@ -290,21 +293,21 @@ var warBaseHullEntries = []WarBaseHullCatalogEntry{
 }
 
 var warComponentEntries = []WarComponentCatalogEntry{
-	{ID: "micro_reactor", Name: "Micro Reactor", Category: WarComponentCategoryPower, SlotKind: "core", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainAir}, PowerOutput: 140, Volume: 18, Mass: 14, HeatLoad: 8, Maintenance: 1, Tags: []string{"starter", "reactor"}},
-	{ID: "naval_fission_core", Name: "Naval Fission Core", Category: WarComponentCategoryPower, SlotKind: "core", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerOutput: 380, Volume: 44, Mass: 36, HeatLoad: 18, Maintenance: 3, Tags: []string{"naval", "reactor"}},
-	{ID: "servo_drive", Name: "Servo Drive", Category: WarComponentCategoryPropulsion, SlotKind: "mobility", SupportedDomains: []UnitDomain{UnitDomainGround}, PowerDraw: 28, Volume: 14, Mass: 10, RigidityLoad: 8, HeatLoad: 5, Maintenance: 1, Tags: []string{"ground"}},
-	{ID: "vector_thrusters", Name: "Vector Thrusters", Category: WarComponentCategoryPropulsion, SlotKind: "drive", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 54, Volume: 24, Mass: 18, RigidityLoad: 12, HeatLoad: 10, Maintenance: 2, Tags: []string{"flight", "naval"}},
-	{ID: "reactive_armor", Name: "Reactive Armor", Category: WarComponentCategoryDefense, SlotKind: "armor", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 8, Volume: 16, Mass: 20, RigidityLoad: 10, Maintenance: 1, Tags: []string{"armor"}},
-	{ID: "escort_shield", Name: "Escort Shield", Category: WarComponentCategoryDefense, SlotKind: "shield", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 36, Volume: 20, Mass: 14, HeatLoad: 8, Maintenance: 2, Tags: []string{"shield"}},
-	{ID: "point_defense_grid", Name: "Point Defense Grid", Category: WarComponentCategoryDefense, SlotKind: "hardpoint", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 22, Volume: 12, Mass: 8, HeatLoad: 6, Maintenance: 2, Tags: []string{"pd"}},
-	{ID: "tactical_radar", Name: "Tactical Radar", Category: WarComponentCategorySensor, SlotKind: "sensor", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 14, Volume: 8, Mass: 6, HeatLoad: 3, Maintenance: 1, Tags: []string{"active_sensor"}},
-	{ID: "battle_link_array", Name: "Battle Link Array", Category: WarComponentCategorySensor, SlotKind: "sensor", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 18, Volume: 10, Mass: 6, HeatLoad: 4, Maintenance: 1, Tags: []string{"datalink"}},
-	{ID: "plasma_lance", Name: "Plasma Lance", Category: WarComponentCategoryWeapon, SlotKind: "weapon", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainSpace}, PowerDraw: 42, Volume: 20, Mass: 16, RigidityLoad: 12, HeatLoad: 16, Maintenance: 2, Tags: []string{"direct_fire"}},
-	{ID: "swarm_missile_pod", Name: "Swarm Missile Pod", Category: WarComponentCategoryWeapon, SlotKind: "weapon", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 24, Volume: 16, Mass: 12, RigidityLoad: 6, HeatLoad: 8, Maintenance: 2, Tags: []string{"missile"}},
-	{ID: "coilgun_battery", Name: "Coilgun Battery", Category: WarComponentCategoryWeapon, SlotKind: "weapon", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 56, Volume: 26, Mass: 20, RigidityLoad: 16, HeatLoad: 14, Maintenance: 3, Tags: []string{"kinetic"}},
-	{ID: "field_repair_pack", Name: "Field Repair Pack", Category: WarComponentCategoryUtility, SlotKind: "utility", SupportedDomains: []UnitDomain{UnitDomainGround}, PowerDraw: 10, Volume: 8, Mass: 6, Maintenance: 1, Tags: []string{"repair"}},
-	{ID: "ecm_suite", Name: "ECM Suite", Category: WarComponentCategoryUtility, SlotKind: "utility", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 16, Volume: 10, Mass: 8, HeatLoad: 4, Maintenance: 1, Tags: []string{"ecm"}},
-	{ID: "drone_bay", Name: "Drone Bay", Category: WarComponentCategoryUtility, SlotKind: "utility", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 20, Volume: 18, Mass: 14, HeatLoad: 6, Maintenance: 2, Tags: []string{"hangar"}},
+	{ID: "micro_reactor", Name: "Micro Reactor", Category: WarComponentCategoryPower, SlotKind: "core", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainAir}, PowerOutput: 170, Volume: 18, Mass: 14, HeatLoad: 8, Maintenance: 1, SignalLoad: 2, Tags: []string{"starter", "reactor"}},
+	{ID: "naval_fission_core", Name: "Naval Fission Core", Category: WarComponentCategoryPower, SlotKind: "core", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerOutput: 380, Volume: 44, Mass: 36, HeatLoad: 18, Maintenance: 3, SignalLoad: 4, Tags: []string{"naval", "reactor"}},
+	{ID: "servo_drive", Name: "Servo Drive", Category: WarComponentCategoryPropulsion, SlotKind: "mobility", SupportedDomains: []UnitDomain{UnitDomainGround}, PowerDraw: 28, Volume: 14, Mass: 10, RigidityLoad: 8, HeatLoad: 5, Maintenance: 1, SignalLoad: 1, Tags: []string{"ground"}},
+	{ID: "vector_thrusters", Name: "Vector Thrusters", Category: WarComponentCategoryPropulsion, SlotKind: "drive", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 54, Volume: 24, Mass: 18, RigidityLoad: 12, HeatLoad: 10, Maintenance: 2, SignalLoad: 3, Tags: []string{"flight", "naval"}},
+	{ID: "reactive_armor", Name: "Reactive Armor", Category: WarComponentCategoryDefense, SlotKind: "armor", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 8, Volume: 16, Mass: 20, RigidityLoad: 10, Maintenance: 1, SignalLoad: 1, Tags: []string{"armor"}},
+	{ID: "escort_shield", Name: "Escort Shield", Category: WarComponentCategoryDefense, SlotKind: "shield", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 36, Volume: 20, Mass: 14, HeatLoad: 8, Maintenance: 2, SignalLoad: 2, Tags: []string{"shield"}},
+	{ID: "point_defense_grid", Name: "Point Defense Grid", Category: WarComponentCategoryDefense, SlotKind: "hardpoint", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 22, Volume: 12, Mass: 8, HeatLoad: 6, Maintenance: 2, SignalLoad: 1, Tags: []string{"pd"}},
+	{ID: "tactical_radar", Name: "Tactical Radar", Category: WarComponentCategorySensor, SlotKind: "sensor", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 14, Volume: 8, Mass: 6, HeatLoad: 3, Maintenance: 1, SignalLoad: 5, Tags: []string{"active_sensor"}},
+	{ID: "battle_link_array", Name: "Battle Link Array", Category: WarComponentCategorySensor, SlotKind: "sensor", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 18, Volume: 10, Mass: 6, HeatLoad: 4, Maintenance: 1, SignalLoad: 4, Tags: []string{"datalink"}},
+	{ID: "plasma_lance", Name: "Plasma Lance", Category: WarComponentCategoryWeapon, SlotKind: "weapon", SupportedDomains: []UnitDomain{UnitDomainGround, UnitDomainSpace}, PowerDraw: 42, Volume: 20, Mass: 16, RigidityLoad: 12, HeatLoad: 16, Maintenance: 2, SignalLoad: 4, Tags: []string{"direct_fire"}},
+	{ID: "swarm_missile_pod", Name: "Swarm Missile Pod", Category: WarComponentCategoryWeapon, SlotKind: "weapon", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 24, Volume: 16, Mass: 12, RigidityLoad: 6, HeatLoad: 8, Maintenance: 2, SignalLoad: 3, Tags: []string{"missile"}},
+	{ID: "coilgun_battery", Name: "Coilgun Battery", Category: WarComponentCategoryWeapon, SlotKind: "weapon", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 56, Volume: 26, Mass: 20, RigidityLoad: 16, HeatLoad: 14, Maintenance: 3, SignalLoad: 4, Tags: []string{"kinetic"}},
+	{ID: "field_repair_pack", Name: "Field Repair Pack", Category: WarComponentCategoryUtility, SlotKind: "utility", SupportedDomains: []UnitDomain{UnitDomainGround}, PowerDraw: 10, Volume: 8, Mass: 6, Maintenance: 1, SignalLoad: 1, Tags: []string{"repair"}},
+	{ID: "ecm_suite", Name: "ECM Suite", Category: WarComponentCategoryUtility, SlotKind: "utility", SupportedDomains: []UnitDomain{UnitDomainAir, UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 16, Volume: 10, Mass: 8, HeatLoad: 4, Maintenance: 1, SignalLoad: 1, StealthRating: 2, Tags: []string{"ecm"}},
+	{ID: "drone_bay", Name: "Drone Bay", Category: WarComponentCategoryUtility, SlotKind: "utility", SupportedDomains: []UnitDomain{UnitDomainOrbital, UnitDomainSpace}, PowerDraw: 20, Volume: 18, Mass: 14, HeatLoad: 6, Maintenance: 2, SignalLoad: 2, Tags: []string{"hangar"}},
 }
 
 var warPublicBlueprintEntries = []WarPublicBlueprintCatalogEntry{

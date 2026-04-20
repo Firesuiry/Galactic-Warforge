@@ -162,6 +162,17 @@ func (ps *PlayerState) AddItems(items []ItemAmount) {
 	}
 }
 
+// EnsureWarBlueprints returns a writable blueprint map.
+func (ps *PlayerState) EnsureWarBlueprints() map[string]*WarBlueprint {
+	if ps == nil {
+		return nil
+	}
+	if ps.WarBlueprints == nil {
+		ps.WarBlueprints = make(map[string]*WarBlueprint)
+	}
+	return ps.WarBlueprints
+}
+
 func normalizePermissions(perms []string) []string {
 	if len(perms) == 0 {
 		return nil

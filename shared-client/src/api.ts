@@ -36,6 +36,9 @@ import type {
   StateSummary,
   SystemRuntimeView,
   SystemView,
+  WarBlueprintListView,
+  WarBlueprintState,
+  WarBlueprintDetailView,
 } from './types.js';
 import { resolveServerUrl } from './utils.js';
 
@@ -163,6 +166,20 @@ export interface DeploySquadOptions {
 export interface CommissionFleetOptions {
   count?: number;
   fleetId?: string;
+}
+
+export interface CreateBlueprintOptions {
+  name?: string;
+  baseFrameId?: string;
+  baseHullId?: string;
+}
+
+export interface FinalizeBlueprintOptions {
+  targetState?: WarBlueprintState;
+}
+
+export interface VariantBlueprintOptions {
+  name?: string;
 }
 
 export type FleetFormation = FormationType;
@@ -316,6 +333,14 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchCatalog(): Promise<CatalogView> {
     return apiFetch<CatalogView>('/catalog');
+  }
+
+  function fetchWarfareBlueprints(): Promise<WarBlueprintListView> {
+    return apiFetch<WarBlueprintListView>('/world/warfare/blueprints');
+  }
+
+  function fetchWarfareBlueprint(blueprintId: string): Promise<WarBlueprintDetailView> {
+    return apiFetch<WarBlueprintDetailView>(`/world/warfare/blueprints/${blueprintId}`);
   }
 
   function fetchFleets(): Promise<FleetDetailView[]> {
@@ -631,6 +656,69 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdBlueprintCreate(blueprintId: string, domain: string, options: CreateBlueprintOptions) {
+    return sendSingleCommand({
+      type: 'blueprint_create',
+      target: { layer: 'planet' },
+      payload: {
+        blueprint_id: blueprintId,
+        domain,
+        ...(options.name ? { name: options.name } : {}),
+        ...(options.baseFrameId ? { base_frame_id: options.baseFrameId } : {}),
+        ...(options.baseHullId ? { base_hull_id: options.baseHullId } : {}),
+      },
+    });
+  }
+
+  function cmdBlueprintSetComponent(blueprintId: string, slotId: string, componentId: string) {
+    return sendSingleCommand({
+      type: 'blueprint_set_component',
+      target: { layer: 'planet' },
+      payload: {
+        blueprint_id: blueprintId,
+        slot_id: slotId,
+        component_id: componentId,
+      },
+    });
+  }
+
+  function cmdBlueprintValidate(blueprintId: string) {
+    return sendSingleCommand({
+      type: 'blueprint_validate',
+      target: { layer: 'planet' },
+      payload: { blueprint_id: blueprintId },
+    });
+  }
+
+  function cmdBlueprintFinalize(blueprintId: string, options: FinalizeBlueprintOptions = {}) {
+    return sendSingleCommand({
+      type: 'blueprint_finalize',
+      target: { layer: 'planet' },
+      payload: {
+        blueprint_id: blueprintId,
+        ...(options.targetState ? { target_state: options.targetState } : {}),
+      },
+    });
+  }
+
+  function cmdBlueprintVariant(
+    parentBlueprintId: string,
+    blueprintId: string,
+    allowedSlotIds: string[],
+    options: VariantBlueprintOptions = {},
+  ) {
+    return sendSingleCommand({
+      type: 'blueprint_variant',
+      target: { layer: 'planet' },
+      payload: {
+        parent_blueprint_id: parentBlueprintId,
+        blueprint_id: blueprintId,
+        allowed_slot_ids: allowedSlotIds,
+        ...(options.name ? { name: options.name } : {}),
+      },
+    });
+  }
+
   function cmdLaunchSolarSail(buildingId: string, launchOptions: LaunchSolarSailOptions = {}) {
     return sendSingleCommand({
       type: 'launch_solar_sail',
@@ -717,6 +805,11 @@ export function createApiClient(options: ApiClientOptions) {
     clearAuth,
     cmdAttack,
     cmdBuild,
+    cmdBlueprintCreate,
+    cmdBlueprintFinalize,
+    cmdBlueprintSetComponent,
+    cmdBlueprintValidate,
+    cmdBlueprintVariant,
     cmdBuildDysonFrame,
     cmdBuildDysonNode,
     cmdBuildDysonShell,
@@ -763,6 +856,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchSummary,
     fetchSystem,
     fetchSystemRuntime,
+    fetchWarfareBlueprint,
+    fetchWarfareBlueprints,
     getAuth,
     getServerUrl,
     sendCommandRequest,

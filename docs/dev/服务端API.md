@@ -833,6 +833,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to` / `max_level` / `icon_key` / `color`
   - `world_units`：公开世界单位目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `production_mode` / `query_scopes` / `commands` / `hidden_reason`
   - `warfare`：战争目录聚合，包含 `base_frames` / `base_hulls` / `components` / `public_blueprints`
+  - `warfare.base_frames[]` / `warfare.base_hulls[]`：当前会在 `budgets` 中额外暴露 `signal_capacity`，用于蓝图校验时的信号/隐形预算
+  - `warfare.components[]`：当前会额外暴露 `signal_load` / `stealth_rating`，用于蓝图校验时的签名负荷与隐蔽加成
   - `warfare.public_blueprints`：公开预置蓝图目录，包含 `id` / `name` / `domain` / `source` / `base_frame_id` / `base_hull_id` / `visible_tech_id` / `runtime_class` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `components`
 - 响应示例:
 ```json
@@ -1010,6 +1012,25 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 ---
 
+**GET /world/warfare/blueprints**
+- 说明: 当前玩家自有战争蓝图列表（需认证）
+- 响应字段:
+  - `blueprints[]`：玩家蓝图详情，包含 `id` / `owner_id` / `name` / `source` / `state` / `domain` / `base_frame_id` / `base_hull_id` / `parent_blueprint_id` / `allowed_variant_slots` / `components` / `validation` / `allowed_actions`
+  - `validation`：当前按 authoritative 目录即时重算的校验结果，包含 `valid` / `limits` / `usage` / `issues`
+  - `validation.issues[]`：结构化失败原因，包含 `code` / `message` / 可选 `slot_id` / `component_id` / `actual` / `limit`
+- 说明补充:
+  - 这里只返回当前玩家自己的蓝图对象，不混入公开预置蓝图；预置蓝图仍通过 `/catalog.warfare.public_blueprints` 暴露
+  - `allowed_actions` 会直接反映状态机约束，例如 `draft` 允许 `set_component` / `validate`，`prototype` 允许 `finalize` / `variant`
+
+**GET /world/warfare/blueprints/{blueprint_id}**
+- 说明: 查询一个战争蓝图详情（需认证）
+- 说明补充:
+  - 若 `blueprint_id` 属于当前玩家自有蓝图，返回玩家蓝图对象
+  - 若 `blueprint_id` 不在玩家自有蓝图中，但命中了公开预置蓝图（例如 `prototype` / `corvette`），则返回预置蓝图的统一详情视图
+  - 预置蓝图会复用同一套校验器，当前返回为 `source = preset` 且 `state = adopted`
+
+---
+
 **POST /commands**
 - 说明: 提交命令（需认证）
 - 说明补充: `issuer_type` 与 `issuer_id` 必填；当 `issuer_type=player` 时，`issuer_id` 必须与 Bearer key 对应的玩家一致；命令会进行权限校验（`permissions`），无权限则直接拒绝
@@ -1027,7 +1048,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1073,10 +1094,17 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "coverage": 0.4,
         "component_type": "node|frame|shell",
         "component_id": "shell-1",
+        "domain": "ground|air|orbital|space",
+        "base_frame_id": "light_frame|medium_frame|heavy_frame|assault_frame",
+        "base_hull_id": "corvette_hull|destroyer_hull|cruiser_hull|carrier_hull|siege_hull",
+        "slot_id": "power_core|mobility|armor|sensor|weapon_primary|weapon_aux|utility|reactor|drive",
+        "allowed_slot_ids": ["utility"],
+        "target_state": "prototype|field_tested|adopted|obsolete",
+        "parent_blueprint_id": "prototype|玩家已有 blueprint_id",
         "target_entity_id": "entity-2",
         "target_id": "enemy-1",
         "unit_type": "仅 produce 使用；当前 /catalog.world_units 中 public=true 且 production_mode=world_produce 的 unit id",
-        "blueprint_id": "deploy_squad / commission_fleet 使用；当前 /catalog.warfare.public_blueprints 中的公开蓝图 id"
+        "blueprint_id": "deploy_squad / commission_fleet 使用时为公开蓝图 id；blueprint_* 命令使用时为玩家蓝图 id"
       }
     }
   ]
@@ -1104,6 +1132,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
+  - `blueprint_create`：`payload.blueprint_id` + `payload.domain` 必填，且必须二选一提供 `payload.base_frame_id` 或 `payload.base_hull_id`；当前只创建玩家自有蓝图草案，不会生成任何部署载荷；若 `blueprint_id` 与公开预置蓝图或当前玩家已有蓝图重名，会直接拒绝
+  - `blueprint_set_component`：`payload.blueprint_id` + `payload.slot_id` + `payload.component_id` 必填；只允许编辑 `draft` / `validated` 蓝图；这里允许先装入未来会被校验器判非法的组件组合，真正的 legality 以 `blueprint_validate` 结果为准；若蓝图是受控改型，只能修改 `allowed_variant_slots` 白名单中的槽位
+  - `blueprint_validate`：`payload.blueprint_id` 必填；只允许校验 `draft` / `validated` 蓝图；服务端会返回结构化 `validation`，覆盖功率、体积、质量、刚性、热负荷、信号/隐形、维护成本以及 `hardpoint_mismatch` 等原因；当校验失败时，最终 authoritative `command_result.payload.validation.issues[]` 可直接用于 CLI/Web 展示
+  - `blueprint_finalize`：`payload.blueprint_id` 必填；`payload.target_state` 可选，未传时按状态机走默认下一阶段（`validated -> prototype -> field_tested -> adopted -> obsolete`）；当前只允许合法迁移；从 `validated` 进入更高阶段前，蓝图必须已经通过校验
+  - `blueprint_variant`：`payload.parent_blueprint_id` + `payload.blueprint_id` + `payload.allowed_slot_ids[]` 必填；父蓝图既可以是当前玩家已定型蓝图，也可以是公开预置蓝图；服务端会复制父蓝图的底盘、域和组件形成新的 `draft` 改型，并记录 `parent_blueprint_id`；后续只能修改 `allowed_slot_ids` 指定的槽位
   - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；若发射器配置了轨道半径/倾角约束，`payload.orbit_radius` / `payload.inclination` 还必须落在该建筑运行参数允许范围内；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
   - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件；当前每枚火箭都会让目标层 `rocket_launches += 1`，并按 `min(0.5, rocket_launches * 0.02)` 重算 `construction_bonus`
   - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选；要求玩家已解锁 `dyson_component`；若目标层不存在，服务端会先自动补层，层半径优先取 `payload.orbit_radius`，否则回退为 `1.0 + 0.5 * layer_index`
@@ -1223,6 +1256,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
     - 对 `build`，如果这里只返回 `OK + construction task ... queued`，不要把它误判成“建筑已完全落地并可运行”；后续还应继续观察同坐标的 `entity_created` 与对应 `building_state_changed`
     - 对 `build` 超范围失败，当前常见失败消息就是 `executor out of range: <distance> > <operate_range>`；客户端可以直接把这条 authoritative message 翻译成移动执行体的下一步提示
+    - 对 `blueprint_validate` / `blueprint_finalize` / `blueprint_variant` 这类战争蓝图命令，若 payload 里带有 `validation`，其结构与 `/world/warfare/blueprints*` 返回的 `validation` 一致；客户端应优先消费这份 authoritative 结构化原因，而不是自己二次拼错误文案
   - `resource_changed`：电力链路现在会在同一轮 authoritative 电力结算里只提交一次最终 `energy`；后续同 tick 的矿物/产出事件若继续复用 `resource_changed`，会沿用同一个最终 `energy` 值，不再在 `10000 -> 99xx -> 98xx` 间来回跳变。
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。

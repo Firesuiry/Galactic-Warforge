@@ -740,6 +740,16 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execFleetAttack(gc.world, qr.PlayerID, cmd)
 		case model.CmdFleetDisband:
 			res, evts = gc.execFleetDisband(gc.world, qr.PlayerID, cmd)
+		case model.CmdBlueprintCreate:
+			res, evts = gc.execBlueprintCreate(gc.world, qr.PlayerID, cmd)
+		case model.CmdBlueprintSetComponent:
+			res, evts = gc.execBlueprintSetComponent(gc.world, qr.PlayerID, cmd)
+		case model.CmdBlueprintValidate:
+			res, evts = gc.execBlueprintValidate(gc.world, qr.PlayerID, cmd)
+		case model.CmdBlueprintFinalize:
+			res, evts = gc.execBlueprintFinalize(gc.world, qr.PlayerID, cmd)
+		case model.CmdBlueprintVariant:
+			res, evts = gc.execBlueprintVariant(gc.world, qr.PlayerID, cmd)
 		case model.CmdUpgrade:
 			res, evts = gc.execUpgrade(gc.world, qr.PlayerID, cmd)
 		case model.CmdDemolish:
@@ -793,17 +803,21 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 }
 
 func commandResultEvent(qr *model.QueuedRequest, cmd model.Command, res model.CommandResult) *model.GameEvent {
+	payload := map[string]any{
+		"request_id":    qr.Request.RequestID,
+		"command_index": res.CommandIndex,
+		"command_type":  cmd.Type,
+		"status":        res.Status,
+		"code":          res.Code,
+		"message":       res.Message,
+	}
+	if res.Validation != nil {
+		payload["validation"] = res.Validation
+	}
 	return &model.GameEvent{
 		EventType:       model.EvtCommandResult,
 		VisibilityScope: qr.PlayerID,
-		Payload: map[string]any{
-			"request_id":    qr.Request.RequestID,
-			"command_index": res.CommandIndex,
-			"command_type":  cmd.Type,
-			"status":        res.Status,
-			"code":          res.Code,
-			"message":       res.Message,
-		},
+		Payload:         payload,
 	}
 }
 
