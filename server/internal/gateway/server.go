@@ -117,6 +117,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
 	mux.HandleFunc("GET /war/blueprints", s.auth(s.handleWarBlueprints))
 	mux.HandleFunc("GET /war/blueprints/{blueprint_id}", s.auth(s.handleWarBlueprint))
+	mux.HandleFunc("GET /war/task-forces", s.auth(s.handleWarTaskForces))
+	mux.HandleFunc("GET /war/theaters", s.auth(s.handleWarTheaters))
 
 	// Commands
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
@@ -374,6 +376,20 @@ func (s *Server) handleWarBlueprint(w http.ResponseWriter, r *http.Request, play
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
+}
+
+// handleWarTaskForces returns GET /war/task-forces
+func (s *Server) handleWarTaskForces(w http.ResponseWriter, r *http.Request, playerID string) {
+	writeJSON(
+		w,
+		http.StatusOK,
+		s.ql.WarTaskForces(s.core.World(), playerID, s.core.Worlds(), s.core.SpaceRuntime()),
+	)
+}
+
+// handleWarTheaters returns GET /war/theaters
+func (s *Server) handleWarTheaters(w http.ResponseWriter, r *http.Request, playerID string) {
+	writeJSON(w, http.StatusOK, s.ql.WarTheaters(s.core.World(), playerID))
 }
 
 // handleCommands handles POST /commands
@@ -938,6 +954,49 @@ func validateCommandStructure(cmd model.Command) error {
 	case model.CmdFleetDisband:
 		if _, ok := cmd.Payload["fleet_id"]; !ok {
 			return fmt.Errorf("fleet_disband requires payload.fleet_id")
+		}
+	case model.CmdTaskForceCreate:
+		if _, ok := cmd.Payload["task_force_id"]; !ok {
+			return fmt.Errorf("task_force_create requires payload.task_force_id")
+		}
+	case model.CmdTaskForceAssign:
+		for _, field := range []string{"task_force_id", "member_kind", "member_ids"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("task_force_assign requires payload.%s", field)
+			}
+		}
+	case model.CmdTaskForceSetStance:
+		for _, field := range []string{"task_force_id", "stance"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("task_force_set_stance requires payload.%s", field)
+			}
+		}
+	case model.CmdTaskForceDeploy:
+		if _, ok := cmd.Payload["task_force_id"]; !ok {
+			return fmt.Errorf("task_force_deploy requires payload.task_force_id")
+		}
+		if _, ok := cmd.Payload["system_id"]; !ok {
+			if _, ok := cmd.Payload["planet_id"]; !ok {
+				if _, ok := cmd.Payload["position"]; !ok {
+					return fmt.Errorf("task_force_deploy requires at least one of payload.system_id, payload.planet_id, payload.position")
+				}
+			}
+		}
+	case model.CmdTheaterCreate:
+		if _, ok := cmd.Payload["theater_id"]; !ok {
+			return fmt.Errorf("theater_create requires payload.theater_id")
+		}
+	case model.CmdTheaterDefineZone:
+		for _, field := range []string{"theater_id", "zone_type"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("theater_define_zone requires payload.%s", field)
+			}
+		}
+	case model.CmdTheaterSetObjective:
+		for _, field := range []string{"theater_id", "objective_type"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("theater_set_objective requires payload.%s", field)
+			}
 		}
 	case model.CmdBlueprintCreate:
 		if _, ok := cmd.Payload["blueprint_id"]; !ok {

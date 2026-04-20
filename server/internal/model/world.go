@@ -27,6 +27,7 @@ type PlayerState struct {
 	CombatTech    *PlayerCombatTechState             `json:"combat_tech,omitempty"`
 	Stats         *PlayerStats                       `json:"stats,omitempty"`
 	WarBlueprints map[string]*WarBlueprintDefinition `json:"war_blueprints,omitempty"`
+	WarCoordination *WarCoordinationState            `json:"war_coordination,omitempty"`
 
 	permissionSet map[string]struct{} `json:"-"`
 }

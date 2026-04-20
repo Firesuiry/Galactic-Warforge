@@ -28,6 +28,13 @@ func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T
 		{Type: model.CmdBlueprintSetStatus, Payload: map[string]any{"blueprint_id": "bp-1", "status": string(model.WarBlueprintStatusFieldTested)}},
 		{Type: model.CommandType("queue_military_production"), Payload: map[string]any{"building_id": "b-1", "blueprint_id": "bp-1", "count": 1}},
 		{Type: model.CommandType("refit_unit"), Payload: map[string]any{"building_id": "b-1", "unit_id": "squad-1", "target_blueprint_id": "prototype"}},
+		{Type: model.CmdTaskForceCreate, Payload: map[string]any{"task_force_id": "tf-1", "stance": string(model.WarTaskForceStanceEscort)}},
+		{Type: model.CmdTaskForceAssign, Payload: map[string]any{"task_force_id": "tf-1", "member_kind": string(model.WarTaskForceMemberKindFleet), "member_ids": []string{"fleet-1"}}},
+		{Type: model.CmdTaskForceSetStance, Payload: map[string]any{"task_force_id": "tf-1", "stance": string(model.WarTaskForceStanceIntercept)}},
+		{Type: model.CmdTaskForceDeploy, Payload: map[string]any{"task_force_id": "tf-1", "system_id": "sys-1"}},
+		{Type: model.CmdTheaterCreate, Payload: map[string]any{"theater_id": "theater-1"}},
+		{Type: model.CmdTheaterDefineZone, Payload: map[string]any{"theater_id": "theater-1", "zone_type": string(model.WarTheaterZoneTypePrimary)}},
+		{Type: model.CmdTheaterSetObjective, Payload: map[string]any{"theater_id": "theater-1", "objective_type": "secure_planet"}},
 	}
 
 	for _, cmd := range cases {
@@ -213,6 +220,41 @@ func TestValidateCommandStructureRejectsIncompleteBlueprintCommands(t *testing.T
 				Payload: map[string]any{"building_id": "b-1", "unit_id": "squad-1"},
 			},
 			msg: "payload.target_blueprint_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTaskForceAssign,
+				Payload: map[string]any{"task_force_id": "tf-1", "member_kind": string(model.WarTaskForceMemberKindFleet)},
+			},
+			msg: "payload.member_ids",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTaskForceSetStance,
+				Payload: map[string]any{"task_force_id": "tf-1"},
+			},
+			msg: "payload.stance",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTaskForceDeploy,
+				Payload: map[string]any{"task_force_id": "tf-1"},
+			},
+			msg: "at least one of payload.system_id, payload.planet_id, payload.position",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTheaterDefineZone,
+				Payload: map[string]any{"theater_id": "theater-1"},
+			},
+			msg: "payload.zone_type",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdTheaterSetObjective,
+				Payload: map[string]any{"theater_id": "theater-1"},
+			},
+			msg: "payload.objective_type",
 		},
 	}
 

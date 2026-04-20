@@ -1172,6 +1172,28 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     - `signal_signature_exceeded`
     - `maintenance_budget_exceeded`
 
+**GET /war/task-forces**
+- 说明: 返回当前认证玩家名下的任务群列表（需认证）
+- 响应字段:
+  - `task_forces[]`：每个任务群包含 `id` / `name` / `theater_id` / `stance` / `deployment` / `members` / `command_capacity`
+  - `members[]`：每个成员包含 `kind` / `entity_id` / `planet_id|system_id` / `blueprint_ids` / `count` / `state`
+  - `command_capacity`：包含 `total` / `used` / `over` / `delay_penalty` / `hit_penalty` / `formation_penalty` / `coordination_penalty` / `sources`
+  - `sources[]`：每个来源包含 `source_id` / `source_type` / `label` / `entity_id` / `planet_id|system_id` / `capacity`
+- 说明补充:
+  - `stance` 是 authoritative 运行态字段，不是 UI 注释
+  - `command_capacity` 会按当前任务群成员、部署负担和指挥源实时计算；超编时 `over` 与各类 penalty 会同步上升
+  - 当前 `source_type` 至少覆盖 `command_center`、`command_ship`、`battlefield_analysis_base`、`military_ai_core`
+
+**GET /war/theaters**
+- 说明: 返回当前认证玩家名下的战区列表（需认证）
+- 响应字段:
+  - `theaters[]`：每个战区包含 `id` / `name` / `zones` / `objective`
+  - `zones[]`：每个区域包含 `zone_type` / `system_id` / `planet_id` / `position` / `radius`
+  - `objective`：当前战区目标，包含 `objective_type` / `system_id` / `planet_id` / `entity_id` / `description`
+- 说明补充:
+  - 当前支持的 `zone_type` 包括 `primary`、`secondary`、`no_entry`、`rally`、`supply_priority`
+  - 同一 `zone_type` 再次定义时会覆盖旧值，保持战区 authoritative 配置单一来源
+
 ---
 
 **POST /commands**
@@ -1191,7 +1213,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1274,6 +1296,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
+  - `task_force_create`：`payload.task_force_id` 必填；可选 `payload.name`、`payload.stance`；`stance` 当前支持 `hold|patrol|escort|intercept|harass|siege|bombard|retreat_on_losses`
+  - `task_force_assign`：`payload.task_force_id` + `payload.member_kind` + `payload.member_ids` 必填；`member_kind` 当前支持 `squad|fleet`；同一 runtime 成员只能属于一个任务群，新分配会自动从旧任务群移除
+  - `task_force_set_stance`：`payload.task_force_id` + `payload.stance` 必填；姿态会直接影响 authoritative 结算中的目标选择、交战距离、追击与撤退阈值
+  - `task_force_deploy`：`payload.task_force_id` 必填；`payload.system_id` / `payload.planet_id` / `payload.position` 至少需要一项；可选 `payload.theater_id`；当前写入的是 authoritative 部署意图与战区绑定，不伪装成已经完成自动航渡
+  - `theater_create`：`payload.theater_id` 必填；可选 `payload.name`
+  - `theater_define_zone`：`payload.theater_id` + `payload.zone_type` 必填；可选 `payload.system_id`、`payload.planet_id`、`payload.position`、`payload.radius`
+  - `theater_set_objective`：`payload.theater_id` + `payload.objective_type` 必填；可选 `payload.system_id`、`payload.planet_id`、`payload.entity_id`、`payload.description`
   - `blueprint_create`：`payload.blueprint_id` + `payload.name` 必填，且必须在 `payload.base_frame_id` / `payload.base_hull_id` 中二选一；目标底盘对应科技必须已解锁；玩家私有蓝图 id 不能与公开 `public_blueprints[].id` 冲突；新建蓝图初始状态固定为 `draft`
   - `blueprint_set_component`：`payload.blueprint_id` + `payload.slot_id` + `payload.component_id` 必填；只允许修改当前玩家自己的 `draft|validated` 蓝图；若此前已有 `last_validation`，本次改动会把蓝图自动打回 `draft` 并清空最近一次校验结果；若该蓝图是改型，则只能修改其 `modifiable_slots` 内的槽位
   - `blueprint_validate`：`payload.blueprint_id` 必填；只允许对当前玩家自己的 `draft|validated` 蓝图执行；校验成功时会把蓝图推进到 `validated`，失败时会保留在 `draft`；无论成功还是失败，`results[].details.validation` 和 `GET /war/blueprints/{blueprint_id}.last_validation` 都会同步写入结构化校验结果
