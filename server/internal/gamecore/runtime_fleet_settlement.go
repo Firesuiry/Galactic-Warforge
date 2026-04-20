@@ -75,16 +75,39 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 				continue
 			}
 			for _, fleet := range systemRuntime.Fleets {
-				if fleet == nil || fleet.State != model.FleetStateAttacking || fleet.Target == nil {
+				if fleet == nil {
+					continue
+				}
+				taskForce := taskForceByMember(systemRuntime, model.RuntimeUnitKindFleet, fleet.ID)
+				if taskForce != nil {
+					taskForce.Behavior = model.DefaultTaskForceBehavior(taskForce.Stance)
+				}
+				if fleet.State != model.FleetStateAttacking || fleet.Target == nil {
 					continue
 				}
 				targetWorld := worlds[fleet.Target.PlanetID]
 				if targetWorld == nil || targetWorld.EnemyForces == nil {
 					continue
 				}
+				if taskForce != nil && shouldRetreatFleet(taskForce, fleet) {
+					taskForce.Status = model.TaskForceStatusRetreating
+					fleet.State = model.FleetStateIdle
+					fleet.Target = nil
+					events = append(events, &model.GameEvent{
+						EventType:       model.EvtEntityUpdated,
+						VisibilityScope: fleet.OwnerID,
+						Payload: map[string]any{
+							"entity_type": "task_force",
+							"entity_id":   taskForce.ID,
+							"status":      taskForce.Status,
+							"fleet_id":    fleet.ID,
+						},
+					})
+					continue
+				}
 				target := findEnemyForceByID(targetWorld, fleet.Target.TargetID)
 				if target == nil {
-					target = findNearestEnemyForce(targetWorld, model.Position{X: targetWorld.MapWidth / 2, Y: targetWorld.MapHeight / 2})
+					target = selectFleetTarget(targetWorld, taskForce, fleet.Target)
 				}
 				if target == nil {
 					fleet.State = model.FleetStateIdle
@@ -92,11 +115,28 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 					continue
 				}
 
-				damage := max(1, fleet.Weapon.Damage/4)
+				delayTicks := 0
+				hitRateMultiplier := 1.0
+				coordinationMultiplier := 1.0
+				if taskForce != nil {
+					delayTicks = taskForce.CommandCapacity.Penalty.DelayTicks
+					hitRateMultiplier = taskForce.CommandCapacity.Penalty.HitRateMultiplier
+					coordinationMultiplier = taskForce.CommandCapacity.Penalty.CoordinationMultiplier
+					if taskForce.Behavior.PreserveStealth {
+						hitRateMultiplier *= 0.9
+					}
+				}
+				if currentTick-fleet.LastAttackTick < int64(fleet.Weapon.FireRate+delayTicks) {
+					continue
+				}
+				damage := max(1, int(float64(fleet.Weapon.Damage/4)*hitRateMultiplier*coordinationMultiplier))
 				target.Strength -= damage
 				fleet.LastAttackTick = currentTick
 				fleet.Weapon.LastFireTick = currentTick
 				fleet.Shield.ProcessShieldRecharge(currentTick)
+				if taskForce != nil {
+					taskForce.Status = model.TaskForceStatusEngaging
+				}
 
 				events = append(events, &model.GameEvent{
 					EventType:       model.EvtDamageApplied,
@@ -109,6 +149,13 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 						"damage":        damage,
 					},
 				})
+				if target.Strength > 0 && fleet.Shield.MaxLevel > 0 {
+					counterDamage := max(1, damage/3)
+					fleet.Shield.Level -= float64(counterDamage)
+					if fleet.Shield.Level < 0 {
+						fleet.Shield.Level = 0
+					}
+				}
 
 				if target.Strength <= 0 {
 					events = append(events, &model.GameEvent{
@@ -122,8 +169,18 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 						},
 					})
 					removeEnemyForce(targetWorld, target.ID)
-					fleet.State = model.FleetStateIdle
-					fleet.Target = nil
+					if taskForce == nil || !taskForce.Behavior.Pursue {
+						fleet.State = model.FleetStateIdle
+						fleet.Target = nil
+					} else {
+						nextTarget := selectFleetTarget(targetWorld, taskForce, fleet.Target)
+						if nextTarget == nil {
+							fleet.State = model.FleetStateIdle
+							fleet.Target = nil
+						} else {
+							fleet.Target = &model.FleetTarget{PlanetID: targetWorld.PlanetID, TargetID: nextTarget.ID}
+						}
+					}
 				}
 			}
 		}
@@ -136,4 +193,43 @@ func findEnemyForceBySquadTarget(ws *model.WorldState, targetID string) *model.E
 		return nil
 	}
 	return findEnemyForceByID(ws, targetID)
+}
+
+func taskForceByMember(systemRuntime *model.PlayerSystemRuntime, unitKind model.RuntimeUnitKind, unitID string) *model.TaskForce {
+	if systemRuntime == nil {
+		return nil
+	}
+	for _, taskForce := range systemRuntime.TaskForces {
+		if taskForce == nil {
+			continue
+		}
+		for _, member := range taskForce.Members {
+			if member.UnitKind == unitKind && member.UnitID == unitID {
+				return taskForce
+			}
+		}
+	}
+	return nil
+}
+
+func shouldRetreatFleet(taskForce *model.TaskForce, fleet *model.SpaceFleet) bool {
+	if taskForce == nil || fleet == nil || taskForce.Behavior.RetreatLossThreshold <= 0 || fleet.Shield.MaxLevel <= 0 {
+		return false
+	}
+	return fleet.Shield.Level/fleet.Shield.MaxLevel <= taskForce.Behavior.RetreatLossThreshold
+}
+
+func selectFleetTarget(targetWorld *model.WorldState, taskForce *model.TaskForce, fallback *model.FleetTarget) *model.EnemyForce {
+	if targetWorld == nil || targetWorld.EnemyForces == nil {
+		return nil
+	}
+	if fallback != nil {
+		if target := findEnemyForceByID(targetWorld, fallback.TargetID); target != nil {
+			return target
+		}
+	}
+	if taskForce == nil {
+		return findNearestEnemyForce(targetWorld, model.Position{X: targetWorld.MapWidth / 2, Y: targetWorld.MapHeight / 2})
+	}
+	return selectEnemyForceForTaskForce(targetWorld, taskForce.Behavior, taskForce.DeploymentTarget)
 }

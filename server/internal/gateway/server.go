@@ -114,6 +114,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/planets/{planet_id}/networks", s.auth(s.handlePlanetNetworks))
 	mux.HandleFunc("GET /world/fleets", s.auth(s.handleFleets))
 	mux.HandleFunc("GET /world/fleets/{fleet_id}", s.auth(s.handleFleet))
+	mux.HandleFunc("GET /world/task-forces", s.auth(s.handleTaskForces))
+	mux.HandleFunc("GET /world/task-forces/{task_force_id}", s.auth(s.handleTaskForce))
+	mux.HandleFunc("GET /world/theaters", s.auth(s.handleTheaters))
+	mux.HandleFunc("GET /world/theaters/{theater_id}", s.auth(s.handleTheater))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
 	mux.HandleFunc("GET /war/blueprints", s.auth(s.handleWarBlueprints))
 	mux.HandleFunc("GET /war/blueprints/{blueprint_id}", s.auth(s.handleWarBlueprint))
@@ -349,6 +353,38 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request, playerID st
 	view, ok := s.ql.Fleet(playerID, fleetID, s.core.SpaceRuntime())
 	if !ok {
 		writeError(w, http.StatusNotFound, "fleet not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleTaskForces returns GET /world/task-forces
+func (s *Server) handleTaskForces(w http.ResponseWriter, r *http.Request, playerID string) {
+	writeJSON(w, http.StatusOK, s.ql.TaskForces(playerID, s.core.SpaceRuntime()))
+}
+
+// handleTaskForce returns GET /world/task-forces/{task_force_id}
+func (s *Server) handleTaskForce(w http.ResponseWriter, r *http.Request, playerID string) {
+	taskForceID := r.PathValue("task_force_id")
+	view, ok := s.ql.TaskForce(playerID, taskForceID, s.core.SpaceRuntime())
+	if !ok {
+		writeError(w, http.StatusNotFound, "task force not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleTheaters returns GET /world/theaters
+func (s *Server) handleTheaters(w http.ResponseWriter, r *http.Request, playerID string) {
+	writeJSON(w, http.StatusOK, s.ql.Theaters(playerID, s.core.SpaceRuntime()))
+}
+
+// handleTheater returns GET /world/theaters/{theater_id}
+func (s *Server) handleTheater(w http.ResponseWriter, r *http.Request, playerID string) {
+	theaterID := r.PathValue("theater_id")
+	view, ok := s.ql.Theater(playerID, theaterID, s.core.SpaceRuntime())
+	if !ok {
+		writeError(w, http.StatusNotFound, "theater not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, view)

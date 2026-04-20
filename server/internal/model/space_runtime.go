@@ -18,6 +18,8 @@ type PlayerSystemRuntime struct {
 	SolarSailOrbit *SolarSailOrbitState   `json:"solar_sail_orbit,omitempty"`
 	DysonSphere    *DysonSphereState      `json:"dyson_sphere,omitempty"`
 	Fleets         map[string]*SpaceFleet `json:"fleets,omitempty"`
+	TaskForces     map[string]*TaskForce  `json:"task_forces,omitempty"`
+	Theaters       map[string]*Theater    `json:"theaters,omitempty"`
 }
 
 // NewSpaceRuntimeState returns an initialized empty space runtime.
@@ -58,13 +60,21 @@ func (rt *SpaceRuntimeState) EnsurePlayerSystem(playerID, systemID string) *Play
 	systemRuntime, ok := playerRuntime.Systems[systemID]
 	if !ok || systemRuntime == nil {
 		systemRuntime = &PlayerSystemRuntime{
-			SystemID: systemID,
-			Fleets:   make(map[string]*SpaceFleet),
+			SystemID:   systemID,
+			Fleets:     make(map[string]*SpaceFleet),
+			TaskForces: make(map[string]*TaskForce),
+			Theaters:   make(map[string]*Theater),
 		}
 		playerRuntime.Systems[systemID] = systemRuntime
 	}
 	if systemRuntime.Fleets == nil {
 		systemRuntime.Fleets = make(map[string]*SpaceFleet)
+	}
+	if systemRuntime.TaskForces == nil {
+		systemRuntime.TaskForces = make(map[string]*TaskForce)
+	}
+	if systemRuntime.Theaters == nil {
+		systemRuntime.Theaters = make(map[string]*Theater)
 	}
 	return systemRuntime
 }
@@ -130,8 +140,10 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 				continue
 			}
 			systemCopy := &PlayerSystemRuntime{
-				SystemID: systemRuntime.SystemID,
-				Fleets:   make(map[string]*SpaceFleet, len(systemRuntime.Fleets)),
+				SystemID:   systemRuntime.SystemID,
+				Fleets:     make(map[string]*SpaceFleet, len(systemRuntime.Fleets)),
+				TaskForces: make(map[string]*TaskForce, len(systemRuntime.TaskForces)),
+				Theaters:   make(map[string]*Theater, len(systemRuntime.Theaters)),
 			}
 			if systemRuntime.SolarSailOrbit != nil {
 				orbitCopy := *systemRuntime.SolarSailOrbit
@@ -150,6 +162,18 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 					fleetCopy.Target = &targetCopy
 				}
 				systemCopy.Fleets[fleetID] = &fleetCopy
+			}
+			for taskForceID, taskForce := range systemRuntime.TaskForces {
+				if taskForce == nil {
+					continue
+				}
+				systemCopy.TaskForces[taskForceID] = cloneTaskForce(taskForce)
+			}
+			for theaterID, theater := range systemRuntime.Theaters {
+				if theater == nil {
+					continue
+				}
+				systemCopy.Theaters[theaterID] = cloneTheater(theater)
 			}
 			playerCopy.Systems[systemID] = systemCopy
 		}

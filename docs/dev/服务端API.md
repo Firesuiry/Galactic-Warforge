@@ -346,12 +346,17 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 当前会公开四类 system-scoped runtime：
     - `solar_sail_orbit`
     - `dyson_sphere`
-    - `active_planet_context`
-    - `fleets`
+  - `active_planet_context`
+  - `fleets`
+  - `task_forces`
+  - `theaters`
   - `active_planet_context` 只在当前 `active_planet_id` 属于该 system，且该 active world 已加载时返回；它不会跨其他行星做扫描补数
   - `active_planet_context` 只是当前 active world 上玩家自有 `em_rail_ejector` / `vertical_launching_silo` / `ray_receiver` 的聚合计数，本身不等于该 system 已经存在 `space runtime`；不过当前官方 midgame 会同时用 `scenario_bootstrap` 预置行星锚点和 system runtime 锚点，所以 fresh 启动后通常会直接看到非零计数与 `available=true`
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
   - `fleets[].units[].blueprint_id` 是 authoritative 编成来源；`unit_type` 当前仍与 `blueprint_id` 保持同值，仅作为兼容镜像保留
+  - `task_forces` 由 `task_force_create|task_force_assign|task_force_set_stance|task_force_deploy` 写入同一份 `SpaceRuntimeState`；成员当前支持 `fleet` 与 `combat_squad` 两类 authoritative runtime 引用
+  - `task_forces[].command_capacity` 会返回当前任务群的 authoritative 指挥容量、来源、占用和超编惩罚；当前来源至少覆盖 `command_center` / `command_ship` / `battlefield_analysis_base` / `military_ai_core`
+  - `theaters` 由 `theater_create|theater_define_zone|theater_set_objective` 写入同一份 `SpaceRuntimeState`；当前按 `system_id` 归属，不做跨恒星系聚合
 - 响应字段:
   - `system_id` / `discovered` / `available`
   - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
@@ -366,6 +371,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
+  - `task_forces`：包含 `task_force_id` / `owner_id` / `system_id` / `theater_id` / `stance` / `status` / `members` / `deployment_target` / `behavior` / `command_capacity`
+  - `task_forces[].members[]`：包含 `unit_kind` / `unit_id` / `system_id` / `planet_id`；`unit_kind` 当前只会是 `fleet` 或 `combat_squad`
+  - `task_forces[].deployment_target`：包含 `layer` / `system_id` / `planet_id` / `position`
+  - `task_forces[].behavior`：包含 `target_priority` / `engagement_range_multiplier` / `pursue` / `preserve_stealth` / `retreat_loss_threshold`
+  - `task_forces[].command_capacity`：包含 `total` / `used` / `over` / `sources` / `penalty`
+  - `task_forces[].command_capacity.sources[]`：包含 `type` / `source_id` / `label` / `capacity`
+  - `task_forces[].command_capacity.penalty`：包含 `delay_ticks` / `hit_rate_multiplier` / `formation_multiplier` / `coordination_multiplier`
+  - `theaters`：包含 `theater_id` / `owner_id` / `system_id` / `name` / `zones` / `objective` / `task_force_ids`
+  - `theaters[].zones[]`：包含 `zone_type` / `system_id` / `planet_id` / `position`
+  - `theaters[].objective`：包含 `objective_type` / `target_system_id` / `target_planet_id` / `position`
 - 响应示例:
 ```json
 {
@@ -409,6 +424,66 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "state": "idle",
       "units": [{"blueprint_id": "corvette", "unit_type": "corvette", "count": 1}]
     }
+  ],
+  "task_forces": [
+    {
+      "task_force_id": "tf-alpha",
+      "owner_id": "p1",
+      "system_id": "sys-1",
+      "theater_id": "theater-home",
+      "stance": "aggressive_pursuit",
+      "status": "engaging",
+      "members": [
+        {"unit_kind": "fleet", "unit_id": "fleet-demo", "system_id": "sys-1"}
+      ],
+      "deployment_target": {
+        "layer": "planet",
+        "system_id": "sys-1",
+        "planet_id": "planet-1-1",
+        "position": {"x": 11, "y": 11}
+      },
+      "behavior": {
+        "target_priority": "highest_threat",
+        "engagement_range_multiplier": 1.25,
+        "pursue": true,
+        "preserve_stealth": false,
+        "retreat_loss_threshold": 0
+      },
+      "command_capacity": {
+        "total": 20,
+        "used": 37,
+        "over": 17,
+        "sources": [
+          {"type": "command_center", "source_id": "command-center:p1", "label": "Strategic Command", "capacity": 4},
+          {"type": "battlefield_analysis_base", "source_id": "base-1", "label": "Battlefield Analysis Base", "capacity": 6},
+          {"type": "military_ai_core", "source_id": "ai-core-1", "label": "Military AI Core", "capacity": 5},
+          {"type": "command_ship", "source_id": "fleet-demo", "label": "Flag Command Ship", "capacity": 5}
+        ],
+        "penalty": {
+          "delay_ticks": 5,
+          "hit_rate_multiplier": 0.45,
+          "formation_multiplier": 0.4,
+          "coordination_multiplier": 0.35
+        }
+      }
+    }
+  ],
+  "theaters": [
+    {
+      "theater_id": "theater-home",
+      "owner_id": "p1",
+      "system_id": "sys-1",
+      "name": "Home Theater",
+      "zones": [
+        {"zone_type": "primary", "system_id": "sys-1", "planet_id": "planet-1-1"}
+      ],
+      "objective": {
+        "objective_type": "secure_orbit",
+        "target_system_id": "sys-1",
+        "target_planet_id": "planet-1-1"
+      },
+      "task_force_ids": ["tf-alpha"]
+    }
   ]
 }
 ```
@@ -446,6 +521,40 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "shield": {"level": 40, "max_level": 40, "recharge_rate": 2, "recharge_delay": 10}
 }
 ```
+
+**GET /world/task-forces**
+- 说明: 当前玩家可见任务群列表（需认证）
+- 说明补充:
+  - 当前只返回当前玩家自己在 `space runtime` 中拥有的任务群
+  - 空列表固定返回 `[]`
+- 响应字段:
+  - `task_force_id` / `owner_id` / `system_id` / `theater_id` / `stance` / `status` / `members` / `deployment_target` / `behavior` / `command_capacity`
+
+**GET /world/task-forces/{task_force_id}**
+- 说明: 单任务群 authoritative 详情（需认证）
+- 响应字段:
+  - `task_force_id` / `owner_id` / `system_id` / `theater_id`
+  - `stance` / `status`
+  - `members`
+  - `deployment_target`
+  - `behavior`
+  - `command_capacity`
+
+**GET /world/theaters**
+- 说明: 当前玩家可见战区列表（需认证）
+- 说明补充:
+  - 当前只返回当前玩家自己在 `space runtime` 中拥有的战区
+  - 空列表固定返回 `[]`
+- 响应字段:
+  - `theater_id` / `owner_id` / `system_id` / `name` / `zones` / `objective` / `task_force_ids`
+
+**GET /world/theaters/{theater_id}**
+- 说明: 单战区 authoritative 详情（需认证）
+- 响应字段:
+  - `theater_id` / `owner_id` / `system_id` / `name`
+  - `zones`
+  - `objective`
+  - `task_force_ids`
 
 **GET /world/planets/{planet_id}**
 - 说明: 行星概要（需认证）
@@ -1191,7 +1300,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1224,6 +1333,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "count": 1,
         "fleet_id": "fleet-1",
         "formation": "line|vee|circle|wedge",
+        "task_force_id": "tf-alpha",
+        "theater_id": "theater-home",
+        "zone_type": "primary|secondary|exclusion|assembly|supply_priority",
+        "stance": "hold|patrol|escort|intercept|harass|siege|bombard|retreat_on_losses|preserve_stealth|aggressive_pursuit",
+        "objective_type": "secure_orbit|defend|patrol_route",
         "blueprint_id": "bp-prototype-1",
         "parent_blueprint_id": "prototype",
         "base_frame_id": "light_frame",
@@ -1274,6 +1388,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
+  - `task_force_create`：`payload.task_force_id` + `payload.system_id` 必填；可选 `payload.name` / `payload.theater_id`；若传 `theater_id`，目标战区必须已存在且归属同一玩家同一 `system_id`
+  - `task_force_assign`：`payload.task_force_id` 必填；至少传 `payload.fleet_ids[]` 或 `payload.squad_ids[]` 其中一项；当前成员引用只接受玩家自有的 `fleet` 与 `combat_squad` authoritative runtime 实体，并会把成员列表整体替换为本次 payload
+  - `task_force_set_stance`：`payload.task_force_id` + `payload.stance` 必填；`stance` 取 `hold|patrol|escort|intercept|harass|siege|bombard|retreat_on_losses|preserve_stealth|aggressive_pursuit`；服务端会同步重算 `behavior` 和 `command_capacity.penalty`
+  - `task_force_deploy`：`payload.task_force_id` 必填；至少传 `payload.system_id` / `payload.planet_id` / `payload.position` 之一；服务端会写入 `deployment_target`，并在目标行星存在敌对势力时给已编入的舰队 / 战斗小队自动分配目标；当前不实现跨恒星系真实航渡，只记录目标并驱动同系统 runtime 行为
+  - `theater_create`：`payload.theater_id` + `payload.system_id` 必填；可选 `payload.name`
+  - `theater_define_zone`：`payload.theater_id` + `payload.zone_type` 必填；可选 `payload.planet_id` / `payload.position`；`zone_type` 取 `primary|secondary|exclusion|assembly|supply_priority`
+  - `theater_set_objective`：`payload.theater_id` + `payload.objective_type` 必填；可选 `payload.target_system_id` / `payload.target_planet_id` / `payload.position`
   - `blueprint_create`：`payload.blueprint_id` + `payload.name` 必填，且必须在 `payload.base_frame_id` / `payload.base_hull_id` 中二选一；目标底盘对应科技必须已解锁；玩家私有蓝图 id 不能与公开 `public_blueprints[].id` 冲突；新建蓝图初始状态固定为 `draft`
   - `blueprint_set_component`：`payload.blueprint_id` + `payload.slot_id` + `payload.component_id` 必填；只允许修改当前玩家自己的 `draft|validated` 蓝图；若此前已有 `last_validation`，本次改动会把蓝图自动打回 `draft` 并清空最近一次校验结果；若该蓝图是改型，则只能修改其 `modifiable_slots` 内的槽位
   - `blueprint_validate`：`payload.blueprint_id` 必填；只允许对当前玩家自己的 `draft|validated` 蓝图执行；校验成功时会把蓝图推进到 `validated`，失败时会保留在 `draft`；无论成功还是失败，`results[].details.validation` 和 `GET /war/blueprints/{blueprint_id}.last_validation` 都会同步写入结构化校验结果
