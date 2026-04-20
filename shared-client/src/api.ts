@@ -14,11 +14,13 @@ import type {
   FleetDetailView,
   FormationType,
   GalaxyView,
+  GroundTaskForceOrder,
   HealthResponse,
   CatalogView,
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
   MetricsSnapshot,
+  OrbitalSupportMode,
   PlanetInspectEntityKind,
   PlanetInspectView,
   PlanetOverviewView,
@@ -211,6 +213,9 @@ export interface TaskForceDeployOptions {
   systemId?: string;
   planetId?: string;
   position?: Position;
+  frontlineId?: string;
+  groundOrder?: GroundTaskForceOrder;
+  supportMode?: OrbitalSupportMode;
 }
 
 export interface TheaterCreateOptions {
@@ -231,6 +236,15 @@ export interface TheaterSetObjectiveOptions {
   planetId?: string;
   entityId?: string;
   description?: string;
+}
+
+export interface BlockadePlanetOptions {
+  planetId: string;
+}
+
+export interface LandingStartOptions {
+  planetId: string;
+  operationId?: string;
 }
 
 function buildUrl(serverUrl: string, path: string): string {
@@ -775,6 +789,9 @@ export function createApiClient(options: ApiClientOptions) {
         ...(options.systemId ? { system_id: options.systemId } : {}),
         ...(options.planetId ? { planet_id: options.planetId } : {}),
         ...(options.position ? { position: options.position } : {}),
+        ...(options.frontlineId ? { frontline_id: options.frontlineId } : {}),
+        ...(options.groundOrder ? { ground_order: options.groundOrder } : {}),
+        ...(options.supportMode ? { support_mode: options.supportMode } : {}),
       },
     });
   }
@@ -829,6 +846,29 @@ export function createApiClient(options: ApiClientOptions) {
         ...(options.planetId ? { planet_id: options.planetId } : {}),
         ...(options.entityId ? { entity_id: options.entityId } : {}),
         ...(options.description ? { description: options.description } : {}),
+      },
+    });
+  }
+
+  function cmdBlockadePlanet(taskForceId: string, options: BlockadePlanetOptions) {
+    return sendSingleCommand({
+      type: 'blockade_planet',
+      target: { layer: 'planet', planet_id: options.planetId, entity_id: taskForceId },
+      payload: {
+        task_force_id: taskForceId,
+        planet_id: options.planetId,
+      },
+    });
+  }
+
+  function cmdLandingStart(taskForceId: string, options: LandingStartOptions) {
+    return sendSingleCommand({
+      type: 'landing_start',
+      target: { layer: 'planet', planet_id: options.planetId, entity_id: taskForceId },
+      payload: {
+        task_force_id: taskForceId,
+        planet_id: options.planetId,
+        ...(options.operationId ? { operation_id: options.operationId } : {}),
       },
     });
   }
@@ -1017,6 +1057,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdBlueprintSetComponent,
     cmdBlueprintValidate,
     cmdBlueprintVariant,
+    cmdBlockadePlanet,
     cmdQueueMilitaryProduction,
     cmdRefitUnit,
     cmdBuildDysonFrame,
@@ -1041,6 +1082,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdFleetAttack,
     cmdFleetDisband,
     cmdLaunchRocket,
+    cmdLandingStart,
     cmdLaunchSolarSail,
     cmdMove,
     cmdProduce,

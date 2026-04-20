@@ -109,3 +109,50 @@ describe('fleet command registration', () => {
     assert.match(systemRuntimeHelp, /system_runtime \[system_id\]/);
   });
 });
+
+describe('warfare command registration', () => {
+  it('registers warfare query commands', async () => {
+    assert.ok(COMMANDS.planet_runtime);
+    assert.ok(COMMANDS.blueprints);
+    assert.ok(COMMANDS.war_industry);
+    assert.ok(COMMANDS.task_forces);
+    assert.ok(COMMANDS.theaters);
+
+    const runtimeHelp = await dispatch('help planet_runtime', { currentPlayer: 'p1', rl: {} });
+    assert.match(runtimeHelp, /planet_runtime \[planet_id\]/);
+
+    const blueprintHelp = await dispatch('help blueprints', { currentPlayer: 'p1', rl: {} });
+    assert.match(blueprintHelp, /blueprints \[blueprint_id\]/);
+
+    const industryHelp = await dispatch('help war_industry', { currentPlayer: 'p1', rl: {} });
+    assert.match(industryHelp, /war_industry/);
+  });
+
+  it('registers warfare action commands', async () => {
+    assert.ok(COMMANDS.blueprint_create);
+    assert.ok(COMMANDS.blueprint_set_component);
+    assert.ok(COMMANDS.blueprint_validate);
+    assert.ok(COMMANDS.blueprint_finalize);
+    assert.ok(COMMANDS.blueprint_variant);
+    assert.ok(COMMANDS.queue_military_production);
+    assert.ok(COMMANDS.refit_unit);
+    assert.ok(COMMANDS.task_force_create);
+    assert.ok(COMMANDS.task_force_assign);
+    assert.ok(COMMANDS.task_force_set_stance);
+    assert.ok(COMMANDS.task_force_deploy);
+    assert.ok(COMMANDS.theater_create);
+    assert.ok(COMMANDS.theater_define_zone);
+    assert.ok(COMMANDS.theater_set_objective);
+    assert.ok(COMMANDS.blockade_planet);
+    assert.ok(COMMANDS.landing_start);
+
+    const taskForceHelp = await dispatch('help task_force_create', { currentPlayer: 'p1', rl: {} });
+    assert.match(taskForceHelp, /task_force_create <task_force_id>/);
+
+    const blockadeHelp = await dispatch('help blockade_planet', { currentPlayer: 'p1', rl: {} });
+    assert.match(blockadeHelp, /blockade_planet <task_force_id> <planet_id>/);
+
+    const landingHelp = await dispatch('help landing_start', { currentPlayer: 'p1', rl: {} });
+    assert.match(landingHelp, /landing_start <task_force_id> <planet_id>/);
+  });
+});

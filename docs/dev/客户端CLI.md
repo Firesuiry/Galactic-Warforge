@@ -1,6 +1,6 @@
 # SiliconWorld 客户端 CLI
 
-`client-cli` 当前除了游戏 `server` 常用查询与 31 类核心命令外，也补齐了最小 `agent-gateway` 管理入口：`agent_list`、`agent_create`、`agent_update`、`agent_message`、`agent_thread`。这样案例 1 中“创建李斯 -> 李斯创建胡景 -> 李斯委派胡景建矿场”已经可以直接通过 CLI 回归。原有行星读取链路继续使用 `summary / scene / inspect` 三段式模型；对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。到 T100 为止，`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler` 以及终局高阶舰队线都能在官方 midgame 或派生验证局直接回归。
+`client-cli` 当前除了游戏 `server` 常用查询与基础建造命令外，也已经补齐战争系统的最小玩家闭环：蓝图创建 / 改型 / 校验 / 定型、军工排产与翻修、任务群 / 战区指挥、登陆与封锁命令，以及 `contacts / supply / battle_report` 所需的运行态查询。`agent-gateway` 的最小管理入口 `agent_list`、`agent_create`、`agent_update`、`agent_message`、`agent_thread` 也继续保留，因此 Case1“创建李斯 -> 李斯创建胡景 -> 李斯委派胡景建矿场”与战争链路可以共用同一套 CLI runtime。原有行星读取链路继续使用 `summary / scene / inspect` 三段式模型，对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。
 
 公共游戏命令目录现在以 `shared-client/src/command-catalog.ts` 为单一真相：CLI、Web 和文档都从这份目录对齐命令 alias、分类和公开范围。`client-cli/src/command-catalog.ts` 只在其上补 `health / summary / save` 这类 CLI 专属命令，不再手写第二份公共命令分类。
 
@@ -44,7 +44,14 @@
 | `stats`          | 无                                                           | 查询 `GET /state/stats`；其中 `production_stats` 表示当前 active world 当前 tick 的真实落库 / 落站产出 |
 | `galaxy`         | 无                                                           | 查询 `GET /world/galaxy`                                          |
 | `system`         | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}`，默认 `sys-1`               |
+| `system_runtime` | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}/runtime`，包含舰队、contacts、封锁、登陆与战报 |
 | `planet`         | `[planet_id]`                                                | 查询 `GET /world/planets/{planet_id}` 行星概要，默认 `planet-1-1` |
+| `planet_runtime` | `[planet_id]`                                                | 查询 `GET /world/planets/{planet_id}/runtime`，包含 contacts、滩头、前线与地面任务群 |
+| `fleet_status`   | `[fleet_id]`                                                 | 查询 `GET /world/fleets` 或 `GET /world/fleets/{fleet_id}`        |
+| `blueprints`     | `[blueprint_id]`                                             | 查询 `GET /world/warfare/blueprints`，或查询某个蓝图详情          |
+| `war_industry`   | 无                                                           | 查询 `GET /world/warfare/industry`，输出生产单、翻修单、部署枢纽和军需节点 |
+| `task_forces`    | 无                                                           | 查询 `GET /world/warfare/task-forces`                             |
+| `theaters`       | 无                                                           | 查询 `GET /world/warfare/theaters`                                |
 | `scene`          | `[planet_id] <x> <y> <width> <height>`                       | 查询 `GET /world/planets/{planet_id}/scene` 原始 JSON             |
 | `inspect`        | `<planet_id> <building\|unit\|resource\|sector> <entity_id>` | 查询 `GET /world/planets/{planet_id}/inspect` 原始 JSON           |
 | `fog`            | `[planet_id] [x y width height]`                             | 通过 `/scene` 拉取局部迷雾并做 ASCII 渲染，默认窗口 `0 0 32 16`   |
@@ -71,6 +78,24 @@
 | `restore_construction`        | `<task_id>`                                                                                                                                                                    | 恢复施工任务                           |
 | `start_research`              | `<tech_id>`                                                                                                                                                                    | 开始研究                               |
 | `cancel_research`             | `<tech_id>`                                                                                                                                                                    | 取消研究                               |
+| `blueprint_create`            | `<blueprint_id> <ground\|space> [--name <name>] (--base-frame <base_frame_id> \| --base-hull <base_hull_id>)`                                                               | 创建战争蓝图草案                       |
+| `blueprint_set_component`     | `<blueprint_id> <slot_id> <component_id>`                                                                                                                                      | 修改蓝图槽位组件                       |
+| `blueprint_validate`          | `<blueprint_id>`                                                                                                                                                               | 校验蓝图合法性并返回结构化问题         |
+| `blueprint_finalize`          | `<blueprint_id> [--target-state <state>]`                                                                                                                                      | 推进蓝图生命周期状态                   |
+| `blueprint_variant`           | `<parent_blueprint_id> <blueprint_id> <allowed_slot_ids_csv> [--name <name>]`                                                                                                 | 从公开蓝图或已定型蓝图生成受控改型     |
+| `queue_military_production`   | `<building_id> <deployment_hub_id> <blueprint_id> [--count <n>]`                                                                                                              | 在军工设施排产，并把成品交付到部署枢纽 |
+| `refit_unit`                  | `<building_id> <unit_id> <target_blueprint_id>`                                                                                                                                | 让小队或同构舰队进入 authoritative 翻修 |
+| `deploy_squad`                | `<building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]`                                                                                                           | 消耗部署枢纽中的载荷并生成地面战斗小队 |
+| `commission_fleet`            | `<building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]`                                                                                              | 消耗部署枢纽中的载荷并生成或补强舰队   |
+| `task_force_create`           | `<task_force_id> [--name <name>] [--stance <stance>]`                                                                                                                          | 创建任务群                             |
+| `task_force_assign`           | `<task_force_id> <squad\|fleet> <member_ids_csv> [--system <system_id>] [--planet <planet_id>]`                                                                              | 把小队或舰队编入任务群                 |
+| `task_force_set_stance`       | `<task_force_id> <stance>`                                                                                                                                                     | 切换任务群姿态                         |
+| `task_force_deploy`           | `<task_force_id> [--theater <theater_id>] [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y>] [--frontline <frontline_id>] [--ground-order <order>] [--support-mode <mode>]` | 写入任务群部署意图、前线命令和轨道支援模式 |
+| `theater_create`              | `<theater_id> [--name <name>]`                                                                                                                                                 | 创建战区                               |
+| `theater_define_zone`         | `<theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y>] [--radius <n>]`                                                                   | 定义战区区域                           |
+| `theater_set_objective`       | `<theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]`                                                 | 设置战区目标                           |
+| `blockade_planet`             | `<task_force_id> <planet_id>`                                                                                                                                                  | 对目标行星下发轨道封锁意图             |
+| `landing_start`               | `<task_force_id> <planet_id> [--operation-id <operation_id>]`                                                                                                                  | 启动登陆投送流程                       |
 | `switch_active_planet`        | `<planet_id>`                                                                                                                                                                  | 切换当前 active planet                 |
 | `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid>`                                                                                                                                        | 切换射线接收站模式                     |
 | `transfer`                    | `<building_id> <item_id> <quantity>`                                                                                                                                           | 把玩家背包物品装入建筑本地存储         |
@@ -252,7 +277,50 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `fleet_status` 会显示舰队武器、护盾、编队与最近攻击 tick
 - `system_runtime` 会显示该系统当前太阳帆与舰队运行态
 
-### 4. 物流与多星球最小闭环现在可直接操作
+### 4. 战争系统最小 CLI 闭环
+
+战争链路当前推荐用下面这组命令做最小闭环验证：
+
+1. 蓝图与改型：
+   - `blueprints`
+   - `blueprint_create <blueprint_id> <ground|space> ...`
+   - `blueprint_set_component <blueprint_id> <slot_id> <component_id>`
+   - `blueprint_validate <blueprint_id>`
+   - `blueprint_finalize <blueprint_id>`
+   - `blueprint_variant <parent_blueprint_id> <blueprint_id> <allowed_slot_ids_csv>`
+2. 军工与部署：
+   - `war_industry`
+   - `queue_military_production <building_id> <deployment_hub_id> <blueprint_id>`
+   - `refit_unit <building_id> <unit_id> <target_blueprint_id>`
+   - `deploy_squad ...`
+   - `commission_fleet ...`
+3. 指挥与态势：
+   - `task_force_create`
+   - `task_force_assign`
+   - `task_force_set_stance`
+   - `task_force_deploy`
+   - `theater_create`
+   - `theater_define_zone`
+   - `theater_set_objective`
+4. 情报、补给与战报：
+   - `planet_runtime [planet_id]`
+   - `system_runtime [system_id]`
+   - `fleet_status [fleet_id]`
+   - `war_industry`
+   - `task_forces`
+5. 轨道封锁与登陆：
+   - `blockade_planet <task_force_id> <planet_id>`
+   - `landing_start <task_force_id> <planet_id> [--operation-id <operation_id>]`
+
+当前实现边界：
+
+- `deploy_squad` / `commission_fleet` 不再硬编码只接受公开蓝图 ID；玩家自定义并已定型的蓝图同样可以走部署命令。
+- `task_force_deploy` 当前同时承担“部署锚点 / 前线命令 / 轨道支援模式”三类写入口，但它仍然不是完整自动航渡系统。
+- `blockade_planet` / `landing_start` 的同步返回只代表请求入队，最终 authoritative 结果要看 SSE `command_result` 或 `event_snapshot --types command_result`。
+- `system_runtime` 现在会输出舰队外，还会显示 `contacts`、`planet_blockades`、`landing_operations` 与 `battle_reports`；`planet_runtime` 会显示 `contacts`、`frontlines` 与 `ground_task_forces`。
+- `war_industry` 现在是最直接的补给查询入口，能看到生产单、翻修单、部署枢纽和供给节点库存。
+
+### 5. 物流与多星球最小闭环现在可直接操作
 
 当前 CLI 已经打通了收敛版的 `造站 -> 配槽位 -> 自动配送 -> 切星球继续经营` 闭环：
 
@@ -276,7 +344,7 @@ configure_logistics_slot b-31 interstellar hydrogen demand 80
 switch_active_planet planet-1-1
 ```
 
-### 5. 科研命令现在要求真实矩阵
+### 6. 科研命令现在要求真实矩阵
 
 `start_research` 不再是旧版“抽象研究点排队”。
 
@@ -285,7 +353,7 @@ switch_active_planet planet-1-1
 - 研究开始前，所需每种矩阵都必须已经出现在研究站本地库存里
 - 研究推进会真实消耗研究站本地库存中的矩阵；如果缺实验室或缺矩阵，可在 `summary` 的 `tech.current_research.blocked_reason` 里看到 `waiting_lab` / `waiting_matrix`
 
-### 6. 调试查询接口也已补齐
+### 7. 调试查询接口也已补齐
 
 除玩法主命令外，CLI 还支持：
 
@@ -296,7 +364,7 @@ switch_active_planet planet-1-1
 - Tick replay
 - Tick rollback
 
-### 7. 行星查询已经拆成 `planet / scene / inspect / fog`
+### 8. 行星查询已经拆成 `planet / scene / inspect / fog`
 
 - `planet` 只显示轻量概要，适合快速确认行星规模与对象数量
 - `scene` 直接返回当前视窗原始 JSON，适合调试地图裁剪与图层

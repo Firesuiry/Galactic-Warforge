@@ -7,6 +7,7 @@ import type {
   GalaxyView,
   HealthResponse,
   MetricsSnapshot,
+  PlanetRuntimeView,
   PlanetSceneView,
   PlanetSummaryView,
   PlayerStatsSnapshot,
@@ -14,6 +15,12 @@ import type {
   StateSummary,
   SystemRuntimeView,
   SystemView,
+  WarBlueprintDetailView,
+  WarBlueprintListView,
+  WarIndustryView,
+  WarSupplyStock,
+  WarTaskForceListView,
+  WarTheaterListView,
 } from './types.js';
 
 function pad(s: string, len: number): string {
@@ -53,6 +60,13 @@ function fmtStateLabel(state?: string, reason?: string): string {
   return `${state}:${reason}`;
 }
 
+function fmtFloat(value?: number, digits = 2): string {
+  if (value === undefined) {
+    return '-';
+  }
+  return Number(value.toFixed(digits)).toString();
+}
+
 function inventoryTotal(inv?: Record<string, number>): number {
   return Object.values(inv ?? {}).reduce((sum, qty) => sum + qty, 0);
 }
@@ -79,6 +93,29 @@ function fmtFleetTarget(target?: { planet_id: string; target_id?: string }): str
     return '-';
   }
   return target.target_id ? `${target.planet_id}/${target.target_id}` : target.planet_id;
+}
+
+function fmtWarStock(stock?: WarSupplyStock): string {
+  const entries = Object.entries(stock ?? {}).filter(([, qty]) => (qty ?? 0) > 0);
+  if (entries.length === 0) {
+    return '-';
+  }
+  return entries.map(([item, qty]) => `${item}:${qty}`).join(', ');
+}
+
+function fmtContactLabel(contact: {
+  confirmed_type?: string;
+  classification?: string;
+  entity_type?: string;
+}): string {
+  return contact.confirmed_type ?? contact.classification ?? contact.entity_type ?? '-';
+}
+
+function fmtPosition(position?: { x: number; y: number; z?: number }): string {
+  if (!position) {
+    return '-';
+  }
+  return position.z ? `${position.x},${position.y},${position.z}` : `${position.x},${position.y}`;
 }
 
 function fmtBuildingOps(building: Building): string {
@@ -209,22 +246,96 @@ export function fmtSystemRuntime(runtime: SystemRuntimeView): string {
   } else {
     lines.push('Solar sails: -');
   }
+  if (runtime.orbital_superiority) {
+    lines.push(`Orbital superiority: ${runtime.orbital_superiority.advantage_player_id || '-'}  intensity=${fmtFloat(runtime.orbital_superiority.contest_intensity)}  reason=${runtime.orbital_superiority.last_reason || '-'}`);
+  }
 
   const fleets = runtime.fleets ?? [];
   lines.push('');
   if (fleets.length === 0) {
     lines.push(chalk.dim('No fleets in this system runtime.'));
-    return lines.join('\n');
+  } else {
+    const rows = fleets.map((fleet) => [
+      fleet.fleet_id,
+      fleet.state,
+      fleet.formation,
+      fmtFleetUnits(fleet.units),
+      fmtFleetTarget(fleet.target),
+    ]);
+    lines.push(table(['FleetID', 'State', 'Formation', 'Units', 'Target'], rows));
   }
 
-  const rows = fleets.map((fleet) => [
-    fleet.fleet_id,
-    fleet.state,
-    fleet.formation,
-    fmtFleetUnits(fleet.units),
-    fmtFleetTarget(fleet.target),
-  ]);
-  lines.push(table(['FleetID', 'State', 'Formation', 'Units', 'Target'], rows));
+  const contacts = runtime.contacts ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Contacts'));
+  if (contacts.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['ID', 'Level', 'Type', 'Signal', 'Updated'],
+      contacts.map((contact) => [
+        contact.id,
+        contact.level,
+        fmtContactLabel(contact),
+        fmtFloat(contact.signal_strength),
+        String(contact.last_updated_tick ?? '-'),
+      ]),
+    ));
+  }
+
+  const blockades = runtime.planet_blockades ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Blockades'));
+  if (blockades.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['Planet', 'Status', 'TaskForce', 'Supply', 'Landings'],
+      blockades.map((blockade) => [
+        blockade.planet_id,
+        blockade.status,
+        blockade.task_force_id ?? '-',
+        String(blockade.interdicted_supply ?? 0),
+        String(blockade.interdicted_landings ?? 0),
+      ]),
+    ));
+  }
+
+  const landings = runtime.landing_operations ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Landing Operations'));
+  if (landings.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['ID', 'Planet', 'TaskForce', 'Stage', 'Result'],
+      landings.map((landing) => [
+        landing.id,
+        landing.planet_id,
+        landing.task_force_id,
+        landing.stage,
+        landing.result,
+      ]),
+    ));
+  }
+
+  const reports = runtime.battle_reports ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Battle Reports'));
+  if (reports.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['Battle', 'Fleet', 'Target', 'Damage', 'Lock'],
+      reports.map((report) => [
+        report.battle_id,
+        report.fleet_id,
+        report.target_id ?? '-',
+        String(report.target_strength_loss ?? 0),
+        fmtFloat(report.lock_quality),
+      ]),
+    ));
+  }
   return lines.join('\n');
 }
 
@@ -285,6 +396,224 @@ export function fmtFleetDetail(fleet: FleetDetailView | FleetRuntimeView): strin
     lines.push(`Last attack tick: ${fleet.last_attack_tick}`);
   }
   return lines.join('\n');
+}
+
+export function fmtPlanetRuntime(runtime: PlanetRuntimeView): string {
+  if (!runtime.discovered) {
+    return `Planet Runtime: ${chalk.bold(runtime.planet_id)}  ${chalk.dim('undiscovered')}`;
+  }
+  const lines = [
+    `Planet Runtime: ${chalk.bold(runtime.planet_id)}`,
+    `Available: ${runtime.available ? chalk.green('yes') : chalk.dim('no')}  Tick: ${chalk.cyan(runtime.tick)}`,
+    `Contacts=${runtime.contacts?.length ?? 0}  EnemyForces=${runtime.enemy_forces?.length ?? 0}  Frontlines=${runtime.frontlines?.length ?? 0}`,
+  ];
+
+  const contacts = runtime.contacts ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Contacts'));
+  if (contacts.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['ID', 'Level', 'Type', 'Position', 'Updated'],
+      contacts.map((contact) => [
+        contact.id,
+        contact.level,
+        fmtContactLabel(contact),
+        fmtPosition(contact.position),
+        String(contact.last_updated_tick ?? '-'),
+      ]),
+    ));
+  }
+
+  const frontlines = runtime.frontlines ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Frontlines'));
+  if (frontlines.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['ID', 'Type', 'Status', 'Control', 'Position'],
+      frontlines.map((frontline) => [
+        frontline.id,
+        frontline.type,
+        frontline.status,
+        fmtFloat(frontline.control),
+        fmtPosition(frontline.position),
+      ]),
+    ));
+  }
+
+  const taskForces = runtime.ground_task_forces ?? [];
+  lines.push('');
+  lines.push(chalk.bold('Ground Task Forces'));
+  if (taskForces.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['TaskForce', 'Order', 'Status', 'Support', 'Progress'],
+      taskForces.map((taskForce) => [
+        taskForce.task_force_id,
+        taskForce.ground_order ?? '-',
+        taskForce.status ?? '-',
+        taskForce.orbital_support_mode ?? '-',
+        fmtFloat(taskForce.progress),
+      ]),
+    ));
+  }
+
+  return lines.join('\n');
+}
+
+export function fmtWarBlueprintList(view: WarBlueprintListView): string {
+  const blueprints = view.blueprints ?? [];
+  if (blueprints.length === 0) {
+    return chalk.dim('No warfare blueprints.');
+  }
+  return table(
+    ['Blueprint', 'State', 'Domain', 'Source', 'Actions'],
+    blueprints.map((blueprint) => [
+      blueprint.id,
+      blueprint.state,
+      blueprint.domain,
+      blueprint.source,
+      (blueprint.allowed_actions ?? []).join(',') || '-',
+    ]),
+  );
+}
+
+export function fmtWarBlueprintDetail(blueprint: WarBlueprintDetailView): string {
+  const lines = [
+    `Blueprint: ${chalk.bold(blueprint.name)} (${blueprint.id})`,
+    `State: ${blueprint.state}  Domain: ${blueprint.domain}  Source: ${blueprint.source}`,
+    `Base: ${blueprint.base_frame_id ?? blueprint.base_hull_id ?? '-'}  Parent: ${blueprint.parent_blueprint_id ?? '-'}`,
+    `Validation: ${blueprint.validation.valid ? chalk.green('valid') : chalk.red('invalid')}`,
+  ];
+  if ((blueprint.components ?? []).length > 0) {
+    lines.push('');
+    lines.push(table(
+      ['Slot', 'Component'],
+      (blueprint.components ?? []).map((slot) => [slot.slot_id, slot.component_id]),
+    ));
+  }
+  const issues = blueprint.validation.issues ?? [];
+  if (issues.length > 0) {
+    lines.push('');
+    lines.push(chalk.bold('Validation Issues'));
+    lines.push(table(
+      ['Code', 'Slot', 'Message'],
+      issues.map((issue) => [issue.code, issue.slot_id ?? '-', issue.message]),
+    ));
+  }
+  return lines.join('\n');
+}
+
+export function fmtWarIndustry(view: WarIndustryView): string {
+  const lines = [chalk.bold('Production Orders')];
+  const production = view.production_orders ?? [];
+  if (production.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['ID', 'Blueprint', 'Factory', 'Hub', 'Stage', 'Status'],
+      production.map((order) => [
+        order.id,
+        order.blueprint_id,
+        order.factory_building_id,
+        order.deployment_hub_id ?? '-',
+        order.stage,
+        order.status,
+      ]),
+    ));
+  }
+
+  lines.push('');
+  lines.push(chalk.bold('Refit Orders'));
+  const refits = view.refit_orders ?? [];
+  if (refits.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['ID', 'Unit', 'From', 'To', 'Status'],
+      refits.map((order) => [
+        order.id,
+        order.unit_id,
+        order.source_blueprint_id,
+        order.target_blueprint_id,
+        order.status,
+      ]),
+    ));
+  }
+
+  lines.push('');
+  lines.push(chalk.bold('Deployment Hubs'));
+  const hubs = view.deployment_hubs ?? [];
+  if (hubs.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['Hub', 'Type', 'Planet', 'Ready Payloads'],
+      hubs.map((hub) => [
+        hub.building_id,
+        hub.building_type,
+        hub.planet_id ?? '-',
+        fmtTopEntries(hub.ready_payloads),
+      ]),
+    ));
+  }
+
+  lines.push('');
+  lines.push(chalk.bold('Supply Nodes'));
+  const supplyNodes = view.supply_nodes ?? [];
+  if (supplyNodes.length === 0) {
+    lines.push(chalk.dim('  none'));
+  } else {
+    lines.push(table(
+      ['Node', 'Type', 'Planet', 'Inventory'],
+      supplyNodes.map((node) => [
+        node.node_id,
+        node.source_type,
+        node.planet_id ?? '-',
+        fmtWarStock(node.inventory),
+      ]),
+    ));
+  }
+
+  return lines.join('\n');
+}
+
+export function fmtWarTaskForces(view: WarTaskForceListView): string {
+  const taskForces = view.task_forces ?? [];
+  if (taskForces.length === 0) {
+    return chalk.dim('No task forces.');
+  }
+  return table(
+    ['TaskForce', 'Stance', 'Theater', 'Members', 'Supply', 'Command'],
+    taskForces.map((taskForce) => [
+      taskForce.id,
+      taskForce.stance,
+      taskForce.theater_id ?? '-',
+      String(taskForce.members?.length ?? 0),
+      taskForce.supply_status.condition,
+      `${taskForce.command_capacity.used}/${taskForce.command_capacity.total}`,
+    ]),
+  );
+}
+
+export function fmtWarTheaters(view: WarTheaterListView): string {
+  const theaters = view.theaters ?? [];
+  if (theaters.length === 0) {
+    return chalk.dim('No theaters.');
+  }
+  return table(
+    ['Theater', 'Name', 'Zones', 'Objective'],
+    theaters.map((theater) => [
+      theater.id,
+      theater.name ?? '-',
+      String(theater.zones?.length ?? 0),
+      theater.objective?.objective_type ?? '-',
+    ]),
+  );
 }
 
 export function fmtFogScene(scene: PlanetSceneView): string {

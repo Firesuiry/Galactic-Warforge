@@ -6,11 +6,17 @@ import {
   fetchMetrics,
   fetchPlanet,
   fetchPlanetInspect,
+  fetchPlanetRuntime,
   fetchPlanetScene,
   fetchStats,
   fetchSummary,
   fetchSystem,
   fetchSystemRuntime,
+  fetchWarfareBlueprint,
+  fetchWarfareBlueprints,
+  fetchWarIndustry,
+  fetchWarTaskForces,
+  fetchWarTheaters,
 } from '../api.js';
 import { DEFAULT_SYSTEM_ID, DEFAULT_PLANET_ID } from '../config.js';
 import {
@@ -20,11 +26,17 @@ import {
   fmtGalaxy,
   fmtHealth,
   fmtMetrics,
+  fmtPlanetRuntime,
   fmtPlanetSummary,
   fmtStats,
   fmtSummary,
   fmtSystem,
   fmtSystemRuntime,
+  fmtWarBlueprintDetail,
+  fmtWarBlueprintList,
+  fmtWarIndustry,
+  fmtWarTaskForces,
+  fmtWarTheaters,
 } from '../format.js';
 import type { PlanetSceneParams } from '../api.js';
 import { parseArgs, parseIntegerArg } from './args.js';
@@ -110,6 +122,50 @@ export async function cmdFleetStatus(args: string[]): Promise<string> {
       return fmtFleetList(await fetchFleets());
     }
     return fmtFleetDetail(await fetchFleet(args[0]));
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdPlanetRuntime(args: string[]): Promise<string> {
+  const planetId = args[0] ?? DEFAULT_PLANET_ID;
+  try {
+    return fmtPlanetRuntime(await fetchPlanetRuntime(planetId));
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdBlueprints(args: string[]): Promise<string> {
+  try {
+    if (args[0]) {
+      return fmtWarBlueprintDetail(await fetchWarfareBlueprint(args[0]));
+    }
+    return fmtWarBlueprintList(await fetchWarfareBlueprints());
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdWarIndustry(_args: string[]): Promise<string> {
+  try {
+    return fmtWarIndustry(await fetchWarIndustry());
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdTaskForces(_args: string[]): Promise<string> {
+  try {
+    return fmtWarTaskForces(await fetchWarTaskForces());
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdTheaters(_args: string[]): Promise<string> {
+  try {
+    return fmtWarTheaters(await fetchWarTheaters());
   } catch (e) {
     return fmtError(String(e));
   }

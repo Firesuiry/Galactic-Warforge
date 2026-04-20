@@ -7,6 +7,7 @@ import {
 } from './config.js';
 
 export type {
+  BlockadePlanetOptions,
   AlertSnapshotParams,
   ApiClient,
   AuditQueryParams,
@@ -15,23 +16,39 @@ export type {
   BuildDysonShellOptions,
   BuildOptions,
   CommissionFleetOptions,
+  CreateBlueprintOptions,
   DeploySquadOptions,
   Direction,
   DysonComponentType,
   EventSnapshotParams,
   FleetFormation,
+  FinalizeBlueprintOptions,
+  LandingStartOptions,
   LaunchRocketOptions,
   LaunchSolarSailOptions,
   PlanetSceneParams,
+  QueueMilitaryProductionOptions,
   ReplayRequest,
   RollbackRequest,
+  TaskForceAssignOptions,
+  TaskForceDeployOptions,
+  TheaterCreateOptions,
+  TheaterDefineZoneOptions,
+  TheaterSetObjectiveOptions,
+  VariantBlueprintOptions,
   BlueprintID,
   WorldUnitID,
 } from '../../shared-client/src/api.js';
 export type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
+  GroundTaskForceOrder,
+  OrbitalSupportMode,
   RayReceiverMode,
+  WarBlueprintState,
+  WarTaskForceMemberKind,
+  WarTaskForceStance,
+  WarTheaterZoneType,
 } from '../../shared-client/src/types.js';
 
 const client = createApiClient({
@@ -43,6 +60,12 @@ const client = createApiClient({
 
 export const clearAuth = client.clearAuth;
 export const cmdAttack = client.cmdAttack;
+export const cmdBlockadePlanet = client.cmdBlockadePlanet;
+export const cmdBlueprintCreate = client.cmdBlueprintCreate;
+export const cmdBlueprintFinalize = client.cmdBlueprintFinalize;
+export const cmdBlueprintSetComponent = client.cmdBlueprintSetComponent;
+export const cmdBlueprintValidate = client.cmdBlueprintValidate;
+export const cmdBlueprintVariant = client.cmdBlueprintVariant;
 export const cmdBuild = client.cmdBuild;
 export const cmdBuildDysonFrame = client.cmdBuildDysonFrame;
 export const cmdBuildDysonNode = client.cmdBuildDysonNode;
@@ -58,10 +81,13 @@ export const cmdDeploySquad = client.cmdDeploySquad;
 export const cmdFleetAssign = client.cmdFleetAssign;
 export const cmdFleetAttack = client.cmdFleetAttack;
 export const cmdFleetDisband = client.cmdFleetDisband;
+export const cmdLandingStart = client.cmdLandingStart;
 export const cmdLaunchRocket = client.cmdLaunchRocket;
 export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;
 export const cmdMove = client.cmdMove;
 export const cmdProduce = client.cmdProduce;
+export const cmdQueueMilitaryProduction = client.cmdQueueMilitaryProduction;
+export const cmdRefitUnit = client.cmdRefitUnit;
 export const cmdRestoreConstruction = client.cmdRestoreConstruction;
 export const cmdScanGalaxy = client.cmdScanGalaxy;
 export const cmdScanPlanet = client.cmdScanPlanet;
@@ -69,6 +95,13 @@ export const cmdScanSystem = client.cmdScanSystem;
 export const cmdSetRayReceiverMode = client.cmdSetRayReceiverMode;
 export const cmdStartResearch = client.cmdStartResearch;
 export const cmdSwitchActivePlanet = client.cmdSwitchActivePlanet;
+export const cmdTaskForceAssign = client.cmdTaskForceAssign;
+export const cmdTaskForceCreate = client.cmdTaskForceCreate;
+export const cmdTaskForceDeploy = client.cmdTaskForceDeploy;
+export const cmdTaskForceSetStance = client.cmdTaskForceSetStance;
+export const cmdTheaterCreate = client.cmdTheaterCreate;
+export const cmdTheaterDefineZone = client.cmdTheaterDefineZone;
+export const cmdTheaterSetObjective = client.cmdTheaterSetObjective;
 export const cmdTransferItem = client.cmdTransferItem;
 export const cmdUpgrade = client.cmdUpgrade;
 export const fetchAlertSnapshot = client.fetchAlertSnapshot;
@@ -82,11 +115,17 @@ export const fetchHealth = client.fetchHealth;
 export const fetchMetrics = client.fetchMetrics;
 export const fetchPlanet = client.fetchPlanet;
 export const fetchPlanetInspect = client.fetchPlanetInspect;
+export const fetchPlanetRuntime = client.fetchPlanetRuntime;
 export const fetchPlanetScene = client.fetchPlanetScene;
 export const fetchSystemRuntime = client.fetchSystemRuntime;
 export const fetchStats = client.fetchStats;
 export const fetchSummary = client.fetchSummary;
 export const fetchSystem = client.fetchSystem;
+export const fetchWarfareBlueprint = client.fetchWarfareBlueprint;
+export const fetchWarfareBlueprints = client.fetchWarfareBlueprints;
+export const fetchWarIndustry = client.fetchWarIndustry;
+export const fetchWarTaskForces = client.fetchWarTaskForces;
+export const fetchWarTheaters = client.fetchWarTheaters;
 export const getAuth = client.getAuth;
 export const getServerUrl = client.getServerUrl;
 export const sendCommandRequest = client.sendCommandRequest;

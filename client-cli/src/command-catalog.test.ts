@@ -24,5 +24,10 @@ describe('agent command catalog', () => {
     assert.equal(getCommandCategory('transfer'), 'management');
     assert.equal(getCommandCategory('switch_active_planet'), 'management');
     assert.equal(getCommandCategory('launch_rocket'), 'management');
+    assert.ok(AGENT_ALLOWED_COMMANDS.includes('blueprint_create'));
+    assert.ok(AGENT_ALLOWED_COMMANDS.includes('queue_military_production'));
+    assert.ok(AGENT_ALLOWED_COMMANDS.includes('task_force_create'));
+    assert.ok(AGENT_ALLOWED_COMMANDS.includes('blockade_planet'));
+    assert.ok(AGENT_ALLOWED_COMMANDS.includes('landing_start'));
   });
 });

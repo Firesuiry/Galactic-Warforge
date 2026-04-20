@@ -78,3 +78,23 @@
    - 登陆 / 封锁操作
 2. `shared-client`、CLI 命令目录、帮助输出和服务端能力口径一致。
 3. CLI 查询输出足以支撑自动化回归和人工试玩，不必依赖读原始 HTTP JSON。
+
+## 完成情况
+
+- 完成时间：2026-04-20
+- 结果：已完成
+- 实现摘要：
+  - `shared-client` 补齐战争命令与运行态类型，新增 `blockade_planet`、`landing_start` 等命令类型，并扩展 `task_force_deploy` 所需的 `frontline_id`、`ground_order`、`support_mode` 参数。
+  - `client-cli` 补齐战争查询链路，新增 `planet_runtime`、`blueprints`、`war_industry`、`task_forces`、`theaters`，并为行星运行态、军工、任务群、战区增加面向玩家可读的格式化输出。
+  - `client-cli` 补齐战争动作链路，新增蓝图创建/编辑/校验/定型/改型、军工排产与翻修、任务群/战区指挥、封锁与登陆等独立命令，并同步更新帮助与命令注册。
+  - 原有 `deploy_squad` / `commission_fleet` 不再硬编码限制公开蓝图，允许玩家使用自定义已定型蓝图进入部署链路，避免 CLI 继续停留在旧舰队线语义。
+  - 已同步更新 `docs/dev/客户端CLI.md`，补充战争命令、查询、帮助口径和最小 CLI 闭环说明。
+- 关键验证：
+  - `npm --prefix client-cli test`
+  - `cd client-cli && npx tsc --noEmit`
+  - 实机 CLI 验证：
+    - `blueprints` 可正常返回无蓝图提示 `No warfare blueprints.`
+    - `war_industry` 可输出 `Production Orders / Refit Orders / Deployment Hubs / Supply Nodes`
+    - `task_force_create tf-cli-20260420b` 最终 `command_result.status=executed`
+    - `task_forces` 可查询到 `tf-cli-20260420b`
+    - `blockade_planet tf-cli-20260420b planet-1-1` 最终 `command_result.status=failed`，失败原因是任务群没有舰队成员，说明 CLI 已能走通失败回执与对账链路
