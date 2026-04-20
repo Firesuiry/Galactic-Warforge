@@ -201,6 +201,26 @@ func (ps *PlayerState) EnsureWarIndustry() *WarIndustryState {
 	return ps.WarIndustry
 }
 
+// EnsureWarCoordination returns a writable warfare coordination state.
+func (ps *PlayerState) EnsureWarCoordination() *WarCoordinationState {
+	if ps == nil {
+		return nil
+	}
+	if ps.WarCoordination == nil {
+		ps.WarCoordination = &WarCoordinationState{
+			TaskForces: make(map[string]*WarTaskForce),
+			Theaters:   make(map[string]*WarTheater),
+		}
+	}
+	if ps.WarCoordination.TaskForces == nil {
+		ps.WarCoordination.TaskForces = make(map[string]*WarTaskForce)
+	}
+	if ps.WarCoordination.Theaters == nil {
+		ps.WarCoordination.Theaters = make(map[string]*WarTheater)
+	}
+	return ps.WarCoordination
+}
+
 func normalizePermissions(perms []string) []string {
 	if len(perms) == 0 {
 		return nil

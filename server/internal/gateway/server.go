@@ -117,6 +117,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/warfare/blueprints", s.auth(s.handleWarBlueprints))
 	mux.HandleFunc("GET /world/warfare/blueprints/{blueprint_id}", s.auth(s.handleWarBlueprint))
 	mux.HandleFunc("GET /world/warfare/industry", s.auth(s.handleWarIndustry))
+	mux.HandleFunc("GET /world/warfare/task-forces", s.auth(s.handleWarTaskForces))
+	mux.HandleFunc("GET /world/warfare/theaters", s.auth(s.handleWarTheaters))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
 
 	// Commands
@@ -379,6 +381,18 @@ func (s *Server) handleWarBlueprint(w http.ResponseWriter, r *http.Request, play
 // handleWarIndustry returns GET /world/warfare/industry
 func (s *Server) handleWarIndustry(w http.ResponseWriter, r *http.Request, playerID string) {
 	view := s.ql.WarIndustry(s.core.World(), playerID)
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleWarTaskForces returns GET /world/warfare/task-forces
+func (s *Server) handleWarTaskForces(w http.ResponseWriter, r *http.Request, playerID string) {
+	view := s.ql.WarTaskForces(s.core.World(), playerID, s.core.Worlds(), s.core.SpaceRuntime())
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleWarTheaters returns GET /world/warfare/theaters
+func (s *Server) handleWarTheaters(w http.ResponseWriter, r *http.Request, playerID string) {
+	view := s.ql.WarTheaters(s.core.World(), playerID)
 	writeJSON(w, http.StatusOK, view)
 }
 
@@ -984,6 +998,42 @@ func validateCommandStructure(cmd model.Command) error {
 	case model.CmdFleetDisband:
 		if _, ok := cmd.Payload["fleet_id"]; !ok {
 			return fmt.Errorf("fleet_disband requires payload.fleet_id")
+		}
+	case model.CmdTaskForceCreate:
+		if _, ok := cmd.Payload["task_force_id"]; !ok {
+			return fmt.Errorf("task_force_create requires payload.task_force_id")
+		}
+	case model.CmdTaskForceAssign:
+		for _, field := range []string{"task_force_id", "member_kind", "member_ids"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("task_force_assign requires payload.%s", field)
+			}
+		}
+	case model.CmdTaskForceSetStance:
+		for _, field := range []string{"task_force_id", "stance"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("task_force_set_stance requires payload.%s", field)
+			}
+		}
+	case model.CmdTaskForceDeploy:
+		if _, ok := cmd.Payload["task_force_id"]; !ok {
+			return fmt.Errorf("task_force_deploy requires payload.task_force_id")
+		}
+	case model.CmdTheaterCreate:
+		if _, ok := cmd.Payload["theater_id"]; !ok {
+			return fmt.Errorf("theater_create requires payload.theater_id")
+		}
+	case model.CmdTheaterDefineZone:
+		for _, field := range []string{"theater_id", "zone_type"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("theater_define_zone requires payload.%s", field)
+			}
+		}
+	case model.CmdTheaterSetObjective:
+		for _, field := range []string{"theater_id", "objective_type"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("theater_set_objective requires payload.%s", field)
+			}
 		}
 	case model.CmdUpgrade:
 		if cmd.Target.EntityID == "" {

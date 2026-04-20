@@ -740,6 +740,20 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execFleetAttack(gc.world, qr.PlayerID, cmd)
 		case model.CmdFleetDisband:
 			res, evts = gc.execFleetDisband(gc.world, qr.PlayerID, cmd)
+		case model.CmdTaskForceCreate:
+			res, evts = gc.execTaskForceCreate(gc.world, qr.PlayerID, cmd)
+		case model.CmdTaskForceAssign:
+			res, evts = gc.execTaskForceAssign(gc.world, qr.PlayerID, cmd)
+		case model.CmdTaskForceSetStance:
+			res, evts = gc.execTaskForceSetStance(gc.world, qr.PlayerID, cmd)
+		case model.CmdTaskForceDeploy:
+			res, evts = gc.execTaskForceDeploy(gc.world, qr.PlayerID, cmd)
+		case model.CmdTheaterCreate:
+			res, evts = gc.execTheaterCreate(gc.world, qr.PlayerID, cmd)
+		case model.CmdTheaterDefineZone:
+			res, evts = gc.execTheaterDefineZone(gc.world, qr.PlayerID, cmd)
+		case model.CmdTheaterSetObjective:
+			res, evts = gc.execTheaterSetObjective(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintCreate:
 			res, evts = gc.execBlueprintCreate(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintSetComponent:

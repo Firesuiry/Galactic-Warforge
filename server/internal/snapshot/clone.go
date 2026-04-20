@@ -11,17 +11,18 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		return nil
 	}
 	cp := &model.PlayerState{
-		PlayerID:      ps.PlayerID,
-		TeamID:        ps.TeamID,
-		Role:          ps.Role,
-		Resources:     ps.Resources,
-		Inventory:     ps.Inventory.Clone(),
-		IsAlive:       ps.IsAlive,
-		Tech:          clonePlayerTechState(ps.Tech),
-		CombatTech:    clonePlayerCombatTechState(ps.CombatTech),
-		Stats:         clonePlayerStats(ps.Stats),
-		WarBlueprints: cloneWarBlueprintMap(ps.WarBlueprints),
-		WarIndustry:   cloneWarIndustryState(ps.WarIndustry),
+		PlayerID:        ps.PlayerID,
+		TeamID:          ps.TeamID,
+		Role:            ps.Role,
+		Resources:       ps.Resources,
+		Inventory:       ps.Inventory.Clone(),
+		IsAlive:         ps.IsAlive,
+		Tech:            clonePlayerTechState(ps.Tech),
+		CombatTech:      clonePlayerCombatTechState(ps.CombatTech),
+		Stats:           clonePlayerStats(ps.Stats),
+		WarBlueprints:   cloneWarBlueprintMap(ps.WarBlueprints),
+		WarIndustry:     cloneWarIndustryState(ps.WarIndustry),
+		WarCoordination: cloneWarCoordinationState(ps.WarCoordination),
 	}
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
@@ -62,6 +63,13 @@ func cloneWarBlueprint(blueprint *model.WarBlueprint) *model.WarBlueprint {
 }
 
 func cloneWarIndustryState(state *model.WarIndustryState) *model.WarIndustryState {
+	if state == nil {
+		return nil
+	}
+	return state.Clone()
+}
+
+func cloneWarCoordinationState(state *model.WarCoordinationState) *model.WarCoordinationState {
 	if state == nil {
 		return nil
 	}

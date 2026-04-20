@@ -304,6 +304,13 @@ export type CommandType =
   | 'fleet_assign'
   | 'fleet_attack'
   | 'fleet_disband'
+  | 'task_force_create'
+  | 'task_force_assign'
+  | 'task_force_set_stance'
+  | 'task_force_deploy'
+  | 'theater_create'
+  | 'theater_define_zone'
+  | 'theater_set_objective'
   | 'blueprint_create'
   | 'blueprint_set_component'
   | 'blueprint_validate'
@@ -1188,6 +1195,109 @@ export interface WarIndustryView {
   production_orders: WarProductionOrder[];
   refit_orders: WarRefitOrder[];
   deployment_hubs: WarDeploymentHubView[];
+}
+
+export type WarTaskForceStance =
+  | 'hold'
+  | 'patrol'
+  | 'escort'
+  | 'intercept'
+  | 'harass'
+  | 'siege'
+  | 'bombard'
+  | 'retreat_on_losses';
+
+export type WarTaskForceMemberKind = 'squad' | 'fleet';
+
+export type WarTheaterZoneType =
+  | 'primary'
+  | 'secondary'
+  | 'no_entry'
+  | 'rally'
+  | 'supply_priority';
+
+export type WarCommandCapacitySourceType =
+  | 'command_center'
+  | 'command_ship'
+  | 'battlefield_analysis_base'
+  | 'military_ai_core';
+
+export interface WarTaskForceDeployment {
+  system_id?: string;
+  planet_id?: string;
+  position?: Position;
+}
+
+export interface WarCommandCapacitySource {
+  source_id: string;
+  source_type: WarCommandCapacitySourceType;
+  label?: string;
+  entity_id?: string;
+  planet_id?: string;
+  system_id?: string;
+  capacity: number;
+}
+
+export interface WarCommandCapacityStatus {
+  total: number;
+  used: number;
+  over?: number;
+  delay_penalty?: number;
+  hit_penalty?: number;
+  formation_penalty?: number;
+  coordination_penalty?: number;
+  sources?: WarCommandCapacitySource[];
+}
+
+export interface WarTaskForceMemberView {
+  kind: WarTaskForceMemberKind;
+  entity_id: string;
+  planet_id?: string;
+  system_id?: string;
+  blueprint_ids?: string[];
+  count?: number;
+  state?: string;
+}
+
+export interface WarTaskForceView {
+  id: string;
+  name?: string;
+  theater_id?: string;
+  stance: WarTaskForceStance;
+  deployment?: WarTaskForceDeployment;
+  members?: WarTaskForceMemberView[];
+  command_capacity: WarCommandCapacityStatus;
+}
+
+export interface WarTaskForceListView {
+  task_forces: WarTaskForceView[];
+}
+
+export interface WarTheaterZoneView {
+  zone_type: WarTheaterZoneType;
+  system_id?: string;
+  planet_id?: string;
+  position?: Position;
+  radius?: number;
+}
+
+export interface WarTheaterObjectiveView {
+  objective_type: string;
+  system_id?: string;
+  planet_id?: string;
+  entity_id?: string;
+  description?: string;
+}
+
+export interface WarTheaterView {
+  id: string;
+  name?: string;
+  zones?: WarTheaterZoneView[];
+  objective?: WarTheaterObjectiveView;
+}
+
+export interface WarTheaterListView {
+  theaters: WarTheaterView[];
 }
 
 export interface FleetRuntimeView {

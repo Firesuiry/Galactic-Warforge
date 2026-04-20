@@ -40,6 +40,11 @@ import type {
   WarBlueprintListView,
   WarBlueprintState,
   WarBlueprintDetailView,
+  WarTaskForceListView,
+  WarTaskForceMemberKind,
+  WarTaskForceStance,
+  WarTheaterListView,
+  WarTheaterZoneType,
 } from './types.js';
 import { resolveServerUrl } from './utils.js';
 
@@ -188,6 +193,45 @@ export interface QueueMilitaryProductionOptions {
 }
 
 export type FleetFormation = FormationType;
+
+export interface CreateTaskForceOptions {
+  name?: string;
+  stance?: WarTaskForceStance;
+}
+
+export interface TaskForceAssignOptions {
+  memberKind: WarTaskForceMemberKind;
+  memberIds: string[];
+  systemId?: string;
+  planetId?: string;
+}
+
+export interface TaskForceDeployOptions {
+  theaterId?: string;
+  systemId?: string;
+  planetId?: string;
+  position?: Position;
+}
+
+export interface TheaterCreateOptions {
+  name?: string;
+}
+
+export interface TheaterDefineZoneOptions {
+  zoneType: WarTheaterZoneType;
+  systemId?: string;
+  planetId?: string;
+  position?: Position;
+  radius?: number;
+}
+
+export interface TheaterSetObjectiveOptions {
+  objectiveType: string;
+  systemId?: string;
+  planetId?: string;
+  entityId?: string;
+  description?: string;
+}
 
 function buildUrl(serverUrl: string, path: string): string {
   return resolveServerUrl(serverUrl, path);
@@ -350,6 +394,14 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchWarIndustry(): Promise<WarIndustryView> {
     return apiFetch<WarIndustryView>('/world/warfare/industry');
+  }
+
+  function fetchWarTaskForces(): Promise<WarTaskForceListView> {
+    return apiFetch<WarTaskForceListView>('/world/warfare/task-forces');
+  }
+
+  function fetchWarTheaters(): Promise<WarTheaterListView> {
+    return apiFetch<WarTheaterListView>('/world/warfare/theaters');
   }
 
   function fetchFleets(): Promise<FleetDetailView[]> {
@@ -665,6 +717,122 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdTaskForceCreate(taskForceId: string, options: CreateTaskForceOptions = {}) {
+    return sendSingleCommand({
+      type: 'task_force_create',
+      target: { layer: 'planet', entity_id: taskForceId },
+      payload: {
+        task_force_id: taskForceId,
+        ...(options.name ? { name: options.name } : {}),
+        ...(options.stance ? { stance: options.stance } : {}),
+      },
+    });
+  }
+
+  function cmdTaskForceAssign(taskForceId: string, options: TaskForceAssignOptions) {
+    const layer = options.systemId ? 'system' : 'planet';
+    return sendSingleCommand({
+      type: 'task_force_assign',
+      target: {
+        layer,
+        entity_id: taskForceId,
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+      },
+      payload: {
+        task_force_id: taskForceId,
+        member_kind: options.memberKind,
+        member_ids: options.memberIds,
+      },
+    });
+  }
+
+  function cmdTaskForceSetStance(taskForceId: string, stance: WarTaskForceStance) {
+    return sendSingleCommand({
+      type: 'task_force_set_stance',
+      target: { layer: 'planet', entity_id: taskForceId },
+      payload: {
+        task_force_id: taskForceId,
+        stance,
+      },
+    });
+  }
+
+  function cmdTaskForceDeploy(taskForceId: string, options: TaskForceDeployOptions) {
+    const layer = options.systemId ? 'system' : 'planet';
+    return sendSingleCommand({
+      type: 'task_force_deploy',
+      target: {
+        layer,
+        entity_id: taskForceId,
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+        ...(options.position ? { position: options.position } : {}),
+      },
+      payload: {
+        task_force_id: taskForceId,
+        ...(options.theaterId ? { theater_id: options.theaterId } : {}),
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+        ...(options.position ? { position: options.position } : {}),
+      },
+    });
+  }
+
+  function cmdTheaterCreate(theaterId: string, options: TheaterCreateOptions = {}) {
+    return sendSingleCommand({
+      type: 'theater_create',
+      target: { layer: 'planet', entity_id: theaterId },
+      payload: {
+        theater_id: theaterId,
+        ...(options.name ? { name: options.name } : {}),
+      },
+    });
+  }
+
+  function cmdTheaterDefineZone(theaterId: string, options: TheaterDefineZoneOptions) {
+    const layer = options.systemId ? 'system' : 'planet';
+    return sendSingleCommand({
+      type: 'theater_define_zone',
+      target: {
+        layer,
+        entity_id: theaterId,
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+        ...(options.position ? { position: options.position } : {}),
+      },
+      payload: {
+        theater_id: theaterId,
+        zone_type: options.zoneType,
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+        ...(options.position ? { position: options.position } : {}),
+        ...(options.radius !== undefined ? { radius: options.radius } : {}),
+      },
+    });
+  }
+
+  function cmdTheaterSetObjective(theaterId: string, options: TheaterSetObjectiveOptions) {
+    const layer = options.systemId ? 'system' : 'planet';
+    return sendSingleCommand({
+      type: 'theater_set_objective',
+      target: {
+        layer,
+        entity_id: theaterId,
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+      },
+      payload: {
+        theater_id: theaterId,
+        objective_type: options.objectiveType,
+        ...(options.systemId ? { system_id: options.systemId } : {}),
+        ...(options.planetId ? { planet_id: options.planetId } : {}),
+        ...(options.entityId ? { entity_id: options.entityId } : {}),
+        ...(options.description ? { description: options.description } : {}),
+      },
+    });
+  }
+
   function cmdBlueprintCreate(blueprintId: string, domain: string, options: CreateBlueprintOptions) {
     return sendSingleCommand({
       type: 'blueprint_create',
@@ -862,6 +1030,13 @@ export function createApiClient(options: ApiClientOptions) {
     cmdDemolish,
     cmdDemolishDyson,
     cmdDeploySquad,
+    cmdTaskForceAssign,
+    cmdTaskForceCreate,
+    cmdTaskForceDeploy,
+    cmdTaskForceSetStance,
+    cmdTheaterCreate,
+    cmdTheaterDefineZone,
+    cmdTheaterSetObjective,
     cmdFleetAssign,
     cmdFleetAttack,
     cmdFleetDisband,
@@ -900,6 +1075,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchWarfareBlueprint,
     fetchWarfareBlueprints,
     fetchWarIndustry,
+    fetchWarTaskForces,
+    fetchWarTheaters,
     getAuth,
     getServerUrl,
     sendCommandRequest,

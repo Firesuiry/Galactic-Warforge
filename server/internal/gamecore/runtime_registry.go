@@ -199,6 +199,13 @@ func (gc *GameCore) WorldForPlanet(planetID string) *model.WorldState {
 	return gc.worlds[planetID]
 }
 
+func (gc *GameCore) Worlds() map[string]*model.WorldState {
+	if gc == nil {
+		return nil
+	}
+	return gc.worldMapSnapshot()
+}
+
 func (gc *GameCore) worldMapSnapshot() map[string]*model.WorldState {
 	gc.runtimeMu.RLock()
 	defer gc.runtimeMu.RUnlock()
