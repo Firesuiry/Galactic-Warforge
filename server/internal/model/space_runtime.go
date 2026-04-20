@@ -151,6 +151,7 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 				}
 				fleetCopy := *fleet
 				fleetCopy.Units = append([]FleetUnitStack(nil), fleet.Units...)
+				fleetCopy.Sustainment = fleet.Sustainment.Clone()
 				if fleet.Target != nil {
 					targetCopy := *fleet.Target
 					fleetCopy.Target = &targetCopy

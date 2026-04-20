@@ -11,19 +11,20 @@ const (
 
 // CombatSquad is the authoritative runtime entity for deployable planetary combat units.
 type CombatSquad struct {
-	ID               string           `json:"id"`
-	OwnerID          string           `json:"owner_id"`
-	PlanetID         string           `json:"planet_id"`
-	SourceBuildingID string           `json:"source_building_id,omitempty"`
-	BlueprintID      string           `json:"blueprint_id"`
-	Count            int              `json:"count"`
-	HP               int              `json:"hp"`
-	MaxHP            int              `json:"max_hp"`
-	Shield           ShieldState      `json:"shield"`
-	Weapon           WeaponState      `json:"weapon"`
-	State            CombatSquadState `json:"state"`
-	TargetEnemyID    string           `json:"target_enemy_id,omitempty"`
-	LastAttackTick   int64            `json:"last_attack_tick,omitempty"`
+	ID               string              `json:"id"`
+	OwnerID          string              `json:"owner_id"`
+	PlanetID         string              `json:"planet_id"`
+	SourceBuildingID string              `json:"source_building_id,omitempty"`
+	BlueprintID      string              `json:"blueprint_id"`
+	Count            int                 `json:"count"`
+	HP               int                 `json:"hp"`
+	MaxHP            int                 `json:"max_hp"`
+	Shield           ShieldState         `json:"shield"`
+	Weapon           WeaponState         `json:"weapon"`
+	Sustainment      WarSustainmentState `json:"sustainment"`
+	State            CombatSquadState    `json:"state"`
+	TargetEnemyID    string              `json:"target_enemy_id,omitempty"`
+	LastAttackTick   int64               `json:"last_attack_tick,omitempty"`
 }
 
 // CombatRuntimeState stores authoritative combat runtime entities for one planet world.
@@ -65,6 +66,7 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 			continue
 		}
 		copy := *squad
+		copy.Sustainment = squad.Sustainment.Clone()
 		out.Squads[id] = &copy
 	}
 	for id, platform := range rt.OrbitalPlatforms {

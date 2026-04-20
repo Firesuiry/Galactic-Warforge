@@ -196,6 +196,89 @@ export interface OrbitPosition {
 
 export type CombatSquadState = 'idle' | 'engaging' | 'destroyed';
 
+export type WarSupplyCondition = 'healthy' | 'strained' | 'critical' | 'collapsed';
+
+export type WarSupplySourceType =
+  | 'planetary_logistics_station'
+  | 'interstellar_logistics_station'
+  | 'orbital_supply_port'
+  | 'supply_ship'
+  | 'frontline_supply_drop';
+
+export type WarRepairTier = 'field_repair' | 'frontline_repair_station' | 'overhaul';
+
+export interface WarSupplyStock {
+  ammo?: number;
+  missiles?: number;
+  fuel?: number;
+  spare_parts?: number;
+  shield_cells?: number;
+  repair_drones?: number;
+}
+
+export interface WarRepairState {
+  tier?: WarRepairTier;
+  active?: boolean;
+  blocked_reason?: string;
+  hp_per_tick?: number;
+  shield_per_tick?: number;
+  remaining_damage?: number;
+  remaining_shield?: number;
+  remaining_ticks?: number;
+  completed_this_tick?: boolean;
+}
+
+export interface WarSupplySourceRef {
+  source_id: string;
+  source_type: WarSupplySourceType;
+  label?: string;
+  planet_id?: string;
+  system_id?: string;
+  building_id?: string;
+  unit_id?: string;
+}
+
+export interface WarSustainmentState {
+  current: WarSupplyStock;
+  capacity: WarSupplyStock;
+  condition: WarSupplyCondition;
+  cohesion?: number;
+  damage_penalty?: number;
+  shield_penalty?: number;
+  mobility_penalty?: number;
+  repair_blocked?: boolean;
+  retreat_recommended?: boolean;
+  shortages?: string[];
+  sources?: WarSupplySourceRef[];
+  last_resupply_tick?: number;
+  last_consumption_tick?: number;
+  repair: WarRepairState;
+}
+
+export interface WarSupplyNodeView {
+  node_id: string;
+  source_type: WarSupplySourceType;
+  label?: string;
+  planet_id?: string;
+  system_id?: string;
+  building_id?: string;
+  unit_id?: string;
+  inventory: WarSupplyStock;
+  updated_tick?: number;
+}
+
+export interface WarSupplyStatusView {
+  current: WarSupplyStock;
+  capacity: WarSupplyStock;
+  condition: WarSupplyCondition;
+  cohesion?: number;
+  damage_penalty?: number;
+  shield_penalty?: number;
+  mobility_penalty?: number;
+  retreat_recommended?: boolean;
+  shortages?: string[];
+}
+
 export interface CombatSquad {
   id: string;
   owner_id: string;
@@ -207,6 +290,7 @@ export interface CombatSquad {
   max_hp: number;
   shield: ShieldState;
   weapon: WeaponState;
+  sustainment: WarSustainmentState;
   state: CombatSquadState;
   target_enemy_id?: string;
   last_attack_tick?: number;
@@ -1230,6 +1314,7 @@ export interface WarRefitOrder {
   queue_index?: number;
   created_tick?: number;
   updated_tick?: number;
+  repair_tier?: WarRepairTier;
 }
 
 export interface WarDeploymentHubView {
@@ -1244,6 +1329,7 @@ export interface WarIndustryView {
   production_orders: WarProductionOrder[];
   refit_orders: WarRefitOrder[];
   deployment_hubs: WarDeploymentHubView[];
+  supply_nodes: WarSupplyNodeView[];
 }
 
 export type WarTaskForceStance =
@@ -1306,6 +1392,8 @@ export interface WarTaskForceMemberView {
   blueprint_ids?: string[];
   count?: number;
   state?: string;
+  supply_status?: WarSupplyStatusView;
+  repair_state?: WarRepairState;
 }
 
 export interface WarTaskForceView {
@@ -1316,6 +1404,7 @@ export interface WarTaskForceView {
   deployment?: WarTaskForceDeployment;
   members?: WarTaskForceMemberView[];
   command_capacity: WarCommandCapacityStatus;
+  supply_status: WarSupplyStatusView;
 }
 
 export interface WarTaskForceListView {
@@ -1357,6 +1446,7 @@ export interface FleetRuntimeView {
   formation: FormationType;
   state: FleetState;
   units?: FleetUnitStack[];
+  sustainment: WarSustainmentState;
   target?: FleetTarget;
 }
 

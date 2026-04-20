@@ -46,6 +46,7 @@ func (ql *Layer) WarTaskForces(
 			Members:         model.ResolveWarTaskForceMembers(player, taskForce, worlds, spaceRuntime),
 			CommandCapacity: model.EvaluateWarTaskForce(player, taskForce, worlds, spaceRuntime),
 		}
+		tfView.SupplyStatus = model.SummarizeWarTaskForceSupply(tfView.Members)
 		if taskForce.Deployment != nil {
 			deployment := *taskForce.Deployment
 			if taskForce.Deployment.Position != nil {

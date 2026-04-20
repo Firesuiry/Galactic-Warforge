@@ -189,7 +189,9 @@ func collectCombatSquads(ws *model.WorldState, playerID string) []model.CombatSq
 		if squad == nil {
 			continue
 		}
-		out = append(out, *squad)
+		copy := *squad
+		copy.Sustainment = squad.Sustainment.Clone()
+		out = append(out, copy)
 	}
 	return out
 }

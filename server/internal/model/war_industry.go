@@ -68,6 +68,7 @@ type WarRefitOrder struct {
 	QueueIndex        int64            `json:"queue_index,omitempty"`
 	CreatedTick       int64            `json:"created_tick,omitempty"`
 	UpdatedTick       int64            `json:"updated_tick,omitempty"`
+	RepairTier        WarRepairTier    `json:"repair_tier,omitempty"`
 }
 
 // WarProductionLineState tracks per-facility retool and repeat-production state.
@@ -110,6 +111,7 @@ type WarIndustryView struct {
 	ProductionOrders []WarProductionOrder   `json:"production_orders"`
 	RefitOrders      []WarRefitOrder        `json:"refit_orders"`
 	DeploymentHubs   []WarDeploymentHubView `json:"deployment_hubs"`
+	SupplyNodes      []WarSupplyNodeView    `json:"supply_nodes"`
 }
 
 // Clone returns a deep copy of the military industry state.

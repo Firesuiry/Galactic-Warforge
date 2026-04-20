@@ -12,6 +12,7 @@ func (ql *Layer) WarIndustry(ws *model.WorldState, playerID string) *model.WarIn
 		ProductionOrders: []model.WarProductionOrder{},
 		RefitOrders:      []model.WarRefitOrder{},
 		DeploymentHubs:   []model.WarDeploymentHubView{},
+		SupplyNodes:      []model.WarSupplyNodeView{},
 	}
 	if ws == nil {
 		return view
@@ -74,6 +75,74 @@ func (ql *Layer) WarIndustry(ws *model.WorldState, playerID string) *model.WarIn
 			hubView.ReadyPayloads[blueprintID] = count
 		}
 		view.DeploymentHubs = append(view.DeploymentHubs, hubView)
+
+		if building := ws.Buildings[hub.BuildingID]; building != nil && building.Storage != nil {
+			view.SupplyNodes = append(view.SupplyNodes, model.WarSupplyNodeView{
+				NodeID:      "hub:" + hub.BuildingID,
+				SourceType:  model.WarSupplySourceOrbitalSupplyPort,
+				Label:       "Orbital Supply Port",
+				PlanetID:    ws.PlanetID,
+				BuildingID:  hub.BuildingID,
+				Inventory:   model.MilitarySupplyFromInventory(building.Storage.Inventory),
+				UpdatedTick: hub.UpdatedTick,
+			})
+		}
+	}
+
+	for stationID, station := range ws.LogisticsStations {
+		building := ws.Buildings[stationID]
+		if station == nil || building == nil || building.OwnerID != playerID {
+			continue
+		}
+		sourceType := model.WarSupplySourcePlanetaryLogisticsStation
+		label := "Planetary Logistics Station"
+		if building.Type == model.BuildingTypeInterstellarLogisticsStation {
+			sourceType = model.WarSupplySourceInterstellarLogistics
+			label = "Interstellar Logistics Station"
+		}
+		view.SupplyNodes = append(view.SupplyNodes, model.WarSupplyNodeView{
+			NodeID:      "station:" + stationID,
+			SourceType:  sourceType,
+			Label:       label,
+			PlanetID:    ws.PlanetID,
+			BuildingID:  stationID,
+			Inventory:   model.MilitarySupplyFromInventory(station.Inventory),
+			UpdatedTick: ws.Tick,
+		})
+	}
+
+	for droneID, drone := range ws.LogisticsDrones {
+		building := ws.Buildings[drone.StationID]
+		if drone == nil || building == nil || building.OwnerID != playerID {
+			continue
+		}
+		view.SupplyNodes = append(view.SupplyNodes, model.WarSupplyNodeView{
+			NodeID:      "drone:" + droneID,
+			SourceType:  model.WarSupplySourceFrontlineSupplyDrop,
+			Label:       "Frontline Supply Drop",
+			PlanetID:    ws.PlanetID,
+			BuildingID:  drone.StationID,
+			UnitID:      droneID,
+			Inventory:   model.MilitarySupplyFromInventory(drone.Cargo),
+			UpdatedTick: ws.Tick,
+		})
+	}
+
+	for shipID, ship := range ws.LogisticsShips {
+		building := ws.Buildings[ship.StationID]
+		if ship == nil || building == nil || building.OwnerID != playerID {
+			continue
+		}
+		view.SupplyNodes = append(view.SupplyNodes, model.WarSupplyNodeView{
+			NodeID:      "ship:" + shipID,
+			SourceType:  model.WarSupplySourceSupplyShip,
+			Label:       "Supply Ship",
+			PlanetID:    ws.PlanetID,
+			BuildingID:  ship.StationID,
+			UnitID:      shipID,
+			Inventory:   model.MilitarySupplyFromInventory(ship.Cargo),
+			UpdatedTick: ws.Tick,
+		})
 	}
 
 	return view

@@ -438,10 +438,15 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 	baseHP := 80
 	weapon := model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8, AmmoCost: 0}
 	shield := model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10}
+	sustainment := model.WarSustainmentState{}
+	blueprint, hasBlueprint := model.ResolveWarBlueprintForPlayer(ws.Players[playerID], blueprintID)
 	if profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, blueprintID); ok && profile.Squad != nil {
 		baseHP = profile.Squad.HP
 		weapon = profile.Squad.Weapon
 		shield = profile.Squad.Shield
+		if hasBlueprint {
+			sustainment = model.InitWarSustainmentState(blueprint, profile, count)
+		}
 	}
 	totalHP := baseHP * count
 	return &model.CombatSquad{
@@ -455,6 +460,7 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 		MaxHP:            totalHP,
 		Shield:           shield,
 		Weapon:           weapon,
+		Sustainment:      sustainment,
 		State:            model.CombatSquadStateIdle,
 	}
 }
@@ -479,6 +485,8 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 	totalDamage := 0
 	totalShield := 0.0
 	maxShield := 0.0
+	oldCapacity := fleet.Sustainment.Capacity
+	newCapacity := model.WarSupplyStock{}
 	for _, stack := range fleet.Units {
 		profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, stack.BlueprintID)
 		if !ok || profile.FleetUnit == nil {
@@ -487,6 +495,15 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 		totalDamage += profile.FleetUnit.Weapon.Damage * stack.Count
 		totalShield += profile.FleetUnit.Shield.Level * float64(stack.Count)
 		maxShield += profile.FleetUnit.Shield.MaxLevel * float64(stack.Count)
+		if blueprint, ok := model.ResolveWarBlueprintForPlayer(ws.Players[playerID], stack.BlueprintID); ok {
+			capacity := model.InitWarSustainmentState(blueprint, profile, stack.Count).Capacity
+			newCapacity.Ammo += capacity.Ammo
+			newCapacity.Missiles += capacity.Missiles
+			newCapacity.Fuel += capacity.Fuel
+			newCapacity.SpareParts += capacity.SpareParts
+			newCapacity.ShieldCells += capacity.ShieldCells
+			newCapacity.RepairDrones += capacity.RepairDrones
+		}
 	}
 	fleet.Weapon = model.WeaponState{
 		Type:         model.WeaponTypeLaser,
@@ -501,6 +518,13 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 		RechargeRate:  2,
 		RechargeDelay: 10,
 	}
+	fleet.Sustainment.Capacity = newCapacity
+	fleet.Sustainment.Current = model.RefillForAddedCapacity(fleet.Sustainment.Current, oldCapacity, newCapacity)
+	fleet.Sustainment.Condition = model.WarSupplyConditionHealthy
+	if fleet.Sustainment.Cohesion <= 0 {
+		fleet.Sustainment.Cohesion = 1
+	}
+	fleet.Sustainment.Normalize()
 }
 
 func resolveWarBlueprintRuntimeProfile(ws *model.WorldState, playerID, blueprintID string) (model.WarBlueprintRuntimeProfile, bool) {

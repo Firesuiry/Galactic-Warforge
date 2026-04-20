@@ -131,13 +131,15 @@ type WarCommandCapacityStatus struct {
 
 // WarTaskForceMemberView resolves one task-force member against live runtime state.
 type WarTaskForceMemberView struct {
-	Kind         string   `json:"kind"`
-	EntityID     string   `json:"entity_id"`
-	PlanetID     string   `json:"planet_id,omitempty"`
-	SystemID     string   `json:"system_id,omitempty"`
-	BlueprintIDs []string `json:"blueprint_ids,omitempty"`
-	Count        int      `json:"count,omitempty"`
-	State        string   `json:"state,omitempty"`
+	Kind         string               `json:"kind"`
+	EntityID     string               `json:"entity_id"`
+	PlanetID     string               `json:"planet_id,omitempty"`
+	SystemID     string               `json:"system_id,omitempty"`
+	BlueprintIDs []string             `json:"blueprint_ids,omitempty"`
+	Count        int                  `json:"count,omitempty"`
+	State        string               `json:"state,omitempty"`
+	SupplyStatus *WarSupplyStatusView `json:"supply_status,omitempty"`
+	RepairState  *WarRepairState      `json:"repair_state,omitempty"`
 }
 
 // WarTaskForceView exposes query-facing task-force state.
@@ -149,6 +151,7 @@ type WarTaskForceView struct {
 	Deployment      *WarTaskForceDeployment  `json:"deployment,omitempty"`
 	Members         []WarTaskForceMemberView `json:"members,omitempty"`
 	CommandCapacity WarCommandCapacityStatus `json:"command_capacity"`
+	SupplyStatus    WarSupplyStatusView      `json:"supply_status"`
 }
 
 // WarTaskForceListView is the list response for task forces.
@@ -350,6 +353,10 @@ func ResolveWarTaskForceMembers(player *PlayerState, taskForce *WarTaskForce, wo
 				view.BlueprintIDs = []string{squad.BlueprintID}
 				view.Count = squad.Count
 				view.State = string(squad.State)
+				status := squad.Sustainment.StatusView()
+				view.SupplyStatus = &status
+				repair := squad.Sustainment.Repair
+				view.RepairState = &repair
 				break
 			}
 		case WarTaskForceMemberKindFleet:
@@ -379,6 +386,10 @@ func ResolveWarTaskForceMembers(player *PlayerState, taskForce *WarTaskForce, wo
 						total += stack.Count
 					}
 					view.Count = total
+					status := fleet.Sustainment.StatusView()
+					view.SupplyStatus = &status
+					repair := fleet.Sustainment.Repair
+					view.RepairState = &repair
 					break
 				}
 			}
@@ -386,6 +397,56 @@ func ResolveWarTaskForceMembers(player *PlayerState, taskForce *WarTaskForce, wo
 		out = append(out, view)
 	}
 	return out
+}
+
+// SummarizeWarTaskForceSupply aggregates member sustainment into one task-force level status.
+func SummarizeWarTaskForceSupply(members []WarTaskForceMemberView) WarSupplyStatusView {
+	summary := WarSupplyStatusView{
+		Condition: WarSupplyConditionHealthy,
+		Cohesion:  1,
+	}
+	if len(members) == 0 {
+		return summary
+	}
+
+	conditions := map[WarSupplyCondition]int{
+		WarSupplyConditionHealthy:   0,
+		WarSupplyConditionStrained:  1,
+		WarSupplyConditionCritical:  2,
+		WarSupplyConditionCollapsed: 3,
+	}
+	maxCondition := WarSupplyConditionHealthy
+	shortages := map[string]struct{}{}
+	totalCohesion := 0.0
+	counted := 0.0
+
+	for _, member := range members {
+		if member.SupplyStatus == nil {
+			continue
+		}
+		summary.Current.add(member.SupplyStatus.Current)
+		summary.Capacity.add(member.SupplyStatus.Capacity)
+		summary.DamagePenalty = maxFloat(summary.DamagePenalty, member.SupplyStatus.DamagePenalty)
+		summary.ShieldPenalty = maxFloat(summary.ShieldPenalty, member.SupplyStatus.ShieldPenalty)
+		summary.MobilityPenalty = maxFloat(summary.MobilityPenalty, member.SupplyStatus.MobilityPenalty)
+		summary.RetreatRecommended = summary.RetreatRecommended || member.SupplyStatus.RetreatRecommended
+		totalCohesion += member.SupplyStatus.Cohesion
+		counted++
+		if conditions[member.SupplyStatus.Condition] > conditions[maxCondition] {
+			maxCondition = member.SupplyStatus.Condition
+		}
+		for _, shortage := range member.SupplyStatus.Shortages {
+			shortages[shortage] = struct{}{}
+		}
+	}
+	if counted > 0 {
+		summary.Cohesion = roundWarPenalty(totalCohesion / counted)
+	}
+	for shortage := range shortages {
+		summary.Shortages = append(summary.Shortages, shortage)
+	}
+	summary.Condition = maxCondition
+	return summary
 }
 
 // EvaluateWarTaskForce computes live command-capacity totals and penalties.

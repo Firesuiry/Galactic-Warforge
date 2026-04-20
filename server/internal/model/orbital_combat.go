@@ -184,17 +184,18 @@ func CalculateFormationPositions(leader *CombatUnit, formationType FormationType
 
 // SpaceFleet 太空舰队
 type SpaceFleet struct {
-	ID               string           `json:"id"`
-	OwnerID          string           `json:"owner_id"`
-	SystemID         string           `json:"system_id"`
-	AnchorPlanetID   string           `json:"anchor_planet_id,omitempty"`
-	SourceBuildingID string           `json:"source_building_id,omitempty"`
-	Name             string           `json:"name,omitempty"`
-	Formation        FormationType    `json:"formation"`
-	State            FleetState       `json:"state"`
-	Units            []FleetUnitStack `json:"units,omitempty"`
-	Weapon           WeaponState      `json:"weapon"`
-	Shield           ShieldState      `json:"shield"`
-	Target           *FleetTarget     `json:"target,omitempty"`
-	LastAttackTick   int64            `json:"last_attack_tick,omitempty"`
+	ID               string              `json:"id"`
+	OwnerID          string              `json:"owner_id"`
+	SystemID         string              `json:"system_id"`
+	AnchorPlanetID   string              `json:"anchor_planet_id,omitempty"`
+	SourceBuildingID string              `json:"source_building_id,omitempty"`
+	Name             string              `json:"name,omitempty"`
+	Formation        FormationType       `json:"formation"`
+	State            FleetState          `json:"state"`
+	Units            []FleetUnitStack    `json:"units,omitempty"`
+	Weapon           WeaponState         `json:"weapon"`
+	Shield           ShieldState         `json:"shield"`
+	Sustainment      WarSustainmentState `json:"sustainment"`
+	Target           *FleetTarget        `json:"target,omitempty"`
+	LastAttackTick   int64               `json:"last_attack_tick,omitempty"`
 }

@@ -29,29 +29,31 @@ type ActivePlanetDysonContextView struct {
 
 // FleetRuntimeView is a compact fleet summary.
 type FleetRuntimeView struct {
-	FleetID          string                 `json:"fleet_id"`
-	OwnerID          string                 `json:"owner_id"`
-	SystemID         string                 `json:"system_id"`
-	SourceBuildingID string                 `json:"source_building_id,omitempty"`
-	Formation        string                 `json:"formation"`
-	State            string                 `json:"state"`
-	Units            []model.FleetUnitStack `json:"units,omitempty"`
-	Target           *model.FleetTarget     `json:"target,omitempty"`
+	FleetID          string                    `json:"fleet_id"`
+	OwnerID          string                    `json:"owner_id"`
+	SystemID         string                    `json:"system_id"`
+	SourceBuildingID string                    `json:"source_building_id,omitempty"`
+	Formation        string                    `json:"formation"`
+	State            string                    `json:"state"`
+	Units            []model.FleetUnitStack    `json:"units,omitempty"`
+	Sustainment      model.WarSustainmentState `json:"sustainment"`
+	Target           *model.FleetTarget        `json:"target,omitempty"`
 }
 
 // FleetDetailView exposes one fleet in detail.
 type FleetDetailView struct {
-	FleetID          string                 `json:"fleet_id"`
-	OwnerID          string                 `json:"owner_id"`
-	SystemID         string                 `json:"system_id"`
-	SourceBuildingID string                 `json:"source_building_id,omitempty"`
-	Formation        string                 `json:"formation"`
-	State            string                 `json:"state"`
-	Units            []model.FleetUnitStack `json:"units,omitempty"`
-	Target           *model.FleetTarget     `json:"target,omitempty"`
-	Weapon           model.WeaponState      `json:"weapon"`
-	Shield           model.ShieldState      `json:"shield"`
-	LastAttackTick   int64                  `json:"last_attack_tick,omitempty"`
+	FleetID          string                    `json:"fleet_id"`
+	OwnerID          string                    `json:"owner_id"`
+	SystemID         string                    `json:"system_id"`
+	SourceBuildingID string                    `json:"source_building_id,omitempty"`
+	Formation        string                    `json:"formation"`
+	State            string                    `json:"state"`
+	Units            []model.FleetUnitStack    `json:"units,omitempty"`
+	Target           *model.FleetTarget        `json:"target,omitempty"`
+	Weapon           model.WeaponState         `json:"weapon"`
+	Shield           model.ShieldState         `json:"shield"`
+	Sustainment      model.WarSustainmentState `json:"sustainment"`
+	LastAttackTick   int64                     `json:"last_attack_tick,omitempty"`
 }
 
 // SystemRuntime returns one system runtime view.
@@ -202,6 +204,7 @@ func fleetRuntimeView(fleet *model.SpaceFleet) FleetRuntimeView {
 		Formation:        string(fleet.Formation),
 		State:            string(fleet.State),
 		Units:            append([]model.FleetUnitStack(nil), fleet.Units...),
+		Sustainment:      fleet.Sustainment.Clone(),
 	}
 	if fleet.Target != nil {
 		targetCopy := *fleet.Target
@@ -221,6 +224,7 @@ func fleetDetailView(fleet *model.SpaceFleet) FleetDetailView {
 		Units:            append([]model.FleetUnitStack(nil), fleet.Units...),
 		Weapon:           fleet.Weapon,
 		Shield:           fleet.Shield,
+		Sustainment:      fleet.Sustainment.Clone(),
 		LastAttackTick:   fleet.LastAttackTick,
 	}
 	if fleet.Target != nil {

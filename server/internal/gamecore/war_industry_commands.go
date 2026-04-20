@@ -285,6 +285,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 			CreatedTick:       ws.Tick,
 			UpdatedTick:       ws.Tick,
 			QueueIndex:        industry.NextOrderSeq,
+			RepairTier:        model.WarRepairTierOverhaul,
 		}
 		order.RemainingTicks = order.TotalTicks
 		industry.RefitOrders[order.ID] = order
@@ -342,6 +343,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 		CreatedTick:       ws.Tick,
 		UpdatedTick:       ws.Tick,
 		QueueIndex:        industry.NextOrderSeq,
+		RepairTier:        model.WarRepairTierOverhaul,
 	}
 	order.RemainingTicks = order.TotalTicks
 	industry.RefitOrders[order.ID] = order

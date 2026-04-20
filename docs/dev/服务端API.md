@@ -364,7 +364,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `dyson_sphere.layers[].construction_bonus` 当前按 `min(0.5, rocket_launches * 0.02)` 结算；若该层已有壳面，`launch_rocket` 还会按顺序把第一个 `coverage < 1.0` 的壳面额外推进 `0.02` 覆盖率，并重算该壳面的 `energy_output`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
-  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
+  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `sustainment` / `target`
+  - `fleets[].sustainment`：舰队 authoritative 补给态，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `repair_blocked` / `retreat_recommended` / `shortages` / `sources` / `last_resupply_tick` / `last_consumption_tick` / `repair`
+  - `fleets[].sustainment.current` / `capacity`：六类军需库存，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
+  - `fleets[].sustainment.sources[]`：最近一次补给来源，字段为 `source_id` / `source_type` / `label` / `planet_id` / `system_id` / `building_id` / `unit_id`
+  - `fleets[].sustainment.sources[].source_type`：当前 authoritative 只会返回 `planetary_logistics_station` / `interstellar_logistics_station` / `orbital_supply_port` / `supply_ship` / `frontline_supply_drop`
+  - `fleets[].sustainment.repair`：维修态，字段为 `tier` / `active` / `blocked_reason` / `hp_per_tick` / `shield_per_tick` / `remaining_damage` / `remaining_shield` / `remaining_ticks` / `completed_this_tick`
+  - `fleets[].sustainment.repair.tier`：当前只会返回 `field_repair` / `frontline_repair_station` / `overhaul`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `contacts`：恒星系情报接触列表，包含 `id` / `scope_type` / `scope_id` / `contact_kind` / `entity_id` / `entity_type` / `domain` / `planet_id` / `system_id` / `level` / `classification` / `confirmed_type` / `strength_estimate` / `threat_level` / `last_updated_tick` / `signal_strength` / `lock_quality` / `jamming_penalty` / `missile_drift_risk` / `false_contact` / `sources`
   - `contacts[].level`：当前固定为 `unknown_signal` / `classified_contact` / `confirmed_type` / `fully_resolved`
@@ -424,7 +430,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 返回字段与单舰详情一致，便于 CLI 直接列表示意
   - 当玩家当前没有任何舰队时，响应体固定返回空数组 `[]`，不会返回 `null`
 - 响应字段:
-  - `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target` / `weapon` / `shield` / `last_attack_tick`
+  - `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `sustainment` / `target` / `weapon` / `shield` / `last_attack_tick`
+  - `sustainment` 字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
 
 **GET /world/fleets/{fleet_id}**
 - 说明: 单舰队 authoritative 详情（需认证）
@@ -432,10 +439,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_id` / `owner_id` / `system_id` / `source_building_id`
   - `formation` / `state`
   - `units`
+  - `sustainment`
   - `target`
   - `weapon`
   - `shield`
   - `last_attack_tick`
+  - `sustainment` 字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
 - 响应示例:
 ```json
 {
@@ -626,7 +635,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 行星侦察不再只有旧式“看见/没看见”；当前 runtime 会同时返回 `contacts`（完整接触对象）和 `detections`（为旧查询/渲染保留的摘要投影）
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
-  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `sustainment` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `combat_squads[].sustainment`：地面单位 authoritative 补给态，字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
   - `orbital_platforms`：轨道平台，包含 `id` / `owner_id` / `planet_id` / `orbit` / `hp` / `max_hp` / `weapon` / `ammo_capacity` / `ammo_count` / `last_fire_tick` / `is_active`
   - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
@@ -1076,25 +1086,34 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 当前玩家的战争军工、翻修与部署枢纽状态（需认证）
 - 响应字段:
   - `production_orders[]`：军工排产单，包含 `id` / `factory_building_id` / `deployment_hub_id` / `blueprint_id` / `domain` / `count` / `completed_count` / `status` / `stage` / `stage_remaining_ticks` / `stage_total_ticks` / `component_ticks` / `assembly_ticks` / `retool_ticks` / `repeat_bonus_percent`
-  - `refit_orders[]`：翻修 / 改型单，包含 `id` / `building_id` / `unit_id` / `unit_kind` / `source_blueprint_id` / `target_blueprint_id` / `status` / `remaining_ticks` / `total_ticks`
+  - `refit_orders[]`：翻修 / 改型单，包含 `id` / `building_id` / `unit_id` / `unit_kind` / `source_blueprint_id` / `target_blueprint_id` / `status` / `remaining_ticks` / `total_ticks` / `repair_tier`
+  - `refit_orders[].repair_tier`：当前翻修层级，取值为 `field_repair` / `frontline_repair_station` / `overhaul`
   - `deployment_hubs[]`：部署枢纽军备库存，包含 `building_id` / `building_type` / `planet_id` / `capacity` / `ready_payloads`
+  - `supply_nodes[]`：军需补给节点视图，包含 `node_id` / `source_type` / `label` / `planet_id` / `system_id` / `building_id` / `unit_id` / `inventory` / `updated_tick`
+  - `supply_nodes[].inventory`：六类军需库存，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
+  - `supply_nodes[].source_type`：当前 authoritative 只会返回 `planetary_logistics_station` / `interstellar_logistics_station` / `orbital_supply_port` / `supply_ship` / `frontline_supply_drop`
 - 说明补充:
   - `production_orders[].stage` 当前 authoritative 区分为 `components -> assembly -> ready`
   - `repeat_bonus_percent` 表示同一产线连续生产同蓝图时的效率收益；`retool_ticks` 表示切换到不同蓝图时的重整时间
   - `ready_payloads` 已取代把蓝图 ID 当普通 item 塞进建筑 `storage` 的旧做法；`deploy_squad` / `commission_fleet` 只从这里消费军备产物
+  - `supply_nodes` 会同时聚合玩家所属部署枢纽、行星物流站、星际物流站、物流货船与物流无人机上的军需库存，便于直接观察战区补给面
 
 **GET /world/warfare/task-forces**
 - 说明: 当前玩家的任务群编制、姿态、成员与指挥容量视图（需认证）
 - 响应字段:
-  - `task_forces[]`：任务群列表，包含 `id` / `name` / `theater_id` / `stance` / `deployment` / `members` / `command_capacity`
+  - `task_forces[]`：任务群列表，包含 `id` / `name` / `theater_id` / `stance` / `deployment` / `members` / `command_capacity` / `supply_status`
   - `deployment`：当前 authoritative 部署意图，包含可选 `system_id` / `planet_id` / `position`
-  - `members[]`：运行态成员解析结果，包含 `kind` / `entity_id` / `planet_id` / `system_id` / `blueprint_ids` / `count` / `state`
+  - `members[]`：运行态成员解析结果，包含 `kind` / `entity_id` / `planet_id` / `system_id` / `blueprint_ids` / `count` / `state` / `supply_status` / `repair_state`
+  - `members[].supply_status`：成员补给摘要，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `retreat_recommended` / `shortages`
+  - `members[].repair_state`：成员维修态，包含 `tier` / `active` / `blocked_reason` / `hp_per_tick` / `shield_per_tick` / `remaining_damage` / `remaining_shield` / `remaining_ticks` / `completed_this_tick`
   - `command_capacity`：当前任务群指挥容量状态，包含 `total` / `used` / `over` / `delay_penalty` / `hit_penalty` / `formation_penalty` / `coordination_penalty` / `sources`
+  - `supply_status`：任务群聚合补给摘要，字段结构与 `members[].supply_status` 一致；当前按成员最差 `condition`、最大惩罚和累计库存汇总
   - `sources[]`：容量来源，包含 `source_id` / `source_type` / `label` / `entity_id` / `planet_id` / `system_id` / `capacity`
 - 说明补充:
   - `stance` 当前支持 `hold` / `patrol` / `escort` / `intercept` / `harass` / `siege` / `bombard` / `retreat_on_losses`
   - `command_capacity.sources[].source_type` 当前来自 `command_center` / `command_ship` / `battlefield_analysis_base` / `military_ai_core`
   - 该查询是 authoritative 组织层视图，不是静态配置快照；成员、姿态和超编惩罚会随着当前 runtime 实体状态实时变化
+  - `members[].repair_state.tier` 当前只会返回 `field_repair` / `frontline_repair_station` / `overhaul`
   - `task_force_deploy` 当前只表达部署意图与战区绑定，不等价于已经存在完整跨星系自动航渡系统
 
 **GET /world/warfare/theaters**

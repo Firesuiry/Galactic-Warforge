@@ -24,7 +24,7 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 		if taskForce != nil {
 			status = model.EvaluateWarTaskForce(player, taskForce, worlds, nil)
 		}
-		if shouldRetreatSquad(squad, profile) {
+		if squad.Sustainment.RetreatRecommended || shouldRetreatSquad(squad, profile) {
 			squad.State = model.CombatSquadStateIdle
 			squad.TargetEnemyID = ""
 			continue
@@ -40,14 +40,23 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 		if attackDelayed(currentTick, squad.LastAttackTick, status.DelayPenalty) {
 			continue
 		}
+		if attackBlockedBySustainment(&squad.Sustainment) {
+			squad.State = model.CombatSquadStateIdle
+			continue
+		}
 
 		damage := squad.Weapon.Damage * max(1, squad.Count)
 		damage = applyTaskForceDamagePenalty(damage, profile, status)
+		damage = int(float64(damage) * sustainmentDamageMultiplier(&squad.Sustainment))
+		if damage <= 0 {
+			continue
+		}
 		target.Strength -= max(1, damage/6)
 		squad.TargetEnemyID = target.ID
 		squad.State = model.CombatSquadStateEngaging
 		squad.LastAttackTick = currentTick
-		squad.Shield.ProcessShieldRecharge(currentTick)
+		settleAttackConsumption(&squad.Sustainment, squad.Weapon, currentTick)
+		rechargeShieldWithSustainment(&squad.Shield, &squad.Sustainment, currentTick)
 
 		events = append(events, &model.GameEvent{
 			EventType:       model.EvtDamageApplied,
@@ -109,7 +118,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 				if taskForce != nil {
 					status = model.EvaluateWarTaskForce(player, taskForce, worlds, spaceRuntime)
 				}
-				if shouldRetreatFleet(fleet, profile) {
+				if fleet.Sustainment.RetreatRecommended || shouldRetreatFleet(fleet, profile) {
 					fleet.State = model.FleetStateIdle
 					fleet.Target = nil
 					continue
@@ -125,13 +134,23 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 				if attackDelayed(currentTick, fleet.LastAttackTick, status.DelayPenalty) {
 					continue
 				}
+				if attackBlockedBySustainment(&fleet.Sustainment) {
+					fleet.State = model.FleetStateIdle
+					fleet.Target = nil
+					continue
+				}
 
 				damage := max(1, fleet.Weapon.Damage/4)
 				damage = applyTaskForceDamagePenalty(damage, profile, status)
+				damage = int(float64(damage) * sustainmentDamageMultiplier(&fleet.Sustainment))
+				if damage <= 0 {
+					continue
+				}
 				target.Strength -= damage
 				fleet.LastAttackTick = currentTick
 				fleet.Weapon.LastFireTick = currentTick
-				fleet.Shield.ProcessShieldRecharge(currentTick)
+				settleAttackConsumption(&fleet.Sustainment, fleet.Weapon, currentTick)
+				rechargeShieldWithSustainment(&fleet.Shield, &fleet.Sustainment, currentTick)
 
 				events = append(events, &model.GameEvent{
 					EventType:       model.EvtDamageApplied,
