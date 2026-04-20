@@ -440,6 +440,9 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 	weapon := model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8, AmmoCost: 0}
 	shield := model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10}
 	sustainment := model.WarSustainmentState{}
+	domain := model.UnitDomainGround
+	baseFrameID := ""
+	platformClass := "mech"
 	blueprint, hasBlueprint := model.ResolveWarBlueprintForPlayer(ws.Players[playerID], blueprintID)
 	if profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, blueprintID); ok && profile.Squad != nil {
 		baseHP = profile.Squad.HP
@@ -447,6 +450,9 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 		shield = profile.Squad.Shield
 		if hasBlueprint {
 			sustainment = model.InitWarSustainmentState(blueprint, profile, count)
+			domain = blueprint.Domain
+			baseFrameID = blueprint.BaseFrameID
+			platformClass = combatSquadPlatformClass(blueprint)
 		}
 	}
 	totalHP := baseHP * count
@@ -456,6 +462,9 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 		PlanetID:         planetID,
 		SourceBuildingID: buildingID,
 		BlueprintID:      blueprintID,
+		Domain:           domain,
+		BaseFrameID:      baseFrameID,
+		PlatformClass:    platformClass,
 		Count:            count,
 		HP:               totalHP,
 		MaxHP:            totalHP,
@@ -464,6 +473,29 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 		Sustainment:      sustainment,
 		State:            model.CombatSquadStateIdle,
 	}
+}
+
+func combatSquadPlatformClass(blueprint model.WarBlueprint) string {
+	if blueprint.Domain == model.UnitDomainAir {
+		return "drone"
+	}
+	for _, slot := range blueprint.Components {
+		if component, ok := model.PublicWarBlueprintCatalogIndex().ComponentByID(slot.ComponentID); ok {
+			if stringSliceContains(component.Tags, "vehicle") || stringSliceContains(component.Tags, "tracked") || stringSliceContains(component.Tags, "hover") {
+				return "vehicle"
+			}
+		}
+	}
+	return "mech"
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func addFleetUnits(fleet *model.SpaceFleet, blueprintID string, count int) {

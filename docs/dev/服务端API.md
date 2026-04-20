@@ -376,6 +376,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `landing_operations[].result`：当前固定为 `pending` / `success` / `failed`
   - `landing_operations[].blocked_reason`：失败时当前只会返回 `insufficient_orbital_superiority` / `insufficient_initial_supply` / `landing_zone_unsafe` / `task_force_unavailable`
   - `landing_operations[].initial_supply`：登陆发起方任务群在流程推进时快照到的六类初始军需，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
+  - `landing_operations[].bridgehead_id`：若登陆成功，可直接关联到 `/world/planets/{planet_id}/runtime.bridgeheads[].id`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `last_battle_report_id`
@@ -705,9 +706,20 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 行星侦察不再只有旧式“看见/没看见”；当前 runtime 会同时返回 `contacts`（完整接触对象）和 `detections`（为旧查询/渲染保留的摘要投影）
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
-  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `sustainment` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `domain` / `base_frame_id` / `platform_class` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `sustainment` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `combat_squads[].platform_class`：当前 authoritative 会按蓝图运行态归类为 `mech` / `vehicle` / `drone`
   - `combat_squads[].sustainment`：地面单位 authoritative 补给态，字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
   - `orbital_platforms`：轨道平台，包含 `id` / `owner_id` / `planet_id` / `orbit` / `hp` / `max_hp` / `weapon` / `ammo_capacity` / `ammo_count` / `last_fire_tick` / `is_active`
+  - `bridgeheads`：滩头阵地运行态，包含 `id` / `operation_id` / `owner_id` / `planet_id` / `frontline_id` / `status` / `contested` / `expansion_level` / `fortification_level` / `established_tick` / `last_support_tick` / `transport_capacity`
+  - `bridgeheads[].status`：当前固定为 `establishing` / `active` / `collapsed`
+  - `frontlines`：行星层 authoritative 前线据点，包含 `id` / `planet_id` / `owner_id` / `type` / `bridgehead_id` / `position` / `status` / `control` / `fortification` / `obstacle_level` / `supply_flow` / `last_orbital_support_tick` / `updated_tick`
+  - `frontlines[].type`：当前固定为 `bridgehead` / `outpost`
+  - `frontlines[].status`：当前固定为 `secured` / `contested` / `destroyed`
+  - `ground_task_forces`：行星层任务群推进运行态，包含 `task_force_id` / `owner_id` / `planet_id` / `frontline_id` / `bridgehead_id` / `ground_order` / `status` / `progress` / `pressure` / `orbital_support_mode` / `orbital_support_available` / `orbital_support_cooldown` / `orbital_support_blocked_reason` / `last_orbital_support_tick` / `updated_tick`
+  - `ground_task_forces[].ground_order`：当前固定为 `occupy` / `advance` / `hold` / `clear_obstacles` / `escort_supply`
+  - `ground_task_forces[].status`：当前固定为 `staging` / `contesting` / `securing` / `holding` / `clearing` / `supplying` / `blocked`
+  - `ground_task_forces[].orbital_support_mode`：当前固定为 `none` / `fire_support` / `strike`
+  - `ground_task_forces[].orbital_support_blocked_reason`：当前 authoritative 会返回 `no_orbital_superiority` / `planetary_defense_screen` / `frontline_not_found`
   - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
   - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `origin_planet_id` / `target_planet_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
@@ -1172,7 +1184,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 当前玩家的任务群编制、姿态、成员与指挥容量视图（需认证）
 - 响应字段:
   - `task_forces[]`：任务群列表，包含 `id` / `name` / `theater_id` / `stance` / `deployment` / `members` / `command_capacity` / `supply_status`
-  - `deployment`：当前 authoritative 部署意图，包含可选 `system_id` / `planet_id` / `position`
+  - `deployment`：当前 authoritative 部署意图，包含可选 `system_id` / `planet_id` / `position` / `frontline_id` / `ground_order` / `support_mode`
   - `members[]`：运行态成员解析结果，包含 `kind` / `entity_id` / `planet_id` / `system_id` / `blueprint_ids` / `count` / `state` / `supply_status` / `repair_state`
   - `members[].supply_status`：成员补给摘要，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `retreat_recommended` / `shortages`
   - `members[].repair_state`：成员维修态，包含 `tier` / `active` / `blocked_reason` / `hp_per_tick` / `shield_per_tick` / `remaining_damage` / `remaining_shield` / `remaining_ticks` / `completed_this_tick`
@@ -1184,7 +1196,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `command_capacity.sources[].source_type` 当前来自 `command_center` / `command_ship` / `battlefield_analysis_base` / `military_ai_core`
   - 该查询是 authoritative 组织层视图，不是静态配置快照；成员、姿态和超编惩罚会随着当前 runtime 实体状态实时变化
   - `members[].repair_state.tier` 当前只会返回 `field_repair` / `frontline_repair_station` / `overhaul`
-  - `task_force_deploy` 当前只表达部署意图与战区绑定，不等价于已经存在完整跨星系自动航渡系统
+  - `task_force_deploy` 当前既表达跨层部署意图，也表达行星层任务群的前线命令；它仍不等价于已经存在完整跨星系自动航渡系统
 
 **GET /world/warfare/theaters**
 - 说明: 当前玩家的战区、区域划分与战区目标（需认证）
@@ -1313,7 +1325,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `task_force_create`：`payload.task_force_id` 必填；可选 `payload.name` / `payload.stance`；未传 `stance` 时默认为 `hold`
   - `task_force_assign`：`payload.task_force_id` + `payload.member_kind` + `payload.member_ids[]` 必填；`member_kind` 当前只支持 `squad|fleet`；服务端会校验这些 runtime 成员归属当前玩家，并把成员从旧任务群 authoritative 地迁移到新任务群
   - `task_force_set_stance`：`payload.task_force_id` + `payload.stance` 必填；`stance` 取 `hold|patrol|escort|intercept|harass|siege|bombard|retreat_on_losses`；该姿态会真实进入 runtime 结算，影响目标优先级、交战距离、追击与撤退阈值
-  - `task_force_deploy`：`payload.task_force_id` 必填；至少还需提供 `payload.system_id` / `payload.planet_id` / `payload.position` 之一；可选 `payload.theater_id`；若提供 `theater_id`，目标战区必须已存在且属于当前玩家；当前命令写入的是 authoritative 部署意图和战区绑定，不代表已有完整自动移动系统
+  - `task_force_deploy`：`payload.task_force_id` 必填；至少还需提供 `payload.system_id` / `payload.planet_id` / `payload.position` / `payload.frontline_id` / `payload.ground_order` 之一；可选 `payload.theater_id` / `payload.frontline_id` / `payload.ground_order` / `payload.support_mode`；若提供 `theater_id`，目标战区必须已存在且属于当前玩家；`ground_order` 当前支持 `occupy|advance|hold|clear_obstacles|escort_supply`，`support_mode` 当前支持 `none|fire_support|strike`；当前命令写入的是 authoritative 部署意图、战区绑定和行星层前线命令，不代表已有完整自动移动系统
   - `theater_create`：`payload.theater_id` 必填；可选 `payload.name`
   - `theater_define_zone`：`payload.theater_id` + `payload.zone_type` 必填；可选 `payload.system_id` / `payload.planet_id` / `payload.position` / `payload.radius`；`zone_type` 取 `primary|secondary|no_entry|rally|supply_priority`
   - `theater_set_objective`：`payload.theater_id` + `payload.objective_type` 必填；可选 `payload.system_id` / `payload.planet_id` / `payload.entity_id` / `payload.description`

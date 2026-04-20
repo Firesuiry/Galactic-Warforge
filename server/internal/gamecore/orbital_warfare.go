@@ -593,19 +593,27 @@ func ensureLandingBridgehead(targetWorld *model.WorldState, operation *model.Lan
 		if bridgehead := targetWorld.CombatRuntime.Bridgeheads[operation.BridgeheadID]; bridgehead != nil {
 			bridgehead.Status = model.LandingBridgeheadStatusActive
 			bridgehead.LastSupportTick = currentTick
+			if bridgehead.ExpansionLevel <= 0 {
+				bridgehead.ExpansionLevel = 0.35
+			}
+			if bridgehead.FortificationLevel <= 0 {
+				bridgehead.FortificationLevel = 0.25
+			}
 			return bridgehead.ID
 		}
 	}
 	bridgeheadID := targetWorld.CombatRuntime.NextEntityID("bridgehead")
 	targetWorld.CombatRuntime.Bridgeheads[bridgeheadID] = &model.LandingBridgehead{
-		ID:                bridgeheadID,
-		OperationID:       operation.ID,
-		OwnerID:           operation.OwnerID,
-		PlanetID:          operation.PlanetID,
-		Status:            model.LandingBridgeheadStatusActive,
-		EstablishedTick:   currentTick,
-		LastSupportTick:   currentTick,
-		TransportCapacity: operation.TransportCapacity,
+		ID:                 bridgeheadID,
+		OperationID:        operation.ID,
+		OwnerID:            operation.OwnerID,
+		PlanetID:           operation.PlanetID,
+		Status:             model.LandingBridgeheadStatusActive,
+		ExpansionLevel:     0.35,
+		FortificationLevel: 0.25,
+		EstablishedTick:    currentTick,
+		LastSupportTick:    currentTick,
+		TransportCapacity:  operation.TransportCapacity,
 	}
 	return bridgeheadID
 }

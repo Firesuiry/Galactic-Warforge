@@ -248,7 +248,44 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 		}
 		deployment.Position = position
 	}
-	if deployment.SystemID == "" && deployment.PlanetID == "" && deployment.Position == nil {
+	if raw, ok := cmd.Payload["frontline_id"]; ok {
+		value, err := payloadValueString(raw)
+		if err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.frontline_id must be a string"
+			return res, nil
+		}
+		deployment.FrontlineID = value
+	}
+	if raw, ok := cmd.Payload["ground_order"]; ok {
+		value, err := payloadValueString(raw)
+		if err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.ground_order must be a string"
+			return res, nil
+		}
+		deployment.GroundOrder = model.GroundTaskForceOrder(value)
+		if !model.ValidGroundTaskForceOrder(deployment.GroundOrder) {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("invalid ground order: %s", value)
+			return res, nil
+		}
+	}
+	if raw, ok := cmd.Payload["support_mode"]; ok {
+		value, err := payloadValueString(raw)
+		if err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.support_mode must be a string"
+			return res, nil
+		}
+		deployment.OrbitalSupportMode = model.OrbitalSupportMode(value)
+		if !model.ValidOrbitalSupportMode(deployment.OrbitalSupportMode) {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("invalid orbital support mode: %s", value)
+			return res, nil
+		}
+	}
+	if deployment.SystemID == "" && deployment.PlanetID == "" && deployment.Position == nil && deployment.FrontlineID == "" && deployment.GroundOrder == "" {
 		res.Code = model.CodeValidationFailed
 		res.Message = "task_force_deploy requires at least one target field"
 		return res, nil

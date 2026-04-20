@@ -16,6 +16,9 @@ type CombatSquad struct {
 	PlanetID         string              `json:"planet_id"`
 	SourceBuildingID string              `json:"source_building_id,omitempty"`
 	BlueprintID      string              `json:"blueprint_id"`
+	Domain           UnitDomain          `json:"domain,omitempty"`
+	BaseFrameID      string              `json:"base_frame_id,omitempty"`
+	PlatformClass    string              `json:"platform_class,omitempty"`
 	Count            int                 `json:"count"`
 	HP               int                 `json:"hp"`
 	MaxHP            int                 `json:"max_hp"`
@@ -29,10 +32,12 @@ type CombatSquad struct {
 
 // CombatRuntimeState stores authoritative combat runtime entities for one planet world.
 type CombatRuntimeState struct {
-	EntityCounter    int64                         `json:"entity_counter"`
-	Squads           map[string]*CombatSquad       `json:"squads,omitempty"`
-	OrbitalPlatforms map[string]*OrbitalPlatform   `json:"orbital_platforms,omitempty"`
-	Bridgeheads      map[string]*LandingBridgehead `json:"bridgeheads,omitempty"`
+	EntityCounter    int64                              `json:"entity_counter"`
+	Squads           map[string]*CombatSquad            `json:"squads,omitempty"`
+	OrbitalPlatforms map[string]*OrbitalPlatform        `json:"orbital_platforms,omitempty"`
+	Bridgeheads      map[string]*LandingBridgehead      `json:"bridgeheads,omitempty"`
+	Frontlines       map[string]*PlanetaryFrontline     `json:"frontlines,omitempty"`
+	GroundTaskForces map[string]*GroundTaskForceRuntime `json:"ground_task_forces,omitempty"`
 }
 
 // NewCombatRuntimeState returns an initialized combat runtime container.
@@ -41,6 +46,8 @@ func NewCombatRuntimeState() *CombatRuntimeState {
 		Squads:           make(map[string]*CombatSquad),
 		OrbitalPlatforms: make(map[string]*OrbitalPlatform),
 		Bridgeheads:      make(map[string]*LandingBridgehead),
+		Frontlines:       make(map[string]*PlanetaryFrontline),
+		GroundTaskForces: make(map[string]*GroundTaskForceRuntime),
 	}
 }
 
@@ -63,6 +70,8 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 		Squads:           make(map[string]*CombatSquad, len(rt.Squads)),
 		OrbitalPlatforms: make(map[string]*OrbitalPlatform, len(rt.OrbitalPlatforms)),
 		Bridgeheads:      make(map[string]*LandingBridgehead, len(rt.Bridgeheads)),
+		Frontlines:       make(map[string]*PlanetaryFrontline, len(rt.Frontlines)),
+		GroundTaskForces: make(map[string]*GroundTaskForceRuntime, len(rt.GroundTaskForces)),
 	}
 	for id, squad := range rt.Squads {
 		if squad == nil {
@@ -85,6 +94,24 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 		}
 		copy := *bridgehead
 		out.Bridgeheads[id] = &copy
+	}
+	for id, frontline := range rt.Frontlines {
+		if frontline == nil {
+			continue
+		}
+		copy := *frontline
+		if frontline.Position != nil {
+			pos := *frontline.Position
+			copy.Position = &pos
+		}
+		out.Frontlines[id] = &copy
+	}
+	for id, taskForce := range rt.GroundTaskForces {
+		if taskForce == nil {
+			continue
+		}
+		copy := *taskForce
+		out.GroundTaskForces[id] = &copy
 	}
 	return out
 }

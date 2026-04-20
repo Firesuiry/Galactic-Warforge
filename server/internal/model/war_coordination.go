@@ -47,9 +47,12 @@ const (
 
 // WarTaskForceDeployment stores the current deployment intent for one task force.
 type WarTaskForceDeployment struct {
-	SystemID string    `json:"system_id,omitempty"`
-	PlanetID string    `json:"planet_id,omitempty"`
-	Position *Position `json:"position,omitempty"`
+	SystemID           string               `json:"system_id,omitempty"`
+	PlanetID           string               `json:"planet_id,omitempty"`
+	Position           *Position            `json:"position,omitempty"`
+	FrontlineID        string               `json:"frontline_id,omitempty"`
+	GroundOrder        GroundTaskForceOrder `json:"ground_order,omitempty"`
+	OrbitalSupportMode OrbitalSupportMode   `json:"support_mode,omitempty"`
 }
 
 // WarTaskForceMemberRef stores one runtime member binding.

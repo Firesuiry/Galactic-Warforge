@@ -8,22 +8,25 @@ import (
 
 // PlanetRuntimeView exposes dynamic planet runtime state for the active world.
 type PlanetRuntimeView struct {
-	PlanetID          string                  `json:"planet_id"`
-	Discovered        bool                    `json:"discovered"`
-	Available         bool                    `json:"available"`
-	ActivePlanetID    string                  `json:"active_planet_id,omitempty"`
-	Tick              int64                   `json:"tick"`
-	CombatSquads      []model.CombatSquad     `json:"combat_squads,omitempty"`
-	OrbitalPlatforms  []model.OrbitalPlatform `json:"orbital_platforms,omitempty"`
-	LogisticsStations []LogisticsStationView  `json:"logistics_stations,omitempty"`
-	LogisticsDrones   []LogisticsDroneView    `json:"logistics_drones,omitempty"`
-	LogisticsShips    []LogisticsShipView     `json:"logistics_ships,omitempty"`
-	ConstructionTasks []ConstructionTaskView  `json:"construction_tasks,omitempty"`
-	EnemyForces       []EnemyForceView        `json:"enemy_forces,omitempty"`
-	Contacts          []model.SensorContact   `json:"contacts,omitempty"`
-	Detections        []DetectionView         `json:"detections,omitempty"`
-	ThreatLevel       int                     `json:"threat_level"`
-	LastAttackTick    int64                   `json:"last_attack_tick,omitempty"`
+	PlanetID          string                         `json:"planet_id"`
+	Discovered        bool                           `json:"discovered"`
+	Available         bool                           `json:"available"`
+	ActivePlanetID    string                         `json:"active_planet_id,omitempty"`
+	Tick              int64                          `json:"tick"`
+	CombatSquads      []model.CombatSquad            `json:"combat_squads,omitempty"`
+	OrbitalPlatforms  []model.OrbitalPlatform        `json:"orbital_platforms,omitempty"`
+	Bridgeheads       []model.LandingBridgehead      `json:"bridgeheads,omitempty"`
+	Frontlines        []model.PlanetaryFrontline     `json:"frontlines,omitempty"`
+	GroundTaskForces  []model.GroundTaskForceRuntime `json:"ground_task_forces,omitempty"`
+	LogisticsStations []LogisticsStationView         `json:"logistics_stations,omitempty"`
+	LogisticsDrones   []LogisticsDroneView           `json:"logistics_drones,omitempty"`
+	LogisticsShips    []LogisticsShipView            `json:"logistics_ships,omitempty"`
+	ConstructionTasks []ConstructionTaskView         `json:"construction_tasks,omitempty"`
+	EnemyForces       []EnemyForceView               `json:"enemy_forces,omitempty"`
+	Contacts          []model.SensorContact          `json:"contacts,omitempty"`
+	Detections        []DetectionView                `json:"detections,omitempty"`
+	ThreatLevel       int                            `json:"threat_level"`
+	LastAttackTick    int64                          `json:"last_attack_tick,omitempty"`
 }
 
 type LogisticsStationView struct {
@@ -161,6 +164,9 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
 	view.CombatSquads = collectCombatSquads(ws, playerID)
 	view.OrbitalPlatforms = collectOrbitalPlatforms(ws, playerID)
+	view.Bridgeheads = collectBridgeheads(ws)
+	view.Frontlines = collectFrontlines(ws)
+	view.GroundTaskForces = collectGroundTaskForces(ws)
 	view.Contacts = collectPlanetSensorContacts(ws, playerID)
 	view.EnemyForces = collectEnemyForces(ws, playerID)
 	view.Detections = collectDetections(ws, playerID)
@@ -215,6 +221,71 @@ func collectOrbitalPlatforms(ws *model.WorldState, playerID string) []model.Orbi
 			continue
 		}
 		out = append(out, *platform)
+	}
+	return out
+}
+
+func collectBridgeheads(ws *model.WorldState) []model.LandingBridgehead {
+	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.Bridgeheads) == 0 {
+		return []model.LandingBridgehead{}
+	}
+	ids := make([]string, 0, len(ws.CombatRuntime.Bridgeheads))
+	for id := range ws.CombatRuntime.Bridgeheads {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.LandingBridgehead, 0, len(ids))
+	for _, id := range ids {
+		bridgehead := ws.CombatRuntime.Bridgeheads[id]
+		if bridgehead == nil {
+			continue
+		}
+		out = append(out, *bridgehead)
+	}
+	return out
+}
+
+func collectFrontlines(ws *model.WorldState) []model.PlanetaryFrontline {
+	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.Frontlines) == 0 {
+		return []model.PlanetaryFrontline{}
+	}
+	ids := make([]string, 0, len(ws.CombatRuntime.Frontlines))
+	for id := range ws.CombatRuntime.Frontlines {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.PlanetaryFrontline, 0, len(ids))
+	for _, id := range ids {
+		frontline := ws.CombatRuntime.Frontlines[id]
+		if frontline == nil {
+			continue
+		}
+		copy := *frontline
+		if frontline.Position != nil {
+			pos := *frontline.Position
+			copy.Position = &pos
+		}
+		out = append(out, copy)
+	}
+	return out
+}
+
+func collectGroundTaskForces(ws *model.WorldState) []model.GroundTaskForceRuntime {
+	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.GroundTaskForces) == 0 {
+		return []model.GroundTaskForceRuntime{}
+	}
+	ids := make([]string, 0, len(ws.CombatRuntime.GroundTaskForces))
+	for id := range ws.CombatRuntime.GroundTaskForces {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.GroundTaskForceRuntime, 0, len(ids))
+	for _, id := range ids {
+		taskForce := ws.CombatRuntime.GroundTaskForces[id]
+		if taskForce == nil {
+			continue
+		}
+		out = append(out, *taskForce)
 	}
 	return out
 }

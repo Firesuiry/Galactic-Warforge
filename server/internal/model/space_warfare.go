@@ -79,18 +79,23 @@ type LandingBridgeheadStatus string
 const (
 	LandingBridgeheadStatusEstablishing LandingBridgeheadStatus = "establishing"
 	LandingBridgeheadStatusActive       LandingBridgeheadStatus = "active"
+	LandingBridgeheadStatusCollapsed    LandingBridgeheadStatus = "collapsed"
 )
 
 // LandingBridgehead stores authoritative planetary landing ingress state.
 type LandingBridgehead struct {
-	ID                string                  `json:"id"`
-	OperationID       string                  `json:"operation_id"`
-	OwnerID           string                  `json:"owner_id"`
-	PlanetID          string                  `json:"planet_id"`
-	Status            LandingBridgeheadStatus `json:"status"`
-	EstablishedTick   int64                   `json:"established_tick,omitempty"`
-	LastSupportTick   int64                   `json:"last_support_tick,omitempty"`
-	TransportCapacity int                     `json:"transport_capacity,omitempty"`
+	ID                 string                  `json:"id"`
+	OperationID        string                  `json:"operation_id"`
+	OwnerID            string                  `json:"owner_id"`
+	PlanetID           string                  `json:"planet_id"`
+	FrontlineID        string                  `json:"frontline_id,omitempty"`
+	Status             LandingBridgeheadStatus `json:"status"`
+	Contested          bool                    `json:"contested,omitempty"`
+	ExpansionLevel     float64                 `json:"expansion_level,omitempty"`
+	FortificationLevel float64                 `json:"fortification_level,omitempty"`
+	EstablishedTick    int64                   `json:"established_tick,omitempty"`
+	LastSupportTick    int64                   `json:"last_support_tick,omitempty"`
+	TransportCapacity  int                     `json:"transport_capacity,omitempty"`
 }
 
 // SystemWarfareRuntime stores authoritative system-level war state.
