@@ -147,6 +147,7 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 	if err := applyScenarioBootstrap(cfg, maps, worlds, spaceRuntime); err != nil {
 		return PlanetRuntimeRegistry{}, err
 	}
+	seedWarIndustryAnchors(worlds)
 
 	activePlanetID := ""
 	if activePlanet != nil {
@@ -161,6 +162,25 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		Worlds:         worlds,
 		SpaceRuntime:   spaceRuntime,
 	}, nil
+}
+
+func seedWarIndustryAnchors(worlds map[string]*model.WorldState) {
+	for _, ws := range worlds {
+		if ws == nil {
+			continue
+		}
+		for _, building := range ws.Buildings {
+			if building == nil || building.OwnerID == "" || building.Runtime.Functions.Deployment == nil {
+				continue
+			}
+			player := ws.Players[building.OwnerID]
+			if player == nil {
+				continue
+			}
+			industry := player.EnsureWarIndustry()
+			ensureWarDeploymentHubState(industry, building.ID, deploymentHubCapacity(building.Runtime.Functions.Deployment))
+		}
+	}
 }
 
 func (gc *GameCore) sortedPlanetIDs() []string {

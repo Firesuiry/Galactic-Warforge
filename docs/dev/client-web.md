@@ -99,6 +99,8 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`、`landing_operations`，并直接暴露当前补给状态和短缺项
 - 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁、登陆的 authoritative 回执
 - 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
+- 已补 `client-web/tests/war-workbench-authoritative.spec.ts`，会配合 `server/config-war.yaml + map-war.yaml` 与 `server/scripts/start_official_war_test_server.sh` 启动官方战争验证局，实测蓝图改型、军工量产、舰队编成、战区配置、封锁与登陆链路
+- `/war` 现在会以 1 秒轮询 authoritative 战争查询，保证“accepted, will execute at next tick”这类异步命令能在浏览器里追上真实运行态，而不是停在提交瞬间的旧缓存
 - 当前边界：
   - 任务群成员编成、量产下单、翻修下单仍依赖既有入口或后续任务，不在本页一次性补齐
   - AI 军事自治仍以后续任务为准
@@ -189,8 +191,24 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 - Playwright：验证核心交互回归
   - `tests/war-workbench.spec.ts`：战争工作台桌面与窄屏回归
+  - `tests/war-workbench-authoritative.spec.ts`：自动拉起官方战争验证局，验证 `/war` 对 authoritative 战争场景的真实操作闭环
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览
+
+authoritative 战争回归：
+
+```bash
+cd /home/firesuiry/develop/siliconWorld/client-web
+npx playwright test tests/war-workbench-authoritative.spec.ts
+```
+
+这条用例会自动启动：
+
+```bash
+bash ../server/scripts/start_official_war_test_server.sh 19481
+```
+
+不需要手动再起一份 `config-war.yaml` 服务端。
 
 Storybook：
 

@@ -1,0 +1,45 @@
+galaxy:
+  system_count: 1
+  width: 1000
+  height: 1000
+system:
+  planets_per_system: 3
+  gas_giant_ratio: 0
+  max_moons: 4
+planet:
+  width: 48
+  height: 48
+  resource_density: 10
+  terrain:
+    water_ratio: 0.12
+    lava_ratio: 0.04
+    blocked_ratio: 0.08
+  environment:
+    wind:
+      min: 0.6
+      max: 1.4
+    light:
+      min: 0.6
+      max: 1.5
+    day_length_hours:
+      min: 12
+      max: 48
+    tidal_lock_chance: 0.1
+  resources:
+    rare_chance: 0.08
+    cluster_min: 3
+    cluster_max: 8
+    cluster_radius: 3
+    vein_amount_min: 80
+    vein_amount_max: 200
+    vein_yield_min: 2
+    vein_yield_max: 6
+    oil_yield_min: 3
+    oil_yield_max: 8
+    oil_min_yield: 1
+    oil_decay_per_tick: 1
+    renewable_regen_per_tick: 2
+overrides:
+  planets:
+    planet-1-2:
+      kind: gas_giant

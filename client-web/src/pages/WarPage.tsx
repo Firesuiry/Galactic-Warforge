@@ -41,6 +41,8 @@ const TASK_FORCE_STANCES: WarTaskForceStance[] = [
   'retreat_on_losses',
 ];
 
+const WAR_POLL_INTERVAL_MS = 1_000;
+
 function firstQueryError(errors: unknown[]) {
   return errors.find(Boolean);
 }
@@ -98,6 +100,8 @@ export function WarPage() {
   const summaryQuery = useQuery({
     queryKey: ['summary', session.serverUrl, session.playerId],
     queryFn: () => client.fetchSummary(),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const catalogQuery = useQuery({
@@ -108,21 +112,29 @@ export function WarPage() {
   const blueprintsQuery = useQuery({
     queryKey: ['war-blueprints', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarfareBlueprints(),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const industryQuery = useQuery({
     queryKey: ['war-industry', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarIndustry(),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const taskForcesQuery = useQuery({
     queryKey: ['war-task-forces', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarTaskForces(),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const theatersQuery = useQuery({
     queryKey: ['war-theaters', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarTheaters(),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const activePlanetId = summaryQuery.data?.active_planet_id ?? '';
@@ -131,6 +143,8 @@ export function WarPage() {
     queryKey: ['planet', session.serverUrl, session.playerId, activePlanetId],
     queryFn: () => client.fetchPlanet(activePlanetId),
     enabled: Boolean(activePlanetId),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const focusSystemId = resolveSystemId({
@@ -143,12 +157,16 @@ export function WarPage() {
     queryKey: ['system', session.serverUrl, session.playerId, focusSystemId],
     queryFn: () => client.fetchSystem(focusSystemId),
     enabled: Boolean(focusSystemId),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const runtimeQuery = useQuery({
     queryKey: ['system-runtime', session.serverUrl, session.playerId, focusSystemId],
     queryFn: () => client.fetchSystemRuntime(focusSystemId),
     enabled: Boolean(focusSystemId),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const commandMutation = useMutation({

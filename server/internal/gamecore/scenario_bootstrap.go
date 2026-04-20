@@ -109,10 +109,18 @@ func applyScenarioBuildingBootstrap(
 		if item.ItemID == "" || item.Quantity <= 0 {
 			continue
 		}
-		if building.Storage == nil {
-			return fmt.Errorf("%s does not support inventory bootstrap", buildingCfg.BuildingType)
+		if building.Storage != nil {
+			building.Storage.EnsureInventory()[item.ItemID] += item.Quantity
+			continue
 		}
-		building.Storage.EnsureInventory()[item.ItemID] += item.Quantity
+		if station := ws.LogisticsStations[building.ID]; station != nil {
+			if station.Inventory == nil {
+				station.Inventory = make(model.ItemInventory)
+			}
+			station.Inventory[item.ItemID] += item.Quantity
+			continue
+		}
+		return fmt.Errorf("%s does not support inventory bootstrap", buildingCfg.BuildingType)
 	}
 	return nil
 }
