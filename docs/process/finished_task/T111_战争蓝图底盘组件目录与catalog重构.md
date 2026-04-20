@@ -111,6 +111,7 @@
 - 已补 `/catalog`、snapshot round-trip、部署链路、CLI 帮助与 shared-client 类型同步，并更新：
   - `docs/dev/服务端API.md`
   - `docs/dev/客户端CLI.md`
+  - `docs/player/玩法指南.md`
 
 ## 测试
 
