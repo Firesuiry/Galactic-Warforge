@@ -1057,6 +1057,80 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 ---
 
+**GET /war/blueprints**
+- 说明: 返回当前认证玩家名下的战争蓝图列表（需认证）
+- 响应字段:
+  - `player_id`
+  - `blueprints`：玩家私有蓝图数组；每个元素包含 `id` / `name` / `owner_id` / `source` / `parent_blueprint_id` / `parent_source` / `domain` / `runtime_class` / `visible_tech_id` / `base_frame_id` / `base_hull_id` / `status` / `slot_assignments` / `modifiable_slots` / `last_validation`
+- 说明补充:
+  - 这里只返回玩家私有蓝图，不混入 `/catalog.public_blueprints`
+  - `slot_assignments` 是 authoritative 槽位装配结果，键当前固定为 `power` / `mobility|engine` / `defense` / `sensor` / `primary_weapon` / `utility`
+  - `last_validation` 包含最近一次校验快照：`valid` / `usage` / `issues`
+- 响应示例:
+```json
+{
+  "player_id": "p1",
+  "blueprints": [
+    {
+      "id": "bp-prototype-1",
+      "name": "Prototype Mk1",
+      "owner_id": "p1",
+      "source": "player",
+      "domain": "ground",
+      "runtime_class": "combat_squad",
+      "visible_tech_id": "prototype",
+      "base_frame_id": "light_frame",
+      "status": "adopted",
+      "slot_assignments": {
+        "power": "compact_reactor",
+        "mobility": "servo_actuator_pack",
+        "defense": "composite_armor_plating",
+        "sensor": "battlefield_sensor_suite",
+        "primary_weapon": "pulse_laser_mount",
+        "utility": "command_uplink"
+      },
+      "last_validation": {
+        "valid": true,
+        "usage": {
+          "power_supply": 90,
+          "power_demand": 58,
+          "volume": 72,
+          "mass": 65,
+          "rigidity": 59,
+          "heat_generation": 55,
+          "heat_dissipation": 66,
+          "signal_signature": 55,
+          "stealth": 4,
+          "signal_exposure": 51,
+          "maintenance": 58
+        }
+      }
+    }
+  ]
+}
+```
+
+**GET /war/blueprints/{blueprint_id}**
+- 说明: 返回当前认证玩家名下单个战争蓝图详情（需认证）
+- 返回:
+  - `200`：找到目标蓝图
+  - `404`：目标蓝图不存在或不属于当前玩家
+- 说明补充:
+  - 当前公开预置蓝图仍通过 `/catalog.public_blueprints` 查询；这里只返回玩家私有蓝图
+  - `last_validation.issues[].code` 当前至少可能出现：
+    - `required_slot_missing`
+    - `component_domain_mismatch`
+    - `hardpoint_mismatch`
+    - `power_budget_exceeded`
+    - `volume_budget_exceeded`
+    - `mass_budget_exceeded`
+    - `rigidity_budget_exceeded`
+    - `heat_dissipation_insufficient`
+    - `signal_signature_exceeded`
+    - `maintenance_budget_exceeded`
+
+---
+
 **POST /commands**
 - 说明: 提交命令（需认证）
 - 说明补充: `issuer_type` 与 `issuer_id` 必填；当 `issuer_type=player` 时，`issuer_id` 必须与 Bearer key 对应的玩家一致；命令会进行权限校验（`permissions`），无权限则直接拒绝
@@ -1074,7 +1148,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1107,6 +1181,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "count": 1,
         "fleet_id": "fleet-1",
         "formation": "line|vee|circle|wedge",
+        "blueprint_id": "bp-prototype-1",
+        "parent_blueprint_id": "prototype",
+        "base_frame_id": "light_frame",
+        "base_hull_id": "corvette_hull",
+        "slot_id": "primary_weapon",
+        "status": "draft|validated|prototype|field_tested|adopted|obsolete",
         "system_id": "sys-1",
         "layer_index": 0,
         "orbit_radius": 1.0,
@@ -1150,6 +1230,12 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
+  - `blueprint_create`：`payload.blueprint_id` + `payload.name` 必填，且必须在 `payload.base_frame_id` / `payload.base_hull_id` 中二选一；目标底盘对应科技必须已解锁；玩家私有蓝图 id 不能与公开 `public_blueprints[].id` 冲突；新建蓝图初始状态固定为 `draft`
+  - `blueprint_set_component`：`payload.blueprint_id` + `payload.slot_id` + `payload.component_id` 必填；只允许修改当前玩家自己的 `draft|validated` 蓝图；若此前已有 `last_validation`，本次改动会把蓝图自动打回 `draft` 并清空最近一次校验结果；若该蓝图是改型，则只能修改其 `modifiable_slots` 内的槽位
+  - `blueprint_validate`：`payload.blueprint_id` 必填；只允许对当前玩家自己的 `draft|validated` 蓝图执行；校验成功时会把蓝图推进到 `validated`，失败时会保留在 `draft`；无论成功还是失败，`results[].details.validation` 和 `GET /war/blueprints/{blueprint_id}.last_validation` 都会同步写入结构化校验结果
+  - `blueprint_finalize`：`payload.blueprint_id` 必填；只允许对 `validated` 且最近一次 `last_validation.valid=true` 的蓝图执行；成功后推进到 `prototype`
+  - `blueprint_variant`：`payload.parent_blueprint_id` + `payload.blueprint_id` 必填；`payload.name` 可选，未传时默认使用 `blueprint_id`；父蓝图既可以是玩家私有蓝图，也可以是 `/catalog.public_blueprints[].id`；父蓝图必须处于 `prototype|field_tested|adopted`；新改型会继承父蓝图底盘和现有装配，起始状态固定为 `draft`
+  - `blueprint_set_status`：`payload.blueprint_id` + `payload.status` 必填；当前只允许 `prototype -> field_tested|obsolete`、`field_tested -> adopted|obsolete`、`adopted -> obsolete`；除 `obsolete` 外，所有推进都要求该蓝图保留一份 `last_validation.valid=true` 的最近校验记录
   - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；若发射器配置了轨道半径/倾角约束，`payload.orbit_radius` / `payload.inclination` 还必须落在该建筑运行参数允许范围内；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
   - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件；当前每枚火箭都会让目标层 `rocket_launches += 1`，并按 `min(0.5, rocket_launches * 0.02)` 重算 `construction_bonus`
   - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选；要求玩家已解锁 `dyson_component`；若目标层不存在，服务端会先自动补层，层半径优先取 `payload.orbit_radius`，否则回退为 `1.0 + 0.5 * layer_index`
@@ -1214,6 +1300,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `UNAUTHORIZED`
   - `EXECUTOR_UNAVAILABLE`
   - `EXECUTOR_BUSY`
+- 响应字段补充:
+  - `results[].details`：命令的结构化附加信息；当前战争蓝图命令会在这里返回 `blueprint` 和/或 `validation`
+  - `results[].details.validation.issues[].code`：可直接作为玩家可读错误码，不需要再从英文 message 里反推
 - 响应示例:
 ```json
 {
@@ -1265,6 +1354,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assigned`
   - `fleet_attack_started`
   - `fleet_disbanded`
+  - `blueprint_validated`
+  - `blueprint_invalidated`
 - 事件类型补充:
   - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
     - 对 `build`，如果这里只返回 `OK + construction task ... queued`，不要把它误判成“建筑已完全落地并可运行”；后续还应继续观察同坐标的 `entity_created` 与对应 `building_state_changed`
@@ -1282,6 +1373,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_assigned`：舰队改编队事件，payload 包含 `fleet_id` / `formation`。
   - `fleet_attack_started`：舰队开始攻击事件，payload 包含 `fleet_id` / `planet_id` / `target_id`；实际后续伤害仍通过 `damage_applied` / `entity_destroyed` 体现。
   - `fleet_disbanded`：舰队解散事件，payload 包含 `fleet_id`。
+  - `blueprint_validated`：蓝图校验成功事件，payload 包含 `blueprint_id` / `blueprint` / `validation`。
+  - `blueprint_invalidated`：蓝图校验失败或已验证蓝图被再次编辑后的失效事件；payload 至少包含 `blueprint_id` / `blueprint`，若来源于显式校验失败还会带 `validation`，若来源于编辑导致失效则额外带 `reason = "component_changed"`。
 - 响应示例:
 ```json
 {

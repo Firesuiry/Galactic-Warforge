@@ -36,6 +36,8 @@ import type {
   StateSummary,
   SystemRuntimeView,
   SystemView,
+  WarBlueprintDefinition,
+  WarBlueprintListView,
 } from './types.js';
 import { resolveServerUrl } from './utils.js';
 
@@ -323,6 +325,14 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchFleet(fleetId: string): Promise<FleetDetailView> {
     return apiFetch<FleetDetailView>(`/world/fleets/${fleetId}`);
+  }
+
+  function fetchWarBlueprints(): Promise<WarBlueprintListView> {
+    return apiFetch<WarBlueprintListView>('/war/blueprints');
+  }
+
+  function fetchWarBlueprint(blueprintId: string): Promise<WarBlueprintDefinition> {
+    return apiFetch<WarBlueprintDefinition>(`/war/blueprints/${blueprintId}`);
   }
 
   async function sendCommands(commands: Command[]): Promise<CommandResponse> {
@@ -762,6 +772,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchSummary,
     fetchSystem,
     fetchSystemRuntime,
+    fetchWarBlueprint,
+    fetchWarBlueprints,
     getAuth,
     getServerUrl,
     sendCommandRequest,

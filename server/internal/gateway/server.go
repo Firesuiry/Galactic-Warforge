@@ -115,6 +115,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/fleets", s.auth(s.handleFleets))
 	mux.HandleFunc("GET /world/fleets/{fleet_id}", s.auth(s.handleFleet))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
+	mux.HandleFunc("GET /war/blueprints", s.auth(s.handleWarBlueprints))
+	mux.HandleFunc("GET /war/blueprints/{blueprint_id}", s.auth(s.handleWarBlueprint))
 
 	// Commands
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
@@ -356,6 +358,22 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request, playerID st
 func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, playerID string) {
 	_ = playerID
 	writeJSON(w, http.StatusOK, s.ql.Catalog())
+}
+
+// handleWarBlueprints returns GET /war/blueprints
+func (s *Server) handleWarBlueprints(w http.ResponseWriter, r *http.Request, playerID string) {
+	writeJSON(w, http.StatusOK, s.ql.WarBlueprints(s.core.World(), playerID))
+}
+
+// handleWarBlueprint returns GET /war/blueprints/{blueprint_id}
+func (s *Server) handleWarBlueprint(w http.ResponseWriter, r *http.Request, playerID string) {
+	blueprintID := r.PathValue("blueprint_id")
+	view, ok := s.ql.WarBlueprint(s.core.World(), playerID, blueprintID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "war blueprint not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 // handleCommands handles POST /commands
@@ -920,6 +938,40 @@ func validateCommandStructure(cmd model.Command) error {
 	case model.CmdFleetDisband:
 		if _, ok := cmd.Payload["fleet_id"]; !ok {
 			return fmt.Errorf("fleet_disband requires payload.fleet_id")
+		}
+	case model.CmdBlueprintCreate:
+		if _, ok := cmd.Payload["blueprint_id"]; !ok {
+			return fmt.Errorf("blueprint_create requires payload.blueprint_id")
+		}
+		if _, ok := cmd.Payload["name"]; !ok {
+			return fmt.Errorf("blueprint_create requires payload.name")
+		}
+		_, hasBaseFrame := cmd.Payload["base_frame_id"]
+		_, hasBaseHull := cmd.Payload["base_hull_id"]
+		if hasBaseFrame == hasBaseHull {
+			return fmt.Errorf("blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id")
+		}
+	case model.CmdBlueprintSetComponent:
+		for _, field := range []string{"blueprint_id", "slot_id", "component_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("blueprint_set_component requires payload.%s", field)
+			}
+		}
+	case model.CmdBlueprintValidate, model.CmdBlueprintFinalize:
+		if _, ok := cmd.Payload["blueprint_id"]; !ok {
+			return fmt.Errorf("%s requires payload.blueprint_id", cmd.Type)
+		}
+	case model.CmdBlueprintVariant:
+		for _, field := range []string{"parent_blueprint_id", "blueprint_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("blueprint_variant requires payload.%s", field)
+			}
+		}
+	case model.CmdBlueprintSetStatus:
+		for _, field := range []string{"blueprint_id", "status"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("blueprint_set_status requires payload.%s", field)
+			}
 		}
 	case model.CmdUpgrade:
 		if cmd.Target.EntityID == "" {

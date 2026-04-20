@@ -20,6 +20,12 @@ func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T
 		{Type: model.CmdBuildDysonFrame, Payload: map[string]any{"system_id": "sys-1", "layer_index": 0, "node_a_id": "n-1", "node_b_id": "n-2"}},
 		{Type: model.CmdBuildDysonShell, Payload: map[string]any{"system_id": "sys-1", "layer_index": 0, "latitude_min": -15.0, "latitude_max": 15.0, "coverage": 0.4}},
 		{Type: model.CmdDemolishDyson, Payload: map[string]any{"system_id": "sys-1", "component_type": "shell", "component_id": "s-1"}},
+		{Type: model.CmdBlueprintCreate, Payload: map[string]any{"blueprint_id": "bp-1", "name": "Prototype", "base_frame_id": "light_frame"}},
+		{Type: model.CmdBlueprintSetComponent, Payload: map[string]any{"blueprint_id": "bp-1", "slot_id": "power", "component_id": "compact_reactor"}},
+		{Type: model.CmdBlueprintValidate, Payload: map[string]any{"blueprint_id": "bp-1"}},
+		{Type: model.CmdBlueprintFinalize, Payload: map[string]any{"blueprint_id": "bp-1"}},
+		{Type: model.CmdBlueprintVariant, Payload: map[string]any{"parent_blueprint_id": "corvette", "blueprint_id": "bp-2"}},
+		{Type: model.CmdBlueprintSetStatus, Payload: map[string]any{"blueprint_id": "bp-1", "status": string(model.WarBlueprintStatusFieldTested)}},
 	}
 
 	for _, cmd := range cases {
@@ -138,6 +144,59 @@ func TestValidateCommandStructureRejectsIncompletePlanetAndRayReceiverCommands(t
 				Payload: map[string]any{"building_id": "rr-1"},
 			},
 			msg: "payload.mode",
+		},
+	}
+
+	for _, cs := range cases {
+		err := validateCommandStructure(cs.cmd)
+		if err == nil {
+			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
+		}
+		if !strings.Contains(err.Error(), cs.msg) {
+			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		}
+	}
+}
+
+func TestValidateCommandStructureRejectsIncompleteBlueprintCommands(t *testing.T) {
+	cases := []struct {
+		cmd model.Command
+		msg string
+	}{
+		{
+			cmd: model.Command{
+				Type:    model.CmdBlueprintCreate,
+				Payload: map[string]any{"name": "Prototype", "base_frame_id": "light_frame"},
+			},
+			msg: "payload.blueprint_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdBlueprintSetComponent,
+				Payload: map[string]any{"blueprint_id": "bp-1", "component_id": "compact_reactor"},
+			},
+			msg: "payload.slot_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdBlueprintValidate,
+				Payload: map[string]any{},
+			},
+			msg: "payload.blueprint_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdBlueprintVariant,
+				Payload: map[string]any{"blueprint_id": "bp-2"},
+			},
+			msg: "payload.parent_blueprint_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CmdBlueprintSetStatus,
+				Payload: map[string]any{"blueprint_id": "bp-1"},
+			},
+			msg: "payload.status",
 		},
 	}
 

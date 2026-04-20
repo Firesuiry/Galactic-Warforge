@@ -304,6 +304,12 @@ export type CommandType =
   | 'fleet_assign'
   | 'fleet_attack'
   | 'fleet_disband'
+  | 'blueprint_create'
+  | 'blueprint_set_component'
+  | 'blueprint_validate'
+  | 'blueprint_finalize'
+  | 'blueprint_variant'
+  | 'blueprint_set_status'
   | 'launch_solar_sail'
   | 'launch_rocket'
   | 'build_dyson_node'
@@ -338,6 +344,7 @@ export interface CommandResult {
   status: string;
   code: string;
   message: string;
+  details?: Record<string, unknown>;
 }
 
 export interface CommandResponse {
@@ -977,6 +984,65 @@ export interface UnitCatalogEntry {
 
 export type WarComponentCategory = 'power' | 'propulsion' | 'defense' | 'sensor' | 'weapon' | 'utility';
 export type WarBlueprintSource = 'preset' | 'player';
+export type WarBlueprintStatus =
+  | 'draft'
+  | 'validated'
+  | 'prototype'
+  | 'field_tested'
+  | 'adopted'
+  | 'obsolete';
+
+export interface WarBlueprintValidationIssue {
+  code: string;
+  slot_id?: string;
+  component_id?: string;
+  limit?: number;
+  actual?: number;
+  message?: string;
+}
+
+export interface WarBlueprintUsage {
+  power_supply: number;
+  power_demand: number;
+  volume: number;
+  mass: number;
+  rigidity: number;
+  heat_generation: number;
+  heat_dissipation: number;
+  signal_signature: number;
+  stealth: number;
+  signal_exposure: number;
+  maintenance: number;
+}
+
+export interface WarBlueprintValidationResult {
+  valid: boolean;
+  usage: WarBlueprintUsage;
+  issues?: WarBlueprintValidationIssue[];
+}
+
+export interface WarBlueprintDefinition {
+  id: string;
+  name: string;
+  owner_id?: string;
+  source: WarBlueprintSource;
+  parent_blueprint_id?: string;
+  parent_source?: WarBlueprintSource;
+  domain: string;
+  runtime_class: string;
+  visible_tech_id?: string;
+  base_frame_id?: string;
+  base_hull_id?: string;
+  status: WarBlueprintStatus;
+  slot_assignments?: Record<string, string>;
+  modifiable_slots?: string[];
+  last_validation?: WarBlueprintValidationResult;
+}
+
+export interface WarBlueprintListView {
+  player_id: string;
+  blueprints: WarBlueprintDefinition[];
+}
 
 export interface BaseFrameCatalogEntry {
   id: string;
