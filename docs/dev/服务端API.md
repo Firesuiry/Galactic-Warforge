@@ -70,7 +70,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 这批锚点会直接进入运行态，所以 `GET /state/summary.active_planet_id`、`GET /world/systems/{system_id}/runtime.active_planet_context`、`ray_receiver` 供能与发射建筑观察链路都会在 fresh midgame 启动后立即可验证
 - 这里的 `completed_techs` 是官方验证场景的直接完成列表，不会递归自动补全自然科研前置；因此 midgame 可以只预置 `integrated_logistics`、`photon_mining`、`annihilation` 三个叶子科技，同时继续保留 `dirac_inversion` 未完成。
 - 当前官方 midgame 场景故意**不**预置 `dirac_inversion` 与 `antimatter_fuel_rod`，以便继续同时验证 `set_ray_receiver_mode ... photon` 的科技门禁，以及 `artificial_star` 空燃料时的终局边界；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution` / `integrated_logistics` / `photon_mining` / `annihilation`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`artificial_star`。
-- 当前官方 midgame 场景同样**不**直接预置 `prototype` / `precision_drone` / `corvette` / `destroyer`；这些单位线现在已经是公开 API 能力，但仍要求玩家自己走 `research -> recipe -> transfer_item -> deploy_squad|commission_fleet` 这条最小闭环。
+- 当前官方 midgame 场景同样**不**直接预置 `prototype` / `precision_drone` / `corvette` / `destroyer`；这些单位线现在已经是公开 API 能力，但仍要求玩家自己走 `research -> blueprint -> queue_military_production -> deploy_squad|commission_fleet` 这条最小闭环。
 - `map` 配置新增 `overrides.planets.<planet_id>.kind`，可强制把某颗行星覆盖成 `gas_giant`、`rocky` 或 `ice`，不再依赖 seed 抽卡。当前 `map-midgame.yaml` 把 `planet-1-2` 强制设成 `gas_giant`，用于验证 `orbital_collector` 与戴森中后期路线。
 
 **GET /health**
@@ -351,6 +351,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `active_planet_context` 只在当前 `active_planet_id` 属于该 system，且该 active world 已加载时返回；它不会跨其他行星做扫描补数
   - `active_planet_context` 只是当前 active world 上玩家自有 `em_rail_ejector` / `vertical_launching_silo` / `ray_receiver` 的聚合计数，本身不等于该 system 已经存在 `space runtime`；不过当前官方 midgame 会同时用 `scenario_bootstrap` 预置行星锚点和 system runtime 锚点，所以 fresh 启动后通常会直接看到非零计数与 `available=true`
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
+  - `fleets[].units[].blueprint_id` 是 authoritative 编成来源；`unit_type` 当前仍与 `blueprint_id` 保持同值，仅作为兼容镜像保留
 - 响应字段:
   - `system_id` / `discovered` / `available`
   - `solar_sail_orbit`：包含 `player_id` / `system_id` / `sails` / `total_energy`
@@ -406,7 +407,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "source_building_id": "b-1",
       "formation": "wedge",
       "state": "idle",
-      "units": [{"unit_type": "corvette", "count": 1}]
+      "units": [{"blueprint_id": "corvette", "unit_type": "corvette", "count": 1}]
     }
   ]
 }
@@ -440,7 +441,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "source_building_id": "b-1",
   "formation": "wedge",
   "state": "idle",
-  "units": [{"unit_type": "corvette", "count": 1}],
+  "units": [{"blueprint_id": "corvette", "unit_type": "corvette", "count": 1}],
   "weapon": {"type": "laser", "damage": 40, "fire_rate": 10, "range": 24, "ammo_cost": 0},
   "shield": {"level": 40, "max_level": 40, "recharge_rate": 2, "recharge_delay": 10}
 }
@@ -616,12 +617,18 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
   - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
   - `combat_squads` 与 `orbital_platforms` 现在来自持久化 `CombatRuntimeState`，会进入 save / replay / rollback
-  - `combat_squads` 由 `deploy_squad` 写入；当前 payload 来源是部署枢纽本地存储中的 `prototype` / `precision_drone`
+  - `combat_squads` 由 `deploy_squad` 写入；当前 payload 来源是部署枢纽 `deployment_state.payload_inventory` 内已完成总装的蓝图军备产物，而不是建筑普通 storage 中的固定 item
+  - `deployment_hubs` 会返回当前行星上玩家自有、带 deployment module 的部署枢纽 authoritative 运行态，包括军备库存、生产队列、翻修队列与连产状态
   - 当前 active 行星仍承载最完整的敌情/侦测结算；非 active 但已加载行星也可以看到该行星自己的 authoritative combat runtime
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
-  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `unit_type` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `unit_type` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `state` / `target_enemy_id` / `last_attack_tick`
   - `orbital_platforms`：轨道平台，包含 `id` / `owner_id` / `planet_id` / `orbit` / `hp` / `max_hp` / `weapon` / `ammo_capacity` / `ammo_count` / `last_fire_tick` / `is_active`
+  - `deployment_hubs`：部署枢纽视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `allowed_domains` / `payload_inventory` / `production_queue` / `refit_queue` / `line_state`
+  - `deployment_hubs[].payload_inventory`：键为 `blueprint_id`，值为当前已可部署的军备产物数量
+  - `deployment_hubs[].production_queue[]`：包含 `id` / `blueprint_id` / `blueprint_name` / `base_id` / `domain` / `runtime_class` / `stage` / `status` / `component_ticks_total` / `component_ticks_remaining` / `assembly_ticks_total` / `assembly_ticks_remaining` / `retool_ticks_total` / `retool_ticks_remaining` / `series_bonus_ratio` / `queued_tick` / `last_update_tick` / `component_cost` / `assembly_cost`
+  - `deployment_hubs[].refit_queue[]`：包含 `id` / `unit_id` / `source_blueprint_id` / `target_blueprint_id` / `target_name` / `base_id` / `domain` / `runtime_class` / `count` / `status` / `queued_tick` / `last_update_tick` / `total_ticks` / `remaining_ticks` / `refit_cost` / `source_building_id` / `return_planet_id` / `return_system_id`
+  - `deployment_hubs[].line_state`：包含 `last_blueprint_id` / `series_streak`，用于表达同蓝图连产收益
   - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
   - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `origin_planet_id` / `target_planet_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
@@ -644,11 +651,47 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "owner_id": "p1",
       "planet_id": "planet-1-1",
       "source_building_id": "b-1",
+      "blueprint_id": "prototype",
       "unit_type": "prototype",
       "count": 2,
       "hp": 160,
       "max_hp": 160,
       "state": "idle"
+    }
+  ],
+  "deployment_hubs": [
+    {
+      "building_id": "b-1",
+      "building_type": "battlefield_analysis_base",
+      "owner_id": "p1",
+      "position": {"x": 6, "y": 6},
+      "state": "running",
+      "allowed_domains": ["ground", "space"],
+      "payload_inventory": {"prototype": 1},
+      "production_queue": [
+        {
+          "id": "mprod-1",
+          "blueprint_id": "precision_drone",
+          "stage": "final_assembly",
+          "status": "in_progress",
+          "assembly_ticks_remaining": 12,
+          "series_bonus_ratio": 0.1
+        }
+      ],
+      "refit_queue": [
+        {
+          "id": "mrefit-1",
+          "unit_id": "squad-1",
+          "source_blueprint_id": "prototype",
+          "target_blueprint_id": "precision_drone",
+          "status": "queued",
+          "remaining_ticks": 18
+        }
+      ],
+      "line_state": {
+        "last_blueprint_id": "precision_drone",
+        "series_streak": 2
+      }
     }
   ],
   "logistics_stations": [
@@ -1051,7 +1094,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `buildings` 中 `vertical_launching_silo` 当前会暴露 `default_recipe_id = "small_carrier_rocket"`。
   - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`、`antimatter_capsule`、`gravity_missile`。
   - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip`、`mass_energy_storage`、`gravity_missile` 也都会对外暴露对应 recipe 解锁。
-  - `techs` 中 `prototype`、`precision_drone`、`corvette`、`destroyer` 现在都是公开可研究科技；它们解锁的是载荷 recipe，不再污染 `produce` 语义。
+  - `techs` 中 `prototype`、`precision_drone`、`corvette`、`destroyer` 现在都是公开可研究科技；它们既作为 `public_blueprints[].visible_tech_id` 的门禁，也继续承接对应军备 recipe 的解锁语义，不再污染 `produce` 语义。
   - `units` 现在只保留 `worker` / `soldier` 这类 `world_produce + world_unit` 的世界单位。
   - `base_frames` / `base_hulls` / `components` / `public_blueprints` 是战争系统新的 authoritative 公开目录；`prototype` / `precision_drone` / `corvette` / `destroyer` 已迁移为 `public_blueprints`，不再继续伪装成旧式固定单位表条目。
 
@@ -1148,7 +1191,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|blueprint_set_status|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1202,7 +1245,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "component_id": "shell-1",
         "target_entity_id": "entity-2",
         "target_id": "enemy-1",
-        "unit_type": "produce 时使用 /catalog.units 中的公开世界单位 id；deploy/commission 时使用 /catalog.public_blueprints 中的公开蓝图 id"
+        "unit_type": "仅供 produce 使用的公开世界单位 id",
+        "blueprint_id": "deploy/commission/queue_military_production 时使用的 blueprint_id"
       }
     }
   ]
@@ -1225,8 +1269,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
-  - `deploy_squad`：`payload.building_id` + `payload.unit_type` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；`payload.unit_type` 当前传的是 `/catalog.public_blueprints[].id`；目标建筑必须是当前玩家拥有、带 deployment module 与本地存储、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该预置蓝图对应 `visible_tech_id`，并且枢纽本地存储里已有足量 `prototype` / `precision_drone` 载荷；若传 `planet_id`，目标行星 runtime 也必须已加载
-  - `commission_fleet`：`payload.building_id` + `payload.unit_type` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；`payload.unit_type` 当前传的是 `/catalog.public_blueprints[].id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的蓝图是 `corvette` / `destroyer`，同样要求已解锁对应科技且部署枢纽本地存储内已有足量载荷；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加单位并重算 `weapon` / `shield`，而不是覆盖旧栈
+  - `deploy_squad`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；`payload.blueprint_id` 可传公开预置蓝图，也可传当前玩家已定型的私有蓝图；目标建筑必须是当前玩家拥有、带 deployment module 与 deployment_state、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该蓝图对应 `visible_tech_id`，并且枢纽 `deployment_hubs[].payload_inventory` 里已有足量同名军备产物；若传 `planet_id`，目标行星 runtime 也必须已加载
+  - `commission_fleet`：`payload.building_id` + `payload.blueprint_id` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；`payload.blueprint_id` 可传公开预置蓝图，也可传当前玩家已定型的私有太空蓝图；目标建筑约束同 `deploy_squad`；当前同样要求已解锁对应科技且部署枢纽 `payload_inventory` 中已有足量军备产物；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加单位并重算 `weapon` / `shield`，而不是覆盖旧栈
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填
@@ -1236,6 +1280,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `blueprint_finalize`：`payload.blueprint_id` 必填；只允许对 `validated` 且最近一次 `last_validation.valid=true` 的蓝图执行；成功后推进到 `prototype`
   - `blueprint_variant`：`payload.parent_blueprint_id` + `payload.blueprint_id` 必填；`payload.name` 可选，未传时默认使用 `blueprint_id`；父蓝图既可以是玩家私有蓝图，也可以是 `/catalog.public_blueprints[].id`；父蓝图必须处于 `prototype|field_tested|adopted`；新改型会继承父蓝图底盘和现有装配，起始状态固定为 `draft`
   - `blueprint_set_status`：`payload.blueprint_id` + `payload.status` 必填；当前只允许 `prototype -> field_tested|obsolete`、`field_tested -> adopted|obsolete`、`adopted -> obsolete`；除 `obsolete` 外，所有推进都要求该蓝图保留一份 `last_validation.valid=true` 的最近校验记录
+  - `queue_military_production`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；目标建筑必须是当前玩家拥有、带 deployment module、并且当前 tick 可运行的部署枢纽；`payload.blueprint_id` 必须指向预置蓝图或当前玩家已定型（`prototype|field_tested|adopted`）的私有蓝图；命令会立即从枢纽 storage 与玩家 inventory 扣除组件/总装所需材料，然后把订单写入该枢纽 `deployment_hubs[].production_queue`；同蓝图连续排产会在订单上体现 `series_bonus_ratio`，切换蓝图会体现 `retool_ticks_total`
+  - `refit_unit`：`payload.building_id` + `payload.unit_id` + `payload.target_blueprint_id` 必填；`payload.unit_id` 当前既可以是 `combat_squads[].id`，也可以是 `/world/fleets/{fleet_id}` 中的 `fleet_id`；目标蓝图必须与原单位共享同一底盘 / runtime class；命令会把目标 runtime 单位从场上收回，扣除翻修成本，并把翻修订单写入部署枢纽 `refit_queue`；翻修完成后单位会以目标 `blueprint_id` 重新回到原行星或恒星系 runtime
   - `launch_solar_sail`：`payload.building_id` 必填；目标必须是处于可运行状态的 `em_rail_ejector`，且建筑本地存储中已装载足够 `solar_sail`；可选 `payload.count` / `payload.orbit_radius` / `payload.inclination`；`payload.count` 默认 `1`、单次最多 `10`；若发射器配置了轨道半径/倾角约束，`payload.orbit_radius` / `payload.inclination` 还必须落在该建筑运行参数允许范围内；太阳帆会自动进入当前发射器所在星球对应 `system_id` 的 snapshot-backed `space` runtime，同一次批量发射会为每张帆分配独立 `entity_id`；若命中发射器自身的成功率失败分支，会照样扣除已装载太阳帆，但不会生成 orbit entry 或 `entity_created`
   - `launch_rocket`：`payload.building_id` + `payload.system_id` 必填；`payload.layer_index` 可选，默认 `0`；`payload.count` 可选，默认 `1`，单次最多 `5`；目标必须是处于 `running` 状态的 `vertical_launching_silo`，且建筑本地存储中已装载足够 `small_carrier_rocket`；目标戴森层必须已存在至少一个 `node` / `frame` / `shell` scaffold；成功后会扣除火箭并返回 `rocket_launched` 事件；当前每枚火箭都会让目标层 `rocket_launches += 1`，并按 `min(0.5, rocket_launches * 0.02)` 重算 `construction_bonus`
   - `build_dyson_node`：`payload.system_id` / `payload.layer_index` / `payload.latitude` / `payload.longitude` 必填；`payload.orbit_radius` 可选；要求玩家已解锁 `dyson_component`；若目标层不存在，服务端会先自动补层，层半径优先取 `payload.orbit_radius`，否则回退为 `1.0 + 0.5 * layer_index`

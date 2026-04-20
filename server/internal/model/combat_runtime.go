@@ -15,6 +15,7 @@ type CombatSquad struct {
 	OwnerID          string           `json:"owner_id"`
 	PlanetID         string           `json:"planet_id"`
 	SourceBuildingID string           `json:"source_building_id,omitempty"`
+	BlueprintID      string           `json:"blueprint_id,omitempty"`
 	UnitType         string           `json:"unit_type"`
 	Count            int              `json:"count"`
 	HP               int              `json:"hp"`

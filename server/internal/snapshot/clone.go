@@ -198,6 +198,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		Conveyor:         cloneConveyor(b.Conveyor),
 		Sorter:           cloneSorter(b.Sorter),
 		LogisticsStation: cloneLogisticsStation(b.LogisticsStation),
+		DeploymentState:  b.DeploymentState.Clone(),
 	}
 	if b.Job != nil {
 		bs.Job = &BuildingJobSnapshot{
@@ -260,6 +261,11 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		mb.LogisticsStation = cloneLogisticsStation(snap.LogisticsStation)
 	} else if model.IsLogisticsStationBuilding(mb.Type) {
 		return nil, fmt.Errorf("logistics station snapshot missing for %s", buildingID)
+	}
+	if snap.DeploymentState != nil {
+		mb.DeploymentState = snap.DeploymentState.Clone()
+	} else if mb.Runtime.Functions.Deployment != nil {
+		model.InitBuildingDeploymentState(mb)
 	}
 	model.SyncBuildingConveyor(mb)
 	model.SyncBuildingSorter(mb)

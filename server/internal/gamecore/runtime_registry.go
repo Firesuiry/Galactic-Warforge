@@ -79,6 +79,7 @@ func seedPlayerOutposts(ws *model.WorldState, players []config.PlayerConfig) {
 		model.InitBuildingConveyor(base)
 		model.InitBuildingSorter(base)
 		model.InitBuildingLogisticsStation(base)
+		model.InitBuildingDeploymentState(base)
 		model.RegisterLogisticsStation(ws, base)
 		model.RegisterPowerGridBuilding(ws, base)
 		ws.Buildings[id] = base

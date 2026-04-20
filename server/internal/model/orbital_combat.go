@@ -44,8 +44,9 @@ type FleetTarget struct {
 
 // FleetUnitStack stores unit counts by payload type.
 type FleetUnitStack struct {
-	UnitType string `json:"unit_type"`
-	Count    int    `json:"count"`
+	BlueprintID string `json:"blueprint_id,omitempty"`
+	UnitType    string `json:"unit_type"`
+	Count       int    `json:"count"`
 }
 
 // OrbitalPlatform 轨道防御平台

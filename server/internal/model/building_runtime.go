@@ -212,9 +212,12 @@ type LaunchModule struct {
 
 // DeploymentModule marks a building as a squad/fleet deployment hub.
 type DeploymentModule struct {
-	SquadCapacity int      `json:"squad_capacity" yaml:"squad_capacity"`
-	FleetCapacity int      `json:"fleet_capacity" yaml:"fleet_capacity"`
-	AllowedUnits  []string `json:"allowed_units,omitempty" yaml:"allowed_units,omitempty"`
+	SquadCapacity   int          `json:"squad_capacity" yaml:"squad_capacity"`
+	FleetCapacity   int          `json:"fleet_capacity" yaml:"fleet_capacity"`
+	PayloadCapacity int          `json:"payload_capacity" yaml:"payload_capacity"`
+	ProductionLines int          `json:"production_lines" yaml:"production_lines"`
+	RefitBays       int          `json:"refit_bays" yaml:"refit_bays"`
+	AllowedDomains  []UnitDomain `json:"allowed_domains,omitempty" yaml:"allowed_domains,omitempty"`
 }
 
 // BuildingRuntimeDefinition defines runtime parameters for a building type.
@@ -610,7 +613,7 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 	}
 	if m.Deployment != nil {
 		val := *m.Deployment
-		val.AllowedUnits = append([]string(nil), m.Deployment.AllowedUnits...)
+		val.AllowedDomains = append([]UnitDomain(nil), m.Deployment.AllowedDomains...)
 		out.Deployment = &val
 	}
 	return out
@@ -634,9 +637,12 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			Storage: &StorageModule{Capacity: 60, Slots: 4, Buffer: 20, InputPriority: 2, OutputPriority: 1},
 			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 			Deployment: &DeploymentModule{
-				SquadCapacity: 4,
-				FleetCapacity: 2,
-				AllowedUnits:  []string{ItemPrototype, ItemPrecisionDrone, ItemCorvette, ItemDestroyer},
+				SquadCapacity:   4,
+				FleetCapacity:   2,
+				PayloadCapacity: 12,
+				ProductionLines: 1,
+				RefitBays:       1,
+				AllowedDomains:  []UnitDomain{UnitDomainGround, UnitDomainAir, UnitDomainSpace},
 			},
 		},
 	},

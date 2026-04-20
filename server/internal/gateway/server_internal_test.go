@@ -26,6 +26,8 @@ func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T
 		{Type: model.CmdBlueprintFinalize, Payload: map[string]any{"blueprint_id": "bp-1"}},
 		{Type: model.CmdBlueprintVariant, Payload: map[string]any{"parent_blueprint_id": "corvette", "blueprint_id": "bp-2"}},
 		{Type: model.CmdBlueprintSetStatus, Payload: map[string]any{"blueprint_id": "bp-1", "status": string(model.WarBlueprintStatusFieldTested)}},
+		{Type: model.CommandType("queue_military_production"), Payload: map[string]any{"building_id": "b-1", "blueprint_id": "bp-1", "count": 1}},
+		{Type: model.CommandType("refit_unit"), Payload: map[string]any{"building_id": "b-1", "unit_id": "squad-1", "target_blueprint_id": "prototype"}},
 	}
 
 	for _, cmd := range cases {
@@ -197,6 +199,20 @@ func TestValidateCommandStructureRejectsIncompleteBlueprintCommands(t *testing.T
 				Payload: map[string]any{"blueprint_id": "bp-1"},
 			},
 			msg: "payload.status",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CommandType("queue_military_production"),
+				Payload: map[string]any{"building_id": "b-1", "count": 1},
+			},
+			msg: "payload.blueprint_id",
+		},
+		{
+			cmd: model.Command{
+				Type:    model.CommandType("refit_unit"),
+				Payload: map[string]any{"building_id": "b-1", "unit_id": "squad-1"},
+			},
+			msg: "payload.target_blueprint_id",
 		},
 	}
 

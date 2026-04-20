@@ -56,6 +56,7 @@ func newSettlementPipeline() settlementPipeline {
 			settlePipelineIO(ws)
 			events = append(events, settleProduction(ws)...)
 			settleStorage(ws)
+			events = append(events, gc.settleMilitaryIndustry(ws)...)
 
 			if gc.monitor != nil {
 				monEvents, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)

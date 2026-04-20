@@ -73,16 +73,18 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 		t.Fatalf("transfer starter matrices: %s (%s)", transferRes.Code, transferRes.Message)
 	}
 
-	startRes, _ := core.execStartResearch(ws, "p1", model.Command{
-		Type: model.CmdStartResearch,
-		Payload: map[string]any{
-			"tech_id": "electromagnetism",
-		},
-	})
-	if startRes.Code != model.CodeOK {
-		t.Fatalf("start electromagnetism: %s (%s)", startRes.Code, startRes.Message)
+	if player.Tech == nil || !player.Tech.HasTech("electromagnetism") {
+		startRes, _ := core.execStartResearch(ws, "p1", model.Command{
+			Type: model.CmdStartResearch,
+			Payload: map[string]any{
+				"tech_id": "electromagnetism",
+			},
+		})
+		if startRes.Code != model.CodeOK {
+			t.Fatalf("start electromagnetism: %s (%s)", startRes.Code, startRes.Message)
+		}
+		waitForCompletedResearch(t, core, "p1", "electromagnetism")
 	}
-	waitForCompletedResearch(t, core, "p1", "electromagnetism")
 
 	wind := findOwnedBuildingByType(ws, "p1", model.BuildingTypeWindTurbine)
 	if wind == nil {

@@ -48,8 +48,8 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 
 	base := newBuilding("base-t100", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 6, Y: 6})
 	base.Runtime.State = model.BuildingWorkRunning
-	base.Storage.EnsureInventory()[model.ItemPrototype] = 3
-	base.Storage.EnsureInventory()[model.ItemCorvette] = 2
+	base.DeploymentState.PayloadInventory[model.ItemPrototype] = 3
+	base.DeploymentState.PayloadInventory[model.ItemCorvette] = 2
 	attachBuilding(ws, base)
 	power := newBuilding("power-t100", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
@@ -73,7 +73,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		Target: model.CommandTarget{EntityID: base.ID},
 		Payload: map[string]any{
 			"building_id": base.ID,
-			"unit_type":   "prototype",
+			"blueprint_id": "prototype",
 			"count":       2,
 			"planet_id":   ws.PlanetID,
 		},
@@ -93,7 +93,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		Target: model.CommandTarget{EntityID: base.ID, SystemID: "sys-1"},
 		Payload: map[string]any{
 			"building_id": base.ID,
-			"unit_type":   "corvette",
+			"blueprint_id": "corvette",
 			"count":       1,
 			"system_id":   "sys-1",
 			"fleet_id":    "fleet-alpha",
@@ -171,8 +171,8 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 
 	base := newBuilding("dispatcher-base-t100", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 6, Y: 6})
 	base.Runtime.State = model.BuildingWorkRunning
-	base.Storage.EnsureInventory()[model.ItemPrototype] = 2
-	base.Storage.EnsureInventory()[model.ItemCorvette] = 1
+	base.DeploymentState.PayloadInventory[model.ItemPrototype] = 2
+	base.DeploymentState.PayloadInventory[model.ItemCorvette] = 1
 	attachBuilding(ws, base)
 	power := newBuilding("dispatcher-power-t100", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
@@ -196,7 +196,7 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 		Target: model.CommandTarget{EntityID: base.ID},
 		Payload: map[string]any{
 			"building_id": base.ID,
-			"unit_type":   "prototype",
+			"blueprint_id": "prototype",
 			"count":       2,
 			"planet_id":   ws.PlanetID,
 		},
@@ -209,7 +209,7 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 		Target: model.CommandTarget{EntityID: base.ID, SystemID: "sys-1"},
 		Payload: map[string]any{
 			"building_id": base.ID,
-			"unit_type":   "corvette",
+			"blueprint_id": "corvette",
 			"count":       1,
 			"system_id":   "sys-1",
 			"fleet_id":    "fleet-dispatcher",

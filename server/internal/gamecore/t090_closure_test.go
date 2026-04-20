@@ -67,6 +67,7 @@ func newBuilding(id string, btype model.BuildingType, owner string, pos model.Po
 	model.InitBuildingEnergyStorage(building)
 	model.InitBuildingSorter(building)
 	model.InitBuildingLogisticsStation(building)
+	model.InitBuildingDeploymentState(building)
 	return building
 }
 

@@ -35,6 +35,8 @@ const (
 	CmdBlueprintFinalize         CommandType = "blueprint_finalize"
 	CmdBlueprintVariant          CommandType = "blueprint_variant"
 	CmdBlueprintSetStatus        CommandType = "blueprint_set_status"
+	CmdQueueMilitaryProduction   CommandType = "queue_military_production"
+	CmdRefitUnit                 CommandType = "refit_unit"
 	CmdBuildDysonNode            CommandType = "build_dyson_node"
 	CmdBuildDysonFrame           CommandType = "build_dyson_frame"
 	CmdBuildDysonShell           CommandType = "build_dyson_shell"

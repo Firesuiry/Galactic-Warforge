@@ -15,6 +15,7 @@ type PlanetRuntimeView struct {
 	Tick              int64                  `json:"tick"`
 	CombatSquads      []model.CombatSquad    `json:"combat_squads,omitempty"`
 	OrbitalPlatforms  []model.OrbitalPlatform `json:"orbital_platforms,omitempty"`
+	DeploymentHubs    []DeploymentHubView    `json:"deployment_hubs,omitempty"`
 	LogisticsStations []LogisticsStationView `json:"logistics_stations,omitempty"`
 	LogisticsDrones   []LogisticsDroneView   `json:"logistics_drones,omitempty"`
 	LogisticsShips    []LogisticsShipView    `json:"logistics_ships,omitempty"`
@@ -33,6 +34,19 @@ type LogisticsStationView struct {
 	State        *model.LogisticsStationState `json:"state,omitempty"`
 	DroneIDs     []string                     `json:"drone_ids,omitempty"`
 	ShipIDs      []string                     `json:"ship_ids,omitempty"`
+}
+
+type DeploymentHubView struct {
+	BuildingID      string                           `json:"building_id"`
+	BuildingType    model.BuildingType               `json:"building_type"`
+	OwnerID         string                           `json:"owner_id"`
+	Position        model.Position                   `json:"position"`
+	State           model.BuildingWorkState          `json:"state"`
+	AllowedDomains  []model.UnitDomain               `json:"allowed_domains,omitempty"`
+	PayloadInventory model.ItemInventory             `json:"payload_inventory,omitempty"`
+	ProductionQueue []model.MilitaryProductionOrder  `json:"production_queue,omitempty"`
+	RefitQueue      []model.MilitaryRefitOrder       `json:"refit_queue,omitempty"`
+	LineState       model.DeploymentHubLineState     `json:"line_state,omitempty"`
 }
 
 type LogisticsDroneView struct {
@@ -157,6 +171,7 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 	}
 
 	view.LogisticsStations = collectLogisticsStations(ws, playerID, droneIDsByStation, shipIDsByStation)
+	view.DeploymentHubs = collectDeploymentHubs(ws, playerID)
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
 	view.CombatSquads = collectCombatSquads(ws, playerID)
 	view.OrbitalPlatforms = collectOrbitalPlatforms(ws, playerID)
@@ -167,6 +182,54 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 		view.LastAttackTick = ws.EnemyForces.LastAttack
 	}
 	return view, true
+}
+
+func collectDeploymentHubs(ws *model.WorldState, playerID string) []DeploymentHubView {
+	if ws == nil || len(ws.Buildings) == 0 {
+		return []DeploymentHubView{}
+	}
+	ids := make([]string, 0)
+	for id, building := range ws.Buildings {
+		if building == nil || building.OwnerID != playerID || building.Runtime.Functions.Deployment == nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]DeploymentHubView, 0, len(ids))
+	for _, id := range ids {
+		building := ws.Buildings[id]
+		if building == nil || building.Runtime.Functions.Deployment == nil {
+			continue
+		}
+		view := DeploymentHubView{
+			BuildingID:      building.ID,
+			BuildingType:    building.Type,
+			OwnerID:         building.OwnerID,
+			Position:        building.Position,
+			State:           building.Runtime.State,
+			AllowedDomains:  append([]model.UnitDomain(nil), building.Runtime.Functions.Deployment.AllowedDomains...),
+			LineState:       model.DeploymentHubLineState{},
+		}
+		if building.DeploymentState != nil {
+			view.PayloadInventory = building.DeploymentState.PayloadInventory.Clone()
+			view.LineState = building.DeploymentState.LineState
+			for _, order := range building.DeploymentState.ProductionQueue {
+				if order == nil {
+					continue
+				}
+				view.ProductionQueue = append(view.ProductionQueue, *order.Clone())
+			}
+			for _, order := range building.DeploymentState.RefitQueue {
+				if order == nil {
+					continue
+				}
+				view.RefitQueue = append(view.RefitQueue, *order.Clone())
+			}
+		}
+		out = append(out, view)
+	}
+	return out
 }
 
 func collectCombatSquads(ws *model.WorldState, playerID string) []model.CombatSquad {

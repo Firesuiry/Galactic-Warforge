@@ -45,6 +45,7 @@ type BuildingSnapshot struct {
 	Conveyor         *model.ConveyorState         `json:"conveyor,omitempty"`
 	Sorter           *model.SorterState           `json:"sorter,omitempty"`
 	LogisticsStation *model.LogisticsStationState `json:"logistics_station,omitempty"`
+	DeploymentState  *model.DeploymentHubState    `json:"deployment_state,omitempty"`
 	Job              *BuildingJobSnapshot         `json:"job,omitempty"`
 }
 

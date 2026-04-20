@@ -752,6 +752,10 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execBlueprintVariant(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintSetStatus:
 			res, evts = gc.execBlueprintSetStatus(gc.world, qr.PlayerID, cmd)
+		case model.CmdQueueMilitaryProduction:
+			res, evts = gc.execQueueMilitaryProduction(gc.world, qr.PlayerID, cmd)
+		case model.CmdRefitUnit:
+			res, evts = gc.execRefitUnit(gc.world, qr.PlayerID, cmd)
 		case model.CmdUpgrade:
 			res, evts = gc.execUpgrade(gc.world, qr.PlayerID, cmd)
 		case model.CmdDemolish:

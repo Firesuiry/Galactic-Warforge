@@ -585,6 +585,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	model.InitBuildingConveyor(b)
 	model.InitBuildingSorter(b)
 	model.InitBuildingLogisticsStation(b)
+	model.InitBuildingDeploymentState(b)
 	syncCollectorResourceKind(ws, b)
 	if b.Production != nil {
 		recipeID := task.RecipeID
