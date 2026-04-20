@@ -346,6 +346,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 当前会公开六类 system-scoped runtime：
     - `solar_sail_orbit`
     - `dyson_sphere`
+    - `orbital_superiority`
+    - `planet_blockades`
+    - `landing_operations`
     - `active_planet_context`
     - `fleets`
     - `contacts`
@@ -363,6 +366,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `dyson_sphere.layers[].frames[]`：包含 `id` / `layer_index` / `node_a_id` / `node_b_id` / `integrity` / `built`
   - `dyson_sphere.layers[].shells[]`：包含 `id` / `layer_index` / `latitude_min` / `latitude_max` / `coverage` / `energy_output` / `integrity` / `built`
   - `dyson_sphere.layers[].construction_bonus` 当前按 `min(0.5, rocket_launches * 0.02)` 结算；若该层已有壳面，`launch_rocket` 还会按顺序把第一个 `coverage < 1.0` 的壳面额外推进 `0.02` 覆盖率，并重算该壳面的 `energy_output`
+  - `orbital_superiority`：系统级制轨态，字段为 `system_id` / `advantage_player_id` / `contest_intensity` / `last_reason` / `updated_tick`
+  - `orbital_superiority.last_reason`：当前 authoritative 只会返回 `no_fleet_presence` / `orbit_contested` / `fleet_presence_margin`
+  - `planet_blockades[]`：行星级轨道封锁态，字段为 `planet_id` / `system_id` / `owner_id` / `task_force_id` / `status` / `intensity` / `interdicted_supply` / `interdicted_transports` / `interdicted_landings` / `last_reason` / `updated_tick`
+  - `planet_blockades[].status`：当前固定为 `planned` / `active` / `contested` / `broken`
+  - `planet_blockades[].last_reason`：当前 authoritative 只会返回 `awaiting_orbital_superiority` / `orbital_superiority_held` / `orbit_contested` / `lost_orbital_superiority` / `task_force_unavailable` / 各类 `*_interdicted`
+  - `landing_operations[]`：登陆投送流程，字段为 `id` / `owner_id` / `task_force_id` / `system_id` / `planet_id` / `stage` / `result` / `blocked_reason` / `transport_capacity` / `initial_supply` / `landing_zone_safety` / `bridgehead_id` / `started_tick` / `updated_tick` / `completed_tick`
+  - `landing_operations[].stage`：当前固定为 `reconnaissance` / `landing_window_open` / `vanguard_landing` / `beachhead_established` / `failed`
+  - `landing_operations[].result`：当前固定为 `pending` / `success` / `failed`
+  - `landing_operations[].blocked_reason`：失败时当前只会返回 `insufficient_orbital_superiority` / `insufficient_initial_supply` / `landing_zone_unsafe` / `task_force_unavailable`
+  - `landing_operations[].initial_supply`：登陆发起方任务群在流程推进时快照到的六类初始军需，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `last_battle_report_id`
@@ -392,6 +405,46 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "system_id": "sys-1",
   "discovered": true,
   "available": true,
+  "orbital_superiority": {
+    "system_id": "sys-1",
+    "advantage_player_id": "p1",
+    "contest_intensity": 0.22,
+    "last_reason": "fleet_presence_margin",
+    "updated_tick": 128
+  },
+  "planet_blockades": [
+    {
+      "planet_id": "planet-1-1",
+      "system_id": "sys-1",
+      "owner_id": "p1",
+      "task_force_id": "tf-front",
+      "status": "active",
+      "intensity": 0.78,
+      "interdicted_supply": 2,
+      "interdicted_transports": 1,
+      "interdicted_landings": 0,
+      "last_reason": "orbital_superiority_held",
+      "updated_tick": 128
+    }
+  ],
+  "landing_operations": [
+    {
+      "id": "landing-3",
+      "owner_id": "p1",
+      "task_force_id": "tf-front",
+      "system_id": "sys-1",
+      "planet_id": "planet-1-1",
+      "stage": "beachhead_established",
+      "result": "success",
+      "transport_capacity": 8,
+      "initial_supply": {"ammo": 4, "fuel": 3, "spare_parts": 2},
+      "landing_zone_safety": 0.8,
+      "bridgehead_id": "bridgehead-1",
+      "started_tick": 126,
+      "updated_tick": 128,
+      "completed_tick": 128
+    }
+  ],
   "dyson_sphere": {
     "player_id": "p1",
     "system_id": "sys-1",
@@ -1162,7 +1215,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1264,6 +1317,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `theater_create`：`payload.theater_id` 必填；可选 `payload.name`
   - `theater_define_zone`：`payload.theater_id` + `payload.zone_type` 必填；可选 `payload.system_id` / `payload.planet_id` / `payload.position` / `payload.radius`；`zone_type` 取 `primary|secondary|no_entry|rally|supply_priority`
   - `theater_set_objective`：`payload.theater_id` + `payload.objective_type` 必填；可选 `payload.system_id` / `payload.planet_id` / `payload.entity_id` / `payload.description`
+  - `blockade_planet`：`payload.task_force_id` + `payload.planet_id` 必填；任务群必须属于当前玩家、且至少包含一个舰队成员；命令只写入 authoritative 封锁意图，真正是否 `active` 取决于后续 tick 中该任务群是否仍可用、且其所属玩家是否在目标恒星系取得制轨优势；当封锁 `active` 时，当前会真实拦截该行星的 `orbital_supply_port` / `interstellar_logistics_station` / `supply_ship` / `frontline_supply_drop` 军需补给节点，并累计 `interdicted_supply` / `interdicted_transports`
+  - `landing_start`：`payload.task_force_id` + `payload.planet_id` 必填；可选 `payload.operation_id`；任务群必须属于当前玩家且具备正向 `transport_capacity`；命令会创建独立的 authoritative 登陆流程，不会把 `fleet_attack` 目标改成星球来伪装“已登陆”；后续 tick 会依次推进 `reconnaissance -> landing_window_open -> vanguard_landing -> beachhead_established`，若缺制轨、初始军需不足、登陆点不安全或任务群失效，则会转为 `result=failed`
   - `blueprint_create`：`payload.blueprint_id` + `payload.domain` 必填，且必须二选一提供 `payload.base_frame_id` 或 `payload.base_hull_id`；当前只创建玩家自有蓝图草案，不会生成任何部署载荷；若 `blueprint_id` 与公开预置蓝图或当前玩家已有蓝图重名，会直接拒绝
   - `blueprint_set_component`：`payload.blueprint_id` + `payload.slot_id` + `payload.component_id` 必填；只允许编辑 `draft` / `validated` 蓝图；这里允许先装入未来会被校验器判非法的组件组合，真正的 legality 以 `blueprint_validate` 结果为准；若蓝图是受控改型，只能修改 `allowed_variant_slots` 白名单中的槽位
   - `blueprint_validate`：`payload.blueprint_id` 必填；只允许校验 `draft` / `validated` 蓝图；服务端会返回结构化 `validation`，覆盖功率、体积、质量、刚性、热负荷、信号/隐形、维护成本以及 `hardpoint_mismatch` 等原因；当校验失败时，最终 authoritative `command_result.payload.validation.issues[]` 可直接用于 CLI/Web 展示
@@ -1389,6 +1444,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `missile_salvo_fired`
   - `point_defense_intercept`
   - `battle_report_generated`
+  - `landing_started`
+  - `landing_failed`
+  - `orbital_superiority_changed`
+  - `supply_line_disrupted`
 - 事件类型补充:
   - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
     - 对 `build`，如果这里只返回 `OK + construction task ... queued`，不要把它误判成“建筑已完全落地并可运行”；后续还应继续观察同坐标的 `entity_created` 与对应 `building_state_changed`
@@ -1410,6 +1469,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `missile_salvo_fired`：导弹齐射事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `launched` / `intercepted` / `drifted` / `lock_quality` / `jamming_penalty`；若来源是敌对势力还会额外写 `source = "enemy_force"`
   - `point_defense_intercept`：点防拦截事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `intercepted` / `remaining`
   - `battle_report_generated`：太空战战报生成事件，payload 包含 `battle_id` / `fleet_id` / `report`；`report` 结构与 `GET /world/systems/{system_id}/runtime.battle_reports[]` 一致
+  - `landing_started`：登陆投送启动事件，payload 包含 `operation_id` / `planet_id` / `task_force_id`
+  - `landing_failed`：登陆投送失败事件，payload 包含 `operation_id` / `planet_id` / `blocked_reason`
+  - `orbital_superiority_changed`：恒星系制轨态变化事件，payload 包含 `system_id` / `advantage_player_id` / `contest_intensity` / `reason`
+  - `supply_line_disrupted`：当前仍作为封锁拦截预留事件类型；本轮实现的 authoritative 拦截计数先体现在 `planet_blockades[].interdicted_*` 中，后续若事件化会沿用该名字
 - 响应示例:
 ```json
 {

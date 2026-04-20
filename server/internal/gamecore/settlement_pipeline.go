@@ -73,11 +73,12 @@ func newSettlementPipeline() settlementPipeline {
 	})
 
 	pipeline.register("interstellar_runtime", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
+		var events []*model.GameEvent
+		events = append(events, settleOrbitalWarfare(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)...)
 		settleInterstellarDispatch(gc.worlds, gc.maps)
 		settleLogisticsShips(gc.worlds)
 		settleWarSustainment(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)
 
-		var events []*model.GameEvent
 		for _, ws := range frame.worlds {
 			events = append(events, settleCombatRuntime(ws, ws.Tick)...)
 		}

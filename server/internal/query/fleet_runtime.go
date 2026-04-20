@@ -8,15 +8,18 @@ import (
 
 // SystemRuntimeView exposes dynamic system-scoped runtime state.
 type SystemRuntimeView struct {
-	SystemID            string                        `json:"system_id"`
-	Discovered          bool                          `json:"discovered"`
-	Available           bool                          `json:"available"`
-	SolarSailOrbit      *model.SolarSailOrbitState    `json:"solar_sail_orbit,omitempty"`
-	DysonSphere         *model.DysonSphereState       `json:"dyson_sphere,omitempty"`
-	ActivePlanetContext *ActivePlanetDysonContextView `json:"active_planet_context,omitempty"`
-	Fleets              []FleetRuntimeView            `json:"fleets,omitempty"`
-	Contacts            []model.SensorContact         `json:"contacts,omitempty"`
-	BattleReports       []model.SpaceBattleReport     `json:"battle_reports,omitempty"`
+	SystemID            string                         `json:"system_id"`
+	Discovered          bool                           `json:"discovered"`
+	Available           bool                           `json:"available"`
+	SolarSailOrbit      *model.SolarSailOrbitState     `json:"solar_sail_orbit,omitempty"`
+	DysonSphere         *model.DysonSphereState        `json:"dyson_sphere,omitempty"`
+	OrbitalSuperiority  *model.OrbitalSuperiorityState `json:"orbital_superiority,omitempty"`
+	PlanetBlockades     []model.PlanetBlockadeState    `json:"planet_blockades,omitempty"`
+	LandingOperations   []model.LandingOperationState  `json:"landing_operations,omitempty"`
+	ActivePlanetContext *ActivePlanetDysonContextView  `json:"active_planet_context,omitempty"`
+	Fleets              []FleetRuntimeView             `json:"fleets,omitempty"`
+	Contacts            []model.SensorContact          `json:"contacts,omitempty"`
+	BattleReports       []model.SpaceBattleReport      `json:"battle_reports,omitempty"`
 }
 
 // ActivePlanetDysonContextView summarizes Dyson-capable buildings on the current active planet.
@@ -103,6 +106,40 @@ func (ql *Layer) SystemRuntime(
 			stateCopy.Layers[index].Shells = append([]model.DysonShell(nil), state.Layers[index].Shells...)
 		}
 		view.DysonSphere = &stateCopy
+	}
+	if warfare := spaceRuntime.SystemWarfare(systemID); warfare != nil {
+		if warfare.OrbitalSuperiority != nil {
+			superiority := *warfare.OrbitalSuperiority
+			view.OrbitalSuperiority = &superiority
+		}
+		if len(warfare.PlanetBlockades) > 0 {
+			planetIDs := make([]string, 0, len(warfare.PlanetBlockades))
+			for planetID := range warfare.PlanetBlockades {
+				planetIDs = append(planetIDs, planetID)
+			}
+			sort.Strings(planetIDs)
+			for _, planetID := range planetIDs {
+				blockade := warfare.PlanetBlockades[planetID]
+				if blockade == nil {
+					continue
+				}
+				view.PlanetBlockades = append(view.PlanetBlockades, *blockade)
+			}
+		}
+		if len(warfare.LandingOperations) > 0 {
+			operationIDs := make([]string, 0, len(warfare.LandingOperations))
+			for operationID := range warfare.LandingOperations {
+				operationIDs = append(operationIDs, operationID)
+			}
+			sort.Strings(operationIDs)
+			for _, operationID := range operationIDs {
+				operation := warfare.LandingOperations[operationID]
+				if operation == nil {
+					continue
+				}
+				view.LandingOperations = append(view.LandingOperations, *operation)
+			}
+		}
 	}
 	for _, fleet := range systemRuntime.Fleets {
 		if fleet == nil {

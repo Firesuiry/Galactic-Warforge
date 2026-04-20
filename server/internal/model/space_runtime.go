@@ -2,8 +2,9 @@ package model
 
 // SpaceRuntimeState is the top-level authoritative space runtime container.
 type SpaceRuntimeState struct {
-	EntityCounter int64                          `json:"entity_counter"`
-	Players       map[string]*PlayerSpaceRuntime `json:"players,omitempty"`
+	EntityCounter int64                            `json:"entity_counter"`
+	Players       map[string]*PlayerSpaceRuntime   `json:"players,omitempty"`
+	Systems       map[string]*SystemWarfareRuntime `json:"systems,omitempty"`
 }
 
 // PlayerSpaceRuntime stores per-player space runtime data.
@@ -26,6 +27,7 @@ type PlayerSystemRuntime struct {
 func NewSpaceRuntimeState() *SpaceRuntimeState {
 	return &SpaceRuntimeState{
 		Players: make(map[string]*PlayerSpaceRuntime),
+		Systems: make(map[string]*SystemWarfareRuntime),
 	}
 }
 
@@ -45,6 +47,9 @@ func (rt *SpaceRuntimeState) EnsurePlayerSystem(playerID, systemID string) *Play
 	}
 	if rt.Players == nil {
 		rt.Players = make(map[string]*PlayerSpaceRuntime)
+	}
+	if rt.Systems == nil {
+		rt.Systems = make(map[string]*SystemWarfareRuntime)
 	}
 	playerRuntime, ok := rt.Players[playerID]
 	if !ok || playerRuntime == nil {
@@ -72,7 +77,32 @@ func (rt *SpaceRuntimeState) EnsurePlayerSystem(playerID, systemID string) *Play
 	if systemRuntime.SensorContacts == nil {
 		systemRuntime.SensorContacts = make(map[string]*SensorContact)
 	}
+	if rt.Systems[systemID] == nil {
+		rt.Systems[systemID] = NewSystemWarfareRuntime(systemID)
+	}
 	return systemRuntime
+}
+
+// EnsureSystemWarfare returns an initialized system warfare runtime bucket.
+func (rt *SpaceRuntimeState) EnsureSystemWarfare(systemID string) *SystemWarfareRuntime {
+	if rt == nil {
+		return nil
+	}
+	if rt.Systems == nil {
+		rt.Systems = make(map[string]*SystemWarfareRuntime)
+	}
+	if rt.Systems[systemID] == nil {
+		rt.Systems[systemID] = NewSystemWarfareRuntime(systemID)
+	}
+	return rt.Systems[systemID]
+}
+
+// SystemWarfare returns system warfare runtime when present.
+func (rt *SpaceRuntimeState) SystemWarfare(systemID string) *SystemWarfareRuntime {
+	if rt == nil || rt.Systems == nil {
+		return nil
+	}
+	return rt.Systems[systemID]
 }
 
 // PlayerSystem returns a player-system runtime bucket when present.
@@ -122,6 +152,7 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 	out := &SpaceRuntimeState{
 		EntityCounter: rt.EntityCounter,
 		Players:       make(map[string]*PlayerSpaceRuntime, len(rt.Players)),
+		Systems:       make(map[string]*SystemWarfareRuntime, len(rt.Systems)),
 	}
 	for playerID, playerRuntime := range rt.Players {
 		if playerRuntime == nil {
@@ -164,6 +195,12 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 			playerCopy.Systems[systemID] = systemCopy
 		}
 		out.Players[playerID] = playerCopy
+	}
+	for systemID, warfareRuntime := range rt.Systems {
+		if warfareRuntime == nil {
+			continue
+		}
+		out.Systems[systemID] = CloneSystemWarfareRuntime(warfareRuntime)
 	}
 	return out
 }

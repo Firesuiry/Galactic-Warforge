@@ -29,9 +29,10 @@ type CombatSquad struct {
 
 // CombatRuntimeState stores authoritative combat runtime entities for one planet world.
 type CombatRuntimeState struct {
-	EntityCounter    int64                       `json:"entity_counter"`
-	Squads           map[string]*CombatSquad     `json:"squads,omitempty"`
-	OrbitalPlatforms map[string]*OrbitalPlatform `json:"orbital_platforms,omitempty"`
+	EntityCounter    int64                         `json:"entity_counter"`
+	Squads           map[string]*CombatSquad       `json:"squads,omitempty"`
+	OrbitalPlatforms map[string]*OrbitalPlatform   `json:"orbital_platforms,omitempty"`
+	Bridgeheads      map[string]*LandingBridgehead `json:"bridgeheads,omitempty"`
 }
 
 // NewCombatRuntimeState returns an initialized combat runtime container.
@@ -39,6 +40,7 @@ func NewCombatRuntimeState() *CombatRuntimeState {
 	return &CombatRuntimeState{
 		Squads:           make(map[string]*CombatSquad),
 		OrbitalPlatforms: make(map[string]*OrbitalPlatform),
+		Bridgeheads:      make(map[string]*LandingBridgehead),
 	}
 }
 
@@ -60,6 +62,7 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 		EntityCounter:    rt.EntityCounter,
 		Squads:           make(map[string]*CombatSquad, len(rt.Squads)),
 		OrbitalPlatforms: make(map[string]*OrbitalPlatform, len(rt.OrbitalPlatforms)),
+		Bridgeheads:      make(map[string]*LandingBridgehead, len(rt.Bridgeheads)),
 	}
 	for id, squad := range rt.Squads {
 		if squad == nil {
@@ -75,6 +78,13 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 		}
 		copy := *platform
 		out.OrbitalPlatforms[id] = &copy
+	}
+	for id, bridgehead := range rt.Bridgeheads {
+		if bridgehead == nil {
+			continue
+		}
+		copy := *bridgehead
+		out.Bridgeheads[id] = &copy
 	}
 	return out
 }

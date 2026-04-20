@@ -1035,6 +1035,18 @@ func validateCommandStructure(cmd model.Command) error {
 				return fmt.Errorf("theater_set_objective requires payload.%s", field)
 			}
 		}
+	case model.CmdBlockadePlanet:
+		for _, field := range []string{"task_force_id", "planet_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("blockade_planet requires payload.%s", field)
+			}
+		}
+	case model.CmdLandingStart:
+		for _, field := range []string{"task_force_id", "planet_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("landing_start requires payload.%s", field)
+			}
+		}
 	case model.CmdUpgrade:
 		if cmd.Target.EntityID == "" {
 			return fmt.Errorf("upgrade requires target.entity_id")

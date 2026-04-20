@@ -27,7 +27,7 @@ func settleWarSustainment(worlds map[string]*model.WorldState, maps *mapmodel.Un
 		}
 		systemID := worldSystemID(maps, ws.PlanetID)
 		for playerID := range ws.Players {
-			nodes := collectWorldSupplyNodes(ws, playerID, systemID, currentTick)
+			nodes := collectWorldSupplyNodes(ws, playerID, systemID, spaceRuntime, currentTick)
 			if len(nodes) == 0 {
 				continue
 			}
@@ -100,12 +100,13 @@ func settleWarSustainment(worlds map[string]*model.WorldState, maps *mapmodel.Un
 	}
 }
 
-func collectWorldSupplyNodes(ws *model.WorldState, playerID, systemID string, currentTick int64) []*warSupplyNode {
+func collectWorldSupplyNodes(ws *model.WorldState, playerID, systemID string, spaceRuntime *model.SpaceRuntimeState, currentTick int64) []*warSupplyNode {
 	if ws == nil || playerID == "" {
 		return nil
 	}
 	nodes := make([]*warSupplyNode, 0)
 	player := ws.Players[playerID]
+	underBlockade := activeEnemyPlanetBlockade(spaceRuntime, systemID, ws.PlanetID, playerID)
 
 	if player != nil && player.WarIndustry != nil {
 		for _, hub := range player.WarIndustry.DeploymentHubs {
@@ -114,6 +115,10 @@ func collectWorldSupplyNodes(ws *model.WorldState, playerID, systemID string, cu
 			}
 			building := ws.Buildings[hub.BuildingID]
 			if building == nil || building.OwnerID != playerID || building.Storage == nil {
+				continue
+			}
+			if underBlockade != nil {
+				recordPlanetBlockadeInterdiction(spaceRuntime, systemID, ws.PlanetID, playerID, 1, 0, "offworld_supply_interdicted", currentTick)
 				continue
 			}
 			inventory := building.Storage.EnsureInventory()
@@ -141,6 +146,10 @@ func collectWorldSupplyNodes(ws *model.WorldState, playerID, systemID string, cu
 		sourceType := model.WarSupplySourcePlanetaryLogisticsStation
 		label := "Planetary Logistics Station"
 		if building.Type == model.BuildingTypeInterstellarLogisticsStation {
+			if underBlockade != nil {
+				recordPlanetBlockadeInterdiction(spaceRuntime, systemID, ws.PlanetID, playerID, 1, 1, "interstellar_convoy_interdicted", currentTick)
+				continue
+			}
 			sourceType = model.WarSupplySourceInterstellarLogistics
 			label = "Interstellar Logistics Station"
 		}
@@ -167,6 +176,10 @@ func collectWorldSupplyNodes(ws *model.WorldState, playerID, systemID string, cu
 		if building == nil || building.OwnerID != playerID {
 			continue
 		}
+		if underBlockade != nil {
+			recordPlanetBlockadeInterdiction(spaceRuntime, systemID, ws.PlanetID, playerID, 1, 1, "frontline_drop_interdicted", currentTick)
+			continue
+		}
 		nodes = append(nodes, &warSupplyNode{
 			view: model.WarSupplyNodeView{
 				NodeID:      fmt.Sprintf("drone:%s", droneID),
@@ -189,6 +202,10 @@ func collectWorldSupplyNodes(ws *model.WorldState, playerID, systemID string, cu
 		}
 		building := ws.Buildings[ship.StationID]
 		if building == nil || building.OwnerID != playerID {
+			continue
+		}
+		if underBlockade != nil {
+			recordPlanetBlockadeInterdiction(spaceRuntime, systemID, ws.PlanetID, playerID, 1, 1, "supply_ship_interdicted", currentTick)
 			continue
 		}
 		nodes = append(nodes, &warSupplyNode{

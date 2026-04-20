@@ -754,6 +754,10 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execTheaterDefineZone(gc.world, qr.PlayerID, cmd)
 		case model.CmdTheaterSetObjective:
 			res, evts = gc.execTheaterSetObjective(gc.world, qr.PlayerID, cmd)
+		case model.CmdBlockadePlanet:
+			res, evts = gc.execBlockadePlanet(gc.world, qr.PlayerID, cmd)
+		case model.CmdLandingStart:
+			res, evts = gc.execLandingStart(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintCreate:
 			res, evts = gc.execBlueprintCreate(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintSetComponent:

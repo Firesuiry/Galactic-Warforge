@@ -4,31 +4,35 @@ package model
 type EventType string
 
 const (
-	EvtCommandResult         EventType = "command_result"
-	EvtEntityCreated         EventType = "entity_created"
-	EvtEntityMoved           EventType = "entity_moved"
-	EvtDamageApplied         EventType = "damage_applied"
-	EvtEntityDestroyed       EventType = "entity_destroyed"
-	EvtBuildingStateChanged  EventType = "building_state_changed"
-	EvtResourceChanged       EventType = "resource_changed"
-	EvtTickCompleted         EventType = "tick_completed"
-	EvtProductionAlert       EventType = "production_alert"
-	EvtConstructionPaused    EventType = "construction_paused"
-	EvtConstructionResumed   EventType = "construction_resumed"
-	EvtResearchCompleted     EventType = "research_completed"
-	EvtVictoryDeclared       EventType = "victory_declared"
-	EvtThreatLevelChanged    EventType = "threat_level_changed"
-	EvtLootDropped           EventType = "loot_dropped"
-	EvtEntityUpdated         EventType = "entity_updated"
-	EvtRocketLaunched        EventType = "rocket_launched"
-	EvtSquadDeployed         EventType = "squad_deployed"
-	EvtFleetCommissioned     EventType = "fleet_commissioned"
-	EvtFleetAssigned         EventType = "fleet_assigned"
-	EvtFleetAttackStarted    EventType = "fleet_attack_started"
-	EvtFleetDisbanded        EventType = "fleet_disbanded"
-	EvtMissileSalvoFired     EventType = "missile_salvo_fired"
-	EvtPointDefenseIntercept EventType = "point_defense_intercept"
-	EvtBattleReportGenerated EventType = "battle_report_generated"
+	EvtCommandResult             EventType = "command_result"
+	EvtEntityCreated             EventType = "entity_created"
+	EvtEntityMoved               EventType = "entity_moved"
+	EvtDamageApplied             EventType = "damage_applied"
+	EvtEntityDestroyed           EventType = "entity_destroyed"
+	EvtBuildingStateChanged      EventType = "building_state_changed"
+	EvtResourceChanged           EventType = "resource_changed"
+	EvtTickCompleted             EventType = "tick_completed"
+	EvtProductionAlert           EventType = "production_alert"
+	EvtConstructionPaused        EventType = "construction_paused"
+	EvtConstructionResumed       EventType = "construction_resumed"
+	EvtResearchCompleted         EventType = "research_completed"
+	EvtVictoryDeclared           EventType = "victory_declared"
+	EvtThreatLevelChanged        EventType = "threat_level_changed"
+	EvtLootDropped               EventType = "loot_dropped"
+	EvtEntityUpdated             EventType = "entity_updated"
+	EvtRocketLaunched            EventType = "rocket_launched"
+	EvtSquadDeployed             EventType = "squad_deployed"
+	EvtFleetCommissioned         EventType = "fleet_commissioned"
+	EvtFleetAssigned             EventType = "fleet_assigned"
+	EvtFleetAttackStarted        EventType = "fleet_attack_started"
+	EvtFleetDisbanded            EventType = "fleet_disbanded"
+	EvtMissileSalvoFired         EventType = "missile_salvo_fired"
+	EvtPointDefenseIntercept     EventType = "point_defense_intercept"
+	EvtBattleReportGenerated     EventType = "battle_report_generated"
+	EvtLandingStarted            EventType = "landing_started"
+	EvtLandingFailed             EventType = "landing_failed"
+	EvtOrbitalSuperiorityChanged EventType = "orbital_superiority_changed"
+	EvtSupplyLineDisrupted       EventType = "supply_line_disrupted"
 )
 
 var allEventTypes = []EventType{
@@ -57,6 +61,10 @@ var allEventTypes = []EventType{
 	EvtMissileSalvoFired,
 	EvtPointDefenseIntercept,
 	EvtBattleReportGenerated,
+	EvtLandingStarted,
+	EvtLandingFailed,
+	EvtOrbitalSuperiorityChanged,
+	EvtSupplyLineDisrupted,
 }
 
 var validEventTypes = func() map[EventType]struct{} {
