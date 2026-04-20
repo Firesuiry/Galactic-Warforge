@@ -11,6 +11,7 @@ import { OverviewPage } from '@/pages/OverviewPage';
 import { PlanetPage } from '@/pages/PlanetPage';
 import { ReplayPage } from '@/pages/ReplayPage';
 import { SystemPage } from '@/pages/SystemPage';
+import { WarPage } from '@/pages/WarPage';
 
 function RootRedirect() {
   const hasSession = useHasSession();
@@ -37,6 +38,7 @@ export function AppRoutes() {
         )}
       >
         <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/war" element={<WarPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/galaxy" element={<GalaxyPage />} />
         <Route path="/system/:systemId" element={<SystemPage />} />

@@ -85,9 +85,25 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - `/galaxy`：银河总览
 - `/system/:systemId`：恒星系详情；页面直接消费 `/world/systems/{systemId}/runtime`，展示 `dyson_sphere` / `solar_sail_orbit` / `active_planet_context` 聚合出的戴森态势、层级产能、火箭累计发射次数，以及当前 active planet 对戴森操作链路的支撑建筑
 - `/planet/:planetId`：行星观察页
+- `/war`：战争工作台
 - `/agents`：AI 智能体工作台
 
-### 3.3 行星页
+### 3.3 战争工作台
+
+当前已支持：
+
+- `/war` 新增长期战争工作台，沿用当前大战略骨架，不退回调试表单堆叠页
+- 蓝图工作台：可创建蓝图、查看底盘与组件槽位、执行 `blueprint_set_component` / `blueprint_validate` / `blueprint_finalize`，并直接展示非法原因、预算占用和角色预估
+- 军工总览：聚合量产单、翻修单、部署枢纽和补给节点，可直接对选定蓝图发起一次部署尝试，并把“当前部署枢纽不支持该蓝图”等失败原因解释成玩家可读提示
+- 战区面板：聚合任务群与战区目标，可直接调整 `task_force_set_stance`，并对当前焦点行星发起 `blockade_planet` / `landing_start`
+- 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`、`landing_operations`，并直接暴露当前补给状态和短缺项
+- 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁、登陆的 authoritative 回执
+- 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
+- 当前边界：
+  - 任务群成员编成、量产下单、翻修下单仍依赖既有入口或后续任务，不在本页一次性补齐
+  - AI 军事自治仍以后续任务为准
+
+### 3.4 行星页
 
 当前已支持：
 
@@ -105,13 +121,13 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 调试面板
 - 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
 
-### 3.4 回放调试页
+### 3.5 回放调试页
 
 - 输入 `from_tick` / `to_tick`
 - 调 `/replay`
 - 查看 digest / drift 信息
 
-### 3.5 AI 智能体工作台
+### 3.6 AI 智能体工作台
 
 - `/agents` 已改成 IM 风格协作工作台，核心对象是会话、消息、成员、权限、`ConversationTurn` 和定时任务
 - 左栏提供频道列表、私聊列表、智能体目录，以及创建频道入口
@@ -124,7 +140,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 当前工作台不再把协作模型塞进 `server/`，浏览器只通过 `/agent-api` 与 `agent-gateway` 通信
 - 当 `serverUrl` 指向 fixture 模式时，工作台会进入只读，发送、建群、拉人、建定时任务入口会禁用
 
-### 3.6 当前已接入的协作能力
+### 3.7 当前已接入的协作能力
 
 - 玩家可创建频道，也可主动发起与某个 agent 的私聊
 - 玩家或具备权限的总管类 agent 可按星球批量拉人，把某个星球范围内的 agent 加进会话
@@ -133,7 +149,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 支持给会话创建周期性定时任务，按固定间隔投递一段消息，驱动 agent 做持续巡检或汇报
 - 右栏会显示会话内 agent 的运行时硬限制摘要，包括星球范围和命令类别
 
-### 3.7 中英翻译配置
+### 3.8 中英翻译配置
 
 当前 `client-web` 已增加统一翻译层，用于把用户可见的英文枚举、类型名、状态名、命令名和关键字段标签翻成中文。
 
@@ -164,12 +180,15 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 登录页在线模式是否明确提示“Web 入口地址”，并把原始 `Failed to fetch` 转成可理解的代理/CORS 错误
 - 行星页在窄屏下是否仍保留地图首屏，并可在 `工作台 / 选中对象 / 活动流` 间切换
 - 命令提交后是否先进入 `pending`，再被后续 `command_result` / `research_completed` / `rocket_launched` 覆盖为最终结果
+- `/war` 是否能同时展示蓝图、军工、战区、战报四个长期面板，并能看到蓝图非法原因、部署失败原因、登陆失败原因等解释性提示
+- `/war` 在窄屏下是否仍能看到蓝图创建、部署蓝图、任务群姿态和封锁入口，不会因为布局塌陷而失去最小操作闭环
 - `/agents` 的频道切换、私聊、消息发送、按星球拉人、定时任务创建是否正常可见
 - agent 自动回复后，请求卡片、turn 状态、最终回复和失败原因是否能自动刷新并挂回正确请求
 
 ### 4.2 常用验证组合
 
 - Playwright：验证核心交互回归
+  - `tests/war-workbench.spec.ts`：战争工作台桌面与窄屏回归
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览
 

@@ -2126,9 +2126,183 @@ a {
   font-size: 0.82rem;
 }
 
+.war-page {
+  gap: 16px;
+}
+
+.war-hero {
+  align-items: flex-start;
+}
+
+.war-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.war-workbench {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.war-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.war-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.war-panel__header h2,
+.war-card h3 {
+  margin: 0;
+}
+
+.war-panel__controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.war-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.war-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(180, 210, 199, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.war-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #d5e6df;
+  font-size: 0.92rem;
+}
+
+.war-field span {
+  color: #9db6b0;
+}
+
+.war-field input,
+.war-field select {
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(180, 210, 199, 0.12);
+  background: rgba(9, 17, 20, 0.82);
+  color: #edf6f1;
+}
+
+.war-field--compact {
+  flex: 1;
+}
+
+.war-kv-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.war-kv-list div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.war-kv-list dt {
+  color: #8fa9a2;
+}
+
+.war-kv-list dd {
+  margin: 0;
+}
+
+.war-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.war-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 210, 199, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #dcebe6;
+  font-size: 0.82rem;
+}
+
+.war-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.war-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.war-slot-row,
+.war-action-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.war-button {
+  justify-content: center;
+}
+
+.status-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(180, 210, 199, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.status-banner--success {
+  border-color: rgba(64, 177, 132, 0.28);
+  background: rgba(64, 177, 132, 0.12);
+}
+
+.status-banner--warning {
+  border-color: rgba(212, 178, 97, 0.28);
+  background: rgba(212, 178, 97, 0.12);
+}
+
+.status-banner--error {
+  border-color: rgba(215, 109, 109, 0.28);
+  background: rgba(215, 109, 109, 0.12);
+}
+
 @media (max-width: 1100px) {
   .strategic-layout,
-  .planet-workbench--grand {
+  .planet-workbench--grand,
+  .war-workbench {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -2147,6 +2321,10 @@ a {
   }
 
   .campaign-board__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .war-section-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

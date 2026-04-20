@@ -102,6 +102,9 @@ export function TopNav() {
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/galaxy">
           星图
         </NavLink>
+        <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/war">
+          战争
+        </NavLink>
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/agents">
           智能体
         </NavLink>

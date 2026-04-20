@@ -72,3 +72,22 @@
 2. 玩家可在浏览器完成战争系统核心工作流的主要步骤。
 3. 重要错误和约束具备可操作的解释，不需要读源码。
 4. 桌面端和移动端至少都能完成最小战争操作闭环。
+
+## 完成情况
+
+- 完成时间：2026-04-20
+- 结果：已完成
+- 实现摘要：
+  - 新增 `client-web` 战争工作台页面 `/war`，将蓝图、军工、战区、战报四类长期面板收口到统一大战略壳子内，并同步补上顶栏导航入口。
+  - 新增 `client-web/src/features/war/error-hints.ts` 与 `client-web/src/features/war/format.ts`，把蓝图非法原因、部署失败、登陆失败、封锁条件不满足等 authoritative 结果转成玩家可读提示。
+  - 蓝图工作台已支持蓝图创建、槽位组件调整、校验、定型、预算显示和角色预估；军工总览已支持查看量产/翻修/部署/补给节点，并可对当前蓝图发起一次部署尝试。
+  - 战区面板已支持任务群姿态调整、目标行星切换、封锁与登陆命令；战报与情报面板已聚合 contacts、battle_reports、planet_blockades、landing_operations 与任务群补给态势。
+  - 新增 `client-web/src/pages/WarPage.test.tsx` 和 `client-web/tests/war-workbench.spec.ts`，分别覆盖组件层回归与浏览器级桌面/窄屏回归。
+  - 已同步更新 `docs/dev/client-web.md`，写明 `/war` 入口、当前能力边界以及新的浏览器回归口径。
+- 边界说明：
+  - 本任务未补齐任务群成员编成、量产下单、翻修下单和 AI 军事自治，这些仍由前置/后续任务负责。
+  - 当前战争工作台重点是把已有 authoritative 战争能力组织成浏览器可发现、可执行、可验证的主流程。
+- 关键验证：
+  - `npm --prefix client-web test`
+  - `cd client-web && npx tsc --noEmit`
+  - `cd client-web && npx playwright test tests/war-workbench.spec.ts`
