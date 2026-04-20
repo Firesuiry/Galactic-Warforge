@@ -348,6 +348,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     - `dyson_sphere`
     - `active_planet_context`
     - `fleets`
+    - `contacts`
   - `active_planet_context` 只在当前 `active_planet_id` 属于该 system，且该 active world 已加载时返回；它不会跨其他行星做扫描补数
   - `active_planet_context` 只是当前 active world 上玩家自有 `em_rail_ejector` / `vertical_launching_silo` / `ray_receiver` 的聚合计数，本身不等于该 system 已经存在 `space runtime`；不过当前官方 midgame 会同时用 `scenario_bootstrap` 预置行星锚点和 system runtime 锚点，所以 fresh 启动后通常会直接看到非零计数与 `available=true`
   - `fleets` 由 `commission_fleet` 写入 top-level `SpaceRuntimeState`；当前只会返回当前玩家自己在该 `system_id` 下的舰队
@@ -365,6 +366,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `target`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
+  - `contacts`：恒星系情报接触列表，包含 `id` / `scope_type` / `scope_id` / `contact_kind` / `entity_id` / `entity_type` / `domain` / `planet_id` / `system_id` / `level` / `classification` / `confirmed_type` / `strength_estimate` / `threat_level` / `last_updated_tick` / `signal_strength` / `lock_quality` / `jamming_penalty` / `missile_drift_risk` / `false_contact` / `sources`
+  - `contacts[].level`：当前固定为 `unknown_signal` / `classified_contact` / `confirmed_type` / `fully_resolved`
+  - `contacts[].sources[]`：当前至少会返回 `vision` / `active_radar` / `passive_em` / `infrared` / `signal_tower` / `recon_unit` 中实际参与本次判定的来源；`source_id`/`source_kind` 可直接追到建筑或舰队
+  - 当前 system contacts 会真实受到主动/被动传感器组合、同星系 anchor 距离和目标电子战强度影响；强 ECM 目标还可能生成 `false_contact=true` 的幽灵接触
 - 响应示例:
 ```json
 {
@@ -618,6 +623,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `combat_squads` 与 `orbital_platforms` 现在来自持久化 `CombatRuntimeState`，会进入 save / replay / rollback
   - `combat_squads` 由 `deploy_squad` 写入；当前 payload 来源是部署枢纽的 authoritative `war_industry.deployment_hubs[].ready_payloads`，既可以是公开预置蓝图，也可以是玩家已定型蓝图
   - 当前 active 行星仍承载最完整的敌情/侦测结算；非 active 但已加载行星也可以看到该行星自己的 authoritative combat runtime
+  - 行星侦察不再只有旧式“看见/没看见”；当前 runtime 会同时返回 `contacts`（完整接触对象）和 `detections`（为旧查询/渲染保留的摘要投影）
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
   - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `state` / `target_enemy_id` / `last_attack_tick`
@@ -626,8 +632,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
   - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `origin_planet_id` / `target_planet_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
   - `construction_tasks`：施工任务视图，包含 `id` / `player_id` / `region_id` / `building_type` / `position` / `rotation` / `blueprint_params` / `conveyor_direction` / `recipe_id` / `cost` / `state` / `enqueue_tick` / `start_tick` / `update_tick` / `queue_index` / `remaining_ticks` / `total_ticks` / `speed_bonus` / `priority` / `error` / `materials_deducted`
-  - `enemy_forces`：敌军视图，包含 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
-  - `detections`：侦测摘要，包含 `player_id` / `vision_range` / `known_enemy_count` / `detected_positions`
+  - `contacts`：行星接触列表，字段与 system runtime 的 `contacts` 相同；当前 ground / beacon / hive 目标也会按同一套四级情报语义返回
+  - `enemy_forces`：敌军视图，只包含当前至少达到 `confirmed_type` 的真实接触，字段仍为 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
+  - `detections`：侦测摘要投影，包含 `player_id` / `vision_range` / `known_enemy_count` / `detected_positions`；它来自 `contacts` 聚合，不再是独立 authoritative 状态
 - 用法补充:
   - `enemy_forces[].id` 也是当前 `fleet_attack` 与 combat squad 自动交战会消费的 target ID 真相来源
 - 响应示例:
@@ -697,12 +704,48 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "spawn_tick": 40
     }
   ],
+  "contacts": [
+    {
+      "id": "enemy-force-1",
+      "scope_type": "planet",
+      "scope_id": "planet-1-1",
+      "contact_kind": "enemy_force",
+      "entity_id": "enemy-force-1",
+      "entity_type": "enemy_force",
+      "domain": "ground",
+      "position": {"x": 10, "y": 10},
+      "level": "confirmed_type",
+      "classification": "ground_force",
+      "confirmed_type": "swarm",
+      "strength_estimate": 25,
+      "last_updated_tick": 90,
+      "signal_strength": 12,
+      "lock_quality": 0.7,
+      "sources": [
+        {"source_type": "active_radar", "source_id": "radar-1", "source_kind": "building", "strength": 6}
+      ]
+    },
+    {
+      "id": "enemy-force-1-ghost",
+      "scope_type": "planet",
+      "scope_id": "planet-1-1",
+      "contact_kind": "false_contact",
+      "entity_type": "enemy_force",
+      "level": "unknown_signal",
+      "classification": "ghost_signature",
+      "last_updated_tick": 90,
+      "false_contact": true,
+      "sources": [
+        {"source_type": "signal_tower", "source_id": "tower-1", "source_kind": "building", "strength": 3}
+      ]
+    }
+  ],
   "detections": [
     {
       "player_id": "p1",
       "vision_range": 12,
       "known_enemy_count": 1,
-      "detected_positions": [{"x": 9, "y": 10}, {"x": 10, "y": 10}]
+      "detected_positions": [{"x": 10, "y": 10}]
     }
   ],
   "threat_level": 2,

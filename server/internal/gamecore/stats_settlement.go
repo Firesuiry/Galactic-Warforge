@@ -1,6 +1,8 @@
 package gamecore
 
 import (
+	"math"
+
 	"siliconworld/internal/model"
 )
 
@@ -142,13 +144,15 @@ func (gc *GameCore) updateLogisticsStats(player *model.PlayerState) {
 func (gc *GameCore) updateCombatStats(player *model.PlayerState) {
 	stats := &player.Stats.CombatStats
 
-	// 从Detections获取威胁等级
-	if gc.world.Detections != nil {
-		if det, ok := gc.world.Detections[player.PlayerID]; ok {
-			// 从已知敌人中计算最大威胁等级
+	// 从 sensor contacts 获取威胁等级
+	if gc.world.SensorContacts != nil {
+		if state, ok := gc.world.SensorContacts[player.PlayerID]; ok && state != nil {
 			maxThreat := 0
-			for _, enemy := range det.KnownEnemies {
-				threatInt := int(enemy.ThreatLevel)
+			for _, contact := range state.Contacts {
+				if contact == nil || contact.FalseContact {
+					continue
+				}
+				threatInt := int(math.Ceil(contact.ThreatLevel))
 				if threatInt > maxThreat {
 					maxThreat = threatInt
 				}

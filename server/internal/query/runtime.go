@@ -8,21 +8,22 @@ import (
 
 // PlanetRuntimeView exposes dynamic planet runtime state for the active world.
 type PlanetRuntimeView struct {
-	PlanetID          string                 `json:"planet_id"`
-	Discovered        bool                   `json:"discovered"`
-	Available         bool                   `json:"available"`
-	ActivePlanetID    string                 `json:"active_planet_id,omitempty"`
-	Tick              int64                  `json:"tick"`
-	CombatSquads      []model.CombatSquad    `json:"combat_squads,omitempty"`
+	PlanetID          string                  `json:"planet_id"`
+	Discovered        bool                    `json:"discovered"`
+	Available         bool                    `json:"available"`
+	ActivePlanetID    string                  `json:"active_planet_id,omitempty"`
+	Tick              int64                   `json:"tick"`
+	CombatSquads      []model.CombatSquad     `json:"combat_squads,omitempty"`
 	OrbitalPlatforms  []model.OrbitalPlatform `json:"orbital_platforms,omitempty"`
-	LogisticsStations []LogisticsStationView `json:"logistics_stations,omitempty"`
-	LogisticsDrones   []LogisticsDroneView   `json:"logistics_drones,omitempty"`
-	LogisticsShips    []LogisticsShipView    `json:"logistics_ships,omitempty"`
-	ConstructionTasks []ConstructionTaskView `json:"construction_tasks,omitempty"`
-	EnemyForces       []EnemyForceView       `json:"enemy_forces,omitempty"`
-	Detections        []DetectionView        `json:"detections,omitempty"`
-	ThreatLevel       int                    `json:"threat_level"`
-	LastAttackTick    int64                  `json:"last_attack_tick,omitempty"`
+	LogisticsStations []LogisticsStationView  `json:"logistics_stations,omitempty"`
+	LogisticsDrones   []LogisticsDroneView    `json:"logistics_drones,omitempty"`
+	LogisticsShips    []LogisticsShipView     `json:"logistics_ships,omitempty"`
+	ConstructionTasks []ConstructionTaskView  `json:"construction_tasks,omitempty"`
+	EnemyForces       []EnemyForceView        `json:"enemy_forces,omitempty"`
+	Contacts          []model.SensorContact   `json:"contacts,omitempty"`
+	Detections        []DetectionView         `json:"detections,omitempty"`
+	ThreatLevel       int                     `json:"threat_level"`
+	LastAttackTick    int64                   `json:"last_attack_tick,omitempty"`
 }
 
 type LogisticsStationView struct {
@@ -160,6 +161,7 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
 	view.CombatSquads = collectCombatSquads(ws, playerID)
 	view.OrbitalPlatforms = collectOrbitalPlatforms(ws, playerID)
+	view.Contacts = collectPlanetSensorContacts(ws, playerID)
 	view.EnemyForces = collectEnemyForces(ws, playerID)
 	view.Detections = collectDetections(ws, playerID)
 	if ws.EnemyForces != nil {
@@ -407,32 +409,41 @@ func collectEnemyForces(ws *model.WorldState, playerID string) []EnemyForceView 
 	if ws == nil {
 		return []EnemyForceView{}
 	}
-	detection := ws.Detections[playerID]
-	if detection == nil || len(detection.KnownEnemies) == 0 {
+	state := ws.SensorContacts[playerID]
+	if state == nil || len(state.Contacts) == 0 {
 		return []EnemyForceView{}
 	}
-	forceByID := make(map[string]model.EnemyForce, len(detection.KnownEnemies))
+	forceByID := make(map[string]model.EnemyForce, len(state.Contacts))
 	if ws.EnemyForces != nil {
 		for _, force := range ws.EnemyForces.Forces {
 			forceByID[force.ID] = force
 		}
 	}
-	known := append([]model.EnemyIntel(nil), detection.KnownEnemies...)
-	sort.Slice(known, func(i, j int) bool {
-		return known[i].EnemyID < known[j].EnemyID
+	contacts := make([]model.SensorContact, 0, len(state.Contacts))
+	for _, contact := range state.Contacts {
+		if contact == nil || contact.ContactKind != model.SensorContactKindEnemyForce || contact.FalseContact {
+			continue
+		}
+		if model.SensorContactLevelRank(contact.Level) < model.SensorContactLevelRank(model.SensorContactLevelConfirmedType) {
+			continue
+		}
+		contacts = append(contacts, cloneSensorContact(contact))
+	}
+	sort.Slice(contacts, func(i, j int) bool {
+		return contacts[i].ID < contacts[j].ID
 	})
-	out := make([]EnemyForceView, 0, len(known))
-	for _, intel := range known {
-		force := forceByID[intel.EnemyID]
+	out := make([]EnemyForceView, 0, len(contacts))
+	for _, contact := range contacts {
+		force := forceByID[contact.EntityID]
 		out = append(out, EnemyForceView{
-			ID:           intel.EnemyID,
-			Type:         intel.Type,
-			Position:     intel.Position,
-			Strength:     intel.Strength,
+			ID:           contact.EntityID,
+			Type:         fallbackString(contact.ConfirmedType, contact.Classification),
+			Position:     derefSensorPosition(contact.Position),
+			Strength:     contact.StrengthEstimate,
 			TargetPlayer: force.TargetPlayer,
 			SpawnTick:    force.SpawnTick,
-			LastSeen:     intel.LastSeen,
-			ThreatLevel:  intel.ThreatLevel,
+			LastSeen:     contact.LastUpdatedTick,
+			ThreatLevel:  contact.ThreatLevel,
 		})
 	}
 	return out
@@ -442,11 +453,31 @@ func collectDetections(ws *model.WorldState, playerID string) []DetectionView {
 	if ws == nil {
 		return []DetectionView{}
 	}
-	detection := ws.Detections[playerID]
-	if detection == nil {
+	state := ws.SensorContacts[playerID]
+	if state == nil || len(state.Contacts) == 0 {
 		return []DetectionView{}
 	}
-	positions := append([]model.Position(nil), detection.DetectedPositions...)
+	positions := make([]model.Position, 0, len(state.Contacts))
+	maxSignal := 0.0
+	knownCount := 0
+	seen := make(map[model.Position]struct{})
+	for _, contact := range state.Contacts {
+		if contact == nil {
+			continue
+		}
+		if !contact.FalseContact {
+			knownCount++
+		}
+		if contact.Position != nil {
+			if _, ok := seen[*contact.Position]; !ok {
+				seen[*contact.Position] = struct{}{}
+				positions = append(positions, *contact.Position)
+			}
+		}
+		if contact.SignalStrength > maxSignal {
+			maxSignal = contact.SignalStrength
+		}
+	}
 	sort.Slice(positions, func(i, j int) bool {
 		if positions[i].X != positions[j].X {
 			return positions[i].X < positions[j].X
@@ -457,11 +488,59 @@ func collectDetections(ws *model.WorldState, playerID string) []DetectionView {
 		return positions[i].Z < positions[j].Z
 	})
 	return []DetectionView{{
-		PlayerID:          detection.PlayerID,
-		VisionRange:       detection.VisionRange,
-		KnownEnemyCount:   len(detection.KnownEnemies),
+		PlayerID:          playerID,
+		VisionRange:       maxSignal,
+		KnownEnemyCount:   knownCount,
 		DetectedPositions: positions,
 	}}
+}
+
+func collectPlanetSensorContacts(ws *model.WorldState, playerID string) []model.SensorContact {
+	if ws == nil || ws.SensorContacts == nil {
+		return []model.SensorContact{}
+	}
+	state := ws.SensorContacts[playerID]
+	if state == nil || len(state.Contacts) == 0 {
+		return []model.SensorContact{}
+	}
+	ids := make([]string, 0, len(state.Contacts))
+	for id := range state.Contacts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.SensorContact, 0, len(ids))
+	for _, id := range ids {
+		contact := state.Contacts[id]
+		if contact == nil {
+			continue
+		}
+		out = append(out, cloneSensorContact(contact))
+	}
+	return out
+}
+
+func cloneSensorContact(contact *model.SensorContact) model.SensorContact {
+	copy := *contact
+	if contact.Position != nil {
+		position := *contact.Position
+		copy.Position = &position
+	}
+	copy.Sources = append([]model.SensorContactSource(nil), contact.Sources...)
+	return copy
+}
+
+func derefSensorPosition(position *model.Position) model.Position {
+	if position == nil {
+		return model.Position{}
+	}
+	return *position
+}
+
+func fallbackString(primary, fallback string) string {
+	if primary != "" {
+		return primary
+	}
+	return fallback
 }
 
 func ownerForStation(ws *model.WorldState, stationID string) string {

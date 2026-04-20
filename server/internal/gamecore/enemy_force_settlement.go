@@ -46,11 +46,6 @@ func (gc *GameCore) settleEnemyForces() []*model.GameEvent {
 		}
 	}
 
-	// 确保DetectionState已初始化
-	if ws.Detections == nil {
-		ws.Detections = make(map[string]*model.DetectionState)
-	}
-
 	// 1. 生成新敌对势力
 	if ws.Tick%cfg.SpawnIntervalTicks == 0 && len(ws.EnemyForces.Forces) < cfg.MaxForces {
 		gc.spawnEnemyForce(ws, cfg)
@@ -59,10 +54,7 @@ func (gc *GameCore) settleEnemyForces() []*model.GameEvent {
 	// 2. 应用信号塔效果（重定向敌人）
 	gc.applySignalTowerEffects(ws)
 
-	// 3. 雷达扫描更新检测状态
-	gc.updateRadarDetection(ws, gc.world.Tick)
-
-	// 4. 扩散现有敌对势力（考虑减速效果）
+	// 3. 扩散现有敌对势力（考虑减速效果）
 	gc.applySlowFieldEffects(ws)
 	for i := range ws.EnemyForces.Forces {
 		force := &ws.EnemyForces.Forces[i]
@@ -70,6 +62,9 @@ func (gc *GameCore) settleEnemyForces() []*model.GameEvent {
 		// 确保敌对势力在地图边界内
 		clampForcePosition(ws, force)
 	}
+
+	// 4. 刷新行星层 contacts
+	settlePlanetSensorContacts(ws, ws.Tick)
 
 	// 5. 计算威胁等级
 	ws.EnemyForces.ThreatLevel = model.ThreatLevelNone
@@ -365,87 +360,7 @@ func (gc *GameCore) applySignalTowerEffects(ws *model.WorldState) {
 
 // updateRadarDetection 更新雷达检测状态
 func (gc *GameCore) updateRadarDetection(ws *model.WorldState, currentTick int64) {
-	if ws == nil || ws.Buildings == nil {
-		return
-	}
-
-	for _, building := range ws.Buildings {
-		if building.HP <= 0 || building.Runtime.State != model.BuildingWorkRunning {
-			continue
-		}
-
-		// 检查是否是雷达或信号塔（有检测功能）
-		isRadar := building.Type == model.BuildingTypeBattlefieldAnalysisBase
-		hasRadarFunc := building.Runtime.Functions.Combat != nil &&
-			building.Runtime.Functions.Combat.Range > 0
-
-		if !isRadar && !hasRadarFunc {
-			continue
-		}
-
-		rangeVal := 10
-		if hasRadarFunc {
-			rangeVal = building.Runtime.Functions.Combat.Range
-		}
-
-		// 扫描范围内的敌人
-		for _, force := range ws.EnemyForces.Forces {
-			dist := calculateDistance(building.Position, force.Position)
-			if dist > rangeVal {
-				continue
-			}
-
-			// 更新该建筑所属玩家的检测状态
-			detection := ws.Detections[building.OwnerID]
-			if detection == nil {
-				detection = &model.DetectionState{
-					PlayerID:          building.OwnerID,
-					KnownEnemies:      make([]model.EnemyIntel, 0),
-					DetectedPositions: make([]model.Position, 0),
-					VisionRange:       float64(rangeVal),
-				}
-				ws.Detections[building.OwnerID] = detection
-			}
-
-			// 检查是否已存在该敌人情报
-			found := false
-			for i, intel := range detection.KnownEnemies {
-				if intel.EnemyID == force.ID {
-					// 更新情报
-					detection.KnownEnemies[i].Position = force.Position
-					detection.KnownEnemies[i].LastSeen = currentTick
-					detection.KnownEnemies[i].Strength = force.Strength
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				// 添加新敌人情报
-				intel := model.EnemyIntel{
-					EnemyID:     force.ID,
-					Type:        string(force.Type),
-					Position:    force.Position,
-					Strength:    force.Strength,
-					LastSeen:    currentTick,
-					ThreatLevel: 0,
-				}
-				detection.KnownEnemies = append(detection.KnownEnemies, intel)
-			}
-
-			// 更新探测到的位置
-			posFound := false
-			for _, pos := range detection.DetectedPositions {
-				if pos.X == force.Position.X && pos.Y == force.Position.Y {
-					posFound = true
-					break
-				}
-			}
-			if !posFound {
-				detection.DetectedPositions = append(detection.DetectedPositions, force.Position)
-			}
-		}
-	}
+	settlePlanetSensorContacts(ws, currentTick)
 }
 
 // applySlowFieldEffects 应用减速场效果

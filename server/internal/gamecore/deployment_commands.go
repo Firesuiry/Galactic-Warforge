@@ -218,6 +218,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 			ID:               fleetID,
 			OwnerID:          playerID,
 			SystemID:         systemID,
+			AnchorPlanetID:   ws.PlanetID,
 			SourceBuildingID: building.ID,
 			Formation:        model.FormationTypeLine,
 			State:            model.FleetStateIdle,

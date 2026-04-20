@@ -14,10 +14,11 @@ type PlayerSpaceRuntime struct {
 
 // PlayerSystemRuntime stores per-player, per-system space runtime data.
 type PlayerSystemRuntime struct {
-	SystemID       string                 `json:"system_id"`
-	SolarSailOrbit *SolarSailOrbitState   `json:"solar_sail_orbit,omitempty"`
-	DysonSphere    *DysonSphereState      `json:"dyson_sphere,omitempty"`
-	Fleets         map[string]*SpaceFleet `json:"fleets,omitempty"`
+	SystemID       string                    `json:"system_id"`
+	SolarSailOrbit *SolarSailOrbitState      `json:"solar_sail_orbit,omitempty"`
+	DysonSphere    *DysonSphereState         `json:"dyson_sphere,omitempty"`
+	Fleets         map[string]*SpaceFleet    `json:"fleets,omitempty"`
+	SensorContacts map[string]*SensorContact `json:"sensor_contacts,omitempty"`
 }
 
 // NewSpaceRuntimeState returns an initialized empty space runtime.
@@ -58,13 +59,17 @@ func (rt *SpaceRuntimeState) EnsurePlayerSystem(playerID, systemID string) *Play
 	systemRuntime, ok := playerRuntime.Systems[systemID]
 	if !ok || systemRuntime == nil {
 		systemRuntime = &PlayerSystemRuntime{
-			SystemID: systemID,
-			Fleets:   make(map[string]*SpaceFleet),
+			SystemID:       systemID,
+			Fleets:         make(map[string]*SpaceFleet),
+			SensorContacts: make(map[string]*SensorContact),
 		}
 		playerRuntime.Systems[systemID] = systemRuntime
 	}
 	if systemRuntime.Fleets == nil {
 		systemRuntime.Fleets = make(map[string]*SpaceFleet)
+	}
+	if systemRuntime.SensorContacts == nil {
+		systemRuntime.SensorContacts = make(map[string]*SensorContact)
 	}
 	return systemRuntime
 }
@@ -130,8 +135,9 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 				continue
 			}
 			systemCopy := &PlayerSystemRuntime{
-				SystemID: systemRuntime.SystemID,
-				Fleets:   make(map[string]*SpaceFleet, len(systemRuntime.Fleets)),
+				SystemID:       systemRuntime.SystemID,
+				Fleets:         make(map[string]*SpaceFleet, len(systemRuntime.Fleets)),
+				SensorContacts: cloneSensorContactMap(systemRuntime.SensorContacts),
 			}
 			if systemRuntime.SolarSailOrbit != nil {
 				orbitCopy := *systemRuntime.SolarSailOrbit

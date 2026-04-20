@@ -187,6 +187,7 @@ type SpaceFleet struct {
 	ID               string           `json:"id"`
 	OwnerID          string           `json:"owner_id"`
 	SystemID         string           `json:"system_id"`
+	AnchorPlanetID   string           `json:"anchor_planet_id,omitempty"`
 	SourceBuildingID string           `json:"source_building_id,omitempty"`
 	Name             string           `json:"name,omitempty"`
 	Formation        FormationType    `json:"formation"`

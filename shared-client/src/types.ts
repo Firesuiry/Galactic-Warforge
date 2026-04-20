@@ -782,6 +782,54 @@ export interface DetectionView {
   detected_positions?: Position[];
 }
 
+export type SensorContactLevel =
+  | 'unknown_signal'
+  | 'classified_contact'
+  | 'confirmed_type'
+  | 'fully_resolved';
+
+export type SensorContactScope = 'planet' | 'system';
+export type SensorContactKind = 'enemy_force' | 'fleet' | 'false_contact';
+export type SensorSourceType =
+  | 'vision'
+  | 'active_radar'
+  | 'passive_em'
+  | 'infrared'
+  | 'signal_tower'
+  | 'recon_unit';
+
+export interface SensorContactSource {
+  source_type: SensorSourceType;
+  source_id: string;
+  source_kind?: string;
+  strength?: number;
+}
+
+export interface SensorContact {
+  id: string;
+  scope_type: SensorContactScope;
+  scope_id: string;
+  contact_kind: SensorContactKind;
+  entity_id?: string;
+  entity_type?: string;
+  domain?: string;
+  planet_id?: string;
+  system_id?: string;
+  position?: Position;
+  level: SensorContactLevel;
+  classification?: string;
+  confirmed_type?: string;
+  strength_estimate?: number;
+  threat_level?: number;
+  last_updated_tick: number;
+  signal_strength?: number;
+  lock_quality?: number;
+  jamming_penalty?: number;
+  missile_drift_risk?: number;
+  false_contact?: boolean;
+  sources?: SensorContactSource[];
+}
+
 export interface PlanetRuntimeView {
   planet_id: string;
   discovered: boolean;
@@ -795,6 +843,7 @@ export interface PlanetRuntimeView {
   logistics_ships?: LogisticsShipView[];
   construction_tasks?: ConstructionTaskView[];
   enemy_forces?: EnemyForceView[];
+  contacts?: SensorContact[];
   detections?: DetectionView[];
   threat_level: number;
   last_attack_tick?: number;
@@ -1381,6 +1430,7 @@ export interface SystemRuntimeView {
   dyson_sphere?: DysonSphereView;
   active_planet_context?: ActivePlanetDysonContextView;
   fleets?: FleetRuntimeView[];
+  contacts?: SensorContact[];
 }
 
 export interface CatalogView {

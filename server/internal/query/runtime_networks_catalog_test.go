@@ -110,19 +110,47 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 			SpawnTick:    40,
 		}},
 	}
-	ws.Detections = map[string]*model.DetectionState{
+	ws.SensorContacts = map[string]*model.SensorContactState{
 		"p1": {
-			PlayerID:    "p1",
-			VisionRange: 12,
-			KnownEnemies: []model.EnemyIntel{{
-				EnemyID:     "enemy-force-1",
-				Type:        string(model.EnemyForceTypeSwarm),
-				Position:    model.Position{X: 10, Y: 10},
-				Strength:    25,
-				LastSeen:    90,
-				ThreatLevel: 2.5,
-			}},
-			DetectedPositions: []model.Position{{X: 9, Y: 10}, {X: 10, Y: 10}},
+			PlayerID:  "p1",
+			ScopeType: model.SensorContactScopePlanet,
+			ScopeID:   planetID,
+			Contacts: map[string]*model.SensorContact{
+				"enemy-force-1": {
+					ID:               "enemy-force-1",
+					ScopeType:        model.SensorContactScopePlanet,
+					ScopeID:          planetID,
+					ContactKind:      model.SensorContactKindEnemyForce,
+					EntityID:         "enemy-force-1",
+					EntityType:       "enemy_force",
+					Domain:           model.UnitDomainGround,
+					Position:         &model.Position{X: 10, Y: 10},
+					Level:            model.SensorContactLevelConfirmedType,
+					Classification:   "ground_force",
+					ConfirmedType:    string(model.EnemyForceTypeSwarm),
+					StrengthEstimate: 25,
+					ThreatLevel:      2.5,
+					LastUpdatedTick:  90,
+					SignalStrength:   12,
+					Sources: []model.SensorContactSource{
+						{SourceType: model.SensorSourceActiveRadar, SourceID: "radar-1", SourceKind: "building", Strength: 6},
+					},
+				},
+				"enemy-force-1-ghost": {
+					ID:              "enemy-force-1-ghost",
+					ScopeType:       model.SensorContactScopePlanet,
+					ScopeID:         planetID,
+					ContactKind:     model.SensorContactKindFalseContact,
+					EntityType:      "enemy_force",
+					Level:           model.SensorContactLevelUnknownSignal,
+					Classification:  "ghost_signature",
+					LastUpdatedTick: 90,
+					FalseContact:    true,
+					Sources: []model.SensorContactSource{
+						{SourceType: model.SensorSourceSignalTower, SourceID: "tower-1", SourceKind: "building", Strength: 3},
+					},
+				},
+			},
 		},
 	}
 
@@ -148,7 +176,10 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 	if len(view.EnemyForces) != 1 || view.EnemyForces[0].ID != "enemy-force-1" {
 		t.Fatalf("expected detected enemy force, got %+v", view.EnemyForces)
 	}
-	if len(view.Detections) != 1 || len(view.Detections[0].DetectedPositions) != 2 {
+	if len(view.Contacts) != 2 {
+		t.Fatalf("expected runtime contacts including false contact, got %+v", view.Contacts)
+	}
+	if len(view.Detections) != 1 || len(view.Detections[0].DetectedPositions) != 1 {
 		t.Fatalf("expected detection payload, got %+v", view.Detections)
 	}
 	if view.ThreatLevel != int(model.ThreatLevelMedium) || view.LastAttackTick != 88 {

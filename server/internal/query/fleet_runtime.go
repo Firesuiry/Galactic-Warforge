@@ -1,16 +1,21 @@
 package query
 
-import "siliconworld/internal/model"
+import (
+	"sort"
+
+	"siliconworld/internal/model"
+)
 
 // SystemRuntimeView exposes dynamic system-scoped runtime state.
 type SystemRuntimeView struct {
-	SystemID            string                         `json:"system_id"`
-	Discovered          bool                           `json:"discovered"`
-	Available           bool                           `json:"available"`
-	SolarSailOrbit      *model.SolarSailOrbitState     `json:"solar_sail_orbit,omitempty"`
-	DysonSphere         *model.DysonSphereState        `json:"dyson_sphere,omitempty"`
-	ActivePlanetContext *ActivePlanetDysonContextView  `json:"active_planet_context,omitempty"`
-	Fleets              []FleetRuntimeView             `json:"fleets,omitempty"`
+	SystemID            string                        `json:"system_id"`
+	Discovered          bool                          `json:"discovered"`
+	Available           bool                          `json:"available"`
+	SolarSailOrbit      *model.SolarSailOrbitState    `json:"solar_sail_orbit,omitempty"`
+	DysonSphere         *model.DysonSphereState       `json:"dyson_sphere,omitempty"`
+	ActivePlanetContext *ActivePlanetDysonContextView `json:"active_planet_context,omitempty"`
+	Fleets              []FleetRuntimeView            `json:"fleets,omitempty"`
+	Contacts            []model.SensorContact         `json:"contacts,omitempty"`
 }
 
 // ActivePlanetDysonContextView summarizes Dyson-capable buildings on the current active planet.
@@ -92,6 +97,7 @@ func (ql *Layer) SystemRuntime(
 		}
 		view.Fleets = append(view.Fleets, fleetRuntimeView(fleet))
 	}
+	view.Contacts = collectSystemSensorContacts(systemRuntime)
 	return view, true
 }
 
@@ -222,4 +228,24 @@ func fleetDetailView(fleet *model.SpaceFleet) FleetDetailView {
 		view.Target = &targetCopy
 	}
 	return view
+}
+
+func collectSystemSensorContacts(systemRuntime *model.PlayerSystemRuntime) []model.SensorContact {
+	if systemRuntime == nil || len(systemRuntime.SensorContacts) == 0 {
+		return []model.SensorContact{}
+	}
+	ids := make([]string, 0, len(systemRuntime.SensorContacts))
+	for id := range systemRuntime.SensorContacts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]model.SensorContact, 0, len(ids))
+	for _, id := range ids {
+		contact := systemRuntime.SensorContacts[id]
+		if contact == nil {
+			continue
+		}
+		out = append(out, cloneSensorContact(contact))
+	}
+	return out
 }
