@@ -309,6 +309,8 @@ export type CommandType =
   | 'blueprint_validate'
   | 'blueprint_finalize'
   | 'blueprint_variant'
+  | 'queue_military_production'
+  | 'refit_unit'
   | 'launch_solar_sail'
   | 'launch_rocket'
   | 'build_dyson_node'
@@ -1125,6 +1127,67 @@ export interface WarBlueprintDetailView {
 
 export interface WarBlueprintListView {
   blueprints: WarBlueprintDetailView[];
+}
+
+export type WarOrderStatus = 'queued' | 'in_progress' | 'blocked' | 'completed';
+
+export type WarProductionStage = 'components' | 'assembly' | 'ready';
+
+export type WarRefitUnitKind = 'squad' | 'fleet';
+
+export interface WarProductionOrder {
+  id: string;
+  factory_building_id: string;
+  deployment_hub_id?: string;
+  blueprint_id: string;
+  domain: string;
+  count: number;
+  completed_count: number;
+  status: WarOrderStatus;
+  stage: WarProductionStage;
+  stage_remaining_ticks?: number;
+  stage_total_ticks?: number;
+  component_ticks?: number;
+  assembly_ticks?: number;
+  retool_ticks?: number;
+  repeat_bonus_percent?: number;
+  queue_index?: number;
+  created_tick?: number;
+  updated_tick?: number;
+}
+
+export interface WarRefitOrder {
+  id: string;
+  building_id: string;
+  unit_id: string;
+  unit_kind: WarRefitUnitKind;
+  source_planet_id?: string;
+  source_system_id?: string;
+  source_building_id?: string;
+  source_blueprint_id: string;
+  target_blueprint_id: string;
+  count?: number;
+  fleet_formation?: FormationType;
+  status: WarOrderStatus;
+  remaining_ticks?: number;
+  total_ticks?: number;
+  queue_index?: number;
+  created_tick?: number;
+  updated_tick?: number;
+}
+
+export interface WarDeploymentHubView {
+  building_id: string;
+  building_type: string;
+  planet_id?: string;
+  capacity?: number;
+  ready_payloads?: Record<string, number>;
+}
+
+export interface WarIndustryView {
+  production_orders: WarProductionOrder[];
+  refit_orders: WarRefitOrder[];
+  deployment_hubs: WarDeploymentHubView[];
 }
 
 export interface FleetRuntimeView {

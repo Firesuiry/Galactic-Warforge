@@ -31,6 +31,7 @@ func newSettlementPipeline() settlementPipeline {
 
 	pipeline.register("research_and_dyson", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
 		events := settleResearch(gc.worlds)
+		events = append(events, settleWarIndustry(frame.currentWorld, gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settleSolarSails(gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settleDysonSpheres(gc.spaceRuntime, frame.currentTick)...)
 		return events

@@ -116,6 +116,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/fleets/{fleet_id}", s.auth(s.handleFleet))
 	mux.HandleFunc("GET /world/warfare/blueprints", s.auth(s.handleWarBlueprints))
 	mux.HandleFunc("GET /world/warfare/blueprints/{blueprint_id}", s.auth(s.handleWarBlueprint))
+	mux.HandleFunc("GET /world/warfare/industry", s.auth(s.handleWarIndustry))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
 
 	// Commands
@@ -372,6 +373,12 @@ func (s *Server) handleWarBlueprint(w http.ResponseWriter, r *http.Request, play
 		writeError(w, http.StatusNotFound, "warfare blueprint not found")
 		return
 	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// handleWarIndustry returns GET /world/warfare/industry
+func (s *Server) handleWarIndustry(w http.ResponseWriter, r *http.Request, playerID string) {
+	view := s.ql.WarIndustry(s.core.World(), playerID)
 	writeJSON(w, http.StatusOK, view)
 }
 
@@ -947,6 +954,18 @@ func validateCommandStructure(cmd model.Command) error {
 		for _, field := range []string{"parent_blueprint_id", "blueprint_id", "allowed_slot_ids"} {
 			if _, ok := cmd.Payload[field]; !ok {
 				return fmt.Errorf("blueprint_variant requires payload.%s", field)
+			}
+		}
+	case model.CmdQueueMilitaryProduction:
+		for _, field := range []string{"building_id", "deployment_hub_id", "blueprint_id", "count"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("queue_military_production requires payload.%s", field)
+			}
+		}
+	case model.CmdRefitUnit:
+		for _, field := range []string{"building_id", "unit_id", "target_blueprint_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("refit_unit requires payload.%s", field)
 			}
 		}
 	case model.CmdFleetAssign:

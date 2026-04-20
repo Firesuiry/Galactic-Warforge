@@ -21,6 +21,7 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		CombatTech:    clonePlayerCombatTechState(ps.CombatTech),
 		Stats:         clonePlayerStats(ps.Stats),
 		WarBlueprints: cloneWarBlueprintMap(ps.WarBlueprints),
+		WarIndustry:   cloneWarIndustryState(ps.WarIndustry),
 	}
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
@@ -58,6 +59,13 @@ func cloneWarBlueprint(blueprint *model.WarBlueprint) *model.WarBlueprint {
 		return nil
 	}
 	return blueprint.Clone()
+}
+
+func cloneWarIndustryState(state *model.WarIndustryState) *model.WarIndustryState {
+	if state == nil {
+		return nil
+	}
+	return state.Clone()
 }
 
 func clonePlayerResearch(research *model.PlayerResearch) *model.PlayerResearch {

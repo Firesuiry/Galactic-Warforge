@@ -173,6 +173,34 @@ func (ps *PlayerState) EnsureWarBlueprints() map[string]*WarBlueprint {
 	return ps.WarBlueprints
 }
 
+// EnsureWarIndustry returns a writable warfare industry state.
+func (ps *PlayerState) EnsureWarIndustry() *WarIndustryState {
+	if ps == nil {
+		return nil
+	}
+	if ps.WarIndustry == nil {
+		ps.WarIndustry = &WarIndustryState{
+			ProductionOrders: make(map[string]*WarProductionOrder),
+			RefitOrders:      make(map[string]*WarRefitOrder),
+			ProductionLines:  make(map[string]*WarProductionLineState),
+			DeploymentHubs:   make(map[string]*WarDeploymentHubState),
+		}
+	}
+	if ps.WarIndustry.ProductionOrders == nil {
+		ps.WarIndustry.ProductionOrders = make(map[string]*WarProductionOrder)
+	}
+	if ps.WarIndustry.RefitOrders == nil {
+		ps.WarIndustry.RefitOrders = make(map[string]*WarRefitOrder)
+	}
+	if ps.WarIndustry.ProductionLines == nil {
+		ps.WarIndustry.ProductionLines = make(map[string]*WarProductionLineState)
+	}
+	if ps.WarIndustry.DeploymentHubs == nil {
+		ps.WarIndustry.DeploymentHubs = make(map[string]*WarDeploymentHubState)
+	}
+	return ps.WarIndustry
+}
+
 func normalizePermissions(perms []string) []string {
 	if len(perms) == 0 {
 		return nil

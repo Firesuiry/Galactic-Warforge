@@ -36,6 +36,7 @@ import type {
   StateSummary,
   SystemRuntimeView,
   SystemView,
+  WarIndustryView,
   WarBlueprintListView,
   WarBlueprintState,
   WarBlueprintDetailView,
@@ -180,6 +181,10 @@ export interface FinalizeBlueprintOptions {
 
 export interface VariantBlueprintOptions {
   name?: string;
+}
+
+export interface QueueMilitaryProductionOptions {
+  count?: number;
 }
 
 export type FleetFormation = FormationType;
@@ -341,6 +346,10 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchWarfareBlueprint(blueprintId: string): Promise<WarBlueprintDetailView> {
     return apiFetch<WarBlueprintDetailView>(`/world/warfare/blueprints/${blueprintId}`);
+  }
+
+  function fetchWarIndustry(): Promise<WarIndustryView> {
+    return apiFetch<WarIndustryView>('/world/warfare/industry');
   }
 
   function fetchFleets(): Promise<FleetDetailView[]> {
@@ -719,6 +728,36 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdQueueMilitaryProduction(
+    buildingId: string,
+    deploymentHubId: string,
+    blueprintId: BlueprintID,
+    options: QueueMilitaryProductionOptions = {},
+  ) {
+    return sendSingleCommand({
+      type: 'queue_military_production',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: {
+        building_id: buildingId,
+        deployment_hub_id: deploymentHubId,
+        blueprint_id: blueprintId,
+        count: options.count ?? 1,
+      },
+    });
+  }
+
+  function cmdRefitUnit(buildingId: string, unitId: string, targetBlueprintId: BlueprintID) {
+    return sendSingleCommand({
+      type: 'refit_unit',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: {
+        building_id: buildingId,
+        unit_id: unitId,
+        target_blueprint_id: targetBlueprintId,
+      },
+    });
+  }
+
   function cmdLaunchSolarSail(buildingId: string, launchOptions: LaunchSolarSailOptions = {}) {
     return sendSingleCommand({
       type: 'launch_solar_sail',
@@ -810,6 +849,8 @@ export function createApiClient(options: ApiClientOptions) {
     cmdBlueprintSetComponent,
     cmdBlueprintValidate,
     cmdBlueprintVariant,
+    cmdQueueMilitaryProduction,
+    cmdRefitUnit,
     cmdBuildDysonFrame,
     cmdBuildDysonNode,
     cmdBuildDysonShell,
@@ -858,6 +899,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchSystemRuntime,
     fetchWarfareBlueprint,
     fetchWarfareBlueprints,
+    fetchWarIndustry,
     getAuth,
     getServerUrl,
     sendCommandRequest,

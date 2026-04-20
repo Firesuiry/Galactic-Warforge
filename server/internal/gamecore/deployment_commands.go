@@ -37,38 +37,40 @@ func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd m
 	if result != nil {
 		return *result, nil
 	}
-	entry, ok := model.PublicWarBlueprintByID(blueprintID)
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s is not publicly available", blueprintID)
-		return res, nil
-	}
-	if entry.DeployCommand != string(model.CmdDeploySquad) || entry.RuntimeClass != model.UnitRuntimeClassCombatSquad {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s is not deployed via deploy_squad", blueprintID)
-		return res, nil
-	}
-	if !deploymentAllowsBlueprint(deployment, blueprintID) {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building %s cannot deploy %s", building.ID, blueprintID)
-		return res, nil
-	}
-	if err := requireBlueprintTechUnlocked(ws, playerID, entry.VisibleTechID); err != nil {
+	player := ws.Players[playerID]
+	blueprint, visibleTechID, err := resolveIndustryBlueprint(player, blueprintID)
+	if err != nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = err.Error()
 		return res, nil
 	}
-	if building.Storage.OutputQuantity(blueprintID) < count {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in deployment hub storage", count, blueprintID)
+	if warBlueprintDeployCommand(blueprint) != model.CmdDeploySquad || warBlueprintRuntimeClass(blueprint) != model.UnitRuntimeClassCombatSquad {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("blueprint %s is not deployed via deploy_squad", blueprintID)
 		return res, nil
 	}
-	provided, remaining, err := building.Storage.Provide(blueprintID, count)
-	if err != nil || remaining > 0 || provided != count {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in deployment hub storage", count, blueprintID)
+	if !deploymentAllowsBlueprint(deployment, blueprint) {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("building %s cannot deploy %s", building.ID, blueprintID)
 		return res, nil
 	}
+	if err := requireBlueprintTechUnlocked(ws, playerID, visibleTechID); err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	hub := player.EnsureWarIndustry()
+	hubState := ensureWarDeploymentHubState(hub, building.ID, deploymentHubCapacity(deployment))
+	if hubState.ReadyPayloads[blueprintID] < count {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d %s in deployment hub inventory", count, blueprintID)
+		return res, nil
+	}
+	hubState.ReadyPayloads[blueprintID] -= count
+	if hubState.ReadyPayloads[blueprintID] <= 0 {
+		delete(hubState.ReadyPayloads, blueprintID)
+	}
+	hubState.UpdatedTick = ws.Tick
 
 	targetPlanetID := ws.PlanetID
 	if raw, ok := cmd.Payload["planet_id"]; ok {
@@ -88,7 +90,7 @@ func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd m
 		targetWorld.CombatRuntime = model.NewCombatRuntimeState()
 	}
 
-	squad := newCombatSquad(targetWorld.CombatRuntime.NextEntityID("squad"), playerID, targetPlanetID, building.ID, blueprintID, count)
+	squad := newCombatSquad(targetWorld, playerID, targetWorld.CombatRuntime.NextEntityID("squad"), targetPlanetID, building.ID, blueprintID, count)
 	targetWorld.CombatRuntime.Squads[squad.ID] = squad
 
 	events := []*model.GameEvent{
@@ -159,38 +161,40 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	if result != nil {
 		return *result, nil
 	}
-	entry, ok := model.PublicWarBlueprintByID(blueprintID)
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s is not publicly available", blueprintID)
-		return res, nil
-	}
-	if entry.DeployCommand != string(model.CmdCommissionFleet) || entry.RuntimeClass != model.UnitRuntimeClassFleet {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s is not commissioned via commission_fleet", blueprintID)
-		return res, nil
-	}
-	if !deploymentAllowsBlueprint(deployment, blueprintID) {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building %s cannot deploy %s", building.ID, blueprintID)
-		return res, nil
-	}
-	if err := requireBlueprintTechUnlocked(ws, playerID, entry.VisibleTechID); err != nil {
+	player := ws.Players[playerID]
+	blueprint, visibleTechID, err := resolveIndustryBlueprint(player, blueprintID)
+	if err != nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = err.Error()
 		return res, nil
 	}
-	if building.Storage.OutputQuantity(blueprintID) < count {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in deployment hub storage", count, blueprintID)
+	if warBlueprintDeployCommand(blueprint) != model.CmdCommissionFleet || warBlueprintRuntimeClass(blueprint) != model.UnitRuntimeClassFleet {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("blueprint %s is not commissioned via commission_fleet", blueprintID)
 		return res, nil
 	}
-	provided, remaining, err := building.Storage.Provide(blueprintID, count)
-	if err != nil || remaining > 0 || provided != count {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in deployment hub storage", count, blueprintID)
+	if !deploymentAllowsBlueprint(deployment, blueprint) {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("building %s cannot deploy %s", building.ID, blueprintID)
 		return res, nil
 	}
+	if err := requireBlueprintTechUnlocked(ws, playerID, visibleTechID); err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	hub := player.EnsureWarIndustry()
+	hubState := ensureWarDeploymentHubState(hub, building.ID, deploymentHubCapacity(deployment))
+	if hubState.ReadyPayloads[blueprintID] < count {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d %s in deployment hub inventory", count, blueprintID)
+		return res, nil
+	}
+	hubState.ReadyPayloads[blueprintID] -= count
+	if hubState.ReadyPayloads[blueprintID] <= 0 {
+		delete(hubState.ReadyPayloads, blueprintID)
+	}
+	hubState.UpdatedTick = ws.Tick
 
 	if gc.spaceRuntime == nil {
 		gc.spaceRuntime = model.NewSpaceRuntimeState()
@@ -221,7 +225,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 		systemRuntime.Fleets[fleetID] = fleet
 	}
 	addFleetUnits(fleet, blueprintID, count)
-	rebuildFleetStats(fleet)
+	rebuildFleetStats(ws, playerID, fleet)
 
 	events := []*model.GameEvent{
 		{
@@ -404,19 +408,18 @@ func requireOwnedDeploymentHub(ws *model.WorldState, playerID, buildingID string
 	return building, building.Runtime.Functions.Deployment, nil
 }
 
-func deploymentAllowsBlueprint(module *model.DeploymentModule, blueprintID string) bool {
+func deploymentAllowsBlueprint(module *model.DeploymentModule, blueprint model.WarBlueprint) bool {
 	if module == nil {
 		return false
 	}
-	if len(module.AllowedBlueprints) == 0 {
-		return true
+	switch warBlueprintRuntimeClass(blueprint) {
+	case model.UnitRuntimeClassCombatSquad:
+		return module.SquadCapacity > 0
+	case model.UnitRuntimeClassFleet:
+		return module.FleetCapacity > 0
+	default:
+		return false
 	}
-	for _, allowed := range module.AllowedBlueprints {
-		if allowed == blueprintID {
-			return true
-		}
-	}
-	return false
 }
 
 func requireBlueprintTechUnlocked(ws *model.WorldState, playerID, techID string) error {
@@ -430,11 +433,11 @@ func requireBlueprintTechUnlocked(ws *model.WorldState, playerID, techID string)
 	return nil
 }
 
-func newCombatSquad(id, playerID, planetID, buildingID, blueprintID string, count int) *model.CombatSquad {
+func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, blueprintID string, count int) *model.CombatSquad {
 	baseHP := 80
 	weapon := model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8, AmmoCost: 0}
 	shield := model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10}
-	if profile, ok := model.WarBlueprintRuntimeProfileByID(blueprintID); ok && profile.Squad != nil {
+	if profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, blueprintID); ok && profile.Squad != nil {
 		baseHP = profile.Squad.HP
 		weapon = profile.Squad.Weapon
 		shield = profile.Squad.Shield
@@ -468,7 +471,7 @@ func addFleetUnits(fleet *model.SpaceFleet, blueprintID string, count int) {
 	fleet.Units = append(fleet.Units, model.FleetUnitStack{BlueprintID: blueprintID, Count: count})
 }
 
-func rebuildFleetStats(fleet *model.SpaceFleet) {
+func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.SpaceFleet) {
 	if fleet == nil {
 		return
 	}
@@ -476,7 +479,7 @@ func rebuildFleetStats(fleet *model.SpaceFleet) {
 	totalShield := 0.0
 	maxShield := 0.0
 	for _, stack := range fleet.Units {
-		profile, ok := model.WarBlueprintRuntimeProfileByID(stack.BlueprintID)
+		profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, stack.BlueprintID)
 		if !ok || profile.FleetUnit == nil {
 			continue
 		}
@@ -496,6 +499,44 @@ func rebuildFleetStats(fleet *model.SpaceFleet) {
 		MaxLevel:      maxShield,
 		RechargeRate:  2,
 		RechargeDelay: 10,
+	}
+}
+
+func resolveWarBlueprintRuntimeProfile(ws *model.WorldState, playerID, blueprintID string) (model.WarBlueprintRuntimeProfile, bool) {
+	if profile, ok := model.WarBlueprintRuntimeProfileByID(blueprintID); ok {
+		return profile, true
+	}
+	if ws == nil {
+		return model.WarBlueprintRuntimeProfile{}, false
+	}
+	player := ws.Players[playerID]
+	if player == nil {
+		return model.WarBlueprintRuntimeProfile{}, false
+	}
+	blueprint, ok := model.ResolveWarBlueprintForPlayer(player, blueprintID)
+	if !ok {
+		return model.WarBlueprintRuntimeProfile{}, false
+	}
+	return model.ResolveWarBlueprintRuntimeProfile(blueprint), true
+}
+
+func warBlueprintDeployCommand(blueprint model.WarBlueprint) model.CommandType {
+	switch warBlueprintRuntimeClass(blueprint) {
+	case model.UnitRuntimeClassCombatSquad:
+		return model.CmdDeploySquad
+	case model.UnitRuntimeClassFleet:
+		return model.CmdCommissionFleet
+	default:
+		return ""
+	}
+}
+
+func warBlueprintRuntimeClass(blueprint model.WarBlueprint) model.UnitRuntimeClass {
+	switch blueprint.Domain {
+	case model.UnitDomainGround, model.UnitDomainAir:
+		return model.UnitRuntimeClassCombatSquad
+	default:
+		return model.UnitRuntimeClassFleet
 	}
 }
 

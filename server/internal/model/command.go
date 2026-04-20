@@ -24,16 +24,18 @@ const (
 	CmdLaunchSolarSail           CommandType = "launch_solar_sail"
 	CmdLaunchRocket              CommandType = "launch_rocket"
 	CmdSetRayReceiverMode        CommandType = "set_ray_receiver_mode"
-	CmdDeploySquad              CommandType = "deploy_squad"
-	CmdCommissionFleet          CommandType = "commission_fleet"
-	CmdFleetAssign              CommandType = "fleet_assign"
-	CmdFleetAttack              CommandType = "fleet_attack"
-	CmdFleetDisband             CommandType = "fleet_disband"
-	CmdBlueprintCreate          CommandType = "blueprint_create"
-	CmdBlueprintSetComponent    CommandType = "blueprint_set_component"
-	CmdBlueprintValidate        CommandType = "blueprint_validate"
-	CmdBlueprintFinalize        CommandType = "blueprint_finalize"
-	CmdBlueprintVariant         CommandType = "blueprint_variant"
+	CmdDeploySquad               CommandType = "deploy_squad"
+	CmdCommissionFleet           CommandType = "commission_fleet"
+	CmdFleetAssign               CommandType = "fleet_assign"
+	CmdFleetAttack               CommandType = "fleet_attack"
+	CmdFleetDisband              CommandType = "fleet_disband"
+	CmdBlueprintCreate           CommandType = "blueprint_create"
+	CmdBlueprintSetComponent     CommandType = "blueprint_set_component"
+	CmdBlueprintValidate         CommandType = "blueprint_validate"
+	CmdBlueprintFinalize         CommandType = "blueprint_finalize"
+	CmdBlueprintVariant          CommandType = "blueprint_variant"
+	CmdQueueMilitaryProduction   CommandType = "queue_military_production"
+	CmdRefitUnit                 CommandType = "refit_unit"
 	CmdBuildDysonNode            CommandType = "build_dyson_node"
 	CmdBuildDysonFrame           CommandType = "build_dyson_frame"
 	CmdBuildDysonShell           CommandType = "build_dyson_shell"
@@ -95,10 +97,10 @@ const (
 
 // CommandResult is the per-command outcome within a response
 type CommandResult struct {
-	CommandIndex int           `json:"command_index"`
-	Status       CommandStatus `json:"status"`
-	Code         ResultCode    `json:"code"`
-	Message      string        `json:"message"`
+	CommandIndex int                           `json:"command_index"`
+	Status       CommandStatus                 `json:"status"`
+	Code         ResultCode                    `json:"code"`
+	Message      string                        `json:"message"`
 	Validation   *WarBlueprintValidationResult `json:"validation,omitempty"`
 }
 

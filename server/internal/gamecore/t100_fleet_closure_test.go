@@ -48,12 +48,19 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 
 	base := newBuilding("base-t100", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 6, Y: 6})
 	base.Runtime.State = model.BuildingWorkRunning
-	base.Storage.EnsureInventory()[model.ItemPrototype] = 3
-	base.Storage.EnsureInventory()[model.ItemCorvette] = 2
+	base.Runtime.Params.EnergyConsume = 0
+	if base.Runtime.Functions.Energy != nil {
+		base.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
 	attachBuilding(ws, base)
 	power := newBuilding("power-t100", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, power)
+	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[base.ID] = &model.WarDeploymentHubState{
+		BuildingID:    base.ID,
+		Capacity:      12,
+		ReadyPayloads: map[string]int{model.ItemPrototype: 3, model.ItemCorvette: 2},
+	}
 
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: ws.PlanetID,
@@ -178,12 +185,19 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 
 	base := newBuilding("dispatcher-base-t100", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 6, Y: 6})
 	base.Runtime.State = model.BuildingWorkRunning
-	base.Storage.EnsureInventory()[model.ItemPrototype] = 2
-	base.Storage.EnsureInventory()[model.ItemCorvette] = 1
+	base.Runtime.Params.EnergyConsume = 0
+	if base.Runtime.Functions.Energy != nil {
+		base.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
 	attachBuilding(ws, base)
 	power := newBuilding("dispatcher-power-t100", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, power)
+	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[base.ID] = &model.WarDeploymentHubState{
+		BuildingID:    base.ID,
+		Capacity:      12,
+		ReadyPayloads: map[string]int{model.ItemPrototype: 2, model.ItemCorvette: 1},
+	}
 
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: ws.PlanetID,

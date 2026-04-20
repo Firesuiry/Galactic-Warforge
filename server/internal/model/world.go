@@ -14,19 +14,20 @@ type Resources struct {
 
 // PlayerState holds per-player game state
 type PlayerState struct {
-	PlayerID    string                    `json:"player_id"`
-	TeamID      string                    `json:"team_id"`
-	Role        string                    `json:"role"`
-	Resources   Resources                 `json:"resources"`
-	Inventory   ItemInventory             `json:"inventory,omitempty"`
-	IsAlive     bool                      `json:"is_alive"`
-	Permissions []string                  `json:"permissions,omitempty"`
-	Executor    *ExecutorState            `json:"executor,omitempty"`
-	Executors   map[string]*ExecutorState `json:"executors,omitempty"`
-	Tech        *PlayerTechState          `json:"tech,omitempty"`
-	CombatTech  *PlayerCombatTechState    `json:"combat_tech,omitempty"`
-	Stats       *PlayerStats              `json:"stats,omitempty"`
-	WarBlueprints map[string]*WarBlueprint `json:"war_blueprints,omitempty"`
+	PlayerID      string                    `json:"player_id"`
+	TeamID        string                    `json:"team_id"`
+	Role          string                    `json:"role"`
+	Resources     Resources                 `json:"resources"`
+	Inventory     ItemInventory             `json:"inventory,omitempty"`
+	IsAlive       bool                      `json:"is_alive"`
+	Permissions   []string                  `json:"permissions,omitempty"`
+	Executor      *ExecutorState            `json:"executor,omitempty"`
+	Executors     map[string]*ExecutorState `json:"executors,omitempty"`
+	Tech          *PlayerTechState          `json:"tech,omitempty"`
+	CombatTech    *PlayerCombatTechState    `json:"combat_tech,omitempty"`
+	Stats         *PlayerStats              `json:"stats,omitempty"`
+	WarBlueprints map[string]*WarBlueprint  `json:"war_blueprints,omitempty"`
+	WarIndustry   *WarIndustryState         `json:"war_industry,omitempty"`
 
 	permissionSet map[string]struct{} `json:"-"`
 }
