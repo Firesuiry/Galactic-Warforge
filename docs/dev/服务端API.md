@@ -825,13 +825,17 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 客户端展示元数据总表（需认证）
 - 说明补充:
   - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
-  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `units`
+  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `units` / `base_frames` / `base_hulls` / `components` / `public_blueprints`
 - 响应字段:
   - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
   - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to` / `max_level` / `icon_key` / `color`
-  - `units`：公开单位目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `visible_tech_id` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `hidden_reason`
+  - `units`：公开世界单位目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `visible_tech_id` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `hidden_reason`
+  - `base_frames`：公开地面 / 空中底盘目录，包含 `id` / `name` / `domain` / `public` / `visible_tech_id` / `size_class` / `roles`
+  - `base_hulls`：公开太空船体目录，包含 `id` / `name` / `domain` / `public` / `visible_tech_id` / `size_class` / `roles`
+  - `components`：公开战争组件目录，包含 `id` / `name` / `category` / `public` / `domains` / `slot_type` / `visible_tech_id` / `tags`
+  - `public_blueprints`：公开预置蓝图目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `source` / `visible_tech_id` / `base_frame_id` / `base_hull_id` / `output_item_id` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `component_ids` / `summary`
 - 响应示例:
 ```json
 {
@@ -936,30 +940,98 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "commands": ["move"]
     },
     {
+      "id": "soldier",
+      "name": "Soldier",
+      "domain": "ground",
+      "runtime_class": "world_unit",
+      "public": true,
+      "production_mode": "world_produce",
+      "query_scopes": ["planet"],
+      "commands": ["move", "attack"]
+    }
+  ],
+  "base_frames": [
+    {
+      "id": "light_frame",
+      "name": "Light Frame",
+      "domain": "ground",
+      "public": true,
+      "visible_tech_id": "prototype",
+      "size_class": "light",
+      "roles": ["line", "assault"]
+    }
+  ],
+  "base_hulls": [
+    {
+      "id": "corvette_hull",
+      "name": "Corvette Hull",
+      "domain": "space",
+      "public": true,
+      "visible_tech_id": "corvette",
+      "size_class": "escort",
+      "roles": ["escort", "intercept"]
+    }
+  ],
+  "components": [
+    {
+      "id": "compact_reactor",
+      "name": "Compact Reactor",
+      "category": "power",
+      "public": true,
+      "domains": ["ground", "air"],
+      "slot_type": "power_core",
+      "visible_tech_id": "prototype",
+      "tags": ["starter", "sustained"]
+    }
+  ],
+  "public_blueprints": [
+    {
       "id": "prototype",
-      "name": "Prototype",
+      "name": "Prototype Standard Pattern",
       "domain": "ground",
       "runtime_class": "combat_squad",
       "public": true,
+      "source": "preset",
       "visible_tech_id": "prototype",
-      "production_mode": "factory_recipe",
+      "base_frame_id": "light_frame",
+      "output_item_id": "prototype",
       "producer_recipes": ["prototype"],
       "deploy_command": "deploy_squad",
       "query_scopes": ["planet_runtime"],
-      "commands": ["deploy_squad"]
+      "commands": ["deploy_squad"],
+      "component_ids": [
+        "compact_reactor",
+        "servo_actuator_pack",
+        "composite_armor_plating",
+        "battlefield_sensor_suite",
+        "pulse_laser_mount",
+        "command_uplink"
+      ],
+      "summary": "Starter frontline mech frame for direct deployment."
     },
     {
       "id": "corvette",
-      "name": "Corvette",
+      "name": "Corvette Escort Pattern",
       "domain": "space",
       "runtime_class": "fleet_unit",
       "public": true,
+      "source": "preset",
       "visible_tech_id": "corvette",
-      "production_mode": "factory_recipe",
+      "base_hull_id": "corvette_hull",
+      "output_item_id": "corvette",
       "producer_recipes": ["corvette"],
       "deploy_command": "commission_fleet",
       "query_scopes": ["system_runtime", "fleet"],
-      "commands": ["commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"]
+      "commands": ["commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"],
+      "component_ids": [
+        "micro_fusion_core",
+        "ion_drive_cluster",
+        "deflector_shield_array",
+        "deep_space_radar",
+        "pulse_laser_mount",
+        "repair_drone_bay"
+      ],
+      "summary": "Escort hull for screening and intercept duties."
     }
   ]
 }
@@ -980,7 +1052,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`、`antimatter_capsule`、`gravity_missile`。
   - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip`、`mass_energy_storage`、`gravity_missile` 也都会对外暴露对应 recipe 解锁。
   - `techs` 中 `prototype`、`precision_drone`、`corvette`、`destroyer` 现在都是公开可研究科技；它们解锁的是载荷 recipe，不再污染 `produce` 语义。
-  - `units` 是 `produce`、`deploy_squad`、`commission_fleet`、CLI 帮助和 shared-client 共享的 authoritative 公开单位边界；`worker` / `soldier` 走 `world_produce`，`prototype` / `precision_drone` / `corvette` / `destroyer` 走 `factory_recipe + deploy_command`。
+  - `units` 现在只保留 `worker` / `soldier` 这类 `world_produce + world_unit` 的世界单位。
+  - `base_frames` / `base_hulls` / `components` / `public_blueprints` 是战争系统新的 authoritative 公开目录；`prototype` / `precision_drone` / `corvette` / `destroyer` 已迁移为 `public_blueprints`，不再继续伪装成旧式固定单位表条目。
 
 ---
 
@@ -1049,7 +1122,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "component_id": "shell-1",
         "target_entity_id": "entity-2",
         "target_id": "enemy-1",
-        "unit_type": "当前 /catalog.units 中 public=true 的 unit id；produce 仅接受 world_produce world_unit，deploy/commission 接受 factory_recipe 高阶载荷"
+        "unit_type": "produce 时使用 /catalog.units 中的公开世界单位 id；deploy/commission 时使用 /catalog.public_blueprints 中的公开蓝图 id"
       }
     }
   ]
@@ -1072,8 +1145,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
-  - `deploy_squad`：`payload.building_id` + `payload.unit_type` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；目标建筑必须是当前玩家拥有、带 deployment module 与本地存储、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该单位对应 `visible_tech_id`，并且枢纽本地存储里已有足量 `prototype` / `precision_drone` 载荷；若传 `planet_id`，目标行星 runtime 也必须已加载
-  - `commission_fleet`：`payload.building_id` + `payload.unit_type` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的单位是 `corvette` / `destroyer`，同样要求已解锁对应科技且部署枢纽本地存储内已有足量载荷；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加单位并重算 `weapon` / `shield`，而不是覆盖旧栈
+  - `deploy_squad`：`payload.building_id` + `payload.unit_type` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；`payload.unit_type` 当前传的是 `/catalog.public_blueprints[].id`；目标建筑必须是当前玩家拥有、带 deployment module 与本地存储、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该预置蓝图对应 `visible_tech_id`，并且枢纽本地存储里已有足量 `prototype` / `precision_drone` 载荷；若传 `planet_id`，目标行星 runtime 也必须已加载
+  - `commission_fleet`：`payload.building_id` + `payload.unit_type` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；`payload.unit_type` 当前传的是 `/catalog.public_blueprints[].id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的蓝图是 `corvette` / `destroyer`，同样要求已解锁对应科技且部署枢纽本地存储内已有足量载荷；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加单位并重算 `weapon` / `shield`，而不是覆盖旧栈
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
   - `fleet_disband`：`payload.fleet_id` 必填

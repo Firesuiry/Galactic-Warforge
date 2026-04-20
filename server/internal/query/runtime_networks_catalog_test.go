@@ -252,37 +252,68 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
 	unitIDs := map[string]bool{}
-	worldProduceCount := 0
-	deployableCount := 0
 	for _, entry := range view.Units {
 		unitIDs[entry.ID] = true
 		if !entry.Public {
 			t.Fatalf("expected public unit entry, got %+v", entry)
 		}
-		switch entry.ProductionMode {
-		case model.UnitProductionModeWorldProduce:
-			worldProduceCount++
-			if entry.RuntimeClass != model.UnitRuntimeClassWorld {
-				t.Fatalf("expected world_produce entries to be world units, got %+v", entry)
-			}
-		case model.UnitProductionModeFactoryRecipe:
-			deployableCount++
-			if len(entry.ProducerRecipes) == 0 || entry.DeployCommand == "" {
-				t.Fatalf("expected factory_recipe entries to expose recipes and deploy command, got %+v", entry)
-			}
-		default:
-			t.Fatalf("unexpected production mode in public unit catalog: %+v", entry)
+		if entry.ProductionMode != model.UnitProductionModeWorldProduce || entry.RuntimeClass != model.UnitRuntimeClassWorld {
+			t.Fatalf("expected /catalog.units to expose only world_produce units after T111, got %+v", entry)
 		}
 	}
-	if worldProduceCount != 2 {
-		t.Fatalf("expected exactly 2 world_produce units, got %d in %+v", worldProduceCount, view.Units)
+	if len(view.Units) != 2 {
+		t.Fatalf("expected exactly 2 world units in catalog, got %+v", view.Units)
 	}
-	if deployableCount != 4 {
-		t.Fatalf("expected exactly 4 factory_recipe deployable units, got %d in %+v", deployableCount, view.Units)
-	}
-	for _, id := range []string{"worker", "soldier", "prototype", "precision_drone", "corvette", "destroyer"} {
+	for _, id := range []string{"worker", "soldier"} {
 		if !unitIDs[id] {
 			t.Fatalf("expected %s in catalog units, got %+v", id, view.Units)
+		}
+	}
+	if len(view.BaseFrames) == 0 || len(view.BaseHulls) == 0 {
+		t.Fatalf("expected war chassis catalogs, got frames=%+v hulls=%+v", view.BaseFrames, view.BaseHulls)
+	}
+	if len(view.Components) == 0 {
+		t.Fatalf("expected war component catalog, got %+v", view.Components)
+	}
+	if len(view.PublicBlueprints) != 4 {
+		t.Fatalf("expected four preset public blueprints, got %+v", view.PublicBlueprints)
+	}
+	componentCategories := map[model.WarComponentCategory]bool{}
+	for _, component := range view.Components {
+		componentCategories[component.Category] = true
+	}
+	for _, category := range []model.WarComponentCategory{
+		model.WarComponentCategoryPower,
+		model.WarComponentCategoryPropulsion,
+		model.WarComponentCategoryDefense,
+		model.WarComponentCategorySensor,
+		model.WarComponentCategoryWeapon,
+		model.WarComponentCategoryUtility,
+	} {
+		if !componentCategories[category] {
+			t.Fatalf("expected component category %s in %+v", category, view.Components)
+		}
+	}
+	blueprintIDs := map[string]bool{}
+	for _, blueprint := range view.PublicBlueprints {
+		blueprintIDs[blueprint.ID] = true
+		if blueprint.Source != model.WarBlueprintSourcePreset {
+			t.Fatalf("expected preset blueprint source, got %+v", blueprint)
+		}
+		if len(blueprint.ComponentIDs) == 0 || len(blueprint.ProducerRecipes) == 0 || blueprint.DeployCommand == "" {
+			t.Fatalf("expected blueprint deployment metadata, got %+v", blueprint)
+		}
+		if blueprint.Domain == model.UnitDomainSpace {
+			if blueprint.BaseHullID == "" || blueprint.BaseFrameID != "" {
+				t.Fatalf("expected space blueprint to reference a base hull, got %+v", blueprint)
+			}
+		} else if blueprint.BaseFrameID == "" || blueprint.BaseHullID != "" {
+			t.Fatalf("expected non-space blueprint to reference a base frame, got %+v", blueprint)
+		}
+	}
+	for _, id := range []string{"prototype", "precision_drone", "corvette", "destroyer"} {
+		if !blueprintIDs[id] {
+			t.Fatalf("expected %s in public blueprints, got %+v", id, view.PublicBlueprints)
 		}
 	}
 

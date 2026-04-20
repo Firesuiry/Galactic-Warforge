@@ -22,7 +22,7 @@ const (
 type UnitProductionMode string
 
 const (
-	UnitProductionModeWorldProduce UnitProductionMode = "world_produce"
+	UnitProductionModeWorldProduce  UnitProductionMode = "world_produce"
 	UnitProductionModeFactoryRecipe UnitProductionMode = "factory_recipe"
 	UnitProductionModeInternal      UnitProductionMode = "internal"
 )
@@ -63,58 +63,6 @@ var unitCatalogEntries = []UnitCatalogEntry{
 		ProductionMode: UnitProductionModeWorldProduce,
 		QueryScopes:    []string{"planet"},
 		Commands:       []string{"move", "attack"},
-	},
-	{
-		ID:              ItemPrototype,
-		Name:            "Prototype",
-		Domain:          UnitDomainGround,
-		RuntimeClass:    UnitRuntimeClassCombatSquad,
-		Public:          true,
-		VisibleTechID:   "prototype",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"prototype"},
-		DeployCommand:   "deploy_squad",
-		QueryScopes:     []string{"planet_runtime"},
-		Commands:        []string{"deploy_squad"},
-	},
-	{
-		ID:              ItemPrecisionDrone,
-		Name:            "Precision Drone",
-		Domain:          UnitDomainAir,
-		RuntimeClass:    UnitRuntimeClassCombatSquad,
-		Public:          true,
-		VisibleTechID:   "precision_drone",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"precision_drone"},
-		DeployCommand:   "deploy_squad",
-		QueryScopes:     []string{"planet_runtime"},
-		Commands:        []string{"deploy_squad"},
-	},
-	{
-		ID:              ItemCorvette,
-		Name:            "Corvette",
-		Domain:          UnitDomainSpace,
-		RuntimeClass:    UnitRuntimeClassFleet,
-		Public:          true,
-		VisibleTechID:   "corvette",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"corvette"},
-		DeployCommand:   "commission_fleet",
-		QueryScopes:     []string{"system_runtime", "fleet"},
-		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"},
-	},
-	{
-		ID:              ItemDestroyer,
-		Name:            "Destroyer",
-		Domain:          UnitDomainSpace,
-		RuntimeClass:    UnitRuntimeClassFleet,
-		Public:          true,
-		VisibleTechID:   "destroyer",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"destroyer"},
-		DeployCommand:   "commission_fleet",
-		QueryScopes:     []string{"system_runtime", "fleet"},
-		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"},
 	},
 }
 

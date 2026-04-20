@@ -4,11 +4,15 @@ import "siliconworld/internal/model"
 
 // CatalogView exposes front-end display metadata derived from server catalogs.
 type CatalogView struct {
-	Buildings []BuildingCatalogEntry   `json:"buildings,omitempty"`
-	Items     []ItemCatalogEntry       `json:"items,omitempty"`
-	Recipes   []RecipeCatalogEntry     `json:"recipes,omitempty"`
-	Techs     []TechCatalogEntry       `json:"techs,omitempty"`
-	Units     []model.UnitCatalogEntry `json:"units,omitempty"`
+	Buildings        []BuildingCatalogEntry              `json:"buildings,omitempty"`
+	Items            []ItemCatalogEntry                  `json:"items,omitempty"`
+	Recipes          []RecipeCatalogEntry                `json:"recipes,omitempty"`
+	Techs            []TechCatalogEntry                  `json:"techs,omitempty"`
+	Units            []model.UnitCatalogEntry            `json:"units,omitempty"`
+	BaseFrames       []model.BaseFrameCatalogEntry       `json:"base_frames,omitempty"`
+	BaseHulls        []model.BaseHullCatalogEntry        `json:"base_hulls,omitempty"`
+	Components       []model.WarComponentCatalogEntry    `json:"components,omitempty"`
+	PublicBlueprints []model.PublicBlueprintCatalogEntry `json:"public_blueprints,omitempty"`
 }
 
 type BuildingCatalogEntry struct {
@@ -156,13 +160,21 @@ func (ql *Layer) Catalog() *CatalogView {
 	}
 
 	units := model.PublicUnitCatalogEntries()
+	baseFrames := model.PublicBaseFrameCatalogEntries()
+	baseHulls := model.PublicBaseHullCatalogEntries()
+	components := model.PublicWarComponentCatalogEntries()
+	publicBlueprints := model.PublicWarBlueprintCatalogEntries()
 
 	return &CatalogView{
-		Buildings: buildings,
-		Items:     items,
-		Recipes:   recipes,
-		Techs:     techs,
-		Units:     units,
+		Buildings:        buildings,
+		Items:            items,
+		Recipes:          recipes,
+		Techs:            techs,
+		Units:            units,
+		BaseFrames:       baseFrames,
+		BaseHulls:        baseHulls,
+		Components:       components,
+		PublicBlueprints: publicBlueprints,
 	}
 }
 

@@ -37,15 +37,15 @@ func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd m
 	if result != nil {
 		return *result, nil
 	}
-	entry, ok := model.PublicUnitCatalogEntryByID(unitID)
+	entry, ok := model.PublicWarBlueprintByID(unitID)
 	if !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unit %s is not publicly available", unitID)
+		res.Message = fmt.Sprintf("blueprint %s is not publicly available", unitID)
 		return res, nil
 	}
 	if entry.DeployCommand != string(model.CmdDeploySquad) || entry.RuntimeClass != model.UnitRuntimeClassCombatSquad {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unit %s is not deployed via deploy_squad", unitID)
+		res.Message = fmt.Sprintf("blueprint %s is not deployed via deploy_squad", unitID)
 		return res, nil
 	}
 	if !deploymentAllowsUnit(deployment, unitID) {
@@ -159,15 +159,15 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	if result != nil {
 		return *result, nil
 	}
-	entry, ok := model.PublicUnitCatalogEntryByID(unitID)
+	entry, ok := model.PublicWarBlueprintByID(unitID)
 	if !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unit %s is not publicly available", unitID)
+		res.Message = fmt.Sprintf("blueprint %s is not publicly available", unitID)
 		return res, nil
 	}
 	if entry.DeployCommand != string(model.CmdCommissionFleet) || entry.RuntimeClass != model.UnitRuntimeClassFleet {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unit %s is not commissioned via commission_fleet", unitID)
+		res.Message = fmt.Sprintf("blueprint %s is not commissioned via commission_fleet", unitID)
 		return res, nil
 	}
 	if !deploymentAllowsUnit(deployment, unitID) {
@@ -431,15 +431,15 @@ func requireUnitTechUnlocked(ws *model.WorldState, playerID, techID string) erro
 }
 
 func newCombatSquad(id, playerID, planetID, buildingID, unitID string, count int) *model.CombatSquad {
-	baseHP := 80
-	weapon := model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8, AmmoCost: 0}
-	shield := model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10}
-	if unitID == model.ItemPrecisionDrone {
-		baseHP = 60
-		weapon = model.WeaponState{Type: model.WeaponTypeMissile, Damage: 35, FireRate: 8, Range: 12, AmmoCost: 0}
-		shield = model.ShieldState{Level: 30, MaxLevel: 30, RechargeRate: 1.5, RechargeDelay: 8}
+	profile, ok := model.WarBlueprintRuntimeProfileByID(unitID)
+	if !ok {
+		profile = model.WarBlueprintRuntimeProfile{
+			SquadBaseHP: 80,
+			SquadWeapon: model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8, AmmoCost: 0},
+			SquadShield: model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10},
+		}
 	}
-	totalHP := baseHP * count
+	totalHP := profile.SquadBaseHP * count
 	return &model.CombatSquad{
 		ID:               id,
 		OwnerID:          playerID,
@@ -449,8 +449,8 @@ func newCombatSquad(id, playerID, planetID, buildingID, unitID string, count int
 		Count:            count,
 		HP:               totalHP,
 		MaxHP:            totalHP,
-		Shield:           shield,
-		Weapon:           weapon,
+		Shield:           profile.SquadShield,
+		Weapon:           profile.SquadWeapon,
 		State:            model.CombatSquadStateIdle,
 	}
 }
@@ -475,30 +475,47 @@ func rebuildFleetStats(fleet *model.SpaceFleet) {
 	totalDamage := 0
 	totalShield := 0.0
 	maxShield := 0.0
+	fireRate := 10
+	fireRange := 24.0
+	weaponType := model.WeaponTypeLaser
+	rechargeRate := 2.0
+	rechargeDelay := 10
 	for _, stack := range fleet.Units {
-		switch stack.UnitType {
-		case model.ItemCorvette:
-			totalDamage += 40 * stack.Count
-			totalShield += 40 * float64(stack.Count)
-			maxShield += 40 * float64(stack.Count)
-		case model.ItemDestroyer:
-			totalDamage += 80 * stack.Count
-			totalShield += 80 * float64(stack.Count)
-			maxShield += 80 * float64(stack.Count)
+		profile, ok := model.WarBlueprintRuntimeProfileByID(stack.UnitType)
+		if !ok || profile.FleetWeaponDamage <= 0 {
+			continue
+		}
+		totalDamage += profile.FleetWeaponDamage * stack.Count
+		totalShield += profile.FleetShield * float64(stack.Count)
+		maxShield += profile.FleetShield * float64(stack.Count)
+		if profile.FleetWeaponType != "" {
+			weaponType = profile.FleetWeaponType
+		}
+		if profile.FleetWeaponFireRate > 0 {
+			fireRate = profile.FleetWeaponFireRate
+		}
+		if profile.FleetWeaponRange > 0 {
+			fireRange = profile.FleetWeaponRange
+		}
+		if profile.FleetShieldRechargeRate > 0 {
+			rechargeRate = profile.FleetShieldRechargeRate
+		}
+		if profile.FleetShieldRechargeDelay > 0 {
+			rechargeDelay = profile.FleetShieldRechargeDelay
 		}
 	}
 	fleet.Weapon = model.WeaponState{
-		Type:         model.WeaponTypeLaser,
+		Type:         weaponType,
 		Damage:       totalDamage,
-		FireRate:     10,
-		Range:        24,
+		FireRate:     fireRate,
+		Range:        fireRange,
 		LastFireTick: fleet.LastAttackTick,
 	}
 	fleet.Shield = model.ShieldState{
 		Level:         totalShield,
 		MaxLevel:      maxShield,
-		RechargeRate:  2,
-		RechargeDelay: 10,
+		RechargeRate:  rechargeRate,
+		RechargeDelay: rechargeDelay,
 	}
 }
 

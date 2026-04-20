@@ -93,3 +93,25 @@
 3. 预置战争单位 `prototype`、`precision_drone`、`corvette`、`destroyer` 已迁移为公开蓝图，不再要求调用方把它们当作旧式固定单位类型硬编码。
 4. 新目录结构可被保存、读档、回放和 query 层稳定读取。
 5. 代码中不存在为了兼容旧结构而额外保留一整套包装层的权宜方案。
+
+## 完成情况
+
+- 完成时间：2026-04-20
+- 状态：已完成
+
+### 本轮落地
+
+- 将 `/catalog` 的战争公开目录从旧 `units[]` 中拆出，新增 `base_frames`、`base_hulls`、`components`、`public_blueprints` 四组 authoritative 数据。
+- `worker` / `soldier` 继续保留在 `units[]`，`prototype` / `precision_drone` / `corvette` / `destroyer` 已迁移为预置 `public_blueprints`，不再继续作为旧式固定战争单位条目公开。
+- `deploy_squad`、`commission_fleet`、舰队统计与 `produce` 的拒绝分支已切到新蓝图目录，运行态继续只保存单一标识，没有引入平行兼容包装层。
+- `shared-client` 已同步 catalog 类型；服务端 API 文档与玩家指南中的公开目录口径已更新。
+
+### 测试记录
+
+- `cd server && env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH go test ./internal/model ./internal/query`
+- `cd server && env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH go test ./internal/gamecore -run 'TestT099|TestT100'`
+- `cd client-web && npm run build`
+
+### 额外说明
+
+- `cd server && env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH go test ./internal/model ./internal/query ./internal/gamecore` 仍会被仓库现有基线测试 `TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome` 卡住，失败原因为 `start electromagnetism: VALIDATION_FAILED (tech already completed)`；该问题与本次 T111 改动无直接关联，本轮未顺手改动其默认新局配置。

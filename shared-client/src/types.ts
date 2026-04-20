@@ -975,6 +975,59 @@ export interface UnitCatalogEntry {
   hidden_reason?: string;
 }
 
+export type WarComponentCategory = 'power' | 'propulsion' | 'defense' | 'sensor' | 'weapon' | 'utility';
+export type WarBlueprintSource = 'preset' | 'player';
+
+export interface BaseFrameCatalogEntry {
+  id: string;
+  name: string;
+  domain: string;
+  public: boolean;
+  visible_tech_id?: string;
+  size_class?: string;
+  roles?: string[];
+}
+
+export interface BaseHullCatalogEntry {
+  id: string;
+  name: string;
+  domain: string;
+  public: boolean;
+  visible_tech_id?: string;
+  size_class?: string;
+  roles?: string[];
+}
+
+export interface WarComponentCatalogEntry {
+  id: string;
+  name: string;
+  category: WarComponentCategory;
+  public: boolean;
+  domains?: string[];
+  slot_type?: string;
+  visible_tech_id?: string;
+  tags?: string[];
+}
+
+export interface PublicBlueprintCatalogEntry {
+  id: string;
+  name: string;
+  domain: string;
+  runtime_class: string;
+  public: boolean;
+  source: WarBlueprintSource;
+  visible_tech_id?: string;
+  base_frame_id?: string;
+  base_hull_id?: string;
+  output_item_id?: string;
+  producer_recipes?: string[];
+  deploy_command?: string;
+  query_scopes?: string[];
+  commands?: string[];
+  component_ids?: string[];
+  summary?: string;
+}
+
 export interface FleetRuntimeView {
   fleet_id: string;
   owner_id: string;
@@ -1064,6 +1117,10 @@ export interface CatalogView {
   recipes?: RecipeCatalogEntry[];
   techs?: TechCatalogEntry[];
   units?: UnitCatalogEntry[];
+  base_frames?: BaseFrameCatalogEntry[];
+  base_hulls?: BaseHullCatalogEntry[];
+  components?: WarComponentCatalogEntry[];
+  public_blueprints?: PublicBlueprintCatalogEntry[];
 }
 
 export interface GameEvent {

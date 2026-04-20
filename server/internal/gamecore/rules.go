@@ -656,7 +656,7 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 	utypeID := fmt.Sprintf("%v", utypeRaw)
 	unitEntry, ok := model.PublicWorldProduceUnitByID(utypeID)
 	if !ok {
-		if entry, exists := model.PublicUnitCatalogEntryByID(utypeID); exists {
+		if entry, exists := model.PublicWarBlueprintByID(utypeID); exists {
 			res.Code = model.CodeValidationFailed
 			switch entry.DeployCommand {
 			case string(model.CmdDeploySquad):
