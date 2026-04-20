@@ -35,8 +35,8 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   restore_construction: { usage: '<task_id>', desc: 'Restore a cancelled construction task' },
   start_research: { usage: '<tech_id>', desc: 'Start researching a technology' },
   cancel_research: { usage: '<tech_id>', desc: 'Cancel a technology in progress or queue' },
-  deploy_squad: { usage: '<building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]', desc: 'Consume deployment payloads from a hub and create a combat squad' },
-  commission_fleet: { usage: '<building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]', desc: 'Consume fleet payloads from a hub and create or reinforce a fleet' },
+  deploy_squad: { usage: '<building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]', desc: 'Consume a public squad blueprint payload from a hub and create a combat squad' },
+  commission_fleet: { usage: '<building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]', desc: 'Consume a public fleet blueprint payload from a hub and create or reinforce a fleet' },
   fleet_assign: { usage: '<fleet_id> <line|vee|circle|wedge>', desc: 'Change a fleet formation' },
   fleet_attack: { usage: '<fleet_id> <planet_id> <target_id>', desc: 'Order a fleet to attack a target in the same system' },
   fleet_disband: { usage: '<fleet_id>', desc: 'Disband a fleet and remove it from runtime' },
@@ -104,8 +104,8 @@ const HELP_TEXT = [
   '    restore_construction <task_id>',
   '    start_research <tech_id>',
   '    cancel_research <tech_id>',
-  '    deploy_squad <building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]',
-  '    commission_fleet <building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]',
+  '    deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]',
+  '    commission_fleet <building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]',
   '    fleet_assign <fleet_id> <line|vee|circle|wedge>',
   '    fleet_attack <fleet_id> <planet_id> <target_id>',
   '    fleet_disband <fleet_id>',
@@ -148,16 +148,16 @@ async function getProduceHelp(): Promise<string> {
   const usage = '<entity_id> <unit_type>';
   try {
     const catalog = await fetchCatalog();
-    const units = (catalog.units ?? [])
+    const units = (catalog.world_units ?? [])
       .filter((entry) => entry.public && entry.production_mode === 'world_produce' && entry.runtime_class === 'world_unit')
       .map((entry) => entry.id);
     if (units.length > 0) {
-      return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit from /catalog.units: ${units.join(', ')}`;
+      return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit from /catalog.world_units: ${units.join(', ')}`;
     }
   } catch {
     // Fall back to generic help when the server is unavailable.
   }
-  return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit; available ids come from /catalog.units when the server is reachable`;
+  return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit; available ids come from /catalog.world_units when the server is reachable`;
 }
 
 function getCommandHelp(cmd: string): string | Promise<string> {

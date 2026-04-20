@@ -251,39 +251,70 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
-	unitIDs := map[string]bool{}
-	worldProduceCount := 0
-	deployableCount := 0
-	for _, entry := range view.Units {
-		unitIDs[entry.ID] = true
+	if len(view.WorldUnits) != 2 {
+		t.Fatalf("expected exactly 2 public world units, got %+v", view.WorldUnits)
+	}
+	worldUnitIDs := map[string]bool{}
+	for _, entry := range view.WorldUnits {
+		worldUnitIDs[entry.ID] = true
 		if !entry.Public {
-			t.Fatalf("expected public unit entry, got %+v", entry)
+			t.Fatalf("expected public world unit entry, got %+v", entry)
 		}
-		switch entry.ProductionMode {
-		case model.UnitProductionModeWorldProduce:
-			worldProduceCount++
-			if entry.RuntimeClass != model.UnitRuntimeClassWorld {
-				t.Fatalf("expected world_produce entries to be world units, got %+v", entry)
-			}
-		case model.UnitProductionModeFactoryRecipe:
-			deployableCount++
-			if len(entry.ProducerRecipes) == 0 || entry.DeployCommand == "" {
-				t.Fatalf("expected factory_recipe entries to expose recipes and deploy command, got %+v", entry)
-			}
-		default:
-			t.Fatalf("unexpected production mode in public unit catalog: %+v", entry)
+		if entry.ProductionMode != model.UnitProductionModeWorldProduce || entry.RuntimeClass != model.UnitRuntimeClassWorld {
+			t.Fatalf("expected world unit production metadata, got %+v", entry)
 		}
 	}
-	if worldProduceCount != 2 {
-		t.Fatalf("expected exactly 2 world_produce units, got %d in %+v", worldProduceCount, view.Units)
-	}
-	if deployableCount != 4 {
-		t.Fatalf("expected exactly 4 factory_recipe deployable units, got %d in %+v", deployableCount, view.Units)
-	}
-	for _, id := range []string{"worker", "soldier", "prototype", "precision_drone", "corvette", "destroyer"} {
-		if !unitIDs[id] {
-			t.Fatalf("expected %s in catalog units, got %+v", id, view.Units)
+	for _, id := range []string{"worker", "soldier"} {
+		if !worldUnitIDs[id] {
+			t.Fatalf("expected %s in catalog world_units, got %+v", id, view.WorldUnits)
 		}
+	}
+	if view.Warfare == nil {
+		t.Fatal("expected warfare catalog section")
+	}
+	if len(view.Warfare.BaseFrames) == 0 || len(view.Warfare.BaseHulls) == 0 {
+		t.Fatalf("expected designable base frames and hulls, got %+v", view.Warfare)
+	}
+	if len(view.Warfare.PublicBlueprints) != 4 {
+		t.Fatalf("expected 4 public preset blueprints, got %+v", view.Warfare.PublicBlueprints)
+	}
+	componentCategories := map[model.WarComponentCategory]bool{}
+	for _, component := range view.Warfare.Components {
+		componentCategories[component.Category] = true
+	}
+	for _, category := range []model.WarComponentCategory{
+		model.WarComponentCategoryPower,
+		model.WarComponentCategoryPropulsion,
+		model.WarComponentCategoryDefense,
+		model.WarComponentCategorySensor,
+		model.WarComponentCategoryWeapon,
+		model.WarComponentCategoryUtility,
+	} {
+		if !componentCategories[category] {
+			t.Fatalf("expected warfare component category %s, got %+v", category, view.Warfare.Components)
+		}
+	}
+	blueprintByID := map[string]model.WarPublicBlueprintCatalogEntry{}
+	for _, blueprint := range view.Warfare.PublicBlueprints {
+		blueprintByID[blueprint.ID] = blueprint
+		if blueprint.Source != model.WarBlueprintSourcePreset {
+			t.Fatalf("expected preset public blueprint source, got %+v", blueprint)
+		}
+		if blueprint.VisibleTechID == "" || len(blueprint.ProducerRecipes) == 0 || blueprint.DeployCommand == "" {
+			t.Fatalf("expected deployment metadata on public blueprint, got %+v", blueprint)
+		}
+	}
+	if blueprintByID["prototype"].BaseFrameID == "" || blueprintByID["prototype"].Domain != model.UnitDomainGround {
+		t.Fatalf("expected prototype preset blueprint to bind a ground frame, got %+v", blueprintByID["prototype"])
+	}
+	if blueprintByID["precision_drone"].BaseFrameID == "" || blueprintByID["precision_drone"].Domain != model.UnitDomainAir {
+		t.Fatalf("expected precision_drone preset blueprint to bind an air frame, got %+v", blueprintByID["precision_drone"])
+	}
+	if blueprintByID["corvette"].BaseHullID == "" || blueprintByID["corvette"].Domain != model.UnitDomainSpace {
+		t.Fatalf("expected corvette preset blueprint to bind a space hull, got %+v", blueprintByID["corvette"])
+	}
+	if blueprintByID["destroyer"].BaseHullID == "" || blueprintByID["destroyer"].Domain != model.UnitDomainSpace {
+		t.Fatalf("expected destroyer preset blueprint to bind a space hull, got %+v", blueprintByID["destroyer"])
 	}
 
 	var mining *BuildingCatalogEntry

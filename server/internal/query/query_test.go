@@ -248,7 +248,7 @@ func TestFleetListIncludesFleetDetailsWhenPresent(t *testing.T) {
 		SourceBuildingID: "base-1",
 		Formation:        model.FormationTypeWedge,
 		State:            model.FleetStateIdle,
-		Units:            []model.FleetUnitStack{{UnitType: "corvette", Count: 2}},
+		Units:            []model.FleetUnitStack{{BlueprintID: "corvette", Count: 2}},
 		Weapon: model.WeaponState{
 			Type:     "laser",
 			Damage:   40,
@@ -274,8 +274,8 @@ func TestFleetListIncludesFleetDetailsWhenPresent(t *testing.T) {
 	if fleets[0].Formation != string(model.FormationTypeWedge) {
 		t.Fatalf("expected wedge formation, got %+v", fleets[0])
 	}
-	if len(fleets[0].Units) != 1 || fleets[0].Units[0].UnitType != "corvette" {
-		t.Fatalf("expected corvette units, got %+v", fleets[0].Units)
+	if len(fleets[0].Units) != 1 || fleets[0].Units[0].BlueprintID != "corvette" {
+		t.Fatalf("expected corvette blueprint stack, got %+v", fleets[0].Units)
 	}
 }
 

@@ -100,7 +100,7 @@ describe('fleet command registration', () => {
     assert.ok(COMMANDS.system_runtime);
 
     const deployHelp = await dispatch('help deploy_squad', { currentPlayer: 'p1', rl: {} });
-    assert.match(deployHelp, /deploy_squad <building_id> <prototype\|precision_drone>/);
+    assert.match(deployHelp, /deploy_squad <building_id> <blueprint_id>/);
 
     const fleetHelp = await dispatch('help fleet_status', { currentPlayer: 'p1', rl: {} });
     assert.match(fleetHelp, /fleet_status \[fleet_id\]/);

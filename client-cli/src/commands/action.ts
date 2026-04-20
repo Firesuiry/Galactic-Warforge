@@ -44,8 +44,8 @@ const DYSON_COMPONENT_TYPES = new Set<DysonComponentType>(['node', 'frame', 'she
 const LOGISTICS_SCOPES = new Set(['planetary', 'interstellar']);
 const LOGISTICS_MODES = new Set(['none', 'supply', 'demand', 'both']);
 const RAY_RECEIVER_MODES = new Set<RayReceiverMode>(['power', 'photon', 'hybrid']);
-const SQUAD_UNITS = new Set(['prototype', 'precision_drone']);
-const FLEET_UNITS = new Set(['corvette', 'destroyer']);
+const SQUAD_BLUEPRINTS = new Set(['prototype', 'precision_drone']);
+const FLEET_BLUEPRINTS = new Set(['corvette', 'destroyer']);
 const FLEET_FORMATIONS = new Set<FleetFormation>(['line', 'vee', 'circle', 'wedge']);
 
 function toErrorMessage(error: unknown): string {
@@ -338,10 +338,10 @@ export async function cmdCancelResearch(args: string[]): Promise<string> {
 export async function cmdDeploySquad(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
-    return fmtError('Usage: deploy_squad <building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]');
+    return fmtError('Usage: deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]');
   }
-  if (!SQUAD_UNITS.has(parsed.positionals[1])) {
-    return fmtError('unit_type 必须是 prototype 或 precision_drone');
+  if (!SQUAD_BLUEPRINTS.has(parsed.positionals[1])) {
+    return fmtError('blueprint_id 当前必须是 prototype 或 precision_drone');
   }
   try {
     const countRaw = getStringOption(parsed, 'count');
@@ -357,10 +357,10 @@ export async function cmdDeploySquad(args: string[]): Promise<string> {
 export async function cmdCommissionFleet(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
-    return fmtError('Usage: commission_fleet <building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]');
+    return fmtError('Usage: commission_fleet <building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]');
   }
-  if (!FLEET_UNITS.has(parsed.positionals[1])) {
-    return fmtError('unit_type 必须是 corvette 或 destroyer');
+  if (!FLEET_BLUEPRINTS.has(parsed.positionals[1])) {
+    return fmtError('blueprint_id 当前必须是 corvette 或 destroyer');
   }
   try {
     const countRaw = getStringOption(parsed, 'count');

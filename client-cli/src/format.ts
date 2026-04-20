@@ -66,12 +66,12 @@ function fmtInventoryPreview(inv?: Record<string, number>, limit = 2): string {
   return entries.length > limit ? `${preview},...` : preview;
 }
 
-function fmtFleetUnits(units?: Array<{ unit_type: string; count: number }>): string {
+function fmtFleetUnits(units?: Array<{ blueprint_id: string; count: number }>): string {
   const entries = (units ?? []).filter((stack) => stack.count > 0);
   if (entries.length === 0) {
     return '-';
   }
-  return entries.map((stack) => `${stack.unit_type}:${stack.count}`).join(', ');
+  return entries.map((stack) => `${stack.blueprint_id}:${stack.count}`).join(', ');
 }
 
 function fmtFleetTarget(target?: { planet_id: string; target_id?: string }): string {

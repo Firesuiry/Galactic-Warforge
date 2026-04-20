@@ -893,13 +893,13 @@ func validateCommandStructure(cmd model.Command) error {
 			return fmt.Errorf("produce requires payload.unit_type")
 		}
 	case model.CmdDeploySquad:
-		for _, field := range []string{"building_id", "unit_type", "count"} {
+		for _, field := range []string{"building_id", "blueprint_id", "count"} {
 			if _, ok := cmd.Payload[field]; !ok {
 				return fmt.Errorf("deploy_squad requires payload.%s", field)
 			}
 		}
 	case model.CmdCommissionFleet:
-		for _, field := range []string{"building_id", "unit_type", "count", "system_id"} {
+		for _, field := range []string{"building_id", "blueprint_id", "count", "system_id"} {
 			if _, ok := cmd.Payload[field]; !ok {
 				return fmt.Errorf("commission_fleet requires payload.%s", field)
 			}

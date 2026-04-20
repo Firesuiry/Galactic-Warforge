@@ -6,9 +6,9 @@ import (
 
 // OrbitPosition 轨道位置
 type OrbitPosition struct {
-	PlanetID    string  `json:"planet_id"`     // 所属星球
-	Radius      float64 `json:"radius"`        // 轨道半径
-	Angle       float64 `json:"angle"`         // 当前角度(弧度)
+	PlanetID     string  `json:"planet_id"`     // 所属星球
+	Radius       float64 `json:"radius"`        // 轨道半径
+	Angle        float64 `json:"angle"`         // 当前角度(弧度)
 	AngularSpeed float64 `json:"angular_speed"` // 角速度(弧度/tick)
 }
 
@@ -44,23 +44,23 @@ type FleetTarget struct {
 
 // FleetUnitStack stores unit counts by payload type.
 type FleetUnitStack struct {
-	UnitType string `json:"unit_type"`
-	Count    int    `json:"count"`
+	BlueprintID string `json:"blueprint_id"`
+	Count       int    `json:"count"`
 }
 
 // OrbitalPlatform 轨道防御平台
 type OrbitalPlatform struct {
-	ID            string         `json:"id"`              // 平台ID
-	OwnerID       string         `json:"owner_id"`       // 所属玩家
-	PlanetID      string         `json:"planet_id"`      // 所属星球
-	Orbit         OrbitPosition  `json:"orbit"`          // 轨道位置
-	HP            int            `json:"hp"`             // 当前生命值
-	MaxHP         int            `json:"max_hp"`         // 最大生命值
-	Weapon        WeaponState    `json:"weapon"`         // 武器状态
-	AmmoCapacity  int            `json:"ammo_capacity"`   // 弹药容量
-	AmmoCount     int            `json:"ammo_count"`      // 当前弹药
-	LastFireTick  int64          `json:"last_fire_tick"` // 上次开火tick
-	IsActive      bool           `json:"is_active"`      // 是否激活
+	ID           string        `json:"id"`             // 平台ID
+	OwnerID      string        `json:"owner_id"`       // 所属玩家
+	PlanetID     string        `json:"planet_id"`      // 所属星球
+	Orbit        OrbitPosition `json:"orbit"`          // 轨道位置
+	HP           int           `json:"hp"`             // 当前生命值
+	MaxHP        int           `json:"max_hp"`         // 最大生命值
+	Weapon       WeaponState   `json:"weapon"`         // 武器状态
+	AmmoCapacity int           `json:"ammo_capacity"`  // 弹药容量
+	AmmoCount    int           `json:"ammo_count"`     // 当前弹药
+	LastFireTick int64         `json:"last_fire_tick"` // 上次开火tick
+	IsActive     bool          `json:"is_active"`      // 是否激活
 }
 
 // DefaultOrbitalPlatformStats 返回默认轨道平台属性

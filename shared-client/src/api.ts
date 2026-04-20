@@ -111,7 +111,8 @@ export interface RollbackRequest {
   to_tick?: number;
 }
 
-export type UnitTypeName = string;
+export type WorldUnitID = string;
+export type BlueprintID = string;
 export type Direction = 'north' | 'east' | 'south' | 'west' | 'auto';
 export type DysonComponentType = 'node' | 'frame' | 'shell';
 
@@ -444,7 +445,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdProduce(entityId: string, unitType: UnitTypeName) {
+  function cmdProduce(entityId: string, unitType: WorldUnitID) {
     return sendSingleCommand({
       type: 'produce',
       target: { layer: 'planet', entity_id: entityId },
@@ -563,7 +564,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdDeploySquad(buildingId: string, unitType: UnitTypeName, options: DeploySquadOptions = {}) {
+  function cmdDeploySquad(buildingId: string, blueprintId: BlueprintID, options: DeploySquadOptions = {}) {
     return sendSingleCommand({
       type: 'deploy_squad',
       target: {
@@ -573,7 +574,7 @@ export function createApiClient(options: ApiClientOptions) {
       },
       payload: {
         building_id: buildingId,
-        unit_type: unitType,
+        blueprint_id: blueprintId,
         count: options.count ?? 1,
         ...(options.planetId ? { planet_id: options.planetId } : {}),
       },
@@ -582,7 +583,7 @@ export function createApiClient(options: ApiClientOptions) {
 
   function cmdCommissionFleet(
     buildingId: string,
-    unitType: UnitTypeName,
+    blueprintId: BlueprintID,
     systemId: string,
     options: CommissionFleetOptions = {},
   ) {
@@ -591,7 +592,7 @@ export function createApiClient(options: ApiClientOptions) {
       target: { layer: 'system', system_id: systemId, entity_id: buildingId },
       payload: {
         building_id: buildingId,
-        unit_type: unitType,
+        blueprint_id: blueprintId,
         count: options.count ?? 1,
         system_id: systemId,
         ...(options.fleetId ? { fleet_id: options.fleetId } : {}),

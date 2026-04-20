@@ -1,12 +1,13 @@
 package model
 
-// UnitDomain describes the space a unit lives in.
+// UnitDomain describes the space a unit or blueprint lives in.
 type UnitDomain string
 
 const (
-	UnitDomainGround UnitDomain = "ground"
-	UnitDomainAir    UnitDomain = "air"
-	UnitDomainSpace  UnitDomain = "space"
+	UnitDomainGround  UnitDomain = "ground"
+	UnitDomainAir     UnitDomain = "air"
+	UnitDomainOrbital UnitDomain = "orbital"
+	UnitDomainSpace   UnitDomain = "space"
 )
 
 // UnitRuntimeClass describes which authoritative runtime owns the unit.
@@ -22,28 +23,25 @@ const (
 type UnitProductionMode string
 
 const (
-	UnitProductionModeWorldProduce UnitProductionMode = "world_produce"
+	UnitProductionModeWorldProduce  UnitProductionMode = "world_produce"
 	UnitProductionModeFactoryRecipe UnitProductionMode = "factory_recipe"
 	UnitProductionModeInternal      UnitProductionMode = "internal"
 )
 
-// UnitCatalogEntry is the authoritative public-facing unit capability record.
-type UnitCatalogEntry struct {
-	ID              string             `json:"id"`
-	Name            string             `json:"name"`
-	Domain          UnitDomain         `json:"domain"`
-	RuntimeClass    UnitRuntimeClass   `json:"runtime_class"`
-	Public          bool               `json:"public"`
-	VisibleTechID   string             `json:"visible_tech_id,omitempty"`
-	ProductionMode  UnitProductionMode `json:"production_mode"`
-	ProducerRecipes []string           `json:"producer_recipes,omitempty"`
-	DeployCommand   string             `json:"deploy_command,omitempty"`
-	QueryScopes     []string           `json:"query_scopes,omitempty"`
-	Commands        []string           `json:"commands,omitempty"`
-	HiddenReason    string             `json:"hidden_reason,omitempty"`
+// WorldUnitCatalogEntry is the authoritative public-facing catalog entry for non-blueprint world units.
+type WorldUnitCatalogEntry struct {
+	ID             string             `json:"id"`
+	Name           string             `json:"name"`
+	Domain         UnitDomain         `json:"domain"`
+	RuntimeClass   UnitRuntimeClass   `json:"runtime_class"`
+	Public         bool               `json:"public"`
+	ProductionMode UnitProductionMode `json:"production_mode"`
+	QueryScopes    []string           `json:"query_scopes,omitempty"`
+	Commands       []string           `json:"commands,omitempty"`
+	HiddenReason   string             `json:"hidden_reason,omitempty"`
 }
 
-var unitCatalogEntries = []UnitCatalogEntry{
+var worldUnitCatalogEntries = []WorldUnitCatalogEntry{
 	{
 		ID:             string(UnitTypeWorker),
 		Name:           "Worker",
@@ -64,94 +62,41 @@ var unitCatalogEntries = []UnitCatalogEntry{
 		QueryScopes:    []string{"planet"},
 		Commands:       []string{"move", "attack"},
 	},
-	{
-		ID:              ItemPrototype,
-		Name:            "Prototype",
-		Domain:          UnitDomainGround,
-		RuntimeClass:    UnitRuntimeClassCombatSquad,
-		Public:          true,
-		VisibleTechID:   "prototype",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"prototype"},
-		DeployCommand:   "deploy_squad",
-		QueryScopes:     []string{"planet_runtime"},
-		Commands:        []string{"deploy_squad"},
-	},
-	{
-		ID:              ItemPrecisionDrone,
-		Name:            "Precision Drone",
-		Domain:          UnitDomainAir,
-		RuntimeClass:    UnitRuntimeClassCombatSquad,
-		Public:          true,
-		VisibleTechID:   "precision_drone",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"precision_drone"},
-		DeployCommand:   "deploy_squad",
-		QueryScopes:     []string{"planet_runtime"},
-		Commands:        []string{"deploy_squad"},
-	},
-	{
-		ID:              ItemCorvette,
-		Name:            "Corvette",
-		Domain:          UnitDomainSpace,
-		RuntimeClass:    UnitRuntimeClassFleet,
-		Public:          true,
-		VisibleTechID:   "corvette",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"corvette"},
-		DeployCommand:   "commission_fleet",
-		QueryScopes:     []string{"system_runtime", "fleet"},
-		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"},
-	},
-	{
-		ID:              ItemDestroyer,
-		Name:            "Destroyer",
-		Domain:          UnitDomainSpace,
-		RuntimeClass:    UnitRuntimeClassFleet,
-		Public:          true,
-		VisibleTechID:   "destroyer",
-		ProductionMode:  UnitProductionModeFactoryRecipe,
-		ProducerRecipes: []string{"destroyer"},
-		DeployCommand:   "commission_fleet",
-		QueryScopes:     []string{"system_runtime", "fleet"},
-		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"},
-	},
 }
 
-// PublicUnitCatalogEntries returns the public unit catalog snapshot.
-func PublicUnitCatalogEntries() []UnitCatalogEntry {
-	out := make([]UnitCatalogEntry, 0, len(unitCatalogEntries))
-	for _, entry := range unitCatalogEntries {
+// PublicWorldUnitCatalogEntries returns the public world-unit catalog snapshot.
+func PublicWorldUnitCatalogEntries() []WorldUnitCatalogEntry {
+	out := make([]WorldUnitCatalogEntry, 0, len(worldUnitCatalogEntries))
+	for _, entry := range worldUnitCatalogEntries {
 		if !entry.Public {
 			continue
 		}
-		out = append(out, cloneUnitCatalogEntry(entry))
+		out = append(out, cloneWorldUnitCatalogEntry(entry))
 	}
 	return out
 }
 
-// PublicUnitCatalogEntryByID returns one public-facing unit entry.
-func PublicUnitCatalogEntryByID(id string) (UnitCatalogEntry, bool) {
-	for _, entry := range unitCatalogEntries {
+// PublicWorldUnitByID returns one public-facing world-unit entry.
+func PublicWorldUnitByID(id string) (WorldUnitCatalogEntry, bool) {
+	for _, entry := range worldUnitCatalogEntries {
 		if entry.ID != id || !entry.Public {
 			continue
 		}
-		return cloneUnitCatalogEntry(entry), true
+		return cloneWorldUnitCatalogEntry(entry), true
 	}
-	return UnitCatalogEntry{}, false
+	return WorldUnitCatalogEntry{}, false
 }
 
 // PublicWorldProduceUnitByID returns the authoritative world-produce entry.
-func PublicWorldProduceUnitByID(id string) (UnitCatalogEntry, bool) {
-	entry, ok := PublicUnitCatalogEntryByID(id)
+func PublicWorldProduceUnitByID(id string) (WorldUnitCatalogEntry, bool) {
+	entry, ok := PublicWorldUnitByID(id)
 	if !ok || entry.ProductionMode != UnitProductionModeWorldProduce || entry.RuntimeClass != UnitRuntimeClassWorld {
-		return UnitCatalogEntry{}, false
+		return WorldUnitCatalogEntry{}, false
 	}
 	return entry, true
 }
 
-func cloneUnitCatalogEntry(entry UnitCatalogEntry) UnitCatalogEntry {
-	entry.ProducerRecipes = append([]string(nil), entry.ProducerRecipes...)
+func cloneWorldUnitCatalogEntry(entry WorldUnitCatalogEntry) WorldUnitCatalogEntry {
 	entry.QueryScopes = append([]string(nil), entry.QueryScopes...)
 	entry.Commands = append([]string(nil), entry.Commands...)
 	return entry

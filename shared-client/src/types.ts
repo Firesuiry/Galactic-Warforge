@@ -201,7 +201,7 @@ export interface CombatSquad {
   owner_id: string;
   planet_id: string;
   source_building_id?: string;
-  unit_type: string;
+  blueprint_id: string;
   count: number;
   hp: number;
   max_hp: number;
@@ -248,7 +248,7 @@ export interface FleetTarget {
 }
 
 export interface FleetUnitStack {
-  unit_type: string;
+  blueprint_id: string;
   count: number;
 }
 
@@ -960,7 +960,7 @@ export interface TechCatalogEntry {
   color: string;
 }
 
-export interface UnitCatalogEntry {
+export interface WorldUnitCatalogEntry {
   id: string;
   name: string;
   domain: string;
@@ -973,6 +973,92 @@ export interface UnitCatalogEntry {
   query_scopes?: string[];
   commands?: string[];
   hidden_reason?: string;
+}
+
+export interface WarBudgetProfile {
+  power_output?: number;
+  sustained_draw?: number;
+  peak_draw?: number;
+  volume_capacity?: number;
+  mass_capacity?: number;
+  rigidity_capacity?: number;
+  heat_capacity?: number;
+  maintenance_limit?: number;
+}
+
+export interface WarSlotSpec {
+  id: string;
+  category: string;
+  size?: string;
+  required?: boolean;
+  notes?: string;
+}
+
+export interface WarBaseFrameCatalogEntry {
+  id: string;
+  name: string;
+  role?: string;
+  description?: string;
+  supported_domains?: string[];
+  visible_tech_id?: string;
+  budgets?: WarBudgetProfile;
+  slots?: WarSlotSpec[];
+}
+
+export interface WarBaseHullCatalogEntry {
+  id: string;
+  name: string;
+  role?: string;
+  description?: string;
+  supported_domains?: string[];
+  visible_tech_id?: string;
+  budgets?: WarBudgetProfile;
+  slots?: WarSlotSpec[];
+}
+
+export interface WarComponentCatalogEntry {
+  id: string;
+  name: string;
+  category: string;
+  slot_kind?: string;
+  supported_domains?: string[];
+  power_output?: number;
+  power_draw?: number;
+  volume?: number;
+  mass?: number;
+  rigidity_load?: number;
+  heat_load?: number;
+  maintenance?: number;
+  tags?: string[];
+}
+
+export interface WarBlueprintComponentSlot {
+  slot_id: string;
+  component_id: string;
+}
+
+export interface WarPublicBlueprintCatalogEntry {
+  id: string;
+  name: string;
+  domain: string;
+  source: string;
+  base_frame_id?: string;
+  base_hull_id?: string;
+  visible_tech_id?: string;
+  runtime_class: string;
+  production_mode: string;
+  producer_recipes?: string[];
+  deploy_command?: string;
+  query_scopes?: string[];
+  commands?: string[];
+  components?: WarBlueprintComponentSlot[];
+}
+
+export interface WarfareCatalogView {
+  base_frames?: WarBaseFrameCatalogEntry[];
+  base_hulls?: WarBaseHullCatalogEntry[];
+  components?: WarComponentCatalogEntry[];
+  public_blueprints?: WarPublicBlueprintCatalogEntry[];
 }
 
 export interface FleetRuntimeView {
@@ -1063,7 +1149,8 @@ export interface CatalogView {
   items?: ItemCatalogEntry[];
   recipes?: RecipeCatalogEntry[];
   techs?: TechCatalogEntry[];
-  units?: UnitCatalogEntry[];
+  world_units?: WorldUnitCatalogEntry[];
+  warfare?: WarfareCatalogView;
 }
 
 export interface GameEvent {

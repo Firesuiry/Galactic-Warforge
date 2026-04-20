@@ -76,6 +76,25 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 	ws.Units[unit.ID] = unit
 	ws.TileUnits[model.TileKey(0, 1)] = []string{unit.ID}
+	ws.CombatRuntime = &model.CombatRuntimeState{
+		EntityCounter: 3,
+		Squads: map[string]*model.CombatSquad{
+			"squad-1": {
+				ID:               "squad-1",
+				OwnerID:          player.PlayerID,
+				PlanetID:         ws.PlanetID,
+				SourceBuildingID: building.ID,
+				BlueprintID:      "prototype",
+				Count:            2,
+				HP:               160,
+				MaxHP:            160,
+				Shield:           model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10},
+				Weapon:           model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8},
+				State:            model.CombatSquadStateIdle,
+			},
+		},
+		OrbitalPlatforms: map[string]*model.OrbitalPlatform{},
+	}
 
 	ws.Pipelines = &model.PipelineNetworkState{
 		Nodes: map[string]*model.PipelineNode{
@@ -120,7 +139,20 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 
 	discovery := buildDiscovery()
-	snap := snapshot.Capture(ws, discovery)
+	space := model.NewSpaceRuntimeState()
+	systemRuntime := space.EnsurePlayerSystem(player.PlayerID, "sys-1")
+	systemRuntime.Fleets["fleet-1"] = &model.SpaceFleet{
+		ID:               "fleet-1",
+		OwnerID:          player.PlayerID,
+		SystemID:         "sys-1",
+		SourceBuildingID: building.ID,
+		Formation:        model.FormationTypeLine,
+		State:            model.FleetStateIdle,
+		Units:            []model.FleetUnitStack{{BlueprintID: "corvette", Count: 2}},
+		Weapon:           model.WeaponState{Type: model.WeaponTypeLaser, Damage: 80, FireRate: 10, Range: 24},
+		Shield:           model.ShieldState{Level: 80, MaxLevel: 80, RechargeRate: 2, RechargeDelay: 10},
+	}
+	snap := snapshot.CaptureRuntime(map[string]*model.WorldState{ws.PlanetID: ws}, ws.PlanetID, discovery, space)
 
 	data, err := snapshot.Encode(snap)
 	if err != nil {
@@ -131,9 +163,13 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		t.Fatalf("decode snapshot: %v", err)
 	}
 
-	restored, err := decoded.RestoreWorld()
+	worlds, activePlanetID, restoredSpace, err := decoded.RestoreRuntime()
 	if err != nil {
-		t.Fatalf("restore world: %v", err)
+		t.Fatalf("restore runtime: %v", err)
+	}
+	restored := worlds[activePlanetID]
+	if restored == nil {
+		t.Fatalf("expected restored active world for %s", activePlanetID)
 	}
 
 	if restored.Tick != ws.Tick {
@@ -173,6 +209,16 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 	if segment.Params.Attenuation < 0.09 || segment.Params.Attenuation > 0.11 {
 		t.Fatalf("pipeline segment attenuation mismatch: %f", segment.Params.Attenuation)
+	}
+	if restored.CombatRuntime == nil || restored.CombatRuntime.Squads["squad-1"] == nil || restored.CombatRuntime.Squads["squad-1"].BlueprintID != "prototype" {
+		t.Fatalf("expected combat runtime blueprint_id roundtrip, got %+v", restored.CombatRuntime)
+	}
+	if restoredSpace == nil || restoredSpace.PlayerSystem(player.PlayerID, "sys-1") == nil {
+		t.Fatalf("expected restored space runtime, got %+v", restoredSpace)
+	}
+	fleet := restoredSpace.PlayerSystem(player.PlayerID, "sys-1").Fleets["fleet-1"]
+	if fleet == nil || len(fleet.Units) != 1 || fleet.Units[0].BlueprintID != "corvette" {
+		t.Fatalf("expected fleet blueprint_id roundtrip, got %+v", fleet)
 	}
 
 	restoredDiscovery, err := decoded.RestoreDiscovery()

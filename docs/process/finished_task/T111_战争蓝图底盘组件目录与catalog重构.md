@@ -93,3 +93,27 @@
 3. 预置战争单位 `prototype`、`precision_drone`、`corvette`、`destroyer` 已迁移为公开蓝图，不再要求调用方把它们当作旧式固定单位类型硬编码。
 4. 新目录结构可被保存、读档、回放和 query 层稳定读取。
 5. 代码中不存在为了兼容旧结构而额外保留一整套包装层的权宜方案。
+
+## 完成情况
+
+- 已将原先混在 `/catalog.units` 里的战争固定单位表拆成两部分：
+  - `/catalog.world_units`：仅保留 `worker`、`soldier`
+  - `/catalog.warfare`：新增 `base_frames`、`base_hulls`、`components`、`public_blueprints`
+- 已新增 authoritative 战争目录模型：
+  - 底盘/船体：`light_frame`、`medium_frame`、`heavy_frame`、`assault_frame`、`corvette_hull`、`destroyer_hull` 等
+  - 组件目录：覆盖 `power`、`propulsion`、`defense`、`sensor`、`weapon`、`utility`
+  - 预置公开蓝图：`prototype`、`precision_drone`、`corvette`、`destroyer`
+- 已把战争运行态从旧 `unit_type` 语义切到 `blueprint_id`：
+  - `deploy_squad` / `commission_fleet` payload 改为 `blueprint_id`
+  - `CombatSquad` 与 `FleetUnitStack` 改为持久化 `blueprint_id`
+  - 生产命令 `produce` 继续只接受世界单位 `unit_type`
+- 已让部署与舰队运行态直接依赖新的公开蓝图目录与 runtime profile，不再读取旧战争固定单位表。
+- 已补 `/catalog`、snapshot round-trip、部署链路、CLI 帮助与 shared-client 类型同步，并更新：
+  - `docs/dev/服务端API.md`
+  - `docs/dev/客户端CLI.md`
+
+## 测试
+
+- `cd server && /home/firesuiry/sdk/go1.25.0/bin/go test ./...`
+- `cd client-cli && npm test`
+- `cd client-web && npm run build`

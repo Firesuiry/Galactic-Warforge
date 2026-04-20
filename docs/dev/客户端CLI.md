@@ -62,7 +62,7 @@
 | `build`                       | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]`                                                                                                 | 建造任意服务端可建建筑                 |
 | `move`                        | `<entity_id> <x> <y> [--z <z>]`                                                                                                                                                | 移动单位                               |
 | `attack`                      | `<entity_id> <target_entity_id>`                                                                                                                                               | 攻击单位或建筑                         |
-| `produce`                     | `<entity_id> <unit_type>`                                                                                                                                                      | 按服务端 `/catalog.units` 生产公开单位 |
+| `produce`                     | `<entity_id> <unit_type>`                                                                                                                                                      | 按服务端 `/catalog.world_units` 生产公开单位 |
 | `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
 | `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
 | `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>]` | 配置物流站无人机容量、优先级与星际开关 |
@@ -172,8 +172,8 @@ build 20 8 recomposing_assembler --recipe gravity_missile
 
 - `produce` 只保留给 `worker` / `soldier` 这类 `world_produce` 地表单位
 - `prototype` / `precision_drone` / `corvette` / `destroyer` 先通过配方做成载荷 item，再用部署命令进入 authoritative runtime
-- `help produce` 会读取服务端 `/catalog.units`，只展示 `production_mode=world_produce && runtime_class=world_unit` 的单位
-- 新增的舰队 CLI 命令会直接对齐 `/catalog.units[].deploy_command`
+- `help produce` 会读取服务端 `/catalog.world_units`，只展示 `production_mode=world_produce && runtime_class=world_unit` 的单位
+- 新增的舰队 CLI 命令会直接对齐 `/catalog.warfare.public_blueprints[].deploy_command`
 
 `vertical_launching_silo` 现在有服务端默认配方，建造时即使不传 `--recipe` 也会自动挂上 `small_carrier_rocket`：
 
@@ -235,8 +235,8 @@ build 11 6 conveyor_belt_mk3 --direction auto
    - `destroyer`
 2. 用 `transfer <building_id> <item_id> <quantity>` 把载荷装进部署枢纽本地存储
 3. 用部署命令生成 runtime 实体：
-   - `deploy_squad <building_id> <prototype|precision_drone> [--count <n>] [--planet <planet_id>]`
-   - `commission_fleet <building_id> <corvette|destroyer> <system_id> [--count <n>] [--fleet-id <fleet_id>]`
+   - `deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]`
+   - `commission_fleet <building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]`
 4. 用运行态命令和查询继续控制：
    - `fleet_assign <fleet_id> <line|vee|circle|wedge>`
    - `fleet_attack <fleet_id> <planet_id> <target_id>`

@@ -656,15 +656,15 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 	utypeID := fmt.Sprintf("%v", utypeRaw)
 	unitEntry, ok := model.PublicWorldProduceUnitByID(utypeID)
 	if !ok {
-		if entry, exists := model.PublicUnitCatalogEntryByID(utypeID); exists {
+		if entry, exists := model.PublicWarBlueprintByID(utypeID); exists {
 			res.Code = model.CodeValidationFailed
 			switch entry.DeployCommand {
 			case string(model.CmdDeploySquad):
-				res.Message = fmt.Sprintf("unit %s is not produced via produce; use deploy_squad", utypeID)
+				res.Message = fmt.Sprintf("blueprint %s is not produced via produce; use deploy_squad", utypeID)
 			case string(model.CmdCommissionFleet):
-				res.Message = fmt.Sprintf("unit %s is not produced via produce; use commission_fleet", utypeID)
+				res.Message = fmt.Sprintf("blueprint %s is not produced via produce; use commission_fleet", utypeID)
 			default:
-				res.Message = fmt.Sprintf("unit %s is not produced via produce", utypeID)
+				res.Message = fmt.Sprintf("blueprint %s is not produced via produce", utypeID)
 			}
 			return res, nil
 		}

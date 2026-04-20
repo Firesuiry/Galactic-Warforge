@@ -25,7 +25,8 @@ export type {
   PlanetSceneParams,
   ReplayRequest,
   RollbackRequest,
-  UnitTypeName,
+  BlueprintID,
+  WorldUnitID,
 } from '../../shared-client/src/api.js';
 export type {
   ConfigureLogisticsSlotOptions,

@@ -3,8 +3,8 @@ package gamecore
 import (
 	"testing"
 
-	"siliconworld/internal/query"
 	"siliconworld/internal/model"
+	"siliconworld/internal/query"
 	"siliconworld/internal/visibility"
 )
 
@@ -72,10 +72,10 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		Type:   model.CmdDeploySquad,
 		Target: model.CommandTarget{EntityID: base.ID},
 		Payload: map[string]any{
-			"building_id": base.ID,
-			"unit_type":   "prototype",
-			"count":       2,
-			"planet_id":   ws.PlanetID,
+			"building_id":  base.ID,
+			"blueprint_id": "prototype",
+			"count":        2,
+			"planet_id":    ws.PlanetID,
 		},
 	})
 	if deployRes.Code != model.CodeOK {
@@ -87,16 +87,19 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 	if ws.CombatRuntime == nil || len(ws.CombatRuntime.Squads) != 1 {
 		t.Fatalf("expected squad runtime to be created, got %+v", ws.CombatRuntime)
 	}
+	if ws.CombatRuntime.Squads["squad-1"] != nil && ws.CombatRuntime.Squads["squad-1"].BlueprintID != "prototype" {
+		t.Fatalf("expected deployed squad to persist prototype blueprint_id, got %+v", ws.CombatRuntime.Squads["squad-1"])
+	}
 
 	commissionRes, commissionEvents := core.execCommissionFleet(ws, "p1", model.Command{
 		Type:   model.CmdCommissionFleet,
 		Target: model.CommandTarget{EntityID: base.ID, SystemID: "sys-1"},
 		Payload: map[string]any{
-			"building_id": base.ID,
-			"unit_type":   "corvette",
-			"count":       1,
-			"system_id":   "sys-1",
-			"fleet_id":    "fleet-alpha",
+			"building_id":  base.ID,
+			"blueprint_id": "corvette",
+			"count":        1,
+			"system_id":    "sys-1",
+			"fleet_id":     "fleet-alpha",
 		},
 	})
 	if commissionRes.Code != model.CodeOK {
@@ -105,12 +108,16 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 	if len(commissionEvents) == 0 || commissionEvents[0].EventType != model.EvtFleetCommissioned {
 		t.Fatalf("expected fleet_commissioned event, got %+v", commissionEvents)
 	}
+	runtime := core.spaceRuntime.PlayerSystem("p1", "sys-1")
+	if runtime == nil || runtime.Fleets["fleet-alpha"] == nil || len(runtime.Fleets["fleet-alpha"].Units) != 1 || runtime.Fleets["fleet-alpha"].Units[0].BlueprintID != "corvette" {
+		t.Fatalf("expected commissioned fleet to persist corvette blueprint_id, got %+v", runtime)
+	}
 
 	assignRes, _ := core.execFleetAssign(ws, "p1", model.Command{
 		Type: model.CmdFleetAssign,
 		Payload: map[string]any{
-			"fleet_id":   "fleet-alpha",
-			"formation":  string(model.FormationTypeWedge),
+			"fleet_id":  "fleet-alpha",
+			"formation": string(model.FormationTypeWedge),
 		},
 	})
 	if assignRes.Code != model.CodeOK {
@@ -120,9 +127,9 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 	attackRes, _ := core.execFleetAttack(ws, "p1", model.Command{
 		Type: model.CmdFleetAttack,
 		Payload: map[string]any{
-			"fleet_id":   "fleet-alpha",
-			"planet_id":  ws.PlanetID,
-			"target_id":  "enemy-t100",
+			"fleet_id":  "fleet-alpha",
+			"planet_id": ws.PlanetID,
+			"target_id": "enemy-t100",
 		},
 	})
 	if attackRes.Code != model.CodeOK {
@@ -195,10 +202,10 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 		Type:   model.CmdDeploySquad,
 		Target: model.CommandTarget{EntityID: base.ID},
 		Payload: map[string]any{
-			"building_id": base.ID,
-			"unit_type":   "prototype",
-			"count":       2,
-			"planet_id":   ws.PlanetID,
+			"building_id":  base.ID,
+			"blueprint_id": "prototype",
+			"count":        2,
+			"planet_id":    ws.PlanetID,
 		},
 	}); res.Code != model.CodeOK {
 		t.Fatalf("dispatch deploy_squad failed: %s (%s)", res.Code, res.Message)
@@ -208,11 +215,11 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 		Type:   model.CmdCommissionFleet,
 		Target: model.CommandTarget{EntityID: base.ID, SystemID: "sys-1"},
 		Payload: map[string]any{
-			"building_id": base.ID,
-			"unit_type":   "corvette",
-			"count":       1,
-			"system_id":   "sys-1",
-			"fleet_id":    "fleet-dispatcher",
+			"building_id":  base.ID,
+			"blueprint_id": "corvette",
+			"count":        1,
+			"system_id":    "sys-1",
+			"fleet_id":     "fleet-dispatcher",
 		},
 	}); res.Code != model.CodeOK {
 		t.Fatalf("dispatch commission_fleet failed: %s (%s)", res.Code, res.Message)
