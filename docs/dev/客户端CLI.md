@@ -302,7 +302,15 @@ build 11 6 conveyor_belt_mk3 --direction auto
 
 ### 4. 战争系统最小 CLI 闭环
 
-战争链路当前推荐用下面这组命令做最小闭环验证：
+战争链路当前推荐优先在 `config-war.yaml + map-war.yaml` 这套 authoritative 官方战争验证局里做最小闭环验证。该场景已经为 `p1` / `p2` 预置：
+
+- `battlefield_analysis_base` 部署枢纽
+- `recomposing_assembler`
+- `planetary_logistics_station`
+- `interstellar_logistics_station`
+- `prototype` / `precision_drone` / `corvette` / `destroyer` 四条公开战争蓝图科技
+
+在这个场景里，推荐按下面这组命令验证最小闭环：
 
 1. 蓝图与改型：
    - `blueprints`
@@ -342,6 +350,23 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `blockade_planet` / `landing_start` 的同步返回只代表请求入队，最终 authoritative 结果要看 SSE `command_result` 或 `event_snapshot --types command_result`。
 - `system_runtime` 现在会输出舰队外，还会显示 `contacts`、`planet_blockades`、`landing_operations` 与 `battle_reports`；`planet_runtime` 会显示 `contacts`、`frontlines` 与 `ground_task_forces`。
 - `war_industry` 现在是最直接的补给查询入口，能看到生产单、翻修单、部署枢纽和供给节点库存。
+- 官方战争验证局会把军工底座和补给节点预置好，但仍不会直接生成舰队、任务群和战区；这些实体依然需要用上面的 CLI 命令真实创建。
+- `/war` 页面适合做蓝图查看、部署尝试、姿态切换、战报/情报观察，但当前 `task_force_create|assign`、`theater_create|define_zone|set_objective` 与量产/翻修下单仍以 CLI 为最稳入口。
+
+### 4.1 AI 军事委派的真实入口
+
+当前 AI 军事委派已经落在 `agent-gateway + client-cli runtime` 上，真实使用顺序是：
+
+1. 先用上面的战争命令建好要委派的 `task_force` / `theater`
+2. 再用 `agent_update` 给目标 agent 授权具体 `--theater-ids` / `--task-force-ids`
+3. 最后用 `agent_message` 下达目标，让 agent 在授权范围内执行
+
+当前硬边界：
+
+- 只配置 `commandCategories=combat` 不够，战争命令还必须命中 `--military-command-ids`
+- `blockade_planet` / `landing_start` / `queue_military_production` 还会分别受 `--allow-blockade` / `--allow-landing` / `--allow-military-production` 控制
+- 运行时会拿 authoritative `theaters` / `task_forces` 对齐 `system_id` / `planet_id` / `task_force_id` / `theater_id`，越界直接拒绝
+- 当前查询仍以玩家全量可见视图返回，agent 侧硬限制主要控制“能否执行”和“能否越界下命令”
 
 ### 5. 物流与多星球最小闭环现在可直接操作
 

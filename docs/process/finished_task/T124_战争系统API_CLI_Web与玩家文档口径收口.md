@@ -84,3 +84,18 @@
 1. API、CLI、Web、玩家文档对战争系统的口径一致。
 2. 文档中每个公开入口都能在真实代码和验证场景中找到对应能力。
 3. 对未完成能力有明确边界说明，不再出现误导性“已全部实现”表述。
+
+## 完成情况
+
+- 完成时间：2026-04-21
+- 结果：已完成
+- 实现摘要：
+  - 更新 `docs/dev/服务端API.md`，补齐 `config-war.yaml + map-war.yaml` 官方战争验证场景说明，明确预置科技、军工锚点、补给节点、公开预置蓝图和 `accepted != 最终成功` 的 authoritative 边界。
+  - 更新 `docs/dev/客户端CLI.md`，把官方战争验证局作为最小 CLI 闭环的推荐入口，并补充 AI 军事委派的真实使用顺序与权限边界。
+  - 更新 `docs/dev/client-web.md`，明确 `/war` 适用的官方战争场景、页面职责，以及 `/war` 与 `/agents` 在战争操作和 AI 委派上的边界分工。
+  - 更新 `docs/player/玩法指南.md`，补齐战争系统真实起步路径、蓝图/军工/部署/战区/封锁/登陆链路、AI 军事委派入口，并删除过期的“只剩基础命令表”口径。
+  - 更新 `docs/player/上手与验证.md`，把官方战争验证路径扩成可复现的蓝图改型、量产、编舰、任务群、战区、封锁、登陆和 AI 委派验证流程，并写明占位 ID 的获取方式。
+- 关键验证：
+  - `cd server && /home/firesuiry/sdk/go1.25.0/bin/go test ./internal/startup ./internal/gateway -count=1`
+  - `cd client-cli && npm test -- --test-name-pattern='official war regression'`
+  - `cd client-web && npx playwright test tests/war-workbench.spec.ts tests/war-workbench-authoritative.spec.ts`

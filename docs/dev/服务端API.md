@@ -73,6 +73,46 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 当前官方 midgame 场景同样**不**直接预置 `prototype` / `precision_drone` / `corvette` / `destroyer`；这些单位线现在已经是公开 API 能力，但仍要求玩家自己走 `research -> queue_military_production -> /world/warfare/industry -> deploy_squad|commission_fleet` 这条最小闭环。
 - `map` 配置新增 `overrides.planets.<planet_id>.kind`，可强制把某颗行星覆盖成 `gas_giant`、`rocky` 或 `ice`，不再依赖 seed 抽卡。当前 `map-midgame.yaml` 把 `planet-1-2` 强制设成 `gas_giant`，用于验证 `orbital_collector` 与戴森中后期路线。
 
+**官方战争验证场景**
+- 服务端当前提供一套 authoritative 官方战争验证局：`config-war.yaml + map-war.yaml`
+- 启动命令：
+```bash
+cd /home/firesuiry/develop/siliconWorld/server
+env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
+  go run ./cmd/server -config config-war.yaml -map-config map-war.yaml
+```
+- 默认玩家仍是：
+  - `p1 / key_player_1`
+  - `p2 / key_player_2`
+- 当前 fresh war scene 会把 `battlefield.initial_active_planet_id` 固定到 `planet-1-1`，因此 `GET /state/summary.active_planet_id` 在新局下应直接返回 `planet-1-1`
+- `players[].bootstrap.completed_techs` 会直接为 `p1` / `p2` 预置：
+  - `battlefield_analysis`
+  - `prototype`
+  - `precision_drone`
+  - `corvette`
+  - `destroyer`
+  - 以及战争链路依赖的 `electromagnetism`、`basic_logistics_system`、`automatic_metallurgy`、`basic_assembling_processes`、`interstellar_logistics`、`integrated_logistics`、`signal_tower`、`plasma_turret`、`planetary_shield`
+- `scenario_bootstrap.planets[]` 会在 `planet-1-1` 直接落地真实战争锚点，而不是只做 query 层伪造：
+  - 已通电的 `battlefield_analysis_base` 部署枢纽
+  - 已通电的 `recomposing_assembler`
+  - 已通电的 `planetary_logistics_station`
+  - 已通电的 `interstellar_logistics_station`
+  - 这些物流站会预置弹药、燃料、部件等军需库存
+- `GET /world/warfare/industry` 在官方战争场景下应直接能看到：
+  - `deployment_hubs[]`
+  - `supply_nodes[]`
+  - 且 `supply_nodes[].label` 至少能出现 `Orbital Supply Port`、`Planetary Logistics Station`、`Interstellar Logistics Station`
+- `/catalog.warfare.public_blueprints` 与 `GET /world/warfare/blueprints/{blueprint_id}` 会暴露当前公开战争预置蓝图：
+  - `prototype`
+  - `precision_drone`
+  - `corvette`
+  - `destroyer`
+- 这套场景的目标是让 API / CLI / Web / agent-gateway 可以直接验证战争闭环，而不是要求玩家先从普通新局自然推进到军工底座
+- 当前边界也要写清：
+  - 官方战争场景会预置科技、军工锚点和军需节点，但**不会**预先替玩家创建舰队、任务群或战区
+  - 公开太空/地面单位仍然要走 `blueprint_* -> queue_military_production -> /world/warfare/industry.ready_payloads -> deploy_squad|commission_fleet`
+  - `blockade_planet` / `landing_start` 的同步 `accepted` 响应只表示命令已入队，最终状态仍要以后续 `/world/systems/{system_id}/runtime.planet_blockades[]`、`landing_operations[]` 或 `command_result` / 事件流对账
+
 **GET /health**
 - 说明: 健康检查（无需认证）
 - 响应:
