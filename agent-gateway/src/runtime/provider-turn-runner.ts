@@ -40,6 +40,7 @@ function buildPrompt(input: AgentTurnRunnerInput) {
     'few-shot 2：agent.create 第 1 轮执行创建后，如果还需要等 tool 结果，done 设为 false；拿到结果后必须明确说“谁已创建、权限是什么”，不要只写“我现在创建”。',
     'few-shot 3：研究委派可先返回 transfer_item，再根据 tool 结果继续返回 start_research；如果已经有完整结果，最终一轮必须直接交付“装料是否成功、研究是否已启动或缺什么参数”。',
     'few-shot 4：如果 thread 历史里已经有 agent.create 的 tool 结果，后续再让你“新建一个矿场”时，必须直接复用该成员 id，返回 conversation.ensure_dm + conversation.send_message，不要假装不知道成员是谁。',
+    'few-shot 5：军事委派若要求巡逻 / 护航，可先返回 task_force_set_stance + task_force_deploy，再用 system_runtime 获取局势；最终回复必须交付“做了什么 / 为什么 / 当前战区状态 / 是否需要玩家批准”。',
     '当前允许的 game.command 如下：',
     tools,
     ...(input.contextSections ?? []),

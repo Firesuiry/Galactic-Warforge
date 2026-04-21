@@ -125,10 +125,33 @@
 | 命令            | 参数                                                                                                                                                          | 说明                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `agent_list`    | 无                                                                                                                                                            | 列出当前 agent-gateway 中的 agent profile          |
-| `agent_create`  | `<name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]` | 创建一个绑定当前玩家 key 的 agent                  |
-| `agent_update`  | `<agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]`                    | 更新 agent role / policy                           |
+| `agent_create`  | `<name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true\|false>] [--allow-landing <true\|false>] [--allow-military-production <true\|false>] [--military-production-limit <n>]` | 创建一个绑定当前玩家 key 的 agent                  |
+| `agent_update`  | `<agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true\|false>] [--allow-landing <true\|false>] [--allow-military-production <true\|false>] [--military-production-limit <n>]`                    | 更新 agent role / policy                           |
 | `agent_message` | `<agent_id> <content>`                                                                                                                                       | 直接向单 agent thread 发送一条任务消息             |
 | `agent_thread`  | `<agent_id>`                                                                                                                                                 | 查看 agent thread 中的消息、tool call、执行日志与最近一次 turn 摘要 |
+
+补充说明：
+
+- `--theater-ids` / `--task-force-ids` 用来把现有战区或任务群显式委派给 agent
+- `--military-command-ids` 是战争命令白名单；当前常用值包括 `system_runtime`、`war_industry`、`task_forces`、`theaters`、`queue_military_production`、`task_force_set_stance`、`task_force_deploy`、`blockade_planet`、`landing_start`
+- `--allow-blockade`、`--allow-landing`、`--allow-military-production` 是高风险动作开关
+- `--military-production-limit` 是单次 `queue_military_production` 可排产的最大数量
+
+一个最小军事委派例子：
+
+```bash
+agent_update agent-war-director \
+  --command-categories observe,combat,management \
+  --theater-ids theater-front \
+  --task-force-ids tf-front \
+  --military-command-ids system_runtime,task_force_set_stance,task_force_deploy \
+  --allow-blockade false \
+  --allow-landing false \
+  --allow-military-production false \
+  --military-production-limit 0
+
+agent_message agent-war-director 接管 theater-front，并让 tf-front 在战区内维持巡逻，汇报当前局势。
+```
 
 ### 工具类
 

@@ -44,6 +44,16 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
   const commandCategories = parseCsv(getStringOption(parsed, 'command-categories'));
   const canDispatchAgentIds = parseCsv(getStringOption(parsed, 'dispatch-agent-ids'));
   const canDirectMessageAgentIds = parseCsv(getStringOption(parsed, 'direct-message-agent-ids'));
+  const theaterIds = parseCsv(getStringOption(parsed, 'theater-ids'));
+  const taskForceIds = parseCsv(getStringOption(parsed, 'task-force-ids'));
+  const allowedCommandIds = parseCsv(getStringOption(parsed, 'military-command-ids'));
+  const allowBlockade = parseBooleanOption(getStringOption(parsed, 'allow-blockade'), 'allow-blockade');
+  const allowLanding = parseBooleanOption(getStringOption(parsed, 'allow-landing'), 'allow-landing');
+  const allowMilitaryProduction = parseBooleanOption(
+    getStringOption(parsed, 'allow-military-production'),
+    'allow-military-production',
+  );
+  const maxMilitaryProductionCountRaw = getStringOption(parsed, 'military-production-limit');
 
   const policy: AgentGatewayPolicy = {};
   if (planetIds) {
@@ -73,6 +83,34 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
   if (canDirectMessageAgentIds) {
     policy.canDirectMessageAgentIds = canDirectMessageAgentIds;
   }
+  const military: NonNullable<AgentGatewayPolicy['military']> = {};
+  if (theaterIds) {
+    military.theaterIds = theaterIds;
+  }
+  if (taskForceIds) {
+    military.taskForceIds = taskForceIds;
+  }
+  if (allowedCommandIds) {
+    military.allowedCommandIds = allowedCommandIds;
+  }
+  if (allowBlockade !== undefined) {
+    military.allowBlockade = allowBlockade;
+  }
+  if (allowLanding !== undefined) {
+    military.allowLanding = allowLanding;
+  }
+  if (allowMilitaryProduction !== undefined) {
+    military.allowMilitaryProduction = allowMilitaryProduction;
+  }
+  if (maxMilitaryProductionCountRaw !== undefined) {
+    military.maxMilitaryProductionCount = Number.parseInt(maxMilitaryProductionCountRaw, 10);
+    if (Number.isNaN(military.maxMilitaryProductionCount)) {
+      throw new Error('military-production-limit 必须是整数');
+    }
+  }
+  if (Object.keys(military).length > 0) {
+    policy.military = military;
+  }
   return Object.keys(policy).length > 0 ? policy : undefined;
 }
 
@@ -97,7 +135,7 @@ export async function cmdAgentCreate(args: string[]): Promise<string> {
   const name = parsed.positionals[0];
   const providerId = getStringOption(parsed, 'provider');
   if (!name || !providerId) {
-    return fmtError('Usage: agent_create <name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]');
+    return fmtError('Usage: agent_create <name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-landing <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
   }
 
   const auth = getAuth();
@@ -127,7 +165,7 @@ export async function cmdAgentUpdate(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   const agentId = parsed.positionals[0];
   if (!agentId) {
-    return fmtError('Usage: agent_update <agent_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]');
+    return fmtError('Usage: agent_update <agent_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-landing <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
   }
 
   try {

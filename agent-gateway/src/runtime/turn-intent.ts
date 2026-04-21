@@ -61,6 +61,15 @@ export function classifyTurnIntent(history: Array<{ role: string; content: strin
     '切换',
     '设置',
     '发射',
+    'task force',
+    'task_force',
+    'theater',
+    '战区',
+    '巡逻',
+    '护航',
+    '补给',
+    '封锁',
+    '登陆',
   ])) {
     return 'game_mutation';
   }
@@ -79,6 +88,10 @@ export function classifyTurnIntent(history: Array<{ role: string; content: strin
     '扫描',
     '状态',
     '局势',
+    'contacts',
+    'battle report',
+    '侦察',
+    '战报',
   ])) {
     return 'observe';
   }

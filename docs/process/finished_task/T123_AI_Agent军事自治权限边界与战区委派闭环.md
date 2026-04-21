@@ -79,3 +79,18 @@ SiliconWorld 的核心差异之一是 AI Agent 是一等公民。战争系统如
 2. agent 军事权限具备明确边界，不是默认全局最高权限。
 3. 军事 agent 返回的是实际执行结果和局势总结，而不是空泛“已开始处理”。
 4. 至少一条军事自治链路可在官方战争验证场景中稳定回归。
+
+## 完成情况
+
+- 完成时间：2026-04-20
+- 结果：已完成
+- 实现摘要：
+  - `agent-gateway` 新增军事 policy 模型与统一归一化逻辑，补上 `theaterIds`、`taskForceIds`、`allowedCommandIds`、量产上限和 `allowBlockade / allowLanding / allowMilitaryProduction` 三个高风险开关；下级 agent 创建与更新也会继承并受父级边界约束。
+  - `agent-gateway` 的 typed `game.command` 扩展到战争链路，已支持 `system_runtime`、`war_industry`、`task_forces`、`theaters`、`queue_military_production`、`task_force_set_stance`、`task_force_deploy`、`blockade_planet`、`landing_start`，并把军事委派上下文与任务模板注入 provider prompt。
+  - `client-cli` runtime 新增军事硬限制：战争命令必须命中 `allowedCommandIds`，并基于 authoritative `/world/warfare/theaters` 与 `/world/warfare/task-forces` 校验战区 / 任务群 / system / planet 是否越界；封锁、登陆、量产会继续受风险开关和量产上限约束。
+  - agent 完成军事动作后会自动补一段可审计摘要，至少覆盖“做了什么 / 为什么 / 当前战区状态 / 需要玩家批准”，避免只返回空泛中间态。
+  - CLI 侧 `agent_create` / `agent_update` 已补齐军事委派参数；`docs/dev/agent-gateway.md` 与 `docs/dev/客户端CLI.md` 已同步更新本次真实口径。
+- 关键验证：
+  - `cd client-cli && npm test`
+  - `cd agent-gateway && npm test`
+  - `cd agent-gateway && npm test -- src/t123_military_autonomy.test.ts`

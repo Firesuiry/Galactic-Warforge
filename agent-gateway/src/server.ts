@@ -9,10 +9,12 @@ import { handleAgentRoutes } from './routes/agents.js';
 import { handleConversationRoutes } from './routes/conversations.js';
 import { handleProviderRoutes } from './routes/providers.js';
 import { handleScheduleRoutes } from './routes/schedules.js';
+import { createDefaultPolicy, isSubsetWithin, normalizePolicy } from './runtime/agent-policy.js';
 import type { CanonicalAgentAction } from './runtime/action-schema.js';
 import { createEventBus } from './runtime/events.js';
 import { summarizeGameCommandAction } from './runtime/game-command-executor.js';
 import { runAgentLoop } from './runtime/loop.js';
+import { appendMilitaryAuditSummary, buildMilitaryContextSections, filterCommandsByMilitaryPolicy } from './runtime/military.js';
 import {
   createMailboxController,
   type MailboxEntry,
@@ -33,7 +35,7 @@ import { createThreadStore } from './store/thread-store.js';
 import { createTurnStore } from './store/turn-store.js';
 import type {
   AgentInstance,
-  AgentPolicy,
+  AgentPolicyPatch,
   AgentThread,
   Conversation,
   ConversationMessage,
@@ -67,33 +69,6 @@ function buildCapabilities(): GatewayCapabilities {
   };
 }
 
-function createDefaultPolicy(): AgentPolicy {
-  return {
-    planetIds: [],
-    commandCategories: [],
-    canCreateAgents: false,
-    canCreateChannel: false,
-    canManageMembers: false,
-    canInviteByPlanet: false,
-    canCreateSchedules: false,
-    canDirectMessageAgentIds: [],
-    canDispatchAgentIds: [],
-  };
-}
-
-function normalizePolicy(policy?: Partial<AgentPolicy>, base?: AgentPolicy): AgentPolicy {
-  const fallback = base ?? createDefaultPolicy();
-  return {
-    ...fallback,
-    ...policy,
-    planetIds: policy?.planetIds ?? fallback.planetIds,
-    commandCategories: policy?.commandCategories ?? fallback.commandCategories,
-    canCreateAgents: policy?.canCreateAgents ?? fallback.canCreateAgents,
-    canDirectMessageAgentIds: policy?.canDirectMessageAgentIds ?? fallback.canDirectMessageAgentIds,
-    canDispatchAgentIds: policy?.canDispatchAgentIds ?? fallback.canDispatchAgentIds,
-  };
-}
-
 function dedupe(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
@@ -106,17 +81,6 @@ function roleRank(role?: AgentInstance['role']) {
     return 2;
   }
   return 1;
-}
-
-function isSubsetWithin(requested: string[] | undefined, allowed: string[] | undefined) {
-  if (!requested || requested.length === 0) {
-    return true;
-  }
-  if (!allowed || allowed.length === 0) {
-    return true;
-  }
-  const allowedSet = new Set(allowed);
-  return requested.every((value) => allowedSet.has(value));
 }
 
 function buildTurnErrorHint(code: string | undefined, rawMessage: string) {
@@ -400,13 +364,34 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
     }
 
     const policy = normalizePolicy(
-      typeof action.policy === 'object' && action.policy ? action.policy as Partial<AgentPolicy> : undefined,
+      typeof action.policy === 'object' && action.policy ? action.policy as AgentPolicyPatch : undefined,
     );
     if (!isSubsetWithin(policy.commandCategories, actor.policy?.commandCategories)) {
       throw new Error('child command categories exceed creator policy');
     }
     if (!isSubsetWithin(policy.planetIds, actor.policy?.planetIds)) {
       throw new Error('child planet scope exceeds creator policy');
+    }
+    if (!isSubsetWithin(policy.military.theaterIds, actor.policy?.military.theaterIds)) {
+      throw new Error('child theater scope exceeds creator policy');
+    }
+    if (!isSubsetWithin(policy.military.taskForceIds, actor.policy?.military.taskForceIds)) {
+      throw new Error('child task-force scope exceeds creator policy');
+    }
+    if (!isSubsetWithin(policy.military.allowedCommandIds, actor.policy?.military.allowedCommandIds)) {
+      throw new Error('child military commands exceed creator policy');
+    }
+    if (policy.military.maxMilitaryProductionCount > (actor.policy?.military.maxMilitaryProductionCount ?? 0)) {
+      throw new Error('child military production limit exceeds creator policy');
+    }
+    if (policy.military.allowBlockade && !actor.policy?.military.allowBlockade) {
+      throw new Error('child blockade permission exceeds creator policy');
+    }
+    if (policy.military.allowLanding && !actor.policy?.military.allowLanding) {
+      throw new Error('child landing permission exceeds creator policy');
+    }
+    if (policy.military.allowMilitaryProduction && !actor.policy?.military.allowMilitaryProduction) {
+      throw new Error('child military production permission exceeds creator policy');
     }
 
     const providerId = typeof action.providerId === 'string' && action.providerId.trim() !== ''
@@ -483,13 +468,34 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
     }
 
     const policy = action.policy && typeof action.policy === 'object'
-      ? normalizePolicy(action.policy as Partial<AgentPolicy>, target.policy ?? createDefaultPolicy())
+      ? normalizePolicy(action.policy as AgentPolicyPatch, target.policy ?? createDefaultPolicy())
       : target.policy ?? createDefaultPolicy();
     if (!isSubsetWithin(policy.commandCategories, actor.policy?.commandCategories)) {
       throw new Error('updated command categories exceed actor policy');
     }
     if (!isSubsetWithin(policy.planetIds, actor.policy?.planetIds)) {
       throw new Error('updated planet scope exceeds actor policy');
+    }
+    if (!isSubsetWithin(policy.military.theaterIds, actor.policy?.military.theaterIds)) {
+      throw new Error('updated theater scope exceeds actor policy');
+    }
+    if (!isSubsetWithin(policy.military.taskForceIds, actor.policy?.military.taskForceIds)) {
+      throw new Error('updated task-force scope exceeds actor policy');
+    }
+    if (!isSubsetWithin(policy.military.allowedCommandIds, actor.policy?.military.allowedCommandIds)) {
+      throw new Error('updated military commands exceed actor policy');
+    }
+    if (policy.military.maxMilitaryProductionCount > (actor.policy?.military.maxMilitaryProductionCount ?? 0)) {
+      throw new Error('updated military production limit exceeds actor policy');
+    }
+    if (policy.military.allowBlockade && !actor.policy?.military.allowBlockade) {
+      throw new Error('updated blockade permission exceeds actor policy');
+    }
+    if (policy.military.allowLanding && !actor.policy?.military.allowLanding) {
+      throw new Error('updated landing permission exceeds actor policy');
+    }
+    if (policy.military.allowMilitaryProduction && !actor.policy?.military.allowMilitaryProduction) {
+      throw new Error('updated military production permission exceeds actor policy');
     }
 
     const role = typeof action.role === 'string' ? action.role as AgentInstance['role'] : target.role;
@@ -604,6 +610,13 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
         }));
 
         const playerKey = await secretStore.readValue(agent.playerKeySecretId);
+        const militaryContext = await buildMilitaryContextSections(agent, playerKey);
+        const allowedCommands = filterCommandsByMilitaryPolicy(
+          getAgentAllowedCommands({
+            allowedCategories: agent.policy?.commandCategories,
+          }),
+          agent,
+        );
         const result = await runAgentLoop({
           maxSteps: provider.toolPolicy.maxSteps,
           provider: {
@@ -612,15 +625,14 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
               provider,
               secretStore,
               history: input.history,
-              allowedCommands: getAgentAllowedCommands({
-                allowedCategories: agent.policy?.commandCategories,
-              }),
+              allowedCommands,
               contextSections: [
                 `当前会话：${conversation.name}`,
                 `当前智能体：${agent.name}`,
                 '可用 action: game.command / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
                 '如果本轮无需动作且已经完成，可直接返回 assistantMessage + [] + true。',
                 '如果同时返回 assistantMessage 与 final_answer，则以 final_answer 作为正式回复。',
+                ...militaryContext,
               ],
             }),
           },
@@ -632,6 +644,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
             }, {
               allowedCategories: agent.policy?.commandCategories,
               allowedPlanetIds: agent.policy?.planetIds,
+              military: agent.policy?.military,
             }),
           },
           gatewayRuntime: {
@@ -691,13 +704,20 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
             }));
           },
         });
+        const finalMessageText = await appendMilitaryAuditSummary({
+          agent,
+          playerKey,
+          requestContent: history.at(-1)?.content ?? '',
+          finalMessage: result.finalMessage,
+          executedActions,
+        });
 
         let finalMessageId = currentTurn.finalMessageId;
-        if (result.finalMessage) {
+        if (finalMessageText) {
           const finalMessage = await appendAgentConversationMessage(
             conversation,
             agent,
-            result.finalMessage,
+            finalMessageText,
             'agent_message',
             {
               replyToMessageId: currentTurn.requestMessageId,

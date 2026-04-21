@@ -2,13 +2,15 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
+import { createDefaultPolicy, normalizePolicy } from '../runtime/agent-policy.js';
 import { runAgentLoop } from '../runtime/loop.js';
 import type { CanonicalAgentAction } from '../runtime/action-schema.js';
 import type { GatewayEvent } from '../runtime/events.js';
+import { appendMilitaryAuditSummary, buildMilitaryContextSections, filterCommandsByMilitaryPolicy } from '../runtime/military.js';
 import { classifyPublicTurnError } from '../runtime/provider-error.js';
 import { runProviderTurn, type AgentTurnRunner } from '../runtime/turn.js';
 import { countsAsExecutedAction, resolveTurnOutcomeKind } from '../runtime/turn-validator.js';
-import type { AgentInstance, AgentPolicy, AgentThread, ModelProvider } from '../types.js';
+import type { AgentInstance, AgentPolicyPatch, AgentThread, ModelProvider } from '../types.js';
 
 interface AgentStore {
   list: () => Promise<AgentInstance[]>;
@@ -48,33 +50,6 @@ interface AgentRouteContext {
   ensureDirectConversation?: (actor: AgentInstance, targetAgentId: string) => Promise<string>;
   sendConversationMessage?: (actor: AgentInstance, action: Record<string, unknown>) => Promise<string>;
   turnRunner?: AgentTurnRunner;
-}
-
-function createDefaultPolicy(): AgentPolicy {
-  return {
-    planetIds: [],
-    commandCategories: [],
-    canCreateAgents: false,
-    canCreateChannel: false,
-    canManageMembers: false,
-    canInviteByPlanet: false,
-    canCreateSchedules: false,
-    canDirectMessageAgentIds: [],
-    canDispatchAgentIds: [],
-  };
-}
-
-function normalizePolicy(policy?: Partial<AgentPolicy>, base?: AgentPolicy): AgentPolicy {
-  const fallback = base ?? createDefaultPolicy();
-  return {
-    ...fallback,
-    ...policy,
-    planetIds: policy?.planetIds ?? fallback.planetIds,
-    commandCategories: policy?.commandCategories ?? fallback.commandCategories,
-    canCreateAgents: policy?.canCreateAgents ?? fallback.canCreateAgents,
-    canDirectMessageAgentIds: policy?.canDirectMessageAgentIds ?? fallback.canDirectMessageAgentIds,
-    canDispatchAgentIds: policy?.canDispatchAgentIds ?? fallback.canDispatchAgentIds,
-  };
 }
 
 async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
@@ -191,7 +166,7 @@ export async function handleAgentRoutes(
       playerKey: string;
       goal?: string;
       role?: 'worker' | 'manager' | 'director';
-      policy?: Partial<AgentPolicy>;
+      policy?: AgentPolicyPatch;
       supervisorAgentIds?: string[];
       managedAgentIds?: string[];
       activeConversationIds?: string[];
@@ -254,7 +229,7 @@ export async function handleAgentRoutes(
       playerKey?: string;
       goal?: string;
       role?: 'worker' | 'manager' | 'director';
-      policy?: Partial<AgentPolicy>;
+      policy?: AgentPolicyPatch;
       supervisorAgentIds?: string[];
       managedAgentIds?: string[];
       activeConversationIds?: string[];
@@ -375,6 +350,13 @@ export async function handleAgentRoutes(
           content: message.content,
         })) ?? [{ role: 'user', content: payload.content }];
         const managedAgentContext = await buildManagedAgentContext(context.agentStore, agent);
+        const militaryContext = await buildMilitaryContextSections(agent, playerKey);
+        const allowedCommands = filterCommandsByMilitaryPolicy(
+          getAgentAllowedCommands({
+            allowedCategories: agent.policy?.commandCategories,
+          }),
+          agent,
+        );
 
         const result = await runAgentLoop({
           maxSteps: provider.toolPolicy.maxSteps,
@@ -384,14 +366,13 @@ export async function handleAgentRoutes(
               provider,
               secretStore: context.secretStore,
               history: input.history,
-              allowedCommands: getAgentAllowedCommands({
-                allowedCategories: agent.policy?.commandCategories,
-              }),
+              allowedCommands,
               contextSections: [
                 `当前智能体：${agent.name}`,
                 '可用 action: game.command / agent.create / agent.update / conversation.ensure_dm / conversation.send_message / final_answer。',
                 '如果你已经创建过成员，后续轮次必须优先复用 thread 历史中的 tool 结果和成员 id，不要假装不知道已创建的成员。',
                 ...managedAgentContext,
+                ...militaryContext,
               ],
             }),
           },
@@ -404,6 +385,7 @@ export async function handleAgentRoutes(
               }, {
                 allowedCategories: agent.policy?.commandCategories,
                 allowedPlanetIds: agent.policy?.planetIds,
+                military: agent.policy?.military,
               });
               const currentThread = await context.threadStore.get(thread.id);
               if (currentThread) {
@@ -488,6 +470,13 @@ export async function handleAgentRoutes(
             context.eventBus.emit({ agentId: agent.id, type: 'tool_result', payload: { commandLine, output } });
           },
         });
+        const finalMessage = await appendMilitaryAuditSummary({
+          agent,
+          playerKey,
+          requestContent: payload.content,
+          finalMessage: result.finalMessage,
+          executedActions,
+        });
 
         agent.status = 'completed';
         agent.updatedAt = new Date().toISOString();
@@ -498,13 +487,13 @@ export async function handleAgentRoutes(
             outcomeKind: result.outcomeKind,
             executedActionCount: result.executedActionCount,
             repairCount: result.repairCount,
-            finalMessage: result.finalMessage,
+            finalMessage,
           };
         });
         context.eventBus.emit({
           agentId: agent.id,
           type: 'completed',
-          payload: { finalMessage: result.finalMessage },
+          payload: { finalMessage },
         });
       } catch (error) {
         const publicError = classifyPublicTurnError(error);

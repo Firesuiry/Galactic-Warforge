@@ -32,4 +32,23 @@ describe('game cli runtime', () => {
       allowedCategories: ['observe'],
     }), /command category not allowed/);
   });
+
+  it('rejects landing operations that still require player approval', async () => {
+    await assert.rejects(() => runCommandLine('landing_start tf-war planet-1-1', {
+      currentPlayer: 'p1',
+      serverUrl: 'http://localhost:18080',
+      playerKey: 'key_player_1',
+    }, {
+      allowedCategories: ['combat'],
+      military: {
+        theaterIds: ['theater-front'],
+        taskForceIds: ['tf-war'],
+        allowedCommandIds: ['landing_start'],
+        allowBlockade: false,
+        allowLanding: false,
+        allowMilitaryProduction: false,
+        maxMilitaryProductionCount: 0,
+      },
+    }), /player approval|landing/i);
+  });
 });

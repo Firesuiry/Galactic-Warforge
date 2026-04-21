@@ -10,6 +10,17 @@ export interface AgentGatewayPolicy {
   canCreateSchedules?: boolean;
   canDirectMessageAgentIds?: string[];
   canDispatchAgentIds?: string[];
+  military?: AgentGatewayMilitaryPolicy;
+}
+
+export interface AgentGatewayMilitaryPolicy {
+  theaterIds?: string[];
+  taskForceIds?: string[];
+  allowedCommandIds?: string[];
+  maxMilitaryProductionCount?: number;
+  allowBlockade?: boolean;
+  allowLanding?: boolean;
+  allowMilitaryProduction?: boolean;
 }
 
 export interface AgentProfilePayload {

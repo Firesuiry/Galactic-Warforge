@@ -17,9 +17,22 @@ export interface CanonicalAgentPolicy {
   canCreateSchedules: boolean;
   canDirectMessageAgentIds: string[];
   canDispatchAgentIds: string[];
+  military: CanonicalAgentMilitaryPolicy;
 }
 
-export type CanonicalAgentPolicyPatch = Partial<CanonicalAgentPolicy>;
+export interface CanonicalAgentMilitaryPolicy {
+  theaterIds: string[];
+  taskForceIds: string[];
+  allowedCommandIds: string[];
+  maxMilitaryProductionCount: number;
+  allowBlockade: boolean;
+  allowLanding: boolean;
+  allowMilitaryProduction: boolean;
+}
+
+export type CanonicalAgentPolicyPatch =
+  Partial<Omit<CanonicalAgentPolicy, 'military'>>
+  & { military?: Partial<CanonicalAgentMilitaryPolicy> };
 
 export type CanonicalAgentAction =
   | CanonicalGameCommandAction
@@ -116,6 +129,18 @@ export const AGENT_ACTION_SCHEMA = {
                 type: 'array',
                 items: { type: 'string' },
               },
+              military: {
+                type: 'object',
+                properties: {
+                  theaterIds: { type: 'array', items: { type: 'string' } },
+                  taskForceIds: { type: 'array', items: { type: 'string' } },
+                  allowedCommandIds: { type: 'array', items: { type: 'string' } },
+                  maxMilitaryProductionCount: { type: 'number' },
+                  allowBlockade: { type: 'boolean' },
+                  allowLanding: { type: 'boolean' },
+                  allowMilitaryProduction: { type: 'boolean' },
+                },
+              },
             },
           },
         },
@@ -207,6 +232,54 @@ function normalizeOptionalPolicy(value: unknown, fieldName: string) {
       throw new Error(`${fieldName}.canDispatchAgentIds must be a string array`);
     }
     policy.canDispatchAgentIds = canDispatchAgentIds;
+  }
+  if (record.military !== undefined) {
+    const militaryRecord = asRecord(record.military);
+    if (!militaryRecord) {
+      throw new Error(`${fieldName}.military must be an object`);
+    }
+    const military: Partial<CanonicalAgentMilitaryPolicy> = {};
+    if (militaryRecord.theaterIds !== undefined) {
+      const theaterIds = asStringArray(militaryRecord.theaterIds);
+      if (!theaterIds) {
+        throw new Error(`${fieldName}.military.theaterIds must be a string array`);
+      }
+      military.theaterIds = theaterIds;
+    }
+    if (militaryRecord.taskForceIds !== undefined) {
+      const taskForceIds = asStringArray(militaryRecord.taskForceIds);
+      if (!taskForceIds) {
+        throw new Error(`${fieldName}.military.taskForceIds must be a string array`);
+      }
+      military.taskForceIds = taskForceIds;
+    }
+    if (militaryRecord.allowedCommandIds !== undefined) {
+      const allowedCommandIds = asStringArray(militaryRecord.allowedCommandIds);
+      if (!allowedCommandIds) {
+        throw new Error(`${fieldName}.military.allowedCommandIds must be a string array`);
+      }
+      military.allowedCommandIds = allowedCommandIds;
+    }
+    if (militaryRecord.maxMilitaryProductionCount !== undefined) {
+      const maxMilitaryProductionCount = asFiniteNumber(militaryRecord.maxMilitaryProductionCount);
+      if (maxMilitaryProductionCount === undefined) {
+        throw new Error(`${fieldName}.military.maxMilitaryProductionCount must be a number`);
+      }
+      military.maxMilitaryProductionCount = maxMilitaryProductionCount;
+    }
+    if (militaryRecord.allowBlockade !== undefined) {
+      military.allowBlockade = normalizeBoolean(militaryRecord.allowBlockade, `${fieldName}.military.allowBlockade`);
+    }
+    if (militaryRecord.allowLanding !== undefined) {
+      military.allowLanding = normalizeBoolean(militaryRecord.allowLanding, `${fieldName}.military.allowLanding`);
+    }
+    if (militaryRecord.allowMilitaryProduction !== undefined) {
+      military.allowMilitaryProduction = normalizeBoolean(
+        militaryRecord.allowMilitaryProduction,
+        `${fieldName}.military.allowMilitaryProduction`,
+      );
+    }
+    policy.military = military;
   }
 
   return policy;

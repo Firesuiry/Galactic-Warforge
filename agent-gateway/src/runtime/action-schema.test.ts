@@ -223,4 +223,66 @@ describe("action schema normalize", () => {
       },
     ]);
   });
+
+  it("normalizes warfare observe and command actions into canonical typed args", () => {
+    const normalized = normalizeProviderTurn({
+      assistantMessage: "切换任务群姿态并检查战区。",
+      done: false,
+      actions: [
+        {
+          type: "game.command",
+          command: "system_runtime",
+          args: {
+            system_id: "sys-1",
+          },
+        },
+        {
+          type: "game.command",
+          command: "task_force_set_stance",
+          args: {
+            task_force_id: "tf-1",
+            stance: "patrol",
+          },
+        },
+        {
+          type: "game.command",
+          command: "task_force_deploy",
+          args: {
+            task_force_id: "tf-1",
+            theater_id: "theater-front",
+            system_id: "sys-1",
+            planet_id: "planet-1-1",
+          },
+        },
+      ],
+    });
+
+    assert.deepEqual(normalized.actions, [
+      {
+        type: "game.command",
+        command: "system_runtime",
+        args: {
+          systemId: "sys-1",
+        },
+      },
+      {
+        type: "game.command",
+        command: "task_force_set_stance",
+        args: {
+          taskForceId: "tf-1",
+          stance: "patrol",
+        },
+      },
+      {
+        type: "game.command",
+        command: "task_force_deploy",
+        args: {
+          taskForceId: "tf-1",
+          theaterId: "theater-front",
+          systemId: "sys-1",
+          planetId: "planet-1-1",
+        },
+      },
+    ]);
+  });
 });

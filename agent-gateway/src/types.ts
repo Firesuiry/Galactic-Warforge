@@ -96,6 +96,16 @@ export interface AgentThread {
   updatedAt: string;
 }
 
+export interface AgentMilitaryPolicy {
+  theaterIds: string[];
+  taskForceIds: string[];
+  allowedCommandIds: string[];
+  maxMilitaryProductionCount: number;
+  allowBlockade: boolean;
+  allowLanding: boolean;
+  allowMilitaryProduction: boolean;
+}
+
 export interface AgentPolicy {
   planetIds: string[];
   commandCategories: string[];
@@ -106,7 +116,12 @@ export interface AgentPolicy {
   canCreateSchedules: boolean;
   canDirectMessageAgentIds: string[];
   canDispatchAgentIds: string[];
+  military: AgentMilitaryPolicy;
 }
+
+export type AgentPolicyPatch =
+  Partial<Omit<AgentPolicy, 'military'>>
+  & { military?: Partial<AgentMilitaryPolicy> };
 
 export interface Conversation {
   id: string;
