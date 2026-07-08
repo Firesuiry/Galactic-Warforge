@@ -61,6 +61,8 @@ import {
   PLANET_ZOOM_LEVELS,
   usePlanetViewStore,
 } from "@/features/planet-map/store";
+import { renderEntitiesToCanvas } from "@/features/planet-map/entity-draw";
+import { useSessionSnapshot } from "@/hooks/use-session";
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -1034,13 +1036,40 @@ export function PlanetDebugPanel({
     })),
   );
   const [shareMessage, setShareMessage] = useState("");
+  const session = useSessionSnapshot();
 
   function exportScreenshot() {
     if (!canvas?.toDataURL) {
       return;
     }
+    // canvas 现在只画底图（地形/网格/迷雾/overview），实体在 DOM。导出时把实体合成回截图，保证全保真。
+    const viewportWidth = canvas.clientWidth || canvas.width;
+    const viewportHeight = canvas.clientHeight || canvas.height;
+    const offscreen = document.createElement("canvas");
+    offscreen.width = canvas.width;
+    offscreen.height = canvas.height;
+    const offCtx = offscreen.getContext("2d");
+    if (!offCtx) {
+      return;
+    }
+    offCtx.drawImage(canvas, 0, 0);
+    const dpr = canvas.width / Math.max(viewportWidth, 1) || 1;
+    offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    renderEntitiesToCanvas(
+      offCtx,
+      planet,
+      runtime,
+      networks,
+      camera,
+      viewportWidth,
+      viewportHeight,
+      catalog,
+      session.playerId,
+      layers,
+    );
+
     const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
+    link.href = offscreen.toDataURL("image/png");
     link.download = `${planet.planet_id}-tick-${currentTick}.png`;
     link.click();
   }

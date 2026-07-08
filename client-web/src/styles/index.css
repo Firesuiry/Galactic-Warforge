@@ -854,6 +854,7 @@ button {
 }
 
 .planet-map-canvas__viewport {
+  position: relative;
   min-height: 0;
 }
 
@@ -867,6 +868,58 @@ button {
     linear-gradient(180deg, #08111f 0%, #050811 100%);
   outline: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+/* 语义实体层：叠在 canvas 底图之上、但点击穿透回 canvas（实体是只读语义 DOM，命中检测仍走 canvas 的 tile 计算） */
+.entity-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  pointer-events: none;
+  /* transform 由 useImperativeCameraTransform 写入；--tile 由缩放写入，节点用 calc(var(--tile) * N) 定位 */
+  transform: translate(0, 0);
+  --tile: 12px;
+  z-index: 1;
+}
+
+.entity-layer__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.entity-node {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.entity-node__label {
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  color: #edf6ff;
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* z 序：资源在下，建筑中，单位/无人机/敌情在上（仅视觉；选择优先级由 resolveSelectionAtTile 决定，与此无关） */
+.entity-node--resource { z-index: 1; }
+.entity-node--construction { z-index: 2; }
+.entity-node--building { z-index: 3; }
+.entity-node--pipeline-node,
+.entity-node--power-coverage { z-index: 3; }
+.entity-node--unit,
+.entity-node--drone,
+.entity-node--ship,
+.entity-node--enemy,
+.entity-node--detection { z-index: 4; }
 
 .planet-map-canvas__status {
   display: flex;

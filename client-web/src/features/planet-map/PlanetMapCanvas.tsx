@@ -8,13 +8,8 @@ import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, P
 import {
   buildSceneWindow,
   clamp,
-  getBuildingDisplayName,
-  getBuildingFootprint,
-  getBuildingList,
   getFogState,
-  getResourceList,
   getTerrainTile,
-  getUnitList,
   getViewportTileBounds,
   type PlanetRenderView,
   resolveSelectionAtTile,
@@ -26,10 +21,11 @@ import {
   createAnimationFrameValueScheduler,
   describeSceneRenderSimplifications,
   getSceneRenderDetailPolicy,
-  isBuildingFootprintVisible,
-  isPositionVisible,
   isTilePointVisible,
 } from '@/features/planet-map/render';
+import { collectVisibleEntities } from '@/features/planet-map/entity-draw';
+import { useImperativeCameraTransform } from '@/features/planet-map/useImperativeCameraTransform';
+import { PlanetEntityLayer } from '@/features/planet-map/PlanetEntityLayer';
 import {
   DEFAULT_PLANET_ZOOM_INDEX,
   DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX,
@@ -67,19 +63,6 @@ const terrainColors: Record<string, string> = {
   lava: '#9a4624',
   unknown: '#1a2236',
 };
-
-const resourceColors: Record<string, string> = {
-  iron_ore: '#8ea5b8',
-  copper_ore: '#e38d4a',
-  coal: '#666b73',
-  stone: '#c8c0a4',
-  oil: '#4d3a89',
-  silicon_ore: '#6fc5c2',
-};
-
-function getResourceColor(kind: string) {
-  return resourceColors[kind] ?? '#d2c06f';
-}
 
 function getViewportDefaults(): ViewportSize {
   return {
@@ -121,20 +104,6 @@ function pointToTile(
     return null;
   }
   return { x, y };
-}
-
-function tileCenter(cameraOffset: number, tile: number, tileSize: number) {
-  return cameraOffset + ((tile + 0.5) * tileSize);
-}
-
-function drawCenteredLabel(context: CanvasRenderingContext2D, text: string, x: number, y: number) {
-  context.save();
-  context.fillStyle = 'rgba(5, 12, 22, 0.82)';
-  const width = context.measureText(text).width + 8;
-  context.fillRect(x - (width / 2), y - 10, width, 14);
-  context.fillStyle = '#edf6ff';
-  context.fillText(text, x - (width / 2) + 4, y);
-  context.restore();
 }
 
 function drawOverviewHeatmap(
@@ -193,10 +162,25 @@ function areTilePointsEqual(left: TilePoint | null, right: TilePoint | null) {
     && (left?.y ?? null) === (right?.y ?? null);
 }
 
+interface CameraPatch {
+  offsetX: number;
+  offsetY: number;
+  zoomIndex: number;
+  ready: boolean;
+}
+
+function areCameraPatchesEqual(left: CameraPatch, right: CameraPatch) {
+  return left.offsetX === right.offsetX
+    && left.offsetY === right.offsetY
+    && left.zoomIndex === right.zoomIndex
+    && left.ready === right.ready;
+}
+
 export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runtime, onCanvasReady }: PlanetMapCanvasProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseFrameCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const entityLayerRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<{ pointerX: number; pointerY: number; offsetX: number; offsetY: number } | null>(null);
   const previousZoomIndexRef = useRef(DEFAULT_PLANET_ZOOM_INDEX);
   const [viewport, setViewport] = useState<ViewportSize>(getViewportDefaults);
@@ -228,21 +212,10 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
   })));
   const session = useSessionSnapshot();
 
-  const buildingList = useMemo(() => getBuildingList(planet), [planet]);
-  const unitList = useMemo(() => getUnitList(planet), [planet]);
-  const resourceList = useMemo(() => getResourceList(planet), [planet]);
-  const logisticsDrones = runtime?.available ? runtime.logistics_drones ?? [] : [];
-  const logisticsShips = runtime?.available ? runtime.logistics_ships ?? [] : [];
-  const constructionTasks = runtime?.available ? runtime.construction_tasks ?? [] : [];
-  const enemyForces = runtime?.available ? runtime.enemy_forces ?? [] : [];
-  const detections = runtime?.available ? runtime.detections ?? [] : [];
-  const powerLinks = networks?.available ? networks.power_links ?? [] : [];
-  const powerCoverage = networks?.available ? networks.power_coverage ?? [] : [];
-  const pipelineNodes = networks?.available ? networks.pipeline_nodes ?? [] : [];
-  const pipelineSegments = networks?.available ? networks.pipeline_segments ?? [] : [];
   const zoomLevel = getPlanetZoomLevel(camera.zoomIndex);
   const overviewMode = isPlanetOverviewZoom(camera.zoomIndex);
   const tileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+  useImperativeCameraTransform(entityLayerRef, camera.offsetX, camera.offsetY, tileSize);
   const viewportBounds = useMemo(
     () => getViewportTileBounds(planet, camera, tileSize, viewport.width, viewport.height),
     [camera, planet, tileSize, viewport.height, viewport.width],
@@ -281,67 +254,29 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     }),
     [setHoveredTile],
   );
-  const visibleBuildings = useMemo(
-    () => buildingList.filter((building) => isBuildingFootprintVisible(building, viewportBounds, 1)),
-    [buildingList, viewportBounds],
+  // 拖拽/滚轮的高频 setCamera 走 rAF 合帧：N 次 pointermove/scroll 在同一帧只提交一次相机状态，
+  // 避免每个事件触发整屏逐格重绘（实测拖拽曾达 4110 fillRect/移动）。与 hover 同样的合帧机制。
+  const cameraScheduler = useMemo(
+    () => createAnimationFrameValueScheduler<CameraPatch>({
+      commit: (value) => {
+        setCamera(value);
+      },
+      getCurrentValue: () => {
+        const current = usePlanetViewStore.getState().camera;
+        return {
+          offsetX: current.offsetX,
+          offsetY: current.offsetY,
+          zoomIndex: current.zoomIndex,
+          ready: current.ready,
+        };
+      },
+      isEqual: areCameraPatchesEqual,
+    }),
+    [setCamera],
   );
-  const visibleUnits = useMemo(
-    () => unitList.filter((unit) => isPositionVisible(unit.position, viewportBounds, 1)),
-    [unitList, viewportBounds],
-  );
-  const visibleResources = useMemo(
-    () => resourceList.filter((resource) => isPositionVisible(resource.position, viewportBounds, 1)),
-    [resourceList, viewportBounds],
-  );
-  const visibleLogisticsDrones = useMemo(
-    () => logisticsDrones.filter((drone) => (
-      isPositionVisible(drone.position, viewportBounds, 1)
-      || Boolean(drone.target_pos && isPositionVisible(drone.target_pos, viewportBounds, 1))
-    )),
-    [logisticsDrones, viewportBounds],
-  );
-  const visibleLogisticsShips = useMemo(
-    () => logisticsShips.filter((ship) => (
-      isPositionVisible(ship.position, viewportBounds, 1)
-      || Boolean(ship.target_pos && isPositionVisible(ship.target_pos, viewportBounds, 1))
-    )),
-    [logisticsShips, viewportBounds],
-  );
-  const visibleConstructionTasks = useMemo(
-    () => constructionTasks.filter((task) => isPositionVisible(task.position, viewportBounds, 1)),
-    [constructionTasks, viewportBounds],
-  );
-  const visibleEnemyForces = useMemo(
-    () => enemyForces.filter((force) => isPositionVisible(force.position, viewportBounds, 1)),
-    [enemyForces, viewportBounds],
-  );
-  const visibleDetections = useMemo(
-    () => detections.filter((detection) => (
-      (detection.detected_positions ?? []).some((position) => isPositionVisible(position, viewportBounds, 1))
-    )),
-    [detections, viewportBounds],
-  );
-  const visiblePowerLinks = useMemo(
-    () => powerLinks.filter((link) => (
-      isPositionVisible(link.from_position, viewportBounds, 1)
-      || isPositionVisible(link.to_position, viewportBounds, 1)
-    )),
-    [powerLinks, viewportBounds],
-  );
-  const visiblePowerCoverage = useMemo(
-    () => powerCoverage.filter((coverage) => isPositionVisible(coverage.position, viewportBounds, 1)),
-    [powerCoverage, viewportBounds],
-  );
-  const visiblePipelineSegments = useMemo(
-    () => pipelineSegments.filter((segment) => (
-      isPositionVisible(segment.from_position, viewportBounds, 1)
-      || isPositionVisible(segment.to_position, viewportBounds, 1)
-    )),
-    [pipelineSegments, viewportBounds],
-  );
-  const visiblePipelineNodes = useMemo(
-    () => pipelineNodes.filter((node) => isPositionVisible(node.position, viewportBounds, 1)),
-    [pipelineNodes, viewportBounds],
+  const visibleEntities = useMemo(
+    () => collectVisibleEntities(planet, runtime, networks, viewportBounds),
+    [planet, runtime, networks, viewportBounds],
   );
 
   useEffect(() => {
@@ -382,7 +317,8 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
 
   useEffect(() => () => {
     hoverScheduler.cancel();
-  }, [hoverScheduler]);
+    cameraScheduler.cancel();
+  }, [hoverScheduler, cameraScheduler]);
 
   useEffect(() => {
     if (!camera.ready) {
@@ -551,210 +487,9 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
       }
     }
 
-    if (layers.resources) {
-      visibleResources.forEach((resource) => {
-        const position = toTilePoint(resource.position);
-        const screenX = camera.offsetX + ((position.x + 0.5) * tileSize);
-        const screenY = camera.offsetY + ((position.y + 0.5) * tileSize);
-        context.fillStyle = getResourceColor(resource.kind);
-        context.beginPath();
-        context.arc(screenX, screenY, Math.max(2, tileSize * (detailPolicy.simplifyStructures ? 0.18 : 0.24)), 0, Math.PI * 2);
-        context.fill();
-      });
-    }
-
-    if (layers.buildings) {
-      visibleBuildings.forEach((building) => {
-        const { width, height } = getBuildingFootprint(building);
-        const position = toTilePoint(building.position);
-        const screenX = camera.offsetX + (position.x * tileSize);
-        const screenY = camera.offsetY + (position.y * tileSize);
-        const pixelWidth = width * tileSize;
-        const pixelHeight = height * tileSize;
-
-        if (detailPolicy.simplifyStructures) {
-          context.fillStyle = building.owner_id === session.playerId ? 'rgba(36, 201, 182, 0.4)' : 'rgba(222, 87, 87, 0.38)';
-          context.fillRect(screenX, screenY, Math.max(pixelWidth, 2), Math.max(pixelHeight, 2));
-        } else {
-          context.fillStyle = building.owner_id === session.playerId ? 'rgba(36, 201, 182, 0.26)' : 'rgba(222, 87, 87, 0.22)';
-          context.fillRect(screenX + 1, screenY + 1, Math.max(pixelWidth - 2, 2), Math.max(pixelHeight - 2, 2));
-          context.strokeStyle = building.owner_id === session.playerId ? '#57efe0' : '#ff7b7b';
-          context.lineWidth = 2;
-          context.strokeRect(screenX + 1, screenY + 1, Math.max(pixelWidth - 2, 2), Math.max(pixelHeight - 2, 2));
-        }
-
-        if (detailPolicy.showBuildingLabels) {
-          context.fillStyle = '#edf6ff';
-          context.font = '11px sans-serif';
-          context.fillText(getBuildingDisplayName(catalog, building.type).slice(0, 6), screenX + 4, screenY + 14);
-        }
-      });
-    }
-
-    if (layers.units) {
-      visibleUnits.forEach((unit) => {
-        const position = toTilePoint(unit.position);
-        const screenX = camera.offsetX + ((position.x + 0.5) * tileSize);
-        const screenY = camera.offsetY + ((position.y + 0.5) * tileSize);
-        context.fillStyle = unit.owner_id === session.playerId ? '#91ff70' : '#ff6262';
-        if (detailPolicy.simplifyStructures) {
-          const size = Math.max(3, tileSize * 0.32);
-          context.fillRect(screenX - (size / 2), screenY - (size / 2), size, size);
-        } else {
-          context.beginPath();
-          context.arc(screenX, screenY, Math.max(3, tileSize * 0.22), 0, Math.PI * 2);
-          context.fill();
-        }
-      });
-    }
-
-    if (layers.logistics) {
-      context.save();
-      context.lineWidth = 2;
-      visibleLogisticsDrones.forEach((drone) => {
-        const start = toTilePoint(drone.position);
-        const startX = tileCenter(camera.offsetX, start.x, tileSize);
-        const startY = tileCenter(camera.offsetY, start.y, tileSize);
-        if (drone.target_pos) {
-          const target = toTilePoint(drone.target_pos);
-          context.setLineDash([8, 6]);
-          context.strokeStyle = 'rgba(45, 212, 191, 0.72)';
-          context.beginPath();
-          context.moveTo(startX, startY);
-          context.lineTo(tileCenter(camera.offsetX, target.x, tileSize), tileCenter(camera.offsetY, target.y, tileSize));
-          context.stroke();
-        }
-        context.setLineDash([]);
-        context.fillStyle = '#2dd4bf';
-        context.beginPath();
-        context.arc(startX, startY, Math.max(4, tileSize * 0.18), 0, Math.PI * 2);
-        context.fill();
-      });
-      visibleLogisticsShips.forEach((ship) => {
-        const start = toTilePoint(ship.position);
-        const startX = tileCenter(camera.offsetX, start.x, tileSize);
-        const startY = tileCenter(camera.offsetY, start.y, tileSize);
-        if (ship.target_pos) {
-          const target = toTilePoint(ship.target_pos);
-          context.setLineDash([2, 8]);
-          context.strokeStyle = 'rgba(255, 224, 102, 0.68)';
-          context.beginPath();
-          context.moveTo(startX, startY);
-          context.lineTo(tileCenter(camera.offsetX, target.x, tileSize), tileCenter(camera.offsetY, target.y, tileSize));
-          context.stroke();
-        }
-        context.setLineDash([]);
-        context.fillStyle = '#ffe066';
-        context.fillRect(startX - Math.max(3, tileSize * 0.16), startY - Math.max(3, tileSize * 0.16), Math.max(6, tileSize * 0.32), Math.max(6, tileSize * 0.32));
-      });
-      context.restore();
-    }
-
-    if (layers.power) {
-      context.save();
-      visiblePowerLinks.forEach((link) => {
-        const from = toTilePoint(link.from_position);
-        const to = toTilePoint(link.to_position);
-        context.beginPath();
-        context.setLineDash(link.kind === 'wireless' ? [6, 6] : []);
-        context.strokeStyle = link.kind === 'wireless' ? 'rgba(255, 212, 59, 0.72)' : 'rgba(116, 192, 252, 0.72)';
-        context.lineWidth = link.kind === 'wireless' ? 2 : 3;
-        context.moveTo(tileCenter(camera.offsetX, from.x, tileSize), tileCenter(camera.offsetY, from.y, tileSize));
-        context.lineTo(tileCenter(camera.offsetX, to.x, tileSize), tileCenter(camera.offsetY, to.y, tileSize));
-        context.stroke();
-      });
-      context.setLineDash([]);
-      visiblePowerCoverage.forEach((coverage) => {
-        const point = toTilePoint(coverage.position);
-        const centerX = tileCenter(camera.offsetX, point.x, tileSize);
-        const centerY = tileCenter(camera.offsetY, point.y, tileSize);
-        context.strokeStyle = coverage.connected ? 'rgba(116, 192, 252, 0.92)' : 'rgba(255, 107, 107, 0.92)';
-        context.lineWidth = 2;
-        context.beginPath();
-        context.arc(centerX, centerY, Math.max(6, tileSize * 0.32), 0, Math.PI * 2);
-        context.stroke();
-      });
-      context.restore();
-    }
-
-    if (layers.pipelines) {
-      context.save();
-      visiblePipelineSegments.forEach((segment) => {
-        const from = toTilePoint(segment.from_position);
-        const to = toTilePoint(segment.to_position);
-        context.strokeStyle = 'rgba(99, 230, 190, 0.78)';
-        context.lineWidth = 3;
-        context.beginPath();
-        context.moveTo(tileCenter(camera.offsetX, from.x, tileSize), tileCenter(camera.offsetY, from.y, tileSize));
-        context.lineTo(tileCenter(camera.offsetX, to.x, tileSize), tileCenter(camera.offsetY, to.y, tileSize));
-        context.stroke();
-      });
-      visiblePipelineNodes.forEach((node) => {
-        const point = toTilePoint(node.position);
-        const centerX = tileCenter(camera.offsetX, point.x, tileSize);
-        const centerY = tileCenter(camera.offsetY, point.y, tileSize);
-        context.fillStyle = node.fluid_id ? getResourceColor(node.fluid_id) : '#63e6be';
-        context.fillRect(centerX - Math.max(3, tileSize * 0.18), centerY - Math.max(3, tileSize * 0.18), Math.max(6, tileSize * 0.36), Math.max(6, tileSize * 0.36));
-      });
-      context.restore();
-    }
-
-    if (layers.construction) {
-      context.save();
-      visibleConstructionTasks.forEach((task) => {
-        const point = toTilePoint(task.position);
-        const screenX = camera.offsetX + (point.x * tileSize);
-        const screenY = camera.offsetY + (point.y * tileSize);
-        const color = task.state === 'in_progress'
-          ? 'rgba(255, 224, 102, 0.9)'
-          : task.state === 'paused'
-            ? 'rgba(255, 146, 43, 0.9)'
-            : task.state === 'cancelled'
-              ? 'rgba(255, 107, 107, 0.9)'
-              : 'rgba(148, 216, 45, 0.9)';
-        context.strokeStyle = color;
-        context.lineWidth = 3;
-        context.strokeRect(screenX + 2, screenY + 2, Math.max(tileSize - 4, 4), Math.max(tileSize - 4, 4));
-        if (tileSize >= 24) {
-          context.font = '11px sans-serif';
-          drawCenteredLabel(context, task.state, screenX + (tileSize / 2), screenY + 14);
-        }
-      });
-      context.restore();
-    }
-
-    if (layers.threat) {
-      context.save();
-      visibleEnemyForces.forEach((force) => {
-        const point = toTilePoint(force.position);
-        const centerX = tileCenter(camera.offsetX, point.x, tileSize);
-        const centerY = tileCenter(camera.offsetY, point.y, tileSize);
-        context.fillStyle = 'rgba(255, 107, 107, 0.88)';
-        context.beginPath();
-        context.moveTo(centerX, centerY - Math.max(6, tileSize * 0.28));
-        context.lineTo(centerX + Math.max(6, tileSize * 0.28), centerY);
-        context.lineTo(centerX, centerY + Math.max(6, tileSize * 0.28));
-        context.lineTo(centerX - Math.max(6, tileSize * 0.28), centerY);
-        context.closePath();
-        context.fill();
-      });
-      visibleDetections.forEach((detection) => {
-        detection.detected_positions?.forEach((position) => {
-          if (!isPositionVisible(position, viewportBounds, 1)) {
-            return;
-          }
-          const point = toTilePoint(position);
-          const centerX = tileCenter(camera.offsetX, point.x, tileSize);
-          const centerY = tileCenter(camera.offsetY, point.y, tileSize);
-          context.strokeStyle = 'rgba(255, 212, 59, 0.76)';
-          context.lineWidth = 2;
-          context.beginPath();
-          context.arc(centerX, centerY, Math.max(5, tileSize * 0.22), 0, Math.PI * 2);
-          context.stroke();
-        });
-      });
-      context.restore();
-    }
+    // 实体（资源/建筑/单位/物流/电力/管道/工地/敌情）已迁到 DOM 实体层（PlanetEntityLayer），
+    // 不再在 canvas 上绘制。canvas 只保留底图：地形 / 网格 / 迷雾 / overview 热力图。
+    // 实体的 canvas 绘制函数保留在 entity-draw.ts，供 PNG 导出（exportScreenshot）合成全保真截图。
 
     if (layers.fog && fog) {
       const fogStride = detailPolicy.simplifyFog
@@ -791,34 +526,15 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
   }, [
     camera.offsetX,
     camera.offsetY,
-    catalog,
-    constructionTasks,
     detailPolicy,
     fog,
     layers,
-    logisticsDrones,
-    logisticsShips,
     overview,
     overviewMode,
     planet,
-    powerCoverage,
-    powerLinks,
-    session.playerId,
     tileSize,
     viewport,
     viewportBounds,
-    visibleBuildings,
-    visibleConstructionTasks,
-    visibleDetections,
-    visibleEnemyForces,
-    visibleLogisticsDrones,
-    visibleLogisticsShips,
-    visiblePipelineNodes,
-    visiblePipelineSegments,
-    visiblePowerCoverage,
-    visiblePowerLinks,
-    visibleResources,
-    visibleUnits,
   ]);
 
   useEffect(() => {
@@ -923,9 +639,10 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     if (dragState) {
       const deltaX = event.clientX - dragState.pointerX;
       const deltaY = event.clientY - dragState.pointerY;
-      setCamera({
+      cameraScheduler.schedule({
         offsetX: dragState.offsetX + deltaX,
         offsetY: dragState.offsetY + deltaY,
+        zoomIndex: camera.zoomIndex,
         ready: true,
       });
       return;
@@ -959,7 +676,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     const worldX = (event.clientX - rect.left - camera.offsetX) / currentTileSize;
     const worldY = (event.clientY - rect.top - camera.offsetY) / currentTileSize;
 
-    setCamera({
+    cameraScheduler.schedule({
       zoomIndex: nextZoomIndex,
       offsetX: event.clientX - rect.left - (worldX * nextTileSize),
       offsetY: event.clientY - rect.top - (worldY * nextTileSize),
@@ -1035,6 +752,28 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
           ref={canvasRef}
           role="img"
         />
+        {/*
+          语义实体层：叠在 canvas 底图之上的只读 DOM。pointer-events:none，点击穿透回 canvas，
+          命中检测仍走 canvas 的 pointToTile → resolveSelectionAtTile（保留建筑>单位>资源>地块优先级）。
+          实体节点由 PlanetEntityLayer 渲染；本 div 仅作 transform/--tile 容器，供 useImperativeCameraTransform 写入。
+        */}
+        {/*
+          语义实体层：叠在 canvas 底图之上的只读 DOM。pointer-events:none，点击穿透回 canvas，
+          命中检测仍走 canvas 的 pointToTile → resolveSelectionAtTile（保留建筑>单位>资源>地块优先级）。
+          本 div 作为 transform/--tile 容器（由 useImperativeCameraTransform 写入），
+          内部节点由 PlanetEntityLayer 渲染（按 tile 空间定位，随容器整体平移/缩放）。
+        */}
+        <div className="entity-layer" ref={entityLayerRef} aria-hidden="true">
+          <PlanetEntityLayer
+            catalog={catalog}
+            playerId={session.playerId}
+            tileSize={tileSize}
+            detailPolicy={detailPolicy}
+            overviewMode={overviewMode}
+            layers={layers}
+            visible={visibleEntities}
+          />
+        </div>
       </div>
       <div className="planet-map-canvas__status">
         <span>{overviewMode ? `缩放 ${getPlanetZoomStatusLabel(camera.zoomIndex, planet.map_width, planet.map_height)}` : `缩放 ${sceneZoomStatusLabel}`}</span>
