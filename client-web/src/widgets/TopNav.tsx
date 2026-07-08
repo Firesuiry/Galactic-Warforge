@@ -86,7 +86,10 @@ export function TopNav() {
       </div>
 
       <div className="top-nav__status">
-        <span className="top-nav__chip top-nav__chip--tick">
+        <span
+          className="top-nav__chip top-nav__chip--tick tick-pulse"
+          key={`topnav-tick-${summaryQuery.data?.tick ?? 'none'}`}
+        >
           <Icon iconKey="gear" size={14} />
           <span>tick {summaryQuery.data?.tick ?? '-'}</span>
         </span>

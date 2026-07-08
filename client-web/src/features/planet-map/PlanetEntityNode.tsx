@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+
 import type {
   Building,
   CatalogView,
@@ -18,6 +20,23 @@ import { getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/fea
 import { getResourceColor } from '@/features/planet-map/entity-draw';
 
 /**
+ * V3 juice：当 value 从非 target 变为 target 时返回一次性闪烁标志。
+ * 配合 onAnimationEnd 清除，用于建造完成等状态转换动效。
+ */
+function useTransitionFlash(value: string, target: string): readonly [boolean, () => void] {
+  const prevRef = useRef(value);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    const prev = prevRef.current;
+    prevRef.current = value;
+    if (value === target && prev !== target) {
+      setFlash(true);
+    }
+  }, [value, target]);
+  return [flash, () => setFlash(false)] as const;
+}
+
+/**
  * 行星地图实体的 DOM 节点 + 连线层。
  *
  * 节点用 tile 空间定位：盒实体用 left/top/width/height（calc(var(--tile)*N)），
@@ -33,9 +52,10 @@ export interface BuildingNodeProps {
   playerId: string;
   simplify: boolean;
   showLabel: boolean;
+  isSelected?: boolean;
 }
 
-export function BuildingNode({ building, catalog, playerId, simplify, showLabel }: BuildingNodeProps) {
+export function BuildingNode({ building, catalog, playerId, simplify, showLabel, isSelected }: BuildingNodeProps) {
   const { width, height } = getBuildingFootprint(building);
   const point = toTilePoint(building.position);
   const isOwn = building.owner_id === playerId;
@@ -58,6 +78,7 @@ export function BuildingNode({ building, catalog, playerId, simplify, showLabel 
       }}
       data-entity-kind="building"
       data-entity-id={building.id}
+      data-selected={isSelected ? '' : undefined}
       data-building-type={building.type}
       data-owner-id={building.owner_id}
       data-owner={isOwn ? 'self' : 'other'}
@@ -79,9 +100,10 @@ export interface UnitNodeProps {
   unit: Unit;
   playerId: string;
   simplify: boolean;
+  isSelected?: boolean;
 }
 
-export function UnitNode({ unit, playerId, simplify }: UnitNodeProps) {
+export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps) {
   const point = toTilePoint(unit.position);
   const isOwn = unit.owner_id === playerId;
   const sizeFactor = simplify ? 0.32 : 0.44;
@@ -97,6 +119,7 @@ export function UnitNode({ unit, playerId, simplify }: UnitNodeProps) {
       }}
       data-entity-kind="unit"
       data-entity-id={unit.id}
+      data-selected={isSelected ? '' : undefined}
       data-unit-type={unit.type}
       data-owner-id={unit.owner_id}
       data-owner={isOwn ? 'self' : 'other'}
@@ -112,9 +135,10 @@ export function UnitNode({ unit, playerId, simplify }: UnitNodeProps) {
 
 export interface ResourceNodeProps {
   resource: PlanetResource;
+  isSelected?: boolean;
 }
 
-export function ResourceNode({ resource }: ResourceNodeProps) {
+export function ResourceNode({ resource, isSelected }: ResourceNodeProps) {
   const point = toTilePoint(resource.position);
   return (
     <div
@@ -128,6 +152,7 @@ export function ResourceNode({ resource }: ResourceNodeProps) {
       }}
       data-entity-kind="resource"
       data-entity-id={resource.id}
+      data-selected={isSelected ? '' : undefined}
       data-resource-kind={resource.kind}
       data-tile-x={point.x}
       data-tile-y={point.y}
@@ -201,6 +226,7 @@ export interface ConstructionNodeProps {
 }
 
 export function ConstructionNode({ task, catalog, showLabel }: ConstructionNodeProps) {
+  const [justCompleted, clearCompleted] = useTransitionFlash(task.state, 'completed');
   const point = toTilePoint(task.position);
   const color = task.state === 'in_progress'
     ? 'rgba(255, 224, 102, 0.9)'
@@ -211,7 +237,7 @@ export function ConstructionNode({ task, catalog, showLabel }: ConstructionNodeP
         : 'rgba(148, 216, 45, 0.9)';
   return (
     <div
-      className="entity-node entity-node--construction"
+      className={`entity-node entity-node--construction${justCompleted ? ' build-complete' : ''}`}
       style={{
         left: `calc(var(--tile) * ${point.x})`,
         top: `calc(var(--tile) * ${point.y})`,
@@ -220,6 +246,7 @@ export function ConstructionNode({ task, catalog, showLabel }: ConstructionNodeP
         border: `3px solid ${color}`,
         borderRadius: 2,
       }}
+      onAnimationEnd={clearCompleted}
       data-entity-kind="construction"
       data-entity-id={task.id}
       data-building-type={task.building_type}

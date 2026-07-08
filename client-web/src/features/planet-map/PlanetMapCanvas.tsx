@@ -782,6 +782,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
             tileSize={tileSize}
             detailPolicy={detailPolicy}
             overviewMode={overviewMode}
+            selected={selected}
             layers={layers}
             visible={visibleEntities}
           />

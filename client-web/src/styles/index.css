@@ -2069,9 +2069,120 @@ a {
   color: var(--accent);
 }
 
+/* ============================================================
+ * V3 游戏感 / juice：一次性 + 持续动效
+ * 全部用 transform/opacity/box-shadow/filter（不触发 layout）。
+ * reduced-motion 兜底见本节末尾。
+ * ============================================================ */
+
+/* tick 脉冲：数值变化时缩放+发光（配合 React key 变化触发重挂载重放） */
+@keyframes tick-pulse {
+  0%   { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(57, 230, 208, 0)); }
+  45%  { transform: scale(1.16); filter: drop-shadow(0 0 8px rgba(57, 230, 208, 0.75)); }
+  100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(57, 230, 208, 0)); }
+}
+.tick-pulse { animation: tick-pulse var(--dur) var(--ease); }
+
+/* 选中环呼吸：box-shadow 脉冲（accent），只用 box-shadow 避免冲突实体的 transform 定位 */
+@keyframes selection-ring {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(57, 230, 208, 0.5), 0 0 8px rgba(57, 230, 208, 0.3); }
+  50%      { box-shadow: 0 0 0 2px rgba(57, 230, 208, 0.95), 0 0 18px rgba(57, 230, 208, 0.65); }
+}
+.entity-node[data-selected] {
+  animation: selection-ring 1.6s var(--ease) infinite;
+  z-index: 6;
+}
+/* tile 选中的 DOM 呼吸环（canvas 高亮之外的叠加） */
+.entity-node--selection-tile {
+  background: transparent;
+  border: 2px solid rgba(57, 230, 208, 0.55);
+  border-radius: 2px;
+  pointer-events: none;
+  animation: selection-ring 1.6s var(--ease) infinite;
+}
+
+/* 告警闪烁：amber 闪烁+glow（2 次） */
+@keyframes alert-flash {
+  0%   { background-color: rgba(255, 180, 84, 0.04); box-shadow: 0 0 0 rgba(255, 180, 84, 0); }
+  18%  { background-color: rgba(255, 180, 84, 0.22); box-shadow: 0 0 16px rgba(255, 180, 84, 0.55); }
+  36%  { background-color: rgba(255, 180, 84, 0.04); box-shadow: 0 0 0 rgba(255, 180, 84, 0); }
+  60%  { background-color: rgba(255, 180, 84, 0.18); box-shadow: 0 0 14px rgba(255, 180, 84, 0.45); }
+  100% { background-color: rgba(255, 180, 84, 0.04); box-shadow: 0 0 0 rgba(255, 180, 84, 0); }
+}
+.alert-flash { animation: alert-flash 1.1s var(--ease); }
+
+/* 建造完成：缩放回弹+绿光（工地节点用 left/top 定位，transform 安全） */
+@keyframes build-complete {
+  0%   { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(110, 231, 183, 0)); }
+  35%  { transform: scale(1.18); filter: drop-shadow(0 0 12px rgba(110, 231, 183, 0.85)); }
+  65%  { transform: scale(0.95); }
+  100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(110, 231, 183, 0)); }
+}
+.entity-node.build-complete {
+  animation: build-complete var(--dur-slow) var(--ease);
+}
+
+/* 面板滑入：挂载时 translateY+opacity（React 重渲染不重挂载→只在 mount 播一次） */
+@keyframes panel-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel {
+  animation: panel-slide-in var(--dur-slow) var(--ease);
+}
+
+/* 路由转场：.page-shell 按 pathname 重挂载时重放 */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.992); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.page-shell {
+  animation: page-enter var(--dur-slow) var(--ease);
+}
+
+/* hover/按压微反馈 */
+.top-nav__chip,
+.hero-chip,
+.secondary-button,
+.secondary-link,
+.primary-button,
+.primary-link {
+  transition:
+    transform var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+.top-nav__chip:hover,
+.hero-chip:hover,
+.secondary-button:hover,
+.secondary-link:hover,
+.primary-button:hover,
+.primary-link:hover {
+  transform: translateY(-1px);
+}
+.primary-button:hover,
+.primary-link:hover {
+  box-shadow: 0 0 16px rgba(57, 230, 208, 0.32);
+}
+.top-nav__chip:active,
+.hero-chip:active,
+.secondary-button:active,
+.secondary-link:active,
+.primary-button:active,
+.primary-link:active {
+  transform: translateY(0);
+}
+
+/* reduced-motion 兜底：关闭所有动画/过渡（含 V3 新增与既有 chip-pulse） */
 @media (prefers-reduced-motion: reduce) {
-  .top-nav__chip--pulse {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

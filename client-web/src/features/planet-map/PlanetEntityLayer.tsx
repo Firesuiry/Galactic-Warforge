@@ -4,6 +4,7 @@ import type { CatalogView } from '@shared/types';
 
 import type { VisibleEntities } from '@/features/planet-map/entity-draw';
 import type { SceneRenderDetailPolicy } from '@/features/planet-map/render';
+import type { SelectedEntity } from '@/features/planet-map/model';
 import {
   BuildingNode,
   ConstructionNode,
@@ -30,6 +31,7 @@ import {
  * - overview 模式（zoom 0-2）下不渲染实体（canvas 只画热力图）。
  * - 实体是 pointer-events:none 的语义 DOM，命中检测走 canvas。
  * - 可见实体集合由 collectVisibleEntities 统一计算（与 PNG 导出共用，避免两处各算一遍）。
+ * - V3：selected 用于在对应实体节点上叠 data-selected（CSS 选中呼吸环），tile 选中追加一个 DOM 呼吸环。
  */
 export interface PlanetEntityLayerProps {
   catalog?: CatalogView;
@@ -37,6 +39,7 @@ export interface PlanetEntityLayerProps {
   tileSize: number;
   detailPolicy: SceneRenderDetailPolicy;
   overviewMode: boolean;
+  selected: SelectedEntity | null;
   layers: {
     buildings: boolean;
     units: boolean;
@@ -57,12 +60,20 @@ function PlanetEntityLayerImpl(props: PlanetEntityLayerProps) {
     tileSize,
     detailPolicy,
     overviewMode,
+    selected,
     layers,
     visible,
   } = props;
 
   const simplify = detailPolicy.simplifyStructures;
   const showBuildingLabels = detailPolicy.showBuildingLabels;
+  // 实体型选中（building/unit/resource）才有 id；tile 选中单独走 DOM 呼吸环分支。
+  const selectedEntityId =
+    selected && (selected.kind === 'building' || selected.kind === 'unit' || selected.kind === 'resource')
+      ? selected.id
+      : null;
+  const tileSelection =
+    selected && selected.kind === 'tile' ? selected.position : null;
 
   const logisticsSegments = useMemo(
     () => (layers.logistics ? buildLogisticsSegments(visible.logisticsDrones, visible.logisticsShips) : []),
@@ -84,7 +95,7 @@ function PlanetEntityLayerImpl(props: PlanetEntityLayerProps) {
   return (
     <>
       {layers.resources
-        ? visible.resources.map((resource) => <ResourceNode key={`resource-${resource.id}`} resource={resource} />)
+        ? visible.resources.map((resource) => <ResourceNode key={`resource-${resource.id}`} resource={resource} isSelected={resource.id === selectedEntityId} />)
         : null}
 
       {layers.construction
@@ -120,12 +131,21 @@ function PlanetEntityLayerImpl(props: PlanetEntityLayerProps) {
               playerId={playerId}
               simplify={simplify}
               showLabel={showBuildingLabels}
+              isSelected={building.id === selectedEntityId}
             />
           ))
         : null}
 
       {layers.units
-        ? visible.units.map((unit) => <UnitNode key={`unit-${unit.id}`} unit={unit} playerId={playerId} simplify={simplify} />)
+        ? visible.units.map((unit) => (
+            <UnitNode
+              key={`unit-${unit.id}`}
+              unit={unit}
+              playerId={playerId}
+              simplify={simplify}
+              isSelected={unit.id === selectedEntityId}
+            />
+          ))
         : null}
 
       {layers.logistics ? (
@@ -149,6 +169,20 @@ function PlanetEntityLayerImpl(props: PlanetEntityLayerProps) {
             ))
           ))}
         </>
+      ) : null}
+
+      {/* V3：tile 选中的 DOM 呼吸环（canvas 已画高亮，此为叠加的 accent 呼吸） */}
+      {tileSelection ? (
+        <div
+          aria-hidden="true"
+          className="entity-node entity-node--selection-tile"
+          style={{
+            left: `calc(var(--tile) * ${tileSelection.x})`,
+            top: `calc(var(--tile) * ${tileSelection.y})`,
+            width: 'calc(var(--tile) * 1)',
+            height: 'calc(var(--tile) * 1)',
+          }}
+        />
       ) : null}
     </>
   );
