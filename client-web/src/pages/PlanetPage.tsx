@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import { ALL_EVENT_TYPES } from "@shared/config";
 
+import { Icon } from "@/common/Icon";
 import {
   PlanetActivityPanel,
   PlanetDebugPanel,
@@ -512,17 +513,27 @@ export function PlanetPage() {
           </p>
         </div>
         <div className="hero-actions">
-          <div className="hero-chip">矿产 {mineralSummary}</div>
           <div className="hero-chip">
-            能量 {currentPlayer?.resources?.energy ?? 0}
+            <Icon iconKey="iron_ore" color="#c9a06a" size={18} />
+            <span>矿产 {mineralSummary}</span>
           </div>
           <div className="hero-chip">
-            电力{" "}
-            {stats
-              ? `${stats.energy_stats.generation}/${stats.energy_stats.consumption}`
-              : "-"}
+            <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
+            <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
           </div>
-          <div className="hero-chip">研究 {currentResearchName || "无"}</div>
+          <div className="hero-chip">
+            <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
+            <span>
+              电力{" "}
+              {stats
+                ? `${stats.energy_stats.generation}/${stats.energy_stats.consumption}`
+                : "-"}
+            </span>
+          </div>
+          <div className="hero-chip">
+            <Icon iconKey="lab" color="#5fb0ff" size={18} />
+            <span>研究 {currentResearchName || "无"}</span>
+          </div>
         </div>
       </section>
 

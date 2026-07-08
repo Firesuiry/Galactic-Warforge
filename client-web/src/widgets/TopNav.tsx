@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useNavigate } from 'react-router-dom';
 
+import { Icon } from '@/common/Icon';
 import { formatMineralInventory } from '@/features/mineral-summary';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { useApiClient } from '@/hooks/use-api-client';
@@ -60,6 +61,14 @@ export function TopNav() {
   const currentPlayer = summaryQuery.data?.players?.[session.playerId];
   const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
   const energyStats = statsQuery.data?.energy_stats;
+  const powerGeneration = energyStats?.generation;
+  const powerConsumption = energyStats?.consumption;
+  const powerDelta =
+    typeof powerGeneration === 'number' && typeof powerConsumption === 'number'
+      ? powerGeneration - powerConsumption
+      : null;
+  const powerClass = powerDelta == null ? '' : powerDelta >= 0 ? 'top-nav__chip--good' : 'top-nav__chip--danger';
+  const powerPulse = powerDelta != null && powerDelta < 0 ? ' top-nav__chip--pulse' : '';
   const saveDisabled = isFixtureServerUrl(session.serverUrl) || saveMutation.isPending;
 
   return (
@@ -77,18 +86,33 @@ export function TopNav() {
       </div>
 
       <div className="top-nav__status">
-        <span className="top-nav__chip">tick {summaryQuery.data?.tick ?? '-'}</span>
-        <span className="top-nav__chip">
-          矿产 {mineralSummary}
+        <span className="top-nav__chip top-nav__chip--tick">
+          <Icon iconKey="gear" size={14} />
+          <span>tick {summaryQuery.data?.tick ?? '-'}</span>
         </span>
         <span className="top-nav__chip">
-          能量 {currentPlayer?.resources?.energy ?? 0}
+          <Icon iconKey="iron_ore" color="#c9a06a" size={16} />
+          <span>矿产 {mineralSummary}</span>
         </span>
         <span className="top-nav__chip">
-          电力 {energyStats ? `${energyStats.generation}/${energyStats.consumption}` : '-'}
+          <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
+          <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
+        </span>
+        <span className={`top-nav__chip${powerClass ? ` ${powerClass}` : ''}${powerPulse}`}>
+          <Icon iconKey="ray_receiver" color="#39e6d0" size={16} />
+          <span>
+            电力{' '}
+            {energyStats ? `${energyStats.generation}/${energyStats.consumption}` : '-'}
+          </span>
+          {powerDelta != null ? (
+            <span className="top-nav__chip-delta">
+              {powerDelta >= 0 ? '+' : ''}
+              {powerDelta}
+            </span>
+          ) : null}
         </span>
         <span className="top-nav__chip">
-          活跃行星 {summaryQuery.data?.active_planet_id ?? '-'}
+          <span>活跃行星 {summaryQuery.data?.active_planet_id ?? '-'}</span>
         </span>
         {saveMessage ? (
           <span className="top-nav__chip top-nav__chip--accent">{saveMessage}</span>
@@ -97,18 +121,23 @@ export function TopNav() {
 
       <nav className="top-nav__links">
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/overview">
+          <span aria-hidden="true" className="top-nav__link-glyph">📊</span>
           总览
         </NavLink>
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/galaxy">
+          <span aria-hidden="true" className="top-nav__link-glyph">🌌</span>
           星图
         </NavLink>
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/war">
+          <span aria-hidden="true" className="top-nav__link-glyph">⚔️</span>
           战争
         </NavLink>
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/agents">
+          <span aria-hidden="true" className="top-nav__link-glyph">🤖</span>
           智能体
         </NavLink>
         <NavLink className={({ isActive }) => (isActive ? 'active' : '')} to="/replay">
+          <span aria-hidden="true" className="top-nav__link-glyph">⏪</span>
           回放
         </NavLink>
       </nav>
@@ -119,10 +148,12 @@ export function TopNav() {
         onClick={handleSave}
         disabled={saveDisabled}
       >
+        <span aria-hidden="true" className="top-nav__link-glyph">💾</span>
         {saveMutation.isPending ? '保存中...' : '保存'}
       </button>
 
       <button className="secondary-button top-nav__logout" type="button" onClick={handleLogout}>
+        <span aria-hidden="true" className="top-nav__link-glyph">🚪</span>
         退出
       </button>
     </header>
