@@ -98,6 +98,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 军工总览：聚合量产单、翻修单、部署枢纽和补给节点，可直接对选定蓝图发起一次部署尝试，并可通过「量产排队」「翻修改装」表单下达 `queue_military_production` / `refit_unit`，把“当前部署枢纽不支持该蓝图”等失败原因解释成玩家可读提示
 - 战区面板：聚合任务群与战区目标，可直接调整 `task_force_set_stance`，对当前焦点行星发起 `blockade_planet` / `landing_start`，并通过表单完成 `task_force_create` / `task_force_assign` / `task_force_deploy` 与 `theater_create` / `theater_define_zone` / `theater_set_objective`
 - 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`、`landing_operations`，并直接暴露当前补给状态和短缺项；舰队指挥表单可下达 `fleet_assign` / `fleet_attack` / `fleet_disband`
+- 战场态势面板：`features/war/battlefield/BattlefieldMap.tsx` 用 Canvas 2D 绘制星系级示意图（恒星、行星轨道圈、己方/敌方舰队接触标记、封锁圈虚线、登陆行动），点击标记可选中并回传，让玩家「看懂战局」而不再只看文字列表
 - 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁、登陆的 authoritative 回执
 - 命令提交管道统一收敛到 `features/war/use-war-command.ts`，查询键统一由 `features/war/war-query-keys.ts` 构造；新增命令表单落在 `features/war/components/forms/` 下，自管表单状态、复用同一提交与反馈通道，避免在 WarPage 内堆叠手写 handler
 - 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
@@ -105,7 +106,6 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - `WarPage.test.tsx` 新增「12 个新战争命令表单的纯 GUI 提交」用例，覆盖 `blueprint_variant / queue_military_production / refit_unit / theater_create|define_zone|set_objective / task_force_create|assign|deploy / fleet_assign|attack|disband`
 - `/war` 现在会以 1 秒轮询 authoritative 战争查询，保证“accepted, will execute at next tick”这类异步命令能在浏览器里追上真实运行态，而不是停在提交瞬间的旧缓存（SSE 实时层收敛见后续批次）
 - 当前边界：
-  - 战场态势可视化（星系级舰队/封锁/登陆位置图）尚未落地，当前仍以文字列表呈现接触与封锁
   - AI 军事委派已经在 `/agents` 工作台和 `agent-gateway` 落地，但不在 `/war` 页内直接配置；推荐先用 `/war` 建好任务群/战区，再到 `/agents` 做委派和审计
 
 ### 3.4 行星页

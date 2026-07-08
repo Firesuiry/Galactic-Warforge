@@ -9,6 +9,7 @@ import { ProductionQueueForm } from '@/features/war/components/forms/ProductionQ
 import { RefitForm } from '@/features/war/components/forms/RefitForm';
 import { TaskForceForm } from '@/features/war/components/forms/TaskForceForm';
 import { TheaterForm } from '@/features/war/components/forms/TheaterForm';
+import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
 import type { WarCommandHint } from '@/features/war/error-hints';
 import {
   formatBlockadeStatus,
@@ -498,6 +499,24 @@ export function WarPage() {
           <span className="badge">{contacts.length} 条接触</span>
           <span className="badge">{battleReports.length} 份战报</span>
           <span className="badge">{blockades.length} 条封锁</span>
+        </div>
+      </section>
+
+      <section className="panel war-panel">
+        <div className="war-panel__header">
+          <div>
+            <h2>战场态势</h2>
+            <p className="subtle-text">星系级示意图：恒星、行星轨道、己方/敌方舰队接触、封锁圈与登陆行动一目了然。</p>
+          </div>
+        </div>
+        <div className="war-section-grid">
+          <BattlefieldMap
+            systemName={system?.name || focusSystemId || '未知星系'}
+            planets={currentPlanets}
+            runtime={runtime}
+            fleets={fleets}
+            playerId={session.playerId}
+          />
         </div>
       </section>
 
