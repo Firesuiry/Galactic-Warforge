@@ -41,7 +41,7 @@ function createCatalog() {
           id: 'mech_frame_alpha',
           name: '阿尔法机体',
           role: '前线突破',
-          supported_domains: ['ground_unit'],
+          supported_domains: ['ground'],
           budgets: {
             power_output: 8,
             sustained_draw: 14,
@@ -60,7 +60,7 @@ function createCatalog() {
           id: 'corvette_hull',
           name: '轻型护航舰体',
           role: '护航封锁',
-          supported_domains: ['space_unit'],
+          supported_domains: ['space'],
           budgets: {
             power_output: 18,
             sustained_draw: 24,
@@ -75,9 +75,9 @@ function createCatalog() {
         },
       ],
       components: [
-        { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground_unit'], power_output: 6 },
-        { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground_unit', 'space_unit'], power_draw: 12, heat_load: 8 },
-        { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space_unit'], power_draw: 4, heat_load: 3, tags: ['escort'] },
+        { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground'], power_output: 6 },
+        { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground', 'space'], power_draw: 12, heat_load: 8 },
+        { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space'], power_draw: 4, heat_load: 3, tags: ['escort'] },
       ],
     },
   };
@@ -91,7 +91,7 @@ function createBlueprints() {
         name: '前锋试制型',
         source: 'player',
         state: 'draft',
-        domain: 'ground_unit',
+        domain: 'ground',
         base_frame_id: 'mech_frame_alpha',
         validation: {
           valid: false,
@@ -117,7 +117,7 @@ function createBlueprints() {
         name: '舰队封锁型',
         source: 'player',
         state: 'adopted',
-        domain: 'space_unit',
+        domain: 'space',
         base_hull_id: 'corvette_hull',
         validation: {
           valid: true,
@@ -141,7 +141,7 @@ function createIndustry() {
         factory_building_id: 'factory-1',
         deployment_hub_id: 'hub-1',
         blueprint_id: 'fleet-adopted',
-        domain: 'space_unit',
+        domain: 'space',
         count: 4,
         completed_count: 1,
         status: 'in_progress',

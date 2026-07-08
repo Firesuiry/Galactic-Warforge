@@ -69,7 +69,7 @@ describe('WarPage', () => {
                 id: 'mech_frame_alpha',
                 name: '阿尔法机体',
                 role: '前线突破',
-                supported_domains: ['ground_unit'],
+                supported_domains: ['ground'],
                 budgets: {
                   power_output: 8,
                   sustained_draw: 14,
@@ -88,7 +88,7 @@ describe('WarPage', () => {
                 id: 'corvette_hull',
                 name: '轻型护航舰体',
                 role: '护航封锁',
-                supported_domains: ['space_unit'],
+                supported_domains: ['space'],
                 budgets: {
                   power_output: 18,
                   sustained_draw: 24,
@@ -103,15 +103,15 @@ describe('WarPage', () => {
               },
             ],
             components: [
-              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground_unit'], power_output: 6 },
-              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground_unit', 'space_unit'], power_draw: 12, heat_load: 8 },
-              { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space_unit'], power_draw: 4, heat_load: 3, tags: ['escort'] },
+              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground'], power_output: 6 },
+              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground', 'space'], power_draw: 12, heat_load: 8 },
+              { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space'], power_draw: 4, heat_load: 3, tags: ['escort'] },
             ],
             public_blueprints: [
               {
                 id: 'preset-corvette',
                 name: '标准护航舰',
-                domain: 'space_unit',
+                domain: 'space',
                 source: 'preset',
                 base_hull_id: 'corvette_hull',
                 runtime_class: 'fleet',
@@ -129,7 +129,7 @@ describe('WarPage', () => {
               name: '前锋试制型',
               source: 'player',
               state: 'draft',
-              domain: 'ground_unit',
+              domain: 'ground',
               base_frame_id: 'mech_frame_alpha',
               validation: {
                 valid: false,
@@ -169,7 +169,7 @@ describe('WarPage', () => {
               name: '舰队封锁型',
               source: 'player',
               state: 'adopted',
-              domain: 'space_unit',
+              domain: 'space',
               base_hull_id: 'corvette_hull',
               validation: {
                 valid: true,
@@ -206,7 +206,7 @@ describe('WarPage', () => {
               factory_building_id: 'factory-1',
               deployment_hub_id: 'hub-1',
               blueprint_id: 'fleet-adopted',
-              domain: 'space_unit',
+              domain: 'space',
               count: 4,
               completed_count: 1,
               status: 'in_progress',
@@ -484,7 +484,7 @@ describe('WarPage', () => {
                 id: 'mech_frame_alpha',
                 name: '阿尔法机体',
                 role: '前线突破',
-                supported_domains: ['ground_unit'],
+                supported_domains: ['ground'],
                 budgets: {
                   power_output: 8,
                   sustained_draw: 14,
@@ -503,7 +503,7 @@ describe('WarPage', () => {
                 id: 'corvette_hull',
                 name: '轻型护航舰体',
                 role: '护航封锁',
-                supported_domains: ['space_unit'],
+                supported_domains: ['space'],
                 budgets: {
                   power_output: 18,
                   sustained_draw: 24,
@@ -518,9 +518,9 @@ describe('WarPage', () => {
               },
             ],
             components: [
-              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground_unit'], power_output: 6 },
-              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground_unit', 'space_unit'], power_draw: 12, heat_load: 8 },
-              { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space_unit'], power_draw: 4, heat_load: 3, tags: ['escort'] },
+              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground'], power_output: 6 },
+              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground', 'space'], power_draw: 12, heat_load: 8 },
+              { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space'], power_draw: 4, heat_load: 3, tags: ['escort'] },
             ],
           },
         });
@@ -533,7 +533,7 @@ describe('WarPage', () => {
               name: '前锋试制型',
               source: 'player',
               state: 'draft',
-              domain: 'ground_unit',
+              domain: 'ground',
               base_frame_id: 'mech_frame_alpha',
               validation: {
                 valid: false,
@@ -555,7 +555,7 @@ describe('WarPage', () => {
               name: '舰队封锁型',
               source: 'player',
               state: 'adopted',
-              domain: 'space_unit',
+              domain: 'space',
               base_hull_id: 'corvette_hull',
               validation: {
                 valid: true,
@@ -715,7 +715,7 @@ describe('WarPage', () => {
 
     await user.type(screen.getByLabelText('蓝图 ID'), 'bp-new');
     await user.type(screen.getByLabelText('蓝图名称'), '晨星改');
-    await user.selectOptions(screen.getByLabelText('作战域'), 'ground_unit');
+    await user.selectOptions(screen.getByLabelText('作战域'), 'ground');
     await user.selectOptions(screen.getByLabelText('底盘'), 'mech_frame_alpha');
     await user.click(screen.getByRole('button', { name: '创建蓝图' }));
 
@@ -773,18 +773,18 @@ describe('WarPage', () => {
             base_frames: [{
               id: 'mech_frame_alpha',
               name: '阿尔法机体',
-              supported_domains: ['ground_unit'],
+              supported_domains: ['ground'],
               slots: [{ id: 'core', category: 'core' }, { id: 'weapon', category: 'weapon' }],
             }],
             base_hulls: [{
               id: 'corvette_hull',
               name: '轻型护航舰体',
-              supported_domains: ['space_unit'],
+              supported_domains: ['space'],
               slots: [{ id: 'engine', category: 'engine' }, { id: 'weapon', category: 'weapon' }],
             }],
             components: [
-              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground_unit'] },
-              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground_unit', 'space_unit'] },
+              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground'] },
+              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground', 'space'] },
             ],
           },
         });
@@ -797,7 +797,7 @@ describe('WarPage', () => {
               name: '标准护航舰',
               source: 'player',
               state: 'adopted',
-              domain: 'space_unit',
+              domain: 'space',
               base_hull_id: 'corvette_hull',
               validation: { valid: true, issues: [] },
               allowed_actions: ['blueprint_variant'],
@@ -873,7 +873,7 @@ describe('WarPage', () => {
           tick: 320,
           bounds: { x: 0, y: 0, width: 48, height: 48 },
           buildings: {
-            'factory-1': { id: 'factory-1', type: 'recomposing_assembler', owner_id: 'p1', position: { x: 7, y: 3 }, hp: 100, max_hp: 100, level: 1, vision_range: 6, runtime: {} },
+            'factory-1': { id: 'factory-1', type: 'recomposing_assembler', owner_id: 'p1', position: { x: 7, y: 3 }, hp: 100, max_hp: 100, level: 1, vision_range: 6, runtime: { functions: { production: {} } } },
             'hub-1': { id: 'hub-1', type: 'battlefield_analysis_base', owner_id: 'p1', position: { x: 5, y: 3 }, hp: 100, max_hp: 100, level: 1, vision_range: 6, runtime: {} },
           },
         });

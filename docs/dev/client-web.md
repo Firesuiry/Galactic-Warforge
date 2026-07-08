@@ -103,8 +103,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 命令提交管道统一收敛到 `features/war/use-war-command.ts`，查询键统一由 `features/war/war-query-keys.ts` 构造；新增命令表单落在 `features/war/components/forms/` 下，自管表单状态、复用同一提交与反馈通道，避免在 WarPage 内堆叠手写 handler
 - 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
 - 已补 `client-web/tests/war-workbench-authoritative.spec.ts`，会配合 `server/config-war.yaml + map-war.yaml` 与 `server/scripts/start_official_war_test_server.sh` 启动官方战争验证局，实测蓝图改型、军工量产、舰队编成、战区配置、封锁与登陆链路
+- 已补 `client-web/tests/war-workbench-pure-gui.spec.ts`（P0 验收）：全程只用 GUI 打完官方战争局——蓝图创建/填槽/校验/定型→量产排队→舰队编成→任务群组建/编组/部署→战区创建/定义/目标→封锁，0 处 apiCommand 战争准备
 - `WarPage.test.tsx` 新增「12 个新战争命令表单的纯 GUI 提交」用例，覆盖 `blueprint_variant / queue_military_production / refit_unit / theater_create|define_zone|set_objective / task_force_create|assign|deploy / fleet_assign|attack|disband`
-- `/war` 现在会以 1 秒轮询 authoritative 战争查询，保证“accepted, will execute at next tick”这类异步命令能在浏览器里追上真实运行态，而不是停在提交瞬间的旧缓存（SSE 实时层收敛见后续批次）
+- 实时层收敛：`features/war/hooks/use-war-realtime.ts` 复刻 `use-planet-realtime` 模式，订阅 `/events/stream`（`shared-client/config.ts` 的 `ALL_EVENT_TYPES` 已补齐 13 个战争事件）→ 150ms 防抖批量失效对应 query；WarPage 的 8 路 1 秒轮询收敛为 `summary`(15s) + `system-runtime`(10s) 兜底，其余改 SSE 驱动
+- 顺手修复创建蓝图表单的 domain 口径：选项由过时的 `ground_unit/space_unit` 改为真实 catalog 的 `ground/air/orbital/space`，底盘选择基于 `isSpaceDomain` 判定，避免与 server 校验不一致导致创建执行失败
 - 当前边界：
   - AI 军事委派已经在 `/agents` 工作台和 `agent-gateway` 落地，但不在 `/war` 页内直接配置；推荐先用 `/war` 建好任务群/战区，再到 `/agents` 做委派和审计
 

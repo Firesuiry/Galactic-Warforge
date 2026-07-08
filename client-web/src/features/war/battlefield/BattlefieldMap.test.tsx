@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
 
-const runtime: SystemRuntimeView = {
+const runtime = {
   system_id: 'sys-1',
   discovered: true,
   available: true,
@@ -19,11 +19,11 @@ const runtime: SystemRuntimeView = {
   landing_operations: [{ id: 'landing-1', owner_id: 'p1', task_force_id: 'tf-1', system_id: 'sys-1', planet_id: 'planet-1-1', stage: 'reconnaissance', result: 'pending' }],
   contacts: [{ id: 'contact-1', scope_type: 'system', scope_id: 'sys-1', contact_kind: 'enemy_force', level: 'confirmed', position: { x: 4, y: 2 }, threat_level: 7, signal_strength: 0.7, classification: 'destroyer_screen', last_updated_tick: 320 }],
   battle_reports: [],
-};
+} as unknown as SystemRuntimeView;
 
-const fleets: FleetRuntimeView[] = [
-  { fleet_id: 'fleet-1', owner_id: 'p1', system_id: 'sys-1', formation: 'line', state: 'ready', weapons: { direct_fire: 0, missile: 0, point_defense: 0 }, sustainment: { fuel: 0, ammo: 0, spare_parts: 0 }, armor: { integrity: 1, max: 1 }, structure: { integrity: 1, max: 1 }, subsystems: {} },
-];
+const fleets = [
+  { fleet_id: 'fleet-1', owner_id: 'p1', system_id: 'sys-1', formation: 'line', state: 'ready' },
+] as unknown as FleetRuntimeView[];
 
 describe('BattlefieldMap', () => {
   it('渲染星系战场态势标题、图例与制空权摘要', () => {

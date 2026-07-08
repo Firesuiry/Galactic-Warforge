@@ -10,6 +10,7 @@ import { RefitForm } from '@/features/war/components/forms/RefitForm';
 import { TaskForceForm } from '@/features/war/components/forms/TaskForceForm';
 import { TheaterForm } from '@/features/war/components/forms/TheaterForm';
 import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
+import { useWarRealtime } from '@/features/war/hooks/use-war-realtime';
 import type { WarCommandHint } from '@/features/war/error-hints';
 import {
   formatBlockadeStatus,
@@ -43,10 +44,18 @@ const TASK_FORCE_STANCES: WarTaskForceStance[] = [
   'retreat_on_losses',
 ];
 
-const WAR_POLL_INTERVAL_MS = 1_000;
+const WAR_FALLBACK_SUMMARY_MS = 15_000;
+const WAR_FALLBACK_RUNTIME_MS = 10_000;
 
 function firstQueryError(errors: unknown[]) {
   return errors.find(Boolean);
+}
+
+const WAR_DOMAINS = ['ground', 'air', 'orbital', 'space'] as const;
+type WarDomain = (typeof WAR_DOMAINS)[number];
+
+function isSpaceDomain(domain: string) {
+  return domain === 'space' || domain === 'orbital';
 }
 
 function defaultBaseId(input: {
@@ -56,14 +65,10 @@ function defaultBaseId(input: {
     base_hulls?: Array<{ id: string; supported_domains?: string[] }>;
   };
 }) {
-  if (input.domain === 'space_unit') {
-    return input.catalog?.base_hulls?.find((entry) => (
-      !entry.supported_domains
-      || entry.supported_domains.length === 0
-      || entry.supported_domains.includes(input.domain)
-    ))?.id ?? '';
-  }
-  return input.catalog?.base_frames?.find((entry) => (
+  const bases = isSpaceDomain(input.domain)
+    ? input.catalog?.base_hulls
+    : input.catalog?.base_frames;
+  return bases?.find((entry) => (
     !entry.supported_domains
     || entry.supported_domains.length === 0
     || entry.supported_domains.includes(input.domain)
@@ -94,13 +99,13 @@ export function WarPage() {
   const [slotSelections, setSlotSelections] = useState<Record<string, string>>({});
   const [createBlueprintId, setCreateBlueprintId] = useState('');
   const [createBlueprintName, setCreateBlueprintName] = useState('');
-  const [createDomain, setCreateDomain] = useState('ground_unit');
+  const [createDomain, setCreateDomain] = useState<WarDomain>('space');
   const [createBaseId, setCreateBaseId] = useState('');
 
   const summaryQuery = useQuery({
     queryKey: ['summary', session.serverUrl, session.playerId],
     queryFn: () => client.fetchSummary(),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchInterval: WAR_FALLBACK_SUMMARY_MS,
     refetchIntervalInBackground: true,
   });
 
@@ -112,29 +117,21 @@ export function WarPage() {
   const blueprintsQuery = useQuery({
     queryKey: ['war-blueprints', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarfareBlueprints(),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const industryQuery = useQuery({
     queryKey: ['war-industry', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarIndustry(),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const taskForcesQuery = useQuery({
     queryKey: ['war-task-forces', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarTaskForces(),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const theatersQuery = useQuery({
     queryKey: ['war-theaters', session.serverUrl, session.playerId],
     queryFn: () => client.fetchWarTheaters(),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const activePlanetId = summaryQuery.data?.active_planet_id ?? '';
@@ -143,8 +140,6 @@ export function WarPage() {
     queryKey: ['planet', session.serverUrl, session.playerId, activePlanetId],
     queryFn: () => client.fetchPlanet(activePlanetId),
     enabled: Boolean(activePlanetId),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const focusSystemId = resolveSystemId({
@@ -157,23 +152,19 @@ export function WarPage() {
     queryKey: ['system', session.serverUrl, session.playerId, focusSystemId],
     queryFn: () => client.fetchSystem(focusSystemId),
     enabled: Boolean(focusSystemId),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const runtimeQuery = useQuery({
     queryKey: ['system-runtime', session.serverUrl, session.playerId, focusSystemId],
     queryFn: () => client.fetchSystemRuntime(focusSystemId),
     enabled: Boolean(focusSystemId),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchInterval: WAR_FALLBACK_RUNTIME_MS,
     refetchIntervalInBackground: true,
   });
 
   const fleetsQuery = useQuery({
     queryKey: ['war-fleets', session.serverUrl, session.playerId],
     queryFn: () => client.fetchFleets(),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const planetSceneQuery = useQuery({
@@ -185,11 +176,17 @@ export function WarPage() {
       height: 48,
     }),
     enabled: Boolean(activePlanetId),
-    refetchInterval: WAR_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 
   const { runCommand, notify, feedbacks, isPending } = useWarCommand();
+
+  useWarRealtime({
+    client,
+    serverUrl: session.serverUrl,
+    playerId: session.playerId,
+    playerKey: session.playerKey,
+    focusSystemId,
+  });
 
   const catalog = catalogQuery.data?.warfare;
   const blueprints = blueprintsQuery.data?.blueprints ?? [];
@@ -207,7 +204,8 @@ export function WarPage() {
   const blockades = runtime?.planet_blockades ?? [];
   const landingOperations = runtime?.landing_operations ?? [];
   const factoryBuildings = (Object.values(planetSceneQuery.data?.buildings ?? {})
-    .filter((building) => building.owner_id === session.playerId));
+    .filter((building) => building.owner_id === session.playerId
+      && building.runtime?.functions?.production));
   const scope = { serverUrl: session.serverUrl, playerId: session.playerId };
   const selectedBlueprint = blueprints.find((item) => item.id === selectedBlueprintId) ?? blueprints[0];
   const selectedDeployBlueprint = blueprints.find((item) => item.id === selectedDeployBlueprintId);
@@ -290,7 +288,7 @@ export function WarPage() {
       setCreateBaseId(nextBaseId);
       return;
     }
-    const baseExists = createDomain === 'space_unit'
+    const baseExists = isSpaceDomain(createDomain)
       ? Boolean(catalog.base_hulls?.some((item) => item.id === createBaseId))
       : Boolean(catalog.base_frames?.some((item) => item.id === createBaseId));
     if (!baseExists) {
@@ -302,22 +300,15 @@ export function WarPage() {
     if (!selectedBlueprint) {
       return;
     }
+    // 仅在切换蓝图时用 authoritative 组件状态初始化槽位选择；
+    // 同一蓝图被 SSE 失效重取时不重置，避免清掉玩家正在进行的槽位选择。
     const nextSelections: Record<string, string> = {};
     blueprintSlots.forEach(({ slot, current }) => {
       nextSelections[slot.id] = current;
     });
-    setSlotSelections((current) => {
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(nextSelections);
-      if (
-        currentKeys.length === nextKeys.length
-        && nextKeys.every((key) => current[key] === nextSelections[key])
-      ) {
-        return current;
-      }
-      return nextSelections;
-    });
-  }, [blueprintSlots, selectedBlueprint?.id]);
+    setSlotSelections(nextSelections);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBlueprint?.id]);
 
   if (isLoading) {
     return <div className="panel">正在加载战争工作台...</div>;
@@ -357,7 +348,7 @@ export function WarPage() {
       invalidateKeys: [['war-blueprints', session.serverUrl, session.playerId]],
       execute: () => client.cmdBlueprintCreate(createBlueprintId.trim(), createDomain, {
         name: createBlueprintName.trim() || undefined,
-        ...(createDomain === 'space_unit' ? { baseHullId: createBaseId } : { baseFrameId: createBaseId }),
+        ...(isSpaceDomain(createDomain) ? { baseHullId: createBaseId } : { baseFrameId: createBaseId }),
       }),
     });
   }
@@ -392,7 +383,9 @@ export function WarPage() {
       setFeedback('blueprint', { tone: 'error', title: '当前没有可定型的蓝图' });
       return;
     }
-    const targetState = selectedBlueprint.state === 'validated' ? 'prototype' : 'adopted';
+    // 状态机：validated→prototype→field_tested→adopted。定型默认推进到 prototype；
+    // 即使页面状态因 SSE 刷新滞后仍显示 draft，服务端已是 validated 时 prototype 也可达成。
+    const targetState = selectedBlueprint.state === 'field_tested' ? 'adopted' : 'prototype';
     runCommand({
       section: 'blueprint',
       invalidateKeys: [['war-blueprints', session.serverUrl, session.playerId]],
@@ -405,7 +398,7 @@ export function WarPage() {
       setFeedback('industry', { tone: 'error', title: '部署需要先选择蓝图和部署枢纽' });
       return;
     }
-    if (selectedDeployBlueprint.domain === 'space_unit') {
+    if (isSpaceDomain(selectedDeployBlueprint.domain)) {
       if (!focusSystemId) {
         setFeedback('industry', { tone: 'error', title: '当前缺少星系上下文，无法下达舰队部署' });
         return;
@@ -564,15 +557,16 @@ export function WarPage() {
               </label>
               <label className="war-field">
                 <span>作战域</span>
-                <select value={createDomain} onChange={(event) => setCreateDomain(event.target.value)}>
-                  <option value="ground_unit">ground_unit</option>
-                  <option value="space_unit">space_unit</option>
+                <select value={createDomain} onChange={(event) => setCreateDomain(event.target.value as WarDomain)}>
+                  {WAR_DOMAINS.map((domain) => (
+                    <option key={domain} value={domain}>{domain}</option>
+                  ))}
                 </select>
               </label>
               <label className="war-field">
                 <span>底盘</span>
                 <select value={createBaseId} onChange={(event) => setCreateBaseId(event.target.value)}>
-                  {(createDomain === 'space_unit' ? catalog.base_hulls : catalog.base_frames)?.map((base) => (
+                  {(isSpaceDomain(createDomain) ? catalog.base_hulls : catalog.base_frames)?.map((base) => (
                     <option key={base.id} value={base.id}>
                       {base.name} ({base.id})
                     </option>

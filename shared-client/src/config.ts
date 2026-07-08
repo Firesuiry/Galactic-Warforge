@@ -28,6 +28,20 @@ export const ALL_EVENT_TYPES = [
   'loot_dropped',
   'entity_updated',
   'rocket_launched',
+  // 战争闭环事件（fleet / 战场 / 封锁 / 登陆 / 补给 / 胜利）
+  'squad_deployed',
+  'fleet_commissioned',
+  'fleet_assigned',
+  'fleet_attack_started',
+  'fleet_disbanded',
+  'missile_salvo_fired',
+  'point_defense_intercept',
+  'battle_report_generated',
+  'landing_started',
+  'landing_failed',
+  'orbital_superiority_changed',
+  'supply_line_disrupted',
+  'victory_declared',
 ] as const;
 
 export const DEFAULT_EVENT_TYPES = [
@@ -40,6 +54,15 @@ export const DEFAULT_EVENT_TYPES = [
   'research_completed',
   'loot_dropped',
   'rocket_launched',
+  // 战争高频事件：让战争工作台的 SSE 实时层默认订阅
+  'fleet_commissioned',
+  'fleet_attack_started',
+  'battle_report_generated',
+  'orbital_superiority_changed',
+  'landing_started',
+  'landing_failed',
+  'supply_line_disrupted',
+  'squad_deployed',
 ] as const;
 
 export const DEFAULT_SSE_SILENT_EVENT_TYPES = new Set([
