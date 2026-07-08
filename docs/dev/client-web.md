@@ -94,18 +94,19 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 - `/war` 新增长期战争工作台，沿用当前大战略骨架，不退回调试表单堆叠页
 - 推荐直接配合 `server/config-war.yaml + map-war.yaml` 使用；官方战争验证局已经为 `p1` / `p2` 预置部署枢纽、军工底座、补给节点和 `prototype|precision_drone|corvette|destroyer` 公开科技，适合直接验证战争入口
-- 蓝图工作台：可创建蓝图、查看底盘与组件槽位、执行 `blueprint_set_component` / `blueprint_validate` / `blueprint_finalize`，并直接展示非法原因、预算占用和角色预估
-- 军工总览：聚合量产单、翻修单、部署枢纽和补给节点，可直接对选定蓝图发起一次部署尝试，并把“当前部署枢纽不支持该蓝图”等失败原因解释成玩家可读提示
-- 战区面板：聚合任务群与战区目标，可直接调整 `task_force_set_stance`，并对当前焦点行星发起 `blockade_planet` / `landing_start`
-- 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`、`landing_operations`，并直接暴露当前补给状态和短缺项
+- 蓝图工作台：可创建蓝图、查看底盘与组件槽位、执行 `blueprint_set_component` / `blueprint_validate` / `blueprint_finalize` / `blueprint_variant`（蓝图改型），并直接展示非法原因、预算占用和角色预估
+- 军工总览：聚合量产单、翻修单、部署枢纽和补给节点，可直接对选定蓝图发起一次部署尝试，并可通过「量产排队」「翻修改装」表单下达 `queue_military_production` / `refit_unit`，把“当前部署枢纽不支持该蓝图”等失败原因解释成玩家可读提示
+- 战区面板：聚合任务群与战区目标，可直接调整 `task_force_set_stance`，对当前焦点行星发起 `blockade_planet` / `landing_start`，并通过表单完成 `task_force_create` / `task_force_assign` / `task_force_deploy` 与 `theater_create` / `theater_define_zone` / `theater_set_objective`
+- 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`、`landing_operations`，并直接暴露当前补给状态和短缺项；舰队指挥表单可下达 `fleet_assign` / `fleet_attack` / `fleet_disband`
 - 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁、登陆的 authoritative 回执
+- 命令提交管道统一收敛到 `features/war/use-war-command.ts`，查询键统一由 `features/war/war-query-keys.ts` 构造；新增命令表单落在 `features/war/components/forms/` 下，自管表单状态、复用同一提交与反馈通道，避免在 WarPage 内堆叠手写 handler
 - 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
 - 已补 `client-web/tests/war-workbench-authoritative.spec.ts`，会配合 `server/config-war.yaml + map-war.yaml` 与 `server/scripts/start_official_war_test_server.sh` 启动官方战争验证局，实测蓝图改型、军工量产、舰队编成、战区配置、封锁与登陆链路
-- `/war` 现在会以 1 秒轮询 authoritative 战争查询，保证“accepted, will execute at next tick”这类异步命令能在浏览器里追上真实运行态，而不是停在提交瞬间的旧缓存
+- `WarPage.test.tsx` 新增「12 个新战争命令表单的纯 GUI 提交」用例，覆盖 `blueprint_variant / queue_military_production / refit_unit / theater_create|define_zone|set_objective / task_force_create|assign|deploy / fleet_assign|attack|disband`
+- `/war` 现在会以 1 秒轮询 authoritative 战争查询，保证“accepted, will execute at next tick”这类异步命令能在浏览器里追上真实运行态，而不是停在提交瞬间的旧缓存（SSE 实时层收敛见后续批次）
 - 当前边界：
-  - 当前页面重点是蓝图查看/编辑、部署尝试、姿态调整、封锁/登陆和战报情报观察，不是把全部战争指挥入口都塞进一个页面
-  - `task_force_create|assign`、`theater_create|define_zone|set_objective`、军工量产下单、翻修下单目前仍以 CLI 为最稳入口
-  - AI 军事委派已经在 `/agents` 工作台和 `agent-gateway` 落地，但不在 `/war` 页内直接配置；推荐先用 CLI 或既有命令入口建好任务群/战区，再到 `/agents` 做委派和审计
+  - 战场态势可视化（星系级舰队/封锁/登陆位置图）尚未落地，当前仍以文字列表呈现接触与封锁
+  - AI 军事委派已经在 `/agents` 工作台和 `agent-gateway` 落地，但不在 `/war` 页内直接配置；推荐先用 `/war` 建好任务群/战区，再到 `/agents` 做委派和审计
 
 ### 3.4 行星页
 

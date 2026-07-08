@@ -746,4 +746,223 @@ describe('WarPage', () => {
     expect(screen.getByText('当前任务群缺少登陆运力')).toBeInTheDocument();
     expect(screen.getByText('task force tf-1 stance set to siege')).toBeInTheDocument();
   });
+
+  it('支持 12 个新战争命令表单的纯 GUI 提交', async () => {
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+
+    const commandTypes: string[] = [];
+
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/state/summary')) {
+        return jsonResponse({
+          tick: 320,
+          active_planet_id: 'planet-1-1',
+          map_width: 128,
+          map_height: 128,
+          players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 880, energy: 460 }, inventory: {} } },
+        });
+      }
+      if (url.endsWith('/catalog')) {
+        return jsonResponse({
+          warfare: {
+            base_frames: [{
+              id: 'mech_frame_alpha',
+              name: '阿尔法机体',
+              supported_domains: ['ground_unit'],
+              slots: [{ id: 'core', category: 'core' }, { id: 'weapon', category: 'weapon' }],
+            }],
+            base_hulls: [{
+              id: 'corvette_hull',
+              name: '轻型护航舰体',
+              supported_domains: ['space_unit'],
+              slots: [{ id: 'engine', category: 'engine' }, { id: 'weapon', category: 'weapon' }],
+            }],
+            components: [
+              { id: 'fusion_core', name: '聚变核心', category: 'core', supported_domains: ['ground_unit'] },
+              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground_unit', 'space_unit'] },
+            ],
+          },
+        });
+      }
+      if (url.endsWith('/world/warfare/blueprints')) {
+        return jsonResponse({
+          blueprints: [
+            {
+              id: 'corvette_base',
+              name: '标准护航舰',
+              source: 'player',
+              state: 'adopted',
+              domain: 'space_unit',
+              base_hull_id: 'corvette_hull',
+              validation: { valid: true, issues: [] },
+              allowed_actions: ['blueprint_variant'],
+              components: [
+                { slot_id: 'engine', component_id: 'burner_drive' },
+                { slot_id: 'weapon', component_id: 'coilgun' },
+              ],
+            },
+          ],
+        });
+      }
+      if (url.endsWith('/world/warfare/industry')) {
+        return jsonResponse({
+          production_orders: [],
+          refit_orders: [],
+          deployment_hubs: [{
+            building_id: 'hub-1',
+            building_type: 'orbital_dock',
+            planet_id: 'planet-1-1',
+            capacity: 6,
+            ready_payloads: {},
+          }],
+          supply_nodes: [],
+        });
+      }
+      if (url.endsWith('/world/warfare/task-forces')) {
+        return jsonResponse({
+          task_forces: [{
+            id: 'tf-1',
+            name: '第一封锁群',
+            stance: 'hold',
+            deployment: { system_id: 'sys-1', planet_id: 'planet-1-1' },
+            command_capacity: { total: 8, used: 0 },
+            supply_status: { current: { fuel: 40, ammo: 12 }, capacity: { fuel: 100, ammo: 60 }, condition: 'stable', shortages: [] },
+            members: [],
+          }],
+        });
+      }
+      if (url.endsWith('/world/warfare/theaters')) {
+        return jsonResponse({
+          theaters: [{
+            id: 'theater-front',
+            name: '前线战区',
+            zones: [{ zone_type: 'primary', system_id: 'sys-1', planet_id: 'planet-1-1', radius: 12 }],
+            objective: { objective_type: 'secure_planet', system_id: 'sys-1', planet_id: 'planet-1-1' },
+          }],
+        });
+      }
+      if (url.endsWith('/world/fleets')) {
+        return jsonResponse([
+          { fleet_id: 'fleet-1', owner_id: 'p1', system_id: 'sys-1', formation: 'line', state: 'ready', units: [] },
+        ]);
+      }
+      if (url.endsWith('/world/planets/planet-1-1')) {
+        return jsonResponse({
+          planet_id: 'planet-1-1',
+          system_id: 'sys-1',
+          name: 'Gaia',
+          discovered: true,
+          kind: 'terrestrial',
+          map_width: 48,
+          map_height: 48,
+          tick: 320,
+        });
+      }
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return jsonResponse({
+          planet_id: 'planet-1-1',
+          system_id: 'sys-1',
+          discovered: true,
+          map_width: 48,
+          map_height: 48,
+          tick: 320,
+          bounds: { x: 0, y: 0, width: 48, height: 48 },
+          buildings: {
+            'factory-1': { id: 'factory-1', type: 'recomposing_assembler', owner_id: 'p1', position: { x: 7, y: 3 }, hp: 100, max_hp: 100, level: 1, vision_range: 6, runtime: {} },
+            'hub-1': { id: 'hub-1', type: 'battlefield_analysis_base', owner_id: 'p1', position: { x: 5, y: 3 }, hp: 100, max_hp: 100, level: 1, vision_range: 6, runtime: {} },
+          },
+        });
+      }
+      if (url.endsWith('/world/systems/sys-1')) {
+        return jsonResponse({
+          system_id: 'sys-1',
+          name: 'Helios',
+          discovered: true,
+          planets: [{ planet_id: 'planet-1-1', name: 'Gaia', discovered: true, kind: 'terrestrial' }],
+        });
+      }
+      if (url.endsWith('/world/systems/sys-1/runtime')) {
+        return jsonResponse({
+          system_id: 'sys-1',
+          discovered: true,
+          available: true,
+          orbital_superiority: { system_id: 'sys-1', advantage_player_id: 'p1', contest_intensity: 0.3, last_reason: 'task_force_superiority', updated_tick: 320 },
+          planet_blockades: [],
+          landing_operations: [],
+          contacts: [{
+            id: 'contact-1',
+            contact_kind: 'enemy_force',
+            classification: 'destroyer_screen',
+            confidence: 0.7,
+            threat_level: 7,
+            entity_id: 'enemy-fleet-3',
+            position: { x: 18, y: 0, z: 4 },
+          }],
+          battle_reports: [],
+        });
+      }
+      if (url.endsWith('/commands')) {
+        const request = init?.body ? JSON.parse(String(init.body)) : null;
+        const command = request?.commands?.[0];
+        commandTypes.push(command?.type);
+        return jsonResponse(createCommandResponse(`${command?.type} accepted`));
+      }
+      throw new Error(`unexpected url ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    renderApp(['/war']);
+
+    await screen.findByRole('heading', { name: '战争工作台' });
+
+    // blueprint_variant
+    await user.type(screen.getByLabelText('变体 ID'), 'corvette_scout');
+    await user.click(screen.getByRole('checkbox', { name: /weapon/ }));
+    await user.click(screen.getByRole('button', { name: '派生变体' }));
+
+    // queue_military_production
+    await user.click(screen.getByRole('button', { name: '下达量产' }));
+    // refit_unit
+    await user.click(screen.getByRole('button', { name: '下达翻修' }));
+
+    // theater_create / define_zone / set_objective
+    await user.type(screen.getByLabelText('战区 ID'), 'theater-alpha');
+    await user.click(screen.getByRole('button', { name: '创建战区' }));
+    await user.click(screen.getByRole('button', { name: '定义区域' }));
+    await user.click(screen.getByRole('button', { name: '设定目标' }));
+
+    // task_force_create / assign / deploy
+    await user.type(screen.getByLabelText('任务群 ID'), 'tf-strike');
+    await user.click(screen.getByRole('button', { name: '组建任务群' }));
+    await user.click(screen.getByRole('checkbox', { name: 'fleet-1' }));
+    await user.click(screen.getByRole('button', { name: '编入任务群' }));
+    await user.click(screen.getByRole('button', { name: '部署到位' }));
+
+    // fleet_assign / attack / disband
+    await user.click(screen.getByRole('button', { name: '调整编队' }));
+    await user.click(screen.getByRole('button', { name: '下达攻击' }));
+    await user.click(screen.getByRole('button', { name: '解散舰队' }));
+
+    await waitFor(() => {
+      expect(commandTypes).toEqual([
+        'blueprint_variant',
+        'queue_military_production',
+        'refit_unit',
+        'theater_create',
+        'theater_define_zone',
+        'theater_set_objective',
+        'task_force_create',
+        'task_force_assign',
+        'task_force_deploy',
+        'fleet_assign',
+        'fleet_attack',
+        'fleet_disband',
+      ]);
+    });
+  });
 });

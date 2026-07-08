@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import type { CommandResult, WarTaskForceStance } from '@shared/types';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { WarTaskForceStance } from '@shared/types';
+import { useQuery } from '@tanstack/react-query';
 
-import { buildWarSuccessHint, resolveWarCommandHint, type WarCommandHint } from '@/features/war/error-hints';
+import { BlueprintVariantForm } from '@/features/war/components/forms/BlueprintVariantForm';
+import { FleetActionForm } from '@/features/war/components/forms/FleetActionForm';
+import { ProductionQueueForm } from '@/features/war/components/forms/ProductionQueueForm';
+import { RefitForm } from '@/features/war/components/forms/RefitForm';
+import { TaskForceForm } from '@/features/war/components/forms/TaskForceForm';
+import { TheaterForm } from '@/features/war/components/forms/TheaterForm';
+import type { WarCommandHint } from '@/features/war/error-hints';
 import {
   formatBlockadeStatus,
   formatBlueprintBaseLabel,
@@ -19,16 +25,11 @@ import {
   getBlueprintSlotComponents,
   inferBlueprintRole,
 } from '@/features/war/format';
+import { useWarCommand } from '@/features/war/use-war-command';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
 type FeedbackSection = 'blueprint' | 'industry' | 'theater' | 'reports';
-
-interface PendingWarCommand {
-  section: FeedbackSection;
-  invalidateKeys: unknown[][];
-  execute: () => Promise<{ results: CommandResult[] }>;
-}
 
 const TASK_FORCE_STANCES: WarTaskForceStance[] = [
   'hold',
@@ -82,7 +83,6 @@ function resolveSystemId(input: {
 export function WarPage() {
   const client = useApiClient();
   const session = useSessionSnapshot();
-  const queryClient = useQueryClient();
 
   const [selectedBlueprintId, setSelectedBlueprintId] = useState('');
   const [selectedDeployBlueprintId, setSelectedDeployBlueprintId] = useState('');
@@ -91,7 +91,6 @@ export function WarPage() {
   const [selectedPlanetId, setSelectedPlanetId] = useState('');
   const [selectedStance, setSelectedStance] = useState<WarTaskForceStance>('hold');
   const [slotSelections, setSlotSelections] = useState<Record<string, string>>({});
-  const [feedbacks, setFeedbacks] = useState<Partial<Record<FeedbackSection, WarCommandHint[]>>>({});
   const [createBlueprintId, setCreateBlueprintId] = useState('');
   const [createBlueprintName, setCreateBlueprintName] = useState('');
   const [createDomain, setCreateDomain] = useState('ground_unit');
@@ -169,46 +168,27 @@ export function WarPage() {
     refetchIntervalInBackground: true,
   });
 
-  const commandMutation = useMutation({
-    mutationFn: async (input: PendingWarCommand) => {
-      const response = await input.execute();
-      return {
-        input,
-        result: response.results[0],
-      };
-    },
-    onSuccess: ({ input, result }) => {
-      const hint = result?.status === 'executed'
-        ? buildWarSuccessHint(result?.message)
-        : resolveWarCommandHint(result?.message)
-          ?? {
-            tone: 'warning',
-            title: result?.message || '命令未返回结果',
-          };
-      setFeedbacks((current) => {
-        const previous = current[input.section] ?? [];
-        return {
-          ...current,
-          [input.section]: [hint, ...previous].slice(0, 4),
-        };
-      });
-      input.invalidateKeys.forEach((queryKey) => {
-        void queryClient.invalidateQueries({ queryKey });
-      });
-    },
-    onError: (error, input) => {
-      setFeedbacks((current) => {
-        const previous = current[input.section] ?? [];
-        return {
-          ...current,
-          [input.section]: [{
-            tone: 'error',
-            title: error instanceof Error ? error.message : '命令提交失败',
-          }, ...previous].slice(0, 4),
-        };
-      });
-    },
+  const fleetsQuery = useQuery({
+    queryKey: ['war-fleets', session.serverUrl, session.playerId],
+    queryFn: () => client.fetchFleets(),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
+
+  const planetSceneQuery = useQuery({
+    queryKey: ['war-planet-scene', session.serverUrl, session.playerId, activePlanetId],
+    queryFn: () => client.fetchPlanetScene(activePlanetId, {
+      x: 0,
+      y: 0,
+      width: 48,
+      height: 48,
+    }),
+    enabled: Boolean(activePlanetId),
+    refetchInterval: WAR_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+  });
+
+  const { runCommand, notify, feedbacks, isPending } = useWarCommand();
 
   const catalog = catalogQuery.data?.warfare;
   const blueprints = blueprintsQuery.data?.blueprints ?? [];
@@ -217,6 +197,7 @@ export function WarPage() {
   const theaters = theatersQuery.data?.theaters ?? [];
   const system = systemQuery.data;
   const runtime = runtimeQuery.data;
+  const fleets = fleetsQuery.data ?? [];
   const deploymentHubs = industry?.deployment_hubs ?? [];
   const supplyNodes = industry?.supply_nodes ?? [];
   const currentPlanets = system?.planets ?? [];
@@ -224,6 +205,9 @@ export function WarPage() {
   const battleReports = runtime?.battle_reports ?? [];
   const blockades = runtime?.planet_blockades ?? [];
   const landingOperations = runtime?.landing_operations ?? [];
+  const factoryBuildings = (Object.values(planetSceneQuery.data?.buildings ?? {})
+    .filter((building) => building.owner_id === session.playerId));
+  const scope = { serverUrl: session.serverUrl, playerId: session.playerId };
   const selectedBlueprint = blueprints.find((item) => item.id === selectedBlueprintId) ?? blueprints[0];
   const selectedDeployBlueprint = blueprints.find((item) => item.id === selectedDeployBlueprintId);
   const selectedTaskForce = taskForces.find((item) => item.id === selectedTaskForceId) ?? taskForces[0];
@@ -355,17 +339,7 @@ export function WarPage() {
   }
 
   function setFeedback(section: FeedbackSection, hint: WarCommandHint) {
-    setFeedbacks((current) => {
-      const previous = current[section] ?? [];
-      return {
-        ...current,
-        [section]: [hint, ...previous].slice(0, 4),
-      };
-    });
-  }
-
-  function runCommand(input: PendingWarCommand) {
-    commandMutation.mutate(input);
+    notify(section, hint);
   }
 
   function handleCreateBlueprint() {
@@ -681,6 +655,14 @@ export function WarPage() {
               </article>
             </div>
           ) : null}
+
+          <BlueprintVariantForm
+            scope={scope}
+            runCommand={runCommand}
+            isPending={isPending}
+            catalog={catalog}
+            blueprints={blueprints}
+          />
         </section>
 
         <section className="panel war-panel">
@@ -780,6 +762,25 @@ export function WarPage() {
               ))}
             </ul>
           </article>
+
+          <div className="war-section-grid">
+            <ProductionQueueForm
+              scope={scope}
+              runCommand={runCommand}
+              isPending={isPending}
+              buildings={factoryBuildings}
+              deploymentHubs={deploymentHubs}
+              blueprints={blueprints}
+            />
+            <RefitForm
+              scope={scope}
+              runCommand={runCommand}
+              isPending={isPending}
+              buildings={factoryBuildings}
+              fleets={fleets}
+              blueprints={blueprints}
+            />
+          </div>
         </section>
 
         <section className="panel war-panel">
@@ -877,6 +878,28 @@ export function WarPage() {
               </ul>
             </article>
           </div>
+
+          <div className="war-section-grid">
+            <TaskForceForm
+              scope={scope}
+              runCommand={runCommand}
+              isPending={isPending}
+              taskForces={taskForces}
+              theaters={theaters}
+              fleets={fleets}
+              currentPlanets={currentPlanets}
+              focusSystemId={focusSystemId}
+              selectedPlanetId={selectedPlanetId}
+            />
+            <TheaterForm
+              scope={scope}
+              runCommand={runCommand}
+              isPending={isPending}
+              theaters={theaters}
+              currentPlanets={currentPlanets}
+              focusSystemId={focusSystemId}
+            />
+          </div>
         </section>
 
         <section className="panel war-panel">
@@ -948,6 +971,19 @@ export function WarPage() {
                 ))}
               </ul>
             </article>
+          </div>
+
+          <div className="war-section-grid">
+            <FleetActionForm
+              scope={scope}
+              runCommand={runCommand}
+              isPending={isPending}
+              fleets={fleets}
+              currentPlanets={currentPlanets}
+              contacts={contacts}
+              selectedPlanetId={selectedPlanetId}
+              focusSystemId={focusSystemId}
+            />
           </div>
         </section>
       </section>
