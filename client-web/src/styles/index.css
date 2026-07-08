@@ -1,10 +1,41 @@
 :root {
+  /* 字体 */
+  --font-display: "Orbitron", "PingFang SC", sans-serif; /* 标题/数值 */
+  --font-body: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 色板（DSP 全息） */
+  --bg-0: #060912;
+  --bg-1: #0a1428;
+  --panel-bg: rgba(12, 22, 44, 0.72);
+  --panel-bg-solid: #0c162c;
+  --border: rgba(120, 180, 255, 0.14);
+  --border-glow: rgba(57, 230, 208, 0.35);
+  --accent: #39e6d0; /* teal 主色（己方/激活） */
+  --accent-2: #5fb0ff; /* blue 次色 */
+  --amber: #ffb454; /* 能量/警告 */
+  --danger: #ff5757; /* 敌方/错误 */
+  --good: #6ee7b7; /* 正向反馈 */
+  --text: #e8f1ff;
+  --text-muted: #8fa3c8;
+  --text-dim: #5e7191;
+  /* 发光 */
+  --glow-accent: 0 0 16px rgba(57, 230, 208, 0.35);
+  --glow-amber: 0 0 14px rgba(255, 180, 84, 0.32);
+  /* 尺寸 */
+  --radius-sm: 6px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  /* 动效 */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 360ms;
+
   color-scheme: dark;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-body);
   line-height: 1.5;
   font-weight: 400;
-  background: #0b1020;
-  color: #edf2ff;
+  background: var(--bg-0);
+  color: var(--text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -21,11 +52,12 @@ body {
   min-height: 100vh;
   background:
     radial-gradient(circle at top, rgba(63, 92, 255, 0.18), transparent 30%),
-    linear-gradient(180deg, #0b1020 0%, #090d18 100%);
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  color: var(--text);
 }
 
 a {
-  color: #79a8ff;
+  color: var(--accent-2);
   text-decoration: none;
 }
 
@@ -921,6 +953,21 @@ button {
 .entity-node--enemy,
 .entity-node--detection { z-index: 4; }
 
+/* Icon 组件：彩色圆角方块底 + emoji 字形（V0 设计地基，V4 接线到实体节点/资源 chip/命令按钮） */
+.sw-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  box-shadow: 0 0 6px rgba(57, 230, 208, 0.18);
+  user-select: none;
+  line-height: 1;
+  overflow: hidden;
+}
+
 .planet-map-canvas__status {
   display: flex;
   flex-wrap: wrap;
@@ -1753,20 +1800,20 @@ button {
 }
 
 :root {
-  font-family: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: #071013;
-  color: #e9f4f2;
+  font-family: var(--font-body);
+  background: var(--bg-0);
+  color: var(--text);
 }
 
 body {
   background:
-    radial-gradient(circle at 20% 0%, rgba(59, 116, 102, 0.2), transparent 30%),
-    radial-gradient(circle at 100% 20%, rgba(168, 116, 42, 0.12), transparent 26%),
-    linear-gradient(180deg, #071013 0%, #0b171b 100%);
+    radial-gradient(circle at 20% 0%, rgba(57, 230, 208, 0.12), transparent 30%),
+    radial-gradient(circle at 100% 20%, rgba(255, 180, 84, 0.08), transparent 26%),
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
 }
 
 a {
-  color: #90c8ba;
+  color: var(--accent-2);
 }
 
 .page-shell {
