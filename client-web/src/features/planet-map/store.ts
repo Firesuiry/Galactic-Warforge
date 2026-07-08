@@ -155,6 +155,17 @@ export interface PlanetSceneWindow {
   height: number;
 }
 
+/**
+ * 主地图画布的像素视口与当前 tile 边长。
+ * 由 PlanetMapCanvas 写入（仅在 resize/zoom 时变更），供 minimap 等页级组件
+ * 计算视口矩形而不必嵌进 PlanetMapCanvas 内部（保持拖拽热路径隔离）。
+ */
+export interface PlanetMapProjection {
+  viewportWidth: number;
+  viewportHeight: number;
+  tileSize: number;
+}
+
 export interface PlanetLayerState {
   terrain: boolean;
   resources: boolean;
@@ -196,6 +207,7 @@ interface PlanetViewState {
   lastFullSyncAt: number | null;
   debugOpen: boolean;
   focusRequest: FocusRequest | null;
+  mapProjection: PlanetMapProjection;
 }
 
 interface PlanetViewActions {
@@ -218,6 +230,7 @@ interface PlanetViewActions {
   toggleDebugOpen: () => void;
   requestFocus: (position: TilePoint) => void;
   consumeFocusRequest: (nonce: number) => void;
+  setMapProjection: (projection: PlanetMapProjection) => void;
 }
 
 export type PlanetViewStore = PlanetViewState & PlanetViewActions;
@@ -272,6 +285,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     lastFullSyncAt: null,
     debugOpen: false,
     focusRequest: null,
+    mapProjection: { viewportWidth: 0, viewportHeight: 0, tileSize: 0 },
   };
 }
 
@@ -387,6 +401,18 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
         : {}
     ));
   },
+  setMapProjection: (projection) => {
+    set((state) => {
+      if (
+        state.mapProjection.viewportWidth === projection.viewportWidth
+        && state.mapProjection.viewportHeight === projection.viewportHeight
+        && state.mapProjection.tileSize === projection.tileSize
+      ) {
+        return state;
+      }
+      return { mapProjection: projection };
+    });
+  },
 }));
 
 export function resetPlanetViewStore() {
@@ -411,5 +437,6 @@ export function resetPlanetViewStore() {
     toggleDebugOpen: usePlanetViewStore.getState().toggleDebugOpen,
     requestFocus: usePlanetViewStore.getState().requestFocus,
     consumeFocusRequest: usePlanetViewStore.getState().consumeFocusRequest,
+    setMapProjection: usePlanetViewStore.getState().setMapProjection,
   });
 }

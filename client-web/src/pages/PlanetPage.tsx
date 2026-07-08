@@ -18,6 +18,7 @@ import {
   usePlanetCommandStore,
 } from "@/features/planet-commands/store";
 import { PlanetMapCanvas } from "@/features/planet-map/PlanetMapCanvas";
+import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { formatMineralInventory } from "@/features/mineral-summary";
 import {
   extractAlertFromEvent,
@@ -28,7 +29,7 @@ import {
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
 import { useApiClient } from "@/hooks/use-api-client";
 import { useSessionSnapshot } from "@/hooks/use-session";
-import { translatePlanetKind } from "@/i18n/translate";
+import { translatePlanetKind, translateUi } from "@/i18n/translate";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
   getPlanetOverviewRequestStep,
@@ -68,6 +69,22 @@ function useMediaQuery(query: string) {
 
   return matches;
 }
+
+type PlanetDetailPanel = "workbench" | "selection" | "activity";
+
+interface DetailTabConfig {
+  id: PlanetDetailPanel;
+  /** 桌面端图标 Tab 用的 emoji 字形（工作台🛠️/选中🎯/活动📜）。 */
+  glyph: string;
+  /** i18n key → 文案（移动端文本 Tab + 桌面端 aria-label 共用）。 */
+  labelKey: "planet.tab.workbench" | "planet.tab.selection" | "planet.tab.activity";
+}
+
+const DETAIL_TABS: DetailTabConfig[] = [
+  { id: "workbench", glyph: "🛠️", labelKey: "planet.tab.workbench" },
+  { id: "selection", glyph: "🎯", labelKey: "planet.tab.selection" },
+  { id: "activity", glyph: "📜", labelKey: "planet.tab.activity" },
+];
 
 export function PlanetPage() {
   const client = useApiClient();
@@ -123,9 +140,9 @@ export function PlanetPage() {
   );
   const activeZoomLevel = getPlanetZoomLevel(zoomIndex);
   const isCompactLayout = useMediaQuery("(max-width: 900px)");
-  const [compactPanel, setCompactPanel] = useState<
-    "workbench" | "selection" | "activity"
-  >("workbench");
+  const [activeDetailPanel, setActiveDetailPanel] = useState<PlanetDetailPanel>(
+    "workbench",
+  );
 
   const sceneQuery = useQuery({
     queryKey: [
@@ -260,7 +277,7 @@ export function PlanetPage() {
     restoredViewRef.current = "";
     resetForPlanet(planetId);
     resetCommandStore(planetId);
-    setCompactPanel("workbench");
+    setActiveDetailPanel("workbench");
   }, [planetId, resetCommandStore, resetForPlanet]);
 
   useEffect(() => {
@@ -309,6 +326,8 @@ export function PlanetPage() {
     );
     if (sharedSelection) {
       setSelected(sharedSelection);
+      // 深链直达选中实体：自动切到"选中对象" Tab，让用户立刻看到详情
+      setActiveDetailPanel("selection");
     }
 
     restoredViewRef.current = signature;
@@ -418,47 +437,48 @@ export function PlanetPage() {
   );
   const detailPanels = (
     <>
-      {isCompactLayout ? (
-        <div
-          aria-label="行星工作台面板"
-          className="planet-detail-tabs"
-          role="tablist"
-        >
-          {[
-            { id: "workbench", label: "工作台" },
-            { id: "selection", label: "选中对象" },
-            { id: "activity", label: "活动流" },
-          ].map((panel) => (
+      <div
+        aria-label="行星工作台面板"
+        className={
+          isCompactLayout
+            ? "planet-detail-tabs"
+            : "planet-detail-tabs planet-detail-tabs--icon"
+        }
+        role="tablist"
+      >
+        {DETAIL_TABS.map((tab) => {
+          const label = translateUi(tab.labelKey);
+          const isActive = activeDetailPanel === tab.id;
+          return (
             <button
-              aria-controls={`planet-compact-panel-${panel.id}`}
-              aria-selected={compactPanel === panel.id}
+              aria-controls={`planet-detail-panel-${tab.id}`}
+              aria-label={label}
+              aria-selected={isActive}
               className={
-                compactPanel === panel.id
+                isActive
                   ? "secondary-button planet-detail-tabs__tab planet-detail-tabs__tab--active"
                   : "secondary-button planet-detail-tabs__tab"
               }
-              id={`planet-compact-tab-${panel.id}`}
-              key={panel.id}
-              onClick={() =>
-                setCompactPanel(
-                  panel.id as "workbench" | "selection" | "activity",
-                )
-              }
+              id={`planet-detail-tab-${tab.id}`}
+              key={tab.id}
+              onClick={() => setActiveDetailPanel(tab.id)}
               role="tab"
+              title={label}
               type="button"
             >
-              {panel.label}
+              <span aria-hidden="true" className="planet-detail-tabs__glyph">
+                {tab.glyph}
+              </span>
+              {isCompactLayout ? (
+                <span className="planet-detail-tabs__text">{label}</span>
+              ) : null}
             </button>
-          ))}
-        </div>
-      ) : null}
+          );
+        })}
+      </div>
       <div className="planet-detail-shell__content">
-        {!isCompactLayout || compactPanel === "workbench" ? (
-          <div
-            hidden={isCompactLayout && compactPanel !== "workbench"}
-            id="planet-compact-panel-workbench"
-            role={isCompactLayout ? "tabpanel" : undefined}
-          >
+        {activeDetailPanel === "workbench" ? (
+          <div id="planet-detail-panel-workbench" role="tabpanel">
             <PlanetCommandCenter
               catalog={catalog}
               client={client}
@@ -471,12 +491,8 @@ export function PlanetPage() {
             />
           </div>
         ) : null}
-        {!isCompactLayout || compactPanel === "selection" ? (
-          <div
-            hidden={isCompactLayout && compactPanel !== "selection"}
-            id="planet-compact-panel-selection"
-            role={isCompactLayout ? "tabpanel" : undefined}
-          >
+        {activeDetailPanel === "selection" ? (
+          <div id="planet-detail-panel-selection" role="tabpanel">
             <PlanetEntityPanel
               catalog={catalog}
               fog={planet}
@@ -488,8 +504,8 @@ export function PlanetPage() {
             />
           </div>
         ) : null}
-        {isCompactLayout && compactPanel === "activity" ? (
-          <div id="planet-compact-panel-activity" role="tabpanel">
+        {activeDetailPanel === "activity" ? (
+          <div id="planet-detail-panel-activity" role="tabpanel">
             <PlanetActivityPanel
               alerts={recentAlerts}
               events={recentEvents}
@@ -560,6 +576,11 @@ export function PlanetPage() {
             planet={planet}
             runtime={runtime}
           />
+          <PlanetMinimap
+            fog={planet}
+            overview={overviewQuery.data}
+            planet={planet}
+          />
           <PlanetDebugPanel
             catalog={catalog}
             canvas={canvasRef.current}
@@ -597,14 +618,6 @@ export function PlanetPage() {
           {detailPanels}
         </aside>
       </section>
-
-      {!isCompactLayout ? (
-        <PlanetActivityPanel
-          alerts={recentAlerts}
-          events={recentEvents}
-          planet={planet}
-        />
-      ) : null}
     </div>
   );
 }

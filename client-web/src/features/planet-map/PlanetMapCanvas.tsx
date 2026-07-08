@@ -197,6 +197,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     setSceneWindow,
     setHoveredTile,
     setSelected,
+    setMapProjection,
   } = usePlanetViewStore(useShallow((state) => ({
     camera: state.camera,
     focusRequest: state.focusRequest,
@@ -209,6 +210,7 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     setSceneWindow: state.setSceneWindow,
     setHoveredTile: state.setHoveredTile,
     setSelected: state.setSelected,
+    setMapProjection: state.setMapProjection,
   })));
   const session = useSessionSnapshot();
 
@@ -337,6 +339,16 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     const nextSceneWindow = buildSceneWindow(planet, camera, tileSize, viewport.width, viewport.height);
     setSceneWindow(nextSceneWindow);
   }, [camera, overviewMode, planet, setSceneWindow, tileSize, viewport.height, viewport.width]);
+
+  // 把主画布的像素视口与 tile 边长发布到 store（仅在 resize/zoom 时变更），
+  // 供 minimap 等页级组件计算视口矩形；setter 自带去重，不会触发额外重渲染。
+  useEffect(() => {
+    setMapProjection({
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      tileSize,
+    });
+  }, [setMapProjection, tileSize, viewport.height, viewport.width]);
 
   useEffect(() => {
     const previousZoomMode = getPlanetZoomLevel(previousZoomIndexRef.current).mode;

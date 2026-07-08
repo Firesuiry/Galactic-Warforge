@@ -175,6 +175,9 @@ export const TRANSLATIONS = {
     "page.campaign_overview": "战役总览",
     "page.galaxy_command_map": "银河指挥图",
     "page.system_targeting": "星系态势",
+    "planet.tab.workbench": "工作台",
+    "planet.tab.selection": "选中对象",
+    "planet.tab.activity": "活动流",
   },
 } as const;
 

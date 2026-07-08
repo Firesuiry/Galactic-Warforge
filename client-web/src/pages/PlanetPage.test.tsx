@@ -930,6 +930,9 @@ describe("PlanetPage", () => {
       screen.getAllByText("矿产 铁矿 24 · 石矿 3 · 硅矿 8").length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("资源 240 / 140")).not.toBeInTheDocument();
+
+    // V2：活动流收入右侧"活动流" Tab，切过去核对事件/告警
+    await user.click(screen.getByRole("tab", { name: "活动流" }));
     expect(screen.getByText("事件时间线")).toBeInTheDocument();
     expect(screen.getByText("告警面板")).toBeInTheDocument();
     expect(
@@ -940,6 +943,8 @@ describe("PlanetPage", () => {
 
     await user.click(screen.getAllByRole("button", { name: "定位" })[0]);
 
+    // 定位选中建筑后，切到"选中对象" Tab 看实体详情
+    await user.click(screen.getByRole("tab", { name: "选中对象" }));
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
     expect(screen.getByText("采矿机")).toBeInTheDocument();
     expect(screen.getByText("运行中")).toBeInTheDocument();
@@ -948,6 +953,7 @@ describe("PlanetPage", () => {
   });
 
   it("接收 SSE 后会把新事件和新告警并入页面并触发快照重拉", async () => {
+    const user = userEvent.setup();
     let alertSnapshotCalls = 0;
     const liveAlert = {
       alert_id: "alert-2",
@@ -1052,6 +1058,8 @@ describe("PlanetPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
+    // V2：事件/告警在"活动流" Tab
+    await user.click(screen.getByRole("tab", { name: "活动流" }));
     expect(
       await screen.findByText("[t121] 产物阻塞"),
     ).toBeInTheDocument();
@@ -1271,6 +1279,8 @@ describe("PlanetPage", () => {
     expect(screen.getByText("行星槽位")).toBeInTheDocument();
     expect(screen.getByText("库存与缓存摘要")).toBeInTheDocument();
 
+    // V2：物流配置在工作台 Tab 内——深链已自动落到"选中对象"，切回工作台配置
+    await user.click(screen.getByRole("tab", { name: "工作台" }));
     await user.click(screen.getByRole("tab", { name: "物流" }));
     expect(await screen.findByText("物流站配置")).toBeInTheDocument();
     expect(
@@ -1400,6 +1410,8 @@ describe("PlanetPage", () => {
     expect(screen.getByText("星际配置")).toBeInTheDocument();
     expect(screen.getByText("星际槽位")).toBeInTheDocument();
 
+    // V2：物流配置在工作台 Tab 内——深链已自动落到"选中对象"，切回工作台配置
+    await user.click(screen.getByRole("tab", { name: "工作台" }));
     await user.click(screen.getByRole("tab", { name: "物流" }));
     expect(await screen.findByText("物流槽位配置")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("物流范围"), "interstellar");
