@@ -64,6 +64,59 @@ const terrainColors: Record<string, string> = {
   unknown: '#1a2236',
 };
 
+/** 流光/暗角地形：water/lava 走横向流光带（静态相位，避免每帧重绘），其余地形走确定性明暗抖动。 */
+const SHADING_TERRAINS = new Set(['water', 'lava', 'buildable', 'blocked']);
+
+/** 迷雾边界检测的四邻域偏移（判定 visible↔不可见 的过渡格，用于软渐变）。 */
+const BOUNDARY_NEIGHBORS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+function parseTerrainHex(hex: string): [number, number, number] {
+  let h = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (h.length === 3) {
+    h = h.split('').map((c) => c + c).join('');
+  }
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/**
+ * 确定性明暗抖动：基于 (x,y) 的廉价 hash 算 ±0.16 的亮度系数，叠加到 terrainColor 上。
+ * 让平铺地形有起伏感而非死平板块；纯算法无贴图。
+ */
+function shadeTerrainColor(baseHex: string, x: number, y: number): string {
+  const [r, g, b] = parseTerrainHex(baseHex);
+  const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+  const factor = 1 + ((((hash % 1000) / 1000) - 0.5) * 0.32);
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  return `rgb(${clamp(Math.round(r * factor))}, ${clamp(Math.round(g * factor))}, ${clamp(Math.round(b * factor))})`;
+}
+
+/**
+ * water/lava 的横向静态流光带：以 y 为相位画一条极淡的亮带 + 暗带（各一次 fillRect），
+ * 模拟液面反光。相位仅随 y 变化（与相机/视口无关），不会在拖拽时闪烁；不引入每帧动画。
+ */
+function drawLiquidFlowBand(
+  context: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  size: number,
+  y: number,
+) {
+  const phase = ((y * 0.5) + Math.floor(y * 0.25)) % 4;
+  if (phase === 0) {
+    context.fillStyle = 'rgba(255, 255, 255, 0.06)';
+  } else if (phase === 1) {
+    context.fillStyle = 'rgba(0, 0, 0, 0.08)';
+  } else {
+    return; // 2/3 的格子不叠带，保持低开销与稀疏质感
+  }
+  context.fillRect(screenX, screenY, size, Math.max(1, size * 0.4));
+}
+
 function getViewportDefaults(): ViewportSize {
   return {
     width: 960,
@@ -474,8 +527,16 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     if (layers.terrain) {
       for (let y = startY; y < endY; y += 1) {
         for (let x = startX; x < endX; x += 1) {
-          context.fillStyle = terrainColors[getTerrainTile(planet, x, y)] ?? terrainColors.unknown;
-          context.fillRect(camera.offsetX + (x * tileSize), camera.offsetY + (y * tileSize), tileSize, tileSize);
+          const terrainKind = getTerrainTile(planet, x, y);
+          const baseHex = terrainColors[terrainKind] ?? terrainColors.unknown;
+          const screenX = camera.offsetX + (x * tileSize);
+          const screenY = camera.offsetY + (y * tileSize);
+          // 确定性明暗抖动：避免死平板块；water/lava 叠横向静态流光带
+          context.fillStyle = SHADING_TERRAINS.has(terrainKind) ? shadeTerrainColor(baseHex, x, y) : baseHex;
+          context.fillRect(screenX, screenY, tileSize, tileSize);
+          if (terrainKind === 'water' || terrainKind === 'lava') {
+            drawLiquidFlowBand(context, screenX, screenY, tileSize, y);
+          }
         }
       }
     }
@@ -507,6 +568,9 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
       const fogStride = detailPolicy.simplifyFog
         ? Math.max(2, Math.ceil(6 / Math.max(tileSize, 1)))
         : 1;
+      // 边界柔化：相邻格若可见度不同（visible↔不可见），该不可见格为迷雾边界，
+      // 用较低 alpha 的径向渐变过渡，避免方块硬切；中心区仍用较高 alpha 保证遮挡。
+      const boundaryRadius = Math.max(tileSize * 0.75, 6);
       for (let y = startY; y < endY; y += fogStride) {
         for (let x = startX; x < endX; x += fogStride) {
           const blockEndX = Math.min(x + fogStride, endX);
@@ -525,13 +589,39 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
           if (blockVisible) {
             continue;
           }
-          context.fillStyle = blockExplored ? 'rgba(7, 11, 20, 0.44)' : 'rgba(0, 0, 0, 0.9)';
-          context.fillRect(
-            camera.offsetX + (x * tileSize),
-            camera.offsetY + (y * tileSize),
-            (blockEndX - x) * tileSize,
-            (blockEndY - y) * tileSize,
-          );
+          const blockW = (blockEndX - x) * tileSize;
+          const blockH = (blockEndY - y) * tileSize;
+          const blockScreenX = camera.offsetX + (x * tileSize);
+          const blockScreenY = camera.offsetY + (y * tileSize);
+
+          // 检测是否为边界格（上下左右任一邻格 visible 即为边界）
+          let isBoundary = false;
+          for (const [dx, dy] of BOUNDARY_NEIGHBORS) {
+            const nf = getFogState(fog, x + dx, y + dy);
+            if (nf.visible) {
+              isBoundary = true;
+              break;
+            }
+          }
+
+          if (isBoundary && !detailPolicy.simplifyFog && blockW >= 4 && typeof context.createRadialGradient === 'function') {
+            // 径向软渐变：中心 alpha 较低、边缘渐隐到近 0，让迷雾边缘自然消融
+            const grad = context.createRadialGradient(
+              blockScreenX + blockW / 2,
+              blockScreenY + blockH / 2,
+              Math.max(blockW, blockH) * 0.1,
+              blockScreenX + blockW / 2,
+              blockScreenY + blockH / 2,
+              boundaryRadius,
+            );
+            const peak = blockExplored ? 0.34 : 0.62;
+            grad.addColorStop(0, blockExplored ? `rgba(7, 11, 20, ${peak})` : `rgba(0, 0, 0, ${peak})`);
+            grad.addColorStop(1, blockExplored ? 'rgba(7, 11, 20, 0.08)' : 'rgba(0, 0, 0, 0.16)');
+            context.fillStyle = grad;
+          } else {
+            context.fillStyle = blockExplored ? 'rgba(7, 11, 20, 0.44)' : 'rgba(0, 0, 0, 0.9)';
+          }
+          context.fillRect(blockScreenX, blockScreenY, blockW, blockH);
         }
       }
     }

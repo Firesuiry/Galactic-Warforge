@@ -14,6 +14,8 @@ export interface IconProps {
   iconKey?: string;
   color?: string;
   size?: number;
+  /** 为 true 时不写死 width/height/fontSize，交给 CSS 控制（用于地图实体节点随 tile 缩放）。 */
+  fluid?: boolean;
   /** 提供时图标变为带语义的 img；否则视为装饰性（aria-hidden）。 */
   label?: string;
   className?: string;
@@ -93,14 +95,16 @@ function resolveGlyph(iconKey: string | undefined): string {
   return '?';
 }
 
-export function Icon({ iconKey, color, size = 24, label, className }: IconProps) {
+export function Icon({ iconKey, color, size = 24, fluid = false, label, className }: IconProps) {
   const glyph = resolveGlyph(iconKey);
-  const style: CSSProperties = {
-    width: size,
-    height: size,
-    fontSize: Math.round(size * 0.56),
-    background: colorToRgba(color, 0.18),
-  };
+  const style: CSSProperties = fluid
+    ? { background: colorToRgba(color, 0.18) }
+    : {
+        width: size,
+        height: size,
+        fontSize: Math.round(size * 0.56),
+        background: colorToRgba(color, 0.18),
+      };
   const a11y = label
     ? { role: 'img', 'aria-label': label }
     : { 'aria-hidden': true as const };

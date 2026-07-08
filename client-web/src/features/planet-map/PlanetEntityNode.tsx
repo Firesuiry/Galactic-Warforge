@@ -16,7 +16,8 @@ import type {
   Unit,
 } from '@shared/types';
 
-import { getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
+import { Icon } from '@/common/Icon';
+import { getBuildingCatalogEntry, getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
 import { getResourceColor } from '@/features/planet-map/entity-draw';
 
 /**
@@ -63,6 +64,8 @@ export function BuildingNode({ building, catalog, playerId, simplify, showLabel,
     ? (isOwn ? 'rgba(36, 201, 182, 0.4)' : 'rgba(222, 87, 87, 0.38)')
     : (isOwn ? 'rgba(36, 201, 182, 0.26)' : 'rgba(222, 87, 87, 0.22)');
   const stroke = isOwn ? '#57efe0' : '#ff7b7b';
+  const catalogEntry = getBuildingCatalogEntry(catalog, building.type);
+  const iconColor = catalogEntry?.color ?? (isOwn ? '#39e6d0' : '#ff7b7b');
 
   return (
     <div
@@ -89,6 +92,7 @@ export function BuildingNode({ building, catalog, playerId, simplify, showLabel,
       data-max-hp={building.max_hp}
       data-level={building.level}
     >
+      <Icon className="entity-node__icon" iconKey={catalogEntry?.icon_key ?? building.type} color={iconColor} fluid />
       {showLabel ? (
         <span className="entity-node__label">{getBuildingDisplayName(catalog, building.type).slice(0, 6)}</span>
       ) : null}
@@ -129,7 +133,9 @@ export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps
       data-max-hp={unit.max_hp}
       data-is-moving={unit.is_moving ? 'true' : 'false'}
       data-target-pos={unit.target_pos ? `${unit.target_pos.x},${unit.target_pos.y}` : undefined}
-    />
+    >
+      <Icon className="entity-node__icon" iconKey={unit.type} color={isOwn ? '#91ff70' : '#ff6262'} fluid />
+    </div>
   );
 }
 
@@ -147,8 +153,6 @@ export function ResourceNode({ resource, isSelected }: ResourceNodeProps) {
         transform: `translate(calc(var(--tile) * ${point.x + 0.5}), calc(var(--tile) * ${point.y + 0.5})) translate(-50%, -50%)`,
         width: 'calc(var(--tile) * 0.48)',
         height: 'calc(var(--tile) * 0.48)',
-        background: getResourceColor(resource.kind),
-        borderRadius: '50%',
       }}
       data-entity-kind="resource"
       data-entity-id={resource.id}
@@ -158,7 +162,9 @@ export function ResourceNode({ resource, isSelected }: ResourceNodeProps) {
       data-tile-y={point.y}
       data-remaining={resource.remaining}
       data-current-yield={resource.current_yield}
-    />
+    >
+      <Icon className="entity-node__icon" iconKey={resource.kind} color={getResourceColor(resource.kind)} fluid />
+    </div>
   );
 }
 
