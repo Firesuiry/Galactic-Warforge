@@ -14,6 +14,13 @@ export const PLANET_COMMAND_RENDERERS: Partial<
   build: { cardId: "build", section: "基础操作" },
   move: { cardId: "move", section: "基础操作" },
   demolish: { cardId: "demolish", section: "基础操作" },
+  attack: { cardId: "combat", section: "战斗与制造" },
+  produce: { cardId: "combat", section: "战斗与制造" },
+  upgrade: { cardId: "combat", section: "战斗与制造" },
+  cancel_construction: { cardId: "cancel", section: "取消与恢复" },
+  restore_construction: { cardId: "cancel", section: "取消与恢复" },
+  cancel_research: { cardId: "cancel", section: "取消与恢复" },
+  demolish_dyson: { cardId: "cancel", section: "取消与恢复" },
   start_research: { cardId: "research", section: "研究与装料" },
   transfer_item: { cardId: "transfer-item", section: "研究与装料" },
   switch_active_planet: {

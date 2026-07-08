@@ -40,6 +40,11 @@ export function SystemPage() {
   });
 
   const [selectedPlanetId, setSelectedPlanetId] = useState('');
+  const [visibleLayers, setVisibleLayers] = useState({ dyson: true, planets: true, runtime: true });
+
+  function toggleLayer(layer: keyof typeof visibleLayers) {
+    setVisibleLayers((current) => ({ ...current, [layer]: !current[layer] }));
+  }
 
   if (systemQuery.isLoading || runtimeQuery.isLoading || summaryQuery.isLoading) {
     return <div className="panel">正在加载星系详情...</div>;
@@ -94,31 +99,79 @@ export function SystemPage() {
 
       <section className="strategic-layout">
         <aside className="strategic-rail">
-          <button className="secondary-button strategic-rail__link" type="button">戴森</button>
-          <button className="secondary-button strategic-rail__link" type="button">行星</button>
-          <button className="secondary-button strategic-rail__link" type="button">运行态</button>
+          <button
+            className={visibleLayers.dyson ? 'secondary-button strategic-rail__link strategic-rail__link--active' : 'secondary-button strategic-rail__link'}
+            type="button"
+            onClick={() => toggleLayer('dyson')}
+            aria-pressed={visibleLayers.dyson}
+          >
+            戴森
+          </button>
+          <button
+            className={visibleLayers.planets ? 'secondary-button strategic-rail__link strategic-rail__link--active' : 'secondary-button strategic-rail__link'}
+            type="button"
+            onClick={() => toggleLayer('planets')}
+            aria-pressed={visibleLayers.planets}
+          >
+            行星
+          </button>
+          <button
+            className={visibleLayers.runtime ? 'secondary-button strategic-rail__link strategic-rail__link--active' : 'secondary-button strategic-rail__link'}
+            type="button"
+            onClick={() => toggleLayer('runtime')}
+            aria-pressed={visibleLayers.runtime}
+          >
+            运行态
+          </button>
         </aside>
 
         <section className="panel strategic-main">
-          <DysonSituationPanel
-            layers={situation.layers}
-            metrics={situation.metrics}
-          />
-          <div className="system-orbit-map">
-            <div className="system-orbit-map__star">STAR</div>
-            {planets.map((planet, index) => (
-              <button
-                className={planet.planet_id === selectedPlanet?.planet_id ? 'orbit-node orbit-node--active' : 'orbit-node'}
-                key={planet.planet_id}
-                onClick={() => setSelectedPlanetId(planet.planet_id)}
-                style={{ '--orbit-index': index } as CSSProperties}
-                type="button"
-              >
-                <strong>{planet.name || planet.planet_id}</strong>
-                <span>{translatePlanetKind(planet.kind)}</span>
-              </button>
-            ))}
-          </div>
+          {visibleLayers.dyson ? (
+            <DysonSituationPanel
+              layers={situation.layers}
+              metrics={situation.metrics}
+            />
+          ) : null}
+          {visibleLayers.runtime ? (
+            <section className="planet-side-section">
+              <div className="section-title">星系运行态</div>
+              <dl className="planet-kv-list">
+                <div>
+                  <dt>制空权</dt>
+                  <dd>
+                    {runtime.orbital_superiority
+                      ? `${runtime.orbital_superiority.advantage_player_id ?? '争夺中'} · ${runtime.orbital_superiority.last_reason ?? '-'}`
+                      : '未形成'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>接触</dt>
+                  <dd>{runtime.contacts?.length ?? 0} 条</dd>
+                </div>
+                <div>
+                  <dt>战报</dt>
+                  <dd>{runtime.battle_reports?.length ?? 0} 份</dd>
+                </div>
+              </dl>
+            </section>
+          ) : null}
+          {visibleLayers.planets ? (
+            <div className="system-orbit-map">
+              <div className="system-orbit-map__star">STAR</div>
+              {planets.map((planet, index) => (
+                <button
+                  className={planet.planet_id === selectedPlanet?.planet_id ? 'orbit-node orbit-node--active' : 'orbit-node'}
+                  key={planet.planet_id}
+                  onClick={() => setSelectedPlanetId(planet.planet_id)}
+                  style={{ '--orbit-index': index } as CSSProperties}
+                  type="button"
+                >
+                  <strong>{planet.name || planet.planet_id}</strong>
+                  <span>{translatePlanetKind(planet.kind)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
 
         <aside className="panel strategic-side">

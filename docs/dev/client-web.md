@@ -82,8 +82,8 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 ### 3.2 星图导航
 
-- `/galaxy`：银河总览
-- `/system/:systemId`：恒星系详情；页面直接消费 `/world/systems/{systemId}/runtime`，展示 `dyson_sphere` / `solar_sail_orbit` / `active_planet_context` 聚合出的戴森态势、层级产能、火箭累计发射次数，以及当前 active planet 对戴森操作链路的支撑建筑
+- `/galaxy`：银河总览；侧栏「筛选 / 发现状态 / 情报」均为可用按钮——筛选切换只看已发现星系、发现状态切换星系卡片上的发现标签、情报跳转战争工作台战报区
+- `/system/:systemId`：恒星系详情；页面直接消费 `/world/systems/{systemId}/runtime`，展示 `dyson_sphere` / `solar_sail_orbit` / `active_planet_context` 聚合出的戴森态势、层级产能、火箭累计发射次数，以及当前 active planet 对戴森操作链路的支撑建筑；侧栏「戴森 / 行星 / 运行态」按钮分别切换主区三块图层可见性，运行态卡聚合制空权、接触与战报计数
 - `/planet/:planetId`：行星观察页
 - `/war`：战争工作台
 - `/agents`：AI 智能体工作台
@@ -116,6 +116,8 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 物流轨迹、电网、管网、施工、敌情图层
 - 行星工作台首屏：`PlanetOperationHeader` 会固定显示当前路由行星、当前 active planet、最近命令结果和待处理命令数
 - `PlanetCommandCenter` 作为首屏主操作区，已补齐 `transfer_item`、`switch_active_planet`、`build_dyson_*`、`launch_solar_sail`、`launch_rocket`、`set_ray_receiver_mode` 等 typed form 入口
+- `战斗与制造` 页签：单位攻击（`attack`）、建筑量产（`produce`）、建筑升级（`upgrade`）三条战术链；目标候选分别从己方单位、生产建筑、敌方接触/敌方单位动态填充
+- `取消与恢复` 页签：取消建造（`cancel_construction`）、恢复建造（`restore_construction`）、取消当前研究（`cancel_research`）、拆除戴森组件（`demolish_dyson`）集中处理；任务候选来自 `runtime.construction_tasks`，研究来自 `current_research`，戴森组件来自 `systemRuntime.dyson_sphere.layers`
 - `研究与装料` 页签现在是阶段化研究工作台：顶部展示当前研究卡片与开局推荐路径，中部按 `当前可研究 / 已完成 / 尚未满足前置` 分组科技，点击卡片后再通过 `start_research` 真正提交命令
 - 研究派生逻辑已拆到独立模块；组件层主用 `summary.players[pid].tech.current_research` 与 `completed_techs` 推导 UI，若运行时仍遇到旧版 `completed_techs` level map，只在派生层内部归一化，不向组件扩散
 - 命令结果账本：提交后先显示 `pending`，再优先由 SSE authoritative 回写切到最终成功或失败；默认会收口 `command_result`，并把 `research_completed`、`rocket_launched` 这类异步完成事件也视作最终成功态。如果等待超时，会补拉 `/events/snapshot` 对账，并附带下一步提示

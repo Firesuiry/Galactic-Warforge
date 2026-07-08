@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_GALAXY_ID, DEFAULT_SYSTEM_ID } from "@shared/config";
-import type { ApiClient } from "@shared/api";
+import type { ApiClient, DysonComponentType, WorldUnitID } from "@shared/api";
 import type {
   CatalogView,
   CommandResponse,
@@ -63,6 +63,8 @@ type LogisticsScope = "planetary" | "interstellar";
 type LogisticsMode = "none" | "supply" | "demand" | "both";
 type CommandWorkflowId =
   | "basic"
+  | "combat"
+  | "cancel"
   | "research"
   | "logistics"
   | "cross_planet"
@@ -77,6 +79,16 @@ const COMMAND_WORKFLOWS: Array<{
     id: "basic",
     label: "基础操作",
     description: "扫描、建造、移动和拆除都放在同一条开局操作链里。",
+  },
+  {
+    id: "combat",
+    label: "战斗与制造",
+    description: "单位攻击、建筑量产与升级收口在同一条战术链里。",
+  },
+  {
+    id: "cancel",
+    label: "取消与恢复",
+    description: "取消建造、恢复建造、取消研究与拆除戴森组件集中处理。",
   },
   {
     id: "research",
@@ -177,6 +189,14 @@ export function PlanetCommandPanel({
   const [moveY, setMoveY] = useState(0);
   const [researchId, setResearchId] = useState("");
   const [demolishId, setDemolishId] = useState("");
+  const [attackUnitId, setAttackUnitId] = useState("");
+  const [attackTargetId, setAttackTargetId] = useState("");
+  const [produceBuildingId, setProduceBuildingId] = useState("");
+  const [produceUnitType, setProduceUnitType] = useState("");
+  const [upgradeBuildingId, setUpgradeBuildingId] = useState("");
+  const [cancelTaskId, setCancelTaskId] = useState("");
+  const [restoreTaskId, setRestoreTaskId] = useState("");
+  const [demolishDysonComponentId, setDemolishDysonComponentId] = useState("");
   const [stationConfigBuildingId, setStationConfigBuildingId] = useState("");
   const [slotConfigBuildingId, setSlotConfigBuildingId] = useState("");
   const [droneCapacity, setDroneCapacity] = useState("");
@@ -242,6 +262,52 @@ export function PlanetCommandPanel({
         (unit) => unit.owner_id === playerId,
       ),
     [planet.units, playerId],
+  );
+  const attackTargets = useMemo(
+    () => [
+      ...(runtime?.enemy_forces ?? []),
+      ...Object.values(planet.units ?? {}).filter((unit) => unit.owner_id !== playerId),
+    ],
+    [runtime?.enemy_forces, planet.units, playerId],
+  );
+  const cancellableTasks = useMemo(
+    () => (runtime?.construction_tasks ?? []).filter(
+      (task) => task.player_id === playerId
+        && (task.state === 'pending' || task.state === 'in_progress' || task.state === 'paused'),
+    ),
+    [runtime?.construction_tasks, playerId],
+  );
+  const restorableTasks = useMemo(
+    () => (runtime?.construction_tasks ?? []).filter(
+      (task) => task.player_id === playerId && (task.state === 'paused' || task.state === 'cancelled'),
+    ),
+    [runtime?.construction_tasks, playerId],
+  );
+  const dysonComponents = useMemo(() => {
+    const layers = systemRuntime?.dyson_sphere?.layers ?? [];
+    const components: Array<{ id: string; label: string; type: string }> = [];
+    layers.forEach((layer, layerIndex) => {
+      (layer.nodes ?? []).forEach((node) => components.push({
+        id: node.id,
+        label: `node ${node.id} (L${layerIndex})`,
+        type: 'node',
+      }));
+      (layer.frames ?? []).forEach((frame) => components.push({
+        id: frame.id,
+        label: `frame ${frame.id} (L${layerIndex})`,
+        type: 'frame',
+      }));
+      (layer.shells ?? []).forEach((shell) => components.push({
+        id: shell.id,
+        label: `shell ${shell.id} (L${layerIndex})`,
+        type: 'shell',
+      }));
+    });
+    return components;
+  }, [systemRuntime?.dyson_sphere?.layers]);
+  const produceUnitTypes = useMemo(
+    () => (catalog?.world_units ?? []).filter((unit) => unit.production_mode === 'produce' || unit.deploy_command === 'produce'),
+    [catalog?.world_units],
   );
   const ownLogisticsStations = useMemo(
     () => listOwnLogisticsStations(planet, runtime, playerId),
@@ -1269,6 +1335,271 @@ export function PlanetCommandPanel({
             type="button"
           >
             拆除建筑
+          </button>
+        </div>
+      </section>
+        </>
+      ) : null}
+
+      {activeWorkflow === "combat" ? (
+        <>
+      <section
+        aria-labelledby="planet-workflow-tab-combat"
+        className="planet-side-section"
+        id="planet-workflow-panel-combat"
+        role="tabpanel"
+      >
+        <div className="section-title">单位攻击</div>
+        <div className="compact-form-grid">
+          <label className="field">
+            <span>己方单位</span>
+            <select
+              onChange={(event) => setAttackUnitId(event.target.value)}
+              value={attackUnitId}
+            >
+              <option value="">选择单位</option>
+              {ownUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.id} · {unit.type}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>攻击目标</span>
+            <select
+              onChange={(event) => setAttackTargetId(event.target.value)}
+              value={attackTargetId}
+            >
+              <option value="">选择目标</option>
+              {attackTargets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {target.id} · {'type' in target ? target.type : '敌方'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !attackUnitId || !attackTargetId}
+            onClick={() => {
+              void runCommand("attack", () => client.cmdAttack(attackUnitId, attackTargetId), {
+                focus: { entityId: attackUnitId },
+              });
+            }}
+            type="button"
+          >
+            发起攻击
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">建筑量产</div>
+        <div className="compact-form-grid">
+          <label className="field">
+            <span>生产建筑</span>
+            <select
+              onChange={(event) => setProduceBuildingId(event.target.value)}
+              value={produceBuildingId}
+            >
+              <option value="">选择建筑</option>
+              {ownBuildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.id} · {building.type}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>单位类型</span>
+            <select
+              onChange={(event) => setProduceUnitType(event.target.value)}
+              value={produceUnitType}
+            >
+              <option value="">选择单位</option>
+              {produceUnitTypes.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name} ({unit.id})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !produceBuildingId || !produceUnitType}
+            onClick={() => {
+              void runCommand("produce", () => client.cmdProduce(produceBuildingId, produceUnitType as WorldUnitID), {
+                focus: { entityId: produceBuildingId },
+              });
+            }}
+            type="button"
+          >
+            下达量产
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">建筑升级</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>升级建筑</span>
+            <select
+              onChange={(event) => setUpgradeBuildingId(event.target.value)}
+              value={upgradeBuildingId}
+            >
+              <option value="">选择建筑</option>
+              {ownBuildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.id} · {building.type}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !upgradeBuildingId}
+            onClick={() => {
+              void runCommand("upgrade", () => client.cmdUpgrade(upgradeBuildingId), {
+                focus: { entityId: upgradeBuildingId },
+              });
+            }}
+            type="button"
+          >
+            升级建筑
+          </button>
+        </div>
+      </section>
+        </>
+      ) : null}
+
+      {activeWorkflow === "cancel" ? (
+        <>
+      <section
+        aria-labelledby="planet-workflow-tab-cancel"
+        className="planet-side-section"
+        id="planet-workflow-panel-cancel"
+        role="tabpanel"
+      >
+        <div className="section-title">取消建造</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>待取消任务</span>
+            <select
+              onChange={(event) => setCancelTaskId(event.target.value)}
+              value={cancelTaskId}
+            >
+              <option value="">选择任务</option>
+              {cancellableTasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.id} · {task.building_type} · {task.state}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !cancelTaskId}
+            onClick={() => {
+              void runCommand("cancel_construction", () => client.cmdCancelConstruction(cancelTaskId));
+            }}
+            type="button"
+          >
+            取消建造
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">恢复建造</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>待恢复任务</span>
+            <select
+              onChange={(event) => setRestoreTaskId(event.target.value)}
+              value={restoreTaskId}
+            >
+              <option value="">选择任务</option>
+              {restorableTasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.id} · {task.building_type} · {task.state}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !restoreTaskId}
+            onClick={() => {
+              void runCommand("restore_construction", () => client.cmdRestoreConstruction(restoreTaskId));
+            }}
+            type="button"
+          >
+            恢复建造
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">取消研究</div>
+        <div className="compact-form-grid">
+          <p className="subtle-text field--span-2">
+            {playerTechState?.current_research
+              ? `当前研究：${playerTechState.current_research.tech_id}（${playerTechState.current_research.progress ?? 0}/${playerTechState.current_research.total_cost ?? 0}）`
+              : '当前没有进行中的研究。'}
+          </p>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !playerTechState?.current_research?.tech_id}
+            onClick={() => {
+              const techId = playerTechState?.current_research?.tech_id;
+              if (!techId) {
+                return;
+              }
+              void runCommand("cancel_research", () => client.cmdCancelResearch(techId));
+            }}
+            type="button"
+          >
+            取消当前研究
+          </button>
+        </div>
+      </section>
+
+      <section className="planet-side-section">
+        <div className="section-title">拆除戴森组件</div>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>戴森组件</span>
+            <select
+              onChange={(event) => setDemolishDysonComponentId(event.target.value)}
+              value={demolishDysonComponentId}
+            >
+              <option value="">选择组件</option>
+              {dysonComponents.map((component) => (
+                <option key={`${component.type}-${component.id}`} value={`${component.type}:${component.id}`}>
+                  {component.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={busyAction !== "" || !demolishDysonComponentId}
+            onClick={() => {
+              const [componentType, componentId] = demolishDysonComponentId.split(':');
+              if (!componentType || !componentId || !currentSystemId) {
+                return;
+              }
+              void runCommand("demolish_dyson", () => client.cmdDemolishDyson(
+                currentSystemId,
+                componentType as DysonComponentType,
+                componentId,
+              ));
+            }}
+            type="button"
+          >
+            拆除组件
           </button>
         </div>
       </section>

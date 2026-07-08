@@ -1793,4 +1793,153 @@ describe("PlanetPage", () => {
     );
     expect(decodeURIComponent(exportedHref)).toContain('"share_url":');
   });
+
+  it("战斗与制造、取消与恢复工作流支持纯 GUI 下达 7 个命令", async () => {
+    const commandTypes: string[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.endsWith("/state/summary")) {
+          return Promise.resolve(jsonResponse(createSummaryPayload()));
+        }
+        if (url.endsWith("/state/stats")) {
+          return Promise.resolve(jsonResponse(createStatsPayload()));
+        }
+        if (url.endsWith("/world/systems/sys-1")) {
+          return Promise.resolve(jsonResponse({
+            system_id: "sys-1",
+            galaxy_id: "galaxy-1",
+            name: "Helios",
+            star_type: "main_sequence",
+            planets: [{ planet_id: "planet-1-1", name: "Gaia", kind: "terrestrial" }],
+          }));
+        }
+        if (url.endsWith("/world/systems/sys-1/runtime")) {
+          return Promise.resolve(jsonResponse({
+            system_id: "sys-1",
+            orbiting_fleets: [],
+            enemy_fleets: [],
+            solar_sails: [],
+            dyson_sphere: {
+              system_id: "sys-1",
+              layers: [{
+                layer_index: 0,
+                orbit_radius: 120,
+                nodes: [{ id: "dyson-node-1", layer_index: 0, latitude: 0, longitude: 0, energy_output: 10, integrity: 1, built: true }],
+                frames: [],
+                shells: [],
+              }],
+              ray_receivers: [],
+              sails: [],
+            },
+          }));
+        }
+        if (url.includes("/world/planets/planet-1-1/scene")) {
+          return Promise.resolve(jsonResponse({
+            ...createScenePayload(),
+            system_id: "sys-1",
+            buildings: {
+              "b-factory": { id: "b-factory", type: "recomposing_assembler", owner_id: "p1", position: { x: 0, y: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 6, runtime: {} },
+            },
+            units: {
+              "u-1": { id: "u-1", type: "combat_drone", owner_id: "p1", position: { x: 0, y: 0 }, hp: 100, max_hp: 100, attack: 10, defense: 5 },
+              "u-enemy": { id: "u-enemy", type: "raider", owner_id: "p2", position: { x: 1, y: 1 }, hp: 80, max_hp: 80, attack: 8, defense: 3 },
+            },
+          }));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
+          return Promise.resolve(jsonResponse({
+            ...createRuntimePayload(),
+            enemy_forces: [{ id: "enemy-force-1", type: "raider_squad", position: { x: 1, y: 1 }, strength: 8 }],
+            construction_tasks: [
+              { id: "task-active", player_id: "p1", building_type: "wind_turbine", position: { x: 2, y: 2 }, state: "in_progress", enqueue_tick: 100 },
+              { id: "task-paused", player_id: "p1", building_type: "tesla_tower", position: { x: 3, y: 3 }, state: "paused", enqueue_tick: 100 },
+            ],
+          }));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/networks")) {
+          return Promise.resolve(jsonResponse(createNetworksPayload()));
+        }
+        if (url.endsWith("/catalog")) {
+          return Promise.resolve(jsonResponse({
+            ...createCatalogPayload(),
+            world_units: [{ id: "combat_drone", name: "战斗无人机", domain: "ground_unit", runtime_class: "squad", public: true, production_mode: "produce", deploy_command: "produce" }],
+          }));
+        }
+        if (url.includes("/events/snapshot") || url.includes("/alerts/production/snapshot")) {
+          return Promise.resolve(jsonResponse({ event_types: [], available_from_tick: 1, next_event_id: "", has_more: false, events: [], alerts: [] }));
+        }
+        if (url.includes("/events/stream")) {
+          return Promise.resolve(sseResponse([{ event: "connected", data: { player_id: "p1", event_types: ["command_result"] } }], init?.signal as AbortSignal));
+        }
+        if (url.endsWith("/commands")) {
+          const request = init?.body ? JSON.parse(String(init.body)) : null;
+          const command = request?.commands?.[0];
+          commandTypes.push(command?.type);
+          return Promise.resolve(jsonResponse({
+            request_id: request?.request_id ?? "req-1",
+            accepted: true,
+            enqueue_tick: 121,
+            results: [{ command_index: 0, status: "accepted", code: "OK", message: `${command?.type} accepted` }],
+          }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderApp(["/planet/planet-1-1"]);
+
+    await screen.findByRole("tab", { name: /战斗与制造/ });
+
+    // 切到「战斗与制造」工作流
+    await user.click(screen.getByRole("tab", { name: /战斗与制造/ }));
+
+    // attack
+    await user.selectOptions(screen.getByLabelText("己方单位"), "u-1");
+    await user.selectOptions(screen.getByLabelText("攻击目标"), "enemy-force-1");
+    await user.click(screen.getByRole("button", { name: "发起攻击" }));
+
+    // produce
+    await user.selectOptions(screen.getByLabelText("生产建筑"), "b-factory");
+    await user.selectOptions(screen.getByLabelText("单位类型"), "combat_drone");
+    await user.click(screen.getByRole("button", { name: "下达量产" }));
+
+    // upgrade
+    await user.selectOptions(screen.getByLabelText("升级建筑"), "b-factory");
+    await user.click(screen.getByRole("button", { name: "升级建筑" }));
+
+    // 切到「取消与恢复」工作流
+    await user.click(screen.getByRole("tab", { name: /取消与恢复/ }));
+
+    // cancel_construction
+    await user.selectOptions(screen.getByLabelText("待取消任务"), "task-active");
+    await user.click(screen.getByRole("button", { name: "取消建造" }));
+
+    // restore_construction
+    await user.selectOptions(screen.getByLabelText("待恢复任务"), "task-paused");
+    await user.click(screen.getByRole("button", { name: "恢复建造" }));
+
+    // cancel_research
+    await user.click(screen.getByRole("button", { name: "取消当前研究" }));
+
+    // demolish_dyson
+    await user.selectOptions(screen.getByLabelText("戴森组件"), "node:dyson-node-1");
+    await user.click(screen.getByRole("button", { name: "拆除组件" }));
+
+    await waitFor(() => {
+      expect(commandTypes).toEqual([
+        "attack",
+        "produce",
+        "upgrade",
+        "cancel_construction",
+        "restore_construction",
+        "cancel_research",
+        "demolish_dyson",
+      ]);
+    });
+  });
 });

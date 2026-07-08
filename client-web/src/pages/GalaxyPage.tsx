@@ -17,6 +17,8 @@ export function GalaxyPage() {
   });
 
   const [selectedSystemId, setSelectedSystemId] = useState('');
+  const [discoveredOnly, setDiscoveredOnly] = useState(false);
+  const [showDiscovery, setShowDiscovery] = useState(false);
 
   if (galaxyQuery.isLoading) {
     return <div className="panel">正在加载银河总览...</div>;
@@ -32,6 +34,7 @@ export function GalaxyPage() {
 
   const galaxy = galaxyQuery.data;
   const systems = galaxy.systems ?? [];
+  const visibleSystems = discoveredOnly ? systems.filter((system) => system.discovered) : systems;
   const selectedSystem = (
     systems.find((system) => system.system_id === selectedSystemId)
     ?? systems.find((system) => system.discovered)
@@ -53,14 +56,30 @@ export function GalaxyPage() {
 
       <section className="strategic-layout">
         <aside className="strategic-rail">
-          <button className="secondary-button strategic-rail__link" type="button">筛选</button>
-          <button className="secondary-button strategic-rail__link" type="button">发现状态</button>
-          <button className="secondary-button strategic-rail__link" type="button">情报</button>
+          <button
+            className={discoveredOnly ? 'secondary-button strategic-rail__link strategic-rail__link--active' : 'secondary-button strategic-rail__link'}
+            type="button"
+            onClick={() => setDiscoveredOnly((current) => !current)}
+            aria-pressed={discoveredOnly}
+          >
+            筛选
+          </button>
+          <button
+            className={showDiscovery ? 'secondary-button strategic-rail__link strategic-rail__link--active' : 'secondary-button strategic-rail__link'}
+            type="button"
+            onClick={() => setShowDiscovery((current) => !current)}
+            aria-pressed={showDiscovery}
+          >
+            发现状态
+          </button>
+          <Link className="secondary-button strategic-rail__link" to="/war">情报</Link>
         </aside>
 
         <section className="panel strategic-main">
           <div className="galaxy-map">
-            {systems.map((system) => (
+            {visibleSystems.length === 0 ? (
+              <p className="subtle-text">当前筛选下没有恒星系。</p>
+            ) : visibleSystems.map((system) => (
               <button
                 className={system.system_id === selectedSystem?.system_id ? 'galaxy-node galaxy-node--active' : 'galaxy-node'}
                 key={system.system_id}
@@ -69,6 +88,9 @@ export function GalaxyPage() {
               >
                 <strong>{system.name || system.system_id}</strong>
                 <span>{system.position ? `${system.position.x}, ${system.position.y}` : '未知坐标'}</span>
+                {showDiscovery ? (
+                  <span className="subtle-text">{system.discovered ? '已发现' : '未发现'}</span>
+                ) : null}
               </button>
             ))}
           </div>
