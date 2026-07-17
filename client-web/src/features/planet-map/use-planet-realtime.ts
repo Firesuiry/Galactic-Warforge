@@ -16,6 +16,7 @@ import {
 } from '@/features/planet-map/model';
 import { forwardGameEventToBattleBus } from '@/engine/battle-events';
 import { playPlanetEventAudio } from '@/features/audio/planet-audio';
+import { notifyGameEvent } from '@/features/notifications/notify';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
@@ -212,6 +213,9 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
 
       // 行星事件音效分流（建造完成/研究完成/产线告警/火箭发射），内部按 event_id 去重
       playPlanetEventAudio(event);
+
+      // 全局事件通知 toast（内部 event_id 去重；?freeze=1 不弹）
+      notifyGameEvent(event);
 
       // 战斗事件总线分流（damage_applied 等瞬时战斗事件 → 行星地图特效演出）。
       // use-war-realtime 挂在 /war 路由、本 hook 挂在 /planet 路由，二者不会同页

@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 import { resetPlanetViewStore } from '@/features/planet-map/store';
+import { resetNotificationsStore } from '@/features/notifications/store';
 import { resetSessionStore } from '@/stores/session';
 
 const canvasContextStub = {
@@ -42,6 +43,7 @@ beforeEach(() => {
   localStorage.clear();
   resetSessionStore();
   resetPlanetViewStore();
+  resetNotificationsStore();
 });
 
 afterEach(() => {

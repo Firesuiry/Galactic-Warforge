@@ -7,6 +7,7 @@ import { Icon } from '@/common/Icon';
 import { isMuted, setMuted, sfx } from '@/engine/audio';
 import { formatMineralInventory } from '@/features/mineral-summary';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { translateAlertType, translateSeverity, translateUi } from '@/i18n/translate';
@@ -192,6 +193,7 @@ export function TopNav() {
       </div>
 
       <div className="top-nav__actions">
+        <NotificationBell />
         <button
           className="top-nav__icon-btn"
           type="button"

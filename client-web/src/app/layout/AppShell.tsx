@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useGameAudio } from '@/features/audio/use-game-audio';
+import { NotificationToasts } from '@/features/notifications/NotificationToasts';
 import { Outliner } from '@/widgets/Outliner';
 import { TopNav } from '@/widgets/TopNav';
 
@@ -21,6 +22,8 @@ export function AppShell() {
         </main>
         <Outliner />
       </div>
+      {/* 全局事件通知 toast 栈（右下角悬浮，全页面可见） */}
+      <NotificationToasts />
     </div>
   );
 }

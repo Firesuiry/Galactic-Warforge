@@ -7,6 +7,7 @@ import { createSseClient } from '@shared/sse';
 import type { ApiClient } from '@shared/api';
 
 import { forwardGameEventToBattleBus } from '@/engine/battle-events';
+import { notifyGameEvent } from '@/features/notifications/notify';
 import {
   shouldRefreshWarBlueprints,
   shouldRefreshWarFleets,
@@ -203,6 +204,9 @@ export function useWarRealtime(options: UseWarRealtimeOptions) {
       // 瞬时战斗事件分流一份到战斗事件总线（战场特效/后续音效消费），
       // 下面的 react-query 防抖失效逻辑保持不变。
       forwardGameEventToBattleBus(event);
+
+      // 全局事件通知 toast（内部 event_id 去重；?freeze=1 不弹）
+      notifyGameEvent(event);
 
       scheduleInvalidation({
         summary: shouldRefreshWarSummary(event),
