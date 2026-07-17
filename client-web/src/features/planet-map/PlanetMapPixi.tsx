@@ -154,11 +154,13 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   const {
     camera,
     focusRequest,
+    zoomRequest,
     hoveredTile,
     interactionMode,
     layers,
     selected,
     consumeFocusRequest,
+    consumeZoomRequest,
     exitInteractionMode,
     requestFocus,
     setCamera,
@@ -169,11 +171,13 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   } = usePlanetViewStore(useShallow((state) => ({
     camera: state.camera,
     focusRequest: state.focusRequest,
+    zoomRequest: state.zoomRequest,
     hoveredTile: state.hoveredTile,
     interactionMode: state.interactionMode,
     layers: state.layers,
     selected: state.selected,
     consumeFocusRequest: state.consumeFocusRequest,
+    consumeZoomRequest: state.consumeZoomRequest,
     exitInteractionMode: state.exitInteractionMode,
     requestFocus: state.requestFocus,
     setCamera: state.setCamera,
@@ -187,6 +191,11 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   const zoomLevel = getPlanetZoomLevel(camera.zoomIndex);
   const overviewMode = isPlanetOverviewZoom(camera.zoomIndex);
   const tileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+  // 建造模式自动叠加网格（不改用户开关，退出建造即恢复）；手动勾选仍然生效。
+  const sceneLayers = useMemo(
+    () => (interactionMode.kind === 'build' && !layers.grid ? { ...layers, grid: true } : layers),
+    [interactionMode.kind, layers],
+  );
   useImperativeCameraTransform(entityLayerRef, camera.offsetX, camera.offsetY, tileSize);
   const viewportBounds = useMemo(
     () => getViewportTileBounds(planet, camera, tileSize, viewport.width, viewport.height),
@@ -200,18 +209,18 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       }
       return describeSceneRenderSimplifications(detailPolicy).filter((message) => {
         if (message === '细网格已简化') {
-          return layers.grid;
+          return sceneLayers.grid;
         }
         if (message === '迷雾已合并') {
-          return layers.fog;
+          return sceneLayers.fog;
         }
         if (message === '建筑与单位已简化') {
-          return layers.buildings || layers.units;
+          return sceneLayers.buildings || sceneLayers.units;
         }
         return true;
       });
     },
-    [detailPolicy, layers.buildings, layers.fog, layers.grid, layers.units, overviewMode],
+    [detailPolicy, sceneLayers, overviewMode],
   );
   const sceneZoomStatusLabel = zoomLevel.mode === 'scene' && zoomLevel.tileSize !== undefined && zoomLevel.tileSize !== tileSize
     ? `${zoomLevel.label} (实际 ${tileSize}px/tile)`
@@ -326,16 +335,17 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   // ---------- 数据 → Pixi 场景 ----------
 
   useEffect(() => {
-    sceneRef.current?.setBase({ planet, fog, overview, overviewMode, layers });
-  }, [planet, fog, overview, overviewMode, layers, pixiApp]);
+    sceneRef.current?.setBase({ planet, fog, overview, overviewMode, layers: sceneLayers });
+  }, [planet, fog, overview, overviewMode, sceneLayers, pixiApp]);
 
   useEffect(() => {
     sceneRef.current?.setCamera({
       offsetX: camera.offsetX,
       offsetY: camera.offsetY,
       tileSize,
+      zoomIndex: camera.zoomIndex,
     });
-  }, [camera.offsetX, camera.offsetY, tileSize, pixiApp]);
+  }, [camera.offsetX, camera.offsetY, camera.zoomIndex, tileSize, pixiApp]);
 
   useEffect(() => {
     sceneRef.current?.setEntities({
@@ -343,10 +353,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       catalog,
       playerId: session.playerId,
       detailPolicy,
-      layers,
+      layers: sceneLayers,
       overviewMode,
     });
-  }, [visibleEntities, catalog, session.playerId, detailPolicy, layers, overviewMode, pixiApp]);
+  }, [visibleEntities, catalog, session.playerId, detailPolicy, sceneLayers, overviewMode, pixiApp]);
 
   useEffect(() => {
     const buildAssessment = !overviewMode && interactionMode.kind === 'build' && hoveredTile
@@ -361,12 +371,12 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       selected,
       mode: interactionMode,
       buildAssessment,
-      selectionVisible: layers.selection,
+      selectionVisible: sceneLayers.selection,
       overview,
       overviewMode,
       viewportBounds,
     });
-  }, [catalog, hoveredTile, interactionMode, layers.selection, overview, overviewMode, planet, selected, viewportBounds, pixiApp]);
+  }, [catalog, hoveredTile, interactionMode, sceneLayers.selection, overview, overviewMode, planet, selected, viewportBounds, pixiApp]);
 
   useEffect(() => () => {
     hoverScheduler.cancel();
@@ -433,6 +443,41 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     consumeFocusRequest(focusRequest.nonce);
   }, [camera.zoomIndex, consumeFocusRequest, focusRequest, overviewMode, planet, setCamera, viewport]);
 
+  // 统一缩放入口：±按钮/档位按钮经 store 的 zoomRequest 到达（anchor=null → 视口中心）。
+  useEffect(() => {
+    if (!zoomRequest) {
+      return;
+    }
+    applyZoomAtIndex(
+      zoomRequest.zoomIndex,
+      zoomRequest.anchor?.x ?? viewport.width / 2,
+      zoomRequest.anchor?.y ?? viewport.height / 2,
+    );
+    consumeZoomRequest(zoomRequest.nonce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomRequest, consumeZoomRequest]);
+
+  // 缩放快捷键：+/- 以视口中心为锚走同一入口（输入框聚焦时不抢按键）。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target
+        && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === '+' || event.key === '=') {
+        applyZoomAtIndex(camera.zoomIndex + 1, viewport.width / 2, viewport.height / 2);
+      } else if (event.key === '-') {
+        applyZoomAtIndex(camera.zoomIndex - 1, viewport.width / 2, viewport.height / 2);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera, viewport, planet, cameraScheduler]);
+
   function updateHoveredTile(clientX: number, clientY: number) {
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) {
@@ -479,29 +524,40 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     hoverScheduler.schedule(null);
   }
 
-  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const nextZoomIndex = clamp(camera.zoomIndex + (event.deltaY < 0 ? 1 : -1), 0, PLANET_ZOOM_LEVELS.length - 1);
-    if (nextZoomIndex === camera.zoomIndex) {
+  /**
+   * 统一缩放出口：滚轮/±按钮/档位按钮/快捷键都经这里提交"离散档位 + 锚点守恒 offset"
+   * （zoom-to-cursor；anchorX/anchorY 为视口内像素坐标）。数据层 zoomIndex 立即落库，
+   * 渲染层补间由 Pixi 场景按 zoomIndex 变化驱动（?freeze=1 瞬切）。
+   */
+  function applyZoomAtIndex(nextZoomIndex: number, anchorX: number, anchorY: number) {
+    const clampedIndex = clamp(nextZoomIndex, 0, PLANET_ZOOM_LEVELS.length - 1);
+    if (clampedIndex === camera.zoomIndex) {
       return;
     }
+    const currentTileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+    const nextTileSize = getPlanetRenderTileSize(clampedIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+    const worldX = (anchorX - camera.offsetX) / currentTileSize;
+    const worldY = (anchorY - camera.offsetY) / currentTileSize;
 
+    cameraScheduler.schedule({
+      zoomIndex: clampedIndex,
+      offsetX: anchorX - worldX * nextTileSize,
+      offsetY: anchorY - worldY * nextTileSize,
+      ready: true,
+    });
+  }
+
+  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    event.preventDefault();
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) {
       return;
     }
-
-    const currentTileSize = getPlanetRenderTileSize(camera.zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
-    const nextTileSize = getPlanetRenderTileSize(nextZoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
-    const worldX = (event.clientX - rect.left - camera.offsetX) / currentTileSize;
-    const worldY = (event.clientY - rect.top - camera.offsetY) / currentTileSize;
-
-    cameraScheduler.schedule({
-      zoomIndex: nextZoomIndex,
-      offsetX: event.clientX - rect.left - (worldX * nextTileSize),
-      offsetY: event.clientY - rect.top - (worldY * nextTileSize),
-      ready: true,
-    });
+    applyZoomAtIndex(
+      camera.zoomIndex + (event.deltaY < 0 ? 1 : -1),
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+    );
   }
 
   function handleClick(event: ReactMouseEvent<HTMLDivElement>) {

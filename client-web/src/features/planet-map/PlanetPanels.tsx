@@ -123,18 +123,18 @@ export function PlanetLayerPanel({
     camera,
     hoveredTile,
     layers,
+    requestZoom,
     resetCamera,
     selected,
-    setZoomIndex,
     toggleLayer,
   } = usePlanetViewStore(
     useShallow((state) => ({
       camera: state.camera,
       hoveredTile: state.hoveredTile,
       layers: state.layers,
+      requestZoom: state.requestZoom,
       resetCamera: state.resetCamera,
       selected: state.selected,
-      setZoomIndex: state.setZoomIndex,
       toggleLayer: state.toggleLayer,
     })),
   );
@@ -173,7 +173,7 @@ export function PlanetLayerPanel({
                   : "secondary-button zoom-button"
               }
               key={zoomLevel.label}
-              onClick={() => setZoomIndex(index)}
+              onClick={() => requestZoom(index)}
               type="button"
             >
               {zoomLevel.label}

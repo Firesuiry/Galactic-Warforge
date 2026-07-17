@@ -8,7 +8,6 @@ import {
   PlanetActivityPanel,
   PlanetDebugPanel,
   PlanetEntityPanel,
-  PlanetLayerPanel,
 } from "@/features/planet-map/PlanetPanels";
 import { PlanetCommandCenter } from "@/features/planet-commands/PlanetCommandCenter";
 import { PlanetOperationHeader } from "@/features/planet-commands/PlanetOperationHeader";
@@ -19,6 +18,7 @@ import {
 } from "@/features/planet-commands/store";
 import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
+import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
@@ -111,6 +111,7 @@ export function PlanetPage() {
     recentEvents,
     resetForPlanet,
     sceneWindow,
+    selected,
     setLayers,
     setLastEventId,
     setSelected,
@@ -126,6 +127,7 @@ export function PlanetPage() {
       recentEvents: state.recentEvents,
       resetForPlanet: state.resetForPlanet,
       sceneWindow: state.sceneWindow,
+      selected: state.selected,
       setLayers: state.setLayers,
       setLastEventId: state.setLastEventId,
       setSelected: state.setSelected,
@@ -146,6 +148,8 @@ export function PlanetPage() {
   const [activeDetailPanel, setActiveDetailPanel] = useState<PlanetDetailPanel>(
     "workbench",
   );
+  // 右侧工作台抽屉：默认收起为边缘把手；点选实体/新命令回执时自动滑出。
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const sceneQuery = useQuery({
     queryKey: [
@@ -287,7 +291,21 @@ export function PlanetPage() {
     resetForPlanet(planetId);
     resetCommandStore(planetId);
     setActiveDetailPanel("workbench");
+    setDrawerOpen(false);
   }, [planetId, resetCommandStore, resetForPlanet]);
+
+  // 点选实体 / 收到新命令回执时，工作台抽屉自动滑出。
+  useEffect(() => {
+    if (selected) {
+      setDrawerOpen(true);
+    }
+  }, [selected]);
+
+  useEffect(() => {
+    if (latestCommandEntry) {
+      setDrawerOpen(true);
+    }
+  }, [latestCommandEntry]);
 
   useEffect(() => {
     if (!sceneQuery.data) {
@@ -527,111 +545,122 @@ export function PlanetPage() {
 
   return (
     <div className="page-grid page-grid--planet">
-      <section className="panel page-hero">
-        <div className="page-header">
-          <h1>{planet.name || planet.planet_id}</h1>
-          <p className="subtle-text">
-            <span className="tick-pulse" key={`hero-tick-${planet.tick}`}>
-              tick {planet.tick}
-            </span>
-            {" · "}
-            {translatePlanetKind(planet.kind)} ·{" "}
-            {planet.map_width} x {planet.map_height}
-          </p>
+      <section className="panel planet-map-shell">
+        <PlanetMapPixi
+          catalog={catalog}
+          fog={planet}
+          networks={networks}
+          onCanvasReady={(capture) => {
+            captureRef.current = capture;
+          }}
+          onInteractTile={handleInteractTile}
+          overview={overviewQuery.data}
+          planet={planet}
+          runtime={runtime}
+        />
+        {/* 悬浮标题片：行星名/类型/尺寸 + 资源芯片（原 page-hero 内容，HUD 化） */}
+        <div className="planet-title-chip">
+          <div className="planet-title-chip__head">
+            <h1>{planet.name || planet.planet_id}</h1>
+            <p className="subtle-text">
+              <span className="tick-pulse" key={`hero-tick-${planet.tick}`}>
+                tick {planet.tick}
+              </span>
+              {" · "}
+              {translatePlanetKind(planet.kind)} ·{" "}
+              {planet.map_width} x {planet.map_height}
+            </p>
+          </div>
+          <div className="planet-title-chip__chips">
+            <div className="hero-chip">
+              <Icon iconKey="iron_ore" color="#c9a06a" size={18} />
+              <span>矿产 {mineralSummary}</span>
+            </div>
+            <div className="hero-chip">
+              <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
+              <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
+            </div>
+            <div className="hero-chip">
+              <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
+              <span>
+                电力{" "}
+                {stats
+                  ? `${stats.energy_stats.generation}/${stats.energy_stats.consumption}`
+                  : "-"}
+              </span>
+            </div>
+            <div className="hero-chip">
+              <Icon iconKey="lab" color="#5fb0ff" size={18} />
+              <span>研究 {currentResearchName || "无"}</span>
+            </div>
+          </div>
         </div>
-        <div className="hero-actions">
-          <div className="hero-chip">
-            <Icon iconKey="iron_ore" color="#c9a06a" size={18} />
-            <span>矿产 {mineralSummary}</span>
-          </div>
-          <div className="hero-chip">
-            <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
-            <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
-          </div>
-          <div className="hero-chip">
-            <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
-            <span>
-              电力{" "}
-              {stats
-                ? `${stats.energy_stats.generation}/${stats.energy_stats.consumption}`
-                : "-"}
-            </span>
-          </div>
-          <div className="hero-chip">
-            <Icon iconKey="lab" color="#5fb0ff" size={18} />
-            <span>研究 {currentResearchName || "无"}</span>
-          </div>
+        <div className="planet-map-shell__overlay">
+          <PlanetSelectionBar catalog={catalog} planet={planet} />
+          <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} />
         </div>
-      </section>
-
-      <section className="planet-workbench">
-        {!isCompactLayout ? (
-          <aside className="panel planet-sidebar">
-            <PlanetLayerPanel
-              networks={networks}
-              planet={planet}
-              runtime={runtime}
+        <PlanetMinimap
+          fog={planet}
+          overview={overviewQuery.data}
+          planet={planet}
+        />
+        <PlanetDebugPanel
+          capture={captureRef.current}
+          catalog={catalog}
+          currentTick={planet.tick}
+          networks={networks}
+          onPullEvents={pullMissedEvents}
+          onRefreshFog={async () => {
+            await sceneQuery.refetch();
+            markFullSync();
+          }}
+          onRefreshPlanet={async () => {
+            await Promise.all([
+              sceneQuery.refetch(),
+              runtimeQuery.refetch(),
+              networksQuery.refetch(),
+              summaryQuery.refetch(),
+              statsQuery.refetch(),
+            ]);
+            markFullSync();
+          }}
+          planet={planet}
+          runtime={runtime}
+        />
+        <PlanetMapToolbar
+          networks={networks}
+          planet={planet}
+          runtime={runtime}
+        />
+        {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出 */}
+        <aside
+          className={
+            drawerOpen ? "planet-drawer planet-drawer--open" : "planet-drawer"
+          }
+        >
+          <button
+            aria-expanded={drawerOpen}
+            aria-label="工作台"
+            className="planet-drawer__handle"
+            onClick={() => setDrawerOpen((open) => !open)}
+            title="工作台"
+            type="button"
+          >
+            <span aria-hidden="true" className="planet-drawer__handle-text">
+              工作台
+            </span>
+          </button>
+          <div className="panel planet-detail-shell planet-drawer__body">
+            <PlanetOperationHeader
+              activePlanetId={summary?.active_planet_id ?? planet.planet_id}
+              latestEntry={latestCommandEntry}
+              pendingCount={pendingCommandCount}
+              routePlanetId={planet.planet_id}
+              routePlanetName={planet.name}
+              systemName={system?.name ?? system?.system_id}
             />
-          </aside>
-        ) : null}
-
-        <section className="panel planet-map-shell">
-          <PlanetMapPixi
-            catalog={catalog}
-            fog={planet}
-            networks={networks}
-            onCanvasReady={(capture) => {
-              captureRef.current = capture;
-            }}
-            onInteractTile={handleInteractTile}
-            overview={overviewQuery.data}
-            planet={planet}
-            runtime={runtime}
-          />
-          <div className="planet-map-shell__overlay">
-            <PlanetSelectionBar catalog={catalog} planet={planet} />
-            <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} />
+            {detailPanels}
           </div>
-          <PlanetMinimap
-            fog={planet}
-            overview={overviewQuery.data}
-            planet={planet}
-          />
-          <PlanetDebugPanel
-            capture={captureRef.current}
-            catalog={catalog}
-            currentTick={planet.tick}
-            networks={networks}
-            onPullEvents={pullMissedEvents}
-            onRefreshFog={async () => {
-              await sceneQuery.refetch();
-              markFullSync();
-            }}
-            onRefreshPlanet={async () => {
-              await Promise.all([
-                sceneQuery.refetch(),
-                runtimeQuery.refetch(),
-                networksQuery.refetch(),
-                summaryQuery.refetch(),
-                statsQuery.refetch(),
-              ]);
-              markFullSync();
-            }}
-            planet={planet}
-            runtime={runtime}
-          />
-        </section>
-
-        <aside className="panel planet-detail-shell">
-          <PlanetOperationHeader
-            activePlanetId={summary?.active_planet_id ?? planet.planet_id}
-            latestEntry={latestCommandEntry}
-            pendingCount={pendingCommandCount}
-            routePlanetId={planet.planet_id}
-            routePlanetName={planet.name}
-            systemName={system?.name ?? system?.system_id}
-          />
-          {detailPanels}
         </aside>
       </section>
     </div>

@@ -125,11 +125,11 @@ describe('PlanetMapPixi 交互（拖拽/缩放/点选）', () => {
       throw new Error('交互面未渲染');
     }
 
-    // miner-1 在 tile (1,1)；camera offset 32、tileSize 12（zoomIndex 5）。
+    // miner-1 在 tile (1,1)；camera offset 32、tileSize 8（默认档 zoomIndex 6）。
     await act(async () => {
       surface.dispatchEvent(new MouseEvent('click', {
-        clientX: SEED_OFFSET + 1.5 * 12,
-        clientY: SEED_OFFSET + 1.5 * 12,
+        clientX: SEED_OFFSET + 1.5 * 8,
+        clientY: SEED_OFFSET + 1.5 * 8,
         bubbles: true,
       }));
     });

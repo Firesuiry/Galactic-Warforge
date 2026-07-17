@@ -9,8 +9,9 @@
  *   （增量同步）；物流/电网/管道/工地/敌情各一个 Graphics，sync 时整体重绘。
  * - 交互叠加：选中黄框 / hover 白框 / 建造幽灵 / move/attack 准星（单个 Graphics，数据变化重绘）。
  *
- * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲，
- * 不做任何数据重建。视觉契约与旧 entity-draw.ts / PlanetMapCanvas 对齐。
+ * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲 +
+ * 缩放档切换的 world 变换补间（~180ms，frozen 时瞬切），不做任何数据重建。
+ * 视觉契约与旧 entity-draw.ts / PlanetMapCanvas 对齐。
  *
  * 战斗特效：组件侧订阅战斗事件总线（battle-events）调 handleBattleEvent，
  * damage_applied 映射为开火闪光/伤害飘字/受击闪白（planet-effects 纯逻辑 + 池化视图），
@@ -32,6 +33,7 @@ import type {
 import type { BattleEvent } from '@/engine/battle-events';
 import { resolveIconGlyph } from '@/common/Icon';
 import { getEmojiTexture, getGlowTexture } from '@/engine/textures';
+import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
 import {
   PlanetEffectPool,
@@ -64,6 +66,9 @@ import { getResourceColorValue, type VisibleEntities } from '@/features/planet-m
 
 /** 单位平滑移动的指数趋近速率（1/s）：pos += (target - pos) * (1 - exp(-dt * k))。 */
 export const UNIT_SMOOTHING_RATE = 8;
+
+/** 缩放档切换的补间时长（ms）：渲染层 world 变换从旧值动画到新值，数据层档位离散不变。 */
+export const PLANET_ZOOM_TWEEN_MS = 180;
 
 /** 指数趋近的每帧混合系数；dt 越大越接近 1（帧率无关）。 */
 export function smoothingBlend(dtSeconds: number, rate = UNIT_SMOOTHING_RATE) {
@@ -132,6 +137,8 @@ export interface PlanetSceneCameraInput {
   offsetX: number;
   offsetY: number;
   tileSize: number;
+  /** 数据层离散缩放档：档位变化触发渲染层补间（resize 导致的 tileSize 变化不播动画）。 */
+  zoomIndex: number;
 }
 
 export interface PlanetSceneEntitiesInput {
@@ -275,6 +282,13 @@ export class PlanetScene {
   private offsetX = 0;
   private offsetY = 0;
   private tileSize = 12;
+  /** 渲染层实际应用的 world 变换（补间期间与数据层目标值 offsetX/offsetY 不同步）。 */
+  private appliedScale = 1;
+  private appliedX = 0;
+  private appliedY = 0;
+  private zoomTween: { fromScale: number; fromX: number; fromY: number; tween: Tween } | null = null;
+  private lastAppliedZoomIndex: number | null = null;
+  private lastAppliedMode: boolean | null = null;
   private layers: PlanetLayerState | null = null;
   private detailPolicy: SceneRenderDetailPolicy | null = null;
   private overviewMode = false;
@@ -389,11 +403,11 @@ export class PlanetScene {
 
   /** 相机输入：平移只动 world 容器；tileSize（缩放档）变化才触发实体按新尺寸重建。 */
   setCamera(input: PlanetSceneCameraInput) {
-    const tileSizeChanged = input.tileSize !== this.tileSize;
+    const previousTileSize = this.tileSize;
+    const tileSizeChanged = input.tileSize !== previousTileSize;
     this.offsetX = input.offsetX;
     this.offsetY = input.offsetY;
     this.tileSize = input.tileSize;
-    this.world.position.set(input.offsetX, input.offsetY);
     this.layoutBaseSprites();
     if (tileSizeChanged) {
       this.redrawGrid();
@@ -402,6 +416,36 @@ export class PlanetScene {
       this.redrawInteraction();
       this.applyLayerVisibility();
     }
+
+    // 缩放补间：离散档位变化时，渲染变换（world scale/position）从当前值 ~180ms 补间到
+    // scale=1@目标 offset。起始帧按 旧tileSize/新tileSize 收缩 world.scale，
+    // 使子节点按新尺寸重建后首帧视觉与旧视图连续；平移/首帧/模式切换/frozen 直接落位。
+    const modeSwitched = this.lastAppliedMode !== null && this.lastAppliedMode !== this.overviewMode;
+    const zoomIndexChanged = this.lastAppliedZoomIndex !== null && input.zoomIndex !== this.lastAppliedZoomIndex;
+    if (!this.frozen && zoomIndexChanged && !modeSwitched) {
+      const fromScale = this.appliedScale * (previousTileSize / input.tileSize);
+      this.zoomTween = {
+        fromScale,
+        fromX: this.appliedX,
+        fromY: this.appliedY,
+        tween: createTween(PLANET_ZOOM_TWEEN_MS, easeOutCubic),
+      };
+      this.applyCameraTransform(fromScale, this.appliedX, this.appliedY);
+    } else {
+      this.zoomTween = null;
+      this.applyCameraTransform(1, this.offsetX, this.offsetY);
+    }
+    this.lastAppliedZoomIndex = input.zoomIndex;
+    this.lastAppliedMode = this.overviewMode;
+  }
+
+  /** 应用渲染层相机变换：world.scale 承载补间中的缩放混合，空闲时恒为 1。 */
+  private applyCameraTransform(scale: number, x: number, y: number) {
+    this.appliedScale = scale;
+    this.appliedX = x;
+    this.appliedY = y;
+    this.world.scale.set(scale);
+    this.world.position.set(x, y);
   }
 
   /** 实体输入：建筑/单位/资源增量同步（保平滑移动状态），连线类 Graphics 整体重绘。 */
@@ -1213,6 +1257,18 @@ export class PlanetScene {
     }
     // 上限 100ms：后台标签页恢复时不会一次性飞跃。
     const dt = Math.min(ticker.deltaMS, 100) / 1000;
+    // 缩放补间推进：完成后精确落到 scale=1@目标 offset。
+    if (this.zoomTween) {
+      const progress = this.zoomTween.tween.step(ticker.deltaMS);
+      this.applyCameraTransform(
+        lerp(this.zoomTween.fromScale, 1, progress),
+        lerp(this.zoomTween.fromX, this.offsetX, progress),
+        lerp(this.zoomTween.fromY, this.offsetY, progress),
+      );
+      if (progress >= 1) {
+        this.zoomTween = null;
+      }
+    }
     const blend = smoothingBlend(dt);
     for (const node of this.unitNodes.values()) {
       const dx = node.targetX - node.posX;

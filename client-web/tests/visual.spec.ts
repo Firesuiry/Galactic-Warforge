@@ -60,6 +60,8 @@ test('移动端行星页保留地图首屏并提供工作台切换', async ({ pa
   await openFixtureMode(page);
   await page.goto('/planet/planet-1-1');
   await expect(page.getByRole('img', { name: '行星地图' })).toBeVisible();
+  // V3 全屏布局：工作台默认收起为右侧边缘把手，点击滑出抽屉
+  await page.getByRole('button', { name: '工作台' }).click();
   await expect(page.getByRole('tab', { name: '工作台' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '选中对象' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '活动流' })).toBeVisible();

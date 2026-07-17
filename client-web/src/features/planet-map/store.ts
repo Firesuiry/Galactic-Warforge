@@ -56,20 +56,40 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
     tileSize: 1,
   },
   {
+    label: '2px',
+    mode: 'scene',
+    scale: 2,
+    tileSize: 2,
+  },
+  {
     label: '4px',
     mode: 'scene',
     scale: 4,
     tileSize: 4,
   },
   {
-    label: '12px',
+    label: '8px',
     mode: 'scene',
-    scale: 12,
-    tileSize: 12,
+    scale: 8,
+    tileSize: 8,
+  },
+  {
+    label: '16px',
+    mode: 'scene',
+    scale: 16,
+    tileSize: 16,
+  },
+  {
+    label: '32px',
+    mode: 'scene',
+    scale: 32,
+    tileSize: 32,
   },
 ];
-export const DEFAULT_PLANET_ZOOM_INDEX = 5;
-export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = 4;
+export const DEFAULT_PLANET_ZOOM_INDEX = 6;
+export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;
+/** scene 档缺省 tile 边长（px/tile），与默认缩放档一致。 */
+export const DEFAULT_PLANET_SCENE_TILE_SIZE = 8;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
 export const MAX_PLANET_SCENE_TILES_PER_AXIS = 320;
 
@@ -147,7 +167,7 @@ export function getPlanetRenderTileSize(
     );
   }
 
-  const requestedTileSize = zoomLevel.tileSize ?? 12;
+  const requestedTileSize = zoomLevel.tileSize ?? DEFAULT_PLANET_SCENE_TILE_SIZE;
   const protectedTileSize = Math.max(
     Math.ceil(viewportWidth / MAX_PLANET_SCENE_TILES_PER_AXIS),
     Math.ceil(viewportHeight / MAX_PLANET_SCENE_TILES_PER_AXIS),
@@ -209,6 +229,17 @@ interface FocusRequest {
   position: TilePoint;
 }
 
+/**
+ * 缩放请求：所有缩放入口（滚轮/±按钮/档位按钮/快捷键）的统一通道。
+ * anchor 为视口内像素坐标（zoom-to-cursor 锚点）；null = 视口中心。
+ * 数据层档位仍是离散的（zoomIndex 立即落库），渲染层由 Pixi 场景做补间。
+ */
+interface ZoomRequest {
+  nonce: number;
+  zoomIndex: number;
+  anchor: TilePoint | null;
+}
+
 interface PlanetViewState {
   planetId: string;
   layers: PlanetLayerState;
@@ -224,6 +255,7 @@ interface PlanetViewState {
   lastFullSyncAt: number | null;
   debugOpen: boolean;
   focusRequest: FocusRequest | null;
+  zoomRequest: ZoomRequest | null;
   mapProjection: PlanetMapProjection;
 }
 
@@ -250,6 +282,9 @@ interface PlanetViewActions {
   toggleDebugOpen: () => void;
   requestFocus: (position: TilePoint) => void;
   consumeFocusRequest: (nonce: number) => void;
+  /** 请求切到指定缩放档（anchor=null 时以视口中心为锚）。 */
+  requestZoom: (zoomIndex: number, anchor?: TilePoint | null) => void;
+  consumeZoomRequest: (nonce: number) => void;
   setMapProjection: (projection: PlanetMapProjection) => void;
 }
 
@@ -262,7 +297,7 @@ function createDefaultLayers(): PlanetLayerState {
     buildings: true,
     units: true,
     fog: true,
-    grid: true,
+    grid: false,
     selection: true,
     logistics: true,
     power: false,
@@ -306,6 +341,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     lastFullSyncAt: null,
     debugOpen: false,
     focusRequest: null,
+    zoomRequest: null,
     mapProjection: { viewportWidth: 0, viewportHeight: 0, tileSize: 0 },
   };
 }
@@ -428,6 +464,22 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
         : {}
     ));
   },
+  requestZoom: (zoomIndex, anchor = null) => {
+    set(() => ({
+      zoomRequest: {
+        nonce: Date.now(),
+        zoomIndex: Math.min(Math.max(zoomIndex, 0), PLANET_ZOOM_LEVELS.length - 1),
+        anchor,
+      },
+    }));
+  },
+  consumeZoomRequest: (nonce) => {
+    set((state) => (
+      state.zoomRequest?.nonce === nonce
+        ? { zoomRequest: null }
+        : {}
+    ));
+  },
   setMapProjection: (projection) => {
     set((state) => {
       if (
@@ -466,6 +518,8 @@ export function resetPlanetViewStore() {
     toggleDebugOpen: usePlanetViewStore.getState().toggleDebugOpen,
     requestFocus: usePlanetViewStore.getState().requestFocus,
     consumeFocusRequest: usePlanetViewStore.getState().consumeFocusRequest,
+    requestZoom: usePlanetViewStore.getState().requestZoom,
+    consumeZoomRequest: usePlanetViewStore.getState().consumeZoomRequest,
     setMapProjection: usePlanetViewStore.getState().setMapProjection,
   });
 }

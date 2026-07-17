@@ -1524,6 +1524,8 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
 
+    // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里
+    await user.click(screen.getByRole("button", { name: "图层与视角" }));
     await user.click(screen.getByRole("button", { name: "1px/4tile" }));
 
     expect(await screen.findByText("缩放 1px/4tile")).toBeInTheDocument();
@@ -1621,6 +1623,8 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
 
+    // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里
+    await user.click(screen.getByRole("button", { name: "图层与视角" }));
     await user.click(screen.getByRole("button", { name: "1px/4tile" }));
 
     await waitFor(() => {
@@ -1704,6 +1708,10 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
 
+    // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里；
+    // "网格"图层默认关闭，先手动勾开才能看到"细网格已简化"提示
+    await user.click(screen.getByRole("button", { name: "图层与视角" }));
+    await user.click(screen.getByRole("checkbox", { name: "网格" }));
     await user.click(screen.getByRole("button", { name: "1px" }));
 
     expect(await screen.findByText("低缩放简化")).toBeInTheDocument();

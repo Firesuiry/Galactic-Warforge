@@ -45,6 +45,15 @@ function shadeFactor(x: number, y: number) {
   return 1 + ((((hash % 1000) / 1000) - 0.5) * 0.32);
 }
 
+/** 迷雾 alpha 抖动幅度（±）：仅微扰，两档均值契约不变（未探索 0.9 / 已探索 0.44）。 */
+const FOG_ALPHA_JITTER = 0.05;
+
+/** 迷雾抖动的确定性 hash：同 (x,y) 必得同值，保证截图可复现。返回 [-1, 1]。 */
+function fogJitterFactor(x: number, y: number) {
+  const hash = ((x * 2654435761) ^ (y * 40503)) >>> 0;
+  return ((hash % 1000) / 1000) * 2 - 1;
+}
+
 /**
  * water/lava 流光带的整格近似：旧实现只在格子上沿 40% 画亮/暗带，
  * 1px/tile 纹理无法表达亚格条带，退化为整格 6% 提亮 / 8% 压暗（相位公式保持一致）。
@@ -104,7 +113,8 @@ export function renderPlanetTerrainCanvas(planet: PlanetRenderView): HTMLCanvasE
 
 /**
  * 场景模式迷雾画布：map_width × map_height，1px/tile。
- * 未探索 rgba(0,0,0,0.9)、已探索 rgba(7,11,20,0.44)、可见透明；
+ * 未探索 rgba(0,0,0,~0.9)、已探索 rgba(7,11,20,~0.44)、可见透明；
+ * 每格 alpha 叠加 ±0.05 的确定性抖动（(x,y) hash 种子，截图可复现），两档均值不变。
  * Pixi 侧用 linear 过滤放大，visible↔不可见 边界自然形成约 1 tile 的软渐变
  * （替代旧实现的径向渐变软边界）。
  */
@@ -126,17 +136,18 @@ export function renderPlanetFogCanvas(
       if (state.visible) {
         continue;
       }
+      const jitter = fogJitterFactor(x, y) * FOG_ALPHA_JITTER;
       const offset = (y * width + x) * 4;
       if (state.explored) {
         pixels[offset] = 7;
         pixels[offset + 1] = 11;
         pixels[offset + 2] = 20;
-        pixels[offset + 3] = Math.round(0.44 * 255);
+        pixels[offset + 3] = clampByte((0.44 + jitter) * 255);
       } else {
         pixels[offset] = 0;
         pixels[offset + 1] = 0;
         pixels[offset + 2] = 0;
-        pixels[offset + 3] = Math.round(0.9 * 255);
+        pixels[offset + 3] = clampByte((0.9 + jitter) * 255);
       }
     }
   }

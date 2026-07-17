@@ -138,10 +138,20 @@ button {
 .page-grid--planet {
   height: 100%;
   min-height: 0;
-  gap: 16px;
-  /* V2：活动流收入右侧工作台 Tab，第三行取消；地图获得整屏剩余高度 */
-  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
+  gap: 0;
+  /* V3 全屏化：地图壳吃满 app-body，页级信息全部 HUD 悬浮 */
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
+}
+
+/* 行星页全屏化：page-shell 去 padding/限宽，地图吃满剩余视口 */
+.page-shell:has(> .page-grid--planet) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  padding: 0;
 }
 
 .page-header {
@@ -855,24 +865,10 @@ button {
   font-size: 0.825rem;
 }
 
-.planet-workbench {
-  display: grid;
-  /* V2：地图当主角——侧栏/详情收窄，地图列 min 抬高、占主导 */
-  grid-template-columns: minmax(180px, 208px) minmax(360px, 1fr) minmax(232px, 260px);
-  gap: 12px;
-  align-items: stretch;
-  min-height: 0;
-}
-
-.planet-sidebar,
 .planet-detail-shell {
   min-height: 0;
   height: 100%;
   padding: 16px;
-}
-
-.planet-sidebar,
-.planet-detail-shell {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -898,7 +894,8 @@ button {
   overflow: hidden;
   min-height: 0;
   height: 100%;
-  padding: 14px;
+  padding: 0;
+  border-radius: 0;
 }
 
 .planet-map-canvas {
@@ -918,12 +915,12 @@ button {
   width: 100%;
   height: 100%;
   display: block;
-  border-radius: 18px;
+  border-radius: 0;
   background:
     radial-gradient(circle at 20% 20%, rgba(48, 128, 255, 0.18), transparent 22%),
     linear-gradient(180deg, #08111f 0%, #050811 100%);
   outline: 1px solid rgba(255, 255, 255, 0.08);
-  /* Pixi canvas 是直角矩形，裁剪到圆角 surface 内 */
+  /* Pixi canvas 铺满直角 surface */
   overflow: hidden;
 }
 
@@ -1552,32 +1549,8 @@ button {
 }
 
 @media (max-width: 1100px) {
-  .page-grid--planet {
-    height: auto;
-    grid-template-rows: auto;
-    overflow: visible;
-  }
-
-  .planet-workbench {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .planet-sidebar,
-  .planet-detail-shell,
-  .planet-map-shell {
-    min-height: auto;
-  }
-
   .research-groups {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .planet-map-canvas {
-    height: auto;
-  }
-
-  .planet-map-canvas__viewport {
-    height: clamp(280px, 48vh, 420px);
   }
 
   .compact-form-grid {
@@ -1609,20 +1582,23 @@ button {
   }
 
   .debug-panel {
-    position: static;
-    width: 100%;
-    max-width: none;
-    margin-top: 12px;
+    width: min(260px, calc(100vw - 32px));
   }
 }
 
 @media (max-width: 900px) {
-  .planet-map-shell {
-    min-height: 360px;
-  }
-
   .planet-detail-shell {
     gap: 14px;
+  }
+
+  /* 窄屏：标题片只留主标题行，地图首屏不拥挤 */
+  .planet-title-chip__chips {
+    display: none;
+  }
+
+  /* 窄屏：工作台抽屉覆盖式展开 */
+  .planet-drawer__body {
+    width: min(320px, 88vw);
   }
 }
 
@@ -2184,8 +2160,7 @@ a {
   gap: 14px;
 }
 
-.strategic-hero,
-.page-hero--planet {
+.strategic-hero {
   min-height: 96px;
   border-radius: 22px;
   background: linear-gradient(135deg, rgba(16, 38, 43, 0.96), rgba(12, 23, 28, 0.94));
@@ -2193,10 +2168,6 @@ a {
 
 .hero-actions {
   flex-wrap: wrap;
-}
-
-.hero-actions--planet {
-  justify-content: flex-end;
 }
 
 .hero-chip {
@@ -2322,21 +2293,6 @@ a {
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.planet-workbench--grand {
-  grid-template-columns: 76px minmax(0, 1fr) 360px;
-  gap: 14px;
-}
-
-.planet-map-shell--grand {
-  min-height: 760px;
-  padding: 14px;
-}
-
-.planet-detail-shell--grand {
-  gap: 14px;
-  min-height: 760px;
 }
 
 .planet-map-stage {
@@ -2567,7 +2523,6 @@ a {
 
 @media (max-width: 1100px) {
   .strategic-layout,
-  .planet-workbench--grand,
   .war-workbench {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2691,10 +2646,11 @@ a {
   opacity: 0.82;
 }
 
-/* 桌面端：状态行右侧留白避开缩略图 */
+/* 桌面端：状态行右侧留白避开缩略图，左侧留白避开悬浮工具条 */
 @media (min-width: 1101px) {
   .planet-map-canvas__status {
     padding-right: 190px;
+    padding-left: 72px;
   }
 }
 
@@ -2703,6 +2659,149 @@ a {
   .planet-minimap {
     display: none;
   }
+}
+
+/* ============================================================
+ * V3 行星页全屏化 HUD：悬浮标题片 / 左下工具条 / 右侧工作台抽屉
+ * ============================================================ */
+
+/* 悬浮标题片（左上）：行星名/类型/尺寸 + 资源芯片，半透明 HUD 底，不挡地图交互 */
+.planet-title-chip {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(440px, calc(100% - 32px));
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 28, 0.66);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.planet-title-chip__head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px rgba(57, 230, 208, 0.28);
+}
+
+.planet-title-chip__head p {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+}
+
+.planet-title-chip__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.planet-title-chip__chips .hero-chip {
+  padding: 4px 9px;
+  font-size: 0.74rem;
+}
+
+/* 左下悬浮工具条：一列小图标按钮 + 图层/视角浮层 */
+.planet-map-toolbar {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 6;
+}
+
+.planet-map-toolbar__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 28, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+
+.planet-map-toolbar__button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.planet-map-toolbar__popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: 288px;
+  max-width: calc(100vw - 48px);
+  max-height: min(62vh, 580px);
+  overflow: auto;
+  padding: 14px;
+}
+
+/* 右侧工作台抽屉：默认收起为边缘把手，--open 时滑出（覆盖式，不挤压地图） */
+.planet-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.planet-drawer__handle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  writing-mode: vertical-rl;
+  padding: 16px 7px;
+  border: 1px solid var(--border-glow);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  background: rgba(8, 14, 28, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--accent);
+  font-size: 0.8rem;
+  letter-spacing: 0.24em;
+  cursor: pointer;
+}
+
+.planet-drawer__handle:hover {
+  background: rgba(44, 193, 176, 0.2);
+}
+
+.planet-drawer__body {
+  pointer-events: auto;
+  width: 300px;
+  max-width: 88vw;
+  height: 100%;
+  overflow-y: auto;
+  border-radius: 0;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  transform: translateX(100%);
+  transition: transform var(--dur) var(--ease);
+}
+
+.planet-drawer--open .planet-drawer__body {
+  transform: translateX(0);
 }
 
 
