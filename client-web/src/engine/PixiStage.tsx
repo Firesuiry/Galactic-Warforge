@@ -40,7 +40,10 @@ export function PixiStage({ className, onReady }: PixiStageProps) {
       })
       .then(() => {
         if (destroyed) {
-          app.destroy(true, { children: true });
+          // StrictMode/导航竞态：init 完成前已被卸载。
+          // 第一个参数不得为 true——renderer 的 true 会释放全局共享资源，
+          // 会误伤同页其他 Application 实例（Pixi 内部随之报 'push' of undefined）。
+          app.destroy(false, { children: true });
           return;
         }
         ready = true;
@@ -55,7 +58,7 @@ export function PixiStage({ className, onReady }: PixiStageProps) {
       destroyed = true;
       cleanup?.();
       if (ready) {
-        app.destroy(true, { children: true });
+        app.destroy(false, { children: true });
       }
     };
   }, []);

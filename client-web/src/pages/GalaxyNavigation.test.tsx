@@ -238,8 +238,8 @@ describe('Galaxy navigation', () => {
 
     await user.click(screen.getByRole('button', { name: '进入星系' }));
     expect(useStarmapViewStore.getState().focusedSystemId).toBe('sys-1');
-    // 面包屑出现当前恒星系
-    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+    // 面包屑出现当前恒星系（Outliner 也会列出同名恒星系，按 class 限定）
+    expect(await screen.findByText('Alpha', { selector: '.starmap-breadcrumb__current' })).toBeInTheDocument();
 
     // 系内选中行星
     act(() => {
@@ -262,7 +262,7 @@ describe('Galaxy navigation', () => {
     act(() => {
       useStarmapViewStore.getState().focusSystem('sys-1');
     });
-    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+    expect(await screen.findByText('Alpha', { selector: '.starmap-breadcrumb__current' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Milky Test' }));
     expect(useStarmapViewStore.getState().focusedSystemId).toBeNull();

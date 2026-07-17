@@ -521,7 +521,6 @@ export function PlanetPage() {
     <div className="page-grid page-grid--planet">
       <section className="panel page-hero">
         <div className="page-header">
-          <p className="eyebrow">T007-T012 行星观察端</p>
           <h1>{planet.name || planet.planet_id}</h1>
           <p className="subtle-text">
             <span className="tick-pulse" key={`hero-tick-${planet.tick}`}>

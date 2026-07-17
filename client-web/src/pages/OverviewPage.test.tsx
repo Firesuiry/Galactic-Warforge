@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -108,12 +108,14 @@ describe('OverviewPage', () => {
     expect(screen.getAllByText('铁矿 24 · 石矿 3 · 硅矿 8').length).toBeGreaterThan(0);
     expect(screen.queryByText('矿物 240')).not.toBeInTheDocument();
     expect(screen.getAllByText('基础能源学').length).toBeGreaterThan(0);
-    expect(screen.queryByText('[t87] 实体已创建')).not.toBeInTheDocument();
-    expect(screen.queryByText('电力不足')).not.toBeInTheDocument();
+    // 情报面板默认折叠（断言范围限定在总览主面板，HUD Outliner 的警报展示不受影响）
+    const mainPanel = document.querySelector('.strategic-main') as HTMLElement;
+    expect(within(mainPanel).queryByText('[t87] 实体已创建')).not.toBeInTheDocument();
+    expect(within(mainPanel).queryByText('电力不足')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '情报' }));
 
-    expect(await screen.findByText('[t87] 实体已创建')).toBeInTheDocument();
-    expect(screen.getByText('电力不足')).toBeInTheDocument();
+    expect(await within(mainPanel).findByText('[t87] 实体已创建')).toBeInTheDocument();
+    expect(within(mainPanel).getByText('电力不足')).toBeInTheDocument();
   });
 });

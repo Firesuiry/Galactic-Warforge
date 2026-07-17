@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 
+import { Outliner } from '@/widgets/Outliner';
 import { TopNav } from '@/widgets/TopNav';
 
 export function AppShell() {
@@ -7,13 +8,16 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <TopNav />
-      {/*
-        key 按 pathname 变化 → 路由切换时 .page-shell 重挂载，触发 CSS page-enter 动画重放。
-        TopNav 在 main 之外，不随路由重挂载（保留其状态）。
-      */}
-      <main className="page-shell" key={pathname}>
-        <Outlet />
-      </main>
+      <div className="app-body">
+        {/*
+          key 按 pathname 变化 → 路由切换时 .page-shell 重挂载，触发 CSS page-enter 动画重放。
+          TopNav 在 main 之外，不随路由重挂载（保留其状态）。
+        */}
+        <main className="page-shell" key={pathname}>
+          <Outlet />
+        </main>
+        <Outliner />
+      </div>
     </div>
   );
 }

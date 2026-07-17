@@ -108,7 +108,10 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: '打开离线场景' }));
 
     expect(await screen.findByRole('button', { name: 'Silicon Frontier' })).toBeInTheDocument();
-    expect(screen.getByText('样例：基准观察场景')).toBeInTheDocument();
+
+    // 样例标识收进设置弹层
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(await screen.findByText(/样例：基准观察场景/)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(useSessionStore.getState().serverUrl).toBe(createFixtureServerUrl('baseline'));

@@ -27,6 +27,19 @@ function renderTopNav() {
   );
 }
 
+function stubAlerts(alerts: unknown[] = []) {
+  return (url: URL) => {
+    if (url.pathname === '/alerts/production/snapshot') {
+      return jsonResponse({
+        available_from_tick: 1,
+        has_more: false,
+        alerts,
+      });
+    }
+    return null;
+  };
+}
+
 describe('TopNav save', () => {
   beforeEach(() => {
     useSessionStore.getState().setSession({
@@ -38,8 +51,13 @@ describe('TopNav save', () => {
 
   it('在线模式下允许保存并显示成功提示', async () => {
     const user = userEvent.setup();
+    const alertsStub = stubAlerts();
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
+      const alertResponse = alertsStub(url);
+      if (alertResponse) {
+        return Promise.resolve(alertResponse);
+      }
       if (url.pathname === '/state/summary') {
         return Promise.resolve(jsonResponse({
           tick: 12,
@@ -78,16 +96,23 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
-    expect(await screen.findByText('矿产 铁矿 7 · 铜矿 2')).toBeInTheDocument();
+    expect(await screen.findByText('铁矿 7 · 铜矿 2')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '保存' }));
 
+    // 保存成功提示收进设置弹层
+    await user.click(await screen.findByRole('button', { name: '设置' }));
     expect(await screen.findByText('已保存到 tick 12')).toBeInTheDocument();
   });
 
   it('在线模式下保存失败会显示错误', async () => {
     const user = userEvent.setup();
+    const alertsStub = stubAlerts();
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
       const url = new URL(String(input));
+      const alertResponse = alertsStub(url);
+      if (alertResponse) {
+        return Promise.resolve(alertResponse);
+      }
       if (url.pathname === '/state/summary') {
         return Promise.resolve(jsonResponse({
           tick: 12,
@@ -119,9 +144,10 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
-    expect(await screen.findByText('矿产 硅矿 5')).toBeInTheDocument();
+    expect(await screen.findByText('硅矿 5')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '保存' }));
 
+    await user.click(await screen.findByRole('button', { name: '设置' }));
     expect(await screen.findByText('disk full')).toBeInTheDocument();
   });
 
@@ -135,5 +161,38 @@ describe('TopNav save', () => {
     renderTopNav();
 
     expect(await screen.findByRole('button', { name: '保存' })).toBeDisabled();
+  });
+
+  it('设置弹层展示玩家与服务信息', async () => {
+    const user = userEvent.setup();
+    const alertsStub = stubAlerts();
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const alertResponse = alertsStub(url);
+      if (alertResponse) {
+        return Promise.resolve(alertResponse);
+      }
+      if (url.pathname === '/state/summary') {
+        return Promise.resolve(jsonResponse({
+          tick: 12,
+          active_planet_id: 'planet-1-1',
+          players: { p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true } },
+        }));
+      }
+      if (url.pathname === '/state/stats') {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 12,
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+        }));
+      }
+      throw new Error(`unexpected request ${url.pathname}`);
+    }));
+
+    renderTopNav();
+    await user.click(await screen.findByRole('button', { name: '设置' }));
+    expect(await screen.findByText('玩家')).toBeInTheDocument();
+    expect(screen.getByText('p1')).toBeInTheDocument();
+    expect(screen.getByText(/localhost:5173/)).toBeInTheDocument();
   });
 });
