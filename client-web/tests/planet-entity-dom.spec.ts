@@ -4,7 +4,7 @@ async function openFixtureMode(page: Page) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
-  await expect(page.getByRole('heading', { name: '全局总览' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Silicon Frontier' })).toBeVisible();
 }
 
 // 验证棋盘实体已成为 agent/DevTools 可定位的真实 DOM 节点（重构前是读不到的 canvas 位图）。

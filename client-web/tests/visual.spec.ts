@@ -4,14 +4,26 @@ async function openFixtureMode(page: Page) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
-  await expect(page.getByRole('heading', { name: '全局总览' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Silicon Frontier' })).toBeVisible();
 }
 
 test('总览页截图基线', async ({ page }) => {
   await openFixtureMode(page);
+  await page.goto('/overview');
+  await expect(page.getByRole('heading', { name: '全局总览' })).toBeVisible();
   await expect(page.locator('.page-shell')).toHaveScreenshot('overview-dashboard.png', {
     animations: 'disabled',
   });
+});
+
+test('银河星图截图基线', async ({ page }) => {
+  await openFixtureMode(page);
+  // freeze 模式冻结相机/脉冲/公转动画，保证截图确定性
+  await page.goto('/galaxy?freeze=1');
+  await expect(page.locator('.starmap-stage canvas')).toBeVisible();
+  await page.waitForTimeout(800);
+  const screenshot = await page.screenshot({ animations: 'disabled' });
+  expect(screenshot).toMatchSnapshot('starmap-galaxy.png');
 });
 
 test('行星地图主视图截图基线', async ({ page }) => {
@@ -55,12 +67,12 @@ test('移动端行星页保留地图首屏并提供工作台切换', async ({ pa
   await expect(page.getByText('事件时间线')).toBeVisible();
 });
 
-test('system 页在 fixture 模式展示戴森运行态', async ({ page }) => {
+test('深链 /system/:id 进入对应恒星系星图', async ({ page }) => {
   await openFixtureMode(page);
   await page.goto('/system/sys-1');
-  await expect(page.getByRole('heading', { name: 'Aster' })).toBeVisible();
-  await expect(page.locator('.system-situation__metric').filter({ hasText: '系统总产能' })).toContainText('1500');
-  await expect(page.locator('.planet-side-section').filter({ hasText: '当前 active planet' })).toContainText('Gaia');
+  // 面包屑显示当前恒星系，Pixi 画布可见
+  await expect(page.locator('.starmap-breadcrumb__current')).toHaveText('Aster');
+  await expect(page.locator('.starmap-stage canvas')).toBeVisible();
 });
 
 test('回放 digest 截图基线', async ({ page }) => {

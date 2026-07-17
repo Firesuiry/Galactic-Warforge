@@ -19,7 +19,7 @@ export function OnlyGuests({ children }: PropsWithChildren) {
   const hasSession = useHasSession();
 
   if (hasSession) {
-    return <Navigate to="/overview" replace />;
+    return <Navigate to="/galaxy" replace />;
   }
 
   return children;

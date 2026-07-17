@@ -2370,136 +2370,6 @@ a {
   text-transform: uppercase;
 }
 
-.galaxy-map {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  min-height: 100%;
-  align-content: center;
-}
-
-.galaxy-node,
-.orbit-node {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 18px;
-  border: 1px solid rgba(180, 210, 199, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  text-align: left;
-}
-
-.galaxy-node--active,
-.orbit-node--active {
-  border-color: rgba(117, 181, 165, 0.32);
-  box-shadow: inset 0 0 0 1px rgba(117, 181, 165, 0.2);
-}
-
-.system-orbit-map {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 100%;
-  padding: 32px;
-}
-
-.system-orbit-map__star {
-  display: grid;
-  place-items: center;
-  width: 112px;
-  height: 112px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 203, 117, 0.92), rgba(210, 122, 42, 0.88));
-  color: #2a1904;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.system-orbit-map .orbit-node {
-  position: absolute;
-  width: 160px;
-  transform:
-    rotate(calc(var(--orbit-index) * 68deg))
-    translateY(calc(-150px - (var(--orbit-index) * 16px)))
-    rotate(calc(var(--orbit-index) * -68deg));
-}
-
-.system-situation {
-  display: grid;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.system-situation__metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 10px;
-}
-
-.system-situation__metric,
-.system-situation__layer-card {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(180, 210, 199, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.system-situation__metric-label {
-  color: #8fb0a8;
-  font-size: 0.82rem;
-}
-
-.system-situation__metric-value {
-  font-size: 1.45rem;
-  color: #eef7f3;
-}
-
-.system-situation__layers {
-  display: grid;
-  gap: 10px;
-}
-
-.system-situation__layer-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: baseline;
-}
-
-.system-situation__active-planet-name {
-  font-size: 1.1rem;
-  color: #eef7f3;
-}
-
-.system-situation__context-list {
-  display: grid;
-  gap: 8px;
-  padding-left: 18px;
-  margin: 0;
-}
-
-.system-situation__mode-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.system-situation__mode-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(180, 210, 199, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #dcebe6;
-  font-size: 0.82rem;
-}
-
 .planet-workbench--grand {
   grid-template-columns: 76px minmax(0, 1fr) 360px;
   gap: 14px;
@@ -2753,18 +2623,6 @@ a {
   .war-section-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .system-orbit-map {
-    gap: 14px;
-    padding: 0;
-  }
-
-  .system-orbit-map__star,
-  .system-orbit-map .orbit-node {
-    position: static;
-    transform: none;
-    width: 100%;
-  }
 }
 
 /* ============================================================
@@ -2877,3 +2735,210 @@ a {
   }
 }
 
+
+/* ============================================================
+ * 星图（Starmap）：全屏 Pixi 画布 + 悬浮 HUD
+ * ============================================================ */
+
+.starmap-view {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 130px);
+  min-height: 480px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #04060e;
+}
+
+/* 星图页让 page-shell 变为纵向 flex，星图吃满剩余视口 */
+.page-shell:has(> .starmap-view) {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-shell:has(> .starmap-view) > .starmap-view {
+  flex: 1;
+  height: auto;
+}
+
+.starmap-stage,
+.starmap-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.starmap-hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.starmap-hud > * {
+  pointer-events: auto;
+}
+
+.starmap-hud__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.starmap-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 28, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+.starmap-breadcrumb__link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.starmap-breadcrumb__link:hover {
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(57, 230, 208, 0.5);
+}
+
+.starmap-breadcrumb__sep {
+  color: var(--text-dim);
+}
+
+.starmap-breadcrumb__current {
+  color: var(--text);
+}
+
+.starmap-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 28, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.starmap-filter input {
+  accent-color: var(--accent);
+}
+
+.starmap-card {
+  align-self: center;
+  margin-bottom: 14px;
+  width: min(420px, calc(100% - 32px));
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-glow);
+  background: rgba(10, 18, 34, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 0 1px rgba(57, 230, 208, 0.08),
+    0 0 24px rgba(57, 230, 208, 0.12),
+    0 18px 42px rgba(0, 0, 0, 0.5);
+  animation: starmap-card-in var(--dur) var(--ease);
+}
+
+@keyframes starmap-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.starmap-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.starmap-card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.starmap-card__tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(95, 176, 255, 0.3);
+  background: rgba(95, 176, 255, 0.1);
+  color: var(--accent-2);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.starmap-card dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 12px;
+}
+
+.starmap-card dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.starmap-card dt {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.starmap-card dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.starmap-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.starmap-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}

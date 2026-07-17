@@ -6,12 +6,33 @@ import { renderApp, jsonResponse } from '@/test/utils';
 import { createFixtureServerUrl } from '@/fixtures';
 import { useSessionStore } from '@/stores/session';
 
-function mockFetchForOverview() {
+vi.mock('@/engine/PixiStage', () => ({
+  PixiStage: () => <div data-testid="pixi-stage" />,
+}));
+
+function mockFetchForStarmap() {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
     const url = String(input);
 
     if (url.endsWith('/health')) {
       return Promise.resolve(jsonResponse({ status: 'ok', tick: 42 }));
+    }
+    if (url.endsWith('/world/galaxy')) {
+      return Promise.resolve(jsonResponse({
+        galaxy_id: 'galaxy-1',
+        name: 'Milky Test',
+        discovered: true,
+        width: 1200,
+        height: 900,
+        systems: [
+          {
+            system_id: 'sys-1',
+            name: 'Alpha',
+            discovered: true,
+            position: { x: 100, y: 120 },
+          },
+        ],
+      }));
     }
     if (url.endsWith('/state/summary')) {
       return Promise.resolve(jsonResponse({
@@ -58,8 +79,8 @@ function mockFetchForOverview() {
 }
 
 describe('LoginPage', () => {
-  it('支持快捷填充并在验证成功后进入总览', async () => {
-    mockFetchForOverview();
+  it('支持快捷填充并在验证成功后进入星图', async () => {
+    mockFetchForStarmap();
     const user = userEvent.setup();
 
     renderApp(['/login']);
@@ -68,9 +89,9 @@ describe('LoginPage', () => {
     expect(screen.getByDisplayValue('p2')).toBeInTheDocument();
     expect(screen.getByDisplayValue('key_player_2')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '连接并进入总览' }));
+    await user.click(screen.getByRole('button', { name: '连接并进入星图' }));
 
-    expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Milky Test' })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(useSessionStore.getState().playerId).toBe('p2');
@@ -78,7 +99,7 @@ describe('LoginPage', () => {
     });
   });
 
-  it('支持直接进入离线 fixtures 总览页', async () => {
+  it('支持直接进入离线 fixtures 星图', async () => {
     const user = userEvent.setup();
 
     renderApp(['/login']);
@@ -86,7 +107,7 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('radio', { name: '离线样例' }));
     await user.click(screen.getByRole('button', { name: '打开离线场景' }));
 
-    expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Silicon Frontier' })).toBeInTheDocument();
     expect(screen.getByText('样例：基准观察场景')).toBeInTheDocument();
 
     await waitFor(() => {
@@ -106,7 +127,7 @@ describe('LoginPage', () => {
     const webEntryInput = screen.getByLabelText('Web 入口地址');
     await user.clear(webEntryInput);
     await user.type(webEntryInput, 'http://127.0.0.1:18081');
-    await user.click(screen.getByRole('button', { name: '连接并进入总览' }));
+    await user.click(screen.getByRole('button', { name: '连接并进入星图' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/请填写 Web 入口地址/);
     expect(screen.getByRole('alert')).toHaveTextContent(/不要直接填写游戏服务端端口/);

@@ -116,7 +116,7 @@ export function LoginPage() {
 
       setSession(nextValue);
       queryClient.clear();
-      navigate('/overview', { replace: true });
+      navigate('/galaxy', { replace: true });
     } catch (error) {
       setErrorMessage(
         formatConnectionError(error, connectionMode, nextValue.serverUrl),
@@ -233,7 +233,7 @@ export function LoginPage() {
           ) : null}
 
           <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? '连接中...' : connectionMode === 'fixture' ? '打开离线场景' : '连接并进入总览'}
+            {submitting ? '连接中...' : connectionMode === 'fixture' ? '打开离线场景' : '连接并进入星图'}
           </button>
         </form>
       </section>

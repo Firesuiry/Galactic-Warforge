@@ -1,9 +1,14 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 
+import { resetStarmapViewStore, useStarmapViewStore } from '@/features/starmap/store';
 import { renderApp, jsonResponse, sseResponse } from '@/test/utils';
 import { useSessionStore } from '@/stores/session';
+
+vi.mock('@/engine/PixiStage', () => ({
+  PixiStage: () => <div data-testid="pixi-stage" />,
+}));
 
 function createRuntimePayload() {
   return {
@@ -58,19 +63,9 @@ function createCatalogPayload() {
   };
 }
 
-function createSystemRuntimePayload() {
-  return {
-    system_id: 'sys-1',
-    discovered: true,
-    available: true,
-    dyson_sphere: {
-      layers: [],
-    },
-  };
-}
-
 describe('Galaxy navigation', () => {
-  it('可从银河进入星系并继续进入已发现行星', async () => {
+  beforeEach(() => {
+    resetStarmapViewStore();
     useSessionStore.getState().setSession({
       serverUrl: 'http://localhost:5173',
       playerId: 'p1',
@@ -91,6 +86,7 @@ describe('Galaxy navigation', () => {
               name: 'Alpha',
               discovered: true,
               position: { x: 10, y: 12 },
+              star: { type: 'G' },
             },
           ],
         }));
@@ -101,6 +97,8 @@ describe('Galaxy navigation', () => {
           system_id: 'sys-1',
           name: 'Alpha',
           discovered: true,
+          position: { x: 10, y: 12 },
+          star: { type: 'G' },
           planets: [
             {
               planet_id: 'planet-1-1',
@@ -110,10 +108,6 @@ describe('Galaxy navigation', () => {
             },
           ],
         }));
-      }
-
-      if (url.endsWith('/world/systems/sys-1/runtime')) {
-        return Promise.resolve(jsonResponse(createSystemRuntimePayload()));
       }
 
       if (url.endsWith('/world/planets/planet-1-1')) {
@@ -224,18 +218,53 @@ describe('Galaxy navigation', () => {
 
       return Promise.reject(new Error(`unexpected url ${url}`));
     }));
+  });
 
+  it('星图选中恒星系 → 进入星系 → 选中行星 → 进入行星', async () => {
     const user = userEvent.setup();
 
     renderApp(['/galaxy']);
 
-    expect(await screen.findByRole('heading', { name: 'Milky Test' })).toBeInTheDocument();
+    // 银河层：面包屑显示银河名
+    expect(await screen.findByRole('button', { name: 'Milky Test' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: '进入星系' }));
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    // 场景点击选中恒星系（Pixi 交互在单测中经 store 模拟）
+    act(() => {
+      useStarmapViewStore.getState().select({ kind: 'system', id: 'sys-1' });
+    });
+    const systemCard = await screen.findByTestId('starmap-system-card');
+    expect(systemCard).toHaveTextContent('Alpha');
+    expect(systemCard).toHaveTextContent('G 型恒星');
 
-    await user.click(screen.getByRole('link', { name: '进入行星' }));
+    await user.click(screen.getByRole('button', { name: '进入星系' }));
+    expect(useStarmapViewStore.getState().focusedSystemId).toBe('sys-1');
+    // 面包屑出现当前恒星系
+    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+
+    // 系内选中行星
+    act(() => {
+      useStarmapViewStore.getState().select({ kind: 'planet', id: 'planet-1-1', systemId: 'sys-1' });
+    });
+    const planetCard = await screen.findByTestId('starmap-planet-card');
+    expect(planetCard).toHaveTextContent('Gaia');
+    expect(planetCard).toHaveTextContent('类地行星');
+
+    await user.click(screen.getByRole('button', { name: '进入行星' }));
     expect(await screen.findByRole('heading', { name: 'Gaia' }, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '行星地图' })).toBeInTheDocument();
+  });
+
+  it('面包屑可从恒星系返回银河', async () => {
+    const user = userEvent.setup();
+    renderApp(['/galaxy']);
+    await screen.findByRole('button', { name: 'Milky Test' });
+
+    act(() => {
+      useStarmapViewStore.getState().focusSystem('sys-1');
+    });
+    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Milky Test' }));
+    expect(useStarmapViewStore.getState().focusedSystemId).toBeNull();
   });
 });

@@ -82,8 +82,9 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 ### 3.2 星图导航
 
-- `/galaxy`：银河总览；侧栏「筛选 / 发现状态 / 情报」均为可用按钮——筛选切换只看已发现星系、发现状态切换星系卡片上的发现标签、情报跳转战争工作台战报区
-- `/system/:systemId`：恒星系详情；页面直接消费 `/world/systems/{systemId}/runtime`，展示 `dyson_sphere` / `solar_sail_orbit` / `active_planet_context` 聚合出的戴森态势、层级产能、火箭累计发射次数，以及当前 active planet 对戴森操作链路的支撑建筑；侧栏「戴森 / 行星 / 运行态」按钮分别切换主区三块图层可见性，运行态卡聚合制空权、接触与战报计数
+- `/galaxy`：Pixi.js 渲染的全屏银河星图（`features/starmap/`），登录后的默认落地页。恒星按谱型（O/B/A/F/G/K/M）着色发光、按真实坐标布局，近邻恒星间有航线连线；未探明星系暗淡显示。支持拖拽平移、滚轮连续缩放（文字标签保持屏幕空间大小）、单击选中浮出情报卡、双击或持续放大进入恒星系
+- `/system/:systemId`：与星图同一场景的恒星系视图深链——中心恒星 + 行星轨道环 + 公转动画，行星按种类着色（气态带条纹），单击选中浮出情报卡，双击或卡片按钮进入 `/planet/:planetId`；双击空白或持续缩小返回银河；面包屑可返回银河层
+- 渲染基础在 `src/engine/`：`PixiStage`（React 挂载点）、`camera`（连续缩放/飞行补间相机）、`textures`（程序化纹理：恒星光晕/行星球体/星场/星云，零美术资源）、`tween`；星图 URL 加 `?freeze=1` 可冻结动画供截图测试
 - `/planet/:planetId`：行星观察页
 - `/war`：战争工作台
 - `/agents`：AI 智能体工作台

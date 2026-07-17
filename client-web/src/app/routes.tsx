@@ -15,7 +15,7 @@ import { WarPage } from '@/pages/WarPage';
 
 function RootRedirect() {
   const hasSession = useHasSession();
-  return <Navigate to={hasSession ? '/overview' : '/login'} replace />;
+  return <Navigate to={hasSession ? '/galaxy' : '/login'} replace />;
 }
 
 export function AppRoutes() {
