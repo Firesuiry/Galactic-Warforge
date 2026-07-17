@@ -1,10 +1,13 @@
 import { Outlet, useLocation } from 'react-router-dom';
 
+import { useGameAudio } from '@/features/audio/use-game-audio';
 import { Outliner } from '@/widgets/Outliner';
 import { TopNav } from '@/widgets/TopNav';
 
 export function AppShell() {
   const { pathname } = useLocation();
+  // App 级游戏音效：订阅战斗事件总线（此处全局只挂一次）
+  useGameAudio();
   return (
     <div className="app-shell">
       <TopNav />

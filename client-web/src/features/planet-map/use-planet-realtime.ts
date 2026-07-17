@@ -14,6 +14,7 @@ import {
   shouldRefreshStats,
   shouldRefreshSummary,
 } from '@/features/planet-map/model';
+import { playPlanetEventAudio } from '@/features/audio/planet-audio';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
@@ -207,6 +208,9 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       store.appendRecentEvent(event);
       store.setLastEventId(event.event_id);
       usePlanetCommandStore.getState().ingestEvent(event);
+
+      // 行星事件音效分流（建造完成/研究完成/产线告警/火箭发射），内部按 event_id 去重
+      playPlanetEventAudio(event);
 
       const alert = extractAlertFromEvent(event);
       if (alert) {

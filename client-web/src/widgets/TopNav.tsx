@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
+import { isMuted, setMuted, sfx } from '@/engine/audio';
 import { formatMineralInventory } from '@/features/mineral-summary';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { useApiClient } from '@/hooks/use-api-client';
@@ -29,6 +30,7 @@ export function TopNav() {
   const fixtureScenario = fixtureId ? getFixtureScenario(fixtureId) : null;
   const [saveMessage, setSaveMessage] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(() => isMuted());
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
   const summaryQuery = useQuery({
@@ -89,6 +91,17 @@ export function TopNav() {
   function handleSave() {
     setSaveMessage('');
     saveMutation.mutate();
+  }
+
+  function handleToggleMute() {
+    const next = !audioMuted;
+    setMuted(next);
+    setAudioMuted(next);
+    // 解除静音时播一声 tick 确认（本次点击的捕获阶段已完成 audio unlock）；
+    // 静音时不播——主增益已归零，播了也听不见
+    if (!next) {
+      sfx.uiClick();
+    }
   }
 
   const currentPlayer = summaryQuery.data?.players?.[session.playerId];
@@ -179,6 +192,17 @@ export function TopNav() {
       </div>
 
       <div className="top-nav__actions">
+        <button
+          className="top-nav__icon-btn"
+          type="button"
+          onClick={handleToggleMute}
+          title={audioMuted ? '取消静音' : '静音'}
+          aria-label={audioMuted ? '取消静音' : '静音'}
+          aria-pressed={audioMuted}
+        >
+          <span aria-hidden="true">{audioMuted ? '🔇' : '🔊'}</span>
+        </button>
+
         <button
           className="top-nav__icon-btn"
           type="button"

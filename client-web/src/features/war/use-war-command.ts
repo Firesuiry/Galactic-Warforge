@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { CommandResult } from '@shared/types';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { sfx } from '@/engine/audio';
 import { buildWarSuccessHint, resolveWarCommandHint, type WarCommandHint } from '@/features/war/error-hints';
 import type { FeedbackSection, WarCommandInput } from '@/features/war/war-query-keys';
 
@@ -63,6 +64,12 @@ function pushFeedback(
   section: FeedbackSection,
   hint: WarCommandHint,
 ) {
+  // 指令反馈音：成功双音上行 / 失败低音下行（无 AudioContext 环境自动 no-op）
+  if (hint.tone === 'success') {
+    sfx.commandOk();
+  } else {
+    sfx.commandFail();
+  }
   setFeedbacks((current) => {
     const previous = current[section] ?? [];
     return {
