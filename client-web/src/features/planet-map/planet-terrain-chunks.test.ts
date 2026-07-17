@@ -23,6 +23,7 @@ import {
   soilNoiseFactor,
   subPixelNoise,
   terrainChunkSignature,
+  terrainLandMask,
   terrainNeighborMask,
   useChunkedTerrain,
   waterNoiseFactor,
@@ -192,16 +193,27 @@ describe('过渡邻域规则', () => {
     expect(edgeDistancePx(3, 3, NO_MASK)).toBe(Infinity);
   });
 
-  it('shorelineFoamMix：陆侧 3px 渐变，水/岩浆/无邻水为 0', () => {
+  it('shorelineFoamMix：水格贴陆侧 3px 渐变，陆格/无陆邻/水-水相邻为 0', () => {
     const mask = { ...NO_MASK, left: true };
-    expect(shorelineFoamMix('buildable', mask, 0, 4)).toBeCloseTo(0.55, 6);
-    expect(shorelineFoamMix('buildable', mask, 1, 4)).toBeCloseTo(0.3, 6);
-    expect(shorelineFoamMix('buildable', mask, 2, 4)).toBeCloseTo(0.12, 6);
-    expect(shorelineFoamMix('buildable', mask, SHORELINE_WIDTH_PX, 4)).toBe(0);
-    expect(shorelineFoamMix('blocked', mask, 0, 0)).toBeCloseTo(0.55, 6);
-    expect(shorelineFoamMix('water', mask, 0, 4)).toBe(0);
+    expect(shorelineFoamMix('water', mask, 0, 4)).toBeCloseTo(0.55, 6);
+    expect(shorelineFoamMix('water', mask, 1, 4)).toBeCloseTo(0.3, 6);
+    expect(shorelineFoamMix('water', mask, 2, 4)).toBeCloseTo(0.12, 6);
+    expect(shorelineFoamMix('water', mask, SHORELINE_WIDTH_PX, 4)).toBe(0);
+    // 陆格不再产生泡沫（避免散点水域瓷砖感）
+    expect(shorelineFoamMix('buildable', mask, 0, 4)).toBe(0);
+    expect(shorelineFoamMix('blocked', mask, 0, 4)).toBe(0);
     expect(shorelineFoamMix('lava', mask, 0, 4)).toBe(0);
-    expect(shorelineFoamMix('buildable', NO_MASK, 0, 4)).toBe(0);
+    // 水-水相邻（无陆邻）无缝融合
+    expect(shorelineFoamMix('water', NO_MASK, 0, 4)).toBe(0);
+  });
+
+  it('terrainLandMask：只有 buildable/blocked 算陆，越界不算陆', () => {
+    // (3,0) 是水：左邻 buildable 为陆，其余方向是水/越界
+    expect(terrainLandMask(planet, 3, 0)).toEqual({ up: false, down: false, left: true, right: false });
+    // (3,1) 是水：左邻 buildable、下邻 lava（非陆）
+    expect(terrainLandMask(planet, 3, 1)).toEqual({ up: false, down: false, left: true, right: false });
+    // (0,2) 是 blocked（陆格本身不需要掩码，但函数应如实报告邻居）：下邻 buildable 为陆
+    expect(terrainLandMask(planet, 0, 2)).toEqual({ up: true, down: true, left: false, right: true });
   });
 
   it('lavaEdgeGlowMix：贴边强发光、次格减弱、内部为 0', () => {
@@ -285,25 +297,30 @@ describe('computeTerrainChunkPixels', () => {
     expect([...first.data]).toEqual([...second.data]);
   });
 
-  it('水岸过渡：陆格贴水侧像素比内侧更亮（泡沫渐变）', () => {
+  it('水岸按边过渡：水格贴陆侧像素更亮（泡沫），水-水相邻边与陆格均无泡沫', () => {
     const planet = createPlanet([
-      ['buildable', 'water'],
-      ['buildable', 'buildable'],
+      ['water', 'buildable'],
+      ['water', 'water'],
     ]);
     const { data, width } = computeTerrainChunkPixels(planet, 0, 0);
     const px = (x: number, y: number) => {
       const offset = (y * width + x) * 4;
       return [data[offset], data[offset + 1], data[offset + 2]] as const;
     };
-    // (0,0) 格右侧邻水：贴边列 (px=7) 的亮度应高于格中心 (px=3)
+    // (0,0) 水格右邻陆：贴陆列 (px=7) 的亮度应高于格中心 (px=3)
     const edge = px(7, 3);
     const inner = px(3, 3);
     expect(edge[0] + edge[1] + edge[2]).toBeGreaterThan(inner[0] + inner[1] + inner[2]);
-    // 无水邻的 (1,1) 格不受泡沫影响：贴 (0,0) 一侧与中心无同方向渐变
-    const noWater = px(8, 11);
-    const noWaterCenter = px(11, 11);
-    expect(Math.abs((noWater[0] + noWater[1] + noWater[2]) - (noWaterCenter[0] + noWaterCenter[1] + noWaterCenter[2])))
-      .toBeLessThan(edge[0] + edge[1] + edge[2] - (inner[0] + inner[1] + inner[2]));
+    // (1,1) 水格左邻是水：水-水相邻边 (px=8) 无泡沫，与中心亮度差远小于泡沫增量
+    const seam = px(8, 11);
+    const center = px(11, 11);
+    expect((seam[0] + seam[1] + seam[2]) - (center[0] + center[1] + center[2]))
+      .toBeLessThan((edge[0] + edge[1] + edge[2]) - (inner[0] + inner[1] + inner[2]));
+    // (1,0) 陆格左邻水：陆侧不再有泡沫渐变（贴水列与中心亮度差远小于水侧增量）
+    const landEdge = px(8, 3);
+    const landInner = px(11, 3);
+    expect((landEdge[0] + landEdge[1] + landEdge[2]) - (landInner[0] + landInner[1] + landInner[2]))
+      .toBeLessThan((edge[0] + edge[1] + edge[2]) - (inner[0] + inner[1] + inner[2]));
   });
 
   it('岩浆描边：贴非岩浆边的像素比内部更亮更橙', () => {

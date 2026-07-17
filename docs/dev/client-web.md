@@ -140,11 +140,14 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 事件时间线与告警面板；活动流支持 `关键反馈 / 全部事件 / 仅命令 / 仅告警` 四种模式，默认会折叠 `tick_completed`、`resource_changed`、`threat_level_changed` 这类低信号事件
 - SSE 增量同步与补拉
 - 调试面板
-- 地图渲染已迁到 Pixi（期3b）：`PlanetMapPixi.tsx` + `planet-scene.ts`（替代已删除的 `PlanetMapCanvas.tsx` 与 `entity-draw.ts`）。底图（地形/网格/迷雾/overview 热力）由 `planet-base-map.ts` 离屏生成 1px/tile（overview 1px/cell）画布转纹理，地形 nearest 放大保硬边、迷雾 linear 得软边界；实体（建筑 footprint 描边盒 + emoji、单位圆点、资源 emoji、物流/船虚线、电网、管道、工地、敌情、选中框/建造幽灵/准星）走 Pixi Container + Graphics，emoji 纹理由 `engine/textures.getEmojiTexture` 缓存，虚线用 `buildDashSegments` 切段模拟（Pixi Graphics 无原生 dash）
-- 单位平滑移动：ticker 每帧把单位显示位置向数据位置指数趋近（`smoothingBlend`，k≈8/s，帧率无关），ticker 只做平滑移动/选中环脉冲这类轻量动效，不做数据重建；URL 加 `?freeze=1` 冻结动效供截图测试
+- 地图渲染已迁到 Pixi（期3b）：`PlanetMapPixi.tsx` + `planet-scene.ts`（替代已删除的 `PlanetMapCanvas.tsx` 与 `entity-draw.ts`）。底图（地形/网格/迷雾/overview 热力）由 `planet-base-map.ts` 离屏生成 1px/tile（overview 1px/cell）画布转纹理，地形 nearest 放大保硬边、迷雾 linear 得软边界；实体视觉已随期5c 换代为程序化矢量精灵（见下），物流/船虚线、电网、管道、敌情、选中框/建造幽灵/准星仍走 Pixi Graphics，虚线用 `buildDashSegments` 切段模拟（Pixi Graphics 无原生 dash）
+- 单位平滑移动：ticker 每帧把单位显示位置向数据位置指数趋近（`smoothingBlend`，k≈8/s，帧率无关），ticker 只做平滑移动/选中环脉冲/建筑轻量动效（期5c 风机叶片、警示与辉光呼吸）这类轻量动效，不做数据重建；URL 加 `?freeze=1` 冻结动效供截图测试
 - 行星战斗伤害特效（期4c）：`planet-effects.ts`（特效池 + damage_applied→特效指令映射纯函数，不依赖 Pixi）+ `planet-scene.ts` 的 `effectsLayer` / `handleBattleEvent`；行星页 SSE 经 `use-planet-realtime` 新增的 `forwardGameEventToBattleBus` 分流到战斗事件总线，组件侧订阅总线驱动演出：damage_applied 触发开火闪光（攻击方→目标弹道亮点 + 渐隐亮线，防御塔黄白/普通单位青白）、`-{damage}` 伤害飘字（敌方受击红/己方受击橙）、受击节点闪白（alpha 正弦脉冲，节点中途销毁则停演）；目标解析不到当前实体树（如敌情 marker）时不演出，entity_destroyed 不做演出、由实体增量同步自然消失承担；frozen 模式不演出
 - 语义实体 DOM 层以 ghost 形式保留（`entity-layer--ghost`，`opacity:0` + `pointer-events:none`，禁止 display:none/visibility:hidden）：带 `data-entity-*` 的节点仍供 DevTools/agent 定位（Playwright 对 opacity:0 仍判 visible），点击命中仍走 surface 的 pointToTile；可见实体收集与资源色板在 `visible-entities.ts`（Pixi 场景与 DOM 层共用）
 - 调试面板"导出 PNG"改用 Pixi `extract.canvas(app.stage)` 整体抓舞台（与屏幕所见一致），不再走 canvas + entity-draw 合成
+- 行星页全屏化（期5a）：删 page-hero/三列 workbench，地图吃满 app-body，行星信息改悬浮标题片、图层与缩放收左下 `PlanetMapToolbar`、工作台改右侧抽屉（选中/回执自动滑出）；缩放档重排 9 档（scene 1/2/4/8/16/32px，默认 8px），档间 180ms 补间 + zoom-to-cursor，统一 `requestZoom` 入口（±按钮/快捷键/滚轮同一管道），+/- 快捷键以视口中心为锚；网格默认关、建造模式自动叠加，迷雾 alpha 用确定性噪声抖动
+- 拟真分块地表（期5b）：`planet-terrain-chunks.ts` 在有效 tileSize ≥4px 的 scene 档启用 64×64 tile/chunk、8px/tile 离屏烘焙（1/2px 档与 overview 维持低成本整图画布）；可见块按需生成（含 1 圈余量、视口中心优先），LRU 上限 64 块，惰性补块每帧 ≤2（frozen 同步补齐保截图确定），地形变化按 FNV-1a 变体签名逐块脏校验；每格 8×8px 内土壤/水面噪色、水岸泡沫、岩浆描边暗壳、blocked 隆起浮雕全部确定性种子（(x,y,px,py) hash，纯函数可测）；氛围层：水面低分辨率动态遮罩流光（add 混合 + alpha 呼吸）+ 岩浆呼吸辉光 + 全屏轻暗角，相位走固定时钟、frozen 锁 0；相机对小图两轴视口居中、拖拽/缩放逐轴钳位
+- 行星实体程序化矢量精灵（期5c）：`planet-building-sprites.ts` 把建筑从"footprint 描边盒 + 居中 emoji"换代为离屏烘焙剪影精灵——6 种原型（tower/dome/furnace/depot/belt/special，类型映射表 + 关键词兜底）按 32px/tile 超采样绘制"投影 → 底座板 → 主体结构 → 顶部细节"，水平约 8% 溢出 footprint（Factorio/Civ 式伪 3D），同原型内靠类型级点缀色区分；纹理全局缓存（键 `bldg:<archetype>:<w>x<h>:<state>`，队伍归属不入键、由场景侧底座描边条承担），Sprite 缩放到 footprint×tileSize 显示，建筑层按 tile 底部 y 排序防溢出穿插；emoji 降级为右上角类型角标（≥16px 档显示），受损/故障走 distressed 烘焙变体（暗化 + 警示斜纹）+ ⚠️ 角标呼吸，wind_turbine 叶片独立 sprite 在 ticker 旋转（id hash 相位、frozen 锁 0），furnace 发光窗辉光呼吸；单位圆点改带朝向楔形（朝向 = 移动目标/攻击目标/最近朝向，默认朝上，队色描边 + 暗底），受伤画 HP 弧（顶部 90°、绿→黄→红，不随朝向旋转）；资源 emoji 坐上晶簇/岩块底座贴花（kind hash 确定性形状）；工地 3px 色框改脚手架（虚线轮廓 + 四角 L 支架 + 对角撑 + 底部进度条）；水岸泡沫打磨为按边过渡（只在水格与陆格相邻的边画、水-水边无缝融合，大片水域内部均匀只有轮廓岸线），消除散点水域的"每格全边白框"瓷砖感
 - 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
 
 ### 3.5 回放调试页
@@ -219,9 +222,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
   - `tests/war-workbench-authoritative.spec.ts`：自动拉起官方战争验证局，验证 `/war` 对 authoritative 战争场景的真实操作闭环
   - `tests/planet-entity-dom.spec.ts`：行星地图实体的 ghost DOM 可见性契约（`data-entity-*` 可定位、点击穿透后命中选中）
   - `tests/planet-build-workflow.spec.ts`：建造栏选卡 + 地图点选放置的全流程 authoritative 回执
-  - `tests/visual.spec.ts`：总览/星图/行星地图/回放的截图基线（行星地图基线已随 Pixi 迁移重录）
+  - `tests/visual.spec.ts`：总览/星图/行星地图/回放的截图基线（行星地图基线已随 Pixi 迁移及期5 各期视觉换代重录，重录前人工核对 actual）
 - vitest 纯逻辑单测（期4 新增）：`src/engine/battle-events.test.ts`（总线分流/seq 去重）、`features/war/battlefield/battlefield-model.test.ts` + `battlefield-effects.test.ts`（布局纯函数/特效池）、`src/engine/audio.test.ts` + `features/audio/game-audio.test.ts`（合成参数/限流/事件→音效映射）、`features/planet-map/planet-effects.test.ts`（伤害特效映射）、`features/starmap/model.test.ts` 增补（舰队聚合/战火航线定向）
-- 冻结截图约定：星图/行星地图/战场图统一用 URL `?freeze=1` 进入 frozen 模式，脉冲/公转/特效演出全部静止，供确定性截图
+- vitest 行星地图单测（期5 新增）：`features/planet-map/planet-terrain-chunks.test.ts`（分块可见集合/LRU/FNV 签名/按边过渡邻域规则与像素级泡沫）、`features/planet-map/planet-building-sprites.test.ts`（原型映射/烘焙布局与缓存键/distressed 判定）、`features/planet-map/planet-scene.test.ts` 增补（单位楔形与朝向/HP 弧参数/工地进度/资源贴花确定性）
+- 冻结截图约定：星图/行星地图/战场图统一用 URL `?freeze=1` 进入 frozen 模式，脉冲/公转/特效演出/风机叶片与辉光呼吸全部静止（相位锁 0），供确定性截图
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览
 

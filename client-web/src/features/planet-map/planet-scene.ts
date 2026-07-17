@@ -10,8 +10,10 @@
  * - 氛围层：水面流光（低分辨率动态遮罩画布：1px/tile 水格遮罩 × ticker 驱动的移动光带，
  *   add 混合 + alpha 呼吸，不动静态地表纹理）+ 岩浆 1px mask 的呼吸辉光；
  *   暗角为 stage 级静态叠加。相位基于固定时钟，frozen 停在 0。
- * - 实体：建筑（footprint 描边盒 + emoji 图标）/单位（圆点）/资源（emoji）走逐节点 Container
- *   （增量同步）；物流/电网/管道/工地/敌情各一个 Graphics，sync 时整体重绘。
+ * - 实体：建筑（程序化矢量结构精灵：原型剪影 + 投影/底座板 + 队伍色底座描边条 + emoji 角标，
+ *   planet-building-sprites 烘焙缓存；风机叶片/furnace 辉光走 ticker 动效）/单位（带朝向楔形 + HP 弧）
+ *   /资源（晶簇贴花 + emoji）走逐节点 Container（增量同步）；物流/电网/管道/工地/敌情各一个 Graphics，
+ *   sync 时整体重绘（工地为脚手架虚线 + 进度条）。建筑层按 tile 底部 y 排序（sortableChildren）。
  * - 交互叠加：选中黄框 / hover 白框 / 建造幽灵 / move/attack 准星（单个 Graphics，数据变化重绘）。
  *
  * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲 +
@@ -61,6 +63,19 @@ import {
   type TilePoint,
   type ViewportTileBounds,
 } from '@/features/planet-map/model';
+import {
+  BUILDING_SPRITE_TILE_PX,
+  FURNACE_GLOW_FRACTION,
+  ROTOR_HUB_FRACTION,
+  buildingSpriteLayout,
+  getBuildingSpriteTexture,
+  getWindBladesTexture,
+  hasGlowWindow,
+  hasRotorBlades,
+  resolveBuildingAccent,
+  resolveBuildingArchetype,
+  resolveBuildingVisualState,
+} from '@/features/planet-map/planet-building-sprites';
 import {
   renderPlanetFogCanvas,
   renderPlanetFluidMaskCanvas,
@@ -144,6 +159,131 @@ export function buildDashSegments(
   return segments;
 }
 
+/** 确定性 id hash → [0, 2π) 动画相位（同 id 同相位，截图可复现）。 */
+export function entityAnimPhase(id: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    hash = (hash ^ id.charCodeAt(i)) >>> 0;
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return ((hash % 6283) / 6283) * Math.PI * 2;
+}
+
+/**
+ * 单位楔形（带朝向箭头）多边形：默认指向正上 (-y)，顶点在 (0,-r)。
+ * 尾部分叉内凹，低分辨率下也能读出朝向。
+ */
+export function unitWedgePoints(radius: number): number[] {
+  const r = Math.max(radius, 1.5);
+  return [
+    0, -r,
+    r * 0.78, r * 0.72,
+    0, r * 0.3,
+    -r * 0.78, r * 0.72,
+  ];
+}
+
+/**
+ * 单位朝向解析：移动中朝 target_pos；否则朝 attack_target 解析位置；
+ * 都无则保留 fallback（节点存续期间的最近朝向，默认朝上）。
+ */
+export function resolveUnitDirection(
+  unit: Pick<Unit, 'position' | 'is_moving' | 'target_pos' | 'attack_target'>,
+  fallback: { x: number; y: number },
+  resolveTarget: (entityId: string) => TilePoint | null,
+): { x: number; y: number } {
+  const origin = toTilePoint(unit.position);
+  let target: TilePoint | null = null;
+  if (unit.is_moving && unit.target_pos) {
+    target = toTilePoint(unit.target_pos);
+  } else if (unit.attack_target) {
+    target = resolveTarget(unit.attack_target);
+  }
+  if (!target) {
+    return fallback;
+  }
+  const dx = target.x - origin.x;
+  const dy = target.y - origin.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-6) {
+    return fallback;
+  }
+  return { x: dx / length, y: dy / length };
+}
+
+export interface HpArcParams {
+  /** 血量比 [0, 1]。 */
+  ratio: number;
+  /** 弧色：满血绿 → 残血红（中段黄）。 */
+  color: number;
+  /** 是否绘制（有血量数据且受伤才画）。 */
+  visible: boolean;
+}
+
+/** HP 弧参数：有 max_hp 且 hp < max_hp 时显示；颜色绿→黄→红按 ratio 插值。 */
+export function hpArcParams(hp: number | undefined, maxHp: number | undefined): HpArcParams {
+  if (hp === undefined || maxHp === undefined || maxHp <= 0) {
+    return { ratio: 1, color: 0x69db7c, visible: false };
+  }
+  const ratio = Math.min(Math.max(hp / maxHp, 0), 1);
+  // 绿 (0x69db7c) → 黄 (0xffd43b) → 红 (0xe03131)：ratio 0.5 处为黄。
+  const t = ratio < 0.5 ? ratio * 2 : (ratio - 0.5) * 2;
+  const from = ratio < 0.5 ? 0xe03131 : 0xffd43b;
+  const to = ratio < 0.5 ? 0xffd43b : 0x69db7c;
+  const r = Math.round(((from >> 16) & 0xff) + (((to >> 16) & 0xff) - ((from >> 16) & 0xff)) * t);
+  const g = Math.round(((from >> 8) & 0xff) + (((to >> 8) & 0xff) - ((from >> 8) & 0xff)) * t);
+  const b = Math.round((from & 0xff) + ((to & 0xff) - (from & 0xff)) * t);
+  return { ratio, color: (r << 16) | (g << 8) | b, visible: ratio < 1 };
+}
+
+/** 工地进度：remaining/total_ticks 可算时返回 [0,1]，否则 null（不画进度条）。 */
+export function constructionProgress(task: { state: string; remaining_ticks?: number; total_ticks?: number }): number | null {
+  if (task.state === 'completed') {
+    return 1;
+  }
+  if (task.total_ticks === undefined || task.total_ticks <= 0 || task.remaining_ticks === undefined) {
+    return null;
+  }
+  return Math.min(Math.max(1 - task.remaining_ticks / task.total_ticks, 0), 1);
+}
+
+/**
+ * 资源点底座贴花多边形组（晶簇/岩块）：3 片确定性"晶簇"三角形 + 底托椭圆参数，
+ * 形状种子来自 kind 字符串（同种资源同形）。返回容器坐标（贴花中心在原点）。
+ */
+export function resourceDecalLayout(kind: string, size: number): {
+  shards: number[][];
+  baseRadiusX: number;
+  baseRadiusY: number;
+} {
+  let hash = 5381;
+  for (let i = 0; i < kind.length; i += 1) {
+    hash = ((hash << 5) + hash + kind.charCodeAt(i)) >>> 0;
+  }
+  const rand = () => {
+    hash ^= hash << 13;
+    hash ^= hash >>> 17;
+    hash ^= hash << 5;
+    hash >>>= 0;
+    return hash / 0xffffffff;
+  };
+  const r = size / 2;
+  const shards: number[][] = [];
+  for (let i = 0; i < 3; i += 1) {
+    const cx = (rand() - 0.5) * r * 0.9;
+    const height = r * (0.55 + rand() * 0.45);
+    const halfWidth = r * (0.22 + rand() * 0.14);
+    const lean = (rand() - 0.5) * r * 0.3;
+    // 底边贴底托上沿，尖端略偏（晶簇感）
+    shards.push([
+      cx - halfWidth, 0,
+      cx + halfWidth, 0,
+      cx + lean, -height,
+    ]);
+  }
+  return { shards, baseRadiusX: r * 0.95, baseRadiusY: r * 0.38 };
+}
+
 export interface PlanetSceneBaseInput {
   planet: PlanetRenderView;
   fog?: FogMapView | PlanetSceneView;
@@ -191,21 +331,41 @@ interface SceneNode {
 }
 
 interface BuildingNode extends SceneNode {
-  box: Graphics;
-  icon: Sprite;
+  /** 队伍色底座描边条（不烘焙进纹理，缓存键与队伍无关）。 */
+  base: Graphics;
+  /** 程序化矢量结构精灵（bldg:* 缓存纹理）。 */
+  sprite: Sprite;
+  /** 类型 emoji 角标（右上角小尺寸，主视觉已降级）。 */
+  badge: Sprite;
+  /** 受损/故障警示角标（ticker 呼吸，frozen 停 0 相位）。 */
+  warning: Sprite;
+  /** 风机旋转叶片（独立小 sprite，ticker 驱动；非风机为 null）。 */
+  blades: Sprite | null;
+  /** furnace 发光窗呼吸辉光（非 furnace 为 null）。 */
+  glow: Sprite | null;
   data: Building;
+  /** 确定性动画相位（由 id hash，截图可复现；frozen 恒 0）。 */
+  phase: number;
 }
 
 interface UnitNode extends SceneNode {
+  /** 楔形（随朝向旋转）。 */
   dot: Graphics;
+  /** HP 弧（不随朝向旋转，恒在屏幕上方）。 */
+  hp: Graphics;
   data: Unit;
   targetX: number;
   targetY: number;
   posX: number;
   posY: number;
+  /** 最近朝向（单位向量，楔形朝向；默认朝上 (0,-1)）。 */
+  dirX: number;
+  dirY: number;
 }
 
 interface ResourceNode extends SceneNode {
+  /** 晶簇/岩块底座贴花（资源调色板上色，emoji 坐在其上）。 */
+  base: Graphics;
   icon: Sprite;
   data: PlanetResource;
 }
@@ -237,6 +397,19 @@ const COLOR_DETECTION = 0xffd43b;
 const COLOR_SELECTED = 0xffd166;
 const COLOR_GHOST_OK = 0x6ee7b7;
 const COLOR_GHOST_BLOCKED = 0xff5757;
+
+/** 建筑 emoji 角标显示门槛（tileSize 低于该值时类型靠剪影+配色辨认）。 */
+export const BUILDING_BADGE_MIN_TILE_SIZE = 16;
+/** 单位楔形填充暗底色（队色描边）。 */
+const COLOR_UNIT_WEDGE_FILL = 0x1c2430;
+/** 风机叶片转速（rad/s，ticker 驱动，frozen 停 0 相位）。 */
+const WIND_BLADE_SPEED = 2.4;
+/** 受损/故障警示角标呼吸参数。 */
+const WARNING_BADGE_BASE_ALPHA = 0.75;
+const WARNING_BADGE_ALPHA_SWING = 0.25;
+/** furnace 发光窗辉光呼吸参数。 */
+const FURNACE_GLOW_BASE_ALPHA = 0.55;
+const FURNACE_GLOW_ALPHA_SWING = 0.3;
 
 /** 开火闪光配色：普通单位青白 / 防御塔黄白（克制，短亮线一过即隐）。 */
 const COLOR_FIRE_UNIT = 0xa5f3fc;
@@ -394,6 +567,8 @@ export class PlanetScene {
     this.resourcesLayer = new Container();
     this.constructionGraphics = new Graphics();
     this.buildingsLayer = new Container();
+    // 遮挡排序：建筑按 tile 底部 y 排序（结构向上溢出 footprint，y 小者先画被遮挡）。
+    this.buildingsLayer.sortableChildren = true;
     this.logisticsGraphics = new Graphics();
     this.unitsLayer = new Container();
     this.threatGraphics = new Graphics();
@@ -1244,12 +1419,27 @@ export class PlanetScene {
     simplify: boolean,
   ): BuildingNode {
     const container = new Container();
-    const box = new Graphics();
-    const icon = new Sprite();
-    icon.anchor.set(0.5);
-    container.addChild(box);
-    container.addChild(icon);
-    const node: BuildingNode = { container, box, icon, data: building };
+    const base = new Graphics();
+    const sprite = new Sprite();
+    const badge = new Sprite();
+    badge.anchor.set(0.5);
+    const warning = new Sprite(getEmojiTexture('⚠️'));
+    warning.anchor.set(0.5);
+    container.addChild(base);
+    container.addChild(sprite);
+    container.addChild(badge);
+    container.addChild(warning);
+    const node: BuildingNode = {
+      container,
+      base,
+      sprite,
+      badge,
+      warning,
+      blades: null,
+      glow: null,
+      data: building,
+      phase: entityAnimPhase(building.id),
+    };
     this.drawBuildingNode(node, catalog, playerId, simplify);
     return node;
   }
@@ -1263,29 +1453,130 @@ export class PlanetScene {
     const pixelHeight = height * this.tileSize;
 
     node.container.position.set(point.x * this.tileSize, point.y * this.tileSize);
-    const box = node.box.clear();
+    node.container.zIndex = point.y + height;
+
+    // 低缩放档（tileSize < 6）保持简化色块，不做结构精灵。
     if (simplify) {
-      box
+      node.sprite.visible = false;
+      node.badge.visible = false;
+      node.warning.visible = false;
+      this.setBuildingAttachment(node, 'blades', null);
+      this.setBuildingAttachment(node, 'glow', null);
+      node.base
+        .clear()
         .rect(0, 0, Math.max(pixelWidth, 2), Math.max(pixelHeight, 2))
         .fill(isOwn ? { color: 0x24c9b6, alpha: 0.4 } : { color: 0xde5757, alpha: 0.38 });
-    } else {
-      box
-        .rect(1, 1, Math.max(pixelWidth - 2, 2), Math.max(pixelHeight - 2, 2))
-        .fill(isOwn ? { color: 0x24c9b6, alpha: 0.26 } : { color: 0xde5757, alpha: 0.22 })
-        .stroke({ width: 2, color: isOwn ? COLOR_BUILDING_STROKE_OWN : COLOR_BUILDING_STROKE_ENEMY });
+      return;
     }
 
-    if (simplify) {
-      node.icon.visible = false;
-    } else {
+    // 结构精灵：原型剪影 + 主色/点缀色，烘焙纹理按 (archetype, w×h, state) 缓存。
+    const visualState = resolveBuildingVisualState(building);
+    const archetype = resolveBuildingArchetype(building.type);
+    node.sprite.texture = getBuildingSpriteTexture({
+      archetype,
+      buildingType: building.type,
+      tilesWide: width,
+      tilesHigh: height,
+      state: visualState,
+    });
+    const scale = this.tileSize / BUILDING_SPRITE_TILE_PX;
+    const layout = buildingSpriteLayout(width, height);
+    node.sprite.scale.set(scale);
+    node.sprite.position.set(-layout.padX * scale, -layout.topExtra * scale);
+    node.sprite.visible = true;
+
+    // 队伍归属：贴合底座板的队伍色描边条（不烘焙，缓存键与队伍无关）。
+    node.base
+      .clear()
+      .roundRect(1, pixelHeight * 0.66, Math.max(pixelWidth - 2, 2), pixelHeight * 0.32, 2)
+      .stroke({ width: 1.5, color: isOwn ? COLOR_BUILDING_STROKE_OWN : COLOR_BUILDING_STROKE_ENEMY, alpha: 0.9 });
+
+    // emoji 降级为右上角类型角标（高缩放档才显示，低档靠剪影+配色辨认）。
+    if (this.tileSize >= BUILDING_BADGE_MIN_TILE_SIZE) {
       const catalogEntry = getBuildingCatalogEntry(catalog, building.type);
-      node.icon.texture = getEmojiTexture(resolveIconGlyph(catalogEntry?.icon_key ?? building.type));
-      const size = Math.max(Math.min(pixelWidth, pixelHeight), 4);
-      node.icon.width = size;
-      node.icon.height = size;
-      node.icon.position.set(pixelWidth / 2, pixelHeight / 2);
-      node.icon.visible = true;
+      node.badge.texture = getEmojiTexture(resolveIconGlyph(catalogEntry?.icon_key ?? building.type));
+      const badgeSize = Math.max(pixelWidth * 0.34, 6);
+      node.badge.width = badgeSize;
+      node.badge.height = badgeSize;
+      node.badge.position.set(pixelWidth - badgeSize * 0.4, badgeSize * 0.4);
+      node.badge.alpha = 0.92;
+      node.badge.visible = true;
+    } else {
+      node.badge.visible = false;
     }
+
+    // 受损/故障：警示角标（ticker 呼吸；frozen 停 0 相位恒定亮度）。
+    if (visualState === 'distressed') {
+      const badgeSize = Math.max(pixelWidth * 0.3, 5);
+      node.warning.width = badgeSize;
+      node.warning.height = badgeSize;
+      node.warning.position.set(badgeSize * 0.45, badgeSize * 0.45);
+      node.warning.alpha = WARNING_BADGE_BASE_ALPHA;
+      node.warning.visible = true;
+    } else {
+      node.warning.visible = false;
+    }
+
+    // 风机旋转叶片：独立小 sprite，轮毂对齐结构机舱位置。
+    if (hasRotorBlades(building.type)) {
+      const blades = this.setBuildingAttachment(node, 'blades', () => {
+        const sprite = new Sprite();
+        sprite.anchor.set(0.5);
+        return sprite;
+      });
+      blades.texture = getWindBladesTexture(width, height);
+      blades.scale.set(scale);
+      blades.position.set(pixelWidth * ROTOR_HUB_FRACTION.x, pixelHeight * ROTOR_HUB_FRACTION.y);
+      blades.rotation = this.frozen ? 0 : node.phase;
+      blades.visible = true;
+    } else {
+      this.setBuildingAttachment(node, 'blades', null);
+    }
+
+    // furnace 发光窗呼吸辉光（add 混合叠加在窗口位置）。
+    if (hasGlowWindow(archetype)) {
+      const glow = this.setBuildingAttachment(node, 'glow', () => {
+        const sprite = new Sprite(getGlowTexture(resolveBuildingAccent(building.type)));
+        sprite.anchor.set(0.5);
+        sprite.blendMode = 'add';
+        return sprite;
+      });
+      const glowSize = Math.max(pixelWidth * 0.5, 4);
+      glow.width = glowSize;
+      glow.height = glowSize;
+      glow.position.set(pixelWidth * FURNACE_GLOW_FRACTION.x, pixelHeight * FURNACE_GLOW_FRACTION.y);
+      glow.alpha = FURNACE_GLOW_BASE_ALPHA;
+      glow.visible = true;
+    } else {
+      this.setBuildingAttachment(node, 'glow', null);
+    }
+  }
+
+  /** 附件（叶片/辉光）按需挂载/卸载：factory 为 null 时销毁并置空。 */
+  private setBuildingAttachment<K extends 'blades' | 'glow'>(node: BuildingNode, slot: K, factory: () => Sprite): Sprite;
+  private setBuildingAttachment<K extends 'blades' | 'glow'>(node: BuildingNode, slot: K, factory: null): null;
+  private setBuildingAttachment<K extends 'blades' | 'glow'>(
+    node: BuildingNode,
+    slot: K,
+    factory: (() => Sprite) | null,
+  ): Sprite | null {
+    const existing = node[slot];
+    if (!factory) {
+      if (existing) {
+        node.container.removeChild(existing);
+        existing.destroy();
+        node[slot] = null;
+      }
+      return null;
+    }
+    if (existing) {
+      return existing;
+    }
+    const sprite = factory();
+    // 压在结构精灵（index 1）之上、角标之下。
+    node.container.addChildAt(sprite, 2);
+    node[slot] = sprite;
+    return sprite;
   }
 
   private syncUnits(units: Unit[], playerId: string) {
@@ -1312,34 +1603,75 @@ export class PlanetScene {
     );
   }
 
+  /** 攻击目标 id → tile 位置（供单位朝向解析；找不到返回 null）。 */
+  private resolveEntityTilePoint = (entityId: string): TilePoint | null => {
+    const building = this.buildingNodes.get(entityId);
+    if (building) {
+      return toTilePoint(building.data.position);
+    }
+    const unit = this.unitNodes.get(entityId);
+    if (unit) {
+      return toTilePoint(unit.data.position);
+    }
+    return null;
+  };
+
   private createUnitNode(unit: Unit, playerId: string, simplify: boolean): UnitNode {
     const container = new Container();
     const dot = new Graphics();
+    const hp = new Graphics();
     container.addChild(dot);
+    container.addChild(hp);
     const point = toTilePoint(unit.position);
     const node: UnitNode = {
       container,
       dot,
+      hp,
       data: unit,
       targetX: tileCenter(point.x, this.tileSize),
       targetY: tileCenter(point.y, this.tileSize),
       posX: tileCenter(point.x, this.tileSize),
       posY: tileCenter(point.y, this.tileSize),
+      dirX: 0,
+      dirY: -1,
     };
     container.position.set(node.posX, node.posY);
     this.drawUnitDot(node, playerId, simplify);
     return node;
   }
 
+  /** 单位：带朝向的楔形（队色描边 + 暗底）+ 受伤 HP 弧；简化档保持色块。 */
   private drawUnitDot(node: UnitNode, playerId: string, simplify: boolean) {
     const isOwn = node.data.owner_id === playerId;
     const color = isOwn ? COLOR_UNIT_OWN : COLOR_UNIT_ENEMY;
     const dot = node.dot.clear();
+    const hpGraphics = node.hp.clear();
     if (simplify) {
       const size = Math.max(3, this.tileSize * 0.32);
       dot.rect(-size / 2, -size / 2, size, size).fill(color);
-    } else {
-      dot.circle(0, 0, Math.max(3, this.tileSize * 0.22)).fill(color);
+      return;
+    }
+
+    const direction = resolveUnitDirection(node.data, { x: node.dirX, y: node.dirY }, this.resolveEntityTilePoint);
+    node.dirX = direction.x;
+    node.dirY = direction.y;
+    const radius = Math.max(3.5, this.tileSize * 0.3);
+    dot.poly(unitWedgePoints(radius), true)
+      .fill({ color: COLOR_UNIT_WEDGE_FILL, alpha: 0.92 })
+      .stroke({ width: 1.6, color });
+    // 楔形默认朝正上，旋转到朝向（atan2 相对 +x，补偿 -90°）。
+    dot.rotation = Math.atan2(direction.y, direction.x) + Math.PI / 2;
+
+    const hp = hpArcParams(node.data.hp, node.data.max_hp);
+    if (hp.visible) {
+      // HP 弧：楔形外圈顶部 90° 扇形，长度随血量比缩短，颜色绿→黄→红（不随朝向旋转）。
+      const arcRadius = radius + 2.5;
+      const startAngle = -Math.PI * 0.75;
+      const endAngle = startAngle + Math.PI * 0.5 * Math.max(hp.ratio, 0.06);
+      hpGraphics.arc(0, 0, arcRadius, startAngle, -Math.PI * 0.25)
+        .stroke({ width: 2, color: 0x10151d, alpha: 0.7 });
+      hpGraphics.arc(0, 0, arcRadius, startAngle, endAngle)
+        .stroke({ width: 2, color: hp.color });
     }
   }
 
@@ -1357,15 +1689,29 @@ export class PlanetScene {
 
   private createResourceNode(resource: PlanetResource): ResourceNode {
     const container = new Container();
+    // 晶簇/岩块底座贴花（资源调色板上色，确定性形状），emoji 坐在贴花之上。
+    const base = new Graphics();
+    const decalSize = Math.max(this.tileSize * 0.72, 5);
+    const decal = resourceDecalLayout(resource.kind, decalSize);
+    const resourceColor = getResourceColorValue(resource.kind);
+    base.ellipse(0, 0, decal.baseRadiusX, decal.baseRadiusY)
+      .fill({ color: 0x141a24, alpha: 0.85 })
+      .stroke({ width: 1, color: resourceColor, alpha: 0.5 });
+    for (const shard of decal.shards) {
+      base.poly(shard, true).fill({ color: resourceColor, alpha: 0.9 });
+    }
+    container.addChild(base);
+
     const icon = new Sprite(getEmojiTexture(resolveIconGlyph(resource.kind)));
     icon.anchor.set(0.5);
-    const size = Math.max(this.tileSize * 0.62, 4);
+    const size = Math.max(this.tileSize * 0.52, 4);
     icon.width = size;
     icon.height = size;
+    icon.position.set(0, -decalSize * 0.28);
     container.addChild(icon);
     const point = toTilePoint(resource.position);
     container.position.set(tileCenter(point.x, this.tileSize), tileCenter(point.y, this.tileSize));
-    return { container, icon, data: resource };
+    return { container, base, icon, data: resource };
   }
 
   // ---------- 连线/静态实体层（sync 时整体重绘） ----------
@@ -1441,8 +1787,52 @@ export class PlanetScene {
     const ts = this.tileSize;
     for (const task of input.visible.constructionTasks) {
       const point = toTilePoint(task.position);
-      g.rect(point.x * ts + 2, point.y * ts + 2, Math.max(ts - 4, 4), Math.max(ts - 4, 4))
-        .stroke({ width: 3, color: constructionStateColor(task.state), alpha: 0.9 });
+      const x = point.x * ts;
+      const y = point.y * ts;
+      const color = constructionStateColor(task.state);
+      const inset = 1.5;
+      const arm = Math.max(3, ts * 0.24);
+
+      // 脚手架：虚线轮廓 + 四角 L 支架 + 轻对角撑，替代旧的 3px 色块边框。
+      const left = x + inset;
+      const top = y + inset;
+      const right = x + ts - inset;
+      const bottom = y + ts - inset;
+      for (const [ax, ay, bx, by] of buildDashSegments(left, top, right, top, [4, 3])) {
+        g.moveTo(ax, ay).lineTo(bx, by);
+      }
+      for (const [ax, ay, bx, by] of buildDashSegments(left, bottom, right, bottom, [4, 3])) {
+        g.moveTo(ax, ay).lineTo(bx, by);
+      }
+      for (const [ax, ay, bx, by] of buildDashSegments(left, top, left, bottom, [4, 3])) {
+        g.moveTo(ax, ay).lineTo(bx, by);
+      }
+      for (const [ax, ay, bx, by] of buildDashSegments(right, top, right, bottom, [4, 3])) {
+        g.moveTo(ax, ay).lineTo(bx, by);
+      }
+      g.stroke({ width: 1.5, color, alpha: 0.75 });
+
+      // 四角 L 支架（粗一点，读作脚手架夹具）。
+      g.moveTo(left, top + arm).lineTo(left, top).lineTo(left + arm, top)
+        .moveTo(right - arm, top).lineTo(right, top).lineTo(right, top + arm)
+        .moveTo(right, bottom - arm).lineTo(right, bottom).lineTo(right - arm, bottom)
+        .moveTo(left + arm, bottom).lineTo(left, bottom).lineTo(left, bottom - arm)
+        .stroke({ width: 2, color, alpha: 0.95 });
+
+      // 对角撑（轻，施工中的"未成形"感）。
+      g.moveTo(left, bottom).lineTo(right, top)
+        .stroke({ width: 1, color, alpha: 0.35 });
+
+      // 进度条（底部，数据可算时绘制）。
+      const progress = constructionProgress(task);
+      if (progress !== null) {
+        const barWidth = ts - inset * 2;
+        const barY = bottom - 3.5;
+        g.rect(left, barY, barWidth, 3).fill({ color: 0x10151d, alpha: 0.8 });
+        if (progress > 0) {
+          g.rect(left, barY, Math.max(barWidth * progress, 1), 3).fill({ color, alpha: 0.95 });
+        }
+      }
     }
   }
 
@@ -1635,6 +2025,21 @@ export class PlanetScene {
     // 氛围动效推进固定时钟（frozen 不推进，相位停在 0）。
     this.ambientTime += dt;
     this.updateAmbientPhase();
+    // 建筑动效：风机叶片旋转（确定性相位）、受损/故障警示呼吸、furnace 发光窗呼吸。
+    // frozen 下 tick 提前返回，初始绘制停在 0 相位。
+    for (const node of this.buildingNodes.values()) {
+      if (node.blades) {
+        node.blades.rotation = node.phase + this.ambientTime * WIND_BLADE_SPEED;
+      }
+      if (node.warning.visible) {
+        node.warning.alpha = WARNING_BADGE_BASE_ALPHA
+          + WARNING_BADGE_ALPHA_SWING * Math.sin(this.ambientTime * 3.4 + node.phase);
+      }
+      if (node.glow) {
+        node.glow.alpha = FURNACE_GLOW_BASE_ALPHA
+          + FURNACE_GLOW_ALPHA_SWING * Math.sin(this.ambientTime * 2.1 + node.phase);
+      }
+    }
     const blend = smoothingBlend(dt);
     for (const node of this.unitNodes.values()) {
       const dx = node.targetX - node.posX;

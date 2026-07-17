@@ -9,8 +9,9 @@ import { SHADING_TERRAINS, TERRAIN_RGB, shadeFactor } from '@/features/planet-ma
  * - 只生成可见区域（含 1 圈余量）的块；LRU 上限 64 块，逐出时销毁纹理；
  *   地形数据变化按块签名（FNV-1a 变体 hash）标记脏重生成。
  * - 每格 8×8px 内的噪色/生态过渡全部确定性（(x,y,px,py) hash 种子），截图可复现：
- *   基底沿用 planet-base-map 色板 + 明暗抖动，叠加亚像素细噪；水岸泡沫、岩浆发光描边
- *   与暗壳、blocked 隆起浮雕只查 4 邻居，纯函数可测。
+ *   基底沿用 planet-base-map 色板 + 明暗抖动，叠加亚像素细噪；水岸泡沫按边过渡
+ *   （只在水格与陆格相邻的边画，水-水边无缝融合，大片水域内部均匀只有轮廓有岸线）、
+ *   岩浆发光描边与暗壳、blocked 隆起浮雕只查 4 邻居，纯函数可测。
  * - 1px/2px 档（有效 tileSize < 4）与 overview 模式维持 planet-base-map 的低成本整图画布。
  */
 
@@ -158,6 +159,20 @@ export function terrainNeighborMask(planet: PlanetRenderView, x: number, y: numb
   };
 }
 
+/** 陆邻掩码：某方向的邻居是陆格（buildable/blocked）时为 true（越界不算陆，地图边缘不产生泡沫）。 */
+export function terrainLandMask(planet: PlanetRenderView, x: number, y: number): TerrainEdgeMask {
+  const isLand = (tx: number, ty: number) => {
+    const kind = getTerrainTile(planet, tx, ty);
+    return kind === 'buildable' || kind === 'blocked';
+  };
+  return {
+    up: isLand(x, y - 1),
+    down: isLand(x, y + 1),
+    left: isLand(x - 1, y),
+    right: isLand(x + 1, y),
+  };
+}
+
 /** 掩码取反：邻居不是 targetKind 的方向为 true（岩浆描边/blocked 浮雕用）。 */
 export function invertEdgeMask(mask: TerrainEdgeMask): TerrainEdgeMask {
   return { up: !mask.up, down: !mask.down, left: !mask.left, right: !mask.right };
@@ -193,7 +208,7 @@ export function subPixelNoise(x: number, y: number, px: number, py: number, salt
 
 // ---------- 生态过渡/噪色规则（纯函数，输入 tile 种类 + 邻接掩码 + 像素坐标） ----------
 
-/** 水岸泡沫向陆侧渗入的宽度（px）。 */
+/** 水岸泡沫向水侧渗入的宽度（px）。 */
 export const SHORELINE_WIDTH_PX = 3;
 /** 泡沫色（浅蓝白）。 */
 export const SHORELINE_FOAM_RGB: readonly [number, number, number] = [0xd7, 0xec, 0xf5];
@@ -201,14 +216,15 @@ export const SHORELINE_FOAM_RGB: readonly [number, number, number] = [0xd7, 0xec
 export const LAVA_EDGE_GLOW_RGB: readonly [number, number, number] = [0xff, 0x7a, 0x28];
 
 /**
- * 水→岸泡沫混合量 [0, 1]：陆地格（buildable/blocked）贴水一侧 SHORELINE_WIDTH_PX 内
- * 由边向内递减（0.55 / 0.3 / 0.12），其余为 0。
+ * 按边过渡的水岸泡沫混合量 [0, 1]：只在水格与陆格相邻的边画泡沫——水格贴陆一侧
+ * SHORELINE_WIDTH_PX 内由边向内递减（0.55 / 0.3 / 0.12），其余为 0。
+ * 陆格不再描泡沫（避免散点水域"每格全边白框"的瓷砖感），水-水相邻边无缝融合。
  */
-export function shorelineFoamMix(kind: string, waterMask: TerrainEdgeMask, px: number, py: number, tilePx = TERRAIN_CHUNK_TILE_PX): number {
-  if (kind !== 'buildable' && kind !== 'blocked') {
+export function shorelineFoamMix(kind: string, landMask: TerrainEdgeMask, px: number, py: number, tilePx = TERRAIN_CHUNK_TILE_PX): number {
+  if (kind !== 'water') {
     return 0;
   }
-  const distance = edgeDistancePx(px, py, waterMask, tilePx);
+  const distance = edgeDistancePx(px, py, landMask, tilePx);
   if (distance >= SHORELINE_WIDTH_PX) {
     return 0;
   }
@@ -322,9 +338,9 @@ export function computeTerrainChunkPixels(planet: PlanetRenderView, cx: number, 
       const base = TERRAIN_RGB[kind] ?? TERRAIN_RGB.unknown;
       const shade = SHADING_TERRAINS.has(kind) ? shadeFactor(x, y) : 1;
 
-      // 邻接掩码只查一次（4 邻居）：水陆交界的泡沫 / 岩浆描边 / blocked 浮雕各取所需。
-      const waterMask = kind === 'buildable' || kind === 'blocked'
-        ? terrainNeighborMask(planet, x, y, 'water')
+      // 邻接掩码只查一次（4 邻居）：水侧泡沫（陆邻方向）/ 岩浆描边 / blocked 浮雕各取所需。
+      const landMask = kind === 'water'
+        ? terrainLandMask(planet, x, y)
         : EMPTY_EDGE_MASK;
       const nonLavaMask = kind === 'lava'
         ? invertEdgeMask(terrainNeighborMask(planet, x, y, 'lava'))
@@ -354,7 +370,7 @@ export function computeTerrainChunkPixels(planet: PlanetRenderView, cx: number, 
           let g = base[1] * factor;
           let b = base[2] * factor;
 
-          const foam = shorelineFoamMix(kind, waterMask, px, py);
+          const foam = shorelineFoamMix(kind, landMask, px, py);
           if (foam > 0) {
             r += (SHORELINE_FOAM_RGB[0] - r) * foam;
             g += (SHORELINE_FOAM_RGB[1] - g) * foam;
