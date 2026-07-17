@@ -5,7 +5,6 @@ import type { ApiClient, DysonComponentType, WorldUnitID } from "@shared/api";
 import type {
   CatalogView,
   CommandResponse,
-  PlanetNetworksView,
   PlanetRuntimeView,
   StateSummary,
   SystemRuntimeView,
@@ -15,7 +14,6 @@ import type {
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import {
   findLogisticsStation,
-  formatPosition,
   formatItemInventorySummary,
   getBuildingDisplayName,
   getItemDisplayName,
@@ -29,8 +27,6 @@ import {
   getResearchProgressPercent,
   normalizeCompletedTechIds,
 } from "@/features/planet-map/research-workflow";
-import { deriveBuildWorkflowView } from "@/features/planet-map/build-workflow";
-import { deriveMoveWorkflowView } from "@/features/planet-map/move-workflow";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -40,18 +36,15 @@ import {
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
   translateCommandType,
-  translateDirection,
   translateLogisticsMode,
   translateLogisticsScope,
   translateTechId,
   translateUi,
-  translateUnitType,
 } from "@/i18n/translate";
 
 interface PlanetCommandPanelProps {
   catalog?: CatalogView;
   client: ApiClient;
-  networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   summary?: StateSummary;
@@ -78,12 +71,12 @@ const COMMAND_WORKFLOWS: Array<{
   {
     id: "basic",
     label: "基础操作",
-    description: "扫描、建造、移动和拆除都放在同一条开局操作链里。",
+    description: "扫描命令入口；建造、移动和拆除已改为在地图上直接操作。",
   },
   {
     id: "combat",
     label: "战斗与制造",
-    description: "单位攻击、建筑量产与升级收口在同一条战术链里。",
+    description: "建筑量产在这里下达；单位攻击与建筑升级已改为在地图上直接操作。",
   },
   {
     id: "cancel",
@@ -162,7 +155,6 @@ function journalTone(entry: PlanetCommandJournalEntry) {
 export function PlanetCommandPanel({
   catalog,
   client,
-  networks,
   planet,
   runtime,
   summary,
@@ -176,24 +168,9 @@ export function PlanetCommandPanel({
   const [activeWorkflow, setActiveWorkflow] = useState<CommandWorkflowId>("basic");
   const [scanGalaxyId, setScanGalaxyId] = useState(DEFAULT_GALAXY_ID);
   const [scanSystemId, setScanSystemId] = useState(DEFAULT_SYSTEM_ID);
-  const [buildX, setBuildX] = useState(0);
-  const [buildY, setBuildY] = useState(0);
-  const [buildingType, setBuildingType] = useState("");
-  const [buildDirection, setBuildDirection] = useState<
-    "north" | "east" | "south" | "west" | "auto"
-  >("auto");
-  const [showAdvancedBuild, setShowAdvancedBuild] = useState(false);
-  const [recipeId, setRecipeId] = useState("");
-  const [moveUnitId, setMoveUnitId] = useState("");
-  const [moveX, setMoveX] = useState(0);
-  const [moveY, setMoveY] = useState(0);
   const [researchId, setResearchId] = useState("");
-  const [demolishId, setDemolishId] = useState("");
-  const [attackUnitId, setAttackUnitId] = useState("");
-  const [attackTargetId, setAttackTargetId] = useState("");
   const [produceBuildingId, setProduceBuildingId] = useState("");
   const [produceUnitType, setProduceUnitType] = useState("");
-  const [upgradeBuildingId, setUpgradeBuildingId] = useState("");
   const [cancelTaskId, setCancelTaskId] = useState("");
   const [restoreTaskId, setRestoreTaskId] = useState("");
   const [demolishDysonComponentId, setDemolishDysonComponentId] = useState("");
@@ -256,20 +233,6 @@ export function PlanetCommandPanel({
       ),
     [planet.buildings, playerId],
   );
-  const ownUnits = useMemo(
-    () =>
-      Object.values(planet.units ?? {}).filter(
-        (unit) => unit.owner_id === playerId,
-      ),
-    [planet.units, playerId],
-  );
-  const attackTargets = useMemo(
-    () => [
-      ...(runtime?.enemy_forces ?? []),
-      ...Object.values(planet.units ?? {}).filter((unit) => unit.owner_id !== playerId),
-    ],
-    [runtime?.enemy_forces, planet.units, playerId],
-  );
   const cancellableTasks = useMemo(
     () => (runtime?.construction_tasks ?? []).filter(
       (task) => task.player_id === playerId
@@ -325,54 +288,6 @@ export function PlanetCommandPanel({
     [playerTechState],
   );
   const photonModeUnlocked = completedTechIds.has("dirac_inversion");
-  const buildWorkflow = useMemo(
-    () => deriveBuildWorkflowView({
-      catalog,
-      buildingType,
-      journal,
-      networks,
-      planet,
-      playerId,
-      selectedPosition: { x: buildX, y: buildY, z: 0 },
-      summary,
-    }),
-    [
-      buildX,
-      buildY,
-      buildingType,
-      catalog,
-      journal,
-      networks,
-      planet,
-      playerId,
-      summary,
-    ],
-  );
-  const moveWorkflow = useMemo(
-    () =>
-      deriveMoveWorkflowView({
-        planet,
-        targetPosition: { x: moveX, y: moveY, z: 0 },
-        unitId: moveUnitId,
-      }),
-    [moveUnitId, moveX, moveY, planet],
-  );
-  const visibleBuildOptions = useMemo(
-    () => [
-      ...buildWorkflow.catalog.recommended,
-      ...buildWorkflow.catalog.unlocked,
-      ...(showAdvancedBuild ? buildWorkflow.catalog.locked : []),
-      ...(showAdvancedBuild ? buildWorkflow.catalog.debugOnly : []),
-    ],
-    [buildWorkflow.catalog, showAdvancedBuild],
-  );
-  const recipesForBuilding = useMemo(
-    () =>
-      [...(catalog?.recipes ?? [])]
-        .filter((recipe) => recipe.building_types?.includes(buildingType))
-        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
-    [buildingType, catalog?.recipes],
-  );
   const researchGroups = useMemo(
     () => deriveResearchGroups(catalog, playerTechState),
     [catalog, playerTechState],
@@ -501,18 +416,6 @@ export function PlanetCommandPanel({
   );
 
   useEffect(() => {
-    if (visibleBuildOptions.length === 0) {
-      if (buildingType) {
-        setBuildingType("");
-      }
-      return;
-    }
-    if (!visibleBuildOptions.some((entry) => entry.id === buildingType)) {
-      setBuildingType(visibleBuildOptions[0].id);
-    }
-  }, [buildingType, visibleBuildOptions]);
-
-  useEffect(() => {
     const nextResearchId = researchGroups.available[0]?.id ?? "";
     if (!nextResearchId && researchId) {
       setResearchId("");
@@ -534,21 +437,6 @@ export function PlanetCommandPanel({
       setDysonSystemId(currentSystemId);
     }
   }, [currentSystemId, dysonSystemId, scanSystemId]);
-
-  useEffect(() => {
-    if (selected?.position) {
-      setBuildX(selected.position.x);
-      setBuildY(selected.position.y);
-      setMoveX(selected.position.x);
-      setMoveY(selected.position.y);
-    }
-    if (selected?.kind === "building") {
-      setDemolishId(selected.id);
-    }
-    if (selected?.kind === "unit") {
-      setMoveUnitId(selected.id);
-    }
-  }, [selected]);
 
   useEffect(() => {
     if (selectedOwnedBuildingId) {
@@ -794,63 +682,6 @@ export function PlanetCommandPanel({
     : "";
   const recentEntries = journal.slice(0, 5);
 
-  function getBuildOptionLabel(entry: (typeof visibleBuildOptions)[number]) {
-    const displayName = entry.name || getBuildingDisplayName(catalog, entry.id);
-    if (entry.visibility === "locked") {
-      return `${displayName} · 未解锁`;
-    }
-    if (entry.visibility === "debugOnly") {
-      return `${displayName} · 目录异常`;
-    }
-    return `${displayName} · ${entry.id}`;
-  }
-
-  function formatTerrainLabel(terrain: string) {
-    switch (terrain) {
-      case "buildable":
-        return "可建造地块";
-      case "blocked":
-        return "障碍地块";
-      case "water":
-        return "水域";
-      case "lava":
-        return "岩浆";
-      default:
-        return terrain;
-    }
-  }
-
-  function formatWaypointChain(positions: Array<{ x: number; y: number; z?: number }>) {
-    return positions
-      .map((position) =>
-        formatPosition({ x: position.x, y: position.y, z: position.z ?? 0 }),
-      )
-      .join(" -> ");
-  }
-
-  function describeBlockedTile(
-    tile: NonNullable<typeof buildWorkflow.tileAssessment>["blockedTiles"][number],
-  ) {
-    if (tile.reason === "terrain") {
-      return `${formatPosition({ x: tile.x, y: tile.y, z: 0 })} 为${formatTerrainLabel(tile.terrain)}`;
-    }
-    if (tile.reason === "building") {
-      return `${formatPosition({ x: tile.x, y: tile.y, z: 0 })} 已被建筑 ${tile.buildingId} 占用`;
-    }
-    return `${formatPosition({ x: tile.x, y: tile.y, z: 0 })} 已被资源点 ${tile.resourceId} 占用`;
-  }
-
-  function renderHintDetail(detail: string) {
-    const lines = detail
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (lines.length <= 1) {
-      return detail;
-    }
-    return lines[lines.length - 1];
-  }
-
   async function runCommand(
     actionLabel: string,
     execute: () => Promise<CommandResponse>,
@@ -1036,308 +867,6 @@ export function PlanetCommandPanel({
         </div>
       </section>
 
-      <section className="planet-side-section">
-        <div className="section-title">建造</div>
-        <div className="build-workflow-header">
-          <button
-            className="secondary-button"
-            onClick={() => setShowAdvancedBuild((value) => !value)}
-            type="button"
-          >
-            {showAdvancedBuild ? "隐藏高级建造" : "显示高级建造"}
-          </button>
-          <span className="subtle-text">
-            默认只暴露已解锁主流程建筑；高级模式才显示未解锁与目录异常项。
-          </span>
-        </div>
-        <div className="build-preflight">
-          <div className="section-title section-title--minor">建造前检查</div>
-          {buildWorkflow.reachability.executorUnitId ? (
-            <div className="build-preflight__summary">
-              <span>
-                执行体 {buildWorkflow.reachability.executorUnitId}
-              </span>
-              <span>
-                distance / operateRange = {buildWorkflow.reachability.distance ?? "-"} /{" "}
-                {buildWorkflow.reachability.operateRange ?? "-"}
-              </span>
-            </div>
-          ) : (
-            <p className="subtle-text">当前没有可用执行体，无法做距离预检。</p>
-          )}
-          {buildWorkflow.tileAssessment ? (
-            <div className="build-preflight__summary">
-              <span>
-                目标地形 {formatTerrainLabel(buildWorkflow.tileAssessment.terrain)}
-              </span>
-              <span>
-                {buildWorkflow.tileAssessment.buildable
-                  ? "当前地块可直接建造"
-                  : "当前地块不可直接建造"}
-              </span>
-            </div>
-          ) : null}
-          {buildWorkflow.tileAssessment?.blockedTiles.map((tile) => (
-            <div className="subtle-text" key={`${tile.reason}:${tile.x}:${tile.y}`}>
-              {describeBlockedTile(tile)}
-            </div>
-          ))}
-          {buildWorkflow.preflightHints.map((hint) => (
-            <div
-              className={`command-inline-hint command-inline-hint--${hint.tone}`}
-              key={hint.title}
-            >
-              <strong>{hint.title}</strong>
-              <div className="subtle-text">{renderHintDetail(hint.detail)}</div>
-              {hint.suggestedAction === "move_executor" ? (
-                <button
-                  className="secondary-button"
-                  onClick={() => {
-                    setActiveWorkflow("basic");
-                    if (buildWorkflow.reachability.executorUnitId) {
-                      setMoveUnitId(buildWorkflow.reachability.executorUnitId);
-                    }
-                    const landing =
-                      buildWorkflow.approachPlan?.firstWaypoint
-                      ?? buildWorkflow.approachPlan?.landingPosition;
-                    setMoveX(landing?.x ?? buildX);
-                    setMoveY(landing?.y ?? buildY);
-                  }}
-                  type="button"
-                >
-                  切到移动工作流
-                </button>
-              ) : null}
-            </div>
-          ))}
-          {buildWorkflow.approachPlan?.landingPosition ? (
-            <div className="command-inline-hint command-inline-hint--warning">
-              <strong>
-                建议落点 {formatPosition(buildWorkflow.approachPlan.landingPosition)}
-              </strong>
-              <div className="subtle-text">
-                目标还差 {buildWorkflow.approachPlan.distanceGap ?? 0} 格操作距离；
-                推荐移动路线{" "}
-                {formatWaypointChain(buildWorkflow.approachPlan.waypoints)}
-              </div>
-            </div>
-          ) : null}
-          {buildWorkflow.postBuildHints.map((hint) => (
-            <div
-              className={`command-inline-hint command-inline-hint--${hint.tone}`}
-              key={`${hint.title}:${hint.detail}`}
-            >
-              <strong>{hint.title}</strong>
-              <div className="subtle-text">{renderHintDetail(hint.detail)}</div>
-            </div>
-          ))}
-        </div>
-        <div className="compact-form-grid">
-          <label className="field">
-            <span>{fieldLabel("x")}</span>
-            <input
-              onChange={(event) => setBuildX(Number(event.target.value) || 0)}
-              type="number"
-              value={buildX}
-            />
-          </label>
-          <label className="field">
-            <span>{fieldLabel("y")}</span>
-            <input
-              onChange={(event) => setBuildY(Number(event.target.value) || 0)}
-              type="number"
-              value={buildY}
-            />
-          </label>
-          <label className="field field--span-2">
-            <span>{fieldLabel("building_type")}</span>
-            <select
-              onChange={(event) => setBuildingType(event.target.value)}
-              value={buildingType}
-            >
-              {visibleBuildOptions.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {getBuildOptionLabel(entry)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>{fieldLabel("direction")}</span>
-            <select
-              onChange={(event) =>
-                setBuildDirection(event.target.value as typeof buildDirection)
-              }
-              value={buildDirection}
-            >
-              <option value="auto">{translateDirection("auto")}</option>
-              <option value="north">{translateDirection("north")}</option>
-              <option value="east">{translateDirection("east")}</option>
-              <option value="south">{translateDirection("south")}</option>
-              <option value="west">{translateDirection("west")}</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>{fieldLabel("recipe_id")}</span>
-            <select
-              onChange={(event) => setRecipeId(event.target.value)}
-              value={recipeId}
-            >
-              <option value="">无</option>
-              {recipesForBuilding.map((recipe) => (
-                <option key={recipe.id} value={recipe.id}>
-                  {recipe.name} · {recipe.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="primary-button field--span-2"
-            disabled={busyAction !== "" || !buildingType}
-            onClick={() => {
-              void runCommand("build", () =>
-                client.cmdBuild({ x: buildX, y: buildY, z: 0 }, buildingType, {
-                  direction: buildDirection,
-                  ...(recipeId ? { recipeId } : {}),
-                }),
-                {
-                  focus: {
-                    buildingType,
-                    position: { x: buildX, y: buildY, z: 0 },
-                  },
-                },
-              );
-            }}
-            type="button"
-          >
-            发送建造命令
-          </button>
-        </div>
-      </section>
-
-      <section className="planet-side-section">
-        <div className="section-title">移动</div>
-        <div className="build-preflight">
-          <div className="section-title section-title--minor">移动前检查</div>
-          {moveWorkflow.unitPosition ? (
-            <div className="build-preflight__summary">
-              <span>单位 {moveWorkflow.unitId}</span>
-              <span>
-                distance / moveRange = {moveWorkflow.distance ?? "-"} /{" "}
-                {moveWorkflow.moveRange ?? "-"}
-              </span>
-            </div>
-          ) : (
-            <p className="subtle-text">先选择单位，地图选点会直接回填目标坐标。</p>
-          )}
-          {moveWorkflow.unitPosition && moveWorkflow.inRange ? (
-            <div className="subtle-text">当前目标一步可达，可直接提交移动命令。</div>
-          ) : null}
-          {moveWorkflow.firstWaypoint ? (
-            <div className="command-inline-hint command-inline-hint--warning">
-              <strong>建议先走第一跳 {formatPosition(moveWorkflow.firstWaypoint)}</strong>
-              <div className="subtle-text">
-                目标还差 {moveWorkflow.distanceGap ?? 0} 格移动距离；推荐路线{" "}
-                {formatWaypointChain(moveWorkflow.waypoints)}
-              </div>
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  setMoveX(moveWorkflow.firstWaypoint?.x ?? moveX);
-                  setMoveY(moveWorkflow.firstWaypoint?.y ?? moveY);
-                }}
-                type="button"
-              >
-                填入第一跳
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <div className="compact-form-grid">
-          <label className="field field--span-2">
-            <span>{fieldLabel("unit_id")}</span>
-            <select
-              onChange={(event) => setMoveUnitId(event.target.value)}
-              value={moveUnitId}
-            >
-              <option value="">选择单位</option>
-              {ownUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.id} · {translateUnitType(unit.type)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>{fieldLabel("x")}</span>
-            <input
-              onChange={(event) => setMoveX(Number(event.target.value) || 0)}
-              type="number"
-              value={moveX}
-            />
-          </label>
-          <label className="field">
-            <span>{fieldLabel("y")}</span>
-            <input
-              onChange={(event) => setMoveY(Number(event.target.value) || 0)}
-              type="number"
-              value={moveY}
-            />
-          </label>
-          <button
-            className="secondary-button field--span-2"
-            disabled={busyAction !== "" || !moveUnitId}
-            onClick={() => {
-              void runCommand("move", () =>
-                client.cmdMove(moveUnitId, { x: moveX, y: moveY, z: 0 }),
-                {
-                  focus: {
-                    entityId: moveUnitId,
-                    position: { x: moveX, y: moveY, z: 0 },
-                  },
-                },
-              );
-            }}
-            type="button"
-          >
-            移动单位
-          </button>
-        </div>
-      </section>
-
-      <section className="planet-side-section">
-        <div className="section-title">拆除</div>
-        <div className="compact-form-grid">
-          <label className="field field--span-2">
-            <span>{fieldLabel("building_id")}</span>
-            <select
-              onChange={(event) => setDemolishId(event.target.value)}
-              value={demolishId}
-            >
-              <option value="">选择建筑</option>
-              {ownBuildings.map((building) => (
-                <option key={building.id} value={building.id}>
-                  {building.id} · {building.type}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button field--span-2"
-            disabled={busyAction !== "" || !demolishId}
-            onClick={() => {
-              void runCommand("demolish", () => client.cmdDemolish(demolishId), {
-                focus: {
-                  entityId: demolishId,
-                },
-              });
-            }}
-            type="button"
-          >
-            拆除建筑
-          </button>
-        </div>
-      </section>
         </>
       ) : null}
 
@@ -1349,52 +878,6 @@ export function PlanetCommandPanel({
         id="planet-workflow-panel-combat"
         role="tabpanel"
       >
-        <div className="section-title">单位攻击</div>
-        <div className="compact-form-grid">
-          <label className="field">
-            <span>己方单位</span>
-            <select
-              onChange={(event) => setAttackUnitId(event.target.value)}
-              value={attackUnitId}
-            >
-              <option value="">选择单位</option>
-              {ownUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.id} · {unit.type}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>攻击目标</span>
-            <select
-              onChange={(event) => setAttackTargetId(event.target.value)}
-              value={attackTargetId}
-            >
-              <option value="">选择目标</option>
-              {attackTargets.map((target) => (
-                <option key={target.id} value={target.id}>
-                  {target.id} · {'type' in target ? target.type : '敌方'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button field--span-2"
-            disabled={busyAction !== "" || !attackUnitId || !attackTargetId}
-            onClick={() => {
-              void runCommand("attack", () => client.cmdAttack(attackUnitId, attackTargetId), {
-                focus: { entityId: attackUnitId },
-              });
-            }}
-            type="button"
-          >
-            发起攻击
-          </button>
-        </div>
-      </section>
-
-      <section className="planet-side-section">
         <div className="section-title">建筑量产</div>
         <div className="compact-form-grid">
           <label className="field">
@@ -1436,38 +919,6 @@ export function PlanetCommandPanel({
             type="button"
           >
             下达量产
-          </button>
-        </div>
-      </section>
-
-      <section className="planet-side-section">
-        <div className="section-title">建筑升级</div>
-        <div className="compact-form-grid">
-          <label className="field field--span-2">
-            <span>升级建筑</span>
-            <select
-              onChange={(event) => setUpgradeBuildingId(event.target.value)}
-              value={upgradeBuildingId}
-            >
-              <option value="">选择建筑</option>
-              {ownBuildings.map((building) => (
-                <option key={building.id} value={building.id}>
-                  {building.id} · {building.type}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button field--span-2"
-            disabled={busyAction !== "" || !upgradeBuildingId}
-            onClick={() => {
-              void runCommand("upgrade", () => client.cmdUpgrade(upgradeBuildingId), {
-                focus: { entityId: upgradeBuildingId },
-              });
-            }}
-            type="button"
-          >
-            升级建筑
           </button>
         </div>
       </section>

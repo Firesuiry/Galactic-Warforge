@@ -169,11 +169,11 @@ export function Outliner() {
 
       <section className="outliner__section">
         <div className="outliner__section-title">警报 {alerts.length}</div>
-        {alerts.map((alert) => (
+        {alerts.map((alert, index) => (
           <button
             className={`outliner__item outliner__item--alert outliner__item--${alert.severity}`}
             type="button"
-            key={alert.alert_id}
+            key={`${alert.alert_id}-${alert.tick}-${index}`}
             onClick={() => activePlanetId && navigate(`/planet/${activePlanetId}`)}
             title={alert.message}
           >

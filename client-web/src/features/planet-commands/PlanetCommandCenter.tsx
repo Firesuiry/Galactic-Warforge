@@ -1,6 +1,5 @@
 import type {
   CatalogView,
-  PlanetNetworksView,
   PlanetRuntimeView,
   StateSummary,
   SystemRuntimeView,
@@ -14,7 +13,6 @@ import type { PlanetRenderView } from "@/features/planet-map/model";
 interface PlanetCommandCenterProps {
   catalog?: CatalogView;
   client: ApiClient;
-  networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   summary?: StateSummary;

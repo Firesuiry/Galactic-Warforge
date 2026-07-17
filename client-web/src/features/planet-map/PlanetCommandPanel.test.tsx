@@ -289,8 +289,6 @@ function createCatalog() {
 function createSummary(options?: {
   completedTechIds?: string[];
   currentResearch?: { tech_id: string; progress?: number; total_cost?: number } | null;
-  executorUnitId?: string;
-  operateRange?: number;
 }) {
   const currentResearch = options?.currentResearch === null
     ? undefined
@@ -314,17 +312,6 @@ function createSummary(options?: {
           completed_techs: options?.completedTechIds ?? ["dyson_sphere_program"],
           ...(currentResearch ? { current_research: currentResearch } : {}),
         },
-        ...(options?.executorUnitId
-          ? {
-              executor: {
-                unit_id: options.executorUnitId,
-                build_efficiency: 1,
-                operate_range: options.operateRange ?? 6,
-                concurrent_tasks: 1,
-                research_boost: 0,
-              },
-            }
-          : {}),
       },
     },
   };
@@ -661,178 +648,6 @@ describe("PlanetCommandPanel", () => {
     expect(screen.queryByText("开局推荐路径")).not.toBeInTheDocument();
     const completedGroup = screen.getByRole("region", { name: "已完成" });
     expect(within(completedGroup).getByText("电磁学")).toBeInTheDocument();
-  });
-
-  it("默认建造列表只显示已解锁建筑，高级模式展开后才显示未解锁与目录异常项", async () => {
-    const user = userEvent.setup();
-    const planet = createPlanet();
-    const catalog = createCatalog();
-    const client = createClient();
-
-    render(
-      <PlanetCommandPanel
-        catalog={catalog as never}
-        client={client as never}
-        planet={planet as never}
-        runtime={createRuntime() as never}
-        summary={createSummary({
-          completedTechIds: ["dyson_sphere_program"],
-        }) as never}
-      />,
-    );
-
-    expect(
-      screen.getByRole("option", { name: /风力涡轮机/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: /矩阵研究站/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: /特斯拉塔/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: /Planetary Logistics Station/ }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "显示高级建造" }));
-
-    expect(
-      screen.getByRole("option", { name: /特斯拉塔 · 未解锁/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: /Planetary Logistics Station · 目录异常/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("建造前检查展示执行体距离，并在超范围时提示切到移动工作流", () => {
-    const planet = createPlanet();
-    planet.map_width = 8;
-    planet.map_height = 8;
-    planet.bounds = { x: 0, y: 0, width: 8, height: 8 };
-    planet.terrain = Array.from({ length: 8 }, () =>
-      Array.from({ length: 8 }, () => "buildable"),
-    );
-    planet.visible = Array.from({ length: 8 }, () =>
-      Array.from({ length: 8 }, () => true),
-    );
-    planet.explored = Array.from({ length: 8 }, () =>
-      Array.from({ length: 8 }, () => true),
-    );
-    planet.units = {
-      "exec-1": {
-        id: "exec-1",
-        type: "executor",
-        owner_id: "p1",
-        position: { x: 1, y: 1, z: 0 },
-        hp: 100,
-        max_hp: 100,
-        attack: 0,
-        defense: 0,
-        attack_range: 0,
-        move_range: 2,
-        vision_range: 4,
-        is_moving: false,
-      },
-    };
-
-    act(() => {
-      usePlanetViewStore.getState().setSelected({
-        kind: "tile",
-        position: { x: 5, y: 4, z: 0 },
-      });
-    });
-
-    render(
-      <PlanetCommandPanel
-        catalog={createCatalog() as never}
-        client={createClient() as never}
-        planet={planet as never}
-        runtime={createRuntime() as never}
-        summary={createSummary({
-          completedTechIds: ["dyson_sphere_program"],
-          executorUnitId: "exec-1",
-          operateRange: 6,
-        }) as never}
-      />,
-    );
-
-    expect(screen.getByText("建造前检查")).toBeInTheDocument();
-    expect(screen.getByText(/执行体 exec-1/)).toBeInTheDocument();
-    expect(screen.getByText(/distance \/ operateRange = 7 \/ 6/)).toBeInTheDocument();
-    expect(
-      screen.getByText("当前执行体无法直接建造到目标坐标"),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/建议落点/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "切到移动工作流" })).toBeInTheDocument();
-  });
-
-  it("移动前检查会为超范围目标生成多段路线，并可一键回填第一跳", async () => {
-    const user = userEvent.setup();
-    const planet = createPlanet();
-    planet.map_width = 12;
-    planet.map_height = 12;
-    planet.bounds = { x: 0, y: 0, width: 12, height: 12 };
-    planet.terrain = Array.from({ length: 12 }, () =>
-      Array.from({ length: 12 }, () => "buildable"),
-    );
-    planet.visible = Array.from({ length: 12 }, () =>
-      Array.from({ length: 12 }, () => true),
-    );
-    planet.explored = Array.from({ length: 12 }, () =>
-      Array.from({ length: 12 }, () => true),
-    );
-    planet.units = {
-      "exec-1": {
-        id: "exec-1",
-        type: "executor",
-        owner_id: "p1",
-        position: { x: 1, y: 1, z: 0 },
-        hp: 100,
-        max_hp: 100,
-        attack: 0,
-        defense: 0,
-        attack_range: 0,
-        move_range: 4,
-        vision_range: 4,
-        is_moving: false,
-      },
-    };
-
-    act(() => {
-      usePlanetViewStore.getState().setSelected({
-        kind: "tile",
-        position: { x: 7, y: 4, z: 0 },
-      });
-    });
-
-    render(
-      <PlanetCommandPanel
-        catalog={createCatalog() as never}
-        client={createClient() as never}
-        planet={planet as never}
-        runtime={createRuntime() as never}
-        summary={createSummary({
-          completedTechIds: ["dyson_sphere_program"],
-          executorUnitId: "exec-1",
-          operateRange: 6,
-        }) as never}
-      />,
-    );
-
-    await user.selectOptions(screen.getByLabelText("单位"), "exec-1");
-
-    expect(screen.getByText("移动前检查")).toBeInTheDocument();
-    expect(screen.getByText(/distance \/ moveRange = 9 \/ 4/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/\(5, 1, 0\) -> \(7, 3, 0\) -> \(7, 4, 0\)/),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "填入第一跳" }));
-
-    const xInputs = screen.getAllByLabelText("X 坐标") as HTMLInputElement[];
-    const yInputs = screen.getAllByLabelText("Y 坐标") as HTMLInputElement[];
-    expect(xInputs[1].value).toBe("5");
-    expect(yInputs[1].value).toBe("1");
   });
 
   it("未解锁 dirac_inversion 时禁用 photon 模式并直接提示前置科技", async () => {

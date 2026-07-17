@@ -1,10 +1,26 @@
 import { create } from 'zustand';
 
 import type { AlertEntry, GameEventDetail } from '@shared/types';
+import type { Direction } from '@shared/api';
 import type { SseStatus } from '@shared/sse';
 
 import type { PlanetLayerKey, SelectedEntity, TilePoint } from '@/features/planet-map/model';
 import { mergeRecentAlerts, mergeRecentEvents } from '@/features/planet-map/model';
+
+/**
+ * 地图交互模式：决定地图点击的语义。
+ * - inspect：默认，点选查看详情
+ * - build：建造模式，悬停显示幽灵 footprint，点击直接下达建造命令
+ * - move：为指定单位选择移动目标点
+ * - attack：为指定单位选择攻击目标
+ */
+export type PlanetInteractionMode =
+  | { kind: 'inspect' }
+  | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction }
+  | { kind: 'move'; unitId: string }
+  | { kind: 'attack'; unitId: string };
+
+export const INSPECT_MODE: PlanetInteractionMode = { kind: 'inspect' };
 
 export interface PlanetZoomLevel {
   label: string;
@@ -200,6 +216,7 @@ interface PlanetViewState {
   sceneWindow: PlanetSceneWindow;
   hoveredTile: TilePoint | null;
   selected: SelectedEntity | null;
+  interactionMode: PlanetInteractionMode;
   recentEvents: GameEventDetail[];
   recentAlerts: AlertEntry[];
   sseStatus: SseStatus;
@@ -216,6 +233,9 @@ interface PlanetViewActions {
   toggleLayer: (layer: PlanetLayerKey) => void;
   setHoveredTile: (tile: TilePoint | null) => void;
   setSelected: (selection: SelectedEntity | null) => void;
+  setInteractionMode: (mode: PlanetInteractionMode) => void;
+  /** 退出当前交互模式回到 inspect（Esc/右键）。 */
+  exitInteractionMode: () => void;
   setCamera: (camera: Partial<PlanetCameraState>) => void;
   setSceneWindow: (sceneWindow: PlanetSceneWindow) => void;
   setLayers: (layers: Partial<PlanetLayerState>) => void;
@@ -278,6 +298,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     sceneWindow: createDefaultSceneWindow(),
     hoveredTile: null,
     selected: null,
+    interactionMode: INSPECT_MODE,
     recentEvents: [],
     recentAlerts: [],
     sseStatus: 'idle',
@@ -317,6 +338,12 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   },
   setSelected: (selected) => {
     set({ selected });
+  },
+  setInteractionMode: (interactionMode) => {
+    set({ interactionMode });
+  },
+  exitInteractionMode: () => {
+    set({ interactionMode: INSPECT_MODE });
   },
   setCamera: (camera) => {
     set((state) => ({
@@ -423,6 +450,8 @@ export function resetPlanetViewStore() {
     toggleLayer: usePlanetViewStore.getState().toggleLayer,
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setSelected: usePlanetViewStore.getState().setSelected,
+    setInteractionMode: usePlanetViewStore.getState().setInteractionMode,
+    exitInteractionMode: usePlanetViewStore.getState().exitInteractionMode,
     setCamera: usePlanetViewStore.getState().setCamera,
     setSceneWindow: usePlanetViewStore.getState().setSceneWindow,
     setLayers: usePlanetViewStore.getState().setLayers,

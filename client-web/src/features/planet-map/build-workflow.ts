@@ -396,6 +396,19 @@ function buildPostBuildHints(input: {
   return hint ? [hint] : [];
 }
 
+/**
+ * 公开的建造格评估（供地图幽灵预览/点击放置预检使用）。
+ * 返回 undefined 表示没有目标点。
+ */
+export function assessBuildTiles(
+  catalog: CatalogView | undefined,
+  buildingType: string | undefined,
+  planet: PlanetRenderView,
+  position?: Position,
+): BuildTileAssessment | undefined {
+  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position });
+}
+
 export function deriveBuildWorkflowView(input: {
   catalog?: CatalogView;
   buildingType?: string;

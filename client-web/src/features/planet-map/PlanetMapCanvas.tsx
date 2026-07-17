@@ -23,6 +23,7 @@ import {
   getSceneRenderDetailPolicy,
   isTilePointVisible,
 } from '@/features/planet-map/render';
+import { assessBuildTiles } from '@/features/planet-map/build-workflow';
 import { collectVisibleEntities } from '@/features/planet-map/entity-draw';
 import { useImperativeCameraTransform } from '@/features/planet-map/useImperativeCameraTransform';
 import { PlanetEntityLayer } from '@/features/planet-map/PlanetEntityLayer';
@@ -46,6 +47,8 @@ interface PlanetMapCanvasProps {
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
+  /** build/move/attack 模式下的地图点击（inspect 模式不会触发）。 */
+  onInteractTile?: (tile: TilePoint) => void;
 }
 
 interface ViewportSize {
@@ -229,7 +232,7 @@ function areCameraPatchesEqual(left: CameraPatch, right: CameraPatch) {
     && left.ready === right.ready;
 }
 
-export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runtime, onCanvasReady }: PlanetMapCanvasProps) {
+export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runtime, onCanvasReady, onInteractTile }: PlanetMapCanvasProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseFrameCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -242,9 +245,11 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     camera,
     focusRequest,
     hoveredTile,
+    interactionMode,
     layers,
     selected,
     consumeFocusRequest,
+    exitInteractionMode,
     requestFocus,
     setCamera,
     setSceneWindow,
@@ -255,9 +260,11 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     camera: state.camera,
     focusRequest: state.focusRequest,
     hoveredTile: state.hoveredTile,
+    interactionMode: state.interactionMode,
     layers: state.layers,
     selected: state.selected,
     consumeFocusRequest: state.consumeFocusRequest,
+    exitInteractionMode: state.exitInteractionMode,
     requestFocus: state.requestFocus,
     setCamera: state.setCamera,
     setSceneWindow: state.setSceneWindow,
@@ -670,6 +677,51 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
       );
     }
 
+    // 建造模式：幽灵 footprint 预览（绿=可建 红=阻塞），替代普通 hover 高亮
+    if (!overviewMode && interactionMode.kind === 'build' && hoveredTile) {
+      const assessment = assessBuildTiles(catalog, interactionMode.buildingType, planet, {
+        x: hoveredTile.x,
+        y: hoveredTile.y,
+        z: 0,
+      });
+      if (assessment) {
+        const blockedSet = new Set(assessment.blockedTiles.map((tile) => `${tile.x},${tile.y}`));
+        for (let dy = 0; dy < assessment.footprint.height; dy += 1) {
+          for (let dx = 0; dx < assessment.footprint.width; dx += 1) {
+            const tx = hoveredTile.x + dx;
+            const ty = hoveredTile.y + dy;
+            const blocked = blockedSet.has(`${tx},${ty}`);
+            const screenX = camera.offsetX + (tx * tileSize);
+            const screenY = camera.offsetY + (ty * tileSize);
+            context.fillStyle = blocked ? 'rgba(255, 87, 87, 0.32)' : 'rgba(110, 231, 183, 0.28)';
+            context.fillRect(screenX, screenY, tileSize, tileSize);
+            context.strokeStyle = blocked ? '#ff5757' : '#6ee7b7';
+            context.lineWidth = 1.5;
+            context.strokeRect(screenX + 0.5, screenY + 0.5, Math.max(tileSize - 1, 1), Math.max(tileSize - 1, 1));
+          }
+        }
+        return;
+      }
+    }
+
+    // 移动/攻击模式：目标点准星高亮
+    if (!overviewMode && (interactionMode.kind === 'move' || interactionMode.kind === 'attack') && hoveredTile) {
+      const screenX = camera.offsetX + (hoveredTile.x * tileSize);
+      const screenY = camera.offsetY + (hoveredTile.y * tileSize);
+      context.strokeStyle = interactionMode.kind === 'move' ? '#6ee7b7' : '#ff5757';
+      context.lineWidth = 2.5;
+      context.strokeRect(screenX + 1, screenY + 1, Math.max(tileSize - 2, 2), Math.max(tileSize - 2, 2));
+      // 准星十字
+      const mid = tileSize / 2;
+      context.beginPath();
+      context.moveTo(screenX + mid, screenY + 2);
+      context.lineTo(screenX + mid, screenY + tileSize - 2);
+      context.moveTo(screenX + 2, screenY + mid);
+      context.lineTo(screenX + tileSize - 2, screenY + mid);
+      context.stroke();
+      return;
+    }
+
     if (!layers.selection) {
       return;
     }
@@ -705,10 +757,13 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
   }, [
     camera.offsetX,
     camera.offsetY,
+    catalog,
     hoveredTile,
+    interactionMode,
     layers,
     overview,
     overviewMode,
+    planet,
     selected,
     tileSize,
     viewport,
@@ -795,6 +850,11 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
     if (!tile) {
       return;
     }
+    // build/move/attack 模式：点击 = 下达指令，不改变选中
+    if (interactionMode.kind !== 'inspect') {
+      onInteractTile?.(tile);
+      return;
+    }
     const selection = overviewMode ? null : resolveSelectionAtTile(planet, tile.x, tile.y);
     setSelected(selection ?? {
       kind: 'tile',
@@ -805,6 +865,27 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
       },
     });
   }
+
+  /** 右键/Esc 退出当前交互模式（回到点选）。 */
+  function handleContextMenu(event: ReactMouseEvent<HTMLCanvasElement>) {
+    if (interactionMode.kind !== 'inspect') {
+      event.preventDefault();
+      exitInteractionMode();
+    }
+  }
+
+  useEffect(() => {
+    if (interactionMode.kind === 'inspect') {
+      return undefined;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        exitInteractionMode();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [exitInteractionMode, interactionMode.kind]);
 
   function handleDoubleClick(event: ReactMouseEvent<HTMLCanvasElement>) {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -840,11 +921,14 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
       <div className="planet-map-canvas__viewport" ref={viewportRef}>
         <canvas
           aria-label="行星地图"
-          className="planet-map-canvas__surface"
+          className={interactionMode.kind === 'inspect'
+            ? 'planet-map-canvas__surface'
+            : `planet-map-canvas__surface planet-map-canvas__surface--${interactionMode.kind}`}
           data-camera-offset-x={camera.offsetX}
           data-camera-offset-y={camera.offsetY}
           data-tile-size={tileSize}
           onClick={handleClick}
+          onContextMenu={handleContextMenu}
           onDoubleClick={handleDoubleClick}
           onPointerDown={handlePointerDown}
           onPointerLeave={handlePointerLeave}
@@ -883,6 +967,15 @@ export function PlanetMapCanvas({ catalog, fog, networks, overview, planet, runt
         <span>
           Hover {hoveredTile ? `(${hoveredTile.x}, ${hoveredTile.y})` : '-'}
         </span>
+        {interactionMode.kind === 'build' ? (
+          <span className="planet-map-canvas__mode">建造模式：点击放置 · 右键/Esc 取消</span>
+        ) : null}
+        {interactionMode.kind === 'move' ? (
+          <span className="planet-map-canvas__mode">移动模式：点击目标点 · 右键/Esc 取消</span>
+        ) : null}
+        {interactionMode.kind === 'attack' ? (
+          <span className="planet-map-canvas__mode planet-map-canvas__mode--attack">攻击模式：点击目标 · 右键/Esc 取消</span>
+        ) : null}
         <span>{selectionLabel(selected)}</span>
         {simplificationMessages.length > 0 ? <span>低缩放简化</span> : null}
         {simplificationMessages.map((message) => (

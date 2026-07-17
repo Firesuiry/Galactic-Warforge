@@ -946,7 +946,7 @@ describe("PlanetPage", () => {
     // 定位选中建筑后，切到"选中对象" Tab 看实体详情
     await user.click(screen.getByRole("tab", { name: "选中对象" }));
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
-    expect(screen.getByText("采矿机")).toBeInTheDocument();
+    expect(screen.getAllByText("采矿机").length).toBeGreaterThan(0);
     expect(screen.getByText("运行中")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "展开调试" }));
     expect(screen.getByText("调试面板")).toBeInTheDocument();
@@ -1806,7 +1806,7 @@ describe("PlanetPage", () => {
     expect(decodeURIComponent(exportedHref)).toContain('"share_url":');
   });
 
-  it("战斗与制造、取消与恢复工作流支持纯 GUI 下达 7 个命令", async () => {
+  it("战斗与制造、取消与恢复工作流支持纯 GUI 下达 5 个命令", async () => {
     const commandTypes: string[] = [];
 
     vi.stubGlobal(
@@ -1910,19 +1910,10 @@ describe("PlanetPage", () => {
     // 切到「战斗与制造」工作流
     await user.click(screen.getByRole("tab", { name: /战斗与制造/ }));
 
-    // attack
-    await user.selectOptions(screen.getByLabelText("己方单位"), "u-1");
-    await user.selectOptions(screen.getByLabelText("攻击目标"), "enemy-force-1");
-    await user.click(screen.getByRole("button", { name: "发起攻击" }));
-
     // produce
     await user.selectOptions(screen.getByLabelText("生产建筑"), "b-factory");
     await user.selectOptions(screen.getByLabelText("单位类型"), "combat_drone");
     await user.click(screen.getByRole("button", { name: "下达量产" }));
-
-    // upgrade
-    await user.selectOptions(screen.getByLabelText("升级建筑"), "b-factory");
-    await user.click(screen.getByRole("button", { name: "升级建筑" }));
 
     // 切到「取消与恢复」工作流
     await user.click(screen.getByRole("tab", { name: /取消与恢复/ }));
@@ -1944,9 +1935,7 @@ describe("PlanetPage", () => {
 
     await waitFor(() => {
       expect(commandTypes).toEqual([
-        "attack",
         "produce",
-        "upgrade",
         "cancel_construction",
         "restore_construction",
         "cancel_research",

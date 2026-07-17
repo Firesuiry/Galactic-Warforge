@@ -18,7 +18,10 @@ import {
   usePlanetCommandStore,
 } from "@/features/planet-commands/store";
 import { PlanetMapCanvas } from "@/features/planet-map/PlanetMapCanvas";
+import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
+import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
+import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { formatMineralInventory } from "@/features/mineral-summary";
 import {
   extractAlertFromEvent,
@@ -212,6 +215,12 @@ export function PlanetPage() {
     queryKey: ["stats", session.serverUrl, session.playerId],
     queryFn: () => client.fetchStats(),
     enabled: Boolean(planetId),
+  });
+
+  const handleInteractTile = usePlanetInteractions({
+    catalog: catalogQuery.data,
+    planet: sceneQuery.data,
+    runtime: runtimeQuery.data,
   });
 
   const overviewRequestStep = getPlanetOverviewRequestStep(
@@ -482,7 +491,6 @@ export function PlanetPage() {
             <PlanetCommandCenter
               catalog={catalog}
               client={client}
-              networks={networks}
               planet={planet}
               runtime={runtime}
               summary={summary}
@@ -575,10 +583,15 @@ export function PlanetPage() {
             onCanvasReady={(canvas) => {
               canvasRef.current = canvas;
             }}
+            onInteractTile={handleInteractTile}
             overview={overviewQuery.data}
             planet={planet}
             runtime={runtime}
           />
+          <div className="planet-map-shell__overlay">
+            <PlanetSelectionBar catalog={catalog} planet={planet} />
+            <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} />
+          </div>
           <PlanetMinimap
             fog={planet}
             overview={overviewQuery.data}
