@@ -434,22 +434,25 @@ test('浏览器中可操作战争工作台核心闭环', async ({ page }) => {
   await page.goto('/war');
 
   await expect(page.getByRole('heading', { name: '战争工作台' })).toBeVisible();
+
+  // 期6a 全屏化：面板收进右侧抽屉，先点开边缘把手（默认落在蓝图组）
+  await page.getByRole('button', { name: '工作台' }).click();
   await expect(page.getByText('蓝图工作台')).toBeVisible();
-  await expect(page.getByText('军工总览')).toBeVisible();
-  await expect(page.getByText('战区面板')).toBeVisible();
-  await expect(page.getByText('战报与情报')).toBeVisible();
   await expect(page.getByText('功率预算不足', { exact: true })).toBeVisible();
-  await expect(page.getByText('destroyer_screen')).toBeVisible();
 
   await page.getByLabel('蓝图 ID').fill('bp-browser');
   await page.getByLabel('蓝图名称').fill('浏览器回归型');
   await page.getByRole('button', { name: '创建蓝图' }).click();
   await expect(page.getByText('blueprint bp-browser created')).toBeVisible();
 
+  await page.getByRole('tab', { name: '军工' }).click();
+  await expect(page.getByText('军工总览')).toBeVisible();
   await page.getByLabel('部署蓝图').selectOption('fleet-adopted');
   await page.getByRole('button', { name: '尝试部署' }).click();
   await expect(page.getByText('当前部署枢纽不支持该蓝图')).toBeVisible();
 
+  await page.getByRole('tab', { name: '战区' }).click();
+  await expect(page.getByText('战区面板')).toBeVisible();
   await page.getByLabel('任务群姿态').selectOption('siege');
   await page.getByRole('button', { name: '更新姿态' }).click();
   await expect(page.getByText('task force tf-1 stance set to siege')).toBeVisible();
@@ -459,6 +462,10 @@ test('浏览器中可操作战争工作台核心闭环', async ({ page }) => {
 
   await page.getByRole('button', { name: '发起登陆' }).click();
   await expect(page.getByText('当前任务群缺少登陆运力')).toBeVisible();
+
+  await page.getByRole('tab', { name: '战报' }).click();
+  await expect(page.getByText('战报与情报')).toBeVisible();
+  await expect(page.getByText('destroyer_screen')).toBeVisible();
 });
 
 test('窄屏下战争工作台仍保留最小操作闭环', async ({ page }) => {
@@ -468,9 +475,14 @@ test('窄屏下战争工作台仍保留最小操作闭环', async ({ page }) => 
   await page.goto('/war');
 
   await expect(page.getByRole('heading', { name: '战争工作台' })).toBeVisible();
+  // 抽屉覆盖式展开，逐组确认关键操作仍在
+  await page.getByRole('button', { name: '工作台' }).click();
   await expect(page.getByLabel('蓝图 ID')).toBeVisible();
+  await page.getByRole('tab', { name: '军工' }).click();
   await expect(page.getByLabel('部署蓝图')).toBeVisible();
+  await page.getByRole('tab', { name: '战区' }).click();
   await expect(page.getByLabel('任务群姿态')).toBeVisible();
   await expect(page.getByRole('button', { name: '发起封锁' })).toBeVisible();
+  await page.getByRole('tab', { name: '战报' }).click();
   await expect(page.getByText('destroyer_screen')).toBeVisible();
 });

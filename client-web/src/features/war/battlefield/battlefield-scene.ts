@@ -66,6 +66,13 @@ const MISSILE_HIT_FLASH = { radius: 12, durationMs: 360 };
 /** 击毁标记淡出时长（ms）。 */
 const DESTROYED_FADE_MS = 600;
 
+/** 恒星 glow / 星核的基础缩放（未做密度补偿时）。 */
+const STAR_GLOW_SCALE = 1.1;
+const STAR_SCALE = 0.55;
+/** 密度补偿系数钳位区间：大屏不过度缩小、小屏不过度放大。 */
+const DENSITY_K_MIN = 0.65;
+const DENSITY_K_MAX = 1.1;
+
 export interface BattlefieldSceneCallbacks {
   onSelect: (selection: BattlefieldSelection | null) => void;
 }
@@ -106,6 +113,13 @@ export class BattlefieldScene {
   private markers: BattlefieldMarkerLayout[] = [];
   private markerNodes = new Map<string, MarkerNode>();
   private selectedId: string | null = null;
+  private starGlow: Sprite | null = null;
+  private starCore: Sprite | null = null;
+  /**
+   * 视觉密度补偿：root 随容器等比放大后，标记/标签若同倍放大会显得稀疏粗大。
+   * 按 1/√scale 反向补偿（钳位 [0.65, 1.1]），大屏上信息密度更高、小屏上略放大。
+   */
+  private densityK = 1;
 
   private readonly effectPool = new BattleEffectPool();
   private readonly effectViews = new Map<number, EffectView>();
@@ -207,15 +221,17 @@ export class BattlefieldScene {
     const starGlow = new Sprite(getGlowTexture(0xfde68a));
     starGlow.anchor.set(0.5);
     starGlow.position.set(CENTER_X, CENTER_Y);
-    starGlow.scale.set(1.1);
+    starGlow.scale.set(STAR_GLOW_SCALE);
     starGlow.alpha = 0.85;
     this.root.addChild(starGlow);
+    this.starGlow = starGlow;
 
     const star = new Sprite(getStarTexture(0xfde68a));
     star.anchor.set(0.5);
     star.position.set(CENTER_X, CENTER_Y);
-    star.scale.set(0.55);
+    star.scale.set(STAR_SCALE);
     this.root.addChild(star);
+    this.starCore = star;
   }
 
   private rebuildOrbits(input: BattlefieldLayoutInput) {
@@ -244,6 +260,8 @@ export class BattlefieldScene {
   private createMarkerNode(marker: BattlefieldMarkerLayout): MarkerNode {
     const container = new Container();
     container.position.set(marker.x, marker.y);
+    // 密度补偿作用于整个标记（glow/实体/标签），命中半径随容器等比收缩
+    container.scale.set(this.densityK);
     container.eventMode = 'static';
     container.cursor = 'pointer';
     container.hitArea = {
@@ -372,6 +390,16 @@ export class BattlefieldScene {
 
   // ---------- 选中态 ----------
 
+  /** 密度补偿应用：恒星 glow/星核、全部标记容器、选中环半径随 densityK 重设。 */
+  private applyDensity() {
+    this.starGlow?.scale.set(STAR_GLOW_SCALE * this.densityK);
+    this.starCore?.scale.set(STAR_SCALE * this.densityK);
+    this.markerNodes.forEach((node) => {
+      node.container.scale.set(this.densityK);
+    });
+    this.updateSelectionRing();
+  }
+
   private updateSelectionRing() {
     const ring = this.selectionRing.clear();
     const marker = this.markers.find((entry) => entry.id === this.selectedId);
@@ -379,9 +407,10 @@ export class BattlefieldScene {
       ring.visible = false;
       return;
     }
+    const radius = BATTLEFIELD_HIT_RADIUS * this.densityK;
     ring
-      .circle(0, 0, BATTLEFIELD_HIT_RADIUS).stroke({ width: 2, color: 0xfacc15, alpha: 0.95 })
-      .circle(0, 0, BATTLEFIELD_HIT_RADIUS + 4).stroke({ width: 0.8, color: 0xfacc15, alpha: 0.4 });
+      .circle(0, 0, radius).stroke({ width: 2, color: 0xfacc15, alpha: 0.95 })
+      .circle(0, 0, radius + 4).stroke({ width: 0.8, color: 0xfacc15, alpha: 0.4 });
     ring.position.set(marker.x, marker.y);
     ring.visible = true;
   }
@@ -663,6 +692,17 @@ export class BattlefieldScene {
       (this.app.screen.width - BATTLEFIELD_VIEW_WIDTH * scale) / 2,
       (this.app.screen.height - BATTLEFIELD_VIEW_HEIGHT * scale) / 2,
     );
+
+    // 视觉密度校准：画布越大补偿越小（1/√scale），大屏上标记/标签不随视口线性放大。
+    // 纯屏幕尺寸函数、确定性强，放在 frozen 早退之前，保证冻结截图同样校准。
+    const nextDensityK = Math.min(
+      DENSITY_K_MAX,
+      Math.max(DENSITY_K_MIN, 1 / Math.sqrt(Math.max(scale, 0.0001))),
+    );
+    if (Math.abs(nextDensityK - this.densityK) > 0.005) {
+      this.densityK = nextDensityK;
+      this.applyDensity();
+    }
 
     if (this.frozen) {
       return;

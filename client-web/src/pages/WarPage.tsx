@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { WarTaskForceStance } from '@shared/types';
 import { useQuery } from '@tanstack/react-query';
 
+import { MapDrawer } from '@/common/MapDrawer';
 import { BlueprintVariantForm } from '@/features/war/components/forms/BlueprintVariantForm';
 import { FleetActionForm } from '@/features/war/components/forms/FleetActionForm';
 import { ProductionQueueForm } from '@/features/war/components/forms/ProductionQueueForm';
@@ -46,6 +47,17 @@ const TASK_FORCE_STANCES: WarTaskForceStance[] = [
 
 const WAR_FALLBACK_SUMMARY_MS = 15_000;
 const WAR_FALLBACK_RUNTIME_MS = 10_000;
+
+/**
+ * 抽屉分组 Tab：蓝图/军工/战区/战报。
+ * id 与命令反馈 section 一一对应，新回执到达时抽屉自动滑出并落到对应分组。
+ */
+const WAR_DRAWER_TABS: Array<{ id: FeedbackSection; glyph: string; label: string }> = [
+  { id: 'blueprint', glyph: '🧬', label: '蓝图' },
+  { id: 'industry', glyph: '🏭', label: '军工' },
+  { id: 'theater', glyph: '🎯', label: '战区' },
+  { id: 'reports', glyph: '📜', label: '战报' },
+];
 
 function firstQueryError(errors: unknown[]) {
   return errors.find(Boolean);
@@ -101,6 +113,9 @@ export function WarPage() {
   const [createBlueprintName, setCreateBlueprintName] = useState('');
   const [createDomain, setCreateDomain] = useState<WarDomain>('space');
   const [createBaseId, setCreateBaseId] = useState('');
+  // 右侧工作台抽屉：默认收起为边缘把手；选中战场标记/新命令回执时自动滑出
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<FeedbackSection>('blueprint');
 
   const summaryQuery = useQuery({
     queryKey: ['summary', session.serverUrl, session.playerId],
@@ -310,6 +325,21 @@ export function WarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBlueprint?.id]);
 
+  // 新命令回执：抽屉自动滑出并落到对应分组（对齐行星页「新回执自动滑出」范式）。
+  // pushFeedback 每次只换对应 section 的数组引用，据此定位变化分组。
+  const prevFeedbacksRef = useRef(feedbacks);
+  useEffect(() => {
+    const prev = prevFeedbacksRef.current;
+    prevFeedbacksRef.current = feedbacks;
+    const changed = WAR_DRAWER_TABS.find(
+      (tab) => feedbacks[tab.id] !== prev[tab.id] && (feedbacks[tab.id]?.length ?? 0) > 0,
+    );
+    if (changed) {
+      setActiveTab(changed.id);
+      setDrawerOpen(true);
+    }
+  }, [feedbacks]);
+
   if (isLoading) {
     return <div className="panel">正在加载战争工作台...</div>;
   }
@@ -476,45 +506,76 @@ export function WarPage() {
   }
 
   return (
-    <div className="page-grid strategic-page war-page">
-      <section className="panel page-hero strategic-hero war-hero">
-        <div className="page-header">
-          <p className="eyebrow">Grand Strategy Warfare</p>
-          <h1>战争工作台</h1>
-          <p className="subtle-text">
-            当前焦点：{system?.name || focusSystemId || '未知星系'} / {currentPlanets.find((planet) => planet.planet_id === selectedPlanetId)?.name || selectedPlanetId || '未知行星'}
-          </p>
-        </div>
-        <div className="war-hero__meta">
-          <span className="badge badge--ok">tick {summaryQuery.data.tick}</span>
-          <span className="badge">{system?.name || focusSystemId || '未知星系'}</span>
-          <span className="badge">{currentPlanets.find((planet) => planet.planet_id === selectedPlanetId)?.name || selectedPlanetId || '未知行星'}</span>
-          <span className="badge">{contacts.length} 条接触</span>
-          <span className="badge">{battleReports.length} 份战报</span>
-          <span className="badge">{blockades.length} 条封锁</span>
-        </div>
-      </section>
+    <div className="page-grid page-grid--map">
+      <section className="panel planet-map-shell">
+        <BattlefieldMap
+          systemName={system?.name || focusSystemId || '未知星系'}
+          planets={currentPlanets}
+          runtime={runtime}
+          fleets={fleets}
+          playerId={session.playerId}
+          onSelect={(next) => {
+            // 选中战场标记自动滑出抽屉（对齐行星页「选中实体自动滑出」）
+            if (next) {
+              setDrawerOpen(true);
+            }
+          }}
+        />
 
-      <section className="panel war-panel">
-        <div className="war-panel__header">
-          <div>
-            <h2>战场态势</h2>
-            <p className="subtle-text">星系级示意图：恒星、行星轨道、己方/敌方舰队接触、封锁圈与登陆行动一目了然。</p>
+        {/* 悬浮标题片：页面标题/焦点星系/战况计数 HUD 化（原 page-hero 内容） */}
+        <div className="planet-title-chip war-title-chip">
+          <div className="planet-title-chip__head">
+            <p className="eyebrow">Grand Strategy Warfare</p>
+            <h1>战争工作台</h1>
+            {/* 战场主视区的节标题；图上 HUD 另带「战场态势 · 星系名」 */}
+            <h2 className="war-title-chip__scene">战场态势</h2>
+            <p className="subtle-text">
+              当前焦点：{system?.name || focusSystemId || '未知星系'} / {currentPlanets.find((planet) => planet.planet_id === selectedPlanetId)?.name || selectedPlanetId || '未知行星'}
+            </p>
+          </div>
+          <div className="planet-title-chip__chips">
+            <span className="badge badge--ok">tick {summaryQuery.data.tick}</span>
+            <span className="badge">{system?.name || focusSystemId || '未知星系'}</span>
+            <span className="badge">{currentPlanets.find((planet) => planet.planet_id === selectedPlanetId)?.name || selectedPlanetId || '未知行星'}</span>
+            <span className="badge">{contacts.length} 条接触</span>
+            <span className="badge">{battleReports.length} 份战报</span>
+            <span className="badge">{blockades.length} 条封锁</span>
           </div>
         </div>
-        <div className="war-section-grid">
-          <BattlefieldMap
-            systemName={system?.name || focusSystemId || '未知星系'}
-            planets={currentPlanets}
-            runtime={runtime}
-            fleets={fleets}
-            playerId={session.playerId}
-          />
-        </div>
-      </section>
 
-      <section className="war-workbench">
-        <section className="panel war-panel">
+        {/* 右侧工作台抽屉：蓝图/军工/战区/战报四组 Tab，功能与原多面板布局一致 */}
+        <MapDrawer
+          bodyClassName="war-drawer__body"
+          label="工作台"
+          onToggle={() => setDrawerOpen((open) => !open)}
+          open={drawerOpen}
+        >
+          <div aria-label="战争工作台面板" className="planet-detail-tabs war-drawer-tabs" role="tablist">
+            {WAR_DRAWER_TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  aria-controls={`war-drawer-panel-${tab.id}`}
+                  aria-selected={isActive}
+                  className={isActive
+                    ? 'secondary-button planet-detail-tabs__tab planet-detail-tabs__tab--active'
+                    : 'secondary-button planet-detail-tabs__tab'}
+                  id={`war-drawer-tab-${tab.id}`}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  <span aria-hidden="true" className="planet-detail-tabs__glyph">{tab.glyph}</span>
+                  <span className="planet-detail-tabs__text">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="planet-detail-shell__content war-drawer__content">
+            {activeTab === 'blueprint' ? (
+              <div id="war-drawer-panel-blueprint" role="tabpanel">
+                <section className="war-panel">
           <div className="war-panel__header">
             <div>
               <h2>蓝图工作台</h2>
@@ -676,9 +737,12 @@ export function WarPage() {
             catalog={catalog}
             blueprints={blueprints}
           />
-        </section>
-
-        <section className="panel war-panel">
+                </section>
+              </div>
+            ) : null}
+            {activeTab === 'industry' ? (
+              <div id="war-drawer-panel-industry" role="tabpanel">
+                <section className="war-panel">
           <div className="war-panel__header">
             <div>
               <h2>军工总览</h2>
@@ -794,9 +858,12 @@ export function WarPage() {
               blueprints={blueprints}
             />
           </div>
-        </section>
-
-        <section className="panel war-panel">
+                </section>
+              </div>
+            ) : null}
+            {activeTab === 'theater' ? (
+              <div id="war-drawer-panel-theater" role="tabpanel">
+                <section className="war-panel">
           <div className="war-panel__header">
             <div>
               <h2>战区面板</h2>
@@ -913,9 +980,12 @@ export function WarPage() {
               focusSystemId={focusSystemId}
             />
           </div>
-        </section>
-
-        <section className="panel war-panel">
+                </section>
+              </div>
+            ) : null}
+            {activeTab === 'reports' ? (
+              <div id="war-drawer-panel-reports" role="tabpanel">
+                <section className="war-panel">
           <div className="war-panel__header">
             <div>
               <h2>战报与情报</h2>
@@ -998,7 +1068,11 @@ export function WarPage() {
               focusSystemId={focusSystemId}
             />
           </div>
-        </section>
+                </section>
+              </div>
+            ) : null}
+          </div>
+        </MapDrawer>
       </section>
     </div>
   );

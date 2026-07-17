@@ -135,18 +135,18 @@ button {
   gap: 20px;
 }
 
-.page-grid--planet {
+/* 全屏地图页（行星页/战争页共用）：地图壳吃满 app-body，页级信息全部 HUD 悬浮 */
+.page-grid--map {
   height: 100%;
   min-height: 0;
   flex: 1;
   gap: 0;
-  /* V3 全屏化：地图壳吃满 app-body，页级信息全部 HUD 悬浮 */
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
-/* 行星页全屏化：page-shell 去 padding/限宽，地图吃满剩余视口 */
-.page-shell:has(> .page-grid--planet) {
+/* 全屏地图页：page-shell 去 padding/限宽，地图吃满剩余视口 */
+.page-shell:has(> .page-grid--map) {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -2332,27 +2332,6 @@ a {
   font-size: 0.82rem;
 }
 
-.war-page {
-  gap: 16px;
-}
-
-.war-hero {
-  align-items: flex-start;
-}
-
-.war-hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-.war-workbench {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
 .war-panel {
   display: flex;
   flex-direction: column;
@@ -2377,9 +2356,10 @@ a {
   flex-wrap: wrap;
 }
 
+/* 抽屉内恒单列（战争页全屏化后，war-section-grid 只存在于右侧抽屉） */
 .war-section-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -2391,22 +2371,6 @@ a {
   border-radius: 18px;
   border: 1px solid rgba(180, 210, 199, 0.08);
   background: rgba(255, 255, 255, 0.03);
-}
-
-/* 战场态势 Pixi 画布容器：固定 640×440 纵横比，随卡片宽度缩放 */
-.battlefield-canvas {
-  width: 100%;
-  max-width: 640px;
-  aspect-ratio: 640 / 440;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #0b1220;
-}
-
-.battlefield-canvas canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .war-field {
@@ -2522,8 +2486,7 @@ a {
 }
 
 @media (max-width: 1100px) {
-  .strategic-layout,
-  .war-workbench {
+  .strategic-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -2542,10 +2505,6 @@ a {
   }
 
   .campaign-board__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .war-section-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -2780,6 +2739,23 @@ a {
   font-size: 0.8rem;
   letter-spacing: 0.24em;
   cursor: pointer;
+  transition: right var(--dur) var(--ease);
+}
+
+/* 抽屉滑出时把手同步左移，保持露出可再次收起（宽度与抽屉体一致） */
+.planet-drawer--open .planet-drawer__handle {
+  right: min(300px, 88vw);
+}
+
+@media (max-width: 900px) {
+  .planet-drawer--open .planet-drawer__handle {
+    right: min(320px, 88vw);
+  }
+}
+
+/* 战争抽屉更宽（min(430px, 92vw)），把手避让距离随动 */
+.planet-drawer--open:has(> .war-drawer__body) .planet-drawer__handle {
+  right: min(430px, 92vw);
 }
 
 .planet-drawer__handle:hover {
@@ -2802,6 +2778,148 @@ a {
 
 .planet-drawer--open .planet-drawer__body {
   transform: translateX(0);
+}
+
+/* ============================================================
+ * V3 战争页全屏化 HUD（期6a）：战场图即主界面 + 悬浮标题片 + 右侧抽屉
+ * 外壳/标题片/抽屉复用 .planet-map-shell / .planet-title-chip /
+ * .planet-drawer 体系（含共用组件 MapDrawer），这里只补战争页特有样式。
+ * ============================================================ */
+
+/* 战场态势 Pixi 画布：吃满地图壳（场景内部按 640×440 逻辑视口等比缩放居中） */
+.battlefield-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.battlefield-canvas {
+  position: absolute;
+  inset: 0;
+  background: #0b1220;
+}
+
+.battlefield-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 图上 HUD：战场标题 + 制空权/接触摘要（右上，避开左上标题片与右缘抽屉把手） */
+.battlefield-hud {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: min(460px, calc(100% - 32px));
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 28, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+  text-align: right;
+  pointer-events: none;
+}
+
+.battlefield-hud h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 16px rgba(57, 230, 208, 0.28);
+}
+
+.battlefield-hud p {
+  margin: 0;
+  font-size: 0.74rem;
+}
+
+/* 图例（左下悬浮片，覆盖式不挡标记点击） */
+.battlefield-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 28, 0.66);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+  font-size: 0.74rem;
+  pointer-events: none;
+}
+
+.battlefield-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 选中回显（底部居中胶囊） */
+.battlefield-selection {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-glow);
+  background: rgba(8, 14, 28, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+/* 标题片内的「战场态势」节标签（图上 HUD 另带星系名） */
+.war-title-chip__scene {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  opacity: 0.92;
+}
+
+/* 战争抽屉：比行星抽屉宽以承载蓝图/军工表单 */
+.planet-drawer__body.war-drawer__body {
+  width: min(430px, 92vw);
+}
+
+.war-drawer__content {
+  flex: 1;
+}
+
+.war-drawer-tabs .planet-detail-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* 窄屏：隐藏图上 HUD（标题片已承载星系名/计数），抽屉保持覆盖式 */
+@media (max-width: 900px) {
+  .battlefield-hud {
+    display: none;
+  }
+
+  .battlefield-legend {
+    padding: 6px 10px;
+    font-size: 0.68rem;
+  }
 }
 
 

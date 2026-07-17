@@ -426,17 +426,28 @@ describe('WarPage', () => {
 
     renderApp(['/war']);
 
+    const user = userEvent.setup();
+
     expect(await screen.findByRole('heading', { name: '战争工作台' })).toBeInTheDocument();
+    // 期6a 全屏化：战场图为首屏，四个面板收进右侧抽屉分组（默认蓝图组）
+    expect(screen.getByText('Helios')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '工作台' }));
     expect(screen.getByText('蓝图工作台')).toBeInTheDocument();
-    expect(screen.getByText('军工总览')).toBeInTheDocument();
-    expect(screen.getByText('战区面板')).toBeInTheDocument();
-    expect(screen.getByText('战报与情报')).toBeInTheDocument();
     expect(screen.getByText('前锋试制型')).toBeInTheDocument();
     expect(screen.getByText('功率预算不足')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: '军工' }));
+    expect(screen.getByText('军工总览')).toBeInTheDocument();
     expect(screen.getByText('舰队封锁型')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: '战区' }));
+    expect(screen.getByText('战区面板')).toBeInTheDocument();
     expect(screen.getByText('第一封锁群')).toBeInTheDocument();
     expect(screen.getByText('补给危急')).toBeInTheDocument();
-    expect(screen.getByText('Helios')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: '战报' }));
+    expect(screen.getByText('战报与情报')).toBeInTheDocument();
     expect(screen.getByText('destroyer_screen')).toBeInTheDocument();
     expect(screen.getByText('battle-9')).toBeInTheDocument();
     expect(screen.getByText('已封锁')).toBeInTheDocument();
@@ -720,6 +731,9 @@ describe('WarPage', () => {
 
     await screen.findByRole('heading', { name: '战争工作台' });
 
+    // 期6a 全屏化：先点开抽屉（默认蓝图组）
+    await user.click(screen.getByRole('button', { name: '工作台' }));
+
     await user.type(screen.getByLabelText('蓝图 ID'), 'bp-new');
     await user.type(screen.getByLabelText('蓝图名称'), '晨星改');
     await user.selectOptions(screen.getByLabelText('作战域'), 'ground');
@@ -728,9 +742,14 @@ describe('WarPage', () => {
 
     await user.click(screen.getByRole('button', { name: '校验蓝图' }));
 
+    // 等本组回执落地再切组，避免「新回执自动落组」把 Tab 拉回去
+    await screen.findByText('当前动作未通过权威校验');
+    await user.click(screen.getByRole('tab', { name: '军工' }));
     await user.selectOptions(screen.getByLabelText('部署蓝图'), 'fleet-adopted');
     await user.click(screen.getByRole('button', { name: '尝试部署' }));
 
+    await screen.findByText('当前部署枢纽不支持该蓝图');
+    await user.click(screen.getByRole('tab', { name: '战区' }));
     await user.selectOptions(screen.getByLabelText('任务群姿态'), 'siege');
     await user.click(screen.getByRole('button', { name: '更新姿态' }));
 
@@ -748,10 +767,13 @@ describe('WarPage', () => {
       ]);
     });
 
-    expect(screen.getByText('blueprint bp-new created')).toBeInTheDocument();
+    // 各组回执留在各自 Tab 内
+    expect(await screen.findByText('task force tf-1 stance set to siege')).toBeInTheDocument();
+    expect(await screen.findByText('当前任务群缺少登陆运力')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: '军工' }));
     expect(screen.getByText('当前部署枢纽不支持该蓝图')).toBeInTheDocument();
-    expect(screen.getByText('当前任务群缺少登陆运力')).toBeInTheDocument();
-    expect(screen.getByText('task force tf-1 stance set to siege')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: '蓝图' }));
+    expect(screen.getByText('blueprint bp-new created')).toBeInTheDocument();
   });
 
   it('支持 12 个新战争命令表单的纯 GUI 提交', async () => {
@@ -927,15 +949,25 @@ describe('WarPage', () => {
 
     await screen.findByRole('heading', { name: '战争工作台' });
 
+    // 期6a 全屏化：先点开抽屉（默认蓝图组），再按组切换表单
+    await user.click(screen.getByRole('button', { name: '工作台' }));
+
     // blueprint_variant
     await user.type(screen.getByLabelText('变体 ID'), 'corvette_scout');
     await user.click(screen.getByRole('checkbox', { name: /weapon/ }));
     await user.click(screen.getByRole('button', { name: '派生变体' }));
 
+    // 等本组回执落地再切组，避免「新回执自动落组」把 Tab 拉回去
+    await screen.findByText('blueprint_variant accepted');
+    await user.click(screen.getByRole('tab', { name: '军工' }));
+
     // queue_military_production
     await user.click(screen.getByRole('button', { name: '下达量产' }));
     // refit_unit
     await user.click(screen.getByRole('button', { name: '下达翻修' }));
+
+    await screen.findByText('refit_unit accepted');
+    await user.click(screen.getByRole('tab', { name: '战区' }));
 
     // theater_create / define_zone / set_objective
     await user.type(screen.getByLabelText('战区 ID'), 'theater-alpha');
@@ -949,6 +981,9 @@ describe('WarPage', () => {
     await user.click(screen.getByRole('checkbox', { name: 'fleet-1' }));
     await user.click(screen.getByRole('button', { name: '编入任务群' }));
     await user.click(screen.getByRole('button', { name: '部署到位' }));
+
+    await screen.findByText('task_force_deploy accepted');
+    await user.click(screen.getByRole('tab', { name: '战报' }));
 
     // fleet_assign / attack / disband
     await user.click(screen.getByRole('button', { name: '调整编队' }));

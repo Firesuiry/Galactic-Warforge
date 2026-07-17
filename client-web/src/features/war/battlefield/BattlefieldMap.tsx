@@ -21,12 +21,13 @@ interface BattlefieldMapProps {
 }
 
 /**
- * 星系级战场态势图（Pixi 渲染，布局语义见 battlefield-model）。
+ * 星系级战场态势图（Pixi 渲染，布局语义见 battlefield-model），全屏地图即主界面。
  *
  * 把恒星、行星轨道、己方/敌方舰队接触、封锁圈、登陆行动收拢到一张图上，
  * 解决 WarPage 过去只有文字列表、玩家「看不懂战局」的问题。
  * 点击标记会选中并回传，供上层联动 FleetActionForm / TaskForceForm。
  * 场景订阅战斗事件总线，导弹齐射/点防拦截/战报到达时做一次性特效演出。
+ * chrome 全部 HUD 化：顶部居中标题/制空权摘要、左下图例、底部居中选中回显。
  */
 export function BattlefieldMap({
   systemName,
@@ -54,15 +55,7 @@ export function BattlefieldMap({
   const superiority = runtime?.orbital_superiority;
 
   return (
-    <article className="war-card battlefield-card">
-      <h3>战场态势 · {systemName}</h3>
-      <p className="subtle-text">
-        {superiority
-          ? `制空权：${superiority.advantage_player_id ?? '争夺中'} · ${(superiority as { contest_intensity?: number }).contest_intensity ?? 0}`
-          : '尚未形成制空权'}
-        {' · '}
-        接触 {(runtime?.contacts ?? []).length} · 舰队 {fleets.length} · 封锁 {(runtime?.planet_blockades ?? []).length} · 登陆 {(runtime?.landing_operations ?? []).length}
-      </p>
+    <div className="battlefield-stage">
       <PixiStage
         className="battlefield-canvas"
         onReady={(app) => {
@@ -85,17 +78,27 @@ export function BattlefieldMap({
           };
         }}
       />
-      <ul className="war-list">
+      <div className="battlefield-hud">
+        <h3>战场态势 · {systemName}</h3>
+        <p className="subtle-text">
+          {superiority
+            ? `制空权：${superiority.advantage_player_id ?? '争夺中'} · ${(superiority as { contest_intensity?: number }).contest_intensity ?? 0}`
+            : '尚未形成制空权'}
+          {' · '}
+          接触 {(runtime?.contacts ?? []).length} · 舰队 {fleets.length} · 封锁 {(runtime?.planet_blockades ?? []).length} · 登陆 {(runtime?.landing_operations ?? []).length}
+        </p>
+      </div>
+      <ul className="war-list battlefield-legend">
         <li><span style={{ color: '#38bdf8' }}>◆</span> 己方舰队</li>
         <li><span style={{ color: '#f87171' }}>▲</span> 敌方接触</li>
         <li><span style={{ color: '#94a3b8' }}>●</span> 行星（红圈虚线=被封锁）</li>
       </ul>
       {selection ? (
-        <p className="subtle-text">
+        <p className="battlefield-selection subtle-text">
           已选中：{selection.label}{selection.detail ? `（${selection.detail}）` : ''}
         </p>
       ) : null}
-    </article>
+    </div>
   );
 }
 

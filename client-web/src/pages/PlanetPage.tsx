@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { ALL_EVENT_TYPES } from "@shared/config";
 
 import { Icon } from "@/common/Icon";
+import { MapDrawer } from "@/common/MapDrawer";
 import {
   PlanetActivityPanel,
   PlanetDebugPanel,
@@ -544,7 +545,7 @@ export function PlanetPage() {
   );
 
   return (
-    <div className="page-grid page-grid--planet">
+    <div className="page-grid page-grid--map">
       <section className="panel planet-map-shell">
         <PlanetMapPixi
           catalog={catalog}
@@ -632,36 +633,22 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         />
-        {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出 */}
-        <aside
-          className={
-            drawerOpen ? "planet-drawer planet-drawer--open" : "planet-drawer"
-          }
+        {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出（共用 MapDrawer） */}
+        <MapDrawer
+          label="工作台"
+          onToggle={() => setDrawerOpen((open) => !open)}
+          open={drawerOpen}
         >
-          <button
-            aria-expanded={drawerOpen}
-            aria-label="工作台"
-            className="planet-drawer__handle"
-            onClick={() => setDrawerOpen((open) => !open)}
-            title="工作台"
-            type="button"
-          >
-            <span aria-hidden="true" className="planet-drawer__handle-text">
-              工作台
-            </span>
-          </button>
-          <div className="panel planet-detail-shell planet-drawer__body">
-            <PlanetOperationHeader
-              activePlanetId={summary?.active_planet_id ?? planet.planet_id}
-              latestEntry={latestCommandEntry}
-              pendingCount={pendingCommandCount}
-              routePlanetId={planet.planet_id}
-              routePlanetName={planet.name}
-              systemName={system?.name ?? system?.system_id}
-            />
-            {detailPanels}
-          </div>
-        </aside>
+          <PlanetOperationHeader
+            activePlanetId={summary?.active_planet_id ?? planet.planet_id}
+            latestEntry={latestCommandEntry}
+            pendingCount={pendingCommandCount}
+            routePlanetId={planet.planet_id}
+            routePlanetName={planet.name}
+            systemName={system?.name ?? system?.system_id}
+          />
+          {detailPanels}
+        </MapDrawer>
       </section>
     </div>
   );

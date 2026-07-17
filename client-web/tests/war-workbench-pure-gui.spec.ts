@@ -95,6 +95,9 @@ test('纯 GUI 打完官方战争局：蓝图→量产→舰队→任务群→战
   await expect(page.getByRole('heading', { name: '战争工作台' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '战场态势', exact: true })).toBeVisible();
 
+  // 期6a 全屏化：面板收进右侧抽屉，先点开边缘把手（默认落在蓝图组）
+  await page.getByRole('button', { name: '工作台' }).click();
+
   // 1. 蓝图工作台：从零创建一个护航舰蓝图（GUI 全程）
   await page.getByLabel('蓝图 ID').fill(BLUEPRINT_ID);
   await page.getByLabel('作战域').selectOption('space');
@@ -126,6 +129,7 @@ test('纯 GUI 打完官方战争局：蓝图→量产→舰队→任务群→战
   });
 
   // 4. 军工总览：量产排队（GUI 表单）
+  await page.getByRole('tab', { name: '军工' }).click();
   await page.getByLabel('量产蓝图').selectOption(BLUEPRINT_ID);
   await page.getByLabel('量产工厂').selectOption({ index: 0 });
   await page.getByLabel('量产部署枢纽').selectOption({ index: 0 });
@@ -142,6 +146,7 @@ test('纯 GUI 打完官方战争局：蓝图→量产→舰队→任务群→战
   await waitForCondition('fleet commissioned', () => readAnyFleetExists(), 60_000);
 
   // 6. 战区面板：组建任务群 → 编入舰队 → 部署到位（GUI 表单）
+  await page.getByRole('tab', { name: '战区' }).click();
   await page.getByLabel('任务群 ID').fill(TASK_FORCE_ID);
   await page.getByRole('button', { name: '组建任务群' }).click();
   await expect(page.getByText('accepted, will execute at next tick').first()).toBeVisible({ timeout: 10_000 });
