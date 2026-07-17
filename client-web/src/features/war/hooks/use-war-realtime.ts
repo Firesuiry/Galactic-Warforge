@@ -6,6 +6,7 @@ import { ALL_EVENT_TYPES } from '@shared/config';
 import { createSseClient } from '@shared/sse';
 import type { ApiClient } from '@shared/api';
 
+import { forwardGameEventToBattleBus } from '@/engine/battle-events';
 import {
   shouldRefreshWarBlueprints,
   shouldRefreshWarFleets,
@@ -58,6 +59,8 @@ interface WarScope {
  *
  * 结构复刻 use-planet-realtime：
  * - createSseClient 订阅 game 事件 → 150ms 防抖批量 invalidateQueries
+ * - 瞬时战斗事件（导弹/点防/战报/伤害/击毁）同步分流到 engine/battle-events
+ *   战斗事件总线，供战场特效（后续音效）消费；payload 透传，不进任何 store
  * - subscribeStatus 重连后用 /events/snapshot 补齐遗漏事件（游标用 useRef，不引入 war store）
  * - 不做事件缓冲/journal：战报/接触/封锁列表全部来自 react-query 缓存，失效即刷新
  */
@@ -196,6 +199,10 @@ export function useWarRealtime(options: UseWarRealtimeOptions) {
       if (event.event_id) {
         lastEventIdRef.current = event.event_id;
       }
+
+      // 瞬时战斗事件分流一份到战斗事件总线（战场特效/后续音效消费），
+      // 下面的 react-query 防抖失效逻辑保持不变。
+      forwardGameEventToBattleBus(event);
 
       scheduleInvalidation({
         summary: shouldRefreshWarSummary(event),

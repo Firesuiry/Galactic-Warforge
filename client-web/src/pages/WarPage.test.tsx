@@ -5,6 +5,13 @@ import { vi } from 'vitest';
 import { renderApp, jsonResponse } from '@/test/utils';
 import { useSessionStore } from '@/stores/session';
 
+// jsdom 无 WebGL：mock PixiStage（战场态势图），与其他页测试同一模式
+vi.mock('@/engine/PixiStage', () => ({
+  PixiStage: ({ className }: { className?: string }) => (
+    <div data-testid="pixi-stage" className={className} />
+  ),
+}));
+
 function createCommandResponse(message: string, status = 'executed') {
   return {
     request_id: 'req-war-1',

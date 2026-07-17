@@ -2437,6 +2437,22 @@ a {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* 战场态势 Pixi 画布容器：固定 640×440 纵横比，随卡片宽度缩放 */
+.battlefield-canvas {
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 640 / 440;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b1220;
+}
+
+.battlefield-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .war-field {
   display: flex;
   flex-direction: column;

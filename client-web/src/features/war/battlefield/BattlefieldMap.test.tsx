@@ -4,6 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
 
+// jsdom 无 WebGL：mock PixiStage 为占位 div（保留 className 以校验容器 chrome），
+// 场景/特效的几何与生命周期由 battlefield-model / battlefield-effects 纯函数用例覆盖。
+vi.mock('@/engine/PixiStage', () => ({
+  PixiStage: ({ className }: { className?: string }) => (
+    <div data-testid="pixi-stage" className={className} />
+  ),
+}));
+
 const runtime = {
   system_id: 'sys-1',
   discovered: true,
@@ -26,11 +34,8 @@ const fleets = [
 ] as unknown as FleetRuntimeView[];
 
 describe('BattlefieldMap', () => {
-  it('渲染星系战场态势标题、图例与制空权摘要', () => {
-    // jsdom 无真实 canvas context，draw 会安全提前返回；这里只校验 chrome。
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-
-    render(
+  it('渲染星系战场态势标题、图例、制空权摘要与 Pixi 画布容器', () => {
+    const { container } = render(
       <BattlefieldMap
         systemName="Helios"
         planets={[{ planet_id: 'planet-1-1', name: 'Gaia', discovered: true, kind: 'terrestrial' }]}
@@ -45,5 +50,10 @@ describe('BattlefieldMap', () => {
     expect(screen.getByText(/接触 1 · 舰队 1 · 封锁 1 · 登陆 1/)).toBeInTheDocument();
     expect(screen.getByText('己方舰队')).toBeInTheDocument();
     expect(screen.getByText('敌方接触')).toBeInTheDocument();
+    // Pixi 画布挂在 .battlefield-canvas 容器里
+    expect(container.querySelector('.battlefield-canvas')).not.toBeNull();
+    expect(screen.getByTestId('pixi-stage')).toHaveClass('battlefield-canvas');
+    // 未点击选中时无回显
+    expect(screen.queryByText(/已选中：/)).not.toBeInTheDocument();
   });
 });
