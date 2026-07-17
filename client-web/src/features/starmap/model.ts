@@ -3,7 +3,7 @@
  * 不依赖 Pixi，可单测。
  */
 
-import type { GalaxyView, PlanetRef, SystemRef } from '@shared/types';
+import type { FleetRuntimeView, GalaxyView, PlanetRef, SystemRef } from '@shared/types';
 
 /** 恒星光谱型 → 主色（O 蓝 → M 红）。 */
 export const STAR_COLORS: Record<string, number> = {
@@ -148,6 +148,8 @@ export function systemGlyphScale(system: SystemRef): number {
 }
 
 export interface SystemLane {
+  fromId: string;
+  toId: string;
   from: { x: number; y: number };
   to: { x: number; y: number };
 }
@@ -155,6 +157,7 @@ export interface SystemLane {
 /**
  * 星座连线：每个恒星系向最近的 k 个邻居连线，去重。
  * 纯几何装饰（不引用 distance_matrix，避免维度/语义耦合）。
+ * 端点携带恒星系 id，供战火航线按 attacking 星系筛选定向。
  */
 export function computeSystemLanes(systems: SystemRef[], neighborCount = 2): SystemLane[] {
   const points = systems
@@ -175,8 +178,67 @@ export function computeSystemLanes(systems: SystemRef[], neighborCount = 2): Sys
         return;
       }
       seen.add(key);
-      lanes.push({ from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } });
+      lanes.push({ fromId: a.id, toId: b.id, from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } });
     });
   });
   return lanes;
+}
+
+/** 一个恒星系的舰队驻留概况（徽标聚合结果）。 */
+export interface FleetSystemPresence {
+  systemId: string;
+  /** 驻留舰队总数（同系多艘聚合成一个徽标 + 数量角标）。 */
+  total: number;
+  /** 其中 attacking 状态的舰队数（>0 时徽标红色脉冲、相连航线做战火动画）。 */
+  attacking: number;
+}
+
+/**
+ * 舰队按 system_id 分组计数（含 attacking 计数），按 systemId 排序保证确定性。
+ * 舰队数据只有 system_id 与 state（idle/attacking），无移动中状态，不做任何移动推断。
+ */
+export function summarizeFleetsBySystem(
+  fleets: Array<Pick<FleetRuntimeView, 'system_id' | 'state'>>,
+): FleetSystemPresence[] {
+  const bySystem = new Map<string, FleetSystemPresence>();
+  fleets.forEach((fleet) => {
+    if (!fleet.system_id) {
+      return;
+    }
+    let presence = bySystem.get(fleet.system_id);
+    if (!presence) {
+      presence = { systemId: fleet.system_id, total: 0, attacking: 0 };
+      bySystem.set(fleet.system_id, presence);
+    }
+    presence.total += 1;
+    if (fleet.state === 'attacking') {
+      presence.attacking += 1;
+    }
+  });
+  return [...bySystem.values()].sort((a, b) => a.systemId.localeCompare(b.systemId));
+}
+
+/**
+ * 战火航线筛选：只挑端点为 attacking 星系的航线，并把方向定向为
+ * 从 attacking 星系向外（from=attacking 端，to=另一端）；两端都 attacking 时保持原向。
+ * 返回新数组/新对象，不改传入 lanes。
+ */
+export function selectWarLanes(
+  lanes: SystemLane[],
+  attackingSystemIds: ReadonlySet<string>,
+): SystemLane[] {
+  const warLanes: SystemLane[] = [];
+  lanes.forEach((lane) => {
+    const fromHot = attackingSystemIds.has(lane.fromId);
+    const toHot = attackingSystemIds.has(lane.toId);
+    if (!fromHot && !toHot) {
+      return;
+    }
+    if (fromHot || !toHot) {
+      warLanes.push({ ...lane });
+    } else {
+      warLanes.push({ fromId: lane.toId, toId: lane.fromId, from: lane.to, to: lane.from });
+    }
+  });
+  return warLanes;
 }

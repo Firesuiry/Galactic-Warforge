@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from '@shared/types';
 
 import { PixiStage } from '@/engine/PixiStage';
+import { subscribeBattleEvents } from '@/engine/battle-events';
 import {
   buildSceneWindow,
   clamp,
@@ -286,7 +287,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       // 开发模式暴露给 Playwright/控制台做画布内定位
       (window as unknown as { __planetScene?: PlanetScene }).__planetScene = scene;
     }
+    // 战斗事件总线 → 场景特效（damage_applied 开火/飘字/受击闪白）；卸载退订防重复演出
+    const unsubscribe = subscribeBattleEvents((event) => scene.handleBattleEvent(event));
     return () => {
+      unsubscribe();
       sceneRef.current = null;
       setPixiApp(null);
       scene.destroy();

@@ -75,7 +75,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 ### 3.0 游戏 HUD 骨架
 
-- 顶栏（`widgets/TopNav.tsx`）：群星式细条——图标菜单（总览/星图/战争/智能体/回放）、资源 chip（tick/矿产/能量/电力Δ，赤字红脉冲）、警报按钮（带计数，点击跳活跃行星）、保存与设置图标；玩家/服务器信息收进设置弹层
+- 顶栏（`widgets/TopNav.tsx`）：群星式细条——图标菜单（总览/星图/战争/智能体/回放）、资源 chip（tick/矿产/能量/电力Δ，赤字红脉冲）、警报按钮（带计数，点击跳活跃行星）、静音开关（期4b：🔊/🔇 全局音效开关，状态持久化到 localStorage `sw.audio.muted`，解除静音时播一声 uiClick 确认）、保存与设置图标；玩家/服务器信息收进设置弹层
 - 右侧 Outliner（`widgets/Outliner.tsx`）：焦点行星/恒星系（谱型色点）/舰队/警报四区，点击跳转；以布局列嵌入 AppShell（不遮挡页面），可折叠且状态持久化到 localStorage
 - 资源/警报数据 5~10s 轮询刷新；顶栏无后台信息（服务地址等已收进设置弹层）
 
@@ -90,7 +90,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 - `/galaxy`：Pixi.js 渲染的全屏银河星图（`features/starmap/`），登录后的默认落地页。恒星按谱型（O/B/A/F/G/K/M）着色发光、按真实坐标布局，近邻恒星间有航线连线；未探明星系暗淡显示。支持拖拽平移、滚轮连续缩放（文字标签保持屏幕空间大小）、单击选中浮出情报卡、双击或持续放大进入恒星系
 - `/system/:systemId`：与星图同一场景的恒星系视图深链——中心恒星 + 行星轨道环 + 公转动画，行星按种类着色（气态带条纹），单击选中浮出情报卡，双击或卡片按钮进入 `/planet/:planetId`；双击空白或持续缩小返回银河；面包屑可返回银河层
+- 星图战争覆盖层（期4c）：`model.ts` 新增 `summarizeFleetsBySystem`（舰队按 system_id 聚合成驻留概况：总数 + attacking 计数，按 systemId 排序保证确定性）与 `selectWarLanes`（筛出端点为 attacking 星系的航线，方向定为从 attacking 端向外）；`scene.ts` 据此新增舰队徽标层（菱形+glow+数量角标，驻留蓝色微光 / attacking 红色脉冲，脉冲相位差确定性、不用随机）与战火航线（attacking 星系的相连航线叠红色基线，亮点沿线循环流动、两端渐隐）；`StarmapView.tsx` 复用与 WarPage 相同的 `war-fleets` query key/函数装配数据（共享 react-query 缓存，不发新请求）；全部动画走 frozen 门
 - 渲染基础在 `src/engine/`：`PixiStage`（React 挂载点）、`camera`（连续缩放/飞行补间相机）、`textures`（程序化纹理：恒星光晕/行星球体/星场/星云/emoji 字形，零美术资源）、`tween`；星图 URL 加 `?freeze=1` 可冻结动画供截图测试
+- 战斗事件总线（期4a）：`src/engine/battle-events.ts` 把 SSE 瞬时战斗事件（`missile_salvo_fired / point_defense_intercept / battle_report_generated / damage_applied / entity_destroyed`）从 react-query 失效管线分流一份给演出层（特效/音效），payload 透传、不进任何 store；总线内自增 seq 供订阅方去重（StrictMode 双挂载/多重转发时同一事件只演出一次），订阅返回退订函数；`use-war-realtime`（/war，期4a）与 `use-planet-realtime`（/planet，期4c）各自在 SSE 回调里 `forwardGameEventToBattleBus`，两 hook 挂在不同路由，不会同页双转发
+- 程序化音效（期4b）：`src/engine/audio.ts` WebAudio 合成引擎，零音频资源零新依赖——振荡器 + 白噪声两个合成原语，惰性 AudioContext + 首次手势（pointerdown/keydown 捕获阶段）解锁，解锁前播放静默丢弃；语义 `sfx` API：`fire / explosion(big) / intercept / commandOk / commandFail / buildComplete / researchComplete / alert / uiClick`；同类 50ms 窗口限流 3 次防炸耳、战斗音效 ±30 音分 detune 防机械感、无 AudioContext 环境整体 no-op 降级。挂接：App 级 `features/audio/use-game-audio.ts`（AppShell 挂一次）订阅战斗总线——齐射→fire、点防→intercept、战报/击毁→explosion（damage_applied 不发声，避免同帧叠音）；`use-war-command` 的 notify 按成功/失败播 `commandOk / commandFail`；`use-planet-realtime` 经 `features/audio/planet-audio.ts` 播建造完成/研究完成/产线告警/火箭发射（event_id 去重）；顶栏静音开关见 3.0
 - `/planet/:planetId`：行星观察页
 - `/war`：战争工作台
 - `/agents`：AI 智能体工作台
@@ -105,7 +108,8 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 军工总览：聚合量产单、翻修单、部署枢纽和补给节点，可直接对选定蓝图发起一次部署尝试，并可通过「量产排队」「翻修改装」表单下达 `queue_military_production` / `refit_unit`，把“当前部署枢纽不支持该蓝图”等失败原因解释成玩家可读提示
 - 战区面板：聚合任务群与战区目标，可直接调整 `task_force_set_stance`，对当前焦点行星发起 `blockade_planet` / `landing_start`，并通过表单完成 `task_force_create` / `task_force_assign` / `task_force_deploy` 与 `theater_create` / `theater_define_zone` / `theater_set_objective`
 - 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`、`landing_operations`，并直接暴露当前补给状态和短缺项；舰队指挥表单可下达 `fleet_assign` / `fleet_attack` / `fleet_disband`
-- 战场态势面板：`features/war/battlefield/BattlefieldMap.tsx` 用 Canvas 2D 绘制星系级示意图（恒星、行星轨道圈、己方/敌方舰队接触标记、封锁圈虚线、登陆行动），点击标记可选中并回传，让玩家「看懂战局」而不再只看文字列表
+- 战场态势面板：`features/war/battlefield/BattlefieldMap.tsx` 绘制星系级示意图（恒星、行星轨道圈、己方/敌方舰队接触标记、封锁圈虚线、登陆行动），点击标记可选中并回传，让玩家「看懂战局」而不再只看文字列表；渲染已 Pixi 化（期4a）：`battlefield-scene.ts` 场景类（glow 恒星/行星节点、菱形舰队标记、虚线封锁环）+ `battlefield-model.ts` 布局纯函数 + `battlefield-effects.ts` 特效池，DOM chrome（标题/图例 war-list/制空权摘要/已选中回显）契约不变
+- 战场事件驱动演出（期4a）：场景订阅战斗事件总线，导弹齐射画弹道轨迹+拖尾、爆炸播扩散环+火花+伤害飘字、点防拦截闪光、击毁播大爆炸；与星图同一约定，URL 加 `?freeze=1` 进入 frozen 模式冻结脉冲与全部特效，供确定性截图
 - 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁、登陆的 authoritative 回执
 - 命令提交管道统一收敛到 `features/war/use-war-command.ts`，查询键统一由 `features/war/war-query-keys.ts` 构造；新增命令表单落在 `features/war/components/forms/` 下，自管表单状态、复用同一提交与反馈通道，避免在 WarPage 内堆叠手写 handler
 - 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
@@ -138,6 +142,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 调试面板
 - 地图渲染已迁到 Pixi（期3b）：`PlanetMapPixi.tsx` + `planet-scene.ts`（替代已删除的 `PlanetMapCanvas.tsx` 与 `entity-draw.ts`）。底图（地形/网格/迷雾/overview 热力）由 `planet-base-map.ts` 离屏生成 1px/tile（overview 1px/cell）画布转纹理，地形 nearest 放大保硬边、迷雾 linear 得软边界；实体（建筑 footprint 描边盒 + emoji、单位圆点、资源 emoji、物流/船虚线、电网、管道、工地、敌情、选中框/建造幽灵/准星）走 Pixi Container + Graphics，emoji 纹理由 `engine/textures.getEmojiTexture` 缓存，虚线用 `buildDashSegments` 切段模拟（Pixi Graphics 无原生 dash）
 - 单位平滑移动：ticker 每帧把单位显示位置向数据位置指数趋近（`smoothingBlend`，k≈8/s，帧率无关），ticker 只做平滑移动/选中环脉冲这类轻量动效，不做数据重建；URL 加 `?freeze=1` 冻结动效供截图测试
+- 行星战斗伤害特效（期4c）：`planet-effects.ts`（特效池 + damage_applied→特效指令映射纯函数，不依赖 Pixi）+ `planet-scene.ts` 的 `effectsLayer` / `handleBattleEvent`；行星页 SSE 经 `use-planet-realtime` 新增的 `forwardGameEventToBattleBus` 分流到战斗事件总线，组件侧订阅总线驱动演出：damage_applied 触发开火闪光（攻击方→目标弹道亮点 + 渐隐亮线，防御塔黄白/普通单位青白）、`-{damage}` 伤害飘字（敌方受击红/己方受击橙）、受击节点闪白（alpha 正弦脉冲，节点中途销毁则停演）；目标解析不到当前实体树（如敌情 marker）时不演出，entity_destroyed 不做演出、由实体增量同步自然消失承担；frozen 模式不演出
 - 语义实体 DOM 层以 ghost 形式保留（`entity-layer--ghost`，`opacity:0` + `pointer-events:none`，禁止 display:none/visibility:hidden）：带 `data-entity-*` 的节点仍供 DevTools/agent 定位（Playwright 对 opacity:0 仍判 visible），点击命中仍走 surface 的 pointToTile；可见实体收集与资源色板在 `visible-entities.ts`（Pixi 场景与 DOM 层共用）
 - 调试面板"导出 PNG"改用 Pixi `extract.canvas(app.stage)` 整体抓舞台（与屏幕所见一致），不再走 canvas + entity-draw 合成
 - 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
@@ -215,6 +220,8 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
   - `tests/planet-entity-dom.spec.ts`：行星地图实体的 ghost DOM 可见性契约（`data-entity-*` 可定位、点击穿透后命中选中）
   - `tests/planet-build-workflow.spec.ts`：建造栏选卡 + 地图点选放置的全流程 authoritative 回执
   - `tests/visual.spec.ts`：总览/星图/行星地图/回放的截图基线（行星地图基线已随 Pixi 迁移重录）
+- vitest 纯逻辑单测（期4 新增）：`src/engine/battle-events.test.ts`（总线分流/seq 去重）、`features/war/battlefield/battlefield-model.test.ts` + `battlefield-effects.test.ts`（布局纯函数/特效池）、`src/engine/audio.test.ts` + `features/audio/game-audio.test.ts`（合成参数/限流/事件→音效映射）、`features/planet-map/planet-effects.test.ts`（伤害特效映射）、`features/starmap/model.test.ts` 增补（舰队聚合/战火航线定向）
+- 冻结截图约定：星图/行星地图/战场图统一用 URL `?freeze=1` 进入 frozen 模式，脉冲/公转/特效演出全部静止，供确定性截图
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览
 

@@ -6,8 +6,10 @@ import {
   hashAngle,
   layoutSystemOrbits,
   planetColorOf,
+  selectWarLanes,
   starColorOf,
   starTypeLabel,
+  summarizeFleetsBySystem,
 } from '@/features/starmap/model';
 import type { GalaxyView, SystemRef } from '@shared/types';
 
@@ -118,5 +120,57 @@ describe('starmap/model', () => {
     expect(a1).toBeGreaterThanOrEqual(0);
     expect(a1).toBeLessThan(Math.PI * 2);
     expect(hashAngle('planet-1-2')).not.toBe(a1);
+  });
+
+  it('summarizeFleetsBySystem 按 system_id 分组计数并统计 attacking，排序确定', () => {
+    const summary = summarizeFleetsBySystem([
+      { system_id: 'sys-b', state: 'idle' },
+      { system_id: 'sys-a', state: 'attacking' },
+      { system_id: 'sys-b', state: 'attacking' },
+      { system_id: 'sys-b', state: 'idle' },
+      { system_id: '', state: 'idle' }, // 无星系归属：跳过
+    ]);
+    expect(summary).toEqual([
+      { systemId: 'sys-a', total: 1, attacking: 1 },
+      { systemId: 'sys-b', total: 3, attacking: 1 },
+    ]);
+    expect(summarizeFleetsBySystem([])).toEqual([]);
+  });
+
+  it('selectWarLanes 只挑 attacking 星系的航线，方向从 attacking 端向外', () => {
+    const systems = [
+      makeSystem('a', 0, 0),
+      makeSystem('b', 10, 0),
+      makeSystem('c', 20, 0),
+    ];
+    const lanes = computeSystemLanes(systems, 1);
+    const original = lanes.map((lane) => ({ ...lane }));
+
+    // b attacking：a-b 与 b-c 入选，a-b 定向为 b→a，b-c 保持 b→c
+    const warLanes = selectWarLanes(lanes, new Set(['b']));
+    expect(warLanes).toHaveLength(2);
+    const ab = warLanes.find((lane) => [lane.fromId, lane.toId].sort().join('~') === 'a~b')!;
+    expect(ab.fromId).toBe('b');
+    expect(ab.toId).toBe('a');
+    expect(ab.from).toEqual({ x: 10, y: 0 });
+    expect(ab.to).toEqual({ x: 0, y: 0 });
+    const bc = warLanes.find((lane) => [lane.fromId, lane.toId].sort().join('~') === 'b~c')!;
+    expect(bc.fromId).toBe('b');
+    expect(bc.toId).toBe('c');
+
+    // 无 attacking：全静态
+    expect(selectWarLanes(lanes, new Set())).toEqual([]);
+    // 不改传入 lanes
+    expect(lanes).toEqual(original);
+  });
+
+  it('selectWarLanes 两端都 attacking 时保持原向且只出现一次', () => {
+    const systems = [makeSystem('a', 0, 0), makeSystem('b', 10, 0)];
+    const lanes = computeSystemLanes(systems, 1);
+    expect(lanes).toHaveLength(1);
+    const warLanes = selectWarLanes(lanes, new Set(['a', 'b']));
+    expect(warLanes).toHaveLength(1);
+    expect(warLanes[0]!.fromId).toBe(lanes[0]!.fromId);
+    expect(warLanes[0]!.from).toEqual(lanes[0]!.from);
   });
 });

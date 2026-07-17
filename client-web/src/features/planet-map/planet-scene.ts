@@ -11,9 +11,13 @@
  *
  * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲，
  * 不做任何数据重建。视觉契约与旧 entity-draw.ts / PlanetMapCanvas 对齐。
+ *
+ * 战斗特效：组件侧订阅战斗事件总线（battle-events）调 handleBattleEvent，
+ * damage_applied 映射为开火闪光/伤害飘字/受击闪白（planet-effects 纯逻辑 + 池化视图），
+ * frozen 模式不演出。
  */
 
-import { Application, Container, Graphics, Sprite, Texture, type Ticker } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, Texture, type Ticker } from 'pixi.js';
 
 import type {
   Building,
@@ -25,9 +29,21 @@ import type {
   Unit,
 } from '@shared/types';
 
+import type { BattleEvent } from '@/engine/battle-events';
 import { resolveIconGlyph } from '@/common/Icon';
-import { getEmojiTexture } from '@/engine/textures';
+import { getEmojiTexture, getGlowTexture } from '@/engine/textures';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
+import {
+  PlanetEffectPool,
+  specsFromPlanetBattleEvent,
+  type FireFlashEffectSpec,
+  type HitFlashEffectSpec,
+  type PlanetDamageFloatEffectSpec,
+  type PlanetEffect,
+  type PlanetEffectKind,
+  type PlanetEffectPoint,
+  type PlanetEffectSpec,
+} from '@/features/planet-map/planet-effects';
 import {
   getBuildingCatalogEntry,
   getBuildingFootprint,
@@ -168,6 +184,16 @@ interface ResourceNode extends SceneNode {
   data: PlanetResource;
 }
 
+/** 特效视图：池化复用（restart 重置状态），update 按 progress 逐帧推进。 */
+interface PlanetEffectView {
+  kind: PlanetEffectKind;
+  container: Container;
+  restart(spec: PlanetEffectSpec): void;
+  update(effect: PlanetEffect): void;
+  /** 回收时的收尾（受击闪白恢复节点 alpha）。 */
+  release?(): void;
+}
+
 const COLOR_BACKDROP = 0x07101d;
 const COLOR_GRID = 0xd2e2ff;
 const COLOR_BUILDING_STROKE_OWN = 0x57efe0;
@@ -185,6 +211,15 @@ const COLOR_DETECTION = 0xffd43b;
 const COLOR_SELECTED = 0xffd166;
 const COLOR_GHOST_OK = 0x6ee7b7;
 const COLOR_GHOST_BLOCKED = 0xff5757;
+
+/** 开火闪光配色：普通单位青白 / 防御塔黄白（克制，短亮线一过即隐）。 */
+const COLOR_FIRE_UNIT = 0xa5f3fc;
+const COLOR_FIRE_DEFENSE = 0xfde68a;
+/** 伤害飘字配色：敌方受击红色系 / 己方受击橙色系（与既有己敌配色一致）。 */
+const COLOR_FLOAT_ENEMY_HIT = 0xf87171;
+const COLOR_FLOAT_OWN_HIT = 0xfbbf24;
+/** 受击闪白的 alpha 下探幅度（1 → 1-DEPTH → 1 的正弦脉冲）。 */
+const HIT_FLASH_ALPHA_DEPTH = 0.55;
 
 const tileCenter = (tile: number, tileSize: number) => (tile + 0.5) * tileSize;
 
@@ -220,6 +255,7 @@ export class PlanetScene {
   private readonly unitsLayer: Container;
   private readonly threatGraphics: Graphics;
   private readonly selectionGraphics: Graphics;
+  private readonly effectsLayer: Container;
 
   private terrainTexture: Texture | null = null;
   private fogTexture: Texture | null = null;
@@ -250,6 +286,11 @@ export class PlanetScene {
   private pulsePhase = 0;
   private disposed = false;
 
+  private readonly effectPool = new PlanetEffectPool();
+  private readonly effectViews = new Map<number, PlanetEffectView>();
+  private readonly freeEffectViews = new Map<PlanetEffectKind, PlanetEffectView[]>();
+  private lastHandledSeq = 0;
+
   constructor(app: Application, options: PlanetSceneOptions = {}) {
     this.app = app;
     this.frozen = options.frozen ?? false;
@@ -269,8 +310,9 @@ export class PlanetScene {
     this.unitsLayer = new Container();
     this.threatGraphics = new Graphics();
     this.selectionGraphics = new Graphics();
+    this.effectsLayer = new Container();
 
-    // z 序对齐旧实现：地形 < 网格 < 迷雾 < 管网/电网 < 资源 < 工地 < 建筑 < 物流 < 单位 < 敌情 < 选中叠加
+    // z 序对齐旧实现：地形 < 网格 < 迷雾 < 管网/电网 < 资源 < 工地 < 建筑 < 物流 < 单位 < 敌情 < 选中叠加 < 战斗特效
     this.app.stage.addChild(this.backdrop);
     this.app.stage.addChild(this.world);
     this.world.addChild(this.terrainSprite);
@@ -286,6 +328,7 @@ export class PlanetScene {
     this.world.addChild(this.unitsLayer);
     this.world.addChild(this.threatGraphics);
     this.world.addChild(this.selectionGraphics);
+    this.world.addChild(this.effectsLayer);
 
     this.drawBackdrop();
     this.app.renderer.on('resize', this.drawBackdrop);
@@ -379,6 +422,211 @@ export class PlanetScene {
   setInteraction(input: PlanetSceneInteractionInput) {
     this.interactionInput = input;
     this.redrawInteraction();
+  }
+
+  // ---------- 战斗事件演出 ----------
+
+  /**
+   * 消费一条战斗事件总线事件（damage_applied → 开火闪光/伤害飘字/受击闪白）。
+   * seq 去重保证 StrictMode 双挂载/多重转发时同一事件只演出一次（同 battlefield-scene）。
+   * frozen 模式下不演出。
+   */
+  handleBattleEvent(event: BattleEvent) {
+    if (this.disposed || this.frozen) {
+      return;
+    }
+    if (event.seq <= this.lastHandledSeq) {
+      return;
+    }
+    this.lastHandledSeq = event.seq;
+
+    const specs = specsFromPlanetBattleEvent(event, {
+      resolve: (entityId) => this.resolveEffectPoint(entityId),
+    });
+    specs.forEach((spec) => this.spawnEffect(spec));
+  }
+
+  /** 把实体 id 解析到当前节点树：建筑取 footprint 中心，单位取平滑后的显示位置。 */
+  private resolveEffectPoint(entityId: string | undefined | null): PlanetEffectPoint | null {
+    if (!entityId) {
+      return null;
+    }
+    const playerId = this.entitiesInput?.playerId;
+    const building = this.buildingNodes.get(entityId);
+    if (building) {
+      const { width, height } = getBuildingFootprint(building.data);
+      return {
+        x: building.container.position.x + (width * this.tileSize) / 2,
+        y: building.container.position.y + (height * this.tileSize) / 2,
+        owner: playerId && building.data.owner_id === playerId ? 'own' : 'enemy',
+        kind: 'building',
+      };
+    }
+    const unit = this.unitNodes.get(entityId);
+    if (unit) {
+      return {
+        x: unit.posX,
+        y: unit.posY,
+        owner: playerId && unit.data.owner_id === playerId ? 'own' : 'enemy',
+        kind: 'unit',
+      };
+    }
+    return null;
+  }
+
+  // ---------- 特效（池化视图 + ticker 推进） ----------
+
+  private spawnEffect(spec: PlanetEffectSpec) {
+    const effect = this.effectPool.spawn(spec);
+    const view = this.obtainEffectView(spec);
+    this.effectViews.set(effect.id, view);
+    if (view.container.parent !== this.effectsLayer) {
+      this.effectsLayer.addChild(view.container);
+    }
+    view.container.visible = true;
+  }
+
+  private obtainEffectView(spec: PlanetEffectSpec): PlanetEffectView {
+    const freeList = this.freeEffectViews.get(spec.kind);
+    const reused = freeList?.pop();
+    const view = reused ?? this.createEffectView(spec.kind);
+    view.restart(spec);
+    return view;
+  }
+
+  private recycleEffectView(effect: PlanetEffect) {
+    const view = this.effectViews.get(effect.id);
+    if (!view) {
+      return;
+    }
+    this.effectViews.delete(effect.id);
+    view.release?.();
+    view.container.visible = false;
+    const freeList = this.freeEffectViews.get(view.kind) ?? [];
+    freeList.push(view);
+    this.freeEffectViews.set(view.kind, freeList);
+  }
+
+  private createEffectView(kind: PlanetEffectKind): PlanetEffectView {
+    switch (kind) {
+      case 'fire_flash':
+        return this.createFireFlashView();
+      case 'damage_float':
+        return this.createDamageFloatView();
+      case 'hit_flash':
+        return this.createHitFlashView();
+    }
+  }
+
+  /** 开火闪光：弹道亮点从攻击方飞到目标 + 短亮线随飞行渐隐。 */
+  private createFireFlashView(): PlanetEffectView {
+    const container = new Container();
+    const trail = new Graphics();
+    const head = new Sprite(getGlowTexture(0xffffff));
+    head.anchor.set(0.5);
+    head.scale.set(0.1);
+    container.addChild(trail);
+    container.addChild(head);
+
+    let spec: FireFlashEffectSpec | null = null;
+
+    return {
+      kind: 'fire_flash',
+      container,
+      restart(next) {
+        spec = next as FireFlashEffectSpec;
+        const color = spec.tone === 'defense' ? COLOR_FIRE_DEFENSE : COLOR_FIRE_UNIT;
+        head.tint = color;
+        head.position.set(spec.fromX, spec.fromY);
+        head.alpha = 1;
+        trail
+          .clear()
+          .moveTo(spec.fromX, spec.fromY)
+          .lineTo(spec.toX, spec.toY)
+          .stroke({ width: 1.6, color, alpha: 0.7 });
+      },
+      update(effect) {
+        if (!spec) {
+          return;
+        }
+        const p = effect.progress;
+        head.position.set(
+          spec.fromX + (spec.toX - spec.fromX) * p,
+          spec.fromY + (spec.toY - spec.fromY) * p,
+        );
+        head.alpha = 1 - p * 0.5;
+        trail.alpha = (1 - p) * 0.7;
+      },
+    };
+  }
+
+  /** 伤害飘字：-{damage} 上飘渐隐（敌方受击红 / 己方受击橙）。 */
+  private createDamageFloatView(): PlanetEffectView {
+    const container = new Container();
+    const text = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Inter, "PingFang SC", sans-serif',
+        fontSize: 12,
+        fontWeight: '700',
+        fill: COLOR_FLOAT_ENEMY_HIT,
+        stroke: { color: 0x1c0a0a, width: 2 },
+      },
+    });
+    text.anchor.set(0.5);
+    container.addChild(text);
+    let spec: PlanetDamageFloatEffectSpec | null = null;
+
+    return {
+      kind: 'damage_float',
+      container,
+      restart(next) {
+        spec = next as PlanetDamageFloatEffectSpec;
+        text.text = spec.text;
+        text.style.fill = spec.tone === 'own_hit' ? COLOR_FLOAT_OWN_HIT : COLOR_FLOAT_ENEMY_HIT;
+        text.position.set(spec.x, spec.y);
+        text.alpha = 1;
+      },
+      update(effect) {
+        if (!spec) {
+          return;
+        }
+        const p = effect.progress;
+        text.position.set(spec.x, spec.y - 20 * p);
+        text.alpha = p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+      },
+    };
+  }
+
+  /**
+   * 受击闪白：对目标节点容器做 alpha 正弦脉冲（无自有绘制物）。
+   * 节点中途被增量同步销毁时直接停演，release 只恢复未销毁节点的 alpha。
+   */
+  private createHitFlashView(): PlanetEffectView {
+    const container = new Container();
+    let target: Container | null = null;
+
+    return {
+      kind: 'hit_flash',
+      container,
+      restart: (next) => {
+        const spec = next as HitFlashEffectSpec;
+        const node = this.unitNodes.get(spec.targetId) ?? this.buildingNodes.get(spec.targetId);
+        target = node?.container ?? null;
+      },
+      update(effect) {
+        if (!target || target.destroyed) {
+          return;
+        }
+        target.alpha = 1 - HIT_FLASH_ALPHA_DEPTH * Math.sin(Math.PI * effect.progress);
+      },
+      release() {
+        if (target && !target.destroyed) {
+          target.alpha = 1;
+        }
+        target = null;
+      },
+    };
   }
 
   // ---------- 底图 ----------
@@ -983,5 +1231,12 @@ export class PlanetScene {
     }
     this.pulsePhase += dt * 3.2;
     this.selectionGraphics.alpha = 0.85 + 0.15 * Math.sin(this.pulsePhase);
+
+    // 战斗特效推进：完成的回收视图（受击闪白恢复节点 alpha）
+    const completed = this.effectPool.advance(ticker.deltaMS);
+    completed.forEach((effect) => this.recycleEffectView(effect));
+    this.effectPool.active().forEach((effect) => {
+      this.effectViews.get(effect.id)?.update(effect);
+    });
   };
 }

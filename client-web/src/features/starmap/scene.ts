@@ -1,6 +1,8 @@
 /**
  * 星图 Pixi 场景：银河层（恒星+航线）与恒星系层（恒星+轨道行星）共用一台相机。
  * 交互：拖拽平移、滚轮连续缩放、点击选中、双击/缩放下钻恒星系、系内缩小返回银河。
+ * 舰队覆盖层（setFleets）：有舰队驻留的星系旁画徽标（菱形+glow+数量角标，
+ * attacking 红色脉冲）；attacking 星系的相连航线做战火流动（frozen 冻结）。
  */
 
 import {
@@ -26,11 +28,15 @@ import {
   galaxyWorldRect,
   layoutSystemOrbits,
   planetColorOf,
+  selectWarLanes,
   starColorOf,
+  summarizeFleetsBySystem,
   systemGlyphScale,
+  type FleetSystemPresence,
   type PlanetOrbitLayout,
+  type SystemLane,
 } from '@/features/starmap/model';
-import type { GalaxyView, PlanetRef, SystemRef, SystemView } from '@shared/types';
+import type { FleetRuntimeView, GalaxyView, PlanetRef, SystemRef, SystemView } from '@shared/types';
 
 /** 银河层放大到该倍数且指针附近有恒星系时，自动进入该系。 */
 const ENTER_SYSTEM_ZOOM = 2.6;
@@ -45,6 +51,15 @@ const DRAG_THRESHOLD_PX = 6;
 
 const STAR_CORE_RADIUS = 9;
 const SYSTEM_STAR_RADIUS = 46;
+
+/** 舰队徽标配色：attacking 红 / 驻留蓝（对齐战场图舰队标记色调）。 */
+const COLOR_FLEET_IDLE = 0x38bdf8;
+const COLOR_FLEET_ATTACKING = 0xf87171;
+/** 战火航线：流动亮点遍历整条航线的周期（秒）与每条航线亮点数。 */
+const WAR_LANE_TRAVEL_SECONDS = 1.8;
+const WAR_LANE_DOT_COUNT = 2;
+/** 徽标脉冲相位差个数（确定性，不用随机，保证 frozen 截图稳定）。 */
+const FLEET_PULSE_PHASE_STEP = (Math.PI * 2) / 7;
 
 export interface StarmapSceneCallbacks {
   onSelectSystem: (systemId: string | null) => void;
@@ -76,6 +91,22 @@ interface PlanetNode {
   label: Text;
 }
 
+interface FleetBadgeNode {
+  presence: FleetSystemPresence;
+  container: Container;
+  /** 脉冲部分（glow + 菱形），数量角标不参与脉冲。 */
+  pulseTarget: Container;
+  glow: Sprite;
+  pulsePhase: number;
+}
+
+/** 战火航线流动亮点：沿定向航线 from→to 循环。 */
+interface WarLaneDot {
+  lane: SystemLane;
+  sprite: Sprite;
+  phase: number;
+}
+
 export class StarmapScene {
   private readonly app: Application;
   private readonly callbacks: StarmapSceneCallbacks;
@@ -85,7 +116,9 @@ export class StarmapScene {
   private readonly background: Container;
   private readonly world: Container;
   private readonly lanesLayer: Graphics;
+  private readonly warLanesLayer: Container;
   private readonly galaxyLayer: Container;
+  private readonly fleetBadgeLayer: Container;
   private readonly systemLayer: Container;
 
   private galaxy: GalaxyView | null = null;
@@ -94,6 +127,10 @@ export class StarmapScene {
   private orbitRings: Graphics[] = [];
   private systemStar: Sprite | null = null;
   private systemSelectionRing: Graphics | null = null;
+  private currentLanes: SystemLane[] = [];
+  private fleetSummary: FleetSystemPresence[] = [];
+  private fleetBadgeNodes: FleetBadgeNode[] = [];
+  private warLaneDots: WarLaneDot[] = [];
 
   private focusedSystemId: string | null = null;
   private selectedSystemId: string | null = null;
@@ -124,13 +161,17 @@ export class StarmapScene {
     this.background = new Container();
     this.world = new Container();
     this.lanesLayer = new Graphics();
+    this.warLanesLayer = new Container();
     this.galaxyLayer = new Container();
+    this.fleetBadgeLayer = new Container();
     this.systemLayer = new Container();
 
     this.app.stage.addChild(this.background);
     this.app.stage.addChild(this.world);
     this.world.addChild(this.lanesLayer);
+    this.world.addChild(this.warLanesLayer);
     this.world.addChild(this.galaxyLayer);
+    this.world.addChild(this.fleetBadgeLayer);
     this.world.addChild(this.systemLayer);
 
     this.buildBackground();
@@ -182,6 +223,8 @@ export class StarmapScene {
     this.rebuildSystemLayer(system);
     this.galaxyLayer.visible = false;
     this.lanesLayer.visible = false;
+    this.warLanesLayer.visible = false;
+    this.fleetBadgeLayer.visible = false;
     this.systemLayer.visible = true;
 
     const worldPos = this.systemWorldPosition(systemId, system);
@@ -210,6 +253,8 @@ export class StarmapScene {
     this.systemLayer.visible = false;
     this.galaxyLayer.visible = true;
     this.lanesLayer.visible = true;
+    this.warLanesLayer.visible = true;
+    this.fleetBadgeLayer.visible = true;
     if (this.galaxy) {
       const rect = galaxyWorldRect(this.galaxy);
       const pose = {
@@ -266,7 +311,9 @@ export class StarmapScene {
     this.galaxyLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.systemNodes.clear();
     this.lanesLayer.clear();
+    this.currentLanes = [];
     if (!this.galaxy || this.focusedSystemId) {
+      this.rebuildFleetOverlay();
       return;
     }
 
@@ -274,7 +321,8 @@ export class StarmapScene {
       system.position && (!this.discoveredOnly || system.discovered)
     ));
 
-    computeSystemLanes(systems).forEach((lane) => {
+    this.currentLanes = computeSystemLanes(systems);
+    this.currentLanes.forEach((lane) => {
       this.lanesLayer
         .moveTo(lane.from.x, lane.from.y)
         .lineTo(lane.to.x, lane.to.y)
@@ -287,6 +335,113 @@ export class StarmapScene {
       this.galaxyLayer.addChild(node.container);
     });
     this.updateSelectionRings();
+    this.rebuildFleetOverlay();
+  }
+
+  // ---------- 舰队徽标 + 战火航线 ----------
+
+  /**
+   * 舰队数据输入（war-fleets 查询结果）：按 system_id 聚合成徽标，
+   * attacking 星系的相连航线做战火流动。规模小，数据变化时全量重建覆盖层。
+   */
+  setFleets(fleets: FleetRuntimeView[] | null) {
+    this.fleetSummary = summarizeFleetsBySystem(fleets ?? []);
+    this.rebuildFleetOverlay();
+  }
+
+  private rebuildFleetOverlay() {
+    this.fleetBadgeLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+    this.warLanesLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+    this.fleetBadgeNodes = [];
+    this.warLaneDots = [];
+    if (!this.galaxy || this.focusedSystemId || this.fleetSummary.length === 0) {
+      return;
+    }
+
+    let pulseIndex = 0;
+    this.fleetSummary.forEach((presence) => {
+      const systemNode = this.systemNodes.get(presence.systemId);
+      if (!systemNode) {
+        return; // 星系当前不可见（仅看已发现过滤/无坐标）
+      }
+      const badge = this.createFleetBadge(presence, pulseIndex * FLEET_PULSE_PHASE_STEP);
+      badge.container.position.set(
+        systemNode.container.position.x + 15,
+        systemNode.container.position.y - 15,
+      );
+      if (presence.attacking > 0) {
+        pulseIndex += 1;
+      }
+      this.fleetBadgeNodes.push(badge);
+      this.fleetBadgeLayer.addChild(badge.container);
+    });
+
+    const attackingIds = new Set(
+      this.fleetSummary
+        .filter((presence) => presence.attacking > 0 && this.systemNodes.has(presence.systemId))
+        .map((presence) => presence.systemId),
+    );
+    if (attackingIds.size === 0) {
+      return;
+    }
+
+    const base = new Graphics();
+    this.warLanesLayer.addChild(base);
+    selectWarLanes(this.currentLanes, attackingIds).forEach((lane) => {
+      base
+        .moveTo(lane.from.x, lane.from.y)
+        .lineTo(lane.to.x, lane.to.y)
+        .stroke({ width: 1.6, color: COLOR_FLEET_ATTACKING, alpha: 0.3 });
+      for (let i = 0; i < WAR_LANE_DOT_COUNT; i += 1) {
+        const dot = new Sprite(getGlowTexture(0xffc0b8));
+        dot.anchor.set(0.5);
+        dot.scale.set(0.09);
+        dot.position.set(lane.from.x, lane.from.y);
+        this.warLanesLayer.addChild(dot);
+        this.warLaneDots.push({ lane, sprite: dot, phase: i / WAR_LANE_DOT_COUNT });
+      }
+    });
+  }
+
+  /** 舰队徽标：小菱形 + 微 glow（对齐战场图舰队标记），多艘聚合成数量角标。 */
+  private createFleetBadge(presence: FleetSystemPresence, pulsePhase: number): FleetBadgeNode {
+    const attacking = presence.attacking > 0;
+    const color = attacking ? COLOR_FLEET_ATTACKING : COLOR_FLEET_IDLE;
+
+    const container = new Container();
+    const pulseTarget = new Container();
+    container.addChild(pulseTarget);
+
+    const glow = new Sprite(getGlowTexture(color));
+    glow.anchor.set(0.5);
+    glow.scale.set(0.3);
+    glow.alpha = attacking ? 0.75 : 0.5;
+    pulseTarget.addChild(glow);
+
+    const diamond = new Graphics();
+    diamond
+      .poly([0, -6, 8, 0, 0, 6, -8, 0], true)
+      .fill({ color, alpha: 0.95 })
+      .stroke({ width: 1.1, color: 0xffffff, alpha: 0.55 });
+    pulseTarget.addChild(diamond);
+
+    if (presence.total > 1) {
+      const count = new Text({
+        text: String(presence.total),
+        style: {
+          fontFamily: 'Inter, "PingFang SC", sans-serif',
+          fontSize: 10,
+          fontWeight: '700',
+          fill: 0xe2e8f0,
+          stroke: { color: 0x0b1220, width: 2 },
+        },
+      });
+      count.anchor.set(0, 0.5);
+      count.position.set(9, 0);
+      container.addChild(count);
+    }
+
+    return { presence, container, pulseTarget, glow, pulsePhase };
   }
 
   private createSystemNode(system: SystemRef): SystemNode {
@@ -621,6 +776,26 @@ export class StarmapScene {
         node.label.visible = this.camera.zoom > 0.45;
         const inv = 1 / Math.max(this.camera.zoom, 0.2);
         node.label.scale.set(inv);
+      });
+
+      // 舰队徽标：attacking 红色脉冲（alpha/缩放 sin），idle 静止微光
+      this.fleetBadgeNodes.forEach((node) => {
+        if (node.presence.attacking === 0) {
+          return;
+        }
+        const pulse = 1 + 0.16 * Math.sin(t * 4 + node.pulsePhase);
+        node.pulseTarget.scale.set(pulse);
+        node.glow.alpha = 0.5 + 0.3 * Math.sin(t * 4 + node.pulsePhase);
+      });
+
+      // 战火航线：亮点沿定向航线循环流动（两端渐隐），frozen 时 t 冻结保持静止
+      this.warLaneDots.forEach((dot) => {
+        const p = ((t / WAR_LANE_TRAVEL_SECONDS) + dot.phase) % 1;
+        dot.sprite.position.set(
+          dot.lane.from.x + (dot.lane.to.x - dot.lane.from.x) * p,
+          dot.lane.from.y + (dot.lane.to.y - dot.lane.from.y) * p,
+        );
+        dot.sprite.alpha = Math.sin(Math.PI * p) * 0.9;
       });
     }
 

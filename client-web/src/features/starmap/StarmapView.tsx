@@ -54,6 +54,13 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     enabled: Boolean(focusedSystemId),
   });
 
+  // 舰队数据 → 星图徽标/战火航线：与 WarPage 同一 query key/函数（共享缓存，不发新请求）；
+  // 路由均在 RequireSession 之下，enabled 条件与 war 页一致（始终启用）。
+  const fleetsQuery = useQuery({
+    queryKey: ['war-fleets', session.serverUrl, session.playerId],
+    queryFn: () => client.fetchFleets(),
+  });
+
   const callbacks = useMemo(() => ({
     onSelectSystem: (systemId: string | null) => {
       useStarmapViewStore.getState().select(systemId ? { kind: 'system', id: systemId } : null);
@@ -79,6 +86,10 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
   useEffect(() => {
     sceneRef.current?.setGalaxy(galaxyQuery.data ?? null);
   }, [galaxyQuery.data]);
+
+  useEffect(() => {
+    sceneRef.current?.setFleets(fleetsQuery.data ?? null);
+  }, [fleetsQuery.data]);
 
   useEffect(() => {
     sceneRef.current?.setDiscoveredOnly(discoveredOnly);
@@ -137,6 +148,9 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           }
           if (galaxyQuery.data) {
             scene.setGalaxy(galaxyQuery.data);
+          }
+          if (fleetsQuery.data) {
+            scene.setFleets(fleetsQuery.data);
           }
           const focus = useStarmapViewStore.getState().focusedSystemId;
           if (focus) {
