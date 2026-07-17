@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 
 import type { CatalogView } from '@shared/types';
 
-import type { VisibleEntities } from '@/features/planet-map/entity-draw';
+import type { VisibleEntities } from '@/features/planet-map/visible-entities';
 import type { SceneRenderDetailPolicy } from '@/features/planet-map/render';
 import type { SelectedEntity } from '@/features/planet-map/model';
 import {
@@ -26,7 +26,7 @@ import {
  * 语义实体层：叠在 canvas 底图之上的只读 DOM 节点集合。
  *
  * 本组件只负责渲染节点（Fragment），外层 `.entity-layer` 容器（含 transform/--tile）由
- * PlanetMapCanvas 持有并交 useImperativeCameraTransform 写入。
+ * PlanetMapPixi 持有并交 useImperativeCameraTransform 写入。
  * - memo 时 props 不含 camera.offset，平移不触发节点 DOM 变更（节点按 tile 空间定位，靠容器 transform 整体平移）。
  * - overview 模式（zoom 0-2）下不渲染实体（canvas 只画热力图）。
  * - 实体是 pointer-events:none 的语义 DOM，命中检测走 canvas。

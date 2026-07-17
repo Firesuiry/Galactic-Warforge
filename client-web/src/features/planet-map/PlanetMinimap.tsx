@@ -23,7 +23,7 @@ import { usePlanetViewStore } from "@/features/planet-map/store";
  * 交互：点击缩略图 → requestFocus(tile)，相机居中到该 tile（scene 模式保持缩放，overview 模式放大进入）。
  *
  * 隔离：本组件渲染在 PlanetPage（.planet-map-shell 内），独立 canvas，
- * 不参与 PlanetMapCanvas 的拖拽热路径（perf 测试只渲染 PlanetMapCanvas，不受影响）。
+ * 不参与 PlanetMapPixi 的拖拽热路径。
  * 底图（地形+迷雾）缓存到离屏 canvas，仅在 planet/fog/overview 变化时重建；
  * 相机移动只触发"清屏 + 贴底图 + 画视口框"（3 次调用），极轻量。
  */

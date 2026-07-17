@@ -90,7 +90,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 
 - `/galaxy`：Pixi.js 渲染的全屏银河星图（`features/starmap/`），登录后的默认落地页。恒星按谱型（O/B/A/F/G/K/M）着色发光、按真实坐标布局，近邻恒星间有航线连线；未探明星系暗淡显示。支持拖拽平移、滚轮连续缩放（文字标签保持屏幕空间大小）、单击选中浮出情报卡、双击或持续放大进入恒星系
 - `/system/:systemId`：与星图同一场景的恒星系视图深链——中心恒星 + 行星轨道环 + 公转动画，行星按种类着色（气态带条纹），单击选中浮出情报卡，双击或卡片按钮进入 `/planet/:planetId`；双击空白或持续缩小返回银河；面包屑可返回银河层
-- 渲染基础在 `src/engine/`：`PixiStage`（React 挂载点）、`camera`（连续缩放/飞行补间相机）、`textures`（程序化纹理：恒星光晕/行星球体/星场/星云，零美术资源）、`tween`；星图 URL 加 `?freeze=1` 可冻结动画供截图测试
+- 渲染基础在 `src/engine/`：`PixiStage`（React 挂载点）、`camera`（连续缩放/飞行补间相机）、`textures`（程序化纹理：恒星光晕/行星球体/星场/星云/emoji 字形，零美术资源）、`tween`；星图 URL 加 `?freeze=1` 可冻结动画供截图测试
 - `/planet/:planetId`：行星观察页
 - `/war`：战争工作台
 - `/agents`：AI 智能体工作台
@@ -125,8 +125,9 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 物流轨迹、电网、管网、施工、敌情图层
 - 行星工作台首屏：`PlanetOperationHeader` 会固定显示当前路由行星、当前 active planet、最近命令结果和待处理命令数
 - `PlanetCommandCenter` 作为首屏主操作区，已补齐 `transfer_item`、`switch_active_planet`、`build_dyson_*`、`launch_solar_sail`、`launch_rocket`、`set_ray_receiver_mode` 等 typed form 入口
-- `战斗与制造` 页签：单位攻击（`attack`）、建筑量产（`produce`）、建筑升级（`upgrade`）三条战术链；目标候选分别从己方单位、生产建筑、敌方接触/敌方单位动态填充
+- `战斗与制造` 页签：建筑量产（`produce`），候选从生产建筑动态填充；`attack` / `upgrade` 表单已随期3a 迁到地图直操作（见下方"地图直操作"）
 - `取消与恢复` 页签：取消建造（`cancel_construction`）、恢复建造（`restore_construction`）、取消当前研究（`cancel_research`）、拆除戴森组件（`demolish_dyson`）集中处理；任务候选来自 `runtime.construction_tasks`，研究来自 `current_research`，戴森组件来自 `systemRuntime.dyson_sphere.layers`
+- 地图直操作（期3a）：store 的 `interactionMode`（`inspect / build / move / attack`）决定地图点击语义，Esc/右键退出当前模式。底部建造栏 `PlanetBuildBar`（推荐/已解锁分组 + 造价显示）点选建筑进入建造模式，地图悬停显示幽灵 footprint（绿=可建 / 红=阻塞，复用 `build-workflow` 格评估），点击直接下达，本地预检拦截会写 journal，模式保持支持连续放置；`PlanetSelectionBar` 给选中建筑升级/拆除、选中单位移动/攻击（进入地图点选模式，准星高亮），与表单共用同一 `submitPlanetCommand` 管道
 - `研究与装料` 页签现在是阶段化研究工作台：顶部展示当前研究卡片与开局推荐路径，中部按 `当前可研究 / 已完成 / 尚未满足前置` 分组科技，点击卡片后再通过 `start_research` 真正提交命令
 - 研究派生逻辑已拆到独立模块；组件层主用 `summary.players[pid].tech.current_research` 与 `completed_techs` 推导 UI，若运行时仍遇到旧版 `completed_techs` level map，只在派生层内部归一化，不向组件扩散
 - 命令结果账本：提交后先显示 `pending`，再优先由 SSE authoritative 回写切到最终成功或失败；默认会收口 `command_result`，并把 `research_completed`、`rocket_launched` 这类异步完成事件也视作最终成功态。如果等待超时，会补拉 `/events/snapshot` 对账，并附带下一步提示
@@ -135,6 +136,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 事件时间线与告警面板；活动流支持 `关键反馈 / 全部事件 / 仅命令 / 仅告警` 四种模式，默认会折叠 `tick_completed`、`resource_changed`、`threat_level_changed` 这类低信号事件
 - SSE 增量同步与补拉
 - 调试面板
+- 地图渲染已迁到 Pixi（期3b）：`PlanetMapPixi.tsx` + `planet-scene.ts`（替代已删除的 `PlanetMapCanvas.tsx` 与 `entity-draw.ts`）。底图（地形/网格/迷雾/overview 热力）由 `planet-base-map.ts` 离屏生成 1px/tile（overview 1px/cell）画布转纹理，地形 nearest 放大保硬边、迷雾 linear 得软边界；实体（建筑 footprint 描边盒 + emoji、单位圆点、资源 emoji、物流/船虚线、电网、管道、工地、敌情、选中框/建造幽灵/准星）走 Pixi Container + Graphics，emoji 纹理由 `engine/textures.getEmojiTexture` 缓存，虚线用 `buildDashSegments` 切段模拟（Pixi Graphics 无原生 dash）
+- 单位平滑移动：ticker 每帧把单位显示位置向数据位置指数趋近（`smoothingBlend`，k≈8/s，帧率无关），ticker 只做平滑移动/选中环脉冲这类轻量动效，不做数据重建；URL 加 `?freeze=1` 冻结动效供截图测试
+- 语义实体 DOM 层以 ghost 形式保留（`entity-layer--ghost`，`opacity:0` + `pointer-events:none`，禁止 display:none/visibility:hidden）：带 `data-entity-*` 的节点仍供 DevTools/agent 定位（Playwright 对 opacity:0 仍判 visible），点击命中仍走 surface 的 pointToTile；可见实体收集与资源色板在 `visible-entities.ts`（Pixi 场景与 DOM 层共用）
+- 调试面板"导出 PNG"改用 Pixi `extract.canvas(app.stage)` 整体抓舞台（与屏幕所见一致），不再走 canvas + entity-draw 合成
 - 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
 
 ### 3.5 回放调试页
@@ -195,6 +200,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 表单提交后 UI 是否保持正确状态
 - 登录页在线模式是否明确提示“Web 入口地址”，并把原始 `Failed to fetch` 转成可理解的代理/CORS 错误
 - 行星页在窄屏下是否仍保留地图首屏，并可在 `工作台 / 选中对象 / 活动流` 间切换
+- 行星地图直操作：建造栏选卡后幽灵预览是否跟随悬停（绿/红着色）、点击放置是否有命令回执、右键/Esc 是否退出模式；Pixi 地图是否正确显示地形/迷雾/建筑/单位/资源，缩放平移与单位移动是否顺滑
 - 命令提交后是否先进入 `pending`，再被后续 `command_result` / `research_completed` / `rocket_launched` 覆盖为最终结果
 - `/war` 是否能同时展示蓝图、军工、战区、战报四个长期面板，并能看到蓝图非法原因、部署失败原因、登陆失败原因等解释性提示
 - `/war` 在窄屏下是否仍能看到蓝图创建、部署蓝图、任务群姿态和封锁入口，不会因为布局塌陷而失去最小操作闭环
@@ -206,6 +212,9 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - Playwright：验证核心交互回归
   - `tests/war-workbench.spec.ts`：战争工作台桌面与窄屏回归
   - `tests/war-workbench-authoritative.spec.ts`：自动拉起官方战争验证局，验证 `/war` 对 authoritative 战争场景的真实操作闭环
+  - `tests/planet-entity-dom.spec.ts`：行星地图实体的 ghost DOM 可见性契约（`data-entity-*` 可定位、点击穿透后命中选中）
+  - `tests/planet-build-workflow.spec.ts`：建造栏选卡 + 地图点选放置的全流程 authoritative 回执
+  - `tests/visual.spec.ts`：总览/星图/行星地图/回放的截图基线（行星地图基线已随 Pixi 迁移重录）
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览
 

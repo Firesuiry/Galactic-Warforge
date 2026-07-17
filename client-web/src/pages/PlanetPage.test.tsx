@@ -5,6 +5,11 @@ import { vi } from "vitest";
 import { renderApp, jsonResponse, sseResponse } from "@/test/utils";
 import { useSessionStore } from "@/stores/session";
 
+// jsdom 无法真正运行 Pixi 渲染；行星地图的视觉由 planet-scene 承担，页面级断言只依赖 DOM。
+vi.mock("@/engine/PixiStage", () => ({
+  PixiStage: () => <div data-testid="pixi-stage" />,
+}));
+
 function stubMatchMedia(matches: boolean) {
   vi.stubGlobal(
     "matchMedia",

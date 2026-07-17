@@ -169,6 +169,24 @@ export function getNebulaTexture(color: number, seed: number, size = 512): Textu
   return toTexture(key, canvas);
 }
 
+/**
+ * emoji 字形纹理：离屏 canvas fillText 绘制后转 Texture，按 `emoji:<glyph>:<size>` 缓存。
+ * 供行星地图实体图标（建筑/单位/资源）使用；字形解析走 common/Icon 的 resolveIconGlyph。
+ */
+export function getEmojiTexture(glyph: string, size = 64): Texture {
+  const key = `emoji:${glyph}:${size}`;
+  const hit = cache.get(key);
+  if (hit) {
+    return hit;
+  }
+  const [canvas, ctx] = makeCanvas(size);
+  ctx.font = `${Math.round(size * 0.78)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(glyph, size / 2, size / 2 + Math.round(size * 0.04));
+  return toTexture(key, canvas);
+}
+
 /** 测试/热重载时清空缓存。 */
 export function clearTextureCache() {
   cache.forEach((texture) => texture.destroy(true));

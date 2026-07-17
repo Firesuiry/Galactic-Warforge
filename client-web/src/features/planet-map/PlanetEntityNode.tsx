@@ -18,7 +18,7 @@ import type {
 
 import { Icon } from '@/common/Icon';
 import { getBuildingCatalogEntry, getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
-import { getResourceColor } from '@/features/planet-map/entity-draw';
+import { getResourceColor } from '@/features/planet-map/visible-entities';
 
 /**
  * V3 juice：当 value 从非 target 变为 target 时返回一次性闪烁标志。

@@ -923,6 +923,24 @@ button {
     radial-gradient(circle at 20% 20%, rgba(48, 128, 255, 0.18), transparent 22%),
     linear-gradient(180deg, #08111f 0%, #050811 100%);
   outline: 1px solid rgba(255, 255, 255, 0.08);
+  /* Pixi canvas 是直角矩形，裁剪到圆角 surface 内 */
+  overflow: hidden;
+}
+
+/* Pixi 画布容器：填满交互面（与 starmap-stage 同一模式） */
+.planet-map-canvas__pixi,
+.planet-map-canvas__pixi canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ghost 语义实体层：视觉由 Pixi 承担，DOM 仅供 DevTools/agent 定位。
+   只能用 opacity 隐藏（Playwright 仍判 visible），禁止 display:none/visibility:hidden。 */
+.entity-layer--ghost {
+  opacity: 0;
 }
 
 /* 语义实体层：叠在 canvas 底图之上、但点击穿透回 canvas（实体是只读语义 DOM，命中检测仍走 canvas 的 tile 计算） */

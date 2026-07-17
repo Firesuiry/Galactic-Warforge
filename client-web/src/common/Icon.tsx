@@ -95,6 +95,11 @@ function resolveGlyph(iconKey: string | undefined): string {
   return '?';
 }
 
+/** 供 Pixi 场景（emoji 纹理）复用的字形解析：与 DOM Icon 保持同一映射与回退。 */
+export function resolveIconGlyph(iconKey: string | undefined): string {
+  return resolveGlyph(iconKey);
+}
+
 export function Icon({ iconKey, color, size = 24, fluid = false, label, className }: IconProps) {
   const glyph = resolveGlyph(iconKey);
   const style: CSSProperties = fluid

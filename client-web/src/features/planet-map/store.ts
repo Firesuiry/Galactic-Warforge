@@ -173,8 +173,8 @@ export interface PlanetSceneWindow {
 
 /**
  * 主地图画布的像素视口与当前 tile 边长。
- * 由 PlanetMapCanvas 写入（仅在 resize/zoom 时变更），供 minimap 等页级组件
- * 计算视口矩形而不必嵌进 PlanetMapCanvas 内部（保持拖拽热路径隔离）。
+ * 由 PlanetMapPixi 写入（仅在 resize/zoom 时变更），供 minimap 等页级组件
+ * 计算视口矩形而不必嵌进 PlanetMapPixi 内部（保持拖拽热路径隔离）。
  */
 export interface PlanetMapProjection {
   viewportWidth: number;

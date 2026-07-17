@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { PlanetMapCanvas } from '@/features/planet-map/PlanetMapCanvas';
+import { PlanetMapPixi } from '@/features/planet-map/PlanetMapPixi';
 import { baselineScenario, withBaselineSession, withPlanetSelection } from '@/stories/fixture-story';
 
 const planet = baselineScenario.planets['planet-1-1'];
@@ -9,7 +9,7 @@ const assembler = planet.buildings?.['assembler-1'];
 
 const meta = {
   title: 'Planet/MapCanvas',
-  component: PlanetMapCanvas,
+  component: PlanetMapPixi,
   decorators: [withBaselineSession],
   args: {
     fog,
@@ -17,10 +17,10 @@ const meta = {
   },
   render: (args) => (
     <div className="panel planet-map-shell" style={{ minHeight: 760 }}>
-      <PlanetMapCanvas {...args} />
+      <PlanetMapPixi {...args} />
     </div>
   ),
-} satisfies Meta<typeof PlanetMapCanvas>;
+} satisfies Meta<typeof PlanetMapPixi>;
 
 export default meta;
 

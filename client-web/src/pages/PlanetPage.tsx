@@ -17,7 +17,7 @@ import {
   getPendingCommandCount,
   usePlanetCommandStore,
 } from "@/features/planet-commands/store";
-import { PlanetMapCanvas } from "@/features/planet-map/PlanetMapCanvas";
+import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
@@ -101,7 +101,7 @@ export function PlanetPage() {
     [session.serverUrl],
   );
   const { planetId = "" } = useParams();
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureRef = useRef<PlanetMapCapture | null>(null);
   const restoredViewRef = useRef("");
   const {
     hydrateRecentAlerts,
@@ -576,12 +576,12 @@ export function PlanetPage() {
         ) : null}
 
         <section className="panel planet-map-shell">
-          <PlanetMapCanvas
+          <PlanetMapPixi
             catalog={catalog}
             fog={planet}
             networks={networks}
-            onCanvasReady={(canvas) => {
-              canvasRef.current = canvas;
+            onCanvasReady={(capture) => {
+              captureRef.current = capture;
             }}
             onInteractTile={handleInteractTile}
             overview={overviewQuery.data}
@@ -598,8 +598,8 @@ export function PlanetPage() {
             planet={planet}
           />
           <PlanetDebugPanel
+            capture={captureRef.current}
             catalog={catalog}
-            canvas={canvasRef.current}
             currentTick={planet.tick}
             networks={networks}
             onPullEvents={pullMissedEvents}
