@@ -1,16 +1,22 @@
 /**
- * 行星地图 Pixi 场景：底图纹理精灵 + 实体节点树 + 轻量动效 ticker。
+ * 行星地图 Pixi 场景：底图纹理精灵/分块地表 + 实体节点树 + 轻量动效 ticker。
  *
- * 场景结构（除 backdrop 外全部挂在 world 容器下，相机 = world.position）：
- * - 底图：terrain/fog/overview 由 planet-base-map 生成 1px/tile（overview 1px/cell）离屏 canvas
- *   → Texture → Sprite；地形/overview 用 nearest 放大保硬边，迷雾用 linear 得软边界。
- *   数据变化时重生成纹理并销毁旧纹理（emoji 纹理由全局缓存管理，不在此销毁）。
+ * 场景结构（除 backdrop/暗角外全部挂在 world 容器下，相机 = world.position）：
+ * - 底图：scene 模式按有效 tileSize 分两路——≥4px 走 64×64 分块高分辨率地表
+ *   （planet-terrain-chunks：8px/tile 烘焙、可见块按需生成、LRU 64 块、签名脏校验），
+ *   <4px 走 1px/tile 整图画布；overview 模式 1px/cell 聚合画布。
+ *   迷雾始终 1px/tile（linear 放大得软边界）；地形/overview 用 nearest。
+ *   数据变化时重生成纹理并销毁旧纹理（emoji/暗角纹理由全局缓存管理，不在此销毁）。
+ * - 氛围层：水面流光（低分辨率动态遮罩画布：1px/tile 水格遮罩 × ticker 驱动的移动光带，
+ *   add 混合 + alpha 呼吸，不动静态地表纹理）+ 岩浆 1px mask 的呼吸辉光；
+ *   暗角为 stage 级静态叠加。相位基于固定时钟，frozen 停在 0。
  * - 实体：建筑（footprint 描边盒 + emoji 图标）/单位（圆点）/资源（emoji）走逐节点 Container
  *   （增量同步）；物流/电网/管道/工地/敌情各一个 Graphics，sync 时整体重绘。
  * - 交互叠加：选中黄框 / hover 白框 / 建造幽灵 / move/attack 准星（单个 Graphics，数据变化重绘）。
  *
  * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲 +
- * 缩放档切换的 world 变换补间（~180ms，frozen 时瞬切），不做任何数据重建。
+ * 缩放档切换的 world 变换补间（~180ms，frozen 时瞬切）+ 分块惰性补块（每帧 ≤2 块）+
+ * 氛围相位推进，不做任何数据重建。
  * 视觉契约与旧 entity-draw.ts / PlanetMapCanvas 对齐。
  *
  * 战斗特效：组件侧订阅战斗事件总线（battle-events）调 handleBattleEvent，
@@ -32,7 +38,7 @@ import type {
 
 import type { BattleEvent } from '@/engine/battle-events';
 import { resolveIconGlyph } from '@/common/Icon';
-import { getEmojiTexture, getGlowTexture } from '@/engine/textures';
+import { getEmojiTexture, getGlowTexture, getVignetteTexture } from '@/engine/textures';
 import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
 import {
@@ -57,9 +63,22 @@ import {
 } from '@/features/planet-map/model';
 import {
   renderPlanetFogCanvas,
+  renderPlanetFluidMaskCanvas,
   renderPlanetOverviewCanvas,
   renderPlanetTerrainCanvas,
 } from '@/features/planet-map/planet-base-map';
+import {
+  LruMap,
+  TERRAIN_CHUNK_BUILD_BUDGET_PER_FRAME,
+  TERRAIN_CHUNK_CACHE_LIMIT,
+  TERRAIN_CHUNK_TILES,
+  chunkSpanAxis,
+  computeVisibleChunkKeys,
+  parseChunkKey,
+  renderTerrainChunkCanvas,
+  terrainChunkSignature,
+  useChunkedTerrain,
+} from '@/features/planet-map/planet-terrain-chunks';
 import { isTilePointVisible, type SceneRenderDetailPolicy } from '@/features/planet-map/render';
 import type { PlanetInteractionMode, PlanetLayerState } from '@/features/planet-map/store';
 import { getResourceColorValue, type VisibleEntities } from '@/features/planet-map/visible-entities';
@@ -228,6 +247,22 @@ const COLOR_FLOAT_OWN_HIT = 0xfbbf24;
 /** 受击闪白的 alpha 下探幅度（1 → 1-DEPTH → 1 的正弦脉冲）。 */
 const HIT_FLASH_ALPHA_DEPTH = 0.55;
 
+/** 水面流光高亮：add 混合，移动光带由低分辨率动态遮罩驱动（frozen 停在 0 相位）。 */
+const WATER_SHINE_BASE_ALPHA = 0.7;
+const WATER_SHINE_ALPHA_SWING = 0.15;
+/** 动态遮罩画布单轴上限（低分辨率，防大图逐帧重绘过贵）。 */
+const WATER_SHINE_MAX_AXIS_PX = 512;
+/** 岩浆呼吸辉光：add 混合，alpha 正弦呼吸。 */
+const LAVA_GLOW_BASE_ALPHA = 0.12;
+const LAVA_GLOW_ALPHA_SWING = 0.05;
+
+/** 分块地表缓存条目（场景自有纹理，逐出/销毁时由场景负责 destroy(true)）。 */
+interface TerrainChunkEntry {
+  sprite: Sprite;
+  texture: Texture;
+  signature: string;
+}
+
 const tileCenter = (tile: number, tileSize: number) => (tile + 0.5) * tileSize;
 
 function constructionStateColor(state: string): number {
@@ -250,6 +285,11 @@ export class PlanetScene {
   private readonly backdrop: Graphics;
   private readonly world: Container;
   private readonly terrainSprite: Sprite;
+  private readonly terrainChunkLayer: Container;
+  private readonly ambientLayer: Container;
+  private readonly waterShineSprite: Sprite;
+  private readonly lavaGlowSprite: Sprite;
+  private readonly vignetteSprite: Sprite;
   private readonly fogSprite: Sprite;
   private readonly overviewSprite: Sprite;
   private readonly gridGraphics: Graphics;
@@ -267,6 +307,25 @@ export class PlanetScene {
   private terrainTexture: Texture | null = null;
   private fogTexture: Texture | null = null;
   private overviewTexture: Texture | null = null;
+  private lavaMaskTexture: Texture | null = null;
+  private waterShineTexture: Texture | null = null;
+  /** 1px/tile 水格遮罩（仅 2D 合成用，不上 GPU）；无水格时为 null。 */
+  private waterMaskCanvas: HTMLCanvasElement | null = null;
+  /** 低分辨率动态遮罩画布（移动光带 × 水格遮罩），ticker 逐帧重绘（frozen 只绘 0 相位一次）。 */
+  private waterShineCanvas: HTMLCanvasElement | null = null;
+
+  /** 地表路径：legacy = 1px/tile 整图画布（1/2px 档）；chunked = 64×64 分块 8px/tile 高分辨率。 */
+  private terrainPath: 'legacy' | 'chunked' = 'legacy';
+  private readonly chunks = new LruMap<string, TerrainChunkEntry>(TERRAIN_CHUNK_CACHE_LIMIT, (_key, entry) => {
+    entry.sprite.destroy();
+    entry.texture.destroy(true);
+  });
+  private chunkQueue: string[] = [];
+  private neededChunkKeys = new Set<string>();
+  /** 氛围动效的固定时钟（s）：ticker 累积 dt，frozen 恒为 0 → 相位确定。 */
+  private ambientTime = 0;
+  private mapPixelWidth = 0;
+  private mapPixelHeight = 0;
 
   private baseInput: PlanetSceneBaseInput | null = null;
   private textureSource: {
@@ -312,6 +371,21 @@ export class PlanetScene {
     this.backdrop = new Graphics();
     this.world = new Container();
     this.terrainSprite = new Sprite();
+    this.terrainChunkLayer = new Container();
+    this.ambientLayer = new Container();
+    // 水面流光：动态遮罩纹理 sprite（add 混合），ticker 逐帧重绘低分辨率遮罩（光带移动 + alpha 呼吸）。
+    this.waterShineSprite = new Sprite();
+    this.waterShineSprite.blendMode = 'add';
+    this.waterShineSprite.alpha = WATER_SHINE_BASE_ALPHA;
+    this.waterShineSprite.visible = false;
+    // 岩浆呼吸：岩浆格 1px mask 纹理直接 tint 亮橙 + add 混合，ticker 驱动 alpha 呼吸。
+    this.lavaGlowSprite = new Sprite();
+    this.lavaGlowSprite.blendMode = 'add';
+    this.lavaGlowSprite.tint = 0xff7a28;
+    this.lavaGlowSprite.alpha = LAVA_GLOW_BASE_ALPHA;
+    this.lavaGlowSprite.visible = false;
+    // 全屏轻暗角：stage 级（不随相机），resize 时铺满屏幕。
+    this.vignetteSprite = new Sprite(getVignetteTexture());
     this.fogSprite = new Sprite();
     this.overviewSprite = new Sprite();
     this.gridGraphics = new Graphics();
@@ -326,10 +400,15 @@ export class PlanetScene {
     this.selectionGraphics = new Graphics();
     this.effectsLayer = new Container();
 
-    // z 序对齐旧实现：地形 < 网格 < 迷雾 < 管网/电网 < 资源 < 工地 < 建筑 < 物流 < 单位 < 敌情 < 选中叠加 < 战斗特效
+    // z 序对齐旧实现：地形 < 水面/岩浆氛围 < 网格 < 迷雾 < 管网/电网 < 资源 < 工地 < 建筑 < 物流 < 单位 < 敌情 < 选中叠加 < 战斗特效；
+    // 暗角在 world 之后，屏幕空间压在一切之上。
     this.app.stage.addChild(this.backdrop);
     this.app.stage.addChild(this.world);
     this.world.addChild(this.terrainSprite);
+    this.world.addChild(this.terrainChunkLayer);
+    this.world.addChild(this.ambientLayer);
+    this.ambientLayer.addChild(this.waterShineSprite);
+    this.ambientLayer.addChild(this.lavaGlowSprite);
     this.world.addChild(this.overviewSprite);
     this.world.addChild(this.gridGraphics);
     this.world.addChild(this.fogSprite);
@@ -343,17 +422,23 @@ export class PlanetScene {
     this.world.addChild(this.threatGraphics);
     this.world.addChild(this.selectionGraphics);
     this.world.addChild(this.effectsLayer);
+    this.app.stage.addChild(this.vignetteSprite);
 
-    this.drawBackdrop();
-    this.app.renderer.on('resize', this.drawBackdrop);
+    this.handleResize();
+    this.app.renderer.on('resize', this.handleResize);
     this.app.ticker.add(this.tick);
   }
 
   destroy() {
     this.disposed = true;
     this.app.ticker.remove(this.tick);
-    this.app.renderer.off('resize', this.drawBackdrop);
+    this.app.renderer.off('resize', this.handleResize);
     this.destroyBaseTextures();
+    this.clearTerrainChunks();
+    // 暗角 sprite 销毁但纹理来自全局缓存（engine/textures），不得 destroy(true)。
+    this.vignetteSprite.destroy();
+    this.waterShineSprite.destroy();
+    this.lavaGlowSprite.destroy();
   }
 
   // ---------- 数据输入 ----------
@@ -415,6 +500,18 @@ export class PlanetScene {
       this.redrawStaticLayers();
       this.redrawInteraction();
       this.applyLayerVisibility();
+    }
+
+    // 地表路径同步：缩放档跨过 4px 阈值或模式切换时 legacy ↔ chunked 切换；
+    // 相机平移只更新可见块计划（缺失块进惰性队列）。
+    const desiredPath = useChunkedTerrain(this.overviewMode, input.tileSize) ? 'chunked' : 'legacy';
+    if (desiredPath !== this.terrainPath) {
+      this.syncTerrainPath();
+    } else if (desiredPath === 'chunked') {
+      if (tileSizeChanged) {
+        this.layoutTerrainChunks();
+      }
+      this.updateChunkPlan();
     }
 
     // 缩放补间：离散档位变化时，渲染变换（world scale/position）从当前值 ~180ms 补间到
@@ -682,13 +779,32 @@ export class PlanetScene {
       .fill(COLOR_BACKDROP);
   };
 
+  /** resize 统一入口：背景/暗角铺满屏幕；视口变化后可见块集合重算（分块路径）。 */
+  private readonly handleResize = () => {
+    this.drawBackdrop();
+    this.vignetteSprite.width = this.app.screen.width;
+    this.vignetteSprite.height = this.app.screen.height;
+    if (this.terrainPath === 'chunked') {
+      this.updateChunkPlan();
+    }
+  };
+
   private destroyBaseTextures() {
     this.terrainTexture?.destroy(true);
     this.fogTexture?.destroy(true);
     this.overviewTexture?.destroy(true);
+    this.waterShineTexture?.destroy(true);
+    this.lavaMaskTexture?.destroy(true);
     this.terrainTexture = null;
     this.fogTexture = null;
     this.overviewTexture = null;
+    this.waterShineTexture = null;
+    this.lavaMaskTexture = null;
+    this.waterMaskCanvas = null;
+    this.waterShineCanvas = null;
+    this.lastShinePhase = -1;
+    this.waterShineSprite.texture = Texture.EMPTY;
+    this.lavaGlowSprite.texture = Texture.EMPTY;
   }
 
   private rebuildBaseTextures() {
@@ -713,11 +829,10 @@ export class PlanetScene {
       }
       this.terrainSprite.texture = Texture.EMPTY;
       this.fogSprite.texture = Texture.EMPTY;
+      this.clearTerrainChunks();
+      this.terrainPath = 'legacy';
       return;
     }
-    const terrainCanvas = renderPlanetTerrainCanvas(input.planet);
-    this.terrainTexture = this.createBaseTexture(terrainCanvas, 'nearest');
-    this.terrainSprite.texture = this.terrainTexture;
 
     const fogCanvas = renderPlanetFogCanvas(input.planet, input.fog);
     if (fogCanvas) {
@@ -727,6 +842,236 @@ export class PlanetScene {
       this.fogSprite.texture = Texture.EMPTY;
     }
     this.overviewSprite.texture = Texture.EMPTY;
+
+    // 氛围遮罩（水/岩浆 1px/tile）：流光高亮与呼吸辉光的载体，不改动静态地表纹理。
+    this.waterMaskCanvas = renderPlanetFluidMaskCanvas(input.planet, 'water');
+    if (this.waterMaskCanvas) {
+      // 低分辨率动态遮罩画布：逐帧把"移动光带 × 水格遮罩"合成进去再 texture.update。
+      const scale = Math.min(1, WATER_SHINE_MAX_AXIS_PX / Math.max(input.planet.map_width, input.planet.map_height, 1));
+      const shineCanvas = document.createElement('canvas');
+      shineCanvas.width = Math.max(Math.round(input.planet.map_width * scale), 1);
+      shineCanvas.height = Math.max(Math.round(input.planet.map_height * scale), 1);
+      this.waterShineCanvas = shineCanvas;
+      this.waterShineTexture = this.createBaseTexture(shineCanvas, 'linear');
+      this.waterShineSprite.texture = this.waterShineTexture;
+    }
+    const lavaCanvas = renderPlanetFluidMaskCanvas(input.planet, 'lava');
+    if (lavaCanvas) {
+      this.lavaMaskTexture = this.createBaseTexture(lavaCanvas, 'linear');
+      this.lavaGlowSprite.texture = this.lavaMaskTexture;
+    }
+
+    // 地表本体：按 tileSize 决定 legacy 整图 / 分块路径（含脏块校验与可见块计划）。
+    this.syncTerrainPath();
+    this.layoutAmbientSprites();
+    this.applyLayerVisibility();
+  }
+
+  /**
+   * 地表路径同步：数据变化与缩放档切换共用。
+   * - legacy（1px 整图画布）：无缓存纹理时重建（destroyBaseTextures 后必然重建）。
+   * - chunked（64×64 分块 8px/tile）：按签名逐块校验（地形变化的块销毁待重建），
+   *   重排块精灵并按当前相机更新可见块计划；frozen 模式同步补齐（截图确定性）。
+   */
+  private syncTerrainPath() {
+    const input = this.baseInput;
+    if (!input || input.overviewMode) {
+      this.terrainPath = 'legacy';
+      this.clearTerrainChunks();
+      return;
+    }
+    if (useChunkedTerrain(false, this.tileSize)) {
+      if (this.terrainTexture) {
+        this.terrainTexture.destroy(true);
+        this.terrainTexture = null;
+        this.terrainSprite.texture = Texture.EMPTY;
+      }
+      this.terrainPath = 'chunked';
+      this.validateTerrainChunks(input.planet);
+      this.layoutTerrainChunks();
+      this.updateChunkPlan();
+      return;
+    }
+    this.terrainPath = 'legacy';
+    this.clearTerrainChunks();
+    if (!this.terrainTexture) {
+      const terrainCanvas = renderPlanetTerrainCanvas(input.planet);
+      this.terrainTexture = this.createBaseTexture(terrainCanvas, 'nearest');
+      this.terrainSprite.texture = this.terrainTexture;
+      this.layoutBaseSprites();
+    }
+  }
+
+  /** 按签名逐块校验：地形变化/地图缩边越界的块销毁（重新进入待生成队列）。 */
+  private validateTerrainChunks(planet: PlanetRenderView) {
+    for (const key of this.chunks.keys()) {
+      const entry = this.chunks.peek(key);
+      if (!entry) {
+        continue;
+      }
+      const [cx, cy] = parseChunkKey(key);
+      const outOfMap = cx * TERRAIN_CHUNK_TILES >= planet.map_width
+        || cy * TERRAIN_CHUNK_TILES >= planet.map_height;
+      if (outOfMap || entry.signature !== terrainChunkSignature(planet, cx, cy)) {
+        entry.sprite.destroy();
+        entry.texture.destroy(true);
+        this.chunks.delete(key);
+      }
+    }
+  }
+
+  /**
+   * 可见块计划：计算可见集合（含 1 圈余量，按到视口中心距离升序），
+   * 缺失块进惰性队列（ticker 每帧最多补 N 块；frozen 同步全补），LRU 逐出不保护可见块。
+   */
+  private updateChunkPlan() {
+    const input = this.baseInput;
+    if (!input || input.overviewMode || this.terrainPath !== 'chunked') {
+      this.chunkQueue = [];
+      this.neededChunkKeys = new Set<string>();
+      return;
+    }
+    const keys = computeVisibleChunkKeys({
+      mapWidth: input.planet.map_width,
+      mapHeight: input.planet.map_height,
+      offsetX: this.offsetX,
+      offsetY: this.offsetY,
+      tileSize: this.tileSize,
+      viewportWidth: this.app.screen.width,
+      viewportHeight: this.app.screen.height,
+    });
+    this.neededChunkKeys = new Set(keys);
+    this.chunkQueue = keys.filter((key) => !this.chunks.has(key));
+    for (const key of keys) {
+      this.chunks.get(key); // 触达提新（LRU 使用序）
+    }
+    this.chunks.evictToCapacity((key) => this.neededChunkKeys.has(key));
+    if (this.frozen && this.chunkQueue.length > 0) {
+      const pending = this.chunkQueue;
+      this.chunkQueue = [];
+      for (const key of pending) {
+        this.buildTerrainChunk(key);
+      }
+    }
+  }
+
+  /** 生成一个地表块：烘焙 canvas → Texture → Sprite 拼入 world（nearest 保硬边像素感）。 */
+  private buildTerrainChunk(key: string) {
+    const input = this.baseInput;
+    if (!input || input.overviewMode || this.chunks.has(key)) {
+      return;
+    }
+    const [cx, cy] = parseChunkKey(key);
+    const canvas = renderTerrainChunkCanvas(input.planet, cx, cy);
+    const texture = Texture.from(canvas);
+    texture.source.scaleMode = 'nearest';
+    const sprite = new Sprite(texture);
+    this.layoutTerrainChunkSprite(sprite, cx, cy);
+    this.terrainChunkLayer.addChild(sprite);
+    this.chunks.set(key, {
+      sprite,
+      texture,
+      signature: terrainChunkSignature(input.planet, cx, cy),
+    });
+  }
+
+  private clearTerrainChunks() {
+    for (const key of this.chunks.keys()) {
+      const entry = this.chunks.peek(key);
+      if (!entry) {
+        continue;
+      }
+      entry.sprite.destroy();
+      entry.texture.destroy(true);
+    }
+    this.chunks.clear();
+    this.chunkQueue = [];
+    this.neededChunkKeys = new Set<string>();
+  }
+
+  private layoutTerrainChunkSprite(sprite: Sprite, cx: number, cy: number) {
+    const input = this.baseInput;
+    if (!input) {
+      return;
+    }
+    const x0 = cx * TERRAIN_CHUNK_TILES;
+    const y0 = cy * TERRAIN_CHUNK_TILES;
+    sprite.position.set(x0 * this.tileSize, y0 * this.tileSize);
+    sprite.width = chunkSpanAxis(x0, input.planet.map_width) * this.tileSize;
+    sprite.height = chunkSpanAxis(y0, input.planet.map_height) * this.tileSize;
+  }
+
+  private layoutTerrainChunks() {
+    for (const key of this.chunks.keys()) {
+      const entry = this.chunks.peek(key);
+      if (!entry) {
+        continue;
+      }
+      const [cx, cy] = parseChunkKey(key);
+      this.layoutTerrainChunkSprite(entry.sprite, cx, cy);
+    }
+  }
+
+  /** 氛围层尺寸/相位布局：流光/辉光铺满地图；相位 0 重绘一次动态遮罩（frozen 也只画这一次）。 */
+  private layoutAmbientSprites() {
+    const input = this.baseInput;
+    if (!input || input.overviewMode) {
+      this.mapPixelWidth = 0;
+      this.mapPixelHeight = 0;
+      return;
+    }
+    this.mapPixelWidth = input.planet.map_width * this.tileSize;
+    this.mapPixelHeight = input.planet.map_height * this.tileSize;
+    if (this.waterShineSprite.texture !== Texture.EMPTY) {
+      this.waterShineSprite.width = this.mapPixelWidth;
+      this.waterShineSprite.height = this.mapPixelHeight;
+    }
+    if (this.lavaGlowSprite.texture !== Texture.EMPTY) {
+      this.lavaGlowSprite.width = this.mapPixelWidth;
+      this.lavaGlowSprite.height = this.mapPixelHeight;
+    }
+    this.updateAmbientPhase();
+  }
+
+  /** 氛围动效相位：水面流光（光带移动 + alpha 呼吸）、岩浆 alpha 呼吸；frozen 下 ambientTime 恒 0 → 固定相位。 */
+  private updateAmbientPhase() {
+    const t = this.ambientTime;
+    this.renderWaterShineCanvas(t);
+    this.waterShineSprite.alpha = WATER_SHINE_BASE_ALPHA + WATER_SHINE_ALPHA_SWING * Math.sin(t * 0.9);
+    this.lavaGlowSprite.alpha = LAVA_GLOW_BASE_ALPHA + LAVA_GLOW_ALPHA_SWING * Math.sin(t * 1.9);
+  }
+
+  /** 低分辨率动态遮罩：对角柔光带（相位 t 驱动位置）× 水格遮罩（destination-in），再上传纹理。 */
+  private lastShinePhase = -1;
+
+  private renderWaterShineCanvas(t: number) {
+    const canvas = this.waterShineCanvas;
+    const mask = this.waterMaskCanvas;
+    if (!canvas || !mask || t === this.lastShinePhase) {
+      return;
+    }
+    this.lastShinePhase = t;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return;
+    }
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    // 光带中心沿对角线往返（±0.7 振幅保证完全扫过）；带宽约图宽 35%。
+    const center = 0.5 + 0.7 * Math.sin(t * 0.35);
+    const bandWidth = Math.max(width * 0.35, 1);
+    const bandX = center * (width + bandWidth * 2) - bandWidth;
+    const gradient = context.createLinearGradient(bandX - bandWidth, 0, bandX + bandWidth, height * 0.25);
+    gradient.addColorStop(0, 'rgba(140, 210, 255, 0)');
+    gradient.addColorStop(0.5, 'rgba(165, 222, 255, 0.55)');
+    gradient.addColorStop(1, 'rgba(140, 210, 255, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, width, height);
+    context.globalCompositeOperation = 'destination-in';
+    context.drawImage(mask, 0, 0, width, height);
+    context.globalCompositeOperation = 'source-over';
+    this.waterShineTexture?.source.update();
   }
 
   private createBaseTexture(canvas: HTMLCanvasElement, scaleMode: 'nearest' | 'linear'): Texture {
@@ -746,12 +1091,14 @@ export class PlanetScene {
       const cellSize = Math.max(this.tileSize * step, 1);
       this.overviewSprite.width = input.overview.cells_width * cellSize;
       this.overviewSprite.height = input.overview.cells_height * cellSize;
+      this.layoutAmbientSprites();
       return;
     }
     this.terrainSprite.width = input.planet.map_width * this.tileSize;
     this.terrainSprite.height = input.planet.map_height * this.tileSize;
     this.fogSprite.width = this.terrainSprite.width;
     this.fogSprite.height = this.terrainSprite.height;
+    this.layoutAmbientSprites();
   }
 
   private redrawGrid() {
@@ -804,9 +1151,15 @@ export class PlanetScene {
       return;
     }
     const overview = this.overviewMode;
-    this.terrainSprite.visible = !overview && layers.terrain && this.terrainTexture !== null;
+    const chunked = this.terrainPath === 'chunked';
+    this.terrainSprite.visible = !overview && !chunked && layers.terrain && this.terrainTexture !== null;
+    this.terrainChunkLayer.visible = !overview && chunked && layers.terrain;
     this.overviewSprite.visible = overview && this.overviewTexture !== null;
     this.fogSprite.visible = !overview && layers.fog && this.fogTexture !== null;
+    // 氛围层跟随地形开关；单个 sprite 还要求自己的遮罩纹理存在。
+    this.ambientLayer.visible = !overview && layers.terrain;
+    this.waterShineSprite.visible = !overview && layers.terrain && this.waterShineTexture !== null;
+    this.lavaGlowSprite.visible = !overview && layers.terrain && this.lavaMaskTexture !== null;
     // gridGraphics 的内容由 redrawGrid 决定（关闭时 clear），空图形本身无渲染开销，保持 visible。
     this.pipelinesGraphics.visible = !overview && layers.pipelines;
     this.powerGraphics.visible = !overview && layers.power;
@@ -1269,6 +1622,19 @@ export class PlanetScene {
         this.zoomTween = null;
       }
     }
+    // 分块地表惰性补块：每帧最多 N 块（拖拽时防卡顿），按队列（视口中心优先）生成。
+    let buildBudget = TERRAIN_CHUNK_BUILD_BUDGET_PER_FRAME;
+    while (buildBudget > 0 && this.chunkQueue.length > 0) {
+      const key = this.chunkQueue.shift();
+      if (key === undefined) {
+        break;
+      }
+      this.buildTerrainChunk(key);
+      buildBudget -= 1;
+    }
+    // 氛围动效推进固定时钟（frozen 不推进，相位停在 0）。
+    this.ambientTime += dt;
+    this.updateAmbientPhase();
     const blend = smoothingBlend(dt);
     for (const node of this.unitNodes.values()) {
       const dx = node.targetX - node.posX;

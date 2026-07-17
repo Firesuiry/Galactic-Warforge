@@ -501,6 +501,32 @@ export function resolveSelectionFromQueryValue(
   return null;
 }
 
+/**
+ * 小图轴（世界像素尺寸 < 视口）的居中偏移。
+ * 用于初始相机与"聚焦/缩放"路径：小图在视口中居中而非顶左锚定。
+ */
+export function centerCameraAxisOffset(worldPx: number, viewportPx: number) {
+  return (viewportPx - worldPx) / 2;
+}
+
+/**
+ * 单轴相机偏移钳位：小图轴（worldPx < viewportPx）不允许地图中心被拖出视口
+ * （偏移钳在 [center - viewport/2, center + viewport/2]，即地图中心 ∈ [0, viewport]）；
+ * 大图轴维持现状不钳（自由拖拽）。
+ */
+export function clampCameraAxisOffset(worldPx: number, viewportPx: number, offset: number) {
+  if (worldPx >= viewportPx) {
+    return offset;
+  }
+  const center = centerCameraAxisOffset(worldPx, viewportPx);
+  return clamp(offset, center - viewportPx / 2, center + viewportPx / 2);
+}
+
+/** 小图轴取居中、大图轴保留聚焦目标的相机偏移（聚焦基地/小图居中通用）。 */
+export function resolveFocusCameraAxisOffset(worldPx: number, viewportPx: number, focusedOffset: number) {
+  return worldPx < viewportPx ? centerCameraAxisOffset(worldPx, viewportPx) : focusedOffset;
+}
+
 export function getViewportTileBounds(
   planet: PlanetRenderView,
   camera: PlanetCameraSnapshot,

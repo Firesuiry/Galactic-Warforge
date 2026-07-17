@@ -1,8 +1,11 @@
 import type { PlanetView } from '@shared/types';
 
 import {
+  centerCameraAxisOffset,
+  clampCameraAxisOffset,
   getBuildingDisplayName,
   mergeRecentEvents,
+  resolveFocusCameraAxisOffset,
   resolveSelectionAtTile,
   summarizeEvent,
 } from '@/features/planet-map/model';
@@ -152,5 +155,32 @@ describe('planet map model helpers', () => {
     expect(getBuildingDisplayName(undefined, 'unknown_building')).toBe(
       'unknown_building',
     );
+  });
+});
+
+describe('相机小图居中与钳位', () => {
+  it('centerCameraAxisOffset：小图轴取视口中心', () => {
+    expect(centerCameraAxisOffset(384, 1440)).toBe(528);
+    expect(centerCameraAxisOffset(384, 1080)).toBe(348);
+    // 大图轴公式同样成立（调用方只在 worldPx < viewportPx 时使用）
+    expect(centerCameraAxisOffset(2000, 1440)).toBe(-280);
+  });
+
+  it('clampCameraAxisOffset：小图轴钳在"地图中心不出视口"范围内', () => {
+    // 世界 384px < 视口 1440px：offset ∈ [center-720, center+720] = [-192, 1248]
+    expect(clampCameraAxisOffset(384, 1440, 528)).toBe(528); // 居中不动
+    expect(clampCameraAxisOffset(384, 1440, 62)).toBe(62); // 范围内保留拖拽结果
+    expect(clampCameraAxisOffset(384, 1440, -500)).toBe(-192); // 左向越界 → 钳住
+    expect(clampCameraAxisOffset(384, 1440, 2000)).toBe(1248); // 右向越界 → 钳住
+  });
+
+  it('clampCameraAxisOffset：大图轴不钳（自由拖拽）', () => {
+    expect(clampCameraAxisOffset(16000, 1440, -8000)).toBe(-8000);
+    expect(clampCameraAxisOffset(16000, 1440, 32)).toBe(32);
+  });
+
+  it('resolveFocusCameraAxisOffset：小图轴聚焦退化为居中，大图轴聚焦目标', () => {
+    expect(resolveFocusCameraAxisOffset(384, 1440, 900)).toBe(528);
+    expect(resolveFocusCameraAxisOffset(16000, 1440, -1200)).toBe(-1200);
   });
 });

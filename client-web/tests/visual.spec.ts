@@ -28,7 +28,8 @@ test('银河星图截图基线', async ({ page }) => {
 
 test('行星地图主视图截图基线', async ({ page }) => {
   await openFixtureMode(page);
-  await page.goto('/planet/planet-1-1');
+  // freeze 模式冻结氛围动效（水面流光/岩浆呼吸）与脉冲，保证截图确定性
+  await page.goto('/planet/planet-1-1?freeze=1');
   await expect(page.getByRole('heading', { name: 'Gaia' })).toBeVisible();
   const expandDebugButton = page.getByRole('button', { name: '展开调试' });
   if (!(await expandDebugButton.isVisible())) {

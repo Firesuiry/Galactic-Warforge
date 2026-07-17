@@ -11,7 +11,7 @@ import { getFogState, getTerrainTile, type PlanetRenderView } from '@/features/p
  * - overview 模式：1px/cell 合成画布（地形 + 资源/建筑/单位热力 + 迷雾）。
  */
 
-const TERRAIN_RGB: Record<string, readonly [number, number, number]> = {
+export const TERRAIN_RGB: Record<string, readonly [number, number, number]> = {
   buildable: [0x27, 0x34, 0x4d],
   blocked: [0x0f, 0x16, 0x25],
   water: [0x22, 0x5b, 0x87],
@@ -20,7 +20,7 @@ const TERRAIN_RGB: Record<string, readonly [number, number, number]> = {
 };
 
 /** 明暗抖动/流光带只作用于这些地形（与旧 SHADING_TERRAINS 一致）。 */
-const SHADING_TERRAINS = new Set(['water', 'lava', 'buildable', 'blocked']);
+export const SHADING_TERRAINS = new Set(['water', 'lava', 'buildable', 'blocked']);
 
 const OVERVIEW_HEAT_COLORS = {
   resource: [210, 192, 111],
@@ -40,7 +40,7 @@ function createCanvas(width: number, height: number): [HTMLCanvasElement, Canvas
 }
 
 /** 旧 shadeTerrainColor 的亮度系数：基于 (x,y) 的确定性 hash，±0.16。 */
-function shadeFactor(x: number, y: number) {
+export function shadeFactor(x: number, y: number) {
   const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
   return 1 + ((((hash % 1000) / 1000) - 0.5) * 0.32);
 }
@@ -152,6 +152,43 @@ export function renderPlanetFogCanvas(
     }
   }
 
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
+/**
+ * 场景模式流体遮罩画布：map_width × map_height，1px/tile。
+ * 指定地形（water/lava）的格子写纯白（alpha 255），其余全透明；一张也没有时返回 null。
+ * 供氛围动效层使用：水面/岩浆的遮罩纹理（Pixi 侧 linear 放大得软边界），
+ * 配合 add 混合的呼吸/移动高亮 sprite，不改动分块地形静态纹理。
+ */
+export function renderPlanetFluidMaskCanvas(
+  planet: PlanetRenderView,
+  targetKind: 'water' | 'lava',
+): HTMLCanvasElement | null {
+  const width = planet.map_width;
+  const height = planet.map_height;
+  const [canvas, context, image] = createCanvas(width, height);
+  const pixels = image.data;
+  let found = false;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (getTerrainTile(planet, x, y) !== targetKind) {
+        continue;
+      }
+      found = true;
+      const offset = (y * width + x) * 4;
+      pixels[offset] = 255;
+      pixels[offset + 1] = 255;
+      pixels[offset + 2] = 255;
+      pixels[offset + 3] = 255;
+    }
+  }
+
+  if (!found) {
+    return null;
+  }
   context.putImageData(image, 0, 0);
   return canvas;
 }

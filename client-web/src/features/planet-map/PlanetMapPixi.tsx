@@ -10,9 +10,12 @@ import { PixiStage } from '@/engine/PixiStage';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import {
   buildSceneWindow,
+  centerCameraAxisOffset,
   clamp,
+  clampCameraAxisOffset,
   getViewportTileBounds,
   type PlanetRenderView,
+  resolveFocusCameraAxisOffset,
   resolveSelectionAtTile,
   selectionLabel,
   type TilePoint,
@@ -82,17 +85,19 @@ function createInitialCamera(viewport: ViewportSize, planet: PlanetRenderView, z
   const tileSize = getPlanetRenderTileSize(zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
   const worldWidth = planet.map_width * tileSize;
   const worldHeight = planet.map_height * tileSize;
+  // 小图轴（世界像素 < 视口）居中显示；大图轴留 32px 边距从顶左开始。
   return {
-    offsetX: worldWidth < viewport.width ? (viewport.width - worldWidth) / 2 : 32,
-    offsetY: worldHeight < viewport.height ? (viewport.height - worldHeight) / 2 : 32,
+    offsetX: worldWidth < viewport.width ? centerCameraAxisOffset(worldWidth, viewport.width) : 32,
+    offsetY: worldHeight < viewport.height ? centerCameraAxisOffset(worldHeight, viewport.height) : 32,
   };
 }
 
 function centerCameraOnTile(viewport: ViewportSize, planet: PlanetRenderView, zoomIndex: number, x: number, y: number) {
   const tileSize = getPlanetRenderTileSize(zoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
+  // 小图轴整图已在视口内，聚焦退化为整图居中；大图轴聚焦到目标 tile。
   return {
-    offsetX: (viewport.width / 2) - ((x + 0.5) * tileSize),
-    offsetY: (viewport.height / 2) - ((y + 0.5) * tileSize),
+    offsetX: resolveFocusCameraAxisOffset(planet.map_width * tileSize, viewport.width, (viewport.width / 2) - ((x + 0.5) * tileSize)),
+    offsetY: resolveFocusCameraAxisOffset(planet.map_height * tileSize, viewport.height, (viewport.height / 2) - ((y + 0.5) * tileSize)),
   };
 }
 
@@ -393,6 +398,41 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     }
   }, [camera.ready, camera.zoomIndex, planet.map_height, planet.map_width, setCamera, viewport]);
 
+  // 小图轴居中维护：视口/缩放档变化后，世界像素小于视口的轴重新居中。
+  // 首次（挂载）运行跳过——挂载定位归初始相机/聚焦 effect（二者对小图轴同样居中）；
+  // 读 getState 而非依赖 camera，避免拖拽过程中来回触发。
+  const recenterKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const recenterKey = `${viewport.width}x${viewport.height}:${tileSize}:${planet.map_width}x${planet.map_height}`;
+    if (recenterKeyRef.current === null || recenterKeyRef.current === recenterKey) {
+      recenterKeyRef.current = recenterKey;
+      return;
+    }
+    recenterKeyRef.current = recenterKey;
+    const current = usePlanetViewStore.getState().camera;
+    if (!current.ready) {
+      return;
+    }
+    const worldWidth = planet.map_width * tileSize;
+    const worldHeight = planet.map_height * tileSize;
+    const patch: { offsetX?: number; offsetY?: number } = {};
+    if (worldWidth < viewport.width) {
+      const centered = centerCameraAxisOffset(worldWidth, viewport.width);
+      if (current.offsetX !== centered) {
+        patch.offsetX = centered;
+      }
+    }
+    if (worldHeight < viewport.height) {
+      const centered = centerCameraAxisOffset(worldHeight, viewport.height);
+      if (current.offsetY !== centered) {
+        patch.offsetY = centered;
+      }
+    }
+    if (patch.offsetX !== undefined || patch.offsetY !== undefined) {
+      setCamera(patch);
+    }
+  }, [planet.map_width, planet.map_height, setCamera, tileSize, viewport]);
+
   useEffect(() => {
     if (!camera.ready || overviewMode) {
       return;
@@ -504,9 +544,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     if (dragState) {
       const deltaX = event.clientX - dragState.pointerX;
       const deltaY = event.clientY - dragState.pointerY;
+      // 小图轴钳位：地图中心不允许被拖出视口（data-camera-offset 语义不变，值反映钳位后的偏移）。
       cameraScheduler.schedule({
-        offsetX: dragState.offsetX + deltaX,
-        offsetY: dragState.offsetY + deltaY,
+        offsetX: clampCameraAxisOffset(planet.map_width * tileSize, viewport.width, dragState.offsetX + deltaX),
+        offsetY: clampCameraAxisOffset(planet.map_height * tileSize, viewport.height, dragState.offsetY + deltaY),
         zoomIndex: camera.zoomIndex,
         ready: true,
       });
@@ -541,8 +582,8 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
 
     cameraScheduler.schedule({
       zoomIndex: clampedIndex,
-      offsetX: anchorX - worldX * nextTileSize,
-      offsetY: anchorY - worldY * nextTileSize,
+      offsetX: clampCameraAxisOffset(planet.map_width * nextTileSize, viewport.width, anchorX - worldX * nextTileSize),
+      offsetY: clampCameraAxisOffset(planet.map_height * nextTileSize, viewport.height, anchorY - worldY * nextTileSize),
       ready: true,
     });
   }

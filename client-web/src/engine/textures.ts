@@ -187,6 +187,24 @@ export function getEmojiTexture(glyph: string, size = 64): Texture {
   return toTexture(key, canvas);
 }
 
+/** 轻暗角：中心透明向四角渐暗，全屏叠加增强聚焦感（截图确定性：静态纹理）。 */
+export function getVignetteTexture(size = 512): Texture {
+  const key = `vignette:${size}`;
+  const hit = cache.get(key);
+  if (hit) {
+    return hit;
+  }
+  const [canvas, ctx] = makeCanvas(size);
+  const half = size / 2;
+  const gradient = ctx.createRadialGradient(half, half, size * 0.32, half, half, size * 0.72);
+  gradient.addColorStop(0, 'rgba(3, 7, 15, 0)');
+  gradient.addColorStop(0.72, 'rgba(3, 7, 15, 0.16)');
+  gradient.addColorStop(1, 'rgba(3, 7, 15, 0.52)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  return toTexture(key, canvas);
+}
+
 /** 测试/热重载时清空缓存。 */
 export function clearTextureCache() {
   cache.forEach((texture) => texture.destroy(true));
