@@ -373,6 +373,40 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 		t.Fatalf("expected silo default recipe small_carrier_rocket, got %+v", silo)
 	}
 
+	buildingByID := map[model.BuildingType]*BuildingCatalogEntry{}
+	for i := range view.Buildings {
+		buildingByID[view.Buildings[i].ID] = &view.Buildings[i]
+	}
+	gauss := buildingByID[model.BuildingTypeGaussTurret]
+	if gauss == nil || gauss.CombatRange != 5 {
+		t.Fatalf("expected gauss turret combat_range 5, got %+v", gauss)
+	}
+	if gauss.PowerRange != 0 {
+		t.Fatalf("expected gauss turret without power_range, got %+v", gauss)
+	}
+	srPlasma := buildingByID[model.BuildingTypeSRPlasmaTurret]
+	if srPlasma == nil || srPlasma.CombatRange != 12 {
+		t.Fatalf("expected sr plasma turret combat_range 12, got %+v", srPlasma)
+	}
+	tesla := buildingByID[model.BuildingTypeTeslaTower]
+	if tesla == nil || tesla.PowerRange != model.DefaultTeslaTowerRange {
+		t.Fatalf("expected tesla tower power_range %d, got %+v", model.DefaultTeslaTowerRange, tesla)
+	}
+	if tesla.CombatRange != 0 {
+		t.Fatalf("expected tesla tower without combat_range, got %+v", tesla)
+	}
+	wirelessTower := buildingByID[model.BuildingTypeWirelessPowerTower]
+	if wirelessTower == nil || wirelessTower.PowerRange != model.DefaultWirelessPowerTowerRange {
+		t.Fatalf("expected wireless power tower power_range %d, got %+v", model.DefaultWirelessPowerTowerRange, wirelessTower)
+	}
+	substation := buildingByID[model.BuildingTypeSatelliteSubstation]
+	if substation == nil || substation.PowerRange != model.DefaultSatelliteSubstationRange {
+		t.Fatalf("expected satellite substation power_range %d, got %+v", model.DefaultSatelliteSubstationRange, substation)
+	}
+	if mining.CombatRange != 0 || mining.PowerRange != 0 {
+		t.Fatalf("expected mining machine without range fields, got %+v", mining)
+	}
+
 	foundTech := false
 	for _, tech := range view.Techs {
 		if tech.ID == "electromagnetism" {

@@ -24,6 +24,8 @@ type BuildingCatalogEntry struct {
 	RequiresResourceNode bool                      `json:"requires_resource_node,omitempty"`
 	CanProduceUnits      bool                      `json:"can_produce_units,omitempty"`
 	UnlockTech           []string                  `json:"unlock_tech,omitempty"`
+	CombatRange          int                       `json:"combat_range,omitempty"`
+	PowerRange           int                       `json:"power_range,omitempty"`
 	IconKey              string                    `json:"icon_key"`
 	Color                string                    `json:"color"`
 }
@@ -79,7 +81,7 @@ func (ql *Layer) Catalog() *CatalogView {
 	buildings := make([]BuildingCatalogEntry, 0, len(buildDefs))
 	for _, def := range buildDefs {
 		buildCostItems := append([]model.ItemAmount(nil), def.BuildCost.Items...)
-		buildings = append(buildings, BuildingCatalogEntry{
+		entry := BuildingCatalogEntry{
 			ID:                   def.ID,
 			Name:                 def.Name,
 			Category:             def.Category,
@@ -93,7 +95,16 @@ func (ql *Layer) Catalog() *CatalogView {
 			UnlockTech:           append([]string(nil), def.UnlockTech...),
 			IconKey:              string(def.ID),
 			Color:                buildingCatalogColor(def.Category),
-		})
+		}
+		if runtimeDef, ok := model.BuildingRuntimeDefinitionByID(def.ID); ok {
+			if combat := runtimeDef.Functions.Combat; combat != nil && combat.Range > 0 {
+				entry.CombatRange = combat.Range
+			}
+			if powerGrid := runtimeDef.Functions.PowerGrid; powerGrid != nil && powerGrid.WirelessRange > 0 {
+				entry.PowerRange = powerGrid.WirelessRange
+			}
+		}
+		buildings = append(buildings, entry)
 	}
 
 	itemDefs := model.AllItems()

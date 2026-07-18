@@ -16,7 +16,8 @@
  *   sync 时整体重绘（工地为脚手架虚线 + 进度条）。建筑+单位在同一个 sortableChildren 容器按
  *   tile 底部 y 排序（zIndex 单位为小数 tile 坐标）：建筑结构向上溢出 footprint，单位走到高建筑
  *   北侧会被遮住上半；单位 zIndex 随平滑移动逐帧更新。buildings/units 图层开关落到逐节点 visible。
- * - 交互叠加：选中黄框 / hover 白框 / 建造幽灵 / move/attack 准星（单个 Graphics，数据变化重绘）；
+ * - 交互叠加：选中黄框（防御建筑附射程圈）/ hover 白框 / 建造幽灵（footprint + catalog 范围圈）/
+ *   move/attack 准星（单个 Graphics，数据变化重绘）；
  *   地块 hover 轻量高亮为独立 Graphics（形状只随 tileSize 重画，hover 变化仅动位置/可见性，零重建）。
  *
  * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲 +
@@ -161,6 +162,90 @@ export function buildDashSegments(
     }
   }
   return segments;
+}
+
+/**
+ * 虚线圆弧：沿圆周按 dash pattern（如画 8 空 6）切成若干"画"段微弦，
+ * 供 Graphics 模拟虚线圆（Pixi Graphics 无原生 setLineDash）。
+ * pattern 为空（或全 0）时退化为完整圆。
+ */
+export function buildDashArcSegments(
+  cx: number,
+  cy: number,
+  radius: number,
+  pattern: readonly number[],
+): Array<readonly [number, number, number, number]> {
+  if (radius <= 0) {
+    return [];
+  }
+  const safePattern = pattern.map((value) => Math.max(value, 0)).filter((value) => value > 0);
+  const circumference = Math.PI * 2 * radius;
+  // 微弦弧长 ≈ 2px（至少 24 段）：兼顾圆滑与段数。
+  const chordCount = Math.max(Math.ceil(circumference / 2), 24);
+  const chordLength = circumference / chordCount;
+  const pointAt = (index: number) => {
+    const angle = (index / chordCount) * Math.PI * 2;
+    return [cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius] as const;
+  };
+  const segments: Array<readonly [number, number, number, number]> = [];
+  let drawing = true;
+  let patternIndex = 0;
+  let remaining = safePattern.length > 0 ? safePattern[0] : Number.POSITIVE_INFINITY;
+  for (let i = 0; i < chordCount; i += 1) {
+    if (drawing) {
+      const [x1, y1] = pointAt(i);
+      const [x2, y2] = pointAt(i + 1);
+      segments.push([x1, y1, x2, y2]);
+    }
+    if (safePattern.length === 0) {
+      continue;
+    }
+    remaining -= chordLength;
+    while (remaining <= 0) {
+      drawing = !drawing;
+      patternIndex = (patternIndex + 1) % safePattern.length;
+      remaining += safePattern[patternIndex];
+    }
+  }
+  return segments;
+}
+
+/** 范围圈规格：kind 决定配色/线型（combat 橙红细实线，power 黄色虚线对齐电网语义）。 */
+export interface RangeCircleSpec {
+  kind: 'combat' | 'power';
+  /** 半径（tile 单位，与 server 曼哈顿距离语义一致，绘制时换算像素）。 */
+  radiusTiles: number;
+}
+
+/**
+ * build 幽灵范围圈：catalog 条目带 combat_range / power_range 时各出一圈；
+ * 无范围字段的建筑类型不画。
+ */
+export function resolveGhostRangeCircles(
+  catalog: CatalogView | undefined,
+  buildingType: string | undefined,
+): RangeCircleSpec[] {
+  if (!buildingType) {
+    return [];
+  }
+  const entry = getBuildingCatalogEntry(catalog, buildingType);
+  const circles: RangeCircleSpec[] = [];
+  if (entry?.combat_range && entry.combat_range > 0) {
+    circles.push({ kind: 'combat', radiusTiles: entry.combat_range });
+  }
+  if (entry?.power_range && entry.power_range > 0) {
+    circles.push({ kind: 'power', radiusTiles: entry.power_range });
+  }
+  return circles;
+}
+
+/**
+ * 选中建筑射程圈半径（tile）：已放置防御建筑读 runtime.functions.combat.range；
+ * 无战斗能力返回 undefined。供电建筑的无线覆盖由电网图层（连线 + 覆盖标记）承担，不重复画圈。
+ */
+export function resolveSelectedCombatRange(building: Building | undefined | null): number | undefined {
+  const range = building?.runtime?.functions?.combat?.range;
+  return range !== undefined && range > 0 ? range : undefined;
 }
 
 /** 确定性 id hash → [0, 2π) 动画相位（同 id 同相位，截图可复现）。 */
@@ -347,6 +432,8 @@ export interface PlanetSceneInteractionInput {
   mode: PlanetInteractionMode;
   /** build 模式幽灵预览的评估结果（由组件用 assessBuildTiles 预先算好）。 */
   buildAssessment?: BuildTileAssessment;
+  /** build 模式幽灵范围圈数据源（catalog 的 combat_range / power_range）。 */
+  catalog?: CatalogView;
   selectionVisible: boolean;
   overview?: PlanetOverviewView;
   overviewMode: boolean;
@@ -429,6 +516,7 @@ const COLOR_DETECTION = 0xffd43b;
 const COLOR_SELECTED = 0xffd166;
 const COLOR_GHOST_OK = 0x6ee7b7;
 const COLOR_GHOST_BLOCKED = 0xff5757;
+const COLOR_RANGE_COMBAT = 0xff922b;
 
 /** 建筑 emoji 角标显示门槛（tileSize 低于该值时类型靠剪影+配色辨认）。 */
 export const BUILDING_BADGE_MIN_TILE_SIZE = 16;
@@ -2013,6 +2101,18 @@ export class PlanetScene {
             .stroke({ width: 1.5, color: blocked ? COLOR_GHOST_BLOCKED : COLOR_GHOST_OK });
         }
       }
+      // 幽灵范围预览：catalog 带 combat_range（橙红细圈）/power_range（黄虚线圈，对齐电网配色），
+      // 随幽灵移动，退出 build 模式随叠加层整体清除；无范围字段的建筑类型不画。
+      const rangeCircles = resolveGhostRangeCircles(input.catalog, mode.buildingType);
+      if (rangeCircles.length > 0) {
+        this.drawRangeCircles(
+          g,
+          (hoveredTile.x + assessment.footprint.width / 2) * ts,
+          (hoveredTile.y + assessment.footprint.height / 2) * ts,
+          rangeCircles,
+          ts,
+        );
+      }
       return;
     }
 
@@ -2056,12 +2156,47 @@ export class PlanetScene {
     if (!isTilePointVisible(highlightTile, input.viewportBounds, 1)) {
       return;
     }
+    // 选中防御建筑：画射程圈（数据来自该建筑 runtime.functions.combat.range）；
+    // 供电建筑的无线覆盖由电网图层承担，这里不重复画。
+    if (selected?.kind === 'building') {
+      const node = this.buildingNodes.get(selected.id);
+      const combatRange = resolveSelectedCombatRange(node?.data);
+      if (node && combatRange !== undefined) {
+        const { width, height } = getBuildingFootprint(node.data);
+        const point = toTilePoint(node.data.position);
+        this.drawRangeCircles(
+          g,
+          (point.x + width / 2) * ts,
+          (point.y + height / 2) * ts,
+          [{ kind: 'combat', radiusTiles: combatRange }],
+          ts,
+        );
+      }
+    }
     const screenX = highlightTile.x * ts;
     const screenY = highlightTile.y * ts;
     g.rect(screenX + 1.5, screenY + 1.5, Math.max(ts - 3, 2), Math.max(ts - 3, 2))
       .stroke(selected
         ? { width: 3, color: COLOR_SELECTED }
         : { width: 2, color: 0xffffff, alpha: 0.65 });
+  }
+
+  /** 范围圈绘制：combat 橙红细实线，power 黄色虚线（对齐电网 wireless 配色语义）。 */
+  private drawRangeCircles(g: Graphics, cx: number, cy: number, circles: RangeCircleSpec[], ts: number) {
+    for (const circle of circles) {
+      const radius = circle.radiusTiles * ts;
+      if (radius <= 0) {
+        continue;
+      }
+      if (circle.kind === 'combat') {
+        g.circle(cx, cy, radius).stroke({ width: 2, color: COLOR_RANGE_COMBAT, alpha: 0.85 });
+      } else {
+        for (const [ax, ay, bx, by] of buildDashArcSegments(cx, cy, radius, [8, 6])) {
+          g.moveTo(ax, ay).lineTo(bx, by);
+        }
+        g.stroke({ width: 2, color: COLOR_POWER_WIRELESS, alpha: 0.85 });
+      }
+    }
   }
 
   // ---------- ticker：单位平滑移动 + 选中环脉冲 ----------

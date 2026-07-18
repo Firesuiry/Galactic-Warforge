@@ -113,6 +113,7 @@ type BuildingFunctionModules struct {
 	Energy          *modelpower.EnergyModule `json:"energy,omitempty" yaml:"energy,omitempty"`
 	Research        *ResearchModule          `json:"research,omitempty" yaml:"research,omitempty"`
 	Combat          *CombatModule            `json:"combat,omitempty" yaml:"combat,omitempty"`
+	PowerGrid       *PowerGridModule         `json:"power_grid,omitempty" yaml:"power_grid,omitempty"`
 	Shield          *ShieldModule            `json:"shield,omitempty" yaml:"shield,omitempty"`
 	Launch          *LaunchModule            `json:"launch,omitempty" yaml:"launch,omitempty"`
 	Deployment      *DeploymentModule        `json:"deployment,omitempty" yaml:"deployment,omitempty"`
@@ -188,6 +189,11 @@ type ResearchModule struct {
 type CombatModule struct {
 	Attack int `json:"attack" yaml:"attack"`
 	Range  int `json:"range" yaml:"range"`
+}
+
+// PowerGridModule handles wireless power transmission coverage.
+type PowerGridModule struct {
+	WirelessRange int `json:"wireless_range" yaml:"wireless_range"`
 }
 
 // ShieldModule handles planetary shield charge and capacity.
@@ -490,6 +496,9 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			return fmt.Errorf("building runtime %s combat module invalid", def.ID)
 		}
 	}
+	if def.Functions.PowerGrid != nil && def.Functions.PowerGrid.WirelessRange < 0 {
+		return fmt.Errorf("building runtime %s power grid module invalid", def.ID)
+	}
 	if def.Functions.Shield != nil {
 		module := def.Functions.Shield
 		if module.Capacity <= 0 || module.ChargePerTick <= 0 {
@@ -599,6 +608,10 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 	if m.Combat != nil {
 		val := *m.Combat
 		out.Combat = &val
+	}
+	if m.PowerGrid != nil {
+		val := *m.PowerGrid
+		out.PowerGrid = &val
 	}
 	if m.Shield != nil {
 		val := *m.Shield
@@ -951,6 +964,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 		},
+		Functions: BuildingFunctionModules{
+			PowerGrid: &PowerGridModule{WirelessRange: DefaultTeslaTowerRange},
+		},
 	},
 	{
 		ID: BuildingTypeWirelessPowerTower,
@@ -959,6 +975,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 		},
+		Functions: BuildingFunctionModules{
+			PowerGrid: &PowerGridModule{WirelessRange: DefaultWirelessPowerTowerRange},
+		},
 	},
 	{
 		ID: BuildingTypeSatelliteSubstation,
@@ -966,6 +985,9 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
+		},
+		Functions: BuildingFunctionModules{
+			PowerGrid: &PowerGridModule{WirelessRange: DefaultSatelliteSubstationRange},
 		},
 	},
 	{

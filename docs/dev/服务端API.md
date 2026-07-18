@@ -1002,7 +1002,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
   - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `world_units` / `warfare`
 - 响应字段:
-  - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `icon_key` / `color`
+  - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `combat_range` / `power_range` / `icon_key` / `color`
+  - `buildings[].combat_range`：可选，战斗射程（tile 曼哈顿距离），仅有战斗能力的建筑（如 `gauss_turret`、`sr_plasma_turret`、`jammer_tower`）携带；与结算同源，取自该建筑 runtime 定义 `functions.combat.range`
+  - `buildings[].power_range`：可选，无线供电覆盖半径（tile 曼哈顿距离），仅无线供电建筑（`tesla_tower`、`wireless_power_tower`、`satellite_substation`）携带；与电网结算同源，取自该建筑 runtime 定义 `functions.power_grid.wireless_range`
   - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to` / `max_level` / `icon_key` / `color`
@@ -1026,6 +1028,32 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "requires_resource_node": true,
       "icon_key": "mining_machine",
       "color": "#48b589"
+    },
+    {
+      "id": "gauss_turret",
+      "name": "Gauss Turret",
+      "category": "command_signal",
+      "subcategory": "command_signal",
+      "footprint": {"width": 1, "height": 1},
+      "build_cost": {"minerals": 80, "energy": 30},
+      "buildable": true,
+      "unlock_tech": ["weapon_system"],
+      "combat_range": 5,
+      "icon_key": "gauss_turret",
+      "color": "#fa5252"
+    },
+    {
+      "id": "tesla_tower",
+      "name": "Tesla Tower",
+      "category": "power_grid",
+      "subcategory": "power_grid",
+      "footprint": {"width": 1, "height": 1},
+      "build_cost": {"minerals": 20, "energy": 10},
+      "buildable": true,
+      "unlock_tech": ["electromagnetism"],
+      "power_range": 4,
+      "icon_key": "tesla_tower",
+      "color": "#74c0fc"
     }
   ],
   "items": [

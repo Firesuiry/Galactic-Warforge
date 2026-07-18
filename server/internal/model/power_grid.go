@@ -413,17 +413,14 @@ func powerGridConnectors(building *Building) []PowerConnector {
 	return connectors
 }
 
+// powerGridWirelessRange resolves the wireless coverage range from the building
+// runtime definition (single source of truth, also exposed via the catalog).
 func powerGridWirelessRange(btype BuildingType) int {
-	switch btype {
-	case BuildingTypeTeslaTower:
-		return DefaultTeslaTowerRange
-	case BuildingTypeWirelessPowerTower:
-		return DefaultWirelessPowerTowerRange
-	case BuildingTypeSatelliteSubstation:
-		return DefaultSatelliteSubstationRange
-	default:
+	def, ok := BuildingRuntimeDefinitionByID(btype)
+	if !ok || def.Functions.PowerGrid == nil {
 		return 0
 	}
+	return def.Functions.PowerGrid.WirelessRange
 }
 
 // IsPowerGridBuilding returns true when a building belongs to the power grid category.

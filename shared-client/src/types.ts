@@ -97,6 +97,10 @@ export interface CombatModule {
   range: number;
 }
 
+export interface PowerGridModule {
+  wireless_range: number;
+}
+
 export interface BuildingFunctionModules {
   production?: ProductionModule;
   collect?: CollectModule;
@@ -106,6 +110,7 @@ export interface BuildingFunctionModules {
   energy?: EnergyModule;
   research?: ResearchModule;
   combat?: CombatModule;
+  power_grid?: PowerGridModule;
   orbital?: Record<string, unknown>;
   sorter?: Record<string, unknown>;
   ray_receiver?: Record<string, unknown>;
@@ -1134,6 +1139,8 @@ export interface BuildingCatalogEntry {
   requires_resource_node?: boolean;
   can_produce_units?: boolean;
   unlock_tech?: string[];
+  combat_range?: number;
+  power_range?: number;
   icon_key: string;
   color: string;
 }

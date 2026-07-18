@@ -376,6 +376,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       selected,
       mode: interactionMode,
       buildAssessment,
+      catalog,
       selectionVisible: sceneLayers.selection,
       overview,
       overviewMode,

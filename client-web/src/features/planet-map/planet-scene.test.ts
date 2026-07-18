@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Building, BuildingFunctionModules, CatalogView } from '@shared/types';
+
 import {
+  buildDashArcSegments,
   buildDashSegments,
   buildingSortKey,
   constructionProgress,
   entityAnimPhase,
   hpArcParams,
+  resolveGhostRangeCircles,
+  resolveSelectedCombatRange,
   resolveTileHoverHighlight,
   resolveUnitDirection,
   resourceDecalLayout,
@@ -55,6 +60,98 @@ describe('planet-scene 纯函数', () => {
 
   it('buildDashSegments：零长线段不产生段落', () => {
     expect(buildDashSegments(3, 3, 3, 3, [4, 4])).toEqual([]);
+  });
+});
+
+describe('范围圈纯函数', () => {
+  const catalog = {
+    buildings: [
+      { id: 'gauss_turret', combat_range: 5 },
+      { id: 'tesla_tower', power_range: 4 },
+      { id: 'jammer_tower', combat_range: 8 },
+      { id: 'wind_turbine' },
+    ],
+  } as unknown as CatalogView;
+
+  const makeBuilding = (functions?: BuildingFunctionModules): Building => ({
+    id: 'b-1',
+    type: 'gauss_turret',
+    owner_id: 'p-1',
+    position: { x: 3, y: 3, z: 0 },
+    hp: 100,
+    max_hp: 100,
+    level: 1,
+    vision_range: 6,
+    runtime: {
+      params: {
+        energy_consume: 3,
+        energy_generate: 0,
+        capacity: 0,
+        maintenance_cost: { minerals: 0, energy: 0 },
+        footprint: { width: 1, height: 1 },
+      },
+      functions,
+      state: 'running',
+    },
+  });
+
+  it('resolveGhostRangeCircles：combat_range/power_range 各出一圈，无范围字段不画', () => {
+    expect(resolveGhostRangeCircles(catalog, 'gauss_turret')).toEqual([{ kind: 'combat', radiusTiles: 5 }]);
+    expect(resolveGhostRangeCircles(catalog, 'tesla_tower')).toEqual([{ kind: 'power', radiusTiles: 4 }]);
+    expect(resolveGhostRangeCircles(catalog, 'wind_turbine')).toEqual([]);
+    expect(resolveGhostRangeCircles(catalog, 'unknown_type')).toEqual([]);
+    expect(resolveGhostRangeCircles(catalog, undefined)).toEqual([]);
+    expect(resolveGhostRangeCircles(undefined, 'gauss_turret')).toEqual([]);
+  });
+
+  it('resolveGhostRangeCircles：零/负半径防御性忽略', () => {
+    const zeroCatalog = {
+      buildings: [{ id: 'broken', combat_range: 0, power_range: -1 }],
+    } as unknown as CatalogView;
+    expect(resolveGhostRangeCircles(zeroCatalog, 'broken')).toEqual([]);
+  });
+
+  it('resolveSelectedCombatRange：已放置防御建筑读 runtime.functions.combat.range', () => {
+    expect(resolveSelectedCombatRange(makeBuilding({ combat: { attack: 15, range: 5 } }))).toBe(5);
+    expect(resolveSelectedCombatRange(makeBuilding({ power_grid: { wireless_range: 4 } }))).toBeUndefined();
+    expect(resolveSelectedCombatRange(makeBuilding(undefined))).toBeUndefined();
+    expect(resolveSelectedCombatRange(makeBuilding({ combat: { attack: 0, range: 0 } }))).toBeUndefined();
+    expect(resolveSelectedCombatRange(null)).toBeUndefined();
+    expect(resolveSelectedCombatRange(undefined)).toBeUndefined();
+  });
+
+  it('buildDashArcSegments：空 pattern 退化为闭合整圆', () => {
+    const segments = buildDashArcSegments(10, 20, 30, []);
+    expect(segments.length).toBeGreaterThanOrEqual(24);
+    const [firstX, firstY] = [segments[0][0], segments[0][1]];
+    const [, , lastX, lastY] = segments[segments.length - 1];
+    // 首尾闭合（末段终点 = 首段起点）
+    expect(lastX).toBeCloseTo(firstX, 6);
+    expect(lastY).toBeCloseTo(firstY, 6);
+    // 所有点都在圆周上
+    for (const [ax, ay, bx, by] of segments) {
+      expect(Math.hypot(ax - 10, ay - 20)).toBeCloseTo(30, 6);
+      expect(Math.hypot(bx - 10, by - 20)).toBeCloseTo(30, 6);
+    }
+  });
+
+  it('buildDashArcSegments：虚线产生空隙，画段总弧长小于整圆', () => {
+    const solid = buildDashArcSegments(0, 0, 20, []);
+    const dashed = buildDashArcSegments(0, 0, 20, [8, 6]);
+    expect(dashed.length).toBeLessThan(solid.length);
+    expect(dashed.length).toBeGreaterThan(0);
+    // 画段都在圆周上
+    for (const [ax, ay] of dashed) {
+      expect(Math.hypot(ax, ay)).toBeCloseTo(20, 6);
+    }
+  });
+
+  it('buildDashArcSegments：零半径/全 0 pattern 防御', () => {
+    expect(buildDashArcSegments(0, 0, 0, [8, 6])).toEqual([]);
+    expect(buildDashArcSegments(0, 0, -3, [8, 6])).toEqual([]);
+    // 全 0 pattern 退化为整圆（不死循环）
+    const solid = buildDashArcSegments(0, 0, 10, [0, 0]);
+    expect(solid.length).toBeGreaterThanOrEqual(24);
   });
 });
 
