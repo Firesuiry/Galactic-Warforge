@@ -3,7 +3,8 @@
  *
  * 告别"footprint 描边盒 + 居中 emoji"：按 ~6 种剪影原型（tower/dome/furnace/depot/belt/special）
  * 在离屏 canvas 上按 32px/tile 超采样绘制矢量结构（投影 → 底座板 → 主体结构 → 顶部细节），
- * 转 Pixi Texture 全局缓存（键 `bldg:<archetype>:<w>x<h>:<state>`，纹理不随场景销毁），
+ * 转 Pixi Texture 全局缓存（键 `bldg:<archetype>:<w>x<h>:<state>`，belt 原型追加方向段
+ * `:<direction>` 烘焙 4 向 chevron 变体，纹理不随场景销毁），
  * 场景侧 Sprite 缩放到 footprint×tileSize 显示。
  *
  * - 视觉溢出 footprint：水平各 ~8%+2px，上方为结构高度（伪 3D，约 0.55 倍 footprint 高），
@@ -24,6 +25,23 @@ export type BuildingArchetype = 'tower' | 'dome' | 'furnace' | 'depot' | 'belt' 
 
 /** 受损/故障烘焙变体：normal = 常规；distressed = 暗化 + 警示斜纹。 */
 export type BuildingVisualState = 'normal' | 'distressed';
+
+/** 传送带方向纹朝向（chevron 指向 = 物流输出方向）。 */
+export type BeltDirection = 'north' | 'east' | 'south' | 'west';
+
+/**
+ * 传送带方向解析：取 server 下发的 conveyor.output（建成时已由服务器把 auto 解析成实方向）；
+ * 缺失/auto/空串一律回退 east（与历史固定 +x 纹一致）。仅 conveyor_belt_* 携带该数据。
+ */
+export function resolveConveyorBeltDirection(
+  building: { conveyor?: { output?: string } },
+): BeltDirection {
+  const output = building.conveyor?.output;
+  if (output === 'north' || output === 'south' || output === 'west' || output === 'east') {
+    return output;
+  }
+  return 'east';
+}
 
 /**
  * 建筑类型 → 剪影原型。未列出的类型按关键词兜底（含 tower/lab/smelter 等），
@@ -266,8 +284,10 @@ export function buildingSpriteCacheKey(
   tilesWide: number,
   tilesHigh: number,
   state: BuildingVisualState,
+  direction?: BeltDirection,
 ): string {
-  return `bldg:${archetype}:${tilesWide}x${tilesHigh}:${state}`;
+  // 方向段仅 belt 变体携带（其他原型无方向纹，键保持不变）。
+  return `bldg:${archetype}:${tilesWide}x${tilesHigh}:${state}${direction ? `:${direction}` : ''}`;
 }
 
 /** 风机叶片烘焙缓存键。 */
@@ -626,15 +646,22 @@ function drawDepot(ctx: CanvasRenderingContext2D, layout: BuildingSpriteLayout, 
   }
 }
 
-function drawBelt(ctx: CanvasRenderingContext2D, layout: BuildingSpriteLayout, palette: ArchetypePalette) {
+function drawBelt(
+  ctx: CanvasRenderingContext2D,
+  layout: BuildingSpriteLayout,
+  palette: ArchetypePalette,
+  direction: BeltDirection = 'east',
+) {
   const { padX, topExtra, footprintWidth: fw, footprintHeight: fh } = layout;
   const fx = padX;
   const fy = topExtra;
+  // 带体走向：east/west 横带（钢轨在上下），north/south 竖带（钢轨在左右）。
+  const horizontal = direction === 'east' || direction === 'west';
 
-  const bx = fx + fw * 0.02;
-  const bw = fw * 0.96;
-  const by = fy + fh * 0.44;
-  const bh = fh * 0.24;
+  const bx = horizontal ? fx + fw * 0.02 : fx + fw * 0.38;
+  const by = horizontal ? fy + fh * 0.44 : fy + fh * 0.02;
+  const bw = horizontal ? fw * 0.96 : fw * 0.24;
+  const bh = horizontal ? fh * 0.24 : fh * 0.96;
 
   ctx.beginPath();
   ctx.rect(bx, by, bw, bh);
@@ -643,23 +670,43 @@ function drawBelt(ctx: CanvasRenderingContext2D, layout: BuildingSpriteLayout, p
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // 上下钢轨
+  // 钢轨（贴带体两侧长边）
   ctx.fillStyle = '#77839a';
-  ctx.fillRect(bx, by, bw, Math.max(1.5, bh * 0.18));
-  ctx.fillRect(bx, by + bh - Math.max(1.5, bh * 0.18), bw, Math.max(1.5, bh * 0.18));
+  const rail = Math.max(1.5, (horizontal ? bh : bw) * 0.18);
+  if (horizontal) {
+    ctx.fillRect(bx, by, bw, rail);
+    ctx.fillRect(bx, by + bh - rail, bw, rail);
+  } else {
+    ctx.fillRect(bx, by, rail, bh);
+    ctx.fillRect(bx + bw - rail, by, rail, bh);
+  }
 
-  // 方向箭头纹（chevron → +x）
+  // 方向箭头纹（chevron 指向物流输出方向）
   ctx.fillStyle = numToCss(palette.accent, 0.85);
-  const chevronW = fw * 0.12;
-  const count = Math.max(2, Math.round(fw / (chevronW * 1.8)));
+  const span = horizontal ? bw : bh;
+  const thickness = horizontal ? bh : bw;
+  const chevronW = (horizontal ? fw : fh) * 0.12;
+  const count = Math.max(2, Math.round(span / (chevronW * 1.8)));
+  const sign = direction === 'east' || direction === 'south' ? 1 : -1;
   for (let i = 0; i < count; i += 1) {
-    const cx = bx + bw * ((i + 0.5) / count);
-    const cy = by + bh / 2;
+    const along = (horizontal ? bx : by) + span * ((i + 0.5) / count);
+    const across = (horizontal ? by : bx) + thickness / 2;
+    const tip = along + sign * chevronW * 0.4;
+    const tail = along - sign * chevronW * 0.4;
+    const notch = along - sign * chevronW * 0.1;
+    const half = thickness * 0.26;
     ctx.beginPath();
-    ctx.moveTo(cx - chevronW * 0.4, cy - bh * 0.26);
-    ctx.lineTo(cx + chevronW * 0.4, cy);
-    ctx.lineTo(cx - chevronW * 0.4, cy + bh * 0.26);
-    ctx.lineTo(cx - chevronW * 0.1, cy);
+    if (horizontal) {
+      ctx.moveTo(tail, across - half);
+      ctx.lineTo(tip, across);
+      ctx.lineTo(tail, across + half);
+      ctx.lineTo(notch, across);
+    } else {
+      ctx.moveTo(across - half, tail);
+      ctx.lineTo(across, tip);
+      ctx.lineTo(across + half, tail);
+      ctx.lineTo(across, notch);
+    }
     ctx.closePath();
     ctx.fill();
   }
@@ -711,6 +758,8 @@ export interface BuildingSpriteSpec {
   tilesWide: number;
   tilesHigh: number;
   state: BuildingVisualState;
+  /** belt 原型的方向纹朝向（其他原型忽略，也不进缓存键）。 */
+  direction?: BeltDirection;
 }
 
 function renderBuildingCanvas(spec: BuildingSpriteSpec): HTMLCanvasElement {
@@ -741,7 +790,7 @@ function renderBuildingCanvas(spec: BuildingSpriteSpec): HTMLCanvasElement {
       drawDepot(ctx, layout, palette, spec.buildingType);
       break;
     case 'belt':
-      drawBelt(ctx, layout, palette);
+      drawBelt(ctx, layout, palette, spec.direction);
       break;
     case 'special':
       drawSpecial(ctx, layout, palette);
@@ -755,12 +804,13 @@ function renderBuildingCanvas(spec: BuildingSpriteSpec): HTMLCanvasElement {
 
 /** 建筑结构精灵纹理（全局缓存；纹理生命周期由本模块管理，场景不得 destroy）。 */
 export function getBuildingSpriteTexture(spec: BuildingSpriteSpec): Texture {
-  const key = buildingSpriteCacheKey(spec.archetype, spec.tilesWide, spec.tilesHigh, spec.state);
+  const direction = spec.archetype === 'belt' ? (spec.direction ?? 'east') : undefined;
+  const key = buildingSpriteCacheKey(spec.archetype, spec.tilesWide, spec.tilesHigh, spec.state, direction);
   const hit = cache.get(key);
   if (hit) {
     return hit;
   }
-  const texture = Texture.from(renderBuildingCanvas(spec));
+  const texture = Texture.from(renderBuildingCanvas({ ...spec, direction }));
   texture.source.scaleMode = 'linear';
   cache.set(key, texture);
   return texture;

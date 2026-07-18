@@ -11,6 +11,7 @@ import {
   resolveBuildingAccent,
   resolveBuildingArchetype,
   resolveBuildingVisualState,
+  resolveConveyorBeltDirection,
   windBladesCacheKey,
 } from '@/features/planet-map/planet-building-sprites';
 
@@ -58,6 +59,28 @@ describe('烘焙参数与缓存键', () => {
     expect(buildingSpriteCacheKey('tower', 1, 1, 'distressed')).toBe('bldg:tower:1x1:distressed');
     expect(buildingSpriteCacheKey('furnace', 2, 3, 'normal')).toBe('bldg:furnace:2x3:normal');
     expect(windBladesCacheKey(1, 1)).toBe('bldg-blades:1x1');
+  });
+
+  it('belt 方向纹变体键：方向追加为末段，缺省不带方向段（非 belt 键不变）', () => {
+    expect(buildingSpriteCacheKey('belt', 1, 1, 'normal', 'east')).toBe('bldg:belt:1x1:normal:east');
+    expect(buildingSpriteCacheKey('belt', 1, 1, 'normal', 'north')).toBe('bldg:belt:1x1:normal:north');
+    expect(buildingSpriteCacheKey('belt', 1, 1, 'distressed', 'south')).toBe('bldg:belt:1x1:distressed:south');
+    // 四方向键互不相同（烘焙 4 向变体）
+    const keys = (['north', 'east', 'south', 'west'] as const).map(
+      (direction) => buildingSpriteCacheKey('belt', 1, 1, 'normal', direction),
+    );
+    expect(new Set(keys).size).toBe(4);
+  });
+
+  it('resolveConveyorBeltDirection：取 conveyor.output 实方向，auto/空/缺失回退 east', () => {
+    expect(resolveConveyorBeltDirection({ conveyor: { output: 'north' } })).toBe('north');
+    expect(resolveConveyorBeltDirection({ conveyor: { output: 'south' } })).toBe('south');
+    expect(resolveConveyorBeltDirection({ conveyor: { output: 'west' } })).toBe('west');
+    expect(resolveConveyorBeltDirection({ conveyor: { output: 'east' } })).toBe('east');
+    expect(resolveConveyorBeltDirection({ conveyor: { output: 'auto' } })).toBe('east');
+    expect(resolveConveyorBeltDirection({ conveyor: { output: '' } })).toBe('east');
+    expect(resolveConveyorBeltDirection({ conveyor: {} })).toBe('east');
+    expect(resolveConveyorBeltDirection({})).toBe('east');
   });
 
   it('布局：32px/tile 超采样，溢出随 footprint 自适应', () => {

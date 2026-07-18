@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildDashSegments,
+  buildingSortKey,
   constructionProgress,
   entityAnimPhase,
   hpArcParams,
+  resolveTileHoverHighlight,
   resolveUnitDirection,
   resourceDecalLayout,
   smoothingBlend,
   UNIT_SMOOTHING_RATE,
+  unitSortKey,
   unitWedgePoints,
 } from '@/features/planet-map/planet-scene';
 
@@ -121,6 +124,56 @@ describe('HP 弧参数', () => {
     const high = hpArcParams(75, 100).color;
     const low = hpArcParams(25, 100).color;
     expect((high >> 8) & 0xff).toBeGreaterThan((low >> 8) & 0xff);
+  });
+});
+
+describe('遮挡排序键', () => {
+  it('buildingSortKey：取 footprint 底行 y（结构向上溢出，底行大者后画压前）', () => {
+    expect(buildingSortKey(3, 1)).toBe(4);
+    expect(buildingSortKey(3, 2)).toBe(5);
+    // 同列上下两个 1 高建筑：北侧（y 小）先画
+    expect(buildingSortKey(2, 1)).toBeLessThan(buildingSortKey(3, 1));
+  });
+
+  it('unitSortKey：显示位置像素 y → 小数 tile y（支持平滑移动中的帧间值）', () => {
+    expect(unitSortKey(16, 8)).toBe(2);
+    expect(unitSortKey(20, 8)).toBeCloseTo(2.5, 6);
+    // 防御：tileSize 异常时不产生 Infinity/NaN
+    expect(Number.isFinite(unitSortKey(10, 0))).toBe(true);
+  });
+
+  it('建筑与单位同键空间：单位在高建筑北侧（y 更小）先画被遮挡，南侧后画压建筑', () => {
+    // 1×1 塔 footprint y=5（底行键 6）；单位中心 y=4.5（北侧）→ 4.5 < 6 先画
+    const towerKey = buildingSortKey(5, 1);
+    expect(unitSortKey(4.5 * 8, 8)).toBeLessThan(towerKey);
+    // 单位走到南侧 y=6.5 → 后画压塔底座
+    expect(unitSortKey(6.5 * 8, 8)).toBeGreaterThan(towerKey);
+  });
+});
+
+describe('地块 hover 轻量高亮状态机', () => {
+  it('inspect 模式悬停即亮，返回原 tile 引用', () => {
+    const tile = { x: 3, y: 4 };
+    expect(resolveTileHoverHighlight(tile, { kind: 'inspect' }, false)).toBe(tile);
+  });
+
+  it('move/attack 模式同样给高亮（准星叠加在其上）', () => {
+    const tile = { x: 1, y: 2 };
+    expect(resolveTileHoverHighlight(tile, { kind: 'move', unitId: 'u1' }, false)).toBe(tile);
+    expect(resolveTileHoverHighlight(tile, { kind: 'attack', unitId: 'u1' }, false)).toBe(tile);
+  });
+
+  it('build 模式不叠加（幽灵 footprint 承担悬停反馈）', () => {
+    expect(resolveTileHoverHighlight(
+      { x: 1, y: 2 },
+      { kind: 'build', buildingType: 'assembler', direction: 'east' },
+      false,
+    )).toBeNull();
+  });
+
+  it('overview 或无 hover 时隐藏', () => {
+    expect(resolveTileHoverHighlight({ x: 1, y: 2 }, { kind: 'inspect' }, true)).toBeNull();
+    expect(resolveTileHoverHighlight(null, { kind: 'inspect' }, false)).toBeNull();
   });
 });
 

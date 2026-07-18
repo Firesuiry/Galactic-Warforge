@@ -13,8 +13,11 @@
  * - 实体：建筑（程序化矢量结构精灵：原型剪影 + 投影/底座板 + 队伍色底座描边条 + emoji 角标，
  *   planet-building-sprites 烘焙缓存；风机叶片/furnace 辉光走 ticker 动效）/单位（带朝向楔形 + HP 弧）
  *   /资源（晶簇贴花 + emoji）走逐节点 Container（增量同步）；物流/电网/管道/工地/敌情各一个 Graphics，
- *   sync 时整体重绘（工地为脚手架虚线 + 进度条）。建筑层按 tile 底部 y 排序（sortableChildren）。
- * - 交互叠加：选中黄框 / hover 白框 / 建造幽灵 / move/attack 准星（单个 Graphics，数据变化重绘）。
+ *   sync 时整体重绘（工地为脚手架虚线 + 进度条）。建筑+单位在同一个 sortableChildren 容器按
+ *   tile 底部 y 排序（zIndex 单位为小数 tile 坐标）：建筑结构向上溢出 footprint，单位走到高建筑
+ *   北侧会被遮住上半；单位 zIndex 随平滑移动逐帧更新。buildings/units 图层开关落到逐节点 visible。
+ * - 交互叠加：选中黄框 / hover 白框 / 建造幽灵 / move/attack 准星（单个 Graphics，数据变化重绘）；
+ *   地块 hover 轻量高亮为独立 Graphics（形状只随 tileSize 重画，hover 变化仅动位置/可见性，零重建）。
  *
  * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲 +
  * 缩放档切换的 world 变换补间（~180ms，frozen 时瞬切）+ 分块惰性补块（每帧 ≤2 块）+
@@ -75,6 +78,7 @@ import {
   resolveBuildingAccent,
   resolveBuildingArchetype,
   resolveBuildingVisualState,
+  resolveConveyorBeltDirection,
 } from '@/features/planet-map/planet-building-sprites';
 import {
   renderPlanetFogCanvas,
@@ -245,6 +249,34 @@ export function constructionProgress(task: { state: string; remaining_ticks?: nu
     return null;
   }
   return Math.min(Math.max(1 - task.remaining_ticks / task.total_ticks, 0), 1);
+}
+
+/**
+ * 遮挡排序键（zIndex，单位为小数 tile 坐标）：建筑按 footprint 底行 y，
+ * 结构向上溢出 footprint → 底行相同者先画，y 小者被遮挡。
+ */
+export function buildingSortKey(tileY: number, footprintHeight: number): number {
+  return tileY + footprintHeight;
+}
+
+/** 单位遮挡排序键：平滑移动中的显示位置 y（像素）换算成小数 tile 坐标，随移动逐帧更新。 */
+export function unitSortKey(posY: number, tileSize: number): number {
+  return posY / Math.max(tileSize, 1e-6);
+}
+
+/**
+ * 地块 hover 轻量高亮落点：inspect/move/attack 模式下悬停即亮；
+ * build 模式由幽灵 footprint 承担（不叠加），overview 或无 hover 时隐藏。
+ */
+export function resolveTileHoverHighlight(
+  hoveredTile: TilePoint | null,
+  mode: PlanetInteractionMode,
+  overviewMode: boolean,
+): TilePoint | null {
+  if (overviewMode || !hoveredTile || mode.kind === 'build') {
+    return null;
+  }
+  return hoveredTile;
 }
 
 /**
@@ -466,13 +498,13 @@ export class PlanetScene {
   private readonly fogSprite: Sprite;
   private readonly overviewSprite: Sprite;
   private readonly gridGraphics: Graphics;
+  private readonly hoverGraphics: Graphics;
   private readonly pipelinesGraphics: Graphics;
   private readonly powerGraphics: Graphics;
   private readonly resourcesLayer: Container;
   private readonly constructionGraphics: Graphics;
-  private readonly buildingsLayer: Container;
+  private readonly entitiesLayer: Container;
   private readonly logisticsGraphics: Graphics;
-  private readonly unitsLayer: Container;
   private readonly threatGraphics: Graphics;
   private readonly selectionGraphics: Graphics;
   private readonly effectsLayer: Container;
@@ -562,20 +594,24 @@ export class PlanetScene {
     this.fogSprite = new Sprite();
     this.overviewSprite = new Sprite();
     this.gridGraphics = new Graphics();
+    // 地块 hover 轻量高亮：形状只随 tileSize 重画，hover 变化仅动位置/可见性（零重建）。
+    this.hoverGraphics = new Graphics();
+    this.hoverGraphics.visible = false;
     this.pipelinesGraphics = new Graphics();
     this.powerGraphics = new Graphics();
     this.resourcesLayer = new Container();
     this.constructionGraphics = new Graphics();
-    this.buildingsLayer = new Container();
-    // 遮挡排序：建筑按 tile 底部 y 排序（结构向上溢出 footprint，y 小者先画被遮挡）。
-    this.buildingsLayer.sortableChildren = true;
+    this.entitiesLayer = new Container();
+    // 遮挡排序：建筑+单位同容器按 tile 底部 y 排序（zIndex 单位为小数 tile 坐标，
+    // 建筑取 footprint 底行，单位取平滑移动中的显示位置），y 小者先画被高建筑遮挡。
+    this.entitiesLayer.sortableChildren = true;
     this.logisticsGraphics = new Graphics();
-    this.unitsLayer = new Container();
     this.threatGraphics = new Graphics();
     this.selectionGraphics = new Graphics();
     this.effectsLayer = new Container();
 
-    // z 序对齐旧实现：地形 < 水面/岩浆氛围 < 网格 < 迷雾 < 管网/电网 < 资源 < 工地 < 建筑 < 物流 < 单位 < 敌情 < 选中叠加 < 战斗特效；
+    // z 序对齐旧实现：地形 < 水面/岩浆氛围 < 网格 < 迷雾 < hover 高亮 < 管网/电网 < 资源 < 工地
+    // < 实体（建筑+单位统一 y 排序） < 物流 < 敌情 < 选中叠加 < 战斗特效；
     // 暗角在 world 之后，屏幕空间压在一切之上。
     this.app.stage.addChild(this.backdrop);
     this.app.stage.addChild(this.world);
@@ -587,18 +623,20 @@ export class PlanetScene {
     this.world.addChild(this.overviewSprite);
     this.world.addChild(this.gridGraphics);
     this.world.addChild(this.fogSprite);
+    this.world.addChild(this.hoverGraphics);
     this.world.addChild(this.pipelinesGraphics);
     this.world.addChild(this.powerGraphics);
     this.world.addChild(this.resourcesLayer);
     this.world.addChild(this.constructionGraphics);
-    this.world.addChild(this.buildingsLayer);
+    this.world.addChild(this.entitiesLayer);
     this.world.addChild(this.logisticsGraphics);
-    this.world.addChild(this.unitsLayer);
     this.world.addChild(this.threatGraphics);
     this.world.addChild(this.selectionGraphics);
     this.world.addChild(this.effectsLayer);
     this.app.stage.addChild(this.vignetteSprite);
 
+    // 首帧即备好 hover 高亮形状（后续仅 tileSize 变化时重画）。
+    this.redrawHoverShape();
     this.handleResize();
     this.app.renderer.on('resize', this.handleResize);
     this.app.ticker.add(this.tick);
@@ -671,6 +709,7 @@ export class PlanetScene {
     this.layoutBaseSprites();
     if (tileSizeChanged) {
       this.redrawGrid();
+      this.redrawHoverShape();
       this.rebuildEntityNodes();
       this.redrawStaticLayers();
       this.redrawInteraction();
@@ -1340,9 +1379,14 @@ export class PlanetScene {
     this.powerGraphics.visible = !overview && layers.power;
     this.resourcesLayer.visible = !overview && layers.resources;
     this.constructionGraphics.visible = !overview && layers.construction;
-    this.buildingsLayer.visible = !overview && layers.buildings;
+    // 建筑/单位同处一个排序容器，图层开关落到逐节点 visible（zIndex 排序不受影响）。
+    for (const node of this.buildingNodes.values()) {
+      node.container.visible = !overview && layers.buildings;
+    }
+    for (const node of this.unitNodes.values()) {
+      node.container.visible = !overview && layers.units;
+    }
     this.logisticsGraphics.visible = !overview && layers.logistics;
-    this.unitsLayer.visible = !overview && layers.units;
     this.threatGraphics.visible = !overview && layers.threat;
   }
 
@@ -1401,7 +1445,7 @@ export class PlanetScene {
     this.syncNodes(
       this.buildingNodes,
       buildings,
-      this.buildingsLayer,
+      this.entitiesLayer,
       (building) => this.createBuildingNode(building, catalog, playerId, simplify),
       (node, building) => {
         if (node.data !== building) {
@@ -1453,7 +1497,7 @@ export class PlanetScene {
     const pixelHeight = height * this.tileSize;
 
     node.container.position.set(point.x * this.tileSize, point.y * this.tileSize);
-    node.container.zIndex = point.y + height;
+    node.container.zIndex = buildingSortKey(point.y, height);
 
     // 低缩放档（tileSize < 6）保持简化色块，不做结构精灵。
     if (simplify) {
@@ -1469,7 +1513,7 @@ export class PlanetScene {
       return;
     }
 
-    // 结构精灵：原型剪影 + 主色/点缀色，烘焙纹理按 (archetype, w×h, state) 缓存。
+    // 结构精灵：原型剪影 + 主色/点缀色，烘焙纹理按 (archetype, w×h, state[, direction]) 缓存。
     const visualState = resolveBuildingVisualState(building);
     const archetype = resolveBuildingArchetype(building.type);
     node.sprite.texture = getBuildingSpriteTexture({
@@ -1478,6 +1522,7 @@ export class PlanetScene {
       tilesWide: width,
       tilesHigh: height,
       state: visualState,
+      direction: archetype === 'belt' ? resolveConveyorBeltDirection(building) : undefined,
     });
     const scale = this.tileSize / BUILDING_SPRITE_TILE_PX;
     const layout = buildingSpriteLayout(width, height);
@@ -1584,7 +1629,7 @@ export class PlanetScene {
     this.syncNodes(
       this.unitNodes,
       units,
-      this.unitsLayer,
+      this.entitiesLayer,
       (unit) => this.createUnitNode(unit, playerId, simplify),
       (node, unit) => {
         const point = toTilePoint(unit.position);
@@ -1594,6 +1639,7 @@ export class PlanetScene {
           node.posX = node.targetX;
           node.posY = node.targetY;
           node.container.position.set(node.posX, node.posY);
+          node.container.zIndex = unitSortKey(node.posY, this.tileSize);
         }
         if (node.data !== unit) {
           node.data = unit;
@@ -1636,6 +1682,7 @@ export class PlanetScene {
       dirY: -1,
     };
     container.position.set(node.posX, node.posY);
+    container.zIndex = unitSortKey(node.posY, this.tileSize);
     this.drawUnitDot(node, playerId, simplify);
     return node;
   }
@@ -1916,7 +1963,32 @@ export class PlanetScene {
 
   // ---------- 交互叠加层 ----------
 
+  /** hover 高亮形状：按当前 tileSize 在原点画一次（tileSize 变化才重画；hover 变化只动位置）。 */
+  private redrawHoverShape() {
+    const ts = this.tileSize;
+    this.hoverGraphics
+      .clear()
+      .rect(1, 1, Math.max(ts - 2, 2), Math.max(ts - 2, 2))
+      .fill({ color: 0xffffff, alpha: 0.06 })
+      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.5 });
+  }
+
+  /** hover 高亮落点：仅动 hoverGraphics 的位置/可见性，零重建（build 模式幽灵逻辑不受影响）。 */
+  private updateHoverHighlight() {
+    const input = this.interactionInput;
+    const tile = input
+      ? resolveTileHoverHighlight(input.hoveredTile, input.mode, input.overviewMode)
+      : null;
+    if (!tile) {
+      this.hoverGraphics.visible = false;
+      return;
+    }
+    this.hoverGraphics.position.set(tile.x * this.tileSize, tile.y * this.tileSize);
+    this.hoverGraphics.visible = true;
+  }
+
   private redrawInteraction() {
+    this.updateHoverHighlight();
     const g = this.selectionGraphics.clear();
     const input = this.interactionInput;
     if (!input) {
@@ -2049,12 +2121,15 @@ export class PlanetScene {
           node.posX = node.targetX;
           node.posY = node.targetY;
           node.container.position.set(node.posX, node.posY);
+          node.container.zIndex = unitSortKey(node.posY, this.tileSize);
         }
         continue;
       }
       node.posX += dx * blend;
       node.posY += dy * blend;
       node.container.position.set(node.posX, node.posY);
+      // 遮挡排序键随平滑移动逐帧更新（小数 tile y），单位走到高建筑北侧被遮住。
+      node.container.zIndex = unitSortKey(node.posY, this.tileSize);
     }
     this.pulsePhase += dt * 3.2;
     this.selectionGraphics.alpha = 0.85 + 0.15 * Math.sin(this.pulsePhase);

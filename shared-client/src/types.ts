@@ -129,6 +129,14 @@ export interface BuildingJob {
   refund_rate?: number;
 }
 
+/** 传送带运行状态（server model.Building.conveyor 直出；仅 conveyor_belt_* 携带）。 */
+export interface BuildingConveyorState {
+  input: ConveyorDirection;
+  output: ConveyorDirection;
+  max_stack?: number;
+  throughput?: number;
+}
+
 export interface Building {
   id: string;
   type: BuildingType;
@@ -144,6 +152,7 @@ export interface Building {
     input_buffer?: ItemInventory;
     output_buffer?: ItemInventory;
   };
+  conveyor?: BuildingConveyorState;
   production?: {
     recipe_id?: string;
     remaining_ticks?: number;

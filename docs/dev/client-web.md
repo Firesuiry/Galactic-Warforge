@@ -76,6 +76,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 ### 3.0 游戏 HUD 骨架
 
 - 顶栏（`widgets/TopNav.tsx`）：群星式细条——图标菜单（总览/星图/战争/智能体/回放）、资源 chip（tick/矿产/能量/电力Δ，赤字红脉冲）、警报按钮（带计数，点击跳活跃行星）、静音开关（期4b：🔊/🔇 全局音效开关，状态持久化到 localStorage `sw.audio.muted`，解除静音时播一声 uiClick 确认）、保存与设置图标；玩家/服务器信息收进设置弹层
+- 全局事件通知中心（期6b，`features/notifications/`）：zustand store（toast 栈上限 5 / 历史环 20 / 5s 消退 sweep / hover 暂停消退 / mergeKey 5s 窗口合并计数）+ 右下 `NotificationToasts` toast 栈 + TopNav 铃铛（未读角标 / 历史面板 / href 跳转）；`event-toasts.ts` 纯函数映射 17 类事件，两路 SSE（`use-war-realtime` / `use-planet-realtime`）各挂一行 `notifyGameEvent`，event_id 环形缓冲去重；`?freeze=1` 全抑制保截图确定性；音效去重原则——已有音效覆盖的事件不再重复配音，无声事件按 kind 补一声
 - 右侧 Outliner（`widgets/Outliner.tsx`）：焦点行星/恒星系（谱型色点）/舰队/警报四区，点击跳转；以布局列嵌入 AppShell（不遮挡页面），可折叠且状态持久化到 localStorage
 - 资源/警报数据 5~10s 轮询刷新；顶栏无后台信息（服务地址等已收进设置弹层）
 
@@ -118,6 +119,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - `WarPage.test.tsx` 新增「12 个新战争命令表单的纯 GUI 提交」用例，覆盖 `blueprint_variant / queue_military_production / refit_unit / theater_create|define_zone|set_objective / task_force_create|assign|deploy / fleet_assign|attack|disband`
 - 实时层收敛：`features/war/hooks/use-war-realtime.ts` 复刻 `use-planet-realtime` 模式，订阅 `/events/stream`（`shared-client/config.ts` 的 `ALL_EVENT_TYPES` 已补齐 13 个战争事件）→ 150ms 防抖批量失效对应 query；WarPage 的 8 路 1 秒轮询收敛为 `summary`(15s) + `system-runtime`(10s) 兜底，其余改 SSE 驱动
 - 顺手修复创建蓝图表单的 domain 口径：选项由过时的 `ground_unit/space_unit` 改为真实 catalog 的 `ground/air/orbital/space`，底盘选择基于 `isSpaceDomain` 判定，避免与 server 校验不一致导致创建执行失败
+- 战争页全屏化（期6a）：WarPage 重写——战场图吃满 app-body、左上标题片，蓝图/军工/战区/战报四组 Tab 收右侧抽屉（选中标记/新回执自动滑出）；抽取共用抽屉组件 `common/MapDrawer`（行星页工作台抽屉同步换用）；BattlefieldMap chrome HUD 化（摘要右上 / 图例左下 / 选中回显底部居中）；战场视觉密度按 1/√scale 补偿适配大画布；`page-grid--planet` 改名 `page-grid--map`
 - 当前边界：
   - AI 军事委派已经在 `/agents` 工作台和 `agent-gateway` 落地，但不在 `/war` 页内直接配置；推荐先用 `/war` 建好任务群/战区，再到 `/agents` 做委派和审计
 
@@ -148,6 +150,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 行星页全屏化（期5a）：删 page-hero/三列 workbench，地图吃满 app-body，行星信息改悬浮标题片、图层与缩放收左下 `PlanetMapToolbar`、工作台改右侧抽屉（选中/回执自动滑出）；缩放档重排 9 档（scene 1/2/4/8/16/32px，默认 8px），档间 180ms 补间 + zoom-to-cursor，统一 `requestZoom` 入口（±按钮/快捷键/滚轮同一管道），+/- 快捷键以视口中心为锚；网格默认关、建造模式自动叠加，迷雾 alpha 用确定性噪声抖动
 - 拟真分块地表（期5b）：`planet-terrain-chunks.ts` 在有效 tileSize ≥4px 的 scene 档启用 64×64 tile/chunk、8px/tile 离屏烘焙（1/2px 档与 overview 维持低成本整图画布）；可见块按需生成（含 1 圈余量、视口中心优先），LRU 上限 64 块，惰性补块每帧 ≤2（frozen 同步补齐保截图确定），地形变化按 FNV-1a 变体签名逐块脏校验；每格 8×8px 内土壤/水面噪色、水岸泡沫、岩浆描边暗壳、blocked 隆起浮雕全部确定性种子（(x,y,px,py) hash，纯函数可测）；氛围层：水面低分辨率动态遮罩流光（add 混合 + alpha 呼吸）+ 岩浆呼吸辉光 + 全屏轻暗角，相位走固定时钟、frozen 锁 0；相机对小图两轴视口居中、拖拽/缩放逐轴钳位
 - 行星实体程序化矢量精灵（期5c）：`planet-building-sprites.ts` 把建筑从"footprint 描边盒 + 居中 emoji"换代为离屏烘焙剪影精灵——6 种原型（tower/dome/furnace/depot/belt/special，类型映射表 + 关键词兜底）按 32px/tile 超采样绘制"投影 → 底座板 → 主体结构 → 顶部细节"，水平约 8% 溢出 footprint（Factorio/Civ 式伪 3D），同原型内靠类型级点缀色区分；纹理全局缓存（键 `bldg:<archetype>:<w>x<h>:<state>`，队伍归属不入键、由场景侧底座描边条承担），Sprite 缩放到 footprint×tileSize 显示，建筑层按 tile 底部 y 排序防溢出穿插；emoji 降级为右上角类型角标（≥16px 档显示），受损/故障走 distressed 烘焙变体（暗化 + 警示斜纹）+ ⚠️ 角标呼吸，wind_turbine 叶片独立 sprite 在 ticker 旋转（id hash 相位、frozen 锁 0），furnace 发光窗辉光呼吸；单位圆点改带朝向楔形（朝向 = 移动目标/攻击目标/最近朝向，默认朝上，队色描边 + 暗底），受伤画 HP 弧（顶部 90°、绿→黄→红，不随朝向旋转）；资源 emoji 坐上晶簇/岩块底座贴花（kind hash 确定性形状）；工地 3px 色框改脚手架（虚线轮廓 + 四角 L 支架 + 对角撑 + 底部进度条）；水岸泡沫打磨为按边过渡（只在水格与陆格相邻的边画、水-水边无缝融合，大片水域内部均匀只有轮廓岸线），消除散点水域的"每格全边白框"瓷砖感
+- 行星页交互与视觉打磨（期6c）：建筑+单位合并为单个 `entitiesLayer`（sortableChildren）按统一排序键遮挡——建筑取 footprint 底行 y、单位取平滑移动显示位置的小数 tile y（创建/frozen 同步/ticker 逐帧三处更新），单位走到高建筑北侧会被向上溢出的结构遮住；buildings/units 图层开关相应落到逐节点 visible；传送带 chevron 方向纹接通 server 既有数据（`Building.conveyor.output`，shared-client 补类型声明，仅 conveyor_belt_* 携带，建成时服务器已把 auto 解析为实方向），belt 原型按 4 向烘焙变体（横/竖带体 + 朝向 chevron，缓存键追加方向段，auto/缺失回退 east）；地块 hover 轻量高亮为独立 Graphics（1px 内缩白框 + 6% 白填充，形状只随 tileSize 重画，hover 变化仅动位置/可见性零重建；inspect/move/attack 显示，build 由幽灵 footprint 承担不叠加，overview 隐藏）；建造范围圈预览评估后跳过（catalog 无 range 数据，`runtime.functions.combat.range` 只存在于已放置建筑，放置前幽灵拿不到，不硬造）；受损 distressed 建筑/受伤单位 HP 弧已做运行时目检（临时 fixture + 离线截图，不进仓库）
 - 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
 
 ### 3.5 回放调试页
@@ -222,9 +225,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
   - `tests/war-workbench-authoritative.spec.ts`：自动拉起官方战争验证局，验证 `/war` 对 authoritative 战争场景的真实操作闭环
   - `tests/planet-entity-dom.spec.ts`：行星地图实体的 ghost DOM 可见性契约（`data-entity-*` 可定位、点击穿透后命中选中）
   - `tests/planet-build-workflow.spec.ts`：建造栏选卡 + 地图点选放置的全流程 authoritative 回执
-  - `tests/visual.spec.ts`：总览/星图/行星地图/回放的截图基线（行星地图基线已随 Pixi 迁移及期5 各期视觉换代重录，重录前人工核对 actual）
+  - `tests/visual.spec.ts`：总览/星图/行星地图/回放的截图基线（行星地图基线已随 Pixi 迁移及期5 各期视觉换代重录，期6b 星图基线因 TopNav 新增铃铛重录，重录前人工核对 actual）
 - vitest 纯逻辑单测（期4 新增）：`src/engine/battle-events.test.ts`（总线分流/seq 去重）、`features/war/battlefield/battlefield-model.test.ts` + `battlefield-effects.test.ts`（布局纯函数/特效池）、`src/engine/audio.test.ts` + `features/audio/game-audio.test.ts`（合成参数/限流/事件→音效映射）、`features/planet-map/planet-effects.test.ts`（伤害特效映射）、`features/starmap/model.test.ts` 增补（舰队聚合/战火航线定向）
 - vitest 行星地图单测（期5 新增）：`features/planet-map/planet-terrain-chunks.test.ts`（分块可见集合/LRU/FNV 签名/按边过渡邻域规则与像素级泡沫）、`features/planet-map/planet-building-sprites.test.ts`（原型映射/烘焙布局与缓存键/distressed 判定）、`features/planet-map/planet-scene.test.ts` 增补（单位楔形与朝向/HP 弧参数/工地进度/资源贴花确定性）
+- vitest 期6 新增：`features/notifications/notifications.test.ts`（期6b：store 栈上限/消退 sweep/mergeKey 合并/event_id 去重 + 17 类事件映射）；`features/planet-map/planet-scene.test.ts` 增补（期6c：遮挡排序键/hover 高亮状态机）、`planet-building-sprites.test.ts` 增补（期6c：方向纹变体缓存键/conveyor.output 方向解析）；期6c 未触动既有截图基线（无鼠标截图天然不受遮挡排序/hover 影响）
 - 冻结截图约定：星图/行星地图/战场图统一用 URL `?freeze=1` 进入 frozen 模式，脉冲/公转/特效演出/风机叶片与辉光呼吸全部静止（相位锁 0），供确定性截图
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览
