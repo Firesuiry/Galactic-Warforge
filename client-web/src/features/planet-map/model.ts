@@ -79,12 +79,22 @@ export interface PlanetCameraSnapshot {
 }
 
 export interface ViewportTileBounds {
+  /**
+   * 可见 tile 范围（unwrapped 坐标系）：环绕轴上可能 < 0 或 ≥ map 尺寸，
+   * 用 wrapMod/canonicalTileIndex 换算回真实 tile；非环绕轴恒在 [0, map-1] 内。
+   */
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
+  /** 视口中心（真实 tile 坐标，环绕轴已取模回 [0, map)）。 */
   centerX: number;
   centerY: number;
+  /** 该轴是否启用环绕渲染（世界像素 > 视口像素）。缺省视为 false（旧调用方兼容）。 */
+  wrapX?: boolean;
+  wrapY?: boolean;
+  mapWidth?: number;
+  mapHeight?: number;
 }
 
 export type PlanetRenderView = PlanetView | PlanetSceneView;
@@ -547,6 +557,57 @@ export function resolveFocusCameraAxisOffset(worldPx: number, viewportPx: number
   return worldPx < viewportPx ? centerCameraAxisOffset(worldPx, viewportPx) : focusedOffset;
 }
 
+/** 非负取模：(-4, 1000) → 996。 */
+export function wrapMod(value: number, size: number) {
+  if (size <= 0) {
+    return value;
+  }
+  return ((value % size) + size) % size;
+}
+
+/**
+ * 单轴是否启用环绕渲染：世界像素大于视口像素时，相机无法看到全图，
+ * 地图边缘会看到虚空（"墙"）；此时把对侧内容环绕贴过来形成完整地图。
+ * 世界 ≤ 视口的轴整图可见，维持旧居中/钳位行为（视觉上本来就是完整地图）。
+ */
+export function isWrapAxisEnabled(worldPx: number, viewportPx: number) {
+  return worldPx > viewportPx;
+}
+
+/**
+ * 环绕轴相机偏移归一化：把任意偏移映射到等价区间 (margin - worldPx, margin]。
+ * 归一化后视口最多跨越一条接缝（每轴最多看到一份副本），且偏移有界不会拖丢地图。
+ */
+export function normalizeWrappedAxisOffset(worldPx: number, offset: number, margin = 32) {
+  if (worldPx <= 0) {
+    return offset;
+  }
+  let next = offset;
+  while (next > margin) {
+    next -= worldPx;
+  }
+  while (next <= margin - worldPx) {
+    next += worldPx;
+  }
+  return next;
+}
+
+/** 单轴相机偏移结算：环绕轴归一化（可无限平移、环绕显示），非环绕轴维持旧钳位。 */
+export function resolveCameraAxisOffset(worldPx: number, viewportPx: number, offset: number, margin = 32) {
+  if (isWrapAxisEnabled(worldPx, viewportPx)) {
+    return normalizeWrappedAxisOffset(worldPx, offset, margin);
+  }
+  return clampCameraAxisOffset(worldPx, viewportPx, offset);
+}
+
+/**
+ * tile 的规范（unwrapped）坐标：映射到以 cut 为起点的一个周期 [cut, cut + size) 内。
+ * 渲染层用它把真实 tile 摆到屏幕位置（如 cut=996 时 tile 2 → 1002）。
+ */
+export function canonicalTileIndex(tile: number, cut: number, size: number) {
+  return cut + wrapMod(tile - cut, size);
+}
+
 export function getViewportTileBounds(
   planet: PlanetRenderView,
   camera: PlanetCameraSnapshot,
@@ -554,44 +615,48 @@ export function getViewportTileBounds(
   viewportWidth: number,
   viewportHeight: number,
 ): ViewportTileBounds {
-  const minX = clamp(
-    Math.floor(-camera.offsetX / tileSize),
-    0,
-    Math.max(planet.map_width - 1, 0),
-  );
-  const minY = clamp(
-    Math.floor(-camera.offsetY / tileSize),
-    0,
-    Math.max(planet.map_height - 1, 0),
-  );
-  const maxX = clamp(
-    Math.ceil((viewportWidth - camera.offsetX) / tileSize) - 1,
-    0,
-    Math.max(planet.map_width - 1, 0),
-  );
-  const maxY = clamp(
-    Math.ceil((viewportHeight - camera.offsetY) / tileSize) - 1,
-    0,
-    Math.max(planet.map_height - 1, 0),
-  );
+  const mapWidth = Math.max(planet.map_width, 0);
+  const mapHeight = Math.max(planet.map_height, 0);
+  const wrapX = isWrapAxisEnabled(mapWidth * tileSize, viewportWidth);
+  const wrapY = isWrapAxisEnabled(mapHeight * tileSize, viewportHeight);
+  // 环绕轴保留 unwrapped 范围（可越界），非环绕轴维持旧钳位。
+  const minX = wrapX
+    ? Math.floor(-camera.offsetX / tileSize)
+    : clamp(Math.floor(-camera.offsetX / tileSize), 0, Math.max(mapWidth - 1, 0));
+  const minY = wrapY
+    ? Math.floor(-camera.offsetY / tileSize)
+    : clamp(Math.floor(-camera.offsetY / tileSize), 0, Math.max(mapHeight - 1, 0));
+  const maxX = wrapX
+    ? Math.ceil((viewportWidth - camera.offsetX) / tileSize) - 1
+    : clamp(Math.ceil((viewportWidth - camera.offsetX) / tileSize) - 1, 0, Math.max(mapWidth - 1, 0));
+  const maxY = wrapY
+    ? Math.ceil((viewportHeight - camera.offsetY) / tileSize) - 1
+    : clamp(Math.ceil((viewportHeight - camera.offsetY) / tileSize) - 1, 0, Math.max(mapHeight - 1, 0));
+  const rawCenterX = (minX + maxX) / 2 || 0;
+  const rawCenterY = (minY + maxY) / 2 || 0;
   return {
     minX,
     minY,
     maxX,
     maxY,
-    centerX: Number(((minX + maxX) / 2 || 0).toFixed(2)),
-    centerY: Number(((minY + maxY) / 2 || 0).toFixed(2)),
+    centerX: Number((wrapX ? wrapMod(rawCenterX, mapWidth || 1) : rawCenterX).toFixed(2)),
+    centerY: Number((wrapY ? wrapMod(rawCenterY, mapHeight || 1) : rawCenterY).toFixed(2)),
+    wrapX,
+    wrapY,
+    mapWidth,
+    mapHeight,
   };
 }
 
 function isInsideBounds(position: Position, bounds: ViewportTileBounds) {
   const point = toTilePoint(position);
-  return (
-    point.x >= bounds.minX &&
-    point.x <= bounds.maxX &&
-    point.y >= bounds.minY &&
-    point.y <= bounds.maxY
-  );
+  const inX = bounds.wrapX && bounds.mapWidth
+    ? wrapMod(point.x - bounds.minX, bounds.mapWidth) <= bounds.maxX - bounds.minX
+    : point.x >= bounds.minX && point.x <= bounds.maxX;
+  const inY = bounds.wrapY && bounds.mapHeight
+    ? wrapMod(point.y - bounds.minY, bounds.mapHeight) <= bounds.maxY - bounds.minY
+    : point.y >= bounds.minY && point.y <= bounds.maxY;
+  return inX && inY;
 }
 
 export function buildViewLinkSearchParams(
@@ -1107,10 +1172,15 @@ export function buildSceneWindow(
   const alignedY =
     Math.floor(rawY / SCENE_WINDOW_ALIGNMENT) * SCENE_WINDOW_ALIGNMENT;
 
+  // 环绕轴跨接缝时（可见范围越出地图任一侧），服务端窗口无法表达
+  // "尾部 + 头部"两段并集，退化为整轴拉取（仅贴边浏览时触发）。
+  const crossX = Boolean(bounds.wrapX) && (bounds.minX < 0 || bounds.maxX >= planet.map_width);
+  const crossY = Boolean(bounds.wrapY) && (bounds.minY < 0 || bounds.maxY >= planet.map_height);
+
   return {
-    x: clamp(alignedX, 0, Math.max(planet.map_width - width, 0)),
-    y: clamp(alignedY, 0, Math.max(planet.map_height - height, 0)),
-    width,
-    height,
+    x: crossX ? 0 : clamp(alignedX, 0, Math.max(planet.map_width - width, 0)),
+    y: crossY ? 0 : clamp(alignedY, 0, Math.max(planet.map_height - height, 0)),
+    width: crossX ? planet.map_width : width,
+    height: crossY ? planet.map_height : height,
   };
 }

@@ -1,14 +1,21 @@
 import type { PlanetView } from '@shared/types';
 
 import {
+  buildSceneWindow,
+  canonicalTileIndex,
   centerCameraAxisOffset,
   clampCameraAxisOffset,
   getBuildingDisplayName,
+  getViewportTileBounds,
+  isWrapAxisEnabled,
   mergeRecentEvents,
+  normalizeWrappedAxisOffset,
+  resolveCameraAxisOffset,
   resolveFocusCameraAxisOffset,
   resolveHomeTile,
   resolveSelectionAtTile,
   summarizeEvent,
+  wrapMod,
 } from '@/features/planet-map/model';
 
 function createPlanetFixture(): PlanetView {
@@ -195,5 +202,120 @@ describe('相机小图居中与钳位', () => {
   it('resolveFocusCameraAxisOffset：小图轴聚焦退化为居中，大图轴聚焦目标', () => {
     expect(resolveFocusCameraAxisOffset(384, 1440, 900)).toBe(528);
     expect(resolveFocusCameraAxisOffset(16000, 1440, -1200)).toBe(-1200);
+  });
+});
+
+describe('环绕渲染（toroidal wrap）', () => {
+  it('wrapMod：非负取模', () => {
+    expect(wrapMod(-4, 1000)).toBe(996);
+    expect(wrapMod(-1000, 1000)).toBe(0);
+    expect(wrapMod(-1001, 1000)).toBe(999);
+    expect(wrapMod(5, 1000)).toBe(5);
+    expect(wrapMod(1005, 1000)).toBe(5);
+    expect(wrapMod(7, 0)).toBe(7); // size<=0 原样返回（防御）
+  });
+
+  it('isWrapAxisEnabled：世界像素大于视口才启用环绕', () => {
+    expect(isWrapAxisEnabled(8000, 960)).toBe(true);
+    expect(isWrapAxisEnabled(960, 960)).toBe(false);
+    expect(isWrapAxisEnabled(800, 960)).toBe(false);
+  });
+
+  it('normalizeWrappedAxisOffset：映射到 (margin-worldPx, margin] 且周期等价', () => {
+    expect(normalizeWrappedAxisOffset(8000, 32)).toBe(32); // 区间内不动
+    expect(normalizeWrappedAxisOffset(8000, 100)).toBe(100 - 8000);
+    expect(normalizeWrappedAxisOffset(8000, -16000)).toBe(0);
+    expect(normalizeWrappedAxisOffset(8000, -7968)).toBe(32); // -7968 + 8000
+    // 任意输入都落在 (32-8000, 32]
+    for (const value of [0, 31.5, -7968, -7969, 12345, -987654]) {
+      const next = normalizeWrappedAxisOffset(8000, value);
+      expect(next).toBeGreaterThan(32 - 8000);
+      expect(next).toBeLessThanOrEqual(32);
+    }
+  });
+
+  it('resolveCameraAxisOffset：环绕轴归一化、小图轴维持钳位', () => {
+    expect(resolveCameraAxisOffset(8000, 960, -9000)).toBe(-1000);
+    expect(resolveCameraAxisOffset(384, 1440, -500)).toBe(-192); // 小图轴旧钳位
+  });
+
+  it('canonicalTileIndex：映射到以 cut 为起点的周期内', () => {
+    expect(canonicalTileIndex(2, 996, 1000)).toBe(1002);
+    expect(canonicalTileIndex(998, 996, 1000)).toBe(998);
+    expect(canonicalTileIndex(996, 996, 1000)).toBe(996);
+    expect(canonicalTileIndex(5, -4, 1000)).toBe(5);
+    expect(canonicalTileIndex(998, -4, 1000)).toBe(-2);
+    // 映射结果恒在 [cut, cut+size)
+    expect(canonicalTileIndex(0, 996, 1000)).toBe(1000);
+  });
+
+  it('getViewportTileBounds：环绕轴保留 unwrapped 范围，中心取模回真实 tile', () => {
+    const bigPlanet = {
+      ...createPlanetFixture(),
+      map_width: 1000,
+      map_height: 1000,
+    };
+    const bounds = getViewportTileBounds(
+      bigPlanet,
+      { offsetX: 32, offsetY: -7992, zoomIndex: 6 },
+      8,
+      960,
+      640,
+    );
+    expect(bounds.wrapX).toBe(true);
+    expect(bounds.wrapY).toBe(true);
+    expect(bounds.minX).toBe(-4); // floor(-32/8)，不再钳到 0
+    expect(bounds.maxX).toBe(115);
+    expect(bounds.minY).toBe(999); // floor(7992/8)
+    expect(bounds.maxY).toBe(1078);
+    expect(bounds.centerX).toBeCloseTo(55.5);
+    expect(bounds.centerY).toBeCloseTo(38.5); // (999+1078)/2=1038.5 → mod 1000
+    expect(bounds.mapWidth).toBe(1000);
+  });
+
+  it('getViewportTileBounds：小地图（世界<视口）不启用环绕，维持钳位', () => {
+    const bounds = getViewportTileBounds(
+      createPlanetFixture(), // 4×4
+      { offsetX: 400, offsetY: 400, zoomIndex: 6 },
+      8,
+      960,
+      640,
+    );
+    expect(bounds.wrapX).toBe(false);
+    expect(bounds.wrapY).toBe(false);
+    expect(bounds.minX).toBe(0);
+    expect(bounds.maxX).toBe(3);
+  });
+
+  it('buildSceneWindow：环绕轴跨接缝时整轴拉取，未跨接缝维持原窗口', () => {
+    const bigPlanet = {
+      ...createPlanetFixture(),
+      map_width: 1000,
+      map_height: 1000,
+    };
+    // offsetX=32 → 可见范围 [-4, 115]，左侧跨接缝
+    const crossing = buildSceneWindow(
+      bigPlanet,
+      { offsetX: 32, offsetY: -4000, zoomIndex: 6 },
+      8,
+      960,
+      640,
+    );
+    expect(crossing.x).toBe(0);
+    expect(crossing.width).toBe(1000);
+    expect(crossing.y).toBeGreaterThanOrEqual(0);
+    expect(crossing.height).toBeLessThan(1000);
+
+    // 视口完全在地图内部 → 不跨接缝，窗口走原有 padding/对齐逻辑
+    const inside = buildSceneWindow(
+      bigPlanet,
+      { offsetX: -4000, offsetY: -4000, zoomIndex: 6 },
+      8,
+      960,
+      640,
+    );
+    expect(inside.width).toBeLessThan(1000);
+    expect(inside.x).toBeGreaterThan(0);
+    expect(inside.x + inside.width).toBeLessThanOrEqual(1000);
   });
 });

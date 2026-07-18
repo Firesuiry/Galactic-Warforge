@@ -10,6 +10,12 @@ export interface SseClientOptions {
   bufferSize?: number;
   initialRetryDelayMs?: number;
   maxRetryDelayMs?: number;
+  /**
+   * 静默看门狗阈值：超过该时长未收到任何字节（含服务端心跳注释行）就
+   * 判定连接已死并主动重连。服务端心跳间隔 25s，默认阈值 75s = 3 个心跳。
+   * 解决不稳定网络下 TCP 半开（读不到 FIN）导致客户端一直假“已连接”的问题。
+   */
+  heartbeatTimeoutMs?: number;
 }
 
 export interface StartSseOptions {
@@ -28,10 +34,14 @@ export function createSseClient(options: SseClientOptions) {
   let startOptions: StartSseOptions | null = null;
   const bufferSize = options.bufferSize ?? DEFAULT_SSE_BUFFER_SIZE;
   const maxRetryDelayMs = options.maxRetryDelayMs ?? 30_000;
+  const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 75_000;
   const fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
   const eventBuffer: SseEvent[] = [];
   const eventListeners = new Set<(event: SseEvent) => void>();
   const statusListeners = new Set<(nextStatus: SseStatus) => void>();
+  let lastActivityAt = 0;
+  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  let abortedByWatchdog = false;
 
   function setStatus(nextStatus: SseStatus) {
     status = nextStatus;
@@ -62,8 +72,31 @@ export function createSseClient(options: SseClientOptions) {
     };
   }
 
+  function startWatchdog() {
+    stopWatchdog();
+    lastActivityAt = Date.now();
+    watchdogTimer = setInterval(() => {
+      if (!running || !controller) {
+        return;
+      }
+      if (Date.now() - lastActivityAt > heartbeatTimeoutMs) {
+        // 连接已静默死亡：主动 abort 触发重连（与 stop() 的用户主动断开区分）
+        abortedByWatchdog = true;
+        controller.abort();
+      }
+    }, Math.min(heartbeatTimeoutMs / 3, 15_000));
+  }
+
+  function stopWatchdog() {
+    if (watchdogTimer !== null) {
+      clearInterval(watchdogTimer);
+      watchdogTimer = null;
+    }
+  }
+
   function stop() {
     running = false;
+    stopWatchdog();
     controller?.abort();
     controller = null;
     setStatus('stopped');
@@ -83,6 +116,7 @@ export function createSseClient(options: SseClientOptions) {
     }
 
     controller = new AbortController();
+    abortedByWatchdog = false;
     setStatus(status === 'idle' || status === 'stopped' ? 'connecting' : 'reconnecting');
 
     const eventTypes = startOptions.eventTypes ?? DEFAULT_EVENT_TYPES;
@@ -104,11 +138,18 @@ export function createSseClient(options: SseClientOptions) {
 
       retryDelayMs = options.initialRetryDelayMs ?? 1000;
       setStatus('connected');
+      startWatchdog();
       await readStream(response.body);
     } catch (error) {
-      if ((error as Error).name === 'AbortError' || !running) {
+      if (!running) {
         return;
       }
+      // 用户主动 stop() 的 abort 不重连；看门狗判死的 abort 走重连
+      if ((error as Error).name === 'AbortError' && !abortedByWatchdog) {
+        return;
+      }
+    } finally {
+      stopWatchdog();
     }
 
     if (!running) {
@@ -132,6 +173,7 @@ export function createSseClient(options: SseClientOptions) {
       if (done) {
         break;
       }
+      lastActivityAt = Date.now();
       buffer += decoder.decode(value, { stream: true });
       buffer = processBuffer(buffer);
     }

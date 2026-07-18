@@ -12,14 +12,16 @@ import {
   buildSceneWindow,
   centerCameraAxisOffset,
   clamp,
-  clampCameraAxisOffset,
   getViewportTileBounds,
+  isWrapAxisEnabled,
+  resolveCameraAxisOffset,
   type PlanetRenderView,
   resolveFocusCameraAxisOffset,
   resolveSelectionAtTile,
   selectionLabel,
   type TilePoint,
   toTilePoint,
+  wrapMod,
 } from '@/features/planet-map/model';
 import {
   createAnimationFrameValueScheduler,
@@ -110,9 +112,19 @@ function pointToTile(
   tileSize: number,
   planet: PlanetRenderView,
 ) {
-  const x = Math.floor((clientX - rect.left - offsetX) / tileSize);
-  const y = Math.floor((clientY - rect.top - offsetY) / tileSize);
-  if (x < 0 || y < 0 || x >= planet.map_width || y >= planet.map_height) {
+  let x = Math.floor((clientX - rect.left - offsetX) / tileSize);
+  let y = Math.floor((clientY - rect.top - offsetY) / tileSize);
+  // 环绕轴：任何屏幕位置都命中某个真实 tile（取模回绕）；非环绕轴维持出界判空。
+  const wrapX = isWrapAxisEnabled(planet.map_width * tileSize, rect.width);
+  const wrapY = isWrapAxisEnabled(planet.map_height * tileSize, rect.height);
+  if (wrapX) {
+    x = wrapMod(x, planet.map_width);
+  } else if (x < 0 || x >= planet.map_width) {
+    return null;
+  }
+  if (wrapY) {
+    y = wrapMod(y, planet.map_height);
+  } else if (y < 0 || y >= planet.map_height) {
     return null;
   }
   return { x, y };
@@ -477,8 +489,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       focusRequest.position.x,
       focusRequest.position.y,
     );
+    const focusTileSize = getPlanetRenderTileSize(targetZoomIndex, viewport.width, viewport.height, planet.map_width, planet.map_height);
     setCamera({
-      ...nextCamera,
+      offsetX: resolveCameraAxisOffset(planet.map_width * focusTileSize, viewport.width, nextCamera.offsetX),
+      offsetY: resolveCameraAxisOffset(planet.map_height * focusTileSize, viewport.height, nextCamera.offsetY),
       zoomIndex: targetZoomIndex,
       ready: true,
     });
@@ -546,10 +560,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     if (dragState) {
       const deltaX = event.clientX - dragState.pointerX;
       const deltaY = event.clientY - dragState.pointerY;
-      // 小图轴钳位：地图中心不允许被拖出视口（data-camera-offset 语义不变，值反映钳位后的偏移）。
+      // 环绕轴自由平移（归一化到等价周期），非环绕轴维持旧钳位（地图中心不出视口）。
       cameraScheduler.schedule({
-        offsetX: clampCameraAxisOffset(planet.map_width * tileSize, viewport.width, dragState.offsetX + deltaX),
-        offsetY: clampCameraAxisOffset(planet.map_height * tileSize, viewport.height, dragState.offsetY + deltaY),
+        offsetX: resolveCameraAxisOffset(planet.map_width * tileSize, viewport.width, dragState.offsetX + deltaX),
+        offsetY: resolveCameraAxisOffset(planet.map_height * tileSize, viewport.height, dragState.offsetY + deltaY),
         zoomIndex: camera.zoomIndex,
         ready: true,
       });
@@ -584,8 +598,8 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
 
     cameraScheduler.schedule({
       zoomIndex: clampedIndex,
-      offsetX: clampCameraAxisOffset(planet.map_width * nextTileSize, viewport.width, anchorX - worldX * nextTileSize),
-      offsetY: clampCameraAxisOffset(planet.map_height * nextTileSize, viewport.height, anchorY - worldY * nextTileSize),
+      offsetX: resolveCameraAxisOffset(planet.map_width * nextTileSize, viewport.width, anchorX - worldX * nextTileSize),
+      offsetY: resolveCameraAxisOffset(planet.map_height * nextTileSize, viewport.height, anchorY - worldY * nextTileSize),
       ready: true,
     });
   }
@@ -660,8 +674,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     }
     if (overviewMode) {
       const nextCamera = centerCameraOnTile(viewport, planet, DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX, tile.x, tile.y);
+      const focusTileSize = getPlanetRenderTileSize(DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX, viewport.width, viewport.height, planet.map_width, planet.map_height);
       setCamera({
-        ...nextCamera,
+        offsetX: resolveCameraAxisOffset(planet.map_width * focusTileSize, viewport.width, nextCamera.offsetX),
+        offsetY: resolveCameraAxisOffset(planet.map_height * focusTileSize, viewport.height, nextCamera.offsetY),
         zoomIndex: DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX,
         ready: true,
       });

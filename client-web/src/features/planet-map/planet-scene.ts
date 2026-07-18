@@ -59,9 +59,12 @@ import {
   type PlanetEffectSpec,
 } from '@/features/planet-map/planet-effects';
 import {
+  canonicalTileIndex,
   getBuildingCatalogEntry,
   getBuildingFootprint,
+  isWrapAxisEnabled,
   toTilePoint,
+  wrapMod,
   type PlanetRenderView,
   type SelectedEntity,
   type TilePoint,
@@ -98,6 +101,7 @@ import {
   renderTerrainChunkCanvas,
   terrainChunkSignature,
   useChunkedTerrain,
+  type TerrainWrapSampling,
 } from '@/features/planet-map/planet-terrain-chunks';
 import { isTilePointVisible, type SceneRenderDetailPolicy } from '@/features/planet-map/render';
 import type { PlanetInteractionMode, PlanetLayerState } from '@/features/planet-map/store';
@@ -449,6 +453,15 @@ interface SceneNode {
   container: Container;
 }
 
+/** 底图镜像精灵：环绕轴上把整图纹理在 +W/+H/(+W,+H) 处各贴一份，填充接缝另一侧。 */
+interface MirrorSpriteEntry {
+  sprite: Sprite;
+  /** 纹理/尺寸来源（主精灵）；镜像共享其纹理，不单独销毁。 */
+  source: Sprite;
+  shiftX: boolean;
+  shiftY: boolean;
+}
+
 interface BuildingNode extends SceneNode {
   /** 队伍色底座描边条（不烘焙进纹理，缓存键与队伍无关）。 */
   base: Graphics;
@@ -634,11 +647,17 @@ export class PlanetScene {
   private offsetX = 0;
   private offsetY = 0;
   private tileSize = 12;
+  /** 环绕渲染状态：每轴是否环绕（世界像素 > 视口像素）+ 视口起始 tile（cut，unwrapped）。 */
+  private wrapX = false;
+  private wrapY = false;
+  private cutX = 0;
+  private cutY = 0;
+  private readonly mirrorSprites: MirrorSpriteEntry[] = [];
   /** 渲染层实际应用的 world 变换（补间期间与数据层目标值 offsetX/offsetY 不同步）。 */
   private appliedScale = 1;
   private appliedX = 0;
   private appliedY = 0;
-  private zoomTween: { fromScale: number; fromX: number; fromY: number; tween: Tween } | null = null;
+  private zoomTween: { fromScale: number; fromX: number; fromY: number; toX: number; toY: number; tween: Tween } | null = null;
   private lastAppliedZoomIndex: number | null = null;
   private lastAppliedMode: boolean | null = null;
   private layers: PlanetLayerState | null = null;
@@ -704,13 +723,17 @@ export class PlanetScene {
     this.app.stage.addChild(this.backdrop);
     this.app.stage.addChild(this.world);
     this.world.addChild(this.terrainSprite);
+    this.addMirrorSprites(this.terrainSprite, this.world);
     this.world.addChild(this.terrainChunkLayer);
     this.world.addChild(this.ambientLayer);
     this.ambientLayer.addChild(this.waterShineSprite);
+    this.addMirrorSprites(this.waterShineSprite, this.ambientLayer);
     this.ambientLayer.addChild(this.lavaGlowSprite);
+    this.addMirrorSprites(this.lavaGlowSprite, this.ambientLayer);
     this.world.addChild(this.overviewSprite);
     this.world.addChild(this.gridGraphics);
     this.world.addChild(this.fogSprite);
+    this.addMirrorSprites(this.fogSprite, this.world);
     this.world.addChild(this.hoverGraphics);
     this.world.addChild(this.pipelinesGraphics);
     this.world.addChild(this.powerGraphics);
@@ -740,6 +763,11 @@ export class PlanetScene {
     this.vignetteSprite.destroy();
     this.waterShineSprite.destroy();
     this.lavaGlowSprite.destroy();
+    // 镜像精灵只持有共享纹理引用，单独销毁 sprite 即可。
+    for (const mirror of this.mirrorSprites) {
+      mirror.sprite.destroy();
+    }
+    this.mirrorSprites.length = 0;
   }
 
   // ---------- 数据输入 ----------
@@ -794,9 +822,19 @@ export class PlanetScene {
     this.offsetX = input.offsetX;
     this.offsetY = input.offsetY;
     this.tileSize = input.tileSize;
-    this.layoutBaseSprites();
-    if (tileSizeChanged) {
+    // 环绕状态（轴 + 视口起始 tile）：cut 变化时把实体/连线/交互叠加重摆到规范坐标。
+    // tileSize 变化走全量重建路径，已包含等价重摆，无需重复。
+    const wrapChanged = this.updateWrapState();
+    if (wrapChanged && !tileSizeChanged) {
+      this.relayoutWrappedPositions();
+      this.redrawStaticLayers();
+      this.redrawInteraction();
       this.redrawGrid();
+    }
+    this.layoutBaseSprites();
+    // 网格只覆盖可见范围，平移/缩放都要重画（每帧几百条线段，代价可忽略）。
+    this.redrawGrid();
+    if (tileSizeChanged) {
       this.redrawHoverShape();
       this.rebuildEntityNodes();
       this.redrawStaticLayers();
@@ -823,10 +861,19 @@ export class PlanetScene {
     const zoomIndexChanged = this.lastAppliedZoomIndex !== null && input.zoomIndex !== this.lastAppliedZoomIndex;
     if (!this.frozen && zoomIndexChanged && !modeSwitched) {
       const fromScale = this.appliedScale * (previousTileSize / input.tileSize);
+      // 归一化后的目标 offset 可能与当前渲染位置相差整数个地图周期（等价分支），
+      // 补间目标对齐到最近分支，避免 180ms 内扫过整张地图。
+      const periodX = (this.baseInput?.planet.map_width ?? 0) * input.tileSize;
+      const periodY = (this.baseInput?.planet.map_height ?? 0) * input.tileSize;
+      const alignBranch = (target: number, reference: number, period: number, wrap: boolean) => (
+        wrap && period > 0 ? target + Math.round((reference - target) / period) * period : target
+      );
       this.zoomTween = {
         fromScale,
         fromX: this.appliedX,
         fromY: this.appliedY,
+        toX: alignBranch(this.offsetX, this.appliedX, periodX, this.wrapX),
+        toY: alignBranch(this.offsetY, this.appliedY, periodY, this.wrapY),
         tween: createTween(PLANET_ZOOM_TWEEN_MS, easeOutCubic),
       };
       this.applyCameraTransform(fromScale, this.appliedX, this.appliedY);
@@ -845,6 +892,112 @@ export class PlanetScene {
     this.appliedY = y;
     this.world.scale.set(scale);
     this.world.position.set(x, y);
+  }
+
+  // ---------- 环绕渲染（toroidal wrap） ----------
+
+  /** 为主精灵登记 3 个镜像（+X / +Y / +XY），共享纹理、随主精灵布局与可见性。 */
+  private addMirrorSprites(source: Sprite, parent: Container) {
+    for (const [shiftX, shiftY] of [[true, false], [false, true], [true, true]] as const) {
+      const sprite = new Sprite();
+      sprite.visible = false;
+      sprite.blendMode = source.blendMode;
+      sprite.tint = source.tint;
+      parent.addChild(sprite);
+      this.mirrorSprites.push({ sprite, source, shiftX, shiftY });
+    }
+  }
+
+  /** 重算环绕状态（环绕轴 + 视口起始 tile）；返回是否有变化。 */
+  private updateWrapState() {
+    const planet = this.baseInput?.planet;
+    let nextWrapX = false;
+    let nextWrapY = false;
+    if (planet && !this.overviewMode) {
+      nextWrapX = isWrapAxisEnabled(planet.map_width * this.tileSize, this.app.screen.width);
+      nextWrapY = isWrapAxisEnabled(planet.map_height * this.tileSize, this.app.screen.height);
+    }
+    const nextCutX = nextWrapX ? Math.floor(-this.offsetX / this.tileSize) : 0;
+    const nextCutY = nextWrapY ? Math.floor(-this.offsetY / this.tileSize) : 0;
+    const changed = nextWrapX !== this.wrapX || nextWrapY !== this.wrapY
+      || nextCutX !== this.cutX || nextCutY !== this.cutY;
+    this.wrapX = nextWrapX;
+    this.wrapY = nextWrapY;
+    this.cutX = nextCutX;
+    this.cutY = nextCutY;
+    return changed;
+  }
+
+  /** 真实 tile → 规范（unwrapped）tile：视口跨接缝时把接缝另一侧的内容平移进来。 */
+  private canonTileX(tile: number) {
+    const mapWidth = this.baseInput?.planet.map_width ?? 1;
+    return this.wrapX ? canonicalTileIndex(tile, this.cutX, mapWidth) : tile;
+  }
+
+  private canonTileY(tile: number) {
+    const mapHeight = this.baseInput?.planet.map_height ?? 1;
+    return this.wrapY ? canonicalTileIndex(tile, this.cutY, mapHeight) : tile;
+  }
+
+  /** 真实 tile → 世界像素（tile 左上角）。 */
+  private pxTileX(tile: number) {
+    return this.canonTileX(tile) * this.tileSize;
+  }
+
+  private pxTileY(tile: number) {
+    return this.canonTileY(tile) * this.tileSize;
+  }
+
+  /** 真实 tile → 世界像素（tile 中心）。 */
+  private pxCenterX(tile: number) {
+    return tileCenter(this.canonTileX(tile), this.tileSize);
+  }
+
+  private pxCenterY(tile: number) {
+    return tileCenter(this.canonTileY(tile), this.tileSize);
+  }
+
+  /** 镜像精灵布局/可见性：贴主精灵纹理与尺寸，位置平移一个地图周期。 */
+  private layoutMirrorSprites() {
+    for (const mirror of this.mirrorSprites) {
+      mirror.sprite.texture = mirror.source.texture;
+      mirror.sprite.width = mirror.source.width;
+      mirror.sprite.height = mirror.source.height;
+      mirror.sprite.position.set(
+        mirror.shiftX ? this.mapPixelWidth : 0,
+        mirror.shiftY ? this.mapPixelHeight : 0,
+      );
+      mirror.sprite.visible = mirror.source.visible
+        && (!mirror.shiftX || this.wrapX)
+        && (!mirror.shiftY || this.wrapY);
+    }
+  }
+
+  /**
+   * 相机 cut 变化后的重定位：把实体节点重新摆到规范坐标。
+   * 非接缝实体的规范坐标不随 cut 变化（仅接缝处实体跳变），所以这是廉价的 position 更新，
+   * 单位不做跨图平滑滑行（直接落位），静态连线层与交互叠加层重绘。
+   */
+  private relayoutWrappedPositions() {
+    for (const node of this.buildingNodes.values()) {
+      const point = toTilePoint(node.data.position);
+      const { height } = getBuildingFootprint(node.data);
+      node.container.position.set(this.pxTileX(point.x), this.pxTileY(point.y));
+      node.container.zIndex = buildingSortKey(this.canonTileY(point.y), height);
+    }
+    for (const node of this.unitNodes.values()) {
+      const point = toTilePoint(node.data.position);
+      node.targetX = this.pxCenterX(point.x);
+      node.targetY = this.pxCenterY(point.y);
+      node.posX = node.targetX;
+      node.posY = node.targetY;
+      node.container.position.set(node.posX, node.posY);
+      node.container.zIndex = unitSortKey(node.posY, this.tileSize);
+    }
+    for (const node of this.resourceNodes.values()) {
+      const point = toTilePoint(node.data.position);
+      node.container.position.set(this.pxCenterX(point.x), this.pxCenterY(point.y));
+    }
   }
 
   /** 实体输入：建筑/单位/资源增量同步（保平滑移动状态），连线类 Graphics 整体重绘。 */
@@ -1081,11 +1234,18 @@ export class PlanetScene {
       .fill(COLOR_BACKDROP);
   };
 
-  /** resize 统一入口：背景/暗角铺满屏幕；视口变化后可见块集合重算（分块路径）。 */
+  /** resize 统一入口：背景/暗角铺满屏幕；视口变化后环绕状态/可见块集合重算。 */
   private readonly handleResize = () => {
     this.drawBackdrop();
     this.vignetteSprite.width = this.app.screen.width;
     this.vignetteSprite.height = this.app.screen.height;
+    if (this.updateWrapState()) {
+      this.relayoutWrappedPositions();
+      this.redrawStaticLayers();
+      this.redrawInteraction();
+      this.redrawGrid();
+    }
+    this.layoutBaseSprites();
     if (this.terrainPath === 'chunked') {
       this.updateChunkPlan();
     }
@@ -1107,6 +1267,8 @@ export class PlanetScene {
     this.lastShinePhase = -1;
     this.waterShineSprite.texture = Texture.EMPTY;
     this.lavaGlowSprite.texture = Texture.EMPTY;
+    // 镜像共享主精灵纹理：主纹理销毁后同步置空，避免悬挂引用。
+    this.layoutMirrorSprites();
   }
 
   private rebuildBaseTextures() {
@@ -1204,7 +1366,12 @@ export class PlanetScene {
     }
   }
 
-  /** 按签名逐块校验：地形变化/地图缩边越界的块销毁（重新进入待生成队列）。 */
+  /** 当前环绕取样配置（传给分块地形烘焙/签名）。 */
+  private get wrapSampling(): TerrainWrapSampling {
+    return { wrapX: this.wrapX, wrapY: this.wrapY };
+  }
+
+  /** 按签名逐块校验：地形变化的块销毁（重新进入待生成队列）；非环绕轴越出地图的块一并销毁。 */
   private validateTerrainChunks(planet: PlanetRenderView) {
     for (const key of this.chunks.keys()) {
       const entry = this.chunks.peek(key);
@@ -1212,9 +1379,9 @@ export class PlanetScene {
         continue;
       }
       const [cx, cy] = parseChunkKey(key);
-      const outOfMap = cx * TERRAIN_CHUNK_TILES >= planet.map_width
-        || cy * TERRAIN_CHUNK_TILES >= planet.map_height;
-      if (outOfMap || entry.signature !== terrainChunkSignature(planet, cx, cy)) {
+      const outOfMap = (!this.wrapX && (cx * TERRAIN_CHUNK_TILES >= planet.map_width || cx < 0))
+        || (!this.wrapY && (cy * TERRAIN_CHUNK_TILES >= planet.map_height || cy < 0));
+      if (outOfMap || entry.signature !== terrainChunkSignature(planet, cx, cy, this.wrapSampling)) {
         entry.sprite.destroy();
         entry.texture.destroy(true);
         this.chunks.delete(key);
@@ -1241,6 +1408,8 @@ export class PlanetScene {
       tileSize: this.tileSize,
       viewportWidth: this.app.screen.width,
       viewportHeight: this.app.screen.height,
+      wrapX: this.wrapX,
+      wrapY: this.wrapY,
     });
     this.neededChunkKeys = new Set(keys);
     this.chunkQueue = keys.filter((key) => !this.chunks.has(key));
@@ -1264,7 +1433,7 @@ export class PlanetScene {
       return;
     }
     const [cx, cy] = parseChunkKey(key);
-    const canvas = renderTerrainChunkCanvas(input.planet, cx, cy);
+    const canvas = renderTerrainChunkCanvas(input.planet, cx, cy, this.wrapSampling);
     const texture = Texture.from(canvas);
     texture.source.scaleMode = 'nearest';
     const sprite = new Sprite(texture);
@@ -1273,7 +1442,7 @@ export class PlanetScene {
     this.chunks.set(key, {
       sprite,
       texture,
-      signature: terrainChunkSignature(input.planet, cx, cy),
+      signature: terrainChunkSignature(input.planet, cx, cy, this.wrapSampling),
     });
   }
 
@@ -1299,8 +1468,11 @@ export class PlanetScene {
     const x0 = cx * TERRAIN_CHUNK_TILES;
     const y0 = cy * TERRAIN_CHUNK_TILES;
     sprite.position.set(x0 * this.tileSize, y0 * this.tileSize);
-    sprite.width = chunkSpanAxis(x0, input.planet.map_width) * this.tileSize;
-    sprite.height = chunkSpanAxis(y0, input.planet.map_height) * this.tileSize;
+    // 环绕轴 chunk 恒满 64 tile（内容 mod 回绕），非环绕轴地图边缘残块收窄。
+    const spanX = this.wrapX ? TERRAIN_CHUNK_TILES : chunkSpanAxis(x0, input.planet.map_width);
+    const spanY = this.wrapY ? TERRAIN_CHUNK_TILES : chunkSpanAxis(y0, input.planet.map_height);
+    sprite.width = spanX * this.tileSize;
+    sprite.height = spanY * this.tileSize;
   }
 
   private layoutTerrainChunks() {
@@ -1341,6 +1513,12 @@ export class PlanetScene {
     this.renderWaterShineCanvas(t);
     this.waterShineSprite.alpha = WATER_SHINE_BASE_ALPHA + WATER_SHINE_ALPHA_SWING * Math.sin(t * 0.9);
     this.lavaGlowSprite.alpha = LAVA_GLOW_BASE_ALPHA + LAVA_GLOW_ALPHA_SWING * Math.sin(t * 1.9);
+    // 氛围镜像跟随主精灵的呼吸 alpha。
+    for (const mirror of this.mirrorSprites) {
+      if (mirror.source === this.waterShineSprite || mirror.source === this.lavaGlowSprite) {
+        mirror.sprite.alpha = mirror.source.alpha;
+      }
+    }
   }
 
   /** 低分辨率动态遮罩：对角柔光带（相位 t 驱动位置）× 水格遮罩（destination-in），再上传纹理。 */
@@ -1394,6 +1572,7 @@ export class PlanetScene {
       this.overviewSprite.width = input.overview.cells_width * cellSize;
       this.overviewSprite.height = input.overview.cells_height * cellSize;
       this.layoutAmbientSprites();
+      this.layoutMirrorSprites();
       return;
     }
     this.terrainSprite.width = input.planet.map_width * this.tileSize;
@@ -1401,6 +1580,7 @@ export class PlanetScene {
     this.fogSprite.width = this.terrainSprite.width;
     this.fogSprite.height = this.terrainSprite.height;
     this.layoutAmbientSprites();
+    this.layoutMirrorSprites();
   }
 
   private redrawGrid() {
@@ -1434,13 +1614,17 @@ export class PlanetScene {
     if (!this.detailPolicy?.showSceneGrid) {
       return;
     }
-    const width = input.planet.map_width * this.tileSize;
-    const height = input.planet.map_height * this.tileSize;
-    for (let x = 0; x <= input.planet.map_width; x += 1) {
-      g.moveTo(x * this.tileSize, 0).lineTo(x * this.tileSize, height);
+    // 只画可见范围的网格线（unwrapped 坐标，环绕轴上自然跨过接缝）：
+    // 网格周期 = 1 tile，任意副本里的线位置一致，无需感知地图边界。
+    const minTX = Math.floor(-this.offsetX / this.tileSize);
+    const maxTX = Math.ceil((this.app.screen.width - this.offsetX) / this.tileSize);
+    const minTY = Math.floor(-this.offsetY / this.tileSize);
+    const maxTY = Math.ceil((this.app.screen.height - this.offsetY) / this.tileSize);
+    for (let x = minTX; x <= maxTX; x += 1) {
+      g.moveTo(x * this.tileSize, minTY * this.tileSize).lineTo(x * this.tileSize, maxTY * this.tileSize);
     }
-    for (let y = 0; y <= input.planet.map_height; y += 1) {
-      g.moveTo(0, y * this.tileSize).lineTo(width, y * this.tileSize);
+    for (let y = minTY; y <= maxTY; y += 1) {
+      g.moveTo(minTX * this.tileSize, y * this.tileSize).lineTo(maxTX * this.tileSize, y * this.tileSize);
     }
     g.stroke({ width: 1, color: COLOR_GRID, alpha: 0.08 });
   }
@@ -1476,6 +1660,7 @@ export class PlanetScene {
     }
     this.logisticsGraphics.visible = !overview && layers.logistics;
     this.threatGraphics.visible = !overview && layers.threat;
+    this.layoutMirrorSprites();
   }
 
   // ---------- 实体节点（增量同步） ----------
@@ -1584,8 +1769,8 @@ export class PlanetScene {
     const pixelWidth = width * this.tileSize;
     const pixelHeight = height * this.tileSize;
 
-    node.container.position.set(point.x * this.tileSize, point.y * this.tileSize);
-    node.container.zIndex = buildingSortKey(point.y, height);
+    node.container.position.set(this.pxTileX(point.x), this.pxTileY(point.y));
+    node.container.zIndex = buildingSortKey(this.canonTileY(point.y), height);
 
     // 低缩放档（tileSize < 6）保持简化色块，不做结构精灵。
     if (simplify) {
@@ -1721,8 +1906,8 @@ export class PlanetScene {
       (unit) => this.createUnitNode(unit, playerId, simplify),
       (node, unit) => {
         const point = toTilePoint(unit.position);
-        node.targetX = tileCenter(point.x, this.tileSize);
-        node.targetY = tileCenter(point.y, this.tileSize);
+        node.targetX = this.pxCenterX(point.x);
+        node.targetY = this.pxCenterY(point.y);
         if (this.frozen) {
           node.posX = node.targetX;
           node.posY = node.targetY;
@@ -1762,10 +1947,10 @@ export class PlanetScene {
       dot,
       hp,
       data: unit,
-      targetX: tileCenter(point.x, this.tileSize),
-      targetY: tileCenter(point.y, this.tileSize),
-      posX: tileCenter(point.x, this.tileSize),
-      posY: tileCenter(point.y, this.tileSize),
+      targetX: this.pxCenterX(point.x),
+      targetY: this.pxCenterY(point.y),
+      posX: this.pxCenterX(point.x),
+      posY: this.pxCenterY(point.y),
       dirX: 0,
       dirY: -1,
     };
@@ -1845,7 +2030,7 @@ export class PlanetScene {
     icon.position.set(0, -decalSize * 0.28);
     container.addChild(icon);
     const point = toTilePoint(resource.position);
-    container.position.set(tileCenter(point.x, this.tileSize), tileCenter(point.y, this.tileSize));
+    container.position.set(this.pxCenterX(point.x), this.pxCenterY(point.y));
     return { container, base, icon, data: resource };
   }
 
@@ -1869,14 +2054,14 @@ export class PlanetScene {
     for (const segment of input.visible.pipelineSegments) {
       const from = toTilePoint(segment.from_position);
       const to = toTilePoint(segment.to_position);
-      g.moveTo(tileCenter(from.x, ts), tileCenter(from.y, ts))
-        .lineTo(tileCenter(to.x, ts), tileCenter(to.y, ts));
+      g.moveTo(this.pxCenterX(from.x), this.pxCenterY(from.y))
+        .lineTo(this.pxCenterX(to.x), this.pxCenterY(to.y));
     }
     g.stroke({ width: 3, color: COLOR_PIPELINE, alpha: 0.78 });
     for (const node of input.visible.pipelineNodes) {
       const point = toTilePoint(node.position);
       const side = Math.max(6, ts * 0.36);
-      g.rect(tileCenter(point.x, ts) - side / 2, tileCenter(point.y, ts) - side / 2, side, side)
+      g.rect(this.pxCenterX(point.x) - side / 2, this.pxCenterY(point.y) - side / 2, side, side)
         .fill(node.fluid_id ? getResourceColorValue(node.fluid_id) : COLOR_PIPELINE);
     }
   }
@@ -1894,22 +2079,22 @@ export class PlanetScene {
       if (wireless) {
         this.strokeDashed(
           g,
-          tileCenter(from.x, ts),
-          tileCenter(from.y, ts),
-          tileCenter(to.x, ts),
-          tileCenter(to.y, ts),
+          this.pxCenterX(from.x),
+          this.pxCenterY(from.y),
+          this.pxCenterX(to.x),
+          this.pxCenterY(to.y),
           [6, 6],
           { width: 2, color: COLOR_POWER_WIRELESS, alpha: 0.72 },
         );
       } else {
-        g.moveTo(tileCenter(from.x, ts), tileCenter(from.y, ts))
-          .lineTo(tileCenter(to.x, ts), tileCenter(to.y, ts))
+        g.moveTo(this.pxCenterX(from.x), this.pxCenterY(from.y))
+          .lineTo(this.pxCenterX(to.x), this.pxCenterY(to.y))
           .stroke({ width: 3, color: COLOR_POWER_WIRED, alpha: 0.72 });
       }
     }
     for (const coverage of input.visible.powerCoverage) {
       const point = toTilePoint(coverage.position);
-      g.circle(tileCenter(point.x, ts), tileCenter(point.y, ts), Math.max(6, ts * 0.32))
+      g.circle(this.pxCenterX(point.x), this.pxCenterY(point.y), Math.max(6, ts * 0.32))
         .stroke({ width: 2, color: coverage.connected ? COLOR_POWER_WIRED : COLOR_POWER_DOWN, alpha: 0.92 });
     }
   }
@@ -1922,8 +2107,8 @@ export class PlanetScene {
     const ts = this.tileSize;
     for (const task of input.visible.constructionTasks) {
       const point = toTilePoint(task.position);
-      const x = point.x * ts;
-      const y = point.y * ts;
+      const x = this.pxTileX(point.x);
+      const y = this.pxTileY(point.y);
       const color = constructionStateColor(task.state);
       const inset = 1.5;
       const arm = Math.max(3, ts * 0.24);
@@ -1983,15 +2168,15 @@ export class PlanetScene {
         const target = toTilePoint(drone.target_pos);
         this.strokeDashed(
           g,
-          tileCenter(start.x, ts),
-          tileCenter(start.y, ts),
-          tileCenter(target.x, ts),
-          tileCenter(target.y, ts),
+          this.pxCenterX(start.x),
+          this.pxCenterY(start.y),
+          this.pxCenterX(target.x),
+          this.pxCenterY(target.y),
           [8, 6],
           { width: 2, color: COLOR_DRONE, alpha: 0.72 },
         );
       }
-      g.circle(tileCenter(start.x, ts), tileCenter(start.y, ts), Math.max(4, ts * 0.18)).fill(COLOR_DRONE);
+      g.circle(this.pxCenterX(start.x), this.pxCenterY(start.y), Math.max(4, ts * 0.18)).fill(COLOR_DRONE);
     }
     for (const ship of input.visible.logisticsShips) {
       const start = toTilePoint(ship.position);
@@ -1999,16 +2184,16 @@ export class PlanetScene {
         const target = toTilePoint(ship.target_pos);
         this.strokeDashed(
           g,
-          tileCenter(start.x, ts),
-          tileCenter(start.y, ts),
-          tileCenter(target.x, ts),
-          tileCenter(target.y, ts),
+          this.pxCenterX(start.x),
+          this.pxCenterY(start.y),
+          this.pxCenterX(target.x),
+          this.pxCenterY(target.y),
           [2, 8],
           { width: 2, color: COLOR_SHIP, alpha: 0.68 },
         );
       }
       const side = Math.max(6, ts * 0.32);
-      g.rect(tileCenter(start.x, ts) - side / 2, tileCenter(start.y, ts) - side / 2, side, side).fill(COLOR_SHIP);
+      g.rect(this.pxCenterX(start.x) - side / 2, this.pxCenterY(start.y) - side / 2, side, side).fill(COLOR_SHIP);
     }
   }
 
@@ -2020,15 +2205,15 @@ export class PlanetScene {
     const ts = this.tileSize;
     for (const force of input.visible.enemyForces) {
       const point = toTilePoint(force.position);
-      const cx = tileCenter(point.x, ts);
-      const cy = tileCenter(point.y, ts);
+      const cx = this.pxCenterX(point.x);
+      const cy = this.pxCenterY(point.y);
       const r = Math.max(6, ts * 0.28);
       g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy], true).fill({ color: COLOR_ENEMY, alpha: 0.88 });
     }
     for (const detection of input.visible.detections) {
       for (const position of detection.detected_positions ?? []) {
         const point = toTilePoint(position);
-        g.circle(tileCenter(point.x, ts), tileCenter(point.y, ts), Math.max(5, ts * 0.22))
+        g.circle(this.pxCenterX(point.x), this.pxCenterY(point.y), Math.max(5, ts * 0.22))
           .stroke({ width: 2, color: COLOR_DETECTION, alpha: 0.76 });
       }
     }
@@ -2071,7 +2256,7 @@ export class PlanetScene {
       this.hoverGraphics.visible = false;
       return;
     }
-    this.hoverGraphics.position.set(tile.x * this.tileSize, tile.y * this.tileSize);
+    this.hoverGraphics.position.set(this.pxTileX(tile.x), this.pxTileY(tile.y));
     this.hoverGraphics.visible = true;
   }
 
@@ -2094,8 +2279,8 @@ export class PlanetScene {
           const tx = hoveredTile.x + dx;
           const ty = hoveredTile.y + dy;
           const blocked = blockedSet.has(`${tx},${ty}`);
-          const screenX = tx * ts;
-          const screenY = ty * ts;
+          const screenX = this.pxTileX(tx);
+          const screenY = this.pxTileY(ty);
           g.rect(screenX, screenY, ts, ts)
             .fill(blocked ? { color: COLOR_GHOST_BLOCKED, alpha: 0.32 } : { color: COLOR_GHOST_OK, alpha: 0.28 })
             .stroke({ width: 1.5, color: blocked ? COLOR_GHOST_BLOCKED : COLOR_GHOST_OK });
@@ -2107,8 +2292,8 @@ export class PlanetScene {
       if (rangeCircles.length > 0) {
         this.drawRangeCircles(
           g,
-          (hoveredTile.x + assessment.footprint.width / 2) * ts,
-          (hoveredTile.y + assessment.footprint.height / 2) * ts,
+          this.pxTileX(hoveredTile.x) + (assessment.footprint.width / 2) * ts,
+          this.pxTileY(hoveredTile.y) + (assessment.footprint.height / 2) * ts,
           rangeCircles,
           ts,
         );
@@ -2118,8 +2303,8 @@ export class PlanetScene {
 
     // 移动/攻击模式：目标点准星高亮
     if (!overviewMode && (mode.kind === 'move' || mode.kind === 'attack') && hoveredTile) {
-      const screenX = hoveredTile.x * ts;
-      const screenY = hoveredTile.y * ts;
+      const screenX = this.pxTileX(hoveredTile.x);
+      const screenY = this.pxTileY(hoveredTile.y);
       const color = mode.kind === 'move' ? COLOR_GHOST_OK : COLOR_GHOST_BLOCKED;
       g.rect(screenX + 1, screenY + 1, Math.max(ts - 2, 2), Math.max(ts - 2, 2))
         .stroke({ width: 2.5, color });
@@ -2166,15 +2351,15 @@ export class PlanetScene {
         const point = toTilePoint(node.data.position);
         this.drawRangeCircles(
           g,
-          (point.x + width / 2) * ts,
-          (point.y + height / 2) * ts,
+          (this.canonTileX(point.x) + width / 2) * ts,
+          (this.canonTileY(point.y) + height / 2) * ts,
           [{ kind: 'combat', radiusTiles: combatRange }],
           ts,
         );
       }
     }
-    const screenX = highlightTile.x * ts;
-    const screenY = highlightTile.y * ts;
+    const screenX = this.pxTileX(highlightTile.x);
+    const screenY = this.pxTileY(highlightTile.y);
     g.rect(screenX + 1.5, screenY + 1.5, Math.max(ts - 3, 2), Math.max(ts - 3, 2))
       .stroke(selected
         ? { width: 3, color: COLOR_SELECTED }
@@ -2207,16 +2392,17 @@ export class PlanetScene {
     }
     // 上限 100ms：后台标签页恢复时不会一次性飞跃。
     const dt = Math.min(ticker.deltaMS, 100) / 1000;
-    // 缩放补间推进：完成后精确落到 scale=1@目标 offset。
+    // 缩放补间推进：完成后精确落到 scale=1@归一化目标 offset（周期等价分支视觉一致）。
     if (this.zoomTween) {
       const progress = this.zoomTween.tween.step(ticker.deltaMS);
       this.applyCameraTransform(
         lerp(this.zoomTween.fromScale, 1, progress),
-        lerp(this.zoomTween.fromX, this.offsetX, progress),
-        lerp(this.zoomTween.fromY, this.offsetY, progress),
+        lerp(this.zoomTween.fromX, this.zoomTween.toX, progress),
+        lerp(this.zoomTween.fromY, this.zoomTween.toY, progress),
       );
       if (progress >= 1) {
         this.zoomTween = null;
+        this.applyCameraTransform(1, this.offsetX, this.offsetY);
       }
     }
     // 分块地表惰性补块：每帧最多 N 块（拖拽时防卡顿），按队列（视口中心优先）生成。

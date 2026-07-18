@@ -388,3 +388,96 @@ describe('useChunkedTerrain 路径门槛', () => {
     expect(useChunkedTerrain(true, 8)).toBe(false);
   });
 });
+
+describe('环绕取样（toroidal wrap）', () => {
+  // 100×64 地图：X 轴 1.5625 个 chunk（chunk0=0..63，chunk1=64..99 残块），Y 轴正好 1 个
+  const WRAP = { wrapX: true, wrapY: false };
+  const planet = createPlanet(
+    Array.from({ length: 64 }, (_, y) =>
+      Array.from({ length: 100 }, (_, x) => {
+        if ((x + y) % 17 === 0) return 'water';
+        if ((x * y) % 23 === 0 && x > 0) return 'blocked';
+        return 'buildable';
+      }),
+    ),
+  );
+
+  it('computeVisibleChunkKeys：环绕轴不钳进地图（可返回 ≥ 地图 chunk 数的键）', () => {
+    // 相机对着右边缘：可见 chunk 应包含 cx=1（真实残块）与 cx=2（环绕副本）
+    const keys = computeVisibleChunkKeys({
+      mapWidth: 100,
+      mapHeight: 64,
+      offsetX: -64 * 8,
+      offsetY: 0,
+      tileSize: 8,
+      viewportWidth: 8 * 70,
+      viewportHeight: 8 * 10,
+      wrapX: true,
+      wrapY: false,
+    });
+    expect(keys).toContain('1,0');
+    expect(keys).toContain('2,0');
+    expect(keys).toContain('0,0'); // 余量圈
+  });
+
+  it('computeVisibleChunkKeys：非环绕轴维持钳位（现状回归）', () => {
+    const keys = computeVisibleChunkKeys({
+      mapWidth: 100,
+      mapHeight: 64,
+      offsetX: -64 * 8,
+      offsetY: 0,
+      tileSize: 8,
+      viewportWidth: 8 * 70,
+      viewportHeight: 8 * 10,
+    });
+    expect(keys).toContain('1,0');
+    expect(keys).not.toContain('2,0');
+  });
+
+  it('环绕 chunk 像素：接缝另一侧与真实位置逐像素一致', () => {
+    const wrapped = computeTerrainChunkPixels(planet, 1, 0, WRAP); // tiles 64..127 → 64..99,0..27
+    const realRight = computeTerrainChunkPixels(planet, 0, 0); // tiles 0..63
+    expect(wrapped.width).toBe(64 * TERRAIN_CHUNK_TILE_PX); // 环绕轴恒满 64 tile
+    // wrapped 的 tx=36..63（对应真实 tile 0..27）必须与 chunk0 的 tx=0..27 逐像素一致。
+    // 例外：真实 tile 0 本身——它在 chunk0 里的左邻居是越界 unknown，
+    // 而在环绕副本里左邻居是真实的 tile 99（这正是环绕要修正的"边缘感"），泡沫/明暗不同属预期。
+    for (let ty = 0; ty < 64; ty += 1) {
+      for (let tx = 1; tx < 28; tx += 1) {
+        for (let py = 0; py < TERRAIN_CHUNK_TILE_PX; py += 1) {
+          for (let px = 0; px < TERRAIN_CHUNK_TILE_PX; px += 1) {
+            const wrappedIdx = (((ty * 8 + py) * wrapped.width) + (36 + tx) * 8 + px) * 4;
+            const realIdx = (((ty * 8 + py) * realRight.width) + tx * 8 + px) * 4;
+            expect(wrapped.data[wrappedIdx]).toBe(realRight.data[realIdx]);
+            expect(wrapped.data[wrappedIdx + 1]).toBe(realRight.data[realIdx + 1]);
+            expect(wrapped.data[wrappedIdx + 2]).toBe(realRight.data[realIdx + 2]);
+          }
+        }
+      }
+    }
+  });
+
+  it('环绕 chunk 的水岸泡沫跨过地图边缘（x=99 与 x=0 视为相邻）', () => {
+    // x=99 是水、x=0 是陆 → 环绕取样时 x=99 的右侧邻居是陆，泡沫出现；
+    // 非环绕取样时右侧越界为 unknown，无泡沫。
+    const edgePlanet = createPlanet([
+      [...Array.from({ length: 63 }, () => 'buildable'), 'water', ...Array.from({ length: 36 }, () => 'buildable')],
+    ].map((row) => row.slice(0, 100)).concat(
+      Array.from({ length: 63 }, () => Array.from({ length: 100 }, () => 'buildable')),
+    ) as string[][]);
+    // 直接验证掩码：wrap 时 (99,0) 的陆邻掩码 right=true（x=0 是 buildable）
+    const wrappedMask = terrainLandMask(edgePlanet, 99, 0, { wrapX: true, wrapY: false });
+    expect(wrappedMask.right).toBe(true);
+    const plainMask = terrainLandMask(edgePlanet, 99, 0);
+    expect(plainMask.right).toBe(false);
+  });
+
+  it('terrainChunkSignature：环绕配置参与签名（切换环绕配置触发脏校验）', () => {
+    const wrapped = terrainChunkSignature(planet, 1, 0, WRAP);
+    const plain = terrainChunkSignature(planet, 1, 0);
+    expect(wrapped).not.toBe(plain);
+    // 同配置同数据稳定
+    expect(terrainChunkSignature(planet, 1, 0, WRAP)).toBe(wrapped);
+    // 环绕签名 = 内容决定：chunk 2（64..127 的下一个周期 164..227 → mod 后同内容不同位置）签名不同
+    expect(terrainChunkSignature(planet, 2, 0, WRAP)).not.toBe(wrapped);
+  });
+});

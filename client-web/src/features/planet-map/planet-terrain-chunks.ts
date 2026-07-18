@@ -1,4 +1,4 @@
-import { getTerrainTile, type PlanetRenderView } from '@/features/planet-map/model';
+import { getTerrainTile, wrapMod, type PlanetRenderView } from '@/features/planet-map/model';
 import { SHADING_TERRAINS, TERRAIN_RGB, shadeFactor } from '@/features/planet-map/planet-base-map';
 
 /**
@@ -63,11 +63,29 @@ export interface TerrainChunkVisibilityInput {
   viewportHeight: number;
   /** 可见范围外扩的余量圈数（默认 TERRAIN_CHUNK_MARGIN）。 */
   margin?: number;
+  /** 环绕轴：该轴 chunk 不钳进地图，取样按 mod 回绕（渲染接缝另一侧的内容）。 */
+  wrapX?: boolean;
+  wrapY?: boolean;
+}
+
+/** 单轴可见 chunk 区间：环绕轴不钳（unwrapped），非环绕轴钳进地图（无交集返回 null）。 */
+function visibleChunkRangeAxis(rawMin: number, rawMax: number, mapTiles: number, wrap: boolean) {
+  if (wrap) {
+    return { min: rawMin, max: rawMax };
+  }
+  const maxChunk = chunkCountAxis(mapTiles) - 1;
+  if (rawMax < 0 || rawMin > maxChunk) {
+    return null;
+  }
+  const min = Math.min(Math.max(rawMin, 0), maxChunk);
+  const max = Math.min(Math.max(rawMax, 0), maxChunk);
+  return min > max ? null : { min, max };
 }
 
 /**
  * 计算可见 chunk 键集合（含余量圈），按到视口中心的距离升序返回
  * ——惰性补块时优先生成视口中心附近的块。
+ * 环绕轴上键为 unwrapped chunk 坐标（可 ≥ 地图 chunk 数），内容取样 mod 回绕。
  */
 export function computeVisibleChunkKeys(input: TerrainChunkVisibilityInput): string[] {
   const { mapWidth, mapHeight, offsetX, offsetY, tileSize, viewportWidth, viewportHeight } = input;
@@ -75,32 +93,30 @@ export function computeVisibleChunkKeys(input: TerrainChunkVisibilityInput): str
     return [];
   }
   const margin = input.margin ?? TERRAIN_CHUNK_MARGIN;
-  const maxCX = chunkCountAxis(mapWidth) - 1;
-  const maxCY = chunkCountAxis(mapHeight) - 1;
+  const wrapX = input.wrapX ?? false;
+  const wrapY = input.wrapY ?? false;
 
-  // 先判视口与地图是否相交：未钳位的原始范围完全落在地图外时返回空集合。
-  const rawMinCX = Math.floor(Math.floor(-offsetX / tileSize) / TERRAIN_CHUNK_TILES) - margin;
-  const rawMinCY = Math.floor(Math.floor(-offsetY / tileSize) / TERRAIN_CHUNK_TILES) - margin;
-  const rawMaxCX = Math.floor(Math.floor((viewportWidth - offsetX) / tileSize) / TERRAIN_CHUNK_TILES) + margin;
-  const rawMaxCY = Math.floor(Math.floor((viewportHeight - offsetY) / tileSize) / TERRAIN_CHUNK_TILES) + margin;
-  if (rawMaxCX < 0 || rawMaxCY < 0 || rawMinCX > maxCX || rawMinCY > maxCY) {
-    return [];
-  }
-
-  const clampChunk = (value: number, max: number) => Math.min(Math.max(value, 0), max);
-  const minCX = clampChunk(rawMinCX, maxCX);
-  const minCY = clampChunk(rawMinCY, maxCY);
-  const maxVisibleCX = clampChunk(rawMaxCX, maxCX);
-  const maxVisibleCY = clampChunk(rawMaxCY, maxCY);
-  if (minCX > maxVisibleCX || minCY > maxVisibleCY) {
+  const rangeX = visibleChunkRangeAxis(
+    Math.floor(Math.floor(-offsetX / tileSize) / TERRAIN_CHUNK_TILES) - margin,
+    Math.floor(Math.floor((viewportWidth - offsetX) / tileSize) / TERRAIN_CHUNK_TILES) + margin,
+    mapWidth,
+    wrapX,
+  );
+  const rangeY = visibleChunkRangeAxis(
+    Math.floor(Math.floor(-offsetY / tileSize) / TERRAIN_CHUNK_TILES) - margin,
+    Math.floor(Math.floor((viewportHeight - offsetY) / tileSize) / TERRAIN_CHUNK_TILES) + margin,
+    mapHeight,
+    wrapY,
+  );
+  if (!rangeX || !rangeY) {
     return [];
   }
 
   const centerTileX = (viewportWidth / 2 - offsetX) / tileSize;
   const centerTileY = (viewportHeight / 2 - offsetY) / tileSize;
   const keys: Array<{ key: string; distance: number }> = [];
-  for (let cy = minCY; cy <= maxVisibleCY; cy += 1) {
-    for (let cx = minCX; cx <= maxVisibleCX; cx += 1) {
+  for (let cy = rangeY.min; cy <= rangeY.max; cy += 1) {
+    for (let cx = rangeX.min; cx <= rangeX.max; cx += 1) {
       const chunkCenterX = (cx + 0.5) * TERRAIN_CHUNK_TILES;
       const chunkCenterY = (cy + 0.5) * TERRAIN_CHUNK_TILES;
       const dx = chunkCenterX - centerTileX;
@@ -122,18 +138,45 @@ const TERRAIN_KIND_CODES: Record<string, number> = {
 };
 
 /**
+ * chunk 取样环绕配置：环绕轴上取样坐标 mod 回绕（同一真实 tile 在接缝两侧
+ * 渲染出完全一致的像素，包括噪色/明暗种子）；非环绕轴行为不变。
+ */
+export interface TerrainWrapSampling {
+  wrapX: boolean;
+  wrapY: boolean;
+}
+
+function wrapSampleAxis(value: number, mapTiles: number, wrap: boolean) {
+  return wrap ? wrapMod(value, Math.max(mapTiles, 1)) : value;
+}
+
+/** 环绕取样的地形查询：wrap 轴 mod 回绕，等价于在接缝另一侧看到同一格。 */
+export function sampleTerrainTile(planet: PlanetRenderView, x: number, y: number, wrap?: TerrainWrapSampling) {
+  if (!wrap) {
+    return getTerrainTile(planet, x, y);
+  }
+  return getTerrainTile(
+    planet,
+    wrapSampleAxis(x, planet.map_width, wrap.wrapX),
+    wrapSampleAxis(y, planet.map_height, wrap.wrapY),
+  );
+}
+
+/**
  * chunk 内地形数据的签名（FNV-1a 变体）：数据引用变化后逐块重算比对，
  * 不一致的块标记脏重生成（对齐 planet-scene overview 纹理的签名比对模式）。
+ * 环绕轴上按 unwrapped chunk 原点取样（mod 回绕），键入环绕标记避免切换时脏校验漏判。
  */
-export function terrainChunkSignature(planet: PlanetRenderView, cx: number, cy: number): string {
+export function terrainChunkSignature(planet: PlanetRenderView, cx: number, cy: number, wrap?: TerrainWrapSampling): string {
   const x0 = cx * TERRAIN_CHUNK_TILES;
   const y0 = cy * TERRAIN_CHUNK_TILES;
-  const x1 = Math.min(x0 + TERRAIN_CHUNK_TILES, planet.map_width);
-  const y1 = Math.min(y0 + TERRAIN_CHUNK_TILES, planet.map_height);
-  let hash = (2166136261 ^ (x0 * 73856093) ^ (y0 * 19349663) ^ (planet.map_width << 9) ^ planet.map_height) >>> 0;
-  for (let y = y0; y < y1; y += 1) {
-    for (let x = x0; x < x1; x += 1) {
-      hash = (hash ^ (TERRAIN_KIND_CODES[getTerrainTile(planet, x, y)] ?? 0)) >>> 0;
+  const tilesX = wrap?.wrapX ? TERRAIN_CHUNK_TILES : Math.max(Math.min(TERRAIN_CHUNK_TILES, planet.map_width - x0), 0);
+  const tilesY = wrap?.wrapY ? TERRAIN_CHUNK_TILES : Math.max(Math.min(TERRAIN_CHUNK_TILES, planet.map_height - y0), 0);
+  let hash = (2166136261 ^ (x0 * 73856093) ^ (y0 * 19349663) ^ (planet.map_width << 9) ^ planet.map_height
+    ^ (wrap?.wrapX ? 0x9e37 : 0) ^ (wrap?.wrapY ? 0x79b9 : 0)) >>> 0;
+  for (let ty = 0; ty < tilesY; ty += 1) {
+    for (let tx = 0; tx < tilesX; tx += 1) {
+      hash = (hash ^ (TERRAIN_KIND_CODES[sampleTerrainTile(planet, x0 + tx, y0 + ty, wrap)] ?? 0)) >>> 0;
       hash = Math.imul(hash, 16777619) >>> 0;
     }
   }
@@ -150,19 +193,19 @@ export interface TerrainEdgeMask {
 
 export const EMPTY_EDGE_MASK: TerrainEdgeMask = { up: false, down: false, left: false, right: false };
 
-export function terrainNeighborMask(planet: PlanetRenderView, x: number, y: number, targetKind: string): TerrainEdgeMask {
+export function terrainNeighborMask(planet: PlanetRenderView, x: number, y: number, targetKind: string, wrap?: TerrainWrapSampling): TerrainEdgeMask {
   return {
-    up: getTerrainTile(planet, x, y - 1) === targetKind,
-    down: getTerrainTile(planet, x, y + 1) === targetKind,
-    left: getTerrainTile(planet, x - 1, y) === targetKind,
-    right: getTerrainTile(planet, x + 1, y) === targetKind,
+    up: sampleTerrainTile(planet, x, y - 1, wrap) === targetKind,
+    down: sampleTerrainTile(planet, x, y + 1, wrap) === targetKind,
+    left: sampleTerrainTile(planet, x - 1, y, wrap) === targetKind,
+    right: sampleTerrainTile(planet, x + 1, y, wrap) === targetKind,
   };
 }
 
-/** 陆邻掩码：某方向的邻居是陆格（buildable/blocked）时为 true（越界不算陆，地图边缘不产生泡沫）。 */
-export function terrainLandMask(planet: PlanetRenderView, x: number, y: number): TerrainEdgeMask {
+/** 陆邻掩码：某方向的邻居是陆格（buildable/blocked）时为 true（非环绕时越界不算陆，地图边缘不产生泡沫）。 */
+export function terrainLandMask(planet: PlanetRenderView, x: number, y: number, wrap?: TerrainWrapSampling): TerrainEdgeMask {
   const isLand = (tx: number, ty: number) => {
-    const kind = getTerrainTile(planet, tx, ty);
+    const kind = sampleTerrainTile(planet, tx, ty, wrap);
     return kind === 'buildable' || kind === 'blocked';
   };
   return {
@@ -318,35 +361,37 @@ export interface TerrainChunkPixels {
 }
 
 /**
- * 计算一个 chunk 的地表像素（tileSize=8px/tile；边缘残块按实际 tile 数收窄）。
- * 不依赖 canvas，纯函数可测；全部确定性：同一份地形数据必得同一份像素。
+ * 计算一个 chunk 的地表像素（tileSize=8px/tile；非环绕轴在地图边缘按实际 tile 数收窄，
+ * 环绕轴恒满 64 tile、取样 mod 回绕）。不依赖 canvas，纯函数可测；全部确定性：
+ * 同一份地形数据必得同一份像素（噪色/明暗种子用回绕后的真实坐标，接缝两侧一致）。
  */
-export function computeTerrainChunkPixels(planet: PlanetRenderView, cx: number, cy: number): TerrainChunkPixels {
+export function computeTerrainChunkPixels(planet: PlanetRenderView, cx: number, cy: number, wrap?: TerrainWrapSampling): TerrainChunkPixels {
   const x0 = cx * TERRAIN_CHUNK_TILES;
   const y0 = cy * TERRAIN_CHUNK_TILES;
-  const tilesX = chunkSpanAxis(x0, planet.map_width);
-  const tilesY = chunkSpanAxis(y0, planet.map_height);
+  const tilesX = wrap?.wrapX ? TERRAIN_CHUNK_TILES : chunkSpanAxis(x0, planet.map_width);
+  const tilesY = wrap?.wrapY ? TERRAIN_CHUNK_TILES : chunkSpanAxis(y0, planet.map_height);
   const width = Math.max(tilesX * TERRAIN_CHUNK_TILE_PX, 1);
   const height = Math.max(tilesY * TERRAIN_CHUNK_TILE_PX, 1);
   const data = new Uint8ClampedArray(width * height * 4);
 
   for (let ty = 0; ty < tilesY; ty += 1) {
     for (let tx = 0; tx < tilesX; tx += 1) {
-      const x = x0 + tx;
-      const y = y0 + ty;
+      // 取样坐标：环绕轴 mod 回绕到真实 tile，保证同一格在任何副本里像素一致。
+      const x = wrapSampleAxis(x0 + tx, planet.map_width, wrap?.wrapX ?? false);
+      const y = wrapSampleAxis(y0 + ty, planet.map_height, wrap?.wrapY ?? false);
       const kind = getTerrainTile(planet, x, y);
       const base = TERRAIN_RGB[kind] ?? TERRAIN_RGB.unknown;
       const shade = SHADING_TERRAINS.has(kind) ? shadeFactor(x, y) : 1;
 
       // 邻接掩码只查一次（4 邻居）：水侧泡沫（陆邻方向）/ 岩浆描边 / blocked 浮雕各取所需。
       const landMask = kind === 'water'
-        ? terrainLandMask(planet, x, y)
+        ? terrainLandMask(planet, x, y, wrap)
         : EMPTY_EDGE_MASK;
       const nonLavaMask = kind === 'lava'
-        ? invertEdgeMask(terrainNeighborMask(planet, x, y, 'lava'))
+        ? invertEdgeMask(terrainNeighborMask(planet, x, y, 'lava', wrap))
         : EMPTY_EDGE_MASK;
       const reliefMask = kind === 'blocked'
-        ? invertEdgeMask(terrainNeighborMask(planet, x, y, 'blocked'))
+        ? invertEdgeMask(terrainNeighborMask(planet, x, y, 'blocked', wrap))
         : EMPTY_EDGE_MASK;
 
       for (let py = 0; py < TERRAIN_CHUNK_TILE_PX; py += 1) {
@@ -399,8 +444,8 @@ export function computeTerrainChunkPixels(planet: PlanetRenderView, cx: number, 
 /**
  * 烘焙一个 chunk 的地表 canvas（像素由 computeTerrainChunkPixels 提供）。
  */
-export function renderTerrainChunkCanvas(planet: PlanetRenderView, cx: number, cy: number): HTMLCanvasElement {
-  const { width, height, data } = computeTerrainChunkPixels(planet, cx, cy);
+export function renderTerrainChunkCanvas(planet: PlanetRenderView, cx: number, cy: number, wrap?: TerrainWrapSampling): HTMLCanvasElement {
+  const { width, height, data } = computeTerrainChunkPixels(planet, cx, cy, wrap);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;

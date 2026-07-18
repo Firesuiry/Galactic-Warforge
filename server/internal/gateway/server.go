@@ -705,11 +705,20 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 	fmt.Fprintf(w, "event: connected\ndata: %s\n\n", connectedPayload)
 	flusher.Flush()
 
+	// 心跳：空闲连接会被 NAT/代理在几分钟内静默掐断（表现为半开 TCP，
+	// 客户端读不到 FIN 也无法感知）。周期性发送 SSE 注释行既保活连接，
+	// 也让客户端能据此判断连接死活。心跳间隔须显著小于常见空闲超时（3-5 分钟）。
+	heartbeat := time.NewTicker(25 * time.Second)
+	defer heartbeat.Stop()
+
 	ctx := r.Context()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ": ping\n\n")
+			flusher.Flush()
 		case evt, open := <-ch:
 			if !open {
 				return

@@ -85,6 +85,30 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
     scale: 32,
     tileSize: 32,
   },
+  {
+    label: '48px',
+    mode: 'scene',
+    scale: 48,
+    tileSize: 48,
+  },
+  {
+    label: '64px',
+    mode: 'scene',
+    scale: 64,
+    tileSize: 64,
+  },
+  {
+    label: '96px',
+    mode: 'scene',
+    scale: 96,
+    tileSize: 96,
+  },
+  {
+    label: '128px',
+    mode: 'scene',
+    scale: 128,
+    tileSize: 128,
+  },
 ];
 export const DEFAULT_PLANET_ZOOM_INDEX = 6;
 export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;

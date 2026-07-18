@@ -1805,6 +1805,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 查询参数:
   - `event_types`（必填）：显式订阅的事件类型列表，逗号分隔；传 `all` 表示全部事件类型
 - 事件格式: `event: connected` + `data: {"player_id":"p1","event_types":["command_result"]}`；`event: game` + `data: <GameEvent JSON>`
+- 心跳: 服务端每 25 秒发送一行 SSE 注释 `: ping` 保活连接并供客户端做存活检测；客户端应按 SSE 规范忽略注释行。若超过约 3 个心跳周期未收到任何字节，应判定连接静默死亡并主动重连
 - `GameEvent.event_type` 取值与 `GET /events/snapshot` 一致；`payload` 结构随事件类型变化
 - 补充说明:
   - 服务端不再默认自动推送全部事件；只有显式订阅的 `event_types` 才会进入该 SSE 连接

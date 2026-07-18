@@ -5,6 +5,7 @@ import {
   describeSceneRenderSimplifications,
   getSceneRenderDetailPolicy,
   isBuildingFootprintVisible,
+  isTilePointVisible,
 } from "@/features/planet-map/render";
 
 describe("planet map render helpers", () => {
@@ -104,5 +105,66 @@ describe("planet map render helpers", () => {
 
     expect(committed).toEqual(["tile-3"]);
     expect(cancelAnimationFrameMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("环绕轴可见性判定", () => {
+  // 视口 unwrapped 范围 [-4, 115] × [990, 1010]，地图 1000×1000，两轴均环绕
+  const wrapBounds = {
+    minX: -4,
+    minY: 990,
+    maxX: 115,
+    maxY: 1010,
+    centerX: 55.5,
+    centerY: 0,
+    wrapX: true,
+    wrapY: true,
+    mapWidth: 1000,
+    mapHeight: 1000,
+  };
+
+  it("isTilePointVisible：跨接缝的 tile 判可见，范围外判不可见", () => {
+    expect(isTilePointVisible({ x: 998, y: 995 }, wrapBounds)).toBe(true); // 接缝左侧
+    expect(isTilePointVisible({ x: 50, y: 1000 }, wrapBounds)).toBe(true); // 接缝右侧（y mod）
+    expect(isTilePointVisible({ x: 5, y: 0 }, wrapBounds)).toBe(true);
+    expect(isTilePointVisible({ x: 500, y: 500 }, wrapBounds)).toBe(false); // 地图中部不可见
+    expect(isTilePointVisible({ x: 120, y: 500 }, wrapBounds)).toBe(false); // x 超出
+  });
+
+  it("isBuildingFootprintVisible：footprint 跨接缝的建筑判可见", () => {
+    const building = {
+      id: "b1",
+      type: "depot_mk1",
+      owner_id: "p1",
+      position: { x: 998, y: 995, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 0,
+      runtime: {
+        params: {
+          energy_consume: 0,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 4, height: 4 },
+        },
+        state: "running",
+      },
+    } as unknown as Parameters<typeof isBuildingFootprintVisible>[0];
+    // 建筑占 998..1001（mod 后 998,999,0,1），与视口 [-4,115] 相交
+    expect(isBuildingFootprintVisible(building, wrapBounds)).toBe(true);
+    const far = {
+      ...building,
+      id: "b2",
+      position: { x: 500, y: 500, z: 0 },
+    } as unknown as Parameters<typeof isBuildingFootprintVisible>[0];
+    expect(isBuildingFootprintVisible(far, wrapBounds)).toBe(false);
+  });
+
+  it("非环绕 bounds 行为不变（无 wrap 字段的旧调用方）", () => {
+    const plain = { minX: 0, minY: 0, maxX: 10, maxY: 10, centerX: 5, centerY: 5 };
+    expect(isTilePointVisible({ x: 5, y: 5 }, plain)).toBe(true);
+    expect(isTilePointVisible({ x: 11, y: 5 }, plain)).toBe(false);
   });
 });

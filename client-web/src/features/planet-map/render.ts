@@ -1,7 +1,7 @@
 import type { Building, Position } from "@shared/types";
 
 import type { TilePoint, ViewportTileBounds } from "@/features/planet-map/model";
-import { getBuildingFootprint, toTilePoint } from "@/features/planet-map/model";
+import { canonicalTileIndex, getBuildingFootprint, toTilePoint, wrapMod } from "@/features/planet-map/model";
 
 export interface SceneRenderDetailPolicy {
   showSceneGrid: boolean;
@@ -33,16 +33,31 @@ export function describeSceneRenderSimplifications(policy: SceneRenderDetailPoli
   return messages;
 }
 
+/** 单轴可见性：环绕轴按 unwrapped 区间跨接缝判定，非环绕轴按普通区间判定。 */
+function isAxisVisible(value: number, min: number, max: number, wrap: boolean | undefined, mapSize: number | undefined, padding: number) {
+  if (!wrap || !mapSize || mapSize <= 0) {
+    return value >= min - padding && value <= max + padding;
+  }
+  return wrapMod(value - (min - padding), mapSize) <= (max + padding) - (min - padding);
+}
+
+/** 单轴区间可见性（footprint 等）：把区间起点映射进规范坐标后做区间重叠判定。 */
+function isAxisSpanVisible(start: number, span: number, min: number, max: number, wrap: boolean | undefined, mapSize: number | undefined, padding: number) {
+  if (!wrap || !mapSize || mapSize <= 0) {
+    return !(start + span - 1 < min - padding || start > max + padding);
+  }
+  const canonical = canonicalTileIndex(start, min - padding, mapSize);
+  return canonical <= max + padding && canonical + span - 1 >= min - padding;
+}
+
 export function isTilePointVisible(
   tile: TilePoint,
   bounds: ViewportTileBounds,
   padding = 0,
 ) {
   return (
-    tile.x >= bounds.minX - padding &&
-    tile.x <= bounds.maxX + padding &&
-    tile.y >= bounds.minY - padding &&
-    tile.y <= bounds.maxY + padding
+    isAxisVisible(tile.x, bounds.minX, bounds.maxX, bounds.wrapX, bounds.mapWidth, padding) &&
+    isAxisVisible(tile.y, bounds.minY, bounds.maxY, bounds.wrapY, bounds.mapHeight, padding)
   );
 }
 
@@ -61,13 +76,9 @@ export function isBuildingFootprintVisible(
 ) {
   const origin = toTilePoint(building.position);
   const footprint = getBuildingFootprint(building);
-  const maxX = origin.x + footprint.width - 1;
-  const maxY = origin.y + footprint.height - 1;
-  return !(
-    maxX < bounds.minX - padding ||
-    origin.x > bounds.maxX + padding ||
-    maxY < bounds.minY - padding ||
-    origin.y > bounds.maxY + padding
+  return (
+    isAxisSpanVisible(origin.x, footprint.width, bounds.minX, bounds.maxX, bounds.wrapX, bounds.mapWidth, padding) &&
+    isAxisSpanVisible(origin.y, footprint.height, bounds.minY, bounds.maxY, bounds.wrapY, bounds.mapHeight, padding)
   );
 }
 

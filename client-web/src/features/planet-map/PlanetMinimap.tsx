@@ -9,6 +9,7 @@ import {
   getViewportTileBounds,
   type PlanetRenderView,
   type ViewportTileBounds,
+  wrapMod,
 } from "@/features/planet-map/model";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 
@@ -236,21 +237,35 @@ export function PlanetMinimap({ planet, fog, overview }: PlanetMinimapProps) {
       return;
     }
     const { scale, offsetX, offsetY } = layout;
-    const minX = Math.max(viewportBounds.minX, 0);
-    const minY = Math.max(viewportBounds.minY, 0);
-    const maxX = Math.min(viewportBounds.maxX, mapWidth - 1);
-    const maxY = Math.min(viewportBounds.maxY, mapHeight - 1);
-    const rectX = offsetX + minX * scale;
-    const rectY = offsetY + minY * scale;
-    const rectW = Math.max((maxX - minX + 1) * scale, 2);
-    const rectH = Math.max((maxY - minY + 1) * scale, 2);
+    // 环绕轴上可见范围可能跨接缝（minX<0 或 maxX≥map），拆成轴向上的 1~2 段，
+    // 两轴组合出最多 4 个矩形，保证视口框在小地图上形状正确。
+    const axisSegments = (min: number, max: number, mapSize: number, wrap: boolean) => {
+      if (!wrap || mapSize <= 0) {
+        return [[Math.max(min, 0), Math.min(max, mapSize - 1)] as const];
+      }
+      const start = wrapMod(min, mapSize);
+      const span = max - min;
+      const first: readonly [number, number] = [start, Math.min(start + span, mapSize - 1)];
+      const remainder = span - (first[1] - start);
+      return remainder > 0 ? [first, [0, remainder - 1] as const] : [first];
+    };
+    const segmentsX = axisSegments(viewportBounds.minX, viewportBounds.maxX, mapWidth, viewportBounds.wrapX ?? false);
+    const segmentsY = axisSegments(viewportBounds.minY, viewportBounds.maxY, mapHeight, viewportBounds.wrapY ?? false);
 
     // 视口框：半透明填充 + accent 描边 + 四角直角强调
-    context.fillStyle = "rgba(57, 230, 208, 0.12)";
-    context.fillRect(rectX, rectY, rectW, rectH);
-    context.strokeStyle = "#39e6d0";
-    context.lineWidth = 1.25;
-    context.strokeRect(rectX + 0.5, rectY + 0.5, rectW - 1, rectH - 1);
+    for (const [minX, maxX] of segmentsX) {
+      for (const [minY, maxY] of segmentsY) {
+        const rectX = offsetX + minX * scale;
+        const rectY = offsetY + minY * scale;
+        const rectW = Math.max((maxX - minX + 1) * scale, 2);
+        const rectH = Math.max((maxY - minY + 1) * scale, 2);
+        context.fillStyle = "rgba(57, 230, 208, 0.12)";
+        context.fillRect(rectX, rectY, rectW, rectH);
+        context.strokeStyle = "#39e6d0";
+        context.lineWidth = 1.25;
+        context.strokeRect(rectX + 0.5, rectY + 0.5, rectW - 1, rectH - 1);
+      }
+    }
   }, [layout, mapHeight, mapWidth, viewportBounds]);
 
   function handleClick(event: React.MouseEvent<HTMLCanvasElement>) {
