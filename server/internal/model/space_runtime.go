@@ -190,6 +190,10 @@ func CloneSpaceRuntimeState(rt *SpaceRuntimeState) *SpaceRuntimeState {
 					targetCopy := *fleet.Target
 					fleetCopy.Target = &targetCopy
 				}
+				if fleet.Transit != nil {
+					transitCopy := *fleet.Transit
+					fleetCopy.Transit = &transitCopy
+				}
 				systemCopy.Fleets[fleetID] = &fleetCopy
 			}
 			playerCopy.Systems[systemID] = systemCopy

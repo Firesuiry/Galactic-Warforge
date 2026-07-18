@@ -6,6 +6,68 @@ import (
 	"siliconworld/internal/model"
 )
 
+const (
+	// FleetTransitTicks is the fixed tick cost of an inter-system jump (tunable).
+	FleetTransitTicks int64 = 10
+	// fleetLaneNeighborCount mirrors the starmap lane rule (k nearest neighbors).
+	fleetLaneNeighborCount = 2
+)
+
+// settleFleetTransit advances in-flight fleet jumps: each tick decrements the
+// remaining counter; on zero the fleet relocates to its target system bucket,
+// transit clears, and fleet_arrived fires. Transit fleets keep State idle and
+// stay in their origin system bucket until arrival, but are excluded from
+// orbital-superiority scoring (mid-jump fleets fight in no system's battle).
+func settleFleetTransit(spaceRuntime *model.SpaceRuntimeState) []*model.GameEvent {
+	if spaceRuntime == nil {
+		return nil
+	}
+
+	var events []*model.GameEvent
+	for _, playerRuntime := range spaceRuntime.Players {
+		if playerRuntime == nil {
+			continue
+		}
+		for _, systemRuntime := range playerRuntime.Systems {
+			if systemRuntime == nil {
+				continue
+			}
+			var arrived []*model.SpaceFleet
+			for _, fleet := range systemRuntime.Fleets {
+				if fleet == nil || fleet.Transit == nil {
+					continue
+				}
+				fleet.Transit.RemainingTicks--
+				if fleet.Transit.RemainingTicks > 0 {
+					continue
+				}
+				arrived = append(arrived, fleet)
+			}
+			for _, fleet := range arrived {
+				transit := fleet.Transit
+				delete(systemRuntime.Fleets, fleet.ID)
+				targetRuntime := spaceRuntime.EnsurePlayerSystem(fleet.OwnerID, transit.TargetSystemID)
+				if targetRuntime == nil {
+					continue
+				}
+				fleet.SystemID = transit.TargetSystemID
+				fleet.Transit = nil
+				targetRuntime.Fleets[fleet.ID] = fleet
+				events = append(events, &model.GameEvent{
+					EventType:       model.EvtFleetArrived,
+					VisibilityScope: fleet.OwnerID,
+					Payload: map[string]any{
+						"fleet_id":       fleet.ID,
+						"system_id":      fleet.SystemID,
+						"from_system_id": transit.FromSystemID,
+					},
+				})
+			}
+		}
+	}
+	return events
+}
+
 func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameEvent {
 	if ws == nil || ws.CombatRuntime == nil || ws.EnemyForces == nil {
 		return nil

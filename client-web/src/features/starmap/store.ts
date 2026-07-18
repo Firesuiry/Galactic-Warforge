@@ -10,11 +10,13 @@ export type StarmapSelection =
 
 /**
  * 星图直操交互模式（对齐行星页范式）：
- * inspect 默认；attack = 已选舰队，等待在系内点选行星目标下达 fleet_attack。
+ * inspect 默认；attack = 已选舰队，等待在系内点选行星目标下达 fleet_attack；
+ * move = 已选舰队，等待在银河层点选目标星系下达 fleet_move。
  */
 export type StarmapInteractionMode =
   | { kind: 'inspect' }
-  | { kind: 'attack'; fleetId: string };
+  | { kind: 'attack'; fleetId: string }
+  | { kind: 'move'; fleetId: string };
 
 export const STARMAP_INSPECT_MODE: StarmapInteractionMode = { kind: 'inspect' };
 

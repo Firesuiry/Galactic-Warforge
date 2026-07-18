@@ -33,6 +33,8 @@ export const ALL_EVENT_TYPES = [
   'fleet_commissioned',
   'fleet_assigned',
   'fleet_attack_started',
+  'fleet_move_started',
+  'fleet_arrived',
   'fleet_disbanded',
   'missile_salvo_fired',
   'point_defense_intercept',

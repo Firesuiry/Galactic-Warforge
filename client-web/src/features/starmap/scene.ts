@@ -1,8 +1,9 @@
 /**
  * 星图 Pixi 场景：银河层（恒星+航线）与恒星系层（恒星+轨道行星）共用一台相机。
  * 交互：拖拽平移、滚轮连续缩放、点击选中、双击/缩放下钻恒星系、系内缩小返回银河。
- * 舰队覆盖层（setFleets）：有舰队驻留的星系旁画徽标（菱形+glow+数量角标，
- * attacking 红色脉冲）；attacking 星系的相连航线做战火流动（frozen 冻结）。
+ * 舰队覆盖层（setFleets）：非跃迁舰队按星系画徽标（菱形+glow+数量角标，
+ * attacking 红色脉冲）；attacking 星系的相连航线做战火流动（frozen 冻结）；
+ * 跃迁中舰队画为航线上按 transit 进度插值的移动光点（带拖尾，数据驱动定位）。
  */
 
 import {
@@ -32,9 +33,11 @@ import {
   starColorOf,
   summarizeFleetsBySystem,
   systemGlyphScale,
+  transitFleetRenders,
   type FleetSystemPresence,
   type PlanetOrbitLayout,
   type SystemLane,
+  type TransitFleetRender,
 } from '@/features/starmap/model';
 import type { FleetRuntimeView, GalaxyView, PlanetRef, SystemRef, SystemView } from '@shared/types';
 
@@ -55,6 +58,8 @@ const SYSTEM_STAR_RADIUS = 46;
 /** 舰队徽标配色：attacking 红 / 驻留蓝（对齐战场图舰队标记色调）。 */
 const COLOR_FLEET_IDLE = 0x38bdf8;
 const COLOR_FLEET_ATTACKING = 0xf87171;
+/** 跃迁光点：青金色（与驻留/交战区分），拖尾同色渐隐。 */
+const COLOR_FLEET_TRANSIT = 0x7ef9d2;
 /** 战火航线：流动亮点遍历整条航线的周期（秒）与每条航线亮点数。 */
 const WAR_LANE_TRAVEL_SECONDS = 1.8;
 const WAR_LANE_DOT_COUNT = 2;
@@ -111,6 +116,14 @@ interface WarLaneDot {
   phase: number;
 }
 
+/** 跃迁舰队光点：位置由 transit 进度插值（数据驱动），glow 轻微呼吸。 */
+interface TransitDotNode {
+  render: TransitFleetRender;
+  container: Container;
+  glow: Sprite;
+  pulsePhase: number;
+}
+
 export class StarmapScene {
   private readonly app: Application;
   private readonly callbacks: StarmapSceneCallbacks;
@@ -121,6 +134,7 @@ export class StarmapScene {
   private readonly world: Container;
   private readonly lanesLayer: Graphics;
   private readonly warLanesLayer: Container;
+  private readonly transitLayer: Container;
   private readonly galaxyLayer: Container;
   private readonly fleetBadgeLayer: Container;
   private readonly systemLayer: Container;
@@ -132,9 +146,11 @@ export class StarmapScene {
   private systemStar: Sprite | null = null;
   private systemSelectionRing: Graphics | null = null;
   private currentLanes: SystemLane[] = [];
+  private fleetList: FleetRuntimeView[] = [];
   private fleetSummary: FleetSystemPresence[] = [];
   private fleetBadgeNodes: FleetBadgeNode[] = [];
   private warLaneDots: WarLaneDot[] = [];
+  private transitDotNodes: TransitDotNode[] = [];
 
   private focusedSystemId: string | null = null;
   private selectedSystemId: string | null = null;
@@ -168,6 +184,7 @@ export class StarmapScene {
     this.world = new Container();
     this.lanesLayer = new Graphics();
     this.warLanesLayer = new Container();
+    this.transitLayer = new Container();
     this.galaxyLayer = new Container();
     this.fleetBadgeLayer = new Container();
     this.systemLayer = new Container();
@@ -176,6 +193,7 @@ export class StarmapScene {
     this.app.stage.addChild(this.world);
     this.world.addChild(this.lanesLayer);
     this.world.addChild(this.warLanesLayer);
+    this.world.addChild(this.transitLayer);
     this.world.addChild(this.galaxyLayer);
     this.world.addChild(this.fleetBadgeLayer);
     this.world.addChild(this.systemLayer);
@@ -236,6 +254,7 @@ export class StarmapScene {
     this.galaxyLayer.visible = false;
     this.lanesLayer.visible = false;
     this.warLanesLayer.visible = false;
+    this.transitLayer.visible = false;
     this.fleetBadgeLayer.visible = false;
     this.systemLayer.visible = true;
 
@@ -266,6 +285,7 @@ export class StarmapScene {
     this.galaxyLayer.visible = true;
     this.lanesLayer.visible = true;
     this.warLanesLayer.visible = true;
+    this.transitLayer.visible = true;
     this.fleetBadgeLayer.visible = true;
     if (this.galaxy) {
       const rect = galaxyWorldRect(this.galaxy);
@@ -353,20 +373,28 @@ export class StarmapScene {
   // ---------- 舰队徽标 + 战火航线 ----------
 
   /**
-   * 舰队数据输入（war-fleets 查询结果）：按 system_id 聚合成徽标，
-   * attacking 星系的相连航线做战火流动。规模小，数据变化时全量重建覆盖层。
+   * 舰队数据输入（war-fleets 查询结果）：非跃迁舰队按 system_id 聚合成徽标，
+   * attacking 星系的相连航线做战火流动；跃迁中舰队画为航线上的移动光点
+   * （位置按 transit 进度插值，数据驱动，frozen 下静止）。规模小，数据变化时全量重建。
    */
   setFleets(fleets: FleetRuntimeView[] | null) {
-    this.fleetSummary = summarizeFleetsBySystem(fleets ?? []);
+    this.fleetList = fleets ?? [];
+    this.fleetSummary = summarizeFleetsBySystem(this.fleetList);
     this.rebuildFleetOverlay();
   }
 
   private rebuildFleetOverlay() {
     this.fleetBadgeLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.warLanesLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+    this.transitLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.fleetBadgeNodes = [];
     this.warLaneDots = [];
-    if (!this.galaxy || this.focusedSystemId || this.fleetSummary.length === 0) {
+    this.transitDotNodes = [];
+    if (!this.galaxy || this.focusedSystemId) {
+      return;
+    }
+    this.rebuildTransitDots();
+    if (this.fleetSummary.length === 0) {
       return;
     }
 
@@ -414,6 +442,59 @@ export class StarmapScene {
         this.warLaneDots.push({ lane, sprite: dot, phase: i / WAR_LANE_DOT_COUNT });
       }
     });
+  }
+
+  /**
+   * 跃迁舰队光点：transit 中的舰队沿起止星系直线插值定位（progress =
+   * 1-remaining/total，来自 server tick 数据），带一小段回退拖尾。
+   * 端点星系当前不可见（仅看已发现过滤/无坐标）时跳过，与徽标同规则。
+   */
+  private rebuildTransitDots() {
+    if (!this.galaxy) {
+      return;
+    }
+    const visibleSystems = (this.galaxy.systems ?? []).filter((system) => (
+      system.position && (!this.discoveredOnly || system.discovered)
+    ));
+    transitFleetRenders(this.fleetList, visibleSystems).forEach((render, index) => {
+      if (!this.systemNodes.has(render.fromSystemId) || !this.systemNodes.has(render.toSystemId)) {
+        return;
+      }
+      const node = this.createTransitDot(render, index * FLEET_PULSE_PHASE_STEP);
+      this.transitDotNodes.push(node);
+      this.transitLayer.addChild(node.container);
+    });
+  }
+
+  private createTransitDot(render: TransitFleetRender, pulsePhase: number): TransitDotNode {
+    const dx = render.to.x - render.from.x;
+    const dy = render.to.y - render.from.y;
+    const px = render.from.x + dx * render.progress;
+    const py = render.from.y + dy * render.progress;
+
+    const container = new Container();
+    container.position.set(px, py);
+
+    // 拖尾：从光点向出发端回退 ~7% 航程的一段渐隐短线
+    const tailT = Math.max(0, render.progress - 0.07);
+    const trail = new Graphics();
+    trail
+      .moveTo(render.from.x + dx * tailT - px, render.from.y + dy * tailT - py)
+      .lineTo(0, 0)
+      .stroke({ width: 1.8, color: COLOR_FLEET_TRANSIT, alpha: 0.45 });
+    container.addChild(trail);
+
+    const glow = new Sprite(getGlowTexture(COLOR_FLEET_TRANSIT));
+    glow.anchor.set(0.5);
+    glow.scale.set(0.16);
+    glow.alpha = 0.85;
+    container.addChild(glow);
+
+    const core = new Graphics();
+    core.circle(0, 0, 2.6).fill({ color: 0xf8fafc, alpha: 0.95 });
+    container.addChild(core);
+
+    return { render, container, glow, pulsePhase };
   }
 
   /** 舰队徽标：小菱形 + 微 glow（对齐战场图舰队标记），多艘聚合成数量角标。 */
@@ -851,6 +932,12 @@ export class StarmapScene {
           dot.lane.from.y + (dot.lane.to.y - dot.lane.from.y) * p,
         );
         dot.sprite.alpha = Math.sin(Math.PI * p) * 0.9;
+      });
+
+      // 跃迁光点：位置由 transit 进度驱动（rebuild 时定位），此处只做 glow 呼吸
+      this.transitDotNodes.forEach((node) => {
+        const pulse = 1 + 0.18 * Math.sin(t * 5 + node.pulsePhase);
+        node.glow.scale.set(0.16 * pulse);
       });
     }
 

@@ -131,6 +131,30 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(toastFromGameEvent(gameEvent('victory_declared', {}))?.sfx).toBe('commandOk');
     expect(toastFromGameEvent(gameEvent('victory_declared', {}))?.toast.kind).toBe('success');
   });
+
+  it('fleet_move_started：info + uiClick，标题带起止星系', () => {
+    const mapped = toastFromGameEvent(gameEvent('fleet_move_started', {
+      fleet_id: 'f1',
+      from_system_id: 'sys-1',
+      to_system_id: 'sys-2',
+      total_ticks: 10,
+    }));
+    expect(mapped?.toast.kind).toBe('info');
+    expect(mapped?.toast.title).toContain('sys-1');
+    expect(mapped?.toast.title).toContain('sys-2');
+    expect(mapped?.sfx).toBe('uiClick');
+  });
+
+  it('fleet_arrived：success + commandOk，标题带抵达星系', () => {
+    const mapped = toastFromGameEvent(gameEvent('fleet_arrived', {
+      fleet_id: 'f1',
+      system_id: 'sys-2',
+      from_system_id: 'sys-1',
+    }));
+    expect(mapped?.toast.kind).toBe('success');
+    expect(mapped?.toast.title).toContain('sys-2');
+    expect(mapped?.sfx).toBe('commandOk');
+  });
 });
 
 describe('notifications store', () => {

@@ -738,6 +738,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execFleetAssign(gc.world, qr.PlayerID, cmd)
 		case model.CmdFleetAttack:
 			res, evts = gc.execFleetAttack(gc.world, qr.PlayerID, cmd)
+		case model.CmdFleetMove:
+			res, evts = gc.execFleetMove(gc.world, qr.PlayerID, cmd)
 		case model.CmdFleetDisband:
 			res, evts = gc.execFleetDisband(gc.world, qr.PlayerID, cmd)
 		case model.CmdTaskForceCreate:

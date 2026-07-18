@@ -6,6 +6,8 @@ import {
   fleetStateLabel,
   pickFleetInSystem,
   resolveFleetAttackTarget,
+  resolveFleetMoveTarget,
+  computeSystemLanes,
 } from '@/features/starmap/model';
 import { resetStarmapViewStore, useStarmapViewStore } from '@/features/starmap/store';
 
@@ -32,6 +34,19 @@ describe('pickFleetInSystem（徽标循环点选）', () => {
 
   it('单艘舰队循环回自身', () => {
     expect(pickFleetInSystem(fleets, 'sys-2', 'fleet-3')).toBe('fleet-3');
+  });
+
+  it('跃迁中的舰队不参与徽标点选循环', () => {
+    const withTransit = [
+      { fleet_id: 'fleet-1', system_id: 'sys-1' },
+      {
+        fleet_id: 'fleet-t',
+        system_id: 'sys-1',
+        transit: { from_system_id: 'sys-1', target_system_id: 'sys-2', total_ticks: 10, remaining_ticks: 6 },
+      },
+    ];
+    expect(pickFleetInSystem(withTransit, 'sys-1', null)).toBe('fleet-1');
+    expect(pickFleetInSystem(withTransit, 'sys-1', 'fleet-1')).toBe('fleet-1');
   });
 });
 
@@ -78,11 +93,55 @@ describe('resolveFleetAttackTarget（fleet_attack 目标解析）', () => {
   });
 });
 
+describe('resolveFleetMoveTarget（fleet_move 目标解析）', () => {
+  // 直线四星系 a-b-c-d，k=1：a-b、b-c、c-d 相连，a-c 不连
+  const lanes = computeSystemLanes([
+    { system_id: 'a', discovered: true, position: { x: 0, y: 0 } },
+    { system_id: 'b', discovered: true, position: { x: 10, y: 0 } },
+    { system_id: 'c', discovered: true, position: { x: 20, y: 0 } },
+    { system_id: 'd', discovered: true, position: { x: 30, y: 0 } },
+  ], 1);
+  const idleFleet = { system_id: 'a', state: 'idle' as const };
+
+  it('有航线连接的邻接星系 → 放行', () => {
+    expect(resolveFleetMoveTarget(lanes, idleFleet, 'b')).toEqual({ ok: true });
+  });
+
+  it('无航线连接的星系 → 本地拦截', () => {
+    const resolution = resolveFleetMoveTarget(lanes, idleFleet, 'c');
+    expect(resolution.ok).toBe(false);
+    if (!resolution.ok) {
+      expect(resolution.reason).toContain('无航线连接');
+    }
+  });
+
+  it('目标 = 当前星系 → 拦截', () => {
+    expect(resolveFleetMoveTarget(lanes, idleFleet, 'a').ok).toBe(false);
+  });
+
+  it('交战中 / 跃迁中 / 舰队缺失 → 拦截', () => {
+    expect(resolveFleetMoveTarget(lanes, { system_id: 'a', state: 'attacking' }, 'b').ok).toBe(false);
+    expect(resolveFleetMoveTarget(lanes, {
+      system_id: 'a',
+      state: 'idle',
+      transit: { from_system_id: 'a', target_system_id: 'b', total_ticks: 10, remaining_ticks: 5 },
+    }, 'b').ok).toBe(false);
+    expect(resolveFleetMoveTarget(lanes, undefined, 'b').ok).toBe(false);
+  });
+});
+
 describe('fleetStateLabel', () => {
   it('idle/attacking 映射中文标签', () => {
-    expect(fleetStateLabel('idle')).toBe('待命');
-    expect(fleetStateLabel('attacking')).toBe('交战中');
+    expect(fleetStateLabel({ state: 'idle' })).toBe('待命');
+    expect(fleetStateLabel({ state: 'attacking' })).toBe('交战中');
     expect(fleetStateLabel(undefined)).toBe('待命');
+  });
+
+  it('transit 非空即跃迁中（state 保持 idle）', () => {
+    expect(fleetStateLabel({
+      state: 'idle',
+      transit: { from_system_id: 'sys-1', target_system_id: 'sys-2', total_ticks: 10, remaining_ticks: 4 },
+    })).toBe('跃迁中');
   });
 });
 

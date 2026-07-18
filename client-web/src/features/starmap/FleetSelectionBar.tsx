@@ -1,8 +1,10 @@
 /**
  * 舰队情境条：星图直选舰队后的底部悬浮操作条（对齐 PlanetSelectionBar 范式）。
  * 动作只覆盖 server 真实支持的舰队指令：fleet_assign（编队）/ fleet_attack
- * （同星系行星目标，进入 attack 模式点选）/ fleet_disband。指令提交复用
- * war 侧 useWarCommand 管道（回执 + 音效 + 查询失效一致）。
+ * （同星系行星目标，进入 attack 模式点选）/ fleet_move（跨星系跃迁，进入
+ * move 模式在银河层点选目标星系）/ fleet_disband。指令提交复用 war 侧
+ * useWarCommand 管道（回执 + 音效 + 查询失效一致）。
+ * 跃迁中（transit 非空）的舰队显示跃迁进度，全部动作禁用（与 server 阻断一致）。
  */
 
 import { useEffect, useState } from 'react';
@@ -21,6 +23,8 @@ interface FleetSelectionBarProps {
   fleet: FleetDetailView;
   /** 所在星系显示名（已解析，未解析时调用方传 system_id）。 */
   systemName: string;
+  /** 跃迁起止星系名解析（可选，缺省回退 system_id）。 */
+  resolveSystemName?: (systemId: string) => string;
   scope: WarQueryScope;
   runCommand: (input: WarCommandInput) => void;
   feedbacks: Partial<Record<FeedbackSection, WarCommandHint[]>>;
@@ -30,6 +34,7 @@ interface FleetSelectionBarProps {
 export function FleetSelectionBar({
   fleet,
   systemName,
+  resolveSystemName,
   scope,
   runCommand,
   feedbacks,
@@ -47,6 +52,9 @@ export function FleetSelectionBar({
   }, [fleet.fleet_id, fleet.formation]);
 
   const attacking = interactionMode.kind === 'attack' && interactionMode.fleetId === fleet.fleet_id;
+  const moving = interactionMode.kind === 'move' && interactionMode.fleetId === fleet.fleet_id;
+  const transit = fleet.transit ?? null;
+  const nameOf = resolveSystemName ?? ((systemId: string) => systemId);
 
   function handleAssign() {
     runCommand({
@@ -67,6 +75,16 @@ export function FleetSelectionBar({
     if (store.focusedSystemId !== fleet.system_id) {
       store.focusSystem(fleet.system_id);
     }
+  }
+
+  function handleMoveToggle() {
+    if (moving) {
+      exitInteractionMode();
+      return;
+    }
+    setInteractionMode({ kind: 'move', fleetId: fleet.fleet_id });
+    // fleet_move 目标在银河层点选：退回银河总览
+    useStarmapViewStore.getState().exitToGalaxy();
   }
 
   function handleDisband() {
@@ -90,16 +108,23 @@ export function FleetSelectionBar({
         <div className="starmap-fleet-bar__info">
           <strong>{fleet.fleet_id}</strong>
           <span className="starmap-fleet-bar__meta">
-            {fleetStateLabel(fleet.state)} · 阵型 {fleet.formation}
+            {fleetStateLabel(fleet)} · 阵型 {fleet.formation}
             · 装甲 {fleet.armor.level}/{fleet.armor.max_level}
             · 结构 {fleet.structure.level}/{fleet.structure.max_level}
             · @{systemName}
           </span>
+          {transit ? (
+            <span className="starmap-fleet-bar__meta" data-testid="starmap-fleet-transit">
+              跃迁 {nameOf(transit.from_system_id)}→{nameOf(transit.target_system_id)}
+              {' · '}剩余 {transit.remaining_ticks}/{transit.total_ticks} tick
+            </span>
+          ) : null}
         </div>
         <div className="starmap-fleet-bar__actions">
           <select
             aria-label="舰队阵型"
             value={formation}
+            disabled={Boolean(transit)}
             onChange={(event) => setFormation(event.target.value as FormationType)}
           >
             {FORMATIONS.map((value) => (
@@ -109,7 +134,7 @@ export function FleetSelectionBar({
           <button
             className="secondary-button"
             type="button"
-            disabled={isPending || formation === fleet.formation}
+            disabled={isPending || Boolean(transit) || formation === fleet.formation}
             onClick={handleAssign}
           >
             调整编队
@@ -117,15 +142,23 @@ export function FleetSelectionBar({
           <button
             className={`secondary-button${attacking ? ' starmap-fleet-bar__active' : ''}`}
             type="button"
-            disabled={isPending}
+            disabled={isPending || Boolean(transit)}
             onClick={handleAttackToggle}
           >
             {attacking ? '取消攻击' : '攻击目标'}
           </button>
           <button
+            className={`secondary-button${moving ? ' starmap-fleet-bar__active' : ''}`}
+            type="button"
+            disabled={isPending || Boolean(transit) || fleet.state !== 'idle'}
+            onClick={handleMoveToggle}
+          >
+            {moving ? '取消跃迁' : '跃迁'}
+          </button>
+          <button
             className="secondary-button starmap-fleet-bar__danger"
             type="button"
-            disabled={isPending}
+            disabled={isPending || Boolean(transit)}
             onClick={handleDisband}
           >
             解散舰队

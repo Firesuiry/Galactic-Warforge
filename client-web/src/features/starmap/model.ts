@@ -156,8 +156,8 @@ export interface SystemLane {
 
 /**
  * 星座连线：每个恒星系向最近的 k 个邻居连线，去重。
- * 纯几何装饰（不引用 distance_matrix，避免维度/语义耦合）。
- * 端点携带恒星系 id，供战火航线按 attacking 星系筛选定向。
+ * 端点携带恒星系 id：既是战火航线的定向依据，也是 fleet_move 跃迁合法性
+ * 的本地判定图（server 端 mapmodel.SystemsLinkedByLane 用同一 k 近邻规则）。
  */
 export function computeSystemLanes(systems: SystemRef[], neighborCount = 2): SystemLane[] {
   const points = systems
@@ -195,14 +195,14 @@ export interface FleetSystemPresence {
 
 /**
  * 舰队按 system_id 分组计数（含 attacking 计数），按 systemId 排序保证确定性。
- * 舰队数据只有 system_id 与 state（idle/attacking），无移动中状态，不做任何移动推断。
+ * 跃迁中（transit 非空）的舰队不计入任何星系徽标——它们渲染为航线上的移动光点。
  */
 export function summarizeFleetsBySystem(
-  fleets: Array<Pick<FleetRuntimeView, 'system_id' | 'state'>>,
+  fleets: Array<Pick<FleetRuntimeView, 'system_id' | 'state' | 'transit'>>,
 ): FleetSystemPresence[] {
   const bySystem = new Map<string, FleetSystemPresence>();
   fleets.forEach((fleet) => {
-    if (!fleet.system_id) {
+    if (!fleet.system_id || fleet.transit) {
       return;
     }
     let presence = bySystem.get(fleet.system_id);
@@ -216,6 +216,56 @@ export function summarizeFleetsBySystem(
     }
   });
   return [...bySystem.values()].sort((a, b) => a.systemId.localeCompare(b.systemId));
+}
+
+/** 跃迁舰队在星图上的渲染描述（沿起止星系直线插值）。 */
+export interface TransitFleetRender {
+  fleetId: string;
+  fromSystemId: string;
+  toSystemId: string;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  /** 0..1：1 - remaining/total；frozen 截图下静止于该进度。 */
+  progress: number;
+}
+
+/**
+ * 跃迁舰队 → 航线上移动光点的纯数据计算：
+ * 位置 = lerp(from.position, to.position, 1 - remaining/total)。
+ * 端点星系无坐标 / total_ticks 非法时跳过；按 fleetId 排序保证确定性。
+ */
+export function transitFleetRenders(
+  fleets: Array<Pick<FleetRuntimeView, 'fleet_id' | 'transit'>>,
+  systems: SystemRef[],
+): TransitFleetRender[] {
+  const positionById = new Map<string, { x: number; y: number }>();
+  systems.forEach((system) => {
+    if (system.position) {
+      positionById.set(system.system_id, { x: system.position.x, y: system.position.y });
+    }
+  });
+  const renders: TransitFleetRender[] = [];
+  fleets.forEach((fleet) => {
+    const transit = fleet.transit;
+    if (!transit || transit.total_ticks <= 0) {
+      return;
+    }
+    const from = positionById.get(transit.from_system_id);
+    const to = positionById.get(transit.target_system_id);
+    if (!from || !to) {
+      return;
+    }
+    const progress = Math.min(1, Math.max(0, 1 - transit.remaining_ticks / transit.total_ticks));
+    renders.push({
+      fleetId: fleet.fleet_id,
+      fromSystemId: transit.from_system_id,
+      toSystemId: transit.target_system_id,
+      from,
+      to,
+      progress,
+    });
+  });
+  return renders.sort((a, b) => a.fleetId.localeCompare(b.fleetId));
 }
 
 /**
@@ -248,13 +298,14 @@ export function selectWarLanes(
 /**
  * 徽标循环点选：同一星系的舰队聚合在一个徽标后面，重复点击在该星系的
  * 舰队列表里循环（按 API 返回顺序，稳定）。列表为空返回 null。
+ * 跃迁中的舰队不挂徽标（渲染为航线光点），不参与点选循环。
  */
 export function pickFleetInSystem(
-  fleets: Array<Pick<FleetRuntimeView, 'fleet_id' | 'system_id'>>,
+  fleets: Array<Pick<FleetRuntimeView, 'fleet_id' | 'system_id' | 'transit'>>,
   systemId: string,
   currentFleetId: string | null,
 ): string | null {
-  const inSystem = fleets.filter((fleet) => fleet.system_id === systemId);
+  const inSystem = fleets.filter((fleet) => fleet.system_id === systemId && !fleet.transit);
   if (inSystem.length === 0) {
     return null;
   }
@@ -285,7 +336,49 @@ export function resolveFleetAttackTarget(
   return { ok: true, targetId: contact.entity_id };
 }
 
-/** 舰队状态中文标签（FleetState 只有 idle/attacking，无移动中状态）。 */
-export function fleetStateLabel(state: FleetRuntimeView['state'] | undefined): string {
-  return state === 'attacking' ? '交战中' : '待命';
+/** 舰队状态中文标签：transit 非空即跃迁中（state 保持 idle，见 server 期7c）。 */
+export function fleetStateLabel(fleet: Pick<FleetRuntimeView, 'state' | 'transit'> | undefined): string {
+  if (!fleet) {
+    return '待命';
+  }
+  if (fleet.transit) {
+    return '跃迁中';
+  }
+  return fleet.state === 'attacking' ? '交战中' : '待命';
+}
+
+export type FleetMoveTargetResolution =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+/**
+ * fleet_move 目标解析（本地拦截，对齐 server 校验规则）：
+ * 舰队须待命且未在跃迁；目标不能是当前星系；目标与当前星系间须有航线
+ * （与星图渲染同源，经 computeSystemLanes 传入）。
+ */
+export function resolveFleetMoveTarget(
+  lanes: SystemLane[],
+  fleet: Pick<FleetRuntimeView, 'system_id' | 'state' | 'transit'> | undefined,
+  targetSystemId: string,
+): FleetMoveTargetResolution {
+  if (!fleet) {
+    return { ok: false, reason: '舰队不存在或已离开' };
+  }
+  if (fleet.transit) {
+    return { ok: false, reason: '舰队已在跃迁中' };
+  }
+  if (fleet.state !== 'idle') {
+    return { ok: false, reason: '交战中舰队无法跃迁' };
+  }
+  if (targetSystemId === fleet.system_id) {
+    return { ok: false, reason: '舰队已在该星系' };
+  }
+  const linked = lanes.some((lane) => (
+    (lane.fromId === fleet.system_id && lane.toId === targetSystemId)
+    || (lane.toId === fleet.system_id && lane.fromId === targetSystemId)
+  ));
+  if (!linked) {
+    return { ok: false, reason: '目标星系与当前星系无航线连接' };
+  }
+  return { ok: true };
 }

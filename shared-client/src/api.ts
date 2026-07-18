@@ -731,6 +731,17 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdFleetMove(fleetId: string, targetSystemId: string) {
+    return sendSingleCommand({
+      type: 'fleet_move',
+      target: { layer: 'system', entity_id: fleetId, system_id: targetSystemId },
+      payload: {
+        fleet_id: fleetId,
+        target_system_id: targetSystemId,
+      },
+    });
+  }
+
   function cmdTaskForceCreate(taskForceId: string, options: CreateTaskForceOptions = {}) {
     return sendSingleCommand({
       type: 'task_force_create',
@@ -1081,6 +1092,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdFleetAssign,
     cmdFleetAttack,
     cmdFleetDisband,
+    cmdFleetMove,
     cmdLaunchRocket,
     cmdLandingStart,
     cmdLaunchSolarSail,

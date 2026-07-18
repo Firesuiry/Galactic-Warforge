@@ -12,6 +12,7 @@ const { mockClient, runCommandMock } = vi.hoisted(() => ({
   mockClient: {
     cmdFleetAssign: vi.fn(),
     cmdFleetDisband: vi.fn(),
+    cmdFleetMove: vi.fn(),
   },
   // 透传执行 execute，使指令客户端调用可被断言
   runCommandMock: vi.fn((input: WarCommandInput) => void input.execute()),
@@ -105,5 +106,37 @@ describe('FleetSelectionBar', () => {
     await user.click(screen.getByRole('button', { name: '解散舰队' }));
     expect(mockClient.cmdFleetDisband).toHaveBeenCalledWith('fleet-1');
     expect(useStarmapViewStore.getState().selectedFleetId).toBeNull();
+  });
+
+  it('跃迁：进入 move 模式并退回银河层（等待点选目标星系）', async () => {
+    const user = userEvent.setup();
+    useStarmapViewStore.getState().focusSystem('sys-1');
+    renderBar();
+
+    await user.click(screen.getByRole('button', { name: '跃迁' }));
+    expect(useStarmapViewStore.getState().interactionMode).toEqual({ kind: 'move', fleetId: 'fleet-1' });
+    expect(useStarmapViewStore.getState().focusedSystemId).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '取消跃迁' }));
+    expect(useStarmapViewStore.getState().interactionMode.kind).toBe('inspect');
+  });
+
+  it('跃迁中：显示进度并禁用全部动作', () => {
+    renderBar({
+      ...makeFleet(),
+      transit: { from_system_id: 'sys-1', target_system_id: 'sys-2', total_ticks: 10, remaining_ticks: 4 },
+    });
+    const bar = screen.getByTestId('starmap-fleet-bar');
+    expect(bar).toHaveTextContent('跃迁中');
+    expect(screen.getByTestId('starmap-fleet-transit')).toHaveTextContent('跃迁 sys-1→sys-2 · 剩余 4/10 tick');
+    expect(screen.getByRole('button', { name: '攻击目标' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '跃迁' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '解散舰队' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '调整编队' })).toBeDisabled();
+  });
+
+  it('交战中舰队不可跃迁', () => {
+    renderBar({ ...makeFleet(), state: 'attacking' });
+    expect(screen.getByRole('button', { name: '跃迁' })).toBeDisabled();
   });
 });

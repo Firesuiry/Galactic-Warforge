@@ -210,6 +210,29 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
         },
         sfx: 'alert',
       };
+    case 'fleet_move_started': {
+      const from = asString(payload.from_system_id);
+      const to = asString(payload.to_system_id);
+      return {
+        toast: {
+          kind: 'info',
+          title: `🚀 舰队跃迁：${from || '?'}→${to || '?'}`,
+          body: shortId(asString(payload.fleet_id)) || undefined,
+          href: '/galaxy',
+        },
+        sfx: 'uiClick',
+      };
+    }
+    case 'fleet_arrived':
+      return {
+        toast: {
+          kind: 'success',
+          title: `✓ 舰队抵达：${asString(payload.system_id) || '?'}`,
+          body: shortId(asString(payload.fleet_id)) || undefined,
+          href: '/galaxy',
+        },
+        sfx: 'commandOk',
+      };
     case 'landing_started':
       return {
         toast: {

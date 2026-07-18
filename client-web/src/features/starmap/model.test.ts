@@ -10,6 +10,7 @@ import {
   starColorOf,
   starTypeLabel,
   summarizeFleetsBySystem,
+  transitFleetRenders,
 } from '@/features/starmap/model';
 import type { GalaxyView, SystemRef } from '@shared/types';
 
@@ -135,6 +136,48 @@ describe('starmap/model', () => {
       { systemId: 'sys-b', total: 3, attacking: 1 },
     ]);
     expect(summarizeFleetsBySystem([])).toEqual([]);
+  });
+
+  it('summarizeFleetsBySystem 跳过跃迁中的舰队（不占星系徽标）', () => {
+    const transit = { from_system_id: 'sys-a', target_system_id: 'sys-b', total_ticks: 10, remaining_ticks: 5 };
+    const summary = summarizeFleetsBySystem([
+      { system_id: 'sys-a', state: 'idle' },
+      { system_id: 'sys-a', state: 'idle', transit },
+    ]);
+    expect(summary).toEqual([{ systemId: 'sys-a', total: 1, attacking: 0 }]);
+    expect(summarizeFleetsBySystem([{ system_id: 'sys-a', state: 'idle', transit }])).toEqual([]);
+  });
+
+  it('transitFleetRenders 按 1-remaining/total 插值且排序确定', () => {
+    const systems = [makeSystem('sys-a', 0, 0), makeSystem('sys-b', 100, 0)];
+    const renders = transitFleetRenders([
+      {
+        fleet_id: 'fleet-2',
+        transit: { from_system_id: 'sys-a', target_system_id: 'sys-b', total_ticks: 10, remaining_ticks: 4 },
+      },
+      {
+        fleet_id: 'fleet-1',
+        transit: { from_system_id: 'sys-b', target_system_id: 'sys-a', total_ticks: 10, remaining_ticks: 10 },
+      },
+      { fleet_id: 'fleet-3' }, // 非跃迁：跳过
+      {
+        fleet_id: 'fleet-4', // 端点无坐标：跳过
+        transit: { from_system_id: 'sys-a', target_system_id: 'sys-x', total_ticks: 10, remaining_ticks: 5 },
+      },
+      {
+        fleet_id: 'fleet-5', // total_ticks 非法：跳过
+        transit: { from_system_id: 'sys-a', target_system_id: 'sys-b', total_ticks: 0, remaining_ticks: 0 },
+      },
+    ], systems);
+    expect(renders.map((render) => render.fleetId)).toEqual(['fleet-1', 'fleet-2']);
+    // fleet-1：remaining==total → progress 0（仍在起点 sys-b）
+    expect(renders[0]!.progress).toBe(0);
+    expect(renders[0]!.from).toEqual({ x: 100, y: 0 });
+    expect(renders[0]!.to).toEqual({ x: 0, y: 0 });
+    // fleet-2：1-4/10 = 0.6 → 位置 = sys-a + 0.6*(sys-b-sys-a) = (60, 0)
+    expect(renders[1]!.progress).toBeCloseTo(0.6);
+    const px = renders[1]!.from.x + (renders[1]!.to.x - renders[1]!.from.x) * renders[1]!.progress;
+    expect(px).toBeCloseTo(60);
   });
 
   it('selectWarLanes 只挑 attacking 星系的航线，方向从 attacking 端向外', () => {

@@ -415,6 +415,14 @@ export interface FleetTarget {
   target_id?: string;
 }
 
+/** 跃迁（跨星系航行）状态：transit 非空即跃迁中，进度 = 1 - remaining/total。 */
+export interface FleetTransitState {
+  from_system_id: string;
+  target_system_id: string;
+  total_ticks: number;
+  remaining_ticks: number;
+}
+
 export interface FleetUnitStack {
   blueprint_id: string;
   count: number;
@@ -471,6 +479,7 @@ export type CommandType =
   | 'commission_fleet'
   | 'fleet_assign'
   | 'fleet_attack'
+  | 'fleet_move'
   | 'fleet_disband'
   | 'task_force_create'
   | 'task_force_assign'
@@ -1666,6 +1675,7 @@ export interface FleetRuntimeView {
   structure: DurabilityLayerState;
   subsystems: SpaceFleetSubsystemState;
   target?: FleetTarget;
+  transit?: FleetTransitState;
   last_battle_report_id?: string;
 }
 

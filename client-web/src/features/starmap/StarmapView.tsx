@@ -9,9 +9,16 @@ import { useNavigate } from 'react-router-dom';
 
 import { PixiStage } from '@/engine/PixiStage';
 import { FleetSelectionBar } from '@/features/starmap/FleetSelectionBar';
-import { pickFleetInSystem, resolveFleetAttackTarget, starTypeLabel } from '@/features/starmap/model';
+import {
+  computeSystemLanes,
+  pickFleetInSystem,
+  resolveFleetAttackTarget,
+  resolveFleetMoveTarget,
+  starTypeLabel,
+} from '@/features/starmap/model';
 import { StarmapScene } from '@/features/starmap/scene';
 import { useStarmapViewStore } from '@/features/starmap/store';
+import { useStarmapNotify } from '@/features/starmap/use-starmap-notify';
 import { useWarCommand } from '@/features/war/use-war-command';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -39,6 +46,9 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
   );
   const { runCommand, notify, feedbacks, isPending } = useWarCommand();
 
+  // 星图路由的 SSE 通知桥（跃迁开始/到达等 toast 在星图上也能弹出）
+  useStarmapNotify(session.serverUrl, session.playerKey);
+
   const sceneRef = useRef<StarmapScene | null>(null);
   const focusedRef = useRef(focusedSystemId);
   focusedRef.current = focusedSystemId;
@@ -65,11 +75,13 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     enabled: Boolean(focusedSystemId),
   });
 
-  // 舰队数据 → 星图徽标/战火航线：与 WarPage 同一 query key/函数（共享缓存，不发新请求）；
+  // 舰队数据 → 星图徽标/战火航线/跃迁光点：与 WarPage 同一 query key/函数（共享缓存，不发新请求）；
   // 路由均在 RequireSession 之下，enabled 条件与 war 页一致（始终启用）。
+  // 星图路由下没有 war SSE 实时层，加 2s 轮询让跃迁进度（remaining_ticks）持续推进。
   const fleetsQuery = useQuery({
     queryKey: ['war-fleets', session.serverUrl, session.playerId],
     queryFn: () => client.fetchFleets(),
+    refetchInterval: 2000,
   });
 
   // attack 模式需要目标行星上的传感器接触（system-runtime 查询与 war 页共享缓存）
@@ -79,17 +91,47 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     enabled: Boolean(focusedSystemId) && interactionMode.kind === 'attack',
   });
 
+  // move 模式的本地航线校验图：与场景渲染同一套 k 近邻航线（含仅看已发现过滤）
+  const galaxyLanes = useMemo(
+    () => computeSystemLanes(
+      (galaxyQuery.data?.systems ?? []).filter((system) => (
+        system.position && (!discoveredOnly || system.discovered)
+      )),
+    ),
+    [galaxyQuery.data, discoveredOnly],
+  );
+
   // 回调用 ref 取最新数据（callbacks useMemo 保持稳定，避免重建 scene）
   const fleetsRef = useRef(fleetsQuery.data);
   fleetsRef.current = fleetsQuery.data;
   const systemRuntimeRef = useRef(systemRuntimeQuery.data);
   systemRuntimeRef.current = systemRuntimeQuery.data;
+  const lanesRef = useRef(galaxyLanes);
+  lanesRef.current = galaxyLanes;
   const commandRef = useRef({ runCommand, notify });
   commandRef.current = { runCommand, notify };
 
   const callbacks = useMemo(() => ({
     onSelectSystem: (systemId: string | null) => {
-      useStarmapViewStore.getState().select(systemId ? { kind: 'system', id: systemId } : null);
+      const state = useStarmapViewStore.getState();
+      const mode = state.interactionMode;
+      // move 模式：点星系 → 本地校验航线后下达 fleet_move
+      if (systemId && mode.kind === 'move') {
+        const fleet = (fleetsRef.current ?? []).find((item) => item.fleet_id === mode.fleetId);
+        const resolution = resolveFleetMoveTarget(lanesRef.current, fleet, systemId);
+        if (!resolution.ok) {
+          commandRef.current.notify('reports', { tone: 'warning', title: resolution.reason });
+          return;
+        }
+        commandRef.current.runCommand({
+          section: 'reports',
+          invalidateKeys: [['war-fleets', scope.serverUrl, scope.playerId]],
+          execute: () => client.cmdFleetMove(mode.fleetId, systemId),
+        });
+        state.exitInteractionMode();
+        return;
+      }
+      state.select(systemId ? { kind: 'system', id: systemId } : null);
     },
     onSelectPlanet: (planetId: string | null) => {
       const state = useStarmapViewStore.getState();
@@ -385,6 +427,9 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           <FleetSelectionBar
             fleet={selectedFleet}
             systemName={selectedFleetSystemName}
+            resolveSystemName={(systemId) => (
+              galaxyQuery.data?.systems?.find((system) => system.system_id === systemId)?.name || systemId
+            )}
             scope={scope}
             runCommand={runCommand}
             feedbacks={feedbacks}
@@ -395,11 +440,13 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
         <p className="starmap-hint">
           {interactionMode.kind === 'attack'
             ? '攻击模式：点击行星下达攻击指令 · Esc/右键取消'
-            : selectedFleetId
-              ? '已选中舰队：底部情境条下达指令 · Esc/右键/点空地取消'
-              : focusedSystemId
-                ? '拖拽平移 · 滚轮缩放 · 双击行星进入 · 双击空白/持续缩小返回银河'
-                : '拖拽平移 · 滚轮缩放 · 单击选中 · 双击或持续放大进入恒星系'}
+            : interactionMode.kind === 'move'
+              ? '跃迁模式：点击目标星系下达跃迁指令（需航线连接） · Esc/右键取消'
+              : selectedFleetId
+                ? '已选中舰队：底部情境条下达指令 · Esc/右键/点空地取消'
+                : focusedSystemId
+                  ? '拖拽平移 · 滚轮缩放 · 双击行星进入 · 双击空白/持续缩小返回银河'
+                  : '拖拽平移 · 滚轮缩放 · 单击选中 · 双击或持续放大进入恒星系'}
         </p>
       </div>
     </div>

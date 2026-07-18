@@ -327,7 +327,8 @@ func evaluateOrbitalSuperiority(
 		player := playerStateFromWorlds(worlds, playerRuntime.PlayerID)
 		totalScore := 0.0
 		for _, fleet := range systemRuntime.Fleets {
-			if fleet == nil {
+			if fleet == nil || fleet.Transit != nil {
+				// 跃迁中的舰队不计入任何星系的轨道优势评分
 				continue
 			}
 			totalScore += fleetOrbitalScore(worlds, spaceRuntime, player, fleet)

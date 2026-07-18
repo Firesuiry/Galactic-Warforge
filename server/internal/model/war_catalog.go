@@ -367,7 +367,7 @@ var warPublicBlueprintEntries = []WarPublicBlueprintCatalogEntry{
 		ProducerRecipes: []string{"corvette"},
 		DeployCommand:   "commission_fleet",
 		QueryScopes:     []string{"system_runtime", "fleet"},
-		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"},
+		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_move", "fleet_disband"},
 		Components: []WarBlueprintComponentSlot{
 			{SlotID: "reactor", ComponentID: "naval_fission_core"},
 			{SlotID: "drive", ComponentID: "vector_thrusters"},
@@ -389,7 +389,7 @@ var warPublicBlueprintEntries = []WarPublicBlueprintCatalogEntry{
 		ProducerRecipes: []string{"destroyer"},
 		DeployCommand:   "commission_fleet",
 		QueryScopes:     []string{"system_runtime", "fleet"},
-		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_disband"},
+		Commands:        []string{"commission_fleet", "fleet_assign", "fleet_attack", "fleet_move", "fleet_disband"},
 		Components: []WarBlueprintComponentSlot{
 			{SlotID: "reactor", ComponentID: "naval_fission_core"},
 			{SlotID: "drive", ComponentID: "vector_thrusters"},

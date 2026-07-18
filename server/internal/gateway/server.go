@@ -995,6 +995,12 @@ func validateCommandStructure(cmd model.Command) error {
 				return fmt.Errorf("fleet_attack requires payload.%s", field)
 			}
 		}
+	case model.CmdFleetMove:
+		for _, field := range []string{"fleet_id", "target_system_id"} {
+			if _, ok := cmd.Payload[field]; !ok {
+				return fmt.Errorf("fleet_move requires payload.%s", field)
+			}
+		}
 	case model.CmdFleetDisband:
 		if _, ok := cmd.Payload["fleet_id"]; !ok {
 			return fmt.Errorf("fleet_disband requires payload.fleet_id")

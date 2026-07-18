@@ -42,6 +42,17 @@ type FleetTarget struct {
 	TargetID string `json:"target_id,omitempty"`
 }
 
+// FleetTransitState tracks an in-flight inter-system jump.
+// A fleet with Transit != nil is mid-jump: State stays idle, the fleet keeps
+// its origin SystemID bucket until arrival, and progress derives from
+// 1 - RemainingTicks/TotalTicks.
+type FleetTransitState struct {
+	FromSystemID   string `json:"from_system_id"`
+	TargetSystemID string `json:"target_system_id"`
+	TotalTicks     int64  `json:"total_ticks"`
+	RemainingTicks int64  `json:"remaining_ticks"`
+}
+
 // FleetUnitStack stores unit counts by payload type.
 type FleetUnitStack struct {
 	BlueprintID string `json:"blueprint_id"`
@@ -201,6 +212,7 @@ type SpaceFleet struct {
 	Subsystems         SpaceFleetSubsystemState `json:"subsystems"`
 	Sustainment        WarSustainmentState      `json:"sustainment"`
 	Target             *FleetTarget             `json:"target,omitempty"`
+	Transit            *FleetTransitState       `json:"transit,omitempty"`
 	LastAttackTick     int64                    `json:"last_attack_tick,omitempty"`
 	LastBattleReportID string                   `json:"last_battle_report_id,omitempty"`
 }

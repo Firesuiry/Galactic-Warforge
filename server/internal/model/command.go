@@ -28,6 +28,7 @@ const (
 	CmdCommissionFleet           CommandType = "commission_fleet"
 	CmdFleetAssign               CommandType = "fleet_assign"
 	CmdFleetAttack               CommandType = "fleet_attack"
+	CmdFleetMove                 CommandType = "fleet_move"
 	CmdFleetDisband              CommandType = "fleet_disband"
 	CmdTaskForceCreate           CommandType = "task_force_create"
 	CmdTaskForceAssign           CommandType = "task_force_assign"

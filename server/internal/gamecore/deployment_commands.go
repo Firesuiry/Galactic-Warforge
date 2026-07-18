@@ -183,19 +183,6 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 		res.Message = err.Error()
 		return res, nil
 	}
-	hub := player.EnsureWarIndustry()
-	hubState := ensureWarDeploymentHubState(hub, building.ID, deploymentHubCapacity(deployment))
-	if hubState.ReadyPayloads[blueprintID] < count {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in deployment hub inventory", count, blueprintID)
-		return res, nil
-	}
-	hubState.ReadyPayloads[blueprintID] -= count
-	if hubState.ReadyPayloads[blueprintID] <= 0 {
-		delete(hubState.ReadyPayloads, blueprintID)
-	}
-	hubState.UpdatedTick = ws.Tick
-
 	if gc.spaceRuntime == nil {
 		gc.spaceRuntime = model.NewSpaceRuntimeState()
 	}
@@ -211,6 +198,24 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	if fleetID == "" {
 		fleetID = gc.spaceRuntime.NextEntityID("fleet")
 	}
+	if existing := systemRuntime.Fleets[fleetID]; existing != nil && existing.Transit != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is in transit and cannot take reinforcements", fleetID)
+		return res, nil
+	}
+
+	hub := player.EnsureWarIndustry()
+	hubState := ensureWarDeploymentHubState(hub, building.ID, deploymentHubCapacity(deployment))
+	if hubState.ReadyPayloads[blueprintID] < count {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d %s in deployment hub inventory", count, blueprintID)
+		return res, nil
+	}
+	hubState.ReadyPayloads[blueprintID] -= count
+	if hubState.ReadyPayloads[blueprintID] <= 0 {
+		delete(hubState.ReadyPayloads, blueprintID)
+	}
+	hubState.UpdatedTick = ws.Tick
 
 	fleet := systemRuntime.Fleets[fleetID]
 	if fleet == nil {
@@ -281,6 +286,11 @@ func (gc *GameCore) execFleetAssign(_ *model.WorldState, playerID string, cmd mo
 		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
 		return res, nil
 	}
+	if fleet.Transit != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is in transit and cannot be assigned", fleetID)
+		return res, nil
+	}
 	fleet.Formation = formation
 	fleet.State = model.FleetStateIdle
 	res.Status = model.StatusExecuted
@@ -322,6 +332,11 @@ func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd mo
 		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
 		return res, nil
 	}
+	if fleet.Transit != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is in transit and cannot attack", fleetID)
+		return res, nil
+	}
 	planet, ok := gc.maps.Planet(planetID)
 	if !ok || planet == nil {
 		res.Code = model.CodeInvalidTarget
@@ -349,6 +364,73 @@ func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd mo
 	}}
 }
 
+func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+	fleetID, err := payloadStrictString(cmd.Payload, "fleet_id")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	targetSystemID, err := payloadStrictString(cmd.Payload, "target_system_id")
+	if err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
+	if fleet == nil {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
+		return res, nil
+	}
+	if fleet.State != model.FleetStateIdle {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is %s and cannot move", fleetID, fleet.State)
+		return res, nil
+	}
+	if fleet.Transit != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is already in transit to %s", fleetID, fleet.Transit.TargetSystemID)
+		return res, nil
+	}
+	if targetSystemID == fleet.SystemID {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is already in %s", fleetID, targetSystemID)
+		return res, nil
+	}
+	if _, ok := gc.maps.System(targetSystemID); !ok {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("system %s not found", targetSystemID)
+		return res, nil
+	}
+	if !gc.maps.SystemsLinkedByLane(fleet.SystemID, targetSystemID, fleetLaneNeighborCount) {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("no direct lane between %s and %s", fleet.SystemID, targetSystemID)
+		return res, nil
+	}
+
+	fleet.Transit = &model.FleetTransitState{
+		FromSystemID:   fleet.SystemID,
+		TargetSystemID: targetSystemID,
+		TotalTicks:     FleetTransitTicks,
+		RemainingTicks: FleetTransitTicks,
+	}
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("fleet %s jumping from %s to %s (%d ticks)", fleetID, fleet.SystemID, targetSystemID, FleetTransitTicks)
+	return res, []*model.GameEvent{{
+		EventType:       model.EvtFleetMoveStarted,
+		VisibilityScope: playerID,
+		Payload: map[string]any{
+			"fleet_id":       fleetID,
+			"from_system_id": fleet.SystemID,
+			"to_system_id":   targetSystemID,
+			"total_ticks":    FleetTransitTicks,
+		},
+	}}
+}
+
 func (gc *GameCore) execFleetDisband(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	fleetID, err := payloadStrictString(cmd.Payload, "fleet_id")
@@ -361,6 +443,11 @@ func (gc *GameCore) execFleetDisband(_ *model.WorldState, playerID string, cmd m
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
 		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
+		return res, nil
+	}
+	if fleet.Transit != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("fleet %s is in transit and cannot be disbanded", fleetID)
 		return res, nil
 	}
 	delete(systemRuntime.Fleets, fleetID)

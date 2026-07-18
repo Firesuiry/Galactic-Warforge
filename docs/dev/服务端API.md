@@ -419,7 +419,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `landing_operations[].bridgehead_id`：若登陆成功，可直接关联到 `/world/planets/{planet_id}/runtime.bridgeheads[].id`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
-  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `last_battle_report_id`
+  - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `transit` / `last_battle_report_id`
   - `fleets[].weapons`：太空战火力画像，字段为 `direct_fire` / `missile` / `point_defense` / `electronic_warfare`
   - `fleets[].sustainment`：舰队 authoritative 补给态，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `repair_blocked` / `retreat_recommended` / `shortages` / `sources` / `last_resupply_tick` / `last_consumption_tick` / `repair`
   - `fleets[].sustainment.current` / `capacity`：六类军需库存，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
@@ -431,6 +431,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleets[].subsystems`：关键子系统状态，包含 `engine` / `fire_control` / `sensors` / `point_defense`；每个子系统都带 `integrity` / `state` / `effect`
   - `fleets[].subsystems.*.state`：当前固定为 `operational` / `degraded` / `disabled`
   - `fleets[].target`：当前仅在舰队已收到 `fleet_attack` 后存在；字段为 `planet_id` + `target_id`，其中 `target_id` 当前应对应同一恒星系目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
+  - `fleets[].transit`：当前仅在舰队已收到 `fleet_move` 且尚未到达时存在；字段为 `from_system_id` / `target_system_id` / `total_ticks` / `remaining_ticks`；跃迁期间 `state` 保持 `idle`、`system_id` 保持出发星系（进度 = `1 - remaining_ticks/total_ticks`），跃迁中舰队不计入任何星系的轨道优势评分，且 `fleet_assign` / `fleet_attack` / `fleet_disband` / `commission_fleet`（增援同一 `fleet_id`）都会被拒绝
   - `fleets[].last_battle_report_id`：最近一份太空战战报 ID；若舰队尚未参与 battle report 生成则为空
   - `contacts`：恒星系情报接触列表，包含 `id` / `scope_type` / `scope_id` / `contact_kind` / `entity_id` / `entity_type` / `domain` / `planet_id` / `system_id` / `level` / `classification` / `confirmed_type` / `strength_estimate` / `threat_level` / `last_updated_tick` / `signal_strength` / `lock_quality` / `jamming_penalty` / `missile_drift_risk` / `false_contact` / `sources`
   - `contacts[].level`：当前固定为 `unknown_signal` / `classified_contact` / `confirmed_type` / `fully_resolved`
@@ -1295,7 +1296,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1389,6 +1390,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `commission_fleet`：`payload.building_id` + `payload.blueprint_id` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的蓝图是 `corvette` / `destroyer`，玩家自有 `space|orbital` 已定型蓝图也可以直接编入舰队；同样要求已解锁对应科技且部署枢纽 `ready_payloads` 中已有足量军备产物；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加蓝图栈并重算 `weapon` / `shield`，而不是覆盖旧栈
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
+  - `fleet_move`：`payload.fleet_id` + `payload.target_system_id` 必填；舰队必须属于当前玩家且 `state=idle`（attacking 或已在跃迁中的舰队会被拒绝）；目标星系必须存在、不是当前星系、且与当前星系有直达航线——服务端没有独立航线表，航线图按与星图渲染一致的 k 近邻规则从星系坐标导出（每个星系连接银河内最近的 2 个邻居，任一端点名即连通）；跃迁耗时固定 10 tick（`gamecore.FleetTransitTicks`），每 tick `remaining_ticks` 减 1，归零时舰队 authoritative 地迁入目标星系并发出 `fleet_arrived`；跃迁期间 `state` 保持 `idle`、`transit` 非空即跃迁中，舰队在到达前不计入任何星系的轨道优势评分
   - `fleet_disband`：`payload.fleet_id` 必填
   - `task_force_create`：`payload.task_force_id` 必填；可选 `payload.name` / `payload.stance`；未传 `stance` 时默认为 `hold`
   - `task_force_assign`：`payload.task_force_id` + `payload.member_kind` + `payload.member_ids[]` 必填；`member_kind` 当前只支持 `squad|fleet`；服务端会校验这些 runtime 成员归属当前玩家，并把成员从旧任务群 authoritative 地迁移到新任务群
@@ -1520,6 +1522,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_commissioned`
   - `fleet_assigned`
   - `fleet_attack_started`
+  - `fleet_move_started`
+  - `fleet_arrived`
   - `fleet_disbanded`
   - `missile_salvo_fired`
   - `point_defense_intercept`
@@ -1545,6 +1549,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `fleet_commissioned`：舰队编成事件，payload 包含 `fleet_id` / `fleet`；同时还会伴随一条 `entity_created(entity_type = "fleet")`。
   - `fleet_assigned`：舰队改编队事件，payload 包含 `fleet_id` / `formation`。
   - `fleet_attack_started`：舰队开始攻击事件，payload 包含 `fleet_id` / `planet_id` / `target_id`；后续太空战细节会继续通过 `missile_salvo_fired` / `point_defense_intercept` / `battle_report_generated` 与常规 `damage_applied` / `entity_destroyed` 体现。
+  - `fleet_move_started`：舰队跃迁开始事件，payload 包含 `fleet_id` / `from_system_id` / `to_system_id` / `total_ticks`。
+  - `fleet_arrived`：舰队跃迁到达事件，payload 包含 `fleet_id` / `system_id`（抵达星系）/ `from_system_id`。
   - `fleet_disbanded`：舰队解散事件，payload 包含 `fleet_id`。
   - `missile_salvo_fired`：导弹齐射事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `launched` / `intercepted` / `drifted` / `lock_quality` / `jamming_penalty`；若来源是敌对势力还会额外写 `source = "enemy_force"`
   - `point_defense_intercept`：点防拦截事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `intercepted` / `remaining`

@@ -17,8 +17,11 @@ const FLEET_STATE_LABELS: Record<string, string> = {
   attacking: '交战中',
 };
 
-function fleetStateLabel(state: string) {
-  return FLEET_STATE_LABELS[state] ?? state;
+function fleetStateLabel(fleet: { state: string; transit?: unknown }) {
+  if (fleet.transit) {
+    return '跃迁中';
+  }
+  return FLEET_STATE_LABELS[fleet.state] ?? fleet.state;
 }
 
 const COLLAPSE_KEY = 'sw.outliner.collapsed';
@@ -157,11 +160,11 @@ export function Outliner() {
             type="button"
             key={fleet.fleet_id}
             onClick={() => navigate('/war')}
-            title={fleetStateLabel(fleet.state)}
+            title={fleetStateLabel(fleet)}
           >
             <span aria-hidden="true">🚀</span>
             <span>{fleet.fleet_id}</span>
-            <span className="outliner__item-meta">{fleetStateLabel(fleet.state)}</span>
+            <span className="outliner__item-meta">{fleetStateLabel(fleet)}</span>
           </button>
         ))}
         {fleets.length === 0 ? <p className="outliner__empty">暂无舰队</p> : null}

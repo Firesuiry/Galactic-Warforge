@@ -25,6 +25,8 @@ const (
 	EvtFleetCommissioned         EventType = "fleet_commissioned"
 	EvtFleetAssigned             EventType = "fleet_assigned"
 	EvtFleetAttackStarted        EventType = "fleet_attack_started"
+	EvtFleetMoveStarted          EventType = "fleet_move_started"
+	EvtFleetArrived              EventType = "fleet_arrived"
 	EvtFleetDisbanded            EventType = "fleet_disbanded"
 	EvtMissileSalvoFired         EventType = "missile_salvo_fired"
 	EvtPointDefenseIntercept     EventType = "point_defense_intercept"
@@ -57,6 +59,8 @@ var allEventTypes = []EventType{
 	EvtFleetCommissioned,
 	EvtFleetAssigned,
 	EvtFleetAttackStarted,
+	EvtFleetMoveStarted,
+	EvtFleetArrived,
 	EvtFleetDisbanded,
 	EvtMissileSalvoFired,
 	EvtPointDefenseIntercept,

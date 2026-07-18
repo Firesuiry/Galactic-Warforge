@@ -46,6 +46,7 @@ type FleetRuntimeView struct {
 	Structure          model.DurabilityLayerState     `json:"structure"`
 	Subsystems         model.SpaceFleetSubsystemState `json:"subsystems"`
 	Target             *model.FleetTarget             `json:"target,omitempty"`
+	Transit            *model.FleetTransitState       `json:"transit,omitempty"`
 	LastBattleReportID string                         `json:"last_battle_report_id,omitempty"`
 }
 
@@ -59,6 +60,7 @@ type FleetDetailView struct {
 	State            string                         `json:"state"`
 	Units            []model.FleetUnitStack         `json:"units,omitempty"`
 	Target           *model.FleetTarget             `json:"target,omitempty"`
+	Transit          *model.FleetTransitState       `json:"transit,omitempty"`
 	Weapon           model.WeaponState              `json:"weapon"`
 	Weapons          model.SpaceWeaponMix           `json:"weapons"`
 	Shield           model.ShieldState              `json:"shield"`
@@ -265,6 +267,10 @@ func fleetRuntimeView(fleet *model.SpaceFleet) FleetRuntimeView {
 		targetCopy := *fleet.Target
 		view.Target = &targetCopy
 	}
+	if fleet.Transit != nil {
+		transitCopy := *fleet.Transit
+		view.Transit = &transitCopy
+	}
 	return view
 }
 
@@ -289,6 +295,10 @@ func fleetDetailView(fleet *model.SpaceFleet) FleetDetailView {
 	if fleet.Target != nil {
 		targetCopy := *fleet.Target
 		view.Target = &targetCopy
+	}
+	if fleet.Transit != nil {
+		transitCopy := *fleet.Transit
+		view.Transit = &transitCopy
 	}
 	return view
 }
