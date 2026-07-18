@@ -3,7 +3,7 @@
  * 不依赖 Pixi，可单测。
  */
 
-import type { FleetRuntimeView, GalaxyView, PlanetRef, SystemRef } from '@shared/types';
+import type { FleetRuntimeView, GalaxyView, PlanetRef, SensorContact, SystemRef } from '@shared/types';
 
 /** 恒星光谱型 → 主色（O 蓝 → M 红）。 */
 export const STAR_COLORS: Record<string, number> = {
@@ -241,4 +241,51 @@ export function selectWarLanes(
     }
   });
   return warLanes;
+}
+
+// ---------- 舰队直操作（期7b） ----------
+
+/**
+ * 徽标循环点选：同一星系的舰队聚合在一个徽标后面，重复点击在该星系的
+ * 舰队列表里循环（按 API 返回顺序，稳定）。列表为空返回 null。
+ */
+export function pickFleetInSystem(
+  fleets: Array<Pick<FleetRuntimeView, 'fleet_id' | 'system_id'>>,
+  systemId: string,
+  currentFleetId: string | null,
+): string | null {
+  const inSystem = fleets.filter((fleet) => fleet.system_id === systemId);
+  if (inSystem.length === 0) {
+    return null;
+  }
+  const currentIndex = inSystem.findIndex((fleet) => fleet.fleet_id === currentFleetId);
+  const next = inSystem[(currentIndex + 1) % inSystem.length];
+  return next?.fleet_id ?? null;
+}
+
+export type FleetAttackTargetResolution =
+  | { ok: true; targetId: string }
+  | { ok: false; reason: string };
+
+/**
+ * fleet_attack 目标解析：server 仅支持同星系目标，target_id 取目标行星上
+ * 首个可锁定的敌方传感器接触（contact_kind=enemy_force 且带 entity_id）。
+ * 没有匹配接触时本地拦截，不提交指令。
+ */
+export function resolveFleetAttackTarget(
+  contacts: SensorContact[] | undefined,
+  planetId: string,
+): FleetAttackTargetResolution {
+  const contact = (contacts ?? []).find(
+    (item) => item.contact_kind === 'enemy_force' && item.entity_id && item.planet_id === planetId,
+  );
+  if (!contact?.entity_id) {
+    return { ok: false, reason: '该行星没有可锁定的敌方目标' };
+  }
+  return { ok: true, targetId: contact.entity_id };
+}
+
+/** 舰队状态中文标签（FleetState 只有 idle/attacking，无移动中状态）。 */
+export function fleetStateLabel(state: FleetRuntimeView['state'] | undefined): string {
+  return state === 'attacking' ? '交战中' : '待命';
 }

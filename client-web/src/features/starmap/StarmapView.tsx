@@ -8,9 +8,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { PixiStage } from '@/engine/PixiStage';
-import { starTypeLabel } from '@/features/starmap/model';
+import { FleetSelectionBar } from '@/features/starmap/FleetSelectionBar';
+import { pickFleetInSystem, resolveFleetAttackTarget, starTypeLabel } from '@/features/starmap/model';
 import { StarmapScene } from '@/features/starmap/scene';
 import { useStarmapViewStore } from '@/features/starmap/store';
+import { useWarCommand } from '@/features/war/use-war-command';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { translatePlanetKind } from '@/i18n/translate';
@@ -27,7 +29,15 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
 
   const focusedSystemId = useStarmapViewStore((state) => state.focusedSystemId);
   const selected = useStarmapViewStore((state) => state.selected);
+  const selectedFleetId = useStarmapViewStore((state) => state.selectedFleetId);
+  const interactionMode = useStarmapViewStore((state) => state.interactionMode);
   const discoveredOnly = useStarmapViewStore((state) => state.discoveredOnly);
+
+  const scope = useMemo(
+    () => ({ serverUrl: session.serverUrl, playerId: session.playerId }),
+    [session.serverUrl, session.playerId],
+  );
+  const { runCommand, notify, feedbacks, isPending } = useWarCommand();
 
   const sceneRef = useRef<StarmapScene | null>(null);
   const focusedRef = useRef(focusedSystemId);
@@ -40,6 +50,7 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     }
     return () => {
       useStarmapViewStore.getState().exitToGalaxy();
+      useStarmapViewStore.getState().selectFleet(null);
     };
   }, [initialSystemId]);
 
@@ -61,15 +72,65 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     queryFn: () => client.fetchFleets(),
   });
 
+  // attack 模式需要目标行星上的传感器接触（system-runtime 查询与 war 页共享缓存）
+  const systemRuntimeQuery = useQuery({
+    queryKey: ['system-runtime', session.serverUrl, session.playerId, focusedSystemId],
+    queryFn: () => client.fetchSystemRuntime(focusedSystemId!),
+    enabled: Boolean(focusedSystemId) && interactionMode.kind === 'attack',
+  });
+
+  // 回调用 ref 取最新数据（callbacks useMemo 保持稳定，避免重建 scene）
+  const fleetsRef = useRef(fleetsQuery.data);
+  fleetsRef.current = fleetsQuery.data;
+  const systemRuntimeRef = useRef(systemRuntimeQuery.data);
+  systemRuntimeRef.current = systemRuntimeQuery.data;
+  const commandRef = useRef({ runCommand, notify });
+  commandRef.current = { runCommand, notify };
+
   const callbacks = useMemo(() => ({
     onSelectSystem: (systemId: string | null) => {
       useStarmapViewStore.getState().select(systemId ? { kind: 'system', id: systemId } : null);
     },
     onSelectPlanet: (planetId: string | null) => {
+      const state = useStarmapViewStore.getState();
+      const mode = state.interactionMode;
       const systemId = focusedRef.current;
-      useStarmapViewStore.getState().select(
-        planetId && systemId ? { kind: 'planet', id: planetId, systemId } : null,
-      );
+      // attack 模式：点行星 → 组装 fleet_attack（server 仅支持同星系目标）
+      if (planetId && mode.kind === 'attack' && systemId) {
+        const fleet = (fleetsRef.current ?? []).find((item) => item.fleet_id === mode.fleetId);
+        if (!fleet || fleet.system_id !== systemId) {
+          commandRef.current.notify('reports', {
+            tone: 'warning',
+            title: '舰队不在当前星系，无法下达攻击',
+          });
+          state.exitInteractionMode();
+          return;
+        }
+        const resolution = resolveFleetAttackTarget(systemRuntimeRef.current?.contacts, planetId);
+        if (!resolution.ok) {
+          commandRef.current.notify('reports', { tone: 'warning', title: resolution.reason });
+          return;
+        }
+        commandRef.current.runCommand({
+          section: 'reports',
+          invalidateKeys: [
+            ['war-fleets', scope.serverUrl, scope.playerId],
+            ['system-runtime', scope.serverUrl, scope.playerId, systemId],
+          ],
+          execute: () => client.cmdFleetAttack(fleet.fleet_id, planetId, resolution.targetId),
+        });
+        state.exitInteractionMode();
+        return;
+      }
+      state.select(planetId && systemId ? { kind: 'planet', id: planetId, systemId } : null);
+    },
+    onSelectFleet: (systemId: string | null) => {
+      const state = useStarmapViewStore.getState();
+      if (!systemId) {
+        state.selectFleet(null);
+        return;
+      }
+      state.selectFleet(pickFleetInSystem(fleetsRef.current ?? [], systemId, state.selectedFleetId));
     },
     onEnterSystem: (systemId: string) => {
       useStarmapViewStore.getState().focusSystem(systemId);
@@ -80,7 +141,7 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     onOpenPlanet: (planetId: string) => {
       navigate(`/planet/${planetId}`);
     },
-  }), [navigate]);
+  }), [client, navigate, scope]);
 
   // 数据 → 场景
   useEffect(() => {
@@ -124,6 +185,40 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
     scene.setSelectedPlanet(selected?.kind === 'planet' ? selected.id : null);
   }, [selected]);
 
+  // 直选舰队 → 徽标高亮环（徽标按星系聚合，传所在星系 id）
+  const selectedFleet = useMemo(
+    () => (fleetsQuery.data ?? []).find((fleet) => fleet.fleet_id === selectedFleetId) ?? null,
+    [fleetsQuery.data, selectedFleetId],
+  );
+
+  useEffect(() => {
+    sceneRef.current?.setSelectedFleet(selectedFleet?.system_id ?? null);
+  }, [selectedFleet]);
+
+  // 舰队数据刷新后选中舰队已不存在（解散/战损）→ 自动取消选中
+  useEffect(() => {
+    if (selectedFleetId && fleetsQuery.data && !selectedFleet) {
+      useStarmapViewStore.getState().selectFleet(null);
+    }
+  }, [selectedFleetId, fleetsQuery.data, selectedFleet]);
+
+  // Esc：先退交互模式，再取消舰队选中（对齐行星页范式）
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      const state = useStarmapViewStore.getState();
+      if (state.interactionMode.kind !== 'inspect') {
+        state.exitInteractionMode();
+      } else if (state.selectedFleetId) {
+        state.selectFleet(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const focusedSystem = systemQuery.data
     ?? galaxyQuery.data?.systems?.find((system) => system.system_id === focusedSystemId)
     ?? null;
@@ -133,9 +228,28 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
   const selectedPlanet = selected?.kind === 'planet'
     ? systemQuery.data?.planets?.find((planet) => planet.planet_id === selected.id) ?? null
     : null;
+  const selectedFleetSystemName = selectedFleet
+    ? galaxyQuery.data?.systems?.find((system) => system.system_id === selectedFleet.system_id)?.name
+      || selectedFleet.system_id
+    : '';
 
   return (
-    <div className="starmap-view">
+    <div
+      className="starmap-view"
+      onContextMenu={(event) => {
+        // 右键：退交互模式/取消舰队选中（仅在有状态可取消时拦截系统菜单）
+        const state = useStarmapViewStore.getState();
+        if (state.interactionMode.kind === 'inspect' && !state.selectedFleetId) {
+          return;
+        }
+        event.preventDefault();
+        if (state.interactionMode.kind !== 'inspect') {
+          state.exitInteractionMode();
+        } else {
+          state.selectFleet(null);
+        }
+      }}
+    >
       <PixiStage
         className="starmap-stage"
         onReady={(app) => {
@@ -143,8 +257,10 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           const scene = new StarmapScene(app, callbacks, { frozen });
           sceneRef.current = scene;
           if (import.meta.env.DEV) {
-            // 开发模式暴露给 Playwright/控制台做画布内定位
+            // 开发模式暴露给 Playwright/控制台做画布内定位与交互状态检查
             (window as unknown as { __starmapScene?: StarmapScene }).__starmapScene = scene;
+            (window as unknown as { __starmapViewStore?: typeof useStarmapViewStore }).__starmapViewStore
+              = useStarmapViewStore;
           }
           if (galaxyQuery.data) {
             scene.setGalaxy(galaxyQuery.data);
@@ -265,10 +381,25 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           </section>
         ) : null}
 
+        {selectedFleet ? (
+          <FleetSelectionBar
+            fleet={selectedFleet}
+            systemName={selectedFleetSystemName}
+            scope={scope}
+            runCommand={runCommand}
+            feedbacks={feedbacks}
+            isPending={isPending}
+          />
+        ) : null}
+
         <p className="starmap-hint">
-          {focusedSystemId
-            ? '拖拽平移 · 滚轮缩放 · 双击行星进入 · 双击空白/持续缩小返回银河'
-            : '拖拽平移 · 滚轮缩放 · 单击选中 · 双击或持续放大进入恒星系'}
+          {interactionMode.kind === 'attack'
+            ? '攻击模式：点击行星下达攻击指令 · Esc/右键取消'
+            : selectedFleetId
+              ? '已选中舰队：底部情境条下达指令 · Esc/右键/点空地取消'
+              : focusedSystemId
+                ? '拖拽平移 · 滚轮缩放 · 双击行星进入 · 双击空白/持续缩小返回银河'
+                : '拖拽平移 · 滚轮缩放 · 单击选中 · 双击或持续放大进入恒星系'}
         </p>
       </div>
     </div>

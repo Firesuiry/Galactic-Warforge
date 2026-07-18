@@ -64,6 +64,8 @@ const FLEET_PULSE_PHASE_STEP = (Math.PI * 2) / 7;
 export interface StarmapSceneCallbacks {
   onSelectSystem: (systemId: string | null) => void;
   onSelectPlanet: (planetId: string | null) => void;
+  /** 舰队徽标点选：传星系 id（徽标按星系聚合）；空地点击传 null 取消选中。 */
+  onSelectFleet: (systemId: string | null) => void;
   onEnterSystem: (systemId: string) => void;
   onExitToGalaxy: () => void;
   onOpenPlanet: (planetId: string) => void;
@@ -97,6 +99,8 @@ interface FleetBadgeNode {
   /** 脉冲部分（glow + 菱形），数量角标不参与脉冲。 */
   pulseTarget: Container;
   glow: Sprite;
+  /** 选中高亮环（frozen 下静止，不参与脉冲缩放）。 */
+  ring: Graphics;
   pulsePhase: number;
 }
 
@@ -135,6 +139,8 @@ export class StarmapScene {
   private focusedSystemId: string | null = null;
   private selectedSystemId: string | null = null;
   private selectedPlanetId: string | null = null;
+  /** 直选舰队所在星系（徽标按星系聚合，高亮环画在对应徽标上）。 */
+  private selectedFleetSystemId: string | null = null;
   private discoveredOnly = false;
   private systemFitZoom = 1;
   private galaxyFitZoom = 1;
@@ -215,6 +221,12 @@ export class StarmapScene {
   setSelectedPlanet(planetId: string | null) {
     this.selectedPlanetId = planetId;
     this.updateSelectionRings();
+  }
+
+  /** 直选舰队高亮：传舰队所在星系 id（徽标聚合粒度），null 取消。 */
+  setSelectedFleet(systemId: string | null) {
+    this.selectedFleetSystemId = systemId;
+    this.updateFleetSelectionRings();
   }
 
   /** 进入/离开恒星系。system 数据可能尚在加载（传 null 先画中心恒星占位）。 */
@@ -375,6 +387,7 @@ export class StarmapScene {
       this.fleetBadgeNodes.push(badge);
       this.fleetBadgeLayer.addChild(badge.container);
     });
+    this.updateFleetSelectionRings();
 
     const attackingIds = new Set(
       this.fleetSummary
@@ -409,6 +422,11 @@ export class StarmapScene {
     const color = attacking ? COLOR_FLEET_ATTACKING : COLOR_FLEET_IDLE;
 
     const container = new Container();
+    container.eventMode = 'static';
+    container.cursor = 'pointer';
+    container.hitArea = {
+      contains: (x: number, y: number) => x * x + y * y <= 14 * 14,
+    };
     const pulseTarget = new Container();
     container.addChild(pulseTarget);
 
@@ -424,6 +442,16 @@ export class StarmapScene {
       .fill({ color, alpha: 0.95 })
       .stroke({ width: 1.1, color: 0xffffff, alpha: 0.55 });
     pulseTarget.addChild(diamond);
+
+    // 选中高亮环（默认隐藏，setSelectedFleet 控制；不参与徽标脉冲）
+    const ring = new Graphics();
+    ring
+      .circle(0, 0, 13)
+      .stroke({ width: 1.4, color: 0xffe08a, alpha: 0.9 })
+      .circle(0, 0, 16)
+      .stroke({ width: 0.7, color: 0xffe08a, alpha: 0.35 });
+    ring.visible = false;
+    container.addChild(ring);
 
     if (presence.total > 1) {
       const count = new Text({
@@ -441,7 +469,22 @@ export class StarmapScene {
       container.addChild(count);
     }
 
-    return { presence, container, pulseTarget, glow, pulsePhase };
+    container.on('pointertap', (event: FederatedPointerEvent) => {
+      if (this.dragState?.moved) {
+        return;
+      }
+      this.callbacks.onSelectFleet(presence.systemId);
+      event.stopPropagation();
+    });
+
+    return { presence, container, pulseTarget, glow, ring, pulsePhase };
+  }
+
+  /** 舰队徽标选中环刷新（覆盖层重建后/选中变化时调用）。 */
+  private updateFleetSelectionRings() {
+    this.fleetBadgeNodes.forEach((node) => {
+      node.ring.visible = node.presence.systemId === this.selectedFleetSystemId;
+    });
   }
 
   private createSystemNode(system: SystemRef): SystemNode {
@@ -672,6 +715,7 @@ export class StarmapScene {
       // 点击空白：取消选中；恒星系层双击空白返回银河。
       this.callbacks.onSelectSystem(null);
       this.callbacks.onSelectPlanet(null);
+      this.callbacks.onSelectFleet(null);
       if (this.focusedSystemId) {
         const now = performance.now();
         if (this.lastTapTarget === '__space__' && now - this.lastTapAt < DOUBLE_TAP_MS) {
@@ -787,6 +831,17 @@ export class StarmapScene {
         node.pulseTarget.scale.set(pulse);
         node.glow.alpha = 0.5 + 0.3 * Math.sin(t * 4 + node.pulsePhase);
       });
+
+      // 舰队选中环：缓慢呼吸（frozen 门控，截图基线里无选中态）
+      if (!this.frozen) {
+        this.fleetBadgeNodes.forEach((node) => {
+          if (!node.ring.visible) {
+            return;
+          }
+          const pulse = 1 + 0.08 * Math.sin(t * 3 + node.pulsePhase);
+          node.ring.scale.set(pulse);
+        });
+      }
 
       // 战火航线：亮点沿定向航线循环流动（两端渐隐），frozen 时 t 冻结保持静止
       this.warLaneDots.forEach((dot) => {
