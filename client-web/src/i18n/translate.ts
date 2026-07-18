@@ -27,7 +27,16 @@ function translateCatalogBackedValue(
   if (hasDisplayName(displayName) && displayName && isProbablyChinese(displayName)) {
     return displayName;
   }
-  return translateByDictionary(dictionary, value);
+  const translated = dictionary[value];
+  if (translated) {
+    return translated;
+  }
+  // 字典未命中时回退到 catalog 的英文名（如 "Wind Turbine"），
+  // 避免界面直接暴露下划线原始 ID（如 wind_turbine）。
+  if (hasDisplayName(displayName) && displayName) {
+    return displayName;
+  }
+  return value;
 }
 
 export function translatePlanetKind(kind: string | undefined | null) {

@@ -4,6 +4,7 @@ import type { CommandResult } from '@shared/types';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { sfx } from '@/engine/audio';
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { buildWarSuccessHint, resolveWarCommandHint, type WarCommandHint } from '@/features/war/error-hints';
 import type { FeedbackSection, WarCommandInput } from '@/features/war/war-query-keys';
 
@@ -32,11 +33,13 @@ export function useWarCommand(): UseWarCommandResult {
     },
     onSuccess: ({ input, result }) => {
       const hint: WarCommandHint = result?.status === 'executed'
+        || result?.status === 'accepted'
+        || result?.status === 'queued'
         ? buildWarSuccessHint(result?.message)
         : resolveWarCommandHint(result?.message)
           ?? {
             tone: 'warning',
-            title: result?.message || '命令未返回结果',
+            title: toPlayerFacingMessage(result?.message),
           };
       pushFeedback(setFeedbacks, input.section, hint);
       input.invalidateKeys.forEach((queryKey) => {
@@ -46,7 +49,7 @@ export function useWarCommand(): UseWarCommandResult {
     onError: (error, input) => {
       pushFeedback(setFeedbacks, input.section, {
         tone: 'error',
-        title: error instanceof Error ? error.message : '命令提交失败',
+        title: error instanceof Error ? toPlayerFacingMessage(error.message) : '命令提交失败',
       });
     },
   });

@@ -1008,11 +1008,14 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 						mined := mineResource(ws, b, accepted)
 						if mined > 0 {
 							stored, _, err := b.Storage.Receive(itemID, mined)
-							if err == nil && stored > 0 && productionSnapshot != nil {
-								productionSnapshot.RecordBuildingOutputs(b, []model.ItemAmount{{
-									ItemID:   itemID,
-									Quantity: stored,
-								}})
+							if err == nil && stored > 0 {
+								minerals = collectMineralsKickback(b.Runtime.Functions.Collect, stored)
+								if productionSnapshot != nil {
+									productionSnapshot.RecordBuildingOutputs(b, []model.ItemAmount{{
+										ItemID:   itemID,
+										Quantity: stored,
+									}})
+								}
 							}
 						}
 					}
@@ -1121,6 +1124,16 @@ func buildingPowerAvailability(
 		return false, stateReasonUnderPower, model.PowerAllocation{}
 	}
 	return true, "", alloc
+}
+
+// collectMineralsKickback converts mined-and-stored output into minerals
+// credited to the owning player's pool, according to the collector's
+// configured MineralsKickback ratio.
+func collectMineralsKickback(module *model.CollectModule, stored int) int {
+	if module == nil || stored <= 0 || module.MineralsKickback <= 0 {
+		return 0
+	}
+	return int(float64(stored) * module.MineralsKickback)
 }
 
 func mineResource(ws *model.WorldState, building *model.Building, yieldPerTick int) int {

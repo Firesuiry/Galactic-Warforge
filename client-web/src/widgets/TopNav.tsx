@@ -8,6 +8,7 @@ import { isMuted, setMuted, sfx } from '@/engine/audio';
 import { formatMineralInventory } from '@/features/mineral-summary';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { isResearchStationAlertNoise } from '@/features/production-alerts';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { translateAlertType, translateSeverity, translateUi } from '@/i18n/translate';
@@ -118,7 +119,9 @@ export function TopNav() {
   const powerPulse = powerDelta != null && powerDelta < 0 ? ' top-nav__chip--pulse' : '';
   const saveDisabled = isFixtureServerUrl(session.serverUrl) || saveMutation.isPending;
 
-  const alerts = alertQuery.data?.alerts ?? [];
+  const alerts = (alertQuery.data?.alerts ?? []).filter(
+    (alert) => !isResearchStationAlertNoise(alert),
+  );
   const alertCount = alerts.length + (powerDelta != null && powerDelta < 0 ? 1 : 0);
   const activePlanetId = summaryQuery.data?.active_planet_id;
 
@@ -151,9 +154,12 @@ export function TopNav() {
           <Icon iconKey="gear" size={14} />
           <span>tick {summaryQuery.data?.tick ?? '-'}</span>
         </span>
-        <span className="top-nav__chip" title="矿产库存">
+        <span
+          className="top-nav__chip"
+          title={`建设资金（矿石）· 背包库存：${mineralSummary}`}
+        >
           <Icon iconKey="iron_ore" color="#c9a06a" size={16} />
-          <span>{mineralSummary}</span>
+          <span>{currentPlayer?.resources?.minerals ?? 0}</span>
         </span>
         <span className="top-nav__chip" title="能量">
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />

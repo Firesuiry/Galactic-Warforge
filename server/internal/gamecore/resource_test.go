@@ -6,6 +6,142 @@ import (
 	"siliconworld/internal/model"
 )
 
+// Regression for docs/player/issue/2026-07-18-gameplay-02-minerals建造货币零收入发展卡死.md:
+// minerals is the only construction currency; the opening build chain must not
+// deadlock the economy once the starter pack runs out. After the mining
+// machine comes online, minerals must grow strictly every tick and the player
+// must be able to afford the next building (depot_mk1).
+func TestOpeningBuildChainMiningRestoresMineralsIncome(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 1, 1)
+
+	// Fresh game bootstrap (config-dev.yaml): 240 minerals.
+	const bootstrapMinerals = 240
+	player := &model.PlayerState{
+		PlayerID:  "p1",
+		Resources: model.Resources{Minerals: bootstrapMinerals, Energy: 100},
+		IsAlive:   true,
+	}
+	ws.Players["p1"] = player
+
+	// Recommended opening chain: wind_turbine -> matrix_lab -> tesla_tower -> mining_machine.
+	chain := []model.BuildingType{
+		model.BuildingTypeWindTurbine,
+		model.BuildingTypeMatrixLab,
+		model.BuildingTypeTeslaTower,
+		model.BuildingTypeMiningMachine,
+	}
+	for _, btype := range chain {
+		def, ok := model.BuildingDefinitionByID(btype)
+		if !ok {
+			t.Fatalf("missing building definition %s", btype)
+		}
+		if player.Resources.Minerals < def.BuildCost.Minerals {
+			t.Fatalf("cannot afford %s: have %d, need %d", btype, player.Resources.Minerals, def.BuildCost.Minerals)
+		}
+		player.Resources.Minerals -= def.BuildCost.Minerals
+	}
+	if player.Resources.Minerals != 20 {
+		t.Fatalf("expected 20 minerals after opening chain, got %d", player.Resources.Minerals)
+	}
+
+	// Mining machine on a silicon ore node.
+	ws.Resources["r1"] = &model.ResourceNodeState{
+		ID:           "r1",
+		PlanetID:     ws.PlanetID,
+		Kind:         "silicon_ore",
+		Behavior:     "finite",
+		MaxAmount:    1000,
+		Remaining:    1000,
+		BaseYield:    8,
+		CurrentYield: 8,
+	}
+	ws.Grid[0][0].ResourceNodeID = "r1"
+	miner := &model.Building{
+		ID:       "miner",
+		Type:     model.BuildingTypeMiningMachine,
+		OwnerID:  "p1",
+		Position: model.Position{X: 0, Y: 0},
+		Runtime:  model.BuildingProfileFor(model.BuildingTypeMiningMachine, 1).Runtime,
+	}
+	model.InitBuildingStorage(miner)
+	miner.Runtime.Params.EnergyConsume = 0
+	if miner.Runtime.Functions.Energy != nil {
+		miner.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
+	ws.Buildings["miner"] = miner
+
+	depotDef, ok := model.BuildingDefinitionByID(model.BuildingTypeDepotMk1)
+	if !ok {
+		t.Fatal("missing depot_mk1 definition")
+	}
+
+	prev := player.Resources.Minerals
+	totalHauled := 0
+	for tick := 0; tick < 20; tick++ {
+		settleResources(ws)
+		got := player.Resources.Minerals
+		if got <= prev {
+			t.Fatalf("tick %d: minerals not strictly increasing: %d -> %d", tick, prev, got)
+		}
+		prev = got
+		// Simulate logistics hauling the ore out so the miner keeps producing.
+		miner.Storage.Tick()
+		hauled, _, err := miner.Storage.Provide(model.ItemSiliconOre, 1<<30)
+		if err != nil {
+			t.Fatalf("tick %d: haul silicon ore: %v", tick, err)
+		}
+		totalHauled += hauled
+	}
+
+	if totalHauled <= 0 {
+		t.Fatal("expected silicon ore to be mined and hauled")
+	}
+	if prev < depotDef.BuildCost.Minerals {
+		t.Fatalf("expected minerals >= depot_mk1 cost %d after mining, got %d", depotDef.BuildCost.Minerals, prev)
+	}
+}
+
+// Water/oil collectors feed the fluid item economy only; they must not
+// generate minerals (MineralsKickback defaults to 0).
+func TestFluidCollectorsDoNotYieldMinerals(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 1, 1)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Minerals: 20}, IsAlive: true}
+	ws.Resources["r1"] = &model.ResourceNodeState{
+		ID:           "r1",
+		Kind:         "water",
+		Behavior:     "renewable",
+		MaxAmount:    100,
+		Remaining:    100,
+		BaseYield:    5,
+		CurrentYield: 5,
+		RegenPerTick: 2,
+	}
+	ws.Grid[0][0].ResourceNodeID = "r1"
+	pump := &model.Building{
+		ID:       "pump",
+		Type:     model.BuildingTypeWaterPump,
+		OwnerID:  "p1",
+		Position: model.Position{X: 0, Y: 0},
+		Runtime:  model.BuildingProfileFor(model.BuildingTypeWaterPump, 1).Runtime,
+	}
+	model.InitBuildingStorage(pump)
+	pump.Runtime.Params.EnergyConsume = 0
+	if pump.Runtime.Functions.Energy != nil {
+		pump.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
+	ws.Buildings["pump"] = pump
+
+	for i := 0; i < 5; i++ {
+		settleResources(ws)
+	}
+	if got := ws.Players["p1"].Resources.Minerals; got != 20 {
+		t.Fatalf("expected water pump to yield no minerals, got %d", got)
+	}
+	if got := totalStorageItems(pump.Storage); got <= 0 {
+		t.Fatalf("expected water buffered in pump storage, got %d", got)
+	}
+}
+
 func TestMineExtractsFiniteResource(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 1, 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{}, IsAlive: true}

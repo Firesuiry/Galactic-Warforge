@@ -99,14 +99,54 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(mapped?.sfx).toBeUndefined();
   });
 
-  it('production_alert → warning，按 building 合并', () => {
+  it('production_alert → warning，按 building + alert_type 合并，文案本地化', () => {
     const mapped = toastFromGameEvent(gameEvent('production_alert', {
       alert: { alert_id: 'a1', building_id: 'b7', message: '电力不足' },
     }));
     expect(mapped?.toast.kind).toBe('warning');
-    expect(mapped?.toast.body).toBe('电力不足');
-    expect(mapped?.toast.mergeKey).toBe('production_alert:b7');
+    expect(mapped?.toast.body).toBe('b7：电力不足');
+    expect(mapped?.toast.mergeKey).toBe('production_alert:b7:unknown');
     expect(mapped?.sfx).toBeUndefined();
+  });
+
+  it('production_alert：建筑名与告警类型走 i18n，不用 server 英文原文', () => {
+    const mapped = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a2',
+        building_id: 'b-25',
+        building_type: 'wind_turbine',
+        alert_type: 'input_shortage',
+        message: 'building b-25 input shortage detected',
+      },
+    }));
+    expect(mapped?.toast.body).toBe('风力涡轮机 b-25：原料短缺');
+    expect(mapped?.toast.body).not.toContain('detected');
+    expect(mapped?.toast.mergeKey).toBe('production_alert:b-25:input_shortage');
+  });
+
+  it('production_alert：研究站（空 matrix_lab）吞吐类告警属噪音不弹，断电仍提醒', () => {
+    const noise = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a3',
+        building_id: 'b-25',
+        building_type: 'matrix_lab',
+        alert_type: 'throughput_drop',
+        message: 'building b-25 throughput drop detected',
+      },
+    }));
+    expect(noise).toBeNull();
+
+    const power = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a4',
+        building_id: 'b-25',
+        building_type: 'matrix_lab',
+        alert_type: 'power_shortage',
+        message: 'building b-25 power shortage',
+      },
+    }));
+    expect(power?.toast.kind).toBe('warning');
+    expect(power?.toast.body).toBe('矩阵研究站 b-25：电力不足');
   });
 
   it('rocket_launched → info（不配音）', () => {
@@ -223,6 +263,16 @@ describe('notifications store', () => {
     expect(state.unread).toBe(HISTORY_SIZE + 5);
     state.markAllRead();
     expect(useNotificationsStore.getState().unread).toBe(0);
+  });
+
+  it('dismissAll：全部标记 leaving（走出场动画后由组件移除）', () => {
+    const store = useNotificationsStore.getState();
+    store.push({ kind: 'info', title: 'a' }, 1000);
+    store.push({ kind: 'warning', title: 'b' }, 1001);
+    useNotificationsStore.getState().dismissAll();
+    const { toasts } = useNotificationsStore.getState();
+    expect(toasts.length).toBe(2);
+    expect(toasts.every((toast) => toast.leaving)).toBe(true);
   });
 });
 

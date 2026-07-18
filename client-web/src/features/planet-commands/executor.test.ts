@@ -128,4 +128,22 @@ describe("planet command executor", () => {
       authoritativeSource: "event",
     });
   });
+
+  it("本地提交失败时只向玩家展示翻译后的文案，原文留在 debugMessage", async () => {
+    const execute = vi.fn().mockRejectedValue(new Error("502 Bad Gateway"));
+
+    await submitPlanetCommand({
+      commandType: "produce",
+      planetId: "planet-1-1",
+      execute,
+    });
+
+    const entry = usePlanetCommandStore.getState().journal[0];
+    expect(entry).toMatchObject({
+      status: "failed",
+      authoritativeCode: "LOCAL_ERROR",
+      authoritativeMessage: "服务器连接异常，请稍后重试。",
+      debugMessage: "502 Bad Gateway",
+    });
+  });
 });

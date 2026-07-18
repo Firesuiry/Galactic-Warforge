@@ -67,7 +67,7 @@ describe('fixture fetch', () => {
       planet_id: 'planet-1-1',
       entity_kind: 'building',
       entity_id: 'assembler-1',
-      title: '组装机',
+      title: '制造台 Mk.I',
     });
     expect(payload.building?.id).toBe('assembler-1');
   });

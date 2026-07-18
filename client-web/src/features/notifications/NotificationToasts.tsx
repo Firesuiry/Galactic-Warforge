@@ -89,6 +89,7 @@ function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
 export function NotificationToasts() {
   const toasts = useNotificationsStore((state) => state.toasts);
   const sweep = useNotificationsStore((state) => state.sweep);
+  const dismissAll = useNotificationsStore((state) => state.dismissAll);
   const frozen = isNotificationsFrozen();
 
   useEffect(() => {
@@ -102,6 +103,15 @@ export function NotificationToasts() {
 
   return (
     <div className="toast-stack" aria-live="polite">
+      {toasts.length > 1 ? (
+        <button
+          className="toast-stack__dismiss-all"
+          type="button"
+          onClick={dismissAll}
+        >
+          全部忽略
+        </button>
+      ) : null}
       {toasts.map((toast) => (
         <ToastCard key={toast.id} toast={toast} frozen={frozen} />
       ))}

@@ -4,10 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { formatMineralInventory } from '@/features/mineral-summary';
+import { isResearchStationAlertNoise } from '@/features/production-alerts';
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import {
   translateAlertType,
+  translateBuildingType,
   translateEventType,
   translateTechId,
   translateUi,
@@ -60,7 +63,7 @@ export function OverviewPage() {
   if (error || !summaryQuery.data || !statsQuery.data) {
     return (
       <div className="panel error-banner" role="alert">
-        {error instanceof Error ? error.message : '总览数据加载失败'}
+        {error instanceof Error ? toPlayerFacingMessage(error.message) : '总览数据加载失败'}
       </div>
     );
   }
@@ -68,7 +71,9 @@ export function OverviewPage() {
   const summary = summaryQuery.data;
   const stats = statsQuery.data;
   const events = eventQuery.data?.events ?? [];
-  const alerts = alertQuery.data?.alerts ?? [];
+  const alerts = (alertQuery.data?.alerts ?? []).filter(
+    (alert) => !isResearchStationAlertNoise(alert),
+  );
   const currentPlayer = summary.players[session.playerId];
   const resources = currentPlayer?.resources;
   const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
@@ -106,13 +111,19 @@ export function OverviewPage() {
           <div className="campaign-board">
             <div className="campaign-board__headline">
               <span className="badge badge--ok">战役主板</span>
-              <strong>下一步优先处理：{recommendedAlert?.message ?? '继续推进产能与侦察'}</strong>
+              <strong>
+                下一步优先处理：
+                {recommendedAlert
+                  ? `${translateAlertType(recommendedAlert.alert_type)} · ${translateBuildingType(recommendedAlert.building_type)} ${recommendedAlert.building_id}`
+                  : '继续推进产能与侦察'}
+              </strong>
             </div>
             <div className="campaign-board__grid">
               <article className="campaign-card">
-                <span className="campaign-card__label">矿产库存</span>
-                <strong>{mineralSummary}</strong>
+                <span className="campaign-card__label">矿产</span>
+                <strong>矿 {formatNumber(resources?.minerals)}</strong>
                 <span>能量 {formatNumber(resources?.energy)}</span>
+                <span className="subtle-text">背包：{mineralSummary}</span>
               </article>
               <article className="campaign-card">
                 <span className="campaign-card__label">研究</span>
@@ -154,7 +165,11 @@ export function OverviewPage() {
                     {alerts.slice().reverse().map((alert) => (
                       <li key={alert.alert_id}>
                         <strong>[t{alert.tick}] {translateAlertType(alert.alert_type)}</strong>
-                        <span>{alert.message}</span>
+                        <span>
+                          {alert.building_type
+                            ? `${translateBuildingType(alert.building_type)} ${alert.building_id}`
+                            : alert.message}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -170,6 +185,10 @@ export function OverviewPage() {
             <dl className="planet-kv-list">
               <div>
                 <dt>矿产</dt>
+                <dd>矿 {formatNumber(resources?.minerals)}</dd>
+              </div>
+              <div>
+                <dt>矿石库存</dt>
                 <dd>{mineralSummary}</dd>
               </div>
               <div>

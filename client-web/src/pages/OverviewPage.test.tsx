@@ -79,7 +79,7 @@ describe('OverviewPage', () => {
               tick: 88,
               player_id: 'p1',
               building_id: 'assembler-1',
-              building_type: 'assembler',
+              building_type: 'assembling_machine_mk1',
               alert_type: 'power_low',
               severity: 'warning',
               message: '电力不足',
@@ -105,7 +105,9 @@ describe('OverviewPage', () => {
     renderApp(['/overview']);
 
     expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
-    expect(screen.getAllByText('铁矿 24 · 石矿 3 · 硅矿 8').length).toBeGreaterThan(0);
+    // 矿产卡主值是建设资金 resources.minerals；背包矿石库存降级为二级信息
+    expect(screen.getAllByText('矿 240').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/铁矿 24 · 石矿 3 · 硅矿 8/).length).toBeGreaterThan(0);
     expect(screen.queryByText('矿物 240')).not.toBeInTheDocument();
     expect(screen.getAllByText('基础能源学').length).toBeGreaterThan(0);
     // 情报面板默认折叠（断言范围限定在总览主面板，HUD Outliner 的警报展示不受影响）
@@ -116,6 +118,8 @@ describe('OverviewPage', () => {
     await user.click(screen.getByRole('button', { name: '情报' }));
 
     expect(await within(mainPanel).findByText('[t87] 实体已创建')).toBeInTheDocument();
-    expect(within(mainPanel).getByText('电力不足')).toBeInTheDocument();
+    // 告警文案本地化：建筑中文名 + 内部 ID，不再直接展示英文原文 message
+    expect(within(mainPanel).getByText('[t88] 电力不足')).toBeInTheDocument();
+    expect(within(mainPanel).getByText('制造台 Mk.I assembler-1')).toBeInTheDocument();
   });
 });

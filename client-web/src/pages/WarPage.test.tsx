@@ -743,7 +743,7 @@ describe('WarPage', () => {
     await user.click(screen.getByRole('button', { name: '校验蓝图' }));
 
     // 等本组回执落地再切组，避免「新回执自动落组」把 Tab 拉回去
-    await screen.findByText('当前动作未通过权威校验');
+    await screen.findByText('当前动作未通过服务器校验，请检查输入后重试。');
     await user.click(screen.getByRole('tab', { name: '军工' }));
     await user.selectOptions(screen.getByLabelText('部署蓝图'), 'fleet-adopted');
     await user.click(screen.getByRole('button', { name: '尝试部署' }));
@@ -1005,6 +1005,147 @@ describe('WarPage', () => {
         'fleet_attack',
         'fleet_disband',
       ]);
+    });
+  });
+
+  it('开局无自有蓝图时可基于公开预置蓝图派生变体', async () => {
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+
+    const commandPayloads: Array<Record<string, unknown>> = [];
+
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/state/summary')) {
+        return jsonResponse({
+          tick: 320,
+          active_planet_id: 'planet-1-1',
+          map_width: 128,
+          map_height: 128,
+          players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 880, energy: 460 }, inventory: {} } },
+        });
+      }
+      if (url.endsWith('/catalog')) {
+        return jsonResponse({
+          warfare: {
+            base_hulls: [{
+              id: 'corvette_hull',
+              name: '轻型护航舰体',
+              supported_domains: ['space'],
+              slots: [{ id: 'engine', category: 'engine' }, { id: 'weapon', category: 'weapon' }],
+            }],
+            components: [
+              { id: 'burner_drive', name: '燃烧驱动', category: 'engine', supported_domains: ['space'] },
+              { id: 'coilgun', name: '线圈炮', category: 'weapon', supported_domains: ['ground', 'space'] },
+            ],
+            public_blueprints: [{
+              id: 'corvette',
+              name: '标准护航舰',
+              domain: 'space',
+              source: 'preset',
+              base_hull_id: 'corvette_hull',
+              runtime_class: 'fleet',
+              production_mode: 'commission',
+            }],
+          },
+        });
+      }
+      if (url.endsWith('/world/warfare/blueprints')) {
+        return jsonResponse({ blueprints: [] });
+      }
+      if (url.endsWith('/world/warfare/industry')) {
+        return jsonResponse({
+          production_orders: [],
+          refit_orders: [],
+          deployment_hubs: [],
+          supply_nodes: [],
+        });
+      }
+      if (url.endsWith('/world/warfare/task-forces')) {
+        return jsonResponse({ task_forces: [] });
+      }
+      if (url.endsWith('/world/warfare/theaters')) {
+        return jsonResponse({ theaters: [] });
+      }
+      if (url.endsWith('/world/fleets')) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith('/world/planets/planet-1-1')) {
+        return jsonResponse({
+          planet_id: 'planet-1-1',
+          system_id: 'sys-1',
+          name: 'Gaia',
+          discovered: true,
+          kind: 'terrestrial',
+          map_width: 48,
+          map_height: 48,
+          tick: 320,
+        });
+      }
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return jsonResponse({
+          planet_id: 'planet-1-1',
+          system_id: 'sys-1',
+          map_width: 48,
+          map_height: 48,
+          tick: 320,
+          bounds: { x: 0, y: 0, width: 48, height: 48 },
+          buildings: {},
+        });
+      }
+      if (url.endsWith('/world/systems/sys-1')) {
+        return jsonResponse({
+          system_id: 'sys-1',
+          name: 'Helios',
+          discovered: true,
+          planets: [{ planet_id: 'planet-1-1', name: 'Gaia', discovered: true, kind: 'terrestrial' }],
+        });
+      }
+      if (url.endsWith('/world/systems/sys-1/runtime')) {
+        return jsonResponse({
+          system_id: 'sys-1',
+          discovered: true,
+          available: true,
+          planet_blockades: [],
+          landing_operations: [],
+          contacts: [],
+          battle_reports: [],
+        });
+      }
+      if (url.endsWith('/commands')) {
+        const request = init?.body ? JSON.parse(String(init.body)) : null;
+        const command = request?.commands?.[0];
+        commandPayloads.push(command);
+        return jsonResponse(createCommandResponse(`${command?.type} accepted`));
+      }
+      throw new Error(`unexpected url ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    renderApp(['/war']);
+
+    await screen.findByRole('heading', { name: '战争工作台' });
+    await user.click(screen.getByRole('button', { name: '工作台' }));
+
+    // 改型表单在开局（0 自有蓝图）也应可见，且默认选中公开预置父本
+    await screen.findByRole('heading', { name: '蓝图改型' });
+    expect(screen.getByRole('option', { name: /标准护航舰 \(corvette\)/ })).toBeTruthy();
+    expect(screen.getByText(/暂无自有蓝图/)).toBeTruthy();
+
+    await user.type(screen.getByLabelText('变体 ID'), 'corvette_verify');
+    await user.click(screen.getByRole('checkbox', { name: /weapon/ }));
+    await user.click(screen.getByRole('button', { name: '派生变体' }));
+
+    await waitFor(() => {
+      expect(commandPayloads).toHaveLength(1);
+    });
+    expect(commandPayloads[0]?.type).toBe('blueprint_variant');
+    expect(commandPayloads[0]?.payload).toMatchObject({
+      parent_blueprint_id: 'corvette',
+      blueprint_id: 'corvette_verify',
     });
   });
 });

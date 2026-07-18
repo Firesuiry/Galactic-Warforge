@@ -65,7 +65,7 @@ const statsByPlayer: Record<string, PlayerStatsSnapshot> = {
   p1: {
     player_id: 'p1',
     tick: 128,
-    production_stats: { total_output: 36, by_building_type: { mining_machine: 12, assembler: 24 }, by_item: { iron_ore: 18, gear: 18 }, efficiency: 0.91 },
+    production_stats: { total_output: 36, by_building_type: { mining_machine: 12, assembling_machine_mk1: 24 }, by_item: { iron_ore: 18, gear: 18 }, efficiency: 0.91 },
     energy_stats: { generation: 180, consumption: 146, storage: 220, current_stored: 168, shortage_ticks: 2 },
     logistics_stats: { throughput: 14, avg_distance: 18, avg_travel_time: 11, deliveries: 27 },
     combat_stats: { units_lost: 1, enemies_killed: 6, threat_level: 3, highest_threat: 4 },
@@ -392,7 +392,7 @@ const planets: Record<string, PlanetView> = {
     buildings: {
       'assembler-1': {
         id: 'assembler-1',
-        type: 'assembler',
+        type: 'assembling_machine_mk1',
         owner_id: 'p1',
         position: { x: 4, y: 2, z: 0 },
         hp: 160,
@@ -843,7 +843,7 @@ const catalog = {
   buildings: [
     {
       id: 'assembling_machine_mk1',
-      name: '装配台 Mk.I',
+      name: 'Assembling Machine Mk.I',
       category: 'production',
       subcategory: 'production',
       footprint: { width: 2, height: 2 },
@@ -854,7 +854,7 @@ const catalog = {
     },
     {
       id: 'mining_machine',
-      name: '采矿机',
+      name: 'Mining Machine',
       category: 'collect',
       subcategory: 'collect',
       footprint: { width: 1, height: 1 },
@@ -866,7 +866,7 @@ const catalog = {
     },
     {
       id: 'tesla_tower',
-      name: '特斯拉塔',
+      name: 'Tesla Tower',
       category: 'power_grid',
       subcategory: 'power_grid',
       footprint: { width: 1, height: 1 },
@@ -965,7 +965,7 @@ const events = [
     visibility_scope: 'p1',
     payload: {
       building_id: 'assembler-1',
-      building_type: 'assembler',
+      building_type: 'assembling_machine_mk1',
       prev_state: 'running',
       next_state: 'paused',
       reason: 'power_low',
@@ -982,7 +982,7 @@ const events = [
         tick: 125,
         player_id: 'p1',
         building_id: 'assembler-1',
-        building_type: 'assembler',
+        building_type: 'assembling_machine_mk1',
         alert_type: 'power_low',
         severity: 'warning',
         message: '装配线电力不足',
@@ -1019,7 +1019,7 @@ const alerts = [
     tick: 125,
     player_id: 'p1',
     building_id: 'assembler-1',
-    building_type: 'assembler',
+    building_type: 'assembling_machine_mk1',
     alert_type: 'power_low',
     severity: 'warning',
     message: '装配线电力不足',

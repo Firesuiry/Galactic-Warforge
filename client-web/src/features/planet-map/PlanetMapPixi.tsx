@@ -468,7 +468,8 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     if (!focusRequest) {
       return;
     }
-    const targetZoomIndex = overviewMode ? DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX : camera.zoomIndex;
+    const targetZoomIndex = focusRequest.zoomIndex
+      ?? (overviewMode ? DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX : camera.zoomIndex);
     const nextCamera = centerCameraOnTile(
       viewport,
       planet,

@@ -1654,8 +1654,10 @@ describe('AgentsPage', () => {
     expect(await screen.findByText('失败原因')).toBeInTheDocument();
     expect(screen.getByText('已执行动作')).toBeInTheDocument();
     expect(screen.getByText('1 动作')).toBeInTheDocument();
-    expect(screen.getByText(/provider_schema_invalid/)).toBeInTheDocument();
-    expect(screen.getByText('transfer_item requires buildingId')).toBeInTheDocument();
+    // 玩家视角：只展示网关给出的公开文案，不再暴露 errorCode / 原始错误
+    expect(screen.getByText('模型返回结构无效，请稍后重试。')).toBeInTheDocument();
+    expect(screen.queryByText(/provider_schema_invalid/)).not.toBeInTheDocument();
+    expect(screen.queryByText('transfer_item requires buildingId')).not.toBeInTheDocument();
     expect(
       screen.getByText('缺少目标建筑 ID，请明确研究站或装料建筑，例如 b-9。'),
     ).toBeInTheDocument();

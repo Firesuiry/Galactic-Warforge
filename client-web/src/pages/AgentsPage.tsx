@@ -22,6 +22,7 @@ import {
   updateSchedule,
 } from '@/features/agents/api';
 import { useConversationEvents, type ConversationStreamEvent } from '@/features/agents/use-agent-events';
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { isFixtureServerUrl } from '@/fixtures';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import type {
@@ -445,7 +446,7 @@ export function AgentsPage() {
     const error = healthQuery.error || conversationsQuery.error || agentsQuery.error || providersQuery.error || schedulesQuery.error || messagesQuery.error || turnsQuery.error;
     return (
       <div className="panel error-banner" role="alert">
-        {error instanceof Error ? error.message : '智能体协作台加载失败'}
+        {error instanceof Error ? toPlayerFacingMessage(error.message) : '智能体协作台加载失败'}
       </div>
     );
   }

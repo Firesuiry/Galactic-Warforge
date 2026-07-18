@@ -22,11 +22,13 @@ import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
+import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { formatMineralInventory } from "@/features/mineral-summary";
 import {
   extractAlertFromEvent,
   parseEnabledLayers,
+  resolveHomeTile,
   resolveSelectionFromQueryValue,
   getTechDisplayName,
 } from "@/features/planet-map/model";
@@ -38,6 +40,7 @@ import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
   getPlanetOverviewRequestStep,
   getPlanetZoomLevel,
+  PLANET_HOME_ZOOM_INDEX,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -151,6 +154,8 @@ export function PlanetPage() {
   );
   // 右侧工作台抽屉：默认收起为边缘把手；点选实体/新命令回执时自动滑出。
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // 左上信息片：可折叠成窄条，减少对地图的遮挡（折叠按钮单独恢复 pointer-events）。
+  const [titleChipCollapsed, setTitleChipCollapsed] = useState(false);
 
   const sceneQuery = useQuery({
     queryKey: [
@@ -299,6 +304,10 @@ export function PlanetPage() {
   useEffect(() => {
     if (selected) {
       setDrawerOpen(true);
+      // 点选建筑/单位时同步切到"选中对象" Tab，让本地存储等详情立刻可见
+      if (selected.kind === "building" || selected.kind === "unit") {
+        setActiveDetailPanel("selection");
+      }
     }
   }, [selected]);
 
@@ -346,6 +355,12 @@ export function PlanetPage() {
       if (Number.isFinite(focusX) && Number.isFinite(focusY)) {
         requestFocus({ x: Math.round(focusX), y: Math.round(focusY) });
       }
+    } else {
+      // 首次进入（无深链坐标）：相机直接聚焦玩家基地，避免全图漆黑找不到家。
+      const home = resolveHomeTile(sceneQuery.data, session.playerId);
+      if (home) {
+        requestFocus(home, PLANET_HOME_ZOOM_INDEX);
+      }
     }
 
     const sharedSelection = resolveSelectionFromQueryValue(
@@ -364,6 +379,7 @@ export function PlanetPage() {
     sceneQuery.data,
     requestFocus,
     searchParams,
+    session.playerId,
     setLayers,
     setSelected,
     setZoomIndex,
@@ -444,7 +460,7 @@ export function PlanetPage() {
   ) {
     return (
       <div className="panel error-banner" role="alert">
-        {error instanceof Error ? error.message : "行星数据加载失败"}
+        {error instanceof Error ? toPlayerFacingMessage(error.message) : "行星数据加载失败"}
       </div>
     );
   }
@@ -559,10 +575,26 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         />
-        {/* 悬浮标题片：行星名/类型/尺寸 + 资源芯片（原 page-hero 内容，HUD 化） */}
-        <div className="planet-title-chip">
+        {/* 悬浮标题片：行星名/类型/尺寸 + 资源芯片（原 page-hero 内容，HUD 化），可折叠 */}
+        <div
+          className={
+            titleChipCollapsed
+              ? "planet-title-chip planet-title-chip--collapsed"
+              : "planet-title-chip"
+          }
+        >
           <div className="planet-title-chip__head">
             <h1>{planet.name || planet.planet_id}</h1>
+            <button
+              aria-expanded={!titleChipCollapsed}
+              aria-label={titleChipCollapsed ? "展开行星信息" : "折叠行星信息"}
+              className="planet-title-chip__toggle"
+              onClick={() => setTitleChipCollapsed((collapsed) => !collapsed)}
+              title={titleChipCollapsed ? "展开行星信息" : "折叠行星信息"}
+              type="button"
+            >
+              <span aria-hidden="true">{titleChipCollapsed ? "▸" : "▾"}</span>
+            </button>
             <p className="subtle-text">
               <span className="tick-pulse" key={`hero-tick-${planet.tick}`}>
                 tick {planet.tick}
@@ -572,32 +604,44 @@ export function PlanetPage() {
               {planet.map_width} x {planet.map_height}
             </p>
           </div>
-          <div className="planet-title-chip__chips">
-            <div className="hero-chip">
-              <Icon iconKey="iron_ore" color="#c9a06a" size={18} />
-              <span>矿产 {mineralSummary}</span>
+          {titleChipCollapsed ? null : (
+            <div className="planet-title-chip__chips">
+              <div
+                className="hero-chip"
+                title={`建设资金（矿石）· 背包库存：${mineralSummary}`}
+              >
+                <Icon iconKey="iron_ore" color="#c9a06a" size={18} />
+                <span>矿产 {currentPlayer?.resources?.minerals ?? 0}</span>
+              </div>
+              <div className="hero-chip">
+                <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
+                <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
+              </div>
+              <div className="hero-chip">
+                <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
+                <span>
+                  电力{" "}
+                  {stats
+                    ? `${stats.energy_stats.generation}/${stats.energy_stats.consumption}`
+                    : "-"}
+                </span>
+              </div>
+              <div className="hero-chip">
+                <Icon iconKey="lab" color="#5fb0ff" size={18} />
+                <span>研究 {currentResearchName || "无"}</span>
+              </div>
             </div>
-            <div className="hero-chip">
-              <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
-              <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
-            </div>
-            <div className="hero-chip">
-              <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
-              <span>
-                电力{" "}
-                {stats
-                  ? `${stats.energy_stats.generation}/${stats.energy_stats.consumption}`
-                  : "-"}
-              </span>
-            </div>
-            <div className="hero-chip">
-              <Icon iconKey="lab" color="#5fb0ff" size={18} />
-              <span>研究 {currentResearchName || "无"}</span>
-            </div>
-          </div>
+          )}
         </div>
         <div className="planet-map-shell__overlay">
-          <PlanetSelectionBar catalog={catalog} planet={planet} />
+          <PlanetSelectionBar
+            catalog={catalog}
+            onShowDetail={() => {
+              setActiveDetailPanel("selection");
+              setDrawerOpen(true);
+            }}
+            planet={planet}
+          />
           <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} />
         </div>
         <PlanetMinimap

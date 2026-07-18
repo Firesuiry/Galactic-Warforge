@@ -5,8 +5,13 @@ import { useShallow } from "zustand/react/shallow";
 import type { PlanetNetworksView, PlanetRuntimeView } from "@shared/types";
 
 import type { PlanetRenderView } from "@/features/planet-map/model";
+import { resolveHomeTile } from "@/features/planet-map/model";
 import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
-import { usePlanetViewStore } from "@/features/planet-map/store";
+import {
+  PLANET_HOME_ZOOM_INDEX,
+  usePlanetViewStore,
+} from "@/features/planet-map/store";
+import { useSessionSnapshot } from "@/hooks/use-session";
 
 interface PlanetMapToolbarProps {
   networks?: PlanetNetworksView;
@@ -18,19 +23,22 @@ interface PlanetMapToolbarProps {
  * 左下悬浮工具条（V3 全屏布局）：默认一列小图标按钮，
  * ☰ 弹出浮层承载原左栏内容（12 图层勾选 + 缩放档位 + 场景摘要，组件原样复用）。
  * 缩放 ± 与档位按钮统一走 store 的 requestZoom（锚点 = 视口中心），渲染层补间由场景负责。
+ * ⌂ 语义为"回到基地"：居中到玩家基地并切到 32px/tile；找不到基地时退回重置视角。
  */
 export function PlanetMapToolbar({
   networks,
   planet,
   runtime,
 }: PlanetMapToolbarProps) {
-  const { camera, requestZoom, resetCamera } = usePlanetViewStore(
+  const { camera, requestZoom, requestFocus, resetCamera } = usePlanetViewStore(
     useShallow((state) => ({
       camera: state.camera,
       requestZoom: state.requestZoom,
+      requestFocus: state.requestFocus,
       resetCamera: state.resetCamera,
     })),
   );
+  const session = useSessionSnapshot();
   const [panelOpen, setPanelOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -46,6 +54,15 @@ export function PlanetMapToolbar({
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [panelOpen]);
+
+  const handleHome = () => {
+    const home = resolveHomeTile(planet, session.playerId);
+    if (home) {
+      requestFocus(home, PLANET_HOME_ZOOM_INDEX);
+    } else {
+      resetCamera();
+    }
+  };
 
   return (
     <div className="planet-map-toolbar" ref={rootRef}>
@@ -88,10 +105,10 @@ export function PlanetMapToolbar({
           <span aria-hidden="true">＋</span>
         </button>
         <button
-          aria-label="重置视角"
+          aria-label="回到基地"
           className="secondary-button planet-map-toolbar__button"
-          onClick={resetCamera}
-          title="重置视角"
+          onClick={handleHome}
+          title="回到基地"
           type="button"
         >
           <span aria-hidden="true">⌂</span>

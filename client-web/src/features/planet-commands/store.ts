@@ -33,6 +33,8 @@ export interface PlanetCommandJournalEntry {
   acceptedMessage: string;
   authoritativeCode?: string;
   authoritativeMessage?: string;
+  /** 原始服务端/网络错误文本，仅供调试，永不渲染给玩家。 */
+  debugMessage?: string;
   authoritativeSource?: CommandAuthoritativeSource;
   relatedEventIds: string[];
   focus?: CommandJournalFocus;

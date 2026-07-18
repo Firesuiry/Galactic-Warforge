@@ -1,5 +1,6 @@
 import type { CommandResponse, EventSnapshotResponse } from "@shared/types";
 
+import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import type { CommandJournalFocus } from "@/features/planet-commands/store";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 
@@ -63,7 +64,7 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
 
     return response;
   } catch (error) {
-    const message = error instanceof Error
+    const rawMessage = error instanceof Error
       ? error.message
       : `${input.commandType} failed`;
     usePlanetCommandStore.getState().addJournalEntry({
@@ -73,7 +74,8 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       status: "failed",
       acceptedMessage: `${input.commandType} 提交失败`,
       authoritativeCode: "LOCAL_ERROR",
-      authoritativeMessage: message,
+      authoritativeMessage: toPlayerFacingMessage(rawMessage),
+      debugMessage: rawMessage,
       authoritativeSource: "response",
       focus: input.focus,
       pendingRecovery: false,

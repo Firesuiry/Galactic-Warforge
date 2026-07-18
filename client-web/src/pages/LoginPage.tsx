@@ -7,6 +7,7 @@ import { createApiClient } from '@shared/api';
 import { DEFAULT_PLAYERS } from '@shared/config';
 import { normalizeServerUrl } from '@shared/utils';
 
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import {
   createFixtureFetch,
   createFixtureServerUrl,
@@ -55,7 +56,7 @@ function formatConnectionError(
     return `当前在线模式请填写 Web 入口地址（例如 ${currentWebOrigin}），不要直接填写游戏服务端端口（例如 18081 / 18082）。游戏服务端地址已由当前 Web 入口代理处理，浏览器直接访问会触发代理/CORS 失败。`;
   }
 
-  return rawMessage;
+  return toPlayerFacingMessage(rawMessage);
 }
 
 export function LoginPage() {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveBuildWorkflowView } from "@/features/planet-map/build-workflow";
+import {
+  assessBuildTiles,
+  deriveBuildWorkflowView,
+} from "@/features/planet-map/build-workflow";
 
 function createCatalog() {
   return {
@@ -173,7 +176,7 @@ describe("build workflow", () => {
       title: "电网已接入，但当前发电不足",
       suggestedAction: "build_power",
     });
-    expect(view.postBuildHints[0]?.detail).toContain("authoritative: under_power");
+    expect(view.postBuildHints[0]?.detail).toContain("电网发电量低于当前负载需求");
   });
 
   it("对目标地块给出地形与占用诊断，并为超距建造生成建议落点", () => {
@@ -233,5 +236,90 @@ describe("build workflow", () => {
       firstWaypoint: { x: 4, y: 1, z: 0 },
       waypoints: [{ x: 4, y: 1, z: 0 }],
     });
+  });
+});
+
+describe("采集建筑（requires_resource_node）资源格评估", () => {
+  const catalog = {
+    buildings: [
+      {
+        id: "mining_machine",
+        name: "采矿机",
+        buildable: true,
+        requires_resource_node: true,
+        footprint: { width: 1, height: 1 },
+      },
+      {
+        id: "wind_turbine",
+        name: "风力涡轮机",
+        buildable: true,
+        footprint: { width: 1, height: 1 },
+      },
+    ],
+  };
+
+  function createResourcePlanet() {
+    const planet = createPlanet();
+    planet.resources = [
+      {
+        id: "iron-1",
+        planet_id: "planet-1-1",
+        kind: "iron_ore",
+        behavior: "finite",
+        position: { x: 3, y: 2, z: 0 },
+        remaining: 900,
+        current_yield: 3,
+      },
+    ];
+    return planet;
+  }
+
+  it("采矿机可放置在资源格上（资源格不再视为阻挡）", () => {
+    const assessment = assessBuildTiles(
+      catalog as never,
+      "mining_machine",
+      createResourcePlanet() as never,
+      { x: 3, y: 2, z: 0 },
+    );
+
+    expect(assessment?.buildable).toBe(true);
+    expect(assessment?.blockedTiles).toEqual([]);
+  });
+
+  it("采矿机放在空地视为不可建造，原因 missing_resource", () => {
+    const assessment = assessBuildTiles(
+      catalog as never,
+      "mining_machine",
+      createResourcePlanet() as never,
+      { x: 4, y: 4, z: 0 },
+    );
+
+    expect(assessment?.buildable).toBe(false);
+    expect(assessment?.blockedTiles).toEqual([
+      expect.objectContaining({
+        x: 4,
+        y: 4,
+        reason: "missing_resource",
+      }),
+    ]);
+  });
+
+  it("非采集建筑仍不可压资源格", () => {
+    const assessment = assessBuildTiles(
+      catalog as never,
+      "wind_turbine",
+      createResourcePlanet() as never,
+      { x: 3, y: 2, z: 0 },
+    );
+
+    expect(assessment?.buildable).toBe(false);
+    expect(assessment?.blockedTiles).toEqual([
+      expect.objectContaining({
+        x: 3,
+        y: 2,
+        reason: "resource",
+        resourceId: "iron-1",
+      }),
+    ]);
   });
 });

@@ -6,6 +6,7 @@ import {
   getBuildingDisplayName,
   mergeRecentEvents,
   resolveFocusCameraAxisOffset,
+  resolveHomeTile,
   resolveSelectionAtTile,
   summarizeEvent,
 } from '@/features/planet-map/model';
@@ -78,6 +79,18 @@ function createPlanetFixture(): PlanetView {
 }
 
 describe('planet map model helpers', () => {
+  it('resolveHomeTile 优先返回自有建筑，其次自有单位，都没有返回 null', () => {
+    const planet = createPlanetFixture();
+
+    expect(resolveHomeTile(planet, 'p1')).toEqual({ x: 1, y: 1 });
+
+    const noBuilding = { ...planet, buildings: {} };
+    expect(resolveHomeTile(noBuilding, 'p1')).toEqual({ x: 0, y: 3 });
+
+    expect(resolveHomeTile(planet, 'p2')).toBeNull();
+    expect(resolveHomeTile(noBuilding, 'p2')).toBeNull();
+  });
+
   it('按建筑、单位、资源优先级解析地块选中对象', () => {
     const planet = createPlanetFixture();
 

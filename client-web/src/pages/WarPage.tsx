@@ -11,6 +11,7 @@ import { RefitForm } from '@/features/war/components/forms/RefitForm';
 import { TaskForceForm } from '@/features/war/components/forms/TaskForceForm';
 import { TheaterForm } from '@/features/war/components/forms/TheaterForm';
 import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { useWarRealtime } from '@/features/war/hooks/use-war-realtime';
 import type { WarCommandHint } from '@/features/war/error-hints';
 import {
@@ -355,7 +356,7 @@ export function WarPage() {
   ) {
     return (
       <div className="panel error-banner" role="alert">
-        {error instanceof Error ? error.message : '战争工作台数据加载失败'}
+        {error instanceof Error ? toPlayerFacingMessage(error.message) : '战争工作台数据加载失败'}
       </div>
     );
   }
@@ -594,6 +595,11 @@ export function WarPage() {
                     </option>
                   ))}
                 </select>
+                {blueprints.length === 0 ? (
+                  <span className="subtle-text">
+                    暂无自有蓝图，可在下方「蓝图改型」里基于公开预置蓝图派生变体。
+                  </span>
+                ) : null}
               </label>
             </div>
           </div>
@@ -637,6 +643,9 @@ export function WarPage() {
               <button className="primary-link war-button" type="button" onClick={handleCreateBlueprint}>
                 创建蓝图
               </button>
+              <p className="subtle-text">
+                也可以跳过新建，直接在下方「蓝图改型」里基于公开预置蓝图派生变体。
+              </p>
             </article>
 
             <article className="war-card">

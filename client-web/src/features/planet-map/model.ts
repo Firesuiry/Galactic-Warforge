@@ -157,6 +157,26 @@ export function getResourceList(planet: PlanetRenderView) {
   );
 }
 
+/**
+ * 玩家"家"的位置：优先第一个自有建筑（基地），没有建筑时退到第一个自有单位。
+ * 用于首次进入行星页的相机定位与 ⌂（回到基地）。
+ */
+export function resolveHomeTile(
+  planet: PlanetRenderView,
+  playerId: string,
+): TilePoint | null {
+  const building = getBuildingList(planet).find(
+    (candidate) => candidate.owner_id === playerId,
+  );
+  if (building) {
+    return toTilePoint(building.position);
+  }
+  const unit = getUnitList(planet).find(
+    (candidate) => candidate.owner_id === playerId,
+  );
+  return unit ? toTilePoint(unit.position) : null;
+}
+
 export function getBuildingFootprint(building: Building) {
   const footprint = building.runtime?.params?.footprint;
   return {

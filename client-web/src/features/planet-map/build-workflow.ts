@@ -63,7 +63,7 @@ export interface BuildBlockedTile {
   x: number;
   y: number;
   terrain: string;
-  reason: "terrain" | "building" | "resource";
+  reason: "terrain" | "building" | "resource" | "missing_resource";
   buildingId?: string;
   resourceId?: string;
 }
@@ -204,17 +204,6 @@ function findBlockingResource(
   });
 }
 
-function getCatalogFootprint(
-  catalog: CatalogView | undefined,
-  buildingType?: string,
-) {
-  const entry = catalog?.buildings?.find((candidate) => candidate.id === buildingType);
-  return {
-    width: Math.max(1, entry?.footprint?.width ?? 1),
-    height: Math.max(1, entry?.footprint?.height ?? 1),
-  };
-}
-
 function buildTileAssessment(input: {
   catalog?: CatalogView;
   buildingType?: string;
@@ -225,7 +214,16 @@ function buildTileAssessment(input: {
     return undefined;
   }
 
-  const footprint = getCatalogFootprint(input.catalog, input.buildingType);
+  const entry = input.catalog?.buildings?.find(
+    (candidate) => candidate.id === input.buildingType,
+  );
+  const footprint = {
+    width: Math.max(1, entry?.footprint?.width ?? 1),
+    height: Math.max(1, entry?.footprint?.height ?? 1),
+  };
+  // 采集建筑（requires_resource_node）必须压在资源点上，与服务端校验对齐：
+  // 资源格不算阻挡，但锚点格必须命中资源点，否则本地拦截。
+  const requiresResourceNode = entry?.requires_resource_node === true;
   const blockedTiles: BuildBlockedTile[] = [];
   const resources = getResourceList(input.planet);
 
@@ -251,7 +249,7 @@ function buildTileAssessment(input: {
           buildingId: blockingBuilding.id,
         });
       }
-      if (blockingResource) {
+      if (blockingResource && !requiresResourceNode) {
         blockedTiles.push({
           x,
           y,
@@ -268,6 +266,21 @@ function buildTileAssessment(input: {
     input.selectedPosition.x,
     input.selectedPosition.y,
   );
+  if (
+    requiresResourceNode
+    && !findBlockingResource(
+      resources,
+      input.selectedPosition.x,
+      input.selectedPosition.y,
+    )
+  ) {
+    blockedTiles.push({
+      x: input.selectedPosition.x,
+      y: input.selectedPosition.y,
+      terrain: primaryTerrain,
+      reason: "missing_resource",
+    });
+  }
   const blockingBuildingId = blockedTiles.find(
     (tile) => tile.reason === "building",
   )?.buildingId;
@@ -380,7 +393,7 @@ function buildPostBuildHints(input: {
       {
         tone: "info",
         title: journalHint,
-        detail: "authoritative: journal",
+        detail: "来自服务器命令回执。",
       } satisfies PlanetCommandHint,
     ];
   }

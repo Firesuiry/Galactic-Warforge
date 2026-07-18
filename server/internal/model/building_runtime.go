@@ -129,6 +129,11 @@ type ProductionModule struct {
 type CollectModule struct {
 	ResourceKind string `json:"resource_kind,omitempty" yaml:"resource_kind,omitempty"`
 	YieldPerTick int    `json:"yield_per_tick" yaml:"yield_per_tick"`
+	// MineralsKickback is the amount of minerals credited to the owner's pool
+	// per unit of mined resource stored in the building's local storage.
+	// It keeps the minerals-based construction economy funded while the
+	// mined items themselves flow into the item/logistics economy.
+	MineralsKickback float64 `json:"minerals_kickback,omitempty" yaml:"minerals_kickback,omitempty"`
 }
 
 // OrbitalModule handles orbital collection outputs per tick.
@@ -666,7 +671,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Collect: &CollectModule{YieldPerTick: 8},
+			Collect: &CollectModule{YieldPerTick: 8, MineralsKickback: 1.0},
 			Storage: &StorageModule{Capacity: 48, Slots: 2, Buffer: 12, InputPriority: 1, OutputPriority: 2},
 			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 		},
@@ -684,7 +689,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Collect: &CollectModule{YieldPerTick: 16},
+			Collect: &CollectModule{YieldPerTick: 16, MineralsKickback: 0.5},
 			Storage: &StorageModule{Capacity: 96, Slots: 3, Buffer: 24, InputPriority: 1, OutputPriority: 2},
 			Energy:  &modelpower.EnergyModule{ConsumePerTick: 6},
 		},

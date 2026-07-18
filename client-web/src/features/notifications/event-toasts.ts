@@ -16,7 +16,8 @@ import type { GameEventDetail } from '@shared/types';
 import type { SoundName } from '@/engine/audio';
 import { isBuildingCompletionEvent } from '@/features/audio/planet-audio';
 import type { ToastInput } from '@/features/notifications/store';
-import { translateBuildingType, translateTechId } from '@/i18n/translate';
+import { isResearchStationAlertNoise } from '@/features/production-alerts';
+import { translateAlertType, translateBuildingType, translateTechId } from '@/i18n/translate';
 
 export interface EventToast {
   toast: ToastInput;
@@ -134,15 +135,27 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
     }
     case 'production_alert': {
       const alert = asRecord(payload.alert);
-      const message = asString(alert?.message);
+      const alertType = asString(alert?.alert_type);
+      const buildingType = asString(alert?.building_type);
       const buildingId = asString(alert?.building_id) || asString(payload.building_id);
+      // 研究模式（无配方）的 matrix_lab / self_evolution_lab 是合法开局状态，
+      // 其吞吐类告警属噪音，不弹 toast（见 production-alerts.ts）
+      if (isResearchStationAlertNoise({ building_type: buildingType, alert_type: alertType })) {
+        return null;
+      }
+      // 文案本地化：建筑名 + 告警类型，不使用 server 的英文原文 message
+      const issue = translateAlertType(alertType, asString(alert?.message) || '产线告警');
+      const buildingLabel = buildingType
+        ? `${translateBuildingType(buildingType)}${buildingId ? ` ${shortId(buildingId)}` : ''}`
+        : (buildingId ? shortId(buildingId) : '');
       return {
         toast: {
           kind: 'warning',
           title: '⚠ 产线告警',
-          body: message || (buildingId ? shortId(buildingId) : undefined),
+          body: [buildingLabel, issue].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
-          mergeKey: `production_alert:${buildingId || 'unknown'}`,
+          // 同建筑同原因合并计数，避免刷屏
+          mergeKey: `production_alert:${buildingId || 'unknown'}:${alertType || 'unknown'}`,
         },
       };
     }

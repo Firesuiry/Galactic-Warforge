@@ -931,8 +931,10 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "行星地图" })).toBeInTheDocument();
+    // hero 矿产位显示建设资金 resources.minerals（背包矿石库存收进 title 提示）
+    expect(screen.getAllByText("矿产 240").length).toBeGreaterThan(0);
     expect(
-      screen.getAllByText("矿产 铁矿 24 · 石矿 3 · 硅矿 8").length,
+      screen.getAllByTitle("建设资金（矿石）· 背包库存：铁矿 24 · 石矿 3 · 硅矿 8").length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("资源 240 / 140")).not.toBeInTheDocument();
 
@@ -1891,7 +1893,7 @@ describe("PlanetPage", () => {
         if (url.endsWith("/catalog")) {
           return Promise.resolve(jsonResponse({
             ...createCatalogPayload(),
-            world_units: [{ id: "combat_drone", name: "战斗无人机", domain: "ground_unit", runtime_class: "squad", public: true, production_mode: "produce", deploy_command: "produce" }],
+            world_units: [{ id: "combat_drone", name: "战斗无人机", domain: "ground_unit", runtime_class: "squad", public: true, production_mode: "world_produce" }],
           }));
         }
         if (url.includes("/events/snapshot") || url.includes("/alerts/production/snapshot")) {

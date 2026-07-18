@@ -116,7 +116,7 @@ function formatTurnFailure(turn: ConversationTurnView) {
     return '智能体在最大步数内仍未完成这轮任务。';
   }
 
-  return `${turn.errorCode ? `${turn.errorCode}: ` : ''}${turn.errorMessage ?? ''}`;
+  return turn.errorMessage ?? '这轮对话没有成功，请稍后重试。';
 }
 
 export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
@@ -355,12 +355,6 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
                           <div>
                             <div className="section-title">失败原因</div>
                             <p>{formatTurnFailure(turn)}</p>
-                            {turn.rawErrorMessage ? (
-                              <>
-                                <div className="section-title">真实错误</div>
-                                <p>{turn.rawErrorMessage}</p>
-                              </>
-                            ) : null}
                             {turn.errorHint ? (
                               <>
                                 <div className="section-title">建议处理</div>

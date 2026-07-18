@@ -2659,6 +2659,44 @@ a {
   font-size: 0.78rem;
 }
 
+/* 折叠按钮：父容器 pointer-events:none，按钮单独恢复可点 */
+.planet-title-chip__head {
+  position: relative;
+  padding-right: 26px;
+}
+
+.planet-title-chip__toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(16, 26, 46, 0.8);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.planet-title-chip__toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* 折叠态：只剩一条窄 bar（行星名 + tick），不遮地图 */
+.planet-title-chip--collapsed {
+  gap: 0;
+  padding: 6px 12px;
+}
+
+.planet-title-chip--collapsed .planet-title-chip__head p {
+  margin-top: 0;
+}
+
 .planet-title-chip__chips {
   display: flex;
   flex-wrap: wrap;
@@ -3652,6 +3690,15 @@ a {
   cursor: not-allowed;
 }
 
+.planet-build-card--unaffordable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.planet-build-card--unaffordable .planet-build-card__cost {
+  color: var(--danger, #ff6b6b);
+}
+
 .planet-build-card__name {
   font-size: 0.72rem;
   white-space: nowrap;
@@ -3725,6 +3772,23 @@ a {
   gap: 8px;
   width: min(320px, calc(100vw - 32px));
   pointer-events: none;
+}
+
+.toast-stack__dismiss-all {
+  align-self: flex-end;
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(10, 18, 34, 0.92);
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.toast-stack__dismiss-all:hover {
+  color: var(--text);
+  border-color: var(--border-glow);
 }
 
 .toast {

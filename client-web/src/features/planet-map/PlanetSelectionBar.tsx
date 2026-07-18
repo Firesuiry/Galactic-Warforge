@@ -3,7 +3,7 @@
  * 建筑：升级/拆除；单位：移动/攻击（进入地图点选模式）；地块/资源：只读信息。
  */
 
-import type { CatalogView, CommandResponse } from '@shared/types';
+import type { Building, CatalogView, CommandResponse } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
@@ -11,6 +11,7 @@ import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
 } from '@/features/planet-commands/store';
 import {
+  formatItemInventorySummary,
   getBuildingDisplayName,
   type PlanetRenderView,
 } from '@/features/planet-map/model';
@@ -21,10 +22,37 @@ import { translateBuildingState, translateUnitType } from '@/i18n/translate';
 
 interface PlanetSelectionBarProps {
   catalog?: CatalogView;
+  /** "详情"入口：切到侧栏"选中对象"页签展示完整建筑详情。 */
+  onShowDetail?: () => void;
   planet: PlanetRenderView;
 }
 
-export function PlanetSelectionBar({ catalog, planet }: PlanetSelectionBarProps) {
+/** 建筑本地存储摘要，如 "硅矿 12 · 容量 12/20"；无存储数据时返回 null。 */
+function formatBuildingStorageSummary(
+  catalog: CatalogView | undefined,
+  building: Building,
+): string | null {
+  const inventory = building.storage?.inventory;
+  const hasItems = Object.values(inventory ?? {}).some((amount) => amount !== 0);
+  const capacity =
+    building.storage?.capacity ?? building.runtime?.functions?.storage?.capacity;
+  if (!hasItems && capacity === undefined) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (hasItems) {
+    parts.push(`库存 ${formatItemInventorySummary(catalog, inventory)}`);
+  } else {
+    parts.push('库存空');
+  }
+  if (capacity !== undefined) {
+    const total = Object.values(inventory ?? {}).reduce((sum, amount) => sum + amount, 0);
+    parts.push(`容量 ${total}/${capacity}`);
+  }
+  return parts.join(' · ');
+}
+
+export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSelectionBarProps) {
   const client = useApiClient();
   const session = useSessionSnapshot();
   const selected = usePlanetViewStore((state) => state.selected);
@@ -57,6 +85,7 @@ export function PlanetSelectionBar({ catalog, planet }: PlanetSelectionBarProps)
     }
     const name = getBuildingDisplayName(catalog, building.type);
     const ownBuilding = building.owner_id === session.playerId;
+    const storageSummary = formatBuildingStorageSummary(catalog, building);
     return (
       <div className="planet-selection-bar" data-testid="planet-selection-bar">
         <Icon iconKey={building.type} size={20} />
@@ -65,9 +94,21 @@ export function PlanetSelectionBar({ catalog, planet }: PlanetSelectionBarProps)
           <span className="planet-selection-bar__meta">
             ({building.position.x}, {building.position.y}) · {translateBuildingState(building.runtime?.state)}
           </span>
+          {storageSummary ? (
+            <span className="planet-selection-bar__meta">{storageSummary}</span>
+          ) : null}
         </div>
         {ownBuilding ? (
           <div className="planet-selection-bar__actions">
+            {onShowDetail ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={onShowDetail}
+              >
+                详情
+              </button>
+            ) : null}
             <button
               className="secondary-button"
               type="button"

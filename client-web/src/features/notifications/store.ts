@@ -64,6 +64,8 @@ interface NotificationsActions {
   resume: (id: number, now?: number) => void;
   /** 手动关闭（标记 leaving，走出场动画）。 */
   dismiss: (id: number) => void;
+  /** 全部忽略：当前栈内所有 toast 标记 leaving（走出场动画）。 */
+  dismissAll: () => void;
   /** 真正移除（出场动画结束后由组件调用）。 */
   remove: (id: number) => void;
   /** 清空未读（打开历史面板时）。 */
@@ -194,6 +196,12 @@ export const useNotificationsStore = create<NotificationsStore>()((set, get) => 
       toasts: get().toasts.map(
         (toast) => (toast.id === id ? { ...toast, leaving: true } : toast),
       ),
+    });
+  },
+
+  dismissAll: () => {
+    set({
+      toasts: get().toasts.map((toast) => ({ ...toast, leaving: true })),
     });
   },
 

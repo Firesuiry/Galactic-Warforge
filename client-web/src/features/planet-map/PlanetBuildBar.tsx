@@ -51,6 +51,8 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
 
   const activeBuildingType = interactionMode.kind === 'build' ? interactionMode.buildingType : null;
   const buildMode = interactionMode.kind === 'build';
+  // 建设资金余额：resources 缺失时视为"未知"，不做置灰（避免旧快照误伤）。
+  const mineralsBalance = summary?.players?.[session.playerId]?.resources?.minerals;
 
   const visibleEntries = [
     ...workflow.catalog.recommended,
@@ -69,13 +71,17 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
           const locked = entry.visibility === 'locked' || entry.visibility === 'debugOnly';
           const active = entry.id === activeBuildingType;
           const cost = formatCost(entry);
+          const mineralCost = entry.build_cost?.minerals ?? 0;
+          const unaffordable =
+            !locked && mineralsBalance !== undefined && mineralsBalance < mineralCost;
           return (
             <button
               key={entry.id}
-              className={`planet-build-card${active ? ' planet-build-card--active' : ''}${locked ? ' planet-build-card--locked' : ''}`}
+              className={`planet-build-card${active ? ' planet-build-card--active' : ''}${locked ? ' planet-build-card--locked' : ''}${unaffordable ? ' planet-build-card--unaffordable' : ''}`}
+              data-building-id={entry.id}
               type="button"
-              disabled={locked}
-              title={`${translateBuildingType(entry.id, entry.name)}${cost ? ` · ${cost}` : ''}${locked ? ' · 未解锁' : ''}`}
+              disabled={locked || unaffordable}
+              title={`${translateBuildingType(entry.id, entry.name)}${cost ? ` · ${cost}` : ''}${locked ? ' · 未解锁' : ''}${unaffordable ? ` · 矿不足：需要 ${mineralCost} / 现有 ${mineralsBalance}` : ''}`}
               onClick={() => {
                 if (active) {
                   exitInteractionMode();

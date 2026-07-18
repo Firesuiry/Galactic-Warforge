@@ -88,6 +88,8 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
 ];
 export const DEFAULT_PLANET_ZOOM_INDEX = 6;
 export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;
+/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[8] = 32px/tile，首次进入/⌂ 聚焦基地时使用。 */
+export const PLANET_HOME_ZOOM_INDEX = 8;
 /** scene 档缺省 tile 边长（px/tile），与默认缩放档一致。 */
 export const DEFAULT_PLANET_SCENE_TILE_SIZE = 8;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
@@ -227,6 +229,8 @@ export interface PlanetCameraState {
 interface FocusRequest {
   nonce: number;
   position: TilePoint;
+  /** 聚焦时一并切到的缩放档（如"回家"用 32px/tile）；缺省保持当前档。 */
+  zoomIndex?: number;
 }
 
 /**
@@ -280,7 +284,7 @@ interface PlanetViewActions {
   hydrateRecentAlerts: (alerts: AlertEntry[]) => void;
   appendRecentAlert: (alert: AlertEntry) => void;
   toggleDebugOpen: () => void;
-  requestFocus: (position: TilePoint) => void;
+  requestFocus: (position: TilePoint, zoomIndex?: number) => void;
   consumeFocusRequest: (nonce: number) => void;
   /** 请求切到指定缩放档（anchor=null 时以视口中心为锚）。 */
   requestZoom: (zoomIndex: number, anchor?: TilePoint | null) => void;
@@ -449,11 +453,19 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
       debugOpen: !state.debugOpen,
     }));
   },
-  requestFocus: (position) => {
+  requestFocus: (position, zoomIndex) => {
     set(() => ({
       focusRequest: {
         nonce: Date.now(),
         position,
+        ...(zoomIndex === undefined
+          ? {}
+          : {
+            zoomIndex: Math.min(
+              Math.max(zoomIndex, 0),
+              PLANET_ZOOM_LEVELS.length - 1,
+            ),
+          }),
       },
     }));
   },

@@ -131,4 +131,49 @@ describe('PlanetSelectionBar', () => {
     const { container } = render(<PlanetSelectionBar catalog={catalog} planet={makePlanet()} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('选中带本地存储的建筑：显示库存摘要与容量', () => {
+    const planet = makePlanet();
+    planet.buildings = {
+      'b-mine': {
+        id: 'b-mine',
+        type: 'mining_machine',
+        owner_id: 'p1',
+        position: { x: 3, y: 3, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 3,
+        runtime: {
+          state: 'running',
+          functions: { storage: { capacity: 20 } },
+        },
+        storage: { inventory: { silicon_ore: 12 } },
+      } as never,
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: 'building',
+      id: 'b-mine',
+      position: { x: 3, y: 3, z: 0 },
+    });
+    render(<PlanetSelectionBar catalog={catalog} planet={planet} />);
+
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('采矿机');
+    expect(bar).toHaveTextContent('库存 硅矿 12 · 容量 12/20');
+  });
+
+  it('己方建筑提供"详情"入口并回调 onShowDetail', async () => {
+    const user = userEvent.setup();
+    const onShowDetail = vi.fn();
+    usePlanetViewStore.getState().setSelected({
+      kind: 'building',
+      id: 'b-1',
+      position: { x: 2, y: 2, z: 0 },
+    });
+    render(<PlanetSelectionBar catalog={catalog} onShowDetail={onShowDetail} planet={makePlanet()} />);
+
+    await user.click(screen.getByRole('button', { name: '详情' }));
+    expect(onShowDetail).toHaveBeenCalledTimes(1);
+  });
 });

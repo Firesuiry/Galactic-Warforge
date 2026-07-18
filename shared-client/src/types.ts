@@ -153,6 +153,9 @@ export interface Building {
   vision_range: number;
   runtime: BuildingRuntime;
   storage?: {
+    capacity?: number;
+    slots?: number;
+    buffer_capacity?: number;
     inventory?: ItemInventory;
     input_buffer?: ItemInventory;
     output_buffer?: ItemInventory;

@@ -1,3 +1,5 @@
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
+
 export type WarHintTone = 'success' | 'warning' | 'error';
 
 export interface WarCommandHint {
@@ -20,7 +22,6 @@ export function resolveWarCommandHint(message?: string | null): WarCommandHint |
     return {
       tone: 'error',
       title: '当前部署枢纽不支持该蓝图',
-      detail: `authoritative: ${raw}`,
     };
   }
 
@@ -28,7 +29,6 @@ export function resolveWarCommandHint(message?: string | null): WarCommandHint |
     return {
       tone: 'error',
       title: '当前任务群缺少登陆运力',
-      detail: `authoritative: ${raw}`,
     };
   }
 
@@ -36,7 +36,6 @@ export function resolveWarCommandHint(message?: string | null): WarCommandHint |
     return {
       tone: 'error',
       title: '当前任务群没有可用于封锁的舰队成员',
-      detail: `authoritative: ${raw}`,
     };
   }
 
@@ -44,21 +43,19 @@ export function resolveWarCommandHint(message?: string | null): WarCommandHint |
     return {
       tone: 'error',
       title: '任务群部署星系与目标封锁星系不一致',
-      detail: `authoritative: ${raw}`,
     };
   }
 
   if (includes(raw, 'invalid')) {
     return {
       tone: 'warning',
-      title: '当前动作未通过权威校验',
-      detail: `authoritative: ${raw}`,
+      title: '当前动作未通过服务器校验，请检查输入后重试。',
     };
   }
 
   return {
     tone: 'warning',
-    title: raw,
+    title: toPlayerFacingMessage(raw),
   };
 }
 

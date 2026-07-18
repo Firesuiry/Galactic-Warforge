@@ -29,6 +29,7 @@ import {
   getBuildingDisplayName,
   getFogState,
   getItemDisplayName,
+  getRecipeDisplayName,
   getResourceList,
   getTerrainTile,
   getViewportTileBounds,
@@ -36,6 +37,7 @@ import {
   isLogisticsStationBuildingType,
   listLogisticsStationSettings,
   PLANET_LAYER_LABELS,
+  resolveHomeTile,
   resolveSelectionFromAlert,
   resolveSelectionFromEvent,
   selectionEntityId,
@@ -46,6 +48,7 @@ import {
 } from "@/features/planet-map/model";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
+import { isResearchStationAlertNoise } from "@/features/production-alerts";
 import {
   translateBuildingState,
   translateEventType,
@@ -58,9 +61,11 @@ import {
   getPlanetRenderTileSize,
   getPlanetZoomScale,
   getPlanetZoomStatusLabel,
+  PLANET_HOME_ZOOM_INDEX,
   PLANET_ZOOM_LEVELS,
   usePlanetViewStore,
 } from "@/features/planet-map/store";
+import { useSessionSnapshot } from "@/hooks/use-session";
 import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 
 function formatTimestamp(timestamp: number | null) {
@@ -108,12 +113,105 @@ function useNewItemIds<T>(items: readonly T[], getId: (item: T) => string): Set<
   return newIds;
 }
 
+/** 库存总量达到容量的该比例即提示"存储将满"。 */
+const STORAGE_NEAR_FULL_RATIO = 0.9;
+
+function translateJobType(jobType: string) {
+  return jobType === "upgrade" ? "升级" : jobType === "demolish" ? "拆除" : jobType;
+}
+
+/**
+ * 选中建筑的"库存与任务"区：结构化展示本地存储（物品/数量/容量）、
+ * 输入/输出缓存、生产配方与剩余 tick、当前任务；积压将满时给出警示。
+ */
+function BuildingStorageSection({
+  building,
+  catalog,
+}: {
+  building: Building;
+  catalog?: CatalogView;
+}) {
+  const inventory = building.storage?.inventory;
+  const inventorySummary = formatItemInventorySummary(catalog, inventory);
+  const totalStored = Object.values(inventory ?? {}).reduce(
+    (sum, amount) => sum + amount,
+    0,
+  );
+  const capacity =
+    building.storage?.capacity ?? building.runtime?.functions?.storage?.capacity;
+  const nearFull =
+    capacity !== undefined &&
+    capacity > 0 &&
+    totalStored >= capacity * STORAGE_NEAR_FULL_RATIO;
+  const collect = building.runtime?.functions?.collect;
+  const production = building.production;
+  const job = building.job;
+
+  return (
+    <section className="planet-side-section">
+      <div className="section-title">库存与任务</div>
+      <dl className="planet-kv-list">
+        <div>
+          <dt>本地存储</dt>
+          <dd>
+            {inventorySummary}
+            {capacity !== undefined ? `（${totalStored}/${capacity}）` : ""}
+          </dd>
+        </div>
+        {nearFull ? (
+          <div className="planet-kv-list__warning">
+            <dt>存储警示</dt>
+            <dd>存储将满，请及时转运或扩容</dd>
+          </div>
+        ) : null}
+        {building.storage?.input_buffer ? (
+          <div>
+            <dt>输入缓存</dt>
+            <dd>{formatItemInventorySummary(catalog, building.storage.input_buffer)}</dd>
+          </div>
+        ) : null}
+        {building.storage?.output_buffer ? (
+          <div>
+            <dt>输出缓存</dt>
+            <dd>{formatItemInventorySummary(catalog, building.storage.output_buffer)}</dd>
+          </div>
+        ) : null}
+        {collect ? (
+          <div>
+            <dt>产出速率</dt>
+            <dd>{collect.yield_per_tick}/tick</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>生产配方</dt>
+          <dd>
+            {production?.recipe_id
+              ? `${getRecipeDisplayName(catalog, production.recipe_id)}${
+                  production.remaining_ticks !== undefined
+                    ? `（剩余 ${production.remaining_ticks} tick）`
+                    : ""
+                }`
+              : "未配置"}
+          </dd>
+        </div>
+        <div>
+          <dt>当前任务</dt>
+          <dd>
+            {job
+              ? `${translateJobType(job.type)}（剩余 ${job.remaining_ticks} tick）`
+              : "无"}
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 interface PlanetLayerPanelProps {
   networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
 }
-
 export function PlanetLayerPanel({
   networks,
   planet,
@@ -123,6 +221,7 @@ export function PlanetLayerPanel({
     camera,
     hoveredTile,
     layers,
+    requestFocus,
     requestZoom,
     resetCamera,
     selected,
@@ -132,12 +231,23 @@ export function PlanetLayerPanel({
       camera: state.camera,
       hoveredTile: state.hoveredTile,
       layers: state.layers,
+      requestFocus: state.requestFocus,
       requestZoom: state.requestZoom,
       resetCamera: state.resetCamera,
       selected: state.selected,
       toggleLayer: state.toggleLayer,
     })),
   );
+  const session = useSessionSnapshot();
+
+  const handleHome = () => {
+    const home = resolveHomeTile(planet, session.playerId);
+    if (home) {
+      requestFocus(home, PLANET_HOME_ZOOM_INDEX);
+    } else {
+      resetCamera();
+    }
+  };
 
   const resources = useMemo(() => getResourceList(planet), [planet]);
   const buildingCount =
@@ -181,10 +291,10 @@ export function PlanetLayerPanel({
           ))}
           <button
             className="secondary-button zoom-button"
-            onClick={resetCamera}
+            onClick={handleHome}
             type="button"
           >
-            重置视角
+            回到基地
           </button>
         </div>
       </section>
@@ -528,20 +638,7 @@ export function PlanetEntityPanel({
           </dl>
         </section>
 
-        <section className="planet-side-section">
-          <div className="section-title">库存与任务</div>
-          <pre className="json-preview">
-            {JSON.stringify(
-              {
-                storage: building.storage ?? {},
-                production: building.production ?? {},
-                job: building.job ?? {},
-              },
-              null,
-              2,
-            )}
-          </pre>
-        </section>
+        <BuildingStorageSection building={building} catalog={catalog} />
 
         <section className="planet-side-section">
           <div className="section-title">网络与运行态</div>
@@ -913,8 +1010,14 @@ export function PlanetActivityPanel({
     [activityMode, events],
   );
 
+  // 研究站（无配方 matrix_lab 等）的吞吐类告警是噪音，统一过滤（见 production-alerts）
+  const visibleAlerts = useMemo(
+    () => alerts.filter((alert) => !isResearchStationAlertNoise(alert)),
+    [alerts],
+  );
+
   // V3：新增告警条目入场闪烁（首次填充不闪）
-  const freshAlertIds = useNewItemIds(alerts, (alert) => alert.alert_id);
+  const freshAlertIds = useNewItemIds(visibleAlerts, (alert) => alert.alert_id);
 
   function focusSelection(
     selection: ReturnType<typeof resolveSelectionFromEvent>,
@@ -985,8 +1088,8 @@ export function PlanetActivityPanel({
       <section className="panel split-panel__section">
         <div className="section-title">告警面板</div>
         <ul className="timeline-list timeline-list--dense">
-          {alerts.length === 0 ? <li>暂无告警</li> : null}
-          {alerts.map((alert) => {
+          {visibleAlerts.length === 0 ? <li>暂无告警</li> : null}
+          {visibleAlerts.map((alert) => {
             const presentation = describeAlert(planet, alert);
             const isFresh = freshAlertIds.has(alert.alert_id);
             return (

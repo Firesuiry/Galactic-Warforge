@@ -182,14 +182,19 @@ func TestProductionStats_CollectStorageOutput_Counted(t *testing.T) {
 	settleResources(ws)
 
 	stats := collectProductionStats(t, core, "p1")
-	if stats.TotalOutput != 16 {
-		t.Fatalf("expected collect->storage output 16, got %+v", stats)
+	// 16 fire_ice mined into storage + 8 minerals kickback (16 * 0.5) credited
+	// to the player pool.
+	if stats.TotalOutput != 24 {
+		t.Fatalf("expected collect->storage output 24, got %+v", stats)
 	}
-	if got := stats.ByBuildingType[string(model.BuildingTypeAdvancedMiningMachine)]; got != 16 {
-		t.Fatalf("expected advanced_mining_machine output 16, got %+v", stats.ByBuildingType)
+	if got := stats.ByBuildingType[string(model.BuildingTypeAdvancedMiningMachine)]; got != 24 {
+		t.Fatalf("expected advanced_mining_machine output 24, got %+v", stats.ByBuildingType)
 	}
 	if got := stats.ByItem[model.ItemFireIce]; got != 16 {
 		t.Fatalf("expected fire_ice output 16, got %+v", stats.ByItem)
+	}
+	if got := stats.ByItem[model.ProductionStatMinerals]; got != 8 {
+		t.Fatalf("expected minerals kickback output 8, got %+v", stats.ByItem)
 	}
 	if sumIntMap(stats.ByBuildingType) != stats.TotalOutput {
 		t.Fatalf("expected by_building_type to sum to total_output, got %+v", stats)
@@ -359,17 +364,21 @@ func TestProductionStats_ProcessTickCollectAndOrbitalOutputsCounted(t *testing.T
 	core.processTick()
 
 	stats := ws.Players["p1"].Stats.ProductionStats
-	if stats.TotalOutput != 21 {
-		t.Fatalf("expected processTick authoritative output 21, got %+v", stats)
+	// 16 fire_ice + 8 minerals kickback (16 * 0.5) + 5 orbital outputs = 29.
+	if stats.TotalOutput != 29 {
+		t.Fatalf("expected processTick authoritative output 29, got %+v", stats)
 	}
-	if got := stats.ByBuildingType[string(model.BuildingTypeAdvancedMiningMachine)]; got != 16 {
-		t.Fatalf("expected advanced_mining_machine processTick output 16, got %+v", stats.ByBuildingType)
+	if got := stats.ByBuildingType[string(model.BuildingTypeAdvancedMiningMachine)]; got != 24 {
+		t.Fatalf("expected advanced_mining_machine processTick output 24, got %+v", stats.ByBuildingType)
 	}
 	if got := stats.ByBuildingType[string(model.BuildingTypeOrbitalCollector)]; got != 5 {
 		t.Fatalf("expected orbital_collector processTick output 5, got %+v", stats.ByBuildingType)
 	}
 	if got := stats.ByItem[model.ItemFireIce]; got != 16 {
 		t.Fatalf("expected processTick fire_ice output 16, got %+v", stats.ByItem)
+	}
+	if got := stats.ByItem[model.ProductionStatMinerals]; got != 8 {
+		t.Fatalf("expected processTick minerals kickback output 8, got %+v", stats.ByItem)
 	}
 	if got := stats.ByItem[model.ItemHydrogen]; got != 4 {
 		t.Fatalf("expected processTick hydrogen output 4, got %+v", stats.ByItem)

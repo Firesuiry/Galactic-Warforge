@@ -47,6 +47,7 @@
 - `battlefield_analysis_base` 本身不发电；如果不先补 `wind_turbine`，第一台空 `matrix_lab` 会停在无电状态。
 - 这份启动包的用途不是跳过前期，而是覆盖默认新局到第一条自给电磁矩阵产线之间的前期科研真空段；研究系统仍然要求真实 `running` 研究站与真实矩阵消耗。
 - 当前默认图上一组可直接复现的 starter 闭环是：`build 3 2 wind_turbine` -> `build 2 3 matrix_lab` -> `transfer <matrix_lab_id> electromagnetic_matrix 10` -> `start_research electromagnetism` -> `build 4 2 tesla_tower` -> `build 5 1 mining_machine`；完成后首台研究站仍保留，且还剩 `20 minerals`。
+- minerals 持续收入规则：采集建筑把资源点产出写入自身 `Storage` 的同时，按实际入库数量 × `CollectModule.MineralsKickback` 折算 minerals 直充玩家矿物池；当前 `mining_machine = 1.0`、`advanced_mining_machine = 0.5`，`water_pump` / `oil_extractor` 等流体采集建筑为 0（不产矿）。因此 starter 闭环里的矿机一旦开跑，每入库存 1 单位矿就 +1 minerals（满功率 8/tick），本地存储堆满后停产、收入同步停止，需要传送带/仓库把矿拉走后恢复；该折算产出与物品产出共用同一份 `ProductionSettlementSnapshot` 事实源，在 `production_stats.by_item["minerals"]` 中可见。
 
 **官方中后期场景**
 - 服务端现在提供一套官方 midgame 场景：`config-midgame.yaml + map-midgame.yaml`

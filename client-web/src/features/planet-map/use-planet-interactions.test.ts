@@ -41,6 +41,17 @@ const catalog: CatalogView = {
       icon_key: 'wind_turbine',
       color: '#39e6d0',
     } as never,
+    {
+      id: 'mining_machine',
+      name: '采矿机',
+      category: 'collect',
+      footprint: { width: 1, height: 1 },
+      build_cost: { minerals: 50, energy: 20 },
+      buildable: true,
+      requires_resource_node: true,
+      icon_key: 'mining_machine',
+      color: '#c9a06a',
+    } as never,
   ],
 };
 
@@ -164,6 +175,52 @@ describe('usePlanetInteractions', () => {
     expect(journal[0]?.status).toBe('failed');
     expect(journal[0]?.authoritativeCode).toBe('LOCAL_PREFLIGHT');
     expect(journal[0]?.authoritativeMessage).toContain('建筑占用');
+  });
+
+  it('build 模式：采集建筑可放置在资源格上并下达命令', () => {
+    const { handle, planet } = setup();
+    planet.resources = [
+      {
+        id: 'iron-1',
+        planet_id: 'planet-1-1',
+        kind: 'iron_ore',
+        behavior: 'finite',
+        position: { x: 5, y: 1, z: 0 },
+        remaining: 900,
+        current_yield: 3,
+      } as never,
+    ];
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'mining_machine',
+      direction: 'auto',
+    });
+
+    handle({ x: 5, y: 1 });
+
+    expect(mockClient.cmdBuild).toHaveBeenCalledWith(
+      { x: 5, y: 1, z: 0 },
+      'mining_machine',
+      { direction: 'auto' },
+    );
+    expect(submitMock).toHaveBeenCalled();
+  });
+
+  it('build 模式：采集建筑放在空地本地拦截并提示需要资源点', () => {
+    const { handle } = setup();
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'mining_machine',
+      direction: 'auto',
+    });
+
+    handle({ x: 4, y: 4 });
+
+    expect(mockClient.cmdBuild).not.toHaveBeenCalled();
+    const journal = usePlanetCommandStore.getState().journal;
+    expect(journal[0]?.status).toBe('failed');
+    expect(journal[0]?.authoritativeCode).toBe('LOCAL_PREFLIGHT');
+    expect(journal[0]?.authoritativeMessage).toContain('需要建在资源点上');
   });
 
   it('move 模式：点击目标下达移动命令并退出模式', () => {

@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
-import { PlanetActivityPanel } from "@/features/planet-map/PlanetPanels";
+import {
+  PlanetActivityPanel,
+  PlanetEntityPanel,
+} from "@/features/planet-map/PlanetPanels";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 
 function createPlanet() {
@@ -133,5 +136,105 @@ describe("PlanetActivityPanel", () => {
     expect(
       screen.queryByText("building b-44 throughput drop detected"),
     ).not.toBeInTheDocument();
+  });
+
+  it("研究站（空 matrix_lab）的吞吐类告警不进入告警面板", () => {
+    render(
+      <PlanetActivityPanel
+        alerts={[
+          {
+            alert_id: "alert-noise",
+            tick: 121,
+            player_id: "p1",
+            building_id: "b-25",
+            building_type: "matrix_lab",
+            alert_type: "throughput_drop",
+            severity: "warning",
+            message: "building b-25 throughput drop detected",
+            metrics: {
+              throughput: 1,
+              backlog: 0,
+              idle_ratio: 0,
+              efficiency: 0,
+              input_shortage: false,
+              output_blocked: false,
+              power_state: "normal",
+            },
+            details: {},
+          },
+        ]}
+        events={[]}
+        planet={createPlanet() as never}
+      />,
+    );
+
+    expect(screen.getByText("暂无告警")).toBeInTheDocument();
+    expect(screen.queryByText(/矩阵研究站/)).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanetEntityPanel 建筑库存", () => {
+  beforeEach(() => {
+    usePlanetViewStore.getState().resetForPlanet("planet-1-1");
+    usePlanetCommandStore.getState().resetForPlanet("planet-1-1");
+  });
+
+  it("结构化展示本地存储/容量/产出速率，积压将满时给出警示", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-mine"] = {
+      id: "b-mine",
+      type: "mining_machine",
+      owner_id: "p1",
+      position: { x: 5, y: 1, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 1, height: 1 },
+        },
+        functions: {
+          storage: { capacity: 20 },
+          collect: { resource_kind: "silicon_ore", yield_per_tick: 2 },
+        },
+        state: "running",
+      },
+      storage: { inventory: { silicon_ore: 19 } },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-mine",
+      position: { x: 5, y: 1, z: 0 },
+    });
+
+    render(<PlanetEntityPanel planet={planet as never} />);
+
+    expect(screen.getByText("库存与任务")).toBeInTheDocument();
+    expect(screen.getByText(/硅矿 19（19\/20）/)).toBeInTheDocument();
+    expect(screen.getByText(/存储将满/)).toBeInTheDocument();
+    expect(screen.getByText("2/tick")).toBeInTheDocument();
+    expect(screen.getByText("未配置")).toBeInTheDocument();
+    // 不再是原始 JSON dump
+    expect(document.querySelector(".planet-panel-stack .json-preview")).toBeNull();
+  });
+
+  it("无存储数据时显示空库存与未配置配方", () => {
+    const planet = createPlanet();
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-44",
+      position: { x: 2, y: 1, z: 0 },
+    });
+
+    render(<PlanetEntityPanel planet={planet as never} />);
+
+    expect(screen.getByText("库存与任务")).toBeInTheDocument();
+    expect(screen.queryByText(/存储将满/)).not.toBeInTheDocument();
+    expect(screen.getByText("未配置")).toBeInTheDocument();
   });
 });

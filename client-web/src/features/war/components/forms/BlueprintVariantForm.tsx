@@ -33,9 +33,29 @@ export function BlueprintVariantForm({
   const [variantName, setVariantName] = useState('');
   const [allowedSlots, setAllowedSlots] = useState<Record<string, boolean>>({});
 
+  const presetParents = useMemo<WarBlueprintDetailView[]>(
+    () =>
+      (catalog?.public_blueprints ?? []).map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        source: 'preset',
+        state: 'adopted',
+        domain: entry.domain,
+        base_frame_id: entry.base_frame_id,
+        base_hull_id: entry.base_hull_id,
+        components: entry.components,
+        validation: { valid: true },
+      })),
+    [catalog?.public_blueprints],
+  );
+
   const parentBlueprint = useMemo(
-    () => blueprints.find((item) => item.id === parentBlueprintId) ?? blueprints[0],
-    [blueprints, parentBlueprintId],
+    () =>
+      blueprints.find((item) => item.id === parentBlueprintId)
+      ?? presetParents.find((item) => item.id === parentBlueprintId)
+      ?? blueprints[0]
+      ?? presetParents[0],
+    [blueprints, parentBlueprintId, presetParents],
   );
   const slots = useMemo(
     () => getBlueprintSlotComponents(catalog, parentBlueprint),
@@ -79,6 +99,9 @@ export function BlueprintVariantForm({
   return (
     <article className="war-card">
       <h3>蓝图改型</h3>
+      <p className="subtle-text">
+        从公开预置蓝图或已有蓝图派生变体，勾选允许后续改动的槽位。
+      </p>
       <WarField label="父蓝图">
         <select
           value={parentBlueprint.id}
@@ -87,11 +110,24 @@ export function BlueprintVariantForm({
             setAllowedSlots({});
           }}
         >
-          {blueprints.map((blueprint) => (
-            <option key={blueprint.id} value={blueprint.id}>
-              {blueprint.name} ({blueprint.id})
-            </option>
-          ))}
+          {presetParents.length > 0 ? (
+            <optgroup label="公开预置蓝图">
+              {presetParents.map((blueprint) => (
+                <option key={blueprint.id} value={blueprint.id}>
+                  {blueprint.name} ({blueprint.id})
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {blueprints.length > 0 ? (
+            <optgroup label="我的蓝图">
+              {blueprints.map((blueprint) => (
+                <option key={blueprint.id} value={blueprint.id}>
+                  {blueprint.name} ({blueprint.id})
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
         </select>
       </WarField>
       <WarField label="变体 ID">

@@ -11,6 +11,7 @@ import type {
   SystemView,
 } from "@shared/types";
 
+import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import {
   findLogisticsStation,
@@ -269,7 +270,7 @@ export function PlanetCommandPanel({
     return components;
   }, [systemRuntime?.dyson_sphere?.layers]);
   const produceUnitTypes = useMemo(
-    () => (catalog?.world_units ?? []).filter((unit) => unit.production_mode === 'produce' || unit.deploy_command === 'produce'),
+    () => (catalog?.world_units ?? []).filter((unit) => unit.production_mode === 'world_produce'),
     [catalog?.world_units],
   );
   const ownLogisticsStations = useMemo(
@@ -678,7 +679,9 @@ export function PlanetCommandPanel({
   const latestResultMessage = latestEntry
     ? latestEntry.status === "pending"
       ? `${translateCommandType(latestEntry.commandType)} 已受理：${latestEntry.acceptedMessage}`
-      : latestEntry.authoritativeMessage ?? latestEntry.acceptedMessage
+      : latestEntry.status === "failed"
+        ? toPlayerFacingMessage(latestEntry.authoritativeMessage ?? latestEntry.acceptedMessage)
+        : latestEntry.authoritativeMessage ?? latestEntry.acceptedMessage
     : "";
   const recentEntries = journal.slice(0, 5);
 
@@ -713,7 +716,7 @@ export function PlanetCommandPanel({
       <section className="planet-side-section">
         <div className="section-title">命令工作流</div>
         <p className="subtle-text">
-          所有操作都走同一套 `/commands` authoritative 契约，但界面改成按玩家实际操作链来分组。
+          所有操作都会经服务器确认后生效，界面按玩家实际操作链分组。
         </p>
         {latestEntry ? (
           <div
@@ -779,13 +782,19 @@ export function PlanetCommandPanel({
                   <span
                     className={`command-history-status command-history-status--${journalTone(entry)}`}
                   >
-                    {entry.requestId}
+                    {entry.status === "pending"
+                      ? "等待服务器确认"
+                      : entry.status === "succeeded"
+                        ? "服务器已确认"
+                        : "未生效"}
                   </span>
                 </div>
                 <span>
                   {entry.status === "pending"
                     ? entry.acceptedMessage
-                    : entry.authoritativeMessage ?? entry.acceptedMessage}
+                    : entry.status === "failed"
+                      ? toPlayerFacingMessage(entry.authoritativeMessage ?? entry.acceptedMessage)
+                      : entry.authoritativeMessage ?? entry.acceptedMessage}
                 </span>
                 {entry.nextHint ? (
                   <span className="subtle-text">{entry.nextHint}</span>
@@ -794,7 +803,7 @@ export function PlanetCommandPanel({
             ))}
           </ul>
         ) : (
-          <p className="subtle-text">最近还没有 authoritative 命令结果。</p>
+          <p className="subtle-text">最近还没有命令结果。</p>
         )}
       </section>
 
@@ -907,6 +916,11 @@ export function PlanetCommandPanel({
                 </option>
               ))}
             </select>
+            {produceUnitTypes.length === 0 ? (
+              <span className="subtle-text">
+                {catalog ? "当前没有可量产单位。" : "单位目录尚未加载，请稍候。"}
+              </span>
+            ) : null}
           </label>
           <button
             className="secondary-button field--span-2"
