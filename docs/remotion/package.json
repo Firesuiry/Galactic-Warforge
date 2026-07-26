@@ -8,7 +8,8 @@
     "studio": "remotion studio",
     "render": "npm run render:intro",
     "render:intro": "remotion render src/index.ts SiliconWorldIntro out/siliconworld-intro.mp4",
-    "render:design": "remotion render src/index.ts GalacticWarFactoryDesign out/galactic-war-factory-design.mp4"
+    "render:design": "remotion render src/index.ts GalacticWarFactoryDesign out/galactic-war-factory-design.mp4",
+    "render:battle": "remotion render src/index.ts AiBattle out/ai-battle.mp4"
   },
   "dependencies": {
     "@remotion/media": "4.0.438",

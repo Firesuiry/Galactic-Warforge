@@ -1,4 +1,5 @@
 import {Composition} from 'remotion';
+import {AiBattleVideo, aiBattleDurationInFrames} from './AiBattleVideo';
 import {
   GalacticWarFactoryDesignVideo,
   galacticWarFactoryDesignDurationInFrames,
@@ -20,6 +21,14 @@ export const RemotionRoot = () => {
         id="GalacticWarFactoryDesign"
         component={GalacticWarFactoryDesignVideo}
         durationInFrames={galacticWarFactoryDesignDurationInFrames}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="AiBattle"
+        component={AiBattleVideo}
+        durationInFrames={aiBattleDurationInFrames}
         fps={30}
         width={1920}
         height={1080}

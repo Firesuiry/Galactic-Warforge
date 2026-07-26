@@ -24,14 +24,9 @@ var syncFile = func(file *os.File) error {
 	return file.Sync()
 }
 
-var syncDir = func(root string) error {
-	dir, err := os.Open(root)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
-}
+// syncDir 的实现按平台分流：POSIX 上目录 fsync 是原子重命名持久化的必要一步，
+// Windows 上目录句柄不支持 FlushFileBuffers，见 files_sync_windows.go。
+var syncDir = defaultSyncDir
 
 func writeAll(w io.Writer, data []byte) error {
 	_, err := io.Copy(w, bytes.NewReader(data))
