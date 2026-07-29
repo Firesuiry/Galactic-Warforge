@@ -313,7 +313,10 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           }
           const focus = useStarmapViewStore.getState().focusedSystemId;
           if (focus) {
-            scene.showSystem(focus, null);
+            // 深链冷启动竞态：system 数据可能已先于 scene 就绪到达
+            // （onReady 经 ref 取最新闭包，此处能拿到当前 systemQuery.data），
+            // 直接带上，避免系内只剩中心恒星、等不到下一次 updateSystem。
+            scene.showSystem(focus, systemQuery.data ?? null);
           }
           return () => {
             sceneRef.current = null;
