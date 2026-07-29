@@ -23,6 +23,16 @@ import {
 } from 'pixi.js';
 
 import type { BattleEvent } from '@/engine/battle-events';
+import {
+  HOLO_ACCENT,
+  HOLO_ACCENT_2,
+  HOLO_AMBER,
+  HOLO_BG_1,
+  HOLO_DANGER,
+  HOLO_DANGER_LIGHT,
+  HOLO_TEXT,
+  HOLO_TEXT_MUTED,
+} from '@/engine/palette';
 import { getGlowTexture, getPlanetTexture, getStarTexture, getStarfieldTexture } from '@/engine/textures';
 import { easeOutCubic } from '@/engine/tween';
 import { planetColorOf } from '@/features/starmap/model';
@@ -52,10 +62,11 @@ import {
 const CENTER_X = BATTLEFIELD_VIEW_WIDTH / 2;
 const CENTER_Y = BATTLEFIELD_VIEW_HEIGHT / 2;
 
+/** 标记语义色（对齐 tokens.css）：己方 teal / 敌方 danger 红 / 中立 muted。 */
 const TONE_COLORS = {
-  own: 0x38bdf8,
-  enemy: 0xf87171,
-  neutral: 0xcbd5e1,
+  own: HOLO_ACCENT,
+  enemy: HOLO_DANGER,
+  neutral: HOLO_TEXT_MUTED,
 } as const;
 
 /** 接触/舰队标记的脉冲相位差个数（确定性，不用随机，保证 frozen 截图稳定）。 */
@@ -207,7 +218,7 @@ export class BattlefieldScene {
 
   private buildBackground() {
     const backdrop = new Graphics();
-    backdrop.rect(0, 0, BATTLEFIELD_VIEW_WIDTH, BATTLEFIELD_VIEW_HEIGHT).fill(0x0b1220);
+    backdrop.rect(0, 0, BATTLEFIELD_VIEW_WIDTH, BATTLEFIELD_VIEW_HEIGHT).fill(HOLO_BG_1);
     this.root.addChild(backdrop);
 
     const starfield = new TilingSprite({
@@ -240,7 +251,7 @@ export class BattlefieldScene {
     input.planets.forEach((_, index) => {
       orbits
         .circle(CENTER_X, CENTER_Y, 120 + index * 36)
-        .stroke({ width: 1, color: 0x94a3b8, alpha: 0.25 });
+        .stroke({ width: 1, color: HOLO_ACCENT_2, alpha: 0.16 });
     });
     this.orbitLayer.addChild(orbits);
   }
@@ -294,7 +305,7 @@ export class BattlefieldScene {
       style: {
         fontFamily: 'Inter, "PingFang SC", sans-serif',
         fontSize: 11,
-        fill: 0xe2e8f0,
+        fill: HOLO_TEXT,
       },
     });
     label.anchor.set(0, 0.5);
@@ -316,7 +327,8 @@ export class BattlefieldScene {
 
   private buildPlanetMarker(marker: BattlefieldMarkerLayout, container: Container): Sprite {
     const [kindColor, bandColor] = planetColorOf(marker.planetKind);
-    const color = marker.tone === 'enemy' ? 0xfca5a5 : kindColor;
+    // 敌方行星整体提亮 danger 红（红族语义，与 teal 己方行星色系区分）
+    const color = marker.tone === 'enemy' ? HOLO_DANGER_LIGHT : kindColor;
 
     const glow = new Sprite(getGlowTexture(color));
     glow.anchor.set(0.5);
@@ -342,7 +354,7 @@ export class BattlefieldScene {
         ring.arc(0, 0, radius, angle, end);
         angle = end + gapAngle;
       }
-      ring.stroke({ width: 2, color: 0xf87171, alpha: 0.6 });
+      ring.stroke({ width: 2, color: HOLO_DANGER, alpha: 0.6 });
       container.addChild(ring);
     }
     return glow;
@@ -409,8 +421,8 @@ export class BattlefieldScene {
     }
     const radius = BATTLEFIELD_HIT_RADIUS * this.densityK;
     ring
-      .circle(0, 0, radius).stroke({ width: 2, color: 0xfacc15, alpha: 0.95 })
-      .circle(0, 0, radius + 4).stroke({ width: 0.8, color: 0xfacc15, alpha: 0.4 });
+      .circle(0, 0, radius).stroke({ width: 2, color: HOLO_AMBER, alpha: 0.95 })
+      .circle(0, 0, radius + 4).stroke({ width: 0.8, color: HOLO_AMBER, alpha: 0.4 });
     ring.position.set(marker.x, marker.y);
     ring.visible = true;
   }

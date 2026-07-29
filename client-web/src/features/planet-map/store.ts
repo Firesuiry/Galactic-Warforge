@@ -112,8 +112,15 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
 ];
 export const DEFAULT_PLANET_ZOOM_INDEX = 6;
 export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;
-/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[8] = 32px/tile，首次进入/⌂ 聚焦基地时使用。 */
+/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[8] = 32px/tile，大行星首次进入/⌂ 聚焦基地时使用。 */
 export const PLANET_HOME_ZOOM_INDEX = 8;
+/**
+ * requestFocus 缩放哨兵：由渲染侧按"视口 × 地图尺寸"自适应选档（resolvePlanetFitZoomIndex）。
+ * 小行星整图放大到 60-80% 占屏，大行星回落"回家"档（行为不变）。
+ */
+export const PLANET_FOCUS_FIT_ZOOM = -1;
+/** 自适应选档的目标占屏比：地图内容占视口短边 ~70%（可接受区间 60-80%）。 */
+export const PLANET_FIT_TARGET_OCCUPANCY = 0.7;
 /** scene 档缺省 tile 边长（px/tile），与默认缩放档一致。 */
 export const DEFAULT_PLANET_SCENE_TILE_SIZE = 8;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
@@ -210,6 +217,55 @@ export function resolvePlanetZoomIndex(scale: number) {
   ), DEFAULT_PLANET_ZOOM_INDEX);
 }
 
+/**
+ * 小行星初始相机自适应选档（PLANET_FOCUS_FIT_ZOOM 的结算）：
+ * - 大行星（回家档下世界像素已超视口）行为不变，直接返回 fallback；
+ * - 小行星在"整图可入视口"的 scene 档中，挑选占屏比（max(世界宽/视口宽, 世界高/视口高)）
+ *   最接近 70% 的一档——离散翻倍档位无法精确命中 60-80% 区间时取最近可行解；
+ * - 视口/地图尺寸异常时返回 fallback。
+ */
+export function resolvePlanetFitZoomIndex(
+  viewportWidth: number,
+  viewportHeight: number,
+  mapWidth: number,
+  mapHeight: number,
+  fallbackZoomIndex = PLANET_HOME_ZOOM_INDEX,
+) {
+  if (viewportWidth <= 0 || viewportHeight <= 0 || mapWidth <= 0 || mapHeight <= 0) {
+    return fallbackZoomIndex;
+  }
+  const fallbackTileSize = getPlanetRenderTileSize(
+    fallbackZoomIndex,
+    viewportWidth,
+    viewportHeight,
+    mapWidth,
+    mapHeight,
+  );
+  if (mapWidth * fallbackTileSize > viewportWidth || mapHeight * fallbackTileSize > viewportHeight) {
+    return fallbackZoomIndex; // 大行星：维持回家档
+  }
+  let bestIndex = -1;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < PLANET_ZOOM_LEVELS.length; index += 1) {
+    if (PLANET_ZOOM_LEVELS[index].mode !== 'scene') {
+      continue;
+    }
+    const tileSize = getPlanetRenderTileSize(index, viewportWidth, viewportHeight, mapWidth, mapHeight);
+    const worldWidth = mapWidth * tileSize;
+    const worldHeight = mapHeight * tileSize;
+    if (worldWidth > viewportWidth || worldHeight > viewportHeight) {
+      continue; // 必须整图入视口（不触发环绕/裁切）
+    }
+    const occupancy = Math.max(worldWidth / viewportWidth, worldHeight / viewportHeight);
+    const score = Math.abs(occupancy - PLANET_FIT_TARGET_OCCUPANCY);
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestIndex >= 0 ? bestIndex : fallbackZoomIndex;
+}
+
 export interface PlanetSceneWindow {
   x: number;
   y: number;
@@ -253,7 +309,7 @@ export interface PlanetCameraState {
 interface FocusRequest {
   nonce: number;
   position: TilePoint;
-  /** 聚焦时一并切到的缩放档（如"回家"用 32px/tile）；缺省保持当前档。 */
+  /** 聚焦时一并切到的缩放档（PLANET_FOCUS_FIT_ZOOM = 小行星自适应占屏）；缺省保持当前档。 */
   zoomIndex?: number;
 }
 
@@ -485,10 +541,13 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
         ...(zoomIndex === undefined
           ? {}
           : {
-            zoomIndex: Math.min(
-              Math.max(zoomIndex, 0),
-              PLANET_ZOOM_LEVELS.length - 1,
-            ),
+            // PLANET_FOCUS_FIT_ZOOM 哨兵原样透传（渲染侧结算），其余档位钳到合法区间。
+            zoomIndex: zoomIndex === PLANET_FOCUS_FIT_ZOOM
+              ? PLANET_FOCUS_FIT_ZOOM
+              : Math.min(
+                Math.max(zoomIndex, 0),
+                PLANET_ZOOM_LEVELS.length - 1,
+              ),
           }),
       },
     }));

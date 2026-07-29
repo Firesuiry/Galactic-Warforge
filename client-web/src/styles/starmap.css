@@ -62,10 +62,11 @@
   gap: 8px;
   padding: 8px 14px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-glow);
   background: rgba(8, 14, 28, 0.72);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-hud);
   font-family: var(--font-display);
   letter-spacing: 0.04em;
 }
@@ -98,10 +99,11 @@
   gap: 8px;
   padding: 8px 14px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-glow);
   background: rgba(8, 14, 28, 0.72);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-hud);
   color: var(--text-muted);
   font-size: 0.85rem;
   cursor: pointer;
@@ -122,10 +124,7 @@
   background: rgba(10, 18, 34, 0.85);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  box-shadow:
-    0 0 0 1px rgba(57, 230, 208, 0.08),
-    0 0 24px rgba(57, 230, 208, 0.12),
-    0 18px 42px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-hud);
   animation: starmap-card-in var(--dur) var(--ease);
 }
 
@@ -229,7 +228,7 @@
   background: rgba(10, 18, 34, 0.9);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-hud);
   animation: starmap-card-in var(--dur) var(--ease);
 }
 
@@ -263,9 +262,8 @@
   font-size: 0.8rem;
 }
 
+/* 动作按钮走期3 Button 控件（sw-btn--sm 承担紧凑尺寸），此处只保留情境态修饰 */
 .starmap-fleet-bar__actions .secondary-button {
-  padding: 5px 12px;
-  font-size: 0.8rem;
   white-space: nowrap;
 }
 

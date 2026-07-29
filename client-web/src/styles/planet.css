@@ -776,7 +776,7 @@
   background:#060c16d1;
   backdrop-filter:blur(6px);
   -webkit-backdrop-filter:blur(6px);
-  box-shadow:0 0 0 1px #39e6d014,0 0 18px #39e6d029,0 10px 26px #00000080;
+  box-shadow:var(--shadow-hud);
 }
 
 .planet-minimap__canvas {
@@ -905,11 +905,11 @@
   gap:6px;
   padding:6px;
   border-radius:var(--radius);
-  border:1px solid var(--border);
+  border:1px solid var(--border-glow);
   background:#080e1cb8;
   backdrop-filter:blur(8px);
   -webkit-backdrop-filter:blur(8px);
-  box-shadow:0 10px 26px #0006;
+  box-shadow:var(--shadow-hud);
 }
 
 .planet-map-toolbar__button {
@@ -1040,7 +1040,7 @@
   background:#0a1222e6;
   backdrop-filter:blur(8px);
   -webkit-backdrop-filter:blur(8px);
-  box-shadow:0 10px 26px #00000073;
+  box-shadow:var(--shadow-hud);
   animation:starmap-card-in var(--dur) var(--ease);
 }
 
@@ -1087,23 +1087,55 @@
 .planet-build-bar {
   display:flex;
   flex-direction:column;
-  gap:4px;
+  gap:6px;
   max-width:100%;
-  padding:8px 10px 6px;
+  padding:10px 12px 7px;
   border-radius:var(--radius-lg);
-  border:1px solid var(--border);
-  background:#080e1ce0;
+  border:1px solid var(--border-glow);
+  background:#080e1ce6;
   backdrop-filter:blur(8px);
   -webkit-backdrop-filter:blur(8px);
-  box-shadow:0 12px 30px #00000073;
+  box-shadow:var(--shadow-hud);
 }
 
 .planet-build-bar__scroller {
   display:flex;
-  gap:6px;
+  gap:12px;
   overflow-x:auto;
   scrollbar-width:thin;
-  max-width:min(860px,calc(100vw - 560px));
+  max-width:min(960px,calc(100vw - 480px));
+  padding-bottom:2px;
+}
+
+/* 目录分组（电力/生产/物流/军事……）：组标题 + 卡片行，组间竖分隔线 */
+.planet-build-group {
+  flex:0 0 auto;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding-right:12px;
+  border-right:1px solid var(--line-2);
+}
+
+.planet-build-group:last-child {
+  padding-right:0;
+  border-right:none;
+}
+
+.planet-build-group__label {
+  padding-left:2px;
+  font-family:var(--font-display);
+  font-size:.6rem;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--accent);
+  opacity:.75;
+  white-space:nowrap;
+}
+
+.planet-build-group__cards {
+  display:flex;
+  gap:6px;
 }
 
 .planet-build-card {
@@ -1111,10 +1143,10 @@
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:3px;
-  min-width:76px;
-  padding:7px 8px 6px;
-  border-radius:var(--radius-sm);
+  gap:4px;
+  min-width:88px;
+  padding:8px 10px 7px;
+  border-radius:var(--radius);
   border:1px solid var(--border);
   background:var(--surface-1);
   color:var(--text);
@@ -1125,7 +1157,8 @@
 .planet-build-card:hover:not(:disabled) {
   border-color:var(--border-glow);
   background:#39e6d014;
-  transform:translateY(-1px);
+  transform:translateY(-2px);
+  box-shadow:0 0 14px #39e6d038;
 }
 
 .planet-build-card--active {
@@ -1134,32 +1167,72 @@
   box-shadow:0 0 12px #39e6d04d;
 }
 
+/* 锁定：灰化 + 锁角标（解锁条件在 title/aria-label） */
 .planet-build-card--locked {
-  opacity:.42;
+  opacity:.45;
+  filter:grayscale(.75);
   cursor:not-allowed;
 }
 
+/* 负担不起：红边 + 红成本 */
 .planet-build-card--unaffordable {
-  opacity:.5;
+  opacity:.78;
+  border-color:#ff575766;
   cursor:not-allowed;
 }
 
-.planet-build-card--unaffordable .planet-build-card__cost {
+.planet-build-card--unaffordable .planet-build-card__cost,
+.planet-build-card--unaffordable .planet-build-card__cost-item {
   color:var(--danger, #ff6b6b);
 }
 
+.planet-build-card__icon {
+  position:relative;
+  display:grid;
+  place-items:center;
+}
+
+.planet-build-card__lock {
+  position:absolute;
+  right:-7px;
+  bottom:-5px;
+  padding:1px;
+  border-radius:50%;
+  border:1px solid var(--line-3);
+  background:#0a1222;
+  color:var(--text-muted);
+  box-sizing:content-box;
+}
+
 .planet-build-card__name {
-  font-size:.72rem;
+  font-size:.74rem;
   white-space:nowrap;
-  max-width:92px;
+  max-width:96px;
   overflow:hidden;
   text-overflow:ellipsis;
 }
 
 .planet-build-card__cost {
-  color:var(--text-dim);
-  font-size:.66rem;
+  display:flex;
+  gap:8px;
   white-space:nowrap;
+}
+
+.planet-build-card__cost-item {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  font-size:.68rem;
+  font-variant-numeric:tabular-nums;
+  color:var(--text-dim);
+}
+
+.planet-build-card__cost-item--minerals {
+  color:#c9a06a;
+}
+
+.planet-build-card__cost-item--energy {
+  color:var(--amber);
 }
 
 .planet-build-bar__footer {

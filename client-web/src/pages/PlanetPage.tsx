@@ -41,7 +41,7 @@ import { usePlanetViewStore } from "@/features/planet-map/store";
 import {
   getPlanetOverviewRequestStep,
   getPlanetZoomLevel,
-  PLANET_HOME_ZOOM_INDEX,
+  PLANET_FOCUS_FIT_ZOOM,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -357,10 +357,10 @@ export function PlanetPage() {
         requestFocus({ x: Math.round(focusX), y: Math.round(focusY) });
       }
     } else {
-      // 首次进入（无深链坐标）：相机直接聚焦玩家基地，避免全图漆黑找不到家。
+      // 首次进入（无深链坐标）：相机聚焦玩家基地并自适应占屏（小图放到 60-80%），避免全图漆黑找不到家。
       const home = resolveHomeTile(sceneQuery.data, session.playerId);
       if (home) {
-        requestFocus(home, PLANET_HOME_ZOOM_INDEX);
+        requestFocus(home, PLANET_FOCUS_FIT_ZOOM);
       }
     }
 

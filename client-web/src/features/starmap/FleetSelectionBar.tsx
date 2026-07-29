@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 
 import type { FleetDetailView, FormationType } from '@shared/types';
 
+import { Button } from '@/common/controls';
 import { fleetStateLabel } from '@/features/starmap/model';
 import { useStarmapViewStore } from '@/features/starmap/store';
 import type { WarCommandHint } from '@/features/war/error-hints';
@@ -131,38 +132,41 @@ export function FleetSelectionBar({
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
-          <button
-            className="secondary-button"
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={isPending || Boolean(transit) || formation === fleet.formation}
             onClick={handleAssign}
           >
             调整编队
-          </button>
-          <button
-            className={`secondary-button${attacking ? ' starmap-fleet-bar__active' : ''}`}
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className={attacking ? 'starmap-fleet-bar__active' : undefined}
             disabled={isPending || Boolean(transit)}
             onClick={handleAttackToggle}
           >
             {attacking ? '取消攻击' : '攻击目标'}
-          </button>
-          <button
-            className={`secondary-button${moving ? ' starmap-fleet-bar__active' : ''}`}
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className={moving ? 'starmap-fleet-bar__active' : undefined}
             disabled={isPending || Boolean(transit) || fleet.state !== 'idle'}
             onClick={handleMoveToggle}
           >
             {moving ? '取消跃迁' : '跃迁'}
-          </button>
-          <button
-            className="secondary-button starmap-fleet-bar__danger"
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="starmap-fleet-bar__danger"
             disabled={isPending || Boolean(transit)}
             onClick={handleDisband}
           >
             解散舰队
-          </button>
+          </Button>
         </div>
       </div>
     </div>

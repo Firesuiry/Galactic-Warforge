@@ -61,7 +61,7 @@ import {
   getPlanetRenderTileSize,
   getPlanetZoomScale,
   getPlanetZoomStatusLabel,
-  PLANET_HOME_ZOOM_INDEX,
+  PLANET_FOCUS_FIT_ZOOM,
   PLANET_ZOOM_LEVELS,
   usePlanetViewStore,
 } from "@/features/planet-map/store";
@@ -243,7 +243,7 @@ export function PlanetLayerPanel({
   const handleHome = () => {
     const home = resolveHomeTile(planet, session.playerId);
     if (home) {
-      requestFocus(home, PLANET_HOME_ZOOM_INDEX);
+      requestFocus(home, PLANET_FOCUS_FIT_ZOOM);
     } else {
       resetCamera();
     }

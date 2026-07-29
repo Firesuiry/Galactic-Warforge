@@ -40,7 +40,9 @@ import {
   getPlanetZoomLevel,
   getPlanetZoomStatusLabel,
   isPlanetOverviewZoom,
+  PLANET_FOCUS_FIT_ZOOM,
   PLANET_ZOOM_LEVELS,
+  resolvePlanetFitZoomIndex,
   usePlanetViewStore,
 } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -161,6 +163,9 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   const dragStateRef = useRef<{ pointerX: number; pointerY: number; offsetX: number; offsetY: number } | null>(null);
   const previousZoomIndexRef = useRef(DEFAULT_PLANET_ZOOM_INDEX);
   const [viewport, setViewport] = useState<ViewportSize>(getViewportDefaults);
+  // 视口是否已实测（挂载时 updateViewport 同步量过 DOM）：PLANET_FOCUS_FIT_ZOOM 的自适应
+  // 选档必须等实测尺寸，否则会按默认 960×640 误选偏小档位（小图放大不足）。
+  const [viewportMeasured, setViewportMeasured] = useState(false);
   const [pixiApp, setPixiApp] = useState<Application | null>(null);
   // ?freeze=1 冻结动效（单位直接落位），供截图测试与确定性渲染（与星图 freeze 同一约定）。
   const frozen = useMemo(
@@ -287,6 +292,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         width: Math.max(MIN_VIEWPORT_WIDTH, Math.floor(rect?.width || 0) || getViewportDefaults().width),
         height: Math.max(MIN_VIEWPORT_HEIGHT, Math.floor(rect?.height || 0) || getViewportDefaults().height),
       });
+      setViewportMeasured(true);
     }
 
     updateViewport();
@@ -480,8 +486,15 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     if (!focusRequest) {
       return;
     }
-    const targetZoomIndex = focusRequest.zoomIndex
-      ?? (overviewMode ? DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX : camera.zoomIndex);
+    // 自适应选档依赖实测视口：未实测时保留请求不消费，等 viewportMeasured 后本 effect 重跑。
+    if (focusRequest.zoomIndex === PLANET_FOCUS_FIT_ZOOM && !viewportMeasured) {
+      return;
+    }
+    // PLANET_FOCUS_FIT_ZOOM：按视口 × 地图尺寸自适应选档（小图 60-80% 占屏，大图回落回家档）。
+    const targetZoomIndex = focusRequest.zoomIndex === PLANET_FOCUS_FIT_ZOOM
+      ? resolvePlanetFitZoomIndex(viewport.width, viewport.height, planet.map_width, planet.map_height)
+      : focusRequest.zoomIndex
+        ?? (overviewMode ? DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX : camera.zoomIndex);
     const nextCamera = centerCameraOnTile(
       viewport,
       planet,
@@ -497,7 +510,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       ready: true,
     });
     consumeFocusRequest(focusRequest.nonce);
-  }, [camera.zoomIndex, consumeFocusRequest, focusRequest, overviewMode, planet, setCamera, viewport]);
+  }, [camera.zoomIndex, consumeFocusRequest, focusRequest, overviewMode, planet, setCamera, viewport, viewportMeasured]);
 
   // 统一缩放入口：±按钮/档位按钮经 store 的 zoomRequest 到达（anchor=null → 视口中心）。
   useEffect(() => {

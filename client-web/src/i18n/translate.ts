@@ -54,6 +54,11 @@ export function translateBuildingType(
   );
 }
 
+/** 建筑目录分组名（建造栏分组标题）：词典未命中时回退原始 category 字符串。 */
+export function translateBuildingCategory(category: string | undefined | null) {
+  return translateByDictionary(TRANSLATIONS.buildingCategory, category, TRANSLATIONS.ui.unknown);
+}
+
 export function translateItemId(itemId: string, displayName?: string) {
   return translateCatalogBackedValue(TRANSLATIONS.itemId, itemId, displayName);
 }

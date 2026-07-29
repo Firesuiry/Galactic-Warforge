@@ -17,6 +17,7 @@ import {
 } from 'pixi.js';
 
 import { Camera2D, type ViewportSize } from '@/engine/camera';
+import { HOLO_ACCENT, HOLO_AMBER, HOLO_BG_1, HOLO_DANGER, HOLO_TEXT } from '@/engine/palette';
 import {
   getGlowTexture,
   getNebulaTexture,
@@ -55,9 +56,9 @@ const DRAG_THRESHOLD_PX = 6;
 const STAR_CORE_RADIUS = 9;
 const SYSTEM_STAR_RADIUS = 46;
 
-/** 舰队徽标配色：attacking 红 / 驻留蓝（对齐战场图舰队标记色调）。 */
-const COLOR_FLEET_IDLE = 0x38bdf8;
-const COLOR_FLEET_ATTACKING = 0xf87171;
+/** 舰队徽标配色：attacking danger 红 / 驻留 teal（己方语义，对齐战场图与 tokens.css）。 */
+const COLOR_FLEET_IDLE = HOLO_ACCENT;
+const COLOR_FLEET_ATTACKING = HOLO_DANGER;
 /** 跃迁光点：青金色（与驻留/交战区分），拖尾同色渐隐。 */
 const COLOR_FLEET_TRANSIT = 0x7ef9d2;
 /** 战火航线：流动亮点遍历整条航线的周期（秒）与每条航线亮点数。 */
@@ -528,9 +529,9 @@ export class StarmapScene {
     const ring = new Graphics();
     ring
       .circle(0, 0, 13)
-      .stroke({ width: 1.4, color: 0xffe08a, alpha: 0.9 })
+      .stroke({ width: 1.4, color: HOLO_AMBER, alpha: 0.9 })
       .circle(0, 0, 16)
-      .stroke({ width: 0.7, color: 0xffe08a, alpha: 0.35 });
+      .stroke({ width: 0.7, color: HOLO_AMBER, alpha: 0.35 });
     ring.visible = false;
     container.addChild(ring);
 
@@ -541,8 +542,8 @@ export class StarmapScene {
           fontFamily: 'Inter, "PingFang SC", sans-serif',
           fontSize: 10,
           fontWeight: '700',
-          fill: 0xe2e8f0,
-          stroke: { color: 0x0b1220, width: 2 },
+          fill: HOLO_TEXT,
+          stroke: { color: HOLO_BG_1, width: 2 },
         },
       });
       count.anchor.set(0, 0.5);
@@ -592,7 +593,7 @@ export class StarmapScene {
     }
 
     const ring = new Graphics();
-    this.drawRing(ring, 0xffe08a, STAR_CORE_RADIUS * 2.1);
+    this.drawRing(ring, HOLO_AMBER, STAR_CORE_RADIUS * 2.1);
     ring.visible = false;
 
     const label = new Text({
@@ -749,7 +750,7 @@ export class StarmapScene {
         const { layout } = selectedNode;
         this.systemSelectionRing
           .circle(layout.radius, layout.radius, layout.radius * 1.8)
-          .stroke({ width: 1.4, color: 0xffe08a, alpha: 0.9 });
+          .stroke({ width: 1.4, color: HOLO_AMBER, alpha: 0.9 });
         this.systemSelectionRing.position.copyFrom(selectedNode.container.position);
         this.systemSelectionRing.visible = true;
       } else {
@@ -922,6 +923,12 @@ export class StarmapScene {
           const pulse = 1 + 0.08 * Math.sin(t * 3 + node.pulsePhase);
           node.ring.scale.set(pulse);
         });
+        // 星系选中环：透明度呼吸（仅 opacity，无布局抖动）
+        this.systemNodes.forEach((node) => {
+          if (node.ring.visible) {
+            node.ring.alpha = 0.72 + 0.28 * Math.sin(t * 2.6);
+          }
+        });
       }
 
       // 战火航线：亮点沿定向航线循环流动（两端渐隐），frozen 时 t 冻结保持静止
@@ -966,6 +973,10 @@ export class StarmapScene {
         );
         if (selectedNode) {
           this.systemSelectionRing.position.copyFrom(selectedNode.container.position);
+        }
+        // 行星选中环：透明度呼吸（仅 opacity；frozen 冻结供截图基线）
+        if (!this.frozen && this.systemSelectionRing.visible) {
+          this.systemSelectionRing.alpha = 0.72 + 0.28 * Math.sin(t * 2.6);
         }
       }
     }

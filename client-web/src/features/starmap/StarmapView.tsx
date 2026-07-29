@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { PixiStage } from '@/engine/PixiStage';
+import { Button } from '@/common/controls';
 import { FleetSelectionBar } from '@/features/starmap/FleetSelectionBar';
 import {
   computeSystemLanes,
@@ -377,13 +378,12 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
             </dl>
             {selectedSystem.discovered ? (
               <div className="starmap-card__actions">
-                <button
-                  className="primary-button"
-                  type="button"
+                <Button
+                  size="sm"
                   onClick={() => useStarmapViewStore.getState().focusSystem(selectedSystem.system_id)}
                 >
                   进入星系
-                </button>
+                </Button>
               </div>
             ) : null}
           </section>
@@ -411,13 +411,12 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
             </dl>
             {selectedPlanet.discovered ? (
               <div className="starmap-card__actions">
-                <button
-                  className="primary-button"
-                  type="button"
+                <Button
+                  size="sm"
                   onClick={() => navigate(`/planet/${selectedPlanet.planet_id}`)}
                 >
                   进入行星
-                </button>
+                </Button>
               </div>
             ) : null}
           </section>

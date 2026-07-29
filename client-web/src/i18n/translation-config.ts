@@ -72,6 +72,24 @@ export const TRANSLATIONS = {
     vertical_launching_silo: "垂直发射井",
     foundation: "地基",
   },
+  // 建筑目录分组（catalog.buildings[].category，与 server BuildingCategory 常量/config/defs 对应）
+  buildingCategory: {
+    collect: "采集",
+    transport: "运输",
+    storage: "仓储",
+    production: "生产",
+    chemical: "化工",
+    refining: "精炼",
+    power: "电力",
+    power_grid: "电网",
+    research: "研究",
+    logistics: "物流",
+    logistics_hub: "物流枢纽",
+    dyson: "戴森",
+    command_signal: "指挥",
+    combat: "军事",
+    space: "航天",
+  },
   // 与 config/defs/items/ 下的物品定义一一对应
   itemId: {
     // 矿石

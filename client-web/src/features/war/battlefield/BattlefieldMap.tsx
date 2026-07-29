@@ -89,9 +89,9 @@ export function BattlefieldMap({
         </p>
       </div>
       <ul className="war-list battlefield-legend">
-        <li><span style={{ color: '#38bdf8' }}>◆</span> 己方舰队</li>
-        <li><span style={{ color: '#f87171' }}>▲</span> 敌方接触</li>
-        <li><span style={{ color: '#94a3b8' }}>●</span> 行星（红圈虚线=被封锁）</li>
+        <li><span style={{ color: 'var(--accent)' }}>◆</span> 己方舰队</li>
+        <li><span style={{ color: 'var(--danger)' }}>▲</span> 敌方接触</li>
+        <li><span style={{ color: 'var(--text-muted)' }}>●</span> 行星（红圈虚线=被封锁）</li>
       </ul>
       {selection ? (
         <p className="battlefield-selection subtle-text">

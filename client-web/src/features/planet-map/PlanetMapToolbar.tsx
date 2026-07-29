@@ -9,7 +9,7 @@ import type { PlanetRenderView } from "@/features/planet-map/model";
 import { resolveHomeTile } from "@/features/planet-map/model";
 import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
 import {
-  PLANET_HOME_ZOOM_INDEX,
+  PLANET_FOCUS_FIT_ZOOM,
   usePlanetViewStore,
 } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
@@ -24,7 +24,8 @@ interface PlanetMapToolbarProps {
  * 左下悬浮工具条（V3 全屏布局）：默认一列小图标按钮，
  * 图层按钮弹出浮层承载原左栏内容（12 图层勾选 + 缩放档位 + 场景摘要，组件原样复用）。
  * 缩放 ± 与档位按钮统一走 store 的 requestZoom（锚点 = 视口中心），渲染层补间由场景负责。
- * "回到基地"：居中到玩家基地并切到 32px/tile；找不到基地时退回重置视角。
+ * "回到基地"：居中到玩家基地并自适应占屏（小行星整图 60-80%，大行星维持 32px/tile 回家档）；
+ * 找不到基地时退回重置视角。
  */
 export function PlanetMapToolbar({
   networks,
@@ -59,7 +60,7 @@ export function PlanetMapToolbar({
   const handleHome = () => {
     const home = resolveHomeTile(planet, session.playerId);
     if (home) {
-      requestFocus(home, PLANET_HOME_ZOOM_INDEX);
+      requestFocus(home, PLANET_FOCUS_FIT_ZOOM);
     } else {
       resetCamera();
     }
