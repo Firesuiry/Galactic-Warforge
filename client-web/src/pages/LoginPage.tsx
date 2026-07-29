@@ -2,11 +2,13 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useQueryClient } from '@tanstack/react-query';
+import { User } from 'lucide-react';
 
 import { createApiClient } from '@shared/api';
 import { DEFAULT_PLAYERS } from '@shared/config';
 import { normalizeServerUrl } from '@shared/utils';
 
+import { Button, Input, Select } from '@/common/controls';
 import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import {
   createFixtureFetch,
@@ -129,10 +131,15 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-hero">
+        <h1 className="login-title">SILICON WORLD</h1>
+        <p className="login-subtitle">硅基世界指挥台</p>
+      </div>
+
       <section className="panel login-panel">
         <div className="page-header">
-          <p className="eyebrow">T004 登录页与会话管理</p>
-          <h1>连接 SiliconWorld Web 入口</h1>
+          <p className="eyebrow">Command Uplink</p>
+          <h2 className="login-panel__heading">建立指挥链路</h2>
           <p className="subtle-text">
             在线模式通过当前 Web 入口代理访问游戏服务端，离线模式会直接载入本地 fixtures。
           </p>
@@ -163,7 +170,7 @@ export function LoginPage() {
           {connectionMode === 'server' ? (
             <label className="field">
               <span>Web 入口地址</span>
-              <input
+              <Input
                 aria-label="Web 入口地址"
                 name="serverUrl"
                 value={form.serverUrl}
@@ -177,7 +184,7 @@ export function LoginPage() {
           ) : (
             <label className="field">
               <span>样例场景</span>
-              <select
+              <Select
                 name="fixtureId"
                 onChange={(event) => setFixtureId(event.target.value)}
                 value={fixtureId}
@@ -187,7 +194,7 @@ export function LoginPage() {
                     {fixture.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <span className="field-hint">
                 {availableFixtures.find((fixture) => fixture.id === fixtureId)?.description ?? '离线模式可直接渲染主要页面与组件。'}
               </span>
@@ -196,7 +203,7 @@ export function LoginPage() {
 
           <label className="field">
             <span>player_id</span>
-            <input
+            <Input
               name="playerId"
               value={form.playerId}
               onChange={(event) => updateField('playerId', event.target.value)}
@@ -206,7 +213,7 @@ export function LoginPage() {
 
           <label className="field">
             <span>player_key</span>
-            <input
+            <Input
               name="playerKey"
               value={form.playerKey}
               onChange={(event) => updateField('playerKey', event.target.value)}
@@ -218,11 +225,16 @@ export function LoginPage() {
             {DEFAULT_PLAYERS.map((player) => (
               <button
                 key={player.id}
-                className="secondary-button"
+                aria-label={`使用 ${player.id}`}
+                className="preset-card"
                 type="button"
                 onClick={() => applyPreset(player.id, player.key)}
               >
-                使用 {player.id}
+                <span className="preset-card__title">
+                  <User size={14} strokeWidth={2} aria-hidden="true" />
+                  使用 {player.id}
+                </span>
+                <span className="preset-card__key">{player.key}</span>
               </button>
             ))}
           </div>
@@ -233,9 +245,9 @@ export function LoginPage() {
             </div>
           ) : null}
 
-          <button className="primary-button" type="submit" disabled={submitting}>
+          <Button variant="primary" type="submit" disabled={submitting}>
             {submitting ? '连接中...' : connectionMode === 'fixture' ? '打开离线场景' : '连接并进入星图'}
-          </button>
+          </Button>
         </form>
       </section>
     </div>

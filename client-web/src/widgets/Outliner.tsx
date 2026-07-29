@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Globe, Rocket, TriangleAlert } from 'lucide-react';
 
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -93,7 +94,7 @@ export function Outliner() {
         title="展开总览栏"
         aria-label="展开总览栏"
       >
-        ◀
+        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
       </button>
     );
   }
@@ -109,7 +110,7 @@ export function Outliner() {
           title="收起总览栏"
           aria-label="收起总览栏"
         >
-          ▶
+          <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
 
@@ -121,7 +122,7 @@ export function Outliner() {
             type="button"
             onClick={() => navigate(`/planet/${activePlanetId}`)}
           >
-            <span aria-hidden="true">🪐</span>
+            <Globe size={16} strokeWidth={2} aria-hidden="true" />
             <span>{activePlanetId}</span>
           </button>
         ) : (
@@ -162,7 +163,7 @@ export function Outliner() {
             onClick={() => navigate('/war')}
             title={fleetStateLabel(fleet)}
           >
-            <span aria-hidden="true">🚀</span>
+            <Rocket size={16} strokeWidth={2} aria-hidden="true" />
             <span>{fleet.fleet_id}</span>
             <span className="outliner__item-meta">{fleetStateLabel(fleet)}</span>
           </button>
@@ -180,7 +181,7 @@ export function Outliner() {
             onClick={() => activePlanetId && navigate(`/planet/${activePlanetId}`)}
             title={alert.message}
           >
-            <span aria-hidden="true">⚠️</span>
+            <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
             <span>{translateAlertType(alert.alert_type, translateSeverity(alert.severity))}</span>
             <span className="outliner__item-meta">t{alert.tick}</span>
           </button>

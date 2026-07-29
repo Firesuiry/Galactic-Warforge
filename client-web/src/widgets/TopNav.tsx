@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bot, ChartColumn, Cpu, Hourglass, Orbit, Rewind, Save, Settings, Swords, TriangleAlert, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
@@ -14,13 +15,13 @@ import { useSessionSnapshot } from '@/hooks/use-session';
 import { translateAlertType, translateSeverity, translateUi } from '@/i18n/translate';
 import { useSessionStore } from '@/stores/session';
 
-const MENU_ITEMS = [
-  { to: '/overview', glyph: '📊', label: '总览' },
-  { to: '/galaxy', glyph: '🌌', label: '星图' },
-  { to: '/war', glyph: '⚔️', label: '战争' },
-  { to: '/agents', glyph: '🤖', label: '智能体' },
-  { to: '/replay', glyph: '⏪', label: '回放' },
-] as const;
+const MENU_ITEMS: ReadonlyArray<{ to: string; icon: LucideIcon; label: string }> = [
+  { to: '/overview', icon: ChartColumn, label: '总览' },
+  { to: '/galaxy', icon: Orbit, label: '星图' },
+  { to: '/war', icon: Swords, label: '战争' },
+  { to: '/agents', icon: Bot, label: '智能体' },
+  { to: '/replay', icon: Rewind, label: '回放' },
+];
 
 export function TopNav() {
   const client = useApiClient();
@@ -128,6 +129,9 @@ export function TopNav() {
   return (
     <header className="top-nav">
       <div className="top-nav__brand">
+        <span className="top-nav__brand-mark" aria-hidden="true">
+          <Cpu size={16} strokeWidth={2} />
+        </span>
         <div className="top-nav__title">{translateUi('app.command_center')}</div>
       </div>
 
@@ -140,7 +144,7 @@ export function TopNav() {
             title={item.label}
             aria-label={item.label}
           >
-            <span aria-hidden="true">{item.glyph}</span>
+            <item.icon size={18} strokeWidth={2} aria-hidden="true" />
           </NavLink>
         ))}
       </nav>
@@ -159,18 +163,18 @@ export function TopNav() {
           title={`建设资金（矿石）· 背包库存：${mineralSummary}`}
         >
           <Icon iconKey="iron_ore" color="#c9a06a" size={16} />
-          <span>{currentPlayer?.resources?.minerals ?? 0}</span>
+          <span className="top-nav__chip-value">{currentPlayer?.resources?.minerals ?? 0}</span>
         </span>
         <span className="top-nav__chip" title="能量">
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
-          <span>{currentPlayer?.resources?.energy ?? 0}</span>
+          <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>
         <span
           className={`top-nav__chip${powerClass ? ` ${powerClass}` : ''}${powerPulse}`}
           title="电力 发电/耗电"
         >
           <Icon iconKey="ray_receiver" color="#39e6d0" size={16} />
-          <span>
+          <span className="top-nav__chip-value">
             {energyStats ? `${energyStats.generation}/${energyStats.consumption}` : '-'}
           </span>
           {powerDelta != null ? (
@@ -192,7 +196,7 @@ export function TopNav() {
               : '电力赤字'}
             onClick={() => activePlanetId && navigate(`/planet/${activePlanetId}`)}
           >
-            <span aria-hidden="true">⚠️</span>
+            <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
             <span className="top-nav__alert-count">{alertCount}</span>
           </button>
         ) : null}
@@ -208,7 +212,11 @@ export function TopNav() {
           aria-label={audioMuted ? '取消静音' : '静音'}
           aria-pressed={audioMuted}
         >
-          <span aria-hidden="true">{audioMuted ? '🔇' : '🔊'}</span>
+          {audioMuted ? (
+            <VolumeX size={18} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Volume2 size={18} strokeWidth={2} aria-hidden="true" />
+          )}
         </button>
 
         <button
@@ -219,7 +227,11 @@ export function TopNav() {
           title={saveMutation.isPending ? '保存中...' : '保存'}
           aria-label="保存"
         >
-          <span aria-hidden="true">{saveMutation.isPending ? '⏳' : '💾'}</span>
+          {saveMutation.isPending ? (
+            <Hourglass size={18} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Save size={18} strokeWidth={2} aria-hidden="true" />
+          )}
         </button>
 
         <div className="top-nav__settings" ref={settingsRef}>
@@ -231,7 +243,7 @@ export function TopNav() {
             aria-label="设置"
             aria-expanded={settingsOpen}
           >
-            <span aria-hidden="true">⚙️</span>
+            <Settings size={18} strokeWidth={2} aria-hidden="true" />
           </button>
           {settingsOpen ? (
             <div className="top-nav__settings-pop" role="menu">

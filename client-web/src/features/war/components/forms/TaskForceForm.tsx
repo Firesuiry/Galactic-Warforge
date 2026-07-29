@@ -10,6 +10,7 @@ import type {
 } from '@shared/types';
 
 import { WarField } from '@/features/war/components/WarField';
+import { Input, Select } from '@/common/controls';
 import type { WarCommandInput, WarQueryScope } from '@/features/war/war-query-keys';
 import { useApiClient } from '@/hooks/use-api-client';
 
@@ -160,17 +161,17 @@ export function TaskForceForm({
       <article className="war-card">
         <h3>组建任务群</h3>
         <WarField label="任务群 ID">
-          <input value={createId} onChange={(event) => setCreateId(event.target.value)} placeholder="例如 tf-strike" />
+          <Input value={createId} onChange={(event) => setCreateId(event.target.value)} placeholder="例如 tf-strike" />
         </WarField>
         <WarField label="任务群名称">
-          <input value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="可选" />
+          <Input value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="可选" />
         </WarField>
         <WarField label="初始姿态">
-          <select value={createStance} onChange={(event) => setCreateStance(event.target.value as WarTaskForceStance)}>
+          <Select value={createStance} onChange={(event) => setCreateStance(event.target.value as WarTaskForceStance)}>
             {TASK_FORCE_STANCES.map((stance) => (
               <option key={stance} value={stance}>{stance}</option>
             ))}
-          </select>
+          </Select>
         </WarField>
         <button
           className="secondary-button war-button"
@@ -186,20 +187,20 @@ export function TaskForceForm({
         <article className="war-card">
           <h3>编组成员</h3>
           <WarField label="编入目标群">
-            <select value={assignTaskForce.id} onChange={(event) => setAssignTaskForceId(event.target.value)}>
+            <Select value={assignTaskForce.id} onChange={(event) => setAssignTaskForceId(event.target.value)}>
               {taskForces.map((taskForce) => (
                 <option key={taskForce.id} value={taskForce.id}>
                   {taskForce.name || taskForce.id} ({taskForce.id})
                 </option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <WarField label="成员类型">
-            <select value={assignMemberKind} onChange={(event) => setAssignMemberKind(event.target.value as WarTaskForceMemberKind)}>
+            <Select value={assignMemberKind} onChange={(event) => setAssignMemberKind(event.target.value as WarTaskForceMemberKind)}>
               {MEMBER_KINDS.map((kind) => (
                 <option key={kind} value={kind}>{kind}</option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <div className="war-field">
             <span>编入舰队</span>
@@ -207,7 +208,7 @@ export function TaskForceForm({
               {fleets.length === 0 ? <li>暂无可编入的舰队。</li> : fleets.map((fleet) => (
                 <li key={fleet.fleet_id}>
                   <label>
-                    <input
+                    <Input
                       type="checkbox"
                       checked={Boolean(assignMemberIds[fleet.fleet_id])}
                       onChange={() => toggleMember(fleet.fleet_id)}
@@ -221,13 +222,13 @@ export function TaskForceForm({
           </div>
           {assignPlanet ? (
             <WarField label="驻守行星">
-              <select value={assignPlanet.planet_id} onChange={(event) => setAssignPlanetId(event.target.value)}>
+              <Select value={assignPlanet.planet_id} onChange={(event) => setAssignPlanetId(event.target.value)}>
                 {currentPlanets.map((planet) => (
                   <option key={planet.planet_id} value={planet.planet_id}>
                     {planet.name || planet.planet_id}
                   </option>
                 ))}
-              </select>
+              </Select>
             </WarField>
           ) : null}
           <button
@@ -245,34 +246,34 @@ export function TaskForceForm({
         <article className="war-card">
           <h3>部署任务群</h3>
           <WarField label="部署目标任务群">
-            <select value={deployTaskForce.id} onChange={(event) => setDeployTaskForceId(event.target.value)}>
+            <Select value={deployTaskForce.id} onChange={(event) => setDeployTaskForceId(event.target.value)}>
               {taskForces.map((taskForce) => (
                 <option key={taskForce.id} value={taskForce.id}>
                   {taskForce.name || taskForce.id} ({taskForce.id})
                 </option>
               ))}
-            </select>
+            </Select>
           </WarField>
           {deployTheater ? (
             <WarField label="归属战区">
-              <select value={deployTheater.id} onChange={(event) => setDeployTheaterId(event.target.value)}>
+              <Select value={deployTheater.id} onChange={(event) => setDeployTheaterId(event.target.value)}>
                 {theaters.map((theater) => (
                   <option key={theater.id} value={theater.id}>
                     {theater.name || theater.id} ({theater.id})
                   </option>
                 ))}
-              </select>
+              </Select>
             </WarField>
           ) : null}
           {deployPlanet ? (
             <WarField label="部署行星">
-              <select value={deployPlanet.planet_id} onChange={(event) => setDeployPlanetId(event.target.value)}>
+              <Select value={deployPlanet.planet_id} onChange={(event) => setDeployPlanetId(event.target.value)}>
                 {currentPlanets.map((planet) => (
                   <option key={planet.planet_id} value={planet.planet_id}>
                     {planet.name || planet.planet_id}
                   </option>
                 ))}
-              </select>
+              </Select>
             </WarField>
           ) : null}
           <button

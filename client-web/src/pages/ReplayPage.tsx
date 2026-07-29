@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 
 import type { ReplayDigest, ReplayResponse } from '@shared/types';
 
+import { Button, Input } from '@/common/controls';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
@@ -196,7 +197,7 @@ export function ReplayPage() {
 
           <label className="field">
             <span>from_tick</span>
-            <input
+            <Input
               inputMode="numeric"
               name="fromTick"
               onChange={(event) => updateField('fromTick', event.target.value)}
@@ -206,7 +207,7 @@ export function ReplayPage() {
 
           <label className="field">
             <span>to_tick</span>
-            <input
+            <Input
               disabled={form.step}
               inputMode="numeric"
               name="toTick"
@@ -217,7 +218,7 @@ export function ReplayPage() {
 
           <label className="field">
             <span>speed</span>
-            <input
+            <Input
               inputMode="decimal"
               name="speed"
               onChange={(event) => updateField('speed', event.target.value)}
@@ -227,7 +228,7 @@ export function ReplayPage() {
           </label>
 
           <label className="toggle-row">
-            <input
+            <Input
               checked={form.step}
               name="step"
               onChange={(event) => updateField('step', event.target.checked)}
@@ -237,7 +238,7 @@ export function ReplayPage() {
           </label>
 
           <label className="toggle-row">
-            <input
+            <Input
               checked={form.verify}
               name="verify"
               onChange={(event) => updateField('verify', event.target.checked)}
@@ -258,9 +259,9 @@ export function ReplayPage() {
             </div>
           ) : null}
 
-          <button className="primary-button" disabled={replayMutation.isPending} type="submit">
+          <Button variant="primary" disabled={replayMutation.isPending} type="submit">
             {replayMutation.isPending ? '执行回放中...' : '执行 replay'}
-          </button>
+          </Button>
         </form>
 
         <div className="replay-result-stack">

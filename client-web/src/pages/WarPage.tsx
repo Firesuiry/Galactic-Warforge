@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { WarTaskForceStance } from '@shared/types';
 import { useQuery } from '@tanstack/react-query';
+import { Dna, Factory, ScrollText, Target, type LucideIcon } from 'lucide-react';
 
 import { MapDrawer } from '@/common/MapDrawer';
+import { Input, Select, Tabs } from '@/common/controls';
 import { BlueprintVariantForm } from '@/features/war/components/forms/BlueprintVariantForm';
 import { FleetActionForm } from '@/features/war/components/forms/FleetActionForm';
 import { ProductionQueueForm } from '@/features/war/components/forms/ProductionQueueForm';
@@ -53,11 +55,11 @@ const WAR_FALLBACK_RUNTIME_MS = 10_000;
  * 抽屉分组 Tab：蓝图/军工/战区/战报。
  * id 与命令反馈 section 一一对应，新回执到达时抽屉自动滑出并落到对应分组。
  */
-const WAR_DRAWER_TABS: Array<{ id: FeedbackSection; glyph: string; label: string }> = [
-  { id: 'blueprint', glyph: '🧬', label: '蓝图' },
-  { id: 'industry', glyph: '🏭', label: '军工' },
-  { id: 'theater', glyph: '🎯', label: '战区' },
-  { id: 'reports', glyph: '📜', label: '战报' },
+const WAR_DRAWER_TABS: Array<{ id: FeedbackSection; icon: LucideIcon; label: string }> = [
+  { id: 'blueprint', icon: Dna, label: '蓝图' },
+  { id: 'industry', icon: Factory, label: '军工' },
+  { id: 'theater', icon: Target, label: '战区' },
+  { id: 'reports', icon: ScrollText, label: '战报' },
 ];
 
 function firstQueryError(errors: unknown[]) {
@@ -551,28 +553,14 @@ export function WarPage() {
           onToggle={() => setDrawerOpen((open) => !open)}
           open={drawerOpen}
         >
-          <div aria-label="战争工作台面板" className="planet-detail-tabs war-drawer-tabs" role="tablist">
-            {WAR_DRAWER_TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  aria-controls={`war-drawer-panel-${tab.id}`}
-                  aria-selected={isActive}
-                  className={isActive
-                    ? 'secondary-button planet-detail-tabs__tab planet-detail-tabs__tab--active'
-                    : 'secondary-button planet-detail-tabs__tab'}
-                  id={`war-drawer-tab-${tab.id}`}
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  role="tab"
-                  type="button"
-                >
-                  <span aria-hidden="true" className="planet-detail-tabs__glyph">{tab.glyph}</span>
-                  <span className="planet-detail-tabs__text">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <Tabs
+            ariaLabel="战争工作台面板"
+            className="war-drawer-tabs"
+            idPrefix="war-drawer"
+            tabs={WAR_DRAWER_TABS}
+            activeId={activeTab}
+            onChange={(id) => setActiveTab(id as FeedbackSection)}
+          />
           <div className="planet-detail-shell__content war-drawer__content">
             {activeTab === 'blueprint' ? (
               <div id="war-drawer-panel-blueprint" role="tabpanel">
@@ -585,7 +573,7 @@ export function WarPage() {
             <div className="war-panel__controls">
               <label className="war-field">
                 <span>蓝图选择</span>
-                <select
+                <Select
                   value={selectedBlueprint?.id ?? ''}
                   onChange={(event) => setSelectedBlueprintId(event.target.value)}
                 >
@@ -594,7 +582,7 @@ export function WarPage() {
                       {blueprint.name} ({blueprint.id})
                     </option>
                   ))}
-                </select>
+                </Select>
                 {blueprints.length === 0 ? (
                   <span className="subtle-text">
                     暂无自有蓝图，可在下方「蓝图改型」里基于公开预置蓝图派生变体。
@@ -616,29 +604,29 @@ export function WarPage() {
               <h3>创建蓝图</h3>
               <label className="war-field">
                 <span>蓝图 ID</span>
-                <input value={createBlueprintId} onChange={(event) => setCreateBlueprintId(event.target.value)} />
+                <Input value={createBlueprintId} onChange={(event) => setCreateBlueprintId(event.target.value)} />
               </label>
               <label className="war-field">
                 <span>蓝图名称</span>
-                <input value={createBlueprintName} onChange={(event) => setCreateBlueprintName(event.target.value)} />
+                <Input value={createBlueprintName} onChange={(event) => setCreateBlueprintName(event.target.value)} />
               </label>
               <label className="war-field">
                 <span>作战域</span>
-                <select value={createDomain} onChange={(event) => setCreateDomain(event.target.value as WarDomain)}>
+                <Select value={createDomain} onChange={(event) => setCreateDomain(event.target.value as WarDomain)}>
                   {WAR_DOMAINS.map((domain) => (
                     <option key={domain} value={domain}>{domain}</option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="war-field">
                 <span>底盘</span>
-                <select value={createBaseId} onChange={(event) => setCreateBaseId(event.target.value)}>
+                <Select value={createBaseId} onChange={(event) => setCreateBaseId(event.target.value)}>
                   {(isSpaceDomain(createDomain) ? catalog.base_hulls : catalog.base_frames)?.map((base) => (
                     <option key={base.id} value={base.id}>
                       {base.name} ({base.id})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <button className="primary-link war-button" type="button" onClick={handleCreateBlueprint}>
                 创建蓝图
@@ -699,7 +687,7 @@ export function WarPage() {
                   <div className="war-slot-row" key={slot.id}>
                     <label className="war-field war-field--compact">
                       <span>{slot.id}</span>
-                      <select
+                      <Select
                         aria-label={`槽位 ${slot.id}`}
                         value={slotSelections[slot.id] ?? ''}
                         onChange={(event) => {
@@ -716,7 +704,7 @@ export function WarPage() {
                             {component.name} ({component.id})
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                     <button className="secondary-button war-button" type="button" onClick={() => handleSetBlueprintSlot(slot.id)}>
                       保存槽位
@@ -789,7 +777,7 @@ export function WarPage() {
               <h3>部署尝试</h3>
               <label className="war-field">
                 <span>部署蓝图</span>
-                <select
+                <Select
                   value={selectedDeployBlueprint?.id ?? ''}
                   onChange={(event) => setSelectedDeployBlueprintId(event.target.value)}
                 >
@@ -798,11 +786,11 @@ export function WarPage() {
                       {blueprint.name} ({blueprint.id})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="war-field">
                 <span>部署枢纽</span>
-                <select
+                <Select
                   value={selectedDeploymentHub?.building_id ?? ''}
                   onChange={(event) => setSelectedDeploymentHubId(event.target.value)}
                 >
@@ -811,7 +799,7 @@ export function WarPage() {
                       {hub.building_type} ({hub.building_id})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               {selectedDeployBlueprint ? (
                 <dl className="war-kv-list">
@@ -892,33 +880,33 @@ export function WarPage() {
               <h3>任务群控制</h3>
               <label className="war-field">
                 <span>任务群</span>
-                <select value={selectedTaskForce?.id ?? ''} onChange={(event) => setSelectedTaskForceId(event.target.value)}>
+                <Select value={selectedTaskForce?.id ?? ''} onChange={(event) => setSelectedTaskForceId(event.target.value)}>
                   {taskForces.map((taskForce) => (
                     <option key={taskForce.id} value={taskForce.id}>
                       {taskForce.name || taskForce.id} ({taskForce.id})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="war-field">
                 <span>任务群姿态</span>
-                <select value={selectedStance} onChange={(event) => setSelectedStance(event.target.value as WarTaskForceStance)}>
+                <Select value={selectedStance} onChange={(event) => setSelectedStance(event.target.value as WarTaskForceStance)}>
                   {TASK_FORCE_STANCES.map((stance) => (
                     <option key={stance} value={stance}>
                       {stance}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="war-field">
                 <span>目标行星</span>
-                <select value={selectedPlanetId} onChange={(event) => setSelectedPlanetId(event.target.value)}>
+                <Select value={selectedPlanetId} onChange={(event) => setSelectedPlanetId(event.target.value)}>
                   {currentPlanets.map((planet) => (
                     <option key={planet.planet_id} value={planet.planet_id}>
                       {planet.name || planet.planet_id}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <div className="war-action-row">
                 <button className="secondary-button war-button" type="button" onClick={handleTaskForceStanceUpdate}>

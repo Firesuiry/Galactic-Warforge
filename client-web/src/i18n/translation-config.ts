@@ -198,6 +198,7 @@ export const TRANSLATIONS = {
   },
   techId: {
     "tech-energy-1": "基础能源学",
+    "tech-energy-grid-2": "能源电网 II",
     dirac_inversion: "狄拉克反演",
     // server/internal/model/combat_tech.go 中的战斗科技（服务端英文名）
     weapon_mk1: "武器 Mk.I",

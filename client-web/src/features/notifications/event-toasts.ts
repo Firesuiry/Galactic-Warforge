@@ -59,7 +59,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'danger',
-          title: destroyed ? '☄ 击毁目标' : '⚔ 舰队交火',
+          title: destroyed ? '击毁目标' : '舰队交火',
           body: [
             targetId ? shortId(targetId) : '',
             damage !== undefined ? `-${Math.round(damage)}` : '',
@@ -74,7 +74,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'danger',
-          title: '✖ 单位被摧毁',
+          title: '单位被摧毁',
           body: entityId ? shortId(entityId) : undefined,
           href: '/war',
           mergeKey: 'entity_destroyed',
@@ -86,7 +86,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🚀 导弹齐射',
+          title: '导弹齐射',
           body: count !== undefined ? `×${count}` : undefined,
           href: '/war',
           mergeKey: 'missile_salvo_fired',
@@ -98,7 +98,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🛡 点防拦截',
+          title: '点防拦截',
           body: intercepted !== undefined ? `拦截 ×${intercepted}` : undefined,
           href: '/war',
           mergeKey: 'point_defense_intercept',
@@ -118,7 +118,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'success',
-          title: `✓ 建造完成：${buildingType ? translateBuildingType(buildingType) : '建筑'}`,
+          title: `建造完成：${buildingType ? translateBuildingType(buildingType) : '建筑'}`,
           href: planetHref(payload),
         },
       };
@@ -128,7 +128,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'success',
-          title: `✓ 研究完成：${techId ? translateTechId(techId) : '科技'}`,
+          title: `研究完成：${techId ? translateTechId(techId) : '科技'}`,
           href: planetHref(payload),
         },
       };
@@ -151,7 +151,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'warning',
-          title: '⚠ 产线告警',
+          title: '产线告警',
           body: [buildingLabel, issue].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
           // 同建筑同原因合并计数，避免刷屏
@@ -164,7 +164,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🚀 火箭发射',
+          title: '火箭发射',
           body: count !== undefined && count > 1 ? `×${count}` : undefined,
           href: planetHref(payload),
         },
@@ -176,7 +176,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🛰 新舰队服役',
+          title: '新舰队服役',
           body: shortId(asString(payload.fleet_id)) || undefined,
           href: '/war',
         },
@@ -186,7 +186,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🛰 舰队已编组',
+          title: '舰队已编组',
           body: shortId(asString(payload.fleet_id)) || undefined,
           href: '/war',
           mergeKey: 'fleet_assigned',
@@ -197,7 +197,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🛰 舰队已解散',
+          title: '舰队已解散',
           body: shortId(asString(payload.fleet_id)) || undefined,
           href: '/war',
         },
@@ -207,7 +207,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '⬇ 小队已部署',
+          title: '小队已部署',
           href: '/war',
           mergeKey: 'squad_deployed',
         },
@@ -217,7 +217,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'warning',
-          title: '⚔ 舰队出击',
+          title: '舰队出击',
           body: shortId(asString(payload.fleet_id)) || undefined,
           href: '/war',
         },
@@ -229,7 +229,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: `🚀 舰队跃迁：${from || '?'}→${to || '?'}`,
+          title: `舰队跃迁：${from || '?'}→${to || '?'}`,
           body: shortId(asString(payload.fleet_id)) || undefined,
           href: '/galaxy',
         },
@@ -240,7 +240,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'success',
-          title: `✓ 舰队抵达：${asString(payload.system_id) || '?'}`,
+          title: `舰队抵达：${asString(payload.system_id) || '?'}`,
           body: shortId(asString(payload.fleet_id)) || undefined,
           href: '/galaxy',
         },
@@ -250,7 +250,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'warning',
-          title: '⬇ 登陆作战开始',
+          title: '登陆作战开始',
           href: '/war',
         },
         sfx: 'alert',
@@ -259,7 +259,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'danger',
-          title: '✖ 登陆失败',
+          title: '登陆失败',
           href: '/war',
         },
         sfx: 'explosion',
@@ -268,7 +268,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'warning',
-          title: '⚠ 补给线被切断',
+          title: '补给线被切断',
           href: '/war',
           mergeKey: 'supply_line_disrupted',
         },
@@ -278,7 +278,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'info',
-          title: '🛰 轨道控制权变更',
+          title: '轨道控制权变更',
           href: '/war',
           mergeKey: 'orbital_superiority_changed',
         },
@@ -288,7 +288,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'success',
-          title: '🏆 胜利宣言',
+          title: '胜利宣言',
           href: '/war',
         },
         sfx: 'commandOk',

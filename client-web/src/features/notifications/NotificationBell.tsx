@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bell } from 'lucide-react';
 
 import { sfx } from '@/engine/audio';
 import { useNotificationsStore } from '@/features/notifications/store';
@@ -57,7 +58,7 @@ export function NotificationBell() {
         aria-label="通知"
         aria-expanded={open}
       >
-        <span aria-hidden="true">🔔</span>
+        <Bell size={18} strokeWidth={2} aria-hidden="true" />
         {unread > 0 ? (
           <span className="notification-bell__badge">{unread > 99 ? '99+' : unread}</span>
         ) : null}

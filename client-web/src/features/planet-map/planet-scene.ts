@@ -43,8 +43,7 @@ import type {
 } from '@shared/types';
 
 import type { BattleEvent } from '@/engine/battle-events';
-import { resolveIconGlyph } from '@/common/Icon';
-import { getEmojiTexture, getGlowTexture, getVignetteTexture } from '@/engine/textures';
+import { getGlowTexture, getIconTexture, getVignetteTexture } from '@/engine/textures';
 import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
 import {
@@ -1740,7 +1739,7 @@ export class PlanetScene {
     const sprite = new Sprite();
     const badge = new Sprite();
     badge.anchor.set(0.5);
-    const warning = new Sprite(getEmojiTexture('⚠️'));
+    const warning = new Sprite(getIconTexture('alert', 0xffb020));
     warning.anchor.set(0.5);
     container.addChild(base);
     container.addChild(sprite);
@@ -1809,10 +1808,13 @@ export class PlanetScene {
       .roundRect(1, pixelHeight * 0.66, Math.max(pixelWidth - 2, 2), pixelHeight * 0.32, 2)
       .stroke({ width: 1.5, color: isOwn ? COLOR_BUILDING_STROKE_OWN : COLOR_BUILDING_STROKE_ENEMY, alpha: 0.9 });
 
-    // emoji 降级为右上角类型角标（高缩放档才显示，低档靠剪影+配色辨认）。
+    // 类型图标降级为右上角角标（高缩放档才显示，低档靠剪影+配色辨认）。
     if (this.tileSize >= BUILDING_BADGE_MIN_TILE_SIZE) {
       const catalogEntry = getBuildingCatalogEntry(catalog, building.type);
-      node.badge.texture = getEmojiTexture(resolveIconGlyph(catalogEntry?.icon_key ?? building.type));
+      node.badge.texture = getIconTexture(
+        catalogEntry?.icon_key ?? building.type,
+        resolveBuildingAccent(building.type),
+      );
       const badgeSize = Math.max(pixelWidth * 0.34, 6);
       node.badge.width = badgeSize;
       node.badge.height = badgeSize;
@@ -2009,7 +2011,7 @@ export class PlanetScene {
 
   private createResourceNode(resource: PlanetResource): ResourceNode {
     const container = new Container();
-    // 晶簇/岩块底座贴花（资源调色板上色，确定性形状），emoji 坐在贴花之上。
+    // 晶簇/岩块底座贴花（资源调色板上色，确定性形状），lucide 图标坐在贴花之上。
     const base = new Graphics();
     const decalSize = Math.max(this.tileSize * 0.72, 5);
     const decal = resourceDecalLayout(resource.kind, decalSize);
@@ -2022,7 +2024,7 @@ export class PlanetScene {
     }
     container.addChild(base);
 
-    const icon = new Sprite(getEmojiTexture(resolveIconGlyph(resource.kind)));
+    const icon = new Sprite(getIconTexture(resource.kind, resourceColor));
     icon.anchor.set(0.5);
     const size = Math.max(this.tileSize * 0.52, 4);
     icon.width = size;

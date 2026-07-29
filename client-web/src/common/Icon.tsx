@@ -1,59 +1,34 @@
 import type { CSSProperties } from 'react';
 
+import { Icon as LucideIconBase } from 'lucide-react';
+
+import { resolveIconNode } from '@/common/icon-map';
+
 /**
- * Icon：统一的"彩色圆角方块底 + emoji 字形"图标组件（V0 设计地基）。
+ * Icon：统一的"彩色圆角方块底 + lucide 线稿字形"图标组件（期2 图标体系）。
  *
- * - 通过 `iconKey`（来自 catalog.icon_key）查 emoji 字形；未命中则回退首字母大写。
- * - `color`（来自 catalog.color）转低透明 rgba 作容器底色；未给则用 --accent 低透明。
- * - `size` 控制容器边长（默认 24），字号跟随 size。
+ * - 通过 `iconKey`（来自 catalog.icon_key）查 lucide 节点数据（common/icon-map，全站唯一事实来源）；
+ *   未命中则回退首字母大写。
+ * - `color`（来自 catalog.color）既作字形描边色（currentColor），也转低透明 rgba 作容器底色与微光描边；
+ *   未给则用 --accent 主色。
+ * - `size` 控制容器边长（默认 24），字形跟随 size（约 0.62 倍）。
  * - 装饰性图标默认 `aria-hidden`；若提供 `label` 则 `role="img"` + `aria-label`。
- * - 零运行时依赖（纯 emoji）。V4 会把实体节点/chip/按钮接到此组件。
  */
 
 export interface IconProps {
   iconKey?: string;
   color?: string;
   size?: number;
-  /** 为 true 时不写死 width/height/fontSize，交给 CSS 控制（用于地图实体节点随 tile 缩放）。 */
+  /** 为 true 时不写死 width/height，交给 CSS 控制（用于地图实体节点随 tile 缩放）。 */
   fluid?: boolean;
   /** 提供时图标变为带语义的 img；否则视为装饰性（aria-hidden）。 */
   label?: string;
   className?: string;
 }
 
-/** iconKey → emoji 字形映射。覆盖建筑/资源/单位的核心 catalog key（含常见别名）。 */
-const ICON_MAP: Record<string, string> = {
-  // 建筑 —— 采集 / 生产 / 能源 / 科研 / 物流 / 戴森球
-  mining_machine: '⛏️',
-  miner: '⛏️',
-  assembling_machine_mk1: '🛠️',
-  assembler: '🛠️',
-  tesla_tower: '⚡',
-  tesla: '⚡',
-  lab: '🧪',
-  research_station: '🧪',
-  logistics_station: '📡',
-  em_rail_ejector: '🛰️',
-  vertical_launching_silo: '🚀',
-  ray_receiver: '🔭',
-  artificial_star: '✨',
-  // 资源
-  iron_ore: '🪨',
-  copper_ore: '🟠',
-  coal: '⚫',
-  stone: '⬜',
-  oil: '🛢️',
-  silicon_ore: '🔵',
-  water: '💧',
-  gear: '⚙️',
-  // 单位
-  worker: '👷',
-  soldier: '🪖',
-  executor: '🤖',
-};
-
-/** 主色 RGB（与 --accent #39e6d0 对应），color 缺失/无法解析时的底色回退。 */
+/** 主色（与 --accent #39e6d0 对应），color 缺失/无法解析时的底色与字形回退。 */
 const ACCENT_RGB: readonly [number, number, number] = [57, 230, 208];
+const ACCENT_CSS = '#39e6d0';
 
 function parseHex(hex: string): [number, number, number] | null {
   let h = hex.trim();
@@ -89,34 +64,40 @@ function colorToRgba(color: string | undefined, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function resolveGlyph(iconKey: string | undefined): string {
-  if (iconKey && ICON_MAP[iconKey]) return ICON_MAP[iconKey];
+/** 未命中映射时的字母回退（与原 emoji 版行为一致）。 */
+function resolveFallbackLetter(iconKey: string | undefined): string {
   if (iconKey && iconKey.length > 0) return iconKey.charAt(0).toUpperCase();
   return '?';
 }
 
-/** 供 Pixi 场景（emoji 纹理）复用的字形解析：与 DOM Icon 保持同一映射与回退。 */
-export function resolveIconGlyph(iconKey: string | undefined): string {
-  return resolveGlyph(iconKey);
-}
-
 export function Icon({ iconKey, color, size = 24, fluid = false, label, className }: IconProps) {
-  const glyph = resolveGlyph(iconKey);
-  const style: CSSProperties = fluid
-    ? { background: colorToRgba(color, 0.18) }
-    : {
-        width: size,
-        height: size,
-        fontSize: Math.round(size * 0.56),
-        background: colorToRgba(color, 0.18),
-      };
+  const node = resolveIconNode(iconKey);
+  const glyphColor = color ?? ACCENT_CSS;
+  const style: CSSProperties = {
+    background: colorToRgba(color, 0.16),
+    borderColor: colorToRgba(color, 0.4),
+    boxShadow: `0 0 6px ${colorToRgba(color, 0.22)}`,
+    color: glyphColor,
+    ...(fluid
+      ? {}
+      : { width: size, height: size, fontSize: Math.round(size * 0.56) }),
+  };
   const a11y = label
     ? { role: 'img', 'aria-label': label }
     : { 'aria-hidden': true as const };
 
   return (
     <span className={['sw-icon', className].filter(Boolean).join(' ')} style={style} {...a11y}>
-      <span aria-hidden="true">{glyph}</span>
+      {node ? (
+        <LucideIconBase
+          iconNode={node}
+          size={fluid ? '62%' : Math.round(size * 0.62)}
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+      ) : (
+        <span aria-hidden="true">{resolveFallbackLetter(iconKey)}</span>
+      )}
     </span>
   );
 }

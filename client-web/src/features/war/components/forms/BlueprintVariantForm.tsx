@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { WarBlueprintDetailView, WarfareCatalogView } from '@shared/types';
 
 import { WarField } from '@/features/war/components/WarField';
+import { Input, Select } from '@/common/controls';
 import { getBlueprintSlotComponents } from '@/features/war/format';
 import type { WarCommandInput } from '@/features/war/war-query-keys';
 import type { WarQueryScope } from '@/features/war/war-query-keys';
@@ -103,7 +104,7 @@ export function BlueprintVariantForm({
         从公开预置蓝图或已有蓝图派生变体，勾选允许后续改动的槽位。
       </p>
       <WarField label="父蓝图">
-        <select
+        <Select
           value={parentBlueprint.id}
           onChange={(event) => {
             setParentBlueprintId(event.target.value);
@@ -128,17 +129,17 @@ export function BlueprintVariantForm({
               ))}
             </optgroup>
           ) : null}
-        </select>
+        </Select>
       </WarField>
       <WarField label="变体 ID">
-        <input
+        <Input
           value={variantId}
           onChange={(event) => setVariantId(event.target.value)}
           placeholder="例如 corvette_scout"
         />
       </WarField>
       <WarField label="变体名称">
-        <input
+        <Input
           value={variantName}
           onChange={(event) => setVariantName(event.target.value)}
           placeholder="可选"
@@ -150,7 +151,7 @@ export function BlueprintVariantForm({
           {slots.map(({ slot }) => (
             <li key={slot.id}>
               <label>
-                <input
+                <Input
                   type="checkbox"
                   checked={Boolean(allowedSlots[slot.id])}
                   onChange={() => toggleSlot(slot.id)}

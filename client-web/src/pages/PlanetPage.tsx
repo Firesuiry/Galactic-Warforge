@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { Crosshair, ChevronDown, ChevronRight, Hammer, ScrollText, type LucideIcon } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { ALL_EVENT_TYPES } from "@shared/config";
@@ -81,16 +82,16 @@ type PlanetDetailPanel = "workbench" | "selection" | "activity";
 
 interface DetailTabConfig {
   id: PlanetDetailPanel;
-  /** 桌面端图标 Tab 用的 emoji 字形（工作台🛠️/选中🎯/活动📜）。 */
-  glyph: string;
+  /** 桌面端图标 Tab 用的 lucide 图标组件（工作台/选中/活动）。 */
+  icon: LucideIcon;
   /** i18n key → 文案（移动端文本 Tab + 桌面端 aria-label 共用）。 */
   labelKey: "planet.tab.workbench" | "planet.tab.selection" | "planet.tab.activity";
 }
 
 const DETAIL_TABS: DetailTabConfig[] = [
-  { id: "workbench", glyph: "🛠️", labelKey: "planet.tab.workbench" },
-  { id: "selection", glyph: "🎯", labelKey: "planet.tab.selection" },
-  { id: "activity", glyph: "📜", labelKey: "planet.tab.activity" },
+  { id: "workbench", icon: Hammer, labelKey: "planet.tab.workbench" },
+  { id: "selection", icon: Crosshair, labelKey: "planet.tab.selection" },
+  { id: "activity", icon: ScrollText, labelKey: "planet.tab.activity" },
 ];
 
 export function PlanetPage() {
@@ -511,7 +512,7 @@ export function PlanetPage() {
               type="button"
             >
               <span aria-hidden="true" className="planet-detail-tabs__glyph">
-                {tab.glyph}
+                <tab.icon size={18} strokeWidth={2} />
               </span>
               {isCompactLayout ? (
                 <span className="planet-detail-tabs__text">{label}</span>
@@ -593,7 +594,13 @@ export function PlanetPage() {
               title={titleChipCollapsed ? "展开行星信息" : "折叠行星信息"}
               type="button"
             >
-              <span aria-hidden="true">{titleChipCollapsed ? "▸" : "▾"}</span>
+              <span aria-hidden="true">
+                {titleChipCollapsed ? (
+                  <ChevronRight size={14} strokeWidth={2} />
+                ) : (
+                  <ChevronDown size={14} strokeWidth={2} />
+                )}
+              </span>
             </button>
             <p className="subtle-text">
               <span className="tick-pulse" key={`hero-tick-${planet.tick}`}>

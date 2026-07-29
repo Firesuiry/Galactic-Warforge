@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { House, Layers, Minus, Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import type { PlanetNetworksView, PlanetRuntimeView } from "@shared/types";
@@ -21,9 +22,9 @@ interface PlanetMapToolbarProps {
 
 /**
  * 左下悬浮工具条（V3 全屏布局）：默认一列小图标按钮，
- * ☰ 弹出浮层承载原左栏内容（12 图层勾选 + 缩放档位 + 场景摘要，组件原样复用）。
+ * 图层按钮弹出浮层承载原左栏内容（12 图层勾选 + 缩放档位 + 场景摘要，组件原样复用）。
  * 缩放 ± 与档位按钮统一走 store 的 requestZoom（锚点 = 视口中心），渲染层补间由场景负责。
- * ⌂ 语义为"回到基地"：居中到玩家基地并切到 32px/tile；找不到基地时退回重置视角。
+ * "回到基地"：居中到玩家基地并切到 32px/tile；找不到基地时退回重置视角。
  */
 export function PlanetMapToolbar({
   networks,
@@ -84,7 +85,7 @@ export function PlanetMapToolbar({
           title="图层与视角"
           type="button"
         >
-          <span aria-hidden="true">☰</span>
+          <Layers size={18} strokeWidth={2} aria-hidden="true" />
         </button>
         <button
           aria-label="缩小"
@@ -93,7 +94,7 @@ export function PlanetMapToolbar({
           title="缩小"
           type="button"
         >
-          <span aria-hidden="true">−</span>
+          <Minus size={18} strokeWidth={2} aria-hidden="true" />
         </button>
         <button
           aria-label="放大"
@@ -102,7 +103,7 @@ export function PlanetMapToolbar({
           title="放大"
           type="button"
         >
-          <span aria-hidden="true">＋</span>
+          <Plus size={18} strokeWidth={2} aria-hidden="true" />
         </button>
         <button
           aria-label="回到基地"
@@ -111,7 +112,7 @@ export function PlanetMapToolbar({
           title="回到基地"
           type="button"
         >
-          <span aria-hidden="true">⌂</span>
+          <House size={18} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
     </div>

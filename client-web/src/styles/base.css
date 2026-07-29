@@ -1,0 +1,70 @@
+/* 基础层：reset / body 星空背景 / 链接 / 表单元素默认 */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    /* 星点（静态，多层 radial-gradient 散点；最在顶层、最亮） */
+    radial-gradient(1.8px 1.8px at 7% 12%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(1.4px 1.4px at 15% 34%, rgba(210, 226, 255, 0.85), transparent 60%),
+    radial-gradient(1.6px 1.6px at 24% 68%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1.3px 1.3px at 32% 20%, rgba(190, 215, 255, 0.8), transparent 60%),
+    radial-gradient(1.5px 1.5px at 40% 84%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1.8px 1.8px at 48% 8%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(1.3px 1.3px at 54% 44%, rgba(200, 222, 255, 0.78), transparent 60%),
+    radial-gradient(1.6px 1.6px at 61% 62%, rgba(255, 255, 255, 0.88), transparent 60%),
+    radial-gradient(1.4px 1.4px at 68% 26%, rgba(255, 255, 255, 0.82), transparent 60%),
+    radial-gradient(1.7px 1.7px at 75% 79%, rgba(210, 226, 255, 0.9), transparent 60%),
+    radial-gradient(1.3px 1.3px at 82% 16%, rgba(255, 255, 255, 0.78), transparent 60%),
+    radial-gradient(1.6px 1.6px at 89% 53%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1.4px 1.4px at 95% 30%, rgba(190, 215, 255, 0.8), transparent 60%),
+    radial-gradient(1.3px 1.3px at 3% 55%, rgba(255, 255, 255, 0.75), transparent 60%),
+    radial-gradient(1.6px 1.6px at 12% 82%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1.2px 1.2px at 20% 6%, rgba(200, 222, 255, 0.72), transparent 60%),
+    radial-gradient(1.5px 1.5px at 36% 52%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1.4px 1.4px at 45% 30%, rgba(255, 255, 255, 0.82), transparent 60%),
+    radial-gradient(1.3px 1.3px at 57% 73%, rgba(190, 215, 255, 0.72), transparent 60%),
+    radial-gradient(1.7px 1.7px at 66% 7%, rgba(255, 255, 255, 0.92), transparent 60%),
+    radial-gradient(1.4px 1.4px at 73% 40%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1.3px 1.3px at 80% 65%, rgba(210, 226, 255, 0.74), transparent 60%),
+    radial-gradient(1.6px 1.6px at 87% 90%, rgba(255, 255, 255, 0.86), transparent 60%),
+    radial-gradient(1.3px 1.3px at 94% 72%, rgba(255, 255, 255, 0.76), transparent 60%),
+    /* 极淡星云带（紫/蓝） */
+    radial-gradient(circle at 20% 0%, rgba(57, 230, 208, 0.12), transparent 30%),
+    radial-gradient(circle at 100% 20%, rgba(255, 180, 84, 0.08), transparent 26%),
+    radial-gradient(ellipse 60% 38% at 72% 14%, rgba(123, 97, 255, 0.12), transparent 70%),
+    radial-gradient(ellipse 52% 34% at 16% 84%, rgba(36, 110, 200, 0.1), transparent 72%),
+    /* 底色渐变（最底层） */
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+a {
+  color: var(--accent-2);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+#root {
+  min-height: 100vh;
+}

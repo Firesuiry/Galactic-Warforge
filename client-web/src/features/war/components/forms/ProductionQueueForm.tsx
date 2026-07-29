@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { Building, WarBlueprintDetailView, WarDeploymentHubView } from '@shared/types';
 
 import { WarField } from '@/features/war/components/WarField';
+import { Input, Select } from '@/common/controls';
 import type { WarCommandInput, WarQueryScope } from '@/features/war/war-query-keys';
 import { useApiClient } from '@/hooks/use-api-client';
 
@@ -73,34 +74,34 @@ export function ProductionQueueForm({
     <article className="war-card">
       <h3>量产排队</h3>
       <WarField label="量产工厂">
-        <select value={factory.id} onChange={(event) => setFactoryId(event.target.value)}>
+        <Select value={factory.id} onChange={(event) => setFactoryId(event.target.value)}>
           {buildings.map((building) => (
             <option key={building.id} value={building.id}>
               {building.type} ({building.id})
             </option>
           ))}
-        </select>
+        </Select>
       </WarField>
       <WarField label="量产部署枢纽">
-        <select value={hub.building_id} onChange={(event) => setHubId(event.target.value)}>
+        <Select value={hub.building_id} onChange={(event) => setHubId(event.target.value)}>
           {deploymentHubs.map((entry) => (
             <option key={entry.building_id} value={entry.building_id}>
               {entry.building_type} ({entry.building_id})
             </option>
           ))}
-        </select>
+        </Select>
       </WarField>
       <WarField label="量产蓝图">
-        <select value={blueprint.id} onChange={(event) => setBlueprintId(event.target.value)}>
+        <Select value={blueprint.id} onChange={(event) => setBlueprintId(event.target.value)}>
           {blueprints.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.name} ({entry.id})
             </option>
           ))}
-        </select>
+        </Select>
       </WarField>
       <WarField label="数量">
-        <input
+        <Input
           type="number"
           min={1}
           value={count}

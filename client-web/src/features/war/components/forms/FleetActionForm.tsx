@@ -8,6 +8,7 @@ import type {
 } from '@shared/types';
 
 import { WarField } from '@/features/war/components/WarField';
+import { Select } from '@/common/controls';
 import type { WarCommandInput, WarQueryScope } from '@/features/war/war-query-keys';
 import { useApiClient } from '@/hooks/use-api-client';
 
@@ -131,20 +132,20 @@ export function FleetActionForm({
       <article className="war-card">
         <h3>舰队编队</h3>
         <WarField label="编队舰队">
-          <select value={assignFleet.fleet_id} onChange={(event) => setAssignFleetId(event.target.value)}>
+          <Select value={assignFleet.fleet_id} onChange={(event) => setAssignFleetId(event.target.value)}>
             {fleets.map((fleet) => (
               <option key={fleet.fleet_id} value={fleet.fleet_id}>
                 {fleet.fleet_id}（{fleet.formation}）
               </option>
             ))}
-          </select>
+          </Select>
         </WarField>
         <WarField label="编队阵型">
-          <select value={formation} onChange={(event) => setFormation(event.target.value as FormationType)}>
+          <Select value={formation} onChange={(event) => setFormation(event.target.value as FormationType)}>
             {FORMATIONS.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
-          </select>
+          </Select>
         </WarField>
         <button
           className="secondary-button war-button"
@@ -160,23 +161,23 @@ export function FleetActionForm({
         <article className="war-card">
           <h3>舰队攻击</h3>
           <WarField label="攻击舰队">
-            <select value={attackFleet.fleet_id} onChange={(event) => setAttackFleetId(event.target.value)}>
+            <Select value={attackFleet.fleet_id} onChange={(event) => setAttackFleetId(event.target.value)}>
               {fleets.map((fleet) => (
                 <option key={fleet.fleet_id} value={fleet.fleet_id}>{fleet.fleet_id}</option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <WarField label="交战行星">
-            <select value={attackPlanet.planet_id} onChange={(event) => setAttackPlanetId(event.target.value)}>
+            <Select value={attackPlanet.planet_id} onChange={(event) => setAttackPlanetId(event.target.value)}>
               {currentPlanets.map((planet) => (
                 <option key={planet.planet_id} value={planet.planet_id}>
                   {planet.name || planet.planet_id}
                 </option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <WarField label="攻击目标">
-            <select
+            <Select
               value={attackTarget?.entity_id ?? ''}
               onChange={(event) => setAttackTargetId(event.target.value)}
               disabled={enemyContacts.length === 0}
@@ -188,7 +189,7 @@ export function FleetActionForm({
                   {contact.entity_id}（{contact.classification ?? contact.contact_kind}）
                 </option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <button
             className="secondary-button war-button"
@@ -205,11 +206,11 @@ export function FleetActionForm({
         <article className="war-card">
           <h3>解散舰队</h3>
           <WarField label="解散舰队">
-            <select value={disbandFleet.fleet_id} onChange={(event) => setDisbandFleetId(event.target.value)}>
+            <Select value={disbandFleet.fleet_id} onChange={(event) => setDisbandFleetId(event.target.value)}>
               {fleets.map((fleet) => (
                 <option key={fleet.fleet_id} value={fleet.fleet_id}>{fleet.fleet_id}</option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <button
             className="secondary-button war-button"

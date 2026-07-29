@@ -3,7 +3,10 @@
  * 纹理按 key 缓存。仅在浏览器环境调用（依赖 document.createElement('canvas')）。
  */
 
+import type { IconNode } from 'lucide-react';
 import { Texture } from 'pixi.js';
+
+import { resolveIconNode } from '@/common/icon-map';
 
 const cache = new Map<string, Texture>();
 
@@ -170,21 +173,131 @@ export function getNebulaTexture(color: number, seed: number, size = 512): Textu
 }
 
 /**
- * emoji 字形纹理：离屏 canvas fillText 绘制后转 Texture，按 `emoji:<glyph>:<size>` 缓存。
- * 供行星地图实体图标（建筑/单位/资源）使用；字形解析走 common/Icon 的 resolveIconGlyph。
+ * lucide 图标纹理：把 common/icon-map 的 SVG 节点数据（24×24 viewBox 线稿）用 Path2D
+ * 描进离屏 canvas 后转 Texture，按 `icon:<iconKey>:<color>:<size>` 缓存。
+ * 供行星地图实体图标（建筑角标/资源/警示）使用；与 DOM 侧 common/Icon 同一映射。
+ * 未命中映射时回退为首字母字形（与 DOM Icon 的回退一致）。
  */
-export function getEmojiTexture(glyph: string, size = 64): Texture {
-  const key = `emoji:${glyph}:${size}`;
+const ICON_VIEWBOX = 24;
+const ICON_STROKE_WIDTH = 2;
+
+function parseSvgPoints(points: string): Array<[number, number]> {
+  return points
+    .trim()
+    .split(/\s+/)
+    .map((pair) => {
+      const [x, y] = pair.split(',').map(Number);
+      return [x, y];
+    });
+}
+
+/** 把 lucide 节点元素（path/circle/ellipse/line/rect/polyline/polygon）转成 Path2D。 */
+function iconElementToPath2D(tag: string, attrs: Record<string, string>): Path2D | null {
+  switch (tag) {
+    case 'path':
+      return attrs.d ? new Path2D(attrs.d) : null;
+    case 'circle': {
+      const p = new Path2D();
+      p.arc(Number(attrs.cx), Number(attrs.cy), Number(attrs.r), 0, Math.PI * 2);
+      return p;
+    }
+    case 'ellipse': {
+      const p = new Path2D();
+      p.ellipse(
+        Number(attrs.cx),
+        Number(attrs.cy),
+        Number(attrs.rx),
+        Number(attrs.ry),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      return p;
+    }
+    case 'line': {
+      const p = new Path2D();
+      p.moveTo(Number(attrs.x1), Number(attrs.y1));
+      p.lineTo(Number(attrs.x2), Number(attrs.y2));
+      return p;
+    }
+    case 'rect': {
+      const p = new Path2D();
+      p.rect(Number(attrs.x), Number(attrs.y), Number(attrs.width), Number(attrs.height));
+      return p;
+    }
+    case 'polyline':
+    case 'polygon': {
+      const pts = parseSvgPoints(attrs.points ?? '');
+      if (pts.length < 2) return null;
+      const p = new Path2D();
+      p.moveTo(pts[0][0], pts[0][1]);
+      for (const [x, y] of pts.slice(1)) {
+        p.lineTo(x, y);
+      }
+      if (tag === 'polygon') {
+        p.closePath();
+      }
+      return p;
+    }
+    default:
+      return null;
+  }
+}
+
+function renderIconCanvas(node: IconNode, colorCss: string, size: number): HTMLCanvasElement {
+  const [canvas, ctx] = makeCanvas(size);
+  // 线稿贴边会发虚：留 6% 内边距后按 viewBox 缩放，stroke 属性在 viewBox 坐标系下设定。
+  const scale = (size * 0.88) / ICON_VIEWBOX;
+  ctx.save();
+  ctx.translate(size * 0.06, size * 0.06);
+  ctx.scale(scale, scale);
+  ctx.strokeStyle = colorCss;
+  ctx.fillStyle = colorCss;
+  ctx.lineWidth = ICON_STROKE_WIDTH;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [tag, attrs] of node) {
+    const path = iconElementToPath2D(tag, attrs);
+    if (!path) {
+      continue;
+    }
+    if (attrs.fill && attrs.fill !== 'none') {
+      ctx.fill(path);
+    } else {
+      ctx.stroke(path);
+    }
+  }
+  ctx.restore();
+  return canvas;
+}
+
+export function getIconTexture(iconKey: string | undefined, color = 0x39e6d0, size = 64): Texture {
+  const key = `icon:${iconKey ?? ''}:${color}:${size}`;
   const hit = cache.get(key);
   if (hit) {
     return hit;
   }
+  const node = resolveIconNode(iconKey);
+  const canvas = node
+    ? renderIconCanvas(node, numToCss(color), size)
+    : renderFallbackLetterCanvas(iconKey, numToCss(color), size);
+  return toTexture(key, canvas);
+}
+
+/** 未命中映射时的字母回退纹理（对齐 DOM Icon 的首字母回退）。 */
+function renderFallbackLetterCanvas(
+  iconKey: string | undefined,
+  colorCss: string,
+  size: number,
+): HTMLCanvasElement {
   const [canvas, ctx] = makeCanvas(size);
-  ctx.font = `${Math.round(size * 0.78)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  const letter = iconKey && iconKey.length > 0 ? iconKey.charAt(0).toUpperCase() : '?';
+  ctx.font = `600 ${Math.round(size * 0.5)}px "Segoe UI", "PingFang SC", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(glyph, size / 2, size / 2 + Math.round(size * 0.04));
-  return toTexture(key, canvas);
+  ctx.fillStyle = colorCss;
+  ctx.fillText(letter, size / 2, size / 2 + Math.round(size * 0.03));
+  return canvas;
 }
 
 /** 轻暗角：中心透明向四角渐暗，全屏叠加增强聚焦感（截图确定性：静态纹理）。 */

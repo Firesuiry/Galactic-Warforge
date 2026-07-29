@@ -7,6 +7,7 @@ import type {
 } from '@shared/types';
 
 import { WarField } from '@/features/war/components/WarField';
+import { Input, Select } from '@/common/controls';
 import type { WarCommandInput, WarQueryScope } from '@/features/war/war-query-keys';
 import { useApiClient } from '@/hooks/use-api-client';
 
@@ -132,10 +133,10 @@ export function TheaterForm({
       <article className="war-card">
         <h3>创建战区</h3>
         <WarField label="战区 ID">
-          <input value={createId} onChange={(event) => setCreateId(event.target.value)} placeholder="例如 theater-north" />
+          <Input value={createId} onChange={(event) => setCreateId(event.target.value)} placeholder="例如 theater-north" />
         </WarField>
         <WarField label="战区名称">
-          <input value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="可选" />
+          <Input value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="可选" />
         </WarField>
         <button
           className="secondary-button war-button"
@@ -151,34 +152,34 @@ export function TheaterForm({
         <article className="war-card">
           <h3>定义战区区域</h3>
           <WarField label="区域所属战区">
-            <select value={zoneTheater.id} onChange={(event) => setZoneTheaterId(event.target.value)}>
+            <Select value={zoneTheater.id} onChange={(event) => setZoneTheaterId(event.target.value)}>
               {theaters.map((theater) => (
                 <option key={theater.id} value={theater.id}>
                   {theater.name || theater.id} ({theater.id})
                 </option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <WarField label="区域类型">
-            <select value={zoneType} onChange={(event) => setZoneType(event.target.value as WarTheaterZoneType)}>
+            <Select value={zoneType} onChange={(event) => setZoneType(event.target.value as WarTheaterZoneType)}>
               {THEATER_ZONE_TYPES.map((value) => (
                 <option key={value} value={value}>{value}</option>
               ))}
-            </select>
+            </Select>
           </WarField>
           {zonePlanet ? (
             <WarField label="区域行星">
-              <select value={zonePlanet.planet_id} onChange={(event) => setZonePlanetId(event.target.value)}>
+              <Select value={zonePlanet.planet_id} onChange={(event) => setZonePlanetId(event.target.value)}>
                 {currentPlanets.map((planet) => (
                   <option key={planet.planet_id} value={planet.planet_id}>
                     {planet.name || planet.planet_id}
                   </option>
                 ))}
-              </select>
+              </Select>
             </WarField>
           ) : null}
           <WarField label="区域半径">
-            <input
+            <Input
               type="number"
               min={1}
               value={zoneRadius}
@@ -200,34 +201,34 @@ export function TheaterForm({
         <article className="war-card">
           <h3>设定战区目标</h3>
           <WarField label="目标战区">
-            <select value={objectiveTheater.id} onChange={(event) => setObjectiveTheaterId(event.target.value)}>
+            <Select value={objectiveTheater.id} onChange={(event) => setObjectiveTheaterId(event.target.value)}>
               {theaters.map((theater) => (
                 <option key={theater.id} value={theater.id}>
                   {theater.name || theater.id} ({theater.id})
                 </option>
               ))}
-            </select>
+            </Select>
           </WarField>
           <WarField label="目标类型">
-            <select value={objectiveType} onChange={(event) => setObjectiveType(event.target.value)}>
+            <Select value={objectiveType} onChange={(event) => setObjectiveType(event.target.value)}>
               {THEATER_OBJECTIVE_TYPES.map((value) => (
                 <option key={value} value={value}>{value}</option>
               ))}
-            </select>
+            </Select>
           </WarField>
           {objectivePlanet ? (
             <WarField label="目标行星">
-              <select value={objectivePlanet.planet_id} onChange={(event) => setObjectivePlanetId(event.target.value)}>
+              <Select value={objectivePlanet.planet_id} onChange={(event) => setObjectivePlanetId(event.target.value)}>
                 {currentPlanets.map((planet) => (
                   <option key={planet.planet_id} value={planet.planet_id}>
                     {planet.name || planet.planet_id}
                   </option>
                 ))}
-              </select>
+              </Select>
               </WarField>
           ) : null}
           <WarField label="目标说明">
-            <input
+            <Input
               value={objectiveDescription}
               onChange={(event) => setObjectiveDescription(event.target.value)}
               placeholder="可选"

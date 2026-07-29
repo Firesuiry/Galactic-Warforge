@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { Building, FleetDetailView, WarBlueprintDetailView } from '@shared/types';
 
 import { WarField } from '@/features/war/components/WarField';
+import { Select } from '@/common/controls';
 import type { WarCommandInput, WarQueryScope } from '@/features/war/war-query-keys';
 import { useApiClient } from '@/hooks/use-api-client';
 
@@ -68,31 +69,31 @@ export function RefitForm({
     <article className="war-card">
       <h3>翻修改装</h3>
       <WarField label="改装船坞">
-        <select value={building.id} onChange={(event) => setBuildingId(event.target.value)}>
+        <Select value={building.id} onChange={(event) => setBuildingId(event.target.value)}>
           {buildings.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.type} ({entry.id})
             </option>
           ))}
-        </select>
+        </Select>
       </WarField>
       <WarField label="改装单位">
-        <select value={unit.fleet_id} onChange={(event) => setUnitId(event.target.value)}>
+        <Select value={unit.fleet_id} onChange={(event) => setUnitId(event.target.value)}>
           {fleets.map((entry) => (
             <option key={entry.fleet_id} value={entry.fleet_id}>
               {entry.fleet_id}（{entry.system_id ?? '未知星系'}）
             </option>
           ))}
-        </select>
+        </Select>
       </WarField>
       <WarField label="目标蓝图">
-        <select value={targetBlueprint.id} onChange={(event) => setTargetBlueprintId(event.target.value)}>
+        <Select value={targetBlueprint.id} onChange={(event) => setTargetBlueprintId(event.target.value)}>
           {blueprints.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.name} ({entry.id})
             </option>
           ))}
-        </select>
+        </Select>
       </WarField>
       <button
         className="secondary-button war-button"

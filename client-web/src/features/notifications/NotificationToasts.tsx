@@ -7,6 +7,7 @@
 
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Check, Info, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 
 import {
   isNotificationsFrozen,
@@ -19,11 +20,11 @@ import {
 const EXIT_ANIMATION_MS = 320;
 const SWEEP_INTERVAL_MS = 250;
 
-const KIND_GLYPH: Record<Toast['kind'], string> = {
-  info: 'ℹ',
-  success: '✓',
-  warning: '⚠',
-  danger: '✖',
+const KIND_ICON: Record<Toast['kind'], LucideIcon> = {
+  info: Info,
+  success: Check,
+  warning: TriangleAlert,
+  danger: X,
 };
 
 function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
@@ -49,6 +50,8 @@ function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
     dismiss(toast.id);
   }
 
+  const KindIcon = KIND_ICON[toast.kind];
+
   return (
     <div
       className={[
@@ -63,7 +66,9 @@ function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
       onMouseLeave={() => resume(toast.id)}
       onClick={handleClick}
     >
-      <span className="toast__glyph" aria-hidden="true">{KIND_GLYPH[toast.kind]}</span>
+      <span className="toast__glyph" aria-hidden="true">
+        <KindIcon size={16} strokeWidth={2} />
+      </span>
       <div className="toast__content">
         <div className="toast__title">
           {toast.title}
