@@ -171,6 +171,12 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 	}
 	for _, world := range worlds {
 		world.Tick = save.Tick
+		// The saved world grid is the authoritative terrain (spawn areas were
+		// flattened at bootstrap); sync it back so map-model terrain views
+		// stay consistent after a resume.
+		if planet, ok := maps.Planet(world.PlanetID); ok {
+			syncPlanetTerrainFromWorld(planet, world)
+		}
 	}
 	discovery, err := save.Snapshot.RestoreDiscovery()
 	if err != nil {
@@ -274,6 +280,26 @@ func chooseBaseSnapshot(base, current *snapshot.Snapshot) *snapshot.Snapshot {
 		return base
 	}
 	return current
+}
+
+// syncPlanetTerrainFromWorld copies the runtime world terrain into the map
+// model planet so scene views render the same terrain the simulation uses.
+func syncPlanetTerrainFromWorld(planet *mapmodel.Planet, ws *model.WorldState) {
+	if planet == nil || ws == nil {
+		return
+	}
+	if len(planet.Terrain) != ws.MapHeight {
+		return
+	}
+	for y := 0; y < ws.MapHeight; y++ {
+		row := planet.Terrain[y]
+		if len(row) != ws.MapWidth {
+			return
+		}
+		for x := 0; x < ws.MapWidth; x++ {
+			row[x] = ws.Grid[y][x].Terrain
+		}
+	}
 }
 
 func cloneAuditEntries(entries []*model.AuditEntry) []*model.AuditEntry {

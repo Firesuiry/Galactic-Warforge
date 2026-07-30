@@ -101,6 +101,12 @@ type PlayerResearch struct {
 	RequiredCost  []ItemAmount   `json:"required_cost,omitempty"`
 	ConsumedCost  map[string]int `json:"consumed_cost,omitempty"`
 	BlockedReason string         `json:"blocked_reason,omitempty"`
+	// SpeedMultiplier is the current research speed factor from lab power
+	// allocation (1 = fully powered). Refreshed every research settlement tick.
+	SpeedMultiplier float64 `json:"speed_multiplier"`
+	// EstimatedTicksRemaining estimates the ticks left at the current effective
+	// research speed; 0 (omitted) when progress is stalled.
+	EstimatedTicksRemaining int64 `json:"estimated_ticks_remaining,omitempty"`
 	EnqueueTick   int64          `json:"enqueue_tick"`
 	CompleteTick  int64          `json:"complete_tick,omitempty"`
 }

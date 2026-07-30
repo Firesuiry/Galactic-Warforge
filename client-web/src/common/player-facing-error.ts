@@ -27,6 +27,21 @@ export function toPlayerFacingMessage(raw?: string | null): string {
     return "目标位置超出当前执行体的可操作范围，请先移动执行体再试。";
   }
 
+  const moveRangeExceeded = source.match(
+    /move distance (\d+) exceeds unit move range (\d+)/i,
+  );
+  if (moveRangeExceeded) {
+    return `移动距离 ${moveRangeExceeded[1]} 超出该单位单次移动范围 ${moveRangeExceeded[2]}，请分多段移动。`;
+  }
+
+  if (/out of map bounds/i.test(source)) {
+    return "目标位置超出地图边界。";
+  }
+
+  if (/destination tile is occupied/i.test(source)) {
+    return "目标位置已被建筑占用，请选择其他位置。";
+  }
+
   if (/unauthorized|forbidden|invalid api key|invalid player key/.test(normalized)) {
     return "登录状态失效，请重新登录。";
   }

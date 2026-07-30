@@ -935,7 +935,7 @@ func staticPlanetResources(planet *mapmodel.Planet) []*model.ResourceNodeState {
 	res := make([]*model.ResourceNodeState, 0, len(planet.Resources))
 	for i := range planet.Resources {
 		node := planet.Resources[i]
-		res = append(res, &model.ResourceNodeState{
+		state := &model.ResourceNodeState{
 			ID:           node.ID,
 			PlanetID:     node.PlanetID,
 			Kind:         string(node.Kind),
@@ -950,7 +950,9 @@ func staticPlanetResources(planet *mapmodel.Planet) []*model.ResourceNodeState {
 			RegenPerTick: node.RegenPerTick,
 			DecayPerTick: node.DecayPerTick,
 			IsRare:       node.IsRare,
-		})
+		}
+		state.SyncDepleted()
+		res = append(res, state)
 	}
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].ID < res[j].ID

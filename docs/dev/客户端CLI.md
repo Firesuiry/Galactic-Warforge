@@ -400,6 +400,7 @@ switch_active_planet planet-1-1
 - `matrix_lab` 不设置 `recipe_id` 时会作为研究站；设置了 `recipe_id` 时则按普通生产建筑运行
 - 研究开始前，所需每种矩阵都必须已经出现在研究站本地库存里
 - 研究推进会真实消耗研究站本地库存中的矩阵；如果缺实验室或缺矩阵，可在 `summary` 的 `tech.current_research.blocked_reason` 里看到 `waiting_lab` / `waiting_matrix`
+- 研究站供电不足时 `blocked_reason` 为 `low_power`（未通电停滞或电力配比降速），同时 `tech.current_research.speed_multiplier` 给出供电速度倍率、`estimated_ticks_remaining` 给出按当前速度预估的剩余 tick
 
 ### 7. 调试查询接口也已补齐
 

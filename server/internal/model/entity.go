@@ -126,7 +126,7 @@ func UnitStats(utype UnitType) Unit {
 		u.Attack = 0
 		u.Defense = 2
 		u.AttackRange = 0
-		u.MoveRange = 4
+		u.MoveRange = 12
 		u.VisionRange = 6
 	}
 	return u

@@ -43,3 +43,7 @@ overrides:
   planets:
     planet-1-2:
       kind: gas_giant
+# 官方 war 场景的预置建筑群围绕角落出生点布置，显式钉住出生点保持场景布局。
+spawn_points:
+  - {x: 3, y: 3}
+  - {x: 44, y: 44}

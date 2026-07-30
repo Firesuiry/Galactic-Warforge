@@ -1,9 +1,11 @@
+import type { Direction } from "@shared/api";
 import type {
   BuildingCatalogEntry,
   CatalogView,
   PlanetResource,
   PlanetNetworksView,
   Position,
+  RecipeCatalogEntry,
   StateSummary,
 } from "@shared/types";
 
@@ -420,6 +422,47 @@ export function assessBuildTiles(
   position?: Position,
 ): BuildTileAssessment | undefined {
   return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position });
+}
+
+/** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */
+export function isConveyorBeltBuilding(buildingType: string) {
+  return buildingType.startsWith("conveyor_belt");
+}
+
+/** 建造模式下传送带方向的循环顺序（R 键/按钮共用）。 */
+export const BELT_DIRECTION_CYCLE: Direction[] = ["auto", "north", "east", "south", "west"];
+
+export const DIRECTION_LABELS: Record<Direction, string> = {
+  auto: "自动",
+  north: "北",
+  east: "东",
+  south: "南",
+  west: "西",
+};
+
+export function nextBeltDirection(current: Direction): Direction {
+  const index = BELT_DIRECTION_CYCLE.indexOf(current);
+  return BELT_DIRECTION_CYCLE[(index + 1) % BELT_DIRECTION_CYCLE.length];
+}
+
+/**
+ * 建筑可携配方列表（建造时选定，写入 interactionMode.recipeId 随 build 命令下发）。
+ * 配方归属由 recipe.building_types 声明（与服务端校验一致）；
+ * tech_unlock 非空的配方需玩家已完成其中任一科技（对齐服务端 CanUseRecipeTech）。
+ */
+export function listBuildingRecipes(
+  catalog: CatalogView | undefined,
+  buildingType: string,
+  completedTechIds: Iterable<string>,
+): RecipeCatalogEntry[] {
+  const completed = new Set(completedTechIds);
+  return (catalog?.recipes ?? []).filter((recipe) => {
+    if (!recipe.building_types?.includes(buildingType)) {
+      return false;
+    }
+    const requiredTechs = recipe.tech_unlock?.filter(Boolean) ?? [];
+    return requiredTechs.length === 0 || requiredTechs.some((techId) => completed.has(techId));
+  });
 }
 
 export function deriveBuildWorkflowView(input: {

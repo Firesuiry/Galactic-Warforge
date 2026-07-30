@@ -46,6 +46,7 @@ import type { BattleEvent } from '@/engine/battle-events';
 import { getGlowTexture, getIconTexture, getVignetteTexture } from '@/engine/textures';
 import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
+import { isConveyorBeltBuilding } from '@/features/planet-map/build-workflow';
 import {
   PlanetEffectPool,
   specsFromPlanetBattleEvent,
@@ -2299,6 +2300,31 @@ export class PlanetScene {
           rangeCircles,
           ts,
         );
+      }
+      // 传送带幽灵：叠加输出方向箭头（auto 由服务端放置时解析，不画）。
+      if (isConveyorBeltBuilding(mode.buildingType) && mode.direction !== 'auto') {
+        const vectors: Record<string, { x: number; y: number }> = {
+          north: { x: 0, y: -1 },
+          east: { x: 1, y: 0 },
+          south: { x: 0, y: 1 },
+          west: { x: -1, y: 0 },
+        };
+        const vector = vectors[mode.direction];
+        if (vector) {
+          const cx = this.pxTileX(hoveredTile.x) + (assessment.footprint.width / 2) * ts;
+          const cy = this.pxTileY(hoveredTile.y) + (assessment.footprint.height / 2) * ts;
+          const half = ts * 0.3;
+          const tipX = cx + vector.x * half;
+          const tipY = cy + vector.y * half;
+          const wing = ts * 0.16;
+          g.moveTo(cx - vector.x * half, cy - vector.y * half)
+            .lineTo(tipX, tipY)
+            .moveTo(tipX, tipY)
+            .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
+            .moveTo(tipX, tipY)
+            .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
+            .stroke({ width: 2, color: COLOR_GHOST_OK, alpha: 0.95 });
+        }
       }
       return;
     }

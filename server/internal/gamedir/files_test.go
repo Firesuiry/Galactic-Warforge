@@ -372,7 +372,7 @@ func TestWriteJSONBytesAtomicSyncsParentDirWhenCreatingRoot(t *testing.T) {
 		return nil
 	}
 
-	if err := dir.writeJSONBytesAtomic(dir.SavePath(), []byte("{}")); err != nil {
+	if err := dir.writeBytesAtomic(dir.SavePath(), []byte("{}")); err != nil {
 		t.Fatalf("write json bytes atomically: %v", err)
 	}
 	expected := []string{filepath.Dir(root), root}
@@ -406,7 +406,7 @@ func TestWriteJSONBytesAtomicSyncsFileAndDirectory(t *testing.T) {
 		return nil
 	}
 
-	if err := dir.writeJSONBytesAtomic(dir.SavePath(), []byte("{}")); err != nil {
+	if err := dir.writeBytesAtomic(dir.SavePath(), []byte("{}")); err != nil {
 		t.Fatalf("write json bytes atomically: %v", err)
 	}
 	if fileSyncs != 1 {

@@ -568,6 +568,8 @@ export interface TechQueueEntry {
   required_cost?: ItemAmount[];
   consumed_cost?: Record<string, number>;
   blocked_reason?: string;
+  speed_multiplier?: number;
+  estimated_ticks_remaining?: number;
   enqueue_tick?: number;
   complete_tick?: number;
 }

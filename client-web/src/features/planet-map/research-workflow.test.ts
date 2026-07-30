@@ -87,8 +87,7 @@ describe("research workflow", () => {
     });
 
     expect(groups.current?.id).toBe("electromagnetism");
-    expect(groups.current?.blockedReasonLabel).toContain("矩阵");
-    expect(groups.current?.costLabels).toContain("电磁矩阵 x10");
+    expect(groups.current?.blockedReasonLabel).toContain("矩阵");    expect(groups.current?.costLabels).toContain("电磁矩阵 x10");
     expect(groups.current?.unlockLabels).toEqual(
       expect.arrayContaining(["特斯拉塔", "磁铁配方"]),
     );
@@ -98,6 +97,24 @@ describe("research workflow", () => {
     ]);
     expect(groups.locked.map((tech) => tech.id)).toEqual(["energy_matrix"]);
     expect(groups.locked[0]?.missingPrerequisiteLabels).toEqual(["电磁学"]);
+  });
+
+  it("把 low_power 阻塞原因翻译成供电不足提示", () => {
+    const groups = deriveResearchGroups(createCatalog(), {
+      player_id: "p1",
+      completed_techs: ["dyson_sphere_program"],
+      current_research: {
+        tech_id: "electromagnetism",
+        state: "in_progress",
+        progress: 4,
+        total_cost: 10,
+        blocked_reason: "low_power",
+        speed_multiplier: 0.5,
+        estimated_ticks_remaining: 12,
+      },
+    });
+
+    expect(groups.current?.blockedReasonLabel).toBe("研究站供电不足，研究降速或停滞");
   });
 
   it("只在 electromagnetism 尚未完成时显示开局推荐路径", () => {

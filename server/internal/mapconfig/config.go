@@ -73,16 +73,23 @@ type PlanetOverride struct {
 	Kind string `yaml:"kind"`
 }
 
+// SpawnPointConfig pins an explicit player spawn tile on the primary planet.
+type SpawnPointConfig struct {
+	X int `yaml:"x"`
+	Y int `yaml:"y"`
+}
+
 type OverridesConfig struct {
 	Planets map[string]PlanetOverride `yaml:"planets,omitempty"`
 }
 
 // Config is the root map configuration.
 type Config struct {
-	Galaxy    GalaxyConfig    `yaml:"galaxy"`
-	System    SystemConfig    `yaml:"system"`
-	Planet    PlanetConfig    `yaml:"planet"`
-	Overrides OverridesConfig `yaml:"overrides,omitempty"`
+	Galaxy      GalaxyConfig       `yaml:"galaxy"`
+	System      SystemConfig       `yaml:"system"`
+	Planet      PlanetConfig       `yaml:"planet"`
+	Overrides   OverridesConfig    `yaml:"overrides,omitempty"`
+	SpawnPoints []SpawnPointConfig `yaml:"spawn_points,omitempty"`
 }
 
 // ApplyDefaults fills missing config values with defaults.
@@ -177,6 +184,9 @@ func Load(path string) (*Config, error) {
 	if err := validateResources(cfg.Planet.Resources); err != nil {
 		return nil, err
 	}
+	if err := validateSpawnPoints(cfg.Planet, cfg.SpawnPoints); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
 }
@@ -255,6 +265,15 @@ func validateResources(cfg ResourceConfig) error {
 	}
 	if cfg.RenewableRegenPerTick < 0 {
 		return fmt.Errorf("planet.resources.renewable_regen_per_tick must be >= 0")
+	}
+	return nil
+}
+
+func validateSpawnPoints(planet PlanetConfig, points []SpawnPointConfig) error {
+	for i, p := range points {
+		if p.X < 0 || p.X >= planet.Width || p.Y < 0 || p.Y >= planet.Height {
+			return fmt.Errorf("spawn_points[%d] (%d,%d) out of planet bounds %dx%d", i, p.X, p.Y, planet.Width, planet.Height)
+		}
 	}
 	return nil
 }

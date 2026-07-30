@@ -22,9 +22,14 @@ const (
 )
 
 // ProductionAlert is a monitoring alert raised for a single building.
+// Alerts are aggregated per (building, alert type): repeated occurrences do
+// not create new entries, they bump RepeatCount and LastTick on the existing
+// entry instead.
 type ProductionAlert struct {
 	AlertID      string                  `json:"alert_id"`
 	Tick         int64                   `json:"tick"`
+	LastTick     int64                   `json:"last_tick,omitempty"`
+	RepeatCount  int                     `json:"repeat_count,omitempty"`
 	PlayerID     string                  `json:"player_id"`
 	BuildingID   string                  `json:"building_id"`
 	BuildingType BuildingType            `json:"building_type"`

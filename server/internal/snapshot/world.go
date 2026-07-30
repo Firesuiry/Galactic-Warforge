@@ -231,6 +231,7 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		if !ws.InBounds(res.Position.X, res.Position.Y) {
 			return nil, fmt.Errorf("resource %s out of bounds", id)
 		}
+		res.SyncDepleted()
 		cell := &ws.Grid[res.Position.Y][res.Position.X]
 		if cell.ResourceNodeID != "" && cell.ResourceNodeID != id {
 			return nil, fmt.Errorf("duplicate resource occupancy at %d,%d", res.Position.X, res.Position.Y)

@@ -73,6 +73,8 @@ function translateResearchBlockedReason(blockedReason?: string) {
   switch (blockedReason) {
     case "waiting_lab":
       return "缺少运行中的研究站";
+    case "low_power":
+      return "研究站供电不足，研究降速或停滞";
     case "waiting_matrix":
       return "缺少所需矩阵";
     case "invalid_tech":

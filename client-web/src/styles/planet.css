@@ -1252,6 +1252,40 @@
   color:var(--text-dim);
 }
 
+.planet-build-bar__status {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+
+.planet-build-bar__control {
+  border:1px solid var(--border);
+  border-radius:4px;
+  background:var(--surface-1);
+  color:var(--accent-2);
+  font-size:.72rem;
+  cursor:pointer;
+  padding:2px 8px;
+  white-space:nowrap;
+  transition:border-color var(--dur-fast) var(--ease),background var(--dur-fast) var(--ease);
+}
+
+.planet-build-bar__control:hover {
+  border-color:var(--border-glow);
+  background:#5fb0ff1f;
+}
+
+.planet-build-bar__select {
+  border:1px solid var(--border);
+  border-radius:4px;
+  background:var(--surface-1);
+  color:var(--text);
+  font-size:.72rem;
+  padding:2px 4px;
+  max-width:180px;
+}
+
 .planet-build-bar__toggle {
   border:none;
   background:none;

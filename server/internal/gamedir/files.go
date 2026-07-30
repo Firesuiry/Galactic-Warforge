@@ -2,6 +2,7 @@ package gamedir
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -187,14 +188,18 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("read save.json: %w", err)
 	}
+	actualFingerprint := fingerprintBytes(saveData)
+	payload, err := maybeGunzip(saveData)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decompress save.json: %w", err)
+	}
 	save := &SaveFile{}
-	if err := json.Unmarshal(saveData, save); err != nil {
+	if err := json.Unmarshal(payload, save); err != nil {
 		return nil, nil, fmt.Errorf("parse save.json: %w", err)
 	}
 	if err := validateSave(save); err != nil {
 		return nil, nil, err
 	}
-	actualFingerprint := fingerprintBytes(saveData)
 	if meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint || !meta.LastSavedAt.Equal(save.SavedAt) {
 		healedMeta := *meta
 		if err := d.writeMeta(&healedMeta, save.SavedAt, actualFingerprint); err != nil {
@@ -231,14 +236,46 @@ func (d *Dir) writeSave(save *SaveFile, savedAt time.Time) (string, error) {
 		return "", fmt.Errorf("write save.json: nil save")
 	}
 	save.SavedAt = savedAt
-	saveData, err := json.MarshalIndent(save, "", "  ")
+	saveData, err := json.Marshal(save)
 	if err != nil {
 		return "", fmt.Errorf("write save.json: marshal json: %w", err)
 	}
-	if err := d.writeJSONBytesAtomic(d.SavePath(), saveData); err != nil {
+	compressed, err := gzipCompress(saveData)
+	if err != nil {
+		return "", fmt.Errorf("write save.json: compress: %w", err)
+	}
+	if err := d.writeBytesAtomic(d.SavePath(), compressed); err != nil {
 		return "", fmt.Errorf("write save.json: %w", err)
 	}
-	return fingerprintBytes(saveData), nil
+	return fingerprintBytes(compressed), nil
+}
+
+// gzipCompress compresses a save payload. Go's gzip writer is deterministic
+// for a given input, keeping save fingerprints stable across identical writes.
+func gzipCompress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	if _, err := w.Write(data); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// maybeGunzip decompresses gzip payloads detected by the magic bytes 1f 8b;
+// legacy uncompressed saves pass through untouched.
+func maybeGunzip(data []byte) ([]byte, error) {
+	if len(data) < 2 || data[0] != 0x1f || data[1] != 0x8b {
+		return data, nil
+	}
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
 }
 
 func (d *Dir) readJSON(path string, out any) error {
@@ -257,10 +294,10 @@ func (d *Dir) writeJSONAtomic(path string, payload any) error {
 	if err != nil {
 		return fmt.Errorf("marshal json: %w", err)
 	}
-	return d.writeJSONBytesAtomic(path, data)
+	return d.writeBytesAtomic(path, data)
 }
 
-func (d *Dir) writeJSONBytesAtomic(path string, data []byte) error {
+func (d *Dir) writeBytesAtomic(path string, data []byte) error {
 	createdRoot := false
 	if _, err := os.Stat(d.root); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

@@ -147,6 +147,24 @@ describe('usePlanetInteractions', () => {
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('build');
   });
 
+  it('build 模式：携带方向与配方时随建造命令透传', () => {
+    const { handle } = setup();
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'assembling_machine_mk1',
+      direction: 'west',
+      recipeId: 'gear',
+    });
+
+    handle({ x: 2, y: 2 });
+
+    expect(mockClient.cmdBuild).toHaveBeenCalledWith(
+      { x: 2, y: 2, z: 0 },
+      'assembling_machine_mk1',
+      { direction: 'west', recipeId: 'gear' },
+    );
+  });
+
   it('build 模式：被占用位置本地拦截并写 journal', () => {
     const { handle, planet } = setup();
     planet.buildings = {

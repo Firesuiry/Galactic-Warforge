@@ -2,6 +2,7 @@ package startup
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -123,12 +124,95 @@ func TestAutoSaveTickerWritesUpdatedSave(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	saveData, err := os.ReadFile(filepath.Join(gameDir, "save.json"))
+	_, save, err := gamedir.Open(gameDir).Load()
+	if err != nil {
+		t.Fatalf("load save after auto save deadline: %v", err)
+	}
+	t.Fatalf("expected auto save to flush latest tick 9, got tick %d", save.Tick)
+}
+
+func TestResumeFromGzipSavePreservesState(t *testing.T) {
+	cfgPath, mapCfgPath, gameDir := writeBootstrapFixtures(t)
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	app.Core.World().Lock()
+	app.Core.World().Tick = 42
+	app.Core.World().Unlock()
+	if _, err := app.Core.Save("manual"); err != nil {
+		t.Fatalf("manual save: %v", err)
+	}
+	baseCount := len(app.Core.World().Buildings)
+	if baseCount == 0 {
+		t.Fatalf("expected seeded base buildings before save")
+	}
+	app.Stop()
+
+	raw, err := os.ReadFile(filepath.Join(gameDir, "save.json"))
 	if err != nil {
 		t.Fatalf("read save.json: %v", err)
 	}
-	if !bytes.Contains(saveData, []byte(`"tick": 9`)) {
-		t.Fatalf("expected auto save to flush latest tick, got %s", string(saveData))
+	if len(raw) < 2 || raw[0] != 0x1f || raw[1] != 0x8b {
+		t.Fatalf("expected gzip-compressed save.json, got magic %x", raw[:min(8, len(raw))])
+	}
+
+	resumed, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("resume runtime: %v", err)
+	}
+	defer resumed.Stop()
+	if got := resumed.Core.World().Tick; got != 42 {
+		t.Fatalf("expected tick 42 after resume, got %d", got)
+	}
+	if got := len(resumed.Core.World().Buildings); got != baseCount {
+		t.Fatalf("expected %d buildings after resume, got %d", baseCount, got)
+	}
+	player := resumed.Core.World().Players["p1"]
+	if player == nil || player.Resources.Minerals != 200 || player.Resources.Energy != 100 {
+		t.Fatalf("expected player resources restored, got %+v", player)
+	}
+}
+
+func TestResumeFromLegacyPlainJSONSave(t *testing.T) {
+	cfgPath, mapCfgPath, gameDir := writeBootstrapFixtures(t)
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	app.Core.World().Lock()
+	app.Core.World().Tick = 33
+	app.Core.World().Unlock()
+	if _, err := app.Core.Save("manual"); err != nil {
+		t.Fatalf("manual save: %v", err)
+	}
+	app.Stop()
+
+	// Rewrite save.json as legacy uncompressed JSON; resume must accept it.
+	_, save, err := gamedir.Open(gameDir).Load()
+	if err != nil {
+		t.Fatalf("load saved game: %v", err)
+	}
+	payload, err := json.Marshal(save)
+	if err != nil {
+		t.Fatalf("marshal legacy save: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(gameDir, "save.json"), payload, 0o644); err != nil {
+		t.Fatalf("write legacy save: %v", err)
+	}
+
+	resumed, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("resume runtime from legacy save: %v", err)
+	}
+	defer resumed.Stop()
+	if got := resumed.Core.World().Tick; got != 33 {
+		t.Fatalf("expected tick 33 after legacy resume, got %d", got)
+	}
+	if len(resumed.Core.World().Buildings) == 0 {
+		t.Fatalf("expected buildings restored from legacy save")
 	}
 }
 

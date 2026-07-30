@@ -104,7 +104,26 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 	}
 
 	galaxy.DistanceMatrix = buildDistanceMatrix(galaxy.SystemIDs, u.Systems)
+	applySpawnPoints(u, cfg.SpawnPoints)
 	return u
+}
+
+// applySpawnPoints pins explicit spawn tiles onto the primary planet.
+func applySpawnPoints(u *mapmodel.Universe, points []mapconfig.SpawnPointConfig) {
+	if len(points) == 0 {
+		return
+	}
+	primary := u.PrimaryPlanet()
+	if primary == nil {
+		return
+	}
+	primary.SpawnPoints = make([]mapmodel.GridPos, 0, len(points))
+	for _, p := range points {
+		if p.X < 0 || p.X >= primary.Width || p.Y < 0 || p.Y >= primary.Height {
+			continue
+		}
+		primary.SpawnPoints = append(primary.SpawnPoints, mapmodel.GridPos{X: p.X, Y: p.Y})
+	}
 }
 
 func nextOrbitDistance(prev float64, rng *rng) float64 {

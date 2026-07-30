@@ -33,6 +33,41 @@ const catalog: CatalogView = {
       icon_key: 'matrix_lab',
       color: '#5fb0ff',
     } as never,
+    {
+      id: 'conveyor_belt_mk1',
+      name: '传送带 Mk.I',
+      category: 'transport',
+      footprint: { width: 1, height: 1 },
+      build_cost: { minerals: 2, energy: 0 },
+      buildable: true,
+      unlock_tech: ['tech-basic-power'],
+      icon_key: 'conveyor_belt_mk1',
+      color: '#8fa3c8',
+    } as never,
+    {
+      id: 'assembling_machine_mk1',
+      name: '组装机 Mk.I',
+      category: 'production',
+      footprint: { width: 2, height: 2 },
+      build_cost: { minerals: 40, energy: 0 },
+      buildable: true,
+      unlock_tech: ['tech-basic-power'],
+      icon_key: 'assembling_machine_mk1',
+      color: '#f59f00',
+    } as never,
+  ],
+  recipes: [
+    {
+      id: 'gear',
+      name: '齿轮',
+      building_types: ['assembling_machine_mk1'],
+    } as never,
+    {
+      id: 'circuit',
+      name: '电路板',
+      building_types: ['assembling_machine_mk1'],
+      tech_unlock: ['tech-electronics'],
+    } as never,
   ],
 };
 
@@ -155,6 +190,77 @@ describe('PlanetBuildBar', () => {
     expect(usePlanetViewStore.getState().interactionMode).toEqual({
       kind: 'build',
       buildingType: 'wind_turbine',
+      direction: 'auto',
+    });
+  });
+
+  it('传送带建造模式：方向按钮与 R 键循环切换方向', async () => {
+    const user = userEvent.setup();
+    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+
+    // 非传送带建筑不显示方向控件
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+    expect(screen.queryByRole('button', { name: /^方向：/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+
+    await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({
+      kind: 'build',
+      buildingType: 'conveyor_belt_mk1',
+      direction: 'auto',
+    });
+
+    // 按钮循环：auto → north → east
+    const directionButton = screen.getByRole('button', { name: '方向：自动（R）' });
+    await user.click(directionButton);
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'north' });
+    await user.click(screen.getByRole('button', { name: '方向：北（R）' }));
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
+
+    // R 键循环：east → south → west → auto
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'south' });
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'west' });
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'auto' });
+  });
+
+  it('生产建筑建造模式：配方下拉选择后写入 interactionMode.recipeId', async () => {
+    const user = userEvent.setup();
+    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+
+    // 无配方建筑不显示配方下拉
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+    expect(screen.queryByRole('combobox', { name: '建造配方' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+
+    await user.click(screen.getByRole('button', { name: /组装机 Mk.I/ }));
+    const select = screen.getByRole('combobox', { name: '建造配方' });
+    // tech-electronics 未完成 → circuit 被过滤，仅"无配方 + 齿轮"
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      '无配方（默认）',
+      '齿轮',
+    ]);
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({
+      kind: 'build',
+      buildingType: 'assembling_machine_mk1',
+      direction: 'auto',
+    });
+
+    await user.selectOptions(select, 'gear');
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({
+      kind: 'build',
+      buildingType: 'assembling_machine_mk1',
+      direction: 'auto',
+      recipeId: 'gear',
+    });
+
+    // 选回"无配方"清除 recipeId（matrix_lab 即研究站语义）
+    await user.selectOptions(select, '');
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({
+      kind: 'build',
+      buildingType: 'assembling_machine_mk1',
       direction: 'auto',
     });
   });

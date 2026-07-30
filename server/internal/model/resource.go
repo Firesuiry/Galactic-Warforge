@@ -16,6 +16,17 @@ type ResourceNodeState struct {
 	RegenPerTick int      `json:"regen_per_tick"`
 	DecayPerTick int      `json:"decay_per_tick"`
 	IsRare       bool     `json:"is_rare,omitempty"`
+	Depleted     bool     `json:"depleted,omitempty"`
+}
+
+// SyncDepleted refreshes the depleted marker from the remaining amount. A
+// node is depleted when nothing can be extracted from it anymore; depleted
+// nodes stay visible on the map and remain buildable for any building.
+func (r *ResourceNodeState) SyncDepleted() {
+	if r == nil {
+		return
+	}
+	r.Depleted = r.Remaining <= 0 || r.MaxAmount <= 0
 }
 
 // Clone returns a copy of the resource node state.

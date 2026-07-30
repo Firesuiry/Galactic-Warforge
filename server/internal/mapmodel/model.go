@@ -41,6 +41,8 @@ type Planet struct {
 	Terrain         [][]terrain.TileType
 	Environment     PlanetEnvironment
 	Resources       []ResourceNode
+	// SpawnPoints pins explicit player spawn tiles; empty means auto-placement.
+	SpawnPoints []GridPos
 }
 
 // Universe is the immutable three-layer map model.

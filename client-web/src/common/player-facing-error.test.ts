@@ -22,6 +22,15 @@ describe("toPlayerFacingMessage", () => {
     expect(toPlayerFacingMessage("unauthorized")).toBe("登录状态失效，请重新登录。");
   });
 
+  it("把移动失败错误翻译成玩家口径", () => {
+    expect(toPlayerFacingMessage("move distance 13 exceeds unit move range 12"))
+      .toBe("移动距离 13 超出该单位单次移动范围 12，请分多段移动。");
+    expect(toPlayerFacingMessage("position (40,2) out of map bounds"))
+      .toBe("目标位置超出地图边界。");
+    expect(toPlayerFacingMessage("destination tile is occupied by a building"))
+      .toBe("目标位置已被建筑占用，请选择其他位置。");
+  });
+
   it("无法识别的原文一律回退到通用文案，不外泄实现细节", () => {
     expect(toPlayerFacingMessage("some internal stack trace with request id abc"))
       .toBe("操作未成功，请稍后重试。");

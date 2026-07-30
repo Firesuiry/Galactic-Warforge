@@ -1166,6 +1166,7 @@ func mineResource(ws *model.WorldState, building *model.Building, yieldPerTick i
 		if node.Remaining == 0 {
 			node.CurrentYield = 0
 		}
+		node.SyncDepleted()
 		return extracted
 	case "renewable":
 		if node.Remaining <= 0 || node.CurrentYield <= 0 {
@@ -1174,6 +1175,7 @@ func mineResource(ws *model.WorldState, building *model.Building, yieldPerTick i
 		extracted := minInt(yieldPerTick, node.CurrentYield)
 		extracted = minInt(extracted, node.Remaining)
 		node.Remaining -= extracted
+		node.SyncDepleted()
 		return extracted
 	case "decay":
 		if node.CurrentYield <= 0 {
@@ -1208,6 +1210,7 @@ func regenResourceNodes(ws *model.WorldState) {
 			if node.Remaining > node.MaxAmount {
 				node.Remaining = node.MaxAmount
 			}
+			node.SyncDepleted()
 		}
 	}
 }

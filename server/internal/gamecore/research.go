@@ -40,16 +40,36 @@ func settleResearch(worlds map[string]*model.WorldState) []*model.GameEvent {
 
 		labs := runningResearchLabs(worlds, player.PlayerID)
 		if len(labs) == 0 {
-			research.BlockedReason = "waiting_lab"
+			research.SpeedMultiplier = 0
+			research.EstimatedTicksRemaining = 0
+			if hasUnpoweredResearchLab(worlds, player.PlayerID) {
+				research.BlockedReason = "low_power"
+			} else {
+				research.BlockedReason = "waiting_lab"
+			}
 			continue
 		}
 
-		progressed := consumeResearchProgress(labs, research, researchThroughput(player, labs))
-		if progressed <= 0 {
-			research.BlockedReason = "waiting_matrix"
+		throughput, powerMultiplier := researchThroughput(player, labs, researchPowerRatios(worlds))
+		research.SpeedMultiplier = powerMultiplier
+		if throughput <= 0 {
+			research.BlockedReason = "low_power"
+			research.EstimatedTicksRemaining = 0
 			continue
 		}
-		research.BlockedReason = ""
+
+		progressed := consumeResearchProgress(labs, research, throughput)
+		if progressed <= 0 {
+			research.BlockedReason = "waiting_matrix"
+			research.EstimatedTicksRemaining = 0
+			continue
+		}
+		if powerMultiplier < 1 {
+			research.BlockedReason = "low_power"
+		} else {
+			research.BlockedReason = ""
+		}
+		research.EstimatedTicksRemaining = estimateResearchTicksRemaining(research, throughput)
 
 		if research.Progress >= research.TotalCost {
 			completeResearch(player, research, def, currentResearchTick(worlds), &events)
@@ -131,17 +151,84 @@ func runningResearchLabs(worlds map[string]*model.WorldState, playerID string) [
 	return labs
 }
 
-func researchThroughput(player *model.PlayerState, labs []*model.Building) int {
-	speed := 0
+// researchPowerRatios returns the current power allocation ratio (0..1) for
+// every research-capable building that participates in a power network,
+// sourced from the same power settlement snapshot used by resource
+// settlement. Buildings outside any network have no entry; they are flipped
+// to the no-power state by resource settlement within the same tick, so
+// research treats them at full ratio until that state transition lands.
+func researchPowerRatios(worlds map[string]*model.WorldState) map[string]float64 {
+	ratios := make(map[string]float64)
+	for _, ws := range worlds {
+		if ws == nil {
+			continue
+		}
+		var allocations model.PowerAllocationState
+		if snapshot := model.CurrentPowerSettlementSnapshot(ws); snapshot != nil {
+			allocations = snapshot.Allocations
+		}
+		for id, building := range ws.Buildings {
+			if building == nil || building.Runtime.Functions.Research == nil {
+				continue
+			}
+			if alloc, ok := allocations.Buildings[id]; ok {
+				ratios[id] = alloc.Ratio
+			}
+		}
+	}
+	return ratios
+}
+
+// hasUnpoweredResearchLab reports whether the player owns a research lab that
+// is stalled specifically because it has no power.
+func hasUnpoweredResearchLab(worlds map[string]*model.WorldState, playerID string) bool {
+	for _, ws := range worlds {
+		if ws == nil {
+			continue
+		}
+		for _, building := range ws.Buildings {
+			if building == nil || building.OwnerID != playerID {
+				continue
+			}
+			if !isResearchLab(building) {
+				continue
+			}
+			if building.Runtime.State == model.BuildingWorkNoPower {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// researchThroughput returns the effective research speed (matrix items per
+// tick) and the power multiplier across all running labs. The multiplier is
+// the per-lab power allocation ratio weighted by ResearchPerTick; 1 means
+// every lab is fully powered.
+func researchThroughput(player *model.PlayerState, labs []*model.Building, powerRatios map[string]float64) (int, float64) {
+	baseSpeed := 0
+	effectiveSpeed := 0.0
 	for _, building := range labs {
 		if building == nil || building.Runtime.Functions.Research == nil {
 			continue
 		}
-		speed += building.Runtime.Functions.Research.ResearchPerTick
+		perTick := building.Runtime.Functions.Research.ResearchPerTick
+		if perTick <= 0 {
+			continue
+		}
+		ratio := 1.0
+		if model.PowerDemandForBuilding(building) > 0 {
+			if allocRatio, ok := powerRatios[building.ID]; ok {
+				ratio = allocRatio
+			}
+		}
+		baseSpeed += perTick
+		effectiveSpeed += float64(perTick) * ratio
 	}
-	if speed <= 0 {
-		return 0
+	if baseSpeed <= 0 {
+		return 0, 0
 	}
+	multiplier := effectiveSpeed / float64(baseSpeed)
 	boost := 0.0
 	if player != nil {
 		if len(player.Executors) > 0 {
@@ -155,12 +242,27 @@ func researchThroughput(player *model.PlayerState, labs []*model.Building) int {
 		}
 	}
 	if boost > 0 {
-		speed = int(math.Ceil(float64(speed) * (1 + boost)))
+		effectiveSpeed *= 1 + boost
 	}
-	if speed < 1 {
+	speed := int(math.Ceil(effectiveSpeed))
+	if effectiveSpeed > 0 && speed < 1 {
 		speed = 1
 	}
-	return speed
+	return speed, multiplier
+}
+
+// estimateResearchTicksRemaining estimates how many ticks the current research
+// still needs at the given effective throughput.
+func estimateResearchTicksRemaining(research *model.PlayerResearch, throughput int) int64 {
+	if research == nil || throughput <= 0 {
+		return 0
+	}
+	remaining := research.TotalCost - research.Progress
+	if remaining <= 0 {
+		return 0
+	}
+	perTick := int64(throughput)
+	return (remaining + perTick - 1) / perTick
 }
 
 // completeResearch marks a research as completed and applies unlocks

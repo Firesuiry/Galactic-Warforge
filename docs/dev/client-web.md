@@ -141,6 +141,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - `战斗与制造` 页签：建筑量产（`produce`），候选从生产建筑动态填充；`attack` / `upgrade` 表单已随期3a 迁到地图直操作（见下方"地图直操作"）
 - `取消与恢复` 页签：取消建造（`cancel_construction`）、恢复建造（`restore_construction`）、取消当前研究（`cancel_research`）、拆除戴森组件（`demolish_dyson`）集中处理；任务候选来自 `runtime.construction_tasks`，研究来自 `current_research`，戴森组件来自 `systemRuntime.dyson_sphere.layers`
 - 地图直操作（期3a）：store 的 `interactionMode`（`inspect / build / move / attack`）决定地图点击语义，Esc/右键退出当前模式。底部建造栏 `PlanetBuildBar`（推荐/已解锁分组 + 造价显示）点选建筑进入建造模式，地图悬停显示幽灵 footprint（绿=可建 / 红=阻塞，复用 `build-workflow` 格评估），点击直接下达，本地预检拦截会写 journal，模式保持支持连续放置；`PlanetSelectionBar` 给选中建筑升级/拆除、选中单位移动/攻击（进入地图点选模式，准星高亮），与表单共用同一 `submitPlanetCommand` 管道
+- 建造模式参数化：传送带类建筑（`conveyor_belt_*`）进入建造模式后，hint 区出现方向按钮（快捷键 R）在 auto → 北 → 东 → 南 → 西间循环，画布幽灵叠加输出方向箭头（auto 由服务端放置时解析不画箭头）；有可用配方的建筑（recipe.building_types 命中且 tech_unlock 已研究，`build-workflow.listBuildingRecipes`）hint 区出现配方下拉（默认"无配方"，如 matrix_lab 无配方即研究站），选择后写入 `interactionMode.recipeId` 随 build 命令下发
 - `研究与装料` 页签现在是阶段化研究工作台：顶部展示当前研究卡片与开局推荐路径，中部按 `当前可研究 / 已完成 / 尚未满足前置` 分组科技，点击卡片后再通过 `start_research` 真正提交命令
 - 研究派生逻辑已拆到独立模块；组件层主用 `summary.players[pid].tech.current_research` 与 `completed_techs` 推导 UI，若运行时仍遇到旧版 `completed_techs` level map，只在派生层内部归一化，不向组件扩散
 - 命令结果账本：提交后先显示 `pending`，再优先由 SSE authoritative 回写切到最终成功或失败；默认会收口 `command_result`，并把 `research_completed`、`rocket_launched` 这类异步完成事件也视作最终成功态。如果等待超时，会补拉 `/events/snapshot` 对账，并附带下一步提示

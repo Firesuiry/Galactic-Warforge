@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 
 	"siliconworld/internal/config"
@@ -772,6 +773,31 @@ func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
 	ws.RLock()
 	defer ws.RUnlock()
 
+	// execBuild enforces the executor operate range, so prefer open tiles
+	// near an executor (players visited in ID order for determinism).
+	playerIDs := make([]string, 0, len(ws.Players))
+	for playerID := range ws.Players {
+		playerIDs = append(playerIDs, playerID)
+	}
+	sort.Strings(playerIDs)
+	for _, playerID := range playerIDs {
+		player := ws.Players[playerID]
+		if player == nil {
+			continue
+		}
+		execState := player.ExecutorForPlanet(ws.PlanetID)
+		if execState == nil {
+			continue
+		}
+		execUnit := ws.Units[execState.UnitID]
+		if execUnit == nil {
+			continue
+		}
+		if pos := findOpenTileNearLocked(ws, execUnit.Position, execState.OperateRange, margin); pos != nil {
+			return pos, nil
+		}
+	}
+
 	for y := margin; y < ws.MapHeight-margin; y++ {
 		for x := margin; x < ws.MapWidth-margin; x++ {
 			if !ws.Grid[y][x].Terrain.Buildable() {
@@ -787,6 +813,42 @@ func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
 		}
 	}
 	return nil, nil
+}
+
+func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist, margin int) *model.Position {
+	for dist := 0; dist <= maxDist; dist++ {
+		for dy := -dist; dy <= dist; dy++ {
+			absDy := dy
+			if absDy < 0 {
+				absDy = -absDy
+			}
+			span := dist - absDy
+			for dx := -span; dx <= span; dx++ {
+				absDx := dx
+				if absDx < 0 {
+					absDx = -absDx
+				}
+				if absDx+absDy != dist {
+					continue
+				}
+				x, y := center.X+dx, center.Y+dy
+				if x < margin || y < margin || x >= ws.MapWidth-margin || y >= ws.MapHeight-margin {
+					continue
+				}
+				if !ws.Grid[y][x].Terrain.Buildable() {
+					continue
+				}
+				if ws.Grid[y][x].ResourceNodeID != "" {
+					continue
+				}
+				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
+					continue
+				}
+				return &model.Position{X: x, Y: y}
+			}
+		}
+	}
+	return nil
 }
 
 func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.Position, error) {

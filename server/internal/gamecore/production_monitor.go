@@ -38,7 +38,7 @@ func (pm *productionMonitor) cooldownTicks() int64 {
 	return pm.cfg.AlertCooldownTicks
 }
 
-// settleProductionMonitoring samples production buildings and generates alerts.
+// settleProductionMonitoring samples production and collection buildings and generates alerts.
 func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, currentTick int64) ([]*model.GameEvent, []*model.ProductionAlert) {
 	if ws == nil || pm == nil {
 		return nil, nil
@@ -72,21 +72,31 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 	for i := 0; i < maxEntities; i++ {
 		idx := (start + i) % len(ids)
 		building := ws.Buildings[ids[idx]]
-		if building == nil || building.Runtime.Functions.Production == nil {
+		if building == nil {
+			continue
+		}
+		production := building.Runtime.Functions.Production
+		collect := building.Runtime.Functions.Collect
+		if production == nil && collect == nil {
 			continue
 		}
 		player := ws.Players[building.OwnerID]
 		if player == nil || !player.IsAlive {
 			continue
 		}
-		throughput := building.Runtime.Functions.Production.Throughput
+		throughput := 0
+		if production != nil {
+			throughput = production.Throughput
+		} else {
+			throughput = collect.YieldPerTick
+		}
 		backlog := 0
 		inputShortage := false
 		outputBlocked := false
 		moved := 0
 		if building.Storage != nil {
 			backlog = building.Storage.UsedInputBuffer()
-			outputBlocked = building.Storage.OutputBufferCapacity() > 0 && building.Storage.UsedOutputBuffer() >= building.Storage.OutputBufferCapacity()
+			outputBlocked = storageOutputBlocked(building.Storage, production == nil)
 		}
 		if building.Conveyor != nil {
 			moved = building.Conveyor.Throughput
@@ -95,7 +105,7 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 		if throughput > 0 {
 			efficiency = float64(moved) / float64(throughput)
 		}
-		if throughput > 0 && building.Storage != nil && backlog <= 0 && efficiency < pm.cfg.ShortageRatio {
+		if production != nil && throughput > 0 && building.Storage != nil && backlog <= 0 && efficiency < pm.cfg.ShortageRatio {
 			inputShortage = true
 		}
 
@@ -126,6 +136,22 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 	return events, alerts
 }
 
+// storageOutputBlocked reports whether produced items can no longer leave the
+// building. Collectors only stall once their main inventory is also full,
+// since their output buffer refills from inventory every tick.
+func storageOutputBlocked(storage *model.StorageState, collector bool) bool {
+	if storage == nil || storage.OutputBufferCapacity() <= 0 {
+		return false
+	}
+	if storage.UsedOutputBuffer() < storage.OutputBufferCapacity() {
+		return false
+	}
+	if !collector {
+		return true
+	}
+	return storage.Capacity > 0 && storage.UsedInventory() >= storage.Capacity
+}
+
 func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) []*model.ProductionAlert {
 	if pm == nil || building == nil || building.ProductionMonitor == nil {
 		return nil
@@ -133,6 +159,8 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	var alerts []*model.ProductionAlert
 	state := building.ProductionMonitor
 	cooldown := pm.cooldownTicks()
+	// Collectors have no recipe inputs, so only power and output blockage apply.
+	collector := building.Runtime.Functions.Production == nil
 
 	if building.Runtime.State == model.BuildingWorkNoPower && state.ShouldAlert(model.AlertTypePowerShortage, tick, cooldown) {
 		details := map[string]any{"power_priority": building.Runtime.Params.PowerPriority}
@@ -140,7 +168,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 		state.MarkAlert(model.AlertTypePowerShortage, tick)
 	}
 
-	if throughput > 0 {
+	if !collector && throughput > 0 {
 		ratio := float64(backlog) / float64(throughput)
 		if ratio >= pm.cfg.BacklogCriticalRatio && state.ShouldAlert(model.AlertTypeBacklog, tick, cooldown) {
 			details := map[string]any{"backlog_ratio": ratio}
@@ -153,7 +181,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 		}
 	}
 
-	if inputShortage && state.ShouldAlert(model.AlertTypeInputShortage, tick, cooldown) {
+	if !collector && inputShortage && state.ShouldAlert(model.AlertTypeInputShortage, tick, cooldown) {
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil))
 		state.MarkAlert(model.AlertTypeInputShortage, tick)
 	}
@@ -164,7 +192,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	}
 
 	eff := state.LastStats.Efficiency
-	if throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio && state.ShouldAlert(model.AlertTypeThroughputDrop, tick, cooldown) {
+	if !collector && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio && state.ShouldAlert(model.AlertTypeThroughputDrop, tick, cooldown) {
 		details := map[string]any{"efficiency": eff}
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, details))
 		state.MarkAlert(model.AlertTypeThroughputDrop, tick)
@@ -181,7 +209,7 @@ func (pm *productionMonitor) buildAlert(
 	stats model.MonitorStats,
 	details map[string]any,
 ) *model.ProductionAlert {
-	alertID := fmt.Sprintf("alert-%d-%s", tick, building.ID)
+	alertID := fmt.Sprintf("alert-%d-%s-%s", tick, building.ID, alertType)
 	return &model.ProductionAlert{
 		AlertID:      alertID,
 		Tick:         tick,

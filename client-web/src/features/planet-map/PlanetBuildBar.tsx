@@ -6,13 +6,21 @@
  */
 
 import { Lock, Mountain, Zap } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { CatalogView, StateSummary } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
-import { deriveBuildWorkflowView, type BuildCatalogEntryView } from '@/features/planet-map/build-workflow';
+import {
+  deriveBuildWorkflowView,
+  DIRECTION_LABELS,
+  isConveyorBeltBuilding,
+  listBuildingRecipes,
+  nextBeltDirection,
+  type BuildCatalogEntryView,
+} from '@/features/planet-map/build-workflow';
 import { getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
+import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { translateBuildingCategory, translateBuildingType } from '@/i18n/translate';
@@ -63,6 +71,56 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
 
   const activeBuildingType = interactionMode.kind === 'build' ? interactionMode.buildingType : null;
   const buildMode = interactionMode.kind === 'build';
+  // 传送带建造模式：方向可循环切换（auto → 北 → 东 → 南 → 西），随 build 命令下发服务端。
+  const beltMode = buildMode && isConveyorBeltBuilding(activeBuildingType ?? '');
+  const buildDirection = interactionMode.kind === 'build' ? interactionMode.direction : 'auto';
+  // 生产类建造模式：可在建造时指定配方（无配方 = 服务端默认行为，如 matrix_lab 作研究站）。
+  const activeRecipeId = interactionMode.kind === 'build' ? interactionMode.recipeId : undefined;
+  const availableRecipes = useMemo(() => {
+    if (!buildMode || !activeBuildingType) {
+      return [];
+    }
+    const completedTechIds = normalizeCompletedTechIds(summary?.players?.[session.playerId]?.tech);
+    return listBuildingRecipes(catalog, activeBuildingType, completedTechIds);
+  }, [buildMode, activeBuildingType, catalog, summary, session.playerId]);
+
+  const cycleBeltDirection = () => {
+    const mode = usePlanetViewStore.getState().interactionMode;
+    if (mode.kind !== 'build') {
+      return;
+    }
+    setInteractionMode({ ...mode, direction: nextBeltDirection(mode.direction) });
+  };
+
+  const selectBuildRecipe = (recipeId: string) => {
+    const mode = usePlanetViewStore.getState().interactionMode;
+    if (mode.kind !== 'build') {
+      return;
+    }
+    setInteractionMode({ ...mode, recipeId: recipeId || undefined });
+  };
+
+  // R 键循环传送带方向（输入控件聚焦时不抢按键）。
+  useEffect(() => {
+    if (!beltMode) {
+      return undefined;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target
+        && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === 'r' || event.key === 'R') {
+        cycleBeltDirection();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beltMode, setInteractionMode]);
   // 建设资金余额：resources 缺失时视为"未知"，不做置灰（避免旧快照误伤）。
   const mineralsBalance = summary?.players?.[session.playerId]?.resources?.minerals;
 
@@ -154,15 +212,40 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
         ))}
       </div>
       <div className="planet-build-bar__footer">
-        {buildMode ? (
-          <span className="planet-build-bar__hint">
-            放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览，点击放置，右键/Esc 退出
-          </span>
-        ) : (
-          <span className="planet-build-bar__hint planet-build-bar__hint--dim">
-            选择建筑类型后在地图上点击放置
-          </span>
-        )}
+        <div className="planet-build-bar__status">
+          {buildMode ? (
+            <span className="planet-build-bar__hint">
+              放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览，点击放置，右键/Esc 退出
+            </span>
+          ) : (
+            <span className="planet-build-bar__hint planet-build-bar__hint--dim">
+              选择建筑类型后在地图上点击放置
+            </span>
+          )}
+          {beltMode ? (
+            <button
+              className="planet-build-bar__control"
+              type="button"
+              title="切换传送带方向（快捷键 R）"
+              onClick={cycleBeltDirection}
+            >
+              方向：{DIRECTION_LABELS[buildDirection]}（R）
+            </button>
+          ) : null}
+          {buildMode && availableRecipes.length > 0 ? (
+            <select
+              className="planet-build-bar__select"
+              aria-label="建造配方"
+              value={activeRecipeId ?? ''}
+              onChange={(event) => selectBuildRecipe(event.target.value)}
+            >
+              <option value="">无配方（默认）</option>
+              {availableRecipes.map((recipe) => (
+                <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
+              ))}
+            </select>
+          ) : null}
+        </div>
         <button
           className="planet-build-bar__toggle"
           type="button"

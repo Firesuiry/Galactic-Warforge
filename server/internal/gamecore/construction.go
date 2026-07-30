@@ -595,7 +595,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		}
 		b.Production.RecipeID = recipeID
 	}
-	if b.Runtime.Functions.Production != nil {
+	if b.Runtime.Functions.Production != nil || b.Runtime.Functions.Collect != nil {
 		b.ProductionMonitor = model.NewProductionMonitorState()
 	}
 

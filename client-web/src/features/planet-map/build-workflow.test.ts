@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   assessBuildTiles,
   deriveBuildWorkflowView,
+  isConveyorBeltBuilding,
+  listBuildingRecipes,
+  nextBeltDirection,
 } from "@/features/planet-map/build-workflow";
 
 function createCatalog() {
@@ -321,5 +324,66 @@ describe("采集建筑（requires_resource_node）资源格评估", () => {
         resourceId: "iron-1",
       }),
     ]);
+  });
+});
+
+describe("传送带方向循环", () => {
+  it("conveyor_belt_* 判定为传送带，其他建筑不是", () => {
+    expect(isConveyorBeltBuilding("conveyor_belt_mk1")).toBe(true);
+    expect(isConveyorBeltBuilding("conveyor_belt_mk2")).toBe(true);
+    expect(isConveyorBeltBuilding("conveyor_belt_mk3")).toBe(true);
+    expect(isConveyorBeltBuilding("wind_turbine")).toBe(false);
+    expect(isConveyorBeltBuilding("matrix_lab")).toBe(false);
+  });
+
+  it("方向按 auto → north → east → south → west 循环", () => {
+    expect(nextBeltDirection("auto")).toBe("north");
+    expect(nextBeltDirection("north")).toBe("east");
+    expect(nextBeltDirection("east")).toBe("south");
+    expect(nextBeltDirection("south")).toBe("west");
+    expect(nextBeltDirection("west")).toBe("auto");
+  });
+});
+
+describe("listBuildingRecipes 建筑可携配方", () => {
+  const catalog = {
+    recipes: [
+      {
+        id: "iron_plate",
+        name: "铁板",
+        building_types: ["arc_smelter"],
+      },
+      {
+        id: "gear",
+        name: "齿轮",
+        building_types: ["assembling_machine_mk1"],
+      },
+      {
+        id: "circuit",
+        name: "电路板",
+        building_types: ["assembling_machine_mk1"],
+        tech_unlock: ["tech-electronics"],
+      },
+      {
+        id: "matrix_blue",
+        name: "蓝矩阵",
+        building_types: ["matrix_lab"],
+      },
+    ],
+  };
+
+  it("按 building_types 匹配建筑，空 tech_unlock 配方始终可用", () => {
+    const recipes = listBuildingRecipes(catalog as never, "assembling_machine_mk1", []);
+    expect(recipes.map((recipe) => recipe.id)).toEqual(["gear"]);
+  });
+
+  it("tech_unlock 配方需玩家已完成对应科技", () => {
+    const recipes = listBuildingRecipes(catalog as never, "assembling_machine_mk1", ["tech-electronics"]);
+    expect(recipes.map((recipe) => recipe.id)).toEqual(["gear", "circuit"]);
+  });
+
+  it("无配方建筑 / 空 catalog 返回空列表", () => {
+    expect(listBuildingRecipes(catalog as never, "wind_turbine", [])).toEqual([]);
+    expect(listBuildingRecipes(undefined, "matrix_lab", [])).toEqual([]);
   });
 });

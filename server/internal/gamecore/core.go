@@ -845,11 +845,14 @@ func commandResultEvent(qr *model.QueuedRequest, cmd model.Command, res model.Co
 	}
 }
 
+// spawnEdgeMargin keeps auto-picked start positions away from map edges.
+const spawnEdgeMargin = 8
+
 // computeStartPositions returns N spread-out starting positions
 func computeStartPositions(cfg *config.Config, w, h int) []model.Position {
 	n := len(cfg.Players)
 	positions := make([]model.Position, n)
-	margin := 3
+	margin := spawnEdgeMargin
 	switch n {
 	case 1:
 		positions[0] = model.Position{X: w / 2, Y: h / 2}
@@ -857,10 +860,18 @@ func computeStartPositions(cfg *config.Config, w, h int) []model.Position {
 		positions[0] = model.Position{X: margin, Y: margin}
 		positions[1] = model.Position{X: w - margin - 1, Y: h - margin - 1}
 	default:
+		radiusX := w/2 - margin - 1
+		radiusY := h/2 - margin - 1
+		if radiusX < 0 {
+			radiusX = 0
+		}
+		if radiusY < 0 {
+			radiusY = 0
+		}
 		for i := 0; i < n; i++ {
 			angle := float64(i) / float64(n) * 2 * math.Pi
-			cx := w/2 + int(float64(w/2-margin)*math.Cos(angle))
-			cy := h/2 + int(float64(h/2-margin)*math.Sin(angle))
+			cx := w/2 + int(float64(radiusX)*math.Cos(angle))
+			cy := h/2 + int(float64(radiusY)*math.Sin(angle))
 			positions[i] = model.Position{X: cx, Y: cy}
 		}
 	}
@@ -913,6 +924,7 @@ func applyPlanetResources(ws *model.WorldState, planet *mapmodel.Planet) {
 			DecayPerTick: node.DecayPerTick,
 			IsRare:       node.IsRare,
 		}
+		state.SyncDepleted()
 		ws.Resources[node.ID] = state
 		ws.Grid[pos.Y][pos.X].ResourceNodeID = node.ID
 	}

@@ -6,6 +6,7 @@ import (
 	"siliconworld/internal/config"
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	"siliconworld/internal/terrain"
 )
 
 type PlanetRuntimeRegistry struct {
@@ -46,12 +47,13 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	return ws
 }
 
-func seedPlayerOutposts(ws *model.WorldState, players []config.PlayerConfig) {
+func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig) {
 	if ws == nil || len(players) == 0 {
 		return
 	}
-	basePositions := computeStartPositions(&config.Config{Players: players}, ws.MapWidth, ws.MapHeight)
+	basePositions := spawnPositionsFor(ws, planet, players)
 	for i := range basePositions {
+		flattenSpawnArea(ws, planet, basePositions[i], spawnAreaRadius)
 		basePositions[i] = findNearestBuildable(ws, basePositions[i])
 	}
 	for i, p := range players {
@@ -109,6 +111,144 @@ func seedPlayerOutposts(ws *model.WorldState, players []config.PlayerConfig) {
 	}
 }
 
+// spawnAreaRadius is the radius around each spawn point flattened to
+// buildable terrain so a fresh base always has room to expand.
+const spawnAreaRadius = 8
+
+// spawnResourceSearchRadius caps how far an auto spawn may wander when
+// looking for a tile with minable resources nearby.
+const spawnResourceSearchRadius = 32
+
+// spawnPositionsFor returns explicit planet spawn points when the map config
+// pins them, otherwise spread-out auto positions kept away from map edges and
+// nudged next to minable resource nodes so the first mining loop works.
+func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig) []model.Position {
+	if planet != nil && len(planet.SpawnPoints) > 0 {
+		positions := make([]model.Position, 0, len(planet.SpawnPoints))
+		for _, p := range planet.SpawnPoints {
+			if ws.InBounds(p.X, p.Y) {
+				positions = append(positions, model.Position{X: p.X, Y: p.Y})
+			}
+		}
+		if len(positions) > 0 {
+			return positions
+		}
+	}
+	positions := computeStartPositions(&config.Config{Players: players}, ws.MapWidth, ws.MapHeight)
+	mineDist := spawnMineDistance(players)
+	for i := range positions {
+		positions[i] = relocateSpawnNearResources(ws, positions[i], mineDist)
+	}
+	return positions
+}
+
+// spawnMineDistance is the max Manhattan distance allowed between a spawn and
+// the nearest resource node, leaving room for the executor's adjacent tile.
+func spawnMineDistance(players []config.PlayerConfig) int {
+	operateRange := 0
+	for _, p := range players {
+		if p.Executor.OperateRange <= 0 {
+			continue
+		}
+		if operateRange == 0 || p.Executor.OperateRange < operateRange {
+			operateRange = p.Executor.OperateRange
+		}
+	}
+	if operateRange <= 0 {
+		operateRange = 6
+	}
+	dist := operateRange - 2
+	if dist < 1 {
+		dist = 1
+	}
+	return dist
+}
+
+// relocateSpawnNearResources nudges an auto spawn to the closest tile that
+// keeps the edge margin and has a resource node within dist. The spawn area
+// is flattened afterwards, so the node's own terrain does not matter here.
+func relocateSpawnNearResources(ws *model.WorldState, start model.Position, dist int) model.Position {
+	if ws == nil {
+		return start
+	}
+	if hasResourceNodeWithin(ws, start, dist) {
+		return start
+	}
+	for r := 1; r <= spawnResourceSearchRadius; r++ {
+		for dy := -r; dy <= r; dy++ {
+			for dx := -r; dx <= r; dx++ {
+				if dx != -r && dx != r && dy != -r && dy != r {
+					continue
+				}
+				x, y := start.X+dx, start.Y+dy
+				if x < spawnEdgeMargin || y < spawnEdgeMargin || x > ws.MapWidth-1-spawnEdgeMargin || y > ws.MapHeight-1-spawnEdgeMargin {
+					continue
+				}
+				if hasResourceNodeWithin(ws, model.Position{X: x, Y: y}, dist) {
+					return model.Position{X: x, Y: y}
+				}
+			}
+		}
+	}
+	return start
+}
+
+// hasResourceNodeWithin reports whether a resource node sits within Manhattan
+// dist of center.
+func hasResourceNodeWithin(ws *model.WorldState, center model.Position, dist int) bool {
+	for dy := -dist; dy <= dist; dy++ {
+		y := center.Y + dy
+		if y < 0 || y >= ws.MapHeight {
+			continue
+		}
+		absDy := dy
+		if absDy < 0 {
+			absDy = -absDy
+		}
+		span := dist - absDy
+		for dx := -span; dx <= span; dx++ {
+			x := center.X + dx
+			if x < 0 || x >= ws.MapWidth {
+				continue
+			}
+			if ws.Grid[y][x].ResourceNodeID != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// flattenSpawnArea converts non-buildable terrain within radius of center to
+// buildable ground. Resource nodes are untouched: they live on a separate
+// layer and remain harvestable inside the flattened area. The flattened
+// terrain is written to both the runtime world grid and the map model planet,
+// keeping the two terrain copies consistent for scene rendering.
+func flattenSpawnArea(ws *model.WorldState, planet *mapmodel.Planet, center model.Position, radius int) {
+	if ws == nil || radius <= 0 {
+		return
+	}
+	for dy := -radius; dy <= radius; dy++ {
+		y := center.Y + dy
+		if y < 0 || y >= ws.MapHeight {
+			continue
+		}
+		for dx := -radius; dx <= radius; dx++ {
+			x := center.X + dx
+			if x < 0 || x >= ws.MapWidth {
+				continue
+			}
+			if dx*dx+dy*dy > radius*radius {
+				continue
+			}
+			ws.Grid[y][x].Terrain = terrain.TileBuildable
+			if planet != nil && y < len(planet.Terrain) && x < len(planet.Terrain[y]) {
+				planet.Terrain[y][x] = terrain.TileBuildable
+			}
+		}
+	}
+}
+
 func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe) (PlanetRuntimeRegistry, error) {
 	activePlanet := maps.PrimaryPlanet()
 	if cfg.Battlefield.InitialActivePlanetID != "" {
@@ -141,7 +281,8 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		if ws == nil {
 			continue
 		}
-		seedPlayerOutposts(ws, cfg.Players)
+		planet, _ := maps.Planet(planetID)
+		seedPlayerOutposts(ws, planet, cfg.Players)
 		worlds[planetID] = ws
 	}
 	if err := applyScenarioBootstrap(cfg, maps, worlds, spaceRuntime); err != nil {

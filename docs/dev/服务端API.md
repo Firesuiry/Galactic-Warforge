@@ -31,6 +31,7 @@
 - 续档时，目录内部保存的 `battlefield`、`players`、`map_config` 优先于本次外部配置。
 - 纯运行参数仍允许被本次外部配置覆盖，包括：`server.port`、`server.rate_limit`、`server.event_history_limit`、`server.snapshot_max_events`、`server.alert_history_limit`、`server.auto_save_interval_seconds`。
 - 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
+- `save.json` 以 gzip 压缩存储（文件名不变）；读取时按 gzip 魔数自动识别，旧版本写出的未压缩明文 `save.json` 可正常续档，下次保存自动转为压缩格式。
 - 第一版不做多槽位或命名存档点，自动保存与手动保存都会覆盖同一份 `save.json`。
 - 第一版不持久化 RNG 状态；续档后未来随机事件不保证与不停服持续运行时完全一致。
 - `save.json.runtime_state` 现在会额外持久化 `winner` / `victory_reason` / `victory_rule` / `victory_tech_id`，保证科技胜利、续档、回放、回滚后的胜利态一致。
@@ -73,6 +74,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 当前官方 midgame 场景故意**不**预置 `dirac_inversion` 与 `antimatter_fuel_rod`，以便继续同时验证 `set_ray_receiver_mode ... photon` 的科技门禁，以及 `artificial_star` 空燃料时的终局边界；但已经预置了 `signal_tower` / `plasma_turret` / `gravity_matrix` / `planetary_shield` / `self_evolution` / `integrated_logistics` / `photon_mining` / `annihilation`，可以直接通过通用 `build` 验证 `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`self_evolution_lab`、`advanced_mining_machine`、`pile_sorter`、`recomposing_assembler`、`artificial_star`。
 - 当前官方 midgame 场景同样**不**直接预置 `prototype` / `precision_drone` / `corvette` / `destroyer`；这些单位线现在已经是公开 API 能力，但仍要求玩家自己走 `research -> queue_military_production -> /world/warfare/industry -> deploy_squad|commission_fleet` 这条最小闭环。
 - `map` 配置新增 `overrides.planets.<planet_id>.kind`，可强制把某颗行星覆盖成 `gas_giant`、`rocky` 或 `ice`，不再依赖 seed 抽卡。当前 `map-midgame.yaml` 把 `planet-1-2` 强制设成 `gas_giant`，用于验证 `orbital_collector` 与戴森中后期路线。
+- `map` 配置新增 `spawn_points: [{x, y}, ...]`，可显式钉住玩家在主行星的出生点；未配置时出生点自动散布且距地图边缘至少 8 格，并会就近挪到矿脉旁边。无论哪种方式，出生点周围半径 8 格都会被平整为可建地形（资源点保留）。官方 `map-midgame.yaml` / `map-war.yaml` 已显式钉住 `(3,3)` 与 `(44,44)`，与场景预置建筑群布局保持一致。
 
 **官方战争验证场景**
 - 服务端当前提供一套 authoritative 官方战争验证局：`config-war.yaml + map-war.yaml`
@@ -228,10 +230,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `tech` 字段说明:
     - `player_id` / `completed_techs` / `current_research` / `research_queue` / `total_researched`
     - `completed_techs` 当前对外仍是 `{tech_id: level}` 的 level map；Web 研究派生层会在本地把它归一化成“已完成科技 ID 列表”，但接口本身尚未切到扁平 `string[]`
-    - `current_research` / `research_queue` 元素字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason` / `enqueue_tick` / `complete_tick`
+    - `current_research` / `research_queue` 元素字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason` / `speed_multiplier` / `estimated_ticks_remaining` / `enqueue_tick` / `complete_tick`
     - `progress` / `total_cost` 现在对应真实矩阵消耗进度；`required_cost` / `consumed_cost` 中的矩阵物品统一使用 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`
-    - `blocked_reason` 当前常见值为 `waiting_lab` / `waiting_matrix` / `invalid_tech`
-    - 当前 `client-web` 的阶段化研究工作台主要依赖 `completed_techs`、`current_research.tech_id`、`progress`、`total_cost`、`required_cost`、`blocked_reason` 来派生“当前可研究 / 已完成 / 尚未满足前置”分组，以及“缺研究站 / 缺矩阵”提示
+    - `blocked_reason` 当前常见值为 `waiting_lab` / `waiting_matrix` / `low_power` / `invalid_tech`；`low_power` 表示研究站供电不足（研究站未通电停滞，或运行中但电力配比 < 1 导致降速）
+    - `speed_multiplier`：当前研究速度供电倍率（按各研究站电力配比的加权值，1 = 满速；无运行中研究站时为 0）；`estimated_ticks_remaining`：按当前有效速度预估的剩余 tick，研究停滞时为 0 并省略
+    - 当前 `client-web` 的阶段化研究工作台主要依赖 `completed_techs`、`current_research.tech_id`、`progress`、`total_cost`、`required_cost`、`blocked_reason` 来派生“当前可研究 / 已完成 / 尚未满足前置”分组，以及“缺研究站 / 缺矩阵 / 供电不足”提示
   - `combat_tech` 字段说明:
     - `player_id` / `unlocked_techs` / `current_research` / `research_progress`
     - `unlocked_techs` / `current_research` 中的科技对象字段：`id` / `name` / `type` / `level` / `max_level` / `research_cost` / `effects`
@@ -665,6 +668,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `terrain`: 当前窗口内的地形切片
   - `visible` / `explored`: 当前窗口内的迷雾切片
   - `buildings` / `units` / `resources`: 当前窗口内可见实体
+  - `resources[]` 中 `remaining=0`（或 `max_amount=0`）的资源点会携带 `depleted: true` 标记；枯竭资源点仍保留在输出中（前端可淡化显示），且不阻碍建造——任何建筑都可直接建在枯竭点上，`requires_resource_node` 的采集建筑建在枯竭点上则采不到资源
   - `building_count` / `unit_count` / `resource_count`: 当前整颗行星的可见实体总数或资源总数，便于前端补充概览信息
 - 响应示例:
 ```json
@@ -1374,7 +1378,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
   - `scan_system`：`target.system_id` 必填；`target.layer` 可填 `system`
   - `scan_planet`：`target.planet_id` 必填；`target.layer` 可填 `planet`
-  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
+  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（只校验资源点存在，不校验是否枯竭；建在枯竭点上采不到资源），枯竭（`depleted=true`）资源点不阻碍建造，任何建筑都可直接建在枯竭点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，例如 `worker`、`soldier`
@@ -1542,7 +1546,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `damage_applied`：当伤害来源为 `enemy_force -> building` 且命中了行星护盾时，payload 额外包含 `shield_absorbed`（本次被护盾吸收的伤害）与 `shield_remaining`（当前玩家所有 `running` 的 `planetary_shield_generator` 剩余总护盾值）。
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。
     - 当前 Web 建造账本会把 `entity_created` 与后续 `building_state_changed` 收口到同一条结果，用于给新建建筑生成“补供电塔 / 补发电 / 扩容电网”这类下一步提示；如果你要实现同类客户端，至少需要同时订阅这两类事件
-  - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。
+  - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。同一建筑同一类型的持续告警条件每个冷却窗口最多重发一次该事件；快照侧（`GET /alerts/production/snapshot`）会把重复发生聚合为单条目的 `last_tick` / `repeat_count`。
   - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule`；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
   - 若 `mission_complete` 在当前 tick 完成，事件顺序会先出现 `research_completed`，再出现 `victory_declared`。
   - `rocket_launched` 戴森火箭发射事件，payload 包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`；其中 `construction_bonus` 与 `GET /world/systems/{system_id}/runtime.dyson_sphere.layers[].construction_bonus` 共享同一份 tick 内 authoritative 结果。
@@ -1601,6 +1605,15 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `next_alert_id`：当前页最后一条告警 ID，可作为下一次增量拉取游标
   - `has_more`：是否还有后续告警
   - `alerts`：当前认证玩家的告警数组
+- 告警聚合语义:
+  - 同一 `building_id` + `alert_type` 在快照中只保留一个条目，持续存在的告警条件不会刷出新条目
+  - `tick`：首次发生 tick（条目身份不变）；`last_tick`：最近一次重复发生 tick（仅在有重复时返回）；`repeat_count`：首次之后被聚合的重复次数
+  - 重复发生时 `severity` / `metrics` / `details` 刷新为最新采样值，`alert_id` 与列表位置保持不变，游标分页不受影响
+  - `alert_id` 格式为 `alert-<tick>-<building_id>-<alert_type>`
+  - 重复发生仍会按冷却窗口（`alert_cooldown_ticks`）发出 `production_alert` 事件，快照侧始终聚合
+- 监控覆盖范围:
+  - 有配方的生产建筑（`functions.production`）：全部 5 类告警
+  - 采集建筑（`functions.collect`：`mining_machine` / `advanced_mining_machine` / `water_pump` / `oil_extractor`）：只产生 `output_blocked`（本地仓储与输出缓冲全部堵满、采集停产）与 `power_shortage`，不产生 `backlog` / `input_shortage` / `throughput_drop`
 - `alert_type` 当前包括:
   - `throughput_drop`
   - `backlog`
@@ -1612,12 +1625,14 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 {
   "available_from_tick": 100,
   "since_tick": 120,
-  "next_alert_id": "alert-123-b-1",
+  "next_alert_id": "alert-123-b-1-backlog",
   "has_more": false,
   "alerts": [
     {
-      "alert_id": "alert-123-b-1",
+      "alert_id": "alert-123-b-1-backlog",
       "tick": 123,
+      "last_tick": 163,
+      "repeat_count": 2,
       "player_id": "p1",
       "building_id": "b-1",
       "building_type": "arc_smelter",
