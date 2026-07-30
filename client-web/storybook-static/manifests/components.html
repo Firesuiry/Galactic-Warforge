@@ -576,13 +576,13 @@
 <header>
   <div class="wrap">
     <h1>Manifest Debugger</h1>
-    <div class="summary"><a class="filter-pill all" data-k="all" href="#filter-all">All</a><span class="filter-pill ok" aria-disabled="true">7 components ok</span><a class="filter-pill info" data-k="infos" href="#filter-infos">2/7 infos</a><span class="filter-pill ok" aria-disabled="true">21 stories ok</span></div>
+    <div class="summary"><a class="filter-pill all" data-k="all" href="#filter-all">All</a><span class="filter-pill ok" aria-disabled="true">8 components ok</span><a class="filter-pill info" data-k="infos" href="#filter-infos">2/8 infos</a><span class="filter-pill ok" aria-disabled="true">23 stories ok</span></div>
   </div>
 </header>
 <main>
   <div class="wrap">
     <div class="note info" style="margin-bottom: 16px;">
-            <strong>Tip:</strong> You are using <code>react-docgen</code> (the default). Generation took <strong>1.0s</strong>. For higher quality prop types, consider switching to <code>react-docgen-typescript</code> in your <code>main.ts</code>:
+            <strong>Tip:</strong> You are using <code>react-docgen</code> (the default). Generation took <strong>0.9s</strong>. For higher quality prop types, consider switching to <code>react-docgen-typescript</code> in your <code>main.ts</code>:
             <pre><code>typescript: {
   reactDocgen: 'react-docgen-typescript',
 }</code></pre>
@@ -1489,6 +1489,97 @@ tabs: HoloTabItem[]</code></pre>
     &lt;/div&gt;
   );
 };</code></pre>
+            </div>
+        </div>
+    
+  </div>
+</article>
+<article
+  class="card 
+  no-error 
+  no-info 
+  no-story-error
+  no-doc-error"
+  role="listitem"
+  aria-label="Textarea">
+  <div class="head">
+    <div class="title">
+      <h2><span class="status-dot dot-ok"></span> Textarea</h2>
+      <div class="badges">
+        
+        
+        <label for="c-7-common-controls-textarea-stories" class="badge ok as-toggle">2 stories</label>
+        
+      </div>
+    </div>
+    <div class="meta" title="./src/common/controls/Textarea.stories.tsx">common-controls-textarea · ./src/common/controls/Textarea.stories.tsx</div>
+    
+    <div class="hint">全息多行输入（期7 控件库补全）：受控语义与原生 textarea 一致， 保留 rows/aria-label/disabled；皮肤与 sw-input 同族（.sw-textarea）。</div>
+    
+  </div>
+
+  <!-- ⬇️ Hidden toggles must be siblings BEFORE .panels -->
+  
+  
+  <input id="c-7-common-controls-textarea-stories" class="tg tg-stories" type="checkbox" hidden />
+  
+  
+
+  <div class="panels">
+    
+    
+    
+    
+        <div class="panel panel-stories">
+          
+          
+          
+          <div class="note ok">
+                <div class="row">
+                  <span class="ex-name">Imports</span>
+                </div>
+                <pre><code>import { Textarea } from "siliconworld-client-web";</code></pre>
+              </div>
+          
+          
+            <div class="note ok">
+              <div class="row">
+                <span class="ex-name">Default</span>
+                <span class="badge ok">story ok</span>
+              </div>
+              
+              
+              <pre><code>const Default = function DefaultTextarea() {
+  const [value, setValue] = useState(&#39;&#39;);
+  return (
+    &lt;div style={{ padding: 16, width: 320 }}&gt;
+      &lt;Textarea
+        aria-label=&quot;多行输入&quot;
+        placeholder=&quot;例如：@建造官 每五分钟同步一次当前状态&quot;
+        rows={4}
+        value={value}
+        onChange={(event) =&gt; setValue(event.target.value)}
+      /&gt;
+    &lt;/div&gt;
+  );
+};</code></pre>
+            </div>
+            <div class="note ok">
+              <div class="row">
+                <span class="ex-name">Disabled</span>
+                <span class="badge ok">story ok</span>
+              </div>
+              
+              
+              <pre><code>const Disabled = () =&gt; &lt;div style={{ padding: 16, width: 320 }}&gt;
+    &lt;Textarea
+        rows={4}
+        placeholder=&quot;输入多行指令内容&quot;
+        aria-label=&quot;演示多行输入&quot;
+        disabled
+        value=&quot;离线样例模式不可编辑&quot;
+        onChange={() =&gt; undefined} /&gt;
+&lt;/div&gt;;</code></pre>
             </div>
         </div>
     

@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
+import { Button, Input, Select, Textarea } from '@/common/controls';
+
 import { getMissingPolicyCategories, getProviderCommandCoverageCategories } from './provider-command-catalog';
 import { ProviderManagerView } from './ProviderManagerView';
 import type {
@@ -151,9 +153,9 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
         </div>
         {!props.showCreateMember && selectedAgent ? (
           <div className="agent-members-view__actions">
-            <button className="primary-button" onClick={() => props.onStartDm(selectedAgent.id)} type="button">
+            <Button variant="primary" onClick={() => props.onStartDm(selectedAgent.id)} type="button">
               发起私聊
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -163,7 +165,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
           <form className="agent-im__composer-card" onSubmit={props.onCreateMember}>
             <label className="field">
               <span>成员名称</span>
-              <input
+              <Input
                 aria-label="成员名称"
                 value={props.memberName}
                 onChange={(event) => props.onMemberNameChange(event.target.value)}
@@ -171,7 +173,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
             </label>
             <label className="field">
               <span>绑定模型 Provider</span>
-              <select
+              <Select
                 aria-label="绑定模型 Provider"
                 value={props.memberProviderId}
                 onChange={(event) => props.onMemberProviderIdChange(event.target.value)}
@@ -180,19 +182,19 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                 {props.providers.map((provider) => (
                   <option key={provider.id} value={provider.id}>{provider.name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <div className="agent-members-view__inline-actions">
-              <button className="secondary-button" onClick={props.onOpenProviderManager} type="button">
+              <Button variant="secondary" onClick={props.onOpenProviderManager} type="button">
                 新建模型 Provider
-              </button>
-              <button
-                className="primary-button"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={!props.memberName.trim() || !props.memberProviderId || props.fixtureMode}
                 type="submit"
               >
                 保存成员
-              </button>
+              </Button>
             </div>
           </form>
 
@@ -280,7 +282,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
             <form className="agent-im__composer-card" onSubmit={handleSaveAgentProvider}>
               <label className="field">
                 <span>绑定模型 Provider</span>
-                <select
+                <Select
                   aria-label="绑定模型 Provider"
                   value={selectedAgentProviderId}
                   onChange={(event) => setSelectedAgentProviderId(event.target.value)}
@@ -289,11 +291,11 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                   {props.providers.map((provider) => (
                     <option key={provider.id} value={provider.id}>{provider.name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
-              <button className="primary-button" disabled={!selectedAgentProviderId || props.fixtureMode} type="submit">
+              <Button variant="primary" disabled={!selectedAgentProviderId || props.fixtureMode} type="submit">
                 保存模型 Provider 绑定
-              </button>
+              </Button>
             </form>
           </section>
 
@@ -308,7 +310,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
             <form className="agent-im__composer-card" onSubmit={handleSavePolicy}>
               <label className="field">
                 <span>星球范围</span>
-                <input
+                <Input
                   aria-label="星球范围"
                   value={planetIdsText}
                   onChange={(event) => setPlanetIdsText(event.target.value)}
@@ -317,7 +319,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               </label>
               <label className="field">
                 <span>命令分类</span>
-                <input
+                <Input
                   aria-label="命令分类"
                   value={commandCategoriesText}
                   onChange={(event) => setCommandCategoriesText(event.target.value)}
@@ -325,7 +327,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               </label>
               <label className="field">
                 <span>可私聊成员</span>
-                <input
+                <Input
                   aria-label="可私聊成员"
                   value={directMessageAgentIdsText}
                   onChange={(event) => setDirectMessageAgentIdsText(event.target.value)}
@@ -333,7 +335,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               </label>
               <label className="field">
                 <span>可调度成员</span>
-                <input
+                <Input
                   aria-label="可调度成员"
                   value={dispatchAgentIdsText}
                   onChange={(event) => setDispatchAgentIdsText(event.target.value)}
@@ -342,7 +344,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
 
               <div className="agent-form__checkbox-grid">
                 <label className="agent-form__checkbox">
-                  <input
+                  <Input
                     aria-label="允许创建智能体"
                     checked={canCreateAgents}
                     onChange={(event) => setCanCreateAgents(event.target.checked)}
@@ -351,7 +353,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                   <span>允许创建智能体</span>
                 </label>
                 <label className="agent-form__checkbox">
-                  <input
+                  <Input
                     aria-label="允许创建频道"
                     checked={canCreateChannel}
                     onChange={(event) => setCanCreateChannel(event.target.checked)}
@@ -360,7 +362,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                   <span>允许创建频道</span>
                 </label>
                 <label className="agent-form__checkbox">
-                  <input
+                  <Input
                     aria-label="允许管理成员"
                     checked={canManageMembers}
                     onChange={(event) => setCanManageMembers(event.target.checked)}
@@ -369,7 +371,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                   <span>允许管理成员</span>
                 </label>
                 <label className="agent-form__checkbox">
-                  <input
+                  <Input
                     aria-label="允许按星球拉人"
                     checked={canInviteByPlanet}
                     onChange={(event) => setCanInviteByPlanet(event.target.checked)}
@@ -378,7 +380,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                   <span>允许按星球拉人</span>
                 </label>
                 <label className="agent-form__checkbox">
-                  <input
+                  <Input
                     aria-label="允许创建定时任务"
                     checked={canCreateSchedules}
                     onChange={(event) => setCanCreateSchedules(event.target.checked)}
@@ -388,9 +390,9 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                 </label>
               </div>
 
-              <button className="primary-button" disabled={props.fixtureMode} type="submit">
+              <Button variant="primary" disabled={props.fixtureMode} type="submit">
                 保存权限配置
-              </button>
+              </Button>
             </form>
           </section>
 
@@ -410,13 +412,13 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
                     <span>{`每 ${schedule.intervalSeconds} 秒发送一次`}</span>
                     <span>{formatScheduleTarget(schedule, selectedAgent)}</span>
                     <span>{schedule.enabled ? '已启用' : '已停用'}</span>
-                    <button
-                      className="secondary-button"
+                    <Button
+                      variant="secondary"
                       onClick={() => props.onToggleScheduleEnabled(schedule.id, !schedule.enabled)}
                       type="button"
                     >
                       {schedule.enabled ? '停用任务' : '启用任务'}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -430,7 +432,7 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
             <form className="agent-im__composer-card" onSubmit={props.onCreateSchedule}>
               <label className="field">
                 <span>任务间隔（秒）</span>
-                <input
+                <Input
                   aria-label="任务间隔（秒）"
                   value={props.scheduleIntervalSeconds}
                   onChange={(event) => props.onScheduleIntervalChange(event.target.value)}
@@ -438,16 +440,16 @@ export function MemberWorkspaceView(props: MemberWorkspaceViewProps) {
               </label>
               <label className="field">
                 <span>任务内容</span>
-                <textarea
+                <Textarea
                   aria-label="任务内容"
                   rows={4}
                   value={props.scheduleMessage}
                   onChange={(event) => props.onScheduleMessageChange(event.target.value)}
                 />
               </label>
-              <button className="primary-button" disabled={props.fixtureMode} type="submit">
+              <Button variant="primary" disabled={props.fixtureMode} type="submit">
                 创建定时任务
-              </button>
+              </Button>
             </form>
           </section>
         </div>

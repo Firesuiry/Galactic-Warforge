@@ -100,3 +100,24 @@
 
 ## 六、执行
 逐阶段派子代理实现 → 主线验收（上述清单）→ 通过则提交一批次 → 进入下一阶段。全 V0-V4 完成后汇报。
+
+## 七、本轮（2026-07-29）执行结果
+
+按"期1~期7"批次落地，对照 V0~V4 勾选如下：
+
+| 方案阶段 | 状态 | 对应批次与说明 |
+| --- | --- | --- |
+| V0 设计地基 | ✅ | 期1（43c0038）：`styles/` 八文件拆分，teal 全息 token 体系统一；期2（43c0038）：图标体系落地为 lucide-react 线稿（`common/icon-map.ts` + `Icon.tsx` + Pixi `getIconTexture` 同源），替代方案中的 emoji 字形映射（方向性调整，效果更优），裸 emoji 清零 |
+| V1 皮肤 | ✅ | 期1 `.panel` 全息化全站统一；期3（43c0038）：`common/controls/` 控件库（Button/Select/Input/Tabs + stories）、TopNav 资源栏、Outliner、Login 标题屏；期7 补 `Textarea` 控件收尾 agents 页 |
+| V2 布局与层级 | ✅ | 期4（43c0038）：Overview 重做群星式指挥总览（态势横幅 + 下一步行动条 + mini 星图卡 + 资源脉搏 + 行星态势）；行星页全屏化/工作台抽屉/minimap 在此前批次（期5a 等）已完成，本轮期5（b5457fb）续作相机 fit 精修 |
+| V3 游戏感 / juice | ✅ | 既有 tick-pulse/alert-flash/selection-ring/panel-slide-in 保留；期6（b5457fb）选中环呼吸统一；`prefers-reduced-motion` 全局兜底未动（components.css `@media (prefers-reduced-motion: reduce)`） |
+| V4 地图精修 | ✅ | Pixi 化/拟真分块地表/矢量精灵在此前批次完成；本轮期5 相机初始适配 + DSP 建造栏 + `--shadow-hud`，期6（b5457fb + 9b8df39）`engine/palette.ts` 场景调色板、两场景配色 token 化、`/system/:id` 冷启动竞态修复 |
+
+期7（本批次，工具页皮肤 + 总验收）：
+
+- ✅ Agents 页皮肤统一：四个视图（AgentsSidebar/ChannelWorkspaceView/MemberWorkspaceView/ProviderManagerView）原生表单控件全部换控件库，新增 `Textarea` 控件与 `.sw-textarea` 皮肤；气泡/面板/标签/选中态归入 token（`--surface-*`/`--border-glow`/`--accent-soft`/`--danger` 派生色）；布局与逻辑零改动
+- ✅ Replay 页补漏：digest 差异行/漂移徽标归入 `--danger` 派生色与圆角 token
+- ✅ NotFound 页皮肤化：全息面板 + 发光 404 + Button 控件返回
+- ✅ 旧皮肤清理：pages.css/components.css 删除无引用块（agent-workspace/agent-thread/agent-im 三栏旧块、`.field textarea` 等）；`.field input/select` 与 `.compact-form-grid` 裸元素皮肤因 `PlanetCommandPanel` 仍在使用原生控件而保留（行星页表单控件化超本期范围，留作后续）
+- ✅ 总验收：tsc / vitest 379 / build / build-storybook 全绿；visual.spec 6/6（planet-map-shell 基线因 1px 渲染抖动重录，actual 已核对无破版）；功能用例串行全量 21 过 + 2 例 war-workbench 先存严格模式歧义（组合跑残留态，单文件串行复跑全绿，先存问题未在本轮动）；实拍 login/overview/galaxy/system/planet/war/replay/agents 八页 + 404 页逐张核对通过；`data-entity-*` 契约（planet-entity-dom 用例）与 reduced-motion 兜底均在
+- 硬约束遵守：零新依赖、动画只用 transform/opacity（本期未新增动画）、`data-*` 契约保留

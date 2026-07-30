@@ -1,83 +1,5 @@
 /* 页面专属：agents / login / replay / 指挥总览（command） */
 
-.agent-workspace {
-  display: grid;
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(280px, 340px);
-  gap: 16px;
-}
-
-.agent-workspace__column {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
-
-.agent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.agent-list__button {
-  width: 100%;
-  justify-content: flex-start;
-}
-
-.agent-list__button--active {
-  background: rgba(86, 137, 255, 0.2);
-}
-
-.agent-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.agent-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 220px;
-  max-height: 420px;
-  overflow: auto;
-}
-
-.agent-thread__message {
-  border: 1px solid var(--line-2);
-  border-radius: 14px;
-  padding: 12px;
-  background: var(--surface-1);
-}
-
-.agent-thread__message p {
-  margin: 8px 0 0;
-  white-space: pre-wrap;
-}
-
-.agent-thread__message--assistant {
-  border-color: rgba(86, 137, 255, 0.3);
-}
-
-.agent-thread__message--tool {
-  border-color: rgba(110, 231, 183, 0.3);
-}
-
-.agent-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.agent-context {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .agent-workspace-shell {
   display: grid;
   grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
@@ -128,10 +50,14 @@
   font-size: 0.85rem;
 }
 
-.channel-workspace--settings {
+/* 设置态/侧栏/Provider 管理：面板底统一为 token 体系（panel 渐变底 + accent-2 顶光） */
+.channel-workspace--settings,
+.agent-sidebar,
+.agent-template-manager {
   background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
-    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
+    radial-gradient(circle at top, rgba(95, 176, 255, 0.08), transparent 50%),
+    linear-gradient(180deg, rgba(57, 230, 208, 0.06), transparent 28%),
+    var(--panel-bg);
 }
 
 .channel-workspace__section {
@@ -142,7 +68,7 @@
 
 .channel-workspace__empty {
   padding: 16px;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-1);
   border: 1px solid var(--line-1);
 }
@@ -152,9 +78,6 @@
   flex-direction: column;
   gap: 16px;
   min-height: 0;
-  background:
-    linear-gradient(180deg, rgba(19, 28, 51, 0.98), rgba(13, 20, 38, 0.94)),
-    radial-gradient(circle at top, rgba(90, 177, 255, 0.16), transparent 45%);
 }
 
 .agent-sidebar__header h1 {
@@ -238,7 +161,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 18px;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-1);
   border: 1px solid var(--line-1);
 }
@@ -249,50 +172,6 @@
   gap: 10px;
 }
 
-.agent-template-manager {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
-    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
-}
-
-.agent-im {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-}
-
-.agent-im__sidebar,
-.agent-im__thread,
-.agent-im__details {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
-
-.agent-im__sidebar {
-  background:
-    linear-gradient(180deg, rgba(19, 28, 51, 0.98), rgba(13, 20, 38, 0.94)),
-    radial-gradient(circle at top, rgba(90, 177, 255, 0.16), transparent 45%);
-}
-
-.agent-im__sidebar-header,
-.agent-im__thread-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.agent-im__sidebar-header h1,
-.agent-im__thread-header h2 {
-  margin: 0;
-}
-
-.agent-im__conversation-list,
-.agent-im__agent-list,
 .agent-im__detail-list {
   list-style: none;
   margin: 0;
@@ -302,34 +181,14 @@
   gap: 10px;
 }
 
-.agent-im__agent-card,
 .agent-im__detail-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
   border: 1px solid var(--line-1);
-}
-
-.agent-im__agent-card {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.agent-im__thread {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(8, 13, 25, 0.92)),
-    radial-gradient(circle at top, rgba(64, 131, 255, 0.12), transparent 50%);
-}
-
-.agent-im__thread-meta {
-  display: flex;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 0.85rem;
 }
 
 .agent-im__messages {
@@ -344,7 +203,7 @@
 .agent-im__message {
   max-width: min(76%, 720px);
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line-2);
   background: var(--surface-2);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
@@ -352,7 +211,7 @@
 
 .agent-im__message header {
   margin-bottom: 6px;
-  color: #8cb1ff;
+  color: var(--accent-2);
 }
 
 .agent-im__message p {
@@ -362,8 +221,8 @@
 
 .agent-im__message--player {
   align-self: flex-end;
-  background: linear-gradient(135deg, rgba(47, 119, 255, 0.32), rgba(32, 198, 183, 0.18));
-  border-color: rgba(111, 177, 255, 0.22);
+  background: linear-gradient(135deg, rgba(95, 176, 255, 0.26), var(--accent-soft));
+  border-color: var(--border-glow);
 }
 
 .agent-im__message--agent {
@@ -375,8 +234,8 @@
 .agent-im__message--system {
   align-self: center;
   max-width: 100%;
-  background: rgba(255, 210, 117, 0.08);
-  border-color: rgba(255, 210, 117, 0.18);
+  background: rgba(255, 180, 84, 0.08);
+  border-color: rgba(255, 180, 84, 0.2);
 }
 
 .agent-im__composer,
@@ -385,7 +244,7 @@
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-1);
   border: 1px solid var(--line-1);
 }
@@ -401,8 +260,9 @@
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(68, 135, 255, 0.16);
-  color: #cae2ff;
+  background: rgba(95, 176, 255, 0.14);
+  border: 1px solid rgba(95, 176, 255, 0.22);
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 700;
 }
@@ -553,14 +413,9 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: var(--radius);
   border: 1px solid var(--line-1);
   background: var(--surface-1);
-}
-
-.agent-form__checkbox input {
-  width: 16px;
-  height: 16px;
 }
 
 .replay-page {
@@ -608,9 +463,9 @@
 }
 
 .replay-kv-list__row--mismatch {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 111, 111, 0.2);
-  background: rgba(116, 22, 30, 0.34);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 87, 87, 0.28);
+  background: rgba(255, 87, 87, 0.1);
   padding: 10px 12px;
 }
 
@@ -619,8 +474,8 @@
 }
 
 .replay-status--danger {
-  background: rgba(255, 93, 93, 0.16);
-  color: #ffb8b8;
+  background: rgba(255, 87, 87, 0.16);
+  color: #ffc4c4;
 }
 
 .replay-stat-grid {
@@ -638,6 +493,38 @@
   .replay-digest-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* 404 页：居中全息面板 + 发光状态码（对标登录标题屏） */
+.notfound-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.notfound-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: min(480px, 100%);
+  padding: 44px 36px;
+  text-align: center;
+}
+
+.notfound-code {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  color: var(--accent);
+  text-shadow:
+    0 0 18px rgba(57, 230, 208, 0.55),
+    0 0 64px rgba(57, 230, 208, 0.28);
 }
 
 /* ============================================================

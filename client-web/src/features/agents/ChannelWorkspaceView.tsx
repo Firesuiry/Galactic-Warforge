@@ -1,5 +1,7 @@
 import type { FormEvent } from 'react';
 
+import { Button, Input, Select, Textarea } from '@/common/controls';
+
 import type {
   AgentProfileView,
   ConversationMessageView,
@@ -144,9 +146,9 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
             <h2>{props.conversation?.name ?? '频道设置'}</h2>
             <p className="subtle-text">{props.conversation?.topic || '管理频道成员与协作入口。'}</p>
           </div>
-          <button className="secondary-button" onClick={props.onBackToChat} type="button">
+          <Button variant="secondary" onClick={props.onBackToChat} type="button">
             返回聊天
-          </button>
+          </Button>
         </div>
 
         <section className="channel-workspace__section">
@@ -174,16 +176,16 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
             <form className="agent-im__composer-card" onSubmit={props.onAddMembers}>
               <label className="field">
                 <span>选择成员</span>
-                <select aria-label="选择成员" value={props.inviteAgentId} onChange={(event) => props.onInviteAgentIdChange(event.target.value)}>
+                <Select aria-label="选择成员" value={props.inviteAgentId} onChange={(event) => props.onInviteAgentIdChange(event.target.value)}>
                   <option value="">请选择一个成员</option>
                   {availableAgents.map((agent) => (
                     <option key={agent.id} value={agent.id}>{agent.name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
-              <button className="secondary-button" disabled={!props.inviteAgentId || props.fixtureMode} type="submit">
+              <Button variant="secondary" disabled={!props.inviteAgentId || props.fixtureMode} type="submit">
                 添加到频道
-              </button>
+              </Button>
             </form>
           ) : (
             <div className="channel-workspace__empty">
@@ -197,11 +199,11 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
           <form className="agent-im__composer-card" onSubmit={props.onInviteByPlanet}>
             <label className="field">
               <span>星球 ID</span>
-              <input value={props.invitePlanetId} onChange={(event) => props.onInvitePlanetIdChange(event.target.value)} />
+              <Input aria-label="星球 ID" value={props.invitePlanetId} onChange={(event) => props.onInvitePlanetIdChange(event.target.value)} />
             </label>
-            <button className="secondary-button" disabled={!props.conversation || props.fixtureMode} type="submit">
+            <Button variant="secondary" disabled={!props.conversation || props.fixtureMode} type="submit">
               按星球拉人
-            </button>
+            </Button>
           </form>
         </section>
       </section>
@@ -249,9 +251,9 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
         {props.conversation ? (
           <div className="channel-workspace__actions">
             <span className="channel-workspace__meta">{props.conversation.memberIds.length} 名成员</span>
-            <button className="secondary-button" onClick={props.onOpenSettings} type="button">
+            <Button variant="secondary" onClick={props.onOpenSettings} type="button">
               频道设置
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -400,16 +402,16 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
       <form className="agent-im__composer" onSubmit={props.onSendMessage}>
         <label className="field">
           <span>发送消息</span>
-          <textarea
+          <Textarea
             aria-label="发送消息"
             rows={4}
             value={props.messageInput}
             onChange={(event) => props.onMessageInputChange(event.target.value)}
           />
         </label>
-        <button className="primary-button" disabled={!props.conversation || props.fixtureMode} type="submit">
+        <Button variant="primary" disabled={!props.conversation || props.fixtureMode} type="submit">
           发送
-        </button>
+        </Button>
       </form>
     </section>
   );

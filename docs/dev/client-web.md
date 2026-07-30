@@ -79,6 +79,9 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 全局事件通知中心（期6b，`features/notifications/`）：zustand store（toast 栈上限 5 / 历史环 20 / 5s 消退 sweep / hover 暂停消退 / mergeKey 5s 窗口合并计数）+ 右下 `NotificationToasts` toast 栈 + TopNav 铃铛（未读角标 / 历史面板 / href 跳转）；`event-toasts.ts` 纯函数映射 17 类事件，两路 SSE（`use-war-realtime` / `use-planet-realtime`）各挂一行 `notifyGameEvent`，event_id 环形缓冲去重；`?freeze=1` 全抑制保截图确定性；音效去重原则——已有音效覆盖的事件不再重复配音，无声事件按 kind 补一声
 - 右侧 Outliner（`widgets/Outliner.tsx`）：焦点行星/恒星系（谱型色点）/舰队/警报四区，点击跳转；以布局列嵌入 AppShell（不遮挡页面），可折叠且状态持久化到 localStorage
 - 资源/警报数据 5~10s 轮询刷新；顶栏无后台信息（服务地址等已收进设置弹层）
+- 样式地基（期9a）：`styles/` 八文件拆分（tokens/base/components/shell/starmap/planet/war/pages），消灭旧绿色调色，全站统一深空蓝 teal 全息 token 体系（`--surface-*`/`--line-*`/`--accent-soft` 等）
+- 图标体系（期9b）：lucide-react + `common/icon-map.ts` 统一 iconKey→IconNode；`common/Icon.tsx` 重写为线稿图标 + 语义色容器，Pixi 侧 `getIconTexture` 烘焙同源图标纹理，全站裸 emoji 清零
+- 全息控件库与壳（期9c）：`common/controls/`（Button/Select/Input/Tabs + Storybook stories，期9g 补 Textarea）；TopNav 群星式资源栏、Outliner 打磨、War/Replay/Login 表单控件化、LoginPage 游戏标题屏（星云氛围层 + 发光标题）
 
 ### 3.1 总览页
 
@@ -86,6 +89,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 玩家统计
 - 最近事件与告警
 - 顶栏手动保存
+- 指挥总览重做（期9d）：群星式四区布局——顶部态势横幅 + 文明6式「下一步」主行动条、mini 星图卡（`MiniGalaxyMap`，Canvas2D 轻量星图）+ 快捷入口图标卡、告警事件时间线、资源脉搏卡组 + 行星态势列表；废弃 campaign-card 旧布局
 
 ### 3.2 星图导航
 
@@ -100,6 +104,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - `/planet/:planetId`：行星观察页
 - `/war`：战争工作台
 - `/agents`：AI 智能体工作台
+- 星图/战争页精修（期9f）：`engine/palette.ts` 场景全息调色板，星图与战争两场景配色归入 token、选中环呼吸统一；修复 `/system/:id` 冷启动竞态（system 数据先于 Pixi scene 就绪到达时 updateSystem 被跳过、系内只剩恒星，`onReady` 补 `showSystem`）；war.css 裸元素皮肤随控件替换移除，按钮 Button 控件化
 
 ### 3.3 战争工作台
 
@@ -156,12 +161,14 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 窄屏/移动端会保留地图首屏，并把右侧区域收口成 `工作台 / 选中对象 / 活动流` 三个页签，默认进入 `工作台`
 - 行星地图环面环绕渲染（期8a）：世界像素 > 视口像素的轴启用 toroidal wrap——相机 offset 归一化到 `(margin-worldPx, margin]`（`normalizeWrappedAxisOffset`，可无限平移不拖丢），渲染层用规范坐标 `canonicalTileIndex(t, cut, W)` 把接缝另一侧内容平移进视口（实体/连线/hover/选中/幽灵全走 `pxTileX/pxCenterX` 一族助手，cut 变化才重摆，非接缝实体规范坐标不变所以廉价）；分块地表键改 unwrapped、取样 mod 回绕（噪色种子用回绕后坐标，同一格在任何副本像素一致；chunk 恒满 64 tile）；legacy 整图/迷雾/氛围精灵在 +W/+H/(+W,+H) 各挂一个共享纹理的镜像 sprite；网格按 1 tile 周期天然无缝、改画可见范围（顺带省整图线条）；pointToTile 取模后永不为 null（环绕轴）；视口跨接缝时 `buildSceneWindow` 该轴退化为整轴拉取（服务端窗口表达不了两段并集）；小地图视口框按轴拆 1~2 段（最多 4 矩形）；缩放补间目标按周期对齐最近分支避免扫图。非环绕轴（世界 ≤ 视口）行为与旧版完全一致
 - 缩放档扩充（期8b）：scene 档新增 48/64/96/128px（原 1~32px 不变），默认档/回家档索引不变；SSE 服务端每 25s 发 `: ping` 注释心跳保活，shared-client SSE 加静默看门狗（`heartbeatTimeoutMs` 默认 75s ≈ 3 个心跳，超时主动 abort 重连，与 stop() 的用户断开区分），修复不稳定网络下 TCP 半开导致的假"已连接"
+- 行星页精修（期9e，对标 DSP）：相机初始适配 `resolvePlanetFitZoomIndex`（小行星进入时自动选档使地图占屏约 60-80% 并居中，三个「回家」入口统一走 fit 哨兵）；建造栏 DSP 化（catalog.category 真实分组 + 中文词典，卡片三态——锁定灰化 + Lock 角标 / 负担不起红边红成本 / 可建造 hover 微光上浮，`data-building-id` 等测试契约保留）；`tokens.css` 新增 `--shadow-hud`，工具条/小地图/选中情境条/建造栏 HUD 皮肤统一
 
 ### 3.5 回放调试页
 
 - 输入 `from_tick` / `to_tick`
 - 调 `/replay`
 - 查看 digest / drift 信息
+- 皮肤补漏（期9g）：表单控件化（Input/Button），digest 差异行与漂移徽标归入 `--danger` 派生色与统一圆角 token；注意 `/replay` 与 vite 代理条目同名，整页刷新/直接 goto 会被代理到服务端返回 405，SPA 内需经内部导航（顶栏链接）进入
 
 ### 3.6 AI 智能体工作台
 
@@ -175,6 +182,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 会话消息通过 `agent-gateway` 的 `message` 与 `turn.*` SSE 推送刷新，消息加载只影响消息区，不会整页回到 loading
 - 当前工作台不再把协作模型塞进 `server/`，浏览器只通过 `/agent-api` 与 `agent-gateway` 通信
 - 当 `serverUrl` 指向 fixture 模式时，工作台会进入只读，发送、建群、拉人、建定时任务入口会禁用
+- 工具页皮肤统一（期9g）：agents 页全部原生表单控件换控件库（补 `Textarea` 控件与 `.sw-textarea` 皮肤，aria-label/role 契约不变），聊天气泡/详情卡/输入区归入 `--surface-*`/`--border-glow`/`--accent-soft` 与圆角 token，设置态与侧栏面板底统一为 panel 渐变 + accent-2 顶光；`pages.css`/`components.css` 清理无引用旧皮肤（agent-workspace/agent-thread/agent-im 三栏旧块、`.field textarea` 等），`.field input/select` 裸元素皮肤因 `PlanetCommandPanel` 仍在使用而保留；NotFoundPage 改全息面板 + 发光 404 + Button 控件返回
 
 ### 3.7 当前已接入的协作能力
 
@@ -233,6 +241,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - vitest 纯逻辑单测（期4 新增）：`src/engine/battle-events.test.ts`（总线分流/seq 去重）、`features/war/battlefield/battlefield-model.test.ts` + `battlefield-effects.test.ts`（布局纯函数/特效池）、`src/engine/audio.test.ts` + `features/audio/game-audio.test.ts`（合成参数/限流/事件→音效映射）、`features/planet-map/planet-effects.test.ts`（伤害特效映射）、`features/starmap/model.test.ts` 增补（舰队聚合/战火航线定向）
 - vitest 行星地图单测（期5 新增）：`features/planet-map/planet-terrain-chunks.test.ts`（分块可见集合/LRU/FNV 签名/按边过渡邻域规则与像素级泡沫）、`features/planet-map/planet-building-sprites.test.ts`（原型映射/烘焙布局与缓存键/distressed 判定）、`features/planet-map/planet-scene.test.ts` 增补（单位楔形与朝向/HP 弧参数/工地进度/资源贴花确定性）
 - vitest 期6 新增：`features/notifications/notifications.test.ts`（期6b：store 栈上限/消退 sweep/mergeKey 合并/event_id 去重 + 17 类事件映射）；`features/planet-map/planet-scene.test.ts` 增补（期6c：遮挡排序键/hover 高亮状态机）、`planet-building-sprites.test.ts` 增补（期6c：方向纹变体缓存键/conveyor.output 方向解析）；期6c 未触动既有截图基线（无鼠标截图天然不受遮挡排序/hover 影响）
+- 期9g（本轮期7）验收注记：`planet-map-shell` 基线出现 1px 高 / 0.01 像素比的渲染环境抖动（读 actual 确认无破版后按流程重录，重录后 visual.spec 6/6 绿）；功能用例串行全量仅 war-workbench 两例命中先存严格模式歧义（`getByText('destroyer_screen')`，组合跑时服务端残留态所致，单文件串行全绿）
 - 冻结截图约定：星图/行星地图/战场图统一用 URL `?freeze=1` 进入 frozen 模式，脉冲/公转/特效演出/风机叶片与辉光呼吸全部静止（相位锁 0），供确定性截图
 - 手动浏览器检查：验证渲染和操作可见性
 - Storybook：开发局部组件时快速预览

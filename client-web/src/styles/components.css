@@ -73,8 +73,9 @@
 }
 
 .agent-sidebar__pane-button--active {
-  border-color: rgba(83, 177, 255, 0.28);
-  background: linear-gradient(135deg, rgba(32, 85, 184, 0.36), rgba(30, 186, 181, 0.16));
+  border-color: var(--border-glow);
+  background: var(--accent-soft);
+  box-shadow: 0 0 12px rgba(57, 230, 208, 0.22);
 }
 
 .agent-sidebar__list-button {
@@ -82,7 +83,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 14px;
 }
 
@@ -96,31 +97,9 @@
 }
 
 .agent-sidebar__list-button--active {
-  border-color: rgba(83, 177, 255, 0.28);
-  background: linear-gradient(135deg, rgba(32, 85, 184, 0.36), rgba(30, 186, 181, 0.16));
-}
-
-.agent-im__conversation-button {
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  border-radius: 16px;
-  padding: 14px;
-}
-
-.agent-im__conversation-button strong {
-  font-size: 0.98rem;
-}
-
-.agent-im__conversation-button span {
-  color: var(--text-muted);
-  font-size: 0.86rem;
-}
-
-.agent-im__conversation-button--active {
-  border-color: rgba(83, 177, 255, 0.28);
-  background: linear-gradient(135deg, rgba(32, 85, 184, 0.36), rgba(30, 186, 181, 0.16));
+  border-color: var(--border-glow);
+  background: var(--accent-soft);
+  box-shadow: 0 0 12px rgba(57, 230, 208, 0.22);
 }
 
 .section-title {
@@ -306,6 +285,7 @@
   gap: 8px;
 }
 
+/* 裸元素皮肤仅服务 PlanetCommandPanel 的原生控件（其余页面已换 sw-input/sw-select） */
 .field input {
   width: 100%;
   padding: 12px 14px;
@@ -322,17 +302,6 @@
   border: 1px solid var(--line-3);
   background: var(--surface-1);
   color: inherit;
-}
-
-.field textarea {
-  width: 100%;
-  min-height: 96px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line-3);
-  background: var(--surface-1);
-  color: inherit;
-  resize: vertical;
 }
 
 .field-hint {
@@ -423,8 +392,6 @@
 .war-panel__header h2,
 .war-card h3,
 .agent-sidebar__header h1,
-.agent-im__sidebar-header h1,
-.agent-im__thread-header h2,
 .agent-members-view__header h2 {
   font-family: var(--font-display);
   letter-spacing: 0.04em;
@@ -735,8 +702,8 @@
 
 /* ============================================================
  * 全息控件库（期3）：src/common/controls/ 组件皮肤
- * Button 变体/尺寸 · Select（原生 + 定制箭头）· Input · Checkbox · Tabs
- * 选择器加权（.sw-select .sw-select__native / input.sw-input）以压过
+ * Button 变体/尺寸 · Select（原生 + 定制箭头）· Input · Textarea（期7）· Checkbox · Tabs
+ * 选择器加权（.sw-select .sw-select__native / input.sw-input / textarea.sw-textarea）以压过
  * 上方 .field/.compact-form-grid 的裸元素皮肤；war.css 裸元素规则已随控件替换移除。
  * ============================================================ */
 
@@ -871,6 +838,41 @@ input.sw-input:focus {
 }
 
 input.sw-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Textarea：全息多行输入（与 sw-input 同族） --- */
+textarea.sw-textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+textarea.sw-textarea::placeholder {
+  color: var(--text-dim);
+}
+
+textarea.sw-textarea:hover:not(:disabled) {
+  border-color: var(--border-glow);
+}
+
+textarea.sw-textarea:focus {
+  outline: none;
+  border-color: var(--border-glow);
+  box-shadow: var(--glow-accent);
+}
+
+textarea.sw-textarea:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

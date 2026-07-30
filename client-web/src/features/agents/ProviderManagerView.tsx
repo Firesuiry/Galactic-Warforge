@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 
 import type { CommandPermissionCategory } from '@shared/command-catalog';
 
+import { Button, Input, Select, Textarea } from '@/common/controls';
+
 import {
   DEFAULT_PROVIDER_COMMAND_WHITELIST,
   getProviderCommandCoverageCategories,
@@ -150,15 +152,15 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
   }
 
   return (
-    <section className="agent-members-view__section agent-template-manager">
+    <section className="panel agent-members-view__section agent-template-manager">
       <div className="agent-members-view__section-header">
         <div>
           <div className="section-title">模型 Provider 管理</div>
           <p className="subtle-text">模型 Provider 定义成员绑定的 AI 接口、模型、系统提示词与启动参数。</p>
         </div>
-        <button className="secondary-button" onClick={props.onClose} type="button">
+        <Button variant="secondary" onClick={props.onClose} type="button">
           收起模型 Provider
-        </button>
+        </Button>
       </div>
 
       {props.providers.length > 0 ? (
@@ -201,7 +203,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
       <form className="agent-im__composer-card" onSubmit={handleSubmit}>
         <label className="field">
           <span>模型 Provider 名称</span>
-          <input
+          <Input
             aria-label="模型 Provider 名称"
             value={providerName}
             onChange={(event) => setProviderName(event.target.value)}
@@ -209,7 +211,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
         </label>
         <label className="field">
           <span>模型 Provider 说明</span>
-          <textarea
+          <Textarea
             aria-label="模型 Provider 说明"
             rows={3}
             value={providerDescription}
@@ -218,7 +220,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
         </label>
         <label className="field">
           <span>Provider 类型</span>
-          <select
+          <Select
             aria-label="Provider 类型"
             value={providerKind}
             onChange={(event) => handleProviderKindChange(event.target.value as AgentProviderKindView)}
@@ -226,12 +228,12 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             <option value="http_api">HTTP API</option>
             <option value="codex_cli">Codex CLI</option>
             <option value="claude_code_cli">Claude Code CLI</option>
-          </select>
+          </Select>
         </label>
         {providerKind !== 'http_api' ? (
           <label className="field">
             <span>模型名称</span>
-            <input
+            <Input
               aria-label="模型名称"
               value={modelName}
               onChange={(event) => setModelName(event.target.value)}
@@ -240,7 +242,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
         ) : null}
         <label className="field">
           <span>系统提示词</span>
-          <textarea
+          <Textarea
             aria-label="系统提示词"
             rows={5}
             value={systemPrompt}
@@ -251,7 +253,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
           <>
             <label className="field">
               <span>API URL</span>
-              <input
+              <Input
                 aria-label="API URL"
                 value={apiUrl}
                 onChange={(event) => setApiUrl(event.target.value)}
@@ -259,18 +261,18 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             </label>
             <label className="field">
               <span>接口类型</span>
-              <select
+              <Select
                 aria-label="接口类型"
                 value={apiStyle}
                 onChange={(event) => setApiStyle(event.target.value as 'openai' | 'claude')}
               >
                 <option value="openai">OpenAI</option>
                 <option value="claude">Claude</option>
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>模型名称</span>
-              <input
+              <Input
                 aria-label="模型名称"
                 value={modelName}
                 onChange={(event) => setModelName(event.target.value)}
@@ -278,7 +280,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             </label>
             <label className="field">
               <span>API Key</span>
-              <input
+              <Input
                 aria-label="API Key"
                 type="password"
                 value={apiKey}
@@ -290,7 +292,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
           <>
             <label className="field">
               <span>启动命令</span>
-              <input
+              <Input
                 aria-label="启动命令"
                 value={command}
                 onChange={(event) => setCommand(event.target.value)}
@@ -298,7 +300,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             </label>
             <label className="field">
               <span>工作目录</span>
-              <input
+              <Input
                 aria-label="工作目录"
                 value={workdir}
                 onChange={(event) => setWorkdir(event.target.value)}
@@ -306,7 +308,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             </label>
             <label className="field">
               <span>启动参数</span>
-              <textarea
+              <Textarea
                 aria-label="启动参数"
                 rows={4}
                 value={argsText}
@@ -331,20 +333,20 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
               <fieldset key={group.permissionCategory} className="agent-im__detail-card">
                 <legend>{PROVIDER_CATEGORY_LABELS[group.permissionCategory]}</legend>
                 <div className="agent-members-view__inline-actions">
-                  <button
-                    className="secondary-button"
+                  <Button
+                    variant="secondary"
                     onClick={() => replaceGroupCommands(group.permissionCategory, true)}
                     type="button"
                   >
                     全选本组
-                  </button>
-                  <button
-                    className="secondary-button"
+                  </Button>
+                  <Button
+                    variant="secondary"
                     onClick={() => replaceGroupCommands(group.permissionCategory, false)}
                     type="button"
                   >
                     清空本组
-                  </button>
+                  </Button>
                   <span className="subtle-text">
                     {allChecked
                       ? '本组已全选'
@@ -354,7 +356,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
                 <div className="agent-form__checkbox-grid">
                   {group.commands.map((definition) => (
                     <label key={definition.command} className="agent-form__checkbox">
-                      <input
+                      <Input
                         aria-label={definition.label}
                         checked={commandWhitelist.includes(definition.command)}
                         onChange={() => toggleCommand(definition.command)}
@@ -368,9 +370,9 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
             );
           })}
         </section>
-        <button className="primary-button" disabled={!providerName.trim() || props.fixtureMode} type="submit">
+        <Button variant="primary" disabled={!providerName.trim() || props.fixtureMode} type="submit">
           保存模型 Provider
-        </button>
+        </Button>
       </form>
     </section>
   );
