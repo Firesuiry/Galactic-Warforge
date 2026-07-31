@@ -11,6 +11,7 @@ import { OverviewPage } from '@/pages/OverviewPage';
 import { PlanetPage } from '@/pages/PlanetPage';
 import { ReplayPage } from '@/pages/ReplayPage';
 import { SystemPage } from '@/pages/SystemPage';
+import { TechPage } from '@/pages/TechPage';
 import { WarPage } from '@/pages/WarPage';
 
 function RootRedirect() {
@@ -38,6 +39,7 @@ export function AppRoutes() {
         )}
       >
         <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/tech" element={<TechPage />} />
         <Route path="/war" element={<WarPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/galaxy" element={<GalaxyPage />} />

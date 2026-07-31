@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, ChartColumn, Cpu, Hourglass, Orbit, Rewind, Save, Settings, Swords, TriangleAlert, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
+import { Bot, ChartColumn, Cpu, FlaskConical, Hourglass, Orbit, Rewind, Save, Settings, Swords, TriangleAlert, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
@@ -18,6 +18,7 @@ import { useSessionStore } from '@/stores/session';
 const MENU_ITEMS: ReadonlyArray<{ to: string; icon: LucideIcon; label: string }> = [
   { to: '/overview', icon: ChartColumn, label: '总览' },
   { to: '/galaxy', icon: Orbit, label: '星图' },
+  { to: '/tech', icon: FlaskConical, label: '科技' },
   { to: '/war', icon: Swords, label: '战争' },
   { to: '/agents', icon: Bot, label: '智能体' },
   { to: '/replay', icon: Rewind, label: '回放' },

@@ -1,0 +1,267 @@
+/* 科技树页（/tech）——对标文明6/群星科技树：分支泳道 + 四态节点 + 右侧详情。 */
+
+.tech-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md, 12px);
+  height: 100%;
+  min-height: 0;
+}
+
+.tech-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
+.tech-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tech-header__title h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
+.tech-header__stats {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+}
+
+.tech-header__stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tech-header__stats dt {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.tech-header__stats dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text);
+}
+
+.tech-header__lanes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tech-lane-chip {
+  padding: 4px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tech-lane-chip:hover {
+  border-color: var(--border-glow);
+  color: var(--text);
+}
+
+.tech-lane-chip.is-active {
+  background: var(--accent-soft);
+  border-color: var(--border-glow);
+  color: var(--accent);
+}
+
+.tech-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--gap-md, 12px);
+  flex: 1;
+  min-height: 0;
+}
+
+.tech-canvas {
+  overflow: auto;
+  padding: 4px 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tech-lane__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  position: sticky;
+  left: 0;
+}
+
+.tech-lane__grid {
+  position: relative;
+}
+
+.tech-node {
+  position: absolute;
+  width: 192px;
+  height: 68px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.tech-node:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-glow);
+}
+
+.tech-node > :first-child {
+  grid-row: 1 / span 2;
+}
+
+.tech-node__name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tech-node__status {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.tech-node.is-completed {
+  border-color: rgba(110, 231, 183, 0.45);
+  background: rgba(110, 231, 183, 0.08);
+}
+
+.tech-node.is-completed .tech-node__status {
+  color: var(--good);
+}
+
+.tech-node.is-researching {
+  border-color: var(--border-glow);
+  box-shadow: var(--glow-accent);
+}
+
+.tech-node.is-researching .tech-node__status {
+  color: var(--accent);
+}
+
+.tech-node.is-available {
+  border-color: rgba(255, 180, 84, 0.4);
+}
+
+.tech-node.is-available .tech-node__status {
+  color: var(--amber);
+}
+
+.tech-node.is-locked {
+  opacity: 0.5;
+}
+
+.tech-node.is-selected {
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+.tech-detail {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tech-detail--empty {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.tech-detail__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.tech-detail__head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.tech-detail__meta {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+.tech-detail__section h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.tech-detail__section ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tech-detail__dim {
+  color: var(--text-dim);
+  list-style: none;
+  margin-left: -16px;
+}
+
+.tech-detail__done {
+  color: var(--good);
+}
+
+.tech-detail__missing {
+  color: var(--amber);
+}
+
+@media (max-width: 1080px) {
+  .tech-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tech-detail {
+    max-height: 320px;
+  }
+}

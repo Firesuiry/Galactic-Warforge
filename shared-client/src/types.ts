@@ -1292,6 +1292,8 @@ export interface TechCatalogEntry {
   type: string;
   level: number;
   prerequisites?: string[];
+  /** 后继科技（server 由 prerequisites 反向推导，科技树连线可直接用）。 */
+  leads_to?: string[];
   cost?: ItemAmount[];
   unlocks?: TechUnlock[];
   effects?: TechEffect[];

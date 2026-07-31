@@ -1097,7 +1097,11 @@ var defaultTechDefinitions = []TechDefinition{
 		Category:      TechCategoryBranch,
 		Type:          TechTypeMain,
 		Level:         8,
-		Prerequisites: []string{"strange_matter"},
+		// 对撞机是生产奇异物质的设备，前置应为上游材料科技而非产物科技。
+		// 原始数据中 miniature_collider ↔ strange_matter 互为前置（环形依赖），
+		// 导致整条后期主线（重力矩阵→飞升→宇宙矩阵→任务完成）不可达。
+		// 修正：对撞机前置改为 structure_matrix（Lv7），与关卡梯度一致。
+		Prerequisites: []string{"structure_matrix"},
 		Cost:          []ItemAmount{{ItemID: "energy_matrix", Quantity: 2000}, {ItemID: "structure_matrix", Quantity: 1000}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "miniature_collider"},
@@ -1486,7 +1490,11 @@ var defaultTechDefinitions = []TechDefinition{
 		Category:      TechCategoryMain,
 		Type:          TechTypeDyson,
 		Level:         12,
-		Prerequisites: []string{"mass_energy_storage", "ionosphere"},
+		// ionosphere（Lv11）和 dirac_inversion（Lv12）原本互为前置（环形依赖），
+		// 导致两者及后继 annihilation/universe_matrix/mission_complete 全部不可达。
+		// 修正：dirac_inversion 只依赖 mass_energy_storage；
+		// ionosphere 作为 branch 分支，仍可合理要求 dirac_inversion 作为前置。
+		Prerequisites: []string{"mass_energy_storage"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 3000}, {ItemID: "energy_matrix", Quantity: 3000}, {ItemID: "structure_matrix", Quantity: 750}, {ItemID: "information_matrix", Quantity: 750}, {ItemID: "gravity_matrix", Quantity: 1500}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockSpecial, ID: "photon_mode"},
@@ -1529,7 +1537,10 @@ var defaultTechDefinitions = []TechDefinition{
 		Category:      TechCategoryMain,
 		Type:          TechTypeMain,
 		Level:         15,
-		Prerequisites: []string{"annihilation", "dyson_sphere_partial"},
+		// dyson_stress 是戴森球分支的终点科技，替代原先引用的未定义
+		// "dyson_sphere_partial"——后者让 universe_matrix 及其后继
+		// mission_complete（胜利科技）永久不可达。
+		Prerequisites: []string{"annihilation", "dyson_stress"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 1000}, {ItemID: "structure_matrix", Quantity: 1000}, {ItemID: "information_matrix", Quantity: 1000}, {ItemID: "gravity_matrix", Quantity: 1000}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockSpecial, ID: "universe_matrix"},
