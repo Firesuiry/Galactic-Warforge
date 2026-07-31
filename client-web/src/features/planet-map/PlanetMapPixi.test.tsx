@@ -6,7 +6,7 @@ import type { FogMapView } from '@shared/types';
 
 import { getFixtureScenario } from '@/fixtures';
 import { PlanetMapPixi } from '@/features/planet-map/PlanetMapPixi';
-import { DEFAULT_PLANET_ZOOM_INDEX, resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
+import { DEFAULT_PLANET_ZOOM_INDEX, getPlanetZoomLevel, resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
 import { resetSessionStore, useSessionStore } from '@/stores/session';
 
 // jsdom 无法真正初始化 Pixi Application；交互（拖拽/滚轮/点选）走 DOM 事件与 store，与 Pixi 无关。
@@ -125,11 +125,12 @@ describe('PlanetMapPixi 交互（拖拽/缩放/点选）', () => {
       throw new Error('交互面未渲染');
     }
 
-    // miner-1 在 tile (1,1)；camera offset 32、tileSize 8（默认档 zoomIndex 6）。
+    // miner-1 在 tile (1,1)；camera offset 32、tileSize 48（默认档 zoomIndex 9）。
+    const tileSize = getPlanetZoomLevel(DEFAULT_PLANET_ZOOM_INDEX).tileSize ?? 48;
     await act(async () => {
       surface.dispatchEvent(new MouseEvent('click', {
-        clientX: SEED_OFFSET + 1.5 * 8,
-        clientY: SEED_OFFSET + 1.5 * 8,
+        clientX: SEED_OFFSET + 1.5 * tileSize,
+        clientY: SEED_OFFSET + 1.5 * tileSize,
         bubbles: true,
       }));
     });

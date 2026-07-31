@@ -182,7 +182,7 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
                     }}
                   >
                     <span className="planet-build-card__icon">
-                      <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={30} />
+                      <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />
                       {locked ? (
                         <Lock aria-hidden="true" className="planet-build-card__lock" size={11} strokeWidth={2.5} />
                       ) : null}
