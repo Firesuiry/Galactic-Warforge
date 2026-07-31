@@ -253,9 +253,9 @@ describe('OverviewPage', () => {
     expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
     expect(screen.getByText('星海平静，暂无告警与事件')).toBeInTheDocument();
 
-    // 默认 stats 有 generation=120 且 summary 正在研究，故显示研究进度态
+    // 默认 stats 有 generation=120 且 summary 正在研究，故显示研究进度态（深链 research workflow）
     const nextAction = screen.getByRole('link', { name: /下一步优先处理/ });
-    expect(nextAction).toHaveAttribute('href', '/planet/planet-1-1');
+    expect(nextAction).toHaveAttribute('href', '/planet/planet-1-1?workflow=research');
     expect(within(nextAction).getByText(/研究进行中/)).toBeInTheDocument();
   });
 
