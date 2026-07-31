@@ -103,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	// World queries
 	mux.HandleFunc("GET /state/summary", s.auth(s.handleStateSummary))
 	mux.HandleFunc("GET /state/stats", s.auth(s.handleStateStats))
+	mux.HandleFunc("GET /state/agent-briefing", s.auth(s.handleAgentBriefing))
 	mux.HandleFunc("GET /world/galaxy", s.auth(s.handleGalaxy))
 	mux.HandleFunc("GET /world/systems/{system_id}", s.auth(s.handleSystem))
 	mux.HandleFunc("GET /world/systems/{system_id}/runtime", s.auth(s.handleSystemRuntime))
@@ -187,6 +188,35 @@ func (s *Server) handleStateStats(w http.ResponseWriter, r *http.Request, player
 	ws := s.core.World()
 	stats := s.ql.Stats(ws, playerID)
 	writeJSON(w, http.StatusOK, stats)
+}
+
+// handleAgentBriefing returns GET /state/agent-briefing — one-shot aggregate
+// snapshot for agent/GUI bootstrap (self + war + fleets + alerts + commands).
+func (s *Server) handleAgentBriefing(w http.ResponseWriter, r *http.Request, playerID string) {
+	alertLimit := query.DefaultAgentBriefingAlertLimit
+	if v := r.URL.Query().Get("alert_limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 {
+			writeError(w, http.StatusBadRequest, "alert_limit must be a positive integer")
+			return
+		}
+		alertLimit = parsed
+	}
+	if max := s.cfg.Server.AlertHistoryLimit; max > 0 && alertLimit > max {
+		alertLimit = max
+	}
+
+	ws := s.core.World()
+	briefing := s.ql.AgentBriefing(
+		ws,
+		playerID,
+		s.core.Victory(),
+		s.core.Worlds(),
+		s.core.SpaceRuntime(),
+		s.core.AlertHistory().All(),
+		alertLimit,
+	)
+	writeJSON(w, http.StatusOK, briefing)
 }
 
 // handleGalaxy returns GET /world/galaxy

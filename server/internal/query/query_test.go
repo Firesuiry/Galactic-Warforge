@@ -521,3 +521,154 @@ func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.Worl
 	ws.Tick = 1
 	return ql, ws, planetID
 }
+
+func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 16, 16)
+	ws.Tick = 42
+	ws.Players["p1"] = &model.PlayerState{
+		PlayerID:  "p1",
+		TeamID:    "team-1",
+		Role:      "commander",
+		IsAlive:   true,
+		Resources: model.Resources{Minerals: 240, Energy: 80},
+		Inventory: model.ItemInventory{"iron_ore": 12},
+		Tech: &model.PlayerTechState{
+			PlayerID: "p1",
+			CompletedTechs: map[string]int{
+				"dyson_sphere_program": 1,
+				"electromagnetism":     1,
+			},
+			CurrentResearch: &model.PlayerResearch{
+				TechID:    "basic_logistics",
+				State:     model.ResearchInProgress,
+				Progress:  3,
+				TotalCost: 10,
+			},
+			ResearchQueue:   []*model.PlayerResearch{{TechID: "energy_matrix"}},
+			TotalResearched: 99,
+		},
+		Stats: model.NewPlayerStats("p1"),
+	}
+	ws.Players["p1"].SetPermissions([]string{"*"})
+	ws.Players["p1"].Stats.EnergyStats.Generation = 120
+	ws.Players["p1"].Stats.CombatStats.EnemiesKilled = 4
+
+	// Enemy alert should be filtered out; keep newest own alerts within limit.
+	alerts := []*model.ProductionAlert{
+		{AlertID: "a1", Tick: 10, PlayerID: "p1", Message: "old"},
+		{AlertID: "a2", Tick: 20, PlayerID: "p2", Message: "enemy"},
+		{AlertID: "a3", Tick: 30, PlayerID: "p1", Message: "mid"},
+		{AlertID: "a4", Tick: 40, PlayerID: "p1", Message: "new"},
+	}
+
+	spaceRuntime := model.NewSpaceRuntimeState()
+	systemRuntime := spaceRuntime.EnsurePlayerSystem("p1", "sys-1")
+	systemRuntime.Fleets["fleet-alpha"] = &model.SpaceFleet{
+		ID:        "fleet-alpha",
+		OwnerID:   "p1",
+		SystemID:  "sys-1",
+		Formation: model.FormationTypeWedge,
+		State:     model.FleetStateIdle,
+		Units:     []model.FleetUnitStack{{BlueprintID: "corvette", Count: 3}},
+		Transit: &model.FleetTransitState{
+			FromSystemID:   "sys-1",
+			TargetSystemID: "sys-2",
+			TotalTicks:     10,
+			RemainingTicks: 4,
+		},
+	}
+
+	worlds := map[string]*model.WorldState{planetID: ws}
+	briefing := ql.AgentBriefing(
+		ws,
+		"p1",
+		model.VictoryState{
+			WinnerID:    "p1",
+			Reason:      "game_win",
+			VictoryRule: "hybrid",
+		},
+		worlds,
+		spaceRuntime,
+		alerts,
+		2,
+	)
+
+	if briefing.Tick != 42 {
+		t.Fatalf("expected tick 42, got %d", briefing.Tick)
+	}
+	if briefing.ActivePlanetID != planetID {
+		t.Fatalf("expected active planet %s, got %s", planetID, briefing.ActivePlanetID)
+	}
+	if briefing.Winner != "p1" || briefing.VictoryReason != "game_win" || briefing.VictoryRule != "hybrid" {
+		t.Fatalf("unexpected victory metadata: %+v", briefing)
+	}
+	if briefing.Self.PlayerID != "p1" || briefing.Self.Resources.Minerals != 240 {
+		t.Fatalf("unexpected self payload: %+v", briefing.Self)
+	}
+	if briefing.Self.Tech == nil || briefing.Self.Tech.CompletedCount != 2 {
+		t.Fatalf("expected compact tech summary, got %+v", briefing.Self.Tech)
+	}
+	if briefing.Self.Tech.CurrentResearch == nil || briefing.Self.Tech.CurrentResearch.TechID != "basic_logistics" {
+		t.Fatalf("expected current research, got %+v", briefing.Self.Tech)
+	}
+	if briefing.Self.Tech.ResearchQueueLen != 1 {
+		t.Fatalf("expected research_queue_len=1, got %d", briefing.Self.Tech.ResearchQueueLen)
+	}
+	if briefing.EnergyStats.Generation != 120 || briefing.CombatStats.EnemiesKilled != 4 {
+		t.Fatalf("unexpected stats projection: energy=%+v combat=%+v", briefing.EnergyStats, briefing.CombatStats)
+	}
+	if len(briefing.RecentAlerts) != 2 {
+		t.Fatalf("expected newest 2 own alerts, got %+v", briefing.RecentAlerts)
+	}
+	if briefing.RecentAlerts[0].AlertID != "a3" || briefing.RecentAlerts[1].AlertID != "a4" {
+		t.Fatalf("expected alerts a3,a4 (newest window), got %+v", briefing.RecentAlerts)
+	}
+	if len(briefing.Fleets) != 1 {
+		t.Fatalf("expected one fleet card, got %+v", briefing.Fleets)
+	}
+	if briefing.Fleets[0].UnitCount != 3 || !briefing.Fleets[0].InTransit || briefing.Fleets[0].TransitTo != "sys-2" {
+		t.Fatalf("unexpected fleet card: %+v", briefing.Fleets[0])
+	}
+	if briefing.TaskForces == nil || briefing.Theaters == nil || briefing.EnemyForces == nil {
+		t.Fatalf("expected non-nil war/enemy slices")
+	}
+	if len(briefing.AvailableCommands) == 0 {
+		t.Fatal("expected wildcard permissions to expose available commands")
+	}
+	foundBuild := false
+	for _, cmd := range briefing.AvailableCommands {
+		if cmd == string(model.CmdBuild) {
+			foundBuild = true
+			break
+		}
+	}
+	if !foundBuild {
+		t.Fatalf("expected build in available_commands, got %v", briefing.AvailableCommands)
+	}
+
+	// Enemy inventory / foreign player state must not leak via self.
+	if briefing.Self.PlayerID != "p1" {
+		t.Fatalf("self must stay scoped to caller")
+	}
+}
+
+func TestAgentBriefingFiltersCommandsByPermission(t *testing.T) {
+	ql, ws, _ := newPlanetQueryFixture(t, 12, 12)
+	ws.Players["p1"] = &model.PlayerState{
+		PlayerID: "p1",
+		IsAlive:  true,
+	}
+	ws.Players["p1"].SetPermissions([]string{"build", "move"})
+
+	briefing := ql.AgentBriefing(ws, "p1", model.VictoryState{}, map[string]*model.WorldState{}, model.NewSpaceRuntimeState(), nil, 5)
+	if len(briefing.AvailableCommands) != 2 {
+		t.Fatalf("expected 2 allowed commands, got %v", briefing.AvailableCommands)
+	}
+	got := map[string]bool{}
+	for _, cmd := range briefing.AvailableCommands {
+		got[cmd] = true
+	}
+	if !got["build"] || !got["move"] {
+		t.Fatalf("expected build+move only, got %v", briefing.AvailableCommands)
+	}
+}

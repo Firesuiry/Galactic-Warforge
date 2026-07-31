@@ -268,6 +268,63 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 ---
 
+**GET /state/agent-briefing**
+- 说明: 代理/GUI 一站式态势快照（需认证）。把 `summary` + `stats` 能源/战斗摘要 + 可见舰队/任务群/战区/敌情 + 最近产线告警 + 当前权限下的可用命令目录压成一次查询，避免 agent 多轮试探。
+- 查询参数:
+  - `alert_limit`（可选，正整数）：`recent_alerts` 保留的最近条数；默认 `20`；超过 `server.alert_history_limit` 时按上限截断
+- 响应字段:
+  - `tick` / `active_planet_id` / `map_width` / `map_height`
+  - `winner` / `victory_reason` / `victory_rule`：已宣告胜利时返回（与 `/state/summary` 同源）
+  - `self`：调用方玩家紧凑视图
+    - `player_id` / `team_id` / `role` / `is_alive`
+    - `resources` / `inventory`：仅自身
+    - `tech`：`completed_count` / `completed_techs`（有序列表）/ `current_research` / `research_queue_len` / `total_researched`；**不**回传完整科技树
+  - `energy_stats` / `combat_stats`：与 `/state/stats` 对应子对象同源
+  - `recent_alerts`：按玩家过滤后的最近产线告警（结构同 `/alerts/production/snapshot.alerts`）
+  - `fleets`：己方舰队紧凑卡 `fleet_id` / `system_id` / `formation` / `state` / `unit_count` / `target` / `in_transit` / `transit_to`
+  - `task_forces` / `theaters`：与 `/world/warfare/task-forces`、`/world/warfare/theaters` 列表同源（权限过滤后）
+  - `enemy_forces`：传感器已确认敌情（结构同行星 runtime 敌情卡）
+  - `available_commands`：`string[]`，按玩家 `permissions`（含 `*`）过滤后的全部公开 `CommandType`
+- 作用域补充:
+  - 仅暴露调用方可见/可操作信息；敌方 inventory/tech 不会泄漏
+  - 舰队/任务群/战区复用既有 query 投影，不另起事实源
+- 响应示例:
+```json
+{
+  "tick": 120,
+  "active_planet_id": "planet-1-1",
+  "map_width": 32,
+  "map_height": 32,
+  "self": {
+    "player_id": "p1",
+    "team_id": "team-1",
+    "role": "commander",
+    "is_alive": true,
+    "resources": {"minerals": 240, "energy": 80},
+    "inventory": {"iron_ore": 12},
+    "tech": {
+      "completed_count": 2,
+      "completed_techs": ["dyson_sphere_program", "electromagnetism"],
+      "current_research": {"tech_id": "basic_logistics", "state": "in_progress", "progress": 3, "total_cost": 10},
+      "research_queue_len": 1,
+      "total_researched": 99
+    }
+  },
+  "energy_stats": {"generation": 120, "consumption": 40, "storage": 0, "current_stored": 0, "shortage_ticks": 0},
+  "combat_stats": {"units_lost": 0, "enemies_killed": 4, "threat_level": 0, "highest_threat": 0},
+  "recent_alerts": [],
+  "fleets": [
+    {"fleet_id": "fleet-alpha", "system_id": "sys-1", "formation": "wedge", "state": "idle", "unit_count": 3, "in_transit": true, "transit_to": "sys-2"}
+  ],
+  "task_forces": [],
+  "theaters": [],
+  "enemy_forces": [],
+  "available_commands": ["build", "move", "attack", "produce"]
+}
+```
+
+---
+
 **GET /state/stats**
 - 说明: 当前认证玩家统计（需认证）
 - 响应字段:

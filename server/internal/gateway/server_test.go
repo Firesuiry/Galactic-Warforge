@@ -888,3 +888,61 @@ func minimalSaveMetaFile() *gamedir.MetaFile {
 		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
 	})
 }
+
+
+func TestAgentBriefingAuthorized(t *testing.T) {
+	srv, _ := newTestServer(t)
+	body := getAuthorizedJSON(t, srv, "/state/agent-briefing")
+
+	if _, ok := body["tick"]; !ok {
+		t.Fatal("response should include tick")
+	}
+	if _, ok := body["active_planet_id"]; !ok {
+		t.Fatal("response should include active_planet_id")
+	}
+	self, ok := body["self"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected self object, got %T", body["self"])
+	}
+	if self["player_id"] != "p1" {
+		t.Fatalf("expected self.player_id=p1, got %v", self["player_id"])
+	}
+	for _, key := range []string{
+		"energy_stats",
+		"combat_stats",
+		"recent_alerts",
+		"fleets",
+		"task_forces",
+		"theaters",
+		"enemy_forces",
+		"available_commands",
+	} {
+		if _, ok := body[key]; !ok {
+			t.Fatalf("response missing %s", key)
+		}
+	}
+	cmds, ok := body["available_commands"].([]any)
+	if !ok {
+		t.Fatalf("available_commands should be array, got %T", body["available_commands"])
+	}
+	if len(cmds) == 0 {
+		t.Fatal("expected non-empty available_commands for default commander permissions")
+	}
+
+	// Unauthorized is rejected.
+	req := httptest.NewRequest("GET", "/state/agent-briefing", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without auth, got %d", rec.Code)
+	}
+
+	// Invalid alert_limit is rejected.
+	req = httptest.NewRequest("GET", "/state/agent-briefing?alert_limit=0", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for alert_limit=0, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

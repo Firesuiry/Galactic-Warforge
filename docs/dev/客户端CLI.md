@@ -42,6 +42,7 @@
 | `metrics`        | 无                                                           | 查询 `GET /metrics`                                               |
 | `summary`        | 无                                                           | 查询 `GET /state/summary`                                         |
 | `stats`          | 无                                                           | 查询 `GET /state/stats`；其中 `production_stats` 表示当前 active world 当前 tick 的真实落库 / 落站产出 |
+| `briefing`       | `[alert_limit]`                                              | 查询 `GET /state/agent-briefing`：己方资源/研究/能源战斗摘要 + 舰队/任务群/战区/敌情 + 最近告警 + 可用命令目录 |
 | `galaxy`         | 无                                                           | 查询 `GET /world/galaxy`                                          |
 | `system`         | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}`，默认 `sys-1`               |
 | `system_runtime` | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}/runtime`，包含舰队、contacts、封锁、登陆与战报 |
@@ -434,6 +435,7 @@ switch_active_planet planet-1-1
 ```bash
 summary
 stats
+briefing
 planet
 scene planet-1-1 96 160 32 32
 inspect planet-1-1 building assembler-1

@@ -10,6 +10,7 @@ import {
   fetchPlanetScene,
   fetchStats,
   fetchSummary,
+  fetchAgentBriefing,
   fetchSystem,
   fetchSystemRuntime,
   fetchWarfareBlueprint,
@@ -30,6 +31,7 @@ import {
   fmtPlanetSummary,
   fmtStats,
   fmtSummary,
+  fmtAgentBriefing,
   fmtSystem,
   fmtSystemRuntime,
   fmtWarBlueprintDetail,
@@ -76,6 +78,18 @@ export async function cmdSummary(_args: string[]): Promise<string> {
 export async function cmdStats(_args: string[]): Promise<string> {
   try {
     return fmtStats(await fetchStats());
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdBriefing(args: string[]): Promise<string> {
+  try {
+    let alertLimit: number | undefined;
+    if (args[0] !== undefined && args[0] !== '') {
+      alertLimit = parseRequiredInteger(args[0], 'alert_limit');
+    }
+    return fmtAgentBriefing(await fetchAgentBriefing(alertLimit !== undefined ? { alert_limit: alertLimit } : undefined));
   } catch (e) {
     return fmtError(String(e));
   }

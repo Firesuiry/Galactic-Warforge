@@ -12,7 +12,7 @@ import type {
   PlanetSummaryView,
   PlayerStatsSnapshot,
   SseEvent,
-  StateSummary,
+  AgentBriefing, StateSummary,
   SystemRuntimeView,
   SystemView,
   WarBlueprintDetailView,
@@ -203,6 +203,56 @@ export function fmtStats(s: PlayerStatsSnapshot): string {
     `  enemies_killed=${s.combat_stats.enemies_killed}  units_lost=${s.combat_stats.units_lost}`,
     `  threat=${s.combat_stats.threat_level}  highest=${s.combat_stats.highest_threat}`,
   ].join('\n');
+}
+
+
+export function fmtAgentBriefing(b: AgentBriefing): string {
+  const lines: string[] = [
+    `Tick: ${chalk.cyan(b.tick)}  Active Planet: ${b.active_planet_id}  Map: ${b.map_width}x${b.map_height}`,
+  ];
+  if (b.winner) {
+    lines.push(chalk.green(`Winner: ${b.winner} (${b.victory_reason ?? '-'} / ${b.victory_rule ?? '-'})`));
+  }
+  lines.push('');
+  lines.push(chalk.bold('Self'));
+  lines.push(
+    `  ${b.self.player_id} team=${b.self.team_id ?? '-'} role=${b.self.role ?? '-'} alive=${b.self.is_alive}`,
+  );
+  lines.push(
+    `  minerals=${b.self.resources?.minerals ?? 0} energy=${b.self.resources?.energy ?? 0}`,
+  );
+  if (b.self.tech) {
+    lines.push(
+      `  tech completed=${b.self.tech.completed_count} queue=${b.self.tech.research_queue_len} researched=${b.self.tech.total_researched}`,
+    );
+    if (b.self.tech.current_research) {
+      const r = b.self.tech.current_research;
+      lines.push(`  research ${r.tech_id} progress=${r.progress}/${r.total_cost} state=${r.state}`);
+    }
+  }
+  lines.push('');
+  lines.push(chalk.bold('Energy / Combat'));
+  lines.push(
+    `  gen=${b.energy_stats?.generation ?? 0} cons=${b.energy_stats?.consumption ?? 0} stored=${b.energy_stats?.current_stored ?? 0}/${b.energy_stats?.storage ?? 0}`,
+  );
+  lines.push(
+    `  killed=${b.combat_stats?.enemies_killed ?? 0} lost=${b.combat_stats?.units_lost ?? 0} threat=${b.combat_stats?.threat_level ?? 0}`,
+  );
+  lines.push('');
+  lines.push(chalk.bold(`Fleets (${b.fleets?.length ?? 0})`));
+  for (const f of b.fleets ?? []) {
+    const transit = f.in_transit ? ` transit→${f.transit_to ?? '?'}` : '';
+    lines.push(`  ${f.fleet_id} @${f.system_id} ${f.state} units=${f.unit_count}${transit}`);
+  }
+  lines.push(chalk.bold(`Task forces (${b.task_forces?.length ?? 0}) / Theaters (${b.theaters?.length ?? 0}) / Enemies (${b.enemy_forces?.length ?? 0})`));
+  lines.push(chalk.bold(`Recent alerts (${b.recent_alerts?.length ?? 0})`));
+  for (const a of b.recent_alerts ?? []) {
+    lines.push(`  [t${a.tick}] ${a.severity ?? '-'} ${a.alert_type ?? '-'} ${a.message ?? ''}`);
+  }
+  lines.push('');
+  lines.push(chalk.bold(`Available commands (${b.available_commands?.length ?? 0})`));
+  lines.push(`  ${(b.available_commands ?? []).join(', ')}`);
+  return lines.join('\n');
 }
 
 export function fmtGalaxy(g: GalaxyView): string {

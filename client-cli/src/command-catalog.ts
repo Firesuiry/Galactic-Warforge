@@ -10,6 +10,7 @@ const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: AgentCommandCatego
   metrics: { category: 'observe' },
   summary: { category: 'observe' },
   stats: { category: 'observe' },
+  briefing: { category: 'observe' },
   galaxy: { category: 'observe' },
   system: { category: 'observe' },
   system_runtime: { category: 'observe' },

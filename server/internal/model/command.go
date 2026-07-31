@@ -128,3 +128,56 @@ type QueuedRequest struct {
 	PlayerID    string
 	EnqueueTick int64
 }
+
+// AllCommandTypes returns every public CommandType in stable declaration order.
+// Used by permission surfaces such as GET /state/agent-briefing.
+func AllCommandTypes() []CommandType {
+	return []CommandType{
+		CmdBuild,
+		CmdMove,
+		CmdAttack,
+		CmdProduce,
+		CmdUpgrade,
+		CmdDemolish,
+		CmdConfigureLogisticsStation,
+		CmdConfigureLogisticsSlot,
+		CmdScanGalaxy,
+		CmdScanSystem,
+		CmdScanPlanet,
+		CmdCancelConstruction,
+		CmdRestoreConstruction,
+		CmdStartResearch,
+		CmdCancelResearch,
+		CmdSwitchActivePlanet,
+		CmdTransferItem,
+		CmdLaunchSolarSail,
+		CmdLaunchRocket,
+		CmdSetRayReceiverMode,
+		CmdDeploySquad,
+		CmdCommissionFleet,
+		CmdFleetAssign,
+		CmdFleetAttack,
+		CmdFleetMove,
+		CmdFleetDisband,
+		CmdTaskForceCreate,
+		CmdTaskForceAssign,
+		CmdTaskForceSetStance,
+		CmdTaskForceDeploy,
+		CmdTheaterCreate,
+		CmdTheaterDefineZone,
+		CmdTheaterSetObjective,
+		CmdBlockadePlanet,
+		CmdLandingStart,
+		CmdBlueprintCreate,
+		CmdBlueprintSetComponent,
+		CmdBlueprintValidate,
+		CmdBlueprintFinalize,
+		CmdBlueprintVariant,
+		CmdQueueMilitaryProduction,
+		CmdRefitUnit,
+		CmdBuildDysonNode,
+		CmdBuildDysonFrame,
+		CmdBuildDysonShell,
+		CmdDemolishDyson,
+	}
+}

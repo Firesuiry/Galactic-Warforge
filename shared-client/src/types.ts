@@ -664,6 +664,73 @@ export interface StateSummary {
   map_height: number;
 }
 
+/** Compact research summary embedded in AgentBriefing.self.tech */
+export interface AgentBriefingTech {
+  completed_count: number;
+  completed_techs?: string[];
+  current_research?: TechQueueEntry;
+  research_queue_len: number;
+  total_researched: number;
+}
+
+/** Calling player's compact identity + economy + tech for agent briefing. */
+export interface AgentBriefingSelf {
+  player_id: string;
+  team_id?: string;
+  role?: string;
+  is_alive: boolean;
+  resources: Resources;
+  inventory?: ItemInventory;
+  tech?: AgentBriefingTech;
+}
+
+/** Compact own-fleet card in the agent briefing surface. */
+export interface AgentBriefingFleet {
+  fleet_id: string;
+  system_id: string;
+  formation: string;
+  state: string;
+  unit_count: number;
+  target?: FleetTarget;
+  in_transit?: boolean;
+  transit_to?: string;
+}
+
+/** Sensor-confirmed enemy force card (same shape as planet runtime). */
+export interface EnemyForceView {
+  id: string;
+  type: string;
+  position: Position;
+  strength: number;
+  target_player?: string;
+  spawn_tick?: number;
+  last_seen?: number;
+  threat_level?: number;
+}
+
+/**
+ * Aggregated one-shot snapshot for GET /state/agent-briefing.
+ * Collapses summary + stats + war + fleets + alerts + command surface.
+ */
+export interface AgentBriefing {
+  tick: number;
+  active_planet_id: string;
+  map_width: number;
+  map_height: number;
+  winner?: string;
+  victory_reason?: string;
+  victory_rule?: string;
+  self: AgentBriefingSelf;
+  energy_stats: EnergyStats;
+  combat_stats: CombatStats;
+  recent_alerts: AlertEntry[];
+  fleets: AgentBriefingFleet[];
+  task_forces: WarTaskForceView[];
+  theaters: WarTheaterView[];
+  enemy_forces: EnemyForceView[];
+  available_commands: string[];
+}
+
 export interface OrbitInfo {
   distance_au: number;
   period_days: number;

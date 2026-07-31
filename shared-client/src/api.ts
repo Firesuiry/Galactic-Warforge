@@ -35,6 +35,7 @@ import type {
   RollbackResponse,
   SaveRequest,
   SaveResponse,
+  AgentBriefing,
   StateSummary,
   SystemRuntimeView,
   SystemView,
@@ -343,6 +344,15 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchStats(): Promise<PlayerStatsSnapshot> {
     return apiFetch<PlayerStatsSnapshot>('/state/stats');
+  }
+
+  function fetchAgentBriefing(params?: { alert_limit?: number }): Promise<AgentBriefing> {
+    const searchParams = new URLSearchParams();
+    if (params?.alert_limit !== undefined) {
+      searchParams.set('alert_limit', String(params.alert_limit));
+    }
+    const query = searchParams.toString();
+    return apiFetch<AgentBriefing>(`/state/agent-briefing${query ? `?${query}` : ''}`);
   }
 
   function fetchGalaxy(): Promise<GalaxyView> {
@@ -1124,6 +1134,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchPlanetRuntime,
     fetchStats,
     fetchSummary,
+    fetchAgentBriefing,
     fetchSystem,
     fetchSystemRuntime,
     fetchWarfareBlueprint,

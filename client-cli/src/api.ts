@@ -121,6 +121,7 @@ export const fetchPlanetScene = client.fetchPlanetScene;
 export const fetchSystemRuntime = client.fetchSystemRuntime;
 export const fetchStats = client.fetchStats;
 export const fetchSummary = client.fetchSummary;
+export const fetchAgentBriefing = client.fetchAgentBriefing;
 export const fetchSystem = client.fetchSystem;
 export const fetchWarfareBlueprint = client.fetchWarfareBlueprint;
 export const fetchWarfareBlueprints = client.fetchWarfareBlueprints;
