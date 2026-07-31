@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { PlayerState, ProductionAlert } from "@shared/types";
+import type { AlertEntry, PlayerState } from "@shared/types";
 
 import { resolveEarlyGameNextAction } from "@/features/early-game-next";
 
@@ -18,7 +18,7 @@ function player(partial: Partial<PlayerState> = {}): PlayerState {
   };
 }
 
-const alert: ProductionAlert = {
+const alert: AlertEntry = {
   alert_id: "a1",
   tick: 10,
   player_id: "p1",

@@ -5,7 +5,7 @@
  * 保证总览页在冷启动时也能给出正确入口，而不是空态跳银河。
  */
 
-import type { EnergyStats, PlayerState, ProductionAlert } from "@shared/types";
+import type { AlertEntry, EnergyStats, PlayerState } from "@shared/types";
 
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import {
@@ -43,7 +43,7 @@ export interface ResolveEarlyGameNextInput {
   player?: PlayerState | null;
   energy?: EnergyStats | null;
   /** 已过滤噪声后的产线告警，优先级最高。 */
-  alerts?: ProductionAlert[];
+  alerts?: AlertEntry[];
 }
 
 const EARLY_TECH = "electromagnetism";

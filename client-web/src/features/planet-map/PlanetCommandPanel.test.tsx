@@ -588,7 +588,7 @@ describe("PlanetCommandPanel", () => {
 
     expect(screen.getByText("开局推荐路径")).toBeInTheDocument();
     expect(
-      screen.getByText("风机 -> 空研究站 -> 装 10 电磁矩阵 -> 研究 electromagnetism"),
+      screen.getByText("风力涡轮机供电 -> 矿机开采铁矿/铜矿 -> 熔炉冶炼铁块/铜块 -> 装配机加工磁线圈/电路板 -> 合成 10 电磁矩阵装入研究站 -> 研究电磁学"),
     ).toBeInTheDocument();
     expect(screen.getByText("当前可研究")).toBeInTheDocument();
     expect(screen.getByText("已完成")).toBeInTheDocument();
