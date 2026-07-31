@@ -9,8 +9,8 @@ import { expect, test, type Page } from '@playwright/test';
  * 唯一验收问题：一个不碰 CLI/API 的玩家能不能打完一仗。
  */
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = 'http://127.0.0.1:19481';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
+const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 
 const BLUEPRINT_ID = 'corvette_pure_gui';
 const TASK_FORCE_ID = 'tf_pure_gui';
