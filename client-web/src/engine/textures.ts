@@ -53,6 +53,33 @@ export function getGlowTexture(color: number, size = 128): Texture {
   return toTexture(key, canvas);
 }
 
+/** 硬边圆粒：实色填充 + 暗色描边 + 左上高光（传送带货物/采集矿粒等小圆点用）。 */
+export function getDiscTexture(color: number, size = 64): Texture {
+  const key = `disc:${color}:${size}`;
+  const hit = cache.get(key);
+  if (hit) {
+    return hit;
+  }
+  const [canvas, ctx] = makeCanvas(size);
+  const half = size / 2;
+  const radius = half - 2;
+  const gradient = ctx.createRadialGradient(
+    half - radius * 0.35, half - radius * 0.35, radius * 0.1,
+    half, half, radius,
+  );
+  gradient.addColorStop(0, numToCss(0xffffff, 0.95));
+  gradient.addColorStop(0.25, numToCss(color, 1));
+  gradient.addColorStop(1, numToCss(color, 0.82));
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(half, half, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(6, 10, 18, 0.85)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  return toTexture(key, canvas);
+}
+
 /** 恒星：白热核心 + 谱色光晕。 */
 export function getStarTexture(color: number, size = 128): Texture {
   const key = `star:${color}:${size}`;

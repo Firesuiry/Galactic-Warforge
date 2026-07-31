@@ -16,13 +16,16 @@
  *   sync 时整体重绘（工地为脚手架虚线 + 进度条）。建筑+单位在同一个 sortableChildren 容器按
  *   tile 底部 y 排序（zIndex 单位为小数 tile 坐标）：建筑结构向上溢出 footprint，单位走到高建筑
  *   北侧会被遮住上半；单位 zIndex 随平滑移动逐帧更新。buildings/units 图层开关落到逐节点 visible。
+ *   物流可视化：传送带 buffer 有货时挂货物圆点（颜色 = 资源调色板），ticker 驱动沿输出方向
+ *   循环流动（方向/流速由 planet-logistics-flow 按 conveyor.output/throughput 近似）；
+ *   running 的采集建筑挂"矿石被采出"上抛脉冲（颜色 = collect.resource_kind，id hash 错相）。
  * - 交互叠加：选中黄框（防御建筑附射程圈）/ hover 白框 / 建造幽灵（footprint + catalog 范围圈）/
  *   move/attack 准星（单个 Graphics，数据变化重绘）；
  *   地块 hover 轻量高亮为独立 Graphics（形状只随 tileSize 重画，hover 变化仅动位置/可见性，零重建）。
  *
  * ticker 只做轻量动效：单位显示位置向数据位置指数趋近（k≈8/s）+ 选中环透明度脉冲 +
  * 缩放档切换的 world 变换补间（~180ms，frozen 时瞬切）+ 分块惰性补块（每帧 ≤2 块）+
- * 氛围相位推进，不做任何数据重建。
+ * 氛围相位推进 + 传送带货物圆点流动/采集脉冲，不做任何数据重建。
  * 视觉契约与旧 entity-draw.ts / PlanetMapCanvas 对齐。
  *
  * 战斗特效：组件侧订阅战斗事件总线（battle-events）调 handleBattleEvent，
@@ -43,10 +46,21 @@ import type {
 } from '@shared/types';
 
 import type { BattleEvent } from '@/engine/battle-events';
-import { getGlowTexture, getIconTexture, getVignetteTexture } from '@/engine/textures';
+import { getDiscTexture, getGlowTexture, getIconTexture, getVignetteTexture } from '@/engine/textures';
 import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
 import { isConveyorBeltBuilding } from '@/features/planet-map/build-workflow';
+import {
+  BELT_FLOW_MIN_TILE_SIZE,
+  BELT_ITEM_MAX_DOTS,
+  beltDotInitialProgress,
+  beltDotPosition,
+  beltFlowVector,
+  beltItemDotColors,
+  beltItemSpeedTilesPerSec,
+  harvestPulseEnvelope,
+  resolveHarvestPulse,
+} from '@/features/planet-map/planet-logistics-flow';
 import {
   PlanetEffectPool,
   specsFromPlanetBattleEvent,
@@ -475,9 +489,37 @@ interface BuildingNode extends SceneNode {
   blades: Sprite | null;
   /** furnace 发光窗呼吸辉光（非 furnace 为 null）。 */
   glow: Sprite | null;
+  /** 传送带货物流（buffer 有货的传送带才挂载，ticker 驱动圆点沿输出方向循环）。 */
+  beltFlow: BeltItemFlow | null;
+  /** 采集产出脉冲（running 的采集建筑才挂载，ticker 驱动"矿石被采出"上抛粒子）。 */
+  harvest: HarvestPulseView | null;
   data: Building;
   /** 确定性动画相位（由 id hash，截图可复现；frozen 恒 0）。 */
   phase: number;
+}
+
+/** 传送带货物流视图：N 个圆点沿输出方向循环流动（progress ∈ [0,1)，输入边 → 输出边）。 */
+interface BeltItemFlow {
+  dots: Array<{ sprite: Sprite; progress: number }>;
+  /** footprint 中心（容器坐标）。 */
+  cx: number;
+  cy: number;
+  /** 流向向量 × 半轴长（progress=1 时圆心压在输出边缘）。 */
+  ax: number;
+  ay: number;
+  /** 流速（tile/s，throughput 近似）。 */
+  speed: number;
+}
+
+/** 采集产出脉冲视图：单粒矿周期性从结构基座上抛渐隐（周期由 entityAnimPhase 错相）。 */
+interface HarvestPulseView {
+  sprite: Sprite;
+  /** 抛出起点（容器坐标）。 */
+  baseX: number;
+  baseY: number;
+  /** 上抛行程（px，向上为负 y）。 */
+  risePx: number;
+  periodSec: number;
 }
 
 interface UnitNode extends SceneNode {
@@ -543,6 +585,13 @@ const WARNING_BADGE_ALPHA_SWING = 0.25;
 /** furnace 发光窗辉光呼吸参数。 */
 const FURNACE_GLOW_BASE_ALPHA = 0.55;
 const FURNACE_GLOW_ALPHA_SWING = 0.3;
+
+/** 传送带货物圆点直径（占 tileSize 比例，带下限保证低缩放档可辨）。 */
+const BELT_ITEM_DOT_FRACTION = 0.24;
+const BELT_ITEM_DOT_MIN_PX = 2.5;
+/** 采集矿粒直径（占 tileSize 比例）与上抛行程（占 tileSize 比例）。 */
+const HARVEST_DOT_FRACTION = 0.3;
+const HARVEST_RISE_TILES = 0.62;
 
 /** 开火闪光配色：普通单位青白 / 防御塔黄白（克制，短亮线一过即隐）。 */
 const COLOR_FIRE_UNIT = 0xa5f3fc;
@@ -1754,6 +1803,8 @@ export class PlanetScene {
       warning,
       blades: null,
       glow: null,
+      beltFlow: null,
+      harvest: null,
       data: building,
       phase: entityAnimPhase(building.id),
     };
@@ -1779,6 +1830,8 @@ export class PlanetScene {
       node.warning.visible = false;
       this.setBuildingAttachment(node, 'blades', null);
       this.setBuildingAttachment(node, 'glow', null);
+      this.destroyBeltItemFlow(node);
+      this.destroyHarvestPulse(node);
       node.base
         .clear()
         .rect(0, 0, Math.max(pixelWidth, 2), Math.max(pixelHeight, 2))
@@ -1871,6 +1924,129 @@ export class PlanetScene {
     } else {
       this.setBuildingAttachment(node, 'glow', null);
     }
+
+    // 物流可视化：传送带货物圆点（buffer 有货时沿输出方向流动）+ 采集产出脉冲。
+    this.syncBeltItemFlow(node, pixelWidth, pixelHeight);
+    this.syncHarvestPulse(node, pixelWidth, pixelHeight);
+  }
+
+  /**
+   * 传送带货物圆点增量同步：buffer 展开成颜色序列（planet-logistics-flow 纯逻辑），
+   * 逐点对齐数量/颜色并保留既有流动相位（数据刷新不重置圆点位置，避免跳动）。
+   */
+  private syncBeltItemFlow(node: BuildingNode, pixelWidth: number, pixelHeight: number) {
+    const conveyor = node.data.conveyor;
+    const colors = this.tileSize >= BELT_FLOW_MIN_TILE_SIZE
+      ? beltItemDotColors(conveyor?.buffer, BELT_ITEM_MAX_DOTS)
+      : [];
+    if (!conveyor || colors.length === 0) {
+      this.destroyBeltItemFlow(node);
+      return;
+    }
+
+    const vector = beltFlowVector(conveyor.output);
+    const flow = node.beltFlow ?? {
+      dots: [],
+      cx: pixelWidth / 2,
+      cy: pixelHeight / 2,
+      ax: 0,
+      ay: 0,
+      speed: 1,
+    };
+    flow.cx = pixelWidth / 2;
+    flow.cy = pixelHeight / 2;
+    flow.ax = vector.x * (pixelWidth / 2);
+    flow.ay = vector.y * (pixelHeight / 2);
+    flow.speed = beltItemSpeedTilesPerSec(conveyor.throughput);
+
+    const dotSize = Math.max(this.tileSize * BELT_ITEM_DOT_FRACTION, BELT_ITEM_DOT_MIN_PX);
+    // 数量对齐：多余的从尾部回收，缺失的在尾部补上（初始相位均匀铺开）。
+    while (flow.dots.length > colors.length) {
+      const dot = flow.dots.pop();
+      dot?.sprite.destroy();
+    }
+    while (flow.dots.length < colors.length) {
+      const sprite = new Sprite();
+      sprite.anchor.set(0.5);
+      const progress = beltDotInitialProgress(flow.dots.length, colors.length);
+      flow.dots.push({ sprite, progress });
+      node.container.addChildAt(sprite, 2); // 压在结构精灵之上、角标之下
+    }
+    flow.dots.forEach((dot, index) => {
+      dot.sprite.texture = getDiscTexture(colors[index]);
+      dot.sprite.width = dotSize;
+      dot.sprite.height = dotSize;
+      const pos = beltDotPosition(dot.progress, flow.cx, flow.cy, flow.ax, flow.ay);
+      dot.sprite.position.set(pos.x, pos.y);
+      dot.sprite.visible = true;
+    });
+    node.beltFlow = flow;
+  }
+
+  /** 传送带货物流卸载：销毁圆点并置空。 */
+  private destroyBeltItemFlow(node: BuildingNode) {
+    if (node.beltFlow) {
+      for (const dot of node.beltFlow.dots) {
+        dot.sprite.destroy();
+      }
+      node.beltFlow = null;
+    }
+  }
+
+  /**
+   * 采集产出脉冲同步：running 的采集建筑挂一粒矿色圆点（颜色取 collect.resource_kind），
+   * ticker 按周期上抛渐隐（相位由 id hash 错开，多矿机不同步闪烁）。
+   */
+  private syncHarvestPulse(node: BuildingNode, pixelWidth: number, pixelHeight: number) {
+    const spec = this.tileSize >= BELT_FLOW_MIN_TILE_SIZE
+      ? resolveHarvestPulse(node.data)
+      : null;
+    if (!spec) {
+      this.destroyHarvestPulse(node);
+      return;
+    }
+    const dotSize = Math.max(this.tileSize * HARVEST_DOT_FRACTION, BELT_ITEM_DOT_MIN_PX);
+    const pulse = node.harvest ?? {
+      sprite: new Sprite(),
+      baseX: 0,
+      baseY: 0,
+      risePx: 0,
+      periodSec: spec.periodSec,
+    };
+    if (!pulse.sprite.parent) {
+      pulse.sprite.anchor.set(0.5);
+      node.container.addChild(pulse.sprite);
+    }
+    pulse.sprite.texture = getDiscTexture(spec.color);
+    pulse.sprite.width = dotSize;
+    pulse.sprite.height = dotSize;
+    pulse.baseX = pixelWidth / 2;
+    pulse.baseY = pixelHeight * 0.55;
+    pulse.risePx = this.tileSize * HARVEST_RISE_TILES;
+    pulse.periodSec = spec.periodSec;
+    node.harvest = pulse;
+    this.updateHarvestPulse(node);
+  }
+
+  /** 采集脉冲卸载：销毁矿粒并置空。 */
+  private destroyHarvestPulse(node: BuildingNode) {
+    if (node.harvest) {
+      node.harvest.sprite.destroy();
+      node.harvest = null;
+    }
+  }
+
+  /** 按当前固定时钟摆放矿粒（frozen 下 ambientTime 恒 0 → 停在相位决定的确定位置）。 */
+  private updateHarvestPulse(node: BuildingNode) {
+    const pulse = node.harvest;
+    if (!pulse || pulse.periodSec <= 0) {
+      return;
+    }
+    const cycle = ((this.ambientTime + node.phase) % pulse.periodSec) / pulse.periodSec;
+    const envelope = harvestPulseEnvelope(cycle);
+    pulse.sprite.position.set(pulse.baseX, pulse.baseY - envelope.rise * pulse.risePx);
+    pulse.sprite.alpha = envelope.alpha;
+    pulse.sprite.visible = true;
   }
 
   /** 附件（叶片/辉光）按需挂载/卸载：factory 为 null 时销毁并置空。 */
@@ -2459,6 +2635,19 @@ export class PlanetScene {
       if (node.glow) {
         node.glow.alpha = FURNACE_GLOW_BASE_ALPHA
           + FURNACE_GLOW_ALPHA_SWING * Math.sin(this.ambientTime * 2.1 + node.phase);
+      }
+      // 传送带货流：圆点沿输出方向匀速循环（到输出边回卷输入边，模拟移交下一段）。
+      if (node.beltFlow) {
+        const flow = node.beltFlow;
+        for (const dot of flow.dots) {
+          dot.progress = (dot.progress + dt * flow.speed) % 1;
+          const pos = beltDotPosition(dot.progress, flow.cx, flow.cy, flow.ax, flow.ay);
+          dot.sprite.position.set(pos.x, pos.y);
+        }
+      }
+      // 采集产出脉冲：周期性"矿石被采出"上抛渐隐。
+      if (node.harvest) {
+        this.updateHarvestPulse(node);
       }
     }
     const blend = smoothingBlend(dt);

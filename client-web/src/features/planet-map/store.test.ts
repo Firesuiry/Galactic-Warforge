@@ -20,12 +20,13 @@ describe('resolvePlanetFitZoomIndex：小行星初始相机自适应占屏', () 
     expect(resolvePlanetFitZoomIndex(1440, 900, 8, 6)).toBe(sceneZoomIndexByTileSize(96));
   });
 
-  it('48×48 大图在回家档（32px）已超视口 → 行为不变返回回家档', () => {
+  it('48×48 大图在回家档（48px）已超视口 → 行为不变返回回家档', () => {
     expect(resolvePlanetFitZoomIndex(1440, 900, 48, 48)).toBe(PLANET_HOME_ZOOM_INDEX);
   });
 
-  it('30×20 中图在 32px 档占屏 71% 已达标 → 维持 32px', () => {
-    expect(resolvePlanetFitZoomIndex(1440, 900, 30, 20)).toBe(sceneZoomIndexByTileSize(32));
+  it('20×12 中图选 48px 档（占屏 67%，最接近 70% 目标）', () => {
+    // 候选：48px → 960×576 占屏 67%，64px → 1280×768 占屏 89%；最接近 0.7 的是 48px。
+    expect(resolvePlanetFitZoomIndex(1440, 900, 20, 12)).toBe(sceneZoomIndexByTileSize(48));
   });
 
   it('移动端窄视口（390×844）：8×6 选 32px（48px 会超出视口宽）', () => {

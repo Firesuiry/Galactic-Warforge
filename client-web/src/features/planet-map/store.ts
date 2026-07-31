@@ -110,10 +110,15 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
     tileSize: 128,
   },
 ];
-export const DEFAULT_PLANET_ZOOM_INDEX = 6;
+/**
+ * 默认缩放档：PLANET_ZOOM_LEVELS[9] = 48px/tile。
+ * 试玩反馈 32px/tile 下建筑/地块图标偏小、缺乏沉浸感，默认档统一提到 48px。
+ */
+export const DEFAULT_PLANET_ZOOM_INDEX = 9;
+/** 概览双击进入 scene 的落点档：与回家档一致（48px/tile），避免落进过小的 8px 档。 */
 export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;
-/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[8] = 32px/tile，大行星首次进入/⌂ 聚焦基地时使用。 */
-export const PLANET_HOME_ZOOM_INDEX = 8;
+/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[9] = 48px/tile，大行星首次进入/⌂ 聚焦基地时使用。 */
+export const PLANET_HOME_ZOOM_INDEX = 9;
 /**
  * requestFocus 缩放哨兵：由渲染侧按"视口 × 地图尺寸"自适应选档（resolvePlanetFitZoomIndex）。
  * 小行星整图放大到 60-80% 占屏，大行星回落"回家"档（行为不变）。
@@ -122,7 +127,7 @@ export const PLANET_FOCUS_FIT_ZOOM = -1;
 /** 自适应选档的目标占屏比：地图内容占视口短边 ~70%（可接受区间 60-80%）。 */
 export const PLANET_FIT_TARGET_OCCUPANCY = 0.7;
 /** scene 档缺省 tile 边长（px/tile），与默认缩放档一致。 */
-export const DEFAULT_PLANET_SCENE_TILE_SIZE = 8;
+export const DEFAULT_PLANET_SCENE_TILE_SIZE = 48;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
 export const MAX_PLANET_SCENE_TILES_PER_AXIS = 320;
 
