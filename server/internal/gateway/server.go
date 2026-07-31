@@ -538,6 +538,14 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 			results[i].Issues = []model.CommandIssue{issue}
 			results[i].Message = issue.Message
 			allAccepted = false
+		} else if issues := s.validateBusinessRules(playerID, cmd); len(issues) > 0 {
+			// 业务规则快速预检：当前仅覆盖 start_research（研究站/矩阵存在性），
+			// 让玩家在 HTTP 层立即得到可操作的中文错误，而非异步静默失败。
+			results[i].Status = model.StatusRejected
+			results[i].Code = model.CodeValidationFailed
+			results[i].Issues = issues
+			results[i].Message = model.IssuesMessage(issues)
+			allAccepted = false
 		} else {
 			results[i].Status = model.StatusAccepted
 			results[i].Code = model.CodeOK
@@ -930,6 +938,27 @@ func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Re
 // Delegates to the shared model command structure registry (also powers GET /catalog/commands).
 func validateCommandStructure(cmd model.Command) []model.CommandIssue {
 	return model.ValidateCommandStructure(cmd)
+}
+
+// validateBusinessRules 对特定命令做即时业务规则预检，返回问题列表。
+// 目的：让玩家在 HTTP 层得到可操作的中文错误，而非异步静默失败。
+// 仅覆盖"在接受阶段可快速判断的"情况；严格语义校验仍在 tick 时执行。
+func (s *Server) validateBusinessRules(playerID string, cmd model.Command) []model.CommandIssue {
+	switch cmd.Type {
+	case model.CmdStartResearch:
+		techID, _ := cmd.Payload["tech_id"].(string)
+		if techID == "" {
+			return nil // 结构校验已拒绝，不重复
+		}
+		ws := s.core.World()
+		if ws == nil {
+			return nil
+		}
+		ws.RLock()
+		defer ws.RUnlock()
+		return s.core.ValidateStartResearchLocked(playerID, techID, ws)
+	}
+	return nil
 }
 
 // writeJSON writes a JSON response
