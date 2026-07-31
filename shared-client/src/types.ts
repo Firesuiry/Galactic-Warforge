@@ -138,6 +138,8 @@ export interface BuildingJob {
 export interface BuildingConveyorState {
   input: ConveyorDirection;
   output: ConveyorDirection;
+  /** 带内物品堆（server ConveyorState.buffer 直出，队首 = 即将送出的一端；供地图货流动画）。 */
+  buffer?: ItemAmount[];
   max_stack?: number;
   throughput?: number;
 }
