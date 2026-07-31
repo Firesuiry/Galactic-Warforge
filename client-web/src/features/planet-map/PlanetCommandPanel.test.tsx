@@ -1,10 +1,29 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
-import { PlanetCommandPanel } from "@/features/planet-map/PlanetCommandPanel";
+import {
+  parseCommandWorkflowId,
+  PlanetCommandPanel,
+} from "@/features/planet-map/PlanetCommandPanel";
 import { usePlanetViewStore } from "@/features/planet-map/store";
+
+function renderPanel(
+  ui: React.ReactElement,
+  options?: { initialEntries?: string[] },
+) {
+  const entries = options?.initialEntries ?? ["/planet/planet-1-1"];
+  const wrap = (node: React.ReactElement) => (
+    <MemoryRouter initialEntries={entries}>{node}</MemoryRouter>
+  );
+  const result = render(wrap(ui));
+  return {
+    ...result,
+    rerender: (next: React.ReactElement) => result.rerender(wrap(next)),
+  };
+}
 
 function createPlanet() {
   return {
@@ -347,7 +366,7 @@ describe("PlanetCommandPanel", () => {
     const client = createClient();
     const runtime = createRuntime();
 
-    const { rerender } = render(
+    const { rerender } = renderPanel(
       <PlanetCommandPanel
         catalog={catalog as never}
         client={client as never}
@@ -389,7 +408,7 @@ describe("PlanetCommandPanel", () => {
     const client = createClient();
     const runtime = createRuntime();
 
-    const { rerender } = render(
+    const { rerender } = renderPanel(
       <PlanetCommandPanel
         catalog={catalog as never}
         client={client as never}
@@ -448,7 +467,7 @@ describe("PlanetCommandPanel", () => {
       ],
     });
 
-    render(
+    renderPanel(
       <PlanetCommandPanel
         catalog={catalog as never}
         client={client as never}
@@ -523,7 +542,7 @@ describe("PlanetCommandPanel", () => {
       });
     });
 
-    render(
+    renderPanel(
       <PlanetCommandPanel
         catalog={catalog as never}
         client={client as never}
@@ -571,7 +590,7 @@ describe("PlanetCommandPanel", () => {
       ],
     });
 
-    render(
+    renderPanel(
       <PlanetCommandPanel
         catalog={catalog as never}
         client={client as never}
@@ -588,7 +607,9 @@ describe("PlanetCommandPanel", () => {
 
     expect(screen.getByText("开局推荐路径")).toBeInTheDocument();
     expect(
-      screen.getByText("风机 -> 空研究站 -> 装 10 电磁矩阵 -> 研究 electromagnetism"),
+      screen.getByText(
+        "风力涡轮机供电 -> 矿机开采铁矿/铜矿 -> 熔炉冶炼铁块/铜块 -> 装配机加工磁线圈/电路板 -> 合成 10 电磁矩阵装入研究站 -> 研究电磁学",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText("当前可研究")).toBeInTheDocument();
     expect(screen.getByText("已完成")).toBeInTheDocument();
@@ -616,7 +637,7 @@ describe("PlanetCommandPanel", () => {
     const catalog = createCatalog();
     const client = createClient();
 
-    const { rerender } = render(
+    const { rerender } = renderPanel(
       <PlanetCommandPanel
         catalog={catalog as never}
         client={client as never}
@@ -653,7 +674,7 @@ describe("PlanetCommandPanel", () => {
   it("未解锁 dirac_inversion 时禁用 photon 模式并直接提示前置科技", async () => {
     const user = userEvent.setup();
 
-    render(
+    renderPanel(
       <PlanetCommandPanel
         catalog={createCatalog() as never}
         client={createClient() as never}
@@ -672,4 +693,48 @@ describe("PlanetCommandPanel", () => {
     ).toBeDisabled();
     expect(screen.getByText(/缺少科技.*狄拉克反演/)).toBeInTheDocument();
   });
+
+  it("parseCommandWorkflowId 校验合法 workflow", () => {
+    expect(parseCommandWorkflowId("research")).toBe("research");
+    expect(parseCommandWorkflowId("dyson")).toBe("dyson");
+    expect(parseCommandWorkflowId("nope")).toBe("basic");
+    expect(parseCommandWorkflowId(null)).toBe("basic");
+  });
+
+  it("initialWorkflow 深链落到研究 Tab", () => {
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        initialWorkflow="research"
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "研究与装料" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("URL ?workflow=dyson 落到戴森 Tab", () => {
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=dyson"] },
+    );
+    expect(screen.getByRole("tab", { name: "戴森" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
 });

@@ -354,6 +354,23 @@ export function OverviewPage() {
                 <span>{activePlanetName ?? activePlanetId}</span>
               </span>
             </Link>
+            <Link
+              className="command-quick__card"
+              to={`/planet/${activePlanetId}?workflow=dyson`}
+            >
+              <Icon iconKey="ray_receiver" color="#39e6d0" size={30} />
+              <span className="command-quick__card-text">
+                <strong>戴森工程</strong>
+                <span>发射 · 射线 · 组件</span>
+              </span>
+            </Link>
+            <Link className="command-quick__card" to="/war?tab=industry">
+              <Icon iconKey="fleet" color="#ffb454" size={30} />
+              <span className="command-quick__card-text">
+                <strong>军工部署</strong>
+                <span>编成舰队 · 量产</span>
+              </span>
+            </Link>
             <Link className="command-quick__card" to="/replay">
               <Icon iconKey="replay" color="#5fb0ff" size={30} />
               <span className="command-quick__card-text">

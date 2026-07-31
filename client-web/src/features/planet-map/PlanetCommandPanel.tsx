@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { DEFAULT_GALAXY_ID, DEFAULT_SYSTEM_ID } from "@shared/config";
 import type { ApiClient, DysonComponentType, WorldUnitID } from "@shared/api";
@@ -51,11 +52,13 @@ interface PlanetCommandPanelProps {
   summary?: StateSummary;
   system?: SystemView;
   systemRuntime?: SystemRuntimeView;
+  /** 深链初值（PlanetPage ?workflow=）；未传则读 URL。 */
+  initialWorkflow?: CommandWorkflowId;
 }
 
 type LogisticsScope = "planetary" | "interstellar";
 type LogisticsMode = "none" | "supply" | "demand" | "both";
-type CommandWorkflowId =
+export type CommandWorkflowId =
   | "basic"
   | "combat"
   | "cancel"
@@ -63,6 +66,27 @@ type CommandWorkflowId =
   | "logistics"
   | "cross_planet"
   | "dyson";
+
+const COMMAND_WORKFLOW_IDS: CommandWorkflowId[] = [
+  "basic",
+  "combat",
+  "cancel",
+  "research",
+  "logistics",
+  "cross_planet",
+  "dyson",
+];
+
+/** 解析 ?workflow= 深链；非法值回落 basic。 */
+export function parseCommandWorkflowId(
+  raw: string | null | undefined,
+): CommandWorkflowId {
+  if (!raw) {
+    return "basic";
+  }
+  const value = raw.trim() as CommandWorkflowId;
+  return COMMAND_WORKFLOW_IDS.includes(value) ? value : "basic";
+}
 
 const COMMAND_WORKFLOWS: Array<{
   id: CommandWorkflowId;
@@ -161,12 +185,33 @@ export function PlanetCommandPanel({
   summary,
   system,
   systemRuntime,
+  initialWorkflow,
 }: PlanetCommandPanelProps) {
+  const [searchParams] = useSearchParams();
   const selected = usePlanetViewStore((state) => state.selected);
   const journal = usePlanetCommandStore((state) => state.journal);
   const latestEntry = usePlanetCommandStore((state) => state.journal[0]);
   const playerId = client.getAuth().playerId;
-  const [activeWorkflow, setActiveWorkflow] = useState<CommandWorkflowId>("basic");
+  const resolvedInitialWorkflow = parseCommandWorkflowId(
+    initialWorkflow ?? searchParams.get("workflow"),
+  );
+  const [activeWorkflow, setActiveWorkflow] =
+    useState<CommandWorkflowId>(resolvedInitialWorkflow);
+  const appliedWorkflowRef = useRef<string>("");
+
+  // 深链 ?workflow= 变化时同步 Tab（玩家手动切 Tab 后仍可被新深链覆盖）
+  useEffect(() => {
+    const raw = initialWorkflow ?? searchParams.get("workflow");
+    if (!raw) {
+      return;
+    }
+    const signature = String(raw);
+    if (appliedWorkflowRef.current === signature) {
+      return;
+    }
+    appliedWorkflowRef.current = signature;
+    setActiveWorkflow(parseCommandWorkflowId(raw));
+  }, [initialWorkflow, searchParams]);
   const [scanGalaxyId, setScanGalaxyId] = useState(DEFAULT_GALAXY_ID);
   const [scanSystemId, setScanSystemId] = useState(DEFAULT_SYSTEM_ID);
   const [researchId, setResearchId] = useState("");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { PlayerState, ProductionAlert } from "@shared/types";
+import type { AlertEntry, PlayerState } from "@shared/types";
 
 import { resolveEarlyGameNextAction } from "@/features/early-game-next";
 
@@ -18,7 +18,48 @@ function player(partial: Partial<PlayerState> = {}): PlayerState {
   };
 }
 
-const alert: ProductionAlert = {
+function midgameStats(overrides?: {
+  production?: number;
+  logistics?: number;
+  generation?: number;
+  consumption?: number;
+}) {
+  const production = overrides?.production ?? 12;
+  const logistics = overrides?.logistics ?? 0;
+  const generation = overrides?.generation ?? 120;
+  const consumption = overrides?.consumption ?? 40;
+  return {
+    player_id: "p1",
+    tick: 1,
+    production_stats: {
+      total_output: production,
+      by_building_type: {},
+      by_item: {},
+      efficiency: 1,
+    },
+    energy_stats: {
+      generation,
+      consumption,
+      storage: 100,
+      current_stored: 50,
+      shortage_ticks: 0,
+    },
+    logistics_stats: {
+      throughput: logistics,
+      avg_distance: 1,
+      avg_travel_time: 1,
+      deliveries: logistics > 0 ? 1 : 0,
+    },
+    combat_stats: {
+      units_lost: 0,
+      enemies_killed: 0,
+      threat_level: 0,
+      highest_threat: 0,
+    },
+  };
+}
+
+const alert: AlertEntry = {
   alert_id: "a1",
   tick: 10,
   player_id: "p1",
@@ -75,6 +116,7 @@ describe("resolveEarlyGameNextAction", () => {
     });
     expect(next.stage).toBe("research_electromagnetism");
     expect(next.to).toContain("build=matrix_lab");
+    expect(next.to).toContain("workflow=research");
     expect(next.text).toMatch(/矩阵研究站|电磁学/);
   });
 
@@ -101,7 +143,7 @@ describe("resolveEarlyGameNextAction", () => {
     expect(next.to).toContain("build=matrix_lab");
   });
 
-  it("研究缺矩阵：引导装入", () => {
+  it("研究缺矩阵：引导装入（深链 research workflow）", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
       player: player({
@@ -122,10 +164,11 @@ describe("resolveEarlyGameNextAction", () => {
       alerts: [],
     });
     expect(next.stage).toBe("load_matrix");
+    expect(next.to).toContain("workflow=research");
     expect(next.text).toContain("矩阵");
   });
 
-  it("研究进行中：显示进度", () => {
+  it("研究进行中：显示进度并深链研究 Tab", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
       player: player({
@@ -145,6 +188,7 @@ describe("resolveEarlyGameNextAction", () => {
     });
     expect(next.stage).toBe("research_running");
     expect(next.idle).toBe(true);
+    expect(next.to).toContain("workflow=research");
     expect(next.text).toMatch(/40%/);
   });
 
@@ -156,14 +200,7 @@ describe("resolveEarlyGameNextAction", () => {
           player_id: "p1",
           completed_techs: ["dyson_sphere_program", "electromagnetism"],
         },
-        stats: {
-          player_id: "p1",
-          tick: 1,
-          production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
-          energy_stats: { generation: 30, consumption: 5, storage: 0, current_stored: 0, shortage_ticks: 0 },
-          logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
-        },
+        stats: midgameStats({ production: 0, logistics: 0 }),
       }),
       energy: { generation: 30, consumption: 5, storage: 0, current_stored: 0, shortage_ticks: 0 },
       alerts: [],
@@ -172,7 +209,7 @@ describe("resolveEarlyGameNextAction", () => {
     expect(next.to).toContain("build=mining_machine");
   });
 
-  it("稳态有产出：降级银河侦察", () => {
+  it("有产出但未研究基础物流：引导研究物流", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
       player: player({
@@ -180,20 +217,82 @@ describe("resolveEarlyGameNextAction", () => {
           player_id: "p1",
           completed_techs: ["dyson_sphere_program", "electromagnetism"],
         },
-        stats: {
-          player_id: "p1",
-          tick: 1,
-          production_stats: { total_output: 12, by_building_type: {}, by_item: {}, efficiency: 1 },
-          energy_stats: { generation: 120, consumption: 40, storage: 100, current_stored: 50, shortage_ticks: 0 },
-          logistics_stats: { throughput: 1, avg_distance: 1, avg_travel_time: 1, deliveries: 1 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
-        },
+        stats: midgameStats({ production: 12, logistics: 0 }),
       }),
       energy: { generation: 120, consumption: 40, storage: 100, current_stored: 50, shortage_ticks: 0 },
       alerts: [],
     });
-    expect(next.stage).toBe("scout_expand");
-    expect(next.to).toBe("/galaxy");
+    expect(next.stage).toBe("research_basic_logistics");
+    expect(next.to).toContain("workflow=research");
+    expect(next.text).toMatch(/物流|传送带/);
+    expect(next.idle).toBe(false);
+  });
+
+  it("物流科技完成但无吞吐：引导铺传送带", () => {
+    const next = resolveEarlyGameNextAction({
+      activePlanetId: "planet-1-1",
+      player: player({
+        tech: {
+          player_id: "p1",
+          completed_techs: [
+            "dyson_sphere_program",
+            "electromagnetism",
+            "basic_logistics_system",
+          ],
+        },
+        stats: midgameStats({ production: 12, logistics: 0 }),
+      }),
+      energy: { generation: 120, consumption: 40, storage: 100, current_stored: 50, shortage_ticks: 0 },
+      alerts: [],
+    });
+    expect(next.stage).toBe("logistics_expand");
+    expect(next.to).toContain("build=conveyor_belt_mk1");
+    expect(next.text).toMatch(/传送带/);
+  });
+
+  it("戴森链解锁：引导戴森 workflow", () => {
+    const next = resolveEarlyGameNextAction({
+      activePlanetId: "planet-1-1",
+      player: player({
+        tech: {
+          player_id: "p1",
+          completed_techs: [
+            "dyson_sphere_program",
+            "electromagnetism",
+            "basic_logistics_system",
+            "solar_sail_orbit",
+          ],
+        },
+        stats: midgameStats({ production: 20, logistics: 4 }),
+      }),
+      energy: { generation: 200, consumption: 80, storage: 100, current_stored: 50, shortage_ticks: 0 },
+      alerts: [],
+    });
+    expect(next.stage).toBe("dyson_intro");
+    expect(next.to).toContain("workflow=dyson");
     expect(next.idle).toBe(true);
+  });
+
+  it("中期稳态：军工部署入口（非纯侦察）", () => {
+    const next = resolveEarlyGameNextAction({
+      activePlanetId: "planet-1-1",
+      player: player({
+        tech: {
+          player_id: "p1",
+          completed_techs: [
+            "dyson_sphere_program",
+            "electromagnetism",
+            "basic_logistics_system",
+          ],
+        },
+        stats: midgameStats({ production: 12, logistics: 3 }),
+      }),
+      energy: { generation: 120, consumption: 40, storage: 100, current_stored: 50, shortage_ticks: 0 },
+      alerts: [],
+    });
+    expect(next.stage).toBe("war_intro");
+    expect(next.to).toBe("/war?tab=industry");
+    expect(next.idle).toBe(true);
+    expect(next.text).toMatch(/舰队|军工/);
   });
 });

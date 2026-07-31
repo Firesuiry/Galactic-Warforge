@@ -7,7 +7,10 @@ import type {
 } from "@shared/types";
 import type { ApiClient } from "@shared/api";
 
-import { PlanetCommandPanel } from "@/features/planet-map/PlanetCommandPanel";
+import {
+  PlanetCommandPanel,
+  type CommandWorkflowId,
+} from "@/features/planet-map/PlanetCommandPanel";
 import type { PlanetRenderView } from "@/features/planet-map/model";
 
 interface PlanetCommandCenterProps {
@@ -18,6 +21,8 @@ interface PlanetCommandCenterProps {
   summary?: StateSummary;
   system?: SystemView;
   systemRuntime?: SystemRuntimeView;
+  /** 深链初值：研究/物流/戴森工作流 Tab。 */
+  initialWorkflow?: CommandWorkflowId;
 }
 
 export function PlanetCommandCenter(props: PlanetCommandCenterProps) {

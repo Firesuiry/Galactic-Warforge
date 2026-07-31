@@ -34,6 +34,24 @@ function createCatalog() {
         name: "行星物流站",
         buildable: true,
       },
+      {
+        id: "conveyor_belt_mk1",
+        name: "传送带 Mk.I",
+        buildable: true,
+        unlock_tech: ["basic_logistics_system"],
+      },
+      {
+        id: "sorter_mk1",
+        name: "分拣器 Mk.I",
+        buildable: true,
+        unlock_tech: ["basic_logistics_system"],
+      },
+      {
+        id: "mining_machine",
+        name: "采矿机",
+        buildable: true,
+        unlock_tech: ["electromagnetism"],
+      },
     ],
   };
 }
@@ -135,11 +153,44 @@ describe("build workflow", () => {
       "matrix_lab",
     ]);
     expect(view.catalog.unlocked).toEqual([]);
-    expect(view.catalog.locked.map((entry) => entry.id)).toEqual([
-      "ray_receiver",
-    ]);
+    // 物流/采矿需对应科技；射线接收站仍锁定；无 unlock_tech 的物流站进 debugOnly
+    expect(view.catalog.locked.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        "ray_receiver",
+        "conveyor_belt_mk1",
+        "sorter_mk1",
+        "mining_machine",
+      ]),
+    );
     expect(view.catalog.debugOnly.map((entry) => entry.id)).toEqual([
       "planetary_logistics_station",
+    ]);
+  });
+
+  it("基础物流科技完成后推荐传送带与分拣器", () => {
+    const summary = createSummary() as {
+      players: {
+        p1: {
+          tech: { completed_techs: string[] };
+        };
+      };
+    };
+    summary.players.p1.tech.completed_techs = [
+      "dyson_sphere_program",
+      "basic_logistics_system",
+    ];
+    const view = deriveBuildWorkflowView({
+      catalog: createCatalog() as never,
+      playerId: "p1",
+      planet: createPlanet() as never,
+      summary: summary as never,
+      selectedPosition: { x: 1, y: 1, z: 0 },
+    });
+    expect(view.catalog.recommended.map((entry) => entry.id)).toEqual([
+      "wind_turbine",
+      "matrix_lab",
+      "conveyor_belt_mk1",
+      "sorter_mk1",
     ]);
   });
 

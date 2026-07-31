@@ -5,7 +5,7 @@
  * 保证总览页在冷启动时也能给出正确入口，而不是空态跳银河。
  */
 
-import type { EnergyStats, PlayerState, ProductionAlert } from "@shared/types";
+import type { AlertEntry, EnergyStats, PlayerState } from "@shared/types";
 
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import {
@@ -35,6 +35,10 @@ export interface EarlyGameNextAction {
     | "research_running"
     | "research_electromagnetism"
     | "mine_expand"
+    | "research_basic_logistics"
+    | "logistics_expand"
+    | "dyson_intro"
+    | "war_intro"
     | "scout_expand";
 }
 
@@ -43,10 +47,13 @@ export interface ResolveEarlyGameNextInput {
   player?: PlayerState | null;
   energy?: EnergyStats | null;
   /** 已过滤噪声后的产线告警，优先级最高。 */
-  alerts?: ProductionAlert[];
+  alerts?: AlertEntry[];
 }
 
 const EARLY_TECH = "electromagnetism";
+const LOGISTICS_TECH = "basic_logistics_system";
+const DYSON_ORBIT_TECH = "solar_sail_orbit";
+const RAY_RECEIVER_TECH = "ray_receiver";
 const MATRIX_ITEM = "electromagnetic_matrix";
 const MATRIX_NEEDED = 10;
 
@@ -70,7 +77,8 @@ function inventoryQty(player: PlayerState | null | undefined, itemId: string) {
 
 /**
  * 解析总览「下一步优先处理」。
- * 优先级：产线告警 > 无电起步 > 研究阻塞 > 开局科研链 > 采矿扩张 > 星图侦察。
+ * 优先级：产线告警 > 无电起步 > 研究阻塞 > 开局科研链 > 采矿扩张 >
+ * 中期物流/戴森/军工 > 星图侦察。
  */
 export function resolveEarlyGameNextAction(
   input: ResolveEarlyGameNextInput,
@@ -83,10 +91,13 @@ export function resolveEarlyGameNextAction(
   const shortage = (energy?.shortage_ticks ?? 0) > 0 || consumption > generation;
   const completed = new Set(normalizeCompletedTechIds(player?.tech));
   const electromagnetismDone = completed.has(EARLY_TECH);
+  const basicLogisticsDone = completed.has(LOGISTICS_TECH);
+  const dysonUnlocked =
+    completed.has(DYSON_ORBIT_TECH) || completed.has(RAY_RECEIVER_TECH);
   const current = player?.tech?.current_research;
   const matrixQty = inventoryQty(player, MATRIX_ITEM);
-  const productionOutput = player?.stats?.production_stats?.total_output
-    ?? 0;
+  const productionOutput = player?.stats?.production_stats?.total_output ?? 0;
+  const logisticsThroughput = player?.stats?.logistics_stats?.throughput ?? 0;
 
   const recommendedAlert = input.alerts?.[0];
   if (recommendedAlert) {
@@ -114,7 +125,7 @@ export function resolveEarlyGameNextAction(
     };
   }
 
-  // 2) 有研究但被阻塞
+  // 2) 有研究但被阻塞 / 进行中
   if (current?.tech_id) {
     const blocked = current.blocked_reason;
     if (blocked === "waiting_lab") {
@@ -129,7 +140,7 @@ export function resolveEarlyGameNextAction(
     }
     if (blocked === "waiting_matrix") {
       return {
-        to: planetPath(planetId),
+        to: planetPath(planetId, { workflow: "research" }),
         iconKey: "tech",
         color: "#ffb454",
         text: `研究缺矩阵 · 向研究站装入电磁矩阵（背包 ${matrixQty}）`,
@@ -154,7 +165,7 @@ export function resolveEarlyGameNextAction(
         ? Math.min(100, Math.round((current.progress / current.total_cost) * 100))
         : 0;
     return {
-      to: planetPath(planetId),
+      to: planetPath(planetId, { workflow: "research" }),
       iconKey: "tech",
       color: "#6ee7b7",
       text: `研究进行中：${techName} ${percent}%`,
@@ -176,7 +187,7 @@ export function resolveEarlyGameNextAction(
       };
     }
     return {
-      to: planetPath(planetId, { build: "matrix_lab" }),
+      to: planetPath(planetId, { build: "matrix_lab", workflow: "research" }),
       iconKey: "tech",
       color: "#6ee7b7",
       text: "建造矩阵研究站 · 装入矩阵并研究电磁学",
@@ -209,13 +220,50 @@ export function resolveEarlyGameNextAction(
     };
   }
 
-  // 6) 稳态：推进产能与侦察
+  // 6) 中期：基础物流科技（传送带/分拣器入口）
+  if (!basicLogisticsDone) {
+    const logisticsName = translateTechId(LOGISTICS_TECH, "基础物流系统");
+    return {
+      to: planetPath(planetId, { workflow: "research" }),
+      iconKey: "conveyor_belt_mk1",
+      color: "#8fa3c8",
+      text: `研究${logisticsName} · 解锁传送带与分拣器`,
+      idle: false,
+      stage: "research_basic_logistics",
+    };
+  }
+
+  // 7) 物流科技已解锁但产线未跑通：铺传送带
+  if (logisticsThroughput <= 0) {
+    return {
+      to: planetPath(planetId, { build: "conveyor_belt_mk1" }),
+      iconKey: "conveyor_belt_mk1",
+      color: "#8fa3c8",
+      text: "物流已解锁 · 铺设传送带连接产线",
+      idle: false,
+      stage: "logistics_expand",
+    };
+  }
+
+  // 8) 戴森链已解锁：引导戴森工作流
+  if (dysonUnlocked) {
+    return {
+      to: planetPath(planetId, { workflow: "dyson" }),
+      iconKey: "ray_receiver",
+      color: "#39e6d0",
+      text: "戴森链已开启 · 配置发射与射线接收",
+      idle: true,
+      stage: "dyson_intro",
+    };
+  }
+
+  // 9) 中期稳态：军工部署入口（比纯侦察更可玩）
   return {
-    to: "/galaxy",
-    iconKey: "galaxy",
-    color: "#39e6d0",
-    text: "继续推进产能与侦察",
+    to: "/war?tab=industry",
+    iconKey: "fleet",
+    color: "#ffb454",
+    text: "编成首支舰队 · 从军工部署起步",
     idle: true,
-    stage: "scout_expand",
+    stage: "war_intro",
   };
 }

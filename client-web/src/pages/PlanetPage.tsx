@@ -13,6 +13,7 @@ import {
 } from "@/features/planet-map/PlanetPanels";
 import { PlanetCommandCenter } from "@/features/planet-commands/PlanetCommandCenter";
 import { PlanetOperationHeader } from "@/features/planet-commands/PlanetOperationHeader";
+import { parseCommandWorkflowId } from "@/features/planet-map/PlanetCommandPanel";
 import {
   getLatestCommandEntry,
   getPendingCommandCount,
@@ -385,6 +386,16 @@ export function PlanetPage() {
         direction: "auto",
       });
       setActiveDetailPanel("workbench");
+      setDrawerOpen(true);
+    }
+
+    // 深链 workflow=research|logistics|dyson…：打开工作台并落到对应命令 Tab
+    const workflowRaw = searchParams.get("workflow");
+    if (workflowRaw && workflowRaw.trim() !== "") {
+      // 校验合法 id（非法时仍打开抽屉，子面板回落 basic）
+      parseCommandWorkflowId(workflowRaw);
+      setActiveDetailPanel("workbench");
+      setDrawerOpen(true);
     }
 
     restoredViewRef.current = signature;

@@ -31,7 +31,12 @@ import { normalizeCompletedTechIds } from "@/features/planet-map/research-workfl
 const BUILD_RECOMMENDATION_ORDER = [
   "wind_turbine",
   "matrix_lab",
+  "mining_machine",
   "tesla_tower",
+  "conveyor_belt_mk1",
+  "sorter_mk1",
+  "depot_mk1",
+  "planetary_logistics_station",
   "em_rail_ejector",
   "vertical_launching_silo",
   "ray_receiver",

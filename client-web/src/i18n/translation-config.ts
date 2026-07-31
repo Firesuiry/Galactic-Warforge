@@ -217,6 +217,12 @@ export const TRANSLATIONS = {
   techId: {
     "tech-energy-1": "基础能源学",
     "tech-energy-grid-2": "能源电网 II",
+    electromagnetism: "电磁学",
+    basic_logistics_system: "基础物流系统",
+    planetary_logistics: "行星物流系统",
+    solar_sail_orbit: "太阳帆轨道系统",
+    ray_receiver: "射线接收站",
+    dyson_sphere_program: "戴森球计划",
     dirac_inversion: "狄拉克反演",
     // server/internal/model/combat_tech.go 中的战斗科技（服务端英文名）
     weapon_mk1: "武器 Mk.I",
