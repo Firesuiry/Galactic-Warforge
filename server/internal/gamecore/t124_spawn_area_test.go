@@ -196,6 +196,75 @@ func TestT124ExplicitSpawnPointsAreUsedAndFlattened(t *testing.T) {
 	}
 }
 
+// Starter matrix chain needs iron + copper inside operate range. When mapgen
+// only drops coal/silicon near spawn (seed-001 playtest), inject the missing
+// kinds so research is reachable without wandering the whole map.
+func TestT124StarterIronAndCopperWithinMineDistance(t *testing.T) {
+	// Explicit spawn far from any natural iron/copper: only coal nearby.
+	spawns := []mapconfig.SpawnPointConfig{{X: 16, Y: 16}}
+	maps := newT124Universe(t, "seed-t124-starter-ores", 48, 48, spawns)
+	planet := maps.PrimaryPlanet()
+	planet.Resources = []mapmodel.ResourceNode{{
+		ID: "res-coal-only", PlanetID: planet.ID, Kind: mapmodel.ResourceCoal, Behavior: mapmodel.ResourceFinite,
+		Position: mapmodel.GridPos{X: 18, Y: 16}, Total: 100, BaseYield: 2,
+	}}
+
+	cfg := &config.Config{
+		Battlefield: config.BattlefieldConfig{MapSeed: "seed-t124-starter-ores", MaxTickRate: 10},
+		Players: []config.PlayerConfig{{
+			PlayerID: "p1",
+			Key:      "p1-key",
+			Executor: config.ExecutorConfig{OperateRange: 6},
+		}},
+	}
+	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{IntervalTicks: 100})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	core := New(cfg, maps, queue.New(), NewEventBus(), store)
+	ws := core.World()
+	base := t124BuildingPos(t, ws, "p1", model.BuildingTypeBattlefieldAnalysisBase)
+	mineDist := spawnMineDistance(cfg.Players)
+
+	for _, kind := range []string{string(mapmodel.ResourceIronOre), string(mapmodel.ResourceCopperOre)} {
+		if !hasResourceKindWithin(ws, base, mineDist, kind) {
+			t.Fatalf("expected %s within mine dist %d of base %+v", kind, mineDist, base)
+		}
+	}
+	// Coal from the fixture must still be present; injection is additive.
+	if !hasResourceKindWithin(ws, base, mineDist, string(mapmodel.ResourceCoal)) {
+		t.Fatalf("expected original coal near base %+v", base)
+	}
+}
+
+// config-dev + map.yaml (seed-001) must guarantee iron/copper near the base so
+// the documented matrix chain is operable without seed luck.
+func TestConfigDevStarterOresReachableForMatrixChain(t *testing.T) {
+	core := newConfigDevTestCore(t)
+	ws := core.World()
+	player := ws.Players["p1"]
+	if player == nil {
+		t.Fatal("expected player p1")
+	}
+	base := findOwnedBuildingByType(ws, "p1", model.BuildingTypeBattlefieldAnalysisBase)
+	if base == nil {
+		t.Fatal("expected p1 base")
+	}
+	execState := player.ExecutorForPlanet(ws.PlanetID)
+	if execState == nil {
+		t.Fatal("expected executor state")
+	}
+	mineDist := spawnMineDistance([]config.PlayerConfig{{
+		Executor: config.ExecutorConfig{OperateRange: execState.OperateRange},
+	}})
+	for _, kind := range []string{string(mapmodel.ResourceIronOre), string(mapmodel.ResourceCopperOre)} {
+		if !hasResourceKindWithin(ws, base.Position, mineDist, kind) {
+			t.Fatalf("config-dev seed: expected %s within dist %d of base %+v (operate_range=%d)",
+				kind, mineDist, base.Position, execState.OperateRange)
+		}
+	}
+}
+
 func TestT124ComputeStartPositionsRespectEdgeMargin(t *testing.T) {
 	cfg := &config.Config{Players: []config.PlayerConfig{{PlayerID: "p1"}, {PlayerID: "p2"}, {PlayerID: "p3"}, {PlayerID: "p4"}, {PlayerID: "p5"}}}
 	for _, pos := range computeStartPositions(cfg, 64, 48) {

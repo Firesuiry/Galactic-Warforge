@@ -101,6 +101,87 @@ func TestOpeningBuildChainMiningRestoresMineralsIncome(t *testing.T) {
 	}
 }
 
+// Full local storage must not freeze minerals kickback: construction currency is
+// keyed off mined amount, while Storage only buffers items for logistics.
+// Regression for 2026-07-31 playtest: minerals plateaued at ~80 once the
+// mining_machine buffer filled (capacity 48) and no belts hauled ore away.
+func TestMineralsKickbackContinuesWhenStorageIsFull(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 1, 1)
+	player := &model.PlayerState{
+		PlayerID:  "p1",
+		Resources: model.Resources{Minerals: 20, Energy: 100},
+		IsAlive:   true,
+	}
+	ws.Players["p1"] = player
+	ws.Resources["r1"] = &model.ResourceNodeState{
+		ID:           "r1",
+		PlanetID:     ws.PlanetID,
+		Kind:         "silicon_ore",
+		Behavior:     "finite",
+		MaxAmount:    1000,
+		Remaining:    1000,
+		BaseYield:    8,
+		CurrentYield: 8,
+	}
+	ws.Grid[0][0].ResourceNodeID = "r1"
+	miner := &model.Building{
+		ID:       "miner",
+		Type:     model.BuildingTypeMiningMachine,
+		OwnerID:  "p1",
+		Position: model.Position{X: 0, Y: 0},
+		Runtime:  model.BuildingProfileFor(model.BuildingTypeMiningMachine, 1).Runtime,
+	}
+	model.InitBuildingStorage(miner)
+	miner.Runtime.Params.EnergyConsume = 0
+	if miner.Runtime.Functions.Energy != nil {
+		miner.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
+	ws.Buildings["miner"] = miner
+
+	// Fill every buffer/inventory slot so further Receive accepts nothing.
+	if miner.Storage == nil {
+		t.Fatal("expected mining machine storage")
+	}
+	for {
+		accepted, _, err := miner.Storage.Receive(model.ItemSiliconOre, 1<<20)
+		if err != nil {
+			t.Fatalf("prefill storage: %v", err)
+		}
+		if accepted == 0 {
+			break
+		}
+	}
+	preview, _, err := miner.Storage.PreviewReceive(model.ItemSiliconOre, 8)
+	if err != nil || preview != 0 {
+		t.Fatalf("expected full storage (preview accept 0), got preview=%d err=%v held=%d",
+			preview, err, totalStorageItems(miner.Storage))
+	}
+	heldBefore := totalStorageItems(miner.Storage)
+
+	prevMinerals := player.Resources.Minerals
+	prevRemaining := ws.Resources["r1"].Remaining
+	for tick := 0; tick < 12; tick++ {
+		settleResources(ws)
+		got := player.Resources.Minerals
+		if got <= prevMinerals {
+			t.Fatalf("tick %d: minerals stalled with full storage: %d -> %d", tick, prevMinerals, got)
+		}
+		// Ore must still leave the vein even though nothing fits in the buffer.
+		if rem := ws.Resources["r1"].Remaining; rem >= prevRemaining {
+			t.Fatalf("tick %d: expected vein to keep depleting while storage full: %d -> %d", tick, prevRemaining, rem)
+		}
+		if held := totalStorageItems(miner.Storage); held != heldBefore {
+			t.Fatalf("tick %d: storage should not grow when full (no haul): held %d -> %d", tick, heldBefore, held)
+		}
+		preview, _, err = miner.Storage.PreviewReceive(model.ItemSiliconOre, 8)
+		if err != nil || preview != 0 {
+			t.Fatalf("tick %d: storage should stay full, preview=%d err=%v", tick, preview, err)
+		}
+		prevMinerals = got
+		prevRemaining = ws.Resources["r1"].Remaining
+	}
+}
+
 // Water/oil collectors feed the fluid item economy only; they must not
 // generate minerals (MineralsKickback defaults to 0).
 func TestFluidCollectorsDoNotYieldMinerals(t *testing.T) {

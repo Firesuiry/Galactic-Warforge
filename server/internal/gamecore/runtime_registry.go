@@ -56,6 +56,9 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		flattenSpawnArea(ws, planet, basePositions[i], spawnAreaRadius)
 		basePositions[i] = findNearestBuildable(ws, basePositions[i])
 	}
+	// Guarantee iron/copper within mining reach of every final base so the
+	// matrix production chain is not blocked by distant mapgen veins.
+	ensureStarterResourceNodes(ws, planet, basePositions, spawnMineDistance(players))
 	for i, p := range players {
 		ps := ws.Players[p.PlayerID]
 		if ps == nil {
@@ -118,6 +121,23 @@ const spawnAreaRadius = 8
 // spawnResourceSearchRadius caps how far an auto spawn may wander when
 // looking for a tile with minable resources nearby.
 const spawnResourceSearchRadius = 32
+
+// starterResourceKinds are injected near every spawn when missing so the
+// opening matrix chain (iron → magnet/coil, copper → circuit) stays reachable
+// inside the executor operate range without relying on mapgen luck.
+var starterResourceKinds = []mapmodel.ResourceKind{
+	mapmodel.ResourceIronOre,
+	mapmodel.ResourceCopperOre,
+}
+
+// starterVeinTotal is intentionally above map.yaml natural vein_amount_max
+// (200): yield 8 would burn a 200-unit patch in ~25 ticks (~2.5s at 10 tps),
+// which is too short for the pre-belt opening loop (build grid → mine → fund
+// smelters). Yield stays snappy at 8; total covers early matrix-chain funding.
+const (
+	starterVeinTotal = 2000
+	starterVeinYield = 8
+)
 
 // spawnPositionsFor returns explicit planet spawn points when the map config
 // pins them, otherwise spread-out auto positions kept away from map edges and
@@ -218,6 +238,165 @@ func hasResourceNodeWithin(ws *model.WorldState, center model.Position, dist int
 	}
 	return false
 }
+
+// ensureStarterResourceNodes places missing starter ore kinds within dist of
+// each spawn center so iron/copper for the matrix chain are always operable.
+func ensureStarterResourceNodes(ws *model.WorldState, planet *mapmodel.Planet, centers []model.Position, dist int) {
+	if ws == nil || len(centers) == 0 || dist < 1 {
+		return
+	}
+	if ws.Resources == nil {
+		ws.Resources = make(map[string]*model.ResourceNodeState)
+	}
+	seen := make(map[model.Position]struct{}, len(centers))
+	for _, center := range centers {
+		if _, ok := seen[center]; ok {
+			continue
+		}
+		seen[center] = struct{}{}
+		for _, kind := range starterResourceKinds {
+			if hasResourceKindWithin(ws, center, dist, string(kind)) {
+				continue
+			}
+			pos, ok := findOpenTileForResource(ws, center, dist)
+			if !ok {
+				continue
+			}
+			injectResourceNode(ws, planet, pos, kind)
+		}
+	}
+}
+
+// hasResourceKindWithin reports whether a node of the given kind sits within
+// Manhattan dist of center.
+func hasResourceKindWithin(ws *model.WorldState, center model.Position, dist int, kind string) bool {
+	if ws == nil || kind == "" {
+		return false
+	}
+	for dy := -dist; dy <= dist; dy++ {
+		y := center.Y + dy
+		if y < 0 || y >= ws.MapHeight {
+			continue
+		}
+		absDy := dy
+		if absDy < 0 {
+			absDy = -absDy
+		}
+		span := dist - absDy
+		for dx := -span; dx <= span; dx++ {
+			x := center.X + dx
+			if x < 0 || x >= ws.MapWidth {
+				continue
+			}
+			nodeID := ws.Grid[y][x].ResourceNodeID
+			if nodeID == "" {
+				continue
+			}
+			node := ws.Resources[nodeID]
+			if node != nil && node.Kind == kind {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// findOpenTileForResource picks an empty, non-resource tile inside dist of
+// center, preferring ring distance 2..dist so the base tile itself stays free.
+func findOpenTileForResource(ws *model.WorldState, center model.Position, dist int) (model.Position, bool) {
+	if ws == nil {
+		return model.Position{}, false
+	}
+	for r := 2; r <= dist; r++ {
+		for dy := -r; dy <= r; dy++ {
+			for dx := -r; dx <= r; dx++ {
+				if manhattanAbs(dx)+manhattanAbs(dy) != r {
+					continue
+				}
+				x, y := center.X+dx, center.Y+dy
+				if !ws.InBounds(x, y) {
+					continue
+				}
+				if ws.Grid[y][x].ResourceNodeID != "" {
+					continue
+				}
+				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
+					continue
+				}
+				return model.Position{X: x, Y: y}, true
+			}
+		}
+	}
+	// Fallback: allow distance 1 if the outer rings are packed.
+	for dy := -1; dy <= 1; dy++ {
+		for dx := -1; dx <= 1; dx++ {
+			if dx == 0 && dy == 0 {
+				continue
+			}
+			x, y := center.X+dx, center.Y+dy
+			if !ws.InBounds(x, y) {
+				continue
+			}
+			if ws.Grid[y][x].ResourceNodeID != "" {
+				continue
+			}
+			if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
+				continue
+			}
+			return model.Position{X: x, Y: y}, true
+		}
+	}
+	return model.Position{}, false
+}
+
+func manhattanAbs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// injectResourceNode writes a finite ore node into the runtime world and, when
+// present, the map-model planet so scene/query layers stay consistent.
+func injectResourceNode(ws *model.WorldState, planet *mapmodel.Planet, pos model.Position, kind mapmodel.ResourceKind) {
+	if ws == nil || !ws.InBounds(pos.X, pos.Y) {
+		return
+	}
+	if ws.Grid[pos.Y][pos.X].ResourceNodeID != "" {
+		return
+	}
+	id := ws.NextEntityID("res")
+	state := &model.ResourceNodeState{
+		ID:           id,
+		PlanetID:     ws.PlanetID,
+		Kind:         string(kind),
+		Behavior:     string(mapmodel.ResourceFinite),
+		Position:     pos,
+		MaxAmount:    starterVeinTotal,
+		Remaining:    starterVeinTotal,
+		BaseYield:    starterVeinYield,
+		CurrentYield: starterVeinYield,
+	}
+	state.SyncDepleted()
+	ws.Resources[id] = state
+	ws.Grid[pos.Y][pos.X].ResourceNodeID = id
+	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileBuildable
+	if planet != nil {
+		if pos.Y < len(planet.Terrain) && pos.X < len(planet.Terrain[pos.Y]) {
+			planet.Terrain[pos.Y][pos.X] = terrain.TileBuildable
+		}
+		planet.Resources = append(planet.Resources, mapmodel.ResourceNode{
+			ID:        id,
+			PlanetID:  planet.ID,
+			Kind:      kind,
+			Behavior:  mapmodel.ResourceFinite,
+			Position:  mapmodel.GridPos{X: pos.X, Y: pos.Y},
+			Total:     starterVeinTotal,
+			BaseYield: starterVeinYield,
+		})
+	}
+}
+
 
 // flattenSpawnArea converts non-buildable terrain within radius of center to
 // buildable ground. Resource nodes are untouched: they live on a separate
