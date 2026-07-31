@@ -133,20 +133,21 @@ func (m *ProductionMonitorState) MarkAlert(alertType ProductionAlertType, tick i
 	m.LastAlertAt[alertType] = tick
 }
 
-// AlertMessage returns a human-friendly message for alert type.
+// AlertMessage returns a player-facing Chinese message for alert type.
+// Clients may further localize with building type names; this is the server baseline.
 func AlertMessage(alertType ProductionAlertType, buildingID string) string {
 	switch alertType {
 	case AlertTypeThroughputDrop:
-		return fmt.Sprintf("building %s throughput drop detected", buildingID)
+		return fmt.Sprintf("建筑 %s：产能下降", buildingID)
 	case AlertTypeBacklog:
-		return fmt.Sprintf("building %s backlog rising", buildingID)
+		return fmt.Sprintf("建筑 %s：堆积升高", buildingID)
 	case AlertTypeInputShortage:
-		return fmt.Sprintf("building %s input shortage", buildingID)
+		return fmt.Sprintf("建筑 %s：原料短缺", buildingID)
 	case AlertTypeOutputBlocked:
-		return fmt.Sprintf("building %s output blocked", buildingID)
+		return fmt.Sprintf("建筑 %s：产物阻塞", buildingID)
 	case AlertTypePowerShortage:
-		return fmt.Sprintf("building %s power shortage", buildingID)
+		return fmt.Sprintf("建筑 %s：电力不足", buildingID)
 	default:
-		return fmt.Sprintf("building %s alert", buildingID)
+		return fmt.Sprintf("建筑 %s：产线告警", buildingID)
 	}
 }

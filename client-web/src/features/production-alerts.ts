@@ -1,11 +1,9 @@
 /**
  * 产线告警展示策略（纯函数）。
  *
- * 背景：server 的 production_monitor 对「研究模式」（未配配方）的
- * matrix_lab / self_evolution_lab 也会按周期刷 throughput_drop /
- * input_shortage 等产线告警——空研究站是合法且推荐的开局状态，
- * 这类告警属于噪音。server 侧修复前，客户端统一在展示层过滤：
- * toast、活动流告警面板、顶栏告警计数都走本模块的判定。
+ * server 已在 production_monitor 对研究模式（Research 模块 + 空配方）
+ * 跳过吞吐类告警；本模块保留同等过滤作为防御层，防止旧存档/旧服
+ * 仍把噪音推到 toast、活动流与顶栏计数。
  */
 
 /** 研究站类建筑：无配方时恒定"产能下降/原料短缺"，不应当作产线异常。 */

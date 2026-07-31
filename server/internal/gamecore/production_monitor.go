@@ -84,6 +84,10 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 		if player == nil || !player.IsAlive {
 			continue
 		}
+		// Research-mode labs (Research module + empty recipe) are a legal idle
+		// state for matrix_lab / self_evolution_lab. They share Production
+		// throughput stats but must not raise factory-line shortage/drop alerts.
+		researchMode := isResearchLab(building)
 		throughput := 0
 		if production != nil {
 			throughput = production.Throughput
@@ -96,7 +100,9 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 		moved := 0
 		if building.Storage != nil {
 			backlog = building.Storage.UsedInputBuffer()
-			outputBlocked = storageOutputBlocked(building.Storage, production == nil)
+			// Collectors and research-mode labs do not produce factory outputs
+			// that need conveyor drainage; skip output blockage for research mode.
+			outputBlocked = !researchMode && storageOutputBlocked(building.Storage, production == nil)
 		}
 		if building.Conveyor != nil {
 			moved = building.Conveyor.Throughput
@@ -105,7 +111,7 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 		if throughput > 0 {
 			efficiency = float64(moved) / float64(throughput)
 		}
-		if production != nil && throughput > 0 && building.Storage != nil && backlog <= 0 && efficiency < pm.cfg.ShortageRatio {
+		if !researchMode && production != nil && throughput > 0 && building.Storage != nil && backlog <= 0 && efficiency < pm.cfg.ShortageRatio {
 			inputShortage = true
 		}
 
@@ -161,6 +167,10 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	cooldown := pm.cooldownTicks()
 	// Collectors have no recipe inputs, so only power and output blockage apply.
 	collector := building.Runtime.Functions.Production == nil
+	// Research-mode labs (empty recipe) are idle research stations, not factories.
+	researchMode := isResearchLab(building)
+	// Factory-line throughput metrics only apply to true production buildings.
+	lineAlerts := !collector && !researchMode
 
 	if building.Runtime.State == model.BuildingWorkNoPower && state.ShouldAlert(model.AlertTypePowerShortage, tick, cooldown) {
 		details := map[string]any{"power_priority": building.Runtime.Params.PowerPriority}
@@ -168,7 +178,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 		state.MarkAlert(model.AlertTypePowerShortage, tick)
 	}
 
-	if !collector && throughput > 0 {
+	if lineAlerts && throughput > 0 {
 		ratio := float64(backlog) / float64(throughput)
 		if ratio >= pm.cfg.BacklogCriticalRatio && state.ShouldAlert(model.AlertTypeBacklog, tick, cooldown) {
 			details := map[string]any{"backlog_ratio": ratio}
@@ -181,7 +191,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 		}
 	}
 
-	if !collector && inputShortage && state.ShouldAlert(model.AlertTypeInputShortage, tick, cooldown) {
+	if lineAlerts && inputShortage && state.ShouldAlert(model.AlertTypeInputShortage, tick, cooldown) {
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil))
 		state.MarkAlert(model.AlertTypeInputShortage, tick)
 	}
@@ -192,7 +202,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	}
 
 	eff := state.LastStats.Efficiency
-	if !collector && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio && state.ShouldAlert(model.AlertTypeThroughputDrop, tick, cooldown) {
+	if lineAlerts && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio && state.ShouldAlert(model.AlertTypeThroughputDrop, tick, cooldown) {
 		details := map[string]any{"efficiency": eff}
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, details))
 		state.MarkAlert(model.AlertTypeThroughputDrop, tick)
