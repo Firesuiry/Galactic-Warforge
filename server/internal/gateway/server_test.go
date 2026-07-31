@@ -456,6 +456,71 @@ func TestPostCommandsPermissionDenied(t *testing.T) {
 	if resp.Results[0].Code != model.CodeUnauthorized {
 		t.Errorf("expected UNAUTHORIZED code, got %s", resp.Results[0].Code)
 	}
+	if len(resp.Results[0].Issues) == 0 || resp.Results[0].Issues[0].Code != model.IssueUnauthorized {
+		t.Errorf("expected unauthorized issue, got %+v", resp.Results[0].Issues)
+	}
+}
+
+func TestPostCommandsStructuredValidationIssues(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	cases := []struct {
+		name  string
+		cmd   model.Command
+		field string
+	}{
+		{
+			name: "build missing position",
+			cmd: model.Command{
+				Type:    model.CmdBuild,
+				Payload: map[string]any{"building_type": "mining_machine"},
+			},
+			field: "target.position",
+		},
+		{
+			name: "transfer_item missing building_id",
+			cmd: model.Command{
+				Type:    model.CmdTransferItem,
+				Payload: map[string]any{"item_id": model.ItemSolarSail, "quantity": 1},
+			},
+			field: "payload.building_id",
+		},
+	}
+
+	for i, cs := range cases {
+		resp := postCommandRequest(t, srv, model.CommandRequest{
+			RequestID:  "req-struct-issues-" + cs.name,
+			IssuerType: "player",
+			IssuerID:   "p1",
+			Commands:   []model.Command{cs.cmd},
+		})
+		if resp.Accepted {
+			t.Fatalf("case %d (%s): expected accepted=false", i, cs.name)
+		}
+		if len(resp.Results) != 1 {
+			t.Fatalf("case %d (%s): expected 1 result, got %d", i, cs.name, len(resp.Results))
+		}
+		res := resp.Results[0]
+		if res.Status != model.StatusRejected || res.Code != model.CodeValidationFailed {
+			t.Fatalf("case %d (%s): expected rejected/VALIDATION_FAILED, got %s/%s", i, cs.name, res.Status, res.Code)
+		}
+		found := false
+		for _, issue := range res.Issues {
+			if issue.Field == cs.field && issue.Code == model.IssueMissingField {
+				found = true
+				if issue.Expected != "required" {
+					t.Fatalf("case %d (%s): expected Expected=required, got %#v", i, cs.name, issue.Expected)
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("case %d (%s): expected missing_field on %s, got %+v", i, cs.name, cs.field, res.Issues)
+		}
+		if res.Message == "" {
+			t.Fatalf("case %d (%s): message should remain human-readable", i, cs.name)
+		}
+	}
 }
 
 func TestGalaxyEndpoint(t *testing.T) {
@@ -888,7 +953,6 @@ func minimalSaveMetaFile() *gamedir.MetaFile {
 		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
 	})
 }
-
 
 func TestAgentBriefingAuthorized(t *testing.T) {
 	srv, _ := newTestServer(t)

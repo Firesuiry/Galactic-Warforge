@@ -408,6 +408,14 @@ export function fmtCommandResponse(r: CommandResponse): string {
     const okStatuses = new Set(['executed', 'accepted']);
     const statusColor = okStatuses.has(res.status) ? chalk.green : chalk.red;
     lines.push(`  [${res.command_index}] ${statusColor(res.status)} ${res.code}: ${res.message}`);
+    for (const issue of res.issues ?? []) {
+      const parts = [`code=${issue.code}`];
+      if (issue.field) parts.push(`field=${issue.field}`);
+      if (issue.expected !== undefined) parts.push(`expected=${JSON.stringify(issue.expected)}`);
+      if (issue.actual !== undefined) parts.push(`actual=${JSON.stringify(issue.actual)}`);
+      if (issue.message) parts.push(issue.message);
+      lines.push(`    - ${parts.join(' ')}`);
+    }
   }
   return lines.join('\n');
 }

@@ -531,11 +531,29 @@ export interface CommandRequest {
   commands: Command[];
 }
 
+export type CommandIssueCode =
+  | 'missing_field'
+  | 'invalid_value'
+  | 'unknown_command'
+  | 'unauthorized'
+  | 'duplicate_request'
+  | string;
+
+/** Field-level structural validation issue from gateway precheck. */
+export interface CommandIssue {
+  code: CommandIssueCode;
+  field?: string;
+  message: string;
+  expected?: unknown;
+  actual?: unknown;
+}
+
 export interface CommandResult {
   command_index: number;
   status: string;
   code: string;
   message: string;
+  issues?: CommandIssue[];
   validation?: WarBlueprintValidationResult;
 }
 

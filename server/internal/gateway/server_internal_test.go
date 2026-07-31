@@ -1,11 +1,19 @@
 package gateway
 
 import (
-	"strings"
 	"testing"
 
 	"siliconworld/internal/model"
 )
+
+func hasIssueField(issues []model.CommandIssue, field string) bool {
+	for _, issue := range issues {
+		if issue.Field == field {
+			return true
+		}
+	}
+	return false
+}
 
 func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T) {
 	cases := []model.Command{
@@ -23,8 +31,8 @@ func TestValidateCommandStructureAllowsImplementedLifecycleCommands(t *testing.T
 	}
 
 	for _, cmd := range cases {
-		if err := validateCommandStructure(cmd); err != nil {
-			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, err)
+		if issues := validateCommandStructure(cmd); len(issues) > 0 {
+			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, issues)
 		}
 	}
 }
@@ -36,118 +44,121 @@ func TestValidateCommandStructureAllowsPlanetAndRayReceiverCommands(t *testing.T
 	}
 
 	for _, cmd := range cases {
-		if err := validateCommandStructure(cmd); err != nil {
-			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, err)
+		if issues := validateCommandStructure(cmd); len(issues) > 0 {
+			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, issues)
 		}
 	}
 }
 
 func TestValidateCommandStructureRejectsIncompleteLaunchRocket(t *testing.T) {
 	cases := []struct {
-		cmd model.Command
-		msg string
+		cmd   model.Command
+		field string
 	}{
 		{
 			cmd: model.Command{
 				Type:    model.CmdLaunchRocket,
 				Payload: map[string]any{"system_id": "sys-1"},
 			},
-			msg: "payload.building_id",
+			field: "payload.building_id",
 		},
 		{
 			cmd: model.Command{
 				Type:    model.CmdLaunchRocket,
 				Payload: map[string]any{"building_id": "b-1"},
 			},
-			msg: "payload.system_id",
+			field: "payload.system_id",
 		},
 	}
 
 	for _, cs := range cases {
-		err := validateCommandStructure(cs.cmd)
-		if err == nil {
+		issues := validateCommandStructure(cs.cmd)
+		if len(issues) == 0 {
 			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
 		}
-		if !strings.Contains(err.Error(), cs.msg) {
-			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		if !hasIssueField(issues, cs.field) {
+			t.Fatalf("expected issue about %s, got %v", cs.field, issues)
+		}
+		if issues[0].Code != model.IssueMissingField {
+			t.Fatalf("expected missing_field, got %s", issues[0].Code)
 		}
 	}
 }
 
 func TestValidateCommandStructureRejectsIncompleteTransferItem(t *testing.T) {
 	cases := []struct {
-		cmd model.Command
-		msg string
+		cmd   model.Command
+		field string
 	}{
 		{
 			cmd: model.Command{
 				Type:    model.CmdTransferItem,
 				Payload: map[string]any{"item_id": model.ItemSolarSail, "quantity": 1},
 			},
-			msg: "payload.building_id",
+			field: "payload.building_id",
 		},
 		{
 			cmd: model.Command{
 				Type:    model.CmdTransferItem,
 				Payload: map[string]any{"building_id": "b-1", "quantity": 1},
 			},
-			msg: "payload.item_id",
+			field: "payload.item_id",
 		},
 		{
 			cmd: model.Command{
 				Type:    model.CmdTransferItem,
 				Payload: map[string]any{"building_id": "b-1", "item_id": model.ItemSolarSail},
 			},
-			msg: "payload.quantity",
+			field: "payload.quantity",
 		},
 	}
 
 	for _, cs := range cases {
-		err := validateCommandStructure(cs.cmd)
-		if err == nil {
+		issues := validateCommandStructure(cs.cmd)
+		if len(issues) == 0 {
 			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
 		}
-		if !strings.Contains(err.Error(), cs.msg) {
-			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		if !hasIssueField(issues, cs.field) {
+			t.Fatalf("expected issue about %s, got %v", cs.field, issues)
 		}
 	}
 }
 
 func TestValidateCommandStructureRejectsIncompletePlanetAndRayReceiverCommands(t *testing.T) {
 	cases := []struct {
-		cmd model.Command
-		msg string
+		cmd   model.Command
+		field string
 	}{
 		{
 			cmd: model.Command{
 				Type:    model.CmdSwitchActivePlanet,
 				Payload: map[string]any{},
 			},
-			msg: "payload.planet_id",
+			field: "payload.planet_id",
 		},
 		{
 			cmd: model.Command{
 				Type:    model.CmdSetRayReceiverMode,
 				Payload: map[string]any{"mode": "power"},
 			},
-			msg: "payload.building_id",
+			field: "payload.building_id",
 		},
 		{
 			cmd: model.Command{
 				Type:    model.CmdSetRayReceiverMode,
 				Payload: map[string]any{"building_id": "rr-1"},
 			},
-			msg: "payload.mode",
+			field: "payload.mode",
 		},
 	}
 
 	for _, cs := range cases {
-		err := validateCommandStructure(cs.cmd)
-		if err == nil {
+		issues := validateCommandStructure(cs.cmd)
+		if len(issues) == 0 {
 			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
 		}
-		if !strings.Contains(err.Error(), cs.msg) {
-			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		if !hasIssueField(issues, cs.field) {
+			t.Fatalf("expected issue about %s, got %v", cs.field, issues)
 		}
 	}
 }
@@ -168,18 +179,18 @@ func TestValidateCommandStructureAllowsLogisticsCommands(t *testing.T) {
 	}
 
 	for _, cmd := range cases {
-		if err := validateCommandStructure(cmd); err != nil {
-			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, err)
+		if issues := validateCommandStructure(cmd); len(issues) > 0 {
+			t.Fatalf("expected command %s to pass validation, got %v", cmd.Type, issues)
 		}
 	}
 }
 
 func TestValidateCommandStructureRejectsIncompleteLogisticsCommands(t *testing.T) {
 	cases := []struct {
-		cmd model.Command
-		msg string
+		cmd   model.Command
+		field string
 	}{
-		{cmd: model.Command{Type: model.CmdConfigureLogisticsStation}, msg: "target.entity_id"},
+		{cmd: model.Command{Type: model.CmdConfigureLogisticsStation}, field: "target.entity_id"},
 		{
 			cmd: model.Command{
 				Type:   model.CmdConfigureLogisticsSlot,
@@ -191,7 +202,7 @@ func TestValidateCommandStructureRejectsIncompleteLogisticsCommands(t *testing.T
 					"local_storage": 120,
 				},
 			},
-			msg: "configure_logistics_slot requires target.entity_id",
+			field: "target.entity_id",
 		},
 		{
 			cmd: model.Command{
@@ -203,7 +214,7 @@ func TestValidateCommandStructureRejectsIncompleteLogisticsCommands(t *testing.T
 					"local_storage": 120,
 				},
 			},
-			msg: "payload.scope",
+			field: "payload.scope",
 		},
 		{
 			cmd: model.Command{
@@ -215,7 +226,7 @@ func TestValidateCommandStructureRejectsIncompleteLogisticsCommands(t *testing.T
 					"local_storage": 120,
 				},
 			},
-			msg: "payload.item_id",
+			field: "payload.item_id",
 		},
 		{
 			cmd: model.Command{
@@ -227,7 +238,7 @@ func TestValidateCommandStructureRejectsIncompleteLogisticsCommands(t *testing.T
 					"local_storage": 120,
 				},
 			},
-			msg: "payload.mode",
+			field: "payload.mode",
 		},
 		{
 			cmd: model.Command{
@@ -239,17 +250,30 @@ func TestValidateCommandStructureRejectsIncompleteLogisticsCommands(t *testing.T
 					"mode":    string(model.LogisticsStationModeSupply),
 				},
 			},
-			msg: "payload.local_storage",
+			field: "payload.local_storage",
 		},
 	}
 
 	for _, cs := range cases {
-		err := validateCommandStructure(cs.cmd)
-		if err == nil {
+		issues := validateCommandStructure(cs.cmd)
+		if len(issues) == 0 {
 			t.Fatalf("expected command %s to fail validation", cs.cmd.Type)
 		}
-		if !strings.Contains(err.Error(), cs.msg) {
-			t.Fatalf("expected error about %s, got %v", cs.msg, err)
+		if !hasIssueField(issues, cs.field) {
+			t.Fatalf("expected issue about %s, got %v", cs.field, issues)
 		}
+	}
+}
+
+func TestValidateCommandStructureUnknownCommand(t *testing.T) {
+	issues := validateCommandStructure(model.Command{Type: "not_a_real_command"})
+	if len(issues) != 1 {
+		t.Fatalf("expected 1 issue, got %v", issues)
+	}
+	if issues[0].Code != model.IssueUnknownCommand {
+		t.Fatalf("expected unknown_command, got %s", issues[0].Code)
+	}
+	if issues[0].Field != "type" {
+		t.Fatalf("expected field=type, got %s", issues[0].Field)
 	}
 }

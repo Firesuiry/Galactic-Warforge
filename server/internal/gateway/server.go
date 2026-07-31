@@ -476,11 +476,13 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 			}
 			results := make([]model.CommandResult, len(req.Commands))
 			for i := range req.Commands {
+				issue := model.DuplicateRequestIssue()
 				results[i] = model.CommandResult{
 					CommandIndex: i,
 					Status:       model.StatusRejected,
 					Code:         model.CodeDuplicate,
-					Message:      "duplicate request_id",
+					Message:      issue.Message,
+					Issues:       []model.CommandIssue{issue},
 				}
 			}
 			s.recordPrecheckAudit(playerID, qr, results)
@@ -492,7 +494,8 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 				CommandIndex: 0,
 				Status:       model.StatusRejected,
 				Code:         model.CodeDuplicate,
-				Message:      "duplicate request_id",
+				Message:      model.DuplicateRequestIssue().Message,
+				Issues:       []model.CommandIssue{model.DuplicateRequestIssue()},
 			}},
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -515,15 +518,18 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 	allAccepted := true
 	for i, cmd := range req.Commands {
 		results[i].CommandIndex = i
-		if err := validateCommandStructure(cmd); err != nil {
+		if issues := validateCommandStructure(cmd); len(issues) > 0 {
 			results[i].Status = model.StatusRejected
 			results[i].Code = model.CodeValidationFailed
-			results[i].Message = err.Error()
+			results[i].Issues = issues
+			results[i].Message = model.IssuesMessage(issues)
 			allAccepted = false
 		} else if !s.core.CanIssueCommand(playerID, cmd.Type) {
+			issue := model.UnauthorizedIssue("permission denied")
 			results[i].Status = model.StatusRejected
 			results[i].Code = model.CodeUnauthorized
-			results[i].Message = "permission denied"
+			results[i].Issues = []model.CommandIssue{issue}
+			results[i].Message = issue.Message
 			allAccepted = false
 		} else {
 			results[i].Status = model.StatusAccepted
@@ -912,308 +918,187 @@ func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// validateCommandStructure does fast structural validation without world access
-func validateCommandStructure(cmd model.Command) error {
+// validateCommandStructure does fast structural validation without world access.
+// Returns field-level issues suitable for agent repair prompts.
+func validateCommandStructure(cmd model.Command) []model.CommandIssue {
+	var issues []model.CommandIssue
 	switch cmd.Type {
 	case model.CmdScanGalaxy:
-		if cmd.Target.GalaxyID == "" {
-			return fmt.Errorf("scan_galaxy requires target.galaxy_id")
-		}
-		if cmd.Target.Layer != "" && cmd.Target.Layer != "galaxy" {
-			return fmt.Errorf("scan_galaxy target.layer must be galaxy")
-		}
+		issues = append(issues, requireTargetGalaxyID(cmd)...)
+		issues = append(issues, requireTargetLayer(cmd, "galaxy")...)
 	case model.CmdScanSystem:
-		if cmd.Target.SystemID == "" {
-			return fmt.Errorf("scan_system requires target.system_id")
-		}
-		if cmd.Target.Layer != "" && cmd.Target.Layer != "system" {
-			return fmt.Errorf("scan_system target.layer must be system")
-		}
+		issues = append(issues, requireTargetSystemID(cmd)...)
+		issues = append(issues, requireTargetLayer(cmd, "system")...)
 	case model.CmdScanPlanet:
-		if cmd.Target.PlanetID == "" {
-			return fmt.Errorf("scan_planet requires target.planet_id")
-		}
-		if cmd.Target.Layer != "" && cmd.Target.Layer != "planet" {
-			return fmt.Errorf("scan_planet target.layer must be planet")
-		}
+		issues = append(issues, requireTargetPlanetID(cmd)...)
+		issues = append(issues, requireTargetLayer(cmd, "planet")...)
 	case model.CmdBuild:
-		if cmd.Target.Position == nil {
-			return fmt.Errorf("build requires target.position")
-		}
-		if _, ok := cmd.Payload["building_type"]; !ok {
-			return fmt.Errorf("build requires payload.building_type")
-		}
+		issues = append(issues, requireTargetPosition(cmd)...)
+		issues = append(issues, requirePayload(cmd.Payload, "building_type")...)
 		if recipeID, ok := cmd.Payload["recipe_id"]; ok {
 			if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {
-				return fmt.Errorf("build payload.recipe_id must be a non-empty string when provided")
+				issues = append(issues, model.InvalidValueIssue(
+					"payload.recipe_id",
+					"payload.recipe_id must be a non-empty string when provided",
+					"non-empty string",
+					recipeID,
+				))
 			}
 		}
 	case model.CmdMove:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("move requires target.entity_id")
-		}
-		if cmd.Target.Position == nil {
-			return fmt.Errorf("move requires target.position")
-		}
+		issues = append(issues, requireTargetEntityID(cmd)...)
+		issues = append(issues, requireTargetPosition(cmd)...)
 	case model.CmdAttack:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("attack requires target.entity_id")
-		}
-		if _, ok := cmd.Payload["target_entity_id"]; !ok {
-			return fmt.Errorf("attack requires payload.target_entity_id")
-		}
+		issues = append(issues, requireTargetEntityID(cmd)...)
+		issues = append(issues, requirePayload(cmd.Payload, "target_entity_id")...)
 	case model.CmdProduce:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("produce requires target.entity_id")
-		}
-		if _, ok := cmd.Payload["unit_type"]; !ok {
-			return fmt.Errorf("produce requires payload.unit_type")
-		}
+		issues = append(issues, requireTargetEntityID(cmd)...)
+		issues = append(issues, requirePayload(cmd.Payload, "unit_type")...)
 	case model.CmdDeploySquad:
-		for _, field := range []string{"building_id", "blueprint_id", "count"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("deploy_squad requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "blueprint_id", "count")...)
 	case model.CmdCommissionFleet:
-		for _, field := range []string{"building_id", "blueprint_id", "count", "system_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("commission_fleet requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "blueprint_id", "count", "system_id")...)
 	case model.CmdBlueprintCreate:
-		if _, ok := cmd.Payload["blueprint_id"]; !ok {
-			return fmt.Errorf("blueprint_create requires payload.blueprint_id")
-		}
-		if _, ok := cmd.Payload["domain"]; !ok {
-			return fmt.Errorf("blueprint_create requires payload.domain")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "blueprint_id", "domain")...)
 		_, hasFrame := cmd.Payload["base_frame_id"]
 		_, hasHull := cmd.Payload["base_hull_id"]
 		if hasFrame == hasHull {
-			return fmt.Errorf("blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id")
+			var actual any
+			if hasFrame && hasHull {
+				actual = []string{"base_frame_id", "base_hull_id"}
+			}
+			issues = append(issues, model.InvalidValueIssue(
+				"payload.base_frame_id|payload.base_hull_id",
+				"blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id",
+				"exactly one of base_frame_id or base_hull_id",
+				actual,
+			))
 		}
 	case model.CmdBlueprintSetComponent:
-		for _, field := range []string{"blueprint_id", "slot_id", "component_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("blueprint_set_component requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "blueprint_id", "slot_id", "component_id")...)
 	case model.CmdBlueprintValidate, model.CmdBlueprintFinalize:
-		if _, ok := cmd.Payload["blueprint_id"]; !ok {
-			return fmt.Errorf("%s requires payload.blueprint_id", cmd.Type)
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "blueprint_id")...)
 	case model.CmdBlueprintVariant:
-		for _, field := range []string{"parent_blueprint_id", "blueprint_id", "allowed_slot_ids"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("blueprint_variant requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "parent_blueprint_id", "blueprint_id", "allowed_slot_ids")...)
 	case model.CmdQueueMilitaryProduction:
-		for _, field := range []string{"building_id", "deployment_hub_id", "blueprint_id", "count"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("queue_military_production requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "deployment_hub_id", "blueprint_id", "count")...)
 	case model.CmdRefitUnit:
-		for _, field := range []string{"building_id", "unit_id", "target_blueprint_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("refit_unit requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "unit_id", "target_blueprint_id")...)
 	case model.CmdFleetAssign:
-		if _, ok := cmd.Payload["fleet_id"]; !ok {
-			return fmt.Errorf("fleet_assign requires payload.fleet_id")
-		}
-		if _, ok := cmd.Payload["formation"]; !ok {
-			return fmt.Errorf("fleet_assign requires payload.formation")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "fleet_id", "formation")...)
 	case model.CmdFleetAttack:
-		for _, field := range []string{"fleet_id", "planet_id", "target_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("fleet_attack requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "fleet_id", "planet_id", "target_id")...)
 	case model.CmdFleetMove:
-		for _, field := range []string{"fleet_id", "target_system_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("fleet_move requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "fleet_id", "target_system_id")...)
 	case model.CmdFleetDisband:
-		if _, ok := cmd.Payload["fleet_id"]; !ok {
-			return fmt.Errorf("fleet_disband requires payload.fleet_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "fleet_id")...)
 	case model.CmdTaskForceCreate:
-		if _, ok := cmd.Payload["task_force_id"]; !ok {
-			return fmt.Errorf("task_force_create requires payload.task_force_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_force_id")...)
 	case model.CmdTaskForceAssign:
-		for _, field := range []string{"task_force_id", "member_kind", "member_ids"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("task_force_assign requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "member_kind", "member_ids")...)
 	case model.CmdTaskForceSetStance:
-		for _, field := range []string{"task_force_id", "stance"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("task_force_set_stance requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "stance")...)
 	case model.CmdTaskForceDeploy:
-		if _, ok := cmd.Payload["task_force_id"]; !ok {
-			return fmt.Errorf("task_force_deploy requires payload.task_force_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_force_id")...)
 	case model.CmdTheaterCreate:
-		if _, ok := cmd.Payload["theater_id"]; !ok {
-			return fmt.Errorf("theater_create requires payload.theater_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "theater_id")...)
 	case model.CmdTheaterDefineZone:
-		for _, field := range []string{"theater_id", "zone_type"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("theater_define_zone requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "theater_id", "zone_type")...)
 	case model.CmdTheaterSetObjective:
-		for _, field := range []string{"theater_id", "objective_type"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("theater_set_objective requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "theater_id", "objective_type")...)
 	case model.CmdBlockadePlanet:
-		for _, field := range []string{"task_force_id", "planet_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("blockade_planet requires payload.%s", field)
-			}
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "planet_id")...)
 	case model.CmdLandingStart:
-		for _, field := range []string{"task_force_id", "planet_id"} {
-			if _, ok := cmd.Payload[field]; !ok {
-				return fmt.Errorf("landing_start requires payload.%s", field)
-			}
-		}
-	case model.CmdUpgrade:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("upgrade requires target.entity_id")
-		}
-	case model.CmdDemolish:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("demolish requires target.entity_id")
-		}
-	case model.CmdConfigureLogisticsStation:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("configure_logistics_station requires target.entity_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "planet_id")...)
+	case model.CmdUpgrade, model.CmdDemolish, model.CmdConfigureLogisticsStation:
+		issues = append(issues, requireTargetEntityID(cmd)...)
 	case model.CmdConfigureLogisticsSlot:
-		if cmd.Target.EntityID == "" {
-			return fmt.Errorf("configure_logistics_slot requires target.entity_id")
-		}
-		if _, ok := cmd.Payload["scope"]; !ok {
-			return fmt.Errorf("configure_logistics_slot requires payload.scope")
-		}
-		if _, ok := cmd.Payload["item_id"]; !ok {
-			return fmt.Errorf("configure_logistics_slot requires payload.item_id")
-		}
-		if _, ok := cmd.Payload["mode"]; !ok {
-			return fmt.Errorf("configure_logistics_slot requires payload.mode")
-		}
-		if _, ok := cmd.Payload["local_storage"]; !ok {
-			return fmt.Errorf("configure_logistics_slot requires payload.local_storage")
-		}
+		issues = append(issues, requireTargetEntityID(cmd)...)
+		issues = append(issues, requirePayload(cmd.Payload, "scope", "item_id", "mode", "local_storage")...)
 	case model.CmdCancelConstruction, model.CmdRestoreConstruction:
-		if _, ok := cmd.Payload["task_id"]; !ok {
-			return fmt.Errorf("%s requires payload.task_id", cmd.Type)
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "task_id")...)
 	case model.CmdStartResearch, model.CmdCancelResearch:
-		if _, ok := cmd.Payload["tech_id"]; !ok {
-			return fmt.Errorf("%s requires payload.tech_id", cmd.Type)
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "tech_id")...)
 	case model.CmdTransferItem:
-		if _, ok := cmd.Payload["building_id"]; !ok {
-			return fmt.Errorf("transfer_item requires payload.building_id")
-		}
-		if _, ok := cmd.Payload["item_id"]; !ok {
-			return fmt.Errorf("transfer_item requires payload.item_id")
-		}
-		if _, ok := cmd.Payload["quantity"]; !ok {
-			return fmt.Errorf("transfer_item requires payload.quantity")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "item_id", "quantity")...)
 	case model.CmdSwitchActivePlanet:
-		if _, ok := cmd.Payload["planet_id"]; !ok {
-			return fmt.Errorf("switch_active_planet requires payload.planet_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "planet_id")...)
 	case model.CmdSetRayReceiverMode:
-		if _, ok := cmd.Payload["building_id"]; !ok {
-			return fmt.Errorf("set_ray_receiver_mode requires payload.building_id")
-		}
-		if _, ok := cmd.Payload["mode"]; !ok {
-			return fmt.Errorf("set_ray_receiver_mode requires payload.mode")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "mode")...)
 	case model.CmdLaunchSolarSail:
-		if _, ok := cmd.Payload["building_id"]; !ok {
-			return fmt.Errorf("launch_solar_sail requires payload.building_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id")...)
 	case model.CmdLaunchRocket:
-		if _, ok := cmd.Payload["building_id"]; !ok {
-			return fmt.Errorf("launch_rocket requires payload.building_id")
-		}
-		if _, ok := cmd.Payload["system_id"]; !ok {
-			return fmt.Errorf("launch_rocket requires payload.system_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "building_id", "system_id")...)
 	case model.CmdBuildDysonNode:
-		if _, ok := cmd.Payload["system_id"]; !ok {
-			return fmt.Errorf("build_dyson_node requires payload.system_id")
-		}
-		if _, ok := cmd.Payload["layer_index"]; !ok {
-			return fmt.Errorf("build_dyson_node requires payload.layer_index")
-		}
-		if _, ok := cmd.Payload["latitude"]; !ok {
-			return fmt.Errorf("build_dyson_node requires payload.latitude")
-		}
-		if _, ok := cmd.Payload["longitude"]; !ok {
-			return fmt.Errorf("build_dyson_node requires payload.longitude")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "system_id", "layer_index", "latitude", "longitude")...)
 	case model.CmdBuildDysonFrame:
-		if _, ok := cmd.Payload["system_id"]; !ok {
-			return fmt.Errorf("build_dyson_frame requires payload.system_id")
-		}
-		if _, ok := cmd.Payload["layer_index"]; !ok {
-			return fmt.Errorf("build_dyson_frame requires payload.layer_index")
-		}
-		if _, ok := cmd.Payload["node_a_id"]; !ok {
-			return fmt.Errorf("build_dyson_frame requires payload.node_a_id")
-		}
-		if _, ok := cmd.Payload["node_b_id"]; !ok {
-			return fmt.Errorf("build_dyson_frame requires payload.node_b_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "system_id", "layer_index", "node_a_id", "node_b_id")...)
 	case model.CmdBuildDysonShell:
-		if _, ok := cmd.Payload["system_id"]; !ok {
-			return fmt.Errorf("build_dyson_shell requires payload.system_id")
-		}
-		if _, ok := cmd.Payload["layer_index"]; !ok {
-			return fmt.Errorf("build_dyson_shell requires payload.layer_index")
-		}
-		if _, ok := cmd.Payload["latitude_min"]; !ok {
-			return fmt.Errorf("build_dyson_shell requires payload.latitude_min")
-		}
-		if _, ok := cmd.Payload["latitude_max"]; !ok {
-			return fmt.Errorf("build_dyson_shell requires payload.latitude_max")
-		}
-		if _, ok := cmd.Payload["coverage"]; !ok {
-			return fmt.Errorf("build_dyson_shell requires payload.coverage")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "system_id", "layer_index", "latitude_min", "latitude_max", "coverage")...)
 	case model.CmdDemolishDyson:
-		if _, ok := cmd.Payload["system_id"]; !ok {
-			return fmt.Errorf("demolish_dyson requires payload.system_id")
-		}
-		if _, ok := cmd.Payload["component_type"]; !ok {
-			return fmt.Errorf("demolish_dyson requires payload.component_type")
-		}
-		if _, ok := cmd.Payload["component_id"]; !ok {
-			return fmt.Errorf("demolish_dyson requires payload.component_id")
-		}
+		issues = append(issues, requirePayload(cmd.Payload, "system_id", "component_type", "component_id")...)
 	default:
-		return fmt.Errorf("unknown command type: %s", cmd.Type)
+		issues = append(issues, model.UnknownCommandIssue(string(cmd.Type)))
+	}
+	return issues
+}
+
+func requirePayload(payload map[string]any, fields ...string) []model.CommandIssue {
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	var issues []model.CommandIssue
+	for _, field := range fields {
+		if _, ok := payload[field]; !ok {
+			issues = append(issues, model.MissingFieldIssue("payload."+field))
+		}
+	}
+	return issues
+}
+
+func requireTargetEntityID(cmd model.Command) []model.CommandIssue {
+	if cmd.Target.EntityID == "" {
+		return []model.CommandIssue{model.MissingFieldIssue("target.entity_id")}
+	}
+	return nil
+}
+
+func requireTargetPosition(cmd model.Command) []model.CommandIssue {
+	if cmd.Target.Position == nil {
+		return []model.CommandIssue{model.MissingFieldIssue("target.position")}
+	}
+	return nil
+}
+
+func requireTargetGalaxyID(cmd model.Command) []model.CommandIssue {
+	if cmd.Target.GalaxyID == "" {
+		return []model.CommandIssue{model.MissingFieldIssue("target.galaxy_id")}
+	}
+	return nil
+}
+
+func requireTargetSystemID(cmd model.Command) []model.CommandIssue {
+	if cmd.Target.SystemID == "" {
+		return []model.CommandIssue{model.MissingFieldIssue("target.system_id")}
+	}
+	return nil
+}
+
+func requireTargetPlanetID(cmd model.Command) []model.CommandIssue {
+	if cmd.Target.PlanetID == "" {
+		return []model.CommandIssue{model.MissingFieldIssue("target.planet_id")}
+	}
+	return nil
+}
+
+func requireTargetLayer(cmd model.Command, expected string) []model.CommandIssue {
+	if cmd.Target.Layer != "" && cmd.Target.Layer != expected {
+		return []model.CommandIssue{model.InvalidValueIssue(
+			"target.layer",
+			fmt.Sprintf("target.layer must be %s", expected),
+			expected,
+			cmd.Target.Layer,
+		)}
 	}
 	return nil
 }

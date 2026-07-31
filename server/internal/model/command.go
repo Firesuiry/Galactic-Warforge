@@ -111,6 +111,7 @@ type CommandResult struct {
 	Status       CommandStatus                 `json:"status"`
 	Code         ResultCode                    `json:"code"`
 	Message      string                        `json:"message"`
+	Issues       []CommandIssue                `json:"issues,omitempty"`
 	Validation   *WarBlueprintValidationResult `json:"validation,omitempty"`
 }
 

@@ -1547,6 +1547,40 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   ]
 }
 ```
+- 结构化预校验错误（`results[].issues[]`）:
+  - gateway 在入队前做字段级结构校验；失败时 HTTP 仍为 `202`，但 `accepted=false` 且整批不入队
+  - `results[].message` 保留人类可读摘要；`results[].issues[]` 给 agent/CLI 做机器可读修复
+  - issue 字段：
+    - `code`：`missing_field` / `invalid_value` / `unknown_command` / `unauthorized` / `duplicate_request`
+    - `field`：出错路径，如 `payload.building_type`、`target.position`、`type`
+    - `message`：该 issue 的人类可读说明
+    - `expected`：合法取值提示（如 `"required"`、枚举列表、约束描述）
+    - `actual`：实际收到的值（可选）
+  - 预校验失败示例（缺 `target.position` 的 build）:
+```json
+{
+  "request_id": "uuid",
+  "accepted": false,
+  "enqueue_tick": 120,
+  "results": [
+    {
+      "command_index": 0,
+      "status": "rejected",
+      "code": "VALIDATION_FAILED",
+      "message": "target.position is required",
+      "issues": [
+        {
+          "code": "missing_field",
+          "field": "target.position",
+          "message": "target.position is required",
+          "expected": "required"
+        }
+      ]
+    }
+  ]
+}
+```
+  - 说明：本字段目前覆盖 gateway 预校验与权限拒绝；runtime 执行失败（tick 内 `command_result`）仍以 `code`/`message` 为主，后续可再扩展
 
 ---
 
