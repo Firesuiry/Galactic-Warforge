@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import type { WarTaskForceStance } from '@shared/types';
 import { useQuery } from '@tanstack/react-query';
@@ -36,6 +37,15 @@ import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
 type FeedbackSection = 'blueprint' | 'industry' | 'theater' | 'reports';
+
+const WAR_TAB_IDS: FeedbackSection[] = ['blueprint', 'industry', 'theater', 'reports'];
+
+function parseWarTab(raw: string | null): FeedbackSection | null {
+  if (!raw) {
+    return null;
+  }
+  return WAR_TAB_IDS.includes(raw as FeedbackSection) ? (raw as FeedbackSection) : null;
+}
 
 const TASK_FORCE_STANCES: WarTaskForceStance[] = [
   'hold',
@@ -104,6 +114,7 @@ function resolveSystemId(input: {
 export function WarPage() {
   const client = useApiClient();
   const session = useSessionSnapshot();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedBlueprintId, setSelectedBlueprintId] = useState('');
   const [selectedDeployBlueprintId, setSelectedDeployBlueprintId] = useState('');
@@ -116,9 +127,10 @@ export function WarPage() {
   const [createBlueprintName, setCreateBlueprintName] = useState('');
   const [createDomain, setCreateDomain] = useState<WarDomain>('space');
   const [createBaseId, setCreateBaseId] = useState('');
-  // 右侧工作台抽屉：默认收起为边缘把手；选中战场标记/新命令回执时自动滑出
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<FeedbackSection>('blueprint');
+  // 右侧工作台抽屉：默认收起为边缘把手；选中战场标记/新命令回执/?tab= 深链时自动滑出
+  const initialTab = parseWarTab(searchParams.get('tab')) ?? 'blueprint';
+  const [drawerOpen, setDrawerOpen] = useState(() => Boolean(parseWarTab(searchParams.get('tab'))));
+  const [activeTab, setActiveTab] = useState<FeedbackSection>(initialTab);
 
   const summaryQuery = useQuery({
     queryKey: ['summary', session.serverUrl, session.playerId],
@@ -343,6 +355,26 @@ export function WarPage() {
     }
   }, [feedbacks]);
 
+  // 深链：/war?tab=industry|blueprint|theater|reports → 打开抽屉并落到对应分组
+  useEffect(() => {
+    const tab = parseWarTab(searchParams.get('tab'));
+    if (!tab) {
+      return;
+    }
+    setActiveTab(tab);
+    setDrawerOpen(true);
+  }, [searchParams]);
+
+  function handleTabChange(id: string) {
+    const next = id as FeedbackSection;
+    setActiveTab(next);
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      params.set('tab', next);
+      return params;
+    }, { replace: true });
+  }
+
   if (isLoading) {
     return <div className="panel">正在加载战争工作台...</div>;
   }
@@ -518,9 +550,32 @@ export function WarPage() {
           fleets={fleets}
           playerId={session.playerId}
           onSelect={(next) => {
-            // 选中战场标记自动滑出抽屉（对齐行星页「选中实体自动滑出」）
-            if (next) {
-              setDrawerOpen(true);
+            // 选中战场标记：联动命令表单默认目标 + 自动滑出抽屉
+            if (!next) {
+              return;
+            }
+            setDrawerOpen(true);
+            if (next.kind === 'planet') {
+              setSelectedPlanetId(next.id);
+              setActiveTab('theater');
+              return;
+            }
+            if (next.kind === 'fleet') {
+              // 舰队标记 id = fleet_id：若隶属某任务群则回填任务群，并切到战区/战报
+              const owningTaskForce = taskForces.find((tf) =>
+                (tf.members ?? []).some((member) => member.entity_id === next.id),
+              );
+              if (owningTaskForce) {
+                setSelectedTaskForceId(owningTaskForce.id);
+                setActiveTab('theater');
+              } else {
+                setActiveTab('reports');
+              }
+              return;
+            }
+            if (next.kind === 'contact') {
+              // 敌方接触：打开战报/舰队指挥，便于下达攻击
+              setActiveTab('reports');
             }
           }}
         />
@@ -559,7 +614,7 @@ export function WarPage() {
             idPrefix="war-drawer"
             tabs={WAR_DRAWER_TABS}
             activeId={activeTab}
-            onChange={(id) => setActiveTab(id as FeedbackSection)}
+            onChange={handleTabChange}
           />
           <div className="planet-detail-shell__content war-drawer__content">
             {activeTab === 'blueprint' ? (
@@ -628,7 +683,7 @@ export function WarPage() {
                   ))}
                 </Select>
               </label>
-              <button className="primary-link war-button" type="button" onClick={handleCreateBlueprint}>
+              <button className="primary-link war-button" type="button" disabled={isPending} onClick={handleCreateBlueprint}>
                 创建蓝图
               </button>
               <p className="subtle-text">
@@ -665,10 +720,10 @@ export function WarPage() {
                     <span className="war-chip">体积 {formatMetric(selectedBlueprint.validation.usage?.volume)}</span>
                   </div>
                   <div className="war-action-row">
-                    <button className="secondary-button war-button" type="button" onClick={handleValidateBlueprint}>
+                    <button className="secondary-button war-button" type="button" disabled={isPending} onClick={handleValidateBlueprint}>
                       校验蓝图
                     </button>
-                    <button className="secondary-button war-button" type="button" onClick={handleFinalizeBlueprint}>
+                    <button className="secondary-button war-button" type="button" disabled={isPending} onClick={handleFinalizeBlueprint}>
                       定型蓝图
                     </button>
                   </div>
@@ -706,7 +761,7 @@ export function WarPage() {
                         ))}
                       </Select>
                     </label>
-                    <button className="secondary-button war-button" type="button" onClick={() => handleSetBlueprintSlot(slot.id)}>
+                    <button className="secondary-button war-button" type="button" disabled={isPending} onClick={() => handleSetBlueprintSlot(slot.id)}>
                       保存槽位
                     </button>
                   </div>
@@ -775,13 +830,25 @@ export function WarPage() {
 
             <article className="war-card">
               <h3>部署尝试</h3>
+              {blueprints.length === 0 || deploymentHubs.length === 0 ? (
+                <p className="subtle-text" data-testid="deploy-empty-hint">
+                  {blueprints.length === 0 && deploymentHubs.length === 0
+                    ? '暂无蓝图与部署枢纽：先创建并定型蓝图，再在行星建造部署枢纽。'
+                    : blueprints.length === 0
+                      ? '暂无可用蓝图：到「蓝图」页签创建/定型后再部署。'
+                      : '暂无部署枢纽：在行星建造部署枢纽后，才能编成舰队或部署地面单位。'}
+                </p>
+              ) : null}
               <label className="war-field">
                 <span>部署蓝图</span>
                 <Select
                   value={selectedDeployBlueprint?.id ?? ''}
                   onChange={(event) => setSelectedDeployBlueprintId(event.target.value)}
+                  disabled={blueprints.length === 0}
                 >
-                  {blueprints.map((blueprint) => (
+                  {blueprints.length === 0 ? (
+                    <option value="">暂无蓝图</option>
+                  ) : blueprints.map((blueprint) => (
                     <option key={blueprint.id} value={blueprint.id}>
                       {blueprint.name} ({blueprint.id})
                     </option>
@@ -793,8 +860,11 @@ export function WarPage() {
                 <Select
                   value={selectedDeploymentHub?.building_id ?? ''}
                   onChange={(event) => setSelectedDeploymentHubId(event.target.value)}
+                  disabled={deploymentHubs.length === 0}
                 >
-                  {deploymentHubs.map((hub) => (
+                  {deploymentHubs.length === 0 ? (
+                    <option value="">暂无部署枢纽</option>
+                  ) : deploymentHubs.map((hub) => (
                     <option key={hub.building_id} value={hub.building_id}>
                       {hub.building_type} ({hub.building_id})
                     </option>
@@ -813,7 +883,12 @@ export function WarPage() {
                   </div>
                 </dl>
               ) : null}
-              <button className="secondary-button war-button" type="button" onClick={handleDeploy}>
+              <button
+                className="secondary-button war-button"
+                type="button"
+                disabled={isPending || blueprints.length === 0 || deploymentHubs.length === 0}
+                onClick={handleDeploy}
+              >
                 尝试部署
               </button>
               <ul className="war-list">
@@ -909,13 +984,13 @@ export function WarPage() {
                 </Select>
               </label>
               <div className="war-action-row">
-                <button className="secondary-button war-button" type="button" onClick={handleTaskForceStanceUpdate}>
+                <button className="secondary-button war-button" type="button" disabled={isPending || !selectedTaskForce?.id} onClick={handleTaskForceStanceUpdate}>
                   更新姿态
                 </button>
-                <button className="secondary-button war-button" type="button" onClick={handleBlockade}>
+                <button className="secondary-button war-button" type="button" disabled={isPending || !selectedTaskForce?.id || !selectedPlanetId} onClick={handleBlockade}>
                   发起封锁
                 </button>
-                <button className="secondary-button war-button" type="button" onClick={handleLanding}>
+                <button className="secondary-button war-button" type="button" disabled={isPending || !selectedTaskForce?.id || !selectedPlanetId} onClick={handleLanding}>
                   发起登陆
                 </button>
               </div>

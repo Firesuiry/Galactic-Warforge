@@ -8,7 +8,7 @@ import { FleetSelectionBar } from '@/features/starmap/FleetSelectionBar';
 import { resetStarmapViewStore, useStarmapViewStore } from '@/features/starmap/store';
 import type { WarCommandInput } from '@/features/war/war-query-keys';
 
-const { mockClient, runCommandMock } = vi.hoisted(() => ({
+const { mockClient, runCommandMock, sfxMock } = vi.hoisted(() => ({
   mockClient: {
     cmdFleetAssign: vi.fn(),
     cmdFleetDisband: vi.fn(),
@@ -16,10 +16,19 @@ const { mockClient, runCommandMock } = vi.hoisted(() => ({
   },
   // 透传执行 execute，使指令客户端调用可被断言
   runCommandMock: vi.fn((input: WarCommandInput) => void input.execute()),
+  sfxMock: {
+    uiClick: vi.fn(),
+    commandOk: vi.fn(),
+    commandFail: vi.fn(),
+  },
 }));
 
 vi.mock('@/hooks/use-api-client', () => ({
   useApiClient: () => mockClient,
+}));
+
+vi.mock('@/engine/audio', () => ({
+  sfx: sfxMock,
 }));
 
 function makeFleet(): FleetDetailView {
@@ -86,13 +95,14 @@ describe('FleetSelectionBar', () => {
     expect(runCommandMock).toHaveBeenCalled();
   });
 
-  it('攻击目标：进入 attack 模式并聚焦舰队所在星系', async () => {
+  it('攻击目标：进入 attack 模式并聚焦舰队所在星系，且播 uiClick', async () => {
     const user = userEvent.setup();
     renderBar();
 
     await user.click(screen.getByRole('button', { name: '攻击目标' }));
     expect(useStarmapViewStore.getState().interactionMode).toEqual({ kind: 'attack', fleetId: 'fleet-1' });
     expect(useStarmapViewStore.getState().focusedSystemId).toBe('sys-1');
+    expect(sfxMock.uiClick).toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: '取消攻击' }));
     expect(useStarmapViewStore.getState().interactionMode.kind).toBe('inspect');
@@ -108,7 +118,7 @@ describe('FleetSelectionBar', () => {
     expect(useStarmapViewStore.getState().selectedFleetId).toBeNull();
   });
 
-  it('跃迁：进入 move 模式并退回银河层（等待点选目标星系）', async () => {
+  it('跃迁：进入 move 模式并退回银河层（等待点选目标星系），且播 uiClick', async () => {
     const user = userEvent.setup();
     useStarmapViewStore.getState().focusSystem('sys-1');
     renderBar();
@@ -116,6 +126,7 @@ describe('FleetSelectionBar', () => {
     await user.click(screen.getByRole('button', { name: '跃迁' }));
     expect(useStarmapViewStore.getState().interactionMode).toEqual({ kind: 'move', fleetId: 'fleet-1' });
     expect(useStarmapViewStore.getState().focusedSystemId).toBeNull();
+    expect(sfxMock.uiClick).toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: '取消跃迁' }));
     expect(useStarmapViewStore.getState().interactionMode.kind).toBe('inspect');

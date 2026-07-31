@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import type {
   FleetDetailView,
@@ -120,9 +121,12 @@ export function FleetActionForm({
 
   if (fleets.length === 0) {
     return (
-      <article className="war-card">
+      <article className="war-card" data-testid="fleet-action-empty">
         <h3>舰队指挥</h3>
-        <p className="subtle-text">暂无可用舰队，先在工作台编成舰队后再下达指挥。</p>
+        <p className="subtle-text">暂无可用舰队，先在军工部署编成舰队后再下达指挥。</p>
+        <Link className="primary-link war-button" to="/war?tab=industry">
+          前往军工部署
+        </Link>
       </article>
     );
   }

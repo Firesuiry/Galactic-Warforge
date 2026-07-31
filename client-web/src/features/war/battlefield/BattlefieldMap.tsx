@@ -6,6 +6,7 @@ import type {
   SystemRuntimeView,
 } from '@shared/types';
 
+import { sfx } from '@/engine/audio';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import { PixiStage } from '@/engine/PixiStage';
 import { BattlefieldScene } from '@/features/war/battlefield/battlefield-scene';
@@ -63,6 +64,9 @@ export function BattlefieldMap({
           const frozen = new URLSearchParams(window.location.search).has('freeze');
           const scene = new BattlefieldScene(app, {
             onSelect: (next) => {
+              if (next) {
+                sfx.uiClick();
+              }
               setSelection(next);
               onSelectRef.current?.(next);
             },

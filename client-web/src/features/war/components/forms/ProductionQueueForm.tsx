@@ -67,7 +67,29 @@ export function ProductionQueueForm({
   }
 
   if (!factory || !hub || !blueprint) {
-    return null;
+    return (
+      <article className="war-card" data-testid="production-queue-empty">
+        <h3>量产排队</h3>
+        <p className="subtle-text">
+          暂不可用：
+          {[
+            !factory ? '量产工厂（需具备生产功能的建筑）' : null,
+            !hub ? '部署枢纽' : null,
+            !blueprint ? '军工蓝图' : null,
+          ].filter(Boolean).join('、')}
+          。
+        </p>
+        {!blueprint ? (
+          <p className="subtle-text">先到「蓝图」页签创建并定型蓝图，再到军工部署/量产。</p>
+        ) : null}
+        {!hub ? (
+          <p className="subtle-text">在行星建造部署枢纽后，此处才会出现量产入口。</p>
+        ) : null}
+        {!factory ? (
+          <p className="subtle-text">在当前行星建造具备生产功能的工厂后，即可排队量产。</p>
+        ) : null}
+      </article>
+    );
   }
 
   return (

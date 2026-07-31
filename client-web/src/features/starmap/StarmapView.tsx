@@ -5,10 +5,11 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { PixiStage } from '@/engine/PixiStage';
 import { Button } from '@/common/controls';
+import { sfx } from '@/engine/audio';
 import { FleetSelectionBar } from '@/features/starmap/FleetSelectionBar';
 import {
   computeSystemLanes,
@@ -124,6 +125,7 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           commandRef.current.notify('reports', { tone: 'warning', title: resolution.reason });
           return;
         }
+        sfx.uiClick();
         commandRef.current.runCommand({
           section: 'reports',
           invalidateKeys: [['war-fleets', scope.serverUrl, scope.playerId]],
@@ -131,6 +133,9 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
         });
         state.exitInteractionMode();
         return;
+      }
+      if (systemId) {
+        sfx.uiClick();
       }
       state.select(systemId ? { kind: 'system', id: systemId } : null);
     },
@@ -154,6 +159,7 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           commandRef.current.notify('reports', { tone: 'warning', title: resolution.reason });
           return;
         }
+        sfx.uiClick();
         commandRef.current.runCommand({
           section: 'reports',
           invalidateKeys: [
@@ -165,6 +171,9 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
         state.exitInteractionMode();
         return;
       }
+      if (planetId) {
+        sfx.uiClick();
+      }
       state.select(planetId && systemId ? { kind: 'planet', id: planetId, systemId } : null);
     },
     onSelectFleet: (systemId: string | null) => {
@@ -173,9 +182,14 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
         state.selectFleet(null);
         return;
       }
-      state.selectFleet(pickFleetInSystem(fleetsRef.current ?? [], systemId, state.selectedFleetId));
+      const nextFleetId = pickFleetInSystem(fleetsRef.current ?? [], systemId, state.selectedFleetId);
+      if (nextFleetId) {
+        sfx.uiClick();
+      }
+      state.selectFleet(nextFleetId);
     },
     onEnterSystem: (systemId: string) => {
+      sfx.uiClick();
       useStarmapViewStore.getState().focusSystem(systemId);
     },
     onExitToGalaxy: () => {
@@ -425,19 +439,47 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
           </section>
         ) : null}
 
-        {selectedFleet ? (
-          <FleetSelectionBar
-            fleet={selectedFleet}
-            systemName={selectedFleetSystemName}
-            resolveSystemName={(systemId) => (
-              galaxyQuery.data?.systems?.find((system) => system.system_id === systemId)?.name || systemId
-            )}
-            scope={scope}
-            runCommand={runCommand}
-            feedbacks={feedbacks}
-            isPending={isPending}
-          />
-        ) : null}
+        {(() => {
+          const reportFeedbacks = feedbacks.reports ?? [];
+          const noFleets = !fleetsQuery.isLoading && (fleetsQuery.data?.length ?? 0) === 0;
+          // 无选中舰队时仍挂 reports 反馈与空舰队 CTA，避免校验失败/解散后 banner 消失
+          if (selectedFleet) {
+            return (
+              <FleetSelectionBar
+                fleet={selectedFleet}
+                systemName={selectedFleetSystemName}
+                resolveSystemName={(systemId) => (
+                  galaxyQuery.data?.systems?.find((system) => system.system_id === systemId)?.name || systemId
+                )}
+                scope={scope}
+                runCommand={runCommand}
+                feedbacks={feedbacks}
+                isPending={isPending}
+              />
+            );
+          }
+          if (reportFeedbacks.length === 0 && !noFleets) {
+            return null;
+          }
+          return (
+            <div className="starmap-fleet-bar-wrap" data-testid="starmap-feedback-host">
+              {reportFeedbacks.map((feedback, index) => (
+                <div className={`status-banner status-banner--${feedback.tone}`} key={`${feedback.title}-${index}`}>
+                  <strong>{feedback.title}</strong>
+                  {feedback.detail ? <span>{feedback.detail}</span> : null}
+                </div>
+              ))}
+              {noFleets ? (
+                <div className="starmap-empty-cta" data-testid="starmap-empty-fleets">
+                  <span>暂无可用舰队</span>
+                  <Link className="starmap-empty-cta__link" to="/war?tab=industry">
+                    去军工编成舰队
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
 
         <p className="starmap-hint">
           {interactionMode.kind === 'attack'

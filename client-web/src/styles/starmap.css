@@ -277,3 +277,31 @@
   border-color: rgba(255, 87, 87, 0.5) !important;
   color: var(--danger) !important;
 }
+
+/* 无舰队/无选中时的底部引导条（与情境条同宿主） */
+.starmap-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border-glow);
+  background: rgba(10, 18, 34, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-hud);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.starmap-empty-cta__link {
+  color: var(--accent-2);
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.starmap-empty-cta__link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
