@@ -40,14 +40,14 @@
 **普通新局默认入口**
 - `config-dev.yaml + map.yaml` 现在就是一条可直接从 fresh save 起步的官方路线。
 - `battlefield.victory_rule` 当前支持 `elimination`、`mission_complete`、`hybrid` 三种取值；仓库内当前提供的 `config.yaml`、`config-dev.yaml`、`config-midgame.yaml` 都显式设置为 `hybrid`，即 `mission_complete` 科研胜利与基地消灭胜同时有效。
-- 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`；这门 0 级科技现在会直接解锁 `matrix_lab + wind_turbine`，因此第一条真实入口是先补风机、再摆研究站。
+- 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`；这门 0 级科技会直接解锁整套基础工业建筑：`matrix_lab`、`wind_turbine`、`mining_machine`、`arc_smelter`、`tesla_tower`、`conveyor_belt_mk1`、`sorter_mk1`、`assembling_machine_mk1`，因此默认新局从拍风机、接电塔、压矿机开始，无需先研究。
 - `config-dev.yaml` 会为每名玩家预置一份最小启动包：
   - `minerals = 240`
   - `energy = 100`
-  - `inventory`: `electromagnetic_matrix x50`
+  - 不再预置 `electromagnetic_matrix`；第一门 `electromagnetism`（10 个电磁矩阵）必须由产业链自产：铁矿 -> 磁铁（`smelt_magnet`）-> 磁线圈（`magnetic_coil`），铁矿 -> 铁块、铜矿 -> 铜块 -> 电路板（`circuit_board`），磁线圈 + 电路板 -> 电磁矩阵（`electromagnetic_matrix` 配方无需研究，`assembling_machine_mk1` / `matrix_lab` / `self_evolution_lab` 均可生产）。
 - `battlefield_analysis_base` 本身不发电；如果不先补 `wind_turbine`，第一台空 `matrix_lab` 会停在无电状态。
-- 这份启动包的用途不是跳过前期，而是覆盖默认新局到第一条自给电磁矩阵产线之间的前期科研真空段；研究系统仍然要求真实 `running` 研究站与真实矩阵消耗。
-- 当前默认图上一组可直接复现的 starter 闭环是：`build 3 2 wind_turbine` -> `build 2 3 matrix_lab` -> `transfer <matrix_lab_id> electromagnetic_matrix 10` -> `start_research electromagnetism` -> `build 4 2 tesla_tower` -> `build 5 1 mining_machine`；完成后首台研究站仍保留，且还剩 `20 minerals`。
+- 研究系统仍然要求真实 `running` 研究站与真实矩阵消耗；`electromagnetism` 完成后解锁 `depot_mk1`，`basic_logistics_system` 解锁 `splitter` / `sorter_mk2` / `traffic_monitor`。旧的 `electromagnetic_matrix`、`improved_logistics` 两门科技已从树中移除（前者配方改为开局可用，后者的解锁下移给 `basic_logistics_system`）。
+- 当前默认图上一组可直接复现的 starter 闭环是：`build 3 2 wind_turbine` -> `build 4 2 tesla_tower` -> `build 5 1 mining_machine`；矩阵产线投产后 `build 2 3 matrix_lab` -> `transfer <matrix_lab_id> electromagnetic_matrix 10` -> `start_research electromagnetism`。
 - minerals 持续收入规则：采集建筑把资源点产出写入自身 `Storage` 的同时，按实际入库数量 × `CollectModule.MineralsKickback` 折算 minerals 直充玩家矿物池；当前 `mining_machine = 1.0`、`advanced_mining_machine = 0.5`，`water_pump` / `oil_extractor` 等流体采集建筑为 0（不产矿）。因此 starter 闭环里的矿机一旦开跑，每入库存 1 单位矿就 +1 minerals（满功率 8/tick），本地存储堆满后停产、收入同步停止，需要传送带/仓库把矿拉走后恢复；该折算产出与物品产出共用同一份 `ProductionSettlementSnapshot` 事实源，在 `production_stats.by_item["minerals"]` 中可见。
 
 **官方中后期场景**
@@ -1057,7 +1057,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "footprint": {"width": 1, "height": 1},
       "build_cost": {"minerals": 20, "energy": 10},
       "buildable": true,
-      "unlock_tech": ["electromagnetism"],
+      "unlock_tech": ["dyson_sphere_program"],
       "power_range": 4,
       "icon_key": "tesla_tower",
       "color": "#74c0fc"
@@ -1379,7 +1379,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
   - `scan_system`：`target.system_id` 必填；`target.layer` 可填 `system`
   - `scan_planet`：`target.planet_id` 必填；`target.layer` 可填 `planet`
-  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（只校验资源点存在，不校验是否枯竭；建在枯竭点上采不到资源），枯竭（`depleted=true`）资源点不阻碍建造，任何建筑都可直接建在枯竭点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里第一台 `matrix_lab` 已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
+  - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（只校验资源点存在，不校验是否枯竭；建在枯竭点上采不到资源），枯竭（`depleted=true`）资源点不阻碍建造，任何建筑都可直接建在枯竭点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里 `matrix_lab` 与 `wind_turbine` / `mining_machine` / `arc_smelter` / `tesla_tower` / `conveyor_belt_mk1` / `sorter_mk1` / `assembling_machine_mk1` 均已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，例如 `worker`、`soldier`

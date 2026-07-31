@@ -10,7 +10,7 @@ import (
 	"siliconworld/internal/model"
 )
 
-func TestT092ConfigDevBootstrapProvidesFreshResearchMatrices(t *testing.T) {
+func TestT092ConfigDevBootstrapRequiresChainProducedMatrices(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	sourceConfigPath := filepath.Join(repoRoot, "server", "config-dev.yaml")
 	mapCfgPath := filepath.Join(repoRoot, "server", "map.yaml")
@@ -42,8 +42,8 @@ func TestT092ConfigDevBootstrapProvidesFreshResearchMatrices(t *testing.T) {
 		if player.Resources.Minerals != 240 || player.Resources.Energy != 100 {
 			t.Fatalf("unexpected bootstrap resources for %s: %+v", playerID, player.Resources)
 		}
-		if player.Inventory[model.ItemElectromagneticMatrix] != 50 {
-			t.Fatalf("expected %s to start with 50 electromagnetic_matrix, got %+v", playerID, player.Inventory)
+		if player.Inventory[model.ItemElectromagneticMatrix] != 0 {
+			t.Fatalf("expected %s to start without bootstrapped matrices (industry chain required), got %+v", playerID, player.Inventory)
 		}
 	}
 }

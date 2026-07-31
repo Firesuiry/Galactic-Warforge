@@ -56,9 +56,11 @@ const (
 	ItemCarbonNanotube = "carbon_nanotube"
 	ItemCrystalSilicon = "crystal_silicon"
 	ItemPlastic        = "plastic"
+	ItemMagnet         = "magnet"
 
 	ItemGear                         = "gear"
 	ItemMotor                        = "motor"
+	ItemMagneticCoil                 = "magnetic_coil"
 	ItemCircuitBoard                 = "circuit_board"
 	ItemMicrocrystalline             = "microcrystalline_component"
 	ItemProcessor                    = "processor"
@@ -389,6 +391,14 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 200,
 		UnitVolume: 1,
 	},
+	ItemMagnet: {
+		ID:         ItemMagnet,
+		Name:       "Magnet",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
 	ItemGear: {
 		ID:         ItemGear,
 		Name:       "Gear",
@@ -400,6 +410,14 @@ var itemCatalog = map[string]ItemDefinition{
 	ItemMotor: {
 		ID:         ItemMotor,
 		Name:       "Motor",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemMagneticCoil: {
+		ID:         ItemMagneticCoil,
+		Name:       "Magnetic Coil",
 		Category:   ItemCategoryComponent,
 		Form:       ResourceSolid,
 		StackLimit: 100,
