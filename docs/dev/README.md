@@ -12,6 +12,7 @@
 - `client-web.md`：Web 客户端定位、启动、页面能力与回归方式
 - `agent-gateway.md`：本地 Agent 网关说明
 - `server现状与差距.md`：当前实现到哪里、还有哪些关键缺口
+- `命令覆盖率矩阵.md`：T-D1 自动生成——server / shared / CLI / agent / GUI 指令面对照（`python3 scripts/command_coverage.py --write|--check`）
 
 ## 历史资料
 

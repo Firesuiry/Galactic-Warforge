@@ -26,6 +26,7 @@ import {
   cmdFleetAssign as apiFleetAssign,
   cmdFleetAttack as apiFleetAttack,
   cmdFleetDisband as apiFleetDisband,
+  cmdFleetMove as apiFleetMove,
   cmdLandingStart as apiLandingStart,
   cmdTransferItem as apiTransferItem,
   cmdSwitchActivePlanet as apiSwitchActivePlanet,
@@ -454,6 +455,17 @@ export async function cmdFleetDisband(args: string[]): Promise<string> {
   }
   try {
     return fmtCommandResponse(await apiFleetDisband(args[0]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdFleetMove(args: string[]): Promise<string> {
+  if (args.length < 2) {
+    return fmtError('Usage: fleet_move <fleet_id> <target_system_id>');
+  }
+  try {
+    return fmtCommandResponse(await apiFleetMove(args[0], args[1]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }

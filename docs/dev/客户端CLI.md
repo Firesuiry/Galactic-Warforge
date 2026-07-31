@@ -258,6 +258,7 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - `fleet_assign`
 - `fleet_attack`
 - `fleet_disband`
+- `fleet_move`
 - `move`
 - `attack`
 - `scan_galaxy`
@@ -289,6 +290,7 @@ build 11 6 conveyor_belt_mk3 --direction auto
    - `fleet_assign <fleet_id> <line|vee|circle|wedge>`
    - `fleet_attack <fleet_id> <planet_id> <target_id>`
    - `fleet_disband <fleet_id>`
+   - `fleet_move <fleet_id> <target_system_id>`
    - `fleet_status [fleet_id]`
    - `system_runtime [system_id]`
 
@@ -297,6 +299,7 @@ build 11 6 conveyor_belt_mk3 --direction auto
 - 部署枢纽必须带电并处于 `running`
 - `battlefield_analysis_base` 现在就是默认部署枢纽
 - `fleet_attack` 当前只支持同一恒星系内目标
+- `fleet_move` 要求目标星系与当前星系按 k 近邻航线直达、舰队 `state=idle` 且不在跃迁中；固定 10 tick 跃迁
 - `fleet_status` 会显示舰队武器、护盾、编队与最近攻击 tick
 - `system_runtime` 会显示该系统当前太阳帆与舰队运行态
 

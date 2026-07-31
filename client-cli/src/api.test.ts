@@ -13,6 +13,7 @@ import {
   cmdFleetAssign,
   cmdFleetAttack,
   cmdFleetDisband,
+  cmdFleetMove,
   cmdLandingStart,
   cmdLaunchRocket,
   cmdQueueMilitaryProduction,
@@ -58,6 +59,7 @@ describe('client api exports', () => {
     assert.equal(typeof cmdFleetAssign, 'function');
     assert.equal(typeof cmdFleetAttack, 'function');
     assert.equal(typeof cmdFleetDisband, 'function');
+    assert.equal(typeof cmdFleetMove, 'function');
     assert.equal(typeof fetchSystemRuntime, 'function');
     assert.equal(typeof fetchFleets, 'function');
     assert.equal(typeof fetchFleet, 'function');

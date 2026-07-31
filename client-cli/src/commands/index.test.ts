@@ -96,6 +96,7 @@ describe('fleet command registration', () => {
     assert.ok(COMMANDS.fleet_assign);
     assert.ok(COMMANDS.fleet_attack);
     assert.ok(COMMANDS.fleet_disband);
+    assert.ok(COMMANDS.fleet_move);
     assert.ok(COMMANDS.fleet_status);
     assert.ok(COMMANDS.system_runtime);
 

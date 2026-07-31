@@ -259,6 +259,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "hidden",
   },
   {
+    id: "fleet_move",
+    apiCommandName: "fleet_move",
+    cliCommandName: "fleet_move",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "system",
+    requiresActivePlanet: false,
+    webSurface: "optional",
+  },
+  {
     id: "task_force_create",
     apiCommandName: "task_force_create",
     cliCommandName: "task_force_create",

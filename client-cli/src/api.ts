@@ -81,6 +81,7 @@ export const cmdDeploySquad = client.cmdDeploySquad;
 export const cmdFleetAssign = client.cmdFleetAssign;
 export const cmdFleetAttack = client.cmdFleetAttack;
 export const cmdFleetDisband = client.cmdFleetDisband;
+export const cmdFleetMove = client.cmdFleetMove;
 export const cmdLandingStart = client.cmdLandingStart;
 export const cmdLaunchRocket = client.cmdLaunchRocket;
 export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;
