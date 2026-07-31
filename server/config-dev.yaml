@@ -13,9 +13,6 @@ players:
     bootstrap:
       minerals: 240
       energy: 100
-      inventory:
-        - item_id: "electromagnetic_matrix"
-          quantity: 50
     executor:
       build_efficiency: 1.0
       operate_range: 6
@@ -29,9 +26,6 @@ players:
     bootstrap:
       minerals: 240
       energy: 100
-      inventory:
-        - item_id: "electromagnetic_matrix"
-          quantity: 50
     executor:
       build_efficiency: 1.0
       operate_range: 6

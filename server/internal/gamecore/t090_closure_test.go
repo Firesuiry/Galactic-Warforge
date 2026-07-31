@@ -428,8 +428,8 @@ func TestT091SelfEvolutionLabSupportsResearchAndMatrixRecipes(t *testing.T) {
 	if accepted, remaining, err := productionLab.Storage.Receive(model.ItemCircuitBoard, 1); err != nil || accepted != 1 || remaining != 0 {
 		t.Fatalf("prime self_evolution_lab with circuit_board failed: accepted=%d remaining=%d err=%v", accepted, remaining, err)
 	}
-	if accepted, remaining, err := productionLab.Storage.Receive(model.ItemEnergeticGraphite, 1); err != nil || accepted != 1 || remaining != 0 {
-		t.Fatalf("prime self_evolution_lab with energetic_graphite failed: accepted=%d remaining=%d err=%v", accepted, remaining, err)
+	if accepted, remaining, err := productionLab.Storage.Receive(model.ItemMagneticCoil, 1); err != nil || accepted != 1 || remaining != 0 {
+		t.Fatalf("prime self_evolution_lab with magnetic_coil failed: accepted=%d remaining=%d err=%v", accepted, remaining, err)
 	}
 
 	for i := 0; i < 70; i++ {

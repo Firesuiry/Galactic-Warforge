@@ -236,6 +236,12 @@ var defaultTechDefinitions = []TechDefinition{
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "matrix_lab"},
 			{Type: TechUnlockBuilding, ID: "wind_turbine"},
+			{Type: TechUnlockBuilding, ID: "mining_machine"},
+			{Type: TechUnlockBuilding, ID: "arc_smelter"},
+			{Type: TechUnlockBuilding, ID: "power_pylon"},
+			{Type: TechUnlockBuilding, ID: "conveyor_mk1"},
+			{Type: TechUnlockBuilding, ID: "sorter_mk1"},
+			{Type: TechUnlockBuilding, ID: "assembler_mk1"},
 		},
 	},
 
@@ -250,8 +256,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"dyson_sphere_program"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "power_pylon"},
-			{Type: TechUnlockBuilding, ID: "mining_machine"},
+			{Type: TechUnlockBuilding, ID: "storage_mk1"},
 		},
 	},
 
@@ -266,9 +271,9 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "conveyor_mk1"},
-			{Type: TechUnlockBuilding, ID: "sorter_mk1"},
-			{Type: TechUnlockBuilding, ID: "storage_mk1"},
+			{Type: TechUnlockBuilding, ID: "splitter"},
+			{Type: TechUnlockBuilding, ID: "sorter_mk2"},
+			{Type: TechUnlockBuilding, ID: "flow_monitor"},
 		},
 	},
 	{
@@ -281,21 +286,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "arc_smelter"},
 			{Type: TechUnlockRecipe, ID: "glass"},
-		},
-	},
-	{
-		ID:            "electromagnetic_matrix",
-		Name:          "电磁矩阵",
-		NameEN:        "Electromagnetic Matrix",
-		Category:      TechCategoryMain,
-		Type:          TechTypeMain,
-		Level:         2,
-		Prerequisites: []string{"electromagnetism"},
-		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
-		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "electromagnetic_matrix"},
 		},
 	},
 	{
@@ -307,9 +298,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Level:         2,
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
-		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "assembler_mk1"},
-		},
 	},
 	{
 		ID:            "fluid_storage",
@@ -382,21 +370,6 @@ var defaultTechDefinitions = []TechDefinition{
 	},
 
 	// Level 3
-	{
-		ID:            "improved_logistics",
-		Name:          "改良物流系统",
-		NameEN:        "Improved Logistics System",
-		Category:      TechCategoryMain,
-		Type:          TechTypeLogistics,
-		Level:         3,
-		Prerequisites: []string{"electromagnetic_drive"},
-		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 100}},
-		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "splitter"},
-			{Type: TechUnlockBuilding, ID: "sorter_mk2"},
-			{Type: TechUnlockBuilding, ID: "flow_monitor"},
-		},
-	},
 	{
 		ID:            "steel_smelting",
 		Name:          "钢材冶炼",
@@ -639,7 +612,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Category:      TechCategoryMain,
 		Type:          TechTypeLogistics,
 		Level:         5,
-		Prerequisites: []string{"improved_logistics", "magnetic_levitation"},
+		Prerequisites: []string{"basic_logistics_system", "magnetic_levitation"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 400}, {ItemID: "energy_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "conveyor_mk2"},
@@ -654,7 +627,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Category:      TechCategoryBranch,
 		Type:          TechTypeLogistics,
 		Level:         5,
-		Prerequisites: []string{"improved_logistics", "magnetic_levitation"},
+		Prerequisites: []string{"basic_logistics_system", "magnetic_levitation"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 300}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "logistics_distributor"},
