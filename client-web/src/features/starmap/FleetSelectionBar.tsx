@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import type { FleetDetailView, FormationType } from '@shared/types';
 
 import { Button } from '@/common/controls';
+import { sfx } from '@/engine/audio';
 import { fleetStateLabel } from '@/features/starmap/model';
 import { useStarmapViewStore } from '@/features/starmap/store';
 import type { WarCommandHint } from '@/features/war/error-hints';
@@ -66,6 +67,7 @@ export function FleetSelectionBar({
   }
 
   function handleAttackToggle() {
+    sfx.uiClick();
     if (attacking) {
       exitInteractionMode();
       return;
@@ -79,6 +81,7 @@ export function FleetSelectionBar({
   }
 
   function handleMoveToggle() {
+    sfx.uiClick();
     if (moving) {
       exitInteractionMode();
       return;

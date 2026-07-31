@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import type {
   FleetDetailView,
@@ -205,7 +206,13 @@ export function TaskForceForm({
           <div className="war-field">
             <span>编入舰队</span>
             <ul className="war-list">
-              {fleets.length === 0 ? <li>暂无可编入的舰队。</li> : fleets.map((fleet) => (
+              {fleets.length === 0 ? (
+                <li data-testid="task-force-no-fleets">
+                  暂无可编入的舰队。
+                  {' '}
+                  <Link className="primary-link" to="/war?tab=industry">前往军工部署</Link>
+                </li>
+              ) : fleets.map((fleet) => (
                 <li key={fleet.fleet_id}>
                   <label>
                     <Input

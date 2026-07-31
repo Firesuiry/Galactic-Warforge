@@ -1148,4 +1148,109 @@ describe('WarPage', () => {
       blueprint_id: 'corvette_verify',
     });
   });
+
+  it('?tab=industry 深链打开军工抽屉分组', async () => {
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/state/summary')) {
+        return Promise.resolve(jsonResponse({
+          tick: 320,
+          active_planet_id: 'planet-1-1',
+          map_width: 128,
+          map_height: 128,
+          players: {
+            p1: {
+              player_id: 'p1',
+              is_alive: true,
+              resources: { minerals: 880, energy: 460 },
+              inventory: { iron_ore: 40, silicon_ore: 18, stone_ore: 10 },
+            },
+          },
+        }));
+      }
+      if (url.endsWith('/state/stats')) {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 320,
+          production_stats: { total_output: 24, by_building_type: {}, by_item: {}, efficiency: 0.95 },
+          energy_stats: { generation: 320, consumption: 280, storage: 1000, current_stored: 640, shortage_ticks: 0 },
+          logistics_stats: { throughput: 18, avg_distance: 22, avg_travel_time: 12, queues: 20 },
+          combat_stats: { units_lost: 2, enemies_killed: 9, threat_level: 6, highest_threat: 7 },
+        }));
+      }
+      if (url.endsWith('/catalog')) {
+        return Promise.resolve(jsonResponse({
+          warfare: {
+            base_frames: [{ id: 'mech_frame_alpha', name: '阿尔法机体', role: '前线突破', supported_domains: ['ground'], budgets: {} }],
+            base_hulls: [{ id: 'hull_corvette', name: '护航舰底盘', role: '护航', supported_domains: ['space'], budgets: {} }],
+            components: [],
+            public_blueprints: [],
+          },
+        }));
+      }
+      if (url.endsWith('/world/warfare/blueprints')) {
+        return Promise.resolve(jsonResponse({ blueprints: [] }));
+      }
+      if (url.endsWith('/world/warfare/industry')) {
+        return Promise.resolve(jsonResponse({
+          production_orders: [],
+          refit_orders: [],
+          deployment_hubs: [],
+          supply_nodes: [],
+        }));
+      }
+      if (url.endsWith('/world/warfare/task-forces')) {
+        return Promise.resolve(jsonResponse({ task_forces: [] }));
+      }
+      if (url.endsWith('/world/warfare/theaters')) {
+        return Promise.resolve(jsonResponse({ theaters: [] }));
+      }
+      if (url.includes('/world/planets/planet-1-1/scene')) {
+        return Promise.resolve(jsonResponse({ buildings: {}, units: {}, fog: {} }));
+      }
+      if (url.endsWith('/world/planets/planet-1-1')) {
+        return Promise.resolve(jsonResponse({
+          planet_id: 'planet-1-1',
+          system_id: 'sys-1',
+          name: '起始星',
+          kind: 'terrestrial',
+        }));
+      }
+      if (url.endsWith('/world/systems/sys-1')) {
+        return Promise.resolve(jsonResponse({
+          system_id: 'sys-1',
+          name: 'Helios',
+          planets: [{ planet_id: 'planet-1-1', name: '起始星', kind: 'terrestrial' }],
+        }));
+      }
+      if (url.endsWith('/world/systems/sys-1/runtime')) {
+        return Promise.resolve(jsonResponse({
+          discovered: true,
+          available: true,
+          planet_blockades: [],
+          landing_operations: [],
+          contacts: [],
+          battle_reports: [],
+        }));
+      }
+      if (url.endsWith('/world/fleets')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    }));
+
+    renderApp(['/war?tab=industry']);
+
+    expect(await screen.findByRole('heading', { name: '战争工作台' })).toBeInTheDocument();
+    // 深链应直接打开军工分组（抽屉展开）
+    expect(await screen.findByText('军工总览')).toBeInTheDocument();
+    expect(screen.getByTestId('deploy-empty-hint')).toBeInTheDocument();
+    expect(screen.getByTestId('production-queue-empty')).toBeInTheDocument();
+  });
 });
