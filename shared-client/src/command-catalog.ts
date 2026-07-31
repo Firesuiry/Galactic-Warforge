@@ -86,7 +86,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "produce",
@@ -96,7 +96,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "build",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "upgrade",
@@ -106,7 +106,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "build",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "demolish",
@@ -146,7 +146,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "build",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "restore_construction",
@@ -156,7 +156,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "build",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "start_research",
@@ -176,7 +176,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "research",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "transfer_item",
@@ -216,7 +216,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "commission_fleet",
@@ -226,7 +226,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "fleet_assign",
@@ -236,7 +236,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "fleet_attack",
@@ -246,7 +246,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "fleet_disband",
@@ -256,7 +256,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "fleet_move",
@@ -276,7 +276,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "task_force_assign",
@@ -286,7 +286,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "task_force_set_stance",
@@ -296,7 +296,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "task_force_deploy",
@@ -306,7 +306,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "theater_create",
@@ -316,7 +316,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "theater_define_zone",
@@ -326,7 +326,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "theater_set_objective",
@@ -336,7 +336,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "system",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "blockade_planet",
@@ -346,7 +346,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "landing_start",
@@ -356,7 +356,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "combat",
     layer: "planet",
     requiresActivePlanet: false,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "blueprint_create",
@@ -366,7 +366,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "blueprint_set_component",
@@ -376,7 +376,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "blueprint_validate",
@@ -386,7 +386,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "blueprint_finalize",
@@ -396,7 +396,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "blueprint_variant",
@@ -406,7 +406,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "queue_military_production",
@@ -416,7 +416,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "refit_unit",
@@ -426,7 +426,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "management",
     layer: "planet",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
   {
     id: "launch_solar_sail",
@@ -486,7 +486,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     permissionCategory: "build",
     layer: "system",
     requiresActivePlanet: true,
-    webSurface: "hidden",
+    webSurface: "optional",
   },
 ];
 
