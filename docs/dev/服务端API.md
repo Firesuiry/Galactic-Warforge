@@ -287,9 +287,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `efficiency` 仍是 `ProductionMonitor` 的采样均值，和真实落库数量分开统计
 - 能源统计口径补充:
   - `generation` 现在按当前 active planet 上玩家所属 power network 的真实 `supply` 聚合，已包含 `ray_receiver power/hybrid` 的实际回灌和储能放电结果
-  - `consumption` 使用 power allocation 的真实 `allocated`
+  - `consumption` 使用 power network 的真实 `demand`（建筑耗电需求；无电时仍 >0，避免 0/0 伪装供电稳定）
   - `current_stored` 读取各储能建筑的 `energy_storage.energy`，不再复用建筑 HP
-  - `shortage_ticks` 只在本 tick 任一玩家网络 `shortage=true` 时累加
+  - `shortage_ticks` 在本 tick 任一玩家网络 `shortage=true`，或 `consumption > generation`（孤立耗电节点等）时累加
   - 这些字段与 `/world/planets/{planet_id}/networks.power_networks` / `power_coverage` 共同来自同一份 `PowerSettlementSnapshot`，不会再出现“中途事件里短暂加电、最终 summary/stats/networks 又回退”的分叉
 - 作用域补充:
   - `production_stats` / `energy_stats` 当前都只统计 active planet 对应 world 的 authoritative 快照，不会跨所有已加载行星做总汇总

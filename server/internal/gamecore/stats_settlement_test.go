@@ -451,3 +451,29 @@ func sumIntMap(values map[string]int) int {
 	}
 	return total
 }
+
+
+// 无供电时 consumption 仍应暴露 Demand（非 Allocated=0），并标记短缺。
+func TestEnergyStats_NoPowerShowsDemandNotZero(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+	player := ws.Players["p1"]
+	if player == nil {
+		t.Fatal("expected player p1")
+	}
+
+	// 不放发电机：仅依赖 GameCore.New 放置的 battlefield_analysis_base（Demand=2）
+	// 强制结算一次电力快照。
+	core.processTick()
+
+	stats := player.Stats.EnergyStats
+	if stats.Generation != 0 {
+		t.Fatalf("expected generation 0 with no power plants, got %+v", stats)
+	}
+	if stats.Consumption <= 0 {
+		t.Fatalf("expected consumption to expose base demand > 0, got %+v", stats)
+	}
+	if stats.ShortageTicks <= 0 {
+		t.Fatalf("expected shortage_ticks > 0 when demand without generation, got %+v", stats)
+	}
+}

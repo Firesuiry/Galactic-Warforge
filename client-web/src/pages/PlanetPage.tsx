@@ -121,6 +121,7 @@ export function PlanetPage() {
     setLastEventId,
     setSelected,
     setZoomIndex,
+    setInteractionMode,
     zoomIndex,
     requestFocus,
   } = usePlanetViewStore(
@@ -137,6 +138,7 @@ export function PlanetPage() {
       setLastEventId: state.setLastEventId,
       setSelected: state.setSelected,
       setZoomIndex: state.setZoomIndex,
+      setInteractionMode: state.setInteractionMode,
       zoomIndex: state.camera.zoomIndex,
       requestFocus: state.requestFocus,
     })),
@@ -374,6 +376,17 @@ export function PlanetPage() {
       setActiveDetailPanel("selection");
     }
 
+    // 深链 build=<buildingType>：进入建造模式（对标总览「下一步」开局引导）
+    const buildType = searchParams.get("build");
+    if (buildType && buildType.trim() !== "") {
+      setInteractionMode({
+        kind: "build",
+        buildingType: buildType.trim(),
+        direction: "auto",
+      });
+      setActiveDetailPanel("workbench");
+    }
+
     restoredViewRef.current = signature;
   }, [
     planetId,
@@ -381,6 +394,7 @@ export function PlanetPage() {
     requestFocus,
     searchParams,
     session.playerId,
+    setInteractionMode,
     setLayers,
     setSelected,
     setZoomIndex,

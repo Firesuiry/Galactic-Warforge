@@ -94,16 +94,50 @@ interface StubOptions {
   events?: unknown[];
   alerts?: unknown[];
   galaxyFails?: boolean;
+  /** 覆盖 stats.energy_stats（用于开局无电场景）。 */
+  energy?: {
+    generation: number;
+    consumption: number;
+    storage: number;
+    current_stored: number;
+    shortage_ticks: number;
+  };
+  /** 覆盖 summary.players.p1.tech。 */
+  tech?: {
+    player_id: string;
+    completed_techs?: string[];
+    current_research?: {
+      tech_id: string;
+      state: string;
+      progress: number;
+      total_cost: number;
+      blocked_reason?: string;
+    };
+  };
 }
 
-function stubFetch({ events = [], alerts = [], galaxyFails = false }: StubOptions = {}) {
+function stubFetch({
+  events = [],
+  alerts = [],
+  galaxyFails = false,
+  energy,
+  tech,
+}: StubOptions = {}) {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
     const url = String(input);
     if (url.endsWith('/state/summary')) {
-      return Promise.resolve(jsonResponse(summaryPayload()));
+      const payload = summaryPayload();
+      if (tech) {
+        payload.players.p1.tech = tech;
+      }
+      return Promise.resolve(jsonResponse(payload));
     }
     if (url.endsWith('/state/stats')) {
-      return Promise.resolve(jsonResponse(statsPayload()));
+      const payload = statsPayload();
+      if (energy) {
+        payload.energy_stats = energy;
+      }
+      return Promise.resolve(jsonResponse(payload));
     }
     if (url.includes('/events/snapshot')) {
       return Promise.resolve(jsonResponse(eventsPayload(events)));
@@ -208,7 +242,7 @@ describe('OverviewPage', () => {
     expect(within(planets).getByRole('link', { name: /Morrow/ })).toHaveAttribute('href', '/planet/planet-1-2');
   });
 
-  it('空态：无告警事件时时间线友好空态，下一步降级为侦察引导', async () => {
+  it('空态：无告警且有电力产出时，下一步降级为侦察引导', async () => {
     stubSession();
     stubFetch({ events: [], alerts: [] });
 
@@ -217,9 +251,30 @@ describe('OverviewPage', () => {
     expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
     expect(screen.getByText('星海平静，暂无告警与事件')).toBeInTheDocument();
 
+    // 默认 stats 有 generation=120 且 summary 正在研究，故显示研究进度态
     const nextAction = screen.getByRole('link', { name: /下一步优先处理/ });
-    expect(nextAction).toHaveAttribute('href', '/galaxy');
-    expect(within(nextAction).getByText('继续推进产能与侦察')).toBeInTheDocument();
+    expect(nextAction).toHaveAttribute('href', '/planet/planet-1-1');
+    expect(within(nextAction).getByText(/研究进行中/)).toBeInTheDocument();
+  });
+
+  it('新局无电无告警：下一步引导建造风力涡轮机', async () => {
+    stubSession();
+    stubFetch({
+      events: [],
+      alerts: [],
+      energy: { generation: 0, consumption: 0, storage: 0, current_stored: 0, shortage_ticks: 0 },
+      tech: {
+        player_id: 'p1',
+        completed_techs: ['dyson_sphere_program'],
+      },
+    });
+
+    renderApp(['/overview']);
+
+    expect(await screen.findByRole('heading', { name: '全局总览' })).toBeInTheDocument();
+    const nextAction = screen.getByRole('link', { name: /下一步优先处理/ });
+    expect(nextAction).toHaveAttribute('href', '/planet/planet-1-1?build=wind_turbine');
+    expect(within(nextAction).getByText(/风力涡轮机/)).toBeInTheDocument();
   });
 
   it('星图数据不可用时主面板正常渲染，星图卡与行星列表降级空态', async () => {

@@ -104,14 +104,20 @@ func buildPlayerEnergyStats(ws *model.WorldState, playerID string) model.EnergyS
 
 	if snapshot := model.CurrentPowerSettlementSnapshot(ws); snapshot != nil {
 		if player, ok := snapshot.Players[playerID]; ok {
+			// Generation = 电网供电能力；Consumption = 建筑需求（Demand）。
+			// 不用 Allocated：无电时 Allocated=0 会把 0 供电/2 需求伪装成 0/0「供电稳定」。
 			stats.Generation = player.Generation
-			stats.Consumption = player.Allocated
+			stats.Consumption = player.Demand
 		}
 		for _, network := range snapshot.Allocations.Networks {
 			if network != nil && network.OwnerID == playerID && network.Shortage {
 				stats.ShortageTicks = 1
 				break
 			}
+		}
+		// 需求 > 供电但 allocation.Shortage 未置位时（如孤立耗电节点）仍计短缺
+		if stats.ShortageTicks == 0 && stats.Consumption > stats.Generation {
+			stats.ShortageTicks = 1
 		}
 	}
 	for _, building := range ws.Buildings {

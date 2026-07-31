@@ -128,8 +128,9 @@ func TestEnergyStatsUseResolvedNetworksAndStorageState(t *testing.T) {
 	if stats.Generation != 20 {
 		t.Fatalf("expected generation 20 from resolved network supply, got %+v", stats)
 	}
-	if stats.Consumption != 20 {
-		t.Fatalf("expected consumption 20 from resolved allocations, got %+v", stats)
+	// Demand = assembler 30 + default battlefield base 2 (placed by GameCore.New).
+	if stats.Consumption != 32 {
+		t.Fatalf("expected consumption 32 from network demand (assembler+base), got %+v", stats)
 	}
 	if stats.Storage != 50 {
 		t.Fatalf("expected storage 50 from runtime energy storage capacity, got %+v", stats)

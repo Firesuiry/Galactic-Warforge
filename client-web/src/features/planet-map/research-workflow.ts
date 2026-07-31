@@ -248,10 +248,10 @@ export function buildStarterGuide(
   return {
     highlightedTechId: "electromagnetism",
     steps: [
-      "风机",
-      "空研究站",
-      "装 10 电磁矩阵",
-      "研究 electromagnetism",
+      "建造风力涡轮机供电",
+      "建造空矩阵研究站",
+      "装入 10 个电磁矩阵",
+      "研究电磁学（解锁采矿机/特斯拉塔）",
     ],
   };
 }

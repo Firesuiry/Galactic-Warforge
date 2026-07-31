@@ -5,6 +5,7 @@ import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
+import { resolveEarlyGameNextAction } from '@/features/early-game-next';
 import { formatMineralInventory } from '@/features/mineral-summary';
 import { isResearchStationAlertNoise } from '@/features/production-alerts';
 import { MiniGalaxyMap } from '@/features/starmap/MiniGalaxyMap';
@@ -263,23 +264,13 @@ export function OverviewPage() {
   const discoveredSystemCount = discoveredSystemIds.length;
   const totalSystemCount = galaxyQuery.data?.systems?.length ?? 0;
 
-  // 文明6 式"下一步"主行动：复用原战役主板的推荐告警数据
-  const recommendedAlert = alerts[0];
-  const nextAction = recommendedAlert
-    ? {
-        to: `/planet/${activePlanetId}`,
-        iconKey: recommendedAlert.building_type || 'alert',
-        color: '#ffb454',
-        text: `${translateAlertType(recommendedAlert.alert_type, translateSeverity(recommendedAlert.severity))} · ${translateBuildingType(recommendedAlert.building_type)} ${recommendedAlert.building_id}`,
-        idle: false,
-      }
-    : {
-        to: '/galaxy',
-        iconKey: 'galaxy',
-        color: '#39e6d0',
-        text: '继续推进产能与侦察',
-        idle: true,
-      };
+  // 文明6 式"下一步"：告警优先，否则按开局状态机（无电→风机→研究站→电磁学→采矿）
+  const nextAction = resolveEarlyGameNextAction({
+    activePlanetId,
+    player: currentPlayer,
+    energy: energyStats,
+    alerts,
+  });
 
   return (
     <div className="page-grid command-page">
@@ -444,7 +435,11 @@ export function OverviewPage() {
                 </div>
                 <strong className="command-resource__value">{energyStats.generation}/{energyStats.consumption}</strong>
                 <span className="command-resource__meta">
-                  {powerShort ? `短缺 ${energyStats.shortage_ticks} tick` : '供电稳定'}
+                  {energyStats.generation <= 0 && energyStats.consumption > 0
+                    ? '无发电 · 立即建风机'
+                    : powerShort
+                      ? `短缺 ${energyStats.shortage_ticks} tick`
+                      : '供电稳定'}
                 </span>
               </article>
               <article className="command-resource">
