@@ -36,7 +36,7 @@ function summaryPayload() {
             progress: 40,
             total_cost: 100,
           },
-        },
+        } as SummaryTech,
       },
     },
   };
@@ -103,16 +103,18 @@ interface StubOptions {
     shortage_ticks: number;
   };
   /** 覆盖 summary.players.p1.tech。 */
-  tech?: {
-    player_id: string;
-    completed_techs?: string[];
-    current_research?: {
-      tech_id: string;
-      state: string;
-      progress: number;
-      total_cost: number;
-      blocked_reason?: string;
-    };
+  tech?: SummaryTech;
+}
+
+interface SummaryTech {
+  player_id: string;
+  completed_techs?: string[];
+  current_research?: {
+    tech_id: string;
+    state: string;
+    progress: number;
+    total_cost: number;
+    blocked_reason?: string;
   };
 }
 

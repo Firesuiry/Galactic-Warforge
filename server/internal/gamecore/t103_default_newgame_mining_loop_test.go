@@ -61,28 +61,20 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 		t.Fatalf("expected first matrix_lab to be powered before research, got %s (%s)", lab.Runtime.State, lab.Runtime.StateReason)
 	}
 
-	transferRes, _ := core.execTransferItem(ws, "p1", model.Command{
-		Type: model.CmdTransferItem,
-		Payload: map[string]any{
-			"building_id": lab.ID,
-			"item_id":     model.ItemElectromagneticMatrix,
-			"quantity":    10,
-		},
-	})
-	if transferRes.Code != model.CodeOK {
-		t.Fatalf("transfer starter matrices: %s (%s)", transferRes.Code, transferRes.Message)
+	// Fresh games no longer bootstrap matrices: the first research must wait
+	// for the industry chain, while mining works from the initial tech.
+	if got := player.Inventory[model.ItemElectromagneticMatrix]; got != 0 {
+		t.Fatalf("expected fresh bootstrap without matrices, got %d", got)
 	}
-
 	startRes, _ := core.execStartResearch(ws, "p1", model.Command{
 		Type: model.CmdStartResearch,
 		Payload: map[string]any{
 			"tech_id": "electromagnetism",
 		},
 	})
-	if startRes.Code != model.CodeOK {
-		t.Fatalf("start electromagnetism: %s (%s)", startRes.Code, startRes.Message)
+	if startRes.Code == model.CodeOK {
+		t.Fatal("expected electromagnetism to require chain-produced matrices in the lab")
 	}
-	waitForCompletedResearch(t, core, "p1", "electromagnetism")
 
 	wind := findOwnedBuildingByType(ws, "p1", model.BuildingTypeWindTurbine)
 	if wind == nil {

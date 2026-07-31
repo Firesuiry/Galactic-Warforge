@@ -223,10 +223,10 @@ test('首次进入行星页视角聚焦基地，基地不被信息片遮挡且�
   const surface = page.locator('.planet-map-canvas__surface');
   await expect(surface).toBeVisible({ timeout: 30_000 });
 
-  // 回家视角：32px/tile，基地落在视口内且不压在左上信息片区域（约 left 16..456 / top 16..150）。
+  // 回家视角：48px/tile，基地落在视口内且不压在左上信息片区域（约 left 16..456 / top 16..150）。
   await expect
     .poll(async () => Number(await surface.getAttribute('data-tile-size')), { timeout: 10_000 })
-    .toBe(32);
+    .toBe(48);
   const surfaceBox = await surface.boundingBox();
   if (!surfaceBox) {
     throw new Error('交互面不可见');

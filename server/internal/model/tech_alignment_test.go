@@ -88,7 +88,7 @@ func TestTechUnlockReferencesAreAligned(t *testing.T) {
 }
 
 func TestKeyTechUnlocksMatchImplementedBuildings(t *testing.T) {
-	assertTechHasUnlock(t, "basic_assembling_processes", TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk1)})
+	assertTechHasUnlock(t, "dyson_sphere_program", TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk1)})
 	assertTechHasUnlock(t, "plane_filter_smelting", TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypePlaneSmelter)})
 	assertTechHasUnlock(t, "quantum_printing", TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypeNegentropySmelter)})
 }
