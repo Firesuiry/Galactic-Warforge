@@ -11,6 +11,7 @@ import {
   fetchStats,
   fetchSummary,
   fetchAgentBriefing,
+  fetchCommandCatalog,
   fetchSystem,
   fetchSystemRuntime,
   fetchWarfareBlueprint,
@@ -32,6 +33,7 @@ import {
   fmtStats,
   fmtSummary,
   fmtAgentBriefing,
+  fmtCommandCatalog,
   fmtSystem,
   fmtSystemRuntime,
   fmtWarBlueprintDetail,
@@ -90,6 +92,14 @@ export async function cmdBriefing(args: string[]): Promise<string> {
       alertLimit = parseRequiredInteger(args[0], 'alert_limit');
     }
     return fmtAgentBriefing(await fetchAgentBriefing(alertLimit !== undefined ? { alert_limit: alertLimit } : undefined));
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdCatalogCommands(_args: string[]): Promise<string> {
+  try {
+    return fmtCommandCatalog(await fetchCommandCatalog());
   } catch (e) {
     return fmtError(String(e));
   }

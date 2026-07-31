@@ -1858,6 +1858,26 @@ export interface CatalogView {
   warfare?: WarfareCatalogView;
 }
 
+/** One public command structural entry from GET /catalog/commands. */
+export interface CommandCatalogEntry {
+  type: string;
+  required_target_fields: string[];
+  required_payload_fields: string[];
+  optional_payload_fields?: string[];
+  required_layer?: string;
+  constraints?: string[];
+  /** JSON Schema fragment for this command object (type + target + payload). */
+  schema: Record<string, unknown>;
+}
+
+/** Full public command catalog from GET /catalog/commands. */
+export interface CommandCatalogView {
+  version: number;
+  commands: CommandCatalogEntry[];
+  /** Aggregate JSON Schema with oneOf over all public command types. */
+  command_schema?: Record<string, unknown>;
+}
+
 export interface GameEvent {
   event_id: string;
   tick: number;

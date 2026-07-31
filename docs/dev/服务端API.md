@@ -1280,6 +1280,75 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 ---
 
+**GET /catalog/commands**
+- 说明: 公共命令结构目录（需认证）。服务端 `model` 共享注册表是唯一真相源，同时驱动 gateway 结构预校验（`ValidateCommandStructure`）与本接口导出；GUI 表单、CLI、agent prompt、skill 应消费此目录，而不是维护第二份字段表。
+- 说明补充:
+  - 覆盖 `model.AllCommandTypes()` 全部公开 `CommandType`（当前 46 条）
+  - 与 `GET /catalog`（建筑/物品/配方/科技/战争元数据）分离；本接口只描述命令结构，不重复实体 catalog
+  - `command_schema` 为聚合 JSON Schema（`oneOf` 各命令 object schema），便于外部校验器直接引用
+- 响应字段:
+  - `version`：目录版本号（当前 `1`）
+  - `commands[]`：每条公开命令的结构描述
+    - `type`：命令类型字符串（与 `POST /commands` 的 `type` 一致）
+    - `required_target_fields`：`target` 上必填字段名列表（空数组表示无 target 必填）
+    - `required_payload_fields`：`payload` 上必填字段名列表（空数组表示无 payload 必填）
+    - `optional_payload_fields`：可选 payload 字段（文档化；结构预校验不强制）
+    - `required_layer`：可选；要求 `target.layer` 必须等于该值（如 `galaxy` / `system` / `planet`）
+    - `constraints`：人类可读约束说明（XOR、运行时“至少一个…”等）
+    - `schema`：该命令对象的 JSON Schema 片段（`type` + `target` + `payload`）
+  - `command_schema`：聚合 schema，`oneOf` 覆盖全部 `commands[].schema`
+- 响应示例:
+```json
+{
+  "version": 1,
+  "commands": [
+    {
+      "type": "build",
+      "required_target_fields": ["position"],
+      "required_payload_fields": ["building_type"],
+      "optional_payload_fields": ["recipe_id", "direction"],
+      "schema": {
+        "type": "object",
+        "required": ["type", "target", "payload"],
+        "properties": {
+          "type": {"const": "build"},
+          "target": {
+            "type": "object",
+            "required": ["position"],
+            "properties": {
+              "position": {"type": "object", "required": ["x", "y"]}
+            }
+          },
+          "payload": {
+            "type": "object",
+            "required": ["building_type"],
+            "properties": {
+              "building_type": {"type": "string"},
+              "recipe_id": {"type": "string", "minLength": 1},
+              "direction": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "fleet_move",
+      "required_target_fields": [],
+      "required_payload_fields": ["fleet_id", "target_system_id"],
+      "schema": {"type": "object"}
+    }
+  ],
+  "command_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "SiliconWorld Command",
+    "description": "One public game command object (type + target + payload)",
+    "oneOf": []
+  }
+}
+```
+
+---
+
 **GET /world/warfare/blueprints**
 - 说明: 当前玩家自有战争蓝图列表（需认证）
 - 响应字段:

@@ -108,6 +108,7 @@ export const cmdUpgrade = client.cmdUpgrade;
 export const fetchAlertSnapshot = client.fetchAlertSnapshot;
 export const fetchAudit = client.fetchAudit;
 export const fetchCatalog = client.fetchCatalog;
+export const fetchCommandCatalog = client.fetchCommandCatalog;
 export const fetchEventSnapshot = client.fetchEventSnapshot;
 export const fetchFleet = client.fetchFleet;
 export const fetchFleets = client.fetchFleets;

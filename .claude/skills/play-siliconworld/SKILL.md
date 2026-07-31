@@ -102,26 +102,38 @@ SW_SERVER=http://localhost:18080 npm run dev
 
 ### 3.2 非交互单条命令（Claude 推荐）
 
-`client-cli` 的 `runCommandLine` 可程序化调用，复用命令解析与越界/军事 policy 校验：
+**两条路径，勿混用：**
+
+| 角色 | 入口 | 说明 |
+| --- | --- | --- |
+| **Commander（skill 默认）** | `dispatch` 或 **HTTP** | 全命令面；**不要**给 `runCommandLine` 塞 agent military policy |
+| **委派 Agent** | `runCommandLine(line, ctx, policy)` | 必须带 `policy.military`（theater/taskForce/白名单），否则军事查询/指令会被 CLI 拒绝 |
+
+Commander 非交互（与官方战争回归一致，走 `dispatch`，无 military 门禁）：
 
 ```bash
 cd client-cli
-SW_SERVER=http://localhost:18080 npx tsx -e '
-import { runCommandLine } from "./src/runtime.ts";
-const ctx = {
-  currentPlayer: "p1",
-  playerKey: "key_player_1",
-  serverUrl: process.env.SW_SERVER || "http://localhost:18080",
-};
-const line = process.argv[1] || "briefing";
-const out = await runCommandLine(line, ctx);
-console.log(out);
-' -- "briefing"
+# 推荐：本地 runner 文件（tsx -e 对 top-level await 不友好）
+cat > /tmp/sw-dispatch.mjs <<'EOF'
+import { setAuth, setServerUrl } from './src/api.ts';
+import { dispatch } from './src/commands/index.ts';
+const line = process.argv.slice(2).join(' ');
+const player = process.env.SW_PLAYER || 'p1';
+const key = process.env.SW_KEY || 'key_player_1';
+const url = process.env.SW_SERVER || 'http://localhost:18080';
+setServerUrl(url);
+setAuth(player, key);
+console.log(await dispatch(line, { currentPlayer: player, rl: {} }));
+EOF
+SW_SERVER=http://localhost:19481 npx tsx /tmp/sw-dispatch.mjs briefing
+SW_SERVER=http://localhost:19481 npx tsx /tmp/sw-dispatch.mjs war_industry
 ```
+
+`runCommandLine` 仅在**模拟 agent 委派**时使用（会校验 `policy.military`；无 policy 时 `war_industry` / 舰队任务群等会直接抛错）。
 
 多条时循环调用；**每条命令等返回后再发下一条**（异步施工/战斗靠下一轮查询对账，不要连发盲猜）。
 
-### 3.3 直接 HTTP（CLI 不可用时）
+### 3.3 直接 HTTP（CLI 不可用或 commander 捷径）
 
 ```bash
 # 一眼局势
@@ -155,7 +167,8 @@ curl -fsS -X POST -H "Authorization: Bearer key_player_1" \
 ```
 1. OBSERVE  briefing [20]
             必要时再拉：summary / scene / war_industry / task_forces / theaters /
-                        system_runtime / planet_runtime / fleet_status / inspect
+                        system_runtime / planet_runtime / fleet_status / inspect /
+                        catalog_commands（字段级结构/JSON Schema，修命令时用）
 2. DECIDE   根据 self.resources、tech、alerts、fleets/task_forces/theaters/enemy_forces
             选 1～N 条可执行命令（优先闭环最短路径）
 3. ACT      经 CLI 或 POST /commands 发出
@@ -260,6 +273,7 @@ system_runtime sys-1   # 确认 blockades / landing_operations
 ```text
 # 观察
 health | summary | stats | briefing [n]
+catalog_commands
 galaxy | system [id] | planet [id]
 scene [planet] x y w h | inspect <planet> building|unit|resource|sector <id>
 war_industry | blueprints [id] | task_forces | theaters

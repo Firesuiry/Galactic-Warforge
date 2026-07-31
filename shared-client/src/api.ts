@@ -17,6 +17,7 @@ import type {
   GroundTaskForceOrder,
   HealthResponse,
   CatalogView,
+  CommandCatalogView,
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
   MetricsSnapshot,
@@ -406,6 +407,10 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchCatalog(): Promise<CatalogView> {
     return apiFetch<CatalogView>('/catalog');
+  }
+
+  function fetchCommandCatalog(): Promise<CommandCatalogView> {
+    return apiFetch<CommandCatalogView>('/catalog/commands');
   }
 
   function fetchWarfareBlueprints(): Promise<WarBlueprintListView> {
@@ -1120,6 +1125,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchAlertSnapshot,
     fetchAudit,
     fetchCatalog,
+    fetchCommandCatalog,
     fetchEventSnapshot,
     fetchFleet,
     fetchFleets,

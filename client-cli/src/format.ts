@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type {
   Building,
+  CommandCatalogView,
   CommandResponse,
   FleetDetailView,
   FleetRuntimeView,
@@ -205,6 +206,28 @@ export function fmtStats(s: PlayerStatsSnapshot): string {
   ].join('\n');
 }
 
+
+export function fmtCommandCatalog(catalog: CommandCatalogView): string {
+  const commands = catalog.commands ?? [];
+  const lines: string[] = [
+    `Command catalog v${catalog.version}  (${commands.length} public types)`,
+    '',
+  ];
+  for (const entry of commands) {
+    const target = (entry.required_target_fields ?? []).length > 0
+      ? `target=${(entry.required_target_fields ?? []).join(',')}`
+      : 'target=-';
+    const payload = (entry.required_payload_fields ?? []).length > 0
+      ? `payload=${(entry.required_payload_fields ?? []).join(',')}`
+      : 'payload=-';
+    const optional = (entry.optional_payload_fields ?? []).length > 0
+      ? `  optional=${(entry.optional_payload_fields ?? []).join(',')}`
+      : '';
+    const layer = entry.required_layer ? `  layer=${entry.required_layer}` : '';
+    lines.push(`  ${pad(entry.type, 28)} ${target}  ${payload}${optional}${layer}`);
+  }
+  return lines.join('\n');
+}
 
 export function fmtAgentBriefing(b: AgentBriefing): string {
   const lines: string[] = [

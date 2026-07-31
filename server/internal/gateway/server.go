@@ -121,6 +121,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/warfare/task-forces", s.auth(s.handleWarTaskForces))
 	mux.HandleFunc("GET /world/warfare/theaters", s.auth(s.handleWarTheaters))
 	mux.HandleFunc("GET /catalog", s.auth(s.handleCatalog))
+	mux.HandleFunc("GET /catalog/commands", s.auth(s.handleCommandCatalog))
 
 	// Commands
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
@@ -391,6 +392,12 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request, playerID st
 func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, playerID string) {
 	_ = playerID
 	writeJSON(w, http.StatusOK, s.ql.Catalog())
+}
+
+// handleCommandCatalog returns GET /catalog/commands
+func (s *Server) handleCommandCatalog(w http.ResponseWriter, r *http.Request, playerID string) {
+	_ = playerID
+	writeJSON(w, http.StatusOK, model.BuildCommandCatalog())
 }
 
 // handleWarBlueprints returns GET /world/warfare/blueprints
@@ -920,187 +927,9 @@ func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Re
 
 // validateCommandStructure does fast structural validation without world access.
 // Returns field-level issues suitable for agent repair prompts.
+// Delegates to the shared model command structure registry (also powers GET /catalog/commands).
 func validateCommandStructure(cmd model.Command) []model.CommandIssue {
-	var issues []model.CommandIssue
-	switch cmd.Type {
-	case model.CmdScanGalaxy:
-		issues = append(issues, requireTargetGalaxyID(cmd)...)
-		issues = append(issues, requireTargetLayer(cmd, "galaxy")...)
-	case model.CmdScanSystem:
-		issues = append(issues, requireTargetSystemID(cmd)...)
-		issues = append(issues, requireTargetLayer(cmd, "system")...)
-	case model.CmdScanPlanet:
-		issues = append(issues, requireTargetPlanetID(cmd)...)
-		issues = append(issues, requireTargetLayer(cmd, "planet")...)
-	case model.CmdBuild:
-		issues = append(issues, requireTargetPosition(cmd)...)
-		issues = append(issues, requirePayload(cmd.Payload, "building_type")...)
-		if recipeID, ok := cmd.Payload["recipe_id"]; ok {
-			if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {
-				issues = append(issues, model.InvalidValueIssue(
-					"payload.recipe_id",
-					"payload.recipe_id must be a non-empty string when provided",
-					"non-empty string",
-					recipeID,
-				))
-			}
-		}
-	case model.CmdMove:
-		issues = append(issues, requireTargetEntityID(cmd)...)
-		issues = append(issues, requireTargetPosition(cmd)...)
-	case model.CmdAttack:
-		issues = append(issues, requireTargetEntityID(cmd)...)
-		issues = append(issues, requirePayload(cmd.Payload, "target_entity_id")...)
-	case model.CmdProduce:
-		issues = append(issues, requireTargetEntityID(cmd)...)
-		issues = append(issues, requirePayload(cmd.Payload, "unit_type")...)
-	case model.CmdDeploySquad:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "blueprint_id", "count")...)
-	case model.CmdCommissionFleet:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "blueprint_id", "count", "system_id")...)
-	case model.CmdBlueprintCreate:
-		issues = append(issues, requirePayload(cmd.Payload, "blueprint_id", "domain")...)
-		_, hasFrame := cmd.Payload["base_frame_id"]
-		_, hasHull := cmd.Payload["base_hull_id"]
-		if hasFrame == hasHull {
-			var actual any
-			if hasFrame && hasHull {
-				actual = []string{"base_frame_id", "base_hull_id"}
-			}
-			issues = append(issues, model.InvalidValueIssue(
-				"payload.base_frame_id|payload.base_hull_id",
-				"blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id",
-				"exactly one of base_frame_id or base_hull_id",
-				actual,
-			))
-		}
-	case model.CmdBlueprintSetComponent:
-		issues = append(issues, requirePayload(cmd.Payload, "blueprint_id", "slot_id", "component_id")...)
-	case model.CmdBlueprintValidate, model.CmdBlueprintFinalize:
-		issues = append(issues, requirePayload(cmd.Payload, "blueprint_id")...)
-	case model.CmdBlueprintVariant:
-		issues = append(issues, requirePayload(cmd.Payload, "parent_blueprint_id", "blueprint_id", "allowed_slot_ids")...)
-	case model.CmdQueueMilitaryProduction:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "deployment_hub_id", "blueprint_id", "count")...)
-	case model.CmdRefitUnit:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "unit_id", "target_blueprint_id")...)
-	case model.CmdFleetAssign:
-		issues = append(issues, requirePayload(cmd.Payload, "fleet_id", "formation")...)
-	case model.CmdFleetAttack:
-		issues = append(issues, requirePayload(cmd.Payload, "fleet_id", "planet_id", "target_id")...)
-	case model.CmdFleetMove:
-		issues = append(issues, requirePayload(cmd.Payload, "fleet_id", "target_system_id")...)
-	case model.CmdFleetDisband:
-		issues = append(issues, requirePayload(cmd.Payload, "fleet_id")...)
-	case model.CmdTaskForceCreate:
-		issues = append(issues, requirePayload(cmd.Payload, "task_force_id")...)
-	case model.CmdTaskForceAssign:
-		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "member_kind", "member_ids")...)
-	case model.CmdTaskForceSetStance:
-		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "stance")...)
-	case model.CmdTaskForceDeploy:
-		issues = append(issues, requirePayload(cmd.Payload, "task_force_id")...)
-	case model.CmdTheaterCreate:
-		issues = append(issues, requirePayload(cmd.Payload, "theater_id")...)
-	case model.CmdTheaterDefineZone:
-		issues = append(issues, requirePayload(cmd.Payload, "theater_id", "zone_type")...)
-	case model.CmdTheaterSetObjective:
-		issues = append(issues, requirePayload(cmd.Payload, "theater_id", "objective_type")...)
-	case model.CmdBlockadePlanet:
-		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "planet_id")...)
-	case model.CmdLandingStart:
-		issues = append(issues, requirePayload(cmd.Payload, "task_force_id", "planet_id")...)
-	case model.CmdUpgrade, model.CmdDemolish, model.CmdConfigureLogisticsStation:
-		issues = append(issues, requireTargetEntityID(cmd)...)
-	case model.CmdConfigureLogisticsSlot:
-		issues = append(issues, requireTargetEntityID(cmd)...)
-		issues = append(issues, requirePayload(cmd.Payload, "scope", "item_id", "mode", "local_storage")...)
-	case model.CmdCancelConstruction, model.CmdRestoreConstruction:
-		issues = append(issues, requirePayload(cmd.Payload, "task_id")...)
-	case model.CmdStartResearch, model.CmdCancelResearch:
-		issues = append(issues, requirePayload(cmd.Payload, "tech_id")...)
-	case model.CmdTransferItem:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "item_id", "quantity")...)
-	case model.CmdSwitchActivePlanet:
-		issues = append(issues, requirePayload(cmd.Payload, "planet_id")...)
-	case model.CmdSetRayReceiverMode:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "mode")...)
-	case model.CmdLaunchSolarSail:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id")...)
-	case model.CmdLaunchRocket:
-		issues = append(issues, requirePayload(cmd.Payload, "building_id", "system_id")...)
-	case model.CmdBuildDysonNode:
-		issues = append(issues, requirePayload(cmd.Payload, "system_id", "layer_index", "latitude", "longitude")...)
-	case model.CmdBuildDysonFrame:
-		issues = append(issues, requirePayload(cmd.Payload, "system_id", "layer_index", "node_a_id", "node_b_id")...)
-	case model.CmdBuildDysonShell:
-		issues = append(issues, requirePayload(cmd.Payload, "system_id", "layer_index", "latitude_min", "latitude_max", "coverage")...)
-	case model.CmdDemolishDyson:
-		issues = append(issues, requirePayload(cmd.Payload, "system_id", "component_type", "component_id")...)
-	default:
-		issues = append(issues, model.UnknownCommandIssue(string(cmd.Type)))
-	}
-	return issues
-}
-
-func requirePayload(payload map[string]any, fields ...string) []model.CommandIssue {
-	if payload == nil {
-		payload = map[string]any{}
-	}
-	var issues []model.CommandIssue
-	for _, field := range fields {
-		if _, ok := payload[field]; !ok {
-			issues = append(issues, model.MissingFieldIssue("payload."+field))
-		}
-	}
-	return issues
-}
-
-func requireTargetEntityID(cmd model.Command) []model.CommandIssue {
-	if cmd.Target.EntityID == "" {
-		return []model.CommandIssue{model.MissingFieldIssue("target.entity_id")}
-	}
-	return nil
-}
-
-func requireTargetPosition(cmd model.Command) []model.CommandIssue {
-	if cmd.Target.Position == nil {
-		return []model.CommandIssue{model.MissingFieldIssue("target.position")}
-	}
-	return nil
-}
-
-func requireTargetGalaxyID(cmd model.Command) []model.CommandIssue {
-	if cmd.Target.GalaxyID == "" {
-		return []model.CommandIssue{model.MissingFieldIssue("target.galaxy_id")}
-	}
-	return nil
-}
-
-func requireTargetSystemID(cmd model.Command) []model.CommandIssue {
-	if cmd.Target.SystemID == "" {
-		return []model.CommandIssue{model.MissingFieldIssue("target.system_id")}
-	}
-	return nil
-}
-
-func requireTargetPlanetID(cmd model.Command) []model.CommandIssue {
-	if cmd.Target.PlanetID == "" {
-		return []model.CommandIssue{model.MissingFieldIssue("target.planet_id")}
-	}
-	return nil
-}
-
-func requireTargetLayer(cmd model.Command, expected string) []model.CommandIssue {
-	if cmd.Target.Layer != "" && cmd.Target.Layer != expected {
-		return []model.CommandIssue{model.InvalidValueIssue(
-			"target.layer",
-			fmt.Sprintf("target.layer must be %s", expected),
-			expected,
-			cmd.Target.Layer,
-		)}
-	}
-	return nil
+	return model.ValidateCommandStructure(cmd)
 }
 
 // writeJSON writes a JSON response
