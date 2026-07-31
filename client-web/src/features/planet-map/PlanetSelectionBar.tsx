@@ -6,6 +6,7 @@
 import type { Building, CatalogView, CommandResponse } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
+import { sfx } from '@/engine/audio';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
@@ -156,6 +157,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
               className={`secondary-button${modeForUnit?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
               type="button"
               onClick={() => {
+                sfx.uiClick();
                 if (modeForUnit?.kind === 'move') {
                   exitInteractionMode();
                 } else {
@@ -169,6 +171,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
               className={`secondary-button${modeForUnit?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
               type="button"
               onClick={() => {
+                sfx.uiClick();
                 if (modeForUnit?.kind === 'attack') {
                   exitInteractionMode();
                 } else {

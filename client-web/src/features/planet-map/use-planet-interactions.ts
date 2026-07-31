@@ -13,6 +13,7 @@ import type {
 
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { sfx } from '@/engine/audio';
 import { assessBuildTiles } from '@/features/planet-map/build-workflow';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import {
@@ -36,6 +37,7 @@ function reportLocalBlock(commandType: string, planetId: string, message: string
     focus,
     pendingRecovery: false,
   });
+  sfx.commandFail();
 }
 
 /** 在指定 tile 上寻找攻击目标：优先敌军势力，其次非己方单位。 */

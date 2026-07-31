@@ -4,10 +4,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 
+const { sfxMock } = vi.hoisted(() => ({
+  sfxMock: {
+    commandOk: vi.fn(),
+    commandFail: vi.fn(),
+  },
+}));
+
+vi.mock("@/engine/audio", () => ({
+  sfx: sfxMock,
+}));
+
 describe("planet command executor", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     usePlanetCommandStore.getState().resetForPlanet("planet-1-1");
+    sfxMock.commandOk.mockClear();
+    sfxMock.commandFail.mockClear();
   });
 
   afterEach(() => {
@@ -58,6 +71,8 @@ describe("planet command executor", () => {
       requestId: "req-build-1",
       status: "pending",
     });
+    expect(sfxMock.commandOk).toHaveBeenCalledTimes(1);
+    expect(sfxMock.commandFail).not.toHaveBeenCalled();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(800);
@@ -145,5 +160,35 @@ describe("planet command executor", () => {
       authoritativeMessage: "服务器连接异常，请稍后重试。",
       debugMessage: "502 Bad Gateway",
     });
+    expect(sfxMock.commandFail).toHaveBeenCalledTimes(1);
+    expect(sfxMock.commandOk).not.toHaveBeenCalled();
+  });
+
+  it("服务端拒绝时播 commandFail", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      request_id: "req-reject-1",
+      accepted: false,
+      results: [
+        {
+          command_index: 0,
+          status: "rejected",
+          code: "INSUFFICIENT_RESOURCES",
+          message: "矿石不足",
+        },
+      ],
+    });
+
+    await submitPlanetCommand({
+      commandType: "build",
+      planetId: "planet-1-1",
+      execute,
+    });
+
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      status: "failed",
+      authoritativeCode: "INSUFFICIENT_RESOURCES",
+    });
+    expect(sfxMock.commandFail).toHaveBeenCalledTimes(1);
+    expect(sfxMock.commandOk).not.toHaveBeenCalled();
   });
 });

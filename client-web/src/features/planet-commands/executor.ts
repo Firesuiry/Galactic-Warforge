@@ -1,6 +1,7 @@
 import type { CommandResponse, EventSnapshotResponse } from "@shared/types";
 
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
+import { sfx } from "@/engine/audio";
 import type { CommandJournalFocus } from "@/features/planet-commands/store";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 
@@ -30,6 +31,13 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       response,
       focus: input.focus,
     });
+
+    // 与战争页对齐：HTTP 接受/拒绝即刻反馈，不等权威回写。
+    if (response.accepted) {
+      sfx.commandOk();
+    } else {
+      sfx.commandFail();
+    }
 
     if (response.accepted && input.fetchAuthoritativeSnapshot) {
       window.setTimeout(async () => {
@@ -80,6 +88,7 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       focus: input.focus,
       pendingRecovery: false,
     });
+    sfx.commandFail();
     return undefined;
   }
 }

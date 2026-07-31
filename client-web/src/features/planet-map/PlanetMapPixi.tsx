@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from '@shared/types';
 
 import { PixiStage } from '@/engine/PixiStage';
+import { sfx } from '@/engine/audio';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import {
   buildSceneWindow,
@@ -645,6 +646,9 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       return;
     }
     const selection = overviewMode ? null : resolveSelectionAtTile(planet, tile.x, tile.y);
+    if (selection && (selection.kind === 'building' || selection.kind === 'unit')) {
+      sfx.uiClick();
+    }
     setSelected(selection ?? {
       kind: 'tile',
       position: {

@@ -727,6 +727,43 @@
   background:var(--surface-2);
   color:var(--text-muted);
   font-size:.82rem;
+  border:1px solid transparent;
+  transition:background .18s ease,border-color .18s ease,color .18s ease;
+}
+
+.planet-command-bar--ok {
+  background:#2fb57622;
+  border-color:rgba(47,181,118,.28);
+  color:#aef0ca;
+}
+
+.planet-command-bar--error {
+  background:#ff6b6b22;
+  border-color:rgba(255,107,107,.28);
+  color:#ffd2d2;
+}
+
+.planet-command-bar--pending {
+  background:#ffe39e18;
+  border-color:rgba(255,227,158,.28);
+  color:#ffe39e;
+}
+
+.planet-command-bar__feedback {
+  flex:1 1 180px;
+  min-width:0;
+}
+
+.planet-command-bar__feedback--ok {
+  color:#aef0ca;
+}
+
+.planet-command-bar__feedback--error {
+  color:#ffd2d2;
+}
+
+.planet-command-bar__feedback--pending {
+  color:#ffe39e;
 }
 
 .planet-map-shell:after {

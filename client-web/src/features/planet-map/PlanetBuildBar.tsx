@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CatalogView, StateSummary } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
+import { sfx } from '@/engine/audio';
 import {
   deriveBuildWorkflowView,
   DIRECTION_LABELS,
@@ -174,6 +175,7 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
                     title={title}
                     aria-label={title}
                     onClick={() => {
+                      sfx.uiClick();
                       if (active) {
                         exitInteractionMode();
                       } else {
