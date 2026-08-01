@@ -33,7 +33,6 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Duration:      60,
 		EnergyCost:    1,
 		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
-		TechUnlock:    []string{"smelting"},
 	},
 	"smelt_copper": {
 		ID:            "smelt_copper",
@@ -43,7 +42,6 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Duration:      60,
 		EnergyCost:    1,
 		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
-		TechUnlock:    []string{"smelting"},
 	},
 	"smelt_stone": {
 		ID:            "smelt_stone",
@@ -63,7 +61,6 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Duration:      60,
 		EnergyCost:    1,
 		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
-		TechUnlock:    []string{"smelting"},
 	},
 	"smelt_silicon": {
 		ID:            "smelt_silicon",
@@ -168,7 +165,6 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Outputs:       []ItemAmount{{ItemID: ItemCircuitBoard, Quantity: 1}},
 		Duration:      30,
 		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
-		TechUnlock:    []string{"basic_components"},
 	},
 	"magnetic_coil": {
 		ID:            "magnetic_coil",
@@ -177,7 +173,6 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Outputs:       []ItemAmount{{ItemID: ItemMagneticCoil, Quantity: 2}},
 		Duration:      30,
 		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
-		TechUnlock:    []string{"basic_components"},
 	},
 	"microcrystalline_component": {
 		ID:            "microcrystalline_component",

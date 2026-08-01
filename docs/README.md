@@ -5,6 +5,7 @@
 - `docs/dev/`：当前有效的开发者文档
 - `docs/player/`：当前有效的玩家与测试文档
 - `docs/process/`：任务流转与自动化流程文档
+- `docs/guide/`：专项制作指南（如试玩介绍视频制作流程）
 - `docs/archive/`：历史设计、旧调研、参考资料
 
 ## 我是开发者
@@ -28,6 +29,7 @@
 ## 其他目录说明
 
 - `docs/process/`：给任务流转脚本和人工维护流程使用，不是玩家或普通开发入口。
+- `docs/guide/`：专项制作指南，如 `docs/guide/视频制作指南.md`（试玩介绍视频全流程）。
 - `docs/archive/`：保留旧方案、旧报告和参考资料，避免它们继续和当前主文档混在一起。
 - `docs/superpowers/`：agent 设计稿与计划稿。
 - `docs/remotion/`：独立多媒体工程目录。
