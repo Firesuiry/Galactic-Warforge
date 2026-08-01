@@ -11,8 +11,8 @@ players:
     role: "commander"
     permissions: ["*"]
     bootstrap:
-      minerals: 240
-      energy: 100
+      minerals: 480
+      energy: 200
     executor:
       build_efficiency: 1.0
       operate_range: 6
@@ -24,8 +24,8 @@ players:
     role: "commander"
     permissions: ["*"]
     bootstrap:
-      minerals: 240
-      energy: 100
+      minerals: 480
+      energy: 200
     executor:
       build_efficiency: 1.0
       operate_range: 6

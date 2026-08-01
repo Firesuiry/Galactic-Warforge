@@ -1,8 +1,9 @@
 // SiliconWorld 真实试玩录像导演脚本
 // 通过 Playwright 驱动真实 Web UI 玩游戏，全程分段录像 + 事件时间戳日志 + 里程碑截图。
-// 用法: node play_session.mjs [--minutes 120] [--seg-sec 480] [--out .run/video-playtest/session] [--preset full|expansion|industry|finale]
+// 用法: node play_session.mjs [--minutes 120] [--seg-sec 480] [--out .run/video-playtest/session] [--preset full|expansion|industry|finale] [--no-pad]
 // 环境变量覆盖: PLAY_WEB / PLAY_SERVER / PLAY_PLAYER_ID / PLAY_PLAYER_KEY / PLAY_PLANET_ID
-//   例: PLAY_WEB=http://127.0.0.1:5698 PLAY_SERVER=http://127.0.0.1:5697 node play_session.mjs --minutes 12 --preset full
+//   例: PLAY_WEB=http://127.0.0.1:5698 PLAY_SERVER=http://127.0.0.1:5697 node play_session.mjs --minutes 30 --preset full --no-pad
+// --no-pad: 阶段干完即走（冒烟用）；正式长录不加，阶段窗口内用观察节拍填充画面
 import { chromium } from '/home/firesuiry/develop/siliconWorld/client-web/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +18,7 @@ const TOTAL_SEC = argVal('minutes', 120) * 60; // 新开局链路（远征+自�
 const SEG_SEC = argVal('seg-sec', 480);
 const OUT = args.includes('--out') ? args[args.indexOf('--out') + 1] : '.run/video-playtest/session';
 const START_OFFSET_SEC = argVal('start-offset', 0); // 续跑时的事件日志时间偏移
+const NO_PAD = args.includes('--no-pad'); // 冒烟用：阶段干完即走，不做 minEnd 收尾填充
 
 const WEB = process.env.PLAY_WEB ?? 'http://127.0.0.1:5678';
 const SERVER = process.env.PLAY_SERVER ?? 'http://127.0.0.1:5677';
@@ -144,6 +146,8 @@ async function ensureOnPlanet() {
 // ---------------- 相机控制 ----------------
 async function readCamera() {
   const surface = page.locator('.planet-map-canvas__surface');
+  // 非行星页（星图/银河）没有画布：直接返回空盒，避免 locator 自动等待 30s 超时
+  if ((await surface.count()) === 0) return { offsetX: 0, offsetY: 0, tileSize: 0, box: null };
   const [ox, oy, ts] = await Promise.all([
     surface.getAttribute('data-camera-offset-x'),
     surface.getAttribute('data-camera-offset-y'),
@@ -282,7 +286,7 @@ async function powerStatus() {
 }
 
 // 在任意己方建筑的正交相邻格补风机（风机 line range=1，贴任意电网节点即可并网）
-async function powerBoost(target = 1) {
+async function powerBoost(target = 1, avoid = null) {
   for (let i = 0; i < target; i++) {
     const scene = await getScene();
     const { executor, occupied } = analyzeScene(scene);
@@ -295,6 +299,7 @@ async function powerBoost(target = 1) {
         const x = b.position.x + dx, y = b.position.y + dy;
         if (Math.abs(x - ep.x) + Math.abs(y - ep.y) > 6) continue;
         if (!isTileFree(scene, occupied, x, y)) continue;
+        if (avoid?.has(`${x}:${y}`)) continue;
         tile = { x, y };
         break outer;
       }
@@ -439,8 +444,9 @@ function isTileFree(scene, occupied, x, y) {
 
 // 在执行体操作范围内找空地。
 // adjacentTo: 只取与该位置正交相邻的格子（电网 line range=1 需要）；
-// near: 候选按到该位置的曼哈顿距离排序（默认按到执行体距离）。
-function findBuildTile(scene, { range = 6, avoidResources = true, near = null, adjacentTo = null } = {}) {
+// near: 候选按到该位置的曼哈顿距离排序（默认按到执行体距离）；
+// avoid: 规划预留格集合（"x:y"），避免电网建筑抢占带线/厂房规划位。
+function findBuildTile(scene, { range = 6, avoidResources = true, near = null, adjacentTo = null, avoid = null } = {}) {
   const { executor, occupied, resourceAt } = analyzeScene(scene);
   if (!executor) throw new Error('找不到执行体');
   const ep = executor.position;
@@ -453,6 +459,7 @@ function findBuildTile(scene, { range = 6, avoidResources = true, near = null, a
         const y = ep.y + sy;
         if (!isTileFree(scene, occupied, x, y)) continue;
         if (avoidResources && resourceAt.has(`${x}:${y}`)) continue;
+        if (avoid?.has(`${x}:${y}`)) continue;
         if (adjacentTo && Math.abs(x - adjacentTo.x) + Math.abs(y - adjacentTo.y) !== 1) continue;
         candidates.push({ x, y, dist: near ? Math.abs(x - near.x) + Math.abs(y - near.y) : d });
       }
@@ -567,7 +574,7 @@ async function buildAt(buildingType, tile, { verify = true, recipe = null, stayI
 }
 
 // 带重试的建造：自动在执行体范围内找空地；unlessExists 指定时已存在同型建筑则跳过
-async function buildNear(buildingType, { near = null, adjacentTo = null, retries = 3, unlessExists = null } = {}) {
+async function buildNear(buildingType, { near = null, adjacentTo = null, retries = 3, unlessExists = null, avoid = null } = {}) {
   if (unlessExists) {
     const scene = await getScene();
     if (Object.values(scene.buildings ?? {}).some((b) => b.type === unlessExists)) {
@@ -577,10 +584,10 @@ async function buildNear(buildingType, { near = null, adjacentTo = null, retries
   }
   for (let i = 0; i < retries; i++) {
     const scene = await getScene();
-    let tile = findBuildTile(scene, { near, adjacentTo });
+    let tile = findBuildTile(scene, { near, adjacentTo, avoid });
     if (!tile && adjacentTo) {
       // 正交相邻格占满时退而求其次：找靠近电网节点的空地
-      tile = findBuildTile(scene, { near: adjacentTo });
+      tile = findBuildTile(scene, { near: adjacentTo, avoid });
     }
     if (!tile) { logEvent('warn', `${buildingType}: 范围内没有合适空地`); return false; }
     if (await buildAt(buildingType, tile)) return true;
@@ -595,6 +602,60 @@ const BELT_DIR_LABEL = { auto: '自动', north: '北', east: '东', south: '南'
 const DIR_VECTORS = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] };
 const DIR_OF_VECTOR = (dx, dy) => (dx === 1 ? 'east' : dx === -1 ? 'west' : dy === 1 ? 'south' : 'north');
 const DIR_OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
+
+// 全局规划预留登记：所有自动选址（电网/仓储/炮塔等）都必须避开，
+// 否则发电建筑会落在规划带线/厂房位上（曾整场抢占矿机短带位导致断链）
+const PLANNED_TILES = new Set();
+const reserveTiles = (tiles) => { for (const t of tiles) PLANNED_TILES.add(`${t.x}:${t.y}`); };
+
+// ---------------- 线性一体化工厂蓝图 ----------------
+// 锚点 = 线圈装配机 C 的位置。结构（无围栏、全部侧面可进出）：
+//   Sm磁铁炉        Si铁块炉
+//     带s             带s
+//   C线圈 ←e— Sc1铜炉1        Sc2铜炉2 —w→ B电路板（Sc2→带w）
+//     带e → (1,3)混合带s ← 带w
+//            M矩阵装配机
+//             带s → L研究站
+// C/B 出线在 (1,3) 汇成混合带（装配机按配方需要从同一带子拣货），M 只吃线圈+电路板。
+const BP_BUILDINGS = [
+  { key: 'smMagnet', type: 'arc_smelter', recipe: 'smelt_magnet', rel: [0, 0] },
+  { key: 'smIron', type: 'arc_smelter', recipe: 'smelt_iron', rel: [2, 0] },
+  { key: 'coilAsm', type: 'assembling_machine_mk1', recipe: 'magnetic_coil', rel: [0, 2] },
+  { key: 'boardAsm', type: 'assembling_machine_mk1', recipe: 'circuit_board', rel: [2, 2] },
+  { key: 'smCopper1', type: 'arc_smelter', recipe: 'smelt_copper', rel: [-2, 2] },
+  { key: 'smCopper2', type: 'arc_smelter', recipe: 'smelt_copper', rel: [4, 2] },
+  { key: 'matrixAsm', type: 'assembling_machine_mk1', recipe: 'electromagnetic_matrix', rel: [1, 4] },
+  { key: 'lab', type: 'matrix_lab', recipe: null, rel: [1, 6] },
+];
+const BP_BELTS = [
+  [0, 1, 'south'],   // Sm → C（磁铁）
+  [-1, 2, 'east'],   // Sc1 → C（铜块）
+  [2, 1, 'south'],   // Si → B（铁块）
+  [3, 2, 'west'],    // Sc2 → B（铜块）
+  [0, 3, 'east'],    // C 出线
+  [2, 3, 'west'],    // B 出线
+  [1, 3, 'south'],   // 混合带（线圈+电路板）→ M
+  [1, 5, 'south'],   // 矩阵 → 研究站
+];
+// 矿石入口候选（相对格+指向）：矿石长途带的终点，带指向对应熔炉
+const BP_ORE_ENTRIES = {
+  smMagnet: [{ rel: [0, -1], finalDir: 'south' }, { rel: [-1, 0], finalDir: 'east' }],
+  smIron: [{ rel: [2, -1], finalDir: 'south' }, { rel: [3, 0], finalDir: 'west' }],
+  smCopper1: [{ rel: [-2, 1], finalDir: 'south' }, { rel: [-2, 3], finalDir: 'north' }, { rel: [-3, 2], finalDir: 'east' }],
+  smCopper2: [{ rel: [4, 1], finalDir: 'south' }, { rel: [4, 3], finalDir: 'north' }, { rel: [5, 2], finalDir: 'west' }],
+};
+// 生产商产出表（防溢毒邻接判断）：研究站无产出不计
+const BP_PRODUCERS = {
+  smMagnet: 'magnet', smIron: 'iron_ingot', smCopper1: 'copper_ingot', smCopper2: 'copper_ingot',
+  coilAsm: 'magnetic_coil', boardAsm: 'circuit_board', matrixAsm: 'electromagnetic_matrix',
+};
+const BP_ROT = ([x, y], k) => (k === 0 ? [x, y] : k === 1 ? [-y, x] : k === 2 ? [-x, -y] : [y, -x]);
+const ROT_DIR = {
+  0: { north: 'north', east: 'east', south: 'south', west: 'west' },
+  1: { north: 'west', east: 'north', south: 'east', west: 'south' },
+  2: { north: 'south', east: 'west', south: 'north', west: 'east' },
+  3: { north: 'east', east: 'south', south: 'west', west: 'north' },
+};
 
 // 传送带建造模式下用建造栏按钮循环切换方向（比 R 键更不受焦点影响）
 async function setBeltDirection(dir) {
@@ -638,12 +699,16 @@ async function layBelts(tiles, dirs, { label = '传送带' } = {}) {
   const scene = await getSceneAt(Math.max(0, Math.min(...xs) - 4), Math.max(0, Math.min(...ys) - 4),
     Math.max(...xs) - Math.min(...xs) + 9, Math.max(...ys) - Math.min(...ys) + 9).catch(() => null);
   if (scene) {
-    const at = new Set(Object.values(scene.buildings ?? {})
-      .filter((b) => b.type === BELT_TYPE && b.owner_id === PLAYER_ID)
-      .map((b) => `${b.position.x}:${b.position.y}`));
+    const belts = Object.values(scene.buildings ?? {})
+      .filter((b) => b.type === BELT_TYPE && b.owner_id === PLAYER_ID);
+    const at = new Map(belts.map((b) => [`${b.position.x}:${b.position.y}`, b.conveyor?.output]));
     const missing = tiles.filter((t) => !at.has(`${t.x}:${t.y}`));
     if (missing.length > 0) {
       logEvent('warn', `${label}: ${missing.length} 格传送带未落地，首漏 (${missing[0].x},${missing[0].y})，货流可能断档`);
+    }
+    const wrongDir = tiles.filter((t, i) => at.has(`${t.x}:${t.y}`) && at.get(`${t.x}:${t.y}`) && at.get(`${t.x}:${t.y}`) !== dirs[i]);
+    if (wrongDir.length > 0) {
+      logEvent('warn', `${label}: ${wrongDir.length} 格传送带方向不符，首处 (${wrongDir[0].x},${wrongDir[0].y})，链路可能不通`);
     }
   }
   await shot('belts-laid');
@@ -684,6 +749,110 @@ function beltRoute(isBeltAble, start, end, finalDir, bounds) {
       if (!isEnd && !isBeltAble(nx, ny)) continue;
       prev.set(nk, key(cur.x, cur.y));
       queue.push({ x: nx, y: ny });
+    }
+  }
+  return null;
+}
+
+// 一体化工厂规划：蓝图落位（锚点×4 旋转）+ 4 条矿石长途带（矿机→各熔炉）。
+// 防溢毒：带路中段不得贴“产出≠本线物品”的生产商（满线溢出会异物品卡死整条带）；
+// 矿机四邻格是矿石带唯一出口，蓝图落位一律避让。全部预留格登记进 PLANNED_TILES。
+async function planFactory(minerTiles) {
+  const scene = await getScene();
+  const occupied = new Set();
+  for (const b of Object.values(scene.buildings ?? {})) occupied.add(`${b.position.x}:${b.position.y}`);
+  for (const u of Object.values(scene.units ?? {})) occupied.add(`${u.position.x}:${u.position.y}`);
+  const resourceAt = new Set((scene.resources ?? []).map((r) => `${r.position.x}:${r.position.y}`));
+  const planned = new Set();
+  const free = (x, y) => x >= 0 && y >= 0 && x < scene.map_width && y < scene.map_height
+    && scene.terrain?.[y]?.[x] === 'buildable'
+    && !occupied.has(`${x}:${y}`) && !resourceAt.has(`${x}:${y}`) && !planned.has(`${x}:${y}`);
+  const blockedForBlueprint = new Set();
+  for (const m of Object.values(minerTiles)) {
+    for (const [dx, dy] of Object.values(DIR_VECTORS)) blockedForBlueprint.add(`${m.x + dx}:${m.y + dy}`);
+  }
+  const mid = {
+    x: Math.round((minerTiles.iron_ore.x + minerTiles.copper_ore.x + BASE_POS.x) / 3),
+    y: Math.round((minerTiles.iron_ore.y + minerTiles.copper_ore.y + BASE_POS.y) / 3),
+  };
+  const candidates = [];
+  for (let dy = -12; dy <= 12; dy++) for (let dx = -12; dx <= 12; dx++) candidates.push({ x: mid.x + dx, y: mid.y + dy });
+  candidates.sort((a, b) => (Math.abs(a.x - mid.x) + Math.abs(a.y - mid.y)) - (Math.abs(b.x - mid.x) + Math.abs(b.y - mid.y)));
+  const t2 = (anchor, k, rel) => { const [rx, ry] = BP_ROT(rel, k); return { x: anchor.x + rx, y: anchor.y + ry }; };
+  for (const anchor of candidates) {
+    for (let k = 0; k < 4; k++) {
+      const attempt = [];
+      const add = (t) => { planned.add(`${t.x}:${t.y}`); attempt.push(t); };
+      const buildings = BP_BUILDINGS.map((b) => ({ ...b, tile: t2(anchor, k, b.rel) }));
+      const belts = BP_BELTS.map(([rx, ry, dir]) => ({ tile: t2(anchor, k, [rx, ry]), dir: ROT_DIR[k][dir] }));
+      const all = [...buildings.map((b) => b.tile), ...belts.map((b) => b.tile)];
+      if (new Set(all.map((t) => `${t.x}:${t.y}`)).size !== all.length) continue;
+      if (!all.every((t) => free(t.x, t.y) && !blockedForBlueprint.has(`${t.x}:${t.y}`))) continue;
+      for (const t of all) add(t);
+      const producerMap = new Map();
+      for (const b of buildings) { const out = BP_PRODUCERS[b.key]; if (out) producerMap.set(`${b.tile.x}:${b.tile.y}`, out); }
+      producerMap.set(`${minerTiles.iron_ore.x}:${minerTiles.iron_ore.y}`, 'iron_ore');
+      producerMap.set(`${minerTiles.copper_ore.x}:${minerTiles.copper_ore.y}`, 'copper_ore');
+      const routes = {};
+      let fail = null;
+      for (const [name, ore, srcTile, smKey] of [
+        ['oreFeMagnet', 'iron_ore', minerTiles.iron_ore, 'smMagnet'],
+        ['oreFeIron', 'iron_ore', minerTiles.iron_ore, 'smIron'],
+        ['oreCu1', 'copper_ore', minerTiles.copper_ore, 'smCopper1'],
+        ['oreCu2', 'copper_ore', minerTiles.copper_ore, 'smCopper2'],
+      ]) {
+        const sm = buildings.find((b) => b.key === smKey);
+        const entries = BP_ORE_ENTRIES[smKey].map((e) => ({ tile: t2(anchor, k, e.rel), finalDir: ROT_DIR[k][e.finalDir] }));
+        const startOk = (t) => {
+          for (const [dx, dy] of Object.values(DIR_VECTORS)) {
+            const kk = `${t.x + dx}:${t.y + dy}`;
+            if (kk === `${srcTile.x}:${srcTile.y}`) continue;
+            const out = producerMap.get(kk);
+            if (out && out !== ore) return false;
+          }
+          return true;
+        };
+        let best = null;
+        for (const entry of entries) {
+          if (producerMap.has(`${entry.tile.x}:${entry.tile.y}`)) continue;
+          const starts = Object.values(DIR_VECTORS)
+            .map(([dx, dy]) => ({ x: srcTile.x + dx, y: srcTile.y + dy }))
+            .filter((t) => !Object.values(routes).some((r) => r.tiles.some((rt) => rt.x === t.x && rt.y === t.y)))
+            .filter((t) => free(t.x, t.y) && startOk(t))
+            .sort((a, b) => (Math.abs(a.x - entry.tile.x) + Math.abs(a.y - entry.tile.y)) - (Math.abs(b.x - entry.tile.x) + Math.abs(b.y - entry.tile.y)));
+          for (const start of starts) {
+            const able = (x, y) => {
+              if (!free(x, y) && !(x === start.x && y === start.y)) return false;
+              for (const [dx, dy] of Object.values(DIR_VECTORS)) {
+                const kk = `${x + dx}:${y + dy}`;
+                if (kk === `${srcTile.x}:${srcTile.y}` || kk === `${sm.tile.x}:${sm.tile.y}`) continue;
+                const out = producerMap.get(kk);
+                if (out && out !== ore) return false;
+              }
+              return true;
+            };
+            const xs = [srcTile.x, entry.tile.x, anchor.x], ys = [srcTile.y, entry.tile.y, anchor.y];
+            const bounds = {
+              x0: Math.max(0, Math.min(...xs) - 14), x1: Math.max(...xs) + 14,
+              y0: Math.max(0, Math.min(...ys) - 14), y1: Math.max(...ys) + 14,
+            };
+            const route = beltRoute(able, start, entry.tile, entry.finalDir, bounds);
+            if (route && (!best || route.tiles.length < best.tiles.length)) best = route;
+          }
+          if (best) break;
+        }
+        if (!best) { fail = name; break; }
+        routes[name] = best;
+        for (const t of best.tiles) add(t);
+      }
+      if (fail) {
+        for (const t of attempt) planned.delete(`${t.x}:${t.y}`);
+        continue;
+      }
+      // 规划成功：全部预留格登记，避免后续自动选址抢占
+      reserveTiles(attempt);
+      const stand = { x: anchor.x, y: anchor.y + 3 };
+      return { anchor, rot: k, buildings, belts, routes, stand };
     }
   }
   return null;
@@ -737,18 +906,9 @@ async function scanClusters(kinds) {
   return [...clusters.values()];
 }
 
-function nearestCluster(clusters, kind, from) {
-  const cands = clusters.filter((c) => c.kind === kind);
-  let best = null;
-  for (const c of cands) {
-    c.tiles.sort((a, b) => (Math.abs(a.x - from.x) + Math.abs(a.y - from.y)) - (Math.abs(b.x - from.x) + Math.abs(b.y - from.y)));
-    c.dist = Math.abs(c.tiles[0].x - from.x) + Math.abs(c.tiles[0].y - from.y);
-    if (!best || c.dist < best.dist) best = c;
-  }
-  return best;
-}
-
 // 矿机→短带→熔炉 三联格：矿机压矿脉，皮带一格、熔炉紧随其后，方向朝 preferToward 优先
+// 带格除目标矿脉外不得贴其他矿脉格：矿机出料会被侧面任意带子拉走，
+// 带格贴到别家矿机必然跨线偷料（铜带拉铁矿喂铜炉，整条线卡死）。
 function planMinerSmelter(grid, minerTile, preferToward) {
   const dirs = Object.keys(DIR_VECTORS).sort((a, b) => {
     const score = (d) => {
@@ -762,11 +922,20 @@ function planMinerSmelter(grid, minerTile, preferToward) {
     const [dx, dy] = DIR_VECTORS[dir];
     const belt = { x: minerTile.x + dx, y: minerTile.y + dy };
     const smelter = { x: minerTile.x + 2 * dx, y: minerTile.y + 2 * dy };
-    if (grid.free(belt.x, belt.y) && grid.free(smelter.x, smelter.y)) {
-      return { minerTile, beltTile: belt, beltDir: dir, smelterTile: smelter, dir };
-    }
+    if (!grid.free(belt.x, belt.y) || !grid.free(smelter.x, smelter.y)) continue;
+    if (touchesForeignResource(grid, belt, minerTile)) continue;
+    return { minerTile, beltTile: belt, beltDir: dir, smelterTile: smelter, dir };
   }
   return null;
+}
+
+function touchesForeignResource(grid, tile, minerTile) {
+  for (const [dx, dy] of Object.values(DIR_VECTORS)) {
+    const x = tile.x + dx, y = tile.y + dy;
+    if (x === minerTile.x && y === minerTile.y) continue;
+    if (grid.resourceAt.has(`${x}:${y}`)) return true;
+  }
+  return false;
 }
 
 // 装配枢纽相对布局（A=锚点，x 向东 y 向南）：
@@ -820,33 +989,51 @@ async function buildAtExact(buildingType, tile, { recipe = null, retries = 2 } =
   return false;
 }
 
-// 规划一片矿区：N 组「矿机→短带→熔炉(指定配方)」，返回站位与预留格
+// 规划一片矿区：每个配方一条「矿机→短带→熔炉」支线。
+// 出生保障矿脉只有 1 格时，多台熔炉共用一台矿机——矿机不同侧面各拉一条带
+// （建筑只能从“指向自己”的带子取货，支线互不干扰）。
 async function planMiningSite(cluster, recipes, toward) {
   const scene = await getScene();
   const reserved = [];
   const spots = [];
-  for (const tile of cluster.tiles) {
-    if (spots.length >= recipes.length) break;
-    if (scene.terrain?.[tile.y]?.[tile.x] !== 'buildable') continue;
-    const grid = makeSiteGrid(scene, reserved);
-    const plan = planMinerSmelter(grid, tile, toward);
-    if (!plan) continue;
-    reserved.push(plan.beltTile, plan.smelterTile);
-    spots.push({ ...plan, recipe: recipes[spots.length], kind: cluster.kind });
-  }
-  if (spots.length < recipes.length) {
-    logEvent('warn', `矿区 (${cluster.tiles[0].x},${cluster.tiles[0].y}) 规划失败：矿脉周边空地不足`);
+  const usableTiles = cluster.tiles.filter((t) => scene.terrain?.[t.y]?.[t.x] === 'buildable');
+  if (!usableTiles.length) {
+    logEvent('warn', `矿区 (${cluster.tiles[0].x},${cluster.tiles[0].y}) 规划失败：矿脉格均不可建造`);
     return null;
   }
+  // 只取最近矿格周边 8 格内的矿脉：无 cluster 的 starter 节点会把全图同名节点
+  // 混成一个簇（含远处其他玩家的保障矿），支线必须收拢在最近矿格周边
+  const home = usableTiles[0];
+  const nearTiles = usableTiles.filter((t) => Math.abs(t.x - home.x) + Math.abs(t.y - home.y) <= 8);
+  for (let i = 0; i < recipes.length; i++) {
+    // 矿脉格多于配方数时一机一炉；不够时最近一格被多条支线共用
+    const tile = nearTiles[Math.min(i, nearTiles.length - 1)];
+    const grid = makeSiteGrid(scene, reserved);
+    const plan = planMinerSmelter(grid, tile, toward);
+    if (!plan) {
+      logEvent('warn', `矿区 (${tile.x},${tile.y}) 第 ${i + 1} 条支线规划失败：矿脉周边空地不足`);
+      return null;
+    }
+    reserved.push(plan.beltTile, plan.smelterTile);
+    spots.push({
+      minerTile: plan.minerTile,
+      beltTiles: [plan.beltTile],
+      beltDirs: [plan.beltDir],
+      smelterTile: plan.smelterTile,
+      recipe: recipes[i],
+      kind: cluster.kind,
+    });
+  }
+  const last = spots[spots.length - 1];
   const stand = {
-    x: Math.round((spots[0].smelterTile.x + spots[1].smelterTile.x) / 2),
-    y: Math.round((spots[0].smelterTile.y + spots[1].smelterTile.y) / 2),
+    x: Math.round((spots[0].smelterTile.x + last.smelterTile.x) / 2),
+    y: Math.round((spots[0].smelterTile.y + last.smelterTile.y) / 2),
   };
   return { spots, stand, reserved, kind: cluster.kind };
 }
 
 // 熔炉出线起点：熔炉周边空格（排除进料带所在格），朝向目标优先
-function smelterOutputStart(grid, smelterTile, inputBeltTile, toward) {
+function smelterOutputStart(grid, smelterTile, inputBeltTiles, toward) {
   const dirs = Object.keys(DIR_VECTORS).sort((a, b) => {
     const score = (d) => {
       const [dx, dy] = DIR_VECTORS[d];
@@ -857,26 +1044,40 @@ function smelterOutputStart(grid, smelterTile, inputBeltTile, toward) {
   for (const dir of dirs) {
     const [dx, dy] = DIR_VECTORS[dir];
     const t = { x: smelterTile.x + dx, y: smelterTile.y + dy };
-    if (t.x === inputBeltTile.x && t.y === inputBeltTile.y) continue;
+    if (inputBeltTiles.some((b) => b.x === t.x && b.y === t.y)) continue;
     if (grid.free(t.x, t.y)) return t;
   }
   return null;
 }
 
-// 在铁区周边搜索枢纽锚点，并试算 4 条长途传送带路径（磁铁/铁块自铁区，铜块×2 自铜区）
+// 枢纽选址：首选铁区周边，失败回退到基地周边（出生点半径 8 已平整，必有空地）。
+// 试算 4 条长途传送带路径（磁铁/铁块自铁区，铜块×2 自铜区）
 async function planHubAndRoutes(feSite, cuSite) {
+  const centers = [feSite.stand];
+  if (Math.abs(feSite.stand.x - BASE_POS.x) + Math.abs(feSite.stand.y - BASE_POS.y) > 4) centers.push(BASE_POS);
+  for (const center of centers) {
+    const plan = await tryHubAround(center, feSite, cuSite);
+    if (plan) {
+      if (center !== feSite.stand) logEvent('info', `枢纽选址回退到基地周边 (${plan.anchor.x},${plan.anchor.y})`);
+      return plan;
+    }
+    logEvent('warn', `枢纽选址: (${center.x},${center.y}) 周边无可用锚点，换下一候选区域`);
+  }
+  return null;
+}
+
+async function tryHubAround(center, feSite, cuSite) {
   const scene = await getScene();
-  const feC = feSite.stand;
   const candidates = [];
-  for (let dy = -7; dy <= 7; dy++) {
-    for (let dx = -7; dx <= 7; dx++) candidates.push({ x: feC.x + dx, y: feC.y + dy });
+  for (let dy = -8; dy <= 8; dy++) {
+    for (let dx = -8; dx <= 8; dx++) candidates.push({ x: center.x + dx, y: center.y + dy });
   }
   const score = (a) => Math.abs(a.x - cuSite.stand.x) + Math.abs(a.y - cuSite.stand.y)
-    + 2 * (Math.abs(a.x - feC.x) + Math.abs(a.y - feC.y));
+    + 2 * (Math.abs(a.x - feSite.stand.x) + Math.abs(a.y - feSite.stand.y));
   candidates.sort((a, b) => score(a) - score(b));
   const allX = [...feSite.reserved, ...cuSite.reserved].map((t) => t.x);
   const allY = [...feSite.reserved, ...cuSite.reserved].map((t) => t.y);
-  for (const anchor of candidates.slice(0, 24)) {
+  for (const anchor of candidates.slice(0, 32)) {
     const reserved = [...feSite.reserved, ...cuSite.reserved];
     const grid = makeSiteGrid(scene, reserved);
     const hub = planHubLayout(grid, anchor);
@@ -898,7 +1099,7 @@ async function planHubAndRoutes(feSite, cuSite) {
       ['copper2', cuSite.spots[1], hub.entries.copper2],
     ]) {
       const g2 = makeSiteGrid(scene, routeReserved);
-      const start = smelterOutputStart(g2, spot.smelterTile, spot.beltTile, entry.tile);
+      const start = smelterOutputStart(g2, spot.smelterTile, spot.beltTiles, entry.tile);
       if (!start) { ok = false; break; }
       routeReserved.push(start);
       const g3 = makeSiteGrid(scene, routeReserved);
@@ -912,14 +1113,15 @@ async function planHubAndRoutes(feSite, cuSite) {
   return null;
 }
 
-// 站点电力预建：特斯拉塔贴中心 + 两台风机贴塔（消费建筑落地前先把电网铺好）
-async function seedSitePower(center, { label = '站点', windCount = 2 } = {}) {
+// 站点电力预建：特斯拉塔贴中心 + 两台风机贴塔（消费建筑落地前先把电网铺好）。
+// avoid：站点规划预留格（带线/厂房位），电网建筑不得抢占。
+async function seedSitePower(center, { label = '站点', windCount = 2, avoid = null } = {}) {
   const hasTesla = await findBuildingNear('tesla_tower', center, 8);
-  if (!hasTesla) await buildNear('tesla_tower', { near: center });
+  if (!hasTesla) await buildNear('tesla_tower', { near: center, avoid });
   const tesla = await findBuildingNear('tesla_tower', center, 10);
   for (let i = 0; i < windCount; i++) {
-    if (tesla) await buildNear('wind_turbine', { adjacentTo: tesla.position });
-    else await powerBoost(1);
+    if (tesla) await buildNear('wind_turbine', { adjacentTo: tesla.position, avoid });
+    else await powerBoost(1, avoid);
   }
   logEvent('action', `${label}电网预建完成（特斯拉塔+风机×${windCount}）`);
 }
@@ -940,13 +1142,20 @@ async function ensureSitePower(center, types, { rounds = 4, label = '站点' } =
       logEvent('milestone', `${label}电力就绪（${st.count} 台在线）`);
       return true;
     }
-    logEvent('info', `${label}存在未通电建筑，第 ${r + 1} 轮补电（特斯拉塔+风机）`);
-    await buildNear('tesla_tower', { near: center });
+    // 补电要贴着“没电的那台”建塔（特斯拉 range=4，贴站位中心可能够不着边缘建筑）
+    const scene0 = await getScene().catch(() => null);
+    const offline = Object.values(scene0?.buildings ?? {}).filter(
+      (b) => types.includes(b.type) && b.owner_id === PLAYER_ID
+        && Math.abs(b.position.x - center.x) + Math.abs(b.position.y - center.y) <= 22
+        && !['running', 'idle'].includes(b.runtime?.state));
+    const target = offline[0]?.position ?? center;
+    logEvent('info', `${label}存在未通电建筑，第 ${r + 1} 轮补电（贴 (${target.x},${target.y}) 建塔+风机）`);
+    await buildNear('tesla_tower', { near: target });
     const scene = await getScene().catch(() => null);
     const tesla = Object.values(scene?.buildings ?? {})
       .filter((b) => b.type === 'tesla_tower' && b.owner_id === PLAYER_ID)
-      .sort((a, b) => (Math.abs(a.position.x - center.x) + Math.abs(a.position.y - center.y))
-        - (Math.abs(b.position.x - center.x) + Math.abs(b.position.y - center.y)))[0];
+      .sort((a, b) => (Math.abs(a.position.x - target.x) + Math.abs(a.position.y - target.y))
+        - (Math.abs(b.position.x - target.x) + Math.abs(b.position.y - target.y)))[0];
     if (tesla) {
       await buildNear('wind_turbine', { adjacentTo: tesla.position });
       await buildNear('wind_turbine', { adjacentTo: tesla.position });
@@ -978,26 +1187,42 @@ async function findBuildingNear(type, pos, maxDist = 22) {
       - (Math.abs(b.position.x - pos.x) + Math.abs(b.position.y - pos.y)))[0] ?? null;
 }
 
-// 建设一片矿区：电力 → 矿机/短带/熔炉 ×N → 验证通电与产出
-// 先进场再开工：执行体操作范围只有 6 格，远离厂址的一切建造都会被服务端拒绝
+// 建设一片矿区：电力 → 逐支线（矿机/短带/熔炉）→ 验证通电与产出。
+// 先进场再开工：执行体操作范围只有 6 格，远离厂址的一切建造都会被服务端拒绝；
+// 多炉共用矿脉时矿机只建一台；熔炉落地后必须看到矿石入炉（落地≠连通）。
 async function buildMiningSite(site, { label, milestones = [] } = {}) {
   const arrived = await moveExecutorTo(site.stand, { arriveDist: 2, maxSteps: 40 });
   if (!arrived) logEvent('warn', `${label}: 执行体未能抵达厂址 (${site.stand.x},${site.stand.y})，建造可能超距失败`);
-  await seedSitePower(site.stand, { label });
+  const avoid = new Set(site.reserved.map((t) => `${t.x}:${t.y}`));
+  await seedSitePower(site.stand, { label, avoid });
+  const oreLabel = site.kind === 'copper_ore' ? '铜矿' : '铁矿';
+  const builtSmelters = [];
   for (const spot of site.spots) {
-    await waitResources(50, 20, 420);
-    const minerOk = await buildAtExact('mining_machine', spot.minerTile);
-    if (!minerOk) {
-      logEvent('warn', `${label}: 矿机落地失败 @(${spot.minerTile.x},${spot.minerTile.y})，该坑位熔炉一并跳过`);
-      continue;
+    const minerExisting = await findBuildingNear('mining_machine', spot.minerTile, 0);
+    if (!minerExisting) {
+      await waitResources(50, 20, 420);
+      const minerOk = await buildAtExact('mining_machine', spot.minerTile);
+      if (!minerOk) {
+        logEvent('warn', `${label}: 矿机落地失败 @(${spot.minerTile.x},${spot.minerTile.y})，该支线熔炉一并跳过`);
+        continue;
+      }
     }
-    await layBelts([spot.beltTile], [spot.beltDir], { label: `${label}矿机短带` });
-    // 矿产回扣与下游消耗挂钩，第二台熔炉的 120 矿产要等第一条产线跑一会儿
+    await layBelts(spot.beltTiles, spot.beltDirs, { label: `${label}矿机短带` });
     await waitResources(120, 60, 720);
     const smelterOk = await buildAtExact('arc_smelter', spot.smelterTile, { recipe: spot.recipe });
-    if (!smelterOk) logEvent('warn', `${label}: 熔炉落地失败 @(${spot.smelterTile.x},${spot.smelterTile.y})，该坑位停产`);
+    if (!smelterOk) {
+      logEvent('warn', `${label}: 熔炉落地失败 @(${spot.smelterTile.x},${spot.smelterTile.y})，该支线停产`);
+      continue;
+    }
+    builtSmelters.push(spot);
   }
+  // 先保电再验货：矿机没电什么都采不出来，入炉等待只会空超时
   await ensureSitePower(site.stand, ['mining_machine', 'arc_smelter'], { label });
+  // 矿石入炉：传送带真正把矿喂进熔炉才算链路通（落地≠连通）
+  for (const spot of builtSmelters) {
+    const sm = await findBuildingNear('arc_smelter', spot.smelterTile, 0);
+    if (sm) await waitStorageQty(`${label}${oreLabel}入炉`, sm.id, site.kind, 1, { timeoutSec: 240 });
+  }
   for (const m of milestones) {
     const b = await findBuildingNear(m.buildingType, m.near ?? site.stand);
     if (!b) { logEvent('warn', `${label}: 找不到 ${m.buildingType}，跳过里程碑 ${m.desc}`); continue; }
@@ -1438,13 +1663,12 @@ const expansionPhases = [
       await page.waitForTimeout(3500);
     },
   },
-  { name: 'R1-勘察与扫描', minEnd: 300, run: async () => { await phases[1].run(); } },
-  { name: 'R2-远征铁矿区', minEnd: 560, run: async () => { await phases[2].run(); } },
-  { name: 'R3-铁矿区开工', minEnd: 1300, run: async () => { await phases[3].run(); } },
-  { name: 'R4-铜矿区开工', minEnd: 1900, run: async () => { await phases[4].run(); } },
-  { name: 'R4b-装配枢纽', minEnd: 2500, run: async () => { await phases[5].run(); } },
-  { name: 'R4c-传送带联网', minEnd: 3400, run: async () => { await phases[6].run(); } },
-  { name: 'R4d-电磁学', minEnd: 4400, run: async () => { await phases[7].run(); } },
+  { name: 'R1-勘察与规划', minEnd: 300, run: async () => { await phases[1].run(); } },
+  { name: 'R2-铁矿区开工', minEnd: 700, run: async () => { await phases[2].run(); } },
+  { name: 'R3-铜矿区开工', minEnd: 1300, run: async () => { await phases[3].run(); } },
+  { name: 'R4-装配枢纽', minEnd: 1900, run: async () => { await phases[4].run(); } },
+  { name: 'R5-传送带联网', minEnd: 2700, run: async () => { await phases[5].run(); } },
+  { name: 'R6-电磁学', minEnd: 3600, run: async () => { await phases[6].run(); } },
   {
     name: 'R5-挺进富矿带', minEnd: 2100,
     async run() {
@@ -1564,8 +1788,28 @@ function startHeartbeat() {
 }
 
 // ---------------- 阶段定义 ----------------
-// 产业链全局状态：P1 勘察后填充矿带，P2-P6 逐级填充厂址规划与带线路径
+// 产业链全局状态：P1 勘察规划后填充矿区，P2-P6 逐级建设并填充枢纽与带线路径
 let CHAIN = null;
+
+// 按距离排序尝试矿带，直到规划成功（出生保障的单格 starter 矿脉优先，失败退到远矿带）
+async function planSiteNear(clusters, kind, recipes, toward, label) {
+  const cands = clusters.filter((c) => c.kind === kind);
+  for (const c of cands) {
+    c.tiles.sort((a, b) => (Math.abs(a.x - BASE_POS.x) + Math.abs(a.y - BASE_POS.y))
+      - (Math.abs(b.x - BASE_POS.x) + Math.abs(b.y - BASE_POS.y)));
+    c.dist = Math.abs(c.tiles[0].x - BASE_POS.x) + Math.abs(c.tiles[0].y - BASE_POS.y);
+  }
+  cands.sort((a, b) => a.dist - b.dist);
+  for (const c of cands.slice(0, 4)) {
+    const site = await planMiningSite(c, recipes, toward);
+    if (site) {
+      const starter = c.id == null || c.id === undefined;
+      logEvent('milestone', `${label}矿带锁定 (${c.tiles[0].x},${c.tiles[0].y}) 储量 ${c.total}${starter ? '（出生保障矿脉）' : ''}，矿机×1+熔炉×${recipes.length}`);
+      return site;
+    }
+  }
+  return null;
+}
 
 const phases = [
   {
@@ -1611,7 +1855,7 @@ const phases = [
     },
   },
   {
-    name: 'P1-勘察与扫描', minEnd: 300,
+    name: 'P1-勘察与规划', minEnd: 300,
     async run() {
       await ensureOnPlanet();
       await openWorkflowTab('基础操作');
@@ -1625,42 +1869,22 @@ const phases = [
         await sleep(2200);
       }
       await openWorkflowTab('基础操作');
-      // 全图勘察铁/铜矿带，选定产业链厂址（新开局：矩阵必须自产，铁铜缺一不可）
+      // 全图勘察铁/铜矿带并完成厂址规划。服务端出生保障铁铜（starter 矿脉紧贴基地），
+      // 整条矩阵链落在出生点平整区，sink-first 一次建到位；starter 规划失败才退到远矿带。
       const clusters = await scanClusters(['iron_ore', 'copper_ore']);
       CHAIN = CHAIN ?? {};
-      CHAIN.feCluster = nearestCluster(clusters, 'iron_ore', BASE_POS);
-      CHAIN.cuCluster = nearestCluster(clusters, 'copper_ore', BASE_POS);
-      if (!CHAIN.feCluster || !CHAIN.cuCluster) {
-        logEvent('warn', '全图扫描未找到铁/铜矿带，后续产业链阶段将降级跳过');
+      CHAIN.feSite = await planSiteNear(clusters, 'iron_ore', ['smelt_magnet', 'smelt_iron'], BASE_POS, '铁');
+      CHAIN.cuSite = await planSiteNear(clusters, 'copper_ore', ['smelt_copper', 'smelt_copper'], CHAIN.feSite?.stand ?? BASE_POS, '铜');
+      if (!CHAIN.feSite || !CHAIN.cuSite) {
+        logEvent('warn', '铁/铜矿区规划失败，后续产业链阶段将降级跳过');
       } else {
-        logEvent('milestone', `勘察锁定铁矿带 (${CHAIN.feCluster.tiles[0].x},${CHAIN.feCluster.tiles[0].y}) 储量 ${CHAIN.feCluster.total}`);
-        logEvent('milestone', `勘察锁定铜矿带 (${CHAIN.cuCluster.tiles[0].x},${CHAIN.cuCluster.tiles[0].y}) 储量 ${CHAIN.cuCluster.total}`);
-        await shot('survey-clusters');
+        await shot('survey-sites');
       }
       await wander(15, '查看地图细节');
     },
   },
   {
-    name: 'P2-远征铁矿区', minEnd: 560,
-    async run() {
-      await ensureOnPlanet();
-      if (!CHAIN?.feCluster || !CHAIN?.cuCluster) { logEvent('skip', '没有矿带勘察结果，跳过远征'); return; }
-      const mid = {
-        x: Math.round((CHAIN.feCluster.tiles[0].x + CHAIN.cuCluster.tiles[0].x) / 2),
-        y: Math.round((CHAIN.feCluster.tiles[0].y + CHAIN.cuCluster.tiles[0].y) / 2),
-      };
-      // 铁区规划：磁铁矿机+磁铁熔炉、铁块矿机+铁块熔炉，朝向未来枢纽（两矿带中点）
-      CHAIN.feSite = await planMiningSite(CHAIN.feCluster, ['smelt_magnet', 'smelt_iron'], mid);
-      if (!CHAIN.feSite) { logEvent('warn', '铁区规划失败'); return; }
-      logEvent('action', `铁区厂址规划完成：矿机×2+熔炉×2，站位 (${CHAIN.feSite.stand.x},${CHAIN.feSite.stand.y})`);
-      const arrived = await moveExecutorTo(CHAIN.feSite.stand, { arriveDist: 3, maxSteps: 40 });
-      if (arrived) logEvent('milestone', '执行体远征抵达铁矿带');
-      await shot('arrive-iron-site');
-      await wander(10, '矿区地貌观察');
-    },
-  },
-  {
-    name: 'P3-铁矿区开工', minEnd: 1300,
+    name: 'P2-铁矿区开工', minEnd: 700,
     async run() {
       await ensureOnPlanet();
       if (!CHAIN?.feSite) { logEvent('skip', '铁区未规划，跳过'); return; }
@@ -1682,18 +1906,15 @@ const phases = [
     },
   },
   {
-    name: 'P4-铜矿区开工', minEnd: 1900,
+    name: 'P3-铜矿区开工', minEnd: 1300,
     async run() {
       await ensureOnPlanet();
-      if (!CHAIN?.cuCluster || !CHAIN?.feSite) { logEvent('skip', '铜区未勘察，跳过'); return; }
-      CHAIN.cuSite = await planMiningSite(CHAIN.cuCluster, ['smelt_copper', 'smelt_copper'], CHAIN.feSite.stand);
-      if (!CHAIN.cuSite) { logEvent('warn', '铜区规划失败'); return; }
-      await moveExecutorTo(CHAIN.cuSite.stand, { arriveDist: 3, maxSteps: 20 });
-      logEvent('milestone', '执行体转进铜矿带');
+      if (!CHAIN?.cuSite) { logEvent('skip', '铜区未规划，跳过'); return; }
       await buildMiningSite(CHAIN.cuSite, {
         label: '铜矿区',
         milestones: [
           { buildingType: 'arc_smelter', near: CHAIN.cuSite.spots[0].smelterTile, itemId: 'copper_ingot', qty: 2, desc: '铜块×2产出' },
+          { buildingType: 'arc_smelter', near: CHAIN.cuSite.spots[1].smelterTile, itemId: 'copper_ingot', qty: 2, desc: '铜块×2产出（二线）' },
         ],
       });
       const miner = await findBuildingNear('mining_machine', CHAIN.cuSite.stand);
@@ -1705,7 +1926,7 @@ const phases = [
     },
   },
   {
-    name: 'P5-装配枢纽', minEnd: 2500,
+    name: 'P4-装配枢纽', minEnd: 1900,
     async run() {
       await ensureOnPlanet();
       if (!CHAIN?.feSite || !CHAIN?.cuSite) { logEvent('skip', '矿区未就绪，跳过枢纽'); return; }
@@ -1715,7 +1936,11 @@ const phases = [
       logEvent('action', `枢纽选址 (${hub.anchor.x},${hub.anchor.y})：线圈/电路板/矩阵三台装配机+研究站，4 条长途带路径就绪`);
       await moveExecutorTo({ x: hub.anchor.x + 2, y: hub.anchor.y + 1 }, { arriveDist: 3, maxSteps: 20 });
       const hubCenter = { x: hub.anchor.x + 2, y: hub.anchor.y };
-      await seedSitePower(hubCenter, { label: '装配枢纽', windCount: 3 });
+      const hubAvoid = new Set([hub.coilAsm, hub.boardAsm, hub.matrixAsm, hub.lab,
+        ...hub.belts.map((b) => b.tile),
+        ...Object.values(CHAIN.hubPlan.routes ?? {}).flatMap((r) => r.tiles)]
+        .map((t) => `${t.x}:${t.y}`));
+      await seedSitePower(hubCenter, { label: '装配枢纽', windCount: 3, avoid: hubAvoid });
       await waitResources(100, 50, 720);
       await buildAtExact('assembling_machine_mk1', hub.coilAsm, { recipe: 'magnetic_coil' });
       await waitResources(100, 50, 720);
@@ -1728,7 +1953,7 @@ const phases = [
     },
   },
   {
-    name: 'P6-传送带联网', minEnd: 3400,
+    name: 'P5-传送带联网', minEnd: 2700,
     async run() {
       await ensureOnPlanet();
       if (!CHAIN?.hubPlan) { logEvent('skip', '枢纽未规划，跳过联网'); return; }
@@ -1756,7 +1981,7 @@ const phases = [
     },
   },
   {
-    name: 'P7-首门科技·电磁学', minEnd: 4400,
+    name: 'P6-首门科技·电磁学', minEnd: 3600,
     async run() {
       await ensureOnPlanet();
       const labId = await findLabId();
@@ -1766,7 +1991,7 @@ const phases = [
     },
   },
   {
-    name: 'P8-物流系统拓展', minEnd: 5200,
+    name: 'P7-物流系统拓展', minEnd: 4400,
     async run() {
       await ensureOnPlanet();
       await ensureResearch('basic_logistics_system', /^基础物流/, { timeoutSec: 900 });
@@ -1779,7 +2004,7 @@ const phases = [
     },
   },
   {
-    name: 'P9-冶金与武器', minEnd: 6600,
+    name: 'P8-冶金与武器', minEnd: 5600,
     async run() {
       await ensureOnPlanet();
       await ensureResearch('automatic_metallurgy', /自动化冶金/, { timeoutSec: 700 });
@@ -1794,7 +2019,7 @@ const phases = [
     },
   },
   {
-    name: 'P10-外扩侦察与终幕', minEnd: 99999,
+    name: 'P9-外扩侦察与终幕', minEnd: 99999,
     async run() {
       await ensureOnPlanet();
       // 侦察一处富矿带（镜头素材），有余粮就建前哨
@@ -1887,9 +2112,9 @@ async function main() {
       // 出错后尝试恢复页面
       try { await ensureOnPlanet(); } catch {}
     }
-    // 填充到阶段窗口结束
+    // 填充到阶段窗口结束（--no-pad 时跳过，冒烟直接推进）
     const remain = phase.minEnd - elapsed();
-    if (remain > 5 && elapsed() < TOTAL_SEC) {
+    if (!NO_PAD && remain > 5 && elapsed() < TOTAL_SEC) {
       await wander(remain, `${phase.name}·收尾观察`);
     }
   }
