@@ -695,23 +695,60 @@ async function layBelts(tiles, dirs, { label = '传送带' } = {}) {
     await exitBuildMode();
   }
   logEvent('action', `${label}: 铺设传送带 ${placed}/${tiles.length} 格`);
-  // 服务端核验：点击成功≠命令被受理（超距/占用会被拒），漏放的路段要打 warn 便于事后定位
-  await sleep(1500);
-  const xs = tiles.map((t) => t.x), ys = tiles.map((t) => t.y);
-  const scene = await getSceneAt(Math.max(0, Math.min(...xs) - 4), Math.max(0, Math.min(...ys) - 4),
-    Math.max(...xs) - Math.min(...xs) + 9, Math.max(...ys) - Math.min(...ys) + 9).catch(() => null);
-  if (scene) {
+  // 服务端核验：点击成功≠命令被受理（超距/占用会被拒）；对漏放/方向不符的格子逐格修复一次
+  // （移动已自愈后，修复基本都能落地），仍不通才打 warn 降级。
+  const audit = async () => {
+    await sleep(1500);
+    const xs = tiles.map((t) => t.x), ys = tiles.map((t) => t.y);
+    const scene = await getSceneAt(Math.max(0, Math.min(...xs) - 4), Math.max(0, Math.min(...ys) - 4),
+      Math.max(...xs) - Math.min(...xs) + 9, Math.max(...ys) - Math.min(...ys) + 9).catch(() => null);
+    if (!scene) return { missing: [], wrongDir: [] };
     const belts = Object.values(scene.buildings ?? {})
       .filter((b) => b.type === BELT_TYPE && b.owner_id === PLAYER_ID);
     const at = new Map(belts.map((b) => [`${b.position.x}:${b.position.y}`, b.conveyor?.output]));
-    const missing = tiles.filter((t) => !at.has(`${t.x}:${t.y}`));
-    if (missing.length > 0) {
-      logEvent('warn', `${label}: ${missing.length} 格传送带未落地，首漏 (${missing[0].x},${missing[0].y})，货流可能断档`);
+    return {
+      missing: tiles.filter((t) => !at.has(`${t.x}:${t.y}`)),
+      wrongDir: tiles.filter((t, i) => at.has(`${t.x}:${t.y}`) && at.get(`${t.x}:${t.y}`) && at.get(`${t.x}:${t.y}`) !== dirs[i]),
+    };
+  };
+  let { missing, wrongDir } = await audit();
+  for (const t of wrongDir) {
+    if (elapsed() > TOTAL_SEC) break;
+    logEvent('info', `${label}: 修复方向不符 @(${t.x},${t.y})`);
+    await moveExecutorTo(t, { arriveDist: 3, maxSteps: 14 }).catch(() => false);
+    await demolishAt(t, BELT_TYPE).catch(() => false);
+    const i = tiles.findIndex((x) => x.x === t.x && x.y === t.y);
+    const card3 = page.locator(`.planet-build-card[data-building-id="${BELT_TYPE}"]`);
+    if (i >= 0 && (await card3.count()) > 0 && (await card3.isEnabled().catch(() => false))) {
+      await card3.click();
+      await sleep(500);
+      await setBeltDirection(dirs[i]);
+      await clickTile(t);
+      await sleep(300);
+      await exitBuildMode();
     }
-    const wrongDir = tiles.filter((t, i) => at.has(`${t.x}:${t.y}`) && at.get(`${t.x}:${t.y}`) && at.get(`${t.x}:${t.y}`) !== dirs[i]);
-    if (wrongDir.length > 0) {
-      logEvent('warn', `${label}: ${wrongDir.length} 格传送带方向不符，首处 (${wrongDir[0].x},${wrongDir[0].y})，链路可能不通`);
+  }
+  for (const t of missing) {
+    if (elapsed() > TOTAL_SEC) break;
+    logEvent('info', `${label}: 补铺漏放 @(${t.x},${t.y})`);
+    await moveExecutorTo(t, { arriveDist: 3, maxSteps: 14 }).catch(() => false);
+    const i = tiles.findIndex((x) => x.x === t.x && x.y === t.y);
+    const card4 = page.locator(`.planet-build-card[data-building-id="${BELT_TYPE}"]`);
+    if (i >= 0 && (await card4.count()) > 0 && (await card4.isEnabled().catch(() => false))) {
+      await card4.click();
+      await sleep(500);
+      await setBeltDirection(dirs[i]);
+      await clickTile(t);
+      await sleep(300);
+      await exitBuildMode();
     }
+  }
+  if (wrongDir.length || missing.length) ({ missing, wrongDir } = await audit());
+  if (missing.length > 0) {
+    logEvent('warn', `${label}: ${missing.length} 格传送带未落地，首漏 (${missing[0].x},${missing[0].y})，货流可能断档`);
+  }
+  if (wrongDir.length > 0) {
+    logEvent('warn', `${label}: ${wrongDir.length} 格传送带方向不符，首处 (${wrongDir[0].x},${wrongDir[0].y})，链路可能不通`);
   }
   await shot('belts-laid');
   return placed;
