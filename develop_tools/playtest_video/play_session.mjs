@@ -1425,6 +1425,30 @@ async function ensureExecutorFree() {
   return false;
 }
 
+// 行军落点避障：直接踩到建筑格（含传送带）会让客户端“建筑优先”选中逻辑锁死单位；
+// 落点被占时在周边 1~2 环找最接近最终目标的空格。
+async function pickFreeStepDest(pos, dest, target) {
+  const scene = await getSceneAt(Math.max(0, pos.x - 14), Math.max(0, pos.y - 14), 29, 29).catch(() => null);
+  const occ = new Set();
+  for (const b of Object.values(scene?.buildings ?? {})) occ.add(`${b.position.x}:${b.position.y}`);
+  if (!occ.has(`${dest.x}:${dest.y}`)) return dest;
+  const score = (t) => Math.abs(t.x - target.x) + Math.abs(t.y - target.y);
+  for (let d = 1; d <= 2; d++) {
+    const cands = [];
+    for (let dx = -d; dx <= d; dx++) {
+      const dy = d - Math.abs(dx);
+      for (const sy of (dy === 0 ? [0] : [-dy, dy])) {
+        const t = { x: dest.x + dx, y: dest.y + sy };
+        if (t.x === pos.x && t.y === pos.y) continue;
+        if (occ.has(`${t.x}:${t.y}`)) continue;
+        cands.push(t);
+      }
+    }
+    if (cands.length) { cands.sort((a, b) => score(a) - score(b)); return cands[0]; }
+  }
+  return null;
+}
+
 // 分步把执行体开到目标附近（每步曼哈顿 ≤4）。
 // 单步失败/超时不再整段放弃：重新读取实际位置后重试，连续失败 4 次才认输。
 async function moveExecutorTo(target, { arriveDist = 2, maxSteps = 12 } = {}) {
@@ -1455,19 +1479,21 @@ async function moveExecutorTo(target, { arriveDist = 2, maxSteps = 12 } = {}) {
       dx = Math.sign(dxTotal) * Math.min(Math.abs(dxTotal), rem);
     }
     const dest = { x: pos.x + dx, y: pos.y + dy };
-    const moved = await moveUnit(pos, dest);
+    // 落点避障：踩到建筑格（含传送带）会让客户端“建筑优先”选中逻辑锁死单位
+    const freeDest = await pickFreeStepDest(pos, dest, target);
+    if (!freeDest) {
+      consecutiveFails++;
+      logEvent('warn', `落点 (${dest.x},${dest.y}) 及周边均被占用（连续第 ${consecutiveFails} 次），换轴重试`);
+      step--;
+      continue;
+    }
+    const moved = await moveUnit(pos, freeDest);
     if (!moved) {
       consecutiveFails++;
       logEvent('warn', `移动命令未下达（连续第 ${consecutiveFails} 次），重新定位后重试`);
       if (consecutiveFails >= 4) {
         // UI 连续失败（多见于单位站上建筑格无法被点选）：走服务端命令通道救援
-        if (await apiRescueMove(dest)) {
-          const rescued = await waitFor(`执行体救援移动到 (${dest.x},${dest.y})`, async () => {
-            const p2 = await executorPos();
-            return p2 && p2.x === dest.x && p2.y === dest.y;
-          }, { timeoutSec: 60, beatSec: 8, quiet: true });
-          if (rescued) { consecutiveFails = 0; continue; }
-        }
+        if (await apiRescueMove(freeDest, { arriveDist: 1 })) { consecutiveFails = 0; continue; }
         logEvent('warn', '移动命令连续失败，放弃行军');
         return false;
       }
@@ -1476,9 +1502,9 @@ async function moveExecutorTo(target, { arriveDist = 2, maxSteps = 12 } = {}) {
       continue;
     }
     // 行军等待期间不做地图点击（quiet），避免误触把部队带偏
-    const arrived = await waitFor(`执行体移动到 (${dest.x},${dest.y})`, async () => {
+    const arrived = await waitFor(`执行体移动到 (${freeDest.x},${freeDest.y})`, async () => {
       const p2 = await executorPos();
-      return p2 && p2.x === dest.x && p2.y === dest.y;
+      return p2 && p2.x === freeDest.x && p2.y === freeDest.y;
     }, { timeoutSec: 90, beatSec: 8, quiet: true });
     if (!arrived) {
       consecutiveFails++;
