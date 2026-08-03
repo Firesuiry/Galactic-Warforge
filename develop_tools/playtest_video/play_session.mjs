@@ -1,8 +1,9 @@
 // SiliconWorld 真实试玩录像导演脚本
 // 通过 Playwright 驱动真实 Web UI 玩游戏，全程分段录像 + 事件时间戳日志 + 里程碑截图。
-// 用法: node play_session.mjs [--minutes 120] [--seg-sec 480] [--out .run/video-playtest/session] [--preset full|expansion|industry|finale] [--no-pad]
+// 用法: node play_session.mjs [--minutes 120] [--seg-sec 480] [--out .run/video-playtest/session] [--preset full|expansion|industry|finale|recovery] [--no-pad] [--start-offset N]
 // 环境变量覆盖: PLAY_WEB / PLAY_SERVER / PLAY_PLAYER_ID / PLAY_PLAYER_KEY / PLAY_PLANET_ID
 //   例: PLAY_WEB=http://127.0.0.1:5698 PLAY_SERVER=http://127.0.0.1:5697 node play_session.mjs --minutes 30 --preset full --no-pad
+// recovery: 从现场重建（跳过 P0-P3），续跑装配枢纽→联网→研究→终幕；幂等可重复跑
 // --no-pad: 阶段干完即走（冒烟用）；正式长录不加，阶段窗口内用观察节拍填充画面
 import { chromium } from '/home/firesuiry/develop/siliconWorld/client-web/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
@@ -14,7 +15,7 @@ function argVal(name, dflt) {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? Number(args[i + 1]) : dflt;
 }
-const TOTAL_SEC = argVal('minutes', 120) * 60; // 新开局链路（远征+自产矩阵）显著更长，默认 120 分钟
+const TOTAL_SEC = argVal('minutes', 120) * 60 + argVal('start-offset', 0); // --minutes 为本次运行时长；--start-offset 续接时间轴时终点相应后移
 const SEG_SEC = argVal('seg-sec', 480);
 const OUT = args.includes('--out') ? args[args.indexOf('--out') + 1] : '.run/video-playtest/session';
 const START_OFFSET_SEC = argVal('start-offset', 0); // 续跑时的事件日志时间偏移
@@ -286,7 +287,7 @@ async function powerStatus() {
 }
 
 // 在任意己方建筑的正交相邻格补风机（风机 line range=1，贴任意电网节点即可并网）
-async function powerBoost(target = 1, avoid = null) {
+async function powerBoost(target = 1, avoid = PLANNED_TILES) {
   for (let i = 0; i < target; i++) {
     const scene = await getScene();
     const { executor, occupied } = analyzeScene(scene);
@@ -446,7 +447,7 @@ function isTileFree(scene, occupied, x, y) {
 // adjacentTo: 只取与该位置正交相邻的格子（电网 line range=1 需要）；
 // near: 候选按到该位置的曼哈顿距离排序（默认按到执行体距离）；
 // avoid: 规划预留格集合（"x:y"），避免电网建筑抢占带线/厂房规划位。
-function findBuildTile(scene, { range = 6, avoidResources = true, near = null, adjacentTo = null, avoid = null } = {}) {
+function findBuildTile(scene, { range = 6, avoidResources = true, near = null, adjacentTo = null, avoid = PLANNED_TILES } = {}) {
   const { executor, occupied, resourceAt } = analyzeScene(scene);
   if (!executor) throw new Error('找不到执行体');
   const ep = executor.position;
@@ -559,14 +560,20 @@ async function buildAt(buildingType, tile, { verify = true, recipe = null, stayI
     if (result !== before && /成功|失败|超出|out of range|拒绝|错误/i.test(result)) break;
     await sleep(1000);
   }
-  const ok = result !== before && /成功/.test(result) && !/失败|超出|out of range/i.test(result);
-  // 账本读不到时，用服务端 scene 兜底验证（回执 UI 异常不代表命令失败）
+  const ok = result !== before && /成功/.test(result) && !/失败|超出|out of range|拒绝/i.test(result);
+  // “待回写/accepted”= 已进入建造队列但未执行：不是失败，等建筑在现场出现再判定
+  const queued = !ok && result !== before && /accepted|待回写/i.test(result) && !/失败|超出|out of range|拒绝/i.test(result);
+  // 账本读不到时，用服务端 scene 兜底验证（回执 UI 异常不代表命令失败）；
+  // 排队受理的建造要等更久（队列执行+施工耗时）
   let finalOk = ok;
   if (!finalOk) {
-    await sleep(3000);
-    const scene = await getSceneAt(Math.max(0, tile.x - 30), Math.max(0, tile.y - 30), 60, 60).catch(() => null);
-    if (scene && Object.values(scene.buildings ?? {}).some(
-      (b) => b.type === buildingType && b.position.x === tile.x && b.position.y === tile.y)) finalOk = true;
+    const deadline = Date.now() + (queued ? 90000 : 3000);
+    while (Date.now() < deadline && !finalOk) {
+      await sleep(queued ? 5000 : 3000);
+      const scene = await getSceneAt(Math.max(0, tile.x - 30), Math.max(0, tile.y - 30), 60, 60).catch(() => null);
+      if (scene && Object.values(scene.buildings ?? {}).some(
+        (b) => b.type === buildingType && b.position.x === tile.x && b.position.y === tile.y)) finalOk = true;
+    }
   }
   logEvent(finalOk ? 'action' : 'warn', `建造 ${buildingType}${recipe ? `[${recipe}]` : ''} @(${tile.x},${tile.y}) → ${finalOk ? '成功' : result.slice(0, 60)}`);
   await shot(`build-${buildingType}`);
@@ -608,55 +615,11 @@ const DIR_OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east
 const PLANNED_TILES = new Set();
 const reserveTiles = (tiles) => { for (const t of tiles) PLANNED_TILES.add(`${t.x}:${t.y}`); };
 
-// ---------------- 线性一体化工厂蓝图 ----------------
-// 锚点 = 线圈装配机 C 的位置。结构（无围栏、全部侧面可进出）：
-//   Sm磁铁炉        Si铁块炉
-//     带s             带s
-//   C线圈 ←e— Sc1铜炉1        Sc2铜炉2 —w→ B电路板（Sc2→带w）
-//     带e → (1,3)混合带s ← 带w
-//            M矩阵装配机
-//             带s → L研究站
-// C/B 出线在 (1,3) 汇成混合带（装配机按配方需要从同一带子拣货），M 只吃线圈+电路板。
-const BP_BUILDINGS = [
-  { key: 'smMagnet', type: 'arc_smelter', recipe: 'smelt_magnet', rel: [0, 0] },
-  { key: 'smIron', type: 'arc_smelter', recipe: 'smelt_iron', rel: [2, 0] },
-  { key: 'coilAsm', type: 'assembling_machine_mk1', recipe: 'magnetic_coil', rel: [0, 2] },
-  { key: 'boardAsm', type: 'assembling_machine_mk1', recipe: 'circuit_board', rel: [2, 2] },
-  { key: 'smCopper1', type: 'arc_smelter', recipe: 'smelt_copper', rel: [-2, 2] },
-  { key: 'smCopper2', type: 'arc_smelter', recipe: 'smelt_copper', rel: [4, 2] },
-  { key: 'matrixAsm', type: 'assembling_machine_mk1', recipe: 'electromagnetic_matrix', rel: [1, 4] },
-  { key: 'lab', type: 'matrix_lab', recipe: null, rel: [1, 6] },
-];
-const BP_BELTS = [
-  [0, 1, 'south'],   // Sm → C（磁铁）
-  [-1, 2, 'east'],   // Sc1 → C（铜块）
-  [2, 1, 'south'],   // Si → B（铁块）
-  [3, 2, 'west'],    // Sc2 → B（铜块）
-  [0, 3, 'east'],    // C 出线
-  [2, 3, 'west'],    // B 出线
-  [1, 3, 'south'],   // 混合带（线圈+电路板）→ M
-  [1, 5, 'south'],   // 矩阵 → 研究站
-];
-// 矿石入口候选（相对格+指向）：矿石长途带的终点，带指向对应熔炉
-const BP_ORE_ENTRIES = {
-  smMagnet: [{ rel: [0, -1], finalDir: 'south' }, { rel: [-1, 0], finalDir: 'east' }],
-  smIron: [{ rel: [2, -1], finalDir: 'south' }, { rel: [3, 0], finalDir: 'west' }],
-  smCopper1: [{ rel: [-2, 1], finalDir: 'south' }, { rel: [-2, 3], finalDir: 'north' }, { rel: [-3, 2], finalDir: 'east' }],
-  smCopper2: [{ rel: [4, 1], finalDir: 'south' }, { rel: [4, 3], finalDir: 'north' }, { rel: [5, 2], finalDir: 'west' }],
+// 配方 → 产出物（防溢毒邻接判断用）
+const RECIPE_OUTPUT = {
+  smelt_magnet: 'magnet', smelt_iron: 'iron_ingot', smelt_copper: 'copper_ingot',
+  magnetic_coil: 'magnetic_coil', circuit_board: 'circuit_board', electromagnetic_matrix: 'electromagnetic_matrix',
 };
-// 生产商产出表（防溢毒邻接判断）：研究站无产出不计
-const BP_PRODUCERS = {
-  smMagnet: 'magnet', smIron: 'iron_ingot', smCopper1: 'copper_ingot', smCopper2: 'copper_ingot',
-  coilAsm: 'magnetic_coil', boardAsm: 'circuit_board', matrixAsm: 'electromagnetic_matrix',
-};
-const BP_ROT = ([x, y], k) => (k === 0 ? [x, y] : k === 1 ? [-y, x] : k === 2 ? [-x, -y] : [y, -x]);
-const ROT_DIR = {
-  0: { north: 'north', east: 'east', south: 'south', west: 'west' },
-  1: { north: 'west', east: 'north', south: 'east', west: 'south' },
-  2: { north: 'south', east: 'west', south: 'north', west: 'east' },
-  3: { north: 'east', east: 'south', south: 'west', west: 'north' },
-};
-
 // 传送带建造模式下用建造栏按钮循环切换方向（比 R 键更不受焦点影响）
 async function setBeltDirection(dir) {
   const btn = page.locator('.planet-build-bar__control', { hasText: '方向' }).first();
@@ -672,9 +635,28 @@ async function setBeltDirection(dir) {
   return text.includes(`方向：${BELT_DIR_LABEL[dir]}`);
 }
 
-// 沿路径逐格铺传送带。tiles[i] 的输出方向为 dirs[i]；建造模式全程保持，最后统一退出
+// 沿路径逐格铺传送带。tiles[i] 的输出方向为 dirs[i]；建造模式全程保持，最后统一退出。
+// 幂等：已有自有带子的格跳过不铺（计入 placed）。
 async function layBelts(tiles, dirs, { label = '传送带' } = {}) {
   if (!tiles.length) return true;
+  // 预扫描：方向一致的旧带沿用；方向不符的旧带标记拆除重铺
+  const xs0 = tiles.map((t) => t.x), ys0 = tiles.map((t) => t.y);
+  const pre = await getSceneAt(Math.max(0, Math.min(...xs0) - 2), Math.max(0, Math.min(...ys0) - 2),
+    Math.max(...xs0) - Math.min(...xs0) + 5, Math.max(...ys0) - Math.min(...ys0) + 5).catch(() => null);
+  const existing = new Map(Object.values(pre?.buildings ?? {})
+    .filter((b) => b.type === BELT_TYPE && b.owner_id === PLAYER_ID)
+    .map((b) => [`${b.position.x}:${b.position.y}`, b.conveyor?.output]));
+  const todo = [];
+  let skipped = 0;
+  tiles.forEach((t, i) => {
+    const key = `${t.x}:${t.y}`;
+    if (!existing.has(key)) { todo.push({ t, d: dirs[i], redemolish: false }); return; }
+    const out = existing.get(key);
+    if (out && out !== dirs[i]) { todo.push({ t, d: dirs[i], redemolish: true }); return; }
+    skipped++;
+  });
+  if (skipped > 0) logEvent('info', `${label}: ${skipped} 格传送带已存在，直接沿用`);
+  if (!todo.length) return tiles.length;
   const card = page.locator(`.planet-build-card[data-building-id="${BELT_TYPE}"]`);
   if ((await card.count()) === 0) { logEvent('skip', '传送带未解锁'); return false; }
   await card.scrollIntoViewIfNeeded().catch(() => {});
@@ -682,16 +664,36 @@ async function layBelts(tiles, dirs, { label = '传送带' } = {}) {
     logEvent('warn', `${label}: 传送带卡片不可用（矿产不足），放弃铺设`);
     return false;
   }
-  await card.click();
-  await sleep(600);
-  let placed = 0;
-  for (let i = 0; i < tiles.length; i++) {
+  let placed = skipped;
+  // 长途带分段铺：执行体操作范围只有 6 格，每段先把执行体挪到段首附近再进建造模式
+  const CHUNK = 5;
+  for (let ci = 0; ci < todo.length; ci += CHUNK) {
+    const chunk = todo.slice(ci, ci + CHUNK);
     if (elapsed() > TOTAL_SEC) break;
-    await setBeltDirection(dirs[i]);
-    if (await clickTile(tiles[i])) placed++;
-    await sleep(250);
+    await moveExecutorTo(chunk[0].t, { arriveDist: 3, maxSteps: 14 }).catch(() => false);
+    await ensureOnPlanet().catch(() => {});
+    // 方向不符的旧带先拆（建造模式外操作）
+    for (const { t, redemolish } of chunk) {
+      if (redemolish) {
+        logEvent('info', `${label}: 拆除方向不符的旧带 @(${t.x},${t.y}) 重铺`);
+        await demolishAt(t, BELT_TYPE).catch(() => false);
+      }
+    }
+    const card2 = page.locator(`.planet-build-card[data-building-id="${BELT_TYPE}"]`);
+    if ((await card2.count()) === 0 || !(await card2.isEnabled().catch(() => false))) {
+      logEvent('warn', `${label}: 传送带卡片不可用，第 ${ci / CHUNK + 1} 段放弃`);
+      break;
+    }
+    await card2.click();
+    await sleep(600);
+    for (const { t, d } of chunk) {
+      if (elapsed() > TOTAL_SEC) break;
+      await setBeltDirection(d);
+      if (await clickTile(t)) placed++;
+      await sleep(250);
+    }
+    await exitBuildMode();
   }
-  await exitBuildMode();
   logEvent('action', `${label}: 铺设传送带 ${placed}/${tiles.length} 格`);
   // 服务端核验：点击成功≠命令被受理（超距/占用会被拒），漏放的路段要打 warn 便于事后定位
   await sleep(1500);
@@ -715,17 +717,27 @@ async function layBelts(tiles, dirs, { label = '传送带' } = {}) {
   return placed;
 }
 
-// BFS 找一条传送带路径：从 start 格到 end 格，end 格的输出方向固定为 finalDir（指向目标建筑）。
-// isBeltAble(x,y) 判断空格可放带；start/end 格视为可用。路径不允许 U 型掉头（末端反向则判失败）。
-function beltRoute(isBeltAble, start, end, finalDir, bounds) {
+// BFS 找一条传送带路径：从 start 格到终点集合中的任意格。
+// endSet: Map<"x:y", finalDir|null>——终点为枢纽入口时 finalDir 固定（带指向建筑，末端不许掉头）；
+// 终点为既有路线的汇流格时 finalDir=null（方向沿用既有带，无掉头约束）。
+// BFS 寻路一条皮带路径。ableDir(x,y,dir)（可选）：方向感知的合法性校验——
+// 扩展 cur→next 时锁定 cur 的带子方向为步进方向，终点格方向为 finalDir，
+// 用于"定向溢毒"约束（带子方向背离生产商才会被其溢出货物的服务端实测规则）。
+function beltRoute(isBeltAble, start, endSet, bounds, ableDir = null) {
   const key = (x, y) => `${x}:${y}`;
   const prev = new Map([[key(start.x, start.y), null]]);
   const queue = [start];
   while (queue.length) {
     const cur = queue.shift();
-    if (cur.x === end.x && cur.y === end.y) {
+    const curKey = key(cur.x, cur.y);
+    if (endSet.has(curKey)) {
+      const finalDir = endSet.get(curKey);
+      if (finalDir && ableDir && !ableDir(cur.x, cur.y, finalDir)) {
+        // 终点格以 finalDir 指向时非法（如末端指向会中毒），本终点不可达
+        continue;
+      }
       const path = [];
-      let ck = key(cur.x, cur.y);
+      let ck = curKey;
       while (ck) {
         const [x, y] = ck.split(':').map(Number);
         path.push({ x, y });
@@ -736,125 +748,222 @@ function beltRoute(isBeltAble, start, end, finalDir, bounds) {
       for (let i = 0; i < path.length - 1; i++) {
         dirs.push(DIR_OF_VECTOR(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y));
       }
-      if (dirs.length && DIR_OPPOSITE[finalDir] === dirs[dirs.length - 1]) return null; // 末端掉头，皮带无法回灌
-      dirs.push(finalDir);
-      return { tiles: path, dirs };
+      if (finalDir) {
+        if (dirs.length && DIR_OPPOSITE[finalDir] === dirs[dirs.length - 1]) return null; // 末端掉头，皮带无法回灌
+        dirs.push(finalDir);
+      }
+      return { tiles: path, dirs, endTile: cur };
     }
-    for (const [dx, dy] of Object.values(DIR_VECTORS)) {
-      const nx = cur.x + dx, ny = cur.y + dy;
-      const nk = key(nx, ny);
+    for (const [stepDir, [dx, dy]] of Object.entries(DIR_VECTORS)) {
+      const nx = cur.x + dx, ny = cur.y + dy, nk = key(nx, ny);
       if (prev.has(nk)) continue;
       if (nx < bounds.x0 || nx > bounds.x1 || ny < bounds.y0 || ny > bounds.y1) continue;
-      const isEnd = nx === end.x && ny === end.y;
-      if (!isEnd && !isBeltAble(nx, ny)) continue;
-      prev.set(nk, key(cur.x, cur.y));
+      if (!endSet.has(nk) && !isBeltAble(nx, ny)) continue;
+      // cur 的带子方向被本步锁定为 stepDir：非法则不走这个方向
+      if (ableDir && !ableDir(cur.x, cur.y, stepDir)) continue;
+      prev.set(nk, curKey);
       queue.push({ x: nx, y: ny });
     }
   }
   return null;
 }
 
-// 一体化工厂规划：蓝图落位（锚点×4 旋转）+ 4 条矿石长途带（矿机→各熔炉）。
-// 防溢毒：带路中段不得贴“产出≠本线物品”的生产商（满线溢出会异物品卡死整条带）；
-// 矿机四邻格是矿石带唯一出口，蓝图落位一律避让。全部预留格登记进 PLANNED_TILES。
-async function planFactory(minerTiles) {
+// 装配枢纽规划（星型拓扑 + BFS 实算路由）：给 4 台熔炉（磁/铁/铜×2，已建成或仅规划均可）配
+// 一个「3 装配机+研究站」枢纽。布局：矩阵装配机居中，线圈/电路板装配机左右各 2 格，研究站
+// 下（或上）方 2 格；内部带仅 3 格（线圈→矩阵、电路板→矩阵、矩阵→研究站），互不贴邻。
+// 4 条熔炉入线用 beltRoute 从熔炉侧面实算到装配机空闲侧面。
+// 规则（全部来自服务端实测）：建筑只从"指向自己"的带子取货；生产商满线后会向侧面
+// 任意带子溢出（溢毒），故带路中段不得贴"产出≠本线物品"的生产商；
+// 已存在的自有建筑/带子可复用（幂等：probe 建了一半，正式跑接着来）。
+// 诊断：每个锚点的失败环节（layout / 哪条路线 no-path）计数上报。
+async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = new Map(), extraPlanned = [] } = {}) {
   const scene = await getScene();
-  const occupied = new Set();
-  for (const b of Object.values(scene.buildings ?? {})) occupied.add(`${b.position.x}:${b.position.y}`);
-  for (const u of Object.values(scene.units ?? {})) occupied.add(`${u.position.x}:${u.position.y}`);
+  const occupied = new Map(); // "x:y" -> building
+  for (const b of Object.values(scene.buildings ?? {})) occupied.set(`${b.position.x}:${b.position.y}`, b);
+  const unitAt = new Set(Object.values(scene.units ?? {}).map((u) => `${u.position.x}:${u.position.y}`));
   const resourceAt = new Set((scene.resources ?? []).map((r) => `${r.position.x}:${r.position.y}`));
-  const planned = new Set();
+  const resourceKindAt = new Map((scene.resources ?? []).map((r) => [`${r.position.x}:${r.position.y}`, r.kind]));
+  // 生产商产出图：矿机→矿种，熔炉/装配机→配方产出；规划中的矿机/熔炉同样算生产商
+  const producerMap = new Map(extraProducers);
+  for (const b of occupied.values()) {
+    const k = `${b.position.x}:${b.position.y}`;
+    if (b.type === 'mining_machine') producerMap.set(k, resourceKindAt.get(k) ?? 'ore');
+    else if (RECIPE_OUTPUT[recipeOf(b)]) producerMap.set(k, RECIPE_OUTPUT[recipeOf(b)]);
+  }
+  const beltAt = new Set();
+  for (const b of occupied.values()) {
+    if (b.type === BELT_TYPE && b.owner_id === PLAYER_ID) beltAt.add(`${b.position.x}:${b.position.y}`);
+  }
+  const planned = new Set(extraPlanned.map((t) => `${t.x}:${t.y}`));
   const free = (x, y) => x >= 0 && y >= 0 && x < scene.map_width && y < scene.map_height
     && scene.terrain?.[y]?.[x] === 'buildable'
-    && !occupied.has(`${x}:${y}`) && !resourceAt.has(`${x}:${y}`) && !planned.has(`${x}:${y}`);
-  const blockedForBlueprint = new Set();
-  for (const m of Object.values(minerTiles)) {
-    for (const [dx, dy] of Object.values(DIR_VECTORS)) blockedForBlueprint.add(`${m.x + dx}:${m.y + dy}`);
-  }
-  const mid = {
-    x: Math.round((minerTiles.iron_ore.x + minerTiles.copper_ore.x + BASE_POS.x) / 3),
-    y: Math.round((minerTiles.iron_ore.y + minerTiles.copper_ore.y + BASE_POS.y) / 3),
+    && !occupied.has(`${x}:${y}`) && !unitAt.has(`${x}:${y}`) && !resourceAt.has(`${x}:${y}`) && !planned.has(`${x}:${y}`);
+  const freeOrOwn = (x, y, type) => {
+    if (free(x, y)) return true;
+    const ex = occupied.get(`${x}:${y}`);
+    return !!(ex && ex.owner_id === PLAYER_ID && ex.type === type);
   };
-  const candidates = [];
-  for (let dy = -12; dy <= 12; dy++) for (let dx = -12; dx <= 12; dx++) candidates.push({ x: mid.x + dx, y: mid.y + dy });
-  candidates.sort((a, b) => (Math.abs(a.x - mid.x) + Math.abs(a.y - mid.y)) - (Math.abs(b.x - mid.x) + Math.abs(b.y - mid.y)));
-  const t2 = (anchor, k, rel) => { const [rx, ry] = BP_ROT(rel, k); return { x: anchor.x + rx, y: anchor.y + ry }; };
-  for (const anchor of candidates) {
-    for (let k = 0; k < 4; k++) {
-      const attempt = [];
-      const add = (t) => { planned.add(`${t.x}:${t.y}`); attempt.push(t); };
-      const buildings = BP_BUILDINGS.map((b) => ({ ...b, tile: t2(anchor, k, b.rel) }));
-      const belts = BP_BELTS.map(([rx, ry, dir]) => ({ tile: t2(anchor, k, [rx, ry]), dir: ROT_DIR[k][dir] }));
-      const all = [...buildings.map((b) => b.tile), ...belts.map((b) => b.tile)];
-      if (new Set(all.map((t) => `${t.x}:${t.y}`)).size !== all.length) continue;
-      if (!all.every((t) => free(t.x, t.y) && !blockedForBlueprint.has(`${t.x}:${t.y}`))) continue;
-      for (const t of all) add(t);
-      const producerMap = new Map();
-      for (const b of buildings) { const out = BP_PRODUCERS[b.key]; if (out) producerMap.set(`${b.tile.x}:${b.tile.y}`, out); }
-      producerMap.set(`${minerTiles.iron_ore.x}:${minerTiles.iron_ore.y}`, 'iron_ore');
-      producerMap.set(`${minerTiles.copper_ore.x}:${minerTiles.copper_ore.y}`, 'copper_ore');
+  // 定向溢毒（服务端 building_io_settlement.go 实测规则）：生产商只把货溢到
+  // "方向背离自己"的相邻带子上（allowsInput 要求带子从其背侧接货）；指向生产商或
+  // 与其轴向垂直的带子都是安全的。因此只需按带子的实际方向判定：
+  // 格 (x,y) 上方向为 dir 的带子，相邻生产商位于 ndir 方向时，仅当 dir === DIR_OPPOSITE[ndir]
+  // （带子背离生产商）且其产出不在 items 白名单时才中毒。
+  const poisonByDir = (x, y, dir, items, exemptKeys) => {
+    for (const [ndir, [dx, dy]] of Object.entries(DIR_VECTORS)) {
+      const kk = `${x + dx}:${y + dy}`;
+      if (exemptKeys.has(kk)) continue;
+      const out = producerMap.get(kk);
+      if (out && !items.includes(out) && dir === DIR_OPPOSITE[ndir]) return false;
+    }
+    return true;
+  };
+
+  // 星型布局变体（锚点 = 矩阵装配机 M）：线圈 C/电路板 B 左右各 2 格，研究站 L 上下 2 格。
+  // 内部带恰好落在两建筑中间格，指向目标建筑，天然互不贴邻。
+  const LAYOUTS = [
+    { coil: [-2, 0], board: [2, 0], lab: [0, 2] },
+    { coil: [2, 0], board: [-2, 0], lab: [0, 2] },
+    { coil: [-2, 0], board: [2, 0], lab: [0, -2] },
+    { coil: [2, 0], board: [-2, 0], lab: [0, -2] },
+  ];
+  const smelterArr = [smelters.magnet, smelters.iron, smelters.copperA, smelters.copperB].filter(Boolean);
+  const cx = Math.round(smelterArr.reduce((s, t) => s + t.x, 0) / smelterArr.length);
+  const cy = Math.round(smelterArr.reduce((s, t) => s + t.y, 0) / smelterArr.length);
+  // 候选锚点：熔炉质心与基地两处的螺旋环（距离 3 起，避开熔炉集群），按到熔炉总距离升序
+  const anchors = [];
+  const seenAnchor = new Set();
+  for (const c of [{ x: cx, y: cy }, center]) {
+    for (let d = 3; d <= 30; d++) {
+      for (let dx = -d; dx <= d; dx++) {
+        const dy = d - Math.abs(dx);
+        for (const sy of (dy === 0 ? [0] : [-dy, dy])) {
+          const a = { x: c.x + dx, y: c.y + sy };
+          const k = `${a.x}:${a.y}`;
+          if (seenAnchor.has(k)) continue;
+          seenAnchor.add(k);
+          anchors.push(a);
+        }
+      }
+    }
+  }
+  const distSum = (a) => smelterArr.reduce((s, t) => s + Math.abs(t.x - a.x) + Math.abs(t.y - a.y), 0);
+  // 幂等优先：现场已有枢纽建筑（probe 建了一半/全部）时，优先在其位置续建，不起第二座枢纽
+  const hubAnchors = [];
+  for (const b of occupied.values()) {
+    if (b.owner_id === PLAYER_ID && (b.type === 'assembling_machine_mk1' || b.type === 'matrix_lab')) {
+      hubAnchors.push({ x: b.position.x, y: b.position.y });
+      // 已有装配机可能处于星型的 C/B/M 任意位，连带其周边 2 格也作为候选锚点
+      for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+        hubAnchors.push({ x: b.position.x + dx, y: b.position.y + dy });
+      }
+    }
+  }
+  anchors.sort((a, b) => distSum(a) - distSum(b));
+  anchors.unshift(...hubAnchors.filter((a, i) => hubAnchors.findIndex((c) => c.x === a.x && c.y === a.y) === i));
+
+  const diag = { layout: 0 };
+  for (const anchor of anchors.slice(0, 1200)) {
+    for (const lay of LAYOUTS) {
+      const at = (rel) => ({ x: anchor.x + rel[0], y: anchor.y + rel[1] });
+      const buildings = [
+        { key: 'coilAsm', type: 'assembling_machine_mk1', recipe: 'magnetic_coil', tile: at(lay.coil) },
+        { key: 'boardAsm', type: 'assembling_machine_mk1', recipe: 'circuit_board', tile: at(lay.board) },
+        { key: 'matrixAsm', type: 'assembling_machine_mk1', recipe: 'electromagnetic_matrix', tile: { ...anchor } },
+        { key: 'lab', type: 'matrix_lab', recipe: null, tile: at(lay.lab) },
+      ];
+      const midOf = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      const dirOf = (from, to) => DIR_OF_VECTOR(to.x - from.x, to.y - from.y);
+      const belts = [
+        { tile: midOf(buildings[0].tile, anchor), dir: dirOf(buildings[0].tile, anchor), items: ['magnetic_coil'] },
+        { tile: midOf(buildings[1].tile, anchor), dir: dirOf(buildings[1].tile, anchor), items: ['circuit_board'] },
+        { tile: midOf(anchor, buildings[3].tile), dir: dirOf(anchor, buildings[3].tile), items: ['electromagnetic_matrix'] },
+      ];
+      const hubKeys = new Set(buildings.map((b) => `${b.tile.x}:${b.tile.y}`));
+      const coreTiles = [...buildings.map((b) => b.tile), ...belts.map((b) => b.tile)];
+      // 落位：空格，或可复用的同型自有建筑/自有带子
+      const okTiles = buildings.every((b) => freeOrOwn(b.tile.x, b.tile.y, b.type))
+        && belts.every((b) => free(b.tile.x, b.tile.y) || beltAt.has(`${b.tile.x}:${b.tile.y}`));
+      if (!okTiles) { diag.layout++; continue; }
+      // 安静区：内部带的实际方向不得被外部生产商定向溢毒（建筑格本身不会接溢出，无需检查）
+      const quiet = belts.every((b) => poisonByDir(b.tile.x, b.tile.y, b.dir, b.items, hubKeys));
+      if (!quiet) { diag.layout++; continue; }
+      const attemptTiles = [...coreTiles];
+      for (const t of coreTiles) planned.add(`${t.x}:${t.y}`);
+
+      // 4 条熔炉入线：磁/铜A → 线圈装配机，铁/铜B → 电路板装配机
+      const ROUTES = [
+        ['magnet', 'magnet', smelters.magnet, buildings[0]],
+        ['copperA', 'copper_ingot', smelters.copperA, buildings[0]],
+        ['iron', 'iron_ingot', smelters.iron, buildings[1]],
+        ['copperB', 'copper_ingot', smelters.copperB, buildings[1]],
+      ];
       const routes = {};
       let fail = null;
-      for (const [name, ore, srcTile, smKey] of [
-        ['oreFeMagnet', 'iron_ore', minerTiles.iron_ore, 'smMagnet'],
-        ['oreFeIron', 'iron_ore', minerTiles.iron_ore, 'smIron'],
-        ['oreCu1', 'copper_ore', minerTiles.copper_ore, 'smCopper1'],
-        ['oreCu2', 'copper_ore', minerTiles.copper_ore, 'smCopper2'],
-      ]) {
-        const sm = buildings.find((b) => b.key === smKey);
-        const entries = BP_ORE_ENTRIES[smKey].map((e) => ({ tile: t2(anchor, k, e.rel), finalDir: ROT_DIR[k][e.finalDir] }));
-        const startOk = (t) => {
-          for (const [dx, dy] of Object.values(DIR_VECTORS)) {
-            const kk = `${t.x + dx}:${t.y + dy}`;
-            if (kk === `${srcTile.x}:${srcTile.y}`) continue;
-            const out = producerMap.get(kk);
-            if (out && out !== ore) return false;
-          }
-          return true;
-        };
+      for (const [name, item, srcTile, asm] of ROUTES) {
+        const srcKey = `${srcTile.x}:${srcTile.y}`;
+        const asmKey = `${asm.tile.x}:${asm.tile.y}`;
+        // 终点候选：装配机空闲侧面（带子指向建筑才会被取货）
+        const ends = Object.entries(DIR_VECTORS)
+          .map(([dir, [dx, dy]]) => ({ tile: { x: asm.tile.x + dx, y: asm.tile.y + dy }, finalDir: DIR_OPPOSITE[dir] }))
+          .filter((e) => !planned.has(`${e.tile.x}:${e.tile.y}`))
+          .filter((e) => free(e.tile.x, e.tile.y) || beltAt.has(`${e.tile.x}:${e.tile.y}`));
         let best = null;
-        for (const entry of entries) {
-          if (producerMap.has(`${entry.tile.x}:${entry.tile.y}`)) continue;
+        for (const e of ends) {
+          const srcDir = (t) => DIR_OF_VECTOR(t.x - srcTile.x, t.y - srcTile.y);
           const starts = Object.values(DIR_VECTORS)
             .map(([dx, dy]) => ({ x: srcTile.x + dx, y: srcTile.y + dy }))
-            .filter((t) => !Object.values(routes).some((r) => r.tiles.some((rt) => rt.x === t.x && rt.y === t.y)))
-            .filter((t) => free(t.x, t.y) && startOk(t))
-            .sort((a, b) => (Math.abs(a.x - entry.tile.x) + Math.abs(a.y - entry.tile.y)) - (Math.abs(b.x - entry.tile.x) + Math.abs(b.y - entry.tile.y)));
+            .filter((t) => !planned.has(`${t.x}:${t.y}`))
+            .filter((t) => free(t.x, t.y) || beltAt.has(`${t.x}:${t.y}`))
+            .sort((a, b) => (Math.abs(a.x - e.tile.x) + Math.abs(a.y - e.tile.y)) - (Math.abs(b.x - e.tile.x) + Math.abs(b.y - e.tile.y)));
           for (const start of starts) {
             const able = (x, y) => {
-              if (!free(x, y) && !(x === start.x && y === start.y)) return false;
-              for (const [dx, dy] of Object.values(DIR_VECTORS)) {
-                const kk = `${x + dx}:${y + dy}`;
-                if (kk === `${srcTile.x}:${srcTile.y}` || kk === `${sm.tile.x}:${sm.tile.y}`) continue;
-                const out = producerMap.get(kk);
-                if (out && out !== ore) return false;
-              }
-              return true;
+              const kk = `${x}:${y}`;
+              if (x === start.x && y === start.y) return true;
+              if (planned.has(kk)) return false;
+              return free(x, y) || beltAt.has(kk);
             };
-            const xs = [srcTile.x, entry.tile.x, anchor.x], ys = [srcTile.y, entry.tile.y, anchor.y];
+            // 方向校验：起点带必须背离源熔炉才接得到货；中途带按定向溢毒规则判定
+            const ableDir = (x, y, dir) => {
+              if (x === start.x && y === start.y && dir !== srcDir(start)) return false;
+              return poisonByDir(x, y, dir, [item], new Set([srcKey, asmKey]));
+            };
+            const xs = [srcTile.x, e.tile.x, anchor.x];
+            const ys = [srcTile.y, e.tile.y, anchor.y];
             const bounds = {
-              x0: Math.max(0, Math.min(...xs) - 14), x1: Math.max(...xs) + 14,
-              y0: Math.max(0, Math.min(...ys) - 14), y1: Math.max(...ys) + 14,
+              x0: Math.max(0, Math.min(...xs) - 16), x1: Math.max(...xs) + 16,
+              y0: Math.max(0, Math.min(...ys) - 16), y1: Math.max(...ys) + 16,
             };
-            const route = beltRoute(able, start, entry.tile, entry.finalDir, bounds);
+            const route = beltRoute(able, start, new Map([[`${e.tile.x}:${e.tile.y}`, e.finalDir]]), bounds, ableDir);
             if (route && (!best || route.tiles.length < best.tiles.length)) best = route;
           }
           if (best) break;
         }
-        if (!best) { fail = name; break; }
+        if (!best) { fail = name; diag[`${name}:no-path`] = (diag[`${name}:no-path`] ?? 0) + 1; break; }
         routes[name] = best;
-        for (const t of best.tiles) add(t);
+        for (const t of best.tiles) { planned.add(`${t.x}:${t.y}`); attemptTiles.push(t); }
       }
       if (fail) {
-        for (const t of attempt) planned.delete(`${t.x}:${t.y}`);
+        for (const t of attemptTiles) planned.delete(`${t.x}:${t.y}`);
         continue;
       }
-      // 规划成功：全部预留格登记，避免后续自动选址抢占
-      reserveTiles(attempt);
-      const stand = { x: anchor.x, y: anchor.y + 3 };
-      return { anchor, rot: k, buildings, belts, routes, stand };
+      // 站位：枢纽周边空格（默认在下侧，操作范围 6 内覆盖全部建筑）
+      let stand = null;
+      outer: for (let d = 0; d <= 6; d++) {
+        for (let dx = -d; dx <= d; dx++) {
+          const dy = d - Math.abs(dx);
+          for (const sy of (dy === 0 ? [0] : [-dy, dy])) {
+            const t = { x: anchor.x + dx, y: anchor.y + 3 + sy };
+            if (free(t.x, t.y)) { stand = t; break outer; }
+          }
+        }
+      }
+      stand ??= { x: anchor.x, y: anchor.y + 3 };
+      reserveTiles(attemptTiles);
+      logEvent('action', `装配枢纽选址 (${anchor.x},${anchor.y})（星型）：3 装配机+研究站，4 条入线 ${Object.values(routes).map((r) => r.tiles.length).join('/')} 格`);
+      return { anchor, rot: 0, buildings, belts, routes, stand };
     }
   }
+  logEvent('warn', `装配枢纽选址失败诊断: ${JSON.stringify(diag)}（layout=布局放不下，其余=对应路线无路径）`);
   return null;
 }
 
@@ -938,48 +1047,22 @@ function touchesForeignResource(grid, tile, minerTile) {
   return false;
 }
 
-// 装配枢纽相对布局（A=锚点，x 向东 y 向南）：
-//   铜带1入口(0,-1)s → 线圈装配(0,0) -e→ (1,0)e → 矩阵装配(2,0) -e→ (3,0)e → 研究站(4,0)
-//   磁铁入口(-1,0)e   电路板装配(0,1) -e→ (1,1)e → (2,1)n ↗
-//   铁块入口(-1,1)e   铜带2入口(0,2)n
-function planHubLayout(grid, anchor) {
-  const t = (dx, dy) => ({ x: anchor.x + dx, y: anchor.y + dy });
-  const hub = {
-    anchor,
-    coilAsm: t(0, 0),
-    boardAsm: t(0, 1),
-    matrixAsm: t(2, 0),
-    lab: t(4, 0),
-    belts: [
-      { tile: t(-1, 0), dir: 'east', name: '磁铁入口' },
-      { tile: t(1, 0), dir: 'east', name: '线圈出线' },
-      { tile: t(3, 0), dir: 'east', name: '矩阵出线' },
-      { tile: t(-1, 1), dir: 'east', name: '铁块入口' },
-      { tile: t(1, 1), dir: 'east', name: '电路板出线1' },
-      { tile: t(2, 1), dir: 'north', name: '电路板出线2' },
-      { tile: t(0, -1), dir: 'south', name: '铜带入线1' },
-      { tile: t(0, 2), dir: 'north', name: '铜带入线2' },
-    ],
-    // 外部产线接入点（长途带终点）
-    entries: {
-      magnet: { tile: t(-1, 0), finalDir: 'east' },
-      iron: { tile: t(-1, 1), finalDir: 'east' },
-      copper1: { tile: t(0, -1), finalDir: 'south' },
-      copper2: { tile: t(0, 2), finalDir: 'north' },
-    },
-  };
-  const all = [hub.coilAsm, hub.boardAsm, hub.matrixAsm, hub.lab, ...hub.belts.map((b) => b.tile)];
-  for (const tile of all) {
-    if (!grid.free(tile.x, tile.y)) return null;
-  }
-  return hub;
-}
 
 // ---------------- 产业链建造编排 ----------------
-// 精确落格建造；失败时把执行体挪近目标格（操作范围 6）重试
+// 精确落格建造；失败时把执行体挪近目标格（操作范围 6）重试。
+// 幂等：目标格已有同型自有建筑（配方一致）则直接使用，不重复建造
 async function buildAtExact(buildingType, tile, { recipe = null, retries = 2 } = {}) {
+  const existing = await findBuildingNear(buildingType, tile, 0);
+  if (existing && (!recipe || !recipeOf(existing) || recipeOf(existing) === recipe)) {
+    logEvent('info', `${buildingType} @(${tile.x},${tile.y}) 已存在，直接沿用`);
+    return true;
+  }
   for (let i = 0; i <= retries; i++) {
-    if (await buildAt(buildingType, tile, { recipe })) return true;
+    if (await buildAt(buildingType, tile, { recipe })) {
+      // 建造落地后执行体可能正站在新建筑格上（客户端建筑优先选中会让单位永久点选不到）
+      await ensureExecutorFree().catch(() => {});
+      return true;
+    }
     if (i < retries) {
       logEvent('info', `建造 ${buildingType} @(${tile.x},${tile.y}) 未果，执行体挪近后重试`);
       await moveExecutorTo({ x: tile.x, y: tile.y }, { arriveDist: 3, maxSteps: 6 }).catch(() => false);
@@ -1032,86 +1115,6 @@ async function planMiningSite(cluster, recipes, toward) {
   return { spots, stand, reserved, kind: cluster.kind };
 }
 
-// 熔炉出线起点：熔炉周边空格（排除进料带所在格），朝向目标优先
-function smelterOutputStart(grid, smelterTile, inputBeltTiles, toward) {
-  const dirs = Object.keys(DIR_VECTORS).sort((a, b) => {
-    const score = (d) => {
-      const [dx, dy] = DIR_VECTORS[d];
-      return Math.abs(smelterTile.x + dx - toward.x) + Math.abs(smelterTile.y + dy - toward.y);
-    };
-    return score(a) - score(b);
-  });
-  for (const dir of dirs) {
-    const [dx, dy] = DIR_VECTORS[dir];
-    const t = { x: smelterTile.x + dx, y: smelterTile.y + dy };
-    if (inputBeltTiles.some((b) => b.x === t.x && b.y === t.y)) continue;
-    if (grid.free(t.x, t.y)) return t;
-  }
-  return null;
-}
-
-// 枢纽选址：首选铁区周边，失败回退到基地周边（出生点半径 8 已平整，必有空地）。
-// 试算 4 条长途传送带路径（磁铁/铁块自铁区，铜块×2 自铜区）
-async function planHubAndRoutes(feSite, cuSite) {
-  const centers = [feSite.stand];
-  if (Math.abs(feSite.stand.x - BASE_POS.x) + Math.abs(feSite.stand.y - BASE_POS.y) > 4) centers.push(BASE_POS);
-  for (const center of centers) {
-    const plan = await tryHubAround(center, feSite, cuSite);
-    if (plan) {
-      if (center !== feSite.stand) logEvent('info', `枢纽选址回退到基地周边 (${plan.anchor.x},${plan.anchor.y})`);
-      return plan;
-    }
-    logEvent('warn', `枢纽选址: (${center.x},${center.y}) 周边无可用锚点，换下一候选区域`);
-  }
-  return null;
-}
-
-async function tryHubAround(center, feSite, cuSite) {
-  const scene = await getScene();
-  const candidates = [];
-  for (let dy = -8; dy <= 8; dy++) {
-    for (let dx = -8; dx <= 8; dx++) candidates.push({ x: center.x + dx, y: center.y + dy });
-  }
-  const score = (a) => Math.abs(a.x - cuSite.stand.x) + Math.abs(a.y - cuSite.stand.y)
-    + 2 * (Math.abs(a.x - feSite.stand.x) + Math.abs(a.y - feSite.stand.y));
-  candidates.sort((a, b) => score(a) - score(b));
-  const allX = [...feSite.reserved, ...cuSite.reserved].map((t) => t.x);
-  const allY = [...feSite.reserved, ...cuSite.reserved].map((t) => t.y);
-  for (const anchor of candidates.slice(0, 32)) {
-    const reserved = [...feSite.reserved, ...cuSite.reserved];
-    const grid = makeSiteGrid(scene, reserved);
-    const hub = planHubLayout(grid, anchor);
-    if (!hub) continue;
-    const xs = [...allX, anchor.x - 2, anchor.x + 5];
-    const ys = [...allY, anchor.y - 3, anchor.y + 4];
-    const bounds = {
-      x0: Math.max(0, Math.min(...xs) - 12), x1: Math.max(...xs) + 12,
-      y0: Math.max(0, Math.min(...ys) - 12), y1: Math.max(...ys) + 12,
-    };
-    const hubTiles = [hub.coilAsm, hub.boardAsm, hub.matrixAsm, hub.lab, ...hub.belts.map((b) => b.tile)];
-    const routeReserved = [...reserved, ...hubTiles];
-    const routes = {};
-    let ok = true;
-    for (const [name, spot, entry] of [
-      ['magnet', feSite.spots[0], hub.entries.magnet],
-      ['iron', feSite.spots[1], hub.entries.iron],
-      ['copper1', cuSite.spots[0], hub.entries.copper1],
-      ['copper2', cuSite.spots[1], hub.entries.copper2],
-    ]) {
-      const g2 = makeSiteGrid(scene, routeReserved);
-      const start = smelterOutputStart(g2, spot.smelterTile, spot.beltTiles, entry.tile);
-      if (!start) { ok = false; break; }
-      routeReserved.push(start);
-      const g3 = makeSiteGrid(scene, routeReserved);
-      const route = beltRoute(g3.free, start, entry.tile, entry.finalDir, bounds);
-      if (!route) { ok = false; break; }
-      routes[name] = route;
-      routeReserved.push(...route.tiles);
-    }
-    if (ok) return { hub, routes, anchor };
-  }
-  return null;
-}
 
 // 站点电力预建：特斯拉塔贴中心 + 两台风机贴塔（消费建筑落地前先把电网铺好）。
 // avoid：站点规划预留格（带线/厂房位），电网建筑不得抢占。
@@ -1348,9 +1351,85 @@ async function executorPos() {
   return ex ? { x: ex.position.x, y: ex.position.y } : null;
 }
 
+// API 救援移动（多跳）：单位站上建筑格时，客户端“建筑优先”的选中逻辑让单位永远点选不到，
+// UI 移动彻底失效；此时直接走服务端命令通道分跳移动（单跳曼哈顿 ≤10，满足服务端 ≤12 限距；
+// 此前单跳超距/压格被静默拒，永远等不到抵达）。每跳等待抵达，抵达目标附近才算成功。
+async function apiRescueMove(dest, { arriveDist = 0, maxHops = 6 } = {}) {
+  for (let hop = 0; hop < maxHops; hop++) {
+    const scene = await getScene();
+    const ex = analyzeScene(scene).executor;
+    if (!ex) return false;
+    const pos = ex.position;
+    if (Math.abs(pos.x - dest.x) + Math.abs(pos.y - dest.y) <= arriveDist) return true;
+    const occ = new Set();
+    for (const b of Object.values(scene.buildings ?? {})) occ.add(`${b.position.x}:${b.position.y}`);
+    for (const u of Object.values(scene.units ?? {})) occ.add(`${u.position.x}:${u.position.y}`);
+    // 本跳目标：优先 x 轴再 y 轴，总量 ≤10；目标格被占则在周边找空格
+    const sx = Math.sign(dest.x - pos.x) * Math.min(Math.abs(dest.x - pos.x), 10);
+    const sy = Math.sign(dest.y - pos.y) * Math.min(Math.abs(dest.y - pos.y), 10 - Math.abs(sx));
+    let target = { x: pos.x + sx, y: pos.y + sy };
+    if (occ.has(`${target.x}:${target.y}`)) {
+      let alt = null;
+      outer: for (let d = 1; d <= 3; d++) {
+        for (let dx = -d; dx <= d; dx++) {
+          const dy = d - Math.abs(dx);
+          for (const sy2 of (dy === 0 ? [0] : [-dy, dy])) {
+            const t = { x: target.x + dx, y: target.y + sy2 };
+            if (!occ.has(`${t.x}:${t.y}`)) { alt = t; break outer; }
+          }
+        }
+      }
+      if (!alt) return false;
+      target = alt;
+    }
+    const res = await fetch(`${SERVER}/commands`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${PLAYER_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        request_id: `rescue-${Date.now()}-${hop}`,
+        issuer_type: 'player',
+        issuer_id: PLAYER_ID,
+        commands: [{ type: 'move', target: { entity_id: ex.id, position: { x: target.x, y: target.y, z: 0 } }, payload: {} }],
+      }),
+    }).catch(() => null);
+    if (!res?.ok) { logEvent('warn', `API 救援移动被拒: HTTP ${res?.status}`); return false; }
+    if (hop === 0) logEvent('warn', `UI 移动失效（单位疑站上建筑格），API 救援移动至 (${dest.x},${dest.y})`);
+    const arrived = await waitFor(`救援移动至 (${target.x},${target.y})`, async () => {
+      const p2 = await executorPos();
+      return p2 && p2.x === target.x && p2.y === target.y;
+    }, { timeoutSec: 60, beatSec: 12, quiet: true });
+    if (!arrived) { logEvent('warn', `API 救援移动第 ${hop + 1} 跳未抵达`); return false; }
+  }
+  const p = await executorPos();
+  return !!p && Math.abs(p.x - dest.x) + Math.abs(p.y - dest.y) <= arriveDist;
+}
+
+// 站上建筑格自愈：建造/拆除后若执行体被压在建筑格上（客户端“建筑优先”选中逻辑会让
+// 单位永久点选不到，UI 行军/建造全部卡死），立即用 API 挪到相邻空格。
+async function ensureExecutorFree() {
+  const scene = await getScene().catch(() => null);
+  if (!scene) return false;
+  const ex = analyzeScene(scene).executor;
+  if (!ex) return false;
+  const pos = ex.position;
+  const onBuilding = Object.values(scene.buildings ?? {}).some(
+    (b) => b.position.x === pos.x && b.position.y === pos.y);
+  if (!onBuilding) return true;
+  const occ = new Set(Object.values(scene.buildings ?? {}).map((b) => `${b.position.x}:${b.position.y}`));
+  for (const [dx, dy] of Object.values(DIR_VECTORS)) {
+    const t = { x: pos.x + dx, y: pos.y + dy };
+    if (occ.has(`${t.x}:${t.y}`)) continue;
+    logEvent('warn', `执行体站上建筑格 (${pos.x},${pos.y})，API 侧移自救至 (${t.x},${t.y})`);
+    return apiRescueMove(t, { arriveDist: 0, maxHops: 2 });
+  }
+  return false;
+}
+
 // 分步把执行体开到目标附近（每步曼哈顿 ≤4）。
 // 单步失败/超时不再整段放弃：重新读取实际位置后重试，连续失败 4 次才认输。
 async function moveExecutorTo(target, { arriveDist = 2, maxSteps = 12 } = {}) {
+  // 先自愈：单位若正站在建筑格上，UI 选中已失效，直接 UI 行军必然连败
+  await ensureExecutorFree().catch(() => {});
   let consecutiveFails = 0;
   for (let step = 0; step < maxSteps; step++) {
     const pos = await executorPos();
@@ -1380,7 +1459,18 @@ async function moveExecutorTo(target, { arriveDist = 2, maxSteps = 12 } = {}) {
     if (!moved) {
       consecutiveFails++;
       logEvent('warn', `移动命令未下达（连续第 ${consecutiveFails} 次），重新定位后重试`);
-      if (consecutiveFails >= 4) { logEvent('warn', '移动命令连续失败，放弃行军'); return false; }
+      if (consecutiveFails >= 4) {
+        // UI 连续失败（多见于单位站上建筑格无法被点选）：走服务端命令通道救援
+        if (await apiRescueMove(dest)) {
+          const rescued = await waitFor(`执行体救援移动到 (${dest.x},${dest.y})`, async () => {
+            const p2 = await executorPos();
+            return p2 && p2.x === dest.x && p2.y === dest.y;
+          }, { timeoutSec: 60, beatSec: 8, quiet: true });
+          if (rescued) { consecutiveFails = 0; continue; }
+        }
+        logEvent('warn', '移动命令连续失败，放弃行军');
+        return false;
+      }
       step--; // 重试本步，不消耗步数预算
       await sleep(2500);
       continue;
@@ -1811,6 +1901,23 @@ async function planSiteNear(clusters, kind, recipes, toward, label) {
   return null;
 }
 
+// 建筑配方读取（scene 里配方挂在 production.recipe_id 下，部分快照字段在顶层 recipe_id）
+function recipeOf(b) {
+  return b?.recipe_id ?? b?.production?.recipe_id ?? null;
+}
+
+// 从现场找装配枢纽四件套（按配方区分装配机；研究站须为无配方的研究模式）
+async function hubBuildingsFromScene() {
+  const scene = await getScene();
+  const bs = Object.values(scene.buildings ?? {}).filter((b) => b.owner_id === PLAYER_ID);
+  const findAsm = (recipe) => bs.find((b) => b.type === 'assembling_machine_mk1' && recipeOf(b) === recipe) ?? null;
+  const coilAsm = findAsm('magnetic_coil');
+  const boardAsm = findAsm('circuit_board');
+  const matrixAsm = findAsm('electromagnetic_matrix');
+  const lab = bs.find((b) => b.type === 'matrix_lab' && !recipeOf(b)) ?? null;
+  return { complete: !!(coilAsm && boardAsm && matrixAsm && lab), coilAsm, boardAsm, matrixAsm, lab };
+}
+
 const phases = [
   {
     name: 'P0-登录与星图巡游', minEnd: 150,
@@ -1870,7 +1977,8 @@ const phases = [
       }
       await openWorkflowTab('基础操作');
       // 全图勘察铁/铜矿带并完成厂址规划。服务端出生保障铁铜（starter 矿脉紧贴基地），
-      // 整条矩阵链落在出生点平整区，sink-first 一次建到位；starter 规划失败才退到远矿带。
+      // 整条矩阵链落在出生区，sink-first 一次建到位；starter 规划失败才退到远矿带。
+      // 装配枢纽与 4 条熔炉入线在空地阶段同批规划，全部预留格登记（后续建造自动避让）。
       const clusters = await scanClusters(['iron_ore', 'copper_ore']);
       CHAIN = CHAIN ?? {};
       CHAIN.feSite = await planSiteNear(clusters, 'iron_ore', ['smelt_magnet', 'smelt_iron'], BASE_POS, '铁');
@@ -1878,6 +1986,26 @@ const phases = [
       if (!CHAIN.feSite || !CHAIN.cuSite) {
         logEvent('warn', '铁/铜矿区规划失败，后续产业链阶段将降级跳过');
       } else {
+        CHAIN.smelters = {
+          magnet: CHAIN.feSite.spots[0].smelterTile,
+          iron: CHAIN.feSite.spots[1].smelterTile,
+          copperA: CHAIN.cuSite.spots[0].smelterTile,
+          copperB: CHAIN.cuSite.spots[1].smelterTile,
+        };
+        // 规划中的矿机/熔炉也是生产商：参与防溢毒邻接判断
+        const extraProducers = new Map();
+        for (const s of [CHAIN.feSite, CHAIN.cuSite]) {
+          for (const spot of s.spots) {
+            extraProducers.set(`${spot.minerTile.x}:${spot.minerTile.y}`, s.kind);
+            extraProducers.set(`${spot.smelterTile.x}:${spot.smelterTile.y}`, RECIPE_OUTPUT[spot.recipe]);
+          }
+        }
+        CHAIN.asmHub = await planAssemblerHub(CHAIN.smelters, {
+          center: BASE_POS,
+          extraProducers,
+          extraPlanned: [...CHAIN.feSite.reserved, ...CHAIN.cuSite.reserved],
+        });
+        if (!CHAIN.asmHub) logEvent('warn', '装配枢纽规划失败，P4 阶段将按现状重试');
         await shot('survey-sites');
       }
       await wander(15, '查看地图细节');
@@ -1929,40 +2057,42 @@ const phases = [
     name: 'P4-装配枢纽', minEnd: 1900,
     async run() {
       await ensureOnPlanet();
-      if (!CHAIN?.feSite || !CHAIN?.cuSite) { logEvent('skip', '矿区未就绪，跳过枢纽'); return; }
-      CHAIN.hubPlan = await planHubAndRoutes(CHAIN.feSite, CHAIN.cuSite);
-      if (!CHAIN.hubPlan) { logEvent('warn', '枢纽选址失败：周边空地或传送带路径不足'); return; }
-      const { hub } = CHAIN.hubPlan;
-      logEvent('action', `枢纽选址 (${hub.anchor.x},${hub.anchor.y})：线圈/电路板/矩阵三台装配机+研究站，4 条长途带路径就绪`);
-      await moveExecutorTo({ x: hub.anchor.x + 2, y: hub.anchor.y + 1 }, { arriveDist: 3, maxSteps: 20 });
-      const hubCenter = { x: hub.anchor.x + 2, y: hub.anchor.y };
-      const hubAvoid = new Set([hub.coilAsm, hub.boardAsm, hub.matrixAsm, hub.lab,
-        ...hub.belts.map((b) => b.tile),
-        ...Object.values(CHAIN.hubPlan.routes ?? {}).flatMap((r) => r.tiles)]
-        .map((t) => `${t.x}:${t.y}`));
-      await seedSitePower(hubCenter, { label: '装配枢纽', windCount: 3, avoid: hubAvoid });
-      await waitResources(100, 50, 720);
-      await buildAtExact('assembling_machine_mk1', hub.coilAsm, { recipe: 'magnetic_coil' });
-      await waitResources(100, 50, 720);
-      await buildAtExact('assembling_machine_mk1', hub.boardAsm, { recipe: 'circuit_board' });
-      await waitResources(100, 50, 720);
-      await buildAtExact('assembling_machine_mk1', hub.matrixAsm, { recipe: 'electromagnetic_matrix' });
-      await waitResources(120, 60, 720);
-      await buildAtExact('matrix_lab', hub.lab); // 不选配方 = 研究模式
-      await ensureSitePower(hubCenter, ['assembling_machine_mk1', 'matrix_lab'], { label: '装配枢纽' });
+      // 熔炉布局来源：full 由 P1 规划填入，recovery 由 R0 从现场重建
+      const sm = CHAIN?.smelters;
+      if (!sm?.magnet || !sm?.iron || !sm?.copperA || !sm?.copperB) {
+        logEvent('skip', '熔炉布局不全（磁/铁/铜×2），跳过装配枢纽');
+        return;
+      }
+      // 幂等：枢纽未规划（或部分已建成）时，以现存建筑为锚重新规划；已有建筑/带子会被复用
+      if (!CHAIN.asmHub) {
+        const built = await hubBuildingsFromScene();
+        const center = built.coilAsm?.position ?? BASE_POS;
+        CHAIN.asmHub = await planAssemblerHub(sm, { center });
+        if (!CHAIN.asmHub) { logEvent('warn', '装配枢纽选址失败，本阶段放弃'); return; }
+      }
+      const hub = CHAIN.asmHub;
+      await moveExecutorTo(hub.stand, { arriveDist: 3, maxSteps: 20 });
+      await seedSitePower(hub.stand, { label: '装配枢纽', windCount: 3, avoid: PLANNED_TILES });
+      const COSTS = { assembling_machine_mk1: [100, 50], matrix_lab: [120, 60] };
+      for (const b of hub.buildings) {
+        const [cm, ce] = COSTS[b.type] ?? [100, 50];
+        await waitResources(cm, ce, 720);
+        await buildAtExact(b.type, b.tile, { recipe: b.recipe });
+      }
+      await layBelts(hub.belts.map((b) => b.tile), hub.belts.map((b) => b.dir), { label: '枢纽内部带' });
+      await ensureSitePower(hub.stand, ['assembling_machine_mk1', 'matrix_lab'], { label: '装配枢纽' });
+      await shot('hub-built');
+      logEvent('milestone', '装配枢纽建成（3 装配机+研究站）');
     },
   },
   {
     name: 'P5-传送带联网', minEnd: 2700,
     async run() {
       await ensureOnPlanet();
-      if (!CHAIN?.hubPlan) { logEvent('skip', '枢纽未规划，跳过联网'); return; }
-      const { hub, routes } = CHAIN.hubPlan;
-      // 枢纽内部短带（装配机之间、装配机到研究站）
-      await waitResources(hub.belts.length * 4 + 40, 0, 480);
-      await layBelts(hub.belts.map((b) => b.tile), hub.belts.map((b) => b.dir), { label: '枢纽内部带' });
-      // 4 条长途带：磁铁/铁块自铁区，铜块×2 自铜区
-      for (const [name, label] of [['magnet', '磁铁长途带'], ['iron', '铁块长途带'], ['copper1', '铜块长途带①'], ['copper2', '铜块长途带②']]) {
+      if (!CHAIN?.asmHub) { logEvent('skip', '枢纽未规划，跳过联网'); return; }
+      const { routes, buildings } = CHAIN.asmHub;
+      // 4 条熔炉入线：磁铁/铁块自铁区熔炉，铜块×2 自铜区熔炉
+      for (const [name, label] of [['magnet', '磁铁入线'], ['iron', '铁块入线'], ['copperA', '铜块入线①'], ['copperB', '铜块入线②']]) {
         const route = routes[name];
         if (!route) { logEvent('warn', `${label}无路径，跳过`); continue; }
         await waitResources(route.tiles.length * 4 + 20, 0, 600);
@@ -1972,11 +2102,12 @@ const phases = [
       await shot('factory-linked');
       logEvent('milestone', '产业链传送带全线贯通，货流圆点上线');
       // 生产里程碑：线圈 → 电路板 → 电磁矩阵
-      const coil = await findBuildingNear('assembling_machine_mk1', hub.coilAsm, 2);
+      const byKey = Object.fromEntries(buildings.map((b) => [b.key, b]));
+      const coil = await findBuildingNear('assembling_machine_mk1', byKey.coilAsm.tile, 0);
       if (coil) await waitStorageQty('磁线圈×2产出', coil.id, 'magnetic_coil', 2, { timeoutSec: 600 });
-      const board = await findBuildingNear('assembling_machine_mk1', hub.boardAsm, 2);
+      const board = await findBuildingNear('assembling_machine_mk1', byKey.boardAsm.tile, 0);
       if (board) await waitStorageQty('电路板×2产出', board.id, 'circuit_board', 2, { timeoutSec: 600 });
-      const matrix = await findBuildingNear('assembling_machine_mk1', hub.matrixAsm, 2);
+      const matrix = await findBuildingNear('assembling_machine_mk1', byKey.matrixAsm.tile, 0);
       if (matrix) await waitStorageQty('电磁矩阵×1下线', matrix.id, 'electromagnetic_matrix', 1, { timeoutSec: 600 });
     },
   },
@@ -1998,7 +2129,7 @@ const phases = [
       // 电磁学解锁储物仓：造一座展示仓储落地
       if (await techCompleted('electromagnetism')) {
         await waitResources(60, 20, 300);
-        await buildNear('depot_mk1', { near: CHAIN?.hubPlan?.hub?.anchor ?? BASE_POS });
+        await buildNear('depot_mk1', { near: CHAIN?.asmHub?.anchor ?? BASE_POS, avoid: PLANNED_TILES });
       }
       await wander(15, '物流线观察');
     },
@@ -2011,7 +2142,7 @@ const phases = [
       await ensureResearch('weapon_system', /武器系统/, { timeoutSec: 1200 });
       if (await techCompleted('weapon_system')) {
         await waitResources(80, 30, 300);
-        await buildNear('gauss_turret', { near: CHAIN?.hubPlan?.hub?.anchor ?? BASE_POS });
+        await buildNear('gauss_turret', { near: CHAIN?.asmHub?.anchor ?? BASE_POS, avoid: PLANNED_TILES });
         await wander(15, '炮塔防区观察');
       } else {
         logEvent('warn', '武器系统未完成（矩阵产能不足），炮塔阶段降级');
@@ -2043,6 +2174,49 @@ const phases = [
       logEvent('milestone', '试玩收官');
     },
   },
+];
+
+// ---------------- recovery 预设 ----------------
+// 从现场重建产业链状态（跳过 P0-P3），直接从装配枢纽续跑到终幕。
+// 配合 --start-offset 续接事件时间轴；幂等：已建成的建筑/带子直接沿用。
+const recoveryPhases = [
+  {
+    name: 'R0-重建现场', minEnd: 120,
+    async run() {
+      await page.goto(`${WEB}/planet/${PLANET_ID}`);
+      await page.locator('.planet-map-canvas__surface').waitFor({ timeout: 30000 });
+      await sleep(3000);
+      logEvent('milestone', '回到行星指挥位（recovery 续跑）');
+      CHAIN = CHAIN ?? {};
+      const scene = await getScene();
+      const bs = Object.values(scene.buildings ?? {}).filter((b) => b.owner_id === PLAYER_ID);
+      const smBy = (recipe) => bs.find((b) => b.type === 'arc_smelter' && recipeOf(b) === recipe)?.position ?? null;
+      const coppers = bs.filter((b) => b.type === 'arc_smelter' && recipeOf(b) === 'smelt_copper')
+        .map((b) => b.position)
+        .sort((a, b) => (Math.abs(a.x - BASE_POS.x) + Math.abs(a.y - BASE_POS.y)) - (Math.abs(b.x - BASE_POS.x) + Math.abs(b.y - BASE_POS.y)));
+      CHAIN.smelters = {
+        magnet: smBy('smelt_magnet'),
+        iron: smBy('smelt_iron'),
+        copperA: coppers[0] ?? null,
+        copperB: coppers[1] ?? coppers[0] ?? null,
+      };
+      const missing = Object.entries(CHAIN.smelters).filter(([, v]) => !v).map(([k]) => k);
+      if (missing.length) {
+        logEvent('warn', `现场缺少熔炉: ${missing.join('/')}，装配枢纽阶段将降级`);
+      } else {
+        const f = (p) => `(${p.x},${p.y})`;
+        logEvent('milestone', `现场重建完成：磁炉${f(CHAIN.smelters.magnet)} 铁炉${f(CHAIN.smelters.iron)} 铜炉${f(CHAIN.smelters.copperA)}/${f(CHAIN.smelters.copperB)}`);
+      }
+      await shot('recovery-scene');
+      await ensureOnPlanet();
+    },
+  },
+  { name: 'R4-装配枢纽', minEnd: 2100, run: async () => { await phases[4].run(); } },
+  { name: 'R5-传送带联网', minEnd: 2900, run: async () => { await phases[5].run(); } },
+  { name: 'R6-首门科技·电磁学', minEnd: 3800, run: async () => { await phases[6].run(); } },
+  { name: 'R7-物流系统拓展', minEnd: 4600, run: async () => { await phases[7].run(); } },
+  { name: 'R8-冶金与武器', minEnd: 5800, run: async () => { await phases[8].run(); } },
+  { name: 'R9-外扩侦察与终幕', minEnd: 99999, run: async () => { await phases[9].run(); } },
 ];
 
 // 研究保障：新产业链下矩阵由传送带直接喂进研究站（背包没有存货）。
@@ -2087,6 +2261,7 @@ async function main() {
   const phaseList = preset === 'expansion' ? expansionPhases
     : preset === 'industry' ? industryPhases
     : preset === 'finale' ? finalePhases
+    : preset === 'recovery' ? recoveryPhases
     : phases;
   console.log(`试玩录像开始: 预设=${preset} 总时长 ${TOTAL_SEC / 60} 分钟, 分段 ${SEG_SEC}s, 输出 ${OUT}`);
   browser = await chromium.launch({ headless: true });
