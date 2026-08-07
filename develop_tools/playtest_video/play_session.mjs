@@ -1420,7 +1420,8 @@ async function findBuildingNear(type, pos, maxDist = 22) {
 async function buildMiningSite(site, { label, milestones = [] } = {}) {
   const arrived = await moveExecutorTo(site.stand, { arriveDist: 2, maxSteps: 40 });
   if (!arrived) logEvent('warn', `${label}: 执行体未能抵达厂址 (${site.stand.x},${site.stand.y})，建造可能超距失败`);
-  const avoid = new Set(site.reserved.map((t) => `${t.x}:${t.y}`));
+  // 避开本站预留格 + 全局规划预留（枢纽/长途带等曾把风机建到枢纽装配机位上）
+  const avoid = new Set([...site.reserved.map((t) => `${t.x}:${t.y}`), ...PLANNED_TILES]);
   await seedSitePower(site.stand, { label, avoid });
   const oreLabel = site.kind === 'copper_ore' ? '铜矿' : '铁矿';
   const builtSmelters = [];
