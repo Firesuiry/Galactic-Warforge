@@ -832,6 +832,23 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
     if (b.type === BELT_TYPE && b.owner_id === PLAYER_ID) beltAt.add(`${b.position.x}:${b.position.y}`);
   }
   const planned = new Set(extraPlanned.map((t) => `${t.x}:${t.y}`));
+  // 产线直供带保护：矿机出料带（方向背离矿机）与熔炉入料带（指向熔炉）是既有产线的命门，
+  // 路线规划不得穿越/改向（曾反复被长途线改向导致矿机断料）
+  for (const b of occupied.values()) {
+    if (b.owner_id !== PLAYER_ID) continue;
+    if (b.type !== 'mining_machine' && b.type !== 'arc_smelter') continue;
+    for (const [ndir, [dx, dy]] of Object.entries(DIR_VECTORS)) {
+      const k = `${b.position.x + dx}:${b.position.y + dy}`;
+      const belt = occupied.get(k);
+      if (!belt || belt.type !== BELT_TYPE || belt.owner_id !== PLAYER_ID) continue;
+      const out = belt.conveyor?.output;
+      if (!out) continue;
+      // 矿机相邻带一律保护：方向背离矿机的是现役出料带；方向不对的带一旦被路线复用改向，
+      // 就会变成矿机出料口，把原矿泄进路线造成污染
+      if (b.type === 'mining_machine') { planned.add(k); continue; }
+      if (out === DIR_OPPOSITE[ndir]) planned.add(k); // 熔炉入料带（指向熔炉）
+    }
+  }
   const free = (x, y) => x >= 0 && y >= 0 && x < scene.map_width && y < scene.map_height
     && scene.terrain?.[y]?.[x] === 'buildable'
     && !occupied.has(`${x}:${y}`) && !unitAt.has(`${x}:${y}`) && !resourceAt.has(`${x}:${y}`) && !planned.has(`${x}:${y}`);
@@ -959,6 +976,7 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
               // 汇流优先：布线路线只需接入对应直供带的任意相邻格（混合带，装配机按配方拣货），
               // 不再需要两条独立长线各自挤进枢纽——这是决胜关键
               const routeWithMerge = (srcTile, item, mergeBelt, asmEnds, asmKey) => {
+                const dbg = process.env.HUB_DEBUG;
                 const srcKey = `${srcTile.x}:${srcTile.y}`;
                 const exempt = new Set([srcKey, asmKey]);
                 const starts = Object.values(DIR_VECTORS)
@@ -994,6 +1012,7 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
                   for (const e of [...mergeEnds, ...asmEnds]) {
                     const r = routeBfs0(start, e, bounds, mkAble(), ableDir);
                     if (r) return r;
+                    if (dbg) console.log(`[hubdbg]   ${item} start(${start.x},${start.y})->end(${e.tile.x},${e.tile.y})${e.finalDir} 无果`);
                   }
                 }
                 return null;
@@ -1002,11 +1021,16 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
               const routeBfs0 = (start, end, bounds, able, ableDir) =>
                 beltRoute(able, start, new Map([[`${end.tile.x}:${end.tile.y}`, end.finalDir]]), bounds, ableDir);
               const rCoil = routeWithMerge(cfg.coilRoute.src, cfg.coilRoute.item, beltC, sideOf(coilAsm, hubBlock), coilK);
+              if (rCoil) for (const t of rCoil.tiles) taken.add(`${t.x}:${t.y}`); // 先占线，第二条必须绕行
               const rBoard = rCoil ? routeWithMerge(cfg.boardRoute.src, cfg.boardRoute.item, beltB, sideOf(boardAsm, hubBlock), boardK) : null;
               const routed = (rCoil && rBoard)
                 ? { [cfg.coilRoute.name]: rCoil, [cfg.boardRoute.name]: rBoard } : null;
-              if (!routed) { for (const k of hubBlock) taken.delete(k); bailAt('布线全败'); continue; }
-              for (const t of [...rCoil.tiles, ...rBoard.tiles]) taken.add(`${t.x}:${t.y}`);
+              if (!routed) {
+                if (rCoil) for (const t of rCoil.tiles) taken.delete(`${t.x}:${t.y}`);
+                for (const k of hubBlock) taken.delete(k);
+                bailAt('布线全败');
+                continue;
+              }
               // 全部落定：登记+返回
               for (const t of [...hubBlock].map((k) => k.split(':').map(Number))) planned.add(`${t[0]}:${t[1]}`);
               const beltList = [
