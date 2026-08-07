@@ -1,0 +1,97 @@
+name: 错误回报
+description: 在使用 biliup 的过程中遇到了错误
+labels: [ "bug" ]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 请补全标题并认真填写下方内容
+
+        请清晰描述问题，不必严格套用模板。
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: 你必须先同意以下内容
+      options:
+        - label: 我已在 [Release](https://github.com/biliup/biliup/releases) 检阅最新版本并尝试，且问题依旧
+          required: true
+        - label: 我清楚知道，反馈非最新 Release 版的错误是无意义的
+          required: true
+        - label: 我清楚知道，可以通过附件功能上传完整文件
+          required: true
+
+  - type: input
+    id: system_version
+    attributes:
+      label: 运行环境
+      description: 包括系统名称、系统版本、系统架构、Python版本
+      placeholder: Debian 12.6 x86_64 && Python 3.12.4 或 Docker tag:v0.4.71
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: biliup 版本
+      description: 可通过运行 `biliup --version` 查看
+      placeholder: v0.4.71
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: 所录制的主播网址
+      description: 因平台内直播分区策略有所不同，请准确填写出现问题的主播网址
+      placeholder: https://www.twitch.tv/lck
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug_info
+    attributes:
+      label: 错误描述
+      description: 描述你遇到的问题，需要怎么复现？期望的结果是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 任务平台
+      description: 请复制WEBUI的任务平台内容并**脱敏**后放入文件上传, 或直接复制到下面模板中
+      value: |
+        <details>
+        <summary>
+        任务平台
+        </summary>
+
+        ```bash
+        # 在这里填写你的配置文件
+        ```
+
+        </details>
+
+  - type: textarea
+    id: log
+    attributes:
+      label: 报错日志以及其他描述（如果有）
+      description: 上传 `ds_update.log` 和 `upload.log` 文件, 或将文件内容复制到下面模板中
+      value: |
+        <details>
+        <summary>
+        ### 日志
+        </summary>
+
+        ```bash
+        # 在这里填写你的报错日志
+        ```
+
+        </details>
+
+        ### 其他补充描述
+
+        <!--此处填写补充描述-->
