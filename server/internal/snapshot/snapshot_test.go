@@ -260,3 +260,50 @@ func buildDiscovery() *mapstate.Discovery {
 	discovery.DiscoverPlanet("player-1", "p2")
 	return discovery
 }
+
+// 回归：建筑生产配方必须在快照往返中保留（曾缺失 BuildingSnapshot.Production 字段，
+// 导致存档读档后熔炉/装配机配方丢失、产线静默停摆）。
+func TestSnapshotProductionRoundTrip(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 4, 4)
+	player := &model.PlayerState{PlayerID: "player-1", IsAlive: true}
+	ws.Players[player.PlayerID] = player
+
+	profile := model.BuildingProfileFor(model.BuildingTypeArcSmelter, 1)
+	b := &model.Building{
+		ID:          "b-smelt",
+		Type:        model.BuildingTypeArcSmelter,
+		OwnerID:     player.PlayerID,
+		Position:    model.Position{X: 1, Y: 1},
+		HP:          profile.MaxHP,
+		MaxHP:       profile.MaxHP,
+		Level:       1,
+		VisionRange: profile.VisionRange,
+		Runtime:     profile.Runtime,
+	}
+	model.InitBuildingStorage(b)
+	b.Production = &model.ProductionState{RecipeID: "smelt_iron", Mode: model.BonusModeSpeed, RemainingTicks: 12}
+	ws.Buildings[b.ID] = b
+	ws.TileBuilding[model.TileKey(1, 1)] = b.ID
+	ws.Grid[1][1].BuildingID = b.ID
+
+	snap := snapshot.CaptureRuntime(map[string]*model.WorldState{ws.PlanetID: ws}, ws.PlanetID, nil, nil)
+	data, err := snapshot.Encode(snap)
+	if err != nil {
+		t.Fatalf("encode snapshot: %v", err)
+	}
+	decoded, err := snapshot.Decode(data)
+	if err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	worlds, activePlanetID, _, err := decoded.RestoreRuntime()
+	if err != nil {
+		t.Fatalf("restore runtime: %v", err)
+	}
+	restored := worlds[activePlanetID].Buildings["b-smelt"]
+	if restored == nil || restored.Production == nil {
+		t.Fatalf("production state lost in snapshot roundtrip")
+	}
+	if restored.Production.RecipeID != "smelt_iron" || restored.Production.RemainingTicks != 12 {
+		t.Fatalf("production mismatch: %+v", restored.Production)
+	}
+}
