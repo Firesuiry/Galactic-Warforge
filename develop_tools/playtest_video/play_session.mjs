@@ -862,11 +862,13 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
   const tryDirectFeedHub = () => {
     const { magnet, iron, copperA, copperB } = smelters;
     if (!magnet || !iron || !copperA || !copperB) return null;
+    const bail = {}; // 诊断：各失败环节计数
+    const bailAt = (k) => { bail[k] = (bail[k] ?? 0) + 1; };
     const DIRS = Object.entries(DIR_VECTORS);
     const taken = new Set([...planned]);
     const take = (t) => { const k = `${t.x}:${t.y}`; if (taken.has(k)) return false; return true; };
     const add = (t) => taken.add(`${t.x}:${t.y}`);
-    const routeBfs = (srcTile, endTile, finalDir, item, extraExempt) => {
+    const routeBfs = (srcTile, endTile, finalDir, item, extraExempt, forbidFn = null) => {
       const srcKey = `${srcTile.x}:${srcTile.y}`;
       const exempt = new Set([srcKey, ...extraExempt]);
       const starts = Object.values(DIR_VECTORS)
@@ -879,6 +881,7 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
           const kk = `${x}:${y}`;
           if (x === start.x && y === start.y) return true;
           if (taken.has(kk)) return false;
+          if (forbidFn && forbidFn(x, y)) return false;
           return free(x, y) || beltAt.has(kk);
         };
         const ableDir = (x, y, dir) => {
@@ -895,110 +898,165 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
       }
       return null;
     };
-    for (const [d1, [dx1, dy1]] of DIRS) {
-      const beltC = { x: magnet.x + dx1, y: magnet.y + dy1 };
-      const coilAsm = { x: magnet.x + 2 * dx1, y: magnet.y + 2 * dy1 };
-      if (!take(beltC) || !take(coilAsm)) continue;
-      if (!(free(coilAsm.x, coilAsm.y) || (occupied.get(`${coilAsm.x}:${coilAsm.y}`)?.type === 'assembling_machine_mk1'))) continue;
-      if (!(free(beltC.x, beltC.y) || beltAt.has(`${beltC.x}:${beltC.y}`))) continue;
-      if (!poisonByDir(beltC.x, beltC.y, d1, ['magnet'], new Set([`${magnet.x}:${magnet.y}`, `${coilAsm.x}:${coilAsm.y}`]))) continue;
-      for (const [d2, [dx2, dy2]] of DIRS) {
-        const beltB = { x: iron.x + dx2, y: iron.y + dy2 };
-        const boardAsm = { x: iron.x + 2 * dx2, y: iron.y + 2 * dy2 };
-        if (!take(beltB) || !take(boardAsm)) continue;
-        if (!(free(boardAsm.x, boardAsm.y) || (occupied.get(`${boardAsm.x}:${boardAsm.y}`)?.type === 'assembling_machine_mk1'))) continue;
-        if (!(free(beltB.x, beltB.y) || beltAt.has(`${beltB.x}:${beltB.y}`))) continue;
-        if (!poisonByDir(beltB.x, beltB.y, d2, ['iron_ingot'], new Set([`${iron.x}:${iron.y}`, `${boardAsm.x}:${boardAsm.y}`]))) continue;
-        for (const [d3, [dx3, dy3]] of DIRS) {
-          const beltM1 = { x: coilAsm.x + dx3, y: coilAsm.y + dy3 };
-          const matrixAsm = { x: coilAsm.x + 2 * dx3, y: coilAsm.y + 2 * dy3 };
-          if (!take(beltM1) || !take(matrixAsm)) continue;
-          // 矩阵机必须与电路板机同轴相距 2（直连带喂电路板）
-          const bdx = matrixAsm.x - boardAsm.x, bdy = matrixAsm.y - boardAsm.y;
-          if (Math.abs(bdx) + Math.abs(bdy) !== 2 || (bdx !== 0 && bdy !== 0)) continue;
-          const beltM2 = { x: boardAsm.x + bdx / 2, y: boardAsm.y + bdy / 2 };
-          const beltM2Dir = DIR_OF_VECTOR(bdx, bdy);
-          if (!take(beltM2)) continue;
-          if (!(free(matrixAsm.x, matrixAsm.y) || (occupied.get(`${matrixAsm.x}:${matrixAsm.y}`)?.type === 'assembling_machine_mk1'))) continue;
-          if (!(free(beltM1.x, beltM1.y) || beltAt.has(`${beltM1.x}:${beltM1.y}`))) continue;
-          if (!(free(beltM2.x, beltM2.y) || beltAt.has(`${beltM2.x}:${beltM2.y}`))) continue;
-          const coilK = `${coilAsm.x}:${coilAsm.y}`, boardK = `${boardAsm.x}:${boardAsm.y}`, matrixK = `${matrixAsm.x}:${matrixAsm.y}`;
-          if (!poisonByDir(beltM1.x, beltM1.y, d3, ['magnetic_coil'], new Set([coilK, matrixK]))) continue;
-          if (!poisonByDir(beltM2.x, beltM2.y, beltM2Dir, ['circuit_board'], new Set([boardK, matrixK]))) continue;
-          // 研究站：矩阵机外侧（不回头朝线圈机）
-          for (const [d4, [dx4, dy4]] of DIRS) {
-            if (d4 === DIR_OPPOSITE[d3]) continue;
-            const beltL = { x: matrixAsm.x + dx4, y: matrixAsm.y + dy4 };
-            const lab = { x: matrixAsm.x + 2 * dx4, y: matrixAsm.y + 2 * dy4 };
-            if (!take(beltL) || !take(lab)) continue;
-            if (!(free(lab.x, lab.y) || (occupied.get(`${lab.x}:${lab.y}`)?.type === 'matrix_lab'))) continue;
-            if (!(free(beltL.x, beltL.y) || beltAt.has(`${beltL.x}:${beltL.y}`))) continue;
-            if (!poisonByDir(beltL.x, beltL.y, d4, ['electromagnetic_matrix'], new Set([matrixK, `${lab.x}:${lab.y}`]))) continue;
-            // 铜线入料侧：线圈机/电路板机未被占用的侧面
-            const sideOf = (asm, blockedKeys) => Object.entries(DIR_VECTORS)
-              .map(([dir, [dx, dy]]) => ({ tile: { x: asm.x + dx, y: asm.y + dy }, finalDir: DIR_OPPOSITE[dir] }))
-              .filter((e) => !blockedKeys.has(`${e.tile.x}:${e.tile.y}`) && !taken.has(`${e.tile.x}:${e.tile.y}`))
-              .filter((e) => free(e.tile.x, e.tile.y) || beltAt.has(`${e.tile.x}:${e.tile.y}`));
-            const hubBlock = new Set([coilK, boardK, matrixK, `${lab.x}:${lab.y}`,
-              `${beltC.x}:${beltC.y}`, `${beltB.x}:${beltB.y}`, `${beltM1.x}:${beltM1.y}`, `${beltM2.x}:${beltM2.y}`, `${beltL.x}:${beltL.y}`]);
-            // 枢纽全部格子（含直供/内部带）必须先在 taken 里占位，否则铜线会穿越直供带并改向它们
-            for (const k of hubBlock) taken.add(k);
-            let copperRoutes = null;
-            for (const eA of sideOf(coilAsm, hubBlock)) {
-              const rA = routeBfs(copperA, eA.tile, eA.finalDir, 'copper_ingot', [coilK]);
-              if (!rA) continue;
-              for (const t of rA.tiles) taken.add(`${t.x}:${t.y}`);
-              for (const eB of sideOf(boardAsm, hubBlock)) {
-                const rB = routeBfs(copperB, eB.tile, eB.finalDir, 'copper_ingot', [boardK]);
-                if (!rB) continue;
-                copperRoutes = { copperA: rA, copperB: rB };
-                break;
-              }
-              if (copperRoutes) break;
-              for (const t of rA.tiles) taken.delete(`${t.x}:${t.y}`);
-            }
-            if (!copperRoutes) continue;
-            // 全部落定：登记+返回
-            for (const t of [...hubBlock].map((k) => k.split(':').map(Number))) planned.add(`${t[0]}:${t[1]}`);
-            const beltList = [
-              { tile: beltC, dir: d1, items: ['magnet'] },
-              { tile: beltB, dir: d2, items: ['iron_ingot'] },
-              { tile: beltM1, dir: d3, items: ['magnetic_coil'] },
-              { tile: beltM2, dir: beltM2Dir, items: ['circuit_board'] },
-              { tile: beltL, dir: d4, items: ['electromagnetic_matrix'] },
-            ];
-            const routes = {
-              magnet: { tiles: [beltC], dirs: [d1] },
-              iron: { tiles: [beltB], dirs: [d2] },
-              copperA: copperRoutes.copperA,
-              copperB: copperRoutes.copperB,
-            };
-            const buildings = [
-              { key: 'coilAsm', type: 'assembling_machine_mk1', recipe: 'magnetic_coil', tile: coilAsm },
-              { key: 'boardAsm', type: 'assembling_machine_mk1', recipe: 'circuit_board', tile: boardAsm },
-              { key: 'matrixAsm', type: 'assembling_machine_mk1', recipe: 'electromagnetic_matrix', tile: matrixAsm },
-              { key: 'lab', type: 'matrix_lab', recipe: null, tile: lab },
-            ];
-            let stand = null;
-            outer: for (let d = 0; d <= 6; d++) {
-              for (let dx = -d; dx <= d; dx++) {
-                const dy = d - Math.abs(dx);
-                for (const sy of (dy === 0 ? [0] : [-dy, dy])) {
-                  const t = { x: matrixAsm.x + dx, y: matrixAsm.y + 2 + sy };
-                  if (free(t.x, t.y) && !taken.has(`${t.x}:${t.y}`)) { stand = t; break outer; }
+    // 两种直供配置：北枢纽（磁/铁直供，双铜布线）与南枢纽（双铜直供，磁/铁布线）。
+    // 哪一种的两条布线都能放得下就用哪一种
+    const FEED_CONFIGS = [
+      { coilFeed: { item: 'magnet', src: magnet }, boardFeed: { item: 'iron_ingot', src: iron },
+        coilRoute: { item: 'copper_ingot', src: copperA, name: 'copperA' }, boardRoute: { item: 'copper_ingot', src: copperB, name: 'copperB' } },
+      { coilFeed: { item: 'copper_ingot', src: copperA }, boardFeed: { item: 'copper_ingot', src: copperB },
+        coilRoute: { item: 'magnet', src: magnet, name: 'magnet' }, boardRoute: { item: 'iron_ingot', src: iron, name: 'iron' } },
+    ];
+    for (const cfg of FEED_CONFIGS) {
+      for (const [d1, [dx1, dy1]] of DIRS) {
+        const beltC = { x: cfg.coilFeed.src.x + dx1, y: cfg.coilFeed.src.y + dy1 };
+        const coilAsm = { x: cfg.coilFeed.src.x + 2 * dx1, y: cfg.coilFeed.src.y + 2 * dy1 };
+        if (!take(beltC) || !take(coilAsm)) continue;
+        if (!(free(coilAsm.x, coilAsm.y) || (occupied.get(`${coilAsm.x}:${coilAsm.y}`)?.type === 'assembling_machine_mk1'))) { bailAt('coilAsm格'); continue; }
+        if (!(free(beltC.x, beltC.y) || beltAt.has(`${beltC.x}:${beltC.y}`))) continue;
+        if (!poisonByDir(beltC.x, beltC.y, d1, [cfg.coilFeed.item], new Set([`${cfg.coilFeed.src.x}:${cfg.coilFeed.src.y}`, `${coilAsm.x}:${coilAsm.y}`]))) { bailAt('beltC毒'); continue; }
+        for (const [d2, [dx2, dy2]] of DIRS) {
+          const beltB = { x: cfg.boardFeed.src.x + dx2, y: cfg.boardFeed.src.y + dy2 };
+          const boardAsm = { x: cfg.boardFeed.src.x + 2 * dx2, y: cfg.boardFeed.src.y + 2 * dy2 };
+          if (!take(beltB) || !take(boardAsm)) continue;
+          if (!(free(boardAsm.x, boardAsm.y) || (occupied.get(`${boardAsm.x}:${boardAsm.y}`)?.type === 'assembling_machine_mk1'))) continue;
+          if (!(free(beltB.x, beltB.y) || beltAt.has(`${beltB.x}:${beltB.y}`))) continue;
+          if (!poisonByDir(beltB.x, beltB.y, d2, [cfg.boardFeed.item], new Set([`${cfg.boardFeed.src.x}:${cfg.boardFeed.src.y}`, `${boardAsm.x}:${boardAsm.y}`]))) continue;
+          for (const [d3, [dx3, dy3]] of DIRS) {
+            const beltM1 = { x: coilAsm.x + dx3, y: coilAsm.y + dy3 };
+            const matrixAsm = { x: coilAsm.x + 2 * dx3, y: coilAsm.y + 2 * dy3 };
+            if (!take(beltM1) || !take(matrixAsm)) continue;
+            // 矩阵机必须与电路板机同轴相距 2（直连带喂电路板）
+            const bdx = matrixAsm.x - boardAsm.x, bdy = matrixAsm.y - boardAsm.y;
+            if (Math.abs(bdx) + Math.abs(bdy) !== 2 || (bdx !== 0 && bdy !== 0)) { bailAt('矩阵不同轴'); continue; }
+            const beltM2 = { x: boardAsm.x + bdx / 2, y: boardAsm.y + bdy / 2 };
+            const beltM2Dir = DIR_OF_VECTOR(bdx, bdy);
+            if (!take(beltM2)) continue;
+            if (!(free(matrixAsm.x, matrixAsm.y) || (occupied.get(`${matrixAsm.x}:${matrixAsm.y}`)?.type === 'assembling_machine_mk1'))) continue;
+            if (!(free(beltM1.x, beltM1.y) || beltAt.has(`${beltM1.x}:${beltM1.y}`))) continue;
+            if (!(free(beltM2.x, beltM2.y) || beltAt.has(`${beltM2.x}:${beltM2.y}`))) continue;
+            const coilK = `${coilAsm.x}:${coilAsm.y}`, boardK = `${boardAsm.x}:${boardAsm.y}`, matrixK = `${matrixAsm.x}:${matrixAsm.y}`;
+            if (!poisonByDir(beltM1.x, beltM1.y, d3, ['magnetic_coil'], new Set([coilK, matrixK]))) continue;
+            if (!poisonByDir(beltM2.x, beltM2.y, beltM2Dir, ['circuit_board'], new Set([boardK, matrixK]))) continue;
+            // 研究站：矩阵机外侧（不回头朝线圈机）
+            for (const [d4, [dx4, dy4]] of DIRS) {
+              if (d4 === DIR_OPPOSITE[d3]) continue;
+              const beltL = { x: matrixAsm.x + dx4, y: matrixAsm.y + dy4 };
+              const lab = { x: matrixAsm.x + 2 * dx4, y: matrixAsm.y + 2 * dy4 };
+              if (!take(beltL) || !take(lab)) continue;
+              if (!(free(lab.x, lab.y) || (occupied.get(`${lab.x}:${lab.y}`)?.type === 'matrix_lab'))) continue;
+              if (!(free(beltL.x, beltL.y) || beltAt.has(`${beltL.x}:${beltL.y}`))) continue;
+              if (!poisonByDir(beltL.x, beltL.y, d4, ['electromagnetic_matrix'], new Set([matrixK, `${lab.x}:${lab.y}`]))) continue;
+              // 布线入料侧：线圈机/电路板机未被占用的侧面
+              const sideOf = (asm, blockedKeys) => Object.entries(DIR_VECTORS)
+                .map(([dir, [dx, dy]]) => ({ tile: { x: asm.x + dx, y: asm.y + dy }, finalDir: DIR_OPPOSITE[dir] }))
+                .filter((e) => !blockedKeys.has(`${e.tile.x}:${e.tile.y}`) && !taken.has(`${e.tile.x}:${e.tile.y}`))
+                .filter((e) => free(e.tile.x, e.tile.y) || beltAt.has(`${e.tile.x}:${e.tile.y}`));
+              const hubBlock = new Set([coilK, boardK, matrixK, `${lab.x}:${lab.y}`,
+                `${beltC.x}:${beltC.y}`, `${beltB.x}:${beltB.y}`, `${beltM1.x}:${beltM1.y}`, `${beltM2.x}:${beltM2.y}`, `${beltL.x}:${beltL.y}`]);
+              // 枢纽全部格子（含直供/内部带）必须先占位，否则布线会穿越直供带并改向它们；
+              // 布线失败换布局时必须回滚，否则后续变体的格子被上一次尝试毒化
+              for (const k of hubBlock) taken.add(k);
+              // 汇流优先：布线路线只需接入对应直供带的任意相邻格（混合带，装配机按配方拣货），
+              // 不再需要两条独立长线各自挤进枢纽——这是决胜关键
+              const routeWithMerge = (srcTile, item, mergeBelt, asmEnds, asmKey) => {
+                const srcKey = `${srcTile.x}:${srcTile.y}`;
+                const exempt = new Set([srcKey, asmKey]);
+                const starts = Object.values(DIR_VECTORS)
+                  .map(([dx, dy]) => ({ x: srcTile.x + dx, y: srcTile.y + dy }))
+                  .filter((t) => !taken.has(`${t.x}:${t.y}`))
+                  .filter((t) => free(t.x, t.y) || beltAt.has(`${t.x}:${t.y}`));
+                // 汇流目标：直供带的空格邻居（指向直供带即汇入）
+                const mergeEnds = [];
+                for (const [md, [mdx, mdy]] of Object.entries(DIR_VECTORS)) {
+                  const t = { x: mergeBelt.x + mdx, y: mergeBelt.y + mdy };
+                  if (taken.has(`${t.x}:${t.y}`)) continue;
+                  if (!(free(t.x, t.y) || beltAt.has(`${t.x}:${t.y}`))) continue;
+                  mergeEnds.push({ tile: t, finalDir: md });
+                }
+                for (const start of starts) {
+                  const srcDir = DIR_OF_VECTOR(start.x - srcTile.x, start.y - srcTile.y);
+                  const mkAble = () => (x, y) => {
+                    const kk = `${x}:${y}`;
+                    if (x === start.x && y === start.y) return true;
+                    if (taken.has(kk)) return false;
+                    return free(x, y) || beltAt.has(kk);
+                  };
+                  const ableDir = (x, y, dir) => {
+                    if (x === start.x && y === start.y && dir !== srcDir) return false;
+                    return poisonByDir(x, y, dir, [item], exempt);
+                  };
+                  const allY = [srcTile.y, mergeBelt.y, ...asmEnds.map((e) => e.tile.y)];
+                  const allX = [srcTile.x, mergeBelt.x, ...asmEnds.map((e) => e.tile.x)];
+                  const bounds = {
+                    x0: Math.max(0, Math.min(...allX) - 18), x1: Math.max(...allX) + 18,
+                    y0: Math.max(0, Math.min(...allY) - 18), y1: Math.max(...allY) + 18,
+                  };
+                  for (const e of [...mergeEnds, ...asmEnds]) {
+                    const r = routeBfs0(start, e, bounds, mkAble(), ableDir);
+                    if (r) return r;
+                  }
+                }
+                return null;
+              };
+              // 底层 BFS 包装（汇流/独立统一）
+              const routeBfs0 = (start, end, bounds, able, ableDir) =>
+                beltRoute(able, start, new Map([[`${end.tile.x}:${end.tile.y}`, end.finalDir]]), bounds, ableDir);
+              const rCoil = routeWithMerge(cfg.coilRoute.src, cfg.coilRoute.item, beltC, sideOf(coilAsm, hubBlock), coilK);
+              const rBoard = rCoil ? routeWithMerge(cfg.boardRoute.src, cfg.boardRoute.item, beltB, sideOf(boardAsm, hubBlock), boardK) : null;
+              const routed = (rCoil && rBoard)
+                ? { [cfg.coilRoute.name]: rCoil, [cfg.boardRoute.name]: rBoard } : null;
+              if (!routed) { for (const k of hubBlock) taken.delete(k); bailAt('布线全败'); continue; }
+              for (const t of [...rCoil.tiles, ...rBoard.tiles]) taken.add(`${t.x}:${t.y}`);
+              // 全部落定：登记+返回
+              for (const t of [...hubBlock].map((k) => k.split(':').map(Number))) planned.add(`${t[0]}:${t[1]}`);
+              const beltList = [
+                { tile: beltC, dir: d1, items: [cfg.coilFeed.item] },
+                { tile: beltB, dir: d2, items: [cfg.boardFeed.item] },
+                { tile: beltM1, dir: d3, items: ['magnetic_coil'] },
+                { tile: beltM2, dir: beltM2Dir, items: ['circuit_board'] },
+                { tile: beltL, dir: d4, items: ['electromagnetic_matrix'] },
+              ];
+              const directBeltRoute = (belt, dir) => ({ tiles: [belt], dirs: [dir] });
+              const routeOf = (feed, belt, dir) => routed[feed.name] ?? null;
+              const routes = {};
+              // 磁/铁/铜A/铜B 四线各自对应直供带或布线路由
+              const assign = (name, feed, belt, dir) => {
+                if (cfg.coilFeed.src === feed.src && cfg.coilFeed.item === feed.item) routes[name] = directBeltRoute(beltC, d1);
+                else if (cfg.boardFeed.src === feed.src && cfg.boardFeed.item === feed.item) routes[name] = directBeltRoute(beltB, d2);
+                else routes[name] = routed[name];
+              };
+              assign('magnet', { src: magnet, item: 'magnet' }, beltC, d1);
+              assign('iron', { src: iron, item: 'iron_ingot' }, beltB, d2);
+              assign('copperA', { src: copperA, item: 'copper_ingot' }, beltC, d1);
+              assign('copperB', { src: copperB, item: 'copper_ingot' }, beltB, d2);
+              const buildings = [
+                { key: 'coilAsm', type: 'assembling_machine_mk1', recipe: 'magnetic_coil', tile: coilAsm },
+                { key: 'boardAsm', type: 'assembling_machine_mk1', recipe: 'circuit_board', tile: boardAsm },
+                { key: 'matrixAsm', type: 'assembling_machine_mk1', recipe: 'electromagnetic_matrix', tile: matrixAsm },
+                { key: 'lab', type: 'matrix_lab', recipe: null, tile: lab },
+              ];
+              let stand = null;
+              outer: for (let d = 0; d <= 6; d++) {
+                for (let dx = -d; dx <= d; dx++) {
+                  const dy = d - Math.abs(dx);
+                  for (const sy of (dy === 0 ? [0] : [-dy, dy])) {
+                    const t = { x: matrixAsm.x + dx, y: matrixAsm.y + 2 + sy };
+                    if (free(t.x, t.y) && !taken.has(`${t.x}:${t.y}`)) { stand = t; break outer; }
+                  }
                 }
               }
+              stand ??= { x: matrixAsm.x, y: matrixAsm.y + 2 };
+              const allT = [...buildings.map((b) => b.tile), ...beltList.map((b) => b.tile),
+                ...Object.values(routes).filter(Boolean).flatMap((r) => r.tiles)];
+              reserveTiles(allT);
+              logEvent('action', `装配枢纽选址 (${matrixAsm.x},${matrixAsm.y})（贴炉直供）：3 装配机+研究站，布线 ${Object.values(routes).map((r) => r.tiles.length).join('/')} 格`);
+              return { anchor: matrixAsm, rot: 0, buildings, belts: beltList, routes, stand };
             }
-            stand ??= { x: matrixAsm.x, y: matrixAsm.y + 2 };
-            const allT = [...buildings.map((b) => b.tile), ...beltList.map((b) => b.tile),
-              ...copperRoutes.copperA.tiles, ...copperRoutes.copperB.tiles];
-            reserveTiles(allT);
-            logEvent('action', `装配枢纽选址 (${matrixAsm.x},${matrixAsm.y})（贴炉直供）：3 装配机+研究站，铜线 ${copperRoutes.copperA.tiles.length}/${copperRoutes.copperB.tiles.length} 格`);
-            return { anchor: matrixAsm, rot: 0, buildings, belts: beltList, routes, stand };
           }
         }
       }
     }
+    logEvent('warn', `贴炉直供选址失败诊断: ${JSON.stringify(bail)}`);
     return null;
   };
   const directPlan = tryDirectFeedHub();
