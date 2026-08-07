@@ -133,9 +133,10 @@ var starterResourceKinds = []mapmodel.ResourceKind{
 // starterVeinTotal is intentionally above map.yaml natural vein_amount_max
 // (200): yield 8 would burn a 200-unit patch in ~25 ticks (~2.5s at 10 tps),
 // which is too short for the pre-belt opening loop (build grid → mine → fund
-// smelters). Yield stays snappy at 8; total covers early matrix-chain funding.
+// smelters). Yield stays snappy at 8; total covers a full opening session
+// (实测：矿机全程连续开采约 4 小时才会采空 20000，覆盖试玩/录像整场)
 const (
-	starterVeinTotal = 2000
+	starterVeinTotal = 20000
 	starterVeinYield = 8
 )
 
