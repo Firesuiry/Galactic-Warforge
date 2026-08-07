@@ -971,7 +971,7 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
                   const t = { x: mergeBelt.x + mdx, y: mergeBelt.y + mdy };
                   if (taken.has(`${t.x}:${t.y}`)) continue;
                   if (!(free(t.x, t.y) || beltAt.has(`${t.x}:${t.y}`))) continue;
-                  mergeEnds.push({ tile: t, finalDir: md });
+                  mergeEnds.push({ tile: t, finalDir: DIR_OPPOSITE[md] }); // 末段必须指向汇流带（md 是带到格的方位，取反）
                 }
                 for (const start of starts) {
                   const srcDir = DIR_OF_VECTOR(start.x - srcTile.x, start.y - srcTile.y);
