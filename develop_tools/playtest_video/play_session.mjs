@@ -941,6 +941,8 @@ async function planAssemblerHub(smelters, { center = BASE_POS, extraProducers = 
               .filter((e) => free(e.tile.x, e.tile.y) || beltAt.has(`${e.tile.x}:${e.tile.y}`));
             const hubBlock = new Set([coilK, boardK, matrixK, `${lab.x}:${lab.y}`,
               `${beltC.x}:${beltC.y}`, `${beltB.x}:${beltB.y}`, `${beltM1.x}:${beltM1.y}`, `${beltM2.x}:${beltM2.y}`, `${beltL.x}:${beltL.y}`]);
+            // 枢纽全部格子（含直供/内部带）必须先在 taken 里占位，否则铜线会穿越直供带并改向它们
+            for (const k of hubBlock) taken.add(k);
             let copperRoutes = null;
             for (const eA of sideOf(coilAsm, hubBlock)) {
               const rA = routeBfs(copperA, eA.tile, eA.finalDir, 'copper_ingot', [coilK]);
