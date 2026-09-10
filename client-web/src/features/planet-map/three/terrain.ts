@@ -35,6 +35,7 @@ interface SurfaceState {
     swLocalBounds: { value: THREE.Vector4 };
     swLocalDimensions: { value: THREE.Vector2 };
     swOverviewExtent: { value: THREE.Vector2 };
+    swTime: { value: number };
   };
   source?: unknown[];
 }
@@ -83,6 +84,7 @@ const SHADER_HEADER = /* glsl */`
   uniform vec4 swLocalBounds;
   uniform vec2 swLocalDimensions;
   uniform vec2 swOverviewExtent;
+  uniform float swTime;
   float swHash(vec3 p) {
     p = fract(p * 0.3183099 + vec3(0.17, 0.43, 0.71));
     p *= 17.0;
@@ -123,6 +125,8 @@ const SHADER_COLOR = /* glsl */`
   // A sphere pole is one point shared by every longitude. Do not stretch the
   // first row's unrelated visibility values into a bright triangular spike.
   float swMapHeight = swLocalDimensions.y / swLocalBounds.w;
+  float swMapWidth = swLocalDimensions.x / swLocalBounds.z;
+  float swTileWorldSize = 6.28318530718 * length(swSurfacePosition) / swMapWidth;
   float swPolarBlend = smoothstep(0.0, 0.5, min(swUV.y, 1.0 - swUV.y) * swMapHeight);
   float swKnown = smoothstep(0.05, 0.95, swProps.b) * swPolarBlend;
   float swWater = smoothstep(0.15, 0.85, swProps.r);
@@ -137,14 +141,26 @@ const SHADER_COLOR = /* glsl */`
   vec3 swSoilTint = mix(vec3(0.82, 0.91, 0.91), vec3(1.03, 1.03, 0.94), swContinental);
   swAlbedo *= mix(swSoilTint * (0.88 + swGrain * 0.16 + swFine * 0.08), vec3(0.95 + swContinental * 0.1), swWater);
   swAlbedo *= 1.0 - swRock * smoothstep(0.64, 0.95, swRidges) * 0.25;
-  float swShore = (smoothstep(0.06, 0.28, swProps.r) - smoothstep(0.42, 0.8, swProps.r)) * swKnown;
+  float swShore = (smoothstep(0.06, 0.28, swProps.r) - smoothstep(0.42, 0.8, swProps.r)) * smoothstep(0.94, 1.0, swProps.b);
   swAlbedo = mix(swAlbedo, vec3(0.23, 0.26, 0.18) * (0.85 + swGrain * 0.3), swShore * 0.5);
+  vec3 swWavePosition = swSurfacePosition / max(0.0001, swTileWorldSize);
+  float swWaveDetail = 1.0 - smoothstep(0.025, 0.16, swPixelFootprint / swTileWorldSize);
+  float swWaveA = sin(dot(swWavePosition, vec3(14.0, 8.0, 19.0)) - swTime * 1.3);
+  float swWaveB = sin(dot(swWavePosition, vec3(-31.0, 17.0, 12.0)) + swTime * 1.7);
+  float swWaveC = sin(dot(swWavePosition, vec3(53.0, 26.0, -39.0)) - swTime * 2.1);
+  float swWaveHeight = (swWaveA * 0.0012 + swWaveB * 0.0006 + swWaveC * 0.0003) * swTileWorldSize * swWaveDetail;
+  // Shallow turquoise and a narrow moving foam line require known land/water
+  // neighbors. A fog boundary must never imply an undiscovered coastline.
+  float swShallow = (1.0 - smoothstep(0.45, 0.95, swProps.r)) * swWater * smoothstep(0.94, 1.0, swProps.b);
+  swAlbedo = mix(swAlbedo, vec3(0.025, 0.22, 0.19), swShallow * 0.65);
+  float swFoam = (smoothstep(0.51, 0.57, swProps.r) - smoothstep(0.65, 0.71, swProps.r)) * smoothstep(0.94, 1.0, swProps.b);
+  swAlbedo += vec3(0.025, 0.06, 0.055) * swFoam * (0.45 + swWaveA * 0.2 + swWaveB * 0.15);
   // The uncharted hemisphere is a neutral scan veil, never fabricated land/water.
   vec3 swVeil = vec3(0.004, 0.011, 0.023) * (0.97 + swContinental * 0.06);
   swAlbedo = mix(swVeil, swAlbedo, swKnown);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
-  float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swFine * 0.0004, swWater) * swKnown;
+  float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swWaveHeight, swWater) * swKnown;
 `;
 
 export function createPlanetSurface(radius: number): PlanetSurface {
@@ -153,7 +169,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
   const uniforms: SurfaceState['uniforms'] = {
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
-    swLocalBounds: { value: new THREE.Vector4(0, 0, 1, 1) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewExtent: { value: new THREE.Vector2(1, 1) },
+    swLocalBounds: { value: new THREE.Vector4(0, 0, 1, 1) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewExtent: { value: new THREE.Vector2(1, 1) }, swTime: { value: 0 },
   };
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025 });
   material.onBeforeCompile = (shader) => {
@@ -162,7 +178,8 @@ export function createPlanetSurface(radius: number): PlanetSurface {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nswSurfacePosition = position;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\n' + SHADER_HEADER)
       .replace('#include <map_fragment>', SHADER_COLOR)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.94, mix(0.86 + swGrain * 0.1, 0.22, swWater), swKnown);')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.94, mix(0.86 + swGrain * 0.1, 0.36, swWater), swKnown);')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularColor *= mix(1.0, 0.3, swWater * swKnown);')
       .replace('#include <normal_fragment_maps>', /* glsl */`
         #include <normal_fragment_maps>
         vec3 swDx = dFdx(-vViewPosition), swDy = dFdy(-vViewPosition);
@@ -229,4 +246,10 @@ export function disposePlanetSurface(mesh: PlanetSurface) {
   }
   mesh.geometry.dispose();
   mesh.material.dispose();
+}
+
+/** Water motion is presentation time, independent of the authoritative simulation tick. */
+export function updatePlanetSurfaceTime(mesh: PlanetSurface, seconds: number) {
+  const state = states.get(mesh);
+  if (state) state.uniforms.swTime.value = seconds;
 }

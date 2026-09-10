@@ -72,7 +72,7 @@ test('移动端行星页保留地图首屏并提供工作台切换', async ({ pa
 
 test('深链 /system/:id 进入对应恒星系星图', async ({ page }) => {
   await openFixtureMode(page);
-  await page.goto('/system/sys-1');
+  await page.goto('/system/sys-1?view=2d');
   // 面包屑显示当前恒星系，Pixi 画布可见
   await expect(page.locator('.starmap-breadcrumb__current')).toHaveText('Aster');
   await expect(page.locator('.starmap-stage canvas')).toBeVisible();

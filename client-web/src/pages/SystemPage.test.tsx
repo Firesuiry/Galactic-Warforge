@@ -76,7 +76,7 @@ describe('SystemPage', () => {
   });
 
   it('深链 /system/:id 直接聚焦对应恒星系', async () => {
-    renderApp(['/system/sys-1']);
+    renderApp(['/system/sys-1?view=2d']);
 
     expect(useStarmapViewStore.getState().focusedSystemId).toBe('sys-1');
     // 面包屑显示当前恒星系名

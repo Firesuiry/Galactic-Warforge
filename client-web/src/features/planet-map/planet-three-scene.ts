@@ -4,12 +4,14 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createPlanetSurface, updatePlanetSurface, disposePlanetSurface } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { createSpace } from './three/space';
 import { tileNormal, normalTile } from './three/projection';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
+import { IndustrialActivity } from './three/industrial-activity';
+import { StaticBatches } from './three/static-batches';
 import { assessBuildTiles } from './build-workflow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position } from '@shared/types';
 import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
@@ -53,6 +55,8 @@ export class PlanetThreeScene {
   private readonly bloom: UnrealBloomPass;
   private readonly environment: THREE.WebGLRenderTarget;
   private readonly industrial = new IndustrialModels();
+  private readonly staticBatches = new StaticBatches();
+  private readonly activity = new IndustrialActivity(this.world, RADIUS);
   private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
   private dressing?: THREE.Group;
   private dressingSignature = '';
@@ -149,6 +153,7 @@ export class PlanetThreeScene {
       this.dressingSignature = dressingSignature;
     }
     this.buildEntities();
+    this.activity.update(data);
     this.updateMarks();
   }
 
@@ -260,6 +265,10 @@ export class PlanetThreeScene {
         return group;
       });
     }
+    for (const building of Object.values(planet.buildings ?? {})) {
+      const model = this.staticEntities.get(`building:${building.id}`)?.group;
+      if (model) model.userData.industryActive = building.runtime?.state === 'running';
+    }
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
       retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y], () => {
@@ -280,6 +289,9 @@ export class PlanetThreeScene {
     for (const [key, entry] of this.staticEntities) {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
+    this.staticBatches.refresh([...this.staticEntities.values()].map(({ group }) => ({
+      root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
+    })));
 
     const movingKeys = new Set<string>();
     const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false) => {
@@ -456,6 +468,8 @@ export class PlanetThreeScene {
       let hidden = false;
       while (object && object !== this.world) { if (!object.visible) hidden = true; object = object.parent; }
       if (hidden) continue;
+      const batchTile = this.staticBatches.resolveHit(hit);
+      if (batchTile) return batchTile;
       object = hit.object;
       while (object && object !== this.world) { if (object.userData.tile) return object.userData.tile as TilePoint; object = object.parent; }
       if (hit.object === this.surface || hit.object.userData.terrain) {
@@ -496,6 +510,9 @@ export class PlanetThreeScene {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
     if (!document.hidden && !this.frozen && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) this.industrial.animate(time / 1000, dt);
     if (!document.hidden) {
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
+      this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       for (const { group, target } of this.moving.values()) {
         const radius = target.length();
         group.position.lerp(target, 1 - Math.exp(-dt * 12)).normalize().multiplyScalar(radius);
@@ -515,12 +532,13 @@ export class PlanetThreeScene {
     canvas.removeEventListener('pointercancel', this.pointerCancel);
     canvas.removeEventListener('pointerleave', this.pointerLeave);
     canvas.removeEventListener('wheel', this.wheel);
+    this.staticBatches.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((o) => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } });
     this.geometries.forEach((g) => geometries.add(g));
     this.materials.forEach((m) => materials.add(m));
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
-    this.industrial.dispose(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
+    this.activity.destroy(); this.industrial.dispose(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
   }
 }

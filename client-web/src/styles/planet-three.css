@@ -5,10 +5,10 @@
   background:#060c12;
 }
 .planet-map-shell--3d::after { display:none; }
-.app-shell:has(.planet-three) .top-nav { background:#0b141cf5; border-color:#6b91a327; box-shadow:none; }
-.app-shell:has(.planet-three) .top-nav__title { text-shadow:none; letter-spacing:.06em; font-weight:500; }
-.app-shell:has(.planet-three) .top-nav__brand-mark { box-shadow:none; border-color:#8ebcc133; }
-.app-shell:has(.planet-three) .outliner { background:#0d1821; border-color:#7e9daa24; flex-basis:208px; width:208px; }
+.app-shell:has(.planet-three, .system-orbit) .top-nav { background:#0b141cf5; border-color:#6b91a327; box-shadow:none; }
+.app-shell:has(.planet-three, .system-orbit) .top-nav__title { text-shadow:none; letter-spacing:.06em; font-weight:500; }
+.app-shell:has(.planet-three, .system-orbit) .top-nav__brand-mark { box-shadow:none; border-color:#8ebcc133; }
+.app-shell:has(.planet-three, .system-orbit) .outliner { background:#0d1821; border-color:#7e9daa24; flex-basis:208px; width:208px; }
 .planet-map-shell--3d .planet-title-chip {
   top:22px; left:24px; border:1px solid #afc2c524; background:linear-gradient(130deg,#11222aed,#0c1922cf);
   border-radius:4px; box-shadow:0 8px 32px #0002; max-width:350px;
@@ -46,20 +46,20 @@
   .planet-map-shell--3d .planet-drawer { top:195px; }
 }
 @media(max-width:600px) {
-  .app-shell:has(.planet-three) .app-body { position:relative; }
-  .app-shell:has(.planet-three) .outliner { position:absolute; z-index:25; top:0; right:0; bottom:0; width:208px; box-shadow:-12px 0 30px #0007; }
-  .app-shell:has(.planet-three) .outliner-handle { flex:0 0 22px; padding:4px; }
-  .app-shell:has(.planet-three) .top-nav { display:grid; grid-template-columns:30px minmax(0,1fr) auto; gap:6px; padding:8px; }
-  .app-shell:has(.planet-three) .top-nav__brand { grid-column:1; grid-row:1; }
-  .app-shell:has(.planet-three) .top-nav__title { display:none; }
-  .app-shell:has(.planet-three) .top-nav__menu { grid-column:2; grid-row:1; width:auto; padding:2px; gap:0; justify-content:space-around; }
-  .app-shell:has(.planet-three) .top-nav__menu-btn { width:24px; height:30px; padding:3px; }
-  .app-shell:has(.planet-three) .top-nav__actions { grid-column:3; grid-row:1; gap:2px; }
-  .app-shell:has(.planet-three) .top-nav__icon-btn { width:26px; height:30px; padding:3px; }
-  .app-shell:has(.planet-three) .top-nav__alerts { grid-column:3; grid-row:2; margin-left:auto; }
-  .app-shell:has(.planet-three) .top-nav__status { grid-column:1 / 3; grid-row:2; flex-wrap:nowrap; gap:4px; width:auto; }
-  .app-shell:has(.planet-three) .top-nav__chip { padding:3px 5px; font-size:10px; }
-  .app-shell:has(.planet-three) .top-nav__chip:first-child { display:none; }
+  .app-shell:has(.planet-three, .system-orbit) .app-body { position:relative; }
+  .app-shell:has(.planet-three, .system-orbit) .outliner { position:absolute; z-index:25; top:0; right:0; bottom:0; width:208px; box-shadow:-12px 0 30px #0007; }
+  .app-shell:has(.planet-three, .system-orbit) .outliner-handle { flex:0 0 22px; padding:4px; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav { display:grid; grid-template-columns:30px minmax(0,1fr) auto; gap:6px; padding:8px; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__brand { grid-column:1; grid-row:1; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__title { display:none; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__menu { grid-column:2; grid-row:1; width:auto; padding:2px; gap:0; justify-content:space-around; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__menu-btn { width:24px; height:30px; padding:3px; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__actions { grid-column:3; grid-row:1; gap:2px; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__icon-btn { width:26px; height:30px; padding:3px; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__alerts { grid-column:3; grid-row:2; margin-left:auto; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__status { grid-column:1 / 3; grid-row:2; flex-wrap:nowrap; gap:4px; width:auto; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__chip { padding:3px 5px; font-size:10px; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__chip:first-child { display:none; }
   .planet-map-shell--3d .planet-title-chip { max-width:calc(100% - 24px); padding:8px 12px; }
   .planet-map-shell--3d .planet-title-chip__head h1 { font-size:14px; }
   .planet-map-shell--3d .planet-view-switch { top:120px; }
@@ -74,5 +74,5 @@
 }
 @media(max-width:600px) {
   /* On phones the notification bell holds notices; transient cards would cover construction controls. */
-  .app-shell:has(.planet-three) .toast-stack { display:none; }
+  .app-shell:has(.planet-three, .system-orbit) .toast-stack { display:none; }
 }

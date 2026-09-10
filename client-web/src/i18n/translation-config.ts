@@ -1,5 +1,6 @@
 export const TRANSLATIONS = {
   planetKind: {
+    rocky: "岩质行星",
     terrestrial: "类地行星",
     barren: "荒芜行星",
     gas_giant: "气态巨行星",

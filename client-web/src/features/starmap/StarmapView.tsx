@@ -359,6 +359,7 @@ export function StarmapView({ initialSystemId }: StarmapViewProps) {
             ) : null}
           </nav>
 
+          {focusedSystemId && <Link className="secondary-button" to={`/system/${focusedSystemId}`}>3D 恒星系</Link>}
           <label className="starmap-filter">
             <input
               type="checkbox"

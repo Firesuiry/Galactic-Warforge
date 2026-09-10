@@ -1,0 +1,41 @@
+.page-shell:has(>.system-orbit) {padding:0;max-width:none;display:flex;}
+.system-orbit {position:relative;flex:1;height:100%;min-height:480px;overflow:hidden;background:#030710;color:#d1dde2;}
+.system-orbit__canvas {position:absolute;inset:0;touch-action:none;}
+.system-orbit__canvas canvas {width:100%;height:100%;display:block;}
+.system-orbit__heading {position:absolute;top:28px;left:30px;pointer-events:none;}
+.system-orbit__heading nav {pointer-events:auto;font-size:11px;letter-spacing:2px;color:#7e9cac;}
+.system-orbit__heading h1 {font-weight:400;font-size:30px;letter-spacing:5px;margin:14px 0 7px;}
+.system-orbit__heading p {font-size:12px;color:#8ca6b4;}
+.system-orbit__tools {position:absolute;top:28px;right:28px;display:flex;gap:8px;}
+.system-orbit .secondary-button {background:#162630dc;border:1px solid #6e8c963b;border-radius:3px;padding:9px 12px;font-size:11px;}
+.system-orbit__tools button:hover,.system-orbit__body:hover {border-color:#e3bf7677;}
+.system-orbit__telemetry {position:absolute;left:30px;bottom:178px;display:grid;gap:8px;padding:18px 20px;background:#0b18218c;border-left:2px solid #cda86c66;backdrop-filter:blur(8px);}
+.system-orbit__eyebrow {font-size:10px;letter-spacing:3px;color:#c4aa79;}
+.system-orbit__telemetry strong {font-size:24px;font-weight:400;color:#f0dfbb;}
+.system-orbit__telemetry small {font-size:10px;color:#8ea6b3;}
+.system-orbit__telemetry p {font-size:11px;margin:0;color:#8ca8b8;}
+.system-orbit__telemetry a {font-size:11px;margin-top:5px;}
+.system-orbit__selection {position:absolute;right:28px;bottom:178px;width:290px;padding:24px;background:#101f2ae8;border:1px solid #9fbac233;border-top:2px solid #dfbd7a;border-radius:3px;backdrop-filter:blur(16px);}
+.system-orbit__selection h2 {font-size:22px;margin:12px 0;font-weight:400;}
+.system-orbit__selection p {font-size:11px;color:#9bb5c0;}
+.system-orbit__selection .secondary-button {display:inline-block;margin:8px 6px 0 0;}
+.system-orbit__close {position:absolute;right:8px;top:8px;background:none;border:0;color:#aac1cc;cursor:pointer;}
+.system-orbit__bodies {position:absolute;bottom:49px;left:30px;right:30px;display:flex;gap:10px;overflow-x:auto;padding:5px 0;}
+.system-orbit__body {flex:0 0 218px;display:flex;align-items:center;gap:14px;text-align:left;border:1px solid #96bbc429;padding:16px;background:#0e202be8;border-radius:4px;cursor:pointer;color:#cbdce4;}
+.system-orbit__body[aria-pressed=true] {border-color:#d8b5758c;background:#273137e8;}
+.system-orbit__body>span:last-child {display:grid;gap:5px;min-width:0;}
+.system-orbit__body small {color:#7f9aa8;font-size:10px;letter-spacing:1px;}
+.system-orbit__body strong {font-weight:400;font-size:15px;overflow:hidden;text-overflow:ellipsis;}
+.system-orbit__planet-icon {display:block;width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 28% 25%,#d2c3a0,#708179 34%,#283a43 65%,#08121c);box-shadow:0 0 16px #729fc51a;flex-shrink:0;}
+.system-orbit__planet-icon--gas_giant {background:repeating-linear-gradient(12deg,#776044 0px,#c9a278 5px,#9d8266 9px);box-shadow:inset -10px -4px 14px #090e18;}
+.system-orbit__planet-icon--lava {background:radial-gradient(circle at 28% 25%,#f6a759,#ab593c 30%,#572c2a 65%,#171017);}
+.system-orbit__hint {position:absolute;bottom:16px;left:30px;margin:0;font-size:10px;letter-spacing:1px;color:#698391;pointer-events:none;}
+.system-orbit__hint span {margin-left:16px;color:#475f6d;}
+.system-orbit__notice {position:absolute;top:40%;left:25%;right:25%;text-align:center;padding:20px;background:#132631;border:1px solid #7996a133;}
+@media(max-width:900px) {
+ .system-orbit__heading{left:18px;top:18px}.system-orbit__heading h1{font-size:22px}
+ .system-orbit__tools{top:106px;right:16px}.system-orbit__telemetry{left:18px;bottom:163px;padding:10px}
+ .system-orbit__selection{right:16px;bottom:163px;max-width:calc(100% - 32px)}
+ .system-orbit__bodies{left:16px;right:16px;bottom:42px}.system-orbit__body{flex-basis:190px;padding:10px}.system-orbit__hint{left:16px;bottom:12px}.system-orbit__hint span{display:none}
+}
+@media(max-width:600px){.system-orbit__telemetry{display:none}.system-orbit__selection{width:245px}.system-orbit__body{flex-basis:175px}.system-orbit__hint{font-size:9px}}

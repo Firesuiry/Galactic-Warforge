@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Crosshair, ChevronDown, ChevronRight, Hammer, ScrollText, type LucideIcon } from "lucide-react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ALL_EVENT_TYPES } from "@shared/config";
 
@@ -617,6 +617,7 @@ export function PlanetPage() {
         />}
         </Suspense>
         <div className="planet-view-switch" aria-label="地图视图">
+          {isThree && systemId && <Link className="secondary-button" to={`/system/${systemId}?planet=${planet.planet_id}`}>恒星系 ↗</Link>}
           <button className="secondary-button" aria-pressed={isThree} onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete("view"); return next; }, { replace: true })}>3D 星球</button>
           <button className="secondary-button" aria-pressed={!isThree} onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.set("view", "2d"); return next; }, { replace: true })}>平面战术</button>
         </div>

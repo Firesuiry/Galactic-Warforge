@@ -429,7 +429,12 @@ export class IndustrialModels {
   }
 
   animate(_time: number, delta: number): void {
-    for (const { object, axis, speed } of this.rotations) object.rotation[axis] += Math.min(delta, 0.08) * speed;
+    for (const { object, axis, speed } of this.rotations) {
+      let parent: THREE.Object3D | null = object;
+      let active = true;
+      while (parent) { if (parent.userData.industryActive === false) { active = false; break; } parent = parent.parent; }
+      if (active) object.rotation[axis] += Math.min(delta, 0.08) * speed;
+    }
   }
 
   releaseAnimations(group: THREE.Object3D): void {

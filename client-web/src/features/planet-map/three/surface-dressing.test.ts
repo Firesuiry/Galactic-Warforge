@@ -36,9 +36,9 @@ describe('non-interactive surface dressing', () => {
 
   it('bounds GPU instance counts independently of map size', () => {
     const group = createSurfaceDressing({ planet: scene(100) }, 100);
-    const count = group.children.reduce((total, mesh) => total + (mesh as THREE.InstancedMesh).count, 0);
+    const count = group.children.reduce((total, mesh) => total + (mesh instanceof THREE.InstancedMesh ? mesh.count : 0), 0);
     expect(count).toBeGreaterThan(1000);
     expect(count).toBeLessThanOrEqual(4000);
-    expect(group.children.length).toBeLessThanOrEqual(2);
+    expect(group.children.length).toBeLessThanOrEqual(3);
   });
 });

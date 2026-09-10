@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getBuildingFootprint, getFogState } from '../model';
 import type { PlanetSurfaceData } from './terrain';
+import { createTerrainRelief } from './local-surface';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const MAX_INSTANCES = 4000;
@@ -111,5 +112,7 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
   };
   add(rockTransforms, rockColors, new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.98, metalness: 0, flatShading: true }), 'weathered-stones');
   add(grassTransforms, grassColors, grassGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide }), 'short-grass-tufts');
+  const relief = createTerrainRelief({ planet, fog }, radius);
+  if (relief) group.add(relief);
   return group;
 }
