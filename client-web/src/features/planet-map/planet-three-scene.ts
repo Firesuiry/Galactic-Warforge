@@ -12,6 +12,7 @@ import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
+import { DynamicBatches } from './three/dynamic-batches';
 import { assessBuildTiles } from './build-workflow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position } from '@shared/types';
 import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
@@ -56,6 +57,7 @@ export class PlanetThreeScene {
   private readonly environment: THREE.WebGLRenderTarget;
   private readonly industrial = new IndustrialModels();
   private readonly staticBatches = new StaticBatches();
+  private readonly dynamicBatches = new DynamicBatches();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
   private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
   private dressing?: THREE.Group;
@@ -91,7 +93,7 @@ export class PlanetThreeScene {
     room.dispose(); pmrem.dispose();
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .32, .45, 1.15);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .32, .45, 2.5);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.renderer.domElement.setAttribute('aria-label', '3D 行星地图：拖动旋转，滚轮缩放，点击地块操作');
@@ -289,9 +291,11 @@ export class PlanetThreeScene {
     for (const [key, entry] of this.staticEntities) {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
-    this.staticBatches.refresh([...this.staticEntities.values()].map(({ group }) => ({
+    const batchEntries = [...this.staticEntities.values()].map(({ group }) => ({
       root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
-    })));
+    }));
+    this.staticBatches.refresh(batchEntries);
+    this.dynamicBatches.refresh(batchEntries);
 
     const movingKeys = new Set<string>();
     const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false) => {
@@ -468,7 +472,7 @@ export class PlanetThreeScene {
       let hidden = false;
       while (object && object !== this.world) { if (!object.visible) hidden = true; object = object.parent; }
       if (hidden) continue;
-      const batchTile = this.staticBatches.resolveHit(hit);
+      const batchTile = this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
       if (batchTile) return batchTile;
       object = hit.object;
       while (object && object !== this.world) { if (object.userData.tile) return object.userData.tile as TilePoint; object = object.parent; }
@@ -511,6 +515,7 @@ export class PlanetThreeScene {
     if (!document.hidden && !this.frozen && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) this.industrial.animate(time / 1000, dt);
     if (!document.hidden) {
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       for (const { group, target } of this.moving.values()) {
@@ -533,6 +538,7 @@ export class PlanetThreeScene {
     canvas.removeEventListener('pointerleave', this.pointerLeave);
     canvas.removeEventListener('wheel', this.wheel);
     this.staticBatches.dispose();
+    this.dynamicBatches.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((o) => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } });

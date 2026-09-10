@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { createIndustrialFinishes } from './industrial-finishes';
 
 type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile';
 type Rotation = { object: THREE.Object3D; axis: 'x' | 'y' | 'z'; speed: number };
@@ -15,20 +16,24 @@ export class IndustrialModels {
   private readonly rotations: Rotation[] = [];
   private readonly merged = new Set<THREE.BufferGeometry>();
   private readonly templates = new Map<string, THREE.Group>();
+  private readonly finishes = createIndustrialFinishes();
 
   constructor() {
     const palette: Record<Finish, THREE.MeshStandardMaterialParameters> = {
-      ceramic: { color: 0xe3e8df, roughness: 0.34, metalness: 0.35 },
+      ceramic: { color: 0xe3e8df, roughness: 0.5, metalness: 0.12 },
       alloy: { color: 0x798c94, roughness: 0.35, metalness: 0.78 },
       graphite: { color: 0x26363e, roughness: 0.47, metalness: 0.64 },
       copper: { color: 0xbb7842, roughness: 0.34, metalness: 0.78 },
-      blue: { color: 0x8befff, emissive: 0x24b7dc, emissiveIntensity: 2.8, roughness: 0.25, metalness: 0.3 },
-      orange: { color: 0xffc97c, emissive: 0xff720d, emissiveIntensity: 2.7, roughness: 0.38, metalness: 0.3 },
+      blue: { color: 0x8befff, emissive: 0x24b7dc, emissiveIntensity: 6, roughness: 0.25, metalness: 0.3 },
+      orange: { color: 0xffc97c, emissive: 0xff720d, emissiveIntensity: 6, roughness: 0.38, metalness: 0.3 },
       glass: { color: 0x153c4f, roughness: 0.17, metalness: 0.72, emissive: 0x073341, emissiveIntensity: 0.5 },
       rubber: { color: 0x18242a, roughness: 0.88, metalness: 0.05 },
       hostile: { color: 0xb9634b, roughness: 0.45, metalness: 0.5 },
     };
-    for (const [key, parameters] of Object.entries(palette)) this.material.set(key, new THREE.MeshStandardMaterial(parameters));
+    for (const [key, parameters] of Object.entries(palette)) {
+      const finish = key === 'ceramic' || key === 'alloy' || key === 'graphite' ? this.finishes[key] : {};
+      this.material.set(key, new THREE.MeshStandardMaterial({ ...parameters, ...finish }));
+    }
     this.geometry.set('box', new RoundedBoxGeometry(1, 1, 1, 1, 0.06));
     this.geometry.set('slab', new THREE.BoxGeometry(1, 1, 1));
     this.geometry.set('cylinder', new THREE.CylinderGeometry(0.5, 0.5, 1, 16));
@@ -455,6 +460,7 @@ export class IndustrialModels {
     this.merged.clear(); this.templates.clear();
     for (const geometry of this.geometry.values()) geometry.dispose();
     for (const material of this.material.values()) material.dispose();
+    this.finishes.dispose();
     this.geometry.clear(); this.material.clear();
   }
 }
