@@ -1,5 +1,15 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { createPlanetSurface, updatePlanetSurface, disposePlanetSurface } from './three/terrain';
+import { IndustrialModels } from './three/industrial-models';
+import { createSpace } from './three/space';
+import { tileNormal, normalTile } from './three/projection';
+import { createSurfaceDressing } from './three/surface-dressing';
+import { createLocalSurface } from './three/local-surface';
 import { assessBuildTiles } from './build-workflow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position } from '@shared/types';
 import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
@@ -21,16 +31,7 @@ export interface PlanetThreeInteraction {
   layers: PlanetLayerVisibility;
 }
 const RADIUS = 100;
-const UP = new THREE.Vector3(0, 1, 0);
 const FRONT = new THREE.Vector3(0, 0, 1);
-const TERRAIN: Record<string, string> = {
-  buildable: '#397565', blocked: '#5a636d',
-  plains: '#397565', plain: '#397565', grass: '#397565', grassland: '#397565',
-  forest: '#23594c', water: '#103c58', ocean: '#103c58', sea: '#103c58',
-  mountain: '#737f86', mountains: '#737f86', rock: '#737f86', desert: '#ac9264',
-  sand: '#ac9264', ice: '#a0c1ca', snow: '#a0c1ca', lava: '#a24c37', swamp: '#4d6150',
-};
-
 /** Presentation only: all entities and terrain are sourced from player-visible server views. */
 export class PlanetThreeScene {
   private readonly scene = new THREE.Scene();
@@ -48,13 +49,26 @@ export class PlanetThreeScene {
   private destroyed = false;
   private altitude = 300;
   private down: { x: number; y: number; moved: boolean } | null = null;
-  private texture?: THREE.CanvasTexture;
+  private readonly composer: EffectComposer;
+  private readonly bloom: UnrealBloomPass;
+  private readonly environment: THREE.WebGLRenderTarget;
+  private readonly industrial = new IndustrialModels();
+  private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
+  private dressing?: THREE.Group;
+  private dressingSignature = '';
+  private localSurface: ReturnType<typeof createLocalSurface> = null;
+  private localSurfaceKey = '';
+  private groundView = false;
+  private tilt = .65;
+  private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3 }>();
+  private readonly staticEntities = new Map<string, { group: THREE.Group; signature: string }>();
+  private readonly linkSignatures = new Map<string, string>();
+  private frozen = new URLSearchParams(window.location.search).has('freeze');
   private readonly geometries = new Map<string, THREE.BufferGeometry>();
   private readonly materials = new Map<string, THREE.Material>();
   private readonly groupByLayer = new Map<string, THREE.Group>();
-  private readonly animations: THREE.Object3D[] = [];
   private lastTime = 0;
-  private readonly models = new Map<string, THREE.Group>();
+
 
   constructor(private readonly host: HTMLElement, private readonly onPick: (tile: TilePoint) => void, private readonly onHover: (tile: TilePoint | null) => void) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
@@ -62,26 +76,45 @@ export class PlanetThreeScene {
     this.renderer.setClearColor('#030912');
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.25;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const room = new RoomEnvironment();
+    this.environment = pmrem.fromScene(room, .04);
+    this.scene.environment = this.environment.texture;
+    this.scene.environmentIntensity = .32;
+    room.dispose(); pmrem.dispose();
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .32, .45, 1.15);
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
     this.renderer.domElement.setAttribute('aria-label', '3D 行星地图：拖动旋转，滚轮缩放，点击地块操作');
     this.renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:none;outline:none';
     this.renderer.domElement.tabIndex = 0;
     host.appendChild(this.renderer.domElement);
     this.scene.add(this.world);
     this.world.add(this.content, this.marks);
-    this.surface = new THREE.Mesh(new THREE.SphereGeometry(RADIUS, 192, 128), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.87, metalness: 0.13 }));
+    this.surface = createPlanetSurface(RADIUS);
+    this.surface.receiveShadow = true;
     this.world.add(this.surface);
-    this.scene.add(new THREE.AmbientLight(0x8babcf, 1.2));
-    const sun = new THREE.DirectionalLight(0xffe3b8, 3.1);
-    sun.position.set(-180, 130, 230);
-    this.scene.add(sun);
-    const rim = new THREE.DirectionalLight(0x3b9dff, 1.1);
-    rim.position.set(130, -70, -120);
+    this.scene.add(new THREE.HemisphereLight(0xb6dafa, 0x384044, .75));
+    this.sunlight.position.set(-100, 140, 230);
+    this.sunlight.target.position.set(0, 0, RADIUS);
+    this.sunlight.castShadow = true;
+    this.sunlight.shadow.mapSize.set(2048, 2048);
+    this.sunlight.shadow.bias = -.00015;
+    this.sunlight.shadow.normalBias = .035;
+    this.sunlight.shadow.camera.near = 1;
+    this.sunlight.shadow.camera.far = 500;
+    this.scene.add(this.sunlight, this.sunlight.target);
+    const rim = new THREE.DirectionalLight(0x719dc7, .75);
+    rim.position.set(100, -60, -70);
     this.scene.add(rim);
-    this.addSky();
-    this.loadModels();
-    this.camera.position.set(0, 0, RADIUS + this.altitude);
-    this.camera.lookAt(0, 0, 0);
+    const { sky, atmosphere } = createSpace(RADIUS);
+    this.scene.add(sky); this.world.add(atmosphere);
+    this.updateCamera();
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointerdown', this.pointerDown);
     canvas.addEventListener('pointermove', this.pointerMove);
@@ -95,58 +128,26 @@ export class PlanetThreeScene {
     this.animate(0);
   }
 
-  private loadModels() {
-    const loader = new GLTFLoader();
-    for (const name of ['hangar_roundA', 'hangar_largeA', 'machine_generator', 'satelliteDish', 'craft_cargoA', 'rover', 'turret_single']) {
-      loader.load(`/assets/space/${name}.glb`, (gltf) => {
-        if (this.destroyed) { gltf.scene.traverse((o) => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => m.dispose()); } }); return; }
-        this.models.set(name, gltf.scene);
-        if (this.data) this.buildEntities();
-      }, undefined, () => { /* Procedural models remain available when assets fail. */ });
-    }
-  }
-  private applyModel(group: THREE.Group, name: string, width: number, depth: number) {
-    const source = this.models.get(name);
-    if (!source) return;
-    const model = source.clone(true);
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const scale = Math.min(width / Math.max(size.x, 0.01), depth / Math.max(size.z, 0.01));
-    model.scale.setScalar(scale);
-    model.position.set(-center.x * scale, -box.min.y * scale + 0.10, -center.z * scale);
-    group.clear();
-    this.part(group, 'box', '#263b4a', [width, 0.10, depth], [0, 0.05, 0]);
-    group.add(model);
-  }
-  private addSky() {
-    const positions: number[] = [];
-    const colors: number[] = [];
-    // Deterministic decorative sky; these points do not represent game entities.
-    for (let i = 0; i < 1500; i++) {
-      const a = i * 2.39996323;
-      const y = 1 - (i + 0.5) / 750;
-      const r = Math.sqrt(1 - y * y);
-      positions.push(Math.cos(a) * r * 1900, y * 1900, Math.sin(a) * r * 1900);
-      const c = new THREE.Color(i % 7 === 0 ? '#9dcfff' : i % 11 === 0 ? '#ffe1b0' : '#b7c8dc');
-      colors.push(c.r, c.g, c.b);
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    this.scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({ size: 2.2, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.82 })));
-    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.018, 96, 64), new THREE.ShaderMaterial({
-      uniforms: { glowColor: { value: new THREE.Color('#2498e5') } },
-      vertexShader: 'varying vec3 vNormal; varying vec3 vPosition; void main(){vec4 p=modelViewMatrix*vec4(position,1.0); vPosition=p.xyz; vNormal=normalize(normalMatrix*normal); gl_Position=projectionMatrix*p;}',
-      fragmentShader: 'uniform vec3 glowColor; varying vec3 vNormal; varying vec3 vPosition; void main(){float rim=pow(1.0-max(dot(normalize(vNormal),normalize(-vPosition)),0.0),3.5); gl_FragColor=vec4(glowColor,rim*0.58);}',
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    }));
-    this.world.add(atmosphere);
-  }
-
   setData(data: PlanetThreeData) {
     this.data = data;
-    this.buildTerrain();
+    updatePlanetSurface(this.surface, data);
+    const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? data.planet.bounds : null]);
+    if (localKey !== this.localSurfaceKey) {
+      if (this.localSurface) { this.world.remove(this.localSurface); this.localSurface.geometry.dispose(); }
+      this.localSurface = createLocalSurface(data.planet, RADIUS, this.surface.material);
+      if (this.localSurface) this.world.add(this.localSurface);
+      this.localSurfaceKey = localKey;
+    }
+    const dressingSignature = JSON.stringify([data.planet.terrain, 'bounds' in data.planet ? data.planet.bounds : null,
+      Object.values(data.planet.buildings ?? {}).map(b => [b.position, getBuildingFootprint(b)]), data.fog?.visible]);
+    if (dressingSignature !== this.dressingSignature) {
+      this.dressing?.traverse(o => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
+      if (this.dressing) this.world.remove(this.dressing);
+      this.dressing = createSurfaceDressing(data, RADIUS);
+      this.dressing.visible = this.groundView;
+      this.world.add(this.dressing);
+      this.dressingSignature = dressingSignature;
+    }
     this.buildEntities();
     this.updateMarks();
   }
@@ -160,16 +161,11 @@ export class PlanetThreeScene {
 
   private normal(x: number, y: number) {
     const p = this.data!.planet;
-    const longitude = ((x + 0.5) / p.map_width) * Math.PI * 2;
-    const latitude = ((y + 0.5) / p.map_height) * Math.PI;
-    return new THREE.Vector3(-Math.cos(longitude) * Math.sin(latitude), Math.cos(latitude), Math.sin(longitude) * Math.sin(latitude));
+    return tileNormal({ x, y }, p.map_width, p.map_height);
   }
 
   private tileFromNormal(n: THREE.Vector3): TilePoint | null {
-    if (!this.data) return null;
-    const p = this.data.planet;
-    const u = ((Math.atan2(n.z, -n.x) / (2 * Math.PI)) + 1) % 1;
-    return { x: Math.min(p.map_width - 1, Math.floor(u * p.map_width)), y: Math.min(p.map_height - 1, Math.floor(Math.acos(THREE.MathUtils.clamp(n.y, -1, 1)) / Math.PI * p.map_height)) };
+    return this.data ? normalTile(n, this.data.planet.map_width, this.data.planet.map_height) : null;
   }
 
   private tileScale() {
@@ -187,40 +183,6 @@ export class PlanetThreeScene {
     if (!this.data) return false;
     const fog = this.data.fog ?? ('bounds' in this.data.planet ? this.data.planet : undefined);
     return fog ? getFogState(fog, Math.round(position.x), Math.round(position.y)).visible : this.known(position);
-  }
-
-  private buildTerrain() {
-    if (!this.data) return;
-    const { planet, overview } = this.data;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.min(2048, Math.max(256, planet.map_width));
-    canvas.height = Math.min(1024, Math.max(128, planet.map_height));
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#101c2c';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const draw = (x: number, y: number, w: number, h: number, terrain: string, visible: boolean) => {
-      if (terrain === 'unknown') return;
-      const color = new THREE.Color(TERRAIN[terrain] ?? '#486d67');
-      if (!visible) color.multiplyScalar(0.42);
-      ctx.fillStyle = `#${color.getHexString()}`;
-      ctx.fillRect(x / planet.map_width * canvas.width, y / planet.map_height * canvas.height, Math.ceil(w / planet.map_width * canvas.width), Math.ceil(h / planet.map_height * canvas.height));
-    };
-    overview?.terrain?.forEach((row, y) => row.forEach((terrain, x) => {
-      if (overview.explored?.[y]?.[x]) draw(x * overview.step, y * overview.step, overview.step, overview.step, terrain, Boolean(overview.visible?.[y]?.[x]));
-    }));
-    const bounds = 'bounds' in planet ? planet.bounds : { x: 0, y: 0 };
-    planet.terrain?.forEach((row, y) => row.forEach((terrain, x) => {
-      const position = { x: bounds.x + x, y: bounds.y + y };
-      if (this.known(position)) draw(position.x, position.y, 1, 1, terrain, this.visible(position));
-    }));
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.magFilter = THREE.NearestFilter;
-    texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
-    this.surface.material.map = texture;
-    this.surface.material.needsUpdate = true;
-    this.texture?.dispose();
-    this.texture = texture;
   }
 
   private geometry(kind: string) {
@@ -259,122 +221,129 @@ export class PlanetThreeScene {
   private place(group: THREE.Group, position: Position | TilePoint, layer: string, scale = 1) {
     const n = this.normal(position.x, position.y);
     group.position.copy(n).multiplyScalar(RADIUS + this.tileScale() * 0.025);
-    group.quaternion.setFromUnitVectors(UP, n);
-    group.scale.setScalar(this.tileScale() * scale);
+    const east = this.normal(position.x + .001, position.y).sub(n).normalize();
+    const south = new THREE.Vector3().crossVectors(east, n).normalize();
+    group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, n, south));
+    // Longitude cells shrink near the poles. Fit models within their authoritative tile.
+    const p = this.data!.planet;
+    const eastSpan = 2 * Math.PI * RADIUS / p.map_width * Math.max(.025, Math.sqrt(Math.max(0, 1 - Math.pow(1 - 2 * (position.y + .5) / p.map_height, 2))));
+    const latitudeRadius = Math.sqrt(Math.max(.0001, 1 - Math.pow(1 - 2 * (position.y + .5) / p.map_height, 2)));
+    const northSpan = 2 * RADIUS / (p.map_height * latitudeRadius);
+    const size = Math.min(eastSpan, northSpan);
+    group.scale.multiplyScalar(size * scale);
     group.userData.tile = { x: Math.round(position.x), y: Math.round(position.y) };
     this.layer(layer).add(group);
   }
 
   private buildEntities() {
     if (!this.data) return;
-    // Shared meshes survive refresh; only network line geometry belongs to an individual snapshot.
-    this.content.traverse((object) => { if (object instanceof THREE.Line || (object instanceof THREE.Mesh && object.userData.transient)) { object.geometry.dispose(); const m = object.material; if (Array.isArray(m)) m.forEach((entry) => entry.dispose()); else m.dispose(); } });
-    this.content.clear();
-    this.groupByLayer.clear();
-    this.animations.length = 0;
     const { planet, playerId, runtime, networks } = this.data;
-    this.buildDetailTerrain();
+    const dimensions = [planet.map_width, planet.map_height];
+    const staticKeys = new Set<string>();
+    // Only rendering inputs enter the signature. Production inventories, health,
+    // research progress and network allocation do not change a model's structure.
+    const retain = (key: string, appearance: unknown[], create: () => THREE.Group) => {
+      staticKeys.add(key);
+      const signature = JSON.stringify([dimensions, ...appearance]);
+      const previous = this.staticEntities.get(key);
+      if (previous?.signature === signature) return;
+      if (previous) this.removeModel(previous.group);
+      this.staticEntities.set(key, { signature, group: create() });
+    };
     for (const building of Object.values(planet.buildings ?? {})) {
       if (!(building.owner_id === playerId || this.visible(building.position))) continue;
-      const g = new THREE.Group();
-      const own = building.owner_id === playerId;
-      const accent = own ? '#48ded2' : '#ff7965';
       const footprint = getBuildingFootprint(building);
-      const width = Math.max(0.7, footprint.width * 0.8);
-      const depth = Math.max(0.7, footprint.height * 0.8);
-      this.part(g, 'box', '#233343', [width, 0.12, depth], [0, 0.06, 0]);
-      const type = building.type as string;
-      if (/solar/.test(type)) {
-        this.part(g, 'box', '#bec8cf', [0.12, 0.35, 0.12], [0, 0.23, 0]);
-        const panel = this.part(g, 'box', '#2468a6', [width * 0.95, 0.04, depth * 0.85], [0, 0.42, 0]);
-        panel.rotation.x = -0.3;
-        for (let i = -1; i <= 1; i++) this.part(g, 'box', '#72c7e8', [0.018, 0.025, depth * 0.8], [i * width * 0.28, 0.45, 0], true);
-      } else if (/wind/.test(type)) {
-        this.part(g, 'cylinder', '#c5d3d7', [0.10, 1.25, 0.10], [0, 0.72, 0]);
-        const rotor = new THREE.Group(); rotor.position.set(0, 1.28, 0.10); g.add(rotor);
-        for (let i = 0; i < 3; i++) { const blade = new THREE.Group(); blade.rotation.z = i * Math.PI * 2 / 3; rotor.add(blade); this.part(blade, 'box', '#e2e9e4', [0.085, 0.48, 0.035], [0, 0.22, 0]); }
-        this.animations.push(rotor);
-      } else if (/belt|conveyor|sorter|pipeline/.test(type)) {
-        this.part(g, 'box', '#506173', [width * 0.85, 0.14, depth], [0, 0.19, 0]);
-        for (let i = -1; i <= 1; i++) this.part(g, 'box', accent, [width * 0.65, 0.025, 0.06], [0, 0.27, i * depth * 0.28], true);
-      } else if (/tower|station|base|hub|lab|research/.test(type)) {
-        this.part(g, 'cylinder', '#afb9bf', [width * 0.65, 0.72, depth * 0.65], [0, 0.48, 0]);
-        this.part(g, 'cylinder', accent, [width * 0.72, 0.055, depth * 0.72], [0, 0.77, 0], true);
-        this.part(g, 'cylinder', '#324454', [width * 0.38, 0.35, depth * 0.38], [0, 0.98, 0]);
-        this.part(g, 'cone', '#d7d5c4', [width * 0.46, 0.22, depth * 0.46], [0, 1.23, 0]);
-        this.part(g, 'cylinder', accent, [0.04, 0.42, 0.04], [0, 1.47, 0], true);
-      } else {
-        this.part(g, 'box', '#a8b3bc', [width * 0.76, 0.45, depth * 0.76], [0, 0.35, 0]);
-        this.part(g, 'box', '#344959', [width * 0.84, 0.13, depth * 0.84], [0, 0.64, 0]);
-        this.part(g, 'box', accent, [width * 0.62, 0.06, 0.035], [0, 0.47, depth * 0.385], true);
-        this.part(g, 'cylinder', '#4d6679', [width * 0.19, 0.48, depth * 0.19], [width * 0.25, 0.86, 0]);
-        this.part(g, 'cylinder', '#efb962', [width * 0.2, 0.045, depth * 0.2], [width * 0.25, 1.11, 0], true);
-      }
-      const modelName = /base|hub/.test(type) ? 'hangar_roundA' : /turret|defense/.test(type) ? 'turret_single' : /lab|research|radar/.test(type) ? 'satelliteDish' : /generator|thermal/.test(type) ? 'machine_generator' : /factory|assembler|depot|storage|smelt/.test(type) ? 'hangar_largeA' : '';
-      this.applyModel(g, modelName, width, depth);
-      this.place(g, building.position, 'buildings');
+      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint], () => {
+        const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
+        this.place(group, { x: building.position.x + (footprint.width - 1) / 2, y: building.position.y + (footprint.height - 1) / 2 }, 'buildings');
+        group.userData.tile = { x: Math.round(building.position.x), y: Math.round(building.position.y) };
+        return group;
+      });
     }
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
-      const g = new THREE.Group();
-      const color = /iron/.test(resource.kind) ? '#8eb9cf' : /copper/.test(resource.kind) ? '#e59658' : /coal|oil/.test(resource.kind) ? '#454956' : '#a383cf';
-      for (let i = 0; i < 3; i++) { const crystal = this.part(g, 'orb', color, [0.23, 0.25 + i * 0.10, 0.25], [(i - 1) * 0.18, 0.17, i % 2 * 0.14]); crystal.rotation.y = i; }
-      this.place(g, resource.position, 'resources');
-    }
-    for (const unit of Object.values(planet.units ?? {})) {
-      if (!(unit.owner_id === playerId || this.visible(unit.position))) continue;
-      const g = this.ship(unit.owner_id === playerId ? '#65ecff' : '#ff776b');
-      this.applyModel(g, /ship|craft|drone/.test(unit.type) ? 'craft_cargoA' : 'rover', 0.75, 0.9);
-      this.place(g, unit.position, 'units', 0.75);
-    }
-    for (const drone of [...(runtime?.logistics_drones ?? []), ...(runtime?.logistics_ships ?? [])]) {
-      if (!this.visible(drone.position)) continue;
-      const g = this.ship('#ffcd75'); this.applyModel(g, 'craft_cargoA', 0.8, 0.8);
-      this.place(g, drone.position, 'logistics', 0.45);
+      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y], () => {
+        const group = this.industrial.resource(resource.kind);
+        this.place(group, resource.position, 'resources');
+        return group;
+      });
     }
     for (const task of runtime?.construction_tasks ?? []) {
       if (!this.known(task.position)) continue;
-      const g = new THREE.Group();
-      for (let x = -1; x <= 1; x += 2) for (let z = -1; z <= 1; z += 2) this.part(g, 'box', '#ffc46b', [0.035, 0.65, 0.035], [x * 0.35, 0.35, z * 0.35], true);
-      this.place(g, task.position, 'construction');
+      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type], () => {
+        const group = new THREE.Group();
+        for (let x = -1; x <= 1; x += 2) for (let z = -1; z <= 1; z += 2) this.part(group, 'box', '#ffc46b', [0.035, 0.65, 0.035], [x * 0.35, 0.35, z * 0.35], true);
+        this.place(group, task.position, 'construction');
+        return group;
+      });
+    }
+    for (const [key, entry] of this.staticEntities) {
+      if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
+    }
+
+    const movingKeys = new Set<string>();
+    const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false) => {
+      movingKeys.add(id);
+      this.trackMotion(id, type, own, position, layer, scale, airborne);
+    };
+    for (const unit of Object.values(planet.units ?? {})) {
+      if (unit.owner_id === playerId || this.visible(unit.position)) move(`unit:${unit.id}`, unit.type, unit.owner_id === playerId, unit.position, 'units', .72);
+    }
+    const logisticsLinks: { from: Position; to: Position }[] = [];
+    for (const drone of [...(runtime?.logistics_drones ?? []), ...(runtime?.logistics_ships ?? [])]) {
+      if (!this.visible(drone.position)) continue;
+      move(`logistics:${drone.id}`, 'ship', true, drone.position, 'logistics', .45, drone.status !== 'idle');
+      if (drone.status !== 'idle' && drone.target_pos) logisticsLinks.push({ from: drone.position, to: drone.target_pos });
     }
     for (const enemy of runtime?.enemy_forces ?? []) {
-      if (this.visible(enemy.position)) this.place(this.ship('#ff665c'), enemy.position, 'threat');
+      if (this.visible(enemy.position)) move(`enemy:${enemy.id}`, enemy.type, false, enemy.position, 'threat', 1);
     }
-    for (const link of networks?.power_links ?? []) this.link(link.from_position, link.to_position, '#ffd37c', 'power');
-    for (const link of networks?.pipeline_segments ?? []) this.link(link.from_position, link.to_position, '#76baef', 'pipelines');
+    for (const [id, entry] of this.moving) {
+      if (!movingKeys.has(id)) { this.removeModel(entry.group); this.moving.delete(id); }
+    }
+    this.syncLinks('logistics', '#7dc5d2', logisticsLinks);
+    this.syncLinks('power', '#ffd37c', (networks?.power_links ?? []).map(link => ({ from: link.from_position, to: link.to_position })));
+    this.syncLinks('pipelines', '#76baef', (networks?.pipeline_segments ?? []).map(link => ({ from: link.from_position, to: link.to_position })));
   }
 
-  private buildDetailTerrain() {
-    if (!this.data) return;
-    const { planet } = this.data;
-    if (!('bounds' in planet) || (planet.map_width <= 2048 && planet.map_height <= 1024)) return;
-    const positions: number[] = [], colors: number[] = [];
-    const b = planet.bounds;
-    planet.terrain?.forEach((row, iy) => row.forEach((terrain, ix) => {
-      const x = b.x + ix, y = b.y + iy;
-      if (!this.known({ x, y }) || terrain === 'unknown') return;
-      const corners = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]].map(([dx, dy]) => this.normal(x + dx, y + dy).multiplyScalar(RADIUS + this.tileScale() * 0.005));
-      const color = new THREE.Color(TERRAIN[terrain] ?? '#486d67');
-      color.multiplyScalar((this.visible({ x, y }) ? 1 : 0.42) * (0.94 + ((x * 7 + y * 13) % 11) * 0.009));
-      for (const i of [0, 2, 1, 0, 3, 2]) { positions.push(...corners[i].toArray()); colors.push(color.r, color.g, color.b); }
-    }));
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
-    mesh.userData.transient = true;
-    mesh.userData.terrain = true;
-    this.layer('terrain').add(mesh);
+  private removeModel(group: THREE.Group) {
+    this.industrial.releaseAnimations(group);
+    group.removeFromParent();
+    // Model geometry/material are cached and shared by the asset library.
   }
-  private ship(color: string) {
-    const g = new THREE.Group();
-    this.part(g, 'box', '#d2dbe1', [0.27, 0.20, 0.56], [0, 0.40, 0]);
-    this.part(g, 'box', '#476578', [0.64, 0.06, 0.25], [0, 0.39, 0.04]);
-    this.part(g, 'orb', color, [0.16, 0.1, 0.12], [0, 0.52, -0.12], true);
-    this.part(g, 'box', color, [0.18, 0.08, 0.1], [0, 0.40, 0.33], true);
-    return g;
+
+  private trackMotion(id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne: boolean) {
+    const signature = JSON.stringify([type, own, layer]);
+    let entry = this.moving.get(id);
+    if (entry && entry.signature !== signature) { this.removeModel(entry.group); this.moving.delete(id); entry = undefined; }
+    const previousPosition = entry?.group.position.clone();
+    if (!entry) {
+      const group = this.industrial.unit(type, own);
+      entry = { group, target: new THREE.Vector3(), signature, baseScale: group.scale.clone() };
+      this.moving.set(id, entry);
+    }
+    const group = entry.group;
+    group.scale.copy(entry.baseScale);
+    this.place(group, position, layer, scale);
+    if (airborne) group.position.normalize().multiplyScalar(RADIUS + this.tileScale() * .4);
+    entry.target.copy(group.position);
+    if (previousPosition && !this.frozen && previousPosition.distanceTo(entry.target) < RADIUS) group.position.copy(previousPosition);
+  }
+
+  private syncLinks(layer: string, color: string, links: { from: Position; to: Position }[]) {
+    const visible = links.filter(link => this.known(link.from) && this.known(link.to));
+    const signature = JSON.stringify([this.data!.planet.map_width, this.data!.planet.map_height,
+      visible.map(link => [link.from.x, link.from.y, link.to.x, link.to.y])]);
+    if (this.linkSignatures.get(layer) === signature) return;
+    this.linkSignatures.set(layer, signature);
+    const group = this.layer(layer);
+    for (const child of [...group.children]) {
+      if (!(child instanceof THREE.Line)) continue;
+      child.geometry.dispose();
+      (Array.isArray(child.material) ? child.material : [child.material]).forEach(material => material.dispose());
+      child.removeFromParent();
+    }
+    for (const link of visible) this.link(link.from, link.to, color, layer);
   }
 
   private link(from: Position, to: Position, color: string, layer: string) {
@@ -420,15 +389,17 @@ export class PlanetThreeScene {
   focus(tile: TilePoint, close = true) {
     if (!this.data) return;
     this.world.quaternion.setFromUnitVectors(this.normal(tile.x, tile.y), FRONT);
-    this.altitude = close ? Math.min(90, Math.max(this.tileScale() * 18, 0.1)) : 300;
+    this.groundView = true;
+    this.altitude = close ? Math.min(75, Math.max(this.tileScale() * 9, .08)) : Math.min(75, Math.max(this.tileScale() * 10, .1));
     this.updateCamera();
   }
-  orbit() { this.altitude = 300; this.updateCamera(); }
+  orbit() { this.groundView = false; this.altitude = 300; this.updateCamera(); }
+  setTilt(value: number) { this.tilt = THREE.MathUtils.clamp(value, 0, 1.1); this.groundView = true; this.updateCamera(); }
   project(tile: TilePoint) {
     if (!this.data) return null;
     this.world.updateMatrixWorld(true);
     const normal = this.normal(tile.x, tile.y).applyQuaternion(this.world.quaternion);
-    const point = normal.clone().multiplyScalar(RADIUS + this.tileScale() * 0.1);
+    const point = normal.clone().multiplyScalar(RADIUS);
     const facing = normal.dot(this.camera.position.clone().sub(point)) > 0;
     point.project(this.camera);
     return { x: (point.x + 1) / 2 * this.host.clientWidth, y: (1 - point.y) / 2 * this.host.clientHeight, visible: facing && Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1 };
@@ -436,25 +407,36 @@ export class PlanetThreeScene {
   zoom(factor: number) {
     if (!(factor > 0)) return;
     this.altitude = THREE.MathUtils.clamp(this.altitude / factor, Math.max(this.tileScale() * 2.5, 0.03), 430);
+    if (this.altitude > 190) this.groundView = false;
+    else if (this.altitude < 130) this.groundView = true;
     this.updateCamera();
   }
   private updateCamera() {
     this.camera.near = Math.max(0.0001, this.altitude * 0.05);
     this.camera.updateProjectionMatrix();
-    this.camera.position.set(0, 0, RADIUS + this.altitude);
-    this.camera.lookAt(0, 0, 0);
+    if (this.dressing) this.dressing.visible = this.groundView;
+    const tilt = this.groundView ? this.tilt : 0;
+    this.camera.position.set(0, -Math.sin(tilt) * this.altitude, RADIUS + Math.cos(tilt) * this.altitude);
+    this.camera.lookAt(0, 0, this.groundView ? RADIUS : 0);
+    const range = Math.min(150, Math.max(2, this.altitude * .75));
+    this.sunlight.shadow.normalBias = Math.min(.035, this.tileScale() * .015);
+    const shadowCamera = this.sunlight.shadow.camera;
+    shadowCamera.left = -range; shadowCamera.right = range;
+    shadowCamera.top = range; shadowCamera.bottom = -range;
+    shadowCamera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
   }
   getCenterTile() {
     return this.data ? this.tileFromNormal(FRONT.clone().applyQuaternion(this.world.quaternion.clone().invert())) : null;
   }
   capture() {
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
     return this.renderer.domElement;
   }
   private resize = () => {
     const width = Math.max(this.host.clientWidth, 1), height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(width, height, false);
+    this.composer.setSize(width, height);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   };
@@ -463,6 +445,10 @@ export class PlanetThreeScene {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), this.camera);
     this.world.updateMatrixWorld(true);
+    if (this.interaction?.interactionMode.kind === 'build' || this.interaction?.interactionMode.kind === 'move') {
+      const point = this.raycaster.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), RADIUS), new THREE.Vector3());
+      return point ? this.tileFromNormal(this.world.worldToLocal(point).normalize()) : null;
+    }
     const hits = this.raycaster.intersectObjects([this.surface, this.content], true);
     for (const hit of hits) {
       if (!hit.object.visible) continue;
@@ -508,8 +494,14 @@ export class PlanetThreeScene {
   private animate = (time: number) => {
     if (this.destroyed) return;
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) for (const rotor of this.animations) rotor.rotation.z += dt * 1.8;
-    this.renderer.render(this.scene, this.camera);
+    if (!document.hidden && !this.frozen && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) this.industrial.animate(time / 1000, dt);
+    if (!document.hidden) {
+      for (const { group, target } of this.moving.values()) {
+        const radius = target.length();
+        group.position.lerp(target, 1 - Math.exp(-dt * 12)).normalize().multiplyScalar(radius);
+      }
+      this.composer.render();
+    }
     this.frame = requestAnimationFrame(this.animate);
   };
   destroy() {
@@ -525,11 +517,10 @@ export class PlanetThreeScene {
     canvas.removeEventListener('wheel', this.wheel);
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
-    this.scene.traverse((o) => { if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } });
-    this.models.forEach((model) => model.traverse((o) => { if (o instanceof THREE.Mesh) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } }));
+    this.scene.traverse((o) => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } });
     this.geometries.forEach((g) => geometries.add(g));
     this.materials.forEach((m) => materials.add(m));
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
-    this.texture?.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
+    this.industrial.dispose(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
   }
 }

@@ -591,7 +591,7 @@ export function PlanetPage() {
 
   return (
     <div className="page-grid page-grid--map">
-      <section className="panel planet-map-shell">
+      <section className={`panel planet-map-shell${isThree ? " planet-map-shell--3d" : ""}`}>
         <Suspense fallback={<div className="panel">正在加载 3D 行星...</div>}>
         {isThree ? <PlanetMapThree
           key={planet.planet_id}
@@ -693,7 +693,7 @@ export function PlanetPage() {
             }}
             planet={planet}
           />
-          <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} />
+          <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} dimensional={isThree} />
         </div>
         {!isThree && <PlanetMinimap
           fog={planet}

@@ -29,7 +29,8 @@ const COLLAPSE_KEY = 'sw.outliner.collapsed';
 
 function readCollapsed() {
   try {
-    return window.localStorage.getItem(COLLAPSE_KEY) === '1';
+    const stored = window.localStorage.getItem(COLLAPSE_KEY);
+    return stored === null ? window.innerWidth <= 600 : stored === '1';
   } catch {
     return false;
   }

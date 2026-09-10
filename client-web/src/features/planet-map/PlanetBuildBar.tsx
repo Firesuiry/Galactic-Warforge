@@ -30,6 +30,7 @@ interface PlanetBuildBarProps {
   catalog?: CatalogView;
   planet: PlanetRenderView;
   summary?: StateSummary;
+  dimensional?: boolean;
 }
 
 function formatCost(entry: BuildCatalogEntryView) {
@@ -56,7 +57,7 @@ function formatUnlockCondition(catalog: CatalogView | undefined, entry: BuildCat
   return techIds.map((techId) => getTechDisplayName(catalog, techId)).join('、');
 }
 
-export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps) {
+export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }: PlanetBuildBarProps) {
   const session = useSessionSnapshot();
   const interactionMode = usePlanetViewStore((state) => state.interactionMode);
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
@@ -184,7 +185,7 @@ export function PlanetBuildBar({ catalog, planet, summary }: PlanetBuildBarProps
                     }}
                   >
                     <span className="planet-build-card__icon">
-                      <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />
+                      {dimensional ? <img className="planet-build-card__model" src={`/assets/buildings/${entry.id}.png`} alt="" loading="lazy" /> : <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />}
                       {locked ? (
                         <Lock aria-hidden="true" className="planet-build-card__lock" size={11} strokeWidth={2.5} />
                       ) : null}

@@ -26,10 +26,19 @@ export function PlanetMapThree(props: Props) {
   const session = useSessionSnapshot();
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
+  const [tilt, setTilt] = useState(0.65);
   const { selected, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest,
   })));
+
+  useEffect(() => {
+    const cancelInteraction = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') usePlanetViewStore.getState().exitInteractionMode();
+    };
+    window.addEventListener('keydown', cancelInteraction);
+    return () => window.removeEventListener('keydown', cancelInteraction);
+  }, []);
 
   useEffect(() => {
     if (!host.current) return;
@@ -111,19 +120,23 @@ export function PlanetMapThree(props: Props) {
     if (tile) scene.current?.focus(tile);
   };
 
-  return <div className="planet-three" onKeyDown={event => {
-    if (event.key === 'Escape') usePlanetViewStore.getState().exitInteractionMode();
+  return <div className="planet-three" onContextMenu={event => {
+    event.preventDefault();
+    usePlanetViewStore.getState().exitInteractionMode();
   }}>
     <div ref={host} className="planet-three__surface" tabIndex={0} role="application" aria-label="3D 行星地图" />
     {error && <div role="alert" className="planet-three__error">{error}</div>}
     <div className="planet-three__navigation" aria-label="3D 视角控制">
-      <span className="planet-three__eyebrow">ORBITAL CONTROL</span>
       <div>
         <button className="secondary-button" onClick={() => scene.current?.orbit()}>全球视角</button>
         <button className="secondary-button" onClick={home}>聚焦基地</button>
         <button className="secondary-button" aria-label="3D 放大" onClick={() => scene.current?.zoom(1.4)}>＋</button>
         <button className="secondary-button" aria-label="3D 缩小" onClick={() => scene.current?.zoom(1 / 1.4)}>−</button>
       </div>
+      <label className="planet-three__tilt">镜头俯仰
+        <input aria-label="镜头俯仰" type="range" min="0" max="1.1" step="0.05" value={tilt}
+          onChange={event => { const value = Number(event.target.value); setTilt(value); scene.current?.setTilt(value); }} />
+      </label>
       <details className="planet-three__layers">
         <summary>显示图层</summary>
         <div>{(['buildings', 'units', 'resources', 'logistics', 'power', 'pipelines', 'construction', 'threat', 'grid'] satisfies PlanetLayerKey[]).map(layer => <label key={layer}>
@@ -131,8 +144,7 @@ export function PlanetMapThree(props: Props) {
           {PLANET_LAYER_LABELS[layer]}
         </label>)}</div>
       </details>
-      <small>拖动旋转 · 滚轮缩放 · 点击地表选择</small>
-      <small>{hoveredTile ? `地表坐标 ${hoveredTile.x}, ${hoveredTile.y}` : '探索星球，规划你的工业文明'}</small>
+      {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
       {interactionMode.kind !== 'inspect' && <button className="secondary-button" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : '攻击'} · Esc</button>}
     </div>
   </div>;

@@ -52,9 +52,14 @@ async function clickTile(page: Page, tile: Tile) {
 }
 
 test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切换平面战术', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const errors: string[] = [];
+  page.on('request', request => { if (request.method() === 'POST') console.log('COMMAND REQUEST', request.url(), request.postData()); });
+  page.on('response', async response => { if (response.request().method() === 'POST') console.log('COMMAND RESPONSE', response.status(), await response.text()); });
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
   const initial = await scene();
   const executor = Object.values(initial.units).find(unit => unit.owner_id === 'p1' && unit.type === 'executor');
   const home = Object.values(initial.buildings).find(building => building.owner_id === 'p1');
@@ -94,29 +99,53 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   await expect.poll(async () => Math.abs((await project(page, neighbor)).x - beforeZoom.x)).toBeGreaterThan(1);
 
   await page.locator('.planet-build-card[data-building-id="wind_turbine"]').click();
+  const buildResponsePromise = page.waitForResponse(response => response.url().endsWith('/commands')
+    && response.request().postDataJSON()?.commands?.[0]?.type === 'build');
   await clickTile(page, buildTile);
+  const buildResponse = await buildResponsePromise;
+  expect(buildResponse.ok()).toBeTruthy();
+  expect(await buildResponse.json()).toMatchObject({ accepted: true, results: [{ status: 'accepted', code: 'OK' }] });
+  expect(buildResponse.request().postDataJSON().commands[0]).toMatchObject({
+    type: 'build', target: { position: { ...buildTile, z: 0 } }, payload: { building_type: 'wind_turbine' },
+  });
+
   await expect.poll(async () => Object.values((await scene()).buildings).some(building =>
     building.type === 'wind_turbine' && building.position.x === buildTile.x && building.position.y === buildTile.y,
   ), { timeout: 20_000 }).toBe(true);
   await page.getByRole('tab', { name: '工作台', exact: true }).click();
   await expect(page.locator('.planet-command-history li').first()).toContainText('成功');
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '取消建造 · Esc', exact: true })).toHaveCount(0);
 
   const afterBuild = await scene();
   const unit = afterBuild.units[executor!.id];
   const target = emptyTile(afterBuild, unit.position, buildTile);
   await clickTile(page, unit.position);
+  await expect(page.getByTestId('planet-selection-bar')).toContainText('执行体', { timeout: 15_000 });
   await page.getByTestId('planet-selection-bar').getByRole('button', { name: '移动', exact: true }).click();
+  const moveResponsePromise = page.waitForResponse(response => response.url().endsWith('/commands')
+    && response.request().postDataJSON()?.commands?.[0]?.type === 'move', { timeout: 30_000 });
+  console.log('MOVE TARGET', target, 'POSITION', await project(page, target));
   await clickTile(page, target);
+  console.log('AFTER MOVE CLICK', await page.locator('.planet-three__navigation').innerText());
+  const moveResponse = await moveResponsePromise;
+  expect(moveResponse.ok()).toBeTruthy();
+  expect(await moveResponse.json()).toMatchObject({ accepted: true, results: [{ status: 'accepted', code: 'OK' }] });
+  expect(moveResponse.request().postDataJSON().commands[0]).toMatchObject({
+    type: 'move', target: { entity_id: unit.id, position: { ...target, z: 0 } },
+  });
   await expect.poll(async () => (await scene()).units[unit.id]?.position, { timeout: 20_000 }).toMatchObject(target);
   await page.getByRole('tab', { name: '工作台', exact: true }).click();
   await expect(page.locator('.planet-command-history li').first()).toContainText('成功');
 
+  await page.getByRole('button', { name: '工作台', exact: true }).click();
   await page.getByRole('button', { name: '平面战术', exact: true }).click();
   await expect(page.locator('.planet-map-canvas__surface')).toBeVisible();
   await expect(canvas).toHaveCount(0);
   await page.getByRole('button', { name: '3D 星球', exact: true }).click();
-  await expect(canvas).toBeVisible();
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: '聚焦基地', exact: true }).click();
+  await page.screenshot({ path: '/tmp/3d-quality-before.png', fullPage: true });
   await page.getByRole('button', { name: '全球视角', exact: true }).click();
   await page.screenshot({ path: '/tmp/siliconworld-3d.png', fullPage: true });
   expect(errors).toEqual([]);
