@@ -139,7 +139,7 @@ test('建造栏点选建筑卡片后在地图点击放置，命令回执出现�
   const tile = pickBuildTile(scene);
 
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}`);
+  await page.goto(`/planet/${PLANET_ID}?view=2d`);
 
   // 底部建造栏就绪后点选 wind_turbine 卡片，进入建造模式（幽灵预览提示出现）。
   const buildCard = page.locator(`.planet-build-card[data-building-id="${BUILDING_ID}"]`);
@@ -185,7 +185,7 @@ test('采集建筑可直接放置在资源格上（前端不再本地拦截）',
   }
 
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}`);
+  await page.goto(`/planet/${PLANET_ID}?view=2d`);
 
   const buildCard = page.locator('.planet-build-card[data-building-id="mining_machine"]');
   await expect(buildCard).toBeVisible({ timeout: 30_000 });
@@ -218,7 +218,7 @@ test('首次进入行星页视角聚焦基地，基地不被信息片遮挡且�
   const [homeId, homeBuilding] = home;
 
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}`);
+  await page.goto(`/planet/${PLANET_ID}?view=2d`);
 
   const surface = page.locator('.planet-map-canvas__surface');
   await expect(surface).toBeVisible({ timeout: 30_000 });

@@ -693,7 +693,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(await screen.findByText("当前路由行星")).toBeInTheDocument();
     expect(screen.getByText("当前 active planet")).toBeInTheDocument();
@@ -807,7 +807,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("img", { name: "行星地图" }),
@@ -925,7 +925,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1060,7 +1060,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1166,7 +1166,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1280,7 +1280,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1?select=building:pls-1"]);
+    renderApp(["/planet/planet-1-1?view=2d&select=building:pls-1"]);
 
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
     expect(screen.getByText("行星槽位")).toBeInTheDocument();
@@ -1411,7 +1411,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1?select=building:ils-1"]);
+    renderApp(["/planet/planet-1-1?view=2d&select=building:ils-1"]);
 
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
     expect(screen.getByText("星际配置")).toBeInTheDocument();
@@ -1520,7 +1520,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1619,7 +1619,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1704,7 +1704,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1798,7 +1798,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1918,7 +1918,7 @@ describe("PlanetPage", () => {
     );
 
     const user = userEvent.setup();
-    renderApp(["/planet/planet-1-1"]);
+    renderApp(["/planet/planet-1-1?view=2d"]);
 
     await screen.findByRole("tab", { name: /战斗与制造/ });
 

@@ -45,7 +45,9 @@ import {
   PLANET_FOCUS_FIT_ZOOM,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+
+const PlanetMapThree = lazy(() => import("@/features/planet-map/PlanetMapThree").then(module => ({ default: module.PlanetMapThree })));
 import { createFixtureFetch, isFixtureServerUrl } from "@/fixtures";
 import { useShallow } from "zustand/react/shallow";
 
@@ -98,7 +100,7 @@ const DETAIL_TABS: DetailTabConfig[] = [
 export function PlanetPage() {
   const client = useApiClient();
   const session = useSessionSnapshot();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const realtimeFetchFn = useMemo(
     () =>
       isFixtureServerUrl(session.serverUrl)
@@ -152,6 +154,7 @@ export function PlanetPage() {
     getPendingCommandCount(state.journal),
   );
   const activeZoomLevel = getPlanetZoomLevel(zoomIndex);
+  const isThree = searchParams.get("view") !== "2d";
   const isCompactLayout = useMediaQuery("(max-width: 900px)");
   const [activeDetailPanel, setActiveDetailPanel] = useState<PlanetDetailPanel>(
     "workbench",
@@ -238,7 +241,7 @@ export function PlanetPage() {
   });
 
   const overviewRequestStep = getPlanetOverviewRequestStep(
-    zoomIndex,
+    isThree ? 2 : zoomIndex,
     sceneQuery.data?.map_width ?? 0,
     sceneQuery.data?.map_height ?? 0,
   );
@@ -282,7 +285,7 @@ export function PlanetPage() {
         step: overviewRequestStep ?? 100,
       }),
     enabled: Boolean(planetId) &&
-      activeZoomLevel.mode === "overview" &&
+      (isThree || activeZoomLevel.mode === "overview") &&
       overviewRequestStep !== undefined,
   });
 
@@ -448,7 +451,7 @@ export function PlanetPage() {
 
   const isLoading = [
     sceneQuery.isLoading,
-    activeZoomLevel.mode === "overview" ? overviewQuery.isLoading : false,
+    !isThree && activeZoomLevel.mode === "overview" ? overviewQuery.isLoading : false,
     runtimeQuery.isLoading,
     systemQuery.isLoading,
     systemRuntimeQuery.isLoading,
@@ -589,7 +592,18 @@ export function PlanetPage() {
   return (
     <div className="page-grid page-grid--map">
       <section className="panel planet-map-shell">
-        <PlanetMapPixi
+        <Suspense fallback={<div className="panel">正在加载 3D 行星...</div>}>
+        {isThree ? <PlanetMapThree
+          key={planet.planet_id}
+          catalog={catalog}
+          fog={planet}
+          networks={networks}
+          onCanvasReady={(capture) => { captureRef.current = capture; }}
+          onInteractTile={handleInteractTile}
+          overview={overviewQuery.data}
+          planet={planet}
+          runtime={runtime}
+        /> : <PlanetMapPixi
           catalog={catalog}
           fog={planet}
           networks={networks}
@@ -600,7 +614,12 @@ export function PlanetPage() {
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
-        />
+        />}
+        </Suspense>
+        <div className="planet-view-switch" aria-label="地图视图">
+          <button className="secondary-button" aria-pressed={isThree} onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete("view"); return next; }, { replace: true })}>3D 星球</button>
+          <button className="secondary-button" aria-pressed={!isThree} onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.set("view", "2d"); return next; }, { replace: true })}>平面战术</button>
+        </div>
         {/* 悬浮标题片：行星名/类型/尺寸 + 资源芯片（原 page-hero 内容，HUD 化），可折叠 */}
         <div
           className={
@@ -676,11 +695,11 @@ export function PlanetPage() {
           />
           <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} />
         </div>
-        <PlanetMinimap
+        {!isThree && <PlanetMinimap
           fog={planet}
           overview={overviewQuery.data}
           planet={planet}
-        />
+        />}
         <PlanetDebugPanel
           capture={captureRef.current}
           catalog={catalog}
@@ -704,11 +723,11 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         />
-        <PlanetMapToolbar
+        {!isThree && <PlanetMapToolbar
           networks={networks}
           planet={planet}
           runtime={runtime}
-        />
+        />}
         {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出（共用 MapDrawer） */}
         <MapDrawer
           label="工作台"

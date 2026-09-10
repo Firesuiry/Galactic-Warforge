@@ -6,6 +6,10 @@ import { resetStarmapViewStore, useStarmapViewStore } from '@/features/starmap/s
 import { renderApp, jsonResponse, sseResponse } from '@/test/utils';
 import { useSessionStore } from '@/stores/session';
 
+vi.mock('@/features/planet-map/PlanetMapThree', () => ({
+  PlanetMapThree: () => <div role="application" aria-label="3D 行星地图" />,
+}));
+
 vi.mock('@/engine/PixiStage', () => ({
   PixiStage: () => <div data-testid="pixi-stage" />,
 }));
@@ -251,7 +255,7 @@ describe('Galaxy navigation', () => {
 
     await user.click(screen.getByRole('button', { name: '进入行星' }));
     expect(await screen.findByRole('heading', { name: 'Gaia' }, { timeout: 2000 })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '行星地图' })).toBeInTheDocument();
+    expect(screen.getByRole('application', { name: '3D 行星地图' })).toBeInTheDocument();
   });
 
   it('面包屑可从恒星系返回银河', async () => {

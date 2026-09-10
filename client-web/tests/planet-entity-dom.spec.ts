@@ -10,7 +10,7 @@ async function openFixtureMode(page: Page) {
 // 验证棋盘实体已成为 agent/DevTools 可定位的真实 DOM 节点（重构前是读不到的 canvas 位图）。
 test('棋盘实体为可被 agent 定位的 DOM 节点（data-entity-*）', async ({ page }) => {
   await openFixtureMode(page);
-  await page.goto('/planet/planet-1-1');
+  await page.goto('/planet/planet-1-1?view=2d');
   await expect(page.getByRole('heading', { name: 'Gaia' })).toBeVisible();
   await page.waitForTimeout(300);
 
