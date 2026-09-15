@@ -58,4 +58,34 @@ describe('3D player-visible terrain', () => {
     expect(disposed).toHaveBeenCalledOnce();
     disposePlanetSurface(mesh);
   });
+
+  it('encodes only explored dry neighbors as shores and never smooths through fog', () => {
+    const mesh = createPlanetSurface(100);
+    updatePlanetSurface(mesh, { planet: scene() });
+    const coast = uniforms(mesh).swLocalCoast.value as THREE.DataTexture;
+    // Water at (123,76): south is known land, east is hidden rock.
+    expect(Array.from(coast.image.data!.slice(0, 4))).toEqual([0, 0, 255, 0]);
+    expect(Array.from(coast.image.data!.slice(4))).toEqual(Array(12).fill(0));
+    disposePlanetSurface(mesh);
+  });
+
+  it('follows the physical north seam into its visible patch instead of the atlas neighbor', () => {
+    const mesh = createPlanetSurface(100);
+    const planet: PlanetSceneView = {
+      ...scene(), surface: { topology: 'cube_sphere', face_size: 2 }, map_width: 6, map_height: 4,
+      bounds: { x: 1, y: 0, width: 1, height: 1 },
+      terrain: [['water']], explored: [[true]], visible: [[true]],
+      surface_patches: [{ bounds: { x: 3, y: 3, width: 1, height: 1 }, terrain: [['buildable']], explored: [[true]], visible: [[true]] }],
+    };
+    updatePlanetSurface(mesh, { planet });
+    const shader = uniforms(mesh);
+    expect(Array.from(shader.swLocalCoast.value.image.data.slice(0, 4))).toEqual([255, 0, 0, 0]);
+    const dispose = vi.fn();
+    shader.swLocalCoast.value.addEventListener('dispose', dispose);
+    updatePlanetSurface(mesh, { planet: { ...planet, surface_patches: [{ ...planet.surface_patches![0], explored: [[false]] }] } });
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(Array.from(shader.swLocalCoast.value.image.data.slice(0, 4))).toEqual([0, 0, 0, 0]);
+    disposePlanetSurface(mesh);
+  });
+
 });

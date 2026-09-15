@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { surfaceStep, type SurfaceDirection } from '@shared/surface';
 import type { FogMapView, PlanetOverviewView, PlanetSceneView } from '@shared/types';
-import { getFogState, type PlanetRenderView } from '../model';
+import { getFogState, getTerrainTile, type PlanetRenderView } from '../model';
 
 export type PlanetSurface = THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
 export interface PlanetSurfaceData {
@@ -23,7 +24,8 @@ const FINISHES: Record<string, [string, number, number]> = {
 };
 const UNKNOWN_COLOR = new THREE.Color('#354655');
 const COLORS = Object.fromEntries(Object.entries(FINISHES).map(([key, value]) => [key, new THREE.Color(value[0])]));
-interface Atlas { color: THREE.DataTexture; properties: THREE.DataTexture }
+interface SurfaceSample { terrain: string; explored: boolean; visible: boolean; coast?: number[] }
+interface Atlas { color: THREE.DataTexture; properties: THREE.DataTexture; coast: THREE.DataTexture }
 interface SurfaceState {
   overview: Atlas;
   local: Atlas;
@@ -32,6 +34,8 @@ interface SurfaceState {
     swOverviewProperties: { value: THREE.DataTexture };
     swLocalColor: { value: THREE.DataTexture };
     swLocalProperties: { value: THREE.DataTexture };
+    swOverviewCoast: { value: THREE.DataTexture };
+    swLocalCoast: { value: THREE.DataTexture };
     swMapDimensions: { value: THREE.Vector2 };
     swLocalDimensions: { value: THREE.Vector2 };
     swOverviewDimensions: { value: THREE.Vector2 };
@@ -54,9 +58,10 @@ function dataTexture(bytes: Uint8Array, width: number, height: number) {
   return texture;
 }
 
-function atlas(width: number, height: number, sample: (x: number, y: number) => { terrain: string; explored: boolean; visible: boolean }): Atlas {
+function atlas(width: number, height: number, sample: (x: number, y: number) => SurfaceSample): Atlas {
   const colors = new Uint8Array(width * height * 4);
   const properties = new Uint8Array(width * height * 4);
+  const coast = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const cell = sample(x, y);
@@ -72,9 +77,19 @@ function atlas(width: number, height: number, sample: (x: number, y: number) => 
       properties[i + 1] = Math.round((finish?.[2] ?? 0) * 255);
       properties[i + 2] = known ? 255 : 0;
       properties[i + 3] = known && cell.visible ? 255 : 0;
+      if (known && finish?.[1] === 1) coast.set(cell.coast ?? [0, 0, 0, 0], i);
     }
   }
-  return { color: dataTexture(colors, width, height), properties: dataTexture(properties, width, height) };
+  return { color: dataTexture(colors, width, height), properties: dataTexture(properties, width, height), coast: dataTexture(coast, width, height) };
+}
+
+/** Cardinal shore flags use real cube-sphere neighbors, including rotated face seams. */
+function coastAt(x: number, y: number, faceSize: number, sample: (x: number, y: number) => SurfaceSample) {
+  return (['north', 'east', 'south', 'west'] as SurfaceDirection[]).map(direction => {
+    const { tile } = surfaceStep({ x, y }, direction, faceSize);
+    const neighbor = sample(tile.x, tile.y);
+    return neighbor.explored && neighbor.terrain !== 'unknown' && (FINISHES[neighbor.terrain]?.[1] ?? 0) === 0 ? 255 : 0;
+  });
 }
 
 const SHADER_HEADER = /* glsl */`
@@ -83,6 +98,8 @@ const SHADER_HEADER = /* glsl */`
   uniform sampler2D swOverviewProperties;
   uniform sampler2D swLocalColor;
   uniform sampler2D swLocalProperties;
+  uniform sampler2D swOverviewCoast;
+  uniform sampler2D swLocalCoast;
   uniform vec2 swMapDimensions;
   uniform vec2 swLocalDimensions;
   uniform vec2 swOverviewDimensions;
@@ -129,6 +146,8 @@ const SHADER_COLOR = /* glsl */`
     swFaceOrigin + 1.0 / vec2(3.0,2.0) - swOverviewHalfTexel);
   vec4 swProps = texture2D(swOverviewProperties, swOverviewUV);
   vec3 swAlbedo = texture2D(swOverviewColor, swOverviewUV).rgb;
+  vec4 swCoast = texture2D(swOverviewCoast, swOverviewUV);
+  vec2 swCellUV = fract(swUV * swOverviewDimensions);
   for(int i=0;i<7;i++) {
     vec4 bounds = swPatchBounds[i];
     if(bounds.z <= 0.0) continue;
@@ -139,6 +158,8 @@ const SHADER_COLOR = /* glsl */`
       vec2 packedUV = clamp(rect.xy+uv*rect.zw, rect.xy+texel, rect.xy+rect.zw-texel);
       swProps = texture2D(swLocalProperties,packedUV);
       swAlbedo = texture2D(swLocalColor,packedUV).rgb;
+      swCoast = texture2D(swLocalCoast,packedUV);
+      swCellUV = fract(swUV * swMapDimensions);
     }
   }
   float swMapWidth = swMapDimensions.x;
@@ -156,8 +177,9 @@ const SHADER_COLOR = /* glsl */`
   vec3 swSoilTint = mix(vec3(0.82, 0.91, 0.91), vec3(1.03, 1.03, 0.94), swContinental);
   swAlbedo *= mix(swSoilTint * (0.88 + swGrain * 0.16 + swFine * 0.08), vec3(0.95 + swContinental * 0.1), swWater);
   swAlbedo *= 1.0 - swRock * smoothstep(0.64, 0.95, swRidges) * 0.25;
-  float swShore = (smoothstep(0.06, 0.28, swProps.r) - smoothstep(0.42, 0.8, swProps.r)) * smoothstep(0.94, 1.0, swProps.b);
-  swAlbedo = mix(swAlbedo, vec3(0.23, 0.26, 0.18) * (0.85 + swGrain * 0.3), swShore * 0.5);
+  vec4 swEdgeDistance = vec4(swCellUV.y, 1.0-swCellUV.x, 1.0-swCellUV.y, swCellUV.x);
+  vec4 swCoastDistance = mix(vec4(1.0), swEdgeDistance, swCoast);
+  float swShoreDistance = min(min(swCoastDistance.x,swCoastDistance.y),min(swCoastDistance.z,swCoastDistance.w));
   vec3 swWavePosition = swSurfacePosition / max(0.0001, swTileWorldSize);
   float swWaveDetail = 1.0 - smoothstep(0.025, 0.16, swPixelFootprint / swTileWorldSize);
   float swWaveA = sin(dot(swWavePosition, vec3(14.0, 8.0, 19.0)) - swTime * 1.3);
@@ -166,10 +188,12 @@ const SHADER_COLOR = /* glsl */`
   float swWaveHeight = (swWaveA * 0.0012 + swWaveB * 0.0006 + swWaveC * 0.0003) * swTileWorldSize * swWaveDetail;
   // Shallow turquoise and a narrow moving foam line require known land/water
   // neighbors. A fog boundary must never imply an undiscovered coastline.
-  float swShallow = (1.0 - smoothstep(0.45, 0.95, swProps.r)) * swWater * smoothstep(0.94, 1.0, swProps.b);
+  float swShallow = (1.0 - smoothstep(0.02, 0.32, swShoreDistance)) * swWater * swKnown;
   swAlbedo = mix(swAlbedo, vec3(0.025, 0.22, 0.19), swShallow * 0.65);
-  float swFoam = (smoothstep(0.51, 0.57, swProps.r) - smoothstep(0.65, 0.71, swProps.r)) * smoothstep(0.94, 1.0, swProps.b);
-  swAlbedo += vec3(0.025, 0.06, 0.055) * swFoam * (0.45 + swWaveA * 0.2 + swWaveB * 0.15);
+  float swFoamEdge = 0.025 + 0.009 * swWaveA;
+  float swFoamAA = max(fwidth(swShoreDistance), 0.003);
+  float swFoam = (1.0-smoothstep(swFoamEdge,swFoamEdge+swFoamAA,swShoreDistance)) * swWater * swKnown;
+  swAlbedo += vec3(0.12, 0.20, 0.19) * swFoam * (0.6 + swWaveB * 0.2);
   // The uncharted hemisphere is a neutral scan veil, never fabricated land/water.
   vec3 swVeil = vec3(0.004, 0.011, 0.023) * (0.97 + swContinental * 0.06);
   swAlbedo = mix(swVeil, swAlbedo, swKnown);
@@ -185,6 +209,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
     swPatchBounds: {value: Array.from({length:7},()=>new THREE.Vector4())}, swPatchUV: {value: Array.from({length:7},()=>new THREE.Vector4())},
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
+    swOverviewCoast: { value: overview.coast }, swLocalCoast: { value: local.coast },
     swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 },
   };
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025 });
@@ -205,7 +230,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v1';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v2';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';
@@ -225,20 +250,32 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   const unknown = { terrain: 'unknown', explored: false, visible: false };
   const overviewWidth = Math.max(1, overview?.cells_width ?? 3);
   const overviewHeight = Math.max(1, overview?.cells_height ?? 2);
-  const globalAtlas = atlas(overviewWidth, overviewHeight, (x, y) => overview ? {
+  const sampleOverview = (x: number, y: number): SurfaceSample => overview ? {
     terrain: overview.terrain?.[y]?.[x] ?? 'unknown',
     explored: Boolean(overview.explored?.[y]?.[x]), visible: Boolean(overview.visible?.[y]?.[x]),
-  } : unknown);
+  } : unknown;
+  const globalAtlas = atlas(overviewWidth, overviewHeight, (x, y) => {
+    const cell = sampleOverview(x, y);
+    return cell.explored && FINISHES[cell.terrain]?.[1] === 1
+      ? { ...cell, coast: coastAt(x, y, overviewWidth / 3, sampleOverview) } : cell;
+  });
   const patches = [{bounds, terrain: planet.terrain, explored: effectiveFog?.explored, visible: effectiveFog?.visible}, ...('surface_patches' in planet ? planet.surface_patches ?? [] : [])].slice(0,7);
   const localWidth = Math.max(1,...patches.map(p=>p.bounds.width));
   const localHeight = Math.max(1,patches.reduce((sum,p)=>sum+p.bounds.height,0));
   let offset=0;
   const packed=patches.map(p=>{const result={...p,offset};offset+=p.bounds.height;return result;});
+  const sampleLocal = (x: number, y: number): SurfaceSample => {
+    const terrain = getTerrainTile(planet, x, y);
+    const state = effectiveFog ? getFogState(effectiveFog, x, y) : { explored: terrain !== 'unknown', visible: terrain !== 'unknown' };
+    return { terrain, ...state };
+  };
   const localAtlas = atlas(localWidth,localHeight,(x,y)=>{
     const patch=packed.find(p=>y>=p.offset&&y<p.offset+p.bounds.height&&x<p.bounds.width);
     if(!patch) return unknown;
     const row=y-patch.offset, terrain=patch.terrain?.[row]?.[x]??'unknown';
-    return {terrain,explored:patch.explored ? Boolean(patch.explored[row]?.[x]) : terrain!=='unknown',visible:patch.visible ? Boolean(patch.visible[row]?.[x]) : terrain!=='unknown'};
+    const explored = patch.explored ? Boolean(patch.explored[row]?.[x]) : terrain !== 'unknown';
+    return {terrain, explored, visible:patch.visible ? Boolean(patch.visible[row]?.[x]) : terrain!=='unknown',
+      coast: explored && FINISHES[terrain]?.[1] === 1 ? coastAt(patch.bounds.x+x, patch.bounds.y+row, planet.surface.face_size, sampleLocal) : undefined};
   });
   state.uniforms.swPatchBounds.value.forEach((v,i)=>{
     const p=packed[i];
@@ -246,13 +283,15 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
     v.set(p.bounds.x/planet.map_width,p.bounds.y/planet.map_height,p.bounds.width/planet.map_width,p.bounds.height/planet.map_height);
     state.uniforms.swPatchUV.value[i].set(0,p.offset/localHeight,p.bounds.width/localWidth,p.bounds.height/localHeight);
   });
-  for (const previous of [state.overview, state.local]) { previous.color.dispose(); previous.properties.dispose(); }
+  for (const previous of [state.overview, state.local]) { previous.color.dispose(); previous.properties.dispose(); previous.coast.dispose(); }
   state.overview = globalAtlas;
   state.local = localAtlas;
   state.uniforms.swOverviewColor.value = globalAtlas.color;
   state.uniforms.swOverviewProperties.value = globalAtlas.properties;
   state.uniforms.swLocalColor.value = localAtlas.color;
   state.uniforms.swLocalProperties.value = localAtlas.properties;
+  state.uniforms.swOverviewCoast.value = globalAtlas.coast;
+  state.uniforms.swLocalCoast.value = localAtlas.coast;
   state.uniforms.swMapDimensions.value.set(planet.map_width, planet.map_height);
   state.uniforms.swLocalDimensions.value.set(localWidth, localHeight);
   state.uniforms.swOverviewDimensions.value.set(overviewWidth, overviewHeight);
@@ -261,7 +300,7 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
 export function disposePlanetSurface(mesh: PlanetSurface) {
   const state = states.get(mesh);
   if (state) {
-    for (const value of [state.overview, state.local]) { value.color.dispose(); value.properties.dispose(); }
+    for (const value of [state.overview, state.local]) { value.color.dispose(); value.properties.dispose(); value.coast.dispose(); }
     states.delete(mesh);
   }
   mesh.geometry.dispose();

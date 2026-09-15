@@ -9,6 +9,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { createSpace } from './three/space';
+import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
@@ -76,11 +77,13 @@ export class PlanetThreeScene {
   private readonly materials = new Map<string, THREE.Material>();
   private readonly groupByLayer = new Map<string, THREE.Group>();
   private lastTime = 0;
+  private quality = parseRenderQuality(new URLSearchParams(window.location.search).get('quality'));
 
 
   constructor(private readonly host: HTMLElement, private readonly onPick: (tile: TilePoint) => void, private readonly onHover: (tile: TilePoint | null) => void) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    const quality = renderQualitySettings(this.quality, window.innerWidth, window.devicePixelRatio, this.renderer.capabilities.maxSamples);
+    this.renderer.setPixelRatio(quality.pixelRatio);
     this.renderer.setClearColor('#030912');
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -93,9 +96,12 @@ export class PlanetThreeScene {
     this.scene.environment = this.environment.texture;
     this.scene.environmentIntensity = .32;
     room.dispose(); pmrem.dispose();
-    this.composer = new EffectComposer(this.renderer);
+    // Default-canvas antialiasing does not reach postprocessing render targets.
+    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: quality.samples });
+    this.composer = new EffectComposer(this.renderer, renderTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .32, .45, 2.5);
+    this.bloom.enabled = quality.bloom;
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.renderer.domElement.setAttribute('aria-label', '3D 行星地图：拖动旋转，滚轮缩放，点击地块操作');
@@ -111,7 +117,7 @@ export class PlanetThreeScene {
     this.sunlight.position.set(-100, 140, 230);
     this.sunlight.target.position.set(0, 0, RADIUS);
     this.sunlight.castShadow = true;
-    this.sunlight.shadow.mapSize.set(2048, 2048);
+    this.sunlight.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
     this.sunlight.shadow.bias = -.00015;
     this.sunlight.shadow.normalBias = .035;
     this.sunlight.shadow.camera.near = 1;
@@ -120,7 +126,7 @@ export class PlanetThreeScene {
     const rim = new THREE.DirectionalLight(0x719dc7, .75);
     rim.position.set(100, -60, -70);
     this.scene.add(rim);
-    const { sky, atmosphere } = createSpace(RADIUS);
+    const { sky, atmosphere } = createSpace(RADIUS, this.sunlight.position.clone().sub(this.sunlight.target.position).normalize());
     this.scene.add(sky); this.world.add(atmosphere);
     this.updateCamera();
     const canvas = this.renderer.domElement;
@@ -134,6 +140,34 @@ export class PlanetThreeScene {
     this.observer.observe(host);
     this.resize();
     this.animate(0);
+  }
+
+  getQuality() { return this.quality; }
+
+  setQuality(quality: PlanetRenderQuality) {
+    this.quality = quality;
+    this.resize();
+  }
+
+  private updateQuality() {
+    const settings = renderQualitySettings(this.quality, window.innerWidth, window.devicePixelRatio, this.renderer.capabilities.maxSamples);
+    if (this.renderer.getPixelRatio() !== settings.pixelRatio) {
+      this.renderer.setPixelRatio(settings.pixelRatio);
+      this.composer.setPixelRatio(settings.pixelRatio);
+    }
+    for (const target of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (target.samples !== settings.samples) {
+        target.samples = settings.samples;
+        target.dispose();
+      }
+    }
+    if (this.sunlight.shadow.mapSize.x !== settings.shadowMapSize) {
+      this.sunlight.shadow.map?.dispose();
+      this.sunlight.shadow.map = null;
+      this.sunlight.shadow.mapSize.set(settings.shadowMapSize, settings.shadowMapSize);
+      this.sunlight.shadow.needsUpdate = true;
+    }
+    this.bloom.enabled = settings.bloom;
   }
 
   setData(data: PlanetThreeData) {
@@ -463,6 +497,7 @@ export class PlanetThreeScene {
     return this.renderer.domElement;
   }
   private resize = () => {
+    this.updateQuality();
     const width = Math.max(this.host.clientWidth, 1), height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);

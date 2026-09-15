@@ -5,7 +5,20 @@ import type { PlanetMapCapture } from './PlanetMapPixi';
 import { PLANET_LAYER_LABELS, getFogState, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
 import { usePlanetViewStore } from './store';
 import { PlanetThreeScene } from './planet-three-scene';
+import type { PlanetRenderQuality } from './three/render-quality';
 import { useSessionSnapshot } from '@/hooks/use-session';
+
+const QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
+
+function readQuality(): PlanetRenderQuality {
+  const query = new URLSearchParams(window.location.search).get('quality');
+  if (query === 'low' || query === 'balanced' || query === 'high') return query;
+  try {
+    const saved = localStorage.getItem(QUALITY_STORAGE_KEY);
+    if (saved === 'low' || saved === 'balanced' || saved === 'high') return saved;
+  } catch { /* Storage can be disabled; rendering still works. */ }
+  return 'balanced';
+}
 
 interface Props {
   planet: PlanetRenderView;
@@ -27,6 +40,7 @@ export function PlanetMapThree(props: Props) {
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [tilt, setTilt] = useState(0.65);
+  const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   const { selected, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest,
@@ -94,6 +108,10 @@ export function PlanetMapThree(props: Props) {
   }, [ready, props.planet, props.fog, props.overview, props.catalog, props.runtime, props.networks, session.playerId]);
 
   useEffect(() => {
+    if (ready) scene.current?.setQuality(quality);
+  }, [ready, quality]);
+
+  useEffect(() => {
     if (!ready || !scene.current || !host.current) return;
     const element = host.current;
     props.onCanvasReady?.({
@@ -136,6 +154,17 @@ export function PlanetMapThree(props: Props) {
       <label className="planet-three__tilt">镜头俯仰
         <input aria-label="镜头俯仰" type="range" min="0" max="1.1" step="0.05" value={tilt}
           onChange={event => { const value = Number(event.target.value); setTilt(value); scene.current?.setTilt(value); }} />
+      </label>
+      <label className="planet-three__quality">画面质量
+        <select aria-label="画面质量" value={quality} onChange={event => {
+          const next = event.target.value as PlanetRenderQuality;
+          setQuality(next);
+          try { localStorage.setItem(QUALITY_STORAGE_KEY, next); } catch { /* Optional preference. */ }
+        }}>
+          <option value="low">流畅</option>
+          <option value="balanced">均衡</option>
+          <option value="high">精细</option>
+        </select>
       </label>
       <details className="planet-three__layers">
         <summary>显示图层</summary>

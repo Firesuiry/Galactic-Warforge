@@ -1,0 +1,28 @@
+.colony-progression { padding: 16px; border: 1px solid rgba(84, 176, 200, .25); border-radius: 12px; background: linear-gradient(145deg, rgba(18, 41, 52, .96), rgba(11, 20, 34, .96)); color: #dbe8ef; margin-bottom: 16px; }
+.colony-progression__header, .colony-progression__title, .colony-progression__action { display: flex; align-items: center; gap: 12px; }
+.colony-progression__header, .colony-progression__action { justify-content: space-between; }
+.colony-progression h3, .colony-progression h4, .colony-progression p { margin: 0; }
+.colony-progression h3 { font-size: 17px; margin-top: 5px; }
+.colony-progression__eyebrow { color: #71c6c8; font-size: 10px; letter-spacing: .18em; }
+.colony-progression__count { font-size: 11px; font-variant-numeric: tabular-nums; color: #a7c9cd; white-space: nowrap; }
+.colony-progression .colony-progression__scope { font-size: 11px; line-height: 1.6; color: #a1afc2; margin: 12px 0; }
+.colony-progression__stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.colony-progression__stage { min-width: 0; border: 1px solid #334559; border-radius: 6px; background: rgba(24, 34, 49, .75); color: #bac8d7; padding: 8px 3px; display: grid; gap: 4px; justify-items: center; font: inherit; font-size: 11px; cursor: pointer; }
+.colony-progression__stage > span:first-child { font-size: 10px; color: #8497b0; font-variant-numeric: tabular-nums; }
+.colony-progression__stage.is-selected { color: #d0fff8; border-color: #48abaf; background: rgba(36, 95, 105, .45); }
+.colony-progression__stage.is-complete > span:first-child { color: #65dec0; }
+.colony-progression__detail { margin-top: 18px; }
+.colony-progression__title { align-items: flex-start; color: #79d5cc; }
+.colony-progression__title h4 { color: #e4f0f4; font-size: 14px; }
+.colony-progression__title p { margin-top: 5px; color: #a8b9ca; font-size: 12px; line-height: 1.65; }
+.colony-progression__goals { padding: 0; margin: 16px 0; list-style: none; display: grid; gap: 13px; }
+.colony-progression__goals li { display: flex; align-items: flex-start; gap: 9px; }
+.colony-progression__check { color: #89a0b8; line-height: 18px; }
+.colony-progression__goals strong { font-size: 12px; font-weight: 600; }
+.colony-progression__goals p { font-size: 11px; color: #a4b4c7; line-height: 1.55; margin-top: 3px; overflow-wrap: anywhere; }
+.colony-progression__goals a { display: inline-block; color: #77d5d0; font-size: 11px; margin-top: 4px; text-decoration: none; }
+.colony-progression__goals .is-complete .colony-progression__check { color: #64d8b3; }
+.colony-progression__action { padding: 11px; border-radius: 7px; background: rgba(46, 118, 120, .35); border: 1px solid #397a81; color: #bafcf0; font-size: 12px; text-decoration: none; }
+.colony-progression__action:hover { background: rgba(46, 118, 120, .6); }
+.colony-progression__done { color: #78d8b8; font-size: 12px; line-height: 1.6; }
+.colony-progression a:focus-visible, .colony-progression button:focus-visible { outline: 2px solid #7bfff0; outline-offset: 3px; }

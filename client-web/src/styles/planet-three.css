@@ -29,6 +29,8 @@
 .planet-map-shell--3d .planet-three__navigation button:hover { background:#3a505a; }
 .planet-three__tilt { display:flex; align-items:center; gap:12px; font-size:11px; }
 .planet-three__tilt input { min-width:0; width:140px; height:3px; accent-color:#c4c7a7; }
+.planet-three__quality { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:11px; }
+.planet-three__quality select { width:140px; min-width:0; padding:4px 8px; border-radius:3px; }
 .planet-map-shell--3d .planet-view-switch { border-radius:4px; right:24px; top:22px; background:#10212ce8; border-color:#809da02b; z-index:16; }
 .planet-map-shell--3d .planet-view-switch button { border-radius:3px; padding:6px 12px; }
 .planet-map-shell--3d .planet-view-switch button[aria-pressed=true] { background:#e4c1831c; color:#ecd1a1; border-color:#ebc68250; }
@@ -40,10 +42,11 @@
 .planet-map-shell--3d .planet-selection-bar { border-color:#d4bf8944; background:#142630ed; border-radius:4px; }
 @media(max-width:900px) {
   .planet-map-shell--3d .planet-title-chip { left:12px; top:12px; max-width:285px; }
-  .planet-map-shell--3d .planet-view-switch { top:110px; right:12px; }
-  .planet-map-shell--3d .debug-panel { top:154px; right:12px; }
+  .planet-map-shell--3d .planet-view-switch { top:164px; right:12px; }
+  .planet-map-shell--3d .planet-view-switch .secondary-button { font-size:11px; padding:6px 8px; }
+  .planet-map-shell--3d .debug-panel { top:204px; right:12px; }
   .planet-map-shell--3d .planet-three__navigation { left:12px; bottom:174px; padding:8px; max-width:260px; }
-  .planet-map-shell--3d .planet-drawer { top:195px; }
+  .planet-map-shell--3d .planet-drawer { top:236px; }
 }
 @media(max-width:600px) {
   .app-shell:has(.planet-three, .system-orbit) .app-body { position:relative; }
@@ -62,9 +65,9 @@
   .app-shell:has(.planet-three, .system-orbit) .top-nav__chip:first-child { display:none; }
   .planet-map-shell--3d .planet-title-chip { max-width:calc(100% - 24px); padding:8px 12px; }
   .planet-map-shell--3d .planet-title-chip__head h1 { font-size:14px; }
-  .planet-map-shell--3d .planet-view-switch { top:120px; }
-  .planet-map-shell--3d .debug-panel { top:162px; }
-  .planet-map-shell--3d .planet-drawer { top:195px; }
+  .planet-map-shell--3d .planet-view-switch { top:164px; }
+  .planet-map-shell--3d .debug-panel { top:204px; }
+  .planet-map-shell--3d .planet-drawer { top:236px; }
   .planet-map-shell--3d .planet-drawer__body { width:min(290px,calc(100vw - 65px)); max-width:calc(100vw - 65px); }
   .planet-map-shell--3d .planet-drawer--open .planet-drawer__handle { right:min(290px,calc(100vw - 65px)); }
   .planet-map-shell--3d .planet-build-card { min-width:68px; width:68px; }

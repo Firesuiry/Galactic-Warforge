@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** Decorative star field and scattering; no game entities or discovered terrain. */
-export function createSpace(radius: number) {
+export function createSpace(radius: number, sunDirection: THREE.Vector3) {
   const sky = new THREE.Group();
   const geometry = new THREE.SphereGeometry(2100, 48, 32);
   const nebula = new THREE.ShaderMaterial({
@@ -27,7 +27,7 @@ export function createSpace(radius: number) {
   stars.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   sky.add(new THREE.Points(stars, new THREE.PointsMaterial({ size: 2, vertexColors: true, transparent: true, opacity: .85, depthWrite: false })));
   const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.009, 128, 96), new THREE.ShaderMaterial({
-    uniforms: { sunDirection: { value: new THREE.Vector3(-.4, .55, .7).normalize() } },
+    uniforms: { sunDirection: { value: sunDirection.clone().normalize() } },
     vertexShader: `varying vec3 vNormal; varying vec3 vPosition; varying vec3 vWorldNormal; void main(){vec4 p=modelViewMatrix*vec4(position,1.);vPosition=p.xyz;vNormal=normalize(normalMatrix*normal);vWorldNormal=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*p;}`,
     fragmentShader: `uniform vec3 sunDirection;varying vec3 vNormal;varying vec3 vPosition;varying vec3 vWorldNormal;void main(){float facing=max(dot(normalize(vNormal),normalize(-vPosition)),0.);float rim=pow(1.-facing,4.);float day=smoothstep(-.35,.6,dot(normalize(vWorldNormal),sunDirection));vec3 color=mix(vec3(.035,.14,.28),vec3(.18,.56,.83),day);gl_FragColor=vec4(color,rim*(.15+.38*day));}`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,

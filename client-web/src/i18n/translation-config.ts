@@ -383,6 +383,8 @@ export const TRANSLATIONS = {
     "page.system_targeting": "星系态势",
     "planet.tab.workbench": "工作台",
     "planet.tab.selection": "选中对象",
+    "planet.tab.production": "生产",
+    "planet.tab.progression": "发展",
     "planet.tab.activity": "活动流",
   },
 } as const;

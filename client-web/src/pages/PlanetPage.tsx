@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Crosshair, ChevronDown, ChevronRight, Hammer, ScrollText, type LucideIcon } from "lucide-react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Crosshair, ChevronDown, ChevronRight, Hammer, Factory, Milestone, ScrollText, type LucideIcon } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { ALL_EVENT_TYPES } from "@shared/config";
 
@@ -12,6 +12,9 @@ import {
   PlanetEntityPanel,
 } from "@/features/planet-map/PlanetPanels";
 import { PlanetCommandCenter } from "@/features/planet-commands/PlanetCommandCenter";
+import { ProductionPlanner } from "@/features/production/ProductionPlanner";
+import { ColonyProgressionPanel } from "@/features/progression/ColonyProgressionPanel";
+import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import { PlanetOperationHeader } from "@/features/planet-commands/PlanetOperationHeader";
 import { parseCommandWorkflowId } from "@/features/planet-map/PlanetCommandPanel";
 import {
@@ -81,25 +84,28 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-type PlanetDetailPanel = "workbench" | "selection" | "activity";
+type PlanetDetailPanel = "workbench" | "selection" | "production" | "progression" | "activity";
 
 interface DetailTabConfig {
   id: PlanetDetailPanel;
   /** 桌面端图标 Tab 用的 lucide 图标组件（工作台/选中/活动）。 */
   icon: LucideIcon;
   /** i18n key → 文案（移动端文本 Tab + 桌面端 aria-label 共用）。 */
-  labelKey: "planet.tab.workbench" | "planet.tab.selection" | "planet.tab.activity";
+  labelKey: "planet.tab.workbench" | "planet.tab.selection" | "planet.tab.production" | "planet.tab.progression" | "planet.tab.activity";
 }
 
 const DETAIL_TABS: DetailTabConfig[] = [
   { id: "workbench", icon: Hammer, labelKey: "planet.tab.workbench" },
   { id: "selection", icon: Crosshair, labelKey: "planet.tab.selection" },
+  { id: "production", icon: Factory, labelKey: "planet.tab.production" },
+  { id: "progression", icon: Milestone, labelKey: "planet.tab.progression" },
   { id: "activity", icon: ScrollText, labelKey: "planet.tab.activity" },
 ];
 
 export function PlanetPage() {
   const client = useApiClient();
   const session = useSessionSnapshot();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const realtimeFetchFn = useMemo(
     () =>
@@ -576,6 +582,56 @@ export function PlanetPage() {
             />
           </div>
         ) : null}
+        {activeDetailPanel === "production" ? (
+          <div id="planet-detail-panel-production" role="tabpanel">
+            <ProductionPlanner
+              key={planet.planet_id}
+              catalog={catalog}
+              buildings={planet.buildings}
+              playerId={session.playerId}
+              completedTechs={normalizeCompletedTechIds(currentPlayer?.tech)}
+              onFocusBuilding={building => {
+                setSelected({ kind: "building", id: building.id, position: building.position });
+                requestFocus(building.position);
+                setActiveDetailPanel("selection");
+              }}
+              onBuildRecipe={(buildingType, recipeId) => {
+                setInteractionMode({ kind: "build", buildingType, recipeId, direction: "auto" });
+                setDrawerOpen(false);
+              }}
+            />
+          </div>
+        ) : null}
+        {activeDetailPanel === "progression" ? (
+          <div id="planet-detail-panel-progression" role="tabpanel">
+            <ColonyProgressionPanel
+              key={planet.planet_id}
+              catalog={catalog}
+              planet={planet}
+              player={currentPlayer}
+              runtime={runtime}
+              systemRuntime={systemRuntime}
+              onNavigate={to => {
+                const destination = new URL(to, window.location.origin);
+                if (destination.pathname !== `/planet/${encodeURIComponent(planet.planet_id)}`) {
+                  navigate(to);
+                  return;
+                }
+                setSearchParams(previous => {
+                  const next = new URLSearchParams(previous);
+                  next.delete("build");
+                  next.delete("workflow");
+                  destination.searchParams.forEach((value, key) => next.set(key, value));
+                  return next;
+                });
+                const buildingType = destination.searchParams.get("build");
+                if (buildingType) setInteractionMode({ kind: "build", buildingType, direction: "auto" });
+                setActiveDetailPanel("workbench");
+                setDrawerOpen(true);
+              }}
+            />
+          </div>
+        ) : null}
         {activeDetailPanel === "activity" ? (
           <div id="planet-detail-panel-activity" role="tabpanel">
             <PlanetActivityPanel
@@ -684,6 +740,14 @@ export function PlanetPage() {
               </div>
             </div>
           )}
+          <div className="planet-management-actions" aria-label="工业发展">
+            <button className="secondary-button" onClick={() => { setActiveDetailPanel("production"); setDrawerOpen(true); }}>
+              <Factory size={13} aria-hidden="true" /> 生产规划
+            </button>
+            <button className="secondary-button" onClick={() => { setActiveDetailPanel("progression"); setDrawerOpen(true); }}>
+              <Milestone size={13} aria-hidden="true" /> 发展路线
+            </button>
+          </div>
         </div>
         <div className="planet-map-shell__overlay">
           <PlanetSelectionBar
@@ -735,14 +799,19 @@ export function PlanetPage() {
           onToggle={() => setDrawerOpen((open) => !open)}
           open={drawerOpen}
         >
-          <PlanetOperationHeader
+          {activeDetailPanel === "production" || activeDetailPanel === "progression" ? (
+            <div className="planet-management-context">
+              <strong>{planet.name || planet.planet_id}</strong>
+              <span>{activeDetailPanel === "production" ? "工业生产" : "发展路线"}</span>
+            </div>
+          ) : <PlanetOperationHeader
             activePlanetId={summary?.active_planet_id ?? planet.planet_id}
             latestEntry={latestCommandEntry}
             pendingCount={pendingCommandCount}
             routePlanetId={planet.planet_id}
             routePlanetName={planet.name}
             systemName={system?.name ?? system?.system_id}
-          />
+          />}
           {detailPanels}
         </MapDrawer>
       </section>

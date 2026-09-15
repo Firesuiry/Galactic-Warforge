@@ -363,7 +363,7 @@ export function getRecipeDisplayName(
   catalog: CatalogView | undefined,
   recipeId: string,
 ) {
-  return getRecipeCatalogEntry(catalog, recipeId)?.name ?? recipeId;
+  return translateItemId(recipeId, getRecipeCatalogEntry(catalog, recipeId)?.name);
 }
 
 export function getTechDisplayName(

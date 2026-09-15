@@ -52,7 +52,8 @@ async function clickTile(page: Page, tile: Tile) {
 }
 
 test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切换平面战术', async ({ page }) => {
-  test.setTimeout(180_000);
+  // Software WebGL needs extra time for MSAA renders and the two full-scene captures.
+  test.setTimeout(300_000);
   const errors: string[] = [];
   page.on('request', request => { if (request.method() === 'POST') console.log('COMMAND REQUEST', request.url(), request.postData()); });
   page.on('response', async response => { if (response.request().method() === 'POST') console.log('COMMAND RESPONSE', response.status(), await response.text()); });
