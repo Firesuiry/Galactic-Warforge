@@ -115,10 +115,9 @@ func DefaultOrbitalPlatformStats(platformType string) OrbitalPlatform {
 }
 
 // CalculateOrbitalPosition 计算轨道平台在地面投影位置
-func (op *OrbitalPlatform) CalculateGroundPosition(planetRadius float64) Position {
-	x := planetRadius + op.Orbit.Radius*math.Cos(op.Orbit.Angle)
-	y := op.Orbit.Radius * math.Sin(op.Orbit.Angle)
-	return Position{X: int(x), Y: int(y)}
+func (op *OrbitalPlatform) CalculateGroundPosition(ws *WorldState) Position {
+	t := ws.Surface().FromVector(math.Cos(op.Orbit.Angle), 0, math.Sin(op.Orbit.Angle))
+	return Position{X: t.X, Y: t.Y}
 }
 
 // UpdateOrbit 更新轨道位置
@@ -130,19 +129,13 @@ func (op *OrbitalPlatform) UpdateOrbit() {
 }
 
 // CalculateOrbitalDistance 计算轨道平台到地面目标的距离
-func CalculateOrbitalDistance(orbit OrbitPosition, groundPos Position, planetRadius float64) float64 {
-	// 轨道平台的地面投影位置
-	groundX := planetRadius + orbit.Radius*math.Cos(orbit.Angle)
-	groundY := orbit.Radius * math.Sin(orbit.Angle)
-
-	// 计算距离
-	dx := groundX - float64(groundPos.X)
-	dy := groundY - float64(groundPos.Y)
-	return math.Sqrt(dx*dx + dy*dy)
+func CalculateOrbitalDistance(ws *WorldState, orbit OrbitPosition, groundPos Position) float64 {
+	p := (&OrbitalPlatform{Orbit: orbit}).CalculateGroundPosition(ws)
+	return float64(ws.SurfaceDistance(p, groundPos))
 }
 
 // CalculateFormationPositions 计算编队位置
-func CalculateFormationPositions(leader *CombatUnit, formationType FormationType, spacing float64) []Position {
+func CalculateFormationPositions(ws *WorldState, leader *CombatUnit, formationType FormationType, spacing float64) []Position {
 	positions := make([]Position, 0)
 
 	switch formationType {
@@ -189,6 +182,9 @@ func CalculateFormationPositions(leader *CombatUnit, formationType FormationType
 			}
 			positions = append(positions, pos)
 		}
+	}
+	for i, p := range positions {
+		positions[i] = ws.SurfaceOffset(leader.Position, p.X-leader.Position.X, p.Y-leader.Position.Y)
 	}
 	return positions
 }

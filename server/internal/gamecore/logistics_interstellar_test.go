@@ -7,7 +7,7 @@ import (
 )
 
 func TestInterstellarDispatchWarpEnergyCost(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 12, 1)
+	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newInterstellarLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})
@@ -70,7 +70,7 @@ func TestInterstellarDispatchWarpEnergyCost(t *testing.T) {
 	if got := origin.LogisticsStation.Inventory[model.ItemIronOre]; got != 70 {
 		t.Fatalf("expected origin inventory 70, got %d", got)
 	}
-	distance := model.ManhattanDist(origin.Position, target.Position)
+	distance := ws.SurfaceDistance(origin.Position, target.Position)
 	expectedEnergy := model.LogisticsShipEnergyCost(distance, origin.LogisticsStation.EnergyPerDistanceValue(), origin.LogisticsStation.WarpEnergyMultiplierValue(), true)
 	if ship.EnergyCost != expectedEnergy {
 		t.Fatalf("expected energy cost %d, got %d", expectedEnergy, ship.EnergyCost)
@@ -78,7 +78,7 @@ func TestInterstellarDispatchWarpEnergyCost(t *testing.T) {
 }
 
 func TestInterstellarShipDelivery(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 4, 1)
+	ws := model.NewWorldState("planet-1", 4)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newInterstellarLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})

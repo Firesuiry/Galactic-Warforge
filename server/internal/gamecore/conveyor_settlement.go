@@ -234,12 +234,8 @@ func conveyorIncomingDirs(ws *model.WorldState, conveyors map[string]*model.Buil
 	}
 	var incoming []model.ConveyorDirection
 	for _, dir := range conveyorDirOrder {
-		dx, dy := dir.Delta()
-		nx := building.Position.X + dx
-		ny := building.Position.Y + dy
-		if !ws.InBounds(nx, ny) {
-			continue
-		}
+		next, nextDir := ws.SurfaceStep(building.Position, dir)
+		nx, ny := next.X, next.Y
 		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
 		if neighborID == "" {
 			continue
@@ -255,7 +251,7 @@ func conveyorIncomingDirs(ws *model.WorldState, conveyors map[string]*model.Buil
 		if !neighborOut.Valid() || neighborOut == model.ConveyorAuto {
 			continue
 		}
-		if neighborOut == dir.Opposite() {
+		if neighborOut == nextDir.Opposite() {
 			incoming = append(incoming, dir)
 		}
 	}
@@ -312,12 +308,8 @@ func conveyorOutputTargets(
 		if output == model.ConveyorAuto && containsDirection(incoming, dir) {
 			continue
 		}
-		dx, dy := dir.Delta()
-		nx := building.Position.X + dx
-		ny := building.Position.Y + dy
-		if !ws.InBounds(nx, ny) {
-			continue
-		}
+		next, nextDir := ws.SurfaceStep(building.Position, dir)
+		nx, ny := next.X, next.Y
 		targetID := ws.TileBuilding[model.TileKey(nx, ny)]
 		if targetID == "" {
 			continue
@@ -329,7 +321,7 @@ func conveyorOutputTargets(
 		if target.OwnerID != building.OwnerID {
 			continue
 		}
-		if !allowsInput(allowedInputs[targetID], dir.Opposite()) {
+		if !allowsInput(allowedInputs[targetID], nextDir.Opposite()) {
 			continue
 		}
 		targets = append(targets, targetID)

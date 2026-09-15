@@ -1,6 +1,7 @@
 import { createApiClient } from '../../../shared-client/src/api.js';
 import type { SystemRuntimeView, WarTaskForceView, WarTheaterView } from '../../../shared-client/src/types.js';
 import type { CanonicalAgentAction } from './action-schema.js';
+import type { CanonicalGameCommandAction } from './game-command-schema.js';
 import { summarizeGameCommandAction } from './game-command-executor.js';
 import type { AgentInstance } from '../types.js';
 
@@ -208,7 +209,7 @@ export async function appendMilitaryAuditSummary(input: {
   finalMessage: string;
   executedActions: CanonicalAgentAction[];
 }) {
-  const militaryActions = input.executedActions.filter((action) => (
+  const militaryActions = input.executedActions.filter((action): action is CanonicalGameCommandAction => (
     action.type === 'game.command' && isMilitaryGameCommandName(action.command)
   ));
   if (militaryActions.length === 0) {

@@ -26,7 +26,7 @@ func newBenchmarkCore(t testing.TB) *GameCore {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 2},
-		Planet: mapconfig.PlanetConfig{Width: 64, Height: 64, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 64, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()

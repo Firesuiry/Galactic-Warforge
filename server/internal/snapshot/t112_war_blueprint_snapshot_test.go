@@ -8,7 +8,7 @@ import (
 )
 
 func TestT112SnapshotRoundTripPreservesPlayerWarBlueprints(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 8, 8)
+	ws := model.NewWorldState("planet-1", 8)
 	player := &model.PlayerState{
 		PlayerID:  "p1",
 		IsAlive:   true,

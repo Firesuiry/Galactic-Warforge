@@ -7,7 +7,7 @@ import (
 )
 
 func TestBuildingIOInputFromConveyor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 1, Y: 0})
@@ -31,7 +31,7 @@ func TestBuildingIOInputFromConveyor(t *testing.T) {
 }
 
 func TestBuildingIOInputToEMRailEjector(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	ejector := newEMRailEjectorBuilding("ejector", model.Position{X: 1, Y: 0}, "p1")
@@ -55,7 +55,7 @@ func TestBuildingIOInputToEMRailEjector(t *testing.T) {
 }
 
 func TestBuildingIOOutputToConveyor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})
@@ -83,7 +83,7 @@ func TestBuildingIOOutputToConveyor(t *testing.T) {
 }
 
 func TestBuildingIOInputRollbackOnFullStorage(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 1, Y: 0})
@@ -117,7 +117,7 @@ func TestBuildingIOInputRollbackOnFullStorage(t *testing.T) {
 }
 
 func TestBuildingIOOutputRollbackOnBlockedConveyor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})
@@ -149,7 +149,7 @@ func TestBuildingIOOutputRollbackOnBlockedConveyor(t *testing.T) {
 }
 
 func TestBuildingIOOutputPrefersNonDuplicateConveyorTarget(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	profile := model.BuildingProfileFor(model.BuildingTypeWaterPump, 1)

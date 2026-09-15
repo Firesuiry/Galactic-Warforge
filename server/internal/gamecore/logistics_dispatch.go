@@ -91,7 +91,7 @@ func settleLogisticsDispatch(ws *model.WorldState) {
 			if len(originStation.Cache.Supply) == 0 || len(demandRemaining) == 0 {
 				continue
 			}
-			candidate := selectDispatchCandidate(originID, originBuilding, originStation, demandRemaining, stationBuildings, ws.LogisticsStations, drone)
+			candidate := selectDispatchCandidate(ws, originID, originBuilding, originStation, demandRemaining, stationBuildings, ws.LogisticsStations, drone)
 			if candidate == nil || candidate.qty <= 0 {
 				continue
 			}
@@ -121,7 +121,7 @@ func settleLogisticsDispatch(ws *model.WorldState) {
 				drone.Cargo = nil
 				continue
 			}
-			if err := drone.BeginTrip(candidate.targetID, targetBuilding.Position); err != nil {
+			if err := drone.BeginTrip(candidate.targetID, targetBuilding.Position, candidate.distance); err != nil {
 				restoreStationInventory(originStation, candidate.itemID, accepted)
 				drone.Cargo = nil
 				continue
@@ -132,7 +132,7 @@ func settleLogisticsDispatch(ws *model.WorldState) {
 	}
 }
 
-func selectDispatchCandidate(originID string, originBuilding *model.Building, originStation *model.LogisticsStationState, demandRemaining map[string]map[string]int, stationBuildings map[string]*model.Building, stations map[string]*model.LogisticsStationState, drone *model.LogisticsDroneState) *logisticsDispatchCandidate {
+func selectDispatchCandidate(ws *model.WorldState, originID string, originBuilding *model.Building, originStation *model.LogisticsStationState, demandRemaining map[string]map[string]int, stationBuildings map[string]*model.Building, stations map[string]*model.LogisticsStationState, drone *model.LogisticsDroneState) *logisticsDispatchCandidate {
 	if originBuilding == nil || originStation == nil || len(originStation.Cache.Supply) == 0 {
 		return nil
 	}
@@ -171,7 +171,7 @@ func selectDispatchCandidate(originID string, originBuilding *model.Building, or
 			if qty <= 0 {
 				continue
 			}
-			distance := model.ManhattanDist(originBuilding.Position, targetBuilding.Position)
+			distance := ws.SurfaceDistance(originBuilding.Position, targetBuilding.Position)
 			travelTicks := model.LogisticsDroneTravelTicks(distance, drone.Speed)
 			candidate := logisticsDispatchCandidate{
 				itemID:         itemID,

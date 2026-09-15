@@ -7,7 +7,7 @@ import (
 )
 
 func TestPowerCoverageLineAdjacency(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 	provider := newTestBuilding("p-grid", BuildingTypeWindTurbine, Position{X: 1, Y: 1})
 	consumer := newTestBuilding("c-1", BuildingTypeAssemblingMachineMk1, Position{X: 2, Y: 1})
@@ -26,7 +26,7 @@ func TestPowerCoverageLineAdjacency(t *testing.T) {
 }
 
 func TestPowerCoverageOutOfRange(t *testing.T) {
-	ws := NewWorldState("p1", 20, 20)
+	ws := NewWorldState("p1", 20)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 	provider := newTestBuilding("p-grid", BuildingTypeWindTurbine, Position{X: 1, Y: 1})
 	consumer := newTestBuilding("c-1", BuildingTypeAssemblingMachineMk1, Position{X: 10, Y: 10})
@@ -48,7 +48,7 @@ func TestPowerCoverageOutOfRange(t *testing.T) {
 }
 
 func TestPowerCoverageWirelessAccess(t *testing.T) {
-	ws := NewWorldState("p1", 20, 20)
+	ws := NewWorldState("p1", 20)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 	source := newTestBuilding("gen-1", BuildingTypeWindTurbine, Position{X: 1, Y: 1})
 	provider := newTestBuilding("p-grid", BuildingTypeWirelessPowerTower, Position{X: 2, Y: 1})
@@ -69,7 +69,7 @@ func TestPowerCoverageWirelessAccess(t *testing.T) {
 }
 
 func TestPowerCoverageRelayHasNoConsumerSlotLimit(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 	source := newTestBuilding("gen-1", BuildingTypeWindTurbine, Position{X: 1, Y: 2})
 	provider := newTestBuilding("p-grid", BuildingTypeTeslaTower, Position{X: 2, Y: 2})
@@ -93,7 +93,7 @@ func TestPowerCoverageRelayHasNoConsumerSlotLimit(t *testing.T) {
 }
 
 func TestPowerCoverageTreatsDynamicPowerInputsAsProvider(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	ws.Players["player-1"] = &PlayerState{PlayerID: "player-1", IsAlive: true}
 	provider := newTestBuilding("rr-1", BuildingTypeRayReceiver, Position{X: 1, Y: 1})
 	consumer := newTestBuilding("c-1", BuildingTypeAssemblingMachineMk1, Position{X: 2, Y: 1})

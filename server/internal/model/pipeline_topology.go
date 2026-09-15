@@ -39,11 +39,7 @@ func PipelineEndpointsFromWorld(ws *WorldState, filter PipelineEndpointFilter) [
 			if filter != nil && !filter(building, port) {
 				continue
 			}
-			pos := Position{
-				X: building.Position.X + port.Offset.X,
-				Y: building.Position.Y + port.Offset.Y,
-				Z: building.Position.Z,
-			}
+			pos := ws.SurfaceOffset(building.Position, port.Offset.X, port.Offset.Y)
 			endpoint := PipelineEndpoint{
 				ID:           PipelineEndpointID(building.ID, port.ID),
 				BuildingID:   building.ID,

@@ -1,6 +1,7 @@
+import { surfaceFace, surfaceOffset } from '@shared/surface';
 import * as THREE from 'three';
 import { getBuildingFootprint, getFogState, type PlanetRenderView } from '../model';
-import { tileNormal } from './projection';
+import { tileNormal, surfaceTileSize } from './projection';
 import type { PlanetSurfaceData } from './terrain';
 
 const RELIEF_TERRAINS = new Set(['blocked', 'rock', 'mountain', 'mountains']);
@@ -27,7 +28,7 @@ export function createTerrainRelief({ planet, fog }: PlanetSurfaceData, radius: 
   const occupied = new Set<string>();
   for (const building of Object.values(planet.buildings ?? {})) {
     const footprint = getBuildingFootprint(building);
-    for (let y = 0; y < footprint.height; y++) for (let x = 0; x < footprint.width; x++) occupied.add(`${Math.round(building.position.x) + x}:${Math.round(building.position.y) + y}`);
+    for (let y = 0; y < footprint.height; y++) for (let x = 0; x < footprint.width; x++) { const cell=surfaceOffset(building.position,x,y,planet.surface.face_size); occupied.add(`${cell.x}:${cell.y}`); }
   }
   for (const entity of [...Object.values(planet.units ?? {}), ...(planet.resources ?? [])]) occupied.add(`${Math.round(entity.position.x)}:${Math.round(entity.position.y)}`);
   const cells: { x: number; y: number }[] = [];
@@ -48,13 +49,12 @@ export function createTerrainRelief({ planet, fog }: PlanetSurfaceData, radius: 
   for (let cellIndex = 0; cellIndex < cells.length; cellIndex += cellStride) {
     const cell = cells[cellIndex];
     const start = positions.length / 3;
-    const center = tileNormal(cell, planet.map_width, planet.map_height);
-    const latitudeRadius = Math.sqrt(Math.max(0.0025, 1 - center.y * center.y));
-    const tileSize = Math.min(2 * Math.PI * radius / planet.map_width * latitudeRadius, 2 * radius / planet.map_height / latitudeRadius);
+    const face = surfaceFace(cell, planet.surface.face_size);
+    const tileSize = surfaceTileSize(radius, planet.surface.face_size);
     for (let y = 0; y <= subdivisions; y++) for (let x = 0; x <= subdivisions; x++) {
       const u = x / subdivisions, v = y / subdivisions;
       const tx = cell.x + u - 0.5, ty = cell.y + v - 0.5;
-      const normal = tileNormal({ x: tx, y: ty }, planet.map_width, planet.map_height);
+      const normal = tileNormal({ x: tx, y: ty }, planet.surface.face_size, face);
       // Irregular rocky ridges taper into the existing terrain, with no raised
       // platform or hard material rectangle at the tile boundary.
       const edge = Math.min(u, v, 1 - u, 1 - v);
@@ -104,18 +104,24 @@ export function createTerrainRelief({ planet, fog }: PlanetSurfaceData, radius: 
  * Material is owned by the global surface; this mesh owns only its geometry.
  */
 export function createLocalSurface(planet: PlanetRenderView, radius: number, material: THREE.MeshStandardMaterial) {
-  if (!('bounds' in planet) || Math.max(planet.map_width, planet.map_height) <= 512) return null;
-  const b = planet.bounds;
-  const nx = Math.min(320, b.width * 2), ny = Math.min(320, b.height * 2);
+  if (!('bounds' in planet) || planet.surface.face_size * 3 <= 512) return null;
   const positions: number[] = [], normals: number[] = [], indices: number[] = [];
-  for (let y = 0; y <= ny; y++) for (let x = 0; x <= nx; x++) {
-    const normal = tileNormal({ x: b.x - .5 + x / nx * b.width, y: b.y - .5 + y / ny * b.height }, planet.map_width, planet.map_height);
-    normals.push(normal.x, normal.y, normal.z);
-    positions.push(normal.x * radius, normal.y * radius, normal.z * radius);
-  }
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    const a = y * (nx + 1) + x, b = a + 1, c = a + nx + 1, d = c + 1;
-    indices.push(a, c, b, b, c, d);
+  const size = planet.surface.face_size;
+  for (const b of [planet.bounds, ...(planet.surface_patches ?? []).map(p=>p.bounds)]) for (let face = 0; face < 6; face++) {
+    const left = Math.max(b.x, face % 3 * size), top = Math.max(b.y, Math.floor(face / 3) * size);
+    const right = Math.min(b.x + b.width, (face % 3 + 1) * size), bottom = Math.min(b.y + b.height, (Math.floor(face / 3) + 1) * size);
+    if (right <= left || bottom <= top) continue;
+    const nx = Math.min(320, Math.ceil((right-left)*2)), ny = Math.min(320, Math.ceil((bottom-top)*2));
+    const start = positions.length / 3;
+    for (let y = 0; y <= ny; y++) for (let x = 0; x <= nx; x++) {
+      const normal = tileNormal({x:left-.5+x/nx*(right-left),y:top-.5+y/ny*(bottom-top)},planet.surface.face_size,face);
+      normals.push(normal.x,normal.y,normal.z);
+      positions.push(normal.x*radius,normal.y*radius,normal.z*radius);
+    }
+    for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+      const a=start+y*(nx+1)+x,c=a+nx+1;
+      indices.push(a,c,a+1,a+1,c,c+1);
+    }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));

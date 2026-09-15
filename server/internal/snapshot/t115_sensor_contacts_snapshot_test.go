@@ -8,7 +8,7 @@ import (
 )
 
 func TestT115SnapshotRoundTripPreservesSensorContacts(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 8, 8)
+	ws := model.NewWorldState("planet-1", 8)
 	ws.Players["p1"] = &model.PlayerState{
 		PlayerID:  "p1",
 		IsAlive:   true,

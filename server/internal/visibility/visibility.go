@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 )
 
 // Engine caches per-player visibility and explored state, updating incrementally.
@@ -227,30 +228,20 @@ func (ps *playerState) applySource(src visionSource, delta int) {
 	if r < 0 {
 		return
 	}
-	r2 := r * r
-	for dy := -r; dy <= r; dy++ {
-		for dx := -r; dx <= r; dx++ {
-			if dx*dx+dy*dy > r2 {
-				continue
-			}
-			x := src.x + dx
-			y := src.y + dy
-			if x < 0 || y < 0 || x >= ps.width || y >= ps.height {
-				continue
-			}
-			idx := y*ps.width + x
-			old := ps.coverage[idx]
-			newVal := old + delta
-			if newVal < 0 {
-				newVal = 0
-			}
-			ps.coverage[idx] = newVal
-			if old == 0 && newVal > 0 {
-				ps.visible[idx] = true
-				ps.explored[idx] = true
-			} else if old > 0 && newVal == 0 {
-				ps.visible[idx] = false
-			}
+	grid := surface.Grid{Size: ps.width / 3}
+	for _, tile := range grid.Disc(surface.Tile{X: src.x, Y: src.y}, r) {
+		idx := tile.Y*ps.width + tile.X
+		old := ps.coverage[idx]
+		newVal := old + delta
+		if newVal < 0 {
+			newVal = 0
+		}
+		ps.coverage[idx] = newVal
+		if old == 0 && newVal > 0 {
+			ps.visible[idx] = true
+			ps.explored[idx] = true
+		} else if old > 0 && newVal == 0 {
+			ps.visible[idx] = false
 		}
 	}
 }
@@ -277,4 +268,60 @@ func blankGrid(width, height int) [][]bool {
 		grid[y] = make([]bool, width)
 	}
 	return grid
+}
+
+// FogRegion copies only the requested atlas window; large worlds must not
+// allocate full-planet fog snapshots for each local rendering patch.
+func (e *Engine) FogRegion(ws *model.WorldState, playerID string, x, y, width, height int) FogState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	ps := e.ensurePlayerLocked(ws, playerID)
+	e.syncPlayerLocked(ws, playerID, ps)
+	out := FogState{Visible: blankGrid(width, height), Explored: blankGrid(width, height)}
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			px, py := x+col, y+row
+			if px < 0 || py < 0 || px >= ps.width || py >= ps.height {
+				continue
+			}
+			idx := py*ps.width + px
+			out.Visible[row][col] = ps.visible[idx]
+			out.Explored[row][col] = ps.explored[idx]
+		}
+	}
+	return out
+}
+
+// ExploredMask copies the compact explored layer for bounded route planning.
+// It avoids materializing both full 2D fog grids when only exploration matters.
+func (e *Engine) ExploredMask(ws *model.WorldState, playerID string) []bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	ps := e.ensurePlayerLocked(ws, playerID)
+	e.syncPlayerLocked(ws, playerID, ps)
+	return append([]bool(nil), ps.explored...)
+}
+
+// ExploredRegionSnapshot reads an inactive planet's cached exploration window.
+func (e *Engine) ExploredRegionSnapshot(planetID string, mapWidth, mapHeight, x, y, width, height int, playerID string) [][]bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := blankGrid(width, height)
+	planet := e.planets[planetID]
+	if planet == nil || planet.width != mapWidth || planet.height != mapHeight {
+		return out
+	}
+	ps := planet.players[playerID]
+	if ps == nil {
+		return out
+	}
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			px, py := x+col, y+row
+			if px >= 0 && py >= 0 && px < mapWidth && py < mapHeight {
+				out[row][col] = ps.explored[py*mapWidth+px]
+			}
+		}
+	}
+	return out
 }

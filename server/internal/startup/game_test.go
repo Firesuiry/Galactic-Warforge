@@ -14,7 +14,6 @@ import (
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/model"
 	"siliconworld/internal/snapshot"
-	"siliconworld/internal/terrain"
 )
 
 func TestBootstrapEmptyDirCreatesGameAndInitialSave(t *testing.T) {
@@ -41,15 +40,13 @@ func TestBootstrapExistingDirUsesSavedGameplayAndMapConfig(t *testing.T) {
 	cfgPath, mapCfgPath, gameDir := writeBootstrapFixtures(t)
 	writeSavedGame(t, gameDir, savedGameOptions{
 		Seed:      "saved-seed",
-		PlanetW:   24,
-		PlanetH:   12,
+		FaceSize:  24,
 		PlayerIDs: []string{"saved-p1"},
 		Tick:      44,
 	})
 	overwriteExternalFixtures(t, cfgPath, mapCfgPath, externalOverrideOptions{
 		Seed:      "external-seed",
-		PlanetW:   99,
-		PlanetH:   99,
+		FaceSize:  99,
 		PlayerIDs: []string{"external-p1", "external-p2"},
 	})
 
@@ -65,7 +62,7 @@ func TestBootstrapExistingDirUsesSavedGameplayAndMapConfig(t *testing.T) {
 	if len(app.Config.Players) != 1 || app.Config.Players[0].PlayerID != "saved-p1" {
 		t.Fatalf("expected saved players restored, got %+v", app.Config.Players)
 	}
-	if app.Maps.PrimaryPlanet().Width != 24 || app.Maps.PrimaryPlanet().Height != 12 {
+	if app.Maps.PrimaryPlanet().Width != 72 || app.Maps.PrimaryPlanet().Height != 48 {
 		t.Fatalf("expected saved map config to win")
 	}
 	if app.Core.World().Tick != 44 {
@@ -293,8 +290,7 @@ system:
   planets_per_system: 3
   gas_giant_ratio: 0
 planet:
-  width: 16
-  height: 16
+  face_size: 16
   resource_density: 8
 overrides:
   planets:
@@ -347,16 +343,14 @@ overrides:
 
 type savedGameOptions struct {
 	Seed      string
-	PlanetW   int
-	PlanetH   int
+	FaceSize  int
 	PlayerIDs []string
 	Tick      int64
 }
 
 type externalOverrideOptions struct {
 	Seed      string
-	PlanetW   int
-	PlanetH   int
+	FaceSize  int
 	PlayerIDs []string
 }
 
@@ -375,7 +369,7 @@ func writeBootstrapFixtures(t *testing.T) (cfgPath string, mapCfgPath string, ga
 	mapCfgPath = filepath.Join(root, "map.yaml")
 	gameDir = filepath.Join(root, "game")
 	writeConfigFile(t, cfgPath, gameDir, config.BattlefieldConfig{MapSeed: "seed-a", MaxTickRate: 10}, []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}}, runtimeOverrideOptions{})
-	writeMapConfigFile(t, mapCfgPath, 16, 16)
+	writeMapConfigFile(t, mapCfgPath, 16)
 	return cfgPath, mapCfgPath, gameDir
 }
 
@@ -386,9 +380,8 @@ func writeSavedGame(t *testing.T, gameDir string, opts savedGameOptions) {
 	if opts.Seed != "" {
 		meta.GameplayConfig.Battlefield.MapSeed = opts.Seed
 	}
-	if opts.PlanetW > 0 {
-		meta.MapConfig.Planet.Width = opts.PlanetW
-		meta.MapConfig.Planet.Height = opts.PlanetH
+	if opts.FaceSize > 0 {
+		meta.MapConfig.Planet.FaceSize = opts.FaceSize
 	}
 	if len(opts.PlayerIDs) > 0 {
 		meta.GameplayConfig.Players = nil
@@ -396,25 +389,13 @@ func writeSavedGame(t *testing.T, gameDir string, opts savedGameOptions) {
 			meta.GameplayConfig.Players = append(meta.GameplayConfig.Players, config.PlayerConfig{PlayerID: id, Key: id + "-key"})
 		}
 	}
+	world := model.NewWorldState("planet-1-1", meta.MapConfig.Planet.FaceSize)
+	world.Tick = opts.Tick
 	save := &gamedir.SaveFile{
 		FormatVersion: 1,
 		Tick:          opts.Tick,
-		Snapshot: &snapshot.Snapshot{
-			Version: snapshot.CurrentVersion,
-			Tick:    opts.Tick,
-			World: &snapshot.WorldSnapshot{
-				Tick:      opts.Tick,
-				PlanetID:  "planet-1-1",
-				MapWidth:  1,
-				MapHeight: 1,
-				Players:   map[string]*model.PlayerState{},
-				Buildings: map[string]*snapshot.BuildingSnapshot{},
-				Units:     map[string]*model.Unit{},
-				Resources: map[string]*model.ResourceNodeState{},
-				Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
-			},
-		},
-		RuntimeState: gamedir.RuntimeState{ActivePlanetID: "planet-1-1"},
+		Snapshot:      snapshot.Capture(world, nil),
+		RuntimeState:  gamedir.RuntimeState{ActivePlanetID: "planet-1-1"},
 	}
 	if err := dir.WriteInitial(meta, save); err != nil {
 		t.Fatalf("write saved game: %v", err)
@@ -431,7 +412,7 @@ func overwriteExternalFixtures(t *testing.T, cfgPath, mapCfgPath string, opts ex
 		}
 	}
 	writeConfigFile(t, cfgPath, gameDir, config.BattlefieldConfig{MapSeed: opts.Seed, MaxTickRate: 10}, players, runtimeOverrideOptions{})
-	writeMapConfigFile(t, mapCfgPath, opts.PlanetW, opts.PlanetH)
+	writeMapConfigFile(t, mapCfgPath, opts.FaceSize)
 }
 
 func writeRuntimeOverrideConfig(t *testing.T, cfgPath string, opts runtimeOverrideOptions) {
@@ -463,17 +444,16 @@ players:
 	}
 }
 
-func writeMapConfigFile(t *testing.T, path string, width, height int) {
+func writeMapConfigFile(t *testing.T, path string, faceSize int) {
 	t.Helper()
 	content := fmt.Sprintf(`galaxy:
   system_count: 1
 system:
   planets_per_system: 1
 planet:
-  width: %d
-  height: %d
+  face_size: %d
   resource_density: 8
-`, width, height)
+`, faceSize)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write map config: %v", err)
 	}
@@ -487,6 +467,6 @@ func minimalMetaFile(t *testing.T) *gamedir.MetaFile {
 	}, &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 8},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	})
 }

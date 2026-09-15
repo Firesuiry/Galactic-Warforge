@@ -22,8 +22,7 @@ func testMapConfig() *mapconfig.Config {
 			MaxMoons:         3,
 		},
 		Planet: mapconfig.PlanetConfig{
-			Width:           16,
-			Height:          16,
+			FaceSize:        16,
 			ResourceDensity: 10,
 		},
 	}
@@ -119,8 +118,7 @@ func TestGenerateAppliesPlanetKindOverrides(t *testing.T) {
 			GasGiantRatio:    0,
 		},
 		Planet: mapconfig.PlanetConfig{
-			Width:           16,
-			Height:          16,
+			FaceSize:        16,
 			ResourceDensity: 10,
 		},
 		Overrides: mapconfig.OverridesConfig{

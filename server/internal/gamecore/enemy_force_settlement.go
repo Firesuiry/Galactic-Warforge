@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 )
 
 // EnemyForceConfig 敌对势力生成配置
@@ -58,7 +59,7 @@ func (gc *GameCore) settleEnemyForces() []*model.GameEvent {
 	gc.applySlowFieldEffects(ws)
 	for i := range ws.EnemyForces.Forces {
 		force := &ws.EnemyForces.Forces[i]
-		model.SpreadEnemyForce(force, gc.rng)
+		model.SpreadEnemyForce(ws, force, gc.rng)
 		// 确保敌对势力在地图边界内
 		clampForcePosition(ws, force)
 	}
@@ -74,7 +75,7 @@ func (gc *GameCore) settleEnemyForces() []*model.GameEvent {
 		}
 		// 找到该玩家最近的建筑位置作为玩家位置
 		playerPos := getPlayerCenterPosition(ws, player.PlayerID)
-		threat := model.CalculateThreatLevel(ws.EnemyForces.Forces, playerPos, params)
+		threat := model.CalculateThreatLevel(ws, ws.EnemyForces.Forces, playerPos, params)
 		if threat > ws.EnemyForces.ThreatLevel {
 			ws.EnemyForces.ThreatLevel = threat
 		}
@@ -123,24 +124,20 @@ func (gc *GameCore) spawnEnemyForce(ws *model.WorldState, cfg EnemyForceConfig) 
 	}
 	forceType := forceTypes[gc.rng.Intn(len(forceTypes))]
 
-	// 在地图边缘生成
-	var pos model.Position
-	edge := gc.rng.Intn(4) // 0=top, 1=right, 2=bottom, 3=left
-	margin := cfg.SpawnMargin
-
-	switch edge {
-	case 0: // top
-		pos.X = gc.rng.Intn(ws.MapWidth)
-		pos.Y = margin
-	case 1: // right
-		pos.X = ws.MapWidth - margin - 1
-		pos.Y = gc.rng.Intn(ws.MapHeight)
-	case 2: // bottom
-		pos.X = gc.rng.Intn(ws.MapWidth)
-		pos.Y = ws.MapHeight - margin - 1
-	case 3: // left
-		pos.X = margin
-		pos.Y = gc.rng.Intn(ws.MapHeight)
+	// A closed planet has no border: spawn away from existing player buildings.
+	pos := model.Position{X: gc.rng.Intn(ws.MapWidth), Y: gc.rng.Intn(ws.MapHeight)}
+	for attempt := 0; attempt < 64; attempt++ {
+		safe := true
+		for _, building := range ws.Buildings {
+			if ws.SurfaceWithin(pos, building.Position, cfg.SpawnMargin) {
+				safe = false
+				break
+			}
+		}
+		if safe {
+			break
+		}
+		pos = model.Position{X: gc.rng.Intn(ws.MapWidth), Y: gc.rng.Intn(ws.MapHeight)}
 	}
 
 	// 计算实力值
@@ -171,20 +168,22 @@ func getPlayerCenterPosition(ws *model.WorldState, playerID string) model.Positi
 		return model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
 	}
 
-	var sumX, sumY, count int
+	var sum [3]float64
+	count := 0
 	for _, b := range ws.Buildings {
 		if b.OwnerID == playerID {
-			sumX += b.Position.X
-			sumY += b.Position.Y
+			v := ws.Surface().Normal(surface.Tile{X: b.Position.X, Y: b.Position.Y})
+			for i := range sum {
+				sum[i] += v[i]
+			}
 			count++
 		}
 	}
-
-	if count == 0 {
-		return model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
+	if count == 0 || sum[0]*sum[0]+sum[1]*sum[1]+sum[2]*sum[2] < 1e-12 {
+		return model.Position{X: ws.Surface().Size / 2, Y: ws.Surface().Size / 2}
 	}
-
-	return model.Position{X: sumX / count, Y: sumY / count}
+	t := ws.Surface().FromVector(sum[0], sum[1], sum[2])
+	return model.Position{X: t.X, Y: t.Y}
 }
 
 // clampForcePosition 确保敌对势力位置在地图边界内
@@ -193,19 +192,10 @@ func clampForcePosition(ws *model.WorldState, force *model.EnemyForce) {
 		return
 	}
 
-	margin := 5
-	if force.Position.X < margin {
-		force.Position.X = margin
+	if !ws.InBounds(force.Position.X, force.Position.Y) {
+		panic("enemy force escaped surface topology")
 	}
-	if force.Position.X >= ws.MapWidth-margin {
-		force.Position.X = ws.MapWidth - margin - 1
-	}
-	if force.Position.Y < margin {
-		force.Position.Y = margin
-	}
-	if force.Position.Y >= ws.MapHeight-margin {
-		force.Position.Y = ws.MapHeight - margin - 1
-	}
+
 }
 
 // executeEnemyAttack 执行敌对势力的攻击
@@ -275,6 +265,12 @@ func (gc *GameCore) executeEnemyAttack(ws *model.WorldState, rhythm model.Attack
 
 			// 如果建筑被摧毁
 			if targetBuilding.HP <= 0 {
+				ws.UnindexBuilding(targetBuilding)
+				delete(ws.Buildings, targetBuilding.ID)
+				removeStationFleet(ws, targetBuilding.ID)
+				model.UnregisterLogisticsStation(ws, targetBuilding.ID)
+				model.UnregisterPowerGridBuilding(ws, targetBuilding.ID)
+
 				events = append(events, &model.GameEvent{
 					EventType:       model.EvtEntityDestroyed,
 					VisibilityScope: player.PlayerID,
@@ -306,9 +302,7 @@ func findNearestPlayerBuilding(ws *model.WorldState, playerID string) *model.Bui
 		}
 
 		// 计算到地图中心的距离
-		dx := b.Position.X - ws.MapWidth/2
-		dy := b.Position.Y - ws.MapHeight/2
-		dist := dx*dx + dy*dy
+		dist := ws.SurfaceDistance(b.Position, model.Position{X: ws.Surface().Size / 2, Y: ws.Surface().Size / 2})
 		if dist < minDist {
 			minDist = dist
 			nearest = b
@@ -338,7 +332,7 @@ func (gc *GameCore) applySignalTowerEffects(ws *model.WorldState) {
 
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
-			dist := calculateDistance(building.Position, force.Position)
+			dist := ws.SurfaceDistance(building.Position, force.Position)
 			visionRange := 10 // 默认信号塔视野范围
 			if building.Runtime.Functions.Combat != nil {
 				visionRange = building.Runtime.Functions.Combat.Range
@@ -388,7 +382,7 @@ func (gc *GameCore) applySlowFieldEffects(ws *model.WorldState) {
 
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
-			dist := calculateDistance(building.Position, force.Position)
+			dist := ws.SurfaceDistance(building.Position, force.Position)
 			if dist > rangeVal {
 				continue
 			}
@@ -403,14 +397,3 @@ func (gc *GameCore) applySlowFieldEffects(ws *model.WorldState) {
 }
 
 // calculateDistance 计算两点之间的距离
-func calculateDistance(a, b model.Position) int {
-	dx := a.X - b.X
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := a.Y - b.Y
-	if dy < 0 {
-		dy = -dy
-	}
-	return dx + dy
-}

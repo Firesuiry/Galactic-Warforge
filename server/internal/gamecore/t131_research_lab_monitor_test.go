@@ -9,7 +9,7 @@ import (
 
 func newResearchLabTestWorld(t *testing.T, btype model.BuildingType) (*model.WorldState, *model.Building) {
 	t.Helper()
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	b := newBuilding("lab-1", btype, "p1", model.Position{X: 2, Y: 2})
 	// Research mode: empty recipe (InitBuildingProduction leaves RecipeID empty).

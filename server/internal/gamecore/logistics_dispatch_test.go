@@ -7,7 +7,7 @@ import (
 )
 
 func TestLogisticsDispatchMatching(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 6, 1)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})
@@ -61,7 +61,7 @@ func TestLogisticsDispatchMatching(t *testing.T) {
 }
 
 func TestLogisticsDispatchPriority(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 6, 6)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})
@@ -115,7 +115,7 @@ func TestLogisticsDispatchPriority(t *testing.T) {
 }
 
 func TestLogisticsDispatchShortestDistance(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 10, 1)
+	ws := model.NewWorldState("planet-1", 10)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})
@@ -167,7 +167,7 @@ func TestLogisticsDispatchShortestDistance(t *testing.T) {
 }
 
 func TestLogisticsDispatchDelivery(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 4, 1)
+	ws := model.NewWorldState("planet-1", 4)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})

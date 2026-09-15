@@ -85,11 +85,12 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 				Kind:            kind,
 				Orbit:           orbit,
 				Moons:           generateMoons(rng, planetID, kind, cfg.System.MaxMoons),
-				Width:           cfg.Planet.Width,
-				Height:          cfg.Planet.Height,
+				FaceSize:        cfg.Planet.FaceSize,
+				Width:           3 * cfg.Planet.FaceSize,
+				Height:          2 * cfg.Planet.FaceSize,
 				Seed:            planetSeed,
 				ResourceDensity: cfg.Planet.ResourceDensity,
-				Terrain:         generateTerrain(planetRNG, cfg.Planet.Terrain, cfg.Planet.Width, cfg.Planet.Height),
+				Terrain:         generateTerrain(planetRNG, cfg.Planet.Terrain, 3*cfg.Planet.FaceSize, 2*cfg.Planet.FaceSize),
 				Environment:     generateEnvironment(planetRNG, orbit, sys.Star, cfg.Planet.Environment),
 			}
 			planet.Resources = generateResources(planetRNG, planet, cfg.Planet.Resources)

@@ -3,6 +3,8 @@ package model
 import (
 	"fmt"
 	"time"
+
+	"siliconworld/internal/surface"
 )
 
 // BlueprintIssueCode describes why a blueprint capture or placement failed.
@@ -71,6 +73,9 @@ func CaptureBlueprint(ws *WorldState, selection BlueprintBounds, createdBy strin
 	if selection.MinX < 0 || selection.MinY < 0 || selection.MaxX >= ws.MapWidth || selection.MaxY >= ws.MapHeight {
 		return result, fmt.Errorf("selection out of world bounds")
 	}
+	if !ws.SurfaceBoundsSingleFace(selection) {
+		return result, fmt.Errorf("blueprint selection must stay within one cube face")
+	}
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
@@ -111,7 +116,7 @@ func CaptureBlueprint(ws *WorldState, selection BlueprintBounds, createdBy strin
 		inside := 0
 		insideAll := true
 		for _, offset := range offsets {
-			pos := Position{X: building.Position.X + offset.X, Y: building.Position.Y + offset.Y}
+			pos := ws.SurfaceOffset(building.Position, offset.X, offset.Y)
 			if pos.X >= selection.MinX && pos.X <= selection.MaxX && pos.Y >= selection.MinY && pos.Y <= selection.MaxY {
 				inside++
 				continue
@@ -215,6 +220,10 @@ func PlaceBlueprint(req BlueprintPlacementRequest) (BlueprintPlacementResult, er
 		MinY: req.Origin.Y,
 		MaxX: req.Origin.X + rotated.Width - 1,
 		MaxY: req.Origin.Y + rotated.Height - 1,
+	}
+
+	if req.MapWidth > 0 && req.MapHeight > 0 && !(surface.Grid{Size: req.MapWidth / 3}).SingleFace(surface.Tile{X: result.Bounds.MinX, Y: result.Bounds.MinY}, surface.Tile{X: result.Bounds.MaxX, Y: result.Bounds.MaxY}) {
+		return result, fmt.Errorf("blueprint placement must stay within one cube face")
 	}
 
 	items := make([]BlueprintPlacementItem, 0, len(req.Blueprint.Items))

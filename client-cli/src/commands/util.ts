@@ -23,7 +23,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   war_industry: { desc: 'Military production, refit, deployment hub and supply node status' },
   task_forces: { desc: 'Player-owned task force list with supply and command capacity' },
   theaters: { desc: 'Player-owned theater zones and objectives' },
-  scene: { usage: '[planet_id] <x> <y> <width> <height>', desc: 'Planet scene raw JSON' },
+  scene: { usage: '[planet_id] <x> <y> <width> <height> [--near_x X --near_y Y --radius R]', desc: 'Cube-sphere atlas scene and seam patches' },
   inspect: { usage: '<planet_id> <building|unit|resource|sector> <entity_id>', desc: 'Planet inspect raw JSON' },
   fleet_status: { usage: '[fleet_id]', desc: 'Fleet list or one fleet detail' },
   fog: { usage: '[planet_id] [x y width height]', desc: 'ASCII fog slice via /scene (default: 0 0 32 16)' },

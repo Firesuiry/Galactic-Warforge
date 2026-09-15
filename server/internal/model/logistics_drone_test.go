@@ -51,7 +51,7 @@ func TestLogisticsDroneTravelTicks(t *testing.T) {
 }
 
 func TestLogisticsDroneStationCapacity(t *testing.T) {
-	ws := NewWorldState("planet-1", 2, 2)
+	ws := NewWorldState("planet-1", 2)
 	station := NewLogisticsStationState()
 	station.DroneCapacity = 1
 	ws.LogisticsStations["station-1"] = station

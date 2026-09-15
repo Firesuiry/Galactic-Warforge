@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestPowerGridAggregationTotals(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 
 	generator := newTestBuilding("g-1", BuildingTypeWindTurbine, Position{X: 1, Y: 1})
@@ -37,7 +37,7 @@ func TestPowerGridAggregationTotals(t *testing.T) {
 }
 
 func TestPowerGridSplitMerge(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 
 	gen := newTestBuilding("g-1", BuildingTypeWindTurbine, Position{X: 1, Y: 1})

@@ -12,7 +12,7 @@ import (
 // A finite node mined down to zero must flip its depleted marker so scene
 // output can render it as exhausted instead of a live resource point.
 func TestMineResourceMarksFiniteNodeDepleted(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	node := &model.ResourceNodeState{
 		ID:           "r1",
 		PlanetID:     ws.PlanetID,
@@ -38,7 +38,7 @@ func TestMineResourceMarksFiniteNodeDepleted(t *testing.T) {
 // Renewable nodes deplete when drained and recover the marker once regen
 // brings the remaining amount back above zero.
 func TestRenewableNodeDepletedFollowsRegen(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	node := &model.ResourceNodeState{
 		ID:           "r1",
 		PlanetID:     ws.PlanetID,
@@ -159,7 +159,7 @@ func findOpenTileNearExecutor(ws *model.WorldState, playerID string) (*model.Pos
 		for y := center.Y - dist; y <= center.Y+dist; y++ {
 			for x := center.X - dist; x <= center.X+dist; x++ {
 				pos := model.Position{X: x, Y: y}
-				if model.ManhattanDist(center, pos) != dist {
+				if ws.SurfaceDistance(center, pos) != dist {
 					continue
 				}
 				if !ws.InBounds(x, y) || !ws.Grid[y][x].Terrain.Buildable() {

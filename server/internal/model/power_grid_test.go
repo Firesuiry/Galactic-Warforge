@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestPowerGridGraphLineConnection(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	b1 := newTestBuilding("b1", BuildingTypeWindTurbine, Position{X: 1, Y: 1})
 	b2 := newTestBuilding("b2", BuildingTypeWindTurbine, Position{X: 2, Y: 1})
 	ws.Buildings[b1.ID] = b1
@@ -23,7 +23,7 @@ func TestPowerGridGraphLineConnection(t *testing.T) {
 }
 
 func TestPowerGridGraphWirelessConnection(t *testing.T) {
-	ws := NewWorldState("p1", 20, 20)
+	ws := NewWorldState("p1", 20)
 	b1 := newTestBuilding("b1", BuildingTypeWirelessPowerTower, Position{X: 1, Y: 1})
 	b2 := newTestBuilding("b2", BuildingTypeWindTurbine, Position{X: 1 + DefaultWirelessPowerTowerRange - 1, Y: 1})
 	b3 := newTestBuilding("b3", BuildingTypeWindTurbine, Position{X: 1 + DefaultWirelessPowerTowerRange + 1, Y: 1})
@@ -45,7 +45,7 @@ func TestPowerGridGraphWirelessConnection(t *testing.T) {
 }
 
 func TestPowerGridGraphRemoval(t *testing.T) {
-	ws := NewWorldState("p1", 10, 10)
+	ws := NewWorldState("p1", 10)
 	b1 := newTestBuilding("b1", BuildingTypeWindTurbine, Position{X: 3, Y: 3})
 	b2 := newTestBuilding("b2", BuildingTypeWindTurbine, Position{X: 4, Y: 3})
 	ws.Buildings[b1.ID] = b1

@@ -3,6 +3,8 @@ package model
 import (
 	"sync"
 
+	"siliconworld/internal/surface"
+
 	"siliconworld/internal/terrain"
 )
 
@@ -44,7 +46,8 @@ type MapTile struct {
 
 // WorldState is the authoritative game state
 type WorldState struct {
-	mu sync.RWMutex
+	SurfaceMetadata surface.Metadata `json:"surface"`
+	mu              sync.RWMutex
 
 	Tick               int64                             `json:"tick"`
 	PlanetID           string                            `json:"planet_id"`
@@ -76,8 +79,13 @@ type WorldState struct {
 }
 
 // NewWorldState creates an empty world state
-func NewWorldState(planetID string, mapWidth, mapHeight int) *WorldState {
+func NewWorldState(planetID string, faceSize int) *WorldState {
+	if faceSize < 1 {
+		panic("face size must be positive")
+	}
+	mapWidth, mapHeight := 3*faceSize, 2*faceSize
 	ws := &WorldState{
+		SurfaceMetadata:   (surface.Grid{Size: faceSize}).Metadata(),
 		PlanetID:          planetID,
 		MapWidth:          mapWidth,
 		MapHeight:         mapHeight,
@@ -90,7 +98,7 @@ func NewWorldState(planetID string, mapWidth, mapHeight int) *WorldState {
 		LogisticsShips:    make(map[string]*LogisticsShipState),
 		TileBuilding:      make(map[string]string),
 		TileUnits:         make(map[string][]string),
-		PowerGrid:         NewPowerGridGraph(mapWidth, mapHeight),
+		PowerGrid:         NewPowerGridGraph(surface.Grid{Size: faceSize}),
 		Construction:      NewConstructionQueue(),
 		CombatRuntime:     NewCombatRuntimeState(),
 	}
@@ -152,17 +160,4 @@ func int64ToStr(n int64) string {
 // InBounds returns true if the position is within map bounds
 func (ws *WorldState) InBounds(x, y int) bool {
 	return x >= 0 && x < ws.MapWidth && y >= 0 && y < ws.MapHeight
-}
-
-// ManhattanDist returns the manhattan distance between two positions
-func ManhattanDist(a, b Position) int {
-	dx := a.X - b.X
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := a.Y - b.Y
-	if dy < 0 {
-		dy = -dy
-	}
-	return dx + dy
 }

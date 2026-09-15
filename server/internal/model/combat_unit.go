@@ -1,7 +1,6 @@
 package model
 
 import (
-	"math"
 	"math/rand"
 )
 
@@ -20,7 +19,7 @@ type WeaponType string
 
 const (
 	WeaponTypeGun     WeaponType = "gun"     // 机枪
-	WeaponTypeCannon WeaponType = "cannon" // 加农炮
+	WeaponTypeCannon  WeaponType = "cannon"  // 加农炮
 	WeaponTypeMissile WeaponType = "missile" // 导弹
 	WeaponTypeLaser   WeaponType = "laser"   // 激光
 )
@@ -32,16 +31,16 @@ const (
 	CombatUnitStateIdle      CombatUnitState = "idle"
 	CombatUnitStateMoving    CombatUnitState = "moving"
 	CombatUnitStateAttacking CombatUnitState = "attacking"
-	CombatUnitStateDead     CombatUnitState = "dead"
+	CombatUnitStateDead      CombatUnitState = "dead"
 )
 
 // ShieldState 护盾状态
 type ShieldState struct {
 	Level         float64 `json:"level"`          // 当前护盾值
-	MaxLevel     float64 `json:"max_level"`      // 最大护盾值
-	RechargeRate float64 `json:"recharge_rate"`  // 恢复速度 (每tick)
+	MaxLevel      float64 `json:"max_level"`      // 最大护盾值
+	RechargeRate  float64 `json:"recharge_rate"`  // 恢复速度 (每tick)
 	RechargeDelay int     `json:"recharge_delay"` // 恢复延迟 (ticks)
-	LastHitTick  int64    `json:"last_hit_tick"` // 上次受击tick
+	LastHitTick   int64   `json:"last_hit_tick"`  // 上次受击tick
 }
 
 // ProcessShieldRecharge 处理护盾恢复
@@ -77,9 +76,9 @@ func (s *ShieldState) ApplyShieldDamage(damage int) (actualDamage int) {
 
 // WeaponState 武器状态
 type WeaponState struct {
-	Type         WeaponType `json:"type"`          // 武器类型
+	Type         WeaponType `json:"type"`           // 武器类型
 	Damage       int        `json:"damage"`         // 伤害值
-	FireRate     int        `json:"fire_rate"`     // 射速 (ticks/发)
+	FireRate     int        `json:"fire_rate"`      // 射速 (ticks/发)
 	Range        float64    `json:"range"`          // 射程
 	LastFireTick int64      `json:"last_fire_tick"` // 上次开火tick
 	AmmoCost     int        `json:"ammo_cost"`      // 每发弹药消耗
@@ -87,18 +86,18 @@ type WeaponState struct {
 
 // CombatUnit 战斗单位扩展信息
 type CombatUnit struct {
-	ID            string           `json:"id"`             // 单位ID
-	Type          CombatUnitType   `json:"type"`           // 单位类型
-	PlayerID      string           `json:"player_id"`      // 所属玩家
-	Position      Position         `json:"position"`       // 位置
-	HP            int              `json:"hp"`             // 当前生命值
-	MaxHP         int              `json:"max_hp"`         // 最大生命值
-	Shield        ShieldState      `json:"shield"`          // 护盾状态
-	Weapon        WeaponState      `json:"weapon"`          // 武器状态
-	AmmoInventory int              `json:"ammo_inventory"` // 弹药库存
-	Speed         float64          `json:"speed"`          // 移动速度
-	State         CombatUnitState  `json:"state"`          // 单位状态
-	AttackTarget  string           `json:"attack_target"`  // 攻击目标ID
+	ID            string          `json:"id"`             // 单位ID
+	Type          CombatUnitType  `json:"type"`           // 单位类型
+	PlayerID      string          `json:"player_id"`      // 所属玩家
+	Position      Position        `json:"position"`       // 位置
+	HP            int             `json:"hp"`             // 当前生命值
+	MaxHP         int             `json:"max_hp"`         // 最大生命值
+	Shield        ShieldState     `json:"shield"`         // 护盾状态
+	Weapon        WeaponState     `json:"weapon"`         // 武器状态
+	AmmoInventory int             `json:"ammo_inventory"` // 弹药库存
+	Speed         float64         `json:"speed"`          // 移动速度
+	State         CombatUnitState `json:"state"`          // 单位状态
+	AttackTarget  string          `json:"attack_target"`  // 攻击目标ID
 }
 
 // LootDrop 掉落物品
@@ -110,10 +109,10 @@ type LootDrop struct {
 // DefaultCombatUnitStats 返回战斗单位默认属性
 func DefaultCombatUnitStats(unitType CombatUnitType) CombatUnit {
 	unit := CombatUnit{
-		Type:     unitType,
-		State:    CombatUnitStateIdle,
-		Shield:   ShieldState{},
-		Weapon:   WeaponState{},
+		Type:   unitType,
+		State:  CombatUnitStateIdle,
+		Shield: ShieldState{},
+		Weapon: WeaponState{},
 	}
 
 	switch unitType {
@@ -179,11 +178,6 @@ func DefaultCombatUnitStats(unitType CombatUnitType) CombatUnit {
 }
 
 // CalculateDistance 计算两点之间的距离
-func CalculateDistance(a, b Position) float64 {
-	dx := float64(a.X - b.X)
-	dy := float64(a.Y - b.Y)
-	return math.Sqrt(dx*dx + dy*dy)
-}
 
 // CalculateDamage 计算伤害
 func CalculateDamage(weapon WeaponState, target *CombatUnit, distance float64) int {
@@ -194,7 +188,7 @@ func CalculateDamage(weapon WeaponState, target *CombatUnit, distance float64) i
 	baseDamage := weapon.Damage
 
 	// 距离衰减
-	distanceFactor := 1.0 - (distance / weapon.Range) * 0.5
+	distanceFactor := 1.0 - (distance/weapon.Range)*0.5
 	if distanceFactor < 0.5 {
 		distanceFactor = 0.5
 	}
@@ -210,7 +204,7 @@ func CalculateDamage(weapon WeaponState, target *CombatUnit, distance float64) i
 }
 
 // ProcessWeaponFire 处理武器开火
-func ProcessWeaponFire(unit *CombatUnit, target *CombatUnit, currentTick int64) (damage int, success bool) {
+func ProcessWeaponFire(ws *WorldState, unit *CombatUnit, target *CombatUnit, currentTick int64) (damage int, success bool) {
 	if unit.State == CombatUnitStateDead {
 		return 0, false
 	}
@@ -221,7 +215,7 @@ func ProcessWeaponFire(unit *CombatUnit, target *CombatUnit, currentTick int64) 
 		return 0, false // 弹药不足
 	}
 
-	distance := CalculateDistance(unit.Position, target.Position)
+	distance := float64(ws.SurfaceDistance(unit.Position, target.Position))
 	damage = CalculateDamage(unit.Weapon, target, distance)
 
 	if damage > 0 {

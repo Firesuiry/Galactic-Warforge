@@ -1,6 +1,7 @@
 package mapconfig
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 
@@ -61,8 +62,7 @@ type ResourceConfig struct {
 
 // PlanetConfig defines planet-level scale and generation.
 type PlanetConfig struct {
-	Width           int               `yaml:"width"`
-	Height          int               `yaml:"height"`
+	FaceSize        int               `yaml:"face_size"`
 	ResourceDensity int               `yaml:"resource_density"` // percent of tiles with deposits
 	Terrain         TerrainConfig     `yaml:"terrain"`
 	Environment     EnvironmentConfig `yaml:"environment"`
@@ -117,11 +117,8 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.System.MaxMoons == 0 {
 		cfg.System.MaxMoons = 4
 	}
-	if cfg.Planet.Width == 0 {
-		cfg.Planet.Width = 2000
-	}
-	if cfg.Planet.Height == 0 {
-		cfg.Planet.Height = 2000
+	if cfg.Planet.FaceSize == 0 {
+		cfg.Planet.FaceSize = 816
 	}
 	if cfg.Planet.ResourceDensity == 0 {
 		cfg.Planet.ResourceDensity = 12
@@ -147,7 +144,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := &Config{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("parse map config: %w", err)
 	}
 
@@ -169,8 +168,8 @@ func Load(path string) (*Config, error) {
 	if cfg.System.MaxMoons < 0 {
 		return nil, fmt.Errorf("system.max_moons must be >= 0")
 	}
-	if cfg.Planet.Width < 4 || cfg.Planet.Height < 4 {
-		return nil, fmt.Errorf("planet width/height must be >= 4")
+	if cfg.Planet.FaceSize < 4 {
+		return nil, fmt.Errorf("planet.face_size must be >= 4")
 	}
 	if cfg.Planet.ResourceDensity < 0 || cfg.Planet.ResourceDensity > 100 {
 		return nil, fmt.Errorf("planet.resource_density must be 0..100")
@@ -271,8 +270,8 @@ func validateResources(cfg ResourceConfig) error {
 
 func validateSpawnPoints(planet PlanetConfig, points []SpawnPointConfig) error {
 	for i, p := range points {
-		if p.X < 0 || p.X >= planet.Width || p.Y < 0 || p.Y >= planet.Height {
-			return fmt.Errorf("spawn_points[%d] (%d,%d) out of planet bounds %dx%d", i, p.X, p.Y, planet.Width, planet.Height)
+		if p.X < 0 || p.X >= 3*planet.FaceSize || p.Y < 0 || p.Y >= 2*planet.FaceSize {
+			return fmt.Errorf("spawn_points[%d] (%d,%d) out of planet bounds %dx%d", i, p.X, p.Y, 3*planet.FaceSize, 2*planet.FaceSize)
 		}
 	}
 	return nil

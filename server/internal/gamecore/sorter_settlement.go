@@ -139,13 +139,10 @@ func sorterFindConveyor(
 	maxRange int,
 	forInput bool,
 ) (string, bool) {
-	dx, dy := dir.Delta()
+	pos := sorter.Position
 	for step := 1; step <= maxRange; step++ {
-		nx := sorter.Position.X + dx*step
-		ny := sorter.Position.Y + dy*step
-		if !ws.InBounds(nx, ny) {
-			return "", false
-		}
+		pos, dir = ws.SurfaceStep(pos, dir)
+		nx, ny := pos.X, pos.Y
 		targetID := ws.TileBuilding[model.TileKey(nx, ny)]
 		if targetID == "" {
 			continue

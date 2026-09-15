@@ -6,9 +6,9 @@ import { collectActivity, IndustrialActivity } from './industrial-activity';
 
 function fixture(): PlanetThreeData {
   return {
-    planet: { planet_id: 'p', map_width: 4, map_height: 4, buildings: {}, units: {}, resources: [], terrain: [] },
+    planet: { planet_id: 'p', surface: {topology:'cube_sphere',face_size:4}, map_width: 12, map_height: 8, buildings: {}, units: {}, resources: [], terrain: [] },
     catalog: { buildings: [{ id: 'arc_smelter', requires_resource_node: false }] },
-    fog: { planet_id: 'p', map_width: 4, map_height: 4, visible: Array.from({ length: 4 }, () => [true, true, true, true]), explored: [] },
+    fog: { planet_id: 'p', surface: {topology:'cube_sphere',face_size:4}, map_width: 12, map_height: 8, visible: Array.from({ length: 4 }, () => [true, true, true, true]), explored: [] },
   } as unknown as PlanetThreeData;
 }
 function factory(state = 'running'): Building {

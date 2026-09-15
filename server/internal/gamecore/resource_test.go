@@ -12,7 +12,7 @@ import (
 // machine comes online, minerals must grow strictly every tick and the player
 // must be able to afford the next building (depot_mk1).
 func TestOpeningBuildChainMiningRestoresMineralsIncome(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 
 	// Fresh game bootstrap (config-dev.yaml): 240 minerals.
 	const bootstrapMinerals = 240
@@ -106,7 +106,7 @@ func TestOpeningBuildChainMiningRestoresMineralsIncome(t *testing.T) {
 // Regression for 2026-07-31 playtest: minerals plateaued at ~80 once the
 // mining_machine buffer filled (capacity 48) and no belts hauled ore away.
 func TestMineralsKickbackContinuesWhenStorageIsFull(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	player := &model.PlayerState{
 		PlayerID:  "p1",
 		Resources: model.Resources{Minerals: 20, Energy: 100},
@@ -185,7 +185,7 @@ func TestMineralsKickbackContinuesWhenStorageIsFull(t *testing.T) {
 // Water/oil collectors feed the fluid item economy only; they must not
 // generate minerals (MineralsKickback defaults to 0).
 func TestFluidCollectorsDoNotYieldMinerals(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Minerals: 20}, IsAlive: true}
 	ws.Resources["r1"] = &model.ResourceNodeState{
 		ID:           "r1",
@@ -224,7 +224,7 @@ func TestFluidCollectorsDoNotYieldMinerals(t *testing.T) {
 }
 
 func TestMineExtractsFiniteResource(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{}, IsAlive: true}
 	ws.Resources["r1"] = &model.ResourceNodeState{
 		ID:           "r1",
@@ -263,7 +263,7 @@ func TestMineExtractsFiniteResource(t *testing.T) {
 }
 
 func TestMineDecaysOilYield(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{}, IsAlive: true}
 	ws.Resources["r1"] = &model.ResourceNodeState{
 		ID:           "r1",
@@ -299,7 +299,7 @@ func TestMineDecaysOilYield(t *testing.T) {
 }
 
 func TestRenewableResourceRegens(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{}, IsAlive: true}
 	ws.Resources["r1"] = &model.ResourceNodeState{
 		ID:           "r1",
@@ -336,7 +336,7 @@ func TestRenewableResourceRegens(t *testing.T) {
 }
 
 func TestMaintenanceCostBlocksProduction(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{
 		PlayerID:  "p1",
 		Resources: model.Resources{Minerals: 1, Energy: 0},
@@ -371,7 +371,7 @@ func TestMaintenanceCostBlocksProduction(t *testing.T) {
 }
 
 func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
 
 	miner := &model.Building{
@@ -416,7 +416,7 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 }
 
 func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
 
 	pump := &model.Building{
@@ -463,7 +463,7 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 }
 
 func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
 
 	extractor := &model.Building{

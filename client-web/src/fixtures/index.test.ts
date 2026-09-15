@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFixtureFetch, createFixtureServerUrl } from '@/fixtures';
+import { createFixtureFetch, createFixtureServerUrl, getFixtureScenario } from '@/fixtures';
 
 describe('fixture fetch', () => {
   it('为行星概要接口返回轻量 summary 载荷', async () => {
@@ -115,4 +115,26 @@ describe('fixture fetch', () => {
       },
     });
   });
+});
+
+
+it('keeps full fixture terrain/fog and overview bins aligned to six complete cube faces', async () => {
+  const fixture = getFixtureScenario('baseline');
+  expect(fixture).toBeDefined();
+  const planet = fixture!.planets['planet-1-1'];
+  const fog = fixture!.fogByPlanet['planet-1-1'];
+  for (const view of [fixture!.summary, planet, fog]) {
+    expect(view.surface).toEqual({topology:'cube_sphere',face_size:8});
+    expect(view.map_width).toBe(24);
+    expect(view.map_height).toBe(16);
+  }
+  for (const matrix of [planet.terrain, fog.visible, fog.explored]) {
+    expect(matrix).toHaveLength(16);
+    expect(matrix!.every(row=>row.length===24)).toBe(true);
+  }
+  expect(planet.terrain![15][23]).toBe('unknown');
+  expect(fog.explored![15][23]).toBe(false);
+  const url=createFixtureServerUrl('baseline');
+  const response=await createFixtureFetch(url)(`${url}/world/planets/planet-1-1/overview?step=3`);
+  expect(await response.json()).toMatchObject({surface:planet.surface,step:2,cells_width:12,cells_height:8});
 });

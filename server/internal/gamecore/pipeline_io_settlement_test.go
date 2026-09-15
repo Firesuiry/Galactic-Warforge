@@ -7,7 +7,7 @@ import (
 )
 
 func TestPipelineIOInputToBuilding(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})
@@ -40,7 +40,7 @@ func TestPipelineIOInputToBuilding(t *testing.T) {
 }
 
 func TestPipelineIOOutputFromBuilding(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})

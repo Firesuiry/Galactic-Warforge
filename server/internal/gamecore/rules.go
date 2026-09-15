@@ -197,7 +197,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		State:             model.ConstructionPending,
 		EnqueueTick:       ws.Tick,
 	}
-	if err := ws.Construction.Enqueue(task); err != nil {
+	if err := ws.Construction.Enqueue(ws, task); err != nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = err.Error()
 		return res, nil
@@ -306,17 +306,19 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 		return res, nil
 	}
 
-	// Check tile is still available for restore
-	tileKey := model.TileKey(task.Position.X, task.Position.Y)
-	if _, occupied := ws.TileBuilding[tileKey]; occupied {
-		res.Code = model.CodePositionOccupied
-		res.Message = "construction tile is now occupied by another building"
+	tiles, err := ws.ConstructionTiles(task)
+	if err != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = err.Error()
 		return res, nil
 	}
-	if ws.Construction.IsTileReserved(tileKey) && ws.Construction.ReservedTiles[tileKey] != taskID {
-		res.Code = model.CodePositionOccupied
-		res.Message = "construction tile is reserved by another construction task"
-		return res, nil
+	for _, p := range tiles {
+		key := model.TileKey(p.X, p.Y)
+		if ws.TileBuilding[key] != "" || !ws.Grid[p.Y][p.X].Terrain.Buildable() || (ws.Construction.ReservedTiles[key] != "" && ws.Construction.ReservedTiles[key] != taskID) {
+			res.Code = model.CodePositionOccupied
+			res.Message = "construction footprint unavailable"
+			return res, nil
+		}
 	}
 
 	// For cancelled tasks, re-reserve materials (they were refunded on cancel)
@@ -337,7 +339,9 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 	if ws.Construction.ReservedTiles == nil {
 		ws.Construction.ReservedTiles = make(map[string]string)
 	}
-	ws.Construction.ReservedTiles[tileKey] = taskID
+	for _, p := range tiles {
+		ws.Construction.ReservedTiles[model.TileKey(p.X, p.Y)] = taskID
+	}
 
 	// Re-add to order if not present
 	inOrder := false
@@ -394,7 +398,7 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		return res, nil
 	}
 
-	dist := model.ManhattanDist(unit.Position, *pos)
+	dist := ws.SurfaceDistance(unit.Position, *pos)
 	if dist > unit.MoveRange {
 		res.Code = model.CodeOutOfRange
 		res.Message = fmt.Sprintf("move distance %d exceeds unit move range %d", dist, unit.MoveRange)
@@ -406,6 +410,12 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 	if _, occupied := ws.TileBuilding[tileKey]; occupied {
 		res.Code = model.CodePositionOccupied
 		res.Message = "destination tile is occupied by a building"
+		return res, nil
+	}
+
+	if _, reachable := ws.SurfacePath(unit.Position, *pos, unit.MoveRange); !reachable {
+		res.Code = model.CodeOutOfRange
+		res.Message = "destination has no walkable surface path within move range"
 		return res, nil
 	}
 
@@ -490,7 +500,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 			return res, nil
 		}
 
-		dist := model.ManhattanDist(attacker.Position, targetPos)
+		dist := ws.SurfaceDistance(attacker.Position, targetPos)
 		if dist > attacker.AttackRange {
 			res.Code = model.CodeOutOfRange
 			res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
@@ -552,7 +562,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 			return res, nil
 		}
 
-		dist := model.ManhattanDist(attacker.Position, targetPos)
+		dist := ws.SurfaceDistance(attacker.Position, targetPos)
 		if dist > attacker.AttackRange {
 			res.Code = model.CodeOutOfRange
 			res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
@@ -585,9 +595,10 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 
 		if targetBuilding.HP <= 0 {
 			delete(ws.Buildings, targetID)
-			tileKey := model.TileKey(targetBuilding.Position.X, targetBuilding.Position.Y)
-			delete(ws.TileBuilding, tileKey)
-			ws.Grid[targetBuilding.Position.Y][targetBuilding.Position.X].BuildingID = ""
+			ws.UnindexBuilding(targetBuilding)
+			removeStationFleet(ws, targetID)
+			model.UnregisterLogisticsStation(ws, targetID)
+			model.UnregisterPowerGridBuilding(ws, targetID)
 			events = append(events, &model.GameEvent{
 				EventType:       model.EvtEntityDestroyed,
 				VisibilityScope: "all",
@@ -1673,8 +1684,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		// Find enemy forces in range
 		if ws.EnemyForces != nil {
 			for i, force := range ws.EnemyForces.Forces {
-				dist := manhattanDistTurret(turret.Position, force.Position)
-				if dist <= combat.Range {
+				if ws.SurfaceWithin(turret.Position, force.Position, combat.Range) {
 					targetedForce = i
 					break // one attack per turret per tick
 				}
@@ -1690,8 +1700,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 				if sameTeam(ws, unit.OwnerID, turret.OwnerID) {
 					continue
 				}
-				dist := model.ManhattanDist(turret.Position, unit.Position)
-				if dist > combat.Range {
+				if !ws.SurfaceWithin(turret.Position, unit.Position, combat.Range) {
 					continue
 				}
 				targetedUnit = unit.ID
@@ -1776,17 +1785,6 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 }
 
 // manhattanDistTurret 计算炮塔到位置的距离
-func manhattanDistTurret(a, b model.Position) int {
-	dx := a.X - b.X
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := a.Y - b.Y
-	if dy < 0 {
-		dy = -dy
-	}
-	return dx + dy
-}
 
 func resolveVictory(rule string, worlds map[string]*model.WorldState, activeWorld *model.WorldState) model.VictoryState {
 	rule = model.NormalizeVictoryRule(rule)
@@ -1887,13 +1885,8 @@ func victoryDeclaredEvent(victory model.VictoryState) *model.GameEvent {
 
 // Helper: find a free adjacent tile
 func findAdjacentFree(ws *model.WorldState, center model.Position) *model.Position {
-	dirs := []model.Position{{X: 0, Y: 1}, {X: 0, Y: -1}, {X: 1, Y: 0}, {X: -1, Y: 0},
-		{X: 1, Y: 1}, {X: -1, Y: 1}, {X: 1, Y: -1}, {X: -1, Y: -1}}
-	for _, d := range dirs {
-		nx, ny := center.X+d.X, center.Y+d.Y
-		if !ws.InBounds(nx, ny) {
-			continue
-		}
+	for _, next := range ws.SurfaceNeighbors(center) {
+		nx, ny := next.X, next.Y
 		tileKey := model.TileKey(nx, ny)
 		if _, occupied := ws.TileBuilding[tileKey]; occupied {
 			continue

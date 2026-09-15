@@ -288,6 +288,7 @@ function buildPlanetSummary(planet: PlanetView): PlanetSummaryView {
     name: planet.name,
     discovered: planet.discovered,
     kind: planet.kind,
+    surface: planet.surface,
     map_width: planet.map_width,
     map_height: planet.map_height,
     tick: planet.tick,
@@ -361,6 +362,7 @@ function buildPlanetScene(planet: PlanetView, fog: FogMapView | undefined, x: nu
     name: planet.name,
     discovered: planet.discovered,
     kind: planet.kind,
+    surface: planet.surface,
     map_width: planet.map_width,
     map_height: planet.map_height,
     tick: planet.tick,
@@ -379,7 +381,8 @@ function buildPlanetScene(planet: PlanetView, fog: FogMapView | undefined, x: nu
 }
 
 function buildPlanetOverview(planet: PlanetView, fog: FogMapView | undefined, step: number): PlanetOverviewView {
-  const nextStep = Math.max(1, step || 100);
+  let nextStep = Math.min(planet.surface.face_size, Math.max(1, Math.floor(step || 100)));
+  while (planet.surface.face_size % nextStep !== 0) nextStep -= 1;
   const cellsWidth = Math.max(1, Math.ceil(planet.map_width / nextStep));
   const cellsHeight = Math.max(1, Math.ceil(planet.map_height / nextStep));
   const terrain = Array.from({ length: cellsHeight }, (_, cellY) => (
@@ -416,6 +419,7 @@ function buildPlanetOverview(planet: PlanetView, fog: FogMapView | undefined, st
     name: planet.name,
     discovered: planet.discovered,
     kind: planet.kind,
+    surface: planet.surface,
     map_width: planet.map_width,
     map_height: planet.map_height,
     tick: planet.tick,

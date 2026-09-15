@@ -5,6 +5,7 @@ import (
 
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapmodel"
+	"siliconworld/internal/surface"
 	"siliconworld/internal/terrain"
 )
 
@@ -208,25 +209,15 @@ func findFreeBuildableTile(rng *rng, terrain [][]terrain.TileType, used [][]bool
 }
 
 func pickClusterTile(rng *rng, centerX, centerY, radius, width, height int, terrain [][]terrain.TileType, used [][]bool) (int, int, bool) {
-	if radius == 0 {
-		if centerX >= 0 && centerX < width && centerY >= 0 && centerY < height && terrain[centerY][centerX].Buildable() && !used[centerY][centerX] {
-			return centerX, centerY, true
+	tiles := (surface.Grid{Size: width / 3}).Disc(surface.Tile{X: centerX, Y: centerY}, radius)
+	for len(tiles) > 0 {
+		i := rng.Intn(len(tiles))
+		tile := tiles[i]
+		tiles[i] = tiles[len(tiles)-1]
+		tiles = tiles[:len(tiles)-1]
+		if terrain[tile.Y][tile.X].Buildable() && !used[tile.Y][tile.X] {
+			return tile.X, tile.Y, true
 		}
-		return 0, 0, false
-	}
-	attempts := radius*radius*6 + 6
-	for i := 0; i < attempts; i++ {
-		dx := rng.RangeInt(-radius, radius)
-		dy := rng.RangeInt(-radius, radius)
-		x := centerX + dx
-		y := centerY + dy
-		if x < 0 || x >= width || y < 0 || y >= height {
-			continue
-		}
-		if !terrain[y][x].Buildable() || used[y][x] {
-			continue
-		}
-		return x, y, true
 	}
 	return 0, 0, false
 }

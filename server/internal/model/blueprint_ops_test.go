@@ -6,7 +6,7 @@ import (
 )
 
 func TestCaptureBlueprintBasic(t *testing.T) {
-	ws := NewWorldState("planet-1", 6, 6)
+	ws := NewWorldState("planet-1", 6)
 	created := time.Date(2026, 3, 19, 12, 0, 0, 0, time.UTC)
 
 	conveyor := newBlueprintTestBuilding("b1", BuildingTypeConveyorBeltMk1, Position{X: 1, Y: 1})
@@ -52,7 +52,7 @@ func TestCaptureBlueprintBasic(t *testing.T) {
 }
 
 func TestCaptureBlueprintPartialFootprint(t *testing.T) {
-	ws := NewWorldState("planet-1", 6, 6)
+	ws := NewWorldState("planet-1", 6)
 	created := time.Date(2026, 3, 19, 12, 0, 0, 0, time.UTC)
 
 	conveyor := newBlueprintTestBuilding("b1", BuildingTypeConveyorBeltMk1, Position{X: 1, Y: 1})

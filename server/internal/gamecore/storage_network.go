@@ -25,12 +25,7 @@ func storageNetworkFor(ws *model.WorldState, startID string) model.StorageNetwor
 		nodes = append(nodes, model.StorageNode{ID: building.ID, Storage: building.Storage})
 
 		pos := building.Position
-		neighbors := []model.Position{
-			{X: pos.X - 1, Y: pos.Y},
-			{X: pos.X + 1, Y: pos.Y},
-			{X: pos.X, Y: pos.Y - 1},
-			{X: pos.X, Y: pos.Y + 1},
-		}
+		neighbors := ws.SurfaceNeighbors(pos)
 		for _, npos := range neighbors {
 			if !ws.InBounds(npos.X, npos.Y) {
 				continue

@@ -1,5 +1,7 @@
 # 服务端 API 文档
 
+> 行星已统一为立方体球面六面网格。`surface: {topology: "cube_sphere", face_size: N}` 明示拓扑；`map_width=3N`、`map_height=2N` 为存储图集尺寸，x/y 不再具有平面邻接语义。配置仅使用 `planet.face_size`，旧平面存档拒绝加载。详见 [立方体球面网格](../guide/立方体球面网格.md)。
+
 本文档整理当前服务端可用的 API。示例与字段以服务端实现为准。
 
 **基础信息**
@@ -212,7 +214,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 **GET /state/summary**
 - 说明: 世界摘要（需认证）
-- 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`）；`winner` 已决出胜者时存在；`victory_reason` / `victory_rule` 在已宣告胜利时返回；`active_planet_id` 当前被模拟的行星；`map_width` / `map_height` 当前行星尺寸
+- 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`）；`winner` 已决出胜者时存在；`victory_reason` / `victory_rule` 在已宣告胜利时返回；`active_planet_id` 当前被模拟的行星；`map_width` / `map_height` 当前行星六面图集尺寸；`surface` 返回 `topology=cube_sphere` 与 `face_size`
 - 胜负补充: 在仓库当前默认配置下，`victory_rule` 为 `hybrid`，因此 `winner` / `victory_reason` 可能来自 `mission_complete -> game_win`，也可能来自基地消灭胜
 - 能源补充: 当 `ray_receiver` 切到 `power` / `hybrid` 且已有太阳帆或戴森结构产能时，`summary.players[pid].resources.energy` 会跟随真实 tick 同步上涨，而不是只在查询层单独造数
 - 事实源补充: `GET /state/summary.players[pid].resources.energy`、`GET /state/stats.energy_stats`、`GET /world/planets/{planet_id}/networks` 当前共享同一份当 tick authoritative `PowerSettlementSnapshot`；`ray_receiver` 会先写入 `ws.PowerInputs` 与接收站结算视图，再由统一的 power finalize 阶段一次性回写最终资源与电网结果
@@ -226,7 +228,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     - `operate_range` 操作范围
     - `concurrent_tasks` 并发任务上限（建造/升级/拆除等执行体任务）
     - `research_boost` 研究辅助加成（数值参数）
-    - 当前 Web 建造前检查使用 `executor.unit_id + operate_range`，再结合对应行星视图里该执行体的 `position` 按 `ManhattanDist` 做预检；这只是客户端提示，不替代服务端执行阶段的最终校验
+    - 当前 Web 建造靠近流程使用 `executor.unit_id` 请求对应行星的 `/path`，将 `operate_range` 作为 `stop_range`，按服务端返回的 `waypoints` 分段移动；不再使用图集 x/y 的曼哈顿距离预检或拆路。每段移动与最终建造仍由服务端执行阶段校验
   - `executors`：按 `planet_id` 组织的执行体映射；字段结构与 `executor` 相同。`executor` 仍保留为当前 active planet 上下文的兼容镜像
   - `tech` 字段说明:
     - `player_id` / `completed_techs` / `current_research` / `research_queue` / `total_researched`
@@ -249,20 +251,43 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "victory_rule": "hybrid",
   "players": {
     "p1": {
-      "player_id":"p1",
-      "team_id":"team-1",
-      "role":"commander",
-      "resources":{"minerals":200,"energy":100},
-      "inventory":{"iron_ingot":20,"circuit_board":5},
-      "permissions":["*"],
-      "executor":{"unit_id":"u-1","build_efficiency":1,"operate_range":6,"concurrent_tasks":2,"research_boost":0},
-      "is_alive":true
+      "player_id": "p1",
+      "team_id": "team-1",
+      "role": "commander",
+      "resources": {
+        "minerals": 200,
+        "energy": 100
+      },
+      "inventory": {
+        "iron_ingot": 20,
+        "circuit_board": 5
+      },
+      "permissions": [
+        "*"
+      ],
+      "executor": {
+        "unit_id": "u-1",
+        "build_efficiency": 1,
+        "operate_range": 6,
+        "concurrent_tasks": 2,
+        "research_boost": 0
+      },
+      "is_alive": true
     },
-    "p2": {"player_id":"p2","team_id":"team-2","role":"commander","is_alive":true}
+    "p2": {
+      "player_id": "p2",
+      "team_id": "team-2",
+      "role": "commander",
+      "is_alive": true
+    }
   },
   "active_planet_id": "planet-1-1",
-  "map_width": 32,
-  "map_height": 32
+  "map_width": 96,
+  "map_height": 64,
+  "surface": {
+    "topology": "cube_sphere",
+    "face_size": 32
+  }
 }
 ```
 
@@ -273,7 +298,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 查询参数:
   - `alert_limit`（可选，正整数）：`recent_alerts` 保留的最近条数；默认 `20`；超过 `server.alert_history_limit` 时按上限截断
 - 响应字段:
-  - `tick` / `active_planet_id` / `map_width` / `map_height`
+  - `tick` / `active_planet_id` / `map_width` / `map_height` / `surface`
   - `winner` / `victory_reason` / `victory_rule`：已宣告胜利时返回（与 `/state/summary` 同源）
   - `self`：调用方玩家紧凑视图
     - `player_id` / `team_id` / `role` / `is_alive`
@@ -293,33 +318,74 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 {
   "tick": 120,
   "active_planet_id": "planet-1-1",
-  "map_width": 32,
-  "map_height": 32,
+  "map_width": 96,
+  "map_height": 64,
   "self": {
     "player_id": "p1",
     "team_id": "team-1",
     "role": "commander",
     "is_alive": true,
-    "resources": {"minerals": 240, "energy": 80},
-    "inventory": {"iron_ore": 12},
+    "resources": {
+      "minerals": 240,
+      "energy": 80
+    },
+    "inventory": {
+      "iron_ore": 12
+    },
     "tech": {
       "completed_count": 2,
-      "completed_techs": ["dyson_sphere_program", "electromagnetism"],
-      "current_research": {"tech_id": "basic_logistics", "state": "in_progress", "progress": 3, "total_cost": 10},
+      "completed_techs": [
+        "dyson_sphere_program",
+        "electromagnetism"
+      ],
+      "current_research": {
+        "tech_id": "basic_logistics",
+        "state": "in_progress",
+        "progress": 3,
+        "total_cost": 10
+      },
       "research_queue_len": 1,
       "total_researched": 99
     }
   },
-  "energy_stats": {"generation": 120, "consumption": 40, "storage": 0, "current_stored": 0, "shortage_ticks": 0},
-  "combat_stats": {"units_lost": 0, "enemies_killed": 4, "threat_level": 0, "highest_threat": 0},
+  "energy_stats": {
+    "generation": 120,
+    "consumption": 40,
+    "storage": 0,
+    "current_stored": 0,
+    "shortage_ticks": 0
+  },
+  "combat_stats": {
+    "units_lost": 0,
+    "enemies_killed": 4,
+    "threat_level": 0,
+    "highest_threat": 0
+  },
   "recent_alerts": [],
   "fleets": [
-    {"fleet_id": "fleet-alpha", "system_id": "sys-1", "formation": "wedge", "state": "idle", "unit_count": 3, "in_transit": true, "transit_to": "sys-2"}
+    {
+      "fleet_id": "fleet-alpha",
+      "system_id": "sys-1",
+      "formation": "wedge",
+      "state": "idle",
+      "unit_count": 3,
+      "in_transit": true,
+      "transit_to": "sys-2"
+    }
   ],
   "task_forces": [],
   "theaters": [],
   "enemy_forces": [],
-  "available_commands": ["build", "move", "attack", "produce"]
+  "available_commands": [
+    "build",
+    "move",
+    "attack",
+    "produce"
+  ],
+  "surface": {
+    "topology": "cube_sphere",
+    "face_size": 32
+  }
 }
 ```
 
@@ -638,16 +704,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 行星概要（需认证）
 - 说明补充:
   - 该接口只返回轻量摘要，不再返回整张 `terrain` / `fog` / `buildings` / `units`
-  - 未发现行星只保证 `planet_id` 与 `discovered=false`
+  - 未发现行星返回 `planet_id`、`system_id`、`discovered=false` 与有效 `surface`；计数和图集尺寸字段为零，不返回名称/种类等发现内容
   - 服务端现在按 `{planet_id}` 直接读取对应行星 runtime，而不是借用当前 active planet 的世界状态
   - 只要目标行星 runtime 已加载，`tick` / `building_count` / `unit_count` 就来自该行星自身，并按当前玩家可见性统计
   - 若目标行星已发现但 runtime 尚未加载，`building_count` / `unit_count` 保持 `0`；`resource_count` 仍返回当前已知总资源点数
 - 响应字段:
   - `planet_id` / `system_id` / `name` / `discovered` / `kind`
-  - `map_width` / `map_height`
+  - `map_width` / `map_height` / `surface`（六面拓扑与每面尺寸）
   - `tick`
   - `building_count` / `unit_count` / `resource_count`
-- 响应示例:
+- 响应示例（独立 N=32 小型测试星球，图集 96×64；不是默认 N=816 的地图）:
 ```json
 {
   "planet_id": "planet-1-1",
@@ -655,12 +721,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
-  "map_width": 2000,
-  "map_height": 2000,
+  "map_width": 96,
+  "map_height": 64,
   "tick": 120,
   "building_count": 84,
   "unit_count": 12,
-  "resource_count": 463
+  "resource_count": 463,
+  "surface": {
+    "topology": "cube_sphere",
+    "face_size": 32
+  }
 }
 ```
 
@@ -669,21 +739,21 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明补充:
   - 用于整颗行星的全局缩放渲染，按固定步长对原始地图做下采样聚合
   - 该接口不返回逐 tile 级别建筑、单位、资源明细，而是返回聚合后的地形、迷雾和计数矩阵
-  - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `step` / `cells_width` / `cells_height`
+  - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `surface` / `step` / `cells_width` / `cells_height`
   - 只要目标行星 runtime 已加载，就会返回该行星自己的当前迷雾与聚合计数，不要求它是 active planet
   - 若目标行星已发现但 runtime 尚未加载，当前会回退为静态地形骨架与空计数矩阵，不会混入别的行星运行态
   - `client-web` 行星观察页在“极小缩放看全局”场景应优先使用该接口，而不是把 `/scene` 压到亚像素渲染
 - 查询参数:
-  - `step`: 下采样步长；表示一个 overview cell 覆盖多少个原始 tile。默认 `100`，最小 `1`，超出地图尺寸时会自动夹紧到地图最大边长
+  - `step`: 请求的每边下采样步长，一个 overview cell 覆盖 step×step 个原始地格。省略或非正数按 `100` 请求；服务端取不超过请求值和 face_size 的最大 face_size 约数，最小 `1`。默认 N=816 时实际 step=68；请求 16 时实际为 16，返回 153×102 格。客户端须使用响应的实际 step
 - 响应字段:
-  - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
+  - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `surface` / `tick`
   - `step`: 本次实际使用的下采样步长
-  - `cells_width` / `cells_height`: 总览矩阵尺寸，等于 `ceil(map_width / step)` 与 `ceil(map_height / step)`
+  - `cells_width` / `cells_height`: 总览矩阵尺寸，等于 `3 * (face_size / step)` 与 `2 * (face_size / step)`；每个采样格完整位于一个面内
   - `terrain`: 聚合后的地形矩阵，每个 cell 取该范围内的主导地形
   - `visible` / `explored`: 聚合后的迷雾矩阵，只要该 cell 内任意 tile 可见或已探索，就记为 `true`
   - `resource_counts` / `building_counts` / `unit_counts`: 每个 cell 内资源点、可见建筑、可见单位数量
   - `building_count` / `unit_count` / `resource_count`: 当前整颗行星的可见建筑总数、可见单位总数、资源总数
-- 响应示例:
+- 响应示例（独立 N=32 小型测试星球，图集 96×64；不是默认 N=816 的地图）:
 ```json
 {
   "planet_id": "planet-1-1",
@@ -691,45 +761,117 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
-  "map_width": 2000,
-  "map_height": 2000,
+  "map_width": 96,
+  "map_height": 64,
   "tick": 4059,
-  "step": 100,
-  "cells_width": 20,
-  "cells_height": 20,
-  "terrain": [["buildable","water"],["buildable","lava"]],
-  "visible": [[true,false],[false,true]],
-  "explored": [[true,true],[false,true]],
-  "resource_counts": [[12,3],[0,1]],
-  "building_counts": [[2,0],[0,1]],
-  "unit_counts": [[1,0],[0,0]],
+  "step": 32,
+  "cells_width": 3,
+  "cells_height": 2,
+  "terrain": [
+    [
+      "buildable",
+      "water",
+      "buildable"
+    ],
+    [
+      "buildable",
+      "lava",
+      "buildable"
+    ]
+  ],
+  "visible": [
+    [
+      true,
+      false,
+      false
+    ],
+    [
+      false,
+      true,
+      false
+    ]
+  ],
+  "explored": [
+    [
+      true,
+      true,
+      false
+    ],
+    [
+      false,
+      true,
+      false
+    ]
+  ],
+  "resource_counts": [
+    [
+      12,
+      3,
+      0
+    ],
+    [
+      0,
+      1,
+      0
+    ]
+  ],
+  "building_counts": [
+    [
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0
+    ]
+  ],
+  "unit_counts": [
+    [
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
   "building_count": 3,
   "unit_count": 1,
-  "resource_count": 8416
+  "resource_count": 16,
+  "surface": {
+    "topology": "cube_sphere",
+    "face_size": 32
+  }
 }
 ```
 
 **GET /world/planets/{planet_id}/scene**
 - 说明: 行星局部场景读模型（需认证）
 - 说明补充:
-  - 用于大地图视窗渲染，只返回指定窗口内的地形、迷雾、建筑、单位、资源
-  - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `bounds`
+  - 用于大地图视窗渲染，返回指定图集窗口内的地形、迷雾、实体；传入球面邻域参数时另返回跨面补片并合并实体
+  - 未发现行星只返回 `planet_id` / `discovered=false` / `map_width` / `map_height` / `surface` / `bounds`
   - 只要目标行星 runtime 已加载，就会返回该行星窗口内的实时迷雾和实体，不要求它是 active planet
   - 若目标行星已发现但 runtime 尚未加载，当前仅返回静态 `terrain` / `environment` / `bounds`，不返回迷雾与实体明细
-  - 当前服务端会对窗口做裁剪：`width` / `height` 默认 `160`，最大 `256`；超出地图边界时会自动回收至合法范围
+  - 当前服务端会对窗口做裁剪：`width` / `height` 默认 `160`，最大 `257`；超出地图边界时会自动回收至合法范围
 - 查询参数:
-  - `x` / `y`: 场景窗口左上角坐标
-  - `width` / `height`: 场景窗口尺寸
+  - `x` / `y`: 场景窗口左上角图集坐标
+  - `width` / `height`: 图集窗口尺寸（默认 160，最大 257）
+  - `near_x` / `near_y` / `radius`: 可选球面邻域中心及图距离半径；radius 为 0..128，非零时中心须为有效图集地格。非法中心或半径返回 400
 - 响应字段:
-  - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `tick`
-  - `bounds`: 本次实际返回的窗口范围，字段为 `x` / `y` / `width` / `height`
+  - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `surface` / `tick`
+  - `bounds`: 本次实际返回的主图集窗口范围，字段为 `x` / `y` / `width` / `height`
+  - `surface_patches`: 可选跨面补片数组，每片独立返回 `bounds/terrain/visible/explored`。未探索地形为 `unknown`，补片资源仅在已探索格返回；实体合并到主响应并去重
   - `terrain`: 当前窗口内的地形切片
   - `visible` / `explored`: 当前窗口内的迷雾切片
   - `buildings` / `units` / `resources`: 当前窗口内可见实体
   - `buildings` 为 `model.Building` 直出：传送带类建筑（`conveyor_belt_*`）携带 `conveyor`（`input` / `output` / `max_stack` / `throughput`），其中 `conveyor.buffer` 为带内物品堆数组（`item_id` / `quantity`，队首 = 即将送出的一端，前端物流动画依赖该字段）；采集类建筑 `runtime.functions.collect.resource_kind` 为正在采集的资源种类（由服务端按脚下矿脉同步）
   - `resources[]` 中 `remaining=0`（或 `max_amount=0`）的资源点会携带 `depleted: true` 标记；枯竭资源点仍保留在输出中（前端可淡化显示），且不阻碍建造——任何建筑都可直接建在枯竭点上，`requires_resource_node` 的采集建筑建在枯竭点上则采不到资源
   - `building_count` / `unit_count` / `resource_count`: 当前整颗行星的可见实体总数或资源总数，便于前端补充概览信息
-- 响应示例:
+- 响应示例（独立 N=32 小型测试星球，图集 96×64；不是默认 N=816 的地图）:
 ```json
 {
   "planet_id": "planet-1-1",
@@ -737,24 +879,55 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "name": "Planet-1-1",
   "discovered": true,
   "kind": "rocky",
-  "map_width": 2000,
-  "map_height": 2000,
+  "map_width": 96,
+  "map_height": 64,
   "tick": 4059,
   "bounds": {
     "x": 0,
     "y": 0,
-    "width": 96,
-    "height": 96
+    "width": 2,
+    "height": 2
   },
-  "terrain": [["buildable","water"],["buildable","lava"]],
-  "visible": [[true,false],[false,true]],
-  "explored": [[true,true],[false,true]],
+  "terrain": [
+    [
+      "buildable",
+      "water"
+    ],
+    [
+      "buildable",
+      "lava"
+    ]
+  ],
+  "visible": [
+    [
+      true,
+      false
+    ],
+    [
+      false,
+      true
+    ]
+  ],
+  "explored": [
+    [
+      true,
+      true
+    ],
+    [
+      false,
+      true
+    ]
+  ],
   "buildings": {},
   "units": {},
   "resources": [],
   "building_count": 0,
   "unit_count": 0,
-  "resource_count": 8416
+  "resource_count": 8416,
+  "surface": {
+    "topology": "cube_sphere",
+    "face_size": 32
+  }
 }
 ```
 
@@ -1068,8 +1241,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `world_units` / `warfare`
 - 响应字段:
   - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `combat_range` / `power_range` / `icon_key` / `color`
-  - `buildings[].combat_range`：可选，战斗射程（tile 曼哈顿距离），仅有战斗能力的建筑（如 `gauss_turret`、`sr_plasma_turret`、`jammer_tower`）携带；与结算同源，取自该建筑 runtime 定义 `functions.combat.range`
-  - `buildings[].power_range`：可选，无线供电覆盖半径（tile 曼哈顿距离），仅无线供电建筑（`tesla_tower`、`wireless_power_tower`、`satellite_substation`）携带；与电网结算同源，取自该建筑 runtime 定义 `functions.power_grid.wireless_range`
+  - `buildings[].combat_range`：可选，战斗射程（球面四邻接地格距离），仅有战斗能力的建筑（如 `gauss_turret`、`sr_plasma_turret`、`jammer_tower`）携带；与结算同源，取自该建筑 runtime 定义 `functions.combat.range`
+  - `buildings[].power_range`：可选，无线供电覆盖半径（球面四邻接地格距离），仅无线供电建筑（`tesla_tower`、`wireless_power_tower`、`satellite_substation`）携带；与电网结算同源，取自该建筑 runtime 定义 `functions.power_grid.wireless_range`
   - `items`：物品元数据，包含 `id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `icon_key` / `color`
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to` / `max_level` / `icon_key` / `color`
@@ -2003,3 +2176,17 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   }
 }
 ```
+
+### 球面接缝场景查询
+
+`GET /world/planets/{planet_id}/scene` 新增可选整数 `near_x`、`near_y`、`radius`。radius 为 0..128；非零时须同时提供有效图集中心坐标。原 x/y/width/height 仍裁剪图集矩形。响应增加 `surface_patches: [{bounds, terrain, visible, explored}]`；每片采用独立图集坐标，实体集合合并至主响应并去重，可见性规则同主窗口。scene、overview、planet、planet summary、state summary、agent briefing、fog 与世界快照均返回 `surface` 元数据。
+
+### 球面路径规划
+
+`GET /world/planets/{planet_id}/path?unit_id=U&target_x=X&target_y=Y&stop_range=R`：为自己的单位规划已探索地表上的最短可行路径。R 可选，默认 0，允许 0..128；非零时在目标球面图距离 R 内停下。非法参数/非自己的单位返回 400。最多规划 512 步；目标未探索或预算内不可达时 `reachable=false, distance=-1, path=[], waypoints=[]`，不泄漏未知地图。
+
+响应：`planet_id`、`surface`、`reachable`、`distance`、`path`（含起点的逐格路线）、`waypoints`（不含起点，按单位 move_range 切分）。规划只使用已探索地形和可见建筑；实际移动命令仍校验当前权威障碍，局势变化时客户端重新查询。
+
+跨面补片的未探索地形返回 `unknown`，补片资源仅在已探索格返回。scene 单窗口尺寸上限为 257（容纳半径 128 的完整中心行）。
+
+`overview.step` 会向下选择不超过请求值的 face_size 约数，保证缩略图分箱不混合不同立方体面；客户端须使用响应的实际 step。

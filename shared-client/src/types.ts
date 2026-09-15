@@ -674,6 +674,7 @@ export interface PlayerState {
 }
 
 export interface StateSummary {
+  surface: SurfaceMetadata;
   tick: number;
   players: Record<string, PlayerState>;
   winner?: string;
@@ -731,6 +732,7 @@ export interface EnemyForceView {
  * Collapses summary + stats + war + fleets + alerts + command surface.
  */
 export interface AgentBriefing {
+  surface: SurfaceMetadata;
   tick: number;
   active_planet_id: string;
   map_width: number;
@@ -785,7 +787,11 @@ export interface PlanetResource {
   cluster_id?: string;
 }
 
+export interface SurfaceMetadata { topology: 'cube_sphere'; face_size: number }
+export interface SurfacePatch { bounds: SceneBounds; terrain?: string[][]; visible?: boolean[][]; explored?: boolean[][] }
+
 export interface PlanetSummaryView {
+  surface: SurfaceMetadata;
   planet_id: string;
   system_id?: string;
   name?: string;
@@ -800,6 +806,7 @@ export interface PlanetSummaryView {
 }
 
 export interface PlanetView {
+  surface: SurfaceMetadata;
   planet_id: string;
   system_id?: string;
   name?: string;
@@ -825,6 +832,8 @@ export interface SceneBounds {
 }
 
 export interface PlanetSceneView {
+  surface_patches?: SurfacePatch[];
+  surface: SurfaceMetadata;
   planet_id: string;
   system_id?: string;
   name?: string;
@@ -847,6 +856,7 @@ export interface PlanetSceneView {
 }
 
 export interface PlanetOverviewView {
+  surface: SurfaceMetadata;
   planet_id: string;
   system_id?: string;
   name?: string;
@@ -883,6 +893,7 @@ export interface PlanetInspectView {
 }
 
 export interface FogMapView {
+  surface: SurfaceMetadata;
   planet_id: string;
   discovered: boolean;
   map_width: number;
@@ -2099,3 +2110,5 @@ export interface RollbackResponse {
   digest: ReplayDigest;
   notes?: string[];
 }
+
+export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; path: Position[]; waypoints: Position[] }

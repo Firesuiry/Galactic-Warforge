@@ -355,7 +355,7 @@ func interstellarDistance(maps *mapmodel.Universe, origin, target *interstellarS
 		return 0
 	}
 	if origin.planetID == target.planetID {
-		return model.ManhattanDist(origin.building.Position, target.building.Position)
+		return origin.world.SurfaceDistance(origin.building.Position, target.building.Position)
 	}
 	if maps == nil {
 		return 10

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ConveyorDirection } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
-import { tileNormal } from './projection';
+import { tileNormal, tileFrame, surfaceTileSize } from './projection';
 
 export interface ActivityOptions {
   paused?: boolean;
@@ -117,7 +117,7 @@ export class IndustrialActivity {
   }
 
   update(data: PlanetThreeData) {
-    const width = data.planet.map_width, height = data.planet.map_height;
+    const faceSize = data.planet.surface.face_size;
     const tick = data.runtime?.tick ?? ('tick' in data.planet ? data.planet.tick as number : undefined);
     const newSnapshot = tick !== this.lastTick;
     const nextObservations = new Map<string, THREE.Vector3>();
@@ -129,12 +129,11 @@ export class IndustrialActivity {
     }
     const indices = new Map<string, number>();
     this.entries = sources.map(source => {
-      const normal = tileNormal(source.position, width, height);
-      const east = new THREE.Vector3(normal.z, 0, -normal.x).normalize();
-      const south = new THREE.Vector3().crossVectors(east, normal).normalize();
+      const normal = tileNormal(source.position, faceSize);
+      const { east, south } = tileFrame(source.position, faceSize);
       const tangent = source.direction === 'north' ? south.negate() : source.direction === 'south' ? south
         : source.direction === 'west' ? east.negate() : east;
-      const size = Math.min(2 * Math.PI * this.radius / width * Math.max(.025, Math.sqrt(1 - normal.y * normal.y)), Math.PI * this.radius / height);
+      const size = surfaceTileSize(this.radius, faceSize);
       const key = `${source.position.x}:${source.position.y}`;
       const stackIndex = indices.get(key) ?? 0;
       if (source.kind === 'cargo') indices.set(key, stackIndex + 1);

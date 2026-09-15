@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 )
 
 // DefaultAgentBriefingAlertLimit is the default number of recent production
@@ -18,6 +19,7 @@ type AgentBriefing struct {
 	ActivePlanetID    string                   `json:"active_planet_id"`
 	MapWidth          int                      `json:"map_width"`
 	MapHeight         int                      `json:"map_height"`
+	Surface           surface.Metadata         `json:"surface"`
 	Winner            string                   `json:"winner,omitempty"`
 	VictoryReason     string                   `json:"victory_reason,omitempty"`
 	VictoryRule       string                   `json:"victory_rule,omitempty"`
@@ -54,14 +56,14 @@ type AgentBriefingTech struct {
 
 // AgentBriefingFleet is a compact own-fleet card for the briefing surface.
 type AgentBriefingFleet struct {
-	FleetID    string             `json:"fleet_id"`
-	SystemID   string             `json:"system_id"`
-	Formation  string             `json:"formation"`
-	State      string             `json:"state"`
-	UnitCount  int                `json:"unit_count"`
-	Target     *model.FleetTarget `json:"target,omitempty"`
-	InTransit  bool               `json:"in_transit,omitempty"`
-	TransitTo  string             `json:"transit_to,omitempty"`
+	FleetID   string             `json:"fleet_id"`
+	SystemID  string             `json:"system_id"`
+	Formation string             `json:"formation"`
+	State     string             `json:"state"`
+	UnitCount int                `json:"unit_count"`
+	Target    *model.FleetTarget `json:"target,omitempty"`
+	InTransit bool               `json:"in_transit,omitempty"`
+	TransitTo string             `json:"transit_to,omitempty"`
 }
 
 // AgentBriefing assembles the one-shot agent/GUI briefing snapshot.
@@ -113,6 +115,7 @@ func (ql *Layer) AgentBriefing(
 	briefing.ActivePlanetID = ws.PlanetID
 	briefing.MapWidth = ws.MapWidth
 	briefing.MapHeight = ws.MapHeight
+	briefing.Surface = (surface.Grid{Size: ws.MapWidth / 3}).Metadata()
 	briefing.Winner = victory.WinnerID
 	briefing.VictoryReason = victory.Reason
 	briefing.VictoryRule = victory.VictoryRule

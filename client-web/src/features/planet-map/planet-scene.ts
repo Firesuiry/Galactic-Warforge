@@ -1,3 +1,4 @@
+import { surfaceOffset } from '@shared/surface';
 /**
  * 行星地图 Pixi 场景：底图纹理精灵/分块地表 + 实体节点树 + 轻量动效 ticker。
  *
@@ -76,7 +77,7 @@ import {
   canonicalTileIndex,
   getBuildingCatalogEntry,
   getBuildingFootprint,
-  isWrapAxisEnabled,
+  resolveSelectionPosition,
   toTilePoint,
   wrapMod,
   type PlanetRenderView,
@@ -860,8 +861,8 @@ export class PlanetScene {
     if (modeChanged) {
       this.rebuildEntityNodes();
       this.redrawStaticLayers();
-      this.redrawInteraction();
     }
+    this.redrawInteraction();
   }
 
   /** 相机输入：平移只动 world 容器；tileSize（缩放档）变化才触发实体按新尺寸重建。 */
@@ -963,8 +964,8 @@ export class PlanetScene {
     let nextWrapX = false;
     let nextWrapY = false;
     if (planet && !this.overviewMode) {
-      nextWrapX = isWrapAxisEnabled(planet.map_width * this.tileSize, this.app.screen.width);
-      nextWrapY = isWrapAxisEnabled(planet.map_height * this.tileSize, this.app.screen.height);
+      nextWrapX = false;
+      nextWrapY = false;
     }
     const nextCutX = nextWrapX ? Math.floor(-this.offsetX / this.tileSize) : 0;
     const nextCutY = nextWrapY ? Math.floor(-this.offsetY / this.tileSize) : 0;
@@ -2455,8 +2456,7 @@ export class PlanetScene {
       const blockedSet = new Set(assessment.blockedTiles.map((tile) => `${tile.x},${tile.y}`));
       for (let dy = 0; dy < assessment.footprint.height; dy += 1) {
         for (let dx = 0; dx < assessment.footprint.width; dx += 1) {
-          const tx = hoveredTile.x + dx;
-          const ty = hoveredTile.y + dy;
+          const { x: tx, y: ty } = surfaceOffset(hoveredTile,dx,dy,(this.baseInput?.planet.map_width ?? 3)/3);
           const blocked = blockedSet.has(`${tx},${ty}`);
           const screenX = this.pxTileX(tx);
           const screenY = this.pxTileY(ty);
@@ -2525,7 +2525,8 @@ export class PlanetScene {
       return;
     }
 
-    const highlightTile = selected ? toTilePoint(selected.position) : hoveredTile;
+    const selectedPosition = this.baseInput ? resolveSelectionPosition(this.baseInput.planet, selected) : null;
+    const highlightTile = selected ? selectedPosition && toTilePoint(selectedPosition) : hoveredTile;
     if (!highlightTile) {
       return;
     }

@@ -1,3 +1,4 @@
+import { surfaceOffset } from '@shared/surface';
 import type {
   AlertEntry,
   Building,
@@ -79,18 +80,15 @@ export interface PlanetCameraSnapshot {
 }
 
 export interface ViewportTileBounds {
-  /**
-   * 可见 tile 范围（unwrapped 坐标系）：环绕轴上可能 < 0 或 ≥ map 尺寸，
-   * 用 wrapMod/canonicalTileIndex 换算回真实 tile；非环绕轴恒在 [0, map-1] 内。
-   */
+  /** 可见展开图坐标范围，限制在地图内；跨面邻接由球面拓扑决定。 */
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
-  /** 视口中心（真实 tile 坐标，环绕轴已取模回 [0, map)）。 */
+  /** 视口中心的展开图坐标。 */
   centerX: number;
   centerY: number;
-  /** 该轴是否启用环绕渲染（世界像素 > 视口像素）。缺省视为 false（旧调用方兼容）。 */
+  /** 渲染批次的轴环绕标志；六面展开图始终设为 false。 */
   wrapX?: boolean;
   wrapY?: boolean;
   mapWidth?: number;
@@ -123,6 +121,8 @@ function hasSceneBounds(planet: PlanetRenderView): planet is PlanetSceneView {
 
 export function getTerrainTile(planet: PlanetRenderView, x: number, y: number) {
   if (hasSceneBounds(planet)) {
+    const patch = planet.surface_patches?.find(p => x >= p.bounds.x && y >= p.bounds.y && x < p.bounds.x + p.bounds.width && y < p.bounds.y + p.bounds.height);
+    if (patch) return patch.terrain?.[y-patch.bounds.y]?.[x-patch.bounds.x] ?? "unknown";
     const localX = x - planet.bounds.x;
     const localY = y - planet.bounds.y;
     return planet.terrain?.[localY]?.[localX] ?? "unknown";
@@ -136,6 +136,8 @@ export function getFogState(
   y: number,
 ) {
   if (fog && "bounds" in fog) {
+    const patch = fog.surface_patches?.find(p => x >= p.bounds.x && y >= p.bounds.y && x < p.bounds.x + p.bounds.width && y < p.bounds.y + p.bounds.height);
+    if (patch) return {visible: Boolean(patch.visible?.[y-patch.bounds.y]?.[x-patch.bounds.x]), explored: Boolean(patch.explored?.[y-patch.bounds.y]?.[x-patch.bounds.x])};
     const localX = x - fog.bounds.x;
     const localY = y - fog.bounds.y;
     return {
@@ -195,15 +197,13 @@ export function getBuildingFootprint(building: Building) {
   };
 }
 
-export function tileContainsBuilding(building: Building, x: number, y: number) {
-  const { width, height } = getBuildingFootprint(building);
-  const origin = toTilePoint(building.position);
-  return (
-    x >= origin.x &&
-    x < origin.x + width &&
-    y >= origin.y &&
-    y < origin.y + height
-  );
+export function tileContainsBuilding(building: Building, x: number, y: number, faceSize: number) {
+  const {width,height}=getBuildingFootprint(building);
+  for(let dy=0;dy<height;dy++) for(let dx=0;dx<width;dx++) {
+    const tile=surfaceOffset(toTilePoint(building.position),dx,dy,faceSize);
+    if(tile.x===x&&tile.y===y)return true;
+  }
+  return false;
 }
 
 export function resolveSelectionAtTile(
@@ -212,7 +212,7 @@ export function resolveSelectionAtTile(
   y: number,
 ): SelectedEntity | null {
   const building = getBuildingList(planet).find((candidate) =>
-    tileContainsBuilding(candidate, x, y),
+    tileContainsBuilding(candidate, x, y, planet.map_width / 3),
   );
   if (building) {
     return {
@@ -247,6 +247,13 @@ export function resolveSelectionAtTile(
   }
 
   return null;
+}
+
+/** Resolve current authoritative coordinates; a missing entity has no selection marker. */
+export function resolveSelectionPosition(planet: PlanetRenderView, selection: SelectedEntity | null): Position | null {
+  if (!selection) return null;
+  if (selection.kind === 'tile') return selection.position;
+  return findSelectionEntity(planet, selection)?.position ?? null;
 }
 
 export function findSelectionEntity(
@@ -565,39 +572,9 @@ export function wrapMod(value: number, size: number) {
   return ((value % size) + size) % size;
 }
 
-/**
- * 单轴是否启用环绕渲染：世界像素大于视口像素时，相机无法看到全图，
- * 地图边缘会看到虚空（"墙"）；此时把对侧内容环绕贴过来形成完整地图。
- * 世界 ≤ 视口的轴整图可见，维持旧居中/钳位行为（视觉上本来就是完整地图）。
- */
-export function isWrapAxisEnabled(worldPx: number, viewportPx: number) {
-  return worldPx > viewportPx;
-}
-
-/**
- * 环绕轴相机偏移归一化：把任意偏移映射到等价区间 (margin - worldPx, margin]。
- * 归一化后视口最多跨越一条接缝（每轴最多看到一份副本），且偏移有界不会拖丢地图。
- */
-export function normalizeWrappedAxisOffset(worldPx: number, offset: number, margin = 32) {
-  if (worldPx <= 0) {
-    return offset;
-  }
-  let next = offset;
-  while (next > margin) {
-    next -= worldPx;
-  }
-  while (next <= margin - worldPx) {
-    next += worldPx;
-  }
-  return next;
-}
-
-/** 单轴相机偏移结算：环绕轴归一化（可无限平移、环绕显示），非环绕轴维持旧钳位。 */
-export function resolveCameraAxisOffset(worldPx: number, viewportPx: number, offset: number, margin = 32) {
-  if (isWrapAxisEnabled(worldPx, viewportPx)) {
-    return normalizeWrappedAxisOffset(worldPx, offset, margin);
-  }
-  return clampCameraAxisOffset(worldPx, viewportPx, offset);
+/** Camera movement in the cut atlas never wraps to an unrelated cube face. */
+export function resolveCameraAxisOffset(worldPx: number, viewportPx: number, offset: number) {
+  return clampCameraAxisOffset(worldPx,viewportPx,offset);
 }
 
 /**
@@ -617,9 +594,9 @@ export function getViewportTileBounds(
 ): ViewportTileBounds {
   const mapWidth = Math.max(planet.map_width, 0);
   const mapHeight = Math.max(planet.map_height, 0);
-  const wrapX = isWrapAxisEnabled(mapWidth * tileSize, viewportWidth);
-  const wrapY = isWrapAxisEnabled(mapHeight * tileSize, viewportHeight);
-  // 环绕轴保留 unwrapped 范围（可越界），非环绕轴维持旧钳位。
+  const wrapX = false;
+  const wrapY = false;
+  // 六面展开图的可见区域限制在 atlas 边界内。
   const minX = wrapX
     ? Math.floor(-camera.offsetX / tileSize)
     : clamp(Math.floor(-camera.offsetX / tileSize), 0, Math.max(mapWidth - 1, 0));

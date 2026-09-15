@@ -1,3 +1,5 @@
+import { surfaceOffset } from '@shared/surface';
+import { tileNormal, surfaceTileSize } from './projection';
 import * as THREE from 'three';
 import { getBuildingFootprint, getFogState } from '../model';
 import type { PlanetSurfaceData } from './terrain';
@@ -34,6 +36,13 @@ function grassGeometry() {
 export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius: number): THREE.Group {
   const group = new THREE.Group();
   group.name = 'non-interactive-surface-dressing';
+  if ('surface_patches' in planet && planet.surface_patches?.length) {
+    for (const patch of planet.surface_patches) {
+      const view = {...planet,...patch,surface_patches:undefined};
+      group.add(createSurfaceDressing({planet:view,fog:view},radius));
+    }
+  }
+
   if (!planet.terrain?.length || planet.map_width < 1 || planet.map_height < 1) return group;
   const bounds = 'bounds' in planet ? planet.bounds : { x: 0, y: 0 };
   const visibility = fog ?? ('bounds' in planet ? planet : undefined);
@@ -41,7 +50,8 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
   for (const building of Object.values(planet.buildings ?? {})) {
     const footprint = getBuildingFootprint(building);
     for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
-      occupied.add(`${Math.round(building.position.x) + dx}:${Math.round(building.position.y) + dy}`);
+      const cell=surfaceOffset(building.position,dx,dy,planet.surface.face_size);
+      occupied.add(`${cell.x}:${cell.y}`);
     }
   }
   for (const entity of [...Object.values(planet.units ?? {}), ...(planet.resources ?? [])]) {
@@ -75,13 +85,8 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
       if (hash(cell.x, cell.y, i + 80) > density) continue;
       const offsetX = (hash(cell.x, cell.y, i * 7) - 0.5) * 0.72;
       const offsetY = (hash(cell.x, cell.y, i * 7 + 1) - 0.5) * 0.72;
-      const y = THREE.MathUtils.clamp(1 - 2 * (cell.y + offsetY + 0.5) / planet.map_height, -1, 1);
-      const longitude = (cell.x + offsetX + 0.5) / planet.map_width * Math.PI * 2;
-      const latitudeRadius = Math.sqrt(Math.max(0, 1 - y * y));
-      normal.set(-Math.cos(longitude) * latitudeRadius, y, Math.sin(longitude) * latitudeRadius);
-      const eastSpan = Math.PI * 2 * radius / planet.map_width * latitudeRadius;
-      const northSpan = 2 * radius / planet.map_height / Math.max(latitudeRadius, 0.05);
-      const tileSize = Math.min(eastSpan, northSpan);
+      normal.copy(tileNormal({x:cell.x+offsetX,y:cell.y+offsetY},planet.surface.face_size));
+      const tileSize = surfaceTileSize(radius, planet.surface.face_size);
       const variation = hash(cell.x, cell.y, i * 7 + 2);
       const size = tileSize * (cell.rock ? 0.075 + variation * 0.1 : 0.018 + variation * 0.024);
       const grass = cell.grass && i !== 0;

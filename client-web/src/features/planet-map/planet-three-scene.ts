@@ -1,3 +1,5 @@
+import { resolveSelectionPosition } from './model';
+import { surfaceFace, surfaceOffset } from '@shared/surface';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -7,7 +9,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { createSpace } from './three/space';
-import { tileNormal, normalTile } from './three/projection';
+import { tileNormal, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -137,14 +139,14 @@ export class PlanetThreeScene {
   setData(data: PlanetThreeData) {
     this.data = data;
     updatePlanetSurface(this.surface, data);
-    const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? data.planet.bounds : null]);
+    const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? [data.planet.bounds,data.planet.surface_patches] : null]);
     if (localKey !== this.localSurfaceKey) {
       if (this.localSurface) { this.world.remove(this.localSurface); this.localSurface.geometry.dispose(); }
       this.localSurface = createLocalSurface(data.planet, RADIUS, this.surface.material);
       if (this.localSurface) this.world.add(this.localSurface);
       this.localSurfaceKey = localKey;
     }
-    const dressingSignature = JSON.stringify([data.planet.terrain, 'bounds' in data.planet ? data.planet.bounds : null,
+    const dressingSignature = JSON.stringify([data.planet.terrain, 'bounds' in data.planet ? [data.planet.bounds,data.planet.surface_patches] : null,
       Object.values(data.planet.buildings ?? {}).map(b => [b.position, getBuildingFootprint(b)]), data.fog?.visible]);
     if (dressingSignature !== this.dressingSignature) {
       this.dressing?.traverse(o => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
@@ -168,16 +170,16 @@ export class PlanetThreeScene {
 
   private normal(x: number, y: number) {
     const p = this.data!.planet;
-    return tileNormal({ x, y }, p.map_width, p.map_height);
+    return tileNormal({ x, y }, p.surface.face_size);
   }
 
   private tileFromNormal(n: THREE.Vector3): TilePoint | null {
-    return this.data ? normalTile(n, this.data.planet.map_width, this.data.planet.map_height) : null;
+    return this.data ? normalTile(n, this.data.planet.surface.face_size) : null;
   }
 
   private tileScale() {
     const p = this.data?.planet;
-    return p ? Math.min(2 * Math.PI * RADIUS / p.map_width, Math.PI * RADIUS / p.map_height) : 1;
+    return p ? surfaceTileSize(RADIUS, p.surface.face_size) : 1;
   }
 
   private known(position: TilePoint) {
@@ -228,15 +230,9 @@ export class PlanetThreeScene {
   private place(group: THREE.Group, position: Position | TilePoint, layer: string, scale = 1) {
     const n = this.normal(position.x, position.y);
     group.position.copy(n).multiplyScalar(RADIUS + this.tileScale() * 0.025);
-    const east = this.normal(position.x + .001, position.y).sub(n).normalize();
-    const south = new THREE.Vector3().crossVectors(east, n).normalize();
+    const { east, south } = tileFrame(position, this.data!.planet.surface.face_size);
     group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, n, south));
-    // Longitude cells shrink near the poles. Fit models within their authoritative tile.
-    const p = this.data!.planet;
-    const eastSpan = 2 * Math.PI * RADIUS / p.map_width * Math.max(.025, Math.sqrt(Math.max(0, 1 - Math.pow(1 - 2 * (position.y + .5) / p.map_height, 2))));
-    const latitudeRadius = Math.sqrt(Math.max(.0001, 1 - Math.pow(1 - 2 * (position.y + .5) / p.map_height, 2)));
-    const northSpan = 2 * RADIUS / (p.map_height * latitudeRadius);
-    const size = Math.min(eastSpan, northSpan);
+    const size = this.tileScale();
     group.scale.multiplyScalar(size * scale);
     group.userData.tile = { x: Math.round(position.x), y: Math.round(position.y) };
     this.layer(layer).add(group);
@@ -245,7 +241,7 @@ export class PlanetThreeScene {
   private buildEntities() {
     if (!this.data) return;
     const { planet, playerId, runtime, networks } = this.data;
-    const dimensions = [planet.map_width, planet.map_height];
+    const dimensions = [planet.surface.face_size];
     const staticKeys = new Set<string>();
     // Only rendering inputs enter the signature. Production inventories, health,
     // research progress and network allocation do not change a model's structure.
@@ -260,9 +256,17 @@ export class PlanetThreeScene {
     for (const building of Object.values(planet.buildings ?? {})) {
       if (!(building.owner_id === playerId || this.visible(building.position))) continue;
       const footprint = getBuildingFootprint(building);
-      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint], () => {
+      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint, building.conveyor?.output], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
-        this.place(group, { x: building.position.x + (footprint.width - 1) / 2, y: building.position.y + (footprint.height - 1) / 2 }, 'buildings');
+        this.place(group, building.position, 'buildings');
+        const direction = building.conveyor?.output;
+        if(direction && direction !== 'auto') group.rotateY(({east:0,south:-Math.PI/2,west:Math.PI,north:Math.PI/2})[direction]);
+        const center = new THREE.Vector3();
+        for(let y=0;y<footprint.height;y++) for(let x=0;x<footprint.width;x++) {
+          const cell=surfaceOffset(building.position,x,y,planet.surface.face_size);
+          center.add(this.normal(cell.x,cell.y));
+        }
+        group.position.copy(center.normalize()).multiplyScalar(RADIUS+this.tileScale()*.025);
         group.userData.tile = { x: Math.round(building.position.x), y: Math.round(building.position.y) };
         return group;
       });
@@ -348,7 +352,7 @@ export class PlanetThreeScene {
 
   private syncLinks(layer: string, color: string, links: { from: Position; to: Position }[]) {
     const visible = links.filter(link => this.known(link.from) && this.known(link.to));
-    const signature = JSON.stringify([this.data!.planet.map_width, this.data!.planet.map_height,
+    const signature = JSON.stringify([this.data!.planet.surface.face_size,
       visible.map(link => [link.from.x, link.from.y, link.to.x, link.to.y])]);
     if (this.linkSignatures.get(layer) === signature) return;
     this.linkSignatures.set(layer, signature);
@@ -377,28 +381,37 @@ export class PlanetThreeScene {
     const add = (tile: TilePoint, color: string) => {
       const points: THREE.Vector3[] = [];
       const offsets = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5], [-0.5, -0.5]];
-      offsets.forEach(([x, y]) => points.push(this.normal(tile.x + x, tile.y + y).multiplyScalar(RADIUS + this.tileScale() * 0.06)));
+      offsets.forEach(([x, y]) => points.push(tileNormal({ x: tile.x + x, y: tile.y + y }, this.data!.planet.surface.face_size, surfaceFace(tile, this.data!.planet.surface.face_size)).multiplyScalar(RADIUS + this.tileScale() * 0.06)));
       this.marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, depthTest: true })));
     };
-    if (this.interaction.layers.selection && this.interaction.selected) add(this.interaction.selected.position, '#fff1a8');
+    const selectedPosition = resolveSelectionPosition(this.data.planet, this.interaction.selected);
+    if (this.interaction.layers.selection && selectedPosition) add(selectedPosition, '#fff1a8');
     if (this.interaction.hoveredTile) {
       const tile = this.interaction.hoveredTile;
       if (this.interaction.interactionMode.kind === 'build') {
         const assessment = assessBuildTiles(this.data.catalog, this.interaction.interactionMode.buildingType, this.data.planet, { ...tile, z: 0 });
         const footprint = assessment?.footprint ?? { width: 1, height: 1 };
         for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
-          const p = { x: tile.x + dx, y: tile.y + dy };
+          const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);
           add(p, assessment?.buildable && this.visible(p) ? '#5ef7a1' : '#ff6666');
         }
       } else add(tile, this.interaction.interactionMode.kind === 'attack' ? '#ff6666' : '#5ef7dc');
     }
     if (this.interaction.layers.grid && 'bounds' in this.data.planet) {
-      const b = this.data.planet.bounds;
+      for (const b of [this.data.planet.bounds, ...(this.data.planet.surface_patches ?? []).map(p=>p.bounds)]) {
       const stride = Math.max(1, Math.ceil(Math.max(b.width, b.height) / 64));
       const points: THREE.Vector3[] = [];
-      for (let y = b.y; y <= b.y + b.height; y += stride) for (let x = b.x; x < b.x + b.width; x += stride) points.push(this.normal(x - 0.5, y - 0.5).multiplyScalar(RADIUS + 0.001), this.normal(Math.min(x + stride, b.x + b.width) - 0.5, y - 0.5).multiplyScalar(RADIUS + 0.001));
-      for (let x = b.x; x <= b.x + b.width; x += stride) for (let y = b.y; y < b.y + b.height; y += stride) points.push(this.normal(x - 0.5, y - 0.5).multiplyScalar(RADIUS + 0.001), this.normal(x - 0.5, Math.min(y + stride, b.y + b.height) - 0.5).multiplyScalar(RADIUS + 0.001));
+      const size = this.data.planet.surface.face_size;
+      for (let y = b.y; y < b.y + b.height; y += stride) for (let x = b.x; x < b.x + b.width; x += stride) {
+        const face = surfaceFace({ x, y }, size);
+        const right = Math.min(x + stride, (face % 3 + 1) * size, b.x + b.width);
+        const bottom = Math.min(y + stride, (Math.floor(face / 3) + 1) * size, b.y + b.height);
+        const corners = [[x-.5,y-.5],[right-.5,y-.5],[right-.5,bottom-.5],[x-.5,bottom-.5]];
+        const normals = corners.map(([cx,cy]) => tileNormal({x:cx,y:cy}, this.data!.planet.surface.face_size,face).multiplyScalar(RADIUS+.001));
+        for(let i=0;i<4;i++) points.push(normals[i],normals[(i+1)%4]);
+      }
       this.marks.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: '#85bec6', transparent: true, opacity: 0.16 })));
+      }
     }
   }
 
@@ -520,7 +533,13 @@ export class PlanetThreeScene {
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       for (const { group, target } of this.moving.values()) {
         const radius = target.length();
-        group.position.lerp(target, 1 - Math.exp(-dt * 12)).normalize().multiplyScalar(radius);
+        const amount = 1 - Math.exp(-dt * 12);
+        const from = group.position.clone().normalize(), to = target.clone().normalize();
+        const rotation = new THREE.Quaternion().setFromUnitVectors(from, to);
+        rotation.slerp(new THREE.Quaternion(), 1 - amount);
+        group.position.copy(from.applyQuaternion(rotation)).multiplyScalar(radius);
+        const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(group.quaternion);
+        group.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(currentUp, group.position.clone().normalize()));
       }
       this.composer.render();
     }

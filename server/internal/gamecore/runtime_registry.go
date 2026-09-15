@@ -6,6 +6,7 @@ import (
 	"siliconworld/internal/config"
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 	"siliconworld/internal/terrain"
 )
 
@@ -40,7 +41,7 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	if !ok || planet == nil {
 		return nil
 	}
-	ws := model.NewWorldState(planet.ID, planet.Width, planet.Height)
+	ws := model.NewWorldState(planet.ID, planet.FaceSize)
 	ws.Players = players
 	applyPlanetTerrain(ws, planet)
 	applyPlanetResources(ws, planet)
@@ -155,7 +156,7 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 			return positions
 		}
 	}
-	positions := computeStartPositions(&config.Config{Players: players}, ws.MapWidth, ws.MapHeight)
+	positions := computeStartPositions(&config.Config{Players: players}, ws.Surface())
 	mineDist := spawnMineDistance(players)
 	for i := range positions {
 		positions[i] = relocateSpawnNearResources(ws, positions[i], mineDist)
@@ -163,7 +164,7 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 	return positions
 }
 
-// spawnMineDistance is the max Manhattan distance allowed between a spawn and
+// spawnMineDistance is the max surface graph distance allowed between a spawn and
 // the nearest resource node, leaving room for the executor's adjacent tile.
 func spawnMineDistance(players []config.PlayerConfig) int {
 	operateRange := 0
@@ -186,55 +187,38 @@ func spawnMineDistance(players []config.PlayerConfig) int {
 }
 
 // relocateSpawnNearResources nudges an auto spawn to the closest tile that
-// keeps the edge margin and has a resource node within dist. The spawn area
+// has a resource node within dist. The spawn area
 // is flattened afterwards, so the node's own terrain does not matter here.
 func relocateSpawnNearResources(ws *model.WorldState, start model.Position, dist int) model.Position {
 	if ws == nil {
 		return start
 	}
-	if hasResourceNodeWithin(ws, start, dist) {
-		return start
-	}
-	for r := 1; r <= spawnResourceSearchRadius; r++ {
-		for dy := -r; dy <= r; dy++ {
-			for dx := -r; dx <= r; dx++ {
-				if dx != -r && dx != r && dy != -r && dy != r {
-					continue
-				}
-				x, y := start.X+dx, start.Y+dy
-				if x < spawnEdgeMargin || y < spawnEdgeMargin || x > ws.MapWidth-1-spawnEdgeMargin || y > ws.MapHeight-1-spawnEdgeMargin {
-					continue
-				}
-				if hasResourceNodeWithin(ws, model.Position{X: x, Y: y}, dist) {
-					return model.Position{X: x, Y: y}
-				}
-			}
+	for _, tile := range (surface.Grid{Size: ws.MapWidth / 3}).Disc(surface.Tile{X: start.X, Y: start.Y}, spawnResourceSearchRadius) {
+		pos := model.Position{X: tile.X, Y: tile.Y}
+		if hasResourceNodeWithin(ws, pos, dist) && spawnHasOpenNeighbors(ws, pos) {
+			return pos
 		}
 	}
 	return start
 }
 
-// hasResourceNodeWithin reports whether a resource node sits within Manhattan
+// Keep early wind/lab placement possible without moving or deleting natural ore.
+func spawnHasOpenNeighbors(ws *model.WorldState, pos model.Position) bool {
+	free := 0
+	for _, neighbor := range ws.SurfaceNeighbors(pos) {
+		if ws.Grid[neighbor.Y][neighbor.X].ResourceNodeID == "" {
+			free++
+		}
+	}
+	return free >= 2
+}
+
+// hasResourceNodeWithin reports whether a resource node sits within surface graph
 // dist of center.
 func hasResourceNodeWithin(ws *model.WorldState, center model.Position, dist int) bool {
-	for dy := -dist; dy <= dist; dy++ {
-		y := center.Y + dy
-		if y < 0 || y >= ws.MapHeight {
-			continue
-		}
-		absDy := dy
-		if absDy < 0 {
-			absDy = -absDy
-		}
-		span := dist - absDy
-		for dx := -span; dx <= span; dx++ {
-			x := center.X + dx
-			if x < 0 || x >= ws.MapWidth {
-				continue
-			}
-			if ws.Grid[y][x].ResourceNodeID != "" {
-				return true
-			}
+	for _, tile := range (surface.Grid{Size: ws.MapWidth / 3}).Disc(surface.Tile{X: center.X, Y: center.Y}, dist) {
+		if ws.Grid[tile.Y][tile.X].ResourceNodeID != "" {
+			return true
 		}
 	}
 	return false
@@ -269,34 +253,15 @@ func ensureStarterResourceNodes(ws *model.WorldState, planet *mapmodel.Planet, c
 }
 
 // hasResourceKindWithin reports whether a node of the given kind sits within
-// Manhattan dist of center.
+// surface graph dist of center.
 func hasResourceKindWithin(ws *model.WorldState, center model.Position, dist int, kind string) bool {
 	if ws == nil || kind == "" {
 		return false
 	}
-	for dy := -dist; dy <= dist; dy++ {
-		y := center.Y + dy
-		if y < 0 || y >= ws.MapHeight {
-			continue
-		}
-		absDy := dy
-		if absDy < 0 {
-			absDy = -absDy
-		}
-		span := dist - absDy
-		for dx := -span; dx <= span; dx++ {
-			x := center.X + dx
-			if x < 0 || x >= ws.MapWidth {
-				continue
-			}
-			nodeID := ws.Grid[y][x].ResourceNodeID
-			if nodeID == "" {
-				continue
-			}
-			node := ws.Resources[nodeID]
-			if node != nil && node.Kind == kind {
-				return true
-			}
+	for _, tile := range (surface.Grid{Size: ws.MapWidth / 3}).Disc(surface.Tile{X: center.X, Y: center.Y}, dist) {
+		node := ws.Resources[ws.Grid[tile.Y][tile.X].ResourceNodeID]
+		if node != nil && node.Kind == kind {
+			return true
 		}
 	}
 	return false
@@ -308,43 +273,18 @@ func findOpenTileForResource(ws *model.WorldState, center model.Position, dist i
 	if ws == nil {
 		return model.Position{}, false
 	}
-	for r := 2; r <= dist; r++ {
-		for dy := -r; dy <= r; dy++ {
-			for dx := -r; dx <= r; dx++ {
-				if manhattanAbs(dx)+manhattanAbs(dy) != r {
-					continue
-				}
-				x, y := center.X+dx, center.Y+dy
-				if !ws.InBounds(x, y) {
-					continue
-				}
-				if ws.Grid[y][x].ResourceNodeID != "" {
-					continue
-				}
-				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
-					continue
-				}
-				return model.Position{X: x, Y: y}, true
-			}
-		}
-	}
-	// Fallback: allow distance 1 if the outer rings are packed.
-	for dy := -1; dy <= 1; dy++ {
-		for dx := -1; dx <= 1; dx++ {
-			if dx == 0 && dy == 0 {
+	grid := surface.Grid{Size: ws.MapWidth / 3}
+	origin := surface.Tile{X: center.X, Y: center.Y}
+	tiles := grid.Disc(origin, dist)
+	for _, minimum := range []int{2, 1} {
+		for _, tile := range tiles {
+			if grid.Distance(origin, tile) < minimum || ws.Grid[tile.Y][tile.X].ResourceNodeID != "" {
 				continue
 			}
-			x, y := center.X+dx, center.Y+dy
-			if !ws.InBounds(x, y) {
+			if _, occupied := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]; occupied {
 				continue
 			}
-			if ws.Grid[y][x].ResourceNodeID != "" {
-				continue
-			}
-			if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
-				continue
-			}
-			return model.Position{X: x, Y: y}, true
+			return model.Position{X: tile.X, Y: tile.Y}, true
 		}
 	}
 	return model.Position{}, false
@@ -398,7 +338,6 @@ func injectResourceNode(ws *model.WorldState, planet *mapmodel.Planet, pos model
 	}
 }
 
-
 // flattenSpawnArea converts non-buildable terrain within radius of center to
 // buildable ground. Resource nodes are untouched: they live on a separate
 // layer and remain harvestable inside the flattened area. The flattened
@@ -408,23 +347,11 @@ func flattenSpawnArea(ws *model.WorldState, planet *mapmodel.Planet, center mode
 	if ws == nil || radius <= 0 {
 		return
 	}
-	for dy := -radius; dy <= radius; dy++ {
-		y := center.Y + dy
-		if y < 0 || y >= ws.MapHeight {
-			continue
-		}
-		for dx := -radius; dx <= radius; dx++ {
-			x := center.X + dx
-			if x < 0 || x >= ws.MapWidth {
-				continue
-			}
-			if dx*dx+dy*dy > radius*radius {
-				continue
-			}
-			ws.Grid[y][x].Terrain = terrain.TileBuildable
-			if planet != nil && y < len(planet.Terrain) && x < len(planet.Terrain[y]) {
-				planet.Terrain[y][x] = terrain.TileBuildable
-			}
+	for _, tile := range (surface.Grid{Size: ws.MapWidth / 3}).Disc(surface.Tile{X: center.X, Y: center.Y}, radius) {
+		x, y := tile.X, tile.Y
+		ws.Grid[y][x].Terrain = terrain.TileBuildable
+		if planet != nil && y < len(planet.Terrain) && x < len(planet.Terrain[y]) {
+			planet.Terrain[y][x] = terrain.TileBuildable
 		}
 	}
 }

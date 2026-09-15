@@ -1,3 +1,4 @@
+import type { PlanetPathView } from './types';
 import {
   DEFAULT_EVENT_TYPES,
   DEFAULT_GALAXY_ID,
@@ -96,6 +97,9 @@ export interface AlertSnapshotParams {
 }
 
 export interface PlanetSceneParams {
+  near_x?: number;
+  near_y?: number;
+  radius?: number;
   x: number;
   y: number;
   width: number;
@@ -370,6 +374,11 @@ export function createApiClient(options: ApiClientOptions) {
 
   function fetchPlanet(planetId: string): Promise<PlanetSummaryView> {
     return apiFetch<PlanetSummaryView>(`/world/planets/${planetId}`);
+  }
+
+  function fetchPlanetPath(planetId: string, params: {unit_id:string;target_x:number;target_y:number;stop_range?:number}): Promise<PlanetPathView> {
+    const query=new URLSearchParams();addParams(query,params);
+    return apiFetch<PlanetPathView>(`/world/planets/${planetId}/path?${query.toString()}`);
   }
 
   function fetchPlanetScene(planetId: string, params: PlanetSceneParams): Promise<PlanetSceneView> {
@@ -1137,6 +1146,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchPlanetInspect,
     fetchPlanetOverview,
     fetchPlanetScene,
+    fetchPlanetPath,
     fetchPlanetRuntime,
     fetchStats,
     fetchSummary,

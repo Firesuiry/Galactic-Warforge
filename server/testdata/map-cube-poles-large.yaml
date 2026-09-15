@@ -1,0 +1,12 @@
+# Exercises streamed local curved meshes, not just the coarse global sphere.
+galaxy:
+  system_count: 1
+system:
+  planets_per_system: 1
+  gas_giant_ratio: 0
+planet:
+  face_size: 256
+  resource_density: 2
+spawn_points:
+  - {x: 384, y: 384}
+  - {x: 640, y: 384}

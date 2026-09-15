@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /world/planets/{planet_id}", s.auth(s.handlePlanet))
 	mux.HandleFunc("GET /world/planets/{planet_id}/overview", s.auth(s.handlePlanetOverview))
 	mux.HandleFunc("GET /world/planets/{planet_id}/scene", s.auth(s.handlePlanetScene))
+	mux.HandleFunc("GET /world/planets/{planet_id}/path", s.auth(s.handlePlanetPath))
 	mux.HandleFunc("GET /world/planets/{planet_id}/inspect", s.auth(s.handlePlanetInspect))
 	mux.HandleFunc("GET /world/planets/{planet_id}/runtime", s.auth(s.handlePlanetRuntime))
 	mux.HandleFunc("GET /world/planets/{planet_id}/networks", s.auth(s.handlePlanetNetworks))
@@ -284,10 +285,22 @@ func (s *Server) handlePlanetOverview(w http.ResponseWriter, r *http.Request, pl
 func (s *Server) handlePlanetScene(w http.ResponseWriter, r *http.Request, playerID string) {
 	planetID := r.PathValue("planet_id")
 	req := query.PlanetSceneRequest{
+		NearX: parseQueryInt(r, "near_x", -1), NearY: parseQueryInt(r, "near_y", -1), Radius: parseQueryInt(r, "radius", 0),
 		X:      parseQueryInt(r, "x", 0),
 		Y:      parseQueryInt(r, "y", 0),
 		Width:  parseQueryInt(r, "width", 0),
 		Height: parseQueryInt(r, "height", 0),
+	}
+	if req.Radius < 0 || req.Radius > 128 || (req.Radius > 0 && (req.NearX < 0 || req.NearY < 0)) {
+		writeError(w, http.StatusBadRequest, "near_x/near_y must be valid atlas coordinates and radius must be 0..128")
+		return
+	}
+	if req.Radius > 0 {
+		planet, exists := s.core.Maps().Planet(planetID)
+		if exists && (req.NearX >= planet.Width || req.NearY >= planet.Height) {
+			writeError(w, http.StatusBadRequest, "near center outside atlas")
+			return
+		}
 	}
 	view, ok := s.ql.PlanetScene(s.core.WorldForPlanet(planetID), playerID, planetID, req)
 	if !ok {

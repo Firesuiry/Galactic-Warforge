@@ -7,7 +7,7 @@ import (
 )
 
 func TestPipelineFlowToBuildingInput(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 1, Y: 0})

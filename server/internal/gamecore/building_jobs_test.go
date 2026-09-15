@@ -174,7 +174,7 @@ func TestDemolishRefundItems(t *testing.T) {
 }
 
 func newTestWorldWithBuilding(btype model.BuildingType, level int) (*model.WorldState, *GameCore, *model.Building) {
-	ws := model.NewWorldState("planet-test", 6, 6)
+	ws := model.NewWorldState("planet-test", 6)
 	player := &model.PlayerState{
 		PlayerID:  "p1",
 		Resources: model.Resources{Minerals: 1000, Energy: 1000},

@@ -75,8 +75,8 @@ const catalog: CatalogView = {
 const summary: StateSummary = {
   tick: 10,
   active_planet_id: 'planet-1-1',
-  map_width: 8,
-  map_height: 8,
+  surface: { topology: 'cube_sphere' as const, face_size: 24 / 3 }, map_width: 24,
+  map_height: 16,
   players: {
     p1: {
       player_id: 'p1',
@@ -93,10 +93,10 @@ function makePlanet(): PlanetRenderView {
   return {
     planet_id: 'planet-1-1',
     discovered: true,
-    map_width: 8,
-    map_height: 8,
+    surface: { topology: 'cube_sphere' as const, face_size: 24 / 3 }, map_width: 24,
+    map_height: 16,
     tick: 10,
-    terrain: Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => 'buildable')),
+    terrain: Array.from({ length: 16 }, (_, y) => Array.from({ length: 24 }, (_, x) => x < 8 && y < 8 ? 'buildable' : 'unknown')),
     buildings: {},
     units: {},
     resources: [],

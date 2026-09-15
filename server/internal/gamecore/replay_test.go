@@ -32,7 +32,7 @@ func TestReplayMatchesSnapshot(t *testing.T) {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 
@@ -125,7 +125,7 @@ func TestReplayMatchesSnapshotWithProductionSettlement(t *testing.T) {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 

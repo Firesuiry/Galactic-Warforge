@@ -319,7 +319,7 @@ func TestProductionStats_OrbitalCollectorFullInventory_ZeroOutput(t *testing.T) 
 
 func TestProductionStats_ProcessTickCollectAndOrbitalOutputsCounted(t *testing.T) {
 	core, _, _ := newTwoPlanetTestCore(t)
-	ws := model.NewWorldState("planet-1-2", 12, 12)
+	ws := model.NewWorldState("planet-1-2", 12)
 	for _, playerID := range []string{"p1", "p2"} {
 		ws.Players[playerID] = &model.PlayerState{
 			PlayerID: playerID,
@@ -424,7 +424,7 @@ func collectProductionStats(t *testing.T, core *GameCore, playerID string) model
 }
 
 func newIsolatedProductionStatsTestWorld(planetID string, width, height int) (*GameCore, *model.WorldState, *model.PlayerState) {
-	ws := model.NewWorldState(planetID, width, height)
+	ws := model.NewWorldState(planetID, max(width, height))
 	player := &model.PlayerState{
 		PlayerID: "p1",
 		IsAlive:  true,

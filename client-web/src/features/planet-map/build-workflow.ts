@@ -1,3 +1,5 @@
+import { surfaceOffset, surfaceDistanceWithin } from '@shared/surface';
+import type { PlanetPathView } from '@shared/types';
 import type { Direction } from "@shared/api";
 import type {
   BuildingCatalogEntry,
@@ -21,11 +23,7 @@ import {
   resolvePlanetCommandHint,
   type PlanetCommandHint,
 } from "@/features/planet-commands/error-hints";
-import {
-  buildWaypointRoute,
-  manhattanDistance,
-  stepTowardsTarget,
-} from "@/features/planet-map/range-planning";
+
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 
 const BUILD_RECOMMENDATION_ORDER = [
@@ -185,7 +183,7 @@ function buildReachability(
   const moveRange = executor?.move_range;
   const operateRange = executorState?.operate_range;
   const distance = executor?.position && selectedPosition
-    ? manhattanDistance(executor.position, selectedPosition)
+    ? surfaceDistanceWithin(executor.position, selectedPosition, planet.surface.face_size, operateRange ?? 16)
     : undefined;
 
   return {
@@ -194,9 +192,9 @@ function buildReachability(
     moveRange,
     operateRange,
     distance,
-    inRange: distance === undefined || operateRange === undefined
+    inRange: !selectedPosition || !executor?.position || operateRange === undefined
       ? true
-      : distance <= operateRange,
+      : distance !== undefined && distance <= operateRange,
   } satisfies BuildReachability;
 }
 
@@ -236,11 +234,10 @@ function buildTileAssessment(input: {
 
   for (let dy = 0; dy < footprint.height; dy += 1) {
     for (let dx = 0; dx < footprint.width; dx += 1) {
-      const x = input.selectedPosition.x + dx;
-      const y = input.selectedPosition.y + dy;
+      const {x,y} = surfaceOffset(input.selectedPosition, dx, dy, input.planet.map_width / 3);
       const terrain = getTerrainTile(input.planet, x, y);
       const blockingBuilding = Object.values(input.planet.buildings ?? {}).find(
-        (building) => tileContainsBuilding(building, x, y),
+        (building) => tileContainsBuilding(building, x, y, input.planet.map_width / 3),
       );
       const blockingResource = findBlockingResource(resources, x, y);
 
@@ -306,56 +303,27 @@ function buildTileAssessment(input: {
   } satisfies BuildTileAssessment;
 }
 
-function buildApproachPlan(
-  reachability: BuildReachability,
-  selectedPosition?: Position,
-) {
-  if (
-    !selectedPosition
-    || !reachability.executorPosition
-    || reachability.distance === undefined
-    || reachability.operateRange === undefined
-    || reachability.inRange
-  ) {
-    return undefined;
-  }
-
-  const distanceGap = Math.max(
-    reachability.distance - reachability.operateRange,
-    0,
-  );
-  const landingPosition = stepTowardsTarget(
-    reachability.executorPosition,
-    selectedPosition,
-    distanceGap,
-  );
-  const waypoints = reachability.moveRange && reachability.moveRange > 0
-    ? buildWaypointRoute(
-      reachability.executorPosition,
-      landingPosition,
-      reachability.moveRange,
-    )
-    : [landingPosition];
-
-  return {
-    distanceGap,
-    landingPosition,
-    firstWaypoint: waypoints[0] ?? landingPosition,
-    waypoints,
-  } satisfies BuildApproachPlan;
+function buildApproachPlan(path?: PlanetPathView): BuildApproachPlan | undefined {
+  if(!path?.reachable || !path.waypoints.length)return undefined;
+  return {distanceGap:path.distance,landingPosition:path.path.at(-1),firstWaypoint:path.waypoints[0],waypoints:path.waypoints};
 }
 
 function buildPreflightHints(reachability: BuildReachability) {
   if (
     !reachability.executorUnitId
     || !reachability.executorPosition
-    || reachability.distance === undefined
     || reachability.operateRange === undefined
     || reachability.inRange
   ) {
     return [];
   }
 
+  if (reachability.distance === undefined) return [{
+    tone: "warning" as const,
+    title: "当前执行体无法直接建造到目标坐标",
+    detail: `目标不在执行体的 ${reachability.operateRange} 格操作范围内，请先移动执行体。`,
+    suggestedAction: "move_executor" as const,
+  }];
   const hint = resolvePlanetCommandHint({
     message: `executor out of range: ${reachability.distance} > ${reachability.operateRange}`,
   });
@@ -370,7 +338,7 @@ function resolveSelectedBuilding(
     return undefined;
   }
   return Object.values(planet.buildings ?? {}).find((building) =>
-    tileContainsBuilding(building, selectedPosition.x, selectedPosition.y),
+    tileContainsBuilding(building, selectedPosition.x, selectedPosition.y, planet.map_width / 3),
   );
 }
 
@@ -471,6 +439,7 @@ export function listBuildingRecipes(
 }
 
 export function deriveBuildWorkflowView(input: {
+  pathPlan?: PlanetPathView;
   catalog?: CatalogView;
   buildingType?: string;
   journal?: PlanetCommandJournalEntry[];
@@ -488,7 +457,7 @@ export function deriveBuildWorkflowView(input: {
     input.selectedPosition,
   );
   const tileAssessment = buildTileAssessment(input);
-  const approachPlan = buildApproachPlan(reachability, input.selectedPosition);
+  const approachPlan = buildApproachPlan(input.pathPlan);
 
   return {
     catalog,

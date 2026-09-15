@@ -206,6 +206,9 @@ export async function cmdScene(args: string[]): Promise<string> {
       width: parseRequiredInteger(parsed.positionals[3], 'width'),
       height: parseRequiredInteger(parsed.positionals[4], 'height'),
     };
+    for (const key of ['near_x', 'near_y', 'radius'] as const) {
+      if (parsed.options[key] !== undefined) request[key] = parseRequiredInteger(String(parsed.options[key]), key);
+    }
     return JSON.stringify(await fetchPlanetScene(planetId, request), null, 2);
   } catch (e) {
     return fmtError(String(e));

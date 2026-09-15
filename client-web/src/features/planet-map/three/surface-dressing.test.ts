@@ -1,10 +1,11 @@
+import { normalTile } from './projection';
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
 import { createSurfaceDressing } from './surface-dressing';
 
 function scene(size: number): PlanetSceneView {
   return {
-    planet_id: 'p', discovered: true, kind: 'rocky', tick: 1, map_width: size, map_height: size,
+    planet_id: 'p', discovered: true, kind: 'rocky', tick: 1, surface: { topology: 'cube_sphere' as const, face_size: size  }, map_width: size * 3, map_height: size * 2,
     bounds: { x: 0, y: 0, width: size, height: size },
     terrain: Array.from({ length: size }, () => Array.from({ length: size }, () => 'blocked')),
     explored: Array.from({ length: size }, () => Array.from({ length: size }, () => true)),
@@ -28,8 +29,7 @@ describe('non-interactive surface dressing', () => {
     for (let i = 0; i < first.count; i++) {
       first.getMatrixAt(i, matrix);
       point.setFromMatrixPosition(matrix).normalize();
-      const x = Math.floor(((Math.atan2(point.z, -point.x) / (Math.PI * 2) + 1) % 1) * 8);
-      const y = Math.floor((1 - point.y) * 0.5 * 8);
+      const {x,y}=normalTile(point,8);
       expect(`${x}:${y}`).not.toBe('3:2');
     }
   });

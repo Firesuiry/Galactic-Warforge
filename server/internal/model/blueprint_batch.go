@@ -196,7 +196,7 @@ func BuildBlueprintBatchDemolishCommands(ws *WorldState, bounds BlueprintBounds,
 		if building == nil {
 			continue
 		}
-		if !buildingIntersectsBounds(building, bounds) {
+		if !buildingIntersectsBounds(ws, building, bounds) {
 			continue
 		}
 		matched++
@@ -350,7 +350,7 @@ func extractConveyorDirection(params BlueprintParams) (ConveyorDirection, bool) 
 	}
 }
 
-func buildingIntersectsBounds(building *Building, bounds BlueprintBounds) bool {
+func buildingIntersectsBounds(ws *WorldState, building *Building, bounds BlueprintBounds) bool {
 	if building == nil {
 		return false
 	}
@@ -359,7 +359,7 @@ func buildingIntersectsBounds(building *Building, bounds BlueprintBounds) bool {
 		return positionInBounds(building.Position, bounds)
 	}
 	for _, offset := range offsets {
-		pos := Position{X: building.Position.X + offset.X, Y: building.Position.Y + offset.Y, Z: building.Position.Z}
+		pos := ws.SurfaceOffset(building.Position, offset.X, offset.Y)
 		if positionInBounds(pos, bounds) {
 			return true
 		}

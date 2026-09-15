@@ -17,7 +17,7 @@ func newQueryTestContext(t *testing.T) (*Layer, *model.WorldState, string) {
 	cfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 4},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 4},
 	}
 	maps := mapgen.Generate(cfg, "query-runtime")
 	discovery := mapstate.NewDiscovery([]config.PlayerConfig{
@@ -25,7 +25,7 @@ func newQueryTestContext(t *testing.T) (*Layer, *model.WorldState, string) {
 		{PlayerID: "p2"},
 	}, maps)
 	ql := New(visibility.New(), maps, discovery)
-	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().Width, maps.PrimaryPlanet().Height)
+	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().FaceSize)
 	return ql, ws, maps.PrimaryPlanetID
 }
 
@@ -84,7 +84,7 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		State:        model.ConstructionPending,
 		Cost:         model.BuildCost{Minerals: 12, Energy: 4},
 	}
-	if err := ws.Construction.Enqueue(task); err != nil {
+	if err := ws.Construction.Enqueue(ws, task); err != nil {
 		t.Fatalf("enqueue task: %v", err)
 	}
 	enemyTask := &model.ConstructionTask{
@@ -94,7 +94,7 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		Position:     model.Position{X: 3, Y: 3},
 		State:        model.ConstructionPending,
 	}
-	if err := ws.Construction.Enqueue(enemyTask); err != nil {
+	if err := ws.Construction.Enqueue(ws, enemyTask); err != nil {
 		t.Fatalf("enqueue enemy task: %v", err)
 	}
 

@@ -7,7 +7,7 @@ import (
 )
 
 func TestLogisticsDroneTakeoffAndLanding(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5, 1)
+	ws := model.NewWorldState("planet-1", 5)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newLogisticsStationBuilding("station-a", model.Position{X: 0, Y: 0})
@@ -24,7 +24,7 @@ func TestLogisticsDroneTakeoffAndLanding(t *testing.T) {
 	if err := model.RegisterLogisticsDrone(ws, drone); err != nil {
 		t.Fatalf("register drone: %v", err)
 	}
-	if err := drone.BeginTrip(target.ID, target.Position); err != nil {
+	if err := drone.BeginTrip(target.ID, target.Position, ws.SurfaceDistance(drone.Position, target.Position)); err != nil {
 		t.Fatalf("begin trip: %v", err)
 	}
 	if drone.Status != model.LogisticsDroneTakeoff {

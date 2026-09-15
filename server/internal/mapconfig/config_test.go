@@ -12,19 +12,18 @@ func TestApplyDefaultsSetsPlanetScaleToTwoThousand(t *testing.T) {
 
 	ApplyDefaults(cfg)
 
-	if cfg.Planet.Width != 2000 {
-		t.Fatalf("expected default planet width 2000, got %d", cfg.Planet.Width)
+	if cfg.Planet.FaceSize != 816 {
+		t.Fatalf("expected default planet width 816, got %d", cfg.Planet.FaceSize)
 	}
-	if cfg.Planet.Height != 2000 {
-		t.Fatalf("expected default planet height 2000, got %d", cfg.Planet.Height)
+	if cfg.Planet.FaceSize != 816 {
+		t.Fatalf("expected default planet height 816, got %d", cfg.Planet.FaceSize)
 	}
 }
 
 func TestLoadReadsSpawnPoints(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "map.yaml")
 	content := `planet:
-  width: 64
-  height: 64
+  face_size: 64
 spawn_points:
   - {x: 8, y: 8}
   - {x: 55, y: 55}
@@ -44,15 +43,24 @@ spawn_points:
 func TestLoadRejectsOutOfBoundsSpawnPoint(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "map.yaml")
 	content := `planet:
-  width: 64
-  height: 64
+  face_size: 64
 spawn_points:
-  - {x: 64, y: 8}
+  - {x: 192, y: 8}
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write map config: %v", err)
 	}
 	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "spawn_points") {
 		t.Fatalf("expected out-of-bounds spawn point rejected, got %v", err)
+	}
+}
+
+func TestLoadRejectsLegacyPlanarDimensions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "map.yaml")
+	if err := os.WriteFile(path, []byte("planet:\n  width: 64\n  height: 64\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("legacy width/height must not silently generate a different world")
 	}
 }

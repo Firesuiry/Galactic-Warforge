@@ -175,7 +175,7 @@ export function PlanetPage() {
       sceneWindow.width,
       sceneWindow.height,
     ],
-    queryFn: () => client.fetchPlanetScene(planetId, sceneWindow),
+    queryFn: () => client.fetchPlanetScene(planetId, { ...sceneWindow, near_x: Math.floor(sceneWindow.x + sceneWindow.width / 2), near_y: Math.floor(sceneWindow.y + sceneWindow.height / 2), radius: 64 }),
     placeholderData: keepPreviousData,
     enabled: Boolean(planetId),
   });

@@ -58,7 +58,7 @@ func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.B
 	if portRemaining <= 0 {
 		return
 	}
-	portPos := portWorldPosition(building, port)
+	portPos := portWorldPosition(ws, building, port)
 
 	for portRemaining > 0 {
 		candidate, ok := selectInputCandidate(ws, conveyors, building, port, portPos)
@@ -95,7 +95,7 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 	if portRemaining <= 0 {
 		return
 	}
-	portPos := portWorldPosition(building, port)
+	portPos := portWorldPosition(ws, building, port)
 
 	for portRemaining > 0 {
 		candidate, ok := selectOutputCandidate(ws, conveyors, building, port, portPos)
@@ -161,12 +161,9 @@ func selectOutputCandidate(
 	baseOrder := outputDirectionOrder(building, port)
 	candidates := make([]outputCandidate, 0, len(baseOrder))
 	for idx, dir := range baseOrder {
-		dx, dy := dir.Delta()
-		nx := portPos.X + dx
-		ny := portPos.Y + dy
-		if !ws.InBounds(nx, ny) {
-			continue
-		}
+		portDir := ws.SurfaceOffsetDirection(building.Position, port.Offset.X, port.Offset.Y, dir)
+		next, nextDir := ws.SurfaceStep(portPos, portDir)
+		nx, ny := next.X, next.Y
 		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
 		if neighborID == "" {
 			continue
@@ -178,7 +175,7 @@ func selectOutputCandidate(
 		if neighbor.OwnerID != building.OwnerID {
 			continue
 		}
-		if !allowsInput(conveyorAllowedInputs(neighbor), dir.Opposite()) {
+		if !allowsInput(conveyorAllowedInputs(neighbor), nextDir.Opposite()) {
 			continue
 		}
 		if neighbor.Conveyor.AvailableCapacity() <= 0 {
@@ -223,11 +220,8 @@ func conveyorHasItem(conveyor *model.ConveyorState, itemID string) bool {
 	return false
 }
 
-func portWorldPosition(building *model.Building, port model.IOPort) model.Position {
-	return model.Position{
-		X: building.Position.X + port.Offset.X,
-		Y: building.Position.Y + port.Offset.Y,
-	}
+func portWorldPosition(ws *model.WorldState, building *model.Building, port model.IOPort) model.Position {
+	return ws.SurfaceOffset(building.Position, port.Offset.X, port.Offset.Y)
 }
 
 func outputDirectionOrder(building *model.Building, port model.IOPort) []model.ConveyorDirection {
@@ -288,12 +282,9 @@ func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Buil
 	var best buildingInputCandidate
 	found := false
 	for idx, dir := range conveyorDirOrder {
-		dx, dy := dir.Delta()
-		nx := portPos.X + dx
-		ny := portPos.Y + dy
-		if !ws.InBounds(nx, ny) {
-			continue
-		}
+		portDir := ws.SurfaceOffsetDirection(building.Position, port.Offset.X, port.Offset.Y, dir)
+		next, nextDir := ws.SurfaceStep(portPos, portDir)
+		nx, ny := next.X, next.Y
 		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
 		if neighborID == "" {
 			continue
@@ -305,7 +296,7 @@ func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Buil
 		if neighbor.OwnerID != building.OwnerID {
 			continue
 		}
-		if neighbor.Conveyor.Output != dir.Opposite() {
+		if neighbor.Conveyor.Output != nextDir.Opposite() {
 			continue
 		}
 		candidate, ok := selectConveyorInputCandidate(building, neighbor, port, dir, idx, needs)

@@ -7,7 +7,7 @@ import (
 )
 
 func TestStorageNetworkFor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 6, 6)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 

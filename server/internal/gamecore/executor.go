@@ -34,7 +34,7 @@ func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, targe
 		}
 		return nil, nil, &res
 	}
-	dist := model.ManhattanDist(execUnit.Position, target)
+	dist := ws.SurfaceDistance(execUnit.Position, target)
 	if dist > execState.OperateRange {
 		res := model.CommandResult{
 			Status:  model.StatusFailed,

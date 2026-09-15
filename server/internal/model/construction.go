@@ -94,7 +94,7 @@ func (s ConstructionState) CanTransition(next ConstructionState) bool {
 }
 
 // Enqueue inserts a task into the queue and reserves its tile.
-func (q *ConstructionQueue) Enqueue(task *ConstructionTask) error {
+func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) error {
 	if q == nil {
 		return fmt.Errorf("construction queue is nil")
 	}
@@ -120,11 +120,23 @@ func (q *ConstructionQueue) Enqueue(task *ConstructionTask) error {
 	if task.State != ConstructionPending {
 		return fmt.Errorf("construction task %s must start in pending state", task.ID)
 	}
-	tileKey := TileKey(task.Position.X, task.Position.Y)
-	if existing := q.ReservedTiles[tileKey]; existing != "" {
-		return fmt.Errorf("tile %s already reserved by %s", tileKey, existing)
+	tiles, err := ws.ConstructionTiles(task)
+	if err != nil {
+		return err
 	}
-	q.ReservedTiles[tileKey] = task.ID
+	for _, p := range tiles {
+		key := TileKey(p.X, p.Y)
+		if existing := q.ReservedTiles[key]; existing != "" {
+			return fmt.Errorf("tile %s already reserved by %s", key, existing)
+		}
+		if ws.TileBuilding[key] != "" || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+			return fmt.Errorf("footprint tile %s is unavailable", key)
+		}
+	}
+	for _, p := range tiles {
+		q.ReservedTiles[TileKey(p.X, p.Y)] = task.ID
+	}
+
 	q.NextSeq++
 	task.QueueIndex = q.NextSeq
 	q.Tasks[task.ID] = task
@@ -140,9 +152,10 @@ func (q *ConstructionQueue) Remove(taskID string) {
 	}
 	task := q.Tasks[taskID]
 	if task != nil {
-		tileKey := TileKey(task.Position.X, task.Position.Y)
-		if q.ReservedTiles != nil && q.ReservedTiles[tileKey] == taskID {
-			delete(q.ReservedTiles, tileKey)
+		for key, id := range q.ReservedTiles {
+			if id == taskID {
+				delete(q.ReservedTiles, key)
+			}
 		}
 		// Keep cancelled tasks in Tasks map for potential restore
 		if task.State == ConstructionCancelled {
@@ -184,21 +197,28 @@ func (q *ConstructionQueue) Transition(taskID string, next ConstructionState) er
 }
 
 // RebuildReservations rebuilds tile reservations from queued tasks.
-func (q *ConstructionQueue) RebuildReservations() {
+func (q *ConstructionQueue) RebuildReservations(ws *WorldState) error {
 	if q == nil {
-		return
+		return nil
 	}
 	q.ReservedTiles = make(map[string]string)
 	for id, task := range q.Tasks {
-		if task == nil {
+		if task == nil || task.State == ConstructionCompleted || task.State == ConstructionCancelled {
 			continue
 		}
-		if task.State == ConstructionCompleted || task.State == ConstructionCancelled {
-			continue
+		tiles, err := ws.ConstructionTiles(task)
+		if err != nil {
+			return err
 		}
-		key := TileKey(task.Position.X, task.Position.Y)
-		q.ReservedTiles[key] = id
+		for _, p := range tiles {
+			key := TileKey(p.X, p.Y)
+			if other := q.ReservedTiles[key]; other != "" && other != id {
+				return fmt.Errorf("overlapping construction footprint")
+			}
+			q.ReservedTiles[key] = id
+		}
 	}
+	return nil
 }
 
 // MaterialSourceType indicates the type of material source.

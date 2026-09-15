@@ -18,6 +18,7 @@ import (
 	"siliconworld/internal/persistence"
 	"siliconworld/internal/queue"
 	"siliconworld/internal/snapshot"
+	"siliconworld/internal/surface"
 )
 
 // EventBus broadcasts game events to all subscribers
@@ -849,31 +850,25 @@ func commandResultEvent(qr *model.QueuedRequest, cmd model.Command, res model.Co
 const spawnEdgeMargin = 8
 
 // computeStartPositions returns N spread-out starting positions
-func computeStartPositions(cfg *config.Config, w, h int) []model.Position {
+func computeStartPositions(cfg *config.Config, grid surface.Grid) []model.Position {
 	n := len(cfg.Players)
 	positions := make([]model.Position, n)
-	margin := spawnEdgeMargin
-	switch n {
-	case 1:
-		positions[0] = model.Position{X: w / 2, Y: h / 2}
-	case 2:
-		positions[0] = model.Position{X: margin, Y: margin}
-		positions[1] = model.Position{X: w - margin - 1, Y: h - margin - 1}
-	default:
-		radiusX := w/2 - margin - 1
-		radiusY := h/2 - margin - 1
-		if radiusX < 0 {
-			radiusX = 0
+	// Opposite face centers keep two-player starts genuinely far apart.
+	if n <= 6 {
+		faces := []int{0, 2, 4, 5, 1, 3}
+		for i := range positions {
+			f := faces[i]
+			positions[i] = model.Position{X: (f%3)*grid.Size + grid.Size/2, Y: (f/3)*grid.Size + grid.Size/2}
 		}
-		if radiusY < 0 {
-			radiusY = 0
-		}
-		for i := 0; i < n; i++ {
-			angle := float64(i) / float64(n) * 2 * math.Pi
-			cx := w/2 + int(float64(radiusX)*math.Cos(angle))
-			cy := h/2 + int(float64(radiusY)*math.Sin(angle))
-			positions[i] = model.Position{X: cx, Y: cy}
-		}
+		return positions
+	}
+	// Fibonacci sphere distributes larger lobbies across the whole planet.
+	for i := range positions {
+		y := 1 - 2*(float64(i)+0.5)/float64(n)
+		r := math.Sqrt(1 - y*y)
+		a := float64(i) * math.Pi * (3 - math.Sqrt(5))
+		t := grid.FromVector(r*math.Cos(a), y, r*math.Sin(a))
+		positions[i] = model.Position{X: t.X, Y: t.Y}
 	}
 	return positions
 }
@@ -931,27 +926,20 @@ func applyPlanetResources(ws *model.WorldState, planet *mapmodel.Planet) {
 }
 
 func findNearestBuildable(ws *model.WorldState, start model.Position) model.Position {
-	if ws == nil {
+	if ws == nil || !ws.InBounds(start.X, start.Y) {
 		return start
 	}
-	if ws.InBounds(start.X, start.Y) && ws.Grid[start.Y][start.X].Terrain.Buildable() {
-		return start
-	}
-	limit := max(ws.MapWidth, ws.MapHeight)
-	for r := 1; r <= limit; r++ {
-		for dy := -r; dy <= r; dy++ {
-			y := start.Y + dy
-			if y < 0 || y >= ws.MapHeight {
-				continue
-			}
-			for dx := -r; dx <= r; dx++ {
-				x := start.X + dx
-				if x < 0 || x >= ws.MapWidth {
-					continue
-				}
-				if ws.Grid[y][x].Terrain.Buildable() {
-					return model.Position{X: x, Y: y}
-				}
+	queue := []model.Position{start}
+	seen := map[model.Position]bool{start: true}
+	for head := 0; head < len(queue); head++ {
+		p := queue[head]
+		if ws.Grid[p.Y][p.X].Terrain.Buildable() {
+			return p
+		}
+		for _, n := range ws.SurfaceNeighbors(p) {
+			if !seen[n] {
+				seen[n] = true
+				queue = append(queue, n)
 			}
 		}
 	}
@@ -959,35 +947,20 @@ func findNearestBuildable(ws *model.WorldState, start model.Position) model.Posi
 }
 
 func findNearestOpenTile(ws *model.WorldState, start model.Position) model.Position {
-	if ws == nil {
+	if ws == nil || !ws.InBounds(start.X, start.Y) {
 		return start
 	}
-	if ws.InBounds(start.X, start.Y) && ws.Grid[start.Y][start.X].Terrain.Buildable() {
-		tileKey := model.TileKey(start.X, start.Y)
-		if _, occupied := ws.TileBuilding[tileKey]; !occupied {
-			return start
+	queue := []model.Position{start}
+	seen := map[model.Position]bool{start: true}
+	for head := 0; head < len(queue); head++ {
+		p := queue[head]
+		if ws.Grid[p.Y][p.X].Terrain.Buildable() && ws.TileBuilding[model.TileKey(p.X, p.Y)] == "" {
+			return p
 		}
-	}
-	limit := max(ws.MapWidth, ws.MapHeight)
-	for r := 1; r <= limit; r++ {
-		for dy := -r; dy <= r; dy++ {
-			y := start.Y + dy
-			if y < 0 || y >= ws.MapHeight {
-				continue
-			}
-			for dx := -r; dx <= r; dx++ {
-				x := start.X + dx
-				if x < 0 || x >= ws.MapWidth {
-					continue
-				}
-				if !ws.Grid[y][x].Terrain.Buildable() {
-					continue
-				}
-				tileKey := model.TileKey(x, y)
-				if _, occupied := ws.TileBuilding[tileKey]; occupied {
-					continue
-				}
-				return model.Position{X: x, Y: y}
+		for _, n := range ws.SurfaceNeighbors(p) {
+			if !seen[n] {
+				seen[n] = true
+				queue = append(queue, n)
 			}
 		}
 	}

@@ -9,19 +9,19 @@ import (
 type EnemyForceType string
 
 const (
-	EnemyForceTypeSwarm  EnemyForceType = "swarm"   // 蜂群
-	EnemyForceTypeHive   EnemyForceType = "hive"    // 蜂巢
-	EnemyForceTypeBeacon EnemyForceType = "beacon"  // 信标
+	EnemyForceTypeSwarm  EnemyForceType = "swarm"  // 蜂群
+	EnemyForceTypeHive   EnemyForceType = "hive"   // 蜂巢
+	EnemyForceTypeBeacon EnemyForceType = "beacon" // 信标
 )
 
 // ThreatLevel 威胁等级
 type ThreatLevel int
 
 const (
-	ThreatLevelNone     ThreatLevel = 0  // 无威胁
-	ThreatLevelLow     ThreatLevel = 1  // 低威胁
-	ThreatLevelMedium  ThreatLevel = 2  // 中威胁
-	ThreatLevelHigh    ThreatLevel = 3  // 高威胁
+	ThreatLevelNone     ThreatLevel = 0 // 无威胁
+	ThreatLevelLow      ThreatLevel = 1 // 低威胁
+	ThreatLevelMedium   ThreatLevel = 2 // 中威胁
+	ThreatLevelHigh     ThreatLevel = 3 // 高威胁
 	ThreatLevelCritical ThreatLevel = 4 // 危急
 )
 
@@ -29,7 +29,7 @@ const (
 type EnemyForce struct {
 	ID           string         `json:"id"`
 	Type         EnemyForceType `json:"type"`          // 势力类型
-	Position     Position       `json:"position"`       // 当前位置
+	Position     Position       `json:"position"`      // 当前位置
 	Strength     int            `json:"strength"`      // 实力值
 	SpreadRadius float64        `json:"spread_radius"` // 扩散半径
 	TargetPlayer string         `json:"target_player"` // 目标玩家
@@ -38,17 +38,17 @@ type EnemyForce struct {
 
 // EnemyForceState 敌对势力整体状态
 type EnemyForceState struct {
-	SystemID    string        `json:"system_id"`    // 所属恒星系
-	Forces      []EnemyForce  `json:"forces"`       // 敌对势力列表
-	ThreatLevel ThreatLevel   `json:"threat_level"` // 总威胁等级
-	LastAttack  int64         `json:"last_attack"`  // 上次攻击tick
+	SystemID    string       `json:"system_id"`    // 所属恒星系
+	Forces      []EnemyForce `json:"forces"`       // 敌对势力列表
+	ThreatLevel ThreatLevel  `json:"threat_level"` // 总威胁等级
+	LastAttack  int64        `json:"last_attack"`  // 上次攻击tick
 }
 
 // ThreatParams 威胁系统参数
 type ThreatParams struct {
 	BaseThreatPerForce   float64 `json:"base_threat_per_force"`   // 每服势力基础威胁
-	StrengthThreatFactor float64 `json:"strength_threat_factor"` // 实力威胁系数
-	DistanceThreatDecay  float64 `json:"distance_threat_decay"`  // 距离衰减系数
+	StrengthThreatFactor float64 `json:"strength_threat_factor"`  // 实力威胁系数
+	DistanceThreatDecay  float64 `json:"distance_threat_decay"`   // 距离衰减系数
 	TimeThreatGrowthRate float64 `json:"time_threat_growth_rate"` // 时间威胁增长率
 }
 
@@ -63,7 +63,7 @@ func DefaultThreatParams() ThreatParams {
 }
 
 // CalculateThreatLevel 计算威胁等级
-func CalculateThreatLevel(forces []EnemyForce, playerPos Position, params ThreatParams) ThreatLevel {
+func CalculateThreatLevel(ws *WorldState, forces []EnemyForce, playerPos Position, params ThreatParams) ThreatLevel {
 	if len(forces) == 0 {
 		return ThreatLevelNone
 	}
@@ -78,8 +78,7 @@ func CalculateThreatLevel(forces []EnemyForce, playerPos Position, params Threat
 		strengthThreat := float64(force.Strength) * params.StrengthThreatFactor
 
 		// 距离衰减
-		distance := math.Sqrt(math.Pow(float64(force.Position.X-playerPos.X), 2) +
-			math.Pow(float64(force.Position.Y-playerPos.Y), 2))
+		distance := float64(ws.SurfaceDistance(force.Position, playerPos))
 		distanceFactor := math.Exp(-distance * params.DistanceThreatDecay)
 
 		threat := (baseThreat + strengthThreat) * distanceFactor
@@ -102,7 +101,7 @@ func CalculateThreatLevel(forces []EnemyForce, playerPos Position, params Threat
 }
 
 // SpreadEnemyForce 扩散敌对势力
-func SpreadEnemyForce(force *EnemyForce, rng *rand.Rand) {
+func SpreadEnemyForce(ws *WorldState, force *EnemyForce, rng *rand.Rand) {
 	if force == nil {
 		return
 	}
@@ -112,8 +111,7 @@ func SpreadEnemyForce(force *EnemyForce, rng *rand.Rand) {
 
 	// 随机方向扩散
 	angle := rng.Float64() * 2 * math.Pi
-	force.Position.X += int(spreadSpeed * math.Cos(angle))
-	force.Position.Y += int(spreadSpeed * math.Sin(angle))
+	force.Position = ws.SurfaceOffset(force.Position, int(spreadSpeed*math.Cos(angle)), int(spreadSpeed*math.Sin(angle)))
 
 	// 增加扩散半径
 	force.SpreadRadius += spreadSpeed * 0.1
@@ -129,8 +127,8 @@ type AttackRhythm struct {
 // DefaultAttackRhythm 返回默认进攻节奏
 func DefaultAttackRhythm() AttackRhythm {
 	return AttackRhythm{
-		MinIntervalTicks:  100,  // 10秒（假设10tick/s）
-		MaxIntervalTicks:  500,  // 50秒
+		MinIntervalTicks:  100, // 10秒（假设10tick/s）
+		MaxIntervalTicks:  500, // 50秒
 		StrengthPerAttack: 10,
 	}
 }

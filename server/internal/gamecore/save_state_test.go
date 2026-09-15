@@ -75,7 +75,7 @@ func TestNewFromSaveRestoresTickWinnerAndHistories(t *testing.T) {
 	save := &gamedir.SaveFile{
 		FormatVersion: 1,
 		Tick:          28,
-		Snapshot:      snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps)),
+		Snapshot:      snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16), mapstate.NewDiscovery(cfg.Players, maps)),
 		RuntimeState: gamedir.RuntimeState{
 			ActivePlanetID: maps.PrimaryPlanetID,
 			Winner:         "p2",
@@ -84,7 +84,7 @@ func TestNewFromSaveRestoresTickWinnerAndHistories(t *testing.T) {
 			VictoryTechID:  "mission_complete",
 		},
 		DebugState: gamedir.DebugState{
-			BaseSnapshot: snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps)),
+			BaseSnapshot: snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16), mapstate.NewDiscovery(cfg.Players, maps)),
 			CommandLog:   []gamedir.CommandLogEntry{{Tick: 9, PlayerID: "p1", RequestID: "req-9"}},
 			EventHistory: map[model.EventType][]*model.GameEvent{
 				model.EvtCommandResult: {
@@ -232,9 +232,9 @@ func TestNewFromSaveKeepsBaseSnapshotWhenRetentionIsLow(t *testing.T) {
 	cfg, maps, q, bus, store := newSaveHarnessDeps(t)
 	cfg.Server.SnapshotRetentionCount = 1
 	cfg.Server.SnapshotRetentionTicks = 1
-	base := snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps))
+	base := snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16), mapstate.NewDiscovery(cfg.Players, maps))
 	base.Tick = 3
-	current := snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps))
+	current := snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16), mapstate.NewDiscovery(cfg.Players, maps))
 	current.Tick = 28
 	save := &gamedir.SaveFile{
 		FormatVersion: 1,
@@ -284,7 +284,7 @@ func newSaveHarnessDeps(t *testing.T) (*config.Config, *mapmodel.Universe, *queu
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 8},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
@@ -305,7 +305,7 @@ func newSaveStateHarness(t *testing.T) *GameCore {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 8},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	}
 	core.AttachGameDir(
 		gamedir.Open(t.TempDir()),
@@ -320,7 +320,7 @@ func oversizedSaveFile(t *testing.T, cfg *config.Config, maps *mapmodel.Universe
 	return &gamedir.SaveFile{
 		FormatVersion: 1,
 		Tick:          12,
-		Snapshot:      snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16, 16), mapstate.NewDiscovery(cfg.Players, maps)),
+		Snapshot:      snapshot.Capture(model.NewWorldState(maps.PrimaryPlanetID, 16), mapstate.NewDiscovery(cfg.Players, maps)),
 		DebugState: gamedir.DebugState{
 			EventHistory: map[model.EventType][]*model.GameEvent{
 				model.EvtCommandResult: {
@@ -333,5 +333,18 @@ func oversizedSaveFile(t *testing.T, cfg *config.Config, maps *mapmodel.Universe
 				{AlertID: "alert-2", Tick: 2, PlayerID: "p1"},
 			},
 		},
+	}
+}
+
+func TestRestoreRejectsMapSurfaceMismatch(t *testing.T) {
+	core := newSaveStateHarness(t)
+	save, err := core.ExportSaveFile("manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	planet := core.maps.PrimaryPlanet()
+	planet.FaceSize++
+	if _, err := NewFromSave(core.cfg, core.maps, nil, nil, nil, save); err == nil {
+		t.Fatal("accepted saved world with different surface size")
 	}
 }

@@ -51,9 +51,9 @@ func settlePlanetSensorContacts(ws *model.WorldState, currentTick int64) {
 				PlanetID:        ws.PlanetID,
 				Position:        clonePosition(force.Position),
 				LastUpdated:     currentTick,
-				DistancePenalty: planetDistancePenalty(sources, force.Position),
+				DistancePenalty: planetDistancePenalty(ws, sources, force.Position),
 				Target:          enemyForceTargetProfile(force),
-				Sources:         sourceInputsForPlanetTarget(sources, force.Position),
+				Sources:         sourceInputsForPlanetTarget(ws, sources, force.Position),
 			}
 			contact, ghost := model.EvaluateSensorContact(eval)
 			if contact != nil {
@@ -364,14 +364,13 @@ func appendBlueprintSensorSources(
 	}
 }
 
-func sourceInputsForPlanetTarget(sources []positionedSensorSource, target model.Position) []model.SensorContactSourceInput {
+func sourceInputsForPlanetTarget(ws *model.WorldState, sources []positionedSensorSource, target model.Position) []model.SensorContactSourceInput {
 	inputs := make([]model.SensorContactSourceInput, 0, len(sources))
 	for _, source := range sources {
 		if source.position == nil {
 			continue
 		}
-		distance := model.CalculateDistance(*source.position, target)
-		if source.rangeLimit > 0 && distance > source.rangeLimit {
+		if source.rangeLimit > 0 && !ws.SurfaceWithin(*source.position, target, int(source.rangeLimit)) {
 			continue
 		}
 		inputs = append(inputs, source.input)
@@ -379,16 +378,16 @@ func sourceInputsForPlanetTarget(sources []positionedSensorSource, target model.
 	return inputs
 }
 
-func planetDistancePenalty(sources []positionedSensorSource, target model.Position) float64 {
+func planetDistancePenalty(ws *model.WorldState, sources []positionedSensorSource, target model.Position) float64 {
 	best := math.MaxFloat64
 	for _, source := range sources {
 		if source.position == nil {
 			continue
 		}
-		distance := model.CalculateDistance(*source.position, target)
-		if source.rangeLimit > 0 && distance > source.rangeLimit {
+		if source.rangeLimit > 0 && !ws.SurfaceWithin(*source.position, target, int(source.rangeLimit)) {
 			continue
 		}
+		distance := float64(ws.SurfaceDistance(*source.position, target))
 		penalty := distance / maxFloat(1, source.rangeLimit) * 4
 		if penalty < best {
 			best = penalty

@@ -215,30 +215,24 @@ func findReachableStarterMiningRoute(ws *model.WorldState, executorPos model.Pos
 		if !mineTile.Terrain.Buildable() {
 			continue
 		}
-		if operateRange > 0 && model.ManhattanDist(executorPos, minePos) > operateRange {
+		if operateRange > 0 && !ws.SurfaceWithin(executorPos, minePos, operateRange) {
 			continue
 		}
 		if _, occupied := ws.TileBuilding[model.TileKey(minePos.X, minePos.Y)]; occupied {
 			continue
 		}
 
-		for y := 0; y < ws.MapHeight; y++ {
-			for x := 0; x < ws.MapWidth; x++ {
-				towerPos := model.Position{X: x, Y: y}
-				if !t103IsOpenBuildTile(ws, towerPos) {
-					continue
-				}
-				if operateRange > 0 && model.ManhattanDist(executorPos, towerPos) > operateRange {
-					continue
-				}
-				if model.ManhattanDist(sourcePos, towerPos) > model.DefaultTeslaTowerRange {
-					continue
-				}
-				if model.ManhattanDist(towerPos, minePos) > model.DefaultTeslaTowerRange {
-					continue
-				}
-				return towerPos, minePos, true
+		for _, towerPos := range ws.SurfaceDisc(sourcePos, model.DefaultTeslaTowerRange) {
+			if !t103IsOpenBuildTile(ws, towerPos) {
+				continue
 			}
+			if operateRange > 0 && !ws.SurfaceWithin(executorPos, towerPos, operateRange) {
+				continue
+			}
+			if !ws.SurfaceWithin(towerPos, minePos, model.DefaultTeslaTowerRange) {
+				continue
+			}
+			return towerPos, minePos, true
 		}
 	}
 

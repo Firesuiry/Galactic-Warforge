@@ -566,6 +566,15 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, fmt.Errorf("resource node missing at construction site")
 	}
 
+	tiles, err := ws.ConstructionTiles(task)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range tiles {
+		if ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+			return nil, fmt.Errorf("construction footprint tile unavailable")
+		}
+	}
 	profile := model.BuildingProfileFor(task.BuildingType, 1)
 	id := ws.NextEntityID("b")
 	b := &model.Building{
@@ -609,16 +618,18 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		b.Conveyor.Input = task.ConveyorDirection.Opposite()
 	}
 	ws.Buildings[id] = b
-	ws.TileBuilding[tileKey] = id
-	ws.Grid[pos.Y][pos.X].BuildingID = id
+	if err := ws.IndexBuilding(b); err != nil {
+		delete(ws.Buildings, id)
+		rollbackConstructionDeduction(ws, task)
+		return nil, err
+	}
 
 	rollback := func() {
 		removeStationFleet(ws, id)
 		model.UnregisterLogisticsStation(ws, id)
 		model.UnregisterPowerGridBuilding(ws, id)
 		delete(ws.Buildings, id)
-		delete(ws.TileBuilding, tileKey)
-		ws.Grid[pos.Y][pos.X].BuildingID = ""
+		ws.UnindexBuilding(b)
 		rollbackConstructionDeduction(ws, task)
 	}
 

@@ -66,7 +66,7 @@ func TestPipelineGraphEndpointFallbackNode(t *testing.T) {
 }
 
 func TestPipelineEndpointsFromWorld(t *testing.T) {
-	ws := NewWorldState("p-1", 4, 4)
+	ws := NewWorldState("p-1", 4)
 	ws.Buildings["b1"] = &Building{
 		ID:       "b1",
 		OwnerID:  "player-1",

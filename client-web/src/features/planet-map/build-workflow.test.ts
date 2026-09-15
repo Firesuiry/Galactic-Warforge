@@ -59,10 +59,11 @@ function createCatalog() {
 function createPlanet() {
   return {
     planet_id: "planet-1-1",
-    map_width: 8,
-    map_height: 8,
-    terrain: Array.from({ length: 8 }, () =>
-      Array.from({ length: 8 }, () => "buildable"),
+    surface: {topology:"cube_sphere" as const,face_size:8},
+    map_width: 24,
+    map_height: 16,
+    terrain: Array.from({ length: 16 }, (_,y) =>
+      Array.from({ length: 24 }, (_,x): string => x < 8 && y < 8 ? "buildable" : "unknown"),
     ),
     buildings: {
       "lab-1": {
@@ -194,7 +195,7 @@ describe("build workflow", () => {
     ]);
   });
 
-  it("按执行体坐标与 Manhattan 距离派生建造前检查", () => {
+  it("按执行体坐标与球面四邻接距离派生建造前检查", () => {
     const view = deriveBuildWorkflowView({
       catalog: createCatalog() as never,
       playerId: "p1",
@@ -207,14 +208,15 @@ describe("build workflow", () => {
       executorUnitId: "exec-1",
       executorPosition: { x: 1, y: 1, z: 0 },
       operateRange: 6,
-      distance: 7,
+      distance: undefined,
       inRange: false,
     });
     expect(view.preflightHints[0]).toMatchObject({
       title: "当前执行体无法直接建造到目标坐标",
       suggestedAction: "move_executor",
     });
-    expect(view.preflightHints[0]?.detail).toContain("distance / operateRange = 7 / 6");
+    expect(view.preflightHints[0]?.detail).toContain("6 格操作范围");
+    expect(view.preflightHints[0]?.detail).not.toContain("7");
   });
 
   it("根据建筑停机原因派生建造后的下一步供电提示", () => {
@@ -236,8 +238,9 @@ describe("build workflow", () => {
   it("对目标地块给出地形与占用诊断，并为超距建造生成建议落点", () => {
     const planet = createPlanet();
     planet.map_width = 12;
-    planet.map_height = 12;
-    planet.terrain = Array.from({ length: 12 }, () =>
+    planet.map_height = 8;
+    planet.surface.face_size = 4;
+    planet.terrain = Array.from({ length: 8 }, () =>
       Array.from({ length: 12 }, () => "buildable"),
     );
     planet.terrain[2][9] = "water";
@@ -260,6 +263,7 @@ describe("build workflow", () => {
       planet: planet as never,
       summary: createSummary() as never,
       selectedPosition: { x: 9, y: 2, z: 0 },
+      pathPlan: {planet_id:'p',surface:{topology:'cube_sphere',face_size:4},reachable:true,distance:3,path:[{x:1,y:1,z:0},{x:4,y:1,z:0}],waypoints:[{x:4,y:1,z:0}]},
       buildingType: "wind_turbine",
     });
 

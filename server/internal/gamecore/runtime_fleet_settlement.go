@@ -468,7 +468,7 @@ func selectEnemyForceByTaskForceProfile(
 		return nil
 	}
 	if preferred := findEnemyForceByID(ws, preferredTargetID); preferred != nil {
-		if profile.Pursue || model.CalculateDistance(anchor, preferred.Position) <= float64(maxDistance) {
+		if profile.Pursue || float64(ws.SurfaceDistance(anchor, preferred.Position)) <= float64(maxDistance) {
 			return preferred
 		}
 	}
@@ -483,7 +483,7 @@ func selectEnemyForceByTaskForceProfile(
 		if force == nil || force.Strength <= 0 {
 			continue
 		}
-		distance := model.CalculateDistance(anchor, force.Position)
+		distance := float64(ws.SurfaceDistance(anchor, force.Position))
 		if !profile.Pursue && distance > float64(maxDistance) {
 			continue
 		}

@@ -12,7 +12,7 @@ import (
 )
 
 func TestSnapshotRoundTrip(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 4, 4)
+	ws := model.NewWorldState("planet-1", 4)
 	ws.Tick = 42
 	ws.EntityCounter = 7
 	ws.Grid[0][1].Terrain = terrain.TileWater
@@ -264,7 +264,7 @@ func buildDiscovery() *mapstate.Discovery {
 // 回归：建筑生产配方必须在快照往返中保留（曾缺失 BuildingSnapshot.Production 字段，
 // 导致存档读档后熔炉/装配机配方丢失、产线静默停摆）。
 func TestSnapshotProductionRoundTrip(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 4, 4)
+	ws := model.NewWorldState("planet-1", 4)
 	player := &model.PlayerState{PlayerID: "player-1", IsAlive: true}
 	ws.Players[player.PlayerID] = player
 
@@ -305,5 +305,32 @@ func TestSnapshotProductionRoundTrip(t *testing.T) {
 	}
 	if restored.Production.RecipeID != "smelt_iron" || restored.Production.RemainingTicks != 12 {
 		t.Fatalf("production mismatch: %+v", restored.Production)
+	}
+}
+
+func TestSnapshotRestoresBuildingFootprintAcrossSeam(t *testing.T) {
+	ws := model.NewWorldState("test", 8)
+	profile := model.BuildingProfileFor(model.BuildingTypeArcSmelter, 1)
+	b := &model.Building{ID: "wide", Type: model.BuildingTypeArcSmelter, OwnerID: "p1", Position: model.Position{X: 7, Y: 4}, Runtime: profile.Runtime}
+	b.Runtime.Params.Footprint = model.Footprint{Width: 2, Height: 2}
+	model.InitBuildingStorage(b)
+	model.InitBuildingProduction(b)
+	ws.Buildings[b.ID] = b
+	if err := ws.IndexBuilding(b); err != nil {
+		t.Fatal(err)
+	}
+	saved := snapshot.CaptureRuntime(map[string]*model.WorldState{ws.PlanetID: ws}, ws.PlanetID, nil, nil)
+	worlds, _, _, err := saved.RestoreRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := worlds[ws.PlanetID]
+	if len(restored.TileBuilding) != 4 {
+		t.Fatalf("restored only %d footprint tiles", len(restored.TileBuilding))
+	}
+	for key := range ws.TileBuilding {
+		if restored.TileBuilding[key] != b.ID {
+			t.Fatalf("lost occupied tile %s", key)
+		}
 	}
 }

@@ -1,0 +1,79 @@
+package model
+
+import "fmt"
+
+// FootprintTiles maps a local rectangular footprint to the surface. A shape
+// larger than a face, or folding onto itself at a cube corner, is invalid.
+func (ws *WorldState) FootprintTiles(origin Position, fp Footprint) ([]Position, error) {
+	n := ws.Surface().Size
+	if !ws.InBounds(origin.X, origin.Y) {
+		return nil, fmt.Errorf("footprint origin out of bounds")
+	}
+	if fp.Width <= 0 || fp.Height <= 0 || fp.Width > n || fp.Height > n {
+		return nil, fmt.Errorf("invalid footprint: dimensions must be within face size %d", n)
+	}
+	out := make([]Position, 0, fp.Width*fp.Height)
+	seen := map[Position]bool{}
+	for y := 0; y < fp.Height; y++ {
+		for x := 0; x < fp.Width; x++ {
+			p := ws.SurfaceOffset(origin, x, y)
+			if seen[p] {
+				return nil, fmt.Errorf("invalid footprint: overlaps itself at cube corner")
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+func (ws *WorldState) BuildingTiles(b *Building) ([]Position, error) {
+	fp := b.Runtime.Params.Footprint
+	if fp.Width == 0 && fp.Height == 0 {
+		def, ok := BuildingDefinitionByID(b.Type)
+		if !ok {
+			return nil, fmt.Errorf("unknown building type %s", b.Type)
+		}
+		fp = def.Footprint
+	}
+	return ws.FootprintTiles(b.Position, fp)
+}
+
+// IndexBuilding atomically validates and indexes every occupied surface tile.
+func (ws *WorldState) IndexBuilding(b *Building) error {
+	tiles, err := ws.BuildingTiles(b)
+	if err != nil {
+		return err
+	}
+	for _, p := range tiles {
+		if id := ws.TileBuilding[TileKey(p.X, p.Y)]; id != "" && id != b.ID {
+			return fmt.Errorf("building footprint overlaps %s", id)
+		}
+	}
+	for _, p := range tiles {
+		ws.TileBuilding[TileKey(p.X, p.Y)] = b.ID
+		ws.Grid[p.Y][p.X].BuildingID = b.ID
+	}
+	return nil
+}
+
+// UnindexBuilding removes the entire footprint, including tiles on other faces.
+func (ws *WorldState) UnindexBuilding(b *Building) {
+	tiles, err := ws.BuildingTiles(b)
+	if err != nil {
+		panic(err)
+	}
+	for _, p := range tiles {
+		key := TileKey(p.X, p.Y)
+		if ws.TileBuilding[key] == b.ID {
+			delete(ws.TileBuilding, key)
+			ws.Grid[p.Y][p.X].BuildingID = ""
+		}
+	}
+}
+func (ws *WorldState) ConstructionTiles(task *ConstructionTask) ([]Position, error) {
+	def, ok := BuildingDefinitionByID(task.BuildingType)
+	if !ok {
+		return nil, fmt.Errorf("unknown building type %s", task.BuildingType)
+	}
+	return ws.FootprintTiles(task.Position, def.Footprint)
+}

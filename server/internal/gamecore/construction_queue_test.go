@@ -30,7 +30,7 @@ func newConstructionTestCore(t *testing.T, playerLimit, regionLimit int) *GameCo
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()

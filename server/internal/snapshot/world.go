@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 	"siliconworld/internal/terrain"
 )
 
@@ -14,6 +15,7 @@ type WorldSnapshot struct {
 	PlanetID        string                                `json:"planet_id"`
 	MapWidth        int                                   `json:"map_width"`
 	MapHeight       int                                   `json:"map_height"`
+	Surface         surface.Metadata                      `json:"surface"`
 	EntityCounter   int64                                 `json:"entity_counter"`
 	Players         map[string]*model.PlayerState         `json:"players"`
 	Buildings       map[string]*BuildingSnapshot          `json:"buildings"`
@@ -71,6 +73,7 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 		PlanetID:        ws.PlanetID,
 		MapWidth:        ws.MapWidth,
 		MapHeight:       ws.MapHeight,
+		Surface:         (surface.Grid{Size: ws.MapWidth / 3}).Metadata(),
 		EntityCounter:   ws.EntityCounter,
 		Players:         make(map[string]*model.PlayerState, len(ws.Players)),
 		Buildings:       make(map[string]*BuildingSnapshot, len(ws.Buildings)),
@@ -113,14 +116,14 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 	if snap == nil {
 		return nil, errors.New("world snapshot is nil")
 	}
-	if snap.MapWidth <= 0 || snap.MapHeight <= 0 {
-		return nil, fmt.Errorf("invalid map size %dx%d", snap.MapWidth, snap.MapHeight)
+	if snap.Surface.Topology != "cube_sphere" || snap.Surface.FaceSize < 1 || snap.MapWidth != 3*snap.Surface.FaceSize || snap.MapHeight != 2*snap.Surface.FaceSize {
+		return nil, fmt.Errorf("unsupported or inconsistent planetary surface: expected cube_sphere atlas 3N x 2N, got topology %q face_size %d atlas %dx%d; start a new game for legacy planar saves", snap.Surface.Topology, snap.Surface.FaceSize, snap.MapWidth, snap.MapHeight)
 	}
 	if err := validateTerrain(snap.Terrain, snap.MapWidth, snap.MapHeight); err != nil {
 		return nil, err
 	}
 
-	ws := model.NewWorldState(snap.PlanetID, snap.MapWidth, snap.MapHeight)
+	ws := model.NewWorldState(snap.PlanetID, snap.Surface.FaceSize)
 	ws.Tick = snap.Tick
 	ws.EntityCounter = snap.EntityCounter
 
@@ -201,7 +204,9 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		ws.Construction = model.NewConstructionQueue()
 	} else {
 		ws.Construction.EnsureInit()
-		ws.Construction.RebuildReservations()
+		if err := ws.Construction.RebuildReservations(ws); err != nil {
+			return nil, err
+		}
 	}
 
 	// Rebuild tile occupancy and link tiles.
@@ -212,12 +217,9 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		if !ws.InBounds(building.Position.X, building.Position.Y) {
 			return nil, fmt.Errorf("building %s out of bounds", id)
 		}
-		key := model.TileKey(building.Position.X, building.Position.Y)
-		if _, exists := ws.TileBuilding[key]; exists {
-			return nil, fmt.Errorf("duplicate building occupancy at %s", key)
+		if err := ws.IndexBuilding(building); err != nil {
+			return nil, fmt.Errorf("building %s occupancy: %w", id, err)
 		}
-		ws.TileBuilding[key] = id
-		ws.Grid[building.Position.Y][building.Position.X].BuildingID = id
 	}
 
 	for id, unit := range ws.Units {

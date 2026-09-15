@@ -34,6 +34,7 @@ type Planet struct {
 	Kind            PlanetKind
 	Orbit           Orbit
 	Moons           []Moon
+	FaceSize        int
 	Width           int
 	Height          int
 	Seed            int64

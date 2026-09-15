@@ -7,7 +7,7 @@ import (
 )
 
 func TestConveyorSettlementMovesItems(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	profile := model.BuildingProfileFor(model.BuildingTypeConveyorBeltMk1, 1)
@@ -64,7 +64,7 @@ func TestConveyorSettlementMovesItems(t *testing.T) {
 }
 
 func TestConveyorSettlementBlockedByCapacity(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	profile := model.BuildingProfileFor(model.BuildingTypeConveyorBeltMk1, 1)
@@ -124,7 +124,7 @@ func TestConveyorSettlementBlockedByCapacity(t *testing.T) {
 }
 
 func TestConveyorSettlementMergeFromMultipleInputs(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorEast)
@@ -161,7 +161,7 @@ func TestConveyorSettlementMergeFromMultipleInputs(t *testing.T) {
 }
 
 func TestConveyorSettlementMergeSharesCapacityAcrossSources(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorNorth)
@@ -207,7 +207,7 @@ func TestConveyorSettlementMergeSharesCapacityAcrossSources(t *testing.T) {
 }
 
 func TestConveyorSettlementMergePrefersDifferentItemsWhenTargetPartiallyFull(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorNorth)
@@ -250,7 +250,7 @@ func TestConveyorSettlementMergePrefersDifferentItemsWhenTargetPartiallyFull(t *
 }
 
 func TestConveyorSettlementSingleMixedSourcePrefersDifferentItemWhenTargetPartiallyFull(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	target := newConveyorBuilding("target", model.Position{X: 1, Y: 1}, model.ConveyorNorth)
@@ -294,7 +294,7 @@ func TestConveyorSettlementSingleMixedSourcePrefersDifferentItemWhenTargetPartia
 }
 
 func TestConveyorSettlementSplitAndTurnPriority(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	source := newConveyorBuilding("source", model.Position{X: 1, Y: 1}, model.ConveyorAuto)

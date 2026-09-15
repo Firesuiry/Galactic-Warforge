@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"siliconworld/internal/surface"
+)
 
 type PowerGridLinkKind string
 
@@ -49,20 +52,18 @@ type PowerGridEdge struct {
 
 // PowerGridGraph stores power grid nodes and edges with spatial indexing.
 type PowerGridGraph struct {
-	MapWidth  int
-	MapHeight int
-	Nodes     map[string]*PowerGridNode
-	Edges     map[string]map[string]PowerGridEdge
+	Surface surface.Grid
+	Nodes   map[string]*PowerGridNode
+	Edges   map[string]map[string]PowerGridEdge
 
 	connectorIndex    map[string][]PowerConnector
 	maxConnectorRange int
 }
 
 // NewPowerGridGraph creates an empty power grid graph.
-func NewPowerGridGraph(width, height int) *PowerGridGraph {
+func NewPowerGridGraph(grid surface.Grid) *PowerGridGraph {
 	return &PowerGridGraph{
-		MapWidth:       width,
-		MapHeight:      height,
+		Surface:        grid,
 		Nodes:          make(map[string]*PowerGridNode),
 		Edges:          make(map[string]map[string]PowerGridEdge),
 		connectorIndex: make(map[string][]PowerConnector),
@@ -72,9 +73,9 @@ func NewPowerGridGraph(width, height int) *PowerGridGraph {
 // BuildPowerGridGraph rebuilds the power grid topology from world state.
 func BuildPowerGridGraph(ws *WorldState) *PowerGridGraph {
 	if ws == nil {
-		return NewPowerGridGraph(0, 0)
+		return NewPowerGridGraph(surface.Grid{})
 	}
-	graph := NewPowerGridGraph(ws.MapWidth, ws.MapHeight)
+	graph := NewPowerGridGraph(ws.Surface())
 	for _, building := range ws.Buildings {
 		graph.AddBuilding(building)
 	}
@@ -87,7 +88,7 @@ func RegisterPowerGridBuilding(ws *WorldState, building *Building) {
 		return
 	}
 	if ws.PowerGrid == nil {
-		ws.PowerGrid = NewPowerGridGraph(ws.MapWidth, ws.MapHeight)
+		ws.PowerGrid = NewPowerGridGraph(ws.Surface())
 	}
 	ws.PowerGrid.AddBuilding(building)
 }
@@ -119,7 +120,7 @@ func (g *PowerGridGraph) AddBuilding(building *Building) bool {
 	if _, exists := g.Nodes[building.ID]; exists {
 		return false
 	}
-	connectors := powerGridConnectors(building)
+	connectors := g.powerGridConnectors(building)
 	if len(connectors) == 0 {
 		return false
 	}
@@ -248,39 +249,23 @@ func (g *PowerGridGraph) connectConnector(conn PowerConnector, scanRange int) {
 	if scanRange <= 0 {
 		return
 	}
-	startX := conn.Position.X - scanRange
-	endX := conn.Position.X + scanRange
-	startY := conn.Position.Y - scanRange
-	endY := conn.Position.Y + scanRange
-	for y := startY; y <= endY; y++ {
-		if g.MapHeight > 0 && (y < 0 || y >= g.MapHeight) {
-			continue
-		}
-		for x := startX; x <= endX; x++ {
-			if g.MapWidth > 0 && (x < 0 || x >= g.MapWidth) {
+	grid := g.Surface
+	for _, tile := range grid.Disc(surface.Tile{X: conn.Position.X, Y: conn.Position.Y}, scanRange) {
+		for _, other := range g.connectorIndex[TileKey(tile.X, tile.Y)] {
+			if other.BuildingID == conn.BuildingID {
 				continue
 			}
-			key := TileKey(x, y)
-			neighbors := g.connectorIndex[key]
-			if len(neighbors) == 0 {
+			dist := grid.Distance(surface.Tile{X: conn.Position.X, Y: conn.Position.Y}, surface.Tile{X: other.Position.X, Y: other.Position.Y})
+			if dist <= 0 {
 				continue
 			}
-			for _, other := range neighbors {
-				if other.BuildingID == conn.BuildingID {
-					continue
-				}
-				dist := manhattanDistance(conn.Position, other.Position)
-				if dist <= 0 {
-					continue
-				}
-				kind, ok := linkKind(conn, other, dist)
-				if !ok {
-					continue
-				}
+			kind, ok := linkKind(conn, other, dist)
+			if ok {
 				g.addEdge(conn.BuildingID, other.BuildingID, kind, dist)
 			}
 		}
 	}
+
 }
 
 func (g *PowerGridGraph) addEdge(a, b string, kind PowerGridLinkKind, distance int) {
@@ -371,7 +356,7 @@ func hasPowerConnection(building *Building) bool {
 	return false
 }
 
-func powerGridConnectors(building *Building) []PowerConnector {
+func (g *PowerGridGraph) powerGridConnectors(building *Building) []PowerConnector {
 	if building == nil {
 		return nil
 	}
@@ -380,11 +365,8 @@ func powerGridConnectors(building *Building) []PowerConnector {
 		if conn.Kind != ConnectionPower {
 			continue
 		}
-		pos := Position{
-			X: building.Position.X + conn.Offset.X,
-			Y: building.Position.Y + conn.Offset.Y,
-			Z: building.Position.Z,
-		}
+		tile := g.Surface.Offset(surface.Tile{X: building.Position.X, Y: building.Position.Y}, conn.Offset.X, conn.Offset.Y)
+		pos := Position{X: tile.X, Y: tile.Y, Z: building.Position.Z}
 		connectors = append(connectors, PowerConnector{
 			BuildingID: building.ID,
 			Position:   pos,
@@ -452,18 +434,6 @@ func needsPowerConnection(building *Building) bool {
 		}
 	}
 	return false
-}
-
-func manhattanDistance(a, b Position) int {
-	dx := a.X - b.X
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := a.Y - b.Y
-	if dy < 0 {
-		dy = -dy
-	}
-	return dx + dy
 }
 
 func maxIntValue(a, b int) int {

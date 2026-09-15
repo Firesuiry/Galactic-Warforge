@@ -36,8 +36,9 @@ const metrics = {
 const summary = {
   tick: 128,
   active_planet_id: 'planet-1-1',
-  map_width: 8,
-  map_height: 6,
+  surface: {topology: 'cube_sphere' as const, face_size: 8},
+  map_width: 24,
+  map_height: 16,
   players: {
     p1: {
       player_id: 'p1',
@@ -373,17 +374,18 @@ const planets: Record<string, PlanetView> = {
     name: 'Gaia',
     discovered: true,
     kind: 'terrestrial',
-    map_width: 8,
-    map_height: 6,
+    surface: {topology: 'cube_sphere' as const, face_size: 8},
+  map_width: 24,
+    map_height: 16,
     tick: 128,
-    terrain: [
+    terrain: Array.from({length:16},(_,y)=>Array.from({length:24},(_,x)=>([
       ['buildable', 'buildable', 'buildable', 'buildable', 'water', 'water', 'buildable', 'buildable'],
       ['buildable', 'buildable', 'buildable', 'buildable', 'water', 'water', 'buildable', 'buildable'],
       ['blocked', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'lava'],
       ['blocked', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'lava'],
       ['buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable'],
       ['buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable', 'buildable'],
-    ],
+    ])[y]?.[x]??'unknown')),
     environment: {
       wind_factor: 0.8,
       light_factor: 1.15,
@@ -546,24 +548,25 @@ const fogByPlanet: Record<string, FogMapView> = {
   'planet-1-1': {
     planet_id: 'planet-1-1',
     discovered: true,
-    map_width: 8,
-    map_height: 6,
-    visible: [
+    surface: {topology: 'cube_sphere' as const, face_size: 8},
+  map_width: 24,
+    map_height: 16,
+    visible: Array.from({length:16},(_,y)=>Array.from({length:24},(_,x)=>([
       [true, true, true, true, false, false, false, false],
       [true, true, true, true, false, false, false, false],
       [true, true, true, true, true, false, false, false],
       [false, true, true, true, true, false, false, false],
       [false, false, true, true, true, true, false, false],
       [false, false, false, true, true, true, false, false],
-    ],
-    explored: [
+    ])[y]?.[x]??false)),
+    explored: Array.from({length:16},(_,y)=>Array.from({length:24},(_,x)=>([
       [true, true, true, true, false, false, false, false],
       [true, true, true, true, true, false, false, false],
       [true, true, true, true, true, true, false, false],
       [true, true, true, true, true, true, false, false],
       [true, true, true, true, true, true, true, false],
       [false, true, true, true, true, true, true, false],
-    ],
+    ])[y]?.[x]??false)),
   },
 };
 

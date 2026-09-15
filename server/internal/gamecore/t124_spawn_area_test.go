@@ -23,8 +23,7 @@ func newT124Universe(t *testing.T, seed string, width, height int, spawns []mapc
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
 		Planet: mapconfig.PlanetConfig{
-			Width:           width,
-			Height:          height,
+			FaceSize:        width,
 			ResourceDensity: 8,
 			Terrain: mapconfig.TerrainConfig{
 				WaterRatio:   t124FloatPtr(0.3),
@@ -74,30 +73,21 @@ func t124UnitPos(t *testing.T, ws *model.WorldState, playerID string, unitType m
 	return model.Position{}
 }
 
-func assertT124EdgeMargin(t *testing.T, ws *model.WorldState, pos model.Position, margin int) {
+func assertT124SurfacePosition(t *testing.T, ws *model.WorldState, pos model.Position, _ int) {
 	t.Helper()
-	if pos.X < margin || pos.Y < margin || pos.X > ws.MapWidth-1-margin || pos.Y > ws.MapHeight-1-margin {
-		t.Fatalf("spawn (%d,%d) closer than %d tiles to map edge %dx%d", pos.X, pos.Y, margin, ws.MapWidth, ws.MapHeight)
+	if !ws.InBounds(pos.X, pos.Y) {
+		t.Fatalf("invalid surface spawn %v", pos)
 	}
 }
 
 func assertT124BuildableAround(t *testing.T, ws *model.WorldState, planet *mapmodel.Planet, center model.Position, radius int) {
 	t.Helper()
-	for dy := -radius; dy <= radius; dy++ {
-		for dx := -radius; dx <= radius; dx++ {
-			if dx*dx+dy*dy > radius*radius {
-				continue
-			}
-			x, y := center.X+dx, center.Y+dy
-			if x < 0 || y < 0 || x >= ws.MapWidth || y >= ws.MapHeight {
-				continue
-			}
-			if !ws.Grid[y][x].Terrain.Buildable() {
-				t.Fatalf("world tile (%d,%d) within radius %d of spawn (%d,%d) is %s", x, y, radius, center.X, center.Y, ws.Grid[y][x].Terrain)
-			}
-			if planet != nil && !planet.Terrain[y][x].Buildable() {
-				t.Fatalf("map-model tile (%d,%d) within radius %d of spawn (%d,%d) is %s", x, y, radius, center.X, center.Y, planet.Terrain[y][x])
-			}
+	for _, p := range ws.SurfaceDisc(center, radius) {
+		if !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+			t.Fatalf("surface tile %v near spawn %v blocked", p, center)
+		}
+		if planet != nil && !planet.Terrain[p.Y][p.X].Buildable() {
+			t.Fatalf("map terrain %v not flattened", p)
 		}
 	}
 }
@@ -112,7 +102,7 @@ func TestT124AutoSpawnAreaIsBuildableAndAwayFromEdges(t *testing.T) {
 		planet := maps.PrimaryPlanet()
 		for _, pid := range players {
 			base := t124BuildingPos(t, ws, pid, model.BuildingTypeBattlefieldAnalysisBase)
-			assertT124EdgeMargin(t, ws, base, 8)
+			assertT124SurfacePosition(t, ws, base, 8)
 			assertT124BuildableAround(t, ws, planet, base, spawnAreaRadius)
 
 			exec := t124UnitPos(t, ws, pid, model.UnitTypeExecutor)
@@ -146,10 +136,10 @@ func TestT124RelocatedSpawnAreaIsFlattened(t *testing.T) {
 	if base.X == ws.MapWidth/2 && base.Y == ws.MapHeight/2 {
 		t.Fatalf("expected spawn relocated away from center (%d,%d)", base.X, base.Y)
 	}
-	if dist := model.ManhattanDist(base, model.Position{X: 20, Y: 20}); dist > spawnMineDistance([]config.PlayerConfig{{Executor: config.ExecutorConfig{OperateRange: 6}}}) {
+	if dist := ws.SurfaceDistance(base, model.Position{X: 20, Y: 20}); dist > spawnMineDistance([]config.PlayerConfig{{Executor: config.ExecutorConfig{OperateRange: 6}}}) {
 		t.Fatalf("base (%d,%d) not relocated next to ore node (20,20), dist=%d", base.X, base.Y, dist)
 	}
-	assertT124EdgeMargin(t, ws, base, 8)
+	assertT124SurfacePosition(t, ws, base, 8)
 	assertT124BuildableAround(t, ws, planet, base, spawnAreaRadius)
 }
 
@@ -265,21 +255,28 @@ func TestConfigDevStarterOresReachableForMatrixChain(t *testing.T) {
 	}
 }
 
-func TestT124ComputeStartPositionsRespectEdgeMargin(t *testing.T) {
+func TestT124ComputeStartPositionsUseDistinctFaces(t *testing.T) {
 	cfg := &config.Config{Players: []config.PlayerConfig{{PlayerID: "p1"}, {PlayerID: "p2"}, {PlayerID: "p3"}, {PlayerID: "p4"}, {PlayerID: "p5"}}}
-	for _, pos := range computeStartPositions(cfg, 64, 48) {
-		if pos.X < 8 || pos.Y < 8 || pos.X > 64-1-8 || pos.Y > 48-1-8 {
-			t.Fatalf("start position (%d,%d) violates edge margin on 64x48 map", pos.X, pos.Y)
+	ws := model.NewWorldState("test", 32)
+	seen := map[int]bool{}
+	for _, p := range computeStartPositions(cfg, ws.Surface()) {
+		if !ws.InBounds(p.X, p.Y) {
+			t.Fatalf("invalid spawn %v", p)
 		}
+		face := p.Y/32*3 + p.X/32
+		if seen[face] {
+			t.Fatal("players share spawn face")
+		}
+		seen[face] = true
 	}
 }
 
 func TestT124FlattenSpawnAreaOnlyTouchesRadius(t *testing.T) {
-	ws := model.NewWorldState("planet-1-1", 32, 32)
-	planet := &mapmodel.Planet{ID: "planet-1-1", Width: 32, Height: 32}
-	planet.Terrain = make([][]terrain.TileType, 32)
+	ws := model.NewWorldState("planet-1-1", 32)
+	planet := &mapmodel.Planet{ID: "planet-1-1", FaceSize: 32, Width: ws.MapWidth, Height: ws.MapHeight}
+	planet.Terrain = make([][]terrain.TileType, ws.MapHeight)
 	for y := range ws.Grid {
-		planet.Terrain[y] = make([]terrain.TileType, 32)
+		planet.Terrain[y] = make([]terrain.TileType, ws.MapWidth)
 		for x := range ws.Grid[y] {
 			ws.Grid[y][x].Terrain = terrain.TileWater
 			planet.Terrain[y][x] = terrain.TileWater

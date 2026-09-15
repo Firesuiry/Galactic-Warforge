@@ -7,7 +7,7 @@ import (
 )
 
 func TestSorterMovesItemsWithinRangeAndSpeed(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5, 1)
+	ws := model.NewWorldState("planet-1", 5)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	input := newConveyorBuilding("in", model.Position{X: 0, Y: 0}, model.ConveyorEast)
@@ -38,7 +38,7 @@ func TestSorterMovesItemsWithinRangeAndSpeed(t *testing.T) {
 }
 
 func TestSorterFilterRespectsFrontStack(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 1)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	input := newConveyorBuilding("in", model.Position{X: 0, Y: 0}, model.ConveyorEast)
@@ -76,7 +76,7 @@ func TestSorterFilterRespectsFrontStack(t *testing.T) {
 }
 
 func TestSorterPriorityOrder(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	inputNorth := newConveyorBuilding("in-n", model.Position{X: 1, Y: 0}, model.ConveyorSouth)

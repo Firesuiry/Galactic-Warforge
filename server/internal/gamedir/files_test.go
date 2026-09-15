@@ -28,7 +28,7 @@ func TestWriteRoundTrip(t *testing.T) {
 		MapConfig: mapconfig.Config{
 			Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 			System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-			Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 8},
+			Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 		},
 	}
 	save := &SaveFile{
@@ -188,7 +188,7 @@ func TestNewMetaFileSetsMetadata(t *testing.T) {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 3},
-		Planet: mapconfig.PlanetConfig{Width: 8, Height: 8, ResourceDensity: 9},
+		Planet: mapconfig.PlanetConfig{FaceSize: 8, ResourceDensity: 9},
 	}
 
 	meta := NewMetaFile(cfg, mapCfg)
@@ -522,7 +522,7 @@ func minimalMeta() *MetaFile {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 4, Height: 4, ResourceDensity: 5},
+		Planet: mapconfig.PlanetConfig{FaceSize: 4, ResourceDensity: 5},
 	}
 	return NewMetaFile(cfg, mapCfg)
 }

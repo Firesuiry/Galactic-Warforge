@@ -145,7 +145,7 @@ func (d *LogisticsDroneState) Unload(itemID string, qty int) (int, int, error) {
 }
 
 // BeginTrip starts a takeoff towards the target.
-func (d *LogisticsDroneState) BeginTrip(targetStationID string, targetPos Position) error {
+func (d *LogisticsDroneState) BeginTrip(targetStationID string, targetPos Position, distance int) error {
 	if d == nil {
 		return fmt.Errorf("drone required")
 	}
@@ -157,7 +157,7 @@ func (d *LogisticsDroneState) BeginTrip(targetStationID string, targetPos Positi
 	d.TargetPos = &Position{X: targetPos.X, Y: targetPos.Y, Z: targetPos.Z}
 	d.Status = LogisticsDroneTakeoff
 	d.RemainingTicks = DefaultLogisticsDroneTakeoffTicks
-	d.TravelTicks = LogisticsDroneTravelTicks(ManhattanDist(d.Position, targetPos), d.Speed)
+	d.TravelTicks = LogisticsDroneTravelTicks(distance, d.Speed)
 	return nil
 }
 

@@ -9,7 +9,7 @@ PORT="${1:-19481}"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/sw-war-test-server.XXXXXX")
 CONFIG_SRC="${SERVER_ROOT}/config-war.yaml"
-MAP_SRC="${SERVER_ROOT}/map-war.yaml"
+MAP_SRC="${SW_TEST_MAP:-${SERVER_ROOT}/map-war.yaml}"
 CONFIG_TMP="${WORK_DIR}/config-war.yaml"
 DATA_DIR="${WORK_DIR}/data-war"
 

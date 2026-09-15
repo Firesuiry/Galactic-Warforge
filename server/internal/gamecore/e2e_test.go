@@ -28,7 +28,7 @@ func newE2ETestCore(t *testing.T) *GameCore {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 32, Height: 32, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 32, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
@@ -169,8 +169,27 @@ func TestE2E_ProductionChain(t *testing.T) {
 	}
 	powerPos, err := findAdjacentOpenTile(ws, *pos)
 	if err != nil {
-		t.Fatalf("find adjacent power tile: %v", err)
+		t.Fatal(err)
 	}
+	if powerPos == nil {
+		executor := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID]
+		for _, candidate := range ws.SurfaceDisc(executor.Position, player.ExecutorForPlanet(ws.PlanetID).OperateRange) {
+			if !t103IsOpenBuildTile(ws, candidate) {
+				continue
+			}
+			neighbor, _ := findAdjacentOpenTile(ws, candidate)
+			if neighbor != nil && ws.SurfaceWithin(executor.Position, *neighbor, player.ExecutorForPlanet(ws.PlanetID).OperateRange) {
+				p := candidate
+				pos = &p
+				powerPos = neighbor
+				break
+			}
+		}
+	}
+	if powerPos == nil {
+		t.Fatal("no reachable adjacent pair for production chain")
+	}
+
 	buildCmd := model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
@@ -855,12 +874,7 @@ func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.P
 	if ws == nil {
 		return nil, nil
 	}
-	candidates := []model.Position{
-		{X: origin.X + 1, Y: origin.Y},
-		{X: origin.X - 1, Y: origin.Y},
-		{X: origin.X, Y: origin.Y + 1},
-		{X: origin.X, Y: origin.Y - 1},
-	}
+	candidates := ws.SurfaceNeighbors(origin)
 	ws.RLock()
 	defer ws.RUnlock()
 	for _, candidate := range candidates {

@@ -21,7 +21,7 @@ func TestLogisticsDemandForecast(t *testing.T) {
 		}
 	}()
 
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	target := newPlanetaryStationBuilding("pl-1", model.Position{X: 0, Y: 0}, "p1")
 	ws.Buildings[target.ID] = target
 	model.RegisterLogisticsStation(ws, target)
@@ -60,7 +60,7 @@ func TestLogisticsOversupplyAllowsExtra(t *testing.T) {
 		}
 	}()
 
-	ws := model.NewWorldState("planet-1", 2, 1)
+	ws := model.NewWorldState("planet-1", 2)
 	target := newPlanetaryStationBuilding("pl-2", model.Position{X: 0, Y: 0}, "p1")
 	ws.Buildings[target.ID] = target
 	model.RegisterLogisticsStation(ws, target)
@@ -100,7 +100,7 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 		}
 	}()
 
-	ws := model.NewWorldState("planet-1", 12, 1)
+	ws := model.NewWorldState("planet-1", 12)
 	origin := newPlanetaryStationBuilding("pl-origin", model.Position{X: 0, Y: 0}, "p1")
 	near := newPlanetaryStationBuilding("pl-near", model.Position{X: 2, Y: 0}, "p1")
 	far := newPlanetaryStationBuilding("pl-far", model.Position{X: 10, Y: 0}, "p1")
@@ -147,7 +147,7 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 	})
 
 	drone := model.NewLogisticsDroneState("drone-1", origin.ID, origin.Position)
-	candidate := selectDispatchCandidate(origin.ID, origin, origin.LogisticsStation, demandRemaining, map[string]*model.Building{
+	candidate := selectDispatchCandidate(ws, origin.ID, origin, origin.LogisticsStation, demandRemaining, map[string]*model.Building{
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,
@@ -166,7 +166,7 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 		near.ID:   near,
 		far.ID:    far,
 	})
-	candidate = selectDispatchCandidate(origin.ID, origin, origin.LogisticsStation, demandRemaining, map[string]*model.Building{
+	candidate = selectDispatchCandidate(ws, origin.ID, origin, origin.LogisticsStation, demandRemaining, map[string]*model.Building{
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,

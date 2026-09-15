@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestBuildBlueprintBatchCommandsSkipInvalid(t *testing.T) {
-	ws := NewWorldState("planet-1", 5, 5)
+	ws := NewWorldState("planet-1", 5)
 	blocker := newBatchTestBuilding("b1", BuildingTypeAssemblingMachineMk1, Position{X: 1, Y: 1}, "p1")
 	attachBatchTestBuilding(ws, blocker)
 
@@ -30,7 +30,7 @@ func TestBuildBlueprintBatchCommandsSkipInvalid(t *testing.T) {
 }
 
 func TestBuildBlueprintBatchCommandsRollback(t *testing.T) {
-	ws := NewWorldState("planet-1", 5, 5)
+	ws := NewWorldState("planet-1", 5)
 	blocker := newBatchTestBuilding("b1", BuildingTypeAssemblingMachineMk1, Position{X: 1, Y: 1}, "p1")
 	attachBatchTestBuilding(ws, blocker)
 
@@ -54,7 +54,7 @@ func TestBuildBlueprintBatchCommandsRollback(t *testing.T) {
 }
 
 func TestBuildBlueprintBatchCommandsResourceNode(t *testing.T) {
-	ws := NewWorldState("planet-1", 3, 3)
+	ws := NewWorldState("planet-1", 3)
 	placement := BlueprintPlacementResult{
 		Items: []BlueprintPlacementItem{
 			{BuildingType: BuildingTypeMiningMachine, Params: BlueprintParams{}, Position: Position{X: 1, Y: 1}},
@@ -74,7 +74,7 @@ func TestBuildBlueprintBatchCommandsResourceNode(t *testing.T) {
 }
 
 func TestBuildBlueprintBatchDemolishSkipInvalid(t *testing.T) {
-	ws := NewWorldState("planet-1", 5, 5)
+	ws := NewWorldState("planet-1", 5)
 	own := newBatchTestBuilding("b1", BuildingTypeAssemblingMachineMk1, Position{X: 1, Y: 1}, "p1")
 	other := newBatchTestBuilding("b2", BuildingTypeAssemblingMachineMk1, Position{X: 2, Y: 1}, "p2")
 	attachBatchTestBuilding(ws, own)
@@ -94,7 +94,7 @@ func TestBuildBlueprintBatchDemolishSkipInvalid(t *testing.T) {
 }
 
 func TestBuildBlueprintBatchDemolishRollback(t *testing.T) {
-	ws := NewWorldState("planet-1", 5, 5)
+	ws := NewWorldState("planet-1", 5)
 	own := newBatchTestBuilding("b1", BuildingTypeAssemblingMachineMk1, Position{X: 1, Y: 1}, "p1")
 	other := newBatchTestBuilding("b2", BuildingTypeAssemblingMachineMk1, Position{X: 2, Y: 1}, "p2")
 	attachBatchTestBuilding(ws, own)

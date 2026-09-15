@@ -1,3 +1,4 @@
+import { CUBE_FACES } from '@shared/surface';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -14,7 +15,6 @@ import {
   centerCameraAxisOffset,
   clamp,
   getViewportTileBounds,
-  isWrapAxisEnabled,
   resolveCameraAxisOffset,
   type PlanetRenderView,
   resolveFocusCameraAxisOffset,
@@ -118,8 +118,8 @@ function pointToTile(
   let x = Math.floor((clientX - rect.left - offsetX) / tileSize);
   let y = Math.floor((clientY - rect.top - offsetY) / tileSize);
   // 环绕轴：任何屏幕位置都命中某个真实 tile（取模回绕）；非环绕轴维持出界判空。
-  const wrapX = isWrapAxisEnabled(planet.map_width * tileSize, rect.width);
-  const wrapY = isWrapAxisEnabled(planet.map_height * tileSize, rect.height);
+  const wrapX = false;
+  const wrapY = false;
   if (wrapX) {
     x = wrapMod(x, planet.map_width);
   } else if (x < 0 || x >= planet.map_width) {
@@ -737,6 +737,9 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         role="img"
       >
         <PixiStage className="planet-map-canvas__pixi" onReady={handlePixiReady} />
+        <div aria-label="立方体六面展开边界" style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
+          {CUBE_FACES.map((face,index)=><div key={face.name} style={{position:'absolute',left:camera.offsetX+index%3*planet.map_width/3*tileSize,top:camera.offsetY+Math.floor(index/3)*planet.map_width/3*tileSize,width:planet.map_width/3*tileSize,height:planet.map_width/3*tileSize,border:'2px dashed #e0c173',boxSizing:'border-box',color:'#ffe9ad',padding:8,fontWeight:700}}>{face.name} 面</div>)}
+        </div>
         {/*
           语义实体层（ghost）：带 data-entity-* 的只读 DOM，供 DevTools/agent 定位；
           opacity:0 + pointer-events:none（Playwright 对 opacity:0 仍判 visible），
@@ -756,6 +759,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         </div>
       </div>
       <div className="planet-map-canvas__status">
+        <span>六面展开图 · 虚线两侧不一定相邻，跨面连接请使用球面视图</span>
         <span>{overviewMode ? `缩放 ${getPlanetZoomStatusLabel(camera.zoomIndex, planet.map_width, planet.map_height)}` : `缩放 ${sceneZoomStatusLabel}`}</span>
         <span>
           Hover {hoveredTile ? `(${hoveredTile.x}, ${hoveredTile.y})` : '-'}

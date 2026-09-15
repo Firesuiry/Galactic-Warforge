@@ -20,16 +20,16 @@ func NewOrbitalPlatformManager() *OrbitalPlatformManager {
 func (m *OrbitalPlatformManager) SpawnOrbitalPlatform(ws *model.WorldState, platformType, ownerID, planetID string, rng interface{}) *model.OrbitalPlatform {
 	stats := model.DefaultOrbitalPlatformStats(platformType)
 	platform := &model.OrbitalPlatform{
-		ID:        ws.NextEntityID("orbital"),
-		OwnerID:   ownerID,
-		PlanetID:  planetID,
-		Orbit:     stats.Orbit,
-		HP:        stats.HP,
-		MaxHP:     stats.MaxHP,
-		Weapon:    stats.Weapon,
+		ID:           ws.NextEntityID("orbital"),
+		OwnerID:      ownerID,
+		PlanetID:     planetID,
+		Orbit:        stats.Orbit,
+		HP:           stats.HP,
+		MaxHP:        stats.MaxHP,
+		Weapon:       stats.Weapon,
 		AmmoCapacity: stats.AmmoCapacity,
-		AmmoCount: stats.AmmoCount,
-		IsActive:  stats.IsActive,
+		AmmoCount:    stats.AmmoCount,
+		IsActive:     stats.IsActive,
 	}
 
 	m.Platforms[platform.ID] = platform
@@ -67,7 +67,7 @@ func (gc *GameCore) settleOrbitalCombat() []*model.GameEvent {
 		}
 
 		// 查找最近的敌对势力
-		target := findNearestEnemyForce(ws, platform.CalculateGroundPosition(10.0))
+		target := findNearestEnemyForce(ws, platform.CalculateGroundPosition(ws))
 		if target == nil {
 			continue
 		}
@@ -81,7 +81,7 @@ func (gc *GameCore) settleOrbitalCombat() []*model.GameEvent {
 		}
 
 		// 计算距离
-		distance := model.CalculateOrbitalDistance(platform.Orbit, target.Position, 10.0)
+		distance := model.CalculateOrbitalDistance(ws, platform.Orbit, target.Position)
 		if distance > platform.Weapon.Range {
 			continue
 		}
@@ -97,11 +97,11 @@ func (gc *GameCore) settleOrbitalCombat() []*model.GameEvent {
 			EventType:       model.EvtDamageApplied,
 			VisibilityScope: platform.OwnerID,
 			Payload: map[string]any{
-				"attacker_id": platform.ID,
+				"attacker_id":   platform.ID,
 				"attacker_type": "orbital_platform",
-				"target_id":   target.ID,
-				"target_type": "enemy_force",
-				"damage":      damage,
+				"target_id":     target.ID,
+				"target_type":   "enemy_force",
+				"damage":        damage,
 			},
 		})
 
@@ -153,8 +153,8 @@ func (gc *GameCore) settleOrbitalCombat() []*model.GameEvent {
 					continue
 				}
 
-				groundPos := platform.CalculateGroundPosition(10.0)
-				dist := model.CalculateDistance(force.Position, groundPos)
+				groundPos := platform.CalculateGroundPosition(ws)
+				dist := float64(ws.SurfaceDistance(force.Position, groundPos))
 
 				// 敌对势力在一定范围内可以攻击轨道平台
 				if dist > 20 { // 敌对势力攻击范围
@@ -177,12 +177,12 @@ func (gc *GameCore) settleOrbitalCombat() []*model.GameEvent {
 					EventType:       model.EvtDamageApplied,
 					VisibilityScope: platform.OwnerID,
 					Payload: map[string]any{
-						"attacker_id": force.ID,
+						"attacker_id":   force.ID,
 						"attacker_type": "enemy_force",
-						"target_id":   platform.ID,
-						"target_type": "orbital_platform",
-						"damage":      damage,
-						"target_hp":   platform.HP,
+						"target_id":     platform.ID,
+						"target_type":   "orbital_platform",
+						"damage":        damage,
+						"target_hp":     platform.HP,
 					},
 				})
 

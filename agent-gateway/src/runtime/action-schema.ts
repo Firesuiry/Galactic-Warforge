@@ -261,8 +261,8 @@ function normalizeOptionalPolicy(value: unknown, fieldName: string) {
       military.allowedCommandIds = allowedCommandIds;
     }
     if (militaryRecord.maxMilitaryProductionCount !== undefined) {
-      const maxMilitaryProductionCount = asFiniteNumber(militaryRecord.maxMilitaryProductionCount);
-      if (maxMilitaryProductionCount === undefined) {
+      const maxMilitaryProductionCount = militaryRecord.maxMilitaryProductionCount;
+      if (typeof maxMilitaryProductionCount !== 'number' || !Number.isFinite(maxMilitaryProductionCount)) {
         throw new Error(`${fieldName}.military.maxMilitaryProductionCount must be a number`);
       }
       military.maxMilitaryProductionCount = maxMilitaryProductionCount;

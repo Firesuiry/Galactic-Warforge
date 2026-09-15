@@ -170,6 +170,13 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		return nil, fmt.Errorf("active world %s missing in save", activePlanetID)
 	}
 	for _, world := range worlds {
+		planet, ok := maps.Planet(world.PlanetID)
+		if !ok || planet == nil {
+			return nil, fmt.Errorf("saved planet %s does not exist in map", world.PlanetID)
+		}
+		if world.MapWidth != planet.Width || world.MapHeight != planet.Height || world.Surface().Size != planet.FaceSize {
+			return nil, fmt.Errorf("saved planet %s surface does not match map topology", world.PlanetID)
+		}
 		world.Tick = save.Tick
 		// The saved world grid is the authoritative terrain (spawn areas were
 		// flattened at bootstrap); sync it back so map-model terrain views

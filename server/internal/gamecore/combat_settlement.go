@@ -81,7 +81,7 @@ func (gc *GameCore) settleCombat() []*model.GameEvent {
 		}
 
 		// 开火
-		damage, success := model.ProcessWeaponFire(unit, &model.CombatUnit{
+		damage, success := model.ProcessWeaponFire(ws, unit, &model.CombatUnit{
 			ID:       target.ID,
 			Position: target.Position,
 			HP:       target.Strength,
@@ -93,11 +93,11 @@ func (gc *GameCore) settleCombat() []*model.GameEvent {
 				EventType:       model.EvtDamageApplied,
 				VisibilityScope: unit.PlayerID,
 				Payload: map[string]any{
-					"attacker_id": unit.ID,
+					"attacker_id":   unit.ID,
 					"attacker_type": "combat_unit",
-					"target_id":   target.ID,
-					"target_type": "enemy_force",
-					"damage":      damage,
+					"target_id":     target.ID,
+					"target_type":   "enemy_force",
+					"damage":        damage,
 				},
 			})
 
@@ -153,7 +153,7 @@ func (gc *GameCore) settleCombat() []*model.GameEvent {
 			}
 
 			// 查找最近的战斗单位
-			target := findNearestCombatUnit(manager, force.Position)
+			target := findNearestCombatUnit(ws, manager, force.Position)
 			if target != nil {
 				// 计算敌人对单位的伤害
 				damage := force.Strength / 2
@@ -168,12 +168,12 @@ func (gc *GameCore) settleCombat() []*model.GameEvent {
 					EventType:       model.EvtDamageApplied,
 					VisibilityScope: target.PlayerID,
 					Payload: map[string]any{
-						"attacker_id": force.ID,
+						"attacker_id":   force.ID,
 						"attacker_type": "enemy_force",
-						"target_id":   target.ID,
-						"target_type": "combat_unit",
-						"damage":      damage,
-						"target_hp":   target.HP,
+						"target_id":     target.ID,
+						"target_type":   "combat_unit",
+						"damage":        damage,
+						"target_hp":     target.HP,
 					},
 				})
 
@@ -221,7 +221,7 @@ func findNearestEnemyForce(ws *model.WorldState, pos model.Position) *model.Enem
 
 	for i := range ws.EnemyForces.Forces {
 		force := &ws.EnemyForces.Forces[i]
-		dist := model.CalculateDistance(pos, force.Position)
+		dist := float64(ws.SurfaceDistance(pos, force.Position))
 		if dist < minDist {
 			minDist = dist
 			nearest = force
@@ -232,7 +232,7 @@ func findNearestEnemyForce(ws *model.WorldState, pos model.Position) *model.Enem
 }
 
 // findNearestCombatUnit 查找最近的战斗单位
-func findNearestCombatUnit(manager *CombatUnitManager, pos model.Position) *model.CombatUnit {
+func findNearestCombatUnit(ws *model.WorldState, manager *CombatUnitManager, pos model.Position) *model.CombatUnit {
 	var nearest *model.CombatUnit
 	minDist := float64(^uint(0) >> 1)
 
@@ -240,7 +240,7 @@ func findNearestCombatUnit(manager *CombatUnitManager, pos model.Position) *mode
 		if unit.State == model.CombatUnitStateDead {
 			continue
 		}
-		dist := model.CalculateDistance(pos, unit.Position)
+		dist := float64(ws.SurfaceDistance(pos, unit.Position))
 		if dist < minDist {
 			minDist = dist
 			nearest = unit

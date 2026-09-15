@@ -112,9 +112,7 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	model.UnregisterLogisticsStation(ws, entityID)
 	model.UnregisterPowerGridBuilding(ws, entityID)
 	delete(ws.Buildings, entityID)
-	tileKey := model.TileKey(building.Position.X, building.Position.Y)
-	delete(ws.TileBuilding, tileKey)
-	ws.Grid[building.Position.Y][building.Position.X].BuildingID = ""
+	ws.UnindexBuilding(building)
 
 	return []*model.GameEvent{
 		{

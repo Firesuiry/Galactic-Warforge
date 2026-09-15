@@ -4,7 +4,7 @@ import { createPlanetSurface, disposePlanetSurface, updatePlanetSurface } from '
 
 function scene(): PlanetSceneView {
   return {
-    planet_id: 'p', discovered: true, tick: 1, map_width: 1000, map_height: 500,
+    planet_id: 'p', discovered: true, tick: 1, surface: { topology: 'cube_sphere' as const, face_size: 512 }, map_width: 1536, map_height: 1024,
     bounds: { x: 123, y: 76, width: 2, height: 2 },
     terrain: [['water', 'blocked'], ['buildable', 'lava']],
     explored: [[true, false], [true, false]], visible: [[true, false], [false, false]],
@@ -36,7 +36,7 @@ describe('3D player-visible terrain', () => {
     const mesh = createPlanetSurface(100);
     updatePlanetSurface(mesh, { planet: scene() });
     const shader = uniforms(mesh);
-    expect(shader.swLocalBounds.value.toArray()).toEqual([0.123, 0.152, 0.002, 0.004]);
+    expect(shader.swPatchBounds.value[0].toArray()).toEqual([123/1536,76/1024,2/1536,2/1024]);
     expect(shader.swLocalColor.value.image.width).toBe(2);
     expect(shader.swLocalColor.value.image.height).toBe(2);
     expect(mesh.geometry.parameters.radius).toBe(100);

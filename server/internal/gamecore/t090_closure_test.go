@@ -29,7 +29,7 @@ func newTwoPlanetTestCore(t *testing.T) (*GameCore, *config.Config, *mapconfig.C
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 2, GasGiantRatio: 0},
-		Planet: mapconfig.PlanetConfig{Width: 24, Height: 24, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 24, ResourceDensity: 12},
 		Overrides: mapconfig.OverridesConfig{
 			Planets: map[string]mapconfig.PlanetOverride{
 				"planet-1-2": {Kind: "gas_giant"},

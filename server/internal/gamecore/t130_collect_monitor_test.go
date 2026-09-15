@@ -8,7 +8,7 @@ import (
 
 func newCollectorTestWorld(t *testing.T, btype model.BuildingType) (*model.WorldState, *model.Building) {
 	t.Helper()
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	b := &model.Building{
 		ID:       "collector-1",
@@ -148,7 +148,7 @@ func TestCollectorMonitoringRaisesPowerShortage(t *testing.T) {
 
 // Production buildings must keep their existing alert behavior.
 func TestProductionBuildingMonitoringUnaffected(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	smelter := &model.Building{
 		ID:       "smelter-1",

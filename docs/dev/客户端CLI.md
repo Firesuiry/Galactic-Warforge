@@ -1,5 +1,7 @@
 # SiliconWorld 客户端 CLI
 
+> 行星已统一为立方体球面六面网格。`surface: {topology: "cube_sphere", face_size: N}` 明示拓扑；`map_width=3N`、`map_height=2N` 为存储图集尺寸，x/y 不再具有平面邻接语义。配置仅使用 `planet.face_size`，旧平面存档拒绝加载。详见 [立方体球面网格](../guide/立方体球面网格.md)。
+
 `client-cli` 当前除了游戏 `server` 常用查询与基础建造命令外，也已经补齐战争系统的最小玩家闭环：蓝图创建 / 改型 / 校验 / 定型、军工排产与翻修、任务群 / 战区指挥、登陆与封锁命令，以及 `contacts / supply / battle_report` 所需的运行态查询。`agent-gateway` 的最小管理入口 `agent_list`、`agent_create`、`agent_update`、`agent_message`、`agent_thread` 也继续保留，因此 Case1“创建李斯 -> 李斯创建胡景 -> 李斯委派胡景建矿场”与战争链路可以共用同一套 CLI runtime。原有行星读取链路继续使用 `summary / scene / inspect` 三段式模型，对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。
 
 公共游戏命令目录现在以 `shared-client/src/command-catalog.ts` 为单一真相：CLI、Web 和文档都从这份目录对齐命令 alias、分类和公开范围。`client-cli/src/command-catalog.ts` 只在其上补 `health / summary / save` 这类 CLI 专属命令，不再手写第二份公共命令分类。
@@ -54,7 +56,7 @@
 | `war_industry`   | 无                                                           | 查询 `GET /world/warfare/industry`，输出生产单、翻修单、部署枢纽和军需节点 |
 | `task_forces`    | 无                                                           | 查询 `GET /world/warfare/task-forces`                             |
 | `theaters`       | 无                                                           | 查询 `GET /world/warfare/theaters`                                |
-| `scene`          | `[planet_id] <x> <y> <width> <height>`                       | 查询 `GET /world/planets/{planet_id}/scene` 原始 JSON             |
+| `scene` | `[planet_id] <x> <y> <width> <height> [--near_x X --near_y Y --radius R]` | 查询图集窗口及球面邻域补片原始 JSON，R 为 0..128 |
 | `inspect`        | `<planet_id> <building\|unit\|resource\|sector> <entity_id>` | 查询 `GET /world/planets/{planet_id}/inspect` 原始 JSON           |
 | `fog`            | `[planet_id] [x y width height]`                             | 通过 `/scene` 拉取局部迷雾并做 ASCII 渲染，默认窗口 `0 0 32 16`   |
 | `audit`          | `[options]`                                                  | 查询 `GET /audit`                                                 |
@@ -651,3 +653,15 @@ rollback --to <tick>
 - 默认恒星系：`sys-1`
 - 默认行星：`planet-1-1`
 - 默认事件显示数量：`10`
+
+### 球面接缝观察
+
+默认普通新局 `planet.face_size=816`，图集为 2448×1632；官方 war/midgame 的 N=48，图集为 144×96。scene 的 width/height 是查询窗口尺寸，不是整颗星球尺寸；服务端省略窗口尺寸时默认 160、最大 257，并裁剪到图集边界。CLI `scene` 仍要求显式窗口参数；`fog` 自己使用 32×16 默认窗口。
+
+`scene [planet_id] <x> <y> <width> <height> [--near_x X --near_y Y --radius R]`：以图集矩形为主窗口，额外查询球面邻域补片（R 最大 128）。例：`scene planet-1-1 0 0 32 32 --near_x 0 --near_y 16 --radius 16`。`surface_patches` 以原始 JSON 输出，现有移动/建造命令仍使用权威图集 x/y。
+
+### 球面移动与建筑布局
+
+`move` 等命令仍传权威图集 x/y，但距离和障碍校验使用球面邻接，不能用 `abs(dx)+abs(dy)` 拆分跨面路线。需要自动规划的调用方可使用共享 API `fetchPlanetPath`，对应 `GET /world/planets/{id}/path?unit_id=...&target_x=...&target_y=...&stop_range=...`；这不是新增 CLI `path` 指令。stop_range 为 0..128，默认 0；建造靠近时取执行体操作范围。返回 path 含起点，waypoints 不含起点并按 move_range 分段。reachable=true 且 waypoints 为空表示已经够近；未知或 512 步预算内不可达返回 reachable=false，不应继续建造。
+
+建筑布局蓝图的矩形选区和旋转后粘贴范围必须在同一面内；跨面布局拆成多个蓝图。此限制不适用于本页 `blueprint_create/blueprint_set_component` 等战争蓝图命令。

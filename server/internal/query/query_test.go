@@ -23,7 +23,7 @@ func TestPlanetSummaryShowsStaticResourceCountAfterDiscovery(t *testing.T) {
 	cfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 8},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	}
 	maps := mapgen.Generate(cfg, "query-planet-resources")
 	discovery := mapstate.NewDiscovery([]config.PlayerConfig{{PlayerID: "p1"}}, maps)
@@ -33,7 +33,7 @@ func TestPlanetSummaryShowsStaticResourceCountAfterDiscovery(t *testing.T) {
 	discovery.DiscoverSystem("p1", "sys-2")
 	discovery.DiscoverPlanet("p1", targetPlanetID)
 
-	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().Width, maps.PrimaryPlanet().Height)
+	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().FaceSize)
 	view, ok := ql.PlanetSummary(ws, "p1", targetPlanetID)
 	if !ok {
 		t.Fatal("expected planet summary")
@@ -103,7 +103,7 @@ func TestPlanetSceneSlicesDiscoveredPlanetBounds(t *testing.T) {
 	cfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 12, ResourceDensity: 8},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	}
 	maps := mapgen.Generate(cfg, "query-planet-scene")
 	discovery := mapstate.NewDiscovery([]config.PlayerConfig{{PlayerID: "p1"}}, maps)
@@ -113,7 +113,7 @@ func TestPlanetSceneSlicesDiscoveredPlanetBounds(t *testing.T) {
 	discovery.DiscoverSystem("p1", "sys-2")
 	discovery.DiscoverPlanet("p1", targetPlanetID)
 
-	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().Width, maps.PrimaryPlanet().Height)
+	ws := model.NewWorldState(maps.PrimaryPlanetID, maps.PrimaryPlanet().FaceSize)
 	view, ok := ql.PlanetScene(ws, "p1", targetPlanetID, PlanetSceneRequest{
 		X:      3,
 		Y:      4,
@@ -143,7 +143,7 @@ func TestPlanetOverviewAggregatesWholePlanet(t *testing.T) {
 	cfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 20, Height: 20, ResourceDensity: 8},
+		Planet: mapconfig.PlanetConfig{FaceSize: 20, ResourceDensity: 8},
 	}
 	maps := mapgen.Generate(cfg, "query-planet-overview")
 	discovery := mapstate.NewDiscovery([]config.PlayerConfig{{PlayerID: "p1"}}, maps)
@@ -154,7 +154,7 @@ func TestPlanetOverviewAggregatesWholePlanet(t *testing.T) {
 	discovery.DiscoverSystem("p1", maps.PrimaryGalaxy().SystemIDs[0])
 	discovery.DiscoverPlanet("p1", targetPlanetID)
 
-	ws := model.NewWorldState(targetPlanetID, maps.PrimaryPlanet().Width, maps.PrimaryPlanet().Height)
+	ws := model.NewWorldState(targetPlanetID, maps.PrimaryPlanet().FaceSize)
 	for _, resource := range staticPlanetResources(maps.PrimaryPlanet()) {
 		ws.Resources[resource.ID] = resource
 	}
@@ -165,14 +165,14 @@ func TestPlanetOverviewAggregatesWholePlanet(t *testing.T) {
 	if view.Step != 5 {
 		t.Fatalf("expected step 5, got %d", view.Step)
 	}
-	if view.CellsWidth != 4 || view.CellsHeight != 4 {
-		t.Fatalf("expected 4x4 overview cells, got %dx%d", view.CellsWidth, view.CellsHeight)
+	if view.CellsWidth != 12 || view.CellsHeight != 8 {
+		t.Fatalf("expected 12x8 overview cells, got %dx%d", view.CellsWidth, view.CellsHeight)
 	}
-	if len(view.Terrain) != 4 || len(view.Terrain[0]) != 4 {
-		t.Fatalf("expected 4x4 terrain aggregate, got %dx%d", len(view.Terrain), len(view.Terrain[0]))
+	if len(view.Terrain) != 8 || len(view.Terrain[0]) != 12 {
+		t.Fatalf("expected 12x8 terrain aggregate, got %dx%d", len(view.Terrain), len(view.Terrain[0]))
 	}
-	if len(view.ResourceCounts) != 4 || len(view.ResourceCounts[0]) != 4 {
-		t.Fatalf("expected 4x4 resource aggregate, got %dx%d", len(view.ResourceCounts), len(view.ResourceCounts[0]))
+	if len(view.ResourceCounts) != 8 || len(view.ResourceCounts[0]) != 12 {
+		t.Fatalf("expected 12x8 resource aggregate, got %dx%d", len(view.ResourceCounts), len(view.ResourceCounts[0]))
 	}
 	if view.ResourceCount == 0 {
 		t.Fatal("expected overview to expose total resources")
@@ -467,6 +467,8 @@ func TestOfficialMidgameSystemRuntimeExposesDysonBootstrapAnchors(t *testing.T) 
 
 func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.WorldState, string) {
 	t.Helper()
+	faceSize := max(width, height)
+	width, height = 3*faceSize, 2*faceSize
 
 	planetID := "planet-1"
 	otherPlanetID := "planet-2"
@@ -492,6 +494,7 @@ func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.Worl
 				ID:       planetID,
 				SystemID: "sys-1",
 				Kind:     mapmodel.PlanetKindRocky,
+				FaceSize: faceSize,
 				Width:    width,
 				Height:   height,
 				Terrain:  terrainGrid,
@@ -503,6 +506,7 @@ func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.Worl
 				ID:       otherPlanetID,
 				SystemID: "sys-2",
 				Kind:     mapmodel.PlanetKindRocky,
+				FaceSize: faceSize,
 				Width:    width,
 				Height:   height,
 				Terrain:  terrainGrid,
@@ -517,7 +521,7 @@ func newPlanetQueryFixture(t *testing.T, width, height int) (*Layer, *model.Worl
 		{PlayerID: "p2"},
 	}, universe)
 	ql := New(visibility.New(), universe, discovery)
-	ws := model.NewWorldState(planetID, width, height)
+	ws := model.NewWorldState(planetID, faceSize)
 	ws.Tick = 1
 	return ql, ws, planetID
 }

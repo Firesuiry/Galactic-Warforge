@@ -185,7 +185,7 @@ func EvaluatePlanBatch(ws *WorldState, req PlanBatchRequest) PlanBatchResult {
 	}
 
 	buildingTiles := occupiedBuildingTiles(ws)
-	pipelineTiles := occupiedPipelineTiles(ws.Pipelines)
+	pipelineTiles := occupiedPipelineTiles(ws, ws.Pipelines)
 
 	switch mode {
 	case PlanBatchMutualFail:
@@ -219,7 +219,7 @@ func evaluateBatchFirstWins(ws *WorldState, req PlanBatchRequest, state *PlanSta
 			}
 		}
 
-		occupied, err := itemOccupiedTiles(item)
+		occupied, err := itemOccupiedTiles(ws, item)
 		if err != nil {
 			res.Allowed = false
 			res.Code = codeForPlanError(err)
@@ -281,7 +281,7 @@ func evaluateBatchMutual(ws *WorldState, req PlanBatchRequest, state *PlanState,
 			}
 		}
 
-		occupied, err := itemOccupiedTiles(item)
+		occupied, err := itemOccupiedTiles(ws, item)
 		if err != nil {
 			res.Allowed = false
 			res.Code = codeForPlanError(err)
@@ -384,7 +384,10 @@ func detectTileConflicts(ws *WorldState, itemID string, tiles []Position, blocke
 	return PlanOK, ""
 }
 
-func itemOccupiedTiles(item PlanItem) ([]Position, error) {
+func itemOccupiedTiles(ws *WorldState, item PlanItem) ([]Position, error) {
+	if !ws.InBounds(item.Position.X, item.Position.Y) && len(item.Tiles) == 0 {
+		return nil, fmt.Errorf("position outside surface bounds")
+	}
 	if len(item.Tiles) > 0 {
 		return dedupePositions(item.Tiles), nil
 	}
@@ -405,16 +408,11 @@ func itemOccupiedTiles(item PlanItem) ([]Position, error) {
 		if footprint.Width == 0 && footprint.Height == 0 {
 			footprint = def.Footprint
 		}
-		offsets, rotated, err := footprintOffsets(footprint, item.Rotation)
+		_, rotated, err := footprintOffsets(footprint, item.Rotation)
 		if err != nil {
 			return nil, err
 		}
-		_ = rotated
-		positions := make([]Position, len(offsets))
-		for i, offset := range offsets {
-			positions[i] = Position{X: item.Position.X + offset.X, Y: item.Position.Y + offset.Y, Z: item.Position.Z}
-		}
-		return positions, nil
+		return ws.FootprintTiles(item.Position, rotated)
 	case PlanKindPipeline, PlanKindCustom:
 		return nil, fmt.Errorf("tiles required for plan kind %s", item.Kind)
 	default:
@@ -428,6 +426,8 @@ func codeForPlanError(err error) PlanResultCode {
 	}
 	errMsg := err.Error()
 	switch {
+	case hasPrefix(errMsg, "position outside surface bounds"):
+		return PlanOutOfBounds
 	case hasPrefix(errMsg, "unknown building type"):
 		return PlanUnknownBuilding
 	case hasPrefix(errMsg, "building type not buildable"):
@@ -506,7 +506,7 @@ func occupiedBuildingTiles(ws *WorldState) map[string]buildingOccupancy {
 			offsets = []GridOffset{{X: 0, Y: 0}}
 		}
 		for _, offset := range offsets {
-			pos := Position{X: building.Position.X + offset.X, Y: building.Position.Y + offset.Y}
+			pos := ws.SurfaceOffset(building.Position, offset.X, offset.Y)
 			key := TileKey(pos.X, pos.Y)
 			occupied[key] = buildingOccupancy{BuildingID: building.ID, BuildingType: building.Type}
 		}
@@ -514,7 +514,7 @@ func occupiedBuildingTiles(ws *WorldState) map[string]buildingOccupancy {
 	return occupied
 }
 
-func occupiedPipelineTiles(state *PipelineNetworkState) map[string]struct{} {
+func occupiedPipelineTiles(ws *WorldState, state *PipelineNetworkState) map[string]struct{} {
 	occupied := make(map[string]struct{})
 	if state == nil {
 		return occupied
@@ -534,43 +534,29 @@ func occupiedPipelineTiles(state *PipelineNetworkState) map[string]struct{} {
 		if from == nil || to == nil {
 			continue
 		}
-		addPipelineLine(occupied, from.Position, to.Position)
+		addPipelineLine(ws, occupied, from.Position, to.Position)
 	}
 	return occupied
 }
 
-func addPipelineLine(occupied map[string]struct{}, from, to Position) {
-	if occupied == nil {
+func addPipelineLine(ws *WorldState, occupied map[string]struct{}, from, to Position) {
+	if occupied == nil || !ws.InBounds(from.X, from.Y) || !ws.InBounds(to.X, to.Y) {
 		return
 	}
-	if from.X == to.X {
-		step := 1
-		if to.Y < from.Y {
-			step = -1
-		}
-		for y := from.Y; ; y += step {
-			occupied[TileKey(from.X, y)] = struct{}{}
-			if y == to.Y {
+	// Deterministic geodesic routing, independent of atlas row/column layout.
+	p := from
+	occupied[TileKey(p.X, p.Y)] = struct{}{}
+	remaining := ws.SurfaceDistance(p, to)
+	for remaining > 0 {
+		for _, next := range ws.SurfaceNeighbors(p) {
+			if ws.SurfaceWithin(next, to, remaining-1) {
+				p = next
+				remaining--
+				occupied[TileKey(p.X, p.Y)] = struct{}{}
 				break
 			}
 		}
-		return
 	}
-	if from.Y == to.Y {
-		step := 1
-		if to.X < from.X {
-			step = -1
-		}
-		for x := from.X; ; x += step {
-			occupied[TileKey(x, from.Y)] = struct{}{}
-			if x == to.X {
-				break
-			}
-		}
-		return
-	}
-	occupied[TileKey(from.X, from.Y)] = struct{}{}
-	occupied[TileKey(to.X, to.Y)] = struct{}{}
 }
 
 func dedupePositions(tiles []Position) []Position {

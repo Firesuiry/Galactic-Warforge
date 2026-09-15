@@ -32,10 +32,12 @@ interface SurfaceState {
     swOverviewProperties: { value: THREE.DataTexture };
     swLocalColor: { value: THREE.DataTexture };
     swLocalProperties: { value: THREE.DataTexture };
-    swLocalBounds: { value: THREE.Vector4 };
+    swMapDimensions: { value: THREE.Vector2 };
     swLocalDimensions: { value: THREE.Vector2 };
-    swOverviewExtent: { value: THREE.Vector2 };
+    swOverviewDimensions: { value: THREE.Vector2 };
     swTime: { value: number };
+    swPatchBounds: {value: THREE.Vector4[]};
+    swPatchUV: {value: THREE.Vector4[]};
   };
   source?: unknown[];
 }
@@ -43,10 +45,10 @@ const states = new WeakMap<PlanetSurface, SurfaceState>();
 
 function dataTexture(bytes: Uint8Array, width: number, height: number) {
   const texture = new THREE.DataTexture(bytes, width, height, THREE.RGBAFormat);
-  // Linear values are baked below; data texture rows start at the north pole.
+  // Linear values are baked below; data texture rows follow the six-face atlas.
   texture.colorSpace = THREE.NoColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
@@ -81,10 +83,12 @@ const SHADER_HEADER = /* glsl */`
   uniform sampler2D swOverviewProperties;
   uniform sampler2D swLocalColor;
   uniform sampler2D swLocalProperties;
-  uniform vec4 swLocalBounds;
+  uniform vec2 swMapDimensions;
   uniform vec2 swLocalDimensions;
-  uniform vec2 swOverviewExtent;
+  uniform vec2 swOverviewDimensions;
   uniform float swTime;
+  uniform vec4 swPatchBounds[7];
+  uniform vec4 swPatchUV[7];
   float swHash(vec3 p) {
     p = fract(p * 0.3183099 + vec3(0.17, 0.43, 0.71));
     p *= 17.0;
@@ -105,30 +109,41 @@ const SHADER_HEADER = /* glsl */`
 
 const SHADER_COLOR = /* glsl */`
   vec3 swP = normalize(swSurfacePosition);
-  vec2 swUV = vec2(fract(atan(swP.z, -swP.x) / 6.28318530718 + 1.0), (1.0 - swP.y) * 0.5);
-  vec2 swOverviewUV = swUV * swOverviewExtent;
+  vec3 swA = abs(swP);
+  float swFace; vec2 swFaceUV;
+  if (swA.z >= swA.x && swA.z >= swA.y) {
+    swFace = swP.z >= 0.0 ? 0.0 : 2.0;
+    swFaceUV = vec2(swP.z >= 0.0 ? swP.x : -swP.x, -swP.y) / swA.z;
+  } else if (swA.x >= swA.y) {
+    swFace = swP.x >= 0.0 ? 1.0 : 3.0;
+    swFaceUV = vec2(swP.x >= 0.0 ? -swP.z : swP.z, -swP.y) / swA.x;
+  } else {
+    swFace = swP.y >= 0.0 ? 4.0 : 5.0;
+    swFaceUV = vec2(swP.x, swP.y >= 0.0 ? swP.z : -swP.z) / swA.y;
+  }
+  swFaceUV = atan(swFaceUV) / 1.57079632679 + 0.5;
+  vec2 swUV = (vec2(mod(swFace,3.0),floor(swFace/3.0)) + clamp(swFaceUV,0.000001,0.999999)) / vec2(3.0,2.0);
+  vec2 swFaceOrigin = vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0);
+  vec2 swOverviewHalfTexel = 0.5 / swOverviewDimensions;
+  vec2 swOverviewUV = clamp(swUV, swFaceOrigin + swOverviewHalfTexel,
+    swFaceOrigin + 1.0 / vec2(3.0,2.0) - swOverviewHalfTexel);
   vec4 swProps = texture2D(swOverviewProperties, swOverviewUV);
   vec3 swAlbedo = texture2D(swOverviewColor, swOverviewUV).rgb;
-  vec2 swLocalUV = (swUV - swLocalBounds.xy) / swLocalBounds.zw;
-  if (all(greaterThanEqual(swLocalUV, vec2(0))) && all(lessThanEqual(swLocalUV, vec2(1)))) {
-    vec4 swLocalProps = texture2D(swLocalProperties, swLocalUV);
-    vec3 swLocalAlbedo = texture2D(swLocalColor, swLocalUV).rgb;
-    // A scene window is a streaming boundary, not a visible cut in the planet.
-    // Fade within the final half-cell only, without reading outside the view.
-    vec2 swEdgeCells = min(swLocalUV, 1.0 - swLocalUV) * swLocalDimensions;
-    float swEdgeX = swLocalBounds.z > 0.9999 ? 1.0 : smoothstep(0.0, 0.5, swEdgeCells.x);
-    float swEdgeY = swLocalBounds.w > 0.9999 ? 1.0 : smoothstep(0.0, 0.5, swEdgeCells.y);
-    float swLocalWeight = swEdgeX * swEdgeY;
-    swProps = mix(swProps, swLocalProps, swLocalWeight);
-    swAlbedo = mix(swAlbedo, swLocalAlbedo, swLocalWeight);
+  for(int i=0;i<7;i++) {
+    vec4 bounds = swPatchBounds[i];
+    if(bounds.z <= 0.0) continue;
+    vec2 uv = (swUV - bounds.xy) / bounds.zw;
+    if(all(greaterThanEqual(uv,vec2(0))) && all(lessThanEqual(uv,vec2(1)))) {
+      vec4 rect = swPatchUV[i];
+      vec2 texel = 0.5 / swLocalDimensions;
+      vec2 packedUV = clamp(rect.xy+uv*rect.zw, rect.xy+texel, rect.xy+rect.zw-texel);
+      swProps = texture2D(swLocalProperties,packedUV);
+      swAlbedo = texture2D(swLocalColor,packedUV).rgb;
+    }
   }
-  // A sphere pole is one point shared by every longitude. Do not stretch the
-  // first row's unrelated visibility values into a bright triangular spike.
-  float swMapHeight = swLocalDimensions.y / swLocalBounds.w;
-  float swMapWidth = swLocalDimensions.x / swLocalBounds.z;
-  float swTileWorldSize = 6.28318530718 * length(swSurfacePosition) / swMapWidth;
-  float swPolarBlend = smoothstep(0.0, 0.5, min(swUV.y, 1.0 - swUV.y) * swMapHeight);
-  float swKnown = smoothstep(0.05, 0.95, swProps.b) * swPolarBlend;
+  float swMapWidth = swMapDimensions.x;
+  float swTileWorldSize = 3.3321622036 * length(swSurfacePosition) / swMapWidth;
+  float swKnown = smoothstep(0.05,0.95,swProps.b);
   float swWater = smoothstep(0.15, 0.85, swProps.r);
   float swRock = swProps.g;
   float swContinental = swFbm(swP * 8.0);
@@ -164,12 +179,13 @@ const SHADER_COLOR = /* glsl */`
 `;
 
 export function createPlanetSurface(radius: number): PlanetSurface {
-  const empty = () => atlas(1, 1, () => ({ terrain: 'unknown', explored: false, visible: false }));
+  const empty = () => atlas(3, 2, () => ({ terrain: 'unknown', explored: false, visible: false }));
   const overview = empty(), local = empty();
   const uniforms: SurfaceState['uniforms'] = {
+    swPatchBounds: {value: Array.from({length:7},()=>new THREE.Vector4())}, swPatchUV: {value: Array.from({length:7},()=>new THREE.Vector4())},
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
-    swLocalBounds: { value: new THREE.Vector4(0, 0, 1, 1) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewExtent: { value: new THREE.Vector2(1, 1) }, swTime: { value: 0 },
+    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 },
   };
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025 });
   material.onBeforeCompile = (shader) => {
@@ -203,29 +219,33 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   const bounds = 'bounds' in planet ? planet.bounds : { x: 0, y: 0, width: planet.map_width, height: planet.map_height };
   const effectiveFog = fog ?? ('bounds' in planet ? planet : undefined);
   const source = [planet.terrain, planet.map_width, planet.map_height, bounds.x, bounds.y, effectiveFog?.explored, effectiveFog?.visible,
-    overview?.terrain, overview?.explored, overview?.visible, overview?.step];
+    'surface_patches' in planet ? planet.surface_patches : null, overview?.terrain, overview?.explored, overview?.visible, overview?.step];
   if (state.source?.every((value, i) => value === source[i])) return;
   state.source = source;
   const unknown = { terrain: 'unknown', explored: false, visible: false };
-  const overviewWidth = Math.max(1, overview?.cells_width ?? 1);
-  const overviewHeight = Math.max(1, overview?.cells_height ?? 1);
+  const overviewWidth = Math.max(1, overview?.cells_width ?? 3);
+  const overviewHeight = Math.max(1, overview?.cells_height ?? 2);
   const globalAtlas = atlas(overviewWidth, overviewHeight, (x, y) => overview ? {
     terrain: overview.terrain?.[y]?.[x] ?? 'unknown',
     explored: Boolean(overview.explored?.[y]?.[x]), visible: Boolean(overview.visible?.[y]?.[x]),
   } : unknown);
-  const localWidth = Math.max(1, planet.terrain?.[0]?.length ?? 1);
-  const localHeight = Math.max(1, planet.terrain?.length ?? 1);
-  const localAtlas = atlas(localWidth, localHeight, (x, y) => {
-    const terrain = planet.terrain?.[y]?.[x] ?? 'unknown';
-    const visibility = effectiveFog ? getFogState(effectiveFog, bounds.x + x, bounds.y + y) : { explored: terrain !== 'unknown', visible: terrain !== 'unknown' };
-    return { terrain, ...visibility };
+  const patches = [{bounds, terrain: planet.terrain, explored: effectiveFog?.explored, visible: effectiveFog?.visible}, ...('surface_patches' in planet ? planet.surface_patches ?? [] : [])].slice(0,7);
+  const localWidth = Math.max(1,...patches.map(p=>p.bounds.width));
+  const localHeight = Math.max(1,patches.reduce((sum,p)=>sum+p.bounds.height,0));
+  let offset=0;
+  const packed=patches.map(p=>{const result={...p,offset};offset+=p.bounds.height;return result;});
+  const localAtlas = atlas(localWidth,localHeight,(x,y)=>{
+    const patch=packed.find(p=>y>=p.offset&&y<p.offset+p.bounds.height&&x<p.bounds.width);
+    if(!patch) return unknown;
+    const row=y-patch.offset, terrain=patch.terrain?.[row]?.[x]??'unknown';
+    return {terrain,explored:patch.explored ? Boolean(patch.explored[row]?.[x]) : terrain!=='unknown',visible:patch.visible ? Boolean(patch.visible[row]?.[x]) : terrain!=='unknown'};
   });
-  if (overview && overviewWidth * overview.step === planet.map_width) {
-    globalAtlas.color.wrapS = globalAtlas.properties.wrapS = THREE.RepeatWrapping;
-  }
-  if (localWidth === planet.map_width) {
-    localAtlas.color.wrapS = localAtlas.properties.wrapS = THREE.RepeatWrapping;
-  }
+  state.uniforms.swPatchBounds.value.forEach((v,i)=>{
+    const p=packed[i];
+    if(!p) {v.set(0,0,0,0);return;}
+    v.set(p.bounds.x/planet.map_width,p.bounds.y/planet.map_height,p.bounds.width/planet.map_width,p.bounds.height/planet.map_height);
+    state.uniforms.swPatchUV.value[i].set(0,p.offset/localHeight,p.bounds.width/localWidth,p.bounds.height/localHeight);
+  });
   for (const previous of [state.overview, state.local]) { previous.color.dispose(); previous.properties.dispose(); }
   state.overview = globalAtlas;
   state.local = localAtlas;
@@ -233,9 +253,9 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   state.uniforms.swOverviewProperties.value = globalAtlas.properties;
   state.uniforms.swLocalColor.value = localAtlas.color;
   state.uniforms.swLocalProperties.value = localAtlas.properties;
-  state.uniforms.swLocalBounds.value.set(bounds.x / planet.map_width, bounds.y / planet.map_height, localWidth / planet.map_width, localHeight / planet.map_height);
+  state.uniforms.swMapDimensions.value.set(planet.map_width, planet.map_height);
   state.uniforms.swLocalDimensions.value.set(localWidth, localHeight);
-  state.uniforms.swOverviewExtent.value.set(overview ? planet.map_width / (overviewWidth * overview.step) : 1, overview ? planet.map_height / (overviewHeight * overview.step) : 1);
+  state.uniforms.swOverviewDimensions.value.set(overviewWidth, overviewHeight);
 }
 
 export function disposePlanetSurface(mesh: PlanetSurface) {

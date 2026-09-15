@@ -1,15 +1,17 @@
-import { MathUtils, Vector3 } from 'three';
+import { Vector3 } from 'three';
+import { surfaceNormal, surfaceTile, surfaceFace } from '@shared/surface';
 import type { TilePoint } from '../model';
-
-/** Equal-area cylindrical projection keeps polar colonies usable while preserving server tile IDs. */
-export function tileNormal(tile: TilePoint, width: number, height: number) {
-  const longitude = (tile.x + .5) / width * Math.PI * 2;
-  const y = MathUtils.clamp(1 - 2 * (tile.y + .5) / height, -1, 1);
-  const equatorial = Math.sqrt(Math.max(0, 1 - y * y));
-  return new Vector3(-Math.cos(longitude) * equatorial, y, Math.sin(longitude) * equatorial);
+export { surfaceTileSize } from '@shared/surface';
+export function tileNormal(tile: TilePoint, faceSize: number, face?: number) {
+  const n = surfaceNormal(tile, faceSize, face);
+  return new Vector3(n.x, n.y, n.z);
 }
-
-export function normalTile(normal: Vector3, width: number, height: number): TilePoint {
-  const u = ((Math.atan2(normal.z, -normal.x) / (2 * Math.PI)) + 1) % 1;
-  return { x: Math.min(width - 1, Math.floor(u * width)), y: Math.min(height - 1, Math.max(0, Math.floor((1 - MathUtils.clamp(normal.y, -1, 1)) * .5 * height))) };
+export function normalTile(normal: Vector3, faceSize: number): TilePoint {
+  return surfaceTile(normal, faceSize);
+}
+export function tileFrame(tile: TilePoint, faceSize: number) {
+  const face = surfaceFace(tile, faceSize), normal = tileNormal(tile, faceSize, face);
+  const east = tileNormal({x: tile.x + .001, y: tile.y}, faceSize, face).sub(normal);
+  east.addScaledVector(normal, -east.dot(normal)).normalize();
+  return {normal, east, south: new Vector3().crossVectors(east, normal).normalize()};
 }

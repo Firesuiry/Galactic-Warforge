@@ -31,7 +31,7 @@ func newFleetTransitTestCore(t *testing.T) *GameCore {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 2},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 32, Height: 32, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 32, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	return New(cfg, maps, queue.New(), NewEventBus(), nil)

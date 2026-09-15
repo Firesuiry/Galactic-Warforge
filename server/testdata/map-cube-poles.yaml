@@ -1,0 +1,12 @@
+# Real backend fixture for browser construction/movement at both polar faces.
+galaxy:
+  system_count: 1
+system:
+  planets_per_system: 1
+  gas_giant_ratio: 0
+planet:
+  face_size: 48
+  resource_density: 10
+spawn_points:
+  - {x: 72, y: 72}
+  - {x: 120, y: 72}

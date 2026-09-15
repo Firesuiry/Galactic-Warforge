@@ -9,7 +9,7 @@ import (
 
 func TestOrbitalCollectorProducesOnGasGiant(t *testing.T) {
 	maps := testUniverseWithPlanet(mapmodel.PlanetKindGasGiant)
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	collector := newOrbitalCollectorBuilding("oc-1", model.Position{X: 0, Y: 0}, "p1")
@@ -32,7 +32,7 @@ func TestOrbitalCollectorProducesOnGasGiant(t *testing.T) {
 
 func TestOrbitalCollectorSkipsNonGasGiant(t *testing.T) {
 	maps := testUniverseWithPlanet(mapmodel.PlanetKindRocky)
-	ws := model.NewWorldState("planet-1", 1, 1)
+	ws := model.NewWorldState("planet-1", 1)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	collector := newOrbitalCollectorBuilding("oc-1", model.Position{X: 0, Y: 0}, "p1")
@@ -48,7 +48,7 @@ func TestOrbitalCollectorSkipsNonGasGiant(t *testing.T) {
 }
 
 func TestOrbitalCollectorDispatchesToPlanetaryStation(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 6, 2)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newOrbitalCollectorBuilding("oc-1", model.Position{X: 0, Y: 0}, "p1")
@@ -90,7 +90,7 @@ func TestOrbitalCollectorDispatchesToPlanetaryStation(t *testing.T) {
 }
 
 func TestOrbitalCollectorDispatchesToInterstellarStation(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 6, 2)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	origin := newOrbitalCollectorBuilding("oc-1", model.Position{X: 0, Y: 0}, "p1")

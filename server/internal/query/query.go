@@ -6,6 +6,7 @@ import (
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/mapstate"
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 	"siliconworld/internal/terrain"
 	"siliconworld/internal/visibility"
 )
@@ -31,6 +32,7 @@ type StateSummary struct {
 	ActivePlanetID string                        `json:"active_planet_id"`
 	MapWidth       int                           `json:"map_width"`
 	MapHeight      int                           `json:"map_height"`
+	Surface        surface.Metadata              `json:"surface"`
 }
 
 // Summary returns a high-level view of the world (no fog clipping for own resources).
@@ -65,6 +67,7 @@ func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.Vi
 		ActivePlanetID: ws.PlanetID,
 		MapWidth:       ws.MapWidth,
 		MapHeight:      ws.MapHeight,
+		Surface:        (surface.Grid{Size: ws.MapWidth / 3}).Metadata(),
 	}
 }
 
@@ -213,6 +216,7 @@ type PlanetSummaryView struct {
 	Kind          mapmodel.PlanetKind `json:"kind,omitempty"`
 	MapWidth      int                 `json:"map_width"`
 	MapHeight     int                 `json:"map_height"`
+	Surface       surface.Metadata    `json:"surface"`
 	Tick          int64               `json:"tick"`
 	BuildingCount int                 `json:"building_count"`
 	UnitCount     int                 `json:"unit_count"`
@@ -227,6 +231,7 @@ func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) 
 	}
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	view := &PlanetSummaryView{
+		Surface:    (surface.Grid{Size: planet.FaceSize}).Metadata(),
 		PlanetID:   planet.ID,
 		SystemID:   planet.SystemID,
 		Discovered: discovered,
@@ -239,6 +244,7 @@ func (ql *Layer) PlanetSummary(ws *model.WorldState, playerID, planetID string) 
 	view.Kind = planet.Kind
 	view.MapWidth = planet.Width
 	view.MapHeight = planet.Height
+	view.Surface = (surface.Grid{Size: planet.FaceSize}).Metadata()
 
 	if ws == nil {
 		view.ResourceCount = len(planet.Resources)
@@ -271,6 +277,7 @@ type PlanetView struct {
 	Moons       []mapmodel.Moon             `json:"moons,omitempty"`
 	MapWidth    int                         `json:"map_width"`
 	MapHeight   int                         `json:"map_height"`
+	Surface     surface.Metadata            `json:"surface"`
 	Tick        int64                       `json:"tick"`
 	Terrain     [][]terrain.TileType        `json:"terrain,omitempty"`
 	Environment *mapmodel.PlanetEnvironment `json:"environment,omitempty"`
@@ -281,7 +288,7 @@ type PlanetView struct {
 
 const (
 	defaultSceneWindowSize = 160
-	maxSceneWindowSize     = 256
+	maxSceneWindowSize     = 257
 	defaultOverviewStep    = 100
 )
 
@@ -293,32 +300,42 @@ type SceneBounds struct {
 }
 
 type PlanetSceneRequest struct {
-	X      int
-	Y      int
-	Width  int
-	Height int
+	NearX, NearY, Radius int
+	X                    int
+	Y                    int
+	Width                int
+	Height               int
+}
+
+type SurfacePatch struct {
+	Bounds   SceneBounds          `json:"bounds"`
+	Terrain  [][]terrain.TileType `json:"terrain"`
+	Visible  [][]bool             `json:"visible"`
+	Explored [][]bool             `json:"explored"`
 }
 
 type PlanetSceneView struct {
-	PlanetID      string                      `json:"planet_id"`
-	SystemID      string                      `json:"system_id,omitempty"`
-	Name          string                      `json:"name,omitempty"`
-	Discovered    bool                        `json:"discovered"`
-	Kind          mapmodel.PlanetKind         `json:"kind,omitempty"`
-	MapWidth      int                         `json:"map_width"`
-	MapHeight     int                         `json:"map_height"`
-	Tick          int64                       `json:"tick"`
-	Bounds        SceneBounds                 `json:"bounds"`
-	Terrain       [][]terrain.TileType        `json:"terrain,omitempty"`
-	Environment   *mapmodel.PlanetEnvironment `json:"environment,omitempty"`
-	Visible       [][]bool                    `json:"visible,omitempty"`
-	Explored      [][]bool                    `json:"explored,omitempty"`
-	Buildings     map[string]*model.Building  `json:"buildings,omitempty"`
-	Units         map[string]*model.Unit      `json:"units,omitempty"`
-	Resources     []*model.ResourceNodeState  `json:"resources,omitempty"`
-	BuildingCount int                         `json:"building_count,omitempty"`
-	UnitCount     int                         `json:"unit_count,omitempty"`
-	ResourceCount int                         `json:"resource_count,omitempty"`
+	SurfacePatches []SurfacePatch              `json:"surface_patches,omitempty"`
+	PlanetID       string                      `json:"planet_id"`
+	SystemID       string                      `json:"system_id,omitempty"`
+	Name           string                      `json:"name,omitempty"`
+	Discovered     bool                        `json:"discovered"`
+	Kind           mapmodel.PlanetKind         `json:"kind,omitempty"`
+	MapWidth       int                         `json:"map_width"`
+	MapHeight      int                         `json:"map_height"`
+	Surface        surface.Metadata            `json:"surface"`
+	Tick           int64                       `json:"tick"`
+	Bounds         SceneBounds                 `json:"bounds"`
+	Terrain        [][]terrain.TileType        `json:"terrain,omitempty"`
+	Environment    *mapmodel.PlanetEnvironment `json:"environment,omitempty"`
+	Visible        [][]bool                    `json:"visible,omitempty"`
+	Explored       [][]bool                    `json:"explored,omitempty"`
+	Buildings      map[string]*model.Building  `json:"buildings,omitempty"`
+	Units          map[string]*model.Unit      `json:"units,omitempty"`
+	Resources      []*model.ResourceNodeState  `json:"resources,omitempty"`
+	BuildingCount  int                         `json:"building_count,omitempty"`
+	UnitCount      int                         `json:"unit_count,omitempty"`
+	ResourceCount  int                         `json:"resource_count,omitempty"`
 }
 
 type PlanetOverviewRequest struct {
@@ -333,6 +350,7 @@ type PlanetOverviewView struct {
 	Kind           mapmodel.PlanetKind  `json:"kind,omitempty"`
 	MapWidth       int                  `json:"map_width"`
 	MapHeight      int                  `json:"map_height"`
+	Surface        surface.Metadata     `json:"surface"`
 	Tick           int64                `json:"tick"`
 	Step           int                  `json:"step"`
 	CellsWidth     int                  `json:"cells_width"`
@@ -721,6 +739,7 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 	}
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	view := &PlanetView{
+		Surface:    (surface.Grid{Size: planet.FaceSize}).Metadata(),
 		PlanetID:   planet.ID,
 		Discovered: discovered,
 	}
@@ -740,6 +759,7 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 	}
 	view.MapWidth = planet.Width
 	view.MapHeight = planet.Height
+	view.Surface = (surface.Grid{Size: planet.FaceSize}).Metadata()
 	view.Tick = ws.Tick
 	view.Terrain = planet.Terrain
 	env := planet.Environment
@@ -759,7 +779,7 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 }
 
 // PlanetScene returns a viewport-sized planet slice for large-map rendering.
-func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, req PlanetSceneRequest) (*PlanetSceneView, bool) {
+func (ql *Layer) planetSceneWindow(ws *model.WorldState, playerID, planetID string, req PlanetSceneRequest) (*PlanetSceneView, bool) {
 	planet, ok := ql.maps.Planet(planetID)
 	if !ok {
 		return nil, false
@@ -773,6 +793,7 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 		Discovered: discovered,
 		MapWidth:   planet.Width,
 		MapHeight:  planet.Height,
+		Surface:    (surface.Grid{Size: planet.FaceSize}).Metadata(),
 		Bounds:     bounds,
 	}
 	if !discovered {
@@ -794,9 +815,9 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 
 	view.Tick = ws.Tick
 	if ws.PlanetID == planetID {
-		fog := ql.vis.FogState(ws, playerID)
-		view.Visible = sliceBoolGrid(fog.Visible, bounds)
-		view.Explored = sliceBoolGrid(fog.Explored, bounds)
+		fog := ql.vis.FogRegion(ws, playerID, bounds.X, bounds.Y, bounds.Width, bounds.Height)
+		view.Visible = fog.Visible
+		view.Explored = fog.Explored
 
 		visibleBuildings := ql.vis.FilterBuildings(ws, playerID)
 		visibleUnits := ql.vis.FilterUnits(ws, playerID)
@@ -810,10 +831,7 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 	}
 
 	view.Visible = blankFog(bounds.Width, bounds.Height)
-	view.Explored = sliceBoolGrid(
-		ql.vis.ExploredSnapshot(planet.ID, planet.Width, planet.Height, playerID),
-		bounds,
-	)
+	view.Explored = ql.vis.ExploredRegionSnapshot(planet.ID, planet.Width, planet.Height, bounds.X, bounds.Y, bounds.Width, bounds.Height, playerID)
 	view.Buildings = map[string]*model.Building{}
 	view.Units = map[string]*model.Unit{}
 	allResources := staticPlanetResources(planet)
@@ -831,6 +849,11 @@ func (ql *Layer) PlanetOverview(ws *model.WorldState, playerID, planetID string,
 
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	step := clampOverviewStep(req, planet.Width, planet.Height)
+	// Keep every overview bucket inside one cube face.
+	step = min(step, planet.FaceSize)
+	for step > 1 && planet.FaceSize%step != 0 {
+		step--
+	}
 	cellsWidth, cellsHeight := overviewDimensions(planet.Width, planet.Height, step)
 	view := &PlanetOverviewView{
 		PlanetID:    planet.ID,
@@ -838,6 +861,7 @@ func (ql *Layer) PlanetOverview(ws *model.WorldState, playerID, planetID string,
 		Discovered:  discovered,
 		MapWidth:    planet.Width,
 		MapHeight:   planet.Height,
+		Surface:     (surface.Grid{Size: planet.FaceSize}).Metadata(),
 		Step:        step,
 		CellsWidth:  cellsWidth,
 		CellsHeight: cellsHeight,
@@ -962,12 +986,13 @@ func staticPlanetResources(planet *mapmodel.Planet) []*model.ResourceNodeState {
 
 // FogMapView is the fog-of-war grid.
 type FogMapView struct {
-	PlanetID   string   `json:"planet_id"`
-	Discovered bool     `json:"discovered"`
-	MapWidth   int      `json:"map_width"`
-	MapHeight  int      `json:"map_height"`
-	Visible    [][]bool `json:"visible,omitempty"`
-	Explored   [][]bool `json:"explored,omitempty"`
+	PlanetID   string           `json:"planet_id"`
+	Discovered bool             `json:"discovered"`
+	MapWidth   int              `json:"map_width"`
+	MapHeight  int              `json:"map_height"`
+	Surface    surface.Metadata `json:"surface"`
+	Visible    [][]bool         `json:"visible,omitempty"`
+	Explored   [][]bool         `json:"explored,omitempty"`
 }
 
 // FogMap returns the visibility grid for a player.
@@ -978,6 +1003,7 @@ func (ql *Layer) FogMap(ws *model.WorldState, playerID, planetID string) (*FogMa
 	}
 	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
 	view := &FogMapView{
+		Surface:    (surface.Grid{Size: planet.FaceSize}).Metadata(),
 		PlanetID:   planet.ID,
 		Discovered: discovered,
 	}
@@ -987,6 +1013,7 @@ func (ql *Layer) FogMap(ws *model.WorldState, playerID, planetID string) (*FogMa
 
 	view.MapWidth = planet.Width
 	view.MapHeight = planet.Height
+	view.Surface = (surface.Grid{Size: planet.FaceSize}).Metadata()
 
 	if ws.PlanetID == planetID {
 		ws.RLock()
@@ -1008,4 +1035,80 @@ func blankFog(w, h int) [][]bool {
 		fog[y] = make([]bool, w)
 	}
 	return fog
+}
+
+// PlanetScene returns an atlas window plus bounded face-local patches across seams.
+func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, req PlanetSceneRequest) (*PlanetSceneView, bool) {
+	view, ok := ql.planetSceneWindow(ws, playerID, planetID, req)
+	if !ok || !view.Discovered || req.Radius <= 0 {
+		return view, ok
+	}
+	grid := surface.Grid{Size: view.Surface.FaceSize}
+	center := surface.Tile{X: req.NearX, Y: req.NearY}
+	if !grid.Valid(center) {
+		return nil, false
+	}
+	radius := min(req.Radius, 128)
+	boxes := map[int]SceneBounds{}
+	for _, tile := range grid.Disc(center, radius) {
+		face := tile.X/grid.Size + 3*(tile.Y/grid.Size)
+		box, exists := boxes[face]
+		if !exists {
+			boxes[face] = SceneBounds{X: tile.X, Y: tile.Y, Width: 1, Height: 1}
+			continue
+		}
+		maxX, maxY := max(box.X+box.Width-1, tile.X), max(box.Y+box.Height-1, tile.Y)
+		box.X = min(box.X, tile.X)
+		box.Y = min(box.Y, tile.Y)
+		box.Width = maxX - box.X + 1
+		box.Height = maxY - box.Y + 1
+		boxes[face] = box
+	}
+	resources := map[string]bool{}
+	for _, resource := range view.Resources {
+		resources[resource.ID] = true
+	}
+	for face := 0; face < 6; face++ {
+		box, exists := boxes[face]
+		if !exists {
+			continue
+		}
+		b := view.Bounds
+		if box.X >= b.X && box.Y >= b.Y && box.X+box.Width <= b.X+b.Width && box.Y+box.Height <= b.Y+b.Height {
+			continue
+		}
+		patch, _ := ql.planetSceneWindow(ws, playerID, planetID, PlanetSceneRequest{X: box.X, Y: box.Y, Width: box.Width, Height: box.Height})
+		// Supplemental tiles carry no unexplored terrain information.
+		for y, row := range patch.Terrain {
+			for x := range row {
+				if y >= len(patch.Explored) || x >= len(patch.Explored[y]) || !patch.Explored[y][x] {
+					row[x] = terrain.TileType("unknown")
+				}
+			}
+		}
+		view.SurfacePatches = append(view.SurfacePatches, SurfacePatch{Bounds: patch.Bounds, Terrain: patch.Terrain, Visible: patch.Visible, Explored: patch.Explored})
+		if view.Buildings == nil {
+			view.Buildings = map[string]*model.Building{}
+		}
+		if view.Units == nil {
+			view.Units = map[string]*model.Unit{}
+		}
+		for id, b := range patch.Buildings {
+			view.Buildings[id] = b
+		}
+		for id, u := range patch.Units {
+			view.Units[id] = u
+		}
+		for _, resource := range patch.Resources {
+			x, y := resource.Position.X-patch.Bounds.X, resource.Position.Y-patch.Bounds.Y
+			if y < 0 || y >= len(patch.Explored) || x < 0 || x >= len(patch.Explored[y]) || !patch.Explored[y][x] {
+				continue
+			}
+			if !resources[resource.ID] {
+				view.Resources = append(view.Resources, resource)
+				resources[resource.ID] = true
+			}
+		}
+	}
+	return view, true
 }

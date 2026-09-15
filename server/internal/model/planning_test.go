@@ -11,7 +11,7 @@ func TestPlanFootprintRotation(t *testing.T) {
 		Rotation:     PlanRotation90,
 		Footprint:    Footprint{Width: 2, Height: 3},
 	}
-	tiles, err := itemOccupiedTiles(item)
+	tiles, err := itemOccupiedTiles(NewWorldState("test", 16), item)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -43,7 +43,7 @@ func TestPlanFootprintRotation(t *testing.T) {
 }
 
 func TestEvaluatePlanBatchFirstWins(t *testing.T) {
-	ws := NewWorldState("planet-1", 5, 5)
+	ws := NewWorldState("planet-1", 5)
 
 	bProfile := BuildingProfileFor(BuildingTypeArcSmelter, 1)
 	b := &Building{ID: "b1", Type: BuildingTypeArcSmelter, OwnerID: "p1", Position: Position{X: 1, Y: 1}, Runtime: bProfile.Runtime}
@@ -75,7 +75,7 @@ func TestEvaluatePlanBatchFirstWins(t *testing.T) {
 		{ID: "conveyor", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: 3, Y: 3}},
 		{ID: "blocked", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: 4, Y: 4}},
 		{ID: "overlap", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: 0, Y: 0}},
-		{ID: "oob", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: 5, Y: 0}},
+		{ID: "oob", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: ws.MapWidth, Y: 0}},
 	}
 
 	res := EvaluatePlanBatch(ws, PlanBatchRequest{BatchID: "batch-1", Items: items, BlockedTiles: blocked, UseCache: false})
@@ -101,7 +101,7 @@ func TestEvaluatePlanBatchFirstWins(t *testing.T) {
 }
 
 func TestEvaluatePlanBatchMutualFail(t *testing.T) {
-	ws := NewWorldState("planet-1", 3, 3)
+	ws := NewWorldState("planet-1", 3)
 	items := []PlanItem{
 		{ID: "a", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: 1, Y: 1}},
 		{ID: "b", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: Position{X: 1, Y: 1}},
@@ -119,7 +119,7 @@ func TestEvaluatePlanBatchMutualFail(t *testing.T) {
 }
 
 func TestPlanReservedTiles(t *testing.T) {
-	ws := NewWorldState("planet-1", 3, 3)
+	ws := NewWorldState("planet-1", 3)
 	state := NewPlanState()
 	state.ReserveTiles("reserved", "batch-0", []Position{{X: 1, Y: 1}})
 	items := []PlanItem{

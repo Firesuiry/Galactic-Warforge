@@ -8,7 +8,7 @@ import (
 )
 
 func buildTestWorld() *model.WorldState {
-	ws := model.NewWorldState("planet-1", 16, 16)
+	ws := model.NewWorldState("planet-1", 16)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 
@@ -154,5 +154,18 @@ func TestExploredPersistsAfterMove(t *testing.T) {
 	}
 	if !fog.Explored[4][7] {
 		t.Error("tile (7,4) should remain explored after losing visibility")
+	}
+}
+
+func TestFogRegionMatchesFullFogAcrossSeam(t *testing.T) {
+	ws := model.NewWorldState("cube", 16)
+	center := model.Position{X: 0, Y: 8}
+	neighbor, _ := ws.SurfaceStep(center, model.ConveyorWest)
+	ws.Units["u"] = &model.Unit{ID: "u", OwnerID: "p1", Position: center, VisionRange: 2}
+	engine := visibility.New()
+	full := engine.FogState(ws, "p1")
+	patch := engine.FogRegion(ws, "p1", neighbor.X, neighbor.Y, 1, 1)
+	if !patch.Visible[0][0] || patch.Visible[0][0] != full.Visible[neighbor.Y][neighbor.X] || patch.Explored[0][0] != full.Explored[neighbor.Y][neighbor.X] {
+		t.Fatal("regional fog differs at seam")
 	}
 }

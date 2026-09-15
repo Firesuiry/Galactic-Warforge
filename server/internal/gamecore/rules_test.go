@@ -28,7 +28,7 @@ func newTestCore(t *testing.T) *gamecore.GameCore {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{Width: 16, Height: 16, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()
@@ -125,25 +125,26 @@ func TestBuildCost(t *testing.T) {
 	_ = e
 }
 
-func TestManhattanDist(t *testing.T) {
+func TestSurfaceDistance(t *testing.T) {
+	ws := model.NewWorldState("test", 32)
 	a := model.Position{X: 0, Y: 0}
 	b := model.Position{X: 3, Y: 4}
-	dist := model.ManhattanDist(a, b)
+	dist := ws.SurfaceDistance(a, b)
 	if dist != 7 {
 		t.Errorf("expected manhattan dist 7, got %d", dist)
 	}
 }
 
 func TestWorldInBounds(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 16, 16)
+	ws := model.NewWorldState("planet-1", 16)
 	if !ws.InBounds(0, 0) {
 		t.Error("(0,0) should be in bounds")
 	}
 	if !ws.InBounds(15, 15) {
 		t.Error("(15,15) should be in bounds")
 	}
-	if ws.InBounds(16, 0) {
-		t.Error("(16,0) should be out of bounds")
+	if ws.InBounds(ws.MapWidth, 0) {
+		t.Error("map width should be out of bounds")
 	}
 	if ws.InBounds(-1, 0) {
 		t.Error("(-1,0) should be out of bounds")

@@ -7,7 +7,7 @@ import (
 )
 
 func TestSettleStorageProductionBuildingKeepsOnlyRecipeOutputsInOutputBuffer(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 1, Y: 1}, "sulfuric_acid")
@@ -31,7 +31,7 @@ func TestSettleStorageProductionBuildingKeepsOnlyRecipeOutputsInOutputBuffer(t *
 }
 
 func TestBuildingIOProductionInputSelectionBalancesRecipeNeeds(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5, 5)
+	ws := model.NewWorldState("planet-1", 5)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 2, Y: 2}, "sulfuric_acid")
@@ -79,7 +79,7 @@ func TestBuildingIOProductionInputSelectionBalancesRecipeNeeds(t *testing.T) {
 }
 
 func TestBuildingIOProductionInputSelectionCanPullNeededItemBehindMixedFrontStack(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5, 5)
+	ws := model.NewWorldState("planet-1", 5)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 2, Y: 2}, "sulfuric_acid")
@@ -115,7 +115,7 @@ func TestBuildingIOProductionInputSelectionCanPullNeededItemBehindMixedFrontStac
 }
 
 func TestBuildingIOProductionBuildingDoesNotExportRecipeInputsAlreadyInOutputBuffer(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 1, Y: 1}, "sulfuric_acid")
@@ -140,7 +140,7 @@ func TestBuildingIOProductionBuildingDoesNotExportRecipeInputsAlreadyInOutputBuf
 }
 
 func TestBuildingIOProductionInputCapLeavesRoomForOutputsAndByproducts(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3, 3)
+	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	assembler := newProductionTestBuilding("assembler", model.BuildingTypeAssemblingMachineMk1, model.Position{X: 1, Y: 1}, "oil_fractionation")
