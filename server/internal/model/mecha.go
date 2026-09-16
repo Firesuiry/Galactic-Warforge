@@ -28,17 +28,23 @@ func (j *MechaJob) Clone() *MechaJob {
 
 // MechaState is the persistent core of the player's executor. Fuel energy is
 // retained between ticks, so even a high energy fuel rod never loses its excess.
+type MechaLogisticsRequest struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
+}
+
 type MechaState struct {
-	Job                 *MechaJob `json:"job,omitempty"`
-	Energy              int       `json:"energy"`
-	MaxEnergy           int       `json:"max_energy"`
-	FuelEnergy          int       `json:"fuel_energy"`
-	Shield              int       `json:"shield"`
-	MaxShield           int       `json:"max_shield"`
-	AttackEnergyCost    int       `json:"attack_energy_cost"`
-	MoveEnergyCost      int       `json:"move_energy_cost"`
-	ShieldRechargeDelay int64     `json:"shield_recharge_delay"`
-	LastHitTick         int64     `json:"last_hit_tick"`
+	LogisticsRequests   map[string]MechaLogisticsRequest `json:"logistics_requests,omitempty"`
+	Job                 *MechaJob                        `json:"job,omitempty"`
+	Energy              int                              `json:"energy"`
+	MaxEnergy           int                              `json:"max_energy"`
+	FuelEnergy          int                              `json:"fuel_energy"`
+	Shield              int                              `json:"shield"`
+	MaxShield           int                              `json:"max_shield"`
+	AttackEnergyCost    int                              `json:"attack_energy_cost"`
+	MoveEnergyCost      int                              `json:"move_energy_cost"`
+	ShieldRechargeDelay int64                            `json:"shield_recharge_delay"`
+	LastHitTick         int64                            `json:"last_hit_tick"`
 }
 
 func (m *MechaState) Clone() *MechaState {
@@ -47,6 +53,12 @@ func (m *MechaState) Clone() *MechaState {
 	}
 	out := *m
 	out.Job = m.Job.Clone()
+	if m.LogisticsRequests != nil {
+		out.LogisticsRequests = make(map[string]MechaLogisticsRequest, len(m.LogisticsRequests))
+		for id, request := range m.LogisticsRequests {
+			out.LogisticsRequests[id] = request
+		}
+	}
 	return &out
 }
 

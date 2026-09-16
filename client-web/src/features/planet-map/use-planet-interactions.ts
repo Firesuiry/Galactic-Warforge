@@ -91,7 +91,7 @@ export function usePlanetInteractions({ catalog, planet, runtime }: UsePlanetInt
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
 
       if (mode.kind === 'build') {
-        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position);
+        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId);
         if (assessment && !assessment.buildable) {
           const reasons = assessment.blockedTiles
             .map((blocked) => (blocked.reason === 'terrain'
@@ -100,7 +100,9 @@ export function usePlanetInteractions({ catalog, planet, runtime }: UsePlanetInt
                 ? `(${blocked.x}, ${blocked.y}) 已被建筑占用`
                 : blocked.reason === 'resource'
                   ? `(${blocked.x}, ${blocked.y}) 被资源点占用`
-                  : `(${blocked.x}, ${blocked.y}) 需要建在资源点上`))
+                  : blocked.reason === 'missing_host'
+                    ? `(${blocked.x}, ${blocked.y}) 需要己方仓库原点`
+                    : `(${blocked.x}, ${blocked.y}) 需要建在资源点上`))
             .slice(0, 3)
             .join('；');
           reportLocalBlock('build', planet.planet_id, `该位置无法建造：${reasons}`, {

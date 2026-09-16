@@ -68,7 +68,7 @@ export interface BuildBlockedTile {
   x: number;
   y: number;
   terrain: string;
-  reason: "terrain" | "building" | "resource" | "missing_resource";
+  reason: "terrain" | "building" | "resource" | "missing_resource" | "missing_host";
   buildingId?: string;
   resourceId?: string;
 }
@@ -210,6 +210,7 @@ function findBlockingResource(
 }
 
 function buildTileAssessment(input: {
+  playerId?: string;
   catalog?: CatalogView;
   buildingType?: string;
   planet: PlanetRenderView;
@@ -230,17 +231,29 @@ function buildTileAssessment(input: {
   // 资源格不算阻挡，但锚点格必须命中资源点，否则本地拦截。
   const requiresResourceNode = entry?.requires_resource_node === true;
   const isFoundation = input.buildingType === "foundation";
+  const isDistributor = input.buildingType === "logistics_distributor";
   const canPrepareTerrain = (terrain: string) => isFoundation && ["water", "lava", "blocked"].includes(terrain);
   const blockedTiles: BuildBlockedTile[] = [];
   const resources = getResourceList(input.planet);
+
+  if (isDistributor) {
+    const buildings = Object.values(input.planet.buildings ?? {});
+    const host = buildings.find(building => (building.type === 'depot_mk1' || building.type === 'depot_mk2')
+      && building.position.x === input.selectedPosition!.x && building.position.y === input.selectedPosition!.y
+      && building.position.z === 0 && building.job?.type !== 'demolish'
+      && (!input.playerId || building.owner_id === input.playerId));
+    const mounted = buildings.find(building => building.type === 'logistics_distributor'
+      && building.position.x === input.selectedPosition!.x && building.position.y === input.selectedPosition!.y);
+    const terrain = getTerrainTile(input.planet, input.selectedPosition.x, input.selectedPosition.y);
+    if (!host || mounted) blockedTiles.push({ ...input.selectedPosition, terrain, reason: mounted ? 'building' : 'missing_host', buildingId: mounted?.id });
+    return { footprint, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0, blockedTiles, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
+  }
 
   for (let dy = 0; dy < footprint.height; dy += 1) {
     for (let dx = 0; dx < footprint.width; dx += 1) {
       const {x,y} = surfaceOffset(input.selectedPosition, dx, dy, input.planet.map_width / 3);
       const terrain = getTerrainTile(input.planet, x, y);
-      const blockingBuilding = Object.values(input.planet.buildings ?? {}).find(
-        (building) => (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3),
-      );
+      const blockingBuilding = Object.values(input.planet.buildings ?? {}).find((building) => (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3));
       const blockingResource = findBlockingResource(resources, x, y);
 
       if (terrain !== "buildable" && !canPrepareTerrain(terrain)) {
@@ -266,7 +279,6 @@ function buildTileAssessment(input: {
       }
     }
   }
-
   const primaryTerrain = getTerrainTile(
     input.planet,
     input.selectedPosition.x,
@@ -395,8 +407,9 @@ export function assessBuildTiles(
   buildingType: string | undefined,
   planet: PlanetRenderView,
   position?: Position,
+  playerId?: string,
 ): BuildTileAssessment | undefined {
-  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position });
+  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position, playerId });
 }
 
 /** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */

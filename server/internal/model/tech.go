@@ -631,7 +631,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 300}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "logistics_distributor"},
-			{Type: TechUnlockBuilding, ID: "logistics_bot"},
+			{Type: TechUnlockUnit, ID: "logistics_drone"},
+			{Type: TechUnlockRecipe, ID: "logistics_bot"},
 		},
 	},
 	{
@@ -1753,7 +1754,6 @@ var techUnlockAliases = map[TechUnlockType]map[string][]TechUnlock{
 		"fluid_tank":             {{Type: TechUnlockBuilding, ID: string(BuildingTypeStorageTank)}},
 		"geothermal_plant":       {{Type: TechUnlockBuilding, ID: string(BuildingTypeGeothermalPowerStation)}},
 		"high_energy_laser":      {{Type: TechUnlockBuilding, ID: string(BuildingTypeLaserTurret)}},
-		"logistics_bot":          {{Type: TechUnlockUnit, ID: "logistics_drone"}},
 		"logistics_vessel":       {{Type: TechUnlockUnit, ID: "logistics_ship"}},
 		"mini_fusion_plant":      {{Type: TechUnlockBuilding, ID: string(BuildingTypeMiniFusionPowerPlant)}},
 		"miniature_collider":     {{Type: TechUnlockBuilding, ID: string(BuildingTypeMiniatureParticleCollider)}},

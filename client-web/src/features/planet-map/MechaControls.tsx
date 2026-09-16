@@ -5,6 +5,7 @@ import { normalizeCompletedTechIds } from './research-workflow';
 import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
+import { MechaLogisticsControls } from './MechaLogisticsControls';
 
 /** All values and fuel choices come from the authoritative scene and catalog. */
 export function MechaControls({ unit, catalog, planetId, canControl, player }: {
@@ -39,6 +40,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
   }
   return (
     <section className="planet-side-section mecha-controls" aria-label="机甲核心">
+      {canControl ? <MechaLogisticsControls unit={unit} catalog={catalog} planetId={planetId} inventory={player?.inventory} /> : null}
       <div className="section-title">机甲核心</div>
       <label>核心能量 <strong>{mecha.energy} / {mecha.max_energy}</strong>
         <meter aria-label="核心能量" min={0} max={mecha.max_energy} value={mecha.energy} />

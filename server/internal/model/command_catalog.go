@@ -114,6 +114,28 @@ func commandStructureRegistry() []CommandStructureSpec {
 			RequiredTargetFields: []string{"entity_id"},
 		},
 		{
+			Type:                  CmdConfigureDistributor,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"item_id", "mode", "local_storage"},
+			OptionalPayloadFields: []string{"player_delivery_enabled", "player_collection_enabled"},
+		},
+		{
+			Type:                  CmdInstallLogisticsBot,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"quantity"},
+			OptionalPayloadFields: []string{"source"},
+		},
+		{
+			Type:                  CmdUninstallLogisticsBot,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"quantity"},
+		},
+		{
+			Type:                  CmdConfigureMechaLogistics,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"requests"},
+		},
+		{
 			Type:                  CmdInstallLogisticsVehicle,
 			OptionalPayloadFields: []string{"source"},
 			RequiredTargetFields:  []string{"entity_id"},

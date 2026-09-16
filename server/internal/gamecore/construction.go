@@ -532,7 +532,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, fmt.Errorf("construction position out of bounds")
 	}
 	tileKey := model.TileKey(pos.X, pos.Y)
-	if _, occupied := ws.TileBuilding[tileKey]; occupied {
+	if _, occupied := ws.TileBuilding[tileKey]; occupied && task.BuildingType != model.BuildingTypeLogisticsDistributor {
 		return nil, fmt.Errorf("construction tile already occupied")
 	}
 	def, ok := model.BuildingDefinitionByID(task.BuildingType)
@@ -548,7 +548,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, err
 	}
 	for _, p := range tiles {
-		if ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation) {
+		if task.BuildingType != model.BuildingTypeLogisticsDistributor && (ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation)) {
 			return nil, fmt.Errorf("construction footprint tile unavailable")
 		}
 		if task.BuildingType == model.BuildingTypeFoundation && ws.FoundationAt(p) != nil {
@@ -586,6 +586,18 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	model.InitBuildingTrafficMonitor(b)
 	model.InitBuildingSorter(b)
 	model.InitBuildingLogisticsStation(b)
+	if task.BuildingType == model.BuildingTypeLogisticsDistributor {
+		// A distributor is an attachment and must bind to the depot at the same
+		// surface origin. The host is checked again at completion to avoid stale
+		// construction reservations creating free-floating logistics devices.
+		host, hostErr := model.DistributorPlacementHost(ws, task.PlayerID, model.Position{X: pos.X, Y: pos.Y, Z: 0}, "")
+		if hostErr != nil {
+			rollbackConstructionDeduction(ws, task)
+			return nil, hostErr
+		}
+		b.Position.Z = 1
+		b.Distributor = model.NewDistributorState(host.ID)
+	}
 	syncCollectorResourceKind(ws, b)
 	if b.Production != nil {
 		recipeID := task.RecipeID

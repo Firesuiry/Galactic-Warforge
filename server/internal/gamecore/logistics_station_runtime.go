@@ -16,6 +16,23 @@ func settleLogisticsCharging(ws *model.WorldState) []*model.GameEvent {
 	}
 	var events []*model.GameEvent
 	for _, b := range ws.Buildings {
+		if b != nil && b.Type == model.BuildingTypeLogisticsDistributor && b.Distributor != nil {
+			d := b.Distributor
+			if d.LastChargeTick != ws.Tick {
+				d.LastChargeTick = ws.Tick
+				d.LastChargeAmount = 0
+				if b.Runtime.State == model.BuildingWorkRunning {
+					base := model.PowerDemandForBuilding(b) - d.ChargingDemand()
+					allocation, ok := snapshot.Allocations.Buildings[b.ID]
+					if ok && allocation.Allocated >= base {
+						amount := min(d.ChargingDemand(), max(0, allocation.Allocated-base))
+						d.Energy += amount
+						d.LastChargeAmount = amount
+					}
+				}
+			}
+			continue
+		}
 		if b == nil || !model.IsGroundLogisticsBuilding(b.Type) || b.LogisticsStation == nil {
 			continue
 		}

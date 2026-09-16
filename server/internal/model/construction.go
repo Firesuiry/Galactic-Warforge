@@ -120,6 +120,12 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 	if task.State != ConstructionPending {
 		return fmt.Errorf("construction task %s must start in pending state", task.ID)
 	}
+	if task.BuildingType == BuildingTypeLogisticsDistributor {
+		if _, err := DistributorPlacementHost(ws, task.PlayerID, task.Position, ""); err != nil {
+			return err
+		}
+		task.Position.Z = 1
+	}
 	tiles, err := ws.ConstructionTiles(task)
 	if err != nil {
 		return err
@@ -129,7 +135,7 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 		if existing := q.ReservedTiles[key]; existing != "" {
 			return fmt.Errorf("tile %s already reserved by %s", key, existing)
 		}
-		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation) {
+		if task.BuildingType != BuildingTypeLogisticsDistributor && (ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation)) {
 			return fmt.Errorf("footprint tile %s is unavailable", key)
 		}
 		if task.BuildingType == BuildingTypeFoundation && ws.FoundationAt(p) != nil {

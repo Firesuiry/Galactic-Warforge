@@ -1423,3 +1423,9 @@
 .logistics-station-controls select, .logistics-station-controls input { width: 100%; min-width: 0; box-sizing: border-box; }
 .logistics-station-controls__port { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .logistics-station-controls fieldset:disabled { opacity: .65; }
+
+.distributor-controls form, .distributor-controls fieldset, .mecha-controls fieldset { display: grid; gap: 10px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.distributor-controls label { display: grid; gap: 4px; }
+.distributor-controls input[type="checkbox"] { width: auto; }
+.distributor-controls select, .distributor-controls input[type="number"] { width: 100%; }
+.mecha-logistics-row { display: grid; gap: 6px; border-bottom: 1px solid var(--border); padding: 8px 0; }

@@ -8,6 +8,10 @@ import type { ReplContext } from '../types.js';
 import { parseArgs, parseIntegerArg } from './args.js';
 
 const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
+  configure_distributor: { usage: '<id> <item_id|none> <none|supply|demand> <local_storage> [--delivery true|false] [--collection true|false]', desc: '配置仓库配送器；省略开关保留原值' },
+  install_logistics_bot: { usage: '<id> <quantity> [--source player|storage]', desc: '消耗背包或绑定仓库的机器人安装至配送器' },
+  uninstall_logistics_bot: { usage: '<id> <quantity>', desc: '回收空载停靠的配送机器人至背包' },
+  configure_mecha_logistics: { usage: '<unit_id> <item:min:max,...|none>', desc: '替换机甲配送请求，最多 8 项，none 清空' },
   health: { desc: 'Server status and current tick' },
   metrics: { desc: 'Runtime metrics' },
   summary: { desc: 'Game summary (resources, players, map)' },
@@ -130,6 +134,10 @@ const HELP_TEXT = [
   '    scan_planet <id>   Discover a planet',
   '',
   chalk.bold('  Game Actions:'),
+  '    configure_distributor <id> <item_id|none> <none|supply|demand> <local_storage> [--delivery true|false] [--collection true|false]',
+  '    install_logistics_bot <id> <quantity> [--source player|storage]',
+  '    uninstall_logistics_bot <id> <quantity>',
+  '    configure_mecha_logistics <unit_id> <item:min:max,...|none>',
   '    build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]',
   '    move <entity_id> <x> <y> [--z <z>]',
   '    attack <entity_id> <target>',

@@ -85,6 +85,7 @@ import {
 import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
 import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdSave, cmdReplay, cmdRollback } from './debug.js';
 import type { ReplContext } from '../types.js';
+import { configureDistributor, installBot, uninstallBot, configureMechaLogistics } from './distributor.js';
 
 export type CommandHandler = (args: string[], ctx: ReplContext) => Promise<string> | string;
 
@@ -94,6 +95,10 @@ export interface CommandEntry {
 }
 
 export const COMMANDS: Record<string, CommandEntry> = {
+  configure_distributor: { handler: configureDistributor },
+  install_logistics_bot: { handler: installBot },
+  uninstall_logistics_bot: { handler: uninstallBot },
+  configure_mecha_logistics: { handler: configureMechaLogistics },
   health: { handler: cmdHealth },
   metrics: { handler: cmdMetrics },
   summary: { handler: cmdSummary },

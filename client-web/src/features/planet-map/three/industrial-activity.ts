@@ -24,6 +24,7 @@ export interface ActivitySource {
   buildingId?: string;
   color: string;
   normal?: THREE.Vector3;
+  altitude?: number;
 }
 
 /** No synthetic production: these fields come from Building runtime/conveyor and runtime logistics views. */
@@ -68,6 +69,12 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     if ('target_planet_id' in drone && drone.target_planet_id && drone.target_planet_id !== data.planet.planet_id && drone.status === 'in_flight') continue;
     if (['takeoff', 'in_flight', 'landing'].includes(drone.status) && visible(drone.position)) sources.push({ id: `flight:${drone.id}`, kind: 'flight',
       position: drone.position, normal: logisticsFlightNormal(drone, data.planet.surface.face_size), active: true, color: '#9dcfff' });
+  }
+  for (const bot of data.runtime?.logistics_bots ?? []) {
+    if (!['takeoff', 'in_flight', 'landing'].includes(bot.status) || !visible(bot.position)) continue;
+    sources.push({ id: `bot-flight:${bot.id}`, kind: 'flight', position: bot.position,
+      normal: tileNormal(bot.position, data.planet.surface.face_size), active: true, color: '#73f0d1',
+      altitude: bot.status === 'in_flight' ? 1.05 : .66 });
   }
   return sources;
 }
@@ -187,9 +194,9 @@ export class IndustrialActivity {
       } else if (source.kind === 'flight') {
         // Exhaust follows the authoritative flight phase. A short trail uses only observed displacement,
         // expires after one second without new state, and never predicts a target or creates cargo.
-        point(this.position.copy(normal).multiplyScalar(this.radius + size * .5), color, size * .14);
+        point(this.position.copy(normal).multiplyScalar(this.radius + size * (source.altitude ?? .5)), color, size * .14);
         if (entry.prior && this.snapshotAge < 1 && !options.reducedMotion) for (let i = 1; i <= 4; i++) {
-          point(this.position.copy(normal).lerp(entry.prior, i / 8).normalize().multiplyScalar(this.radius + size * .5), color, size * .12 * (1 - i / 5));
+          point(this.position.copy(normal).lerp(entry.prior, i / 8).normalize().multiplyScalar(this.radius + size * (source.altitude ?? .5)), color, size * .12 * (1 - i / 5));
         }
       } else {
         const pulse = .7 + Math.sin(this.time * 2.8) * .3;

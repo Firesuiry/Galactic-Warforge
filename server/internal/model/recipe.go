@@ -176,6 +176,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		BuildingTypes:    []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:       []string{"basic_components"},
 	},
+ "logistics_bot": {ID:"logistics_bot",Name:"Logistics Bot",Inputs:[]ItemAmount{{ItemID:ItemMotor,Quantity:1},{ItemID:ItemCircuitBoard,Quantity:1},{ItemID:ItemIronIngot,Quantity:2}},Outputs:[]ItemAmount{{ItemID:ItemLogisticsBot,Quantity:1}},Duration:60,BuildingTypes:[]BuildingType{BuildingTypeAssemblingMachineMk1,BuildingTypeAssemblingMachineMk2,BuildingTypeAssemblingMachineMk3},TechUnlock:[]string{"distribution_logistics"}},
 	"logistics_drone": {
 		ID: "logistics_drone", Name: "Logistics Drone", Inputs: []ItemAmount{{ItemID: ItemMotor, Quantity: 2}, {ItemID: ItemProcessor, Quantity: 2}, {ItemID: ItemIronIngot, Quantity: 5}},
 		Outputs: []ItemAmount{{ItemID: ItemLogisticsDrone, Quantity: 1}}, Duration: 120,

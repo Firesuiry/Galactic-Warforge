@@ -2255,3 +2255,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 跨面补片的未探索地形返回 `unknown`，补片资源仅在已探索格返回。scene 单窗口尺寸上限为 257（容纳半径 128 的完整中心行）。
 
 `overview.step` 会向下选择不超过请求值的 face_size 约数，保证缩略图分箱不混合不同立方体面；客户端须使用响应的实际 step。
+
+## 仓库配送器
+
+`logistics_distributor` 建在己方仓库原点并挂在仓顶。`configure_distributor` 配置物品、供给/需求模式和保有量；`install_logistics_bot`、`uninstall_logistics_bot` 管理真实机器人。`configure_mecha_logistics` 替换机甲最多 8 项补给下限/回收上限。行星 runtime 返回 `logistics_distributors` 与 `logistics_bots`；机器人按球面相邻格移动并消耗有限航程能量，停电停派，目标失效返航，基地失效保货为 stranded。

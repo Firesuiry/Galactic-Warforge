@@ -388,7 +388,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
           x: hoveredTile.x,
           y: hoveredTile.y,
           z: 0,
-        })
+        }, session.playerId)
       : undefined;
     sceneRef.current?.setInteraction({
       hoveredTile,

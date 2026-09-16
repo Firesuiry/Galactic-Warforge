@@ -216,6 +216,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		VisionRange:       b.VisionRange,
 		Runtime:           cloneRuntime(b.Runtime),
 		Storage:           cloneStorage(b.Storage),
+		Distributor:       b.Distributor.Clone(),
 		EnergyStorage:     cloneEnergyStorage(b.EnergyStorage),
 		Conveyor:          cloneConveyor(b.Conveyor),
 		Sorter:            b.Sorter.Clone(),
@@ -266,11 +267,17 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		FoundationTerrain: append([]string(nil), snap.FoundationTerrain...),
 	}
 	if snap.Storage != nil {
+		if mb.Type == model.BuildingTypeLogisticsDistributor {
+			return nil, fmt.Errorf("distributor must use its host storage")
+		}
 		mb.Storage = cloneStorage(snap.Storage)
 	} else if mb.Runtime.Functions.Storage != nil {
 		return nil, fmt.Errorf("storage snapshot missing for %s", buildingID)
 	}
 	if snap.EnergyStorage != nil {
+		if mb.Type == model.BuildingTypeLogisticsDistributor {
+			return nil, fmt.Errorf("distributor uses dedicated charging state")
+		}
 		mb.EnergyStorage = cloneEnergyStorage(snap.EnergyStorage)
 	} else if mb.Runtime.Functions.EnergyStorage != nil {
 		return nil, fmt.Errorf("energy storage snapshot missing for %s", buildingID)
@@ -279,6 +286,17 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		mb.Conveyor = cloneConveyor(snap.Conveyor)
 	} else if model.IsConveyorBuilding(mb.Type) {
 		return nil, fmt.Errorf("conveyor snapshot missing for %s", buildingID)
+	}
+	if mb.Type == model.BuildingTypeLogisticsDistributor {
+		if snap.Distributor == nil {
+			return nil, fmt.Errorf("distributor snapshot missing for %s", buildingID)
+		}
+		if err := snap.Distributor.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid distributor %s: %w", buildingID, err)
+		}
+		mb.Distributor = snap.Distributor.Clone()
+	} else if snap.Distributor != nil {
+		return nil, fmt.Errorf("distributor state on non-distributor building %s", buildingID)
 	}
 	if snap.TrafficMonitor != nil {
 		mb.TrafficMonitor = snap.TrafficMonitor.Clone()

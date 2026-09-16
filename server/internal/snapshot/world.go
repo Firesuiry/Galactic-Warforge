@@ -20,6 +20,7 @@ type WorldSnapshot struct {
 	Players         map[string]*model.PlayerState         `json:"players"`
 	Buildings       map[string]*BuildingSnapshot          `json:"buildings"`
 	Units           map[string]*model.Unit                `json:"units"`
+	LogisticsBots   map[string]*model.LogisticsBotState   `json:"logistics_bots,omitempty"`
 	LogisticsDrones map[string]*model.LogisticsDroneState `json:"logistics_drones,omitempty"`
 	LogisticsShips  map[string]*model.LogisticsShipState  `json:"logistics_ships,omitempty"`
 	Resources       map[string]*model.ResourceNodeState   `json:"resources"`
@@ -43,6 +44,7 @@ type BuildingSnapshot struct {
 	VisionRange       int                          `json:"vision_range"`
 	Runtime           model.BuildingRuntime        `json:"runtime"`
 	Storage           *model.StorageState          `json:"storage,omitempty"`
+	Distributor       *model.DistributorState      `json:"distributor,omitempty"`
 	EnergyStorage     *model.EnergyStorageState    `json:"energy_storage,omitempty"`
 	Conveyor          *model.ConveyorState         `json:"conveyor,omitempty"`
 	Splitter          *model.SplitterState         `json:"splitter,omitempty"`
@@ -83,6 +85,7 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 		Players:         make(map[string]*model.PlayerState, len(ws.Players)),
 		Buildings:       make(map[string]*BuildingSnapshot, len(ws.Buildings)),
 		Units:           make(map[string]*model.Unit, len(ws.Units)),
+		LogisticsBots:   make(map[string]*model.LogisticsBotState, len(ws.LogisticsBots)),
 		LogisticsDrones: make(map[string]*model.LogisticsDroneState, len(ws.LogisticsDrones)),
 		LogisticsShips:  make(map[string]*model.LogisticsShipState, len(ws.LogisticsShips)),
 		Resources:       make(map[string]*model.ResourceNodeState, len(ws.Resources)),
@@ -102,6 +105,9 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 	}
 	for id, u := range ws.Units {
 		snap.Units[id] = u.Clone()
+	}
+	for id, b := range ws.LogisticsBots {
+		snap.LogisticsBots[id] = b.Clone()
 	}
 	for id, d := range ws.LogisticsDrones {
 		snap.LogisticsDrones[id] = cloneLogisticsDrone(d)
@@ -173,8 +179,41 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 			return nil, fmt.Errorf("unit snapshot missing for %s", id)
 		}
 		ws.Units[id] = u.Clone()
+		if u.Mecha != nil {
+			if len(u.Mecha.LogisticsRequests) > 8 {
+				return nil, fmt.Errorf("too many mecha logistics requests")
+			}
+			for item, request := range u.Mecha.LogisticsRequests {
+				definition, ok := model.Item(item)
+				if !ok || definition.Form != model.ResourceSolid || request.Min < 0 || request.Max < 1 || request.Max > 1000 || request.Min > request.Max {
+					return nil, fmt.Errorf("invalid mecha logistics request")
+				}
+			}
+		}
 	}
 
+	// Restore independent cargo owners even if their distributor no longer exists.
+	ws.LogisticsBots = make(map[string]*model.LogisticsBotState, len(snap.LogisticsBots))
+	for id, b := range snap.LogisticsBots {
+		if b == nil {
+			return nil, fmt.Errorf("missing logistics bot %s", id)
+		}
+		if err := b.Validate(); err != nil {
+			return nil, err
+		}
+		if id != b.ID || ws.Players[b.OwnerID] == nil || !ws.InBounds(b.Position.X, b.Position.Y) || !ws.InBounds(b.HomePos.X, b.HomePos.Y) || (b.TargetPos != nil && !ws.InBounds(b.TargetPos.X, b.TargetPos.Y)) {
+			return nil, fmt.Errorf("invalid logistics bot identity or position %s", id)
+		}
+		if home := ws.Buildings[b.DistributorID]; home != nil && (home.OwnerID != b.OwnerID || home.Distributor == nil) {
+			return nil, fmt.Errorf("bot home ownership mismatch")
+		}
+		ws.LogisticsBots[id] = b.Clone()
+	}
+	for _, b := range ws.Buildings {
+		if b.Distributor != nil && model.DistributorBotCount(ws, b.ID) > b.Distributor.BotCapacity {
+			return nil, fmt.Errorf("distributor robot capacity exceeded")
+		}
+	}
 	// Restore logistics drones.
 	ws.LogisticsDrones = make(map[string]*model.LogisticsDroneState, len(snap.LogisticsDrones))
 	for id, d := range snap.LogisticsDrones {

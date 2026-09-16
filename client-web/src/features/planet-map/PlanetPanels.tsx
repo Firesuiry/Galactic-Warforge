@@ -68,6 +68,7 @@ import {
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
 import { LogisticsStationControls } from "./LogisticsStationControls";
+import { DistributorControls } from "./DistributorControls";
 import { TrafficMonitorControls } from "./TrafficMonitorControls";
 import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
@@ -682,6 +683,7 @@ export function PlanetEntityPanel({
         </section>
 
         {logisticsStation?.state && building.type !== "orbital_collector" ? <LogisticsStationControls key={building.id} building={building} state={logisticsStation.state} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
+        {building.type === "logistics_distributor" && building.distributor ? <DistributorControls key={building.id} building={building} host={Object.values(planet.buildings ?? {}).find(candidate => candidate.id === building.distributor?.host_building_id)} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
 
         {showLogisticsDetails ? (
           <>

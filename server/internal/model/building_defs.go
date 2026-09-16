@@ -234,6 +234,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryLogisticsHub,
 		Subcategory: BuildingSubcategoryLogisticsHub,
 		Footprint:   defaultFootprint,
+		BuildCost: BuildCost{Minerals:40,Energy:20},
 		Buildable:   true,
 	},
 	{

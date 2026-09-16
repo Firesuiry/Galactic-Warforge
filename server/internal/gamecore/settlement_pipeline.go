@@ -77,6 +77,7 @@ func newSettlementPipeline() settlementPipeline {
 
 			settleLogisticsDispatch(ws, gc.worlds)
 			settleLogisticsDrones(ws)
+			settleDistributors(ws, ws.PlanetID == gc.activePlanetID)
 		}
 		return events
 	})

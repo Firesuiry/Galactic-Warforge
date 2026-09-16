@@ -8,6 +8,10 @@ export interface PlanetCommandRendererDefinition {
 export const PLANET_COMMAND_RENDERERS: Partial<
   Record<PublicCommandId, PlanetCommandRendererDefinition>
 > = {
+  configure_distributor: { cardId: "distributor-controls", section: "选中对象" },
+  install_logistics_bot: { cardId: "distributor-controls", section: "选中对象" },
+  uninstall_logistics_bot: { cardId: "distributor-controls", section: "选中对象" },
+  configure_mecha_logistics: { cardId: "mecha-logistics-controls", section: "选中对象" },
   install_logistics_vehicle: { cardId: "logistics-station-controls", section: "选中对象" },
   configure_logistics_station: { cardId: "logistics", section: "物流" },
   configure_logistics_slot: { cardId: "logistics", section: "物流" },

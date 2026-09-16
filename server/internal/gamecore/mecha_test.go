@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"siliconworld/internal/model"
@@ -207,7 +208,7 @@ func TestPlayerMechaSnapshotPreservesIndependentEnergyAndShield(t *testing.T) {
 	if err = json.Unmarshal(data, &restored); err != nil {
 		t.Fatal(err)
 	}
-	if *restored.Mecha != *unit.Mecha {
+	if !reflect.DeepEqual(restored.Mecha, unit.Mecha) {
 		t.Fatalf("restore lost core state: %+v", restored.Mecha)
 	}
 }

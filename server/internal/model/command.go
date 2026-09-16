@@ -16,6 +16,10 @@ const (
 	CmdProduce                   CommandType = "produce"
 	CmdUpgrade                   CommandType = "upgrade"
 	CmdDemolish                  CommandType = "demolish"
+	CmdConfigureDistributor      CommandType = "configure_distributor"
+	CmdInstallLogisticsBot       CommandType = "install_logistics_bot"
+	CmdUninstallLogisticsBot     CommandType = "uninstall_logistics_bot"
+	CmdConfigureMechaLogistics   CommandType = "configure_mecha_logistics"
 	CmdInstallLogisticsVehicle   CommandType = "install_logistics_vehicle"
 	CmdConfigureLogisticsStation CommandType = "configure_logistics_station"
 	CmdConfigureLogisticsSlot    CommandType = "configure_logistics_slot"
@@ -154,6 +158,7 @@ func AllCommandTypes() []CommandType {
 		CmdProduce,
 		CmdUpgrade,
 		CmdDemolish,
+		CmdConfigureDistributor, CmdInstallLogisticsBot, CmdUninstallLogisticsBot, CmdConfigureMechaLogistics,
 		CmdInstallLogisticsVehicle,
 		CmdConfigureLogisticsStation,
 		CmdConfigureLogisticsSlot,

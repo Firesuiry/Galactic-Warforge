@@ -59,7 +59,8 @@ type WorldState struct {
 	Grid               [][]MapTile                       `json:"-"` // grid[y][x]
 	Resources          map[string]*ResourceNodeState     `json:"resources"`
 	LogisticsStations  map[string]*LogisticsStationState `json:"-"`
-	LogisticsDrones    map[string]*LogisticsDroneState   `json:"-"`
+	LogisticsBots map[string]*LogisticsBotState `json:"-"`
+ LogisticsDrones    map[string]*LogisticsDroneState   `json:"-"`
 	LogisticsShips     map[string]*LogisticsShipState    `json:"-"`
 	PowerInputs        []PowerInput                      `json:"-"`
 	PowerSnapshot      *PowerSettlementSnapshot          `json:"-"`
@@ -95,7 +96,8 @@ func NewWorldState(planetID string, faceSize int) *WorldState {
 		Units:             make(map[string]*Unit),
 		Resources:         make(map[string]*ResourceNodeState),
 		LogisticsStations: make(map[string]*LogisticsStationState),
-		LogisticsDrones:   make(map[string]*LogisticsDroneState),
+		LogisticsBots: make(map[string]*LogisticsBotState),
+ LogisticsDrones:   make(map[string]*LogisticsDroneState),
 		LogisticsShips:    make(map[string]*LogisticsShipState),
 		TileBuilding:      make(map[string]string),
 		TileUnits:         make(map[string][]string),

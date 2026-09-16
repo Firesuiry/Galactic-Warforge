@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"reflect"
 
 	"siliconworld/internal/model"
 )
@@ -42,7 +43,7 @@ func settleMechas(ws *model.WorldState) []*model.GameEvent {
 			m.Energy--
 			m.Shield += min(2, m.MaxShield-m.Shield)
 		}
-		if beforeMecha != *m || beforeMove != unit.MoveRange || beforeAttack != unit.Attack || beforeDefense != unit.Defense || beforeRange != unit.AttackRange {
+		if !reflect.DeepEqual(beforeMecha, *m) || beforeMove != unit.MoveRange || beforeAttack != unit.Attack || beforeDefense != unit.Defense || beforeRange != unit.AttackRange {
 			events = append(events, mechaStateEvent(unit))
 		}
 	}

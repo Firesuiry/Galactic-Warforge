@@ -297,20 +297,24 @@ export class PlanetThreeScene {
     };
     for (const building of visibleBuildings) {
       const footprint = getBuildingFootprint(building);
+      const host = building.distributor ? planet.buildings?.[building.distributor.host_building_id] : undefined;
+      const placement = host ?? building;
+      const placementFootprint = getBuildingFootprint(placement);
+      const mountHeight = host ? .59 * Math.max(.8, Math.min(placementFootprint.width, placementFootprint.height) * .86 * .72) : 0;
       for (let y = 0; y < footprint.height; y++) for (let x = 0; x < footprint.width; x++) {
         const tile = surfaceOffset(building.position, x, y, planet.surface.face_size);
         occupiedTiles.add(`${tile.x}:${tile.y}`);
       }
       if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
-      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint, building.conveyor?.output], () => {
+      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position, footprint, building.conveyor?.output, host?.position, placementFootprint], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
-        this.place(group, building.position, 'buildings');
+        this.place(group, placement.position, 'buildings');
         const center = new THREE.Vector3();
-        for(let y=0;y<footprint.height;y++) for(let x=0;x<footprint.width;x++) {
-          const cell=surfaceOffset(building.position,x,y,planet.surface.face_size);
+        for(let y=0;y<placementFootprint.height;y++) for(let x=0;x<placementFootprint.width;x++) {
+          const cell=surfaceOffset(placement.position,x,y,planet.surface.face_size);
           center.add(this.normal(cell.x,cell.y));
         }
-        group.position.copy(center.normalize()).multiplyScalar(RADIUS+this.tileScale()*.025);
+        group.position.copy(center.normalize()).multiplyScalar(RADIUS+this.tileScale()*(.025+mountHeight));
         group.userData.tile = { x: Math.round(building.position.x), y: Math.round(building.position.y) };
         return group;
       });
@@ -351,9 +355,9 @@ export class PlanetThreeScene {
     this.dynamicBatches.refresh(batchEntries);
 
     const movingKeys = new Set<string>();
-    const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false, normal?: THREE.Vector3) => {
+    const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false, normal?: THREE.Vector3, altitude?: number) => {
       movingKeys.add(id);
-      this.trackMotion(id, type, own, position, layer, scale, airborne, normal);
+      this.trackMotion(id, type, own, position, layer, scale, airborne, normal, altitude);
     };
     for (const unit of Object.values(planet.units ?? {})) {
       if (unit.owner_id === playerId || this.visible(unit.position)) move(`unit:${unit.id}`, unit.type, unit.owner_id === playerId, unit.position, 'units', .72);
@@ -369,6 +373,22 @@ export class PlanetThreeScene {
       move(`logistics:${drone.id}`, 'ship', drone.owner_id === playerId, drone.position, 'logistics', .45, airborne,
         interplanetary ? undefined : logisticsFlightNormal(drone, planet.surface.face_size));
       if (!interplanetary && ['takeoff', 'in_flight', 'landing'].includes(drone.status) && drone.target_pos) logisticsLinks.push({ from: drone.position, to: drone.target_pos });
+    }
+    for (const bot of runtime?.logistics_bots ?? []) {
+      // Idle robots are stored inside their dock. Positions already advance on the server.
+      if (bot.status === 'idle' || !this.visible(bot.position)) continue;
+      const airborne = ['takeoff', 'in_flight', 'landing'].includes(bot.status);
+      const id = `logistics-bot:${bot.id}`;
+      move(id, 'logistics_bot', bot.owner_id === playerId, bot.position, 'logistics', .6, airborne, undefined,
+        bot.status === 'stranded' ? .035 : bot.status === 'in_flight' ? 1.05 : .66);
+      const model = this.moving.get(id)!.group;
+      model.userData.industryActive = airborne;
+      const cargo = model.getObjectByName('logistics-bot-cargo');
+      if (cargo) {
+        cargo.visible = Object.values(bot.cargo ?? {}).some(quantity => quantity > 0);
+        cargo.userData.inventory = { ...bot.cargo };
+      }
+      if (airborne && bot.target_pos) logisticsLinks.push({ from: bot.position, to: bot.target_pos });
     }
     for (const enemy of runtime?.enemy_forces ?? []) {
       if (this.visible(enemy.position)) move(`enemy:${enemy.id}`, enemy.type, false, enemy.position, 'threat', 1);
@@ -387,7 +407,7 @@ export class PlanetThreeScene {
     // Model geometry/material are cached and shared by the asset library.
   }
 
-  private trackMotion(id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne: boolean, normal?: THREE.Vector3) {
+  private trackMotion(id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne: boolean, normal?: THREE.Vector3, altitude?: number) {
     const signature = JSON.stringify([type, own, layer]);
     let entry = this.moving.get(id);
     if (entry && entry.signature !== signature) { this.removeModel(entry.group); this.moving.delete(id); entry = undefined; }
@@ -405,6 +425,7 @@ export class PlanetThreeScene {
       group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
     }
     if (airborne) group.position.normalize().multiplyScalar(RADIUS + this.tileScale() * .4);
+    if (altitude !== undefined) group.position.normalize().multiplyScalar(RADIUS + this.tileScale() * altitude);
     entry.target.copy(group.position);
     if (previousPosition && !this.frozen && previousPosition.distanceTo(entry.target) < RADIUS) group.position.copy(previousPosition);
   }
@@ -448,7 +469,7 @@ export class PlanetThreeScene {
     if (this.interaction.hoveredTile) {
       const tile = this.interaction.hoveredTile;
       if (this.interaction.interactionMode.kind === 'build') {
-        const assessment = assessBuildTiles(this.data.catalog, this.interaction.interactionMode.buildingType, this.data.planet, { ...tile, z: 0 });
+        const assessment = assessBuildTiles(this.data.catalog, this.interaction.interactionMode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId);
         const footprint = assessment?.footprint ?? { width: 1, height: 1 };
         for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
           const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);

@@ -8,25 +8,27 @@ import (
 
 // PlanetRuntimeView exposes dynamic planet runtime state for the active world.
 type PlanetRuntimeView struct {
-	PlanetID          string                         `json:"planet_id"`
-	Discovered        bool                           `json:"discovered"`
-	Available         bool                           `json:"available"`
-	ActivePlanetID    string                         `json:"active_planet_id,omitempty"`
-	Tick              int64                          `json:"tick"`
-	CombatSquads      []model.CombatSquad            `json:"combat_squads,omitempty"`
-	OrbitalPlatforms  []model.OrbitalPlatform        `json:"orbital_platforms,omitempty"`
-	Bridgeheads       []model.LandingBridgehead      `json:"bridgeheads,omitempty"`
-	Frontlines        []model.PlanetaryFrontline     `json:"frontlines,omitempty"`
-	GroundTaskForces  []model.GroundTaskForceRuntime `json:"ground_task_forces,omitempty"`
-	LogisticsStations []LogisticsStationView         `json:"logistics_stations,omitempty"`
-	LogisticsDrones   []LogisticsDroneView           `json:"logistics_drones,omitempty"`
-	LogisticsShips    []LogisticsShipView            `json:"logistics_ships,omitempty"`
-	ConstructionTasks []ConstructionTaskView         `json:"construction_tasks,omitempty"`
-	EnemyForces       []EnemyForceView               `json:"enemy_forces,omitempty"`
-	Contacts          []model.SensorContact          `json:"contacts,omitempty"`
-	Detections        []DetectionView                `json:"detections,omitempty"`
-	ThreatLevel       int                            `json:"threat_level"`
-	LastAttackTick    int64                          `json:"last_attack_tick,omitempty"`
+	PlanetID              string                         `json:"planet_id"`
+	Discovered            bool                           `json:"discovered"`
+	Available             bool                           `json:"available"`
+	ActivePlanetID        string                         `json:"active_planet_id,omitempty"`
+	Tick                  int64                          `json:"tick"`
+	CombatSquads          []model.CombatSquad            `json:"combat_squads,omitempty"`
+	OrbitalPlatforms      []model.OrbitalPlatform        `json:"orbital_platforms,omitempty"`
+	Bridgeheads           []model.LandingBridgehead      `json:"bridgeheads,omitempty"`
+	Frontlines            []model.PlanetaryFrontline     `json:"frontlines,omitempty"`
+	GroundTaskForces      []model.GroundTaskForceRuntime `json:"ground_task_forces,omitempty"`
+	LogisticsStations     []LogisticsStationView         `json:"logistics_stations,omitempty"`
+	LogisticsDrones       []LogisticsDroneView           `json:"logistics_drones,omitempty"`
+	LogisticsShips        []LogisticsShipView            `json:"logistics_ships,omitempty"`
+	LogisticsDistributors []LogisticsDistributorView     `json:"logistics_distributors,omitempty"`
+	LogisticsBots         []LogisticsBotView             `json:"logistics_bots,omitempty"`
+	ConstructionTasks     []ConstructionTaskView         `json:"construction_tasks,omitempty"`
+	EnemyForces           []EnemyForceView               `json:"enemy_forces,omitempty"`
+	Contacts              []model.SensorContact          `json:"contacts,omitempty"`
+	Detections            []DetectionView                `json:"detections,omitempty"`
+	ThreatLevel           int                            `json:"threat_level"`
+	LastAttackTick        int64                          `json:"last_attack_tick,omitempty"`
 }
 
 type LogisticsStationView struct {
@@ -38,6 +40,18 @@ type LogisticsStationView struct {
 	DroneIDs     []string                     `json:"drone_ids,omitempty"`
 	ShipIDs      []string                     `json:"ship_ids,omitempty"`
 }
+
+type LogisticsDistributorView struct {
+	BuildingID     string                  `json:"building_id"`
+	OwnerID        string                  `json:"owner_id"`
+	Position       model.Position          `json:"position"`
+	HostBuildingID string                  `json:"host_building_id"`
+	HostAvailable  bool                    `json:"host_available"`
+	Inventory      model.ItemInventory     `json:"inventory,omitempty"`
+	State          *model.DistributorState `json:"state"`
+	BotIDs         []string                `json:"bot_ids,omitempty"`
+}
+type LogisticsBotView = model.LogisticsBotState
 
 type LogisticsDroneView struct {
 	TripKind        string                     `json:"trip_kind"`
@@ -175,6 +189,7 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 	}
 
 	view.LogisticsStations = collectLogisticsStations(ws, playerID, droneIDsByStation, shipIDsByStation)
+	view.LogisticsDistributors, view.LogisticsBots = collectLogisticsDistributors(ws, playerID)
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
 	view.CombatSquads = collectCombatSquads(ws, playerID)
 	view.OrbitalPlatforms = collectOrbitalPlatforms(ws, playerID)
@@ -189,6 +204,50 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 		view.LastAttackTick = ws.EnemyForces.LastAttack
 	}
 	return view, true
+}
+
+func collectLogisticsDistributors(ws *model.WorldState, playerID string) ([]LogisticsDistributorView, []LogisticsBotView) {
+	ids := []string{}
+	for id, b := range ws.Buildings {
+		if b != nil && b.Distributor != nil && b.OwnerID == playerID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	distributors := make([]LogisticsDistributorView, 0, len(ids))
+	bots := make([]LogisticsBotView, 0)
+	botIDs := map[string][]string{}
+	for _, id := range sortedBotIDs(ws) {
+		bot := ws.LogisticsBots[id]
+		if bot == nil || bot.OwnerID != playerID {
+			continue
+		}
+		bots = append(bots, *bot.Clone())
+		botIDs[bot.DistributorID] = append(botIDs[bot.DistributorID], id)
+	}
+	for _, id := range ids {
+		b := ws.Buildings[id]
+		host := model.DistributorHost(ws, b)
+		inventory := make(model.ItemInventory)
+		if host != nil {
+			for _, inv := range []model.ItemInventory{host.Storage.Inventory, host.Storage.InputBuffer, host.Storage.OutputBuffer} {
+				for item, qty := range inv {
+					inventory[item] += qty
+				}
+			}
+		}
+		distributors = append(distributors, LogisticsDistributorView{BuildingID: id, OwnerID: b.OwnerID, Position: b.Position, HostBuildingID: b.Distributor.HostBuildingID, HostAvailable: host != nil, State: b.Distributor.Clone(), BotIDs: botIDs[id], Inventory: inventory})
+	}
+	return distributors, bots
+}
+
+func sortedBotIDs(ws *model.WorldState) []string {
+	ids := make([]string, 0, len(ws.LogisticsBots))
+	for id := range ws.LogisticsBots {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func collectCombatSquads(ws *model.WorldState, playerID string) []model.CombatSquad {

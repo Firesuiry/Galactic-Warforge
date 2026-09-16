@@ -352,3 +352,13 @@ it('selects the factory above a foundation, then exposes the foundation after re
   delete planet.buildings[factory.id];
   expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: foundation.id });
 });
+
+it('selects a rooftop distributor before its host warehouse', () => {
+  const planet = createPlanetFixture();
+  const host = { ...planet.buildings!['miner-1'], type: 'depot_mk1' };
+  const distributor = { ...host, id: 'distributor', type: 'logistics_distributor', position: { ...host.position, z: 1 } };
+  planet.buildings = { [host.id]: host, [distributor.id]: distributor };
+  expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: distributor.id });
+  delete planet.buildings[distributor.id];
+  expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: host.id });
+});

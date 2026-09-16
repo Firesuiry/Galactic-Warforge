@@ -214,7 +214,8 @@ export function resolveSelectionAtTile(
   const buildings = getBuildingList(planet).filter((candidate) =>
     tileContainsBuilding(candidate, x, y, planet.map_width / 3),
   );
-  const building = buildings.find((candidate) => candidate.type !== "foundation") ?? buildings[0];
+  const building = buildings.find((candidate) => candidate.type === "logistics_distributor")
+    ?? buildings.find((candidate) => candidate.type !== "foundation") ?? buildings[0];
   if (building) {
     return {
       kind: "building",

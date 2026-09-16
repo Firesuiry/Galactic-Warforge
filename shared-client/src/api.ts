@@ -21,6 +21,8 @@ import type {
   CommandCatalogView,
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
+  DistributorConfig,
+  MechaLogisticsRequest,
   SplitterConfig,
   TrafficMonitorConfig,
   MetricsSnapshot,
@@ -645,6 +647,19 @@ export function createApiClient(options: ApiClientOptions) {
       payload: { item_id: itemId, quantity, source } });
   }
 
+  function cmdConfigureDistributor(buildingId: string, config: DistributorConfig) {
+    return sendSingleCommand({ type: 'configure_distributor', target: { layer: 'planet', entity_id: buildingId }, payload: { ...config } });
+  }
+  function cmdInstallLogisticsBot(buildingId: string, quantity: number, source: 'player' | 'storage' = 'player') {
+    return sendSingleCommand({ type: 'install_logistics_bot', target: { layer: 'planet', entity_id: buildingId }, payload: { quantity, source } });
+  }
+  function cmdUninstallLogisticsBot(buildingId: string, quantity: number) {
+    return sendSingleCommand({ type: 'uninstall_logistics_bot', target: { layer: 'planet', entity_id: buildingId }, payload: { quantity } });
+  }
+  function cmdConfigureMechaLogistics(unitId: string, requests: Record<string, MechaLogisticsRequest>) {
+    return sendSingleCommand({ type: 'configure_mecha_logistics', target: { layer: 'planet', entity_id: unitId }, payload: { requests } });
+  }
+
   function cmdConfigureLogisticsStation(buildingId: string, options: ConfigureLogisticsStationOptions = {}) {
     const payload: Record<string, unknown> = {
       ...(options.inputPriority !== undefined ? { input_priority: options.inputPriority } : {}),
@@ -1166,6 +1181,10 @@ export function createApiClient(options: ApiClientOptions) {
     cmdCommissionFleet,
     cmdConfigureLogisticsSlot,
     cmdConfigureLogisticsStation,
+    cmdConfigureDistributor,
+    cmdInstallLogisticsBot,
+    cmdUninstallLogisticsBot,
+    cmdConfigureMechaLogistics,
     cmdInstallLogisticsVehicle,
     cmdDemolish,
     cmdDemolishDyson,

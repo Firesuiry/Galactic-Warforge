@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { collectActivity, IndustrialActivity } from './industrial-activity';
+import { tileNormal } from './projection';
 
 function fixture(): PlanetThreeData {
   return {
@@ -60,6 +61,23 @@ describe('authoritative industrial activity', () => {
     expect(sources).toHaveLength(1);
     expect(sources[0].id).toBe('flight:local');
     expect(sources[0].normal?.length()).toBeCloseTo(1);
+  });
+
+  it('uses current bot positions directly and emits no flight trail for docked or stranded bots', () => {
+    const data = fixture();
+    const position = { x: 1, y: 2, z: 1 };
+    data.runtime = { logistics_bots: [
+      { id: 'moving', status: 'in_flight', position, target_pos: { x: 3, y: 2 }, remaining_ticks: 1, travel_ticks: 10 },
+      { id: 'idle', status: 'idle', position },
+      { id: 'stranded', status: 'stranded', position },
+      { id: 'waiting', status: 'waiting_unload', position },
+    ] } as unknown as PlanetThreeData['runtime'];
+    const sources = collectActivity(data);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatchObject({ id: 'bot-flight:moving', altitude: 1.05 });
+    expect(sources[0].normal!.distanceTo(tileNormal(position, 4))).toBeLessThan(1e-10);
+    data.fog!.visible![2][1] = false;
+    expect(collectActivity(data)).toHaveLength(0);
   });
 
   it.each([

@@ -267,6 +267,7 @@ export interface Building {
   splitter?: BuildingSplitterState;
   traffic_monitor?: BuildingTrafficMonitorState;
   logistics_station?: LogisticsStationState;
+  distributor?: DistributorState;
   fractionation?: BuildingFractionationState;
   spray_coater?: BuildingSprayCoaterState;
   production?: {
@@ -292,6 +293,7 @@ export interface MechaJob {
 }
 
 export interface MechaState {
+  logistics_requests?: Record<string, MechaLogisticsRequest>;
   job?: MechaJob;
   energy: number;
   max_energy: number;
@@ -574,6 +576,50 @@ export type FleetState = 'idle' | 'attacking';
 export type LogisticsScope = 'planetary' | 'interstellar';
 export type LogisticsMode = 'none' | 'supply' | 'demand' | 'both';
 
+export interface MechaLogisticsRequest { min: number; max: number }
+export interface DistributorConfig {
+  item_id: string;
+  mode: 'none' | 'supply' | 'demand';
+  local_storage: number;
+  player_delivery_enabled?: boolean;
+  player_collection_enabled?: boolean;
+}
+export interface DistributorState extends DistributorConfig {
+  player_delivery_enabled: boolean;
+  player_collection_enabled: boolean;
+  host_building_id: string;
+  energy: number;
+  energy_capacity: number;
+  charge_per_tick: number;
+  last_charge_tick: number;
+  last_charge_amount: number;
+  range: number;
+  bot_capacity: number;
+}
+export interface LogisticsBotView {
+  id: string;
+  owner_id: string;
+  distributor_id: string;
+  home_pos?: Position;
+  position: Position;
+  target_pos?: Position;
+  target_kind?: 'distributor' | 'mecha';
+  target_id?: string;
+  trip_kind?: 'delivery' | 'pickup';
+  pickup_item_id?: string;
+  pickup_quantity?: number;
+  cargo?: ItemInventory;
+  capacity: number;
+  speed: number;
+  status: LogisticsDroneStatus;
+  returning: boolean;
+  remaining_ticks: number;
+  travel_ticks: number;
+  energy_cost: number;
+  energy_remaining: number;
+  state_reason?: string;
+}
+
 export interface ConfigureLogisticsStationInterstellarOptions {
   enabled?: boolean;
   warpEnabled?: boolean;
@@ -615,6 +661,10 @@ export type CommandType =
   | 'configure_splitter'
   | 'configure_traffic_monitor'
   | 'configure_logistics_station'
+  | 'configure_distributor'
+  | 'install_logistics_bot'
+  | 'uninstall_logistics_bot'
+  | 'configure_mecha_logistics'
   | 'install_logistics_vehicle'
   | 'configure_logistics_slot'
   | 'cancel_construction'
@@ -1296,6 +1346,7 @@ export interface PlanetRuntimeView {
   ground_task_forces?: GroundTaskForceRuntime[];
   logistics_stations?: LogisticsStationView[];
   logistics_drones?: LogisticsDroneView[];
+  logistics_bots?: LogisticsBotView[];
   logistics_ships?: LogisticsShipView[];
   construction_tasks?: ConstructionTaskView[];
   enemy_forces?: EnemyForceView[];

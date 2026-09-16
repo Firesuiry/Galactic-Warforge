@@ -742,3 +742,5 @@ configure_traffic_monitor <building_id> <belt_id|none> --window <1..600> --minim
 ```
 
 完整替换配置；绑定己方球面相邻的Mk.I/II/III传送带，`none`清绑定。窗口和最低流量分别以tick、件/tick计。关闭告警仍监测，应用任何配置会重置统计。通过`inspect <planet_id> building <building_id>`查看`traffic_monitor`实时状态、窗口吞吐和累计量；`event_snapshot`可查询`traffic_monitor_alert`的触发与解除。
+
+配送器命令：`configure_distributor <id> <item_id|none> <none|supply|demand> <local_storage> [--delivery true|false] [--collection true|false]`、`install_logistics_bot <id> <quantity> [--source player|storage]`、`uninstall_logistics_bot <id> <quantity>`、`configure_mecha_logistics <unit_id> <item:min:max,...|none>`。

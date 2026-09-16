@@ -47,6 +47,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 	btype := model.BuildingType(fmt.Sprintf("%v", btypeRaw))
+	if btype == model.BuildingTypeLogisticsDistributor {
+		if _, err := model.DistributorPlacementHost(ws,playerID,*pos,""); err != nil { return mechaJobFailed(model.CodeInvalidTarget,err.Error()) }; mounted := *pos; mounted.Z=1;pos=&mounted
+	}
 	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() && btype != model.BuildingTypeFoundation {
 		res.Code = model.CodeInvalidTarget
 		res.Message = "target tile is not buildable"
@@ -55,7 +58,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 
 	// Check tile is unoccupied
 	tileKey := model.TileKey(pos.X, pos.Y)
-	if _, occupied := ws.TileBuilding[tileKey]; occupied {
+	if _, occupied := ws.TileBuilding[tileKey]; occupied && btype != model.BuildingTypeLogisticsDistributor {
 		res.Code = model.CodePositionOccupied
 		res.Message = "tile is already occupied by a building"
 		return res, nil
@@ -927,6 +930,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		res.Message = "cannot demolish building owned by another player"
 		return res, nil
 	}
+	if model.DistributorOnHost(ws,building.ID)!=nil || model.DistributorBotCount(ws,building.ID)>0 { return mechaJobFailed(model.CodeInvalidTarget,"remove the warehouse distributor and uninstall its robots before demolition") }
 	if building.Type == model.BuildingTypeBattlefieldAnalysisBase {
 		res.Code = model.CodeInvalidTarget
 		res.Message = "cannot demolish your own base"

@@ -251,6 +251,20 @@ export class IndustrialModels {
     }
   }
 
+  private distributor(group: THREE.Group, light: Finish) {
+    this.part(group, 'cylinder', 'graphite', [0.67, 0.09, 0.67], [0, 0.045, 0]);
+    this.part(group, 'cylinder', 'alloy', [0.61, 0.035, 0.61], [0, 0.105, 0]);
+    this.ring(group, light, 0.245, 0.128);
+    for (const x of [-0.3, 0.3]) {
+      this.box(group, 'ceramic', [0.1, 0.19, 0.39], [x, 0.14, 0]);
+      this.box(group, light, [0.012, 0.04, 0.23], [x, 0.242, 0]);
+    }
+    this.box(group, 'ceramic', [0.4, 0.26, 0.13], [0, 0.19, -0.28]);
+    this.box(group, 'copper', [0.26, 0.06, 0.025], [0, 0.25, -0.2]);
+    this.pipe(group, 'alloy', [0.22, 0.21, -0.26], [0.22, 0.55, -0.26], 0.012);
+    this.box(group, light, [0.035, 0.04, 0.035], [0.22, 0.56, -0.26]);
+  }
+
   private power(group: THREE.Group, light: Finish, solar: boolean) {
     if (solar) {
       this.pipe(group, 'alloy', [0, 0.09, 0], [0, 0.42, 0], 0.05);
@@ -430,7 +444,7 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-${type}`;
     const light: Finish = own ? 'blue' : 'orange', armor: Finish = own ? 'ceramic' : 'hostile';
-    if (type !== 'foundation' && type !== 'splitter' && !/conveyor/.test(type)) this.foundation(group, light);
+    if (type !== 'foundation' && type !== 'splitter' && type !== 'logistics_distributor' && !/conveyor/.test(type)) this.foundation(group, light);
     if (type === 'foundation') {
       this.box(group, 'alloy', [0.98, 0.035, 0.98], [0, 0.012, 0]);
       for (const edge of [-1, 1]) {
@@ -449,6 +463,7 @@ export class IndustrialModels {
     else if (/mining|miner|extractor|oil/.test(type)) this.miner(group, light);
     else if (/smelt|furnace|thermal/.test(type)) this.furnace(group, light);
     else if (/lab|research|matrix/.test(type)) this.laboratory(group, light);
+    else if (type === 'logistics_distributor') this.distributor(group, light);
     else if (/logistics|launch|silo/.test(type)) this.logistics(group, light);
     else if (/storage|warehouse|depot|tank/.test(type)) this.storage(group, light, /tank|liquid/.test(type));
     else if (/solar|tesla|power|accumulator|energy|substation/.test(type)) this.power(group, light, /solar/.test(type));
@@ -465,7 +480,19 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-unit-${type}`;
     const armor: Finish = own ? 'ceramic' : 'hostile', light: Finish = own ? 'blue' : 'orange';
-    if (type === 'executor' || /mech|mecha/.test(type)) {
+    if (type === 'logistics_bot') {
+      this.box(group, armor, [0.4, 0.16, 0.3], [0, 0.2, 0]);
+      this.box(group, 'glass', [0.23, 0.065, 0.025], [0, 0.235, 0.16]);
+      for (const x of [-0.26, 0.26]) for (const z of [-0.2, 0.2]) {
+        this.pipe(group, 'alloy', [0, 0.2, 0], [x, 0.21, z], 0.027);
+        this.ring(group, 'graphite', 0.105, 0.21, x, z);
+        const rotor = new THREE.Group(); rotor.position.set(x, 0.22, z); group.add(rotor);
+        this.box(rotor, 'alloy', [0.18, 0.012, 0.025], [0, 0, 0]);
+        this.registerRotation(rotor, 'y', 24);
+        this.box(group, light, [0.045, 0.025, 0.045], [x, 0.19, z]);
+      }
+      for (const x of [-0.16, 0.16]) this.box(group, 'graphite', [0.025, 0.13, 0.19], [x, 0.055, 0]);
+    } else if (type === 'executor' || /mech|mecha/.test(type)) {
       // 重型机甲：双腿、装甲躯干、驾驶舱与肩部武器，和普通工人/士兵模型明确区分。
       for (const side of [-1, 1]) {
         this.box(group, 'graphite', [0.14, 0.26, 0.16], [side * 0.13, 0.16, 0]);
@@ -506,6 +533,11 @@ export class IndustrialModels {
       else this.box(group, 'copper', [0.2, 0.055, 0.1], [0, 0.4, -0.06]);
     }
     this.batchStatic(group);
+    if (type === 'logistics_bot') {
+      const cargo = this.box(group, 'copper', [0.22, 0.15, 0.19], [0, 0.035, 0]);
+      cargo.name = 'logistics-bot-cargo';
+      cargo.visible = false;
+    }
     return this.remember(key, group);
   }
 
