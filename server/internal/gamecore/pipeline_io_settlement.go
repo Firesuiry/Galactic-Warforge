@@ -108,7 +108,7 @@ func settlePipelineEndpointOutput(ws *model.WorldState, graph *model.PipelineGra
 	if node == nil {
 		return
 	}
-	fluidID := selectOutputFluid(building.Storage, endpoint)
+	fluidID := selectOutputFluid(building, endpoint)
 	if fluidID == "" {
 		return
 	}
@@ -124,7 +124,7 @@ func settlePipelineEndpointOutput(ws *model.WorldState, graph *model.PipelineGra
 	if limit <= 0 {
 		return
 	}
-	outputQty := building.Storage.OutputQuantity(fluidID)
+	outputQty := building.ExportableItemQuantity(fluidID)
 	if outputQty <= 0 {
 		return
 	}
@@ -198,8 +198,8 @@ func pipelineNodeAdd(state *model.PipelineNetworkState, nodeID, fluidID string, 
 	return qty
 }
 
-func selectOutputFluid(storage *model.StorageState, endpoint model.PipelineEndpoint) string {
-	if storage == nil {
+func selectOutputFluid(building *model.Building, endpoint model.PipelineEndpoint) string {
+	if building == nil || building.Storage == nil {
 		return ""
 	}
 	if len(endpoint.AllowedItems) > 0 {
@@ -207,17 +207,17 @@ func selectOutputFluid(storage *model.StorageState, endpoint model.PipelineEndpo
 			if !model.IsFluidItem(itemID) {
 				continue
 			}
-			if storage.OutputQuantity(itemID) > 0 {
+			if building.ExportableItemQuantity(itemID) > 0 {
 				return itemID
 			}
 		}
 		return ""
 	}
-	for _, itemID := range storage.OutputCandidates() {
+	for _, itemID := range building.Storage.OutputCandidates() {
 		if !model.IsFluidItem(itemID) {
 			continue
 		}
-		if storage.OutputQuantity(itemID) > 0 {
+		if building.ExportableItemQuantity(itemID) > 0 {
 			return itemID
 		}
 	}

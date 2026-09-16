@@ -1,5 +1,44 @@
 package model
 
+// IsFeedbackItem identifies a recipe material that is both consumed and produced.
+// Its input stock must not be exported before it has been processed.
+func (building *Building) IsFeedbackItem(itemID string) bool {
+	if building == nil || building.Production == nil {
+		return false
+	}
+	recipe, ok := Recipe(building.Production.RecipeID)
+	if !ok {
+		return false
+	}
+	input := false
+	for _, item := range recipe.Inputs {
+		if item.ItemID == itemID {
+			input = true
+			break
+		}
+	}
+	if !input {
+		return false
+	}
+	for _, item := range recipe.AllOutputs() {
+		if item.ItemID == itemID {
+			return true
+		}
+	}
+	return false
+}
+
+// ExportableItemQuantity excludes unprocessed feedback inputs from belt/pipe output.
+func (building *Building) ExportableItemQuantity(itemID string) int {
+	if building == nil || building.Storage == nil {
+		return 0
+	}
+	if building.IsFeedbackItem(itemID) {
+		return building.Storage.OutputBuffer[itemID]
+	}
+	return building.Storage.OutputQuantity(itemID)
+}
+
 // ProductionState tracks the active recipe and the in-flight production cycle.
 type ProductionState struct {
 	RecipeID          string       `json:"recipe_id,omitempty"`

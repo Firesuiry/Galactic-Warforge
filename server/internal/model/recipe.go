@@ -93,12 +93,32 @@ var recipeCatalog = map[string]RecipeDefinition{
 	},
 	"oil_fractionation": {
 		ID:            "oil_fractionation",
-		Name:          "Oil Fractionation",
+		Name:          "等离子精炼",
 		Inputs:        []ItemAmount{{ItemID: ItemCrudeOil, Quantity: 2}},
-		Outputs:       []ItemAmount{{ItemID: ItemRefinedOil, Quantity: 1}},
+		Outputs:       []ItemAmount{{ItemID: ItemRefinedOil, Quantity: 2}},
+		Byproducts:    []ItemAmount{{ItemID: ItemHydrogen, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
-		TechUnlock:    []string{"oil_processing"},
+		BuildingTypes: []BuildingType{BuildingTypeOilRefinery},
+		TechUnlock:    []string{"plasma_refining"},
+	},
+	"xray_cracking": {
+		ID:            "xray_cracking",
+		Name:          "X 射线裂解",
+		Inputs:        []ItemAmount{{ItemID: ItemRefinedOil, Quantity: 1}, {ItemID: ItemHydrogen, Quantity: 2}},
+		Outputs:       []ItemAmount{{ItemID: ItemHydrogen, Quantity: 3}},
+		Byproducts:    []ItemAmount{{ItemID: ItemEnergeticGraphite, Quantity: 1}},
+		Duration:      60,
+		BuildingTypes: []BuildingType{BuildingTypeOilRefinery},
+		TechUnlock:    []string{"xray_cracking"},
+	},
+	"reformed_refinement": {
+		ID:            "reformed_refinement",
+		Name:          "重整精炼",
+		Inputs:        []ItemAmount{{ItemID: ItemRefinedOil, Quantity: 2}, {ItemID: ItemHydrogen, Quantity: 1}, {ItemID: ItemCoal, Quantity: 1}},
+		Outputs:       []ItemAmount{{ItemID: ItemRefinedOil, Quantity: 3}},
+		Duration:      60,
+		BuildingTypes: []BuildingType{BuildingTypeOilRefinery},
+		TechUnlock:    []string{"reformed_refinement"},
 	},
 	"plastic": {
 		ID:            "plastic",
@@ -428,7 +448,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		TechUnlock:    []string{"advanced_ammo"},
 	},
 	"antimatter_capsule": {
-		ID: "antimatter_capsule",
+		ID:   "antimatter_capsule",
 		Name: "Antimatter Capsule",
 		Inputs: []ItemAmount{
 			{ItemID: ItemAntimatter, Quantity: 2},
@@ -442,7 +462,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		TechUnlock:    []string{"mass_energy_storage"},
 	},
 	"gravity_missile": {
-		ID: "gravity_missile",
+		ID:   "gravity_missile",
 		Name: "Gravity Missile",
 		Inputs: []ItemAmount{
 			{ItemID: ItemAmmoMissile, Quantity: 1},

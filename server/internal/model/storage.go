@@ -157,6 +157,24 @@ func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 	return accepted, remaining, nil
 }
 
+// ReceiveOutput deposits finished products without mixing them with recipe inputs.
+func (s *StorageState) ReceiveOutput(itemID string, qty int) (int, int, error) {
+	if s == nil {
+		return 0, qty, fmt.Errorf("storage required")
+	}
+	if err := validateItemQuantity(itemID, qty); err != nil {
+		return 0, qty, err
+	}
+	if !s.canAcceptNewItem(itemID) {
+		return 0, qty, nil
+	}
+	take := minInt(qty, max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer()))
+	if take > 0 {
+		addToInventory(s.EnsureOutputBuffer(), itemID, take)
+	}
+	return take, qty - take, nil
+}
+
 // PreviewReceive calculates how many items would be accepted without mutating state.
 func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) {
 	if s == nil {

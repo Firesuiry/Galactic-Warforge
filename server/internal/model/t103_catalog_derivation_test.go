@@ -54,12 +54,10 @@ func TestT103TechAndBuildingCatalogDerivation(t *testing.T) {
 		"crystal_shell",
 		"proliferator_mk2",
 		"proliferator_mk3",
-		"reformed_refinement",
 		"super_magnetic",
 		"supersonic_missile",
 		"titanium_ammo",
 		"wave_interference",
-		"xray_cracking",
 	} {
 		def, ok := TechDefinitionByID(techID)
 		if !ok {

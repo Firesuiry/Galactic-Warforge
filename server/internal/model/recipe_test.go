@@ -54,20 +54,25 @@ func TestByproductRecipes(t *testing.T) {
 	}
 }
 
-func TestOilFractionationCurrentRecipeIsSingleOutput(t *testing.T) {
-	fractionation, ok := Recipe("oil_fractionation")
-	if !ok {
-		t.Fatal("oil_fractionation recipe missing")
+func TestOilRefineryRecipes(t *testing.T) {
+	for _, id := range []string{"oil_fractionation", "xray_cracking", "reformed_refinement"} {
+		recipe, ok := Recipe(id)
+		if !ok || len(recipe.BuildingTypes) != 1 || recipe.BuildingTypes[0] != BuildingTypeOilRefinery {
+			t.Fatalf("%s must run in oil refinery: %+v", id, recipe)
+		}
+		if len(recipe.TechUnlock) == 0 {
+			t.Fatalf("%s missing research gate", id)
+		}
+		for _, techID := range recipe.TechUnlock {
+			tech, exists := TechDefinitionByID(techID)
+			if !exists || tech.Hidden {
+				t.Fatalf("%s has unreachable tech %s", id, techID)
+			}
+		}
 	}
-	if len(fractionation.Byproducts) != 0 {
-		t.Fatalf("expected oil_fractionation to have no byproducts, got %+v", fractionation.Byproducts)
-	}
-	if len(fractionation.Outputs) != 1 {
-		t.Fatalf("expected oil_fractionation to have exactly one output, got %+v", fractionation.Outputs)
-	}
-	output := fractionation.Outputs[0]
-	if output.ItemID != ItemRefinedOil || output.Quantity != 1 {
-		t.Fatalf("expected oil_fractionation to output 1 refined_oil, got %+v", output)
+	recipe, _ := Recipe("oil_fractionation")
+	if len(recipe.Outputs) != 1 || recipe.Outputs[0] != (ItemAmount{ItemID: ItemRefinedOil, Quantity: 2}) || len(recipe.Byproducts) != 1 || recipe.Byproducts[0] != (ItemAmount{ItemID: ItemHydrogen, Quantity: 1}) {
+		t.Fatalf("incorrect plasma refining outputs: %+v", recipe)
 	}
 }
 
@@ -110,47 +115,43 @@ func TestRecipeDependencies(t *testing.T) {
 		}
 	}
 
-	graph := make(map[string][]string, len(recipeCatalog))
+	// Alternative and catalytic recipes may contain cycles. Every recipe must
+	// still have a route from mined/collected resources to all of its seed inputs.
+	reachable := make(map[string]bool)
+	for item := range baseItems {
+		reachable[item] = true
+	}
+	pending := make(map[string]RecipeDefinition)
 	for id, recipe := range recipeCatalog {
-		for _, input := range recipe.Inputs {
-			if _, ok := baseItems[input.ItemID]; ok {
+		pending[id] = recipe
+	}
+	for {
+		progressed := false
+		for id, recipe := range pending {
+			ready := true
+			for _, input := range recipe.Inputs {
+				if !reachable[input.ItemID] {
+					ready = false
+					break
+				}
+			}
+			if !ready {
 				continue
 			}
-			for _, producer := range producers[input.ItemID] {
-				if producer == id {
-					continue
-				}
-				graph[id] = append(graph[id], producer)
+			for _, output := range recipe.AllOutputs() {
+				reachable[output.ItemID] = true
 			}
+			delete(pending, id)
+			progressed = true
 		}
+		if !progressed {
+			break
+		}
+	}
+	if len(pending) > 0 {
+		t.Fatalf("recipes with no reachable seed inputs: %+v", pending)
 	}
 
-	visited := make(map[string]bool, len(recipeCatalog))
-	stack := make(map[string]bool, len(recipeCatalog))
-	var visit func(string) bool
-	visit = func(id string) bool {
-		if stack[id] {
-			return true
-		}
-		if visited[id] {
-			return false
-		}
-		visited[id] = true
-		stack[id] = true
-		for _, dep := range graph[id] {
-			if visit(dep) {
-				return true
-			}
-		}
-		stack[id] = false
-		return false
-	}
-
-	for id := range recipeCatalog {
-		if visit(id) {
-			t.Fatalf("recipe dependency cycle detected at %s", id)
-		}
-	}
 }
 
 func TestMidLateRecipesPresent(t *testing.T) {

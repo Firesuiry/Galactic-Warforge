@@ -301,7 +301,14 @@ func refillBuildingOutputBuffer(building *model.Building) {
 		allowedSet[itemID] = struct{}{}
 	}
 	sanitizeOutputBuffer(building.Storage, allowedSet)
-	refillAllowedOutputBuffer(building.Storage, allowed)
+	// Feedback inputs stay in inventory; only completed batches enter the output buffer.
+	exportable := make([]string, 0, len(allowed))
+	for _, item := range allowed {
+		if !building.IsFeedbackItem(item) {
+			exportable = append(exportable, item)
+		}
+	}
+	refillAllowedOutputBuffer(building.Storage, exportable)
 }
 
 func sanitizeOutputBuffer(storage *model.StorageState, allowed map[string]struct{}) {

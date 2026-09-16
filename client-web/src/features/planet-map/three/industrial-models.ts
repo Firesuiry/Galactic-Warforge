@@ -337,6 +337,21 @@ export class IndustrialModels {
     this.box(group, light, [0.13, 0.03, 0.035], [0, 0.55, -0.215]);
   }
 
+  private refinery(group: THREE.Group, light: Finish) {
+    for (const [x, height] of [[-0.21, 0.85], [0.19, 0.6]]) {
+      this.part(group, 'cylinder', 'alloy', [0.25, height, 0.25], [x, height / 2 + 0.13, -0.06]);
+      for (let i = 0; i < 4; i++) {
+        this.part(group, 'cylinder', 'copper', [0.27, 0.026, 0.27], [x, 0.2 + i * height / 4, -0.06]);
+      }
+      this.part(group, 'cone', 'ceramic', [0.25, 0.12, 0.25], [x, height + 0.19, -0.06]);
+      this.pipe(group, 'copper', [x, 0.18, -0.06], [x, 0.18, 0.32], 0.028);
+      this.box(group, light, [0.045, 0.025, 0.045], [x, height + 0.27, -0.06]);
+    }
+    this.pipe(group, 'alloy', [-0.21, 0.53, -0.06], [0.19, 0.53, -0.06], 0.04);
+    this.box(group, 'graphite', [0.27, 0.19, 0.16], [0, 0.22, 0.24]);
+    this.box(group, light, [0.14, 0.06, 0.012], [0, 0.26, 0.326]);
+  }
+
   building(type: string, width: number, depth: number, own: boolean): THREE.Group {
     const key = `building:${type}:${width}:${depth}:${own}`;
     const cached = this.cached(key); if (cached) return cached;
@@ -346,6 +361,7 @@ export class IndustrialModels {
     if (/conveyor/.test(type)) this.conveyor(group, light);
     else if (/sorter/.test(type)) this.sorter(group, light);
     else if (/wind/.test(type)) this.turbine(group, light);
+    else if (type === 'oil_refinery') this.refinery(group, light);
     else if (/mining|miner|extractor|oil/.test(type)) this.miner(group, light);
     else if (/smelt|furnace|thermal/.test(type)) this.furnace(group, light);
     else if (/lab|research|matrix/.test(type)) this.laboratory(group, light);

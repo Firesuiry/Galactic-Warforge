@@ -110,18 +110,21 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 		"crystal_shell",
 		"proliferator_mk2",
 		"proliferator_mk3",
-		"reformed_refinement",
 		"super_magnetic",
 		"supersonic_missile",
 		"titanium_ammo",
 		"wave_interference",
-		"xray_cracking",
 	} {
 		if _, exists := techsByID[hiddenTech]; exists {
 			t.Fatalf("expected hidden dead-end tech %s to be absent from /catalog.techs", hiddenTech)
 		}
 	}
 
+	for _, techID := range []string{"xray_cracking", "reformed_refinement"} {
+		if techsByID[techID] == nil {
+			t.Fatalf("expected refining tech %s in public catalog", techID)
+		}
+	}
 	particleControl := techsByID["particle_control"]
 	if particleControl == nil {
 		t.Fatal("expected particle_control to stay visible as a bridge tech")

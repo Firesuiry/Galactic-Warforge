@@ -143,7 +143,7 @@ func TestBuildingIOProductionInputCapLeavesRoomForOutputsAndByproducts(t *testin
 	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	assembler := newProductionTestBuilding("assembler", model.BuildingTypeAssemblingMachineMk1, model.Position{X: 1, Y: 1}, "oil_fractionation")
+	assembler := newProductionTestBuilding("assembler", model.BuildingTypeOilRefinery, model.Position{X: 1, Y: 1}, "oil_fractionation")
 	south := newConveyorBuilding("south", model.Position{X: 1, Y: 2}, model.ConveyorNorth)
 	south.Conveyor.MaxStack = 32
 

@@ -107,7 +107,7 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 			return
 		}
 		limit := minInt(portRemaining, available)
-		outputQty := building.Storage.OutputQuantity(candidate.itemID)
+		outputQty := building.ExportableItemQuantity(candidate.itemID)
 		if outputQty <= 0 {
 			return
 		}
@@ -185,7 +185,7 @@ func selectOutputCandidate(
 		if itemID == "" {
 			continue
 		}
-		if building.Storage.OutputQuantity(itemID) <= 0 {
+		if building.ExportableItemQuantity(itemID) <= 0 {
 			continue
 		}
 		candidates = append(candidates, outputCandidate{
@@ -244,7 +244,7 @@ func outputDirectionOrder(building *model.Building, port model.IOPort) []model.C
 		return conveyorDirOrder
 	}
 	for _, itemID := range byproducts {
-		if building.Storage.OutputQuantity(itemID) > 0 {
+		if building.ExportableItemQuantity(itemID) > 0 {
 			return []model.ConveyorDirection{
 				model.ConveyorWest,
 				model.ConveyorEast,
@@ -405,14 +405,14 @@ func selectOutputItem(building *model.Building, port model.IOPort, dir model.Con
 	allowed := buildingDirectionalOutputAllowList(building, &port, dir)
 	if len(allowed) > 0 {
 		for _, itemID := range allowed {
-			if building.Storage.OutputQuantity(itemID) > 0 {
+			if building.ExportableItemQuantity(itemID) > 0 {
 				return itemID
 			}
 		}
 		return ""
 	}
 	for _, itemID := range building.Storage.OutputCandidates() {
-		if building.Storage.OutputQuantity(itemID) > 0 {
+		if building.ExportableItemQuantity(itemID) > 0 {
 			return itemID
 		}
 	}

@@ -162,10 +162,10 @@ func TestStoragePortIO(t *testing.T) {
 }
 
 func TestStoragePortInputCapsProductionRecipeInputs(t *testing.T) {
-	profile := BuildingProfileFor(BuildingTypeAssemblingMachineMk1, 1)
+	profile := BuildingProfileFor(BuildingTypeOilRefinery, 1)
 	building := &Building{
 		ID:          "assembler-1",
-		Type:        BuildingTypeAssemblingMachineMk1,
+		Type:        BuildingTypeOilRefinery,
 		OwnerID:     "p1",
 		Position:    Position{X: 1, Y: 1},
 		HP:          profile.MaxHP,

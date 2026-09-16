@@ -891,6 +891,24 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeOilRefinery,
+		Params: BuildingRuntimeParams{
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Capacity: 3},
+				{ID: "out-main", Direction: PortOutput, Capacity: 3},
+				{ID: "out-side", Direction: PortOutput, Capacity: 2},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 48, Slots: 4, Buffer: 12, InputPriority: 2, OutputPriority: 1},
+			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 6},
+		},
+	},
+	{
 		ID: BuildingTypeChemicalPlant,
 		Params: BuildingRuntimeParams{
 			Capacity:      1,

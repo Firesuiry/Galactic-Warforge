@@ -36,10 +36,9 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 
 		if len(state.PendingOutputs) > 0 || len(state.PendingByproducts) > 0 {
 			combinedOutputs := combineItemAmounts(state.PendingOutputs, state.PendingByproducts)
-			if !canStoreOutputs(building.Storage, combinedOutputs) {
+			if !storeProductionOutputs(building, combinedOutputs) {
 				continue
 			}
-			storeOutputs(building.Storage, combinedOutputs)
 			snapshot.RecordBuildingOutputs(building, combinedOutputs)
 			events = append(events, &model.GameEvent{
 				EventType:       model.EvtResourceChanged,
@@ -127,27 +126,27 @@ func consumeRecipeInputs(storage *model.StorageState, recipe model.RecipeDefinit
 	}
 }
 
-func canStoreOutputs(storage *model.StorageState, outputs []model.ItemAmount) bool {
-	if storage == nil {
+// Commit the entire batch atomically. Feedback outputs are separate from the
+// unprocessed seed stock and can leave only after the production cycle completes.
+func storeProductionOutputs(building *model.Building, outputs []model.ItemAmount) bool {
+	if building == nil || building.Storage == nil {
 		return false
 	}
-	simulated := storage.Clone()
-	for _, stack := range cloneItemAmounts(outputs) {
-		accepted, remaining, err := simulated.Receive(stack.ItemID, stack.Quantity)
-		if err != nil || accepted != stack.Quantity || remaining != 0 {
+	simulated := building.Storage.Clone()
+	for _, output := range outputs {
+		var accepted, remaining int
+		var err error
+		if building.IsFeedbackItem(output.ItemID) {
+			accepted, remaining, err = simulated.ReceiveOutput(output.ItemID, output.Quantity)
+		} else {
+			accepted, remaining, err = simulated.Receive(output.ItemID, output.Quantity)
+		}
+		if err != nil || accepted != output.Quantity || remaining != 0 {
 			return false
 		}
 	}
+	*building.Storage = *simulated
 	return true
-}
-
-func storeOutputs(storage *model.StorageState, outputs []model.ItemAmount) {
-	if storage == nil {
-		return
-	}
-	for _, stack := range cloneItemAmounts(outputs) {
-		_, _, _ = storage.Receive(stack.ItemID, stack.Quantity)
-	}
 }
 
 func availableStorageItem(storage *model.StorageState, itemID string) int {

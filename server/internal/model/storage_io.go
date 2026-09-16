@@ -74,6 +74,9 @@ func StoragePortOutput(building *Building, portID, itemID string, qty int) (int,
 	if building.Storage == nil {
 		return 0, qty, fmt.Errorf("storage not available")
 	}
+	if err := validateItemQuantity(itemID, qty); err != nil {
+		return 0, qty, err
+	}
 	port, ok := findIOPort(building.Runtime.Params.IOPorts, portID)
 	if !ok {
 		return 0, qty, fmt.Errorf("io port %s not found", portID)
@@ -86,6 +89,10 @@ func StoragePortOutput(building *Building, portID, itemID string, qty int) (int,
 	}
 	requested := qty
 	limit := applyPortCapacity(port, qty)
+	limit = minInt(limit, building.ExportableItemQuantity(itemID))
+	if limit <= 0 {
+		return 0, requested, nil
+	}
 	provided, remaining, err := building.Storage.Provide(itemID, limit)
 	if err != nil {
 		return 0, qty, err
