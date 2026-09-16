@@ -139,11 +139,50 @@ export interface BuildingJob {
 }
 
 /** 传输缓存（传送带、分流器及集装设备共用）。 */
+export interface SprayState { level: number; remaining_uses: number }
+export interface ItemStack extends ItemAmount { spray?: SprayState }
+
+export interface BuildingFractionationState {
+  input_buffer: ItemStack[] | null;
+  hydrogen_buffer: ItemStack[] | null;
+  deuterium_buffer: number;
+  buffer_capacity: number;
+  throughput: number;
+  input_direction: CardinalDirection;
+  hydrogen_direction: CardinalDirection;
+  deuterium_direction: CardinalDirection;
+  state: BuildingWorkState | 'blocked';
+  attempts: number;
+  converted: number;
+  returned_hydrogen: number;
+  last_process_tick: number;
+  last_probability: number;
+  last_spray_level: number;
+  rng_state: number;
+}
+
+export interface BuildingSprayCoaterState {
+  input_buffer: ItemStack[] | null;
+  output_buffer: ItemStack[] | null;
+  buffer_capacity: number;
+  throughput: number;
+  input_direction: CardinalDirection;
+  output_direction: CardinalDirection;
+  reagent_direction: CardinalDirection;
+  state: BuildingWorkState | 'blocked' | 'no_proliferator';
+  coated_items: number;
+  consumed_proliferator: number;
+  last_spray_tick: number;
+  spray_item_id: string;
+  spray_units: number;
+  spray_effect?: SprayState;
+}
+
 export interface BuildingConveyorState {
   input: ConveyorDirection;
   output: ConveyorDirection;
   /** 带内物品堆（server ConveyorState.buffer 直出，队首 = 即将送出的一端；供地图货流动画）。 */
-  buffer?: ItemAmount[];
+  buffer?: ItemStack[];
   max_stack?: number;
   throughput?: number;
 }
@@ -209,6 +248,8 @@ export interface Building {
   conveyor?: BuildingConveyorState;
   sorter?: BuildingSorterState;
   splitter?: BuildingSplitterState;
+  fractionation?: BuildingFractionationState;
+  spray_coater?: BuildingSprayCoaterState;
   production?: {
     recipe_id?: string;
     remaining_ticks?: number;

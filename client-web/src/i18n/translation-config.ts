@@ -114,6 +114,7 @@ export const TRANSLATIONS = {
     sulfuric_acid: "硫酸",
     hydrogen: "氢",
     deuterium: "重氢",
+    deuterium_collision: "对撞制重氢",
     // 燃料
     log: "木材",
     plant_fuel: "植物燃料",

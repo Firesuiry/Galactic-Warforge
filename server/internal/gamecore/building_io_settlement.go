@@ -28,7 +28,7 @@ func settleBuildingIO(ws *model.WorldState) {
 
 	for _, id := range ids {
 		building := ws.Buildings[id]
-		if building == nil || building.Storage == nil {
+		if building == nil || building.Storage == nil || building.Type == model.BuildingTypeSprayCoater {
 			continue
 		}
 		ports := sortedIOPorts(building.Runtime.Params.IOPorts)

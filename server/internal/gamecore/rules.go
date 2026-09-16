@@ -2096,6 +2096,13 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		return res, nil
 	}
 
+	if building.Type == model.BuildingTypeSprayCoater {
+		if _, ok := model.SprayDefinitionByItem(itemID); !ok {
+			res.Code = model.CodeValidationFailed
+			res.Message = "spray coater storage accepts proliferator only; route cargo through its west belt"
+			return res, nil
+		}
+	}
 	accepted, remaining, err := building.Storage.Load(itemID, quantity)
 	if err != nil {
 		res.Code = model.CodeValidationFailed

@@ -957,6 +957,26 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeMiniatureParticleCollider,
+		Params: BuildingRuntimeParams{
+			Capacity:      1,
+			EnergyConsume: 24,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Capacity: 6},
+				{ID: "out-main", Direction: PortOutput, Capacity: 6},
+				{ID: "out-side", Direction: PortOutput, Capacity: 6},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 96, Slots: 6, Buffer: 24, InputPriority: 2, OutputPriority: 1},
+			Production: &ProductionModule{Throughput: 1, RecipeSlots: 1},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 24},
+		},
+	},
+	{
 		ID: BuildingTypeMatrixLab,
 		Params: BuildingRuntimeParams{
 			Capacity:      1,
@@ -1205,19 +1225,35 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeFractionator,
+		Params: BuildingRuntimeParams{
+			EnergyConsume:    6,
+			Capacity:         FractionationBufferCapacity,
+			ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Capacity: 1}},
+			IOPorts: []IOPort{
+				{ID: "hydrogen-in", Direction: PortInput, Capacity: FractionationThroughput, AllowedItems: []string{ItemHydrogen}},
+				{ID: "hydrogen-return", Direction: PortOutput, Capacity: FractionationThroughput, AllowedItems: []string{ItemHydrogen}},
+				{ID: "deuterium-out", Direction: PortOutput, Capacity: FractionationThroughput, AllowedItems: []string{ItemDeuterium}},
+			},
+		},
+		Functions: BuildingFunctionModules{Energy: &modelpower.EnergyModule{ConsumePerTick: 6}},
+	},
+	{
 		ID: BuildingTypeSprayCoater,
 		Params: BuildingRuntimeParams{
-			Capacity:      6,
-			EnergyConsume: 2,
+			Capacity:         24,
+			ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Capacity: 1}},
+			EnergyConsume:    2,
 			IOPorts: []IOPort{
-				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
-				{ID: "in-1", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
-				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+				{ID: "material-in", Direction: PortInput, Capacity: 6},
+				{ID: "material-out", Direction: PortOutput, Capacity: 6},
+				{ID: "proliferator-in", Direction: PortInput, Capacity: 6, AllowedItems: []string{ItemProliferatorMk1, ItemProliferatorMk2, ItemProliferatorMk3}},
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Spray:  &SprayModule{Throughput: 6, MaxLevel: 3},
-			Energy: &modelpower.EnergyModule{ConsumePerTick: 2},
+			Storage: &StorageModule{Capacity: 48, Slots: 3},
+			Spray:   &SprayModule{Throughput: 6, MaxLevel: 3},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 2},
 		},
 	},
 	{

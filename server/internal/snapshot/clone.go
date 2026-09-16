@@ -220,6 +220,8 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		Conveyor:          cloneConveyor(b.Conveyor),
 		Sorter:            b.Sorter.Clone(),
 		Splitter:          b.Splitter.Clone(),
+		Fractionation:     b.Fractionation.Clone(),
+		SprayCoater:       b.SprayCoater.Clone(),
 		LogisticsStation:  cloneLogisticsStation(b.LogisticsStation),
 		Production:        b.Production.Clone(),
 		FoundationTerrain: append([]string(nil), b.FoundationTerrain...),
@@ -284,6 +286,22 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		}
 	} else if mb.Type == model.BuildingTypeSplitter {
 		return nil, fmt.Errorf("splitter snapshot missing for %s", buildingID)
+	}
+	if snap.Fractionation != nil {
+		mb.Fractionation = snap.Fractionation.Clone()
+		if err := mb.Fractionation.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid fractionation %s: %w", buildingID, err)
+		}
+	} else if mb.Type == model.BuildingTypeFractionator {
+		return nil, fmt.Errorf("fractionation snapshot missing for %s", buildingID)
+	}
+	if snap.SprayCoater != nil {
+		mb.SprayCoater = snap.SprayCoater.Clone()
+		if err := mb.SprayCoater.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid spray coater %s: %w", buildingID, err)
+		}
+	} else if mb.Type == model.BuildingTypeSprayCoater {
+		return nil, fmt.Errorf("spray coater snapshot missing for %s", buildingID)
 	}
 	if snap.Sorter != nil {
 		mb.Sorter = snap.Sorter.Clone()

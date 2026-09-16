@@ -36,7 +36,7 @@ func settlePipelineIO(ws *model.WorldState) {
 }
 
 func isPipelineEndpoint(building *model.Building, port model.IOPort) bool {
-	if building == nil {
+	if building == nil || building.Type == model.BuildingTypeFractionator || building.Type == model.BuildingTypeSprayCoater {
 		return false
 	}
 	if len(port.AllowedItems) == 0 {

@@ -57,6 +57,8 @@ func newSettlementPipeline() settlementPipeline {
 			settlePipelineFlow(ws)
 			settlePipelineIO(ws)
 			events = append(events, settleProduction(ws)...)
+			settleSprayCoaters(ws)
+			events = append(events, settleFractionation(ws)...)
 			settleStorage(ws)
 			events = append(events, settleTurrets(ws)...)
 

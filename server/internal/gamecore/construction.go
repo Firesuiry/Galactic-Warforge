@@ -603,6 +603,8 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	}
 	model.InitBuildingStorage(b)
 	model.InitBuildingProduction(b)
+	model.InitBuildingFractionation(b)
+	model.InitBuildingSprayCoater(b)
 	model.InitBuildingEnergyStorage(b)
 	model.InitBuildingConveyor(b)
 	model.InitBuildingSorter(b)

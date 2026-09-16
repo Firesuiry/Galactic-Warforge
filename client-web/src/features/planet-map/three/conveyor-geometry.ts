@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { surfaceFace, surfaceOffset, surfaceStep, type SurfaceDirection } from '@shared/surface';
-import type { Building, ConveyorDirection } from '@shared/types';
+import type { Building, ConveyorDirection, PortDirection } from '@shared/types';
 import type { TilePoint } from '../model';
 import { surfaceTileSize, tileNormal } from './projection';
 
@@ -54,15 +54,27 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
   // including offset ports and rotated cube seams, instead of capping the belt
   // short of a connected miner, factory or depot. Sorters keep their arm gap.
   for (const machine of buildings) {
-    if (!machine.storage || isTransportBuilding(machine)) continue;
-    for (const port of machine.runtime?.params?.io_ports ?? []) {
+    if (isTransportBuilding(machine)) continue;
+    const ports: { offset: TilePoint; direction: PortDirection; side?: SurfaceDirection }[] = [];
+    const fractionation = machine.fractionation, coater = machine.spray_coater;
+    if (fractionation) {
+      ports.push({ offset: { x: 0, y: 0 }, direction: 'input', side: fractionation.input_direction },
+        { offset: { x: 0, y: 0 }, direction: 'output', side: fractionation.hydrogen_direction },
+        { offset: { x: 0, y: 0 }, direction: 'output', side: fractionation.deuterium_direction });
+    } else if (coater) {
+      ports.push({ offset: { x: 0, y: 0 }, direction: 'input', side: coater.input_direction },
+        { offset: { x: 0, y: 0 }, direction: 'input', side: coater.reagent_direction },
+        { offset: { x: 0, y: 0 }, direction: 'output', side: coater.output_direction });
+    } else if (machine.storage) ports.push(...(machine.runtime?.params?.io_ports ?? []));
+    for (const port of ports) {
       const origin = surfaceOffset(machine.position, port.offset.x, port.offset.y, faceSize);
-      for (const direction of directions) {
+      for (const direction of port.side ? [port.side] : directions) {
         const step = surfaceStep(origin, direction, faceSize);
         const belt = byTile.get(key(step.tile));
         if (!belt || belt.splitter || belt.owner_id !== machine.owner_id) continue;
         const towardMachine = opposite[step.direction];
-        const feedsMachine = port.direction !== 'output' && belt.conveyor!.output === towardMachine;
+        const feedsMachine = port.direction !== 'output' && (belt.conveyor!.output === towardMachine
+          || Boolean(port.side && belt.conveyor!.output === 'auto'));
         const feedsBelt = port.direction !== 'input' && allowsInput(belt, towardMachine);
         if (!feedsMachine && !feedsBelt) continue;
         const list = (feedsMachine ? outputs : inputs).get(belt.id)!;
@@ -133,6 +145,8 @@ export class ConveyorGeometry {
     const belts = buildings.filter(building => isTransportBuilding(building));
     const signature = JSON.stringify([faceSize, radius, buildings.map(b => [b.id, b.owner_id, b.position, b.type,
       b.conveyor?.input, b.conveyor?.output, b.splitter?.input_directions, b.splitter?.output_directions,
+      b.fractionation && [b.fractionation.input_direction, b.fractionation.hydrogen_direction, b.fractionation.deuterium_direction],
+      b.spray_coater && [b.spray_coater.input_direction, b.spray_coater.output_direction, b.spray_coater.reagent_direction],
       Boolean(b.storage), b.runtime?.params?.io_ports])]);
     if (signature === this.signature) return false;
     this.signature = signature;

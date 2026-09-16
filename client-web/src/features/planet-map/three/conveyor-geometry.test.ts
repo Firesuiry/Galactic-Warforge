@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { surfaceStep, type SurfaceDirection } from '@shared/surface';
-import type { Building, PortDirection, SplitterConfig } from '@shared/types';
+import type { Building, BuildingFractionationState, BuildingSprayCoaterState, PortDirection, SplitterConfig } from '@shared/types';
 import { ConveyorGeometry, conveyorPaths } from './conveyor-geometry';
 import { surfaceTileSize, tileNormal } from './projection';
 
@@ -19,6 +19,26 @@ const splitter = (x: number, y: number, config: SplitterConfig = { input_directi
 });
 
 describe('continuous surface conveyor paths', () => {
+  it('joins only the real directional fractionator and coater ports', () => {
+    const neighbors = [belt('west', 5, 6), belt('east', 7, 6), belt('north', 6, 5, 'south'), belt('south', 6, 7, 'south')];
+    const fraction = { ...machine(6, 6, 'both'), type: 'fractionator', storage: undefined,
+      fractionation: { input_direction: 'west', hydrogen_direction: 'east', deuterium_direction: 'south' } as BuildingFractionationState };
+    const paths = conveyorPaths([fraction, ...neighbors], 16);
+    expect(paths.find(p => p.building.id === 'west')!.connected.has('east')).toBe(true);
+    expect(paths.find(p => p.building.id === 'east')!.connected.has('west')).toBe(true);
+    expect(paths.find(p => p.building.id === 'south')!.connected.has('north')).toBe(true);
+    expect(paths.find(p => p.building.id === 'north')!.connected.size).toBe(0);
+    const coater = { ...machine(6, 6, 'both'), type: 'spray_coater',
+      spray_coater: { input_direction: 'west', output_direction: 'east', reagent_direction: 'north' } as BuildingSprayCoaterState };
+    const coating = conveyorPaths([coater, ...neighbors], 16);
+    expect(coating.find(p => p.building.id === 'north')!.connected.has('south')).toBe(true);
+    expect(coating.find(p => p.building.id === 'south')!.connected.size).toBe(0);
+    const automatic = { ...neighbors[0], conveyor: { ...neighbors[0].conveyor!, output: 'auto' as const } };
+    expect(conveyorPaths([fraction, automatic], 16)[0].connected.has('east')).toBe(true);
+    expect(conveyorPaths([coater, automatic], 16)[0].connected.has('east')).toBe(true);
+    expect(conveyorPaths([machine(6, 6, 'input'), automatic], 16)[0].connected.size).toBe(0);
+  });
+
   it('joins every configured splitter branch and leaves closed or reversed ports capped', () => {
     const hub = splitter(6, 6);
     const paths = conveyorPaths([belt('in', 5, 6), hub, belt('east', 7, 6), belt('south', 6, 7, 'south'), belt('north', 6, 5, 'north')], 16);

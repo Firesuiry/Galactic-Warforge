@@ -25,3 +25,5 @@
 - 四向分流器回放：`scripts/playtest-splitter-browser.mjs`，CLI建造/装料、UI过滤/优先级、满带旁路与重建恢复；使用明确预解锁平地隔离场景。缺状态的旧装饰性分流器存档拒绝恢复；分流器高度布局仍待实现。
 
 - 小地图scene首屏未知图集尺寸时不传默认窗口推算的near中心，先矩形查询，再按当前server/player/planet缓存尺寸裁剪；避免face16的48×32地图返回400。
+
+- 高级加工回放：`scripts/playtest-advanced-processing-browser.mjs`，预置科技/原料的隔离场景；真实氢外循环、喷涂耗剂和三种对撞配方。分馏/喷涂固定西入东出及专属侧口，不支持旋转/管道。通用生产部分供电仍不减速，缺口见星球玩法覆盖文档。

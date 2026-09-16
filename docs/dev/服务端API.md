@@ -872,6 +872,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 四向分流器 `type=splitter` 携带 `splitter` 配置和统计，真实物品仍放在 `conveyor.buffer`；默认西侧输入、东/南/北侧输出。独立 Transport runtime 为 6 件/tick、缓存 24 件；运行时参加同一皮带结算，刚收到的物品不会在同 tick 再穿过下一节点。暂停时不收发，配置不会删除缓存物品。
   - `splitter.input_directions` / `output_directions` 是互斥且各非空的四方向数组；未列出的口关闭。`input_priority` / `output_priority` 可选且必须属于对应数组，`output_filters` 为可选的 `{输出方向: item_id}` 映射。设过滤的口只允许该物品，未设置过滤的出口可放行任意物品；过滤不改变缓存中的真实物品。
   - `splitter.input_cursor` / `output_cursor` 是对应方向数组中下一轮开始考察的零基索引，范围分别为 `[0, len(input_directions))` / `[0, len(output_directions))`。每次实际接收/输出后移到所用口下一索引；不配置优先口时按游标轮换，配置优先口时先尝试优先口、其余合格口再按游标考察。`transferred_items` 累计皮带结算中从该分流器实际送出的物品件数（仅输入不增加）；`last_transfer_tick` 是最近实际输出的 tick，尚未输出时为 0。配置成功将两个游标重置为 0，但保留累计件数、最近输出 tick 和缓存；快照深复制配置/过滤并保留统计与游标。
+  - 分馏塔 `type=fractionator` 携带 `fractionation`，不使用普通 `storage` / `production`。`input_buffer` / `hydrogen_buffer` 为真实氢物品堆数组（`item_id`、`quantity`、可选 `spray: {level, remaining_uses}`）；`deuterium_buffer` 为待输出氘的件数。`buffer_capacity=24` 分别限制三种缓存，`throughput=6` 是每 tick 处理上限；`input_direction=west`、`hydrogen_direction=east`、`deuterium_direction=south` 当前固定。
+  - `fractionation.state` 为 `idle|running|blocked` 或停机时的 `runtime.state`（例如 `no_power`、`paused`）；`attempts` 是累计实际分馏次数，`converted` 是累计转成氘的数量，`returned_hydrogen` 是累计失败返回氢的数量，始终满足 `attempts=converted+returned_hydrogen`。`last_process_tick` / `last_probability` / `last_spray_level` 记录最近一次实际尝试；尚未尝试时 tick/喷涂等级为 0、概率为 0.01。`rng_state` 为持久化非零 uint32 随机状态，只有实际尝试才推进；缓存、喷涂余量、统计和随机状态均随查询/快照深复制，存档恢复继续同一随机序列。
+  - 喷涂机 `type=spray_coater` 携带 `spray_coater`：`input_buffer` / `output_buffer` 为保留喷涂元数据的真实货物堆数组，分别受 `buffer_capacity=24` 限制，`throughput=6`。固定 `input_direction=west`、`output_direction=east`、`reagent_direction=north`；普通 `storage` 仅存放增产剂，容量 48、3 个物品种类槽，货物不进入该存储。
+  - `spray_coater.state` 为 `idle|running|blocked|no_proliferator` 或停机时的 `runtime.state`；`coated_items` / `consumed_proliferator` 分别累计实际喷涂货物数/消耗增产剂件数，`last_spray_tick` 记录最近实际喷涂。`spray_item_id` / `spray_units` / 可选 `spray_effect: {level, remaining_uses}` 保存已消耗那份增产剂的类型、尚可喷涂的单位数和对应效果；不能把 `spray_units` 当成增产剂物品数或货物剩余使用次数。上述状态也通过 inspect / 存档保留；包含分馏塔或喷涂机但缺失/损坏其专属状态的快照会被拒绝恢复。
   - 分拣器建筑携带 `sorter`：`input_directions` / `output_directions` / `speed` / `range` / `filter`。仅 `runtime.state = running` 时搬运，暂停、缺电时不搬运。当前分拣器连接同一玩家的传送带，按配置方向、范围、过滤器及目标容量搬运。
   - `sorter.last_transfer` 仅在发生实际搬运后出现：`tick` 为结算 tick，`sequence` 为该分拣器递增的搬运序号，`source_id` / `target_id` 为实际源/目标建筑 ID，`source_position` / `target_position` 为对应位置（`x` / `y` / `z`），`item_id` / `quantity` 为该次实际搬运物品及数量。同 tick 多次搬运时保留最后一次；空转或停机保留旧记录，客户端须结合 tick、sequence 和运行状态停止过期动画，不能将存在分拣器或 `running` 等同于正在搬货。该结构同时通过场景 buildings、inspect 和快照输出。
   - `resources[]` 中 `remaining=0`（或 `max_amount=0`）的资源点会携带 `depleted: true` 标记；枯竭资源点仍保留在输出中（前端可淡化显示），且不阻碍建造——任何建筑都可直接建在枯竭点上，`requires_resource_node` 的采集建筑建在枯竭点上则采不到资源
@@ -1465,6 +1469,18 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `techs` 中 `prototype`、`precision_drone`、`corvette`、`destroyer` 现在都是公开可研究科技；它们解锁的是载荷 recipe，不再污染 `produce` 语义。
   - 精炼厂 `oil_refinery` 现在具有真实生产、储存、电力（6/tick）与 `in-0` / `out-main` / `out-side` 端口。`oil_fractionation` 仅由精炼厂执行，2 原油 → 2 精炼油 + 1 氢；`xray_cracking` 为 1 精炼油 + 2 氢 → 3 氢 + 1 高能石墨；`reformed_refinement` 为 2 精炼油 + 1 氢 + 1 煤 → 3 精炼油。均为 60 tick，受同名科技（基础配方为 `plasma_refining`）控制，后两项科技恢复公开可研究。
   - 循环配方中同时作为输入/输出的物料：未加工原料位于 `storage.inventory` / `input_buffer`，完成的产物位于 `output_buffer`，物流输出不会提走前者。输出缓存不足时整批保留在 `production.pending_outputs` / `pending_byproducts`，无部分提交；回流原料需经输入端口或装料命令进入。
+  - 分馏塔由 `deuterium_fractionation` 解锁，无 `recipe_id`，耗电 6/tick。西侧相邻同属玩家的有效皮带输入氢，东侧输出失败氢，南侧输出氘；方向按球面邻接转换，暂不支持旋转。每件氢独立以基础概率 1% 转为 1 氘，否则原件氢进入回流缓存，必须经外部皮带回到入口才能再次尝试。任一输出缓存满时停止新的输入与尝试，不推进随机状态、不扣喷涂次数；无电/暂停同样不处理。额定每 tick 最多尝试 6 件，欠压允许运行时按实际供电比例降低处理量。
+  - 分馏使用真实物品喷涂余量：每次尝试消耗该件氢的 1 次 `remaining_uses`，失败仍保留剩余效果。默认 Mk.I/II/III 分别把概率提高至 1.25%/1.5%/2%，余量耗尽后恢复 1%；成功产出的氘不继承氢的喷涂。分馏塔与喷涂机均不接受管道直连，也不能把分流器当普通缓存直接接入；须使用方向匹配的相邻同属玩家皮带。
+  - 喷涂机由 `proliferator_mk1` 解锁，耗电 2/tick；北侧皮带或 `transfer_item` 补增产剂，西进东出处理货物。默认每份 Mk.I/II/III 增产剂分别提供 12/24/60 个喷涂单位，每件新喷货物消耗 1 单位并获得 4/6/8 次效果；同份增产剂的未用单位保留，优先用完已装载剂量，再按 Mk.III→Mk.II→Mk.I 选择有库存的增产剂。已有有效喷涂的货物直接通过，不重复耗剂；耗尽后再次经过才重新喷涂。缺增产剂显示 `no_proliferator` 但货物仍原样通过，输出缓存满则背压停机。当前分馏闭环已读取该效果；普通制造台完整保留/消耗喷涂的端到端增产路线仍待补齐。
+  - 对撞机 `miniature_particle_collider` 由 `miniature_collider` 解锁，真实电网需求为 24/tick、生产吞吐 1、库存 96、6 个物品种类槽；共享缓存 24 按输入/输出优先级 2:1 分为输入 16、输出 8。`in-0` / `out-main` / `out-side` 端口容量各 6；建造时须指定可用 `recipe_id` 才开始配方加工。下表周期为当前无额外加速的一批 tick 数，不表示秒：
+
+    | 配方 ID | 输入 | 主产物 | 副产物 | 周期 | 配方科技门槛 |
+    | --- | --- | --- | --- | --- | --- |
+    | `deuterium_collision` | 10 `hydrogen` | 5 `deuterium` | 无 | 300 tick | `miniature_collider` |
+    | `strange_matter` | 2 `particle_container` + 10 `deuterium` + 2 `iron_ingot` | 1 `strange_matter` | 无 | 480 tick | `strange_matter` |
+    | `antimatter` | 2 `critical_photon` | 2 `antimatter` | 2 `hydrogen` | 120 tick | `dirac_inversion` |
+
+  - `miniature_collider` 科技只解锁对撞机及 `deuterium_collision`，不再提前解锁 `antimatter`。对撞机每批开始时消费真实原料；缺电不启动也不推进已有批次；满仓时主产物和副产物原子提交失败，整批保留 `production.pending_outputs` / `pending_byproducts`，不会继续消费下一批原料。释放容量或存档恢复后只完成一次。原料可经皮带或 `transfer_item` 装入，输出需同时安排反物质与氢去向。
   - `automatic_piler` 可建造，由 `integrated_logistics` 解锁，当前共用 conveyor 状态（吞吐 2，总缓存 4）；此容量不是独立货物叠层数。
   - `world_units` 是 `produce`、CLI 帮助和 shared-client 共享的 authoritative 世界单位边界；`worker` / `soldier` / `mecha` 继续走 `world_produce`，其中 `mecha` 是星球内可移动、可攻击的重型单位。
   - `warfare.public_blueprints` 是 `deploy_squad` / `commission_fleet` / shared-client 共享的 authoritative 战争蓝图边界；`prototype` / `precision_drone` / `corvette` / `destroyer` 已从固定单位表迁移为预置公开蓝图。
@@ -1730,7 +1746,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `cancel_construction` / `restore_construction`：`payload.task_id` 必填
   - `start_research`：`payload.tech_id` 必填；前置科技必须满足；至少需要 1 个处于 `running` 且未设置 `recipe_id` 的研究站（`matrix_lab` 或 `self_evolution_lab`）；所需每种矩阵都必须已经出现在研究站本地库存里；后续 tick 会真实消耗研究站库存中的矩阵推进 `progress`
   - `cancel_research`：`payload.tech_id` 必填
-  - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量
+  - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量。喷涂机只允许有效增产剂物品（`proliferator_mk1` / `proliferator_mk2` / `proliferator_mk3`），尝试装入氢等货物返回验证失败；货物必须走西侧传送带。分馏塔无普通 `storage`，不能直接装料，氢须走西侧传送带。
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
   - `deploy_squad`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；目标建筑必须是当前玩家拥有、带 deployment module、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该蓝图对应 `visible_tech_id`，并且该枢纽在 `/world/warfare/industry.deployment_hubs[].ready_payloads` 中已有足量军备产物；若传 `planet_id`，目标行星 runtime 也必须已加载

@@ -298,6 +298,54 @@ export class IndustrialModels {
     this.box(group, 'alloy', [.22, .018, .07], [0, .53, 0]);
   }
 
+  private fractionator(group: THREE.Group, light: Finish) {
+    this.tank(group, -.17, -.12, .11, .76, .18);
+    this.tank(group, .24, -.1, .11, .43, .105, 'alloy');
+    for (const y of [.3, .43, .56, .69]) this.ring(group, 'copper', .19, y, -.17, -.12);
+    this.pipe(group, 'alloy', [-.42, .23, 0], [-.17, .23, -.12], .045);
+    this.pipe(group, 'alloy', [-.17, .73, -.12], [.24, .73, -.1], .035);
+    this.pipe(group, 'alloy', [.24, .73, -.1], [.24, .3, -.1], .035);
+    this.pipe(group, 'copper', [.24, .25, -.1], [.43, .25, 0], .045);
+    this.pipe(group, 'alloy', [-.17, .19, -.12], [0, .19, .43], .04);
+    this.box(group, 'graphite', [.2, .28, .12], [.15, .28, .23]);
+    this.box(group, light, [.12, .1, .012], [.15, .32, .298]);
+    for (const z of [-.23, -.12, -.01]) this.pipe(group, 'graphite', [-.35, .16, z], [-.35, .84, z], .013);
+  }
+
+  private particleCollider(group: THREE.Group, light: Finish) {
+    // Superconducting raceway, magnet housings and central collision chamber.
+    this.ring(group, 'graphite', .35, .28);
+    this.ring(group, 'alloy', .34, .34);
+    this.ring(group, light, .31, .365);
+    for (let i = 0; i < 8; i++) {
+      const angle = i * Math.PI / 4, x = Math.cos(angle) * .34, z = Math.sin(angle) * .34;
+      this.box(group, 'ceramic', [.13, .17, .12], [x, .37, z], [0, -angle, 0]);
+      this.box(group, 'copper', [.065, .018, .13], [x, .465, z], [0, -angle, 0]);
+    }
+    this.part(group, 'cylinder', 'graphite', [.25, .22, .25], [0, .27, 0]);
+    this.part(group, 'dome', 'glass', [.25, .18, .25], [0, .4, 0]);
+    this.ring(group, light, .13, .405);
+    for (const side of [-1, 1]) {
+      this.box(group, 'ceramic', [.19, .23, .22], [side * .3, .23, -.3]);
+      this.vents(group, side * .3, .365, -.3, 4);
+      this.pipe(group, 'alloy', [side * .3, .23, -.3], [side * .1, .23, 0], .022);
+    }
+  }
+
+  private sprayCoater(group: THREE.Group, light: Finish) {
+    this.box(group, 'graphite', [.91, .07, .42], [0, .17, 0]);
+    for (const z of [-.24, .24]) {
+      this.box(group, 'alloy', [.93, .065, .045], [0, .23, z]);
+      this.box(group, 'ceramic', [.13, .5, .1], [0, .38, z]);
+    }
+    for (let i = 0; i < 9; i++) this.box(group, 'alloy', [.025, .012, .4], [-.38 + i * .095, .212, 0]);
+    this.box(group, 'ceramic', [.22, .13, .61], [0, .67, 0]);
+    for (const z of [-.14, 0, .14]) this.part(group, 'cone', 'copper', [.055, .09, .055], [0, .555, z], [Math.PI, 0, 0]);
+    this.tank(group, .22, -.26, .11, .33, .1, 'glass');
+    this.pipe(group, 'alloy', [.22, .4, -.26], [0, .67, -.22], .02);
+    this.box(group, light, [.12, .035, .012], [0, .67, .312]);
+  }
+
   private sorter(group: THREE.Group, light: Finish) {
     this.part(group, 'cylinder', 'graphite', [0.34, 0.1, 0.34], [0, 0.16, 0]);
     const joint = (parent: THREE.Object3D, name: string) => {
@@ -382,6 +430,9 @@ export class IndustrialModels {
       }
     } else if (/conveyor/.test(type)) this.conveyor(group, light);
     else if (type === 'splitter') this.splitter(group, light);
+    else if (type === 'fractionator') this.fractionator(group, light);
+    else if (type === 'miniature_particle_collider') this.particleCollider(group, light);
+    else if (type === 'spray_coater') this.sprayCoater(group, light);
     else if (/sorter/.test(type)) this.sorter(group, light);
     else if (/wind/.test(type)) this.turbine(group, light);
     else if (type === 'oil_refinery') this.refinery(group, light);

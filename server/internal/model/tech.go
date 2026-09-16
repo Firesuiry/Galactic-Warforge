@@ -1106,7 +1106,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "energy_matrix", Quantity: 2000}, {ItemID: "structure_matrix", Quantity: 1000}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "miniature_collider"},
-			{Type: TechUnlockRecipe, ID: "antimatter"},
+			{Type: TechUnlockRecipe, ID: "deuterium_collision"},
 		},
 	},
 	{

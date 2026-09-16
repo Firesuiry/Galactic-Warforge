@@ -68,6 +68,7 @@ import {
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
 import { SplitterControls } from "./SplitterControls";
+import { ProcessingStatus } from "./ProcessingStatus";
 import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 
 function formatTimestamp(timestamp: number | null) {
@@ -193,7 +194,7 @@ function BuildingStorageSection({
                     ? `（剩余 ${production.remaining_ticks} tick）`
                     : ""
                 }`
-              : "未配置"}
+              : building.fractionation ? "氢循环分馏（自动）" : building.spray_coater ? "物料喷涂（自动）" : "未配置"}
           </dd>
         </div>
         <div>
@@ -642,6 +643,7 @@ export function PlanetEntityPanel({
         </section>
 
         {building.type === "splitter" ? <SplitterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
+        <ProcessingStatus building={building} />
         <BuildingStorageSection building={building} catalog={catalog} />
 
         <section className="planet-side-section">
