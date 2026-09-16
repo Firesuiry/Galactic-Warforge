@@ -38,11 +38,53 @@ func (ws *WorldState) BuildingTiles(b *Building) ([]Position, error) {
 	return ws.FootprintTiles(b.Position, fp)
 }
 
+// FoundationAt returns the terrain layer independently from occupying factories.
+func (ws *WorldState) FoundationAt(pos Position) *Building {
+	for _, b := range ws.Buildings {
+		if b == nil || b.Type != BuildingTypeFoundation {
+			continue
+		}
+		tiles, err := ws.BuildingTiles(b)
+		if err != nil {
+			continue
+		}
+		for _, p := range tiles {
+			if p.X == pos.X && p.Y == pos.Y {
+				return b
+			}
+		}
+	}
+	return nil
+}
+
 // IndexBuilding atomically validates and indexes every occupied surface tile.
 func (ws *WorldState) IndexBuilding(b *Building) error {
 	tiles, err := ws.BuildingTiles(b)
 	if err != nil {
 		return err
+	}
+	// Foundation is a terrain modifier rather than an occupying factory.
+	// Keeping it out of TileBuilding lets factories be placed on the filled
+	// ground while the foundation entity remains available for demolition and
+	// terrain provenance.
+	if b.Type == BuildingTypeFoundation {
+		for _, existing := range ws.Buildings {
+			if existing == nil || existing.ID == b.ID || existing.Type != BuildingTypeFoundation {
+				continue
+			}
+			otherTiles, err := ws.BuildingTiles(existing)
+			if err != nil {
+				return err
+			}
+			for _, p := range tiles {
+				for _, other := range otherTiles {
+					if p.X == other.X && p.Y == other.Y {
+						return fmt.Errorf("foundation footprint overlaps %s", existing.ID)
+					}
+				}
+			}
+		}
+		return nil
 	}
 	for _, p := range tiles {
 		if id := ws.TileBuilding[TileKey(p.X, p.Y)]; id != "" && id != b.ID {
@@ -58,6 +100,9 @@ func (ws *WorldState) IndexBuilding(b *Building) error {
 
 // UnindexBuilding removes the entire footprint, including tiles on other faces.
 func (ws *WorldState) UnindexBuilding(b *Building) {
+	if b.Type == BuildingTypeFoundation {
+		return
+	}
 	tiles, err := ws.BuildingTiles(b)
 	if err != nil {
 		panic(err)

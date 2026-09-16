@@ -192,8 +192,12 @@ type ResearchModule struct {
 
 // CombatModule handles defensive or offensive stats.
 type CombatModule struct {
-	Attack int `json:"attack" yaml:"attack"`
-	Range  int `json:"range" yaml:"range"`
+	Attack       int    `json:"attack" yaml:"attack"`
+	Range        int    `json:"range" yaml:"range"`
+	FireRate     int    `json:"fire_rate,omitempty" yaml:"fire_rate,omitempty"`
+	AmmoItem     string `json:"ammo_item,omitempty" yaml:"ammo_item,omitempty"`
+	AmmoConsume  int    `json:"ammo_consume,omitempty" yaml:"ammo_consume,omitempty"`
+	LastFireTick int64  `json:"last_fire_tick,omitempty" yaml:"last_fire_tick,omitempty"`
 }
 
 // PowerGridModule handles wireless power transmission coverage.
@@ -1228,6 +1232,44 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeAssemblingMachineMk2,
+		Params: BuildingRuntimeParams{
+			Capacity:      2,
+			EnergyConsume: 8,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 48, Slots: 6, Buffer: 16, InputPriority: 2, OutputPriority: 1},
+			Production: &ProductionModule{Throughput: 2, RecipeSlots: 2},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 8},
+		},
+	},
+	{
+		ID: BuildingTypeAssemblingMachineMk3,
+		Params: BuildingRuntimeParams{
+			Capacity:      3,
+			EnergyConsume: 12,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+			IOPorts: []IOPort{
+				{ID: "in-0", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 3},
+				{ID: "out-0", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 3},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Storage:    &StorageModule{Capacity: 72, Slots: 8, Buffer: 24, InputPriority: 2, OutputPriority: 1},
+			Production: &ProductionModule{Throughput: 3, RecipeSlots: 3},
+			Energy:     &modelpower.EnergyModule{ConsumePerTick: 12},
+		},
+	},
+	{
 		ID: BuildingTypeRecomposingAssembler,
 		Params: BuildingRuntimeParams{
 			Capacity:      2,
@@ -1258,6 +1300,26 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			Combat: &CombatModule{Attack: 15, Range: 5},
 			Energy: &modelpower.EnergyModule{ConsumePerTick: 3},
 		},
+	},
+	{
+		ID:        BuildingTypeMissileTurret,
+		Params:    BuildingRuntimeParams{EnergyConsume: 8, ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Offset: GridOffset{}, Capacity: 1}}, IOPorts: []IOPort{{ID: "ammo", Direction: PortInput, Offset: GridOffset{}, Capacity: 4, AllowedItems: []string{ItemAmmoMissile}}}},
+		Functions: BuildingFunctionModules{Combat: &CombatModule{Attack: 40, Range: 10, FireRate: 30, AmmoItem: ItemAmmoMissile, AmmoConsume: 1}, Energy: &modelpower.EnergyModule{ConsumePerTick: 8}, Storage: &StorageModule{Capacity: 40, Slots: 1, Buffer: 20, InputPriority: 2, OutputPriority: 1}},
+	},
+	{
+		ID:        BuildingTypeImplosionCannon,
+		Params:    BuildingRuntimeParams{EnergyConsume: 15, ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Offset: GridOffset{}, Capacity: 1}}, IOPorts: []IOPort{{ID: "ammo", Direction: PortInput, Offset: GridOffset{}, Capacity: 4, AllowedItems: []string{ItemGravityMissile}}}},
+		Functions: BuildingFunctionModules{Combat: &CombatModule{Attack: 75, Range: 12, FireRate: 45, AmmoItem: ItemGravityMissile, AmmoConsume: 1}, Energy: &modelpower.EnergyModule{ConsumePerTick: 15}, Storage: &StorageModule{Capacity: 40, Slots: 1, Buffer: 20, InputPriority: 2, OutputPriority: 1}},
+	},
+	{
+		ID:        BuildingTypeLaserTurret,
+		Params:    BuildingRuntimeParams{EnergyConsume: 18, ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Offset: GridOffset{}, Capacity: 1}}},
+		Functions: BuildingFunctionModules{Combat: &CombatModule{Attack: 30, Range: 8, FireRate: 8}, Energy: &modelpower.EnergyModule{ConsumePerTick: 18}},
+	},
+	{
+		ID:        BuildingTypePlasmaTurret,
+		Params:    BuildingRuntimeParams{EnergyConsume: 25, ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Offset: GridOffset{}, Capacity: 1}}, IOPorts: []IOPort{{ID: "ammo", Direction: PortInput, Offset: GridOffset{}, Capacity: 4, AllowedItems: []string{ItemPlasmaCapsule}}}},
+		Functions: BuildingFunctionModules{Combat: &CombatModule{Attack: 55, Range: 11, FireRate: 20, AmmoItem: ItemPlasmaCapsule, AmmoConsume: 1}, Energy: &modelpower.EnergyModule{ConsumePerTick: 25}, Storage: &StorageModule{Capacity: 40, Slots: 1, Buffer: 20, InputPriority: 2, OutputPriority: 1}},
 	},
 	{
 		ID: BuildingTypeSRPlasmaTurret,

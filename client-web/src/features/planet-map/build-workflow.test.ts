@@ -84,7 +84,7 @@ function createPlanet() {
             footprint: { width: 1, height: 1 },
           },
           functions: {},
-          state: "no_power",
+          state: "no_power" as const,
           state_reason: "under_power",
         },
       },
@@ -440,5 +440,22 @@ describe("listBuildingRecipes 建筑可携配方", () => {
   it("无配方建筑 / 空 catalog 返回空列表", () => {
     expect(listBuildingRecipes(catalog as never, "wind_turbine", [])).toEqual([]);
     expect(listBuildingRecipes(undefined, "matrix_lab", [])).toEqual([]);
+  });
+});
+
+describe('foundation terrain layer', () => {
+  it('allows preparing known water, lava and rock while keeping fog blocked', () => {
+    const planet = { ...createPlanet(), units: {}, discovered: true, tick: 0, bounds: { x: 0, y: 0, width: 24, height: 16 } };
+    for (const terrain of ['water', 'lava', 'blocked', 'unknown']) {
+      planet.terrain[1][1] = terrain;
+      expect(assessBuildTiles(undefined, 'foundation', planet, { x: 1, y: 1, z: 0 })?.buildable).toBe(terrain !== 'unknown');
+      expect(assessBuildTiles(undefined, 'wind_turbine', planet, { x: 1, y: 1, z: 0 })?.buildable).toBe(false);
+    }
+  });
+  it('allows factories on a filled tile but rejects overlapping foundations', () => {
+    const planet = { ...createPlanet(), units: {}, discovered: true, tick: 0, bounds: { x: 0, y: 0, width: 24, height: 16 } };
+    planet.buildings['lab-1'].type = 'foundation';
+    expect(assessBuildTiles(undefined, 'wind_turbine', planet, { x: 5, y: 4, z: 0 })?.buildable).toBe(true);
+    expect(assessBuildTiles(undefined, 'foundation', planet, { x: 5, y: 4, z: 0 })?.buildable).toBe(false);
   });
 });

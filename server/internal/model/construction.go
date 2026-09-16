@@ -129,8 +129,14 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 		if existing := q.ReservedTiles[key]; existing != "" {
 			return fmt.Errorf("tile %s already reserved by %s", key, existing)
 		}
-		if ws.TileBuilding[key] != "" || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation) {
 			return fmt.Errorf("footprint tile %s is unavailable", key)
+		}
+		if task.BuildingType == BuildingTypeFoundation && ws.FoundationAt(p) != nil {
+			return fmt.Errorf("footprint tile %s already has a foundation", key)
+		}
+		if foundation := ws.FoundationAt(p); foundation != nil && foundation.Job != nil && foundation.Job.Type == BuildingJobDemolish {
+			return fmt.Errorf("footprint tile %s foundation is being demolished", key)
 		}
 	}
 	for _, p := range tiles {

@@ -229,6 +229,8 @@ function buildTileAssessment(input: {
   // 采集建筑（requires_resource_node）必须压在资源点上，与服务端校验对齐：
   // 资源格不算阻挡，但锚点格必须命中资源点，否则本地拦截。
   const requiresResourceNode = entry?.requires_resource_node === true;
+  const isFoundation = input.buildingType === "foundation";
+  const canPrepareTerrain = (terrain: string) => isFoundation && ["water", "lava", "blocked"].includes(terrain);
   const blockedTiles: BuildBlockedTile[] = [];
   const resources = getResourceList(input.planet);
 
@@ -237,11 +239,11 @@ function buildTileAssessment(input: {
       const {x,y} = surfaceOffset(input.selectedPosition, dx, dy, input.planet.map_width / 3);
       const terrain = getTerrainTile(input.planet, x, y);
       const blockingBuilding = Object.values(input.planet.buildings ?? {}).find(
-        (building) => tileContainsBuilding(building, x, y, input.planet.map_width / 3),
+        (building) => (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3),
       );
       const blockingResource = findBlockingResource(resources, x, y);
 
-      if (terrain !== "buildable") {
+      if (terrain !== "buildable" && !canPrepareTerrain(terrain)) {
         blockedTiles.push({ x, y, terrain, reason: "terrain" });
       }
       if (blockingBuilding) {
@@ -295,7 +297,7 @@ function buildTileAssessment(input: {
   return {
     footprint,
     terrain: primaryTerrain,
-    terrainBuildable: primaryTerrain === "buildable",
+    terrainBuildable: primaryTerrain === "buildable" || canPrepareTerrain(primaryTerrain),
     blockingBuildingId,
     blockingResourceId,
     buildable: blockedTiles.length === 0,

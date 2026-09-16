@@ -99,6 +99,7 @@ const (
 
 	ItemAmmoBullet        = "ammo_bullet"
 	ItemAmmoMissile       = "ammo_missile"
+	ItemPlasmaCapsule     = "plasma_capsule"
 	ItemAntimatterCapsule = "antimatter_capsule"
 	ItemGravityMissile    = "gravity_missile"
 	ItemPrototype         = "prototype"
@@ -671,6 +672,7 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 50,
 		UnitVolume: 3,
 	},
+	ItemPlasmaCapsule: {ID: ItemPlasmaCapsule, Name: "Plasma Capsule", Category: ItemCategoryAmmo, Form: ResourceSolid, StackLimit: 100, UnitVolume: 1},
 	ItemAntimatterCapsule: {
 		ID:         ItemAntimatterCapsule,
 		Name:       "Antimatter Capsule",

@@ -113,6 +113,7 @@ func IsDefenseBuilding(btype BuildingType) bool {
 	switch btype {
 	case BuildingTypeGaussTurret, BuildingTypeMissileTurret,
 		BuildingTypeLaserTurret, BuildingTypePlasmaTurret, BuildingTypeSRPlasmaTurret,
+		BuildingTypeImplosionCannon,
 		BuildingTypeJammerTower, BuildingTypeSignalTower,
 		BuildingTypePlanetaryShieldGenerator:
 		return true

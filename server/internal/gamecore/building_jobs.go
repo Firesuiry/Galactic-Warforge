@@ -1,6 +1,9 @@
 package gamecore
 
-import "siliconworld/internal/model"
+import (
+	"siliconworld/internal/model"
+	"siliconworld/internal/terrain"
+)
 
 func countActiveExecutorUsage(ws *model.WorldState) map[string]int {
 	usage := make(map[string]int)
@@ -113,6 +116,15 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	model.UnregisterPowerGridBuilding(ws, entityID)
 	delete(ws.Buildings, entityID)
 	ws.UnindexBuilding(building)
+	if building.Type == model.BuildingTypeFoundation && len(building.FoundationTerrain) > 0 {
+		if tiles, err := ws.BuildingTiles(building); err == nil {
+			for i, p := range tiles {
+				if i < len(building.FoundationTerrain) {
+					ws.Grid[p.Y][p.X].Terrain = terrain.TileType(building.FoundationTerrain[i])
+				}
+			}
+		}
+	}
 
 	return []*model.GameEvent{
 		{

@@ -316,6 +316,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryProduction,
 		Subcategory: BuildingSubcategoryProduction,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 240, Energy: 120},
 		Buildable:   true,
 	},
 	{
@@ -324,6 +325,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryProduction,
 		Subcategory: BuildingSubcategoryProduction,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 360, Energy: 180},
 		Buildable:   true,
 	},
 	{

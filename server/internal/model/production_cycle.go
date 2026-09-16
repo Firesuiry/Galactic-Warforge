@@ -65,28 +65,24 @@ func ResolveProductionCycle(req ProductionCycleRequest) (ProductionCycleResult, 
 		Sources:      toBonusSources(sources),
 	})
 
-	result := ProductionCycleResult{
-		Bonus:               bonus,
-		EnergyConsumeTotal:  (runtime.Params.EnergyConsume + req.Recipe.EnergyCost) * bonus.Duration,
-		EnergyGenerateTotal: runtime.Params.EnergyGenerate * bonus.Duration,
-		EffectiveThroughput: effectiveThroughput(runtime.Functions.Production.Throughput, req.Recipe.Duration, bonus.Duration),
-		Inputs:              cloneItemStacks(req.Inputs),
-	}
-
+	result := ProductionCycleResult{Inputs: cloneItemStacks(req.Inputs)}
 	if bonus.Applied && bonus.UsesRequired > 0 {
 		updatedInputs, consumption, ok := consumeSprayUses(result.Inputs, sources, bonus.Level, bonus.UsesRequired)
 		if !ok {
 			bonus = resetBonusForInsufficientSpray(bonus, req.Recipe)
-			result.Bonus = bonus
-			result.EnergyConsumeTotal = (runtime.Params.EnergyConsume + req.Recipe.EnergyCost) * bonus.Duration
-			result.EnergyGenerateTotal = runtime.Params.EnergyGenerate * bonus.Duration
-			result.EffectiveThroughput = effectiveThroughput(runtime.Functions.Production.Throughput, req.Recipe.Duration, bonus.Duration)
-			result.Inputs = cloneItemStacks(req.Inputs)
-			return result, nil
+		} else {
+			result.Inputs = updatedInputs
+			result.SprayConsumption = consumption
 		}
-		result.Inputs = updatedInputs
-		result.SprayConsumption = consumption
 	}
+	// Production throughput is a cycle speed, applied after spray effects.
+	// Round up so a partial tick cannot manufacture extra output.
+	speed := max(1, runtime.Functions.Production.Throughput)
+	bonus.Duration = max(1, (bonus.Duration+speed-1)/speed)
+	result.Bonus = bonus
+	result.EnergyConsumeTotal = (runtime.Params.EnergyConsume + req.Recipe.EnergyCost) * bonus.Duration
+	result.EnergyGenerateTotal = runtime.Params.EnergyGenerate * bonus.Duration
+	result.EffectiveThroughput = float64(req.Recipe.Duration) / float64(bonus.Duration)
 
 	return result, nil
 }
@@ -196,16 +192,6 @@ func resetBonusForInsufficientSpray(bonus ProductionBonusResult, recipe RecipeDe
 	bonus.Byproducts = cloneItemAmounts(recipe.Byproducts)
 	bonus.UsesRequired = 0
 	return bonus
-}
-
-func effectiveThroughput(baseThroughput int, baseDuration int, adjustedDuration int) float64 {
-	if baseThroughput <= 0 {
-		return 0
-	}
-	if baseDuration <= 0 || adjustedDuration <= 0 {
-		return float64(baseThroughput)
-	}
-	return float64(baseThroughput) * float64(baseDuration) / float64(adjustedDuration)
 }
 
 func cloneItemStacks(stacks []ItemStack) []ItemStack {

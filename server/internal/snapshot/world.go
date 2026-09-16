@@ -33,22 +33,23 @@ type WorldSnapshot struct {
 
 // BuildingSnapshot is a snapshot-friendly building payload.
 type BuildingSnapshot struct {
-	ID               string                       `json:"id"`
-	Type             model.BuildingType           `json:"type"`
-	OwnerID          string                       `json:"owner_id"`
-	Position         model.Position               `json:"position"`
-	HP               int                          `json:"hp"`
-	MaxHP            int                          `json:"max_hp"`
-	Level            int                          `json:"level"`
-	VisionRange      int                          `json:"vision_range"`
-	Runtime          model.BuildingRuntime        `json:"runtime"`
-	Storage          *model.StorageState          `json:"storage,omitempty"`
-	EnergyStorage    *model.EnergyStorageState    `json:"energy_storage,omitempty"`
-	Conveyor         *model.ConveyorState         `json:"conveyor,omitempty"`
-	Sorter           *model.SorterState           `json:"sorter,omitempty"`
-	LogisticsStation *model.LogisticsStationState `json:"logistics_station,omitempty"`
-	Production       *model.ProductionState       `json:"production,omitempty"`
-	Job              *BuildingJobSnapshot         `json:"job,omitempty"`
+	ID                string                       `json:"id"`
+	Type              model.BuildingType           `json:"type"`
+	OwnerID           string                       `json:"owner_id"`
+	Position          model.Position               `json:"position"`
+	HP                int                          `json:"hp"`
+	MaxHP             int                          `json:"max_hp"`
+	Level             int                          `json:"level"`
+	VisionRange       int                          `json:"vision_range"`
+	Runtime           model.BuildingRuntime        `json:"runtime"`
+	Storage           *model.StorageState          `json:"storage,omitempty"`
+	EnergyStorage     *model.EnergyStorageState    `json:"energy_storage,omitempty"`
+	Conveyor          *model.ConveyorState         `json:"conveyor,omitempty"`
+	Sorter            *model.SorterState           `json:"sorter,omitempty"`
+	LogisticsStation  *model.LogisticsStationState `json:"logistics_station,omitempty"`
+	Production        *model.ProductionState       `json:"production,omitempty"`
+	Job               *BuildingJobSnapshot         `json:"job,omitempty"`
+	FoundationTerrain []string                     `json:"foundation_terrain,omitempty"`
 }
 
 // BuildingJobSnapshot preserves in-flight job state for snapshots.

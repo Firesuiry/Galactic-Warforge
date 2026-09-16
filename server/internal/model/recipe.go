@@ -88,7 +88,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemCoal, Quantity: 2}},
 		Outputs:       []ItemAmount{{ItemID: ItemEnergeticGraphite, Quantity: 1}},
 		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"basic_fuels"},
 	},
 	"oil_fractionation": {
@@ -166,7 +166,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemGear, Quantity: 1}},
 		Duration:      20,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"basic_components"},
 	},
 	"motor": {
@@ -175,7 +175,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemGear, Quantity: 1}, {ItemID: ItemCircuitBoard, Quantity: 1}, {ItemID: ItemIronIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemMotor, Quantity: 1}},
 		Duration:      40,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"basic_components"},
 	},
 	"circuit_board": {
@@ -184,7 +184,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}, {ItemID: ItemCopperIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemCircuitBoard, Quantity: 1}},
 		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 	},
 	"magnetic_coil": {
 		ID:            "magnetic_coil",
@@ -192,7 +192,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemMagnet, Quantity: 2}, {ItemID: ItemCopperIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemMagneticCoil, Quantity: 2}},
 		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 	},
 	"microcrystalline_component": {
 		ID:            "microcrystalline_component",
@@ -200,7 +200,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemSiliconIngot, Quantity: 2}, {ItemID: ItemCopperIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemMicrocrystalline, Quantity: 1}},
 		Duration:      40,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"advanced_components"},
 	},
 	"processor": {
@@ -209,7 +209,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemCircuitBoard, Quantity: 2}, {ItemID: ItemMicrocrystalline, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemProcessor, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"advanced_components"},
 	},
 	"titanium_crystal": {
@@ -259,7 +259,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Outputs:       []ItemAmount{{ItemID: ItemGraphene, Quantity: 2}},
 		Byproducts:    []ItemAmount{{ItemID: ItemHydrogen, Quantity: 1}},
 		Duration:      50,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"rare_resource_processing"},
 	},
 	"crystal_silicon_from_fractal": {
@@ -268,7 +268,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemFractalSilicon, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemCrystalSilicon, Quantity: 1}},
 		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"rare_resource_processing"},
 	},
 	"photon_combiner_from_grating": {
@@ -277,7 +277,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemGratingCrystal, Quantity: 1}, {ItemID: ItemCircuitBoard, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemPhotonCombiner, Quantity: 1}},
 		Duration:      40,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"rare_resource_processing"},
 	},
 	"particle_container_from_monopole": {
@@ -286,7 +286,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemMonopoleMagnet, Quantity: 1}, {ItemID: ItemTitaniumIngot, Quantity: 2}},
 		Outputs:       []ItemAmount{{ItemID: ItemParticleContainer, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"rare_resource_processing"},
 	},
 	"antimatter": {
@@ -316,7 +316,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Outputs:       []ItemAmount{{ItemID: ItemAnnihilationConstraintSphere, Quantity: 1}},
 		Duration:      120,
 		EnergyCost:    3,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"annihilation"},
 	},
 	"hydrogen_fuel_rod": {
@@ -325,7 +325,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemHydrogen, Quantity: 5}, {ItemID: ItemTitaniumIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemHydrogenFuelRod, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"fuel_rods"},
 	},
 	"deuterium_fuel_rod": {
@@ -334,7 +334,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemDeuterium, Quantity: 5}, {ItemID: ItemTitaniumIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemDeuteriumFuelRod, Quantity: 1}},
 		Duration:      80,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"fuel_rods"},
 	},
 	"small_carrier_rocket": {
@@ -363,7 +363,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemDeuteriumFuelRod, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemDeuterium, Quantity: 2}, {ItemID: ItemTitaniumIngot, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"recycling"},
 	},
 	"electromagnetic_matrix": {
@@ -372,7 +372,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemMagneticCoil, Quantity: 1}, {ItemID: ItemCircuitBoard, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemElectromagneticMatrix, Quantity: 1}},
 		Duration:      60,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeMatrixLab, BuildingTypeSelfEvolutionLab},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3, BuildingTypeMatrixLab, BuildingTypeSelfEvolutionLab},
 	},
 	"energy_matrix": {
 		ID:            "energy_matrix",
@@ -380,7 +380,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemEnergeticGraphite, Quantity: 1}, {ItemID: ItemHydrogen, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemEnergyMatrix, Quantity: 1}},
 		Duration:      80,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeMatrixLab, BuildingTypeSelfEvolutionLab},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3, BuildingTypeMatrixLab, BuildingTypeSelfEvolutionLab},
 		TechUnlock:    []string{"energy_matrix"},
 	},
 	"structure_matrix": {
@@ -389,7 +389,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemTitaniumIngot, Quantity: 1}, {ItemID: ItemPlastic, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemStructureMatrix, Quantity: 1}},
 		Duration:      90,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeMatrixLab, BuildingTypeSelfEvolutionLab},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3, BuildingTypeMatrixLab, BuildingTypeSelfEvolutionLab},
 		TechUnlock:    []string{"structure_matrix"},
 	},
 	"information_matrix": {
@@ -435,7 +435,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemAmmoBullet, Quantity: 5}},
 		Duration:      20,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"basic_ammo"},
 	},
 	"ammo_missile": {
@@ -444,8 +444,22 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Inputs:        []ItemAmount{{ItemID: ItemTitaniumIngot, Quantity: 2}, {ItemID: ItemProcessor, Quantity: 1}},
 		Outputs:       []ItemAmount{{ItemID: ItemAmmoMissile, Quantity: 1}},
 		Duration:      80,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"advanced_ammo"},
+	},
+	"plasma_capsule": {
+		ID:   "plasma_capsule",
+		Name: "等离子胶囊",
+		Inputs: []ItemAmount{
+			{ItemID: ItemTitaniumAlloy, Quantity: 1},
+			{ItemID: ItemParticleContainer, Quantity: 1},
+			{ItemID: ItemHydrogen, Quantity: 2},
+		},
+		Outputs:       []ItemAmount{{ItemID: ItemPlasmaCapsule, Quantity: 1}},
+		Duration:      60,
+		EnergyCost:    4,
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
+		TechUnlock:    []string{"plasma_turret"},
 	},
 	"antimatter_capsule": {
 		ID:   "antimatter_capsule",
@@ -486,7 +500,7 @@ var recipeCatalog = map[string]RecipeDefinition{
 		Outputs:       []ItemAmount{{ItemID: ItemPrototype, Quantity: 1}},
 		Duration:      90,
 		EnergyCost:    4,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk2},
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:    []string{"prototype"},
 	},
 	"precision_drone": {

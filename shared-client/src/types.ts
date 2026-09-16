@@ -95,6 +95,10 @@ export interface ResearchModule {
 export interface CombatModule {
   attack: number;
   range: number;
+  fire_rate?: number;
+  ammo_item?: string;
+  ammo_consume?: number;
+  last_fire_tick?: number;
 }
 
 export interface PowerGridModule {
@@ -194,6 +198,7 @@ export interface Building {
     remaining_ticks?: number;
   };
   job?: BuildingJob;
+  foundation_terrain?: string[];
 }
 
 export interface MechaState {

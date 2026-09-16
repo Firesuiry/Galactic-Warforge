@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/terrain"
 )
 
 // MaterialSourcePriority defines the priority order for material sources.
@@ -571,8 +572,14 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, err
 	}
 	for _, p := range tiles {
-		if ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+		if ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation) {
 			return nil, fmt.Errorf("construction footprint tile unavailable")
+		}
+		if task.BuildingType == model.BuildingTypeFoundation && ws.FoundationAt(p) != nil {
+			return nil, fmt.Errorf("construction footprint already has a foundation")
+		}
+		if foundation := ws.FoundationAt(p); foundation != nil && foundation.Job != nil && foundation.Job.Type == model.BuildingJobDemolish {
+			return nil, fmt.Errorf("construction footprint foundation is being demolished")
 		}
 	}
 	profile := model.BuildingProfileFor(task.BuildingType, 1)
@@ -587,6 +594,12 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		Level:       1,
 		VisionRange: profile.VisionRange,
 		Runtime:     profile.Runtime,
+	}
+	if task.BuildingType == model.BuildingTypeFoundation {
+		b.FoundationTerrain = make([]string, len(tiles))
+		for i, p := range tiles {
+			b.FoundationTerrain[i] = string(ws.Grid[p.Y][p.X].Terrain)
+		}
 	}
 	model.InitBuildingStorage(b)
 	model.InitBuildingProduction(b)
@@ -613,6 +626,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	if err := deductLockedMaterials(ws, task); err != nil {
 		return nil, fmt.Errorf("failed to deduct materials: %w", err)
 	}
+	if task.BuildingType == model.BuildingTypeFoundation {
+		for _, p := range tiles {
+			ws.Grid[p.Y][p.X].Terrain = terrain.TileBuildable
+		}
+	}
 	if b.Conveyor != nil && task.ConveyorDirection.Valid() {
 		b.Conveyor.Output = task.ConveyorDirection
 		b.Conveyor.Input = task.ConveyorDirection.Opposite()
@@ -620,6 +638,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	ws.Buildings[id] = b
 	if err := ws.IndexBuilding(b); err != nil {
 		delete(ws.Buildings, id)
+		if task.BuildingType == model.BuildingTypeFoundation {
+			for i, p := range tiles {
+				ws.Grid[p.Y][p.X].Terrain = terrain.TileType(b.FoundationTerrain[i])
+			}
+		}
 		rollbackConstructionDeduction(ws, task)
 		return nil, err
 	}
@@ -630,6 +653,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		model.UnregisterPowerGridBuilding(ws, id)
 		delete(ws.Buildings, id)
 		ws.UnindexBuilding(b)
+		if task.BuildingType == model.BuildingTypeFoundation {
+			for i, p := range tiles {
+				ws.Grid[p.Y][p.X].Terrain = terrain.TileType(b.FoundationTerrain[i])
+			}
+		}
 		rollbackConstructionDeduction(ws, task)
 	}
 

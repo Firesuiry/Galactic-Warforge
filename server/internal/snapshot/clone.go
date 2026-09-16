@@ -206,21 +206,22 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		return nil
 	}
 	bs := &BuildingSnapshot{
-		ID:               b.ID,
-		Type:             b.Type,
-		OwnerID:          b.OwnerID,
-		Position:         b.Position,
-		HP:               b.HP,
-		MaxHP:            b.MaxHP,
-		Level:            b.Level,
-		VisionRange:      b.VisionRange,
-		Runtime:          cloneRuntime(b.Runtime),
-		Storage:          cloneStorage(b.Storage),
-		EnergyStorage:    cloneEnergyStorage(b.EnergyStorage),
-		Conveyor:         cloneConveyor(b.Conveyor),
-		Sorter:           b.Sorter.Clone(),
-		LogisticsStation: cloneLogisticsStation(b.LogisticsStation),
-		Production:       b.Production.Clone(),
+		ID:                b.ID,
+		Type:              b.Type,
+		OwnerID:           b.OwnerID,
+		Position:          b.Position,
+		HP:                b.HP,
+		MaxHP:             b.MaxHP,
+		Level:             b.Level,
+		VisionRange:       b.VisionRange,
+		Runtime:           cloneRuntime(b.Runtime),
+		Storage:           cloneStorage(b.Storage),
+		EnergyStorage:     cloneEnergyStorage(b.EnergyStorage),
+		Conveyor:          cloneConveyor(b.Conveyor),
+		Sorter:            b.Sorter.Clone(),
+		LogisticsStation:  cloneLogisticsStation(b.LogisticsStation),
+		Production:        b.Production.Clone(),
+		FoundationTerrain: append([]string(nil), b.FoundationTerrain...),
 	}
 	if b.Job != nil {
 		bs.Job = &BuildingJobSnapshot{
@@ -249,15 +250,16 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		return nil, fmt.Errorf("building id missing")
 	}
 	mb := &model.Building{
-		ID:          buildingID,
-		Type:        snap.Type,
-		OwnerID:     snap.OwnerID,
-		Position:    snap.Position,
-		HP:          snap.HP,
-		MaxHP:       snap.MaxHP,
-		Level:       snap.Level,
-		VisionRange: snap.VisionRange,
-		Runtime:     cloneRuntime(snap.Runtime),
+		ID:                buildingID,
+		Type:              snap.Type,
+		OwnerID:           snap.OwnerID,
+		Position:          snap.Position,
+		HP:                snap.HP,
+		MaxHP:             snap.MaxHP,
+		Level:             snap.Level,
+		VisionRange:       snap.VisionRange,
+		Runtime:           cloneRuntime(snap.Runtime),
+		FoundationTerrain: append([]string(nil), snap.FoundationTerrain...),
 	}
 	if snap.Storage != nil {
 		mb.Storage = cloneStorage(snap.Storage)

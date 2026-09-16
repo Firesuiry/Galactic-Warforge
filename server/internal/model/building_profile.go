@@ -39,6 +39,12 @@ func BuildingProfileFor(btype BuildingType, level int) BuildingProfile {
 	case BuildingTypeAssemblingMachineMk1:
 		profile.MaxHP = 200 + 80*level
 		profile.VisionRange = 3
+	case BuildingTypeAssemblingMachineMk2:
+		profile.MaxHP = 280 + 100*level
+		profile.VisionRange = 3
+	case BuildingTypeAssemblingMachineMk3:
+		profile.MaxHP = 380 + 120*level
+		profile.VisionRange = 4
 	case BuildingTypeGaussTurret:
 		profile.MaxHP = 120 + 40*level
 		profile.VisionRange = 6

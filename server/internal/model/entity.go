@@ -36,6 +36,9 @@ type Building struct {
 	Production        *ProductionState        `json:"production,omitempty"`
 	Job               *BuildingJob            `json:"job,omitempty"`
 	ProductionMonitor *ProductionMonitorState `json:"production_monitor,omitempty"`
+	// FoundationTerrain stores the terrain replaced by a foundation, in footprint order.
+	// It allows demolition and snapshot restore to return the tile to its prior state.
+	FoundationTerrain []string `json:"foundation_terrain,omitempty"`
 }
 
 // Clone returns a deep copy of the building state for read-only snapshots.
@@ -58,6 +61,9 @@ func (b *Building) Clone() *Building {
 	out.Production = b.Production.Clone()
 	out.Job = b.Job.Clone()
 	out.ProductionMonitor = b.ProductionMonitor.Clone()
+	if b.FoundationTerrain != nil {
+		out.FoundationTerrain = append([]string(nil), b.FoundationTerrain...)
+	}
 	return &out
 }
 

@@ -766,6 +766,7 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 	view.Environment = &env
 
 	if ws.PlanetID == planetID {
+		view.Terrain = sliceWorldTerrain(ws, SceneBounds{Width: ws.MapWidth, Height: ws.MapHeight})
 		view.Buildings = ql.vis.FilterBuildings(ws, playerID)
 		view.Units = ql.vis.FilterUnits(ws, playerID)
 		view.Resources = sortedResources(ws)
@@ -815,6 +816,7 @@ func (ql *Layer) planetSceneWindow(ws *model.WorldState, playerID, planetID stri
 
 	view.Tick = ws.Tick
 	if ws.PlanetID == planetID {
+		view.Terrain = sliceWorldTerrain(ws, bounds)
 		fog := ql.vis.FogRegion(ws, playerID, bounds.X, bounds.Y, bounds.Width, bounds.Height)
 		view.Visible = fog.Visible
 		view.Explored = fog.Explored
@@ -888,6 +890,7 @@ func (ql *Layer) PlanetOverview(ws *model.WorldState, playerID, planetID string,
 
 	view.Tick = ws.Tick
 	if ws.PlanetID == planetID {
+		view.Terrain = aggregateTerrainGrid(sliceWorldTerrain(ws, SceneBounds{Width: ws.MapWidth, Height: ws.MapHeight}), ws.MapWidth, ws.MapHeight, step)
 		fog := ql.vis.FogState(ws, playerID)
 		visibleBuildings := ql.vis.FilterBuildings(ws, playerID)
 		visibleUnits := ql.vis.FilterUnits(ws, playerID)

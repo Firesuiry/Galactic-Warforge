@@ -357,8 +357,14 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-${type}`;
     const light: Finish = own ? 'blue' : 'orange', armor: Finish = own ? 'ceramic' : 'hostile';
-    if (!/conveyor/.test(type)) this.foundation(group, light);
-    if (/conveyor/.test(type)) this.conveyor(group, light);
+    if (type !== 'foundation' && !/conveyor/.test(type)) this.foundation(group, light);
+    if (type === 'foundation') {
+      this.box(group, 'alloy', [0.98, 0.035, 0.98], [0, 0.012, 0]);
+      for (const edge of [-1, 1]) {
+        this.box(group, 'graphite', [0.96, 0.008, 0.018], [0, 0.034, edge * 0.46]);
+        this.box(group, 'graphite', [0.018, 0.008, 0.96], [edge * 0.46, 0.034, 0]);
+      }
+    } else if (/conveyor/.test(type)) this.conveyor(group, light);
     else if (/sorter/.test(type)) this.sorter(group, light);
     else if (/wind/.test(type)) this.turbine(group, light);
     else if (type === 'oil_refinery') this.refinery(group, light);

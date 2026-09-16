@@ -342,3 +342,13 @@ it('building and resource selection use current entities while tile selection re
   expect(resolveSelectionPosition(planet,{kind:'building',id:'gone',position:selection.position})).toBeNull();
   expect(resolveSelectionPosition(planet,{kind:'resource',id:'gone',position:selection.position})).toBeNull();
 });
+
+it('selects the factory above a foundation, then exposes the foundation after removal', () => {
+  const planet = createPlanetFixture();
+  const factory = planet.buildings!['miner-1'];
+  const foundation = { ...factory, id: 'foundation-1', type: 'foundation' };
+  planet.buildings = { [foundation.id]: foundation, [factory.id]: factory };
+  expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: factory.id });
+  delete planet.buildings[factory.id];
+  expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: foundation.id });
+});

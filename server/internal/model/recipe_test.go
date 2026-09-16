@@ -231,3 +231,49 @@ func isRecyclingRecipe(recipe RecipeDefinition) bool {
 	}
 	return false
 }
+
+func TestPlasmaCapsuleRecipeReachable(t *testing.T) {
+	recipe, ok := Recipe("plasma_capsule")
+	if !ok || len(recipe.Outputs) != 1 || recipe.Outputs[0] != (ItemAmount{ItemID: ItemPlasmaCapsule, Quantity: 1}) {
+		t.Fatalf("missing plasma ammunition recipe: %+v", recipe)
+	}
+	if len(recipe.TechUnlock) != 1 || recipe.TechUnlock[0] != "plasma_turret" {
+		t.Fatalf("plasma ammunition must unlock with its turret: %+v", recipe.TechUnlock)
+	}
+	tech, ok := TechDefinitionByID(recipe.TechUnlock[0])
+	if !ok || tech.Hidden {
+		t.Fatal("plasma research is unreachable")
+	}
+	unlocked := false
+	for _, unlock := range tech.Unlocks {
+		if unlock.Type == TechUnlockRecipe && unlock.ID == recipe.ID {
+			unlocked = true
+		}
+	}
+	if !unlocked {
+		t.Fatal("plasma turret research must advertise its ammunition recipe")
+	}
+	for _, input := range recipe.Inputs {
+		producible := false
+		for _, producer := range AllRecipes() {
+			for _, output := range producer.AllOutputs() {
+				if output.ItemID != input.ItemID {
+					continue
+				}
+				for _, kind := range producer.BuildingTypes {
+					if BuildingProfileFor(kind, 1).Runtime.Functions.Production != nil {
+						producible = true
+					}
+				}
+			}
+		}
+		if !producible {
+			t.Fatalf("plasma ingredient %s lacks an implemented production building", input.ItemID)
+		}
+	}
+	for _, kind := range []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3} {
+		if _, err := ResolveProductionCycle(ProductionCycleRequest{Recipe: recipe, BuildingType: kind}); err != nil {
+			t.Fatalf("%s cannot produce plasma ammunition: %v", kind, err)
+		}
+	}
+}

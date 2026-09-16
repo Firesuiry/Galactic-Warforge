@@ -58,6 +58,7 @@ func newSettlementPipeline() settlementPipeline {
 			settlePipelineIO(ws)
 			events = append(events, settleProduction(ws)...)
 			settleStorage(ws)
+			events = append(events, settleTurrets(ws)...)
 
 			if gc.monitor != nil {
 				monEvents, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
@@ -97,7 +98,6 @@ func newSettlementPipeline() settlementPipeline {
 		}
 
 		var events []*model.GameEvent
-		events = append(events, settleTurrets(activeWorld)...)
 		events = append(events, gc.settleEnemyForces()...)
 		events = append(events, gc.settleCombat()...)
 		events = append(events, gc.settleOrbitalCombat()...)

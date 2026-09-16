@@ -1255,6 +1255,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 1000}, {ItemID: "structure_matrix", Quantity: 1000}, {ItemID: "information_matrix", Quantity: 500}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "plasma_turret"},
+			{Type: TechUnlockRecipe, ID: "plasma_capsule"},
 			{Type: TechUnlockBuilding, ID: "sr_plasma_turret"},
 		},
 	},

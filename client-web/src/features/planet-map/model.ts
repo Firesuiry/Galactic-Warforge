@@ -211,9 +211,10 @@ export function resolveSelectionAtTile(
   x: number,
   y: number,
 ): SelectedEntity | null {
-  const building = getBuildingList(planet).find((candidate) =>
+  const buildings = getBuildingList(planet).filter((candidate) =>
     tileContainsBuilding(candidate, x, y, planet.map_width / 3),
   );
+  const building = buildings.find((candidate) => candidate.type !== "foundation") ?? buildings[0];
   if (building) {
     return {
       kind: "building",

@@ -15,3 +15,5 @@
 - 玩家机甲核心回放：`scripts/playtest-player-mecha.mjs`。近距双玩家隔离配置、已解锁核心/引擎/护盾及煤库存；UI 补能和真实攻防验证，仍不等于完整玩家机甲（飞行/采集/充电等见覆盖文档）。
 
 - 传送带/分拣器截图必须验证真实库存增长与机械臂动作；慢刷新不能丢弃两次观察间的新搬运。回放与证据见 [物流浏览器回归](docs/guide/传送带与分拣器浏览器回归.md)。
+
+- 制造台/地基/炮塔回放分别用 `scripts/playtest-assemblers-browser.mjs`、`scripts/playtest-foundation-browser.mjs`、`scripts/playtest-defense-browser.mjs`；隔离配置要求见脚本头部，结果与未完成项见星球玩法覆盖文档。
