@@ -3,6 +3,8 @@
  * 建筑：升级/拆除；单位：移动/攻击（进入地图点选模式）；地块/资源：只读信息。
  */
 
+import { useState } from 'react';
+import { surfaceDistanceWithin } from '@shared/surface';
 import type { Building, CatalogView, CommandResponse } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
@@ -14,6 +16,7 @@ import {
 import {
   formatItemInventorySummary,
   getBuildingDisplayName,
+  getItemDisplayName,
   type PlanetRenderView,
 } from '@/features/planet-map/model';
 import { usePlanetViewStore } from '@/features/planet-map/store';
@@ -61,8 +64,10 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
   const setSelected = usePlanetViewStore((state) => state.setSelected);
+  const [quantity, setQuantity] = useState(1);
+  const [miningPending, setMiningPending] = useState(false);
 
-  if (!selected || selected.kind === 'tile' || selected.kind === 'resource') {
+  if (!selected || selected.kind === 'tile') {
     return null;
   }
 
@@ -77,6 +82,40 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
         limit: 50,
       }),
     });
+  }
+
+  if (selected.kind === 'resource') {
+    const resource = planet.resources?.find(entry => entry.id === selected.id);
+    if (!resource) return null;
+    const ownMechas = Object.values(planet.units ?? {}).filter(unit => unit.owner_id === session.playerId && unit.type === 'executor' && unit.mecha);
+    const mecha = ownMechas.find(unit => surfaceDistanceWithin(unit.position, resource.position, planet.surface.face_size, 2) !== undefined) ?? ownMechas[0];
+    const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, 2) !== undefined;
+    const solid = catalog?.items?.some(item => item.id === resource.kind && item.form === 'solid') && resource.behavior === 'finite';
+    const count = Number.isFinite(quantity) ? Math.max(1, Math.min(999, Math.floor(quantity))) : 1;
+    const enough = (resource.remaining ?? 0) >= count;
+    return <div className="planet-selection-bar" data-testid="planet-selection-bar">
+      <Icon iconKey={resource.kind} size={20} />
+      <div className="planet-selection-bar__info">
+        <strong>{getItemDisplayName(catalog, resource.kind)}</strong>
+        <span className="planet-selection-bar__meta">剩余 {resource.remaining ?? '—'} · ({resource.position.x}, {resource.position.y})</span>
+        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? '请将机甲移动到矿点 2 格内' : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 10 tick · 消耗 ${count * 10} 核心能量`}</span>
+      </div>
+      {solid && mecha ? <form className="planet-selection-bar__actions" onSubmit={async event => {
+        event.preventDefault();
+        if (!inRange || !enough || mecha.mecha?.job || miningPending) return;
+        setMiningPending(true);
+        try {
+          await submitPlanetCommand({ commandType: 'mine_resource', planetId: planet.planet_id, focus: { entityId: mecha.id },
+            execute: () => client.cmdMineResource(mecha.id, resource.id, count),
+            fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
+          });
+        } finally { setMiningPending(false); }
+      }}>
+        <label>采集数量<input aria-label="采集数量" type="number" min={1} max={Math.min(999, resource.remaining ?? 1)} step={1} value={quantity} onChange={event => setQuantity(Number(event.target.value))} /></label>
+        <button className="secondary-button" disabled={!inRange || !enough || Boolean(mecha.mecha?.job) || miningPending} type="submit">手动采集</button>
+        <button className="secondary-button" type="button" onClick={() => { setSelected({ kind: 'unit', id: mecha.id, position: mecha.position }); onShowDetail?.(); }}>机甲详情</button>
+      </form> : null}
+    </div>;
   }
 
   if (selected.kind === 'building') {

@@ -115,3 +115,53 @@ describe('refuel_mecha request serialization', () => {
     });
   });
 });
+
+
+describe('personal mecha job request serialization', () => {
+  it('sends resource IDs, recipe batch counts, and cancellation through distinct command payloads', async () => {
+    const requests: Array<{ url: string; method?: string; body: Record<string, unknown> }> = [];
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (input, init) => {
+        requests.push({ url: String(input), method: init?.method, body: JSON.parse(String(init?.body)) });
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      },
+    });
+    await api.cmdMineResource('executor-1', 'node:iron:4:5', 7);
+    await api.cmdCraftItem('executor-1', 'magnetic_coil', 3);
+    await api.cmdCancelMechaJob('executor-1');
+    const target = { layer: 'planet', entity_id: 'executor-1' };
+    assert.deepEqual(requests.map(request => request.body.commands), [
+      [{ type: 'mine_resource', target, payload: { resource_id: 'node:iron:4:5', quantity: 7 } }],
+      [{ type: 'craft_item', target, payload: { recipe_id: 'magnetic_coil', quantity: 3 } }],
+      [{ type: 'cancel_mecha_job', target }],
+    ]);
+    for (const request of requests) {
+      assert.equal(request.url, 'http://test.local/commands');
+      assert.equal(request.method, 'POST');
+      assert.equal(request.body.issuer_id, 'p1');
+      assert.equal(request.body.issuer_type, 'player');
+      assert.equal(typeof request.body.request_id, 'string');
+    }
+    assert.equal(new Set(requests.map(request => request.body.request_id)).size, 3);
+  });
+});
+
+
+describe('splitter request serialization', () => {
+  it('sends exact port priority and item filters and supports clearing optional settings', async () => {
+    const commands: unknown[] = [];
+    const api = createApiClient({ serverUrl: 'http://test.local', auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => {
+        commands.push(...JSON.parse(String(init?.body)).commands);
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      } });
+    await api.cmdConfigureSplitter('splitter-1', { input_directions: ['west'], output_directions: ['east', 'south'], output_priority: 'east', output_filters: { east: 'iron_ore' } });
+    await api.cmdConfigureSplitter('splitter-1', { input_directions: ['north'], output_directions: ['south'], input_priority: '', output_priority: '', output_filters: {} });
+    assert.deepEqual(commands, [
+      { type: 'configure_splitter', target: { layer: 'planet', entity_id: 'splitter-1' }, payload: { input_directions: ['west'], output_directions: ['east', 'south'], output_priority: 'east', output_filters: { east: 'iron_ore' } } },
+      { type: 'configure_splitter', target: { layer: 'planet', entity_id: 'splitter-1' }, payload: { input_directions: ['north'], output_directions: ['south'], input_priority: '', output_priority: '', output_filters: {} } },
+    ]);
+  });
+});

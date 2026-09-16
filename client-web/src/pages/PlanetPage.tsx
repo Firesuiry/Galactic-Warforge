@@ -1,8 +1,10 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crosshair, ChevronDown, ChevronRight, Hammer, Factory, Milestone, ScrollText, type LucideIcon } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { ALL_EVENT_TYPES } from "@shared/config";
+import type { PlanetSceneView } from "@shared/types";
+import { buildPlanetSceneRequest } from "@/features/planet-map/scene-query";
 
 import { Icon } from "@/common/Icon";
 import { MapDrawer } from "@/common/MapDrawer";
@@ -104,6 +106,7 @@ const DETAIL_TABS: DetailTabConfig[] = [
 
 export function PlanetPage() {
   const client = useApiClient();
+  const queryClient = useQueryClient();
   const session = useSessionSnapshot();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -181,7 +184,12 @@ export function PlanetPage() {
       sceneWindow.width,
       sceneWindow.height,
     ],
-    queryFn: () => client.fetchPlanetScene(planetId, { ...sceneWindow, near_x: Math.floor(sceneWindow.x + sceneWindow.width / 2), near_y: Math.floor(sceneWindow.y + sceneWindow.height / 2), radius: 64 }),
+    queryFn: () => {
+      const knownPlanet = queryClient.getQueriesData<PlanetSceneView>({
+        queryKey: ["planet-scene", session.serverUrl, session.playerId, planetId],
+      }).find(([, data]) => data !== undefined)?.[1];
+      return client.fetchPlanetScene(planetId, buildPlanetSceneRequest(sceneWindow, knownPlanet));
+    },
     placeholderData: keepPreviousData,
     enabled: Boolean(planetId),
   });
@@ -232,6 +240,7 @@ export function PlanetPage() {
     queryKey: ["summary", session.serverUrl, session.playerId],
     queryFn: () => client.fetchSummary(),
     enabled: Boolean(planetId),
+    refetchInterval: 2000,
   });
 
   const statsQuery = useQuery({

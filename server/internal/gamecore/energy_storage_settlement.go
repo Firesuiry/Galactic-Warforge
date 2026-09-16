@@ -5,16 +5,17 @@ import (
 	modelpower "siliconworld/internal/model/power"
 )
 
-func settleEnergyStorage(ws *model.WorldState) {
+func settleEnergyStorage(ws *model.WorldState) map[string]int {
+	charged := make(map[string]int)
 	if ws == nil {
-		return
+		return charged
 	}
 
 	ws.PowerInputs = filterStoragePowerInputs(ws.PowerInputs)
 
 	networks := model.ResolvePowerNetworks(ws)
 	if len(networks.Networks) == 0 {
-		return
+		return charged
 	}
 
 	for _, network := range networks.Networks {
@@ -43,9 +44,13 @@ func settleEnergyStorage(ws *model.WorldState) {
 			continue
 		}
 		if deficit < 0 {
-			model.ApplyEnergyStorageCharge(nodes, -deficit, balance)
+			actions, _ := model.ApplyEnergyStorageCharge(nodes, -deficit, balance)
+			for _, action := range actions {
+				charged[action.BuildingID] += action.ChargeInput
+			}
 		}
 	}
+	return charged
 }
 
 func filterStoragePowerInputs(inputs []model.PowerInput) []model.PowerInput {

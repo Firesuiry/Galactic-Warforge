@@ -9,7 +9,7 @@ const opposite: Record<SurfaceDirection, SurfaceDirection> = { north: 'south', e
 const offsets = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] } as const;
 const cardinal = (direction: ConveyorDirection | undefined): direction is SurfaceDirection => directions.includes(direction as SurfaceDirection);
 const key = (tile: TilePoint) => `${tile.x}:${tile.y}`;
-const isTransportBuilding = (building: Pick<Building, 'type' | 'conveyor'>) => Boolean(building.conveyor && (building.type.startsWith('conveyor_belt_') || building.type === 'automatic_piler'));
+const isTransportBuilding = (building: Pick<Building, 'type' | 'conveyor'>) => Boolean(building.conveyor && (building.type.startsWith('conveyor_belt_') || building.type === 'automatic_piler' || building.type === 'splitter'));
 
 export interface ConveyorPath {
   building: Building;
@@ -23,6 +23,7 @@ export interface ConveyorPath {
 
 /** The server accepts side merges unless input explicitly specifies a turn. */
 function allowsInput(building: Building, direction: SurfaceDirection) {
+  if (building.splitter) return building.splitter.input_directions.includes(direction);
   const { input, output } = building.conveyor!;
   if (cardinal(input) && input !== output && (!cardinal(output) || input !== opposite[output])) return direction === input;
   return direction !== output;
@@ -41,11 +42,11 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
   // Match server transport ownership, carried seam directions and allowed inputs.
   for (const building of belts) for (const direction of directions) {
     const output = building.conveyor!.output;
-    if (cardinal(output) && output !== direction) continue;
+    if (building.splitter ? !building.splitter.output_directions.includes(direction) : cardinal(output) && output !== direction) continue;
     const step = surfaceStep(building.position, direction, faceSize);
     const neighbor = byTile.get(key(step.tile));
     if (!neighbor || neighbor.owner_id !== building.owner_id || !allowsInput(neighbor, opposite[step.direction])) continue;
-    if (!cardinal(output) && cardinal(neighbor.conveyor!.output) && neighbor.conveyor!.output === opposite[step.direction]) continue;
+    if (!building.splitter && !cardinal(output) && !neighbor.splitter && cardinal(neighbor.conveyor!.output) && neighbor.conveyor!.output === opposite[step.direction]) continue;
     outputs.get(building.id)!.push(direction);
     inputs.get(neighbor.id)!.push(opposite[step.direction]);
   }
@@ -59,7 +60,7 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
       for (const direction of directions) {
         const step = surfaceStep(origin, direction, faceSize);
         const belt = byTile.get(key(step.tile));
-        if (!belt || belt.owner_id !== machine.owner_id) continue;
+        if (!belt || belt.splitter || belt.owner_id !== machine.owner_id) continue;
         const towardMachine = opposite[step.direction];
         const feedsMachine = port.direction !== 'output' && belt.conveyor!.output === towardMachine;
         const feedsBelt = port.direction !== 'input' && allowsInput(belt, towardMachine);
@@ -76,9 +77,13 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
     const output = cardinal(building.conveyor!.output) ? building.conveyor!.output : outgoing[0] ?? 'east';
     const input = incoming[0] ?? (cardinal(building.conveyor!.input) && building.conveyor!.input !== output ? building.conveyor!.input : opposite[output]);
     const connected = new Set([...incoming, ...outgoing]);
-    const routes: [SurfaceDirection, SurfaceDirection][] = [[input, output]];
-    for (const port of incoming.slice(1)) if (port !== output) routes.push([port, output]);
-    for (const port of outgoing) if (port !== output && port !== input) routes.push([input, port]);
+    const routes: [SurfaceDirection, SurfaceDirection][] = building.splitter
+      ? building.splitter.input_directions.flatMap(start => building.splitter!.output_directions.map(end => [start, end] as [SurfaceDirection, SurfaceDirection]))
+      : [[input, output]];
+    if (!building.splitter) {
+      for (const port of incoming.slice(1)) if (port !== output) routes.push([port, output]);
+      for (const port of outgoing) if (port !== output && port !== input) routes.push([input, port]);
+    }
     for (const [start, end] of routes) {
       const face = surfaceFace(building.position, faceSize);
       const port = (direction: SurfaceDirection) => {
@@ -127,7 +132,8 @@ export class ConveyorGeometry {
   refresh(buildings: readonly Building[], faceSize: number, radius = 100) {
     const belts = buildings.filter(building => isTransportBuilding(building));
     const signature = JSON.stringify([faceSize, radius, buildings.map(b => [b.id, b.owner_id, b.position, b.type,
-      b.conveyor?.input, b.conveyor?.output, Boolean(b.storage), b.runtime?.params?.io_ports])]);
+      b.conveyor?.input, b.conveyor?.output, b.splitter?.input_directions, b.splitter?.output_directions,
+      Boolean(b.storage), b.runtime?.params?.io_ports])]);
     if (signature === this.signature) return false;
     this.signature = signature;
     this.clear();

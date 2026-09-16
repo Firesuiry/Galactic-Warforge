@@ -4,10 +4,14 @@ package model
 type CommandType string
 
 const (
+	CmdConfigureSplitter         CommandType = "configure_splitter"
 	CmdBuild                     CommandType = "build"
 	CmdMove                      CommandType = "move"
 	CmdAttack                    CommandType = "attack"
 	CmdRefuelMecha               CommandType = "refuel_mecha"
+	CmdMineResource              CommandType = "mine_resource"
+	CmdCraftItem                 CommandType = "craft_item"
+	CmdCancelMechaJob            CommandType = "cancel_mecha_job"
 	CmdProduce                   CommandType = "produce"
 	CmdUpgrade                   CommandType = "upgrade"
 	CmdDemolish                  CommandType = "demolish"
@@ -135,10 +139,15 @@ type QueuedRequest struct {
 // Used by permission surfaces such as GET /state/agent-briefing.
 func AllCommandTypes() []CommandType {
 	return []CommandType{
+		CmdConfigureSplitter,
 		CmdBuild,
 		CmdMove,
 		CmdAttack,
 		CmdRefuelMecha,
+		CmdMineResource,
+		CmdCraftItem,
+		CmdCancelMechaJob,
+
 		CmdProduce,
 		CmdUpgrade,
 		CmdDemolish,

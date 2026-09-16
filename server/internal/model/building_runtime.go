@@ -760,6 +760,12 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeSplitter,
+		Functions: BuildingFunctionModules{
+			Transport: &TransportModule{Throughput: 6, StackLimit: 24},
+		},
+	},
+	{
 		ID: BuildingTypeAutomaticPiler,
 		Functions: BuildingFunctionModules{
 			Transport: &TransportModule{Throughput: 2, StackLimit: 4},
@@ -1004,12 +1010,14 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 	{
 		ID: BuildingTypeWirelessPowerTower,
 		Params: BuildingRuntimeParams{
+			EnergyConsume: 1,
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 		},
 		Functions: BuildingFunctionModules{
 			PowerGrid: &PowerGridModule{WirelessRange: DefaultWirelessPowerTowerRange},
+			Energy:    &modelpower.EnergyModule{ConsumePerTick: 1},
 		},
 	},
 	{

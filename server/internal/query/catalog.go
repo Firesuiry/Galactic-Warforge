@@ -45,17 +45,18 @@ type ItemCatalogEntry struct {
 }
 
 type RecipeCatalogEntry struct {
-	ID            string               `json:"id"`
-	Name          string               `json:"name"`
-	Inputs        []model.ItemAmount   `json:"inputs"`
-	Outputs       []model.ItemAmount   `json:"outputs"`
-	Byproducts    []model.ItemAmount   `json:"byproducts,omitempty"`
-	Duration      int                  `json:"duration"`
-	EnergyCost    int                  `json:"energy_cost"`
-	BuildingTypes []model.BuildingType `json:"building_types,omitempty"`
-	TechUnlock    []string             `json:"tech_unlock,omitempty"`
-	IconKey       string               `json:"icon_key"`
-	Color         string               `json:"color"`
+	HandcraftAllowed bool                 `json:"handcraft_allowed"`
+	ID               string               `json:"id"`
+	Name             string               `json:"name"`
+	Inputs           []model.ItemAmount   `json:"inputs"`
+	Outputs          []model.ItemAmount   `json:"outputs"`
+	Byproducts       []model.ItemAmount   `json:"byproducts,omitempty"`
+	Duration         int                  `json:"duration"`
+	EnergyCost       int                  `json:"energy_cost"`
+	BuildingTypes    []model.BuildingType `json:"building_types,omitempty"`
+	TechUnlock       []string             `json:"tech_unlock,omitempty"`
+	IconKey          string               `json:"icon_key"`
+	Color            string               `json:"color"`
 }
 
 type TechCatalogEntry struct {
@@ -130,17 +131,18 @@ func (ql *Layer) Catalog() *CatalogView {
 	recipes := make([]RecipeCatalogEntry, 0, len(recipeDefs))
 	for _, recipe := range recipeDefs {
 		recipes = append(recipes, RecipeCatalogEntry{
-			ID:            recipe.ID,
-			Name:          recipe.Name,
-			Inputs:        append([]model.ItemAmount(nil), recipe.Inputs...),
-			Outputs:       append([]model.ItemAmount(nil), recipe.Outputs...),
-			Byproducts:    append([]model.ItemAmount(nil), recipe.Byproducts...),
-			Duration:      recipe.Duration,
-			EnergyCost:    recipe.EnergyCost,
-			BuildingTypes: append([]model.BuildingType(nil), recipe.BuildingTypes...),
-			TechUnlock:    append([]string(nil), recipe.TechUnlock...),
-			IconKey:       recipe.ID,
-			Color:         recipeCatalogColor(recipe),
+			HandcraftAllowed: recipe.HandcraftAllowed,
+			ID:               recipe.ID,
+			Name:             recipe.Name,
+			Inputs:           append([]model.ItemAmount(nil), recipe.Inputs...),
+			Outputs:          append([]model.ItemAmount(nil), recipe.Outputs...),
+			Byproducts:       append([]model.ItemAmount(nil), recipe.Byproducts...),
+			Duration:         recipe.Duration,
+			EnergyCost:       recipe.EnergyCost,
+			BuildingTypes:    append([]model.BuildingType(nil), recipe.BuildingTypes...),
+			TechUnlock:       append([]string(nil), recipe.TechUnlock...),
+			IconKey:          recipe.ID,
+			Color:            recipeCatalogColor(recipe),
 		})
 	}
 

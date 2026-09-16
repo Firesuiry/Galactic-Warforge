@@ -67,6 +67,7 @@ import {
 } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
+import { SplitterControls } from "./SplitterControls";
 import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 
 function formatTimestamp(timestamp: number | null) {
@@ -640,6 +641,7 @@ export function PlanetEntityPanel({
           </dl>
         </section>
 
+        {building.type === "splitter" ? <SplitterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         <BuildingStorageSection building={building} catalog={catalog} />
 
         <section className="planet-side-section">
@@ -869,7 +871,7 @@ export function PlanetEntityPanel({
     const unit = entity as Unit;
     return (
       <div className="planet-panel-stack">
-        <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} />
+        <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} />
         <section className="planet-side-section">
           <div className="section-title">单位详情</div>
           <dl className="planet-kv-list">

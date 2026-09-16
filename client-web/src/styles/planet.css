@@ -1395,3 +1395,17 @@
 .mecha-controls select { width: 100%; }
 .mecha-controls p { margin: 0; font-size: 12px; line-height: 1.5; }
 .mecha-controls form { display: grid; gap: 8px; }
+.mecha-controls label input { grid-column: 1 / -1; width: 100%; }
+.mecha-job { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--accent, #39e6d0); border-radius: 6px; }
+.mecha-job progress { width: 100%; accent-color: var(--accent, #39e6d0); }
+.planet-selection-bar__actions label { display: grid; gap: 4px; font-size: 12px; }
+.planet-selection-bar__actions input { width: 80px; }
+
+.splitter-controls fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.splitter-controls legend { margin-bottom: 10px; }
+.splitter-controls label { display: grid; gap: 5px; min-width: 0; }
+.splitter-controls select { width: 100%; min-width: 0; }
+.splitter-controls__ports { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.splitter-controls__port { display: grid; align-content: start; gap: 8px; }
+.splitter-controls__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.splitter-controls fieldset:disabled { opacity: .65; }

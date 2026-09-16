@@ -8,6 +8,10 @@ import {
   cmdLandingStart,
   cmdProduce,
   cmdRefuelMecha,
+  cmdMineResource,
+  cmdCraftItem,
+  cmdCancelMechaJob,
+  cmdConfigureSplitter,
   cmdTaskForceDeploy,
 } from './action.js';
 
@@ -64,5 +68,55 @@ describe('warfare coordination and landing command surface', () => {
 
     const landing = await cmdLandingStart([]);
     assert.match(landing, /landing_start <task_force_id> <planet_id>/);
+  });
+});
+
+
+describe('personal mecha job command validation', () => {
+  for (const [name, handler] of [['mine_resource', cmdMineResource], ['craft_item', cmdCraftItem]] as const) {
+    it(`${name} rejects malformed quantities before sending a command`, async () => {
+      for (const quantity of ['0', '-1', '1.5', '2tail', '1e3', 'Infinity', 'NaN', '', ' 2', '9007199254740992']) {
+        const out = await handler(['executor-1', 'target-1', quantity]);
+        assert.match(out, /quantity 必须是正整数/, `${name}: ${JSON.stringify(quantity)}`);
+        assert.doesNotMatch(out, /missing authenticated player_id/);
+      }
+    });
+    it(`${name} accepts integer quantities and leaves target validity to the server`, async () => {
+      for (const quantity of ['1', '+2']) {
+        const out = await handler(['executor-1', 'server-defined-target', quantity]);
+        assert.match(out, /missing authenticated player_id/);
+        assert.doesNotMatch(out, /quantity 必须是正整数/);
+      }
+    });
+    it(`${name} requires exactly executor, resource or recipe, and quantity`, async () => {
+      assert.match(await handler(['executor-1', 'target-1']), /Usage:/);
+      assert.match(await handler(['executor-1', 'target-1', '1', 'extra']), /Usage:/);
+    });
+  }
+  it('cancel_mecha_job requires exactly one executor and reaches the API for valid arguments', async () => {
+    assert.match(await cmdCancelMechaJob([]), /Usage: cancel_mecha_job <executor_id>/);
+    assert.match(await cmdCancelMechaJob(['executor-1', 'extra']), /Usage:/);
+    assert.match(await cmdCancelMechaJob(['executor-1']), /missing authenticated player_id/);
+  });
+});
+
+
+describe('splitter configuration', () => {
+  it('rejects overlapping, duplicate, unknown, or missing ports before reaching the server', async () => {
+    for (const args of [
+      ['b', '--inputs', 'west', '--outputs', 'west'],
+      ['b', '--inputs', 'west,west', '--outputs', 'east'],
+      ['b', '--inputs', 'auto', '--outputs', 'east'],
+      ['b', '--inputs', 'west'],
+      ['b', '--inputs', 'west', '--outputs', 'east', '--output-priority', 'north'],
+      ['b', '--inputs', 'west', '--outputs', 'east', '--filters', 'north:iron_ore'],
+      ['b', '--inputs', 'west', '--outputs', 'east', '--filters', 'east:iron_ore,east:copper_ore'],
+      ['b', '--inputs', 'west', '--outputs', 'east', '--filters'],
+      ['b', '--inputs', 'west', '--outputs', 'east', '--typo', 'value'],
+    ]) assert.doesNotMatch(await cmdConfigureSplitter(args), /missing authenticated player_id/);
+  });
+  it('allows full replacement configuration and help never sends commands', async () => {
+    assert.match(await cmdConfigureSplitter(['b', '--inputs', 'west', '--outputs', 'east,south', '--output-priority', 'east', '--filters', 'east:iron_ore']), /missing authenticated player_id/);
+    assert.match(await cmdConfigureSplitter(['--help']), /Usage: configure_splitter/);
   });
 });

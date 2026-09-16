@@ -219,6 +219,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		EnergyStorage:     cloneEnergyStorage(b.EnergyStorage),
 		Conveyor:          cloneConveyor(b.Conveyor),
 		Sorter:            b.Sorter.Clone(),
+		Splitter:          b.Splitter.Clone(),
 		LogisticsStation:  cloneLogisticsStation(b.LogisticsStation),
 		Production:        b.Production.Clone(),
 		FoundationTerrain: append([]string(nil), b.FoundationTerrain...),
@@ -275,6 +276,14 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		mb.Conveyor = cloneConveyor(snap.Conveyor)
 	} else if model.IsConveyorBuilding(mb.Type) {
 		return nil, fmt.Errorf("conveyor snapshot missing for %s", buildingID)
+	}
+	if snap.Splitter != nil {
+		mb.Splitter = snap.Splitter.Clone()
+		if err := mb.Splitter.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid splitter %s: %w", buildingID, err)
+		}
+	} else if mb.Type == model.BuildingTypeSplitter {
+		return nil, fmt.Errorf("splitter snapshot missing for %s", buildingID)
 	}
 	if snap.Sorter != nil {
 		mb.Sorter = snap.Sorter.Clone()

@@ -31,6 +31,7 @@ type Building struct {
 	Storage           *StorageState           `json:"storage,omitempty"`
 	EnergyStorage     *EnergyStorageState     `json:"energy_storage,omitempty"`
 	Conveyor          *ConveyorState          `json:"conveyor,omitempty"`
+	Splitter          *SplitterState          `json:"splitter,omitempty"`
 	Sorter            *SorterState            `json:"sorter,omitempty"`
 	LogisticsStation  *LogisticsStationState  `json:"logistics_station,omitempty"`
 	Production        *ProductionState        `json:"production,omitempty"`
@@ -57,6 +58,7 @@ func (b *Building) Clone() *Building {
 	out.EnergyStorage = b.EnergyStorage.Clone()
 	out.Conveyor = b.Conveyor.Clone()
 	out.Sorter = b.Sorter.Clone()
+	out.Splitter = b.Splitter.Clone()
 	out.LogisticsStation = b.LogisticsStation.Clone()
 	out.Production = b.Production.Clone()
 	out.Job = b.Job.Clone()
@@ -92,10 +94,7 @@ func (u *Unit) Clone() *Unit {
 		return nil
 	}
 	out := *u
-	if u.Mecha != nil {
-		mecha := *u.Mecha
-		out.Mecha = &mecha
-	}
+	out.Mecha = u.Mecha.Clone()
 	if u.TargetPos != nil {
 		target := *u.TargetPos
 		out.TargetPos = &target

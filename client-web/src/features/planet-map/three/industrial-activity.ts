@@ -37,7 +37,9 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     const running = building.runtime?.state === 'running';
     const base = { position: building.position, active: running };
     // One cube per authoritative nonempty stack (quantity is retained, not multiplied into invented items).
-    for (const [index, stack] of (building.conveyor?.buffer ?? []).entries()) {
+    // Splitter buffers are enclosed; no authoritative per-item route is exposed,
+    // so do not show their stock moving along an arbitrary branch.
+    for (const [index, stack] of (building.type === 'splitter' ? [] : building.conveyor?.buffer ?? []).entries()) {
       if (stack.quantity > 0) sources.push({ ...base, id: `${building.id}:cargo:${index}`, kind: 'cargo',
         itemId: stack.item_id, quantity: stack.quantity, direction: building.conveyor?.output, buildingId: building.id,
         color: itemColors.get(stack.item_id) ?? '#d8ae67' });

@@ -19,3 +19,9 @@
 - 制造台/地基/炮塔回放分别用 `scripts/playtest-assemblers-browser.mjs`、`scripts/playtest-foundation-browser.mjs`、`scripts/playtest-defense-browser.mjs`；隔离配置要求见脚本头部，结果与未完成项见星球玩法覆盖文档。
 
 - 连续皮带还需识别建筑真实 IO 端口；分拣器长臂动态实例须更新包围球，搬运中不能切换端点。回放加 `SW_TRANSPORT_RECORD=1` 可录真实搬运动图（需 ffmpeg），详见物流浏览器回归文档。
+
+- 默认新局机甲起步回放：`scripts/playtest-mecha-start-browser.mjs`；空库存UI采铁/煤、补能、手造取消退款、建风机/电塔充电均有证据。大地图headless建议流畅画质；原均衡画质回放曾超时并从同局分段续作，准确范围见星球玩法覆盖与验收。
+
+- 四向分流器回放：`scripts/playtest-splitter-browser.mjs`，CLI建造/装料、UI过滤/优先级、满带旁路与重建恢复；使用明确预解锁平地隔离场景。缺状态的旧装饰性分流器存档拒绝恢复；分流器高度布局仍待实现。
+
+- 小地图scene首屏未知图集尺寸时不传默认窗口推算的near中心，先矩形查询，再按当前server/player/planet缓存尺寸裁剪；避免face16的48×32地图返回400。

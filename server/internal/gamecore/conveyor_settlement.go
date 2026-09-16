@@ -6,92 +6,132 @@ import (
 	"siliconworld/internal/model"
 )
 
-type conveyorTransfer struct {
-	sourceID string
+type conveyorLink struct {
 	targetID string
-	qty      int
-	itemID   string
+	output   model.ConveyorDirection
+	input    model.ConveyorDirection
 }
 
+type conveyorRequest struct {
+	sourceID    string
+	link        conveyorLink
+	bufferIndex int
+}
+
+// All belt-like transport uses one simultaneous inventory settlement. Requests
+// reserve real stacks from the tick's initial buffers; receipts never move again
+// in the same tick and no item can be offered to multiple outputs.
 func settleConveyors(ws *model.WorldState) {
 	if ws == nil {
 		return
 	}
 	conveyors := make(map[string]*model.Building)
+	ids := make([]string, 0)
 	for id, building := range ws.Buildings {
-		if building == nil || building.Conveyor == nil {
+		if !conveyorActive(building) {
 			continue
 		}
 		conveyors[id] = building
-	}
-	if len(conveyors) == 0 {
-		return
-	}
-
-	ids := make([]string, 0, len(conveyors))
-	for id := range conveyors {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-
-	incomingDirs := make(map[string][]model.ConveyorDirection, len(conveyors))
-	for _, id := range ids {
-		incomingDirs[id] = conveyorIncomingDirs(ws, conveyors, conveyors[id])
+	if len(ids) == 0 {
+		return
 	}
-
-	allowedInputs := make(map[string]map[model.ConveyorDirection]struct{}, len(conveyors))
+	allowedInputs := make(map[string]map[model.ConveyorDirection]struct{}, len(ids))
 	for _, id := range ids {
 		allowedInputs[id] = conveyorAllowedInputs(conveyors[id])
 	}
-
-	outputTargets := make(map[string][]string, len(conveyors))
+	links := make(map[string][]conveyorLink, len(ids))
 	for _, id := range ids {
-		outputTargets[id] = conveyorOutputTargets(ws, conveyors, conveyors[id], incomingDirs[id], allowedInputs)
+		links[id] = conveyorOutputTargets(ws, conveyors, conveyors[id], conveyorIncomingDirs(ws, conveyors, conveyors[id]), allowedInputs)
 	}
-
-	offers := make(map[string]int, len(conveyors))
-	capacities := make(map[string]int, len(conveyors))
+	remaining := make(map[string]*model.ConveyorState, len(ids))
+	offers := make(map[string]int, len(ids))
+	capacities := make(map[string]int, len(ids))
+	receipts := make(map[string][]model.ItemStack, len(ids))
+	grants := make(map[string]map[string]int, len(ids))
 	for _, id := range ids {
-		belt := conveyors[id].Conveyor
-		offers[id] = minInt(belt.Throughput, belt.TotalItems())
-		capacities[id] = belt.AvailableCapacity()
+		building := conveyors[id]
+		remaining[id] = building.Conveyor.Clone()
+		grants[id] = make(map[string]int)
+		offers[id] = minInt(building.Conveyor.Throughput, building.Conveyor.TotalItems())
+		capacities[id] = building.Conveyor.AvailableCapacity()
+		if building.Splitter != nil {
+			capacities[id] = minInt(capacities[id], building.Conveyor.Throughput)
+		}
 	}
-
-	allocations := make(map[string][]conveyorTransfer, len(conveyors))
-	remainingOffers := make(map[string]int, len(offers))
-	for _, sourceID := range ids {
-		remainingOffers[sourceID] = offers[sourceID]
-	}
-	allocationOrder := conveyorAllocationOrder(ids, ws.Tick)
+	order := conveyorAllocationOrder(ids, ws.Tick)
 	for {
-		progress := allocateConveyorRound(allocationOrder, outputTargets, remainingOffers, capacities, allocations, conveyors, true)
-		progress = allocateConveyorRound(allocationOrder, outputTargets, remainingOffers, capacities, allocations, conveyors, false) || progress
+		progress := false
+		for _, diverse := range []bool{true, false} {
+			requests := make(map[string][]conveyorRequest)
+			for _, id := range order {
+				if offers[id] <= 0 {
+					continue
+				}
+				for _, link := range orderConveyorLinks(conveyors[id], links[id]) {
+					if capacities[link.targetID] <= 0 {
+						continue
+					}
+					index := conveyorRequestStack(conveyors[id], conveyors[link.targetID], remaining[id], link.output, diverse)
+					if index < 0 {
+						continue
+					}
+					requests[link.targetID] = append(requests[link.targetID], conveyorRequest{sourceID: id, link: link, bufferIndex: index})
+					break
+				}
+			}
+			for _, targetID := range ids {
+				pending := requests[targetID]
+				if len(pending) == 0 {
+					continue
+				}
+				target := conveyors[targetID]
+				if target.Splitter != nil {
+					sort.SliceStable(pending, func(i, j int) bool {
+						return splitterInputRank(target.Splitter, pending[i].link.input) < splitterInputRank(target.Splitter, pending[j].link.input)
+					})
+				} else {
+					sort.SliceStable(pending, func(i, j int) bool {
+						return grants[targetID][pending[i].sourceID] < grants[targetID][pending[j].sourceID]
+					})
+				}
+				request := pending[0]
+				moved := remaining[request.sourceID].TakeAt(request.bufferIndex, 1)
+				if len(moved) == 0 {
+					continue
+				}
+				receipts[targetID] = append(receipts[targetID], moved...)
+				offers[request.sourceID]--
+				capacities[targetID]--
+				grants[targetID][request.sourceID]++
+				source := conveyors[request.sourceID]
+				if source.Splitter != nil {
+					source.Splitter.OutputCursor = nextSplitterCursor(source.Splitter.OutputDirections, request.link.output)
+					source.Splitter.TransferredItems++
+					source.Splitter.LastTransferTick = ws.Tick
+				}
+				if target.Splitter != nil {
+					target.Splitter.InputCursor = nextSplitterCursor(target.Splitter.InputDirections, request.link.input)
+				}
+				progress = true
+			}
+		}
 		if !progress {
 			break
 		}
 	}
-
-	for _, sourceID := range ids {
-		transfers := allocations[sourceID]
-		if len(transfers) == 0 {
-			continue
-		}
-		source := conveyors[sourceID]
-		if source == nil || source.Conveyor == nil {
-			continue
-		}
-		for _, tr := range transfers {
-			if tr.qty <= 0 {
-				continue
-			}
-			target := conveyors[tr.targetID]
-			if target == nil || target.Conveyor == nil {
-				continue
-			}
-			moved := takeConveyorTransferItems(source.Conveyor, tr.itemID, tr.qty)
-			target.Conveyor.AppendStacks(moved)
-		}
+	for _, id := range ids {
+		conveyors[id].Conveyor.Buffer = remaining[id].Buffer
 	}
+	for _, id := range ids {
+		conveyors[id].Conveyor.AppendStacks(receipts[id])
+	}
+}
+
+func conveyorActive(building *model.Building) bool {
+	return building != nil && building.Conveyor != nil && building.Runtime.State == model.BuildingWorkRunning
 }
 
 func conveyorAllocationOrder(ids []string, tick int64) []string {
@@ -99,124 +139,71 @@ func conveyorAllocationOrder(ids []string, tick int64) []string {
 		return nil
 	}
 	offset := int(tick % int64(len(ids)))
-	if offset == 0 {
-		return append([]string(nil), ids...)
-	}
-	order := make([]string, 0, len(ids))
-	order = append(order, ids[offset:]...)
-	order = append(order, ids[:offset]...)
-	return order
+	order := append([]string(nil), ids[offset:]...)
+	return append(order, ids[:offset]...)
 }
 
-func allocateConveyorRound(
-	order []string,
-	outputTargets map[string][]string,
-	remainingOffers map[string]int,
-	capacities map[string]int,
-	allocations map[string][]conveyorTransfer,
-	conveyors map[string]*model.Building,
-	preferDiversity bool,
-) bool {
-	progress := false
-	for _, sourceID := range order {
-		if remainingOffers[sourceID] <= 0 {
-			continue
-		}
-		source := conveyors[sourceID]
-		if source == nil || source.Conveyor == nil {
-			continue
-		}
-		for _, targetID := range outputTargets[sourceID] {
-			if capacities[targetID] <= 0 {
-				continue
-			}
-			target := conveyors[targetID]
-			if target == nil || target.Conveyor == nil {
-				continue
-			}
-			itemID, ok := conveyorTransferItem(target.Conveyor, source.Conveyor, preferDiversity)
-			if !ok {
-				continue
-			}
-			allocations[sourceID] = append(allocations[sourceID], conveyorTransfer{
-				sourceID: sourceID,
-				targetID: targetID,
-				qty:      1,
-				itemID:   itemID,
-			})
-			remainingOffers[sourceID]--
-			capacities[targetID]--
-			progress = true
-			break
+func nextSplitterCursor(directions []model.ConveyorDirection, used model.ConveyorDirection) int {
+	for i, direction := range directions {
+		if direction == used {
+			return (i + 1) % len(directions)
 		}
 	}
-	return progress
+	return 0
 }
 
-func conveyorTransferItem(target, source *model.ConveyorState, preferDiversity bool) (string, bool) {
-	if source == nil || len(source.Buffer) == 0 {
-		return "", false
-	}
-	if !preferDiversity {
-		itemID := source.Buffer[0].ItemID
-		return itemID, itemID != ""
-	}
-	if target == nil || len(target.Buffer) == 0 {
-		return "", false
-	}
-	existing := make(map[string]struct{}, len(target.Buffer))
-	for _, stack := range target.Buffer {
-		if stack.ItemID == "" {
-			continue
-		}
-		existing[stack.ItemID] = struct{}{}
-	}
-	for _, stack := range source.Buffer {
-		if stack.ItemID == "" {
-			continue
-		}
-		if _, ok := existing[stack.ItemID]; ok {
-			continue
-		}
-		return stack.ItemID, true
-	}
-	return "", false
-}
-
-func takeConveyorTransferItems(conveyor *model.ConveyorState, itemID string, qty int) []model.ItemStack {
-	if conveyor == nil || qty <= 0 {
-		return nil
-	}
-	if itemID == "" {
-		return conveyor.Take(qty)
-	}
-	remaining := qty
-	var taken []model.ItemStack
-	for remaining > 0 {
-		index := firstConveyorStackIndex(conveyor, itemID)
-		if index < 0 {
-			break
-		}
-		partial := conveyor.TakeAt(index, remaining)
-		if len(partial) == 0 {
-			break
-		}
-		taken = append(taken, partial...)
-		for _, stack := range partial {
-			remaining -= stack.Quantity
-		}
-	}
-	return taken
-}
-
-func firstConveyorStackIndex(conveyor *model.ConveyorState, itemID string) int {
-	if conveyor == nil || itemID == "" {
+func splitterInputRank(splitter *model.SplitterState, direction model.ConveyorDirection) int {
+	if direction == splitter.InputPriority {
 		return -1
 	}
-	for index, stack := range conveyor.Buffer {
-		if stack.ItemID == itemID && stack.Quantity > 0 {
-			return index
+	for i, port := range splitter.InputDirections {
+		if direction == port {
+			return (i - splitter.InputCursor + len(splitter.InputDirections)) % len(splitter.InputDirections)
 		}
+	}
+	return 4
+}
+
+func orderConveyorLinks(building *model.Building, links []conveyorLink) []conveyorLink {
+	if building.Splitter == nil {
+		return links
+	}
+	s := building.Splitter
+	ordered := append([]conveyorLink(nil), links...)
+	rank := func(direction model.ConveyorDirection) int {
+		if direction == s.OutputPriority {
+			return -1
+		}
+		for i, port := range s.OutputDirections {
+			if direction == port {
+				return (i - s.OutputCursor + len(s.OutputDirections)) % len(s.OutputDirections)
+			}
+		}
+		return 4
+	}
+	sort.SliceStable(ordered, func(i, j int) bool { return rank(ordered[i].output) < rank(ordered[j].output) })
+	return ordered
+}
+
+func conveyorRequestStack(source, target *model.Building, remaining *model.ConveyorState, output model.ConveyorDirection, diverse bool) int {
+	for i, stack := range remaining.Buffer {
+		if stack.Quantity <= 0 || stack.ItemID == "" {
+			continue
+		}
+		if source.Splitter != nil {
+			if source.Splitter.AllowsOutput(output, stack.ItemID) {
+				return i
+			}
+			continue
+		}
+		// Keep existing mixed-belt merge preference. Explicit splitter input
+		// priority takes precedence over this ordinary-belt diversity heuristic.
+		if diverse && target.Splitter == nil {
+			if len(target.Conveyor.Buffer) == 0 || conveyorHasItem(target.Conveyor, stack.ItemID) {
+				continue
+			}
+		}
+		return i
 	}
 	return -1
 }
@@ -247,6 +234,12 @@ func conveyorIncomingDirs(ws *model.WorldState, conveyors map[string]*model.Buil
 		if neighbor.OwnerID != building.OwnerID {
 			continue
 		}
+		if neighbor.Splitter != nil {
+			if neighbor.Splitter.IsOutput(nextDir.Opposite()) {
+				incoming = append(incoming, dir)
+			}
+			continue
+		}
 		neighborOut := neighbor.Conveyor.Output
 		if !neighborOut.Valid() || neighborOut == model.ConveyorAuto {
 			continue
@@ -261,6 +254,15 @@ func conveyorIncomingDirs(ws *model.WorldState, conveyors map[string]*model.Buil
 func conveyorAllowedInputs(building *model.Building) map[model.ConveyorDirection]struct{} {
 	allowed := make(map[model.ConveyorDirection]struct{})
 	if building == nil || building.Conveyor == nil {
+		return allowed
+	}
+	if !conveyorActive(building) {
+		return allowed
+	}
+	if building.Splitter != nil {
+		for _, direction := range building.Splitter.InputDirections {
+			allowed[direction] = struct{}{}
+		}
 		return allowed
 	}
 	output := building.Conveyor.Output
@@ -291,21 +293,24 @@ func conveyorOutputTargets(
 	building *model.Building,
 	incoming []model.ConveyorDirection,
 	allowedInputs map[string]map[model.ConveyorDirection]struct{},
-) []string {
+) []conveyorLink {
 	if ws == nil || building == nil || building.Conveyor == nil {
 		return nil
 	}
 	output := building.Conveyor.Output
 	dirs := conveyorOutputPriority(output, incoming)
-	var targets []string
+	if building.Splitter != nil {
+		dirs = building.Splitter.OutputDirections
+	}
+	var targets []conveyorLink
 	for _, dir := range dirs {
 		if !dir.Valid() || dir == model.ConveyorAuto {
 			continue
 		}
-		if output.Valid() && output != model.ConveyorAuto && dir != output {
+		if building.Splitter == nil && output.Valid() && output != model.ConveyorAuto && dir != output {
 			continue
 		}
-		if output == model.ConveyorAuto && containsDirection(incoming, dir) {
+		if building.Splitter == nil && output == model.ConveyorAuto && containsDirection(incoming, dir) {
 			continue
 		}
 		next, nextDir := ws.SurfaceStep(building.Position, dir)
@@ -324,7 +329,7 @@ func conveyorOutputTargets(
 		if !allowsInput(allowedInputs[targetID], nextDir.Opposite()) {
 			continue
 		}
-		targets = append(targets, targetID)
+		targets = append(targets, conveyorLink{targetID: targetID, output: dir, input: nextDir.Opposite()})
 	}
 	return targets
 }

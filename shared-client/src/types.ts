@@ -138,7 +138,7 @@ export interface BuildingJob {
   refund_rate?: number;
 }
 
-/** 传送带运行状态（server model.Building.conveyor 直出；仅 conveyor_belt_* 携带）。 */
+/** 传输缓存（传送带、分流器及集装设备共用）。 */
 export interface BuildingConveyorState {
   input: ConveyorDirection;
   output: ConveyorDirection;
@@ -173,6 +173,21 @@ export interface BuildingSorterState {
   last_transfer?: SorterTransfer;
 }
 
+export type CardinalDirection = 'north' | 'east' | 'south' | 'west';
+export interface SplitterConfig {
+  input_directions: CardinalDirection[];
+  output_directions: CardinalDirection[];
+  input_priority?: CardinalDirection | '';
+  output_priority?: CardinalDirection | '';
+  output_filters?: Partial<Record<CardinalDirection, string>>;
+}
+export interface BuildingSplitterState extends SplitterConfig {
+  input_cursor: number;
+  output_cursor: number;
+  transferred_items: number;
+  last_transfer_tick: number;
+}
+
 export interface Building {
   id: string;
   type: BuildingType;
@@ -193,6 +208,7 @@ export interface Building {
   };
   conveyor?: BuildingConveyorState;
   sorter?: BuildingSorterState;
+  splitter?: BuildingSplitterState;
   production?: {
     recipe_id?: string;
     remaining_ticks?: number;
@@ -201,7 +217,21 @@ export interface Building {
   foundation_terrain?: string[];
 }
 
+export interface MechaJob {
+  kind: 'mine' | 'craft';
+  resource_id?: string;
+  recipe_id?: string;
+  remaining_ticks: number;
+  ticks_per_batch: number;
+  remaining_batches: number;
+  completed_batches: number;
+  energy_per_tick: number;
+  state: 'running' | 'no_energy' | 'out_of_range';
+  reserved_inputs?: ItemAmount[];
+}
+
 export interface MechaState {
+  job?: MechaJob;
   energy: number;
   max_energy: number;
   fuel_energy: number;
@@ -513,9 +543,13 @@ export type CommandType =
   | 'move'
   | 'attack'
   | 'refuel_mecha'
+  | 'mine_resource'
+  | 'craft_item'
+  | 'cancel_mecha_job'
   | 'produce'
   | 'upgrade'
   | 'demolish'
+  | 'configure_splitter'
   | 'configure_logistics_station'
   | 'configure_logistics_slot'
   | 'cancel_construction'
@@ -1317,6 +1351,7 @@ export interface ItemCatalogEntry {
 }
 
 export interface RecipeCatalogEntry {
+  handcraft_allowed?: boolean;
   id: string;
   name: string;
   inputs: ItemAmount[];

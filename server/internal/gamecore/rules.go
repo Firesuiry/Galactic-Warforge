@@ -559,6 +559,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 		})
 
 		if targetUnit.HP <= 0 {
+			refundMechaJob(ws, targetUnit)
 			delete(ws.Units, targetID)
 			tileKey := model.TileKey(targetUnit.Position.X, targetUnit.Position.Y)
 			removeUnitFromTile(ws, tileKey, targetID)

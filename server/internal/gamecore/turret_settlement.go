@@ -157,6 +157,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			events = append(events, &shot)
 
 			if unit.HP <= 0 {
+				refundMechaJob(ws, unit)
 				delete(ws.Units, unit.ID)
 				tileKey := model.TileKey(unit.Position.X, unit.Position.Y)
 				removeUnitFromTile(ws, tileKey, unit.ID)

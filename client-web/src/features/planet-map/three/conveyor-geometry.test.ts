@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { surfaceStep, type SurfaceDirection } from '@shared/surface';
-import type { Building, PortDirection } from '@shared/types';
+import type { Building, PortDirection, SplitterConfig } from '@shared/types';
 import { ConveyorGeometry, conveyorPaths } from './conveyor-geometry';
 import { surfaceTileSize, tileNormal } from './projection';
 
@@ -13,8 +13,27 @@ const machine = (x: number, y: number, direction: PortDirection, owner = 'p', of
   id: 'machine', type: 'arc_smelter', position: { x, y, z: 0 }, owner_id: owner, storage: {},
   runtime: { params: { io_ports: [{ id: 'port', direction, offset, capacity: 1 }] } },
 } as Building);
+const splitter = (x: number, y: number, config: SplitterConfig = { input_directions: ['west'], output_directions: ['east', 'north', 'south'] }): Building => ({
+  ...belt('splitter', x, y), type: 'splitter',
+  splitter: { ...config, input_cursor: 0, output_cursor: 0, transferred_items: 0, last_transfer_tick: 0 },
+});
 
 describe('continuous surface conveyor paths', () => {
+  it('joins every configured splitter branch and leaves closed or reversed ports capped', () => {
+    const hub = splitter(6, 6);
+    const paths = conveyorPaths([belt('in', 5, 6), hub, belt('east', 7, 6), belt('south', 6, 7, 'south'), belt('north', 6, 5, 'north')], 16);
+    const branches = paths.filter(path => path.building.id === 'splitter');
+    expect(branches).toHaveLength(3);
+    for (const branch of branches) {
+      expect(branch.point(0).distanceTo(paths.find(p => p.building.id === 'in')!.point(1))).toBeLessThan(1e-10);
+      expect(branch.point(1).distanceTo(paths.find(p => p.building.id === branch.output)!.point(0))).toBeLessThan(1e-10);
+    }
+    const closed = splitter(6, 6, { input_directions: ['west'], output_directions: ['east'] });
+    const south = conveyorPaths([closed, belt('south', 6, 7, 'north')], 16).find(p => p.building.id === 'south')!;
+    expect(south.connected.size).toBe(0);
+    expect(conveyorPaths([splitter(6, 6), machine(7, 6, 'input')], 16).every(p => !p.connected.has('east'))).toBe(true);
+  });
+
   it('curves out of a real miner port and reaches the receiving factory base', () => {
     const paths = conveyorPaths([belt('a', 5, 5), belt('b', 6, 5),
       machine(5, 6, 'output'), { ...machine(7, 5, 'input'), id: 'factory' }], 16);

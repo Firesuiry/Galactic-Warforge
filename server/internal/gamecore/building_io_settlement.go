@@ -14,7 +14,7 @@ func settleBuildingIO(ws *model.WorldState) {
 	}
 	conveyors := make(map[string]*model.Building)
 	for id, building := range ws.Buildings {
-		if building == nil || building.Conveyor == nil {
+		if !conveyorActive(building) || building.Splitter != nil {
 			continue
 		}
 		conveyors[id] = building

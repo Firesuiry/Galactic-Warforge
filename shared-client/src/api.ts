@@ -21,6 +21,7 @@ import type {
   CommandCatalogView,
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
+  SplitterConfig,
   MetricsSnapshot,
   OrbitalSupportMode,
   PlanetInspectEntityKind,
@@ -577,6 +578,37 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdMineResource(entityId: string, itemId: string, quantity: number) {
+    return sendSingleCommand({
+      type: 'mine_resource',
+      target: { layer: 'planet', entity_id: entityId },
+      payload: { resource_id: itemId, quantity },
+    });
+  }
+
+  function cmdCraftItem(entityId: string, itemId: string, quantity: number) {
+    return sendSingleCommand({
+      type: 'craft_item',
+      target: { layer: 'planet', entity_id: entityId },
+      payload: { recipe_id: itemId, quantity },
+    });
+  }
+
+  function cmdConfigureSplitter(entityId: string, config: SplitterConfig) {
+    return sendSingleCommand({
+      type: 'configure_splitter',
+      target: { layer: 'planet', entity_id: entityId },
+      payload: { ...config },
+    });
+  }
+
+  function cmdCancelMechaJob(entityId: string) {
+    return sendSingleCommand({
+      type: 'cancel_mecha_job',
+      target: { layer: 'planet', entity_id: entityId },
+    });
+  }
+
   function cmdProduce(entityId: string, unitType: WorldUnitID) {
     return sendSingleCommand({
       type: 'produce',
@@ -1095,6 +1127,11 @@ export function createApiClient(options: ApiClientOptions) {
     clearAuth,
     cmdAttack,
     cmdRefuelMecha,
+    cmdMineResource,
+    cmdCraftItem,
+    cmdCancelMechaJob,
+    cmdConfigureSplitter,
+
     cmdBuild,
     cmdBlueprintCreate,
     cmdBlueprintFinalize,

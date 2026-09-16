@@ -631,7 +631,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 			ws.Grid[p.Y][p.X].Terrain = terrain.TileBuildable
 		}
 	}
-	if b.Conveyor != nil && task.ConveyorDirection.Valid() {
+	if b.Conveyor != nil && b.Splitter == nil && task.ConveyorDirection.Valid() {
 		b.Conveyor.Output = task.ConveyorDirection
 		b.Conveyor.Input = task.ConveyorDirection.Opposite()
 	}

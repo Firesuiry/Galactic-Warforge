@@ -165,3 +165,33 @@ describe('warfare command registration', () => {
     assert.match(landingHelp, /landing_start <task_force_id> <planet_id>/);
   });
 });
+
+
+describe('personal mecha job help and registration', () => {
+  for (const [name, usage] of [
+    ['mine_resource', 'mine_resource <executor_id> <resource_id> <quantity>'],
+    ['craft_item', 'craft_item <executor_id> <recipe_id> <quantity>'],
+    ['cancel_mecha_job', 'cancel_mecha_job <executor_id>'],
+  ]) {
+    it(`${name} exposes dedicated help and --help without submitting commands`, async () => {
+      assert.equal(typeof COMMANDS[name]?.handler, 'function');
+      for (const command of [`help ${name}`, `${name} --help`]) {
+        const out = await dispatch(command, { currentPlayer: 'p1', rl: {} });
+        assert.ok(out.includes(usage), out);
+        assert.doesNotMatch(out, /missing authenticated player_id/);
+      }
+    });
+  }
+  it('craft help explains that quantity counts recipe batches', async () => {
+    assert.match(await cmdHelp(['craft_item']), /批数/);
+  });
+});
+
+
+describe('splitter public command', () => {
+  it('registers and documents full port configuration', async () => {
+    assert.ok(COMMANDS.configure_splitter);
+    const help = await dispatch('help configure_splitter', { currentPlayer: 'p1', rl: {} });
+    for (const option of ['--inputs', '--outputs', '--input-priority', '--output-priority', '--filters']) assert.ok(help.includes(option));
+  });
+});

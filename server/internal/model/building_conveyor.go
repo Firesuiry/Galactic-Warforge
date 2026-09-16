@@ -23,9 +23,14 @@ func SyncBuildingConveyor(building *Building) {
 		building.Conveyor = nil
 		return
 	}
+	if building.Type == BuildingTypeSplitter && building.Splitter == nil {
+		building.Splitter = NewSplitterState()
+	}
 	if building.Conveyor == nil {
 		building.Conveyor = defaultConveyorState(building.Runtime)
-		return
+	}
+	if building.Splitter != nil {
+		building.Conveyor.Input, building.Conveyor.Output = ConveyorAuto, ConveyorAuto
 	}
 	if !building.Conveyor.Output.Valid() {
 		output := ConveyorEast

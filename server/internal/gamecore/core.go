@@ -723,6 +723,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execScanSystem(qr.PlayerID, cmd)
 		case model.CmdScanPlanet:
 			res, evts = gc.execScanPlanet(qr.PlayerID, cmd)
+		case model.CmdConfigureSplitter:
+			res, evts = gc.execConfigureSplitter(gc.world, qr.PlayerID, cmd)
 		case model.CmdBuild:
 			res, evts = gc.execBuild(gc.world, qr.PlayerID, cmd)
 		case model.CmdMove:
@@ -731,6 +733,12 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execAttack(gc.world, qr.PlayerID, cmd)
 		case model.CmdRefuelMecha:
 			res, evts = gc.execRefuelMecha(gc.world, qr.PlayerID, cmd)
+		case model.CmdMineResource:
+			res, evts = gc.execMineResource(gc.world, qr.PlayerID, cmd)
+		case model.CmdCraftItem:
+			res, evts = gc.execCraftItem(gc.world, qr.PlayerID, cmd)
+		case model.CmdCancelMechaJob:
+			res, evts = gc.execCancelMechaJob(gc.world, qr.PlayerID, cmd)
 		case model.CmdProduce:
 			res, evts = gc.execProduce(gc.world, qr.PlayerID, cmd)
 		case model.CmdDeploySquad:

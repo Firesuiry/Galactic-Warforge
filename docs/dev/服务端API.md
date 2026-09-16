@@ -869,6 +869,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `visible` / `explored`: 当前窗口内的迷雾切片
   - `buildings` / `units` / `resources`: 当前窗口内可见实体
   - `buildings` 为 `model.Building` 直出：传送带类建筑（`conveyor_belt_*`）携带 `conveyor`（`input` / `output` / `max_stack` / `throughput`），其中 `conveyor.buffer` 为带内物品堆数组（`item_id` / `quantity`，队首 = 即将送出的一端，前端物流动画依赖该字段）；采集类建筑 `runtime.functions.collect.resource_kind` 为正在采集的资源种类（由服务端按脚下矿脉同步）
+  - 四向分流器 `type=splitter` 携带 `splitter` 配置和统计，真实物品仍放在 `conveyor.buffer`；默认西侧输入、东/南/北侧输出。独立 Transport runtime 为 6 件/tick、缓存 24 件；运行时参加同一皮带结算，刚收到的物品不会在同 tick 再穿过下一节点。暂停时不收发，配置不会删除缓存物品。
+  - `splitter.input_directions` / `output_directions` 是互斥且各非空的四方向数组；未列出的口关闭。`input_priority` / `output_priority` 可选且必须属于对应数组，`output_filters` 为可选的 `{输出方向: item_id}` 映射。设过滤的口只允许该物品，未设置过滤的出口可放行任意物品；过滤不改变缓存中的真实物品。
+  - `splitter.input_cursor` / `output_cursor` 是对应方向数组中下一轮开始考察的零基索引，范围分别为 `[0, len(input_directions))` / `[0, len(output_directions))`。每次实际接收/输出后移到所用口下一索引；不配置优先口时按游标轮换，配置优先口时先尝试优先口、其余合格口再按游标考察。`transferred_items` 累计皮带结算中从该分流器实际送出的物品件数（仅输入不增加）；`last_transfer_tick` 是最近实际输出的 tick，尚未输出时为 0。配置成功将两个游标重置为 0，但保留累计件数、最近输出 tick 和缓存；快照深复制配置/过滤并保留统计与游标。
   - 分拣器建筑携带 `sorter`：`input_directions` / `output_directions` / `speed` / `range` / `filter`。仅 `runtime.state = running` 时搬运，暂停、缺电时不搬运。当前分拣器连接同一玩家的传送带，按配置方向、范围、过滤器及目标容量搬运。
   - `sorter.last_transfer` 仅在发生实际搬运后出现：`tick` 为结算 tick，`sequence` 为该分拣器递增的搬运序号，`source_id` / `target_id` 为实际源/目标建筑 ID，`source_position` / `target_position` 为对应位置（`x` / `y` / `z`），`item_id` / `quantity` 为该次实际搬运物品及数量。同 tick 多次搬运时保留最后一次；空转或停机保留旧记录，客户端须结合 tick、sequence 和运行状态停止过期动画，不能将存在分拣器或 `running` 等同于正在搬货。该结构同时通过场景 buildings、inspect 和快照输出。
   - `resources[]` 中 `remaining=0`（或 `max_amount=0`）的资源点会携带 `depleted: true` 标记；枯竭资源点仍保留在输出中（前端可淡化显示），且不阻碍建造——任何建筑都可直接建在枯竭点上，`requires_resource_node` 的采集建筑建在枯竭点上则采不到资源
@@ -1617,7 +1620,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1691,8 +1694,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 }
 ```
 - 玩家机甲：星球 `Unit` 的 `type=executor` 同时承担建造和机甲操作，`mecha` 返回 `energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick`。初始核心 100，初始护盾容量 0；`mecha_core` 每级核心容量 +10，`mecha_engine` 每级移动范围 +2（基础 12），`energy_shield` 每级护盾容量 +20。研究提高上限但不免费补充能量或护盾。距最近受击满 10 tick 后每 tick 消耗 1 核心能量恢复最多 2 护盾，零能量时停止恢复。`research_speed` 科技效果在研究矩阵实际吞吐中生效，不重复叠加。
-- `mecha_state_changed` 事件仅对拥有者发送，payload 为 `entity_id` + 完整 `mecha`，以及 `move_range` / `attack` / `defense` / `attack_range`；科技仅改变派生属性时也发送，重复同步不重复发送。燃料补充时另带 `fuel_item_id` / `fuel_used`。快照和恢复深复制机甲状态。`mecha` 可生产战斗单位与玩家 `executor` 是不同单位；此机甲核心闭环不代表已实现飞行、跃迁和手动采集。
+- `mecha_state_changed` 事件仅对拥有者发送，payload 为 `entity_id` + 完整 `mecha`，以及 `move_range` / `attack` / `defense` / `attack_range`；科技仅改变派生属性时也发送，重复同步不重复发送。燃料补充时另带 `fuel_item_id` / `fuel_used`。快照和恢复深复制机甲状态。`mecha` 可生产战斗单位与玩家 `executor` 是不同单位；手动采集、个人制造和电网充电规则见下文；飞行、跃迁、建造无人机、装备和死亡恢复仍未完成。
 - `/catalog.items[].mecha_fuel_energy`：煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000；字段不存在或为 0 的物品不可用于机甲燃料。
+- `/catalog.recipes[].handcraft_allowed` 为配方是否允许个人制造的布尔值；可手造不等于科技已解锁，仍须满足该配方的科技规则。当前标记八种：`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`。不满足手造资格或含非固体输入/输出的配方不能通过 `craft_item` 执行。
+- `Unit.mecha.job` 存在时表示当前唯一个人任务：`kind=mine|craft`、`resource_id` 或 `recipe_id`、`remaining_ticks`、`ticks_per_batch`、`remaining_batches`、`completed_batches`、`energy_per_tick`、`state=running|no_energy|out_of_range`、`reserved_inputs`（未完成制造批次的预留原料）。任务完成/取消/死亡后移除；存档、查询和恢复深复制任务及预留原料，恢复不重复扣料。
+- 采矿/制造每推进一个 tick 消耗 1 核心能量。核心不足时暂停；采矿距离超过 2 个球面地块时暂停且不扣能量，回到范围或补能后自动继续。每批完成向玩家 `inventory` 入库并发 `resource_changed`，包含 `entity_id`、`items`、`job_kind`、`completed_batches`；采矿另含 `resource_id` 和矿点 `remaining`。进度、暂停或结束同时通过 `mecha_state_changed` 返回机甲完整状态。
+- 电网自动充电无需命令：存活玩家自己的存活 `executor` 在运行中的自有 `wireless_power_tower` 6 格范围内，最多补 10 核心能量/tick；无线塔自身耗电 1/tick。`tesla_tower` 范围 4 格，最多补 2/tick。范围按球面距离计算，可跨面。仅取塔所在连通电网的真实剩余供电，优先保留建筑用电与蓄电器实际充电，不使用其他独立电网发电或玩家积存 `energy` 代替；停塔、缺电、核心满、超范围或死亡时不充。
+- 同一 tick 先处理燃料/护盾及个人任务，再处理电网充电；按剩余核心缺口补充，多机甲共享单塔速率且单个机甲每 tick 只从一塔受电，优先无线塔。电网、蓄电器与玩家能源结算统一记账，充入机甲/蓄电器的电量不会再次计入玩家余额。充电事件为 `mecha_state_changed`，另带 `charging_building_id`、`charging_network_id`、`grid_charge`（本次实际补能）。这些事件字段不是持久的充电状态。
 
 - 命令字段约束:
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
@@ -1710,8 +1718,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，precision_drone 仍要求 Mk.III。Mk.II/III 吞吐 2/3、仓储容量 48/72、每 tick 功耗 8/12、建造成本分别 240矿120能/360矿180能。所有生产模块的 throughput 现在真实缩短周期：ceil(增产剂调整后的时长 / max(1, throughput))，最短 1 tick，输入输出数量不乘倍数；生产统计 effective_throughput 按最终时长计算，避免重复计速。
   - `refuel_mecha`：`target.entity_id` 必须为自己的 `executor`，`payload.item_id` + 正整数 `payload.quantity` 必填。从玩家库存扣除燃料，按核心缺口限制实际消耗件数；仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品。核心已满或仍有 `fuel_energy` 缓存时拒绝。高热值燃料的多余能量留在机甲缓存，后续每 tick 最多补充 10 核心能量，不丢弃多余热值。事件返回实际 `fuel_used`。
+  - `mine_resource`：`target.entity_id` 为自己的存活 `executor`；必填非空 `payload.resource_id` 和正整数 `payload.quantity`（采集件数）。只支持 `behavior=finite` 且物品 `form=solid` 的矿点，启动时须在 2 格球面距离内且矿点余量不少于请求件数。每 10 tick 采出 1 件到玩家背包，并扣矿点实际余量；不会立刻领取整批或从建筑提货。已有个人任务时拒绝新任务；矿点被耗尽时自动结束，竞采不会把余量扣成负数。
+  - `craft_item`：`target.entity_id` 为自己的存活 `executor`；必填非空 `payload.recipe_id` 和正整数 `payload.quantity`（配方批数，不是产物件数）。配方须 `handcraft_allowed=true`、科技可用且全部输入/输出为固体。启动时一次从玩家背包扣留全部请求批次的输入，材料不足原子失败；每批耗时 `max(1, recipe.duration)` tick、每 tick 消耗 1 核心能量，整批产物及副产物进入背包。禁止与采矿或另一制造任务同时运行；不自动递归制造前置材料。
+  - `cancel_mecha_job`：只需自己存活 `executor` 的 `target.entity_id`，无 payload。取消当前任务，将尚未完成批次的预留原料返还玩家背包（包含进行中批次）；已完成产物保留，已消耗核心能量不返还。机甲死亡路径也会执行同一退款逻辑且只退一次；无任务时返回 `INVALID_TARGET`。
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，当前接受 `worker`、`soldier`、`mecha`；机甲生产成本为 180 矿物 / 80 能量。
   - `upgrade` / `demolish`：`target.entity_id` 必填
+  - `configure_splitter`：`target.entity_id` 为自己拥有且已初始化的 `splitter`。必填 `payload.input_directions` / `output_directions`（数组）；仅允许 `north|east|south|west`，每组至少一个、所有端口不重复且输入输出互斥，不接受 `auto`。可选 `input_priority` / `output_priority`（所属方向或空字符串）和 `output_filters`（输出方向到有效物品 ID 的对象）。**完整替换配置**：省略优先级或传 `""` 会清除旧优先级；省略过滤或传 `{}` 会清除全部旧过滤，删除单口过滤需提交不含该口的完整过滤对象，不能用空物品 ID 代替删除。验证失败不改变原配置、缓存、游标或统计；成功发拥有者可见的 `building_state_changed`，payload 含 `entity_id` 和完整 `splitter`。
+  - 分流器优先级为“可用优先”：优先入口无货时允许其它入口供货；优先出口缺连接、满载或不允许当前物品时，尝试其它有容量且满足自身过滤条件的出口。所有合格出口均堵塞时物品留在原缓存，不丢弃、不复制，也不绕过过滤。过滤口与未过滤口同时存在时，未过滤口也能接收该过滤物品；若需要该物品优先进过滤口，应设置该出口优先级。方向按球面邻接转换，不能简单用 x/y 差替代跨面端口关系。
   - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`
   - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `payload.item_id` + `payload.mode` + `payload.local_storage` 必填；`payload.scope` 取 `planetary|interstellar`；`payload.mode` 取 `none|supply|demand|both`；`interstellar` 作用域只允许星际物流站
   - `cancel_construction` / `restore_construction`：`payload.task_id` 必填

@@ -965,6 +965,7 @@ export function shouldRefreshPlanet(event: GameEventDetail, planetId: string) {
     "entity_moved",
     "damage_applied",
     "mecha_state_changed",
+    "resource_changed",
     "entity_destroyed",
     "building_state_changed",
     "construction_paused",
@@ -992,6 +993,8 @@ export function shouldRefreshAlerts(event: GameEventDetail) {
 
 export function shouldRefreshSummary(event: GameEventDetail) {
   return [
+    "resource_changed",
+    "mecha_state_changed",
     "tick_completed",
     "research_completed",
     "threat_level_changed",

@@ -42,6 +42,8 @@ export type {
 export type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
+  SplitterConfig,
+  CardinalDirection,
   GroundTaskForceOrder,
   OrbitalSupportMode,
   RayReceiverMode,
@@ -88,6 +90,11 @@ export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;
 export const cmdMove = client.cmdMove;
 export const cmdProduce = client.cmdProduce;
 export const cmdRefuelMecha = client.cmdRefuelMecha;
+export const cmdMineResource = client.cmdMineResource;
+export const cmdCraftItem = client.cmdCraftItem;
+export const cmdCancelMechaJob = client.cmdCancelMechaJob;
+export const cmdConfigureSplitter = client.cmdConfigureSplitter;
+
 export const cmdQueueMilitaryProduction = client.cmdQueueMilitaryProduction;
 export const cmdRefitUnit = client.cmdRefitUnit;
 export const cmdRestoreConstruction = client.cmdRestoreConstruction;

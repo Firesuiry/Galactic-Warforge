@@ -2,15 +2,16 @@ package model
 
 // RecipeDefinition captures a production recipe.
 type RecipeDefinition struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	Inputs        []ItemAmount   `json:"inputs"`
-	Outputs       []ItemAmount   `json:"outputs"`
-	Byproducts    []ItemAmount   `json:"byproducts,omitempty"`
-	Duration      int            `json:"duration"`
-	EnergyCost    int            `json:"energy_cost"`
-	BuildingTypes []BuildingType `json:"building_types"`
-	TechUnlock    []string       `json:"tech_unlock,omitempty"`
+	HandcraftAllowed bool           `json:"handcraft_allowed"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Inputs           []ItemAmount   `json:"inputs"`
+	Outputs          []ItemAmount   `json:"outputs"`
+	Byproducts       []ItemAmount   `json:"byproducts,omitempty"`
+	Duration         int            `json:"duration"`
+	EnergyCost       int            `json:"energy_cost"`
+	BuildingTypes    []BuildingType `json:"building_types"`
+	TechUnlock       []string       `json:"tech_unlock,omitempty"`
 }
 
 // AllOutputs returns the main outputs plus byproducts.
@@ -26,41 +27,45 @@ func (r RecipeDefinition) AllOutputs() []ItemAmount {
 
 var recipeCatalog = map[string]RecipeDefinition{
 	"smelt_iron": {
-		ID:            "smelt_iron",
-		Name:          "Smelt Iron",
-		Inputs:        []ItemAmount{{ItemID: ItemIronOre, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}},
-		Duration:      60,
-		EnergyCost:    1,
-		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
+		HandcraftAllowed: true,
+		ID:               "smelt_iron",
+		Name:             "Smelt Iron",
+		Inputs:           []ItemAmount{{ItemID: ItemIronOre, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}},
+		Duration:         60,
+		EnergyCost:       1,
+		BuildingTypes:    []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
 	},
 	"smelt_copper": {
-		ID:            "smelt_copper",
-		Name:          "Smelt Copper",
-		Inputs:        []ItemAmount{{ItemID: ItemCopperOre, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemCopperIngot, Quantity: 1}},
-		Duration:      60,
-		EnergyCost:    1,
-		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
+		HandcraftAllowed: true,
+		ID:               "smelt_copper",
+		Name:             "Smelt Copper",
+		Inputs:           []ItemAmount{{ItemID: ItemCopperOre, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemCopperIngot, Quantity: 1}},
+		Duration:         60,
+		EnergyCost:       1,
+		BuildingTypes:    []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
 	},
 	"smelt_stone": {
-		ID:            "smelt_stone",
-		Name:          "Smelt Stone",
-		Inputs:        []ItemAmount{{ItemID: ItemStoneOre, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemStoneBrick, Quantity: 1}},
-		Duration:      50,
-		EnergyCost:    1,
-		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
-		TechUnlock:    []string{"smelting"},
+		HandcraftAllowed: true,
+		ID:               "smelt_stone",
+		Name:             "Smelt Stone",
+		Inputs:           []ItemAmount{{ItemID: ItemStoneOre, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemStoneBrick, Quantity: 1}},
+		Duration:         50,
+		EnergyCost:       1,
+		BuildingTypes:    []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
+		TechUnlock:       []string{"smelting"},
 	},
 	"smelt_magnet": {
-		ID:            "smelt_magnet",
-		Name:          "Smelt Magnet",
-		Inputs:        []ItemAmount{{ItemID: ItemIronOre, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemMagnet, Quantity: 1}},
-		Duration:      60,
-		EnergyCost:    1,
-		BuildingTypes: []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
+		HandcraftAllowed: true,
+		ID:               "smelt_magnet",
+		Name:             "Smelt Magnet",
+		Inputs:           []ItemAmount{{ItemID: ItemIronOre, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemMagnet, Quantity: 1}},
+		Duration:         60,
+		EnergyCost:       1,
+		BuildingTypes:    []BuildingType{BuildingTypeArcSmelter, BuildingTypePlaneSmelter, BuildingTypeNegentropySmelter},
 	},
 	"smelt_silicon": {
 		ID:            "smelt_silicon",
@@ -83,13 +88,14 @@ var recipeCatalog = map[string]RecipeDefinition{
 		TechUnlock:    []string{"smelting"},
 	},
 	"coal_to_graphite": {
-		ID:            "coal_to_graphite",
-		Name:          "Coal To Energetic Graphite",
-		Inputs:        []ItemAmount{{ItemID: ItemCoal, Quantity: 2}},
-		Outputs:       []ItemAmount{{ItemID: ItemEnergeticGraphite, Quantity: 1}},
-		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
-		TechUnlock:    []string{"basic_fuels"},
+		HandcraftAllowed: true,
+		ID:               "coal_to_graphite",
+		Name:             "Coal To Energetic Graphite",
+		Inputs:           []ItemAmount{{ItemID: ItemCoal, Quantity: 2}},
+		Outputs:          []ItemAmount{{ItemID: ItemEnergeticGraphite, Quantity: 1}},
+		Duration:         30,
+		BuildingTypes:    []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
+		TechUnlock:       []string{"basic_fuels"},
 	},
 	"oil_fractionation": {
 		ID:            "oil_fractionation",
@@ -161,13 +167,14 @@ var recipeCatalog = map[string]RecipeDefinition{
 		TechUnlock:    []string{"chemical_processing"},
 	},
 	"gear": {
-		ID:            "gear",
-		Name:          "Gear",
-		Inputs:        []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemGear, Quantity: 1}},
-		Duration:      20,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
-		TechUnlock:    []string{"basic_components"},
+		HandcraftAllowed: true,
+		ID:               "gear",
+		Name:             "Gear",
+		Inputs:           []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemGear, Quantity: 1}},
+		Duration:         20,
+		BuildingTypes:    []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
+		TechUnlock:       []string{"basic_components"},
 	},
 	"motor": {
 		ID:            "motor",
@@ -179,20 +186,22 @@ var recipeCatalog = map[string]RecipeDefinition{
 		TechUnlock:    []string{"basic_components"},
 	},
 	"circuit_board": {
-		ID:            "circuit_board",
-		Name:          "Circuit Board",
-		Inputs:        []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}, {ItemID: ItemCopperIngot, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemCircuitBoard, Quantity: 1}},
-		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
+		HandcraftAllowed: true,
+		ID:               "circuit_board",
+		Name:             "Circuit Board",
+		Inputs:           []ItemAmount{{ItemID: ItemIronIngot, Quantity: 1}, {ItemID: ItemCopperIngot, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemCircuitBoard, Quantity: 1}},
+		Duration:         30,
+		BuildingTypes:    []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 	},
 	"magnetic_coil": {
-		ID:            "magnetic_coil",
-		Name:          "Magnetic Coil",
-		Inputs:        []ItemAmount{{ItemID: ItemMagnet, Quantity: 2}, {ItemID: ItemCopperIngot, Quantity: 1}},
-		Outputs:       []ItemAmount{{ItemID: ItemMagneticCoil, Quantity: 2}},
-		Duration:      30,
-		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
+		HandcraftAllowed: true,
+		ID:               "magnetic_coil",
+		Name:             "Magnetic Coil",
+		Inputs:           []ItemAmount{{ItemID: ItemMagnet, Quantity: 2}, {ItemID: ItemCopperIngot, Quantity: 1}},
+		Outputs:          []ItemAmount{{ItemID: ItemMagneticCoil, Quantity: 2}},
+		Duration:         30,
+		BuildingTypes:    []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 	},
 	"microcrystalline_component": {
 		ID:            "microcrystalline_component",

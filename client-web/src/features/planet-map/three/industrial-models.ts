@@ -282,6 +282,22 @@ export class IndustrialModels {
     for (const x of [-0.22, 0.22]) for (const z of [-0.33, 0.33]) this.box(group, 'graphite', [0.075, 0.15, 0.09], [x, 0.075, z]);
   }
 
+  private splitter(group: THREE.Group, light: Finish) {
+    // Low four-port hub; the surface conveyor network provides the configured
+    // input/output branches beneath the central housing.
+    this.box(group, 'graphite', [.48, .13, .48], [0, .19, 0]);
+    for (const rotation of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const port = new THREE.Group(); port.rotation.y = rotation; group.add(port);
+      for (const side of [-1, 1]) this.box(port, 'ceramic', [.06, .15, .24], [side * .23, .25, .31]);
+      this.box(port, 'copper', [.48, .055, .08], [0, .35, .4]);
+    }
+    this.part(group, 'cylinder', 'ceramic', [.38, .14, .38], [0, .4, 0]);
+    this.part(group, 'cylinder', 'graphite', [.25, .055, .25], [0, .49, 0]);
+    this.ring(group, light, .13, .525);
+    this.box(group, 'alloy', [.07, .018, .22], [0, .53, 0]);
+    this.box(group, 'alloy', [.22, .018, .07], [0, .53, 0]);
+  }
+
   private sorter(group: THREE.Group, light: Finish) {
     this.part(group, 'cylinder', 'graphite', [0.34, 0.1, 0.34], [0, 0.16, 0]);
     const joint = (parent: THREE.Object3D, name: string) => {
@@ -357,7 +373,7 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-${type}`;
     const light: Finish = own ? 'blue' : 'orange', armor: Finish = own ? 'ceramic' : 'hostile';
-    if (type !== 'foundation' && !/conveyor/.test(type)) this.foundation(group, light);
+    if (type !== 'foundation' && type !== 'splitter' && !/conveyor/.test(type)) this.foundation(group, light);
     if (type === 'foundation') {
       this.box(group, 'alloy', [0.98, 0.035, 0.98], [0, 0.012, 0]);
       for (const edge of [-1, 1]) {
@@ -365,6 +381,7 @@ export class IndustrialModels {
         this.box(group, 'graphite', [0.018, 0.008, 0.96], [edge * 0.46, 0.034, 0]);
       }
     } else if (/conveyor/.test(type)) this.conveyor(group, light);
+    else if (type === 'splitter') this.splitter(group, light);
     else if (/sorter/.test(type)) this.sorter(group, light);
     else if (/wind/.test(type)) this.turbine(group, light);
     else if (type === 'oil_refinery') this.refinery(group, light);

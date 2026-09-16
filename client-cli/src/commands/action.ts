@@ -30,6 +30,13 @@ import {
   cmdLandingStart as apiLandingStart,
   cmdTransferItem as apiTransferItem,
   cmdRefuelMecha as apiRefuelMecha,
+  cmdMineResource as apiMineResource,
+  cmdCraftItem as apiCraftItem,
+  cmdCancelMechaJob as apiCancelMechaJob,
+  cmdConfigureSplitter as apiConfigureSplitter,
+  type SplitterConfig,
+  type CardinalDirection,
+
   cmdSwitchActivePlanet as apiSwitchActivePlanet,
   cmdSetRayReceiverMode as apiSetRayReceiverMode,
   cmdQueueMilitaryProduction as apiQueueMilitaryProduction,
@@ -924,4 +931,61 @@ export async function cmdDemolishDyson(args: string[]): Promise<string> {
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
+}
+
+export async function cmdMineResource(args: string[]): Promise<string> {
+  if (args.includes('--help') || args.length !== 3) return fmtError('Usage: mine_resource <executor_id> <resource_id> <quantity>');
+  const quantity = parseIntegerArg(args[2]);
+  if (!/^\+?[1-9]\d*$/.test(args[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
+  try { return fmtCommandResponse(await apiMineResource(args[0], args[1], quantity)); }
+  catch (error) { return fmtError(toErrorMessage(error)); }
+}
+
+export async function cmdCraftItem(args: string[]): Promise<string> {
+  if (args.includes('--help') || args.length !== 3) return fmtError('Usage: craft_item <executor_id> <recipe_id> <quantity>');
+  const quantity = parseIntegerArg(args[2]);
+  if (!/^\+?[1-9]\d*$/.test(args[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
+  try { return fmtCommandResponse(await apiCraftItem(args[0], args[1], quantity)); }
+  catch (error) { return fmtError(toErrorMessage(error)); }
+}
+
+export async function cmdCancelMechaJob(args: string[]): Promise<string> {
+  if (args.includes('--help') || args.length !== 1) return fmtError('Usage: cancel_mecha_job <executor_id>');
+  try { return fmtCommandResponse(await apiCancelMechaJob(args[0])); }
+  catch (error) { return fmtError(toErrorMessage(error)); }
+}
+
+export async function cmdConfigureSplitter(args: string[]): Promise<string> {
+  const usage = 'Usage: configure_splitter <building_id> --inputs west --outputs east,south,north [--input-priority west] [--output-priority east] [--filters east:iron_ore,south:copper_ore]';
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length !== 1) return fmtError(usage);
+  try {
+    const allowed = new Set(['inputs', 'outputs', 'input-priority', 'output-priority', 'filters']);
+    for (const [name, value] of Object.entries(parsed.options)) {
+      if (!allowed.has(name) || typeof value !== 'string') throw new Error(`无效选项 --${name}`);
+    }
+    const directions = (name: string): CardinalDirection[] => {
+      const values = parseCSVList(getStringOption(parsed, name), name);
+      if (values.some(value => !['north', 'east', 'south', 'west'].includes(value)) || new Set(values).size !== values.length) {
+        throw new Error(`${name} 必须是不重复的 north,east,south,west 方向`);
+      }
+      return values as CardinalDirection[];
+    };
+    const config: SplitterConfig = { input_directions: directions('inputs'), output_directions: directions('outputs'), output_filters: {} };
+    if (config.input_directions.some(direction => config.output_directions.includes(direction))) throw new Error('输入与输出端口不能重叠');
+    for (const role of ['input', 'output'] as const) {
+      const priority = getStringOption(parsed, `${role}-priority`);
+      if (priority !== undefined && !config[`${role}_directions`].includes(priority as CardinalDirection)) throw new Error(`${role}-priority 必须属于对应端口`);
+      config[`${role}_priority`] = priority as CardinalDirection | undefined;
+    }
+    const filters = getStringOption(parsed, 'filters');
+    if (filters) for (const pair of filters.split(',')) {
+      const [direction, item, extra] = pair.split(':');
+      if (!config.output_directions.includes(direction as CardinalDirection) || !item?.trim() || extra !== undefined || config.output_filters![direction as CardinalDirection]) {
+        throw new Error('filters 必须为不重复的输出方向:item_id');
+      }
+      config.output_filters![direction as CardinalDirection] = item.trim();
+    }
+    return fmtCommandResponse(await apiConfigureSplitter(parsed.positionals[0], config));
+  } catch (error) { return fmtError(toErrorMessage(error)); }
 }

@@ -59,6 +59,11 @@ import {
   cmdTheaterSetObjective,
   cmdTransfer,
   cmdRefuelMecha,
+  cmdMineResource,
+  cmdCraftItem,
+  cmdCancelMechaJob,
+  cmdConfigureSplitter,
+
   cmdSwitchActivePlanet,
   cmdSetRayReceiverMode,
   cmdLaunchRocket,
@@ -145,6 +150,11 @@ export const COMMANDS: Record<string, CommandEntry> = {
   landing_start: { handler: cmdLandingStart },
   transfer: { handler: cmdTransfer },
   refuel_mecha: { handler: cmdRefuelMecha },
+  mine_resource: { handler: cmdMineResource },
+  craft_item: { handler: cmdCraftItem },
+  cancel_mecha_job: { handler: cmdCancelMechaJob },
+  configure_splitter: { handler: cmdConfigureSplitter },
+
   switch_active_planet: { handler: cmdSwitchActivePlanet },
   set_ray_receiver_mode: { handler: cmdSetRayReceiverMode },
   launch_rocket: { handler: cmdLaunchRocket },

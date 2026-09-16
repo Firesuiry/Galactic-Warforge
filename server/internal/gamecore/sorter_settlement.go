@@ -161,7 +161,7 @@ func sorterFindConveyor(
 		if target == nil || target.OwnerID != sorter.OwnerID {
 			return "", false
 		}
-		if target.Conveyor == nil {
+		if !conveyorActive(target) || target.Splitter != nil {
 			return "", false
 		}
 		if forInput {

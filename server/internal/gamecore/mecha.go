@@ -7,7 +7,7 @@ import (
 )
 
 func mechaStateEvent(unit *model.Unit) *model.GameEvent {
-	snapshot := *unit.Mecha
+	snapshot := *unit.Mecha.Clone()
 	return &model.GameEvent{EventType: model.EvtMechaStateChanged, VisibilityScope: unit.OwnerID, Payload: map[string]any{"entity_id": unit.ID, "mecha": snapshot, "move_range": unit.MoveRange, "attack": unit.Attack, "defense": unit.Defense, "attack_range": unit.AttackRange}}
 }
 
@@ -46,6 +46,7 @@ func settleMechas(ws *model.WorldState) []*model.GameEvent {
 			events = append(events, mechaStateEvent(unit))
 		}
 	}
+	events = append(events, settleMechaJobs(ws)...)
 	return events
 }
 

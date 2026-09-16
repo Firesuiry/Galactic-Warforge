@@ -2,18 +2,52 @@ package model
 
 import "sort"
 
+// MechaJob is one asynchronous personal task. ReservedInputs contains only
+// uncompleted craft batches, including the batch currently in progress.
+type MechaJob struct {
+	Kind             string       `json:"kind"`
+	ResourceID       string       `json:"resource_id,omitempty"`
+	RecipeID         string       `json:"recipe_id,omitempty"`
+	RemainingTicks   int          `json:"remaining_ticks"`
+	TicksPerBatch    int          `json:"ticks_per_batch"`
+	RemainingBatches int          `json:"remaining_batches"`
+	CompletedBatches int          `json:"completed_batches"`
+	EnergyPerTick    int          `json:"energy_per_tick"`
+	State            string       `json:"state"`
+	ReservedInputs   []ItemAmount `json:"reserved_inputs,omitempty"`
+}
+
+func (j *MechaJob) Clone() *MechaJob {
+	if j == nil {
+		return nil
+	}
+	out := *j
+	out.ReservedInputs = append([]ItemAmount(nil), j.ReservedInputs...)
+	return &out
+}
+
 // MechaState is the persistent core of the player's executor. Fuel energy is
 // retained between ticks, so even a high energy fuel rod never loses its excess.
 type MechaState struct {
-	Energy              int   `json:"energy"`
-	MaxEnergy           int   `json:"max_energy"`
-	FuelEnergy          int   `json:"fuel_energy"`
-	Shield              int   `json:"shield"`
-	MaxShield           int   `json:"max_shield"`
-	AttackEnergyCost    int   `json:"attack_energy_cost"`
-	MoveEnergyCost      int   `json:"move_energy_cost"`
-	ShieldRechargeDelay int64 `json:"shield_recharge_delay"`
-	LastHitTick         int64 `json:"last_hit_tick"`
+	Job                 *MechaJob `json:"job,omitempty"`
+	Energy              int       `json:"energy"`
+	MaxEnergy           int       `json:"max_energy"`
+	FuelEnergy          int       `json:"fuel_energy"`
+	Shield              int       `json:"shield"`
+	MaxShield           int       `json:"max_shield"`
+	AttackEnergyCost    int       `json:"attack_energy_cost"`
+	MoveEnergyCost      int       `json:"move_energy_cost"`
+	ShieldRechargeDelay int64     `json:"shield_recharge_delay"`
+	LastHitTick         int64     `json:"last_hit_tick"`
+}
+
+func (m *MechaState) Clone() *MechaState {
+	if m == nil {
+		return nil
+	}
+	out := *m
+	out.Job = m.Job.Clone()
+	return &out
 }
 
 func NewMechaState() *MechaState {

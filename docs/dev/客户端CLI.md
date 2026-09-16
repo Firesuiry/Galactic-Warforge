@@ -76,6 +76,7 @@
 | `produce`                     | `<entity_id> <unit_type>`                                                                                                                                                      | 按服务端 `/catalog.world_units` 生产公开单位 |
 | `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
 | `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
+| `configure_splitter` | `<building_id> --inputs <方向列表> --outputs <方向列表> [--input-priority <方向>] [--output-priority <方向>] [--filters <方向:item_id列表>]` | 完整替换四向分流器端口、优先级与出口过滤；省略可选项会清除旧值 |
 | `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>]` | 配置物流站无人机容量、优先级与星际开关 |
 | `configure_logistics_slot`    | `<building_id> <planetary\|interstellar> <item_id> <none\|supply\|demand\|both> <local_storage>`                                                                               | 配置物流站单物品供需槽位               |
 | `cancel_construction`         | `<task_id>`                                                                                                                                                                    | 取消施工任务                           |
@@ -104,6 +105,9 @@
 | `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid>`                                                                                                                                        | 切换射线接收站模式                     |
 | `transfer`                    | `<building_id> <item_id> <quantity>`                                                                                                                                           | 把玩家背包物品装入建筑本地存储         |
 | `refuel_mecha`                | `<executor_id> <fuel_item_id> <quantity>`                                                                                                                                      | 用目录中声明 `mecha_fuel_energy` 的燃料为玩家机甲补充能源；数量必须为正整数 |
+| `mine_resource` | `<executor_id> <resource_id> <quantity>` | 在 2 格内手动采集有限固体矿点；quantity 为件数 |
+| `craft_item` | `<executor_id> <recipe_id> <quantity>` | 按已解锁、允许手造的配方进行个人制造；quantity 为批数 |
+| `cancel_mecha_job` | `<executor_id>` | 取消个人任务，返还未完成制造批次的预留原料 |
 | `launch_solar_sail`           | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]`                                                                                                         | 从电磁发射器发射已装载的太阳帆         |
 | `launch_rocket`               | `<building_id> <system_id> [--layer <n>] [--count <n>]`                                                                                                                        | 从垂直发射井向戴森层发射已装载的火箭   |
 | `build_dyson_node`            | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]`                                                                                                        | 建戴森球节点                           |
@@ -116,6 +120,10 @@
 
 - `transfer` 是 CLI alias，对应服务端命令 `transfer_item`
 - `refuel_mecha` 只接受 `/catalog` 的 `items[].mecha_fuel_energy > 0` 燃料，CLI 不硬编码燃料 ID；对应服务端命令 `refuel_mecha`
+- `mine_resource` / `craft_item` 的 quantity 必须是正十进制安全整数（可带 `+`），小数、0、负数、科学记数法、尾随字符及超过 JavaScript 安全整数范围的值在本地拒绝。三个命令均支持 `help <命令>` 和 `<命令> --help`。
+- 采矿每 10 tick 得 1 件、每 tick 消耗 1 核心能量；制造按 `/catalog.recipes[].duration` 逐批推进，同样每 tick 消耗 1 核心能量，原料启动时从玩家背包预留。缺能暂停，采矿离开 2 格范围也暂停；补能或回到范围后自动继续。取消不退已消耗能量，只退未完成批次原料；当前只能运行一个个人任务。
+- `/catalog.recipes[].handcraft_allowed=true` 才支持 `craft_item`，仍须满足科技。`resource_id` 应取真实矿点 ID，不能用 `iron_ore` 这类物品 ID 替代矿点 ID；`quantity` 为批数的配方可能每批产出多件。
+- 电网充电自动执行，不增加 CLI 命令：靠近运行中的自有无线输电塔（6 格，最多 10/tick，塔自耗 1/tick）或电力感应塔（4 格，最多 2/tick），使用连通电网在建筑用电和蓄电后剩余的供电。缺电、超距、暂停或核心已满不会充电。
 - `shared-client/src/command-catalog.ts` 中声明的公共 CLI alias 都会自动进入 agent runtime 的命令白名单
 
 ### 调试与运维类
@@ -241,6 +249,31 @@ build 24 12 vertical_launching_silo
 build 10 6 conveyor_belt_mk1 --direction east
 build 11 6 conveyor_belt_mk3 --direction auto
 ```
+
+### 配置四向分流器
+
+建造 `splitter` 后，通过 `configure_splitter` 改端口；需要已解锁对应建筑科技。方向只允许 `north/east/south/west`，列表用逗号分隔，至少保留一个入口和一个出口。每个方向只能出现一次，不能同时输入/输出；未列出的方向关闭。优先方向必须属于对应入口/出口，过滤只能绑定出口。
+
+```text
+configure_splitter b-splitter --inputs west --outputs east,south --output-priority east --filters east:iron_ore,south:copper_ore
+```
+
+该例西侧输入，东侧只输出铁矿、南侧只输出铜矿，优先尝试东侧。东侧堵塞时，铁矿不能改走只允许铜矿的南口。要让南口成为通用旁路，完整重配时省略南口过滤：
+
+```text
+configure_splitter b-splitter --inputs west --outputs east,south --output-priority east --filters east:iron_ore
+```
+
+现在东侧满载、无连接或不接受当前物品时，物品可从有容量的南侧输出；未过滤口接受任意物品，所以铁矿也可以旁路。优先输入同样是可用优先，指定入口无货时其它入口仍可供货。无优先级时按持久游标轮流尝试合格端口；所有合格出口堵塞时货物留在真实缓存中。
+
+**每条命令完整替换前五项配置**，不是补丁。`--input-priority` / `--output-priority` 省略即清除对应旧优先级；`--filters` 省略即清除全部旧过滤。要只清某一出口的过滤，重新列出其它需要保留的过滤即可。例如清除所有过滤及优先级：
+
+```text
+configure_splitter b-splitter --inputs west --outputs east,south,north
+help configure_splitter
+```
+
+查询建筑时，`splitter.input_cursor` / `output_cursor` 是方向数组中的零基轮询索引，实际收货/发货后移到所用口下一索引；`transferred_items` 只累计分流器实际送出件数，`last_transfer_tick` 记录最近发货 tick，初始为 0。重新配置重置游标，保留这两个统计及 `conveyor.buffer` 缓存；默认吞吐 6 件/tick、缓存 24 件。配置命令只修改自己的分流器，参数非法时整条拒绝，原状态不变。
 
 ### 2. 玩法指南中的 31 类核心命令都已有独立 CLI 命令
 

@@ -42,6 +42,12 @@ type CommandStructureSpec struct {
 func commandStructureRegistry() []CommandStructureSpec {
 	return []CommandStructureSpec{
 		{
+			Type:                  CmdConfigureSplitter,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"input_directions", "output_directions"},
+			OptionalPayloadFields: []string{"input_priority", "output_priority", "output_filters"},
+		},
+		{
 			Type:                  CmdBuild,
 			RequiredTargetFields:  []string{"position"},
 			RequiredPayloadFields: []string{"building_type"},
@@ -73,6 +79,20 @@ func commandStructureRegistry() []CommandStructureSpec {
 			Type:                  CmdRefuelMecha,
 			RequiredTargetFields:  []string{"entity_id"},
 			RequiredPayloadFields: []string{"item_id", "quantity"},
+		},
+		{
+			Type:                  CmdMineResource,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"resource_id", "quantity"},
+		},
+		{
+			Type:                  CmdCraftItem,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"recipe_id", "quantity"},
+		},
+		{
+			Type:                 CmdCancelMechaJob,
+			RequiredTargetFields: []string{"entity_id"},
 		},
 		{
 			Type:                  CmdProduce,

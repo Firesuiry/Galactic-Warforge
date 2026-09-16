@@ -1,9 +1,10 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { renderApp, jsonResponse, sseResponse } from "@/test/utils";
 import { useSessionStore } from "@/stores/session";
+import { usePlanetViewStore } from "@/features/planet-map/store";
 
 // jsdom 无法真正运行 Pixi 渲染；行星地图的视觉由 planet-scene 承担，页面级断言只依赖 DOM。
 vi.mock("@/engine/PixiStage", () => ({
@@ -595,7 +596,18 @@ describe("PlanetPage", () => {
     });
   });
 
-  it("默认首屏展示行星工作台与 active planet 上下文", async () => {
+  it("48×32 小地图首屏成功加载工作台，后续周边查询保持在地图内", async () => {
+    const sceneRequests: URL[] = [];
+    const scene = {
+      ...createScenePayload(),
+      map_width: 48,
+      map_height: 32,
+      surface: { topology: "cube_sphere", face_size: 16 },
+      bounds: { x: 0, y: 0, width: 48, height: 32 },
+      terrain: Array.from({ length: 32 }, () => Array(48).fill("buildable")),
+      visible: Array.from({ length: 32 }, () => Array(48).fill(true)),
+      explored: Array.from({ length: 32 }, () => Array(48).fill(true)),
+    };
     const fetchMock = vi.fn(
       (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
@@ -640,7 +652,17 @@ describe("PlanetPage", () => {
           );
         }
         if (url.includes("/world/planets/planet-1-1/scene")) {
-          return Promise.resolve(jsonResponse(createScenePayload()));
+          const request = new URL(url);
+          sceneRequests.push(request);
+          const nearX = Number(request.searchParams.get("near_x") ?? -1);
+          const nearY = Number(request.searchParams.get("near_y") ?? -1);
+          // Match the real gateway: rectangles are clipped, surface centers
+          // outside the atlas fail before any scene can initialize.
+          if (Number(request.searchParams.get("radius")) > 0 &&
+            (nearX < 0 || nearX >= 48 || nearY < 0 || nearY >= 32)) {
+            return Promise.resolve(jsonResponse({ error: "near center outside atlas" }, { status: 400 }));
+          }
+          return Promise.resolve(jsonResponse(scene));
         }
         if (url.endsWith("/world/planets/planet-1-1/runtime")) {
           return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -703,6 +725,16 @@ describe("PlanetPage", () => {
     expect(
       screen.queryByRole("tab", { name: "命令" }),
     ).not.toBeInTheDocument();
+    expect(sceneRequests[0].searchParams.has("near_x")).toBe(false);
+    act(() => usePlanetViewStore.getState().setSceneWindow({ x: 999, y: 999, width: 96, height: 64 }));
+    await waitFor(() => {
+      expect(sceneRequests.some((request) =>
+        request.searchParams.get("near_x") === "24" &&
+        request.searchParams.get("near_y") === "16" &&
+        request.searchParams.get("width") === "48" &&
+        request.searchParams.get("height") === "32",
+      )).toBe(true);
+    });
   });
 
   it("移动端提供工作台、选中对象和活动流切换，并默认保留地图首屏", async () => {
