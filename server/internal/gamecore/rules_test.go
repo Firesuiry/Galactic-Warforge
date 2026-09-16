@@ -108,12 +108,19 @@ func TestBuildingStats(t *testing.T) {
 func TestUnitStats(t *testing.T) {
 	worker := model.UnitStats(model.UnitTypeWorker)
 	soldier := model.UnitStats(model.UnitTypeSoldier)
+	mecha := model.UnitStats(model.UnitTypeMecha)
 
 	if soldier.HP <= worker.HP {
 		t.Errorf("soldier should have more HP than worker")
 	}
 	if soldier.Attack <= worker.Attack {
 		t.Errorf("soldier should have higher attack than worker")
+	}
+	if mecha.HP <= soldier.HP || mecha.Attack <= soldier.Attack || mecha.AttackRange <= soldier.AttackRange {
+		t.Errorf("mecha should be the stronger controllable ground unit: %+v", mecha)
+	}
+	if minerals, energy := model.UnitCost(model.UnitTypeMecha); minerals != 180 || energy != 80 {
+		t.Fatalf("unexpected mecha cost: %d minerals, %d energy", minerals, energy)
 	}
 }
 

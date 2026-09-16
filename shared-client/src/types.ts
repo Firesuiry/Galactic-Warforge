@@ -7,7 +7,7 @@ export interface Position {
 }
 
 export type BuildingType = string;
-export type UnitType = 'worker' | 'soldier' | 'executor';
+export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor';
 
 export type BuildingWorkState = 'idle' | 'running' | 'paused' | 'no_power' | 'error';
 export type ConnectionKind = 'power' | 'transport' | 'logistics';

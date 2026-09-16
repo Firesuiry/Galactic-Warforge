@@ -155,6 +155,7 @@ export const ICON_MAP: Record<string, IconNode> = {
   worker: hardHat,
   soldier: sword,
   executor: bot,
+  mecha: bot,
   // UI 语义别名（chip/Tab/通知等复用同一映射）
   build: hammer,
   tech: atom,

@@ -238,6 +238,7 @@ export const TRANSLATIONS = {
     worker: "工人",
     soldier: "士兵",
     executor: "执行体",
+    mecha: "机甲",
   },
   eventType: {
     command_result: "命令结果",

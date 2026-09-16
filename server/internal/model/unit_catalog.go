@@ -62,6 +62,16 @@ var worldUnitCatalogEntries = []WorldUnitCatalogEntry{
 		QueryScopes:    []string{"planet"},
 		Commands:       []string{"move", "attack"},
 	},
+	{
+		ID:             string(UnitTypeMecha),
+		Name:           "Mecha",
+		Domain:         UnitDomainGround,
+		RuntimeClass:   UnitRuntimeClassWorld,
+		Public:         true,
+		ProductionMode: UnitProductionModeWorldProduce,
+		QueryScopes:    []string{"planet"},
+		Commands:       []string{"move", "attack"},
+	},
 }
 
 // PublicWorldUnitCatalogEntries returns the public world-unit catalog snapshot.

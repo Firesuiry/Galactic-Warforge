@@ -1381,6 +1381,16 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "production_mode": "world_produce",
       "query_scopes": ["planet"],
       "commands": ["move"]
+    },
+    {
+      "id": "mecha",
+      "name": "Mecha",
+      "domain": "ground",
+      "runtime_class": "world_unit",
+      "public": true,
+      "production_mode": "world_produce",
+      "query_scopes": ["planet"],
+      "commands": ["move", "attack"]
     }
   ],
   "warfare": {
@@ -1450,7 +1460,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `recipes` 中当前已补齐 `titanium_crystal`、`titanium_alloy`、`frame_material`、`quantum_chip`、`small_carrier_rocket`、`information_matrix`、`gravity_matrix`、`universe_matrix`、`antimatter_capsule`、`gravity_missile`。
   - `techs` 中 `vertical_launching.unlocks` 会同时包含 `vertical_launching_silo` 与 recipe `small_carrier_rocket`；`high_strength_crystal`、`titanium_alloy`、`lightweight_structure`、`quantum_chip`、`mass_energy_storage`、`gravity_missile` 也都会对外暴露对应 recipe 解锁。
   - `techs` 中 `prototype`、`precision_drone`、`corvette`、`destroyer` 现在都是公开可研究科技；它们解锁的是载荷 recipe，不再污染 `produce` 语义。
-  - `world_units` 是 `produce`、CLI 帮助和 shared-client 共享的 authoritative 世界单位边界；`worker` / `soldier` 继续走 `world_produce`。
+  - `world_units` 是 `produce`、CLI 帮助和 shared-client 共享的 authoritative 世界单位边界；`worker` / `soldier` / `mecha` 继续走 `world_produce`，其中 `mecha` 是星球内可移动、可攻击的重型单位。
   - `warfare.public_blueprints` 是 `deploy_squad` / `commission_fleet` / shared-client 共享的 authoritative 战争蓝图边界；`prototype` / `precision_drone` / `corvette` / `destroyer` 已从固定单位表迁移为预置公开蓝图。
 
 ---
@@ -1684,7 +1694,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；仅传送带类建筑支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（只校验资源点存在，不校验是否枯竭；建在枯竭点上采不到资源），枯竭（`depleted=true`）资源点不阻碍建造，任何建筑都可直接建在枯竭点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里 `matrix_lab` 与 `wind_turbine` / `mining_machine` / `arc_smelter` / `tesla_tower` / `conveyor_belt_mk1` / `sorter_mk1` / `assembling_machine_mk1` 均已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
   - `move`：`target.entity_id` + `target.position` 必填
   - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
-  - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，例如 `worker`、`soldier`
+  - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，当前接受 `worker`、`soldier`、`mecha`；机甲生产成本为 180 矿物 / 80 能量。
   - `upgrade` / `demolish`：`target.entity_id` 必填
   - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`
   - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `payload.item_id` + `payload.mode` + `payload.local_storage` 必填；`payload.scope` 取 `planetary|interstellar`；`payload.mode` 取 `none|supply|demand|both`；`interstellar` 作用域只允许星际物流站

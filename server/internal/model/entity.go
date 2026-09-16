@@ -13,6 +13,7 @@ type UnitType string
 const (
 	UnitTypeWorker   UnitType = "worker"
 	UnitTypeSoldier  UnitType = "soldier"
+	UnitTypeMecha    UnitType = "mecha"
 	UnitTypeExecutor UnitType = "executor"
 )
 
@@ -120,6 +121,14 @@ func UnitStats(utype UnitType) Unit {
 		u.AttackRange = 2
 		u.MoveRange = 2
 		u.VisionRange = 5
+	case UnitTypeMecha:
+		u.MaxHP = 240
+		u.HP = u.MaxHP
+		u.Attack = 28
+		u.Defense = 12
+		u.AttackRange = 4
+		u.MoveRange = 3
+		u.VisionRange = 7
 	case UnitTypeExecutor:
 		u.MaxHP = 120
 		u.HP = u.MaxHP
@@ -139,6 +148,8 @@ func UnitCost(utype UnitType) (minerals, energy int) {
 		return 30, 10
 	case UnitTypeSoldier:
 		return 60, 20
+	case UnitTypeMecha:
+		return 180, 80
 	}
 	return 0, 0
 }
