@@ -2,6 +2,7 @@
 // SW_TRANSPORT_WEB=http://127.0.0.1:4179 node scripts/playtest-transport-browser.mjs
 import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 const web = process.env.SW_TRANSPORT_WEB ?? 'http://127.0.0.1:4179';
 const evidence = process.env.SW_TRANSPORT_EVIDENCE ?? '/tmp/sw-transport-fix';
 mkdirSync(evidence, { recursive: true });
@@ -16,6 +17,31 @@ async function scene() {
   expect(response.ok()).toBe(true); return response.json();
 }
 const at = (s, x, y) => Object.values(s.buildings).find(b => b.position.x === x && b.position.y === y);
+// Optional real browser recording. Frame durations come from Chromium timestamps;
+// no arm poses, inventories or simulation clocks are modified for the recording.
+async function recordSorter() {
+  if (process.env.SW_TRANSPORT_RECORD !== '1') return;
+  const directory = `${evidence}/recording`;
+  mkdirSync(directory, { recursive: true });
+  const cdp = await page.context().newCDPSession(page), frames = [];
+  cdp.on('Page.screencastFrame', frame => {
+    const file = `frame-${String(frames.length).padStart(4, '0')}.jpg`;
+    writeFileSync(`${directory}/${file}`, Buffer.from(frame.data, 'base64'));
+    frames.push({ file, timestamp: frame.metadata.timestamp });
+    void cdp.send('Page.screencastFrameAck', { sessionId: frame.sessionId });
+  });
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90, maxWidth: 1280, maxHeight: 720, everyNthFrame: 1 });
+  await page.waitForTimeout(25000);
+  await cdp.send('Page.stopScreencast');
+  await cdp.detach();
+  expect(frames.length).toBeGreaterThan(3);
+  const manifest = frames.map((frame, index) => `file '${frame.file}'\nduration ${Math.max(.02, (frames[index + 1]?.timestamp ?? frame.timestamp + .1) - frame.timestamp)}`).join('\n');
+  writeFileSync(`${directory}/frames.txt`, `${manifest}\nfile '${frames.at(-1).file}'\n`);
+  writeFileSync(`${directory}/timestamps.json`, JSON.stringify(frames));
+  const result = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', `${directory}/frames.txt`,
+    '-vf', 'crop=1000:360:100:190,fps=8,split[a][b];[a]palettegen[p];[b][p]paletteuse', '-loop', '0', `${evidence}/sorter-working.gif`], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`Browser GIF encoding failed: ${result.stderr}`);
+}
 function measure(s) {
   const depot = at(s, 13, 3);
   return { tick: s.tick, sequence: at(s, 9, 0).sorter.last_transfer?.sequence ?? 0,
@@ -43,6 +69,7 @@ try {
   await expect.poll(async () => measure(await scene()).ironIngots, { timeout: 60000 }).toBeGreaterThan(before.ironIngots);
   await page.waitForFunction(() => window.transportFrames.some(f => f.carrying), null, { timeout: 60000 });
   const after = measure(await scene()); expect(after.sequence).toBeGreaterThan(before.sequence);
+  console.log('Verified live production', { before, after });
   await page.screenshot({ path: `${evidence}/transport-line.png`, fullPage: true });
   // The same scene, closer to the sorter; record real animation frames without posing the arm.
   await page.evaluate(() => { window.__planetThree.focus({ x: 9, y: 0 }, true); window.__planetThree.zoom(1.5); window.__planetThree.setTilt(.55); });
@@ -54,6 +81,7 @@ try {
     }, { id: sorterId, carrying }, { timeout: 60000, polling: 'raf' });
     await page.screenshot({ path: `${evidence}/${name}.png`, fullPage: true });
   }
+  await recordSorter();
   const rendering = await page.evaluate(() => {
     clearInterval(window.transportSample);
     const renderer = window.__planetThree;
@@ -92,8 +120,15 @@ try {
   const moveRequest = await uiCommand(() => clickTile({ x: 14, y: 4 }));
   await expect.poll(async () => (await scene()).units[executor.id].position.x, { timeout: 15000 }).toBe(14);
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: /风力涡轮机/ }).first().click();
-  const buildRequest = await uiCommand(() => clickTile({ x: 14, y: 3 }));
+  const existingWind = at(await scene(), 14, 3);
+  let buildRequest;
+  if (!existingWind) {
+    await page.getByRole('button', { name: /风力涡轮机/ }).first().click();
+    buildRequest = await uiCommand(() => clickTile({ x: 14, y: 3 }));
+  } else {
+    expect(existingWind.type).toBe('wind_turbine');
+    buildRequest = 'already-built-in-previous-replay';
+  }
   await expect.poll(async () => at(await scene(), 14, 3)?.runtime.state, { timeout: 60000 }).toBe('running');
   await page.keyboard.press('Escape');
   await clickTile({ x: 8, y: 0 });

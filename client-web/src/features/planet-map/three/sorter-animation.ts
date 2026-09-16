@@ -11,6 +11,8 @@ interface Motion {
   payload: THREE.Object3D;
   source: THREE.Vector3;
   target: THREE.Vector3;
+  nextSource: THREE.Vector3;
+  nextTarget: THREE.Vector3;
   observedSequence: number;
   playedSequence: number;
   elapsed: number;
@@ -34,6 +36,7 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
       elbow: arm.getObjectByName('sorter-elbow')!, lower: arm.getObjectByName('sorter-lower')!,
       wrist: arm.getObjectByName('sorter-wrist')!, payload: arm.getObjectByName('sorter-payload')!,
       source: new THREE.Vector3(-.7, .1, 0), target: new THREE.Vector3(.7, .1, 0),
+      nextSource: new THREE.Vector3(), nextTarget: new THREE.Vector3(),
       observedSequence: 0, playedSequence: 0, elapsed: CYCLE_SECONDS, enabled: false,
     };
     motions.set(arm, motion);
@@ -58,8 +61,8 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
   const inverse = model.matrix.clone().invert();
   const point = (position: SorterTransfer['source_position']) => tileNormal(position, faceSize)
     .multiplyScalar(radius + surfaceTileSize(radius, faceSize) * .25).applyMatrix4(inverse).sub(arm.position);
-  motion.source.copy(point(transfer.source_position));
-  motion.target.copy(point(transfer.target_position));
+  motion.nextSource.copy(point(transfer.source_position));
+  motion.nextTarget.copy(point(transfer.target_position));
   motion.observedSequence = transfer.sequence;
   // Metadata is diagnostic only; it does not change game inventories.
   arm.userData.transfer = { sequence: transfer.sequence, itemId: transfer.item_id, quantity: transfer.quantity };
@@ -89,6 +92,10 @@ export function animateSorterArm(arm: THREE.Object3D, delta: number, active: boo
   if (motion.elapsed >= CYCLE_SECONDS) {
     if (motion.playedSequence === motion.observedSequence) return;
     motion.playedSequence = motion.observedSequence;
+    // Keep the current pickup/dropoff fixed for the whole carried movement.
+    // A later authoritative transfer becomes the next cycle, not a midair jump.
+    motion.source.copy(motion.nextSource);
+    motion.target.copy(motion.nextTarget);
     motion.elapsed = 0;
   }
   motion.elapsed = Math.min(CYCLE_SECONDS, motion.elapsed + Math.min(.1, Math.max(0, delta)));

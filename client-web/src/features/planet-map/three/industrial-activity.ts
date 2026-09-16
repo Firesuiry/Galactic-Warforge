@@ -126,9 +126,9 @@ export class IndustrialActivity {
     const nextObservations = new Map<string, THREE.Vector3>();
     const sources = collectActivity(data).slice(0, LIMIT);
     const fog = data.fog ?? ('bounds' in data.planet ? data.planet : undefined);
-    const belts = Object.values(data.planet.buildings ?? {}).filter(building => building.conveyor
-      && (building.owner_id === data.playerId || Boolean(fog && getFogState(fog, building.position.x, building.position.y).visible)));
-    const paths = new Map(conveyorPaths(belts, faceSize, this.radius).map(path => [path.building.id, path]));
+    const buildings = Object.values(data.planet.buildings ?? {}).filter(building =>
+      building.owner_id === data.playerId || Boolean(fog && getFogState(fog, building.position.x, building.position.y).visible));
+    const paths = new Map(conveyorPaths(buildings, faceSize, this.radius).map(path => [path.building.id, path]));
     const counts = new Map<string, number>();
     for (const source of sources) if (source.kind === 'cargo') {
       const key = `${source.position.x}:${source.position.y}`;

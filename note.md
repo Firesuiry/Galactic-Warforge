@@ -17,3 +17,5 @@
 - 传送带/分拣器截图必须验证真实库存增长与机械臂动作；慢刷新不能丢弃两次观察间的新搬运。回放与证据见 [物流浏览器回归](docs/guide/传送带与分拣器浏览器回归.md)。
 
 - 制造台/地基/炮塔回放分别用 `scripts/playtest-assemblers-browser.mjs`、`scripts/playtest-foundation-browser.mjs`、`scripts/playtest-defense-browser.mjs`；隔离配置要求见脚本头部，结果与未完成项见星球玩法覆盖文档。
+
+- 连续皮带还需识别建筑真实 IO 端口；分拣器长臂动态实例须更新包围球，搬运中不能切换端点。回放加 `SW_TRANSPORT_RECORD=1` 可录真实搬运动图（需 ffmpeg），详见物流浏览器回归文档。

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { surfaceFace, surfaceStep, type SurfaceDirection } from '@shared/surface';
+import { surfaceFace, surfaceOffset, surfaceStep, type SurfaceDirection } from '@shared/surface';
 import type { Building, ConveyorDirection } from '@shared/types';
 import type { TilePoint } from '../model';
 import { surfaceTileSize, tileNormal } from './projection';
@@ -33,8 +33,10 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
   const belts = buildings.filter(building => isTransportBuilding(building));
   const byTile = new Map(belts.map(building => [key(building.position), building]));
   const inputs = new Map<string, SurfaceDirection[]>(), outputs = new Map<string, SurfaceDirection[]>();
+  const machinePorts = new Map<string, Set<SurfaceDirection>>();
   for (const building of belts) {
     inputs.set(building.id, []); outputs.set(building.id, []);
+    machinePorts.set(building.id, new Set());
   }
   // Match server transport ownership, carried seam directions and allowed inputs.
   for (const building of belts) for (const direction of directions) {
@@ -46,6 +48,27 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
     if (!cardinal(output) && cardinal(neighbor.conveyor!.output) && neighbor.conveyor!.output === opposite[step.direction]) continue;
     outputs.get(building.id)!.push(direction);
     inputs.get(neighbor.id)!.push(opposite[step.direction]);
+  }
+  // Building I/O is real transport too. Match its public ports and ownership,
+  // including offset ports and rotated cube seams, instead of capping the belt
+  // short of a connected miner, factory or depot. Sorters keep their arm gap.
+  for (const machine of buildings) {
+    if (!machine.storage || isTransportBuilding(machine)) continue;
+    for (const port of machine.runtime?.params?.io_ports ?? []) {
+      const origin = surfaceOffset(machine.position, port.offset.x, port.offset.y, faceSize);
+      for (const direction of directions) {
+        const step = surfaceStep(origin, direction, faceSize);
+        const belt = byTile.get(key(step.tile));
+        if (!belt || belt.owner_id !== machine.owner_id) continue;
+        const towardMachine = opposite[step.direction];
+        const feedsMachine = port.direction !== 'output' && belt.conveyor!.output === towardMachine;
+        const feedsBelt = port.direction !== 'input' && allowsInput(belt, towardMachine);
+        if (!feedsMachine && !feedsBelt) continue;
+        const list = (feedsMachine ? outputs : inputs).get(belt.id)!;
+        if (!list.includes(towardMachine)) list.push(towardMachine);
+        machinePorts.get(belt.id)!.add(towardMachine);
+      }
+    }
   }
   const paths: ConveyorPath[] = [];
   for (const building of belts) {
@@ -60,7 +83,7 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
       const face = surfaceFace(building.position, faceSize);
       const port = (direction: SurfaceDirection) => {
         const [dx, dy] = offsets[direction];
-        const distance = connected.has(direction) ? .5 : .36;
+        const distance = machinePorts.get(building.id)!.has(direction) ? .64 : connected.has(direction) ? .5 : .36;
         const tile = { x: building.position.x + dx * distance, y: building.position.y + dy * distance };
         const normal = tileNormal(tile, faceSize, face);
         const side = tileNormal({ x: tile.x - dy * .001, y: tile.y + dx * .001 }, faceSize, face).sub(tileNormal({ x: tile.x + dy * .001, y: tile.y - dx * .001 }, faceSize, face)).normalize();
@@ -103,11 +126,12 @@ export class ConveyorGeometry {
 
   refresh(buildings: readonly Building[], faceSize: number, radius = 100) {
     const belts = buildings.filter(building => isTransportBuilding(building));
-    const signature = JSON.stringify([faceSize, radius, belts.map(b => [b.id, b.owner_id, b.position, b.conveyor!.input, b.conveyor!.output])]);
+    const signature = JSON.stringify([faceSize, radius, buildings.map(b => [b.id, b.owner_id, b.position, b.type,
+      b.conveyor?.input, b.conveyor?.output, Boolean(b.storage), b.runtime?.params?.io_ports])]);
     if (signature === this.signature) return false;
     this.signature = signature;
     this.clear();
-    const paths = conveyorPaths(belts, faceSize, radius), size = surfaceTileSize(radius, faceSize);
+    const paths = conveyorPaths(buildings, faceSize, radius), size = surfaceTileSize(radius, faceSize);
     const buffers: MeshBuffer[] = this.materials.map(() => ({ positions: [], tiles: [] }));
     this.tiles = belts.map(building => ({ x: building.position.x, y: building.position.y }));
     const indices = new Map(belts.map((building, index) => [building.id, index]));

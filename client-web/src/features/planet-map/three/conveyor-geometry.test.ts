@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { surfaceStep, type SurfaceDirection } from '@shared/surface';
-import type { Building } from '@shared/types';
+import type { Building, PortDirection } from '@shared/types';
 import { ConveyorGeometry, conveyorPaths } from './conveyor-geometry';
 import { surfaceTileSize, tileNormal } from './projection';
 
@@ -9,8 +9,40 @@ const opposite: Record<SurfaceDirection,SurfaceDirection> = { north:'south', eas
 const belt = (id:string,x:number,y:number,output:SurfaceDirection = 'east',input:SurfaceDirection = opposite[output],owner = 'p'):Building => ({
   id, type:'conveyor_belt_mk1', position:{x,y,z:0}, owner_id:owner, conveyor:{input,output},
 } as Building);
+const machine = (x: number, y: number, direction: PortDirection, owner = 'p', offset = { x: 0, y: 0 }): Building => ({
+  id: 'machine', type: 'arc_smelter', position: { x, y, z: 0 }, owner_id: owner, storage: {},
+  runtime: { params: { io_ports: [{ id: 'port', direction, offset, capacity: 1 }] } },
+} as Building);
 
 describe('continuous surface conveyor paths', () => {
+  it('curves out of a real miner port and reaches the receiving factory base', () => {
+    const paths = conveyorPaths([belt('a', 5, 5), belt('b', 6, 5),
+      machine(5, 6, 'output'), { ...machine(7, 5, 'input'), id: 'factory' }], 16);
+    expect(paths[0].input).toBe('south');
+    expect(paths[0].point(0).clone().normalize().distanceTo(tileNormal({ x: 5, y: 5.64 }, 16))).toBeLessThan(1e-10);
+    expect(paths[0].point(1).distanceTo(paths[1].point(0))).toBeLessThan(1e-10);
+    expect(paths[1].connected.has('east')).toBe(true);
+    expect(paths[1].point(1).clone().normalize().distanceTo(tileNormal({ x: 6.64, y: 5 }, 16))).toBeLessThan(1e-10);
+  });
+
+  it('does not invent machine connections through reversed, hostile or absent ports', () => {
+    for (const neighbor of [machine(6, 5, 'output'), machine(6, 5, 'input', 'enemy'),
+      { ...machine(6, 5, 'input'), storage: undefined },
+      { ...machine(6, 5, 'input'), runtime: { ...machine(6, 5, 'input').runtime, params: { ...machine(6, 5, 'input').runtime.params, io_ports: [] } } }]) {
+      expect(conveyorPaths([belt('a', 5, 5), neighbor], 16)[0].connected.size).toBe(0);
+    }
+  });
+
+  it('finds offset machine ports and ports across rotated cube seams', () => {
+    expect(conveyorPaths([belt('a', 5, 5), machine(6, 4, 'input', 'p', { x: 0, y: 1 })], 16)[0].connected.has('east')).toBe(true);
+    for (let face = 0; face < 6; face++) for (const direction of Object.keys(opposite) as SurfaceDirection[]) {
+      const x = face % 3 * 16 + (direction === 'east' ? 15 : direction === 'west' ? 0 : 7);
+      const y = Math.floor(face / 3) * 16 + (direction === 'south' ? 15 : direction === 'north' ? 0 : 7);
+      const next = surfaceStep({ x, y }, direction, 16);
+      const path = conveyorPaths([belt('a', x, y, direction), machine(next.tile.x, next.tile.y, 'input')], 16)[0];
+      expect(path.connected.has(direction)).toBe(true);
+    }
+  });
   it('joins a line at exact cell boundaries at both narrow and wide surface cells', () => {
     for (const [x,y] of [[1,1],[8,8],[14,7]]) {
       const paths = conveyorPaths([belt('a',x,y),belt('b',x+1,y)],16);
@@ -65,6 +97,16 @@ describe('continuous surface conveyor paths', () => {
 });
 
 describe('conveyor rendering batches', () => {
+  it('rebuilds endpoints after a machine is added or removed without inventory churn', () => {
+    const renderer = new ConveyorGeometry(), lane = belt('belt', 5, 5), factory = machine(6, 5, 'input');
+    renderer.refresh([lane], 16);
+    const before = renderer.group.children[0];
+    expect(renderer.refresh([lane, factory], 16)).toBe(true);
+    expect(renderer.group.children[0]).not.toBe(before);
+    expect(renderer.refresh([lane, { ...factory, storage: { inventory: { iron_ingot: 3 } } }], 16)).toBe(false);
+    expect(renderer.refresh([lane], 16)).toBe(true);
+    renderer.dispose();
+  });
   it('keeps the whole network at three draws and picks the correct original tile', () => {
     const renderer=new ConveyorGeometry();
     const buildings=Array.from({length:10},(_,i)=>belt(String(i),i+2,7));

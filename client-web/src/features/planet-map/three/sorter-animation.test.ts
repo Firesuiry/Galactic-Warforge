@@ -108,4 +108,72 @@ describe('authoritative sorter arm', () => {
     expect(dynamics.stats.anchors).toBeGreaterThanOrEqual(7);
     dynamics.dispose(); statics.dispose(); f.assets.dispose();
   });
+  it('renders carried cargo and articulated joints in actual GPU instances, then hides cargo after delivery', () => {
+    const f = fixture(), layer = new THREE.Group(); layer.add(f.model);
+    const dynamics = new DynamicBatches();
+    syncSorterAnimation(f.model, f.building, 50, 48, 100);
+    dynamics.refresh([{ root: f.model, layer, tile: f.building.position }]);
+    const cargoMesh = f.cargo.children[0] as THREE.Mesh;
+    const instancesFor = (source: THREE.Mesh) => layer.children
+      .filter((object): object is THREE.InstancedMesh => object instanceof THREE.InstancedMesh && object.geometry === source.geometry && object.material === source.material)
+      .flatMap(mesh => Array.from({ length: mesh.count }, (_, index) => {
+        const matrix = new THREE.Matrix4(); mesh.getMatrixAt(index, matrix); return matrix;
+      }));
+    expect(instancesFor(cargoMesh).filter(matrix => matrix.determinant() === 0).length).toBeGreaterThan(0);
+    f.assets.animate(0, .1); dynamics.update(); layer.updateMatrixWorld(true);
+    for (const name of ['sorter-upper', 'sorter-lower', 'sorter-wrist', 'sorter-payload']) {
+      const source = f.model.getObjectByName(name)!.children[0] as THREE.Mesh;
+      expect(instancesFor(source).some(matrix => matrix.elements.every((value, index) => Math.abs(value - source.matrixWorld.elements[index]) < 0.00001))).toBe(true);
+    }
+    for (let i = 0; i < 12; i++) { f.assets.animate(0, .1); dynamics.update(); }
+    expect(f.cargo.visible).toBe(false);
+    expect(instancesFor(cargoMesh).filter(matrix => matrix.determinant() === 0).length).toBeGreaterThan(0);
+    dynamics.dispose(); f.assets.dispose();
+  });
+
+  it('keeps extended sorter cargo inside GPU batch bounds for visibility and picking', () => {
+    const f = fixture(), layer = new THREE.Group(); layer.add(f.model);
+    f.building.sorter!.last_transfer!.source_position.x = 6;
+    f.building.sorter!.last_transfer!.target_position.x = 12;
+    const dynamics = new DynamicBatches();
+    syncSorterAnimation(f.model, f.building, 50, 48, 100);
+    dynamics.refresh([{ root: f.model, layer, tile: f.building.position }]);
+    f.assets.animate(0, .1); dynamics.update();
+    for (const mesh of layer.children) {
+      if (!(mesh instanceof THREE.InstancedMesh)) continue;
+      for (let i = 0; i < mesh.count; i++) {
+        const matrix = new THREE.Matrix4(); mesh.getMatrixAt(i, matrix);
+        if (matrix.determinant() === 0) continue;
+        const instance = mesh.geometry.boundingSphere!.clone().applyMatrix4(matrix);
+        expect(mesh.boundingSphere!.center.distanceTo(instance.center) + instance.radius).toBeLessThanOrEqual(mesh.boundingSphere!.radius + .0001);
+      }
+    }
+    dynamics.dispose(); f.assets.dispose();
+  });
+
+  it('finishes carrying to the original endpoint when a new routing snapshot arrives mid-swing', () => {
+    const f = fixture();
+    syncSorterAnimation(f.model, f.building, 50, 48, 100);
+    f.assets.animate(0, .1); f.assets.animate(0, .1);
+    const before = f.wrist.getWorldPosition(new THREE.Vector3());
+    f.building.sorter!.last_transfer!.sequence = 2;
+    f.building.sorter!.last_transfer!.tick = 51;
+    f.building.sorter!.last_transfer!.source_position = { x: 9, y: 3, z: 0 };
+    f.building.sorter!.last_transfer!.target_position = { x: 9, y: 5, z: 0 };
+    syncSorterAnimation(f.model, f.building, 51, 48, 100);
+    f.assets.animate(0, 0);
+    expect(f.wrist.getWorldPosition(new THREE.Vector3()).distanceTo(before)).toBeLessThan(.00001);
+    expect(f.cargo.visible).toBe(true);
+    for (const delta of [.1, .1, .1, .027]) f.assets.animate(0, delta);
+    const firstDropoff = tileNormal({ x: 10, y: 4 }, 48).multiplyScalar(100 + f.size * .25);
+    expect(f.wrist.getWorldPosition(new THREE.Vector3()).distanceTo(firstDropoff)).toBeLessThan(.05);
+    for (const delta of [.1, .1, .1, .024]) f.assets.animate(0, delta);
+    f.assets.animate(0, 0);
+    const nextPickup = tileNormal({ x: 9, y: 3 }, 48).multiplyScalar(100 + f.size * .25);
+    expect(f.wrist.getWorldPosition(new THREE.Vector3()).distanceTo(nextPickup)).toBeLessThan(.001);
+    f.assets.animate(0, .1);
+    expect(f.cargo.visible).toBe(true);
+    f.assets.dispose();
+  });
+
 });

@@ -38,6 +38,7 @@ export class DynamicBatches {
   private readonly sourceVisibility = new Map<THREE.Mesh, boolean>();
   private readonly instances = new Map<THREE.InstancedMesh, Part[]>();
   private readonly scratch = new THREE.Matrix4();
+  private readonly scratchBounds = new THREE.Sphere();
   private readonly hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
   private readonly layerVisibility = new Map<THREE.Object3D, boolean>();
 
@@ -145,9 +146,13 @@ export class DynamicBatches {
         const part = batch.parts[index]; if (!part.anchor.changed) continue;
         this.scratch.multiplyMatrices(part.anchor.matrix, part.relative);
         mesh.setMatrixAt(index, part.anchor.visible ? this.scratch : this.hiddenMatrix);
+        // Articulated arms also change segment lengths and joint offsets. The
+        // initial full-rotation bound cannot cover a later extended reach.
+        if (part.anchor.visible) mesh.boundingSphere!.union(
+          this.scratchBounds.copy(batch.source.geometry.boundingSphere!).applyMatrix4(this.scratch));
         count++;
       }
-      if (count) { mesh.instanceMatrix.needsUpdate = true; updated += count; }
+      if (count) { mesh.boundingSphere!.getBoundingBox(mesh.boundingBox!); mesh.instanceMatrix.needsUpdate = true; updated += count; }
     }
     return updated;
   }
