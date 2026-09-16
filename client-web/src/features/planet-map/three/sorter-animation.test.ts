@@ -27,6 +27,25 @@ function fixture() {
 }
 
 describe('authoritative sorter arm', () => {
+  it('plays a new transfer across slow snapshots without replaying the initial history', () => {
+    const f = fixture();
+    syncSorterAnimation(f.model, f.building, 80, 48, 100);
+    f.assets.animate(0, .1);
+    expect(f.cargo.visible).toBe(false);
+    f.building.sorter!.last_transfer!.sequence = 2;
+    f.building.sorter!.last_transfer!.tick = 110;
+    syncSorterAnimation(f.model, f.building, 140, 48, 100);
+    f.assets.animate(0, .1);
+    expect(f.cargo.visible).toBe(true);
+    for (let i = 0; i < 20; i++) f.assets.animate(0, .1);
+    const rested = f.wrist.getWorldPosition(new THREE.Vector3());
+    syncSorterAnimation(f.model, f.building, 200, 48, 100);
+    for (let i = 0; i < 20; i++) f.assets.animate(0, .1);
+    expect(f.wrist.getWorldPosition(new THREE.Vector3())).toEqual(rested);
+    expect(f.cargo.visible).toBe(false);
+    f.assets.dispose();
+  });
+
   it('reaches the real source and target and carries only during a confirmed transfer, then stops', () => {
     const f = fixture();
     syncSorterAnimation(f.model, f.building, 50, 48, 100);

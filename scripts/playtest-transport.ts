@@ -72,6 +72,8 @@ function measure(snapshot: Awaited<ReturnType<typeof scene>>) {
 
 async function main() {
   if (!at(await scene(), 13, 3)) {
+    // Supply the new line before waiting for its first consumer to run.
+    for (let x = 4; x <= 6; x++) await build(x, 1, 'wind_turbine');
     await build(3, 1, 'mining_machine');
     await build(3, 0, 'conveyor_belt_mk1', '--direction east');
     await build(4, 0, 'conveyor_belt_mk1', '--direction east');

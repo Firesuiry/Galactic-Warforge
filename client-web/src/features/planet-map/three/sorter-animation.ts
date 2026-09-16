@@ -15,6 +15,7 @@ interface Motion {
   playedSequence: number;
   elapsed: number;
   enabled: boolean;
+  snapshotTick?: number;
 }
 
 const motions = new WeakMap<THREE.Object3D, Motion>();
@@ -38,6 +39,8 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
     motions.set(arm, motion);
     pose(arm, motion, new THREE.Vector3(.65, .12, 0), false);
   }
+  const previousTick = motion.snapshotTick;
+  motion.snapshotTick = tick;
   motion.enabled = building.runtime?.state === 'running';
   if (!motion.enabled) {
     motion.payload.visible = false;
@@ -47,7 +50,10 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
   }
   const transfer = building.sorter?.last_transfer;
   if (!transfer || transfer.quantity <= 0 || transfer.sequence <= motion.observedSequence
-      || tick < transfer.tick || tick - transfer.tick > RECENT_TICKS) return;
+      || tick < transfer.tick) return;
+  // Initial historical records stay idle. Once observing a live line, a new
+  // transfer between snapshots is valid even if a slow frame/poll took >20 ticks.
+  if (tick - transfer.tick > RECENT_TICKS && (previousTick === undefined || transfer.tick <= previousTick)) return;
   model.updateMatrix();
   const inverse = model.matrix.clone().invert();
   const point = (position: SorterTransfer['source_position']) => tileNormal(position, faceSize)

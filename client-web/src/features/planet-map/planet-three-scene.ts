@@ -283,6 +283,7 @@ export class PlanetThreeScene {
     this.layer('buildings').add(this.conveyors.group);
     const dimensions = [planet.surface.face_size];
     const staticKeys = new Set<string>();
+    const occupiedTiles = new Set<string>();
     // Only rendering inputs enter the signature. Production inventories, health,
     // research progress and network allocation do not change a model's structure.
     const retain = (key: string, appearance: unknown[], create: () => THREE.Group) => {
@@ -294,8 +295,12 @@ export class PlanetThreeScene {
       this.staticEntities.set(key, { signature, group: create() });
     };
     for (const building of visibleBuildings) {
-      if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
       const footprint = getBuildingFootprint(building);
+      for (let y = 0; y < footprint.height; y++) for (let x = 0; x < footprint.width; x++) {
+        const tile = surfaceOffset(building.position, x, y, planet.surface.face_size);
+        occupiedTiles.add(`${tile.x}:${tile.y}`);
+      }
+      if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
       retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint, building.conveyor?.output], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
         this.place(group, building.position, 'buildings');
@@ -316,8 +321,12 @@ export class PlanetThreeScene {
     }
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
-      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y], () => {
+      const covered = occupiedTiles.has(`${resource.position.x}:${resource.position.y}`);
+      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y, covered], () => {
         const group = this.industrial.resource(resource.kind);
+        // Keep the deposit visible at ground level without hiding the belt deck
+        // or moving sorter arm. Removing the building restores the outcrop.
+        if (covered) group.scale.y *= .1;
         this.place(group, resource.position, 'resources');
         return group;
       });
