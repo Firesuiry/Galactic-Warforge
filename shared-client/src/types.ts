@@ -196,7 +196,20 @@ export interface Building {
   job?: BuildingJob;
 }
 
+export interface MechaState {
+  energy: number;
+  max_energy: number;
+  fuel_energy: number;
+  shield: number;
+  max_shield: number;
+  attack_energy_cost: number;
+  move_energy_cost: number;
+  shield_recharge_delay: number;
+  last_hit_tick: number;
+}
+
 export interface Unit {
+  mecha?: MechaState;
   id: string;
   type: UnitType;
   owner_id: string;
@@ -494,6 +507,7 @@ export type CommandType =
   | 'build'
   | 'move'
   | 'attack'
+  | 'refuel_mecha'
   | 'produce'
   | 'upgrade'
   | 'demolish'
@@ -1284,6 +1298,7 @@ export interface BuildingCatalogEntry {
 }
 
 export interface ItemCatalogEntry {
+  mecha_fuel_energy?: number;
   id: string;
   name: string;
   category: string;

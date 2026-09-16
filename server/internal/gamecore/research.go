@@ -241,6 +241,7 @@ func researchThroughput(player *model.PlayerState, labs []*model.Building, power
 			boost = player.Executor.ResearchBoost
 		}
 	}
+	boost += model.TechEffectValue(player, "research_speed")
 	if boost > 0 {
 		effectiveSpeed *= 1 + boost
 	}
@@ -296,35 +297,9 @@ func completeResearch(player *model.PlayerState, research *model.PlayerResearch,
 		},
 	})
 
-	// Process unlocks
-	applyTechUnlocks(player, def)
-
 	// Clear current research and start next from queue
 	player.Tech.CurrentResearch = nil
 	advanceQueuedResearch(player, tick)
-}
-
-// applyTechUnlocks applies the effects of a completed tech
-func applyTechUnlocks(player *model.PlayerState, def *model.TechDefinition) {
-	// For now, tech unlocks are tracked in the tech state.
-	// Building/recipe unlock checking is done at build/use time by checking:
-	// 1. If the tech that unlocks the building/recipe is in CompletedTechs
-	// 2. If the current level of that tech is sufficient
-
-	// Effects are applied as bonuses (e.g., research speed, build speed)
-	// These are tracked separately and applied during relevant calculations
-	for _, effect := range def.Effects {
-		switch effect.Type {
-		case "research_speed":
-			// Handled via Executor.ResearchBoost
-		case "build_speed":
-			// Handled via Executor.BuildEfficiency
-		case "core_capacity":
-			// Handled via Executor cap increase
-		case "move_speed":
-			// Handled via unit move calculations
-		}
-	}
 }
 
 // execStartResearch handles the "start_research" command
@@ -692,9 +667,15 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 	// 收集该玩家所有运行中研究站
 	var labs []*model.Building
 	for _, b := range ws.Buildings {
-		if b == nil || b.OwnerID != playerID { continue }
-		if b.Runtime.State != model.BuildingWorkRunning { continue }
-		if !isResearchLab(b) { continue }
+		if b == nil || b.OwnerID != playerID {
+			continue
+		}
+		if b.Runtime.State != model.BuildingWorkRunning {
+			continue
+		}
+		if !isResearchLab(b) {
+			continue
+		}
 		labs = append(labs, b)
 	}
 	if len(labs) == 0 {
@@ -703,10 +684,14 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 
 	var issues []model.CommandIssue
 	for _, cost := range def.Cost {
-		if cost.ItemID == "" || cost.Quantity <= 0 { continue }
+		if cost.ItemID == "" || cost.Quantity <= 0 {
+			continue
+		}
 		total := 0
 		for _, lab := range labs {
-			if lab.Storage == nil { continue }
+			if lab.Storage == nil {
+				continue
+			}
 			total += lab.Storage.OutputQuantity(cost.ItemID)
 		}
 		if total <= 0 {

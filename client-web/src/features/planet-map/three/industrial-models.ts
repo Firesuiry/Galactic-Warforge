@@ -381,7 +381,7 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-unit-${type}`;
     const armor: Finish = own ? 'ceramic' : 'hostile', light: Finish = own ? 'blue' : 'orange';
-    if (/mech|mecha/.test(type)) {
+    if (type === 'executor' || /mech|mecha/.test(type)) {
       // 重型机甲：双腿、装甲躯干、驾驶舱与肩部武器，和普通工人/士兵模型明确区分。
       for (const side of [-1, 1]) {
         this.box(group, 'graphite', [0.14, 0.26, 0.16], [side * 0.13, 0.16, 0]);

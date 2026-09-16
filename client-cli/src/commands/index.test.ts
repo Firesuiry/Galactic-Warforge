@@ -51,6 +51,14 @@ describe('transfer command registration', () => {
   });
 });
 
+describe('mecha refuel command registration', () => {
+  it('registers refuel_mecha and exposes its fuel arguments', async () => {
+    assert.ok(COMMANDS.refuel_mecha);
+    const help = await dispatch('help refuel_mecha', { currentPlayer: 'p1', rl: {} });
+    assert.match(help, /refuel_mecha <executor_id> <fuel_item_id> <quantity>/);
+  });
+});
+
 describe('T101 produce help boundary', () => {
   it('does not hardcode worker/soldier in produce help', async () => {
     const help = await dispatch('help produce', { currentPlayer: 'p1', rl: {} });

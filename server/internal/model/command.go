@@ -7,6 +7,7 @@ const (
 	CmdBuild                     CommandType = "build"
 	CmdMove                      CommandType = "move"
 	CmdAttack                    CommandType = "attack"
+	CmdRefuelMecha               CommandType = "refuel_mecha"
 	CmdProduce                   CommandType = "produce"
 	CmdUpgrade                   CommandType = "upgrade"
 	CmdDemolish                  CommandType = "demolish"
@@ -137,6 +138,7 @@ func AllCommandTypes() []CommandType {
 		CmdBuild,
 		CmdMove,
 		CmdAttack,
+		CmdRefuelMecha,
 		CmdProduce,
 		CmdUpgrade,
 		CmdDemolish,

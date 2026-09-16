@@ -398,6 +398,7 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		return res, nil
 	}
 
+	model.SyncMechaCapabilities(unit, ws.Players[playerID])
 	dist := ws.SurfaceDistance(unit.Position, *pos)
 	if dist > unit.MoveRange {
 		res.Code = model.CodeOutOfRange
@@ -413,10 +414,17 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		return res, nil
 	}
 
-	if _, reachable := ws.SurfacePath(unit.Position, *pos, unit.MoveRange); !reachable {
+	path, reachable := ws.SurfacePath(unit.Position, *pos, unit.MoveRange)
+	if !reachable {
 		res.Code = model.CodeOutOfRange
 		res.Message = "destination has no walkable surface path within move range"
 		return res, nil
+	}
+
+	if unit.Mecha != nil {
+		if failure := spendMechaEnergy(unit, (len(path)-1)*unit.Mecha.MoveEnergyCost); failure != nil {
+			return *failure, nil
+		}
 	}
 
 	// Remove unit from old tile
@@ -445,6 +453,9 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
 	res.Message = fmt.Sprintf("unit %s moved to (%d,%d)", entityID, pos.X, pos.Y)
+	if unit.Mecha != nil {
+		events = append(events, mechaStateEvent(unit))
+	}
 	return res, events
 }
 
@@ -471,6 +482,8 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 		res.Message = "cannot order attack with unit owned by another player"
 		return res, nil
 	}
+
+	model.SyncMechaCapabilities(attacker, ws.Players[playerID])
 
 	// Get target entity ID from payload
 	targetIDRaw, ok := cmd.Payload["target_entity_id"]
@@ -507,17 +520,26 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 			return res, nil
 		}
 
-		damage := max(1, attacker.Attack-targetUnit.Defense)
-		targetUnit.HP -= damage
+		if attacker.Mecha != nil {
+			if failure := spendMechaEnergy(attacker, attacker.Mecha.AttackEnergyCost); failure != nil {
+				return *failure, nil
+			}
+		}
+		model.SyncMechaCapabilities(targetUnit, ws.Players[targetOwner])
+		damage, absorbed := model.ApplyUnitDamage(targetUnit, max(1, attacker.Attack-targetUnit.Defense), ws.Tick)
+		if targetUnit.Mecha != nil {
+			events = append(events, mechaStateEvent(targetUnit))
+		}
 
 		events = append(events, &model.GameEvent{
 			EventType:       model.EvtDamageApplied,
 			VisibilityScope: playerID,
 			Payload: map[string]any{
-				"attacker_id": attackerID,
-				"target_id":   targetID,
-				"damage":      damage,
-				"target_hp":   targetUnit.HP,
+				"attacker_id":     attackerID,
+				"target_id":       targetID,
+				"damage":          damage,
+				"target_hp":       targetUnit.HP,
+				"shield_absorbed": absorbed,
 			},
 		})
 		// Broadcast damage to target owner as well
@@ -525,10 +547,11 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 			EventType:       model.EvtDamageApplied,
 			VisibilityScope: targetOwner,
 			Payload: map[string]any{
-				"attacker_id": attackerID,
-				"target_id":   targetID,
-				"damage":      damage,
-				"target_hp":   targetUnit.HP,
+				"attacker_id":     attackerID,
+				"target_id":       targetID,
+				"damage":          damage,
+				"target_hp":       targetUnit.HP,
+				"shield_absorbed": absorbed,
 			},
 		})
 
@@ -569,6 +592,11 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 			return res, nil
 		}
 
+		if attacker.Mecha != nil {
+			if failure := spendMechaEnergy(attacker, attacker.Mecha.AttackEnergyCost); failure != nil {
+				return *failure, nil
+			}
+		}
 		damage := max(1, attacker.Attack-2) // buildings have inherent defense
 		targetBuilding.HP -= damage
 
@@ -618,6 +646,9 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
 	res.Message = fmt.Sprintf("unit %s attacked %s", attackerID, targetID)
+	if attacker.Mecha != nil {
+		events = append(events, mechaStateEvent(attacker))
+	}
 	return res, events
 }
 
@@ -1750,17 +1781,21 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		} else if targetedUnit != "" {
 			// Attack enemy unit
 			unit := ws.Units[targetedUnit]
-			damage := max(1, combat.Attack-unit.Defense)
-			unit.HP -= damage
+			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
+			damage, absorbed := model.ApplyUnitDamage(unit, max(1, combat.Attack-unit.Defense), ws.Tick)
+			if unit.Mecha != nil {
+				events = append(events, mechaStateEvent(unit))
+			}
 
 			events = append(events, &model.GameEvent{
 				EventType:       model.EvtDamageApplied,
 				VisibilityScope: unit.OwnerID,
 				Payload: map[string]any{
-					"attacker_id": turret.ID,
-					"target_id":   unit.ID,
-					"damage":      damage,
-					"target_hp":   unit.HP,
+					"attacker_id":     turret.ID,
+					"target_id":       unit.ID,
+					"damage":          damage,
+					"target_hp":       unit.HP,
+					"shield_absorbed": absorbed,
 				},
 			})
 

@@ -63,20 +63,21 @@ func (b *Building) Clone() *Building {
 
 // Unit represents a mobile unit entity
 type Unit struct {
-	ID           string    `json:"id"`
-	Type         UnitType  `json:"type"`
-	OwnerID      string    `json:"owner_id"`
-	Position     Position  `json:"position"`
-	HP           int       `json:"hp"`
-	MaxHP        int       `json:"max_hp"`
-	Attack       int       `json:"attack"`
-	Defense      int       `json:"defense"`
-	AttackRange  int       `json:"attack_range"`
-	MoveRange    int       `json:"move_range"`
-	VisionRange  int       `json:"vision_range"`
-	IsMoving     bool      `json:"is_moving"`
-	TargetPos    *Position `json:"target_pos,omitempty"`
-	AttackTarget string    `json:"attack_target,omitempty"` // entity ID
+	ID           string      `json:"id"`
+	Type         UnitType    `json:"type"`
+	OwnerID      string      `json:"owner_id"`
+	Position     Position    `json:"position"`
+	HP           int         `json:"hp"`
+	MaxHP        int         `json:"max_hp"`
+	Attack       int         `json:"attack"`
+	Defense      int         `json:"defense"`
+	AttackRange  int         `json:"attack_range"`
+	MoveRange    int         `json:"move_range"`
+	VisionRange  int         `json:"vision_range"`
+	IsMoving     bool        `json:"is_moving"`
+	TargetPos    *Position   `json:"target_pos,omitempty"`
+	AttackTarget string      `json:"attack_target,omitempty"` // entity ID
+	Mecha        *MechaState `json:"mecha,omitempty"`
 }
 
 // Clone returns a deep copy of the unit state for read-only snapshots.
@@ -85,6 +86,10 @@ func (u *Unit) Clone() *Unit {
 		return nil
 	}
 	out := *u
+	if u.Mecha != nil {
+		mecha := *u.Mecha
+		out.Mecha = &mecha
+	}
 	if u.TargetPos != nil {
 		target := *u.TargetPos
 		out.TargetPos = &target
@@ -132,11 +137,12 @@ func UnitStats(utype UnitType) Unit {
 	case UnitTypeExecutor:
 		u.MaxHP = 120
 		u.HP = u.MaxHP
-		u.Attack = 0
-		u.Defense = 2
-		u.AttackRange = 0
+		u.Attack = 20
+		u.Defense = 8
+		u.AttackRange = 4
 		u.MoveRange = 12
 		u.VisionRange = 6
+		u.Mecha = NewMechaState()
 	}
 	return u
 }

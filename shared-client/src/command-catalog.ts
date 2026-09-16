@@ -189,6 +189,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "required",
   },
   {
+    id: "refuel_mecha",
+    apiCommandName: "refuel_mecha",
+    cliCommandName: "refuel_mecha",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "optional",
+  },
+  {
     id: "switch_active_planet",
     apiCommandName: "switch_active_planet",
     cliCommandName: "switch_active_planet",

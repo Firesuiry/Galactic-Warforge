@@ -29,6 +29,7 @@ import {
   cmdFleetMove as apiFleetMove,
   cmdLandingStart as apiLandingStart,
   cmdTransferItem as apiTransferItem,
+  cmdRefuelMecha as apiRefuelMecha,
   cmdSwitchActivePlanet as apiSwitchActivePlanet,
   cmdSetRayReceiverMode as apiSetRayReceiverMode,
   cmdQueueMilitaryProduction as apiQueueMilitaryProduction,
@@ -58,6 +59,7 @@ import {
   type DysonComponentType,
   type RayReceiverMode,
 } from '../api.js';
+import { fetchCatalog } from '../api.js';
 import { fmtCommandResponse, fmtError } from '../format.js';
 import type { CommandRequest, Position } from '../types.js';
 import { getStringOption, parseArgs, parseIntegerArg, parseNumberArg } from './args.js';
@@ -579,6 +581,28 @@ export async function cmdRefitUnit(args: string[]): Promise<string> {
   }
   try {
     return fmtCommandResponse(await apiRefitUnit(args[0], args[1], args[2]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdRefuelMecha(args: string[]): Promise<string> {
+  if (args.length < 3) {
+    return fmtError('Usage: refuel_mecha <executor_id> <fuel_item_id> <quantity>');
+  }
+  const quantity = parseIntegerArg(args[2]);
+  if (!/^\+?[1-9]\d*$/.test(args[2]) || quantity === undefined || quantity <= 0) {
+    return fmtError('quantity 必须是正整数');
+  }
+  try {
+    const catalog = await fetchCatalog();
+    const fuel = (catalog.items ?? []).find((entry) => entry.id === args[1]) as
+      | ({ mecha_fuel_energy?: number })
+      | undefined;
+    if (!fuel || typeof fuel.mecha_fuel_energy !== 'number' || fuel.mecha_fuel_energy <= 0) {
+      return fmtError(`fuel_item_id 不支持机甲燃料: ${args[1]}`);
+    }
+    return fmtCommandResponse(await apiRefuelMecha(args[0], args[1], quantity));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }

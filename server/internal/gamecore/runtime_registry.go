@@ -107,6 +107,7 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 			AttackRange: execStats.AttackRange,
 			MoveRange:   execStats.MoveRange,
 			VisionRange: execStats.VisionRange,
+			Mecha:       execStats.Mecha,
 		}
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)

@@ -569,6 +569,14 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdRefuelMecha(entityId: string, itemId: string, quantity: number) {
+    return sendSingleCommand({
+      type: 'refuel_mecha',
+      target: { layer: 'planet', entity_id: entityId },
+      payload: { item_id: itemId, quantity },
+    });
+  }
+
   function cmdProduce(entityId: string, unitType: WorldUnitID) {
     return sendSingleCommand({
       type: 'produce',
@@ -1086,6 +1094,7 @@ export function createApiClient(options: ApiClientOptions) {
   return {
     clearAuth,
     cmdAttack,
+    cmdRefuelMecha,
     cmdBuild,
     cmdBlueprintCreate,
     cmdBlueprintFinalize,

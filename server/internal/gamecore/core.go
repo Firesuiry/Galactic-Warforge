@@ -729,6 +729,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execMove(gc.world, qr.PlayerID, cmd)
 		case model.CmdAttack:
 			res, evts = gc.execAttack(gc.world, qr.PlayerID, cmd)
+		case model.CmdRefuelMecha:
+			res, evts = gc.execRefuelMecha(gc.world, qr.PlayerID, cmd)
 		case model.CmdProduce:
 			res, evts = gc.execProduce(gc.world, qr.PlayerID, cmd)
 		case model.CmdDeploySquad:

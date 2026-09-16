@@ -40,6 +40,7 @@ func newSettlementPipeline() settlementPipeline {
 	pipeline.register("planetary_runtime", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
 		var events []*model.GameEvent
 		for _, ws := range frame.worlds {
+			events = append(events, settleMechas(ws)...)
 			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
 
 			env := currentPlanetEnvironment(gc.maps, ws.PlanetID)

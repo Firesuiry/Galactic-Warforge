@@ -97,8 +97,8 @@ const (
 	ItemMatrixYellow   = "matrix_yellow"
 	ItemMatrixUniverse = "matrix_universe"
 
-	ItemAmmoBullet  = "ammo_bullet"
-	ItemAmmoMissile = "ammo_missile"
+	ItemAmmoBullet        = "ammo_bullet"
+	ItemAmmoMissile       = "ammo_missile"
 	ItemAntimatterCapsule = "antimatter_capsule"
 	ItemGravityMissile    = "gravity_missile"
 	ItemPrototype         = "prototype"
@@ -112,14 +112,15 @@ const (
 
 // ItemDefinition defines immutable data for an item.
 type ItemDefinition struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Category    ItemCategory `json:"category"`
-	Form        ResourceForm `json:"form"`
-	StackLimit  int          `json:"stack_limit"`
-	UnitVolume  int          `json:"unit_volume"`
-	ContainerID string       `json:"container_id,omitempty"`
-	IsRare      bool         `json:"is_rare,omitempty"`
+	MechaFuelEnergy int          `json:"mecha_fuel_energy,omitempty"`
+	ID              string       `json:"id"`
+	Name            string       `json:"name"`
+	Category        ItemCategory `json:"category"`
+	Form            ResourceForm `json:"form"`
+	StackLimit      int          `json:"stack_limit"`
+	UnitVolume      int          `json:"unit_volume"`
+	ContainerID     string       `json:"container_id,omitempty"`
+	IsRare          bool         `json:"is_rare,omitempty"`
 }
 
 // ItemAmount couples an item with a quantity.
@@ -214,12 +215,13 @@ var itemCatalog = map[string]ItemDefinition{
 		UnitVolume: 1,
 	},
 	ItemCoal: {
-		ID:         ItemCoal,
-		Name:       "Coal",
-		Category:   ItemCategoryOre,
-		Form:       ResourceSolid,
-		StackLimit: 100,
-		UnitVolume: 1,
+		MechaFuelEnergy: 25,
+		ID:              ItemCoal,
+		Name:            "Coal",
+		Category:        ItemCategoryOre,
+		Form:            ResourceSolid,
+		StackLimit:      100,
+		UnitVolume:      1,
 	},
 	ItemFireIce: {
 		ID:         ItemFireIce,
@@ -267,13 +269,14 @@ var itemCatalog = map[string]ItemDefinition{
 		ContainerID: ItemLiquidTank,
 	},
 	ItemRefinedOil: {
-		ID:          ItemRefinedOil,
-		Name:        "Refined Oil",
-		Category:    ItemCategoryMaterial,
-		Form:        ResourceLiquid,
-		StackLimit:  1000,
-		UnitVolume:  1,
-		ContainerID: ItemLiquidTank,
+		MechaFuelEnergy: 40,
+		ID:              ItemRefinedOil,
+		Name:            "Refined Oil",
+		Category:        ItemCategoryMaterial,
+		Form:            ResourceLiquid,
+		StackLimit:      1000,
+		UnitVolume:      1,
+		ContainerID:     ItemLiquidTank,
 	},
 	ItemWater: {
 		ID:          ItemWater,
@@ -294,13 +297,14 @@ var itemCatalog = map[string]ItemDefinition{
 		ContainerID: ItemLiquidTank,
 	},
 	ItemHydrogen: {
-		ID:          ItemHydrogen,
-		Name:        "Hydrogen",
-		Category:    ItemCategoryMaterial,
-		Form:        ResourceGas,
-		StackLimit:  1000,
-		UnitVolume:  1,
-		ContainerID: ItemGasTank,
+		MechaFuelEnergy: 30,
+		ID:              ItemHydrogen,
+		Name:            "Hydrogen",
+		Category:        ItemCategoryMaterial,
+		Form:            ResourceGas,
+		StackLimit:      1000,
+		UnitVolume:      1,
+		ContainerID:     ItemGasTank,
 	},
 	ItemDeuterium: {
 		ID:          ItemDeuterium,
@@ -536,36 +540,40 @@ var itemCatalog = map[string]ItemDefinition{
 		UnitVolume: 1,
 	},
 	ItemEnergeticGraphite: {
-		ID:         ItemEnergeticGraphite,
-		Name:       "Energetic Graphite",
-		Category:   ItemCategoryFuel,
-		Form:       ResourceSolid,
-		StackLimit: 100,
-		UnitVolume: 1,
+		MechaFuelEnergy: 50,
+		ID:              ItemEnergeticGraphite,
+		Name:            "Energetic Graphite",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      100,
+		UnitVolume:      1,
 	},
 	ItemHydrogenFuelRod: {
-		ID:         ItemHydrogenFuelRod,
-		Name:       "Hydrogen Fuel Rod",
-		Category:   ItemCategoryFuel,
-		Form:       ResourceSolid,
-		StackLimit: 50,
-		UnitVolume: 2,
+		MechaFuelEnergy: 100,
+		ID:              ItemHydrogenFuelRod,
+		Name:            "Hydrogen Fuel Rod",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      50,
+		UnitVolume:      2,
 	},
 	ItemDeuteriumFuelRod: {
-		ID:         ItemDeuteriumFuelRod,
-		Name:       "Deuterium Fuel Rod",
-		Category:   ItemCategoryFuel,
-		Form:       ResourceSolid,
-		StackLimit: 50,
-		UnitVolume: 2,
+		MechaFuelEnergy: 250,
+		ID:              ItemDeuteriumFuelRod,
+		Name:            "Deuterium Fuel Rod",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      50,
+		UnitVolume:      2,
 	},
 	ItemAntimatterFuelRod: {
-		ID:         ItemAntimatterFuelRod,
-		Name:       "Antimatter Fuel Rod",
-		Category:   ItemCategoryFuel,
-		Form:       ResourceSolid,
-		StackLimit: 20,
-		UnitVolume: 3,
+		MechaFuelEnergy: 1000,
+		ID:              ItemAntimatterFuelRod,
+		Name:            "Antimatter Fuel Rod",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      20,
+		UnitVolume:      3,
 	},
 	ItemProliferatorMk1: {
 		ID:         ItemProliferatorMk1,

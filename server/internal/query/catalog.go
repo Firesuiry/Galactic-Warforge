@@ -31,16 +31,17 @@ type BuildingCatalogEntry struct {
 }
 
 type ItemCatalogEntry struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Category    model.ItemCategory `json:"category"`
-	Form        model.ResourceForm `json:"form"`
-	StackLimit  int                `json:"stack_limit"`
-	UnitVolume  int                `json:"unit_volume"`
-	ContainerID string             `json:"container_id,omitempty"`
-	IsRare      bool               `json:"is_rare,omitempty"`
-	IconKey     string             `json:"icon_key"`
-	Color       string             `json:"color"`
+	MechaFuelEnergy int                `json:"mecha_fuel_energy,omitempty"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Category        model.ItemCategory `json:"category"`
+	Form            model.ResourceForm `json:"form"`
+	StackLimit      int                `json:"stack_limit"`
+	UnitVolume      int                `json:"unit_volume"`
+	ContainerID     string             `json:"container_id,omitempty"`
+	IsRare          bool               `json:"is_rare,omitempty"`
+	IconKey         string             `json:"icon_key"`
+	Color           string             `json:"color"`
 }
 
 type RecipeCatalogEntry struct {
@@ -111,16 +112,17 @@ func (ql *Layer) Catalog() *CatalogView {
 	items := make([]ItemCatalogEntry, 0, len(itemDefs))
 	for _, item := range itemDefs {
 		items = append(items, ItemCatalogEntry{
-			ID:          item.ID,
-			Name:        item.Name,
-			Category:    item.Category,
-			Form:        item.Form,
-			StackLimit:  item.StackLimit,
-			UnitVolume:  item.UnitVolume,
-			ContainerID: item.ContainerID,
-			IsRare:      item.IsRare,
-			IconKey:     item.ID,
-			Color:       itemCatalogColor(item.Category, item.Form, item.IsRare),
+			ID:              item.ID,
+			Name:            item.Name,
+			Category:        item.Category,
+			Form:            item.Form,
+			StackLimit:      item.StackLimit,
+			MechaFuelEnergy: item.MechaFuelEnergy,
+			UnitVolume:      item.UnitVolume,
+			ContainerID:     item.ContainerID,
+			IsRare:          item.IsRare,
+			IconKey:         item.ID,
+			Color:           itemCatalogColor(item.Category, item.Form, item.IsRare),
 		})
 	}
 

@@ -11,3 +11,5 @@
 - 行星网格已改为唯一六面 cube_sphere；配置只用 planet.face_size，旧平面存档拒绝加载。坐标/面方向/跨面场景协议见 [立方体球面网格](docs/guide/立方体球面网格.md)。
 
 - 全量星球玩法目标与缺口持续记录在 [星球玩法覆盖与验收](docs/guide/星球玩法覆盖与验收.md)。量产战斗 mecha 尚不等于玩家机甲；piler 的总缓存容量尚不等于真实叠层增运。精炼闭环浏览器回放用 `scripts/playtest-refinery.mjs`。
+
+- 玩家机甲核心回放：`scripts/playtest-player-mecha.mjs`。近距双玩家隔离配置、已解锁核心/引擎/护盾及煤库存；UI 补能和真实攻防验证，仍不等于完整玩家机甲（飞行/采集/充电等见覆盖文档）。

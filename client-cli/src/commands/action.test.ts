@@ -7,8 +7,16 @@ import {
   cmdDeploySquad,
   cmdLandingStart,
   cmdProduce,
+  cmdRefuelMecha,
   cmdTaskForceDeploy,
 } from './action.js';
+
+describe('mecha refuel command boundary', () => {
+  it('requires a positive integer quantity', async () => {
+    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '0']), /quantity 必须是正整数/);
+    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '1.5']), /quantity 必须是正整数/);
+  });
+});
 
 describe('T101 produce command boundary', () => {
   it('does not hard reject corvette in cmdProduce before hitting the API layer', async () => {

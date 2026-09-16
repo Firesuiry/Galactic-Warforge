@@ -963,6 +963,7 @@ export function shouldRefreshPlanet(event: GameEventDetail, planetId: string) {
     "entity_created",
     "entity_moved",
     "damage_applied",
+    "mecha_state_changed",
     "entity_destroyed",
     "building_state_changed",
     "construction_paused",

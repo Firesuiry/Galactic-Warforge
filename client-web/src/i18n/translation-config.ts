@@ -237,7 +237,7 @@ export const TRANSLATIONS = {
   unitType: {
     worker: "工人",
     soldier: "士兵",
-    executor: "执行体",
+    executor: "玩家机甲",
     mecha: "机甲",
   },
   eventType: {
@@ -254,6 +254,7 @@ export const TRANSLATIONS = {
     construction_paused: "施工已暂停",
     construction_resumed: "施工已恢复",
     damage_applied: "已造成伤害",
+    mecha_state_changed: "机甲核心状态变化",
     loot_dropped: "战利品掉落",
     tick_completed: "回合结算",
   },
@@ -311,6 +312,7 @@ export const TRANSLATIONS = {
     demolish: "拆除",
     start_research: "开始研究",
     transfer_item: "转移物品",
+    refuel_mecha: "机甲补能",
     switch_active_planet: "切换 active planet",
     launch_solar_sail: "发射太阳帆",
     launch_rocket: "发射火箭",

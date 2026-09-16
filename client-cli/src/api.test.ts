@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { createApiClient } from '../../shared-client/src/api.js';
 
 import {
   cmdBlockadePlanet,
@@ -28,6 +29,7 @@ import {
   cmdTheaterDefineZone,
   cmdTheaterSetObjective,
   cmdTransferItem,
+  cmdRefuelMecha,
   fetchFleet,
   fetchFleets,
   fetchPlanetRuntime,
@@ -46,6 +48,7 @@ describe('client api exports', () => {
 
   it('exports transfer item helper', () => {
     assert.equal(typeof cmdTransferItem, 'function');
+    assert.equal(typeof cmdRefuelMecha, 'function');
   });
 
   it('exports planet switch and ray receiver helpers', () => {
@@ -88,5 +91,27 @@ describe('client api exports', () => {
     assert.equal(typeof cmdTheaterSetObjective, 'function');
     assert.equal(typeof cmdBlockadePlanet, 'function');
     assert.equal(typeof cmdLandingStart, 'function');
+  });
+});
+
+describe('refuel_mecha request serialization', () => {
+  it('serializes executor target and fuel payload', async () => {
+    let requestBody = '';
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => {
+        requestBody = String(init?.body ?? '');
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      },
+    });
+    await api.cmdRefuelMecha('executor-1', 'fuel-rod', 3);
+    const request = JSON.parse(requestBody) as { issuer_id: string; commands: Array<{ type: string; target: Record<string, string>; payload: Record<string, unknown> }> };
+    assert.equal(request.issuer_id, 'p1');
+    assert.deepEqual(request.commands[0], {
+      type: 'refuel_mecha',
+      target: { layer: 'planet', entity_id: 'executor-1' },
+      payload: { item_id: 'fuel-rod', quantity: 3 },
+    });
   });
 });

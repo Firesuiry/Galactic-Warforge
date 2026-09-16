@@ -16,6 +16,7 @@ export const ALL_EVENT_TYPES = [
   'entity_created',
   'entity_moved',
   'damage_applied',
+  'mecha_state_changed',
   'entity_destroyed',
   'building_state_changed',
   'resource_changed',
@@ -69,6 +70,7 @@ export const DEFAULT_EVENT_TYPES = [
 
 export const DEFAULT_SSE_SILENT_EVENT_TYPES = new Set([
   'resource_changed',
+  'mecha_state_changed',
   'threat_level_changed',
   'tick_completed',
 ]);

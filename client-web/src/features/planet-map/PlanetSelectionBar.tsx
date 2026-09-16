@@ -150,9 +150,15 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
           <span className="planet-selection-bar__meta">
             ({unit.position.x}, {unit.position.y}) · HP {unit.hp}/{unit.max_hp}
           </span>
+          {unit.mecha ? <span className="planet-selection-bar__meta">
+            能量 {unit.mecha.energy}/{unit.mecha.max_energy} · 护盾 {unit.mecha.shield}/{unit.mecha.max_shield}
+          </span> : null}
         </div>
         {ownUnit ? (
           <div className="planet-selection-bar__actions">
+            {onShowDetail ? <button className="secondary-button" type="button" onClick={onShowDetail}>
+              {unit.mecha ? '机甲详情' : '详情'}
+            </button> : null}
             <button
               className={`secondary-button${modeForUnit?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
               type="button"

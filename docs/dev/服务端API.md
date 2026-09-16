@@ -1617,7 +1617,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|produce|upgrade|demolish|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1690,13 +1690,18 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   ]
 }
 ```
+- 玩家机甲：星球 `Unit` 的 `type=executor` 同时承担建造和机甲操作，`mecha` 返回 `energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick`。初始核心 100，初始护盾容量 0；`mecha_core` 每级核心容量 +10，`mecha_engine` 每级移动范围 +2（基础 12），`energy_shield` 每级护盾容量 +20。研究提高上限但不免费补充能量或护盾。距最近受击满 10 tick 后每 tick 消耗 1 核心能量恢复最多 2 护盾，零能量时停止恢复。`research_speed` 科技效果在研究矩阵实际吞吐中生效，不重复叠加。
+- `mecha_state_changed` 事件仅对拥有者发送，payload 为 `entity_id` + 完整 `mecha`，以及 `move_range` / `attack` / `defense` / `attack_range`；科技仅改变派生属性时也发送，重复同步不重复发送。燃料补充时另带 `fuel_item_id` / `fuel_used`。快照和恢复深复制机甲状态。`mecha` 可生产战斗单位与玩家 `executor` 是不同单位；此机甲核心闭环不代表已实现飞行、跃迁和手动采集。
+- `/catalog.items[].mecha_fuel_energy`：煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000；字段不存在或为 0 的物品不可用于机甲燃料。
+
 - 命令字段约束:
   - `scan_galaxy`：`target.galaxy_id` 必填；`target.layer` 可填 `galaxy`
   - `scan_system`：`target.system_id` 必填；`target.layer` 可填 `system`
   - `scan_planet`：`target.planet_id` 必填；`target.layer` 可填 `planet`
   - `build`：`target.position` + `payload.building_type` 必填；`target.position` 使用 `x` / `y` / 可选 `z`；传送带与自动集装机支持 `payload.direction`（默认 `east`，`auto` 表示允许多方向路由）；生产建筑可选 `payload.recipe_id` 用于设置初始配方，若提供必须是非空字符串；如果建筑定义存在 `default_recipe_id`，未显式传 `recipe_id` 时会自动回退到默认配方，并且仍会校验玩家是否已解锁该 recipe；`mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（只校验资源点存在，不校验是否枯竭；建在枯竭点上采不到资源），枯竭（`depleted=true`）资源点不阻碍建造，任何建筑都可直接建在枯竭点上，`orbital_collector` 仅允许在气态行星建造；`matrix_lab` / `self_evolution_lab` 在未设置 `recipe_id` 时默认可直接参与 `start_research`；普通新局里 `matrix_lab` 与 `wind_turbine` / `mining_machine` / `arc_smelter` / `tesla_tower` / `conveyor_belt_mk1` / `sorter_mk1` / `assembling_machine_mk1` 均已可由初始完成科技 `dyson_sphere_program` 直接建造；`jammer_tower` / `sr_plasma_turret` / `planetary_shield_generator` 都需要接入电网后才会进入 `running`；命令成功后进入施工队列，建造完成触发 `entity_created`；执行阶段的距离校验与 `server/internal/gamecore/executor.go` 同源，当前失败文案会直接落到 `command_result.message = "executor out of range: <distance> > <operate_range>"`
-  - `move`：`target.entity_id` + `target.position` 必填
-  - `attack`：`target.entity_id` + `payload.target_entity_id` 必填
+  - `move`：`target.entity_id` + `target.position` 必填；玩家执行体 `executor` 每走一格真实地表路径消耗 1 核心能量，绕路按实际路径长度计费，能量不足整条命令拒绝，不改变位置。
+  - `attack`：`target.entity_id` + `payload.target_entity_id` 必填；`executor` 基础攻击 20、防御 8、射程 4，每次成功攻击消耗 8 核心能量。目标机甲护盾优先吸收伤害，`damage_applied.damage` 为实际 HP 伤害，`shield_absorbed` 为护盾吸收值。非法目标、超距、能量不足不扣能量。
+  - `refuel_mecha`：`target.entity_id` 必须为自己的 `executor`，`payload.item_id` + 正整数 `payload.quantity` 必填。从玩家库存扣除燃料，按核心缺口限制实际消耗件数；仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品。核心已满或仍有 `fuel_energy` 缓存时拒绝。高热值燃料的多余能量留在机甲缓存，后续每 tick 最多补充 10 核心能量，不丢弃多余热值。事件返回实际 `fuel_used`。
   - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，当前接受 `worker`、`soldier`、`mecha`；机甲生产成本为 180 矿物 / 80 能量。
   - `upgrade` / `demolish`：`target.entity_id` 必填
   - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`

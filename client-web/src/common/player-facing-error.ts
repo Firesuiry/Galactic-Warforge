@@ -24,7 +24,20 @@ export function toPlayerFacingMessage(raw?: string | null): string {
   }
 
   if (/executor out of range/i.test(source)) {
-    return "目标位置超出当前执行体的可操作范围，请先移动执行体再试。";
+    return "目标位置超出玩家机甲的可操作范围，请先移动机甲再试。";
+  }
+
+  if (/mecha requires .* core energy/i.test(source)) {
+    return "机甲核心能量不足，请在机甲详情中使用背包燃料补能。";
+  }
+  if (/mecha is full or still has stored fuel energy/i.test(source)) {
+    return "机甲核心已满或仍有燃料余能，暂时无需添加燃料。";
+  }
+  if (/item cannot fuel the mecha core/i.test(source)) {
+    return "所选物品不能作为机甲燃料，请选择有效燃料。";
+  }
+  if (/need \d+ .* in inventory/i.test(source)) {
+    return "背包中的物品不足，请补充后再试。";
   }
 
   const moveRangeExceeded = source.match(

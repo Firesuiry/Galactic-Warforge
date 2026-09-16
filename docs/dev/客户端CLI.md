@@ -103,6 +103,7 @@
 | `switch_active_planet`        | `<planet_id>`                                                                                                                                                                  | 切换当前 active planet                 |
 | `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid>`                                                                                                                                        | 切换射线接收站模式                     |
 | `transfer`                    | `<building_id> <item_id> <quantity>`                                                                                                                                           | 把玩家背包物品装入建筑本地存储         |
+| `refuel_mecha`                | `<executor_id> <fuel_item_id> <quantity>`                                                                                                                                      | 用目录中声明 `mecha_fuel_energy` 的燃料为玩家机甲补充能源；数量必须为正整数 |
 | `launch_solar_sail`           | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]`                                                                                                         | 从电磁发射器发射已装载的太阳帆         |
 | `launch_rocket`               | `<building_id> <system_id> [--layer <n>] [--count <n>]`                                                                                                                        | 从垂直发射井向戴森层发射已装载的火箭   |
 | `build_dyson_node`            | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]`                                                                                                        | 建戴森球节点                           |
@@ -114,6 +115,7 @@
 补充说明：
 
 - `transfer` 是 CLI alias，对应服务端命令 `transfer_item`
+- `refuel_mecha` 只接受 `/catalog` 的 `items[].mecha_fuel_energy > 0` 燃料，CLI 不硬编码燃料 ID；对应服务端命令 `refuel_mecha`
 - `shared-client/src/command-catalog.ts` 中声明的公共 CLI alias 都会自动进入 agent runtime 的命令白名单
 
 ### 调试与运维类

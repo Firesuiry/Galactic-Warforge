@@ -151,18 +151,6 @@ func clonePlayerStats(stats *model.PlayerStats) *model.PlayerStats {
 	return &cp
 }
 
-func cloneUnit(unit *model.Unit) *model.Unit {
-	if unit == nil {
-		return nil
-	}
-	cp := *unit
-	if unit.TargetPos != nil {
-		pos := *unit.TargetPos
-		cp.TargetPos = &pos
-	}
-	return &cp
-}
-
 func cloneResource(res *model.ResourceNodeState) *model.ResourceNodeState {
 	if res == nil {
 		return nil

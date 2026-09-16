@@ -8,9 +8,9 @@ import (
 // CommandCatalogView is the machine-readable public command catalog.
 // GUI forms, CLI, agent prompts and skills should share this as the single source of truth.
 type CommandCatalogView struct {
-	Version       int                    `json:"version"`
-	Commands      []CommandCatalogEntry  `json:"commands"`
-	CommandSchema map[string]any         `json:"command_schema,omitempty"`
+	Version       int                   `json:"version"`
+	Commands      []CommandCatalogEntry `json:"commands"`
+	CommandSchema map[string]any        `json:"command_schema,omitempty"`
 }
 
 // CommandCatalogEntry describes structural requirements for one public command type.
@@ -42,8 +42,8 @@ type CommandStructureSpec struct {
 func commandStructureRegistry() []CommandStructureSpec {
 	return []CommandStructureSpec{
 		{
-			Type:                 CmdBuild,
-			RequiredTargetFields: []string{"position"},
+			Type:                  CmdBuild,
+			RequiredTargetFields:  []string{"position"},
 			RequiredPayloadFields: []string{"building_type"},
 			OptionalPayloadFields: []string{"recipe_id", "direction"},
 			ExtraValidation: func(cmd Command) []CommandIssue {
@@ -68,6 +68,11 @@ func commandStructureRegistry() []CommandStructureSpec {
 			Type:                  CmdAttack,
 			RequiredTargetFields:  []string{"entity_id"},
 			RequiredPayloadFields: []string{"target_entity_id"},
+		},
+		{
+			Type:                  CmdRefuelMecha,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"item_id", "quantity"},
 		},
 		{
 			Type:                  CmdProduce,

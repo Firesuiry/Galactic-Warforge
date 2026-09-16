@@ -96,7 +96,7 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 		snap.Buildings[id] = cloneBuilding(b)
 	}
 	for id, u := range ws.Units {
-		snap.Units[id] = cloneUnit(u)
+		snap.Units[id] = u.Clone()
 	}
 	for id, d := range ws.LogisticsDrones {
 		snap.LogisticsDrones[id] = cloneLogisticsDrone(d)
@@ -167,7 +167,7 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		if u == nil {
 			return nil, fmt.Errorf("unit snapshot missing for %s", id)
 		}
-		ws.Units[id] = cloneUnit(u)
+		ws.Units[id] = u.Clone()
 	}
 
 	// Restore logistics drones.
