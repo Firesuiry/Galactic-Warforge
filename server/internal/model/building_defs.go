@@ -173,7 +173,8 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
-		Buildable:   false,
+		UnlockTech:  []string{"integrated_logistics"},
+		Buildable:   true,
 	},
 	{
 		ID:          BuildingTypeTrafficMonitor,

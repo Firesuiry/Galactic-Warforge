@@ -9,6 +9,7 @@ const opposite: Record<SurfaceDirection, SurfaceDirection> = { north: 'south', e
 const offsets = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] } as const;
 const cardinal = (direction: ConveyorDirection | undefined): direction is SurfaceDirection => directions.includes(direction as SurfaceDirection);
 const key = (tile: TilePoint) => `${tile.x}:${tile.y}`;
+const isTransportBuilding = (building: Pick<Building, 'type' | 'conveyor'>) => Boolean(building.conveyor && (building.type.startsWith('conveyor_belt_') || building.type === 'automatic_piler'));
 
 export interface ConveyorPath {
   building: Building;
@@ -29,7 +30,7 @@ function allowsInput(building: Building, direction: SurfaceDirection) {
 
 /** Callers pass ONLY player-owned or currently visible buildings. Never infer an unseen belt. */
 export function conveyorPaths(buildings: readonly Building[], faceSize: number, radius = 100): ConveyorPath[] {
-  const belts = buildings.filter(building => building.conveyor && building.type.startsWith('conveyor_belt_'));
+  const belts = buildings.filter(building => isTransportBuilding(building));
   const byTile = new Map(belts.map(building => [key(building.position), building]));
   const inputs = new Map<string, SurfaceDirection[]>(), outputs = new Map<string, SurfaceDirection[]>();
   for (const building of belts) {
@@ -101,7 +102,7 @@ export class ConveyorGeometry {
   constructor() { this.group.name = 'continuous-conveyors'; }
 
   refresh(buildings: readonly Building[], faceSize: number, radius = 100) {
-    const belts = buildings.filter(building => building.conveyor && building.type.startsWith('conveyor_belt_'));
+    const belts = buildings.filter(building => isTransportBuilding(building));
     const signature = JSON.stringify([faceSize, radius, belts.map(b => [b.id, b.owner_id, b.position, b.conveyor!.input, b.conveyor!.output])]);
     if (signature === this.signature) return false;
     this.signature = signature;

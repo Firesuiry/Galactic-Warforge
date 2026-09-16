@@ -82,10 +82,10 @@ func TestT103TechAndBuildingCatalogDerivation(t *testing.T) {
 	if !ok {
 		t.Fatal("expected automatic_piler building to exist")
 	}
-	if automaticPiler.Buildable {
-		t.Fatalf("expected %s to be removed from public buildable buildings", BuildingTypeAutomaticPiler)
+	if !automaticPiler.Buildable {
+		t.Fatalf("expected %s to be publicly buildable", BuildingTypeAutomaticPiler)
 	}
-	if hasString(automaticPiler.UnlockTech, "integrated_logistics") {
-		t.Fatalf("expected %s to stay off the public tech tree, got unlock_tech=%+v", BuildingTypeAutomaticPiler, automaticPiler.UnlockTech)
+	if !hasString(automaticPiler.UnlockTech, "integrated_logistics") {
+		t.Fatalf("expected %s to unlock from integrated_logistics, got unlock_tech=%+v", BuildingTypeAutomaticPiler, automaticPiler.UnlockTech)
 	}
 }

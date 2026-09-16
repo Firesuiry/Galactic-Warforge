@@ -107,8 +107,8 @@ type PlayerResearch struct {
 	// EstimatedTicksRemaining estimates the ticks left at the current effective
 	// research speed; 0 (omitted) when progress is stalled.
 	EstimatedTicksRemaining int64 `json:"estimated_ticks_remaining,omitempty"`
-	EnqueueTick   int64          `json:"enqueue_tick"`
-	CompleteTick  int64          `json:"complete_tick,omitempty"`
+	EnqueueTick             int64 `json:"enqueue_tick"`
+	CompleteTick            int64 `json:"complete_tick,omitempty"`
 }
 
 // PlayerTechState tracks all tech research state for a player
@@ -940,6 +940,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 500}, {ItemID: "structure_matrix", Quantity: 50}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: string(BuildingTypePileSorter)},
+			{Type: TechUnlockBuilding, ID: string(BuildingTypeAutomaticPiler)},
 		},
 	},
 	{
@@ -1091,12 +1092,12 @@ var defaultTechDefinitions = []TechDefinition{
 		},
 	},
 	{
-		ID:            "miniature_collider",
-		Name:          "小型粒子对撞机",
-		NameEN:        "Miniature Particle Collider",
-		Category:      TechCategoryBranch,
-		Type:          TechTypeMain,
-		Level:         8,
+		ID:       "miniature_collider",
+		Name:     "小型粒子对撞机",
+		NameEN:   "Miniature Particle Collider",
+		Category: TechCategoryBranch,
+		Type:     TechTypeMain,
+		Level:    8,
 		// 对撞机是生产奇异物质的设备，前置应为上游材料科技而非产物科技。
 		// 原始数据中 miniature_collider ↔ strange_matter 互为前置（环形依赖），
 		// 导致整条后期主线（重力矩阵→飞升→宇宙矩阵→任务完成）不可达。
@@ -1484,12 +1485,12 @@ var defaultTechDefinitions = []TechDefinition{
 		},
 	},
 	{
-		ID:            "dirac_inversion",
-		Name:          "狄拉克逆变机制",
-		NameEN:        "Dirac Inversion Mechanism",
-		Category:      TechCategoryMain,
-		Type:          TechTypeDyson,
-		Level:         12,
+		ID:       "dirac_inversion",
+		Name:     "狄拉克逆变机制",
+		NameEN:   "Dirac Inversion Mechanism",
+		Category: TechCategoryMain,
+		Type:     TechTypeDyson,
+		Level:    12,
 		// ionosphere（Lv11）和 dirac_inversion（Lv12）原本互为前置（环形依赖），
 		// 导致两者及后继 annihilation/universe_matrix/mission_complete 全部不可达。
 		// 修正：dirac_inversion 只依赖 mass_energy_storage；
@@ -1531,12 +1532,12 @@ var defaultTechDefinitions = []TechDefinition{
 		},
 	},
 	{
-		ID:            "universe_matrix",
-		Name:          "宇宙矩阵",
-		NameEN:        "Universe Matrix",
-		Category:      TechCategoryMain,
-		Type:          TechTypeMain,
-		Level:         15,
+		ID:       "universe_matrix",
+		Name:     "宇宙矩阵",
+		NameEN:   "Universe Matrix",
+		Category: TechCategoryMain,
+		Type:     TechTypeMain,
+		Level:    15,
 		// dyson_stress 是戴森球分支的终点科技，替代原先引用的未定义
 		// "dyson_sphere_partial"——后者让 universe_matrix 及其后继
 		// mission_complete（胜利科技）永久不可达。

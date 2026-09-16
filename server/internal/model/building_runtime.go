@@ -756,6 +756,12 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeAutomaticPiler,
+		Functions: BuildingFunctionModules{
+			Transport: &TransportModule{Throughput: 2, StackLimit: 4},
+		},
+	},
+	{
 		ID: BuildingTypeConveyorBeltMk2,
 		Functions: BuildingFunctionModules{
 			Transport: &TransportModule{Throughput: 4, StackLimit: 2},

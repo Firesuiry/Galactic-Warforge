@@ -345,7 +345,7 @@ const maxInt = int(^uint(0) >> 1)
 // IsConveyorBuilding returns true for belt-like buildings.
 func IsConveyorBuilding(btype BuildingType) bool {
 	switch btype {
-	case BuildingTypeConveyorBeltMk1, BuildingTypeConveyorBeltMk2, BuildingTypeConveyorBeltMk3:
+	case BuildingTypeConveyorBeltMk1, BuildingTypeConveyorBeltMk2, BuildingTypeConveyorBeltMk3, BuildingTypeAutomaticPiler:
 		return true
 	default:
 		return false

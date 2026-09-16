@@ -69,8 +69,8 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 	}
 
 	automaticPiler := catalogObjectByID(t, buildings, "automatic_piler")
-	if automaticPiler["buildable"] != false {
-		t.Fatalf("expected automatic_piler to be non-buildable in public catalog, got %+v", automaticPiler)
+	if automaticPiler["buildable"] != true {
+		t.Fatalf("expected automatic_piler to be buildable in public catalog, got %+v", automaticPiler)
 	}
 
 	satelliteSubstation := catalogObjectByID(t, buildings, "satellite_substation")

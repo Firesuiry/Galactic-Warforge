@@ -10,6 +10,7 @@ import (
 func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	grantTechs(ws, "p1", "integrated_logistics")
 
 	pos, err := findOpenTile(ws, 2)
 	if err != nil {
@@ -26,8 +27,8 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 			"building_type": string(model.BuildingTypeAutomaticPiler),
 		},
 	})
-	if automaticPilerRes.Code != model.CodeValidationFailed || !strings.Contains(automaticPilerRes.Message, "building type not buildable") {
-		t.Fatalf("expected automatic_piler to be rejected as not buildable, got code=%s message=%q", automaticPilerRes.Code, automaticPilerRes.Message)
+	if automaticPilerRes.Code != model.CodeOK {
+		t.Fatalf("expected automatic_piler to be buildable, got code=%s message=%q", automaticPilerRes.Code, automaticPilerRes.Message)
 	}
 
 	satellitePos, err := findOpenTile(ws, 2)
@@ -36,6 +37,14 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 	}
 	if satellitePos == nil {
 		t.Fatal("expected open tile for satellite_substation test")
+	}
+	// 自动集装机的施工任务占用了第一个空位，推进一 tick 完成施工后再选位。
+	for i := 0; i < 5; i++ {
+		core.processTick()
+	}
+	satellitePos, err = findOpenTile(ws, 3)
+	if err != nil || satellitePos == nil {
+		t.Fatalf("find second open tile for satellite_substation: %v", err)
 	}
 
 	lockedSatelliteRes, _ := core.execBuild(ws, "p1", model.Command{
