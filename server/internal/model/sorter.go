@@ -22,6 +22,18 @@ type SorterFilter struct {
 	Tags  []string         `json:"tags,omitempty" yaml:"tags,omitempty"`
 }
 
+// SorterTransfer records the latest completed movement, not a predicted animation.
+type SorterTransfer struct {
+	Tick           int64    `json:"tick"`
+	Sequence       int64    `json:"sequence"`
+	SourceID       string   `json:"source_id"`
+	TargetID       string   `json:"target_id"`
+	SourcePosition Position `json:"source_position"`
+	TargetPosition Position `json:"target_position"`
+	ItemID         string   `json:"item_id"`
+	Quantity       int      `json:"quantity"`
+}
+
 // SorterState tracks runtime sorter configuration.
 type SorterState struct {
 	InputDirections  []ConveyorDirection `json:"input_directions,omitempty"`
@@ -29,6 +41,7 @@ type SorterState struct {
 	Speed            int                 `json:"speed"`
 	Range            int                 `json:"range"`
 	Filter           SorterFilter        `json:"filter,omitempty"`
+	LastTransfer     *SorterTransfer     `json:"last_transfer,omitempty"`
 }
 
 // Clone returns a deep copy of the sorter state.
@@ -41,6 +54,10 @@ func (s *SorterState) Clone() *SorterState {
 	out.OutputDirections = append([]ConveyorDirection(nil), s.OutputDirections...)
 	out.Filter.Items = append([]string(nil), s.Filter.Items...)
 	out.Filter.Tags = append([]string(nil), s.Filter.Tags...)
+	if s.LastTransfer != nil {
+		transfer := *s.LastTransfer
+		out.LastTransfer = &transfer
+	}
 	return &out
 }
 

@@ -869,6 +869,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `visible` / `explored`: 当前窗口内的迷雾切片
   - `buildings` / `units` / `resources`: 当前窗口内可见实体
   - `buildings` 为 `model.Building` 直出：传送带类建筑（`conveyor_belt_*`）携带 `conveyor`（`input` / `output` / `max_stack` / `throughput`），其中 `conveyor.buffer` 为带内物品堆数组（`item_id` / `quantity`，队首 = 即将送出的一端，前端物流动画依赖该字段）；采集类建筑 `runtime.functions.collect.resource_kind` 为正在采集的资源种类（由服务端按脚下矿脉同步）
+  - 分拣器建筑携带 `sorter`：`input_directions` / `output_directions` / `speed` / `range` / `filter`。仅 `runtime.state = running` 时搬运，暂停、缺电时不搬运。当前分拣器连接同一玩家的传送带，按配置方向、范围、过滤器及目标容量搬运。
+  - `sorter.last_transfer` 仅在发生实际搬运后出现：`tick` 为结算 tick，`sequence` 为该分拣器递增的搬运序号，`source_id` / `target_id` 为实际源/目标建筑 ID，`source_position` / `target_position` 为对应位置（`x` / `y` / `z`），`item_id` / `quantity` 为该次实际搬运物品及数量。同 tick 多次搬运时保留最后一次；空转或停机保留旧记录，客户端须结合 tick、sequence 和运行状态停止过期动画，不能将存在分拣器或 `running` 等同于正在搬货。该结构同时通过场景 buildings、inspect 和快照输出。
   - `resources[]` 中 `remaining=0`（或 `max_amount=0`）的资源点会携带 `depleted: true` 标记；枯竭资源点仍保留在输出中（前端可淡化显示），且不阻碍建造——任何建筑都可直接建在枯竭点上，`requires_resource_node` 的采集建筑建在枯竭点上则采不到资源
   - `building_count` / `unit_count` / `resource_count`: 当前整颗行星的可见实体总数或资源总数，便于前端补充概览信息
 - 响应示例（独立 N=32 小型测试星球，图集 96×64；不是默认 N=816 的地图）:

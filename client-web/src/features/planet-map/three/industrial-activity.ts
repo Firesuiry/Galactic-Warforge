@@ -3,6 +3,7 @@ import type { ConveyorDirection } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
 import { tileNormal, tileFrame, surfaceTileSize } from './projection';
+import { conveyorPaths, type ConveyorPath } from './conveyor-geometry';
 
 export interface ActivityOptions {
   paused?: boolean;
@@ -19,6 +20,7 @@ export interface ActivitySource {
   direction?: ConveyorDirection;
   itemId?: string;
   quantity?: number;
+  buildingId?: string;
   color: string;
 }
 
@@ -37,7 +39,7 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     // One cube per authoritative nonempty stack (quantity is retained, not multiplied into invented items).
     for (const [index, stack] of (building.conveyor?.buffer ?? []).entries()) {
       if (stack.quantity > 0) sources.push({ ...base, id: `${building.id}:cargo:${index}`, kind: 'cargo',
-        itemId: stack.item_id, quantity: stack.quantity, direction: building.conveyor?.output,
+        itemId: stack.item_id, quantity: stack.quantity, direction: building.conveyor?.output, buildingId: building.id,
         color: itemColors.get(stack.item_id) ?? '#d8ae67' });
     }
     if (!running) continue;
@@ -73,6 +75,7 @@ interface SourcePosition {
   stackIndex: number;
   stackCount: number;
   prior?: THREE.Vector3;
+  path?: ConveyorPath;
 }
 const LIMIT = 4096;
 
@@ -122,6 +125,10 @@ export class IndustrialActivity {
     const newSnapshot = tick !== this.lastTick;
     const nextObservations = new Map<string, THREE.Vector3>();
     const sources = collectActivity(data).slice(0, LIMIT);
+    const fog = data.fog ?? ('bounds' in data.planet ? data.planet : undefined);
+    const belts = Object.values(data.planet.buildings ?? {}).filter(building => building.conveyor
+      && (building.owner_id === data.playerId || Boolean(fog && getFogState(fog, building.position.x, building.position.y).visible)));
+    const paths = new Map(conveyorPaths(belts, faceSize, this.radius).map(path => [path.building.id, path]));
     const counts = new Map<string, number>();
     for (const source of sources) if (source.kind === 'cargo') {
       const key = `${source.position.x}:${source.position.y}`;
@@ -140,6 +147,7 @@ export class IndustrialActivity {
       const prior = this.observations.get(source.id);
       if (source.kind === 'flight') nextObservations.set(source.id, normal.clone());
       return { source, color: new THREE.Color(source.color), normal, tangent, size, stackIndex, stackCount: counts.get(key) ?? 1,
+        path: source.buildingId ? paths.get(source.buildingId) : undefined,
         prior: source.kind === 'flight' && prior && prior.distanceToSquared(normal) > 1e-12 ? prior : undefined };
     });
     if (newSnapshot) { this.observations = nextObservations; this.snapshotAge = 0; this.lastTick = tick; }
@@ -163,7 +171,8 @@ export class IndustrialActivity {
       if (source.kind === 'cargo') {
         const moving = source.active && source.direction && !['auto', ''].includes(source.direction);
         const offset = (moving ? phase : (entry.stackIndex + .5) / entry.stackCount) - .5;
-        this.position.copy(normal).multiplyScalar(this.radius + size * .2).addScaledVector(tangent, offset * size * .65);
+        if (entry.path) this.position.copy(entry.path.point(offset + .5)).addScaledVector(normal, size * .1);
+        else this.position.copy(normal).multiplyScalar(this.radius + size * .29).addScaledVector(tangent, offset * size * .95);
         this.rotation.setFromUnitVectors(this.up, normal);
         this.scale.setScalar(size * Math.min(.16, .5 / entry.stackCount));
         this.matrix.compose(this.position, this.rotation, this.scale);

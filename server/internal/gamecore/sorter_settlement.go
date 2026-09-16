@@ -17,7 +17,7 @@ func settleSorters(ws *model.WorldState) {
 	}
 	sorters := make(map[string]*model.Building)
 	for id, building := range ws.Buildings {
-		if building == nil || building.Sorter == nil {
+		if building == nil || building.Sorter == nil || building.Runtime.State != model.BuildingWorkRunning {
 			continue
 		}
 		sorters[id] = building
@@ -94,6 +94,16 @@ func settleSorters(ws *model.WorldState) {
 					continue
 				}
 				target.Conveyor.AppendStacks(moved)
+				sequence := int64(1)
+				if sorter.LastTransfer != nil {
+					sequence = sorter.LastTransfer.Sequence + 1
+				}
+				sorter.LastTransfer = &model.SorterTransfer{
+					Tick: ws.Tick, Sequence: sequence,
+					SourceID: source.ID, TargetID: target.ID,
+					SourcePosition: source.Position, TargetPosition: target.Position,
+					ItemID: stack.ItemID, Quantity: move,
+				}
 				remaining -= move
 			}
 		}

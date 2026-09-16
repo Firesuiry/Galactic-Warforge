@@ -144,6 +144,31 @@ export interface BuildingConveyorState {
   throughput?: number;
 }
 
+/** 服务端最近一次实际搬运；空转时保留旧记录，按 tick / sequence 判断工作动画。 */
+export interface SorterTransfer {
+  tick: number;
+  sequence: number;
+  source_id: string;
+  target_id: string;
+  source_position: Position;
+  target_position: Position;
+  item_id: string;
+  quantity: number;
+}
+
+export interface BuildingSorterState {
+  input_directions?: ConveyorDirection[];
+  output_directions?: ConveyorDirection[];
+  speed: number;
+  range: number;
+  filter?: {
+    mode?: 'allow' | 'deny';
+    items?: string[];
+    tags?: string[];
+  };
+  last_transfer?: SorterTransfer;
+}
+
 export interface Building {
   id: string;
   type: BuildingType;
@@ -163,6 +188,7 @@ export interface Building {
     output_buffer?: ItemInventory;
   };
   conveyor?: BuildingConveyorState;
+  sorter?: BuildingSorterState;
   production?: {
     recipe_id?: string;
     remaining_ticks?: number;

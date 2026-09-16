@@ -154,6 +154,7 @@ func newSorterBuilding(id string, pos model.Position) *model.Building {
 		Level:       1,
 	}
 	model.InitBuildingSorter(b)
+	b.Runtime.State = model.BuildingWorkRunning
 	return b
 }
 
@@ -164,4 +165,83 @@ func attachBuilding(ws *model.WorldState, b *model.Building) {
 	key := model.TileKey(b.Position.X, b.Position.Y)
 	ws.TileBuilding[key] = b.ID
 	ws.Grid[b.Position.Y][b.Position.X].BuildingID = b.ID
+}
+
+func TestSorterTransferReflectsActualMovement(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 5)
+	ws.Tick = 12
+	input := newConveyorBuilding("in", model.Position{X: 0, Y: 2}, model.ConveyorEast)
+	output := newConveyorBuilding("out", model.Position{X: 2, Y: 2}, model.ConveyorEast)
+	sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 2})
+	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
+	sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
+	sorter.Sorter.Speed = 3
+	output.Conveyor.MaxStack = 1
+	for _, b := range []*model.Building{input, output, sorter} {
+		attachBuilding(ws, b)
+	}
+	input.Conveyor.Insert(model.ItemIronOre, 3)
+	settleSorters(ws)
+	transfer := sorter.Sorter.LastTransfer
+	if transfer == nil || transfer.Tick != 12 || transfer.Sequence != 1 || transfer.Quantity != 1 || transfer.ItemID != model.ItemIronOre {
+		t.Fatalf("expected record of one actual item constrained by target capacity, got %+v", transfer)
+	}
+	if transfer.SourceID != input.ID || transfer.TargetID != output.ID || transfer.SourcePosition != input.Position || transfer.TargetPosition != output.Position {
+		t.Fatalf("expected actual source and destination, got %+v", transfer)
+	}
+	if input.Conveyor.TotalItems() != 2 || output.Conveyor.TotalItems() != 1 {
+		t.Fatal("transfer record must correspond to inventory movement")
+	}
+	ws.Tick++
+	settleSorters(ws)
+	if sorter.Sorter.LastTransfer != transfer {
+		t.Fatal("blocked output must not refresh the transfer record")
+	}
+	output.Conveyor.Take(1)
+	ws.Tick++
+	settleSorters(ws)
+	if got := sorter.Sorter.LastTransfer; got == transfer || got.Tick != 14 || got.Sequence != 2 || got.Quantity != 1 {
+		t.Fatalf("expected next actual movement to advance sequence, got %+v", got)
+	}
+}
+
+func TestSorterDoesNotReportOrMoveWhenInactive(t *testing.T) {
+	for _, scenario := range []string{"paused", "no_power", "idle", "error", "empty", "wrong_source_direction", "wrong_target_direction", "filtered"} {
+		t.Run(scenario, func(t *testing.T) {
+			ws := model.NewWorldState("planet-1", 5)
+			ws.Tick = 20
+			input := newConveyorBuilding("in", model.Position{X: 0, Y: 2}, model.ConveyorEast)
+			output := newConveyorBuilding("out", model.Position{X: 2, Y: 2}, model.ConveyorEast)
+			sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 2})
+			sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
+			sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
+			for _, b := range []*model.Building{input, output, sorter} {
+				attachBuilding(ws, b)
+			}
+			input.Conveyor.Insert(model.ItemIronOre, 2)
+			switch scenario {
+			case "paused", "no_power", "idle", "error":
+				sorter.Runtime.State = model.BuildingWorkState(scenario)
+			case "empty":
+				input.Conveyor.Take(2)
+			case "wrong_source_direction":
+				input.Conveyor.Output = model.ConveyorWest
+			case "wrong_target_direction":
+				output.Conveyor.Output = model.ConveyorWest
+			case "filtered":
+				sorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemCopperOre}}
+			}
+			initialItems := input.Conveyor.TotalItems()
+			settleSorters(ws)
+			if input.Conveyor.TotalItems() != initialItems || output.Conveyor.TotalItems() != 0 || sorter.Sorter.LastTransfer != nil {
+				t.Fatalf("inactive sorter moved or recorded items: %+v", sorter.Sorter.LastTransfer)
+			}
+			oldTransfer := &model.SorterTransfer{Tick: 3, Sequence: 1, Quantity: 1}
+			sorter.Sorter.LastTransfer = oldTransfer
+			settleSorters(ws)
+			if sorter.Sorter.LastTransfer != oldTransfer {
+				t.Fatal("inactive sorter must not refresh historical transfer")
+			}
+		})
+	}
 }

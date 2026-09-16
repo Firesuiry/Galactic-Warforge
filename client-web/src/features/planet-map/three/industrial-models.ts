@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createIndustrialFinishes } from './industrial-finishes';
+import { animateSorterArm } from './sorter-animation';
 
 type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile';
 type Rotation = { object: THREE.Object3D; axis: 'x' | 'y' | 'z'; speed: number };
@@ -283,15 +284,28 @@ export class IndustrialModels {
 
   private sorter(group: THREE.Group, light: Finish) {
     this.part(group, 'cylinder', 'graphite', [0.34, 0.1, 0.34], [0, 0.16, 0]);
-    const arm = new THREE.Group(); arm.position.y = 0.24; group.add(arm);
+    const joint = (parent: THREE.Object3D, name: string) => {
+      const node = new THREE.Group(); node.name = name; parent.add(node);
+      // Mark every mutable transform so dynamic instancing follows the whole linkage.
+      this.registerRotation(node, 'y', 0);
+      return node;
+    };
+    const arm = joint(group, 'sorter-arm'); arm.position.y = 0.24;
     this.part(arm, 'cylinder', 'copper', [0.19, 0.15, 0.19], [0, 0, 0]);
-    this.box(arm, 'ceramic', [0.14, 0.27, 0.12], [0, 0.15, 0], [0, 0, -0.2]);
-    this.part(arm, 'cylinder', 'alloy', [0.13, 0.17, 0.13], [0.035, 0.28, 0], [Math.PI / 2, 0, 0]);
-    this.box(arm, 'copper', [0.33, 0.09, 0.09], [0.15, 0.33, 0], [0, 0, 0.3]);
-    this.box(arm, 'ceramic', [0.1, 0.17, 0.1], [0.29, 0.29, 0]);
-    for (const z of [-0.065, 0.065]) this.box(arm, 'graphite', [0.065, 0.12, 0.023], [0.29, 0.18, z]);
-    this.box(arm, light, [0.06, 0.026, 0.11], [0.29, 0.38, 0]);
-    this.registerRotation(arm, 'y', 0.65);
+    const shoulder = joint(arm, 'sorter-shoulder'); shoulder.rotation.z = .9;
+    const upper = joint(shoulder, 'sorter-upper'); upper.scale.x = .46;
+    this.box(upper, 'ceramic', [1, .10, .12], [.5, 0, 0]);
+    this.box(upper, 'copper', [.75, .025, .13], [.5, .062, 0]);
+    const elbow = joint(shoulder, 'sorter-elbow'); elbow.position.x = .46; elbow.rotation.z = -1.55;
+    this.part(elbow, 'cylinder', 'copper', [.16, .18, .16], [0, 0, 0], [Math.PI / 2, 0, 0]);
+    const lower = joint(elbow, 'sorter-lower'); lower.scale.x = .46;
+    this.box(lower, 'alloy', [1, .075, .075], [.5, 0, 0]);
+    const wrist = joint(elbow, 'sorter-wrist'); wrist.position.x = .46; wrist.rotation.z = .65;
+    this.box(wrist, 'ceramic', [.16, .10, .14], [0, 0, 0]);
+    for (const z of [-.075, .075]) this.box(wrist, 'graphite', [.065, .12, .025], [0, -.09, z]);
+    const payload = joint(wrist, 'sorter-payload'); payload.visible = false;
+    this.box(payload, 'copper', [.14, .12, .12], [0, -.11, 0]);
+    this.box(payload, light, [.09, .018, .10], [0, .06, 0]);
   }
 
   private headquarters(group: THREE.Group, light: Finish, armor: Finish) {
@@ -438,7 +452,8 @@ export class IndustrialModels {
       let parent: THREE.Object3D | null = object;
       let active = true;
       while (parent) { if (parent.userData.industryActive === false) { active = false; break; } parent = parent.parent; }
-      if (active) object.rotation[axis] += Math.min(delta, 0.08) * speed;
+      if (object.name === 'sorter-arm') animateSorterArm(object, delta, active);
+      else if (active) object.rotation[axis] += Math.min(delta, 0.08) * speed;
     }
   }
 

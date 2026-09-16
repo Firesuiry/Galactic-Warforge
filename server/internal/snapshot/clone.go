@@ -230,7 +230,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		Storage:          cloneStorage(b.Storage),
 		EnergyStorage:    cloneEnergyStorage(b.EnergyStorage),
 		Conveyor:         cloneConveyor(b.Conveyor),
-		Sorter:           cloneSorter(b.Sorter),
+		Sorter:           b.Sorter.Clone(),
 		LogisticsStation: cloneLogisticsStation(b.LogisticsStation),
 		Production:       b.Production.Clone(),
 	}
@@ -287,7 +287,7 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		return nil, fmt.Errorf("conveyor snapshot missing for %s", buildingID)
 	}
 	if snap.Sorter != nil {
-		mb.Sorter = cloneSorter(snap.Sorter)
+		mb.Sorter = snap.Sorter.Clone()
 	} else if model.IsSorterBuilding(mb.Type) {
 		return nil, fmt.Errorf("sorter snapshot missing for %s", buildingID)
 	}
@@ -351,26 +351,6 @@ func cloneConveyor(conveyor *model.ConveyorState) *model.ConveyorState {
 				clone.Buffer[i].Spray = &spray
 			}
 		}
-	}
-	return &clone
-}
-
-func cloneSorter(sorter *model.SorterState) *model.SorterState {
-	if sorter == nil {
-		return nil
-	}
-	clone := *sorter
-	if len(sorter.InputDirections) > 0 {
-		clone.InputDirections = append([]model.ConveyorDirection(nil), sorter.InputDirections...)
-	}
-	if len(sorter.OutputDirections) > 0 {
-		clone.OutputDirections = append([]model.ConveyorDirection(nil), sorter.OutputDirections...)
-	}
-	if len(sorter.Filter.Items) > 0 {
-		clone.Filter.Items = append([]string(nil), sorter.Filter.Items...)
-	}
-	if len(sorter.Filter.Tags) > 0 {
-		clone.Filter.Tags = append([]string(nil), sorter.Filter.Tags...)
 	}
 	return &clone
 }

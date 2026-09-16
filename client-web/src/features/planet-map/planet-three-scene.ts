@@ -16,6 +16,8 @@ import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
+import { ConveyorGeometry } from './three/conveyor-geometry';
+import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position } from '@shared/types';
 import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
@@ -61,6 +63,7 @@ export class PlanetThreeScene {
   private readonly industrial = new IndustrialModels();
   private readonly staticBatches = new StaticBatches();
   private readonly dynamicBatches = new DynamicBatches();
+  private readonly conveyors = new ConveyorGeometry();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
   private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
   private dressing?: THREE.Group;
@@ -275,6 +278,9 @@ export class PlanetThreeScene {
   private buildEntities() {
     if (!this.data) return;
     const { planet, playerId, runtime, networks } = this.data;
+    const visibleBuildings = Object.values(planet.buildings ?? {}).filter(building => building.owner_id === playerId || this.visible(building.position));
+    this.conveyors.refresh(visibleBuildings, planet.surface.face_size, RADIUS);
+    this.layer('buildings').add(this.conveyors.group);
     const dimensions = [planet.surface.face_size];
     const staticKeys = new Set<string>();
     // Only rendering inputs enter the signature. Production inventories, health,
@@ -287,14 +293,12 @@ export class PlanetThreeScene {
       if (previous) this.removeModel(previous.group);
       this.staticEntities.set(key, { signature, group: create() });
     };
-    for (const building of Object.values(planet.buildings ?? {})) {
-      if (!(building.owner_id === playerId || this.visible(building.position))) continue;
+    for (const building of visibleBuildings) {
+      if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
       const footprint = getBuildingFootprint(building);
       retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint, building.conveyor?.output], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
         this.place(group, building.position, 'buildings');
-        const direction = building.conveyor?.output;
-        if(direction && direction !== 'auto') group.rotateY(({east:0,south:-Math.PI/2,west:Math.PI,north:Math.PI/2})[direction]);
         const center = new THREE.Vector3();
         for(let y=0;y<footprint.height;y++) for(let x=0;x<footprint.width;x++) {
           const cell=surfaceOffset(building.position,x,y,planet.surface.face_size);
@@ -308,6 +312,7 @@ export class PlanetThreeScene {
     for (const building of Object.values(planet.buildings ?? {})) {
       const model = this.staticEntities.get(`building:${building.id}`)?.group;
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
+      if (model && (building.sorter || /sorter/.test(building.type))) syncSorterAnimation(model, building, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0, planet.surface.face_size, RADIUS);
     }
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
@@ -520,7 +525,7 @@ export class PlanetThreeScene {
       let hidden = false;
       while (object && object !== this.world) { if (!object.visible) hidden = true; object = object.parent; }
       if (hidden) continue;
-      const batchTile = this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
+      const batchTile = this.conveyors.resolveHit(hit) ?? this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
       if (batchTile) return batchTile;
       object = hit.object;
       while (object && object !== this.world) { if (object.userData.tile) return object.userData.tile as TilePoint; object = object.parent; }
@@ -593,6 +598,7 @@ export class PlanetThreeScene {
     canvas.removeEventListener('wheel', this.wheel);
     this.staticBatches.dispose();
     this.dynamicBatches.dispose();
+    this.conveyors.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((o) => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } });
