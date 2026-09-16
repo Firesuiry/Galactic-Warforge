@@ -1,7 +1,6 @@
 package gamecore
 
 import (
-	"fmt"
 	"sort"
 	"testing"
 
@@ -304,7 +303,7 @@ func TestE2E_VerticalLaunchingSiloUsesDefaultRocketRecipe(t *testing.T) {
 	}
 }
 
-func TestE2E_LogisticsStationConstructionAutoProvision(t *testing.T) {
+func TestE2E_LogisticsStationConstructionRequiresManufacturedVehicles(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
@@ -355,10 +354,10 @@ func TestE2E_LogisticsStationConstructionAutoProvision(t *testing.T) {
 		t.Fatal("interstellar logistics station not found after construction ticks")
 	}
 
-	if got, want := model.StationDroneCount(ws, built.ID), built.LogisticsStation.DroneCapacityValue(); got != want {
+	if got, want := model.StationDroneCount(ws, built.ID), 0; got != want {
 		t.Fatalf("expected station drones=%d after construction, got %d", want, got)
 	}
-	if got, want := model.StationShipCount(ws, built.ID), built.LogisticsStation.ShipSlotCapacityValue(); got != want {
+	if got, want := model.StationShipCount(ws, built.ID), 0; got != want {
 		t.Fatalf("expected station ships=%d after construction, got %d", want, got)
 	}
 }
@@ -449,78 +448,7 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 	}
 }
 
-func TestE2E_LogisticsStationProvisionFailureRollsBackState(t *testing.T) {
-	core := newE2ETestCore(t)
-	ws := core.World()
-	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
-
-	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
-	player.Resources.Energy = 10000
-	beforeMinerals := player.Resources.Minerals
-	beforeEnergy := player.Resources.Energy
-
-	originalProvisioner := provisionConstructionStationFleet
-	provisionConstructionStationFleet = func(ws *model.WorldState, building *model.Building) error {
-		return fmt.Errorf("injected fleet provisioning failure")
-	}
-	t.Cleanup(func() {
-		provisionConstructionStationFleet = originalProvisioner
-	})
-
-	pos, err := findOpenTile(ws, 2)
-	if err != nil {
-		t.Fatalf("find open tile: %v", err)
-	}
-	if pos == nil {
-		t.Fatal("find open tile: no open tile found")
-	}
-
-	res, _ := core.execBuild(ws, "p1", model.Command{
-		Type:   model.CmdBuild,
-		Target: model.CommandTarget{Position: pos},
-		Payload: map[string]any{
-			"building_type": string(model.BuildingTypeInterstellarLogisticsStation),
-		},
-	})
-	if res.Status != model.StatusExecuted {
-		t.Fatalf("build command failed: %s (%s)", res.Status, res.Message)
-	}
-
-	for i := 0; i < 3; i++ {
-		core.processTick()
-	}
-
-	if player.Resources.Minerals != beforeMinerals || player.Resources.Energy != beforeEnergy {
-		t.Fatalf("expected materials unchanged after provision rollback, got minerals=%d energy=%d", player.Resources.Minerals, player.Resources.Energy)
-	}
-	for _, b := range ws.Buildings {
-		if b != nil && b.OwnerID == "p1" && b.Type == model.BuildingTypeInterstellarLogisticsStation && b.Position == *pos {
-			t.Fatal("unexpected interstellar logistics station created after provision failure")
-		}
-	}
-	for stationID := range ws.LogisticsStations {
-		if _, ok := ws.Buildings[stationID]; !ok {
-			t.Fatalf("found orphan logistics station %s after provision rollback", stationID)
-		}
-	}
-	for _, drone := range ws.LogisticsDrones {
-		if drone != nil {
-			if _, ok := ws.Buildings[drone.StationID]; !ok {
-				t.Fatalf("found orphan logistics drone bound to missing station %s", drone.StationID)
-			}
-		}
-	}
-	for _, ship := range ws.LogisticsShips {
-		if ship != nil {
-			if _, ok := ws.Buildings[ship.StationID]; !ok {
-				t.Fatalf("found orphan logistics ship bound to missing station %s", ship.StationID)
-			}
-		}
-	}
-}
-
-func TestDemolishBuildingRemovesStationFleet(t *testing.T) {
+func TestDemolishBuildingRetainsStrandedStationFleet(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -549,10 +477,10 @@ func TestDemolishBuildingRemovesStationFleet(t *testing.T) {
 	attachBuilding(ws, stationB)
 	model.RegisterLogisticsStation(ws, stationB)
 
-	if err := ensureStationFleet(ws, stationA); err != nil {
+	if err := installTestStationFleet(core, ws, stationA); err != nil {
 		t.Fatalf("ensure station A fleet: %v", err)
 	}
-	if err := ensureStationFleet(ws, stationB); err != nil {
+	if err := installTestStationFleet(core, ws, stationB); err != nil {
 		t.Fatalf("ensure station B fleet: %v", err)
 	}
 
@@ -582,11 +510,11 @@ func TestDemolishBuildingRemovesStationFleet(t *testing.T) {
 		t.Fatal("station A should be removed after demolish job completes")
 	}
 
-	if got := model.StationDroneCount(ws, stationA.ID); got != 0 {
-		t.Fatalf("expected station A drones cleared after demolish, got %d", got)
+	if got := model.StationDroneCount(ws, stationA.ID); got != stationA.LogisticsStation.DroneCapacityValue() {
+		t.Fatalf("expected station A drones retained after demolish, got %d", got)
 	}
-	if got := model.StationShipCount(ws, stationA.ID); got != 0 {
-		t.Fatalf("expected station A ships cleared after demolish, got %d", got)
+	if got := model.StationShipCount(ws, stationA.ID); got != stationA.LogisticsStation.ShipSlotCapacityValue() {
+		t.Fatalf("expected station A ships retained after demolish, got %d", got)
 	}
 	if got := model.StationDroneCount(ws, stationB.ID); got != baselineBDrones {
 		t.Fatalf("expected station B drones unchanged at %d, got %d", baselineBDrones, got)
@@ -622,10 +550,10 @@ func TestE2E_PlanetaryLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	attachBuilding(ws, target)
 	model.RegisterLogisticsStation(ws, target)
 
-	if err := ensureStationFleet(ws, origin); err != nil {
+	if err := installTestStationFleet(core, ws, origin); err != nil {
 		t.Fatalf("ensure origin fleet: %v", err)
 	}
-	if err := ensureStationFleet(ws, target); err != nil {
+	if err := installTestStationFleet(core, ws, target); err != nil {
 		t.Fatalf("ensure target fleet: %v", err)
 	}
 	origin.LogisticsStation.SetInventory(model.ItemInventory{model.ItemIronOre: 120})
@@ -658,6 +586,7 @@ func TestE2E_PlanetaryLogisticsDeliveryAfterConfiguration(t *testing.T) {
 		t.Fatalf("configure target slot failed: %s (%s)", res.Status, res.Message)
 	}
 
+	powerLogisticsFixture(t, ws)
 	core.processTick()
 	var dispatchedDroneID string
 	for id, drone := range ws.LogisticsDrones {
@@ -683,8 +612,8 @@ func TestE2E_PlanetaryLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	if drone == nil {
 		t.Fatalf("expected dispatched drone %s to remain registered", dispatchedDroneID)
 	}
-	if drone.Status != model.LogisticsDroneIdle {
-		t.Fatalf("expected dispatched drone idle after delivery, got %s", drone.Status)
+	if !drone.Returning {
+		t.Fatalf("expected dispatched drone returning after delivery, got %s", drone.Status)
 	}
 	if got := drone.CargoQty(); got != 0 {
 		t.Fatalf("expected dispatched drone cargo cleared, got %d", got)
@@ -717,10 +646,10 @@ func TestE2E_InterstellarLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	attachBuilding(ws, target)
 	model.RegisterLogisticsStation(ws, target)
 
-	if err := ensureStationFleet(ws, origin); err != nil {
+	if err := installTestStationFleet(core, ws, origin); err != nil {
 		t.Fatalf("ensure origin fleet: %v", err)
 	}
-	if err := ensureStationFleet(ws, target); err != nil {
+	if err := installTestStationFleet(core, ws, target); err != nil {
 		t.Fatalf("ensure target fleet: %v", err)
 	}
 	origin.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 200})
@@ -753,6 +682,7 @@ func TestE2E_InterstellarLogisticsDeliveryAfterConfiguration(t *testing.T) {
 		t.Fatalf("configure target slot failed: %s (%s)", res.Status, res.Message)
 	}
 
+	powerLogisticsFixture(t, ws)
 	core.processTick()
 	var dispatchedShipID string
 	for id, ship := range ws.LogisticsShips {
@@ -778,8 +708,8 @@ func TestE2E_InterstellarLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	if ship == nil {
 		t.Fatalf("expected dispatched ship %s to remain registered", dispatchedShipID)
 	}
-	if ship.Status != model.LogisticsShipIdle {
-		t.Fatalf("expected dispatched ship idle after delivery, got %s", ship.Status)
+	if !ship.Returning {
+		t.Fatalf("expected dispatched ship returning after delivery, got %s", ship.Status)
 	}
 	if got := ship.CargoQty(); got != 0 {
 		t.Fatalf("expected dispatched ship cargo cleared, got %d", got)

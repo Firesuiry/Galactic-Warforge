@@ -1008,9 +1008,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `ground_task_forces[].status`：当前固定为 `staging` / `contesting` / `securing` / `holding` / `clearing` / `supplying` / `blocked`
   - `ground_task_forces[].orbital_support_mode`：当前固定为 `none` / `fire_support` / `strike`
   - `ground_task_forces[].orbital_support_blocked_reason`：当前 authoritative 会返回 `no_orbital_superiority` / `planetary_defense_screen` / `frontline_not_found`
-  - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`
+  - `logistics_stations`：物流站视图，包含 `building_id` / `building_type` / `owner_id` / `position` / `state` / `drone_ids` / `ship_ids`。`state.inventory` 是唯一站库，不另设 `building.storage`；新增 `slot_capacity` / `item_capacity` / `energy` / `energy_capacity` / `charge_per_tick` / `last_charge_tick` / `last_charge_amount` / `belt_ports`。槽位为本地与星际设置的物品并集，同一物品只占一个槽；容量按物品分别计算。
+  - 运输器共同字段还包含 `trip_kind`（航次中为 `delivery|pickup`，空闲时为空字符串）、`pickup_item_id` / `pickup_quantity`（空载取货预约）、`home_pos`、`returning`、`state_reason`、`energy_cost`。无人机默认载量100/速度4，船默认载量200/速度2、曲速速度10；船另有 `current_planet_id` 表示实际所在星球。`station_id` 始终为归属站，`target_station_id` / `target_planet_id` 随去程与返航更新。
   - `logistics_drones`：物流无人机视图，包含 `id` / `owner_id` / `station_id` / `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo`
   - `logistics_ships`：物流货船视图，包含 `id` / `owner_id` / `station_id` / `origin_planet_id` / `target_planet_id` / `target_station_id` / `capacity` / `speed` / `warp_speed` / `warp_distance` / `energy_per_distance` / `warp_energy_multiplier` / `warp_item_id` / `warp_item_cost` / `warp_enabled` / `status` / `position` / `target_pos` / `remaining_ticks` / `travel_ticks` / `cargo` / `warped` / `energy_cost` / `warp_item_spent`
+  - 当前物流船runtime列表按船的归属星球注册表返回；异星降落/等待时，目标星球查询尚不汇入其它星球归属的船，应查归属星球runtime并结合 `current_planet_id` 判断。当地3D画面暂不显示这类异星来船，库存交付仍由服务端真实结算。
   - `construction_tasks`：施工任务视图，包含 `id` / `player_id` / `region_id` / `building_type` / `position` / `rotation` / `blueprint_params` / `conveyor_direction` / `recipe_id` / `cost` / `state` / `enqueue_tick` / `start_tick` / `update_tick` / `queue_index` / `remaining_ticks` / `total_ticks` / `speed_bonus` / `priority` / `error` / `materials_deducted`
   - `contacts`：行星接触列表，字段与 system runtime 的 `contacts` 相同；当前 ground / beacon / hive 目标也会按同一套四级情报语义返回
   - `enemy_forces`：敌军视图，只包含当前至少达到 `confirmed_type` 的真实接触，字段仍为 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
@@ -1045,7 +1047,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "owner_id": "p1",
       "position": {"x": 4, "y": 4},
       "drone_ids": ["drone-1"],
-      "ship_ids": ["ship-1"]
+      "ship_ids": []
     }
   ],
   "logistics_drones": [
@@ -1054,13 +1056,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "owner_id": "p1",
       "station_id": "station-1",
       "target_station_id": "station-1",
-      "capacity": 25,
-      "speed": 6,
+      "capacity": 100,
+      "speed": 4,
       "status": "idle",
       "position": {"x": 4, "y": 4},
       "remaining_ticks": 0,
       "travel_ticks": 0,
-      "cargo": {"iron_ore": 12}
+      "cargo": {}
     }
   ],
   "construction_tasks": [
@@ -1637,7 +1639,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1743,12 +1745,13 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `configure_traffic_monitor`：`target.entity_id` 为己方流速监测器，完整替换配置：`target_belt_id`（己方球面相邻 Mk.I/II/III 皮带 ID；空字符串清绑定）、`window_ticks`（1..600 整数）、`minimum_items_per_tick`（0..60 有限数）、`alerts_enabled`（布尔值）均必填。非法配置不改变状态；成功重配清窗口和累计值。建筑耗电1/tick，监测不改变物流。`building.traffic_monitor` 包含配置、`state`、`samples[{tick,items,queued_items}]`、`sample_count`、`window_items`、`items_per_tick`、`total_items`、`last_sample_tick`、`alert_active`。统计目标皮带成功流出的实际件数，包括带间、分拣器和机器取货；同一次流出不重复计数。完整窗口前为 `sampling`，正常为 `flowing|idle`，低于阈值为 `low_flow`，完整窗口每次都有积货且零流出为 `blocked`。无绑定/停电/暂停/目标移除或停用分别为 `unconfigured|no_power|paused|target_missing|target_inactive`，清当前窗口但保留累计；恢复重新采样。关闭告警仍采样。`traffic_monitor_alert` 仅在告警变更时发给所属玩家，载荷含 `building_id`、`planet_id`、`target_belt_id`、`state`、`alert_active`、`items_per_tick`、`minimum_items_per_tick`、`tick`；解除告警同样发出。
   - `configure_splitter`：`target.entity_id` 为自己拥有且已初始化的 `splitter`。必填 `payload.input_directions` / `output_directions`（数组）；仅允许 `north|east|south|west`，每组至少一个、所有端口不重复且输入输出互斥，不接受 `auto`。可选 `input_priority` / `output_priority`（所属方向或空字符串）和 `output_filters`（输出方向到有效物品 ID 的对象）。**完整替换配置**：省略优先级或传 `""` 会清除旧优先级；省略过滤或传 `{}` 会清除全部旧过滤，删除单口过滤需提交不含该口的完整过滤对象，不能用空物品 ID 代替删除。验证失败不改变原配置、缓存、游标或统计；成功发拥有者可见的 `building_state_changed`，payload 含 `entity_id` 和完整 `splitter`。
   - 分流器优先级为“可用优先”：优先入口无货时允许其它入口供货；优先出口缺连接、满载或不允许当前物品时，尝试其它有容量且满足自身过滤条件的出口。所有合格出口均堵塞时物品留在原缓存，不丢弃、不复制，也不绕过过滤。过滤口与未过滤口同时存在时，未过滤口也能接收该过滤物品；若需要该物品优先进过滤口，应设置该出口优先级。方向按球面邻接转换，不能简单用 x/y 差替代跨面端口关系。
-  - `configure_logistics_station`：`target.entity_id` 必填；目标必须是当前玩家拥有的 `planetary_logistics_station` 或 `interstellar_logistics_station`；可选 `payload.input_priority` / `payload.output_priority` / `payload.drone_capacity`；当目标是星际物流站时，还可传 `payload.interstellar.enabled` / `payload.interstellar.warp_enabled` / `payload.interstellar.ship_slots`
-  - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `payload.item_id` + `payload.mode` + `payload.local_storage` 必填；`payload.scope` 取 `planetary|interstellar`；`payload.mode` 取 `none|supply|demand|both`；`interstellar` 作用域只允许星际物流站
+  - `configure_logistics_station`：`target.entity_id` 必填，目标为己方行星/星际物流站。可选 `payload.input_priority` / `output_priority` / `drone_capacity`（1..10）；星际站另可传 `interstellar.enabled` / `warp_enabled` / `ship_slots`（1..5）。容量不能降至已安装运输器数量以下，增加容量不会生成载具。可选 `belt_ports`：省略保持原值，提供则**完整替换**，`{}` 清空全部端口；例如 `{"west":{"mode":"input","item_id":"iron_ore"},"east":{"mode":"output","item_id":"iron_ore"}}`。仅四个正方向，每口模式为 `input|output`，物品须已有槽位。整条配置验证失败不改变原状态。
+  - `configure_logistics_slot`：`target.entity_id` + `payload.scope` + `item_id` + `mode` + `local_storage` 必填；scope 为 `planetary|interstellar`，mode 为 `none|supply|demand|both`，仅星际站支持 interstellar。`local_storage` 必须在0..单项容量内，是供需保留/目标量；`none` 保留本地库存槽。可选布尔 `remove:true` 真正删除当前scope槽，此时仍须 `mode:"none",local_storage:0`；有库存、皮带口引用、去程/返航货物或空载取货预约时拒绝，跨星球按星球+站ID判定；其它scope同物品的空槽可保留。非法配置/删除均返回 `VALIDATION_FAILED` 且不修改状态。
+  - `install_logistics_vehicle`：`target.entity_id` 为己方地面物流站；必填 `payload.item_id`（`logistics_drone|logistics_vessel`）及正整数 `quantity`，可选 `source:"player"|"station"`，省略默认player。player从玩家背包扣成品；station从目标站唯一 `logistics_station.inventory` 扣成品，可将制造台产物经皮带送入站内已配置的本地物品槽后安装。一次扣同数量成品并登记实体，整批容量或库存不足原子失败；库存不足返回 `INSUFFICIENT_RESOURCE`。行星/星际站最多安装10架无人机，只有启用的星际站可安装最多5艘船；轨道采集器不能安装。制造台配方 `logistics_drone`：2 motor + 2 processor + 5 iron_ingot → 1，120 tick，需 `planetary_logistics`；`logistics_vessel`：2 motor + 10 processor + 10 titanium_alloy → 1，300 tick，需 `interstellar_logistics`。两配方不支持个人手造。
   - `cancel_construction` / `restore_construction`：`payload.task_id` 必填
   - `start_research`：`payload.tech_id` 必填；前置科技必须满足；至少需要 1 个处于 `running` 且未设置 `recipe_id` 的研究站（`matrix_lab` 或 `self_evolution_lab`）；所需每种矩阵都必须已经出现在研究站本地库存里；后续 tick 会真实消耗研究站库存中的矩阵推进 `progress`
   - `cancel_research`：`payload.tech_id` 必填
-  - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑；命令会从玩家 `inventory` 扣减实际装入量，并把物品装入建筑本地存储；若存储容量不足，允许部分装填并返回实际转移数量。喷涂机只允许有效增产剂物品（`proliferator_mk1` / `proliferator_mk2` / `proliferator_mk3`），尝试装入氢等货物返回验证失败；货物必须走西侧传送带。分馏塔无普通 `storage`，不能直接装料，氢须走西侧传送带。
+  - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑或地面物流站；命令从玩家 `inventory` 扣减实际装入量。地面物流站须先配置物品槽，写入唯一 `logistics_station.inventory`；普通建筑写本地存储。容量不足允许部分装填，仅扣实际转移数量；轨道采集器不开放此装料入口。喷涂机只允许有效增产剂物品（`proliferator_mk1` / `proliferator_mk2` / `proliferator_mk3`），尝试装入氢等货物返回验证失败；货物必须走西侧传送带。分馏塔无普通 `storage`，不能直接装料，氢须走西侧传送带。
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
   - `deploy_squad`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；目标建筑必须是当前玩家拥有、带 deployment module、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该蓝图对应 `visible_tech_id`，并且该枢纽在 `/world/warfare/industry.deployment_hubs[].ready_payloads` 中已有足量军备产物；若传 `planet_id`，目标行星 runtime 也必须已加载
@@ -1812,8 +1815,11 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 - 示例补充说明：
   - 如果 `vertical_launching_silo` 还没自行产出火箭，可以先用 `transfer_item` 把背包里的 `small_carrier_rocket` 装进建筑本地存储。
   - `launch_rocket` 执行前，目标层必须已经存在至少一个 `build_dyson_*` 生成的脚手架。
-- 物流补充说明：`planetary_logistics_station` 完工后会自动补齐默认容量对应的无人机；`interstellar_logistics_station` 还会自动补齐默认货船
-- 物流补充说明：当前已支持在同一恒星系、已加载行星之间形成最小星际物流闭环；物流货船视图会暴露 `origin_planet_id` / `target_planet_id`，后续 tick 会跨行星派发与结算
+- 地面站建造后为空库存、空电池、无端口、无运输器。行星站建造160矿/80能：3个物品槽、每项200，电池1000、最多充10/tick、基础用电1；星际站280矿/140能：5槽、每项500，电池10000、最多充30/tick、基础用电2。充电计入真实电网分配，先保障基础耗电，再用获配剩余电量充电；满电不再请求充电，玩家全局能量不能代替站内电池。初始场景地面站库存会自动配置 `none` 槽，超过槽数或单项容量则拒绝启动。
+- 站点 `running` 时，每个皮带口最多6件/tick，连接相邻自有活动普通传送带并校验流向，支持cube球面跨面方向转换；先入后出、按物品过滤、满仓/满带背压。停电停止皮带IO与新航次；在途运输不依赖后续供电。站库和载具库存暂不保存喷涂元数据，因此带剩余喷涂用途的货物停在入口皮带，不静默剥离涂层。
+- 调度先尝试供应站自有运输器送货（`delivery`），需求站闲置运输器还可空载前往供应站取货（`pickup`），到达时才从真实供给库存装货，返抵需求站后卸货。供给与需求都扣除在途预约以防重复派遣；被动供给/卸货无需对端供电，但起飞归属站必须有真实电网且电池足够。轨道采集器保持独立采集库存行为，由需求站车辆取货。
+- 航次起飞一次预扣往返能源：无人机为 `2*max(1,球面距离)`；船按默认参数普通航行 `10*距离`，曲速 `30*距离`。开启曲速、距离达到阈值（默认20）、归属站拥有往返共2份 `space_warper` 且电池足够时优先曲速，否则尝试普通航行；曲速物品同样从归属站库存一次扣除，须先配其物品槽。`energy_cost` / `warp_item_spent` 表示本航次往返总支出。
+- 去程与返程均经历 `takeoff → in_flight → landing`，`returning=true` 标记返航，回家卸完后才 `idle`。满仓允许部分卸货，余货保留在 `waiting_unload` / `destination_full`，空间恢复后继续；目标被拆/变敌则带货返航。归属站被拆/变敌且返抵时无法卸货会进入 `stranded` / `home_unavailable`，保留运输器与货物；尚无公共命令回收滞留运输器。跨星球仅结算已加载runtime，不能据此认定完整殖民及跨星系发展链已验收。
 - 升级/拆除规则补充:
   - 受建筑定义中的 `upgrade` / `demolish` 规则约束（允许与否、最大等级、耗时、返还率、是否要求停机）。
   - 若 `duration_ticks > 0`，命令执行会创建 `job` 并将建筑状态置为 `paused`，在作业完成 Tick 时生效：升级后恢复原工作状态，拆除后释放占格并返还资源。

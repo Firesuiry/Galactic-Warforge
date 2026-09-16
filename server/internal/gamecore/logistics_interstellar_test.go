@@ -50,6 +50,7 @@ func TestInterstellarDispatchWarpEnergyCost(t *testing.T) {
 		t.Fatalf("register ship: %v", err)
 	}
 
+	powerLogisticsFixture(t, ws)
 	settleInterstellarDispatch(map[string]*model.WorldState{ws.PlanetID: ws}, nil)
 
 	if ship.Status != model.LogisticsShipTakeoff {
@@ -61,17 +62,17 @@ func TestInterstellarDispatchWarpEnergyCost(t *testing.T) {
 	if !ship.Warped {
 		t.Fatalf("expected ship to warp")
 	}
-	if ship.WarpItemSpent != origin.LogisticsStation.WarpItemCostValue() {
+	if ship.WarpItemSpent != 2*origin.LogisticsStation.WarpItemCostValue() {
 		t.Fatalf("expected warp item spent %d, got %d", origin.LogisticsStation.WarpItemCostValue(), ship.WarpItemSpent)
 	}
-	if got := origin.LogisticsStation.Inventory[model.ItemSpaceWarper]; got != 1 {
+	if got := origin.LogisticsStation.Inventory[model.ItemSpaceWarper]; got != 0 {
 		t.Fatalf("expected warp items 1, got %d", got)
 	}
 	if got := origin.LogisticsStation.Inventory[model.ItemIronOre]; got != 70 {
 		t.Fatalf("expected origin inventory 70, got %d", got)
 	}
 	distance := ws.SurfaceDistance(origin.Position, target.Position)
-	expectedEnergy := model.LogisticsShipEnergyCost(distance, origin.LogisticsStation.EnergyPerDistanceValue(), origin.LogisticsStation.WarpEnergyMultiplierValue(), true)
+	expectedEnergy := 2 * model.LogisticsShipEnergyCost(distance, origin.LogisticsStation.EnergyPerDistanceValue(), origin.LogisticsStation.WarpEnergyMultiplierValue(), true)
 	if ship.EnergyCost != expectedEnergy {
 		t.Fatalf("expected energy cost %d, got %d", expectedEnergy, ship.EnergyCost)
 	}
@@ -116,6 +117,7 @@ func TestInterstellarShipDelivery(t *testing.T) {
 		t.Fatalf("register ship: %v", err)
 	}
 
+	powerLogisticsFixture(t, ws)
 	settleInterstellarDispatch(map[string]*model.WorldState{ws.PlanetID: ws}, nil)
 
 	for i := 0; i < 10; i++ {

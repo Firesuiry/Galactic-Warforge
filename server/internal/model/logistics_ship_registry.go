@@ -11,6 +11,11 @@ func RegisterLogisticsShip(ws *WorldState, ship *LogisticsShipState) error {
 		return fmt.Errorf("ship required")
 	}
 	ship.Normalize()
+	if b := ws.Buildings[ship.StationID]; b != nil {
+		ship.OwnerID = b.OwnerID
+		pos := b.Position
+		ship.HomePos = &pos
+	}
 	if ship.ID == "" {
 		return fmt.Errorf("ship id required")
 	}

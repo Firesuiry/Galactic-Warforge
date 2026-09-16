@@ -6,10 +6,12 @@ import "fmt"
 type LogisticsShipStatus string
 
 const (
-	LogisticsShipIdle     LogisticsShipStatus = "idle"
-	LogisticsShipTakeoff  LogisticsShipStatus = "takeoff"
-	LogisticsShipInFlight LogisticsShipStatus = "in_flight"
-	LogisticsShipLanding  LogisticsShipStatus = "landing"
+	LogisticsShipIdle          LogisticsShipStatus = "idle"
+	LogisticsShipTakeoff       LogisticsShipStatus = "takeoff"
+	LogisticsShipInFlight      LogisticsShipStatus = "in_flight"
+	LogisticsShipLanding       LogisticsShipStatus = "landing"
+	LogisticsShipWaitingUnload LogisticsShipStatus = "waiting_unload"
+	LogisticsShipStranded      LogisticsShipStatus = "stranded"
 )
 
 const (
@@ -28,16 +30,26 @@ const (
 const DefaultLogisticsShipWarpItemID = ItemSpaceWarper
 
 var validLogisticsShipStatuses = map[LogisticsShipStatus]struct{}{
-	LogisticsShipIdle:     {},
-	LogisticsShipTakeoff:  {},
-	LogisticsShipInFlight: {},
-	LogisticsShipLanding:  {},
+	LogisticsShipIdle:          {},
+	LogisticsShipTakeoff:       {},
+	LogisticsShipInFlight:      {},
+	LogisticsShipLanding:       {},
+	LogisticsShipWaitingUnload: {},
+	LogisticsShipStranded:      {},
 }
 
 // LogisticsShipState tracks an interstellar logistics ship.
 type LogisticsShipState struct {
 	ID                   string              `json:"id"`
 	StationID            string              `json:"station_id"`
+	OwnerID              string              `json:"owner_id"`
+	TripKind             string              `json:"trip_kind"`
+	PickupItemID         string              `json:"pickup_item_id,omitempty"`
+	PickupQuantity       int                 `json:"pickup_quantity,omitempty"`
+	HomePos              *Position           `json:"home_pos,omitempty"`
+	Returning            bool                `json:"returning"`
+	StateReason          string              `json:"state_reason,omitempty"`
+	CurrentPlanetID      string              `json:"current_planet_id,omitempty"`
 	OriginPlanetID       string              `json:"origin_planet_id,omitempty"`
 	TargetPlanetID       string              `json:"target_planet_id,omitempty"`
 	TargetStationID      string              `json:"target_station_id,omitempty"`
@@ -71,6 +83,7 @@ func NewLogisticsShipState(id, stationID string, pos Position) *LogisticsShipSta
 		WarpSpeed: DefaultLogisticsShipWarpSpeed,
 		Status:    LogisticsShipIdle,
 		Position:  pos,
+		HomePos:   &Position{X: pos.X, Y: pos.Y, Z: pos.Z},
 	}
 	ship.Normalize()
 	return ship
@@ -82,6 +95,10 @@ func (s *LogisticsShipState) Clone() *LogisticsShipState {
 		return nil
 	}
 	out := *s
+	if s.HomePos != nil {
+		pos := *s.HomePos
+		out.HomePos = &pos
+	}
 	if s.TargetPos != nil {
 		pos := *s.TargetPos
 		out.TargetPos = &pos
@@ -126,7 +143,8 @@ func (s *LogisticsShipState) Normalize() {
 		s.TravelTicks = 0
 	}
 	if _, ok := validLogisticsShipStatuses[s.Status]; !ok {
-		s.Status = LogisticsShipIdle
+		s.Status = LogisticsShipStranded
+		s.StateReason = "invalid_flight_state"
 	}
 	if s.EnergyCost < 0 {
 		s.EnergyCost = 0
@@ -197,6 +215,11 @@ func (s *LogisticsShipState) BeginTrip(targetPlanetID, targetStationID string, t
 		return fmt.Errorf("ship not idle")
 	}
 	s.Normalize()
+	s.TripKind = "delivery"
+	s.PickupItemID = ""
+	s.PickupQuantity = 0
+	s.Returning = false
+	s.StateReason = ""
 	s.TargetPlanetID = targetPlanetID
 	s.TargetStationID = targetStationID
 	s.TargetPos = &Position{X: targetPos.X, Y: targetPos.Y, Z: targetPos.Z}
@@ -212,9 +235,9 @@ func (s *LogisticsShipState) BeginTrip(targetPlanetID, targetStationID string, t
 	}
 	s.TravelTicks = LogisticsShipTravelTicks(distance, speed)
 	s.Warped = warpAllowed
-	s.EnergyCost = LogisticsShipEnergyCost(distance, s.EnergyPerDistance, s.WarpEnergyMultiplier, warpAllowed)
+	s.EnergyCost = 2 * LogisticsShipEnergyCost(distance, s.EnergyPerDistance, s.WarpEnergyMultiplier, warpAllowed)
 	if warpAllowed && s.WarpItemCost > 0 {
-		s.WarpItemSpent = s.WarpItemCost
+		s.WarpItemSpent = 2 * s.WarpItemCost
 	} else {
 		s.WarpItemSpent = 0
 	}

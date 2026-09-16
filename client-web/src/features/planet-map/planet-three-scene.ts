@@ -17,6 +17,7 @@ import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
+import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position } from '@shared/types';
@@ -350,9 +351,9 @@ export class PlanetThreeScene {
     this.dynamicBatches.refresh(batchEntries);
 
     const movingKeys = new Set<string>();
-    const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false) => {
+    const move = (id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne = false, normal?: THREE.Vector3) => {
       movingKeys.add(id);
-      this.trackMotion(id, type, own, position, layer, scale, airborne);
+      this.trackMotion(id, type, own, position, layer, scale, airborne, normal);
     };
     for (const unit of Object.values(planet.units ?? {})) {
       if (unit.owner_id === playerId || this.visible(unit.position)) move(`unit:${unit.id}`, unit.type, unit.owner_id === playerId, unit.position, 'units', .72);
@@ -360,8 +361,14 @@ export class PlanetThreeScene {
     const logisticsLinks: { from: Position; to: Position }[] = [];
     for (const drone of [...(runtime?.logistics_drones ?? []), ...(runtime?.logistics_ships ?? [])]) {
       if (!this.visible(drone.position)) continue;
-      move(`logistics:${drone.id}`, 'ship', true, drone.position, 'logistics', .45, drone.status !== 'idle');
-      if (drone.status !== 'idle' && drone.target_pos) logisticsLinks.push({ from: drone.position, to: drone.target_pos });
+      if ('current_planet_id' in drone && drone.current_planet_id && drone.current_planet_id !== planet.planet_id) continue;
+      const interplanetary = 'target_planet_id' in drone && drone.target_planet_id && drone.target_planet_id !== planet.planet_id;
+      // An interplanetary vessel has left this surface during its cruise phase.
+      if (interplanetary && drone.status === 'in_flight') continue;
+      const airborne = ['takeoff', 'in_flight', 'landing'].includes(drone.status);
+      move(`logistics:${drone.id}`, 'ship', drone.owner_id === playerId, drone.position, 'logistics', .45, airborne,
+        interplanetary ? undefined : logisticsFlightNormal(drone, planet.surface.face_size));
+      if (!interplanetary && ['takeoff', 'in_flight', 'landing'].includes(drone.status) && drone.target_pos) logisticsLinks.push({ from: drone.position, to: drone.target_pos });
     }
     for (const enemy of runtime?.enemy_forces ?? []) {
       if (this.visible(enemy.position)) move(`enemy:${enemy.id}`, enemy.type, false, enemy.position, 'threat', 1);
@@ -380,7 +387,7 @@ export class PlanetThreeScene {
     // Model geometry/material are cached and shared by the asset library.
   }
 
-  private trackMotion(id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne: boolean) {
+  private trackMotion(id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne: boolean, normal?: THREE.Vector3) {
     const signature = JSON.stringify([type, own, layer]);
     let entry = this.moving.get(id);
     if (entry && entry.signature !== signature) { this.removeModel(entry.group); this.moving.delete(id); entry = undefined; }
@@ -393,6 +400,10 @@ export class PlanetThreeScene {
     const group = entry.group;
     group.scale.copy(entry.baseScale);
     this.place(group, position, layer, scale);
+    if (normal) {
+      group.position.copy(normal).multiplyScalar(RADIUS + this.tileScale() * .025);
+      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+    }
     if (airborne) group.position.normalize().multiplyScalar(RADIUS + this.tileScale() * .4);
     entry.target.copy(group.position);
     if (previousPosition && !this.frozen && previousPosition.distanceTo(entry.target) < RADIUS) group.position.copy(previousPosition);

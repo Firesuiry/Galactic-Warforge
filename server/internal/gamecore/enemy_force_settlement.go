@@ -267,7 +267,7 @@ func (gc *GameCore) executeEnemyAttack(ws *model.WorldState, rhythm model.Attack
 			if targetBuilding.HP <= 0 {
 				ws.UnindexBuilding(targetBuilding)
 				delete(ws.Buildings, targetBuilding.ID)
-				removeStationFleet(ws, targetBuilding.ID)
+				detachStationFleet(ws, targetBuilding.ID)
 				model.UnregisterLogisticsStation(ws, targetBuilding.ID)
 				model.UnregisterPowerGridBuilding(ws, targetBuilding.ID)
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { surfaceStep, type SurfaceDirection } from '@shared/surface';
-import type { Building, BuildingFractionationState, BuildingSprayCoaterState, PortDirection, SplitterConfig } from '@shared/types';
+import type { Building, BuildingFractionationState, BuildingSprayCoaterState, LogisticsStationState, PortDirection, SplitterConfig } from '@shared/types';
 import { ConveyorGeometry, conveyorPaths } from './conveyor-geometry';
 import { surfaceTileSize, tileNormal } from './projection';
 
@@ -19,6 +19,23 @@ const splitter = (x: number, y: number, config: SplitterConfig = { input_directi
 });
 
 describe('continuous surface conveyor paths', () => {
+  it('connects only configured station ports and refreshes wiring without inventory churn', () => {
+    const station = { ...machine(6, 6, 'both'), type: 'planetary_logistics_station', storage: undefined,
+      logistics_station: { belt_ports: { west: { mode: 'input', item_id: 'iron_ore' }, east: { mode: 'output', item_id: 'iron_ore' } } } as LogisticsStationState };
+    const neighbors = [belt('west', 5, 6), belt('east', 7, 6), belt('north', 6, 5, 'south')];
+    const paths = conveyorPaths([station, ...neighbors], 16);
+    expect(paths.find(p => p.building.id === 'west')!.connected.has('east')).toBe(true);
+    expect(paths.find(p => p.building.id === 'east')!.connected.has('west')).toBe(true);
+    expect(paths.find(p => p.building.id === 'north')!.connected.size).toBe(0);
+    expect(conveyorPaths([station, belt('reversed', 5, 6, 'west')], 16)[0].connected.size).toBe(0);
+    expect(conveyorPaths([{ ...station, owner_id: 'enemy' }, ...neighbors], 16).every(p => p.connected.size === 0)).toBe(true);
+    const renderer = new ConveyorGeometry();
+    renderer.refresh([station, ...neighbors], 16);
+    expect(renderer.refresh([{ ...station, logistics_station: { ...station.logistics_station, energy: 30, inventory: { iron_ore: 20 } } }, ...neighbors], 16)).toBe(false);
+    expect(renderer.refresh([{ ...station, logistics_station: { ...station.logistics_station, belt_ports: {} } }, ...neighbors], 16)).toBe(true);
+    renderer.dispose();
+  });
+
   it('joins only the real directional fractionator and coater ports', () => {
     const neighbors = [belt('west', 5, 6), belt('east', 7, 6), belt('north', 6, 5, 'south'), belt('south', 6, 7, 'south')];
     const fraction = { ...machine(6, 6, 'both'), type: 'fractionator', storage: undefined,

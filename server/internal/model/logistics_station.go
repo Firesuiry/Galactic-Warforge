@@ -49,6 +49,15 @@ type LogisticsStationCapacityCache struct {
 
 // LogisticsStationState tracks a logistics station configuration and cached capacity.
 type LogisticsStationState struct {
+	SlotCapacity     int                                     `json:"slot_capacity"`
+	ItemCapacity     int                                     `json:"item_capacity"`
+	Energy           int                                     `json:"energy"`
+	EnergyCapacity   int                                     `json:"energy_capacity"`
+	ChargePerTick    int                                     `json:"charge_per_tick"`
+	LastChargeTick   int64                                   `json:"last_charge_tick"`
+	LastChargeAmount int                                     `json:"last_charge_amount"`
+	BeltPorts        map[ConveyorDirection]LogisticsBeltPort `json:"belt_ports,omitempty"`
+
 	Priority             LogisticsStationPriority               `json:"priority"`
 	Settings             map[string]LogisticsStationItemSetting `json:"settings,omitempty"`
 	Inventory            ItemInventory                          `json:"inventory,omitempty"`
@@ -62,6 +71,7 @@ type LogisticsStationState struct {
 // NewLogisticsStationState builds a default station state.
 func NewLogisticsStationState() *LogisticsStationState {
 	state := &LogisticsStationState{
+		SlotCapacity: 3, ItemCapacity: 200, EnergyCapacity: 1000, ChargePerTick: 10, LastChargeTick: -1,
 		Priority:      LogisticsStationPriority{Input: 1, Output: 1},
 		DroneCapacity: DefaultLogisticsStationDroneCapacity,
 	}
@@ -75,6 +85,13 @@ func (s *LogisticsStationState) Clone() *LogisticsStationState {
 		return nil
 	}
 	out := *s
+	if s.BeltPorts != nil {
+		out.BeltPorts = make(map[ConveyorDirection]LogisticsBeltPort, len(s.BeltPorts))
+		for dir, port := range s.BeltPorts {
+			out.BeltPorts[dir] = port
+		}
+	}
+
 	if len(s.Settings) > 0 {
 		out.Settings = make(map[string]LogisticsStationItemSetting, len(s.Settings))
 		for key, setting := range s.Settings {
@@ -147,6 +164,9 @@ func (s *LogisticsStationState) UpsertSetting(setting LogisticsStationItemSettin
 	if _, ok := Item(setting.ItemID); !ok {
 		return fmt.Errorf("unknown item: %s", setting.ItemID)
 	}
+	if err := s.validateSettingCapacity(setting); err != nil {
+		return err
+	}
 	setting.LocalStorage = normalizeNonNegative(setting.LocalStorage)
 	if !setting.Mode.Valid() {
 		setting.Mode = LogisticsStationModeNone
@@ -178,6 +198,9 @@ func (s *LogisticsStationState) UpsertInterstellarSetting(setting LogisticsStati
 	}
 	if _, ok := Item(setting.ItemID); !ok {
 		return fmt.Errorf("unknown item: %s", setting.ItemID)
+	}
+	if err := s.validateSettingCapacity(setting); err != nil {
+		return err
 	}
 	setting.LocalStorage = normalizeNonNegative(setting.LocalStorage)
 	if !setting.Mode.Valid() {

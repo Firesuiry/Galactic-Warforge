@@ -49,6 +49,7 @@ func newSettlementPipeline() settlementPipeline {
 			settlePlanetaryShields(ws)
 			events = append(events, finalizePowerSettlement(ws, receiverViews)...)
 			events = append(events, settleResources(ws)...)
+			events = append(events, settleLogisticsCharging(ws)...)
 
 			settleOrbitalCollectors(ws, gc.maps)
 			ws.ConveyorTraffic = nil
@@ -61,6 +62,7 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleProduction(ws)...)
 			settleSprayCoaters(ws)
 			events = append(events, settleFractionation(ws)...)
+			settleLogisticsStationIO(ws)
 			settleStorage(ws)
 			events = append(events, settleTurrets(ws)...)
 			events = append(events, settleTrafficMonitors(ws)...)
@@ -73,7 +75,7 @@ func newSettlementPipeline() settlementPipeline {
 				}
 			}
 
-			settleLogisticsDispatch(ws)
+			settleLogisticsDispatch(ws, gc.worlds)
 			settleLogisticsDrones(ws)
 		}
 		return events

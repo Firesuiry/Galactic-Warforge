@@ -791,6 +791,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execUpgrade(gc.world, qr.PlayerID, cmd)
 		case model.CmdDemolish:
 			res, evts = gc.execDemolish(gc.world, qr.PlayerID, cmd)
+		case model.CmdInstallLogisticsVehicle:
+			res, evts = gc.execInstallLogisticsVehicle(gc.world, qr.PlayerID, cmd)
 		case model.CmdConfigureLogisticsStation:
 			res, evts = gc.execConfigureLogisticsStation(gc.world, qr.PlayerID, cmd)
 		case model.CmdConfigureLogisticsSlot:

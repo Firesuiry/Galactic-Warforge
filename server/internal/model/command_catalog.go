@@ -114,6 +114,12 @@ func commandStructureRegistry() []CommandStructureSpec {
 			RequiredTargetFields: []string{"entity_id"},
 		},
 		{
+			Type:                  CmdInstallLogisticsVehicle,
+			OptionalPayloadFields: []string{"source"},
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"item_id", "quantity"},
+		},
+		{
 			Type:                 CmdConfigureLogisticsStation,
 			RequiredTargetFields: []string{"entity_id"},
 			OptionalPayloadFields: []string{
@@ -121,12 +127,14 @@ func commandStructureRegistry() []CommandStructureSpec {
 				"output_priority",
 				"drone_capacity",
 				"interstellar",
+				"belt_ports",
 			},
 		},
 		{
 			Type:                  CmdConfigureLogisticsSlot,
 			RequiredTargetFields:  []string{"entity_id"},
 			RequiredPayloadFields: []string{"scope", "item_id", "mode", "local_storage"},
+			OptionalPayloadFields: []string{"remove"},
 		},
 		{
 			Type:                 CmdScanGalaxy,
@@ -527,6 +535,10 @@ func buildCommandSchema(spec CommandStructureSpec) map[string]any {
 
 func schemaForPayloadField(field string) map[string]any {
 	switch field {
+	case "belt_ports":
+		return map[string]any{"type": "object", "propertyNames": map[string]any{"enum": []string{"north", "east", "south", "west"}}, "additionalProperties": map[string]any{"type": "object", "required": []string{"mode", "item_id"}, "properties": map[string]any{"mode": map[string]any{"type": "string", "enum": []string{"input", "output"}}, "item_id": map[string]any{"type": "string"}}}}
+	case "remove":
+		return map[string]any{"type": "boolean"}
 	case "window_ticks":
 		return map[string]any{"type": "integer", "minimum": 1, "maximum": 600}
 	case "minimum_items_per_tick":

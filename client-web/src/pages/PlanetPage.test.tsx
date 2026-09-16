@@ -445,6 +445,7 @@ function createRuntimePayloadWithPlanetaryLogisticsStation() {
           inventory: {
             iron_ore: 45,
           },
+          energy: 100, energy_capacity: 1000, charge_per_tick: 10, last_charge_tick: 1, last_charge_amount: 10, slot_capacity: 3, item_capacity: 200,
           drone_capacity: 10,
           interstellar: {
             enabled: false,
@@ -500,6 +501,7 @@ function createRuntimePayloadWithInterstellarLogisticsStation() {
             iron_ore: 20,
             hydrogen: 12,
           },
+          energy: 100, energy_capacity: 1000, charge_per_tick: 10, last_charge_tick: 1, last_charge_amount: 10, slot_capacity: 3, item_capacity: 200,
           drone_capacity: 20,
           interstellar: {
             enabled: true,
@@ -1327,8 +1329,8 @@ describe("PlanetPage", () => {
         (element) => element.value === "pls-1",
       ),
     ).toBe(true);
-    await user.clear(screen.getByLabelText("无人机容量"));
-    await user.type(screen.getByLabelText("无人机容量"), "12");
+    await user.clear(screen.getByLabelText("无人机槽位上限"));
+    await user.type(screen.getByLabelText("无人机槽位上限"), "8");
     await user.click(screen.getByRole("button", { name: "提交物流站配置" }));
 
     expect(
@@ -1339,7 +1341,7 @@ describe("PlanetPage", () => {
       "configure_logistics_station",
     );
     expect(commandRequests[0]?.commands?.[0]?.target?.entity_id).toBe("pls-1");
-    expect(commandRequests[0]?.commands?.[0]?.payload?.drone_capacity).toBe(12);
+    expect(commandRequests[0]?.commands?.[0]?.payload?.drone_capacity).toBe(8);
   });
 
   it("星际物流站显示星际字段，并允许提交 interstellar 槽位配置", async () => {

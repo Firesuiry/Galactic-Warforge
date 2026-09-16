@@ -356,7 +356,7 @@ export function PlanetCommandPanel({
       ownBuildings.filter(
         (building) =>
           !isLogisticsStationBuildingType(building.type) ||
-          Boolean(building.storage?.inventory),
+          building.type === "planetary_logistics_station" || building.type === "interstellar_logistics_station",
       ),
     [ownBuildings],
   );

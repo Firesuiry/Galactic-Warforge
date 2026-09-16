@@ -77,8 +77,9 @@
 | `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
 | `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
 | `configure_splitter` | `<building_id> --inputs <方向列表> --outputs <方向列表> [--input-priority <方向>] [--output-priority <方向>] [--filters <方向:item_id列表>]` | 完整替换四向分流器端口、优先级与出口过滤；省略可选项会清除旧值 |
-| `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>]` | 配置物流站无人机容量、优先级与星际开关 |
-| `configure_logistics_slot`    | `<building_id> <planetary\|interstellar> <item_id> <none\|supply\|demand\|both> <local_storage>`                                                                               | 配置物流站单物品供需槽位               |
+| `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>] [--belt-ports <方向:input或output:物品ID,...\|none>]` | 配置站点参数；皮带端口提供时完整替换，none清空 |
+| `configure_logistics_slot`    | `<building_id> <planetary\|interstellar> <item_id> <none\|supply\|demand\|both> <local_storage>`                                                                               | 配置物品供需；删除可用 `<building_id> <scope> <item_id> --remove` |
+| `install_logistics_vehicle` | `<station_id> <logistics_drone\|logistics_vessel> <quantity> [--source <player\|station>]` | 消耗背包或站内成品安装，默认player；整批验证容量和库存 |
 | `cancel_construction`         | `<task_id>`                                                                                                                                                                    | 取消施工任务                           |
 | `restore_construction`        | `<task_id>`                                                                                                                                                                    | 恢复施工任务                           |
 | `start_research`              | `<tech_id>`                                                                                                                                                                    | 开始研究                               |
@@ -412,27 +413,54 @@ help configure_splitter
 
 ### 5. 物流与多星球最小闭环现在可直接操作
 
-当前 CLI 已经打通了收敛版的 `造站 -> 配槽位 -> 自动配送 -> 切星球继续经营` 闭环：
+当前 CLI 提供 `造站 -> 接电充电 -> 配槽/皮带 -> 安装成品运输器 -> 真实往返配送` 的操作入口：
 
 - 先用 `build` 建 `planetary_logistics_station` 或 `interstellar_logistics_station`
-- 物流站完工后，服务端会自动补齐默认容量对应的物流单位；星际站还会额外补货船
-- 用 `configure_logistics_station` 调整无人机容量、输入/输出优先级，以及 `interstellar` 里的启用 / 曲速 / 货船槽位
-- 用 `configure_logistics_slot` 为某个 `item_id` 设置 `planetary` 或 `interstellar` 作用域下的 `supply` / `demand` / `both`
+- 新站空库存、空电池、无皮带口、无运输器。安装须有 `logistics_drone` / `logistics_vessel` 成品。默认从背包安装；制造台产物可经皮带送入站点同物品的 `none` 本地槽，再用 `install_logistics_vehicle ... --source station` 从站库安装；调大容量不会生成载具。两配方需 `planetary_logistics` / `interstellar_logistics`，分别消耗2电动机+2处理器+5铁块、2电动机+10处理器+10钛合金。
+- 用 `configure_logistics_station` 调整无人机容量（1..10）、优先级、星际开关/曲速/货船槽位（1..5），容量不得低于已安装数。`--belt-ports` 提供时完整替换全部端口，省略保持原配置，`none` 清空；端口物品必须先配置槽位。
+- 用 `configure_logistics_slot` 配置 `none|supply|demand|both` 与保留/目标量。`none` 仍占本地槽；`--remove` 才删除，有库存、端口引用或在途货物/取货预约时拒绝。PLS为3槽每项200，ILS为5槽每项500，同物品跨scope只占一槽。
 - 用 `switch_active_planet` 在“已发现 + 已加载 + 当前玩家有 foothold”的星球之间切换当前操作焦点
 - 同一恒星系、已加载行星之间的星际物流货船现在可以跨行星派发；是否能形成闭环取决于两端物流站配置与该星球 runtime 是否已加载
-- 如果你更习惯图形界面，同一套配置也可以在 Web 行星页完成：选中己方物流站后，右侧“详情”页签看结构化状态，右侧“命令”页签用“物流站配置 / 物流槽位配置”直接发命令
+- 如果你更习惯图形界面，同一套配置也可以在 Web 行星页完成：在“工作台 → 物流”配置站点/槽位；选中己方站点后，在“详情 → 物流站运行与接线”查看状态、安装运输器和配置皮带端口
 
-常用流程示例：
+常用流程示例（假定两端已建好且通电，背包已有成品与装料；跨星球的目标站先切到所在星球配置）：
 
 ```bash
-configure_logistics_station b-20 --drone-capacity 12 --input-priority 3 --output-priority 2
+configure_logistics_station b-20 --drone-capacity 2 --input-priority 3 --output-priority 2
 configure_logistics_slot b-20 planetary iron_ore supply 20
 configure_logistics_slot b-21 planetary iron_ore demand 60
+configure_logistics_station b-20 --belt-ports west:input:iron_ore
+configure_logistics_station b-21 --belt-ports east:output:iron_ore
+install_logistics_vehicle b-20 logistics_drone 1
+transfer b-20 iron_ore 100
 configure_logistics_station b-30 --interstellar-enabled true --warp-enabled true --ship-slots 2
 configure_logistics_slot b-30 interstellar hydrogen supply 50
 configure_logistics_slot b-31 interstellar hydrogen demand 80
+install_logistics_vehicle b-30 logistics_vessel 1
+transfer b-30 hydrogen 100
 switch_active_planet planet-1-1
 ```
+
+皮带口只连接方向正确的相邻自有活动皮带，每口6件/tick。PLS基础用电1、最多充10/tick至1000；ILS基础2、最多充30/tick至10000。起飞一次扣往返能源，途中停电不坠毁。供方可主动送货，需方可派空载运输器取货；满仓时查看runtime的 `waiting_unload` / `destination_full`，清理同物品空间即可继续。`stranded` / `home_unavailable` 表示归属站失效，货物保留但尚无回收命令。
+
+制造台成品从站库安装示例（假定北侧相邻皮带朝本站送入无人机；配置端口会替换旧端口，应同时提交需要保留的其它口）：
+
+```bash
+configure_logistics_slot b-20 planetary logistics_drone none 0
+configure_logistics_station b-20 --belt-ports west:input:iron_ore,north:input:logistics_drone
+install_logistics_vehicle b-20 logistics_drone 1 --source station
+```
+
+应先确认 `planet_runtime` 中站库已有成品再执行安装；安装不会从其它建筑或未到站的皮带远程取货。
+
+清端口/删空槽示例（须先清空铁矿库存并等运输结束；此命令会拆掉本站全部皮带口）：
+
+```bash
+configure_logistics_station b-20 --belt-ports none
+configure_logistics_slot b-20 planetary iron_ore --remove
+```
+
+曲速还需要在起飞站配置 `space_warper none 0` 槽并实际装入至少2份曲速器，以及足够往返电量和达到距离阈值；只开开关不保证曲速。带剩余喷涂用途的货物会停在站点入口，当前站库不能保留涂层。完整规则见[服务端API](服务端API.md)。
 
 ### 6. 科研命令现在要求真实矩阵
 
@@ -520,15 +548,21 @@ demolish b-18
 
 ### 单星球物流
 
-`configure_logistics_station` 用来改站点参数，`configure_logistics_slot` 用来设单物品供需。通常先让源站 `supply`，再让目标站 `demand`。
+`configure_logistics_station` 改站点参数和端口，`configure_logistics_slot` 设置供需，`install_logistics_vehicle` 安装背包成品，或加 `--source station` 扣站内成品。以下沿用上节已通电、有成品和物料的站点；后半段为星际站示例，异星目标需切星球配置。
 
 ```bash
-configure_logistics_station b-20 --drone-capacity 12 --input-priority 3 --output-priority 2
+configure_logistics_station b-20 --drone-capacity 2 --input-priority 3 --output-priority 2
 configure_logistics_slot b-20 planetary iron_ore supply 20
 configure_logistics_slot b-21 planetary iron_ore demand 60
+configure_logistics_station b-20 --belt-ports west:input:iron_ore
+configure_logistics_station b-21 --belt-ports east:output:iron_ore
+install_logistics_vehicle b-20 logistics_drone 1
+transfer b-20 iron_ore 100
 configure_logistics_station b-30 --interstellar-enabled true --warp-enabled true --ship-slots 2
 configure_logistics_slot b-30 interstellar hydrogen supply 50
 configure_logistics_slot b-31 interstellar hydrogen demand 80
+install_logistics_vehicle b-30 logistics_vessel 1
+transfer b-30 hydrogen 100
 ```
 
 ### 单位与战斗

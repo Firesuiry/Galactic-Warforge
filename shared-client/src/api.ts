@@ -640,11 +640,17 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdInstallLogisticsVehicle(buildingId: string, itemId: string, quantity: number, source: 'player' | 'station' = 'player') {
+    return sendSingleCommand({ type: 'install_logistics_vehicle', target: { layer: 'planet', entity_id: buildingId },
+      payload: { item_id: itemId, quantity, source } });
+  }
+
   function cmdConfigureLogisticsStation(buildingId: string, options: ConfigureLogisticsStationOptions = {}) {
     const payload: Record<string, unknown> = {
       ...(options.inputPriority !== undefined ? { input_priority: options.inputPriority } : {}),
       ...(options.outputPriority !== undefined ? { output_priority: options.outputPriority } : {}),
       ...(options.droneCapacity !== undefined ? { drone_capacity: options.droneCapacity } : {}),
+      ...(options.beltPorts !== undefined ? { belt_ports: options.beltPorts } : {}),
     };
     const interstellar: Record<string, unknown> = {
       ...(options.interstellar?.enabled !== undefined ? { enabled: options.interstellar.enabled } : {}),
@@ -670,6 +676,7 @@ export function createApiClient(options: ApiClientOptions) {
         item_id: options.itemId,
         mode: options.mode,
         local_storage: options.localStorage,
+        ...(options.remove !== undefined ? { remove: options.remove } : {}),
       },
     });
   }
@@ -1159,6 +1166,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdCommissionFleet,
     cmdConfigureLogisticsSlot,
     cmdConfigureLogisticsStation,
+    cmdInstallLogisticsVehicle,
     cmdDemolish,
     cmdDemolishDyson,
     cmdDeploySquad,

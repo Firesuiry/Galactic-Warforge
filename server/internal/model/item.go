@@ -60,6 +60,8 @@ const (
 
 	ItemGear                         = "gear"
 	ItemMotor                        = "motor"
+	ItemLogisticsDrone               = "logistics_drone"
+	ItemLogisticsVessel              = "logistics_vessel"
 	ItemMagneticCoil                 = "magnetic_coil"
 	ItemCircuitBoard                 = "circuit_board"
 	ItemMicrocrystalline             = "microcrystalline_component"
@@ -412,6 +414,8 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 100,
 		UnitVolume: 1,
 	},
+	ItemLogisticsDrone:  {ID: ItemLogisticsDrone, Name: "Logistics Drone", Category: ItemCategoryComponent, Form: ResourceSolid, StackLimit: 50, UnitVolume: 1},
+	ItemLogisticsVessel: {ID: ItemLogisticsVessel, Name: "Logistics Vessel", Category: ItemCategoryComponent, Form: ResourceSolid, StackLimit: 20, UnitVolume: 1},
 	ItemMotor: {
 		ID:         ItemMotor,
 		Name:       "Motor",

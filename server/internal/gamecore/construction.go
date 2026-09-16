@@ -522,30 +522,6 @@ func rollbackConstructionDeduction(ws *model.WorldState, task *model.Constructio
 	task.MaterialsDeducted = false
 }
 
-// Allows tests to force provisioning failures after construction has staged world state.
-var provisionConstructionStationFleet = ensureStationFleet
-
-func ensureStationFleet(ws *model.WorldState, building *model.Building) error {
-	if ws == nil || building == nil || building.LogisticsStation == nil {
-		return nil
-	}
-	if err := ensureStationDronesToCapacity(ws, building); err != nil {
-		return err
-	}
-	if !model.IsInterstellarLogisticsBuilding(building.Type) {
-		return nil
-	}
-	target := building.LogisticsStation.ShipSlotCapacityValue()
-	for model.StationShipCount(ws, building.ID) < target {
-		shipID := ws.NextEntityID("ship")
-		ship := model.NewLogisticsShipState(shipID, building.ID, building.Position)
-		if err := model.RegisterLogisticsShip(ws, ship); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.ConstructionTask) ([]*model.GameEvent, error) {
 	if ws == nil || task == nil {
 		return nil, fmt.Errorf("construction task missing")
@@ -650,28 +626,8 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, err
 	}
 
-	rollback := func() {
-		removeStationFleet(ws, id)
-		model.UnregisterLogisticsStation(ws, id)
-		model.UnregisterPowerGridBuilding(ws, id)
-		delete(ws.Buildings, id)
-		ws.UnindexBuilding(b)
-		if task.BuildingType == model.BuildingTypeFoundation {
-			for i, p := range tiles {
-				ws.Grid[p.Y][p.X].Terrain = terrain.TileType(b.FoundationTerrain[i])
-			}
-		}
-		rollbackConstructionDeduction(ws, task)
-	}
-
 	if b.LogisticsStation != nil {
 		model.RegisterLogisticsStation(ws, b)
-		if b.Type == model.BuildingTypePlanetaryLogisticsStation || b.Type == model.BuildingTypeInterstellarLogisticsStation {
-			if err := provisionConstructionStationFleet(ws, b); err != nil {
-				rollback()
-				return nil, fmt.Errorf("auto provision station fleet: %w", err)
-			}
-		}
 	}
 	model.RegisterPowerGridBuilding(ws, b)
 

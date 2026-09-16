@@ -628,7 +628,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 		if targetBuilding.HP <= 0 {
 			delete(ws.Buildings, targetID)
 			ws.UnindexBuilding(targetBuilding)
-			removeStationFleet(ws, targetID)
+			detachStationFleet(ws, targetID)
 			model.UnregisterLogisticsStation(ws, targetID)
 			model.UnregisterPowerGridBuilding(ws, targetID)
 			events = append(events, &model.GameEvent{
@@ -2078,7 +2078,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		res.Message = "cannot use building owned by another player"
 		return res, nil
 	}
-	if building.Storage == nil {
+	if building.Storage == nil && !(model.IsGroundLogisticsBuilding(building.Type) && building.LogisticsStation != nil) {
 		res.Code = model.CodeValidationFailed
 		res.Message = "target building has no storage"
 		return res, nil
@@ -2103,7 +2103,12 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			return res, nil
 		}
 	}
-	accepted, remaining, err := building.Storage.Load(itemID, quantity)
+	var accepted, remaining int
+	if model.IsGroundLogisticsBuilding(building.Type) && building.LogisticsStation != nil {
+		accepted, remaining, err = building.LogisticsStation.ReceiveItem(itemID, quantity)
+	} else {
+		accepted, remaining, err = building.Storage.Load(itemID, quantity)
+	}
 	if err != nil {
 		res.Code = model.CodeValidationFailed
 		res.Message = err.Error()
@@ -2151,8 +2156,6 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 		return *execRes, nil
 	}
 
-	previousDroneCapacity := station.DroneCapacityValue()
-	droneCapacityUpdated := false
 	staged := station.Clone()
 
 	if raw, ok := cmd.Payload["drone_capacity"]; ok {
@@ -2162,8 +2165,12 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 			res.Message = "payload.drone_capacity must be numeric"
 			return res, nil
 		}
+		if droneCapacity < 1 || droneCapacity > model.DefaultLogisticsStationDroneCapacity {
+			res.Code = model.CodeValidationFailed
+			res.Message = "drone_capacity must be between 1 and 10"
+			return res, nil
+		}
 		staged.DroneCapacity = droneCapacity
-		droneCapacityUpdated = true
 	}
 	if raw, ok := cmd.Payload["input_priority"]; ok {
 		inputPriority, err := payloadValueInt(raw)
@@ -2203,38 +2210,28 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 		}
 	}
 
-	staged.Normalize()
-
-	if droneCapacityUpdated && staged.DroneCapacityValue() > previousDroneCapacity {
-		originalStation := station.Clone()
-		registryHadEntry := false
-		var originalRegistryStation *model.LogisticsStationState
-		if ws.LogisticsStations != nil {
-			originalRegistryStation, registryHadEntry = ws.LogisticsStations[building.ID]
-			if registryHadEntry {
-				ws.LogisticsStations[building.ID] = station
-			}
-		}
-
-		*station = *staged
-		createdDroneIDs, err := ensureStationDronesToCapacityTracking(ws, building)
+	if raw, exists := cmd.Payload["belt_ports"]; exists {
+		ports, err := parseLogisticsBeltPorts(raw)
 		if err != nil {
-			*station = *originalStation
-			if ws.LogisticsStations != nil {
-				if registryHadEntry {
-					ws.LogisticsStations[building.ID] = originalRegistryStation
-				} else {
-					delete(ws.LogisticsStations, building.ID)
-				}
-			}
-			unregisterLogisticsDrones(ws, createdDroneIDs)
 			res.Code = model.CodeValidationFailed
 			res.Message = err.Error()
 			return res, nil
 		}
-	} else {
-		*station = *staged
+		staged.BeltPorts = ports
 	}
+	if err := staged.Validate(); err != nil {
+		res.Code = model.CodeValidationFailed
+		res.Message = err.Error()
+		return res, nil
+	}
+	staged.Normalize()
+
+	if staged.DroneCapacity < model.StationDroneCount(ws, building.ID) || staged.DroneCapacity > model.DefaultLogisticsStationDroneCapacity || staged.Interstellar.ShipSlots < model.StationShipCount(ws, building.ID) || staged.Interstellar.ShipSlots > model.DefaultLogisticsStationShipSlots {
+		res.Code = model.CodeValidationFailed
+		res.Message = "vehicle slots must cover installed fleet and remain within physical limits (10 drones, 5 ships)"
+		return res, nil
+	}
+	*station = *staged
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
@@ -2281,6 +2278,27 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 		return res, nil
 	}
 
+	if raw, exists := cmd.Payload["remove"]; exists {
+		remove, ok := raw.(bool)
+		if !ok {
+			res.Code = model.CodeValidationFailed
+			res.Message = "payload.remove must be boolean"
+			return res, nil
+		}
+		if remove {
+			if mode != model.LogisticsStationModeNone || localStorage != 0 {
+				res.Code = model.CodeValidationFailed
+				res.Message = "slot removal requires mode none and local_storage 0"
+				return res, nil
+			}
+			if err := gc.removeLogisticsSlot(ws, building, scope, itemID); err != nil {
+				res.Code = model.CodeValidationFailed
+				res.Message = err.Error()
+				return res, nil
+			}
+			return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "empty logistics slot removed"}, nil
+		}
+	}
 	setting := model.LogisticsStationItemSetting{
 		ItemID:       itemID,
 		Mode:         mode,
@@ -2397,6 +2415,9 @@ func applyMinimalInterstellarConfig(cfg *model.LogisticsStationInterstellarConfi
 		if err != nil {
 			return fmt.Errorf("payload.interstellar.ship_slots must be numeric")
 		}
+		if shipSlots < 1 || shipSlots > model.DefaultLogisticsStationShipSlots {
+			return fmt.Errorf("ship_slots must be between 1 and 5")
+		}
 		cfg.ShipSlots = shipSlots
 	}
 	return nil
@@ -2431,32 +2452,4 @@ func payloadValueBool(raw any) (bool, error) {
 		return false, fmt.Errorf("boolean required")
 	}
 	return value, nil
-}
-
-func ensureStationDronesToCapacity(ws *model.WorldState, building *model.Building) error {
-	_, err := ensureStationDronesToCapacityTracking(ws, building)
-	return err
-}
-
-func ensureStationDronesToCapacityTracking(ws *model.WorldState, building *model.Building) ([]string, error) {
-	if ws == nil || building == nil || building.LogisticsStation == nil {
-		return nil, nil
-	}
-	target := building.LogisticsStation.DroneCapacityValue()
-	createdDroneIDs := make([]string, 0)
-	for model.StationDroneCount(ws, building.ID) < target {
-		droneID := ws.NextEntityID("drone")
-		drone := model.NewLogisticsDroneState(droneID, building.ID, building.Position)
-		if err := model.RegisterLogisticsDrone(ws, drone); err != nil {
-			return createdDroneIDs, err
-		}
-		createdDroneIDs = append(createdDroneIDs, droneID)
-	}
-	return createdDroneIDs, nil
-}
-
-func unregisterLogisticsDrones(ws *model.WorldState, droneIDs []string) {
-	for _, droneID := range droneIDs {
-		model.UnregisterLogisticsDrone(ws, droneID)
-	}
 }

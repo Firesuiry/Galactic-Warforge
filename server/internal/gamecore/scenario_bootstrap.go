@@ -114,6 +114,18 @@ func applyScenarioBuildingBootstrap(
 			continue
 		}
 		if station := ws.LogisticsStations[building.ID]; station != nil {
+			if model.IsGroundLogisticsBuilding(building.Type) {
+				if !station.ConfiguredItem(item.ItemID) {
+					if err := station.UpsertSetting(model.LogisticsStationItemSetting{ItemID: item.ItemID, Mode: model.LogisticsStationModeNone}); err != nil {
+						return err
+					}
+				}
+				accepted, remaining, err := station.ReceiveItem(item.ItemID, item.Quantity)
+				if err != nil || remaining != 0 || accepted != item.Quantity {
+					return fmt.Errorf("station inventory bootstrap exceeds capacity for %s", item.ItemID)
+				}
+				continue
+			}
 			if station.Inventory == nil {
 				station.Inventory = make(model.ItemInventory)
 			}

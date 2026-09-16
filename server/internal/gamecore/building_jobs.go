@@ -111,7 +111,7 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	}
 
 	entityID := building.ID
-	removeStationFleet(ws, entityID)
+	detachStationFleet(ws, entityID)
 	model.UnregisterLogisticsStation(ws, entityID)
 	model.UnregisterPowerGridBuilding(ws, entityID)
 	delete(ws.Buildings, entityID)
@@ -140,18 +140,24 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	}
 }
 
-func removeStationFleet(ws *model.WorldState, stationID string) {
+func detachStationFleet(ws *model.WorldState, stationID string) {
 	if ws == nil || stationID == "" {
 		return
 	}
-	for id, drone := range ws.LogisticsDrones {
+	for _, drone := range ws.LogisticsDrones {
 		if drone != nil && drone.StationID == stationID {
-			model.UnregisterLogisticsDrone(ws, id)
+			if drone.Status == model.LogisticsDroneIdle {
+				drone.Status = model.LogisticsDroneStranded
+				drone.StateReason = "home_unavailable"
+			}
 		}
 	}
-	for id, ship := range ws.LogisticsShips {
+	for _, ship := range ws.LogisticsShips {
 		if ship != nil && ship.StationID == stationID {
-			model.UnregisterLogisticsShip(ws, id)
+			if ship.Status == model.LogisticsShipIdle {
+				ship.Status = model.LogisticsShipStranded
+				ship.StateReason = "home_unavailable"
+			}
 		}
 	}
 }

@@ -4,6 +4,7 @@ import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
 import { tileNormal, tileFrame, surfaceTileSize } from './projection';
 import { conveyorPaths, type ConveyorPath } from './conveyor-geometry';
+import { logisticsFlightNormal } from './logistics-flight';
 
 export interface ActivityOptions {
   paused?: boolean;
@@ -22,6 +23,7 @@ export interface ActivitySource {
   quantity?: number;
   buildingId?: string;
   color: string;
+  normal?: THREE.Vector3;
 }
 
 /** No synthetic production: these fields come from Building runtime/conveyor and runtime logistics views. */
@@ -62,8 +64,10 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     }
   }
   for (const drone of [...(data.runtime?.logistics_drones ?? []), ...(data.runtime?.logistics_ships ?? [])]) {
-    if (drone.status !== 'idle' && visible(drone.position)) sources.push({ id: `flight:${drone.id}`, kind: 'flight',
-      position: drone.position, active: true, color: '#9dcfff' });
+    if ('current_planet_id' in drone && drone.current_planet_id && drone.current_planet_id !== data.planet.planet_id) continue;
+    if ('target_planet_id' in drone && drone.target_planet_id && drone.target_planet_id !== data.planet.planet_id && drone.status === 'in_flight') continue;
+    if (['takeoff', 'in_flight', 'landing'].includes(drone.status) && visible(drone.position)) sources.push({ id: `flight:${drone.id}`, kind: 'flight',
+      position: drone.position, normal: logisticsFlightNormal(drone, data.planet.surface.face_size), active: true, color: '#9dcfff' });
   }
   return sources;
 }
@@ -138,7 +142,7 @@ export class IndustrialActivity {
     }
     const indices = new Map<string, number>();
     this.entries = sources.map(source => {
-      const normal = tileNormal(source.position, faceSize);
+      const normal = source.normal ?? tileNormal(source.position, faceSize);
       const { east, south } = tileFrame(source.position, faceSize);
       const tangent = source.direction === 'north' ? south.negate() : source.direction === 'south' ? south
         : source.direction === 'west' ? east.negate() : east;
@@ -181,7 +185,7 @@ export class IndustrialActivity {
         this.cargo.setMatrixAt(cargoCount, this.matrix);
         this.cargo.setColorAt(cargoCount++, color);
       } else if (source.kind === 'flight') {
-        // Exhaust stays at authoritative position. A short trail uses only observed displacement,
+        // Exhaust follows the authoritative flight phase. A short trail uses only observed displacement,
         // expires after one second without new state, and never predicts a target or creates cargo.
         point(this.position.copy(normal).multiplyScalar(this.radius + size * .5), color, size * .14);
         if (entry.prior && this.snapshotAge < 1 && !options.reducedMotion) for (let i = 1; i <= 4; i++) {

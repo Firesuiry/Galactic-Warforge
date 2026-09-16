@@ -41,7 +41,8 @@ func TestLogisticsDispatchMatching(t *testing.T) {
 		t.Fatalf("register drone: %v", err)
 	}
 
-	settleLogisticsDispatch(ws)
+	powerLogisticsFixture(t, ws)
+	settleLogisticsDispatch(ws, map[string]*model.WorldState{ws.PlanetID: ws})
 
 	if drone.Status != model.LogisticsDroneTakeoff {
 		t.Fatalf("expected takeoff status, got %s", drone.Status)
@@ -107,7 +108,8 @@ func TestLogisticsDispatchPriority(t *testing.T) {
 		t.Fatalf("register drone: %v", err)
 	}
 
-	settleLogisticsDispatch(ws)
+	powerLogisticsFixture(t, ws)
+	settleLogisticsDispatch(ws, map[string]*model.WorldState{ws.PlanetID: ws})
 
 	if drone.TargetStationID != targetHigh.ID {
 		t.Fatalf("expected high priority target %s, got %s", targetHigh.ID, drone.TargetStationID)
@@ -159,7 +161,8 @@ func TestLogisticsDispatchShortestDistance(t *testing.T) {
 		t.Fatalf("register drone: %v", err)
 	}
 
-	settleLogisticsDispatch(ws)
+	powerLogisticsFixture(t, ws)
+	settleLogisticsDispatch(ws, map[string]*model.WorldState{ws.PlanetID: ws})
 
 	if drone.TargetStationID != targetNear.ID {
 		t.Fatalf("expected nearest target %s, got %s", targetNear.ID, drone.TargetStationID)
@@ -201,7 +204,8 @@ func TestLogisticsDispatchDelivery(t *testing.T) {
 		t.Fatalf("register drone: %v", err)
 	}
 
-	settleLogisticsDispatch(ws)
+	powerLogisticsFixture(t, ws)
+	settleLogisticsDispatch(ws, map[string]*model.WorldState{ws.PlanetID: ws})
 	settleLogisticsDrones(ws)
 	settleLogisticsDrones(ws)
 	settleLogisticsDrones(ws)

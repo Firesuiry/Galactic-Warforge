@@ -73,6 +73,19 @@ func TestT122OfficialWarScenarioBootstrapsAuthoritativeWarAnchors(t *testing.T) 
 		}
 	}
 
+	for _, station := range ws.LogisticsStations {
+		if err := station.Validate(); err != nil {
+			t.Fatalf("official war supply station exceeds physical capacity: %v", err)
+		}
+	}
+	if len(ws.LogisticsDrones) != 0 || len(ws.LogisticsShips) != 0 {
+		t.Fatal("scenario buildings must not create unmanufactured logistics vehicles")
+	}
+	for _, playerID := range []string{"p1", "p2"} {
+		if got := totalInventoryByTypeT122(ws, playerID, model.BuildingTypePlanetaryLogisticsStation, model.ItemPrecisionDrone); got != 6 {
+			t.Fatalf("split depots lost precision drones: %d", got)
+		}
+	}
 	if got := totalInventoryByTypeT122(ws, "p1", model.BuildingTypePlanetaryLogisticsStation, model.ItemAmmoBullet); got <= 0 {
 		t.Fatalf("expected p1 planetary logistics station to preload ammo, got %d", got)
 	}

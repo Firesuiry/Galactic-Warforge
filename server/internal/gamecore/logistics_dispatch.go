@@ -16,7 +16,7 @@ type logisticsDispatchCandidate struct {
 	targetPriority int
 }
 
-func settleLogisticsDispatch(ws *model.WorldState) {
+func settleLogisticsDispatch(ws *model.WorldState, worlds map[string]*model.WorldState) {
 	if ws == nil || len(ws.LogisticsDrones) == 0 || len(ws.LogisticsStations) == 0 {
 		return
 	}
@@ -38,7 +38,7 @@ func settleLogisticsDispatch(ws *model.WorldState) {
 		}
 	}
 
-	demandRemaining, demandForecast := buildDemandRemaining(ws, stationBuildings)
+	demandRemaining, demandForecast := buildDemandRemaining(ws, stationBuildings, worlds)
 	if len(demandRemaining) == 0 {
 		return
 	}
@@ -76,7 +76,7 @@ func settleLogisticsDispatch(ws *model.WorldState) {
 	for _, originID := range originIDs {
 		originStation := ws.LogisticsStations[originID]
 		originBuilding := stationBuildings[originID]
-		if originStation == nil || originBuilding == nil {
+		if originStation == nil || originBuilding == nil || !logisticsStationCanDispatch(ws, originBuilding) {
 			continue
 		}
 		drones := stationDrones[originID]
@@ -91,48 +91,44 @@ func settleLogisticsDispatch(ws *model.WorldState) {
 			if len(originStation.Cache.Supply) == 0 || len(demandRemaining) == 0 {
 				continue
 			}
-			candidate := selectDispatchCandidate(ws, originID, originBuilding, originStation, demandRemaining, stationBuildings, ws.LogisticsStations, drone)
+			candidate := selectDispatchCandidate(ws, originID, originBuilding, originStation, demandRemaining, stationBuildings, ws.LogisticsStations, drone, worlds)
 			if candidate == nil || candidate.qty <= 0 {
 				continue
 			}
 
-			drone.Position = originBuilding.Position
-			accepted, _, err := drone.Load(candidate.itemID, candidate.qty)
-			if err != nil || accepted <= 0 {
-				drone.Cargo = nil
+			if drone.OwnerID != originBuilding.OwnerID || drone.Position != originBuilding.Position {
 				continue
 			}
-			if accepted < candidate.qty {
-				candidate.qty = accepted
+			staged := drone.Clone()
+			accepted, _, err := staged.Load(candidate.itemID, candidate.qty)
+			if err != nil || accepted <= 0 {
+				continue
 			}
-
-			if originStation.Inventory == nil {
-				originStation.Inventory = make(model.ItemInventory)
+			targetBuilding := stationBuildings[candidate.targetID]
+			if targetBuilding == nil {
+				continue
+			}
+			if err := staged.BeginTrip(candidate.targetID, targetBuilding.Position, candidate.distance); err != nil {
+				continue
+			}
+			if !originStation.SpendEnergy(staged.EnergyCost) {
+				continue
 			}
 			originStation.Inventory[candidate.itemID] -= accepted
-			if originStation.Inventory[candidate.itemID] <= 0 {
+			if originStation.Inventory[candidate.itemID] == 0 {
 				delete(originStation.Inventory, candidate.itemID)
 			}
 			originStation.RefreshCapacityCache()
+			*drone = *staged
 
-			targetBuilding := stationBuildings[candidate.targetID]
-			if targetBuilding == nil {
-				restoreStationInventory(originStation, candidate.itemID, accepted)
-				drone.Cargo = nil
-				continue
-			}
-			if err := drone.BeginTrip(candidate.targetID, targetBuilding.Position, candidate.distance); err != nil {
-				restoreStationInventory(originStation, candidate.itemID, accepted)
-				drone.Cargo = nil
-				continue
-			}
 			consumeDemandRemaining(demandRemaining, candidate.targetID, candidate.itemID, accepted)
 			recordDispatchObservation(ws, model.LogisticsSchedulingPlanetary, originID, candidate, demandForecast)
 		}
 	}
+	settleDronePickups(ws, worlds, stationBuildings)
 }
 
-func selectDispatchCandidate(ws *model.WorldState, originID string, originBuilding *model.Building, originStation *model.LogisticsStationState, demandRemaining map[string]map[string]int, stationBuildings map[string]*model.Building, stations map[string]*model.LogisticsStationState, drone *model.LogisticsDroneState) *logisticsDispatchCandidate {
+func selectDispatchCandidate(ws *model.WorldState, originID string, originBuilding *model.Building, originStation *model.LogisticsStationState, demandRemaining map[string]map[string]int, stationBuildings map[string]*model.Building, stations map[string]*model.LogisticsStationState, drone *model.LogisticsDroneState, worlds map[string]*model.WorldState) *logisticsDispatchCandidate {
 	if originBuilding == nil || originStation == nil || len(originStation.Cache.Supply) == 0 {
 		return nil
 	}
@@ -147,7 +143,7 @@ func selectDispatchCandidate(ws *model.WorldState, originID string, originBuildi
 	}
 	var best *logisticsDispatchCandidate
 	for _, itemID := range sortedSupplyKeys(originStation.Cache.Supply) {
-		supplyQty := originStation.Cache.Supply[itemID]
+		supplyQty := originStation.Cache.Supply[itemID] - reservedPickupStock(worlds, ws.PlanetID, originID, itemID)
 		if supplyQty <= 0 {
 			continue
 		}
@@ -167,11 +163,14 @@ func selectDispatchCandidate(ws *model.WorldState, originID string, originBuildi
 			if targetStation == nil {
 				continue
 			}
-			qty := minInt(minInt(droneCapacity, supplyQty), demandQty)
+			qty := min(min(droneCapacity, supplyQty), demandQty, targetStation.AvailableItemCapacity(itemID))
 			if qty <= 0 {
 				continue
 			}
 			distance := ws.SurfaceDistance(originBuilding.Position, targetBuilding.Position)
+			if originStation.Energy < 2*max(1, distance) {
+				continue
+			}
 			travelTicks := model.LogisticsDroneTravelTicks(distance, drone.Speed)
 			candidate := logisticsDispatchCandidate{
 				itemID:         itemID,

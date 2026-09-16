@@ -806,7 +806,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "conveyor_mk3"},
 			{Type: TechUnlockBuilding, ID: "planetary_logistics_station"},
-			{Type: TechUnlockBuilding, ID: "logistics_vessel"},
+			{Type: TechUnlockRecipe, ID: "logistics_drone"},
+			{Type: TechUnlockUnit, ID: "logistics_drone"},
 		},
 	},
 	{
@@ -1036,6 +1037,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1200}, {ItemID: "energy_matrix", Quantity: 1200}, {ItemID: "structure_matrix", Quantity: 120}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "interstellar_logistics_station"},
+			{Type: TechUnlockRecipe, ID: "logistics_vessel"},
+			{Type: TechUnlockUnit, ID: "logistics_ship"},
 			{Type: TechUnlockBuilding, ID: "star_lifter"},
 		},
 	},

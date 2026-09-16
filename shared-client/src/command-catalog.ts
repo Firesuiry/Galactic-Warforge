@@ -28,6 +28,8 @@ export interface PublicCommandDefinition {
 }
 
 export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
+  { id: 'install_logistics_vehicle', apiCommandName: 'install_logistics_vehicle', cliCommandName: 'install_logistics_vehicle',
+    category: 'management', permissionCategory: 'management', layer: 'planet', requiresActivePlanet: true, webSurface: 'required' },
   {
     id: "configure_traffic_monitor",
     apiCommandName: "configure_traffic_monitor",

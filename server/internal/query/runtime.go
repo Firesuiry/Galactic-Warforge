@@ -40,6 +40,13 @@ type LogisticsStationView struct {
 }
 
 type LogisticsDroneView struct {
+	TripKind        string                     `json:"trip_kind"`
+	PickupItemID    string                     `json:"pickup_item_id,omitempty"`
+	PickupQuantity  int                        `json:"pickup_quantity,omitempty"`
+	HomePos         *model.Position            `json:"home_pos,omitempty"`
+	Returning       bool                       `json:"returning"`
+	StateReason     string                     `json:"state_reason,omitempty"`
+	EnergyCost      int                        `json:"energy_cost"`
 	ID              string                     `json:"id"`
 	OwnerID         string                     `json:"owner_id"`
 	StationID       string                     `json:"station_id"`
@@ -55,6 +62,13 @@ type LogisticsDroneView struct {
 }
 
 type LogisticsShipView struct {
+	TripKind             string                    `json:"trip_kind"`
+	PickupItemID         string                    `json:"pickup_item_id,omitempty"`
+	PickupQuantity       int                       `json:"pickup_quantity,omitempty"`
+	HomePos              *model.Position           `json:"home_pos,omitempty"`
+	Returning            bool                      `json:"returning"`
+	StateReason          string                    `json:"state_reason,omitempty"`
+	CurrentPlanetID      string                    `json:"current_planet_id,omitempty"`
 	ID                   string                    `json:"id"`
 	OwnerID              string                    `json:"owner_id"`
 	StationID            string                    `json:"station_id"`
@@ -347,7 +361,10 @@ func collectLogisticsDrones(ws *model.WorldState, playerID string) []LogisticsDr
 		if drone == nil {
 			continue
 		}
-		ownerID := ownerForStation(ws, drone.StationID)
+		ownerID := drone.OwnerID
+		if ownerID == "" {
+			ownerID = ownerForStation(ws, drone.StationID)
+		}
 		if ownerID != playerID {
 			continue
 		}
@@ -356,7 +373,14 @@ func collectLogisticsDrones(ws *model.WorldState, playerID string) []LogisticsDr
 			pos := *drone.TargetPos
 			targetPos = &pos
 		}
+		var homePos *model.Position
+		if drone.HomePos != nil {
+			pos := *drone.HomePos
+			homePos = &pos
+		}
 		out = append(out, LogisticsDroneView{
+			TripKind: drone.TripKind, PickupItemID: drone.PickupItemID, PickupQuantity: drone.PickupQuantity,
+			HomePos: homePos, Returning: drone.Returning, StateReason: drone.StateReason, EnergyCost: drone.EnergyCost,
 			ID:              drone.ID,
 			OwnerID:         ownerID,
 			StationID:       drone.StationID,
@@ -389,7 +413,10 @@ func collectLogisticsShips(ws *model.WorldState, playerID string) []LogisticsShi
 		if ship == nil {
 			continue
 		}
-		ownerID := ownerForStation(ws, ship.StationID)
+		ownerID := ship.OwnerID
+		if ownerID == "" {
+			ownerID = ownerForStation(ws, ship.StationID)
+		}
 		if ownerID != playerID {
 			continue
 		}
@@ -398,7 +425,14 @@ func collectLogisticsShips(ws *model.WorldState, playerID string) []LogisticsShi
 			pos := *ship.TargetPos
 			targetPos = &pos
 		}
+		var homePos *model.Position
+		if ship.HomePos != nil {
+			pos := *ship.HomePos
+			homePos = &pos
+		}
 		out = append(out, LogisticsShipView{
+			TripKind: ship.TripKind, PickupItemID: ship.PickupItemID, PickupQuantity: ship.PickupQuantity,
+			HomePos: homePos, Returning: ship.Returning, StateReason: ship.StateReason, CurrentPlanetID: ship.CurrentPlanetID,
 			ID:                   ship.ID,
 			OwnerID:              ownerID,
 			StationID:            ship.StationID,

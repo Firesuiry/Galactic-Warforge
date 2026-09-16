@@ -735,6 +735,24 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypePlanetaryLogisticsStation,
+		Params: BuildingRuntimeParams{
+			EnergyConsume:    1,
+			Capacity:         600,
+			ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Capacity: 1}},
+		},
+		Functions: BuildingFunctionModules{Energy: &modelpower.EnergyModule{ConsumePerTick: 1}},
+	},
+	{
+		ID: BuildingTypeInterstellarLogisticsStation,
+		Params: BuildingRuntimeParams{
+			EnergyConsume:    2,
+			Capacity:         2500,
+			ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Capacity: 1}},
+		},
+		Functions: BuildingFunctionModules{Energy: &modelpower.EnergyModule{ConsumePerTick: 2}},
+	},
+	{
 		ID: BuildingTypeOrbitalCollector,
 		Params: BuildingRuntimeParams{
 			EnergyConsume: 4,

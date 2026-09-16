@@ -159,6 +159,9 @@ func powerDemandForBuilding(building *Building) int {
 		maintenance = 0
 	}
 	demand := baseConsume + maintenance
+	if IsGroundLogisticsBuilding(building.Type) && building.LogisticsStation != nil {
+		demand += building.LogisticsStation.ChargingDemand()
+	}
 	if demand < 0 {
 		return 0
 	}

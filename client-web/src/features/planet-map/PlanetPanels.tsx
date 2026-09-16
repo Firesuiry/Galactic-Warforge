@@ -67,6 +67,7 @@ import {
 } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
+import { LogisticsStationControls } from "./LogisticsStationControls";
 import { TrafficMonitorControls } from "./TrafficMonitorControls";
 import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
@@ -680,6 +681,8 @@ export function PlanetEntityPanel({
           </dl>
         </section>
 
+        {logisticsStation?.state && building.type !== "orbital_collector" ? <LogisticsStationControls key={building.id} building={building} state={logisticsStation.state} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
+
         {showLogisticsDetails ? (
           <>
             <section className="planet-side-section">
@@ -703,7 +706,7 @@ export function PlanetEntityPanel({
                   <dd>{logisticsStation?.ship_ids?.length ?? 0}</dd>
                 </div>
                 <div>
-                  <dt>无人机容量</dt>
+                  <dt>无人机槽位上限</dt>
                   <dd>{logisticsStation?.state?.drone_capacity ?? "-"}</dd>
                 </div>
               </dl>

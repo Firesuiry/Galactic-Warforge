@@ -191,12 +191,18 @@ scenario_bootstrap:
               quantity: 16
             - item_id: hydrogen_fuel_rod
               quantity: 20
+        - owner_id: "p1"
+          building_type: "planetary_logistics_station"
+          x: 9
+          y: 1
+          state: "running"
+          inventory:
             - item_id: gear
               quantity: 12
             - item_id: photon_combiner
               quantity: 6
             - item_id: precision_drone
-              quantity: 4
+              quantity: 6
         - owner_id: "p1"
           building_type: "interstellar_logistics_station"
           x: 11
@@ -213,8 +219,6 @@ scenario_bootstrap:
               quantity: 12
             - item_id: critical_photon
               quantity: 6
-            - item_id: precision_drone
-              quantity: 2
         - owner_id: "p2"
           building_type: "tesla_tower"
           x: 42
@@ -257,12 +261,18 @@ scenario_bootstrap:
               quantity: 16
             - item_id: hydrogen_fuel_rod
               quantity: 20
+        - owner_id: "p2"
+          building_type: "planetary_logistics_station"
+          x: 38
+          y: 46
+          state: "running"
+          inventory:
             - item_id: gear
               quantity: 12
             - item_id: photon_combiner
               quantity: 6
             - item_id: precision_drone
-              quantity: 4
+              quantity: 6
         - owner_id: "p2"
           building_type: "interstellar_logistics_station"
           x: 36
@@ -279,8 +289,6 @@ scenario_bootstrap:
               quantity: 12
             - item_id: critical_photon
               quantity: 6
-            - item_id: precision_drone
-              quantity: 2
 
 server:
   port: 18080

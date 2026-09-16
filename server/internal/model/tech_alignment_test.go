@@ -109,7 +109,7 @@ func TestT100EndgameTechUnlocksExposeOnlyRuntimeBackedTargets(t *testing.T) {
 	assertTechHasUnlock(t, "mass_energy_storage", TechUnlock{Type: TechUnlockRecipe, ID: "antimatter_capsule"})
 	assertTechHasUnlock(t, "gravity_missile", TechUnlock{Type: TechUnlockRecipe, ID: "gravity_missile"})
 	assertTechHasUnlock(t, "distribution_logistics", TechUnlock{Type: TechUnlockUnit, ID: "logistics_drone"})
-	assertTechHasUnlock(t, "planetary_logistics", TechUnlock{Type: TechUnlockUnit, ID: "logistics_ship"})
+	assertTechHasUnlock(t, "interstellar_logistics", TechUnlock{Type: TechUnlockUnit, ID: "logistics_ship"})
 
 	assertTechLacksUnlockType(t, "engine", TechUnlockUnit)
 	for _, techID := range []string{"prototype", "precision_drone", "corvette", "destroyer"} {

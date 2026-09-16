@@ -1416,3 +1416,10 @@
 .traffic-monitor-controls select, .traffic-monitor-controls input[type="number"] { width: 100%; min-width: 0; box-sizing: border-box; }
 .traffic-monitor-controls .traffic-monitor-controls__toggle { display: flex; align-items: center; gap: 8px; }
 .traffic-monitor-controls fieldset:disabled { opacity: .65; }
+
+.logistics-station-controls fieldset { display: grid; gap: 12px; margin: 0 0 18px; padding: 0; border: 0; min-width: 0; }
+.logistics-station-controls legend { margin-bottom: 10px; }
+.logistics-station-controls label { display: grid; gap: 5px; min-width: 0; }
+.logistics-station-controls select, .logistics-station-controls input { width: 100%; min-width: 0; box-sizing: border-box; }
+.logistics-station-controls__port { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.logistics-station-controls fieldset:disabled { opacity: .65; }

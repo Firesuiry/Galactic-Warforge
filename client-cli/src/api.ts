@@ -77,6 +77,7 @@ export const cmdCancelConstruction = client.cmdCancelConstruction;
 export const cmdCancelResearch = client.cmdCancelResearch;
 export const cmdCommissionFleet = client.cmdCommissionFleet;
 export const cmdConfigureLogisticsSlot = client.cmdConfigureLogisticsSlot;
+export const cmdInstallLogisticsVehicle = client.cmdInstallLogisticsVehicle;
 export const cmdConfigureLogisticsStation = client.cmdConfigureLogisticsStation;
 export const cmdDemolish = client.cmdDemolish;
 export const cmdDemolishDyson = client.cmdDemolishDyson;

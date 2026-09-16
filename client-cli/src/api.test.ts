@@ -176,3 +176,27 @@ describe('traffic monitor request serialization', () => {
     assert.deepEqual(commands, [{ type: 'configure_traffic_monitor', target: { layer: 'planet', entity_id: 'monitor' }, payload: config }]);
   });
 });
+
+
+describe('logistics station requests', () => {
+  it('preserves omitted ports, explicit clearing and safe slot removal in the wire protocol', async () => {
+    const commands: unknown[] = [];
+    const api = createApiClient({ serverUrl: 'http://test.local', auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => { commands.push(...JSON.parse(String(init?.body)).commands); return { ok: true, json: async () => ({ accepted: true }) } as Response; } });
+    await api.cmdInstallLogisticsVehicle('s', 'logistics_drone', 2);
+    await api.cmdInstallLogisticsVehicle('s', 'logistics_vessel', 1, 'station');
+    await api.cmdConfigureLogisticsStation('s', { droneCapacity: 3 });
+    await api.cmdConfigureLogisticsStation('s', { beltPorts: {} });
+    await api.cmdConfigureLogisticsStation('s', { beltPorts: { west: { mode: 'input', item_id: 'iron_ore' } } });
+    await api.cmdConfigureLogisticsSlot('s', { scope: 'planetary', itemId: 'iron_ore', mode: 'none', localStorage: 0, remove: true });
+    const target = { layer: 'planet', entity_id: 's' };
+    assert.deepEqual(commands, [
+      { type: 'install_logistics_vehicle', target, payload: { item_id: 'logistics_drone', quantity: 2, source: 'player' } },
+      { type: 'install_logistics_vehicle', target, payload: { item_id: 'logistics_vessel', quantity: 1, source: 'station' } },
+      { type: 'configure_logistics_station', target, payload: { drone_capacity: 3 } },
+      { type: 'configure_logistics_station', target, payload: { belt_ports: {} } },
+      { type: 'configure_logistics_station', target, payload: { belt_ports: { west: { mode: 'input', item_id: 'iron_ore' } } } },
+      { type: 'configure_logistics_slot', target, payload: { scope: 'planetary', item_id: 'iron_ore', mode: 'none', local_storage: 0, remove: true } },
+    ]);
+  });
+});

@@ -176,6 +176,16 @@ var recipeCatalog = map[string]RecipeDefinition{
 		BuildingTypes:    []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3},
 		TechUnlock:       []string{"basic_components"},
 	},
+	"logistics_drone": {
+		ID: "logistics_drone", Name: "Logistics Drone", Inputs: []ItemAmount{{ItemID: ItemMotor, Quantity: 2}, {ItemID: ItemProcessor, Quantity: 2}, {ItemID: ItemIronIngot, Quantity: 5}},
+		Outputs: []ItemAmount{{ItemID: ItemLogisticsDrone, Quantity: 1}}, Duration: 120,
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3}, TechUnlock: []string{"planetary_logistics"},
+	},
+	"logistics_vessel": {
+		ID: "logistics_vessel", Name: "Logistics Vessel", Inputs: []ItemAmount{{ItemID: ItemMotor, Quantity: 2}, {ItemID: ItemProcessor, Quantity: 10}, {ItemID: ItemTitaniumAlloy, Quantity: 10}},
+		Outputs: []ItemAmount{{ItemID: ItemLogisticsVessel, Quantity: 1}}, Duration: 300,
+		BuildingTypes: []BuildingType{BuildingTypeAssemblingMachineMk1, BuildingTypeAssemblingMachineMk2, BuildingTypeAssemblingMachineMk3}, TechUnlock: []string{"interstellar_logistics"},
+	},
 	"motor": {
 		ID:            "motor",
 		Name:          "Motor",

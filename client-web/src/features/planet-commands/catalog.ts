@@ -8,6 +8,11 @@ export interface PlanetCommandRendererDefinition {
 export const PLANET_COMMAND_RENDERERS: Partial<
   Record<PublicCommandId, PlanetCommandRendererDefinition>
 > = {
+  install_logistics_vehicle: { cardId: "logistics-station-controls", section: "选中对象" },
+  configure_logistics_station: { cardId: "logistics", section: "物流" },
+  configure_logistics_slot: { cardId: "logistics", section: "物流" },
+  configure_splitter: { cardId: "splitter-controls", section: "选中对象" },
+  configure_traffic_monitor: { cardId: "traffic-monitor-controls", section: "选中对象" },
   scan_galaxy: { cardId: "scan", section: "基础操作" },
   scan_system: { cardId: "scan", section: "基础操作" },
   scan_planet: { cardId: "scan", section: "基础操作" },

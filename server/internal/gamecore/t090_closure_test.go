@@ -202,7 +202,10 @@ func TestInterstellarLogisticsDispatchesAcrossLoadedPlanets(t *testing.T) {
 	model.RegisterLogisticsStation(origin, originStation)
 	ship := model.NewLogisticsShipState("ship-1", originStation.ID, originStation.Position)
 	ship.WarpEnabled = false
-	origin.LogisticsShips[ship.ID] = ship
+	if err := model.RegisterLogisticsShip(origin, ship); err != nil {
+		t.Fatal(err)
+	}
+	powerLogisticsFixture(t, origin)
 
 	switchRes := issueInternalCommand(core, "p1", model.Command{
 		Type: model.CommandType("switch_active_planet"),

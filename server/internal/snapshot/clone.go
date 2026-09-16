@@ -319,6 +319,9 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 	}
 	if snap.LogisticsStation != nil {
 		mb.LogisticsStation = cloneLogisticsStation(snap.LogisticsStation)
+		if err := mb.LogisticsStation.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid logistics station %s: %w", buildingID, err)
+		}
 	} else if model.IsLogisticsStationBuilding(mb.Type) {
 		return nil, fmt.Errorf("logistics station snapshot missing for %s", buildingID)
 	}
@@ -332,6 +335,11 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 	model.SyncBuildingConveyor(mb)
 	model.SyncBuildingSorter(mb)
 	model.SyncBuildingLogisticsStation(mb)
+	if mb.LogisticsStation != nil {
+		if err := mb.LogisticsStation.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid logistics station capacity %s: %w", buildingID, err)
+		}
+	}
 	if snap.Job != nil {
 		mb.Job = &model.BuildingJob{
 			Type:           snap.Job.Type,

@@ -82,7 +82,7 @@ func settleInterstellarDispatch(worlds map[string]*model.WorldState, maps *mapmo
 
 	for _, originID := range originIDs {
 		origin := stations[originID]
-		if origin == nil || origin.station == nil || origin.building == nil {
+		if origin == nil || origin.station == nil || origin.building == nil || !logisticsStationCanDispatch(origin.world, origin.building) {
 			continue
 		}
 		ships := stationShips[originID]
@@ -94,60 +94,59 @@ func settleInterstellarDispatch(worlds map[string]*model.WorldState, maps *mapmo
 			}
 			ship := shipRef.ship
 			ship.Normalize()
+			ship.WarpEnabled = origin.station.Interstellar.WarpEnabled
 			ship.OriginPlanetID = origin.planetID
 			origin.station.RefreshCapacityCache()
 			if len(origin.station.InterstellarCache.Supply) == 0 || len(demandRemaining) == 0 {
 				continue
 			}
 
-			candidate := selectInterstellarDispatchCandidate(origin, demandRemaining, stations, ship, maps)
+			candidate := selectInterstellarDispatchCandidate(origin, demandRemaining, stations, ship, maps, worlds)
 			if candidate == nil || candidate.qty <= 0 {
 				continue
 			}
 
-			ship.Position = origin.building.Position
-			accepted, _, err := ship.Load(candidate.itemID, candidate.qty)
-			if err != nil || accepted <= 0 {
-				ship.Cargo = nil
+			if ship.OwnerID != origin.building.OwnerID || ship.Position != origin.building.Position {
 				continue
 			}
-			if accepted < candidate.qty {
-				candidate.qty = accepted
+			staged := ship.Clone()
+			accepted, _, err := staged.Load(candidate.itemID, candidate.qty)
+			if err != nil || accepted <= 0 {
+				continue
 			}
-
-			if origin.station.Inventory == nil {
-				origin.station.Inventory = make(model.ItemInventory)
-			}
-			origin.station.Inventory[candidate.itemID] -= accepted
-			if origin.station.Inventory[candidate.itemID] <= 0 {
-				delete(origin.station.Inventory, candidate.itemID)
-			}
-
-			if candidate.warped && candidate.warpItemCost > 0 {
-				if !consumeWarpItem(origin.station, candidate.warpItemID, candidate.warpItemCost) {
-					restoreStationInventory(origin.station, candidate.itemID, accepted)
-					ship.Cargo = nil
-					continue
-				}
-			}
-			origin.station.RefreshCapacityCache()
-
 			target := stations[candidate.targetID]
 			if target == nil || target.building == nil {
-				restoreStationInventory(origin.station, candidate.itemID, accepted)
-				ship.Cargo = nil
 				continue
 			}
-			if err := ship.BeginTrip(candidate.targetPlanetID, candidate.targetStationID, target.building.Position, candidate.distance, candidate.warped); err != nil {
-				restoreStationInventory(origin.station, candidate.itemID, accepted)
-				ship.Cargo = nil
+			if err := staged.BeginTrip(candidate.targetPlanetID, candidate.targetStationID, target.building.Position, candidate.distance, candidate.warped); err != nil {
 				continue
 			}
+			requiredWarp := candidate.warpItemCost
+			if candidate.itemID == candidate.warpItemID {
+				requiredWarp += accepted
+			}
+			if candidate.warped && origin.station.Inventory[candidate.warpItemID] < requiredWarp {
+				continue
+			}
+			if !origin.station.SpendEnergy(staged.EnergyCost) {
+				continue
+			}
+			origin.station.Inventory[candidate.itemID] -= accepted
+			if origin.station.Inventory[candidate.itemID] == 0 {
+				delete(origin.station.Inventory, candidate.itemID)
+			}
+			if candidate.warped {
+				consumeWarpItem(origin.station, candidate.warpItemID, candidate.warpItemCost)
+			}
+			origin.station.RefreshCapacityCache()
+			staged.CurrentPlanetID = origin.planetID
+			*ship = *staged
 
 			consumeDemandRemaining(demandRemaining, candidate.targetID, candidate.itemID, accepted)
 			recordInterstellarDispatchObservation(origin.world, originID, candidate, demandForecast)
 		}
 	}
+	settleShipPickups(worlds, maps, stations)
 }
 
 func collectInterstellarStations(worlds map[string]*model.WorldState) map[string]*interstellarStationRuntime {
@@ -207,34 +206,7 @@ func collectIdleInterstellarShips(worlds map[string]*model.WorldState, stations 
 }
 
 func buildInterstellarDemandAcrossWorlds(worlds map[string]*model.WorldState, stations map[string]*interstellarStationRuntime) (map[string]map[string]int, map[string]map[string]demandForecast) {
-	reserved := make(map[string]map[string]int)
-	for originPlanetID, ws := range worlds {
-		if ws == nil {
-			continue
-		}
-		for _, ship := range ws.LogisticsShips {
-			if ship == nil || ship.Status == model.LogisticsShipIdle || ship.TargetStationID == "" || len(ship.Cargo) == 0 {
-				continue
-			}
-			targetPlanetID := ship.TargetPlanetID
-			if targetPlanetID == "" {
-				targetPlanetID = originPlanetID
-			}
-			targetKey := interstellarStationKey(targetPlanetID, ship.TargetStationID)
-			if stations[targetKey] == nil {
-				continue
-			}
-			for itemID, qty := range ship.Cargo {
-				if qty <= 0 {
-					continue
-				}
-				if reserved[targetKey] == nil {
-					reserved[targetKey] = make(map[string]int)
-				}
-				reserved[targetKey][itemID] += qty
-			}
-		}
-	}
+	reserved := reservedLogisticsDemand(worlds)
 
 	cfg := model.CurrentLogisticsSchedulingConfig()
 	remaining := make(map[string]map[string]int)
@@ -268,7 +240,7 @@ func buildInterstellarDemandAcrossWorlds(worlds map[string]*model.WorldState, st
 			if byItem := reserved[targetKey]; byItem != nil {
 				reservedQty = byItem[itemID]
 			}
-			available := total - reservedQty
+			available := min(total, ref.station.AvailableItemCapacity(itemID)) - reservedQty
 			if available <= 0 {
 				continue
 			}
@@ -289,7 +261,7 @@ func buildInterstellarDemandAcrossWorlds(worlds map[string]*model.WorldState, st
 	return remaining, forecast
 }
 
-func selectInterstellarDispatchCandidate(origin *interstellarStationRuntime, demandRemaining map[string]map[string]int, stations map[string]*interstellarStationRuntime, ship *model.LogisticsShipState, maps *mapmodel.Universe) *interstellarDispatchCandidate {
+func selectInterstellarDispatchCandidate(origin *interstellarStationRuntime, demandRemaining map[string]map[string]int, stations map[string]*interstellarStationRuntime, ship *model.LogisticsShipState, maps *mapmodel.Universe, worlds map[string]*model.WorldState) *interstellarDispatchCandidate {
 	if origin == nil || origin.building == nil || origin.station == nil || ship == nil || len(origin.station.InterstellarCache.Supply) == 0 {
 		return nil
 	}
@@ -297,7 +269,7 @@ func selectInterstellarDispatchCandidate(origin *interstellarStationRuntime, dem
 	cfg := model.CurrentLogisticsSchedulingConfig()
 	var best *interstellarDispatchCandidate
 	for _, itemID := range sortedSupplyKeys(origin.station.InterstellarCache.Supply) {
-		supplyQty := origin.station.InterstellarCache.Supply[itemID]
+		supplyQty := origin.station.InterstellarCache.Supply[itemID] - reservedPickupStock(worlds, origin.planetID, origin.building.ID, itemID)
 		if supplyQty <= 0 {
 			continue
 		}
@@ -316,12 +288,21 @@ func selectInterstellarDispatchCandidate(origin *interstellarStationRuntime, dem
 			if target.building.OwnerID != origin.building.OwnerID || !target.station.Interstellar.Enabled {
 				continue
 			}
-			qty := minInt(minInt(ship.Capacity, supplyQty), demandQty)
+			qty := min(ship.Capacity, supplyQty, demandQty, target.station.AvailableItemCapacity(itemID))
 			if qty <= 0 {
 				continue
 			}
 			distance := interstellarDistance(maps, origin, target)
 			plan := planInterstellarTrip(distance, ship, origin.station)
+			if plan.warped && itemID == plan.warpItemID {
+				qty = min(qty, supplyQty-plan.warpItemCost)
+				if qty <= 0 {
+					continue
+				}
+			}
+			if plan.energyCost > origin.station.Energy {
+				continue
+			}
 			candidate := interstellarDispatchCandidate{
 				itemID:          itemID,
 				targetID:        targetID,
@@ -388,8 +369,8 @@ func planInterstellarTrip(distance int, ship *model.LogisticsShipState, station 
 	ship.Normalize()
 	baseSpeed := ship.Speed
 	baseTicks := model.LogisticsShipTravelTicks(distance, baseSpeed)
-	baseEnergy := model.LogisticsShipEnergyCost(distance, ship.EnergyPerDistance, ship.WarpEnergyMultiplier, false)
-	baseCost := baseEnergy + baseTicks
+	baseEnergy := 2 * model.LogisticsShipEnergyCost(distance, ship.EnergyPerDistance, ship.WarpEnergyMultiplier, false)
+	baseCost := baseEnergy + 2*baseTicks
 	plan := interstellarTripPlan{
 		warped:       false,
 		travelTicks:  baseTicks,
@@ -399,7 +380,7 @@ func planInterstellarTrip(distance int, ship *model.LogisticsShipState, station 
 		warpItemCost: 0,
 	}
 
-	warpItemCost := ship.WarpItemCost
+	warpItemCost := 2 * ship.WarpItemCost
 	warpItemID := ship.WarpItemID
 	warpAllowed := ship.WarpEnabled && station != nil && station.Interstellar.WarpEnabled && distance >= station.WarpDistanceValue()
 	if warpAllowed && warpItemCost > 0 {
@@ -415,9 +396,9 @@ func planInterstellarTrip(distance int, ship *model.LogisticsShipState, station 
 	if warpAllowed {
 		warpSpeed := ship.WarpSpeed
 		warpTicks := model.LogisticsShipTravelTicks(distance, warpSpeed)
-		warpEnergy := model.LogisticsShipEnergyCost(distance, ship.EnergyPerDistance, ship.WarpEnergyMultiplier, true)
-		warpCost := warpEnergy + warpTicks
-		if warpCost < baseCost || (warpCost == baseCost && warpTicks < baseTicks) {
+		warpEnergy := 2 * model.LogisticsShipEnergyCost(distance, ship.EnergyPerDistance, ship.WarpEnergyMultiplier, true)
+		warpCost := warpEnergy + 2*warpTicks
+		if station.Energy >= warpEnergy {
 			plan = interstellarTripPlan{
 				warped:       true,
 				travelTicks:  warpTicks,

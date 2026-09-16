@@ -68,7 +68,7 @@ func TestExecConfigureLogisticsStationRejectsInterstellarForPlanetaryStation(t *
 	}
 }
 
-func TestExecConfigureLogisticsStationExpandsDronesWhenCapacityRaised(t *testing.T) {
+func TestExecConfigureLogisticsStationCapacityDoesNotCreateDrones(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -101,8 +101,8 @@ func TestExecConfigureLogisticsStationExpandsDronesWhenCapacityRaised(t *testing
 		t.Fatalf("expected drone capacity 3, got %d", stationBuilding.LogisticsStation.DroneCapacityValue())
 	}
 
-	if got := model.StationDroneCount(ws, stationBuilding.ID); got != 3 {
-		t.Fatalf("expected station to have 3 drones after expand, got %d", got)
+	if got := model.StationDroneCount(ws, stationBuilding.ID); got != 1 {
+		t.Fatalf("expected existing single drone after expanding slots, got %d", got)
 	}
 }
 
@@ -208,7 +208,7 @@ func TestExecConfigureLogisticsStationAppliesInterstellarConfig(t *testing.T) {
 			"interstellar": map[string]any{
 				"enabled":      true,
 				"warp_enabled": true,
-				"ship_slots":   6,
+				"ship_slots":   4,
 			},
 		},
 	})
@@ -221,8 +221,8 @@ func TestExecConfigureLogisticsStationAppliesInterstellarConfig(t *testing.T) {
 	if !stationBuilding.LogisticsStation.Interstellar.WarpEnabled {
 		t.Fatalf("expected warp enabled")
 	}
-	if stationBuilding.LogisticsStation.ShipSlotCapacityValue() != 6 {
-		t.Fatalf("expected ship slots 6, got %d", stationBuilding.LogisticsStation.ShipSlotCapacityValue())
+	if stationBuilding.LogisticsStation.ShipSlotCapacityValue() != 4 {
+		t.Fatalf("expected ship slots 4, got %d", stationBuilding.LogisticsStation.ShipSlotCapacityValue())
 	}
 }
 
@@ -518,7 +518,7 @@ func TestExecConfigureLogisticsStationExpansionFailureRollsBackState(t *testing.
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
-			"drone_capacity": 3,
+			"drone_capacity": 1000000,
 			"input_priority": 4,
 		},
 	})

@@ -47,7 +47,7 @@ func TestOrbitalCollectorSkipsNonGasGiant(t *testing.T) {
 	}
 }
 
-func TestOrbitalCollectorDispatchesToPlanetaryStation(t *testing.T) {
+func TestPlanetaryStationDroneCollectsFromOrbitalCollector(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
@@ -76,11 +76,14 @@ func TestOrbitalCollectorDispatchesToPlanetaryStation(t *testing.T) {
 
 	origin.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 10})
 
-	drone := model.NewLogisticsDroneState("drone-1", origin.ID, origin.Position)
-	ws.LogisticsDrones[drone.ID] = drone
+	drone := model.NewLogisticsDroneState("drone-1", target.ID, target.Position)
+	if err := model.RegisterLogisticsDrone(ws, drone); err != nil {
+		t.Fatal(err)
+	}
+	powerLogisticsFixture(t, ws)
 
-	settleLogisticsDispatch(ws)
-	for i := 0; i < 5; i++ {
+	settleLogisticsDispatch(ws, map[string]*model.WorldState{ws.PlanetID: ws})
+	for i := 0; i < 12; i++ {
 		settleLogisticsDrones(ws)
 	}
 
@@ -89,7 +92,7 @@ func TestOrbitalCollectorDispatchesToPlanetaryStation(t *testing.T) {
 	}
 }
 
-func TestOrbitalCollectorDispatchesToInterstellarStation(t *testing.T) {
+func TestInterstellarStationShipCollectsFromOrbitalCollector(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
@@ -118,13 +121,14 @@ func TestOrbitalCollectorDispatchesToInterstellarStation(t *testing.T) {
 
 	origin.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 15})
 
-	ship := model.NewLogisticsShipState("ship-1", origin.ID, origin.Position)
+	ship := model.NewLogisticsShipState("ship-1", target.ID, target.Position)
 	if err := model.RegisterLogisticsShip(ws, ship); err != nil {
 		t.Fatalf("register ship: %v", err)
 	}
 
+	powerLogisticsFixture(t, ws)
 	settleInterstellarDispatch(map[string]*model.WorldState{ws.PlanetID: ws}, nil)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 16; i++ {
 		settleLogisticsShips(map[string]*model.WorldState{ws.PlanetID: ws})
 	}
 

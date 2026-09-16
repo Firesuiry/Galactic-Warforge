@@ -188,6 +188,7 @@ function createRuntime() {
         position: { x: 1, y: 1, z: 0 },
         state: {
           priority: { input: 1, output: 1 },
+          energy: 100, energy_capacity: 1000, charge_per_tick: 10, last_charge_tick: 1, last_charge_amount: 10, slot_capacity: 3, item_capacity: 200,
           drone_capacity: 10,
           interstellar: {
             enabled: false,

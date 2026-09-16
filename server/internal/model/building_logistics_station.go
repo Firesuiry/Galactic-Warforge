@@ -25,7 +25,15 @@ func SyncBuildingLogisticsStation(building *Building) {
 	}
 	if building.LogisticsStation == nil {
 		building.LogisticsStation = NewLogisticsStationState()
-		return
+	}
+	station := building.LogisticsStation
+	switch building.Type {
+	case BuildingTypePlanetaryLogisticsStation:
+		station.SlotCapacity, station.ItemCapacity, station.EnergyCapacity, station.ChargePerTick = 3, 200, 1000, 10
+	case BuildingTypeInterstellarLogisticsStation:
+		station.SlotCapacity, station.ItemCapacity, station.EnergyCapacity, station.ChargePerTick = 5, 500, 10000, 30
+	case BuildingTypeOrbitalCollector:
+		station.SlotCapacity, station.ItemCapacity, station.EnergyCapacity, station.ChargePerTick = 0, 0, 0, 0
 	}
 	building.LogisticsStation.Interstellar.Enabled = IsInterstellarLogisticsBuilding(building.Type)
 	building.LogisticsStation.Normalize()

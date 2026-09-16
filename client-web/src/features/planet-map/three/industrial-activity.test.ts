@@ -47,6 +47,21 @@ describe('authoritative industrial activity', () => {
     expect(sources.filter(source => source.kind === 'flight')).toHaveLength(1);
   });
 
+  it('hides interplanetary flights and remote exhaust, and keeps cargo waits still', () => {
+    const data = fixture();
+    const base = { status: 'in_flight', position: { x: 1, y: 1, z: 0 }, target_pos: { x: 2, y: 1, z: 0 }, remaining_ticks: 5, travel_ticks: 10 };
+    data.runtime = { logistics_ships: [
+      { ...base, id: 'departing', current_planet_id: 'p', target_planet_id: 'remote' },
+      { ...base, id: 'remote', current_planet_id: 'remote', target_planet_id: 'p' },
+      { ...base, id: 'waiting', current_planet_id: 'p', target_planet_id: 'p', status: 'waiting_unload' },
+      { ...base, id: 'local', current_planet_id: 'p', target_planet_id: 'p' },
+    ] } as unknown as PlanetThreeData['runtime'];
+    const sources = collectActivity(data);
+    expect(sources).toHaveLength(1);
+    expect(sources[0].id).toBe('flight:local');
+    expect(sources[0].normal?.length()).toBeCloseTo(1);
+  });
+
   it.each([
     ['finite', 0, 8, false], ['finite', 20, 0, false], ['finite', 20, 8, true],
     ['renewable', 0, 8, false], ['renewable', 20, 8, true],

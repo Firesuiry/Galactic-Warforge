@@ -31,3 +31,5 @@
 - 欠压/监测回放：`scripts/playtest-power-monitor-browser.mjs`（19497/4187独立场景），分阶段保存重编续档验证。监测器按相邻皮带真实流出统计，配置重置窗口，关闭告警不停止采样。
 
 - SSE高频刷新使用串行合并调度并保留在途变更的尾随刷新，防止取消慢查询或漏掉最后事件；不能单独加cancelRefetch:false。回归 `realtime-invalidation.test.ts`。
+
+- 物流站不再免费生成运输器；先接电配槽/皮带，再制造并安装无人机/运输船；install默认扣背包，`--source station` 扣站库成品，支持制造台皮带入站安装。唯一库存为 `logistics_station.inventory`，喷涂货物入口背压。回放 `scripts/playtest-logistics-station-browser.mjs`（19498/4188），运行边界与待验收项见 [星球玩法覆盖与验收](docs/guide/星球玩法覆盖与验收.md)。

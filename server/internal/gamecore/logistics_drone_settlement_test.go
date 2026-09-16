@@ -59,6 +59,12 @@ func TestLogisticsDroneTakeoffAndLanding(t *testing.T) {
 	}
 
 	settleLogisticsDrones(ws)
+	if !drone.Returning || drone.Status != model.LogisticsDroneTakeoff || drone.Position != target.Position {
+		t.Fatalf("delivery must begin physical return: %+v", drone)
+	}
+	for i := 0; i < 4; i++ {
+		settleLogisticsDrones(ws)
+	}
 	if drone.Status != model.LogisticsDroneIdle {
 		t.Fatalf("expected idle status, got %s", drone.Status)
 	}
@@ -68,8 +74,8 @@ func TestLogisticsDroneTakeoffAndLanding(t *testing.T) {
 	if drone.TargetStationID != "" {
 		t.Fatalf("expected target station cleared")
 	}
-	if drone.Position != target.Position {
-		t.Fatalf("expected drone at target position, got %+v", drone.Position)
+	if drone.Position != origin.Position {
+		t.Fatalf("expected drone returned home, got %+v", drone.Position)
 	}
 }
 

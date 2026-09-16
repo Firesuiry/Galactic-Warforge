@@ -11,6 +11,11 @@ func RegisterLogisticsDrone(ws *WorldState, drone *LogisticsDroneState) error {
 		return fmt.Errorf("drone required")
 	}
 	drone.Normalize()
+	if b := ws.Buildings[drone.StationID]; b != nil {
+		drone.OwnerID = b.OwnerID
+		pos := b.Position
+		drone.HomePos = &pos
+	}
 	if drone.ID == "" {
 		return fmt.Errorf("drone id required")
 	}

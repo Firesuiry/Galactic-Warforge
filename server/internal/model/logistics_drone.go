@@ -6,10 +6,12 @@ import "fmt"
 type LogisticsDroneStatus string
 
 const (
-	LogisticsDroneIdle     LogisticsDroneStatus = "idle"
-	LogisticsDroneTakeoff  LogisticsDroneStatus = "takeoff"
-	LogisticsDroneInFlight LogisticsDroneStatus = "in_flight"
-	LogisticsDroneLanding  LogisticsDroneStatus = "landing"
+	LogisticsDroneIdle          LogisticsDroneStatus = "idle"
+	LogisticsDroneTakeoff       LogisticsDroneStatus = "takeoff"
+	LogisticsDroneInFlight      LogisticsDroneStatus = "in_flight"
+	LogisticsDroneLanding       LogisticsDroneStatus = "landing"
+	LogisticsDroneWaitingUnload LogisticsDroneStatus = "waiting_unload"
+	LogisticsDroneStranded      LogisticsDroneStatus = "stranded"
 )
 
 const (
@@ -21,16 +23,26 @@ const (
 )
 
 var validLogisticsDroneStatuses = map[LogisticsDroneStatus]struct{}{
-	LogisticsDroneIdle:     {},
-	LogisticsDroneTakeoff:  {},
-	LogisticsDroneInFlight: {},
-	LogisticsDroneLanding:  {},
+	LogisticsDroneIdle:          {},
+	LogisticsDroneTakeoff:       {},
+	LogisticsDroneInFlight:      {},
+	LogisticsDroneLanding:       {},
+	LogisticsDroneWaitingUnload: {},
+	LogisticsDroneStranded:      {},
 }
 
 // LogisticsDroneState tracks a planetary logistics drone.
 type LogisticsDroneState struct {
 	ID              string               `json:"id"`
 	StationID       string               `json:"station_id"`
+	OwnerID         string               `json:"owner_id"`
+	TripKind        string               `json:"trip_kind"`
+	PickupItemID    string               `json:"pickup_item_id,omitempty"`
+	PickupQuantity  int                  `json:"pickup_quantity,omitempty"`
+	HomePos         *Position            `json:"home_pos,omitempty"`
+	Returning       bool                 `json:"returning"`
+	StateReason     string               `json:"state_reason,omitempty"`
+	EnergyCost      int                  `json:"energy_cost"`
 	TargetStationID string               `json:"target_station_id,omitempty"`
 	Capacity        int                  `json:"capacity"`
 	Speed           int                  `json:"speed"`
@@ -51,6 +63,7 @@ func NewLogisticsDroneState(id, stationID string, pos Position) *LogisticsDroneS
 		Speed:     DefaultLogisticsDroneSpeed,
 		Status:    LogisticsDroneIdle,
 		Position:  pos,
+		HomePos:   &Position{X: pos.X, Y: pos.Y, Z: pos.Z},
 	}
 	drone.Normalize()
 	return drone
@@ -62,6 +75,10 @@ func (d *LogisticsDroneState) Clone() *LogisticsDroneState {
 		return nil
 	}
 	out := *d
+	if d.HomePos != nil {
+		pos := *d.HomePos
+		out.HomePos = &pos
+	}
 	if d.TargetPos != nil {
 		pos := *d.TargetPos
 		out.TargetPos = &pos
@@ -88,7 +105,8 @@ func (d *LogisticsDroneState) Normalize() {
 		d.TravelTicks = 0
 	}
 	if _, ok := validLogisticsDroneStatuses[d.Status]; !ok {
-		d.Status = LogisticsDroneIdle
+		d.Status = LogisticsDroneStranded
+		d.StateReason = "invalid_flight_state"
 	}
 }
 
@@ -153,6 +171,12 @@ func (d *LogisticsDroneState) BeginTrip(targetStationID string, targetPos Positi
 		return fmt.Errorf("drone not idle")
 	}
 	d.Normalize()
+	d.TripKind = "delivery"
+	d.PickupItemID = ""
+	d.PickupQuantity = 0
+	d.Returning = false
+	d.StateReason = ""
+	d.EnergyCost = 2 * max(1, distance)
 	d.TargetStationID = targetStationID
 	d.TargetPos = &Position{X: targetPos.X, Y: targetPos.Y, Z: targetPos.Z}
 	d.Status = LogisticsDroneTakeoff

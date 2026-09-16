@@ -16,6 +16,7 @@ import {
   cmdUpgrade as apiUpgrade,
   cmdDemolish as apiDemolish,
   cmdConfigureLogisticsStation as apiConfigureLogisticsStation,
+  cmdInstallLogisticsVehicle as apiInstallLogisticsVehicle,
   cmdConfigureLogisticsSlot as apiConfigureLogisticsSlot,
   cmdCancelConstruction as apiCancelConstruction,
   cmdRestoreConstruction as apiRestoreConstruction,
@@ -291,11 +292,24 @@ export async function cmdDemolish(args: string[]): Promise<string> {
 
 export async function cmdConfigureLogisticsStation(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
-  if (parsed.positionals.length < 1) {
-    return fmtError('Usage: configure_logistics_station <building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true|false>] [--warp-enabled <true|false>] [--ship-slots <n>]');
+  if (args.includes('--help') || parsed.positionals.length !== 1) {
+    return fmtError('Usage: configure_logistics_station <building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true|false>] [--warp-enabled <true|false>] [--ship-slots <n>] [--belt-ports west:input:iron_ore,east:output:copper_ore|none]');
   }
   try {
+    const allowed = new Set(['drone-capacity', 'input-priority', 'output-priority', 'interstellar-enabled', 'warp-enabled', 'ship-slots', 'belt-ports']);
+    for (const [name, value] of Object.entries(parsed.options)) {
+      if (!allowed.has(name) || typeof value !== 'string') throw new Error(`无效选项 --${name}`);
+    }
     const options: ConfigureLogisticsStationOptions = {};
+    const ports = getStringOption(parsed, 'belt-ports');
+    if (ports !== undefined) {
+      options.beltPorts = {};
+      if (ports !== 'none') for (const token of ports.split(',')) {
+        const [direction, mode, item, extra] = token.split(':');
+        if (!['north', 'east', 'south', 'west'].includes(direction) || !['input', 'output'].includes(mode) || !item?.trim() || extra !== undefined || options.beltPorts[direction as CardinalDirection]) throw new Error('belt-ports 必须为不重复的方向:input或output:物品ID，或none');
+        options.beltPorts[direction as CardinalDirection] = { mode: mode as 'input' | 'output', item_id: item.trim() };
+      }
+    }
     const inputPriority = getStringOption(parsed, 'input-priority');
     const outputPriority = getStringOption(parsed, 'output-priority');
     const droneCapacity = getStringOption(parsed, 'drone-capacity');
@@ -332,25 +346,32 @@ export async function cmdConfigureLogisticsStation(args: string[]): Promise<stri
 }
 
 export async function cmdConfigureLogisticsSlot(args: string[]): Promise<string> {
-  if (args.length < 5) {
-    return fmtError('Usage: configure_logistics_slot <building_id> <planetary|interstellar> <item_id> <none|supply|demand|both> <local_storage>');
+  const parsed = parseArgs(args), values = parsed.positionals;
+  const remove = parsed.options.remove === true;
+  if (args.includes('--help') || values.length !== (remove ? 3 : 5) || Object.keys(parsed.options).some(k => k !== 'remove') || (parsed.options.remove !== undefined && !remove)) {
+    return fmtError('Usage: configure_logistics_slot <building_id> <planetary|interstellar> <item_id> <none|supply|demand|both> <local_storage> OR <building_id> <scope> <item_id> --remove');
   }
-  if (!LOGISTICS_SCOPES.has(args[1])) {
-    return fmtError('scope 必须是 planetary 或 interstellar');
-  }
-  if (!LOGISTICS_MODES.has(args[3])) {
-    return fmtError('mode 必须是 none/supply/demand/both');
-  }
+  if (!LOGISTICS_SCOPES.has(values[1])) return fmtError('scope 必须是 planetary 或 interstellar');
+  if (!remove && !LOGISTICS_MODES.has(values[3])) return fmtError('mode 必须是 none/supply/demand/both');
   try {
-    return fmtCommandResponse(await apiConfigureLogisticsSlot(args[0], {
-      scope: args[1] as 'planetary' | 'interstellar',
-      itemId: args[2],
-      mode: args[3] as 'none' | 'supply' | 'demand' | 'both',
-      localStorage: requireInt(args[4], 'local_storage'),
+    return fmtCommandResponse(await apiConfigureLogisticsSlot(values[0], {
+      scope: values[1] as 'planetary' | 'interstellar', itemId: values[2],
+      mode: remove ? 'none' : values[3] as 'none' | 'supply' | 'demand' | 'both',
+      localStorage: remove ? 0 : requireInt(values[4], 'local_storage'), ...(remove ? { remove: true } : {}),
     }));
-  } catch (e) {
-    return fmtError(toErrorMessage(e));
-  }
+  } catch (e) { return fmtError(toErrorMessage(e)); }
+}
+
+export async function cmdInstallLogisticsVehicle(args: string[]): Promise<string> {
+  const parsed = parseArgs(args), values = parsed.positionals;
+  if (args.includes('--help') || values.length !== 3 || Object.keys(parsed.options).some(k => k !== 'source')) return fmtError('Usage: install_logistics_vehicle <station_id> <logistics_drone|logistics_vessel> <quantity> [--source player|station]');
+  if (!['logistics_drone', 'logistics_vessel'].includes(values[1])) return fmtError('item_id 必须为 logistics_drone 或 logistics_vessel');
+  const source = parsed.options.source ?? 'player';
+  if (source !== 'player' && source !== 'station') return fmtError('source 必须为 player 或 station');
+  const quantity = Number(values[2]);
+  if (!/^[1-9]\d*$/.test(values[2]) || !Number.isSafeInteger(quantity)) return fmtError('quantity 必须是正整数');
+  try { return fmtCommandResponse(await apiInstallLogisticsVehicle(values[0], values[1], quantity, source)); }
+  catch (e) { return fmtError(toErrorMessage(e)); }
 }
 
 export async function cmdCancelConstruction(args: string[]): Promise<string> {

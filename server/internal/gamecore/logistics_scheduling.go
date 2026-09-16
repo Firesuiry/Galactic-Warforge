@@ -12,28 +12,11 @@ type demandForecast struct {
 	oversupply int
 }
 
-func buildDemandRemaining(ws *model.WorldState, stationBuildings map[string]*model.Building) (map[string]map[string]int, map[string]map[string]demandForecast) {
+func buildDemandRemaining(ws *model.WorldState, stationBuildings map[string]*model.Building, worlds map[string]*model.WorldState) (map[string]map[string]int, map[string]map[string]demandForecast) {
 	if ws == nil {
 		return nil, nil
 	}
-	reserved := make(map[string]map[string]int)
-	for _, drone := range ws.LogisticsDrones {
-		if drone == nil || drone.Status == model.LogisticsDroneIdle || drone.TargetStationID == "" || len(drone.Cargo) == 0 {
-			continue
-		}
-		if stationBuildings[drone.TargetStationID] == nil {
-			continue
-		}
-		for itemID, qty := range drone.Cargo {
-			if qty <= 0 {
-				continue
-			}
-			if reserved[drone.TargetStationID] == nil {
-				reserved[drone.TargetStationID] = make(map[string]int)
-			}
-			reserved[drone.TargetStationID][itemID] += qty
-		}
-	}
+	reserved := reservedLogisticsDemand(worlds)
 
 	cfg := model.CurrentLogisticsSchedulingConfig()
 	remaining := make(map[string]map[string]int)
@@ -64,89 +47,10 @@ func buildDemandRemaining(ws *model.WorldState, stationBuildings map[string]*mod
 				continue
 			}
 			reservedQty := 0
-			if byItem := reserved[stationID]; byItem != nil {
+			if byItem := reserved[interstellarStationKey(ws.PlanetID, stationID)]; byItem != nil {
 				reservedQty = byItem[itemID]
 			}
-			available := total - reservedQty
-			if available <= 0 {
-				continue
-			}
-			if remaining[stationID] == nil {
-				remaining[stationID] = make(map[string]int)
-			}
-			if forecast[stationID] == nil {
-				forecast[stationID] = make(map[string]demandForecast)
-			}
-			remaining[stationID][itemID] = available
-			forecast[stationID][itemID] = demandForecast{
-				base:       base,
-				forecast:   predicted,
-				oversupply: oversupply,
-			}
-		}
-	}
-	return remaining, forecast
-}
-
-func buildInterstellarDemandRemaining(ws *model.WorldState, stationBuildings map[string]*model.Building) (map[string]map[string]int, map[string]map[string]demandForecast) {
-	if ws == nil {
-		return nil, nil
-	}
-	reserved := make(map[string]map[string]int)
-	for _, ship := range ws.LogisticsShips {
-		if ship == nil || ship.Status == model.LogisticsShipIdle || ship.TargetStationID == "" || len(ship.Cargo) == 0 {
-			continue
-		}
-		if stationBuildings[ship.TargetStationID] == nil {
-			continue
-		}
-		for itemID, qty := range ship.Cargo {
-			if qty <= 0 {
-				continue
-			}
-			if reserved[ship.TargetStationID] == nil {
-				reserved[ship.TargetStationID] = make(map[string]int)
-			}
-			reserved[ship.TargetStationID][itemID] += qty
-		}
-	}
-
-	cfg := model.CurrentLogisticsSchedulingConfig()
-	remaining := make(map[string]map[string]int)
-	forecast := make(map[string]map[string]demandForecast)
-	for stationID, station := range ws.LogisticsStations {
-		if station == nil || stationBuildings[stationID] == nil {
-			continue
-		}
-		if !station.Interstellar.Enabled {
-			continue
-		}
-		for itemID, setting := range station.InterstellarSettings {
-			if !setting.Mode.DemandEnabled() {
-				continue
-			}
-			local := setting.LocalStorage
-			if local < 0 {
-				local = 0
-			}
-			stored := 0
-			if station.Inventory != nil {
-				stored = station.Inventory[itemID]
-			}
-			base := local - stored
-			if base < 0 {
-				base = 0
-			}
-			predicted, oversupply := forecastDemand(base, local, cfg)
-			total := predicted + oversupply
-			if total <= 0 {
-				continue
-			}
-			reservedQty := 0
-			if byItem := reserved[stationID]; byItem != nil {
-				reservedQty = byItem[itemID]
-			}
-			available := total - reservedQty
+			available := min(total, station.AvailableItemCapacity(itemID)) - reservedQty
 			if available <= 0 {
 				continue
 			}

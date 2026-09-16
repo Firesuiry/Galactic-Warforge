@@ -3,6 +3,9 @@ import { describe, it } from 'node:test';
 
 import {
   cmdBlockadePlanet,
+  cmdConfigureLogisticsStation,
+  cmdConfigureLogisticsSlot,
+  cmdInstallLogisticsVehicle,
   cmdCommissionFleet,
   cmdDeploySquad,
   cmdLandingStart,
@@ -132,5 +135,38 @@ describe('traffic monitor command', () => {
       assert.doesNotMatch(await cmdConfigureTrafficMonitor(args), /missing authenticated player_id/);
     }
     assert.doesNotMatch(await cmdConfigureTrafficMonitor([...valid, '--typo', 'x']), /missing authenticated player_id/);
+  });
+});
+
+
+describe('station installation and wiring command boundaries', () => {
+  it('requires real vehicle IDs and positive safe integer quantities', async () => {
+    for (const quantity of ['0', '-1', '1.5', '1e2', '2tail', '9007199254740992']) {
+      assert.doesNotMatch(await cmdInstallLogisticsVehicle(['s', 'logistics_drone', quantity]), /missing authenticated player_id/);
+    }
+    assert.doesNotMatch(await cmdInstallLogisticsVehicle(['s', 'free_drone', '1']), /missing authenticated player_id/);
+    assert.match(await cmdInstallLogisticsVehicle(['s', 'logistics_vessel', '2']), /missing authenticated player_id/);
+    assert.match(await cmdInstallLogisticsVehicle(['--help']), /Usage:/);
+    assert.match(await cmdInstallLogisticsVehicle(['s', 'logistics_drone', '1', '--source', 'station']), /missing authenticated player_id/);
+    for (const args of [['s', 'logistics_drone', '1', '--source'], ['s', 'logistics_drone', '1', '--source', 'factory'], ['s', 'logistics_drone', '1', '--unknown', 'true']]) assert.doesNotMatch(await cmdInstallLogisticsVehicle(args), /missing authenticated player_id/);
+  });
+  it('accepts explicit wiring replacement and clearing, and rejects malformed options', async () => {
+    for (const value of ['west:input:iron_ore,east:output:copper_ore', 'none']) {
+      assert.match(await cmdConfigureLogisticsStation(['s', '--belt-ports', value]), /missing authenticated player_id/);
+    }
+    for (const args of [
+      ['s', '--belt-ports'], ['s', '--typo', '1'], ['s', '--belt-ports', 'up:input:iron_ore'],
+      ['s', '--belt-ports', 'west:input:iron_ore,west:output:iron_ore'],
+      ['s', '--belt-ports', 'west:both:iron_ore'], ['s', '--belt-ports', 'west:input:'],
+      ['s', '--belt-ports', 'west:input:iron_ore:extra'],
+    ]) assert.doesNotMatch(await cmdConfigureLogisticsStation(args), /missing authenticated player_id/, args.join(' '));
+    assert.match(await cmdConfigureLogisticsStation(['--help']), /Usage:/);
+  });
+  it('distinguishes empty slot removal from a local storage slot', async () => {
+    assert.match(await cmdConfigureLogisticsSlot(['s', 'planetary', 'iron_ore', '--remove']), /missing authenticated player_id/);
+    assert.match(await cmdConfigureLogisticsSlot(['s', 'planetary', 'iron_ore', 'none', '0']), /missing authenticated player_id/);
+    for (const args of [ ['s', 'planetary', 'iron_ore', '--remove', 'false'], ['s', 'wrong', 'iron_ore', '--remove'], ['s', 'planetary', 'iron_ore', 'none', '0', '--remove'] ]) {
+      assert.doesNotMatch(await cmdConfigureLogisticsSlot(args), /missing authenticated player_id/);
+    }
   });
 });

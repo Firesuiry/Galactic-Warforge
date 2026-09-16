@@ -57,7 +57,11 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
     if (isTransportBuilding(machine)) continue;
     const ports: { offset: TilePoint; direction: PortDirection; side?: SurfaceDirection }[] = [];
     const fractionation = machine.fractionation, coater = machine.spray_coater;
-    if (fractionation) {
+    if (machine.logistics_station) {
+      for (const [side, port] of Object.entries(machine.logistics_station.belt_ports ?? {})) {
+        if (port) ports.push({ offset: { x: 0, y: 0 }, direction: port.mode, side: side as SurfaceDirection });
+      }
+    } else if (fractionation) {
       ports.push({ offset: { x: 0, y: 0 }, direction: 'input', side: fractionation.input_direction },
         { offset: { x: 0, y: 0 }, direction: 'output', side: fractionation.hydrogen_direction },
         { offset: { x: 0, y: 0 }, direction: 'output', side: fractionation.deuterium_direction });
@@ -145,6 +149,7 @@ export class ConveyorGeometry {
     const belts = buildings.filter(building => isTransportBuilding(building));
     const signature = JSON.stringify([faceSize, radius, buildings.map(b => [b.id, b.owner_id, b.position, b.type,
       b.conveyor?.input, b.conveyor?.output, b.splitter?.input_directions, b.splitter?.output_directions,
+      b.logistics_station?.belt_ports,
       b.fractionation && [b.fractionation.input_direction, b.fractionation.hydrogen_direction, b.fractionation.deuterium_direction],
       b.spray_coater && [b.spray_coater.input_direction, b.spray_coater.output_direction, b.spray_coater.reagent_direction],
       Boolean(b.storage), b.runtime?.params?.io_ports])]);

@@ -266,6 +266,7 @@ export interface Building {
   sorter?: BuildingSorterState;
   splitter?: BuildingSplitterState;
   traffic_monitor?: BuildingTrafficMonitorState;
+  logistics_station?: LogisticsStationState;
   fractionation?: BuildingFractionationState;
   spray_coater?: BuildingSprayCoaterState;
   production?: {
@@ -583,6 +584,7 @@ export interface ConfigureLogisticsStationOptions {
   inputPriority?: number;
   outputPriority?: number;
   droneCapacity?: number;
+  beltPorts?: Partial<Record<CardinalDirection, LogisticsBeltPort>>;
   interstellar?: ConfigureLogisticsStationInterstellarOptions;
 }
 
@@ -591,6 +593,7 @@ export interface ConfigureLogisticsSlotOptions {
   itemId: string;
   mode: LogisticsMode;
   localStorage: number;
+  remove?: boolean;
 }
 
 export type RayReceiverMode = 'power' | 'photon' | 'hybrid';
@@ -612,6 +615,7 @@ export type CommandType =
   | 'configure_splitter'
   | 'configure_traffic_monitor'
   | 'configure_logistics_station'
+  | 'install_logistics_vehicle'
   | 'configure_logistics_slot'
   | 'cancel_construction'
   | 'restore_construction'
@@ -1075,7 +1079,20 @@ export interface LogisticsStationCapacityCache {
   local?: ItemInventory;
 }
 
+export interface LogisticsBeltPort {
+  mode: 'input' | 'output';
+  item_id: string;
+}
+
 export interface LogisticsStationState {
+  energy: number;
+  energy_capacity: number;
+  charge_per_tick: number;
+  last_charge_tick: number;
+  last_charge_amount: number;
+  slot_capacity: number;
+  item_capacity: number;
+  belt_ports?: Partial<Record<CardinalDirection, LogisticsBeltPort>>;
   priority: LogisticsStationPriority;
   settings?: Record<string, LogisticsStationItemSetting>;
   inventory?: ItemInventory;
@@ -1086,9 +1103,16 @@ export interface LogisticsStationState {
   interstellar_cache?: LogisticsStationCapacityCache;
 }
 
-export type LogisticsDroneStatus = 'idle' | 'takeoff' | 'in_flight' | 'landing';
+export type LogisticsDroneStatus = 'idle' | 'takeoff' | 'in_flight' | 'landing' | 'waiting_unload' | 'stranded';
 
 export interface LogisticsDroneView {
+  trip_kind?: 'delivery' | 'pickup';
+  pickup_item_id?: string;
+  pickup_quantity?: number;
+  home_pos?: Position;
+  returning?: boolean;
+  state_reason?: string;
+  energy_cost?: number;
   id: string;
   owner_id: string;
   station_id: string;
@@ -1103,9 +1127,16 @@ export interface LogisticsDroneView {
   cargo?: ItemInventory;
 }
 
-export type LogisticsShipStatus = 'idle' | 'takeoff' | 'in_flight' | 'landing';
+export type LogisticsShipStatus = 'idle' | 'takeoff' | 'in_flight' | 'landing' | 'waiting_unload' | 'stranded';
 
 export interface LogisticsShipView {
+  trip_kind?: 'delivery' | 'pickup';
+  pickup_item_id?: string;
+  pickup_quantity?: number;
+  home_pos?: Position;
+  returning?: boolean;
+  state_reason?: string;
+  current_planet_id?: string;
   id: string;
   owner_id: string;
   station_id: string;

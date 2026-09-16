@@ -35,7 +35,7 @@ func TestLogisticsDemandForecast(t *testing.T) {
 	}
 	target.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 4})
 
-	remaining, forecast := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target})
+	remaining, forecast := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target}, map[string]*model.WorldState{ws.PlanetID: ws})
 	if remaining[target.ID][model.ItemHydrogen] != 9 {
 		t.Fatalf("expected forecast demand 9, got %d", remaining[target.ID][model.ItemHydrogen])
 	}
@@ -74,7 +74,7 @@ func TestLogisticsOversupplyAllowsExtra(t *testing.T) {
 	}
 	target.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 10})
 
-	remaining, forecast := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target})
+	remaining, forecast := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target}, map[string]*model.WorldState{ws.PlanetID: ws})
 	if remaining[target.ID][model.ItemHydrogen] != 5 {
 		t.Fatalf("expected oversupply demand 5, got %d", remaining[target.ID][model.ItemHydrogen])
 	}
@@ -144,14 +144,15 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,
-	})
+	}, map[string]*model.WorldState{ws.PlanetID: ws})
 
 	drone := model.NewLogisticsDroneState("drone-1", origin.ID, origin.Position)
+	origin.LogisticsStation.Energy = origin.LogisticsStation.EnergyCapacity
 	candidate := selectDispatchCandidate(ws, origin.ID, origin, origin.LogisticsStation, demandRemaining, map[string]*model.Building{
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,
-	}, ws.LogisticsStations, drone)
+	}, ws.LogisticsStations, drone, map[string]*model.WorldState{ws.PlanetID: ws})
 	if candidate == nil || candidate.targetID != near.ID {
 		t.Fatalf("expected shortest path to select near target, got %+v", candidate)
 	}
@@ -165,12 +166,12 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,
-	})
+	}, map[string]*model.WorldState{ws.PlanetID: ws})
 	candidate = selectDispatchCandidate(ws, origin.ID, origin, origin.LogisticsStation, demandRemaining, map[string]*model.Building{
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,
-	}, ws.LogisticsStations, drone)
+	}, ws.LogisticsStations, drone, map[string]*model.WorldState{ws.PlanetID: ws})
 	if candidate == nil || candidate.targetID != far.ID {
 		t.Fatalf("expected lowest cost to select far target, got %+v", candidate)
 	}
