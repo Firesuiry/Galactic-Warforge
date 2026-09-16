@@ -46,6 +46,7 @@ type BuildingSnapshot struct {
 	EnergyStorage     *model.EnergyStorageState    `json:"energy_storage,omitempty"`
 	Conveyor          *model.ConveyorState         `json:"conveyor,omitempty"`
 	Splitter          *model.SplitterState         `json:"splitter,omitempty"`
+	TrafficMonitor    *model.TrafficMonitorState   `json:"traffic_monitor,omitempty"`
 	Fractionation     *model.FractionationState    `json:"fractionation,omitempty"`
 	SprayCoater       *model.SprayCoaterState      `json:"spray_coater,omitempty"`
 	Sorter            *model.SorterState           `json:"sorter,omitempty"`

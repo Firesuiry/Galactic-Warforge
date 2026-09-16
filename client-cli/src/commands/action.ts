@@ -34,6 +34,7 @@ import {
   cmdCraftItem as apiCraftItem,
   cmdCancelMechaJob as apiCancelMechaJob,
   cmdConfigureSplitter as apiConfigureSplitter,
+  cmdConfigureTrafficMonitor as apiConfigureTrafficMonitor,
   type SplitterConfig,
   type CardinalDirection,
 
@@ -987,5 +988,27 @@ export async function cmdConfigureSplitter(args: string[]): Promise<string> {
       config.output_filters![direction as CardinalDirection] = item.trim();
     }
     return fmtCommandResponse(await apiConfigureSplitter(parsed.positionals[0], config));
+  } catch (error) { return fmtError(toErrorMessage(error)); }
+}
+
+export async function cmdConfigureTrafficMonitor(args: string[]): Promise<string> {
+  const usage = 'Usage: configure_traffic_monitor <building_id> <belt_id|none> --window <1..600> --minimum <0..60> --alerts <on|off>';
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length !== 2) return fmtError(usage);
+  try {
+    const allowed = new Set(['window', 'minimum', 'alerts']);
+    for (const [name, value] of Object.entries(parsed.options)) {
+      if (!allowed.has(name) || typeof value !== 'string') throw new Error(`无效选项 --${name}`);
+    }
+    const window = getStringOption(parsed, 'window') ?? '';
+    const minimum = getStringOption(parsed, 'minimum') ?? '';
+    const alerts = getStringOption(parsed, 'alerts');
+    if (!/^\d+$/.test(window) || Number(window) < 1 || Number(window) > 600) throw new Error('window 必须为 1..600 整数');
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(minimum) || !Number.isFinite(Number(minimum)) || Number(minimum) > 60) throw new Error('minimum 必须为 0..60 数值');
+    if (alerts !== 'on' && alerts !== 'off') throw new Error('alerts 必须为 on 或 off');
+    return fmtCommandResponse(await apiConfigureTrafficMonitor(parsed.positionals[0], {
+      target_belt_id: parsed.positionals[1] === 'none' ? '' : parsed.positionals[1],
+      window_ticks: Number(window), minimum_items_per_tick: Number(minimum), alerts_enabled: alerts === 'on',
+    }));
   } catch (error) { return fmtError(toErrorMessage(error)); }
 }

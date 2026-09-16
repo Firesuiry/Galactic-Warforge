@@ -700,3 +700,11 @@ rollback --to <tick>
 `move` 等命令仍传权威图集 x/y，但距离和障碍校验使用球面邻接，不能用 `abs(dx)+abs(dy)` 拆分跨面路线。需要自动规划的调用方可使用共享 API `fetchPlanetPath`，对应 `GET /world/planets/{id}/path?unit_id=...&target_x=...&target_y=...&stop_range=...`；这不是新增 CLI `path` 指令。stop_range 为 0..128，默认 0；建造靠近时取执行体操作范围。返回 path 含起点，waypoints 不含起点并按 move_range 分段。reachable=true 且 waypoints 为空表示已经够近；未知或 512 步预算内不可达返回 reachable=false，不应继续建造。
 
 建筑布局蓝图的矩形选区和旋转后粘贴范围必须在同一面内；跨面布局拆成多个蓝图。此限制不适用于本页 `blueprint_create/blueprint_set_component` 等战争蓝图命令。
+
+### 流速监测器
+
+```text
+configure_traffic_monitor <building_id> <belt_id|none> --window <1..600> --minimum <0..60> --alerts <on|off>
+```
+
+完整替换配置；绑定己方球面相邻的Mk.I/II/III传送带，`none`清绑定。窗口和最低流量分别以tick、件/tick计。关闭告警仍监测，应用任何配置会重置统计。通过`inspect <planet_id> building <building_id>`查看`traffic_monitor`实时状态、窗口吞吐和累计量；`event_snapshot`可查询`traffic_monitor_alert`的触发与解除。

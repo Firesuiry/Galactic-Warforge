@@ -131,6 +131,7 @@ func importMachineStacks(ws *model.WorldState, b *model.Building, dir model.Conv
 			return
 		}
 		moved := source.Conveyor.Take(min(count, front.Quantity))
+		recordConveyorDeparture(ws, source, stackBufferQuantity(moved))
 		*buffer = append(*buffer, moved...)
 		count -= stackBufferQuantity(moved)
 	}

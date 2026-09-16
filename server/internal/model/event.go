@@ -4,6 +4,7 @@ package model
 type EventType string
 
 const (
+	EvtTrafficMonitorAlert       EventType = "traffic_monitor_alert"
 	EvtMechaStateChanged         EventType = "mecha_state_changed"
 	EvtCommandResult             EventType = "command_result"
 	EvtEntityCreated             EventType = "entity_created"
@@ -39,6 +40,7 @@ const (
 )
 
 var allEventTypes = []EventType{
+	EvtTrafficMonitorAlert,
 	EvtMechaStateChanged,
 	EvtCommandResult,
 	EvtEntityCreated,

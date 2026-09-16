@@ -29,6 +29,16 @@ export interface PublicCommandDefinition {
 
 export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
   {
+    id: "configure_traffic_monitor",
+    apiCommandName: "configure_traffic_monitor",
+    cliCommandName: "configure_traffic_monitor",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
     id: "configure_splitter",
     apiCommandName: "configure_splitter",
     cliCommandName: "configure_splitter",

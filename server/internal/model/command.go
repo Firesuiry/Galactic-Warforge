@@ -4,6 +4,7 @@ package model
 type CommandType string
 
 const (
+	CmdConfigureTrafficMonitor   CommandType = "configure_traffic_monitor"
 	CmdConfigureSplitter         CommandType = "configure_splitter"
 	CmdBuild                     CommandType = "build"
 	CmdMove                      CommandType = "move"
@@ -139,6 +140,7 @@ type QueuedRequest struct {
 // Used by permission surfaces such as GET /state/agent-briefing.
 func AllCommandTypes() []CommandType {
 	return []CommandType{
+		CmdConfigureTrafficMonitor,
 		CmdConfigureSplitter,
 		CmdBuild,
 		CmdMove,

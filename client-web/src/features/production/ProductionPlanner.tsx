@@ -58,7 +58,7 @@ export function ProductionPlanner({ catalog, buildings, playerId, completedTechs
           const missing = inputs.filter((input) => input.missing > 0);
           const status = state === 'offline' ? translateBuildingState(building.runtime.state)
             : state === 'unconfigured' ? '未配置配方'
-              : state === 'processing' ? `加工中 · ${building.production?.remaining_ticks} tick`
+              : state === 'processing' ? `加工中 · ${((building.production?.remaining_ticks ?? 0) - (building.production?.progress_fraction ?? 0)).toFixed(2)} 标准生产 tick`
                 : state === 'shortage' ? '下批缺料'
                   : building.runtime.functions?.collect ? '采集设施就绪' : activeRecipe ? '原料就绪' : '运行中';
           return <article className={`production-planner__machine production-planner__machine--${state}`} key={building.id}>

@@ -213,6 +213,23 @@ export interface BuildingSorterState {
 }
 
 export type CardinalDirection = 'north' | 'east' | 'south' | 'west';
+export interface TrafficMonitorConfig {
+  target_belt_id: string;
+  window_ticks: number;
+  minimum_items_per_tick: number;
+  alerts_enabled: boolean;
+}
+export interface BuildingTrafficMonitorState extends TrafficMonitorConfig {
+  state: 'unconfigured' | 'sampling' | 'flowing' | 'idle' | 'low_flow' | 'blocked' | 'no_power' | 'paused' | 'error' | 'target_missing' | 'target_inactive';
+  samples: { tick: number; items: number; queued_items: number }[] | null;
+  sample_count: number;
+  window_items: number;
+  items_per_tick: number;
+  total_items: number;
+  last_sample_tick: number;
+  alert_active: boolean;
+}
+
 export interface SplitterConfig {
   input_directions: CardinalDirection[];
   output_directions: CardinalDirection[];
@@ -248,11 +265,13 @@ export interface Building {
   conveyor?: BuildingConveyorState;
   sorter?: BuildingSorterState;
   splitter?: BuildingSplitterState;
+  traffic_monitor?: BuildingTrafficMonitorState;
   fractionation?: BuildingFractionationState;
   spray_coater?: BuildingSprayCoaterState;
   production?: {
     recipe_id?: string;
     remaining_ticks?: number;
+    progress_fraction?: number;
   };
   job?: BuildingJob;
   foundation_terrain?: string[];
@@ -591,6 +610,7 @@ export type CommandType =
   | 'upgrade'
   | 'demolish'
   | 'configure_splitter'
+  | 'configure_traffic_monitor'
   | 'configure_logistics_station'
   | 'configure_logistics_slot'
   | 'cancel_construction'

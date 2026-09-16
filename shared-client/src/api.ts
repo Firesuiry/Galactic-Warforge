@@ -22,6 +22,7 @@ import type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
   SplitterConfig,
+  TrafficMonitorConfig,
   MetricsSnapshot,
   OrbitalSupportMode,
   PlanetInspectEntityKind,
@@ -594,6 +595,14 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdConfigureTrafficMonitor(entityId: string, config: TrafficMonitorConfig) {
+    return sendSingleCommand({
+      type: 'configure_traffic_monitor',
+      target: { layer: 'planet', entity_id: entityId },
+      payload: { ...config },
+    });
+  }
+
   function cmdConfigureSplitter(entityId: string, config: SplitterConfig) {
     return sendSingleCommand({
       type: 'configure_splitter',
@@ -1131,6 +1140,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdCraftItem,
     cmdCancelMechaJob,
     cmdConfigureSplitter,
+    cmdConfigureTrafficMonitor,
 
     cmdBuild,
     cmdBlueprintCreate,

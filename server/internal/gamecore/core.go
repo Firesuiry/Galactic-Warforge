@@ -725,6 +725,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execScanPlanet(qr.PlayerID, cmd)
 		case model.CmdConfigureSplitter:
 			res, evts = gc.execConfigureSplitter(gc.world, qr.PlayerID, cmd)
+		case model.CmdConfigureTrafficMonitor:
+			res, evts = gc.execConfigureTrafficMonitor(gc.world, qr.PlayerID, cmd)
 		case model.CmdBuild:
 			res, evts = gc.execBuild(gc.world, qr.PlayerID, cmd)
 		case model.CmdMove:

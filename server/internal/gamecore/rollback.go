@@ -182,4 +182,5 @@ func applyWorldState(dst, src *model.WorldState) {
 	dst.TileUnits = src.TileUnits
 	dst.EntityCounter = src.EntityCounter
 	dst.Pipelines = src.Pipelines
+	dst.ConveyorTraffic = nil
 }

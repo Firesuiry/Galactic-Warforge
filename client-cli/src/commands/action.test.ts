@@ -12,6 +12,7 @@ import {
   cmdCraftItem,
   cmdCancelMechaJob,
   cmdConfigureSplitter,
+  cmdConfigureTrafficMonitor,
   cmdTaskForceDeploy,
 } from './action.js';
 
@@ -118,5 +119,18 @@ describe('splitter configuration', () => {
   it('allows full replacement configuration and help never sends commands', async () => {
     assert.match(await cmdConfigureSplitter(['b', '--inputs', 'west', '--outputs', 'east,south', '--output-priority', 'east', '--filters', 'east:iron_ore']), /missing authenticated player_id/);
     assert.match(await cmdConfigureSplitter(['--help']), /Usage: configure_splitter/);
+  });
+});
+
+describe('traffic monitor command', () => {
+  it('validates full configuration and never submits help', async () => {
+    const valid = ['monitor', 'belt', '--window', '10', '--minimum', '0.5', '--alerts', 'on'];
+    assert.match(await cmdConfigureTrafficMonitor(valid), /missing authenticated player_id/);
+    assert.match(await cmdConfigureTrafficMonitor(['--help']), /Usage: configure_traffic_monitor/);
+    for (const [index, value] of [[3, '0'], [3, '601'], [3, '1.5'], [5, '-1'], [5, 'Infinity'], [5, '61'], [7, 'true']] as const) {
+      const args = [...valid]; args[index] = value;
+      assert.doesNotMatch(await cmdConfigureTrafficMonitor(args), /missing authenticated player_id/);
+    }
+    assert.doesNotMatch(await cmdConfigureTrafficMonitor([...valid, '--typo', 'x']), /missing authenticated player_id/);
   });
 });

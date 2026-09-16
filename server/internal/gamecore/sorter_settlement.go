@@ -94,6 +94,7 @@ func settleSorters(ws *model.WorldState) {
 					continue
 				}
 				target.Conveyor.AppendStacks(moved)
+				recordConveyorDeparture(ws, source, move)
 				sequence := int64(1)
 				if sorter.LastTransfer != nil {
 					sequence = sorter.LastTransfer.Sequence + 1

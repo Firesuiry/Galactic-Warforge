@@ -42,6 +42,12 @@ type CommandStructureSpec struct {
 func commandStructureRegistry() []CommandStructureSpec {
 	return []CommandStructureSpec{
 		{
+			Type:                  CmdConfigureTrafficMonitor,
+			RequiredTargetFields:  []string{"entity_id"},
+			RequiredPayloadFields: []string{"target_belt_id", "window_ticks", "minimum_items_per_tick", "alerts_enabled"},
+			Constraints:           []string{"Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations."},
+		},
+		{
 			Type:                  CmdConfigureSplitter,
 			RequiredTargetFields:  []string{"entity_id"},
 			RequiredPayloadFields: []string{"input_directions", "output_directions"},
@@ -521,6 +527,12 @@ func buildCommandSchema(spec CommandStructureSpec) map[string]any {
 
 func schemaForPayloadField(field string) map[string]any {
 	switch field {
+	case "window_ticks":
+		return map[string]any{"type": "integer", "minimum": 1, "maximum": 600}
+	case "minimum_items_per_tick":
+		return map[string]any{"type": "number", "minimum": 0, "maximum": 60}
+	case "alerts_enabled":
+		return map[string]any{"type": "boolean"}
 	case "count", "quantity", "layer_index", "local_storage", "drone_capacity",
 		"input_priority", "output_priority", "radius":
 		return map[string]any{"type": "number"}

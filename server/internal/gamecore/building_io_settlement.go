@@ -84,6 +84,7 @@ func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.B
 			candidate.conveyor.Conveyor.InsertAt(candidate.buffer, rollback)
 		}
 		portRemaining -= inserted
+		recordConveyorDeparture(ws, candidate.conveyor, inserted)
 	}
 }
 

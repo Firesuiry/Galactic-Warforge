@@ -250,6 +250,7 @@ export const TRANSLATIONS = {
     building_state_changed: "建筑状态变更",
     resource_changed: "资源储量变化",
     production_alert: "产线告警",
+    traffic_monitor_alert: "传送带流量告警",
     research_completed: "研究完成",
     threat_level_changed: "威胁等级变化",
     construction_paused: "施工已暂停",

@@ -51,6 +51,8 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleResources(ws)...)
 
 			settleOrbitalCollectors(ws, gc.maps)
+			ws.ConveyorTraffic = nil
+			ensureConveyorTraffic(ws)
 			settleConveyors(ws)
 			settleSorters(ws)
 			settleBuildingIO(ws)
@@ -61,6 +63,7 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleFractionation(ws)...)
 			settleStorage(ws)
 			events = append(events, settleTurrets(ws)...)
+			events = append(events, settleTrafficMonitors(ws)...)
 
 			if gc.monitor != nil {
 				monEvents, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)

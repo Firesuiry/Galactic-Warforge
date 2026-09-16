@@ -46,6 +46,7 @@ func t092PlaceProducer(t *testing.T, ws *model.WorldState, id string, btype mode
 	building.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, building)
 	building.Production.RecipeID = recipeID
+	supplyProductionFixture(t, ws, building)
 	for _, input := range inputs {
 		accepted, remaining, err := building.Storage.Receive(input.ItemID, input.Quantity)
 		if err != nil || remaining != 0 {

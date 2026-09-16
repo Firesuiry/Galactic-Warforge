@@ -19,6 +19,7 @@ import { playPlanetEventAudio } from '@/features/audio/planet-audio';
 import { notifyGameEvent } from '@/features/notifications/notify';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { usePlanetViewStore } from '@/features/planet-map/store';
+import { createPlanetInvalidationScheduler } from '@/features/planet-map/realtime-invalidation';
 
 interface UsePlanetRealtimeSyncOptions {
   client: ApiClient;
@@ -30,32 +31,9 @@ interface UsePlanetRealtimeSyncOptions {
   systemId?: string;
 }
 
-interface InvalidationFlags {
-  scene: boolean;
-  runtime: boolean;
-  networks: boolean;
-  systemRuntime: boolean;
-  summary: boolean;
-  stats: boolean;
-  alerts: boolean;
-}
-
-function createInvalidationFlags(): InvalidationFlags {
-  return {
-    scene: false,
-    runtime: false,
-    networks: false,
-    systemRuntime: false,
-    summary: false,
-    stats: false,
-    alerts: false,
-  };
-}
-
 export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
   const queryClient = useQueryClient();
-  const pendingInvalidationsRef = useRef<InvalidationFlags>(createInvalidationFlags());
-  const invalidateTimerRef = useRef<number | null>(null);
+  const syncGenerationRef = useRef(0);
   const hasConnectedRef = useRef(false);
   const latestQueryScopeRef = useRef({
     serverUrl: options.serverUrl,
@@ -71,6 +49,12 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
     systemId: options.systemId ?? '',
   };
 
+  const invalidations = useMemo(() => createPlanetInvalidationScheduler(
+    queryClient,
+    () => latestQueryScopeRef.current,
+    () => usePlanetViewStore.getState().markFullSync(),
+  ), [queryClient]);
+
   const sseClient = useMemo(
     () => createSseClient({
       fetchFn: options.fetchFn,
@@ -80,6 +64,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
   );
 
   async function pullMissedEvents() {
+    const generation = syncGenerationRef.current;
     const state = usePlanetViewStore.getState();
     let nextCursor = state.lastEventId || undefined;
     let pagesLeft = 4;
@@ -91,6 +76,8 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
         after_event_id: nextCursor,
         limit: 50,
       });
+
+      if (generation !== syncGenerationRef.current) return;
 
       if (response.events.length === 0) {
         break;
@@ -121,8 +108,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
     }
 
     if (sawEvent) {
-      usePlanetViewStore.getState().markFullSync();
-      scheduleInvalidation({
+      invalidations.schedule({
         scene: true,
         runtime: true,
         networks: true,
@@ -134,72 +120,12 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
     }
   }
 
-  function scheduleInvalidation(nextFlags: Partial<InvalidationFlags>) {
-    const current = pendingInvalidationsRef.current;
-    pendingInvalidationsRef.current = {
-      scene: current.scene || Boolean(nextFlags.scene),
-      runtime: current.runtime || Boolean(nextFlags.runtime),
-      networks: current.networks || Boolean(nextFlags.networks),
-      systemRuntime: current.systemRuntime || Boolean(nextFlags.systemRuntime),
-      summary: current.summary || Boolean(nextFlags.summary),
-      stats: current.stats || Boolean(nextFlags.stats),
-      alerts: current.alerts || Boolean(nextFlags.alerts),
-    };
-
-    if (invalidateTimerRef.current !== null) {
-      return;
-    }
-
-    invalidateTimerRef.current = window.setTimeout(() => {
-      const flags = pendingInvalidationsRef.current;
-      const scope = latestQueryScopeRef.current;
-      pendingInvalidationsRef.current = createInvalidationFlags();
-      invalidateTimerRef.current = null;
-
-      if (flags.scene) {
-        void queryClient.invalidateQueries({
-          queryKey: ['planet-scene', scope.serverUrl, scope.playerId, scope.planetId],
-        });
-      }
-      if (flags.runtime) {
-        void queryClient.invalidateQueries({
-          queryKey: ['planet-runtime', scope.serverUrl, scope.playerId, scope.planetId],
-        });
-      }
-      if (flags.networks) {
-        void queryClient.invalidateQueries({
-          queryKey: ['planet-networks', scope.serverUrl, scope.playerId, scope.planetId],
-        });
-      }
-      if (flags.systemRuntime && scope.systemId) {
-        void queryClient.invalidateQueries({
-          queryKey: ['system-runtime', scope.serverUrl, scope.playerId, scope.systemId],
-        });
-      }
-      if (flags.summary) {
-        void queryClient.invalidateQueries({
-          queryKey: ['summary', scope.serverUrl, scope.playerId],
-        });
-      }
-      if (flags.stats) {
-        void queryClient.invalidateQueries({
-          queryKey: ['stats', scope.serverUrl, scope.playerId],
-        });
-      }
-      if (flags.alerts) {
-        void queryClient.invalidateQueries({
-          queryKey: ['alerts-snapshot', scope.serverUrl, scope.playerId, scope.planetId],
-        });
-      }
-      usePlanetViewStore.getState().markFullSync();
-    }, 150);
-  }
-
   useEffect(() => {
     if (!options.playerKey || !options.planetId) {
       return undefined;
     }
 
+    syncGenerationRef.current++;
     const unsubscribeEvent = sseClient.subscribe((message) => {
       if (message.type !== 'game') {
         return;
@@ -230,7 +156,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       const refreshPlanet = shouldRefreshPlanet(event, options.planetId);
       const refreshSummary = shouldRefreshSummary(event);
       const refreshStats = shouldRefreshStats(event);
-      scheduleInvalidation({
+      invalidations.schedule({
         scene: refreshPlanet || shouldRefreshFog(event, options.planetId),
         runtime: refreshPlanet || refreshStats || refreshSummary,
         networks: refreshPlanet || event.event_type === 'building_state_changed',
@@ -258,17 +184,14 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
     });
 
     return () => {
+      syncGenerationRef.current++;
+      invalidations.reset();
       unsubscribeEvent();
       unsubscribeStatus();
       sseClient.stop();
       hasConnectedRef.current = false;
-      if (invalidateTimerRef.current !== null) {
-        window.clearTimeout(invalidateTimerRef.current);
-        invalidateTimerRef.current = null;
-      }
-      pendingInvalidationsRef.current = createInvalidationFlags();
     };
-  }, [options.planetId, options.playerKey, sseClient]);
+  }, [options.planetId, options.playerId, options.playerKey, sseClient, invalidations]);
 
   return {
     pullMissedEvents,

@@ -968,6 +968,7 @@ export function shouldRefreshPlanet(event: GameEventDetail, planetId: string) {
     "resource_changed",
     "entity_destroyed",
     "building_state_changed",
+    "traffic_monitor_alert",
     "construction_paused",
     "construction_resumed",
     "entity_updated",

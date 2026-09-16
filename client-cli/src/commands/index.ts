@@ -63,6 +63,7 @@ import {
   cmdCraftItem,
   cmdCancelMechaJob,
   cmdConfigureSplitter,
+  cmdConfigureTrafficMonitor,
 
   cmdSwitchActivePlanet,
   cmdSetRayReceiverMode,
@@ -154,6 +155,7 @@ export const COMMANDS: Record<string, CommandEntry> = {
   craft_item: { handler: cmdCraftItem },
   cancel_mecha_job: { handler: cmdCancelMechaJob },
   configure_splitter: { handler: cmdConfigureSplitter },
+  configure_traffic_monitor: { handler: cmdConfigureTrafficMonitor },
 
   switch_active_planet: { handler: cmdSwitchActivePlanet },
   set_ray_receiver_mode: { handler: cmdSetRayReceiverMode },

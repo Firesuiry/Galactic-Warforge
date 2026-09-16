@@ -165,3 +165,14 @@ describe('splitter request serialization', () => {
     ]);
   });
 });
+
+describe('traffic monitor request serialization', () => {
+  it('preserves numeric thresholds and boolean alarm disabling with empty binding', async () => {
+    const commands: unknown[] = [];
+    const api = createApiClient({ serverUrl: 'http://test.local', auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => { commands.push(...JSON.parse(String(init?.body)).commands); return { ok: true, json: async () => ({ accepted: true }) } as Response; } });
+    const config = { target_belt_id: '', window_ticks: 10, minimum_items_per_tick: .5, alerts_enabled: false };
+    await api.cmdConfigureTrafficMonitor('monitor', config);
+    assert.deepEqual(commands, [{ type: 'configure_traffic_monitor', target: { layer: 'planet', entity_id: 'monitor' }, payload: config }]);
+  });
+});

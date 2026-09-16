@@ -298,6 +298,15 @@ export class IndustrialModels {
     this.box(group, 'alloy', [.22, .018, .07], [0, .53, 0]);
   }
 
+  private trafficMonitor(group: THREE.Group, light: Finish) {
+    this.box(group, 'graphite', [.15, .5, .15], [0, .38, 0]);
+    this.box(group, 'ceramic', [.63, .43, .17], [0, .75, 0]);
+    this.box(group, 'glass', [.51, .3, .02], [0, .75, .1]);
+    for (let i = 0; i < 5; i++) this.box(group, light, [.035, .05 + i * .035, .024], [-.18 + i * .09, .68 + i * .0175, .118]);
+    this.part(group, 'cylinder', 'copper', [.08, .16, .08], [.24, 1.02, 0]);
+    this.part(group, 'dome', light, [.11, .09, .11], [.24, 1.1, 0]);
+  }
+
   private fractionator(group: THREE.Group, light: Finish) {
     this.tank(group, -.17, -.12, .11, .76, .18);
     this.tank(group, .24, -.1, .11, .43, .105, 'alloy');
@@ -429,6 +438,7 @@ export class IndustrialModels {
         this.box(group, 'graphite', [0.018, 0.008, 0.96], [edge * 0.46, 0.034, 0]);
       }
     } else if (/conveyor/.test(type)) this.conveyor(group, light);
+    else if (type === 'traffic_monitor') this.trafficMonitor(group, light);
     else if (type === 'splitter') this.splitter(group, light);
     else if (type === 'fractionator') this.fractionator(group, light);
     else if (type === 'miniature_particle_collider') this.particleCollider(group, light);

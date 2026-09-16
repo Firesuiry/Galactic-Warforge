@@ -63,6 +63,7 @@ type WorldState struct {
 	LogisticsShips     map[string]*LogisticsShipState    `json:"-"`
 	PowerInputs        []PowerInput                      `json:"-"`
 	PowerSnapshot      *PowerSettlementSnapshot          `json:"-"`
+	ConveyorTraffic    *ConveyorTrafficSnapshot          `json:"-"`
 	ProductionSnapshot *ProductionSettlementSnapshot     `json:"-"`
 	PowerGrid          *PowerGridGraph                   `json:"-"`
 	Pipelines          *PipelineNetworkState             `json:"pipelines,omitempty"`

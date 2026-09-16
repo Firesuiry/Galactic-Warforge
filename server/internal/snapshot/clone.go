@@ -220,6 +220,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		Conveyor:          cloneConveyor(b.Conveyor),
 		Sorter:            b.Sorter.Clone(),
 		Splitter:          b.Splitter.Clone(),
+		TrafficMonitor:    b.TrafficMonitor.Clone(),
 		Fractionation:     b.Fractionation.Clone(),
 		SprayCoater:       b.SprayCoater.Clone(),
 		LogisticsStation:  cloneLogisticsStation(b.LogisticsStation),
@@ -279,6 +280,14 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 	} else if model.IsConveyorBuilding(mb.Type) {
 		return nil, fmt.Errorf("conveyor snapshot missing for %s", buildingID)
 	}
+	if snap.TrafficMonitor != nil {
+		mb.TrafficMonitor = snap.TrafficMonitor.Clone()
+		if err := mb.TrafficMonitor.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid traffic monitor %s: %w", buildingID, err)
+		}
+	} else if mb.Type == model.BuildingTypeTrafficMonitor {
+		return nil, fmt.Errorf("traffic monitor snapshot missing for %s", buildingID)
+	}
 	if snap.Splitter != nil {
 		mb.Splitter = snap.Splitter.Clone()
 		if err := mb.Splitter.Validate(); err != nil {
@@ -315,6 +324,9 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 	}
 	if snap.Production != nil {
 		mb.Production = snap.Production.Clone()
+		if err := mb.Production.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid production %s: %w", buildingID, err)
+		}
 	}
 	model.SyncBuildingProduction(mb)
 	model.SyncBuildingConveyor(mb)

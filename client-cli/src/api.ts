@@ -43,6 +43,7 @@ export type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
   SplitterConfig,
+  TrafficMonitorConfig,
   CardinalDirection,
   GroundTaskForceOrder,
   OrbitalSupportMode,
@@ -94,6 +95,7 @@ export const cmdMineResource = client.cmdMineResource;
 export const cmdCraftItem = client.cmdCraftItem;
 export const cmdCancelMechaJob = client.cmdCancelMechaJob;
 export const cmdConfigureSplitter = client.cmdConfigureSplitter;
+export const cmdConfigureTrafficMonitor = client.cmdConfigureTrafficMonitor;
 
 export const cmdQueueMilitaryProduction = client.cmdQueueMilitaryProduction;
 export const cmdRefitUnit = client.cmdRefitUnit;

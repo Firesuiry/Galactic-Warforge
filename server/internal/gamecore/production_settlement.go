@@ -1,6 +1,10 @@
 package gamecore
 
-import "siliconworld/internal/model"
+import (
+	"math"
+
+	"siliconworld/internal/model"
+)
 
 func settleProduction(ws *model.WorldState) []*model.GameEvent {
 	if ws == nil {
@@ -13,6 +17,7 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		ws.ProductionSnapshot = snapshot
 	}
 
+	var powerSnapshot *model.PowerSettlementSnapshot
 	var events []*model.GameEvent
 	for _, building := range ws.Buildings {
 		if building == nil || building.Runtime.Functions.Production == nil || building.Storage == nil {
@@ -25,13 +30,30 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		if building.Runtime.State != model.BuildingWorkRunning {
 			continue
 		}
+		powerRatio := 1.0
+		if model.PowerDemandForBuilding(building) > 0 {
+			if powerSnapshot == nil {
+				powerSnapshot = model.CurrentPowerSettlementSnapshot(ws)
+			}
+			allocation, ok := powerSnapshot.Allocations.Buildings[building.ID]
+			if !ok || allocation.Allocated <= 0 || allocation.Ratio <= 0 {
+				continue
+			}
+			powerRatio = min(1.0, allocation.Ratio)
+		}
 
 		state := building.Production
 		if state.RemainingTicks > 0 {
-			state.RemainingTicks--
+			state.ProgressFraction += powerRatio
+			// A tiny tolerance prevents repeating fractions (e.g. 20/24)
+			// from losing a whole tick at an exact cycle boundary.
+			completed := int(math.Floor(state.ProgressFraction + 1e-9))
+			state.RemainingTicks -= completed
+			state.ProgressFraction = math.Max(0, state.ProgressFraction-float64(completed))
 			if state.RemainingTicks > 0 {
 				continue
 			}
+			state.ProgressFraction = 0
 		}
 
 		if len(state.PendingOutputs) > 0 || len(state.PendingByproducts) > 0 {
@@ -57,6 +79,7 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		recipe, ok := model.Recipe(state.RecipeID)
 		if !ok {
 			state.RecipeID = ""
+			state.ProgressFraction = 0
 			continue
 		}
 		inputs, ok := collectRecipeInputs(building.Storage, recipe)
@@ -77,6 +100,7 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 
 		consumeRecipeInputs(building.Storage, recipe)
 		state.RemainingTicks = max(1, result.Bonus.Duration)
+		state.ProgressFraction = 0
 		state.PendingOutputs = cloneItemAmounts(result.Bonus.Outputs)
 		state.PendingByproducts = cloneItemAmounts(result.Bonus.Byproducts)
 	}

@@ -311,3 +311,13 @@ describe('notifyGameEvent 挂接层', () => {
     window.history.replaceState(null, '', '/');
   });
 });
+
+it('traffic monitor alarms report blockage and clearing without repeating a warning', () => {
+  const alarm = toastFromGameEvent(gameEvent('traffic_monitor_alert', { building_id: 'm1', planet_id: 'planet-1-1', alert_active: true, state: 'blocked' }));
+  expect(alarm?.toast.kind).toBe('warning');
+  expect(alarm?.toast.body).toContain('积货且无物料流出');
+  const cleared = toastFromGameEvent(gameEvent('traffic_monitor_alert', { building_id: 'm1', planet_id: 'planet-1-1', alert_active: false, state: 'flowing' }));
+  expect(cleared?.toast.kind).toBe('info');
+  expect(cleared?.toast.title).toContain('已解除');
+  expect(cleared?.toast.mergeKey).toBe(alarm?.toast.mergeKey);
+});

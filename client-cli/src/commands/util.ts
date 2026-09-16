@@ -67,6 +67,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   transfer: { usage: '<building_id> <item_id> <quantity>', desc: 'Load items from player inventory into building local storage' },
   mine_resource: { usage: '<executor_id> <resource_id> <quantity>', desc: '手动采集固体资源到背包' },
   craft_item: { usage: '<executor_id> <recipe_id> <quantity>', desc: '使用背包原料进行个人制造，quantity为批数' },
+  configure_traffic_monitor: { usage: '<building_id> <belt_id|none> --window <1..600> --minimum <0..60> --alerts <on|off>', desc: '监测相邻皮带真实流出量；none 清绑定，配置重置采样' },
   configure_splitter: { usage: '<building_id> --inputs west --outputs east,south,north [--input-priority west] [--output-priority east] [--filters east:iron_ore,south:copper_ore]', desc: '完整替换分流器端口、优先级和物品过滤；省略可选项即清除' },
   cancel_mecha_job: { usage: '<executor_id>', desc: '取消机甲任务并返还未完成批次原料' },
   refuel_mecha: { usage: '<executor_id> <fuel_item_id> <quantity>', desc: 'Refuel an executor mecha with a catalog-declared mecha fuel item' },

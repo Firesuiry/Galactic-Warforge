@@ -32,6 +32,7 @@ func TestParticleColliderRecipesThroughBelts(t *testing.T) {
 		t.Run(tc.recipe, func(t *testing.T) {
 			ws := model.NewWorldState("planet", 12)
 			b := colliderForTest(ws, tc.recipe)
+			supplyProductionFixture(t, ws, b)
 			input := newConveyorBuilding("input", model.Position{X: 2, Y: 3}, model.ConveyorEast)
 			output := newConveyorBuilding("output", model.Position{X: 4, Y: 3}, model.ConveyorEast)
 			side := newConveyorBuilding("side", model.Position{X: 3, Y: 4}, model.ConveyorSouth)
@@ -127,6 +128,7 @@ func TestParticleColliderFullOutputIsAtomicAndSurvivesSave(t *testing.T) {
 	core := newSaveStateHarness(t)
 	ws := core.World()
 	b := colliderForTest(ws, "antimatter")
+	supplyProductionFixture(t, ws, b)
 	b.Storage.EnsureInventory()[model.ItemCriticalPhoton] = 4
 	settleProduction(ws)
 	// Leave room for the main output alone, not its hydrogen byproduct. The
@@ -165,6 +167,7 @@ func TestParticleColliderFullOutputIsAtomicAndSurvivesSave(t *testing.T) {
 	delete(resumed.Storage.Inventory, model.ItemStoneOre)
 	delete(resumed.Storage.InputBuffer, model.ItemStoneOre)
 	resumed.Runtime.State = model.BuildingWorkRunning
+	supplyProductionFixture(t, restored.World(), resumed)
 	settleProduction(restored.World())
 	settleStorage(restored.World())
 	if resumed.ExportableItemQuantity(model.ItemAntimatter) != 2 || resumed.ExportableItemQuantity(model.ItemHydrogen) != 2 || availableStorageItem(resumed.Storage, model.ItemCriticalPhoton) != 2 {
@@ -258,6 +261,7 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 	if input == nil || collider == nil || output == nil {
 		t.Fatal("line construction failed")
 	}
+	supplyProductionFixture(t, ws, collider)
 	if accepted, _, err := input.Conveyor.Insert(model.ItemCriticalPhoton, 2); err != nil || accepted != 2 {
 		t.Fatalf("feed photons: %d %v", accepted, err)
 	}

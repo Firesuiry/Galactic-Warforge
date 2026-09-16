@@ -1409,3 +1409,10 @@
 .splitter-controls__port { display: grid; align-content: start; gap: 8px; }
 .splitter-controls__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .splitter-controls fieldset:disabled { opacity: .65; }
+
+.traffic-monitor-controls fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.traffic-monitor-controls legend { margin-bottom: 10px; }
+.traffic-monitor-controls label { display: grid; gap: 5px; min-width: 0; }
+.traffic-monitor-controls select, .traffic-monitor-controls input[type="number"] { width: 100%; min-width: 0; box-sizing: border-box; }
+.traffic-monitor-controls .traffic-monitor-controls__toggle { display: flex; align-items: center; gap: 8px; }
+.traffic-monitor-controls fieldset:disabled { opacity: .65; }

@@ -26,4 +26,8 @@
 
 - 小地图scene首屏未知图集尺寸时不传默认窗口推算的near中心，先矩形查询，再按当前server/player/planet缓存尺寸裁剪；避免face16的48×32地图返回400。
 
-- 高级加工回放：`scripts/playtest-advanced-processing-browser.mjs`，预置科技/原料的隔离场景；真实氢外循环、喷涂耗剂和三种对撞配方。分馏/喷涂固定西入东出及专属侧口，不支持旋转/管道。通用生产部分供电仍不减速，缺口见星球玩法覆盖文档。
+- 高级加工回放：`scripts/playtest-advanced-processing-browser.mjs`，预置科技/原料的隔离场景；真实氢外循环、喷涂耗剂和三种对撞配方。分馏/喷涂固定西入东出及专属侧口，不支持旋转/管道。通用生产已按供电比例减速并保留progress_fraction，完整缺口见星球玩法覆盖文档。
+
+- 欠压/监测回放：`scripts/playtest-power-monitor-browser.mjs`（19497/4187独立场景），分阶段保存重编续档验证。监测器按相邻皮带真实流出统计，配置重置窗口，关闭告警不停止采样。
+
+- SSE高频刷新使用串行合并调度并保留在途变更的尾随刷新，防止取消慢查询或漏掉最后事件；不能单独加cancelRefetch:false。回归 `realtime-invalidation.test.ts`。

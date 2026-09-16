@@ -424,6 +424,7 @@ func TestT091SelfEvolutionLabSupportsResearchAndMatrixRecipes(t *testing.T) {
 	productionLab.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, productionLab)
 	productionLab.Production.RecipeID = "electromagnetic_matrix"
+	supplyProductionFixture(t, ws, productionLab)
 
 	if accepted, remaining, err := productionLab.Storage.Receive(model.ItemCircuitBoard, 1); err != nil || accepted != 1 || remaining != 0 {
 		t.Fatalf("prime self_evolution_lab with circuit_board failed: accepted=%d remaining=%d err=%v", accepted, remaining, err)

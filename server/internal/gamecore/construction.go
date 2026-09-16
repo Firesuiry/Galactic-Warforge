@@ -607,6 +607,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	model.InitBuildingSprayCoater(b)
 	model.InitBuildingEnergyStorage(b)
 	model.InitBuildingConveyor(b)
+	model.InitBuildingTrafficMonitor(b)
 	model.InitBuildingSorter(b)
 	model.InitBuildingLogisticsStation(b)
 	syncCollectorResourceKind(ws, b)

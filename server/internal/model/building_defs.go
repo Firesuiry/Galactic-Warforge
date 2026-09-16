@@ -183,6 +183,7 @@ var defaultBuildingDefinitions = []BuildingDefinition{
 		Category:    BuildingCategoryTransport,
 		Subcategory: BuildingSubcategoryTransport,
 		Footprint:   defaultFootprint,
+		BuildCost:   BuildCost{Minerals: 40, Energy: 20},
 		Buildable:   true,
 	},
 	{

@@ -133,6 +133,13 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
         },
       };
     }
+    case 'traffic_monitor_alert': {
+      const active = payload.alert_active === true;
+      const id = asString(payload.building_id);
+      return { toast: { kind: active ? 'warning' : 'info', title: active ? '传送带流量告警' : '传送带告警已解除',
+        body: `${id || '流速监测器'}：${active ? (payload.state === 'blocked' ? '积货且无物料流出' : '流量低于阈值') : '监测状态已更新'}`,
+        href: planetHref(payload), mergeKey: `traffic_monitor_alert:${id}` } };
+    }
     case 'production_alert': {
       const alert = asRecord(payload.alert);
       const alertType = asString(alert?.alert_type);

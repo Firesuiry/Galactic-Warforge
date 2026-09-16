@@ -25,6 +25,7 @@ func settleConveyors(ws *model.WorldState) {
 	if ws == nil {
 		return
 	}
+	ensureConveyorTraffic(ws)
 	conveyors := make(map[string]*model.Building)
 	ids := make([]string, 0)
 	for id, building := range ws.Buildings {
@@ -32,6 +33,7 @@ func settleConveyors(ws *model.WorldState) {
 			continue
 		}
 		conveyors[id] = building
+		ws.ConveyorTraffic.QueuedBefore[id] = building.Conveyor.TotalItems()
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
@@ -107,6 +109,7 @@ func settleConveyors(ws *model.WorldState) {
 				capacities[targetID]--
 				grants[targetID][request.sourceID]++
 				source := conveyors[request.sourceID]
+				recordConveyorDeparture(ws, source, 1)
 				if source.Splitter != nil {
 					source.Splitter.OutputCursor = nextSplitterCursor(source.Splitter.OutputDirections, request.link.output)
 					source.Splitter.TransferredItems++

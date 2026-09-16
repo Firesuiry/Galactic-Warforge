@@ -32,6 +32,7 @@ type Building struct {
 	EnergyStorage     *EnergyStorageState     `json:"energy_storage,omitempty"`
 	Conveyor          *ConveyorState          `json:"conveyor,omitempty"`
 	Splitter          *SplitterState          `json:"splitter,omitempty"`
+	TrafficMonitor    *TrafficMonitorState    `json:"traffic_monitor,omitempty"`
 	Fractionation     *FractionationState     `json:"fractionation,omitempty"`
 	SprayCoater       *SprayCoaterState       `json:"spray_coater,omitempty"`
 	Sorter            *SorterState            `json:"sorter,omitempty"`
@@ -61,6 +62,7 @@ func (b *Building) Clone() *Building {
 	out.Conveyor = b.Conveyor.Clone()
 	out.Sorter = b.Sorter.Clone()
 	out.Splitter = b.Splitter.Clone()
+	out.TrafficMonitor = b.TrafficMonitor.Clone()
 	out.Fractionation = b.Fractionation.Clone()
 	out.SprayCoater = b.SprayCoater.Clone()
 	out.LogisticsStation = b.LogisticsStation.Clone()

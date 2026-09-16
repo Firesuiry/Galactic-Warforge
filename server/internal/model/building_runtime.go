@@ -760,6 +760,14 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeTrafficMonitor,
+		Params: BuildingRuntimeParams{
+			EnergyConsume:    1,
+			ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Capacity: 1}},
+		},
+		Functions: BuildingFunctionModules{Energy: &modelpower.EnergyModule{ConsumePerTick: 1}},
+	},
+	{
 		ID: BuildingTypeSplitter,
 		Functions: BuildingFunctionModules{
 			Transport: &TransportModule{Throughput: 6, StackLimit: 24},

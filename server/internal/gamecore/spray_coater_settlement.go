@@ -38,6 +38,7 @@ func settleSprayCoaters(ws *model.WorldState) {
 				accepted, _, err := b.Storage.Receive(stack.ItemID, min(6, stack.Quantity))
 				if err == nil && accepted > 0 {
 					source.Conveyor.Take(accepted)
+					recordConveyorDeparture(ws, source, accepted)
 				}
 			}
 		}

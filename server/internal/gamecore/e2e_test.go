@@ -243,7 +243,8 @@ func TestE2E_ProductionChain(t *testing.T) {
 		t.Fatalf("expected to insert 1 iron_ingot, accepted=%d remaining=%d", accepted, remaining)
 	}
 
-	for i := 0; i < 25; i++ {
+	// Actual sunlight and shared demand can leave this assembler below full power.
+	for i := 0; i < 120 && assembler.Storage.OutputQuantity(model.ItemGear) == 0; i++ {
 		core.processTick()
 	}
 
