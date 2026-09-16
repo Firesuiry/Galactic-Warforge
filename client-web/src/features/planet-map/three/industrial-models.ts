@@ -365,7 +365,21 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-unit-${type}`;
     const armor: Finish = own ? 'ceramic' : 'hostile', light: Finish = own ? 'blue' : 'orange';
-    if (/ship|vessel|drone|fighter|space|fleet|transport/.test(type)) {
+    if (/mech|mecha/.test(type)) {
+      // 重型机甲：双腿、装甲躯干、驾驶舱与肩部武器，和普通工人/士兵模型明确区分。
+      for (const side of [-1, 1]) {
+        this.box(group, 'graphite', [0.14, 0.26, 0.16], [side * 0.13, 0.16, 0]);
+        this.box(group, armor, [0.12, 0.13, 0.13], [side * 0.13, 0.39, 0]);
+        this.part(group, 'cylinder', 'alloy', [0.075, 0.11, 0.075], [side * 0.13, 0.02, 0], [0, 0, Math.PI / 2]);
+      }
+      this.box(group, armor, [0.42, 0.3, 0.28], [0, 0.42, 0]);
+      this.box(group, 'glass', [0.24, 0.11, 0.035], [0, 0.52, 0.145], [-0.15, 0, 0]);
+      this.part(group, 'cylinder', light, [0.11, 0.08, 0.11], [0, 0.69, 0], [Math.PI / 2, 0, 0]);
+      for (const side of [-1, 1]) {
+        this.box(group, armor, [0.13, 0.12, 0.2], [side * 0.3, 0.53, 0]);
+        this.pipe(group, 'alloy', [side * 0.31, 0.54, 0.06], [side * 0.31, 0.54, 0.3], 0.024);
+      }
+    } else if (/ship|vessel|drone|fighter|space|fleet|transport/.test(type)) {
       this.box(group, 'graphite', [0.28, 0.13, 0.67], [0, 0.12, 0]);
       this.box(group, armor, [0.26, 0.16, 0.43], [0, 0.19, -0.05]);
       this.part(group, 'cone', armor, [0.26, 0.31, 0.18], [0, 0.16, 0.3], [Math.PI / 2, 0, 0]);
