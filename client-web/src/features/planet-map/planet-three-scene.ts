@@ -294,7 +294,7 @@ export class PlanetThreeScene {
       this.staticEntities.set(key, { signature, group: create() });
     };
     for (const building of visibleBuildings) {
-      if (building.conveyor && (building.type.startsWith('conveyor_belt_') || building.type === 'automatic_piler')) continue;
+      if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
       const footprint = getBuildingFootprint(building);
       retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position.x, building.position.y, footprint, building.conveyor?.output], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
