@@ -77,6 +77,11 @@
 | `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
 | `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
 | `configure_splitter` | `<building_id> --inputs <方向列表> --outputs <方向列表> [--input-priority <方向>] [--output-priority <方向>] [--filters <方向:item_id列表>]` | 完整替换四向分流器端口、优先级与出口过滤；省略可选项会清除旧值 |
+| `configure_traffic_monitor` | `<building_id> <belt_id\|none> --window <1..600> --minimum <0..60> --alerts <on\|off>` | 完整替换流速监测器绑定、窗口、阈值与告警 |
+| `configure_distributor` | `<id> <item_id\|none> <none\|supply\|demand> <local_storage> [--delivery true\|false] [--collection true\|false]` | 配置仓库配送器；省略开关保留原值 |
+| `install_logistics_bot` | `<id> <quantity> [--source player\|storage]` | 消耗背包或绑定仓库的机器人安装至配送器 |
+| `uninstall_logistics_bot` | `<id> <quantity>` | 回收空载停靠的配送机器人至背包 |
+| `configure_mecha_logistics` | `<unit_id> <item:min:max,...\|none>` | 替换机甲配送请求，最多 8 项，`none` 清空 |
 | `configure_logistics_station` | `<building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>] [--belt-ports <方向:input或output:物品ID,...\|none>]` | 配置站点参数；皮带端口提供时完整替换，none清空 |
 | `configure_logistics_slot`    | `<building_id> <planetary\|interstellar> <item_id> <none\|supply\|demand\|both> <local_storage>`                                                                               | 配置物品供需；删除可用 `<building_id> <scope> <item_id> --remove` |
 | `install_logistics_vehicle` | `<station_id> <logistics_drone\|logistics_vessel> <quantity> [--source <player\|station>]` | 消耗背包或站内成品安装，默认player；整批验证容量和库存 |
@@ -93,6 +98,10 @@
 | `refit_unit`                  | `<building_id> <unit_id> <target_blueprint_id>`                                                                                                                                | 让小队或同构舰队进入 authoritative 翻修 |
 | `deploy_squad`                | `<building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]`                                                                                                           | 消耗部署枢纽中的载荷并生成地面战斗小队 |
 | `commission_fleet`            | `<building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]`                                                                                              | 消耗部署枢纽中的载荷并生成或补强舰队   |
+| `fleet_assign`                | `<fleet_id> <line\|vee\|circle\|wedge>`                                                                                                                                        | 改变舰队阵型                           |
+| `fleet_attack`                | `<fleet_id> <planet_id> <target_id>`                                                                                                                                           | 命令舰队攻击同星系目标                 |
+| `fleet_move`                  | `<fleet_id> <target_system_id>`                                                                                                                                                | 命令舰队跃迁到相连恒星系               |
+| `fleet_disband`               | `<fleet_id>`                                                                                                                                                                   | 解散舰队                               |
 | `task_force_create`           | `<task_force_id> [--name <name>] [--stance <stance>]`                                                                                                                          | 创建任务群                             |
 | `task_force_assign`           | `<task_force_id> <squad\|fleet> <member_ids_csv> [--system <system_id>] [--planet <planet_id>]`                                                                              | 把小队或舰队编入任务群                 |
 | `task_force_set_stance`       | `<task_force_id> <stance>`                                                                                                                                                     | 切换任务群姿态                         |

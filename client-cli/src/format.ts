@@ -170,7 +170,7 @@ export function fmtSummary(s: StateSummary): string {
   }
   lines.push('');
 
-  const headers = ['Player', 'Team', 'Role', 'Alive', 'Minerals', 'Energy'];
+  const headers = ['Player', 'Team', 'Role', 'Alive', 'Minerals', 'Energy', 'Executor'];
   const rows = Object.values(s.players).map(p => [
     p.player_id,
     p.team_id ?? '-',
@@ -178,8 +178,15 @@ export function fmtSummary(s: StateSummary): string {
     p.is_alive ? chalk.green('yes') : chalk.red('no'),
     p.resources ? String(p.resources.minerals) : chalk.dim('-'),
     p.resources ? String(p.resources.energy) : chalk.dim('-'),
+    p.executor?.unit_id ?? '-',
   ]);
   lines.push(table(headers, rows));
+  for (const player of Object.values(s.players)) {
+    const preview = fmtInventoryPreview(player.inventory, 8);
+    if (preview) {
+      lines.push(`Inventory ${player.player_id}: ${preview}`);
+    }
+  }
   return lines.join('\n');
 }
 

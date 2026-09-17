@@ -281,7 +281,8 @@ export function createApiClient(options: ApiClientOptions) {
     playerKey: options.auth?.playerKey ?? '',
   };
 
-  const fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
+  const fetchFn: typeof fetch = options.fetchFn
+    ?? ((input, init) => globalThis.fetch(input, init));
   const defaultGalaxyId = options.defaultGalaxyId ?? DEFAULT_GALAXY_ID;
   const defaultPlanetId = options.defaultPlanetId ?? DEFAULT_PLANET_ID;
   const defaultSystemId = options.defaultSystemId ?? DEFAULT_SYSTEM_ID;
