@@ -50,17 +50,25 @@ const (
 	ItemCopperIngot    = "copper_ingot"
 	ItemStoneBrick     = "stone_brick"
 	ItemGlass          = "glass"
+	ItemSteel          = "steel"
 	ItemSiliconIngot   = "silicon_ingot"
 	ItemTitaniumIngot  = "titanium_ingot"
 	ItemGraphene       = "graphene"
 	ItemCarbonNanotube = "carbon_nanotube"
 	ItemCrystalSilicon = "crystal_silicon"
+	ItemDiamond        = "diamond"
 	ItemPlastic        = "plastic"
+	ItemOrganicCrystal = "organic_crystal"
 	ItemMagnet         = "magnet"
 
 	ItemGear                         = "gear"
 	ItemMotor                        = "motor"
-	ItemLogisticsBot = "logistics_bot"
+	ItemEngine                       = "engine"
+	ItemElectromagneticTurbine       = "electromagnetic_turbine"
+	ItemSuperMagneticRing            = "super_magnetic_ring"
+	ItemPrism                        = "prism"
+	ItemPlasmaExciter                = "plasma_exciter"
+	ItemLogisticsBot                 = "logistics_bot"
 	ItemLogisticsDrone               = "logistics_drone"
 	ItemLogisticsVessel              = "logistics_vessel"
 	ItemMagneticCoil                 = "magnetic_coil"
@@ -102,6 +110,9 @@ const (
 
 	ItemAmmoBullet        = "ammo_bullet"
 	ItemAmmoMissile       = "ammo_missile"
+	ItemCombustibleUnit   = "combustible_unit"
+	ItemShellSet          = "shell_set"
+	ItemTitaniumAmmo      = "titanium_ammo"
 	ItemPlasmaCapsule     = "plasma_capsule"
 	ItemAntimatterCapsule = "antimatter_capsule"
 	ItemGravityMissile    = "gravity_missile"
@@ -407,6 +418,95 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 100,
 		UnitVolume: 1,
 	},
+	ItemSteel: {
+		ID:         ItemSteel,
+		Name:       "Steel",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemDiamond: {
+		ID:         ItemDiamond,
+		Name:       "Diamond",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemOrganicCrystal: {
+		ID:         ItemOrganicCrystal,
+		Name:       "Organic Crystal",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemEngine: {
+		ID:         ItemEngine,
+		Name:       "Engine",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemElectromagneticTurbine: {
+		ID:         ItemElectromagneticTurbine,
+		Name:       "Electromagnetic Turbine",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemSuperMagneticRing: {
+		ID:         ItemSuperMagneticRing,
+		Name:       "Super-Magnetic Ring",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemPrism: {
+		ID:         ItemPrism,
+		Name:       "Prism",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemPlasmaExciter: {
+		ID:         ItemPlasmaExciter,
+		Name:       "Plasma Exciter",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemCombustibleUnit: {
+		MechaFuelEnergy: 40,
+		ID:              ItemCombustibleUnit,
+		Name:            "Combustible Unit",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      100,
+		UnitVolume:      1,
+	},
+	ItemShellSet: {
+		ID:         ItemShellSet,
+		Name:       "Shell Set",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemTitaniumAmmo: {
+		ID:         ItemTitaniumAmmo,
+		Name:       "Titanium Ammo Box",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
 	ItemGear: {
 		ID:         ItemGear,
 		Name:       "Gear",
@@ -415,7 +515,7 @@ var itemCatalog = map[string]ItemDefinition{
 		StackLimit: 100,
 		UnitVolume: 1,
 	},
-	ItemLogisticsBot: {ID:ItemLogisticsBot,Name:"Logistics Bot",Category:ItemCategoryComponent,Form:ResourceSolid,StackLimit:100,UnitVolume:1},
+	ItemLogisticsBot:    {ID: ItemLogisticsBot, Name: "Logistics Bot", Category: ItemCategoryComponent, Form: ResourceSolid, StackLimit: 100, UnitVolume: 1},
 	ItemLogisticsDrone:  {ID: ItemLogisticsDrone, Name: "Logistics Drone", Category: ItemCategoryComponent, Form: ResourceSolid, StackLimit: 50, UnitVolume: 1},
 	ItemLogisticsVessel: {ID: ItemLogisticsVessel, Name: "Logistics Vessel", Category: ItemCategoryComponent, Form: ResourceSolid, StackLimit: 20, UnitVolume: 1},
 	ItemMotor: {

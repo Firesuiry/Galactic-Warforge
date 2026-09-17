@@ -104,15 +104,18 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 		}
 	}
 
+	for _, publicTech := range []string{"proliferator_mk2", "super_magnetic", "titanium_ammo"} {
+		if techsByID[publicTech] == nil {
+			t.Fatalf("expected landed planetary tech %s in public catalog", publicTech)
+		}
+	}
+
 	for _, hiddenTech := range []string{
 		"casimir_crystal",
 		"crystal_explosive",
 		"crystal_shell",
-		"proliferator_mk2",
 		"proliferator_mk3",
-		"super_magnetic",
 		"supersonic_missile",
-		"titanium_ammo",
 		"wave_interference",
 	} {
 		if _, exists := techsByID[hiddenTech]; exists {

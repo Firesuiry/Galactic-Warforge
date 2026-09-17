@@ -238,10 +238,10 @@ var defaultTechDefinitions = []TechDefinition{
 			{Type: TechUnlockBuilding, ID: "wind_turbine"},
 			{Type: TechUnlockBuilding, ID: "mining_machine"},
 			{Type: TechUnlockBuilding, ID: "arc_smelter"},
-			{Type: TechUnlockBuilding, ID: "power_pylon"},
-			{Type: TechUnlockBuilding, ID: "conveyor_mk1"},
+			{Type: TechUnlockBuilding, ID: "tesla_tower"},
+			{Type: TechUnlockBuilding, ID: "conveyor_belt_mk1"},
 			{Type: TechUnlockBuilding, ID: "sorter_mk1"},
-			{Type: TechUnlockBuilding, ID: "assembler_mk1"},
+			{Type: TechUnlockBuilding, ID: "assembling_machine_mk1"},
 		},
 	},
 
@@ -256,7 +256,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"dyson_sphere_program"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "storage_mk1"},
+			{Type: TechUnlockBuilding, ID: "depot_mk1"},
 		},
 	},
 
@@ -273,7 +273,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "splitter"},
 			{Type: TechUnlockBuilding, ID: "sorter_mk2"},
-			{Type: TechUnlockBuilding, ID: "flow_monitor"},
+			{Type: TechUnlockBuilding, ID: "traffic_monitor"},
 		},
 	},
 	{
@@ -286,6 +286,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 10}},
 		Unlocks: []TechUnlock{
+			{Type: TechUnlockRecipe, ID: "smelt_stone"},
 			{Type: TechUnlockRecipe, ID: "glass"},
 		},
 	},
@@ -309,8 +310,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 50}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "fluid_tank"},
-			{Type: TechUnlockBuilding, ID: "pump"},
+			{Type: TechUnlockBuilding, ID: "storage_tank"},
+			{Type: TechUnlockBuilding, ID: "water_pump"},
 		},
 	},
 	{
@@ -323,9 +324,9 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 50}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "prism"},
-			{Type: TechUnlockBuilding, ID: "plasma_exciter"},
-			{Type: TechUnlockBuilding, ID: "wireless_pylon"},
+			{Type: TechUnlockRecipe, ID: "prism"},
+			{Type: TechUnlockRecipe, ID: "plasma_exciter"},
+			{Type: TechUnlockBuilding, ID: "wireless_power_tower"},
 		},
 	},
 	{
@@ -338,7 +339,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 50}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "electric_motor"},
+			{Type: TechUnlockRecipe, ID: "motor"},
 		},
 	},
 	{
@@ -351,7 +352,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetism"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 20}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockUnit, ID: "engine"},
+			{Type: TechUnlockRecipe, ID: "engine"},
 		},
 	},
 	{
@@ -365,7 +366,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 20}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "gauss_turret"},
-			{Type: TechUnlockRecipe, ID: "magnum_ammo"},
+			{Type: TechUnlockRecipe, ID: "ammo_bullet"},
 		},
 	},
 
@@ -407,8 +408,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "silicon_ore"},
-			{Type: TechUnlockRecipe, ID: "graphite"},
-			{Type: TechUnlockRecipe, ID: "high_purity_silicon"},
+			{Type: TechUnlockRecipe, ID: "coal_to_graphite"},
+			{Type: TechUnlockRecipe, ID: "smelt_silicon"},
 		},
 	},
 	{
@@ -435,8 +436,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "oil_extractor"},
-			{Type: TechUnlockBuilding, ID: "refinery"},
-			{Type: TechUnlockRecipe, ID: "refined_oil"},
+			{Type: TechUnlockBuilding, ID: "oil_refinery"},
+			{Type: TechUnlockRecipe, ID: "oil_fractionation"},
 		},
 	},
 	{
@@ -479,6 +480,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "diamond"},
 			{Type: TechUnlockRecipe, ID: "crystal"},
+			{Type: TechUnlockRecipe, ID: "crystal_silicon_from_fractal"},
 		},
 	},
 	{
@@ -504,7 +506,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"basic_assembling_processes"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 200}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockRecipe, ID: "microcrystalline"},
+			{Type: TechUnlockRecipe, ID: "microcrystalline_component"},
 		},
 	},
 	{
@@ -532,7 +534,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 200}, {ItemID: "energy_matrix", Quantity: 300}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "fractionator"},
-			{Type: TechUnlockRecipe, ID: "deuterium"},
 		},
 	},
 	{
@@ -560,7 +561,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"plasma_refining"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 200}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "energy_matrix"},
+			{Type: TechUnlockRecipe, ID: "energy_matrix"},
 		},
 	},
 	{
@@ -573,7 +574,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"electromagnetic_drive"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 400}, {ItemID: "energy_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "EM_rail"},
+			{Type: TechUnlockRecipe, ID: "electromagnetic_turbine"},
+			{Type: TechUnlockBuilding, ID: "em_rail_ejector"},
 		},
 	},
 	{
@@ -587,7 +589,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 150}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockBuilding, ID: "missile_turret"},
-			{Type: TechUnlockRecipe, ID: "missile"},
+			{Type: TechUnlockRecipe, ID: "ammo_missile"},
 		},
 	},
 	{
@@ -615,9 +617,9 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"basic_logistics_system", "magnetic_levitation"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 400}, {ItemID: "energy_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "conveyor_mk2"},
+			{Type: TechUnlockBuilding, ID: "conveyor_belt_mk2"},
 			{Type: TechUnlockBuilding, ID: "sorter_mk3"},
-			{Type: TechUnlockBuilding, ID: "storage_mk2"},
+			{Type: TechUnlockBuilding, ID: "depot_mk2"},
 		},
 	},
 	{
@@ -645,7 +647,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"steel_smelting"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 200}, {ItemID: "energy_matrix", Quantity: 200}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockRecipe, ID: "titanium"},
+			{Type: TechUnlockRecipe, ID: "smelt_titanium"},
 		},
 	},
 	{
@@ -671,7 +673,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"solar_collection"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 200}, {ItemID: "energy_matrix", Quantity: 200}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "photon_combiner"},
+			{Type: TechUnlockRecipe, ID: "photon_combiner"},
+			{Type: TechUnlockRecipe, ID: "photon_combiner_from_grating"},
 		},
 	},
 	{
@@ -697,7 +700,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"basic_chemical"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 400}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockRecipe, ID: "graphene"},
+			{Type: TechUnlockRecipe, ID: "graphene_from_graphite"},
+			{Type: TechUnlockRecipe, ID: "graphene_from_fire_ice"},
 		},
 	},
 	{
@@ -736,7 +740,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"energy_matrix"},
 		Cost:          []ItemAmount{{ItemID: "energy_matrix", Quantity: 400}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockRecipe, ID: "hydrogen_fuel"},
+			{Type: TechUnlockRecipe, ID: "hydrogen_fuel_rod"},
 		},
 	},
 	{
@@ -805,7 +809,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"efficient_logistics", "thruster", "vertical_construction"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 400}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "conveyor_mk3"},
+			{Type: TechUnlockBuilding, ID: "conveyor_belt_mk3"},
 			{Type: TechUnlockBuilding, ID: "planetary_logistics_station"},
 			{Type: TechUnlockRecipe, ID: "logistics_drone"},
 			{Type: TechUnlockUnit, ID: "logistics_drone"},
@@ -821,7 +825,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"photon_conversion"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 800}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "geothermal_plant"},
+			{Type: TechUnlockBuilding, ID: "geothermal_power_station"},
 		},
 	},
 	{
@@ -834,8 +838,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"photon_conversion"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 300}, {ItemID: "energy_matrix", Quantity: 300}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "solar_sail"},
-			{Type: TechUnlockBuilding, ID: "EM_rail_launcher"},
+			{Type: TechUnlockRecipe, ID: "solar_sail"},
+			{Type: TechUnlockBuilding, ID: "em_rail_ejector"},
 		},
 	},
 	{
@@ -848,7 +852,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"basic_assembling_processes", "processor"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 300}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "assembler_mk2"},
+			{Type: TechUnlockBuilding, ID: "assembling_machine_mk2"},
 		},
 	},
 	{
@@ -914,6 +918,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 800}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "particle_container"},
+			{Type: TechUnlockRecipe, ID: "particle_container_from_monopole"},
 		},
 	},
 	{
@@ -995,8 +1000,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"deuterium_fractionation"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 500}, {ItemID: "structure_matrix", Quantity: 250}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "mini_fusion_plant"},
-			{Type: TechUnlockRecipe, ID: "deuterium_fuel"},
+			{Type: TechUnlockBuilding, ID: "mini_fusion_power_plant"},
+			{Type: TechUnlockRecipe, ID: "deuterium_fuel_rod"},
 		},
 	},
 	{
@@ -1022,7 +1027,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"high_strength_crystal", "titanium_alloy"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 800}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "structure_matrix"},
+			{Type: TechUnlockRecipe, ID: "structure_matrix"},
 		},
 	},
 
@@ -1040,7 +1045,6 @@ var defaultTechDefinitions = []TechDefinition{
 			{Type: TechUnlockBuilding, ID: "interstellar_logistics_station"},
 			{Type: TechUnlockRecipe, ID: "logistics_vessel"},
 			{Type: TechUnlockUnit, ID: "logistics_ship"},
-			{Type: TechUnlockBuilding, ID: "star_lifter"},
 		},
 	},
 	{
@@ -1109,7 +1113,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"structure_matrix"},
 		Cost:          []ItemAmount{{ItemID: "energy_matrix", Quantity: 2000}, {ItemID: "structure_matrix", Quantity: 1000}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "miniature_collider"},
+			{Type: TechUnlockBuilding, ID: "miniature_particle_collider"},
 			{Type: TechUnlockRecipe, ID: "deuterium_collision"},
 		},
 	},
@@ -1192,7 +1196,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"processor", "particle_control"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 800}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "information_matrix"},
+			{Type: TechUnlockRecipe, ID: "information_matrix"},
 		},
 	},
 	{
@@ -1314,6 +1318,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "information_matrix", Quantity: 200}, {ItemID: "structure_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "plane_filter"},
+			{Type: TechUnlockBuilding, ID: "plane_smelter"},
 		},
 	},
 	{
@@ -1353,7 +1358,8 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"quantum_chip"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 800}, {ItemID: "energy_matrix", Quantity: 800}, {ItemID: "structure_matrix", Quantity: 800}, {ItemID: "information_matrix", Quantity: 800}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "assembler_mk3"},
+			{Type: TechUnlockBuilding, ID: "assembling_machine_mk3"},
+			{Type: TechUnlockBuilding, ID: "negentropy_smelter"},
 		},
 	},
 	{
@@ -1366,7 +1372,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"signal_tower", "high_strength_glass"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 600}, {ItemID: "energy_matrix", Quantity: 600}, {ItemID: "structure_matrix", Quantity: 600}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "high_energy_laser"},
+			{Type: TechUnlockBuilding, ID: "laser_turret"},
 		},
 	},
 
@@ -1381,7 +1387,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"gravitational_wave", "quantum_chip"},
 		Cost:          []ItemAmount{{ItemID: "information_matrix", Quantity: 500}, {ItemID: "structure_matrix", Quantity: 500}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "gravity_matrix"},
+			{Type: TechUnlockRecipe, ID: "gravity_matrix"},
 		},
 	},
 	{
@@ -1549,7 +1555,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Prerequisites: []string{"annihilation", "dyson_stress"},
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1000}, {ItemID: "energy_matrix", Quantity: 1000}, {ItemID: "structure_matrix", Quantity: 1000}, {ItemID: "information_matrix", Quantity: 1000}, {ItemID: "gravity_matrix", Quantity: 1000}},
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockSpecial, ID: "universe_matrix"},
+			{Type: TechUnlockRecipe, ID: "universe_matrix"},
 		},
 	},
 	{
@@ -1655,7 +1661,7 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:     []ItemAmount{{ItemID: "dark_fog_matrix", Quantity: 100}},
 		Hidden:   true,
 		Unlocks: []TechUnlock{
-			{Type: TechUnlockBuilding, ID: "self_evolution_station"},
+			{Type: TechUnlockBuilding, ID: "self_evolution_lab"},
 		},
 	},
 }
@@ -1665,16 +1671,17 @@ func normalizeTechDefinitions(defs []TechDefinition) []TechDefinition {
 	for i := range defs {
 		out[i] = defs[i]
 		out[i].Unlocks = normalizeTechUnlocks(defs[i].Unlocks)
-		switch out[i].ID {
-		case "plane_filter_smelting":
-			out[i].Unlocks = appendUniqueUnlock(out[i].Unlocks, TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypePlaneSmelter)})
-		case "quantum_printing":
-			out[i].Unlocks = appendUniqueUnlock(out[i].Unlocks, TechUnlock{Type: TechUnlockBuilding, ID: string(BuildingTypeNegentropySmelter)})
-		}
 	}
 	return out
 }
 
+// normalizeTechUnlocks drops unlocks whose target is not implemented yet
+// (e.g. recipes scheduled for a later content batch). Techs whose entire
+// unlock list disappears this way are treated as having no public value and
+// become hidden unless they lead to visible successors — see
+// ensureTechCatalogDerived. Raw definitions keep the pending IDs so the
+// integrity test can track them; once the content lands, the unlock starts
+// surviving normalization automatically.
 func normalizeTechUnlocks(unlocks []TechUnlock) []TechUnlock {
 	if len(unlocks) == 0 {
 		return nil
@@ -1692,23 +1699,21 @@ func normalizeTechUnlocks(unlocks []TechUnlock) []TechUnlock {
 
 	out := make([]TechUnlock, 0, len(unlocks))
 	for _, unlock := range unlocks {
-		for _, normalized := range expandTechUnlock(unlock) {
-			switch normalized.Type {
-			case TechUnlockBuilding:
-				if _, ok := buildingIDs[normalized.ID]; !ok {
-					continue
-				}
-			case TechUnlockRecipe:
-				if _, ok := recipeIDs[normalized.ID]; !ok {
-					continue
-				}
-			case TechUnlockUnit:
-				if _, ok := unitIDs[normalized.ID]; !ok {
-					continue
-				}
+		switch unlock.Type {
+		case TechUnlockBuilding:
+			if _, ok := buildingIDs[unlock.ID]; !ok {
+				continue
 			}
-			out = appendUniqueUnlock(out, normalized)
+		case TechUnlockRecipe:
+			if _, ok := recipeIDs[unlock.ID]; !ok {
+				continue
+			}
+		case TechUnlockUnit:
+			if _, ok := unitIDs[unlock.ID]; !ok {
+				continue
+			}
 		}
+		out = appendUniqueUnlock(out, unlock)
 	}
 	return out
 }
@@ -1727,63 +1732,4 @@ func appendUniqueUnlock(unlocks []TechUnlock, unlock TechUnlock) []TechUnlock {
 		}
 	}
 	return append(unlocks, unlock)
-}
-
-func expandTechUnlock(unlock TechUnlock) []TechUnlock {
-	if aliases, ok := techUnlockAliases[unlock.Type][unlock.ID]; ok {
-		return aliases
-	}
-	return []TechUnlock{unlock}
-}
-
-var techUnlockAliases = map[TechUnlockType]map[string][]TechUnlock{
-	TechUnlockBuilding: {
-		"EM_rail":                {{Type: TechUnlockBuilding, ID: string(BuildingTypeEMRailEjector)}},
-		"EM_rail_launcher":       {{Type: TechUnlockBuilding, ID: string(BuildingTypeEMRailEjector)}},
-		"annihilation_reactor":   {{Type: TechUnlockBuilding, ID: string(BuildingTypeArtificialStar)}},
-		"assembler_mk1":          {{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk1)}},
-		"assembler_mk2":          {{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk2)}},
-		"assembler_mk3":          {{Type: TechUnlockBuilding, ID: string(BuildingTypeAssemblingMachineMk3)}},
-		"auto_stacker":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeAutomaticPiler)}},
-		"conveyor_mk1":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeConveyorBeltMk1)}},
-		"conveyor_mk2":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeConveyorBeltMk2)}},
-		"conveyor_mk3":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeConveyorBeltMk3)}},
-		"electric_motor":         {{Type: TechUnlockRecipe, ID: "motor"}},
-		"energy_pylon":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeSatelliteSubstation)}},
-		"flow_monitor":           {{Type: TechUnlockBuilding, ID: string(BuildingTypeTrafficMonitor)}},
-		"fluid_tank":             {{Type: TechUnlockBuilding, ID: string(BuildingTypeStorageTank)}},
-		"geothermal_plant":       {{Type: TechUnlockBuilding, ID: string(BuildingTypeGeothermalPowerStation)}},
-		"high_energy_laser":      {{Type: TechUnlockBuilding, ID: string(BuildingTypeLaserTurret)}},
-		"logistics_vessel":       {{Type: TechUnlockUnit, ID: "logistics_ship"}},
-		"mini_fusion_plant":      {{Type: TechUnlockBuilding, ID: string(BuildingTypeMiniFusionPowerPlant)}},
-		"miniature_collider":     {{Type: TechUnlockBuilding, ID: string(BuildingTypeMiniatureParticleCollider)}},
-		"photon_combiner":        {{Type: TechUnlockRecipe, ID: "photon_combiner_from_grating"}},
-		"plasma_exciter":         {{Type: TechUnlockSpecial, ID: "plasma_exciter"}},
-		"power_pylon":            {{Type: TechUnlockBuilding, ID: string(BuildingTypeTeslaTower)}},
-		"prism":                  {{Type: TechUnlockSpecial, ID: "prism"}},
-		"pump":                   {{Type: TechUnlockBuilding, ID: string(BuildingTypeWaterPump)}},
-		"refinery":               {{Type: TechUnlockBuilding, ID: string(BuildingTypeOilRefinery)}},
-		"self_evolution_station": {{Type: TechUnlockBuilding, ID: string(BuildingTypeSelfEvolutionLab)}},
-		"solar_sail":             {{Type: TechUnlockRecipe, ID: "solar_sail"}},
-		"stacker":                {{Type: TechUnlockBuilding, ID: string(BuildingTypeAutomaticPiler)}},
-		"star_lifter":            {{Type: TechUnlockUnit, ID: "logistics_ship"}},
-		"storage_mk1":            {{Type: TechUnlockBuilding, ID: string(BuildingTypeDepotMk1)}},
-		"storage_mk2":            {{Type: TechUnlockBuilding, ID: string(BuildingTypeDepotMk2)}},
-		"wireless_pylon":         {{Type: TechUnlockBuilding, ID: string(BuildingTypeWirelessPowerTower)}},
-	},
-	TechUnlockRecipe: {
-		"antimatter_fuel":     {{Type: TechUnlockRecipe, ID: "antimatter_fuel_rod"}},
-		"deuterium_fuel":      {{Type: TechUnlockRecipe, ID: "deuterium_fuel_rod"}},
-		"glass":               {{Type: TechUnlockRecipe, ID: "smelt_stone"}},
-		"graphene":            {{Type: TechUnlockRecipe, ID: "graphene_from_graphite"}, {Type: TechUnlockRecipe, ID: "graphene_from_fire_ice"}},
-		"graphite":            {{Type: TechUnlockRecipe, ID: "coal_to_graphite"}},
-		"high_purity_silicon": {{Type: TechUnlockRecipe, ID: "smelt_silicon"}},
-		"hydrogen_fuel":       {{Type: TechUnlockRecipe, ID: "hydrogen_fuel_rod"}},
-		"microcrystalline":    {{Type: TechUnlockRecipe, ID: "microcrystalline_component"}},
-		"missile":             {{Type: TechUnlockRecipe, ID: "ammo_missile"}},
-		"particle_container":  {{Type: TechUnlockRecipe, ID: "particle_container_from_monopole"}},
-		"refined_oil":         {{Type: TechUnlockRecipe, ID: "oil_fractionation"}},
-		"silicon_ore":         {{Type: TechUnlockRecipe, ID: "smelt_silicon"}},
-		"titanium":            {{Type: TechUnlockRecipe, ID: "smelt_titanium"}},
-	},
 }

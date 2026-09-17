@@ -1320,15 +1320,15 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   ],
   "recipes": [
     {
-      "id": "smelt_iron",
-      "name": "Smelt Iron",
-      "inputs": [{"item_id": "iron_ore", "quantity": 1}],
-      "outputs": [{"item_id": "iron_ingot", "quantity": 1}],
-      "duration": 60,
+      "id": "smelt_stone",
+      "name": "Smelt Stone",
+      "inputs": [{"item_id": "stone_ore", "quantity": 1}],
+      "outputs": [{"item_id": "stone_brick", "quantity": 1}],
+      "duration": 50,
       "energy_cost": 1,
       "building_types": ["arc_smelter", "plane_smelter", "negentropy_smelter"],
-      "tech_unlock": ["smelting"],
-      "icon_key": "smelt_iron",
+      "tech_unlock": ["automatic_metallurgy"],
+      "icon_key": "smelt_stone",
       "color": "#74c0fc"
     }
   ],
@@ -1454,7 +1454,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   }
 }
 ```
-- 说明补充：服务端内部科技定义里的原始 unlock 仍可能写成 `power_pylon`，但对外 `/catalog.techs[].unlocks` 会统一归一化成 `tesla_tower`。
+- 说明补充：科技定义中的 unlock ID 现在全部直接写成 canonical ID（如 `tesla_tower`、`oil_refinery`、`em_rail_ejector`），对外 `/catalog.techs[].unlocks` 即原始定义，不再做别名改写。行星内生产配方（`steel`、`glass`、`proliferator_mk1` / `proliferator_mk2`、`organic_crystal`、`particle_container` 等）已落地，对应科技解锁会进入 catalog。尚未落地的恒星系/终局配方解锁（如 `proliferator_mk3`、`thruster`、`photon_combiner`、`space_warper`）仍会在归一化时被暂时裁掉。
+- 配方门控：`recipes[].tech_unlock` 与科技 `unlocks` 中的 recipe 解锁互为镜像、共同生效——只要配方声明了 `tech_unlock` 或被任一科技的 recipe 解锁引用，就必须完成对应科技才能在建造设配方 / 机甲手工中使用；五个矩阵配方（`energy_matrix` / `structure_matrix` / `information_matrix` / `gravity_matrix` / `universe_matrix`）现在也严格由同名科技门控。
 - 戴森相关 catalog 补充：
   - `items` 中矩阵物品统一只暴露 canonical ID：`electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`；旧别名 `matrix_blue` / `matrix_red` / `matrix_yellow` / `matrix_universe` 已从主 catalog 移除。
   - `items` / `recipes` 已补齐终局弹药 `antimatter_capsule` 与 `gravity_missile`，二者都通过 `recomposing_assembler` 进入真实生产闭环。

@@ -38,6 +38,9 @@ func TestT103TechAndBuildingCatalogDerivation(t *testing.T) {
 		"high_strength_glass",
 		"particle_control",
 		"thruster",
+		"proliferator_mk2",
+		"super_magnetic",
+		"titanium_ammo",
 	} {
 		def, ok := TechDefinitionByID(techID)
 		if !ok {
@@ -52,11 +55,8 @@ func TestT103TechAndBuildingCatalogDerivation(t *testing.T) {
 		"casimir_crystal",
 		"crystal_explosive",
 		"crystal_shell",
-		"proliferator_mk2",
 		"proliferator_mk3",
-		"super_magnetic",
 		"supersonic_missile",
-		"titanium_ammo",
 		"wave_interference",
 	} {
 		def, ok := TechDefinitionByID(techID)

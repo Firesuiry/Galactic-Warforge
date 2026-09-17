@@ -573,6 +573,10 @@ func CanBuildTech(player *model.PlayerState, unlockType model.TechUnlockType, un
 }
 
 // CanUseRecipeTech checks whether a player has unlocked the given recipe.
+// A recipe is gated when at least one tech lists it in its recipe unlocks or
+// the recipe itself declares tech gates via RecipeDefinition.TechUnlock; a
+// gated recipe becomes usable once any of those techs is completed. Recipes
+// with no gate at all are basic recipes and stay usable from the start.
 func CanUseRecipeTech(player *model.PlayerState, recipeID string) bool {
 	if recipeID == "" {
 		return false
@@ -580,20 +584,32 @@ func CanUseRecipeTech(player *model.PlayerState, recipeID string) bool {
 	if player == nil || player.Tech == nil {
 		return false
 	}
-	if CanBuildTech(player, model.TechUnlockRecipe, recipeID) {
-		return true
+	gated := false
+	recipe, known := model.Recipe(recipeID)
+	if !known {
+		return false
 	}
 	for _, def := range model.AllTechDefinitions() {
 		if def == nil {
 			continue
 		}
 		for _, unlock := range def.Unlocks {
-			if unlock.Type == model.TechUnlockRecipe && unlock.ID == recipeID {
-				return false
+			if unlock.Type != model.TechUnlockRecipe || unlock.ID != recipeID {
+				continue
 			}
+			if player.Tech.HasTech(def.ID) {
+				return true
+			}
+			gated = true
 		}
 	}
-	return true
+	for _, techID := range recipe.TechUnlock {
+		if player.Tech.HasTech(techID) {
+			return true
+		}
+		gated = true
+	}
+	return !gated
 }
 
 // TechCostForPlayer returns the cost breakdown for a tech based on player's current state
