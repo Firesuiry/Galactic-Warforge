@@ -37,5 +37,5 @@ func (gc *GameCore) execConfigureMechaLogistics(ws *model.WorldState, playerID s
 		requests[itemID] = model.MechaLogisticsRequest{Min: minimum, Max: maximum}
 	}
 	unit.Mecha.LogisticsRequests = requests
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "mecha logistics requests replaced"}, nil
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "mecha logistics requests replaced"}, []*model.GameEvent{mechaStateEvent(unit)}
 }

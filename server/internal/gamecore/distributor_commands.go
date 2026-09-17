@@ -67,7 +67,10 @@ func (gc *GameCore) execConfigureDistributor(ws *model.WorldState, playerID stri
 		return fail("local_storage exceeds host capacity")
 	}
 	b.Distributor = state
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "distributor configured"}, nil
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "distributor configured"}, []*model.GameEvent{{
+		EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
+		Payload: map[string]any{"building_id": b.ID, "distributor": state.Clone()},
+	}}
 }
 
 func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
@@ -121,7 +124,17 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	} else {
 		host.Storage.Provide(model.ItemLogisticsBot, n)
 	}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("installed %d logistics bots", n)}, nil
+	events := []*model.GameEvent{{
+		EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
+		Payload: map[string]any{"building_id": b.ID, "host_building_id": host.ID, "installed": n, "source": source, "bot_count": model.DistributorBotCount(ws, b.ID)},
+	}}
+	if source == "player" {
+		events = append(events, &model.GameEvent{
+			EventType: model.EvtResourceChanged, VisibilityScope: playerID,
+			Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": player.Inventory[model.ItemLogisticsBot]},
+		})
+	}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("installed %d logistics bots", n)}, events
 }
 
 func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
@@ -147,5 +160,11 @@ func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID str
 		model.UnregisterLogisticsBot(ws, id)
 	}
 	ws.Players[playerID].AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}})
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "robots returned to player inventory"}, nil
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "robots returned to player inventory"}, []*model.GameEvent{{
+		EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
+		Payload: map[string]any{"building_id": b.ID, "uninstalled": n, "bot_count": model.DistributorBotCount(ws, b.ID)},
+	}, {
+		EventType: model.EvtResourceChanged, VisibilityScope: playerID,
+		Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": ws.Players[playerID].Inventory[model.ItemLogisticsBot]},
+	}}
 }

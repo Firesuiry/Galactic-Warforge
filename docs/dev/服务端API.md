@@ -2258,4 +2258,19 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 
 ## 仓库配送器
 
-`logistics_distributor` 建在己方仓库原点并挂在仓顶。`configure_distributor` 配置物品、供给/需求模式和保有量；`install_logistics_bot`、`uninstall_logistics_bot` 管理真实机器人。`configure_mecha_logistics` 替换机甲最多 8 项补给下限/回收上限。行星 runtime 返回 `logistics_distributors` 与 `logistics_bots`；机器人按球面相邻格移动并消耗有限航程能量，停电停派，目标失效返航，基地失效保货为 stranded。
+以下命令使用普通 `/commands` 信封，`target.layer="planet"`，`target.entity_id` 指向己方配送器（机甲请求指向己方 executor）。必须有 management 权限。
+
+| 命令 | payload | 行为 |
+| --- | --- | --- |
+| `configure_distributor` | `item_id`、`mode`（none/supply/demand）、`local_storage` 非负整数；可选布尔 `player_delivery_enabled`、`player_collection_enabled` | 配置单种固体物品；省略开关保留原值。空物品仅允许关闭、保有量0且机甲开关全关。保有量不得超过宿主总容量。 |
+| `install_logistics_bot` | `quantity` 正整数、`source`（player/storage，默认player） | 消耗背包或宿主可输出库存中的真实 logistics_bot，最多安装10个。 |
+| `uninstall_logistics_bot` | `quantity` 正整数 | 仅回收空载停靠机器人到玩家背包，数量不足原子失败。 |
+| `configure_mecha_logistics` | `requests: {"motor":{"min":5,"max":10}}` | 整体替换，空对象清空；最多8种固体物品，0≤min≤max≤1000且max>0。 |
+
+`build logistics_distributor` 指向己方 depot_mk1/mk2 的原点；服务器设置z=1，不占地面，一仓一个。必须先回收机器人才能拆配送器，再拆宿主仓库。
+
+配送范围12格，机器人每tick移动2个球面邻格、载货10件；配送器储能1000、最高充电10/tick。仓间供给送货和需求方主动取货均支持；供给只输出超出保有量部分，需求补到保有量。机甲背包低于min时补到max，高于max时回收到max；只有活动星球机甲参与，且需启用配送器对应开关。机甲开关独立于仓间mode。每次飞行预付能量，保留返航预算；停电禁止新派遣，在途继续。目标满仓保货等待、失效则返航，基地失效保留stranded及货物，尚无滞留回收命令。
+
+`GET /world/planets/{id}/runtime` 返回己方 `logistics_distributors`（building_id/owner_id/position/state/bot_ids/host_available/inventory）和 `logistics_bots`。机器人含真实position、home_pos、target_pos、target_kind、trip_kind、cargo、status、returning、energy_cost、energy_remaining等；仓库仍是唯一库存源，inventory为主仓和输入输出缓存合计。Building也带distributor，MechaState带logistics_requests；快照保存并恢复这些状态。
+
+成功配置配送器发送所属玩家可见的 `entity_updated`，机甲请求配置发送 `mecha_state_changed`。装卸机器人发送 `entity_updated`；发生背包扣除/返还时另发送 `resource_changed`（item_id、inventory_qty）。前端据此刷新详情，库存与充电状态直接读取每tick更新的runtime。

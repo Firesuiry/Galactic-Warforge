@@ -620,6 +620,17 @@ export interface LogisticsBotView {
   state_reason?: string;
 }
 
+export interface LogisticsDistributorView {
+  building_id: string;
+  owner_id: string;
+  position: Position;
+  host_building_id: string;
+  host_available: boolean;
+  inventory?: ItemInventory;
+  state: DistributorState;
+  bot_ids?: string[];
+}
+
 export interface ConfigureLogisticsStationInterstellarOptions {
   enabled?: boolean;
   warpEnabled?: boolean;
@@ -1347,6 +1358,7 @@ export interface PlanetRuntimeView {
   logistics_stations?: LogisticsStationView[];
   logistics_drones?: LogisticsDroneView[];
   logistics_bots?: LogisticsBotView[];
+  logistics_distributors?: LogisticsDistributorView[];
   logistics_ships?: LogisticsShipView[];
   construction_tasks?: ConstructionTaskView[];
   enemy_forces?: EnemyForceView[];

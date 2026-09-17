@@ -649,6 +649,12 @@ export function PlanetEntityPanel({
         {building.type === "splitter" ? <SplitterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         <ProcessingStatus building={building} />
         <BuildingStorageSection building={building} catalog={catalog} />
+        {Object.values(planet.buildings ?? {}).filter(candidate => candidate.distributor?.host_building_id === building.id || candidate.id === building.distributor?.host_building_id).map(candidate => (
+          <button key={candidate.id} className="secondary-button" onClick={() => usePlanetViewStore.getState().setSelected({ kind: 'building', id: candidate.id, position: candidate.position })}>
+            {candidate.distributor ? '查看仓顶配送器' : '查看绑定仓库'}
+          </button>
+        ))}
+
 
         <section className="planet-side-section">
           <div className="section-title">网络与运行态</div>

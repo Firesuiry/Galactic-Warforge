@@ -119,7 +119,7 @@ func distributorSupply(ws *model.WorldState, b *model.Building, item, exclude st
 	if host == nil || b.Distributor.ItemID != item || b.Distributor.Mode != model.LogisticsStationModeSupply {
 		return 0
 	}
-	return max(0, min(host.Storage.OutputQuantity(item), commandStorageItemQuantity(host.Storage, item)-b.Distributor.LocalStorage)-distributorPickupReservations(ws, "distributor", b.ID, item, exclude))
+	return max(0, min(host.Storage.OutputQuantity(item), host.Storage.ItemQuantity(item)-b.Distributor.LocalStorage)-distributorPickupReservations(ws, "distributor", b.ID, item, exclude))
 }
 func distributorPickupReservations(ws *model.WorldState, kind, id, item, exclude string) int {
 	total := 0
@@ -186,7 +186,7 @@ func distributorDemand(ws *model.WorldState, b *model.Building, item, exclude st
 	if host == nil || b.Distributor.ItemID != item || b.Distributor.Mode != model.LogisticsStationModeDemand {
 		return 0
 	}
-	return max(0, min(b.Distributor.LocalStorage-commandStorageItemQuantity(host.Storage, item)-distributorIncoming(ws, "distributor", b.ID, item, exclude), distributorFreeSpace(ws, b, item, exclude)))
+	return max(0, min(b.Distributor.LocalStorage-host.Storage.ItemQuantity(item)-distributorIncoming(ws, "distributor", b.ID, item, exclude), distributorFreeSpace(ws, b, item, exclude)))
 }
 func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, active bool) {
 	home := ws.Buildings[bot.DistributorID]
@@ -203,7 +203,7 @@ func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, 
 		if request, ok := unit.Mecha.LogisticsRequests[item]; ok {
 			count := ws.Players[bot.OwnerID].Inventory[item]
 			if s.PlayerDeliveryEnabled && count < request.Min {
-				qty := min(bot.Capacity, max(0, request.Max-count-distributorIncoming(ws, "mecha", unit.ID, item, "")), max(0, min(host.Storage.OutputQuantity(item), commandStorageItemQuantity(host.Storage, item)-s.LocalStorage)))
+				qty := min(bot.Capacity, max(0, request.Max-count-distributorIncoming(ws, "mecha", unit.ID, item, "")), max(0, min(host.Storage.OutputQuantity(item), host.Storage.ItemQuantity(item)-s.LocalStorage)))
 				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "delivery", item, qty, 2*s.Range) {
 					return
 				}
@@ -375,7 +375,7 @@ func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, ho
 		returnDistributorBot(bot, home, "")
 		return
 	}
-	logicalSpace := max(0, target.Distributor.LocalStorage-commandStorageItemQuantity(host.Storage, item))
+	logicalSpace := max(0, target.Distributor.LocalStorage-host.Storage.ItemQuantity(item))
 	qty := min(bot.Cargo[item], logicalSpace)
 	if qty > 0 {
 		accepted, _, _ := host.Storage.Load(item, qty)
@@ -383,7 +383,7 @@ func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, ho
 			bot.Unload(item, accepted)
 		}
 	}
-	if bot.CargoQty() > 0 && target.Distributor.LocalStorage > commandStorageItemQuantity(host.Storage, item) {
+	if bot.CargoQty() > 0 && target.Distributor.LocalStorage > host.Storage.ItemQuantity(item) {
 		bot.Status = model.LogisticsDroneWaitingUnload
 		bot.StateReason = "destination_full"
 		return

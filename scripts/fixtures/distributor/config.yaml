@@ -2,7 +2,7 @@ battlefield:
   construction_region_concurrent_limit: 4
   initial_active_planet_id: planet-1-1
   map_seed: war-seed-001
-  max_tick_rate: 10
+  max_tick_rate: 2
   victory_rule: hybrid
 players:
   - player_id: p1

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Building } from '@shared/types';
 
 import {
   assessBuildTiles,
@@ -458,4 +459,19 @@ describe('foundation terrain layer', () => {
     expect(assessBuildTiles(undefined, 'wind_turbine', planet, { x: 5, y: 4, z: 0 })?.buildable).toBe(true);
     expect(assessBuildTiles(undefined, 'foundation', planet, { x: 5, y: 4, z: 0 })?.buildable).toBe(false);
   });
+});
+
+it('mounts a distributor only on an available owned depot origin and blocks duplicates', () => {
+  const planet = createPlanet();
+  const host = { ...planet.buildings['lab-1'], type: 'depot_mk1' };
+  const buildings: Record<string, Building> = { [host.id]: host };
+  const view = { ...planet, buildings, units: {}, discovered: true, tick: 0, resources: [] };
+  const assess = (x = 5, y = 4) => assessBuildTiles(undefined, 'logistics_distributor', view, { x, y, z: 0 }, 'p1');
+  expect(assess()?.buildable).toBe(true);
+  expect(assess(1, 1)?.blockedTiles[0].reason).toBe('missing_host');
+  buildings[host.id] = { ...host, owner_id: 'p2' };
+  expect(assess()?.buildable).toBe(false);
+  buildings[host.id] = host;
+  buildings.mount = { ...host, id: 'mount', type: 'logistics_distributor', position: { ...host.position, z: 1 } };
+  expect(assess()?.buildable).toBe(false);
 });

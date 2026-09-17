@@ -35,9 +35,10 @@ export function MechaLogisticsControls({ unit, catalog, planetId, inventory }: {
     } finally { setPending(false); }
   }}>
     <div className="section-title">机甲物流请求</div>
+    <p className="muted">背包低于下限时补给到上限，超过上限时回收余量。需要附近配送器开启对应功能。</p>
     <fieldset disabled={pending}>
       {rows.map((row, index) => <div key={index} className="mecha-logistics-row">
-        <label>物品 {index + 1}<select value={row.item} onChange={event => update(index, { item: event.target.value })}>
+        <label>物品 {index + 1}<select aria-label={`物品 ${index + 1}`} value={row.item} onChange={event => update(index, { item: event.target.value })}>
           <option value="">选择物品</option>
           {items.map(item => <option key={item.id} value={item.id}>{getItemDisplayName(catalog, item.id)}</option>)}
         </select></label>

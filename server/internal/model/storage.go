@@ -259,6 +259,14 @@ func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
 	return accepted, remaining, nil
 }
 
+// ItemQuantity counts all owned stock, including items staged in IO buffers.
+func (s *StorageState) ItemQuantity(itemID string) int {
+	if s == nil {
+		return 0
+	}
+	return s.Inventory[itemID] + s.InputBuffer[itemID] + s.OutputBuffer[itemID]
+}
+
 // OutputQuantity returns total quantity available for output for an item.
 func (s *StorageState) OutputQuantity(itemID string) int {
 	if s == nil || itemID == "" {
