@@ -1,0 +1,44 @@
+{
+  "comment": "DSP→SW 映射人工裁定表。key 为 DSP id（kebab-case），value 为现有 SW id。build_scope.py 在自动匹配（id 转换/英文名/zh 名）之后应用本表覆盖。",
+  "item_aliases": {
+    "optical-grating-crystal": "grating_crystal",
+    "unipolar-magnet": "monopole_magnet",
+    "high-purity-silicon": "silicon_ingot",
+    "deuteron-fuel-rod": "deuterium_fuel_rod",
+    "electric-motor": "motor",
+    "thruster": "engine",
+    "df-missile-set": "ammo_missile",
+    "df-explosive-unit": "combustible_unit",
+    "df-high-explosive-shell-set": "shell_set",
+    "df-superalloy-ammo-box": "titanium_ammo",
+    "df-gravity-missile-set": "gravity_missile",
+    "df-prototype": "prototype",
+    "df-precision-drone": "precision_drone",
+    "df-corvette": "corvette",
+    "df-destroyer": "destroyer",
+    "df-crystal-explosive-unit": "plasma_capsule",
+    "df-magnum-ammo-box": "ammo_bullet"
+  },
+  "resource_aliases": {
+    "optical-grating-crystal": "grating_crystal",
+    "unipolar-magnet": "monopole_magnet"
+  },
+  "recipe_aliases": {
+    "crystal-silicon-advanced": "crystal_silicon_from_fractal",
+    "particle-container-advanced": "particle_container_from_monopole",
+    "deuteron-fuel-rod": "deuterium_fuel_rod",
+    "electric-motor": "motor"
+  },
+  "tech_aliases": {
+    "engine": "engine",
+    "thruster": "thruster",
+    "quantum-printing-technology": "quantum_printing",
+    "dyson-sphere-stress-system": "dyson_stress",
+    "high-speed-assembling-processes": "highspeed_assembling"
+  },
+  "policy": {
+    "building_recipes": "DSP 建筑是作为物品合成的配方；SW 的建筑走 BuildCost(minerals/energy/items)。映射规则：DSP 建筑配方的物品消耗并入 SW BuildingDefinition.BuildCost.Items，不作为独立生产配方导入。",
+    "out_of_scope": "需要反物质/临界光子/黑雾掉落/戴森球实体的条目保留数据但标记 gated：不删数据、不解锁、可被未来太空玩法接通。",
+    "holo_beacon": "holo-beacon 与 df-plasma-turret-sr、sorter-4 为 0.10.29 新增展示性/变体建筑：holo-beacon 不实现（纯展示），sorter-4 即 pile_sorter（已存在），df-plasma-turret-sr 映射到 sr_plasma_turret。"
+  }
+}

@@ -33,6 +33,24 @@ const (
 	ResourceRenewable ResourceBehavior = "renewable"
 )
 
+// AllResourceKinds returns every registered resource kind in declaration order.
+func AllResourceKinds() []ResourceKind {
+	return []ResourceKind{
+		ResourceIronOre,
+		ResourceCopperOre,
+		ResourceStoneOre,
+		ResourceSiliconOre,
+		ResourceTitaniumOre,
+		ResourceCoal,
+		ResourceCrudeOil,
+		ResourceWater,
+		ResourceFireIce,
+		ResourceFractalSilicon,
+		ResourceGratingCrystal,
+		ResourceMonopoleMagnet,
+	}
+}
+
 // ResourceNode represents a resource node on a planet.
 type ResourceNode struct {
 	ID           string           `json:"id"`
