@@ -380,7 +380,7 @@ test("浏览器里建造戴森节点后无需刷新即可继续选择新节点�
 
   try {
     await installSession(page, backend.url);
-    await page.goto("/planet/planet-1-2");
+    await page.goto("/planet/planet-1-2?view=2d");
     await expect(page.getByRole("heading", { name: "Aster Prime" })).toBeVisible();
 
     const dysonSection = page.locator(".planet-side-section").filter({ hasText: "戴森建造" });

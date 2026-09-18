@@ -37,6 +37,9 @@ import type {
   PlayerStatsSnapshot,
   Position,
   RayReceiverMode,
+  EnergyExchangerMode,
+  SetEnergyExchangerModePayload,
+  SetRecipePayload,
   ReplayResponse,
   RollbackResponse,
   SaveRequest,
@@ -729,6 +732,15 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdSetRecipe(buildingId: string, recipeId?: string) {
+    const payload: SetRecipePayload = recipeId ? { recipe_id: recipeId } : {};
+    return sendSingleCommand({
+      type: 'set_recipe',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: { ...payload },
+    });
+  }
+
   function cmdTransferItem(buildingId: string, itemId: string, quantity: number) {
     return sendSingleCommand({
       type: 'transfer_item',
@@ -757,6 +769,15 @@ export function createApiClient(options: ApiClientOptions) {
         building_id: buildingId,
         mode,
       },
+    });
+  }
+
+  function cmdSetEnergyExchangerMode(buildingId: string, mode: EnergyExchangerMode) {
+    const payload: SetEnergyExchangerModePayload = { building_id: buildingId, mode };
+    return sendSingleCommand({
+      type: 'set_energy_exchanger_mode',
+      target: { layer: 'planet', entity_id: buildingId },
+      payload: { ...payload },
     });
   }
 
@@ -1211,6 +1232,8 @@ export function createApiClient(options: ApiClientOptions) {
     cmdScanPlanet,
     cmdScanSystem,
     cmdSetRayReceiverMode,
+    cmdSetEnergyExchangerMode,
+    cmdSetRecipe,
     cmdStartResearch,
     cmdSwitchActivePlanet,
     cmdTransferItem,

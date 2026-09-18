@@ -465,7 +465,7 @@ test('浏览器中可操作战争工作台核心闭环', async ({ page }) => {
 
   await page.getByRole('tab', { name: '战报' }).click();
   await expect(page.getByText('战报与情报')).toBeVisible();
-  await expect(page.getByText('destroyer_screen')).toBeVisible();
+  await expect(page.getByText('destroyer_screen', { exact: true })).toBeVisible();
 });
 
 test('窄屏下战争工作台仍保留最小操作闭环', async ({ page }) => {
@@ -484,5 +484,5 @@ test('窄屏下战争工作台仍保留最小操作闭环', async ({ page }) => 
   await expect(page.getByLabel('任务群姿态')).toBeVisible();
   await expect(page.getByRole('button', { name: '发起封锁' })).toBeVisible();
   await page.getByRole('tab', { name: '战报' }).click();
-  await expect(page.getByText('destroyer_screen')).toBeVisible();
+  await expect(page.getByText('destroyer_screen', { exact: true })).toBeVisible();
 });

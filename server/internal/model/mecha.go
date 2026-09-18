@@ -67,46 +67,29 @@ func NewMechaState() *MechaState {
 	return &MechaState{Energy: 100, MaxEnergy: 100, InventoryCapacity: baseMechaInventoryCapacity, AttackEnergyCost: 8, MoveEnergyCost: 1, ShieldRechargeDelay: 10}
 }
 
-// Base executor stats before any research bonus is applied.
+// Base executor stats before any research bonus is applied. Tech bonuses come
+// from TechDefinition.Effects via TechEffectValue; per-level values live in the
+// catalog (tech.go), not in code constants.
 const (
 	baseMechaMaxEnergy         = 100
 	baseMechaMoveRange         = 12
 	baseMechaVisionRange       = 6
 	baseMechaMaxHP             = 120
+	baseMechaAttack            = 20
+	baseMechaDefense           = 8
+	baseMechaAttackRange       = 4
 	baseMechaInventoryCapacity = 200
 
-	// Per-level bonuses for mecha upgrade techs whose definitions do not carry
-	// catalog Effects yet. Keyed by tech ID so research state drives real stats.
-	mechanicalFrameHPPerLevel      = 20
-	inventoryCapacityPerLevel      = 60
-	driveEngineMoveRangePerLevel   = 2
-	energyCircuitChargePctPerLevel = 20
-	chargeRatePercentBase          = 100
+	chargeRatePercentBase = 100
 )
 
-// CompletedTechLevel returns the researched level of a tech, clamped to its
-// catalog MaxLevel, or 0 when the player has not completed it.
-func CompletedTechLevel(player *PlayerState, techID string) int {
-	if player == nil || player.Tech == nil {
-		return 0
-	}
-	level := player.Tech.CompletedTechs[techID]
-	if level <= 0 {
-		return 0
-	}
-	if def, ok := TechDefinitionByID(techID); ok && def.MaxLevel > 0 {
-		level = min(level, def.MaxLevel)
-	}
-	return level
-}
-
-// MechaChargeRate applies the energy_circuit research bonus to a base grid
-// charge rate: +20% per completed level.
+// MechaChargeRate applies the energy_circuit research bonus (catalog effect
+// "mecha_charge_rate_pct", +20% per level) to a base grid charge rate.
 func MechaChargeRate(base int, player *PlayerState) int {
 	if base <= 0 {
 		return 0
 	}
-	pct := chargeRatePercentBase + energyCircuitChargePctPerLevel*CompletedTechLevel(player, "energy_circuit")
+	pct := chargeRatePercentBase + int(TechEffectValue(player, "mecha_charge_rate_pct"))
 	return base * pct / chargeRatePercentBase
 }
 
@@ -152,7 +135,7 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 	m := unit.Mecha
 	m.MaxEnergy = baseMechaMaxEnergy + int(TechEffectValue(player, "core_capacity"))
 	m.MaxShield = int(TechEffectValue(player, "shield_capacity"))
-	m.InventoryCapacity = baseMechaInventoryCapacity + inventoryCapacityPerLevel*CompletedTechLevel(player, "inventory_capacity")
+	m.InventoryCapacity = baseMechaInventoryCapacity + int(TechEffectValue(player, "mecha_inventory_capacity"))
 	m.Energy = max(0, min(m.Energy, m.MaxEnergy))
 	m.Shield = max(0, min(m.Shield, m.MaxShield))
 	// Logistics requests may not ask for more than the backpack can hold; the
@@ -169,13 +152,24 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 		}
 		m.LogisticsRequests[itemID] = request
 	}
-	unit.MaxHP = baseMechaMaxHP + mechanicalFrameHPPerLevel*CompletedTechLevel(player, "mechanical_frame")
+	// Combat techs apply multiplicatively on top of the mecha-tree flat bonuses,
+	// mirroring ApplyCombatTechEffects for CombatUnit: mechanical_frame adds
+	// flat HP, df_enhanced_structure (structure_hp) scales the total; weapon
+	// damage techs scale the base attack.
+	maxHP := baseMechaMaxHP + int(TechEffectValue(player, "mecha_max_hp"))
+	if hpBonus := TechEffectValue(player, "structure_hp"); hpBonus != 0 {
+		maxHP = int(float64(maxHP) * (1.0 + hpBonus))
+	}
+	unit.MaxHP = maxHP
 	unit.HP = max(0, min(unit.HP, unit.MaxHP))
-	// mecha_engine (move_speed effect) and drive_engine stack into the same
-	// movement calculation.
-	unit.MoveRange = baseMechaMoveRange + int(TechEffectValue(player, "move_speed")) + driveEngineMoveRangePerLevel*CompletedTechLevel(player, "drive_engine")
+	// mecha_engine and drive_engine stack through the shared move_speed effect.
+	unit.MoveRange = baseMechaMoveRange + int(TechEffectValue(player, "move_speed"))
 	unit.VisionRange = baseMechaVisionRange + int(TechEffectValue(player, "exploration_range"))
-	unit.Attack, unit.Defense, unit.AttackRange = 20, 8, 4
+	attack := baseMechaAttack
+	if dmgBonus := TechEffectValue(player, "weapon_damage"); dmgBonus != 0 {
+		attack = int(float64(attack) * (1.0 + dmgBonus))
+	}
+	unit.Attack, unit.Defense, unit.AttackRange = attack, baseMechaDefense, baseMechaAttackRange
 }
 
 // ApplyUnitDamage routes all ordinary world-unit damage through the same shield.

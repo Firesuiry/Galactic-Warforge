@@ -102,6 +102,18 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	if ws == nil || building == nil {
 		return nil
 	}
+	var events []*model.GameEvent
+	// A demolished lower layer brings everything stacked above it down in the
+	// same action; each cascaded layer refunds at the same rate as the base.
+	// The recursion already covers higher layers, so skip anything a lower
+	// layer's cascade has removed while this loop was walking the snapshot.
+	for _, layer := range stackedLayersAbove(ws, building) {
+		if ws.Buildings[layer.ID] != layer {
+			continue
+		}
+		events = append(events, demolishBuilding(ws, layer, refundRate)...)
+	}
+
 	refund := model.BuildingDemolishRefundWithRate(building.Type, building.Level, refundRate)
 	player := ws.Players[building.OwnerID]
 	if player != nil {
@@ -126,18 +138,16 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 		}
 	}
 
-	return []*model.GameEvent{
-		{
-			EventType:       model.EvtEntityDestroyed,
-			VisibilityScope: building.OwnerID,
-			Payload: map[string]any{
-				"entity_id":   entityID,
-				"entity_type": "building",
-				"owner_id":    building.OwnerID,
-				"reason":      "demolish",
-			},
+	return append(events, &model.GameEvent{
+		EventType:       model.EvtEntityDestroyed,
+		VisibilityScope: building.OwnerID,
+		Payload: map[string]any{
+			"entity_id":   entityID,
+			"entity_type": "building",
+			"owner_id":    building.OwnerID,
+			"reason":      "demolish",
 		},
-	}
+	})
 }
 
 func detachStationFleet(ws *model.WorldState, stationID string) {

@@ -44,6 +44,10 @@ players:
           quantity: 120
         - item_id: iron_ingot
           quantity: 120
+        - item_id: gear
+          quantity: 120
+        - item_id: magnetic_coil
+          quantity: 120
         - item_id: particle_container
           quantity: 60
         - item_id: photon_combiner
@@ -112,6 +116,10 @@ players:
         - item_id: copper_ingot
           quantity: 120
         - item_id: iron_ingot
+          quantity: 120
+        - item_id: gear
+          quantity: 120
+        - item_id: magnetic_coil
           quantity: 120
         - item_id: particle_container
           quantity: 60

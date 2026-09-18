@@ -36,6 +36,7 @@ const (
 	CmdLaunchSolarSail           CommandType = "launch_solar_sail"
 	CmdLaunchRocket              CommandType = "launch_rocket"
 	CmdSetRayReceiverMode        CommandType = "set_ray_receiver_mode"
+	CmdSetEnergyExchangerMode    CommandType = "set_energy_exchanger_mode"
 	CmdDeploySquad               CommandType = "deploy_squad"
 	CmdCommissionFleet           CommandType = "commission_fleet"
 	CmdFleetAssign               CommandType = "fleet_assign"
@@ -176,6 +177,7 @@ func AllCommandTypes() []CommandType {
 		CmdLaunchSolarSail,
 		CmdLaunchRocket,
 		CmdSetRayReceiverMode,
+		CmdSetEnergyExchangerMode,
 		CmdDeploySquad,
 		CmdCommissionFleet,
 		CmdFleetAssign,

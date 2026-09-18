@@ -36,7 +36,14 @@ test('行星地图主视图截图基线', async ({ page }) => {
     await page.getByRole('button', { name: '收起调试' }).click();
     await expect(expandDebugButton).toBeVisible();
   }
-  await page.waitForTimeout(500);
+  // 等地形分块烘焙完成：连续两次截图像素一致再拍基线，避免高负载下拍到半渲染帧
+  let previousShot: Buffer | null = null;
+  await expect.poll(async () => {
+    const shot = await page.locator('.planet-map-shell').screenshot({ animations: 'disabled' });
+    const settled = previousShot !== null && shot.equals(previousShot);
+    previousShot = shot;
+    return settled;
+  }, { timeout: 20_000, intervals: [600, 800, 1000, 1200, 1500] }).toBe(true);
 
   const mapShell = page.locator('.planet-map-shell');
   const bounds = await mapShell.boundingBox();

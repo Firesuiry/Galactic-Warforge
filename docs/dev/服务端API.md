@@ -1641,7 +1641,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|set_recipe|transfer_item|switch_active_planet|set_ray_receiver_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|set_recipe|transfer_item|switch_active_planet|set_ray_receiver_mode|set_energy_exchanger_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1759,6 +1759,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑或地面物流站；命令从玩家 `inventory` 扣减实际装入量。地面物流站须先配置物品槽，写入唯一 `logistics_station.inventory`；普通建筑写本地存储。容量不足允许部分装填，仅扣实际转移数量；轨道采集器不开放此装料入口。喷涂机只允许有效增产剂物品（`proliferator_mk1` / `proliferator_mk2` / `proliferator_mk3`），尝试装入氢等货物返回验证失败；货物必须走西侧传送带。分馏塔无普通 `storage`，不能直接装料，氢须走西侧传送带。
   - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
+  - `set_energy_exchanger_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `energy_exchanger`（蓄电器能量枢纽）；`payload.mode` 取 `charge|discharge|standby`：`charge` 用电网盈余把空蓄电池（`accumulator`）转成满蓄电池（`accumulator_full`），`discharge` 把满蓄电池转回电网能量并返还空蓄电池，`standby` 不做物品转换；非法模式或目标不是蓄电器返回 `VALIDATION_FAILED`，建筑不存在返回 `ENTITY_NOT_FOUND`，非己方建筑返回 `NOT_OWNER`，且均不改变当前模式
   - `deploy_squad`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；目标建筑必须是当前玩家拥有、带 deployment module、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该蓝图对应 `visible_tech_id`，并且该枢纽在 `/world/warfare/industry.deployment_hubs[].ready_payloads` 中已有足量军备产物；若传 `planet_id`，目标行星 runtime 也必须已加载
   - `commission_fleet`：`payload.building_id` + `payload.blueprint_id` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的蓝图是 `corvette` / `destroyer`，玩家自有 `space|orbital` 已定型蓝图也可以直接编入舰队；同样要求已解锁对应科技且部署枢纽 `ready_payloads` 中已有足量军备产物；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加蓝图栈并重算 `weapon` / `shield`，而不是覆盖旧栈
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
@@ -1828,6 +1829,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 - 升级/拆除规则补充:
   - 受建筑定义中的 `upgrade` / `demolish` 规则约束（允许与否、最大等级、耗时、返还率、是否要求停机）。
   - 若 `duration_ticks > 0`，命令执行会创建 `job` 并将建筑状态置为 `paused`，在作业完成 Tick 时生效：升级后恢复原工作状态，拆除后释放占格并返还资源。
+  - 垂直叠层（`position.z > 0`）级联拆除：拆除任一叠层时，同格所有更高叠层一并拆除（立即拆除与 `job` 完成两条路径行为一致），每层按各自建筑类型/等级以同一返还率退款，并各自发出 `entity_destroyed` 事件；拆除上层不影响下层与地面占格登记。
 - 返回:
   - `400`：请求体非法、缺少 `request_id` / `issuer_type` / `issuer_id`、`commands` 为空等
   - `401`：缺少或使用了无效的 Bearer key
@@ -2268,7 +2270,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 | 命令 | payload | 行为 |
 | --- | --- | --- |
 | `configure_distributor` | `item_id`、`mode`（none/supply/demand）、`local_storage` 非负整数；可选布尔 `player_delivery_enabled`、`player_collection_enabled` | 配置单种固体物品；省略开关保留原值。空物品仅允许关闭、保有量0且机甲开关全关。保有量不得超过宿主总容量。 |
-| `install_logistics_bot` | `quantity` 正整数、`source`（player/storage，默认player） | 消耗背包或宿主可输出库存中的真实 logistics_bot，最多安装10个。 |
+| `install_logistics_bot` | `quantity` 正整数、`source`（player/storage，默认player） | 消耗背包或宿主可输出库存中的真实 logistics_bot，最多安装10个。科技门禁：需已研究解锁 `logistics_bot` 配方的科技（`distribution_logistics`），未研究返回 `VALIDATION_FAILED`（"research required"）且不消耗物品。 |
 | `uninstall_logistics_bot` | `quantity` 正整数 | 仅回收空载停靠机器人到玩家背包，数量不足原子失败。 |
 | `configure_mecha_logistics` | `requests: {"motor":{"min":5,"max":10}}` | 整体替换，空对象清空；最多8种固体物品，0≤min≤max≤1000且max>0。 |
 

@@ -18,33 +18,14 @@ type conveyorRequest struct {
 	bufferIndex int
 }
 
-// logisticsTechLevel returns the completed level of a tech for the owner,
-// clamped to the definition's MaxLevel. Returns 0 when unresearched.
-func logisticsTechLevel(ws *model.WorldState, ownerID, techID string) int {
-	if ws == nil {
-		return 0
-	}
-	player := ws.Players[ownerID]
-	if player == nil || player.Tech == nil {
-		return 0
-	}
-	level := player.Tech.CompletedTechs[techID]
-	if level <= 0 {
-		return 0
-	}
-	if def, ok := model.TechDefinitionByID(techID); ok && def.MaxLevel > 0 && level > def.MaxLevel {
-		level = def.MaxLevel
-	}
-	return level
-}
-
 // pileHeightFor returns the pile height the automatic piler compresses loose
-// items into: 2x by default, 4x once sorter_cargo_integration is researched.
+// items into: 2x by default, raised by the sorter_cargo_integration tech's
+// catalog piler_pile_height effect (2 -> 4 once researched).
 func pileHeightFor(ws *model.WorldState, ownerID string) int {
-	if logisticsTechLevel(ws, ownerID, "sorter_cargo_integration") > 0 {
-		return 4
+	if ws == nil {
+		return 2
 	}
-	return 2
+	return 2 + int(model.TechEffectValue(ws.Players[ownerID], "piler_pile_height"))
 }
 
 func isAutomaticPiler(building *model.Building) bool {

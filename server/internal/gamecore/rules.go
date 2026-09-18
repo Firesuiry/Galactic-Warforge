@@ -9,6 +9,7 @@ import (
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
 	modelpower "siliconworld/internal/model/power"
+	"siliconworld/internal/terrain"
 )
 
 func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAmount, bool) {
@@ -56,9 +57,13 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		pos = &mounted
 	}
 	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() && btype != model.BuildingTypeFoundation {
-		res.Code = model.CodeInvalidTarget
-		res.Message = "target tile is not buildable"
-		return res, nil
+		// Geothermal power stations may sit on lava itself; every other
+		// building still requires buildable ground.
+		if !(model.RequiresLavaProximity(btype) && ws.Grid[pos.Y][pos.X].Terrain == terrain.TileLava) {
+			res.Code = model.CodeInvalidTarget
+			res.Message = "target tile is not buildable"
+			return res, nil
+		}
 	}
 
 	// Check tile is unoccupied; an occupied tile may still accept a vertically
@@ -150,6 +155,11 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			return res, nil
 		}
 	}
+	if model.RequiresLavaProximity(btype) && !buildSiteTouchesLava(ws, btype, *pos) {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("%s must be built on or adjacent to lava", btype)
+		return res, nil
+	}
 
 	var conveyorDir model.ConveyorDirection
 	if model.IsConveyorBuilding(btype) {
@@ -229,6 +239,19 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	res.Code = model.CodeOK
 	res.Message = fmt.Sprintf("construction task %s queued at (%d,%d)", taskID, pos.X, pos.Y)
 	return res, nil
+}
+
+// buildSiteTouchesLava reports whether the building footprint at pos or its
+// 1-tile surrounding ring touches lava terrain (geothermal placement rule).
+func buildSiteTouchesLava(ws *model.WorldState, btype model.BuildingType, pos model.Position) bool {
+	footprint := model.BuildingProfileFor(btype, 1).Runtime.Params.Footprint
+	isLava := func(x, y int) bool {
+		if y < 0 || y >= len(ws.Grid) || x < 0 || x >= len(ws.Grid[y]) {
+			return false
+		}
+		return ws.Grid[y][x].Terrain == terrain.TileLava
+	}
+	return model.LavaProximityOk(isLava, pos.X, pos.Y, footprint.Width, footprint.Height)
 }
 
 // execCancelConstruction handles the "cancel_construction" command
@@ -325,7 +348,8 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 	}
 	for _, p := range tiles {
 		key := model.TileKey(p.X, p.Y)
-		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation) || (ws.Construction.ReservedTiles[key] != "" && ws.Construction.ReservedTiles[key] != taskID) {
+		lavaSite := model.RequiresLavaProximity(task.BuildingType) && ws.Grid[p.Y][p.X].Terrain == terrain.TileLava
+		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation && !lavaSite) || (ws.Construction.ReservedTiles[key] != "" && ws.Construction.ReservedTiles[key] != taskID) {
 			res.Code = model.CodePositionOccupied
 			res.Message = "construction footprint unavailable"
 			return res, nil

@@ -66,19 +66,26 @@ test('真实产线配方规划可建造带配方的工厂，发展路线可进�
   const target = buildSite(await scene());
   await planner.getByRole('button', { name: '建造制造台 Mk.I', exact: true }).click();
   await expect(page.getByRole('button', { name: '取消建造 · Esc' })).toBeVisible();
-  const point = await page.evaluate(tile => {
-    const renderer = (window as unknown as { __planetThree: DebugScene }).__planetThree;
-    renderer.focus(tile, true);
-    return renderer.project(tile);
-  }, target);
-  expect(point.visible).toBe(true);
-  const responsePromise = page.waitForResponse(response => response.url().endsWith('/commands') && response.request().postDataJSON()?.commands?.[0]?.type === 'build');
-  await page.locator('.planet-three__surface canvas').click({ position: { x: point.x, y: point.y } });
-  const response = await responsePromise;
-  expect(response.ok()).toBe(true);
-  expect(response.request().postDataJSON().commands[0].payload).toMatchObject({ building_type: 'assembling_machine_mk1', recipe_id: 'electromagnetic_matrix' });
+  // 并行规格会同服抢建同一空地：每次尝试重取场景重算建造点，直到 build 命令真正发出
+  let response: import('@playwright/test').Response | null = null;
+  let builtTarget = target;
+  for (let attempt = 0; attempt < 5 && !response; attempt++) {
+    builtTarget = buildSite(await scene());
+    const point = await page.evaluate(tile => {
+      const renderer = (window as unknown as { __planetThree: DebugScene }).__planetThree;
+      renderer.focus(tile, true);
+      return renderer.project(tile);
+    }, builtTarget);
+    expect(point.visible).toBe(true);
+    const responsePromise = page.waitForResponse(r => r.url().endsWith('/commands') && r.request().postDataJSON()?.commands?.[0]?.type === 'build', { timeout: 12_000 }).catch(() => null);
+    await page.locator('.planet-three__surface canvas').click({ position: { x: point.x, y: point.y } });
+    response = await responsePromise;
+  }
+  expect(response, 'build command should be issued').toBeTruthy();
+  expect(response!.ok()).toBe(true);
+  expect(response!.request().postDataJSON().commands[0].payload).toMatchObject({ building_type: 'assembling_machine_mk1', recipe_id: 'electromagnetic_matrix' });
   await expect.poll(async () => Object.values((await scene()).buildings).some(building =>
-    building.owner_id === 'p1' && building.position.x === target.x && building.position.y === target.y
+    building.owner_id === 'p1' && building.position.x === builtTarget.x && building.position.y === builtTarget.y
     && building.production?.recipe_id === 'electromagnetic_matrix'), { timeout: 20_000 }).toBe(true);
   await page.keyboard.press('Escape');
 

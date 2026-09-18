@@ -5,6 +5,13 @@ import "fmt"
 const (
 	DefaultLogisticsBotCapacity = 10
 	DefaultLogisticsBotSpeed    = 2
+
+	// MaxLogisticsBotFlightEnergy is the largest prepaid flight budget a bot
+	// may carry: a round trip at the maximum delivery range. The range derives
+	// from the distributor base range (12) plus 5 per distribution_range tech
+	// level (MaxLevel 5 => 37 tiles), billed at 2 energy per tile of one-way
+	// distance, so the ceiling is 2*(12+5*5) = 74.
+	MaxLogisticsBotFlightEnergy = 2 * (12 + 5*5)
 )
 
 // LogisticsBotState owns its cargo and a finite prepaid flight budget.
@@ -94,7 +101,7 @@ func (b *LogisticsBotState) Validate() error {
 	if b.Capacity != DefaultLogisticsBotCapacity || b.Speed != DefaultLogisticsBotSpeed || b.CargoQty() > b.Capacity || b.EnergyRemaining < 0 || b.EnergyRemaining > b.EnergyCost || b.RemainingTicks < 0 || b.TravelTicks < 0 {
 		return fmt.Errorf("invalid bot capacity or flight budget")
 	}
-	if b.HomePos == nil || b.EnergyCost < 0 || b.EnergyCost > 24 || b.PickupQuantity < 0 || b.PickupQuantity > b.Capacity {
+	if b.HomePos == nil || b.EnergyCost < 0 || b.EnergyCost > MaxLogisticsBotFlightEnergy || b.PickupQuantity < 0 || b.PickupQuantity > b.Capacity {
 		return fmt.Errorf("invalid bot home or budget")
 	}
 	if b.Status == LogisticsDroneIdle {

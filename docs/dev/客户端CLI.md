@@ -89,6 +89,8 @@
 | `restore_construction`        | `<task_id>`                                                                                                                                                                    | 恢复施工任务                           |
 | `start_research`              | `<tech_id>`                                                                                                                                                                    | 开始研究                               |
 | `cancel_research`             | `<tech_id>`                                                                                                                                                                    | 取消研究                               |
+| `set_recipe`                  | `<entity_id> [recipe_id]`                                                                                                                                                      | 原地切换生产建筑/研究站配方；省略 `recipe_id` 时研究站回研究模式、生产建筑转空闲；切换后进度清零、库存保留，校验失败原子拒绝 |
+| `set_energy_exchanger_mode`   | `<building_id> <charge\|discharge\|standby>`                                                                                                                                   | 切换蓄电器能量枢纽模式：`charge` 用电网盈余把空蓄电池充成满蓄电池，`discharge` 放电回电网并返还空蓄电池，`standby` 不做物品转换 |
 | `blueprint_create`            | `<blueprint_id> <ground\|space> [--name <name>] (--base-frame <base_frame_id> \| --base-hull <base_hull_id>)`                                                               | 创建战争蓝图草案                       |
 | `blueprint_set_component`     | `<blueprint_id> <slot_id> <component_id>`                                                                                                                                      | 修改蓝图槽位组件                       |
 | `blueprint_validate`          | `<blueprint_id>`                                                                                                                                                               | 校验蓝图合法性并返回结构化问题         |
@@ -298,6 +300,8 @@ help configure_splitter
 - `restore_construction`
 - `start_research`
 - `cancel_research`
+- `set_recipe`
+- `set_energy_exchanger_mode`
 - `switch_active_planet`
 - `set_ray_receiver_mode`
 - `transfer`

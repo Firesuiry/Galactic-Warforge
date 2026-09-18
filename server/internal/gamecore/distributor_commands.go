@@ -101,6 +101,9 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	if player == nil {
 		return fail("player unavailable")
 	}
+	if !CanBuildTech(player, model.TechUnlockRecipe, model.ItemLogisticsBot) {
+		return fail("research required: logistics_bot recipe unlock (distribution_logistics)")
+	}
 	count := player.Inventory[model.ItemLogisticsBot]
 	if source == "storage" {
 		count = host.Storage.OutputQuantity(model.ItemLogisticsBot)

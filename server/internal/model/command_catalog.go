@@ -233,6 +233,11 @@ func commandStructureRegistry() []CommandStructureSpec {
 			RequiredPayloadFields: []string{"building_id", "mode"},
 		},
 		{
+			Type:                  CmdSetEnergyExchangerMode,
+			RequiredPayloadFields: []string{"building_id", "mode"},
+			Constraints:           []string{"mode must be one of charge|discharge|standby; target building must be an owned energy_exchanger"},
+		},
+		{
 			Type:                  CmdDeploySquad,
 			RequiredPayloadFields: []string{"building_id", "blueprint_id", "count"},
 			OptionalPayloadFields: []string{"planet_id"},

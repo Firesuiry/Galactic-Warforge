@@ -1,181 +1,34 @@
 {
   "items": [
     {
-      "id": "jamming_capsule",
-      "name": "Jamming Capsule",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "water",
-      "name": "Water",
-      "category": "material",
-      "form": "liquid",
-      "stack_limit": 1000,
-      "unit_volume": 1,
-      "container_id": "liquid_tank"
-    },
-    {
-      "id": "space_warper",
-      "name": "Space Warper",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "antimatter_capsule",
-      "name": "Antimatter Capsule",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "mecha_fuel_energy": 5,
-      "id": "plant_fuel",
-      "name": "Plant Fuel",
-      "category": "fuel",
-      "form": "solid",
-      "stack_limit": 500,
-      "unit_volume": 1
-    },
-    {
-      "id": "dyson_sphere_component",
-      "name": "Dyson Sphere Component",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "suppressing_capsule",
-      "name": "Suppressing Capsule",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "copper_ore",
-      "name": "Copper Ore",
+      "id": "monopole_magnet",
+      "name": "Monopole Magnet",
       "category": "ore",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "stone_ore",
-      "name": "Stone",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "glass",
-      "name": "Glass",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "silicon_ingot",
-      "name": "Silicon Ingot",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "frame_material",
-      "name": "Frame Material",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "ammo_bullet",
-      "name": "Bullet",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "prototype",
-      "name": "Prototype Payload",
-      "category": "component",
       "form": "solid",
       "stack_limit": 50,
-      "unit_volume": 2
+      "unit_volume": 1,
+      "is_rare": true
     },
     {
-      "id": "plasma_exciter",
-      "name": "Plasma Exciter",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "titanium_crystal",
-      "name": "Titanium Crystal",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "titanium_alloy",
-      "name": "Titanium Alloy",
+      "id": "iron_ingot",
+      "name": "Iron Ingot",
       "category": "material",
       "form": "solid",
-      "stack_limit": 100,
+      "stack_limit": 200,
       "unit_volume": 1
     },
     {
-      "mecha_fuel_energy": 50,
-      "id": "energetic_graphite",
-      "name": "Energetic Graphite",
-      "category": "fuel",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "mecha_fuel_energy": 1000,
-      "id": "antimatter_fuel_rod",
-      "name": "Antimatter Fuel Rod",
-      "category": "fuel",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 3
-    },
-    {
-      "id": "energy_matrix",
-      "name": "Energy Matrix",
-      "category": "matrix",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "structure_matrix",
-      "name": "Structure Matrix",
-      "category": "matrix",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "crystal_silicon",
-      "name": "Crystal Silicon",
+      "id": "stone_brick",
+      "name": "Stone Brick",
       "category": "material",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "engine",
+      "name": "Engine",
+      "category": "component",
       "form": "solid",
       "stack_limit": 100,
       "unit_volume": 1
@@ -189,85 +42,47 @@
       "unit_volume": 1
     },
     {
-      "id": "proliferator_mk3",
-      "name": "Proliferator Mk.III",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "dark_fog_matrix",
-      "name": "Dark Fog Matrix",
-      "category": "matrix",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "small_carrier_rocket",
-      "name": "Small Carrier Rocket",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 10,
-      "unit_volume": 5
-    },
-    {
-      "id": "casimir_crystal",
-      "name": "Casimir Crystal",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "supersonic_missile_set",
-      "name": "Supersonic Missile Set",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "silicon_ore",
-      "name": "Silicon Ore",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "carbon_nanotube",
-      "name": "Carbon Nanotube",
+      "id": "strange_matter",
+      "name": "Strange Matter",
       "category": "material",
       "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
+      "stack_limit": 20,
+      "unit_volume": 2
     },
     {
-      "mecha_fuel_energy": 40,
-      "id": "combustible_unit",
-      "name": "Combustible Unit",
+      "id": "fire_ice",
+      "name": "Fire Ice",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 1,
+      "is_rare": true
+    },
+    {
+      "mecha_fuel_energy": 50,
+      "id": "energetic_graphite",
+      "name": "Energetic Graphite",
       "category": "fuel",
       "form": "solid",
       "stack_limit": 100,
       "unit_volume": 1
     },
     {
-      "id": "engine",
-      "name": "Engine",
-      "category": "component",
+      "mecha_fuel_energy": 100,
+      "id": "hydrogen_fuel_rod",
+      "name": "Hydrogen Fuel Rod",
+      "category": "fuel",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "antimatter_capsule",
+      "name": "Antimatter Capsule",
+      "category": "ammo",
       "form": "solid",
       "stack_limit": 100,
       "unit_volume": 1
-    },
-    {
-      "id": "annihilation_constraint_sphere",
-      "name": "Annihilation Constraint Sphere",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 2
     },
     {
       "id": "gravity_missile",
@@ -278,8 +93,8 @@
       "unit_volume": 1
     },
     {
-      "id": "spiniform_stalagmite_crystal",
-      "name": "Stalagmite Crystal",
+      "id": "kimberlite_ore",
+      "name": "Kimberlite Ore",
       "category": "ore",
       "form": "solid",
       "stack_limit": 50,
@@ -287,132 +102,9 @@
       "is_rare": true
     },
     {
-      "id": "plane_filter",
-      "name": "Plane Filter",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "particle_broadband",
-      "name": "Particle Broadband",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "graviton_lens",
-      "name": "Graviton Lens",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "gas_tank",
-      "name": "Gas Tank",
-      "category": "container",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 6
-    },
-    {
-      "id": "magnet",
-      "name": "Magnet",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "shell_set",
-      "name": "Shell Set",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "titanium_ammo",
-      "name": "Titanium Ammo Box",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "magnetic_coil",
-      "name": "Magnetic Coil",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "microcrystalline_component",
-      "name": "Microcrystalline Component",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "grating_crystal",
-      "name": "Grating Crystal",
+      "id": "copper_ore",
+      "name": "Copper Ore",
       "category": "ore",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1,
-      "is_rare": true
-    },
-    {
-      "id": "sulfuric_acid",
-      "name": "Sulfuric Acid",
-      "category": "material",
-      "form": "liquid",
-      "stack_limit": 1000,
-      "unit_volume": 1,
-      "container_id": "liquid_tank"
-    },
-    {
-      "id": "plastic",
-      "name": "Plastic",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "electromagnetic_turbine",
-      "name": "Electromagnetic Turbine",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "electromagnetic_matrix",
-      "name": "Electromagnetic Matrix",
-      "category": "matrix",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "information_matrix",
-      "name": "Information Matrix",
-      "category": "matrix",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "mecha_fuel_energy": 15,
-      "id": "log",
-      "name": "Log",
-      "category": "fuel",
       "form": "solid",
       "stack_limit": 100,
       "unit_volume": 1
@@ -427,27 +119,76 @@
       "container_id": "gas_tank"
     },
     {
-      "id": "titanium_ingot",
-      "name": "Titanium Ingot",
+      "id": "silicon_ingot",
+      "name": "Silicon Ingot",
       "category": "material",
       "form": "solid",
       "stack_limit": 200,
       "unit_volume": 1
     },
     {
-      "id": "prism",
-      "name": "Prism",
+      "id": "plastic",
+      "name": "Plastic",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "microcrystalline_component",
+      "name": "Microcrystalline Component",
       "category": "component",
       "form": "solid",
       "stack_limit": 100,
       "unit_volume": 1
     },
     {
-      "id": "stone_brick",
-      "name": "Stone Brick",
-      "category": "material",
+      "id": "titanium_crystal",
+      "name": "Titanium Crystal",
+      "category": "component",
       "form": "solid",
-      "stack_limit": 200,
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "quantum_chip",
+      "name": "Quantum Chip",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 1
+    },
+    {
+      "mecha_fuel_energy": 250,
+      "id": "deuterium_fuel_rod",
+      "name": "Deuterium Fuel Rod",
+      "category": "fuel",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "iron_ore",
+      "name": "Iron Ore",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "gear",
+      "name": "Gear",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "circuit_board",
+      "name": "Circuit Board",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
       "unit_volume": 1
     },
     {
@@ -459,8 +200,50 @@
       "unit_volume": 1
     },
     {
-      "id": "universe_matrix",
-      "name": "Universe Matrix",
+      "id": "annihilation_constraint_sphere",
+      "name": "Annihilation Constraint Sphere",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 2
+    },
+    {
+      "mecha_fuel_energy": 1000,
+      "id": "antimatter_fuel_rod",
+      "name": "Antimatter Fuel Rod",
+      "category": "fuel",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 3
+    },
+    {
+      "id": "crystal_shell_set",
+      "name": "Crystal Shell Set",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "grating_crystal",
+      "name": "Grating Crystal",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 1,
+      "is_rare": true
+    },
+    {
+      "id": "space_warper",
+      "name": "Space Warper",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
+      "id": "information_matrix",
+      "name": "Information Matrix",
       "category": "matrix",
       "form": "solid",
       "stack_limit": 20,
@@ -475,12 +258,234 @@
       "unit_volume": 4
     },
     {
+      "id": "spiniform_stalagmite_crystal",
+      "name": "Stalagmite Crystal",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 1,
+      "is_rare": true
+    },
+    {
+      "mecha_fuel_energy": 5,
+      "id": "plant_fuel",
+      "name": "Plant Fuel",
+      "category": "fuel",
+      "form": "solid",
+      "stack_limit": 500,
+      "unit_volume": 1
+    },
+    {
+      "mecha_fuel_energy": 40,
+      "id": "refined_oil",
+      "name": "Refined Oil",
+      "category": "material",
+      "form": "liquid",
+      "stack_limit": 1000,
+      "unit_volume": 1,
+      "container_id": "liquid_tank"
+    },
+    {
+      "id": "magnet",
+      "name": "Magnet",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "diamond",
+      "name": "Diamond",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "super_magnetic_ring",
+      "name": "Super-Magnetic Ring",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "mecha_fuel_energy": 40,
+      "id": "combustible_unit",
+      "name": "Combustible Unit",
+      "category": "fuel",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "logistics_vessel",
+      "name": "Logistics Vessel",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
+      "id": "magnetic_coil",
+      "name": "Magnetic Coil",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "electromagnetic_matrix",
+      "name": "Electromagnetic Matrix",
+      "category": "matrix",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
+      "id": "titanium_ore",
+      "name": "Titanium Ore",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "logistics_bot",
+      "name": "Logistics Bot",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "energy_matrix",
+      "name": "Energy Matrix",
+      "category": "matrix",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
+      "id": "prototype",
+      "name": "Prototype Payload",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "small_carrier_rocket",
+      "name": "Small Carrier Rocket",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 10,
+      "unit_volume": 5
+    },
+    {
+      "id": "attack_drone",
+      "name": "Attack Drone",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "mecha_fuel_energy": 25,
+      "id": "coal",
+      "name": "Coal",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "glass",
+      "name": "Glass",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "plasma_exciter",
+      "name": "Plasma Exciter",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "processor",
+      "name": "Processor",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "proliferator_mk1",
+      "name": "Proliferator Mk.I",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "gravity_matrix",
+      "name": "Gravity Matrix",
+      "category": "matrix",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
       "id": "destroyer",
       "name": "Destroyer Hull Payload",
       "category": "component",
       "form": "solid",
       "stack_limit": 10,
       "unit_volume": 6
+    },
+    {
+      "id": "particle_broadband",
+      "name": "Particle Broadband",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "carbon_nanotube",
+      "name": "Carbon Nanotube",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "logistics_drone",
+      "name": "Logistics Drone",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 1
+    },
+    {
+      "id": "antimatter",
+      "name": "Antimatter",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 1
+    },
+    {
+      "id": "dark_fog_matrix",
+      "name": "Dark Fog Matrix",
+      "category": "matrix",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
     },
     {
       "id": "titanium_glass",
@@ -491,8 +496,8 @@
       "unit_volume": 1
     },
     {
-      "id": "reinforced_thruster",
-      "name": "Reinforced Thruster",
+      "id": "casimir_crystal",
+      "name": "Casimir Crystal",
       "category": "component",
       "form": "solid",
       "stack_limit": 100,
@@ -507,6 +512,257 @@
       "unit_volume": 1
     },
     {
+      "id": "water",
+      "name": "Water",
+      "category": "material",
+      "form": "liquid",
+      "stack_limit": 1000,
+      "unit_volume": 1,
+      "container_id": "liquid_tank"
+    },
+    {
+      "id": "steel",
+      "name": "Steel",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "titanium_ammo",
+      "name": "Titanium Ammo Box",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "particle_container",
+      "name": "Particle Container",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "precision_drone",
+      "name": "Precision Drone Payload",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "reinforced_thruster",
+      "name": "Reinforced Thruster",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "dyson_sphere_component",
+      "name": "Dyson Sphere Component",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "crystal_silicon",
+      "name": "Crystal Silicon",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "prism",
+      "name": "Prism",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "universe_matrix",
+      "name": "Universe Matrix",
+      "category": "matrix",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
+      "id": "ammo_missile",
+      "name": "Missile",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 3
+    },
+    {
+      "id": "solar_sail",
+      "name": "Solar Sail",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "jamming_capsule",
+      "name": "Jamming Capsule",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "silicon_ore",
+      "name": "Silicon Ore",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "copper_ingot",
+      "name": "Copper Ingot",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "structure_matrix",
+      "name": "Structure Matrix",
+      "category": "matrix",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 1
+    },
+    {
+      "id": "shell_set",
+      "name": "Shell Set",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "proliferator_mk2",
+      "name": "Proliferator Mk.II",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "proliferator_mk3",
+      "name": "Proliferator Mk.III",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "plasma_capsule",
+      "name": "Plasma Capsule",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "mecha_fuel_energy": 15,
+      "id": "log",
+      "name": "Log",
+      "category": "fuel",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "suppressing_capsule",
+      "name": "Suppressing Capsule",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "accumulator",
+      "name": "Accumulator",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "accumulator_full",
+      "name": "Accumulator (Full)",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 50,
+      "unit_volume": 2
+    },
+    {
+      "id": "sulfuric_acid",
+      "name": "Sulfuric Acid",
+      "category": "material",
+      "form": "liquid",
+      "stack_limit": 1000,
+      "unit_volume": 1,
+      "container_id": "liquid_tank"
+    },
+    {
+      "id": "titanium_ingot",
+      "name": "Titanium Ingot",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "organic_crystal",
+      "name": "Organic Crystal",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "titanium_alloy",
+      "name": "Titanium Alloy",
+      "category": "material",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "frame_material",
+      "name": "Frame Material",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "graviton_lens",
+      "name": "Graviton Lens",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "supersonic_missile_set",
+      "name": "Supersonic Missile Set",
+      "category": "ammo",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
       "id": "liquid_tank",
       "name": "Liquid Tank",
       "category": "container",
@@ -515,13 +771,54 @@
       "unit_volume": 6
     },
     {
-      "id": "monopole_magnet",
-      "name": "Monopole Magnet",
+      "id": "electromagnetic_turbine",
+      "name": "Electromagnetic Turbine",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "plane_filter",
+      "name": "Plane Filter",
+      "category": "component",
+      "form": "solid",
+      "stack_limit": 200,
+      "unit_volume": 1
+    },
+    {
+      "id": "gas_tank",
+      "name": "Gas Tank",
+      "category": "container",
+      "form": "solid",
+      "stack_limit": 20,
+      "unit_volume": 6
+    },
+    {
+      "id": "stone_ore",
+      "name": "Stone",
+      "category": "ore",
+      "form": "solid",
+      "stack_limit": 100,
+      "unit_volume": 1
+    },
+    {
+      "id": "fractal_silicon",
+      "name": "Fractal Silicon",
       "category": "ore",
       "form": "solid",
       "stack_limit": 50,
       "unit_volume": 1,
       "is_rare": true
+    },
+    {
+      "id": "crude_oil",
+      "name": "Crude Oil",
+      "category": "material",
+      "form": "liquid",
+      "stack_limit": 1000,
+      "unit_volume": 1,
+      "container_id": "liquid_tank"
     },
     {
       "mecha_fuel_energy": 30,
@@ -542,55 +839,6 @@
       "unit_volume": 1
     },
     {
-      "id": "organic_crystal",
-      "name": "Organic Crystal",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "super_magnetic_ring",
-      "name": "Super-Magnetic Ring",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "circuit_board",
-      "name": "Circuit Board",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "strange_matter",
-      "name": "Strange Matter",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 2
-    },
-    {
-      "id": "titanium_ore",
-      "name": "Titanium Ore",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "crude_oil",
-      "name": "Crude Oil",
-      "category": "material",
-      "form": "liquid",
-      "stack_limit": 1000,
-      "unit_volume": 1,
-      "container_id": "liquid_tank"
-    },
-    {
       "id": "photon_combiner",
       "name": "Photon Combiner",
       "category": "component",
@@ -599,247 +847,1509 @@
       "unit_volume": 2
     },
     {
-      "id": "particle_container",
-      "name": "Particle Container",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 2
-    },
-    {
-      "id": "proliferator_mk1",
-      "name": "Proliferator Mk.I",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "solar_sail",
-      "name": "Solar Sail",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "kimberlite_ore",
-      "name": "Kimberlite Ore",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1,
-      "is_rare": true
-    },
-    {
-      "mecha_fuel_energy": 25,
-      "id": "coal",
-      "name": "Coal",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "mecha_fuel_energy": 40,
-      "id": "refined_oil",
-      "name": "Refined Oil",
-      "category": "material",
-      "form": "liquid",
-      "stack_limit": 1000,
-      "unit_volume": 1,
-      "container_id": "liquid_tank"
-    },
-    {
-      "id": "copper_ingot",
-      "name": "Copper Ingot",
-      "category": "material",
+      "id": "ammo_bullet",
+      "name": "Bullet",
+      "category": "ammo",
       "form": "solid",
       "stack_limit": 200,
       "unit_volume": 1
-    },
-    {
-      "id": "diamond",
-      "name": "Diamond",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "processor",
-      "name": "Processor",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "mecha_fuel_energy": 100,
-      "id": "hydrogen_fuel_rod",
-      "name": "Hydrogen Fuel Rod",
-      "category": "fuel",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 2
-    },
-    {
-      "mecha_fuel_energy": 250,
-      "id": "deuterium_fuel_rod",
-      "name": "Deuterium Fuel Rod",
-      "category": "fuel",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 2
-    },
-    {
-      "id": "crystal_shell_set",
-      "name": "Crystal Shell Set",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "iron_ore",
-      "name": "Iron Ore",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "fractal_silicon",
-      "name": "Fractal Silicon",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1,
-      "is_rare": true
-    },
-    {
-      "id": "gear",
-      "name": "Gear",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "logistics_bot",
-      "name": "Logistics Bot",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "logistics_drone",
-      "name": "Logistics Drone",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1
-    },
-    {
-      "id": "gravity_matrix",
-      "name": "Gravity Matrix",
-      "category": "matrix",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "ammo_missile",
-      "name": "Missile",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 3
-    },
-    {
-      "id": "plasma_capsule",
-      "name": "Plasma Capsule",
-      "category": "ammo",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "fire_ice",
-      "name": "Fire Ice",
-      "category": "ore",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1,
-      "is_rare": true
-    },
-    {
-      "id": "iron_ingot",
-      "name": "Iron Ingot",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 200,
-      "unit_volume": 1
-    },
-    {
-      "id": "logistics_vessel",
-      "name": "Logistics Vessel",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 20,
-      "unit_volume": 1
-    },
-    {
-      "id": "steel",
-      "name": "Steel",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "quantum_chip",
-      "name": "Quantum Chip",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1
-    },
-    {
-      "id": "antimatter",
-      "name": "Antimatter",
-      "category": "material",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 1
-    },
-    {
-      "id": "proliferator_mk2",
-      "name": "Proliferator Mk.II",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 100,
-      "unit_volume": 1
-    },
-    {
-      "id": "precision_drone",
-      "name": "Precision Drone Payload",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 2
-    },
-    {
-      "id": "attack_drone",
-      "name": "Attack Drone",
-      "category": "component",
-      "form": "solid",
-      "stack_limit": 50,
-      "unit_volume": 2
     }
   ],
   "recipes": [
+    {
+      "handcraft_allowed": false,
+      "id": "titanium_glass",
+      "name": "Titanium Glass",
+      "inputs": [
+        {
+          "item_id": "glass",
+          "quantity": 2
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 2
+        },
+        {
+          "item_id": "water",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_glass",
+          "quantity": 2
+        }
+      ],
+      "duration": 150,
+      "energy_cost": 2,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "high_strength_glass"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "gravitational_lens",
+      "name": "Graviton Lens",
+      "inputs": [
+        {
+          "item_id": "diamond",
+          "quantity": 4
+        },
+        {
+          "item_id": "strange_matter",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "graviton_lens",
+          "quantity": 1
+        }
+      ],
+      "duration": 180,
+      "energy_cost": 8,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "strange_matter"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "ammo_bullet",
+      "name": "Bullet",
+      "inputs": [
+        {
+          "item_id": "iron_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "ammo_bullet",
+          "quantity": 5
+        }
+      ],
+      "duration": 20,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "weapon_system"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "crystal",
+      "name": "Crystal Silicon",
+      "inputs": [
+        {
+          "item_id": "silicon_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "crystal_silicon",
+          "quantity": 1
+        }
+      ],
+      "duration": 80,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "crystal_smelting"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "proliferator_mk1",
+      "name": "Proliferator Mk.I",
+      "inputs": [
+        {
+          "item_id": "coal",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "proliferator_mk1",
+          "quantity": 1
+        }
+      ],
+      "duration": 20,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "proliferator_mk1"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_precision_drone",
+      "name": "Precision Drone",
+      "inputs": [
+        {
+          "item_id": "circuit_board",
+          "quantity": 2
+        },
+        {
+          "item_id": "prototype",
+          "quantity": 1
+        },
+        {
+          "item_id": "electromagnetic_turbine",
+          "quantity": 1
+        },
+        {
+          "item_id": "photon_combiner",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "precision_drone",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "precision_drone"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "smelt_magnet",
+      "name": "Smelt Magnet",
+      "inputs": [
+        {
+          "item_id": "iron_ore",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "magnet",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 1,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "motor",
+      "name": "Motor",
+      "inputs": [
+        {
+          "item_id": "gear",
+          "quantity": 1
+        },
+        {
+          "item_id": "circuit_board",
+          "quantity": 1
+        },
+        {
+          "item_id": "iron_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "motor",
+          "quantity": 1
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "electromagnetic_drive"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "crystal_silicon_from_fractal",
+      "name": "Crystal Silicon From Fractal Silicon",
+      "inputs": [
+        {
+          "item_id": "fractal_silicon",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "crystal_silicon",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "crystal_smelting"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "circuit_board",
+      "name": "Circuit Board",
+      "inputs": [
+        {
+          "item_id": "iron_ingot",
+          "quantity": 1
+        },
+        {
+          "item_id": "copper_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "circuit_board",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "plasma_capsule",
+      "name": "等离子胶囊",
+      "inputs": [
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 1
+        },
+        {
+          "item_id": "particle_container",
+          "quantity": 1
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "plasma_capsule",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "plasma_turret"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "proliferator_1",
+      "name": "Proliferator Mk.I",
+      "inputs": [
+        {
+          "item_id": "coal",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "proliferator_mk1",
+          "quantity": 1
+        }
+      ],
+      "duration": 15,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "proliferator_mk1"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "supersonic_missile",
+      "name": "Supersonic Missile Set",
+      "inputs": [
+        {
+          "item_id": "combustible_unit",
+          "quantity": 4
+        },
+        {
+          "item_id": "ammo_missile",
+          "quantity": 2
+        },
+        {
+          "item_id": "processor",
+          "quantity": 4
+        },
+        {
+          "item_id": "engine",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "supersonic_missile_set",
+          "quantity": 2
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "supersonic_missile"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "frame_material",
+      "name": "Frame Material",
+      "inputs": [
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 2
+        },
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 1
+        },
+        {
+          "item_id": "processor",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "frame_material",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "lightweight_structure"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "particle_broadband",
+      "name": "Particle Broadband",
+      "inputs": [
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 2
+        },
+        {
+          "item_id": "crystal_silicon",
+          "quantity": 2
+        },
+        {
+          "item_id": "plastic",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "particle_broadband",
+          "quantity": 1
+        }
+      ],
+      "duration": 240,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "particle_control"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "antimatter_fuel_rod",
+      "name": "Antimatter Fuel Rod",
+      "inputs": [
+        {
+          "item_id": "antimatter",
+          "quantity": 2
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 2
+        },
+        {
+          "item_id": "annihilation_constraint_sphere",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "antimatter_fuel_rod",
+          "quantity": 1
+        }
+      ],
+      "duration": 150,
+      "energy_cost": 12,
+      "building_types": [
+        "recomposing_assembler"
+      ],
+      "tech_unlock": [
+        "annihilation"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "gravity_missile",
+      "name": "Gravity Missile",
+      "inputs": [
+        {
+          "item_id": "ammo_missile",
+          "quantity": 1
+        },
+        {
+          "item_id": "strange_matter",
+          "quantity": 1
+        },
+        {
+          "item_id": "gravity_matrix",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "gravity_missile",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 8,
+      "building_types": [
+        "recomposing_assembler"
+      ],
+      "tech_unlock": [
+        "gravity_missile"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "diamond_advanced",
+      "name": "Diamond (advanced)",
+      "inputs": [
+        {
+          "item_id": "kimberlite_ore",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "diamond",
+          "quantity": 2
+        }
+      ],
+      "duration": 90,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "crystal_smelting"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "smelt_copper",
+      "name": "Smelt Copper",
+      "inputs": [
+        {
+          "item_id": "copper_ore",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "copper_ingot",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 1,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "plastic",
+      "name": "Plastic",
+      "inputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 1
+        },
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "plastic",
+          "quantity": 2
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 1,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "basic_chemical"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "x_ray_cracking",
+      "name": "X-ray Cracking",
+      "inputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 1
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 3
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "oil_refinery"
+      ],
+      "tech_unlock": [
+        "xray_cracking"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_gravity_missile_set",
+      "name": "Gravity Missile Set",
+      "inputs": [
+        {
+          "item_id": "plasma_capsule",
+          "quantity": 6
+        },
+        {
+          "item_id": "supersonic_missile_set",
+          "quantity": 3
+        },
+        {
+          "item_id": "strange_matter",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "gravity_missile",
+          "quantity": 3
+        }
+      ],
+      "duration": 180,
+      "energy_cost": 8,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "gravity_missile"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_engine",
+      "name": "Engine",
+      "inputs": [
+        {
+          "item_id": "copper_ingot",
+          "quantity": 2
+        },
+        {
+          "item_id": "magnetic_coil",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "engine",
+          "quantity": 1
+        }
+      ],
+      "duration": 90,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "engine"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "space_warper",
+      "name": "Space Warper",
+      "inputs": [
+        {
+          "item_id": "graviton_lens",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "space_warper",
+          "quantity": 1
+        }
+      ],
+      "duration": 300,
+      "energy_cost": 8,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "gravitational_wave"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "hydrogen_fuel_rod",
+      "name": "Hydrogen Fuel Rod",
+      "inputs": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 5
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "hydrogen_fuel_rod",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "hydrogen_fuel"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "small_carrier_rocket",
+      "name": "Small Carrier Rocket",
+      "inputs": [
+        {
+          "item_id": "frame_material",
+          "quantity": 2
+        },
+        {
+          "item_id": "deuterium_fuel_rod",
+          "quantity": 2
+        },
+        {
+          "item_id": "quantum_chip",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "small_carrier_rocket",
+          "quantity": 1
+        }
+      ],
+      "duration": 200,
+      "energy_cost": 12,
+      "building_types": [
+        "vertical_launching_silo"
+      ],
+      "tech_unlock": [
+        "vertical_launching"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_prototype",
+      "name": "Prototype",
+      "inputs": [
+        {
+          "item_id": "circuit_board",
+          "quantity": 2
+        },
+        {
+          "item_id": "engine",
+          "quantity": 1
+        },
+        {
+          "item_id": "iron_ingot",
+          "quantity": 3
+        },
+        {
+          "item_id": "plasma_exciter",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "prototype",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "prototype"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "thruster",
+      "name": "Thruster",
+      "inputs": [
+        {
+          "item_id": "copper_ingot",
+          "quantity": 3
+        },
+        {
+          "item_id": "steel",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "engine",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "thruster"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "smelt_titanium",
+      "name": "Smelt Titanium",
+      "inputs": [
+        {
+          "item_id": "titanium_ore",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "titanium_smelting"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "smelt_stone",
+      "name": "Smelt Stone",
+      "inputs": [
+        {
+          "item_id": "stone_ore",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "stone_brick",
+          "quantity": 1
+        }
+      ],
+      "duration": 50,
+      "energy_cost": 1,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "automatic_metallurgy"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "titanium_ammo",
+      "name": "Titanium Ammo Box",
+      "inputs": [
+        {
+          "item_id": "ammo_bullet",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_ammo",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "titanium_ammo"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_magnum_ammo_box",
+      "name": "Magnum Ammo Box",
+      "inputs": [
+        {
+          "item_id": "copper_ingot",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "ammo_bullet",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "weapon_system"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_high_explosive_shell_set",
+      "name": "High-Explosive Shell Set",
+      "inputs": [
+        {
+          "item_id": "combustible_unit",
+          "quantity": 2
+        },
+        {
+          "item_id": "shell_set",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 6
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "shell_set",
+          "quantity": 1
+        }
+      ],
+      "duration": 90,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "df_high_explosive_shell_set_tech"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "casimir_crystal_advanced",
+      "name": "Casimir Crystal (advanced)",
+      "inputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 12
+        },
+        {
+          "item_id": "grating_crystal",
+          "quantity": 8
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "casimir_crystal",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "casimir_crystal"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "particle_container_from_monopole",
+      "name": "Particle Container",
+      "inputs": [
+        {
+          "item_id": "monopole_magnet",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "particle_container",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "particle_container"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "ammo_missile",
+      "name": "Missile",
+      "inputs": [
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 2
+        },
+        {
+          "item_id": "processor",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "ammo_missile",
+          "quantity": 1
+        }
+      ],
+      "duration": 80,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "missile_turret"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "proliferator_mk2",
+      "name": "Proliferator Mk.II",
+      "inputs": [
+        {
+          "item_id": "proliferator_mk1",
+          "quantity": 2
+        },
+        {
+          "item_id": "diamond",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "proliferator_mk2",
+          "quantity": 1
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "proliferator_mk2"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "graphene",
+      "name": "Graphene",
+      "inputs": [
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 3
+        },
+        {
+          "item_id": "sulfuric_acid",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        }
+      ],
+      "duration": 50,
+      "energy_cost": 2,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "superconductor"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "titanium_alloy",
+      "name": "Titanium Alloy",
+      "inputs": [
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 4
+        },
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 2
+        },
+        {
+          "item_id": "sulfuric_acid",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 2
+        }
+      ],
+      "duration": 100,
+      "energy_cost": 6,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "titanium_alloy"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "universe_matrix",
+      "name": "Universe Matrix",
+      "inputs": [
+        {
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        },
+        {
+          "item_id": "energy_matrix",
+          "quantity": 1
+        },
+        {
+          "item_id": "structure_matrix",
+          "quantity": 1
+        },
+        {
+          "item_id": "information_matrix",
+          "quantity": 1
+        },
+        {
+          "item_id": "gravity_matrix",
+          "quantity": 1
+        },
+        {
+          "item_id": "antimatter",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "universe_matrix",
+          "quantity": 1
+        }
+      ],
+      "duration": 150,
+      "energy_cost": 10,
+      "building_types": [
+        "matrix_lab",
+        "self_evolution_lab"
+      ],
+      "tech_unlock": [
+        "universe_matrix"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "prism",
+      "name": "Prism",
+      "inputs": [
+        {
+          "item_id": "glass",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "prism",
+          "quantity": 2
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "plasma_control"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "plasma_exciter",
+      "name": "Plasma Exciter",
+      "inputs": [
+        {
+          "item_id": "magnetic_coil",
+          "quantity": 4
+        },
+        {
+          "item_id": "prism",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "plasma_exciter",
+          "quantity": 1
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "plasma_control"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_explosive_unit",
+      "name": "Explosive Unit",
+      "inputs": [
+        {
+          "item_id": "combustible_unit",
+          "quantity": 2
+        },
+        {
+          "item_id": "plastic",
+          "quantity": 2
+        },
+        {
+          "item_id": "sulfuric_acid",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "combustible_unit",
+          "quantity": 2
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 2,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "df_explosive_unit_tech"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_missile_set",
+      "name": "Missile Set",
+      "inputs": [
+        {
+          "item_id": "circuit_board",
+          "quantity": 3
+        },
+        {
+          "item_id": "copper_ingot",
+          "quantity": 6
+        },
+        {
+          "item_id": "combustible_unit",
+          "quantity": 2
+        },
+        {
+          "item_id": "engine",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "ammo_missile",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "missile_turret"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "energy_matrix",
+      "name": "Energy Matrix",
+      "inputs": [
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 1
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "energy_matrix",
+          "quantity": 1
+        }
+      ],
+      "duration": 80,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3",
+        "matrix_lab",
+        "self_evolution_lab"
+      ],
+      "tech_unlock": [
+        "energy_matrix"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "coal_to_graphite",
+      "name": "Coal To Energetic Graphite",
+      "inputs": [
+        {
+          "item_id": "coal",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "smelting_purification"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "antimatter_capsule",
+      "name": "Antimatter Capsule",
+      "inputs": [
+        {
+          "item_id": "antimatter",
+          "quantity": 2
+        },
+        {
+          "item_id": "annihilation_constraint_sphere",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "antimatter_capsule",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 8,
+      "building_types": [
+        "recomposing_assembler"
+      ],
+      "tech_unlock": [
+        "mass_energy_storage"
+      ]
+    },
     {
       "handcraft_allowed": false,
       "id": "prototype",
@@ -903,56 +2413,60 @@
     },
     {
       "handcraft_allowed": false,
-      "id": "crystal_shell",
-      "name": "Crystal Shell Set",
+      "id": "particle_container",
+      "name": "Particle Container",
       "inputs": [
         {
-          "item_id": "plasma_capsule",
+          "item_id": "electromagnetic_turbine",
           "quantity": 2
         },
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        },
+        {
+          "item_id": "copper_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "particle_container",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "particle_container"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "shell_set",
+      "name": "Shell Set",
+      "inputs": [
+        {
+          "item_id": "combustible_unit",
+          "quantity": 2
+        },
+        {
+          "item_id": "copper_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
         {
           "item_id": "shell_set",
           "quantity": 1
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 3
         }
       ],
-      "outputs": [
-        {
-          "item_id": "crystal_shell_set",
-          "quantity": 1
-        }
-      ],
-      "duration": 180,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "crystal_shell"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "coal_to_graphite",
-      "name": "Coal To Energetic Graphite",
-      "inputs": [
-        {
-          "item_id": "coal",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
+      "duration": 40,
       "energy_cost": 0,
       "building_types": [
         "assembling_machine_mk1",
@@ -960,456 +2474,7 @@
         "assembling_machine_mk3"
       ],
       "tech_unlock": [
-        "smelting_purification"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "magnetic_coil",
-      "name": "Magnetic Coil",
-      "inputs": [
-        {
-          "item_id": "magnet",
-          "quantity": 2
-        },
-        {
-          "item_id": "copper_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "magnetic_coil",
-          "quantity": 2
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "diamond",
-      "name": "Diamond",
-      "inputs": [
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "diamond",
-          "quantity": 1
-        }
-      ],
-      "duration": 80,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "crystal_smelting"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "proliferator_1",
-      "name": "Proliferator Mk.I",
-      "inputs": [
-        {
-          "item_id": "coal",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "proliferator_mk1",
-          "quantity": 1
-        }
-      ],
-      "duration": 15,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "proliferator_mk1"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_titanium_ammo_box",
-      "name": "Titanium Ammo Box",
-      "inputs": [
-        {
-          "item_id": "ammo_bullet",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_ammo",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "titanium_ammo"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_suppressing_capsule",
-      "name": "Suppressing Capsule",
-      "inputs": [
-        {
-          "item_id": "jamming_capsule",
-          "quantity": 2
-        },
-        {
-          "item_id": "super_magnetic_ring",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_glass",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "suppressing_capsule",
-          "quantity": 2
-        }
-      ],
-      "duration": 240,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "df_suppressing_capsule_tech"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "organic_crystal_original",
-      "name": "Organic Crystal (original)",
-      "inputs": [
-        {
-          "item_id": "log",
-          "quantity": 20
-        },
-        {
-          "item_id": "plant_fuel",
-          "quantity": 30
-        },
-        {
-          "item_id": "water",
-          "quantity": 10
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "organic_crystal",
-          "quantity": 1
-        }
-      ],
-      "duration": 180,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "polymer_chemical"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "logistics_bot",
-      "name": "Logistics Bot",
-      "inputs": [
-        {
-          "item_id": "motor",
-          "quantity": 1
-        },
-        {
-          "item_id": "circuit_board",
-          "quantity": 1
-        },
-        {
-          "item_id": "iron_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "logistics_bot",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "distribution_logistics"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "high_purity_silicon",
-      "name": "High-purity Silicon",
-      "inputs": [
-        {
-          "item_id": "silicon_ore",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "silicon_ingot",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "smelting_purification"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "circuit_board",
-      "name": "Circuit Board",
-      "inputs": [
-        {
-          "item_id": "iron_ingot",
-          "quantity": 1
-        },
-        {
-          "item_id": "copper_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "circuit_board",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "quantum_chip",
-      "name": "Quantum Chip",
-      "inputs": [
-        {
-          "item_id": "processor",
-          "quantity": 2
-        },
-        {
-          "item_id": "microcrystalline_component",
-          "quantity": 2
-        },
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "quantum_chip",
-          "quantity": 1
-        }
-      ],
-      "duration": 140,
-      "energy_cost": 8,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "quantum_chip"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "antimatter_fuel_rod",
-      "name": "Antimatter Fuel Rod",
-      "inputs": [
-        {
-          "item_id": "antimatter",
-          "quantity": 2
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 2
-        },
-        {
-          "item_id": "annihilation_constraint_sphere",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "antimatter_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "duration": 150,
-      "energy_cost": 12,
-      "building_types": [
-        "recomposing_assembler"
-      ],
-      "tech_unlock": [
-        "annihilation"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "photon_combiner",
-      "name": "Photon Combiner",
-      "inputs": [
-        {
-          "item_id": "circuit_board",
-          "quantity": 1
-        },
-        {
-          "item_id": "prism",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "photon_combiner",
-          "quantity": 1
-        }
-      ],
-      "duration": 90,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "photon_conversion"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "space_warper",
-      "name": "Space Warper",
-      "inputs": [
-        {
-          "item_id": "graviton_lens",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "space_warper",
-          "quantity": 1
-        }
-      ],
-      "duration": 300,
-      "energy_cost": 8,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "gravitational_wave"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "universe_matrix",
-      "name": "Universe Matrix",
-      "inputs": [
-        {
-          "item_id": "electromagnetic_matrix",
-          "quantity": 1
-        },
-        {
-          "item_id": "energy_matrix",
-          "quantity": 1
-        },
-        {
-          "item_id": "structure_matrix",
-          "quantity": 1
-        },
-        {
-          "item_id": "information_matrix",
-          "quantity": 1
-        },
-        {
-          "item_id": "gravity_matrix",
-          "quantity": 1
-        },
-        {
-          "item_id": "antimatter",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "universe_matrix",
-          "quantity": 1
-        }
-      ],
-      "duration": 150,
-      "energy_cost": 10,
-      "building_types": [
-        "matrix_lab",
-        "self_evolution_lab"
-      ],
-      "tech_unlock": [
-        "universe_matrix"
+        "implosion_cannon"
       ]
     },
     {
@@ -1452,27 +2517,1465 @@
       ]
     },
     {
-      "handcraft_allowed": true,
-      "id": "smelt_magnet",
-      "name": "Smelt Magnet",
+      "handcraft_allowed": false,
+      "id": "reinforced_thruster",
+      "name": "Reinforced Thruster",
       "inputs": [
         {
-          "item_id": "iron_ore",
-          "quantity": 1
+          "item_id": "electromagnetic_turbine",
+          "quantity": 5
+        },
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 5
         }
       ],
       "outputs": [
         {
-          "item_id": "magnet",
+          "item_id": "reinforced_thruster",
           "quantity": 1
         }
       ],
-      "duration": 60,
+      "duration": 180,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "reinforced_thruster_technology"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "glass",
+      "name": "Glass",
+      "inputs": [
+        {
+          "item_id": "stone_ore",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "glass",
+          "quantity": 1
+        }
+      ],
+      "duration": 50,
       "energy_cost": 1,
       "building_types": [
         "arc_smelter",
         "plane_smelter",
         "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "automatic_metallurgy"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "super_magnetic_ring",
+      "name": "Super-Magnetic Ring",
+      "inputs": [
+        {
+          "item_id": "electromagnetic_turbine",
+          "quantity": 2
+        },
+        {
+          "item_id": "magnet",
+          "quantity": 3
+        },
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "super_magnetic_ring",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "super_magnetic"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "photon_combiner_from_grating",
+      "name": "Photon Combiner",
+      "inputs": [
+        {
+          "item_id": "grating_crystal",
+          "quantity": 1
+        },
+        {
+          "item_id": "circuit_board",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "photon_combiner",
+          "quantity": 1
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "photon_conversion"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_superalloy_ammo_box",
+      "name": "Superalloy Ammo Box",
+      "inputs": [
+        {
+          "item_id": "titanium_ammo",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_ammo",
+          "quantity": 1
+        }
+      ],
+      "duration": 90,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "df_superalloy_ammo_box_tech"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "organic_crystal_original",
+      "name": "Organic Crystal (original)",
+      "inputs": [
+        {
+          "item_id": "log",
+          "quantity": 20
+        },
+        {
+          "item_id": "plant_fuel",
+          "quantity": 30
+        },
+        {
+          "item_id": "water",
+          "quantity": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "organic_crystal",
+          "quantity": 1
+        }
+      ],
+      "duration": 180,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "polymer_chemical"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "strange_matter",
+      "name": "Strange Matter",
+      "inputs": [
+        {
+          "item_id": "particle_container",
+          "quantity": 2
+        },
+        {
+          "item_id": "deuterium",
+          "quantity": 10
+        },
+        {
+          "item_id": "iron_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "strange_matter",
+          "quantity": 1
+        }
+      ],
+      "duration": 480,
+      "energy_cost": 6,
+      "building_types": [
+        "miniature_particle_collider"
+      ],
+      "tech_unlock": [
+        "strange_matter"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "deuterium_fuel_rod",
+      "name": "Deuterium Fuel Rod",
+      "inputs": [
+        {
+          "item_id": "deuterium",
+          "quantity": 5
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "deuterium_fuel_rod",
+          "quantity": 1
+        }
+      ],
+      "duration": 80,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "mini_fusion"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "structure_matrix",
+      "name": "Structure Matrix",
+      "inputs": [
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        },
+        {
+          "item_id": "plastic",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "structure_matrix",
+          "quantity": 1
+        }
+      ],
+      "duration": 90,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3",
+        "matrix_lab",
+        "self_evolution_lab"
+      ],
+      "tech_unlock": [
+        "structure_matrix"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "combustible_unit",
+      "name": "Combustible Unit",
+      "inputs": [
+        {
+          "item_id": "coal",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "combustible_unit",
+          "quantity": 1
+        }
+      ],
+      "duration": 20,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "combustible_unit"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "titanium_ingot",
+      "name": "Titanium Ingot",
+      "inputs": [
+        {
+          "item_id": "titanium_ore",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "titanium_smelting"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "plasma_refining",
+      "name": "Plasma Refining",
+      "inputs": [
+        {
+          "item_id": "crude_oil",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 2
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "oil_refinery"
+      ],
+      "tech_unlock": [
+        "plasma_refining"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_plasma_capsule",
+      "name": "Plasma Capsule",
+      "inputs": [
+        {
+          "item_id": "deuterium",
+          "quantity": 10
+        },
+        {
+          "item_id": "graphene",
+          "quantity": 1
+        },
+        {
+          "item_id": "magnet",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "plasma_capsule",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "plasma_turret"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "graphene_from_fire_ice",
+      "name": "Graphene From Fire Ice",
+      "inputs": [
+        {
+          "item_id": "fire_ice",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 1
+        }
+      ],
+      "duration": 50,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "superconductor"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "corvette",
+      "name": "Corvette Hull Payload",
+      "inputs": [
+        {
+          "item_id": "precision_drone",
+          "quantity": 2
+        },
+        {
+          "item_id": "frame_material",
+          "quantity": 2
+        },
+        {
+          "item_id": "quantum_chip",
+          "quantity": 1
+        },
+        {
+          "item_id": "deuterium_fuel_rod",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "corvette",
+          "quantity": 1
+        }
+      ],
+      "duration": 180,
+      "energy_cost": 10,
+      "building_types": [
+        "recomposing_assembler"
+      ],
+      "tech_unlock": [
+        "corvette"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "graphene_advanced",
+      "name": "Graphene (advanced)",
+      "inputs": [
+        {
+          "item_id": "fire_ice",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 1
+        }
+      ],
+      "duration": 50,
+      "energy_cost": 0,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "superconductor"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "proliferator_mk3",
+      "name": "Proliferator Mk.III",
+      "inputs": [
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 1
+        },
+        {
+          "item_id": "proliferator_mk2",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "proliferator_mk3",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "proliferator_mk3"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "magnetic_coil",
+      "name": "Magnetic Coil",
+      "inputs": [
+        {
+          "item_id": "magnet",
+          "quantity": 2
+        },
+        {
+          "item_id": "copper_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "magnetic_coil",
+          "quantity": 2
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "solar_sail",
+      "name": "Solar Sail",
+      "inputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        },
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "solar_sail",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "solar_sail_orbit"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "deuterium_fractionation",
+      "name": "Deuterium Fractionation",
+      "inputs": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "deuterium",
+          "quantity": 1
+        }
+      ],
+      "duration": 1500,
+      "energy_cost": 0,
+      "building_types": [
+        "fractionator"
+      ],
+      "tech_unlock": [
+        "deuterium_fractionation"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_jamming_capsule",
+      "name": "Jamming Capsule",
+      "inputs": [
+        {
+          "item_id": "electromagnetic_turbine",
+          "quantity": 1
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 3
+        },
+        {
+          "item_id": "plasma_exciter",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "jamming_capsule",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "df_jammer_tower_tech"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_attack_drone",
+      "name": "Attack Drone",
+      "inputs": [
+        {
+          "item_id": "prototype",
+          "quantity": 1
+        },
+        {
+          "item_id": "electromagnetic_turbine",
+          "quantity": 1
+        },
+        {
+          "item_id": "particle_container",
+          "quantity": 1
+        },
+        {
+          "item_id": "processor",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "attack_drone",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "df_attack_drone_tech"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "fuel_rod_recycling",
+      "name": "Fuel Rod Recycling",
+      "inputs": [
+        {
+          "item_id": "deuterium_fuel_rod",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "deuterium",
+          "quantity": 2
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "xray_cracking",
+      "name": "X 射线裂解",
+      "inputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 1
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 3
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "oil_refinery"
+      ],
+      "tech_unlock": [
+        "xray_cracking"
+      ]
+    },
+    {
+      "handcraft_allowed": true,
+      "id": "gear",
+      "name": "Gear",
+      "inputs": [
+        {
+          "item_id": "iron_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "gear",
+          "quantity": 1
+        }
+      ],
+      "duration": 20,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "microcrystalline_component",
+      "name": "Microcrystalline Component",
+      "inputs": [
+        {
+          "item_id": "silicon_ingot",
+          "quantity": 2
+        },
+        {
+          "item_id": "copper_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "microcrystalline_component",
+          "quantity": 1
+        }
+      ],
+      "duration": 40,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "semiconductor"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "crystal_shell",
+      "name": "Crystal Shell Set",
+      "inputs": [
+        {
+          "item_id": "plasma_capsule",
+          "quantity": 2
+        },
+        {
+          "item_id": "shell_set",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "crystal_shell_set",
+          "quantity": 1
+        }
+      ],
+      "duration": 180,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "crystal_shell"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "quantum_chip",
+      "name": "Quantum Chip",
+      "inputs": [
+        {
+          "item_id": "processor",
+          "quantity": 2
+        },
+        {
+          "item_id": "microcrystalline_component",
+          "quantity": 2
+        },
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "quantum_chip",
+          "quantity": 1
+        }
+      ],
+      "duration": 140,
+      "energy_cost": 8,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "quantum_chip"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_suppressing_capsule",
+      "name": "Suppressing Capsule",
+      "inputs": [
+        {
+          "item_id": "jamming_capsule",
+          "quantity": 2
+        },
+        {
+          "item_id": "super_magnetic_ring",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_glass",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "suppressing_capsule",
+          "quantity": 2
+        }
+      ],
+      "duration": 240,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "df_suppressing_capsule_tech"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "dyson_sphere_component",
+      "name": "Dyson Sphere Component",
+      "inputs": [
+        {
+          "item_id": "frame_material",
+          "quantity": 3
+        },
+        {
+          "item_id": "processor",
+          "quantity": 3
+        },
+        {
+          "item_id": "solar_sail",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "dyson_sphere_component",
+          "quantity": 1
+        }
+      ],
+      "duration": 240,
+      "energy_cost": 10,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "lightweight_structure"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "electromagnetic_matrix",
+      "name": "Electromagnetic Matrix",
+      "inputs": [
+        {
+          "item_id": "magnetic_coil",
+          "quantity": 1
+        },
+        {
+          "item_id": "circuit_board",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3",
+        "matrix_lab",
+        "self_evolution_lab"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "gravity_matrix",
+      "name": "Gravity Matrix",
+      "inputs": [
+        {
+          "item_id": "quantum_chip",
+          "quantity": 2
+        },
+        {
+          "item_id": "strange_matter",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "gravity_matrix",
+          "quantity": 1
+        }
+      ],
+      "duration": 150,
+      "energy_cost": 8,
+      "building_types": [
+        "matrix_lab",
+        "recomposing_assembler",
+        "self_evolution_lab"
+      ],
+      "tech_unlock": [
+        "gravity_matrix"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "oil_fractionation",
+      "name": "等离子精炼",
+      "inputs": [
+        {
+          "item_id": "crude_oil",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 2
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "oil_refinery"
+      ],
+      "tech_unlock": [
+        "plasma_refining"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "logistics_drone",
+      "name": "Logistics Drone",
+      "inputs": [
+        {
+          "item_id": "motor",
+          "quantity": 2
+        },
+        {
+          "item_id": "processor",
+          "quantity": 2
+        },
+        {
+          "item_id": "iron_ingot",
+          "quantity": 5
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "logistics_drone",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "planetary_logistics"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "deuterium_collision",
+      "name": "Deuterium Collision",
+      "inputs": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "deuterium",
+          "quantity": 5
+        }
+      ],
+      "duration": 300,
+      "energy_cost": 24,
+      "building_types": [
+        "miniature_particle_collider"
+      ],
+      "tech_unlock": [
+        "miniature_collider"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "high_purity_silicon",
+      "name": "High-purity Silicon",
+      "inputs": [
+        {
+          "item_id": "silicon_ore",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "silicon_ingot",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "smelting_purification"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "crystal_explosive",
+      "name": "Crystal Explosive Unit",
+      "inputs": [
+        {
+          "item_id": "casimir_crystal",
+          "quantity": 1
+        },
+        {
+          "item_id": "crystal_silicon",
+          "quantity": 8
+        },
+        {
+          "item_id": "combustible_unit",
+          "quantity": 8
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "plasma_capsule",
+          "quantity": 8
+        }
+      ],
+      "duration": 240,
+      "energy_cost": 4,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "crystal_explosive"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "photon_combiner",
+      "name": "Photon Combiner",
+      "inputs": [
+        {
+          "item_id": "circuit_board",
+          "quantity": 1
+        },
+        {
+          "item_id": "prism",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "photon_combiner",
+          "quantity": 1
+        }
+      ],
+      "duration": 90,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "photon_conversion"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "casimir_crystal",
+      "name": "Casimir Crystal",
+      "inputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 12
+        },
+        {
+          "item_id": "titanium_crystal",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "casimir_crystal",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "casimir_crystal"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "logistics_bot",
+      "name": "Logistics Bot",
+      "inputs": [
+        {
+          "item_id": "motor",
+          "quantity": 1
+        },
+        {
+          "item_id": "circuit_board",
+          "quantity": 1
+        },
+        {
+          "item_id": "iron_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "logistics_bot",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "distribution_logistics"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "logistics_vessel",
+      "name": "Logistics Vessel",
+      "inputs": [
+        {
+          "item_id": "motor",
+          "quantity": 2
+        },
+        {
+          "item_id": "processor",
+          "quantity": 10
+        },
+        {
+          "item_id": "titanium_alloy",
+          "quantity": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "logistics_vessel",
+          "quantity": 1
+        }
+      ],
+      "duration": 300,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "interstellar_logistics"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "df_titanium_ammo_box",
+      "name": "Titanium Ammo Box",
+      "inputs": [
+        {
+          "item_id": "ammo_bullet",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_ammo",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "titanium_ammo"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "foundation",
+      "name": "Foundation",
+      "inputs": [
+        {
+          "item_id": "steel",
+          "quantity": 1
+        },
+        {
+          "item_id": "stone_brick",
+          "quantity": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "foundation_supply",
+          "quantity": 1
+        }
+      ],
+      "duration": 30,
+      "energy_cost": 0,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "environment_modification"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "reformed_refinement",
+      "name": "重整精炼",
+      "inputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 2
+        },
+        {
+          "item_id": "hydrogen",
+          "quantity": 1
+        },
+        {
+          "item_id": "coal",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "refined_oil",
+          "quantity": 3
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 0,
+      "building_types": [
+        "oil_refinery"
+      ],
+      "tech_unlock": [
+        "reformed_refinement"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "titanium_crystal",
+      "name": "Titanium Crystal",
+      "inputs": [
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 2
+        },
+        {
+          "item_id": "graphene",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "titanium_crystal",
+          "quantity": 1
+        }
+      ],
+      "duration": 80,
+      "energy_cost": 4,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "high_strength_crystal"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "plane_filter",
+      "name": "Plane Filter",
+      "inputs": [
+        {
+          "item_id": "casimir_crystal",
+          "quantity": 1
+        },
+        {
+          "item_id": "titanium_glass",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "plane_filter",
+          "quantity": 1
+        }
+      ],
+      "duration": 360,
+      "energy_cost": 8,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "wave_interference"
       ]
     },
     {
@@ -1511,25 +4014,322 @@
     },
     {
       "handcraft_allowed": false,
-      "id": "motor",
-      "name": "Motor",
+      "id": "antimatter",
+      "name": "Antimatter",
       "inputs": [
         {
-          "item_id": "gear",
+          "item_id": "critical_photon",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "antimatter",
+          "quantity": 2
+        }
+      ],
+      "byproducts": [
+        {
+          "item_id": "hydrogen",
+          "quantity": 2
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 8,
+      "building_types": [
+        "miniature_particle_collider"
+      ],
+      "tech_unlock": [
+        "dirac_inversion"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "silicon_ore",
+      "name": "Silicon Ore From Stone",
+      "inputs": [
+        {
+          "item_id": "stone_ore",
+          "quantity": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "silicon_ore",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "smelting_purification"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "annihilation_constraint_sphere",
+      "name": "Annihilation Constraint Sphere",
+      "inputs": [
+        {
+          "item_id": "particle_container",
           "quantity": 1
         },
         {
-          "item_id": "circuit_board",
+          "item_id": "processor",
           "quantity": 1
         },
         {
-          "item_id": "iron_ingot",
+          "item_id": "deuterium_fuel_rod",
           "quantity": 1
         }
       ],
       "outputs": [
         {
+          "item_id": "annihilation_constraint_sphere",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 3,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "annihilation"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "information_matrix",
+      "name": "Information Matrix",
+      "inputs": [
+        {
+          "item_id": "processor",
+          "quantity": 2
+        },
+        {
+          "item_id": "quantum_chip",
+          "quantity": 1
+        },
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "information_matrix",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "matrix_lab",
+        "recomposing_assembler",
+        "self_evolution_lab"
+      ],
+      "tech_unlock": [
+        "information_matrix"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "carbon_nanotube_advanced",
+      "name": "Carbon Nanotube (advanced)",
+      "inputs": [
+        {
+          "item_id": "spiniform_stalagmite_crystal",
+          "quantity": 6
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 2
+        }
+      ],
+      "duration": 70,
+      "energy_cost": 2,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "high_strength_material"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "precision_drone",
+      "name": "Precision Drone Payload",
+      "inputs": [
+        {
+          "item_id": "prototype",
+          "quantity": 1
+        },
+        {
+          "item_id": "quantum_chip",
+          "quantity": 1
+        },
+        {
+          "item_id": "deuterium_fuel_rod",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "precision_drone",
+          "quantity": 1
+        }
+      ],
+      "duration": 120,
+      "energy_cost": 6,
+      "building_types": [
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "precision_drone"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "space_warper_advanced",
+      "name": "Space Warper (advanced)",
+      "inputs": [
+        {
+          "item_id": "gravity_matrix",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "space_warper",
+          "quantity": 8
+        }
+      ],
+      "duration": 300,
+      "energy_cost": 8,
+      "building_types": [
+        "assembling_machine_mk1",
+        "assembling_machine_mk2",
+        "assembling_machine_mk3"
+      ],
+      "tech_unlock": [
+        "gravity_matrix"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "smelt_silicon",
+      "name": "Smelt Silicon",
+      "inputs": [
+        {
+          "item_id": "silicon_ore",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "silicon_ingot",
+          "quantity": 1
+        }
+      ],
+      "duration": 60,
+      "energy_cost": 2,
+      "building_types": [
+        "arc_smelter",
+        "plane_smelter",
+        "negentropy_smelter"
+      ],
+      "tech_unlock": [
+        "smelting_purification"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "graphene_from_graphite",
+      "name": "Graphene From Graphite",
+      "inputs": [
+        {
+          "item_id": "energetic_graphite",
+          "quantity": 2
+        },
+        {
+          "item_id": "sulfuric_acid",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        }
+      ],
+      "duration": 50,
+      "energy_cost": 2,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "superconductor"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "carbon_nanotube",
+      "name": "Carbon Nanotube",
+      "inputs": [
+        {
+          "item_id": "graphene",
+          "quantity": 2
+        },
+        {
+          "item_id": "titanium_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "carbon_nanotube",
+          "quantity": 2
+        }
+      ],
+      "duration": 70,
+      "energy_cost": 2,
+      "building_types": [
+        "chemical_plant",
+        "quantum_chemical_plant"
+      ],
+      "tech_unlock": [
+        "high_strength_material"
+      ]
+    },
+    {
+      "handcraft_allowed": false,
+      "id": "electromagnetic_turbine",
+      "name": "Electromagnetic Turbine",
+      "inputs": [
+        {
           "item_id": "motor",
+          "quantity": 2
+        },
+        {
+          "item_id": "magnetic_coil",
+          "quantity": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "electromagnetic_turbine",
           "quantity": 1
         }
       ],
@@ -1541,32 +4341,30 @@
         "assembling_machine_mk3"
       ],
       "tech_unlock": [
-        "electromagnetic_drive"
+        "magnetic_levitation"
       ]
     },
     {
       "handcraft_allowed": false,
-      "id": "graphene_from_fire_ice",
-      "name": "Graphene From Fire Ice",
+      "id": "df_shell_set",
+      "name": "Shell Set",
       "inputs": [
         {
-          "item_id": "fire_ice",
+          "item_id": "copper_ingot",
+          "quantity": 9
+        },
+        {
+          "item_id": "combustible_unit",
           "quantity": 2
         }
       ],
       "outputs": [
         {
-          "item_id": "graphene",
-          "quantity": 2
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "hydrogen",
+          "item_id": "shell_set",
           "quantity": 1
         }
       ],
-      "duration": 50,
+      "duration": 45,
       "energy_cost": 0,
       "building_types": [
         "assembling_machine_mk1",
@@ -1574,55 +4372,61 @@
         "assembling_machine_mk3"
       ],
       "tech_unlock": [
-        "superconductor"
+        "implosion_cannon"
       ]
     },
     {
       "handcraft_allowed": false,
-      "id": "structure_matrix",
-      "name": "Structure Matrix",
+      "id": "df_corvette",
+      "name": "Corvette",
       "inputs": [
         {
-          "item_id": "titanium_ingot",
+          "item_id": "particle_container",
+          "quantity": 3
+        },
+        {
+          "item_id": "processor",
+          "quantity": 2
+        },
+        {
+          "item_id": "reinforced_thruster",
           "quantity": 1
         },
         {
-          "item_id": "plastic",
-          "quantity": 1
+          "item_id": "titanium_alloy",
+          "quantity": 5
         }
       ],
       "outputs": [
         {
-          "item_id": "structure_matrix",
+          "item_id": "corvette",
           "quantity": 1
         }
       ],
-      "duration": 90,
-      "energy_cost": 0,
+      "duration": 150,
+      "energy_cost": 10,
       "building_types": [
         "assembling_machine_mk1",
         "assembling_machine_mk2",
-        "assembling_machine_mk3",
-        "matrix_lab",
-        "self_evolution_lab"
+        "assembling_machine_mk3"
       ],
       "tech_unlock": [
-        "structure_matrix"
+        "corvette"
       ]
     },
     {
       "handcraft_allowed": true,
-      "id": "smelt_copper",
-      "name": "Smelt Copper",
+      "id": "smelt_iron",
+      "name": "Smelt Iron",
       "inputs": [
         {
-          "item_id": "copper_ore",
+          "item_id": "iron_ore",
           "quantity": 1
         }
       ],
       "outputs": [
         {
-          "item_id": "copper_ingot",
+          "item_id": "iron_ingot",
           "quantity": 1
         }
       ],
@@ -1636,48 +4440,21 @@
     },
     {
       "handcraft_allowed": false,
-      "id": "smelt_titanium",
-      "name": "Smelt Titanium",
+      "id": "processor",
+      "name": "Processor",
       "inputs": [
         {
-          "item_id": "titanium_ore",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "titanium_smelting"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "fuel_rod_recycling",
-      "name": "Fuel Rod Recycling",
-      "inputs": [
-        {
-          "item_id": "deuterium_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "deuterium",
+          "item_id": "circuit_board",
           "quantity": 2
         },
         {
-          "item_id": "titanium_ingot",
+          "item_id": "microcrystalline_component",
+          "quantity": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item_id": "processor",
           "quantity": 1
         }
       ],
@@ -1687,39 +4464,9 @@
         "assembling_machine_mk1",
         "assembling_machine_mk2",
         "assembling_machine_mk3"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "gravity_missile",
-      "name": "Gravity Missile",
-      "inputs": [
-        {
-          "item_id": "ammo_missile",
-          "quantity": 1
-        },
-        {
-          "item_id": "strange_matter",
-          "quantity": 1
-        },
-        {
-          "item_id": "gravity_matrix",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "gravity_missile",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 8,
-      "building_types": [
-        "recomposing_assembler"
       ],
       "tech_unlock": [
-        "gravity_missile"
+        "processor"
       ]
     },
     {
@@ -1765,1212 +4512,17 @@
     },
     {
       "handcraft_allowed": false,
-      "id": "oil_fractionation",
-      "name": "等离子精炼",
-      "inputs": [
-        {
-          "item_id": "crude_oil",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 2
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "oil_refinery"
-      ],
-      "tech_unlock": [
-        "plasma_refining"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "graphene_from_graphite",
-      "name": "Graphene From Graphite",
-      "inputs": [
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 2
-        },
-        {
-          "item_id": "sulfuric_acid",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        }
-      ],
-      "duration": 50,
-      "energy_cost": 2,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "superconductor"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "hydrogen_fuel_rod",
-      "name": "Hydrogen Fuel Rod",
-      "inputs": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 5
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "hydrogen_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "hydrogen_fuel"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "solar_sail",
-      "name": "Solar Sail",
-      "inputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        },
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "solar_sail",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "solar_sail_orbit"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "casimir_crystal",
-      "name": "Casimir Crystal",
-      "inputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 12
-        },
-        {
-          "item_id": "titanium_crystal",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "casimir_crystal",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "casimir_crystal"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "ammo_missile",
-      "name": "Missile",
-      "inputs": [
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 2
-        },
-        {
-          "item_id": "processor",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "ammo_missile",
-          "quantity": 1
-        }
-      ],
-      "duration": 80,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "missile_turret"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "plasma_exciter",
-      "name": "Plasma Exciter",
-      "inputs": [
-        {
-          "item_id": "magnetic_coil",
-          "quantity": 4
-        },
-        {
-          "item_id": "prism",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "plasma_exciter",
-          "quantity": 1
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "plasma_control"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_attack_drone",
-      "name": "Attack Drone",
-      "inputs": [
-        {
-          "item_id": "prototype",
-          "quantity": 1
-        },
-        {
-          "item_id": "electromagnetic_turbine",
-          "quantity": 1
-        },
-        {
-          "item_id": "particle_container",
-          "quantity": 1
-        },
-        {
-          "item_id": "processor",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "attack_drone",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "df_attack_drone_tech"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "prism",
-      "name": "Prism",
-      "inputs": [
-        {
-          "item_id": "glass",
-          "quantity": 3
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "prism",
-          "quantity": 2
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "plasma_control"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "reinforced_thruster",
-      "name": "Reinforced Thruster",
-      "inputs": [
-        {
-          "item_id": "electromagnetic_turbine",
-          "quantity": 5
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 5
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "reinforced_thruster",
-          "quantity": 1
-        }
-      ],
-      "duration": 180,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "reinforced_thruster_technology"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "antimatter",
-      "name": "Antimatter",
-      "inputs": [
-        {
-          "item_id": "critical_photon",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "antimatter",
-          "quantity": 2
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 2
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 8,
-      "building_types": [
-        "miniature_particle_collider"
-      ],
-      "tech_unlock": [
-        "dirac_inversion"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "precision_drone",
-      "name": "Precision Drone Payload",
-      "inputs": [
-        {
-          "item_id": "prototype",
-          "quantity": 1
-        },
-        {
-          "item_id": "quantum_chip",
-          "quantity": 1
-        },
-        {
-          "item_id": "deuterium_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "precision_drone",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "precision_drone"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "titanium_ingot",
-      "name": "Titanium Ingot",
-      "inputs": [
-        {
-          "item_id": "titanium_ore",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "titanium_smelting"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_magnum_ammo_box",
-      "name": "Magnum Ammo Box",
-      "inputs": [
-        {
-          "item_id": "copper_ingot",
-          "quantity": 3
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "ammo_bullet",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "weapon_system"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "thruster",
-      "name": "Thruster",
-      "inputs": [
-        {
-          "item_id": "copper_ingot",
-          "quantity": 3
-        },
-        {
-          "item_id": "steel",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "engine",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "thruster"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "graphene_advanced",
-      "name": "Graphene (advanced)",
-      "inputs": [
-        {
-          "item_id": "fire_ice",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 1
-        }
-      ],
-      "duration": 50,
-      "energy_cost": 0,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "superconductor"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "logistics_vessel",
-      "name": "Logistics Vessel",
-      "inputs": [
-        {
-          "item_id": "motor",
-          "quantity": 2
-        },
-        {
-          "item_id": "processor",
-          "quantity": 10
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 10
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "logistics_vessel",
-          "quantity": 1
-        }
-      ],
-      "duration": 300,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "interstellar_logistics"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "corvette",
-      "name": "Corvette Hull Payload",
-      "inputs": [
-        {
-          "item_id": "precision_drone",
-          "quantity": 2
-        },
-        {
-          "item_id": "frame_material",
-          "quantity": 2
-        },
-        {
-          "item_id": "quantum_chip",
-          "quantity": 1
-        },
-        {
-          "item_id": "deuterium_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "corvette",
-          "quantity": 1
-        }
-      ],
-      "duration": 180,
-      "energy_cost": 10,
-      "building_types": [
-        "recomposing_assembler"
-      ],
-      "tech_unlock": [
-        "corvette"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_explosive_unit",
-      "name": "Explosive Unit",
-      "inputs": [
-        {
-          "item_id": "combustible_unit",
-          "quantity": 2
-        },
-        {
-          "item_id": "plastic",
-          "quantity": 2
-        },
-        {
-          "item_id": "sulfuric_acid",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "combustible_unit",
-          "quantity": 2
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 2,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "df_explosive_unit_tech"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "crystal_explosive",
-      "name": "Crystal Explosive Unit",
-      "inputs": [
-        {
-          "item_id": "casimir_crystal",
-          "quantity": 1
-        },
-        {
-          "item_id": "crystal_silicon",
-          "quantity": 8
-        },
-        {
-          "item_id": "combustible_unit",
-          "quantity": 8
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "plasma_capsule",
-          "quantity": 8
-        }
-      ],
-      "duration": 240,
-      "energy_cost": 4,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "crystal_explosive"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "reformed_refinement",
-      "name": "重整精炼",
-      "inputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 2
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 1
-        },
-        {
-          "item_id": "coal",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 3
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "oil_refinery"
-      ],
-      "tech_unlock": [
-        "reformed_refinement"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "glass",
-      "name": "Glass",
-      "inputs": [
-        {
-          "item_id": "stone_ore",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "glass",
-          "quantity": 1
-        }
-      ],
-      "duration": 50,
-      "energy_cost": 1,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "automatic_metallurgy"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "casimir_crystal_advanced",
-      "name": "Casimir Crystal (advanced)",
-      "inputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 12
-        },
-        {
-          "item_id": "grating_crystal",
-          "quantity": 8
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "casimir_crystal",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "casimir_crystal"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "particle_container",
-      "name": "Particle Container",
-      "inputs": [
-        {
-          "item_id": "electromagnetic_turbine",
-          "quantity": 2
-        },
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        },
-        {
-          "item_id": "copper_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "particle_container",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "particle_container"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "combustible_unit",
-      "name": "Combustible Unit",
-      "inputs": [
-        {
-          "item_id": "coal",
-          "quantity": 3
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "combustible_unit",
-          "quantity": 1
-        }
-      ],
-      "duration": 20,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "combustible_unit"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "supersonic_missile",
-      "name": "Supersonic Missile Set",
-      "inputs": [
-        {
-          "item_id": "combustible_unit",
-          "quantity": 4
-        },
-        {
-          "item_id": "ammo_missile",
-          "quantity": 2
-        },
-        {
-          "item_id": "processor",
-          "quantity": 4
-        },
-        {
-          "item_id": "engine",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "supersonic_missile_set",
-          "quantity": 2
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "supersonic_missile"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "space_warper_advanced",
-      "name": "Space Warper (advanced)",
-      "inputs": [
-        {
-          "item_id": "gravity_matrix",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "space_warper",
-          "quantity": 8
-        }
-      ],
-      "duration": 300,
-      "energy_cost": 8,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "gravity_matrix"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "gear",
-      "name": "Gear",
-      "inputs": [
-        {
-          "item_id": "iron_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "gear",
-          "quantity": 1
-        }
-      ],
-      "duration": 20,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "engine",
-      "name": "Engine",
-      "inputs": [
-        {
-          "item_id": "motor",
-          "quantity": 2
-        },
-        {
-          "item_id": "magnetic_coil",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "engine",
-          "quantity": 1
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "engine"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "titanium_ammo",
-      "name": "Titanium Ammo Box",
-      "inputs": [
-        {
-          "item_id": "ammo_bullet",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_ammo",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "titanium_ammo"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "proliferator_mk3",
-      "name": "Proliferator Mk.III",
-      "inputs": [
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 1
-        },
-        {
-          "item_id": "proliferator_mk2",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "proliferator_mk3",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "proliferator_mk3"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "smelt_stone",
-      "name": "Smelt Stone",
-      "inputs": [
-        {
-          "item_id": "stone_ore",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "stone_brick",
-          "quantity": 1
-        }
-      ],
-      "duration": 50,
-      "energy_cost": 1,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "automatic_metallurgy"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "plastic",
-      "name": "Plastic",
-      "inputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 1
-        },
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "plastic",
-          "quantity": 2
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 1,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "basic_chemical"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "logistics_drone",
-      "name": "Logistics Drone",
-      "inputs": [
-        {
-          "item_id": "motor",
-          "quantity": 2
-        },
-        {
-          "item_id": "processor",
-          "quantity": 2
-        },
-        {
-          "item_id": "iron_ingot",
-          "quantity": 5
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "logistics_drone",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "planetary_logistics"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "microcrystalline_component",
-      "name": "Microcrystalline Component",
-      "inputs": [
-        {
-          "item_id": "silicon_ingot",
-          "quantity": 2
-        },
-        {
-          "item_id": "copper_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "microcrystalline_component",
-          "quantity": 1
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "semiconductor"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "particle_container_from_monopole",
-      "name": "Particle Container",
-      "inputs": [
-        {
-          "item_id": "monopole_magnet",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "particle_container",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "particle_container"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "electromagnetic_matrix",
-      "name": "Electromagnetic Matrix",
-      "inputs": [
-        {
-          "item_id": "magnetic_coil",
-          "quantity": 1
-        },
-        {
-          "item_id": "circuit_board",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "electromagnetic_matrix",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3",
-        "matrix_lab",
-        "self_evolution_lab"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "energy_matrix",
-      "name": "Energy Matrix",
+      "id": "diamond",
+      "name": "Diamond",
       "inputs": [
         {
           "item_id": "energetic_graphite",
           "quantity": 1
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 1
         }
       ],
       "outputs": [
         {
-          "item_id": "energy_matrix",
-          "quantity": 1
-        }
-      ],
-      "duration": 80,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3",
-        "matrix_lab",
-        "self_evolution_lab"
-      ],
-      "tech_unlock": [
-        "energy_matrix"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "crystal",
-      "name": "Crystal Silicon",
-      "inputs": [
-        {
-          "item_id": "silicon_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "crystal_silicon",
+          "item_id": "diamond",
           "quantity": 1
         }
       ],
@@ -2983,941 +4535,6 @@
       ],
       "tech_unlock": [
         "crystal_smelting"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "information_matrix",
-      "name": "Information Matrix",
-      "inputs": [
-        {
-          "item_id": "processor",
-          "quantity": 2
-        },
-        {
-          "item_id": "quantum_chip",
-          "quantity": 1
-        },
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "information_matrix",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "matrix_lab",
-        "recomposing_assembler",
-        "self_evolution_lab"
-      ],
-      "tech_unlock": [
-        "information_matrix"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "antimatter_capsule",
-      "name": "Antimatter Capsule",
-      "inputs": [
-        {
-          "item_id": "antimatter",
-          "quantity": 2
-        },
-        {
-          "item_id": "annihilation_constraint_sphere",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "antimatter_capsule",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 8,
-      "building_types": [
-        "recomposing_assembler"
-      ],
-      "tech_unlock": [
-        "mass_energy_storage"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_jamming_capsule",
-      "name": "Jamming Capsule",
-      "inputs": [
-        {
-          "item_id": "electromagnetic_turbine",
-          "quantity": 1
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 3
-        },
-        {
-          "item_id": "plasma_exciter",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "jamming_capsule",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "df_jammer_tower_tech"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_corvette",
-      "name": "Corvette",
-      "inputs": [
-        {
-          "item_id": "particle_container",
-          "quantity": 3
-        },
-        {
-          "item_id": "processor",
-          "quantity": 2
-        },
-        {
-          "item_id": "reinforced_thruster",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 5
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "corvette",
-          "quantity": 1
-        }
-      ],
-      "duration": 150,
-      "energy_cost": 10,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "corvette"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "gravitational_lens",
-      "name": "Graviton Lens",
-      "inputs": [
-        {
-          "item_id": "diamond",
-          "quantity": 4
-        },
-        {
-          "item_id": "strange_matter",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "graviton_lens",
-          "quantity": 1
-        }
-      ],
-      "duration": 180,
-      "energy_cost": 8,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "strange_matter"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "annihilation_constraint_sphere",
-      "name": "Annihilation Constraint Sphere",
-      "inputs": [
-        {
-          "item_id": "particle_container",
-          "quantity": 1
-        },
-        {
-          "item_id": "processor",
-          "quantity": 1
-        },
-        {
-          "item_id": "deuterium_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "annihilation_constraint_sphere",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 3,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "annihilation"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_high_explosive_shell_set",
-      "name": "High-Explosive Shell Set",
-      "inputs": [
-        {
-          "item_id": "combustible_unit",
-          "quantity": 2
-        },
-        {
-          "item_id": "shell_set",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 6
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "shell_set",
-          "quantity": 1
-        }
-      ],
-      "duration": 90,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "df_high_explosive_shell_set_tech"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "x_ray_cracking",
-      "name": "X-ray Cracking",
-      "inputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 1
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 3
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "oil_refinery"
-      ],
-      "tech_unlock": [
-        "xray_cracking"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_missile_set",
-      "name": "Missile Set",
-      "inputs": [
-        {
-          "item_id": "circuit_board",
-          "quantity": 3
-        },
-        {
-          "item_id": "copper_ingot",
-          "quantity": 6
-        },
-        {
-          "item_id": "combustible_unit",
-          "quantity": 2
-        },
-        {
-          "item_id": "engine",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "ammo_missile",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "missile_turret"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_precision_drone",
-      "name": "Precision Drone",
-      "inputs": [
-        {
-          "item_id": "circuit_board",
-          "quantity": 2
-        },
-        {
-          "item_id": "prototype",
-          "quantity": 1
-        },
-        {
-          "item_id": "electromagnetic_turbine",
-          "quantity": 1
-        },
-        {
-          "item_id": "photon_combiner",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "precision_drone",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "precision_drone"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "xray_cracking",
-      "name": "X 射线裂解",
-      "inputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 1
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 3
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "oil_refinery"
-      ],
-      "tech_unlock": [
-        "xray_cracking"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "processor",
-      "name": "Processor",
-      "inputs": [
-        {
-          "item_id": "circuit_board",
-          "quantity": 2
-        },
-        {
-          "item_id": "microcrystalline_component",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "processor",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "processor"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "small_carrier_rocket",
-      "name": "Small Carrier Rocket",
-      "inputs": [
-        {
-          "item_id": "frame_material",
-          "quantity": 2
-        },
-        {
-          "item_id": "deuterium_fuel_rod",
-          "quantity": 2
-        },
-        {
-          "item_id": "quantum_chip",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "small_carrier_rocket",
-          "quantity": 1
-        }
-      ],
-      "duration": 200,
-      "energy_cost": 12,
-      "building_types": [
-        "vertical_launching_silo"
-      ],
-      "tech_unlock": [
-        "vertical_launching"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "proliferator_mk1",
-      "name": "Proliferator Mk.I",
-      "inputs": [
-        {
-          "item_id": "coal",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "proliferator_mk1",
-          "quantity": 1
-        }
-      ],
-      "duration": 20,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "proliferator_mk1"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_gravity_missile_set",
-      "name": "Gravity Missile Set",
-      "inputs": [
-        {
-          "item_id": "plasma_capsule",
-          "quantity": 6
-        },
-        {
-          "item_id": "supersonic_missile_set",
-          "quantity": 3
-        },
-        {
-          "item_id": "strange_matter",
-          "quantity": 3
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "gravity_missile",
-          "quantity": 3
-        }
-      ],
-      "duration": 180,
-      "energy_cost": 8,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "gravity_missile"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "titanium_alloy",
-      "name": "Titanium Alloy",
-      "inputs": [
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 4
-        },
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 2
-        },
-        {
-          "item_id": "sulfuric_acid",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 2
-        }
-      ],
-      "duration": 100,
-      "energy_cost": 6,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "titanium_alloy"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "photon_combiner_from_grating",
-      "name": "Photon Combiner",
-      "inputs": [
-        {
-          "item_id": "grating_crystal",
-          "quantity": 1
-        },
-        {
-          "item_id": "circuit_board",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "photon_combiner",
-          "quantity": 1
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "photon_conversion"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "diamond_advanced",
-      "name": "Diamond (advanced)",
-      "inputs": [
-        {
-          "item_id": "kimberlite_ore",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "diamond",
-          "quantity": 2
-        }
-      ],
-      "duration": 90,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "crystal_smelting"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "plasma_refining",
-      "name": "Plasma Refining",
-      "inputs": [
-        {
-          "item_id": "crude_oil",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "refined_oil",
-          "quantity": 2
-        }
-      ],
-      "byproducts": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "oil_refinery"
-      ],
-      "tech_unlock": [
-        "plasma_refining"
-      ]
-    },
-    {
-      "handcraft_allowed": true,
-      "id": "smelt_iron",
-      "name": "Smelt Iron",
-      "inputs": [
-        {
-          "item_id": "iron_ore",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "iron_ingot",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 1,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "silicon_ore",
-      "name": "Silicon Ore From Stone",
-      "inputs": [
-        {
-          "item_id": "stone_ore",
-          "quantity": 10
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "silicon_ore",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "smelting_purification"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "shell_set",
-      "name": "Shell Set",
-      "inputs": [
-        {
-          "item_id": "combustible_unit",
-          "quantity": 2
-        },
-        {
-          "item_id": "copper_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "shell_set",
-          "quantity": 1
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "implosion_cannon"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_prototype",
-      "name": "Prototype",
-      "inputs": [
-        {
-          "item_id": "circuit_board",
-          "quantity": 2
-        },
-        {
-          "item_id": "engine",
-          "quantity": 1
-        },
-        {
-          "item_id": "iron_ingot",
-          "quantity": 3
-        },
-        {
-          "item_id": "plasma_exciter",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "prototype",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "prototype"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "gravity_matrix",
-      "name": "Gravity Matrix",
-      "inputs": [
-        {
-          "item_id": "quantum_chip",
-          "quantity": 2
-        },
-        {
-          "item_id": "strange_matter",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "gravity_matrix",
-          "quantity": 1
-        }
-      ],
-      "duration": 150,
-      "energy_cost": 8,
-      "building_types": [
-        "matrix_lab",
-        "recomposing_assembler",
-        "self_evolution_lab"
-      ],
-      "tech_unlock": [
-        "gravity_matrix"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "ammo_bullet",
-      "name": "Bullet",
-      "inputs": [
-        {
-          "item_id": "iron_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "ammo_bullet",
-          "quantity": 5
-        }
-      ],
-      "duration": 20,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "weapon_system"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "carbon_nanotube_advanced",
-      "name": "Carbon Nanotube (advanced)",
-      "inputs": [
-        {
-          "item_id": "spiniform_stalagmite_crystal",
-          "quantity": 6
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 2
-        }
-      ],
-      "duration": 70,
-      "energy_cost": 2,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "high_strength_material"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_engine",
-      "name": "Engine",
-      "inputs": [
-        {
-          "item_id": "copper_ingot",
-          "quantity": 2
-        },
-        {
-          "item_id": "magnetic_coil",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "engine",
-          "quantity": 1
-        }
-      ],
-      "duration": 90,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "engine"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "smelt_silicon",
-      "name": "Smelt Silicon",
-      "inputs": [
-        {
-          "item_id": "silicon_ore",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "silicon_ingot",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 2,
-      "building_types": [
-        "arc_smelter",
-        "plane_smelter",
-        "negentropy_smelter"
-      ],
-      "tech_unlock": [
-        "smelting_purification"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "deuterium_fuel_rod",
-      "name": "Deuterium Fuel Rod",
-      "inputs": [
-        {
-          "item_id": "deuterium",
-          "quantity": 5
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "deuterium_fuel_rod",
-          "quantity": 1
-        }
-      ],
-      "duration": 80,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "mini_fusion"
       ]
     },
     {
@@ -3956,518 +4573,8 @@
     },
     {
       "handcraft_allowed": false,
-      "id": "carbon_nanotube",
-      "name": "Carbon Nanotube",
-      "inputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 2
-        }
-      ],
-      "duration": 70,
-      "energy_cost": 2,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "high_strength_material"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "graphene",
-      "name": "Graphene",
-      "inputs": [
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 3
-        },
-        {
-          "item_id": "sulfuric_acid",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "graphene",
-          "quantity": 2
-        }
-      ],
-      "duration": 50,
-      "energy_cost": 2,
-      "building_types": [
-        "chemical_plant",
-        "quantum_chemical_plant"
-      ],
-      "tech_unlock": [
-        "superconductor"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "foundation",
-      "name": "Foundation",
-      "inputs": [
-        {
-          "item_id": "steel",
-          "quantity": 1
-        },
-        {
-          "item_id": "stone_brick",
-          "quantity": 3
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "foundation_supply",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "environment_modification"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "titanium_crystal",
-      "name": "Titanium Crystal",
-      "inputs": [
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 2
-        },
-        {
-          "item_id": "graphene",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_crystal",
-          "quantity": 1
-        }
-      ],
-      "duration": 80,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "high_strength_crystal"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "frame_material",
-      "name": "Frame Material",
-      "inputs": [
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 2
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 1
-        },
-        {
-          "item_id": "processor",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "frame_material",
-          "quantity": 1
-        }
-      ],
-      "duration": 120,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "lightweight_structure"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "plasma_capsule",
-      "name": "等离子胶囊",
-      "inputs": [
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 1
-        },
-        {
-          "item_id": "particle_container",
-          "quantity": 1
-        },
-        {
-          "item_id": "hydrogen",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "plasma_capsule",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "plasma_turret"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "proliferator_mk2",
-      "name": "Proliferator Mk.II",
-      "inputs": [
-        {
-          "item_id": "proliferator_mk1",
-          "quantity": 2
-        },
-        {
-          "item_id": "diamond",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "proliferator_mk2",
-          "quantity": 1
-        }
-      ],
-      "duration": 40,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "proliferator_mk2"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_shell_set",
-      "name": "Shell Set",
-      "inputs": [
-        {
-          "item_id": "copper_ingot",
-          "quantity": 9
-        },
-        {
-          "item_id": "combustible_unit",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "shell_set",
-          "quantity": 1
-        }
-      ],
-      "duration": 45,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "implosion_cannon"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "dyson_sphere_component",
-      "name": "Dyson Sphere Component",
-      "inputs": [
-        {
-          "item_id": "frame_material",
-          "quantity": 3
-        },
-        {
-          "item_id": "processor",
-          "quantity": 3
-        },
-        {
-          "item_id": "solar_sail",
-          "quantity": 3
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "dyson_sphere_component",
-          "quantity": 1
-        }
-      ],
-      "duration": 240,
-      "energy_cost": 10,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "lightweight_structure"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "strange_matter",
-      "name": "Strange Matter",
-      "inputs": [
-        {
-          "item_id": "particle_container",
-          "quantity": 2
-        },
-        {
-          "item_id": "deuterium",
-          "quantity": 10
-        },
-        {
-          "item_id": "iron_ingot",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "strange_matter",
-          "quantity": 1
-        }
-      ],
-      "duration": 480,
-      "energy_cost": 6,
-      "building_types": [
-        "miniature_particle_collider"
-      ],
-      "tech_unlock": [
-        "strange_matter"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_superalloy_ammo_box",
-      "name": "Superalloy Ammo Box",
-      "inputs": [
-        {
-          "item_id": "titanium_ammo",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_alloy",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_ammo",
-          "quantity": 1
-        }
-      ],
-      "duration": 90,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "df_superalloy_ammo_box_tech"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "df_plasma_capsule",
-      "name": "Plasma Capsule",
-      "inputs": [
-        {
-          "item_id": "deuterium",
-          "quantity": 10
-        },
-        {
-          "item_id": "graphene",
-          "quantity": 1
-        },
-        {
-          "item_id": "magnet",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "plasma_capsule",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 4,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "plasma_turret"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "titanium_glass",
-      "name": "Titanium Glass",
-      "inputs": [
-        {
-          "item_id": "glass",
-          "quantity": 2
-        },
-        {
-          "item_id": "titanium_ingot",
-          "quantity": 2
-        },
-        {
-          "item_id": "water",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "titanium_glass",
-          "quantity": 2
-        }
-      ],
-      "duration": 150,
-      "energy_cost": 2,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "high_strength_glass"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "particle_broadband",
-      "name": "Particle Broadband",
-      "inputs": [
-        {
-          "item_id": "carbon_nanotube",
-          "quantity": 2
-        },
-        {
-          "item_id": "crystal_silicon",
-          "quantity": 2
-        },
-        {
-          "item_id": "plastic",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "particle_broadband",
-          "quantity": 1
-        }
-      ],
-      "duration": 240,
-      "energy_cost": 6,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "particle_control"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "crystal_silicon_from_fractal",
-      "name": "Crystal Silicon From Fractal Silicon",
-      "inputs": [
-        {
-          "item_id": "fractal_silicon",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "crystal_silicon",
-          "quantity": 1
-        }
-      ],
-      "duration": 30,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "crystal_smelting"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "deuterium_collision",
-      "name": "Deuterium Collision",
-      "inputs": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 10
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "deuterium",
-          "quantity": 5
-        }
-      ],
-      "duration": 300,
-      "energy_cost": 24,
-      "building_types": [
-        "miniature_particle_collider"
-      ],
-      "tech_unlock": [
-        "miniature_collider"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "electromagnetic_turbine",
-      "name": "Electromagnetic Turbine",
+      "id": "engine",
+      "name": "Engine",
       "inputs": [
         {
           "item_id": "motor",
@@ -4475,12 +4582,12 @@
         },
         {
           "item_id": "magnetic_coil",
-          "quantity": 2
+          "quantity": 1
         }
       ],
       "outputs": [
         {
-          "item_id": "electromagnetic_turbine",
+          "item_id": "engine",
           "quantity": 1
         }
       ],
@@ -4492,98 +4599,7 @@
         "assembling_machine_mk3"
       ],
       "tech_unlock": [
-        "magnetic_levitation"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "super_magnetic_ring",
-      "name": "Super-Magnetic Ring",
-      "inputs": [
-        {
-          "item_id": "electromagnetic_turbine",
-          "quantity": 2
-        },
-        {
-          "item_id": "magnet",
-          "quantity": 3
-        },
-        {
-          "item_id": "energetic_graphite",
-          "quantity": 1
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "super_magnetic_ring",
-          "quantity": 1
-        }
-      ],
-      "duration": 60,
-      "energy_cost": 0,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "super_magnetic"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "deuterium_fractionation",
-      "name": "Deuterium Fractionation",
-      "inputs": [
-        {
-          "item_id": "hydrogen",
-          "quantity": 100
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "deuterium",
-          "quantity": 1
-        }
-      ],
-      "duration": 1500,
-      "energy_cost": 0,
-      "building_types": [
-        "fractionator"
-      ],
-      "tech_unlock": [
-        "deuterium_fractionation"
-      ]
-    },
-    {
-      "handcraft_allowed": false,
-      "id": "plane_filter",
-      "name": "Plane Filter",
-      "inputs": [
-        {
-          "item_id": "casimir_crystal",
-          "quantity": 1
-        },
-        {
-          "item_id": "titanium_glass",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "item_id": "plane_filter",
-          "quantity": 1
-        }
-      ],
-      "duration": 360,
-      "energy_cost": 8,
-      "building_types": [
-        "assembling_machine_mk1",
-        "assembling_machine_mk2",
-        "assembling_machine_mk3"
-      ],
-      "tech_unlock": [
-        "wave_interference"
+        "engine"
       ]
     }
   ],
@@ -5217,6 +5233,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "weapon_damage",
+          "value": 0.1
+        }
+      ],
       "max_level": 6
     },
     {
@@ -5319,6 +5341,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "shield_capacity",
+          "value": 10
+        }
+      ],
       "max_level": 7
     },
     {
@@ -5415,6 +5443,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "weapon_damage",
+          "value": 0.1
+        }
+      ],
       "max_level": 6
     },
     {
@@ -5511,6 +5545,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "structure_hp",
+          "value": 0.1
+        }
+      ],
       "max_level": 6
     },
     {
@@ -5607,6 +5647,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "weapon_damage",
+          "value": 0.1
+        }
+      ],
       "max_level": 6
     },
     {
@@ -5821,6 +5867,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "weapon_damage",
+          "value": 0.1
+        }
+      ],
       "max_level": 6
     },
     {
@@ -6167,6 +6219,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "distribution_range",
+          "value": 5
+        }
+      ],
       "max_level": 5
     },
     {
@@ -6263,6 +6321,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "move_speed",
+          "value": 2
+        }
+      ],
       "max_level": 6
     },
     {
@@ -6506,6 +6570,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "mecha_charge_rate_pct",
+          "value": 20
+        }
+      ],
       "max_level": 6
     },
     {
@@ -6644,6 +6714,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "mecha_inventory_capacity",
+          "value": 60
+        }
+      ],
       "max_level": 7
     },
     {
@@ -6820,6 +6896,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "logistics_ship_capacity",
+          "value": 100
+        }
+      ],
       "leads_to": [
         "logistics_station_integrated_logistics"
       ],
@@ -6961,6 +7043,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "logistics_ship_speed",
+          "value": 1
+        }
+      ],
       "max_level": 7
     },
     {
@@ -7073,6 +7161,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "construction_region_limit",
+          "value": 1
+        }
+      ],
       "max_level": 5
     },
     {
@@ -7330,6 +7424,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "mecha_max_hp",
+          "value": 20
+        }
+      ],
       "max_level": 8
     },
     {
@@ -7828,6 +7928,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "piler_pile_height",
+          "value": 2
+        }
+      ],
       "max_level": 1
     },
     {
@@ -7926,6 +8032,12 @@
           }
         ]
       },
+      "effects": [
+        {
+          "type": "sorter_grab_stacks",
+          "value": 1
+        }
+      ],
       "leads_to": [
         "sorter_cargo_integration"
       ],
@@ -15422,11 +15534,51 @@
             },
             "capacity": 1
           }
+        ],
+        "io_ports": [
+          {
+            "id": "acc-in",
+            "direction": "input",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "capacity": 2,
+            "allowed_items": [
+              "accumulator",
+              "accumulator_full"
+            ]
+          },
+          {
+            "id": "acc-out",
+            "direction": "output",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "capacity": 2,
+            "allowed_items": [
+              "accumulator",
+              "accumulator_full"
+            ]
+          }
         ]
       },
       "functions": {
+        "storage": {
+          "capacity": 200,
+          "slots": 2,
+          "buffer": 20,
+          "input_priority": 2,
+          "output_priority": 1
+        },
         "energy_exchanger": {
-          "hub": true
+          "hub": true,
+          "mode": "standby",
+          "energy_per_item": 100,
+          "items_per_tick": 1,
+          "empty_item_id": "accumulator",
+          "full_item_id": "accumulator_full"
         },
         "energy_storage": {
           "capacity": 400,
@@ -15555,9 +15707,31 @@
             },
             "capacity": 1
           }
+        ],
+        "io_ports": [
+          {
+            "id": "ammo",
+            "direction": "input",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "capacity": 4,
+            "allowed_items": [
+              "ammo_bullet",
+              "titanium_ammo"
+            ]
+          }
         ]
       },
       "functions": {
+        "storage": {
+          "capacity": 40,
+          "slots": 1,
+          "buffer": 20,
+          "input_priority": 2,
+          "output_priority": 1
+        },
         "energy": {
           "output_per_tick": 0,
           "consume_per_tick": 3,
@@ -15565,7 +15739,12 @@
         },
         "combat": {
           "attack": 15,
-          "range": 5
+          "range": 5,
+          "fire_rate": 10,
+          "ammo_item": "ammo_bullet",
+          "ammo_consume": 1,
+          "alt_ammo_item": "titanium_ammo",
+          "alt_ammo_attack": 25
         }
       }
     },
@@ -15573,7 +15752,7 @@
       "id": "geothermal_power_station",
       "params": {
         "energy_consume": 0,
-        "energy_generate": 0,
+        "energy_generate": 30,
         "power_priority": 0,
         "capacity": 0,
         "maintenance_cost": {
@@ -15583,9 +15762,27 @@
         "footprint": {
           "width": 1,
           "height": 1
-        }
+        },
+        "connection_points": [
+          {
+            "id": "power",
+            "kind": "power",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "capacity": 1
+          }
+        ]
       },
-      "functions": {}
+      "functions": {
+        "energy": {
+          "output_per_tick": 30,
+          "consume_per_tick": 0,
+          "buffer": 0,
+          "source_kind": "geothermal"
+        }
+      }
     },
     {
       "id": "implosion_cannon",
@@ -15904,7 +16101,8 @@
             },
             "capacity": 2,
             "allowed_items": [
-              "hydrogen_fuel_rod"
+              "hydrogen_fuel_rod",
+              "deuterium_fuel_rod"
             ]
           }
         ]
@@ -15912,7 +16110,7 @@
       "functions": {
         "storage": {
           "capacity": 40,
-          "slots": 1,
+          "slots": 2,
           "buffer": 10,
           "input_priority": 2,
           "output_priority": 0
@@ -15927,6 +16125,11 @@
               "item_id": "hydrogen_fuel_rod",
               "consume_per_tick": 1,
               "output_multiplier": 1
+            },
+            {
+              "item_id": "deuterium_fuel_rod",
+              "consume_per_tick": 1,
+              "output_multiplier": 2.5
             }
           ]
         }
@@ -17278,7 +17481,12 @@
             },
             "capacity": 2,
             "allowed_items": [
-              "coal"
+              "coal",
+              "energetic_graphite",
+              "hydrogen",
+              "hydrogen_fuel_rod",
+              "log",
+              "plant_fuel"
             ]
           }
         ]
@@ -17286,7 +17494,7 @@
       "functions": {
         "storage": {
           "capacity": 50,
-          "slots": 1,
+          "slots": 6,
           "buffer": 10,
           "input_priority": 2,
           "output_priority": 0
@@ -17301,6 +17509,31 @@
               "item_id": "coal",
               "consume_per_tick": 1,
               "output_multiplier": 1
+            },
+            {
+              "item_id": "energetic_graphite",
+              "consume_per_tick": 1,
+              "output_multiplier": 2
+            },
+            {
+              "item_id": "hydrogen",
+              "consume_per_tick": 1,
+              "output_multiplier": 1.2
+            },
+            {
+              "item_id": "hydrogen_fuel_rod",
+              "consume_per_tick": 1,
+              "output_multiplier": 4
+            },
+            {
+              "item_id": "log",
+              "consume_per_tick": 1,
+              "output_multiplier": 0.6
+            },
+            {
+              "item_id": "plant_fuel",
+              "consume_per_tick": 1,
+              "output_multiplier": 0.2
             }
           ]
         }

@@ -28,8 +28,16 @@ export interface PublicCommandDefinition {
 }
 
 export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
-  { id: 'install_logistics_vehicle', apiCommandName: 'install_logistics_vehicle', cliCommandName: 'install_logistics_vehicle',
-    category: 'management', permissionCategory: 'management', layer: 'planet', requiresActivePlanet: true, webSurface: 'required' },
+  {
+    id: "install_logistics_vehicle",
+    apiCommandName: "install_logistics_vehicle",
+    cliCommandName: "install_logistics_vehicle",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
   {
     id: "configure_traffic_monitor",
     apiCommandName: "configure_traffic_monitor",
@@ -241,6 +249,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "optional",
   },
   {
+    id: "set_recipe",
+    apiCommandName: "set_recipe",
+    cliCommandName: "set_recipe",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "optional",
+  },
+  {
     id: "transfer_item",
     apiCommandName: "transfer_item",
     cliCommandName: "transfer",
@@ -309,6 +327,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     layer: "planet",
     requiresActivePlanet: true,
     webSurface: "required",
+  },
+  {
+    id: "set_energy_exchanger_mode",
+    apiCommandName: "set_energy_exchanger_mode",
+    cliCommandName: "set_energy_exchanger_mode",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "optional",
   },
   {
     id: "deploy_squad",

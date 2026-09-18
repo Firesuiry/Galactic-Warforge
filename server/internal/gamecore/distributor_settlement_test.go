@@ -299,6 +299,7 @@ func TestDistributorInstallConsumesRealItemsAndCannotUninstallActiveCargo(t *tes
 	for _, source := range []string{"player", "storage"} {
 		t.Run(source, func(t *testing.T) {
 			ws, home, _ := distributorTestWorld(t)
+			grantTechs(ws, "p1", "distribution_logistics")
 			player := ws.Players["p1"]
 			core := &GameCore{}
 			cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2, "source": source}}

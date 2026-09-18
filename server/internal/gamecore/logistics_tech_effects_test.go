@@ -152,10 +152,10 @@ func TestLogisticsCarrierTechsRaiseShipCapacityAndSpeed(t *testing.T) {
 
 	settleLogisticsShips(worlds)
 
-	if ship.Capacity != model.DefaultLogisticsShipCapacity+2*model.LogisticsShipCapacityBonusPerLevel {
+	if ship.Capacity != model.DefaultLogisticsShipCapacity+2*100 {
 		t.Fatalf("capacity tech not applied: %d", ship.Capacity)
 	}
-	if ship.Speed != model.DefaultLogisticsShipSpeed+3*model.LogisticsShipSpeedBonusPerLevel {
+	if ship.Speed != model.DefaultLogisticsShipSpeed+3*1 {
 		t.Fatalf("engine tech not applied: %d", ship.Speed)
 	}
 	// Settlement must be idempotent: recomputed from defaults, never accumulated.

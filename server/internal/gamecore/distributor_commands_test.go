@@ -50,6 +50,7 @@ func TestDistributorBotInstallationEventsReflectActualInventory(t *testing.T) {
 	for _, source := range []string{"player", "storage"} {
 		t.Run(source, func(t *testing.T) {
 			ws, home, _ := distributorTestWorld(t)
+			grantTechs(ws, "p1", "distribution_logistics")
 			player := ws.Players["p1"]
 			if source == "player" {
 				player.Inventory[model.ItemLogisticsBot] = 2

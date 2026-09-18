@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"sort"
 
 	"siliconworld/internal/model"
 	"siliconworld/internal/terrain"
@@ -196,6 +197,26 @@ func stackLayersAt(ws *model.WorldState, btype model.BuildingType, x, y int) int
 		}
 	}
 	return top
+}
+
+// stackedLayersAbove returns every building stacked strictly above the given
+// one on the same surface tile (same X/Y, greater Z), ordered lowest layer
+// first. Demolishing a lower layer cascades through these.
+func stackedLayersAbove(ws *model.WorldState, building *model.Building) []*model.Building {
+	if ws == nil || building == nil {
+		return nil
+	}
+	var layers []*model.Building
+	for _, b := range ws.Buildings {
+		if b == nil || b.ID == building.ID {
+			continue
+		}
+		if b.Position.X == building.Position.X && b.Position.Y == building.Position.Y && b.Position.Z > building.Position.Z {
+			layers = append(layers, b)
+		}
+	}
+	sort.Slice(layers, func(i, j int) bool { return layers[i].Position.Z < layers[j].Position.Z })
+	return layers
 }
 
 // stackReservedLayers counts queued construction tasks that will add layers of

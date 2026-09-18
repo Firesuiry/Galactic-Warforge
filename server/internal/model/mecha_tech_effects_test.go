@@ -118,19 +118,6 @@ func TestSyncMechaCapabilitiesIdempotentAcrossRestore(t *testing.T) {
 	}
 }
 
-func TestCompletedTechLevelClampsToCatalogMaxLevel(t *testing.T) {
-	player := mechaTechPlayer(map[string]int{"drive_engine": 99})
-	if level := CompletedTechLevel(player, "drive_engine"); level != 6 {
-		t.Fatalf("drive_engine level must clamp to MaxLevel 6, got %d", level)
-	}
-	if level := CompletedTechLevel(player, "mecha_core"); level != 0 {
-		t.Fatalf("unresearched tech must be level 0, got %d", level)
-	}
-	if level := CompletedTechLevel(nil, "drive_engine"); level != 0 {
-		t.Fatal("nil player must be level 0")
-	}
-}
-
 func TestMechaChargeRateEnergyCircuitBonus(t *testing.T) {
 	if rate := MechaChargeRate(10, mechaTechPlayer(nil)); rate != 10 {
 		t.Fatalf("no research must keep base rate, got %d", rate)

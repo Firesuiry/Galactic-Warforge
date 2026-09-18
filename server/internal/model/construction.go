@@ -1,6 +1,10 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+
+	"siliconworld/internal/terrain"
+)
 
 // ConstructionState tracks the lifecycle of a construction task.
 type ConstructionState string
@@ -138,7 +142,7 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 		if existing := q.ReservedTiles[key]; existing != "" {
 			return fmt.Errorf("tile %s already reserved by %s", key, existing)
 		}
-		if !stacked && task.BuildingType != BuildingTypeLogisticsDistributor && (ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation)) {
+		if !stacked && task.BuildingType != BuildingTypeLogisticsDistributor && (ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation && !(RequiresLavaProximity(task.BuildingType) && ws.Grid[p.Y][p.X].Terrain == terrain.TileLava))) {
 			return fmt.Errorf("footprint tile %s is unavailable", key)
 		}
 		if task.BuildingType == BuildingTypeFoundation && ws.FoundationAt(p) != nil {

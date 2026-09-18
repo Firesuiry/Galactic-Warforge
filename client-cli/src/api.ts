@@ -42,6 +42,9 @@ export type {
 export type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
+  EnergyExchangerMode,
+  SetEnergyExchangerModePayload,
+  SetRecipePayload,
   SplitterConfig,
   TrafficMonitorConfig,
   CardinalDirection,
@@ -109,6 +112,8 @@ export const cmdScanGalaxy = client.cmdScanGalaxy;
 export const cmdScanPlanet = client.cmdScanPlanet;
 export const cmdScanSystem = client.cmdScanSystem;
 export const cmdSetRayReceiverMode = client.cmdSetRayReceiverMode;
+export const cmdSetEnergyExchangerMode = client.cmdSetEnergyExchangerMode;
+export const cmdSetRecipe = client.cmdSetRecipe;
 export const cmdStartResearch = client.cmdStartResearch;
 export const cmdSwitchActivePlanet = client.cmdSwitchActivePlanet;
 export const cmdTaskForceAssign = client.cmdTaskForceAssign;

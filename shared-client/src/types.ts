@@ -105,6 +105,16 @@ export interface PowerGridModule {
   wireless_range: number;
 }
 
+/** 蓄电器能量枢纽模块，镜像 model.EnergyExchangerModule。 */
+export interface EnergyExchangerModule {
+  hub: boolean;
+  mode?: EnergyExchangerMode;
+  energy_per_item: number;
+  items_per_tick: number;
+  empty_item_id: string;
+  full_item_id: string;
+}
+
 export interface BuildingFunctionModules {
   production?: ProductionModule;
   collect?: CollectModule;
@@ -118,6 +128,7 @@ export interface BuildingFunctionModules {
   orbital?: Record<string, unknown>;
   sorter?: Record<string, unknown>;
   ray_receiver?: Record<string, unknown>;
+  energy_exchanger?: EnergyExchangerModule;
   energy_storage?: Record<string, unknown>;
   launch?: Record<string, unknown>;
 }
@@ -655,6 +666,23 @@ export interface ConfigureLogisticsSlotOptions {
 
 export type RayReceiverMode = 'power' | 'photon' | 'hybrid';
 
+/** 蓄电器（energy_exchanger）物品循环模式，镜像 model.EnergyExchangerMode。 */
+export type EnergyExchangerMode = 'charge' | 'discharge' | 'standby';
+
+/**
+ * set_recipe 请求体：recipe_id 省略或为空字符串时研究站切回研究模式、
+ * 普通生产建筑转为空闲；非空时必须是建筑类型支持且已研究解锁的配方。
+ */
+export interface SetRecipePayload {
+  recipe_id?: string;
+}
+
+/** set_energy_exchanger_mode 请求体。 */
+export interface SetEnergyExchangerModePayload {
+  building_id: string;
+  mode: EnergyExchangerMode;
+}
+
 export type CommandType =
   | 'scan_galaxy'
   | 'scan_system'
@@ -682,9 +710,11 @@ export type CommandType =
   | 'restore_construction'
   | 'start_research'
   | 'cancel_research'
+  | 'set_recipe'
   | 'transfer_item'
   | 'switch_active_planet'
   | 'set_ray_receiver_mode'
+  | 'set_energy_exchanger_mode'
   | 'deploy_squad'
   | 'commission_fleet'
   | 'fleet_assign'

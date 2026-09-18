@@ -1969,6 +1969,7 @@ var defaultTechDefinitions = []TechDefinition{
 			7: []ItemAmount{{ItemID: "universe_matrix", Quantity: 552}},
 		},
 		MaxLevel: 7,
+		Effects:  []TechEffect{{Type: "mecha_inventory_capacity", Value: 60}},
 	},
 	{
 		ID:            "drive_engine",
@@ -1988,6 +1989,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 800}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "move_speed", Value: 2}},
 	},
 	{
 		ID:            "mechanical_frame",
@@ -2009,6 +2011,7 @@ var defaultTechDefinitions = []TechDefinition{
 			8: []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 312}, {ItemID: "energy_matrix", Quantity: 312}, {ItemID: "structure_matrix", Quantity: 312}, {ItemID: "information_matrix", Quantity: 312}, {ItemID: "gravity_matrix", Quantity: 312}},
 		},
 		MaxLevel: 8,
+		Effects:  []TechEffect{{Type: "mecha_max_hp", Value: 20}},
 	},
 	{
 		ID:            "mass_construction",
@@ -2046,6 +2049,7 @@ var defaultTechDefinitions = []TechDefinition{
 			5: []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 408}, {ItemID: "energy_matrix", Quantity: 408}, {ItemID: "structure_matrix", Quantity: 408}, {ItemID: "information_matrix", Quantity: 408}, {ItemID: "gravity_matrix", Quantity: 408}},
 		},
 		MaxLevel: 5,
+		Effects:  []TechEffect{{Type: "distribution_range", Value: 5}},
 	},
 	{
 		ID:            "energy_circuit",
@@ -2065,6 +2069,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 320}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "mecha_charge_rate_pct", Value: 20}},
 	},
 	{
 		ID:            "logistics_carrier_capacity",
@@ -2088,6 +2093,7 @@ var defaultTechDefinitions = []TechDefinition{
 			12: []ItemAmount{{ItemID: "universe_matrix", Quantity: 456}},
 		},
 		MaxLevel: 12,
+		Effects:  []TechEffect{{Type: "logistics_ship_capacity", Value: 100}},
 	},
 	{
 		ID:            "logistics_carrier_engine",
@@ -2108,6 +2114,7 @@ var defaultTechDefinitions = []TechDefinition{
 			7: []ItemAmount{{ItemID: "universe_matrix", Quantity: 368}},
 		},
 		MaxLevel: 7,
+		Effects:  []TechEffect{{Type: "logistics_ship_speed", Value: 1}},
 	},
 	{
 		ID:            "sorter_cargo_stacking",
@@ -2126,6 +2133,7 @@ var defaultTechDefinitions = []TechDefinition{
 			5: []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 102}, {ItemID: "energy_matrix", Quantity: 102}, {ItemID: "structure_matrix", Quantity: 102}},
 		},
 		MaxLevel: 5,
+		Effects:  []TechEffect{{Type: "sorter_grab_stacks", Value: 1}},
 	},
 	{
 		ID:            "sorter_cargo_integration",
@@ -2140,6 +2148,7 @@ var defaultTechDefinitions = []TechDefinition{
 			1: []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 30}, {ItemID: "energy_matrix", Quantity: 30}, {ItemID: "structure_matrix", Quantity: 30}},
 		},
 		MaxLevel: 1,
+		Effects:  []TechEffect{{Type: "piler_pile_height", Value: 2}},
 	},
 	{
 		ID:            "pile_sorter",

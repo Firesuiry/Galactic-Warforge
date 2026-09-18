@@ -51,6 +51,31 @@ async function clickTile(page: Page, tile: Tile) {
   await page.locator('.planet-three__surface canvas').click({ position: { x: position.x, y: position.y } });
 }
 
+/**
+ * 3D 软渲染下单次点选偶尔被场景吞掉（pick 落空或被当成普通选中），
+ * 且并行规格会同服抢建同一空地——每次尝试都重新取场景、重算目标格，
+ * 直到目标类型的命令真正发出。返回 { response, tile }（实际命中的格子）。
+ */
+async function clickTileExpectingCommand(
+  page: Page,
+  pickTile: () => Promise<Tile>,
+  commandType: string,
+  attempts = 5,
+): Promise<{ response: import('@playwright/test').Response; tile: Tile }> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const tile = await pickTile();
+    const responsePromise = page.waitForResponse(
+      response => response.url().endsWith('/commands')
+        && response.request().postDataJSON()?.commands?.[0]?.type === commandType,
+      { timeout: 12_000 },
+    ).catch(() => null);
+    await clickTile(page, tile);
+    const response = await responsePromise;
+    if (response) return { response, tile };
+  }
+  throw new Error(`no ${commandType} command issued after ${attempts} tile click attempts`);
+}
+
 test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切换平面战术', async ({ page }) => {
   // Software WebGL needs extra time for MSAA renders and the two full-scene captures.
   test.setTimeout(300_000);
@@ -66,7 +91,6 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   const home = Object.values(initial.buildings).find(building => building.owner_id === 'p1');
   expect(executor).toBeDefined();
   expect(home).toBeDefined();
-  const buildTile = emptyTile(initial, executor!.position);
   await page.addInitScript(() => {
     localStorage.setItem('siliconworld-client-web-session', JSON.stringify({
       state: { serverUrl: location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0,
@@ -100,10 +124,13 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   await expect.poll(async () => Math.abs((await project(page, neighbor)).x - beforeZoom.x)).toBeGreaterThan(1);
 
   await page.locator('.planet-build-card[data-building-id="wind_turbine"]').click();
-  const buildResponsePromise = page.waitForResponse(response => response.url().endsWith('/commands')
-    && response.request().postDataJSON()?.commands?.[0]?.type === 'build');
-  await clickTile(page, buildTile);
-  const buildResponse = await buildResponsePromise;
+  // 3D 软渲染下 React 状态传播慢，等建造模式真正激活再点地图，避免点选被当成普通选中
+  await expect(page.getByText(/放置 风力涡轮机/)).toBeVisible();
+  const { response: buildResponse, tile: buildTile } = await clickTileExpectingCommand(
+    page,
+    async () => emptyTile(await scene(), executor!.position),
+    'build',
+  );
   expect(buildResponse.ok()).toBeTruthy();
   expect(await buildResponse.json()).toMatchObject({ accepted: true, results: [{ status: 'accepted', code: 'OK' }] });
   expect(buildResponse.request().postDataJSON().commands[0]).toMatchObject({
@@ -120,16 +147,20 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
 
   const afterBuild = await scene();
   const unit = afterBuild.units[executor!.id];
-  const target = emptyTile(afterBuild, unit.position, buildTile);
   await clickTile(page, unit.position);
-  await expect(page.getByTestId('planet-selection-bar')).toContainText('执行体', { timeout: 15_000 });
+  await expect(page.getByTestId('planet-selection-bar')).toContainText('玩家机甲', { timeout: 15_000 });
   await page.getByTestId('planet-selection-bar').getByRole('button', { name: '移动', exact: true }).click();
-  const moveResponsePromise = page.waitForResponse(response => response.url().endsWith('/commands')
-    && response.request().postDataJSON()?.commands?.[0]?.type === 'move', { timeout: 30_000 });
-  console.log('MOVE TARGET', target, 'POSITION', await project(page, target));
-  await clickTile(page, target);
+  // 等移动模式激活（按钮变为“取消移动”）再点目标格，避免慢渲染下的竞态
+  await expect(page.getByTestId('planet-selection-bar').getByRole('button', { name: '取消移动', exact: true })).toBeVisible();
+  const { response: moveResponse, tile: target } = await clickTileExpectingCommand(
+    page,
+    async () => {
+      const fresh = await scene();
+      return emptyTile(fresh, fresh.units[executor!.id]?.position ?? unit.position, buildTile);
+    },
+    'move',
+  );
   console.log('AFTER MOVE CLICK', await page.locator('.planet-three__navigation').innerText());
-  const moveResponse = await moveResponsePromise;
   expect(moveResponse.ok()).toBeTruthy();
   expect(await moveResponse.json()).toMatchObject({ accepted: true, results: [{ status: 'accepted', code: 'OK' }] });
   expect(moveResponse.request().postDataJSON().commands[0]).toMatchObject({

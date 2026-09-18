@@ -460,12 +460,12 @@ test("默认新局在浏览器中展示推荐路径、分组研究列表并可�
     completedTechIds: ["dyson_sphere_program"],
   });
 
-  await page.goto("/planet/planet-1-1");
+  await page.goto("/planet/planet-1-1?view=2d");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
   await page.getByRole("tab", { name: "研究与装料" }).click();
 
   await expect(page.getByText("开局推荐路径")).toBeVisible();
-  await expect(page.getByText("风机 -> 空研究站 -> 装 10 电磁矩阵 -> 研究 electromagnetism")).toBeVisible();
+  await expect(page.getByText("风力涡轮机供电 -> 矿机开采铁矿/铜矿 -> 熔炉冶炼铁块/铜块 -> 装配机加工磁线圈/电路板 -> 合成 10 电磁矩阵装入研究站 -> 研究电磁学")).toBeVisible();
   await expect(page.getByRole("region", { name: "当前可研究" })).toContainText("电磁学");
   await expect(page.getByRole("region", { name: "已完成" })).toContainText("戴森球计划");
   await expect(page.getByRole("region", { name: "尚未满足前置" })).toContainText("能量矩阵");
@@ -490,7 +490,7 @@ test("midgame 在浏览器中按建筑上下文展示装料与射线接收站提
     completedTechIds: ["dyson_sphere_program", "electromagnetism", "energy_matrix"],
   });
 
-  await page.goto("/planet/planet-1-1");
+  await page.goto("/planet/planet-1-1?view=2d");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
   await page.getByRole("tab", { name: "研究与装料" }).click();
 

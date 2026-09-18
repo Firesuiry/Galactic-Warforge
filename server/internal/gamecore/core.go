@@ -833,6 +833,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execDemolishDyson(gc.world, qr.PlayerID, cmd)
 		case model.CmdSetRayReceiverMode:
 			res, evts = gc.execSetRayReceiverMode(gc.world, qr.PlayerID, cmd)
+		case model.CmdSetEnergyExchangerMode:
+			res, evts = gc.execSetEnergyExchangerMode(gc.world, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

@@ -53,8 +53,9 @@ func settleSorters(ws *model.WorldState) {
 
 		// Each grab lifts up to grabStacks stacks: ordinary sorters peel one
 		// item per stack while the pile sorter lifts whole piles. The
-		// sorter_cargo_stacking tech raises the stacks per grab.
-		grabStacks := 1 + logisticsTechLevel(ws, building.OwnerID, "sorter_cargo_stacking")
+		// sorter_cargo_stacking tech raises the stacks per grab via its
+		// catalog sorter_grab_stacks effect.
+		grabStacks := 1 + int(model.TechEffectValue(ws.Players[building.OwnerID], "sorter_grab_stacks"))
 		pileGrab := building.Type == model.BuildingTypePileSorter
 		remaining := sorter.Speed
 		for _, out := range outputs {

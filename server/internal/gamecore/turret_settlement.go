@@ -78,12 +78,21 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		}
 		// All storage buckets are parts of the same magazine; storage settlement
 		// may already have moved loaded ammunition to the output buffer.
+		attack := combat.Attack
 		if combat.AmmoItem != "" && !consumeTurretAmmunition(turret.Storage, combat.AmmoItem, max(1, combat.AmmoConsume)) {
-			if turret.Runtime.StateReason != "no_ammunition" {
-				turret.Runtime.StateReason = "no_ammunition"
-				events = append(events, turretStateEvent(turret))
+			// Fall back to the upgraded ammunition when the primary magazine
+			// is dry (e.g. gauss turrets burning titanium ammo at higher
+			// damage once the bullet supply runs out).
+			if combat.AltAmmoItem == "" || !consumeTurretAmmunition(turret.Storage, combat.AltAmmoItem, max(1, combat.AmmoConsume)) {
+				if turret.Runtime.StateReason != "no_ammunition" {
+					turret.Runtime.StateReason = "no_ammunition"
+					events = append(events, turretStateEvent(turret))
+				}
+				continue
 			}
-			continue
+			if combat.AltAmmoAttack > 0 {
+				attack = combat.AltAmmoAttack
+			}
 		}
 		if turret.Runtime.StateReason == "no_ammunition" {
 			turret.Runtime.StateReason = ""
@@ -95,7 +104,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		if targetedForce >= 0 {
 			// Attack enemy force
 			force := &ws.EnemyForces.Forces[targetedForce]
-			damage := combat.Attack
+			damage := attack
 			// Shield mitigation (30% damage to shield, 70% to HP)
 			if force.SpreadRadius > 0 { // using spreadRadius as shield proxy
 				shieldDamage := float64(damage) * 0.3
@@ -141,7 +150,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			// Attack enemy unit
 			unit := ws.Units[targetedUnit]
 			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
-			damage, absorbed := model.ApplyUnitDamage(unit, max(1, combat.Attack-unit.Defense), ws.Tick)
+			damage, absorbed := model.ApplyUnitDamage(unit, max(1, attack-unit.Defense), ws.Tick)
 			if unit.Mecha != nil {
 				events = append(events, mechaStateEvent(unit))
 			}

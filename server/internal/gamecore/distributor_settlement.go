@@ -26,18 +26,14 @@ func logisticsBotIDs(ws *model.WorldState) []string {
 	return ids
 }
 
-// distributionRangeBonusPerLevel is the flat range bonus each level of the
-// distribution_range tech adds to a distributor's delivery range.
-const distributionRangeBonusPerLevel = 5
-
 // distributorEffectiveRange derives the delivery range from the persisted base
-// range plus the owner's distribution_range tech level. The base range is
+// range plus the owner's distribution_range tech effect. The base range is
 // never mutated, so snapshot restores cannot accumulate the bonus.
 func distributorEffectiveRange(ws *model.WorldState, home *model.Building) int {
 	if home == nil || home.Distributor == nil {
 		return 0
 	}
-	return home.Distributor.Range + distributionRangeBonusPerLevel*logisticsTechLevel(ws, home.OwnerID, "distribution_range")
+	return home.Distributor.Range + int(model.TechEffectValue(ws.Players[home.OwnerID], "distribution_range"))
 }
 
 // Cargo and prepaid flight energy belong to the robot. Reservations are

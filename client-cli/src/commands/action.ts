@@ -41,6 +41,8 @@ import {
 
   cmdSwitchActivePlanet as apiSwitchActivePlanet,
   cmdSetRayReceiverMode as apiSetRayReceiverMode,
+  cmdSetEnergyExchangerMode as apiSetEnergyExchangerMode,
+  cmdSetRecipe as apiSetRecipe,
   cmdQueueMilitaryProduction as apiQueueMilitaryProduction,
   cmdRefitUnit as apiRefitUnit,
   cmdTaskForceAssign as apiTaskForceAssign,
@@ -67,6 +69,7 @@ import {
   type Direction,
   type DysonComponentType,
   type RayReceiverMode,
+  type EnergyExchangerMode,
 } from '../api.js';
 import { fetchCatalog } from '../api.js';
 import { fmtCommandResponse, fmtError } from '../format.js';
@@ -78,6 +81,7 @@ const DYSON_COMPONENT_TYPES = new Set<DysonComponentType>(['node', 'frame', 'she
 const LOGISTICS_SCOPES = new Set(['planetary', 'interstellar']);
 const LOGISTICS_MODES = new Set(['none', 'supply', 'demand', 'both']);
 const RAY_RECEIVER_MODES = new Set<RayReceiverMode>(['power', 'photon', 'hybrid']);
+const ENERGY_EXCHANGER_MODES = new Set<EnergyExchangerMode>(['charge', 'discharge', 'standby']);
 const BLUEPRINT_STATES = new Set<WarBlueprintState>(['draft', 'validated', 'prototype', 'field_tested', 'adopted', 'obsolete']);
 const FLEET_FORMATIONS = new Set<FleetFormation>(['line', 'vee', 'circle', 'wedge']);
 const TASK_FORCE_STANCES = new Set<WarTaskForceStance>(['hold', 'patrol', 'escort', 'intercept', 'harass', 'siege', 'bombard', 'retreat_on_losses']);
@@ -413,6 +417,31 @@ export async function cmdCancelResearch(args: string[]): Promise<string> {
   }
   try {
     return fmtCommandResponse(await apiCancelResearch(args[0]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdSetRecipe(args: string[]): Promise<string> {
+  if (args.length < 1 || args.length > 2) {
+    return fmtError('Usage: set_recipe <entity_id> [recipe_id]（省略 recipe_id 时研究站切回研究模式、生产建筑转为空闲）');
+  }
+  try {
+    return fmtCommandResponse(await apiSetRecipe(args[0], args[1]));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdSetEnergyExchangerMode(args: string[]): Promise<string> {
+  if (args.length < 2) {
+    return fmtError('Usage: set_energy_exchanger_mode <building_id> <charge|discharge|standby>');
+  }
+  if (!ENERGY_EXCHANGER_MODES.has(args[1] as EnergyExchangerMode)) {
+    return fmtError('mode 必须是 charge/discharge/standby');
+  }
+  try {
+    return fmtCommandResponse(await apiSetEnergyExchangerMode(args[0], args[1] as EnergyExchangerMode));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }

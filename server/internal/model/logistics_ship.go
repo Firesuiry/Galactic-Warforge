@@ -29,15 +29,6 @@ const (
 
 const DefaultLogisticsShipWarpItemID = ItemSpaceWarper
 
-const (
-	// LogisticsShipCapacityBonusPerLevel is the flat cargo bonus each level of
-	// the logistics_carrier_capacity tech adds on top of the base capacity.
-	LogisticsShipCapacityBonusPerLevel = DefaultLogisticsShipCapacity / 2
-	// LogisticsShipSpeedBonusPerLevel is the flat speed bonus each level of
-	// the logistics_carrier_engine tech adds on top of the base speed.
-	LogisticsShipSpeedBonusPerLevel = 1
-)
-
 var validLogisticsShipStatuses = map[LogisticsShipStatus]struct{}{
 	LogisticsShipIdle:          {},
 	LogisticsShipTakeoff:       {},
@@ -172,28 +163,15 @@ func (s *LogisticsShipState) CargoQty() int {
 }
 
 // RefreshTechStats derives capacity and speed from the owner's completed
-// carrier techs. Values are recomputed from defaults every call, so repeated
-// calls after a snapshot restore never accumulate bonuses.
+// carrier techs via their catalog Effects (logistics_ship_capacity,
+// logistics_ship_speed). Values are recomputed from defaults every call, so
+// repeated calls after a snapshot restore never accumulate bonuses.
 func (s *LogisticsShipState) RefreshTechStats(player *PlayerState) {
 	if s == nil {
 		return
 	}
-	s.Capacity = DefaultLogisticsShipCapacity + LogisticsShipCapacityBonusPerLevel*logisticsShipTechLevel(player, "logistics_carrier_capacity")
-	s.Speed = DefaultLogisticsShipSpeed + LogisticsShipSpeedBonusPerLevel*logisticsShipTechLevel(player, "logistics_carrier_engine")
-}
-
-func logisticsShipTechLevel(player *PlayerState, techID string) int {
-	if player == nil || player.Tech == nil {
-		return 0
-	}
-	level := player.Tech.CompletedTechs[techID]
-	if level <= 0 {
-		return 0
-	}
-	if def, ok := TechDefinitionByID(techID); ok && def.MaxLevel > 0 && level > def.MaxLevel {
-		level = def.MaxLevel
-	}
-	return level
+	s.Capacity = DefaultLogisticsShipCapacity + int(TechEffectValue(player, "logistics_ship_capacity"))
+	s.Speed = DefaultLogisticsShipSpeed + int(TechEffectValue(player, "logistics_ship_speed"))
 }
 
 // AvailableCapacity returns remaining cargo capacity.
