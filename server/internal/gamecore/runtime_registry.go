@@ -125,11 +125,15 @@ const spawnAreaRadius = 8
 const spawnResourceSearchRadius = 32
 
 // starterResourceKinds are injected near every spawn when missing so the
-// opening matrix chain (iron → magnet/coil, copper → circuit) stays reachable
-// inside the executor operate range without relying on mapgen luck.
+// opening matrix chain (iron → magnet/coil, copper → circuit) and the mecha
+// coal fuel loop stay reachable inside the executor operate range without
+// relying on mapgen luck. Coal is guaranteed here (not left to the natural
+// palette) so mapgen palette changes cannot shift the deterministic cluster
+// sequence and strand the nearest coal vein beyond the mecha move range.
 var starterResourceKinds = []mapmodel.ResourceKind{
 	mapmodel.ResourceIronOre,
 	mapmodel.ResourceCopperOre,
+	mapmodel.ResourceCoal,
 }
 
 // starterVeinTotal is intentionally above map.yaml natural vein_amount_max
@@ -226,7 +230,8 @@ func hasResourceNodeWithin(ws *model.WorldState, center model.Position, dist int
 }
 
 // ensureStarterResourceNodes places missing starter ore kinds within dist of
-// each spawn center so iron/copper for the matrix chain are always operable.
+// each spawn center so iron/copper for the matrix chain and coal for mecha
+// refueling are always operable.
 func ensureStarterResourceNodes(ws *model.WorldState, planet *mapmodel.Planet, centers []model.Position, dist int) {
 	if ws == nil || len(centers) == 0 || dist < 1 {
 		return
