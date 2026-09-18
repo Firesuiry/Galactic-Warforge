@@ -255,13 +255,17 @@ def main():
             cands = [alias_t.get(tid), snake(tid)]
             hit = next((c for c in cands if c and c in sw_techs), None)
             if not hit:
-                # DSP 展开多级升级 -> SW MaxLevel 聚合: xxx-3 -> xxx maxlevel>=3
+                # DSP 展开多级升级 -> SW MaxLevel 聚合: xxx-3 -> xxx maxlevel>=3（含别名）
                 m = re.match(r"^(.*)-(\d+)$", tid)
                 if m:
-                    base = snake(m.group(1))
-                    if base in sw_techs:
-                        maxlv = next((st.get("max_level") for st in sw["techs"] if st["id"] == base), None)
-                        hit = base if (maxlv is None or maxlv < 0 or maxlv >= int(m.group(2))) else None
+                    base_raw = m.group(1)
+                    base = snake(base_raw)
+                    for cand_base in (alias_t.get(base_raw), base):
+                        if cand_base and cand_base in sw_techs:
+                            maxlv = next((st.get("max_level") for st in sw["techs"] if st["id"] == cand_base), None)
+                            if maxlv is None or maxlv < 0 or maxlv >= int(m.group(2)):
+                                hit = cand_base
+                                break
             if not hit and t["zh"] in swt_zh:
                 hit = swt_zh[t["zh"]][0]
             if not hit:

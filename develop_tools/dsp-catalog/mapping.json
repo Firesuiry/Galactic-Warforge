@@ -600,6 +600,9 @@
     "distribution-logistics-system": "distribution_logistics"
    },
    {
+    "dyson-sphere-stress-system-1": "dyson_stress"
+   },
+   {
     "electromagnetic-drive": "electromagnetic_drive"
    },
    {
@@ -1445,7 +1448,6 @@
    "holo-beacon"
   ],
   "techs": [
-   "dyson-sphere-stress-system-1",
    "holo-beacon-tech"
   ]
  }

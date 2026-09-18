@@ -1,5 +1,6 @@
 # 项目操作与约定
 
+- 2026-09-18 DSP 行星内全量对齐进行中：冻结范围与验收基线见 [dsp行星内生产对齐范围](docs/dev/dsp行星内生产对齐范围.md)；数据工具链 develop_tools/dsp-catalog（scope.json=冻结闭包，mapping.json=未匹配清单，catalogdump 生成 current_dump.json 后跑 build_scope.py 即得差距）。W1 目录对齐已合 main（物品102/资源18/配方118/科技147/建筑62，parity+closure 测试在 model/dsp_alignment_test.go）。
 - 用户要求：复杂游戏计算留在后端；浏览器负责 3D 表现与操作，目标为《戴森球计划》式工业与星球质感，不能把能转动的球体当成画质完成。
 - 行星与恒星系默认 3D，`?view=2d` 切平面战术；3D 必须实际浏览器验证建造、兵力移动和局势显示。
 - Go：`/home/firesuiry/sdk/go1.25.0/bin`。前端构建和测试在 `client-web/` 运行。
