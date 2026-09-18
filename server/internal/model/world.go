@@ -26,7 +26,6 @@ type PlayerState struct {
 	Executor        *ExecutorState            `json:"executor,omitempty"`
 	Executors       map[string]*ExecutorState `json:"executors,omitempty"`
 	Tech            *PlayerTechState          `json:"tech,omitempty"`
-	CombatTech      *PlayerCombatTechState    `json:"combat_tech,omitempty"`
 	Stats           *PlayerStats              `json:"stats,omitempty"`
 	WarBlueprints   map[string]*WarBlueprint  `json:"war_blueprints,omitempty"`
 	WarIndustry     *WarIndustryState         `json:"war_industry,omitempty"`

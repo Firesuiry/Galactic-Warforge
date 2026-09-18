@@ -190,6 +190,27 @@ func commandStructureRegistry() []CommandStructureSpec {
 			RequiredPayloadFields: []string{"tech_id"},
 		},
 		{
+			Type:                  CmdSetRecipe,
+			RequiredTargetFields:  []string{"entity_id"},
+			OptionalPayloadFields: []string{"recipe_id"},
+			Constraints: []string{
+				"recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.",
+			},
+			ExtraValidation: func(cmd Command) []CommandIssue {
+				if recipeID, ok := cmd.Payload["recipe_id"]; ok {
+					if _, isString := recipeID.(string); !isString && recipeID != nil {
+						return []CommandIssue{InvalidValueIssue(
+							"payload.recipe_id",
+							"payload.recipe_id must be a string when provided",
+							"string",
+							recipeID,
+						)}
+					}
+				}
+				return nil
+			},
+		},
+		{
 			Type:                  CmdSwitchActivePlanet,
 			RequiredPayloadFields: []string{"planet_id"},
 		},

@@ -67,6 +67,9 @@ func TestConstructionQueueReservesTiles(t *testing.T) {
 func TestConstructionQueueRespectsRegionLimit(t *testing.T) {
 	core := newConstructionTestCore(t, 2, 1)
 	ws := core.world
+	// mass_construction tech levels raise the region limit; pin it to the
+	// configured baseline so this test isolates the config behavior.
+	delete(ws.Players["p1"].Tech.CompletedTechs, "mass_construction")
 
 	pos1, pos2 := findTwoOpenTiles(ws)
 	cmd1 := model.Command{

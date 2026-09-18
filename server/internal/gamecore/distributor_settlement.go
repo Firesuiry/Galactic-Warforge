@@ -26,6 +26,20 @@ func logisticsBotIDs(ws *model.WorldState) []string {
 	return ids
 }
 
+// distributionRangeBonusPerLevel is the flat range bonus each level of the
+// distribution_range tech adds to a distributor's delivery range.
+const distributionRangeBonusPerLevel = 5
+
+// distributorEffectiveRange derives the delivery range from the persisted base
+// range plus the owner's distribution_range tech level. The base range is
+// never mutated, so snapshot restores cannot accumulate the bonus.
+func distributorEffectiveRange(ws *model.WorldState, home *model.Building) int {
+	if home == nil || home.Distributor == nil {
+		return 0
+	}
+	return home.Distributor.Range + distributionRangeBonusPerLevel*logisticsTechLevel(ws, home.OwnerID, "distribution_range")
+}
+
 // Cargo and prepaid flight energy belong to the robot. Reservations are
 // derived from these saved flights rather than a separate mutable ledger.
 func settleDistributors(ws *model.WorldState, active bool) {
@@ -53,7 +67,7 @@ func settleDistributors(ws *model.WorldState, active bool) {
 				returnDistributorBot(bot, home, "target_unavailable")
 			} else {
 				bot.TargetPos = &pos
-				if ws.SurfaceDistance(home.Position, pos) > home.Distributor.Range || bot.EnergyRemaining < ws.SurfaceDistance(bot.Position, pos)+ws.SurfaceDistance(pos, home.Position) {
+				if ws.SurfaceDistance(home.Position, pos) > distributorEffectiveRange(ws, home) || bot.EnergyRemaining < ws.SurfaceDistance(bot.Position, pos)+ws.SurfaceDistance(pos, home.Position) {
 					returnDistributorBot(bot, home, "range_or_energy")
 				}
 			}
@@ -198,19 +212,20 @@ func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, 
 	if item == "" {
 		return
 	}
+	effectiveRange := distributorEffectiveRange(ws, home)
 	host := model.DistributorHost(ws, home)
-	if unit := distributorMecha(ws, bot.OwnerID, active); unit != nil && ws.SurfaceDistance(home.Position, unit.Position) <= s.Range {
+	if unit := distributorMecha(ws, bot.OwnerID, active); unit != nil && ws.SurfaceDistance(home.Position, unit.Position) <= effectiveRange {
 		if request, ok := unit.Mecha.LogisticsRequests[item]; ok {
 			count := ws.Players[bot.OwnerID].Inventory[item]
 			if s.PlayerDeliveryEnabled && count < request.Min {
 				qty := min(bot.Capacity, max(0, request.Max-count-distributorIncoming(ws, "mecha", unit.ID, item, "")), max(0, min(host.Storage.OutputQuantity(item), host.Storage.ItemQuantity(item)-s.LocalStorage)))
-				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "delivery", item, qty, 2*s.Range) {
+				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "delivery", item, qty, 2*effectiveRange) {
 					return
 				}
 			}
 			if s.PlayerCollectionEnabled && count > request.Max {
 				qty := min(bot.Capacity, max(0, count-request.Max-distributorPickupReservations(ws, "mecha", unit.ID, item, "")), distributorFreeSpace(ws, home, item, ""))
-				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "pickup", item, qty, 2*s.Range) {
+				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "pickup", item, qty, 2*effectiveRange) {
 					return
 				}
 			}
@@ -222,7 +237,7 @@ func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, 
 			continue
 		}
 		distance := ws.SurfaceDistance(home.Position, target.Position)
-		if distance > s.Range {
+		if distance > effectiveRange {
 			continue
 		}
 		if s.Mode == model.LogisticsStationModeSupply {

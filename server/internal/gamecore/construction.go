@@ -157,6 +157,129 @@ const (
 	defaultConstructionDurationTick = 1
 )
 
+// maxVerticalStackHeight returns how many layers a player may stack for
+// vertically stackable buildings: the ground layer plus one extra layer per
+// completed vertical_construction tech level.
+func maxVerticalStackHeight(player *model.PlayerState) int {
+	height := 1
+	if player != nil && player.Tech != nil {
+		height += player.Tech.CompletedTechs["vertical_construction"]
+	}
+	return height
+}
+
+// isVerticallyStackable reports whether a building type supports DSP-style
+// vertical stacking: research labs and production buildings stack above a
+// ground building of the same type, sharing its footprint.
+func isVerticallyStackable(btype model.BuildingType) bool {
+	if btype == model.BuildingTypeLogisticsDistributor || btype == model.BuildingTypeFoundation {
+		return false
+	}
+	profile := model.BuildingProfileFor(btype, 1)
+	return profile.Runtime.Functions.Research != nil || profile.Runtime.Functions.Production != nil
+}
+
+// stackLayersAt returns the highest stack layer index (0-based Z) of the same
+// building type at (x, y), or -1 when no such building exists. The ground
+// building (Z=0) is layer 0.
+func stackLayersAt(ws *model.WorldState, btype model.BuildingType, x, y int) int {
+	top := -1
+	if ws == nil {
+		return top
+	}
+	for _, b := range ws.Buildings {
+		if b == nil || b.Type != btype {
+			continue
+		}
+		if b.Position.X == x && b.Position.Y == y && b.Position.Z > top {
+			top = b.Position.Z
+		}
+	}
+	return top
+}
+
+// stackReservedLayers counts queued construction tasks that will add layers of
+// the same building type at (x, y), so concurrent build commands cannot
+// overshoot the stack limit.
+func stackReservedLayers(ws *model.WorldState, btype model.BuildingType, x, y int) int {
+	if ws == nil || ws.Construction == nil {
+		return 0
+	}
+	count := 0
+	for _, task := range ws.Construction.Tasks {
+		if task == nil || task.BuildingType != btype {
+			continue
+		}
+		if task.State != model.ConstructionPending && task.State != model.ConstructionInProgress && task.State != model.ConstructionPaused {
+			continue
+		}
+		if task.Position.X == x && task.Position.Y == y {
+			count++
+		}
+	}
+	return count
+}
+
+// resolveVerticalPlacement computes the stacked position (Z = next layer) for
+// a build command whose target tile is already occupied. It fails when the
+// building type cannot stack, when the occupying building is of a different
+// type, or when the player's vertical_construction level does not allow
+// another layer.
+func resolveVerticalPlacement(ws *model.WorldState, player *model.PlayerState, btype model.BuildingType, pos model.Position) (model.Position, error) {
+	if !isVerticallyStackable(btype) {
+		return pos, fmt.Errorf("tile is already occupied by a building")
+	}
+	top := stackLayersAt(ws, btype, pos.X, pos.Y)
+	if top < 0 {
+		return pos, fmt.Errorf("tile is already occupied by a different building type")
+	}
+	next := top + 1 + stackReservedLayers(ws, btype, pos.X, pos.Y)
+	limit := maxVerticalStackHeight(player)
+	if next+1 > limit {
+		return pos, fmt.Errorf("vertical stack layer %d exceeds unlocked height %d (research vertical_construction)", next+1, limit)
+	}
+	stacked := pos
+	stacked.Z = next
+	return stacked, nil
+}
+
+// validateStackCompletion re-checks a stacked construction task at completion
+// time: the ground-layer base of the same type must still exist and the target
+// layer must still be free.
+func validateStackCompletion(ws *model.WorldState, task *model.ConstructionTask) error {
+	baseID := ws.TileBuilding[model.TileKey(task.Position.X, task.Position.Y)]
+	base := ws.Buildings[baseID]
+	if base == nil || base.Type != task.BuildingType || base.Position.Z != 0 {
+		return fmt.Errorf("stack base building missing at construction site")
+	}
+	if base.OwnerID != task.PlayerID {
+		return fmt.Errorf("stack base building owned by another player")
+	}
+	for _, b := range ws.Buildings {
+		if b == nil {
+			continue
+		}
+		if b.Position.X == task.Position.X && b.Position.Y == task.Position.Y && b.Position.Z == task.Position.Z {
+			return fmt.Errorf("stack layer already occupied")
+		}
+	}
+	return nil
+}
+
+// constructionRegionLimitFor returns the per-region concurrent construction
+// limit for a player: the configured base limit plus one extra concurrent task
+// per completed mass_construction tech level.
+func (gc *GameCore) constructionRegionLimitFor(ws *model.WorldState, playerID string) int {
+	limit := gc.constructionRegionLimit()
+	if ws == nil {
+		return limit
+	}
+	if player := ws.Players[playerID]; player != nil {
+		limit += int(model.TechEffectValue(player, "construction_region_limit"))
+	}
+	return limit
+}
+
 // calculateConstructionSpeedBonus calculates the construction speed multiplier for a player.
 // This combines bonuses from buildings, tech, and environment.
 // Returns 1.0 if no bonuses apply (minimum speed).
@@ -314,7 +437,6 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 
 	activeByPlayer := countActiveExecutorUsage(ws)
 	activeByRegion := countActiveConstructionByRegion(ws)
-	regionLimit := gc.constructionRegionLimit()
 
 	// T079: First pass - pause in-progress tasks that no longer have materials available
 	for _, task := range ws.Construction.Tasks {
@@ -366,6 +488,8 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		if activeByPlayer[task.PlayerID] >= playerLimit {
 			continue
 		}
+		// mass_construction tech levels raise the owner's region concurrent limit.
+		regionLimit := gc.constructionRegionLimitFor(ws, task.PlayerID)
 		if regionLimit > 0 && activeByRegion[task.RegionID] >= regionLimit {
 			continue
 		}
@@ -532,7 +656,14 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, fmt.Errorf("construction position out of bounds")
 	}
 	tileKey := model.TileKey(pos.X, pos.Y)
-	if _, occupied := ws.TileBuilding[tileKey]; occupied && task.BuildingType != model.BuildingTypeLogisticsDistributor {
+	stacked := pos.Z > 0 && task.BuildingType != model.BuildingTypeLogisticsDistributor
+	if stacked {
+		// Stacked layers share the ground building's tile; re-validate the
+		// stack instead of the empty-tile invariant.
+		if err := validateStackCompletion(ws, task); err != nil {
+			return nil, err
+		}
+	} else if _, occupied := ws.TileBuilding[tileKey]; occupied && task.BuildingType != model.BuildingTypeLogisticsDistributor {
 		return nil, fmt.Errorf("construction tile already occupied")
 	}
 	def, ok := model.BuildingDefinitionByID(task.BuildingType)
@@ -548,6 +679,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, err
 	}
 	for _, p := range tiles {
+		if stacked {
+			// Footprint tiles of a stacked layer are occupied by the base
+			// building by definition; the stack was validated above.
+			continue
+		}
 		if task.BuildingType != model.BuildingTypeLogisticsDistributor && (ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation)) {
 			return nil, fmt.Errorf("construction footprint tile unavailable")
 		}
@@ -655,4 +791,97 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		},
 	}
 	return events, nil
+}
+
+// execSetRecipe handles the "set_recipe" command: switch a production building
+// (or a research lab between research mode and matrix production mode) to a
+// new recipe in place, without demolishing and rebuilding.
+//
+// DSP semantics applied on switch:
+//   - production progress is reset (RemainingTicks/ProgressFraction/pending
+//     outputs cleared);
+//   - storage contents are kept;
+//   - an empty recipe_id switches a research-capable building back to research
+//     mode (or simply idles a pure production building).
+//
+// The switch is atomic: every validation runs before any state is mutated, so
+// an illegal switch leaves the building untouched.
+func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	buildingID := cmd.Target.EntityID
+	if buildingID == "" {
+		res.Code = model.CodeValidationFailed
+		res.Message = "target.entity_id (building) required"
+		return res, nil
+	}
+	building, ok := ws.Buildings[buildingID]
+	if !ok || building == nil {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		return res, nil
+	}
+	if building.OwnerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot reconfigure building owned by another player"
+		return res, nil
+	}
+	if building.Runtime.Functions.Production == nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("building type %s does not support recipes", building.Type)
+		return res, nil
+	}
+
+	recipeID := ""
+	if recipeRaw, ok := cmd.Payload["recipe_id"]; ok && recipeRaw != nil {
+		recipeID = fmt.Sprintf("%v", recipeRaw)
+	}
+
+	player := ws.Players[playerID]
+	if recipeID != "" {
+		recipe, ok := model.Recipe(recipeID)
+		if !ok {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("unknown recipe: %s", recipeID)
+			return res, nil
+		}
+		supportsRecipe := false
+		for _, allowed := range recipe.BuildingTypes {
+			if allowed == building.Type {
+				supportsRecipe = true
+				break
+			}
+		}
+		if !supportsRecipe {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("recipe %s not supported by building type %s", recipeID, building.Type)
+			return res, nil
+		}
+		if !CanUseRecipeTech(player, recipeID) {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("recipe %s requires research to unlock", recipeID)
+			return res, nil
+		}
+	}
+
+	// All validation passed: apply the switch atomically.
+	model.InitBuildingProduction(building)
+	building.Production.RecipeID = recipeID
+	building.Production.RemainingTicks = 0
+	building.Production.ProgressFraction = 0
+	building.Production.PendingOutputs = nil
+	building.Production.PendingByproducts = nil
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	if recipeID == "" {
+		if building.Runtime.Functions.Research != nil {
+			res.Message = fmt.Sprintf("building %s switched to research mode", buildingID)
+		} else {
+			res.Message = fmt.Sprintf("building %s recipe cleared (idle)", buildingID)
+		}
+	} else {
+		res.Message = fmt.Sprintf("building %s recipe set to %s", buildingID, recipeID)
+	}
+	return res, nil
 }

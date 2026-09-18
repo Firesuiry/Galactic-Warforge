@@ -81,6 +81,18 @@ func (ws *WorldState) IndexBuilding(b *Building) error {
 		}
 		return nil
 	}
+	// Stacked layers (Z>0) share the ground building's tile registration;
+	// only the base layer (Z=0) occupies TileBuilding. Reject duplicate
+	// layers at the same height.
+	if b.Position.Z > 0 {
+		for _, other := range ws.Buildings {
+			if other != nil && other.ID != b.ID &&
+				other.Position.X == b.Position.X && other.Position.Y == b.Position.Y && other.Position.Z == b.Position.Z {
+				return fmt.Errorf("stack layer already occupied by %s", other.ID)
+			}
+		}
+		return nil
+	}
 	// Foundation is a terrain modifier rather than an occupying factory.
 	// Keeping it out of TileBuilding lets factories be placed on the filled
 	// ground while the foundation entity remains available for demolition and
@@ -118,7 +130,7 @@ func (ws *WorldState) IndexBuilding(b *Building) error {
 
 // UnindexBuilding removes the entire footprint, including tiles on other faces.
 func (ws *WorldState) UnindexBuilding(b *Building) {
-	if b.Type == BuildingTypeFoundation || b.Type == BuildingTypeLogisticsDistributor {
+	if b.Type == BuildingTypeFoundation || b.Type == BuildingTypeLogisticsDistributor || b.Position.Z > 0 {
 		return
 	}
 	tiles, err := ws.BuildingTiles(b)

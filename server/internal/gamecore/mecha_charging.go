@@ -66,6 +66,8 @@ func settleMechaCharging(ws *model.WorldState, snapshot *model.PowerSettlementSn
 			if tower.Type == model.BuildingTypeWirelessPowerTower {
 				rate = wirelessMechaChargePerTick
 			}
+			// energy_circuit research raises the per-tick grid charge rate.
+			rate = model.MechaChargeRate(rate, player)
 			amount := min(rate-towerCharge[tower.ID], min(surplus, unit.Mecha.MaxEnergy-unit.Mecha.Energy))
 			if amount <= 0 {
 				continue

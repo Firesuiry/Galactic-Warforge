@@ -40,7 +40,9 @@ func isPipelineEndpoint(building *model.Building, port model.IOPort) bool {
 		return false
 	}
 	if len(port.AllowedItems) == 0 {
-		return false
+		// 储液罐端口不限定物品：作为流体节点接入管网（管线只承载流体，
+		// 输入侧按节点 FluidID 过滤，输出侧只选择库存中的流体）。
+		return building.Type == model.BuildingTypeStorageTank
 	}
 	for _, itemID := range port.AllowedItems {
 		if !model.IsFluidItem(itemID) {

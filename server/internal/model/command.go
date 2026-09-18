@@ -30,6 +30,7 @@ const (
 	CmdRestoreConstruction       CommandType = "restore_construction"
 	CmdStartResearch             CommandType = "start_research"
 	CmdCancelResearch            CommandType = "cancel_research"
+	CmdSetRecipe                 CommandType = "set_recipe"
 	CmdSwitchActivePlanet        CommandType = "switch_active_planet"
 	CmdTransferItem              CommandType = "transfer_item"
 	CmdLaunchSolarSail           CommandType = "launch_solar_sail"
@@ -169,6 +170,7 @@ func AllCommandTypes() []CommandType {
 		CmdRestoreConstruction,
 		CmdStartResearch,
 		CmdCancelResearch,
+		CmdSetRecipe,
 		CmdSwitchActivePlanet,
 		CmdTransferItem,
 		CmdLaunchSolarSail,

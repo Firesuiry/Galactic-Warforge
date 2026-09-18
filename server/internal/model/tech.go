@@ -2027,6 +2027,7 @@ var defaultTechDefinitions = []TechDefinition{
 			5: []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 383}, {ItemID: "energy_matrix", Quantity: 383}, {ItemID: "structure_matrix", Quantity: 383}, {ItemID: "information_matrix", Quantity: 383}},
 		},
 		MaxLevel: 5,
+		Effects:  []TechEffect{{Type: "construction_region_limit", Value: 1}},
 	},
 	{
 		ID:            "distribution_range",
@@ -2287,6 +2288,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 320}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "weapon_damage", Value: 0.1}},
 	},
 	{
 		ID:            "df_energy_shield",
@@ -2307,6 +2309,7 @@ var defaultTechDefinitions = []TechDefinition{
 			7: []ItemAmount{{ItemID: "universe_matrix", Quantity: 368}},
 		},
 		MaxLevel: 7,
+		Effects:  []TechEffect{{Type: "shield_capacity", Value: 10}},
 	},
 	{
 		ID:            "df_energy_weapon_damage",
@@ -2326,6 +2329,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 320}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "weapon_damage", Value: 0.1}},
 	},
 	{
 		ID:            "df_enhanced_structure",
@@ -2345,6 +2349,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 320}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "structure_hp", Value: 0.1}},
 	},
 	{
 		ID:            "df_explosive_weapon_damage",
@@ -2364,6 +2369,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 320}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "weapon_damage", Value: 0.1}},
 	},
 	{
 		ID:            "df_ground_squadron_expansion",
@@ -2403,6 +2409,7 @@ var defaultTechDefinitions = []TechDefinition{
 			6: []ItemAmount{{ItemID: "universe_matrix", Quantity: 320}},
 		},
 		MaxLevel: 6,
+		Effects:  []TechEffect{{Type: "weapon_damage", Value: 0.1}},
 	},
 	{
 		ID:            "df_planetary_shield",

@@ -19,7 +19,7 @@ func TestT100HiddenTechGateBlocksDarkFogButFleetTechsAreResearchable(t *testing.
 	}
 	attachBuilding(ws, lab)
 
-	grantTechs(ws, "p1", "battlefield_analysis", "plasma_control")
+	grantTechs(ws, "p1", "battlefield_analysis", "plasma_control", "information_matrix")
 
 	visibleRes, _ := core.execStartResearch(ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
@@ -29,6 +29,8 @@ func TestT100HiddenTechGateBlocksDarkFogButFleetTechsAreResearchable(t *testing.
 		t.Fatalf("expected prototype research to be queueable, got %s (%s)", visibleRes.Code, visibleRes.Message)
 	}
 
+	// Hidden tech: prerequisites are met but the dark_fog_matrix trigger item
+	// is not held, so the tech stays invisible.
 	hiddenRes, _ := core.execStartResearch(ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "dark_fog_matrix"},
@@ -36,7 +38,7 @@ func TestT100HiddenTechGateBlocksDarkFogButFleetTechsAreResearchable(t *testing.
 	if hiddenRes.Code != model.CodeValidationFailed {
 		t.Fatalf("expected hidden tech to fail validation, got %s (%s)", hiddenRes.Code, hiddenRes.Message)
 	}
-	if hiddenRes.Message != "tech dark_fog_matrix is hidden and cannot be researched directly" {
+	if hiddenRes.Message != "tech dark_fog_matrix is hidden; obtain its trigger items to reveal it" {
 		t.Fatalf("unexpected hidden-tech message: %s", hiddenRes.Message)
 	}
 }

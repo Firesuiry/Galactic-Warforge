@@ -20,14 +20,13 @@ func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 	players := make(map[string]*model.PlayerState, len(cfg.Players))
 	for _, p := range cfg.Players {
 		ps := &model.PlayerState{
-			PlayerID:   p.PlayerID,
-			TeamID:     p.TeamID,
-			Role:       p.Role,
-			Resources:  model.Resources{Minerals: 200, Energy: 100},
-			IsAlive:    true,
-			Tech:       model.NewPlayerTechState(p.PlayerID),
-			CombatTech: &model.PlayerCombatTechState{PlayerID: p.PlayerID, UnlockedTechs: make(map[string]*model.CombatTech)},
-			Stats:      model.NewPlayerStats(p.PlayerID),
+			PlayerID:  p.PlayerID,
+			TeamID:    p.TeamID,
+			Role:      p.Role,
+			Resources: model.Resources{Minerals: 200, Energy: 100},
+			IsAlive:   true,
+			Tech:      model.NewPlayerTechState(p.PlayerID),
+			Stats:     model.NewPlayerStats(p.PlayerID),
 		}
 		ps.SetPermissions(p.Permissions)
 		applyPlayerBootstrap(ps, p.Bootstrap)

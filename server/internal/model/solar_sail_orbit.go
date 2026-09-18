@@ -69,3 +69,39 @@ func SolarSailEnergyOutput(sailCount int, params SolarSailOrbitParams) int {
 	baseEnergy := sailCount * params.EnergyPerSail
 	return int(float64(baseEnergy) * swarmBonus)
 }
+
+// SolarSailLifetimeTicks returns the effective sail lifetime for a player,
+// including the solar_sail_life research bonus (+300 ticks per level).
+func SolarSailLifetimeTicks(params SolarSailOrbitParams, player *PlayerState) int64 {
+	lifetime := params.DefaultLifetime + int64(TechEffectValue(player, "solar_sail_life"))
+	if lifetime < 1 {
+		lifetime = 1
+	}
+	return lifetime
+}
+
+// SyncSolarSailLifetimes aligns every orbiting sail's lifetime with the
+// owner's current solar_sail_life research. Orbit decay settlement expires a
+// sail when its age reaches LifetimeTicks, so refreshing the field each tick
+// makes the research bonus apply to the whole fleet, including sails launched
+// before the research completed. Idempotent and safe after snapshot restore.
+func SyncSolarSailLifetimes(spaceRuntime *SpaceRuntimeState, players map[string]*PlayerState) {
+	if spaceRuntime == nil {
+		return
+	}
+	params := DefaultSolarSailOrbitParams()
+	for playerID, playerRuntime := range spaceRuntime.Players {
+		if playerRuntime == nil {
+			continue
+		}
+		lifetime := SolarSailLifetimeTicks(params, players[playerID])
+		for _, systemRuntime := range playerRuntime.Systems {
+			if systemRuntime == nil || systemRuntime.SolarSailOrbit == nil {
+				continue
+			}
+			for i := range systemRuntime.SolarSailOrbit.Sails {
+				systemRuntime.SolarSailOrbit.Sails[i].LifetimeTicks = lifetime
+			}
+		}
+	}
+}

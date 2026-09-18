@@ -202,3 +202,20 @@ func LogisticsDroneTravelTicks(distance, speed int) int {
 	}
 	return ticks
 }
+
+// SyncLogisticsDroneStats refreshes derived drone stats from the owner's
+// completed research. drone_engine adds its drone_speed effect to the base
+// speed; dispatch settlement consumes the Speed field via BeginTrip and
+// LogisticsDroneTravelTicks, so faster research shortens real flight time.
+// The sync is idempotent and safe to run every tick and after snapshot restore.
+func SyncLogisticsDroneStats(ws *WorldState) {
+	if ws == nil {
+		return
+	}
+	for _, drone := range ws.LogisticsDrones {
+		if drone == nil {
+			continue
+		}
+		drone.Speed = DefaultLogisticsDroneSpeed + int(TechEffectValue(ws.Players[drone.OwnerID], "drone_speed"))
+	}
+}

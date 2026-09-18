@@ -18,6 +18,116 @@ type conveyorRequest struct {
 	bufferIndex int
 }
 
+// logisticsTechLevel returns the completed level of a tech for the owner,
+// clamped to the definition's MaxLevel. Returns 0 when unresearched.
+func logisticsTechLevel(ws *model.WorldState, ownerID, techID string) int {
+	if ws == nil {
+		return 0
+	}
+	player := ws.Players[ownerID]
+	if player == nil || player.Tech == nil {
+		return 0
+	}
+	level := player.Tech.CompletedTechs[techID]
+	if level <= 0 {
+		return 0
+	}
+	if def, ok := model.TechDefinitionByID(techID); ok && def.MaxLevel > 0 && level > def.MaxLevel {
+		level = def.MaxLevel
+	}
+	return level
+}
+
+// pileHeightFor returns the pile height the automatic piler compresses loose
+// items into: 2x by default, 4x once sorter_cargo_integration is researched.
+func pileHeightFor(ws *model.WorldState, ownerID string) int {
+	if logisticsTechLevel(ws, ownerID, "sorter_cargo_integration") > 0 {
+		return 4
+	}
+	return 2
+}
+
+func isAutomaticPiler(building *model.Building) bool {
+	return building != nil && building.Type == model.BuildingTypeAutomaticPiler && building.Conveyor != nil
+}
+
+// pilerFreeCapacity counts piler capacity in pile slots: MaxStack slots each
+// hold a full pile, so the item capacity scales with the pile height.
+func pilerFreeCapacity(ws *model.WorldState, building *model.Building) int {
+	if building == nil || building.Conveyor == nil {
+		return 0
+	}
+	free := building.Conveyor.MaxStack*pileHeightFor(ws, building.OwnerID) - building.Conveyor.TotalItems()
+	if free < 0 {
+		return 0
+	}
+	return free
+}
+
+// conveyorInsertCapacity is the free item capacity a sorter or belt sees when
+// inserting into the target segment.
+func conveyorInsertCapacity(ws *model.WorldState, target *model.Building) int {
+	if isAutomaticPiler(target) {
+		return pilerFreeCapacity(ws, target)
+	}
+	if target == nil || target.Conveyor == nil {
+		return 0
+	}
+	return target.Conveyor.AvailableCapacity()
+}
+
+// compressPilerBuffer regroups the buffer into piles of at most pileHeight
+// items, merging separated stacks of the same kind while preserving order.
+func compressPilerBuffer(conveyor *model.ConveyorState, pileHeight int) {
+	if conveyor == nil || pileHeight <= 1 || len(conveyor.Buffer) == 0 {
+		return
+	}
+	out := make([]model.ItemStack, 0, len(conveyor.Buffer))
+	for _, stack := range conveyor.Buffer {
+		qty := stack.Quantity
+		for qty > 0 {
+			open := -1
+			for i := len(out) - 1; i >= 0; i-- {
+				if out[i].Quantity < pileHeight && canMergeItemStacks(out[i], stack) {
+					open = i
+					break
+				}
+			}
+			if open >= 0 {
+				take := minInt(pileHeight-out[open].Quantity, qty)
+				out[open].Quantity += take
+				qty -= take
+				continue
+			}
+			take := minInt(pileHeight, qty)
+			out = append(out, model.ItemStack{ItemID: stack.ItemID, Quantity: take, Spray: cloneSpray(stack.Spray)})
+			qty -= take
+		}
+	}
+	conveyor.Buffer = out
+}
+
+func canMergeItemStacks(a, b model.ItemStack) bool {
+	if a.ItemID != b.ItemID {
+		return false
+	}
+	if (a.Spray == nil) != (b.Spray == nil) {
+		return false
+	}
+	if a.Spray == nil {
+		return true
+	}
+	return a.Spray.Level == b.Spray.Level && a.Spray.RemainingUses == b.Spray.RemainingUses
+}
+
+func cloneSpray(state *model.SprayState) *model.SprayState {
+	if state == nil {
+		return nil
+	}
+	clone := *state
+	return &clone
+}
+
 // All belt-like transport uses one simultaneous inventory settlement. Requests
 // reserve real stacks from the tick's initial buffers; receipts never move again
 // in the same tick and no item can be offered to multiple outputs.
@@ -58,7 +168,7 @@ func settleConveyors(ws *model.WorldState) {
 		remaining[id] = building.Conveyor.Clone()
 		grants[id] = make(map[string]int)
 		offers[id] = minInt(building.Conveyor.Throughput, building.Conveyor.TotalItems())
-		capacities[id] = building.Conveyor.AvailableCapacity()
+		capacities[id] = conveyorInsertCapacity(ws, building)
 		if building.Splitter != nil {
 			capacities[id] = minInt(capacities[id], building.Conveyor.Throughput)
 		}
@@ -100,16 +210,36 @@ func settleConveyors(ws *model.WorldState) {
 					})
 				}
 				request := pending[0]
-				moved := remaining[request.sourceID].TakeAt(request.bufferIndex, 1)
+				source := conveyors[request.sourceID]
+				moveQty := 1
+				if isAutomaticPiler(source) {
+					// The piler moves whole piles per throughput unit: one grant
+					// carries a full pile instead of a single loose item.
+					buf := remaining[request.sourceID].Buffer
+					if request.bufferIndex < 0 || request.bufferIndex >= len(buf) || buf[request.bufferIndex].Quantity <= 0 {
+						continue
+					}
+					moveQty = minInt(buf[request.bufferIndex].Quantity, pileHeightFor(ws, source.OwnerID))
+					if moveQty > capacities[request.link.targetID] {
+						moveQty = capacities[request.link.targetID]
+					}
+					if moveQty <= 0 {
+						continue
+					}
+				}
+				moved := remaining[request.sourceID].TakeAt(request.bufferIndex, moveQty)
 				if len(moved) == 0 {
 					continue
 				}
+				movedQty := 0
+				for _, stack := range moved {
+					movedQty += stack.Quantity
+				}
 				receipts[targetID] = append(receipts[targetID], moved...)
 				offers[request.sourceID]--
-				capacities[targetID]--
+				capacities[targetID] -= movedQty
 				grants[targetID][request.sourceID]++
-				source := conveyors[request.sourceID]
-				recordConveyorDeparture(ws, source, 1)
+				recordConveyorDeparture(ws, source, movedQty)
 				if source.Splitter != nil {
 					source.Splitter.OutputCursor = nextSplitterCursor(source.Splitter.OutputDirections, request.link.output)
 					source.Splitter.TransferredItems++
@@ -130,6 +260,12 @@ func settleConveyors(ws *model.WorldState) {
 	}
 	for _, id := range ids {
 		conveyors[id].Conveyor.AppendStacks(receipts[id])
+	}
+	for _, id := range ids {
+		building := conveyors[id]
+		if isAutomaticPiler(building) {
+			compressPilerBuffer(building.Conveyor, pileHeightFor(ws, building.OwnerID))
+		}
 	}
 }
 

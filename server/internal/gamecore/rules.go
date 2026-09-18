@@ -61,14 +61,19 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
-	// Check tile is unoccupied
+	// Check tile is unoccupied; an occupied tile may still accept a vertically
+	// stacked layer of the same building type (vertical_construction tech).
 	tileKey := model.TileKey(pos.X, pos.Y)
 	if _, occupied := ws.TileBuilding[tileKey]; occupied && btype != model.BuildingTypeLogisticsDistributor {
-		res.Code = model.CodePositionOccupied
-		res.Message = "tile is already occupied by a building"
-		return res, nil
+		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
+		if stackErr != nil {
+			res.Code = model.CodePositionOccupied
+			res.Message = stackErr.Error()
+			return res, nil
+		}
+		pos = &stackedPos
 	}
-	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) {
+	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) && pos.Z == 0 {
 		res.Code = model.CodePositionOccupied
 		res.Message = "tile is reserved for construction"
 		return res, nil
@@ -1085,18 +1090,18 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 			collectYield := b.Runtime.Functions.Collect.YieldPerTick
 			if def, ok := model.BuildingDefinitionByID(b.Type); ok && def.RequiresResourceNode {
 				collectYield = scaleByPowerRatio(collectYield, powerRatio)
-				if itemID := collectorOutputItemID(ws, b); itemID != "" && b.Storage != nil {
-					// Always extract at power-scaled yield. Storage only buffers
-					// items for logistics/recipes; minerals kickback is keyed off
-					// mined amount so a full local buffer cannot freeze the
-					// construction-currency income (opening loop before belts).
-					mined := mineResource(ws, b, collectYield)
-					if mined > 0 {
-						stored, _, err := b.Storage.Receive(itemID, mined)
+				// Always extract at power-scaled yield. Storage only buffers
+				// items for logistics/recipes; minerals kickback is keyed off
+				// mined amount so a full local buffer cannot freeze the
+				// construction-currency income (opening loop before belts).
+				mined, byItem := mineResource(ws, player, b, collectYield)
+				if mined > 0 && len(byItem) > 0 && b.Storage != nil {
+					minerals = collectMineralsKickback(b.Runtime.Functions.Collect, mined)
+					for _, itemID := range sortedMiningItemIDs(byItem) {
+						stored, _, err := b.Storage.Receive(itemID, byItem[itemID])
 						if err != nil {
 							stored = 0
 						}
-						minerals = collectMineralsKickback(b.Runtime.Functions.Collect, mined)
 						if productionSnapshot != nil && stored > 0 {
 							productionSnapshot.RecordBuildingOutputs(b, []model.ItemAmount{{
 								ItemID:   itemID,
@@ -1106,7 +1111,7 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 					}
 					collectYield = 0
 				} else {
-					minerals = mineResource(ws, b, collectYield)
+					minerals = mined
 				}
 			} else {
 				minerals = scaleByPowerRatio(collectYield, powerRatio)
@@ -1222,45 +1227,159 @@ func collectMineralsKickback(module *model.CollectModule, mined int) int {
 	return int(float64(mined) * module.MineralsKickback)
 }
 
-func mineResource(ws *model.WorldState, building *model.Building, yieldPerTick int) int {
-	if ws == nil || building == nil {
+// veinsUtilizationTechID 矿物利用科技（DSP：每级 +10% 采矿产能、-6% 矿脉消耗）。
+// tech.go 属研究站域，暂未给该科技登记 Effects，故本域直接按等级结算。
+const (
+	veinsUtilizationTechID         = "veins_utilization"
+	veinsUtilizationMaxLevel       = 6
+	veinsUtilizationOutputPerLevel = 0.10
+	veinsUtilizationSavingPerLevel = 0.06
+)
+
+// miningCoverageRadiusByType 矿机覆盖半径（切比雪夫距离，单位：格）。
+// building_runtime.go 属其他域、不可新增字段，覆盖范围在此以类型常量表表达：
+// mining_machine 仅采自身所在脉（半径 0），advanced_mining_machine 大范围多脉同采。
+var miningCoverageRadiusByType = map[model.BuildingType]int{
+	model.BuildingTypeAdvancedMiningMachine: 2,
+}
+
+// veinsUtilizationLevel returns the effective veins_utilization research level,
+// capped at the tech's max level so oversized stored levels stay idempotent.
+func veinsUtilizationLevel(player *model.PlayerState) int {
+	if player == nil || player.Tech == nil {
 		return 0
+	}
+	level := player.Tech.CompletedTechs[veinsUtilizationTechID]
+	if level < 0 {
+		return 0
+	}
+	if level > veinsUtilizationMaxLevel {
+		return veinsUtilizationMaxLevel
+	}
+	return level
+}
+
+// miningYieldPerVein scales the per-vein yield by the veins_utilization output
+// bonus (+10% per level, rounded half-up so small yields still improve).
+func miningYieldPerVein(yieldPerTick, veinsLevel int) int {
+	if yieldPerTick <= 0 || veinsLevel <= 0 {
+		return yieldPerTick
+	}
+	scaled := int(math.Floor(float64(yieldPerTick)*(1+veinsUtilizationOutputPerLevel*float64(veinsLevel)) + 0.5))
+	if scaled < yieldPerTick {
+		return yieldPerTick
+	}
+	return scaled
+}
+
+// veinConsumption converts extracted ore into vein depletion, applying the
+// veins_utilization saving (-6% consumption per level, at least 1 per unit
+// extracted so veins still deplete).
+func veinConsumption(extracted, veinsLevel int) int {
+	if extracted <= 0 {
+		return 0
+	}
+	if veinsLevel <= 0 {
+		return extracted
+	}
+	saved := int(math.Floor(float64(extracted)*veinsUtilizationSavingPerLevel*float64(veinsLevel) + 0.5))
+	consumed := extracted - saved
+	if consumed < 1 {
+		consumed = 1
+	}
+	return consumed
+}
+
+// coveredResourceNodeIDs returns the deterministic set of resource nodes the
+// building covers: its own tile plus every tile inside its coverage radius.
+func coveredResourceNodeIDs(ws *model.WorldState, building *model.Building) []string {
+	if ws == nil || building == nil {
+		return nil
+	}
+	x, y := building.Position.X, building.Position.Y
+	if !ws.InBounds(x, y) {
+		return nil
+	}
+	radius := miningCoverageRadiusByType[building.Type]
+	ids := make([]string, 0, 1)
+	seen := make(map[string]struct{})
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			nx, ny := x+dx, y+dy
+			if !ws.InBounds(nx, ny) {
+				continue
+			}
+			nodeID := ws.Grid[ny][nx].ResourceNodeID
+			if nodeID == "" {
+				continue
+			}
+			if _, dup := seen[nodeID]; dup {
+				continue
+			}
+			seen[nodeID] = struct{}{}
+			ids = append(ids, nodeID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// mineResource extracts from every resource node covered by the building at
+// the per-vein yield (veins_utilization applies per vein). It returns the
+// total amount extracted plus a per-item breakdown keyed by catalog item ID
+// for storage crediting; unmapped kinds contribute only to the total so the
+// caller can keep crediting them as construction minerals.
+func mineResource(ws *model.WorldState, player *model.PlayerState, building *model.Building, yieldPerTick int) (int, map[string]int) {
+	if ws == nil || building == nil {
+		return 0, nil
 	}
 	if yieldPerTick <= 0 {
-		return 0
+		return 0, nil
 	}
-	if !ws.InBounds(building.Position.X, building.Position.Y) {
-		return 0
+	level := veinsUtilizationLevel(player)
+	perVeinYield := miningYieldPerVein(yieldPerTick, level)
+	total := 0
+	var byItem map[string]int
+	for _, nodeID := range coveredResourceNodeIDs(ws, building) {
+		node := ws.Resources[nodeID]
+		if node == nil {
+			continue
+		}
+		extracted := extractFromResourceNode(node, perVeinYield, level)
+		if extracted <= 0 {
+			continue
+		}
+		total += extracted
+		if itemID := resourceKindToItemID(node.Kind); itemID != "" {
+			if byItem == nil {
+				byItem = make(map[string]int, 1)
+			}
+			byItem[itemID] += extracted
+		}
 	}
-	tile := ws.Grid[building.Position.Y][building.Position.X]
-	if tile.ResourceNodeID == "" {
-		return 0
-	}
-	node := ws.Resources[tile.ResourceNodeID]
+	return total, byItem
+}
+
+// extractFromResourceNode settles one node's extraction for a single tick,
+// mutating remaining/yield and returning the amount the miner actually gets.
+func extractFromResourceNode(node *model.ResourceNodeState, yieldPerTick, veinsLevel int) int {
 	if node == nil {
 		return 0
 	}
-
 	switch node.Behavior {
-	case "finite":
+	case "finite", "renewable":
 		if node.Remaining <= 0 || node.CurrentYield <= 0 {
 			return 0
 		}
 		extracted := minInt(yieldPerTick, node.CurrentYield)
 		extracted = minInt(extracted, node.Remaining)
-		node.Remaining -= extracted
-		if node.Remaining == 0 {
-			node.CurrentYield = 0
+		node.Remaining -= veinConsumption(extracted, veinsLevel)
+		if node.Remaining <= 0 {
+			node.Remaining = 0
+			if node.Behavior == "finite" {
+				node.CurrentYield = 0
+			}
 		}
-		node.SyncDepleted()
-		return extracted
-	case "renewable":
-		if node.Remaining <= 0 || node.CurrentYield <= 0 {
-			return 0
-		}
-		extracted := minInt(yieldPerTick, node.CurrentYield)
-		extracted = minInt(extracted, node.Remaining)
-		node.Remaining -= extracted
 		node.SyncDepleted()
 		return extracted
 	case "decay":
@@ -1278,6 +1397,15 @@ func mineResource(ws *model.WorldState, building *model.Building, yieldPerTick i
 	default:
 		return 0
 	}
+}
+
+func sortedMiningItemIDs(byItem map[string]int) []string {
+	ids := make([]string, 0, len(byItem))
+	for id := range byItem {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func regenResourceNodes(ws *model.WorldState) {
@@ -1677,7 +1805,12 @@ func collectorOutputItemID(ws *model.WorldState, building *model.Building) strin
 	if node == nil {
 		return ""
 	}
-	switch node.Kind {
+	return resourceKindToItemID(node.Kind)
+}
+
+// resourceKindToItemID maps a resource node kind to its mined catalog item.
+func resourceKindToItemID(kind string) string {
+	switch kind {
 	case string(mapmodel.ResourceIronOre):
 		return model.ItemIronOre
 	case string(mapmodel.ResourceCopperOre):

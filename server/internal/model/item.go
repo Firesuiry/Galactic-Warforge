@@ -142,6 +142,9 @@ const (
 
 	ItemSolarSail          = "solar_sail"
 	ItemSmallCarrierRocket = "small_carrier_rocket"
+
+	ItemAccumulator     = "accumulator"
+	ItemAccumulatorFull = "accumulator_full"
 )
 
 // ItemDefinition defines immutable data for an item.
@@ -1001,6 +1004,22 @@ var itemCatalog = map[string]ItemDefinition{
 		Form:       ResourceSolid,
 		StackLimit: 100,
 		UnitVolume: 1,
+	},
+	ItemAccumulator: {
+		ID:         ItemAccumulator,
+		Name:       "Accumulator",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 2,
+	},
+	ItemAccumulatorFull: {
+		ID:         ItemAccumulatorFull,
+		Name:       "Accumulator (Full)",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 2,
 	},
 }
 

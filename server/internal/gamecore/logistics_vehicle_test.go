@@ -9,6 +9,7 @@ import (
 )
 
 func installTestStationFleet(core *GameCore, ws *model.WorldState, b *model.Building) error {
+	grantTechs(ws, b.OwnerID, "planetary_logistics", "interstellar_logistics")
 	for _, entry := range []struct {
 		item string
 		qty  int
@@ -45,6 +46,7 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 	ws := core.World()
 	station := newInterstellarLogisticsStationBuilding("install-station", model.Position{X: 5, Y: 5})
 	attachBuilding(ws, station)
+	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 	player := ws.Players["p1"]
 	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsDrone, Quantity: 12}, {ItemID: model.ItemLogisticsVessel, Quantity: 5}})
 	install := func(owner, item string, qty any) model.CommandResult {
@@ -423,6 +425,7 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 		t.Run(itemID, func(t *testing.T) {
 			ws := model.NewWorldState("planet-1", 12)
 			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: make(model.ItemInventory)}
+			grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 			core := &GameCore{}
 			factory := newBuilding("factory", model.BuildingTypeAssemblingMachineMk1, "p1", model.Position{X: 3, Y: 3})
 			factory.Production.RecipeID = itemID

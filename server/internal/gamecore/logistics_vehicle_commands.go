@@ -33,8 +33,12 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 		}
 		source = value
 	}
+	player := ws.Players[playerID]
 	switch itemID {
 	case model.ItemLogisticsDrone:
+		if !CanBuildTech(player, model.TechUnlockUnit, "logistics_drone") {
+			return fail("research required: logistics drone unit unlock (planetary_logistics or distribution_logistics)")
+		}
 		limit := min(station.DroneCapacityValue(), model.DefaultLogisticsStationDroneCapacity)
 		if quantity > limit-model.StationDroneCount(ws, building.ID) {
 			return fail("drone capacity exceeded")
@@ -43,6 +47,9 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 		if building.Type != model.BuildingTypeInterstellarLogisticsStation || !station.Interstellar.Enabled {
 			return fail("vessels require an enabled interstellar logistics station")
 		}
+		if !CanBuildTech(player, model.TechUnlockUnit, "logistics_ship") {
+			return fail("research required: logistics ship unit unlock (interstellar_logistics)")
+		}
 		limit := min(station.ShipSlotCapacityValue(), model.DefaultLogisticsStationShipSlots)
 		if quantity > limit-model.StationShipCount(ws, building.ID) {
 			return fail("ship slots exceeded")
@@ -50,7 +57,6 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 	default:
 		return fail("item_id must be logistics_drone or logistics_vessel")
 	}
-	player := ws.Players[playerID]
 	cost := []model.ItemAmount{{ItemID: itemID, Quantity: quantity}}
 	if (source == "player" && (player == nil || !player.HasItems(cost))) || (source == "station" && station.Inventory[itemID] < quantity) {
 		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeInsufficientResource, Message: "manufactured vehicles required in " + source + " inventory"}, nil
@@ -70,6 +76,7 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 			s := model.NewLogisticsShipState(ws.NextEntityID("ship"), building.ID, building.Position)
 			s.OriginPlanetID = ws.PlanetID
 			s.CurrentPlanetID = ws.PlanetID
+			s.RefreshTechStats(player)
 			err = model.RegisterLogisticsShip(ws, s)
 			if err == nil {
 				ships = append(ships, s.ID)

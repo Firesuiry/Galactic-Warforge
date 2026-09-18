@@ -813,6 +813,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execStartResearch(gc.world, qr.PlayerID, cmd)
 		case model.CmdCancelResearch:
 			res, evts = gc.execCancelResearch(gc.world, qr.PlayerID, cmd)
+		case model.CmdSetRecipe:
+			res, evts = gc.execSetRecipe(gc.world, qr.PlayerID, cmd)
 		case model.CmdTransferItem:
 			res, evts = gc.execTransferItem(gc.world, qr.PlayerID, cmd)
 		case model.CmdSwitchActivePlanet:

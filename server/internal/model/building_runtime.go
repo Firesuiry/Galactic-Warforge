@@ -169,9 +169,51 @@ type StorageModule struct {
 	OutputPriority int `json:"output_priority" yaml:"output_priority"`
 }
 
+// AccumulatorItemEnergy is the grid energy stored in one full accumulator
+// item (ItemAccumulatorFull), aligned with the accumulator building's storage
+// capacity. The accumulator item ids themselves live in item.go.
+const AccumulatorItemEnergy = 100
+
+// EnergyExchangerMode selects the item-cycle behavior of an energy exchanger.
+type EnergyExchangerMode string
+
+const (
+	// EnergyExchangerModeStandby leaves stored accumulator items untouched.
+	EnergyExchangerModeStandby EnergyExchangerMode = "standby"
+	// EnergyExchangerModeCharge converts empty accumulator items into full ones
+	// using grid surplus power.
+	EnergyExchangerModeCharge EnergyExchangerMode = "charge"
+	// EnergyExchangerModeDischarge converts full accumulator items back into
+	// empty ones, releasing energy into the grid.
+	EnergyExchangerModeDischarge EnergyExchangerMode = "discharge"
+)
+
+// IsEnergyExchangerMode validates an exchanger mode value.
+func IsEnergyExchangerMode(mode EnergyExchangerMode) bool {
+	switch mode {
+	case EnergyExchangerModeStandby, EnergyExchangerModeCharge, EnergyExchangerModeDischarge:
+		return true
+	}
+	return false
+}
+
 // EnergyExchangerModule marks a building as a playable power-storage hub.
+// Mode is per-instance runtime state (cloned per building); the remaining
+// fields are definition parameters for the accumulator item cycle.
 type EnergyExchangerModule struct {
 	Hub bool `json:"hub" yaml:"hub"`
+	// Mode selects charge/discharge/standby behavior for the item cycle.
+	Mode EnergyExchangerMode `json:"mode,omitempty" yaml:"mode,omitempty"`
+	// EnergyPerItem is the grid energy consumed to charge one item, or
+	// released when discharging one item.
+	EnergyPerItem int `json:"energy_per_item" yaml:"energy_per_item"`
+	// ItemsPerTick caps item conversions per tick in either direction.
+	ItemsPerTick int `json:"items_per_tick" yaml:"items_per_tick"`
+	// EmptyItemID is the discharged accumulator item consumed in charge mode.
+	EmptyItemID string `json:"empty_item_id" yaml:"empty_item_id"`
+	// FullItemID is the charged accumulator item produced in charge mode and
+	// consumed in discharge mode.
+	FullItemID string `json:"full_item_id" yaml:"full_item_id"`
 }
 
 // EnergyStorageModule handles power storage capacity and charge/discharge rules.
@@ -198,6 +240,13 @@ type CombatModule struct {
 	AmmoItem     string `json:"ammo_item,omitempty" yaml:"ammo_item,omitempty"`
 	AmmoConsume  int    `json:"ammo_consume,omitempty" yaml:"ammo_consume,omitempty"`
 	LastFireTick int64  `json:"last_fire_tick,omitempty" yaml:"last_fire_tick,omitempty"`
+	// AltAmmoItem is an optional upgraded ammunition the turret may fall back
+	// to when the primary AmmoItem is unavailable. Consumption of AltAmmoItem
+	// is wired in the turret settlement layer; the fields here are the
+	// authoritative runtime data it consumes.
+	AltAmmoItem string `json:"alt_ammo_item,omitempty" yaml:"alt_ammo_item,omitempty"`
+	// AltAmmoAttack is the attack value applied when firing AltAmmoItem.
+	AltAmmoAttack int `json:"alt_ammo_attack,omitempty" yaml:"alt_ammo_attack,omitempty"`
 }
 
 // PowerGridModule handles wireless power transmission coverage.
@@ -430,8 +479,20 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			return fmt.Errorf("building runtime %s storage module invalid", def.ID)
 		}
 	}
-	if def.Functions.EnergyExchanger != nil && !def.Functions.EnergyExchanger.Hub {
-		return fmt.Errorf("building runtime %s energy exchanger module invalid", def.ID)
+	if def.Functions.EnergyExchanger != nil {
+		module := def.Functions.EnergyExchanger
+		if !module.Hub {
+			return fmt.Errorf("building runtime %s energy exchanger module invalid", def.ID)
+		}
+		if module.Mode != "" && !IsEnergyExchangerMode(module.Mode) {
+			return fmt.Errorf("building runtime %s energy exchanger mode invalid", def.ID)
+		}
+		if module.EnergyPerItem <= 0 || module.ItemsPerTick <= 0 {
+			return fmt.Errorf("building runtime %s energy exchanger item cycle params invalid", def.ID)
+		}
+		if module.EmptyItemID == "" || module.FullItemID == "" {
+			return fmt.Errorf("building runtime %s energy exchanger item ids required", def.ID)
+		}
 	}
 	if def.Functions.RayReceiver != nil {
 		module := def.Functions.RayReceiver
@@ -599,6 +660,10 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 		val := *m.RayReceiver
 		out.RayReceiver = &val
 	}
+	if m.EnergyExchanger != nil {
+		val := *m.EnergyExchanger
+		out.EnergyExchanger = &val
+	}
 	if m.EnergyStorage != nil {
 		val := *m.EnergyStorage
 		out.EnergyStorage = &val
@@ -636,6 +701,35 @@ func (m BuildingFunctionModules) clone() BuildingFunctionModules {
 		out.Deployment = &val
 	}
 	return out
+}
+
+// RequiresLavaProximity reports whether the building type must be placed on or
+// directly adjacent to lava terrain (geothermal power stations).
+func RequiresLavaProximity(btype BuildingType) bool {
+	return btype == BuildingTypeGeothermalPowerStation
+}
+
+// LavaProximityOk reports whether any tile covered by the footprint at (x,y)
+// or by its 1-tile surrounding ring is lava, using the provided lookup. The
+// lookup must answer false for out-of-bounds coordinates.
+func LavaProximityOk(isLava func(x, y int) bool, x, y, width, height int) bool {
+	if isLava == nil {
+		return false
+	}
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+	for dy := -1; dy <= height; dy++ {
+		for dx := -1; dx <= width; dx++ {
+			if isLava(x+dx, y+dy) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
@@ -1088,9 +1182,20 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
+			IOPorts: []IOPort{
+				{ID: "acc-in", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemAccumulator, ItemAccumulatorFull}},
+				{ID: "acc-out", Direction: PortOutput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemAccumulator, ItemAccumulatorFull}},
+			},
 		},
 		Functions: BuildingFunctionModules{
-			EnergyExchanger: &EnergyExchangerModule{Hub: true},
+			EnergyExchanger: &EnergyExchangerModule{
+				Hub:           true,
+				Mode:          EnergyExchangerModeStandby,
+				EnergyPerItem: AccumulatorItemEnergy,
+				ItemsPerTick:  1,
+				EmptyItemID:   ItemAccumulator,
+				FullItemID:    ItemAccumulatorFull,
+			},
 			EnergyStorage: &EnergyStorageModule{
 				Capacity:            400,
 				ChargePerTick:       80,
@@ -1100,6 +1205,7 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				Priority:            2,
 				InitialCharge:       0,
 			},
+			Storage: &StorageModule{Capacity: 200, Slots: 2, Buffer: 20, InputPriority: 2, OutputPriority: 1},
 		},
 	},
 	{
@@ -1178,6 +1284,18 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
+		ID: BuildingTypeGeothermalPowerStation,
+		Params: BuildingRuntimeParams{
+			EnergyGenerate: 30,
+			ConnectionPoints: []ConnectionPoint{
+				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
+			},
+		},
+		Functions: BuildingFunctionModules{
+			Energy: &modelpower.EnergyModule{OutputPerTick: 30, SourceKind: modelpower.PowerSourceGeothermal},
+		},
+	},
+	{
 		ID: BuildingTypeThermalPowerPlant,
 		Params: BuildingRuntimeParams{
 			EnergyGenerate: 20,
@@ -1185,16 +1303,24 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 			IOPorts: []IOPort{
-				{ID: "fuel-in", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemCoal}},
+				{ID: "fuel-in", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemCoal, ItemEnergeticGraphite, ItemHydrogen, ItemHydrogenFuelRod, ItemLog, ItemPlantFuel}},
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Storage: &StorageModule{Capacity: 50, Slots: 1, Buffer: 10, InputPriority: 2, OutputPriority: 0},
+			Storage: &StorageModule{Capacity: 50, Slots: 6, Buffer: 10, InputPriority: 2, OutputPriority: 0},
 			Energy: &modelpower.EnergyModule{
 				OutputPerTick: 20,
 				SourceKind:    modelpower.PowerSourceThermal,
+				// Output multipliers are折算自物品 MechaFuelEnergy 热值，以煤
+				// (25) 为基准 1.0：石墨 50→2.0、氢 30→1.2、氢燃料棒 100→4.0、
+				// 木材 15→0.6、植物燃料 5→0.2。结算按顺序选用第一种可达燃料。
 				FuelRules: []modelpower.FuelRule{
 					{ItemID: ItemCoal, ConsumePerTick: 1, OutputMultiplier: 1},
+					{ItemID: ItemEnergeticGraphite, ConsumePerTick: 1, OutputMultiplier: 2},
+					{ItemID: ItemHydrogen, ConsumePerTick: 1, OutputMultiplier: 1.2},
+					{ItemID: ItemHydrogenFuelRod, ConsumePerTick: 1, OutputMultiplier: 4},
+					{ItemID: ItemLog, ConsumePerTick: 1, OutputMultiplier: 0.6},
+					{ItemID: ItemPlantFuel, ConsumePerTick: 1, OutputMultiplier: 0.2},
 				},
 			},
 		},
@@ -1219,16 +1345,18 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
 			IOPorts: []IOPort{
-				{ID: "fuel-in", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemHydrogenFuelRod}},
+				{ID: "fuel-in", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 2, AllowedItems: []string{ItemHydrogenFuelRod, ItemDeuteriumFuelRod}},
 			},
 		},
 		Functions: BuildingFunctionModules{
-			Storage: &StorageModule{Capacity: 40, Slots: 1, Buffer: 10, InputPriority: 2, OutputPriority: 0},
+			Storage: &StorageModule{Capacity: 40, Slots: 2, Buffer: 10, InputPriority: 2, OutputPriority: 0},
 			Energy: &modelpower.EnergyModule{
 				OutputPerTick: 40,
 				SourceKind:    modelpower.PowerSourceFusion,
+				// 氘棒热值 (MechaFuelEnergy 250) 为氢棒 (100) 的 2.5 倍。
 				FuelRules: []modelpower.FuelRule{
 					{ItemID: ItemHydrogenFuelRod, ConsumePerTick: 1, OutputMultiplier: 1},
+					{ItemID: ItemDeuteriumFuelRod, ConsumePerTick: 1, OutputMultiplier: 2.5},
 				},
 			},
 		},
@@ -1370,10 +1498,22 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 			ConnectionPoints: []ConnectionPoint{
 				{ID: "power", Kind: ConnectionPower, Offset: GridOffset{X: 0, Y: 0}, Capacity: 1},
 			},
+			IOPorts: []IOPort{
+				{ID: "ammo", Direction: PortInput, Offset: GridOffset{X: 0, Y: 0}, Capacity: 4, AllowedItems: []string{ItemAmmoBullet, ItemTitaniumAmmo}},
+			},
 		},
 		Functions: BuildingFunctionModules{
-			Combat: &CombatModule{Attack: 15, Range: 5},
-			Energy: &modelpower.EnergyModule{ConsumePerTick: 3},
+			Combat: &CombatModule{
+				Attack:        15,
+				Range:         5,
+				FireRate:      10,
+				AmmoItem:      ItemAmmoBullet,
+				AmmoConsume:   1,
+				AltAmmoItem:   ItemTitaniumAmmo,
+				AltAmmoAttack: 25,
+			},
+			Energy:  &modelpower.EnergyModule{ConsumePerTick: 3},
+			Storage: &StorageModule{Capacity: 40, Slots: 1, Buffer: 20, InputPriority: 2, OutputPriority: 1},
 		},
 	},
 	{

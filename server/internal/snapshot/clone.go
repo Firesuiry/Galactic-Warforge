@@ -18,7 +18,6 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		Inventory:       ps.Inventory.Clone(),
 		IsAlive:         ps.IsAlive,
 		Tech:            clonePlayerTechState(ps.Tech),
-		CombatTech:      clonePlayerCombatTechState(ps.CombatTech),
 		Stats:           clonePlayerStats(ps.Stats),
 		WarBlueprints:   cloneWarBlueprintMap(ps.WarBlueprints),
 		WarIndustry:     cloneWarIndustryState(ps.WarIndustry),
@@ -107,30 +106,6 @@ func clonePlayerTechState(tech *model.PlayerTechState) *model.PlayerTechState {
 	}
 	for _, queued := range tech.ResearchQueue {
 		cp.ResearchQueue = append(cp.ResearchQueue, clonePlayerResearch(queued))
-	}
-	return cp
-}
-
-func clonePlayerCombatTechState(state *model.PlayerCombatTechState) *model.PlayerCombatTechState {
-	if state == nil {
-		return nil
-	}
-	cp := &model.PlayerCombatTechState{
-		PlayerID:         state.PlayerID,
-		UnlockedTechs:    make(map[string]*model.CombatTech, len(state.UnlockedTechs)),
-		CurrentResearch:  nil,
-		ResearchProgress: state.ResearchProgress,
-	}
-	for id, tech := range state.UnlockedTechs {
-		if tech == nil {
-			continue
-		}
-		copyTech := *tech
-		cp.UnlockedTechs[id] = &copyTech
-	}
-	if state.CurrentResearch != nil {
-		copyTech := *state.CurrentResearch
-		cp.CurrentResearch = &copyTech
 	}
 	return cp
 }

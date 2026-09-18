@@ -31,6 +31,8 @@ func newSettlementPipeline() settlementPipeline {
 
 	pipeline.register("research_and_dyson", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
 		events := settleResearch(gc.worlds)
+		// Refresh research-derived drone speed and sail lifetimes before decay.
+		settleTechAssetSync(gc, frame)
 		events = append(events, settleWarIndustry(frame.currentWorld, gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settleSolarSails(gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settleDysonSpheres(gc.spaceRuntime, frame.currentTick)...)
@@ -49,6 +51,7 @@ func newSettlementPipeline() settlementPipeline {
 			settlePlanetaryShields(ws)
 			events = append(events, finalizePowerSettlement(ws, receiverViews)...)
 			events = append(events, settleResources(ws)...)
+			events = append(events, gc.settleAutoLaunch(ws)...)
 			events = append(events, settleLogisticsCharging(ws)...)
 
 			settleOrbitalCollectors(ws, gc.maps)
@@ -109,7 +112,7 @@ func newSettlementPipeline() settlementPipeline {
 		events = append(events, gc.settleEnemyForces()...)
 		events = append(events, gc.settleCombat()...)
 		events = append(events, gc.settleOrbitalCombat()...)
-		events = append(events, gc.settleDroneControl()...)
+		events = append(events, gc.settleCombatTech()...)
 		gc.settleStats()
 
 		if !gc.Victory().Declared() {

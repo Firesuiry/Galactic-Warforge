@@ -7,6 +7,7 @@ const (
 	PowerSourceWind           PowerSourceKind = "wind"
 	PowerSourceSolar          PowerSourceKind = "solar"
 	PowerSourceThermal        PowerSourceKind = "thermal"
+	PowerSourceGeothermal     PowerSourceKind = "geothermal"
 	PowerSourceFusion         PowerSourceKind = "fusion"
 	PowerSourceArtificialStar PowerSourceKind = "artificial_star"
 	PowerSourceRayReceiver    PowerSourceKind = "ray_receiver"
@@ -17,6 +18,7 @@ var validPowerSourceKinds = map[PowerSourceKind]struct{}{
 	PowerSourceWind:           {},
 	PowerSourceSolar:          {},
 	PowerSourceThermal:        {},
+	PowerSourceGeothermal:     {},
 	PowerSourceFusion:         {},
 	PowerSourceArtificialStar: {},
 	PowerSourceRayReceiver:    {},

@@ -38,3 +38,4 @@
 - 物流站不再免费生成运输器；先接电配槽/皮带，再制造并安装无人机/运输船；install默认扣背包，`--source station` 扣站库成品，支持制造台皮带入站安装。唯一库存为 `logistics_station.inventory`，喷涂货物入口背压。回放 `scripts/playtest-logistics-station-browser.mjs`（19498/4188），运行边界与待验收项见 [星球玩法覆盖与验收](docs/guide/星球玩法覆盖与验收.md)。
 - 本轮完成仓库配送器、配送机器人、机甲物流请求的服务端、CLI、Web 与 3D 可视化；验证命令和运行约束见 docs/dev/服务端API.md、docs/dev/客户端CLI.md、docs/player/玩法指南.md。
 - 配送器真实回放 `scripts/playtest-distributor-browser.mjs`（19500/4190；隔离配置见同目录fixtures/distributor/README.md）。配送库存必须包括主仓和IO缓存；详情用runtime刷新库存/充电。2026-09-17补齐实际仓库缓存回归、机甲送收与飞行截图。
+- 2026-09-18 W2 研究站与建造体验：新增 set_recipe 命令（原地切换配方/研究模式，进度清零库存保留、非法原子拒绝）；研究站/生产建筑垂直叠层（vertical_construction 逐级解锁，叠层共享底层库存、研究吞吐线性叠加）；mass_construction 接入建造区域并发上限；战斗科技效果（weapon_damage/structure_hp/shield_capacity）经主科技树 start_research 研究、settleCombatTech 每 tick 结算到战斗单位，旧的并行 CombatTechManager/PlayerCombatTechState 死代码已删除；dark_fog_matrix 隐藏科技改为持有触发物品可见。测试在 server/internal/gamecore/research_station_w2_test.go。

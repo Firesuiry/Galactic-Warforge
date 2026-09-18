@@ -41,6 +41,7 @@ type MechaState struct {
 	FuelEnergy          int                              `json:"fuel_energy"`
 	Shield              int                              `json:"shield"`
 	MaxShield           int                              `json:"max_shield"`
+	InventoryCapacity   int                              `json:"inventory_capacity"`
 	AttackEnergyCost    int                              `json:"attack_energy_cost"`
 	MoveEnergyCost      int                              `json:"move_energy_cost"`
 	ShieldRechargeDelay int64                            `json:"shield_recharge_delay"`
@@ -63,7 +64,50 @@ func (m *MechaState) Clone() *MechaState {
 }
 
 func NewMechaState() *MechaState {
-	return &MechaState{Energy: 100, MaxEnergy: 100, AttackEnergyCost: 8, MoveEnergyCost: 1, ShieldRechargeDelay: 10}
+	return &MechaState{Energy: 100, MaxEnergy: 100, InventoryCapacity: baseMechaInventoryCapacity, AttackEnergyCost: 8, MoveEnergyCost: 1, ShieldRechargeDelay: 10}
+}
+
+// Base executor stats before any research bonus is applied.
+const (
+	baseMechaMaxEnergy         = 100
+	baseMechaMoveRange         = 12
+	baseMechaVisionRange       = 6
+	baseMechaMaxHP             = 120
+	baseMechaInventoryCapacity = 200
+
+	// Per-level bonuses for mecha upgrade techs whose definitions do not carry
+	// catalog Effects yet. Keyed by tech ID so research state drives real stats.
+	mechanicalFrameHPPerLevel      = 20
+	inventoryCapacityPerLevel      = 60
+	driveEngineMoveRangePerLevel   = 2
+	energyCircuitChargePctPerLevel = 20
+	chargeRatePercentBase          = 100
+)
+
+// CompletedTechLevel returns the researched level of a tech, clamped to its
+// catalog MaxLevel, or 0 when the player has not completed it.
+func CompletedTechLevel(player *PlayerState, techID string) int {
+	if player == nil || player.Tech == nil {
+		return 0
+	}
+	level := player.Tech.CompletedTechs[techID]
+	if level <= 0 {
+		return 0
+	}
+	if def, ok := TechDefinitionByID(techID); ok && def.MaxLevel > 0 {
+		level = min(level, def.MaxLevel)
+	}
+	return level
+}
+
+// MechaChargeRate applies the energy_circuit research bonus to a base grid
+// charge rate: +20% per completed level.
+func MechaChargeRate(base int, player *PlayerState) int {
+	if base <= 0 {
+		return 0
+	}
+	pct := chargeRatePercentBase + energyCircuitChargePctPerLevel*CompletedTechLevel(player, "energy_circuit")
+	return base * pct / chargeRatePercentBase
 }
 
 // TechEffectValue derives bonuses from completed research without accumulating
@@ -106,11 +150,31 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 		unit.Mecha = NewMechaState()
 	}
 	m := unit.Mecha
-	m.MaxEnergy = 100 + int(TechEffectValue(player, "core_capacity"))
+	m.MaxEnergy = baseMechaMaxEnergy + int(TechEffectValue(player, "core_capacity"))
 	m.MaxShield = int(TechEffectValue(player, "shield_capacity"))
+	m.InventoryCapacity = baseMechaInventoryCapacity + inventoryCapacityPerLevel*CompletedTechLevel(player, "inventory_capacity")
 	m.Energy = max(0, min(m.Energy, m.MaxEnergy))
 	m.Shield = max(0, min(m.Shield, m.MaxShield))
-	unit.MoveRange = 12 + int(TechEffectValue(player, "move_speed"))
+	// Logistics requests may not ask for more than the backpack can hold; the
+	// distributor settlement reads Max when delivering to the mecha.
+	for itemID, request := range m.LogisticsRequests {
+		if request.Max > m.InventoryCapacity {
+			request.Max = m.InventoryCapacity
+		}
+		if request.Min > request.Max {
+			request.Min = request.Max
+		}
+		if request.Min < 0 {
+			request.Min = 0
+		}
+		m.LogisticsRequests[itemID] = request
+	}
+	unit.MaxHP = baseMechaMaxHP + mechanicalFrameHPPerLevel*CompletedTechLevel(player, "mechanical_frame")
+	unit.HP = max(0, min(unit.HP, unit.MaxHP))
+	// mecha_engine (move_speed effect) and drive_engine stack into the same
+	// movement calculation.
+	unit.MoveRange = baseMechaMoveRange + int(TechEffectValue(player, "move_speed")) + driveEngineMoveRangePerLevel*CompletedTechLevel(player, "drive_engine")
+	unit.VisionRange = baseMechaVisionRange + int(TechEffectValue(player, "exploration_range"))
 	unit.Attack, unit.Defense, unit.AttackRange = 20, 8, 4
 }
 

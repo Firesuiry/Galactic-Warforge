@@ -8,6 +8,74 @@ import (
 	"siliconworld/internal/model"
 )
 
+// stackSharedStorage resolves the effective storage of a research lab:
+// vertically stacked layers (Z>0) share the ground layer's storage, DSP-style.
+// The ground building is the one registered in TileBuilding for (x, y).
+func stackSharedStorage(ws *model.WorldState, building *model.Building) *model.StorageState {
+	if ws == nil || building == nil {
+		return nil
+	}
+	if building.Position.Z <= 0 {
+		return building.Storage
+	}
+	base := ws.Buildings[ws.TileBuilding[model.TileKey(building.Position.X, building.Position.Y)]]
+	if base == nil || base.Type != building.Type || base.OwnerID != building.OwnerID || base.Storage == nil {
+		return building.Storage
+	}
+	return base.Storage
+}
+
+// researchLabStorageResolver returns a lookup of each lab's effective
+// (stack-shared) storage, keyed by lab building ID.
+func researchLabStorageResolver(worlds map[string]*model.WorldState, labs []*model.Building) func(*model.Building) *model.StorageState {
+	worldByBuilding := make(map[string]*model.WorldState, len(labs))
+	for _, ws := range worlds {
+		if ws == nil {
+			continue
+		}
+		for id := range ws.Buildings {
+			worldByBuilding[id] = ws
+		}
+	}
+	return func(building *model.Building) *model.StorageState {
+		if building == nil {
+			return nil
+		}
+		if ws, ok := worldByBuilding[building.ID]; ok {
+			return stackSharedStorage(ws, building)
+		}
+		return building.Storage
+	}
+}
+
+// hiddenTechDiscovered reports whether a hidden tech has become visible to the
+// player. DSP semantics: hidden Dark Fog techs reveal themselves once the
+// player holds the trigger item (e.g. dark_fog_matrix loot); here the trigger
+// is holding at least one of every item in the tech's next-level cost, either
+// in the player inventory or in a research lab's storage.
+func hiddenTechDiscovered(player *model.PlayerState, labs []*model.Building, cost []model.ItemAmount, storageOf func(*model.Building) *model.StorageState) bool {
+	for _, c := range cost {
+		if c.ItemID == "" || c.Quantity <= 0 {
+			continue
+		}
+		total := 0
+		if player != nil && player.Inventory != nil {
+			total += player.Inventory[c.ItemID]
+		}
+		for _, lab := range labs {
+			storage := storageOf(lab)
+			if storage == nil {
+				continue
+			}
+			total += storage.OutputQuantity(c.ItemID)
+		}
+		if total <= 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // settleResearch processes research progress for all players using real matrix items.
 func settleResearch(worlds map[string]*model.WorldState) []*model.GameEvent {
 	var events []*model.GameEvent
@@ -58,7 +126,7 @@ func settleResearch(worlds map[string]*model.WorldState) []*model.GameEvent {
 			continue
 		}
 
-		progressed := consumeResearchProgress(labs, research, throughput)
+		progressed := consumeResearchProgress(labs, research, throughput, researchLabStorageResolver(worlds, labs))
 		if progressed <= 0 {
 			research.BlockedReason = "waiting_matrix"
 			research.EstimatedTicksRemaining = 0
@@ -347,11 +415,6 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		res.Message = fmt.Sprintf("unknown tech: %s", techID)
 		return res, nil
 	}
-	if def.Hidden {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("tech %s is hidden and cannot be researched directly", techID)
-		return res, nil
-	}
 
 	// Check prerequisites
 	if !player.Tech.HasPrerequisites(def) {
@@ -386,6 +449,15 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		res.Message = "at least one running research lab is required"
 		return res, nil
 	}
+	storageOf := researchLabStorageResolver(gc.worlds, labs)
+
+	// Hidden techs (Dark Fog chain) become researchable once the player holds
+	// the trigger items; before that they stay invisible.
+	if def.Hidden && !hiddenTechDiscovered(player, labs, def.CostForLevel(player.Tech.CompletedTechs[techID]+1), storageOf) {
+		res.Code = model.CodeValidationFailed
+		res.Message = fmt.Sprintf("tech %s is hidden; obtain its trigger items to reveal it", techID)
+		return res, nil
+	}
 
 	// The cost of the level being researched (1-based); repeatable techs with
 	// CostPerLevel pay per-level prices, everything else pays def.Cost.
@@ -397,10 +469,11 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 		total := 0
 		for _, lab := range labs {
-			if lab == nil || lab.Storage == nil {
+			storage := storageOf(lab)
+			if storage == nil {
 				continue
 			}
-			total += lab.Storage.OutputQuantity(cost.ItemID)
+			total += storage.OutputQuantity(cost.ItemID)
 		}
 		if total <= 0 {
 			res.Code = model.CodeValidationFailed
@@ -504,12 +577,15 @@ func calculateTechCost(cost []model.ItemAmount) int64 {
 	return total
 }
 
-func consumeResearchProgress(labs []*model.Building, research *model.PlayerResearch, budget int) int {
+func consumeResearchProgress(labs []*model.Building, research *model.PlayerResearch, budget int, storageOf func(*model.Building) *model.StorageState) int {
 	if research == nil || budget <= 0 || len(research.RequiredCost) == 0 || len(labs) == 0 {
 		return 0
 	}
 	if research.ConsumedCost == nil {
 		research.ConsumedCost = make(map[string]int, len(research.RequiredCost))
+	}
+	if storageOf == nil {
+		storageOf = func(b *model.Building) *model.StorageState { return b.Storage }
 	}
 
 	progressed := 0
@@ -518,10 +594,14 @@ func consumeResearchProgress(labs []*model.Building, research *model.PlayerResea
 		for remaining > 0 && budget > 0 {
 			consumedThisRound := false
 			for _, lab := range labs {
-				if lab == nil || lab.Storage == nil {
+				var storage *model.StorageState
+				if lab != nil {
+					storage = storageOf(lab)
+				}
+				if storage == nil {
 					continue
 				}
-				available := lab.Storage.OutputQuantity(cost.ItemID)
+				available := storage.OutputQuantity(cost.ItemID)
 				if available <= 0 {
 					continue
 				}
@@ -529,7 +609,7 @@ func consumeResearchProgress(labs []*model.Building, research *model.PlayerResea
 				if take <= 0 {
 					continue
 				}
-				provided, _, err := lab.Storage.Provide(cost.ItemID, take)
+				provided, _, err := storage.Provide(cost.ItemID, take)
 				if err != nil || provided <= 0 {
 					continue
 				}
@@ -648,6 +728,7 @@ func (gc *GameCore) ValidateStartResearch(playerID string, techID string) []mode
 	if len(labs) == 0 {
 		return []model.CommandIssue{{Field: "lab", Code: "no_running_lab", Message: "需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）"}}
 	}
+	storageOf := researchLabStorageResolver(gc.worlds, labs)
 
 	var issues []model.CommandIssue
 	for _, cost := range researchLevelCost(gc.worlds, playerID, def) {
@@ -656,10 +737,11 @@ func (gc *GameCore) ValidateStartResearch(playerID string, techID string) []mode
 		}
 		total := 0
 		for _, lab := range labs {
-			if lab == nil || lab.Storage == nil {
+			storage := storageOf(lab)
+			if storage == nil {
 				continue
 			}
-			total += lab.Storage.OutputQuantity(cost.ItemID)
+			total += storage.OutputQuantity(cost.ItemID)
 		}
 		if total <= 0 {
 			issues = append(issues, model.CommandIssue{
@@ -722,10 +804,11 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 		}
 		total := 0
 		for _, lab := range labs {
-			if lab.Storage == nil {
+			storage := stackSharedStorage(ws, lab)
+			if storage == nil {
 				continue
 			}
-			total += lab.Storage.OutputQuantity(cost.ItemID)
+			total += storage.OutputQuantity(cost.ItemID)
 		}
 		if total <= 0 {
 			issues = append(issues, model.CommandIssue{

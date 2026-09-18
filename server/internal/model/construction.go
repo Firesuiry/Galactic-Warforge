@@ -130,12 +130,15 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 	if err != nil {
 		return err
 	}
+	// Stacked layers (Z>0) sit on the ground building's tile by design; their
+	// placement was validated when the command resolved the stack position.
+	stacked := task.Position.Z > 0 && task.BuildingType != BuildingTypeLogisticsDistributor
 	for _, p := range tiles {
 		key := TileKey(p.X, p.Y)
 		if existing := q.ReservedTiles[key]; existing != "" {
 			return fmt.Errorf("tile %s already reserved by %s", key, existing)
 		}
-		if task.BuildingType != BuildingTypeLogisticsDistributor && (ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation)) {
+		if !stacked && task.BuildingType != BuildingTypeLogisticsDistributor && (ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation)) {
 			return fmt.Errorf("footprint tile %s is unavailable", key)
 		}
 		if task.BuildingType == BuildingTypeFoundation && ws.FoundationAt(p) != nil {

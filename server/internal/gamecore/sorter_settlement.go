@@ -51,6 +51,11 @@ func settleSorters(ws *model.WorldState) {
 			continue
 		}
 
+		// Each grab lifts up to grabStacks stacks: ordinary sorters peel one
+		// item per stack while the pile sorter lifts whole piles. The
+		// sorter_cargo_stacking tech raises the stacks per grab.
+		grabStacks := 1 + logisticsTechLevel(ws, building.OwnerID, "sorter_cargo_stacking")
+		pileGrab := building.Type == model.BuildingTypePileSorter
 		remaining := sorter.Speed
 		for _, out := range outputs {
 			if remaining <= 0 {
@@ -71,30 +76,22 @@ func settleSorters(ws *model.WorldState) {
 				if source == nil || source.Conveyor == nil {
 					continue
 				}
-				stack, ok := peekConveyorFront(source.Conveyor)
-				if !ok || stack.Quantity <= 0 {
+				moved := 0
+				movedItemID := ""
+				for remaining > 0 {
+					qty, itemID := sorterGrabOnce(ws, source, target, sorter, grabStacks, pileGrab)
+					if qty <= 0 {
+						break
+					}
+					if movedItemID == "" {
+						movedItemID = itemID
+					}
+					moved += qty
+					remaining--
+				}
+				if moved <= 0 {
 					continue
 				}
-				if !sorter.Filter.Allows(stack.ItemID) {
-					continue
-				}
-				available := target.Conveyor.AvailableCapacity()
-				if available <= 0 {
-					break
-				}
-				move := minInt(remaining, available)
-				if stack.Quantity < move {
-					move = stack.Quantity
-				}
-				if move <= 0 {
-					continue
-				}
-				moved := source.Conveyor.Take(move)
-				if len(moved) == 0 {
-					continue
-				}
-				target.Conveyor.AppendStacks(moved)
-				recordConveyorDeparture(ws, source, move)
 				sequence := int64(1)
 				if sorter.LastTransfer != nil {
 					sequence = sorter.LastTransfer.Sequence + 1
@@ -103,12 +100,67 @@ func settleSorters(ws *model.WorldState) {
 					Tick: ws.Tick, Sequence: sequence,
 					SourceID: source.ID, TargetID: target.ID,
 					SourcePosition: source.Position, TargetPosition: target.Position,
-					ItemID: stack.ItemID, Quantity: move,
+					ItemID: movedItemID, Quantity: moved,
 				}
-				remaining -= move
 			}
 		}
 	}
+}
+
+// sorterGrabOnce performs a single grab: up to maxStacks stacks from the front
+// of the source buffer. Ordinary sorters take one item per stack; pile
+// sorters lift each stack whole. Returns items moved and the first item ID.
+func sorterGrabOnce(
+	ws *model.WorldState,
+	source, target *model.Building,
+	sorter *model.SorterState,
+	maxStacks int,
+	pileGrab bool,
+) (int, string) {
+	available := conveyorInsertCapacity(ws, target)
+	if available <= 0 {
+		return 0, ""
+	}
+	moved := 0
+	itemID := ""
+	for stacks := 0; stacks < maxStacks && available > 0; stacks++ {
+		if len(source.Conveyor.Buffer) == 0 {
+			break
+		}
+		front := source.Conveyor.Buffer[0]
+		if front.Quantity <= 0 {
+			break
+		}
+		if !sorter.Filter.Allows(front.ItemID) {
+			break
+		}
+		take := 1
+		if pileGrab {
+			take = front.Quantity
+		}
+		if take > available {
+			take = available
+		}
+		if take <= 0 {
+			break
+		}
+		got := source.Conveyor.Take(take)
+		qty := 0
+		for _, stack := range got {
+			qty += stack.Quantity
+		}
+		if qty == 0 {
+			break
+		}
+		target.Conveyor.AppendStacks(got)
+		recordConveyorDeparture(ws, source, qty)
+		if itemID == "" {
+			itemID = front.ItemID
+		}
+		moved += qty
+		available -= qty
+	}
+	return moved, itemID
 }
 
 func sorterInputConveyors(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {

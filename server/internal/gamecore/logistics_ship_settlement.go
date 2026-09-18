@@ -13,6 +13,7 @@ func settleLogisticsShips(worlds map[string]*model.WorldState) {
 				continue
 			}
 			ship.Normalize()
+			ship.RefreshTechStats(ws.Players[ship.OwnerID])
 			ship.OriginPlanetID = originPlanetID
 
 			if ship.Status == model.LogisticsShipIdle {

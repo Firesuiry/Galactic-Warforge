@@ -27,7 +27,7 @@ func TestMineResourceMarksFiniteNodeDepleted(t *testing.T) {
 	ws.Grid[0][0].ResourceNodeID = "r1"
 	miner := &model.Building{ID: "miner", Position: model.Position{X: 0, Y: 0}}
 
-	if got := mineResource(ws, miner, 8); got != 5 {
+	if got, _ := mineResource(ws, nil, miner, 8); got != 5 {
 		t.Fatalf("expected to extract remaining 5, got %d", got)
 	}
 	if node.Remaining != 0 || !node.Depleted {
@@ -54,7 +54,7 @@ func TestRenewableNodeDepletedFollowsRegen(t *testing.T) {
 	ws.Grid[0][0].ResourceNodeID = "r1"
 	pump := &model.Building{ID: "pump", Position: model.Position{X: 0, Y: 0}}
 
-	if got := mineResource(ws, pump, 8); got != 3 {
+	if got, _ := mineResource(ws, nil, pump, 8); got != 3 {
 		t.Fatalf("expected to extract remaining 3, got %d", got)
 	}
 	if !node.Depleted {
