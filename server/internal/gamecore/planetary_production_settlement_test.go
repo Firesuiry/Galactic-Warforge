@@ -35,6 +35,7 @@ func TestPlanetaryProductionRecipesSettleFromBuildCommand(t *testing.T) {
 			player.Resources.Minerals = 10000
 			player.Resources.Energy = 10000
 			grantTechs(ws, "p1", tc.techs...)
+			grantAllItems(ws, "p1", 100)
 
 			prodPos, powerPos := findAdjacentBuildPair(t, ws, "p1")
 

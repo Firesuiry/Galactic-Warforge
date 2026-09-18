@@ -143,6 +143,7 @@ func TestCatalogRecipesAreExplicitlyBasicOrGated(t *testing.T) {
 func TestBuildWithGatedMatrixRecipeRequiresResearch(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	grantAllItems(ws, "p1", 100)
 
 	base := findOwnedBuildingByType(ws, "p1", model.BuildingTypeBattlefieldAnalysisBase)
 	if base == nil {

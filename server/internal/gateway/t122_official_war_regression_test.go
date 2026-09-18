@@ -17,7 +17,7 @@ import (
 )
 
 type warAuthT122 struct {
-	playerID string
+	playerID  string
 	playerKey string
 }
 
@@ -47,8 +47,8 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 		{
 			Type: model.CmdBlueprintFinalize,
 			Payload: map[string]any{
-				"blueprint_id":  "corvette_gateway_t122",
-				"target_state":  string(model.WarBlueprintStatePrototype),
+				"blueprint_id": "corvette_gateway_t122",
+				"target_state": string(model.WarBlueprintStatePrototype),
 			},
 		},
 	})

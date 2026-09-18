@@ -73,6 +73,52 @@ func TestMidLateItemsPresent(t *testing.T) {
 	}
 }
 
+func TestDSPAlignmentItemsPresent(t *testing.T) {
+	cases := []struct {
+		itemID     string
+		category   ItemCategory
+		stackLimit int
+		rare       bool
+	}{
+		{itemID: ItemKimberliteOre, category: ItemCategoryOre, stackLimit: 50, rare: true},
+		{itemID: ItemSpiniformStalagmiteCrystal, category: ItemCategoryOre, stackLimit: 50, rare: true},
+		{itemID: ItemLog, category: ItemCategoryFuel, stackLimit: 100},
+		{itemID: ItemPlantFuel, category: ItemCategoryFuel, stackLimit: 500},
+		{itemID: ItemTitaniumGlass, category: ItemCategoryMaterial, stackLimit: 100},
+		{itemID: ItemPlaneFilter, category: ItemCategoryComponent, stackLimit: 200},
+		{itemID: ItemParticleBroadband, category: ItemCategoryComponent, stackLimit: 200},
+		{itemID: ItemReinforcedThruster, category: ItemCategoryComponent, stackLimit: 100},
+		{itemID: ItemGravitonLens, category: ItemCategoryComponent, stackLimit: 100},
+		{itemID: ItemCasimirCrystal, category: ItemCategoryComponent, stackLimit: 100},
+		{itemID: ItemDysonSphereComponent, category: ItemCategoryComponent, stackLimit: 100},
+		{itemID: ItemFoundationSupply, category: ItemCategoryMaterial, stackLimit: 1000},
+		{itemID: ItemSupersonicMissileSet, category: ItemCategoryAmmo, stackLimit: 100},
+		{itemID: ItemAttackDrone, category: ItemCategoryComponent, stackLimit: 50},
+		{itemID: ItemCrystalShellSet, category: ItemCategoryAmmo, stackLimit: 100},
+		{itemID: ItemJammingCapsule, category: ItemCategoryAmmo, stackLimit: 100},
+		{itemID: ItemSuppressingCapsule, category: ItemCategoryAmmo, stackLimit: 100},
+	}
+
+	for _, tc := range cases {
+		def, ok := Item(tc.itemID)
+		if !ok {
+			t.Fatalf("missing item %s", tc.itemID)
+		}
+		if def.Category != tc.category {
+			t.Fatalf("item %s category mismatch: want %s got %s", tc.itemID, tc.category, def.Category)
+		}
+		if def.StackLimit != tc.stackLimit {
+			t.Fatalf("item %s stack limit mismatch: want %d got %d", tc.itemID, tc.stackLimit, def.StackLimit)
+		}
+		if def.IsRare != tc.rare {
+			t.Fatalf("item %s rare flag mismatch: want %v got %v", tc.itemID, tc.rare, def.IsRare)
+		}
+		if err := ValidateStack(tc.itemID, def.StackLimit); err != nil {
+			t.Fatalf("item %s full stack should validate: %v", tc.itemID, err)
+		}
+	}
+}
+
 func TestStackRules(t *testing.T) {
 	if err := ValidateStack(ItemIronOre, 0); err == nil {
 		t.Fatalf("expected error for zero quantity")

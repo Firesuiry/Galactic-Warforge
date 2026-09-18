@@ -261,23 +261,7 @@ func defaultBuildCostForCategory(category BuildingCategory) BuildCost {
 }
 
 var defaultBuildCostOverrides = map[BuildingType]BuildCost{
-	BuildingTypeBattlefieldAnalysisBase:      {Minerals: 120, Energy: 60},
-	BuildingTypeConveyorBeltMk1:              {Minerals: 4, Energy: 0},
-	BuildingTypeConveyorBeltMk2:              {Minerals: 8, Energy: 0},
-	BuildingTypeConveyorBeltMk3:              {Minerals: 12, Energy: 0},
-	BuildingTypeSorterMk1:                    {Minerals: 6, Energy: 0},
-	BuildingTypeSorterMk2:                    {Minerals: 10, Energy: 0},
-	BuildingTypeSorterMk3:                    {Minerals: 14, Energy: 0},
-	BuildingTypeTeslaTower:                   {Minerals: 20, Energy: 10},
-	BuildingTypeWirelessPowerTower:           {Minerals: 40, Energy: 20},
-	BuildingTypeSatelliteSubstation:          {Minerals: 80, Energy: 40},
-	BuildingTypeWindTurbine:                  {Minerals: 30, Energy: 0},
-	BuildingTypeFoundation:                   {Minerals: 10, Energy: 0},
-	BuildingTypeSignalTower:                  {Minerals: 50, Energy: 20},
-	BuildingTypeSprayCoater:                  {Minerals: 40, Energy: 20},
-	BuildingTypeLogisticsDistributor:         {Minerals: 30, Energy: 10},
-	BuildingTypePlanetaryLogisticsStation:    {Minerals: 240, Energy: 120},
-	BuildingTypeInterstellarLogisticsStation: {Minerals: 360, Energy: 180},
+	BuildingTypeFoundation: {Minerals: 10, Energy: 0},
 }
 
 func validateBuildingDefinition(def BuildingDefinition) error {

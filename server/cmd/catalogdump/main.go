@@ -13,12 +13,12 @@ import (
 )
 
 type dump struct {
-	Items          []model.ItemDefinition             `json:"items"`
-	Recipes        []model.RecipeDefinition           `json:"recipes"`
-	Techs          []*model.TechDefinition            `json:"techs"`
-	Buildings      []model.BuildingDefinition          `json:"buildings"`
+	Items            []model.ItemDefinition            `json:"items"`
+	Recipes          []model.RecipeDefinition          `json:"recipes"`
+	Techs            []*model.TechDefinition           `json:"techs"`
+	Buildings        []model.BuildingDefinition        `json:"buildings"`
 	BuildingRuntimes []model.BuildingRuntimeDefinition `json:"building_runtimes"`
-	ResourceKinds  []mapmodel.ResourceKind            `json:"resource_kinds"`
+	ResourceKinds    []mapmodel.ResourceKind           `json:"resource_kinds"`
 }
 
 func main() {

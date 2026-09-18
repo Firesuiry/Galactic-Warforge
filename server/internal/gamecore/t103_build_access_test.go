@@ -11,6 +11,7 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "integrated_logistics")
+	grantAllItems(ws, "p1", 100)
 
 	pos, err := findOpenTile(ws, 2)
 	if err != nil {

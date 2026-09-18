@@ -110,7 +110,9 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 		}
 	}
 
-	for _, hiddenTech := range []string{
+	// DSP 行星内生产对齐批次落地了对应配方，这些科技不再是死端，
+	// 必须出现在公开科技目录中。
+	for _, landedTech := range []string{
 		"casimir_crystal",
 		"crystal_explosive",
 		"crystal_shell",
@@ -118,8 +120,8 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 		"supersonic_missile",
 		"wave_interference",
 	} {
-		if _, exists := techsByID[hiddenTech]; exists {
-			t.Fatalf("expected hidden dead-end tech %s to be absent from /catalog.techs", hiddenTech)
+		if _, exists := techsByID[landedTech]; !exists {
+			t.Fatalf("expected landed recipe-gating tech %s in public catalog", landedTech)
 		}
 	}
 
@@ -137,7 +139,7 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 		t.Fatalf("expected particle_control.leads_to to include information_matrix, got %+v", particleLeadsTo)
 	}
 	if catalogContains(particleLeadsTo, "casimir_crystal") {
-		t.Fatalf("expected particle_control.leads_to to exclude hidden dead-end casimir_crystal, got %+v", particleLeadsTo)
+		t.Fatalf("expected particle_control.leads_to to exclude casimir_crystal (prereq restructured to structure_matrix), got %+v", particleLeadsTo)
 	}
 
 	highStrengthGlass := techsByID["high_strength_glass"]
@@ -149,6 +151,6 @@ func TestT103CatalogReflectsPublicTechAndBuildingClosure(t *testing.T) {
 		t.Fatalf("expected high_strength_glass.leads_to to include high_energy_laser, got %+v", glassLeadsTo)
 	}
 	if catalogContains(glassLeadsTo, "crystal_explosive") {
-		t.Fatalf("expected high_strength_glass.leads_to to exclude hidden dead-end crystal_explosive, got %+v", glassLeadsTo)
+		t.Fatalf("expected high_strength_glass.leads_to to exclude crystal_explosive (prereq restructured to casimir_crystal), got %+v", glassLeadsTo)
 	}
 }

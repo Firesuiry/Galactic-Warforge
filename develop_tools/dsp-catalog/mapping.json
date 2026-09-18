@@ -32,6 +32,9 @@
     "deuterium": "deuterium"
    },
    {
+    "kimberlite-ore": "kimberlite_ore"
+   },
+   {
     "iron-ingot": "iron_ingot"
    },
    {
@@ -104,6 +107,9 @@
     "df-magnum-ammo-box": "ammo_bullet"
    },
    {
+    "df-supersonic-missile-set": "supersonic_missile_set"
+   },
+   {
     "optical-grating-crystal": "grating_crystal"
    },
    {
@@ -137,10 +143,16 @@
     "carbon-nanotube": "carbon_nanotube"
    },
    {
+    "particle-broadband": "particle_broadband"
+   },
+   {
     "df-titanium-ammo-box": "titanium_ammo"
    },
    {
     "df-gravity-missile-set": "gravity_missile"
+   },
+   {
+    "spiniform-stalagmite-crystal": "spiniform_stalagmite_crystal"
    },
    {
     "gear": "gear"
@@ -164,6 +176,15 @@
     "df-crystal-explosive-unit": "plasma_capsule"
    },
    {
+    "casimir-crystal": "casimir_crystal"
+   },
+   {
+    "titanium-glass": "titanium_glass"
+   },
+   {
+    "plane-filter": "plane_filter"
+   },
+   {
     "quantum-chip": "quantum_chip"
    },
    {
@@ -182,6 +203,9 @@
     "thruster": "engine"
    },
    {
+    "reinforced-thruster": "reinforced_thruster"
+   },
+   {
     "super-magnetic-ring": "super_magnetic_ring"
    },
    {
@@ -195,6 +219,9 @@
    },
    {
     "df-precision-drone": "precision_drone"
+   },
+   {
+    "df-attack-drone": "attack_drone"
    },
    {
     "df-corvette": "corvette"
@@ -224,13 +251,28 @@
     "space-warper": "space_warper"
    },
    {
+    "graviton-lens": "graviton_lens"
+   },
+   {
+    "foundation": "foundation_supply"
+   },
+   {
     "solar-sail": "solar_sail"
    },
    {
     "frame-material": "frame_material"
    },
    {
+    "dyson-sphere-component": "dyson_sphere_component"
+   },
+   {
     "small-carrier-rocket": "small_carrier_rocket"
+   },
+   {
+    "df-crystal-shell-set": "crystal_shell_set"
+   },
+   {
+    "log": "log"
    },
    {
     "electromagnetic-matrix": "electromagnetic_matrix"
@@ -246,6 +288,15 @@
    },
    {
     "gravity-matrix": "gravity_matrix"
+   },
+   {
+    "df-jamming-capsule": "jamming_capsule"
+   },
+   {
+    "df-suppressing-capsule": "suppressing_capsule"
+   },
+   {
+    "plant-fuel": "plant_fuel"
    }
   ],
   "buildings": [
@@ -456,6 +507,12 @@
     "deuterium-fractionation-technology": "deuterium_fractionation"
    },
    {
+    "df-antimatter-capsule-tech": "df_antimatter_capsule_tech"
+   },
+   {
+    "df-attack-drone-tech": "df_attack_drone_tech"
+   },
+   {
     "df-battlefield-analysis-base-tech": "battlefield_analysis"
    },
    {
@@ -480,13 +537,34 @@
     "df-engine-tech": "engine"
    },
    {
+    "df-explosive-unit-tech": "df_explosive_unit_tech"
+   },
+   {
     "df-gravity-missile-set-tech": "gravity_missile"
+   },
+   {
+    "df-high-density-controlled-annihilation": "df_high_density_controlled_annihilation"
+   },
+   {
+    "df-high-explosive-shell-set-tech": "df_high_explosive_shell_set_tech"
    },
    {
     "df-implosion-cannon-tech": "implosion_cannon"
    },
    {
+    "df-jammer-tower-tech": "df_jammer_tower_tech"
+   },
+   {
+    "df-matter-recombination": "df_matter_recombination"
+   },
+   {
     "df-missile-turret-tech": "missile_turret"
+   },
+   {
+    "df-negentropy-recursion": "df_negentropy_recursion"
+   },
+   {
+    "df-planetary-defense-system": "df_planetary_defense_system"
    },
    {
     "df-plasma-turret-tech": "plasma_turret"
@@ -501,7 +579,13 @@
     "df-signal-tower-tech": "signal_tower"
    },
    {
+    "df-superalloy-ammo-box-tech": "df_superalloy_ammo_box_tech"
+   },
+   {
     "df-supersonic-missile-set-tech": "supersonic_missile"
+   },
+   {
+    "df-suppressing-capsule-tech": "df_suppressing_capsule_tech"
    },
    {
     "df-titanium-ammo-box-tech": "titanium_ammo"
@@ -517,6 +601,9 @@
    },
    {
     "electromagnetic-drive": "electromagnetic_drive"
+   },
+   {
+    "electromagnetic-matrix-technology": "electromagnetic_matrix_technology"
    },
    {
     "electromagnetism": "electromagnetism"
@@ -571,6 +658,9 @@
    },
    {
     "hydrogen-fuel-rod-technology": "hydrogen_fuel"
+   },
+   {
+    "improved-logistics-system": "improved_logistics_system"
    },
    {
     "information-matrix-technology": "information_matrix"
@@ -651,6 +741,9 @@
     "reforming-refine-technology": "reformed_refinement"
    },
    {
+    "reinforced-thruster-technology": "reinforced_thruster_technology"
+   },
+   {
     "satellite-power-distribution-system": "satellite_power"
    },
    {
@@ -699,6 +792,291 @@
     "x-ray-cracking-technology": "xray_cracking"
    },
    {
+    "communication-control-1": "communication_control"
+   },
+   {
+    "communication-control-2": "communication_control"
+   },
+   {
+    "communication-control-3": "communication_control"
+   },
+   {
+    "communication-control-4": "communication_control"
+   },
+   {
+    "communication-control-5": "communication_control"
+   },
+   {
+    "communication-control-6": "communication_control"
+   },
+   {
+    "communication-control-7": "communication_control"
+   },
+   {
+    "df-auto-reconstruction-marking-1": "df_auto_reconstruction_marking"
+   },
+   {
+    "df-auto-reconstruction-marking-2": "df_auto_reconstruction_marking"
+   },
+   {
+    "df-auto-reconstruction-marking-3": "df_auto_reconstruction_marking"
+   },
+   {
+    "df-auto-reconstruction-marking-4": "df_auto_reconstruction_marking"
+   },
+   {
+    "df-auto-reconstruction-marking-5": "df_auto_reconstruction_marking"
+   },
+   {
+    "df-auto-reconstruction-marking-6": "df_auto_reconstruction_marking"
+   },
+   {
+    "df-combat-drone-attack-speed-1": "df_combat_drone_attack_speed"
+   },
+   {
+    "df-combat-drone-attack-speed-2": "df_combat_drone_attack_speed"
+   },
+   {
+    "df-combat-drone-attack-speed-3": "df_combat_drone_attack_speed"
+   },
+   {
+    "df-combat-drone-attack-speed-4": "df_combat_drone_attack_speed"
+   },
+   {
+    "df-combat-drone-attack-speed-5": "df_combat_drone_attack_speed"
+   },
+   {
+    "df-combat-drone-damage-1": "df_combat_drone_damage"
+   },
+   {
+    "df-combat-drone-damage-2": "df_combat_drone_damage"
+   },
+   {
+    "df-combat-drone-damage-3": "df_combat_drone_damage"
+   },
+   {
+    "df-combat-drone-damage-4": "df_combat_drone_damage"
+   },
+   {
+    "df-combat-drone-damage-5": "df_combat_drone_damage"
+   },
+   {
+    "df-combat-drone-durability-1": "df_combat_drone_durability"
+   },
+   {
+    "df-combat-drone-durability-2": "df_combat_drone_durability"
+   },
+   {
+    "df-combat-drone-durability-3": "df_combat_drone_durability"
+   },
+   {
+    "df-combat-drone-durability-4": "df_combat_drone_durability"
+   },
+   {
+    "df-combat-drone-durability-5": "df_combat_drone_durability"
+   },
+   {
+    "df-em-weapon-strength-1": "df_em_weapon_strength"
+   },
+   {
+    "df-em-weapon-strength-2": "df_em_weapon_strength"
+   },
+   {
+    "df-em-weapon-strength-3": "df_em_weapon_strength"
+   },
+   {
+    "df-em-weapon-strength-4": "df_em_weapon_strength"
+   },
+   {
+    "df-em-weapon-strength-5": "df_em_weapon_strength"
+   },
+   {
+    "df-em-weapon-strength-6": "df_em_weapon_strength"
+   },
+   {
+    "df-energy-shield-1": "df_energy_shield"
+   },
+   {
+    "df-energy-shield-2": "df_energy_shield"
+   },
+   {
+    "df-energy-shield-3": "df_energy_shield"
+   },
+   {
+    "df-energy-shield-4": "df_energy_shield"
+   },
+   {
+    "df-energy-shield-5": "df_energy_shield"
+   },
+   {
+    "df-energy-shield-6": "df_energy_shield"
+   },
+   {
+    "df-energy-shield-7": "df_energy_shield"
+   },
+   {
+    "df-energy-weapon-damage-1": "df_energy_weapon_damage"
+   },
+   {
+    "df-energy-weapon-damage-2": "df_energy_weapon_damage"
+   },
+   {
+    "df-energy-weapon-damage-3": "df_energy_weapon_damage"
+   },
+   {
+    "df-energy-weapon-damage-4": "df_energy_weapon_damage"
+   },
+   {
+    "df-energy-weapon-damage-5": "df_energy_weapon_damage"
+   },
+   {
+    "df-energy-weapon-damage-6": "df_energy_weapon_damage"
+   },
+   {
+    "df-enhanced-structure-1": "df_enhanced_structure"
+   },
+   {
+    "df-enhanced-structure-2": "df_enhanced_structure"
+   },
+   {
+    "df-enhanced-structure-3": "df_enhanced_structure"
+   },
+   {
+    "df-enhanced-structure-4": "df_enhanced_structure"
+   },
+   {
+    "df-enhanced-structure-5": "df_enhanced_structure"
+   },
+   {
+    "df-enhanced-structure-6": "df_enhanced_structure"
+   },
+   {
+    "df-explosive-weapon-damage-1": "df_explosive_weapon_damage"
+   },
+   {
+    "df-explosive-weapon-damage-2": "df_explosive_weapon_damage"
+   },
+   {
+    "df-explosive-weapon-damage-3": "df_explosive_weapon_damage"
+   },
+   {
+    "df-explosive-weapon-damage-4": "df_explosive_weapon_damage"
+   },
+   {
+    "df-explosive-weapon-damage-5": "df_explosive_weapon_damage"
+   },
+   {
+    "df-explosive-weapon-damage-6": "df_explosive_weapon_damage"
+   },
+   {
+    "df-ground-squadron-expansion-1": "df_ground_squadron_expansion"
+   },
+   {
+    "df-ground-squadron-expansion-2": "df_ground_squadron_expansion"
+   },
+   {
+    "df-ground-squadron-expansion-3": "df_ground_squadron_expansion"
+   },
+   {
+    "df-ground-squadron-expansion-4": "df_ground_squadron_expansion"
+   },
+   {
+    "df-ground-squadron-expansion-5": "df_ground_squadron_expansion"
+   },
+   {
+    "df-ground-squadron-expansion-6": "df_ground_squadron_expansion"
+   },
+   {
+    "df-ground-squadron-expansion-7": "df_ground_squadron_expansion"
+   },
+   {
+    "df-kinetic-weapon-damage-1": "df_kinetic_weapon_damage"
+   },
+   {
+    "df-kinetic-weapon-damage-2": "df_kinetic_weapon_damage"
+   },
+   {
+    "df-kinetic-weapon-damage-3": "df_kinetic_weapon_damage"
+   },
+   {
+    "df-kinetic-weapon-damage-4": "df_kinetic_weapon_damage"
+   },
+   {
+    "df-kinetic-weapon-damage-5": "df_kinetic_weapon_damage"
+   },
+   {
+    "df-kinetic-weapon-damage-6": "df_kinetic_weapon_damage"
+   },
+   {
+    "df-planetary-shield-1": "df_planetary_shield"
+   },
+   {
+    "df-planetary-shield-2": "df_planetary_shield"
+   },
+   {
+    "df-planetary-shield-3": "df_planetary_shield"
+   },
+   {
+    "df-planetary-shield-4": "df_planetary_shield"
+   },
+   {
+    "df-planetary-shield-5": "df_planetary_shield"
+   },
+   {
+    "df-space-fleet-expansion-1": "df_space_fleet_expansion"
+   },
+   {
+    "df-space-fleet-expansion-2": "df_space_fleet_expansion"
+   },
+   {
+    "df-space-fleet-expansion-3": "df_space_fleet_expansion"
+   },
+   {
+    "df-space-fleet-expansion-4": "df_space_fleet_expansion"
+   },
+   {
+    "df-space-fleet-expansion-5": "df_space_fleet_expansion"
+   },
+   {
+    "df-space-fleet-expansion-6": "df_space_fleet_expansion"
+   },
+   {
+    "df-space-fleet-expansion-7": "df_space_fleet_expansion"
+   },
+   {
+    "distribution-range-1": "distribution_range"
+   },
+   {
+    "distribution-range-2": "distribution_range"
+   },
+   {
+    "distribution-range-3": "distribution_range"
+   },
+   {
+    "distribution-range-4": "distribution_range"
+   },
+   {
+    "distribution-range-5": "distribution_range"
+   },
+   {
+    "drive-engine-1": "drive_engine"
+   },
+   {
+    "drive-engine-2": "drive_engine"
+   },
+   {
+    "drive-engine-3": "drive_engine"
+   },
+   {
+    "drive-engine-4": "drive_engine"
+   },
+   {
+    "drive-engine-5": "drive_engine"
+   },
+   {
+    "drive-engine-6": "drive_engine"
+   },
+   {
     "drone-engine-1": "drone_engine"
    },
    {
@@ -717,6 +1095,120 @@
     "drone-engine-6": "drone_engine"
    },
    {
+    "energy-circuit-1": "energy_circuit"
+   },
+   {
+    "energy-circuit-2": "energy_circuit"
+   },
+   {
+    "energy-circuit-3": "energy_circuit"
+   },
+   {
+    "energy-circuit-4": "energy_circuit"
+   },
+   {
+    "energy-circuit-5": "energy_circuit"
+   },
+   {
+    "energy-circuit-6": "energy_circuit"
+   },
+   {
+    "inventory-capacity-1": "inventory_capacity"
+   },
+   {
+    "inventory-capacity-2": "inventory_capacity"
+   },
+   {
+    "inventory-capacity-3": "inventory_capacity"
+   },
+   {
+    "inventory-capacity-4": "inventory_capacity"
+   },
+   {
+    "inventory-capacity-5": "inventory_capacity"
+   },
+   {
+    "inventory-capacity-6": "inventory_capacity"
+   },
+   {
+    "inventory-capacity-7": "inventory_capacity"
+   },
+   {
+    "logistics-carrier-capacity-1": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-12": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-2": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-3": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-4": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-5": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-6": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-7": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-8": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-capacity-9": "logistics_carrier_capacity"
+   },
+   {
+    "logistics-carrier-engine-1": "logistics_carrier_engine"
+   },
+   {
+    "logistics-carrier-engine-2": "logistics_carrier_engine"
+   },
+   {
+    "logistics-carrier-engine-3": "logistics_carrier_engine"
+   },
+   {
+    "logistics-carrier-engine-4": "logistics_carrier_engine"
+   },
+   {
+    "logistics-carrier-engine-5": "logistics_carrier_engine"
+   },
+   {
+    "logistics-carrier-engine-6": "logistics_carrier_engine"
+   },
+   {
+    "logistics-carrier-engine-7": "logistics_carrier_engine"
+   },
+   {
+    "logistics-station-integrated-logistics-1": "logistics_station_integrated_logistics"
+   },
+   {
+    "logistics-station-integrated-logistics-2": "logistics_station_integrated_logistics"
+   },
+   {
+    "logistics-station-integrated-logistics-3": "logistics_station_integrated_logistics"
+   },
+   {
+    "mass-construction-1": "mass_construction"
+   },
+   {
+    "mass-construction-2": "mass_construction"
+   },
+   {
+    "mass-construction-3": "mass_construction"
+   },
+   {
+    "mass-construction-4": "mass_construction"
+   },
+   {
+    "mass-construction-5": "mass_construction"
+   },
+   {
     "mecha-core-2": "mecha_core"
    },
    {
@@ -730,6 +1222,72 @@
    },
    {
     "mecha-core-6": "mecha_core"
+   },
+   {
+    "mechanical-frame-1": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-2": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-3": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-4": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-5": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-6": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-7": "mechanical_frame"
+   },
+   {
+    "mechanical-frame-8": "mechanical_frame"
+   },
+   {
+    "pile-sorter-1": "pile_sorter"
+   },
+   {
+    "pile-sorter-2": "pile_sorter"
+   },
+   {
+    "pile-sorter-3": "pile_sorter"
+   },
+   {
+    "pile-sorter-4": "pile_sorter"
+   },
+   {
+    "pile-sorter-5": "pile_sorter"
+   },
+   {
+    "pile-sorter-6": "pile_sorter"
+   },
+   {
+    "ray-transmission-efficiency-1": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-2": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-3": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-4": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-5": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-6": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-7": "ray_transmission_efficiency"
+   },
+   {
+    "ray-transmission-efficiency-8": "ray_transmission_efficiency"
    },
    {
     "research-speed-1": "research_speed"
@@ -762,6 +1320,24 @@
     "solar-sail-life-6": "solar_sail_life"
    },
    {
+    "sorter-cargo-integration": "sorter_cargo_integration"
+   },
+   {
+    "sorter-cargo-stacking-1": "sorter_cargo_stacking"
+   },
+   {
+    "sorter-cargo-stacking-2": "sorter_cargo_stacking"
+   },
+   {
+    "sorter-cargo-stacking-3": "sorter_cargo_stacking"
+   },
+   {
+    "sorter-cargo-stacking-4": "sorter_cargo_stacking"
+   },
+   {
+    "sorter-cargo-stacking-5": "sorter_cargo_stacking"
+   },
+   {
     "universe-exploration-2": "universe_exploration"
    },
    {
@@ -769,6 +1345,24 @@
    },
    {
     "universe-exploration-4": "universe_exploration"
+   },
+   {
+    "veins-utilization-1": "veins_utilization"
+   },
+   {
+    "veins-utilization-2": "veins_utilization"
+   },
+   {
+    "veins-utilization-3": "veins_utilization"
+   },
+   {
+    "veins-utilization-4": "veins_utilization"
+   },
+   {
+    "veins-utilization-5": "veins_utilization"
+   },
+   {
+    "veins-utilization-6": "veins_utilization"
    },
    {
     "vertical-construction-1": "vertical_construction"
@@ -809,13 +1403,31 @@
     "iron-ore": "iron_ore"
    },
    {
+    "kimberlite-ore": "kimberlite_ore"
+   },
+   {
+    "log": "log"
+   },
+   {
     "optical-grating-crystal": "grating_crystal"
+   },
+   {
+    "organic-crystal": "organic_crystal"
+   },
+   {
+    "plant-fuel": "plant_fuel"
    },
    {
     "silicon-ore": "silicon_ore"
    },
    {
+    "spiniform-stalagmite-crystal": "spiniform_stalagmite_crystal"
+   },
+   {
     "stone": "stone_ore"
+   },
+   {
+    "sulfuric-acid": "sulfuric_acid"
    },
    {
     "titanium-ore": "titanium_ore"
@@ -829,220 +1441,12 @@
   ]
  },
  "unmatched": {
-  "items": [
-   "kimberlite-ore",
-   "df-supersonic-missile-set",
-   "particle-broadband",
-   "spiniform-stalagmite-crystal",
-   "casimir-crystal",
-   "titanium-glass",
-   "plane-filter",
-   "reinforced-thruster",
-   "df-attack-drone",
-   "graviton-lens",
-   "foundation",
-   "dyson-sphere-component",
-   "df-crystal-shell-set",
-   "log",
-   "df-jamming-capsule",
-   "df-suppressing-capsule",
-   "plant-fuel"
-  ],
   "buildings": [
    "holo-beacon"
   ],
   "techs": [
-   "df-antimatter-capsule-tech",
-   "df-attack-drone-tech",
-   "df-explosive-unit-tech",
-   "df-high-density-controlled-annihilation",
-   "df-high-explosive-shell-set-tech",
-   "df-jammer-tower-tech",
-   "df-matter-recombination",
-   "df-negentropy-recursion",
-   "df-planetary-defense-system",
-   "df-superalloy-ammo-box-tech",
-   "df-suppressing-capsule-tech",
    "dyson-sphere-stress-system-1",
-   "electromagnetic-matrix-technology",
-   "improved-logistics-system",
-   "reinforced-thruster-technology",
-   "communication-control-1",
-   "communication-control-2",
-   "communication-control-3",
-   "communication-control-4",
-   "communication-control-5",
-   "communication-control-6",
-   "communication-control-7",
-   "df-auto-reconstruction-marking-1",
-   "df-auto-reconstruction-marking-2",
-   "df-auto-reconstruction-marking-3",
-   "df-auto-reconstruction-marking-4",
-   "df-auto-reconstruction-marking-5",
-   "df-auto-reconstruction-marking-6",
-   "df-combat-drone-attack-speed-1",
-   "df-combat-drone-attack-speed-2",
-   "df-combat-drone-attack-speed-3",
-   "df-combat-drone-attack-speed-4",
-   "df-combat-drone-attack-speed-5",
-   "df-combat-drone-damage-1",
-   "df-combat-drone-damage-2",
-   "df-combat-drone-damage-3",
-   "df-combat-drone-damage-4",
-   "df-combat-drone-damage-5",
-   "df-combat-drone-durability-1",
-   "df-combat-drone-durability-2",
-   "df-combat-drone-durability-3",
-   "df-combat-drone-durability-4",
-   "df-combat-drone-durability-5",
-   "df-em-weapon-strength-1",
-   "df-em-weapon-strength-2",
-   "df-em-weapon-strength-3",
-   "df-em-weapon-strength-4",
-   "df-em-weapon-strength-5",
-   "df-em-weapon-strength-6",
-   "df-energy-shield-1",
-   "df-energy-shield-2",
-   "df-energy-shield-3",
-   "df-energy-shield-4",
-   "df-energy-shield-5",
-   "df-energy-shield-6",
-   "df-energy-shield-7",
-   "df-energy-weapon-damage-1",
-   "df-energy-weapon-damage-2",
-   "df-energy-weapon-damage-3",
-   "df-energy-weapon-damage-4",
-   "df-energy-weapon-damage-5",
-   "df-energy-weapon-damage-6",
-   "df-enhanced-structure-1",
-   "df-enhanced-structure-2",
-   "df-enhanced-structure-3",
-   "df-enhanced-structure-4",
-   "df-enhanced-structure-5",
-   "df-enhanced-structure-6",
-   "df-explosive-weapon-damage-1",
-   "df-explosive-weapon-damage-2",
-   "df-explosive-weapon-damage-3",
-   "df-explosive-weapon-damage-4",
-   "df-explosive-weapon-damage-5",
-   "df-explosive-weapon-damage-6",
-   "df-ground-squadron-expansion-1",
-   "df-ground-squadron-expansion-2",
-   "df-ground-squadron-expansion-3",
-   "df-ground-squadron-expansion-4",
-   "df-ground-squadron-expansion-5",
-   "df-ground-squadron-expansion-6",
-   "df-ground-squadron-expansion-7",
-   "df-kinetic-weapon-damage-1",
-   "df-kinetic-weapon-damage-2",
-   "df-kinetic-weapon-damage-3",
-   "df-kinetic-weapon-damage-4",
-   "df-kinetic-weapon-damage-5",
-   "df-kinetic-weapon-damage-6",
-   "df-planetary-shield-1",
-   "df-planetary-shield-2",
-   "df-planetary-shield-3",
-   "df-planetary-shield-4",
-   "df-planetary-shield-5",
-   "df-space-fleet-expansion-1",
-   "df-space-fleet-expansion-2",
-   "df-space-fleet-expansion-3",
-   "df-space-fleet-expansion-4",
-   "df-space-fleet-expansion-5",
-   "df-space-fleet-expansion-6",
-   "df-space-fleet-expansion-7",
-   "distribution-range-1",
-   "distribution-range-2",
-   "distribution-range-3",
-   "distribution-range-4",
-   "distribution-range-5",
-   "drive-engine-1",
-   "drive-engine-2",
-   "drive-engine-3",
-   "drive-engine-4",
-   "drive-engine-5",
-   "drive-engine-6",
-   "energy-circuit-1",
-   "energy-circuit-2",
-   "energy-circuit-3",
-   "energy-circuit-4",
-   "energy-circuit-5",
-   "energy-circuit-6",
-   "inventory-capacity-1",
-   "inventory-capacity-2",
-   "inventory-capacity-3",
-   "inventory-capacity-4",
-   "inventory-capacity-5",
-   "inventory-capacity-6",
-   "inventory-capacity-7",
-   "logistics-carrier-capacity-1",
-   "logistics-carrier-capacity-12",
-   "logistics-carrier-capacity-2",
-   "logistics-carrier-capacity-3",
-   "logistics-carrier-capacity-4",
-   "logistics-carrier-capacity-5",
-   "logistics-carrier-capacity-6",
-   "logistics-carrier-capacity-7",
-   "logistics-carrier-capacity-8",
-   "logistics-carrier-capacity-9",
-   "logistics-carrier-engine-1",
-   "logistics-carrier-engine-2",
-   "logistics-carrier-engine-3",
-   "logistics-carrier-engine-4",
-   "logistics-carrier-engine-5",
-   "logistics-carrier-engine-6",
-   "logistics-carrier-engine-7",
-   "logistics-station-integrated-logistics-1",
-   "logistics-station-integrated-logistics-2",
-   "logistics-station-integrated-logistics-3",
-   "mass-construction-1",
-   "mass-construction-2",
-   "mass-construction-3",
-   "mass-construction-4",
-   "mass-construction-5",
-   "mechanical-frame-1",
-   "mechanical-frame-2",
-   "mechanical-frame-3",
-   "mechanical-frame-4",
-   "mechanical-frame-5",
-   "mechanical-frame-6",
-   "mechanical-frame-7",
-   "mechanical-frame-8",
-   "pile-sorter-1",
-   "pile-sorter-2",
-   "pile-sorter-3",
-   "pile-sorter-4",
-   "pile-sorter-5",
-   "pile-sorter-6",
-   "ray-transmission-efficiency-1",
-   "ray-transmission-efficiency-2",
-   "ray-transmission-efficiency-3",
-   "ray-transmission-efficiency-4",
-   "ray-transmission-efficiency-5",
-   "ray-transmission-efficiency-6",
-   "ray-transmission-efficiency-7",
-   "ray-transmission-efficiency-8",
-   "sorter-cargo-integration",
-   "sorter-cargo-stacking-1",
-   "sorter-cargo-stacking-2",
-   "sorter-cargo-stacking-3",
-   "sorter-cargo-stacking-4",
-   "sorter-cargo-stacking-5",
-   "veins-utilization-1",
-   "veins-utilization-2",
-   "veins-utilization-3",
-   "veins-utilization-4",
-   "veins-utilization-5",
-   "veins-utilization-6",
    "holo-beacon-tech"
-  ],
-  "resources": [
-   "kimberlite-ore",
-   "log",
-   "organic-crystal",
-   "plant-fuel",
-   "spiniform-stalagmite-crystal",
-   "sulfuric-acid"
   ]
  }
 }

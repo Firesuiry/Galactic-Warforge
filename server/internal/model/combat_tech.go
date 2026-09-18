@@ -13,57 +13,57 @@ const (
 // CombatTechEffect 科技效果
 type CombatTechEffect struct {
 	DamageBonus       float64 `json:"damage_bonus"`        // 伤害加成
-	DefenseBonus      float64 `json:"defense_bonus"`     // 防御加成
-	SpeedBonus        float64 `json:"speed_bonus"`       // 速度加成
-	RangeBonus        float64 `json:"range_bonus"`       // 射程加成
-	ShieldBonus       float64 `json:"shield_bonus"`      // 护盾加成
+	DefenseBonus      float64 `json:"defense_bonus"`       // 防御加成
+	SpeedBonus        float64 `json:"speed_bonus"`         // 速度加成
+	RangeBonus        float64 `json:"range_bonus"`         // 射程加成
+	ShieldBonus       float64 `json:"shield_bonus"`        // 护盾加成
 	AmmoCapacityBonus int     `json:"ammo_capacity_bonus"` // 弹药容量加成
 }
 
 // CombatTech 战斗科技
 type CombatTech struct {
-	ID            string           `json:"id"`
-	Name          string           `json:"name"`
-	Type          CombatTechType   `json:"type"`
-	Level         int              `json:"level"`          // 科技等级
-	MaxLevel      int              `json:"max_level"`      // 最大等级
-	ResearchCost  int              `json:"research_cost"`   // 研究成本
-	Effects       CombatTechEffect `json:"effects"`        // 科技效果
+	ID           string           `json:"id"`
+	Name         string           `json:"name"`
+	Type         CombatTechType   `json:"type"`
+	Level        int              `json:"level"`         // 科技等级
+	MaxLevel     int              `json:"max_level"`     // 最大等级
+	ResearchCost int              `json:"research_cost"` // 研究成本
+	Effects      CombatTechEffect `json:"effects"`       // 科技效果
 }
 
 // CombatTechDefinition 战斗科技定义
 type CombatTechDefinition struct {
-	ID           string           `json:"id"`
-	Name         string           `json:"name"`
-	Type         CombatTechType   `json:"type"`
-	MaxLevel     int              `json:"max_level"`
-	BaseCost     int              `json:"base_cost"`       // 基础研究成本
-	CostPerLevel int              `json:"cost_per_level"`  // 每级增加成本
-	Effects      []CombatTechEffect `json:"effects"`       // 每级效果
+	ID           string             `json:"id"`
+	Name         string             `json:"name"`
+	Type         CombatTechType     `json:"type"`
+	MaxLevel     int                `json:"max_level"`
+	BaseCost     int                `json:"base_cost"`      // 基础研究成本
+	CostPerLevel int                `json:"cost_per_level"` // 每级增加成本
+	Effects      []CombatTechEffect `json:"effects"`        // 每级效果
 }
 
 // PlayerCombatTechState 玩家战斗科技状态
 type PlayerCombatTechState struct {
-	PlayerID        string                  `json:"player_id"`
-	UnlockedTechs   map[string]*CombatTech `json:"unlocked_techs"`   // 已解锁科技
-	CurrentResearch *CombatTech             `json:"current_research"` // 当前研究
+	PlayerID         string                 `json:"player_id"`
+	UnlockedTechs    map[string]*CombatTech `json:"unlocked_techs"`    // 已解锁科技
+	CurrentResearch  *CombatTech            `json:"current_research"`  // 当前研究
 	ResearchProgress int                    `json:"research_progress"` // 研究进度
 }
 
 // DroneUnit 无人机单位
 type DroneUnit struct {
-	ID           string    `json:"id"`
-	OwnerID      string    `json:"owner_id"`
-	Position     Position  `json:"position"`
-	HP           int       `json:"hp"`
-	MaxHP        int       `json:"max_hp"`
-	Attack       int       `json:"attack"`
-	Defense      int       `json:"defense"`
-	Speed        float64   `json:"speed"`
-	AttackRange  int       `json:"attack_range"`
-	VisionRange  int       `json:"vision_range"`
+	ID           string   `json:"id"`
+	OwnerID      string   `json:"owner_id"`
+	Position     Position `json:"position"`
+	HP           int      `json:"hp"`
+	MaxHP        int      `json:"max_hp"`
+	Attack       int      `json:"attack"`
+	Defense      int      `json:"defense"`
+	Speed        float64  `json:"speed"`
+	AttackRange  int      `json:"attack_range"`
+	VisionRange  int      `json:"vision_range"`
 	ControlledBy string   `json:"controlled_by"` // 控制者单位ID
-	State        string    `json:"state"`         // 状态
+	State        string   `json:"state"`         // 状态
 }
 
 // DefaultCombatTechDefinitions 返回默认战斗科技定义

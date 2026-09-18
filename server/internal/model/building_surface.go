@@ -64,14 +64,24 @@ func (ws *WorldState) IndexBuilding(b *Building) error {
 		return err
 	}
 	if b.Type == BuildingTypeLogisticsDistributor {
-  if b.Distributor == nil || b.Position.Z != 1 { return fmt.Errorf("distributor requires warehouse-top attachment state") }
-  if err := b.Distributor.Validate(); err != nil { return err }
-  for _, other := range ws.Buildings { if other != nil && other.ID != b.ID && other.Type == BuildingTypeLogisticsDistributor && other.Position.X == b.Position.X && other.Position.Y == b.Position.Y { return fmt.Errorf("duplicate distributor mount") } }
-  // A destroyed host remains a valid saved attachment; it cannot operate or occupy the ground.
-  if host := ws.Buildings[b.Distributor.HostBuildingID]; host != nil && DistributorHost(ws,b) == nil && !(host.Job != nil && host.Job.Type == BuildingJobDemolish) { return fmt.Errorf("invalid distributor host") }
-  return nil
- }
- // Foundation is a terrain modifier rather than an occupying factory.
+		if b.Distributor == nil || b.Position.Z != 1 {
+			return fmt.Errorf("distributor requires warehouse-top attachment state")
+		}
+		if err := b.Distributor.Validate(); err != nil {
+			return err
+		}
+		for _, other := range ws.Buildings {
+			if other != nil && other.ID != b.ID && other.Type == BuildingTypeLogisticsDistributor && other.Position.X == b.Position.X && other.Position.Y == b.Position.Y {
+				return fmt.Errorf("duplicate distributor mount")
+			}
+		}
+		// A destroyed host remains a valid saved attachment; it cannot operate or occupy the ground.
+		if host := ws.Buildings[b.Distributor.HostBuildingID]; host != nil && DistributorHost(ws, b) == nil && !(host.Job != nil && host.Job.Type == BuildingJobDemolish) {
+			return fmt.Errorf("invalid distributor host")
+		}
+		return nil
+	}
+	// Foundation is a terrain modifier rather than an occupying factory.
 	// Keeping it out of TileBuilding lets factories be placed on the filled
 	// ground while the foundation entity remains available for demolition and
 	// terrain provenance.

@@ -23,6 +23,7 @@ func TestLongRunStability(t *testing.T) {
 	ws.Players["p1"].Resources.Minerals = 1_000_000
 	ws.Players["p1"].Resources.Energy = 1_000_000
 	ws.RUnlock()
+	grantAllItems(ws, "p1", 100)
 
 	// Seed a denser base than the short p95 check so settlement work is real.
 	const seedBuildings = 40
@@ -160,8 +161,8 @@ func TestLongRunStabilityWithSubscriber(t *testing.T) {
 			break
 		}
 		cmd := model.Command{
-			Type:   model.CmdBuild,
-			Target: model.CommandTarget{Position: pos},
+			Type:    model.CmdBuild,
+			Target:  model.CommandTarget{Position: pos},
 			Payload: map[string]any{"building_type": "wind_turbine"},
 		}
 		core.execBuild(ws, "p1", cmd)

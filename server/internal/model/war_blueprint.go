@@ -57,32 +57,14 @@ type WarBlueprintValidationIssue struct {
 
 // WarBlueprintValidationResult captures the latest validation outcome for one blueprint.
 type WarBlueprintValidationResult struct {
-	Valid  bool                         `json:"valid"`
-	Limits WarBudgetProfile             `json:"limits,omitempty"`
-	Usage  WarBlueprintBudgetUsage      `json:"usage,omitempty"`
+	Valid  bool                          `json:"valid"`
+	Limits WarBudgetProfile              `json:"limits,omitempty"`
+	Usage  WarBlueprintBudgetUsage       `json:"usage,omitempty"`
 	Issues []WarBlueprintValidationIssue `json:"issues,omitempty"`
 }
 
 // WarBlueprint is the authoritative mutable blueprint object stored per player.
 type WarBlueprint struct {
-	ID                 string                       `json:"id"`
-	OwnerID            string                       `json:"owner_id,omitempty"`
-	Name               string                       `json:"name"`
-	Source             WarBlueprintSource           `json:"source"`
-	State              WarBlueprintState            `json:"state"`
-	Domain             UnitDomain                   `json:"domain"`
-	BaseFrameID        string                       `json:"base_frame_id,omitempty"`
-	BaseHullID         string                       `json:"base_hull_id,omitempty"`
-	ParentBlueprintID  string                       `json:"parent_blueprint_id,omitempty"`
-	AllowedVariantSlots []string                    `json:"allowed_variant_slots,omitempty"`
-	Components         []WarBlueprintComponentSlot  `json:"components,omitempty"`
-	Validation         *WarBlueprintValidationResult `json:"validation,omitempty"`
-	CreatedTick        int64                        `json:"created_tick,omitempty"`
-	UpdatedTick        int64                        `json:"updated_tick,omitempty"`
-}
-
-// WarBlueprintDetailView is the query-facing blueprint detail payload.
-type WarBlueprintDetailView struct {
 	ID                  string                        `json:"id"`
 	OwnerID             string                        `json:"owner_id,omitempty"`
 	Name                string                        `json:"name"`
@@ -94,8 +76,26 @@ type WarBlueprintDetailView struct {
 	ParentBlueprintID   string                        `json:"parent_blueprint_id,omitempty"`
 	AllowedVariantSlots []string                      `json:"allowed_variant_slots,omitempty"`
 	Components          []WarBlueprintComponentSlot   `json:"components,omitempty"`
-	Validation          WarBlueprintValidationResult  `json:"validation"`
-	AllowedActions      []string                      `json:"allowed_actions,omitempty"`
+	Validation          *WarBlueprintValidationResult `json:"validation,omitempty"`
+	CreatedTick         int64                         `json:"created_tick,omitempty"`
+	UpdatedTick         int64                         `json:"updated_tick,omitempty"`
+}
+
+// WarBlueprintDetailView is the query-facing blueprint detail payload.
+type WarBlueprintDetailView struct {
+	ID                  string                       `json:"id"`
+	OwnerID             string                       `json:"owner_id,omitempty"`
+	Name                string                       `json:"name"`
+	Source              WarBlueprintSource           `json:"source"`
+	State               WarBlueprintState            `json:"state"`
+	Domain              UnitDomain                   `json:"domain"`
+	BaseFrameID         string                       `json:"base_frame_id,omitempty"`
+	BaseHullID          string                       `json:"base_hull_id,omitempty"`
+	ParentBlueprintID   string                       `json:"parent_blueprint_id,omitempty"`
+	AllowedVariantSlots []string                     `json:"allowed_variant_slots,omitempty"`
+	Components          []WarBlueprintComponentSlot  `json:"components,omitempty"`
+	Validation          WarBlueprintValidationResult `json:"validation"`
+	AllowedActions      []string                     `json:"allowed_actions,omitempty"`
 }
 
 // WarBlueprintListView groups player-owned blueprint summaries.
@@ -105,9 +105,9 @@ type WarBlueprintListView struct {
 
 // WarBlueprintCatalogIndex accelerates lookups for validation and query assembly.
 type WarBlueprintCatalogIndex struct {
-	baseFrames      map[string]WarBaseFrameCatalogEntry
-	baseHulls       map[string]WarBaseHullCatalogEntry
-	components      map[string]WarComponentCatalogEntry
+	baseFrames       map[string]WarBaseFrameCatalogEntry
+	baseHulls        map[string]WarBaseHullCatalogEntry
+	components       map[string]WarComponentCatalogEntry
 	publicBlueprints map[string]WarPublicBlueprintCatalogEntry
 }
 
@@ -119,9 +119,9 @@ func NewWarBlueprintCatalogIndex(
 	publicBlueprints []WarPublicBlueprintCatalogEntry,
 ) WarBlueprintCatalogIndex {
 	index := WarBlueprintCatalogIndex{
-		baseFrames:      make(map[string]WarBaseFrameCatalogEntry, len(baseFrames)),
-		baseHulls:       make(map[string]WarBaseHullCatalogEntry, len(baseHulls)),
-		components:      make(map[string]WarComponentCatalogEntry, len(components)),
+		baseFrames:       make(map[string]WarBaseFrameCatalogEntry, len(baseFrames)),
+		baseHulls:        make(map[string]WarBaseHullCatalogEntry, len(baseHulls)),
+		components:       make(map[string]WarComponentCatalogEntry, len(components)),
 		publicBlueprints: make(map[string]WarPublicBlueprintCatalogEntry, len(publicBlueprints)),
 	}
 	for _, entry := range baseFrames {

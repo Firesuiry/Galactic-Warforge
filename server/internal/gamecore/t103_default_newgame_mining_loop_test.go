@@ -35,6 +35,17 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 		t.Fatalf("expected executor unit %s", execState.UnitID)
 	}
 
+	// DSP building-cost alignment makes construction consume crafted
+	// components; stock just those (no matrices) so the fresh-game matrix
+	// assertions below still hold.
+	grantItems(ws, "p1",
+		model.ItemAmount{ItemID: model.ItemGear, Quantity: 3},
+		model.ItemAmount{ItemID: model.ItemIronIngot, Quantity: 20},
+		model.ItemAmount{ItemID: model.ItemMagneticCoil, Quantity: 10},
+		model.ItemAmount{ItemID: model.ItemCircuitBoard, Quantity: 6},
+		model.ItemAmount{ItemID: model.ItemGlass, Quantity: 4},
+	)
+
 	windPos, err := findAdjacentOpenTile(ws, base.Position)
 	if err != nil {
 		t.Fatalf("find wind tile: %v", err)

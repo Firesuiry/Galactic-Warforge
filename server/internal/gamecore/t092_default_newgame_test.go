@@ -148,6 +148,16 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 	}
 
 	// Starter base: wind power + first matrix lab in research mode.
+	// DSP building-cost alignment makes construction consume crafted
+	// components; stock just those (no matrices) so the opening chain below
+	// still has to produce its own research matrices.
+	grantItems(ws, "p1",
+		model.ItemAmount{ItemID: model.ItemGear, Quantity: 1},
+		model.ItemAmount{ItemID: model.ItemIronIngot, Quantity: 14},
+		model.ItemAmount{ItemID: model.ItemMagneticCoil, Quantity: 7},
+		model.ItemAmount{ItemID: model.ItemCircuitBoard, Quantity: 4},
+		model.ItemAmount{ItemID: model.ItemGlass, Quantity: 4},
+	)
 	base := findOwnedBuildingByType(ws, "p1", model.BuildingTypeBattlefieldAnalysisBase)
 	if base == nil {
 		t.Fatal("expected p1 base building")

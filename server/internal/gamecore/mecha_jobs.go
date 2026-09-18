@@ -40,7 +40,8 @@ func manualMineItem(node *model.ResourceNodeState) (string, bool) {
 		return "", false
 	}
 	item, ok := model.Item(node.Kind)
-	return node.Kind, ok && item.Form == model.ResourceSolid && node.Behavior == "finite"
+	return node.Kind, ok && item.Form == model.ResourceSolid &&
+		(node.Behavior == "finite" || node.Behavior == "renewable")
 }
 
 func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
@@ -64,7 +65,7 @@ func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd 
 		return mechaJobFailed(model.CodeEntityNotFound, "resource node not found")
 	}
 	if _, ok := manualMineItem(node); !ok {
-		return mechaJobFailed(model.CodeInvalidTarget, "only finite solid resource nodes can be mined by hand")
+		return mechaJobFailed(model.CodeInvalidTarget, "only solid resource nodes can be mined by hand")
 	}
 	if ws.SurfaceDistance(unit.Position, node.Position) > 2 {
 		return mechaJobFailed(model.CodeOutOfRange, "resource must be within 2 surface tiles")

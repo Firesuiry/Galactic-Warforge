@@ -142,6 +142,7 @@ func TestRefineryBuildRequiresRecipeResearch(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "plasma_refining")
+	grantAllItems(ws, "p1", 100)
 	pos, err := findOpenTile(ws, 2)
 	if err != nil || pos == nil {
 		t.Fatalf("find build tile: %v", err)

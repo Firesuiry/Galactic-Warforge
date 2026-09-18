@@ -46,6 +46,11 @@ const (
 	ItemHydrogen     = "hydrogen"
 	ItemDeuterium    = "deuterium"
 
+	ItemKimberliteOre              = "kimberlite_ore"
+	ItemSpiniformStalagmiteCrystal = "spiniform_stalagmite_crystal"
+	ItemLog                        = "log"
+	ItemPlantFuel                  = "plant_fuel"
+
 	ItemIronIngot      = "iron_ingot"
 	ItemCopperIngot    = "copper_ingot"
 	ItemStoneBrick     = "stone_brick"
@@ -86,6 +91,14 @@ const (
 	ItemAnnihilationConstraintSphere = "annihilation_constraint_sphere"
 	ItemStrangeMatter                = "strange_matter"
 	ItemSpaceWarper                  = "space_warper"
+	ItemTitaniumGlass                = "titanium_glass"
+	ItemPlaneFilter                  = "plane_filter"
+	ItemParticleBroadband            = "particle_broadband"
+	ItemReinforcedThruster           = "reinforced_thruster"
+	ItemGravitonLens                 = "graviton_lens"
+	ItemCasimirCrystal               = "casimir_crystal"
+	ItemDysonSphereComponent         = "dyson_sphere_component"
+	ItemFoundationSupply             = "foundation_supply"
 
 	ItemEnergeticGraphite = "energetic_graphite"
 	ItemHydrogenFuelRod   = "hydrogen_fuel_rod"
@@ -120,6 +133,12 @@ const (
 	ItemPrecisionDrone    = "precision_drone"
 	ItemCorvette          = "corvette"
 	ItemDestroyer         = "destroyer"
+
+	ItemSupersonicMissileSet = "supersonic_missile_set"
+	ItemAttackDrone          = "attack_drone"
+	ItemCrystalShellSet      = "crystal_shell_set"
+	ItemJammingCapsule       = "jamming_capsule"
+	ItemSuppressingCapsule   = "suppressing_capsule"
 
 	ItemSolarSail          = "solar_sail"
 	ItemSmallCarrierRocket = "small_carrier_rocket"
@@ -842,6 +861,146 @@ var itemCatalog = map[string]ItemDefinition{
 		Form:       ResourceSolid,
 		StackLimit: 10,
 		UnitVolume: 5,
+	},
+	ItemKimberliteOre: {
+		ID:         ItemKimberliteOre,
+		Name:       "Kimberlite Ore",
+		Category:   ItemCategoryOre,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 1,
+		IsRare:     true,
+	},
+	ItemSpiniformStalagmiteCrystal: {
+		ID:         ItemSpiniformStalagmiteCrystal,
+		Name:       "Stalagmite Crystal",
+		Category:   ItemCategoryOre,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 1,
+		IsRare:     true,
+	},
+	ItemLog: {
+		MechaFuelEnergy: 15,
+		ID:              ItemLog,
+		Name:            "Log",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      100,
+		UnitVolume:      1,
+	},
+	ItemPlantFuel: {
+		MechaFuelEnergy: 5,
+		ID:              ItemPlantFuel,
+		Name:            "Plant Fuel",
+		Category:        ItemCategoryFuel,
+		Form:            ResourceSolid,
+		StackLimit:      500,
+		UnitVolume:      1,
+	},
+	ItemTitaniumGlass: {
+		ID:         ItemTitaniumGlass,
+		Name:       "Titanium Glass",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemPlaneFilter: {
+		ID:         ItemPlaneFilter,
+		Name:       "Plane Filter",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 200,
+		UnitVolume: 1,
+	},
+	ItemParticleBroadband: {
+		ID:         ItemParticleBroadband,
+		Name:       "Particle Broadband",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 200,
+		UnitVolume: 1,
+	},
+	ItemReinforcedThruster: {
+		ID:         ItemReinforcedThruster,
+		Name:       "Reinforced Thruster",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemGravitonLens: {
+		ID:         ItemGravitonLens,
+		Name:       "Graviton Lens",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemCasimirCrystal: {
+		ID:         ItemCasimirCrystal,
+		Name:       "Casimir Crystal",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemDysonSphereComponent: {
+		ID:         ItemDysonSphereComponent,
+		Name:       "Dyson Sphere Component",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemFoundationSupply: {
+		ID:         ItemFoundationSupply,
+		Name:       "Foundation",
+		Category:   ItemCategoryMaterial,
+		Form:       ResourceSolid,
+		StackLimit: 1000,
+		UnitVolume: 1,
+	},
+	ItemSupersonicMissileSet: {
+		ID:         ItemSupersonicMissileSet,
+		Name:       "Supersonic Missile Set",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemAttackDrone: {
+		ID:         ItemAttackDrone,
+		Name:       "Attack Drone",
+		Category:   ItemCategoryComponent,
+		Form:       ResourceSolid,
+		StackLimit: 50,
+		UnitVolume: 2,
+	},
+	ItemCrystalShellSet: {
+		ID:         ItemCrystalShellSet,
+		Name:       "Crystal Shell Set",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemJammingCapsule: {
+		ID:         ItemJammingCapsule,
+		Name:       "Jamming Capsule",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
+	},
+	ItemSuppressingCapsule: {
+		ID:         ItemSuppressingCapsule,
+		Name:       "Suppressing Capsule",
+		Category:   ItemCategoryAmmo,
+		Form:       ResourceSolid,
+		StackLimit: 100,
+		UnitVolume: 1,
 	},
 }
 

@@ -25,11 +25,17 @@ var resourcePalettes = map[mapmodel.PlanetKind]resourcePalette{
 			mapmodel.ResourceTitaniumOre,
 			mapmodel.ResourceCrudeOil,
 			mapmodel.ResourceWater,
+			mapmodel.ResourceSulfuricAcid,
+			mapmodel.ResourceLog,
+			mapmodel.ResourcePlantFuel,
 		},
 		rare: []mapmodel.ResourceKind{
 			mapmodel.ResourceFractalSilicon,
 			mapmodel.ResourceGratingCrystal,
 			mapmodel.ResourceMonopoleMagnet,
+			mapmodel.ResourceKimberliteOre,
+			mapmodel.ResourceSpiniformStalagmiteCrystal,
+			mapmodel.ResourceOrganicCrystal,
 		},
 	},
 	mapmodel.PlanetKindIce: {
@@ -46,6 +52,9 @@ var resourcePalettes = map[mapmodel.PlanetKind]resourcePalette{
 			mapmodel.ResourceFireIce,
 			mapmodel.ResourceFractalSilicon,
 			mapmodel.ResourceGratingCrystal,
+			mapmodel.ResourceKimberliteOre,
+			mapmodel.ResourceSpiniformStalagmiteCrystal,
+			mapmodel.ResourceOrganicCrystal,
 		},
 	},
 	mapmodel.PlanetKindGasGiant: {
@@ -146,7 +155,10 @@ func resourceBehavior(kind mapmodel.ResourceKind) mapmodel.ResourceBehavior {
 	switch kind {
 	case mapmodel.ResourceCrudeOil:
 		return mapmodel.ResourceDecay
-	case mapmodel.ResourceWater:
+	case mapmodel.ResourceWater,
+		mapmodel.ResourceSulfuricAcid,
+		mapmodel.ResourceLog,
+		mapmodel.ResourcePlantFuel:
 		return mapmodel.ResourceRenewable
 	default:
 		return mapmodel.ResourceFinite

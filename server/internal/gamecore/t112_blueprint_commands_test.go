@@ -89,7 +89,7 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 	finalizeRes, _ := core.execBlueprintFinalize(ws, "p1", model.Command{
 		Type: model.CmdBlueprintFinalize,
 		Payload: map[string]any{
-			"blueprint_id":  "falcon_mk1",
+			"blueprint_id": "falcon_mk1",
 			"target_state": "prototype",
 		},
 	})

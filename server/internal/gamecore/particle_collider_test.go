@@ -181,6 +181,7 @@ func TestParticleColliderFullOutputIsAtomicAndSurvivesSave(t *testing.T) {
 func TestParticleColliderBuildResearchGates(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	grantAllItems(ws, "p1", 100)
 	pos, err := findOpenTile(ws, 2)
 	if err != nil || pos == nil {
 		t.Fatalf("find build tile: %v", err)

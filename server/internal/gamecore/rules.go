@@ -48,7 +48,12 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	}
 	btype := model.BuildingType(fmt.Sprintf("%v", btypeRaw))
 	if btype == model.BuildingTypeLogisticsDistributor {
-		if _, err := model.DistributorPlacementHost(ws,playerID,*pos,""); err != nil { return mechaJobFailed(model.CodeInvalidTarget,err.Error()) }; mounted := *pos; mounted.Z=1;pos=&mounted
+		if _, err := model.DistributorPlacementHost(ws, playerID, *pos, ""); err != nil {
+			return mechaJobFailed(model.CodeInvalidTarget, err.Error())
+		}
+		mounted := *pos
+		mounted.Z = 1
+		pos = &mounted
 	}
 	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() && btype != model.BuildingTypeFoundation {
 		res.Code = model.CodeInvalidTarget
@@ -930,7 +935,9 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		res.Message = "cannot demolish building owned by another player"
 		return res, nil
 	}
-	if model.DistributorOnHost(ws,building.ID)!=nil || model.DistributorBotCount(ws,building.ID)>0 { return mechaJobFailed(model.CodeInvalidTarget,"remove the warehouse distributor and uninstall its robots before demolition") }
+	if model.DistributorOnHost(ws, building.ID) != nil || model.DistributorBotCount(ws, building.ID) > 0 {
+		return mechaJobFailed(model.CodeInvalidTarget, "remove the warehouse distributor and uninstall its robots before demolition")
+	}
 	if building.Type == model.BuildingTypeBattlefieldAnalysisBase {
 		res.Code = model.CodeInvalidTarget
 		res.Message = "cannot demolish your own base"
@@ -1695,6 +1702,18 @@ func collectorOutputItemID(ws *model.WorldState, building *model.Building) strin
 		return model.ItemGratingCrystal
 	case string(mapmodel.ResourceMonopoleMagnet):
 		return model.ItemMonopoleMagnet
+	case string(mapmodel.ResourceKimberliteOre):
+		return model.ItemKimberliteOre
+	case string(mapmodel.ResourceSpiniformStalagmiteCrystal):
+		return model.ItemSpiniformStalagmiteCrystal
+	case string(mapmodel.ResourceOrganicCrystal):
+		return model.ItemOrganicCrystal
+	case string(mapmodel.ResourceSulfuricAcid):
+		return model.ItemSulfuricAcid
+	case string(mapmodel.ResourceLog):
+		return model.ItemLog
+	case string(mapmodel.ResourcePlantFuel):
+		return model.ItemPlantFuel
 	default:
 		return ""
 	}

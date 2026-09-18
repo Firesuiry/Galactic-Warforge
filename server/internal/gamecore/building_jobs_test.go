@@ -21,6 +21,7 @@ func TestUpgradeJobProgress(t *testing.T) {
 	player := ws.Players[building.OwnerID]
 	player.Resources.Minerals = 1000
 	player.Resources.Energy = 1000
+	grantAllItems(ws, building.OwnerID, 100)
 
 	cmd := model.Command{
 		Type:   model.CmdUpgrade,

@@ -16,6 +16,7 @@ func TestResearchCompletesPlanetaryTechAndUnlocksRecipe(t *testing.T) {
 	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 	grantTechs(ws, "p1", "electromagnetism")
+	grantAllItems(ws, "p1", 100)
 
 	if CanUseRecipeTech(player, "smelt_stone") {
 		t.Fatal("smelt_stone must stay locked before automatic_metallurgy")

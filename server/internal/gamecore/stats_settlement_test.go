@@ -452,7 +452,6 @@ func sumIntMap(values map[string]int) int {
 	return total
 }
 
-
 // 无供电时 consumption 仍应暴露 Demand（非 Allocated=0），并标记短缺。
 func TestEnergyStats_NoPowerShowsDemandNotZero(t *testing.T) {
 	core := newE2ETestCore(t)

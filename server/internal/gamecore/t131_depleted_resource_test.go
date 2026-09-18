@@ -106,6 +106,7 @@ func TestBuildOnDepletedResourceNodeAllowed(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "solar_collection")
+	grantAllItems(ws, "p1", 100)
 
 	pos, err := findOpenTileNearExecutor(ws, "p1")
 	if err != nil {

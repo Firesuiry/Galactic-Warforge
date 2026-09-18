@@ -8,20 +8,13 @@ import (
 // pendingRecipeUnlocks 记录科技树里故意保留、但配方尚未落地的 TechUnlockRecipe ID。
 // 这些配方由后续内容批次（A1~A7）补齐；每落地一个配方，必须从这里移除对应条目，
 // 让本测试转而强制校验它指向真实配方。
+// 2026-09-18：12 个行星内生产配方（proliferator_mk3、supersonic_missile、
+// crystal_explosive、crystal_shell、thruster、particle_broadband、titanium_glass、
+// casimir_crystal、plane_filter、gravitational_lens、photon_combiner、space_warper）
+// 已随 DSP 行星内生产对齐批次全部落地，当前无待落地条目。
 var pendingRecipeUnlocks = map[string]string{
-	// 恒星系/星系级配方仍待后续批次；行星内生产配方已落地。
-	"proliferator_mk3":   "A4: 增产剂Mk.III配方",
-	"supersonic_missile": "A6: 超音速导弹组配方",
-	"crystal_explosive":  "A6: 爆裂单元配方",
-	"crystal_shell":      "A6: 晶体炮弹组配方",
-	"thruster":           "A7: 推进器配方",
-	"particle_broadband": "A3: 粒子宽带配方（particle_control）",
-	"titanium_glass":     "A3: 钛化玻璃配方（high_strength_glass）",
-	"casimir_crystal":    "A3: 卡西米尔晶体配方",
-	"plane_filter":       "A3: 位面过滤器配方（wave_interference/plane_filter_smelting）",
-	"gravitational_lens": "A3: 引力透镜配方（strange_matter）",
-	"photon_combiner":    "A3: 光子合并器常规配方（photon_conversion）",
-	"space_warper":       "A7: 空间翘曲器配方（gravitational_wave）",
+	// gated（黑雾材料锁定）配方，待物品/配方域后续批次落地后移除。
+	"df_strange_annihilation_fuel_rod": "W1: 奇异湮灭燃料棒配方（df_high_density_controlled_annihilation，gated）",
 }
 
 // TestTechUnlocksResolve 校验原始科技定义（defaultTechDefinitions）中的每一个

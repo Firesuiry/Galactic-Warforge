@@ -735,11 +735,11 @@ var defaultBuildingRuntimeDefinitions = []BuildingRuntimeDefinition{
 		},
 	},
 	{
-  ID: BuildingTypeLogisticsDistributor,
-  Params: BuildingRuntimeParams{EnergyConsume:1,ConnectionPoints:[]ConnectionPoint{{ID:"power",Kind:ConnectionPower,Capacity:1}}},
-  Functions: BuildingFunctionModules{Energy:&modelpower.EnergyModule{ConsumePerTick:1}},
- },
- {
+		ID:        BuildingTypeLogisticsDistributor,
+		Params:    BuildingRuntimeParams{EnergyConsume: 1, ConnectionPoints: []ConnectionPoint{{ID: "power", Kind: ConnectionPower, Capacity: 1}}},
+		Functions: BuildingFunctionModules{Energy: &modelpower.EnergyModule{ConsumePerTick: 1}},
+	},
+	{
 		ID: BuildingTypePlanetaryLogisticsStation,
 		Params: BuildingRuntimeParams{
 			EnergyConsume:    1,

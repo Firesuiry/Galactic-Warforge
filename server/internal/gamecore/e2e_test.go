@@ -39,6 +39,7 @@ func TestE2E_TickCommandChain(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "solar_collection")
+	grantAllItems(ws, "p1", 100)
 
 	pos, err := findOpenTile(ws, 2)
 	if err != nil {
@@ -78,6 +79,7 @@ func TestE2E_TickCommandChain(t *testing.T) {
 func TestE2E_ResearchUnlockBuildChain(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	grantAllItems(ws, "p1", 100)
 
 	lab := newBuilding("lab-e2e", model.BuildingTypeMatrixLab, "p1", model.Position{X: 6, Y: 6})
 	lab.Runtime.State = model.BuildingWorkRunning
@@ -158,6 +160,7 @@ func TestE2E_ProductionChain(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "basic_assembling_processes", "solar_collection")
+	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
 	player.Resources.Energy = 1000
@@ -256,6 +259,7 @@ func TestE2E_VerticalLaunchingSiloUsesDefaultRocketRecipe(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "vertical_launching")
+	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
 	player.Resources.Minerals = 10000
@@ -307,6 +311,7 @@ func TestE2E_LogisticsStationConstructionRequiresManufacturedVehicles(t *testing
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
+	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
 	player.Resources.Minerals = 10000
@@ -366,6 +371,7 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
+	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
 	player.Resources.Minerals = 10000

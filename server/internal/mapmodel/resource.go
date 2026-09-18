@@ -22,6 +22,13 @@ const (
 	ResourceFractalSilicon ResourceKind = "fractal_silicon"
 	ResourceGratingCrystal ResourceKind = "grating_crystal"
 	ResourceMonopoleMagnet ResourceKind = "monopole_magnet"
+
+	ResourceKimberliteOre              ResourceKind = "kimberlite_ore"
+	ResourceSpiniformStalagmiteCrystal ResourceKind = "spiniform_stalagmite_crystal"
+	ResourceOrganicCrystal             ResourceKind = "organic_crystal"
+	ResourceSulfuricAcid               ResourceKind = "sulfuric_acid"
+	ResourceLog                        ResourceKind = "log"
+	ResourcePlantFuel                  ResourceKind = "plant_fuel"
 )
 
 // ResourceBehavior defines depletion behavior for a resource node.
@@ -48,6 +55,12 @@ func AllResourceKinds() []ResourceKind {
 		ResourceFractalSilicon,
 		ResourceGratingCrystal,
 		ResourceMonopoleMagnet,
+		ResourceKimberliteOre,
+		ResourceSpiniformStalagmiteCrystal,
+		ResourceOrganicCrystal,
+		ResourceSulfuricAcid,
+		ResourceLog,
+		ResourcePlantFuel,
 	}
 }
 

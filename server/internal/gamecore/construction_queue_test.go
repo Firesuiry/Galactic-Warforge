@@ -37,6 +37,7 @@ func newConstructionTestCore(t *testing.T, playerLimit, regionLimit int) *GameCo
 	bus := NewEventBus()
 	core := New(cfg, maps, q, bus, nil)
 	grantAllTechs(core.world, "p1")
+	grantAllItems(core.world, "p1", 500)
 	return core
 }
 

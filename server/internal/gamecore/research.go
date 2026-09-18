@@ -386,7 +386,12 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		res.Message = "at least one running research lab is required"
 		return res, nil
 	}
-	for _, cost := range def.Cost {
+
+	// The cost of the level being researched (1-based); repeatable techs with
+	// CostPerLevel pay per-level prices, everything else pays def.Cost.
+	nextLevel := player.Tech.CompletedTechs[techID] + 1
+	levelCost := def.CostForLevel(nextLevel)
+	for _, cost := range levelCost {
 		if cost.ItemID == "" || cost.Quantity <= 0 {
 			continue
 		}
@@ -404,7 +409,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 	}
 
-	totalCost := calculateTechCost(def)
+	totalCost := calculateTechCost(levelCost)
 
 	// Create research state
 	research := &model.PlayerResearch{
@@ -413,8 +418,8 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		Progress:      0,
 		TotalCost:     totalCost,
 		CurrentLevel:  player.Tech.CompletedTechs[techID],
-		RequiredCost:  append([]model.ItemAmount(nil), def.Cost...),
-		ConsumedCost:  make(map[string]int, len(def.Cost)),
+		RequiredCost:  append([]model.ItemAmount(nil), levelCost...),
+		ConsumedCost:  make(map[string]int, len(levelCost)),
 		BlockedReason: "",
 	}
 
@@ -482,17 +487,15 @@ func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cm
 	return res, nil
 }
 
-// calculateTechCost calculates the total cost for a tech
-func calculateTechCost(def *model.TechDefinition) int64 {
-	if def == nil {
-		return 0
-	}
+// calculateTechCost calculates the total cost for a tech from its effective
+// item cost list (already resolved for the level being researched).
+func calculateTechCost(cost []model.ItemAmount) int64 {
 	// Cost is in matrix items, but we track as "research points"
 	// For simplicity, each matrix item counts as 1 point
 	// In practice, higher-level techs require multiple matrix types
 	total := int64(0)
-	for _, cost := range def.Cost {
-		total += int64(cost.Quantity)
+	for _, c := range cost {
+		total += int64(c.Quantity)
 	}
 	if total == 0 {
 		// Default cost if no explicit cost defined
@@ -623,8 +626,8 @@ func TechCostForPlayer(player *model.PlayerState, techID string) (cost []model.I
 		return nil, false
 	}
 
-	// Return the cost items (matrix type items)
-	return def.Cost, true
+	// Return the cost items for the level the player would research next
+	return def.CostForLevel(player.Tech.CompletedTechs[techID] + 1), true
 }
 
 // ValidateStartResearch performs a fast pre-check for the start_research command:
@@ -647,7 +650,7 @@ func (gc *GameCore) ValidateStartResearch(playerID string, techID string) []mode
 	}
 
 	var issues []model.CommandIssue
-	for _, cost := range def.Cost {
+	for _, cost := range researchLevelCost(gc.worlds, playerID, def) {
 		if cost.ItemID == "" || cost.Quantity <= 0 {
 			continue
 		}
@@ -667,6 +670,16 @@ func (gc *GameCore) ValidateStartResearch(playerID string, techID string) []mode
 		}
 	}
 	return issues
+}
+
+// researchLevelCost resolves the item cost for the level the player would
+// research next (1-based), honoring TechDefinition.CostPerLevel.
+func researchLevelCost(worlds map[string]*model.WorldState, playerID string, def *model.TechDefinition) []model.ItemAmount {
+	level := 1
+	if player := researchPlayers(worlds)[playerID]; player != nil && player.Tech != nil {
+		level = player.Tech.CompletedTechs[def.ID] + 1
+	}
+	return def.CostForLevel(level)
 }
 
 // ValidateStartResearchLocked is the RLock-free variant called by the gateway
@@ -699,7 +712,11 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 	}
 
 	var issues []model.CommandIssue
-	for _, cost := range def.Cost {
+	level := 1
+	if player := ws.Players[playerID]; player != nil && player.Tech != nil {
+		level = player.Tech.CompletedTechs[def.ID] + 1
+	}
+	for _, cost := range def.CostForLevel(level) {
 		if cost.ItemID == "" || cost.Quantity <= 0 {
 			continue
 		}

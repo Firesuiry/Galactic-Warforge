@@ -41,17 +41,8 @@ func TestT103TechAndBuildingCatalogDerivation(t *testing.T) {
 		"proliferator_mk2",
 		"super_magnetic",
 		"titanium_ammo",
-	} {
-		def, ok := TechDefinitionByID(techID)
-		if !ok {
-			t.Fatalf("expected tech %s to exist", techID)
-		}
-		if def.Hidden {
-			t.Fatalf("expected bridge tech %s to stay public", techID)
-		}
-	}
-
-	for _, techID := range []string{
+		// DSP 行星内生产对齐批次落地了对应配方，这些科技不再是无产出的
+		// 死端：它们的配方解锁现在指向真实配方，必须转为公开可研究。
 		"casimir_crystal",
 		"crystal_explosive",
 		"crystal_shell",
@@ -63,8 +54,8 @@ func TestT103TechAndBuildingCatalogDerivation(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected tech %s to exist", techID)
 		}
-		if !def.Hidden {
-			t.Fatalf("expected dead-end tech %s to be hidden", techID)
+		if def.Hidden {
+			t.Fatalf("expected bridge tech %s to stay public", techID)
 		}
 	}
 
