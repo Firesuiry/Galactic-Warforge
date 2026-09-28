@@ -62,7 +62,7 @@ cd /home/firesuiry/develop/siliconWorld/server
 env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   go run ./cmd/server -config config-midgame.yaml -map-config map-midgame.yaml
 ```
-- `battlefield.initial_active_planet_id` 可指定新开局默认进入哪颗行星；若为空，仍使用地图主行星；续档时不覆盖存档中的 active planet。当前官方场景固定为 `planet-1-2`。
+- `battlefield.initial_active_planet_id` 可指定新开局默认进入哪颗行星（F4 起同时也是所有玩家的初始焦点行星）；若为空，仍使用地图主行星；续档时不覆盖存档中的 active planet 与各玩家焦点。当前官方场景固定为 `planet-1-2`。
 - `players[].bootstrap` 可为官方场景预置 `minerals` / `energy` / `inventory[]` / `completed_techs[]`。当前官方场景会给每名玩家预置：
   - `minerals = 5000`
   - `energy = 3000`
@@ -215,7 +215,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 **GET /state/summary**
 - 说明: 世界摘要（需认证）
-- 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`）；`winner` 已决出胜者时存在；`victory_reason` / `victory_rule` 在已宣告胜利时返回；`active_planet_id` 当前被模拟的行星；`map_width` / `map_height` 当前行星六面图集尺寸；`surface` 返回 `topology=cube_sphere` 与 `face_size`
+- 响应字段: `tick` 当前 tick；`players` 玩家可见状态（仅自己返回完整 `PlayerState`，含 F4 的 `focus_planet_id` 焦点行星）；`winner` 已决出胜者时存在；`victory_reason` / `victory_rule` 在已宣告胜利时返回；`active_planet_id` 全局默认行星（F4 起仅为冷启动/兜底值，所有已加载行星都在被模拟）；`map_width` / `map_height` 当前行星六面图集尺寸；`surface` 返回 `topology=cube_sphere` 与 `face_size`
 - 胜负补充: 在仓库当前默认配置下，`victory_rule` 为 `hybrid`，因此 `winner` / `victory_reason` 可能来自 `mission_complete -> game_win`，也可能来自基地消灭胜
 - 能源补充: 当 `ray_receiver` 切到 `power` / `hybrid` 且已有太阳帆或戴森结构产能时，`summary.players[pid].resources.energy` 会跟随真实 tick 同步上涨，而不是只在查询层单独造数
 - 事实源补充: `GET /state/summary.players[pid].resources.energy`、`GET /state/stats.energy_stats`、`GET /world/planets/{planet_id}/networks` 当前共享同一份当 tick authoritative `PowerSettlementSnapshot`；`ray_receiver` 会先写入 `ws.PowerInputs` 与接收站结算视图，再由统一的 power finalize 阶段一次性回写最终资源与电网结果
@@ -303,6 +303,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `winner` / `victory_reason` / `victory_rule`：已宣告胜利时返回（与 `/state/summary` 同源）
   - `self`：调用方玩家紧凑视图
     - `player_id` / `team_id` / `role` / `is_alive`
+    - `focus_planet_id`：该玩家当前的视图焦点/默认落点行星（F4）
     - `resources` / `inventory`：仅自身
     - `tech`：`completed_count` / `completed_techs`（有序列表）/ `current_research` / `research_queue_len` / `total_researched`；**不**回传完整科技树
   - `energy_stats` / `combat_stats`：与 `/state/stats` 对应子对象同源
@@ -1604,7 +1605,15 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - HTTP `202` 与 `results[].status = accepted` 只表示“通过网关预校验并已入队到 `enqueue_tick`”，不是最终成功
   - 每条命令的最终 authoritative 成功/失败结果必须以后续 `command_result` 事件为准；客户端应使用 `payload.request_id + command_index` 进行对账
   - 对 `build` 这类异步链路，`command_result(code=OK)` 通常只表示“施工任务已创建或已排队”；真正的建筑实体落地与后续停机病因需要继续结合 `entity_created` / `building_state_changed` 判断
-- 执行体约束: `build`/`produce`/`upgrade`/`demolish` 需要执行体在操作范围内；`upgrade`/`demolish` 超过并发上限会在执行阶段失败；`build` 超过并发上限时进入施工队列等待调度
+- 执行体约束: `build`/`produce`/`upgrade`/`demolish` 需要执行体在操作范围内；`upgrade`/`demolish` 超过并发上限会在执行阶段失败；`build` 超过并发上限时进入施工队列等待调度（F4 起并发上限按玩家跨全部已加载行星聚合）
+- 行星路由约定（F4，每人独立的行星焦点）:
+  - 所有已加载行星每 tick 都完整参与结算（建造/生产/战斗/黑雾/物流/军工订单），不存在“只有活动行星在模拟”的概念
+  - 行星层命令按以下优先级决定在哪个行星的世界态上结算：`target.planet_id` 显式路由提示 → 命令引用的目标实体（`target.entity_id`/`entity_ids`/`payload.building_id`/`payload.task_id` 等）所在行星 → 玩家焦点行星（`switch_active_planet` 设置的 `players[pid].focus_planet_id`）→ 全局默认行星兜底
+  - `build` 无实体可引用：用 `target.planet_id` 选落点行星，缺省落在玩家焦点行星
+  - 跨行星实体 ID 撞号时（两颗行星各自的自增序列可能同号），实体路由优先命中玩家焦点行星；要指挥另一颗行星上的同号实体，用 `target.planet_id` 显式消歧
+  - 显式指定的 `target.planet_id` 未加载时命令直接失败（`INVALID_TARGET`，message 为 `planet runtime <id> not loaded`）
+  - 太空层/玩家级命令（`fleet_*`/`task_force_*`/`theater_*`/`blockade_planet`/`blueprint_*`/戴森系列/`start_research`/`cancel_research`/扫描系列）的 `planet_id` 是作战参数而非路由提示，不参与行星路由；它们只读写跨行星共享的玩家状态
+  - `deploy_squad` 的 `payload.planet_id` 是小队落点行星（作战参数），行星路由仍由 `payload.building_id`（部署枢纽建筑）决定
 - 请求体:
 ```json
 {
@@ -1735,10 +1744,10 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `transfer_item`：`payload.building_id` + `payload.item_id` + `payload.quantity` 必填；目标必须是当前玩家拥有、且带 `storage` 的建筑或地面物流站；命令从玩家 `inventory` 扣减实际装入量。地面物流站须先配置物品槽，写入唯一 `logistics_station.inventory`；普通建筑写本地存储。容量不足允许部分装填，仅扣实际转移数量；轨道采集器不开放此装料入口。喷涂机只允许有效增产剂物品（`proliferator_mk1` / `proliferator_mk2` / `proliferator_mk3`），尝试装入氢等货物返回验证失败；货物必须走西侧传送带。分馏塔无普通 `storage`，不能直接装料，氢须走西侧传送带。
   - 黑雾实体化（E1–E4）：`enemy_forces[]` 中的 hive 为静态巢穴（`strength` 即 HP，`level` 为生成时固化的巢穴等级），按威胁值节奏孵化黑雾蜂群单位（`units[]` 中 `owner_id="dark_fog"`、`type="dark_fog"`），与玩家单位共用移动/交战结算；威胁值 `threat_meter` 随全行星发电累积，决定巢穴等级/孵化间隔/波次规模/新巢扩张；袭击目标优先级为电厂 > 矿区 > 物流线 > 炮塔 > 其他；波次出发时广播 `enemy_wave_incoming`（payload：`nest_id` / `planet_id` / `from` / `count` / `guards` / `level` / `target_building_id` / `target_pos` / `target_owner`），巢穴出现/扩张发 `entity_created`（`entity_type=enemy_force`，含 `planet_id` / `level`）；行星护盾对建筑的所有外部伤害（黑雾与 PvP）先行吸收。`battlefield.enemy_difficulty` 取 `off|easy|normal|hard`（默认 normal），off 为和平模式不生成巢穴与波次；黑雾巢穴位置由 (行星, 序号) 哈希确定性派生，回放/读档/回滚一致。
   - 巢穴守军与区域安全（E4）：每个巢穴按等级保留守军（`stance="guard"`、`guard_target_id` 锚定巢穴、`combat_anchor` 为巢位，守巢半径 = `aggro_range` 随巢穴等级 +2/级；编制 = 难度基数 + 每级增量，上限按难度：easy 1+1/级 封顶 4，normal 2+1/级 封顶 6，hard 3+2/级 封顶 10），守军参与常规交战结算但不外派袭击，死亡后由后续波次补足；巢穴被摧毁后孤守军转为普通黑雾单位。巢穴摧毁（单位/炮塔/小队/舰队四路径同语义）：掉落按巢穴等级放大（数量乘区 1+0.5×(level−1) 向上取整，`dark_fog_matrix` 保底 level+1 个），`threat_meter` 扣减 `level×100×0.5`（下限 0），并广播 `enemy_nest_destroyed`（payload：`nest_id` / `planet_id` / `position` / `level` / `killed_by` / `killer_owner` / `source`（unit|turret|combat_squad|fleet）/ `drops[]`（`item_id`+`quantity`）/ `threat_meter`（回落后值），visibility=all）；同时登记巢穴遗址（`enemy_forces` 的 `nest_ruins[]`：位置+摧毁 tick+等级），冷却期内（easy 4000 / normal 3000 / hard 2400 tick）遗址半径（easy 10 / normal 12 / hard 14 格）内不再刷新新巢，冷却结束后遗址自动清理。太空巢穴（beacon 侧）不在本期范围，归 E5。
-  - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`
+  - `switch_active_planet`：`payload.planet_id` 必填；目标行星必须已发现、其 runtime 已加载，并且当前玩家在该行星存在 foothold；当前 foothold 的实现定义为该行星上存在玩家自己的 `battlefield_analysis_base` 或 `executor`。F4 起该命令只设置调用玩家自己的视图焦点/默认落点行星（写入 `players[pid].focus_planet_id`），不再修改全局 `active_planet_id`，也不影响其他玩家的命令落点；全局 `active_planet_id` 仅保留为冷启动/兜底默认值
   - `set_ray_receiver_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `ray_receiver`；`payload.mode` 取 `power|photon|hybrid`；`power` 只回灌电网并停止新的 `critical_photon` 增量，`hybrid` 先发电再把剩余输入转成光子，`photon` 只产光子且要求玩家已解锁 `dirac_inversion`；模式切换不会自动清空建筑里已经存在的历史光子库存
   - `set_energy_exchanger_mode`：`payload.building_id` + `payload.mode` 必填；目标必须是当前玩家拥有的 `energy_exchanger`（蓄电器能量枢纽）；`payload.mode` 取 `charge|discharge|standby`：`charge` 用电网盈余把空蓄电池（`accumulator`）转成满蓄电池（`accumulator_full`），`discharge` 把满蓄电池转回电网能量并返还空蓄电池，`standby` 不做物品转换；非法模式或目标不是蓄电器返回 `VALIDATION_FAILED`，建筑不存在返回 `ENTITY_NOT_FOUND`，非己方建筑返回 `NOT_OWNER`，且均不改变当前模式
-  - `deploy_squad`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到当前 active planet 对应 runtime；目标建筑必须是当前玩家拥有、带 deployment module、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该蓝图对应 `visible_tech_id`，并且该枢纽在 `/world/warfare/industry.deployment_hubs[].ready_payloads` 中已有足量军备产物；若传 `planet_id`，目标行星 runtime 也必须已加载
+  - `deploy_squad`：`payload.building_id` + `payload.blueprint_id` + `payload.count` 必填；可选 `payload.planet_id`；未传 `planet_id` 时默认部署到部署枢纽建筑所在行星（F4 起按 `payload.building_id` 路由）；目标建筑必须是当前玩家拥有、带 deployment module、并且当前 tick 处于可运行状态的部署枢纽；当前公开部署枢纽就是 `battlefield_analysis_base`，自身需要接入电网后才算可运行；玩家还必须已经解锁该蓝图对应 `visible_tech_id`，并且该枢纽在 `/world/warfare/industry.deployment_hubs[].ready_payloads` 中已有足量军备产物；若传 `planet_id`，目标行星 runtime 也必须已加载
   - `commission_fleet`：`payload.building_id` + `payload.blueprint_id` + `payload.count` + `payload.system_id` 必填；可选 `payload.fleet_id`；目标建筑约束同 `deploy_squad`；当前公开可编入舰队的蓝图是 `corvette` / `destroyer`，玩家自有 `space|orbital` 已定型蓝图也可以直接编入舰队；同样要求已解锁对应科技且部署枢纽 `ready_payloads` 中已有足量军备产物；若传入一个已存在且属于当前玩家的 `fleet_id`，服务端会向该舰队追加蓝图栈并重算 `weapon` / `shield`，而不是覆盖旧栈
   - `fleet_assign`：`payload.fleet_id` + `payload.formation` 必填；`formation` 取 `line|vee|circle|wedge`
   - `fleet_attack`：`payload.fleet_id` + `payload.planet_id` + `payload.target_id` 必填；当前只支持攻击同一 `system_id` 下的目标，且 `payload.target_id` 应来自目标行星 `/world/planets/{planet_id}/runtime.enemy_forces[].id`
@@ -2209,7 +2218,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `enemy_difficulty`：黑雾难度（`off|easy|normal|hard`）
   - `victory_mode`：胜利判定模式（`elimination|mission_complete|hybrid|sandbox`；`sandbox` 永不判胜）
   - `max_tick_rate`、`active_planet_id`、`tick`、`started_at`（对局开始时间，RFC3339）
-  - `players`：玩家概要数组（`player_id`/`role`/`team_id`/`bot`/`is_alive`），**绝不含登录 key**
+  - `players`：玩家概要数组（`player_id`/`role`/`team_id`/`bot`/`is_alive`/`focus_planet_id`（F4 焦点行星，可能为空表示未设置）），**绝不含登录 key**
   - `victory`：`{declared, winner_id?, team_id?, reason?}`
 - 响应示例:
 ```json

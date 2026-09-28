@@ -224,7 +224,7 @@ func TestDistributionRangeTechExtendsDeliveryRange(t *testing.T) {
 	distributorTestLoad(t, ws, source, model.ItemIronOre, 30)
 	bot := distributorTestBot(t, ws, source, "bot")
 
-	distributorTestTicks(t, ws, 2, true)
+	distributorTestTicks(t, ws, 2)
 	if bot.Status != model.LogisticsDroneIdle || bot.PickupQuantity != 0 {
 		t.Fatalf("dispatched beyond base range without research: %+v", bot)
 	}
@@ -232,7 +232,7 @@ func TestDistributionRangeTechExtendsDeliveryRange(t *testing.T) {
 	grantTechs(ws, "p1", "distribution_range")
 	// Tick manually: the shared distributorTestTicks helper validates bots
 	// against the base-range energy budget, which the extended flight exceeds.
-	settleDistributors(ws, true)
+	settleDistributors(ws)
 	if bot.Status == model.LogisticsDroneIdle || bot.PickupQuantity <= 0 {
 		t.Fatalf("distribution_range tech did not extend delivery range: %+v", bot)
 	}

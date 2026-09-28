@@ -354,7 +354,10 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	return res, nil
 }
 
-func settleWarIndustry(ws *model.WorldState, spaceRuntime *model.SpaceRuntimeState, currentTick int64) []*model.GameEvent {
+// settleWarIndustry 推进所有玩家的军工订单。玩家状态跨行星共享，订单本身
+// 只随 tick 推进；只有落地实体（改造完成的小队）需要按订单记录的
+// SourcePlanetID 反查所属世界（F4），而不是一律落在当前活动行星。
+func settleWarIndustry(gc *GameCore, ws *model.WorldState, spaceRuntime *model.SpaceRuntimeState, currentTick int64) []*model.GameEvent {
 	if ws == nil {
 		return nil
 	}
@@ -462,11 +465,17 @@ func settleWarIndustry(ws *model.WorldState, spaceRuntime *model.SpaceRuntimeSta
 			}
 			switch order.UnitKind {
 			case model.WarRefitUnitKindSquad:
-				if ws.CombatRuntime == nil {
-					ws.CombatRuntime = model.NewCombatRuntimeState()
+				targetWorld := ws
+				if gc != nil && order.SourcePlanetID != "" {
+					if planetWorld := gc.WorldForPlanet(order.SourcePlanetID); planetWorld != nil {
+						targetWorld = planetWorld
+					}
 				}
-				squad := newCombatSquad(ws, playerID, order.UnitID, order.SourcePlanetID, order.SourceBuildingID, targetBlueprint.ID, order.Count)
-				ws.CombatRuntime.Squads[squad.ID] = squad
+				if targetWorld.CombatRuntime == nil {
+					targetWorld.CombatRuntime = model.NewCombatRuntimeState()
+				}
+				squad := newCombatSquad(targetWorld, playerID, order.UnitID, order.SourcePlanetID, order.SourceBuildingID, targetBlueprint.ID, order.Count)
+				targetWorld.CombatRuntime.Squads[squad.ID] = squad
 				events = append(events, &model.GameEvent{
 					EventType:       model.EvtSquadDeployed,
 					VisibilityScope: playerID,

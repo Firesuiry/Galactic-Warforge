@@ -5,23 +5,28 @@ import (
 	"siliconworld/internal/terrain"
 )
 
-func countActiveExecutorUsage(ws *model.WorldState) map[string]int {
+// countActiveExecutorUsage 统计每名玩家在所有已加载行星上的执行体占用
+// （建造任务 + 建筑生产作业），供并发任务上限校验使用（F4：命令可落在
+// 任意已加载行星，占用也必须跨行星聚合）。
+func countActiveExecutorUsage(worlds []*model.WorldState) map[string]int {
 	usage := make(map[string]int)
-	if ws == nil {
-		return usage
-	}
-	for _, building := range ws.Buildings {
-		if building == nil || building.Job == nil {
+	for _, ws := range worlds {
+		if ws == nil {
 			continue
 		}
-		usage[building.OwnerID]++
-	}
-	if ws.Construction != nil {
-		for _, task := range ws.Construction.Tasks {
-			if task == nil || task.State != model.ConstructionInProgress {
+		for _, building := range ws.Buildings {
+			if building == nil || building.Job == nil {
 				continue
 			}
-			usage[task.PlayerID]++
+			usage[building.OwnerID]++
+		}
+		if ws.Construction != nil {
+			for _, task := range ws.Construction.Tasks {
+				if task == nil || task.State != model.ConstructionInProgress {
+					continue
+				}
+				usage[task.PlayerID]++
+			}
 		}
 	}
 	return usage

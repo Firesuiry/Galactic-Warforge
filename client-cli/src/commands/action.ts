@@ -212,7 +212,7 @@ export async function cmdRaw(args: string[]): Promise<string> {
 export async function cmdBuild(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
-    return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]');
+    return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--planet <planet_id>]');
   }
   try {
     const position = parsePosition(
@@ -227,6 +227,7 @@ export async function cmdBuild(args: string[]): Promise<string> {
     return fmtCommandResponse(await apiBuild(position, parsed.positionals[2], {
       direction: direction as Direction | undefined,
       recipeId: getStringOption(parsed, 'recipe'),
+      planetId: getStringOption(parsed, 'planet'),
     }));
   } catch (e) {
     return fmtError(toErrorMessage(e));
@@ -236,7 +237,7 @@ export async function cmdBuild(args: string[]): Promise<string> {
 export async function cmdMove(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
-    return fmtError('Usage: move <entity_id> <x> <y> [--z <z>]');
+    return fmtError('Usage: move <entity_id> <x> <y> [--z <z>] [--planet <planet_id>]');
   }
   try {
     const position = parsePosition(
@@ -244,7 +245,7 @@ export async function cmdMove(args: string[]): Promise<string> {
       parsed.positionals[2],
       getStringOption(parsed, 'z'),
     );
-    return fmtCommandResponse(await apiMove(parsed.positionals[0], position));
+    return fmtCommandResponse(await apiMove(parsed.positionals[0], position, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -255,7 +256,7 @@ const ORDER_KINDS = ['attack_move', 'patrol', 'guard', 'hold', 'follow', 'retrea
 export async function cmdOrder(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
-    return fmtError('Usage: order <entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>]');
+    return fmtError('Usage: order <entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>] [--planet <planet_id>]');
   }
   const selector = parsed.positionals[0].includes(',')
     ? parsed.positionals[0].split(',').map((v) => v.trim()).filter(Boolean)
@@ -265,7 +266,11 @@ export async function cmdOrder(args: string[]): Promise<string> {
     return fmtError(`order 必须是 ${ORDER_KINDS.join('/')}`);
   }
   try {
-    const options: { position?: Position; targetEntityId?: string } = {};
+    const options: { position?: Position; targetEntityId?: string; planetId?: string } = {};
+    const planetId = getStringOption(parsed, 'planet');
+    if (planetId) {
+      options.planetId = planetId;
+    }
     if (order === 'attack_move' || order === 'patrol' || order === 'retreat') {
       if (parsed.positionals.length < 4) {
         return fmtError(`Usage: order <entity_id> ${order} <x> <y>`);
@@ -286,44 +291,48 @@ export async function cmdOrder(args: string[]): Promise<string> {
 }
 
 export async function cmdAttack(args: string[]): Promise<string> {
-  if (args.length < 2) {
-    return fmtError('Usage: attack <entity_id> <target_entity_id>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: attack <entity_id> <target_entity_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiAttack(args[0], args[1]));
+    return fmtCommandResponse(await apiAttack(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
 export async function cmdProduce(args: string[]): Promise<string> {
-  if (args.length < 2) {
-    return fmtError('Usage: produce <entity_id> <unit_type>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: produce <entity_id> <unit_type> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiProduce(args[0], args[1]));
+    return fmtCommandResponse(await apiProduce(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
 export async function cmdUpgrade(args: string[]): Promise<string> {
-  if (args.length < 1) {
-    return fmtError('Usage: upgrade <entity_id>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 1) {
+    return fmtError('Usage: upgrade <entity_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiUpgrade(args[0]));
+    return fmtCommandResponse(await apiUpgrade(parsed.positionals[0], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
 export async function cmdDemolish(args: string[]): Promise<string> {
-  if (args.length < 1) {
-    return fmtError('Usage: demolish <entity_id>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 1) {
+    return fmtError('Usage: demolish <entity_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiDemolish(args[0]));
+    return fmtCommandResponse(await apiDemolish(parsed.positionals[0], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -458,25 +467,27 @@ export async function cmdCancelResearch(args: string[]): Promise<string> {
 }
 
 export async function cmdSetRecipe(args: string[]): Promise<string> {
-  if (args.length < 1 || args.length > 2) {
-    return fmtError('Usage: set_recipe <entity_id> [recipe_id]（省略 recipe_id 时研究站切回研究模式、生产建筑转为空闲）');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 1 || parsed.positionals.length > 2) {
+    return fmtError('Usage: set_recipe <entity_id> [recipe_id] [--planet <planet_id>]（省略 recipe_id 时研究站切回研究模式、生产建筑转为空闲）');
   }
   try {
-    return fmtCommandResponse(await apiSetRecipe(args[0], args[1]));
+    return fmtCommandResponse(await apiSetRecipe(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
 export async function cmdSetEnergyExchangerMode(args: string[]): Promise<string> {
-  if (args.length < 2) {
-    return fmtError('Usage: set_energy_exchanger_mode <building_id> <charge|discharge|standby>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: set_energy_exchanger_mode <building_id> <charge|discharge|standby> [--planet <planet_id>]');
   }
-  if (!ENERGY_EXCHANGER_MODES.has(args[1] as EnergyExchangerMode)) {
+  if (!ENERGY_EXCHANGER_MODES.has(parsed.positionals[1] as EnergyExchangerMode)) {
     return fmtError('mode 必须是 charge/discharge/standby');
   }
   try {
-    return fmtCommandResponse(await apiSetEnergyExchangerMode(args[0], args[1] as EnergyExchangerMode));
+    return fmtCommandResponse(await apiSetEnergyExchangerMode(parsed.positionals[0], parsed.positionals[1] as EnergyExchangerMode, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -680,22 +691,23 @@ export async function cmdRefitUnit(args: string[]): Promise<string> {
 }
 
 export async function cmdRefuelMecha(args: string[]): Promise<string> {
-  if (args.length < 3) {
-    return fmtError('Usage: refuel_mecha <executor_id> <fuel_item_id> <quantity>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 3) {
+    return fmtError('Usage: refuel_mecha <executor_id> <fuel_item_id> <quantity> [--planet <planet_id>]');
   }
-  const quantity = parseIntegerArg(args[2]);
-  if (!/^\+?[1-9]\d*$/.test(args[2]) || quantity === undefined || quantity <= 0) {
+  const quantity = parseIntegerArg(parsed.positionals[2]);
+  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || quantity <= 0) {
     return fmtError('quantity 必须是正整数');
   }
   try {
     const catalog = await fetchCatalog();
-    const fuel = (catalog.items ?? []).find((entry) => entry.id === args[1]) as
+    const fuel = (catalog.items ?? []).find((entry) => entry.id === parsed.positionals[1]) as
       | ({ mecha_fuel_energy?: number })
       | undefined;
     if (!fuel || typeof fuel.mecha_fuel_energy !== 'number' || fuel.mecha_fuel_energy <= 0) {
-      return fmtError(`fuel_item_id 不支持机甲燃料: ${args[1]}`);
+      return fmtError(`fuel_item_id 不支持机甲燃料: ${parsed.positionals[1]}`);
     }
-    return fmtCommandResponse(await apiRefuelMecha(args[0], args[1], quantity));
+    return fmtCommandResponse(await apiRefuelMecha(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -862,7 +874,7 @@ export async function cmdBlockadePlanet(args: string[]): Promise<string> {
 export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
-    return fmtError('Usage: launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]');
+    return fmtError('Usage: launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]');
   }
   try {
     const countRaw = getStringOption(parsed, 'count');
@@ -872,6 +884,7 @@ export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
       orbitRadius: orbitRadiusRaw !== undefined ? requireNumber(orbitRadiusRaw, 'orbit-radius') : undefined,
       inclination: inclinationRaw !== undefined ? requireNumber(inclinationRaw, 'inclination') : undefined,
+      planetId: getStringOption(parsed, 'planet'),
     }));
   } catch (e) {
     return fmtError(toErrorMessage(e));
@@ -879,14 +892,16 @@ export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
 }
 
 export async function cmdTransfer(args: string[]): Promise<string> {
-  if (args.length < 3) {
-    return fmtError('Usage: transfer <building_id> <item_id> <quantity>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 3) {
+    return fmtError('Usage: transfer <building_id> <item_id> <quantity> [--planet <planet_id>]');
   }
   try {
     return fmtCommandResponse(await apiTransferItem(
-      args[0],
-      args[1],
-      requireInt(args[2], 'quantity'),
+      parsed.positionals[0],
+      parsed.positionals[1],
+      requireInt(parsed.positionals[2], 'quantity'),
+      getStringOption(parsed, 'planet'),
     ));
   } catch (e) {
     return fmtError(toErrorMessage(e));
@@ -905,14 +920,15 @@ export async function cmdSwitchActivePlanet(args: string[]): Promise<string> {
 }
 
 export async function cmdSetRayReceiverMode(args: string[]): Promise<string> {
-  if (args.length < 2) {
-    return fmtError('Usage: set_ray_receiver_mode <building_id> <power|photon|hybrid>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: set_ray_receiver_mode <building_id> <power|photon|hybrid> [--planet <planet_id>]');
   }
-  if (!RAY_RECEIVER_MODES.has(args[1] as RayReceiverMode)) {
+  if (!RAY_RECEIVER_MODES.has(parsed.positionals[1] as RayReceiverMode)) {
     return fmtError('mode 必须是 power/photon/hybrid');
   }
   try {
-    return fmtCommandResponse(await apiSetRayReceiverMode(args[0], args[1] as RayReceiverMode));
+    return fmtCommandResponse(await apiSetRayReceiverMode(parsed.positionals[0], parsed.positionals[1] as RayReceiverMode, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -921,7 +937,7 @@ export async function cmdSetRayReceiverMode(args: string[]): Promise<string> {
 export async function cmdLaunchRocket(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
-    return fmtError('Usage: launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>]');
+    return fmtError('Usage: launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]');
   }
   try {
     const layerRaw = getStringOption(parsed, 'layer');
@@ -929,6 +945,7 @@ export async function cmdLaunchRocket(args: string[]): Promise<string> {
     return fmtCommandResponse(await apiLaunchRocket(parsed.positionals[0], parsed.positionals[1], {
       layerIndex: layerRaw !== undefined ? requireInt(layerRaw, 'layer') : undefined,
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
+      planetId: getStringOption(parsed, 'planet'),
     }));
   } catch (e) {
     return fmtError(toErrorMessage(e));
@@ -1006,24 +1023,27 @@ export async function cmdDemolishDyson(args: string[]): Promise<string> {
 }
 
 export async function cmdMineResource(args: string[]): Promise<string> {
-  if (args.includes('--help') || args.length !== 3) return fmtError('Usage: mine_resource <executor_id> <resource_id> <quantity>');
-  const quantity = parseIntegerArg(args[2]);
-  if (!/^\+?[1-9]\d*$/.test(args[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
-  try { return fmtCommandResponse(await apiMineResource(args[0], args[1], quantity)); }
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length !== 3) return fmtError('Usage: mine_resource <executor_id> <resource_id> <quantity> [--planet <planet_id>]');
+  const quantity = parseIntegerArg(parsed.positionals[2]);
+  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
+  try { return fmtCommandResponse(await apiMineResource(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
 export async function cmdCraftItem(args: string[]): Promise<string> {
-  if (args.includes('--help') || args.length !== 3) return fmtError('Usage: craft_item <executor_id> <recipe_id> <quantity>');
-  const quantity = parseIntegerArg(args[2]);
-  if (!/^\+?[1-9]\d*$/.test(args[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
-  try { return fmtCommandResponse(await apiCraftItem(args[0], args[1], quantity)); }
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length !== 3) return fmtError('Usage: craft_item <executor_id> <recipe_id> <quantity> [--planet <planet_id>]');
+  const quantity = parseIntegerArg(parsed.positionals[2]);
+  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
+  try { return fmtCommandResponse(await apiCraftItem(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
 export async function cmdCancelMechaJob(args: string[]): Promise<string> {
-  if (args.includes('--help') || args.length !== 1) return fmtError('Usage: cancel_mecha_job <executor_id>');
-  try { return fmtCommandResponse(await apiCancelMechaJob(args[0])); }
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length !== 1) return fmtError('Usage: cancel_mecha_job <executor_id> [--planet <planet_id>]');
+  try { return fmtCommandResponse(await apiCancelMechaJob(parsed.positionals[0], getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 

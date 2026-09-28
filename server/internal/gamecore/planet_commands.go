@@ -6,6 +6,9 @@ import (
 	"siliconworld/internal/model"
 )
 
+// execSwitchActivePlanet 设置该玩家的视图焦点/默认落点行星（F4）。
+// 不再修改全局 gc.activePlanetID，也不再拖拽执行体绑定——所有已加载行星
+// 始终参与结算，焦点只决定未显式指定行星的命令默认落在哪颗行星。
 func (gc *GameCore) execSwitchActivePlanet(playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
@@ -33,15 +36,17 @@ func (gc *GameCore) execSwitchActivePlanet(playerID string, cmd model.Command) (
 		res.Message = "target planet requires foothold"
 		return res, nil
 	}
-	if !gc.setActivePlanet(planetID) {
+	player := targetWorld.Players[playerID]
+	if player == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "failed to switch active planet"
+		res.Message = "player not found"
 		return res, nil
 	}
+	player.FocusPlanetID = planetID
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("active planet switched to %s", planetID)
+	res.Message = fmt.Sprintf("focus planet switched to %s", planetID)
 	return res, nil
 }
 

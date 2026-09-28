@@ -70,11 +70,12 @@ func (sess *Session) shutdown() {
 
 // GamePlayerSummary 是 /games/current 与 /games/new 响应中的玩家概要（绝不含 key）。
 type GamePlayerSummary struct {
-	PlayerID string `json:"player_id"`
-	Role     string `json:"role"`
-	TeamID   string `json:"team_id"`
-	Bot      string `json:"bot,omitempty"`
-	IsAlive  bool   `json:"is_alive"`
+	PlayerID      string `json:"player_id"`
+	Role          string `json:"role"`
+	TeamID        string `json:"team_id"`
+	Bot           string `json:"bot,omitempty"`
+	IsAlive       bool   `json:"is_alive"`
+	FocusPlanetID string `json:"focus_planet_id,omitempty"` // F4：玩家自己的视图焦点行星
 }
 
 // GameVictorySummary 是当前对局的胜利判定概要。
@@ -120,11 +121,13 @@ func (sess *Session) Summary() GameSummary {
 		}
 	}
 	alive := make(map[string]bool, len(cfg.Players))
+	focus := make(map[string]string, len(cfg.Players))
 	if ws := sess.Core.World(); ws != nil {
 		ws.RLock()
 		for pid, player := range ws.Players {
 			if player != nil {
 				alive[pid] = player.IsAlive
+				focus[pid] = player.FocusPlanetID
 			}
 		}
 		ws.RUnlock()
@@ -132,11 +135,12 @@ func (sess *Session) Summary() GameSummary {
 	players := make([]GamePlayerSummary, 0, len(cfg.Players))
 	for _, p := range cfg.Players {
 		players = append(players, GamePlayerSummary{
-			PlayerID: p.PlayerID,
-			Role:     p.Role,
-			TeamID:   p.TeamID,
-			Bot:      p.Bot,
-			IsAlive:  alive[p.PlayerID],
+			PlayerID:      p.PlayerID,
+			Role:          p.Role,
+			TeamID:        p.TeamID,
+			Bot:           p.Bot,
+			IsAlive:       alive[p.PlayerID],
+			FocusPlanetID: focus[p.PlayerID],
 		})
 	}
 	sort.Slice(players, func(i, j int) bool { return players[i].PlayerID < players[j].PlayerID })

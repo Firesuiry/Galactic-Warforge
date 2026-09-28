@@ -456,7 +456,9 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 	currentTick := ws.Tick
 	events := make([]*model.GameEvent, 0)
 
-	activeByPlayer := countActiveExecutorUsage(ws)
+	// F4：执行体并发上限按玩家跨行星聚合——本世界之前已开始的任务与
+	// 其他行星上 tick 内已转入 InProgress 的任务都计入。
+	activeByPlayer := countActiveExecutorUsage(gc.sortedWorlds())
 	activeByRegion := countActiveConstructionByRegion(ws)
 
 	// T079: First pass - pause in-progress tasks that no longer have materials available

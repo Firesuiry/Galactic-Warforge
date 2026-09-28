@@ -58,6 +58,7 @@ func commandStructureRegistry() []CommandStructureSpec {
 			RequiredTargetFields:  []string{"position"},
 			RequiredPayloadFields: []string{"building_type"},
 			OptionalPayloadFields: []string{"recipe_id", "direction"},
+			Constraints:           []string{"F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。"},
 			ExtraValidation: func(cmd Command) []CommandIssue {
 				if recipeID, ok := cmd.Payload["recipe_id"]; ok {
 					if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {
@@ -76,13 +77,13 @@ func commandStructureRegistry() []CommandStructureSpec {
 			Type:                 CmdMove,
 			RequiredTargetFields: []string{"position"},
 			ExtraValidation:      requireAnyUnitSelector,
-			Constraints:          []string{"实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。"},
+			Constraints:          []string{"实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。", "F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。"},
 		},
 		{
 			Type:                  CmdAttack,
 			RequiredPayloadFields: []string{"target_entity_id"},
 			ExtraValidation:       requireAnyUnitSelector,
-			Constraints:           []string{"指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。"},
+			Constraints:           []string{"指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
 		},
 		{
 			Type:                  CmdUnitOrder,
@@ -111,7 +112,7 @@ func commandStructureRegistry() []CommandStructureSpec {
 				}
 				return issues
 			},
-			Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。"},
+			Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
 		},
 		{
 			Type:                  CmdRefuelMecha,
@@ -245,6 +246,7 @@ func commandStructureRegistry() []CommandStructureSpec {
 		{
 			Type:                  CmdSwitchActivePlanet,
 			RequiredPayloadFields: []string{"planet_id"},
+			Constraints:           []string{"F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。"},
 		},
 		{
 			Type:                  CmdTransferItem,

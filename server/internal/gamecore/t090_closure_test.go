@@ -152,8 +152,15 @@ func TestSwitchActivePlanetAndSaveRestorePreserveMultiPlanetRuntime(t *testing.T
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected switch_active_planet to succeed, got %s (%s)", res.Code, res.Message)
 	}
-	if core.World().PlanetID != "planet-1-1" {
-		t.Fatalf("expected active world to switch to planet-1-1, got %s", core.World().PlanetID)
+	// F4：switch_active_planet 只写该玩家的焦点行星，不再改全局活动行星。
+	if got := core.World().Players["p1"].FocusPlanetID; got != "planet-1-1" {
+		t.Fatalf("expected p1 focus planet planet-1-1, got %s", got)
+	}
+	if core.World().PlanetID != "planet-1-2" {
+		t.Fatalf("expected global active world to stay planet-1-2, got %s", core.World().PlanetID)
+	}
+	if got := core.World().Players["p2"].FocusPlanetID; got != "planet-1-2" {
+		t.Fatalf("expected p2 focus planet to stay planet-1-2, got %s", got)
 	}
 
 	save, err := core.ExportSaveFile("test")
@@ -179,15 +186,24 @@ func TestSwitchActivePlanetAndSaveRestorePreserveMultiPlanetRuntime(t *testing.T
 	if err != nil {
 		t.Fatalf("restore save: %v", err)
 	}
-	if restored.ActivePlanetID() != "planet-1-1" {
-		t.Fatalf("expected restored active planet planet-1-1, got %s", restored.ActivePlanetID())
+	// 全局活动行星保留为冷启动默认值；玩家焦点随存档恢复。
+	if restored.ActivePlanetID() != "planet-1-2" {
+		t.Fatalf("expected restored active planet planet-1-2, got %s", restored.ActivePlanetID())
+	}
+	if got := restored.World().Players["p1"].FocusPlanetID; got != "planet-1-1" {
+		t.Fatalf("expected restored p1 focus planet planet-1-1, got %s", got)
 	}
 }
 
 func TestInterstellarLogisticsDispatchesAcrossLoadedPlanets(t *testing.T) {
 	core, _, _ := newTwoPlanetTestCore(t)
 
-	origin := core.World()
+	// F4：所有已加载行星都在结算，跨行星物流不再依赖活动行星切换；
+	// 直接按行星 ID 取世界态布置两端站点。
+	origin := core.WorldForPlanet("planet-1-2")
+	if origin == nil {
+		t.Fatal("expected planet-1-2 runtime")
+	}
 	originStation := newBuilding("origin-station", model.BuildingTypeInterstellarLogisticsStation, "p1", model.Position{X: 6, Y: 6})
 	if originStation.LogisticsStation == nil {
 		t.Fatal("expected origin logistics station state")
@@ -207,17 +223,10 @@ func TestInterstellarLogisticsDispatchesAcrossLoadedPlanets(t *testing.T) {
 	}
 	powerLogisticsFixture(t, origin)
 
-	switchRes := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CommandType("switch_active_planet"),
-		Payload: map[string]any{
-			"planet_id": "planet-1-1",
-		},
-	})
-	if switchRes.Code != model.CodeOK {
-		t.Fatalf("switch to rocky planet failed: %s (%s)", switchRes.Code, switchRes.Message)
+	target := core.WorldForPlanet("planet-1-1")
+	if target == nil {
+		t.Fatal("expected planet-1-1 runtime")
 	}
-
-	target := core.World()
 	targetStation := newBuilding("target-station", model.BuildingTypeInterstellarLogisticsStation, "p1", model.Position{X: 8, Y: 8})
 	if targetStation.LogisticsStation == nil {
 		t.Fatal("expected target logistics station state")
@@ -230,30 +239,10 @@ func TestInterstellarLogisticsDispatchesAcrossLoadedPlanets(t *testing.T) {
 	placeBuilding(target, targetStation)
 	model.RegisterLogisticsStation(target, targetStation)
 
-	switchBack := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CommandType("switch_active_planet"),
-		Payload: map[string]any{
-			"planet_id": "planet-1-2",
-		},
-	})
-	if switchBack.Code != model.CodeOK {
-		t.Fatalf("switch back to gas planet failed: %s (%s)", switchBack.Code, switchBack.Message)
-	}
-
 	for i := 0; i < 12; i++ {
 		core.processTick()
 	}
 
-	checkTarget := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CommandType("switch_active_planet"),
-		Payload: map[string]any{
-			"planet_id": "planet-1-1",
-		},
-	})
-	if checkTarget.Code != model.CodeOK {
-		t.Fatalf("switch to target planet for verification failed: %s (%s)", checkTarget.Code, checkTarget.Message)
-	}
-	target = core.World()
 	got := 0
 	if station := target.LogisticsStations[targetStation.ID]; station != nil && station.Inventory != nil {
 		got = station.Inventory["hydrogen"]

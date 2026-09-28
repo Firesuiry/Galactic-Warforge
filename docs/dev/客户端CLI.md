@@ -70,13 +70,13 @@
 | `scan_galaxy`                 | `[galaxy_id]`                                                                                                                                                                  | 扫描银河，默认 `galaxy-1`              |
 | `scan_system`                 | `<system_id>`                                                                                                                                                                  | 扫描恒星系                             |
 | `scan_planet`                 | `<planet_id>`                                                                                                                                                                  | 扫描行星                               |
-| `build`                       | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]`                                                                                                 | 建造任意服务端可建建筑                 |
-| `move`                        | `<entity_id> <x> <y> [--z <z>]`                                                                                                                                                | 移动单位                               |
-| `attack`                      | `<entity_id> <target_entity_id>`                                                                                                                                               | 指定攻击目标（单位追击至射程内按冷却开火；执行体保持手动一击） |
-| `order`                       | `<entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>]`                                                                    | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止，支持逗号分隔批量 |
-| `produce`                     | `<entity_id> <unit_type>`                                                                                                                                                      | 按服务端 `/catalog.world_units` 生产公开单位 |
-| `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
-| `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
+| `build`                       | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--planet <planet_id>]`                                                                          | 建造任意服务端可建建筑；`--planet` 显式选落点行星（缺省为自己的焦点行星） |
+| `move`                        | `<entity_id> <x> <y> [--z <z>] [--planet <planet_id>]`                                                                                                                         | 移动单位（按单位所在行星结算；`--planet` 用于跨行星同 ID 消歧） |
+| `attack`                      | `<entity_id> <target_entity_id> [--planet <planet_id>]`                                                                                                                        | 指定攻击目标（单位追击至射程内按冷却开火；执行体保持手动一击；`--planet` 消歧） |
+| `order`                       | `<entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>] [--planet <planet_id>]`                                           | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止，支持逗号分隔批量；`--planet` 消歧 |
+| `produce`                     | `<entity_id> <unit_type> [--planet <planet_id>]`                                                                                                                               | 按服务端 `/catalog.world_units` 生产公开单位（按建筑所在行星结算） |
+| `upgrade`                     | `<entity_id> [--planet <planet_id>]`                                                                                                                                           | 升级建筑（按建筑所在行星结算）         |
+| `demolish`                    | `<entity_id> [--planet <planet_id>]`                                                                                                                                           | 拆除建筑（按建筑所在行星结算）         |
 | `configure_splitter` | `<building_id> --inputs <方向列表> --outputs <方向列表> [--input-priority <方向>] [--output-priority <方向>] [--filters <方向:item_id列表>]` | 完整替换四向分流器端口、优先级与出口过滤；省略可选项会清除旧值 |
 | `configure_traffic_monitor` | `<building_id> <belt_id\|none> --window <1..600> --minimum <0..60> --alerts <on\|off>` | 完整替换流速监测器绑定、窗口、阈值与告警 |
 | `configure_distributor` | `<id> <item_id\|none> <none\|supply\|demand> <local_storage> [--delivery true\|false] [--collection true\|false]` | 配置仓库配送器；省略开关保留原值 |
@@ -90,8 +90,8 @@
 | `restore_construction`        | `<task_id>`                                                                                                                                                                    | 恢复施工任务                           |
 | `start_research`              | `<tech_id>`                                                                                                                                                                    | 开始研究                               |
 | `cancel_research`             | `<tech_id>`                                                                                                                                                                    | 取消研究                               |
-| `set_recipe`                  | `<entity_id> [recipe_id]`                                                                                                                                                      | 原地切换生产建筑/研究站配方；省略 `recipe_id` 时研究站回研究模式、生产建筑转空闲；切换后进度清零、库存保留，校验失败原子拒绝 |
-| `set_energy_exchanger_mode`   | `<building_id> <charge\|discharge\|standby>`                                                                                                                                   | 切换蓄电器能量枢纽模式：`charge` 用电网盈余把空蓄电池充成满蓄电池，`discharge` 放电回电网并返还空蓄电池，`standby` 不做物品转换 |
+| `set_recipe`                  | `<entity_id> [recipe_id] [--planet <planet_id>]`                                                                                                                               | 原地切换生产建筑/研究站配方；省略 `recipe_id` 时研究站回研究模式、生产建筑转空闲；切换后进度清零、库存保留，校验失败原子拒绝 |
+| `set_energy_exchanger_mode`   | `<building_id> <charge\|discharge\|standby> [--planet <planet_id>]`                                                                                                            | 切换蓄电器能量枢纽模式：`charge` 用电网盈余把空蓄电池充成满蓄电池，`discharge` 放电回电网并返还空蓄电池，`standby` 不做物品转换 |
 | `blueprint_create`            | `<blueprint_id> <ground\|space> [--name <name>] (--base-frame <base_frame_id> \| --base-hull <base_hull_id>)`                                                               | 创建战争蓝图草案                       |
 | `blueprint_set_component`     | `<blueprint_id> <slot_id> <component_id>`                                                                                                                                      | 修改蓝图槽位组件                       |
 | `blueprint_validate`          | `<blueprint_id>`                                                                                                                                                               | 校验蓝图合法性并返回结构化问题         |
@@ -113,15 +113,15 @@
 | `theater_define_zone`         | `<theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y>] [--radius <n>]`                                                                   | 定义战区区域                           |
 | `theater_set_objective`       | `<theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]`                                                 | 设置战区目标                           |
 | `blockade_planet`             | `<task_force_id> <planet_id>`                                                                                                                                                  | 对目标行星下发轨道封锁意图             |
-| `switch_active_planet`        | `<planet_id>`                                                                                                                                                                  | 切换当前 active planet                 |
-| `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid>`                                                                                                                                        | 切换射线接收站模式                     |
-| `transfer`                    | `<building_id> <item_id> <quantity>`                                                                                                                                           | 把玩家背包物品装入建筑本地存储         |
-| `refuel_mecha`                | `<executor_id> <fuel_item_id> <quantity>`                                                                                                                                      | 用目录中声明 `mecha_fuel_energy` 的燃料为玩家机甲补充能源；数量必须为正整数 |
-| `mine_resource` | `<executor_id> <resource_id> <quantity>` | 在 2 格内手动采集有限固体矿点；quantity 为件数 |
-| `craft_item` | `<executor_id> <recipe_id> <quantity>` | 按已解锁、允许手造的配方进行个人制造；quantity 为批数 |
-| `cancel_mecha_job` | `<executor_id>` | 取消个人任务，返还未完成制造批次的预留原料 |
-| `launch_solar_sail`           | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>]`                                                                                                         | 从电磁发射器发射已装载的太阳帆         |
-| `launch_rocket`               | `<building_id> <system_id> [--layer <n>] [--count <n>]`                                                                                                                        | 从垂直发射井向戴森层发射已装载的火箭   |
+| `switch_active_planet`        | `<planet_id>`                                                                                                                                                                  | 切换自己的视图焦点/默认落点行星（F4：不影响其他玩家，所有已加载行星始终结算） |
+| `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid> [--planet <planet_id>]`                                                                                                                 | 切换射线接收站模式（按建筑所在行星结算） |
+| `transfer`                    | `<building_id> <item_id> <quantity> [--planet <planet_id>]`                                                                                                                    | 把玩家背包物品装入建筑本地存储（按建筑所在行星结算） |
+| `refuel_mecha`                | `<executor_id> <fuel_item_id> <quantity> [--planet <planet_id>]`                                                                                                               | 用目录中声明 `mecha_fuel_energy` 的燃料为玩家机甲补充能源；数量必须为正整数 |
+| `mine_resource` | `<executor_id> <resource_id> <quantity> [--planet <planet_id>]` | 在 2 格内手动采集有限固体矿点；quantity 为件数（按执行体所在行星结算） |
+| `craft_item` | `<executor_id> <recipe_id> <quantity> [--planet <planet_id>]` | 按已解锁、允许手造的配方进行个人制造；quantity 为批数（按执行体所在行星结算） |
+| `cancel_mecha_job` | `<executor_id> [--planet <planet_id>]` | 取消个人任务，返还未完成制造批次的预留原料 |
+| `launch_solar_sail`           | `<building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]`                                                                                  | 从电磁发射器发射已装载的太阳帆         |
+| `launch_rocket`               | `<building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]`                                                                                                 | 从垂直发射井向戴森层发射已装载的火箭   |
 | `build_dyson_node`            | `<system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]`                                                                                                        | 建戴森球节点                           |
 | `build_dyson_frame`           | `<system_id> <layer_index> <node_a_id> <node_b_id>`                                                                                                                            | 建戴森球框架                           |
 | `build_dyson_shell`           | `<system_id> <layer_index> <latitude_min> <latitude_max> <coverage>`                                                                                                           | 建戴森球壳面                           |
@@ -433,7 +433,7 @@ help configure_splitter
 - 新站空库存、空电池、无皮带口、无运输器。安装须有 `logistics_drone` / `logistics_vessel` 成品。默认从背包安装；制造台产物可经皮带送入站点同物品的 `none` 本地槽，再用 `install_logistics_vehicle ... --source station` 从站库安装；调大容量不会生成载具。两配方需 `planetary_logistics` / `interstellar_logistics`，分别消耗2电动机+2处理器+5铁块、2电动机+10处理器+10钛合金。
 - 用 `configure_logistics_station` 调整无人机容量（1..10）、优先级、星际开关/曲速/货船槽位（1..5），容量不得低于已安装数。`--belt-ports` 提供时完整替换全部端口，省略保持原配置，`none` 清空；端口物品必须先配置槽位。
 - 用 `configure_logistics_slot` 配置 `none|supply|demand|both` 与保留/目标量。`none` 仍占本地槽；`--remove` 才删除，有库存、端口引用或在途货物/取货预约时拒绝。PLS为3槽每项200，ILS为5槽每项500，同物品跨scope只占一槽。
-- 用 `switch_active_planet` 在“已发现 + 已加载 + 当前玩家有 foothold”的星球之间切换当前操作焦点
+- 用 `switch_active_planet` 在“已发现 + 已加载 + 当前玩家有 foothold”的星球之间切换自己的操作焦点（F4：焦点是每玩家独立的，只决定未显式指定行星命令的默认落点）
 - 同一恒星系、已加载行星之间的星际物流货船现在可以跨行星派发；是否能形成闭环取决于两端物流站配置与该星球 runtime 是否已加载
 - 如果你更习惯图形界面，同一套配置也可以在 Web 行星页完成：在“工作台 → 物流”配置站点/槽位；选中己方站点后，在“详情 → 物流站运行与接线”查看状态、安装运输器和配置皮带端口
 
@@ -662,7 +662,7 @@ set_ray_receiver_mode <receiver_id> power
 - `summary` 中应看到 `active_planet_id = planet-1-2`
 - 如果已经通过 `mission_complete` 完成终局科研，`summary` 会额外返回 `winner` / `victory_reason` / `victory_rule`
 - `system sys-1` 中应能看到 `planet-1-2.kind = gas_giant`
-- `switch_active_planet` 只允许切到“已发现 + 已加载 + 你在该星球已有 foothold”的目标；来回切换后，后续 `build` / `inspect` / `transfer` 都会以新的 active planet 为当前操作焦点
+- `switch_active_planet` 只允许切到“已发现 + 已加载 + 你在该星球已有 foothold”的目标；F4 起它只改你自己的焦点行星（不改全局、不拖拽他人）：后续不带 `--planet` 的 `build` 落在你的焦点行星，`transfer`/`inspect`/`move` 等按目标实体所在行星结算，也可用 `--planet` 显式指定
 - 当前官方 seed 下，想同时让 `orbital_collector`、`vertical_launching_silo`、`em_rail_ejector` 都进入 `running`，实测需要把 `stats.energy_stats.generation` 堆到至少 `84`；这个数字现在已经与 `/world/planets/{planet_id}/networks` 的真实网络供电口径对齐，包含 `ray_receiver power/hybrid` 的实际回灌
 - 当 `ray_receiver` 切到 `power` / `hybrid` 且太阳帆或戴森结构已经产能后，`summary.players.p1.resources.energy`、`stats.energy_stats.generation` 与 `/world/planets/{planet_id}/networks.power_networks[].supply` 应同步抬升
 - 用 `set_ray_receiver_mode <receiver_id> power` 验证时，应该比较切模式后的 `energy / generation / supply` 增量，并确认 `critical_photon` 不再继续增长；切换前已经存在的光子库存/缓冲不会被自动清零

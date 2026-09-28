@@ -43,6 +43,8 @@ type AgentBriefingSelf struct {
 	Resources model.Resources     `json:"resources"`
 	Inventory model.ItemInventory `json:"inventory,omitempty"`
 	Tech      *AgentBriefingTech  `json:"tech,omitempty"`
+	// FocusPlanetID 是该玩家当前的视图焦点/默认落点行星（F4）。
+	FocusPlanetID string `json:"focus_planet_id,omitempty"`
 }
 
 // AgentBriefingTech summarizes research without dumping the full tech tree.
@@ -145,6 +147,7 @@ func buildBriefingSelf(player *model.PlayerState, playerID string) AgentBriefing
 	self.Role = player.Role
 	self.IsAlive = player.IsAlive
 	self.Resources = player.Resources
+	self.FocusPlanetID = player.FocusPlanetID
 	if player.Inventory != nil {
 		self.Inventory = player.Inventory.Clone()
 	}

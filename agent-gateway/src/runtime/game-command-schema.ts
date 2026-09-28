@@ -521,7 +521,7 @@ export function summarizeGameCommandAction(action: CanonicalGameCommandAction) {
     case 'transfer_item':
       return `装料 ${action.args.itemId} x${action.args.quantity} -> ${action.args.buildingId}`;
     case 'switch_active_planet':
-      return `切换 active planet 到 ${action.args.planetId}`;
+      return `切换焦点行星到 ${action.args.planetId}`;
     case 'set_ray_receiver_mode':
       return `切换射线接收站 ${action.args.buildingId} -> ${action.args.mode}`;
     case 'queue_military_production':

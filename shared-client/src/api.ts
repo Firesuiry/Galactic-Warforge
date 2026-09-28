@@ -144,17 +144,23 @@ export type DysonComponentType = 'node' | 'frame' | 'shell';
 export interface BuildOptions {
   direction?: Direction;
   recipeId?: string;
+  /** F4：显式落点行星；缺省落在玩家焦点行星。 */
+  planetId?: string;
 }
 
 export interface LaunchSolarSailOptions {
   count?: number;
   orbitRadius?: number;
   inclination?: number;
+  /** F4：发射场所在行星的路由提示（跨行星同 ID 时消歧）。 */
+  planetId?: string;
 }
 
 export interface LaunchRocketOptions {
   layerIndex?: number;
   count?: number;
+  /** F4：发射场所在行星的路由提示（跨行星同 ID 时消歧）。 */
+  planetId?: string;
 }
 
 export interface BuildDysonNodeOptions {
@@ -563,7 +569,7 @@ export function createApiClient(options: ApiClientOptions) {
   function cmdBuild(position: Position, buildingType: string, buildOptions: BuildOptions = {}) {
     return sendSingleCommand({
       type: 'build',
-      target: { layer: 'planet', position },
+      target: { layer: 'planet', position, ...(buildOptions.planetId ? { planet_id: buildOptions.planetId } : {}) },
       payload: {
         building_type: buildingType,
         ...(buildOptions.direction ? { direction: buildOptions.direction } : {}),
@@ -579,27 +585,27 @@ export function createApiClient(options: ApiClientOptions) {
     return { entity_id: selector };
   }
 
-  function cmdMove(selector: string | string[], position: Position) {
+  function cmdMove(selector: string | string[], position: Position, planetId?: string) {
     return sendSingleCommand({
       type: 'move',
-      target: { layer: 'planet', ...unitSelectorTarget(selector), position },
+      target: { layer: 'planet', ...unitSelectorTarget(selector), position, ...(planetId ? { planet_id: planetId } : {}) },
     });
   }
 
-  function cmdAttack(selector: string | string[], targetEntityId: string) {
+  function cmdAttack(selector: string | string[], targetEntityId: string, planetId?: string) {
     return sendSingleCommand({
       type: 'attack',
-      target: { layer: 'planet', ...unitSelectorTarget(selector) },
+      target: { layer: 'planet', ...unitSelectorTarget(selector), ...(planetId ? { planet_id: planetId } : {}) },
       payload: { target_entity_id: targetEntityId },
     });
   }
 
   type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop';
 
-  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string } = {}) {
+  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string; planetId?: string } = {}) {
     return sendSingleCommand({
       type: 'unit_order',
-      target: { layer: 'planet', ...unitSelectorTarget(selector), ...(options.position ? { position: options.position } : {}) },
+      target: { layer: 'planet', ...unitSelectorTarget(selector), ...(options.position ? { position: options.position } : {}), ...(options.planetId ? { planet_id: options.planetId } : {}) },
       payload: {
         order,
         ...(options.targetEntityId ? { target_entity_id: options.targetEntityId } : {}),
@@ -607,26 +613,26 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdRefuelMecha(entityId: string, itemId: string, quantity: number) {
+  function cmdRefuelMecha(entityId: string, itemId: string, quantity: number, planetId?: string) {
     return sendSingleCommand({
       type: 'refuel_mecha',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { item_id: itemId, quantity },
     });
   }
 
-  function cmdMineResource(entityId: string, itemId: string, quantity: number) {
+  function cmdMineResource(entityId: string, itemId: string, quantity: number, planetId?: string) {
     return sendSingleCommand({
       type: 'mine_resource',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { resource_id: itemId, quantity },
     });
   }
 
-  function cmdCraftItem(entityId: string, itemId: string, quantity: number) {
+  function cmdCraftItem(entityId: string, itemId: string, quantity: number, planetId?: string) {
     return sendSingleCommand({
       type: 'craft_item',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { recipe_id: itemId, quantity },
     });
   }
@@ -647,32 +653,32 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdCancelMechaJob(entityId: string) {
+  function cmdCancelMechaJob(entityId: string, planetId?: string) {
     return sendSingleCommand({
       type: 'cancel_mecha_job',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
     });
   }
 
-  function cmdProduce(entityId: string, unitType: WorldUnitID) {
+  function cmdProduce(entityId: string, unitType: WorldUnitID, planetId?: string) {
     return sendSingleCommand({
       type: 'produce',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { unit_type: unitType },
     });
   }
 
-  function cmdUpgrade(entityId: string) {
+  function cmdUpgrade(entityId: string, planetId?: string) {
     return sendSingleCommand({
       type: 'upgrade',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
     });
   }
 
-  function cmdDemolish(entityId: string) {
+  function cmdDemolish(entityId: string, planetId?: string) {
     return sendSingleCommand({
       type: 'demolish',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
     });
   }
 
@@ -690,8 +696,8 @@ export function createApiClient(options: ApiClientOptions) {
   function cmdUninstallLogisticsBot(buildingId: string, quantity: number) {
     return sendSingleCommand({ type: 'uninstall_logistics_bot', target: { layer: 'planet', entity_id: buildingId }, payload: { quantity } });
   }
-  function cmdConfigureMechaLogistics(unitId: string, requests: Record<string, MechaLogisticsRequest>) {
-    return sendSingleCommand({ type: 'configure_mecha_logistics', target: { layer: 'planet', entity_id: unitId }, payload: { requests } });
+  function cmdConfigureMechaLogistics(unitId: string, requests: Record<string, MechaLogisticsRequest>, planetId?: string) {
+    return sendSingleCommand({ type: 'configure_mecha_logistics', target: { layer: 'planet', entity_id: unitId, ...(planetId ? { planet_id: planetId } : {}) }, payload: { requests } });
   }
 
   function cmdConfigureLogisticsStation(buildingId: string, options: ConfigureLogisticsStationOptions = {}) {
@@ -762,19 +768,19 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdSetRecipe(buildingId: string, recipeId?: string) {
+  function cmdSetRecipe(buildingId: string, recipeId?: string, planetId?: string) {
     const payload: SetRecipePayload = recipeId ? { recipe_id: recipeId } : {};
     return sendSingleCommand({
       type: 'set_recipe',
-      target: { layer: 'planet', entity_id: buildingId },
+      target: { layer: 'planet', entity_id: buildingId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { ...payload },
     });
   }
 
-  function cmdTransferItem(buildingId: string, itemId: string, quantity: number) {
+  function cmdTransferItem(buildingId: string, itemId: string, quantity: number, planetId?: string) {
     return sendSingleCommand({
       type: 'transfer_item',
-      target: { layer: 'planet', entity_id: buildingId },
+      target: { layer: 'planet', entity_id: buildingId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: {
         building_id: buildingId,
         item_id: itemId,
@@ -791,10 +797,10 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdSetRayReceiverMode(buildingId: string, mode: RayReceiverMode) {
+  function cmdSetRayReceiverMode(buildingId: string, mode: RayReceiverMode, planetId?: string) {
     return sendSingleCommand({
       type: 'set_ray_receiver_mode',
-      target: { layer: 'planet', entity_id: buildingId },
+      target: { layer: 'planet', entity_id: buildingId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: {
         building_id: buildingId,
         mode,
@@ -802,11 +808,11 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdSetEnergyExchangerMode(buildingId: string, mode: EnergyExchangerMode) {
+  function cmdSetEnergyExchangerMode(buildingId: string, mode: EnergyExchangerMode, planetId?: string) {
     const payload: SetEnergyExchangerModePayload = { building_id: buildingId, mode };
     return sendSingleCommand({
       type: 'set_energy_exchanger_mode',
-      target: { layer: 'planet', entity_id: buildingId },
+      target: { layer: 'planet', entity_id: buildingId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { ...payload },
     });
   }
@@ -817,12 +823,12 @@ export function createApiClient(options: ApiClientOptions) {
       target: {
         layer: 'planet',
         entity_id: buildingId,
-        ...(options.planetId ? { planet_id: options.planetId } : {}),
       },
       payload: {
         building_id: buildingId,
         blueprint_id: blueprintId,
         count: options.count ?? 1,
+        // planet_id 是小队落点行星（作战参数，可为非建筑所在行星）；行星路由由 building_id 决定。
         ...(options.planetId ? { planet_id: options.planetId } : {}),
       },
     });
@@ -1115,7 +1121,7 @@ export function createApiClient(options: ApiClientOptions) {
   function cmdLaunchSolarSail(buildingId: string, launchOptions: LaunchSolarSailOptions = {}) {
     return sendSingleCommand({
       type: 'launch_solar_sail',
-      target: { layer: 'planet' },
+      target: { layer: 'planet', ...(launchOptions.planetId ? { planet_id: launchOptions.planetId } : {}) },
       payload: {
         building_id: buildingId,
         ...(launchOptions.count !== undefined ? { count: launchOptions.count } : {}),
@@ -1128,7 +1134,7 @@ export function createApiClient(options: ApiClientOptions) {
   function cmdLaunchRocket(buildingId: string, systemId: string, launchOptions: LaunchRocketOptions = {}) {
     return sendSingleCommand({
       type: 'launch_rocket',
-      target: { layer: 'system', system_id: systemId },
+      target: { layer: 'system', system_id: systemId, ...(launchOptions.planetId ? { planet_id: launchOptions.planetId } : {}) },
       payload: {
         building_id: buildingId,
         system_id: systemId,

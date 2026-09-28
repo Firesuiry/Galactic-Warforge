@@ -276,12 +276,13 @@ func (s *Server) handleSystemRuntime(w http.ResponseWriter, r *http.Request, pla
 		return
 	}
 	systemID := r.PathValue("system_id")
-	activePlanetID := sess.Core.ActivePlanetID()
+	// F4：视图上的“活动行星”注释 = 调用玩家自己的焦点行星。
+	focusPlanetID := sess.Core.FocusPlanetIDFor(playerID)
 	view, ok := sess.Query.SystemRuntime(
 		playerID,
 		systemID,
-		activePlanetID,
-		sess.Core.WorldForPlanet(activePlanetID),
+		focusPlanetID,
+		sess.Core.WorldForPlanet(focusPlanetID),
 		sess.Core.SpaceRuntime(),
 	)
 	if !ok {
@@ -421,7 +422,7 @@ func (s *Server) handlePlanetRuntime(w http.ResponseWriter, r *http.Request, pla
 	}
 	planetID := r.PathValue("planet_id")
 	ws := sess.Core.WorldForPlanet(planetID)
-	view, ok := sess.Query.PlanetRuntime(ws, playerID, planetID, sess.Core.ActivePlanetID())
+	view, ok := sess.Query.PlanetRuntime(ws, playerID, planetID, sess.Core.FocusPlanetIDFor(playerID))
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -437,7 +438,7 @@ func (s *Server) handlePlanetNetworks(w http.ResponseWriter, r *http.Request, pl
 	}
 	planetID := r.PathValue("planet_id")
 	ws := sess.Core.WorldForPlanet(planetID)
-	view, ok := sess.Query.PlanetNetworks(ws, playerID, planetID, sess.Core.ActivePlanetID())
+	view, ok := sess.Query.PlanetNetworks(ws, playerID, planetID, sess.Core.FocusPlanetIDFor(playerID))
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return

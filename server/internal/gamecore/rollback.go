@@ -111,7 +111,7 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	} else {
 		gc.discovery.ReplaceFromSnapshot(replayCore.discovery.Snapshot())
 	}
-	gc.executorUsage = countActiveExecutorUsage(gc.world)
+	gc.executorUsage = countActiveExecutorUsage(gc.sortedWorlds())
 	gc.setVictoryState(replayCore.Victory())
 	gc.setCurrentWorld(gc.world.PlanetID, gc.world)
 	gc.spaceRuntime = model.CloneSpaceRuntimeState(replayCore.spaceRuntime)

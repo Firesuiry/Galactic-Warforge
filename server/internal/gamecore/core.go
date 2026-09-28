@@ -730,6 +730,18 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			continue
 		}
 
+		// F4：命令按目标行星路由——显式 planet_id → 目标实体所在行星 →
+		// 玩家焦点行星 → 全局活动行星兜底。
+		cmdWorld, routeFailure := gc.resolveCommandWorld(player, cmd)
+		if routeFailure != nil {
+			res = *routeFailure
+			res.CommandIndex = i
+			results = append(results, res)
+			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
+			gc.recordCommandAudit(qr, cmd, res, player, "execute", boolPtr(false))
+			continue
+		}
+
 		switch cmd.Type {
 		case model.CmdScanGalaxy:
 			res, evts = gc.execScanGalaxy(qr.PlayerID, cmd)
@@ -738,117 +750,117 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 		case model.CmdScanPlanet:
 			res, evts = gc.execScanPlanet(qr.PlayerID, cmd)
 		case model.CmdConfigureSplitter:
-			res, evts = gc.execConfigureSplitter(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execConfigureSplitter(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureTrafficMonitor:
-			res, evts = gc.execConfigureTrafficMonitor(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execConfigureTrafficMonitor(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBuild:
-			res, evts = gc.execBuild(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBuild(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdMove:
-			res, evts = gc.execMove(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execMove(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdAttack:
-			res, evts = gc.execAttack(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execAttack(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdUnitOrder:
-			res, evts = gc.execUnitOrder(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execUnitOrder(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdRefuelMecha:
-			res, evts = gc.execRefuelMecha(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execRefuelMecha(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdMineResource:
-			res, evts = gc.execMineResource(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execMineResource(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCraftItem:
-			res, evts = gc.execCraftItem(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execCraftItem(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCancelMechaJob:
-			res, evts = gc.execCancelMechaJob(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execCancelMechaJob(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdProduce:
-			res, evts = gc.execProduce(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execProduce(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdDeploySquad:
-			res, evts = gc.execDeploySquad(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execDeploySquad(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCommissionFleet:
-			res, evts = gc.execCommissionFleet(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execCommissionFleet(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdFleetAssign:
-			res, evts = gc.execFleetAssign(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execFleetAssign(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdFleetAttack:
-			res, evts = gc.execFleetAttack(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execFleetAttack(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdFleetMove:
-			res, evts = gc.execFleetMove(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execFleetMove(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdFleetDisband:
-			res, evts = gc.execFleetDisband(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execFleetDisband(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTaskForceCreate:
-			res, evts = gc.execTaskForceCreate(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTaskForceCreate(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTaskForceAssign:
-			res, evts = gc.execTaskForceAssign(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTaskForceAssign(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTaskForceSetStance:
-			res, evts = gc.execTaskForceSetStance(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTaskForceSetStance(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTaskForceDeploy:
-			res, evts = gc.execTaskForceDeploy(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTaskForceDeploy(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTheaterCreate:
-			res, evts = gc.execTheaterCreate(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTheaterCreate(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTheaterDefineZone:
-			res, evts = gc.execTheaterDefineZone(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTheaterDefineZone(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTheaterSetObjective:
-			res, evts = gc.execTheaterSetObjective(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTheaterSetObjective(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBlockadePlanet:
-			res, evts = gc.execBlockadePlanet(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBlockadePlanet(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBlueprintCreate:
-			res, evts = gc.execBlueprintCreate(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBlueprintCreate(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBlueprintSetComponent:
-			res, evts = gc.execBlueprintSetComponent(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBlueprintSetComponent(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBlueprintValidate:
-			res, evts = gc.execBlueprintValidate(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBlueprintValidate(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBlueprintFinalize:
-			res, evts = gc.execBlueprintFinalize(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBlueprintFinalize(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBlueprintVariant:
-			res, evts = gc.execBlueprintVariant(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBlueprintVariant(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdQueueMilitaryProduction:
-			res, evts = gc.execQueueMilitaryProduction(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execQueueMilitaryProduction(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdRefitUnit:
-			res, evts = gc.execRefitUnit(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execRefitUnit(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdUpgrade:
-			res, evts = gc.execUpgrade(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execUpgrade(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdDemolish:
-			res, evts = gc.execDemolish(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execDemolish(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureDistributor:
-			res, evts = gc.execConfigureDistributor(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execConfigureDistributor(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdInstallLogisticsBot:
-			res, evts = gc.execInstallLogisticsBot(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execInstallLogisticsBot(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdUninstallLogisticsBot:
-			res, evts = gc.execUninstallLogisticsBot(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execUninstallLogisticsBot(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureMechaLogistics:
-			res, evts = gc.execConfigureMechaLogistics(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execConfigureMechaLogistics(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdInstallLogisticsVehicle:
-			res, evts = gc.execInstallLogisticsVehicle(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execInstallLogisticsVehicle(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureLogisticsStation:
-			res, evts = gc.execConfigureLogisticsStation(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execConfigureLogisticsStation(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureLogisticsSlot:
-			res, evts = gc.execConfigureLogisticsSlot(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execConfigureLogisticsSlot(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCancelConstruction:
-			res, evts = gc.execCancelConstruction(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execCancelConstruction(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdRestoreConstruction:
-			res, evts = gc.execRestoreConstruction(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execRestoreConstruction(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdStartResearch:
-			res, evts = gc.execStartResearch(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execStartResearch(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCancelResearch:
-			res, evts = gc.execCancelResearch(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execCancelResearch(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdSetRecipe:
-			res, evts = gc.execSetRecipe(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execSetRecipe(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdTransferItem:
-			res, evts = gc.execTransferItem(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execTransferItem(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdSwitchActivePlanet:
 			res, evts = gc.execSwitchActivePlanet(qr.PlayerID, cmd)
 		case model.CmdLaunchSolarSail:
-			res, evts = gc.execLaunchSolarSail(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execLaunchSolarSail(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdLaunchRocket:
-			res, evts = gc.execLaunchRocket(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execLaunchRocket(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBuildDysonNode:
-			res, evts = gc.execBuildDysonNode(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBuildDysonNode(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBuildDysonFrame:
-			res, evts = gc.execBuildDysonFrame(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBuildDysonFrame(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdBuildDysonShell:
-			res, evts = gc.execBuildDysonShell(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execBuildDysonShell(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdDemolishDyson:
-			res, evts = gc.execDemolishDyson(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execDemolishDyson(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdSetRayReceiverMode:
-			res, evts = gc.execSetRayReceiverMode(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execSetRayReceiverMode(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdSetEnergyExchangerMode:
-			res, evts = gc.execSetEnergyExchangerMode(gc.world, qr.PlayerID, cmd)
+			res, evts = gc.execSetEnergyExchangerMode(cmdWorld, qr.PlayerID, cmd)
 		default:
 			res = model.CommandResult{
 				Status:  model.StatusRejected,

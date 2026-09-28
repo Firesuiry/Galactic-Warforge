@@ -227,6 +227,8 @@ func TestSwitchActivePlanetCommandUpdatesSummaryEndpoint(t *testing.T) {
 	go core.Run()
 	defer core.Stop()
 
+	initialActive := core.ActivePlanetID()
+
 	resp := postCommandRequest(t, srv, model.CommandRequest{
 		RequestID:  "req-switch-active-planet",
 		IssuerType: "player",
@@ -240,13 +242,25 @@ func TestSwitchActivePlanetCommandUpdatesSummaryEndpoint(t *testing.T) {
 		t.Fatalf("expected switch_active_planet request to be accepted, got %+v", resp.Results)
 	}
 
+	// F4：switch_active_planet 只改玩家自己的焦点行星，全局活动行星保持不变。
 	waitForCondition(t, 2*time.Second, func() bool {
-		return core.ActivePlanetID() == "planet-1-1"
+		return core.FocusPlanetIDFor("p1") == "planet-1-1"
 	}, "switch_active_planet was not applied by tick loop")
+	if core.ActivePlanetID() != initialActive {
+		t.Fatalf("expected global active planet to stay %s, got %s", initialActive, core.ActivePlanetID())
+	}
 
 	body := getAuthorizedJSON(t, srv, "/state/summary")
-	if body["active_planet_id"] != "planet-1-1" {
-		t.Fatalf("expected summary.active_planet_id to be planet-1-1, got %v", body["active_planet_id"])
+	if body["active_planet_id"] != initialActive {
+		t.Fatalf("expected summary.active_planet_id to stay %s, got %v", initialActive, body["active_planet_id"])
+	}
+	players, _ := body["players"].(map[string]any)
+	p1, _ := players["p1"].(map[string]any)
+	if p1 == nil {
+		t.Fatal("expected p1 in summary players")
+	}
+	if p1["focus_planet_id"] != "planet-1-1" {
+		t.Fatalf("expected p1 focus_planet_id planet-1-1, got %v", p1["focus_planet_id"])
 	}
 }
 

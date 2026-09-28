@@ -35,10 +35,10 @@ func distributorTestBot(t *testing.T, ws *model.WorldState, home *model.Building
 	return bot
 }
 
-func distributorTestTicks(t *testing.T, ws *model.WorldState, n int, active bool) {
+func distributorTestTicks(t *testing.T, ws *model.WorldState, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
-		settleDistributors(ws, active)
+		settleDistributors(ws)
 		for _, bot := range ws.LogisticsBots {
 			if err := bot.Validate(); err != nil {
 				t.Fatalf("tick %d bot %+v: %v", i, bot, err)
@@ -75,7 +75,7 @@ func TestDistributorWarehouseDeliveryAndPickupReserveDemand(t *testing.T) {
 			first := distributorTestBot(t, ws, home, "a")
 			second := distributorTestBot(t, ws, home, "b")
 			third := distributorTestBot(t, ws, home, "c")
-			distributorTestTicks(t, ws, 1, true)
+			distributorTestTicks(t, ws, 1)
 			if first.PickupQuantity != 10 || second.PickupQuantity != 5 || third.Status != model.LogisticsDroneIdle {
 				t.Fatalf("overbooked demand: %+v %+v %+v", first, second, third)
 			}
@@ -83,11 +83,11 @@ func TestDistributorWarehouseDeliveryAndPickupReserveDemand(t *testing.T) {
 				t.Fatalf("round trips not prepaid: %d", home.Distributor.Energy)
 			}
 			before := first.Position
-			distributorTestTicks(t, ws, 1, true)
+			distributorTestTicks(t, ws, 1)
 			if distance := ws.SurfaceDistance(before, first.Position); distance != 2 || first.EnergyRemaining != 10 {
 				t.Fatalf("actual motion/energy: distance=%d bot=%+v", distance, first)
 			}
-			distributorTestTicks(t, ws, 12, true)
+			distributorTestTicks(t, ws, 12)
 			if got := commandStorageItemQuantity(model.DistributorHost(ws, source).Storage, model.ItemIronOre); got != 25 {
 				t.Fatalf("source=%d, want 25", got)
 			}
@@ -123,7 +123,7 @@ func TestDistributorOutageAndInsufficientEnergyStopDispatch(t *testing.T) {
 				source.Distributor.Energy = 11
 			}
 			energy := source.Distributor.Energy
-			distributorTestTicks(t, ws, 3, true)
+			distributorTestTicks(t, ws, 3)
 			if bot.Status != model.LogisticsDroneIdle || source.Distributor.Energy != energy || model.DistributorHost(ws, source).Storage.OutputQuantity(model.ItemIronOre) != 30 {
 				t.Fatal("blocked dispatch moved cargo or spent energy")
 			}
@@ -136,10 +136,10 @@ func TestDistributorPrepaidFlightSurvivesPowerLoss(t *testing.T) {
 	distributorTestLoad(t, ws, source, model.ItemIronOre, 30)
 	sink.Distributor.LocalStorage = 10
 	bot := distributorTestBot(t, ws, source, "bot")
-	distributorTestTicks(t, ws, 1, true)
+	distributorTestTicks(t, ws, 1)
 	source.Runtime.State = model.BuildingWorkNoPower
 	ws.PowerSnapshot = nil
-	distributorTestTicks(t, ws, 8, true)
+	distributorTestTicks(t, ws, 8)
 	if bot.Status != model.LogisticsDroneIdle || model.DistributorHost(ws, sink).Storage.OutputQuantity(model.ItemIronOre) != 10 || source.Distributor.Energy != 88 {
 		t.Fatalf("prepaid flight failed during outage: %+v", bot)
 	}
@@ -177,7 +177,7 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			for _, id := range []string{"a", "b", "c"} {
 				distributorTestBot(t, ws, home, id)
 			}
-			distributorTestTicks(t, ws, 15, true)
+			distributorTestTicks(t, ws, 15)
 			if player.Inventory[model.ItemIronOre] != 12 {
 				t.Fatalf("request max violated: %d", player.Inventory[model.ItemIronOre])
 			}
@@ -191,7 +191,7 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			// Inside the min/max band there must be no replenishment flight.
 			player.Inventory[model.ItemIronOre] = 7
 			energy := home.Distributor.Energy
-			distributorTestTicks(t, ws, 3, true)
+			distributorTestTicks(t, ws, 3)
 			if player.Inventory[model.ItemIronOre] != 7 || home.Distributor.Energy != energy {
 				t.Fatal("dispatched within min/max band")
 			}
@@ -200,10 +200,12 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 }
 
 func TestDistributorMechaLeavesRangeOrActivePlanetReturnsCargo(t *testing.T) {
-	for _, inactive := range []bool{false, true} {
+	// F4：所有已加载行星都完整结算配送；机甲配送只在“机甲离开配送范围”或
+	// “该行星上没有可用执行体（单位被移除）”时中断并带回货物。
+	for _, gone := range []bool{false, true} {
 		name := "moved"
-		if inactive {
-			name = "inactive_planet"
+		if gone {
+			name = "executor_gone"
 		}
 		t.Run(name, func(t *testing.T) {
 			ws, home, sink := distributorTestWorld(t)
@@ -213,11 +215,13 @@ func TestDistributorMechaLeavesRangeOrActivePlanetReturnsCargo(t *testing.T) {
 			distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 			unit := distributorTestMecha(ws, sink.Position)
 			bot := distributorTestBot(t, ws, home, "bot")
-			distributorTestTicks(t, ws, 2, true)
-			if !inactive {
+			distributorTestTicks(t, ws, 2)
+			if !gone {
 				unit.Position = model.Position{X: 26, Y: 8}
+			} else {
+				delete(ws.Units, unit.ID)
 			}
-			distributorTestTicks(t, ws, 10, !inactive)
+			distributorTestTicks(t, ws, 10)
 			if bot.Status != model.LogisticsDroneIdle || ws.Players["p1"].Inventory[model.ItemIronOre] != 0 || model.DistributorHost(ws, home).Storage.OutputQuantity(model.ItemIronOre) != 30 {
 				t.Fatalf("lost cargo after target moved: %+v", bot)
 			}
@@ -234,15 +238,15 @@ func TestDistributorInvalidTargetAndFullHomePreserveCargo(t *testing.T) {
 	host.Storage = model.NewStorageState(model.StorageModule{Capacity: 30, Slots: 2})
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 	bot := distributorTestBot(t, ws, home, "bot")
-	distributorTestTicks(t, ws, 2, true)
+	distributorTestTicks(t, ws, 2)
 	delete(ws.Buildings, sink.ID)
 	distributorTestLoad(t, ws, home, model.ItemCopperOre, 10)
-	distributorTestTicks(t, ws, 5, true)
+	distributorTestTicks(t, ws, 5)
 	if bot.Status != model.LogisticsDroneWaitingUnload || bot.StateReason != "home_full" || bot.Cargo[model.ItemIronOre] != 10 {
 		t.Fatalf("cargo lost on full return: %+v", bot)
 	}
 	host.Storage.Provide(model.ItemCopperOre, 10)
-	distributorTestTicks(t, ws, 2, true)
+	distributorTestTicks(t, ws, 2)
 	if bot.Status != model.LogisticsDroneIdle || host.Storage.OutputQuantity(model.ItemIronOre) != 30 {
 		t.Fatalf("did not resume unloading: %+v", bot)
 	}
@@ -255,14 +259,14 @@ func TestDistributorFullDestinationWaitsAndResumes(t *testing.T) {
 	host.Storage = model.NewStorageState(model.StorageModule{Capacity: 10, Slots: 2})
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 	bot := distributorTestBot(t, ws, home, "bot")
-	distributorTestTicks(t, ws, 1, true)
+	distributorTestTicks(t, ws, 1)
 	distributorTestLoad(t, ws, sink, model.ItemCopperOre, 10)
-	distributorTestTicks(t, ws, 5, true)
+	distributorTestTicks(t, ws, 5)
 	if bot.Status != model.LogisticsDroneWaitingUnload || bot.StateReason != "destination_full" || bot.CargoQty() != 10 {
 		t.Fatalf("full destination lost cargo: %+v", bot)
 	}
 	host.Storage.Provide(model.ItemCopperOre, 10)
-	distributorTestTicks(t, ws, 5, true)
+	distributorTestTicks(t, ws, 5)
 	if bot.Status != model.LogisticsDroneIdle || host.Storage.OutputQuantity(model.ItemIronOre) != 10 {
 		t.Fatalf("destination never resumed: %+v", bot)
 	}
@@ -317,12 +321,12 @@ func TestDistributorInstallConsumesRealItemsAndCannotUninstallActiveCargo(t *tes
 				t.Fatalf("install accounting: %+v", result)
 			}
 			distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
-			distributorTestTicks(t, ws, 1, true)
+			distributorTestTicks(t, ws, 1)
 			result, _ = core.execUninstallLogisticsBot(ws, "p1", cmd)
 			if result.Status != model.StatusFailed || len(ws.LogisticsBots) != 2 || player.Inventory[model.ItemLogisticsBot] != 0 {
 				t.Fatal("active robots uninstalled")
 			}
-			distributorTestTicks(t, ws, 10, true)
+			distributorTestTicks(t, ws, 10)
 			result, _ = core.execUninstallLogisticsBot(ws, "p1", cmd)
 			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 0 || player.Inventory[model.ItemLogisticsBot] != 2 {
 				t.Fatalf("idle robot recovery failed: %+v", result)
@@ -335,9 +339,9 @@ func TestDistributorMissingHomeStrandsRobotWithoutLosingCargo(t *testing.T) {
 	ws, home, _ := distributorTestWorld(t)
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 	bot := distributorTestBot(t, ws, home, "bot")
-	distributorTestTicks(t, ws, 2, true)
+	distributorTestTicks(t, ws, 2)
 	delete(ws.Buildings, home.Distributor.HostBuildingID)
-	distributorTestTicks(t, ws, 3, true)
+	distributorTestTicks(t, ws, 3)
 	if bot.Status != model.LogisticsDroneStranded || bot.StateReason != "home_unavailable" || bot.Cargo[model.ItemIronOre] != 10 {
 		t.Fatalf("lost orphaned flight cargo: %+v", bot)
 	}
@@ -376,7 +380,7 @@ func TestDistributorBufferedWarehouseAccountingThroughStorageTicks(t *testing.T)
 			}
 			for i := 0; i < 20; i++ {
 				settleStorage(ws)
-				distributorTestTicks(t, ws, 1, true)
+				distributorTestTicks(t, ws, 1)
 			}
 			total := func(b *model.Building) int {
 				s := model.DistributorHost(ws, b).Storage

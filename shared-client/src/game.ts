@@ -42,6 +42,8 @@ export interface GamePlayerSummary {
   team_id: string;
   bot?: string;
   is_alive: boolean;
+  /** F4：该玩家当前的视图焦点/默认落点行星。 */
+  focus_planet_id?: string;
 }
 
 export interface GameVictorySummary {

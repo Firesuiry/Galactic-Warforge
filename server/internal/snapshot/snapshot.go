@@ -184,6 +184,10 @@ func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, *m
 	}
 	for _, player := range sharedPlayers {
 		player.SyncLegacyExecutor(activePlanetID)
+		// F4：旧存档没有焦点字段时回落到全局活动行星。
+		if player.FocusPlanetID == "" {
+			player.FocusPlanetID = activePlanetID
+		}
 	}
 	return worlds, activePlanetID, model.CloneSpaceRuntimeState(snap.Space), nil
 }

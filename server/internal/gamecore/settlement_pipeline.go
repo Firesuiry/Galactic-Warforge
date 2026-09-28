@@ -33,7 +33,7 @@ func newSettlementPipeline() settlementPipeline {
 		events := settleResearch(gc.worlds)
 		// Refresh research-derived drone speed and sail lifetimes before decay.
 		settleTechAssetSync(gc, frame)
-		events = append(events, settleWarIndustry(frame.currentWorld, gc.spaceRuntime, frame.currentTick)...)
+		events = append(events, settleWarIndustry(gc, frame.currentWorld, gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settleSolarSails(gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settleDysonSpheres(gc.spaceRuntime, frame.currentTick)...)
 		return events
@@ -85,7 +85,8 @@ func newSettlementPipeline() settlementPipeline {
 
 			settleLogisticsDispatch(ws, gc.worlds)
 			settleLogisticsDrones(ws)
-			settleDistributors(ws, ws.PlanetID == gc.activePlanetID)
+			// F4：每颗行星的配送器都完整结算（含该机甲所在行星的机甲配送）。
+			settleDistributors(ws)
 		}
 		return events
 	})
@@ -170,8 +171,8 @@ func (gc *GameCore) advanceWorldsOneTick() *settlementFrame {
 	currentTick := int64(0)
 	if currentWorld != nil {
 		currentTick = currentWorld.Tick
-		gc.executorUsage = countActiveExecutorUsage(currentWorld)
 	}
+	gc.executorUsage = countActiveExecutorUsage(worlds)
 	if gc.queue != nil && currentTick > 0 {
 		gc.queue.PruneSeen(currentTick)
 	}

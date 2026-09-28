@@ -906,6 +906,8 @@ export interface PlayerState {
   resources?: Resources;
   inventory?: ItemInventory;
   permissions?: string[];
+  /** F4：玩家自己的视图焦点/默认落点行星。 */
+  focus_planet_id?: string;
   executor?: ExecutorState;
   executors?: Record<string, ExecutorState>;
   tech?: TechState;
@@ -943,6 +945,8 @@ export interface AgentBriefingSelf {
   resources: Resources;
   inventory?: ItemInventory;
   tech?: AgentBriefingTech;
+  /** F4：玩家自己的视图焦点/默认落点行星。 */
+  focus_planet_id?: string;
 }
 
 /** Compact own-fleet card in the agent briefing surface. */

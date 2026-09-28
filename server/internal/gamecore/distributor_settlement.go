@@ -38,7 +38,9 @@ func distributorEffectiveRange(ws *model.WorldState, home *model.Building) int {
 
 // Cargo and prepaid flight energy belong to the robot. Reservations are
 // derived from these saved flights rather than a separate mutable ledger.
-func settleDistributors(ws *model.WorldState, active bool) {
+// settleDistributors 结算一颗行星上的配送机器人（F4：所有已加载行星都完整结算，
+// 机甲配送目标为该机甲在本行星注册的执行体，见 distributorMecha）。
+func settleDistributors(ws *model.WorldState) {
 	if ws == nil {
 		return
 	}
@@ -58,7 +60,7 @@ func settleDistributors(ws *model.WorldState, active bool) {
 			bot.Returning = true
 		}
 		if !bot.Returning {
-			pos, valid := distributorBotTarget(ws, bot, active)
+			pos, valid := distributorBotTarget(ws, bot)
 			if !valid {
 				returnDistributorBot(bot, home, "target_unavailable")
 			} else {
@@ -83,14 +85,14 @@ func settleDistributors(ws *model.WorldState, active bool) {
 			if bot.Returning {
 				finishDistributorReturn(ws, bot, home)
 			} else {
-				arriveDistributorBot(ws, bot, home, active)
+				arriveDistributorBot(ws, bot, home)
 			}
 		}
 	}
 	for _, id := range ids {
 		bot := ws.LogisticsBots[id]
 		if bot.Status == model.LogisticsDroneIdle && bot.CargoQty() == 0 {
-			dispatchDistributorBot(ws, bot, active)
+			dispatchDistributorBot(ws, bot)
 		}
 	}
 }
@@ -106,10 +108,7 @@ func distributorCanDispatch(ws *model.WorldState, b *model.Building) bool {
 	allocation, ok := snapshot.Allocations.Buildings[b.ID]
 	return ok && allocation.Allocated > 0 && allocation.Ratio > 0
 }
-func distributorMecha(ws *model.WorldState, owner string, active bool) *model.Unit {
-	if !active {
-		return nil
-	}
+func distributorMecha(ws *model.WorldState, owner string) *model.Unit {
 	p := ws.Players[owner]
 	if p == nil {
 		return nil
@@ -198,7 +197,7 @@ func distributorDemand(ws *model.WorldState, b *model.Building, item, exclude st
 	}
 	return max(0, min(b.Distributor.LocalStorage-host.Storage.ItemQuantity(item)-distributorIncoming(ws, "distributor", b.ID, item, exclude), distributorFreeSpace(ws, b, item, exclude)))
 }
-func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, active bool) {
+func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState) {
 	home := ws.Buildings[bot.DistributorID]
 	if !distributorCanDispatch(ws, home) {
 		return
@@ -210,7 +209,7 @@ func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, 
 	}
 	effectiveRange := distributorEffectiveRange(ws, home)
 	host := model.DistributorHost(ws, home)
-	if unit := distributorMecha(ws, bot.OwnerID, active); unit != nil && ws.SurfaceDistance(home.Position, unit.Position) <= effectiveRange {
+	if unit := distributorMecha(ws, bot.OwnerID); unit != nil && ws.SurfaceDistance(home.Position, unit.Position) <= effectiveRange {
 		if request, ok := unit.Mecha.LogisticsRequests[item]; ok {
 			count := ws.Players[bot.OwnerID].Inventory[item]
 			if s.PlayerDeliveryEnabled && count < request.Min {
@@ -280,13 +279,13 @@ func startDistributorFlight(ws *model.WorldState, bot *model.LogisticsBotState, 
 	bot.RemainingTicks = bot.TravelTicks
 	return true
 }
-func distributorBotTarget(ws *model.WorldState, bot *model.LogisticsBotState, active bool) (model.Position, bool) {
+func distributorBotTarget(ws *model.WorldState, bot *model.LogisticsBotState) (model.Position, bool) {
 	home := ws.Buildings[bot.DistributorID]
 	if home == nil || home.Distributor == nil || home.Job != nil || home.Distributor.ItemID != bot.PickupItemID {
 		return model.Position{}, false
 	}
 	if bot.TargetKind == "mecha" {
-		unit := distributorMecha(ws, bot.OwnerID, active)
+		unit := distributorMecha(ws, bot.OwnerID)
 		if unit == nil || unit.ID != bot.TargetID {
 			return model.Position{}, false
 		}
@@ -344,14 +343,14 @@ func moveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, home
 	}
 	bot.RemainingTicks = (ws.SurfaceDistance(bot.Position, *bot.TargetPos) + bot.Speed - 1) / bot.Speed
 }
-func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, home *model.Building, active bool) {
+func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, home *model.Building) {
 	item := bot.PickupItemID
-	if _, ok := distributorBotTarget(ws, bot, active); !ok {
+	if _, ok := distributorBotTarget(ws, bot); !ok {
 		returnDistributorBot(bot, home, "target_unavailable")
 		return
 	}
 	if bot.TargetKind == "mecha" {
-		unit := distributorMecha(ws, bot.OwnerID, active)
+		unit := distributorMecha(ws, bot.OwnerID)
 		p := ws.Players[bot.OwnerID]
 		request := model.MechaLogisticsRequest{}
 		if unit.Mecha.LogisticsRequests != nil {

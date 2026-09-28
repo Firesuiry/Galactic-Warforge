@@ -33,10 +33,11 @@ export async function uninstallBot(args: string[]) {
   catch (e) { return fmtError(String(e)); }
 }
 export async function configureMechaLogistics(args: string[]) {
-  if (args.length !== 2 || args.includes('--help')) return fmtError('Usage: configure_mecha_logistics <unit_id> <item:min:max,...|none>');
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length !== 2 || args.includes('--help')) return fmtError('Usage: configure_mecha_logistics <unit_id> <item:min:max,...|none> [--planet <planet_id>]');
   try {
     const requests: Record<string, MechaLogisticsRequest> = {};
-    if (args[1] !== 'none') for (const token of args[1].split(',')) {
+    if (parsed.positionals[1] !== 'none') for (const token of parsed.positionals[1].split(',')) {
       const [item, low, high, extra] = token.split(':');
       if (!item || extra !== undefined || requests[item]) throw new Error('物品设置必须为不重复的 item:min:max');
       const min = integer(low), max = integer(high);
@@ -44,6 +45,7 @@ export async function configureMechaLogistics(args: string[]) {
       requests[item] = { min, max };
     }
     if (Object.keys(requests).length > 8) throw new Error('最多 8 种物品');
-    return fmtCommandResponse(await cmdConfigureMechaLogistics(args[0], requests));
+    const planetId = parsed.options['planet'];
+    return fmtCommandResponse(await cmdConfigureMechaLogistics(parsed.positionals[0], requests, typeof planetId === 'string' ? planetId : undefined));
   } catch (e) { return fmtError(String(e)); }
 }
