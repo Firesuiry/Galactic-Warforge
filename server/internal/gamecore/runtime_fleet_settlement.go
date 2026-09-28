@@ -1018,3 +1018,164 @@ func playerStateFromWorlds(worlds map[string]*model.WorldState, playerID string)
 	}
 	return nil
 }
+
+// fleetRefLike 舰队交战引用的（所属, 星系运行时, 舰队）三元组。
+type fleetRefLike struct {
+	owner  string
+	system *model.PlayerSystemRuntime
+	fleet  *model.SpaceFleet
+}
+
+// settleFleetVsFleet 同星系敌对舰队交战（R4 舰队最小版）：
+// 同一恒星系内分属敌对玩家的舰队自动交火，直瞄火力集火对方最弱舰队，
+// 结构归零即摧毁并移出战场。跃迁中的舰队不参战（与轨道优势口径一致）。
+func settleFleetVsFleet(worlds map[string]*model.WorldState, spaceRuntime *model.SpaceRuntimeState, currentTick int64) []*model.GameEvent {
+	if spaceRuntime == nil {
+		return nil
+	}
+	bySystem := make(map[string][]fleetRefLike)
+	for _, playerRuntime := range spaceRuntime.Players {
+		if playerRuntime == nil {
+			continue
+		}
+		for systemID, systemRuntime := range playerRuntime.Systems {
+			if systemRuntime == nil {
+				continue
+			}
+			for _, fleet := range systemRuntime.Fleets {
+				if fleet == nil || fleet.Transit != nil || fleet.Structure.Level <= 0 {
+					continue
+				}
+				bySystem[systemID] = append(bySystem[systemID], fleetRefLike{owner: fleet.OwnerID, system: systemRuntime, fleet: fleet})
+			}
+		}
+	}
+
+	var events []*model.GameEvent
+	systemIDs := make([]string, 0, len(bySystem))
+	for systemID := range bySystem {
+		systemIDs = append(systemIDs, systemID)
+	}
+	sort.Strings(systemIDs)
+	for _, systemID := range systemIDs {
+		fleets := bySystem[systemID]
+		owners := make(map[string]bool)
+		for _, ref := range fleets {
+			owners[ref.owner] = true
+		}
+		ownerIDs := make([]string, 0, len(owners))
+		for owner := range owners {
+			ownerIDs = append(ownerIDs, owner)
+		}
+		sort.Strings(ownerIDs)
+		if len(ownerIDs) < 2 {
+			continue
+		}
+		for i, attacker := range ownerIDs {
+			for _, defender := range ownerIDs[i+1:] {
+				if !spaceOwnersHostile(worlds, attacker, defender) {
+					continue
+				}
+				events = append(events, fleetPairExchange(fleets, attacker, defender, currentTick)...)
+				events = append(events, fleetPairExchange(fleets, defender, attacker, currentTick)...)
+			}
+		}
+	}
+	return events
+}
+
+// spaceOwnersHostile 太空层敌对判定：不同玩家且无共同队伍。
+func spaceOwnersHostile(worlds map[string]*model.WorldState, a, b string) bool {
+	if a == b {
+		return false
+	}
+	worldIDs := make([]string, 0, len(worlds))
+	for id := range worlds {
+		worldIDs = append(worldIDs, id)
+	}
+	sort.Strings(worldIDs)
+	for _, id := range worldIDs {
+		ws := worlds[id]
+		if ws == nil {
+			continue
+		}
+		pa, pb := ws.Players[a], ws.Players[b]
+		if pa == nil || pb == nil {
+			continue
+		}
+		if pa.TeamID != "" && pa.TeamID == pb.TeamID {
+			return false
+		}
+		return true
+	}
+	return true
+}
+
+// fleetPairExchange 一方对另一方的集火：冷却就绪的舰队直瞄火力集火对方最弱舰队。
+func fleetPairExchange(fleets []fleetRefLike, attackerOwner, defenderOwner string, currentTick int64) []*model.GameEvent {
+	firepower := 0
+	var shooters []*model.SpaceFleet
+	var target *model.SpaceFleet
+	var targetSystem *model.PlayerSystemRuntime
+	for _, ref := range fleets {
+		if ref.owner == attackerOwner {
+			if ref.fleet.Weapons.DirectFire <= 0 {
+				continue
+			}
+			if ref.fleet.LastAttackTick > 0 && currentTick-ref.fleet.LastAttackTick < int64(max(5, ref.fleet.Weapon.FireRate)) {
+				continue
+			}
+			firepower += ref.fleet.Weapons.DirectFire
+			shooters = append(shooters, ref.fleet)
+		}
+		if ref.owner == defenderOwner {
+			if target == nil || ref.fleet.Structure.Level < target.Structure.Level {
+				target = ref.fleet
+				targetSystem = ref.system
+			}
+		}
+	}
+	if firepower <= 0 || target == nil {
+		return nil
+	}
+	damage := max(1, firepower/8)
+	summary, subsystemHits := applySpaceFleetLayeredDamage(target, damage, 0, currentTick)
+	for _, shooter := range shooters {
+		shooter.LastAttackTick = currentTick
+	}
+	totalDamage := int(summary.Shield) + summary.Armor + summary.Structure
+	events := []*model.GameEvent{}
+	for _, scope := range []string{attackerOwner, defenderOwner} {
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtDamageApplied,
+			VisibilityScope: scope,
+			Payload: map[string]any{
+				"attacker_id":     shooters[0].ID,
+				"attacker_type":   "fleet",
+				"attacker_owner":  attackerOwner,
+				"target_id":       target.ID,
+				"target_type":     "fleet",
+				"target_owner":    defenderOwner,
+				"damage":          totalDamage,
+				"target_hp":       target.Structure.Level,
+				"subsystem_hits":  len(subsystemHits),
+				"fleet_vs_fleet":  true,
+			},
+		})
+	}
+	if target.Structure.Level <= 0 {
+		delete(targetSystem.Fleets, target.ID)
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtEntityDestroyed,
+			VisibilityScope: "all",
+			Payload: map[string]any{
+				"entity_id":   target.ID,
+				"entity_type": "fleet",
+				"owner_id":    defenderOwner,
+				"killed_by":   shooters[0].ID,
+				"source":      "fleet",
+			},
+		})
+	}
+	return events
+}

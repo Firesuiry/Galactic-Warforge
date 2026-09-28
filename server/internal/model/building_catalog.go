@@ -103,6 +103,9 @@ type BuildingDefinition struct {
 	DefaultRecipeID      string               `json:"default_recipe_id,omitempty" yaml:"default_recipe_id,omitempty"`
 	RequiresResourceNode bool                 `json:"requires_resource_node,omitempty" yaml:"requires_resource_node,omitempty"`
 	CanProduceUnits      bool                 `json:"can_produce_units,omitempty" yaml:"can_produce_units,omitempty"`
+	// BuildRadius 建造中心半径（D2）：>0 时该建筑覆盖的半径内允许直接建造，
+	// 无需执行体在场。0 表示不是建造中心。
+	BuildRadius int `json:"build_radius,omitempty" yaml:"build_radius,omitempty"`
 }
 
 var (

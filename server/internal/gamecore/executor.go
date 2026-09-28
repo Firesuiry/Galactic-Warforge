@@ -6,6 +6,26 @@ import (
 	"siliconworld/internal/model"
 )
 
+// requireBuildRange 校验建造可达性（D2）：
+// 目标处于任一己方建造中心（BuildRadius>0 的建筑，如战场分析基站）覆盖半径内即可建造；
+// 否则回退要求执行体在操作范围内（无建造中心时的兜底）。
+func (gc *GameCore) requireBuildRange(ws *model.WorldState, playerID string, target model.Position) *model.CommandResult {
+	for _, b := range ws.Buildings {
+		if b == nil || b.OwnerID != playerID || b.HP <= 0 {
+			continue
+		}
+		def, ok := model.BuildingDefinitionByID(b.Type)
+		if !ok || def.BuildRadius <= 0 {
+			continue
+		}
+		if ws.SurfaceDistance(b.Position, target) <= def.BuildRadius {
+			return nil
+		}
+	}
+	_, _, execRes := gc.requireExecutor(ws, playerID, target)
+	return execRes
+}
+
 func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, target model.Position) (*model.ExecutorState, *model.Unit, *model.CommandResult) {
 	player := ws.Players[playerID]
 	if player == nil {

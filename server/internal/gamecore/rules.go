@@ -194,9 +194,8 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
-	_, _, execRes := gc.requireExecutor(ws, playerID, *pos)
-	if execRes != nil {
-		return *execRes, nil
+	if rangeRes := gc.requireBuildRange(ws, playerID, *pos); rangeRes != nil {
+		return *rangeRes, nil
 	}
 
 	if ws.Construction == nil {

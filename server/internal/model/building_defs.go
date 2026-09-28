@@ -81,6 +81,7 @@ var defaultFootprint = Footprint{Width: 1, Height: 1}
 var defaultBuildingDefinitions = []BuildingDefinition{
 	{
 		ID:          BuildingTypeBattlefieldAnalysisBase,
+		BuildRadius: 24,
 		Name:        "Battlefield Analysis Base",
 		Category:    BuildingCategoryCommandSignal,
 		Subcategory: BuildingSubcategoryCommandSignal,

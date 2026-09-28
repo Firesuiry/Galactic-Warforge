@@ -103,6 +103,7 @@ func newSettlementPipeline() settlementPipeline {
 		}
 		events = append(events, settleFleetTransit(gc.spaceRuntime)...)
 		events = append(events, settleSpaceFleets(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)...)
+		events = append(events, settleFleetVsFleet(gc.worlds, gc.spaceRuntime, frame.currentTick)...)
 		settleSystemSensorContacts(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)
 		return events
 	})
