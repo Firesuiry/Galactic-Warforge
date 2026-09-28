@@ -104,3 +104,32 @@ func TestR6TurretCounterAirAndHeavy(t *testing.T) {
 		t.Fatalf("gauss turret vs heavy damage = %d, want %d", got, want)
 	}
 }
+
+// U6：战斗科技作用于防御建筑与建筑结构。
+func TestU6CombatTechReachesDefenseBuildings(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+	player := ws.Players["p1"]
+
+	turret := newBuilding("turret-u6", model.BuildingTypeGaussTurret, "p1", model.Position{X: 5, Y: 5})
+	turret.Runtime.State = model.BuildingWorkRunning
+	placeBuilding(ws, turret)
+	baseAttack := turret.Runtime.Functions.Combat.Attack
+	baseHP := turret.MaxHP
+
+	player.Tech.CompletedTechs["df_kinetic_weapon_damage"] = 2 // +20%
+	player.Tech.CompletedTechs["df_enhanced_structure"] = 1    // +10%
+	settleCombatTech(ws)
+
+	if got, want := turret.Runtime.Functions.Combat.Attack, int(float64(baseAttack)*1.2); got != want {
+		t.Fatalf("turret attack = %d, want %d", got, want)
+	}
+	if got, want := turret.MaxHP, int(float64(baseHP)*1.1); got != want {
+		t.Fatalf("turret max HP = %d, want %d", got, want)
+	}
+	// 幂等：重复结算不叠加。
+	settleCombatTech(ws)
+	if got := turret.Runtime.Functions.Combat.Attack; got != int(float64(baseAttack)*1.2) {
+		t.Fatal("combat tech on buildings must not accumulate")
+	}
+}
