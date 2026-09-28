@@ -8,12 +8,14 @@ import (
 	"siliconworld/internal/surface"
 )
 
-// 黑雾实体化结算（E1–E3）：
+// 黑雾实体化结算（E1–E4）：
 //   - 巢穴（EnemyForce type=hive）是静态的敌方实体，可被攻击摧毁（战利品走既有掉落）；
 //   - 威胁值随玩家发电/工业活动累积（E2），决定巢穴等级、孵化节奏、波次规模与扩张；
 //   - 巢穴按节奏孵化黑雾蜂群单位（UnitTypeDarkFog，归属 DarkFogOwnerID），
 //     与玩家单位共用同一套移动/交战结算（E1）；
-//   - 波次出发时发 enemy_wave_incoming 预警，袭击目标优先电厂/矿区/物流线/炮塔（E3）。
+//   - 波次出发时发 enemy_wave_incoming 预警，袭击目标优先电厂/矿区/物流线/炮塔（E3）；
+//   - 巢穴保留守军（guard 姿态锚定在巢位，E4），摧毁后掉落按等级放大、
+//     威胁回落并登记遗址，冷却期内遗址半径内不再刷新新巢（区域安全）。
 
 // blackFogTuning 黑雾难度参数。
 type blackFogTuning struct {
@@ -22,19 +24,27 @@ type blackFogTuning struct {
 	nestCap      int     // 巢穴数量上限
 	darkUnitCap  int     // 黑雾单位数量上限
 	initialNests int     // 初始巢穴数
+	guardBase    int     // 1 级巢守军编制（E4）
+	guardPerLvl  int     // 每级额外守军编制
+	guardMax     int     // 守军编制上限
+	ruinRadius   int     // 巢穴遗址安全半径（格）：冷却期内半径内不刷新新巢
+	ruinCooldown int64   // 巢穴遗址冷却（tick）
 }
 
 func blackFogTuningFor(difficulty string) blackFogTuning {
 	switch difficulty {
 	case "off", "peaceful":
 		// 和平模式：不生成巢穴（已有的巢穴/黑雾单位保留但不扩张）。
-		return blackFogTuning{meterRate: 0, waveSizeMul: 0, nestCap: 0, darkUnitCap: 0, initialNests: 0}
+		return blackFogTuning{}
 	case "easy":
-		return blackFogTuning{meterRate: 0.00008, waveSizeMul: 0.7, nestCap: 4, darkUnitCap: 40, initialNests: 1}
+		return blackFogTuning{meterRate: 0.00008, waveSizeMul: 0.7, nestCap: 4, darkUnitCap: 40, initialNests: 1,
+			guardBase: 1, guardPerLvl: 1, guardMax: 4, ruinRadius: 10, ruinCooldown: 4000}
 	case "hard":
-		return blackFogTuning{meterRate: 0.0003, waveSizeMul: 1.4, nestCap: 9, darkUnitCap: 90, initialNests: 3}
+		return blackFogTuning{meterRate: 0.0003, waveSizeMul: 1.4, nestCap: 9, darkUnitCap: 90, initialNests: 3,
+			guardBase: 3, guardPerLvl: 2, guardMax: 10, ruinRadius: 14, ruinCooldown: 2400}
 	default: // normal
-		return blackFogTuning{meterRate: 0.00015, waveSizeMul: 1.0, nestCap: 6, darkUnitCap: 60, initialNests: 2}
+		return blackFogTuning{meterRate: 0.00015, waveSizeMul: 1.0, nestCap: 6, darkUnitCap: 60, initialNests: 2,
+			guardBase: 2, guardPerLvl: 1, guardMax: 6, ruinRadius: 12, ruinCooldown: 3000}
 	}
 }
 
@@ -51,6 +61,8 @@ const (
 	blackFogRaidReassignTicks = 40
 	// blackFogNestMinPlayerDistance 新巢穴距玩家建筑的最小距离（尽力满足）。
 	blackFogNestMinPlayerDistance = 50
+	// blackFogGuardAggroPerLevel 守军守巢半径每级加成（E4：守巢半径随巢穴等级缩放）。
+	blackFogGuardAggroPerLevel = 2
 )
 
 // settleEnemyForces 处理单个世界的黑雾威胁累积、巢穴管理与波次孵化。
@@ -80,6 +92,16 @@ func (gc *GameCore) settleEnemyForces(ws *model.WorldState) []*model.GameEvent {
 	level := blackFogNestLevel(ws.EnemyForces.ThreatMeter)
 
 	// 2. 巢穴管理：初始巢穴 + 威胁阈值扩张（和平模式跳过全部生成）。
+	//    先行清理冷却结束的巢穴遗址（E4：状态有界，选位避开仍在冷却的遗址）。
+	if len(ws.EnemyForces.NestRuins) > 0 {
+		kept := ws.EnemyForces.NestRuins[:0]
+		for _, ruin := range ws.EnemyForces.NestRuins {
+			if ws.Tick-ruin.DestroyedTick < tuning.ruinCooldown {
+				kept = append(kept, ruin)
+			}
+		}
+		ws.EnemyForces.NestRuins = kept
+	}
 	nests := blackFogNests(ws)
 	if tuning.nestCap == 0 {
 		// off/peaceful：不生成。
@@ -141,6 +163,7 @@ func (gc *GameCore) settleEnemyForces(ws *model.WorldState) []*model.GameEvent {
 				VisibilityScope: player.PlayerID,
 				Payload: map[string]any{
 					"player_id":    player.PlayerID,
+					"planet_id":    ws.PlanetID,
 					"threat_level": ws.EnemyForces.ThreatLevel,
 					"force_count":  len(ws.EnemyForces.Forces),
 					"threat_meter": ws.EnemyForces.ThreatMeter,
@@ -201,10 +224,12 @@ func blackFogUnitCount(ws *model.WorldState) int {
 // spawnBlackFogNest 在远离玩家建筑的位置生成新巢穴。
 // 位置由 (行星, 巢穴序号, 盐值) 的 FNV 哈希确定性派生——不消费随机序列，
 // 回放、读档与回滚在任何时刻得到完全相同的位置。
+// E4 区域安全：冷却期内的巢穴遗址半径内的候选点被跳过（遗址是状态，筛选仍为确定性）。
 func (gc *GameCore) spawnBlackFogNest(ws *model.WorldState, level int) *model.EnemyForce {
 	if ws == nil {
 		return nil
 	}
+	tuning := blackFogTuningFor(gc.cfg.Battlefield.EnemyDifficulty)
 	minDist := blackFogNestMinPlayerDistance
 	seq := ws.EnemyForces.NestSeq
 	var pos model.Position
@@ -218,6 +243,9 @@ func (gc *GameCore) spawnBlackFogNest(ws *model.WorldState, level int) *model.En
 			continue
 		}
 		if ws.Grid[pos.Y][pos.X].BuildingID != "" {
+			continue
+		}
+		if nestSiteInRuinCooldown(ws, pos, tuning) {
 			continue
 		}
 		// 随尝试次数放宽距离要求，保证小地图也能生成。
@@ -249,13 +277,31 @@ func (gc *GameCore) spawnBlackFogNest(ws *model.WorldState, level int) *model.En
 		Strength:     strength,
 		SpreadRadius: 1.0,
 		SpawnTick:    ws.Tick,
+		Level:        level,
 		LastWaveTick: ws.Tick, // 出生后先等一个完整间隔
 	}
 	ws.EnemyForces.Forces = append(ws.EnemyForces.Forces, nest)
 	return &ws.EnemyForces.Forces[len(ws.EnemyForces.Forces)-1]
 }
 
-// spawnBlackFogWave 巢穴孵化一波蜂群单位并指派袭击目标（E1/E3）。
+// nestSiteInRuinCooldown 候选点是否落在仍在冷却的巢穴遗址安全半径内。
+func nestSiteInRuinCooldown(ws *model.WorldState, pos model.Position, tuning blackFogTuning) bool {
+	if tuning.ruinRadius <= 0 || tuning.ruinCooldown <= 0 {
+		return false
+	}
+	for _, ruin := range ws.EnemyForces.NestRuins {
+		if ws.Tick-ruin.DestroyedTick >= tuning.ruinCooldown {
+			continue
+		}
+		if ws.SurfaceDistance(pos, ruin.Position) <= tuning.ruinRadius {
+			return true
+		}
+	}
+	return false
+}
+
+// spawnBlackFogWave 巢穴孵化一波蜂群单位：守军先补足编制（guard 姿态锚定巢位，E4），
+// 其余为进攻队（attack_move 指派袭击目标，E1/E3）。
 func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyForce, level int, tuning blackFogTuning) []*model.GameEvent {
 	waveSize := int(float64(3+level+int(ws.EnemyForces.ThreatMeter/200.0)) * tuning.waveSizeMul)
 	if waveSize > blackFogMaxWaveSize {
@@ -265,11 +311,26 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 		waveSize = 1
 	}
 
+	nestLvl := nestLevel(nest)
+	guardNeed := blackFogGuardCap(nestLvl, tuning) - blackFogNestGuardCount(ws, nest.ID)
+	if guardNeed < 0 {
+		guardNeed = 0
+	}
+
 	target := selectBlackFogRaidTarget(ws, nest.Position)
 	spawned := 0
-	for _, candidate := range blackFogSpawnTiles(ws, nest.Position, waveSize) {
+	spawnedGuards := 0
+	for i, candidate := range blackFogSpawnTiles(ws, nest.Position, waveSize+guardNeed) {
 		unit := newBlackFogUnit(ws, candidate, level)
-		if target != nil {
+		if i < guardNeed {
+			// 守军：守卫巢穴，锚点在巢位，守巢半径随巢穴等级缩放。
+			unit.Stance = model.UnitStanceGuard
+			unit.GuardTargetID = nest.ID
+			anchor := nest.Position
+			unit.CombatAnchor = &anchor
+			unit.AggroRange += blackFogGuardAggroPerLevel * (nestLvl - 1)
+			spawnedGuards++
+		} else if target != nil {
 			unit.AttackTarget = target.building.ID
 			orderPos := target.building.Position
 			unit.OrderPos = &orderPos
@@ -290,8 +351,10 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 
 	payload := map[string]any{
 		"nest_id":    nest.ID,
+		"planet_id":  ws.PlanetID,
 		"from":       nest.Position,
 		"count":      spawned,
+		"guards":     spawnedGuards,
 		"level":      level,
 		"threat":     ws.EnemyForces.ThreatLevel,
 		"wave_tick":  ws.Tick,
@@ -308,6 +371,38 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 		VisibilityScope: "all",
 		Payload:         payload,
 	}}
+}
+
+// blackFogGuardCap 巢穴守军编制上限（随巢穴等级，受难度约束）。
+func blackFogGuardCap(nestLvl int, tuning blackFogTuning) int {
+	cap := tuning.guardBase + (nestLvl-1)*tuning.guardPerLvl
+	if cap > tuning.guardMax {
+		cap = tuning.guardMax
+	}
+	if cap < 0 {
+		cap = 0
+	}
+	return cap
+}
+
+// blackFogNestGuardCount 统计巢穴现存守军（guard 姿态且锚定该巢）。
+func blackFogNestGuardCount(ws *model.WorldState, nestID string) int {
+	count := 0
+	for _, unit := range ws.Units {
+		if unit != nil && unit.OwnerID == model.DarkFogOwnerID && unit.HP > 0 &&
+			unit.Stance == model.UnitStanceGuard && unit.GuardTargetID == nestID {
+			count++
+		}
+	}
+	return count
+}
+
+// nestLevel 巢穴等级：生成时固化在 Level 字段；缺失（早期存档/手工构造）按 1 级处理。
+func nestLevel(force *model.EnemyForce) int {
+	if force == nil || force.Level < 1 {
+		return 1
+	}
+	return force.Level
 }
 
 // newBlackFogUnit 创建一个黑雾蜂群单位（属性随巢穴等级成长）。
@@ -409,6 +504,9 @@ func reassignBlackFogRaidTargets(ws *model.WorldState) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		unit := ws.Units[id]
+		if unit.Stance == model.UnitStanceGuard {
+			continue // 巢穴守军不外派（E4）
+		}
 		if unit.AttackTarget != "" || unit.HasPath() {
 			continue
 		}
@@ -438,7 +536,9 @@ func blackFogNestEvent(ws *model.WorldState, nest *model.EnemyForce, reason stri
 			"entity_id":   nest.ID,
 			"force_type":  nest.Type,
 			"position":    nest.Position,
+			"planet_id":   ws.PlanetID,
 			"strength":    nest.Strength,
+			"level":       nestLevel(nest),
 			"reason":      reason,
 		},
 	}

@@ -295,6 +295,7 @@ func cloneEnemyForceState(state *model.EnemyForceState) *model.EnemyForceState {
 	}
 	out := *state
 	out.Forces = append([]model.EnemyForce(nil), state.Forces...)
+	out.NestRuins = append([]model.NestRuin(nil), state.NestRuins...)
 	return &out
 }
 

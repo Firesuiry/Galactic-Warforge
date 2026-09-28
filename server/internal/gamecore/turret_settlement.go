@@ -138,13 +138,8 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			if force.Strength <= 0 {
 				// 炮塔击杀同样掉落：优先进入炮塔自身存储（行星侧库存），
 				// 满仓保留已有物品，溢出转入击杀者机甲背包。
-				drops := darkFogLootDrops(force, strengthBefore, ws.Tick)
-				grants := grantDarkFogLoot(ws, turret.OwnerID, turret.Storage, drops)
-				events = append(events, darkFogLootEvents(ws, force, turret.ID, turret.OwnerID, grants)...)
-
-				lastIdx := len(ws.EnemyForces.Forces) - 1
-				ws.EnemyForces.Forces[targetedForce] = ws.EnemyForces.Forces[lastIdx]
-				ws.EnemyForces.Forces = ws.EnemyForces.Forces[:lastIdx]
+				// E4 起统一走 destroyEnemyForce（掉落放大/威胁回落/遗址登记/战报事件）。
+				events = append(events, destroyEnemyForce(ws, force, strengthBefore, turret.ID, turret.OwnerID, "turret", turret.Storage)...)
 			}
 		} else if targetedUnit != "" {
 			// Attack enemy unit

@@ -290,6 +290,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 	switch target.kind {
 	case "enemy_force":
 		force := target.force
+		strengthBefore := force.Strength
 		loss := max(1, damage/6)
 		force.Strength -= loss
 		if force.Strength < 0 {
@@ -299,20 +300,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 		payload["damage"] = loss
 		events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: squad.OwnerID, Payload: payload})
 		if force.Strength <= 0 {
-			drops := darkFogLootDrops(force, force.Strength+loss, currentTick)
-			grants := grantDarkFogLoot(ws, squad.OwnerID, nil, drops)
-			events = append(events, darkFogLootEvents(ws, force, squad.ID, squad.OwnerID, grants)...)
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtEntityDestroyed,
-				VisibilityScope: "all",
-				Payload: map[string]any{
-					"entity_id":   force.ID,
-					"entity_type": "enemy_force",
-					"killed_by":   squad.ID,
-					"source":      "combat_squad",
-				},
-			})
-			removeEnemyForce(ws, force.ID)
+			events = append(events, destroyEnemyForce(ws, force, strengthBefore, squad.ID, squad.OwnerID, "combat_squad", nil)...)
 		}
 	case "unit":
 		victim := target.unit
@@ -445,6 +433,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 					)
 				}
 				targetStrengthLoss := max(1, directDamage+fleetMissileDamage/6)
+				targetStrengthBefore := target.Strength
 				target.Strength -= targetStrengthLoss
 				fleet.LastAttackTick = currentTick
 				fleet.Weapon.LastFireTick = currentTick
@@ -560,17 +549,9 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 
 				if target.Strength <= 0 {
 					report.TargetDestroyed = true
-					events = append(events, &model.GameEvent{
-						EventType:       model.EvtEntityDestroyed,
-						VisibilityScope: "all",
-						Payload: map[string]any{
-							"entity_id":   target.ID,
-							"entity_type": "enemy_force",
-							"killed_by":   fleet.ID,
-							"source":      "fleet",
-						},
-					})
-					removeEnemyForce(targetWorld, target.ID)
+					// E4 起舰队击杀与单位/炮塔共用统一摧毁入口：
+					// 掉落进舰队所属玩家背包，hive 巢穴附带威胁回落/遗址登记/战报事件。
+					events = append(events, destroyEnemyForce(targetWorld, target, targetStrengthBefore, fleet.ID, fleet.OwnerID, "fleet", nil)...)
 					fleet.State = model.FleetStateIdle
 					fleet.Target = nil
 					systemRuntime.AppendBattleReport(report)

@@ -86,6 +86,110 @@ type darkFogLootGrant struct {
 	DiscardedQty int // 无处可去被丢弃
 }
 
+// blackFogNestKillMeterRefundRatio 巢穴摧毁的威胁回落比例（E4）：
+// 摧毁 level 级巢穴扣减 level*blackFogMeterPerLevel*ratio 点威胁值（下限 0）。
+const blackFogNestKillMeterRefundRatio = 0.5
+
+// amplifyNestLoot 巢穴（hive）摧毁掉落按巢穴等级放大（E4）：
+// 数量乘区 = 1 + 0.5*(level-1)（向上取整），且 dark_fog_matrix 保底 level+1 个。
+// 全程整数/定点运算，不消费随机序列，回放一致。
+func amplifyNestLoot(drops []model.ItemAmount, level int) []model.ItemAmount {
+	if level < 1 {
+		level = 1
+	}
+	matrixFloor := level + 1
+	out := make([]model.ItemAmount, 0, len(drops)+1)
+	matrixSeen := false
+	for _, drop := range drops {
+		// 向上取整的 1+0.5*(level-1) 倍乘区：qty*(level+1)/2 的 ceil。
+		qty := drop.Quantity * (level + 1)
+		qty = (qty + 1) / 2
+		if drop.ItemID == model.ItemDarkFogMatrix {
+			matrixSeen = true
+			if qty < matrixFloor {
+				qty = matrixFloor
+			}
+		}
+		out = append(out, model.ItemAmount{ItemID: drop.ItemID, Quantity: qty})
+	}
+	if !matrixSeen {
+		out = append(out, model.ItemAmount{ItemID: model.ItemDarkFogMatrix, Quantity: matrixFloor})
+	}
+	return out
+}
+
+// destroyEnemyForce 黑雾实体摧毁的统一入口（E4）——单位/炮塔/小队/舰队四条
+// 击杀路径共用同一份奖励与区域安全语义：
+//   - 掉落：hive 巢穴按巢穴等级放大（dark_fog_matrix 保底 level+1）；
+//   - 威胁回落：hive 按等级比例扣减 ThreatMeter（下限 0）；
+//   - 区域安全：hive 登记巢穴遗址（位置+摧毁 tick），冷却期内遗址半径内不刷新新巢；
+//   - 事件：loot_dropped（入库明细）+ entity_destroyed（通用）+
+//     enemy_nest_destroyed（hive 专属战报，visibility=all，含 planet_id 与掉落清单）。
+//
+// strengthBefore 为击杀前强度（掉落强度加成用）；storage 非空时战利品优先入该库存
+// （炮塔弹仓），否则入击杀者玩家背包。返回产生的事件，实体已从世界中移除。
+func destroyEnemyForce(ws *model.WorldState, force *model.EnemyForce, strengthBefore int, killerID, killerOwnerID, source string, storage *model.StorageState) []*model.GameEvent {
+	if ws == nil || force == nil {
+		return nil
+	}
+	level := nestLevel(force)
+	drops := darkFogLootDrops(force, strengthBefore, ws.Tick)
+	if force.Type == model.EnemyForceTypeHive {
+		drops = amplifyNestLoot(drops, level)
+	}
+	grants := grantDarkFogLoot(ws, killerOwnerID, storage, drops)
+
+	var events []*model.GameEvent
+	events = append(events, darkFogLootEvents(ws, force, killerID, killerOwnerID, grants)...)
+	events = append(events, &model.GameEvent{
+		EventType:       model.EvtEntityDestroyed,
+		VisibilityScope: "all",
+		Payload: map[string]any{
+			"entity_id":   force.ID,
+			"entity_type": "enemy_force",
+			"killed_by":   killerID,
+			"source":      source,
+		},
+	})
+
+	if force.Type == model.EnemyForceTypeHive && ws.EnemyForces != nil {
+		// 威胁回落 + 遗址登记（区域安全）。
+		refund := blackFogMeterPerLevel * float64(level) * blackFogNestKillMeterRefundRatio
+		ws.EnemyForces.ThreatMeter -= refund
+		if ws.EnemyForces.ThreatMeter < 0 {
+			ws.EnemyForces.ThreatMeter = 0
+		}
+		ws.EnemyForces.NestRuins = append(ws.EnemyForces.NestRuins, model.NestRuin{
+			Position:      force.Position,
+			DestroyedTick: ws.Tick,
+			Level:         level,
+		})
+
+		dropList := make([]map[string]any, 0, len(drops))
+		for _, drop := range drops {
+			dropList = append(dropList, map[string]any{"item_id": drop.ItemID, "quantity": drop.Quantity})
+		}
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtEnemyNestDestroyed,
+			VisibilityScope: "all",
+			Payload: map[string]any{
+				"nest_id":      force.ID,
+				"planet_id":    ws.PlanetID,
+				"position":     force.Position,
+				"level":        level,
+				"killed_by":    killerID,
+				"killer_owner": killerOwnerID,
+				"source":       source,
+				"drops":        dropList,
+				"threat_meter": ws.EnemyForces.ThreatMeter,
+			},
+		})
+	}
+
+	removeEnemyForce(ws, force.ID)
+	return events
+}
+
 // grantDarkFogLoot 把击杀掉落分配给击杀者：
 //  1. 击杀者是炮塔时优先进入炮塔自身存储（行星侧库存）；满仓时保留已有物品，
 //     溢出部分继续向下转移；

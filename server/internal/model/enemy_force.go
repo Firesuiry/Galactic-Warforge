@@ -32,8 +32,17 @@ type EnemyForce struct {
 	Strength       int            `json:"strength"`      // 实力值
 	SpreadRadius   float64        `json:"spread_radius"` // 扩散半径
 	SpawnTick      int64          `json:"spawn_tick"`    // 生成时间
+	Level          int            `json:"level,omitempty"`          // 巢穴等级（生成时固化，E4：守军编制/掉落放大/威胁回落）
 	LastAttackTick int64          `json:"last_attack_tick,omitempty"` // 上次反击 tick（静态黑雾反击节流）
 	LastWaveTick   int64          `json:"last_wave_tick,omitempty"`   // 上次孵化波次 tick（巢穴）
+}
+
+// NestRuin 巢穴遗址（E4 区域安全）：巢穴被摧毁后记录位置与摧毁 tick，
+// 冷却期内遗址半径内不再刷新新巢；冷却结束后由结算清理，状态有界。
+type NestRuin struct {
+	Position      Position `json:"position"`
+	DestroyedTick int64    `json:"destroyed_tick"`
+	Level         int      `json:"level"`
 }
 
 // DarkFogOwnerID 黑雾单位的保留归属 ID（不是玩家，不参与胜负判定）。
@@ -51,6 +60,9 @@ type EnemyForceState struct {
 	// NestSeq 已生成巢穴的累计序号：巢穴位置由 (行星, 序号) 哈希派生，
 	// 与随机序列无关，回放/读档/回滚天然一致。
 	NestSeq int `json:"nest_seq"`
+	// NestRuins 巢穴遗址（E4）：被摧毁巢穴的位置与摧毁 tick，
+	// 冷却期内同区域不再刷新新巢（区域安全）。
+	NestRuins []NestRuin `json:"nest_ruins,omitempty"`
 }
 
 // ThreatParams 威胁系统参数

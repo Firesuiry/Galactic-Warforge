@@ -308,7 +308,8 @@ type friendlyTargetRef struct {
 	pos model.Position
 }
 
-// resolveFriendly 解析友方单位或建筑。
+// resolveFriendly 解析友方单位或建筑；黑雾巢穴（EnemyForce）也可作为锚点——
+// 巢穴守军（E4）以 guard 姿态把 GuardTargetID 锚在巢位上。
 func resolveFriendly(ws *model.WorldState, id string) *friendlyTargetRef {
 	if id == "" {
 		return nil
@@ -318,6 +319,9 @@ func resolveFriendly(ws *model.WorldState, id string) *friendlyTargetRef {
 	}
 	if b, ok := ws.Buildings[id]; ok && b != nil && b.HP > 0 {
 		return &friendlyTargetRef{pos: b.Position}
+	}
+	if force := findEnemyForceByID(ws, id); force != nil && force.Strength > 0 {
+		return &friendlyTargetRef{pos: force.Position}
 	}
 	return nil
 }
@@ -522,20 +526,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 			},
 		})
 		if force.Strength <= 0 {
-			drops := darkFogLootDrops(force, strengthBefore, ws.Tick)
-			grants := grantDarkFogLoot(ws, unit.OwnerID, nil, drops)
-			events = append(events, darkFogLootEvents(ws, force, unit.ID, unit.OwnerID, grants)...)
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtEntityDestroyed,
-				VisibilityScope: "all",
-				Payload: map[string]any{
-					"entity_id":   force.ID,
-					"entity_type": "enemy_force",
-					"killed_by":   unit.ID,
-					"source":      "unit",
-				},
-			})
-			removeEnemyForce(ws, force.ID)
+			events = append(events, destroyEnemyForce(ws, force, strengthBefore, unit.ID, unit.OwnerID, "unit", nil)...)
 			unit.AttackTarget = ""
 		}
 	case "combat_squad":
