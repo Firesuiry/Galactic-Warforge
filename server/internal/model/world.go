@@ -74,6 +74,11 @@ type WorldState struct {
 
 	// Tile occupancy: maps "x,y" -> entity ID
 	TileBuilding map[string]string   `json:"-"`
+	// 寻路暂存（epoch 戳免清零）：仅供结算期单线程 BFS 复用，不落盘。
+	PathScratchParent []int32 `json:"-"`
+	PathScratchDepth  []int32 `json:"-"`
+	PathScratchEpoch  []int32 `json:"-"`
+	PathScratchGen    int32   `json:"-"`
 	TileUnits    map[string][]string `json:"-"`
 
 	EntityCounter int64 `json:"-"`

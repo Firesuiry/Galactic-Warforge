@@ -360,18 +360,17 @@ func TestT091PlanetaryShieldGeneratorChargesAndAbsorbsDamage(t *testing.T) {
 		t.Fatalf("expected planetary_shield_generator to charge over time, got %d", got)
 	}
 
-	ws.EnemyForces = &model.EnemyForceState{
-		Forces: []model.EnemyForce{{
-			ID:           "force-1",
-			Position:     model.Position{X: 1, Y: 1},
-			Strength:     90,
-			SpreadRadius: 1,
-			TargetPlayer: "p1",
-		}},
-	}
+	// E1 后的真实袭击路径：黑雾单位攻击建筑，行星护盾吸收伤害。
+	attacker := spawnWorldTestUnit(ws, model.UnitTypeDarkFog, model.DarkFogOwnerID, model.Position{X: generator.Position.X, Y: generator.Position.Y + 1})
+	attacker.Attack = 30
+	attacker.AttackTarget = generator.ID
 
 	beforeHP := generator.HP
-	events := core.executeEnemyAttack(ws, model.AttackRhythm{StrengthPerAttack: 30})
+	var events []*model.GameEvent
+	for i := 0; i < 3 && generator.HP == beforeHP; i++ {
+		ws.Tick++
+		events = append(events, settleUnitCombat(ws)...)
+	}
 	if generator.HP != beforeHP {
 		t.Fatalf("expected planetary shield to absorb enemy attack before HP loss, before=%d after=%d", beforeHP, generator.HP)
 	}

@@ -48,7 +48,7 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 		for unit.MoveProgress >= 1 && unit.HasPath() {
 			next := unit.Path[unit.PathIndex]
 			if !tileWalkableForUnit(ws, next, unit.ID) {
-				if !ws.InBounds(next.X, next.Y) || ws.TileBuilding[model.TileKey(next.X, next.Y)] != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable() {
+				if !ws.InBounds(next.X, next.Y) || ws.Grid[next.Y][next.X].BuildingID != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable() {
 					// 路径被新建筑/地形变化堵死：立即重寻路。
 					if !repathUnit(ws, unit) {
 						events = append(events, unitMoveAbortedEvent(unit, "path_blocked"))
@@ -108,7 +108,7 @@ func settleSquadMovement(ws *model.WorldState) []*model.GameEvent {
 		squad.MoveProgress += squad.MoveSpeed
 		for squad.MoveProgress >= 1 && squad.HasPath() {
 			next := squad.Path[squad.PathIndex]
-			if !ws.InBounds(next.X, next.Y) || ws.TileBuilding[model.TileKey(next.X, next.Y)] != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable() {
+			if !ws.InBounds(next.X, next.Y) || ws.Grid[next.Y][next.X].BuildingID != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable() {
 				dest := squad.Path[len(squad.Path)-1]
 				path, ok := computeSurfacePath(ws, squad.Position, dest)
 				if !ok {
@@ -146,7 +146,7 @@ func tileWalkableForUnit(ws *model.WorldState, pos model.Position, selfID string
 	if !ws.InBounds(pos.X, pos.Y) {
 		return false
 	}
-	if ws.TileBuilding[model.TileKey(pos.X, pos.Y)] != "" {
+	if ws.Grid[pos.Y][pos.X].BuildingID != "" {
 		return false
 	}
 	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
@@ -285,46 +285,117 @@ func computeSurfacePath(ws *model.WorldState, from, to model.Position) ([]model.
 	return ws.SurfacePath(from, to, budget)
 }
 
-// computeUnitPath 计算单位路径；若终点被建筑占用或不可进入，
-// 退而求其次寻路到终点附近可进入的邻格。
-func computeUnitPath(ws *model.WorldState, from, to model.Position, selfID string) ([]model.Position, bool) {
+// computePathNear 单次 BFS：到达终点本身（可进入时）或终点邻域（半径 1~2）中
+// 距终点最近的可进入格。
+// 性能：epoch 戳扁平数组做已访问/父指针（零分配），建筑占位走 Grid.BuildingID
+// （零字符串分配）；大面积寻路下比 map+TileKey 版本快一个数量级。
+func computePathNear(ws *model.WorldState, from, to model.Position, selfID string) ([]model.Position, bool) {
 	if from == to {
 		return []model.Position{from}, true
 	}
-	if tileWalkableForUnit(ws, to, selfID) {
-		if path, ok := computeSurfacePath(ws, from, to); ok {
-			return path, true
+	dist := ws.SurfaceDistance(from, to)
+	if dist == 1 && tileWalkableForUnit(ws, to, selfID) {
+		return []model.Position{from, to}, true
+	}
+	budget := dist*2 + 40
+	if dist <= 12 {
+		// 近距寻路（围堵/贴身场景）用小预算，避免单位堆中对全图做 BFS。
+		budget = dist*2 + 24
+	}
+	if budget > maxPathBudget {
+		budget = maxPathBudget
+	}
+
+	targetOK := tileWalkableForUnit(ws, to, selfID)
+	// 终点邻域命中集（预算一次，BFS 中 O(1) 查询）。
+	var nearSet map[int32]bool
+	if !targetOK {
+		nearSet = make(map[int32]bool, 32)
+		for _, candidate := range ws.SurfaceDisc(to, 2) {
+			if candidate != to {
+				nearSet[int32(candidate.Y*ws.MapWidth+candidate.X)] = true
+			}
 		}
 	}
-	// 终点不可进入：在终点邻域（半径1~2）找可进入且可达的格子。
-	bestDist := -1
-	var bestPath []model.Position
-	for radius := 1; radius <= 2; radius++ {
-		for _, candidate := range ws.SurfaceDisc(to, radius) {
-			if candidate == from {
-				continue
+
+	size := ws.MapWidth * ws.MapHeight
+	if len(ws.PathScratchParent) != size {
+		ws.PathScratchParent = make([]int32, size)
+		ws.PathScratchDepth = make([]int32, size)
+		ws.PathScratchEpoch = make([]int32, size)
+		ws.PathScratchGen = 0
+	}
+	ws.PathScratchGen++
+	gen := ws.PathScratchGen
+	parent := ws.PathScratchParent
+	depth := ws.PathScratchDepth
+	epoch := ws.PathScratchEpoch
+
+	fromIdx := int32(from.Y*ws.MapWidth + from.X)
+	queue := make([]int32, 1, 256)
+	queue[0] = fromIdx
+	parent[fromIdx] = fromIdx
+	depth[fromIdx] = 0
+	epoch[fromIdx] = gen
+
+	hit := int32(-1)
+	for head := 0; head < len(queue); head++ {
+		cur := queue[head]
+		if targetOK {
+			if int(cur) == to.Y*ws.MapWidth+to.X {
+				hit = cur
+				break
 			}
-			if !tileWalkableForUnit(ws, candidate, selfID) {
-				continue
-			}
-			path, ok := computeSurfacePath(ws, from, candidate)
-			if !ok || len(path) < 2 {
-				continue
-			}
-			d := ws.SurfaceDistance(candidate, to)
-			if bestDist < 0 || d < bestDist {
-				bestDist = d
-				bestPath = path
+		} else if nearSet[cur] {
+			cx, cy := int(cur)%ws.MapWidth, int(cur)/ws.MapWidth
+			if tileWalkableForUnit(ws, model.Position{X: cx, Y: cy}, selfID) {
+				hit = cur
+				break
 			}
 		}
-		if bestPath != nil {
+		if int(depth[cur]) >= budget {
+			continue
+		}
+		cx, cy := int(cur)%ws.MapWidth, int(cur)/ws.MapWidth
+		for _, n := range ws.SurfaceNeighbors(model.Position{X: cx, Y: cy}) {
+			if !ws.InBounds(n.X, n.Y) {
+				continue
+			}
+			nIdx := int32(n.Y*ws.MapWidth + n.X)
+			if epoch[nIdx] == gen {
+				continue
+			}
+			if ws.Grid[n.Y][n.X].BuildingID != "" {
+				continue
+			}
+			if !ws.Grid[n.Y][n.X].Terrain.Buildable() {
+				continue
+			}
+			epoch[nIdx] = gen
+			parent[nIdx] = cur
+			depth[nIdx] = depth[cur] + 1
+			queue = append(queue, nIdx)
+		}
+	}
+	if hit < 0 {
+		return nil, false
+	}
+	path := make([]model.Position, 0, depth[hit]+1)
+	for cur := hit; ; cur = parent[cur] {
+		path = append(path, model.Position{X: int(cur) % ws.MapWidth, Y: int(cur) / ws.MapWidth})
+		if cur == fromIdx {
 			break
 		}
 	}
-	if bestPath == nil {
-		return nil, false
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
 	}
-	return bestPath, true
+	return path, true
+}
+
+// computeUnitPath 计算单位路径；终点被占用/不可进入时落到终点邻域。
+func computeUnitPath(ws *model.WorldState, from, to model.Position, selfID string) ([]model.Position, bool) {
+	return computePathNear(ws, from, to, selfID)
 }
 
 func unitMoveAbortedEvent(unit *model.Unit, reason string) *model.GameEvent {

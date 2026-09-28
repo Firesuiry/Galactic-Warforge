@@ -355,11 +355,15 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 	case "building":
 		b := target.building
 		eff := max(1, damage/2-2)
+		shieldAbsorbed, remaining := absorbPlanetaryShieldDamage(ws, b.OwnerID, eff)
+		eff = remaining
 		b.HP -= eff
 		for _, scope := range []string{squad.OwnerID, b.OwnerID} {
 			payload := basePayload()
 			payload["damage"] = eff
 			payload["target_hp"] = b.HP
+			payload["shield_absorbed"] = shieldAbsorbed
+			payload["shield_remaining"] = totalPlanetaryShieldCharge(ws, b.OwnerID)
 			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
 		}
 		if b.HP <= 0 {

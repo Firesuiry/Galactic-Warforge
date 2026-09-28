@@ -45,6 +45,7 @@ export const ALL_EVENT_TYPES = [
   'landing_failed',
   'orbital_superiority_changed',
   'supply_line_disrupted',
+  'enemy_wave_incoming',
   'victory_declared',
 ] as const;
 
@@ -67,6 +68,7 @@ export const DEFAULT_EVENT_TYPES = [
   'landing_started',
   'landing_failed',
   'supply_line_disrupted',
+  'enemy_wave_incoming',
   'squad_deployed',
 ] as const;
 

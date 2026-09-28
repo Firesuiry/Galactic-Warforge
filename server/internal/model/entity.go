@@ -15,6 +15,9 @@ const (
 	UnitTypeSoldier  UnitType = "soldier"
 	UnitTypeMecha    UnitType = "mecha"
 	UnitTypeExecutor UnitType = "executor"
+	// UnitTypeDarkFog 黑雾蜂群单位（E1）：巢穴孵化的实体敌方单位，
+	// 归属保留势力 ID DarkFogOwnerID，与全体玩家互相敌对。
+	UnitTypeDarkFog UnitType = "dark_fog"
 )
 
 // Building represents a constructed building entity
@@ -122,8 +125,11 @@ type Unit struct {
 	Path         []Position `json:"path,omitempty"`          // 完整路径（含起点）
 	PathIndex    int        `json:"path_index,omitempty"`    // 下一个目标格下标
 	MoveProgress float64    `json:"move_progress,omitempty"` // 向下一格推进的累计进度
-	BlockedTicks int        `json:"blocked_ticks,omitempty"` // 被占位阻挡的连续 tick 数
-	RepathTick   int64      `json:"repath_tick,omitempty"`   // 上次追击重寻路 tick
+	BlockedTicks   int        `json:"blocked_ticks,omitempty"`    // 被占位阻挡的连续 tick 数
+	RepathTick     int64      `json:"repath_tick,omitempty"`      // 上次追击重寻路 tick
+	StuckCount     int        `json:"stuck_count,omitempty"`      // 连续寻路失败次数
+	StuckUntilTick int64      `json:"stuck_until_tick,omitempty"` // 放弃自动重指派直到该 tick（防围堵下全图 BFS 风暴）
+	ChaseGoalPos   *Position  `json:"chase_goal_pos,omitempty"`   // 上次追击寻路时的目标位置（滞回：目标小幅移动不重寻路）
 
 	// 指令姿态与交战（R2/R5）
 	Stance             UnitStance `json:"stance,omitempty"`
@@ -154,6 +160,10 @@ func (u *Unit) Clone() *Unit {
 		pos := *u.CombatAnchor
 		out.CombatAnchor = &pos
 	}
+	if u.ChaseGoalPos != nil {
+		pos := *u.ChaseGoalPos
+		out.ChaseGoalPos = &pos
+	}
 	return &out
 }
 
@@ -170,6 +180,7 @@ func (u *Unit) ClearEngagement() {
 	u.AttackTarget = ""
 	u.CombatAnchor = nil
 	u.LastAttackerID = ""
+	u.ChaseGoalPos = nil
 }
 
 // HasPath 报告单位是否还有未走完的路径。
@@ -231,6 +242,17 @@ func UnitStats(utype UnitType) Unit {
 		u.MoveSpeed = 0.50
 		u.AttackCooldownTick = 6
 		u.Mecha = NewMechaState()
+	}
+	if utype == UnitTypeDarkFog {
+		u.MaxHP = 40
+		u.HP = u.MaxHP
+		u.Attack = 8
+		u.Defense = 2
+		u.AttackRange = 2
+		u.MoveRange = 3
+		u.VisionRange = 8
+		u.MoveSpeed = 0.22
+		u.AttackCooldownTick = 12
 	}
 	u.AggroRange = u.VisionRange
 	u.Stance = UnitStanceIdle

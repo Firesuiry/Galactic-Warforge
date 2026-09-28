@@ -2,7 +2,6 @@ package model
 
 import (
 	"math"
-	"math/rand"
 )
 
 // EnemyForceType 敌对势力类型
@@ -35,14 +34,24 @@ type EnemyForce struct {
 	TargetPlayer   string         `json:"target_player"` // 目标玩家
 	SpawnTick      int64          `json:"spawn_tick"`    // 生成时间
 	LastAttackTick int64          `json:"last_attack_tick,omitempty"` // 上次反击 tick（静态黑雾反击节流）
+	LastWaveTick   int64          `json:"last_wave_tick,omitempty"`   // 上次孵化波次 tick（巢穴）
 }
+
+// DarkFogOwnerID 黑雾单位的保留归属 ID（不是玩家，不参与胜负判定）。
+const DarkFogOwnerID = "dark_fog"
 
 // EnemyForceState 敌对势力整体状态
 type EnemyForceState struct {
 	SystemID    string       `json:"system_id"`    // 所属恒星系
-	Forces      []EnemyForce `json:"forces"`       // 敌对势力列表
+	Forces      []EnemyForce `json:"forces"`       // 敌对势力列表（巢穴/信标等静态实体）
 	ThreatLevel ThreatLevel  `json:"threat_level"` // 总威胁等级
 	LastAttack  int64        `json:"last_attack"`  // 上次攻击tick
+	// ThreatMeter 威胁累积（E2）：随玩家发电/工业活动与战斗累积，
+	// 决定巢穴孵化节奏、波次规模与扩张。
+	ThreatMeter float64 `json:"threat_meter"`
+	// NestSeq 已生成巢穴的累计序号：巢穴位置由 (行星, 序号) 哈希派生，
+	// 与随机序列无关，回放/读档/回滚天然一致。
+	NestSeq int `json:"nest_seq"`
 }
 
 // ThreatParams 威胁系统参数
@@ -99,49 +108,4 @@ func CalculateThreatLevel(ws *WorldState, forces []EnemyForce, playerPos Positio
 	default:
 		return ThreatLevelCritical
 	}
-}
-
-// SpreadEnemyForce 扩散敌对势力
-func SpreadEnemyForce(ws *WorldState, force *EnemyForce, rng *rand.Rand) {
-	if force == nil {
-		return
-	}
-
-	// 计算扩散速度（基于威胁等级）
-	spreadSpeed := 0.01 * (1.0 + float64(force.Strength)/100.0)
-
-	// 随机方向扩散
-	angle := rng.Float64() * 2 * math.Pi
-	force.Position = ws.SurfaceOffset(force.Position, int(spreadSpeed*math.Cos(angle)), int(spreadSpeed*math.Sin(angle)))
-
-	// 增加扩散半径
-	force.SpreadRadius += spreadSpeed * 0.1
-}
-
-// AttackRhythm 进攻节奏参数
-type AttackRhythm struct {
-	MinIntervalTicks  int64 `json:"min_interval_ticks"`  // 最小攻击间隔
-	MaxIntervalTicks  int64 `json:"max_interval_ticks"`  // 最大攻击间隔
-	StrengthPerAttack int   `json:"strength_per_attack"` // 每次攻击强度
-}
-
-// DefaultAttackRhythm 返回默认进攻节奏
-func DefaultAttackRhythm() AttackRhythm {
-	return AttackRhythm{
-		MinIntervalTicks:  100, // 10秒（假设10tick/s）
-		MaxIntervalTicks:  500, // 50秒
-		StrengthPerAttack: 10,
-	}
-}
-
-// GetNextAttackTick 计算下次攻击时间
-func GetNextAttackTick(currentTick int64, threat ThreatLevel, rhythm AttackRhythm) int64 {
-	// 高威胁 = 更频繁的攻击
-	baseInterval := rhythm.MinIntervalTicks
-	threatMultiplier := 1.0 - float64(threat)*0.15 // 威胁越高，间隔越短
-	if threatMultiplier < 0.3 {
-		threatMultiplier = 0.3
-	}
-	interval := int64(float64(rhythm.MaxIntervalTicks-rhythm.MinIntervalTicks) * (1 - threatMultiplier))
-	return currentTick + baseInterval + interval
 }

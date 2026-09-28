@@ -16,6 +16,8 @@ func newBenchmarkCore(t testing.TB) *GameCore {
 		Battlefield: config.BattlefieldConfig{
 			MapSeed:     "benchmark-seed",
 			MaxTickRate: 20,
+			// 性能基准世界关闭黑雾：负载画像稳定，与战斗平衡无关。
+			EnemyDifficulty: "off",
 		},
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1"},

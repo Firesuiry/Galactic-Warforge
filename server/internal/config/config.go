@@ -98,6 +98,9 @@ type BattlefieldConfig struct {
 	InitialActivePlanetID string `yaml:"initial_active_planet_id,omitempty"`
 	// ConstructionRegionConcurrentLimit caps in-progress construction tasks per region.
 	ConstructionRegionConcurrentLimit int `yaml:"construction_region_concurrent_limit"`
+	// EnemyDifficulty 黑雾难度：easy|normal|hard（默认 normal），
+	// 影响威胁累积速率、波次规模与巢穴上限（E2）。
+	EnemyDifficulty string `yaml:"enemy_difficulty,omitempty"`
 }
 
 // ServerConfig holds HTTP server settings
@@ -248,6 +251,9 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Battlefield.VictoryRule == "" {
 		cfg.Battlefield.VictoryRule = "elimination"
+	}
+	if cfg.Battlefield.EnemyDifficulty == "" {
+		cfg.Battlefield.EnemyDifficulty = "normal"
 	}
 
 	if len(cfg.Players) == 0 {

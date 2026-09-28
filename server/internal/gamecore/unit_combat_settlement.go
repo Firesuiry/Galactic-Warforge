@@ -60,8 +60,8 @@ func resolveCombatTarget(ws *model.WorldState, id string) *unitCombatTarget {
 // hostile 判定目标归属对攻击方是否为敌对（含黑雾与全体玩家的互相敌对）。
 func hostile(ws *model.WorldState, attackerOwner, targetOwner string) bool {
 	if targetOwner == "" {
-		// 黑雾（EnemyForce 无归属）对所有玩家敌对。
-		return true
+		// 黑雾巢穴（EnemyForce 无归属）对所有玩家敌对——但不包括黑雾自己的单位。
+		return attackerOwner != model.DarkFogOwnerID
 	}
 	if attackerOwner == targetOwner {
 		return false
@@ -130,7 +130,7 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 	var events []*model.GameEvent
 
 	target := resolveCombatTarget(ws, unit.AttackTarget)
-	if target != nil && target.ownerID != "" && !hostile(ws, unit.OwnerID, target.ownerID) {
+	if target != nil && !hostile(ws, unit.OwnerID, target.ownerID) {
 		target = nil
 		unit.AttackTarget = ""
 	}
@@ -195,8 +195,16 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 			// 原地坚守：不追击，等目标进入射程。
 			return events
 		}
-		chaseTarget(ws, unit, target)
-		return events
+		// 免费换目标：射程内已有其他敌对目标时原地开火，不再追远。
+		if closer := nearestHostileInRange(ws, unit, unit.AttackRange, unit.Stance == model.UnitStanceAttackMove); closer != nil && closer.id != target.id {
+			unit.AttackTarget = closer.id
+			unit.ChaseGoalPos = nil
+			target = closer
+			dist = ws.SurfaceDistance(unit.Position, target.pos)
+		} else {
+			chaseTarget(ws, unit, target)
+			return events
+		}
 	}
 
 	// 进入射程：停下追击，按冷却开火（LastAttackTick==0 视为就绪）。
@@ -321,76 +329,72 @@ func autoAcquireTarget(ws *model.WorldState, unit *model.Unit) *unitCombatTarget
 }
 
 // nearestHostileInRange 扫描范围内最近的敌对目标。
+// 性能：SurfaceDisc 按 BFS 环带（= 图距离序）枚举候选，每个优先级命中的
+// 第一个候选即最近者，全程不做跨面 A* 距离计算——大军对垒时这是数量级差异。
 func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, includeBuildings bool) *unitCombatTarget {
 	var best *unitCombatTarget
 	bestRank := 99
-	bestDist := maxInt32
 
-	consider := func(t *unitCombatTarget) {
-		if t == nil {
-			return
+	adopt := func(t *unitCombatTarget, rank int) bool {
+		if rank >= bestRank {
+			return false
 		}
-		rank := 2
-		switch t.kind {
-		case "unit", "combat_squad":
-			rank = 0
-		case "enemy_force":
-			rank = 1
-		case "building":
-			if !includeBuildings {
-				return
+		best = t
+		bestRank = rank
+		return true
+	}
+
+	for _, tile := range ws.SurfaceDisc(unit.Position, maxDist) {
+		key := model.TileKey(tile.X, tile.Y)
+		for _, otherID := range ws.TileUnits[key] {
+			other := ws.Units[otherID]
+			if other == nil || other.HP <= 0 || other.ID == unit.ID {
+				continue
 			}
-			rank = 2
+			if !hostile(ws, unit.OwnerID, other.OwnerID) {
+				continue
+			}
+			adopt(&unitCombatTarget{kind: "unit", id: other.ID, pos: other.Position, ownerID: other.OwnerID, unit: other}, 0)
 		}
-		d := ws.SurfaceDistance(unit.Position, t.pos)
-		if d > maxDist {
-			return
+		if bestRank == 0 {
+			break // 已找到最近的最高优先级目标
 		}
-		if rank < bestRank || (rank == bestRank && d < bestDist) {
-			best = t
-			bestRank = rank
-			bestDist = d
+		if includeBuildings {
+			if buildingID := ws.TileBuilding[key]; buildingID != "" {
+				if b := ws.Buildings[buildingID]; b != nil && b.HP > 0 && hostile(ws, unit.OwnerID, b.OwnerID) {
+					adopt(&unitCombatTarget{kind: "building", id: b.ID, pos: b.Position, ownerID: b.OwnerID, building: b}, 2)
+				}
+			}
+		}
+		if ws.CombatRuntime != nil {
+			for _, squad := range ws.CombatRuntime.Squads {
+				if squad == nil || squad.State == model.CombatSquadStateDestroyed || squad.HP <= 0 {
+					continue
+				}
+				if squad.Position.X == tile.X && squad.Position.Y == tile.Y && hostile(ws, unit.OwnerID, squad.OwnerID) {
+					adopt(&unitCombatTarget{kind: "combat_squad", id: squad.ID, pos: squad.Position, ownerID: squad.OwnerID, squad: squad}, 0)
+				}
+			}
 		}
 	}
-
-	for _, other := range ws.Units {
-		if other == nil || other.HP <= 0 || other.ID == unit.ID {
-			continue
-		}
-		if !hostile(ws, unit.OwnerID, other.OwnerID) {
-			continue
-		}
-		consider(&unitCombatTarget{kind: "unit", id: other.ID, pos: other.Position, ownerID: other.OwnerID, unit: other})
+	if bestRank == 0 {
+		return best
 	}
-	if ws.EnemyForces != nil {
+	// 黑雾强度点不在瓦片索引中，线性扫描（巢穴数量少，此处可以做精确距离比较）。
+	// 黑雾单位不以自家巢穴为目标。
+	if ws.EnemyForces != nil && unit.OwnerID != model.DarkFogOwnerID {
+		bestForceDist := maxInt32
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
 			if force.Strength <= 0 {
 				continue
 			}
-			consider(&unitCombatTarget{kind: "enemy_force", id: force.ID, pos: force.Position, force: force})
-		}
-	}
-	if ws.CombatRuntime != nil {
-		for _, squad := range ws.CombatRuntime.Squads {
-			if squad == nil || squad.State == model.CombatSquadStateDestroyed || squad.HP <= 0 {
-				continue
+			d := ws.SurfaceDistance(unit.Position, force.Position)
+			if d <= maxDist && d < bestForceDist && bestRank > 1 {
+				best = &unitCombatTarget{kind: "enemy_force", id: force.ID, pos: force.Position, force: force}
+				bestRank = 1
+				bestForceDist = d
 			}
-			if !hostile(ws, unit.OwnerID, squad.OwnerID) {
-				continue
-			}
-			consider(&unitCombatTarget{kind: "combat_squad", id: squad.ID, pos: squad.Position, ownerID: squad.OwnerID, squad: squad})
-		}
-	}
-	if includeBuildings {
-		for _, b := range ws.Buildings {
-			if b == nil || b.HP <= 0 {
-				continue
-			}
-			if !hostile(ws, unit.OwnerID, b.OwnerID) {
-				continue
-			}
-			consider(&unitCombatTarget{kind: "building", id: b.ID, pos: b.Position, ownerID: b.OwnerID, building: b})
 		}
 	}
 	return best
@@ -456,18 +460,24 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 	case "building":
 		b := target.building
 		damage := max(1, unit.Attack-2)
+		// 行星护盾吸收外部伤害（含黑雾与 PvP，U4 方向）。
+		shieldAbsorbed, remaining := absorbPlanetaryShieldDamage(ws, b.OwnerID, damage)
+		shieldRemaining := totalPlanetaryShieldCharge(ws, b.OwnerID)
+		damage = remaining
 		b.HP -= damage
 		for _, scope := range []string{unit.OwnerID, b.OwnerID} {
 			events = append(events, &model.GameEvent{
 				EventType:       model.EvtDamageApplied,
 				VisibilityScope: scope,
 				Payload: map[string]any{
-					"attacker_id":   unit.ID,
-					"attacker_type": "unit",
-					"target_id":     b.ID,
-					"target_type":   "building",
-					"damage":        damage,
-					"target_hp":     b.HP,
+					"attacker_id":      unit.ID,
+					"attacker_type":    "unit",
+					"target_id":        b.ID,
+					"target_type":      "building",
+					"damage":           damage,
+					"target_hp":        b.HP,
+					"shield_absorbed":  shieldAbsorbed,
+					"shield_remaining": shieldRemaining,
 				},
 			})
 		}
@@ -558,15 +568,17 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 		var victim *model.Unit
-		victimDist := maxInt32
-		for _, u := range ws.Units {
-			if u == nil || u.HP <= 0 {
-				continue
-			}
-			d := ws.SurfaceDistance(force.Position, u.Position)
-			if d <= enemyForceStrikeRange && d < victimDist {
+		for _, tile := range ws.SurfaceDisc(force.Position, enemyForceStrikeRange) {
+			for _, unitID := range ws.TileUnits[model.TileKey(tile.X, tile.Y)] {
+				u := ws.Units[unitID]
+				if u == nil || u.HP <= 0 || u.OwnerID == model.DarkFogOwnerID {
+					continue
+				}
 				victim = u
-				victimDist = d
+				break
+			}
+			if victim != nil {
+				break
 			}
 		}
 		if victim != nil {

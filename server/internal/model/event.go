@@ -37,6 +37,7 @@ const (
 	EvtLandingFailed             EventType = "landing_failed"
 	EvtOrbitalSuperiorityChanged EventType = "orbital_superiority_changed"
 	EvtSupplyLineDisrupted       EventType = "supply_line_disrupted"
+	EvtEnemyWaveIncoming         EventType = "enemy_wave_incoming"
 )
 
 var allEventTypes = []EventType{
@@ -73,6 +74,7 @@ var allEventTypes = []EventType{
 	EvtLandingFailed,
 	EvtOrbitalSuperiorityChanged,
 	EvtSupplyLineDisrupted,
+	EvtEnemyWaveIncoming,
 }
 
 var validEventTypes = func() map[EventType]struct{} {
