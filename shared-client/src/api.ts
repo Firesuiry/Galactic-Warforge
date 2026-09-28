@@ -1,4 +1,5 @@
 import type { PlanetPathView } from './types';
+import type { GameSummary, NewGameRequest } from './game.js';
 import {
   DEFAULT_EVENT_TYPES,
   DEFAULT_GALAXY_ID,
@@ -540,6 +541,20 @@ export function createApiClient(options: ApiClientOptions) {
 
   function sendSave(request: SaveRequest = {}): Promise<SaveResponse> {
     return apiFetch<SaveResponse>('/save', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // F1 新局热重置：查询当前对局概要。
+  function fetchCurrentGame(): Promise<GameSummary> {
+    return apiFetch<GameSummary>('/games/current');
+  }
+
+  // F1 新局热重置：仅 role=admin 可调用；成功后旧 key 立即失效，
+  // 调用方需用新局玩家的 key 重新 setAuth 并重新订阅事件流。
+  function createNewGame(request: NewGameRequest): Promise<GameSummary> {
+    return apiFetch<GameSummary>('/games/new', {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -1189,6 +1204,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdCancelMechaJob,
     cmdConfigureSplitter,
     cmdConfigureTrafficMonitor,
+    createNewGame,
 
     cmdBuild,
     cmdBlueprintCreate,
@@ -1245,6 +1261,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchAudit,
     fetchCatalog,
     fetchCommandCatalog,
+    fetchCurrentGame,
     fetchEventSnapshot,
     fetchFleet,
     fetchFleets,

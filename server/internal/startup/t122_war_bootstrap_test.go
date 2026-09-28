@@ -30,11 +30,11 @@ func TestT122OfficialWarScenarioBootstrapsAuthoritativeWarAnchors(t *testing.T) 
 	}
 	defer app.Stop()
 
-	if got := app.Core.ActivePlanetID(); got != "planet-1-1" {
+	if got := app.Current().Core.ActivePlanetID(); got != "planet-1-1" {
 		t.Fatalf("expected active planet planet-1-1, got %s", got)
 	}
 
-	ws := app.Core.World()
+	ws := app.Current().Core.World()
 	if ws == nil {
 		t.Fatal("expected active world")
 	}

@@ -89,6 +89,17 @@ func (eb *EventBus) DroppedCount() uint64 {
 	return eb.droppedCount.Load()
 }
 
+// CloseAll closes and removes every subscriber channel (F1: hot reset tears down
+// the old session's bus so SSE consumers of the previous game disconnect).
+func (eb *EventBus) CloseAll() {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+	for id, sub := range eb.subscribers {
+		close(sub.ch)
+		delete(eb.subscribers, id)
+	}
+}
+
 func buildEventFilterSet(eventTypes []model.EventType) map[model.EventType]struct{} {
 	if len(eventTypes) == 0 {
 		return nil
@@ -325,6 +336,7 @@ type GameCore struct {
 	monitor          *productionMonitor
 	rng              *rand.Rand
 	stopCh           chan struct{}
+	stopOnce         sync.Once
 	victory          model.VictoryState
 	victoryMu        sync.RWMutex
 	runtimeMu        sync.RWMutex
@@ -586,9 +598,15 @@ func (gc *GameCore) Run() {
 	}
 }
 
-// Stop signals the tick loop to stop
+// Stop signals the tick loop to stop; it is idempotent (F1: hot reset and
+// shutdown paths may converge on the same core).
 func (gc *GameCore) Stop() {
-	close(gc.stopCh)
+	if gc == nil || gc.stopCh == nil {
+		return
+	}
+	gc.stopOnce.Do(func() {
+		close(gc.stopCh)
+	})
 }
 
 // processTick runs a single tick

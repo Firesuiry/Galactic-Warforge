@@ -17,6 +17,7 @@ import (
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
 	"siliconworld/internal/snapshot"
+	"siliconworld/internal/startup"
 	"siliconworld/internal/visibility"
 )
 
@@ -41,7 +42,7 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(cfg, core, bus, q)
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
 	return srv, core
 }
 
@@ -418,7 +419,7 @@ func TestPostCommandsPermissionDenied(t *testing.T) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(cfg, core, bus, q)
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
 
 	payload := model.CommandRequest{
 		RequestID:  "req-perm-deny",
@@ -794,7 +795,7 @@ func TestMetricsEndpointIncludesDroppedEvents(t *testing.T) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(cfg, core, bus, q)
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
 
 	ch := bus.Subscribe("metrics-sub", nil)
 	defer bus.Unsubscribe("metrics-sub")

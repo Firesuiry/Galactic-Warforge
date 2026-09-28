@@ -86,6 +86,7 @@ import {
 } from './agent.js';
 import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
 import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdSave, cmdReplay, cmdRollback } from './debug.js';
+import { cmdGameNew, cmdGameStatus } from './game.js';
 import type { ReplContext } from '../types.js';
 import { configureDistributor, installBot, uninstallBot, configureMechaLogistics } from './distributor.js';
 
@@ -189,6 +190,8 @@ export const COMMANDS: Record<string, CommandEntry> = {
   event_snapshot: { handler: cmdEventSnapshot },
   alert_snapshot: { handler: cmdAlertSnapshot },
   save: { handler: cmdSave },
+  game_new: { handler: cmdGameNew },
+  game_status: { handler: cmdGameStatus },
   replay: { handler: cmdReplay },
   rollback: { handler: cmdRollback },
   help: { handler: cmdHelp, completions: [] },

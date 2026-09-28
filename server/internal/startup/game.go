@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"siliconworld/internal/config"
@@ -15,7 +14,6 @@ import (
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/mapmodel"
-	"siliconworld/internal/persistence"
 	"siliconworld/internal/queue"
 	"siliconworld/internal/snapshot"
 )
@@ -27,72 +25,34 @@ const (
 	gameDirStateResume
 )
 
-// App owns the bootstrapped runtime and its background helpers.
-type App struct {
-	Config *config.Config
-	Maps   *mapmodel.Universe
-	Core   *gamecore.GameCore
-	Bus    *gamecore.EventBus
-	Queue  *queue.CommandQueue
-
-	stopOnce     sync.Once
-	autoSaveStop chan struct{}
-	autoSaveDone chan struct{}
-}
-
-// Stop stops autosave first, then stops the game core.
-func (app *App) Stop() {
-	if app == nil {
-		return
-	}
-	app.stopOnce.Do(func() {
-		if app.autoSaveStop != nil {
-			close(app.autoSaveStop)
-		}
-		if app.autoSaveDone != nil {
-			<-app.autoSaveDone
-		}
-		if app.Core != nil {
-			app.Core.Stop()
-		}
-	})
-}
-
-// LoadRuntime loads config, decides whether to create or resume a game, and starts autosave.
-func LoadRuntime(cfgPath, mapCfgPath string) (*App, error) {
+// LoadRuntime loads config, decides whether to create or resume a game, and
+// returns the hot-resettable runtime (F1). The returned runtime has not started
+// any goroutines yet; main calls Runtime.Start before serving HTTP so tests can
+// drive ticks deterministically.
+func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return nil, err
 	}
 
-	dir := gamedir.Open(cfg.Server.DataDir)
-	state, err := detectGameDirState(dir)
+	rt, err := NewRuntime(cfg.Server, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	store, err := persistence.New(cfg.Server.DataDir, persistence.SnapshotPolicy{
-		IntervalTicks:    cfg.Server.SnapshotIntervalTicks,
-		RetentionTicks:   cfg.Server.SnapshotRetentionTicks,
-		RetentionCount:   cfg.Server.SnapshotRetentionCount,
-		MaxSnapshotBytes: cfg.Server.SnapshotMaxBytes,
-		MaxDeltaBytes:    cfg.Server.SnapshotDeltaMaxBytes,
-	})
+	state, err := detectGameDirState(rt.dir)
 	if err != nil {
 		return nil, err
 	}
-
-	q := queue.New()
-	bus := gamecore.NewEventBus()
 
 	var (
 		maps *mapmodel.Universe
-		core *gamecore.GameCore
+		sess *Session
 	)
 
 	switch state {
 	case gameDirStateResume:
-		meta, save, err := dir.Load()
+		meta, save, err := rt.dir.Load()
 		if err != nil {
 			return nil, err
 		}
@@ -100,38 +60,64 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*App, error) {
 		if err != nil {
 			return nil, err
 		}
+		// 恢复对局必须用存档内固化的地图配置（与 saved surface 一一对应）；
+		// 热重置所用地图模板（F1）则优先启动时指定的 mapconfig 文件，读不到再退回存档。
 		mapCfg := cloneSavedMapConfig(meta.MapConfig)
+		startupMapCfg := loadStartupMapConfig(mapCfgPath, meta.MapConfig)
+		rt.mapCfg = startupMapCfg
 		maps = mapgen.Generate(mapCfg, meta.GameplayConfig.Battlefield.MapSeed)
-		core, err = gamecore.NewFromSave(cfg, maps, q, bus, store, save)
+		q := queue.New()
+		bus := gamecore.NewEventBus()
+		store, err := newSnapshotStore(cfg.Server)
 		if err != nil {
 			return nil, err
 		}
-		core.AttachGameDir(dir, meta, choosePersistedBaseSnapshot(save))
+		core, err := gamecore.NewFromSave(cfg, maps, q, bus, store, save)
+		if err != nil {
+			return nil, err
+		}
+		core.AttachGameDir(rt.dir, meta, choosePersistedBaseSnapshot(save))
+		sess = NewSession(cfg, maps, core, bus, q)
 	case gameDirStateNew:
 		externalMapCfg, err := mapconfig.Load(mapCfgPath)
 		if err != nil {
 			return nil, err
 		}
+		rt.mapCfg = externalMapCfg
 		maps = mapgen.Generate(externalMapCfg, cfg.Battlefield.MapSeed)
-		core = gamecore.New(cfg, maps, q, bus, store)
+		q := queue.New()
+		bus := gamecore.NewEventBus()
+		store, err := newSnapshotStore(cfg.Server)
+		if err != nil {
+			return nil, err
+		}
+		core := gamecore.New(cfg, maps, q, bus, store)
 		meta := gamedir.NewMetaFile(cfg, externalMapCfg)
-		core.AttachGameDir(dir, meta, snapshot.Capture(core.World(), core.Discovery()))
+		core.AttachGameDir(rt.dir, meta, snapshot.Capture(core.World(), core.Discovery()))
 		if _, err := core.Save("startup"); err != nil {
 			return nil, fmt.Errorf("initial save: %w", err)
 		}
+		sess = NewSession(cfg, maps, core, bus, q)
 	default:
 		return nil, fmt.Errorf("unsupported game dir state %d", state)
 	}
 
-	app := &App{
-		Config: cfg,
-		Maps:   maps,
-		Core:   core,
-		Bus:    bus,
-		Queue:  q,
+	rt.current.Store(sess)
+	return rt, nil
+}
+
+// loadStartupMapConfig 读取启动时指定的 mapconfig 文件；不可读时退回存档内固化的配置。
+func loadStartupMapConfig(path string, saved mapconfig.Config) *mapconfig.Config {
+	if cfg, err := mapconfig.Load(path); err == nil {
+		return cfg
 	}
-	app.autoSaveStop, app.autoSaveDone = startAutoSaveLoop(core, time.Duration(cfg.Server.AutoSaveIntervalSeconds)*time.Second)
-	return app, nil
+	cp := saved
+	return &cp
+}
+
+func cloneSavedMapConfig(cfg mapconfig.Config) *mapconfig.Config {
+	copy := cfg
+	return &copy
 }
 
 func applySavedGameplayConfig(live *config.Config, meta *gamedir.MetaFile) (*config.Config, error) {
@@ -148,11 +134,6 @@ func applySavedGameplayConfig(live *config.Config, meta *gamedir.MetaFile) (*con
 		return nil, err
 	}
 	return &merged, nil
-}
-
-func cloneSavedMapConfig(cfg mapconfig.Config) *mapconfig.Config {
-	copy := cfg
-	return &copy
 }
 
 func choosePersistedBaseSnapshot(save *gamedir.SaveFile) *snapshot.Snapshot {
@@ -222,6 +203,7 @@ func startAutoSaveLoop(core *gamecore.GameCore, interval time.Duration) (chan st
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
+		defer log.Printf("[AutoSave] loop stopped")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

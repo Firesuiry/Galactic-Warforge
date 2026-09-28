@@ -4,6 +4,8 @@ const (
 	VictoryRuleElimination     = "elimination"
 	VictoryRuleMissionComplete = "mission_complete"
 	VictoryRuleHybrid          = "hybrid"
+	// VictoryRuleSandbox 沙盒模式（F1 新局 victory_mode=sandbox）：永不判胜。
+	VictoryRuleSandbox = "sandbox"
 
 	VictoryReasonElimination = "elimination"
 	VictoryReasonGameWin     = "game_win"
@@ -24,13 +26,15 @@ func (v VictoryState) Declared() bool {
 	return v.WinnerID != ""
 }
 
-// NormalizeVictoryRule folds unknown values back to elimination.
+// NormalizeVictoryRule folds unknown values back to elimination; sandbox is preserved.
 func NormalizeVictoryRule(rule string) string {
 	switch rule {
 	case VictoryRuleMissionComplete:
 		return VictoryRuleMissionComplete
 	case VictoryRuleHybrid:
 		return VictoryRuleHybrid
+	case VictoryRuleSandbox:
+		return VictoryRuleSandbox
 	default:
 		return VictoryRuleElimination
 	}
@@ -44,6 +48,11 @@ func VictoryRuleAllowsMissionComplete(rule string) bool {
 	default:
 		return false
 	}
+}
+
+// VictoryRuleNeverDeclares reports whether the rule disables victory resolution (sandbox).
+func VictoryRuleNeverDeclares(rule string) bool {
+	return NormalizeVictoryRule(rule) == VictoryRuleSandbox
 }
 
 // VictoryRuleAllowsElimination reports whether a rule checks elimination.

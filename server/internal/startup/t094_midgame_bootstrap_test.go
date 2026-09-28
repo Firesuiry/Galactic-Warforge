@@ -31,7 +31,7 @@ func TestT094OfficialMidgameBootstrapAddsLeafUnlocksWithoutDiracInversion(t *tes
 	defer app.Stop()
 
 	for _, playerID := range []string{"p1", "p2"} {
-		player := app.Core.World().Players[playerID]
+		player := app.Current().Core.World().Players[playerID]
 		if player == nil || player.Tech == nil {
 			t.Fatalf("expected player %s bootstrap tech state, got %+v", playerID, player)
 		}
@@ -67,11 +67,11 @@ func TestT094OfficialMidgameBootstrapCreatesDysonValidationAnchors(t *testing.T)
 	}
 	defer app.Stop()
 
-	if got := app.Core.ActivePlanetID(); got != "planet-1-2" {
+	if got := app.Current().Core.ActivePlanetID(); got != "planet-1-2" {
 		t.Fatalf("expected active planet planet-1-2, got %s", got)
 	}
 
-	ws := app.Core.World()
+	ws := app.Current().Core.World()
 	if ws == nil {
 		t.Fatal("expected active world")
 	}
@@ -105,7 +105,7 @@ func TestT094OfficialMidgameBootstrapCreatesDysonValidationAnchors(t *testing.T)
 		)
 	}
 
-	systemRuntime := app.Core.SpaceRuntime().PlayerSystem("p1", "sys-1")
+	systemRuntime := app.Current().Core.SpaceRuntime().PlayerSystem("p1", "sys-1")
 	if systemRuntime == nil {
 		t.Fatal("expected system runtime bootstrap for sys-1")
 	}

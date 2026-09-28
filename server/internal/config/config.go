@@ -16,15 +16,15 @@ type ExecutorConfig struct {
 }
 
 type BootstrapItemConfig struct {
-	ItemID   string `yaml:"item_id"`
-	Quantity int    `yaml:"quantity"`
+	ItemID   string `yaml:"item_id" json:"item_id"`
+	Quantity int    `yaml:"quantity" json:"quantity"`
 }
 
 type PlayerBootstrapConfig struct {
-	Minerals       int                   `yaml:"minerals"`
-	Energy         int                   `yaml:"energy"`
-	Inventory      []BootstrapItemConfig `yaml:"inventory,omitempty"`
-	CompletedTechs []string              `yaml:"completed_techs,omitempty"`
+	Minerals       int                   `yaml:"minerals" json:"minerals"`
+	Energy         int                   `yaml:"energy" json:"energy"`
+	Inventory      []BootstrapItemConfig `yaml:"inventory,omitempty" json:"inventory,omitempty"`
+	CompletedTechs []string              `yaml:"completed_techs,omitempty" json:"completed_techs,omitempty"`
 }
 
 type ScenarioBootstrapBuildingConfig struct {

@@ -31,8 +31,8 @@ func TestBootstrapEmptyDirCreatesGameAndInitialSave(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(gameDir, "save.json")); err != nil {
 		t.Fatalf("expected save.json written before serve: %v", err)
 	}
-	if app.Core.World().Tick != 0 {
-		t.Fatalf("expected fresh game tick 0, got %d", app.Core.World().Tick)
+	if app.Current().Core.World().Tick != 0 {
+		t.Fatalf("expected fresh game tick 0, got %d", app.Current().Core.World().Tick)
 	}
 }
 
@@ -56,17 +56,17 @@ func TestBootstrapExistingDirUsesSavedGameplayAndMapConfig(t *testing.T) {
 	}
 	defer app.Stop()
 
-	if app.Config.Battlefield.MapSeed != "saved-seed" {
-		t.Fatalf("expected saved gameplay config to win, got %q", app.Config.Battlefield.MapSeed)
+	if app.Current().Config.Battlefield.MapSeed != "saved-seed" {
+		t.Fatalf("expected saved gameplay config to win, got %q", app.Current().Config.Battlefield.MapSeed)
 	}
-	if len(app.Config.Players) != 1 || app.Config.Players[0].PlayerID != "saved-p1" {
-		t.Fatalf("expected saved players restored, got %+v", app.Config.Players)
+	if len(app.Current().Config.Players) != 1 || app.Current().Config.Players[0].PlayerID != "saved-p1" {
+		t.Fatalf("expected saved players restored, got %+v", app.Current().Config.Players)
 	}
-	if app.Maps.PrimaryPlanet().Width != 72 || app.Maps.PrimaryPlanet().Height != 48 {
+	if app.Current().Maps.PrimaryPlanet().Width != 72 || app.Current().Maps.PrimaryPlanet().Height != 48 {
 		t.Fatalf("expected saved map config to win")
 	}
-	if app.Core.World().Tick != 44 {
-		t.Fatalf("expected resumed tick 44, got %d", app.Core.World().Tick)
+	if app.Current().Core.World().Tick != 44 {
+		t.Fatalf("expected resumed tick 44, got %d", app.Current().Core.World().Tick)
 	}
 }
 
@@ -87,13 +87,13 @@ func TestBootstrapExistingDirKeepsExternalRuntimeOverrides(t *testing.T) {
 	}
 	defer app.Stop()
 
-	if app.Config.Server.Port != 19090 || app.Config.Server.RateLimit != 77 {
+	if app.Current().Config.Server.Port != 19090 || app.Current().Config.Server.RateLimit != 77 {
 		t.Fatalf("expected runtime overrides preserved")
 	}
-	if app.Config.Server.EventHistoryLimit != 1 || app.Config.Server.AlertHistoryLimit != 1 {
+	if app.Current().Config.Server.EventHistoryLimit != 1 || app.Current().Config.Server.AlertHistoryLimit != 1 {
 		t.Fatalf("expected history runtime overrides preserved")
 	}
-	if app.Config.Server.AutoSaveIntervalSeconds != 5 {
+	if app.Current().Config.Server.AutoSaveIntervalSeconds != 5 {
 		t.Fatalf("expected auto save override preserved")
 	}
 }
@@ -106,16 +106,17 @@ func TestAutoSaveTickerWritesUpdatedSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load runtime: %v", err)
 	}
+	app.Start()
 	defer app.Stop()
 
-	app.Core.World().Lock()
-	app.Core.World().Tick = 9
-	app.Core.World().Unlock()
+	app.Current().Core.World().Lock()
+	app.Current().Core.World().Tick = 9
+	app.Current().Core.World().Unlock()
 
 	deadline := time.Now().Add(1500 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		_, save, err := gamedir.Open(gameDir).Load()
-		if err == nil && save.Tick == 9 {
+		if err == nil && save.Tick >= 9 {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -125,7 +126,7 @@ func TestAutoSaveTickerWritesUpdatedSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load save after auto save deadline: %v", err)
 	}
-	t.Fatalf("expected auto save to flush latest tick 9, got tick %d", save.Tick)
+	t.Fatalf("expected auto save to flush latest tick >=9, got tick %d", save.Tick)
 }
 
 func TestResumeFromGzipSavePreservesState(t *testing.T) {
@@ -135,13 +136,13 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load runtime: %v", err)
 	}
-	app.Core.World().Lock()
-	app.Core.World().Tick = 42
-	app.Core.World().Unlock()
-	if _, err := app.Core.Save("manual"); err != nil {
+	app.Current().Core.World().Lock()
+	app.Current().Core.World().Tick = 42
+	app.Current().Core.World().Unlock()
+	if _, err := app.Current().Core.Save("manual"); err != nil {
 		t.Fatalf("manual save: %v", err)
 	}
-	baseCount := len(app.Core.World().Buildings)
+	baseCount := len(app.Current().Core.World().Buildings)
 	if baseCount == 0 {
 		t.Fatalf("expected seeded base buildings before save")
 	}
@@ -160,13 +161,13 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 		t.Fatalf("resume runtime: %v", err)
 	}
 	defer resumed.Stop()
-	if got := resumed.Core.World().Tick; got != 42 {
+	if got := resumed.Current().Core.World().Tick; got != 42 {
 		t.Fatalf("expected tick 42 after resume, got %d", got)
 	}
-	if got := len(resumed.Core.World().Buildings); got != baseCount {
+	if got := len(resumed.Current().Core.World().Buildings); got != baseCount {
 		t.Fatalf("expected %d buildings after resume, got %d", baseCount, got)
 	}
-	player := resumed.Core.World().Players["p1"]
+	player := resumed.Current().Core.World().Players["p1"]
 	if player == nil || player.Resources.Minerals != 200 || player.Resources.Energy != 100 {
 		t.Fatalf("expected player resources restored, got %+v", player)
 	}
@@ -179,10 +180,10 @@ func TestResumeFromLegacyPlainJSONSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load runtime: %v", err)
 	}
-	app.Core.World().Lock()
-	app.Core.World().Tick = 33
-	app.Core.World().Unlock()
-	if _, err := app.Core.Save("manual"); err != nil {
+	app.Current().Core.World().Lock()
+	app.Current().Core.World().Tick = 33
+	app.Current().Core.World().Unlock()
+	if _, err := app.Current().Core.Save("manual"); err != nil {
 		t.Fatalf("manual save: %v", err)
 	}
 	app.Stop()
@@ -205,10 +206,10 @@ func TestResumeFromLegacyPlainJSONSave(t *testing.T) {
 		t.Fatalf("resume runtime from legacy save: %v", err)
 	}
 	defer resumed.Stop()
-	if got := resumed.Core.World().Tick; got != 33 {
+	if got := resumed.Current().Core.World().Tick; got != 33 {
 		t.Fatalf("expected tick 33 after legacy resume, got %d", got)
 	}
-	if len(resumed.Core.World().Buildings) == 0 {
+	if len(resumed.Current().Core.World().Buildings) == 0 {
 		t.Fatalf("expected buildings restored from legacy save")
 	}
 }
@@ -221,12 +222,13 @@ func TestStopStopsAutoSaveLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load runtime: %v", err)
 	}
+	app.Start()
 
 	app.Stop()
 
-	app.Core.World().Lock()
-	app.Core.World().Tick = 7
-	app.Core.World().Unlock()
+	app.Current().Core.World().Lock()
+	app.Current().Core.World().Tick = 7
+	app.Current().Core.World().Unlock()
 
 	time.Sleep(1200 * time.Millisecond)
 
@@ -307,26 +309,26 @@ overrides:
 	}
 	defer app.Stop()
 
-	if app.Core.World().PlanetID != "planet-1-2" {
-		t.Fatalf("expected active world planet planet-1-2, got %s", app.Core.World().PlanetID)
+	if app.Current().Core.World().PlanetID != "planet-1-2" {
+		t.Fatalf("expected active world planet planet-1-2, got %s", app.Current().Core.World().PlanetID)
 	}
-	if app.Core.ActivePlanetID() != "planet-1-2" {
-		t.Fatalf("expected active planet id planet-1-2, got %s", app.Core.ActivePlanetID())
+	if app.Current().Core.ActivePlanetID() != "planet-1-2" {
+		t.Fatalf("expected active planet id planet-1-2, got %s", app.Current().Core.ActivePlanetID())
 	}
-	if app.Maps.Planets["planet-1-2"] == nil || app.Maps.Planets["planet-1-2"].Kind != "gas_giant" {
-		t.Fatalf("expected planet-1-2 to be gas giant, got %+v", app.Maps.Planets["planet-1-2"])
+	if app.Current().Maps.Planets["planet-1-2"] == nil || app.Current().Maps.Planets["planet-1-2"].Kind != "gas_giant" {
+		t.Fatalf("expected planet-1-2 to be gas giant, got %+v", app.Current().Maps.Planets["planet-1-2"])
 	}
-	if app.Core.Discovery() == nil {
+	if app.Current().Core.Discovery() == nil {
 		t.Fatal("expected discovery state to exist")
 	}
-	if !app.Core.Discovery().IsSystemDiscovered("p1", "sys-1") {
+	if !app.Current().Core.Discovery().IsSystemDiscovered("p1", "sys-1") {
 		t.Fatal("expected active planet system to be discovered for bootstrap player")
 	}
-	if !app.Core.Discovery().IsPlanetDiscovered("p1", "planet-1-2") {
+	if !app.Current().Core.Discovery().IsPlanetDiscovered("p1", "planet-1-2") {
 		t.Fatal("expected active planet to be discovered for bootstrap player")
 	}
 
-	player := app.Core.World().Players["p1"]
+	player := app.Current().Core.World().Players["p1"]
 	if player == nil {
 		t.Fatal("expected bootstrap player p1")
 	}

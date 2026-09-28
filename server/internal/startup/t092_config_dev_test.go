@@ -35,7 +35,7 @@ func TestT092ConfigDevBootstrapRequiresChainProducedMatrices(t *testing.T) {
 	defer app.Stop()
 
 	for _, playerID := range []string{"p1", "p2"} {
-		player := app.Core.World().Players[playerID]
+		player := app.Current().Core.World().Players[playerID]
 		if player == nil {
 			t.Fatalf("expected player %s", playerID)
 		}

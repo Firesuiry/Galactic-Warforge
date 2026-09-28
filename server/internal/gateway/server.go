@@ -12,12 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"siliconworld/internal/config"
-	"siliconworld/internal/gamecore"
 	"siliconworld/internal/model"
 	"siliconworld/internal/query"
-	"siliconworld/internal/queue"
-	"siliconworld/internal/visibility"
+	"siliconworld/internal/startup"
 )
 
 // rateLimiter is a simple per-player token bucket
@@ -54,38 +51,35 @@ func (rl *rateLimiter) Allow(playerID string) bool {
 	return true
 }
 
-// Server is the HTTP server wrapping game services
+// Server is the HTTP server wrapping game services.
+// F1 热重置：Server 不再持有 core/bus/queue；所有 handler 通过 rt.Current()
+// 取当前对局 Session 再访问其中的组件（一局内整体原子替换）。
 type Server struct {
-	cfg    *config.Config
-	keyMap map[string]string // bearer key -> player_id
-	core   *gamecore.GameCore
-	bus    *gamecore.EventBus
-	queue  *queue.CommandQueue
-	ql     *query.Layer
-	vis    *visibility.Engine
-	rl     *rateLimiter
+	rt *startup.Runtime
+	rl *rateLimiter
 }
 
 // New creates and configures the HTTP server
-func New(
-	cfg *config.Config,
-	core *gamecore.GameCore,
-	bus *gamecore.EventBus,
-	q *queue.CommandQueue,
-) *Server {
-	vis := visibility.New()
-	ql := query.New(vis, core.Maps(), core.Discovery())
-
+func New(rt *startup.Runtime) *Server {
 	return &Server{
-		cfg:    cfg,
-		keyMap: cfg.KeyToPlayer(),
-		core:   core,
-		bus:    bus,
-		queue:  q,
-		ql:     ql,
-		vis:    vis,
-		rl:     newRateLimiter(cfg.Server.RateLimit),
+		rt: rt,
+		rl: newRateLimiter(rt.ServerConfig().RateLimit),
 	}
+}
+
+// session 返回当前对局 session；nil 表示尚未 boot（不应发生）。
+func (s *Server) session() *startup.Session {
+	return s.rt.Current()
+}
+
+// requireSession 取当前对局；不可用时写 503 并返回 nil。
+func (s *Server) requireSession(w http.ResponseWriter) *startup.Session {
+	sess := s.rt.Current()
+	if sess == nil {
+		writeError(w, http.StatusServiceUnavailable, "no active game session")
+		return nil
+	}
+	return sess
 }
 
 // Handler returns the root HTTP handler
@@ -128,6 +122,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /commands", s.auth(s.handleCommands))
 	mux.HandleFunc("POST /save", s.auth(s.handleSave))
 
+	// Session management (F1 热重置)
+	mux.HandleFunc("GET /games/current", s.auth(s.handleGameCurrent))
+	mux.HandleFunc("POST /games/new", s.auth(s.handleGameNew))
+
 	// SSE event stream
 	mux.HandleFunc("GET /events/stream", s.auth(s.handleEventStream))
 	// Event snapshot
@@ -142,7 +140,8 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-// auth middleware extracts and validates the Bearer token
+// auth middleware extracts and validates the Bearer token.
+// 键映射来自当前对局 Session（F1 热重置后旧局 key 立即失效）。
 func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -151,7 +150,12 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			return
 		}
 		key := strings.TrimPrefix(authHeader, "Bearer ")
-		playerID, ok := s.keyMap[key]
+		sess := s.session()
+		if sess == nil {
+			writeError(w, http.StatusServiceUnavailable, "no active game session")
+			return
+		}
+		playerID, ok := sess.KeyMap[key]
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "invalid player key")
 			return
@@ -162,39 +166,59 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 
 // handleHealth returns a simple health response
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",
-		"tick":   s.core.CurrentTick(),
+		"tick":   sess.Core.CurrentTick(),
 	})
 }
 
 // handleMetrics returns core runtime metrics
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	m := s.core.GetMetrics()
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	m := sess.Core.GetMetrics()
 	snapshot := m.Snapshot()
-	if s.bus != nil {
-		snapshot["dropped_events"] = s.bus.DroppedCount()
+	if sess.Bus != nil {
+		snapshot["dropped_events"] = sess.Bus.DroppedCount()
 	}
 	writeJSON(w, http.StatusOK, snapshot)
 }
 
 // handleStateSummary returns GET /state/summary
 func (s *Server) handleStateSummary(w http.ResponseWriter, r *http.Request, playerID string) {
-	ws := s.core.World()
-	sum := s.ql.Summary(ws, playerID, s.core.Victory())
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	ws := sess.Core.World()
+	sum := sess.Query.Summary(ws, playerID, sess.Core.Victory())
 	writeJSON(w, http.StatusOK, sum)
 }
 
 // handleStateStats returns GET /state/stats
 func (s *Server) handleStateStats(w http.ResponseWriter, r *http.Request, playerID string) {
-	ws := s.core.World()
-	stats := s.ql.Stats(ws, playerID)
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	ws := sess.Core.World()
+	stats := sess.Query.Stats(ws, playerID)
 	writeJSON(w, http.StatusOK, stats)
 }
 
 // handleAgentBriefing returns GET /state/agent-briefing — one-shot aggregate
 // snapshot for agent/GUI bootstrap (self + war + fleets + alerts + commands).
 func (s *Server) handleAgentBriefing(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	alertLimit := query.DefaultAgentBriefingAlertLimit
 	if v := r.URL.Query().Get("alert_limit"); v != "" {
 		parsed, err := strconv.Atoi(v)
@@ -204,18 +228,18 @@ func (s *Server) handleAgentBriefing(w http.ResponseWriter, r *http.Request, pla
 		}
 		alertLimit = parsed
 	}
-	if max := s.cfg.Server.AlertHistoryLimit; max > 0 && alertLimit > max {
+	if max := sess.Config.Server.AlertHistoryLimit; max > 0 && alertLimit > max {
 		alertLimit = max
 	}
 
-	ws := s.core.World()
-	briefing := s.ql.AgentBriefing(
+	ws := sess.Core.World()
+	briefing := sess.Query.AgentBriefing(
 		ws,
 		playerID,
-		s.core.Victory(),
-		s.core.Worlds(),
-		s.core.SpaceRuntime(),
-		s.core.AlertHistory().All(),
+		sess.Core.Victory(),
+		sess.Core.Worlds(),
+		sess.Core.SpaceRuntime(),
+		sess.Core.AlertHistory().All(),
 		alertLimit,
 	)
 	writeJSON(w, http.StatusOK, briefing)
@@ -223,13 +247,21 @@ func (s *Server) handleAgentBriefing(w http.ResponseWriter, r *http.Request, pla
 
 // handleGalaxy returns GET /world/galaxy
 func (s *Server) handleGalaxy(w http.ResponseWriter, r *http.Request, playerID string) {
-	writeJSON(w, http.StatusOK, s.ql.Galaxy(playerID))
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, sess.Query.Galaxy(playerID))
 }
 
 // handleSystem returns GET /world/systems/{system_id}
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	systemID := r.PathValue("system_id")
-	view, ok := s.ql.System(playerID, systemID)
+	view, ok := sess.Query.System(playerID, systemID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "system not found")
 		return
@@ -239,14 +271,18 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request, playerID s
 
 // handleSystemRuntime returns GET /world/systems/{system_id}/runtime
 func (s *Server) handleSystemRuntime(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	systemID := r.PathValue("system_id")
-	activePlanetID := s.core.ActivePlanetID()
-	view, ok := s.ql.SystemRuntime(
+	activePlanetID := sess.Core.ActivePlanetID()
+	view, ok := sess.Query.SystemRuntime(
 		playerID,
 		systemID,
 		activePlanetID,
-		s.core.WorldForPlanet(activePlanetID),
-		s.core.SpaceRuntime(),
+		sess.Core.WorldForPlanet(activePlanetID),
+		sess.Core.SpaceRuntime(),
 	)
 	if !ok {
 		writeError(w, http.StatusNotFound, "system not found")
@@ -257,9 +293,13 @@ func (s *Server) handleSystemRuntime(w http.ResponseWriter, r *http.Request, pla
 
 // handlePlanet returns GET /world/planets/{planet_id}
 func (s *Server) handlePlanet(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	planetID := r.PathValue("planet_id")
-	ws := s.core.WorldForPlanet(planetID)
-	view, ok := s.ql.PlanetSummary(ws, playerID, planetID)
+	ws := sess.Core.WorldForPlanet(planetID)
+	view, ok := sess.Query.PlanetSummary(ws, playerID, planetID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -269,11 +309,15 @@ func (s *Server) handlePlanet(w http.ResponseWriter, r *http.Request, playerID s
 
 // handlePlanetOverview returns GET /world/planets/{planet_id}/overview
 func (s *Server) handlePlanetOverview(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	planetID := r.PathValue("planet_id")
 	req := query.PlanetOverviewRequest{
 		Step: parseQueryInt(r, "step", 0),
 	}
-	view, ok := s.ql.PlanetOverview(s.core.WorldForPlanet(planetID), playerID, planetID, req)
+	view, ok := sess.Query.PlanetOverview(sess.Core.WorldForPlanet(planetID), playerID, planetID, req)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -283,6 +327,10 @@ func (s *Server) handlePlanetOverview(w http.ResponseWriter, r *http.Request, pl
 
 // handlePlanetScene returns GET /world/planets/{planet_id}/scene
 func (s *Server) handlePlanetScene(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	planetID := r.PathValue("planet_id")
 	req := query.PlanetSceneRequest{
 		NearX: parseQueryInt(r, "near_x", -1), NearY: parseQueryInt(r, "near_y", -1), Radius: parseQueryInt(r, "radius", 0),
@@ -296,13 +344,13 @@ func (s *Server) handlePlanetScene(w http.ResponseWriter, r *http.Request, playe
 		return
 	}
 	if req.Radius > 0 {
-		planet, exists := s.core.Maps().Planet(planetID)
+		planet, exists := sess.Core.Maps().Planet(planetID)
 		if exists && (req.NearX >= planet.Width || req.NearY >= planet.Height) {
 			writeError(w, http.StatusBadRequest, "near center outside atlas")
 			return
 		}
 	}
-	view, ok := s.ql.PlanetScene(s.core.WorldForPlanet(planetID), playerID, planetID, req)
+	view, ok := sess.Query.PlanetScene(sess.Core.WorldForPlanet(planetID), playerID, planetID, req)
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -323,6 +371,10 @@ type planetInspectResponse struct {
 
 // handlePlanetInspect returns GET /world/planets/{planet_id}/inspect
 func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	planetID := r.PathValue("planet_id")
 	q := r.URL.Query()
 	entityKind := q.Get("entity_kind")
@@ -339,8 +391,8 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 		return
 	}
 
-	ws := s.core.WorldForPlanet(planetID)
-	view, ok := s.ql.PlanetInspect(ws, playerID, planetID, query.PlanetInspectRequest{
+	ws := sess.Core.WorldForPlanet(planetID)
+	view, ok := sess.Query.PlanetInspect(ws, playerID, planetID, query.PlanetInspectRequest{
 		TargetType: entityKind,
 		TargetID:   entityID,
 	})
@@ -363,9 +415,13 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 
 // handlePlanetRuntime returns GET /world/planets/{planet_id}/runtime
 func (s *Server) handlePlanetRuntime(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	planetID := r.PathValue("planet_id")
-	ws := s.core.WorldForPlanet(planetID)
-	view, ok := s.ql.PlanetRuntime(ws, playerID, planetID, s.core.ActivePlanetID())
+	ws := sess.Core.WorldForPlanet(planetID)
+	view, ok := sess.Query.PlanetRuntime(ws, playerID, planetID, sess.Core.ActivePlanetID())
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -375,9 +431,13 @@ func (s *Server) handlePlanetRuntime(w http.ResponseWriter, r *http.Request, pla
 
 // handlePlanetNetworks returns GET /world/planets/{planet_id}/networks
 func (s *Server) handlePlanetNetworks(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	planetID := r.PathValue("planet_id")
-	ws := s.core.WorldForPlanet(planetID)
-	view, ok := s.ql.PlanetNetworks(ws, playerID, planetID, s.core.ActivePlanetID())
+	ws := sess.Core.WorldForPlanet(planetID)
+	view, ok := sess.Query.PlanetNetworks(ws, playerID, planetID, sess.Core.ActivePlanetID())
 	if !ok {
 		writeError(w, http.StatusNotFound, "planet not found")
 		return
@@ -387,13 +447,21 @@ func (s *Server) handlePlanetNetworks(w http.ResponseWriter, r *http.Request, pl
 
 // handleFleets returns GET /world/fleets
 func (s *Server) handleFleets(w http.ResponseWriter, r *http.Request, playerID string) {
-	writeJSON(w, http.StatusOK, s.ql.Fleets(playerID, s.core.SpaceRuntime()))
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, sess.Query.Fleets(playerID, sess.Core.SpaceRuntime()))
 }
 
 // handleFleet returns GET /world/fleets/{fleet_id}
 func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	fleetID := r.PathValue("fleet_id")
-	view, ok := s.ql.Fleet(playerID, fleetID, s.core.SpaceRuntime())
+	view, ok := sess.Query.Fleet(playerID, fleetID, sess.Core.SpaceRuntime())
 	if !ok {
 		writeError(w, http.StatusNotFound, "fleet not found")
 		return
@@ -403,8 +471,12 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request, playerID st
 
 // handleCatalog returns GET /catalog
 func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	_ = playerID
-	writeJSON(w, http.StatusOK, s.ql.Catalog())
+	writeJSON(w, http.StatusOK, sess.Query.Catalog())
 }
 
 // handleCommandCatalog returns GET /catalog/commands
@@ -415,12 +487,20 @@ func (s *Server) handleCommandCatalog(w http.ResponseWriter, r *http.Request, pl
 
 // handleWarBlueprints returns GET /world/warfare/blueprints
 func (s *Server) handleWarBlueprints(w http.ResponseWriter, r *http.Request, playerID string) {
-	writeJSON(w, http.StatusOK, s.ql.WarBlueprints(s.core.World(), playerID))
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, sess.Query.WarBlueprints(sess.Core.World(), playerID))
 }
 
 // handleWarBlueprint returns GET /world/warfare/blueprints/{blueprint_id}
 func (s *Server) handleWarBlueprint(w http.ResponseWriter, r *http.Request, playerID string) {
-	view, ok := s.ql.WarBlueprint(s.core.World(), playerID, r.PathValue("blueprint_id"))
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	view, ok := sess.Query.WarBlueprint(sess.Core.World(), playerID, r.PathValue("blueprint_id"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "warfare blueprint not found")
 		return
@@ -430,19 +510,31 @@ func (s *Server) handleWarBlueprint(w http.ResponseWriter, r *http.Request, play
 
 // handleWarIndustry returns GET /world/warfare/industry
 func (s *Server) handleWarIndustry(w http.ResponseWriter, r *http.Request, playerID string) {
-	view := s.ql.WarIndustry(s.core.World(), playerID)
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	view := sess.Query.WarIndustry(sess.Core.World(), playerID)
 	writeJSON(w, http.StatusOK, view)
 }
 
 // handleWarTaskForces returns GET /world/warfare/task-forces
 func (s *Server) handleWarTaskForces(w http.ResponseWriter, r *http.Request, playerID string) {
-	view := s.ql.WarTaskForces(s.core.World(), playerID, s.core.Worlds(), s.core.SpaceRuntime())
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	view := sess.Query.WarTaskForces(sess.Core.World(), playerID, sess.Core.Worlds(), sess.Core.SpaceRuntime())
 	writeJSON(w, http.StatusOK, view)
 }
 
 // handleWarTheaters returns GET /world/warfare/theaters
 func (s *Server) handleWarTheaters(w http.ResponseWriter, r *http.Request, playerID string) {
-	view := s.ql.WarTheaters(s.core.World(), playerID)
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	view := sess.Query.WarTheaters(sess.Core.World(), playerID)
 	writeJSON(w, http.StatusOK, view)
 }
 
@@ -450,6 +542,11 @@ func (s *Server) handleWarTheaters(w http.ResponseWriter, r *http.Request, playe
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID string) {
 	if !s.rl.Allow(playerID) {
 		writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+		return
+	}
+
+	sess := s.requireSession(w)
+	if sess == nil {
 		return
 	}
 
@@ -483,8 +580,8 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 	}
 
 	// Check for duplicate request
-	if s.queue.HasSeen(req.RequestID) {
-		ws := s.core.World()
+	if sess.Queue.HasSeen(req.RequestID) {
+		ws := sess.Core.World()
 		ws.RLock()
 		currentTick := ws.Tick
 		ws.RUnlock()
@@ -505,7 +602,7 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 					Issues:       []model.CommandIssue{issue},
 				}
 			}
-			s.recordPrecheckAudit(playerID, qr, results)
+			s.recordPrecheckAudit(sess, playerID, qr, results)
 		}
 		resp := model.CommandResponse{
 			RequestID: req.RequestID,
@@ -522,7 +619,7 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 		return
 	}
 
-	ws := s.core.World()
+	ws := sess.Core.World()
 	ws.RLock()
 	currentTick := ws.Tick
 	ws.RUnlock()
@@ -544,14 +641,14 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 			results[i].Issues = issues
 			results[i].Message = model.IssuesMessage(issues)
 			allAccepted = false
-		} else if !s.core.CanIssueCommand(playerID, cmd.Type) {
+		} else if !sess.Core.CanIssueCommand(playerID, cmd.Type) {
 			issue := model.UnauthorizedIssue("permission denied")
 			results[i].Status = model.StatusRejected
 			results[i].Code = model.CodeUnauthorized
 			results[i].Issues = []model.CommandIssue{issue}
 			results[i].Message = issue.Message
 			allAccepted = false
-		} else if issues := s.validateBusinessRules(playerID, cmd); len(issues) > 0 {
+		} else if issues := s.validateBusinessRules(sess, playerID, cmd); len(issues) > 0 {
 			// 业务规则快速预检：当前仅覆盖 start_research（研究站/矩阵存在性），
 			// 让玩家在 HTTP 层立即得到可操作的中文错误，而非异步静默失败。
 			results[i].Status = model.StatusRejected
@@ -567,10 +664,10 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 	}
 
 	if allAccepted {
-		s.queue.Enqueue(qr)
+		sess.Queue.Enqueue(qr)
 	}
 	if !allAccepted {
-		s.recordPrecheckAudit(playerID, qr, results)
+		s.recordPrecheckAudit(sess, playerID, qr, results)
 	}
 
 	resp := model.CommandResponse{
@@ -584,6 +681,10 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 
 // handleAuditQuery handles GET /audit
 func (s *Server) handleAuditQuery(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	q := r.URL.Query()
 	filter := model.AuditQuery{
 		PlayerID:   q.Get("player_id"),
@@ -647,7 +748,7 @@ func (s *Server) handleAuditQuery(w http.ResponseWriter, r *http.Request, player
 		filter.Limit = parsed
 	}
 
-	entries, err := s.core.QueryAudit(filter)
+	entries, err := sess.Core.QueryAudit(filter)
 	if err != nil {
 		writeError(w, http.StatusNotImplemented, err.Error())
 		return
@@ -659,10 +760,10 @@ func (s *Server) handleAuditQuery(w http.ResponseWriter, r *http.Request, player
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// requireAdminRole 要求管理员角色（F5）：/save /rollback 等对局级操作仅 role=admin 可调用。
-func (s *Server) requireAdminRole(w http.ResponseWriter, playerID string) bool {
+// requireAdminRole 要求管理员角色（F5）：/save /rollback /games/new 等对局级操作仅 role=admin 可调用。
+func (s *Server) requireAdminRole(w http.ResponseWriter, sess *startup.Session, playerID string) bool {
 	role := ""
-	if ws := s.core.World(); ws != nil {
+	if ws := sess.Core.World(); ws != nil {
 		ws.RLock()
 		if player := ws.Players[playerID]; player != nil {
 			role = player.Role
@@ -678,7 +779,11 @@ func (s *Server) requireAdminRole(w http.ResponseWriter, playerID string) bool {
 
 // handleSave handles POST /save
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request, playerID string) {
-	if !s.requireAdminRole(w, playerID) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	if !s.requireAdminRole(w, sess, playerID) {
 		return
 	}
 	var req model.SaveRequest
@@ -691,7 +796,8 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request, playerID str
 	if trigger == "" {
 		trigger = "manual"
 	}
-	result, err := s.core.Save(trigger)
+	// 经 Runtime 存档：与热重置互斥，避免旧局晚到的写入覆盖新局存档（F1）。
+	result, err := s.rt.Save(trigger)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -707,13 +813,17 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request, playerID str
 
 // handleReplay handles POST /replay
 func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	var req model.ReplayRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
 		return
 	}
-	resp, err := s.core.Replay(req)
+	resp, err := sess.Core.Replay(req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -723,7 +833,11 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request, playerID s
 
 // handleRollback handles POST /rollback
 func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request, playerID string) {
-	if !s.requireAdminRole(w, playerID) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
+	if !s.requireAdminRole(w, sess, playerID) {
 		return
 	}
 	var req model.RollbackRequest
@@ -732,7 +846,7 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request, playerID
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
 		return
 	}
-	resp, err := s.core.Rollback(req)
+	resp, err := sess.Core.Rollback(req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -755,8 +869,14 @@ func parseQueryInt(r *http.Request, key string, fallback int) int {
 	return value
 }
 
-// handleEventStream handles GET /events/stream (SSE)
+// handleEventStream handles GET /events/stream (SSE).
+// F1 热重置：订阅挂在当前对局的事件总线上；/games/new 后旧总线被 CloseAll，
+// 本连接随之断开，客户端需重新订阅并重新拉取全量状态。
 func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming not supported")
@@ -774,8 +894,8 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	subID := fmt.Sprintf("%s-%d", playerID, time.Now().UnixNano())
-	ch := s.bus.Subscribe(subID, eventTypes)
-	defer s.bus.Unsubscribe(subID)
+	ch := sess.Bus.Subscribe(subID, eventTypes)
+	defer sess.Bus.Unsubscribe(subID)
 
 	log.Printf("[SSE] player %s connected (sub %s)", playerID, subID)
 	defer log.Printf("[SSE] player %s disconnected", playerID)
@@ -811,7 +931,7 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 				return
 			}
 			// Apply visibility filter
-			if !s.vis.FilterEvent(evt, playerID) {
+			if !sess.Vis.FilterEvent(evt, playerID) {
 				continue
 			}
 			data, err := json.Marshal(evt)
@@ -826,6 +946,10 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request, playe
 
 // handleEventSnapshot handles GET /events/snapshot
 func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	q := r.URL.Query()
 	eventTypes, err := parseEventTypesQuery(r, true)
 	if err != nil {
@@ -843,7 +967,7 @@ func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, pla
 		sinceTick = parsed
 	}
 
-	limit := s.cfg.Server.SnapshotMaxEvents
+	limit := sess.Config.Server.SnapshotMaxEvents
 	if v := q.Get("limit"); v != "" {
 		parsed, err := strconv.Atoi(v)
 		if err != nil || parsed <= 0 {
@@ -855,16 +979,16 @@ func (s *Server) handleEventSnapshot(w http.ResponseWriter, r *http.Request, pla
 	if limit <= 0 {
 		limit = 200
 	}
-	if max := s.cfg.Server.SnapshotMaxEvents; max > 0 && limit > max {
+	if max := sess.Config.Server.SnapshotMaxEvents; max > 0 && limit > max {
 		limit = max
 	}
 
 	afterEventID := q.Get("after_event_id")
-	events, nextEventID, hasMore, availableFrom := s.core.EventHistory().Snapshot(eventTypes, afterEventID, sinceTick, limit)
+	events, nextEventID, hasMore, availableFrom := sess.Core.EventHistory().Snapshot(eventTypes, afterEventID, sinceTick, limit)
 
 	filtered := make([]*model.GameEvent, 0, len(events))
 	for _, evt := range events {
-		if s.vis.FilterEvent(evt, playerID) {
+		if sess.Vis.FilterEvent(evt, playerID) {
 			filtered = append(filtered, evt)
 		}
 	}
@@ -920,6 +1044,10 @@ func parseEventTypesQuery(r *http.Request, required bool) ([]model.EventType, er
 
 // handleProductionAlertSnapshot handles GET /alerts/production/snapshot
 func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	q := r.URL.Query()
 
 	var sinceTick int64
@@ -932,7 +1060,7 @@ func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Re
 		sinceTick = parsed
 	}
 
-	limit := s.cfg.Server.AlertHistoryLimit
+	limit := sess.Config.Server.AlertHistoryLimit
 	if v := q.Get("limit"); v != "" {
 		parsed, err := strconv.Atoi(v)
 		if err != nil || parsed <= 0 {
@@ -944,12 +1072,12 @@ func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Re
 	if limit <= 0 {
 		limit = 200
 	}
-	if max := s.cfg.Server.AlertHistoryLimit; max > 0 && limit > max {
+	if max := sess.Config.Server.AlertHistoryLimit; max > 0 && limit > max {
 		limit = max
 	}
 
 	afterAlertID := q.Get("after_alert_id")
-	alerts, nextAlertID, hasMore, availableFrom := s.core.AlertHistory().Snapshot(afterAlertID, sinceTick, limit)
+	alerts, nextAlertID, hasMore, availableFrom := sess.Core.AlertHistory().Snapshot(afterAlertID, sinceTick, limit)
 
 	filtered := make([]*model.ProductionAlert, 0, len(alerts))
 	for _, alert := range alerts {
@@ -979,20 +1107,20 @@ func validateCommandStructure(cmd model.Command) []model.CommandIssue {
 // validateBusinessRules 对特定命令做即时业务规则预检，返回问题列表。
 // 目的：让玩家在 HTTP 层得到可操作的中文错误，而非异步静默失败。
 // 仅覆盖"在接受阶段可快速判断的"情况；严格语义校验仍在 tick 时执行。
-func (s *Server) validateBusinessRules(playerID string, cmd model.Command) []model.CommandIssue {
+func (s *Server) validateBusinessRules(sess *startup.Session, playerID string, cmd model.Command) []model.CommandIssue {
 	switch cmd.Type {
 	case model.CmdStartResearch:
 		techID, _ := cmd.Payload["tech_id"].(string)
 		if techID == "" {
 			return nil // 结构校验已拒绝，不重复
 		}
-		ws := s.core.World()
+		ws := sess.Core.World()
 		if ws == nil {
 			return nil
 		}
 		ws.RLock()
 		defer ws.RUnlock()
-		return s.core.ValidateStartResearchLocked(playerID, techID, ws)
+		return sess.Core.ValidateStartResearchLocked(playerID, techID, ws)
 	}
 	return nil
 }
@@ -1014,12 +1142,12 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
-func (s *Server) recordPrecheckAudit(playerID string, qr *model.QueuedRequest, results []model.CommandResult) {
-	if s == nil || s.core == nil || qr == nil || len(results) == 0 {
+func (s *Server) recordPrecheckAudit(sess *startup.Session, playerID string, qr *model.QueuedRequest, results []model.CommandResult) {
+	if s == nil || sess == nil || sess.Core == nil || qr == nil || len(results) == 0 {
 		return
 	}
 
-	ws := s.core.World()
+	ws := sess.Core.World()
 	ws.RLock()
 	tick := ws.Tick
 	role := ""
@@ -1060,7 +1188,7 @@ func (s *Server) recordPrecheckAudit(playerID string, qr *model.QueuedRequest, r
 				"enqueue_tick":   qr.EnqueueTick,
 			},
 		}
-		s.core.AppendAudit(entry)
+		sess.Core.AppendAudit(entry)
 	}
 }
 

@@ -140,11 +140,13 @@
 
 ### 调试与运维类
 
-| 命令       | 参数                | 说明                                                |
-| ---------- | ------------------- | --------------------------------------------------- |
-| `save`     | `[--reason <text>]` | 调用 `POST /save`，刷新当前游戏目录中的 `save.json` |
-| `replay`   | `[options]`         | 调用 `POST /replay`                                 |
-| `rollback` | `[options]`         | 调用 `POST /rollback`                               |
+| 命令          | 参数                                                   | 说明                                                                     |
+| ------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `save`        | `[--reason <text>]`                                    | 调用 `POST /save`，刷新当前游戏目录中的 `save.json`                      |
+| `replay`      | `[options]`                                            | 调用 `POST /replay`                                                      |
+| `rollback`    | `[options]`                                            | 调用 `POST /rollback`                                                    |
+| `game_new`    | `[--seed s] [--difficulty d] [--victory m] --players json` | 调用 `POST /games/new`（F1 热重置，仅 admin），开一局全新游戏          |
+| `game_status` | -                                                      | 调用 `GET /games/current`，查看当前对局概要（seed/tick/玩家，不含 key） |
 
 ### Agent Gateway 类
 
@@ -719,6 +721,22 @@ save --reason <text>
 
 - `--reason` 可选，用来给这次手动保存打标签；不传时仍会正常保存。
 - `save` 不会新建多槽位，只会刷新服务端当前 `server.data_dir` 下的 `save.json`。
+
+## `game_new` / `game_status` 选项（F1 新局热重置）
+
+```bash
+game_status
+game_new --seed seed-42 --difficulty off --victory sandbox \
+  --players '[{"player_id":"p1","key":"k1","role":"admin"},{"player_id":"p2","key":"k2","bot":"normal"}]'
+game_new --players-file ./players.json
+```
+
+- `game_new` 调用 `POST /games/new`，丢弃当前对局并开一局全新的游戏；**仅 `role=admin` 的玩家可调用**，其余角色返回 403。
+- `--seed` 可选，缺省时服务端随机生成地图种子；地图拓扑沿用服务端启动时的 mapconfig 文件，不能在这里改星球规模。
+- `--difficulty` 可选 `off|easy|normal|hard`（默认 `normal`）；`--victory` 可选 `elimination|mission_complete|hybrid|sandbox`（默认 `elimination`，`sandbox` 永不判胜）。
+- `--players` 必填（或与 `--players-file <path>` 二选一），值为玩家定义 JSON 数组；每个玩家 `player_id`/`key` 必填且全局唯一，`role`/`team_id`/`bot`/`bootstrap` 可选，字段语义与 `config.yaml` 一致。
+- 成功后旧局玩家的 key 全部失效：CLI 会自动切换到新局第一个 `admin`（缺省时第一个玩家）的身份；SSE 事件流随后自动重连，之前的 tick/事件/建筑 id 都不再有效。
+- `game_status` 调用 `GET /games/current`，任意登录玩家可用，输出当前对局的 seed/tick/难度/胜利模式/玩家列表（不含 key）。
 
 ## `replay` / `rollback` 选项
 

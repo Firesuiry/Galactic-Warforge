@@ -55,6 +55,18 @@ export type {
   WarTaskForceStance,
   WarTheaterZoneType,
 } from '../../shared-client/src/types.js';
+export type {
+  GamePlayerSummary,
+  GameSummary,
+  GameVictorySummary,
+  NewGameBootstrap,
+  NewGameBootstrapItem,
+  NewGameBotDifficulty,
+  NewGameEnemyDifficulty,
+  NewGamePlayer,
+  NewGameRequest,
+  NewGameVictoryMode,
+} from '../../shared-client/src/game.js';
 
 const client = createApiClient({
   serverUrl: SERVER_URL,
@@ -94,6 +106,7 @@ export const cmdFleetDisband = client.cmdFleetDisband;
 export const cmdFleetMove = client.cmdFleetMove;
 export const cmdLaunchRocket = client.cmdLaunchRocket;
 export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;
+export const createNewGame = client.createNewGame;
 export const cmdMove = client.cmdMove;
 export const cmdUnitOrder = client.cmdUnitOrder;
 export const cmdProduce = client.cmdProduce;
@@ -127,6 +140,7 @@ export const cmdUpgrade = client.cmdUpgrade;
 export const fetchAlertSnapshot = client.fetchAlertSnapshot;
 export const fetchAudit = client.fetchAudit;
 export const fetchCatalog = client.fetchCatalog;
+export const fetchCurrentGame = client.fetchCurrentGame;
 export const fetchCommandCatalog = client.fetchCommandCatalog;
 export const fetchEventSnapshot = client.fetchEventSnapshot;
 export const fetchFleet = client.fetchFleet;

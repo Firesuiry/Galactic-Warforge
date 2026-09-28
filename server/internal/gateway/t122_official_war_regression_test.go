@@ -25,8 +25,8 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 	srv, app := newOfficialWarServerT122(t)
 
 	p1 := warAuthT122{playerID: "p1", playerKey: "key_player_1"}
-	planetID := app.Core.World().PlanetID
-	systemID := app.Maps.PrimaryPlanet().SystemID
+	planetID := app.Current().Core.World().PlanetID
+	systemID := app.Current().Maps.PrimaryPlanet().SystemID
 
 	p1FactoryID := findOwnedBuildingIDT122(t, srv, p1, planetID, "p1", "recomposing_assembler")
 	p1HubID := findOwnedBuildingIDT122(t, srv, p1, planetID, "p1", "battlefield_analysis_base")
@@ -97,7 +97,7 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 	fleetBody := getAuthorizedJSONT122(t, srv, p1, "/world/fleets/fleet-gateway-t122")
 	assertFleetHasSupplyT122(t, fleetBody)
 
-	ws := app.Core.World()
+	ws := app.Current().Core.World()
 	ws.Lock()
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: systemID,
@@ -178,7 +178,7 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 	}, "official war blockade did not reach active orbital superiority state")
 }
 
-func newOfficialWarServerT122(t *testing.T) (*gateway.Server, *startup.App) {
+func newOfficialWarServerT122(t *testing.T) (*gateway.Server, *startup.Runtime) {
 	t.Helper()
 
 	cfgPath := filepath.Join("..", "..", "config-war.yaml")
@@ -200,10 +200,10 @@ func newOfficialWarServerT122(t *testing.T) (*gateway.Server, *startup.App) {
 	if err != nil {
 		t.Fatalf("load official war runtime: %v", err)
 	}
-	go app.Core.Run()
+	app.Start()
 	t.Cleanup(app.Stop)
 
-	return gateway.New(app.Config, app.Core, app.Bus, app.Queue), app
+	return gateway.New(app), app
 }
 
 func postCommandsT122(t *testing.T, srv *gateway.Server, auth warAuthT122, commands []model.Command) model.CommandResponse {
@@ -308,10 +308,10 @@ func readyPayloadCountT122(industryBody map[string]any, hubID, blueprintID strin
 	return 0
 }
 
-func productionReadyTimeoutT122(t *testing.T, app *startup.App, playerID, factoryID, blueprintID string) time.Duration {
+func productionReadyTimeoutT122(t *testing.T, app *startup.Runtime, playerID, factoryID, blueprintID string) time.Duration {
 	t.Helper()
 
-	ws := app.Core.World()
+	ws := app.Current().Core.World()
 	if ws == nil {
 		t.Fatal("expected active world for authoritative war runtime")
 	}
@@ -344,7 +344,7 @@ func productionReadyTimeoutT122(t *testing.T, app *startup.App, playerID, factor
 		assemblyTicks = 12
 	}
 
-	tickRate := app.Config.Battlefield.MaxTickRate
+	tickRate := app.Current().Config.Battlefield.MaxTickRate
 	if tickRate <= 0 {
 		tickRate = 1
 	}

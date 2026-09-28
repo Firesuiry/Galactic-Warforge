@@ -7,6 +7,10 @@ import (
 )
 
 func (s *Server) handlePlanetPath(w http.ResponseWriter, r *http.Request, playerID string) {
+	sess := s.requireSession(w)
+	if sess == nil {
+		return
+	}
 	x, errX := strconv.Atoi(r.URL.Query().Get("target_x"))
 	y, errY := strconv.Atoi(r.URL.Query().Get("target_y"))
 	stop := 0
@@ -18,7 +22,7 @@ func (s *Server) handlePlanetPath(w http.ResponseWriter, r *http.Request, player
 		writeError(w, http.StatusBadRequest, "target_x, target_y and stop_range must be integers")
 		return
 	}
-	view, err := s.ql.PlanetPath(s.core.WorldForPlanet(r.PathValue("planet_id")), playerID, r.URL.Query().Get("unit_id"), model.Position{X: x, Y: y}, stop)
+	view, err := sess.Query.PlanetPath(sess.Core.WorldForPlanet(r.PathValue("planet_id")), playerID, r.URL.Query().Get("unit_id"), model.Position{X: x, Y: y}, stop)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

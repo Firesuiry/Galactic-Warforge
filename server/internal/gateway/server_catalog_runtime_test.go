@@ -13,6 +13,7 @@ import (
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
+	"siliconworld/internal/startup"
 )
 
 func TestPlanetRuntimeEndpoint(t *testing.T) {
@@ -81,7 +82,7 @@ func newTwoPlanetRuntimeServer(t *testing.T) (*gateway.Server, *gamecore.GameCor
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	return gateway.New(cfg, core, bus, q), core
+	return gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q))), core
 }
 
 func TestPlanetRuntimeEndpointUsesLoadedPlanetRuntime(t *testing.T) {

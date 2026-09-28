@@ -35,13 +35,14 @@
 - 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
 - `save.json` 以 gzip 压缩存储（文件名不变）；读取时按 gzip 魔数自动识别，旧版本写出的未压缩明文 `save.json` 可正常续档，下次保存自动转为压缩格式。
 - 第一版不做多槽位或命名存档点，自动保存与手动保存都会覆盖同一份 `save.json`。
+- 热重置（F1）：`POST /games/new` 在不重启进程的前提下丢弃当前对局、覆盖上述目录中的 `meta.json` 与 `save.json` 并切到新局；旧的 tick 快照/命令日志不跨局共享（快照 store 按局隔离），audit 审计历史也从新局重新开始累计。
 - 第一版不持久化 RNG 状态；续档后未来随机事件不保证与不停服持续运行时完全一致。
 - `save.json.runtime_state` 现在会额外持久化 `winner` / `victory_reason` / `victory_rule` / `victory_tech_id`，保证科技胜利、续档、回放、回滚后的胜利态一致。
 - `save.json.snapshot.space` 现在会持久化 top-level `SpaceRuntimeState`；太阳帆 orbit 已按 `player + system` 分桶进入同一份 snapshot-backed runtime，续档、回放、回滚会保留一致的空间实体计数与轨道状态。
 
 **普通新局默认入口**
 - `config-dev.yaml + map.yaml` 现在就是一条可直接从 fresh save 起步的官方路线。
-- `battlefield.victory_rule` 当前支持 `elimination`、`mission_complete`、`hybrid` 三种取值；仓库内当前提供的 `config.yaml`、`config-dev.yaml`、`config-midgame.yaml` 都显式设置为 `hybrid`，即 `mission_complete` 科研胜利与基地消灭胜同时有效。
+- `battlefield.victory_rule` 当前支持 `elimination`、`mission_complete`、`hybrid`、`sandbox` 四种取值（`sandbox` 永不判胜）；仓库内当前提供的 `config.yaml`、`config-dev.yaml`、`config-midgame.yaml` 都显式设置为 `hybrid`，即 `mission_complete` 科研胜利与基地消灭胜同时有效。
 - 默认新局里，每名玩家仍只预完成 `dyson_sphere_program`；这门 0 级科技会直接解锁整套基础工业建筑：`matrix_lab`、`wind_turbine`、`mining_machine`、`arc_smelter`、`tesla_tower`、`conveyor_belt_mk1`、`sorter_mk1`、`assembling_machine_mk1`，因此默认新局从拍风机、接电塔、压矿机开始，无需先研究。
 - `config-dev.yaml` 会为每名玩家预置一份最小启动包：
   - `minerals = 240`
@@ -2196,8 +2197,74 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 
 ---
 
+**GET /games/current**
+- 说明（F1 新局热重置）: 返回当前对局概要（需认证，任意登录玩家），供大厅 UI / CLI 使用。
+- 响应字段:
+  - `map_seed`：当前对局地图种子
+  - `enemy_difficulty`：黑雾难度（`off|easy|normal|hard`）
+  - `victory_mode`：胜利判定模式（`elimination|mission_complete|hybrid|sandbox`；`sandbox` 永不判胜）
+  - `max_tick_rate`、`active_planet_id`、`tick`、`started_at`（对局开始时间，RFC3339）
+  - `players`：玩家概要数组（`player_id`/`role`/`team_id`/`bot`/`is_alive`），**绝不含登录 key**
+  - `victory`：`{declared, winner_id?, team_id?, reason?}`
+- 响应示例:
+```json
+{
+  "map_seed": "seed-001",
+  "enemy_difficulty": "normal",
+  "victory_mode": "elimination",
+  "max_tick_rate": 10,
+  "active_planet_id": "planet-1-1",
+  "tick": 4386,
+  "started_at": "2026-09-29T12:00:00Z",
+  "players": [
+    {"player_id": "p1", "role": "admin", "team_id": "p1", "is_alive": true},
+    {"player_id": "p2", "role": "commander", "team_id": "p2", "bot": "easy", "is_alive": true}
+  ],
+  "victory": {"declared": false}
+}
+```
+
+---
+
+**POST /games/new**
+- 说明（F1 单局热重置）: 丢弃当前对局并开一局全新的游戏（需认证，**仅 `role=admin`**，与 `/save` `/rollback` 同一道门）。
+- 语义:
+  - 重建整个 GameCore（新命令队列、新事件总线、新世界状态），旧局状态全部清理后原子切换到新局；不支持多局并存。
+  - 校验全部通过后才会落盘：新局会先写入 `server.data_dir` 下的 `meta.json` / `save.json`（覆盖旧局），再切换对外服务；写盘失败时旧局保持不变并返回 500。
+  - 切换完成后：旧局玩家的登录 key 立即失效（401）；挂在旧事件总线上的 SSE 订阅被断开；tick 循环与 autosave 指向新局。
+  - 并发多个 `/games/new` 按到达顺序排队执行（互斥），后到者覆盖先到者创建的对局，均返回 201。
+- 请求体:
+```json
+{
+  "map_seed": "seed-42",
+  "enemy_difficulty": "off",
+  "victory_mode": "sandbox",
+  "players": [
+    {"player_id": "p1", "key": "key_a", "role": "admin"},
+    {"player_id": "p2", "key": "key_b", "role": "commander", "team_id": "team-b", "bot": "normal",
+     "bootstrap": {"minerals": 500, "energy": 200, "inventory": [{"item_id": "frame_material", "quantity": 6}], "completed_techs": ["gas_giants"]}}
+  ]
+}
+```
+- 字段说明:
+  - `map_seed`：可选；缺省时由服务端随机生成。**地图拓扑沿用服务端启动时的 mapconfig 文件，不支持在请求体里覆盖地图配置**（未知字段会返回 400）。
+  - `enemy_difficulty`：可选 `off|easy|normal|hard`，默认 `normal`。
+  - `victory_mode`：可选 `elimination`（默认，现状逻辑）|`mission_complete`|`hybrid`|`sandbox`（永不判胜）。
+  - `players`：必填非空数组；`player_id` 与 `key` 必填且在局内唯一；`role` 可选 `admin|commander|observer`（默认 `commander`）；`team_id` 可选（默认取 `player_id`）；`bot` 可选 `easy|normal|hard`（空为人类玩家，bot 走与玩家相同的命令接口）；`bootstrap` 可选，结构与 `config.yaml` 的 `players[].bootstrap` 一致。
+  - 进程级配置（端口、tick 速率、快照策略、autosave 间隔等 server 段）在热重置后保持不变。
+- 响应: `201 Created`，响应体为与 `GET /games/current` 相同结构的新局概要（`tick=0`）。
+- 错误码:
+  - `400`：请求体非法（JSON 解析失败、字段取值非法、players 为空、`player_id`/`key` 缺失或重复、未知字段等）
+  - `401`：未认证或 key 无效
+  - `403`：调用者不是 `role=admin`
+  - `500`：新局初始存档写盘失败（旧局不受影响）
+- 客户端须知: 热重置成功后必须**用新局玩家的 key 重新登录**，并**重新订阅 `GET /events/stream` 且重新拉取全量状态**（`/state/summary`、`/world/*` 等）；旧局的一切 tick、事件 id、建筑 id 都不再有效。
+
+---
+
 **GET /events/stream**
 - 说明: SSE 事件流（需认证）
+- F1 热重置语义: 订阅挂在当前对局的事件总线上；`POST /games/new` 成功后旧总线上的所有订阅被服务端主动断开，客户端必须重新订阅并重新拉取全量状态。
 - 查询参数:
   - `event_types`（必填）：显式订阅的事件类型列表，逗号分隔；传 `all` 表示全部事件类型
 - 事件格式: `event: connected` + `data: {"player_id":"p1","event_types":["command_result"]}`；`event: game` + `data: <GameEvent JSON>`
