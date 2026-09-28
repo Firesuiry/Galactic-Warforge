@@ -16,7 +16,6 @@ export interface AgentMilitaryCommandRuntimePolicy {
   allowedCommandIds?: string[];
   maxMilitaryProductionCount?: number;
   allowBlockade?: boolean;
-  allowLanding?: boolean;
   allowMilitaryProduction?: boolean;
 }
 
@@ -45,7 +44,6 @@ const MILITARY_COMMANDS = new Set([
   'task_force_set_stance',
   'task_force_deploy',
   'blockade_planet',
-  'landing_start',
 ]);
 
 const MILITARY_PRODUCTION_COMMANDS = new Set([
@@ -99,14 +97,6 @@ function parseCommandMetadata(line: string): CommandScopeMetadata {
       }
       return metadata;
     case 'blockade_planet':
-      if (parsed.positionals[0]) {
-        metadata.taskForceIds.push(parsed.positionals[0]);
-      }
-      if (parsed.positionals[1]) {
-        metadata.planetIds.push(parsed.positionals[1]);
-      }
-      return metadata;
-    case 'landing_start':
       if (parsed.positionals[0]) {
         metadata.taskForceIds.push(parsed.positionals[0]);
       }
@@ -207,9 +197,6 @@ async function validateMilitaryCommand(
   }
   if (metadata.commandName === 'blockade_planet' && !military.allowBlockade) {
     throw new Error('blockade_planet requires player approval');
-  }
-  if (metadata.commandName === 'landing_start' && !military.allowLanding) {
-    throw new Error('landing_start requires player approval');
   }
   if (MILITARY_PRODUCTION_COMMANDS.has(metadata.commandName) && !military.allowMilitaryProduction) {
     throw new Error(`${metadata.commandName} requires player approval`);

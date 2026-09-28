@@ -311,7 +311,6 @@ func TestT091SRPlasmaTurretDamagesEnemyForceWhenPowered(t *testing.T) {
 			Position:     model.Position{X: 7, Y: 6},
 			Strength:     120,
 			SpreadRadius: 1,
-			TargetPlayer: "p1",
 		}},
 	}
 

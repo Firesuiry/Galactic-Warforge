@@ -150,7 +150,10 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			// Attack enemy unit
 			unit := ws.Units[targetedUnit]
 			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
-			damage, absorbed := model.ApplyUnitDamage(unit, max(1, attack-unit.Defense), ws.Tick)
+			normalizeUnitCombatStats(unit)
+			turretWeapon := model.WeaponClassForBuilding(turret.Type)
+			raw := max(1, int(float64(max(1, attack-unit.Defense))*model.ResolveDamageCoefficient(turretWeapon, unit.ArmorClass)))
+			damage, absorbed := model.ApplyUnitDamage(unit, raw, ws.Tick)
 			if unit.Mecha != nil {
 				events = append(events, mechaStateEvent(unit))
 			}

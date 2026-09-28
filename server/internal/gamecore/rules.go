@@ -840,11 +840,11 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 		return res, nil
 	}
 
-	execState, _, execRes := gc.requireExecutor(ws, playerID, building.Position)
-	if execRes != nil {
-		return *execRes, nil
+	if rangeRes := gc.requireBuildRange(ws, playerID, building.Position); rangeRes != nil {
+		return *rangeRes, nil
 	}
-	if !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+	playerState := ws.Players[playerID]
+	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
 		res.Code = model.CodeExecutorBusy
 		res.Message = "executor is busy"
 		return res, nil
@@ -863,19 +863,10 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 
 	stats := model.UnitStats(utype)
 	id := ws.NextEntityID("u")
-	u := &model.Unit{
-		ID:          id,
-		Type:        utype,
-		OwnerID:     playerID,
-		Position:    *spawnPos,
-		HP:          stats.HP,
-		MaxHP:       stats.MaxHP,
-		Attack:      stats.Attack,
-		Defense:     stats.Defense,
-		AttackRange: stats.AttackRange,
-		MoveRange:   stats.MoveRange,
-		VisionRange: stats.VisionRange,
-	}
+	u := &stats
+	u.ID = id
+	u.OwnerID = playerID
+	u.Position = *spawnPos
 	ws.Units[id] = u
 	tileKey := model.TileKey(spawnPos.X, spawnPos.Y)
 	ws.TileUnits[tileKey] = append(ws.TileUnits[tileKey], id)
@@ -965,11 +956,11 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		return res, nil
 	}
 
-	execState, _, execRes := gc.requireExecutor(ws, playerID, building.Position)
-	if execRes != nil {
-		return *execRes, nil
+	if rangeRes := gc.requireBuildRange(ws, playerID, building.Position); rangeRes != nil {
+		return *rangeRes, nil
 	}
-	if !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+	playerState := ws.Players[playerID]
+	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
 		res.Code = model.CodeExecutorBusy
 		res.Message = "executor is busy"
 		return res, nil
@@ -1084,11 +1075,11 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		return res, nil
 	}
 
-	execState, _, execRes := gc.requireExecutor(ws, playerID, building.Position)
-	if execRes != nil {
-		return *execRes, nil
+	if rangeRes := gc.requireBuildRange(ws, playerID, building.Position); rangeRes != nil {
+		return *rangeRes, nil
 	}
-	if !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+	playerState := ws.Players[playerID]
+	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
 		res.Code = model.CodeExecutorBusy
 		res.Message = "executor is busy"
 		return res, nil
@@ -1967,7 +1958,7 @@ func resourceNodeForBuilding(ws *model.WorldState, building *model.Building) *mo
 	return ws.Resources[nodeID]
 }
 
-func resolveVictory(rule string, worlds map[string]*model.WorldState, activeWorld *model.WorldState) model.VictoryState {
+func resolveVictory(rule string, worlds map[string]*model.WorldState) model.VictoryState {
 	rule = model.NormalizeVictoryRule(rule)
 	if model.VictoryRuleAllowsMissionComplete(rule) {
 		if victory := resolveMissionCompleteVictory(worlds, rule); victory.Declared() {
@@ -1975,7 +1966,7 @@ func resolveVictory(rule string, worlds map[string]*model.WorldState, activeWorl
 		}
 	}
 	if model.VictoryRuleAllowsElimination(rule) {
-		return resolveEliminationVictory(activeWorld, rule)
+		return resolveEliminationVictory(worlds, rule)
 	}
 	return model.VictoryState{}
 }
@@ -2004,45 +1995,109 @@ func resolveMissionCompleteVictory(worlds map[string]*model.WorldState, rule str
 	}
 }
 
-func resolveEliminationVictory(ws *model.WorldState, rule string) model.VictoryState {
-	winner := checkVictory(ws)
-	if winner == "" {
+// resolveEliminationVictory 淘汰胜利（F3 修正版）：
+//   - 存活判定覆盖所有已加载世界：玩家在任一世界拥有 HQ 或存活机甲单位即视为在场；
+//   - 单人配置不判淘汰（沙盒/PvE 可以输但没有"胜者"）；
+//   - 团队对局按队伍判定：仅存一队的全部存活玩家时团队获胜；
+//   - 全部同时淘汰（同归于尽）不判胜。
+func resolveEliminationVictory(worlds map[string]*model.WorldState, rule string) model.VictoryState {
+	players := make(map[string]*model.PlayerState)
+	worldIDs := make([]string, 0, len(worlds))
+	for id := range worlds {
+		worldIDs = append(worldIDs, id)
+	}
+	sort.Strings(worldIDs)
+	for _, id := range worldIDs {
+		ws := worlds[id]
+		if ws == nil {
+			continue
+		}
+		for pid, p := range ws.Players {
+			if p == nil {
+				continue
+			}
+			if players[pid] == nil {
+				players[pid] = p
+			}
+		}
+	}
+	if len(players) < 2 {
 		return model.VictoryState{}
 	}
-	return model.VictoryState{
-		WinnerID:    winner,
-		Reason:      model.VictoryReasonElimination,
-		VictoryRule: rule,
-	}
-}
 
-// checkVictory determines if a player has won by elimination (opponent lost base).
-func checkVictory(ws *model.WorldState) string {
-	if ws == nil {
-		return ""
-	}
-	playerBases := make(map[string]bool)
-	for _, b := range ws.Buildings {
-		if b.Type == model.BuildingTypeBattlefieldAnalysisBase {
-			playerBases[b.OwnerID] = true
+	// 在场判定：任一世界的 HQ 或存活机甲单位。
+	presence := make(map[string]bool, len(players))
+	for _, id := range worldIDs {
+		ws := worlds[id]
+		if ws == nil {
+			continue
+		}
+		for _, b := range ws.Buildings {
+			if b != nil && b.Type == model.BuildingTypeBattlefieldAnalysisBase && b.HP > 0 {
+				presence[b.OwnerID] = true
+			}
+		}
+		for _, u := range ws.Units {
+			if u != nil && u.HP > 0 && u.Mecha != nil {
+				presence[u.OwnerID] = true
+			}
 		}
 	}
-	for pid, p := range ws.Players {
-		if p.IsAlive && !playerBases[pid] {
-			p.IsAlive = false
+	// 淘汰：存活但不在场的玩家出局（所有世界的玩家副本同步）。
+	eliminated := false
+	for pid, p := range players {
+		if p.IsAlive && !presence[pid] {
+			eliminated = true
+			for _, id := range worldIDs {
+				if ws := worlds[id]; ws != nil {
+					if copy := ws.Players[pid]; copy != nil {
+						copy.IsAlive = false
+					}
+				}
+			}
 		}
 	}
+	_ = eliminated
 
 	var alive []string
-	for pid, p := range ws.Players {
+	for pid, p := range players {
 		if p.IsAlive {
 			alive = append(alive, pid)
 		}
 	}
-	if len(alive) == 1 {
-		return alive[0]
+	sort.Strings(alive)
+	if len(alive) == 0 {
+		return model.VictoryState{}
 	}
-	return ""
+	// 团队判定：存活玩家是否同属一队。
+	teams := make(map[string]bool)
+	for _, pid := range alive {
+		teams[players[pid].TeamID] = true
+	}
+	if len(teams) == 1 {
+		team := ""
+		for t := range teams {
+			team = t
+		}
+		victory := model.VictoryState{
+			WinnerID:    alive[0],
+			Reason:      model.VictoryReasonElimination,
+			VictoryRule: rule,
+		}
+		if team != "" && team != alive[0] {
+			victory.TeamID = team
+		}
+		return victory
+	}
+	// FFA：仅剩一人。
+	if len(alive) == 1 {
+		return model.VictoryState{
+			WinnerID:    alive[0],
+			Reason:      model.VictoryReasonElimination,
+			VictoryRule: rule,
+		}
+	}
+	return model.VictoryState{}
 }
 
 func victoryDeclaredEvent(victory model.VictoryState) *model.GameEvent {
@@ -2056,6 +2111,9 @@ func victoryDeclaredEvent(victory model.VictoryState) *model.GameEvent {
 	}
 	if victory.TechID != "" {
 		payload["tech_id"] = victory.TechID
+	}
+	if victory.TeamID != "" {
+		payload["team_id"] = victory.TeamID
 	}
 	return &model.GameEvent{
 		EventType:       model.EvtVictoryDeclared,

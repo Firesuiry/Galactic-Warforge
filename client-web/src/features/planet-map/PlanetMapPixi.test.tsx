@@ -58,7 +58,7 @@ describe('PlanetMapPixi 交互（拖拽/缩放/点选）', () => {
     resetPlanetViewStore();
   });
 
-  it('拖拽的 N 次 pointermove 经 rAF 合帧为 ~1 次相机提交', async () => {
+  it('右键拖拽的 N 次 pointermove 经 rAF 合帧为 ~1 次相机提交', async () => {
     seedStores();
     const planet = getFixtureScenario('baseline').planets['planet-1-1'];
     const { container } = render(createElement(PlanetMapPixi, { planet, fog: buildFullyVisibleFog() }));
@@ -78,9 +78,10 @@ describe('PlanetMapPixi 交互（拖拽/缩放/点选）', () => {
     const startY = 200;
     const N = 30;
 
-    // 按下后连续 N 次 pointermove（同一帧内到达，模拟真实快速拖拽）。
+    // 右键按下后连续 N 次 pointermove（同一帧内到达，模拟真实快速拖拽）。
+    // inspect 模式左键拖动已让位给框选（C1），相机平移走右键/中键拖动。
     await act(async () => {
-      surface.dispatchEvent(new PointerEventCtor('pointerdown', { clientX: startX, clientY: startY, bubbles: true }));
+      surface.dispatchEvent(new PointerEventCtor('pointerdown', { button: 2, clientX: startX, clientY: startY, bubbles: true }));
       for (let i = 1; i <= N; i += 1) {
         surface.dispatchEvent(new PointerEventCtor('pointermove', { clientX: startX + i, clientY: startY, bubbles: true }));
       }

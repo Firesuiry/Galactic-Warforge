@@ -26,7 +26,6 @@ export interface CanonicalAgentMilitaryPolicy {
   allowedCommandIds: string[];
   maxMilitaryProductionCount: number;
   allowBlockade: boolean;
-  allowLanding: boolean;
   allowMilitaryProduction: boolean;
 }
 
@@ -137,7 +136,6 @@ export const AGENT_ACTION_SCHEMA = {
                   allowedCommandIds: { type: 'array', items: { type: 'string' } },
                   maxMilitaryProductionCount: { type: 'number' },
                   allowBlockade: { type: 'boolean' },
-                  allowLanding: { type: 'boolean' },
                   allowMilitaryProduction: { type: 'boolean' },
                 },
               },
@@ -269,9 +267,6 @@ function normalizeOptionalPolicy(value: unknown, fieldName: string) {
     }
     if (militaryRecord.allowBlockade !== undefined) {
       military.allowBlockade = normalizeBoolean(militaryRecord.allowBlockade, `${fieldName}.military.allowBlockade`);
-    }
-    if (militaryRecord.allowLanding !== undefined) {
-      military.allowLanding = normalizeBoolean(militaryRecord.allowLanding, `${fieldName}.military.allowLanding`);
     }
     if (militaryRecord.allowMilitaryProduction !== undefined) {
       military.allowMilitaryProduction = normalizeBoolean(

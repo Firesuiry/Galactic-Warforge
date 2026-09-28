@@ -344,11 +344,6 @@ func commandStructureRegistry() []CommandStructureSpec {
 			RequiredPayloadFields: []string{"task_force_id", "planet_id"},
 		},
 		{
-			Type:                  CmdLandingStart,
-			RequiredPayloadFields: []string{"task_force_id", "planet_id"},
-			OptionalPayloadFields: []string{"operation_id"},
-		},
-		{
 			Type:                  CmdBlueprintCreate,
 			RequiredPayloadFields: []string{"blueprint_id", "domain"},
 			OptionalPayloadFields: []string{"name", "base_frame_id", "base_hull_id"},

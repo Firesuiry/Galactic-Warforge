@@ -51,8 +51,6 @@ export function shouldRefreshWarTaskForces(event: GameEventDetail) {
     'fleet_disbanded',
     'fleet_assigned',
     'fleet_attack_started',
-    'landing_started',
-    'landing_failed',
     'supply_line_disrupted',
   ].includes(event.event_type)) {
     return true;
@@ -61,6 +59,9 @@ export function shouldRefreshWarTaskForces(event: GameEventDetail) {
 }
 
 export function shouldRefreshWarTheaters(event: GameEventDetail) {
+  if (event.event_type === 'theater_zone_alert') {
+    return true;
+  }
   return isCommandEvent(event, ['theater']);
 }
 
@@ -93,8 +94,7 @@ export function shouldRefreshWarSystemRuntime(event: GameEventDetail) {
     'fleet_attack_started',
     'fleet_move_started',
     'fleet_arrived',
-    'landing_started',
-    'landing_failed',
+    'theater_zone_alert',
     'supply_line_disrupted',
     'damage_applied',
     'entity_destroyed',
@@ -103,7 +103,6 @@ export function shouldRefreshWarSystemRuntime(event: GameEventDetail) {
   }
   return isCommandEvent(event, [
     'blockade_planet',
-    'landing_start',
     'commission_fleet',
     'fleet',
     'task_force_deploy',

@@ -449,6 +449,8 @@ export interface PlanetSceneEntitiesInput {
 export interface PlanetSceneInteractionInput {
   hoveredTile: TilePoint | null;
   selected: SelectedEntity | null;
+  /** 多选单位（框选/编队/双击同类）：在主选中环外追加小选中框。 */
+  selectedUnits?: string[];
   mode: PlanetInteractionMode;
   /** build 模式幽灵预览的评估结果（由组件用 assessBuildTiles 预先算好）。 */
   buildAssessment?: BuildTileAssessment;
@@ -2506,8 +2508,8 @@ export class PlanetScene {
       return;
     }
 
-    // 移动/攻击模式：目标点准星高亮
-    if (!overviewMode && (mode.kind === 'move' || mode.kind === 'attack') && hoveredTile) {
+    // 移动/攻击/单位指令模式：目标点准星高亮
+    if (!overviewMode && (mode.kind === 'move' || mode.kind === 'attack' || mode.kind === 'unit_order') && hoveredTile) {
       const screenX = this.pxTileX(hoveredTile.x);
       const screenY = this.pxTileY(hoveredTile.y);
       const color = mode.kind === 'move' ? COLOR_GHOST_OK : COLOR_GHOST_BLOCKED;
@@ -2524,6 +2526,20 @@ export class PlanetScene {
 
     if (!input.selectionVisible) {
       return;
+    }
+
+    // 多选单位：每个单位节点一个小选中框（主选中环之外追加，随单位平滑移动）。
+    const primaryUnitId = selected?.kind === 'unit' ? selected.id : null;
+    for (const unitId of input.selectedUnits ?? []) {
+      if (unitId === primaryUnitId) {
+        continue;
+      }
+      const node = this.unitNodes.get(unitId);
+      if (!node) {
+        continue;
+      }
+      g.rect(node.posX - ts / 2 + 1.5, node.posY - ts / 2 + 1.5, Math.max(ts - 3, 2), Math.max(ts - 3, 2))
+        .stroke({ width: 2, color: COLOR_SELECTED });
     }
 
     const selectedPosition = this.baseInput ? resolveSelectionPosition(this.baseInput.planet, selected) : null;

@@ -39,10 +39,11 @@ describe('war SSE invalidation helpers', () => {
     }
   });
 
-  it('舰队/封锁/登陆/补给事件按语义广覆盖', () => {
+  it('舰队/战区警戒/补给事件按语义广覆盖', () => {
     expect(shouldRefreshWarFleets(event('fleet_commissioned'))).toBe(true);
     expect(shouldRefreshWarFleets(event('fleet_disbanded'))).toBe(true);
-    expect(shouldRefreshWarTaskForces(event('landing_started'))).toBe(true);
+    expect(shouldRefreshWarTheaters(event('theater_zone_alert'))).toBe(true);
+    expect(shouldRefreshWarSystemRuntime(event('theater_zone_alert'))).toBe(true);
     expect(shouldRefreshWarTaskForces(event('supply_line_disrupted'))).toBe(true);
     expect(shouldRefreshWarIndustry(event('squad_deployed'))).toBe(true);
     expect(shouldRefreshWarIndustry(event('supply_line_disrupted'))).toBe(true);

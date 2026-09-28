@@ -7,7 +7,6 @@ export function createDefaultMilitaryPolicy(): AgentMilitaryPolicy {
     allowedCommandIds: [],
     maxMilitaryProductionCount: 0,
     allowBlockade: false,
-    allowLanding: false,
     allowMilitaryProduction: false,
   };
 }
@@ -25,7 +24,6 @@ export function normalizeMilitaryPolicy(
     allowedCommandIds: policy?.allowedCommandIds ?? fallback.allowedCommandIds,
     maxMilitaryProductionCount: policy?.maxMilitaryProductionCount ?? fallback.maxMilitaryProductionCount,
     allowBlockade: policy?.allowBlockade ?? fallback.allowBlockade,
-    allowLanding: policy?.allowLanding ?? fallback.allowLanding,
     allowMilitaryProduction: policy?.allowMilitaryProduction ?? fallback.allowMilitaryProduction,
   };
 }

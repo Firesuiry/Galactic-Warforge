@@ -48,7 +48,6 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
   const taskForceIds = parseCsv(getStringOption(parsed, 'task-force-ids'));
   const allowedCommandIds = parseCsv(getStringOption(parsed, 'military-command-ids'));
   const allowBlockade = parseBooleanOption(getStringOption(parsed, 'allow-blockade'), 'allow-blockade');
-  const allowLanding = parseBooleanOption(getStringOption(parsed, 'allow-landing'), 'allow-landing');
   const allowMilitaryProduction = parseBooleanOption(
     getStringOption(parsed, 'allow-military-production'),
     'allow-military-production',
@@ -96,9 +95,6 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
   if (allowBlockade !== undefined) {
     military.allowBlockade = allowBlockade;
   }
-  if (allowLanding !== undefined) {
-    military.allowLanding = allowLanding;
-  }
   if (allowMilitaryProduction !== undefined) {
     military.allowMilitaryProduction = allowMilitaryProduction;
   }
@@ -135,7 +131,7 @@ export async function cmdAgentCreate(args: string[]): Promise<string> {
   const name = parsed.positionals[0];
   const providerId = getStringOption(parsed, 'provider');
   if (!name || !providerId) {
-    return fmtError('Usage: agent_create <name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-landing <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
+    return fmtError('Usage: agent_create <name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
   }
 
   const auth = getAuth();
@@ -165,7 +161,7 @@ export async function cmdAgentUpdate(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   const agentId = parsed.positionals[0];
   if (!agentId) {
-    return fmtError('Usage: agent_update <agent_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-landing <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
+    return fmtError('Usage: agent_update <agent_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
   }
 
   try {

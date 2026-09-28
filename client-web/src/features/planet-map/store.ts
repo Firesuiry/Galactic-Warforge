@@ -8,17 +8,25 @@ import type { PlanetLayerKey, SelectedEntity, TilePoint } from '@/features/plane
 import { mergeRecentAlerts, mergeRecentEvents } from '@/features/planet-map/model';
 
 /**
+ * 需要点选目标的单位指令模式（A 攻击移动 / P 巡逻 / G 守卫）。
+ * 进入 unit_order 模式后点地/点目标即对当前选中单位下达对应 unit_order 命令。
+ */
+export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
+
+/**
  * 地图交互模式：决定地图点击的语义。
- * - inspect：默认，点选查看详情
+ * - inspect：默认，点选查看详情；有单位选中时右键=情境指令（点地移动/点敌攻击）
  * - build：建造模式，悬停显示幽灵 footprint，点击直接下达建造命令
- * - move：为指定单位选择移动目标点
- * - attack：为指定单位选择攻击目标
+ * - move：为当前选中单位（store.selectedUnits）选择移动目标点
+ * - attack：为当前选中单位选择攻击目标
+ * - unit_order：为当前选中单位选择 attack_move/patrol/guard 的目标点/目标实体
  */
 export type PlanetInteractionMode =
   | { kind: 'inspect' }
   | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction }
-  | { kind: 'move'; unitId: string }
-  | { kind: 'attack'; unitId: string };
+  | { kind: 'move' }
+  | { kind: 'attack' }
+  | { kind: 'unit_order'; order: UnitOrderMode };
 
 export const INSPECT_MODE: PlanetInteractionMode = { kind: 'inspect' };
 
@@ -318,6 +326,24 @@ interface FocusRequest {
   zoomIndex?: number;
 }
 
+/** 黑雾袭击预警（enemy_wave_incoming，E3）：小地图红线/主图标记/警报跳转共用。 */
+export interface IncomingWave {
+  /** 来源事件 id（去重键）。 */
+  id: string;
+  nestId: string;
+  from: TilePoint;
+  target: TilePoint | null;
+  count: number;
+  level: number;
+  /** 本地记录时间（Date.now 时基），超时自动清理。 */
+  at: number;
+}
+
+/** 来袭波次在图上的保留时长（ms）：足够玩家发现但不长期占位。 */
+export const INCOMING_WAVE_TTL_MS = 45_000;
+/** 编队数量上限（Ctrl+1..9）。 */
+export const CONTROL_GROUP_COUNT = 9;
+
 /**
  * 缩放请求：所有缩放入口（滚轮/±按钮/档位按钮/快捷键）的统一通道。
  * anchor 为视口内像素坐标（zoom-to-cursor 锚点）；null = 视口中心。
@@ -336,6 +362,12 @@ interface PlanetViewState {
   sceneWindow: PlanetSceneWindow;
   hoveredTile: TilePoint | null;
   selected: SelectedEntity | null;
+  /** 多选单位集合（命令目标：框选/编队/双击同类的结果；单选单位时长度=1）。 */
+  selectedUnits: string[];
+  /** Ctrl+1..9 编队（键位 1..9 → 单位 id 列表；成员可能已阵亡，消费侧按 planet 过滤）。 */
+  controlGroups: Record<number, string[]>;
+  /** 黑雾袭击预警（未过期）。 */
+  incomingWaves: IncomingWave[];
   interactionMode: PlanetInteractionMode;
   recentEvents: GameEventDetail[];
   recentAlerts: AlertEntry[];
@@ -354,6 +386,12 @@ interface PlanetViewActions {
   toggleLayer: (layer: PlanetLayerKey) => void;
   setHoveredTile: (tile: TilePoint | null) => void;
   setSelected: (selection: SelectedEntity | null) => void;
+  /** 设置多选单位（框选/编队/双击同类；调用侧负责过滤己方与存活）。 */
+  setSelectedUnits: (unitIds: string[]) => void;
+  /** 记录 Ctrl+数字编队（index 1..9；空数组表示清除该编队）。 */
+  setControlGroup: (index: number, unitIds: string[]) => void;
+  /** 记录一条黑雾袭击预警（按事件 id 去重，超时条目顺带清理）。 */
+  recordIncomingWave: (wave: IncomingWave) => void;
   setInteractionMode: (mode: PlanetInteractionMode) => void;
   /** 退出当前交互模式回到 inspect（Esc/右键）。 */
   exitInteractionMode: () => void;
@@ -422,6 +460,9 @@ function createInitialState(planetId = ''): PlanetViewState {
     sceneWindow: createDefaultSceneWindow(),
     hoveredTile: null,
     selected: null,
+    selectedUnits: [],
+    controlGroups: {},
+    incomingWaves: [],
     interactionMode: INSPECT_MODE,
     recentEvents: [],
     recentAlerts: [],
@@ -463,6 +504,34 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   },
   setSelected: (selected) => {
     set({ selected });
+  },
+  setSelectedUnits: (unitIds) => {
+    set((state) => (
+      state.selectedUnits.length === unitIds.length
+      && state.selectedUnits.every((id, index) => id === unitIds[index])
+        ? state
+        : { selectedUnits: unitIds }
+    ));
+  },
+  setControlGroup: (index, unitIds) => {
+    set((state) => {
+      const controlGroups = { ...state.controlGroups };
+      if (unitIds.length === 0) {
+        delete controlGroups[index];
+      } else {
+        controlGroups[index] = unitIds;
+      }
+      return { controlGroups };
+    });
+  },
+  recordIncomingWave: (wave) => {
+    set((state) => {
+      if (state.incomingWaves.some((entry) => entry.id === wave.id)) {
+        return state;
+      }
+      const alive = state.incomingWaves.filter((entry) => wave.at - entry.at < INCOMING_WAVE_TTL_MS);
+      return { incomingWaves: [...alive, wave].slice(-8) };
+    });
   },
   setInteractionMode: (interactionMode) => {
     set({ interactionMode });
@@ -602,6 +671,9 @@ export function resetPlanetViewStore() {
     toggleLayer: usePlanetViewStore.getState().toggleLayer,
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setSelected: usePlanetViewStore.getState().setSelected,
+    setSelectedUnits: usePlanetViewStore.getState().setSelectedUnits,
+    setControlGroup: usePlanetViewStore.getState().setControlGroup,
+    recordIncomingWave: usePlanetViewStore.getState().recordIncomingWave,
     setInteractionMode: usePlanetViewStore.getState().setInteractionMode,
     exitInteractionMode: usePlanetViewStore.getState().exitInteractionMode,
     setCamera: usePlanetViewStore.getState().setCamera,

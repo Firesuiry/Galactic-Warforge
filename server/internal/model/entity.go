@@ -132,6 +132,10 @@ type Unit struct {
 	ChaseGoalPos   *Position  `json:"chase_goal_pos,omitempty"`   // 上次追击寻路时的目标位置（滞回：目标小幅移动不重寻路）
 
 	// 指令姿态与交战（R2/R5）
+	// 伤害类型（R6）
+	ArmorClass  ArmorClass `json:"armor_class,omitempty"`  // 护甲类型（缺省按单位类型推导）
+	WeaponClass WeaponType `json:"weapon_class,omitempty"` // 武器类型（缺省按单位类型推导）
+
 	Stance             UnitStance `json:"stance,omitempty"`
 	OrderPos           *Position  `json:"order_pos,omitempty"`            // 攻击移动/巡逻终点/撤退目的地
 	GuardTargetID      string     `json:"guard_target_id,omitempty"`      // 守卫/跟随目标实体
@@ -199,7 +203,7 @@ func BuildingCost(btype BuildingType) (minerals, energy int) {
 
 // UnitStats returns default stats for a unit type
 func UnitStats(utype UnitType) Unit {
-	u := Unit{}
+	u := Unit{Type: utype}
 	switch utype {
 	case UnitTypeWorker:
 		u.MaxHP = 60
@@ -256,6 +260,8 @@ func UnitStats(utype UnitType) Unit {
 	}
 	u.AggroRange = u.VisionRange
 	u.Stance = UnitStanceIdle
+	u.ArmorClass = ArmorClassForUnitType(utype)
+	u.WeaponClass = WeaponClassForUnitType(utype)
 	return u
 }
 

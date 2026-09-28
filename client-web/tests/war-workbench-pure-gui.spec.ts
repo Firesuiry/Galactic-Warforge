@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
  *
  * 与 war-workbench-authoritative.spec.ts 的区别：本 spec 禁止用 apiCommand
  * 直打 HTTP 做战争准备，蓝图改型、量产、舰队编成、任务群组建/部署、战区
- * 创建/目标、封锁/登陆全部通过 GUI 表单下达。这是 P0「人类可玩性闭环」的
+ * 创建/目标、封锁全部通过 GUI 表单下达。这是 P0「人类可玩性闭环」的
  * 唯一验收问题：一个不碰 CLI/API 的玩家能不能打完一仗。
  */
 

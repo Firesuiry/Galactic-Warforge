@@ -56,7 +56,6 @@ func TestT117SpaceBattleSettlementGeneratesBattleReportAndPersistsRuntime(t *tes
 			Type:         model.EnemyForceTypeBeacon,
 			Position:     model.Position{X: 12, Y: 12},
 			Strength:     240,
-			TargetPlayer: "p1",
 			SpawnTick:    ws.Tick,
 		}},
 	}

@@ -15,7 +15,6 @@ type SystemRuntimeView struct {
 	DysonSphere         *model.DysonSphereState        `json:"dyson_sphere,omitempty"`
 	OrbitalSuperiority  *model.OrbitalSuperiorityState `json:"orbital_superiority,omitempty"`
 	PlanetBlockades     []model.PlanetBlockadeState    `json:"planet_blockades,omitempty"`
-	LandingOperations   []model.LandingOperationState  `json:"landing_operations,omitempty"`
 	ActivePlanetContext *ActivePlanetDysonContextView  `json:"active_planet_context,omitempty"`
 	Fleets              []FleetRuntimeView             `json:"fleets,omitempty"`
 	Contacts            []model.SensorContact          `json:"contacts,omitempty"`
@@ -126,20 +125,6 @@ func (ql *Layer) SystemRuntime(
 					continue
 				}
 				view.PlanetBlockades = append(view.PlanetBlockades, *blockade)
-			}
-		}
-		if len(warfare.LandingOperations) > 0 {
-			operationIDs := make([]string, 0, len(warfare.LandingOperations))
-			for operationID := range warfare.LandingOperations {
-				operationIDs = append(operationIDs, operationID)
-			}
-			sort.Strings(operationIDs)
-			for _, operationID := range operationIDs {
-				operation := warfare.LandingOperations[operationID]
-				if operation == nil {
-					continue
-				}
-				view.LandingOperations = append(view.LandingOperations, *operation)
 			}
 		}
 	}

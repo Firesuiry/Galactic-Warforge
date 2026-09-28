@@ -317,7 +317,8 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 	case "unit":
 		victim := target.unit
 		model.SyncMechaCapabilities(victim, ws.Players[victim.OwnerID])
-		eff := max(1, damage/2-victim.Defense)
+		normalizeUnitCombatStats(victim)
+		eff := max(1, int(float64(max(1, damage/2-victim.Defense))*model.ResolveDamageCoefficient(squad.Weapon.Type, victim.ArmorClass)))
 		hpDamage, absorbed := model.ApplyUnitDamage(victim, eff, currentTick)
 		victim.LastAttackerID = squad.ID
 		if victim.Mecha != nil {
@@ -335,7 +336,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 		}
 	case "combat_squad":
 		victim := target.squad
-		eff := damage / 2
+		eff := max(1, int(float64(damage/2)*model.ResolveDamageCoefficient(squad.Weapon.Type, squadArmorClass(victim))))
 		if victim.Shield.Level > 0 {
 			eff = victim.Shield.ApplyShieldDamage(eff)
 			victim.Shield.LastHitTick = currentTick
@@ -354,7 +355,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 		}
 	case "building":
 		b := target.building
-		eff := max(1, damage/2-2)
+		eff := max(1, int(float64(max(1, damage/2-2))*model.ResolveDamageCoefficient(squad.Weapon.Type, model.ArmorStructure)))
 		shieldAbsorbed, remaining := absorbPlanetaryShieldDamage(ws, b.OwnerID, eff)
 		eff = remaining
 		b.HP -= eff

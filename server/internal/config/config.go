@@ -88,6 +88,9 @@ type PlayerConfig struct {
 	Permissions []string              `yaml:"permissions"`
 	Executor    ExecutorConfig        `yaml:"executor"`
 	Bootstrap   PlayerBootstrapConfig `yaml:"bootstrap"`
+	// Bot 遭遇战 AI（A1）：easy|normal|hard，空为人类玩家。
+	// bot 走与玩家相同的命令接口，确定性可重放。
+	Bot string `yaml:"bot,omitempty"`
 }
 
 // BattlefieldConfig holds battlefield parameters

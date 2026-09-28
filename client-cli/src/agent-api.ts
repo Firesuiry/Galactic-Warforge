@@ -19,7 +19,6 @@ export interface AgentGatewayMilitaryPolicy {
   allowedCommandIds?: string[];
   maxMilitaryProductionCount?: number;
   allowBlockade?: boolean;
-  allowLanding?: boolean;
   allowMilitaryProduction?: boolean;
 }
 

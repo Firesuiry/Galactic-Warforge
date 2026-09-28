@@ -8,6 +8,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
+import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, normalTile, tileFrame, surfaceTileSize } from './three/projection';
@@ -20,8 +21,10 @@ import { ConveyorGeometry } from './three/conveyor-geometry';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
-import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position } from '@shared/types';
+import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
 import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
+import { isDarkFogUnit } from './rts-commands';
+import type { BattleEvent } from '@/engine/battle-events';
 import type { PlanetInteractionMode } from './store';
 
 export interface PlanetThreeData {
@@ -35,6 +38,8 @@ export interface PlanetThreeData {
 }
 export interface PlanetThreeInteraction {
   selected: SelectedEntity | null;
+  /** 多选单位（框选/编队/双击同类）：每个单位画一个选中标记。 */
+  selectedUnits?: string[];
   hoveredTile: TilePoint | null;
   interactionMode: PlanetInteractionMode;
   layers: PlanetLayerVisibility;
@@ -73,7 +78,7 @@ export class PlanetThreeScene {
   private localSurfaceKey = '';
   private groundView = false;
   private tilt = .65;
-  private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3 }>();
+  private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite } }>();
   private readonly staticEntities = new Map<string, { group: THREE.Group; signature: string }>();
   private readonly linkSignatures = new Map<string, string>();
   private frozen = new URLSearchParams(window.location.search).has('freeze');
@@ -82,6 +87,15 @@ export class PlanetThreeScene {
   private readonly groupByLayer = new Map<string, THREE.Group>();
   private lastTime = 0;
   private quality = parseRenderQuality(new URLSearchParams(window.location.search).get('quality'));
+  /** C2 战斗演出：弹道/枪口/命中/飘字/护盾波纹/爆炸/残骸（挂 world 随星球旋转）。 */
+  private readonly combat = new CombatEffects(this.world, () => this.tileScale());
+  /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次，同 2D planet-scene）。 */
+  private lastBattleSeq = 0;
+  /** 炮塔转向跟踪：模型拆出的独立炮管组 + 当前/目标偏航角。 */
+  private turretAims: { id: string; group: THREE.Group; barrel: THREE.Object3D; yaw: number; targetYaw: number }[] = [];
+  private aimRetargetAt = 0;
+  /** 单位血条材质（destroy 时统一释放；Sprite 不走 Mesh 遍历回收）。 */
+  private readonly barMaterials = new Set<THREE.SpriteMaterial>();
 
 
   constructor(private readonly host: HTMLElement, private readonly onPick: (tile: TilePoint) => void, private readonly onHover: (tile: TilePoint | null) => void) {
@@ -324,6 +338,17 @@ export class PlanetThreeScene {
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
       if (model && (building.sorter || /sorter/.test(building.type))) syncSorterAnimation(model, building, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0, planet.surface.face_size, RADIUS);
     }
+    // 炮塔转向跟踪（C2）：重建可转向炮管列表（保留已有偏航角，模型重建时不跳变）。
+    const previousAims = new Map(this.turretAims.map((aim) => [aim.id, aim]));
+    this.turretAims = [];
+    for (const building of visibleBuildings) {
+      if (!/turret|missile|cannon|defense/.test(building.type)) continue;
+      const model = this.staticEntities.get(`building:${building.id}`)?.group;
+      const barrel = model?.getObjectByName('turret-barrel');
+      if (!model || !barrel) continue;
+      const previous = previousAims.get(building.id);
+      this.turretAims.push({ id: building.id, group: model, barrel, yaw: previous?.yaw ?? 0, targetYaw: previous?.targetYaw ?? 0 });
+    }
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
       const covered = occupiedTiles.has(`${resource.position.x}:${resource.position.y}`);
@@ -360,7 +385,11 @@ export class PlanetThreeScene {
       this.trackMotion(id, type, own, position, layer, scale, airborne, normal, altitude);
     };
     for (const unit of Object.values(planet.units ?? {})) {
-      if (unit.owner_id === playerId || this.visible(unit.position)) move(`unit:${unit.id}`, unit.type, unit.owner_id === playerId, unit.position, 'units', .72);
+      if (unit.owner_id === playerId || this.visible(unit.position)) {
+        move(`unit:${unit.id}`, unit.type, unit.owner_id === playerId, unit.position, 'units', .72);
+        // 血条（C2）：头顶 billboard，受击比例实时更新；黑雾红色标识
+        this.syncUnitBar(this.moving.get(`unit:${unit.id}`), unit);
+      }
     }
     const logisticsLinks: { from: Position; to: Position }[] = [];
     for (const drone of [...(runtime?.logistics_drones ?? []), ...(runtime?.logistics_ships ?? [])]) {
@@ -403,8 +432,117 @@ export class PlanetThreeScene {
 
   private removeModel(group: THREE.Group) {
     this.industrial.releaseAnimations(group);
+    group.traverse((object) => {
+      if (object instanceof THREE.Sprite) {
+        this.barMaterials.delete(object.material as THREE.SpriteMaterial);
+        (object.material as THREE.SpriteMaterial).dispose();
+      }
+    });
     group.removeFromParent();
     // Model geometry/material are cached and shared by the asset library.
+  }
+
+  /** 单位头顶 billboard 血条：底色暗条 + 按 hp 比例伸缩的彩色条（己方绿/敌方橙/黑雾红）。 */
+  private syncUnitBar(entry: { group: THREE.Group; bar?: { bg: THREE.Sprite; fg: THREE.Sprite } } | undefined, unit: Unit) {
+    if (!entry) return;
+    if (!entry.bar) {
+      const bgMaterial = new THREE.SpriteMaterial({ color: 0x11161f, transparent: true, opacity: 0.78, depthTest: false });
+      const fgMaterial = new THREE.SpriteMaterial({ color: 0x5ef7a1, transparent: true, depthTest: false });
+      this.barMaterials.add(bgMaterial);
+      this.barMaterials.add(fgMaterial);
+      const bg = new THREE.Sprite(bgMaterial);
+      const fg = new THREE.Sprite(fgMaterial);
+      bg.renderOrder = 20;
+      fg.renderOrder = 21;
+      bg.center.set(0.5, 0.5);
+      fg.center.set(0, 0.5);
+      bg.scale.set(0.84, 0.1, 1);
+      bg.position.set(0, 1.02, 0);
+      fg.position.set(-0.4, 1.02, 0);
+      entry.group.add(bg, fg);
+      entry.bar = { bg, fg };
+    }
+    const ratio = Math.max(0, Math.min(unit.hp / Math.max(unit.max_hp, 1), 1));
+    const tone = unit.owner_id === this.data?.playerId ? 0x5ef7a1 : isDarkFogUnit(unit) ? 0xff4444 : 0xffa245;
+    (entry.bar.fg.material as THREE.SpriteMaterial).color.setHex(tone);
+    entry.bar.fg.scale.set(Math.max(0.8 * ratio, 0.001), 0.07, 1);
+    const damaged = ratio < 0.999;
+    entry.bar.bg.visible = damaged;
+    entry.bar.fg.visible = damaged;
+  }
+
+  /**
+   * 消费一条战斗事件总线事件（C2：damage_applied → 弹道/枪口/命中/飘字/护盾波纹；
+   * entity_destroyed → 爆炸/残骸）。seq 去重与 2D 一致；frozen 模式不演出。
+   */
+  handleBattleEvent(event: BattleEvent) {
+    if (this.destroyed || this.frozen) return;
+    if (event.seq <= this.lastBattleSeq) return;
+    this.lastBattleSeq = event.seq;
+    this.combat.spawnSpecs(specsFromCombatEvent(event, (entityId) => this.resolveCombatPoint(entityId)));
+  }
+
+  /** 实体 id → 战斗演出锚点（建筑取模型位置，单位取平滑后的实时位置；小队未在 3D 渲染，解析为 null）。 */
+  private resolveCombatPoint(entityId: string | undefined | null): CombatPoint | null {
+    if (!entityId || !this.data) return null;
+    const playerId = this.data.playerId;
+    const ownerOf = (ownerId: string | undefined): CombatPoint['owner'] => (
+      ownerId === playerId ? 'own' : ownerId === 'dark_fog' ? 'darkfog' : 'enemy'
+    );
+    const building = this.staticEntities.get(`building:${entityId}`)?.group;
+    if (building) {
+      const data = this.data.planet.buildings?.[entityId];
+      return { x: building.position.x, y: building.position.y, z: building.position.z, owner: ownerOf(data?.owner_id), kind: 'building' };
+    }
+    const unit = this.moving.get(`unit:${entityId}`)?.group;
+    if (unit) {
+      const data = this.data.planet.units?.[entityId];
+      return { x: unit.position.x, y: unit.position.y, z: unit.position.z, owner: ownerOf(data?.owner_id), kind: 'unit' };
+    }
+    const enemy = this.moving.get(`enemy:${entityId}`)?.group;
+    if (enemy) {
+      return { x: enemy.position.x, y: enemy.position.y, z: enemy.position.z, owner: 'darkfog', kind: 'unit' };
+    }
+    return null;
+  }
+
+  /** 炮塔转向：每 0.3s 重选最近敌对目标，逐帧平滑转到目标方位（无目标保持当前朝向）。 */
+  private updateTurretAims(dt: number, now: number) {
+    if (this.turretAims.length === 0 || !this.data) return;
+    if (now >= this.aimRetargetAt) {
+      this.aimRetargetAt = now + 300;
+      const playerId = this.data.playerId;
+      const hostiles: THREE.Vector3[] = [];
+      for (const unit of Object.values(this.data.planet.units ?? {})) {
+        if (unit.owner_id !== playerId && unit.hp > 0) hostiles.push(this.normal(unit.position.x, unit.position.y).multiplyScalar(RADIUS));
+      }
+      for (const force of this.data.runtime?.enemy_forces ?? []) {
+        hostiles.push(this.normal(force.position.x, force.position.y).multiplyScalar(RADIUS));
+      }
+      const maxRange = this.tileScale() * 26;
+      for (const aim of this.turretAims) {
+        let best: THREE.Vector3 | null = null;
+        let bestDistance = maxRange;
+        for (const hostile of hostiles) {
+          const distance = hostile.distanceTo(aim.group.position);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = hostile;
+          }
+        }
+        if (best) {
+          const local = best.clone().sub(aim.group.position).applyQuaternion(aim.group.quaternion.clone().invert());
+          aim.targetYaw = Math.atan2(local.x, local.z);
+        }
+      }
+    }
+    for (const aim of this.turretAims) {
+      // 最短角差插值（~5rad/s 上限），避免 180° 反转抽搐
+      let delta = aim.targetYaw - aim.yaw;
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+      aim.yaw += THREE.MathUtils.clamp(delta, -dt * 5, dt * 5);
+      aim.barrel.rotation.y = aim.yaw;
+    }
   }
 
   private trackMotion(id: string, type: string, own: boolean, position: Position, layer: string, scale: number, airborne: boolean, normal?: THREE.Vector3, altitude?: number) {
@@ -466,6 +604,14 @@ export class PlanetThreeScene {
     };
     const selectedPosition = resolveSelectionPosition(this.data.planet, this.interaction.selected);
     if (this.interaction.layers.selection && selectedPosition) add(selectedPosition, '#fff1a8');
+    // 多选单位：每个单位一个选中标记（主选中环之外追加）
+    if (this.interaction.layers.selection) {
+      for (const unitId of this.interaction.selectedUnits ?? []) {
+        if (this.interaction.selected?.kind === 'unit' && this.interaction.selected.id === unitId) continue;
+        const unit = this.data.planet.units?.[unitId];
+        if (unit) add({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) }, '#9ef7c9');
+      }
+    }
     if (this.interaction.hoveredTile) {
       const tile = this.interaction.hoveredTile;
       if (this.interaction.interactionMode.kind === 'build') {
@@ -550,10 +696,14 @@ export class PlanetThreeScene {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   };
-  private pick(event: PointerEvent) {
+  /** 屏幕坐标 → tile 拾取（右键情境指令/双击选同类等 React 侧交互用）。 */
+  pickAt(clientX: number, clientY: number) {
+    return this.pickAtCoords(clientX, clientY);
+  }
+  private pickAtCoords(clientX: number, clientY: number) {
     if (!this.data) return null;
     const rect = this.renderer.domElement.getBoundingClientRect();
-    this.raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), this.camera);
+    this.raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), this.camera);
     this.world.updateMatrixWorld(true);
     if (this.interaction?.interactionMode.kind === 'build' || this.interaction?.interactionMode.kind === 'move') {
       const point = this.raycaster.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), RADIUS), new THREE.Vector3());
@@ -576,6 +726,9 @@ export class PlanetThreeScene {
       }
     }
     return null;
+  }
+  private pick(event: PointerEvent) {
+    return this.pickAtCoords(event.clientX, event.clientY);
   }
   private pointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
@@ -612,6 +765,10 @@ export class PlanetThreeScene {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
+      if (!this.frozen) {
+        this.combat.update(dt * 1000);
+        this.updateTurretAims(dt, time);
+      }
       for (const { group, target } of this.moving.values()) {
         const radius = target.length();
         const amount = 1 - Math.exp(-dt * 12);
@@ -640,6 +797,9 @@ export class PlanetThreeScene {
     this.staticBatches.dispose();
     this.dynamicBatches.dispose();
     this.conveyors.dispose();
+    this.combat.dispose();
+    this.barMaterials.forEach((material) => material.dispose());
+    this.barMaterials.clear();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((o) => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => materials.add(m)); } });

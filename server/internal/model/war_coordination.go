@@ -75,12 +75,18 @@ type WarTaskForce struct {
 }
 
 // WarTheaterZone stores one named theater area.
+// HostileCount/Alerted/LastAlertTick 是防区警戒（U8）运行时状态：
+// 结算周期扫描区域内敌方实体（非拥有者单位/建筑、黑雾巢穴等），
+// 有敌情时向拥有者发 theater_zone_alert 告警（有冷却，不刷屏）。
 type WarTheaterZone struct {
-	ZoneType WarTheaterZoneType `json:"zone_type"`
-	SystemID string             `json:"system_id,omitempty"`
-	PlanetID string             `json:"planet_id,omitempty"`
-	Position *Position          `json:"position,omitempty"`
-	Radius   int                `json:"radius,omitempty"`
+	ZoneType      WarTheaterZoneType `json:"zone_type"`
+	SystemID      string             `json:"system_id,omitempty"`
+	PlanetID      string             `json:"planet_id,omitempty"`
+	Position      *Position          `json:"position,omitempty"`
+	Radius        int                `json:"radius,omitempty"`
+	HostileCount  int                `json:"hostile_count,omitempty"`
+	Alerted       bool               `json:"alerted,omitempty"`
+	LastAlertTick int64              `json:"last_alert_tick,omitempty"`
 }
 
 // WarTheaterObjective stores the current theater-level objective.
@@ -164,11 +170,13 @@ type WarTaskForceListView struct {
 
 // WarTheaterZoneView exposes query-facing theater zones.
 type WarTheaterZoneView struct {
-	ZoneType string    `json:"zone_type"`
-	SystemID string    `json:"system_id,omitempty"`
-	PlanetID string    `json:"planet_id,omitempty"`
-	Position *Position `json:"position,omitempty"`
-	Radius   int       `json:"radius,omitempty"`
+	ZoneType     string    `json:"zone_type"`
+	SystemID     string    `json:"system_id,omitempty"`
+	PlanetID     string    `json:"planet_id,omitempty"`
+	Position     *Position `json:"position,omitempty"`
+	Radius       int       `json:"radius,omitempty"`
+	HostileCount int       `json:"hostile_count"`
+	Alerted      bool      `json:"alerted"`
 }
 
 // WarTheaterObjectiveView exposes query-facing theater objectives.

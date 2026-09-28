@@ -445,13 +445,6 @@ export interface SpaceBattleReport {
   jamming_penalty?: number;
 }
 
-export interface OrbitPosition {
-  planet_id: string;
-  radius: number;
-  angle: number;
-  angular_speed: number;
-}
-
 export type CombatSquadState = 'idle' | 'engaging' | 'destroyed';
 
 export type WarSupplyCondition = 'healthy' | 'strained' | 'critical' | 'collapsed';
@@ -558,20 +551,6 @@ export interface CombatSquad {
   path?: Position[];
   path_index?: number;
   move_progress?: number;
-}
-
-export interface OrbitalPlatform {
-  id: string;
-  owner_id: string;
-  planet_id: string;
-  orbit: OrbitPosition;
-  hp: number;
-  max_hp: number;
-  weapon: WeaponState;
-  ammo_capacity: number;
-  ammo_count: number;
-  last_fire_tick?: number;
-  is_active: boolean;
 }
 
 export interface SolarSail {
@@ -757,7 +736,6 @@ export type CommandType =
   | 'theater_define_zone'
   | 'theater_set_objective'
   | 'blockade_planet'
-  | 'landing_start'
   | 'blueprint_create'
   | 'blueprint_set_component'
   | 'blueprint_validate'
@@ -985,7 +963,6 @@ export interface EnemyForceView {
   type: string;
   position: Position;
   strength: number;
-  target_player?: string;
   spawn_tick?: number;
   last_seen?: number;
   threat_level?: number;
@@ -1342,7 +1319,6 @@ export interface EnemyForceView {
   type: string;
   position: Position;
   strength: number;
-  target_player?: string;
   spawn_tick?: number;
   last_seen?: number;
   threat_level?: number;
@@ -1410,8 +1386,6 @@ export interface PlanetRuntimeView {
   active_planet_id?: string;
   tick: number;
   combat_squads?: CombatSquad[];
-  orbital_platforms?: OrbitalPlatform[];
-  bridgeheads?: LandingBridgehead[];
   frontlines?: PlanetaryFrontline[];
   ground_task_forces?: GroundTaskForceRuntime[];
   logistics_stations?: LogisticsStationView[];
@@ -1926,6 +1900,8 @@ export interface WarTheaterZoneView {
   planet_id?: string;
   position?: Position;
   radius?: number;
+  hostile_count: number;
+  alerted: boolean;
 }
 
 export interface WarTheaterObjectiveView {
@@ -1966,56 +1942,11 @@ export interface PlanetBlockadeState {
   intensity?: number;
   interdicted_supply?: number;
   interdicted_transports?: number;
-  interdicted_landings?: number;
   last_reason?: string;
   updated_tick?: number;
 }
 
-export type LandingOperationStage =
-  | 'reconnaissance'
-  | 'landing_window_open'
-  | 'vanguard_landing'
-  | 'beachhead_established'
-  | 'failed';
-
-export type LandingOperationResult = 'pending' | 'success' | 'failed';
-
-export interface LandingOperationState {
-  id: string;
-  owner_id: string;
-  task_force_id: string;
-  system_id: string;
-  planet_id: string;
-  stage: LandingOperationStage;
-  result: LandingOperationResult;
-  blocked_reason?: string;
-  transport_capacity?: number;
-  initial_supply?: WarSupplyStock;
-  landing_zone_safety?: number;
-  bridgehead_id?: string;
-  started_tick?: number;
-  updated_tick?: number;
-  completed_tick?: number;
-}
-
-export type LandingBridgeheadStatus = 'establishing' | 'active' | 'collapsed';
-
-export interface LandingBridgehead {
-  id: string;
-  operation_id: string;
-  owner_id: string;
-  planet_id: string;
-  frontline_id?: string;
-  status: LandingBridgeheadStatus;
-  contested?: boolean;
-  expansion_level?: number;
-  fortification_level?: number;
-  established_tick?: number;
-  last_support_tick?: number;
-  transport_capacity?: number;
-}
-
-export type PlanetaryFrontlineType = 'bridgehead' | 'outpost';
+export type PlanetaryFrontlineType = 'outpost';
 export type PlanetaryFrontlineStatus = 'secured' | 'contested' | 'destroyed';
 
 export interface PlanetaryFrontline {
@@ -2023,7 +1954,6 @@ export interface PlanetaryFrontline {
   planet_id: string;
   owner_id?: string;
   type: PlanetaryFrontlineType;
-  bridgehead_id?: string;
   position?: Position;
   status: PlanetaryFrontlineStatus;
   control?: number;
@@ -2048,7 +1978,6 @@ export interface GroundTaskForceRuntime {
   owner_id: string;
   planet_id: string;
   frontline_id?: string;
-  bridgehead_id?: string;
   ground_order?: GroundTaskForceOrder;
   status?: GroundTaskForceStatus;
   progress?: number;
@@ -2150,7 +2079,6 @@ export interface SystemRuntimeView {
   dyson_sphere?: DysonSphereView;
   orbital_superiority?: OrbitalSuperiorityState;
   planet_blockades?: PlanetBlockadeState[];
-  landing_operations?: LandingOperationState[];
   active_planet_context?: ActivePlanetDysonContextView;
   fleets?: FleetRuntimeView[];
   contacts?: SensorContact[];

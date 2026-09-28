@@ -26,7 +26,7 @@ describe('3D 地图降级与交互退出', () => {
 
   it('右键地图退出移动模式', () => {
     render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
-    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'move', unitId: 'u-6' }));
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'move' }));
     fireEvent.contextMenu(screen.getByRole('application', { name: '3D 行星地图' }));
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
   });

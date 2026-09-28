@@ -2,7 +2,7 @@
 
 > 行星已统一为立方体球面六面网格。`surface: {topology: "cube_sphere", face_size: N}` 明示拓扑；`map_width=3N`、`map_height=2N` 为存储图集尺寸，x/y 不再具有平面邻接语义。配置仅使用 `planet.face_size`，旧平面存档拒绝加载。详见 [立方体球面网格](../guide/立方体球面网格.md)。
 
-`client-cli` 当前除了游戏 `server` 常用查询与基础建造命令外，也已经补齐战争系统的最小玩家闭环：蓝图创建 / 改型 / 校验 / 定型、军工排产与翻修、任务群 / 战区指挥、登陆与封锁命令，以及 `contacts / supply / battle_report` 所需的运行态查询。`agent-gateway` 的最小管理入口 `agent_list`、`agent_create`、`agent_update`、`agent_message`、`agent_thread` 也继续保留，因此 Case1“创建李斯 -> 李斯创建胡景 -> 李斯委派胡景建矿场”与战争链路可以共用同一套 CLI runtime。原有行星读取链路继续使用 `summary / scene / inspect` 三段式模型，对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。
+`client-cli` 当前除了游戏 `server` 常用查询与基础建造命令外，也已经补齐战争系统的最小玩家闭环：蓝图创建 / 改型 / 校验 / 定型、军工排产与翻修、任务群 / 战区指挥与封锁命令，以及 `contacts / supply / battle_report` 所需的运行态查询。`agent-gateway` 的最小管理入口 `agent_list`、`agent_create`、`agent_update`、`agent_message`、`agent_thread` 也继续保留，因此 Case1“创建李斯 -> 李斯创建胡景 -> 李斯委派胡景建矿场”与战争链路可以共用同一套 CLI runtime。原有行星读取链路继续使用 `summary / scene / inspect` 三段式模型，对应的收敛版物流配置现在也已经能在 `client-web` 的行星页直接操作。
 
 公共游戏命令目录现在以 `shared-client/src/command-catalog.ts` 为单一真相：CLI、Web 和文档都从这份目录对齐命令 alias、分类和公开范围。`client-cli/src/command-catalog.ts` 只在其上补 `health / summary / save` 这类 CLI 专属命令，不再手写第二份公共命令分类。
 
@@ -48,7 +48,7 @@
 | `catalog_commands` | 无                                                         | 查询 `GET /catalog/commands`：服务端权威公共命令结构目录（必填 target/payload、可选字段、layer、constraints、JSON Schema） |
 | `galaxy`         | 无                                                           | 查询 `GET /world/galaxy`                                          |
 | `system`         | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}`，默认 `sys-1`               |
-| `system_runtime` | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}/runtime`，包含舰队、contacts、封锁、登陆与战报 |
+| `system_runtime` | `[system_id]`                                                | 查询 `GET /world/systems/{system_id}/runtime`，包含舰队、contacts、封锁与战报 |
 | `planet`         | `[planet_id]`                                                | 查询 `GET /world/planets/{planet_id}` 行星概要，默认 `planet-1-1` |
 | `planet_runtime` | `[planet_id]`                                                | 查询 `GET /world/planets/{planet_id}/runtime`，包含 contacts、滩头、前线与地面任务群 |
 | `fleet_status`   | `[fleet_id]`                                                 | 查询 `GET /world/fleets` 或 `GET /world/fleets/{fleet_id}`        |
@@ -113,7 +113,6 @@
 | `theater_define_zone`         | `<theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y>] [--radius <n>]`                                                                   | 定义战区区域                           |
 | `theater_set_objective`       | `<theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]`                                                 | 设置战区目标                           |
 | `blockade_planet`             | `<task_force_id> <planet_id>`                                                                                                                                                  | 对目标行星下发轨道封锁意图             |
-| `landing_start`               | `<task_force_id> <planet_id> [--operation-id <operation_id>]`                                                                                                                  | 启动登陆投送流程                       |
 | `switch_active_planet`        | `<planet_id>`                                                                                                                                                                  | 切换当前 active planet                 |
 | `set_ray_receiver_mode`       | `<building_id> <power\|photon\|hybrid>`                                                                                                                                        | 切换射线接收站模式                     |
 | `transfer`                    | `<building_id> <item_id> <quantity>`                                                                                                                                           | 把玩家背包物品装入建筑本地存储         |
@@ -152,16 +151,16 @@
 | 命令            | 参数                                                                                                                                                          | 说明                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `agent_list`    | 无                                                                                                                                                            | 列出当前 agent-gateway 中的 agent profile          |
-| `agent_create`  | `<name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true\|false>] [--allow-landing <true\|false>] [--allow-military-production <true\|false>] [--military-production-limit <n>]` | 创建一个绑定当前玩家 key 的 agent                  |
-| `agent_update`  | `<agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true\|false>] [--allow-landing <true\|false>] [--allow-military-production <true\|false>] [--military-production-limit <n>]`                    | 更新 agent role / policy                           |
+| `agent_create`  | `<name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true\|false>] [--allow-military-production <true\|false>] [--military-production-limit <n>]` | 创建一个绑定当前玩家 key 的 agent                  |
+| `agent_update`  | `<agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true\|false>] [--allow-military-production <true\|false>] [--military-production-limit <n>]`                    | 更新 agent role / policy                           |
 | `agent_message` | `<agent_id> <content>`                                                                                                                                       | 直接向单 agent thread 发送一条任务消息             |
 | `agent_thread`  | `<agent_id>`                                                                                                                                                 | 查看 agent thread 中的消息、tool call、执行日志与最近一次 turn 摘要 |
 
 补充说明：
 
 - `--theater-ids` / `--task-force-ids` 用来把现有战区或任务群显式委派给 agent
-- `--military-command-ids` 是战争命令白名单；当前常用值包括 `system_runtime`、`war_industry`、`task_forces`、`theaters`、`queue_military_production`、`task_force_set_stance`、`task_force_deploy`、`blockade_planet`、`landing_start`
-- `--allow-blockade`、`--allow-landing`、`--allow-military-production` 是高风险动作开关
+- `--military-command-ids` 是战争命令白名单；当前常用值包括 `system_runtime`、`war_industry`、`task_forces`、`theaters`、`queue_military_production`、`task_force_set_stance`、`task_force_deploy`、`blockade_planet`
+- `--allow-blockade`、`--allow-military-production` 是高风险动作开关
 - `--military-production-limit` 是单次 `queue_military_production` 可排产的最大数量
 
 一个最小军事委派例子：
@@ -173,7 +172,6 @@ agent_update agent-war-director \
   --task-force-ids tf-front \
   --military-command-ids system_runtime,task_force_set_stance,task_force_deploy \
   --allow-blockade false \
-  --allow-landing false \
   --allow-military-production false \
   --military-production-limit 0
 
@@ -397,16 +395,15 @@ help configure_splitter
    - `fleet_status [fleet_id]`
    - `war_industry`
    - `task_forces`
-5. 轨道封锁与登陆：
+5. 轨道封锁：
    - `blockade_planet <task_force_id> <planet_id>`
-   - `landing_start <task_force_id> <planet_id> [--operation-id <operation_id>]`
 
 当前实现边界：
 
 - `deploy_squad` / `commission_fleet` 不再硬编码只接受公开蓝图 ID；玩家自定义并已定型的蓝图同样可以走部署命令。
 - `task_force_deploy` 当前同时承担“部署锚点 / 前线命令 / 轨道支援模式”三类写入口，但它仍然不是完整自动航渡系统。
-- `blockade_planet` / `landing_start` 的同步返回只代表请求入队，最终 authoritative 结果要看 SSE `command_result` 或 `event_snapshot --types command_result`。
-- `system_runtime` 现在会输出舰队外，还会显示 `contacts`、`planet_blockades`、`landing_operations` 与 `battle_reports`；`planet_runtime` 会显示 `contacts`、`frontlines` 与 `ground_task_forces`。
+- `blockade_planet` 的同步返回只代表请求入队，最终 authoritative 结果要看 SSE `command_result` 或 `event_snapshot --types command_result`。
+- `system_runtime` 现在会输出舰队外，还会显示 `contacts`、`planet_blockades` 与 `battle_reports`；`planet_runtime` 会显示 `contacts`、`frontlines` 与 `ground_task_forces`。
 - `war_industry` 现在是最直接的补给查询入口，能看到生产单、翻修单、部署枢纽和供给节点库存。
 - 官方战争验证局会把军工底座和补给节点预置好，但仍不会直接生成舰队、任务群和战区；这些实体依然需要用上面的 CLI 命令真实创建。
 - `/war` 页面适合做蓝图查看、部署尝试、姿态切换、战报/情报观察，但当前 `task_force_create|assign`、`theater_create|define_zone|set_objective` 与量产/翻修下单仍以 CLI 为最稳入口。
@@ -422,7 +419,7 @@ help configure_splitter
 当前硬边界：
 
 - 只配置 `commandCategories=combat` 不够，战争命令还必须命中 `--military-command-ids`
-- `blockade_planet` / `landing_start` / `queue_military_production` 还会分别受 `--allow-blockade` / `--allow-landing` / `--allow-military-production` 控制
+- `blockade_planet` / `queue_military_production` 还会分别受 `--allow-blockade` / `--allow-military-production` 控制
 - 运行时会拿 authoritative `theaters` / `task_forces` 对齐 `system_id` / `planet_id` / `task_force_id` / `theater_id`，越界直接拒绝
 - 当前查询仍以玩家全量可见视图返回，agent 侧硬限制主要控制“能否执行”和“能否越界下命令”
 

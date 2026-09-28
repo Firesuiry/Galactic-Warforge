@@ -5,7 +5,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ALL_EVENT_TYPES } from '@shared/config';
 import { createSseClient } from '@shared/sse';
 import type { ApiClient } from '@shared/api';
+import type { PlanetSceneView } from '@shared/types';
 
+import { notifyCombatAlert } from '@/features/planet-map/attack-alerts';
 import {
   extractAlertFromEvent,
   shouldRefreshAlerts,
@@ -147,6 +149,18 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       // use-war-realtime 挂在 /war 路由、本 hook 挂在 /planet 路由，二者不会同页
       // 共存，同一事件不会被双转发；场景订阅侧另有 seq 去重兜底。
       forwardGameEventToBattleBus(event);
+
+      // 受袭警报（C3）：己方建筑/单位被打聚合告警 + 黑雾袭击预警（内部 event_id 去重）。
+      // 归属判定取当前行星 scene 缓存（任一窗口即可，取最新一份）。
+      const scope = latestQueryScopeRef.current;
+      const planetView = queryClient.getQueriesData<PlanetSceneView>({
+        queryKey: ['planet-scene', scope.serverUrl, scope.playerId, scope.planetId],
+      }).find(([, data]) => data !== undefined)?.[1];
+      notifyCombatAlert(event, {
+        planet: planetView,
+        playerId: scope.playerId,
+        planetId: scope.planetId,
+      });
 
       const alert = extractAlertFromEvent(event);
       if (alert) {

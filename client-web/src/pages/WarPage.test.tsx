@@ -315,7 +315,7 @@ describe('WarPage', () => {
                 objective_type: 'secure_planet',
                 system_id: 'sys-1',
                 planet_id: 'planet-1-1',
-                description: '拿下登陆窗口并维持封锁',
+                description: '夺取行星并维持封锁',
               },
             },
           ],
@@ -365,20 +365,6 @@ describe('WarPage', () => {
               status: 'active',
               intensity: 0.68,
               last_reason: 'orbital_superiority_held',
-              updated_tick: 320,
-            },
-          ],
-          landing_operations: [
-            {
-              id: 'landing-1',
-              owner_id: 'p1',
-              task_force_id: 'tf-1',
-              system_id: 'sys-1',
-              planet_id: 'planet-1-1',
-              stage: 'reconnaissance',
-              result: 'pending',
-              blocked_reason: 'awaiting_orbital_superiority',
-              transport_capacity: 0,
               updated_tick: 320,
             },
           ],
@@ -453,7 +439,7 @@ describe('WarPage', () => {
     expect(screen.getByText('已封锁')).toBeInTheDocument();
   });
 
-  it('支持蓝图创建、姿态调整、部署尝试、封锁与登陆操作', async () => {
+  it('支持蓝图创建、姿态调整、部署尝试与封锁操作', async () => {
     useSessionStore.getState().setSession({
       serverUrl: 'http://localhost:5173',
       playerId: 'p1',
@@ -655,7 +641,7 @@ describe('WarPage', () => {
                 objective_type: 'secure_planet',
                 system_id: 'sys-1',
                 planet_id: 'planet-1-1',
-                description: '拿下登陆窗口并维持封锁',
+                description: '夺取行星并维持封锁',
               },
             },
           ],
@@ -696,7 +682,6 @@ describe('WarPage', () => {
             updated_tick: 320,
           },
           planet_blockades: [],
-          landing_operations: [],
           contacts: [],
           battle_reports: [],
         });
@@ -716,8 +701,6 @@ describe('WarPage', () => {
             return jsonResponse(createCommandResponse('building hub-1 cannot deploy blueprint fleet-adopted', 'failed'));
           case 'blockade_planet':
             return jsonResponse(createCommandResponse('planet planet-1-1 blockade assigned to task force tf-1'));
-          case 'landing_start':
-            return jsonResponse(createCommandResponse('task force tf-1 lacks transport capacity for landing', 'failed'));
           default:
             return jsonResponse(createCommandResponse('unexpected command'));
         }
@@ -754,7 +737,6 @@ describe('WarPage', () => {
     await user.click(screen.getByRole('button', { name: '更新姿态' }));
 
     await user.click(screen.getByRole('button', { name: '发起封锁' }));
-    await user.click(screen.getByRole('button', { name: '发起登陆' }));
 
     await waitFor(() => {
       expect(commandTypes).toEqual([
@@ -763,13 +745,11 @@ describe('WarPage', () => {
         'commission_fleet',
         'task_force_set_stance',
         'blockade_planet',
-        'landing_start',
       ]);
     });
 
     // 各组回执留在各自 Tab 内
     expect(await screen.findByText('task force tf-1 stance set to siege')).toBeInTheDocument();
-    expect(await screen.findByText('当前任务群缺少登陆运力')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: '军工' }));
     expect(screen.getByText('当前部署枢纽不支持该蓝图')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: '蓝图' }));
@@ -922,7 +902,6 @@ describe('WarPage', () => {
           available: true,
           orbital_superiority: { system_id: 'sys-1', advantage_player_id: 'p1', contest_intensity: 0.3, last_reason: 'task_force_superiority', updated_tick: 320 },
           planet_blockades: [],
-          landing_operations: [],
           contacts: [{
             id: 'contact-1',
             contact_kind: 'enemy_force',
@@ -1110,7 +1089,6 @@ describe('WarPage', () => {
           discovered: true,
           available: true,
           planet_blockades: [],
-          landing_operations: [],
           contacts: [],
           battle_reports: [],
         });
@@ -1234,7 +1212,6 @@ describe('WarPage', () => {
           discovered: true,
           available: true,
           planet_blockades: [],
-          landing_operations: [],
           contacts: [],
           battle_reports: [],
         }));

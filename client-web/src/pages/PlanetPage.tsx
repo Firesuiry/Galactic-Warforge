@@ -31,6 +31,7 @@ import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
+import { usePlanetRtsHotkeys } from "@/features/planet-map/use-planet-rts-hotkeys";
 import { formatMineralInventory } from "@/features/mineral-summary";
 import {
   extractAlertFromEvent,
@@ -249,10 +250,17 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
-  const handleInteractTile = usePlanetInteractions({
+  const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
+  });
+
+  // RTS 快捷键体系（C1）：A/S/H/P/G + Ctrl/数字编队，2D/3D 共用（输入框聚焦自动忽略）
+  usePlanetRtsHotkeys({
+    planet: sceneQuery.data,
+    runtime: runtimeQuery.data,
+    interactions,
   });
 
   const overviewRequestStep = getPlanetOverviewRequestStep(
@@ -664,7 +672,8 @@ export function PlanetPage() {
           fog={planet}
           networks={networks}
           onCanvasReady={(capture) => { captureRef.current = capture; }}
-          onInteractTile={handleInteractTile}
+          onContextTile={interactions.contextTile}
+          onInteractTile={interactions.interactTile}
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
@@ -675,7 +684,8 @@ export function PlanetPage() {
           onCanvasReady={(capture) => {
             captureRef.current = capture;
           }}
-          onInteractTile={handleInteractTile}
+          onContextTile={interactions.contextTile}
+          onInteractTile={interactions.interactTile}
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
@@ -769,11 +779,13 @@ export function PlanetPage() {
           />
           <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} dimensional={isThree} />
         </div>
-        {!isThree && <PlanetMinimap
+        {/* 小地图（C3）：2D/3D 均可用；3D 下无视口框（mapProjection 缺省优雅降级），敌我标记层照常 */}
+        <PlanetMinimap
           fog={planet}
           overview={overviewQuery.data}
           planet={planet}
-        />}
+          runtime={runtime}
+        />
         <PlanetDebugPanel
           capture={captureRef.current}
           catalog={catalog}
@@ -797,11 +809,13 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         />
-        {!isThree && <PlanetMapToolbar
+        {/* 工具条（C3）：2D/3D 均可用；3D 下缩放 ± 无消费者，由 dimensional 隐藏（3D 自带缩放控件） */}
+        <PlanetMapToolbar
+          dimensional={isThree}
           networks={networks}
           planet={planet}
           runtime={runtime}
-        />}
+        />
         {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出（共用 MapDrawer） */}
         <MapDrawer
           label="工作台"

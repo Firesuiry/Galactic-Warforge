@@ -276,23 +276,15 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
         },
         sfx: 'commandOk',
       };
-    case 'landing_started':
-      return {
-        toast: {
-          kind: 'warning',
-          title: '登陆作战开始',
-          href: '/war',
-        },
-        sfx: 'alert',
-      };
-    case 'landing_failed':
+    case 'theater_zone_alert':
       return {
         toast: {
           kind: 'danger',
-          title: '登陆失败',
+          title: `战区告警：${asString(payload.theater_name) || asString(payload.theater_id) || '?'}`,
+          body: `${asString(payload.planet_id) || '?'} 区域发现敌方实体 ×${asString(payload.hostile_count) || '?'}`,
           href: '/war',
         },
-        sfx: 'explosion',
+        sfx: 'alert',
       };
     case 'supply_line_disrupted':
       return {

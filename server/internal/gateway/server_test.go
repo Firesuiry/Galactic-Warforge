@@ -27,7 +27,7 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 			MapSeed: "test", MaxTickRate: 10,
 		},
 		Players: []config.PlayerConfig{
-			{PlayerID: "p1", Key: "key1"},
+			{PlayerID: "p1", Key: "key1", Role: "admin"},
 			{PlayerID: "p2", Key: "key2"},
 		},
 		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
@@ -927,6 +927,32 @@ func TestSaveEndpoint(t *testing.T) {
 	}
 }
 
+func TestSaveRollbackRequireAdminRole(t *testing.T) {
+	srv, core := newTestServer(t)
+	core.AttachGameDir(gamedir.Open(t.TempDir()), minimalSaveMetaFile(), snapshot.Capture(core.World(), core.Discovery()))
+
+	// p2 不是 admin：/save 与 /rollback 一律 403。
+	for _, path := range []string{"/save", "/rollback"} {
+		req := httptest.NewRequest("POST", path, bytes.NewBufferString(`{}`))
+		req.Header.Set("Authorization", "Bearer key2")
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s without admin role: expected 403, got %d", path, rec.Code)
+		}
+	}
+	// admin 可以调用。
+	req := httptest.NewRequest("POST", "/save", bytes.NewBufferString(`{"reason":"manual"}`))
+	req.Header.Set("Authorization", "Bearer key1")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/save with admin role: expected 200, got %d", rec.Code)
+	}
+}
+
 func TestSaveEndpointPropagatesPersistenceFailure(t *testing.T) {
 	srv, _ := newTestServer(t)
 
@@ -944,7 +970,7 @@ func minimalSaveMetaFile() *gamedir.MetaFile {
 	return gamedir.NewMetaFile(&config.Config{
 		Battlefield: config.BattlefieldConfig{MapSeed: "test", MaxTickRate: 10},
 		Players: []config.PlayerConfig{
-			{PlayerID: "p1", Key: "key1"},
+			{PlayerID: "p1", Key: "key1", Role: "admin"},
 			{PlayerID: "p2", Key: "key2"},
 		},
 	}, &mapconfig.Config{

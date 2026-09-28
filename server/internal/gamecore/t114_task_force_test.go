@@ -234,7 +234,6 @@ func TestT114TaskForceStanceAffectsEngagementAndRetreat(t *testing.T) {
 			Position:     model.Position{X: 15, Y: 15},
 			Strength:     120,
 			SpreadRadius: 2,
-			TargetPlayer: "p1",
 			SpawnTick:    ws.Tick,
 		}},
 	}
@@ -359,7 +358,6 @@ func TestT114CommandCapacityPenaltyReducesFleetAttackDamage(t *testing.T) {
 			Position:     model.Position{X: 12, Y: 12},
 			Strength:     300,
 			SpreadRadius: 2,
-			TargetPlayer: "p1",
 			SpawnTick:    ws.Tick,
 		}},
 	}

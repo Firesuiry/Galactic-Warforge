@@ -63,10 +63,9 @@ npm run dev
 
 - `theaterIds`: 允许接管的战区 ID 列表
 - `taskForceIds`: 允许直接操作的任务群 ID 列表
-- `allowedCommandIds`: 允许执行的战争命令白名单；当前已接入 `system_runtime`、`war_industry`、`task_forces`、`theaters`、`queue_military_production`、`task_force_set_stance`、`task_force_deploy`、`blockade_planet`、`landing_start`
+- `allowedCommandIds`: 允许执行的战争命令白名单；当前已接入 `system_runtime`、`war_industry`、`task_forces`、`theaters`、`queue_military_production`、`task_force_set_stance`、`task_force_deploy`、`blockade_planet`
 - `maxMilitaryProductionCount`: 单次军工量产上限
 - `allowBlockade`: 是否允许主动发起封锁
-- `allowLanding`: 是否允许主动发起登陆
 - `allowMilitaryProduction`: 是否允许主动发起军工量产
 
 ### 3.1.1 受控 runtime action
@@ -92,7 +91,7 @@ agent provider 现在以 typed `game.command` 作为唯一游戏动作入口，�
 - 只有 `policy.canCreateAgents=true` 的 agent 才能执行 `agent.create`
 - 新建或更新下级时，授予的 `commandCategories` / `planetIds` / `policy.military.theaterIds` / `policy.military.taskForceIds` / `policy.military.allowedCommandIds` 不能超出创建者自身范围
 - `policy.military.maxMilitaryProductionCount` 也不能超过创建者自己的上限
-- `allowBlockade / allowLanding / allowMilitaryProduction` 这三个高风险开关也不能越权放大
+- `allowBlockade / allowMilitaryProduction` 这两个高风险开关也不能越权放大
 - 新建 agent 的角色不能高于创建者角色
 - agent 向其他 agent 发私聊或委派消息时，目标必须在 `managedAgentIds`，或命中 `canDispatchAgentIds / canDirectMessageAgentIds`
 
@@ -219,7 +218,7 @@ turn 额外字段：
 
 - 只有配置了 `policy.military` 且显式委派了 `theaterIds` 或 `taskForceIds` 的 agent，才能执行战争命令
 - `allowedCommandIds` 是战争命令白名单；即使 `commandCategories` 里已有 `combat`，未列入白名单的战争命令也会被直接拒绝
-- `landing_start` / `blockade_planet` / `queue_military_production` 会分别受 `allowLanding` / `allowBlockade` / `allowMilitaryProduction` 控制
+- `blockade_planet` / `queue_military_production` 会分别受 `allowBlockade` / `allowMilitaryProduction` 控制
 - `queue_military_production` 还会额外检查 `maxMilitaryProductionCount`
 - runtime 会实时读取 authoritative `/world/warfare/theaters` 与 `/world/warfare/task-forces`，把命令里的 `theater_id / task_force_id / system_id / planet_id` 与委派范围对齐；越界时直接拒绝
 

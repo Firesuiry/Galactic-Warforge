@@ -88,6 +88,12 @@ func normalizeUnitCombatStats(u *model.Unit) {
 		if u.Stance == "" {
 			u.Stance = model.UnitStanceIdle
 		}
+		if u.ArmorClass == "" {
+			u.ArmorClass = model.ArmorClassForUnitType(u.Type)
+		}
+		if u.WeaponClass == "" {
+			u.WeaponClass = model.WeaponClassForUnitType(u.Type)
+		}
 	}
 }
 
@@ -402,6 +408,14 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 
 const maxInt32 = int(^uint32(0) >> 1)
 
+// squadArmorClass 小队护甲类型（R6）：空中编队为 air，其余地面编组为 heavy。
+func squadArmorClass(squad *model.CombatSquad) model.ArmorClass {
+	if squad != nil && (squad.Domain == model.UnitDomainAir || squad.PlatformClass == "drone") {
+		return model.ArmorAir
+	}
+	return model.ArmorHeavy
+}
+
 // settleMechaAutoFire 执行体对显式攻击目标的持续开火（不索敌、不追击、不还击）。
 func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 	if unit.AttackTarget == "" {
@@ -434,7 +448,10 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 	case "unit":
 		victim := target.unit
 		model.SyncMechaCapabilities(victim, ws.Players[victim.OwnerID])
-		damage, absorbed := model.ApplyUnitDamage(victim, max(1, unit.Attack-victim.Defense), ws.Tick)
+		normalizeUnitCombatStats(victim)
+		raw := max(1, unit.Attack-victim.Defense)
+		raw = max(1, int(float64(raw)*model.ResolveDamageCoefficient(unit.WeaponClass, victim.ArmorClass)))
+		damage, absorbed := model.ApplyUnitDamage(victim, raw, ws.Tick)
 		victim.LastAttackerID = unit.ID
 		if victim.Mecha != nil {
 			events = append(events, mechaStateEvent(victim))
@@ -459,7 +476,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 		}
 	case "building":
 		b := target.building
-		damage := max(1, unit.Attack-2)
+		damage := max(1, int(float64(max(1, unit.Attack-2))*model.ResolveDamageCoefficient(unit.WeaponClass, model.ArmorStructure)))
 		// 行星护盾吸收外部伤害（含黑雾与 PvP，U4 方向）。
 		shieldAbsorbed, remaining := absorbPlanetaryShieldDamage(ws, b.OwnerID, damage)
 		shieldRemaining := totalPlanetaryShieldCharge(ws, b.OwnerID)
@@ -523,7 +540,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 		}
 	case "combat_squad":
 		squad := target.squad
-		damage := unit.Attack
+		damage := max(1, int(float64(unit.Attack)*model.ResolveDamageCoefficient(unit.WeaponClass, squadArmorClass(squad))))
 		if squad.Shield.Level > 0 {
 			damage = squad.Shield.ApplyShieldDamage(damage)
 			squad.Shield.LastHitTick = ws.Tick

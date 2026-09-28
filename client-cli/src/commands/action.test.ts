@@ -8,7 +8,6 @@ import {
   cmdInstallLogisticsVehicle,
   cmdCommissionFleet,
   cmdDeploySquad,
-  cmdLandingStart,
   cmdProduce,
   cmdRefuelMecha,
   cmdMineResource,
@@ -58,7 +57,7 @@ describe('warfare deployment command surface', () => {
   });
 });
 
-describe('warfare coordination and landing command surface', () => {
+describe('warfare coordination command surface', () => {
   it('shows task_force_deploy usage with frontline and orbital support options', async () => {
     const out = await cmdTaskForceDeploy([]);
     assert.match(out, /task_force_deploy <task_force_id>/);
@@ -66,12 +65,9 @@ describe('warfare coordination and landing command surface', () => {
     assert.match(out, /--support-mode/);
   });
 
-  it('shows blockade_planet and landing_start usage', async () => {
+  it('shows blockade_planet usage', async () => {
     const blockade = await cmdBlockadePlanet([]);
     assert.match(blockade, /blockade_planet <task_force_id> <planet_id>/);
-
-    const landing = await cmdLandingStart([]);
-    assert.match(landing, /landing_start <task_force_id> <planet_id>/);
   });
 });
 

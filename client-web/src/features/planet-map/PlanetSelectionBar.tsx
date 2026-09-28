@@ -19,6 +19,7 @@ import {
   getItemDisplayName,
   type PlanetRenderView,
 } from '@/features/planet-map/model';
+import { summarizeUnitSelection } from '@/features/planet-map/rts-commands';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -60,16 +61,13 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
   const client = useApiClient();
   const session = useSessionSnapshot();
   const selected = usePlanetViewStore((state) => state.selected);
+  const selectedUnits = usePlanetViewStore((state) => state.selectedUnits);
   const interactionMode = usePlanetViewStore((state) => state.interactionMode);
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
   const setSelected = usePlanetViewStore((state) => state.setSelected);
   const [quantity, setQuantity] = useState(1);
   const [miningPending, setMiningPending] = useState(false);
-
-  if (!selected || selected.kind === 'tile') {
-    return null;
-  }
 
   function submit(commandType: string, execute: () => Promise<CommandResponse>, focus?: { entityId?: string }) {
     void submitPlanetCommand({
@@ -82,6 +80,56 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
         limit: 50,
       }),
     });
+  }
+
+  // 多选面板（C1）：≥2 个单位时显示构成与批量指令入口
+  const aliveSelection = selectedUnits.filter((id) => planet.units?.[id]?.owner_id === session.playerId);
+  if (aliveSelection.length >= 2) {
+    const composition = summarizeUnitSelection(planet, aliveSelection)
+      .map((entry) => `${translateUnitType(entry.type)}×${entry.count}`)
+      .join(' · ');
+    const orderEligible = aliveSelection.filter((id) => !planet.units?.[id]?.mecha);
+    const orderButtons: { label: string; title: string; action: () => void }[] = [
+      { label: '移动', title: '右键点地也可移动', action: () => setInteractionMode({ kind: 'move' }) },
+      { label: '攻击', title: '右键点敌也可攻击', action: () => setInteractionMode({ kind: 'attack' }) },
+      ...(orderEligible.length > 0 ? [
+        { label: '攻击移动', title: 'A · 沿途交战推进', action: () => setInteractionMode({ kind: 'unit_order' as const, order: 'attack_move' as const }) },
+        { label: '巡逻', title: 'P · 点击巡逻目标点', action: () => setInteractionMode({ kind: 'unit_order' as const, order: 'patrol' as const }) },
+        { label: '守卫', title: 'G · 点击要守卫的目标', action: () => setInteractionMode({ kind: 'unit_order' as const, order: 'guard' as const }) },
+        { label: '坚守', title: 'H · 原地坚守', action: () => submit('unit_order', () => client.cmdUnitOrder(orderEligible, 'hold'), { entityId: orderEligible[0] }) },
+        { label: '停止', title: 'S · 停止当前命令', action: () => submit('unit_order', () => client.cmdUnitOrder(orderEligible, 'stop'), { entityId: orderEligible[0] }) },
+      ] : []),
+    ];
+    return (
+      <div className="planet-selection-bar" data-testid="planet-selection-bar">
+        <Icon iconKey="soldier" size={20} />
+        <div className="planet-selection-bar__info">
+          <strong>已选 {aliveSelection.length} 个单位</strong>
+          <span className="planet-selection-bar__meta">{composition}</span>
+          <span className="planet-selection-bar__meta">右键点地移动 / 点敌攻击 · Ctrl+数字编队</span>
+        </div>
+        <div className="planet-selection-bar__actions">
+          {orderButtons.map((button) => (
+            <button
+              className="secondary-button"
+              key={button.label}
+              title={button.title}
+              type="button"
+              onClick={() => {
+                sfx.uiClick();
+                button.action();
+              }}
+            >
+              {button.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!selected || selected.kind === 'tile') {
+    return null;
   }
 
   if (selected.kind === 'resource') {
@@ -178,7 +226,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
       return null;
     }
     const ownUnit = unit.owner_id === session.playerId;
-    const modeForUnit = interactionMode.kind === 'move' || interactionMode.kind === 'attack'
+    const activeMode = interactionMode.kind !== 'inspect' && interactionMode.kind !== 'build'
       ? interactionMode
       : null;
     return (
@@ -199,39 +247,52 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
               {unit.mecha ? '机甲详情' : '详情'}
             </button> : null}
             <button
-              className={`secondary-button${modeForUnit?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
+              className={`secondary-button${activeMode?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
               type="button"
+              title="M · 也可直接右键点地移动"
               onClick={() => {
                 sfx.uiClick();
-                if (modeForUnit?.kind === 'move') {
+                if (activeMode?.kind === 'move') {
                   exitInteractionMode();
                 } else {
-                  setInteractionMode({ kind: 'move', unitId: unit.id });
+                  setInteractionMode({ kind: 'move' });
                 }
               }}
             >
-              {modeForUnit?.kind === 'move' ? '取消移动' : '移动'}
+              {activeMode?.kind === 'move' ? '取消移动' : '移动'}
             </button>
             <button
-              className={`secondary-button${modeForUnit?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
+              className={`secondary-button${activeMode?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
               type="button"
+              title="也可直接右键点敌攻击"
               onClick={() => {
                 sfx.uiClick();
-                if (modeForUnit?.kind === 'attack') {
+                if (activeMode?.kind === 'attack') {
                   exitInteractionMode();
                 } else {
-                  setInteractionMode({ kind: 'attack', unitId: unit.id });
+                  setInteractionMode({ kind: 'attack' });
                 }
               }}
             >
-              {modeForUnit?.kind === 'attack' ? '取消攻击' : '攻击'}
+              {activeMode?.kind === 'attack' ? '取消攻击' : '攻击'}
             </button>
             {!unit.mecha ? (
               <>
                 <button
+                  className={`secondary-button${activeMode?.kind === 'unit_order' && activeMode.order === 'attack_move' ? ' planet-selection-bar__active' : ''}`}
+                  type="button"
+                  title="A · 攻击移动：点击目标点，沿途交战"
+                  onClick={() => {
+                    sfx.uiClick();
+                    setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
+                  }}
+                >
+                  攻击移动
+                </button>
+                <button
                   className="secondary-button"
                   type="button"
-                  title="原地坚守：不追击，射程内自动开火"
+                  title="H · 原地坚守：不追击，射程内自动开火"
                   onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'hold'), { entityId: unit.id })}
                 >
                   坚守
@@ -239,7 +300,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
                 <button
                   className="secondary-button"
                   type="button"
-                  title="停止当前命令，回到待命"
+                  title="S · 停止当前命令，回到待命"
                   onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
                 >
                   停止

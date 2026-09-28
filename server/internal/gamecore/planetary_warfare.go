@@ -37,10 +37,8 @@ func settlePlanetaryWarfare(
 			continue
 		}
 		ensurePlanetaryWarfareRuntime(ws)
-		syncLandingBridgeheadsToFrontlines(ws, currentTick)
 		evals := collectPlanetaryTaskForceEvals(worlds, maps, ws, spaceRuntime, currentTick)
 		applyPlanetaryTaskForceEvals(ws, evals, currentTick)
-		syncBridgeheadsFromFrontlines(ws, currentTick)
 	}
 	return events
 }
@@ -57,58 +55,6 @@ func ensurePlanetaryWarfareRuntime(ws *model.WorldState) {
 	}
 	if ws.CombatRuntime.GroundTaskForces == nil {
 		ws.CombatRuntime.GroundTaskForces = make(map[string]*model.GroundTaskForceRuntime)
-	}
-	if ws.CombatRuntime.Bridgeheads == nil {
-		ws.CombatRuntime.Bridgeheads = make(map[string]*model.LandingBridgehead)
-	}
-}
-
-func syncLandingBridgeheadsToFrontlines(ws *model.WorldState, currentTick int64) {
-	if ws == nil || ws.CombatRuntime == nil {
-		return
-	}
-	bridgeheadIDs := make([]string, 0, len(ws.CombatRuntime.Bridgeheads))
-	for id := range ws.CombatRuntime.Bridgeheads {
-		bridgeheadIDs = append(bridgeheadIDs, id)
-	}
-	sort.Strings(bridgeheadIDs)
-	for _, id := range bridgeheadIDs {
-		bridgehead := ws.CombatRuntime.Bridgeheads[id]
-		if bridgehead == nil {
-			continue
-		}
-		if bridgehead.ExpansionLevel <= 0 {
-			bridgehead.ExpansionLevel = 0.35
-		}
-		if bridgehead.FortificationLevel <= 0 {
-			bridgehead.FortificationLevel = 0.25
-		}
-		if bridgehead.FrontlineID != "" {
-			frontline := ws.CombatRuntime.Frontlines[bridgehead.FrontlineID]
-			if frontline != nil {
-				frontline.OwnerID = bridgehead.OwnerID
-				frontline.BridgeheadID = bridgehead.ID
-				frontline.Type = model.PlanetaryFrontlineTypeBridgehead
-				frontline.UpdatedTick = currentTick
-				continue
-			}
-		}
-		frontlineID := ws.CombatRuntime.NextEntityID("frontline")
-		frontline := &model.PlanetaryFrontline{
-			ID:            frontlineID,
-			PlanetID:      ws.PlanetID,
-			OwnerID:       bridgehead.OwnerID,
-			Type:          model.PlanetaryFrontlineTypeBridgehead,
-			BridgeheadID:  bridgehead.ID,
-			Status:        model.PlanetaryFrontlineStatusSecured,
-			Control:       0.45,
-			Fortification: bridgehead.FortificationLevel,
-			ObstacleLevel: 0.4,
-			SupplyFlow:    0.35,
-			UpdatedTick:   currentTick,
-		}
-		ws.CombatRuntime.Frontlines[frontlineID] = frontline
-		bridgehead.FrontlineID = frontlineID
 	}
 }
 
@@ -149,7 +95,6 @@ func collectPlanetaryTaskForceEvals(
 			frontline := resolveTaskForceFrontline(ws, taskForce, currentTick)
 			runtime := ensureGroundTaskForceRuntime(ws, taskForce, currentTick)
 			runtime.FrontlineID = ""
-			runtime.BridgeheadID = ""
 			runtime.OrbitalSupportBlockedReason = ""
 			if runtime.OrbitalSupportCooldown > 0 {
 				runtime.OrbitalSupportCooldown--
@@ -163,7 +108,6 @@ func collectPlanetaryTaskForceEvals(
 				continue
 			}
 			runtime.FrontlineID = frontline.ID
-			runtime.BridgeheadID = frontline.BridgeheadID
 			runtime.OrbitalSupportAvailable = false
 			runtime.Pressure = resolveGroundTaskForcePressure(player, taskForce, ws, spaceRuntime)
 			supportBonus := resolveGroundTaskForceOrbitalSupport(ws, spaceRuntime, systemID, runtime, currentTick)
@@ -194,13 +138,6 @@ func resolveTaskForceFrontline(ws *model.WorldState, taskForce *model.WarTaskFor
 	if taskForce.Deployment.FrontlineID != "" {
 		if frontline := ws.CombatRuntime.Frontlines[taskForce.Deployment.FrontlineID]; frontline != nil {
 			return frontline
-		}
-	}
-	for _, bridgehead := range ws.CombatRuntime.Bridgeheads {
-		if bridgehead != nil && bridgehead.OwnerID == taskForce.OwnerID && bridgehead.FrontlineID != "" {
-			if frontline := ws.CombatRuntime.Frontlines[bridgehead.FrontlineID]; frontline != nil {
-				return frontline
-			}
 		}
 	}
 	if taskForce.Deployment.Position == nil {
@@ -452,14 +389,12 @@ func applyPlanetaryTaskForceEvals(ws *model.WorldState, evals map[string][]*plan
 		}
 
 		sides := make(map[string]float64)
-		ownerOrders := make(map[string]model.GroundTaskForceOrder)
 		for _, eval := range group {
 			if eval == nil || eval.runtime == nil {
 				continue
 			}
 			total := eval.power + eval.supportBonus
 			sides[eval.runtime.OwnerID] += total
-			ownerOrders[eval.runtime.OwnerID] = eval.runtime.GroundOrder
 
 			switch eval.runtime.GroundOrder {
 			case model.GroundTaskForceOrderHold:
@@ -501,7 +436,7 @@ func applyPlanetaryTaskForceEvals(ws *model.WorldState, evals map[string][]*plan
 			} else {
 				frontline.Control -= 0.12 * min(2, ratio)
 				if frontline.Control <= 0.15 {
-					if frontline.BridgeheadID == "" && frontline.Fortification <= 0.05 {
+					if frontline.Fortification <= 0.05 {
 						frontline.OwnerID = ""
 						frontline.Control = 0
 						frontline.Status = model.PlanetaryFrontlineStatusDestroyed
@@ -549,19 +484,7 @@ func applyPlanetaryTaskForceEvals(ws *model.WorldState, evals map[string][]*plan
 				eval.runtime.Progress = frontline.Control
 			}
 			eval.runtime.FrontlineID = frontline.ID
-			eval.runtime.BridgeheadID = frontline.BridgeheadID
 			eval.runtime.UpdatedTick = currentTick
-		}
-
-		if order, ok := ownerOrders[topOwner]; ok && topOwner == frontline.OwnerID && frontline.BridgeheadID != "" {
-			if bridgehead := ws.CombatRuntime.Bridgeheads[frontline.BridgeheadID]; bridgehead != nil {
-				switch order {
-				case model.GroundTaskForceOrderAdvance, model.GroundTaskForceOrderOccupy:
-					bridgehead.ExpansionLevel = clampBattleFloat(bridgehead.ExpansionLevel+0.08, 0, 1)
-				case model.GroundTaskForceOrderHold, model.GroundTaskForceOrderEscortSupply:
-					bridgehead.ExpansionLevel = clampBattleFloat(bridgehead.ExpansionLevel+0.05, 0, 1)
-				}
-			}
 		}
 	}
 }
@@ -604,40 +527,5 @@ func normalizePlanetaryFrontline(frontline *model.PlanetaryFrontline) {
 	frontline.Control = clampBattleFloat(frontline.Control, 0, 1)
 	if frontline.Status == "" {
 		frontline.Status = model.PlanetaryFrontlineStatusContested
-	}
-}
-
-func syncBridgeheadsFromFrontlines(ws *model.WorldState, currentTick int64) {
-	if ws == nil || ws.CombatRuntime == nil {
-		return
-	}
-	for _, bridgehead := range ws.CombatRuntime.Bridgeheads {
-		if bridgehead == nil || bridgehead.FrontlineID == "" {
-			continue
-		}
-		frontline := ws.CombatRuntime.Frontlines[bridgehead.FrontlineID]
-		if frontline == nil {
-			continue
-		}
-		bridgehead.Contested = frontline.Status == model.PlanetaryFrontlineStatusContested
-		bridgehead.FortificationLevel = frontline.Fortification
-		if frontline.LastOrbitalSupportTick > bridgehead.LastSupportTick {
-			bridgehead.LastSupportTick = frontline.LastOrbitalSupportTick
-		}
-		if frontline.OwnerID == bridgehead.OwnerID {
-			bridgehead.ExpansionLevel = clampBattleFloat(maxFloat(bridgehead.ExpansionLevel, frontline.Control*0.9+frontline.SupplyFlow*0.1), 0, 1)
-			bridgehead.Status = model.LandingBridgeheadStatusActive
-		} else {
-			bridgehead.ExpansionLevel = clampBattleFloat(bridgehead.ExpansionLevel-0.12, 0, 1)
-			if bridgehead.ExpansionLevel <= 0.05 {
-				bridgehead.Status = model.LandingBridgeheadStatusCollapsed
-			}
-		}
-		if bridgehead.FortificationLevel <= 0 {
-			bridgehead.FortificationLevel = 0.1
-		}
-		if bridgehead.LastSupportTick == 0 {
-			bridgehead.LastSupportTick = currentTick
-		}
 	}
 }

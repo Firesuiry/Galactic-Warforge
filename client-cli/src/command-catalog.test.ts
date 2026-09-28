@@ -29,6 +29,5 @@ describe('agent command catalog', () => {
     assert.ok(AGENT_ALLOWED_COMMANDS.includes('queue_military_production'));
     assert.ok(AGENT_ALLOWED_COMMANDS.includes('task_force_create'));
     assert.ok(AGENT_ALLOWED_COMMANDS.includes('blockade_planet'));
-    assert.ok(AGENT_ALLOWED_COMMANDS.includes('landing_start'));
   });
 });

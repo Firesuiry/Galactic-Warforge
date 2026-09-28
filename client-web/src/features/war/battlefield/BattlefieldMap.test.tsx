@@ -24,7 +24,6 @@ const runtime = {
     updated_tick: 320,
   },
   planet_blockades: [{ planet_id: 'planet-1-1', system_id: 'sys-1', owner_id: 'p1', status: 'active', intensity: 0.6 }],
-  landing_operations: [{ id: 'landing-1', owner_id: 'p1', task_force_id: 'tf-1', system_id: 'sys-1', planet_id: 'planet-1-1', stage: 'reconnaissance', result: 'pending' }],
   contacts: [{ id: 'contact-1', scope_type: 'system', scope_id: 'sys-1', contact_kind: 'enemy_force', level: 'confirmed', position: { x: 4, y: 2 }, threat_level: 7, signal_strength: 0.7, classification: 'destroyer_screen', last_updated_tick: 320 }],
   battle_reports: [],
 } as unknown as SystemRuntimeView;
@@ -47,7 +46,7 @@ describe('BattlefieldMap', () => {
 
     expect(screen.getByText(/战场态势 · Helios/)).toBeInTheDocument();
     expect(screen.getByText(/制空权：p1/)).toBeInTheDocument();
-    expect(screen.getByText(/接触 1 · 舰队 1 · 封锁 1 · 登陆 1/)).toBeInTheDocument();
+    expect(screen.getByText(/接触 1 · 舰队 1 · 封锁 1/)).toBeInTheDocument();
     expect(screen.getByText('己方舰队')).toBeInTheDocument();
     expect(screen.getByText('敌方接触')).toBeInTheDocument();
     // Pixi 画布挂在 .battlefield-canvas 容器里

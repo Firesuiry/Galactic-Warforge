@@ -178,7 +178,7 @@ curl -fsS -X POST -H "Authorization: Bearer key_player_1" \
 节奏：
 
 - 工业建设：每 2～5 秒一轮，等矿机/产线 running、minerals 上涨。
-- 战争：每轮先 `war_industry` + `task_forces` + `system_runtime`，再部署/封锁/登陆。
+- 战争：每轮先 `war_industry` + `task_forces` + `system_runtime`，再部署/封锁；战区行星区域（theater_define_zone 带坐标）会自动做防区警戒，有敌情时通过 theaters 查询的 `hostile_count/alerted` 与 `theater_zone_alert` 事件可见。
 - 胜利：`briefing` 出现 `winner` / `victory_reason` 即停，写战报。
 
 ## 5. 战术手册（按场景）
@@ -245,14 +245,13 @@ theater_set_objective theater-play secure_planet --system sys-1 --planet planet-
 fleet_status / task_forces / theaters / system_runtime sys-1 / planet_runtime planet-1-1
 # 升级动作
 blockade_planet tf-play planet-1-1
-landing_start tf-play planet-1-1 --operation-id landing-play
-system_runtime sys-1   # 确认 blockades / landing_operations
+system_runtime sys-1   # 确认 blockades；theaters 确认区域敌情 hostile_count/alerted
 ```
 
 注意：
 
 - 官方战争局预置科技与军工底座，**不会**自动建舰队/任务群/战区。
-- `blockade_planet` / `landing_start` 的同步返回只代表入队；以 `system_runtime` 为准。
+- `blockade_planet` 的同步返回只代表入队；以 `system_runtime` 为准。
 - 详细：`docs/player/上手与验证.md` §4.4；GUI 对照 `/war`。
 
 ### 5.4 决策启发式
@@ -292,7 +291,7 @@ queue_military_production <factory> <hub> <bp> [--count n]
 commission_fleet | deploy_squad | refit_unit ...
 task_force_create|assign|set_stance|deploy ...
 theater_create|define_zone|set_objective ...
-blockade_planet | landing_start ...
+blockade_planet ...
 ```
 
 完整参数表：`docs/dev/客户端CLI.md`。`help` 在 REPL 内可用。
@@ -303,7 +302,7 @@ blockade_planet | landing_start ...
 
 1. 场景：newgame / midgame / war，端口与 commit
 2. 用时与最终 tick / winner
-3. 关键节点（首矿、首研究、首舰队、封锁/登陆…）
+3. 关键节点（首矿、首研究、首舰队、封锁…）
 4. 失败命令与 `code`/`issues`（若有）
 5. 阻塞 issue 是否需记入 `docs/player/issue/`
 

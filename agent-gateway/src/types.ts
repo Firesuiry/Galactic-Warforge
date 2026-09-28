@@ -102,7 +102,6 @@ export interface AgentMilitaryPolicy {
   allowedCommandIds: string[];
   maxMilitaryProductionCount: number;
   allowBlockade: boolean;
-  allowLanding: boolean;
   allowMilitaryProduction: boolean;
 }
 

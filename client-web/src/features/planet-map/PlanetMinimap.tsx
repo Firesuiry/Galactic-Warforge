@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { FogMapView, PlanetOverviewView, PlanetSceneView } from "@shared/types";
+import type { FogMapView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from "@shared/types";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -11,7 +11,9 @@ import {
   type ViewportTileBounds,
   wrapMod,
 } from "@/features/planet-map/model";
-import { usePlanetViewStore } from "@/features/planet-map/store";
+import { isDarkFogUnit } from "@/features/planet-map/rts-commands";
+import { INCOMING_WAVE_TTL_MS, usePlanetViewStore } from "@/features/planet-map/store";
+import { useSessionSnapshot } from "@/hooks/use-session";
 
 /**
  * PlanetMinimap：浮在地图右下角的全图缩略图（V2 布局）。
@@ -33,6 +35,8 @@ interface PlanetMinimapProps {
   planet: PlanetRenderView;
   fog?: FogMapView | PlanetSceneView;
   overview?: PlanetOverviewView;
+  /** 敌我标记层数据源（C3）：敌方兵力 marker + 来袭波次以外的实时敌情。 */
+  runtime?: PlanetRuntimeView;
 }
 
 const MINI_CSS = 152;
@@ -93,17 +97,35 @@ function computeLayout(mapWidth: number, mapHeight: number): MinimapLayout {
   };
 }
 
-export function PlanetMinimap({ planet, fog, overview }: PlanetMinimapProps) {
+export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const session = useSessionSnapshot();
+  // 来袭波次闪烁：有未过期波次时 500ms 切换一次（闪烁红点 + 红线）。
+  const [blinkOn, setBlinkOn] = useState(true);
 
-  const { camera, mapProjection, requestFocus } = usePlanetViewStore(
+  const { camera, mapProjection, requestFocus, incomingWaves } = usePlanetViewStore(
     useShallow((state) => ({
       camera: state.camera,
       mapProjection: state.mapProjection,
       requestFocus: state.requestFocus,
+      incomingWaves: state.incomingWaves,
     })),
   );
+
+  const liveWaves = useMemo(
+    () => incomingWaves.filter((wave) => Date.now() - wave.at < INCOMING_WAVE_TTL_MS),
+    // blinkOn 参与依赖：每次闪烁重算过期集合
+    [incomingWaves, blinkOn],
+  );
+
+  useEffect(() => {
+    if (liveWaves.length === 0) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => setBlinkOn((on) => !on), 500);
+    return () => window.clearInterval(timer);
+  }, [liveWaves.length]);
 
   const mapWidth = planet.map_width;
   const mapHeight = planet.map_height;
@@ -217,7 +239,7 @@ export function PlanetMinimap({ planet, fog, overview }: PlanetMinimapProps) {
     context.strokeRect(offsetX + 0.5, offsetY + 0.5, layout.drawWidth - 1, layout.drawHeight - 1);
   }, [fog, layout, mapHeight, mapWidth, overview, planet]);
 
-  // 主层：清屏 → 贴底图 → 画当前视口框。相机移动时触发（极轻量）。
+  // 主层：清屏 → 贴底图 → 敌我标记（C3）→ 来袭波次 → 画当前视口框。相机/实体/波次变化时触发（轻量）。
   useEffect(() => {
     const canvas = canvasRef.current;
     const base = baseCanvasRef.current;
@@ -233,10 +255,61 @@ export function PlanetMinimap({ planet, fog, overview }: PlanetMinimapProps) {
     context.clearRect(0, 0, MINI_CSS, MINI_CSS);
     context.drawImage(base, 0, 0, MINI_CSS, MINI_CSS);
 
+    const { scale, offsetX, offsetY } = layout;
+    const dot = (x: number, y: number, color: string, size = 2) => {
+      context.fillStyle = color;
+      context.fillRect(offsetX + x * scale - size / 2, offsetY + y * scale - size / 2, size, size);
+    };
+
+    // 敌我标记：建筑=绿点、单位=蓝点、黑雾=红点、其他玩家=橙点（敌情只在可见区域出现，迷雾不泄露）
+    for (const building of Object.values(planet.buildings ?? {})) {
+      if (building.owner_id !== session.playerId) continue;
+      if (!getFogState(fog, Math.round(building.position.x), Math.round(building.position.y)).explored) continue;
+      dot(building.position.x, building.position.y, "#5ef7a1", 2.5);
+    }
+    for (const unit of Object.values(planet.units ?? {})) {
+      const pos = { x: Math.round(unit.position.x), y: Math.round(unit.position.y) };
+      if (!getFogState(fog, pos.x, pos.y).visible) continue;
+      if (unit.owner_id === session.playerId) {
+        dot(unit.position.x, unit.position.y, "#5fb0ff");
+      } else if (isDarkFogUnit(unit)) {
+        dot(unit.position.x, unit.position.y, "#ff5252", 2.5);
+      } else {
+        dot(unit.position.x, unit.position.y, "#ffa245");
+      }
+    }
+    for (const force of runtime?.enemy_forces ?? []) {
+      const pos = { x: Math.round(force.position.x), y: Math.round(force.position.y) };
+      if (!getFogState(fog, pos.x, pos.y).visible) continue;
+      dot(force.position.x, force.position.y, "#ff1744", 3);
+    }
+
+    // 来袭波次：from→target 红线 + 目标闪烁红点
+    for (const wave of liveWaves) {
+      const fromX = offsetX + (wave.from.x + 0.5) * scale;
+      const fromY = offsetY + (wave.from.y + 0.5) * scale;
+      if (wave.target) {
+        const toX = offsetX + (wave.target.x + 0.5) * scale;
+        const toY = offsetY + (wave.target.y + 0.5) * scale;
+        context.strokeStyle = "rgba(255, 23, 68, 0.9)";
+        context.lineWidth = 1.25;
+        context.beginPath();
+        context.moveTo(fromX, fromY);
+        context.lineTo(toX, toY);
+        context.stroke();
+      }
+      if (blinkOn) {
+        const focus = wave.target ?? wave.from;
+        context.fillStyle = "#ff1744";
+        context.beginPath();
+        context.arc(offsetX + (focus.x + 0.5) * scale, offsetY + (focus.y + 0.5) * scale, 3, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+
     if (!viewportBounds) {
       return;
     }
-    const { scale, offsetX, offsetY } = layout;
     // 环绕轴上可见范围可能跨接缝（minX<0 或 maxX≥map），拆成轴向上的 1~2 段，
     // 两轴组合出最多 4 个矩形，保证视口框在小地图上形状正确。
     const axisSegments = (min: number, max: number, mapSize: number, wrap: boolean) => {
@@ -266,7 +339,7 @@ export function PlanetMinimap({ planet, fog, overview }: PlanetMinimapProps) {
         context.strokeRect(rectX + 0.5, rectY + 0.5, rectW - 1, rectH - 1);
       }
     }
-  }, [layout, mapHeight, mapWidth, viewportBounds]);
+  }, [blinkOn, fog, layout, liveWaves, mapHeight, mapWidth, planet, runtime, session.playerId, viewportBounds]);
 
   function handleClick(event: React.MouseEvent<HTMLCanvasElement>) {
     if (mapWidth <= 0 || mapHeight <= 0) {

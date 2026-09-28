@@ -116,16 +116,45 @@ describe('PlanetSelectionBar', () => {
       id: 'u-1',
       position: { x: 1, y: 1, z: 0 },
     });
+    usePlanetViewStore.getState().setSelectedUnits(['u-1']);
     render(<PlanetSelectionBar catalog={catalog} planet={makePlanet()} />);
 
     await user.click(screen.getByRole('button', { name: '移动' }));
-    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'move', unitId: 'u-1' });
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'move' });
 
     await user.click(screen.getByRole('button', { name: '取消移动' }));
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
 
     await user.click(screen.getByRole('button', { name: '攻击' }));
-    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'attack', unitId: 'u-1' });
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'attack' });
+  });
+
+  it('多选单位：显示构成与批量指令入口', async () => {
+    const user = userEvent.setup();
+    const planet = makePlanet();
+    planet.units!['u-2'] = {
+      id: 'u-2',
+      type: 'soldier',
+      owner_id: 'p1',
+      position: { x: 2, y: 1, z: 0 },
+      hp: 80,
+      max_hp: 80,
+      attack: 9,
+      defense: 3,
+      attack_range: 2,
+      move_range: 3,
+      vision_range: 4,
+    } as never;
+    usePlanetViewStore.getState().setSelectedUnits(['u-1', 'u-2']);
+    render(<PlanetSelectionBar catalog={catalog} planet={planet} />);
+
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('已选 2 个单位');
+    expect(bar).toHaveTextContent('士兵×1');
+
+    // 多选批量指令：攻击移动进入 unit_order 模式（执行体被过滤，仅士兵可下令）
+    await user.click(screen.getByRole('button', { name: '攻击移动' }));
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'unit_order', order: 'attack_move' });
   });
 
   it('未选中时不渲染', () => {

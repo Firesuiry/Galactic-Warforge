@@ -370,31 +370,12 @@ export function fmtSystemRuntime(runtime: SystemRuntimeView): string {
     lines.push(chalk.dim('  none'));
   } else {
     lines.push(table(
-      ['Planet', 'Status', 'TaskForce', 'Supply', 'Landings'],
+      ['Planet', 'Status', 'TaskForce', 'Supply'],
       blockades.map((blockade) => [
         blockade.planet_id,
         blockade.status,
         blockade.task_force_id ?? '-',
         String(blockade.interdicted_supply ?? 0),
-        String(blockade.interdicted_landings ?? 0),
-      ]),
-    ));
-  }
-
-  const landings = runtime.landing_operations ?? [];
-  lines.push('');
-  lines.push(chalk.bold('Landing Operations'));
-  if (landings.length === 0) {
-    lines.push(chalk.dim('  none'));
-  } else {
-    lines.push(table(
-      ['ID', 'Planet', 'TaskForce', 'Stage', 'Result'],
-      landings.map((landing) => [
-        landing.id,
-        landing.planet_id,
-        landing.task_force_id,
-        landing.stage,
-        landing.result,
       ]),
     ));
   }

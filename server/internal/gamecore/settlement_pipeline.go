@@ -90,10 +90,16 @@ func newSettlementPipeline() settlementPipeline {
 		return events
 	})
 
+	pipeline.register("bots", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
+		gc.settleBots()
+		return nil
+	})
+
 	pipeline.register("interstellar_runtime", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
 		var events []*model.GameEvent
 		events = append(events, settleOrbitalWarfare(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)...)
 		events = append(events, settlePlanetaryWarfare(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)...)
+		events = append(events, settleTheaterWatch(gc.worlds, frame.currentTick)...)
 		settleInterstellarDispatch(gc.worlds, gc.maps)
 		settleLogisticsShips(gc.worlds)
 		settleWarSustainment(gc.worlds, gc.maps, gc.spaceRuntime, frame.currentTick)
@@ -115,11 +121,10 @@ func newSettlementPipeline() settlementPipeline {
 		}
 
 		var events []*model.GameEvent
-		events = append(events, gc.settleOrbitalCombat()...)
 		gc.settleStats()
 
 		if !gc.Victory().Declared() {
-			victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, activeWorld)
+			victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds)
 			if gc.declareVictory(victory) {
 				events = append(events, victoryDeclaredEvent(victory))
 				gc.recordVictoryAudit(victory)

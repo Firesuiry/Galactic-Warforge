@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { fmtSystemRuntime, fmtWarIndustry } from './format.js';
 
 describe('warfare formatting', () => {
-  it('renders contacts, blockades, landings and battle reports in system runtime output', () => {
+  it('renders contacts, blockades and battle reports in system runtime output', () => {
     const out = fmtSystemRuntime({
       system_id: 'sys-1',
       discovered: true,
@@ -35,15 +35,6 @@ describe('warfare formatting', () => {
         task_force_id: 'tf-1',
         status: 'active',
       }],
-      landing_operations: [{
-        id: 'landing-1',
-        owner_id: 'p1',
-        task_force_id: 'tf-1',
-        system_id: 'sys-1',
-        planet_id: 'planet-1-1',
-        stage: 'landing_window_open',
-        result: 'pending',
-      }],
       battle_reports: [{
         battle_id: 'battle-1',
         tick: 56,
@@ -60,7 +51,6 @@ describe('warfare formatting', () => {
     assert.match(out, /Contacts/);
     assert.match(out, /battle-1/);
     assert.match(out, /active/);
-    assert.match(out, /landing-1/);
   });
 
   it('renders production, hubs and supply nodes in war industry output', () => {

@@ -256,8 +256,8 @@ describe('地块 hover 轻量高亮状态机', () => {
 
   it('move/attack 模式同样给高亮（准星叠加在其上）', () => {
     const tile = { x: 1, y: 2 };
-    expect(resolveTileHoverHighlight(tile, { kind: 'move', unitId: 'u1' }, false)).toBe(tile);
-    expect(resolveTileHoverHighlight(tile, { kind: 'attack', unitId: 'u1' }, false)).toBe(tile);
+    expect(resolveTileHoverHighlight(tile, { kind: 'move' }, false)).toBe(tile);
+    expect(resolveTileHoverHighlight(tile, { kind: 'attack' }, false)).toBe(tile);
   });
 
   it('build 模式不叠加（幽灵 footprint 承担悬停反馈）', () => {

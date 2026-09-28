@@ -114,8 +114,7 @@ func (gc *GameCore) settleEnemyForces(ws *model.WorldState) []*model.GameEvent {
 		reassignBlackFogRaidTargets(ws)
 	}
 
-	// 5. 既有辅助效果：信号塔重定向、减速场、传感接触。
-	gc.applySignalTowerEffects(ws)
+	// 5. 既有辅助效果：减速场、传感接触。
 	gc.applySlowFieldEffects(ws)
 	settlePlanetSensorContacts(ws, ws.Tick)
 
@@ -470,46 +469,6 @@ func getPlayerCenterPosition(ws *model.WorldState, playerID string) model.Positi
 	}
 	t := ws.Surface().FromVector(sum[0], sum[1], sum[2])
 	return model.Position{X: t.X, Y: t.Y}
-}
-
-// applySignalTowerEffects 应用信号塔效果（重定向敌人）
-func (gc *GameCore) applySignalTowerEffects(ws *model.WorldState) {
-	if ws == nil || ws.Buildings == nil {
-		return
-	}
-
-	for _, building := range ws.Buildings {
-		if building.Type != model.BuildingTypeSignalTower {
-			continue
-		}
-		if building.HP <= 0 || building.Runtime.State != model.BuildingWorkRunning {
-			continue
-		}
-
-		// 信号塔参数
-		rangeBonus := 5.0
-		redirectChance := 0.3
-
-		for i := range ws.EnemyForces.Forces {
-			force := &ws.EnemyForces.Forces[i]
-			dist := ws.SurfaceDistance(building.Position, force.Position)
-			visionRange := 10 // 默认信号塔视野范围
-			if building.Runtime.Functions.Combat != nil {
-				visionRange = building.Runtime.Functions.Combat.Range
-			}
-			effectiveRange := visionRange + int(rangeBonus)
-			if float64(dist) > float64(effectiveRange) {
-				continue
-			}
-
-			// 重定向几率
-			if ws.Tick%10 == 0 && force.TargetPlayer != "" {
-				if gc.rng.Float64() < redirectChance {
-					force.TargetPlayer = "" // 清除目标，让敌人重新选择目标
-				}
-			}
-		}
-	}
 }
 
 // updateRadarDetection 更新雷达检测状态

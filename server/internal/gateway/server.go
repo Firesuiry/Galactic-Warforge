@@ -659,8 +659,28 @@ func (s *Server) handleAuditQuery(w http.ResponseWriter, r *http.Request, player
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// requireAdminRole 要求管理员角色（F5）：/save /rollback 等对局级操作仅 role=admin 可调用。
+func (s *Server) requireAdminRole(w http.ResponseWriter, playerID string) bool {
+	role := ""
+	if ws := s.core.World(); ws != nil {
+		ws.RLock()
+		if player := ws.Players[playerID]; player != nil {
+			role = player.Role
+		}
+		ws.RUnlock()
+	}
+	if role != "admin" {
+		writeError(w, http.StatusForbidden, "admin role required")
+		return false
+	}
+	return true
+}
+
 // handleSave handles POST /save
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request, playerID string) {
+	if !s.requireAdminRole(w, playerID) {
+		return
+	}
 	var req model.SaveRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -703,6 +723,9 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request, playerID s
 
 // handleRollback handles POST /rollback
 func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request, playerID string) {
+	if !s.requireAdminRole(w, playerID) {
+		return
+	}
 	var req model.RollbackRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {

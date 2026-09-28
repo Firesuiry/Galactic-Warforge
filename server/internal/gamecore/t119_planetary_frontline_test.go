@@ -125,37 +125,34 @@ func TestT119PlanetaryFrontlineCaptureAndRuntimeQuery(t *testing.T) {
 	createGroundTaskForceForT119(t, core, "p1", "tf-ground-p1-t119", p1Squads, model.WarTaskForceStanceSiege)
 	createGroundTaskForceForT119(t, core, "p2", "tf-ground-p2-t119", p2Squads, model.WarTaskForceStanceHold)
 
+	// p1 地面任务群按坐标部署：建立前哨前线。
 	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdLandingStart,
+		Type: model.CmdTaskForceDeploy,
 		Payload: map[string]any{
-			"operation_id":  "landing-p1-t119",
-			"task_force_id": "tf-orbit-p1-t119",
+			"task_force_id": "tf-ground-p1-t119",
+			"system_id":     systemID,
 			"planet_id":     ws.PlanetID,
+			"position":      map[string]any{"x": 10, "y": 10},
+			"ground_order":  "occupy",
+			"support_mode":  "fire_support",
 		},
 	}); res.Code != model.CodeOK {
-		t.Fatalf("landing_start failed: %s (%s)", res.Code, res.Message)
+		t.Fatalf("task_force_deploy p1 failed: %s (%s)", res.Code, res.Message)
 	}
 
-	for i := 0; i < 4; i++ {
-		core.processTick()
-	}
+	core.processTick()
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 	planetView, ok := ql.PlanetRuntime(ws, "p1", ws.PlanetID, ws.PlanetID)
 	planetBody := marshalAnyMap(t, mustValue(t, planetView, ok))
 
-	bridgeheads, ok := planetBody["bridgeheads"].([]any)
-	if !ok || len(bridgeheads) != 1 {
-		t.Fatalf("expected one bridgehead in planet runtime, got %+v", planetBody["bridgeheads"])
+	frontlines, ok := planetBody["frontlines"].([]any)
+	if !ok || len(frontlines) != 1 {
+		t.Fatalf("expected one outpost frontline in planet runtime, got %+v", planetBody["frontlines"])
 	}
-	bridgehead := bridgeheads[0].(map[string]any)
-	frontlineID, ok := bridgehead["frontline_id"].(string)
+	frontlineID, ok := frontlines[0].(map[string]any)["id"].(string)
 	if !ok || frontlineID == "" {
-		t.Fatalf("expected bridgehead frontline link, got %+v", bridgehead)
-	}
-	initialExpansion, ok := bridgehead["expansion_level"].(float64)
-	if !ok || initialExpansion <= 0 {
-		t.Fatalf("expected bridgehead expansion level in query, got %+v", bridgehead)
+		t.Fatalf("expected frontline id, got %+v", frontlines[0])
 	}
 
 	squads, ok := planetBody["combat_squads"].([]any)
@@ -173,28 +170,19 @@ func TestT119PlanetaryFrontlineCaptureAndRuntimeQuery(t *testing.T) {
 		t.Fatalf("expected mech and drone platform classes in planet runtime, got %+v", classes)
 	}
 
-	for _, spec := range []struct {
-		playerID    string
-		taskForceID string
-		order       string
-		supportMode string
-	}{
-		{playerID: "p1", taskForceID: "tf-ground-p1-t119", order: "occupy", supportMode: "fire_support"},
-		{playerID: "p2", taskForceID: "tf-ground-p2-t119", order: "hold", supportMode: "none"},
-	} {
-		if res := issueInternalCommand(core, spec.playerID, model.Command{
-			Type: model.CmdTaskForceDeploy,
-			Payload: map[string]any{
-				"task_force_id": spec.taskForceID,
-				"system_id":     systemID,
-				"planet_id":     ws.PlanetID,
-				"frontline_id":  frontlineID,
-				"ground_order":  spec.order,
-				"support_mode":  spec.supportMode,
-			},
-		}); res.Code != model.CodeOK {
-			t.Fatalf("task_force_deploy %s failed: %s (%s)", spec.taskForceID, res.Code, res.Message)
-		}
+	// p2 地面任务群加入同一前线：前线转为争夺。
+	if res := issueInternalCommand(core, "p2", model.Command{
+		Type: model.CmdTaskForceDeploy,
+		Payload: map[string]any{
+			"task_force_id": "tf-ground-p2-t119",
+			"system_id":     systemID,
+			"planet_id":     ws.PlanetID,
+			"frontline_id":  frontlineID,
+			"ground_order":  "hold",
+			"support_mode":  "none",
+		},
+	}); res.Code != model.CodeOK {
+		t.Fatalf("task_force_deploy p2 failed: %s (%s)", res.Code, res.Message)
 	}
 
 	core.processTick()
@@ -229,12 +217,6 @@ func TestT119PlanetaryFrontlineCaptureAndRuntimeQuery(t *testing.T) {
 	control, ok := frontline["control"].(float64)
 	if !ok || control <= 0.5 {
 		t.Fatalf("expected frontline control progress, got %+v", frontline)
-	}
-
-	bridgehead = findPlanetBridgeheadByID(t, planetBody, bridgehead["id"].(string))
-	expansion, ok := bridgehead["expansion_level"].(float64)
-	if !ok || expansion <= initialExpansion {
-		t.Fatalf("expected bridgehead expansion to increase, before=%f after=%+v", initialExpansion, bridgehead)
 	}
 }
 
@@ -325,18 +307,17 @@ func TestT119PlanetaryDefenseBlocksOrbitalSupport(t *testing.T) {
 	createGroundTaskForceForT119(t, core, "p1", "tf-ground-p1-defense-t119", p1Squads, model.WarTaskForceStanceSiege)
 
 	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdLandingStart,
+		Type: model.CmdTaskForceDeploy,
 		Payload: map[string]any{
-			"operation_id":  "landing-defense-t119",
-			"task_force_id": "tf-orbit-p1-defense-t119",
+			"task_force_id": "tf-ground-p1-defense-t119",
+			"system_id":     systemID,
 			"planet_id":     ws.PlanetID,
+			"position":      map[string]any{"x": 10, "y": 10},
 		},
 	}); res.Code != model.CodeOK {
-		t.Fatalf("landing_start failed: %s (%s)", res.Code, res.Message)
+		t.Fatalf("task_force_deploy failed: %s (%s)", res.Code, res.Message)
 	}
-	for i := 0; i < 4; i++ {
-		core.processTick()
-	}
+	core.processTick()
 
 	shield := newBuilding("shield-t119", model.BuildingTypePlanetaryShieldGenerator, "p2", model.Position{X: 17, Y: 17})
 	shield.Runtime.State = model.BuildingWorkRunning
@@ -357,10 +338,13 @@ func TestT119PlanetaryDefenseBlocksOrbitalSupport(t *testing.T) {
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 	planetView, ok := ql.PlanetRuntime(ws, "p1", ws.PlanetID, ws.PlanetID)
 	planetBody := marshalAnyMap(t, mustValue(t, planetView, ok))
-	bridgehead := firstPlanetBridgehead(t, planetBody)
-	frontlineID, ok := bridgehead["frontline_id"].(string)
+	frontlines, ok := planetBody["frontlines"].([]any)
+	if !ok || len(frontlines) != 1 {
+		t.Fatalf("expected one frontline in planet runtime, got %+v", planetBody["frontlines"])
+	}
+	frontlineID, ok := frontlines[0].(map[string]any)["id"].(string)
 	if !ok || frontlineID == "" {
-		t.Fatalf("expected frontline id on bridgehead, got %+v", bridgehead)
+		t.Fatalf("expected frontline id, got %+v", frontlines[0])
 	}
 
 	beforeCharge := shield.Runtime.Functions.Shield.CurrentCharge
@@ -441,35 +425,6 @@ func ownerSquadIDs(ws *model.WorldState, ownerID string) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-func firstPlanetBridgehead(t *testing.T, planetBody map[string]any) map[string]any {
-	t.Helper()
-	raw, ok := planetBody["bridgeheads"].([]any)
-	if !ok || len(raw) == 0 {
-		t.Fatalf("expected bridgeheads in planet runtime, got %+v", planetBody)
-	}
-	bridgehead, ok := raw[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected first bridgehead to be object, got %T", raw[0])
-	}
-	return bridgehead
-}
-
-func findPlanetBridgeheadByID(t *testing.T, planetBody map[string]any, bridgeheadID string) map[string]any {
-	t.Helper()
-	raw, ok := planetBody["bridgeheads"].([]any)
-	if !ok {
-		t.Fatalf("expected bridgeheads in planet runtime, got %+v", planetBody)
-	}
-	for _, entry := range raw {
-		bridgehead, ok := entry.(map[string]any)
-		if ok && bridgehead["id"] == bridgeheadID {
-			return bridgehead
-		}
-	}
-	t.Fatalf("expected bridgehead %s in %+v", bridgeheadID, raw)
-	return nil
 }
 
 func findPlanetFrontlineByID(t *testing.T, planetBody map[string]any, frontlineID string) map[string]any {

@@ -100,22 +100,15 @@ export function layoutBattlefieldMarkers(input: BattlefieldLayoutInput): Battlef
   const blockadeByPlanet = new Map(
     (runtime?.planet_blockades ?? []).map((blockade) => [blockade.planet_id, blockade]),
   );
-  const landingByPlanet = new Map(
-    (runtime?.landing_operations ?? []).map((landing) => [landing.planet_id, landing]),
-  );
 
   const markers: BattlefieldMarkerLayout[] = [];
 
   planets.forEach((planet, index) => {
     const position = planetPositions.get(planet.planet_id) ?? planetAnchor(index, planets.length);
     const blockade = blockadeByPlanet.get(planet.planet_id);
-    const landing = landingByPlanet.get(planet.planet_id);
     const segments: string[] = [];
     if (blockade) {
       segments.push(`封锁 ${blockade.status}`);
-    }
-    if (landing) {
-      segments.push(`登陆 ${landing.stage}`);
     }
     markers.push({
       id: planet.planet_id,

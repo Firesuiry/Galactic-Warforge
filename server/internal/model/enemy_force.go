@@ -31,7 +31,6 @@ type EnemyForce struct {
 	Position       Position       `json:"position"`      // 当前位置
 	Strength       int            `json:"strength"`      // 实力值
 	SpreadRadius   float64        `json:"spread_radius"` // 扩散半径
-	TargetPlayer   string         `json:"target_player"` // 目标玩家
 	SpawnTick      int64          `json:"spawn_tick"`    // 生成时间
 	LastAttackTick int64          `json:"last_attack_tick,omitempty"` // 上次反击 tick（静态黑雾反击节流）
 	LastWaveTick   int64          `json:"last_wave_tick,omitempty"`   // 上次孵化波次 tick（巢穴）

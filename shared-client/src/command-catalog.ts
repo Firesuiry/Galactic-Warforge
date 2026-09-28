@@ -489,16 +489,6 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "optional",
   },
   {
-    id: "landing_start",
-    apiCommandName: "landing_start",
-    cliCommandName: "landing_start",
-    category: "management",
-    permissionCategory: "combat",
-    layer: "planet",
-    requiresActivePlanet: false,
-    webSurface: "optional",
-  },
-  {
     id: "blueprint_create",
     apiCommandName: "blueprint_create",
     cliCommandName: "blueprint_create",

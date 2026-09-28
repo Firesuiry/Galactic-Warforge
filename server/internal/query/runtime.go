@@ -14,8 +14,6 @@ type PlanetRuntimeView struct {
 	ActivePlanetID        string                         `json:"active_planet_id,omitempty"`
 	Tick                  int64                          `json:"tick"`
 	CombatSquads          []model.CombatSquad            `json:"combat_squads,omitempty"`
-	OrbitalPlatforms      []model.OrbitalPlatform        `json:"orbital_platforms,omitempty"`
-	Bridgeheads           []model.LandingBridgehead      `json:"bridgeheads,omitempty"`
 	Frontlines            []model.PlanetaryFrontline     `json:"frontlines,omitempty"`
 	GroundTaskForces      []model.GroundTaskForceRuntime `json:"ground_task_forces,omitempty"`
 	LogisticsStations     []LogisticsStationView         `json:"logistics_stations,omitempty"`
@@ -134,14 +132,13 @@ type ConstructionTaskView struct {
 }
 
 type EnemyForceView struct {
-	ID           string         `json:"id"`
-	Type         string         `json:"type"`
-	Position     model.Position `json:"position"`
-	Strength     int            `json:"strength"`
-	TargetPlayer string         `json:"target_player,omitempty"`
-	SpawnTick    int64          `json:"spawn_tick,omitempty"`
-	LastSeen     int64          `json:"last_seen,omitempty"`
-	ThreatLevel  float64        `json:"threat_level,omitempty"`
+	ID          string         `json:"id"`
+	Type        string         `json:"type"`
+	Position    model.Position `json:"position"`
+	Strength    int            `json:"strength"`
+	SpawnTick   int64          `json:"spawn_tick,omitempty"`
+	LastSeen    int64          `json:"last_seen,omitempty"`
+	ThreatLevel float64        `json:"threat_level,omitempty"`
 }
 
 type DetectionView struct {
@@ -192,8 +189,6 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 	view.LogisticsDistributors, view.LogisticsBots = collectLogisticsDistributors(ws, playerID)
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
 	view.CombatSquads = collectCombatSquads(ws, playerID)
-	view.OrbitalPlatforms = collectOrbitalPlatforms(ws, playerID)
-	view.Bridgeheads = collectBridgeheads(ws)
 	view.Frontlines = collectFrontlines(ws)
 	view.GroundTaskForces = collectGroundTaskForces(ws)
 	view.Contacts = collectPlanetSensorContacts(ws, playerID)
@@ -271,49 +266,6 @@ func collectCombatSquads(ws *model.WorldState, playerID string) []model.CombatSq
 		copy := *squad
 		copy.Sustainment = squad.Sustainment.Clone()
 		out = append(out, copy)
-	}
-	return out
-}
-
-func collectOrbitalPlatforms(ws *model.WorldState, playerID string) []model.OrbitalPlatform {
-	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.OrbitalPlatforms) == 0 {
-		return []model.OrbitalPlatform{}
-	}
-	ids := make([]string, 0, len(ws.CombatRuntime.OrbitalPlatforms))
-	for id, platform := range ws.CombatRuntime.OrbitalPlatforms {
-		if platform == nil || platform.OwnerID != playerID {
-			continue
-		}
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	out := make([]model.OrbitalPlatform, 0, len(ids))
-	for _, id := range ids {
-		platform := ws.CombatRuntime.OrbitalPlatforms[id]
-		if platform == nil {
-			continue
-		}
-		out = append(out, *platform)
-	}
-	return out
-}
-
-func collectBridgeheads(ws *model.WorldState) []model.LandingBridgehead {
-	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.Bridgeheads) == 0 {
-		return []model.LandingBridgehead{}
-	}
-	ids := make([]string, 0, len(ws.CombatRuntime.Bridgeheads))
-	for id := range ws.CombatRuntime.Bridgeheads {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	out := make([]model.LandingBridgehead, 0, len(ids))
-	for _, id := range ids {
-		bridgehead := ws.CombatRuntime.Bridgeheads[id]
-		if bridgehead == nil {
-			continue
-		}
-		out = append(out, *bridgehead)
 	}
 	return out
 }
@@ -602,14 +554,13 @@ func collectEnemyForces(ws *model.WorldState, playerID string) []EnemyForceView 
 	for _, contact := range contacts {
 		force := forceByID[contact.EntityID]
 		out = append(out, EnemyForceView{
-			ID:           contact.EntityID,
-			Type:         fallbackString(contact.ConfirmedType, contact.Classification),
-			Position:     derefSensorPosition(contact.Position),
-			Strength:     contact.StrengthEstimate,
-			TargetPlayer: force.TargetPlayer,
-			SpawnTick:    force.SpawnTick,
-			LastSeen:     contact.LastUpdatedTick,
-			ThreatLevel:  contact.ThreatLevel,
+			ID:          contact.EntityID,
+			Type:        fallbackString(contact.ConfirmedType, contact.Classification),
+			Position:    derefSensorPosition(contact.Position),
+			Strength:    contact.StrengthEstimate,
+			SpawnTick:   force.SpawnTick,
+			LastSeen:    contact.LastUpdatedTick,
+			ThreatLevel: contact.ThreatLevel,
 		})
 	}
 	return out

@@ -674,7 +674,6 @@ const runtimeByPlanet: Record<string, PlanetRuntimeView> = {
         type: 'swarm',
         position: { x: 6, y: 4, z: 0 },
         strength: 28,
-        target_player: 'p1',
         spawn_tick: 116,
         last_seen: 127,
         threat_level: 2.4,

@@ -94,8 +94,6 @@ func (s *CombatSquad) AliveCount() int {
 type CombatRuntimeState struct {
 	EntityCounter    int64                              `json:"entity_counter"`
 	Squads           map[string]*CombatSquad            `json:"squads,omitempty"`
-	OrbitalPlatforms map[string]*OrbitalPlatform        `json:"orbital_platforms,omitempty"`
-	Bridgeheads      map[string]*LandingBridgehead      `json:"bridgeheads,omitempty"`
 	Frontlines       map[string]*PlanetaryFrontline     `json:"frontlines,omitempty"`
 	GroundTaskForces map[string]*GroundTaskForceRuntime `json:"ground_task_forces,omitempty"`
 }
@@ -104,8 +102,6 @@ type CombatRuntimeState struct {
 func NewCombatRuntimeState() *CombatRuntimeState {
 	return &CombatRuntimeState{
 		Squads:           make(map[string]*CombatSquad),
-		OrbitalPlatforms: make(map[string]*OrbitalPlatform),
-		Bridgeheads:      make(map[string]*LandingBridgehead),
 		Frontlines:       make(map[string]*PlanetaryFrontline),
 		GroundTaskForces: make(map[string]*GroundTaskForceRuntime),
 	}
@@ -128,8 +124,6 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 	out := &CombatRuntimeState{
 		EntityCounter:    rt.EntityCounter,
 		Squads:           make(map[string]*CombatSquad, len(rt.Squads)),
-		OrbitalPlatforms: make(map[string]*OrbitalPlatform, len(rt.OrbitalPlatforms)),
-		Bridgeheads:      make(map[string]*LandingBridgehead, len(rt.Bridgeheads)),
 		Frontlines:       make(map[string]*PlanetaryFrontline, len(rt.Frontlines)),
 		GroundTaskForces: make(map[string]*GroundTaskForceRuntime, len(rt.GroundTaskForces)),
 	}
@@ -143,20 +137,6 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 			copy.Path = append([]Position(nil), squad.Path...)
 		}
 		out.Squads[id] = &copy
-	}
-	for id, platform := range rt.OrbitalPlatforms {
-		if platform == nil {
-			continue
-		}
-		copy := *platform
-		out.OrbitalPlatforms[id] = &copy
-	}
-	for id, bridgehead := range rt.Bridgeheads {
-		if bridgehead == nil {
-			continue
-		}
-		copy := *bridgehead
-		out.Bridgeheads[id] = &copy
 	}
 	for id, frontline := range rt.Frontlines {
 		if frontline == nil {

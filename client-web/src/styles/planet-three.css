@@ -79,3 +79,12 @@
   /* On phones the notification bell holds notices; transient cards would cover construction controls. */
   .app-shell:has(.planet-three, .system-orbit) .toast-stack { display:none; }
 }
+
+/* C1 3D 框选矩形（Shift+左键拖动）；指针穿透 */
+.planet-three__marquee {
+  position: absolute;
+  border: 1.5px solid #5ef7a1;
+  background: rgba(94, 247, 161, 0.12);
+  pointer-events: none;
+  z-index: 6;
+}

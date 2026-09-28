@@ -3,9 +3,12 @@ import { useShallow } from 'zustand/react/shallow';
 import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { PLANET_LAYER_LABELS, getFogState, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
+import { sameTypeOwnUnitsInView } from './rts-commands';
 import { usePlanetViewStore } from './store';
 import { PlanetThreeScene } from './planet-three-scene';
 import type { PlanetRenderQuality } from './three/render-quality';
+import { sfx } from '@/engine/audio';
+import { subscribeBattleEvents } from '@/engine/battle-events';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
 const QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
@@ -29,6 +32,8 @@ interface Props {
   runtime?: PlanetRuntimeView;
   onCanvasReady?: (capture: PlanetMapCapture | null) => void;
   onInteractTile?: (tile: TilePoint) => void;
+  /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
+  onContextTile?: (tile: TilePoint) => boolean;
 }
 
 export function PlanetMapThree(props: Props) {
@@ -41,18 +46,44 @@ export function PlanetMapThree(props: Props) {
   const [ready, setReady] = useState(false);
   const [tilt, setTilt] = useState(0.65);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
-  const { selected, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
-    selected: s.selected, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
+  // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
+  const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const { selected, selectedUnits, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
+    selected: s.selected, selectedUnits: s.selectedUnits, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest,
   })));
 
   useEffect(() => {
     const cancelInteraction = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') usePlanetViewStore.getState().exitInteractionMode();
+      if (event.key !== 'Escape') return;
+      const store = usePlanetViewStore.getState();
+      if (store.interactionMode.kind !== 'inspect') {
+        store.exitInteractionMode();
+        return;
+      }
+      // inspect 模式 Esc = 清空选择
+      if (store.selectedUnits.length > 0 || store.selected) {
+        store.setSelectedUnits([]);
+        store.setSelected(null);
+      }
     };
     window.addEventListener('keydown', cancelInteraction);
     return () => window.removeEventListener('keydown', cancelInteraction);
   }, []);
+
+  /** 多选落库：单选时同步 selected，多选/清空时 selected 置空（与 2D 一致）。 */
+  function applyUnitSelection(ids: string[]) {
+    const store = usePlanetViewStore.getState();
+    store.setSelectedUnits(ids);
+    if (ids.length === 1) {
+      const unit = latest.current.planet.units?.[ids[0]];
+      store.setSelected(unit ? { kind: 'unit', id: unit.id, position: unit.position } : null);
+    } else {
+      store.setSelected(null);
+    }
+    if (ids.length > 0) sfx.uiClick();
+  }
 
   useEffect(() => {
     if (!host.current) return;
@@ -67,8 +98,13 @@ export function PlanetMapThree(props: Props) {
           return;
         }
         if (store.interactionMode.kind !== 'inspect') current.onInteractTile?.(tile);
-        else store.setSelected(resolveSelectionAtTile(current.planet, tile.x, tile.y)
-          ?? { kind: 'tile', position: { ...tile, z: 0 } });
+        else {
+          const selection = resolveSelectionAtTile(current.planet, tile.x, tile.y)
+            ?? { kind: 'tile', position: { ...tile, z: 0 } } as const;
+          store.setSelected(selection);
+          // 单选单位进入多选集合（右键情境指令/快捷键的命令目标）
+          store.setSelectedUnits(selection.kind === 'unit' ? [selection.id] : []);
+        }
       }, tile => usePlanetViewStore.getState().setHoveredTile(tile));
     } catch {
       setError('无法启动 3D 画面，请启用浏览器硬件加速，或切换到平面战术视图。');
@@ -78,6 +114,8 @@ export function PlanetMapThree(props: Props) {
     setReady(true);
     // Dev-only projection helper: browser tests still click the rendered canvas.
     if (import.meta.env.DEV) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
+    // 战斗事件总线 → 3D 战斗演出（弹道/命中/爆炸/残骸）；卸载退订防重复演出
+    const unsubscribeBattle = subscribeBattleEvents((event) => renderer.handleBattleEvent(event));
     const timer = window.setInterval(() => {
       if (document.hidden) return;
       const tile = renderer.getCenterTile();
@@ -95,6 +133,7 @@ export function PlanetMapThree(props: Props) {
     }, 500);
     return () => {
       clearInterval(timer);
+      unsubscribeBattle();
       renderer.destroy();
       scene.current = null;
       latest.current.onCanvasReady?.(null);
@@ -122,8 +161,8 @@ export function PlanetMapThree(props: Props) {
   }, [ready, props.onCanvasReady]);
 
   useEffect(() => {
-    scene.current?.setInteraction({ selected, hoveredTile, interactionMode, layers });
-  }, [ready, selected, hoveredTile, interactionMode, layers]);
+    scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers });
+  }, [ready, selected, selectedUnits, hoveredTile, interactionMode, layers]);
 
   const initiallyFocused = useRef(false);
   useEffect(() => {
@@ -138,11 +177,107 @@ export function PlanetMapThree(props: Props) {
     if (tile) scene.current?.focus(tile);
   };
 
-  return <div className="planet-three" onContextMenu={event => {
+  // Shift+左键框选：capture 阶段拦截，阻止球面旋转；抬起时按屏幕投影选中矩形内己方单位。
+  function handleMarqueeDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || !event.shiftKey || interactionMode.kind !== 'inspect') return;
+    marqueeRef.current = { startX: event.clientX, startY: event.clientY, active: false };
+    event.stopPropagation();
     event.preventDefault();
-    usePlanetViewStore.getState().exitInteractionMode();
+  }
+
+  function handleMarqueeMove(event: React.PointerEvent<HTMLDivElement>) {
+    const marquee = marqueeRef.current;
+    if (!marquee) return;
+    event.stopPropagation();
+    if (!marquee.active && Math.abs(event.clientX - marquee.startX) + Math.abs(event.clientY - marquee.startY) > 4) {
+      marquee.active = true;
+    }
+    if (marquee.active) {
+      setMarqueeRect({
+        x0: Math.min(marquee.startX, event.clientX),
+        y0: Math.min(marquee.startY, event.clientY),
+        x1: Math.max(marquee.startX, event.clientX),
+        y1: Math.max(marquee.startY, event.clientY),
+      });
+    }
+  }
+
+  function handleMarqueeUp(event: React.PointerEvent<HTMLDivElement>) {
+    const marquee = marqueeRef.current;
+    marqueeRef.current = null;
+    if (!marquee) return;
+    event.stopPropagation();
+    setMarqueeRect(null);
+    if (!marquee.active || !scene.current) return;
+    const rect = {
+      minX: Math.min(marquee.startX, event.clientX),
+      maxX: Math.max(marquee.startX, event.clientX),
+      minY: Math.min(marquee.startY, event.clientY),
+      maxY: Math.max(marquee.startY, event.clientY),
+    };
+    const hostRect = host.current?.getBoundingClientRect();
+    if (!hostRect) return;
+    const ids: string[] = [];
+    for (const unit of Object.values(latest.current.planet.units ?? {})) {
+      if (unit.owner_id !== session.playerId) continue;
+      const projected = scene.current.project({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) });
+      if (!projected?.visible) continue;
+      const sx = hostRect.left + projected.x;
+      const sy = hostRect.top + projected.y;
+      if (sx >= rect.minX && sx <= rect.maxX && sy >= rect.minY && sy <= rect.maxY) ids.push(unit.id);
+    }
+    ids.sort();
+    applyUnitSelection(ids);
+  }
+
+  return <div className="planet-three"
+    onPointerDownCapture={handleMarqueeDown}
+    onPointerMoveCapture={handleMarqueeMove}
+    onPointerUpCapture={handleMarqueeUp}
+    onDoubleClick={event => {
+      // 双击单位 = 选中屏幕内全部同类己方单位（投影可见即"同屏"）
+      const tile = scene.current?.pickAt(event.clientX, event.clientY);
+      if (!tile) return;
+      const hit = resolveSelectionAtTile(latest.current.planet, tile.x, tile.y);
+      if (hit?.kind !== 'unit') return;
+      const unit = latest.current.planet.units?.[hit.id];
+      if (!unit || unit.owner_id !== session.playerId || !scene.current || !host.current) return;
+      const hostRect = host.current.getBoundingClientRect();
+      const ids = sameTypeOwnUnitsInView(latest.current.planet, session.playerId, hit.id, null).filter(id => {
+        const candidate = latest.current.planet.units?.[id];
+        if (!candidate) return false;
+        const projected = scene.current?.project({ x: Math.round(candidate.position.x), y: Math.round(candidate.position.y) });
+        if (!projected?.visible) return false;
+        const sx = hostRect.left + projected.x;
+        const sy = hostRect.top + projected.y;
+        return sx >= hostRect.left && sx <= hostRect.right && sy >= hostRect.top && sy <= hostRect.bottom;
+      });
+      applyUnitSelection(ids);
+    }}
+    onContextMenu={event => {
+    event.preventDefault();
+    const store = usePlanetViewStore.getState();
+    if (store.interactionMode.kind !== 'inspect') {
+      store.exitInteractionMode();
+      return;
+    }
+    // inspect 模式右键 = 情境指令（点敌攻击/点地移动，由 onContextTile 判定）
+    const tile = scene.current?.pickAt(event.clientX, event.clientY);
+    if (tile) latest.current.onContextTile?.(tile);
   }}>
     <div ref={host} className="planet-three__surface" tabIndex={0} role="application" aria-label="3D 行星地图" />
+    {marqueeRect && host.current ? (
+      <div
+        aria-hidden="true"
+        className="planet-three__marquee"
+        style={{
+          left: marqueeRect.x0 - host.current.getBoundingClientRect().left,
+          top: marqueeRect.y0 - host.current.getBoundingClientRect().top,
+          width: marqueeRect.x1 - marqueeRect.x0,
+          height: marqueeRect.y1 - marqueeRect.y0,
+        }}
+      />
+    ) : null}
     {error && <div role="alert" className="planet-three__error">{error}</div>}
     <div className="planet-three__navigation" aria-label="3D 视角控制">
       <div>
@@ -174,7 +309,8 @@ export function PlanetMapThree(props: Props) {
         </label>)}</div>
       </details>
       {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
-      {interactionMode.kind !== 'inspect' && <button className="secondary-button" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : '攻击'} · Esc</button>}
+      {selectedUnits.length > 1 && <small>已框选 {selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击</small>}
+      {interactionMode.kind !== 'inspect' && <button className="secondary-button" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : '指令'} · Esc</button>}
     </div>
   </div>;
 }

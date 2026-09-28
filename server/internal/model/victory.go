@@ -15,6 +15,8 @@ type VictoryState struct {
 	Reason      string `json:"reason,omitempty"`
 	VictoryRule string `json:"victory_rule,omitempty"`
 	TechID      string `json:"tech_id,omitempty"`
+	// TeamID 团队胜利时的获胜队伍（F3）：团队对局中仅存一队时填充。
+	TeamID string `json:"team_id,omitempty"`
 }
 
 // Declared reports whether a winner has been resolved.

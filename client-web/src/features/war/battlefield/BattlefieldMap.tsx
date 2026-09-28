@@ -89,7 +89,7 @@ export function BattlefieldMap({
             ? `制空权：${superiority.advantage_player_id ?? '争夺中'} · ${(superiority as { contest_intensity?: number }).contest_intensity ?? 0}`
             : '尚未形成制空权'}
           {' · '}
-          接触 {(runtime?.contacts ?? []).length} · 舰队 {fleets.length} · 封锁 {(runtime?.planet_blockades ?? []).length} · 登陆 {(runtime?.landing_operations ?? []).length}
+          接触 {(runtime?.contacts ?? []).length} · 舰队 {fleets.length} · 封锁 {(runtime?.planet_blockades ?? []).length}
         </p>
       </div>
       <ul className="war-list battlefield-legend">

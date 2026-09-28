@@ -106,7 +106,6 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 			Type:         model.EnemyForceTypeBeacon,
 			Position:     model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
 			Strength:     1,
-			TargetPlayer: "p1",
 			SpawnTick:    ws.Tick,
 		}},
 	}
@@ -177,26 +176,6 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 		blockade, ok := blockades[0].(map[string]any)
 		return ok && blockade["status"] == string(model.PlanetBlockadeStatusActive)
 	}, "official war blockade did not reach active orbital superiority state")
-
-	postCommandsT122(t, srv, p1, []model.Command{{
-		Type: model.CmdLandingStart,
-		Payload: map[string]any{
-			"operation_id":  "landing-gateway-t122",
-			"task_force_id": "tf-gateway-t122",
-			"planet_id":     planetID,
-		},
-	}})
-
-	waitForCondition(t, 8*time.Second, func() bool {
-		body := getAuthorizedJSONT122(t, srv, p1, "/world/systems/"+systemID+"/runtime")
-		operation, ok := findOperationByIDT122(body, "landing_operations", "landing-gateway-t122")
-		if !ok {
-			return false
-		}
-		return operation["result"] == string(model.LandingOperationResultSuccess) &&
-			operation["stage"] == string(model.LandingOperationStageBeachheadEstablished) &&
-			operation["bridgehead_id"] != ""
-	}, "official war landing operation did not establish a bridgehead")
 }
 
 func newOfficialWarServerT122(t *testing.T) (*gateway.Server, *startup.App) {
@@ -327,25 +306,6 @@ func readyPayloadCountT122(industryBody map[string]any, hubID, blueprintID strin
 		}
 	}
 	return 0
-}
-
-func findOperationByIDT122(body map[string]any, key, operationID string) (map[string]any, bool) {
-	value, ok := body[key]
-	if !ok || value == nil {
-		return nil, false
-	}
-	list, ok := value.([]any)
-	if !ok {
-		return nil, false
-	}
-	for _, raw := range list {
-		operation, ok := raw.(map[string]any)
-		if !ok || operation["id"] != operationID {
-			continue
-		}
-		return operation, true
-	}
-	return nil, false
 }
 
 func productionReadyTimeoutT122(t *testing.T, app *startup.App, playerID, factoryID, blueprintID string) time.Duration {

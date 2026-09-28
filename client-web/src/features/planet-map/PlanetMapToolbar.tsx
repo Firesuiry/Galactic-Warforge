@@ -15,6 +15,8 @@ import {
 import { useSessionSnapshot } from "@/hooks/use-session";
 
 interface PlanetMapToolbarProps {
+  /** 3D 球面视图：缩放 ± 走 3D 自带控件（requestZoom 无消费者），这里隐藏。 */
+  dimensional?: boolean;
   networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
@@ -28,6 +30,7 @@ interface PlanetMapToolbarProps {
  * 找不到基地时退回重置视角。
  */
 export function PlanetMapToolbar({
+  dimensional = false,
   networks,
   planet,
   runtime,
@@ -88,24 +91,28 @@ export function PlanetMapToolbar({
         >
           <Layers size={18} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button
-          aria-label="缩小"
-          className="secondary-button planet-map-toolbar__button"
-          onClick={() => requestZoom(camera.zoomIndex - 1)}
-          title="缩小"
-          type="button"
-        >
-          <Minus size={18} strokeWidth={2} aria-hidden="true" />
-        </button>
-        <button
-          aria-label="放大"
-          className="secondary-button planet-map-toolbar__button"
-          onClick={() => requestZoom(camera.zoomIndex + 1)}
-          title="放大"
-          type="button"
-        >
-          <Plus size={18} strokeWidth={2} aria-hidden="true" />
-        </button>
+        {dimensional ? null : (
+          <>
+            <button
+              aria-label="缩小"
+              className="secondary-button planet-map-toolbar__button"
+              onClick={() => requestZoom(camera.zoomIndex - 1)}
+              title="缩小"
+              type="button"
+            >
+              <Minus size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button
+              aria-label="放大"
+              className="secondary-button planet-map-toolbar__button"
+              onClick={() => requestZoom(camera.zoomIndex + 1)}
+              title="放大"
+              type="button"
+            >
+              <Plus size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </>
+        )}
         <button
           aria-label="回到基地"
           className="secondary-button planet-map-toolbar__button"

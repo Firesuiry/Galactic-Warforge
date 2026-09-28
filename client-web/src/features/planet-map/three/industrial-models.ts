@@ -417,10 +417,17 @@ export class IndustrialModels {
     this.part(group, 'hex', 'alloy', [0.68, 0.17, 0.68], [0, 0.18, 0]);
     this.part(group, 'cylinder', 'graphite', [0.4, 0.24, 0.4], [0, 0.36, 0]);
     this.box(group, armor, [0.43, 0.24, 0.4], [0, 0.52, 0]);
+    // 独立炮管组（C2 炮塔转向）：registerRotation 标记后 batchStatic 跳过整棵子树，
+    // DynamicBatches 逐帧复制姿态；场景侧按最近敌对目标写 rotation.y（speed=0 不自动转）。
+    const barrel = new THREE.Group();
+    barrel.name = 'turret-barrel';
+    barrel.position.set(0, 0.52, 0);
+    group.add(barrel);
     for (const x of [-0.11, 0.11]) {
-      this.pipe(group, 'alloy', [x, 0.54, 0.12], [x, 0.63, 0.51], 0.04);
-      this.box(group, 'graphite', [0.1, 0.1, 0.12], [x, 0.62, 0.45], [-0.2, 0, 0]);
+      this.pipe(barrel, 'alloy', [x, 0.02, 0.12], [x, 0.11, 0.51], 0.04);
+      this.box(barrel, 'graphite', [0.1, 0.1, 0.12], [x, 0.1, 0.45], [-0.2, 0, 0]);
     }
+    this.registerRotation(barrel, 'y', 0);
     this.box(group, light, [0.13, 0.03, 0.035], [0, 0.55, -0.215]);
   }
 

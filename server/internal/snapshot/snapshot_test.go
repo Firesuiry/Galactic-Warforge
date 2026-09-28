@@ -93,7 +93,6 @@ func TestSnapshotRoundTrip(t *testing.T) {
 				State:            model.CombatSquadStateIdle,
 			},
 		},
-		OrbitalPlatforms: map[string]*model.OrbitalPlatform{},
 	}
 
 	ws.Pipelines = &model.PipelineNetworkState{

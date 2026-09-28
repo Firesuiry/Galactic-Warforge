@@ -27,17 +27,6 @@ function createRuntime(): SystemRuntimeView {
     planet_blockades: [
       { planet_id: 'planet-1-1', system_id: 'sys-1', owner_id: 'p1', status: 'active' },
     ],
-    landing_operations: [
-      {
-        id: 'landing-1',
-        owner_id: 'p1',
-        task_force_id: 'tf-1',
-        system_id: 'sys-1',
-        planet_id: 'planet-1-1',
-        stage: 'reconnaissance',
-        result: 'pending',
-      },
-    ],
     contacts: [
       {
         id: 'contact-1',
@@ -87,7 +76,7 @@ describe('battlefield-model 布局', () => {
     expect(planet?.kind).toBe('planet');
     expect(planet?.tone).toBe('enemy'); // 被封锁
     expect(planet?.blockaded).toBe(true);
-    expect(planet?.detail).toBe('封锁 active · 登陆 reconnaissance');
+    expect(planet?.detail).toBe('封锁 active');
 
     const free = markers.find((marker) => marker.id === 'planet-1-2');
     expect(free?.tone).toBe('neutral');

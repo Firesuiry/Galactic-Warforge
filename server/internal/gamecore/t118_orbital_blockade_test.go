@@ -8,7 +8,7 @@ import (
 	"siliconworld/internal/visibility"
 )
 
-func TestT118BlockadeInterdictsSupplyAndLandingWithoutSuperiority(t *testing.T) {
+func TestT118BlockadeInterdictsSupplyWithoutSuperiority(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	systemID := core.Maps().PrimaryPlanet().SystemID
@@ -61,7 +61,6 @@ func TestT118BlockadeInterdictsSupplyAndLandingWithoutSuperiority(t *testing.T) 
 		t.Fatalf("commission p2 fleet failed: %s (%s)", res.Code, res.Message)
 	}
 
-	createTaskForceForT118(t, core, "p1", "tf-landing-t118", "fleet-p1-t118", systemID, ws.PlanetID, model.WarTaskForceStanceEscort)
 	createTaskForceForT118(t, core, "p2", "tf-blockade-t118", "fleet-p2-t118", systemID, ws.PlanetID, model.WarTaskForceStanceSiege)
 
 	p1Fleet := core.SpaceRuntime().PlayerSystem("p1", systemID).Fleets["fleet-p1-t118"]
@@ -103,39 +102,9 @@ func TestT118BlockadeInterdictsSupplyAndLandingWithoutSuperiority(t *testing.T) 
 	if blockade["interdicted_supply"].(float64) < 1 {
 		t.Fatalf("expected blockade to record interdicted supply, got %+v", blockade)
 	}
-
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CommandType("landing_start"),
-		Payload: map[string]any{
-			"operation_id":  "landing-fail-t118",
-			"task_force_id": "tf-landing-t118",
-			"planet_id":     ws.PlanetID,
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("landing_start failed: %s (%s)", res.Code, res.Message)
-	}
-
-	core.processTick()
-
-	systemView, ok = ql.SystemRuntime("p1", systemID, ws.PlanetID, ws, core.SpaceRuntime())
-	if !ok {
-		t.Fatal("expected system runtime query view after landing failure")
-	}
-	systemBody = marshalAnyMap(t, systemView)
-	landing := findOperationByID(t, systemBody, "landing_operations", "landing-fail-t118")
-	if landing["result"] != "failed" {
-		t.Fatalf("expected failed landing result, got %+v", landing)
-	}
-	if landing["blocked_reason"] != "insufficient_orbital_superiority" {
-		t.Fatalf("expected superiority failure reason, got %+v", landing)
-	}
-	blockade = firstListEntryMap(t, systemBody, "planet_blockades")
-	if blockade["interdicted_landings"].(float64) < 1 {
-		t.Fatalf("expected blockade to record interdicted landing, got %+v", blockade)
-	}
 }
 
-func TestT118LandingOperationEstablishesBeachheadAfterBlockadeBreaks(t *testing.T) {
+func TestT118BlockadeBreaksAfterFleetDisband(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	systemID := core.Maps().PrimaryPlanet().SystemID
@@ -188,7 +157,6 @@ func TestT118LandingOperationEstablishesBeachheadAfterBlockadeBreaks(t *testing.
 		t.Fatalf("commission p2 fleet failed: %s (%s)", res.Code, res.Message)
 	}
 
-	createTaskForceForT118(t, core, "p1", "tf-landing-success-t118", "fleet-p1-success-t118", systemID, ws.PlanetID, model.WarTaskForceStanceEscort)
 	createTaskForceForT118(t, core, "p2", "tf-blockade-success-t118", "fleet-p2-success-t118", systemID, ws.PlanetID, model.WarTaskForceStanceSiege)
 
 	if res := issueInternalCommand(core, "p2", model.Command{
@@ -220,20 +188,7 @@ func TestT118LandingOperationEstablishesBeachheadAfterBlockadeBreaks(t *testing.
 		t.Fatalf("expected p1 fleet to resupply once blockade breaks, got %+v", p1Fleet.Sustainment.Current)
 	}
 
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CommandType("landing_start"),
-		Payload: map[string]any{
-			"operation_id":  "landing-success-t118",
-			"task_force_id": "tf-landing-success-t118",
-			"planet_id":     ws.PlanetID,
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("landing_start failed: %s (%s)", res.Code, res.Message)
-	}
-
-	for i := 0; i < 4; i++ {
-		core.processTick()
-	}
+	core.processTick()
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 	systemView, ok := ql.SystemRuntime("p1", systemID, ws.PlanetID, ws, core.SpaceRuntime())
@@ -248,21 +203,6 @@ func TestT118LandingOperationEstablishesBeachheadAfterBlockadeBreaks(t *testing.
 	blockade := firstListEntryMap(t, systemBody, "planet_blockades")
 	if blockade["status"] != "broken" {
 		t.Fatalf("expected broken blockade after fleet disband, got %+v", blockade)
-	}
-	landing := findOperationByID(t, systemBody, "landing_operations", "landing-success-t118")
-	if landing["result"] != "success" {
-		t.Fatalf("expected successful landing result, got %+v", landing)
-	}
-	if landing["stage"] != "beachhead_established" {
-		t.Fatalf("expected beachhead stage, got %+v", landing)
-	}
-	if landing["bridgehead_id"] == "" {
-		t.Fatalf("expected bridgehead id, got %+v", landing)
-	}
-	combatBody := marshalAnyMap(t, ws.CombatRuntime)
-	bridgeheads, ok := combatBody["bridgeheads"].(map[string]any)
-	if !ok || len(bridgeheads) != 1 {
-		t.Fatalf("expected one planetary bridgehead, got %+v", combatBody["bridgeheads"])
 	}
 }
 
@@ -348,24 +288,4 @@ func firstListEntryMap(t *testing.T, body map[string]any, key string) map[string
 		t.Fatalf("expected first %q entry to be object, got %T", key, list[0])
 	}
 	return entry
-}
-
-func findOperationByID(t *testing.T, body map[string]any, key, operationID string) map[string]any {
-	t.Helper()
-	value, ok := body[key]
-	if !ok {
-		t.Fatalf("expected field %q in %+v", key, body)
-	}
-	list, ok := value.([]any)
-	if !ok {
-		t.Fatalf("expected list field %q, got %T", key, value)
-	}
-	for _, entry := range list {
-		obj, ok := entry.(map[string]any)
-		if ok && obj["id"] == operationID {
-			return obj
-		}
-	}
-	t.Fatalf("expected operation %q in %+v", operationID, value)
-	return nil
 }

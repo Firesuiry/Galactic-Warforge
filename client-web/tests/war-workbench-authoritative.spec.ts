@@ -175,11 +175,4 @@ test('战争工作台可直接连接 authoritative 战争场景并操作核心�
   await page.getByRole('tab', { name: '战报' }).click();
   await expect(page.getByText('战报与情报')).toBeVisible();
   await expect(page.getByText('planet-1-1 · intensity')).toBeVisible();
-
-  await page.getByRole('tab', { name: '战区' }).click();
-  await page.getByRole('button', { name: '发起登陆' }).click();
-  await expect(page.getByText('accepted, will execute at next tick').first()).toBeVisible();
-
-  await page.getByRole('tab', { name: '战报' }).click();
-  await expect(page.getByText('landing-1')).toBeVisible();
 });

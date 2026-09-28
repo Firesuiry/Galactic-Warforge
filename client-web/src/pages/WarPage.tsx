@@ -21,7 +21,6 @@ import {
   formatBlockadeStatus,
   formatBlueprintBaseLabel,
   formatBlueprintState,
-  formatLandingStage,
   formatMetric,
   formatOrderStatus,
   formatPercent,
@@ -232,7 +231,6 @@ export function WarPage() {
   const contacts = runtime?.contacts ?? [];
   const battleReports = runtime?.battle_reports ?? [];
   const blockades = runtime?.planet_blockades ?? [];
-  const landingOperations = runtime?.landing_operations ?? [];
   const factoryBuildings = (Object.values(planetSceneQuery.data?.buildings ?? {})
     .filter((building) => building.owner_id === session.playerId
       && building.runtime?.functions?.production));
@@ -523,20 +521,6 @@ export function WarPage() {
         ['system-runtime', session.serverUrl, session.playerId, focusSystemId],
       ],
       execute: () => client.cmdBlockadePlanet(selectedTaskForce.id, { planetId: selectedPlanetId }),
-    });
-  }
-
-  function handleLanding() {
-    if (!selectedTaskForce?.id || !selectedPlanetId) {
-      setFeedback('theater', { tone: 'error', title: '登陆需要选择任务群和目标行星' });
-      return;
-    }
-    runCommand({
-      section: 'theater',
-      invalidateKeys: [
-        ['system-runtime', session.serverUrl, session.playerId, focusSystemId],
-      ],
-      execute: () => client.cmdLandingStart(selectedTaskForce.id, { planetId: selectedPlanetId }),
     });
   }
 
@@ -939,7 +923,7 @@ export function WarPage() {
           <div className="war-panel__header">
             <div>
               <h2>战区面板</h2>
-              <p className="subtle-text">姿态、战区目标、封锁与登陆由同一面板驱动。</p>
+              <p className="subtle-text">姿态、战区目标与封锁由同一面板驱动。</p>
             </div>
           </div>
 
@@ -990,9 +974,6 @@ export function WarPage() {
                 <button className="secondary-button war-button" type="button" disabled={isPending || !selectedTaskForce?.id || !selectedPlanetId} onClick={handleBlockade}>
                   发起封锁
                 </button>
-                <button className="secondary-button war-button" type="button" disabled={isPending || !selectedTaskForce?.id || !selectedPlanetId} onClick={handleLanding}>
-                  发起登陆
-                </button>
               </div>
               {selectedTaskForce ? (
                 <dl className="war-kv-list">
@@ -1019,12 +1000,24 @@ export function WarPage() {
             </article>
 
             <article className="war-card">
-              <h3>战区目标</h3>
+              <h3>战区目标与警戒</h3>
               <ul className="war-list">
                 {theaters.length === 0 ? <li>暂无战区。</li> : theaters.map((theater) => (
                   <li key={theater.id}>
                     <strong>{theater.name || theater.id}</strong>
                     <span>{theater.objective?.description || theater.objective?.objective_type || '未设置目标'}</span>
+                    {(theater.zones ?? []).length === 0 ? (
+                      <span className="badge">未定义区域</span>
+                    ) : (theater.zones ?? []).map((zone, index) => (
+                      <span
+                        className={zone.alerted ? 'badge badge--danger' : 'badge'}
+                        key={`${theater.id}-zone-${index}`}
+                      >
+                        {zone.zone_type} · {zone.planet_id || zone.system_id || '未定位'}
+                        {' · '}敌情 {zone.hostile_count}
+                        {zone.alerted ? ' · 告警中' : ''}
+                      </span>
+                    ))}
                   </li>
                 ))}
               </ul>
@@ -1061,7 +1054,7 @@ export function WarPage() {
           <div className="war-panel__header">
             <div>
               <h2>战报与情报</h2>
-              <p className="subtle-text">接触、补给、战报、封锁和登陆状态统一收口。</p>
+              <p className="subtle-text">接触、补给、战报和封锁状态统一收口。</p>
             </div>
           </div>
 
@@ -1115,17 +1108,6 @@ export function WarPage() {
               </ul>
             </article>
 
-            <article className="war-card">
-              <h3>登陆行动</h3>
-              <ul className="war-list">
-                {landingOperations.length === 0 ? <li>暂无登陆行动。</li> : landingOperations.map((operation) => (
-                  <li key={operation.id}>
-                    <strong>{operation.id}</strong>
-                    <span>{formatLandingStage(operation.stage)} · {operation.result}</span>
-                  </li>
-                ))}
-              </ul>
-            </article>
           </div>
 
           <div className="war-section-grid">

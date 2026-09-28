@@ -291,7 +291,7 @@ func TestR3SquadAttritionAndDestruction(t *testing.T) {
 	ws.CombatRuntime.Squads[squad.ID] = squad
 
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 10, Y: 11})
-	enemy.Attack = 200 // 单发 200 伤：320→120，存活员额 4→2
+	enemy.Attack = 300 // 机枪 vs 重甲 0.75：单发 225 伤，320→95，存活员额 4→2
 	events := advanceRTT(ws, 10)
 	if squad.HP >= 320 {
 		t.Fatal("squad took no damage from enemy unit")

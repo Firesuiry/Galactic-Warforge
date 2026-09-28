@@ -117,7 +117,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 当前边界也要写清：
   - 官方战争场景会预置科技、军工锚点和军需节点，但**不会**预先替玩家创建舰队、任务群或战区
   - 公开太空/地面单位仍然要走 `blueprint_* -> queue_military_production -> /world/warfare/industry.ready_payloads -> deploy_squad|commission_fleet`
-  - `blockade_planet` / `landing_start` 的同步 `accepted` 响应只表示命令已入队，最终状态仍要以后续 `/world/systems/{system_id}/runtime.planet_blockades[]`、`landing_operations[]` 或 `command_result` / 事件流对账
+  - `blockade_planet` 的同步 `accepted` 响应只表示命令已入队，最终状态仍要以后续 `/world/systems/{system_id}/runtime.planet_blockades[]` 或 `command_result` / 事件流对账
 
 **GET /health**
 - 说明: 健康检查（无需认证）
@@ -516,7 +516,6 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     - `dyson_sphere`
     - `orbital_superiority`
     - `planet_blockades`
-    - `landing_operations`
     - `active_planet_context`
     - `fleets`
     - `contacts`
@@ -536,15 +535,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `dyson_sphere.layers[].construction_bonus` 当前按 `min(0.5, rocket_launches * 0.02)` 结算；若该层已有壳面，`launch_rocket` 还会按顺序把第一个 `coverage < 1.0` 的壳面额外推进 `0.02` 覆盖率，并重算该壳面的 `energy_output`
   - `orbital_superiority`：系统级制轨态，字段为 `system_id` / `advantage_player_id` / `contest_intensity` / `last_reason` / `updated_tick`
   - `orbital_superiority.last_reason`：当前 authoritative 只会返回 `no_fleet_presence` / `orbit_contested` / `fleet_presence_margin`
-  - `planet_blockades[]`：行星级轨道封锁态，字段为 `planet_id` / `system_id` / `owner_id` / `task_force_id` / `status` / `intensity` / `interdicted_supply` / `interdicted_transports` / `interdicted_landings` / `last_reason` / `updated_tick`
+  - `planet_blockades[]`：行星级轨道封锁态，字段为 `planet_id` / `system_id` / `owner_id` / `task_force_id` / `status` / `intensity` / `interdicted_supply` / `interdicted_transports` / `last_reason` / `updated_tick`
   - `planet_blockades[].status`：当前固定为 `planned` / `active` / `contested` / `broken`
   - `planet_blockades[].last_reason`：当前 authoritative 只会返回 `awaiting_orbital_superiority` / `orbital_superiority_held` / `orbit_contested` / `lost_orbital_superiority` / `task_force_unavailable` / 各类 `*_interdicted`
-  - `landing_operations[]`：登陆投送流程，字段为 `id` / `owner_id` / `task_force_id` / `system_id` / `planet_id` / `stage` / `result` / `blocked_reason` / `transport_capacity` / `initial_supply` / `landing_zone_safety` / `bridgehead_id` / `started_tick` / `updated_tick` / `completed_tick`
-  - `landing_operations[].stage`：当前固定为 `reconnaissance` / `landing_window_open` / `vanguard_landing` / `beachhead_established` / `failed`
-  - `landing_operations[].result`：当前固定为 `pending` / `success` / `failed`
-  - `landing_operations[].blocked_reason`：失败时当前只会返回 `insufficient_orbital_superiority` / `insufficient_initial_supply` / `landing_zone_unsafe` / `task_force_unavailable`
-  - `landing_operations[].initial_supply`：登陆发起方任务群在流程推进时快照到的六类初始军需，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
-  - `landing_operations[].bridgehead_id`：若登陆成功，可直接关联到 `/world/planets/{planet_id}/runtime.bridgeheads[].id`
   - `active_planet_context`：包含 `planet_id` / `em_rail_ejector_count` / `vertical_launching_silo_count` / `ray_receiver_count` / `ray_receiver_modes`
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `transit` / `last_battle_report_id`
@@ -592,27 +585,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "intensity": 0.78,
       "interdicted_supply": 2,
       "interdicted_transports": 1,
-      "interdicted_landings": 0,
       "last_reason": "orbital_superiority_held",
       "updated_tick": 128
-    }
-  ],
-  "landing_operations": [
-    {
-      "id": "landing-3",
-      "owner_id": "p1",
-      "task_force_id": "tf-front",
-      "system_id": "sys-1",
-      "planet_id": "planet-1-1",
-      "stage": "beachhead_established",
-      "result": "success",
-      "transport_capacity": 8,
-      "initial_supply": {"ammo": 4, "fuel": 3, "spare_parts": 2},
-      "landing_zone_safety": 0.8,
-      "bridgehead_id": "bridgehead-1",
-      "started_tick": 126,
-      "updated_tick": 128,
-      "completed_tick": 128
     }
   ],
   "dyson_sphere": {
@@ -988,7 +962,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 未发现行星只返回 `planet_id` + `discovered=false`
   - 已发现但目标行星 runtime 尚未加载时返回 `available=false`
   - 只要目标行星 runtime 已加载，就会返回 `available=true`，即使它不是当前 active 行星；`active_planet_id` 始终表示真正的当前操作焦点
-  - `combat_squads` 与 `orbital_platforms` 现在来自持久化 `CombatRuntimeState`，会进入 save / replay / rollback
+  - `combat_squads` 现在来自持久化 `CombatRuntimeState`，会进入 save / replay / rollback
   - `combat_squads` 由 `deploy_squad` 写入；当前 payload 来源是部署枢纽的 authoritative `war_industry.deployment_hubs[].ready_payloads`，既可以是公开预置蓝图，也可以是玩家已定型蓝图
   - 当前 active 行星仍承载最完整的敌情/侦测结算；非 active 但已加载行星也可以看到该行星自己的 authoritative combat runtime
   - 行星侦察不再只有旧式“看见/没看见”；当前 runtime 会同时返回 `contacts`（完整接触对象）和 `detections`（为旧查询/渲染保留的摘要投影）
@@ -997,13 +971,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `domain` / `base_frame_id` / `platform_class` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `sustainment` / `state` / `target_enemy_id` / `last_attack_tick`
   - `combat_squads[].platform_class`：当前 authoritative 会按蓝图运行态归类为 `mech` / `vehicle` / `drone`
   - `combat_squads[].sustainment`：地面单位 authoritative 补给态，字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
-  - `orbital_platforms`：轨道平台，包含 `id` / `owner_id` / `planet_id` / `orbit` / `hp` / `max_hp` / `weapon` / `ammo_capacity` / `ammo_count` / `last_fire_tick` / `is_active`
-  - `bridgeheads`：滩头阵地运行态，包含 `id` / `operation_id` / `owner_id` / `planet_id` / `frontline_id` / `status` / `contested` / `expansion_level` / `fortification_level` / `established_tick` / `last_support_tick` / `transport_capacity`
-  - `bridgeheads[].status`：当前固定为 `establishing` / `active` / `collapsed`
-  - `frontlines`：行星层 authoritative 前线据点，包含 `id` / `planet_id` / `owner_id` / `type` / `bridgehead_id` / `position` / `status` / `control` / `fortification` / `obstacle_level` / `supply_flow` / `last_orbital_support_tick` / `updated_tick`
-  - `frontlines[].type`：当前固定为 `bridgehead` / `outpost`
+  - `frontlines`：行星层 authoritative 前线据点，包含 `id` / `planet_id` / `owner_id` / `type` / `position` / `status` / `control` / `fortification` / `obstacle_level` / `supply_flow` / `last_orbital_support_tick` / `updated_tick`
+  - `frontlines[].type`：当前固定为 `outpost`
   - `frontlines[].status`：当前固定为 `secured` / `contested` / `destroyed`
-  - `ground_task_forces`：行星层任务群推进运行态，包含 `task_force_id` / `owner_id` / `planet_id` / `frontline_id` / `bridgehead_id` / `ground_order` / `status` / `progress` / `pressure` / `orbital_support_mode` / `orbital_support_available` / `orbital_support_cooldown` / `orbital_support_blocked_reason` / `last_orbital_support_tick` / `updated_tick`
+  - `ground_task_forces`：行星层任务群推进运行态，包含 `task_force_id` / `owner_id` / `planet_id` / `frontline_id` / `ground_order` / `status` / `progress` / `pressure` / `orbital_support_mode` / `orbital_support_available` / `orbital_support_cooldown` / `orbital_support_blocked_reason` / `last_orbital_support_tick` / `updated_tick`
   - `ground_task_forces[].ground_order`：当前固定为 `occupy` / `advance` / `hold` / `clear_obstacles` / `escort_supply`
   - `ground_task_forces[].status`：当前固定为 `staging` / `contesting` / `securing` / `holding` / `clearing` / `supplying` / `blocked`
   - `ground_task_forces[].orbital_support_mode`：当前固定为 `none` / `fire_support` / `strike`
@@ -1015,7 +986,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 当前物流船runtime列表按船的归属星球注册表返回；异星降落/等待时，目标星球查询尚不汇入其它星球归属的船，应查归属星球runtime并结合 `current_planet_id` 判断。当地3D画面暂不显示这类异星来船，库存交付仍由服务端真实结算。
   - `construction_tasks`：施工任务视图，包含 `id` / `player_id` / `region_id` / `building_type` / `position` / `rotation` / `blueprint_params` / `conveyor_direction` / `recipe_id` / `cost` / `state` / `enqueue_tick` / `start_tick` / `update_tick` / `queue_index` / `remaining_ticks` / `total_ticks` / `speed_bonus` / `priority` / `error` / `materials_deducted`
   - `contacts`：行星接触列表，字段与 system runtime 的 `contacts` 相同；当前 ground / beacon / hive 目标也会按同一套四级情报语义返回
-  - `enemy_forces`：敌军视图，只包含当前至少达到 `confirmed_type` 的真实接触，字段仍为 `id` / `type` / `position` / `strength` / `target_player` / `spawn_tick` / `last_seen` / `threat_level`
+  - `enemy_forces`：敌军视图，只包含当前至少达到 `confirmed_type` 的真实接触，字段仍为 `id` / `type` / `position` / `strength` / `spawn_tick` / `last_seen` / `threat_level`
   - `detections`：侦测摘要投影，包含 `player_id` / `vision_range` / `known_enemy_count` / `detected_positions`；它来自 `contacts` 聚合，不再是独立 authoritative 状态
 - 用法补充:
   - `enemy_forces[].id` 也是当前 `fleet_attack` 与 combat squad 自动交战会消费的 target ID 真相来源
@@ -1082,7 +1053,6 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
       "type": "swarm",
       "position": {"x": 10, "y": 10},
       "strength": 25,
-      "target_player": "p1",
       "spawn_tick": 40
     }
   ],
@@ -1613,10 +1583,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `task_force_deploy` 当前既表达跨层部署意图，也表达行星层任务群的前线命令；它仍不等价于已经存在完整跨星系自动航渡系统
 
 **GET /world/warfare/theaters**
-- 说明: 当前玩家的战区、区域划分与战区目标（需认证）
+- 说明: 当前玩家的战区、区域划分与战区目标（需认证）；行星区域（带 `planet_id` + `position`）同时是防区警戒工具：结算周期扫描区域内的敌方实体（非拥有者单位/建筑、黑雾巢穴等），有敌情时向拥有者发 `theater_zone_alert` 事件
 - 响应字段:
   - `theaters[]`：战区列表，包含 `id` / `name` / `zones` / `objective`
-  - `zones[]`：战区区域，包含 `zone_type` / `system_id` / `planet_id` / `position` / `radius`
+  - `zones[]`：战区区域，包含 `zone_type` / `system_id` / `planet_id` / `position` / `radius` / `hostile_count` / `alerted`
+  - `zones[].hostile_count` / `zones[].alerted`：防区警戒实时状态（当前区域内敌方实体数 / 是否处于告警中）
   - `objective`：战区目标，包含 `objective_type` / `system_id` / `planet_id` / `entity_id` / `description`
 - 说明补充:
   - `zone_type` 当前支持 `primary` / `secondary` / `no_entry` / `rally` / `supply_priority`
@@ -1641,7 +1612,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|unit_order|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|set_recipe|transfer_item|switch_active_planet|set_ray_receiver_mode|set_energy_exchanger_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|landing_start|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|unit_order|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|set_recipe|transfer_item|switch_active_planet|set_ray_receiver_mode|set_energy_exchanger_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1779,7 +1750,6 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `theater_define_zone`：`payload.theater_id` + `payload.zone_type` 必填；可选 `payload.system_id` / `payload.planet_id` / `payload.position` / `payload.radius`；`zone_type` 取 `primary|secondary|no_entry|rally|supply_priority`
   - `theater_set_objective`：`payload.theater_id` + `payload.objective_type` 必填；可选 `payload.system_id` / `payload.planet_id` / `payload.entity_id` / `payload.description`
   - `blockade_planet`：`payload.task_force_id` + `payload.planet_id` 必填；任务群必须属于当前玩家、且至少包含一个舰队成员；命令只写入 authoritative 封锁意图，真正是否 `active` 取决于后续 tick 中该任务群是否仍可用、且其所属玩家是否在目标恒星系取得制轨优势；当封锁 `active` 时，当前会真实拦截该行星的 `orbital_supply_port` / `interstellar_logistics_station` / `supply_ship` / `frontline_supply_drop` 军需补给节点，并累计 `interdicted_supply` / `interdicted_transports`
-  - `landing_start`：`payload.task_force_id` + `payload.planet_id` 必填；可选 `payload.operation_id`；任务群必须属于当前玩家且具备正向 `transport_capacity`；命令会创建独立的 authoritative 登陆流程，不会把 `fleet_attack` 目标改成星球来伪装“已登陆”；后续 tick 会依次推进 `reconnaissance -> landing_window_open -> vanguard_landing -> beachhead_established`，若缺制轨、初始军需不足、登陆点不安全或任务群失效，则会转为 `result=failed`
   - `blueprint_create`：`payload.blueprint_id` + `payload.domain` 必填，且必须二选一提供 `payload.base_frame_id` 或 `payload.base_hull_id`；当前只创建玩家自有蓝图草案，不会生成任何部署载荷；若 `blueprint_id` 与公开预置蓝图或当前玩家已有蓝图重名，会直接拒绝
   - `blueprint_set_component`：`payload.blueprint_id` + `payload.slot_id` + `payload.component_id` 必填；只允许编辑 `draft` / `validated` 蓝图；这里允许先装入未来会被校验器判非法的组件组合，真正的 legality 以 `blueprint_validate` 结果为准；若蓝图是受控改型，只能修改 `allowed_variant_slots` 白名单中的槽位
   - `blueprint_validate`：`payload.blueprint_id` 必填；只允许校验 `draft` / `validated` 蓝图；服务端会返回结构化 `validation`，覆盖功率、体积、质量、刚性、热负荷、信号/隐形、维护成本以及 `hardpoint_mismatch` 等原因；当校验失败时，最终 authoritative `command_result.payload.validation.issues[]` 可直接用于 CLI/Web 展示
@@ -1930,7 +1900,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `construction_paused`
   - `construction_resumed`
   - `research_completed`
-  - `victory_declared`
+  - `victory_declared`（淘汰判定覆盖所有已加载世界：HQ 或存活机甲在场即未出局；单人配置不判淘汰胜；团队对局仅存一队时团队获胜，payload 带 team_id）
   - `threat_level_changed`
   - `loot_dropped`
   - `entity_updated`
@@ -1945,9 +1915,8 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `missile_salvo_fired`
   - `point_defense_intercept`
   - `battle_report_generated`
-  - `landing_started`
-  - `landing_failed`
   - `orbital_superiority_changed`
+  - `theater_zone_alert`
   - `supply_line_disrupted`
 - 事件类型补充:
   - `command_result`：这是 `/commands` 异步执行后的 authoritative 最终结果回写；`payload.request_id` 对应原始请求，`command_index` 对应批内第几条命令。即使同步响应里已经返回 `accepted`，最终仍应以这里的 `status` / `code` / `message` 为准。命令类客户端的推荐对账路径是：SSE 主订阅 `command_result`，超时或重连后再用 `GET /events/snapshot?event_types=command_result` 做补账。
@@ -1972,8 +1941,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `missile_salvo_fired`：导弹齐射事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `launched` / `intercepted` / `drifted` / `lock_quality` / `jamming_penalty`；若来源是敌对势力还会额外写 `source = "enemy_force"`
   - `point_defense_intercept`：点防拦截事件，payload 至少包含 `fleet_id` / `target_id` / `target_type` / `intercepted` / `remaining`
   - `battle_report_generated`：太空战战报生成事件，payload 包含 `battle_id` / `fleet_id` / `report`；`report` 结构与 `GET /world/systems/{system_id}/runtime.battle_reports[]` 一致
-  - `landing_started`：登陆投送启动事件，payload 包含 `operation_id` / `planet_id` / `task_force_id`
-  - `landing_failed`：登陆投送失败事件，payload 包含 `operation_id` / `planet_id` / `blocked_reason`
+  - `theater_zone_alert`：战区防区告警事件，区域（`theater_define_zone` 定义的行星圆形区域）内发现敌方实体（非拥有者单位/建筑、黑雾巢穴等）时向战区拥有者发送；payload 包含 `theater_id` / `theater_name` / `zone_type` / `planet_id` / `position` / `radius` / `hostile_count`；敌情持续期间按冷却（300 tick）重报，清空后自动复位；区域实时敌情同时体现在 `GET /world/warfare/theaters` 的 `zones[].hostile_count` / `zones[].alerted`
   - `orbital_superiority_changed`：恒星系制轨态变化事件，payload 包含 `system_id` / `advantage_player_id` / `contest_intensity` / `reason`
   - `supply_line_disrupted`：当前仍作为封锁拦截预留事件类型；本轮实现的 authoritative 拦截计数先体现在 `planet_blockades[].interdicted_*` 中，后续若事件化会沿用该名字
 - 响应示例:
@@ -2069,6 +2037,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 ---
 
 **POST /save**
+  - 权限（F5）：`/save` 与 `/rollback` 仅 `role=admin` 的玩家可调用，其余角色返回 403。
 - 说明: 手动触发一次存档写入（需认证），把当前世界状态刷新到 `server.data_dir/save.json`。
 - 请求体:
 ```json

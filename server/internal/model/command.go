@@ -52,7 +52,6 @@ const (
 	CmdTheaterDefineZone         CommandType = "theater_define_zone"
 	CmdTheaterSetObjective       CommandType = "theater_set_objective"
 	CmdBlockadePlanet            CommandType = "blockade_planet"
-	CmdLandingStart              CommandType = "landing_start"
 	CmdBlueprintCreate           CommandType = "blueprint_create"
 	CmdBlueprintSetComponent     CommandType = "blueprint_set_component"
 	CmdBlueprintValidate         CommandType = "blueprint_validate"
@@ -197,7 +196,6 @@ func AllCommandTypes() []CommandType {
 		CmdTheaterDefineZone,
 		CmdTheaterSetObjective,
 		CmdBlockadePlanet,
-		CmdLandingStart,
 		CmdBlueprintCreate,
 		CmdBlueprintSetComponent,
 		CmdBlueprintValidate,

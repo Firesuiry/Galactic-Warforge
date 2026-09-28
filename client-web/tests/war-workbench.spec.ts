@@ -227,7 +227,7 @@ function createTheaters() {
           objective_type: 'secure_planet',
           system_id: 'sys-1',
           planet_id: 'planet-1-1',
-          description: '拿下登陆窗口并维持封锁',
+          description: '夺取行星并维持封锁',
         },
       },
     ],
@@ -268,18 +268,6 @@ function createSystemRuntime() {
         intensity: 0.68,
         last_reason: 'orbital_superiority_held',
         updated_tick: 320,
-      },
-    ],
-    landing_operations: [
-      {
-        id: 'landing-1',
-        owner_id: 'p1',
-        task_force_id: 'tf-1',
-        system_id: 'sys-1',
-        planet_id: 'planet-1-1',
-        stage: 'reconnaissance',
-        result: 'pending',
-        blocked_reason: 'awaiting_orbital_superiority',
       },
     ],
     contacts: [
@@ -406,7 +394,6 @@ async function installWarRoutes(page: Page) {
       task_force_set_stance: { status: 'executed', message: 'task force tf-1 stance set to siege' },
       commission_fleet: { status: 'failed', message: 'building hub-1 cannot deploy blueprint fleet-adopted' },
       blockade_planet: { status: 'executed', message: 'planet planet-1-1 blockade assigned to task force tf-1' },
-      landing_start: { status: 'failed', message: 'task force tf-1 lacks transport capacity for landing' },
     };
     const result = responseByType[commandType] ?? { status: 'executed', message: `${commandType} accepted` };
     await route.fulfill({
@@ -459,9 +446,6 @@ test('浏览器中可操作战争工作台核心闭环', async ({ page }) => {
 
   await page.getByRole('button', { name: '发起封锁' }).click();
   await expect(page.getByText('planet planet-1-1 blockade assigned to task force tf-1')).toBeVisible();
-
-  await page.getByRole('button', { name: '发起登陆' }).click();
-  await expect(page.getByText('当前任务群缺少登陆运力')).toBeVisible();
 
   await page.getByRole('tab', { name: '战报' }).click();
   await expect(page.getByText('战报与情报')).toBeVisible();

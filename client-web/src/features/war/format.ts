@@ -1,5 +1,4 @@
 import type {
-  LandingOperationStage,
   PlanetBlockadeStatus,
   WarBaseFrameCatalogEntry,
   WarBaseHullCatalogEntry,
@@ -93,23 +92,6 @@ export function formatBlockadeStatus(status?: PlanetBlockadeStatus) {
       return '封锁争夺中';
     case 'broken':
       return '封锁失效';
-    default:
-      return '未知';
-  }
-}
-
-export function formatLandingStage(stage?: LandingOperationStage) {
-  switch (stage) {
-    case 'reconnaissance':
-      return '登陆侦察';
-    case 'landing_window_open':
-      return '登陆窗口已打开';
-    case 'vanguard_landing':
-      return '前锋登陆';
-    case 'beachhead_established':
-      return '滩头已建立';
-    case 'failed':
-      return '登陆失败';
     default:
       return '未知';
   }

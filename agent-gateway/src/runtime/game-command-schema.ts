@@ -15,7 +15,6 @@ export const GAME_COMMAND_NAMES = [
   'task_force_set_stance',
   'task_force_deploy',
   'blockade_planet',
-  'landing_start',
 ] as const;
 
 export type CanonicalGameCommandName = typeof GAME_COMMAND_NAMES[number];
@@ -95,15 +94,6 @@ export type CanonicalGameCommandAction =
         taskForceId: string;
         planetId: string;
       };
-    }
-  | {
-      type: 'game.command';
-      command: 'landing_start';
-      args: {
-        taskForceId: string;
-        planetId: string;
-        operationId?: string;
-      };
     };
 
 const OBSERVE_GAME_COMMANDS = new Set<CanonicalGameCommandName>([
@@ -145,7 +135,6 @@ const ARG_ALIASES: Partial<Record<string, string[]>> = {
   frontlineId: ['frontline_id'],
   groundOrder: ['ground_order'],
   supportMode: ['support_mode'],
-  operationId: ['operation_id'],
 };
 
 function asRecord(value: unknown) {
@@ -415,16 +404,7 @@ export function normalizeGameCommandAction(action: Record<string, unknown>): Can
     };
   }
 
-  const args = requireArgsRecord(action.args, command);
-  return {
-    type: 'game.command',
-    command,
-    args: {
-      taskForceId: requireString(args, 'taskForceId', command),
-      planetId: requireString(args, 'planetId', command),
-      ...(asString(getArgValue(args, 'operationId')) ? { operationId: asString(getArgValue(args, 'operationId')) } : {}),
-    },
-  };
+  throw new Error(`unsupported game command: ${command}`);
 }
 
 export function serializeGameCommandAction(action: CanonicalGameCommandAction) {
@@ -513,13 +493,6 @@ export function serializeGameCommandAction(action: CanonicalGameCommandAction) {
     }
     case 'blockade_planet':
       return `blockade_planet ${action.args.taskForceId} ${action.args.planetId}`;
-    case 'landing_start': {
-      const parts = ['landing_start', action.args.taskForceId, action.args.planetId];
-      if (action.args.operationId) {
-        parts.push('--operation-id', action.args.operationId);
-      }
-      return parts.join(' ');
-    }
     default:
       return action satisfies never;
   }
@@ -559,8 +532,6 @@ export function summarizeGameCommandAction(action: CanonicalGameCommandAction) {
       return `部署任务群 ${action.args.taskForceId} 到 ${action.args.theaterId ?? action.args.systemId ?? action.args.planetId ?? '指定位置'}`;
     case 'blockade_planet':
       return `命令任务群 ${action.args.taskForceId} 封锁 ${action.args.planetId}`;
-    case 'landing_start':
-      return `命令任务群 ${action.args.taskForceId} 对 ${action.args.planetId} 发起登陆`;
     default:
       return action satisfies never;
   }

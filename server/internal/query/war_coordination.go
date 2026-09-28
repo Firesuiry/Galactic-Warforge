@@ -94,10 +94,12 @@ func (ql *Layer) WarTheaters(ws *model.WorldState, playerID string) *model.WarTh
 		}
 		for _, zone := range theater.Zones {
 			zoneView := model.WarTheaterZoneView{
-				ZoneType: string(zone.ZoneType),
-				SystemID: zone.SystemID,
-				PlanetID: zone.PlanetID,
-				Radius:   zone.Radius,
+				ZoneType:     string(zone.ZoneType),
+				SystemID:     zone.SystemID,
+				PlanetID:     zone.PlanetID,
+				Radius:       zone.Radius,
+				HostileCount: zone.HostileCount,
+				Alerted:      zone.Alerted,
 			}
 			if zone.Position != nil {
 				pos := *zone.Position

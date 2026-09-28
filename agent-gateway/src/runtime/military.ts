@@ -14,7 +14,6 @@ const MILITARY_GAME_COMMANDS = new Set([
   'task_force_set_stance',
   'task_force_deploy',
   'blockade_planet',
-  'landing_start',
 ]);
 
 function includesAny(text: string, patterns: string[]) {
@@ -59,9 +58,8 @@ function formatSystemRuntime(systemRuntime: SystemRuntimeView | null) {
     : '制轨=未决';
   const contacts = `contacts=${systemRuntime.contacts?.length ?? 0}`;
   const blockades = `blockades=${systemRuntime.planet_blockades?.length ?? 0}`;
-  const landings = `landings=${systemRuntime.landing_operations?.length ?? 0}`;
   const reports = `battle_reports=${systemRuntime.battle_reports?.length ?? 0}`;
-  return [systemRuntime.system_id, superiority, contacts, blockades, landings, reports].join(' ');
+  return [systemRuntime.system_id, superiority, contacts, blockades, reports].join(' ');
 }
 
 function summarizeMilitaryReason(executedActions: CanonicalAgentAction[]) {
@@ -69,9 +67,6 @@ function summarizeMilitaryReason(executedActions: CanonicalAgentAction[]) {
     .filter((action): action is Extract<CanonicalAgentAction, { type: 'game.command' }> => action.type === 'game.command')
     .map((action) => action.command);
 
-  if (commands.includes('landing_start')) {
-    return '为了趁当前战区窗口推进登陆准备并抢占桥头堡。';
-  }
   if (commands.includes('blockade_planet')) {
     return '为了切断目标行星补给并建立轨道压制。';
   }
@@ -92,12 +87,6 @@ function summarizeApproval(requestContent: string, agent: AgentInstance) {
   const military = agent.policy?.military;
   if (!military) {
     return '是：当前 agent 没有军事委派 policy。';
-  }
-  if (
-    includesAny(request, ['landing', '登陆'])
-    && (!military.allowLanding || !military.allowedCommandIds.includes('landing_start'))
-  ) {
-    return '是：发起登陆仍需玩家额外批准。';
   }
   if (
     includesAny(request, ['blockade', '封锁'])
@@ -178,7 +167,7 @@ export async function buildMilitaryContextSections(agent: AgentInstance, playerK
       `军事权限：commands=${military.allowedCommandIds.join(',') || '-'} `
         + `task_forces=${military.taskForceIds.join(',') || '-'} `
         + `theaters=${military.theaterIds.join(',') || '-'} `
-        + `landing=${military.allowLanding} blockade=${military.allowBlockade} `
+        + `blockade=${military.allowBlockade} `
         + `production=${military.allowMilitaryProduction} max_production=${military.maxMilitaryProductionCount}`,
       ...(scope.theaters.length > 0
         ? [`委派战区：${scope.theaters.map(formatTheater).join('；')}`]
@@ -187,7 +176,7 @@ export async function buildMilitaryContextSections(agent: AgentInstance, playerK
         ? [`委派任务群：${scope.taskForces.map(formatTaskForce).join('；')}`]
         : []),
       ...(scope.systemRuntime ? [`战区实时局势：${formatSystemRuntime(scope.systemRuntime)}`] : []),
-      '军事任务模板：侦察恒星系优先用 system_runtime；维持战区补给优先看 war_industry 与 task_forces；巡逻 / 护航优先 task_force_set_stance + task_force_deploy；登陆准备若未授权 landing_start，必须在最终回复里要求玩家批准。',
+      '军事任务模板：侦察恒星系优先用 system_runtime；维持战区补给优先看 war_industry 与 task_forces；巡逻 / 护航优先 task_force_set_stance + task_force_deploy；未授权的高风险动作必须在最终回复里要求玩家批准。',
       '军事交付要求：最终回复至少覆盖“做了什么 / 为什么 / 当前战区状态 / 需要玩家批准”。',
     ];
   } catch {
@@ -196,7 +185,7 @@ export async function buildMilitaryContextSections(agent: AgentInstance, playerK
       `军事权限：commands=${military.allowedCommandIds.join(',') || '-'} `
         + `task_forces=${military.taskForceIds.join(',') || '-'} `
         + `theaters=${military.theaterIds.join(',') || '-'} `
-        + `landing=${military.allowLanding} blockade=${military.allowBlockade} `
+        + `blockade=${military.allowBlockade} `
         + `production=${military.allowMilitaryProduction} max_production=${military.maxMilitaryProductionCount}`,
     ];
   }

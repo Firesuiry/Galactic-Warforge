@@ -387,9 +387,6 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
     if (policy.military.allowBlockade && !actor.policy?.military.allowBlockade) {
       throw new Error('child blockade permission exceeds creator policy');
     }
-    if (policy.military.allowLanding && !actor.policy?.military.allowLanding) {
-      throw new Error('child landing permission exceeds creator policy');
-    }
     if (policy.military.allowMilitaryProduction && !actor.policy?.military.allowMilitaryProduction) {
       throw new Error('child military production permission exceeds creator policy');
     }
@@ -490,9 +487,6 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
     }
     if (policy.military.allowBlockade && !actor.policy?.military.allowBlockade) {
       throw new Error('updated blockade permission exceeds actor policy');
-    }
-    if (policy.military.allowLanding && !actor.policy?.military.allowLanding) {
-      throw new Error('updated landing permission exceeds actor policy');
     }
     if (policy.military.allowMilitaryProduction && !actor.policy?.military.allowMilitaryProduction) {
       throw new Error('updated military production permission exceeds actor policy');

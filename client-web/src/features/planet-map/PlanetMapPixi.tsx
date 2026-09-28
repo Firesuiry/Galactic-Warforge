@@ -24,6 +24,7 @@ import {
   toTilePoint,
   wrapMod,
 } from '@/features/planet-map/model';
+import { ownUnitsInTileRect, sameTypeOwnUnitsInView } from '@/features/planet-map/rts-commands';
 import {
   createAnimationFrameValueScheduler,
   describeSceneRenderSimplifications,
@@ -67,8 +68,10 @@ interface PlanetMapPixiProps {
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   onCanvasReady?: (capture: PlanetMapCapture | null) => void;
-  /** build/move/attack 模式下的地图点击（inspect 模式不会触发）。 */
+  /** build/move/attack/unit_order 模式下的地图点击（inspect 模式不会触发）。 */
   onInteractTile?: (tile: TilePoint) => void;
+  /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
+  onContextTile?: (tile: TilePoint) => boolean;
 }
 
 interface ViewportSize {
@@ -157,11 +160,17 @@ function areCameraPatchesEqual(left: CameraPatch, right: CameraPatch) {
  * 交互命中仍走 pointToTile 的 tile 换算；语义实体层（PlanetEntityLayer）以 ghost 形式保留
  * （opacity:0 + pointer-events:none，DevTools/agent 可定位，视觉由 Pixi 承担）。
  */
-export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtime, onCanvasReady, onInteractTile }: PlanetMapPixiProps) {
+export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtime, onCanvasReady, onInteractTile, onContextTile }: PlanetMapPixiProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const entityLayerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<PlanetScene | null>(null);
   const dragStateRef = useRef<{ pointerX: number; pointerY: number; offsetX: number; offsetY: number } | null>(null);
+  // 框选（marquee）：inspect 模式左键拖动出选择框；抬起时选中框内己方单位。
+  const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // 框选/右键拖拽后抑制紧随的 click/contextmenu（避免刚框选完又被单击清空、刚平移完又下情境指令）。
+  const suppressClickRef = useRef(false);
+  const suppressContextRef = useRef(false);
   const previousZoomIndexRef = useRef(DEFAULT_PLANET_ZOOM_INDEX);
   const [viewport, setViewport] = useState<ViewportSize>(getViewportDefaults);
   // 视口是否已实测（挂载时 updateViewport 同步量过 DOM）：PLANET_FOCUS_FIT_ZOOM 的自适应
@@ -182,6 +191,8 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     interactionMode,
     layers,
     selected,
+    selectedUnits,
+    incomingWaves,
     consumeFocusRequest,
     consumeZoomRequest,
     exitInteractionMode,
@@ -190,6 +201,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     setSceneWindow,
     setHoveredTile,
     setSelected,
+    setSelectedUnits,
     setMapProjection,
   } = usePlanetViewStore(useShallow((state) => ({
     camera: state.camera,
@@ -199,6 +211,8 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     interactionMode: state.interactionMode,
     layers: state.layers,
     selected: state.selected,
+    selectedUnits: state.selectedUnits,
+    incomingWaves: state.incomingWaves,
     consumeFocusRequest: state.consumeFocusRequest,
     consumeZoomRequest: state.consumeZoomRequest,
     exitInteractionMode: state.exitInteractionMode,
@@ -207,6 +221,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     setSceneWindow: state.setSceneWindow,
     setHoveredTile: state.setHoveredTile,
     setSelected: state.setSelected,
+    setSelectedUnits: state.setSelectedUnits,
     setMapProjection: state.setMapProjection,
   })));
   const session = useSessionSnapshot();
@@ -393,6 +408,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     sceneRef.current?.setInteraction({
       hoveredTile,
       selected,
+      selectedUnits,
       mode: interactionMode,
       buildAssessment,
       catalog,
@@ -401,7 +417,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       overviewMode,
       viewportBounds,
     });
-  }, [catalog, hoveredTile, interactionMode, sceneLayers.selection, overview, overviewMode, planet, selected, viewportBounds, pixiApp]);
+  }, [catalog, hoveredTile, interactionMode, sceneLayers.selection, overview, overviewMode, planet, selected, selectedUnits, viewportBounds, pixiApp]);
 
   useEffect(() => () => {
     hoverScheduler.cancel();
@@ -557,16 +573,35 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     hoverScheduler.schedule(tile);
   }
 
+  /** 视口像素坐标 → tile 浮点坐标（钳到地图内；框选角点换算用）。 */
+  function clientToTileFloat(clientX: number, clientY: number) {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return null;
+    }
+    return {
+      x: clamp((clientX - rect.left - camera.offsetX) / tileSize, 0, Math.max(planet.map_width - 1, 0)),
+      y: clamp((clientY - rect.top - camera.offsetY) / tileSize, 0, Math.max(planet.map_height - 1, 0)),
+    };
+  }
+
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (overviewMode) {
       return;
     }
-    dragStateRef.current = {
-      pointerX: event.clientX,
-      pointerY: event.clientY,
-      offsetX: camera.offsetX,
-      offsetY: camera.offsetY,
-    };
+    // 右键/中键拖动 = 平移相机（inspect 模式左键让位给框选）；非 inspect 模式左键拖动仍平移。
+    if (event.button === 2 || event.button === 1 || interactionMode.kind !== 'inspect') {
+      dragStateRef.current = {
+        pointerX: event.clientX,
+        pointerY: event.clientY,
+        offsetX: camera.offsetX,
+        offsetY: camera.offsetY,
+      };
+      return;
+    }
+    if (event.button === 0) {
+      marqueeRef.current = { startX: event.clientX, startY: event.clientY, active: false };
+    }
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -583,15 +618,77 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       });
       return;
     }
+    const marquee = marqueeRef.current;
+    if (marquee) {
+      if (!marquee.active && Math.abs(event.clientX - marquee.startX) + Math.abs(event.clientY - marquee.startY) > 4) {
+        marquee.active = true;
+      }
+      if (marquee.active) {
+        setMarqueeRect({
+          x0: Math.min(marquee.startX, event.clientX),
+          y0: Math.min(marquee.startY, event.clientY),
+          x1: Math.max(marquee.startX, event.clientX),
+          y1: Math.max(marquee.startY, event.clientY),
+        });
+      }
+      return;
+    }
     updateHoveredTile(event.clientX, event.clientY);
   }
 
-  function handlePointerUp() {
-    dragStateRef.current = null;
+  function handlePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragStateRef.current) {
+      // 右键拖动平移后抑制紧随的 contextmenu（情境指令/取消模式）。
+      if (event.button === 2) {
+        const moved = Math.abs(event.clientX - dragStateRef.current.pointerX) + Math.abs(event.clientY - dragStateRef.current.pointerY);
+        if (moved > 4) {
+          suppressContextRef.current = true;
+        }
+      }
+      dragStateRef.current = null;
+    }
+    const marquee = marqueeRef.current;
+    marqueeRef.current = null;
+    if (marquee?.active) {
+      setMarqueeRect(null);
+      suppressClickRef.current = true;
+      const from = clientToTileFloat(marquee.startX, marquee.startY);
+      const to = clientToTileFloat(event.clientX, event.clientY);
+      if (from && to) {
+        const ids = ownUnitsInTileRect(planet, session.playerId, {
+          minX: Math.floor(Math.min(from.x, to.x)),
+          minY: Math.floor(Math.min(from.y, to.y)),
+          maxX: Math.floor(Math.max(from.x, to.x)),
+          maxY: Math.floor(Math.max(from.y, to.y)),
+        });
+        applyUnitSelection(ids);
+      }
+      return;
+    }
+    setMarqueeRect(null);
+  }
+
+  /** 多选落库：单选时同步 selected（详情面板），多选/清空时 selected 置空（走底部多选条）。 */
+  function applyUnitSelection(ids: string[]) {
+    setSelectedUnits(ids);
+    if (ids.length === 1) {
+      const unit = planet.units?.[ids[0]];
+      setSelected(unit ? { kind: 'unit', id: unit.id, position: unit.position } : null);
+      if (unit) {
+        sfx.uiClick();
+      }
+    } else {
+      setSelected(null);
+      if (ids.length > 1) {
+        sfx.uiClick();
+      }
+    }
   }
 
   function handlePointerLeave() {
     dragStateRef.current = null;
+    marqueeRef.current = null;
+    setMarqueeRect(null);
     hoverScheduler.schedule(null);
   }
 
@@ -632,6 +729,10 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   }
 
   function handleClick(event: ReactMouseEvent<HTMLDivElement>) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) {
       return;
@@ -640,7 +741,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     if (!tile) {
       return;
     }
-    // build/move/attack 模式：点击 = 下达指令，不改变选中
+    // build/move/attack/unit_order 模式：点击 = 下达指令，不改变选中
     if (interactionMode.kind !== 'inspect') {
       onInteractTile?.(tile);
       return;
@@ -657,28 +758,53 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         z: 0,
       },
     });
+    // 单选单位同时进入多选集合（右键情境指令/快捷键以 selectedUnits 为命令目标）
+    setSelectedUnits(selection?.kind === 'unit' ? [selection.id] : []);
   }
 
-  /** 右键/Esc 退出当前交互模式（回到点选）。 */
+  /**
+   * 右键：非 inspect 模式取消当前模式；inspect 模式有己方单位选中时下达情境指令
+   * （点敌=批量攻击，点地=批量移动），无选中则不动作。
+   */
   function handleContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (suppressContextRef.current) {
+      suppressContextRef.current = false;
+      return;
+    }
     if (interactionMode.kind !== 'inspect') {
-      event.preventDefault();
       exitInteractionMode();
+      return;
+    }
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    const tile = pointToTile(event.clientX, event.clientY, rect, camera.offsetX, camera.offsetY, tileSize, planet);
+    if (tile) {
+      onContextTile?.(tile);
     }
   }
 
   useEffect(() => {
-    if (interactionMode.kind === 'inspect') {
-      return undefined;
-    }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (interactionMode.kind !== 'inspect') {
         exitInteractionMode();
+        return;
+      }
+      // inspect 模式 Esc = 清空选择（RTS 惯例）
+      const state = usePlanetViewStore.getState();
+      if (state.selectedUnits.length > 0 || state.selected) {
+        setSelectedUnits([]);
+        setSelected(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [exitInteractionMode, interactionMode.kind]);
+  }, [exitInteractionMode, interactionMode.kind, setSelected, setSelectedUnits]);
 
   function handleDoubleClick(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = viewportRef.current?.getBoundingClientRect();
@@ -706,7 +832,17 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
           z: 0,
         },
       });
+      setSelectedUnits([]);
       return;
+    }
+    // 双击单位 = 选中视口内全部同类己方单位（RTS 惯例）；其他位置保持聚焦行为
+    const hit = resolveSelectionAtTile(planet, tile.x, tile.y);
+    if (hit?.kind === 'unit') {
+      const unit = planet.units?.[hit.id];
+      if (unit && unit.owner_id === session.playerId) {
+        applyUnitSelection(sameTypeOwnUnitsInView(planet, session.playerId, hit.id, viewportBounds));
+        return;
+      }
     }
     requestFocus(tile);
   }
@@ -737,6 +873,57 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         role="img"
       >
         <PixiStage className="planet-map-canvas__pixi" onReady={handlePixiReady} />
+        {marqueeRect ? (
+          <div
+            aria-hidden="true"
+            className="planet-map-canvas__marquee"
+            style={{
+              left: marqueeRect.x0 - (viewportRef.current?.getBoundingClientRect().left ?? 0),
+              top: marqueeRect.y0 - (viewportRef.current?.getBoundingClientRect().top ?? 0),
+              width: marqueeRect.x1 - marqueeRect.x0,
+              height: marqueeRect.y1 - marqueeRect.y0,
+            }}
+          />
+        ) : null}
+        {/* 来袭方向指示（C3）：黑雾波次 from→target 红线 + 目标闪烁标记（指针穿透）。 */}
+        {incomingWaves.length > 0 ? (
+          <div aria-hidden="true" className="planet-map-canvas__waves">
+            <svg className="planet-map-canvas__waves-svg">
+              {incomingWaves.map((wave) => {
+                if (!wave.target) {
+                  return null;
+                }
+                const fromX = camera.offsetX + (wave.from.x + 0.5) * tileSize;
+                const fromY = camera.offsetY + (wave.from.y + 0.5) * tileSize;
+                const toX = camera.offsetX + (wave.target.x + 0.5) * tileSize;
+                const toY = camera.offsetY + (wave.target.y + 0.5) * tileSize;
+                return (
+                  <line
+                    key={wave.id}
+                    className="planet-map-canvas__wave-line"
+                    x1={fromX}
+                    y1={fromY}
+                    x2={toX}
+                    y2={toY}
+                  />
+                );
+              })}
+            </svg>
+            {incomingWaves.map((wave) => {
+              const tile = wave.target ?? wave.from;
+              return (
+                <div
+                  key={`${wave.id}:marker`}
+                  className="planet-map-canvas__wave-marker"
+                  style={{
+                    left: camera.offsetX + (tile.x + 0.5) * tileSize,
+                    top: camera.offsetY + (tile.y + 0.5) * tileSize,
+                  }}
+                />
+              );
+            })}
+          </div>
+        ) : null}
         <div aria-label="立方体六面展开边界" style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
           {CUBE_FACES.map((face,index)=><div key={face.name} style={{position:'absolute',left:camera.offsetX+index%3*planet.map_width/3*tileSize,top:camera.offsetY+Math.floor(index/3)*planet.map_width/3*tileSize,width:planet.map_width/3*tileSize,height:planet.map_width/3*tileSize,border:'2px dashed #e0c173',boxSizing:'border-box',color:'#ffe9ad',padding:8,fontWeight:700}}>{face.name} 面</div>)}
         </div>
@@ -773,6 +960,12 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         {interactionMode.kind === 'attack' ? (
           <span className="planet-map-canvas__mode planet-map-canvas__mode--attack">攻击模式：点击目标 · 右键/Esc 取消</span>
         ) : null}
+        {interactionMode.kind === 'unit_order' ? (
+          <span className="planet-map-canvas__mode planet-map-canvas__mode--attack">
+            {interactionMode.order === 'attack_move' ? '攻击移动：点击目标点（沿途交战）' : interactionMode.order === 'patrol' ? '巡逻：点击巡逻目标点' : '守卫：点击要守卫的目标'} · 右键/Esc 取消
+          </span>
+        ) : null}
+        {selectedUnits.length > 1 ? <span className="planet-map-canvas__mode">已框选 {selectedUnits.length} 个单位 · 右键移动/攻击</span> : null}
         <span>{selectionLabel(selected)}</span>
         {simplificationMessages.length > 0 ? <span>低缩放简化</span> : null}
         {simplificationMessages.map((message) => (

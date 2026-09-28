@@ -186,7 +186,8 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 
 		events := settleTurrets(ws)
 
-		wantTotal := max(1, combat.AltAmmoAttack-unit.Defense)
+		// 高斯(加农) vs 执行体(重甲) 系数 1.25。
+		wantTotal := max(1, int(float64(max(1, combat.AltAmmoAttack-unit.Defense))*model.ResolveDamageCoefficient(model.WeaponTypeCannon, model.ArmorHeavy)))
 		found := false
 		for _, evt := range events {
 			if evt.EventType != model.EvtDamageApplied || evt.Payload["target_id"] != unit.ID {
@@ -223,7 +224,7 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 
 		events := settleTurrets(ws)
 
-		wantTotal := max(1, combat.Attack-unit.Defense)
+		wantTotal := max(1, int(float64(max(1, combat.Attack-unit.Defense))*model.ResolveDamageCoefficient(model.WeaponTypeCannon, model.ArmorHeavy)))
 		found := false
 		for _, evt := range events {
 			if evt.EventType != model.EvtDamageApplied || evt.Payload["target_id"] != unit.ID {

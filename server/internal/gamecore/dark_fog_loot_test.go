@@ -24,30 +24,14 @@ func spawnLootTestForce(ws *model.WorldState, id string, forceType model.EnemyFo
 // spawnWorldTestUnit 在世界中放置一个指定类型的世界单位（含瓦片索引）。
 func spawnWorldTestUnit(ws *model.WorldState, utype model.UnitType, playerID string, pos model.Position) *model.Unit {
 	stats := model.UnitStats(utype)
-	unit := &model.Unit{
-		ID:                 ws.NextEntityID("u"),
-		Type:               utype,
-		OwnerID:            playerID,
-		Position:           pos,
-		HP:                 stats.HP,
-		MaxHP:              stats.MaxHP,
-		Attack:             stats.Attack,
-		Defense:            stats.Defense,
-		AttackRange:        stats.AttackRange,
-		MoveRange:          stats.MoveRange,
-		VisionRange:        stats.VisionRange,
-		MoveSpeed:          stats.MoveSpeed,
-		AttackCooldownTick: stats.AttackCooldownTick,
-		AggroRange:         stats.AggroRange,
-		Stance:             model.UnitStanceIdle,
-	}
-	if utype == model.UnitTypeExecutor {
-		unit.Mecha = stats.Mecha
-	}
-	ws.Units[unit.ID] = unit
+	unit := stats
+	unit.ID = ws.NextEntityID("u")
+	unit.OwnerID = playerID
+	unit.Position = pos
+	ws.Units[unit.ID] = &unit
 	key := model.TileKey(pos.X, pos.Y)
 	ws.TileUnits[key] = append(ws.TileUnits[key], unit.ID)
-	return unit
+	return &unit
 }
 
 // spawnLootKillerUnit 放置一个必定能击杀目标的世界战斗单位。

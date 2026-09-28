@@ -29,7 +29,6 @@ import {
   cmdFleetAttack as apiFleetAttack,
   cmdFleetDisband as apiFleetDisband,
   cmdFleetMove as apiFleetMove,
-  cmdLandingStart as apiLandingStart,
   cmdTransferItem as apiTransferItem,
   cmdRefuelMecha as apiRefuelMecha,
   cmdMineResource as apiMineResource,
@@ -859,20 +858,6 @@ export async function cmdBlockadePlanet(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdLandingStart(args: string[]): Promise<string> {
-  const parsed = parseArgs(args);
-  if (parsed.positionals.length < 2) {
-    return fmtError('Usage: landing_start <task_force_id> <planet_id> [--operation-id <operation_id>]');
-  }
-  try {
-    return fmtCommandResponse(await apiLandingStart(parsed.positionals[0], {
-      planetId: parsed.positionals[1],
-      operationId: getStringOption(parsed, 'operation-id'),
-    }));
-  } catch (e) {
-    return fmtError(toErrorMessage(e));
-  }
-}
 
 export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
   const parsed = parseArgs(args);

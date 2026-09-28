@@ -41,7 +41,6 @@ func TestT115TickSettlementBuildsPlanetAndSystemSensorContacts(t *testing.T) {
 			Position:     model.Position{X: 11, Y: 10},
 			Strength:     90,
 			SpreadRadius: 2,
-			TargetPlayer: "p1",
 			SpawnTick:    ws.Tick,
 		}},
 	}

@@ -259,7 +259,6 @@ func TestT116SupplyShortageDegradesFleetAndForcesRetreat(t *testing.T) {
 			Type:         model.EnemyForceTypeBeacon,
 			Position:     model.Position{X: 18, Y: 18},
 			Strength:     150,
-			TargetPlayer: "p1",
 			SpawnTick:    ws.Tick,
 		}},
 	}

@@ -255,11 +255,6 @@ export interface BlockadePlanetOptions {
   planetId: string;
 }
 
-export interface LandingStartOptions {
-  planetId: string;
-  operationId?: string;
-}
-
 function buildUrl(serverUrl: string, path: string): string {
   return resolveServerUrl(serverUrl, path);
 }
@@ -1009,18 +1004,6 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdLandingStart(taskForceId: string, options: LandingStartOptions) {
-    return sendSingleCommand({
-      type: 'landing_start',
-      target: { layer: 'planet', planet_id: options.planetId, entity_id: taskForceId },
-      payload: {
-        task_force_id: taskForceId,
-        planet_id: options.planetId,
-        ...(options.operationId ? { operation_id: options.operationId } : {}),
-      },
-    });
-  }
-
   function cmdBlueprintCreate(blueprintId: string, domain: string, options: CreateBlueprintOptions) {
     return sendSingleCommand({
       type: 'blueprint_create',
@@ -1244,7 +1227,6 @@ export function createApiClient(options: ApiClientOptions) {
     cmdFleetDisband,
     cmdFleetMove,
     cmdLaunchRocket,
-    cmdLandingStart,
     cmdLaunchSolarSail,
     cmdMove,
     cmdProduce,

@@ -32,12 +32,12 @@ func TestPlayerMechaAttackConsumesEnergyAndRejectsAtomically(t *testing.T) {
 	ws.Units[enemy.ID] = &enemy
 	core := &GameCore{}
 	res, _ := core.execAttack(ws, "p1", mechaAttackCommand(enemy.ID))
-	if res.Code != model.CodeOK || enemy.HP != 85 || unit.Mecha.Energy != 92 {
+	if res.Code != model.CodeOK || enemy.HP != 82 || unit.Mecha.Energy != 92 {
 		t.Fatalf("attack=%+v target=%+v mecha=%+v", res, enemy, unit.Mecha)
 	}
 	unit.Mecha.Energy = 7
 	res, events := core.execAttack(ws, "p1", mechaAttackCommand(enemy.ID))
-	if res.Code != model.CodeInsufficientResource || enemy.HP != 85 || unit.Mecha.Energy != 7 || len(events) != 0 {
+	if res.Code != model.CodeInsufficientResource || enemy.HP != 82 || unit.Mecha.Energy != 7 || len(events) != 0 {
 		t.Fatalf("failed attack mutated state: %+v", res)
 	}
 	unit.Mecha.Energy = 50
@@ -140,27 +140,28 @@ func TestPlayerMechaShieldAbsorbsAttackThenRechargesUsingEnergy(t *testing.T) {
 		t.Fatalf("attack order failed: %+v", res)
 	}
 	settleUnitCombat(ws)
-	if unit.HP != unit.MaxHP || unit.Mecha.Shield != 13 || unit.Mecha.LastHitTick != 20 {
+	// 机枪 vs 重甲系数 0.75：(15-8)×0.75=5，护盾 20→15。
+	if unit.HP != unit.MaxHP || unit.Mecha.Shield != 15 || unit.Mecha.LastHitTick != 20 {
 		t.Fatalf("shield failed: %+v %+v", res, unit)
 	}
 	ws.Tick = 29
 	settleMechas(ws)
-	if unit.Mecha.Shield != 13 || unit.Mecha.Energy != 100 {
+	if unit.Mecha.Shield != 15 || unit.Mecha.Energy != 100 {
 		t.Fatal("shield regenerated before delay")
 	}
 	ws.Tick = 30
 	settleMechas(ws)
-	if unit.Mecha.Shield != 15 || unit.Mecha.Energy != 99 {
+	if unit.Mecha.Shield != 17 || unit.Mecha.Energy != 99 {
 		t.Fatal("shield recharge did not use energy")
 	}
 	unit.Mecha.Energy = 0
 	ws.Tick++
 	settleMechas(ws)
-	if unit.Mecha.Shield != 15 {
+	if unit.Mecha.Shield != 17 {
 		t.Fatal("shield regenerated without energy")
 	}
 	damage, absorbed := model.ApplyUnitDamage(unit, 20, ws.Tick)
-	if damage != 5 || absorbed != 15 || unit.HP != unit.MaxHP-5 || unit.Mecha.Shield != 0 {
+	if damage != 3 || absorbed != 17 || unit.HP != unit.MaxHP-3 || unit.Mecha.Shield != 0 {
 		t.Fatal("shield overflow wrong")
 	}
 }
@@ -286,13 +287,14 @@ func TestPlayerMechaShieldAlsoAbsorbsAutomaticTurretFire(t *testing.T) {
 	turret.Runtime.Functions.Combat = &model.CombatModule{Attack: 18, Range: 4}
 	placeBuilding(ws, turret)
 	events := settleTurrets(ws)
-	if unit.HP != unit.MaxHP || unit.Mecha.Shield != 10 || unit.Mecha.LastHitTick != ws.Tick {
+	// 加农 vs 重甲系数 1.25：(18-8)×1.25=12，护盾 20→8。
+	if unit.HP != unit.MaxHP || unit.Mecha.Shield != 8 || unit.Mecha.LastHitTick != ws.Tick {
 		t.Fatalf("turret bypassed shield: %+v", unit.Mecha)
 	}
 	found := false
 	for _, event := range events {
 		if event.EventType == model.EvtDamageApplied && event.Payload["target_id"] == unit.ID {
-			found = event.Payload["damage"] == 0 && event.Payload["shield_absorbed"] == 10
+			found = event.Payload["damage"] == 0 && event.Payload["shield_absorbed"] == 12
 		}
 	}
 	if !found {

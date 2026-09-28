@@ -223,7 +223,6 @@ describe('T123 military agent autonomy', () => {
               taskForceIds: ['tf-agent-t123'],
               allowedCommandIds: ['system_runtime', 'task_force_set_stance', 'task_force_deploy'],
               allowBlockade: false,
-              allowLanding: false,
               allowMilitaryProduction: false,
               maxMilitaryProductionCount: 0,
             },

@@ -15,7 +15,6 @@ import {
   cmdFleetAttack,
   cmdFleetDisband,
   cmdFleetMove,
-  cmdLandingStart,
   cmdLaunchRocket,
   cmdQueueMilitaryProduction,
   cmdRefitUnit,
@@ -68,7 +67,7 @@ describe('client api exports', () => {
     assert.equal(typeof fetchFleet, 'function');
   });
 
-  it('exports warfare blueprint, industry, coordination and landing helpers', () => {
+  it('exports warfare blueprint, industry and coordination helpers', () => {
     assert.equal(typeof fetchPlanetRuntime, 'function');
     assert.equal(typeof fetchWarfareBlueprints, 'function');
     assert.equal(typeof fetchWarfareBlueprint, 'function');
@@ -90,7 +89,6 @@ describe('client api exports', () => {
     assert.equal(typeof cmdTheaterDefineZone, 'function');
     assert.equal(typeof cmdTheaterSetObjective, 'function');
     assert.equal(typeof cmdBlockadePlanet, 'function');
-    assert.equal(typeof cmdLandingStart, 'function');
   });
 });
 

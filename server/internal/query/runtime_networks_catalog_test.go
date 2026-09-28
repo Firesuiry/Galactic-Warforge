@@ -106,7 +106,6 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 			Type:         model.EnemyForceTypeSwarm,
 			Position:     model.Position{X: 10, Y: 10},
 			Strength:     25,
-			TargetPlayer: "p1",
 			SpawnTick:    40,
 		}},
 	}

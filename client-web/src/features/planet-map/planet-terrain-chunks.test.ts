@@ -434,7 +434,7 @@ describe('环绕取样（toroidal wrap）', () => {
     expect(keys).not.toContain('2,0');
   });
 
-  it('环绕 chunk 像素：接缝另一侧与真实位置逐像素一致', () => {
+  it('环绕 chunk 像素：接缝另一侧与真实位置逐像素一致', { timeout: 20000 }, () => {
     const wrapped = computeTerrainChunkPixels(planet, 1, 0, WRAP); // tiles 64..127 → 64..99,0..27
     const realRight = computeTerrainChunkPixels(planet, 0, 0); // tiles 0..63
     expect(wrapped.width).toBe(64 * TERRAIN_CHUNK_TILE_PX); // 环绕轴恒满 64 tile

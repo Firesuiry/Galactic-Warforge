@@ -33,9 +33,8 @@ const (
 	EvtMissileSalvoFired         EventType = "missile_salvo_fired"
 	EvtPointDefenseIntercept     EventType = "point_defense_intercept"
 	EvtBattleReportGenerated     EventType = "battle_report_generated"
-	EvtLandingStarted            EventType = "landing_started"
-	EvtLandingFailed             EventType = "landing_failed"
 	EvtOrbitalSuperiorityChanged EventType = "orbital_superiority_changed"
+	EvtTheaterZoneAlert          EventType = "theater_zone_alert"
 	EvtSupplyLineDisrupted       EventType = "supply_line_disrupted"
 	EvtEnemyWaveIncoming         EventType = "enemy_wave_incoming"
 )
@@ -70,9 +69,8 @@ var allEventTypes = []EventType{
 	EvtMissileSalvoFired,
 	EvtPointDefenseIntercept,
 	EvtBattleReportGenerated,
-	EvtLandingStarted,
-	EvtLandingFailed,
 	EvtOrbitalSuperiorityChanged,
+	EvtTheaterZoneAlert,
 	EvtSupplyLineDisrupted,
 	EvtEnemyWaveIncoming,
 }

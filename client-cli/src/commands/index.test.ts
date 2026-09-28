@@ -153,16 +153,12 @@ describe('warfare command registration', () => {
     assert.ok(COMMANDS.theater_define_zone);
     assert.ok(COMMANDS.theater_set_objective);
     assert.ok(COMMANDS.blockade_planet);
-    assert.ok(COMMANDS.landing_start);
 
     const taskForceHelp = await dispatch('help task_force_create', { currentPlayer: 'p1', rl: {} });
     assert.match(taskForceHelp, /task_force_create <task_force_id>/);
 
     const blockadeHelp = await dispatch('help blockade_planet', { currentPlayer: 'p1', rl: {} });
     assert.match(blockadeHelp, /blockade_planet <task_force_id> <planet_id>/);
-
-    const landingHelp = await dispatch('help landing_start', { currentPlayer: 'p1', rl: {} });
-    assert.match(landingHelp, /landing_start <task_force_id> <planet_id>/);
   });
 });
 

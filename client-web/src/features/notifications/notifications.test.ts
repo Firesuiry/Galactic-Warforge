@@ -184,8 +184,7 @@ describe('toastFromGameEvent 事件映射', () => {
   it('舰队类事件：此前无音效 → toast 补一声', () => {
     expect(toastFromGameEvent(gameEvent('fleet_commissioned', { fleet_id: 'f1' }))?.sfx).toBe('uiClick');
     expect(toastFromGameEvent(gameEvent('fleet_attack_started', { fleet_id: 'f1' }))?.sfx).toBe('alert');
-    expect(toastFromGameEvent(gameEvent('landing_started', {}))?.sfx).toBe('alert');
-    expect(toastFromGameEvent(gameEvent('landing_failed', {}))?.sfx).toBe('explosion');
+    expect(toastFromGameEvent(gameEvent('theater_zone_alert', { theater_id: 't1' }))?.sfx).toBe('alert');
     expect(toastFromGameEvent(gameEvent('supply_line_disrupted', {}))?.sfx).toBe('alert');
     expect(toastFromGameEvent(gameEvent('victory_declared', {}))?.sfx).toBe('commandOk');
     expect(toastFromGameEvent(gameEvent('victory_declared', {}))?.toast.kind).toBe('success');

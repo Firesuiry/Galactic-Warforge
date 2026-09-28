@@ -163,6 +163,11 @@
   color: var(--good);
 }
 
+.badge--danger {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--danger);
+}
+
 .eyebrow {
   margin: 0;
   display: inline-block;

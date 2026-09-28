@@ -61,8 +61,7 @@ const (
 type PlanetaryFrontlineType string
 
 const (
-	PlanetaryFrontlineTypeBridgehead PlanetaryFrontlineType = "bridgehead"
-	PlanetaryFrontlineTypeOutpost    PlanetaryFrontlineType = "outpost"
+	PlanetaryFrontlineTypeOutpost PlanetaryFrontlineType = "outpost"
 )
 
 // PlanetaryFrontline stores one authoritative frontline object on a planet.
@@ -71,7 +70,6 @@ type PlanetaryFrontline struct {
 	PlanetID               string                   `json:"planet_id"`
 	OwnerID                string                   `json:"owner_id,omitempty"`
 	Type                   PlanetaryFrontlineType   `json:"type"`
-	BridgeheadID           string                   `json:"bridgehead_id,omitempty"`
 	Position               *Position                `json:"position,omitempty"`
 	Status                 PlanetaryFrontlineStatus `json:"status"`
 	Control                float64                  `json:"control,omitempty"`
@@ -101,7 +99,6 @@ type GroundTaskForceRuntime struct {
 	OwnerID                     string                `json:"owner_id"`
 	PlanetID                    string                `json:"planet_id"`
 	FrontlineID                 string                `json:"frontline_id,omitempty"`
-	BridgeheadID                string                `json:"bridgehead_id,omitempty"`
 	GroundOrder                 GroundTaskForceOrder  `json:"ground_order,omitempty"`
 	Status                      GroundTaskForceStatus `json:"status,omitempty"`
 	Progress                    float64               `json:"progress,omitempty"`

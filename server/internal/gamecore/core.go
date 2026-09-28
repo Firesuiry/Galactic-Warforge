@@ -331,7 +331,6 @@ type GameCore struct {
 	activePlanetID   string
 	executorUsage    map[string]int
 	spaceRuntime     *model.SpaceRuntimeState
-	orbitalPlatforms *OrbitalPlatformManager
 	saveMu           sync.Mutex
 	gameDir          *gamedir.Dir
 	saveMeta         *gamedir.MetaFile
@@ -380,7 +379,6 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		activePlanetID:   registry.ActivePlanetID,
 		executorUsage:    make(map[string]int),
 		spaceRuntime:     registry.SpaceRuntime,
-		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
 	if core.spaceRuntime == nil {
 		core.spaceRuntime = model.NewSpaceRuntimeState()
@@ -771,8 +769,6 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execTheaterSetObjective(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlockadePlanet:
 			res, evts = gc.execBlockadePlanet(gc.world, qr.PlayerID, cmd)
-		case model.CmdLandingStart:
-			res, evts = gc.execLandingStart(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintCreate:
 			res, evts = gc.execBlueprintCreate(gc.world, qr.PlayerID, cmd)
 		case model.CmdBlueprintSetComponent:
