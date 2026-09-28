@@ -13,8 +13,8 @@ func TestAdvancedAssemblersRunAuthoritativeProductionTick(t *testing.T) {
 		inputs   model.ItemInventory
 		output   string
 	}{
-		{model.BuildingTypeAssemblingMachineMk2, "prototype", model.ItemInventory{model.ItemCircuitBoard: 2, model.ItemProcessor: 1, model.ItemTitaniumAlloy: 1}, model.ItemPrototype},
-		{model.BuildingTypeAssemblingMachineMk3, "precision_drone", model.ItemInventory{model.ItemPrototype: 1, model.ItemQuantumChip: 1, model.ItemDeuteriumFuelRod: 1}, model.ItemPrecisionDrone},
+		{model.BuildingTypeAssemblingMachineMk2, "motor", model.ItemInventory{model.ItemGear: 1, model.ItemCircuitBoard: 1, model.ItemIronIngot: 1}, model.ItemMotor},
+		{model.BuildingTypeAssemblingMachineMk3, "motor", model.ItemInventory{model.ItemGear: 1, model.ItemCircuitBoard: 1, model.ItemIronIngot: 1}, model.ItemMotor},
 		{model.BuildingTypeAssemblingMachineMk2, "plasma_capsule", model.ItemInventory{model.ItemTitaniumAlloy: 1, model.ItemParticleContainer: 1, model.ItemHydrogen: 2}, model.ItemPlasmaCapsule},
 	} {
 		t.Run(string(tc.building)+"/"+tc.recipe, func(t *testing.T) {
