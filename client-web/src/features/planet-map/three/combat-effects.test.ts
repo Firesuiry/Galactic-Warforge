@@ -60,9 +60,17 @@ describe('combat-effects 事件 → 特效指令（C2）', () => {
     expect(specs.some((spec) => spec.kind === 'shield_ripple')).toBe(true);
   });
 
-  it('护盾吸收但目标是单位 → 不追加护盾波纹', () => {
+  it('护盾吸收且目标是机甲单位 → 追加护盾波纹（服务端只有机甲带护盾）', () => {
     const specs = specsFromCombatEvent(
       makeEvent('damage_applied', { attacker_id: 'df-1', target_id: 's-1', damage: 3, shield_absorbed: 4 }),
+      resolveMap({ 'df-1': fogUnit, 's-1': soldier }),
+    );
+    expect(specs.some((spec) => spec.kind === 'shield_ripple')).toBe(true);
+  });
+
+  it('无护盾吸收 → 不追加护盾波纹', () => {
+    const specs = specsFromCombatEvent(
+      makeEvent('damage_applied', { attacker_id: 'df-1', target_id: 's-1', damage: 3 }),
       resolveMap({ 'df-1': fogUnit, 's-1': soldier }),
     );
     expect(specs.some((spec) => spec.kind === 'shield_ripple')).toBe(false);

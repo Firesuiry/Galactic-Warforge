@@ -150,4 +150,12 @@ describe('attack-alerts 受袭警报（C3）', () => {
     expect(alert?.wave?.target).toBeNull();
     expect(alert?.toast?.href).toBe('/planet/planet-1-1?x=9&y=9');
   });
+
+  it('跳转深链保留当前视图参数（view=2d 不被丢弃）', () => {
+    const alert = buildCombatAlert(
+      makeEvent('damage_applied', { attacker_id: 'df-1', target_id: 'b-1', damage: 8 }),
+      { planet: makePlanet(), playerId: 'p1', planetId: 'planet-1-1', currentSearch: '?view=2d&quality=low' },
+    );
+    expect(alert?.toast?.href).toBe('/planet/planet-1-1?view=2d&quality=low&x=2&y=2');
+  });
 });

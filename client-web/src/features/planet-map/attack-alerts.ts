@@ -38,8 +38,14 @@ function asPosition(value: unknown): TilePoint | null {
   return x !== undefined && y !== undefined ? { x: Math.round(x), y: Math.round(y) } : null;
 }
 
-function planetFocusHref(planetId: string, tile: TilePoint): string {
-  return `/planet/${encodeURIComponent(planetId)}?x=${tile.x}&y=${tile.y}`;
+function planetFocusHref(planetId: string, tile: TilePoint, currentSearch?: string): string {
+  // 保留当前视图参数（view=2d/quality 等），避免跳转后意外切换 2D/3D 视图
+  const params = new URLSearchParams(currentSearch ?? '');
+  params.delete('build');
+  params.delete('workflow');
+  params.set('x', String(tile.x));
+  params.set('y', String(tile.y));
+  return `/planet/${encodeURIComponent(planetId)}?${params.toString()}`;
 }
 
 export interface CombatAlertContext {
@@ -47,6 +53,8 @@ export interface CombatAlertContext {
   planet?: PlanetRenderView;
   playerId: string;
   planetId: string;
+  /** 当前 URL 查询串（保留 view 等视图参数；由副作用层注入，测试可不给）。 */
+  currentSearch?: string;
   /** 注入时间（测试用；缺省 Date.now）。 */
   now?: number;
 }
@@ -96,7 +104,7 @@ export function buildCombatAlert(
         kind: 'danger',
         title: ownBuilding ? '建筑遭受攻击' : '单位遭受攻击',
         body: `${name} (${tile.x}, ${tile.y}) 正遭受攻击`,
-        href: planetFocusHref(context.planetId, tile),
+        href: planetFocusHref(context.planetId, tile, context.currentSearch),
         mergeKey: `base_attack:${targetId}`,
       },
     };
@@ -125,7 +133,7 @@ export function buildCombatAlert(
         kind: 'danger',
         title: '侦测到黑雾袭击',
         body: `${count} 个单位来自 (${from.x}, ${from.y})${target ? `，目标 (${target.x}, ${target.y})` : ''}`,
-        href: planetFocusHref(context.planetId, focus),
+        href: planetFocusHref(context.planetId, focus, context.currentSearch),
         mergeKey: `enemy_wave:${wave.nestId || wave.id}`,
       },
     };
@@ -159,7 +167,11 @@ export function notifyCombatAlert(event: GameEventDetail, context: CombatAlertCo
   if (isDuplicateAlertEvent(event.event_id)) {
     return;
   }
-  const alert = buildCombatAlert(event, context);
+  const alert = buildCombatAlert(event, {
+    ...context,
+    currentSearch: context.currentSearch
+      ?? (typeof window !== 'undefined' ? window.location.search : ''),
+  });
   if (!alert) {
     return;
   }

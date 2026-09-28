@@ -106,7 +106,8 @@ export function specsFromCombatEvent(
       });
     }
     const shieldAbsorbed = asNumber(payload.shield_absorbed) ?? 0;
-    if (shieldAbsorbed > 0 && target.kind === 'building') {
+    // 服务端只有机甲（执行体）单位带护盾：护盾吸收出现在单位目标上。
+    if (shieldAbsorbed > 0) {
       specs.push({ kind: 'shield_ripple', at: target, durationMs: SHIELD_RIPPLE_MS });
     }
     return specs;
