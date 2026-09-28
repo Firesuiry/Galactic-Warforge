@@ -640,7 +640,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 15}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "df_prototype"},
-			{Type: TechUnlockRecipe, ID: "prototype"},
 		},
 	},
 
@@ -839,7 +838,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 25}, {ItemID: "energy_matrix", Quantity: 25}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "df_precision_drone"},
-			{Type: TechUnlockRecipe, ID: "precision_drone"},
 		},
 	},
 
@@ -1332,7 +1330,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 75}, {ItemID: "energy_matrix", Quantity: 75}, {ItemID: "structure_matrix", Quantity: 75}, {ItemID: "information_matrix", Quantity: 75}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "df_corvette"},
-			{Type: TechUnlockRecipe, ID: "corvette"},
 		},
 	},
 	{
@@ -1550,7 +1547,6 @@ var defaultTechDefinitions = []TechDefinition{
 		Cost:          []ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 100}, {ItemID: "energy_matrix", Quantity: 100}, {ItemID: "structure_matrix", Quantity: 100}, {ItemID: "information_matrix", Quantity: 100}, {ItemID: "gravity_matrix", Quantity: 100}},
 		Unlocks: []TechUnlock{
 			{Type: TechUnlockRecipe, ID: "df_destroyer"},
-			{Type: TechUnlockRecipe, ID: "destroyer"},
 		},
 	},
 	{

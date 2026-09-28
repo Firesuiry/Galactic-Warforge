@@ -16,7 +16,7 @@ func TestCatalogExposesExplicitHandcraftPolicy(t *testing.T) {
 			t.Fatalf("basic recipe %s must advertise handcrafting", id)
 		}
 	}
-	for _, id := range []string{"oil_fractionation", "electromagnetic_matrix", "quantum_chip", "plasma_capsule", "precision_drone"} {
+	for _, id := range []string{"oil_fractionation", "electromagnetic_matrix", "quantum_chip", "plasma_capsule", "df_precision_drone"} {
 		if allowed, ok := policies[id]; !ok || allowed {
 			t.Fatalf("factory-only recipe %s missing or handcraftable", id)
 		}

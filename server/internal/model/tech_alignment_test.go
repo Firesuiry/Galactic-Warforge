@@ -42,10 +42,10 @@ func assertTechLacksUnlockType(t *testing.T, techID string, unlockType TechUnloc
 
 func TestT100FleetTechsExposePublicRecipesAndStayRuntimeBacked(t *testing.T) {
 	cases := map[string]string{
-		"prototype":       "prototype",
-		"precision_drone": "precision_drone",
-		"corvette":        "corvette",
-		"destroyer":       "destroyer",
+		"prototype":       "df_prototype",
+		"precision_drone": "df_precision_drone",
+		"corvette":        "df_corvette",
+		"destroyer":       "df_destroyer",
 	}
 	for techID, recipeID := range cases {
 		def := defaultTechDefinitionByID(t, techID)
