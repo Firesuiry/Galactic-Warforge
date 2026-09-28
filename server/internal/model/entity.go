@@ -77,6 +77,30 @@ func (b *Building) Clone() *Building {
 	return &out
 }
 
+// UnitStance 单位指令姿态（R5 指令集）。
+// 姿态决定自动索敌、追击与移动行为；由 move/attack/unit_order 命令设置，
+// 由 Tick 结算推进。
+type UnitStance string
+
+const (
+	// UnitStanceIdle 原地待命：自动索敌，可追击，脱战后回到锚点。
+	UnitStanceIdle UnitStance = "idle"
+	// UnitStanceMoving 移动中：赶赴目标点，不主动索敌。
+	UnitStanceMoving UnitStance = "moving"
+	// UnitStanceAttackMove 攻击移动：沿途索敌并交战，目标清空后继续赶路。
+	UnitStanceAttackMove UnitStance = "attack_move"
+	// UnitStancePatrol 巡逻：在当前位置与目标点之间往返，沿途索敌。
+	UnitStancePatrol UnitStance = "patrol"
+	// UnitStanceGuard 守卫：跟随并保护目标单位/建筑，以其为锚点索敌。
+	UnitStanceGuard UnitStance = "guard"
+	// UnitStanceHold 原地坚守：不移动不追击，射程内目标自动开火。
+	UnitStanceHold UnitStance = "hold"
+	// UnitStanceFollow 跟随：跟随友方单位，保持近距离。
+	UnitStanceFollow UnitStance = "follow"
+	// UnitStanceRetreat 撤退：赶赴目标点，不索敌不还击，到达后转 idle。
+	UnitStanceRetreat UnitStance = "retreat"
+)
+
 // Unit represents a mobile unit entity
 type Unit struct {
 	ID           string      `json:"id"`
@@ -90,10 +114,26 @@ type Unit struct {
 	AttackRange  int         `json:"attack_range"`
 	MoveRange    int         `json:"move_range"`
 	VisionRange  int         `json:"vision_range"`
-	IsMoving     bool        `json:"is_moving"`
-	TargetPos    *Position   `json:"target_pos,omitempty"`
 	AttackTarget string      `json:"attack_target,omitempty"` // entity ID
 	Mecha        *MechaState `json:"mecha,omitempty"`
+
+	// 实时移动（R1）：每 tick 沿 Path 按 MoveSpeed 推进。
+	MoveSpeed    float64    `json:"move_speed"`              // 格/tick
+	Path         []Position `json:"path,omitempty"`          // 完整路径（含起点）
+	PathIndex    int        `json:"path_index,omitempty"`    // 下一个目标格下标
+	MoveProgress float64    `json:"move_progress,omitempty"` // 向下一格推进的累计进度
+	BlockedTicks int        `json:"blocked_ticks,omitempty"` // 被占位阻挡的连续 tick 数
+	RepathTick   int64      `json:"repath_tick,omitempty"`   // 上次追击重寻路 tick
+
+	// 指令姿态与交战（R2/R5）
+	Stance             UnitStance `json:"stance,omitempty"`
+	OrderPos           *Position  `json:"order_pos,omitempty"`            // 攻击移动/巡逻终点/撤退目的地
+	GuardTargetID      string     `json:"guard_target_id,omitempty"`      // 守卫/跟随目标实体
+	CombatAnchor       *Position  `json:"combat_anchor,omitempty"`        // 接战锚点（守位/巡逻起点/追击范围基准）
+	LastAttackerID     string     `json:"last_attacker_id,omitempty"`     // 最近攻击者（还击用）
+	LastAttackTick     int64      `json:"last_attack_tick,omitempty"`     // 上次开火 tick
+	AttackCooldownTick int64      `json:"attack_cooldown_ticks"`          // 开火冷却（tick）
+	AggroRange         int        `json:"aggro_range"`                    // 自动索敌范围
 }
 
 // Clone returns a deep copy of the unit state for read-only snapshots.
@@ -103,11 +143,38 @@ func (u *Unit) Clone() *Unit {
 	}
 	out := *u
 	out.Mecha = u.Mecha.Clone()
-	if u.TargetPos != nil {
-		target := *u.TargetPos
-		out.TargetPos = &target
+	if u.Path != nil {
+		out.Path = append([]Position(nil), u.Path...)
+	}
+	if u.OrderPos != nil {
+		pos := *u.OrderPos
+		out.OrderPos = &pos
+	}
+	if u.CombatAnchor != nil {
+		pos := *u.CombatAnchor
+		out.CombatAnchor = &pos
 	}
 	return &out
+}
+
+// ClearMovement 清空移动状态（路径/进度/阻挡计数）。
+func (u *Unit) ClearMovement() {
+	u.Path = nil
+	u.PathIndex = 0
+	u.MoveProgress = 0
+	u.BlockedTicks = 0
+}
+
+// ClearEngagement 清空交战状态（目标/锚点/还击标记）。
+func (u *Unit) ClearEngagement() {
+	u.AttackTarget = ""
+	u.CombatAnchor = nil
+	u.LastAttackerID = ""
+}
+
+// HasPath 报告单位是否还有未走完的路径。
+func (u *Unit) HasPath() bool {
+	return u != nil && u.PathIndex < len(u.Path)
 }
 
 // BuildingCost returns the resource cost to build a building type.
@@ -131,6 +198,8 @@ func UnitStats(utype UnitType) Unit {
 		u.AttackRange = 1
 		u.MoveRange = 3
 		u.VisionRange = 4
+		u.MoveSpeed = 0.30
+		u.AttackCooldownTick = 12
 	case UnitTypeSoldier:
 		u.MaxHP = 100
 		u.HP = u.MaxHP
@@ -139,6 +208,8 @@ func UnitStats(utype UnitType) Unit {
 		u.AttackRange = 2
 		u.MoveRange = 2
 		u.VisionRange = 5
+		u.MoveSpeed = 0.25
+		u.AttackCooldownTick = 10
 	case UnitTypeMecha:
 		u.MaxHP = 240
 		u.HP = u.MaxHP
@@ -147,6 +218,8 @@ func UnitStats(utype UnitType) Unit {
 		u.AttackRange = 4
 		u.MoveRange = 3
 		u.VisionRange = 7
+		u.MoveSpeed = 0.35
+		u.AttackCooldownTick = 8
 	case UnitTypeExecutor:
 		u.MaxHP = 120
 		u.HP = u.MaxHP
@@ -155,8 +228,12 @@ func UnitStats(utype UnitType) Unit {
 		u.AttackRange = 4
 		u.MoveRange = 12
 		u.VisionRange = 6
+		u.MoveSpeed = 0.50
+		u.AttackCooldownTick = 6
 		u.Mecha = NewMechaState()
 	}
+	u.AggroRange = u.VisionRange
+	u.Stance = UnitStanceIdle
 	return u
 }
 

@@ -491,8 +491,6 @@ const planets: Record<string, PlanetView> = {
         attack_range: 2,
         move_range: 2,
         vision_range: 5,
-        is_moving: true,
-        target_pos: { x: 5, y: 4, z: 0 },
       },
       'worker-1': {
         id: 'worker-1',
@@ -506,7 +504,6 @@ const planets: Record<string, PlanetView> = {
         attack_range: 1,
         move_range: 2,
         vision_range: 4,
-        is_moving: false,
       },
     },
     resources: [

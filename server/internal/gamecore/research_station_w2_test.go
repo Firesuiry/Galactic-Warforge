@@ -318,35 +318,31 @@ func TestCombatTechEffectsReachCombatSettlement(t *testing.T) {
 	ws := core.World()
 	player := ws.Players["p1"]
 
-	unit := core.combatUnits.SpawnCombatUnit(ws, model.CombatUnitTypeMech, "p1", model.Position{X: 5, Y: 5}, nil)
-	base := model.DefaultCombatUnitStats(model.CombatUnitTypeMech)
+	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 5, Y: 5})
+	base := model.UnitStats(model.UnitTypeSoldier)
 
-	core.settleCombatTech()
-	if unit.Weapon.Damage != base.Weapon.Damage || unit.MaxHP != base.MaxHP {
-		t.Fatalf("no tech: stats must stay at baseline, got damage=%d hp=%d", unit.Weapon.Damage, unit.MaxHP)
+	settleCombatTech(ws)
+	if unit.Attack != base.Attack || unit.MaxHP != base.MaxHP {
+		t.Fatalf("no tech: stats must stay at baseline, got attack=%d hp=%d", unit.Attack, unit.MaxHP)
 	}
 
 	player.Tech.CompletedTechs["df_kinetic_weapon_damage"] = 2 // +20% 伤害
 	player.Tech.CompletedTechs["df_enhanced_structure"] = 1    // +10% 耐久
-	player.Tech.CompletedTechs["df_energy_shield"] = 3         // +30 护盾
-	core.settleCombatTech()
+	player.Tech.CompletedTechs["df_energy_shield"] = 3         // +30 护盾（执行体护盾轨道，世界单位无护盾字段）
+	settleCombatTech(ws)
 
-	wantDamage := int(float64(base.Weapon.Damage) * 1.2)
-	if unit.Weapon.Damage != wantDamage {
-		t.Fatalf("weapon damage = %d, want %d (L2 kinetic)", unit.Weapon.Damage, wantDamage)
+	wantDamage := int(float64(base.Attack) * 1.2)
+	if unit.Attack != wantDamage {
+		t.Fatalf("weapon damage = %d, want %d (L2 kinetic)", unit.Attack, wantDamage)
 	}
 	wantHP := int(float64(base.MaxHP) * 1.1)
 	if unit.MaxHP != wantHP {
 		t.Fatalf("max HP = %d, want %d (L1 structure)", unit.MaxHP, wantHP)
 	}
-	wantShield := base.Shield.MaxLevel + 30
-	if unit.Shield.MaxLevel != wantShield {
-		t.Fatalf("shield max = %v, want %v (L3 energy shield)", unit.Shield.MaxLevel, wantShield)
-	}
 
 	// 幂等：重复结算不叠加。
-	core.settleCombatTech()
-	if unit.Weapon.Damage != wantDamage || unit.MaxHP != wantHP {
+	settleCombatTech(ws)
+	if unit.Attack != wantDamage || unit.MaxHP != wantHP {
 		t.Fatal("combat tech settlement must rebuild from baseline, not accumulate")
 	}
 

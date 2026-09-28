@@ -21,11 +21,42 @@ func spawnLootTestForce(ws *model.WorldState, id string, forceType model.EnemyFo
 	})
 }
 
-// spawnLootKillerUnit 放置一个必定能击杀目标的战斗单位。
-func spawnLootKillerUnit(gc *GameCore, ws *model.WorldState, playerID string, pos model.Position) *model.CombatUnit {
-	unit := gc.combatUnits.SpawnCombatUnit(ws, model.CombatUnitTypeMech, playerID, pos, nil)
-	unit.Weapon = model.WeaponState{Type: model.WeaponTypeGun, Damage: 500, FireRate: 1, Range: 100, AmmoCost: 1}
-	unit.AmmoInventory = 100
+// spawnWorldTestUnit 在世界中放置一个指定类型的世界单位（含瓦片索引）。
+func spawnWorldTestUnit(ws *model.WorldState, utype model.UnitType, playerID string, pos model.Position) *model.Unit {
+	stats := model.UnitStats(utype)
+	unit := &model.Unit{
+		ID:                 ws.NextEntityID("u"),
+		Type:               utype,
+		OwnerID:            playerID,
+		Position:           pos,
+		HP:                 stats.HP,
+		MaxHP:              stats.MaxHP,
+		Attack:             stats.Attack,
+		Defense:            stats.Defense,
+		AttackRange:        stats.AttackRange,
+		MoveRange:          stats.MoveRange,
+		VisionRange:        stats.VisionRange,
+		MoveSpeed:          stats.MoveSpeed,
+		AttackCooldownTick: stats.AttackCooldownTick,
+		AggroRange:         stats.AggroRange,
+		Stance:             model.UnitStanceIdle,
+	}
+	if utype == model.UnitTypeExecutor {
+		unit.Mecha = stats.Mecha
+	}
+	ws.Units[unit.ID] = unit
+	key := model.TileKey(pos.X, pos.Y)
+	ws.TileUnits[key] = append(ws.TileUnits[key], unit.ID)
+	return unit
+}
+
+// spawnLootKillerUnit 放置一个必定能击杀目标的世界战斗单位。
+func spawnLootKillerUnit(ws *model.WorldState, playerID string, pos model.Position) *model.Unit {
+	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, playerID, pos)
+	unit.Attack = 500
+	unit.AttackRange = 100
+	unit.AggroRange = 100
+	unit.AttackCooldownTick = 1
 	return unit
 }
 
@@ -151,12 +182,11 @@ func TestGrantDarkFogLootRouting(t *testing.T) {
 func TestCombatUnitKillGrantsDarkFogLoot(t *testing.T) {
 	ws := newPowerTestWorld()
 	ws.Tick = 10
-	gc := &GameCore{world: ws, combatUnits: NewCombatUnitManager()}
 
-	unit := spawnLootKillerUnit(gc, ws, "p1", model.Position{X: 2, Y: 2})
+	unit := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 
-	events := gc.settleCombat()
+	events := settleUnitCombat(ws)
 
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("enemy force should be destroyed, remaining %+v", ws.EnemyForces.Forces)
@@ -189,16 +219,17 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 	ws := newPowerTestWorld()
 	ws.Tick = 10
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
-	gc := &GameCore{world: ws, combatUnits: NewCombatUnitManager()}
 
-	p1unit := spawnLootKillerUnit(gc, ws, "p1", model.Position{X: 2, Y: 2})
+	p1unit := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
-	// p2 的单位没有弹药，无法击杀：p1 的掉落不得串到 p2。
-	p2unit := gc.combatUnits.SpawnCombatUnit(ws, model.CombatUnitTypeMech, "p2", model.Position{X: 2, Y: 4}, nil)
-	p2unit.AmmoInventory = 0
+	// p2 的单位是默认士兵：单发伤害不足以秒杀巢穴，p1 的掉落不得串到 p2。
+	p2unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 2, Y: 4})
+	p2unit.AttackCooldownTick = 1
+	p2unit.AttackTarget = "hive-2"
 	spawnLootTestForce(ws, "hive-2", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 4})
+	p1unit.AttackTarget = "hive-1"
 
-	events := gc.settleCombat()
+	events := settleUnitCombat(ws)
 
 	if ws.Players["p1"].Inventory[model.ItemDarkFogMatrix] < 1 {
 		t.Fatalf("p1 should receive its own kill loot")
@@ -210,13 +241,15 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 		t.Fatalf("hive-2 survived but emitted loot events")
 	}
 
-	// 第二回合：p1 停火，p2 补弹后击杀自己的目标，掉落归 p2。
-	p1unit.AmmoInventory = 0
-	p2unit.AmmoInventory = 100
-	p2unit.Weapon = model.WeaponState{Type: model.WeaponTypeGun, Damage: 500, FireRate: 1, Range: 100, AmmoCost: 1}
+	// 第二回合：p1 阵亡退场，p2 强化后击杀自己的目标，掉落归 p2。
+	killUnit(ws, p1unit, "", "test")
+	p2unit.Attack = 500
+	p2unit.AttackRange = 100
+	p2unit.AggroRange = 100
+	p2unit.AttackTarget = "hive-2"
 	p1Before := ws.Players["p1"].Inventory[model.ItemDarkFogMatrix]
 	ws.Tick++
-	events = gc.settleCombat()
+	events = settleUnitCombat(ws)
 	if ws.Players["p2"].Inventory[model.ItemDarkFogMatrix] < 1 {
 		t.Fatalf("p2 should receive its own kill loot")
 	}
@@ -293,11 +326,11 @@ func TestDarkFogLootSurvivesSaveRestore(t *testing.T) {
 
 	ws := core.World()
 	ws.Tick = 10
-	unit := spawnLootKillerUnit(core, ws, "p1", model.Position{X: 2, Y: 2})
-	_ = unit
+	killer := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
+	killer.AttackTarget = "hive-1"
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 
-	core.settleCombat()
+	settleUnitCombat(ws)
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("enemy force should be destroyed before save")
 	}

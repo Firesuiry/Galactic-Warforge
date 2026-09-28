@@ -317,6 +317,16 @@ export interface MechaState {
   last_hit_tick: number;
 }
 
+export type UnitStance =
+  | 'idle'
+  | 'moving'
+  | 'attack_move'
+  | 'patrol'
+  | 'guard'
+  | 'hold'
+  | 'follow'
+  | 'retreat';
+
 export interface Unit {
   mecha?: MechaState;
   id: string;
@@ -330,9 +340,20 @@ export interface Unit {
   attack_range: number;
   move_range: number;
   vision_range: number;
-  is_moving: boolean;
-  target_pos?: Position;
   attack_target?: string;
+  move_speed?: number;
+  path?: Position[];
+  path_index?: number;
+  move_progress?: number;
+  blocked_ticks?: number;
+  stance?: UnitStance;
+  order_pos?: Position;
+  guard_target_id?: string;
+  combat_anchor?: Position;
+  last_attacker_id?: string;
+  last_attack_tick?: number;
+  attack_cooldown_ticks?: number;
+  aggro_range?: number;
 }
 
 export type WeaponType = 'gun' | 'cannon' | 'missile' | 'laser';
@@ -523,6 +544,7 @@ export interface CombatSquad {
   source_building_id?: string;
   blueprint_id: string;
   count: number;
+  member_max_hp?: number;
   hp: number;
   max_hp: number;
   shield: ShieldState;
@@ -531,6 +553,11 @@ export interface CombatSquad {
   state: CombatSquadState;
   target_enemy_id?: string;
   last_attack_tick?: number;
+  position: Position;
+  move_speed?: number;
+  path?: Position[];
+  path_index?: number;
+  move_progress?: number;
 }
 
 export interface OrbitalPlatform {
@@ -690,6 +717,7 @@ export type CommandType =
   | 'build'
   | 'move'
   | 'attack'
+  | 'unit_order'
   | 'refuel_mecha'
   | 'mine_resource'
   | 'craft_item'
@@ -750,6 +778,7 @@ export interface CommandTarget {
   system_id?: string;
   planet_id?: string;
   entity_id?: string;
+  entity_ids?: string[];
   position?: Position;
 }
 

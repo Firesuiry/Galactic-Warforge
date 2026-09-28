@@ -72,7 +72,8 @@
 | `scan_planet`                 | `<planet_id>`                                                                                                                                                                  | 扫描行星                               |
 | `build`                       | `<x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>]`                                                                                                 | 建造任意服务端可建建筑                 |
 | `move`                        | `<entity_id> <x> <y> [--z <z>]`                                                                                                                                                | 移动单位                               |
-| `attack`                      | `<entity_id> <target_entity_id>`                                                                                                                                               | 攻击单位或建筑                         |
+| `attack`                      | `<entity_id> <target_entity_id>`                                                                                                                                               | 指定攻击目标（单位追击至射程内按冷却开火；执行体保持手动一击） |
+| `order`                       | `<entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>]`                                                                    | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止，支持逗号分隔批量 |
 | `produce`                     | `<entity_id> <unit_type>`                                                                                                                                                      | 按服务端 `/catalog.world_units` 生产公开单位 |
 | `upgrade`                     | `<entity_id>`                                                                                                                                                                  | 升级建筑                               |
 | `demolish`                    | `<entity_id>`                                                                                                                                                                  | 拆除建筑                               |
@@ -314,6 +315,7 @@ help configure_splitter
 - `fleet_move`
 - `move`
 - `attack`
+- `order`
 - `scan_galaxy`
 - `scan_system`
 - `scan_planet`

@@ -206,8 +206,7 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 			continue
 		}
 		profile := model.ResolveWarBlueprintSensorProfile(blueprint)
-		taskForce := model.FindWarTaskForceByMember(player, model.WarTaskForceMemberKindSquad, squad.ID)
-		anchor := squadAnchorPosition(ws, squad, taskForce)
+		anchor := squad.Position
 		appendBlueprintSensorSources(&sources, clonePosition(anchor), 10+profile.SignalSignature/2, profile, "squad:"+squad.ID)
 	}
 	return sources

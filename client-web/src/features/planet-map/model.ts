@@ -60,6 +60,20 @@ export interface TilePoint {
   y: number;
 }
 
+/**
+ * 单位实时移动派生：服务器只下发路径与进度，客户端据此展示移动状态与目的地。
+ */
+export function unitIsMoving(unit: Pick<Unit, 'path' | 'path_index'>): boolean {
+  if (!unit.path) return false;
+  return (unit.path_index ?? 0) < unit.path.length;
+}
+
+export function unitMoveDestination(unit: Pick<Unit, 'path' | 'order_pos'>): Position | undefined {
+  if (unit.order_pos) return unit.order_pos;
+  if (unit.path && unit.path.length > 0) return unit.path[unit.path.length - 1];
+  return undefined;
+}
+
 export type SelectedEntity =
   | { kind: "building"; id: string; position: Position }
   | { kind: "unit"; id: string; position: Position }

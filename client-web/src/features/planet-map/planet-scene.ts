@@ -296,14 +296,15 @@ export function unitWedgePoints(radius: number): number[] {
  * 都无则保留 fallback（节点存续期间的最近朝向，默认朝上）。
  */
 export function resolveUnitDirection(
-  unit: Pick<Unit, 'position' | 'is_moving' | 'target_pos' | 'attack_target'>,
+  unit: Pick<Unit, 'position' | 'path' | 'path_index' | 'attack_target'>,
   fallback: { x: number; y: number },
   resolveTarget: (entityId: string) => TilePoint | null,
 ): { x: number; y: number } {
   const origin = toTilePoint(unit.position);
   let target: TilePoint | null = null;
-  if (unit.is_moving && unit.target_pos) {
-    target = toTilePoint(unit.target_pos);
+  if (unit.path && (unit.path_index ?? 0) < unit.path.length) {
+    // 实时移动：朝路径下一格。
+    target = toTilePoint(unit.path[unit.path_index ?? 0]);
   } else if (unit.attack_target) {
     target = resolveTarget(unit.attack_target);
   }

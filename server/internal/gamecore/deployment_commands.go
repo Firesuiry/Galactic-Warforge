@@ -543,6 +543,14 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 		}
 	}
 	totalHP := baseHP * count
+	// R3 实体化：小队落地到部署建筑旁的可进入格，获得真实坐标与移动力。
+	position := model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
+	if building := ws.Buildings[buildingID]; building != nil {
+		position = building.Position
+		if free := findAdjacentFree(ws, building.Position); free != nil {
+			position = *free
+		}
+	}
 	return &model.CombatSquad{
 		ID:               id,
 		OwnerID:          playerID,
@@ -553,12 +561,15 @@ func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, bl
 		BaseFrameID:      baseFrameID,
 		PlatformClass:    platformClass,
 		Count:            count,
+		MemberMaxHP:      baseHP,
 		HP:               totalHP,
 		MaxHP:            totalHP,
 		Shield:           shield,
 		Weapon:           weapon,
 		Sustainment:      sustainment,
 		State:            model.CombatSquadStateIdle,
+		Position:         position,
+		MoveSpeed:        0.2,
 	}
 }
 

@@ -86,19 +86,32 @@ func TestSurfaceMoveCrossesSeamAndRespectsObstacles(t *testing.T) {
 	ws := model.NewWorldState("test", 8)
 	start := model.Position{X: 0, Y: 4}
 	target, _ := ws.SurfaceStep(start, model.ConveyorWest)
-	unit := &model.Unit{ID: "u", OwnerID: "p1", Position: start, MoveRange: 1}
-	ws.Units[unit.ID] = unit
+	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", start)
 	gc := &GameCore{}
 	cmd := model.Command{Type: "move", Target: model.CommandTarget{EntityID: unit.ID, Position: &target}}
 	result, _ := gc.execMove(ws, "p1", cmd)
-	if result.Status != model.StatusExecuted || unit.Position != target {
-		t.Fatalf("cross seam move failed: %+v", result)
+	if result.Status != model.StatusExecuted {
+		t.Fatalf("cross seam move order failed: %+v", result)
+	}
+	for i := 0; i < 40 && unit.Position != target; i++ {
+		ws.Tick++
+		settleUnitMovement(ws)
+	}
+	if unit.Position != target {
+		t.Fatalf("cross seam move did not arrive: %+v", unit.Position)
 	}
 	for _, n := range ws.SurfaceNeighbors(target) {
 		surfaceTestBuilding(ws, fmt.Sprintf("block-%d-%d", n.X, n.Y), model.BuildingTypeDepotMk1, n)
 	}
 	far, _ := ws.SurfaceStep(start, model.ConveyorEast)
-	unit.MoveRange = 4
+	// 目的地被建筑占用：必须拒绝。
+	occupied := ws.SurfaceNeighbors(target)[0]
+	cmd.Target.Position = &occupied
+	result, _ = gc.execMove(ws, "p1", cmd)
+	if result.Status == model.StatusExecuted {
+		t.Fatal("unit moved onto building-occupied tile")
+	}
+	// 四面被建筑封死：寻路必须失败且单位不动。
 	cmd.Target.Position = &far
 	result, _ = gc.execMove(ws, "p1", cmd)
 	if result.Status == model.StatusExecuted {
@@ -190,12 +203,17 @@ func TestSurfaceCombatDestructionClearsFullFootprint(t *testing.T) {
 	if err := ws.IndexBuilding(b); err != nil {
 		t.Fatal(err)
 	}
-	unit := &model.Unit{ID: "attacker", OwnerID: "p1", Position: model.Position{X: 6, Y: 4}, Attack: 10, AttackRange: 2}
-	ws.Units[unit.ID] = unit
+	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 6, Y: 4})
+	unit.Attack = 10
+	unit.AttackRange = 2
 	gc := &GameCore{}
 	result, _ := gc.execAttack(ws, "p1", model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"target_entity_id": b.ID}})
 	if result.Status != model.StatusExecuted {
-		t.Fatalf("attack failed: %+v", result)
+		t.Fatalf("attack order failed: %+v", result)
+	}
+	for i := 0; i < 40 && len(ws.Buildings) != 0; i++ {
+		ws.Tick++
+		settleUnitCombat(ws)
 	}
 	if len(ws.TileBuilding) != 0 || len(ws.Buildings) != 0 {
 		t.Fatal("destruction left occupied footprint")

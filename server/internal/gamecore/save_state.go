@@ -221,7 +221,6 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		activePlanetID:   activePlanetID,
 		executorUsage:    make(map[string]int),
 		spaceRuntime:     spaceRuntime,
-		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 		baseSnapshot:     chooseBaseSnapshot(save.DebugState.BaseSnapshot, save.Snapshot),
 	}

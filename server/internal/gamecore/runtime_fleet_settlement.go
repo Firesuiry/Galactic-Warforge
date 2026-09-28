@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"math"
+	"sort"
 
 	"siliconworld/internal/model"
 )
@@ -69,16 +70,23 @@ func settleFleetTransit(spaceRuntime *model.SpaceRuntimeState) []*model.GameEven
 }
 
 func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameEvent {
-	if ws == nil || ws.CombatRuntime == nil || ws.EnemyForces == nil {
+	if ws == nil || ws.CombatRuntime == nil {
 		return nil
 	}
 
 	var events []*model.GameEvent
 	worlds := map[string]*model.WorldState{ws.PlanetID: ws}
-	for _, squad := range ws.CombatRuntime.Squads {
+	squadIDs := make([]string, 0, len(ws.CombatRuntime.Squads))
+	for id := range ws.CombatRuntime.Squads {
+		squadIDs = append(squadIDs, id)
+	}
+	sort.Strings(squadIDs)
+	for _, id := range squadIDs {
+		squad := ws.CombatRuntime.Squads[id]
 		if squad == nil || squad.State == model.CombatSquadStateDestroyed {
 			continue
 		}
+		normalizeSquadCombatStats(ws, squad)
 		player := ws.Players[squad.OwnerID]
 		taskForce := model.FindWarTaskForceByMember(player, model.WarTaskForceMemberKindSquad, squad.ID)
 		profile := defaultSquadTaskForceProfile(taskForce)
@@ -91,9 +99,23 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 			squad.TargetEnemyID = ""
 			continue
 		}
-		anchor := squadAnchorPosition(ws, squad, taskForce)
+
+		// 移动指令：特遣队部署位置即目的地（R3/R5 编组移动）。
+		if taskForce != nil && taskForce.Deployment != nil && taskForce.Deployment.Position != nil {
+			dest := *taskForce.Deployment.Position
+			if ws.SurfaceDistance(squad.Position, dest) > 2 && (!squad.HasPath() || currentTick-squad.RepathTick >= chaseRepathTicks) {
+				if path, ok := computeSurfacePath(ws, squad.Position, dest); ok && len(path) > 1 {
+					squad.Path = path
+					squad.PathIndex = 1
+					squad.MoveProgress = 0
+					squad.RepathTick = currentTick
+				}
+			}
+		}
+
+		anchor := squad.Position
 		maxDistance := penalizedEngagementDistance(profile.MaxEngagementDistance, status)
-		target := selectEnemyForceByTaskForceProfile(ws, squad.TargetEnemyID, anchor, profile, maxDistance)
+		target := selectSquadCombatTarget(ws, squad, anchor, profile, maxDistance)
 		if target == nil {
 			squad.State = model.CombatSquadStateIdle
 			squad.TargetEnemyID = ""
@@ -107,45 +129,241 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 			continue
 		}
 
-		damage := squad.Weapon.Damage * max(1, squad.Count)
+		// 射程约束（R3）：超出武器射程时按追击策略逼近或放弃。
+		if dist := ws.SurfaceDistance(squad.Position, target.pos); dist > int(squad.Weapon.Range) {
+			if profile.Pursue {
+				squad.TargetEnemyID = target.id
+				squad.State = model.CombatSquadStateEngaging
+				if !squad.HasPath() || currentTick-squad.RepathTick >= chaseRepathTicks {
+					if path, ok := computeSurfacePath(ws, squad.Position, target.pos); ok && len(path) > 1 {
+						squad.Path = path
+						squad.PathIndex = 1
+						squad.MoveProgress = 0
+						squad.RepathTick = currentTick
+					}
+				}
+			}
+			if !profile.Pursue {
+				squad.State = model.CombatSquadStateIdle
+				squad.TargetEnemyID = ""
+			}
+			continue
+		}
+
+		damage := squad.Weapon.Damage * max(1, squad.AliveCount())
 		damage = applyTaskForceDamagePenalty(damage, profile, status)
 		damage = int(float64(damage) * sustainmentDamageMultiplier(&squad.Sustainment))
 		if damage <= 0 {
 			continue
 		}
-		target.Strength -= max(1, damage/6)
-		squad.TargetEnemyID = target.ID
+		squad.TargetEnemyID = target.id
 		squad.State = model.CombatSquadStateEngaging
 		squad.LastAttackTick = currentTick
 		settleAttackConsumption(&squad.Sustainment, squad.Weapon, currentTick)
 		rechargeShieldWithSustainment(&squad.Shield, &squad.Sustainment, currentTick)
 
-		events = append(events, &model.GameEvent{
-			EventType:       model.EvtDamageApplied,
-			VisibilityScope: squad.OwnerID,
-			Payload: map[string]any{
-				"attacker_id":   squad.ID,
-				"attacker_type": "combat_squad",
-				"target_id":     target.ID,
-				"target_type":   "enemy_force",
-				"damage":        max(1, damage/6),
-			},
-		})
+		events = append(events, applySquadDamageToTarget(ws, squad, target, damage, currentTick)...)
+		if target.kind == "enemy_force" && (target.force == nil || target.force.Strength <= 0) {
+			squad.TargetEnemyID = ""
+			squad.State = model.CombatSquadStateIdle
+		}
+	}
 
-		if target.Strength <= 0 {
+	// 阵亡小队清理（被单位/炮塔/黑雾击杀的在本 tick 已移除；此处兜底）。
+	for id, squad := range ws.CombatRuntime.Squads {
+		if squad != nil && squad.HP <= 0 && squad.State != model.CombatSquadStateDestroyed {
+			events = append(events, destroySquad(ws, squad, "", "attrition")...)
+		}
+		_ = id
+	}
+	return events
+}
+
+// normalizeSquadCombatStats 兼容旧存档：补齐实体化字段（坐标/移速/单员HP）。
+func normalizeSquadCombatStats(ws *model.WorldState, squad *model.CombatSquad) {
+	if squad.MoveSpeed <= 0 {
+		squad.MoveSpeed = 0.2
+	}
+	if squad.MemberMaxHP <= 0 && squad.Count > 0 && squad.MaxHP > 0 {
+		squad.MemberMaxHP = max(1, squad.MaxHP/squad.Count)
+	}
+	if squad.Position == (model.Position{}) {
+		if building := ws.Buildings[squad.SourceBuildingID]; building != nil {
+			squad.Position = building.Position
+			if free := findAdjacentFree(ws, building.Position); free != nil {
+				squad.Position = *free
+			}
+		} else {
+			squad.Position = model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
+		}
+	}
+}
+
+// selectSquadCombatTarget 统一选取小队目标：敌对单位/小队/黑雾/建筑（R4）。
+func selectSquadCombatTarget(ws *model.WorldState, squad *model.CombatSquad, anchor model.Position, profile model.WarTaskForceStanceProfile, maxDistance int) *unitCombatTarget {
+	// 显式目标优先（沿用 TargetEnemyID 语义：现在泛指四类实体）。
+	if preferred := resolveCombatTarget(ws, squad.TargetEnemyID); preferred != nil && hostile(ws, squad.OwnerID, preferred.ownerID) {
+		if profile.Pursue || ws.SurfaceDistance(anchor, preferred.pos) <= maxDistance {
+			return preferred
+		}
+	}
+
+	var best *unitCombatTarget
+	bestDistance := math.MaxFloat64
+	bestStrength := -1
+	bestWeakness := math.MaxInt
+
+	consider := func(t *unitCombatTarget, strength int) {
+		if t == nil || strength <= 0 {
+			return
+		}
+		distance := float64(ws.SurfaceDistance(anchor, t.pos))
+		if !profile.Pursue && distance > float64(maxDistance) {
+			return
+		}
+		switch profile.TargetPriority {
+		case "strongest":
+			if strength > bestStrength || (strength == bestStrength && distance < bestDistance) {
+				best, bestStrength, bestDistance = t, strength, distance
+			}
+		case "weakest":
+			if strength < bestWeakness || (strength == bestWeakness && distance < bestDistance) {
+				best, bestWeakness, bestDistance = t, strength, distance
+			}
+		default:
+			if distance < bestDistance {
+				best, bestDistance = t, distance
+			}
+		}
+	}
+
+	for _, u := range ws.Units {
+		if u == nil || u.HP <= 0 || !hostile(ws, squad.OwnerID, u.OwnerID) {
+			continue
+		}
+		consider(&unitCombatTarget{kind: "unit", id: u.ID, pos: u.Position, ownerID: u.OwnerID, unit: u}, u.HP)
+	}
+	if ws.CombatRuntime != nil {
+		for _, other := range ws.CombatRuntime.Squads {
+			if other == nil || other.ID == squad.ID || other.State == model.CombatSquadStateDestroyed || other.HP <= 0 {
+				continue
+			}
+			if !hostile(ws, squad.OwnerID, other.OwnerID) {
+				continue
+			}
+			consider(&unitCombatTarget{kind: "combat_squad", id: other.ID, pos: other.Position, ownerID: other.OwnerID, squad: other}, other.HP)
+		}
+	}
+	if ws.EnemyForces != nil {
+		for i := range ws.EnemyForces.Forces {
+			force := &ws.EnemyForces.Forces[i]
+			if force.Strength <= 0 {
+				continue
+			}
+			consider(&unitCombatTarget{kind: "enemy_force", id: force.ID, pos: force.Position, force: force}, force.Strength*10)
+		}
+	}
+	for _, b := range ws.Buildings {
+		if b == nil || b.HP <= 0 || !hostile(ws, squad.OwnerID, b.OwnerID) {
+			continue
+		}
+		// 建筑仅在有明确攻击意图（追击姿态或显式目标）时成为候选，避免巡逻误拆。
+		if !profile.Pursue {
+			continue
+		}
+		consider(&unitCombatTarget{kind: "building", id: b.ID, pos: b.Position, ownerID: b.OwnerID, building: b}, b.HP)
+	}
+	return best
+}
+
+// applySquadDamageToTarget 小队开火结算（按目标类型分派）。
+func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, target *unitCombatTarget, damage int, currentTick int64) []*model.GameEvent {
+	var events []*model.GameEvent
+	basePayload := func() map[string]any {
+		return map[string]any{
+			"attacker_id":   squad.ID,
+			"attacker_type": "combat_squad",
+			"target_id":     target.id,
+			"target_type":   target.kind,
+		}
+	}
+	switch target.kind {
+	case "enemy_force":
+		force := target.force
+		loss := max(1, damage/6)
+		force.Strength -= loss
+		if force.Strength < 0 {
+			force.Strength = 0
+		}
+		payload := basePayload()
+		payload["damage"] = loss
+		events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: squad.OwnerID, Payload: payload})
+		if force.Strength <= 0 {
+			drops := darkFogLootDrops(force, force.Strength+loss, currentTick)
+			grants := grantDarkFogLoot(ws, squad.OwnerID, nil, drops)
+			events = append(events, darkFogLootEvents(ws, force, squad.ID, squad.OwnerID, grants)...)
 			events = append(events, &model.GameEvent{
 				EventType:       model.EvtEntityDestroyed,
 				VisibilityScope: "all",
 				Payload: map[string]any{
-					"entity_id":   target.ID,
+					"entity_id":   force.ID,
 					"entity_type": "enemy_force",
 					"killed_by":   squad.ID,
 					"source":      "combat_squad",
 				},
 			})
-			removeEnemyForce(ws, target.ID)
-			squad.TargetEnemyID = ""
-			squad.State = model.CombatSquadStateIdle
+			removeEnemyForce(ws, force.ID)
+		}
+	case "unit":
+		victim := target.unit
+		model.SyncMechaCapabilities(victim, ws.Players[victim.OwnerID])
+		eff := max(1, damage/2-victim.Defense)
+		hpDamage, absorbed := model.ApplyUnitDamage(victim, eff, currentTick)
+		victim.LastAttackerID = squad.ID
+		if victim.Mecha != nil {
+			events = append(events, mechaStateEvent(victim))
+		}
+		for _, scope := range []string{squad.OwnerID, victim.OwnerID} {
+			payload := basePayload()
+			payload["damage"] = hpDamage
+			payload["target_hp"] = victim.HP
+			payload["shield_absorbed"] = absorbed
+			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
+		}
+		if victim.HP <= 0 {
+			events = append(events, killUnit(ws, victim, squad.ID, "combat_squad")...)
+		}
+	case "combat_squad":
+		victim := target.squad
+		eff := damage / 2
+		if victim.Shield.Level > 0 {
+			eff = victim.Shield.ApplyShieldDamage(eff)
+			victim.Shield.LastHitTick = currentTick
+		}
+		losses := victim.ApplySquadDamage(max(1, eff))
+		for _, scope := range []string{squad.OwnerID, victim.OwnerID} {
+			payload := basePayload()
+			payload["damage"] = eff
+			payload["target_hp"] = victim.HP
+			payload["squad_count"] = victim.Count
+			payload["squad_losses"] = losses
+			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
+		}
+		if victim.HP <= 0 {
+			events = append(events, destroySquad(ws, victim, squad.ID, "combat_squad")...)
+		}
+	case "building":
+		b := target.building
+		eff := max(1, damage/2-2)
+		b.HP -= eff
+		for _, scope := range []string{squad.OwnerID, b.OwnerID} {
+			payload := basePayload()
+			payload["damage"] = eff
+			payload["target_hp"] = b.HP
+			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
+		}
+		if b.HP <= 0 {
+			events = append(events, destroyBuildingCombat(ws, b, squad.ID, "combat_squad"))
 		}
 	}
 	return events
@@ -385,13 +603,6 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 	return events
 }
 
-func findEnemyForceBySquadTarget(ws *model.WorldState, targetID string) *model.EnemyForce {
-	if targetID == "" {
-		return nil
-	}
-	return findEnemyForceByID(ws, targetID)
-}
-
 func defaultSquadTaskForceProfile(taskForce *model.WarTaskForce) model.WarTaskForceStanceProfile {
 	if taskForce == nil {
 		profile := model.WarTaskForceProfile(model.WarTaskForceStancePatrol)
@@ -432,19 +643,6 @@ func shouldRetreatFleet(fleet *model.SpaceFleet, profile model.WarTaskForceStanc
 		return false
 	}
 	return fleet.Shield.Level/fleet.Shield.MaxLevel <= profile.RetreatLossThreshold
-}
-
-func squadAnchorPosition(ws *model.WorldState, squad *model.CombatSquad, taskForce *model.WarTaskForce) model.Position {
-	if taskForce != nil && taskForce.Deployment != nil && taskForce.Deployment.Position != nil {
-		return *taskForce.Deployment.Position
-	}
-	if ws != nil {
-		if building := ws.Buildings[squad.SourceBuildingID]; building != nil {
-			return building.Position
-		}
-		return model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
-	}
-	return model.Position{}
 }
 
 func fleetAnchorPosition(targetWorld *model.WorldState, taskForce *model.WarTaskForce) model.Position {

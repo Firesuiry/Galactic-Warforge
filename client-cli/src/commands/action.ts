@@ -11,6 +11,7 @@ import {
   cmdBlueprintVariant as apiBlueprintVariant,
   cmdBuild as apiBuild,
   cmdMove as apiMove,
+  cmdUnitOrder as apiUnitOrder,
   cmdAttack as apiAttack,
   cmdProduce as apiProduce,
   cmdUpgrade as apiUpgrade,
@@ -245,6 +246,41 @@ export async function cmdMove(args: string[]): Promise<string> {
       getStringOption(parsed, 'z'),
     );
     return fmtCommandResponse(await apiMove(parsed.positionals[0], position));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+const ORDER_KINDS = ['attack_move', 'patrol', 'guard', 'hold', 'follow', 'retreat', 'stop'] as const;
+
+export async function cmdOrder(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 2) {
+    return fmtError('Usage: order <entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>]');
+  }
+  const selector = parsed.positionals[0].includes(',')
+    ? parsed.positionals[0].split(',').map((v) => v.trim()).filter(Boolean)
+    : parsed.positionals[0];
+  const order = parsed.positionals[1] as (typeof ORDER_KINDS)[number];
+  if (!ORDER_KINDS.includes(order)) {
+    return fmtError(`order 必须是 ${ORDER_KINDS.join('/')}`);
+  }
+  try {
+    const options: { position?: Position; targetEntityId?: string } = {};
+    if (order === 'attack_move' || order === 'patrol' || order === 'retreat') {
+      if (parsed.positionals.length < 4) {
+        return fmtError(`Usage: order <entity_id> ${order} <x> <y>`);
+      }
+      options.position = parsePosition(parsed.positionals[2], parsed.positionals[3], getStringOption(parsed, 'z'));
+    }
+    if (order === 'guard' || order === 'follow') {
+      const target = getStringOption(parsed, 'target') ?? parsed.positionals[2];
+      if (!target) {
+        return fmtError(`Usage: order <entity_id> ${order} --target <entity_id>`);
+      }
+      options.targetEntityId = target;
+    }
+    return fmtCommandResponse(await apiUnitOrder(selector, order, options));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }

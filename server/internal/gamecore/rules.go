@@ -401,28 +401,46 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 	return res, nil
 }
 
+// resolveCommandUnits 解析命令的目标单位集合（entity_id / entity_ids），
+// 校验存在性与归属；返回可指挥的单位列表与首个错误。
+func resolveCommandUnits(ws *model.WorldState, playerID string, cmd model.Command) ([]*model.Unit, *model.CommandResult) {
+	ids := make([]string, 0, 1+len(cmd.Target.EntityIDs))
+	if cmd.Target.EntityID != "" {
+		ids = append(ids, cmd.Target.EntityID)
+	}
+	seen := map[string]bool{}
+	for _, id := range cmd.Target.EntityIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: "target.entity_id or target.entity_ids required"}
+	}
+	sort.Strings(ids)
+	units := make([]*model.Unit, 0, len(ids))
+	for _, id := range ids {
+		unit, ok := ws.Units[id]
+		if !ok || unit == nil || unit.HP <= 0 {
+			return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeEntityNotFound, Message: fmt.Sprintf("unit %s not found", id)}
+		}
+		if unit.OwnerID != playerID {
+			return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeNotOwner, Message: fmt.Sprintf("cannot command unit %s owned by another player", id)}
+		}
+		units = append(units, unit)
+	}
+	return units, nil
+}
+
 // execMove handles the "move" command for a unit
 func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	entityID := cmd.Target.EntityID
-	if entityID == "" {
-		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id required for move command"
-		return res, nil
-	}
-
-	unit, ok := ws.Units[entityID]
-	if !ok {
-		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("unit %s not found", entityID)
-		return res, nil
-	}
-
-	if unit.OwnerID != playerID {
-		res.Code = model.CodeNotOwner
-		res.Message = "cannot move unit owned by another player"
-		return res, nil
+	units, cmdErr := resolveCommandUnits(ws, playerID, cmd)
+	if cmdErr != nil {
+		return *cmdErr, nil
 	}
 
 	pos := cmd.Target.Position
@@ -431,22 +449,11 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		res.Message = "target.position required for move command"
 		return res, nil
 	}
-
 	if !ws.InBounds(pos.X, pos.Y) {
 		res.Code = model.CodeInvalidTarget
 		res.Message = fmt.Sprintf("position (%d,%d) out of map bounds", pos.X, pos.Y)
 		return res, nil
 	}
-
-	model.SyncMechaCapabilities(unit, ws.Players[playerID])
-	dist := ws.SurfaceDistance(unit.Position, *pos)
-	if dist > unit.MoveRange {
-		res.Code = model.CodeOutOfRange
-		res.Message = fmt.Sprintf("move distance %d exceeds unit move range %d", dist, unit.MoveRange)
-		return res, nil
-	}
-
-	// Check destination not occupied by another building
 	tileKey := model.TileKey(pos.X, pos.Y)
 	if _, occupied := ws.TileBuilding[tileKey]; occupied {
 		res.Code = model.CodePositionOccupied
@@ -454,48 +461,81 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		return res, nil
 	}
 
-	path, reachable := ws.SurfacePath(unit.Position, *pos, unit.MoveRange)
-	if !reachable {
-		res.Code = model.CodeOutOfRange
-		res.Message = "destination has no walkable surface path within move range"
-		return res, nil
-	}
-
-	if unit.Mecha != nil {
-		if failure := spendMechaEnergy(unit, (len(path)-1)*unit.Mecha.MoveEnergyCost); failure != nil {
-			return *failure, nil
+	var events []*model.GameEvent
+	moved := 0
+	for _, unit := range units {
+		model.SyncMechaCapabilities(unit, ws.Players[playerID])
+		if unit.Mecha != nil {
+			// 执行体（玩家机甲）保持近距快速机动语义：范围内瞬移（飞行/真实移动见 I16）。
+			dist := ws.SurfaceDistance(unit.Position, *pos)
+			if dist > unit.MoveRange {
+				res.Code = model.CodeOutOfRange
+				res.Message = fmt.Sprintf("move distance %d exceeds unit move range %d", dist, unit.MoveRange)
+				return res, nil
+			}
+			path, reachable := ws.SurfacePath(unit.Position, *pos, unit.MoveRange)
+			if !reachable {
+				res.Code = model.CodeOutOfRange
+				res.Message = "destination has no walkable surface path within move range"
+				return res, nil
+			}
+			if failure := spendMechaEnergy(unit, (len(path)-1)*unit.Mecha.MoveEnergyCost); failure != nil {
+				return *failure, nil
+			}
+			oldKey := model.TileKey(unit.Position.X, unit.Position.Y)
+			removeUnitFromTile(ws, oldKey, unit.ID)
+			oldPos := unit.Position
+			unit.Position = *pos
+			unit.ClearMovement()
+			unit.ClearEngagement()
+			unit.Stance = model.UnitStanceIdle
+			ws.TileUnits[tileKey] = append(ws.TileUnits[tileKey], unit.ID)
+			events = append(events, &model.GameEvent{
+				EventType:       model.EvtEntityMoved,
+				VisibilityScope: playerID,
+				Payload: map[string]any{
+					"entity_id": unit.ID,
+					"from":      oldPos,
+					"to":        unit.Position,
+				},
+			}, mechaStateEvent(unit))
+			moved++
+			continue
 		}
-	}
-
-	// Remove unit from old tile
-	oldKey := model.TileKey(unit.Position.X, unit.Position.Y)
-	removeUnitFromTile(ws, oldKey, entityID)
-
-	// Move unit
-	oldPos := unit.Position
-	unit.Position = *pos
-
-	// Add unit to new tile
-	ws.TileUnits[tileKey] = append(ws.TileUnits[tileKey], entityID)
-
-	events := []*model.GameEvent{
-		{
+		// 普通单位：实时移动（R1）——只下达路径，由 settleUnitMovement 逐 tick 推进。
+		path, ok := computeUnitPath(ws, unit.Position, *pos, unit.ID)
+		if !ok {
+			res.Code = model.CodeOutOfRange
+			res.Message = fmt.Sprintf("unit %s has no walkable surface path to destination", unit.ID)
+			return res, nil
+		}
+		oldPos := unit.Position
+		unit.Path = path
+		unit.PathIndex = 1
+		unit.MoveProgress = 0
+		unit.BlockedTicks = 0
+		unit.Stance = model.UnitStanceMoving
+		unit.OrderPos = nil
+		unit.GuardTargetID = ""
+		unit.ClearEngagement()
+		events = append(events, &model.GameEvent{
 			EventType:       model.EvtEntityMoved,
 			VisibilityScope: playerID,
 			Payload: map[string]any{
-				"entity_id": entityID,
-				"from":      oldPos,
-				"to":        unit.Position,
+				"entity_id":  unit.ID,
+				"from":       oldPos,
+				"to":         *pos,
+				"path":       path,
+				"move_speed": unit.MoveSpeed,
+				"stance":     unit.Stance,
 			},
-		},
+		})
+		moved++
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("unit %s moved to (%d,%d)", entityID, pos.X, pos.Y)
-	if unit.Mecha != nil {
-		events = append(events, mechaStateEvent(unit))
-	}
+	res.Message = fmt.Sprintf("%d unit(s) moving to (%d,%d)", moved, pos.X, pos.Y)
 	return res, events
 }
 
@@ -503,29 +543,11 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	attackerID := cmd.Target.EntityID
-	if attackerID == "" {
-		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id (attacker) required"
-		return res, nil
+	attackers, cmdErr := resolveCommandUnits(ws, playerID, cmd)
+	if cmdErr != nil {
+		return *cmdErr, nil
 	}
 
-	// Resolve attacker (unit)
-	attacker, ok := ws.Units[attackerID]
-	if !ok {
-		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("attacker unit %s not found", attackerID)
-		return res, nil
-	}
-	if attacker.OwnerID != playerID {
-		res.Code = model.CodeNotOwner
-		res.Message = "cannot order attack with unit owned by another player"
-		return res, nil
-	}
-
-	model.SyncMechaCapabilities(attacker, ws.Players[playerID])
-
-	// Get target entity ID from payload
 	targetIDRaw, ok := cmd.Payload["target_entity_id"]
 	if !ok {
 		res.Code = model.CodeValidationFailed
@@ -534,163 +556,211 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 	}
 	targetID := fmt.Sprintf("%v", targetIDRaw)
 
-	// Resolve target HP and position (unit or building)
-	var targetPos model.Position
-	var targetOwner string
-	var events []*model.GameEvent
-
-	if targetUnit, ok := ws.Units[targetID]; ok {
-		if targetUnit.OwnerID == playerID {
-			res.Code = model.CodeInvalidTarget
-			res.Message = "cannot attack own unit"
-			return res, nil
-		}
-		targetPos = targetUnit.Position
-		targetOwner = targetUnit.OwnerID
-		if sameTeam(ws, playerID, targetOwner) {
-			res.Code = model.CodeInvalidTarget
-			res.Message = "cannot attack allied unit"
-			return res, nil
-		}
-
-		dist := ws.SurfaceDistance(attacker.Position, targetPos)
-		if dist > attacker.AttackRange {
-			res.Code = model.CodeOutOfRange
-			res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
-			return res, nil
-		}
-
-		if attacker.Mecha != nil {
-			if failure := spendMechaEnergy(attacker, attacker.Mecha.AttackEnergyCost); failure != nil {
-				return *failure, nil
-			}
-		}
-		model.SyncMechaCapabilities(targetUnit, ws.Players[targetOwner])
-		damage, absorbed := model.ApplyUnitDamage(targetUnit, max(1, attacker.Attack-targetUnit.Defense), ws.Tick)
-		if targetUnit.Mecha != nil {
-			events = append(events, mechaStateEvent(targetUnit))
-		}
-
-		events = append(events, &model.GameEvent{
-			EventType:       model.EvtDamageApplied,
-			VisibilityScope: playerID,
-			Payload: map[string]any{
-				"attacker_id":     attackerID,
-				"target_id":       targetID,
-				"damage":          damage,
-				"target_hp":       targetUnit.HP,
-				"shield_absorbed": absorbed,
-			},
-		})
-		// Broadcast damage to target owner as well
-		events = append(events, &model.GameEvent{
-			EventType:       model.EvtDamageApplied,
-			VisibilityScope: targetOwner,
-			Payload: map[string]any{
-				"attacker_id":     attackerID,
-				"target_id":       targetID,
-				"damage":          damage,
-				"target_hp":       targetUnit.HP,
-				"shield_absorbed": absorbed,
-			},
-		})
-
-		if targetUnit.HP <= 0 {
-			refundMechaJob(ws, targetUnit)
-			delete(ws.Units, targetID)
-			tileKey := model.TileKey(targetUnit.Position.X, targetUnit.Position.Y)
-			removeUnitFromTile(ws, tileKey, targetID)
-			destroyEvt := &model.GameEvent{
-				EventType:       model.EvtEntityDestroyed,
-				VisibilityScope: "all",
-				Payload: map[string]any{
-					"entity_id":   targetID,
-					"entity_type": "unit",
-					"owner_id":    targetOwner,
-				},
-			}
-			events = append(events, destroyEvt)
-		}
-
-	} else if targetBuilding, ok := ws.Buildings[targetID]; ok {
-		if targetBuilding.OwnerID == playerID {
-			res.Code = model.CodeInvalidTarget
-			res.Message = "cannot attack own building"
-			return res, nil
-		}
-		targetPos = targetBuilding.Position
-		targetOwner = targetBuilding.OwnerID
-		if sameTeam(ws, playerID, targetOwner) {
-			res.Code = model.CodeInvalidTarget
-			res.Message = "cannot attack allied building"
-			return res, nil
-		}
-
-		dist := ws.SurfaceDistance(attacker.Position, targetPos)
-		if dist > attacker.AttackRange {
-			res.Code = model.CodeOutOfRange
-			res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
-			return res, nil
-		}
-
-		if attacker.Mecha != nil {
-			if failure := spendMechaEnergy(attacker, attacker.Mecha.AttackEnergyCost); failure != nil {
-				return *failure, nil
-			}
-		}
-		damage := max(1, attacker.Attack-2) // buildings have inherent defense
-		targetBuilding.HP -= damage
-
-		events = append(events, &model.GameEvent{
-			EventType:       model.EvtDamageApplied,
-			VisibilityScope: playerID,
-			Payload: map[string]any{
-				"attacker_id": attackerID,
-				"target_id":   targetID,
-				"damage":      damage,
-				"target_hp":   targetBuilding.HP,
-			},
-		})
-		events = append(events, &model.GameEvent{
-			EventType:       model.EvtDamageApplied,
-			VisibilityScope: targetOwner,
-			Payload: map[string]any{
-				"attacker_id": attackerID,
-				"target_id":   targetID,
-				"damage":      damage,
-				"target_hp":   targetBuilding.HP,
-			},
-		})
-
-		if targetBuilding.HP <= 0 {
-			delete(ws.Buildings, targetID)
-			ws.UnindexBuilding(targetBuilding)
-			detachStationFleet(ws, targetID)
-			model.UnregisterLogisticsStation(ws, targetID)
-			model.UnregisterPowerGridBuilding(ws, targetID)
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtEntityDestroyed,
-				VisibilityScope: "all",
-				Payload: map[string]any{
-					"entity_id":   targetID,
-					"entity_type": "building",
-					"owner_id":    targetOwner,
-				},
-			})
-		}
-	} else {
+	target := resolveCombatTarget(ws, targetID)
+	if target == nil {
 		res.Code = model.CodeEntityNotFound
 		res.Message = fmt.Sprintf("target entity %s not found", targetID)
+		return res, nil
+	}
+	if target.ownerID == playerID {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "cannot attack own entity"
+		return res, nil
+	}
+	if target.ownerID != "" && sameTeam(ws, playerID, target.ownerID) {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "cannot attack allied entity"
+		return res, nil
+	}
+
+	// R2：攻击命令只指定目标；单位追击至射程内按冷却开火（settleUnitCombat）。
+	var events []*model.GameEvent
+	engaged := 0
+	for _, attacker := range attackers {
+		model.SyncMechaCapabilities(attacker, ws.Players[playerID])
+		if attacker.Mecha != nil {
+			// 执行体（玩家机甲）保持手动攻击语义：射程校验 + 能量消耗 + 立即一击（I16 统一）。
+			dist := ws.SurfaceDistance(attacker.Position, target.pos)
+			if dist > attacker.AttackRange {
+				res.Code = model.CodeOutOfRange
+				res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
+				return res, nil
+			}
+			if failure := spendMechaEnergy(attacker, attacker.Mecha.AttackEnergyCost); failure != nil {
+				return *failure, nil
+			}
+			events = append(events, fireAtTarget(ws, attacker, target)...)
+			attacker.LastAttackTick = ws.Tick
+			attacker.AttackTarget = targetID // 后续按冷却自动开火（settleMechaAutoFire）
+			events = append(events, mechaStateEvent(attacker))
+			engaged++
+			continue
+		}
+		attacker.AttackTarget = targetID
+		attacker.CombatAnchor = nil // 显式攻击：不受守位范围约束
+		attacker.LastAttackerID = ""
+		if attacker.Stance == model.UnitStanceMoving || attacker.Stance == model.UnitStanceRetreat || attacker.Stance == model.UnitStanceAttackMove || attacker.Stance == model.UnitStancePatrol {
+			attacker.Stance = model.UnitStanceIdle
+		}
+		attacker.ClearMovement()
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtEntityUpdated,
+			VisibilityScope: playerID,
+			Payload: map[string]any{
+				"entity_id":   attacker.ID,
+				"entity_kind": "unit",
+				"order":       "attack",
+				"target_id":   targetID,
+			},
+		})
+		engaged++
+	}
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("%d unit(s) attacking %s", engaged, targetID)
+	return res, events
+}
+
+// execUnitOrder handles the "unit_order" command（R5 指令集）：
+// attack_move / patrol / guard / hold / follow / retreat / stop。
+func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	units, cmdErr := resolveCommandUnits(ws, playerID, cmd)
+	if cmdErr != nil {
+		return *cmdErr, nil
+	}
+	orderRaw, ok := cmd.Payload["order"]
+	if !ok {
+		res.Code = model.CodeValidationFailed
+		res.Message = "payload.order required"
+		return res, nil
+	}
+	order := fmt.Sprintf("%v", orderRaw)
+
+	var events []*model.GameEvent
+	ordered := 0
+	for _, unit := range units {
+		// 执行体（玩家机甲）不参与部队指令集。
+		if unit.Mecha != nil {
+			continue
+		}
+		switch order {
+		case "stop":
+			unit.ClearMovement()
+			unit.ClearEngagement()
+			unit.Stance = model.UnitStanceIdle
+			unit.OrderPos = nil
+			unit.GuardTargetID = ""
+		case "hold":
+			unit.ClearMovement()
+			unit.ClearEngagement()
+			unit.Stance = model.UnitStanceHold
+		case "attack_move", "patrol", "retreat":
+			pos := cmd.Target.Position
+			if pos == nil {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("target.position required for %s", order)
+				return res, nil
+			}
+			if !ws.InBounds(pos.X, pos.Y) {
+				res.Code = model.CodeInvalidTarget
+				res.Message = fmt.Sprintf("position (%d,%d) out of map bounds", pos.X, pos.Y)
+				return res, nil
+			}
+			path, pathOK := computeUnitPath(ws, unit.Position, *pos, unit.ID)
+			if !pathOK {
+				res.Code = model.CodeOutOfRange
+				res.Message = fmt.Sprintf("unit %s has no walkable surface path to destination", unit.ID)
+				return res, nil
+			}
+			unit.ClearEngagement()
+			unit.Path = path
+			unit.PathIndex = 1
+			unit.MoveProgress = 0
+			unit.BlockedTicks = 0
+			unit.GuardTargetID = ""
+			dest := *pos
+			unit.OrderPos = &dest
+			switch order {
+			case "attack_move":
+				unit.Stance = model.UnitStanceAttackMove
+				unit.CombatAnchor = nil
+			case "patrol":
+				unit.Stance = model.UnitStancePatrol
+				anchor := unit.Position
+				unit.CombatAnchor = &anchor
+			case "retreat":
+				unit.Stance = model.UnitStanceRetreat
+				unit.CombatAnchor = nil
+			}
+		case "guard", "follow":
+			targetIDRaw, tok := cmd.Payload["target_entity_id"]
+			if !tok {
+				res.Code = model.CodeValidationFailed
+				res.Message = fmt.Sprintf("payload.target_entity_id required for %s", order)
+				return res, nil
+			}
+			targetID := fmt.Sprintf("%v", targetIDRaw)
+			friendly := resolveFriendly(ws, targetID)
+			if friendly == nil {
+				res.Code = model.CodeEntityNotFound
+				res.Message = fmt.Sprintf("target entity %s not found", targetID)
+				return res, nil
+			}
+			if owner := friendlyOwner(ws, targetID); owner != playerID && !sameTeam(ws, playerID, owner) {
+				res.Code = model.CodeInvalidTarget
+				res.Message = "can only guard/follow own or allied entity"
+				return res, nil
+			}
+			unit.ClearMovement()
+			unit.ClearEngagement()
+			unit.GuardTargetID = targetID
+			unit.OrderPos = nil
+			if order == "guard" {
+				unit.Stance = model.UnitStanceGuard
+			} else {
+				unit.Stance = model.UnitStanceFollow
+			}
+		default:
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("unknown order %q", order)
+			return res, nil
+		}
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtEntityUpdated,
+			VisibilityScope: playerID,
+			Payload: map[string]any{
+				"entity_id":   unit.ID,
+				"entity_kind": "unit",
+				"order":       order,
+				"stance":      unit.Stance,
+			},
+		})
+		ordered++
+	}
+	if ordered == 0 {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "no commandable units (executors do not take squad orders)"
 		return res, nil
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("unit %s attacked %s", attackerID, targetID)
-	if attacker.Mecha != nil {
-		events = append(events, mechaStateEvent(attacker))
-	}
+	res.Message = fmt.Sprintf("%d unit(s) ordered %s", ordered, order)
 	return res, events
+}
+
+// friendlyOwner 返回友方目标（单位/建筑）的归属玩家。
+func friendlyOwner(ws *model.WorldState, id string) string {
+	if u, ok := ws.Units[id]; ok && u != nil {
+		return u.OwnerID
+	}
+	if b, ok := ws.Buildings[id]; ok && b != nil {
+		return b.OwnerID
+	}
+	return ""
 }
 
 // execProduce handles the "produce" command to create units at a production building

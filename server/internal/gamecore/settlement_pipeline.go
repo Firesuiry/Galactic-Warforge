@@ -68,6 +68,10 @@ func newSettlementPipeline() settlementPipeline {
 			settleLogisticsStationIO(ws)
 			settleStorage(ws)
 			events = append(events, settleTurrets(ws)...)
+			events = append(events, settleUnitMovement(ws)...)
+			events = append(events, settleSquadMovement(ws)...)
+			events = append(events, settleUnitCombat(ws)...)
+			settleCombatTech(ws)
 			events = append(events, settleTrafficMonitors(ws)...)
 
 			if gc.monitor != nil {
@@ -110,9 +114,7 @@ func newSettlementPipeline() settlementPipeline {
 
 		var events []*model.GameEvent
 		events = append(events, gc.settleEnemyForces()...)
-		events = append(events, gc.settleCombat()...)
 		events = append(events, gc.settleOrbitalCombat()...)
-		events = append(events, gc.settleCombatTech()...)
 		gc.settleStats()
 
 		if !gc.Victory().Declared() {

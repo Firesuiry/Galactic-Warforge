@@ -136,7 +136,11 @@ func TestPlayerMechaShieldAbsorbsAttackThenRechargesUsingEnergy(t *testing.T) {
 	ws.Units[enemy.ID] = &enemy
 	core := &GameCore{}
 	res, _ := core.execAttack(ws, "p2", model.Command{Target: model.CommandTarget{EntityID: enemy.ID}, Payload: map[string]any{"target_entity_id": unit.ID}})
-	if res.Code != model.CodeOK || unit.HP != unit.MaxHP || unit.Mecha.Shield != 13 || unit.Mecha.LastHitTick != 20 {
+	if res.Code != model.CodeOK {
+		t.Fatalf("attack order failed: %+v", res)
+	}
+	settleUnitCombat(ws)
+	if unit.HP != unit.MaxHP || unit.Mecha.Shield != 13 || unit.Mecha.LastHitTick != 20 {
 		t.Fatalf("shield failed: %+v %+v", res, unit)
 	}
 	ws.Tick = 29

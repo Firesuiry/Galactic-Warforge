@@ -119,6 +119,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "optional",
   },
   {
+    id: "unit_order",
+    apiCommandName: "unit_order",
+    cliCommandName: "order",
+    category: "management",
+    permissionCategory: "combat",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
     id: "produce",
     apiCommandName: "produce",
     cliCommandName: "produce",

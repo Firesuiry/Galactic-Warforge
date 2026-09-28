@@ -153,7 +153,7 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 		m.LogisticsRequests[itemID] = request
 	}
 	// Combat techs apply multiplicatively on top of the mecha-tree flat bonuses,
-	// mirroring ApplyCombatTechEffects for CombatUnit: mechanical_frame adds
+	// mechanical_frame adds to the mecha structure HP track;
 	// flat HP, df_enhanced_structure (structure_hp) scales the total; weapon
 	// damage techs scale the base attack.
 	maxHP := baseMechaMaxHP + int(TechEffectValue(player, "mecha_max_hp"))

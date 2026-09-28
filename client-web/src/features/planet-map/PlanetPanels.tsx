@@ -73,6 +73,7 @@ import { TrafficMonitorControls } from "./TrafficMonitorControls";
 import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
 import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
+import { unitIsMoving, unitMoveDestination } from '@/features/planet-map/model';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -920,12 +921,12 @@ export function PlanetEntityPanel({
             </div>
             <div>
               <dt>移动状态</dt>
-              <dd>{unit.is_moving ? "移动中" : "待命"}</dd>
+              <dd>{unitIsMoving(unit) ? "移动中" : unit.stance === 'hold' ? "坚守" : "待命"}</dd>
             </div>
             <div>
               <dt>目标</dt>
               <dd>
-                {unit.attack_target || formatPosition(unit.target_pos) || "-"}
+                {unit.attack_target || formatPosition(unitMoveDestination(unit)) || "-"}
               </dd>
             </div>
           </dl>

@@ -87,7 +87,6 @@ func (gc *GameCore) Replay(req model.ReplayRequest) (*model.ReplayResponse, erro
 		spaceRuntime:     spaceRuntime,
 		alertHistory:     NewAlertHistory(gc.cfg.Server.AlertHistoryLimit),
 		monitor:          newProductionMonitor(gc.cfg.Server.ProductionMonitor),
-		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
 

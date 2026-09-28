@@ -226,6 +226,26 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
             >
               {modeForUnit?.kind === 'attack' ? '取消攻击' : '攻击'}
             </button>
+            {!unit.mecha ? (
+              <>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  title="原地坚守：不追击，射程内自动开火"
+                  onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'hold'), { entityId: unit.id })}
+                >
+                  坚守
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  title="停止当前命令，回到待命"
+                  onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
+                >
+                  停止
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

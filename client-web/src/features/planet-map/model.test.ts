@@ -70,7 +70,6 @@ function createPlanetFixture(): PlanetView {
         attack_range: 1,
         move_range: 2,
         vision_range: 4,
-        is_moving: false,
       },
     },
     resources: [

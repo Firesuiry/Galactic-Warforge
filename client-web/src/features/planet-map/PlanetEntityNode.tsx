@@ -17,7 +17,7 @@ import type {
 } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
-import { getBuildingCatalogEntry, getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
+import { unitIsMoving, unitMoveDestination, getBuildingCatalogEntry, getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
 import { getResourceColor } from '@/features/planet-map/visible-entities';
 
 /**
@@ -131,8 +131,8 @@ export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps
       data-tile-y={point.y}
       data-hp={unit.hp}
       data-max-hp={unit.max_hp}
-      data-is-moving={unit.is_moving ? 'true' : 'false'}
-      data-target-pos={unit.target_pos ? `${unit.target_pos.x},${unit.target_pos.y}` : undefined}
+      data-is-moving={unitIsMoving(unit) ? 'true' : 'false'}
+      data-target-pos={(() => { const dest = unitMoveDestination(unit); return dest ? `${dest.x},${dest.y}` : undefined; })()}
     >
       <Icon className="entity-node__icon" iconKey={unit.type} color={isOwn ? '#91ff70' : '#ff6262'} fluid />
     </div>

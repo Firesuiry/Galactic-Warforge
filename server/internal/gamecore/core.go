@@ -331,7 +331,6 @@ type GameCore struct {
 	activePlanetID   string
 	executorUsage    map[string]int
 	spaceRuntime     *model.SpaceRuntimeState
-	combatUnits      *CombatUnitManager
 	orbitalPlatforms *OrbitalPlatformManager
 	saveMu           sync.Mutex
 	gameDir          *gamedir.Dir
@@ -381,7 +380,6 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 		activePlanetID:   registry.ActivePlanetID,
 		executorUsage:    make(map[string]int),
 		spaceRuntime:     registry.SpaceRuntime,
-		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
 	if core.spaceRuntime == nil {
@@ -733,6 +731,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execMove(gc.world, qr.PlayerID, cmd)
 		case model.CmdAttack:
 			res, evts = gc.execAttack(gc.world, qr.PlayerID, cmd)
+		case model.CmdUnitOrder:
+			res, evts = gc.execUnitOrder(gc.world, qr.PlayerID, cmd)
 		case model.CmdRefuelMecha:
 			res, evts = gc.execRefuelMecha(gc.world, qr.PlayerID, cmd)
 		case model.CmdMineResource:

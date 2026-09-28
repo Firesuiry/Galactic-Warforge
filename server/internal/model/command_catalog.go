@@ -74,12 +74,44 @@ func commandStructureRegistry() []CommandStructureSpec {
 		},
 		{
 			Type:                 CmdMove,
-			RequiredTargetFields: []string{"entity_id", "position"},
+			RequiredTargetFields: []string{"position"},
+			ExtraValidation:      requireAnyUnitSelector,
+			Constraints:          []string{"实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。"},
 		},
 		{
 			Type:                  CmdAttack,
-			RequiredTargetFields:  []string{"entity_id"},
 			RequiredPayloadFields: []string{"target_entity_id"},
+			ExtraValidation:       requireAnyUnitSelector,
+			Constraints:           []string{"指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。"},
+		},
+		{
+			Type:                  CmdUnitOrder,
+			RequiredPayloadFields: []string{"order"},
+			OptionalPayloadFields: []string{"target_entity_id"},
+			ExtraValidation: func(cmd Command) []CommandIssue {
+				issues := requireAnyUnitSelector(cmd)
+				order := strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["order"]))
+				switch order {
+				case "attack_move", "patrol", "retreat":
+					if cmd.Target.Position == nil {
+						issues = append(issues, MissingFieldIssue("target.position"))
+					}
+				case "guard", "follow":
+					if strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["target_entity_id"])) == "" {
+						issues = append(issues, MissingFieldIssue("payload.target_entity_id"))
+					}
+				case "hold", "stop":
+				default:
+					issues = append(issues, InvalidValueIssue(
+						"payload.order",
+						"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop",
+						"attack_move|patrol|guard|hold|follow|retreat|stop",
+						order,
+					))
+				}
+				return issues
+			},
+			Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。"},
 		},
 		{
 			Type:                  CmdRefuelMecha,
@@ -642,4 +674,13 @@ func cloneStringsOrEmpty(in []string) []string {
 		return []string{}
 	}
 	return cloneStrings(in)
+}
+
+// requireAnyUnitSelector 校验移动/攻击/指令类命令的单位选择器：
+// target.entity_id 与 target.entity_ids 至少提供一个。
+func requireAnyUnitSelector(cmd Command) []CommandIssue {
+	if cmd.Target.EntityID != "" || len(cmd.Target.EntityIDs) > 0 {
+		return nil
+	}
+	return []CommandIssue{MissingFieldIssue("target.entity_id")}
 }

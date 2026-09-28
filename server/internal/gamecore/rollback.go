@@ -68,7 +68,6 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 		spaceRuntime:     spaceRuntime,
 		alertHistory:     NewAlertHistory(gc.cfg.Server.AlertHistoryLimit),
 		monitor:          newProductionMonitor(gc.cfg.Server.ProductionMonitor),
-		combatUnits:      NewCombatUnitManager(),
 		orbitalPlatforms: NewOrbitalPlatformManager(),
 	}
 

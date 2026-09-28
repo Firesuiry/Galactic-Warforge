@@ -13,7 +13,7 @@ const { client } = vi.hoisted(() => ({ client: {
 vi.mock('@/hooks/use-api-client', () => ({ useApiClient: () => client }));
 const unit: Unit = {
   id: 'u-1', owner_id: 'p1', type: 'executor', position: { x: 3, y: 2, z: 0 },
-  hp: 120, max_hp: 120, attack: 20, defense: 8, attack_range: 4, move_range: 14, vision_range: 6, is_moving: false,
+  hp: 120, max_hp: 120, attack: 20, defense: 8, attack_range: 4, move_range: 14, vision_range: 6,
   mecha: { energy: 40, max_energy: 110, fuel_energy: 0, shield: 8, max_shield: 20,
     attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10, last_hit_tick: 5 },
 };

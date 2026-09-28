@@ -9,6 +9,7 @@ const (
 	CmdBuild                     CommandType = "build"
 	CmdMove                      CommandType = "move"
 	CmdAttack                    CommandType = "attack"
+	CmdUnitOrder                 CommandType = "unit_order"
 	CmdRefuelMecha               CommandType = "refuel_mecha"
 	CmdMineResource              CommandType = "mine_resource"
 	CmdCraftItem                 CommandType = "craft_item"
@@ -72,7 +73,10 @@ type CommandTarget struct {
 	SystemID string    `json:"system_id,omitempty"`
 	PlanetID string    `json:"planet_id,omitempty"`
 	EntityID string    `json:"entity_id,omitempty"`
-	Position *Position `json:"position,omitempty"`
+	// EntityIDs 批量指令（框选多单位）的目标实体集合；与 EntityID 二选一或并用，
+	// 执行器按稳定顺序逐个处理。
+	EntityIDs []string  `json:"entity_ids,omitempty"`
+	Position  *Position `json:"position,omitempty"`
 }
 
 // Command is a single game action
@@ -152,6 +156,7 @@ func AllCommandTypes() []CommandType {
 		CmdBuild,
 		CmdMove,
 		CmdAttack,
+		CmdUnitOrder,
 		CmdRefuelMecha,
 		CmdMineResource,
 		CmdCraftItem,

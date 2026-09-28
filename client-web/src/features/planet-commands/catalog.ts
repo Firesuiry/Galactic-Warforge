@@ -24,6 +24,7 @@ export const PLANET_COMMAND_RENDERERS: Partial<
   move: { cardId: "move", section: "基础操作" },
   demolish: { cardId: "demolish", section: "基础操作" },
   attack: { cardId: "combat", section: "战斗与制造" },
+  unit_order: { cardId: "combat", section: "战斗与制造" },
   produce: { cardId: "combat", section: "战斗与制造" },
   upgrade: { cardId: "combat", section: "战斗与制造" },
   cancel_construction: { cardId: "cancel", section: "取消与恢复" },

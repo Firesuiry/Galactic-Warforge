@@ -169,9 +169,9 @@ describe('单位楔形与朝向', () => {
     expect(points[3]).toBeCloseTo(points[7], 6);
   });
 
-  it('resolveUnitDirection：移动中朝 target_pos', () => {
+  it('resolveUnitDirection：移动中朝路径下一格', () => {
     const dir = resolveUnitDirection(
-      { position: { x: 1, y: 1, z: 0 }, is_moving: true, target_pos: { x: 4, y: 5, z: 0 } },
+      { position: { x: 1, y: 1, z: 0 }, path: [{ x: 1, y: 1, z: 0 }, { x: 4, y: 5, z: 0 }], path_index: 1 },
       { x: 0, y: -1 },
       () => null,
     );
@@ -181,7 +181,7 @@ describe('单位楔形与朝向', () => {
 
   it('resolveUnitDirection：无移动时朝 attack_target，都无则保留 fallback', () => {
     const dir = resolveUnitDirection(
-      { position: { x: 2, y: 2, z: 0 }, is_moving: false, attack_target: 'b1' },
+      { position: { x: 2, y: 2, z: 0 }, attack_target: 'b1' },
       { x: 0, y: -1 },
       (id) => (id === 'b1' ? { x: 5, y: 2 } : null),
     );
@@ -190,13 +190,13 @@ describe('单位楔形与朝向', () => {
 
     const fallback = { x: 0.6, y: -0.8 };
     expect(resolveUnitDirection(
-      { position: { x: 2, y: 2, z: 0 }, is_moving: false },
+      { position: { x: 2, y: 2, z: 0 } },
       fallback,
       () => null,
     )).toBe(fallback);
     // 目标与本格重合时也保留 fallback
     expect(resolveUnitDirection(
-      { position: { x: 2, y: 2, z: 0 }, is_moving: true, target_pos: { x: 2, y: 2, z: 0 } },
+      { position: { x: 2, y: 2, z: 0 }, path: [{ x: 2, y: 2, z: 0 }], path_index: 0 },
       fallback,
       () => null,
     )).toBe(fallback);

@@ -313,7 +313,14 @@ func TestMechaJobDeathThroughAttackRefundsRemainingReservation(t *testing.T) {
 	ws.Units[attacker.ID] = &attacker
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 	result, _ := core.execAttack(ws, "p2", model.Command{Target: model.CommandTarget{EntityID: attacker.ID}, Payload: map[string]any{"target_entity_id": unit.ID}})
-	if result.Code != model.CodeOK || ws.Units[unit.ID] != nil || player.Inventory[model.ItemIronIngot] != 1 || player.Inventory[model.ItemGear] != 1 {
+	if result.Code != model.CodeOK {
+		t.Fatalf("attack order failed: %+v", result)
+	}
+	for i := 0; i < 40 && ws.Units[unit.ID] != nil; i++ {
+		ws.Tick++
+		settleUnitCombat(ws)
+	}
+	if ws.Units[unit.ID] != nil || player.Inventory[model.ItemIronIngot] != 1 || player.Inventory[model.ItemGear] != 1 {
 		t.Fatalf("combat deletion lost/duplicated reservation: %+v inventory=%v unit=%+v", result, player.Inventory, ws.Units[unit.ID])
 	}
 }

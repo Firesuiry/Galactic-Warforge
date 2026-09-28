@@ -134,60 +134,6 @@ func CalculateOrbitalDistance(ws *WorldState, orbit OrbitPosition, groundPos Pos
 	return float64(ws.SurfaceDistance(p, groundPos))
 }
 
-// CalculateFormationPositions 计算编队位置
-func CalculateFormationPositions(ws *WorldState, leader *CombatUnit, formationType FormationType, spacing float64) []Position {
-	positions := make([]Position, 0)
-
-	switch formationType {
-	case FormationTypeLine:
-		for i := 0; i < 4; i++ {
-			pos := Position{
-				X: leader.Position.X - int(spacing*float64(i)),
-				Y: leader.Position.Y,
-			}
-			positions = append(positions, pos)
-		}
-	case FormationTypeVee:
-		for i := 0; i < 4; i++ {
-			offset := int(spacing * float64(i))
-			pos := Position{
-				X: leader.Position.X - offset,
-				Y: leader.Position.Y - offset,
-			}
-			if i%2 == 0 && i > 0 {
-				pos.Y = leader.Position.Y + offset
-			}
-			positions = append(positions, pos)
-		}
-	case FormationTypeWedge:
-		for i := 0; i < 4; i++ {
-			offset := int(spacing * float64(i))
-			pos := Position{
-				X: leader.Position.X - offset,
-				Y: leader.Position.Y,
-			}
-			if i == 1 || i == 2 {
-				pos.Y = leader.Position.Y - offset/2
-			} else if i == 3 {
-				pos.Y = leader.Position.Y + offset/2
-			}
-			positions = append(positions, pos)
-		}
-	case FormationTypeCircle:
-		for i := 0; i < 6; i++ {
-			angle := float64(i) * (2 * math.Pi / 6)
-			pos := Position{
-				X: leader.Position.X + int(spacing*math.Cos(angle)),
-				Y: leader.Position.Y + int(spacing*math.Sin(angle)),
-			}
-			positions = append(positions, pos)
-		}
-	}
-	for i, p := range positions {
-		positions[i] = ws.SurfaceOffset(leader.Position, p.X-leader.Position.X, p.Y-leader.Position.Y)
-	}
-	return positions
-}
 
 // SpaceFleet 太空舰队
 type SpaceFleet struct {

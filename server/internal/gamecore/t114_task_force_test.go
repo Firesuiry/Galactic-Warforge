@@ -289,12 +289,23 @@ func TestT114TaskForceStanceAffectsEngagementAndRetreat(t *testing.T) {
 		t.Fatalf("task_force_set_stance intercept failed: %s (%s)", res.Code, res.Message)
 	}
 
-	interceptEvents := settleCombatRuntime(ws, ws.Tick+2)
-	if len(interceptEvents) == 0 {
-		t.Fatal("expected intercept stance to engage distant target")
-	}
+	settleCombatRuntime(ws, ws.Tick+2)
 	if ws.CombatRuntime.Squads["squad-1"].TargetEnemyID != "enemy-stance-t114" {
 		t.Fatalf("expected intercept stance to acquire target, got %+v", ws.CombatRuntime.Squads["squad-1"])
+	}
+	// R3 实体化：超出武器射程时先追击逼近，进入射程后真实开火。
+	fired := false
+	for i := 0; i < 600 && !fired; i++ {
+		ws.Tick++
+		settleSquadMovement(ws)
+		for _, evt := range settleCombatRuntime(ws, ws.Tick) {
+			if evt.EventType == model.EvtDamageApplied {
+				fired = true
+			}
+		}
+	}
+	if !fired {
+		t.Fatal("expected intercept stance to close distance and engage the target")
 	}
 
 	squad := ws.CombatRuntime.Squads["squad-1"]

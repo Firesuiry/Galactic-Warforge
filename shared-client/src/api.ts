@@ -562,18 +562,38 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdMove(entityId: string, position: Position) {
+  function unitSelectorTarget(selector: string | string[]) {
+    if (Array.isArray(selector)) {
+      return { entity_ids: selector };
+    }
+    return { entity_id: selector };
+  }
+
+  function cmdMove(selector: string | string[], position: Position) {
     return sendSingleCommand({
       type: 'move',
-      target: { layer: 'planet', entity_id: entityId, position },
+      target: { layer: 'planet', ...unitSelectorTarget(selector), position },
     });
   }
 
-  function cmdAttack(entityId: string, targetEntityId: string) {
+  function cmdAttack(selector: string | string[], targetEntityId: string) {
     return sendSingleCommand({
       type: 'attack',
-      target: { layer: 'planet', entity_id: entityId },
+      target: { layer: 'planet', ...unitSelectorTarget(selector) },
       payload: { target_entity_id: targetEntityId },
+    });
+  }
+
+  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop';
+
+  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string } = {}) {
+    return sendSingleCommand({
+      type: 'unit_order',
+      target: { layer: 'planet', ...unitSelectorTarget(selector), ...(options.position ? { position: options.position } : {}) },
+      payload: {
+        order,
+        ...(options.targetEntityId ? { target_entity_id: options.targetEntityId } : {}),
+      },
     });
   }
 
@@ -1179,6 +1199,7 @@ export function createApiClient(options: ApiClientOptions) {
   return {
     clearAuth,
     cmdAttack,
+    cmdUnitOrder,
     cmdRefuelMecha,
     cmdMineResource,
     cmdCraftItem,

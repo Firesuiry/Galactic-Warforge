@@ -97,6 +97,7 @@ export const cmdLandingStart = client.cmdLandingStart;
 export const cmdLaunchRocket = client.cmdLaunchRocket;
 export const cmdLaunchSolarSail = client.cmdLaunchSolarSail;
 export const cmdMove = client.cmdMove;
+export const cmdUnitOrder = client.cmdUnitOrder;
 export const cmdProduce = client.cmdProduce;
 export const cmdRefuelMecha = client.cmdRefuelMecha;
 export const cmdMineResource = client.cmdMineResource;

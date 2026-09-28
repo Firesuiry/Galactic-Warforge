@@ -29,32 +29,3 @@ func CombatTechEffectsFor(player *PlayerState) CombatTechEffect {
 		ShieldBonus: TechEffectValue(player, "shield_capacity"),
 	}
 }
-
-// ApplyCombatTechEffects recomputes a combat unit's derived stats from its
-// type baseline plus the player's current tech bonuses. It is idempotent:
-// stats are always rebuilt from DefaultCombatUnitStats, never multiplied onto
-// themselves, so running it every tick (or after a snapshot restore) is safe.
-// Current HP/shield are preserved up to the new maxima.
-func ApplyCombatTechEffects(unit *CombatUnit, eff CombatTechEffect) {
-	if unit == nil {
-		return
-	}
-	base := DefaultCombatUnitStats(unit.Type)
-	if eff.HPBonus != 0 {
-		unit.MaxHP = int(float64(base.MaxHP) * (1.0 + eff.HPBonus))
-	} else {
-		unit.MaxHP = base.MaxHP
-	}
-	if unit.HP > unit.MaxHP {
-		unit.HP = unit.MaxHP
-	}
-	if eff.DamageBonus != 0 {
-		unit.Weapon.Damage = int(float64(base.Weapon.Damage) * (1.0 + eff.DamageBonus))
-	} else {
-		unit.Weapon.Damage = base.Weapon.Damage
-	}
-	unit.Shield.MaxLevel = base.Shield.MaxLevel + eff.ShieldBonus
-	if unit.Shield.Level > unit.Shield.MaxLevel {
-		unit.Shield.Level = unit.Shield.MaxLevel
-	}
-}
