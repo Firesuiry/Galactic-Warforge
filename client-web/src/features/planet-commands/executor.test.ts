@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
+import { useNotificationsStore } from "@/features/notifications/store";
 
 const { sfxMock } = vi.hoisted(() => ({
   sfxMock: {
@@ -19,6 +20,7 @@ describe("planet command executor", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     usePlanetCommandStore.getState().resetForPlanet("planet-1-1");
+    useNotificationsStore.getState().resetNotifications();
     sfxMock.commandOk.mockClear();
     sfxMock.commandFail.mockClear();
   });
@@ -190,5 +192,56 @@ describe("planet command executor", () => {
     });
     expect(sfxMock.commandFail).toHaveBeenCalledTimes(1);
     expect(sfxMock.commandOk).not.toHaveBeenCalled();
+  });
+
+  it("服务端拒绝时弹出显眼的失败 toast（英文原文翻成中文）", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      request_id: "req-reject-2",
+      accepted: false,
+      results: [
+        {
+          command_index: 0,
+          status: "rejected",
+          code: "INSUFFICIENT_RESOURCES",
+          message: "need 1 gear for build",
+        },
+      ],
+    });
+
+    await submitPlanetCommand({
+      commandType: "build",
+      planetId: "planet-1-1",
+      execute,
+    });
+
+    const toasts = useNotificationsStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toMatchObject({
+      kind: "danger",
+      title: "建造失败",
+      body: "建造材料不足：还需要 1 个「齿轮」，请先生产或采集。",
+    });
+    // 日志里玩家文案同样是翻译后的中文，原文只留在 debugMessage
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      status: "failed",
+      authoritativeMessage: "建造材料不足：还需要 1 个「齿轮」，请先生产或采集。",
+      debugMessage: "need 1 gear for build",
+    });
+  });
+
+  it("本地提交失败时同样弹出失败 toast", async () => {
+    const execute = vi.fn().mockRejectedValue(new Error("fetch failed"));
+
+    await submitPlanetCommand({
+      commandType: "build",
+      planetId: "planet-1-1",
+      execute,
+    });
+
+    expect(useNotificationsStore.getState().toasts[0]).toMatchObject({
+      kind: "danger",
+      title: "建造失败",
+      body: "服务器连接异常，请稍后重试。",
+    });
   });
 });

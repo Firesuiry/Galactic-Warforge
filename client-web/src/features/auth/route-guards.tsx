@@ -64,8 +64,9 @@ export function OnlyGuests({ children }: PropsWithChildren) {
   useUrlSessionBootstrap();
   const hasSession = useHasSession();
 
+  // 已登录时交给根路径统一决定落地页（默认机甲所在行星视图）。
   if (hasSession) {
-    return <Navigate to="/galaxy" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;

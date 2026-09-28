@@ -2,8 +2,11 @@ import type { CommandResponse, EventSnapshotResponse } from "@shared/types";
 
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { sfx } from "@/engine/audio";
+import { isNotificationsFrozen } from "@/features/notifications/notify";
+import { useNotificationsStore } from "@/features/notifications/store";
 import type { CommandJournalFocus } from "@/features/planet-commands/store";
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
+import { translateCommandType } from "@/i18n/translate";
 
 export interface SubmitPlanetCommandInput {
   commandType: string;
@@ -22,6 +25,22 @@ function createLocalRequestId(commandType: string) {
     ?? `local-${commandType}-${Date.now()}`;
 }
 
+/**
+ * 命令失败时弹全局 danger toast：工作台抽屉里的文字反馈不够显眼，
+ * 玩家需要立刻知道「哪条命令失败、为什么」。
+ */
+function notifyCommandFailure(commandType: string, playerMessage: string) {
+  if (isNotificationsFrozen()) {
+    return;
+  }
+  useNotificationsStore.getState().push({
+    kind: "danger",
+    title: `${translateCommandType(commandType)}失败`,
+    body: playerMessage,
+    mergeKey: `command-fail:${commandType}`,
+  });
+}
+
 export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
   try {
     const response = await input.execute();
@@ -37,6 +56,14 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       sfx.commandOk();
     } else {
       sfx.commandFail();
+      const rawMessage = response.results
+        .map((result) => result.message)
+        .filter(Boolean)
+        .join(" / ");
+      notifyCommandFailure(
+        input.commandType,
+        toPlayerFacingMessage(rawMessage || `${input.commandType} rejected`),
+      );
     }
 
     if (response.accepted && input.fetchAuthoritativeSnapshot) {
@@ -75,6 +102,7 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
     const rawMessage = error instanceof Error
       ? error.message
       : `${input.commandType} failed`;
+    const playerMessage = toPlayerFacingMessage(rawMessage);
     usePlanetCommandStore.getState().addJournalEntry({
       requestId: createLocalRequestId(input.commandType),
       commandType: input.commandType,
@@ -82,13 +110,14 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       status: "failed",
       acceptedMessage: `${input.commandType} 提交失败`,
       authoritativeCode: "LOCAL_ERROR",
-      authoritativeMessage: toPlayerFacingMessage(rawMessage),
+      authoritativeMessage: playerMessage,
       debugMessage: rawMessage,
       authoritativeSource: "response",
       focus: input.focus,
       pendingRecovery: false,
     });
     sfx.commandFail();
+    notifyCommandFailure(input.commandType, playerMessage);
     return undefined;
   }
 }

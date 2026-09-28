@@ -10,6 +10,12 @@ vi.mock('@/engine/PixiStage', () => ({
   PixiStage: () => <div data-testid="pixi-stage" />,
 }));
 
+// 登录后的落地目标改为机甲所在行星页；这里只关心跳转目标，
+// 行星页本身的渲染由 PlanetPage.test.tsx 覆盖。
+vi.mock('@/pages/PlanetPage', () => ({
+  PlanetPage: () => <div data-testid="planet-page" />,
+}));
+
 function mockFetchForStarmap() {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
     const url = String(input);
@@ -79,7 +85,7 @@ function mockFetchForStarmap() {
 }
 
 describe('LoginPage', () => {
-  it('支持快捷填充并在验证成功后进入星图', async () => {
+  it('支持快捷填充并在验证成功后进入机甲所在行星', async () => {
     mockFetchForStarmap();
     const user = userEvent.setup();
 
@@ -91,7 +97,7 @@ describe('LoginPage', () => {
 
     await user.click(screen.getByRole('button', { name: '连接并进入星图' }));
 
-    expect(await screen.findByRole('button', { name: 'Milky Test' })).toBeInTheDocument();
+    expect(await screen.findByTestId('planet-page')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(useSessionStore.getState().playerId).toBe('p2');
@@ -99,7 +105,7 @@ describe('LoginPage', () => {
     });
   });
 
-  it('支持直接进入离线 fixtures 星图', async () => {
+  it('支持直接进入离线 fixtures 行星视图', async () => {
     const user = userEvent.setup();
 
     renderApp(['/login']);
@@ -107,7 +113,7 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('radio', { name: '离线样例' }));
     await user.click(screen.getByRole('button', { name: '打开离线场景' }));
 
-    expect(await screen.findByRole('button', { name: 'Silicon Frontier' })).toBeInTheDocument();
+    expect(await screen.findByTestId('planet-page')).toBeInTheDocument();
 
     // 样例标识收进设置弹层
     await user.click(screen.getByRole('button', { name: '设置' }));

@@ -7,6 +7,7 @@ import type {
   Position,
 } from "@shared/types";
 
+import { toPlayerFacingFeedback, toPlayerFacingMessage } from "@/common/player-facing-error";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
 
 export type CommandJournalStatus = "pending" | "succeeded" | "failed";
@@ -210,15 +211,18 @@ const ASYNC_AUTHORITATIVE_RULES: AsyncAuthoritativeRule[] = [
 ];
 
 function resolveNextHint(entry: PlanetCommandJournalEntry) {
+  // 提示推导依赖服务端英文原文（debugMessage），玩家向的
+  // authoritativeMessage 已被翻译成中文，不能直接用于模式匹配。
+  const matchSource = entry.debugMessage ?? entry.authoritativeMessage;
   const authoritativeHint = resolvePlanetCommandHint({
     code: entry.authoritativeCode,
-    message: entry.authoritativeMessage,
+    message: matchSource,
   });
   if (authoritativeHint?.nextHint) {
     return authoritativeHint.nextHint;
   }
 
-  const message = `${entry.authoritativeCode ?? ""} ${entry.authoritativeMessage ?? ""}`.toLowerCase();
+  const message = `${entry.authoritativeCode ?? ""} ${matchSource ?? ""}`.toLowerCase();
 
   if (entry.commandType === "start_research") {
     if (message.includes("matrix") || message.includes("waiting_matrix")) {
@@ -334,7 +338,10 @@ function reconcileBuildStateChangedEntry(
 }
 
 function buildAcceptedMessage(commandType: string, response: CommandResponse) {
-  return response.results.map((result) => result.message).join(" / ")
+  return response.results
+    .map((result) => toPlayerFacingFeedback(result.message))
+    .filter(Boolean)
+    .join(" / ")
     || `${commandType} accepted`;
 }
 
@@ -373,12 +380,18 @@ function reconcileCommandResultEntry(
   source: Exclude<CommandAuthoritativeSource, "response">,
 ) {
   const payload = asRecord(event.payload) ?? {};
+  const rawMessage = asString(payload.message);
+  const status = resolveAuthoritativeStatus(payload);
   const nextEntry = {
     ...upsertRelatedEvent(entry, event),
-    status: resolveAuthoritativeStatus(payload),
+    status,
     authoritativeCode: asString(payload.code) || entry.authoritativeCode,
-    authoritativeMessage:
-      asString(payload.message) || entry.authoritativeMessage,
+    authoritativeMessage: rawMessage
+      ? status === "failed"
+        ? toPlayerFacingMessage(rawMessage)
+        : toPlayerFacingFeedback(rawMessage)
+      : entry.authoritativeMessage,
+    debugMessage: rawMessage && status === "failed" ? rawMessage : entry.debugMessage,
     authoritativeSource: source,
     pendingRecovery: false,
   };
@@ -493,6 +506,10 @@ export const usePlanetCommandStore = create<
         input.commandType,
         input.response,
       );
+      const rawResultMessage = input.response.results
+        .map((result) => result.message)
+        .filter(Boolean)
+        .join(" / ");
       const nextEntry: PlanetCommandJournalEntry = {
         requestId: input.response.request_id,
         commandType: input.commandType,
@@ -506,7 +523,8 @@ export const usePlanetCommandStore = create<
           : input.response.results[0]?.code,
         authoritativeMessage: input.response.accepted
           ? undefined
-          : acceptedMessage,
+          : toPlayerFacingMessage(rawResultMessage),
+        debugMessage: input.response.accepted ? undefined : rawResultMessage || undefined,
         authoritativeSource: input.response.accepted ? undefined : "response",
         relatedEventIds: [],
         focus: input.focus,

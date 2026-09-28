@@ -13,6 +13,7 @@
 
 import type { GameEventDetail } from '@shared/types';
 
+import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import type { SoundName } from '@/engine/audio';
 import { isBuildingCompletionEvent } from '@/features/audio/planet-audio';
 import type { ToastInput } from '@/features/notifications/store';
@@ -175,6 +176,28 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
           body: count !== undefined && count > 1 ? `×${count}` : undefined,
           href: planetHref(payload),
         },
+      };
+    }
+    // 命令入队后在执行阶段失败（如建造到一半发现缺料/地块不可用）：
+    // HTTP 层已 accepted，executor 不会弹 toast，必须在这里兜底提醒。
+    case 'command_result': {
+      const code = asString(payload.code).toUpperCase();
+      const status = asString(payload.status).toLowerCase();
+      const failed = (code !== '' && code !== 'OK')
+        || status.includes('fail')
+        || status.includes('error');
+      if (!failed) {
+        return null;
+      }
+      return {
+        toast: {
+          kind: 'danger',
+          title: '命令执行失败',
+          body: toPlayerFacingMessage(asString(payload.message)),
+          href: planetHref(payload),
+          mergeKey: `command_result_fail:${code || 'unknown'}`,
+        },
+        sfx: 'alert',
       };
     }
 

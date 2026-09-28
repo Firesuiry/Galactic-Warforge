@@ -115,11 +115,17 @@ export function LoginPage() {
       });
 
       await client.fetchHealth();
-      await client.fetchSummary();
+      const summary = await client.fetchSummary();
 
       setSession(nextValue);
       queryClient.clear();
-      navigate('/galaxy', { replace: true });
+      // 对标戴森球计划：登录后直接进入机甲所在行星的第一人称视图，
+      // 而不是星系总览；拉远相机即可逐级切到轨道/恒星系/银河视图。
+      const homePlanetId = summary.active_planet_id;
+      navigate(
+        homePlanetId ? `/planet/${encodeURIComponent(homePlanetId)}` : '/galaxy',
+        { replace: true },
+      );
     } catch (error) {
       setErrorMessage(
         formatConnectionError(error, connectionMode, nextValue.serverUrl),

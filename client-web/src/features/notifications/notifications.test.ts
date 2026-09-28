@@ -156,6 +156,25 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(mapped?.sfx).toBeUndefined();
   });
 
+  it('command_result 执行期失败 → danger toast（英文原文翻成中文），成功 → null', () => {
+    const failed = toastFromGameEvent(gameEvent('command_result', {
+      request_id: 'req-1',
+      code: 'INSUFFICIENT_RESOURCES',
+      message: 'need 1 gear for build',
+    }));
+    expect(failed?.toast.kind).toBe('danger');
+    expect(failed?.toast.title).toBe('命令执行失败');
+    expect(failed?.toast.body).toBe('建造材料不足：还需要 1 个「齿轮」，请先生产或采集。');
+    expect(failed?.toast.mergeKey).toBe('command_result_fail:INSUFFICIENT_RESOURCES');
+    expect(failed?.sfx).toBe('alert');
+
+    expect(toastFromGameEvent(gameEvent('command_result', {
+      request_id: 'req-2',
+      code: 'OK',
+      message: 'done',
+    }))).toBeNull();
+  });
+
   it('damage_applied / 无关事件 → null', () => {
     expect(toastFromGameEvent(gameEvent('damage_applied', { damage: 5 }))).toBeNull();
     expect(toastFromGameEvent(gameEvent('tick_completed', {}))).toBeNull();
