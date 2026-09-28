@@ -2,11 +2,11 @@ import type { PropsWithChildren } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, type InitialEntry } from 'react-router-dom';
 
 import { AppRoutes } from '@/app/routes';
 
-export function renderApp(initialEntries: string[] = ['/']) {
+export function renderApp(initialEntries: InitialEntry[] = ['/']) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -25,7 +25,7 @@ export function renderApp(initialEntries: string[] = ['/']) {
     );
   }
 
-  return render(<AppRoutes />, { wrapper: Wrapper });
+  return { queryClient, ...render(<AppRoutes />, { wrapper: Wrapper }) };
 }
 
 export function jsonResponse(payload: unknown, init?: ResponseInit) {

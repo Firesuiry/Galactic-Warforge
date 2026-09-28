@@ -4,6 +4,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 
 import { resetPlanetViewStore } from '@/features/planet-map/store';
 import { resetNotificationsStore } from '@/features/notifications/store';
+import { resetLobbyStore } from '@/stores/lobby';
 import { resetSessionStore } from '@/stores/session';
 
 const canvasContextStub = {
@@ -44,6 +45,7 @@ beforeEach(() => {
   resetSessionStore();
   resetPlanetViewStore();
   resetNotificationsStore();
+  resetLobbyStore();
 });
 
 afterEach(() => {

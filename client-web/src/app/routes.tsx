@@ -7,7 +7,9 @@ import { useApiClient } from '@/hooks/use-api-client';
 import { useHasSession, useSessionSnapshot } from '@/hooks/use-session';
 import { GalaxyPage } from '@/pages/GalaxyPage';
 import { AgentsPage } from '@/pages/AgentsPage';
+import { LobbyPage } from '@/pages/LobbyPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { NewGamePage } from '@/pages/NewGamePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { PlanetPage } from '@/pages/PlanetPage';
@@ -72,6 +74,8 @@ export function AppRoutes() {
         )}
       >
         <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/lobby" element={<LobbyPage />} />
+        <Route path="/lobby/new" element={<NewGamePage />} />
         <Route path="/tech" element={<TechPage />} />
         <Route path="/war" element={<WarPage />} />
         <Route path="/agents" element={<AgentsPage />} />

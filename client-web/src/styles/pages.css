@@ -1106,3 +1106,199 @@
     margin-top: 12px;
   }
 }
+
+/* ===== C10 大厅 / 新局设置 ===== */
+
+.lobby-page {
+  gap: 20px;
+}
+
+.lobby-page__fixture {
+  color: var(--text-muted);
+}
+
+.lobby-notice {
+  border-color: rgba(110, 231, 183, 0.35);
+  background: rgba(110, 231, 183, 0.08);
+  color: var(--good);
+}
+
+.lobby-victory {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-color: rgba(255, 180, 84, 0.4);
+  background: rgba(255, 180, 84, 0.08);
+  color: #ffb454;
+  font-weight: 600;
+}
+
+.lobby-summary .stat-card strong {
+  word-break: break-all;
+}
+
+.lobby-players-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lobby-player-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lobby-player {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.lobby-player--self {
+  border-color: var(--border-glow);
+  background: var(--accent-soft);
+}
+
+.lobby-player__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  margin-right: auto;
+}
+
+/* 局变更提示条：固定在导航下方居中，全页面可见 */
+.game-reset-banner {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 180, 84, 0.45);
+  background: rgba(24, 18, 8, 0.92);
+  color: #ffb454;
+  font-size: 0.88rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.game-reset-banner__dismiss {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 180, 84, 0.45);
+  background: transparent;
+  color: #ffb454;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.game-reset-banner__dismiss:hover {
+  background: rgba(255, 180, 84, 0.12);
+}
+
+/* 新局表单 */
+.newgame-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 980px;
+}
+
+.newgame-form__warning {
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.newgame-form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.newgame-players__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.newgame-player-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.newgame-player {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(140px, 1.4fr) minmax(100px, 0.8fr) minmax(100px, 0.8fr) minmax(110px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.newgame-player .field {
+  margin: 0;
+}
+
+.newgame-player__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line-3);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.newgame-player__remove:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: rgba(255, 87, 87, 0.4);
+}
+
+.newgame-player__remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.newgame-errors {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@media (max-width: 900px) {
+  .newgame-player {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .newgame-player__remove {
+    justify-self: end;
+  }
+}

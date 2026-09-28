@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useGameAudio } from '@/features/audio/use-game-audio';
+import { GameResetGuard } from '@/features/lobby/GameResetGuard';
 import { NotificationToasts } from '@/features/notifications/NotificationToasts';
 import { Outliner } from '@/widgets/Outliner';
 import { TopNav } from '@/widgets/TopNav';
@@ -24,6 +25,8 @@ export function AppShell() {
       </div>
       {/* 全局事件通知 toast 栈（右下角悬浮，全页面可见） */}
       <NotificationToasts />
+      {/* C10 局变更守卫：轮询 /games/current，热重置/凭证失效时全局引导 */}
+      <GameResetGuard />
     </div>
   );
 }

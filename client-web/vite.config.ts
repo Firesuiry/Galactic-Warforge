@@ -43,6 +43,7 @@ export default defineConfig({
       '/replay': createProxyEntry(),
       '/rollback': createProxyEntry(),
       '/audit': createProxyEntry(),
+      '/games': createProxyEntry(),
     },
   },
   test: {

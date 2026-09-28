@@ -18,6 +18,7 @@ import {
   parseFixtureIdFromServerUrl,
 } from '@/fixtures';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { useLobbyStore } from '@/stores/lobby';
 import { createInitialSessionValue, useSessionStore } from '@/stores/session';
 
 function createInitialFormValue() {
@@ -66,6 +67,8 @@ export function LoginPage() {
   const queryClient = useQueryClient();
   const storedSession = useSessionSnapshot();
   const setSession = useSessionStore((state) => state.setSession);
+  // C10：局变更守卫在旧 key 失效后跳转登录页时附带的引导提示；登录成功后清除
+  const entryNotice = useLobbyStore((state) => state.loginNotice);
 
   const baseFormValue = createInitialFormValue();
   const availableFixtures = listFixtureScenarios();
@@ -119,6 +122,7 @@ export function LoginPage() {
 
       setSession(nextValue);
       queryClient.clear();
+      useLobbyStore.getState().setLoginNotice('');
       // 对标戴森球计划：登录后直接进入机甲所在行星的第一人称视图，
       // 而不是星系总览；拉远相机即可逐级切到轨道/恒星系/银河视图。
       const homePlanetId = summary.active_planet_id;
@@ -152,6 +156,11 @@ export function LoginPage() {
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
+          {entryNotice === 'session-expired' ? (
+            <div className="error-banner" role="alert">
+              登录凭证已失效——对局可能已被管理员重置。请向管理员索取新局的 key 后重新登录。
+            </div>
+          ) : null}
           <div className="segmented-control" role="radiogroup" aria-label="连接模式">
             <button
               aria-checked={connectionMode === 'server'}
