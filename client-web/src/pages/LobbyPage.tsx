@@ -2,6 +2,8 @@ import { Crown, Plus, Users } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 import {
+  FIXTURE_GAME_UNAVAILABLE,
+  gameStatusOf,
   translateBotDifficulty,
   translateEnemyDifficulty,
   translatePlayerRole,
@@ -36,7 +38,7 @@ export function LobbyPage() {
   if (fixtureMode) {
     return (
       <div className="panel lobby-page__fixture">
-        离线样例模式不提供对局大厅；请从登录页切换到在线服务端查看对局状态。
+        {FIXTURE_GAME_UNAVAILABLE}
       </div>
     );
   }
@@ -57,6 +59,7 @@ export function LobbyPage() {
   const me = game.players.find((player) => player.player_id === session.playerId);
   const isAdmin = me?.role === 'admin';
   const aliveCount = game.players.filter((player) => player.is_alive).length;
+  const finished = gameStatusOf(game) === 'finished';
 
   return (
     <div className="page-grid lobby-page">
@@ -67,8 +70,12 @@ export function LobbyPage() {
           <p className="subtle-text">
             当前对局 seed {game.map_seed} · tick {game.tick} · 每 10 秒自动刷新
           </p>
+          {finished ? <p className="lobby-finished">对局已结束</p> : null}
         </div>
         <div className="hero-actions">
+          {finished ? (
+            <Link className="primary-link" to="/settlement">查看结算</Link>
+          ) : null}
           {isAdmin ? (
             <Link className="primary-link" to="/lobby/new">
               <Plus size={16} strokeWidth={2} aria-hidden="true" />

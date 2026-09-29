@@ -509,9 +509,10 @@ func TestE4NestDestroyRewardsFleetPath(t *testing.T) {
 		SystemID:    systemID,
 		ThreatMeter: 300,
 		Forces: []model.EnemyForce{{
-			ID:        "hive-e4fleet",
-			Type:      model.EnemyForceTypeHive,
-			Position:  model.Position{X: 12, Y: 12},
+			ID:   "hive-e4fleet",
+			Type: model.EnemyForceTypeHive,
+			// 未编队舰队只打锚点交战半径内的巢穴。
+			Position:  model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
 			Strength:  1,
 			SpawnTick: ws.Tick,
 			Level:     2,

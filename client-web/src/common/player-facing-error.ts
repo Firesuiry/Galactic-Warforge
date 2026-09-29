@@ -2,12 +2,32 @@ import { translateBuildingType, translateItemId } from "@/i18n/translate";
 
 const GENERIC_FALLBACK = "操作未成功，请稍后重试。";
 
+/** 终局拒令的玩家文案。results[].code===GAME_FINISHED 时优先使用，不要展示英文原文。 */
+export const GAME_FINISHED_MESSAGE = "对局已结束，请前往结算页查看战报。";
+
+export function isGameFinishedCode(code?: string | null): boolean {
+  return (code ?? "").trim().toUpperCase() === "GAME_FINISHED";
+}
+
+export function isGameFinishedText(raw?: string | null): boolean {
+  const source = (raw ?? "").toLowerCase();
+  return source.includes("game_finished") || source.includes("game finished");
+}
+
+export function isGameFinishedResult(result?: { code?: string | null; message?: string | null } | null): boolean {
+  return isGameFinishedCode(result?.code) || isGameFinishedText(result?.message);
+}
+
 /**
  * 已知服务端消息 → 玩家可读中文。
  * 未命中任何模式时返回 undefined，由调用方决定兜底文案。
  */
 function matchKnownMessage(source: string): string | undefined {
   const normalized = source.toLowerCase();
+
+  if (isGameFinishedText(source)) {
+    return GAME_FINISHED_MESSAGE;
+  }
 
   const missingLabItem = source.match(/missing\s+(.+?)\s+in\s+research\s+labs/i);
   if (missingLabItem) {
@@ -169,4 +189,22 @@ export function toPlayerFacingFeedback(raw?: string | null): string {
     return source;
   }
   return matchKnownMessage(source) ?? source;
+}
+
+/**
+ * HTTP 拒绝回执的玩家文案。任一 result.code===GAME_FINISHED 时优先用终局文案，
+ * 不拼接其它英文 message。
+ */
+export function rejectionPlayerMessage(
+  results: ReadonlyArray<{ code?: string | null; message?: string | null }>,
+  fallback: string,
+): string {
+  if (results.some((result) => isGameFinishedResult(result))) {
+    return GAME_FINISHED_MESSAGE;
+  }
+  const raw = results
+    .map((result) => result.message?.trim())
+    .filter((message): message is string => Boolean(message))
+    .join(" / ");
+  return toPlayerFacingMessage(raw || fallback);
 }

@@ -52,11 +52,12 @@ func TestT117SpaceBattleSettlementGeneratesBattleReportAndPersistsRuntime(t *tes
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: systemID,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-space-t117",
-			Type:         model.EnemyForceTypeBeacon,
-			Position:     model.Position{X: 12, Y: 12},
-			Strength:     240,
-			SpawnTick:    ws.Tick,
+			ID:   "enemy-space-t117",
+			Type: model.EnemyForceTypeBeacon,
+			// 未编队舰队只打锚点交战半径内的目标，不再全图追击。
+			Position:  model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
+			Strength:  240,
+			SpawnTick: ws.Tick,
 		}},
 	}
 	settlePlanetSensorContacts(ws, ws.Tick)

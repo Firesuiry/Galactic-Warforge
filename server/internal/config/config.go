@@ -104,6 +104,17 @@ type BattlefieldConfig struct {
 	// EnemyDifficulty 黑雾难度：easy|normal|hard（默认 normal），
 	// 影响威胁累积速率、波次规模与巢穴上限（E2）。
 	EnemyDifficulty string `yaml:"enemy_difficulty,omitempty"`
+	// PaceResearch 研究消耗/研究点需求倍率，缺省 1。>1 更慢，不改科技目录数字。
+	PaceResearch float64 `yaml:"pace_research,omitempty"`
+	// PaceBuild 建造时长倍率，缺省 1。乘在 defaultConstructionDurationTick 上。
+	PaceBuild float64 `yaml:"pace_build,omitempty"`
+	// PaceOutput 生产配方运行时时长倍率，缺省 1。不改目录 Duration。
+	PaceOutput float64 `yaml:"pace_output,omitempty"`
+	// TimeLimitTicks 时间限制（tick）。0=不限。到点按战损计分判胜；sandbox 永不因此判胜。
+	// 10 tick/s 时 60 分钟 = 36000 tick，90 分钟 = 54000 tick。
+	TimeLimitTicks int64 `yaml:"time_limit_ticks,omitempty"`
+	// ThreatGrowthScale 黑雾威胁累积倍率，缺省 1。只放大正向累积，不改黑雾 AI。
+	ThreatGrowthScale float64 `yaml:"threat_growth_scale,omitempty"`
 }
 
 // ServerConfig holds HTTP server settings
@@ -257,6 +268,24 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Battlefield.EnemyDifficulty == "" {
 		cfg.Battlefield.EnemyDifficulty = "normal"
+	}
+	if cfg.Battlefield.PaceResearch < 0 || cfg.Battlefield.PaceBuild < 0 || cfg.Battlefield.PaceOutput < 0 || cfg.Battlefield.ThreatGrowthScale < 0 {
+		return fmt.Errorf("battlefield pace/threat_growth_scale must be >= 0")
+	}
+	if cfg.Battlefield.TimeLimitTicks < 0 {
+		return fmt.Errorf("battlefield.time_limit_ticks must be >= 0")
+	}
+	if cfg.Battlefield.PaceResearch == 0 {
+		cfg.Battlefield.PaceResearch = 1
+	}
+	if cfg.Battlefield.PaceBuild == 0 {
+		cfg.Battlefield.PaceBuild = 1
+	}
+	if cfg.Battlefield.PaceOutput == 0 {
+		cfg.Battlefield.PaceOutput = 1
+	}
+	if cfg.Battlefield.ThreatGrowthScale == 0 {
+		cfg.Battlefield.ThreatGrowthScale = 1
 	}
 
 	if len(cfg.Players) == 0 {

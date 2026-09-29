@@ -412,12 +412,21 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 
 const maxInt32 = int(^uint32(0) >> 1)
 
-// squadArmorClass 小队护甲类型（R6）：空中编队为 air，其余地面编组为 heavy。
+// squadArmorClass 小队护甲，委托 model.BlueprintCombatClasses（与目录同源）。
 func squadArmorClass(squad *model.CombatSquad) model.ArmorClass {
-	if squad != nil && (squad.Domain == model.UnitDomainAir || squad.PlatformClass == "drone") {
-		return model.ArmorAir
+	if squad == nil {
+		return model.ArmorHeavy
 	}
-	return model.ArmorHeavy
+	armor, _ := model.BlueprintCombatClasses(
+		model.UnitRuntimeClassCombatSquad,
+		squad.Domain,
+		squad.PlatformClass,
+		squad.BlueprintID,
+	)
+	if armor == "" {
+		return model.ArmorHeavy
+	}
+	return armor
 }
 
 // settleMechaAutoFire 执行体对显式攻击目标的持续开火（不索敌、不追击、不还击）。

@@ -735,6 +735,7 @@ export function PlanetPage() {
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
+          theaters={theatersQuery.data?.theaters}
         /> : <PlanetMapPixi
           catalog={catalog}
           fog={planet}

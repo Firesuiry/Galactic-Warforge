@@ -16,6 +16,7 @@ import { sfx } from '@/engine/audio';
 import { fleetStateLabel } from '@/features/starmap/model';
 import { useStarmapViewStore } from '@/features/starmap/store';
 import type { WarCommandHint } from '@/features/war/error-hints';
+import { WarFeedbackBanner } from '@/features/war/WarFeedbackBanner';
 import type { FeedbackSection, WarCommandInput, WarQueryScope } from '@/features/war/war-query-keys';
 import { useApiClient } from '@/hooks/use-api-client';
 
@@ -103,10 +104,7 @@ export function FleetSelectionBar({
   return (
     <div className="starmap-fleet-bar-wrap">
       {feedbacks.reports?.map((feedback, index) => (
-        <div className={`status-banner status-banner--${feedback.tone}`} key={`${feedback.title}-${index}`}>
-          <strong>{feedback.title}</strong>
-          {feedback.detail ? <span>{feedback.detail}</span> : null}
-        </div>
+        <WarFeedbackBanner feedback={feedback} key={`${feedback.title}-${index}`} />
       ))}
       <div className="starmap-fleet-bar" data-testid="starmap-fleet-bar">
         <div className="starmap-fleet-bar__info">

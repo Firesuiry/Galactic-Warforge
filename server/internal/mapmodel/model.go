@@ -40,8 +40,11 @@ type Planet struct {
 	Seed            int64
 	ResourceDensity int
 	Terrain         [][]terrain.TileType
-	Environment     PlanetEnvironment
-	Resources       []ResourceNode
+	// Elevation is generated terrain height in [0,1], same shape as Terrain.
+	// Water is low and highlands are high; sampled on the cube sphere, not the atlas.
+	Elevation   [][]float32
+	Environment PlanetEnvironment
+	Resources   []ResourceNode
 	// SpawnPoints pins explicit player spawn tiles; empty means auto-placement.
 	SpawnPoints []GridPos
 }

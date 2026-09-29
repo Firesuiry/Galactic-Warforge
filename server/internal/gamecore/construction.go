@@ -522,7 +522,7 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		task.StartTick = currentTick
 		task.UpdateTick = currentTick
 		if task.TotalTicks <= 0 {
-			task.TotalTicks = defaultConstructionDurationTick
+			task.TotalTicks = gc.scaledConstructionDuration()
 		}
 		if task.RemainingTicks <= 0 {
 			task.RemainingTicks = task.TotalTicks

@@ -609,58 +609,86 @@ func addFleetUnits(fleet *model.SpaceFleet, blueprintID string, count int) {
 	fleet.Units = append(fleet.Units, model.FleetUnitStack{BlueprintID: blueprintID, Count: count})
 }
 
-func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.SpaceFleet) {
-	if fleet == nil {
-		return
+// fleetStackAggregate is the blueprint-derived combat baseline for one fleet's stacks.
+// Tech settlement multiplies this baseline; it must stay identical to deploy-time stats.
+type fleetStackAggregate struct {
+	hasProfile     bool
+	totalDamage    int
+	totalShield    float64
+	maxShield      float64
+	totalArmor     int
+	totalStructure int
+	weapons        model.SpaceWeaponMix
+	supply         model.WarSupplyStock
+}
+
+func aggregateFleetStacks(ws *model.WorldState, playerID string, stacks []model.FleetUnitStack) fleetStackAggregate {
+	var agg fleetStackAggregate
+	var player *model.PlayerState
+	if ws != nil {
+		player = ws.Players[playerID]
 	}
-	totalDamage := 0
-	totalShield := 0.0
-	maxShield := 0.0
-	totalArmor := 0
-	totalStructure := 0
-	weapons := model.SpaceWeaponMix{}
-	oldCapacity := fleet.Sustainment.Capacity
-	newCapacity := model.WarSupplyStock{}
-	for _, stack := range fleet.Units {
+	for _, stack := range stacks {
 		profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, stack.BlueprintID)
 		if !ok || profile.FleetUnit == nil {
 			continue
 		}
-		totalDamage += profile.FleetUnit.Weapon.Damage * stack.Count
-		totalShield += profile.FleetUnit.Shield.Level * float64(stack.Count)
-		maxShield += profile.FleetUnit.Shield.MaxLevel * float64(stack.Count)
-		if blueprint, ok := model.ResolveWarBlueprintForPlayer(ws.Players[playerID], stack.BlueprintID); ok {
-			combatProfile := model.ResolveWarBlueprintSpaceCombatProfile(blueprint)
-			totalArmor += combatProfile.Armor * stack.Count
-			totalStructure += combatProfile.Structure * stack.Count
-			weapons.DirectFire += combatProfile.Weapons.DirectFire * stack.Count
-			weapons.Missile += combatProfile.Weapons.Missile * stack.Count
-			weapons.PointDefense += combatProfile.Weapons.PointDefense * stack.Count
-			weapons.ElectronicWarfare += combatProfile.Weapons.ElectronicWarfare * stack.Count
-			capacity := model.InitWarSustainmentState(blueprint, profile, stack.Count).Capacity
-			newCapacity.Ammo += capacity.Ammo
-			newCapacity.Missiles += capacity.Missiles
-			newCapacity.Fuel += capacity.Fuel
-			newCapacity.SpareParts += capacity.SpareParts
-			newCapacity.ShieldCells += capacity.ShieldCells
-			newCapacity.RepairDrones += capacity.RepairDrones
+		agg.hasProfile = true
+		agg.totalDamage += profile.FleetUnit.Weapon.Damage * stack.Count
+		agg.totalShield += profile.FleetUnit.Shield.Level * float64(stack.Count)
+		agg.maxShield += profile.FleetUnit.Shield.MaxLevel * float64(stack.Count)
+		blueprint, ok := model.ResolveWarBlueprintForPlayer(player, stack.BlueprintID)
+		if !ok {
+			continue
 		}
+		combatProfile := model.ResolveWarBlueprintSpaceCombatProfile(blueprint)
+		agg.totalArmor += combatProfile.Armor * stack.Count
+		agg.totalStructure += combatProfile.Structure * stack.Count
+		agg.weapons.DirectFire += combatProfile.Weapons.DirectFire * stack.Count
+		agg.weapons.Missile += combatProfile.Weapons.Missile * stack.Count
+		agg.weapons.PointDefense += combatProfile.Weapons.PointDefense * stack.Count
+		agg.weapons.ElectronicWarfare += combatProfile.Weapons.ElectronicWarfare * stack.Count
+		capacity := model.InitWarSustainmentState(blueprint, profile, stack.Count).Capacity
+		agg.supply.Ammo += capacity.Ammo
+		agg.supply.Missiles += capacity.Missiles
+		agg.supply.Fuel += capacity.Fuel
+		agg.supply.SpareParts += capacity.SpareParts
+		agg.supply.ShieldCells += capacity.ShieldCells
+		agg.supply.RepairDrones += capacity.RepairDrones
 	}
-	if totalArmor <= 0 && totalStructure > 0 {
-		totalArmor = warMaxInt(1, totalStructure/4)
+	return agg
+}
+
+func finalizedFleetCombat(agg fleetStackAggregate) (damage int, weaponType model.WeaponType, weapons model.SpaceWeaponMix, armor, structure int) {
+	armor = agg.totalArmor
+	structure = agg.totalStructure
+	weapons = agg.weapons
+	damage = agg.totalDamage
+	if armor <= 0 && structure > 0 {
+		armor = warMaxInt(1, structure/4)
 	}
-	if totalStructure <= 0 {
-		totalStructure = warMaxInt(60, totalDamage)
+	if structure <= 0 {
+		structure = warMaxInt(60, damage)
 	}
 	if weapons.DirectFire > 0 {
-		totalDamage = weapons.DirectFire
+		damage = weapons.DirectFire
 	} else if weapons.Missile > 0 {
-		totalDamage = weapons.Missile
+		damage = weapons.Missile
 	}
-	weaponType := model.WeaponTypeLaser
+	weaponType = model.WeaponTypeLaser
 	if weapons.DirectFire <= 0 && weapons.Missile > 0 {
 		weaponType = model.WeaponTypeMissile
 	}
+	return damage, weaponType, weapons, armor, structure
+}
+
+func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.SpaceFleet) {
+	if fleet == nil {
+		return
+	}
+	agg := aggregateFleetStacks(ws, playerID, fleet.Units)
+	totalDamage, weaponType, weapons, totalArmor, totalStructure := finalizedFleetCombat(agg)
+	oldCapacity := fleet.Sustainment.Capacity
 	fleet.Weapon = model.WeaponState{
 		Type:         weaponType,
 		Damage:       totalDamage,
@@ -671,8 +699,8 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 	}
 	fleet.Weapons = weapons
 	fleet.Shield = model.ShieldState{
-		Level:         totalShield,
-		MaxLevel:      maxShield,
+		Level:         agg.totalShield,
+		MaxLevel:      agg.maxShield,
 		RechargeRate:  2,
 		RechargeDelay: 10,
 	}
@@ -681,8 +709,8 @@ func rebuildFleetStats(ws *model.WorldState, playerID string, fleet *model.Space
 	if fleet.Subsystems.Engine.State == "" {
 		fleet.Subsystems = model.DefaultSpaceFleetSubsystemState()
 	}
-	fleet.Sustainment.Capacity = newCapacity
-	fleet.Sustainment.Current = model.RefillForAddedCapacity(fleet.Sustainment.Current, oldCapacity, newCapacity)
+	fleet.Sustainment.Capacity = agg.supply
+	fleet.Sustainment.Current = model.RefillForAddedCapacity(fleet.Sustainment.Current, oldCapacity, agg.supply)
 	fleet.Sustainment.Condition = model.WarSupplyConditionHealthy
 	if fleet.Sustainment.Cohesion <= 0 {
 		fleet.Sustainment.Cohesion = 1

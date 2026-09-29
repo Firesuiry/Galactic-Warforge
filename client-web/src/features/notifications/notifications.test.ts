@@ -173,6 +173,15 @@ describe('toastFromGameEvent 事件映射', () => {
       code: 'OK',
       message: 'done',
     }))).toBeNull();
+
+    const finished = toastFromGameEvent(gameEvent('command_result', {
+      request_id: 'req-3',
+      code: 'GAME_FINISHED',
+      message: 'game finished: victory already declared, commands are no longer accepted',
+    }));
+    expect(finished?.toast.title).toBe('对局已结束');
+    expect(finished?.toast.body).toContain('对局已结束');
+    expect(finished?.toast.href).toBe('/settlement');
   });
 
   it('damage_applied / 无关事件 → null', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toPlayerFacingFeedback, toPlayerFacingMessage } from "@/common/player-facing-error";
+import { GAME_FINISHED_MESSAGE, rejectionPlayerMessage, toPlayerFacingFeedback, toPlayerFacingMessage } from "@/common/player-facing-error";
 
 describe("toPlayerFacingMessage", () => {
   it("把研究站缺料错误翻译成玩家口径", () => {
@@ -75,6 +75,16 @@ describe("toPlayerFacingMessage", () => {
   it("已是中文玩家文案的原文原样放行", () => {
     expect(toPlayerFacingMessage("缺少 electromagnetic_matrix"))
       .toBe("缺少 electromagnetic_matrix");
+  });
+
+  it("GAME_FINISHED 与 game finished 映射为终局文案，code 优先于其它 message", () => {
+    expect(toPlayerFacingMessage("GAME_FINISHED")).toBe(GAME_FINISHED_MESSAGE);
+    expect(toPlayerFacingMessage("game finished: victory already declared, commands are no longer accepted"))
+      .toBe(GAME_FINISHED_MESSAGE);
+    expect(rejectionPlayerMessage(
+      [{ code: "GAME_FINISHED", message: "ignored other text" }],
+      "fallback",
+    )).toBe(GAME_FINISHED_MESSAGE);
   });
 });
 

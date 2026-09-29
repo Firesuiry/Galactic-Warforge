@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from '@shared/types';
+import type { CatalogView, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { PLANET_LAYER_LABELS, getFogState, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
 import { sameTypeOwnUnitsInView } from './rts-commands';
 import { usePlanetViewStore } from './store';
+import { PlanetSquadLayer } from './PlanetSquadLayer';
+import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene } from './planet-three-scene';
 import type { PlanetRenderQuality } from './three/render-quality';
 import { sfx } from '@/engine/audio';
@@ -30,6 +32,7 @@ interface Props {
   overview?: PlanetOverviewView;
   networks?: PlanetNetworksView;
   runtime?: PlanetRuntimeView;
+  theaters?: WarTheaterView[];
   onCanvasReady?: (capture: PlanetMapCapture | null) => void;
   onInteractTile?: (tile: TilePoint) => void;
   /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
@@ -49,10 +52,34 @@ export function PlanetMapThree(props: Props) {
   // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const { selected, selectedUnits, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
-    selected: s.selected, selectedUnits: s.selectedUnits, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
+  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
+    selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest,
   })));
+  const projectTile = useCallback((tile: { x: number; y: number }) => {
+    return scene.current?.project({ x: Math.round(tile.x), y: Math.round(tile.y) }) ?? null;
+  }, []);
+  function handleSelectSquad(squad: CombatSquad, additive: boolean) {
+    const store = usePlanetViewStore.getState();
+    if (squad.owner_id !== session.playerId) {
+      store.setSelectedSquads([]);
+      store.setSelected({ kind: 'squad', id: squad.id, position: squad.position });
+      return;
+    }
+    if (additive) {
+      const next = selectedSquads.includes(squad.id)
+        ? selectedSquads.filter((id) => id !== squad.id)
+        : [...selectedSquads, squad.id];
+      store.setSelectedSquads(next);
+      const remaining = next.length === 1
+        ? props.runtime?.combat_squads?.find((candidate) => candidate.id === next[0])
+        : undefined;
+      store.setSelected(remaining ? { kind: 'squad', id: remaining.id, position: remaining.position } : null);
+      return;
+    }
+    store.setSelectedSquads([squad.id]);
+    store.setSelected({ kind: 'squad', id: squad.id, position: squad.position });
+  }
 
   useEffect(() => {
     const cancelInteraction = (event: KeyboardEvent) => {
@@ -266,6 +293,24 @@ export function PlanetMapThree(props: Props) {
     if (tile) latest.current.onContextTile?.(tile);
   }}>
     <div ref={host} className="planet-three__surface" tabIndex={0} role="application" aria-label="3D 行星地图" />
+    <PlanetTheaterLayer
+      offsetX={0}
+      offsetY={0}
+      planetId={props.planet.planet_id}
+      projectTile={projectTile}
+      theaters={props.theaters}
+      tileSize={1}
+    />
+    <PlanetSquadLayer
+      offsetX={0}
+      offsetY={0}
+      onSelectSquad={handleSelectSquad}
+      playerId={session.playerId}
+      projectTile={projectTile}
+      selectedSquads={selectedSquads}
+      squads={props.runtime?.combat_squads}
+      tileSize={1}
+    />
     {marqueeRect && host.current ? (
       <div
         aria-hidden="true"

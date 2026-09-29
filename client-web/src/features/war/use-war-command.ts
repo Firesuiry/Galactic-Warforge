@@ -4,8 +4,8 @@ import type { CommandResult } from '@shared/types';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { sfx } from '@/engine/audio';
-import { toPlayerFacingMessage } from '@/common/player-facing-error';
-import { buildWarSuccessHint, resolveWarCommandHint, type WarCommandHint } from '@/features/war/error-hints';
+import { isGameFinishedResult, toPlayerFacingMessage } from '@/common/player-facing-error';
+import { resolveCommandResultHint, type WarCommandHint } from '@/features/war/error-hints';
 import type { FeedbackSection, WarCommandInput } from '@/features/war/war-query-keys';
 
 export interface UseWarCommandResult {
@@ -28,19 +28,11 @@ export function useWarCommand(): UseWarCommandResult {
   const commandMutation = useMutation({
     mutationFn: async (input: WarCommandInput) => {
       const response = await input.execute();
-      const result = response.results[0];
-      return { input, result };
+      return { input, response };
     },
-    onSuccess: ({ input, result }) => {
-      const hint: WarCommandHint = result?.status === 'executed'
-        || result?.status === 'accepted'
-        || result?.status === 'queued'
-        ? buildWarSuccessHint(result?.message)
-        : resolveWarCommandHint(result?.message)
-          ?? {
-            tone: 'warning',
-            title: toPlayerFacingMessage(result?.message),
-          };
+    onSuccess: ({ input, response }) => {
+      const finished = response.results.find((result) => isGameFinishedResult(result));
+      const hint = resolveCommandResultHint(finished ?? response.results[0]);
       pushFeedback(setFeedbacks, input.section, hint);
       input.invalidateKeys.forEach((queryKey) => {
         void queryClient.invalidateQueries({ queryKey });

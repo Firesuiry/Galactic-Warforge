@@ -57,6 +57,7 @@ export type {
 } from '../../shared-client/src/types.js';
 export type {
   GamePlayerSummary,
+  GameStatus,
   GameSummary,
   GameVictorySummary,
   NewGameBootstrap,
@@ -66,6 +67,8 @@ export type {
   NewGamePlayer,
   NewGameRequest,
   NewGameVictoryMode,
+  SettlementPlayerStats,
+  SettlementReport,
 } from '../../shared-client/src/game.js';
 
 const client = createApiClient({

@@ -1,13 +1,51 @@
 // C10 大厅与会话：/games/current 轮询、新局表单模型与校验（纯函数，便于单测）。
 
-import type {
-  GameSummary,
-  NewGameBotDifficulty,
-  NewGameEnemyDifficulty,
-  NewGamePlayer,
-  NewGameRequest,
-  NewGameVictoryMode,
+import {
+  gameStatusOf,
+  type GameSummary,
+  type NewGameBotDifficulty,
+  type NewGameEnemyDifficulty,
+  type NewGamePlayer,
+  type NewGameRequest,
+  type NewGameVictoryMode,
+  type SettlementReport,
 } from '@shared/game';
+
+export { gameStatusOf };
+
+/** 与大厅相同：离线样例没有 /games/current。 */
+export const FIXTURE_GAME_UNAVAILABLE =
+  '离线样例模式不提供对局大厅；请从登录页切换到在线服务端查看对局状态。';
+
+/** 已提示终局的键：started_at + declared_tick。同一局只提示一次。 */
+export const SETTLEMENT_PROMPTED_STORAGE_KEY = 'gw.settlement-prompted';
+
+export function settlementPromptKey(game: Pick<GameSummary, 'started_at' | 'settlement'>) {
+  const declaredTick = game.settlement?.declared_tick;
+  return `${game.started_at}::${declaredTick ?? ''}`;
+}
+
+export function isSameSettlementPrompt(
+  stored: string,
+  game: Pick<GameSummary, 'started_at' | 'settlement'>,
+) {
+  if (!stored || !game.started_at) {
+    return false;
+  }
+  return stored === settlementPromptKey(game) || stored.startsWith(`${game.started_at}::`);
+}
+
+/** session.playerId 是否属于获胜方（本人 id、结算 winner 标记或同队）。 */
+export function didPlayerWin(playerId: string, report: SettlementReport) {
+  if (report.winner_id === playerId) {
+    return true;
+  }
+  const me = report.players.find((player) => player.player_id === playerId);
+  if (me?.winner) {
+    return true;
+  }
+  return Boolean(report.team_id && me?.team_id && me.team_id === report.team_id);
+}
 
 /** 对局身份：started_at + map_seed 任一变化都视为换局（F1 热重置后两者都会变）。 */
 export function gameIdentityOf(game: GameSummary) {
@@ -43,6 +81,11 @@ export const VICTORY_MODE_LABELS: Record<string, string> = {
   sandbox: '沙盒',
 };
 
+export const VICTORY_REASON_LABELS: Record<string, string> = {
+  elimination: '歼灭',
+  game_win: '任务完成',
+};
+
 export const PLAYER_ROLE_LABELS: Record<string, string> = {
   admin: '管理员',
   commander: '指挥官',
@@ -61,6 +104,10 @@ export function translateEnemyDifficulty(value: string) {
 
 export function translateVictoryMode(value: string) {
   return VICTORY_MODE_LABELS[value] ?? value;
+}
+
+export function translateVictoryReason(value: string) {
+  return VICTORY_REASON_LABELS[value] ?? value;
 }
 
 export function translatePlayerRole(value: string) {

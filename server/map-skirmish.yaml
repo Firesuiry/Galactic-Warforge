@@ -1,0 +1,47 @@
+# 遭遇战地图：单行星、每面 96。出生点在同一面两侧，中点强制一小团铁/铜。
+# 不覆盖默认 map.yaml（face_size 816）。
+galaxy:
+  system_count: 1
+  width: 1000
+  height: 1000
+system:
+  planets_per_system: 1
+  gas_giant_ratio: 0
+  max_moons: 0
+planet:
+  face_size: 96
+  resource_density: 8
+  terrain:
+    water_ratio: 0.12
+    lava_ratio: 0.04
+    blocked_ratio: 0.08
+  environment:
+    wind:
+      min: 0.6
+      max: 1.4
+    light:
+      min: 0.6
+      max: 1.5
+    day_length_hours:
+      min: 12
+      max: 48
+    tidal_lock_chance: 0.1
+  resources:
+    rare_chance: 0.08
+    cluster_min: 3
+    cluster_max: 8
+    cluster_radius: 3
+    vein_amount_min: 80
+    vein_amount_max: 200
+    vein_yield_min: 2
+    vein_yield_max: 6
+    oil_yield_min: 3
+    oil_yield_max: 8
+    oil_min_yield: 1
+    oil_decay_per_tick: 1
+    renewable_regen_per_tick: 2
+    contested_center: true
+# 同一面两侧，距离约为面宽的 61%（59/96）。球面中点落在两点之间。
+spawn_points:
+  - {x: 18, y: 48}
+  - {x: 77, y: 48}

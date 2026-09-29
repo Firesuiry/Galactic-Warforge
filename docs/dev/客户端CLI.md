@@ -146,7 +146,7 @@
 | `replay`      | `[options]`                                            | 调用 `POST /replay`                                                      |
 | `rollback`    | `[options]`                                            | 调用 `POST /rollback`                                                    |
 | `game_new`    | `[--seed s] [--difficulty d] [--victory m] --players json` | 调用 `POST /games/new`（F1 热重置，仅 admin），开一局全新游戏          |
-| `game_status` | -                                                      | 调用 `GET /games/current`，查看当前对局概要（seed/tick/玩家，不含 key） |
+| `game_status` | -                                                      | 调用 `GET /games/current`，查看当前对局概要（status/seed/tick/玩家，不含 key）；finished 时打印胜者、原因、时长与战损 |
 
 ### Agent Gateway 类
 
@@ -736,7 +736,7 @@ game_new --players-file ./players.json
 - `--difficulty` 可选 `off|easy|normal|hard`（默认 `normal`）；`--victory` 可选 `elimination|mission_complete|hybrid|sandbox`（默认 `elimination`，`sandbox` 永不判胜）。
 - `--players` 必填（或与 `--players-file <path>` 二选一），值为玩家定义 JSON 数组；每个玩家 `player_id`/`key` 必填且全局唯一，`role`/`team_id`/`bot`/`bootstrap` 可选，字段语义与 `config.yaml` 一致。
 - 成功后旧局玩家的 key 全部失效：CLI 会自动切换到新局第一个 `admin`（缺省时第一个玩家）的身份；SSE 事件流随后自动重连，之前的 tick/事件/建筑 id 都不再有效。
-- `game_status` 调用 `GET /games/current`，任意登录玩家可用，输出当前对局的 seed/tick/难度/胜利模式/玩家列表（不含 key）。
+- `game_status` 调用 `GET /games/current`，任意登录玩家可用，输出当前对局的 status/seed/tick/难度/胜利模式/玩家列表（不含 key）。`status` 缺省按 `running` 打印；`finished` 时再打印胜者、原因、时长 tick，以及每位玩家的击杀/损失/建筑摧毁与损失。
 
 ## `replay` / `rollback` 选项
 

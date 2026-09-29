@@ -149,6 +149,11 @@
   background: rgba(255, 87, 87, 0.12);
 }
 
+.status-banner a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* ============================================================
  * V3 战争页全屏化 HUD（期6a）：战场图即主界面 + 悬浮标题片 + 右侧抽屉
  * 外壳/标题片/抽屉复用 .planet-map-shell / .planet-title-chip /

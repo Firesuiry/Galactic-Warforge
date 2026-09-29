@@ -341,6 +341,8 @@ export interface Unit {
   move_range: number;
   vision_range: number;
   attack_target?: string;
+  armor_class?: string;
+  weapon_class?: string;
   move_speed?: number;
   path?: Position[];
   path_index?: number;
@@ -1035,7 +1037,7 @@ export interface PlanetResource {
 }
 
 export interface SurfaceMetadata { topology: 'cube_sphere'; face_size: number }
-export interface SurfacePatch { bounds: SceneBounds; terrain?: string[][]; visible?: boolean[][]; explored?: boolean[][] }
+export interface SurfacePatch { bounds: SceneBounds; terrain?: string[][]; height?: number[][]; visible?: boolean[][]; explored?: boolean[][] }
 
 export interface PlanetSummaryView {
   surface: SurfaceMetadata;
@@ -1064,6 +1066,8 @@ export interface PlanetView {
   map_width: number;
   map_height: number;
   terrain?: string[][];
+  /** Optional generated elevation in [0,1], same shape as terrain. Old clients ignore it. */
+  height?: number[][];
   environment?: PlanetEnvironment;
   tick: number;
   buildings?: Record<string, Building>;
@@ -1091,6 +1095,8 @@ export interface PlanetSceneView {
   tick: number;
   bounds: SceneBounds;
   terrain?: string[][];
+  /** Optional generated elevation in [0,1], same shape as terrain. Old clients ignore it. */
+  height?: number[][];
   environment?: PlanetEnvironment;
   visible?: boolean[][];
   explored?: boolean[][];
@@ -1602,6 +1608,13 @@ export interface WorldUnitCatalogEntry {
   query_scopes?: string[];
   commands?: string[];
   hidden_reason?: string;
+  armor_class?: string;
+  weapon_class?: string;
+  attack?: number;
+  attack_range?: number;
+  attack_cooldown_tick?: number;
+  move_speed?: number;
+  max_hp?: number;
 }
 
 export interface WarBudgetProfile {
@@ -1684,6 +1697,11 @@ export interface WarPublicBlueprintCatalogEntry {
   query_scopes?: string[];
   commands?: string[];
   components?: WarBlueprintComponentSlot[];
+  armor_class?: string;
+  weapon_class?: string;
+  attack?: number;
+  range?: number;
+  max_hp?: number;
 }
 
 export interface WarfareCatalogView {
@@ -2098,6 +2116,8 @@ export interface CatalogView {
   techs?: TechCatalogEntry[];
   world_units?: WorldUnitCatalogEntry[];
   warfare?: WarfareCatalogView;
+  /** weapon_class -> armor_class -> 系数，与结算表同源。 */
+  damage_coefficients?: Record<string, Record<string, number>>;
 }
 
 /** One public command structural entry from GET /catalog/commands. */

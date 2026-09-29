@@ -19,6 +19,13 @@ import {
   unitCardFromWorldUnit,
 } from '@/features/war/unit-card-model';
 
+const damageCoefficients = {
+  gun: { light: 1.25, heavy: 0.75, structure: 0.5, air: 1, ship: 0.75 },
+  cannon: { light: 0.75, heavy: 1.25, structure: 1.5, air: 0.5, ship: 1 },
+  missile: { light: 1, heavy: 0.75, structure: 1.25, air: 1.5, ship: 1.25 },
+  laser: { light: 1, heavy: 0.9, structure: 1, air: 1.1, ship: 1.1 },
+};
+
 const catalog: CatalogView = {
   techs: [
     {
@@ -29,6 +36,24 @@ const catalog: CatalogView = {
       level: 1,
       icon_key: 'lab',
       color: '#fff',
+    },
+  ],
+  damage_coefficients: damageCoefficients,
+  world_units: [
+    {
+      id: 'soldier',
+      name: 'Soldier',
+      domain: 'ground',
+      runtime_class: 'world_unit',
+      public: true,
+      production_mode: 'world_produce',
+      armor_class: 'light',
+      weapon_class: 'gun',
+      attack: 15,
+      attack_range: 2,
+      attack_cooldown_tick: 10,
+      move_speed: 0.25,
+      max_hp: 100,
     },
   ],
 };
@@ -43,12 +68,17 @@ function publicBlueprint(overrides: Partial<WarPublicBlueprintCatalogEntry> = {}
     production_mode: 'factory_recipe',
     visible_tech_id: 'mil-ground-1',
     deploy_command: 'deploy_squad',
+    armor_class: 'heavy',
+    weapon_class: 'cannon',
+    attack: 22,
+    range: 9,
+    max_hp: 80,
     ...overrides,
   };
 }
 
 describe('unit-card-model', () => {
-  it('运行时单位卡片：数值全部来自 Unit 字段', () => {
+  it('运行时单位卡片：数值来自 Unit，缺类别时按 type 补目录', () => {
     const unit = {
       id: 'u-1',
       type: 'soldier',
@@ -64,7 +94,7 @@ describe('unit-card-model', () => {
       move_speed: 0.4,
       attack_cooldown_ticks: 12,
     } as Unit;
-    const card = unitCardFromRuntimeUnit(unit, '士兵');
+    const card = unitCardFromRuntimeUnit(unit, '士兵', catalog);
     expect(card.title).toBe('士兵');
     expect(card.statsSource).toBe('runtime');
     expect(card.stats).toEqual([
@@ -75,12 +105,21 @@ describe('unit-card-model', () => {
       { key: 'cooldown', label: '冷却', value: '12 tick' },
       { key: 'speed', label: '速度', value: '0.4 tile/tick' },
     ]);
-    expect(card.weaponClass).toBeUndefined();
-    expect(card.armorClass).toBeUndefined();
-    expect(card.countersText).toContain('系数表待服务端');
+    expect(card.weaponClass).toBe('gun');
+    expect(card.armorClass).toBe('light');
+    expect(card.countersText).toBe('机枪克制轻甲；被重甲、建筑、舰船克制');
+
+    const typed = unitCardFromRuntimeUnit(
+      { ...unit, armor_class: 'heavy', weapon_class: 'cannon' },
+      '士兵',
+      catalog,
+    );
+    expect(typed.armorClass).toBe('heavy');
+    expect(typed.weaponClass).toBe('cannon');
+    expect(typed.countersText).toBe('加农克制重甲、建筑；被轻甲、空中克制');
   });
 
-  it('小队卡片：武器类别来自 weapon.type，护盾/在编数入卡', () => {
+  it('小队卡片：武器来自 weapon.type，护甲读目录蓝图', () => {
     const squad = {
       id: 'sq-1',
       owner_id: 'p1',
@@ -96,24 +135,36 @@ describe('unit-card-model', () => {
       position: { x: 5, y: 6, z: 0 },
       move_speed: 0.2,
     } as unknown as CombatSquad;
-    const card = unitCardFromSquad(squad, '剃刀突击机甲', 'ground');
+    const card = unitCardFromSquad(squad, '剃刀突击机甲', 'ground', {
+      ...catalog,
+      warfare: { public_blueprints: [publicBlueprint()] },
+    });
     expect(card.title).toBe('剃刀突击机甲');
     expect(card.subtitle).toBe('sq-1 · 在编 3');
     expect(card.weaponClass).toBe('cannon');
+    expect(card.armorClass).toBe('heavy');
     expect(card.stats).toContainEqual({ key: 'hp', label: 'HP', value: '240/300' });
     expect(card.stats).toContainEqual({ key: 'shield', label: '护盾', value: '40/60' });
     expect(card.stats).toContainEqual({ key: 'cooldown', label: '冷却', value: '14 tick' });
+    expect(card.countersText).toContain('加农克制重甲');
   });
 
-  it('蓝图卡片：目录不暴露战斗数值 → statsSource none + 科技门槛判定', () => {
+  it('蓝图卡片：目录有数值时 statsSource=catalog，并判定科技门槛', () => {
     const locked = unitCardFromPublicBlueprint(publicBlueprint(), catalog, new Set());
-    expect(locked.statsSource).toBe('none');
-    expect(locked.stats).toEqual([]);
+    expect(locked.statsSource).toBe('catalog');
+    expect(locked.armorClass).toBe('heavy');
+    expect(locked.weaponClass).toBe('cannon');
+    expect(locked.stats).toEqual([
+      { key: 'hp', label: 'HP', value: '80' },
+      { key: 'attack', label: '攻击', value: '22' },
+      { key: 'range', label: '射程', value: '9' },
+    ]);
     expect(locked.techGate).toEqual({
       techId: 'mil-ground-1',
       techName: '地面军事 I',
       unlocked: false,
     });
+    expect(locked.countersText).toBe('加农克制重甲、建筑；被轻甲、空中克制');
 
     const unlocked = unitCardFromPublicBlueprint(
       publicBlueprint(),
@@ -121,9 +172,24 @@ describe('unit-card-model', () => {
       new Set(['mil-ground-1']),
     );
     expect(unlocked.techGate?.unlocked).toBe(true);
+
+    const bare = unitCardFromPublicBlueprint(
+      publicBlueprint({
+        armor_class: undefined,
+        weapon_class: undefined,
+        attack: undefined,
+        range: undefined,
+        max_hp: undefined,
+      }),
+      catalog,
+      new Set(),
+    );
+    expect(bare.statsSource).toBe('none');
+    expect(bare.stats).toEqual([]);
+    expect(bare.countersText).toBe('武器类别未知');
   });
 
-  it('玩家蓝图：科技门槛从公共蓝图按 id/父蓝图回溯', () => {
+  it('玩家蓝图：科技门槛与战斗字段从公共蓝图按 id/父蓝图回溯', () => {
     const detail = {
       id: 'bp-razor-mk2',
       name: '剃刀 MK2',
@@ -141,9 +207,13 @@ describe('unit-card-model', () => {
     expect(card.techGate?.techId).toBe('mil-ground-1');
     expect(card.techGate?.unlocked).toBe(true);
     expect(card.runtimeClass).toBe('combat_squad');
+    expect(card.armorClass).toBe('heavy');
+    expect(card.weaponClass).toBe('cannon');
+    expect(card.statsSource).toBe('catalog');
+    expect(card.stats).toContainEqual({ key: 'attack', label: '攻击', value: '22' });
   });
 
-  it('世界单位卡片：无可见科技时不出门槛行', () => {
+  it('世界单位卡片：读取目录战斗数值', () => {
     const entry: WorldUnitCatalogEntry = {
       id: 'soldier',
       name: 'Soldier',
@@ -151,11 +221,28 @@ describe('unit-card-model', () => {
       runtime_class: 'world_unit',
       public: true,
       production_mode: 'world_produce',
+      armor_class: 'light',
+      weapon_class: 'gun',
+      attack: 15,
+      attack_range: 2,
+      attack_cooldown_tick: 10,
+      move_speed: 0.25,
+      max_hp: 100,
     };
     const card = unitCardFromWorldUnit(entry, catalog, new Set());
     expect(card.title).toBe('Soldier');
     expect(card.techGate).toBeUndefined();
-    expect(card.statsSource).toBe('none');
+    expect(card.statsSource).toBe('catalog');
+    expect(card.armorClass).toBe('light');
+    expect(card.weaponClass).toBe('gun');
+    expect(card.stats).toEqual([
+      { key: 'hp', label: 'HP', value: '100' },
+      { key: 'attack', label: '攻击', value: '15' },
+      { key: 'range', label: '射程', value: '2' },
+      { key: 'cooldown', label: '冷却', value: '10 tick' },
+      { key: 'speed', label: '速度', value: '0.25 tile/tick' },
+    ]);
+    expect(card.countersText).toBe('机枪克制轻甲；被重甲、建筑、舰船克制');
   });
 
   it('域标签与克制文案', () => {
@@ -163,7 +250,9 @@ describe('unit-card-model', () => {
     expect(unitCardDomainLabel('space')).toBe('太空');
     expect(unitCardDomainLabel('weird')).toBe('weird');
     expect(unitCardDomainLabel(undefined)).toBe('未知域');
-    expect(unitCardCountersText('air')).toContain('空中');
-    expect(unitCardCountersText(undefined)).toContain('服务端');
+    expect(unitCardCountersText('gun', damageCoefficients)).toBe('机枪克制轻甲；被重甲、建筑、舰船克制');
+    expect(unitCardCountersText('laser', damageCoefficients)).toBe('激光克制空中、舰船；被重甲克制');
+    expect(unitCardCountersText('missile', undefined)).toBe('克制系数未加载');
+    expect(unitCardCountersText(undefined, damageCoefficients)).toBe('武器类别未知');
   });
 });

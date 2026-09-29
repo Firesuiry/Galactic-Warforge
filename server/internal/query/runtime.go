@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/visibility"
 )
 
 // PlanetRuntimeView exposes dynamic planet runtime state for the active world.
@@ -188,7 +189,7 @@ func (ql *Layer) PlanetRuntime(ws *model.WorldState, playerID, planetID, activeP
 	view.LogisticsStations = collectLogisticsStations(ws, playerID, droneIDsByStation, shipIDsByStation)
 	view.LogisticsDistributors, view.LogisticsBots = collectLogisticsDistributors(ws, playerID)
 	view.ConstructionTasks = collectConstructionTasks(ws, playerID)
-	view.CombatSquads = collectCombatSquads(ws, playerID)
+	view.CombatSquads = collectCombatSquads(ws, playerID, ql.vis)
 	view.Frontlines = collectFrontlines(ws)
 	view.GroundTaskForces = collectGroundTaskForces(ws)
 	view.Contacts = collectPlanetSensorContacts(ws, playerID)
@@ -245,16 +246,23 @@ func sortedBotIDs(ws *model.WorldState) []string {
 	return ids
 }
 
-func collectCombatSquads(ws *model.WorldState, playerID string) []model.CombatSquad {
+func collectCombatSquads(ws *model.WorldState, playerID string, vis *visibility.Engine) []model.CombatSquad {
 	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.Squads) == 0 {
 		return []model.CombatSquad{}
 	}
 	ids := make([]string, 0, len(ws.CombatRuntime.Squads))
 	for id, squad := range ws.CombatRuntime.Squads {
-		if squad == nil || squad.OwnerID != playerID {
+		if squad == nil {
 			continue
 		}
-		ids = append(ids, id)
+		if squad.OwnerID == playerID {
+			ids = append(ids, id)
+			continue
+		}
+		// 敌方小队只在当前视野内暴露（与单位雾一致）；己方小队始终可见。
+		if vis != nil && vis.IsVisible(ws, playerID, squad.Position) {
+			ids = append(ids, id)
+		}
 	}
 	sort.Strings(ids)
 	out := make([]model.CombatSquad, 0, len(ids))

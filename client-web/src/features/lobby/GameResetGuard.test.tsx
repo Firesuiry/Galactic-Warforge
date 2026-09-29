@@ -18,6 +18,7 @@ const GAME_A = {
     { player_id: 'p1', role: 'admin', team_id: 'p1', is_alive: true },
   ],
   victory: { declared: false },
+  status: 'running',
 };
 
 const GAME_B = {
@@ -89,5 +90,51 @@ describe('GameResetGuard', () => {
     expect(await screen.findByRole('heading', { name: '建立指挥链路' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(/登录凭证已失效/);
     expect(useSessionStore.getState().playerKey).toBe('');
+  });
+
+  it('终局只提示一次，不登出，可前往结算页', async () => {
+    loginAs('p1');
+    const finished = {
+      ...GAME_A,
+      status: 'finished',
+      tick: 5120,
+      victory: { declared: true, winner_id: 'p1', reason: 'elimination' },
+      settlement: {
+        winner_id: 'p1',
+        reason: 'elimination',
+        victory_rule: 'elimination',
+        start_tick: 0,
+        declared_tick: 5120,
+        duration_ticks: 5120,
+        players: [
+          { player_id: 'p1', is_alive: true, winner: true, units_killed: 1, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0 },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/games/current')) {
+        return Promise.resolve(jsonResponse(finished));
+      }
+      return Promise.resolve(jsonResponse({ error: 'not found' }, { status: 404 }));
+    }));
+    const user = userEvent.setup();
+    const { queryClient } = renderApp(['/lobby']);
+
+    expect(await screen.findByText(/请前往结算页/)).toBeInTheDocument();
+    expect(screen.getAllByText(/请前往结算页/)).toHaveLength(1);
+    expect(useSessionStore.getState().playerKey).toBe('key_p1');
+
+    await queryClient.invalidateQueries({ queryKey: ['current-game'] });
+    await screen.findByText('seed-001');
+    expect(screen.getAllByText(/请前往结算页/)).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: '知道了' }));
+    expect(screen.queryByText(/请前往结算页/)).not.toBeInTheDocument();
+
+    await queryClient.invalidateQueries({ queryKey: ['current-game'] });
+    await screen.findByText('seed-001');
+    expect(screen.queryByText(/请前往结算页/)).not.toBeInTheDocument();
+    expect(useSessionStore.getState().playerKey).toBe('key_p1');
   });
 });

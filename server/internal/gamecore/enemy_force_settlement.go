@@ -140,7 +140,9 @@ func (gc *GameCore) settleEnemyForces(ws *model.WorldState) []*model.GameEvent {
 	gc.applySlowFieldEffects(ws)
 	settlePlanetSensorContacts(ws, ws.Tick)
 
-	// 6. 威胁等级（UI 总览）。
+	// 6. 威胁等级（UI 总览）。只在等级相对上一 tick 变化时发事件，threat_meter 变动不发。
+	// 清零前保存 prev：否则无法区分“持续处于某级”和“本 tick 刚进入该级”。
+	prevThreat := ws.EnemyForces.ThreatLevel
 	params := model.DefaultThreatParams()
 	ws.EnemyForces.ThreatLevel = model.ThreatLevelNone
 	for _, player := range ws.Players {
@@ -153,7 +155,7 @@ func (gc *GameCore) settleEnemyForces(ws *model.WorldState) []*model.GameEvent {
 			ws.EnemyForces.ThreatLevel = threat
 		}
 	}
-	if ws.EnemyForces.ThreatLevel >= model.ThreatLevelLow {
+	if ws.EnemyForces.ThreatLevel != prevThreat {
 		for _, player := range ws.Players {
 			if !player.IsAlive {
 				continue

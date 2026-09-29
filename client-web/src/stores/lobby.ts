@@ -13,9 +13,14 @@ interface LobbyStore {
   authFailureCount: number;
   /** 登出跳登录页时附带的引导提示（location.state 会被路由守卫的 Navigate 覆盖，故放 store） */
   loginNotice: string;
+  /** 已提示过的终局键 started_at::declared_tick。跨轮询保持，避免重复打开。 */
+  settlementPromptedKey: string;
+  settlementNotice: boolean;
   recordIdentity: (scope: string, identity: string) => void;
   flagResetNotice: () => void;
   dismissResetNotice: () => void;
+  noteSettlementPrompt: (key: string, visible: boolean) => void;
+  hideSettlementNotice: () => void;
   bumpAuthFailure: () => number;
   resetAuthFailure: () => void;
   setLoginNotice: (notice: string) => void;
@@ -28,6 +33,8 @@ function createInitialLobbyState() {
     resetNotice: false,
     authFailureCount: 0,
     loginNotice: '',
+    settlementPromptedKey: '',
+    settlementNotice: false,
   };
 }
 
@@ -44,6 +51,12 @@ export const useLobbyStore = create<LobbyStore>()((set, get) => ({
   },
   dismissResetNotice: () => {
     set({ resetNotice: false });
+  },
+  noteSettlementPrompt: (key, visible) => {
+    set({ settlementPromptedKey: key, settlementNotice: visible });
+  },
+  hideSettlementNotice: () => {
+    set({ settlementNotice: false });
   },
   bumpAuthFailure: () => {
     const next = get().authFailureCount + 1;

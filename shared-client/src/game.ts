@@ -53,6 +53,33 @@ export interface GameVictorySummary {
   reason?: string;
 }
 
+/** 终局结算中单个玩家在宣判时刻冻结的战果/战损。字段名与服务端 json 一致。 */
+export interface SettlementPlayerStats {
+  player_id: string;
+  team_id?: string;
+  is_alive: boolean;
+  winner?: boolean;
+  units_killed: number;
+  units_lost: number;
+  buildings_destroyed: number;
+  buildings_lost: number;
+}
+
+/** 宣判时冻结的终局结算报告。仅 status=finished 时由服务端附带。 */
+export interface SettlementReport {
+  winner_id: string;
+  team_id?: string;
+  reason: string;
+  victory_rule: string;
+  tech_id?: string;
+  start_tick: number;
+  declared_tick: number;
+  duration_ticks: number;
+  players: SettlementPlayerStats[];
+}
+
+export type GameStatus = 'running' | 'finished';
+
 // GameSummary 是 GET /games/current 与 POST /games/new 的响应体。
 export interface GameSummary {
   map_seed: string;
@@ -64,4 +91,16 @@ export interface GameSummary {
   started_at: string;
   players: GamePlayerSummary[];
   victory: GameVictorySummary;
+  /**
+   * running|finished。旧响应可缺省，客户端把缺省当 running。
+   * finished 后常规游戏命令以 GAME_FINISHED 拒绝。
+   */
+  status?: GameStatus;
+  /** 仅 finished 时存在。 */
+  settlement?: SettlementReport;
+}
+
+/** 缺省 status 视为 running，兼容尚未带该字段的旧响应。 */
+export function gameStatusOf(game: Pick<GameSummary, 'status'>): GameStatus {
+  return game.status === 'finished' ? 'finished' : 'running';
 }

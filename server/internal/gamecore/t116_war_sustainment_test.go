@@ -255,11 +255,12 @@ func TestT116SupplyShortageDegradesFleetAndForcesRetreat(t *testing.T) {
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: systemID,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-short-t116",
-			Type:         model.EnemyForceTypeBeacon,
-			Position:     model.Position{X: 18, Y: 18},
-			Strength:     150,
-			SpawnTick:    ws.Tick,
+			ID:   "enemy-short-t116",
+			Type: model.EnemyForceTypeBeacon,
+			// 放在舰队锚点内，使“无伤害”来自补给撤退而不是索敌半径。
+			Position:  model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
+			Strength:  150,
+			SpawnTick: ws.Tick,
 		}},
 	}
 	fleet.State = model.FleetStateAttacking

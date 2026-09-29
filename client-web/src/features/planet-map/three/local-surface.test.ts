@@ -1,8 +1,36 @@
 import { it, expect } from 'vitest';
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
-import { createLocalSurface, createTerrainRelief } from './local-surface';
+import { createLocalSurface, createTerrainRelief, displaceTerrainVertex } from './local-surface';
 import { normalTile, tileNormal } from './projection';
+
+it('displaces terrain vertices by authoritative height', () => {
+  const flat = displaceTerrainVertex({ x: 1, y: 0, z: 0 }, 100, 0, 4);
+  const raised = displaceTerrainVertex({ x: 1, y: 0, z: 0 }, 100, 1, 4);
+  expect(flat.x).toBe(100);
+  expect(raised.x).toBeGreaterThan(flat.x);
+
+  const planet: PlanetSceneView = {
+    planet_id: 'p', discovered: true, tick: 1, surface: { topology: 'cube_sphere', face_size: 4 }, map_width: 12, map_height: 8,
+    bounds: { x: 0, y: 0, width: 4, height: 4 },
+    terrain: [['buildable', 'buildable', 'buildable', 'buildable'], ['buildable', 'blocked', 'buildable', 'buildable'], ['buildable', 'buildable', 'buildable', 'buildable'], ['buildable', 'buildable', 'buildable', 'buildable']],
+    height: [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
+    explored: [[true, true, true, true], [true, true, true, true], [true, true, true, true], [true, true, true, true]],
+  };
+  const mesh = createLocalSurface(planet, 100, new THREE.MeshStandardMaterial())!;
+  expect(mesh).not.toBeNull();
+  const positions = mesh.geometry.getAttribute('position');
+  let min = Infinity, max = 0;
+  for (let i = 0; i < positions.count; i++) {
+    const length = new THREE.Vector3().fromBufferAttribute(positions, i).length();
+    min = Math.min(min, length);
+    max = Math.max(max, length);
+  }
+  expect(max).toBeGreaterThan(min);
+  expect(max).toBeGreaterThan(100);
+  mesh.geometry.dispose();
+  mesh.material.dispose();
+});
 
 it('keeps a 10000² planet near-pole colony grounded within 2% of a tile height', () => {
   const p: PlanetSceneView = { planet_id:'p', discovered:true, tick:1, surface: { topology: 'cube_sphere' as const, face_size: 15000 / 3 }, map_width:15000, map_height:10000, bounds:{x:0,y:0,width:96,height:96} };

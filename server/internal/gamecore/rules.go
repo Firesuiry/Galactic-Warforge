@@ -231,7 +231,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
-	task.TotalTicks = max(1, defaultConstructionDurationTick)
+	task.TotalTicks = gc.scaledConstructionDuration()
 	task.RemainingTicks = task.TotalTicks
 
 	res.Status = model.StatusExecuted

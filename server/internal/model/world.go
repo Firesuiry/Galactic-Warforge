@@ -16,13 +16,13 @@ type Resources struct {
 
 // PlayerState holds per-player game state
 type PlayerState struct {
-	PlayerID        string                    `json:"player_id"`
-	TeamID          string                    `json:"team_id"`
-	Role            string                    `json:"role"`
-	Resources       Resources                 `json:"resources"`
-	Inventory       ItemInventory             `json:"inventory,omitempty"`
-	IsAlive         bool                      `json:"is_alive"`
-	Permissions     []string                  `json:"permissions,omitempty"`
+	PlayerID    string        `json:"player_id"`
+	TeamID      string        `json:"team_id"`
+	Role        string        `json:"role"`
+	Resources   Resources     `json:"resources"`
+	Inventory   ItemInventory `json:"inventory,omitempty"`
+	IsAlive     bool          `json:"is_alive"`
+	Permissions []string      `json:"permissions,omitempty"`
 	// FocusPlanetID 是该玩家的视图焦点/默认落点行星（F4）：未显式指定行星的
 	// 命令在此行星结算；switch_active_planet 只改这个字段，不再影响全局模拟。
 	FocusPlanetID   string                    `json:"focus_planet_id,omitempty"`
@@ -51,7 +51,9 @@ type WorldState struct {
 	SurfaceMetadata surface.Metadata `json:"surface"`
 	mu              sync.RWMutex
 
-	Tick               int64                             `json:"tick"`
+	Tick int64 `json:"tick"`
+	// PaceOutput 生产配方时长倍率。0 表示 1。由结算管线按战场配置每 tick 写入，不进快照。
+	PaceOutput         float64                           `json:"-"`
 	PlanetID           string                            `json:"planet_id"`
 	MapWidth           int                               `json:"map_width"`
 	MapHeight          int                               `json:"map_height"`
@@ -76,13 +78,13 @@ type WorldState struct {
 	CombatRuntime      *CombatRuntimeState               `json:"combat_runtime,omitempty"`
 
 	// Tile occupancy: maps "x,y" -> entity ID
-	TileBuilding map[string]string   `json:"-"`
+	TileBuilding map[string]string `json:"-"`
 	// 寻路暂存（epoch 戳免清零）：仅供结算期单线程 BFS 复用，不落盘。
-	PathScratchParent []int32 `json:"-"`
-	PathScratchDepth  []int32 `json:"-"`
-	PathScratchEpoch  []int32 `json:"-"`
-	PathScratchGen    int32   `json:"-"`
-	TileUnits    map[string][]string `json:"-"`
+	PathScratchParent []int32             `json:"-"`
+	PathScratchDepth  []int32             `json:"-"`
+	PathScratchEpoch  []int32             `json:"-"`
+	PathScratchGen    int32               `json:"-"`
+	TileUnits         map[string][]string `json:"-"`
 
 	EntityCounter int64 `json:"-"`
 }

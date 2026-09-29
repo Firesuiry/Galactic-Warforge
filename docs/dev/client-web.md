@@ -133,12 +133,12 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 军工总览：聚合量产单、翻修单、部署枢纽和补给节点，可直接对选定蓝图发起一次部署尝试，并可通过「量产排队」「翻修改装」表单下达 `queue_military_production` / `refit_unit`，把“当前部署枢纽不支持该蓝图”等失败原因解释成玩家可读提示
 - 战区面板：聚合任务群与战区目标，可直接调整 `task_force_set_stance`，对当前焦点行星发起 `blockade_planet`，并通过表单完成 `task_force_create` / `task_force_assign` / `task_force_deploy` 与 `theater_create` / `theater_define_zone` / `theater_set_objective`；战区列表同时展示每个行星区域的防区警戒状态（`hostile_count` / `alerted`，告警中的区域以红色徽标显示）
 - 战报与情报面板：集中展示 `contacts`、`battle_reports`、`planet_blockades`，并直接暴露当前补给状态和短缺项；舰队指挥表单可下达 `fleet_assign` / `fleet_attack` / `fleet_disband`
-- 战场态势面板：`features/war/battlefield/BattlefieldMap.tsx` 绘制星系级示意图（恒星、行星轨道圈、己方/敌方舰队接触标记、封锁圈虚线、登陆行动），点击标记可选中并回传，让玩家「看懂战局」而不再只看文字列表；渲染已 Pixi 化（期4a）：`battlefield-scene.ts` 场景类（glow 恒星/行星节点、菱形舰队标记、虚线封锁环）+ `battlefield-model.ts` 布局纯函数 + `battlefield-effects.ts` 特效池，DOM chrome（标题/图例 war-list/制空权摘要/已选中回显）契约不变
+- 战场态势面板：`features/war/battlefield/BattlefieldMap.tsx` 绘制星系级示意图（恒星、行星轨道圈、己方/敌方舰队接触标记、封锁圈虚线），点击标记可选中并回传，让玩家「看懂战局」而不再只看文字列表；渲染已 Pixi 化（期4a）：`battlefield-scene.ts` 场景类（glow 恒星/行星节点、菱形舰队标记、虚线封锁环）+ `battlefield-model.ts` 布局纯函数 + `battlefield-effects.ts` 特效池，DOM chrome（标题/图例 war-list/制空权摘要/已选中回显）契约不变。登陆行动已随 U8 删除，态势图不再绘制登陆。
 - 战场事件驱动演出（期4a）：场景订阅战斗事件总线，导弹齐射画弹道轨迹+拖尾、爆炸播扩散环+火花+伤害飘字、点防拦截闪光、击毁播大爆炸；与星图同一约定，URL 加 `?freeze=1` 进入 frozen 模式冻结脉冲与全部特效，供确定性截图
-- 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁、登陆的 authoritative 回执
+- 命令反馈改为短历史，不会被下一条操作覆盖，便于在浏览器内连续核对蓝图、部署、封锁的 authoritative 回执
 - 命令提交管道统一收敛到 `features/war/use-war-command.ts`，查询键统一由 `features/war/war-query-keys.ts` 构造；新增命令表单落在 `features/war/components/forms/` 下，自管表单状态、复用同一提交与反馈通道，避免在 WarPage 内堆叠手写 handler
 - 已补 `client-web/tests/war-workbench.spec.ts`，覆盖桌面和窄屏两条浏览器回归
-- 已补 `client-web/tests/war-workbench-authoritative.spec.ts`，会配合 `server/config-war.yaml + map-war.yaml` 与 `server/scripts/start_official_war_test_server.sh` 启动官方战争验证局，实测蓝图改型、军工量产、舰队编成、战区配置、封锁与登陆链路
+- 已补 `client-web/tests/war-workbench-authoritative.spec.ts`，会配合 `server/config-war.yaml + map-war.yaml` 与 `server/scripts/start_official_war_test_server.sh` 启动官方战争验证局，实测蓝图改型、军工量产、舰队编成、战区配置与封锁链路
 - 已补 `client-web/tests/war-workbench-pure-gui.spec.ts`（P0 验收）：全程只用 GUI 打完官方战争局——蓝图创建/填槽/校验/定型→量产排队→舰队编成→任务群组建/编组/部署→战区创建/定义/目标→封锁，0 处 apiCommand 战争准备
 - `WarPage.test.tsx` 新增「12 个新战争命令表单的纯 GUI 提交」用例，覆盖 `blueprint_variant / queue_military_production / refit_unit / theater_create|define_zone|set_objective / task_force_create|assign|deploy / fleet_assign|attack|disband`
 - 实时层收敛：`features/war/hooks/use-war-realtime.ts` 复刻 `use-planet-realtime` 模式，订阅 `/events/stream`（`shared-client/config.ts` 的 `ALL_EVENT_TYPES` 已补齐 13 个战争事件）→ 150ms 防抖批量失效对应 query；WarPage 的 8 路 1 秒轮询收敛为 `summary`(15s) + `system-runtime`(10s) 兜底，其余改 SSE 驱动
@@ -244,7 +244,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev
 - 行星页在窄屏下是否仍保留地图首屏，并可在 `工作台 / 选中对象 / 活动流` 间切换
 - 行星地图直操作：建造栏选卡后幽灵预览是否跟随悬停（绿/红着色）、点击放置是否有命令回执、右键/Esc 是否退出模式；Pixi 地图是否正确显示地形/迷雾/建筑/单位/资源，缩放平移与单位移动是否顺滑
 - 命令提交后是否先进入 `pending`，再被后续 `command_result` / `research_completed` / `rocket_launched` 覆盖为最终结果
-- `/war` 是否能同时展示蓝图、军工、战区、战报四个长期面板，并能看到蓝图非法原因、部署失败原因、登陆失败原因等解释性提示
+- `/war` 是否能同时展示蓝图、军工、战区、战报四个长期面板，并能看到蓝图非法原因、部署失败原因、封锁失败原因等解释性提示
 - `/war` 在窄屏下是否仍能看到蓝图创建、部署蓝图、任务群姿态和封锁入口，不会因为布局塌陷而失去最小操作闭环
 - `/agents` 的频道切换、私聊、消息发送、按星球拉人、定时任务创建是否正常可见
 - agent 自动回复后，请求卡片、turn 状态、最终回复和失败原因是否能自动刷新并挂回正确请求

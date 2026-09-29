@@ -482,7 +482,11 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 	}
 
-	totalCost := calculateTechCost(levelCost)
+	scaledCost := scaleResearchCost(levelCost, gc.researchPace())
+	totalCost := calculateTechCost(scaledCost)
+	if len(levelCost) == 0 {
+		totalCost = int64(scaleTicks(int(totalCost), gc.researchPace()))
+	}
 
 	// Create research state
 	research := &model.PlayerResearch{
@@ -491,7 +495,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		Progress:      0,
 		TotalCost:     totalCost,
 		CurrentLevel:  player.Tech.CompletedTechs[techID],
-		RequiredCost:  append([]model.ItemAmount(nil), levelCost...),
+		RequiredCost:  scaledCost,
 		ConsumedCost:  make(map[string]int, len(levelCost)),
 		BlockedReason: "",
 	}

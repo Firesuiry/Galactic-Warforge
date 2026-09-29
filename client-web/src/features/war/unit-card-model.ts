@@ -1,14 +1,11 @@
 /**
- * 单位卡片数据模型（C4）：蓝图 / 世界单位 / 运行时单位 / 战斗小队 → 统一卡片视图。
+ * 单位卡片数据模型：蓝图 / 世界单位 / 运行时单位 / 战斗小队 → 统一卡片视图。
  *
- * 数据出处纪律（单一出处，禁止硬编码数值表）：
- * - 战斗数值只来自运行时实体（Unit / CombatSquad 的 hp/attack/weapon/shield 等字段）；
- * - 蓝图（含公共蓝图）与世界单位的目录条目目前【不暴露】战斗数值
- *   （WarPublicBlueprintCatalogEntry / WorldUnitCatalogEntry 无 HP/攻击/射程字段），
- *   卡片以 statsSource='catalog' 明示"数值由服务端运行时决定"；
- * - 护甲类别（armor_class）目录未暴露；武器类别仅小队运行时 weapon.type 可得，
- *   其余来源为 undefined，卡片相应降级展示；
- * - 克制关系：服务端系数表未暴露，文案为静态说明并显式标注出处。
+ * 战斗数值与克制来自 catalog 或运行时实体，不在卡片内再推导护甲或系数。
+ * - runtime：Unit / CombatSquad 实测字段；缺类别时按 type / blueprint_id 补目录
+ * - catalog：目录已暴露的 armor/weapon/attack/range/max_hp
+ * - none：该来源没有数值
+ * 老兵等级不做。
  */
 
 import type {
@@ -37,8 +34,8 @@ export interface UnitCardStat {
   value: string;
 }
 
-/** 卡片战斗数值的出处：runtime=实测运行时实体；none=目录未暴露，仅展示静态信息。 */
-export type UnitCardStatsSource = 'runtime' | 'none';
+/** runtime=运行时实体；catalog=目录数值；none=该来源无数值。 */
+export type UnitCardStatsSource = 'runtime' | 'catalog' | 'none';
 
 export interface UnitCardTechGate {
   techId: string;
@@ -57,12 +54,10 @@ export interface UnitCardModel {
   runtimeClass?: string;
   stats: UnitCardStat[];
   statsSource: UnitCardStatsSource;
-  /** 武器类别（仅小队运行时可得：weapon.type）。 */
   weaponClass?: string;
-  /** 护甲类别：catalog 未暴露，恒 undefined（占位字段，服务端暴露后在此接线）。 */
   armorClass?: string;
   techGate?: UnitCardTechGate;
-  /** 克制说明（静态文案；精确系数待服务端暴露，文案内已标注）。 */
+  /** 由 catalog.damage_coefficients 生成；无表时为短降级句。 */
   countersText: string;
 }
 
@@ -73,11 +68,44 @@ export const UNIT_CARD_DOMAIN_LABELS: Record<string, string> = {
   space: '太空',
 };
 
+const WEAPON_CLASS_LABELS: Record<string, string> = {
+  gun: '机枪',
+  cannon: '加农',
+  missile: '导弹',
+  laser: '激光',
+};
+
+const ARMOR_CLASS_LABELS: Record<string, string> = {
+  light: '轻甲',
+  heavy: '重甲',
+  structure: '建筑',
+  air: '空中',
+  ship: '舰船',
+};
+
+const ARMOR_CLASS_ORDER = ['light', 'heavy', 'structure', 'air', 'ship'] as const;
+
+const NO_COEFFICIENTS = '克制系数未加载';
+
 export function unitCardDomainLabel(domain: string | undefined): string {
   if (!domain) {
     return '未知域';
   }
   return UNIT_CARD_DOMAIN_LABELS[domain] ?? domain;
+}
+
+export function unitCardWeaponLabel(weaponClass: string | undefined): string {
+  if (!weaponClass) {
+    return '未知';
+  }
+  return WEAPON_CLASS_LABELS[weaponClass] ?? weaponClass;
+}
+
+export function unitCardArmorLabel(armorClass: string | undefined): string {
+  if (!armorClass) {
+    return '未知';
+  }
+  return ARMOR_CLASS_LABELS[armorClass] ?? armorClass;
 }
 
 export const UNIT_CARD_RUNTIME_CLASS_LABELS: Record<string, string> = {
@@ -86,24 +114,46 @@ export const UNIT_CARD_RUNTIME_CLASS_LABELS: Record<string, string> = {
   fleet_unit: '舰队单位',
 };
 
-/**
- * 克制说明静态文案（按域）。精确克制系数在服务端结算表内、目录未暴露，
- * 此处只给方向性说明并标注出处；服务端暴露后改为读系数表渲染。
- */
-export function unitCardCountersText(domain: string | undefined): string {
-  const note = '（精确克制系数表待服务端目录暴露，以上为方向性说明）';
-  switch (domain) {
-    case 'ground':
-      return `地面单位擅长占领与推进，惧怕空中打击与远程火力${note}`;
-    case 'air':
-      return `空中单位机动压制地面，惧怕防空火力与拦截机${note}`;
-    case 'orbital':
-      return `轨道单位提供火力支援与封锁，受制于点防与制空权争夺${note}`;
-    case 'space':
-      return `太空舰队主宰星系机动与封锁，交战胜负由武器谱系与护盾博弈决定${note}`;
-    default:
-      return `克制关系由服务端系数表结算${note}`;
+/** 系数 > 1 为克制，< 1 为被克制。无系数表时返回短降级句。 */
+export function unitCardCountersText(
+  weaponClass: string | undefined,
+  coefficients: Record<string, Record<string, number>> | undefined,
+): string {
+  if (!coefficients) {
+    return NO_COEFFICIENTS;
   }
+  if (!weaponClass) {
+    return '武器类别未知';
+  }
+  const row = coefficients[weaponClass];
+  if (!row) {
+    return NO_COEFFICIENTS;
+  }
+  const weapon = WEAPON_CLASS_LABELS[weaponClass] ?? weaponClass;
+  const counters: string[] = [];
+  const countered: string[] = [];
+  for (const armor of ARMOR_CLASS_ORDER) {
+    const coef = row[armor];
+    if (typeof coef !== 'number' || coef === 1) {
+      continue;
+    }
+    const label = ARMOR_CLASS_LABELS[armor] ?? armor;
+    if (coef > 1) {
+      counters.push(label);
+    } else if (coef < 1) {
+      countered.push(label);
+    }
+  }
+  if (counters.length > 0 && countered.length > 0) {
+    return `${weapon}克制${counters.join('、')}；被${countered.join('、')}克制`;
+  }
+  if (counters.length > 0) {
+    return `${weapon}克制${counters.join('、')}`;
+  }
+  if (countered.length > 0) {
+    return `${weapon}被${countered.join('、')}克制`;
+  }
+  return `${weapon}无明显克制`;
 }
 
 function techGateOf(
@@ -132,15 +182,42 @@ function compactStats(entries: Array<UnitCardStat | null>): UnitCardStat[] {
   return entries.filter((entry): entry is UnitCardStat => Boolean(entry));
 }
 
-/** 运行时世界单位（worker/soldier/mecha 等 planet.units 实体）→ 卡片。 */
+function firstText(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function worldUnitByType(catalog: CatalogView | undefined, type: string | undefined) {
+  if (!catalog || !type) {
+    return undefined;
+  }
+  return catalog.world_units?.find((entry) => entry.id === type);
+}
+
+function publicBlueprintByID(catalog: CatalogView | undefined, id: string | undefined) {
+  if (!catalog || !id) {
+    return undefined;
+  }
+  return catalog.warfare?.public_blueprints?.find((entry) => entry.id === id);
+}
+
+/** 运行时世界单位 → 卡片。类别优先用实体字段，缺则按 type 补 world_units。 */
 export function unitCardFromRuntimeUnit(
   unit: Unit,
   typeName: string,
+  catalog?: CatalogView,
 ): UnitCardModel {
+  const entry = worldUnitByType(catalog, unit.type);
+  const weaponClass = firstText(unit.weapon_class, entry?.weapon_class);
+  const armorClass = firstText(unit.armor_class, entry?.armor_class);
   return {
     title: typeName,
     subtitle: unit.id,
-    domain: 'ground',
+    domain: entry?.domain ?? 'ground',
     runtimeClass: 'world_unit',
     statsSource: 'runtime',
     stats: compactStats([
@@ -151,17 +228,23 @@ export function unitCardFromRuntimeUnit(
       stat('cooldown', '冷却', unit.attack_cooldown_ticks, ' tick'),
       stat('speed', '速度', unit.move_speed, ' tile/tick'),
     ]),
-    countersText: unitCardCountersText('ground'),
+    weaponClass,
+    armorClass,
+    countersText: unitCardCountersText(weaponClass, catalog?.damage_coefficients),
   };
 }
 
-/** 战斗小队（planet_runtime.combat_squads 实体）→ 卡片。 */
+/** 战斗小队 → 卡片。武器用运行时 weapon.type；护甲只读目录蓝图，不在此推导。 */
 export function unitCardFromSquad(
   squad: CombatSquad,
   blueprintName: string | undefined,
   domain: string | undefined,
+  catalog?: CatalogView,
+  preset?: WarPublicBlueprintCatalogEntry,
 ): UnitCardModel {
+  const linked = preset ?? publicBlueprintByID(catalog, squad.blueprint_id);
   const weapon = squad.weapon;
+  const weaponClass = firstText(weapon?.type, linked?.weapon_class);
   return {
     title: blueprintName ?? squad.blueprint_id,
     subtitle: `${squad.id} · 在编 ${squad.count}`,
@@ -178,12 +261,13 @@ export function unitCardFromSquad(
         ? { key: 'shield', label: '护盾', value: `${squad.shield.level}/${squad.shield.max_level}` }
         : null,
     ]),
-    weaponClass: weapon?.type,
-    countersText: unitCardCountersText(domain),
+    weaponClass,
+    armorClass: linked?.armor_class,
+    countersText: unitCardCountersText(weaponClass, catalog?.damage_coefficients),
   };
 }
 
-/** 玩家/公共蓝图 → 卡片。目录未暴露蓝图战斗数值，statsSource='none'。 */
+/** 玩家/公共蓝图 → 卡片。数值来自目录条目；没有数值时 statsSource='none'。 */
 export function unitCardFromBlueprint(input: {
   id: string;
   name: string;
@@ -191,22 +275,47 @@ export function unitCardFromBlueprint(input: {
   runtimeClass?: string;
   visibleTechId?: string;
   subtitle?: string;
+  armorClass?: string;
+  weaponClass?: string;
+  attack?: number;
+  range?: number;
+  maxHp?: number;
   catalog?: CatalogView;
   completedTechIds: ReadonlySet<string>;
 }): UnitCardModel {
+  const stats = compactStats([
+    stat('hp', 'HP', input.maxHp),
+    stat('attack', '攻击', input.attack),
+    stat('range', '射程', input.range),
+  ]);
   return {
     title: input.name,
     subtitle: input.subtitle ?? input.id,
     domain: input.domain,
     runtimeClass: input.runtimeClass,
-    statsSource: 'none',
-    stats: [],
+    statsSource: stats.length > 0 ? 'catalog' : 'none',
+    stats,
+    weaponClass: input.weaponClass,
+    armorClass: input.armorClass,
     techGate: techGateOf(input.catalog, input.visibleTechId, input.completedTechIds),
-    countersText: unitCardCountersText(input.domain),
+    countersText: unitCardCountersText(input.weaponClass, input.catalog?.damage_coefficients),
   };
 }
 
-/** 玩家蓝图详情视图 → 卡片（visible_tech_id 从公共蓝图目录按 id/父蓝图回溯）。 */
+function combatFieldsOf(entry: WarPublicBlueprintCatalogEntry | undefined) {
+  if (!entry) {
+    return {};
+  }
+  return {
+    armorClass: entry.armor_class,
+    weaponClass: entry.weapon_class,
+    attack: entry.attack,
+    range: entry.range,
+    maxHp: entry.max_hp,
+  };
+}
+
+/** 玩家蓝图详情视图 → 卡片（visible_tech_id 与战斗字段从公共蓝图按 id/父蓝图回溯）。 */
 export function unitCardFromBlueprintDetail(
   blueprint: WarBlueprintDetailView,
   catalog: CatalogView | undefined,
@@ -223,6 +332,7 @@ export function unitCardFromBlueprintDetail(
     runtimeClass: publicEntry?.runtime_class,
     visibleTechId: publicEntry?.visible_tech_id,
     subtitle: blueprint.id,
+    ...combatFieldsOf(publicEntry),
     catalog,
     completedTechIds,
   });
@@ -241,25 +351,35 @@ export function unitCardFromPublicBlueprint(
     runtimeClass: entry.runtime_class,
     visibleTechId: entry.visible_tech_id,
     subtitle: `${entry.id} · 公共蓝图`,
+    ...combatFieldsOf(entry),
     catalog,
     completedTechIds,
   });
 }
 
-/** 世界单位目录条目（worker/soldier/mecha）→ 卡片。 */
+/** 世界单位目录条目 → 卡片。 */
 export function unitCardFromWorldUnit(
   entry: WorldUnitCatalogEntry,
   catalog: CatalogView | undefined,
   completedTechIds: ReadonlySet<string>,
 ): UnitCardModel {
+  const stats = compactStats([
+    stat('hp', 'HP', entry.max_hp),
+    stat('attack', '攻击', entry.attack),
+    stat('range', '射程', entry.attack_range),
+    stat('cooldown', '冷却', entry.attack_cooldown_tick, ' tick'),
+    stat('speed', '速度', entry.move_speed, ' tile/tick'),
+  ]);
   return {
     title: entry.name,
     subtitle: `${entry.id} · 世界单位`,
     domain: entry.domain,
     runtimeClass: entry.runtime_class,
-    statsSource: 'none',
-    stats: [],
+    statsSource: stats.length > 0 ? 'catalog' : 'none',
+    stats,
+    weaponClass: entry.weapon_class,
+    armorClass: entry.armor_class,
     techGate: techGateOf(catalog, entry.visible_tech_id, completedTechIds),
-    countersText: unitCardCountersText(entry.domain),
+    countersText: unitCardCountersText(entry.weapon_class, catalog?.damage_coefficients),
   };
 }

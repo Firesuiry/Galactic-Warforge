@@ -20,6 +20,7 @@ const sampleGame: GameSummary = {
     { player_id: 'p2', role: 'commander', team_id: 'p2', bot: 'easy', is_alive: true },
   ],
   victory: { declared: false },
+  status: 'running',
 };
 
 function stubCreate(t: (req: NewGameRequest) => void) {
@@ -106,9 +107,62 @@ describe('game_status command', () => {
 
   it('renders current game summary', async () => {
     const out = await gameStatusCommand([], async () => sampleGame);
+    assert.match(out, /status: .*running/);
     assert.match(out, /seed: .*seed-x/);
     assert.match(out, /p1/);
     assert.match(out, /bot:easy/);
+    assert.doesNotMatch(out, /settlement:/);
+  });
+
+  it('prints winner, reason, duration and player losses when finished', async () => {
+    const out = await gameStatusCommand([], async () => ({
+      ...sampleGame,
+      tick: 5120,
+      status: 'finished',
+      victory: { declared: true, winner_id: 'p1', reason: 'elimination' },
+      settlement: {
+        winner_id: 'p1',
+        reason: 'elimination',
+        victory_rule: 'elimination',
+        start_tick: 0,
+        declared_tick: 5120,
+        duration_ticks: 5120,
+        players: [
+          {
+            player_id: 'p1',
+            team_id: 'p1',
+            is_alive: true,
+            winner: true,
+            units_killed: 14,
+            units_lost: 6,
+            buildings_destroyed: 3,
+            buildings_lost: 1,
+          },
+          {
+            player_id: 'p2',
+            team_id: 'p2',
+            is_alive: false,
+            units_killed: 6,
+            units_lost: 14,
+            buildings_destroyed: 1,
+            buildings_lost: 3,
+          },
+        ],
+      },
+    }));
+    assert.match(out, /status: .*finished/);
+    assert.match(out, /winner: .*p1/);
+    assert.match(out, /reason: elimination/);
+    assert.match(out, /duration: 5120 ticks/);
+    assert.match(out, /p1 killed=14 lost=6 buildings_destroyed=3 buildings_lost=1/);
+    assert.match(out, /p2 killed=6 lost=14 buildings_destroyed=1 buildings_lost=3/);
+  });
+
+  it('treats a missing status as running', async () => {
+    const { status: _status, ...legacy } = sampleGame;
+    const out = await gameStatusCommand([], async () => legacy);
+    assert.match(out, /status: .*running/);
+    assert.doesNotMatch(out, /winner:/);
   });
 
   it('prints formatted error', async () => {

@@ -229,6 +229,39 @@ describe("planet command executor", () => {
     });
   });
 
+  it("GAME_FINISHED 拒绝时提示对局已结束并链到结算页", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      request_id: "req-finished",
+      accepted: false,
+      results: [
+        {
+          command_index: 0,
+          status: "rejected",
+          code: "GAME_FINISHED",
+          message: "game finished: victory already declared, commands are no longer accepted",
+        },
+      ],
+    });
+
+    await submitPlanetCommand({
+      commandType: "build",
+      planetId: "planet-1-1",
+      execute,
+    });
+
+    expect(useNotificationsStore.getState().toasts[0]).toMatchObject({
+      kind: "danger",
+      title: "对局已结束",
+      body: "对局已结束，请前往结算页查看战报。",
+      href: "/settlement",
+    });
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      status: "failed",
+      authoritativeCode: "GAME_FINISHED",
+      authoritativeMessage: "对局已结束，请前往结算页查看战报。",
+    });
+  });
+
   it("本地提交失败时同样弹出失败 toast", async () => {
     const execute = vi.fn().mockRejectedValue(new Error("fetch failed"));
 

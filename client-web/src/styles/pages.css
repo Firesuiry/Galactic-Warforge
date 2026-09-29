@@ -1212,6 +1212,49 @@
   background: rgba(255, 180, 84, 0.12);
 }
 
+.game-reset-banner--below {
+  top: 116px;
+}
+
+.lobby-finished {
+  margin: 8px 0 0;
+  color: #ffb454;
+  font-weight: 700;
+}
+
+.settlement-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.settlement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.settlement-table th,
+.settlement-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.settlement-table th {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.settlement-row--self td {
+  background: var(--accent-soft);
+}
+
+.settlement-table .badge {
+  margin-left: 6px;
+}
+
 /* 新局表单 */
 .newgame-form {
   display: flex;

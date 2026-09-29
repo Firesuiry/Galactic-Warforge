@@ -7,6 +7,7 @@ import (
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/model"
+	"siliconworld/internal/terrain"
 )
 
 // 黑雾（E1–E3）验收测试：实体化进攻、威胁成长、袭击目标与预警。
@@ -28,7 +29,15 @@ func newBlackFogTestCore(t *testing.T, difficulty string) *GameCore {
 		Planet: mapconfig.PlanetConfig{FaceSize: 64, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
-	return New(cfg, maps, nil, NewEventBus(), nil)
+	core := New(cfg, maps, nil, NewEventBus(), nil)
+	// 战斗夹具不依赖噪声地形：固定坐标的巢穴/电厂必须可进入。
+	ws := core.World()
+	for y := range ws.Grid {
+		for x := range ws.Grid[y] {
+			ws.Grid[y][x].Terrain = terrain.TileBuildable
+		}
+	}
+	return core
 }
 
 func driveBlackFogTicks(core *GameCore, ws *model.WorldState, ticks int) []*model.GameEvent {

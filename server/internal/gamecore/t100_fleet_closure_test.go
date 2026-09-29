@@ -67,9 +67,10 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: ws.PlanetID,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-t100",
-			Type:         model.EnemyForceTypeHive,
-			Position:     model.Position{X: 12, Y: 12},
+			ID:   "enemy-t100",
+			Type: model.EnemyForceTypeHive,
+			// 未编队舰队以地图中心为锚，索敌半径 defaultUngroupedAggroRange；不再全图追击。
+			Position:     model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
 			Strength:     120,
 			SpreadRadius: 2,
 			SpawnTick:    ws.Tick,
@@ -203,9 +204,10 @@ func TestT100FleetCommandsFlowThroughDispatcherAndTickSettlement(t *testing.T) {
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: ws.PlanetID,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-dispatcher-t100",
-			Type:         model.EnemyForceTypeHive,
-			Position:     model.Position{X: 12, Y: 12},
+			ID:   "enemy-dispatcher-t100",
+			Type: model.EnemyForceTypeHive,
+			// 未编队舰队以地图中心为锚，索敌半径 defaultUngroupedAggroRange；不再全图追击。
+			Position:     model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
 			Strength:     120,
 			SpreadRadius: 2,
 			SpawnTick:    ws.Tick,

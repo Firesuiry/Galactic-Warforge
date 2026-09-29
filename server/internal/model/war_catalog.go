@@ -107,6 +107,12 @@ type WarPublicBlueprintCatalogEntry struct {
 	QueryScopes     []string                    `json:"query_scopes,omitempty"`
 	Commands        []string                    `json:"commands,omitempty"`
 	Components      []WarBlueprintComponentSlot `json:"components,omitempty"`
+	// 输出时填充，与结算同源：护甲见 BlueprintCombatClasses，数值取运行时档案。
+	ArmorClass  ArmorClass `json:"armor_class,omitempty"`
+	WeaponClass WeaponType `json:"weapon_class,omitempty"`
+	Attack      int        `json:"attack,omitempty"`
+	Range       float64    `json:"range,omitempty"`
+	MaxHP       int        `json:"max_hp,omitempty"`
 }
 
 // WarfareCatalogView exposes the public authoritative warfare catalog.
@@ -433,6 +439,60 @@ var warBlueprintRuntimeProfiles = map[string]WarBlueprintRuntimeProfile{
 	},
 }
 
+// BlueprintCombatClasses 推导蓝图护甲，并在有档案时返回武器类型。
+// combat_squad：空中域或 drone 平台为 air，否则 heavy。fleet_unit：ship。
+// 无档案时 weapon 为空，目录省略。
+func BlueprintCombatClasses(runtimeClass UnitRuntimeClass, domain UnitDomain, platformClass, blueprintID string) (ArmorClass, WeaponType) {
+	return blueprintArmorClass(runtimeClass, domain, platformClass), blueprintWeaponClass(runtimeClass, blueprintID)
+}
+
+func blueprintArmorClass(runtimeClass UnitRuntimeClass, domain UnitDomain, platformClass string) ArmorClass {
+	switch runtimeClass {
+	case UnitRuntimeClassFleet:
+		return ArmorShip
+	case UnitRuntimeClassCombatSquad:
+		if domain == UnitDomainAir || platformClass == "drone" {
+			return ArmorAir
+		}
+		return ArmorHeavy
+	default:
+		return ""
+	}
+}
+
+func blueprintWeaponClass(runtimeClass UnitRuntimeClass, blueprintID string) WeaponType {
+	stack := blueprintRuntimeStack(blueprintID, runtimeClass)
+	if stack == nil {
+		return ""
+	}
+	return stack.Weapon.Type
+}
+
+func blueprintRuntimeStack(blueprintID string, runtimeClass UnitRuntimeClass) *WarStackRuntimeProfile {
+	profile, ok := warBlueprintRuntimeProfiles[blueprintID]
+	if !ok {
+		return nil
+	}
+	switch runtimeClass {
+	case UnitRuntimeClassFleet:
+		return profile.FleetUnit
+	case UnitRuntimeClassCombatSquad:
+		return profile.Squad
+	default:
+		return nil
+	}
+}
+
+func (entry WarPublicBlueprintCatalogEntry) withDerivedCombatStats() WarPublicBlueprintCatalogEntry {
+	entry.ArmorClass, entry.WeaponClass = BlueprintCombatClasses(entry.RuntimeClass, entry.Domain, "", entry.ID)
+	if stack := blueprintRuntimeStack(entry.ID, entry.RuntimeClass); stack != nil {
+		entry.Attack = stack.Weapon.Damage
+		entry.Range = stack.Weapon.Range
+		entry.MaxHP = stack.HP
+	}
+	return entry
+}
+
 // PublicWarfareCatalog returns the immutable warfare-facing authoritative catalog snapshot.
 func PublicWarfareCatalog() *WarfareCatalogView {
 	return &WarfareCatalogView{
@@ -509,7 +569,7 @@ func cloneWarPublicBlueprintEntry(entry WarPublicBlueprintCatalogEntry) WarPubli
 	entry.QueryScopes = append([]string(nil), entry.QueryScopes...)
 	entry.Commands = append([]string(nil), entry.Commands...)
 	entry.Components = append([]WarBlueprintComponentSlot(nil), entry.Components...)
-	return entry
+	return entry.withDerivedCombatStats()
 }
 
 func cloneWarBlueprintRuntimeProfile(profile WarBlueprintRuntimeProfile) WarBlueprintRuntimeProfile {

@@ -1,6 +1,10 @@
 import type { CommandResponse, EventSnapshotResponse } from "@shared/types";
 
-import { toPlayerFacingMessage } from "@/common/player-facing-error";
+import {
+  isGameFinishedResult,
+  rejectionPlayerMessage,
+  toPlayerFacingMessage,
+} from "@/common/player-facing-error";
 import { sfx } from "@/engine/audio";
 import { isNotificationsFrozen } from "@/features/notifications/notify";
 import { useNotificationsStore } from "@/features/notifications/store";
@@ -29,15 +33,16 @@ function createLocalRequestId(commandType: string) {
  * 命令失败时弹全局 danger toast：工作台抽屉里的文字反馈不够显眼，
  * 玩家需要立刻知道「哪条命令失败、为什么」。
  */
-function notifyCommandFailure(commandType: string, playerMessage: string) {
+function notifyCommandFailure(commandType: string, playerMessage: string, href?: string) {
   if (isNotificationsFrozen()) {
     return;
   }
   useNotificationsStore.getState().push({
     kind: "danger",
-    title: `${translateCommandType(commandType)}失败`,
+    title: href ? "对局已结束" : `${translateCommandType(commandType)}失败`,
     body: playerMessage,
-    mergeKey: `command-fail:${commandType}`,
+    href,
+    mergeKey: href ? "command-fail:GAME_FINISHED" : `command-fail:${commandType}`,
   });
 }
 
@@ -56,13 +61,11 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       sfx.commandOk();
     } else {
       sfx.commandFail();
-      const rawMessage = response.results
-        .map((result) => result.message)
-        .filter(Boolean)
-        .join(" / ");
+      const finished = response.results.some((result) => isGameFinishedResult(result));
       notifyCommandFailure(
         input.commandType,
-        toPlayerFacingMessage(rawMessage || `${input.commandType} rejected`),
+        rejectionPlayerMessage(response.results, `${input.commandType} rejected`),
+        finished ? "/settlement" : undefined,
       );
     }
 

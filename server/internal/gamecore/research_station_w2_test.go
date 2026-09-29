@@ -321,7 +321,7 @@ func TestCombatTechEffectsReachCombatSettlement(t *testing.T) {
 	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 5, Y: 5})
 	base := model.UnitStats(model.UnitTypeSoldier)
 
-	settleCombatTech(ws)
+	settleCombatTech(ws, nil)
 	if unit.Attack != base.Attack || unit.MaxHP != base.MaxHP {
 		t.Fatalf("no tech: stats must stay at baseline, got attack=%d hp=%d", unit.Attack, unit.MaxHP)
 	}
@@ -329,7 +329,7 @@ func TestCombatTechEffectsReachCombatSettlement(t *testing.T) {
 	player.Tech.CompletedTechs["df_kinetic_weapon_damage"] = 2 // +20% 伤害
 	player.Tech.CompletedTechs["df_enhanced_structure"] = 1    // +10% 耐久
 	player.Tech.CompletedTechs["df_energy_shield"] = 3         // +30 护盾（执行体护盾轨道，世界单位无护盾字段）
-	settleCombatTech(ws)
+	settleCombatTech(ws, nil)
 
 	wantDamage := int(float64(base.Attack) * 1.2)
 	if unit.Attack != wantDamage {
@@ -341,7 +341,7 @@ func TestCombatTechEffectsReachCombatSettlement(t *testing.T) {
 	}
 
 	// 幂等：重复结算不叠加。
-	settleCombatTech(ws)
+	settleCombatTech(ws, nil)
 	if unit.Attack != wantDamage || unit.MaxHP != wantHP {
 		t.Fatal("combat tech settlement must rebuild from baseline, not accumulate")
 	}

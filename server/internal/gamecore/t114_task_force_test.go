@@ -353,9 +353,10 @@ func TestT114CommandCapacityPenaltyReducesFleetAttackDamage(t *testing.T) {
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: ws.PlanetID,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-capacity-t114",
-			Type:         model.EnemyForceTypeHive,
-			Position:     model.Position{X: 12, Y: 12},
+			ID:   "enemy-capacity-t114",
+			Type: model.EnemyForceTypeHive,
+			// 拦截姿态的有限交战半径现在会约束索敌；目标放在锚点（地图中心）上。
+			Position:     model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
 			Strength:     300,
 			SpreadRadius: 2,
 			SpawnTick:    ws.Tick,

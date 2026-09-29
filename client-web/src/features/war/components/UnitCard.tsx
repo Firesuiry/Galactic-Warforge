@@ -5,7 +5,9 @@
 
 import {
   UNIT_CARD_RUNTIME_CLASS_LABELS,
+  unitCardArmorLabel,
   unitCardDomainLabel,
+  unitCardWeaponLabel,
   type UnitCardModel,
 } from '@/features/war/unit-card-model';
 
@@ -39,19 +41,17 @@ export function UnitCard({ card, compact = false }: UnitCardProps) {
           ))}
         </dl>
       ) : (
-        <p className="subtle-text unit-card__stats-pending">
-          战斗数值由服务端运行时决定（目录未暴露蓝图数值表）
-        </p>
+        <p className="subtle-text unit-card__stats-pending">战斗数值未知</p>
       )}
 
       <dl className="unit-card__stats unit-card__stats--classes">
         <div>
           <dt>武器类别</dt>
-          <dd>{card.weaponClass ?? '目录未暴露'}</dd>
+          <dd>{unitCardWeaponLabel(card.weaponClass)}</dd>
         </div>
         <div>
           <dt>护甲类别</dt>
-          <dd>{card.armorClass ?? '目录未暴露'}</dd>
+          <dd>{unitCardArmorLabel(card.armorClass)}</dd>
         </div>
       </dl>
 

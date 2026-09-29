@@ -42,6 +42,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   resetSessionStore();
   resetPlanetViewStore();
   resetNotificationsStore();

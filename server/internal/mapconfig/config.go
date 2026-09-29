@@ -58,6 +58,9 @@ type ResourceConfig struct {
 	OilMinYield           int     `yaml:"oil_min_yield"`
 	OilDecayPerTick       int     `yaml:"oil_decay_per_tick"`
 	RenewableRegenPerTick int     `yaml:"renewable_regen_per_tick"`
+	// ContestedCenter forces a small iron/copper cluster near the midpoint of the
+	// first two spawn points. Default maps leave it off.
+	ContestedCenter bool `yaml:"contested_center,omitempty"`
 }
 
 // PlanetConfig defines planet-level scale and generation.
@@ -185,6 +188,9 @@ func Load(path string) (*Config, error) {
 	}
 	if err := validateSpawnPoints(cfg.Planet, cfg.SpawnPoints); err != nil {
 		return nil, err
+	}
+	if cfg.Planet.Resources.ContestedCenter && len(cfg.SpawnPoints) < 2 {
+		return nil, fmt.Errorf("planet.resources.contested_center requires at least 2 spawn_points")
 	}
 
 	return cfg, nil

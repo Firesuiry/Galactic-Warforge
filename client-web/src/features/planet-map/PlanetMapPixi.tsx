@@ -822,6 +822,11 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
 
   /** 点小队标记（C4）：shift=加选/减选；单选同步 selected（详情面板）与音效。 */
   function handleSelectSquad(squad: CombatSquad, additive: boolean) {
+    if (squad.owner_id !== session.playerId) {
+      setSelectedSquads([]);
+      setSelected({ kind: 'squad', id: squad.id, position: squad.position });
+      return;
+    }
     if (additive) {
       const next = selectedSquads.includes(squad.id)
         ? selectedSquads.filter((id) => id !== squad.id)

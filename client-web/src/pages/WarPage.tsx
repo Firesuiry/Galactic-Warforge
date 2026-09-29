@@ -33,6 +33,7 @@ import {
   getBlueprintSlotComponents,
   inferBlueprintRole,
 } from '@/features/war/format';
+import { WarFeedbackBanner } from '@/features/war/WarFeedbackBanner';
 import { useWarCommand } from '@/features/war/use-war-command';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -639,10 +640,7 @@ export function WarPage() {
           </div>
 
           {feedbacks.blueprint?.map((feedback, index) => (
-            <div className={`status-banner status-banner--${feedback.tone}`} key={`${feedback.title}-${index}`}>
-              <strong>{feedback.title}</strong>
-              {feedback.detail ? <span>{feedback.detail}</span> : null}
-            </div>
+            <WarFeedbackBanner feedback={feedback} key={`${feedback.title}-${index}`} />
           ))}
 
           <div className="war-section-grid">
@@ -794,10 +792,7 @@ export function WarPage() {
           </div>
 
           {feedbacks.industry?.map((feedback, index) => (
-            <div className={`status-banner status-banner--${feedback.tone}`} key={`${feedback.title}-${index}`}>
-              <strong>{feedback.title}</strong>
-              {feedback.detail ? <span>{feedback.detail}</span> : null}
-            </div>
+            <WarFeedbackBanner feedback={feedback} key={`${feedback.title}-${index}`} />
           ))}
 
           {/* C4 主路径：生产队列面板（生产线/枢纽 ready payloads/蓝图卡片量产/世界单位生产） */}
@@ -940,10 +935,7 @@ export function WarPage() {
           </div>
 
           {feedbacks.theater?.map((feedback, index) => (
-            <div className={`status-banner status-banner--${feedback.tone}`} key={`${feedback.title}-${index}`}>
-              <strong>{feedback.title}</strong>
-              {feedback.detail ? <span>{feedback.detail}</span> : null}
-            </div>
+            <WarFeedbackBanner feedback={feedback} key={`${feedback.title}-${index}`} />
           ))}
 
           <div className="war-section-grid">
@@ -1071,10 +1063,7 @@ export function WarPage() {
           </div>
 
           {feedbacks.reports?.map((feedback, index) => (
-            <div className={`status-banner status-banner--${feedback.tone}`} key={`${feedback.title}-${index}`}>
-              <strong>{feedback.title}</strong>
-              {feedback.detail ? <span>{feedback.detail}</span> : null}
-            </div>
+            <WarFeedbackBanner feedback={feedback} key={`${feedback.title}-${index}`} />
           ))}
 
           <div className="war-section-grid">

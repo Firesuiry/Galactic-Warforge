@@ -358,6 +358,9 @@ func flattenSpawnArea(ws *model.WorldState, planet *mapmodel.Planet, center mode
 		if planet != nil && y < len(planet.Terrain) && x < len(planet.Terrain[y]) {
 			planet.Terrain[y][x] = terrain.TileBuildable
 		}
+		if planet != nil && y < len(planet.Elevation) && x < len(planet.Elevation[y]) && planet.Elevation[y][x] < 0.4 {
+			planet.Elevation[y][x] = 0.4
+		}
 	}
 }
 

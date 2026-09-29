@@ -17,21 +17,22 @@ function card(overrides: Partial<UnitCardModel> = {}): UnitCardModel {
     ],
     statsSource: 'runtime',
     weaponClass: 'cannon',
-    countersText: '地面单位擅长占领与推进（精确克制系数表待服务端目录暴露，以上为方向性说明）',
+    armorClass: 'heavy',
+    countersText: '加农克制重甲、建筑；被轻甲、空中克制',
     ...overrides,
   };
 }
 
 describe('UnitCard', () => {
-  it('渲染名称/域/数值/武器类别/克制说明', () => {
+  it('渲染名称/域/数值/类别/克制说明', () => {
     render(<UnitCard card={card()} />);
     expect(screen.getByTestId('unit-card')).toBeInTheDocument();
     expect(screen.getByText('剃刀突击机甲')).toBeInTheDocument();
     expect(screen.getByText('地面')).toBeInTheDocument();
     expect(screen.getByText('240/300')).toBeInTheDocument();
-    expect(screen.getByText('cannon')).toBeInTheDocument();
-    expect(screen.getByText('目录未暴露')).toBeInTheDocument(); // 护甲类别
-    expect(screen.getByText(/克制系数表待服务端/)).toBeInTheDocument();
+    expect(screen.getByText('加农')).toBeInTheDocument();
+    expect(screen.getByText('重甲')).toBeInTheDocument();
+    expect(screen.getByText(/加农克制重甲/)).toBeInTheDocument();
   });
 
   it('科技门槛：锁定态显示门槛 tech', () => {
@@ -41,14 +42,20 @@ describe('UnitCard', () => {
     expect(screen.getByText(/需要科技：地面军事 I/)).toBeInTheDocument();
   });
 
-  it('目录未暴露数值时的降级展示', () => {
-    render(<UnitCard card={card({ stats: [], statsSource: 'none', weaponClass: undefined })} />);
-    expect(screen.getByText(/战斗数值由服务端运行时决定/)).toBeInTheDocument();
-    expect(screen.getAllByText('目录未暴露')).toHaveLength(2);
+  it('缺数值与类别时显示未知', () => {
+    render(<UnitCard card={card({
+      stats: [],
+      statsSource: 'none',
+      weaponClass: undefined,
+      armorClass: undefined,
+    })} />);
+    expect(screen.getByText('战斗数值未知')).toBeInTheDocument();
+    expect(screen.getAllByText('未知')).toHaveLength(2);
+    expect(screen.queryByText('目录未暴露')).not.toBeInTheDocument();
   });
 
   it('紧凑模式隐藏克制说明', () => {
     render(<UnitCard card={card()} compact />);
-    expect(screen.queryByText(/克制系数表/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/加农克制/)).not.toBeInTheDocument();
   });
 });

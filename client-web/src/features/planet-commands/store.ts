@@ -7,7 +7,13 @@ import type {
   Position,
 } from "@shared/types";
 
-import { toPlayerFacingFeedback, toPlayerFacingMessage } from "@/common/player-facing-error";
+import {
+  GAME_FINISHED_MESSAGE,
+  isGameFinishedResult,
+  isGameFinishedText,
+  toPlayerFacingFeedback,
+  toPlayerFacingMessage,
+} from "@/common/player-facing-error";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
 
 export type CommandJournalStatus = "pending" | "succeeded" | "failed";
@@ -211,6 +217,9 @@ const ASYNC_AUTHORITATIVE_RULES: AsyncAuthoritativeRule[] = [
 ];
 
 function resolveNextHint(entry: PlanetCommandJournalEntry) {
+  if (entry.authoritativeCode === "GAME_FINISHED" || isGameFinishedText(entry.debugMessage)) {
+    return "对局已结束，请前往结算页查看战报。";
+  }
   // 提示推导依赖服务端英文原文（debugMessage），玩家向的
   // authoritativeMessage 已被翻译成中文，不能直接用于模式匹配。
   const matchSource = entry.debugMessage ?? entry.authoritativeMessage;
@@ -381,16 +390,20 @@ function reconcileCommandResultEntry(
 ) {
   const payload = asRecord(event.payload) ?? {};
   const rawMessage = asString(payload.message);
+  const rawCode = asString(payload.code);
+  const finished = isGameFinishedResult({ code: rawCode, message: rawMessage });
   const status = resolveAuthoritativeStatus(payload);
   const nextEntry = {
     ...upsertRelatedEvent(entry, event),
     status,
-    authoritativeCode: asString(payload.code) || entry.authoritativeCode,
-    authoritativeMessage: rawMessage
-      ? status === "failed"
-        ? toPlayerFacingMessage(rawMessage)
-        : toPlayerFacingFeedback(rawMessage)
-      : entry.authoritativeMessage,
+    authoritativeCode: finished ? (rawCode || "GAME_FINISHED") : (rawCode || entry.authoritativeCode),
+    authoritativeMessage: finished
+      ? GAME_FINISHED_MESSAGE
+      : rawMessage
+        ? status === "failed"
+          ? toPlayerFacingMessage(rawMessage)
+          : toPlayerFacingFeedback(rawMessage)
+        : entry.authoritativeMessage,
     debugMessage: rawMessage && status === "failed" ? rawMessage : entry.debugMessage,
     authoritativeSource: source,
     pendingRecovery: false,
@@ -510,6 +523,7 @@ export const usePlanetCommandStore = create<
         .map((result) => result.message)
         .filter(Boolean)
         .join(" / ");
+      const finishedResult = input.response.results.find((result) => isGameFinishedResult(result));
       const nextEntry: PlanetCommandJournalEntry = {
         requestId: input.response.request_id,
         commandType: input.commandType,
@@ -520,10 +534,14 @@ export const usePlanetCommandStore = create<
         acceptedMessage,
         authoritativeCode: input.response.accepted
           ? undefined
-          : input.response.results[0]?.code,
+          : finishedResult
+            ? (finishedResult.code || "GAME_FINISHED")
+            : input.response.results[0]?.code,
         authoritativeMessage: input.response.accepted
           ? undefined
-          : toPlayerFacingMessage(rawResultMessage),
+          : finishedResult
+            ? GAME_FINISHED_MESSAGE
+            : toPlayerFacingMessage(rawResultMessage),
         debugMessage: input.response.accepted ? undefined : rawResultMessage || undefined,
         authoritativeSource: input.response.accepted ? undefined : "response",
         relatedEventIds: [],

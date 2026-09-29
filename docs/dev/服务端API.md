@@ -845,8 +845,9 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 响应字段:
   - `planet_id` / `system_id` / `name` / `discovered` / `kind` / `map_width` / `map_height` / `surface` / `tick`
   - `bounds`: 本次实际返回的主图集窗口范围，字段为 `x` / `y` / `width` / `height`
-  - `surface_patches`: 可选跨面补片数组，每片独立返回 `bounds/terrain/visible/explored`。未探索地形为 `unknown`，补片资源仅在已探索格返回；实体合并到主响应并去重
+  - `surface_patches`: 可选跨面补片数组，每片独立返回 `bounds/terrain/height/visible/explored`。未探索地形为 `unknown`，补片资源仅在已探索格返回；实体合并到主响应并去重。`height` 可选，未探索格为 0 或不下发
   - `terrain`: 当前窗口内的地形切片
+  - `height`: 可选，与 `terrain` 同形状的高度切片（0..1，omitempty）。旧客户端可忽略。未探索格为 0 或不下发，避免雾区泄露地形
   - `visible` / `explored`: 当前窗口内的迷雾切片
   - `buildings` / `units` / `resources`: 当前窗口内可见实体
   - `buildings` 为 `model.Building` 直出：传送带类建筑（`conveyor_belt_*`）携带 `conveyor`（`input` / `output` / `max_stack` / `throughput`），其中 `conveyor.buffer` 为带内物品堆数组（`item_id` / `quantity`，队首 = 即将送出的一端，前端物流动画依赖该字段）；采集类建筑 `runtime.functions.collect.resource_kind` 为正在采集的资源种类（由服务端按脚下矿脉同步）
@@ -975,7 +976,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 行星侦察不再只有旧式“看见/没看见”；当前 runtime 会同时返回 `contacts`（完整接触对象）和 `detections`（为旧查询/渲染保留的摘要投影）
 - 响应字段:
   - 通用字段：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`
-  - `combat_squads`：地面部署小队，包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `domain` / `base_frame_id` / `platform_class` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `sustainment` / `state` / `target_enemy_id` / `last_attack_tick`
+  - `combat_squads`：地面部署小队。己方小队始终返回；敌方小队仅当其所在格处于当前玩家视野内时返回（与单位雾一致）。字段包含 `id` / `owner_id` / `planet_id` / `source_building_id` / `blueprint_id` / `domain` / `base_frame_id` / `platform_class` / `count` / `hp` / `max_hp` / `shield` / `weapon` / `sustainment` / `state` / `target_enemy_id` / `last_attack_tick`
   - `combat_squads[].platform_class`：当前 authoritative 会按蓝图运行态归类为 `mech` / `vehicle` / `drone`
   - `combat_squads[].sustainment`：地面单位 authoritative 补给态，字段结构与 `GET /world/systems/{system_id}/runtime.fleets[].sustainment` 一致
   - `frontlines`：行星层 authoritative 前线据点，包含 `id` / `planet_id` / `owner_id` / `type` / `position` / `status` / `control` / `fortification` / `obstacle_level` / `supply_flow` / `last_orbital_support_tick` / `updated_tick`
@@ -1241,7 +1242,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `warfare`：战争目录聚合，包含 `base_frames` / `base_hulls` / `components` / `public_blueprints`
   - `warfare.base_frames[]` / `warfare.base_hulls[]`：当前会在 `budgets` 中额外暴露 `signal_capacity`，用于蓝图校验时的信号/隐形预算
   - `warfare.components[]`：当前会额外暴露 `signal_load` / `stealth_rating`，用于蓝图校验时的签名负荷与隐蔽加成
-  - `warfare.public_blueprints`：公开预置蓝图目录，包含 `id` / `name` / `domain` / `source` / `base_frame_id` / `base_hull_id` / `visible_tech_id` / `runtime_class` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `components`
+  - `warfare.public_blueprints`：公开预置蓝图目录，包含 `id` / `name` / `domain` / `source` / `base_frame_id` / `base_hull_id` / `visible_tech_id` / `runtime_class` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `components`，以及与结算同源的 `armor_class` / `weapon_class` / `attack` / `range` / `max_hp`（空中小队或 drone 平台为 `air`，其余地面小队为 `heavy`，舰队为 `ship`；武器类取蓝图运行时档案）
 - 响应示例:
 ```json
 {
@@ -2339,7 +2340,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 
 ### 球面接缝场景查询
 
-`GET /world/planets/{planet_id}/scene` 新增可选整数 `near_x`、`near_y`、`radius`。radius 为 0..128；非零时须同时提供有效图集中心坐标。原 x/y/width/height 仍裁剪图集矩形。响应增加 `surface_patches: [{bounds, terrain, visible, explored}]`；每片采用独立图集坐标，实体集合合并至主响应并去重，可见性规则同主窗口。scene、overview、planet、planet summary、state summary、agent briefing、fog 与世界快照均返回 `surface` 元数据。
+`GET /world/planets/{planet_id}/scene` 新增可选整数 `near_x`、`near_y`、`radius`。radius 为 0..128；非零时须同时提供有效图集中心坐标。原 x/y/width/height 仍裁剪图集矩形。响应增加 `surface_patches: [{bounds, terrain, height, visible, explored}]`；`height` 为可选 0..1 高度切片。每片采用独立图集坐标，实体集合合并至主响应并去重，可见性规则同主窗口。scene、overview、planet、planet summary、state summary、agent briefing、fog 与世界快照均返回 `surface` 元数据。
 
 ### 球面路径规划
 

@@ -9,6 +9,8 @@ const (
 
 	VictoryReasonElimination = "elimination"
 	VictoryReasonGameWin     = "game_win"
+	// VictoryReasonTimeLimit 时间到点按战损计分判胜。
+	VictoryReasonTimeLimit = "time_limit"
 )
 
 // VictoryState captures the resolved winner and why the game ended.

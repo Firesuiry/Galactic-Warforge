@@ -78,6 +78,7 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 				PeriodDays:     orbitPeriodDays(orbitAU, sys.Star.Mass),
 				InclinationDeg: rng.RangeFloat(-planetInclinationMax, planetInclinationMax),
 			}
+			terrainGrid, elevation := generateTerrain(planetRNG, cfg.Planet.Terrain, 3*cfg.Planet.FaceSize, 2*cfg.Planet.FaceSize)
 			planet := &mapmodel.Planet{
 				ID:              planetID,
 				Name:            fmt.Sprintf("Planet-%d-%d", i+1, j+1),
@@ -90,7 +91,8 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 				Height:          2 * cfg.Planet.FaceSize,
 				Seed:            planetSeed,
 				ResourceDensity: cfg.Planet.ResourceDensity,
-				Terrain:         generateTerrain(planetRNG, cfg.Planet.Terrain, 3*cfg.Planet.FaceSize, 2*cfg.Planet.FaceSize),
+				Terrain:         terrainGrid,
+				Elevation:       elevation,
 				Environment:     generateEnvironment(planetRNG, orbit, sys.Star, cfg.Planet.Environment),
 			}
 			planet.Resources = generateResources(planetRNG, planet, cfg.Planet.Resources)
@@ -106,6 +108,8 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 
 	galaxy.DistanceMatrix = buildDistanceMatrix(galaxy.SystemIDs, u.Systems)
 	applySpawnPoints(u, cfg.SpawnPoints)
+	ensureSpawnPads(u)
+	placeContestedCenter(u.PrimaryPlanet(), cfg.Planet.Resources)
 	return u
 }
 

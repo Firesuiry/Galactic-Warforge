@@ -1,5 +1,7 @@
 # 项目操作与约定
 
+- 2026-09-29 遭遇战骨架：`server/map-skirmish.yaml`（face 96、同面双出生点、`resources.contested_center`）配合 `server/config-skirmish.yaml`（p2 bot hard；pace_research 6 / pace_build 2 / pace_output 2 / time_limit_ticks 54000 / threat_growth_scale 1.5）。启动：`cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-skirmish.yaml`。地形改为球面 3D 噪声，scene 可选 `height`。默认 map.yaml 仍 face_size 816、节奏倍率 1。旧种子的地形/资源位置不再与白噪声生成器一致。缺口余项见 [缺失内容清单](docs/guide/缺失内容清单.md)。
+
 - 2026-09-18 DSP 行星内全量对齐进行中：冻结范围与验收基线见 [dsp行星内生产对齐范围](docs/dev/dsp行星内生产对齐范围.md)；数据工具链 develop_tools/dsp-catalog（scope.json=冻结闭包，mapping.json=未匹配清单，catalogdump 生成 current_dump.json 后跑 build_scope.py 即得差距）。W1 目录对齐已合 main（物品102/资源18/配方118/科技147/建筑62，parity+closure 测试在 model/dsp_alignment_test.go）。
 - 用户要求：复杂游戏计算留在后端；浏览器负责 3D 表现与操作，目标为《戴森球计划》式工业与星球质感，不能把能转动的球体当成画质完成。
 - 行星与恒星系默认 3D，`?view=2d` 切平面战术；3D 必须实际浏览器验证建造、兵力移动和局势显示。
@@ -43,4 +45,6 @@
 - 2026-09-28 缺失内容清单实施启动：目标文档 docs/guide/缺失内容清单.md，拍板 docs/guide/对局设计决策.md（D1 60-90分钟遭遇战主模式/D2 机甲英雄+建造半径/D3 黑雾+bot+PvP 三位一体/D4 暂缓/D5 顾问+对手/D6 双轨划界），进度追踪 docs/guide/缺失内容清单-进度.md。M1 服务端核心已完成：单位统一实时移动/自动交战/unit_order 指令集/小队实体化/地面 PvP；执行体（机甲）保留瞬移与手动一击至 I16；单位寻路预算上限 800 格，占位不重叠+侧移绕行。
 - 2026-09-28 落地视图与失败提示：登录/根路径默认直达 active_planet 的 3D 行星视图（OnlyGuests 改跳 "/"，由 routes 的 ActivePlanetLanding 统一决定落地页，回退 /galaxy）；命令失败三条提示路径都要中文+显眼——HTTP 拒绝走 executor 弹 danger toast，执行期失败靠 event-toasts 的 command_result 映射兜底（accepted 后 executor 不弹），日志文案在 store 写入时翻译（toPlayerFacingMessage 错误兜底/toPlayerFacingFeedback 成功保留原文）；提示推导（resolveNextHint/error-hints）依赖英文原文，必须用 debugMessage 匹配。planet-terrain-chunks 环绕像素测试在全量并行下偶发 5s 超时，单跑稳定通过（既有性能抖动）。
 - 2026-09-29 F1 新局热重置落地：服务端从“一局一生”改为 Runtime/Session 原子换局（startup.Runtime 持有 atomic.Pointer[Session]，gateway 全部 handler 经 rt.Current() 访问）；新增 POST /games/new（仅 admin）与 GET /games/current；victory_rule 新增 sandbox；快照 store 按局隔离防止跨局 rollback 污染；autosave/tick goroutine 由 Runtime 交接；CLI 新增 game_new/game_status（game_new 成功后自动切到新局 admin key）。注意 LoadRuntime 现在不启动 goroutine，须显式 rt.Start()（main.go 已接）。
+- 2026-09-29 F2 客户端结算：路由 `/settlement`（AppShell 已登录）。终局提示记 `sessionStorage` 键 `gw.settlement-prompted`（started_at::declared_tick），同一局不重复刷。命令拒绝码 `GAME_FINISHED` 走行星 executor、战争 `useWarCommand`、SSE `command_result`。终局不登出。CLI `game_status` 打 status/战损。
+
 - 2026-09-29 F4 每人独立的行星焦点落地：命令按目标行星路由（gamecore/command_routing.go 的 resolveCommandWorld：target.planet_id 显式提示 → 目标实体所在行星 → 玩家 focus_planet_id → 全局活动行星兜底）；switch_active_planet 只写 PlayerState.FocusPlanetID，不再改全局 activePlanetID、不拖拽执行体；settleWarIndustry 小队落地按订单 SourcePlanetID 反查世界、settleDistributors 去掉 active 门控（每颗行星配送器服务本行星执行体）、执行体并发占用跨行星聚合（countActiveExecutorUsage 收 worlds）。CLI 行星层命令普遍支持 --planet；shared-client 同名函数加可选 planetId（后兼容），cmdDeploySquad 的 target 不再带 planet_id（落点只在 payload）。测试 server/internal/gamecore/f4_planet_focus_test.go（TestF4* 五个）。

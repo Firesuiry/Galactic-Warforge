@@ -1,10 +1,41 @@
 import { surfaceFace, surfaceOffset } from '@shared/surface';
+import type { PlanetSceneView } from '@shared/types';
 import * as THREE from 'three';
 import { getBuildingFootprint, getFogState, type PlanetRenderView } from '../model';
 import { tileNormal, surfaceTileSize } from './projection';
 import type { PlanetSurfaceData } from './terrain';
 
 const RELIEF_TERRAINS = new Set(['blocked', 'rock', 'mountain', 'mountains']);
+const TERRAIN_HEIGHT_TILES = 3.2;
+
+/** Radial lift so authoritative height moves mesh vertices off the sphere. */
+export function displaceTerrainVertex(normal: { x: number; y: number; z: number }, radius: number, height: number, amplitude = 0) {
+  const lift = (Number.isFinite(height) ? height : 0) * amplitude;
+  const r = radius + lift;
+  return { x: normal.x * r, y: normal.y * r, z: normal.z * r };
+}
+
+function heightGridHasRelief(grid?: number[][]) {
+  return grid?.some(row => row?.some(value => value !== 0)) ?? false;
+}
+
+function sceneHasAuthoredHeight(planet: PlanetSceneView) {
+  return heightGridHasRelief(planet.height) || (planet.surface_patches?.some(patch => heightGridHasRelief(patch.height)) ?? false);
+}
+
+/** Nearest-tile sample of the optional scene height field. Missing data is flat. */
+export function sampleTerrainHeight(planet: PlanetSceneView, x: number, y: number) {
+  const tileX = Math.round(x);
+  const tileY = Math.round(y);
+  const read = (grid: number[][] | undefined, originX: number, originY: number) => {
+    const value = grid?.[tileY - originY]?.[tileX - originX];
+    return typeof value === 'number' ? value : undefined;
+  };
+  const patch = planet.surface_patches?.find(p => tileX >= p.bounds.x && tileY >= p.bounds.y && tileX < p.bounds.x + p.bounds.width && tileY < p.bounds.y + p.bounds.height);
+  const patched = patch ? read(patch.height, patch.bounds.x, patch.bounds.y) : undefined;
+  if (patched !== undefined) return patched;
+  return read(planet.height, planet.bounds.x, planet.bounds.y) ?? 0;
+}
 
 function reliefNoise(x: number, y: number) {
   const cell = (a: number, b: number) => {
@@ -104,7 +135,9 @@ export function createTerrainRelief({ planet, fog }: PlanetSurfaceData, radius: 
  * Material is owned by the global surface; this mesh owns only its geometry.
  */
 export function createLocalSurface(planet: PlanetRenderView, radius: number, material: THREE.MeshStandardMaterial) {
-  if (!('bounds' in planet) || planet.surface.face_size * 3 <= 512) return null;
+  if (!('bounds' in planet)) return null;
+  if (planet.surface.face_size * 3 <= 512 && !sceneHasAuthoredHeight(planet)) return null;
+  const amplitude = surfaceTileSize(radius, planet.surface.face_size) * TERRAIN_HEIGHT_TILES;
   const positions: number[] = [], normals: number[] = [], indices: number[] = [];
   const size = planet.surface.face_size;
   for (const b of [planet.bounds, ...(planet.surface_patches ?? []).map(p=>p.bounds)]) for (let face = 0; face < 6; face++) {
@@ -114,9 +147,11 @@ export function createLocalSurface(planet: PlanetRenderView, radius: number, mat
     const nx = Math.min(320, Math.ceil((right-left)*2)), ny = Math.min(320, Math.ceil((bottom-top)*2));
     const start = positions.length / 3;
     for (let y = 0; y <= ny; y++) for (let x = 0; x <= nx; x++) {
-      const normal = tileNormal({x:left-.5+x/nx*(right-left),y:top-.5+y/ny*(bottom-top)},planet.surface.face_size,face);
+      const tx = left-.5+x/nx*(right-left), ty = top-.5+y/ny*(bottom-top);
+      const normal = tileNormal({x:tx,y:ty},planet.surface.face_size,face);
+      const lifted = displaceTerrainVertex(normal, radius, sampleTerrainHeight(planet, tx, ty), amplitude);
       normals.push(normal.x,normal.y,normal.z);
-      positions.push(normal.x*radius,normal.y*radius,normal.z*radius);
+      positions.push(lifted.x,lifted.y,lifted.z);
     }
     for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
       const a=start+y*(nx+1)+x,c=a+nx+1;

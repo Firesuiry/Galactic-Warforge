@@ -119,7 +119,7 @@ func TestU6CombatTechReachesDefenseBuildings(t *testing.T) {
 
 	player.Tech.CompletedTechs["df_kinetic_weapon_damage"] = 2 // +20%
 	player.Tech.CompletedTechs["df_enhanced_structure"] = 1    // +10%
-	settleCombatTech(ws)
+	settleCombatTech(ws, nil)
 
 	if got, want := turret.Runtime.Functions.Combat.Attack, int(float64(baseAttack)*1.2); got != want {
 		t.Fatalf("turret attack = %d, want %d", got, want)
@@ -128,7 +128,7 @@ func TestU6CombatTechReachesDefenseBuildings(t *testing.T) {
 		t.Fatalf("turret max HP = %d, want %d", got, want)
 	}
 	// 幂等：重复结算不叠加。
-	settleCombatTech(ws)
+	settleCombatTech(ws, nil)
 	if got := turret.Runtime.Functions.Combat.Attack; got != int(float64(baseAttack)*1.2) {
 		t.Fatal("combat tech on buildings must not accumulate")
 	}

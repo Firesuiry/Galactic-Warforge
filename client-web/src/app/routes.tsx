@@ -14,6 +14,7 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { PlanetPage } from '@/pages/PlanetPage';
 import { ReplayPage } from '@/pages/ReplayPage';
+import { SettlementPage } from '@/pages/SettlementPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { TechPage } from '@/pages/TechPage';
 import { WarPage } from '@/pages/WarPage';
@@ -76,6 +77,7 @@ export function AppRoutes() {
         <Route path="/overview" element={<OverviewPage />} />
         <Route path="/lobby" element={<LobbyPage />} />
         <Route path="/lobby/new" element={<NewGamePage />} />
+        <Route path="/settlement" element={<SettlementPage />} />
         <Route path="/tech" element={<TechPage />} />
         <Route path="/war" element={<WarPage />} />
         <Route path="/agents" element={<AgentsPage />} />

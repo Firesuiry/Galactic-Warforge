@@ -19,6 +19,7 @@ const GAME_SUMMARY = {
     { player_id: 'p3', role: 'commander', team_id: 'team-b', is_alive: false },
   ],
   victory: { declared: false },
+  status: 'running',
 };
 
 function mockFetchWithGame(game: unknown) {
@@ -60,8 +61,10 @@ describe('LobbyPage', () => {
     expect(screen.getByText('我')).toBeInTheDocument();
     // admin 入口
     expect(screen.getByRole('link', { name: /开新局/ })).toHaveAttribute('href', '/lobby/new');
-    // 未宣判胜利时不显示 victory 条
+    // 未宣判胜利时不显示 victory 条；进行中不显示结算入口
     expect(screen.queryByText(/对局已宣判/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '查看结算' })).not.toBeInTheDocument();
+    expect(screen.queryByText('对局已结束')).not.toBeInTheDocument();
   });
 
   it('非 admin 玩家看不到开新局入口', async () => {
@@ -86,6 +89,32 @@ describe('LobbyPage', () => {
     expect(await screen.findByText(/对局已宣判：胜者 p1/)).toBeInTheDocument();
     expect(screen.getByText(/（队伍 p1）/)).toBeInTheDocument();
     expect(screen.getByText(/· elimination/)).toBeInTheDocument();
+    // 旧响应缺 status 时视为进行中，不显示结算入口
+    expect(screen.queryByRole('link', { name: '查看结算' })).not.toBeInTheDocument();
+  });
+
+  it('status=finished 时英雄区显示对局已结束和查看结算', async () => {
+    loginAs('p1');
+    mockFetchWithGame({
+      ...GAME_SUMMARY,
+      status: 'finished',
+      victory: { declared: true, winner_id: 'p1', reason: 'elimination' },
+      settlement: {
+        winner_id: 'p1',
+        reason: 'elimination',
+        victory_rule: 'elimination',
+        start_tick: 0,
+        declared_tick: 5120,
+        duration_ticks: 5120,
+        players: [],
+      },
+    });
+
+    renderApp(['/lobby']);
+
+    const hero = (await screen.findByRole('heading', { name: '对局大厅' })).closest('section');
+    expect(hero).toHaveTextContent('对局已结束');
+    expect(hero?.querySelector('a[href="/settlement"]')).toHaveTextContent('查看结算');
   });
 
   it('开新局成功后展示提示条', async () => {

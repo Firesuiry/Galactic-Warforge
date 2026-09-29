@@ -4,17 +4,34 @@ import {
   createNewGame, fetchCurrentGame, setAuth,
 } from '../api.js';
 import type { GameSummary, NewGamePlayer, NewGameRequest } from '../api.js';
+import { gameStatusOf } from '../../../shared-client/src/game.js';
 import { fmtError } from '../format.js';
 import { getStringOption, hasFlag, parseArgs } from './args.js';
 
 function formatGameSummary(game: GameSummary): string {
+  const status = gameStatusOf(game);
   const lines: string[] = [
+    `status: ${status === 'finished' ? chalk.yellow(status) : chalk.green(status)}`,
     `seed: ${chalk.cyan(game.map_seed)}  tick: ${chalk.cyan(String(game.tick))}  tick rate: ${game.max_tick_rate}/s`,
     `enemy difficulty: ${game.enemy_difficulty}  victory mode: ${game.victory_mode}`,
     `started at: ${game.started_at}`,
   ];
   if (game.victory.declared) {
     lines.push(`victory: ${chalk.green(game.victory.winner_id ?? '')} (${game.victory.reason ?? ''})`);
+  }
+  if (status === 'finished') {
+    const report = game.settlement;
+    if (!report) {
+      lines.push('settlement: (missing)');
+    } else {
+      lines.push(`winner: ${chalk.green(report.winner_id)}  reason: ${report.reason}  duration: ${report.duration_ticks} ticks`);
+      lines.push('settlement:');
+      for (const player of report.players ?? []) {
+        lines.push(
+          `  ${player.player_id} killed=${player.units_killed} lost=${player.units_lost} buildings_destroyed=${player.buildings_destroyed} buildings_lost=${player.buildings_lost}`,
+        );
+      }
+    }
   }
   lines.push('players:');
   for (const player of game.players) {
@@ -138,7 +155,7 @@ export async function gameStatusCommand(
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
-    return 'game_status\n  查询当前对局概要：seed/tick/难度/胜利模式/玩家列表（不含 key）';
+    return 'game_status\n  查询当前对局概要：status/seed/tick/难度/胜利模式/玩家列表（不含 key）；finished 时附带胜者、原因、时长 tick 与玩家战损';
   }
 
   try {

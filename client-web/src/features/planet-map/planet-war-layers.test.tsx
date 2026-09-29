@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CombatSquad, WarTheaterView } from '@shared/types';
 
-import { PlanetSquadLayer } from '@/features/planet-map/PlanetSquadLayer';
+import { PlanetSquadLayer, squadIconKey } from '@/features/planet-map/PlanetSquadLayer';
 import { PlanetTheaterControls } from '@/features/planet-map/PlanetTheaterControls';
 import { PlanetTheaterLayer } from '@/features/planet-map/PlanetTheaterLayer';
 import { resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
@@ -48,10 +48,18 @@ describe('PlanetSquadLayer', () => {
       />,
     );
     const markers = screen.getAllByRole('button');
-    expect(markers).toHaveLength(1);
-    expect(markers[0].style.left).toBe('264px'); // (5 + 0.5) * 48
-    await user.click(markers[0]);
+    expect(markers).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '小队 sq-1' }).style.left).toBe('264px');
+    expect(screen.getByRole('button', { name: '敌方小队 sq-2' })).toHaveClass('planet-squad-marker--hostile');
+    expect(screen.queryByRole('button', { name: /sq-3/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: '小队 sq-1' }));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sq-1' }), false);
+  });
+
+  it('图标随域和武器变化，不再写死士兵', () => {
+    expect(squadIconKey(squad('air', { blueprint_id: 'precision_drone' }))).toBe('orbit');
+    expect(squadIconKey(squad('ship', { blueprint_id: 'df_destroyer' }))).toBe('fleet');
+    expect(squadIconKey(squad('gun', { weapon: { type: 'gun', damage: 1, fire_rate: 1, range: 1, ammo_cost: 0 } }))).toBe('soldier');
   });
 
   it('无小队时不渲染', () => {

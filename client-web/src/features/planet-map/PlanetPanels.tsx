@@ -79,7 +79,7 @@ import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 import { unitIsMoving, unitMoveDestination } from '@/features/planet-map/model';
 import { findSquadTaskForceId } from '@/features/planet-map/squad-commands';
 import { UnitCard } from '@/features/war/components/UnitCard';
-import { unitCardFromSquad } from '@/features/war/unit-card-model';
+import { unitCardFromRuntimeUnit, unitCardFromSquad } from '@/features/war/unit-card-model';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -919,7 +919,7 @@ export function PlanetEntityPanel({
       <div className="planet-panel-stack">
         <section className="planet-side-section">
           <div className="section-title">小队卡片</div>
-          <UnitCard card={unitCardFromSquad(squad, blueprintName, domain)} />
+          <UnitCard card={unitCardFromSquad(squad, blueprintName, domain, catalog, publicEntry)} />
         </section>
         <section className="planet-side-section">
           <div className="section-title">编队归属</div>
@@ -954,6 +954,7 @@ export function PlanetEntityPanel({
         <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} />
         <section className="planet-side-section">
           <div className="section-title">单位详情</div>
+          <UnitCard card={unitCardFromRuntimeUnit(unit, translateUnitType(unit.type), catalog)} />
           <dl className="planet-kv-list">
             <div>
               <dt>ID</dt>

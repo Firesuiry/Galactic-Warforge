@@ -5,34 +5,7 @@ import (
 
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapmodel"
-	"siliconworld/internal/terrain"
 )
-
-func generateTerrain(rng *rng, cfg mapconfig.TerrainConfig, width, height int) [][]terrain.TileType {
-	water := valueOr(cfg.WaterRatio, 0.12)
-	lava := valueOr(cfg.LavaRatio, 0.04)
-	blocked := valueOr(cfg.BlockedRatio, 0.08)
-
-	grid := make([][]terrain.TileType, height)
-	for y := 0; y < height; y++ {
-		row := make([]terrain.TileType, width)
-		for x := 0; x < width; x++ {
-			roll := rng.Float64()
-			switch {
-			case roll < water:
-				row[x] = terrain.TileWater
-			case roll < water+lava:
-				row[x] = terrain.TileLava
-			case roll < water+lava+blocked:
-				row[x] = terrain.TileBlocked
-			default:
-				row[x] = terrain.TileBuildable
-			}
-		}
-		grid[y] = row
-	}
-	return grid
-}
 
 func generateEnvironment(rng *rng, orbit mapmodel.Orbit, star mapmodel.Star, cfg mapconfig.EnvironmentConfig) mapmodel.PlanetEnvironment {
 	windMin, windMax := rangeOrDefault(cfg.Wind, 0.6, 1.4)

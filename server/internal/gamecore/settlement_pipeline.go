@@ -62,6 +62,7 @@ func newSettlementPipeline() settlementPipeline {
 			settleBuildingIO(ws)
 			settlePipelineFlow(ws)
 			settlePipelineIO(ws)
+			gc.applyOutputPace(ws)
 			events = append(events, settleProduction(ws)...)
 			settleSprayCoaters(ws)
 			events = append(events, settleFractionation(ws)...)
@@ -71,8 +72,8 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleUnitMovement(ws)...)
 			events = append(events, settleSquadMovement(ws)...)
 			events = append(events, settleUnitCombat(ws)...)
-			settleCombatTech(ws)
-			events = append(events, gc.settleEnemyForces(ws)...)
+			settleCombatTech(ws, gc.spaceRuntime)
+			events = append(events, gc.settleEnemyForcesWithGrowth(ws)...)
 			events = append(events, settleTrafficMonitors(ws)...)
 
 			if gc.monitor != nil {
@@ -125,7 +126,7 @@ func newSettlementPipeline() settlementPipeline {
 		gc.settleStats()
 
 		if !gc.Victory().Declared() {
-			victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds)
+			victory := resolveBattlefieldVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, frame.currentTick, gc.timeLimitTicks())
 			if gc.declareVictory(victory, frame.currentTick) {
 				events = append(events, victoryDeclaredEvent(victory))
 				gc.recordVictoryAudit(victory)

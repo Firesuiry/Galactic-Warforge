@@ -117,7 +117,7 @@ func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd mod
 	if !player.DeductItems(reserved) {
 		return mechaJobFailed(model.CodeInsufficientResource, "missing handcraft ingredients in player inventory")
 	}
-	duration := max(1, recipe.Duration)
+	duration := scaleTicks(recipe.Duration, gc.outputPace())
 	unit.Mecha.Job = &model.MechaJob{Kind: "craft", RecipeID: recipeID, RemainingTicks: duration, TicksPerBatch: duration, RemainingBatches: quantity, EnergyPerTick: 1, State: "running", ReservedInputs: reserved}
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "handcrafting started; ingredients reserved"}, []*model.GameEvent{mechaStateEvent(unit)}
 }

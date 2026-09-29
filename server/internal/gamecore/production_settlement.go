@@ -99,7 +99,7 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		}
 
 		consumeRecipeInputs(building.Storage, recipe)
-		state.RemainingTicks = max(1, result.Bonus.Duration)
+		state.RemainingTicks = scaleTicks(result.Bonus.Duration, paceOrOne(ws.PaceOutput))
 		state.ProgressFraction = 0
 		state.PendingOutputs = cloneItemAmounts(result.Bonus.Outputs)
 		state.PendingByproducts = cloneItemAmounts(result.Bonus.Byproducts)

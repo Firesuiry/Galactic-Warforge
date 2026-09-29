@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, ChartColumn, Cpu, FlaskConical, Hourglass, Orbit, Rewind, Save, Settings, Swords, TriangleAlert, Users, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
+import { Bot, ChartColumn, Cpu, Flag, FlaskConical, Hourglass, Orbit, Rewind, Save, Settings, Swords, TriangleAlert, Users, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
@@ -22,6 +22,7 @@ const MENU_ITEMS: ReadonlyArray<{ to: string; icon: LucideIcon; label: string }>
   { to: '/war', icon: Swords, label: '战争' },
   { to: '/agents', icon: Bot, label: '智能体' },
   { to: '/lobby', icon: Users, label: '对局' },
+  { to: '/settlement', icon: Flag, label: '结算' },
   { to: '/replay', icon: Rewind, label: '回放' },
 ];
 

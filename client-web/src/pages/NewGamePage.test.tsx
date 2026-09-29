@@ -18,6 +18,7 @@ const CURRENT_GAME = {
     { player_id: 'p2', role: 'commander', team_id: 'p2', is_alive: true },
   ],
   victory: { declared: false },
+  status: 'running',
 };
 
 interface CapturedRequest {
@@ -72,6 +73,7 @@ function mockFetchWithNewGame() {
           is_alive: true,
         })),
         victory: { declared: false },
+        status: 'running',
       };
       return Promise.resolve(jsonResponse(state.game, { status: 201 }));
     }

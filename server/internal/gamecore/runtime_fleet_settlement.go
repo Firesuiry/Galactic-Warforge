@@ -12,6 +12,8 @@ const (
 	FleetTransitTicks int64 = 10
 	// fleetLaneNeighborCount mirrors the starmap lane rule (k nearest neighbors).
 	fleetLaneNeighborCount = 2
+	// defaultUngroupedAggroRange 未编队索敌半径（格）。Pursue 只允许在该半径内走近开火，不扩大搜索。
+	defaultUngroupedAggroRange = 12
 )
 
 // settleFleetTransit advances in-flight fleet jumps: each tick decrements the
@@ -119,6 +121,10 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 		if target == nil {
 			squad.State = model.CombatSquadStateIdle
 			squad.TargetEnemyID = ""
+			// 部署行军路径由特遣队目的地维持；未编队丢目标后不能留着追击路径继续走。
+			if taskForce == nil || taskForce.Deployment == nil || taskForce.Deployment.Position == nil {
+				squad.ClearPath()
+			}
 			continue
 		}
 		if attackDelayed(currentTick, squad.LastAttackTick, status.DelayPenalty) {
@@ -201,9 +207,9 @@ func normalizeSquadCombatStats(ws *model.WorldState, squad *model.CombatSquad) {
 
 // selectSquadCombatTarget 统一选取小队目标：敌对单位/小队/黑雾/建筑（R4）。
 func selectSquadCombatTarget(ws *model.WorldState, squad *model.CombatSquad, anchor model.Position, profile model.WarTaskForceStanceProfile, maxDistance int) *unitCombatTarget {
-	// 显式目标优先（沿用 TargetEnemyID 语义：现在泛指四类实体）。
+	// 已写入的自动目标超出交战半径必须丢掉，否则下一 tick 会靠 preferred 继续追。
 	if preferred := resolveCombatTarget(ws, squad.TargetEnemyID); preferred != nil && hostile(ws, squad.OwnerID, preferred.ownerID) {
-		if profile.Pursue || ws.SurfaceDistance(anchor, preferred.pos) <= maxDistance {
+		if ws.SurfaceDistance(anchor, preferred.pos) <= maxDistance {
 			return preferred
 		}
 	}
@@ -218,7 +224,7 @@ func selectSquadCombatTarget(ws *model.WorldState, squad *model.CombatSquad, anc
 			return
 		}
 		distance := float64(ws.SurfaceDistance(anchor, t.pos))
-		if !profile.Pursue && distance > float64(maxDistance) {
+		if distance > float64(maxDistance) {
 			return
 		}
 		switch profile.TargetPriority {
@@ -397,6 +403,13 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 					continue
 				}
 				anchor := fleetAnchorPosition(targetWorld, taskForce)
+				// 未编队没有部署锚点。显式攻击目标自己就是锚，避免只因离地图中心超过索敌半径而取消命令；
+				// 改锁其他势力仍受索敌半径约束，不会全图追最近的巢穴。
+				if taskForce == nil {
+					if preferred := findEnemyForceByID(targetWorld, fleet.Target.TargetID); preferred != nil {
+						anchor = preferred.Position
+					}
+				}
 				maxDistance := penalizedEngagementDistance(profile.MaxEngagementDistance, status)
 				target := selectEnemyForceByTaskForceProfile(targetWorld, fleet.Target.TargetID, anchor, profile, maxDistance)
 				if target == nil {
@@ -592,7 +605,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 func defaultSquadTaskForceProfile(taskForce *model.WarTaskForce) model.WarTaskForceStanceProfile {
 	if taskForce == nil {
 		profile := model.WarTaskForceProfile(model.WarTaskForceStancePatrol)
-		profile.MaxEngagementDistance = 1 << 30
+		profile.MaxEngagementDistance = defaultUngroupedAggroRange
 		profile.Pursue = true
 		profile.RetreatLossThreshold = 0
 		return profile
@@ -603,7 +616,7 @@ func defaultSquadTaskForceProfile(taskForce *model.WarTaskForce) model.WarTaskFo
 func defaultFleetTaskForceProfile(taskForce *model.WarTaskForce) model.WarTaskForceStanceProfile {
 	if taskForce == nil {
 		profile := model.WarTaskForceProfile(model.WarTaskForceStanceIntercept)
-		profile.MaxEngagementDistance = 1 << 30
+		profile.MaxEngagementDistance = defaultUngroupedAggroRange
 		profile.Pursue = true
 		profile.RetreatLossThreshold = 0
 		return profile
@@ -652,7 +665,7 @@ func selectEnemyForceByTaskForceProfile(
 		return nil
 	}
 	if preferred := findEnemyForceByID(ws, preferredTargetID); preferred != nil {
-		if profile.Pursue || float64(ws.SurfaceDistance(anchor, preferred.Position)) <= float64(maxDistance) {
+		if ws.SurfaceDistance(anchor, preferred.Position) <= maxDistance {
 			return preferred
 		}
 	}
@@ -668,7 +681,7 @@ func selectEnemyForceByTaskForceProfile(
 			continue
 		}
 		distance := float64(ws.SurfaceDistance(anchor, force.Position))
-		if !profile.Pursue && distance > float64(maxDistance) {
+		if distance > float64(maxDistance) {
 			continue
 		}
 		switch profile.TargetPriority {
@@ -1132,16 +1145,16 @@ func fleetPairExchange(fleets []fleetRefLike, attackerOwner, defenderOwner strin
 			EventType:       model.EvtDamageApplied,
 			VisibilityScope: scope,
 			Payload: map[string]any{
-				"attacker_id":     shooters[0].ID,
-				"attacker_type":   "fleet",
-				"attacker_owner":  attackerOwner,
-				"target_id":       target.ID,
-				"target_type":     "fleet",
-				"target_owner":    defenderOwner,
-				"damage":          totalDamage,
-				"target_hp":       target.Structure.Level,
-				"subsystem_hits":  len(subsystemHits),
-				"fleet_vs_fleet":  true,
+				"attacker_id":    shooters[0].ID,
+				"attacker_type":  "fleet",
+				"attacker_owner": attackerOwner,
+				"target_id":      target.ID,
+				"target_type":    "fleet",
+				"target_owner":   defenderOwner,
+				"damage":         totalDamage,
+				"target_hp":      target.Structure.Level,
+				"subsystem_hits": len(subsystemHits),
+				"fleet_vs_fleet": true,
 			},
 		})
 	}

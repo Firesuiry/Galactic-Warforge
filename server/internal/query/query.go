@@ -310,6 +310,7 @@ type PlanetSceneRequest struct {
 type SurfacePatch struct {
 	Bounds   SceneBounds          `json:"bounds"`
 	Terrain  [][]terrain.TileType `json:"terrain"`
+	Height   [][]float64          `json:"height,omitempty"`
 	Visible  [][]bool             `json:"visible"`
 	Explored [][]bool             `json:"explored"`
 }
@@ -327,6 +328,7 @@ type PlanetSceneView struct {
 	Tick           int64                       `json:"tick"`
 	Bounds         SceneBounds                 `json:"bounds"`
 	Terrain        [][]terrain.TileType        `json:"terrain,omitempty"`
+	Height         [][]float64                 `json:"height,omitempty"`
 	Environment    *mapmodel.PlanetEnvironment `json:"environment,omitempty"`
 	Visible        [][]bool                    `json:"visible,omitempty"`
 	Explored       [][]bool                    `json:"explored,omitempty"`
@@ -806,6 +808,7 @@ func (ql *Layer) planetSceneWindow(ws *model.WorldState, playerID, planetID stri
 	env := planet.Environment
 	view.Environment = &env
 	view.Terrain = sliceTerrain(planet.Terrain, bounds)
+	view.Height = sliceHeight(planet.Elevation, bounds)
 
 	if ws == nil {
 		return view, true
@@ -820,6 +823,7 @@ func (ql *Layer) planetSceneWindow(ws *model.WorldState, playerID, planetID stri
 		fog := ql.vis.FogRegion(ws, playerID, bounds.X, bounds.Y, bounds.Width, bounds.Height)
 		view.Visible = fog.Visible
 		view.Explored = fog.Explored
+		view.Height = maskHeightToExplored(view.Height, view.Explored)
 
 		visibleBuildings := ql.vis.FilterBuildings(ws, playerID)
 		visibleUnits := ql.vis.FilterUnits(ws, playerID)
@@ -834,6 +838,7 @@ func (ql *Layer) planetSceneWindow(ws *model.WorldState, playerID, planetID stri
 
 	view.Visible = blankFog(bounds.Width, bounds.Height)
 	view.Explored = ql.vis.ExploredRegionSnapshot(planet.ID, planet.Width, planet.Height, bounds.X, bounds.Y, bounds.Width, bounds.Height, playerID)
+	view.Height = maskHeightToExplored(view.Height, view.Explored)
 	view.Buildings = map[string]*model.Building{}
 	view.Units = map[string]*model.Unit{}
 	allResources := staticPlanetResources(planet)
@@ -1086,10 +1091,14 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 			for x := range row {
 				if y >= len(patch.Explored) || x >= len(patch.Explored[y]) || !patch.Explored[y][x] {
 					row[x] = terrain.TileType("unknown")
+					if y < len(patch.Height) && x < len(patch.Height[y]) {
+						patch.Height[y][x] = 0
+					}
 				}
 			}
 		}
-		view.SurfacePatches = append(view.SurfacePatches, SurfacePatch{Bounds: patch.Bounds, Terrain: patch.Terrain, Visible: patch.Visible, Explored: patch.Explored})
+		patch.Height = omitFlatHeight(patch.Height)
+		view.SurfacePatches = append(view.SurfacePatches, SurfacePatch{Bounds: patch.Bounds, Terrain: patch.Terrain, Height: patch.Height, Visible: patch.Visible, Explored: patch.Explored})
 		if view.Buildings == nil {
 			view.Buildings = map[string]*model.Building{}
 		}

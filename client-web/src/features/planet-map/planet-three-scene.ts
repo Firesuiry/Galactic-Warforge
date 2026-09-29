@@ -191,7 +191,7 @@ export class PlanetThreeScene {
   setData(data: PlanetThreeData) {
     this.data = data;
     updatePlanetSurface(this.surface, data);
-    const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? [data.planet.bounds,data.planet.surface_patches] : null]);
+    const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? [data.planet.bounds, data.planet.surface_patches?.map(p => [p.bounds, p.height?.length ?? 0]), data.planet.height?.length ?? 0] : null]);
     if (localKey !== this.localSurfaceKey) {
       if (this.localSurface) { this.world.remove(this.localSurface); this.localSurface.geometry.dispose(); }
       this.localSurface = createLocalSurface(data.planet, RADIUS, this.surface.material);

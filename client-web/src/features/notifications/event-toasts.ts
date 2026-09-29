@@ -13,7 +13,7 @@
 
 import type { GameEventDetail } from '@shared/types';
 
-import { toPlayerFacingMessage } from '@/common/player-facing-error';
+import { GAME_FINISHED_MESSAGE, isGameFinishedResult, toPlayerFacingMessage } from '@/common/player-facing-error';
 import type { SoundName } from '@/engine/audio';
 import { isBuildingCompletionEvent } from '@/features/audio/planet-audio';
 import type { ToastInput } from '@/features/notifications/store';
@@ -182,6 +182,19 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
     // HTTP 层已 accepted，executor 不会弹 toast，必须在这里兜底提醒。
     case 'command_result': {
       const code = asString(payload.code).toUpperCase();
+      const message = asString(payload.message);
+      if (isGameFinishedResult({ code, message })) {
+        return {
+          toast: {
+            kind: 'danger',
+            title: '对局已结束',
+            body: GAME_FINISHED_MESSAGE,
+            href: '/settlement',
+            mergeKey: 'command_result_fail:GAME_FINISHED',
+          },
+          sfx: 'alert',
+        };
+      }
       const status = asString(payload.status).toLowerCase();
       const failed = (code !== '' && code !== 'OK')
         || status.includes('fail')
@@ -193,7 +206,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
         toast: {
           kind: 'danger',
           title: '命令执行失败',
-          body: toPlayerFacingMessage(asString(payload.message)),
+          body: toPlayerFacingMessage(message),
           href: planetHref(payload),
           mergeKey: `command_result_fail:${code || 'unknown'}`,
         },
@@ -310,8 +323,9 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       return {
         toast: {
           kind: 'success',
-          title: '胜利宣言',
-          href: '/war',
+          title: '对局已结束',
+          body: '请前往结算页查看战报。',
+          href: '/settlement',
         },
         sfx: 'commandOk',
       };
