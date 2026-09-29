@@ -1,0 +1,1250 @@
+# 建筑定义（基础属性 + 运行时参数）。
+# 格式说明见 docs/dev/数据配置文件.md
+buildings:
+  - id: battlefield_analysis_base
+    name: Battlefield Analysis Base
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 120
+      energy: 60
+      items:
+        - {item_id: circuit_board, quantity: 18}
+        - {item_id: engine, quantity: 12}
+        - {item_id: microcrystalline_component, quantity: 6}
+        - {item_id: steel, quantity: 12}
+    buildable: true
+    build_radius: 24
+    profile: {max_hp_base: 500, max_hp_per_level: 200, vision_range: 5}
+    runtime:
+      params:
+        energy_consume: 2
+        capacity: 4
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 1}]
+      functions:
+        storage: {capacity: 60, slots: 4, buffer: 20, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 2}
+        deployment:
+          squad_capacity: 4
+          fleet_capacity: 2
+          allowed_blueprints: [prototype, precision_drone, corvette, destroyer]
+  - id: mining_machine
+    name: Mining Machine
+    category: collect
+    subcategory: collect
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 50
+      energy: 20
+      items:
+        - {item_id: circuit_board, quantity: 2}
+        - {item_id: gear, quantity: 2}
+        - {item_id: iron_ingot, quantity: 4}
+        - {item_id: magnetic_coil, quantity: 2}
+    buildable: true
+    requires_resource_node: true
+    profile: {max_hp_base: 150, max_hp_per_level: 50, vision_range: 2, level_bonus: {collect_yield: 3}}
+    runtime:
+      params:
+        energy_consume: 2
+        capacity: 8
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: out-0, direction: output, capacity: 1}]
+      functions:
+        collect: {yield_per_tick: 8, minerals_kickback: 1}
+        storage: {capacity: 48, slots: 2, buffer: 12, input_priority: 1, output_priority: 2}
+        energy: {consume_per_tick: 2}
+  - id: advanced_mining_machine
+    name: Advanced Mining Machine
+    category: collect
+    subcategory: collect
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 120
+      energy: 60
+      items:
+        - {item_id: frame_material, quantity: 10}
+        - {item_id: grating_crystal, quantity: 40}
+        - {item_id: quantum_chip, quantity: 4}
+        - {item_id: super_magnetic_ring, quantity: 10}
+        - {item_id: titanium_alloy, quantity: 20}
+    buildable: true
+    requires_resource_node: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 6
+        capacity: 12
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: out-0, direction: output, capacity: 2}]
+      functions:
+        collect: {yield_per_tick: 16, minerals_kickback: 0.5}
+        storage: {capacity: 96, slots: 3, buffer: 24, input_priority: 1, output_priority: 2}
+        energy: {consume_per_tick: 6}
+  - id: water_pump
+    name: Water Pump
+    category: collect
+    subcategory: collect
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 80
+      energy: 30
+      items:
+        - {item_id: circuit_board, quantity: 2}
+        - {item_id: motor, quantity: 4}
+        - {item_id: iron_ingot, quantity: 8}
+        - {item_id: stone_brick, quantity: 4}
+    buildable: true
+    requires_resource_node: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 2
+        capacity: 8
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: out-0, direction: output, capacity: 1, allowed_items: [water]}]
+      functions:
+        collect: {yield_per_tick: 8}
+        storage: {capacity: 60, slots: 1, buffer: 20, input_priority: 1, output_priority: 2}
+        energy: {consume_per_tick: 2}
+  - id: oil_extractor
+    name: Oil Extractor
+    category: collect
+    subcategory: collect
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 80
+      energy: 30
+      items:
+        - {item_id: circuit_board, quantity: 6}
+        - {item_id: plasma_exciter, quantity: 4}
+        - {item_id: steel, quantity: 12}
+        - {item_id: stone_brick, quantity: 12}
+    buildable: true
+    requires_resource_node: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 2
+        capacity: 8
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: out-0, direction: output, capacity: 1, allowed_items: [crude_oil]}]
+      functions:
+        collect: {yield_per_tick: 8}
+        storage: {capacity: 60, slots: 1, buffer: 20, input_priority: 1, output_priority: 2}
+        energy: {consume_per_tick: 2}
+  - id: orbital_collector
+    name: Orbital Collector
+    category: collect
+    subcategory: collect
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 200
+      energy: 80
+      items: [{item_id: reinforced_thruster, quantity: 20}, {item_id: super_magnetic_ring, quantity: 50}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 4, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions:
+        orbital: {outputs: [{item_id: hydrogen, quantity: 4}, {item_id: deuterium, quantity: 1}], max_inventory: 1000}
+        energy: {consume_per_tick: 4}
+  - id: conveyor_belt_mk1
+    name: Conveyor Belt Mk.I
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 4, items: [{item_id: gear, quantity: 1}, {item_id: iron_ingot, quantity: 2}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {transport: {throughput: 2, stack_limit: 2}}}
+  - id: conveyor_belt_mk2
+    name: Conveyor Belt Mk.II
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 8, items: [{item_id: electromagnetic_turbine, quantity: 1}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {transport: {throughput: 4, stack_limit: 2}}}
+  - id: conveyor_belt_mk3
+    name: Conveyor Belt Mk.III
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 12, items: [{item_id: graphene, quantity: 1}, {item_id: super_magnetic_ring, quantity: 1}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {transport: {throughput: 6, stack_limit: 3}}}
+  - id: splitter
+    name: Splitter
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 20
+      energy: 10
+      items: [{item_id: circuit_board, quantity: 1}, {item_id: gear, quantity: 2}, {item_id: iron_ingot, quantity: 3}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {transport: {throughput: 6, stack_limit: 24}}}
+  - id: automatic_piler
+    name: Automatic Piler
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 20
+      energy: 10
+      items:
+        - {item_id: gear, quantity: 4}
+        - {item_id: processor, quantity: 2}
+        - {item_id: steel, quantity: 3}
+        - {item_id: super_magnetic_ring, quantity: 1}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {transport: {throughput: 2, stack_limit: 4}}}
+  - id: traffic_monitor
+    name: Traffic Monitor
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 40
+      energy: 20
+      items:
+        - {item_id: circuit_board, quantity: 2}
+        - {item_id: gear, quantity: 2}
+        - {item_id: glass, quantity: 1}
+        - {item_id: iron_ingot, quantity: 3}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 1}}
+  - id: spray_coater
+    name: Spray Coater
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 60
+      energy: 30
+      items:
+        - {item_id: circuit_board, quantity: 2}
+        - {item_id: microcrystalline_component, quantity: 2}
+        - {item_id: plasma_exciter, quantity: 2}
+        - {item_id: steel, quantity: 4}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 2
+        capacity: 24
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - {id: material-in, direction: input, capacity: 6}
+          - {id: material-out, direction: output, capacity: 6}
+          - id: proliferator-in
+            direction: input
+            capacity: 6
+            allowed_items: [proliferator_mk1, proliferator_mk2, proliferator_mk3]
+      functions: {spray: {throughput: 6, max_level: 3}, storage: {capacity: 48, slots: 3}, energy: {consume_per_tick: 2}}
+  - id: sorter_mk1
+    name: Sorter Mk.I
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 6, items: [{item_id: circuit_board, quantity: 1}, {item_id: iron_ingot, quantity: 1}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {sorter: {speed: 1, range: 1}}}
+  - id: sorter_mk2
+    name: Sorter Mk.II
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 10, items: [{item_id: motor, quantity: 1}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {sorter: {speed: 2, range: 2}}}
+  - id: sorter_mk3
+    name: Sorter Mk.III
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 14, items: [{item_id: electromagnetic_turbine, quantity: 1}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {sorter: {speed: 3, range: 3}}}
+  - id: pile_sorter
+    name: Pile Sorter
+    category: transport
+    subcategory: transport
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 40
+      energy: 20
+      items: [{item_id: processor, quantity: 1}, {item_id: super_magnetic_ring, quantity: 1}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime: {functions: {sorter: {speed: 4, range: 3}}}
+  - id: logistics_distributor
+    name: Logistics Distributor
+    category: logistics_hub
+    subcategory: logistics_hub
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 40
+      energy: 20
+      items:
+        - {item_id: iron_ingot, quantity: 8}
+        - {item_id: plasma_exciter, quantity: 4}
+        - {item_id: processor, quantity: 4}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 1}}
+  - id: planetary_logistics_station
+    name: Planetary Logistics Station
+    category: logistics_hub
+    subcategory: logistics_hub
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 160
+      energy: 80
+      items:
+        - {item_id: particle_container, quantity: 20}
+        - {item_id: processor, quantity: 40}
+        - {item_id: steel, quantity: 40}
+        - {item_id: titanium_ingot, quantity: 40}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 1, capacity: 600, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 1}}
+  - id: interstellar_logistics_station
+    name: Interstellar Logistics Station
+    category: logistics_hub
+    subcategory: logistics_hub
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 280
+      energy: 140
+      items: [{item_id: particle_container, quantity: 20}, {item_id: titanium_alloy, quantity: 40}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 2, capacity: 2500, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 2}}
+  - id: depot_mk1
+    name: Depot Mk.I
+    category: storage
+    subcategory: storage
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 60, energy: 20, items: [{item_id: iron_ingot, quantity: 4}, {item_id: stone_brick, quantity: 4}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]}
+      functions: {storage: {capacity: 300, slots: 3, buffer: 40, input_priority: 2, output_priority: 1}}
+  - id: depot_mk2
+    name: Depot Mk.II
+    category: storage
+    subcategory: storage
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 60, energy: 20, items: [{item_id: steel, quantity: 8}, {item_id: stone_brick, quantity: 8}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {io_ports: [{id: in-0, direction: input, capacity: 3}, {id: out-0, direction: output, capacity: 3}]}
+      functions: {storage: {capacity: 900, slots: 6, buffer: 80, input_priority: 2, output_priority: 2}}
+  - id: storage_tank
+    name: Storage Tank
+    category: storage
+    subcategory: storage
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 60
+      energy: 20
+      items: [{item_id: glass, quantity: 4}, {item_id: iron_ingot, quantity: 8}, {item_id: stone_brick, quantity: 4}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]}
+      functions: {storage: {capacity: 600, slots: 2, buffer: 60, input_priority: 1, output_priority: 2}}
+  - id: arc_smelter
+    name: Arc Smelter
+    category: refining
+    subcategory: refining
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 120
+      energy: 60
+      items:
+        - {item_id: circuit_board, quantity: 4}
+        - {item_id: iron_ingot, quantity: 4}
+        - {item_id: magnetic_coil, quantity: 2}
+        - {item_id: stone_brick, quantity: 2}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 4
+        capacity: 1
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 1}, {id: out-0, direction: output, capacity: 1}]
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 24, slots: 3, buffer: 8, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 4}
+  - id: plane_smelter
+    name: Plane Smelter
+    category: refining
+    subcategory: refining
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 180
+      energy: 90
+      items:
+        - {item_id: frame_material, quantity: 5}
+        - {item_id: monopole_magnet, quantity: 15}
+        - {item_id: plane_filter, quantity: 4}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 6
+        capacity: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        production: {throughput: 2, recipe_slots: 1}
+        storage: {capacity: 36, slots: 4, buffer: 12, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 6}
+  - id: negentropy_smelter
+    name: Negentropy Smelter
+    category: refining
+    subcategory: refining
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 240, energy: 120}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 9
+        capacity: 3
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 3}, {id: out-0, direction: output, capacity: 3}]
+      functions:
+        production: {throughput: 3, recipe_slots: 1}
+        storage: {capacity: 48, slots: 4, buffer: 12, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 9}
+  - id: assembling_machine_mk1
+    name: Assembling Machine Mk.I
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 100
+      energy: 50
+      items: [{item_id: circuit_board, quantity: 4}, {item_id: gear, quantity: 8}, {item_id: iron_ingot, quantity: 4}]
+    buildable: true
+    can_produce_units: true
+    profile: {max_hp_base: 200, max_hp_per_level: 80, vision_range: 3}
+    runtime:
+      params:
+        energy_consume: 5
+        capacity: 1
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 1}, {id: out-0, direction: output, capacity: 1}]
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 24, slots: 4, buffer: 8, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 5}
+  - id: assembling_machine_mk2
+    name: Assembling Machine Mk.II
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 240, energy: 120, items: [{item_id: graphene, quantity: 8}, {item_id: processor, quantity: 4}]}
+    buildable: true
+    profile: {max_hp_base: 280, max_hp_per_level: 100, vision_range: 3}
+    runtime:
+      params:
+        energy_consume: 8
+        capacity: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        production: {throughput: 2, recipe_slots: 2}
+        storage: {capacity: 48, slots: 6, buffer: 16, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 8}
+  - id: assembling_machine_mk3
+    name: Assembling Machine Mk.III
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 360
+      energy: 180
+      items: [{item_id: particle_broadband, quantity: 8}, {item_id: quantum_chip, quantity: 2}]
+    buildable: true
+    profile: {max_hp_base: 380, max_hp_per_level: 120, vision_range: 4}
+    runtime:
+      params:
+        energy_consume: 12
+        capacity: 3
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 3}, {id: out-0, direction: output, capacity: 3}]
+      functions:
+        production: {throughput: 3, recipe_slots: 3}
+        storage: {capacity: 72, slots: 8, buffer: 24, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 12}
+  - id: recomposing_assembler
+    name: Re-Composing Assembler
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 220, energy: 120}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 12
+        capacity: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        production: {throughput: 2, recipe_slots: 2}
+        storage: {capacity: 48, slots: 6, buffer: 16, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 12}
+  - id: oil_refinery
+    name: Oil Refinery
+    category: refining
+    subcategory: refining
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 140
+      energy: 70
+      items:
+        - {item_id: circuit_board, quantity: 6}
+        - {item_id: plasma_exciter, quantity: 6}
+        - {item_id: steel, quantity: 10}
+        - {item_id: stone_brick, quantity: 10}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - {id: in-0, direction: input, capacity: 3}
+          - {id: out-main, direction: output, capacity: 3}
+          - {id: out-side, direction: output, capacity: 2}
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 48, slots: 4, buffer: 12, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 6}
+  - id: fractionator
+    name: Fractionator
+    category: refining
+    subcategory: refining
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 100
+      energy: 60
+      items:
+        - {item_id: glass, quantity: 4}
+        - {item_id: processor, quantity: 1}
+        - {item_id: steel, quantity: 8}
+        - {item_id: stone_brick, quantity: 4}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 6
+        capacity: 24
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - {id: hydrogen-in, direction: input, capacity: 6, allowed_items: [hydrogen]}
+          - {id: hydrogen-return, direction: output, capacity: 6, allowed_items: [hydrogen]}
+          - {id: deuterium-out, direction: output, capacity: 6, allowed_items: [deuterium]}
+      functions: {energy: {consume_per_tick: 6}}
+  - id: chemical_plant
+    name: Chemical Plant
+    category: chemical
+    subcategory: chemical
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 140
+      energy: 70
+      items:
+        - {item_id: circuit_board, quantity: 2}
+        - {item_id: glass, quantity: 8}
+        - {item_id: steel, quantity: 8}
+        - {item_id: stone_brick, quantity: 8}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 6
+        capacity: 1
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 1}, {id: out-0, direction: output, capacity: 1}]
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 24, slots: 4, buffer: 8, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 6}
+  - id: quantum_chemical_plant
+    name: Quantum Chemical Plant
+    category: chemical
+    subcategory: chemical
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 220
+      energy: 110
+      items:
+        - {item_id: quantum_chip, quantity: 3}
+        - {item_id: strange_matter, quantity: 3}
+        - {item_id: titanium_glass, quantity: 10}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 8
+        capacity: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        production: {throughput: 2, recipe_slots: 1}
+        storage: {capacity: 36, slots: 5, buffer: 12, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 8}
+  - id: miniature_particle_collider
+    name: Miniature Particle Collider
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 120
+      energy: 60
+      items:
+        - {item_id: frame_material, quantity: 20}
+        - {item_id: graphene, quantity: 10}
+        - {item_id: processor, quantity: 8}
+        - {item_id: super_magnetic_ring, quantity: 25}
+        - {item_id: titanium_alloy, quantity: 20}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 24
+        capacity: 1
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - {id: in-0, direction: input, capacity: 6}
+          - {id: out-main, direction: output, capacity: 6}
+          - {id: out-side, direction: output, capacity: 6}
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 96, slots: 6, buffer: 24, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 24}
+  - id: matrix_lab
+    name: Matrix Lab
+    category: research
+    subcategory: research
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 120
+      energy: 60
+      items:
+        - {item_id: circuit_board, quantity: 4}
+        - {item_id: glass, quantity: 4}
+        - {item_id: iron_ingot, quantity: 8}
+        - {item_id: magnetic_coil, quantity: 4}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 4
+        capacity: 1
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 1}, {id: out-0, direction: output, capacity: 1}]
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 36, slots: 4, buffer: 12, input_priority: 2, output_priority: 2}
+        energy: {consume_per_tick: 4}
+        research: {research_per_tick: 1}
+  - id: self_evolution_lab
+    name: Self-Evolution Lab
+    category: research
+    subcategory: research
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 400, energy: 200}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 16
+        capacity: 3
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        production: {throughput: 3, recipe_slots: 1}
+        storage: {capacity: 72, slots: 6, buffer: 24, input_priority: 2, output_priority: 2}
+        energy: {consume_per_tick: 16}
+        research: {research_per_tick: 3}
+  - id: tesla_tower
+    name: Tesla Tower
+    category: power_grid
+    subcategory: power_grid
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 20
+      energy: 10
+      items: [{item_id: iron_ingot, quantity: 2}, {item_id: magnetic_coil, quantity: 1}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {power_grid: {wireless_range: 4}}
+  - id: wireless_power_tower
+    name: Wireless Power Tower
+    category: power_grid
+    subcategory: power_grid
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 40, energy: 20, items: [{item_id: plasma_exciter, quantity: 3}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 1}, power_grid: {wireless_range: 6}}
+  - id: satellite_substation
+    name: Satellite Substation
+    category: power_grid
+    subcategory: power_grid
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 80
+      energy: 40
+      items: [{item_id: frame_material, quantity: 2}, {item_id: super_magnetic_ring, quantity: 10}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {power_grid: {wireless_range: 10}}
+  - id: wind_turbine
+    name: Wind Turbine
+    category: power
+    subcategory: power
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 30
+      items: [{item_id: gear, quantity: 1}, {item_id: iron_ingot, quantity: 6}, {item_id: magnetic_coil, quantity: 3}]
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_generate: 10, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {output_per_tick: 10, source_kind: wind}}
+  - id: thermal_power_plant
+    name: Thermal Power Plant
+    category: power
+    subcategory: power
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 90
+      energy: 30
+      items:
+        - {item_id: gear, quantity: 4}
+        - {item_id: iron_ingot, quantity: 10}
+        - {item_id: magnetic_coil, quantity: 4}
+        - {item_id: stone_brick, quantity: 4}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_generate: 20
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - id: fuel-in
+            direction: input
+            capacity: 2
+            allowed_items: [coal, energetic_graphite, hydrogen, hydrogen_fuel_rod, log, plant_fuel]
+      functions:
+        storage: {capacity: 50, slots: 6, buffer: 10, input_priority: 2}
+        energy:
+          output_per_tick: 20
+          source_kind: thermal
+          fuel_rules:
+            - {item_id: coal, consume_per_tick: 1, output_multiplier: 1}
+            - {item_id: energetic_graphite, consume_per_tick: 1, output_multiplier: 2}
+            - {item_id: hydrogen, consume_per_tick: 1, output_multiplier: 1.2}
+            - {item_id: hydrogen_fuel_rod, consume_per_tick: 1, output_multiplier: 4}
+            - {item_id: log, consume_per_tick: 1, output_multiplier: 0.6}
+            - {item_id: plant_fuel, consume_per_tick: 1, output_multiplier: 0.2}
+  - id: solar_panel
+    name: Solar Panel
+    category: power
+    subcategory: power
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 40
+      items:
+        - {item_id: circuit_board, quantity: 5}
+        - {item_id: copper_ingot, quantity: 10}
+        - {item_id: silicon_ingot, quantity: 10}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 30, vision_range: 2, level_bonus: {energy_output: 4}}
+    runtime:
+      params: {energy_generate: 12, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {output_per_tick: 12, source_kind: solar}}
+  - id: geothermal_power_station
+    name: Geothermal Power Station
+    category: power
+    subcategory: power
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 90
+      energy: 30
+      items:
+        - {item_id: copper_ingot, quantity: 20}
+        - {item_id: photon_combiner, quantity: 4}
+        - {item_id: steel, quantity: 15}
+        - {item_id: super_magnetic_ring, quantity: 1}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_generate: 30, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {output_per_tick: 30, source_kind: geothermal}}
+  - id: mini_fusion_power_plant
+    name: Mini Fusion Power Plant
+    category: power
+    subcategory: power
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 90
+      energy: 30
+      items:
+        - {item_id: carbon_nanotube, quantity: 8}
+        - {item_id: processor, quantity: 4}
+        - {item_id: super_magnetic_ring, quantity: 10}
+        - {item_id: titanium_alloy, quantity: 12}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_generate: 40
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: fuel-in, direction: input, capacity: 2, allowed_items: [hydrogen_fuel_rod, deuterium_fuel_rod]}]
+      functions:
+        storage: {capacity: 40, slots: 2, buffer: 10, input_priority: 2}
+        energy:
+          output_per_tick: 40
+          source_kind: fusion
+          fuel_rules:
+            - {item_id: hydrogen_fuel_rod, consume_per_tick: 1, output_multiplier: 1}
+            - {item_id: deuterium_fuel_rod, consume_per_tick: 1, output_multiplier: 2.5}
+  - id: energy_exchanger
+    name: Energy Exchanger
+    category: power_grid
+    subcategory: power_grid
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 180
+      energy: 80
+      items:
+        - {item_id: particle_container, quantity: 8}
+        - {item_id: processor, quantity: 40}
+        - {item_id: steel, quantity: 40}
+        - {item_id: titanium_alloy, quantity: 40}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - {id: acc-in, direction: input, capacity: 2, allowed_items: [accumulator, accumulator_full]}
+          - {id: acc-out, direction: output, capacity: 2, allowed_items: [accumulator, accumulator_full]}
+      functions:
+        storage: {capacity: 200, slots: 2, buffer: 20, input_priority: 2, output_priority: 1}
+        energy_exchanger:
+          hub: true
+          mode: standby
+          energy_per_item: 100
+          items_per_tick: 1
+          empty_item_id: accumulator
+          full_item_id: accumulator_full
+        energy_storage:
+          capacity: 400
+          charge_per_tick: 80
+          discharge_per_tick: 80
+          charge_efficiency: 0.95
+          discharge_efficiency: 0.95
+          priority: 2
+  - id: accumulator
+    name: Accumulator
+    category: power_grid
+    subcategory: power_grid
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 40
+      energy: 20
+      items:
+        - {item_id: crystal_silicon, quantity: 3}
+        - {item_id: iron_ingot, quantity: 6}
+        - {item_id: super_magnetic_ring, quantity: 1}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions:
+        energy_storage:
+          capacity: 100
+          charge_per_tick: 20
+          discharge_per_tick: 20
+          charge_efficiency: 0.9
+          discharge_efficiency: 0.9
+          priority: 1
+  - id: accumulator_full
+    name: Accumulator (Full)
+    category: power_grid
+    subcategory: power_grid
+    footprint: {width: 1, height: 1}
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions:
+        energy_storage:
+          capacity: 100
+          charge_per_tick: 20
+          discharge_per_tick: 20
+          charge_efficiency: 0.9
+          discharge_efficiency: 0.9
+          priority: 1
+          initial_charge: 100
+  - id: ray_receiver
+    name: Ray Receiver
+    category: dyson
+    subcategory: dyson
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 260
+      energy: 130
+      items:
+        - {item_id: photon_combiner, quantity: 10}
+        - {item_id: processor, quantity: 5}
+        - {item_id: silicon_ingot, quantity: 20}
+        - {item_id: steel, quantity: 20}
+        - {item_id: super_magnetic_ring, quantity: 20}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: out-0, direction: output, capacity: 2, allowed_items: [critical_photon]}]
+      functions:
+        storage: {capacity: 100, slots: 2, buffer: 20, input_priority: 1, output_priority: 1}
+        ray_receiver:
+          input_per_tick: 100
+          receive_efficiency: 0.8
+          power_output_per_tick: 60
+          power_efficiency: 0.9
+          photon_output_per_tick: 2
+          photon_energy_cost: 10
+          photon_efficiency: 0.8
+          photon_item_id: critical_photon
+          mode: hybrid
+  - id: artificial_star
+    name: Artificial Star
+    category: power
+    subcategory: power
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 90
+      energy: 30
+      items:
+        - {item_id: annihilation_constraint_sphere, quantity: 10}
+        - {item_id: frame_material, quantity: 20}
+        - {item_id: quantum_chip, quantity: 10}
+        - {item_id: titanium_alloy, quantity: 20}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_generate: 80
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: fuel-in, direction: input, capacity: 2, allowed_items: [antimatter_fuel_rod]}]
+      functions:
+        storage: {capacity: 30, slots: 1, buffer: 10, input_priority: 2}
+        energy:
+          output_per_tick: 80
+          source_kind: artificial_star
+          fuel_rules: [{item_id: antimatter_fuel_rod, consume_per_tick: 1, output_multiplier: 1}]
+  - id: gauss_turret
+    name: Gauss Turret
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 80
+      energy: 30
+      items:
+        - {item_id: circuit_board, quantity: 2}
+        - {item_id: gear, quantity: 8}
+        - {item_id: iron_ingot, quantity: 8}
+        - {item_id: magnetic_coil, quantity: 4}
+    buildable: true
+    profile:
+      max_hp_base: 120
+      max_hp_per_level: 40
+      vision_range: 6
+      weapon_class: cannon
+      level_bonus: {combat_attack: 5, combat_range: 1}
+    runtime:
+      params:
+        energy_consume: 3
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: ammo, direction: input, capacity: 4, allowed_items: [ammo_bullet, titanium_ammo]}]
+      functions:
+        storage: {capacity: 40, slots: 1, buffer: 20, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 3}
+        combat:
+          attack: 15
+          range: 5
+          fire_rate: 10
+          ammo_item: ammo_bullet
+          ammo_consume: 1
+          alt_ammo_item: titanium_ammo
+          alt_ammo_attack: 25
+  - id: missile_turret
+    name: Missile Turret
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 100
+      energy: 40
+      items:
+        - {item_id: circuit_board, quantity: 12}
+        - {item_id: engine, quantity: 6}
+        - {item_id: motor, quantity: 6}
+        - {item_id: steel, quantity: 8}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: missile}
+    runtime:
+      params:
+        energy_consume: 8
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: ammo, direction: input, capacity: 4, allowed_items: [ammo_missile]}]
+      functions:
+        storage: {capacity: 40, slots: 1, buffer: 20, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 8}
+        combat: {attack: 40, range: 10, fire_rate: 30, ammo_item: ammo_missile, ammo_consume: 1}
+  - id: implosion_cannon
+    name: Implosion Cannon
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 100
+      energy: 40
+      items:
+        - {item_id: circuit_board, quantity: 10}
+        - {item_id: motor, quantity: 8}
+        - {item_id: steel, quantity: 10}
+        - {item_id: super_magnetic_ring, quantity: 2}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: laser}
+    runtime:
+      params:
+        energy_consume: 15
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: ammo, direction: input, capacity: 4, allowed_items: [gravity_missile]}]
+      functions:
+        storage: {capacity: 40, slots: 1, buffer: 20, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 15}
+        combat: {attack: 75, range: 12, fire_rate: 45, ammo_item: gravity_missile, ammo_consume: 1}
+  - id: laser_turret
+    name: Laser Turret
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 100
+      energy: 40
+      items:
+        - {item_id: circuit_board, quantity: 6}
+        - {item_id: photon_combiner, quantity: 9}
+        - {item_id: plasma_exciter, quantity: 6}
+        - {item_id: steel, quantity: 9}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: laser}
+    runtime:
+      params: {energy_consume: 18, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 18}, combat: {attack: 30, range: 8, fire_rate: 8}}
+  - id: plasma_turret
+    name: Plasma Turret
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 100
+      energy: 40
+      items:
+        - {item_id: plasma_exciter, quantity: 5}
+        - {item_id: processor, quantity: 5}
+        - {item_id: super_magnetic_ring, quantity: 10}
+        - {item_id: titanium_alloy, quantity: 20}
+        - {item_id: titanium_glass, quantity: 10}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: laser}
+    runtime:
+      params:
+        energy_consume: 25
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: ammo, direction: input, capacity: 4, allowed_items: [plasma_capsule]}]
+      functions:
+        storage: {capacity: 40, slots: 1, buffer: 20, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 25}
+        combat: {attack: 55, range: 11, fire_rate: 20, ammo_item: plasma_capsule, ammo_consume: 1}
+  - id: sr_plasma_turret
+    name: SR Plasma Turret
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 300
+      energy: 150
+      items:
+        - {item_id: plasma_exciter, quantity: 5}
+        - {item_id: processor, quantity: 5}
+        - {item_id: steel, quantity: 15}
+        - {item_id: super_magnetic_ring, quantity: 5}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: laser}
+    runtime:
+      params: {energy_consume: 20, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 20}, combat: {attack: 60, range: 12}}
+  - id: jammer_tower
+    name: Jammer Tower
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 120
+      energy: 60
+      items:
+        - {item_id: copper_ingot, quantity: 12}
+        - {item_id: diamond, quantity: 6}
+        - {item_id: plasma_exciter, quantity: 9}
+        - {item_id: processor, quantity: 3}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: laser}
+    runtime:
+      params: {energy_consume: 6, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 6}, combat: {range: 8}}
+  - id: signal_tower
+    name: Signal Tower
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 50, energy: 20, items: [{item_id: crystal_silicon, quantity: 6}, {item_id: steel, quantity: 12}]}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+  - id: planetary_shield_generator
+    name: Planetary Shield Generator
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 500
+      energy: 250
+      items:
+        - {item_id: electromagnetic_turbine, quantity: 20}
+        - {item_id: particle_container, quantity: 5}
+        - {item_id: steel, quantity: 20}
+        - {item_id: super_magnetic_ring, quantity: 5}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params: {energy_consume: 50, connection_points: [{id: power, kind: power, capacity: 1}]}
+      functions: {energy: {consume_per_tick: 50}, shield: {capacity: 1000, charge_per_tick: 5}}
+  - id: em_rail_ejector
+    name: EM-Rail Ejector
+    category: dyson
+    subcategory: dyson
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 260
+      energy: 130
+      items:
+        - {item_id: gear, quantity: 20}
+        - {item_id: processor, quantity: 5}
+        - {item_id: steel, quantity: 20}
+        - {item_id: super_magnetic_ring, quantity: 10}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 30
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 2, allowed_items: [solar_sail]}]
+      functions:
+        storage: {capacity: 20, slots: 1, buffer: 6, input_priority: 2}
+        energy: {consume_per_tick: 30}
+        launch:
+          energy_per_launch: 300
+          success_rate: 0.95
+          orbit_radius_min: 0.5
+          orbit_radius_max: 5
+          inclination_max: 90
+          launch_interval: 60
+          launch_queue_size: 10
+  - id: vertical_launching_silo
+    name: Vertical Launching Silo
+    category: dyson
+    subcategory: dyson
+    footprint: {width: 1, height: 1}
+    build_cost:
+      minerals: 260
+      energy: 130
+      items:
+        - {item_id: frame_material, quantity: 30}
+        - {item_id: graviton_lens, quantity: 20}
+        - {item_id: quantum_chip, quantity: 10}
+        - {item_id: titanium_alloy, quantity: 80}
+    buildable: true
+    default_recipe_id: small_carrier_rocket
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+    runtime:
+      params:
+        energy_consume: 50
+        capacity: 1
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports:
+          - {id: in-0, direction: input, capacity: 1}
+          - {id: out-0, direction: output, capacity: 1, allowed_items: [small_carrier_rocket]}
+      functions:
+        production: {throughput: 1, recipe_slots: 1}
+        storage: {capacity: 20, slots: 1, buffer: 6, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 50}
+        launch:
+          energy_per_launch: 500
+          success_rate: 0.9
+          orbit_radius_min: 0.5
+          orbit_radius_max: 5
+          inclination_max: 90
+          launch_interval: 120
+          launch_queue_size: 20
+          rocket_item_id: small_carrier_rocket
+          production_speed: 1
+  - id: foundation
+    name: Foundation
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 10}
+    buildable: true
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}

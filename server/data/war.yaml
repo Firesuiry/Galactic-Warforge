@@ -1,0 +1,498 @@
+# 战争蓝图：底盘、舰体、组件与公开蓝图。
+# 格式说明见 docs/dev/数据配置文件.md
+base_frames:
+  - id: light_frame
+    name: Light Frame
+    role: recon_skirmish
+    description: High mobility frame for scouts, drones and light frontline templates.
+    supported_domains: [ground, air]
+    visible_tech_id: prototype
+    budgets:
+      power_output: 200
+      sustained_draw: 120
+      peak_draw: 180
+      volume_capacity: 110
+      mass_capacity: 80
+      rigidity_capacity: 72
+      heat_capacity: 68
+      maintenance_limit: 8
+      signal_capacity: 14
+    slots:
+      - {id: power_core, category: power, required: true}
+      - {id: mobility, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: utility, category: utility}
+  - id: medium_frame
+    name: Medium Frame
+    role: frontline_generalist
+    description: Balanced frame for sustained ground pushes and escort duties.
+    supported_domains: [ground]
+    budgets:
+      power_output: 240
+      sustained_draw: 180
+      peak_draw: 240
+      volume_capacity: 144
+      mass_capacity: 132
+      rigidity_capacity: 118
+      heat_capacity: 110
+      maintenance_limit: 10
+      signal_capacity: 16
+    slots:
+      - {id: power_core, category: power, required: true}
+      - {id: mobility, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: weapon_aux, category: defense}
+      - {id: utility, category: utility}
+  - id: heavy_frame
+    name: Heavy Frame
+    role: breakthrough_guard
+    description: Armor-heavy frame for defensive anchors and siege escorts.
+    supported_domains: [ground]
+    budgets:
+      power_output: 320
+      sustained_draw: 240
+      peak_draw: 320
+      volume_capacity: 220
+      mass_capacity: 220
+      rigidity_capacity: 180
+      heat_capacity: 160
+      maintenance_limit: 14
+      signal_capacity: 18
+    slots:
+      - {id: power_core, category: power, required: true}
+      - {id: mobility, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: weapon_aux, category: defense}
+      - {id: utility_0, category: utility}
+      - {id: utility_1, category: utility}
+  - id: assault_frame
+    name: Assault Frame
+    role: high_commitment_assault
+    description: Oversized frame for shock assaults that require dedicated logistics.
+    supported_domains: [ground]
+    budgets:
+      power_output: 420
+      sustained_draw: 320
+      peak_draw: 420
+      volume_capacity: 280
+      mass_capacity: 300
+      rigidity_capacity: 240
+      heat_capacity: 220
+      maintenance_limit: 18
+      signal_capacity: 22
+    slots:
+      - {id: power_core, category: power, required: true}
+      - {id: mobility, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: weapon_aux, category: weapon, required: true}
+      - {id: utility_0, category: utility}
+      - {id: utility_1, category: utility}
+base_hulls:
+  - id: corvette_hull
+    name: Corvette Hull
+    role: recon_intercept
+    description: Fast response hull for patrol, harassment and screening.
+    supported_domains: [orbital, space]
+    visible_tech_id: corvette
+    budgets:
+      power_output: 420
+      sustained_draw: 300
+      peak_draw: 420
+      volume_capacity: 260
+      mass_capacity: 220
+      rigidity_capacity: 200
+      heat_capacity: 180
+      maintenance_limit: 12
+      signal_capacity: 18
+    slots:
+      - {id: reactor, category: power, required: true}
+      - {id: drive, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: utility, category: utility}
+  - id: destroyer_hull
+    name: Destroyer Hull
+    role: escort_command
+    description: Multi-role escort hull with stronger shields and point defense.
+    supported_domains: [orbital, space]
+    visible_tech_id: destroyer
+    budgets:
+      power_output: 520
+      sustained_draw: 400
+      peak_draw: 520
+      volume_capacity: 380
+      mass_capacity: 340
+      rigidity_capacity: 310
+      heat_capacity: 260
+      maintenance_limit: 16
+      signal_capacity: 20
+    slots:
+      - {id: reactor, category: power, required: true}
+      - {id: drive, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: weapon_aux, category: defense}
+      - {id: utility, category: utility}
+  - id: cruiser_hull
+    name: Cruiser Hull
+    role: line_fire_support
+    description: Long-range hull reserved for heavier fleet doctrines.
+    supported_domains: [space]
+    budgets:
+      power_output: 700
+      sustained_draw: 540
+      peak_draw: 700
+      volume_capacity: 560
+      mass_capacity: 520
+      rigidity_capacity: 430
+      heat_capacity: 360
+      maintenance_limit: 20
+      signal_capacity: 24
+    slots:
+      - {id: reactor, category: power, required: true}
+      - {id: drive, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: weapon_aux, category: weapon, required: true}
+      - {id: utility, category: utility}
+  - id: carrier_hull
+    name: Carrier Hull
+    role: drone_missile_platform
+    description: Support hull built around hangars, datalinks and standoff fire.
+    supported_domains: [space]
+    budgets:
+      power_output: 700
+      sustained_draw: 520
+      peak_draw: 700
+      volume_capacity: 600
+      mass_capacity: 560
+      rigidity_capacity: 400
+      heat_capacity: 340
+      maintenance_limit: 22
+      signal_capacity: 24
+    slots:
+      - {id: reactor, category: power, required: true}
+      - {id: drive, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon}
+      - {id: utility_0, category: utility}
+      - {id: utility_1, category: utility}
+  - id: siege_hull
+    name: Siege Hull
+    role: orbital_pressure
+    description: Slow heavy hull for orbital suppression and fortified pushes.
+    supported_domains: [orbital, space]
+    budgets:
+      power_output: 760
+      sustained_draw: 600
+      peak_draw: 760
+      volume_capacity: 660
+      mass_capacity: 680
+      rigidity_capacity: 520
+      heat_capacity: 420
+      maintenance_limit: 26
+      signal_capacity: 24
+    slots:
+      - {id: reactor, category: power, required: true}
+      - {id: drive, category: propulsion, required: true}
+      - {id: armor, category: defense, required: true}
+      - {id: sensor, category: sensor, required: true}
+      - {id: weapon_primary, category: weapon, required: true}
+      - {id: weapon_aux, category: weapon, required: true}
+      - {id: utility, category: utility}
+components:
+  - id: micro_reactor
+    name: Micro Reactor
+    category: power
+    slot_kind: core
+    supported_domains: [ground, air]
+    power_output: 170
+    volume: 18
+    mass: 14
+    heat_load: 8
+    maintenance: 1
+    signal_load: 2
+    tags: [starter, reactor]
+  - id: naval_fission_core
+    name: Naval Fission Core
+    category: power
+    slot_kind: core
+    supported_domains: [orbital, space]
+    power_output: 380
+    volume: 44
+    mass: 36
+    heat_load: 18
+    maintenance: 3
+    signal_load: 4
+    tags: [naval, reactor]
+  - id: servo_drive
+    name: Servo Drive
+    category: propulsion
+    slot_kind: mobility
+    supported_domains: [ground]
+    power_draw: 28
+    volume: 14
+    mass: 10
+    rigidity_load: 8
+    heat_load: 5
+    maintenance: 1
+    signal_load: 1
+    tags: [ground]
+  - id: vector_thrusters
+    name: Vector Thrusters
+    category: propulsion
+    slot_kind: drive
+    supported_domains: [air, orbital, space]
+    power_draw: 54
+    volume: 24
+    mass: 18
+    rigidity_load: 12
+    heat_load: 10
+    maintenance: 2
+    signal_load: 3
+    tags: [flight, naval]
+  - id: reactive_armor
+    name: Reactive Armor
+    category: defense
+    slot_kind: armor
+    supported_domains: [ground, orbital, space]
+    power_draw: 8
+    volume: 16
+    mass: 20
+    rigidity_load: 10
+    maintenance: 1
+    signal_load: 1
+    tags: [armor]
+  - id: escort_shield
+    name: Escort Shield
+    category: defense
+    slot_kind: shield
+    supported_domains: [air, orbital, space]
+    power_draw: 36
+    volume: 20
+    mass: 14
+    heat_load: 8
+    maintenance: 2
+    signal_load: 2
+    tags: [shield]
+  - id: point_defense_grid
+    name: Point Defense Grid
+    category: defense
+    slot_kind: hardpoint
+    supported_domains: [orbital, space]
+    power_draw: 22
+    volume: 12
+    mass: 8
+    heat_load: 6
+    maintenance: 2
+    signal_load: 1
+    tags: [pd]
+  - id: tactical_radar
+    name: Tactical Radar
+    category: sensor
+    slot_kind: sensor
+    supported_domains: [ground, orbital, space]
+    power_draw: 14
+    volume: 8
+    mass: 6
+    heat_load: 3
+    maintenance: 1
+    signal_load: 5
+    tags: [active_sensor]
+  - id: battle_link_array
+    name: Battle Link Array
+    category: sensor
+    slot_kind: sensor
+    supported_domains: [air, orbital, space]
+    power_draw: 18
+    volume: 10
+    mass: 6
+    heat_load: 4
+    maintenance: 1
+    signal_load: 4
+    tags: [datalink]
+  - id: plasma_lance
+    name: Plasma Lance
+    category: weapon
+    slot_kind: weapon
+    supported_domains: [ground, space]
+    power_draw: 42
+    volume: 20
+    mass: 16
+    rigidity_load: 12
+    heat_load: 16
+    maintenance: 2
+    signal_load: 4
+    tags: [direct_fire]
+  - id: swarm_missile_pod
+    name: Swarm Missile Pod
+    category: weapon
+    slot_kind: weapon
+    supported_domains: [air, orbital, space]
+    power_draw: 24
+    volume: 16
+    mass: 12
+    rigidity_load: 6
+    heat_load: 8
+    maintenance: 2
+    signal_load: 3
+    tags: [missile]
+  - id: coilgun_battery
+    name: Coilgun Battery
+    category: weapon
+    slot_kind: weapon
+    supported_domains: [orbital, space]
+    power_draw: 56
+    volume: 26
+    mass: 20
+    rigidity_load: 16
+    heat_load: 14
+    maintenance: 3
+    signal_load: 4
+    tags: [kinetic]
+  - id: field_repair_pack
+    name: Field Repair Pack
+    category: utility
+    slot_kind: utility
+    supported_domains: [ground]
+    power_draw: 10
+    volume: 8
+    mass: 6
+    maintenance: 1
+    signal_load: 1
+    tags: [repair]
+  - id: ecm_suite
+    name: ECM Suite
+    category: utility
+    slot_kind: utility
+    supported_domains: [air, orbital, space]
+    power_draw: 16
+    volume: 10
+    mass: 8
+    heat_load: 4
+    maintenance: 1
+    signal_load: 1
+    stealth_rating: 2
+    tags: [ecm]
+  - id: drone_bay
+    name: Drone Bay
+    category: utility
+    slot_kind: utility
+    supported_domains: [orbital, space]
+    power_draw: 20
+    volume: 18
+    mass: 14
+    heat_load: 6
+    maintenance: 2
+    signal_load: 2
+    tags: [hangar]
+public_blueprints:
+  - id: prototype
+    name: Prototype
+    domain: ground
+    source: preset
+    base_frame_id: light_frame
+    visible_tech_id: prototype
+    runtime_class: combat_squad
+    production_mode: factory_recipe
+    producer_recipes: [df_prototype]
+    deploy_command: deploy_squad
+    query_scopes: [planet_runtime]
+    commands: [deploy_squad]
+    components:
+      - {slot_id: power_core, component_id: micro_reactor}
+      - {slot_id: mobility, component_id: servo_drive}
+      - {slot_id: armor, component_id: reactive_armor}
+      - {slot_id: sensor, component_id: tactical_radar}
+      - {slot_id: weapon_primary, component_id: plasma_lance}
+      - {slot_id: utility, component_id: field_repair_pack}
+    runtime:
+      squad:
+        hp: 80
+        weapon: {type: laser, damage: 20, fire_rate: 10, range: 8}
+        shield: {level: 20, max_level: 20, recharge_rate: 1, recharge_delay: 10}
+  - id: precision_drone
+    name: Precision Drone
+    domain: air
+    source: preset
+    base_frame_id: light_frame
+    visible_tech_id: precision_drone
+    runtime_class: combat_squad
+    production_mode: factory_recipe
+    producer_recipes: [df_precision_drone]
+    deploy_command: deploy_squad
+    query_scopes: [planet_runtime]
+    commands: [deploy_squad]
+    components:
+      - {slot_id: power_core, component_id: micro_reactor}
+      - {slot_id: mobility, component_id: vector_thrusters}
+      - {slot_id: armor, component_id: escort_shield}
+      - {slot_id: sensor, component_id: battle_link_array}
+      - {slot_id: weapon_primary, component_id: swarm_missile_pod}
+      - {slot_id: utility, component_id: ecm_suite}
+    runtime:
+      squad:
+        hp: 60
+        weapon: {type: missile, damage: 35, fire_rate: 8, range: 12}
+        shield: {level: 30, max_level: 30, recharge_rate: 1.5, recharge_delay: 8}
+  - id: corvette
+    name: Corvette
+    domain: space
+    source: preset
+    base_hull_id: corvette_hull
+    visible_tech_id: corvette
+    runtime_class: fleet_unit
+    production_mode: factory_recipe
+    producer_recipes: [df_corvette]
+    deploy_command: commission_fleet
+    query_scopes: [system_runtime, fleet]
+    commands: [commission_fleet, fleet_assign, fleet_attack, fleet_move, fleet_disband]
+    components:
+      - {slot_id: reactor, component_id: naval_fission_core}
+      - {slot_id: drive, component_id: vector_thrusters}
+      - {slot_id: armor, component_id: escort_shield}
+      - {slot_id: sensor, component_id: tactical_radar}
+      - {slot_id: weapon_primary, component_id: coilgun_battery}
+      - {slot_id: utility, component_id: ecm_suite}
+    runtime:
+      fleet_unit:
+        hp: 100
+        weapon: {type: laser, damage: 40, fire_rate: 10, range: 24}
+        shield: {level: 40, max_level: 40, recharge_rate: 2, recharge_delay: 10}
+  - id: destroyer
+    name: Destroyer
+    domain: space
+    source: preset
+    base_hull_id: destroyer_hull
+    visible_tech_id: destroyer
+    runtime_class: fleet_unit
+    production_mode: factory_recipe
+    producer_recipes: [df_destroyer]
+    deploy_command: commission_fleet
+    query_scopes: [system_runtime, fleet]
+    commands: [commission_fleet, fleet_assign, fleet_attack, fleet_move, fleet_disband]
+    components:
+      - {slot_id: reactor, component_id: naval_fission_core}
+      - {slot_id: drive, component_id: vector_thrusters}
+      - {slot_id: armor, component_id: escort_shield}
+      - {slot_id: sensor, component_id: battle_link_array}
+      - {slot_id: weapon_primary, component_id: plasma_lance}
+      - {slot_id: weapon_aux, component_id: point_defense_grid}
+      - {slot_id: utility, component_id: drone_bay}
+    runtime:
+      fleet_unit:
+        hp: 180
+        weapon: {type: laser, damage: 80, fire_rate: 10, range: 24}
+        shield: {level: 80, max_level: 80, recharge_rate: 2, recharge_delay: 10}

@@ -77,14 +77,14 @@ var validBuildingSubcategories = map[BuildingSubcategory]struct{}{
 
 // Footprint describes how many tiles a building occupies.
 type Footprint struct {
-	Width  int `json:"width" yaml:"width"`
-	Height int `json:"height" yaml:"height"`
+	Width  int `json:"width" yaml:"width,omitempty"`
+	Height int `json:"height" yaml:"height,omitempty"`
 }
 
 // BuildCost describes the construction cost of a building.
 type BuildCost struct {
-	Minerals int          `json:"minerals" yaml:"minerals"`
-	Energy   int          `json:"energy" yaml:"energy"`
+	Minerals int          `json:"minerals" yaml:"minerals,omitempty"`
+	Energy   int          `json:"energy" yaml:"energy,omitempty"`
 	Items    []ItemAmount `json:"items,omitempty" yaml:"items,omitempty"`
 }
 
@@ -92,20 +92,22 @@ type BuildCost struct {
 type BuildingDefinition struct {
 	ID                   BuildingType         `json:"id" yaml:"id"`
 	Name                 string               `json:"name" yaml:"name"`
-	Category             BuildingCategory     `json:"category" yaml:"category"`
-	Subcategory          BuildingSubcategory  `json:"subcategory" yaml:"subcategory"`
-	Footprint            Footprint            `json:"footprint" yaml:"footprint"`
-	BuildCost            BuildCost            `json:"build_cost" yaml:"build_cost"`
+	Category             BuildingCategory     `json:"category" yaml:"category,omitempty"`
+	Subcategory          BuildingSubcategory  `json:"subcategory" yaml:"subcategory,omitempty"`
+	Footprint            Footprint            `json:"footprint" yaml:"footprint,omitempty"`
+	BuildCost            BuildCost            `json:"build_cost" yaml:"build_cost,omitempty"`
 	Upgrade              BuildingUpgradeRule  `json:"upgrade,omitempty" yaml:"upgrade,omitempty"`
 	Demolish             BuildingDemolishRule `json:"demolish,omitempty" yaml:"demolish,omitempty"`
-	UnlockTech           []string             `json:"unlock_tech,omitempty" yaml:"unlock_tech,omitempty"`
-	Buildable            bool                 `json:"buildable" yaml:"buildable"`
+	UnlockTech           []string             `json:"unlock_tech,omitempty" yaml:"-"` // 由科技树派生
+	Buildable            bool                 `json:"buildable" yaml:"buildable,omitempty"`
 	DefaultRecipeID      string               `json:"default_recipe_id,omitempty" yaml:"default_recipe_id,omitempty"`
 	RequiresResourceNode bool                 `json:"requires_resource_node,omitempty" yaml:"requires_resource_node,omitempty"`
 	CanProduceUnits      bool                 `json:"can_produce_units,omitempty" yaml:"can_produce_units,omitempty"`
 	// BuildRadius 建造中心半径（D2）：>0 时该建筑覆盖的半径内允许直接建造，
 	// 无需执行体在场。0 表示不是建造中心。
 	BuildRadius int `json:"build_radius,omitempty" yaml:"build_radius,omitempty"`
+	// Profile 血量/视野/武器类型/逐级加成（仅配置与运行时使用，不进目录 JSON）。
+	Profile BuildingProfileSpec `json:"-" yaml:"profile"`
 }
 
 var (
@@ -149,7 +151,7 @@ func AllBuildingDefinitions() []BuildingDefinition {
 func RegisterBuildingDefinitions(defs ...BuildingDefinition) error {
 	buildingCatalogMu.Lock()
 	for _, def := range defs {
-		if err := validateBuildingDefinition(def); err != nil {
+		if err := validateBuildingDefinition(def, Recipe); err != nil {
 			buildingCatalogMu.Unlock()
 			return err
 		}
@@ -185,7 +187,7 @@ func LoadBuildingCatalogFromFile(path string) error {
 	}
 
 	var wrapper struct {
-		Buildings []BuildingDefinition `yaml:"buildings"`
+		Buildings []BuildingDefinition `yaml:"buildings,omitempty"`
 	}
 	if err := yaml.Unmarshal(data, &wrapper); err == nil && len(wrapper.Buildings) > 0 {
 		return ReplaceBuildingCatalog(wrapper.Buildings)
@@ -208,7 +210,7 @@ func buildBuildingCatalog(defs []BuildingDefinition) (map[BuildingType]BuildingD
 	catalog := make(map[BuildingType]BuildingDefinition, len(defs))
 	for _, def := range defs {
 		def = normalizeBuildableCost(def)
-		if err := validateBuildingDefinition(def); err != nil {
+		if err := validateBuildingDefinition(def, Recipe); err != nil {
 			return nil, err
 		}
 		if _, exists := catalog[def.ID]; exists {
@@ -267,7 +269,8 @@ var defaultBuildCostOverrides = map[BuildingType]BuildCost{
 	BuildingTypeFoundation: {Minerals: 10, Energy: 0},
 }
 
-func validateBuildingDefinition(def BuildingDefinition) error {
+// validateBuildingDefinition 校验建筑定义；recipeByID 用于校验默认配方。
+func validateBuildingDefinition(def BuildingDefinition, recipeByID func(string) (RecipeDefinition, bool)) error {
 	if def.ID == "" {
 		return fmt.Errorf("building id required")
 	}
@@ -292,7 +295,7 @@ func validateBuildingDefinition(def BuildingDefinition) error {
 		}
 	}
 	if def.DefaultRecipeID != "" {
-		recipe, ok := Recipe(def.DefaultRecipeID)
+		recipe, ok := recipeByID(def.DefaultRecipeID)
 		if !ok {
 			return fmt.Errorf("building %s default recipe %s not found", def.ID, def.DefaultRecipeID)
 		}

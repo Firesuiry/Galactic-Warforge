@@ -2,16 +2,16 @@ package model
 
 // RecipeDefinition captures a production recipe.
 type RecipeDefinition struct {
-	HandcraftAllowed bool           `json:"handcraft_allowed"`
-	ID               string         `json:"id"`
-	Name             string         `json:"name"`
-	Inputs           []ItemAmount   `json:"inputs"`
-	Outputs          []ItemAmount   `json:"outputs"`
-	Byproducts       []ItemAmount   `json:"byproducts,omitempty"`
-	Duration         int            `json:"duration"`
-	EnergyCost       int            `json:"energy_cost"`
-	BuildingTypes    []BuildingType `json:"building_types"`
-	TechUnlock       []string       `json:"tech_unlock,omitempty"`
+	ID               string         `json:"id" yaml:"id"`
+	Name             string         `json:"name" yaml:"name"`
+	Inputs           []ItemAmount   `json:"inputs" yaml:"inputs"`
+	Outputs          []ItemAmount   `json:"outputs" yaml:"outputs"`
+	Byproducts       []ItemAmount   `json:"byproducts,omitempty" yaml:"byproducts,omitempty"`
+	Duration         int            `json:"duration" yaml:"duration"`
+	EnergyCost       int            `json:"energy_cost" yaml:"energy_cost,omitempty"`
+	BuildingTypes    []BuildingType `json:"building_types" yaml:"building_types"`
+	TechUnlock       []string       `json:"tech_unlock,omitempty" yaml:"tech_unlock,omitempty"`
+	HandcraftAllowed bool           `json:"handcraft_allowed" yaml:"handcraft_allowed,omitempty"`
 }
 
 // AllOutputs returns the main outputs plus byproducts.

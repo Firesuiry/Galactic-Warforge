@@ -1,0 +1,2259 @@
+# 科技树定义。
+# 格式说明见 docs/dev/数据配置文件.md
+pending_recipe_unlocks:
+  df_strange_annihilation_fuel_rod: 'W1: 奇异湮灭燃料棒配方（df_high_density_controlled_annihilation，gated）'
+techs:
+  - id: dyson_sphere_program
+    name: 戴森球计划
+    name_en: Dyson Sphere Program
+    category: main
+    type: main
+    unlocks:
+      - {type: building, id: matrix_lab}
+      - {type: building, id: wind_turbine}
+      - {type: building, id: mining_machine}
+      - {type: building, id: arc_smelter}
+      - {type: building, id: tesla_tower}
+      - {type: building, id: conveyor_belt_mk1}
+      - {type: building, id: sorter_mk1}
+      - {type: building, id: assembling_machine_mk1}
+  - id: electromagnetism
+    name: 电磁学
+    name_en: Electromagnetism
+    category: main
+    type: main
+    level: 1
+    cost: [{item_id: electromagnetic_matrix, quantity: 10}]
+    unlocks: [{type: building, id: depot_mk1}]
+  - id: basic_logistics_system
+    name: 基础物流系统
+    name_en: Basic Logistics System
+    category: main
+    type: logistics
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 10}]
+    unlocks: [{type: building, id: splitter}, {type: building, id: sorter_mk2}, {type: building, id: traffic_monitor}]
+  - id: automatic_metallurgy
+    name: 自动化冶金
+    name_en: Automatic Metallurgy
+    category: main
+    type: smelting
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 10}]
+    unlocks: [{type: recipe, id: smelt_stone}, {type: recipe, id: glass}]
+  - id: basic_assembling_processes
+    name: 基础制造工艺
+    name_en: Basic Assembling Processes
+    category: main
+    type: smelting
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 10}]
+  - id: fluid_storage
+    name: 液体储存封装
+    name_en: Fluid Storage Encapsulation
+    category: branch
+    type: energy
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}]
+    unlocks: [{type: building, id: storage_tank}, {type: building, id: water_pump}]
+  - id: plasma_control
+    name: 高效电浆控制
+    name_en: High-Efficiency Plasma Control
+    category: branch
+    type: energy
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: prism}, {type: recipe, id: plasma_exciter}, {type: building, id: wireless_power_tower}]
+  - id: electromagnetic_drive
+    name: 电磁驱动
+    name_en: Electromagnetic Drive
+    category: branch
+    type: logistics
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: motor}]
+  - id: engine
+    name: 发动机
+    name_en: Engine
+    category: branch
+    type: main
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 20}]
+    unlocks: [{type: recipe, id: df_engine}, {type: recipe, id: engine}]
+  - id: weapon_system
+    name: 武器系统
+    name_en: Weapon System
+    category: branch
+    type: combat
+    level: 2
+    prerequisites: [electromagnetism, automatic_metallurgy]
+    cost: [{item_id: electromagnetic_matrix, quantity: 20}]
+    unlocks:
+      - {type: recipe, id: df_magnum_ammo_box}
+      - {type: building, id: gauss_turret}
+      - {type: recipe, id: ammo_bullet}
+  - id: steel_smelting
+    name: 钢材冶炼
+    name_en: Steel Smelting
+    category: branch
+    type: smelting
+    level: 3
+    prerequisites: [automatic_metallurgy]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: steel}]
+  - id: combustible_unit
+    name: 燃烧单元
+    name_en: Combustible Unit
+    category: branch
+    type: combat
+    level: 3
+    prerequisites: [automatic_metallurgy]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: combustible_unit}]
+  - id: smelting_purification
+    name: 冶炼提纯
+    name_en: Smelting Purification
+    category: branch
+    type: smelting
+    level: 3
+    prerequisites: [automatic_metallurgy]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks:
+      - {type: recipe, id: high_purity_silicon}
+      - {type: recipe, id: silicon_ore}
+      - {type: recipe, id: coal_to_graphite}
+      - {type: recipe, id: smelt_silicon}
+  - id: thermal_power
+    name: 热力发电
+    name_en: Thermal Power
+    category: branch
+    type: energy
+    level: 3
+    prerequisites: [basic_assembling_processes]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: building, id: thermal_power_plant}]
+  - id: plasma_refining
+    name: 等离子萃取精炼
+    name_en: Plasma Extract Refining
+    category: branch
+    type: chemical
+    level: 3
+    prerequisites: [fluid_storage, plasma_control]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    unlocks:
+      - {type: recipe, id: plasma_refining}
+      - {type: building, id: oil_extractor}
+      - {type: building, id: oil_refinery}
+      - {type: recipe, id: oil_fractionation}
+  - id: battlefield_analysis
+    name: 战场分析基站
+    name_en: Battlefield Analysis Base
+    category: branch
+    type: combat
+    level: 3
+    prerequisites: [engine, weapon_system]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    unlocks: [{type: building, id: battlefield_analysis_base}]
+  - id: environment_modification
+    name: 地形改造
+    name_en: Environment Modification
+    category: branch
+    type: main
+    level: 4
+    prerequisites: [steel_smelting]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: foundation}, {type: building, id: foundation}]
+  - id: crystal_smelting
+    name: 晶体冶炼
+    name_en: Crystal Smelting
+    category: branch
+    type: smelting
+    level: 4
+    prerequisites: [smelting_purification]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks:
+      - {type: recipe, id: diamond_advanced}
+      - {type: recipe, id: diamond}
+      - {type: recipe, id: crystal}
+      - {type: recipe, id: crystal_silicon_from_fractal}
+  - id: solar_collection
+    name: 太阳能收集
+    name_en: Solar Collection
+    category: main
+    type: energy
+    level: 4
+    prerequisites: [basic_assembling_processes, electromagnetic_matrix_technology, smelting_purification]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}]
+    unlocks: [{type: building, id: solar_panel}]
+  - id: semiconductor
+    name: 半导体材料
+    name_en: Semiconductor Material
+    category: branch
+    type: smelting
+    level: 4
+    prerequisites: [basic_assembling_processes]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}]
+    unlocks: [{type: recipe, id: microcrystalline_component}]
+  - id: proliferator_mk1
+    name: 增产剂Mk.I
+    name_en: Proliferator Mk.I
+    category: branch
+    type: main
+    level: 4
+    prerequisites: [semiconductor, plasma_control]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks:
+      - {type: recipe, id: proliferator_1}
+      - {type: building, id: spray_coater}
+      - {type: recipe, id: proliferator_mk1}
+  - id: deuterium_fractionation
+    name: 重氢分馏
+    name_en: Deuterium Fractionation
+    category: branch
+    type: chemical
+    level: 4
+    prerequisites: [thermal_power, plasma_refining]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 75}]
+    unlocks: [{type: recipe, id: deuterium_fractionation}, {type: building, id: fractionator}]
+  - id: basic_chemical
+    name: 基础化工
+    name_en: Basic Chemical Engineering
+    category: main
+    type: chemical
+    level: 4
+    prerequisites: [fluid_storage, plasma_refining]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    unlocks: [{type: building, id: chemical_plant}, {type: recipe, id: plastic}, {type: recipe, id: sulfuric_acid}]
+  - id: energy_matrix
+    name: 能量矩阵
+    name_en: Energy Matrix
+    category: main
+    type: main
+    level: 4
+    prerequisites: [plasma_refining]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: energy_matrix}]
+  - id: magnetic_levitation
+    name: 磁悬浮技术
+    name_en: Magnetic Levitation
+    category: main
+    type: logistics
+    level: 4
+    prerequisites: [electromagnetic_drive]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 13}]
+    unlocks: [{type: recipe, id: electromagnetic_turbine}, {type: building, id: em_rail_ejector}]
+  - id: missile_turret
+    name: 导弹防御塔
+    name_en: Missile Turret
+    category: branch
+    type: combat
+    level: 4
+    prerequisites: [engine, weapon_system, combustible_unit]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    unlocks: [{type: recipe, id: df_missile_set}, {type: building, id: missile_turret}, {type: recipe, id: ammo_missile}]
+  - id: prototype
+    name: 原型机
+    name_en: Prototype
+    category: branch
+    type: combat
+    level: 4
+    prerequisites: [battlefield_analysis, plasma_control]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    unlocks: [{type: recipe, id: df_prototype}]
+  - id: efficient_logistics
+    name: 高效物流系统
+    name_en: High-Efficiency Logistics System
+    category: main
+    type: logistics
+    level: 5
+    prerequisites: [improved_logistics_system, magnetic_levitation]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 13}]
+    unlocks: [{type: building, id: conveyor_belt_mk2}, {type: building, id: sorter_mk3}, {type: building, id: depot_mk2}]
+  - id: distribution_logistics
+    name: 配送物流系统
+    name_en: Distribution Logistics System
+    category: branch
+    type: logistics
+    level: 5
+    prerequisites: [improved_logistics_system, magnetic_levitation]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 25}]
+    unlocks:
+      - {type: building, id: logistics_distributor}
+      - {type: unit, id: logistics_drone}
+      - {type: recipe, id: logistics_bot}
+  - id: titanium_smelting
+    name: 钛矿冶炼
+    name_en: Titanium Smelting
+    category: branch
+    type: smelting
+    level: 5
+    prerequisites: [steel_smelting]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: titanium_ingot}, {type: recipe, id: smelt_titanium}]
+  - id: energy_storage
+    name: 能量储存
+    name_en: Energy Storage
+    category: branch
+    type: energy
+    level: 5
+    prerequisites: [crystal_smelting, solar_collection, super_magnetic]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: building, id: accumulator}]
+  - id: photon_conversion
+    name: 光子变频
+    name_en: Photon Frequency Conversion
+    category: branch
+    type: energy
+    level: 5
+    prerequisites: [solar_collection]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: photon_combiner}, {type: recipe, id: photon_combiner_from_grating}]
+  - id: processor
+    name: 处理器
+    name_en: Processor
+    category: main
+    type: smelting
+    level: 5
+    prerequisites: [semiconductor]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: processor}]
+  - id: superconductor
+    name: 应用超导体
+    name_en: Applied Superconductor
+    category: branch
+    type: chemical
+    level: 5
+    prerequisites: [basic_chemical]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks:
+      - {type: recipe, id: graphene}
+      - {type: recipe, id: graphene_advanced}
+      - {type: recipe, id: graphene_from_graphite}
+      - {type: recipe, id: graphene_from_fire_ice}
+  - id: polymer_chemical
+    name: 高分子化工
+    name_en: Polymer Chemical Engineering
+    category: branch
+    type: chemical
+    level: 5
+    prerequisites: [basic_chemical]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: organic_crystal_original}, {type: recipe, id: organic_crystal}]
+  - id: xray_cracking
+    name: X射线裂解
+    name_en: X-ray Cracking
+    category: branch
+    type: chemical
+    level: 5
+    prerequisites: [basic_chemical, plasma_refining]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: x_ray_cracking}, {type: recipe, id: xray_cracking}]
+  - id: hydrogen_fuel
+    name: 液氢燃料棒
+    name_en: Hydrogen Fuel Rod
+    category: branch
+    type: energy
+    level: 5
+    prerequisites: [energy_matrix]
+    cost: [{item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: hydrogen_fuel_rod}]
+  - id: super_magnetic
+    name: 超级磁场发生器
+    name_en: Super Magnetic Field Generator
+    category: branch
+    type: energy
+    level: 5
+    prerequisites: [magnetic_levitation]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 13}]
+    unlocks: [{type: recipe, id: super_magnetic_ring}]
+  - id: signal_tower
+    name: 信号塔
+    name_en: Signal Tower
+    category: branch
+    type: combat
+    level: 5
+    prerequisites: [missile_turret, plasma_control]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: building, id: signal_tower}, {type: building, id: jammer_tower}]
+  - id: implosion_cannon
+    name: 聚爆加农炮
+    name_en: Implosion Cannon
+    category: branch
+    type: combat
+    level: 5
+    prerequisites: [missile_turret, magnetic_levitation]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: recipe, id: df_shell_set}, {type: building, id: implosion_cannon}, {type: recipe, id: shell_set}]
+  - id: precision_drone
+    name: 精准无人机
+    name_en: Precision Drone
+    category: branch
+    type: combat
+    level: 5
+    prerequisites: [prototype, photon_conversion]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: recipe, id: df_precision_drone}]
+  - id: planetary_logistics
+    name: 行星物流系统
+    name_en: Planetary Logistics System
+    category: main
+    type: logistics
+    level: 6
+    prerequisites: [efficient_logistics, thruster, vertical_construction]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 25}]
+    unlocks:
+      - {type: building, id: conveyor_belt_mk3}
+      - {type: building, id: planetary_logistics_station}
+      - {type: recipe, id: logistics_drone}
+      - {type: unit, id: logistics_drone}
+  - id: geothermal
+    name: 地热能采集
+    name_en: Geothermal Extraction
+    category: branch
+    type: energy
+    level: 6
+    prerequisites: [photon_conversion, super_magnetic]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: building, id: geothermal_power_station}]
+  - id: solar_sail_orbit
+    name: 太阳帆轨道系统
+    name_en: Solar Sail Orbit System
+    category: main
+    type: dyson
+    level: 6
+    prerequisites: [photon_conversion, super_magnetic]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: solar_sail}, {type: building, id: em_rail_ejector}]
+  - id: highspeed_assembling
+    name: 高速制造工艺
+    name_en: High-Speed Assembling Processes
+    category: branch
+    type: smelting
+    level: 6
+    prerequisites: [basic_assembling_processes, processor]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: building, id: assembling_machine_mk2}]
+  - id: high_strength_crystal
+    name: 高强度晶体
+    name_en: High-Strength Crystal
+    category: branch
+    type: chemical
+    level: 6
+    prerequisites: [polymer_chemical]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: titanium_crystal}]
+  - id: reformed_refinement
+    name: 改良精炼
+    name_en: Reformed Refinement
+    category: branch
+    type: chemical
+    level: 6
+    prerequisites: [xray_cracking]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: reformed_refinement}]
+  - id: thruster
+    name: 推进器
+    name_en: Thruster
+    category: main
+    type: main
+    level: 6
+    prerequisites: [hydrogen_fuel]
+    cost: [{item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: thruster}]
+  - id: proliferator_mk2
+    name: 增产剂Mk.II
+    name_en: Proliferator Mk.II
+    category: branch
+    type: main
+    level: 6
+    prerequisites: [processor, proliferator_mk1]
+    cost: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: proliferator_mk2}]
+  - id: particle_container
+    name: 磁场粒子捕获
+    name_en: Magnetic Particle Trap
+    category: branch
+    type: energy
+    level: 6
+    prerequisites: [magnetic_levitation]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: recipe, id: particle_container}, {type: recipe, id: particle_container_from_monopole}]
+  - id: titanium_ammo
+    name: 钛化子弹箱
+    name_en: Titanium Ammo Box
+    category: branch
+    type: combat
+    level: 6
+    prerequisites: [weapon_system, titanium_smelting]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}, {item_id: energy_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: df_titanium_ammo_box}, {type: recipe, id: titanium_ammo}]
+  - id: integrated_logistics
+    name: 整合物流系统
+    name_en: Integrated Logistics System
+    category: branch
+    type: logistics
+    level: 7
+    prerequisites: [efficient_logistics, super_magnetic]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 5}
+    unlocks: [{type: building, id: pile_sorter}, {type: building, id: automatic_piler}]
+  - id: titanium_alloy
+    name: 高强度钛合金
+    name_en: High-Strength Titanium Alloy
+    category: main
+    type: smelting
+    level: 7
+    prerequisites: [titanium_smelting]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 10}
+    unlocks: [{type: recipe, id: titanium_alloy}]
+  - id: lightweight_structure
+    name: 高强度轻质结构
+    name_en: High-Strength Lightweight Structure
+    category: main
+    type: dyson
+    level: 7
+    prerequisites: [high_strength_material, solar_sail_orbit]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}, {item_id: structure_matrix, quantity: 10}]
+    unlocks:
+      - {type: recipe, id: dyson_sphere_component}
+      - {type: recipe, id: frame_material}
+      - {type: special, id: dyson_component}
+  - id: ray_receiver
+    name: 射线接收站
+    name_en: Ray Receiver
+    category: main
+    type: dyson
+    level: 7
+    prerequisites: [solar_sail_orbit]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: building, id: ray_receiver}]
+  - id: mini_fusion
+    name: 微型核聚变发电
+    name_en: Mini Fusion Power Generation
+    category: branch
+    type: energy
+    level: 7
+    prerequisites: [deuterium_fractionation, titanium_alloy]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 25}
+    unlocks: [{type: building, id: mini_fusion_power_plant}, {type: recipe, id: deuterium_fuel_rod}]
+  - id: high_strength_material
+    name: 高强度材料
+    name_en: High-Strength Material
+    category: branch
+    type: chemical
+    level: 7
+    prerequisites: [superconductor]
+    cost: [{item_id: energy_matrix, quantity: 80}, {item_id: structure_matrix, quantity: 20}]
+    unlocks: [{type: recipe, id: carbon_nanotube_advanced}, {type: recipe, id: carbon_nanotube}]
+  - id: structure_matrix
+    name: 结构矩阵
+    name_en: Structure Matrix
+    category: main
+    type: main
+    level: 7
+    prerequisites: [high_strength_crystal]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}, {item_id: energy_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: structure_matrix}]
+  - id: interstellar_logistics
+    name: 星际物流系统
+    name_en: Interstellar Logistics System
+    category: main
+    type: logistics
+    level: 8
+    prerequisites: [planetary_logistics, reinforced_thruster_technology, titanium_alloy]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 10}
+    unlocks:
+      - {type: building, id: interstellar_logistics_station}
+      - {type: recipe, id: logistics_vessel}
+      - {type: unit, id: logistics_ship}
+  - id: interstellar_power
+    name: 星际输电
+    name_en: Interstellar Power Transmission
+    category: branch
+    type: energy
+    level: 8
+    prerequisites: [energy_storage, titanium_alloy]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 10}
+    unlocks: [{type: building, id: energy_exchanger}]
+  - id: particle_control
+    name: 粒子控制
+    name_en: Particle Control
+    category: branch
+    type: chemical
+    level: 8
+    prerequisites: [high_strength_material]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 80}
+      - {item_id: energy_matrix, quantity: 80}
+      - {item_id: structure_matrix, quantity: 20}
+    unlocks: [{type: recipe, id: particle_broadband}]
+  - id: high_strength_glass
+    name: 高强度玻璃
+    name_en: High-Strength Glass
+    category: branch
+    type: smelting
+    level: 8
+    prerequisites: [high_strength_material]
+    cost: [{item_id: energy_matrix, quantity: 60}, {item_id: structure_matrix, quantity: 30}]
+    unlocks: [{type: recipe, id: titanium_glass}]
+  - id: casimir_crystal
+    name: 卡西米尔晶体
+    name_en: Casimir Crystal
+    category: branch
+    type: chemical
+    level: 8
+    prerequisites: [structure_matrix]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 60}
+      - {item_id: energy_matrix, quantity: 60}
+      - {item_id: structure_matrix, quantity: 60}
+    unlocks: [{type: recipe, id: casimir_crystal_advanced}, {type: recipe, id: casimir_crystal}]
+  - id: miniature_collider
+    name: 小型粒子对撞机
+    name_en: Miniature Particle Collider
+    category: branch
+    type: main
+    level: 8
+    prerequisites: [structure_matrix]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 60}
+      - {item_id: energy_matrix, quantity: 60}
+      - {item_id: structure_matrix, quantity: 60}
+    unlocks: [{type: building, id: miniature_particle_collider}, {type: recipe, id: deuterium_collision}]
+  - id: proliferator_mk3
+    name: 增产剂Mk.III
+    name_en: Proliferator Mk.III
+    category: branch
+    type: main
+    level: 8
+    prerequisites: [high_strength_material, proliferator_mk2]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 40}
+      - {item_id: energy_matrix, quantity: 30}
+      - {item_id: structure_matrix, quantity: 20}
+    unlocks: [{type: recipe, id: proliferator_mk3}]
+  - id: satellite_power
+    name: 卫星配电系统
+    name_en: Satellite Power Distribution System
+    category: branch
+    type: energy
+    level: 8
+    prerequisites: [lightweight_structure, super_magnetic]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 60}
+      - {item_id: energy_matrix, quantity: 60}
+      - {item_id: structure_matrix, quantity: 60}
+    unlocks: [{type: special, id: satellite_power}, {type: building, id: satellite_substation}]
+  - id: supersonic_missile
+    name: 超音速导弹组
+    name_en: Supersonic Missile Set
+    category: branch
+    type: combat
+    level: 8
+    prerequisites: [df_high_explosive_shell_set_tech, thruster]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 60}
+      - {item_id: energy_matrix, quantity: 60}
+      - {item_id: structure_matrix, quantity: 15}
+    unlocks: [{type: recipe, id: supersonic_missile}]
+  - id: vertical_construction
+    name: 垂直建造
+    name_en: Vertical Construction
+    category: branch
+    type: main
+    level: 8
+    prerequisites: [basic_logistics_system]
+    cost: [{item_id: energy_matrix, quantity: 100}]
+    cost_per_level:
+      1: [{item_id: energy_matrix, quantity: 100}]
+      2: [{item_id: energy_matrix, quantity: 80}]
+      3: [{item_id: energy_matrix, quantity: 220}, {item_id: structure_matrix, quantity: 220}]
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 204}
+        - {item_id: energy_matrix, quantity: 204}
+        - {item_id: structure_matrix, quantity: 204}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 240}
+        - {item_id: energy_matrix, quantity: 240}
+        - {item_id: structure_matrix, quantity: 240}
+        - {item_id: gravity_matrix, quantity: 240}
+    unlocks: [{type: special, id: vertical_construction}]
+    max_level: 6
+  - id: gas_giants
+    name: 气态行星采集
+    name_en: Gas Giants Exploitation
+    category: main
+    type: dyson
+    level: 9
+    prerequisites: [interstellar_logistics, interstellar_power]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 50}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 50}
+    unlocks: [{type: building, id: orbital_collector}]
+  - id: information_matrix
+    name: 信息矩阵
+    name_en: Information Matrix
+    category: main
+    type: main
+    level: 9
+    prerequisites: [processor, particle_control]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: recipe, id: information_matrix}]
+  - id: wave_interference
+    name: 波函数干涉
+    name_en: Wave Function Interference
+    category: branch
+    type: main
+    level: 9
+    prerequisites: [casimir_crystal, high_strength_glass]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 90}
+      - {item_id: energy_matrix, quantity: 90}
+      - {item_id: information_matrix, quantity: 15}
+    unlocks: [{type: recipe, id: plane_filter}]
+  - id: crystal_explosive
+    name: 爆裂单元
+    name_en: Crystal Explosive Unit
+    category: branch
+    type: combat
+    level: 9
+    prerequisites: [casimir_crystal]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 38}
+    unlocks: [{type: recipe, id: crystal_explosive}]
+  - id: strange_matter
+    name: 奇异物质
+    name_en: Strange Matter
+    category: main
+    type: main
+    level: 9
+    prerequisites: [miniature_collider]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 60}
+      - {item_id: energy_matrix, quantity: 60}
+      - {item_id: structure_matrix, quantity: 60}
+    unlocks: [{type: recipe, id: strange_matter}, {type: recipe, id: gravitational_lens}]
+  - id: crystal_shell
+    name: 晶体炮弹组
+    name_en: Crystal Shell Set
+    category: branch
+    type: combat
+    level: 9
+    prerequisites: [supersonic_missile, titanium_alloy]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: recipe, id: crystal_shell}]
+  - id: plasma_turret
+    name: 磁化电浆炮
+    name_en: Plasma Turret
+    category: branch
+    type: combat
+    level: 9
+    prerequisites: [df_planetary_defense_system, high_strength_glass]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 90}
+      - {item_id: energy_matrix, quantity: 90}
+      - {item_id: structure_matrix, quantity: 90}
+      - {item_id: information_matrix, quantity: 45}
+    unlocks:
+      - {type: recipe, id: df_plasma_capsule}
+      - {type: building, id: plasma_turret}
+      - {type: recipe, id: plasma_capsule}
+      - {type: building, id: sr_plasma_turret}
+  - id: corvette
+    name: 护卫舰
+    name_en: Corvette
+    category: main
+    type: combat
+    level: 9
+    prerequisites: [df_planetary_defense_system, precision_drone]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: recipe, id: df_corvette}]
+  - id: vertical_launching
+    name: 垂直发射井
+    name_en: Vertical Launching Silo
+    category: main
+    type: dyson
+    level: 9
+    prerequisites: [lightweight_structure, quantum_chip]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: building, id: vertical_launching_silo}, {type: recipe, id: small_carrier_rocket}]
+  - id: quantum_chip
+    name: 量子芯片
+    name_en: Quantum Chip
+    category: main
+    type: main
+    level: 10
+    prerequisites: [information_matrix, wave_interference]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: recipe, id: quantum_chip}]
+  - id: plane_filter_smelting
+    name: 位面冶炼
+    name_en: Plane-Filter Smelting
+    category: branch
+    type: smelting
+    level: 10
+    prerequisites: [crystal_smelting, wave_interference]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: recipe, id: plane_filter}, {type: building, id: plane_smelter}]
+  - id: gravitational_wave
+    name: 引力波折射
+    name_en: Gravitational Wave Refraction
+    category: main
+    type: main
+    level: 10
+    prerequisites: [particle_container, strange_matter]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 60}
+      - {item_id: energy_matrix, quantity: 60}
+      - {item_id: structure_matrix, quantity: 60}
+    unlocks: [{type: recipe, id: space_warper}, {type: special, id: warp_drive}]
+  - id: mesoscopic_entanglement
+    name: 中观量子纠缠
+    name_en: Mesoscopic Quantum Entanglement
+    category: branch
+    type: main
+    level: 10
+    prerequisites: [quantum_chip, strange_matter]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: building, id: quantum_chemical_plant}]
+  - id: quantum_printing
+    name: 量子打印工艺
+    name_en: Quantum Printing Technology
+    category: branch
+    type: smelting
+    level: 10
+    prerequisites: [highspeed_assembling, quantum_chip]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    unlocks: [{type: building, id: assembling_machine_mk3}, {type: building, id: negentropy_smelter}]
+  - id: high_energy_laser
+    name: 高能激光塔
+    name_en: High-Energy Laser Tower
+    category: branch
+    type: combat
+    level: 10
+    prerequisites: [signal_tower, high_strength_glass]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 600}
+      - {item_id: energy_matrix, quantity: 600}
+      - {item_id: structure_matrix, quantity: 600}
+    unlocks: [{type: building, id: laser_turret}]
+  - id: gravity_matrix
+    name: 引力矩阵
+    name_en: Gravity Matrix
+    category: main
+    type: main
+    level: 11
+    prerequisites: [gravitational_wave, quantum_chip]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 50}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 50}
+    unlocks: [{type: recipe, id: space_warper_advanced}, {type: recipe, id: gravity_matrix}]
+  - id: planetary_shield
+    name: 行星护盾
+    name_en: Planetary Shield
+    category: branch
+    type: combat
+    level: 11
+    prerequisites: [plasma_turret, interstellar_power, energy_shield]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 800}
+      - {item_id: energy_matrix, quantity: 800}
+      - {item_id: structure_matrix, quantity: 800}
+      - {item_id: information_matrix, quantity: 400}
+    unlocks: [{type: building, id: planetary_shield_generator}]
+  - id: self_evolution
+    name: 自演化研究站
+    name_en: Self-Evolution Lab
+    category: branch
+    type: main
+    level: 11
+    prerequisites: [gravity_matrix, quantum_chip, research_speed]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 600}
+      - {item_id: energy_matrix, quantity: 600}
+      - {item_id: structure_matrix, quantity: 600}
+      - {item_id: information_matrix, quantity: 600}
+    unlocks: [{type: building, id: self_evolution_lab}]
+  - id: photon_mining
+    name: 光子聚焦采矿
+    name_en: Photon Spotlight Mining
+    category: branch
+    type: main
+    level: 11
+    prerequisites: [quantum_chip]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 100}
+      - {item_id: information_matrix, quantity: 100}
+      - {item_id: gravity_matrix, quantity: 60}
+    unlocks: [{type: building, id: advanced_mining_machine}]
+  - id: dyson_stress
+    name: 戴森球应力系统
+    name_en: Dyson Sphere Stress System
+    category: main
+    type: dyson
+    level: 11
+    prerequisites: [vertical_launching]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+      - {item_id: information_matrix, quantity: 200}
+      - {item_id: gravity_matrix, quantity: 200}
+    unlocks: [{type: special, id: dyson_stress}]
+    max_level: 6
+  - id: ionosphere
+    name: 行星电离层利用
+    name_en: Planetary Ionosphere Utilization
+    category: branch
+    type: energy
+    level: 11
+    prerequisites: [gravitational_wave, ray_receiver]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+      - {item_id: gravity_matrix, quantity: 200}
+    unlocks: [{type: special, id: ionosphere_utilization}]
+  - id: mass_energy_storage
+    name: 质能储存
+    name_en: Mass-Energy Storage
+    category: main
+    type: main
+    level: 11
+    prerequisites: [dyson_stress, gravity_matrix]
+    cost: [{item_id: gravity_matrix, quantity: 500}, {item_id: information_matrix, quantity: 300}]
+    unlocks: [{type: recipe, id: antimatter_capsule}]
+  - id: gravity_missile
+    name: 引力导弹组
+    name_en: Gravity Missile Set
+    category: branch
+    type: combat
+    level: 11
+    prerequisites: [crystal_shell, strange_matter]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 100}
+      - {item_id: information_matrix, quantity: 100}
+      - {item_id: gravity_matrix, quantity: 100}
+    unlocks: [{type: recipe, id: df_gravity_missile_set}, {type: recipe, id: gravity_missile}]
+  - id: destroyer
+    name: 驱逐舰
+    name_en: Destroyer
+    category: main
+    type: combat
+    level: 11
+    prerequisites: [corvette, df_attack_drone_tech]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 100}
+      - {item_id: information_matrix, quantity: 100}
+      - {item_id: gravity_matrix, quantity: 100}
+    unlocks: [{type: recipe, id: df_destroyer}]
+  - id: dirac_inversion
+    name: 狄拉克逆变机制
+    name_en: Dirac Inversion Mechanism
+    category: main
+    type: dyson
+    level: 12
+    prerequisites: [ionosphere]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 50}
+      - {item_id: information_matrix, quantity: 50}
+      - {item_id: gravity_matrix, quantity: 100}
+    unlocks: [{type: special, id: photon_mode}, {type: recipe, id: antimatter}]
+  - id: annihilation
+    name: 可控湮灭反应
+    name_en: Controlled Annihilation Reaction
+    category: main
+    type: energy
+    level: 13
+    prerequisites: [dirac_inversion]
+    cost: [{item_id: energy_matrix, quantity: 240}, {item_id: gravity_matrix, quantity: 120}]
+    unlocks:
+      - {type: building, id: recomposing_assembler}
+      - {type: recipe, id: annihilation_constraint_sphere}
+      - {type: recipe, id: antimatter_fuel_rod}
+      - {type: building, id: artificial_star}
+  - id: artificial_star
+    name: 人造恒星
+    name_en: Artificial Star
+    category: main
+    type: energy
+    level: 14
+    prerequisites: [annihilation]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 100}
+      - {item_id: information_matrix, quantity: 100}
+      - {item_id: gravity_matrix, quantity: 100}
+    unlocks: [{type: building, id: artificial_star}]
+  - id: universe_matrix
+    name: 宇宙矩阵
+    name_en: Universe Matrix
+    category: main
+    type: main
+    level: 15
+    prerequisites: [dirac_inversion]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 100}
+      - {item_id: energy_matrix, quantity: 100}
+      - {item_id: structure_matrix, quantity: 100}
+      - {item_id: information_matrix, quantity: 100}
+      - {item_id: gravity_matrix, quantity: 100}
+    unlocks: [{type: recipe, id: universe_matrix}]
+  - id: mission_complete
+    name: 任务完成
+    name_en: Mission Completed
+    category: main
+    type: main
+    level: 16
+    prerequisites: [universe_matrix]
+    cost: [{item_id: universe_matrix, quantity: 80}]
+    unlocks: [{type: special, id: game_win}]
+  - id: universe_exploration
+    name: 宇宙探索
+    name_en: Universe Exploration
+    category: bonus
+    type: mecha
+    level: 1
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 30}]
+      2: [{item_id: electromagnetic_matrix, quantity: 48}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 198}
+        - {item_id: energy_matrix, quantity: 198}
+        - {item_id: information_matrix, quantity: 198}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: information_matrix, quantity: 168}
+        - {item_id: gravity_matrix, quantity: 168}
+    effects: [{type: exploration_range, value: 1}]
+    max_level: 4
+  - id: mecha_core
+    name: 机甲核心
+    name_en: Mecha Core
+    category: bonus
+    type: mecha
+    level: 1
+    cost: [{item_id: electromagnetic_matrix, quantity: 100}]
+    cost_per_level:
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 110}
+        - {item_id: energy_matrix, quantity: 110}
+        - {item_id: structure_matrix, quantity: 110}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 126}
+        - {item_id: energy_matrix, quantity: 126}
+        - {item_id: structure_matrix, quantity: 126}
+        - {item_id: information_matrix, quantity: 126}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 68}
+        - {item_id: energy_matrix, quantity: 68}
+        - {item_id: structure_matrix, quantity: 68}
+        - {item_id: information_matrix, quantity: 68}
+        - {item_id: gravity_matrix, quantity: 68}
+      6: [{item_id: universe_matrix, quantity: 160}]
+    effects: [{type: core_capacity, value: 10}]
+    max_level: 6
+  - id: mecha_engine
+    name: 驱动引擎
+    name_en: Drive Engine
+    category: bonus
+    type: mecha
+    level: 1
+    cost: [{item_id: electromagnetic_matrix, quantity: 200}]
+    effects: [{type: move_speed, value: 2}]
+    max_level: 100
+  - id: drone_engine
+    name: 无人机引擎
+    name_en: Drone Engine
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 60}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 252}
+        - {item_id: energy_matrix, quantity: 252}
+        - {item_id: structure_matrix, quantity: 252}
+        - {item_id: information_matrix, quantity: 252}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 136}
+        - {item_id: energy_matrix, quantity: 136}
+        - {item_id: structure_matrix, quantity: 136}
+        - {item_id: information_matrix, quantity: 136}
+        - {item_id: gravity_matrix, quantity: 136}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: drone_speed, value: 3}]
+    max_level: 6
+  - id: energy_shield
+    name: 能量护盾
+    name_en: Energy Shield
+    category: bonus
+    type: mecha
+    level: 1
+    cost: [{item_id: energy_matrix, quantity: 100}]
+    effects: [{type: shield_capacity, value: 20}]
+    max_level: 6
+  - id: research_speed
+    name: 研究速度
+    name_en: Research Speed
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [information_matrix]
+    cost: [{item_id: information_matrix, quantity: 45}]
+    cost_per_level:
+      1: [{item_id: information_matrix, quantity: 45}]
+      2: [{item_id: information_matrix, quantity: 72}]
+      3: [{item_id: information_matrix, quantity: 99}]
+      4: [{item_id: universe_matrix, quantity: 112}]
+    effects: [{type: research_speed, value: 0.1}]
+    max_level: 4
+  - id: solar_sail_life
+    name: 太阳帆寿命
+    name_en: Solar Sail Life
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [solar_sail_orbit]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 200}
+        - {item_id: energy_matrix, quantity: 200}
+        - {item_id: structure_matrix, quantity: 200}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 252}
+        - {item_id: energy_matrix, quantity: 252}
+        - {item_id: structure_matrix, quantity: 252}
+        - {item_id: information_matrix, quantity: 252}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 306}
+        - {item_id: energy_matrix, quantity: 306}
+        - {item_id: structure_matrix, quantity: 306}
+        - {item_id: information_matrix, quantity: 306}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 180}
+        - {item_id: energy_matrix, quantity: 180}
+        - {item_id: structure_matrix, quantity: 180}
+        - {item_id: information_matrix, quantity: 180}
+    effects: [{type: solar_sail_life, value: 300}]
+    max_level: 6
+  - id: dark_fog_matrix
+    name: 数字模拟计算
+    name_en: Digital Analog Computation
+    category: main
+    type: combat
+    level: 10
+    prerequisites: [information_matrix]
+    cost: [{item_id: dark_fog_matrix, quantity: 60}]
+    unlocks: [{type: building, id: self_evolution_lab}]
+    hidden: true
+  - id: electromagnetic_matrix_technology
+    name: 电磁矩阵科技
+    name_en: Electromagnetic Matrix
+    category: main
+    type: main
+    level: 2
+    prerequisites: [electromagnetism]
+    cost: [{item_id: circuit_board, quantity: 10}, {item_id: magnetic_coil, quantity: 10}]
+    unlocks: [{type: building, id: matrix_lab}]
+  - id: improved_logistics_system
+    name: 改良物流系统
+    name_en: Upgraded Logistics System
+    category: main
+    type: logistics
+    level: 3
+    prerequisites: [basic_logistics_system]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
+    unlocks: [{type: building, id: splitter}, {type: building, id: traffic_monitor}, {type: building, id: sorter_mk2}]
+  - id: reinforced_thruster_technology
+    name: 加力推进器
+    name_en: Reinforced Thruster
+    category: main
+    type: main
+    level: 7
+    prerequisites: [thruster]
+    cost: [{item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: recipe, id: reinforced_thruster}]
+  - id: df_antimatter_capsule_tech
+    name: 反物质胶囊
+    name_en: Antimatter Capsule
+    category: branch
+    type: combat
+    level: 14
+    prerequisites: [annihilation, plasma_turret]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+      - {item_id: information_matrix, quantity: 200}
+      - {item_id: gravity_matrix, quantity: 200}
+    unlocks: [{type: recipe, id: antimatter_capsule}]
+  - id: df_attack_drone_tech
+    name: 攻击无人机
+    name_en: Attack Drone
+    category: branch
+    type: combat
+    level: 7
+    prerequisites: [prototype, particle_container]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 50}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 50}
+    unlocks: [{type: recipe, id: df_attack_drone}]
+  - id: df_explosive_unit_tech
+    name: 爆破单元
+    name_en: Explosive Unit
+    category: branch
+    type: combat
+    level: 7
+    prerequisites: [high_strength_crystal]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: recipe, id: df_explosive_unit}]
+  - id: df_high_density_controlled_annihilation
+    name: 高密度可控湮灭
+    name_en: High-Density Controlled Annihilation
+    category: branch
+    type: combat
+    level: 14
+    prerequisites: [annihilation]
+    cost: [{item_id: dark_fog_matrix, quantity: 60}]
+    unlocks: [{type: recipe, id: df_strange_annihilation_fuel_rod}]
+  - id: df_high_explosive_shell_set_tech
+    name: 高爆炮弹组
+    name_en: High-Explosive Shell Set
+    category: branch
+    type: combat
+    level: 7
+    prerequisites: [implosion_cannon, titanium_smelting]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    unlocks: [{type: recipe, id: df_high_explosive_shell_set}]
+  - id: df_jammer_tower_tech
+    name: 干扰塔
+    name_en: Jammer Tower
+    category: branch
+    type: combat
+    level: 7
+    prerequisites: [missile_turret, processor]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 50}]
+    unlocks: [{type: building, id: jammer_tower}, {type: recipe, id: df_jamming_capsule}]
+  - id: df_matter_recombination
+    name: 物质重组
+    name_en: Matter Recombination
+    category: branch
+    type: combat
+    level: 11
+    prerequisites: [quantum_printing]
+    cost: [{item_id: dark_fog_matrix, quantity: 60}]
+    unlocks: [{type: building, id: recomposing_assembler}]
+  - id: df_negentropy_recursion
+    name: 负熵递归
+    name_en: Negentropy Recursion
+    category: branch
+    type: combat
+    level: 11
+    prerequisites: [plane_filter_smelting]
+    cost: [{item_id: dark_fog_matrix, quantity: 60}]
+    unlocks: [{type: building, id: negentropy_smelter}]
+  - id: df_planetary_defense_system
+    name: 行星防御系统
+    name_en: Planetary Defense System
+    category: main
+    type: combat
+    level: 7
+    prerequisites: [implosion_cannon, particle_container]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}, {item_id: energy_matrix, quantity: 30}]
+    unlocks: [{type: building, id: laser_turret}, {type: building, id: planetary_shield_generator}]
+  - id: df_superalloy_ammo_box_tech
+    name: 超合金弹箱
+    name_en: Superalloy Ammo Box
+    category: branch
+    type: combat
+    level: 8
+    prerequisites: [titanium_ammo, titanium_alloy]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 50}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 25}
+    unlocks: [{type: recipe, id: df_superalloy_ammo_box}]
+  - id: df_suppressing_capsule_tech
+    name: 压制胶囊
+    name_en: Suppressing Capsule
+    category: branch
+    type: combat
+    level: 8
+    prerequisites: [df_jammer_tower_tech]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 50}
+      - {item_id: energy_matrix, quantity: 50}
+      - {item_id: structure_matrix, quantity: 50}
+    unlocks: [{type: recipe, id: df_suppressing_capsule}]
+  - id: communication_control
+    name: 通讯控制
+    name_en: Communication Control
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 60}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3: [{item_id: electromagnetic_matrix, quantity: 110}, {item_id: energy_matrix, quantity: 110}]
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 306}
+        - {item_id: energy_matrix, quantity: 306}
+        - {item_id: structure_matrix, quantity: 306}
+        - {item_id: information_matrix, quantity: 306}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+        - {item_id: information_matrix, quantity: 160}
+        - {item_id: gravity_matrix, quantity: 160}
+      7: [{item_id: universe_matrix, quantity: 368}]
+    max_level: 7
+  - id: veins_utilization
+    name: 矿物利用
+    name_en: Vein Utilization
+    category: bonus
+    type: main
+    level: 1
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 100}, {item_id: energy_matrix, quantity: 100}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 100}, {item_id: energy_matrix, quantity: 100}]
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 330}
+        - {item_id: energy_matrix, quantity: 330}
+        - {item_id: structure_matrix, quantity: 330}
+        - {item_id: information_matrix, quantity: 330}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 252}
+        - {item_id: energy_matrix, quantity: 252}
+        - {item_id: structure_matrix, quantity: 252}
+        - {item_id: information_matrix, quantity: 252}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 136}
+        - {item_id: energy_matrix, quantity: 136}
+        - {item_id: structure_matrix, quantity: 136}
+        - {item_id: information_matrix, quantity: 136}
+        - {item_id: gravity_matrix, quantity: 136}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    max_level: 6
+  - id: inventory_capacity
+    name: 机舱容量
+    name_en: Inventory Capacity
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: circuit_board, quantity: 30}, {item_id: steel, quantity: 30}]
+    cost_per_level:
+      1: [{item_id: circuit_board, quantity: 30}, {item_id: steel, quantity: 30}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 204}
+        - {item_id: energy_matrix, quantity: 204}
+        - {item_id: structure_matrix, quantity: 204}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 240}
+        - {item_id: energy_matrix, quantity: 240}
+        - {item_id: structure_matrix, quantity: 240}
+        - {item_id: information_matrix, quantity: 240}
+        - {item_id: gravity_matrix, quantity: 240}
+      7: [{item_id: universe_matrix, quantity: 552}]
+    effects: [{type: mecha_inventory_capacity, value: 60}]
+    max_level: 7
+  - id: drive_engine
+    name: 驱动引擎
+    name_en: Drive Engine
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: coal, quantity: 15}, {item_id: engine, quantity: 5}]
+    cost_per_level:
+      1: [{item_id: coal, quantity: 15}, {item_id: engine, quantity: 5}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 140}
+        - {item_id: energy_matrix, quantity: 140}
+        - {item_id: structure_matrix, quantity: 140}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 340}
+        - {item_id: energy_matrix, quantity: 340}
+        - {item_id: structure_matrix, quantity: 340}
+        - {item_id: gravity_matrix, quantity: 340}
+      6: [{item_id: universe_matrix, quantity: 800}]
+    effects: [{type: move_speed, value: 2}]
+    max_level: 6
+  - id: mechanical_frame
+    name: 机械骨骼
+    name_en: Mechanical Frame
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: motor, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: motor, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3: [{item_id: electromagnetic_matrix, quantity: 110}, {item_id: energy_matrix, quantity: 110}]
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 204}
+        - {item_id: energy_matrix, quantity: 204}
+        - {item_id: structure_matrix, quantity: 204}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 360}
+        - {item_id: energy_matrix, quantity: 360}
+        - {item_id: structure_matrix, quantity: 360}
+        - {item_id: information_matrix, quantity: 360}
+      7:
+        - {item_id: electromagnetic_matrix, quantity: 414}
+        - {item_id: energy_matrix, quantity: 414}
+        - {item_id: structure_matrix, quantity: 414}
+        - {item_id: information_matrix, quantity: 414}
+      8:
+        - {item_id: electromagnetic_matrix, quantity: 312}
+        - {item_id: energy_matrix, quantity: 312}
+        - {item_id: structure_matrix, quantity: 312}
+        - {item_id: information_matrix, quantity: 312}
+        - {item_id: gravity_matrix, quantity: 312}
+    effects: [{type: mecha_max_hp, value: 20}]
+    max_level: 8
+  - id: mass_construction
+    name: 批量建造
+    name_en: Mass Construction
+    category: bonus
+    type: main
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: circuit_board, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: circuit_board, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 72}]
+      3: [{item_id: electromagnetic_matrix, quantity: 165}, {item_id: energy_matrix, quantity: 165}]
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 210}
+        - {item_id: energy_matrix, quantity: 210}
+        - {item_id: structure_matrix, quantity: 210}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 383}
+        - {item_id: energy_matrix, quantity: 383}
+        - {item_id: structure_matrix, quantity: 383}
+        - {item_id: information_matrix, quantity: 383}
+    effects: [{type: construction_region_limit, value: 1}]
+    max_level: 5
+  - id: distribution_range
+    name: 配送范围
+    name_en: Distribution Range
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [distribution_logistics]
+    cost: [{item_id: electromagnetic_matrix, quantity: 100}, {item_id: energy_matrix, quantity: 100}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 100}, {item_id: energy_matrix, quantity: 100}]
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 420}
+        - {item_id: energy_matrix, quantity: 420}
+        - {item_id: structure_matrix, quantity: 420}
+        - {item_id: information_matrix, quantity: 420}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 408}
+        - {item_id: energy_matrix, quantity: 408}
+        - {item_id: structure_matrix, quantity: 408}
+        - {item_id: information_matrix, quantity: 408}
+        - {item_id: gravity_matrix, quantity: 408}
+    effects: [{type: distribution_range, value: 5}]
+    max_level: 5
+  - id: energy_circuit
+    name: 能量回路
+    name_en: Energy Circuit
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: coal, quantity: 15}, {item_id: energetic_graphite, quantity: 15}, {item_id: log, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: coal, quantity: 15}, {item_id: energetic_graphite, quantity: 15}, {item_id: log, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 136}
+        - {item_id: energy_matrix, quantity: 136}
+        - {item_id: structure_matrix, quantity: 136}
+        - {item_id: information_matrix, quantity: 136}
+        - {item_id: gravity_matrix, quantity: 136}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: mecha_charge_rate_pct, value: 20}]
+    max_level: 6
+  - id: logistics_carrier_capacity
+    name: 运输船机舱扩容
+    name_en: Logistics Carrier Capacity
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [planetary_logistics]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 200}
+        - {item_id: energy_matrix, quantity: 200}
+        - {item_id: structure_matrix, quantity: 200}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 153}
+        - {item_id: energy_matrix, quantity: 153}
+        - {item_id: structure_matrix, quantity: 153}
+        - {item_id: information_matrix, quantity: 153}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 180}
+        - {item_id: energy_matrix, quantity: 180}
+        - {item_id: structure_matrix, quantity: 180}
+        - {item_id: information_matrix, quantity: 180}
+      7:
+        - {item_id: electromagnetic_matrix, quantity: 138}
+        - {item_id: energy_matrix, quantity: 138}
+        - {item_id: structure_matrix, quantity: 138}
+        - {item_id: information_matrix, quantity: 138}
+        - {item_id: gravity_matrix, quantity: 138}
+      8:
+        - {item_id: electromagnetic_matrix, quantity: 156}
+        - {item_id: energy_matrix, quantity: 156}
+        - {item_id: structure_matrix, quantity: 156}
+        - {item_id: information_matrix, quantity: 156}
+        - {item_id: gravity_matrix, quantity: 156}
+      9: [{item_id: universe_matrix, quantity: 348}]
+      12: [{item_id: universe_matrix, quantity: 456}]
+    effects: [{type: logistics_ship_capacity, value: 100}]
+    max_level: 12
+  - id: logistics_carrier_engine
+    name: 运输船引擎
+    name_en: Logistics Carrier Engine
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [planetary_logistics]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 200}
+        - {item_id: energy_matrix, quantity: 200}
+        - {item_id: structure_matrix, quantity: 200}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 252}
+        - {item_id: energy_matrix, quantity: 252}
+        - {item_id: structure_matrix, quantity: 252}
+        - {item_id: information_matrix, quantity: 252}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 408}
+        - {item_id: energy_matrix, quantity: 408}
+        - {item_id: structure_matrix, quantity: 408}
+        - {item_id: information_matrix, quantity: 408}
+        - {item_id: gravity_matrix, quantity: 408}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+        - {item_id: information_matrix, quantity: 160}
+        - {item_id: gravity_matrix, quantity: 160}
+      7: [{item_id: universe_matrix, quantity: 368}]
+    effects: [{type: logistics_ship_speed, value: 1}]
+    max_level: 7
+  - id: sorter_cargo_stacking
+    name: 分拣器货物叠加
+    name_en: Sorter Cargo Stacking
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [integrated_logistics]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 200}
+        - {item_id: energy_matrix, quantity: 200}
+        - {item_id: structure_matrix, quantity: 200}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 168}
+        - {item_id: energy_matrix, quantity: 168}
+        - {item_id: structure_matrix, quantity: 168}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 102}
+        - {item_id: energy_matrix, quantity: 102}
+        - {item_id: structure_matrix, quantity: 102}
+    effects: [{type: sorter_grab_stacks, value: 1}]
+    max_level: 5
+  - id: sorter_cargo_integration
+    name: 分拣器货物集装
+    name_en: Sorter Cargo Integration
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [sorter_cargo_stacking, integrated_logistics]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 30}
+      - {item_id: energy_matrix, quantity: 30}
+      - {item_id: structure_matrix, quantity: 30}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 30}
+        - {item_id: energy_matrix, quantity: 30}
+        - {item_id: structure_matrix, quantity: 30}
+    effects: [{type: piler_pile_height, value: 2}]
+    max_level: 1
+  - id: pile_sorter
+    name: 集装分拣器
+    name_en: Pile Sorter Upgrade
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [integrated_logistics]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 150}
+      - {item_id: energy_matrix, quantity: 150}
+      - {item_id: structure_matrix, quantity: 150}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 150}
+        - {item_id: energy_matrix, quantity: 150}
+        - {item_id: structure_matrix, quantity: 150}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 240}
+        - {item_id: energy_matrix, quantity: 240}
+        - {item_id: structure_matrix, quantity: 240}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 330}
+        - {item_id: energy_matrix, quantity: 330}
+        - {item_id: structure_matrix, quantity: 330}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 210}
+        - {item_id: energy_matrix, quantity: 210}
+        - {item_id: structure_matrix, quantity: 210}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 255}
+        - {item_id: energy_matrix, quantity: 255}
+        - {item_id: structure_matrix, quantity: 255}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 240}
+        - {item_id: energy_matrix, quantity: 240}
+        - {item_id: structure_matrix, quantity: 240}
+        - {item_id: gravity_matrix, quantity: 240}
+    max_level: 6
+  - id: ray_transmission_efficiency
+    name: 射线传输效率
+    name_en: Ray Transmission Efficiency
+    category: bonus
+    type: dyson
+    level: 1
+    prerequisites: [ray_receiver]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 200}
+      - {item_id: energy_matrix, quantity: 200}
+      - {item_id: structure_matrix, quantity: 200}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 200}
+        - {item_id: energy_matrix, quantity: 200}
+        - {item_id: structure_matrix, quantity: 200}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 252}
+        - {item_id: energy_matrix, quantity: 252}
+        - {item_id: structure_matrix, quantity: 252}
+        - {item_id: information_matrix, quantity: 252}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 306}
+        - {item_id: energy_matrix, quantity: 306}
+        - {item_id: structure_matrix, quantity: 306}
+        - {item_id: information_matrix, quantity: 306}
+      6:
+        - {item_id: electromagnetic_matrix, quantity: 480}
+        - {item_id: energy_matrix, quantity: 480}
+        - {item_id: structure_matrix, quantity: 480}
+        - {item_id: information_matrix, quantity: 480}
+        - {item_id: gravity_matrix, quantity: 480}
+      7:
+        - {item_id: electromagnetic_matrix, quantity: 184}
+        - {item_id: energy_matrix, quantity: 184}
+        - {item_id: structure_matrix, quantity: 184}
+        - {item_id: information_matrix, quantity: 184}
+        - {item_id: gravity_matrix, quantity: 184}
+      8: [{item_id: universe_matrix, quantity: 416}]
+    max_level: 8
+  - id: logistics_station_integrated_logistics
+    name: 运输站集装物流
+    name_en: Station Integrated Logistics
+    category: bonus
+    type: logistics
+    level: 1
+    prerequisites: [logistics_carrier_capacity]
+    cost: [{item_id: universe_matrix, quantity: 60}]
+    cost_per_level:
+      1: [{item_id: universe_matrix, quantity: 60}]
+      2: [{item_id: universe_matrix, quantity: 64}]
+      3: [{item_id: universe_matrix, quantity: 88}]
+    max_level: 3
+  - id: df_auto_reconstruction_marking
+    name: 自动标记重建
+    name_en: Auto Reconstruction Marking
+    category: bonus
+    type: mecha
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 60}]
+      2: [{item_id: electromagnetic_matrix, quantity: 80}, {item_id: energy_matrix, quantity: 80}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 220}
+        - {item_id: energy_matrix, quantity: 220}
+        - {item_id: structure_matrix, quantity: 220}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 252}
+        - {item_id: energy_matrix, quantity: 252}
+        - {item_id: structure_matrix, quantity: 252}
+        - {item_id: information_matrix, quantity: 252}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 272}
+        - {item_id: energy_matrix, quantity: 272}
+        - {item_id: structure_matrix, quantity: 272}
+        - {item_id: information_matrix, quantity: 272}
+        - {item_id: gravity_matrix, quantity: 272}
+      6: [{item_id: universe_matrix, quantity: 640}]
+    max_level: 6
+  - id: df_combat_drone_attack_speed
+    name: 战斗无人机射速
+    name_en: Combat Drone Attack Speed
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [prototype]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 80}
+        - {item_id: energy_matrix, quantity: 80}
+        - {item_id: structure_matrix, quantity: 80}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 165}
+        - {item_id: energy_matrix, quantity: 165}
+        - {item_id: structure_matrix, quantity: 165}
+        - {item_id: information_matrix, quantity: 165}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 280}
+        - {item_id: energy_matrix, quantity: 280}
+        - {item_id: structure_matrix, quantity: 280}
+        - {item_id: information_matrix, quantity: 280}
+        - {item_id: gravity_matrix, quantity: 280}
+      5: [{item_id: universe_matrix, quantity: 272}]
+    max_level: 5
+  - id: df_combat_drone_damage
+    name: 战斗无人机伤害
+    name_en: Combat Drone Damage
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [prototype]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 80}
+        - {item_id: energy_matrix, quantity: 80}
+        - {item_id: structure_matrix, quantity: 80}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 99}
+        - {item_id: energy_matrix, quantity: 99}
+        - {item_id: structure_matrix, quantity: 99}
+        - {item_id: information_matrix, quantity: 99}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 140}
+        - {item_id: energy_matrix, quantity: 140}
+        - {item_id: structure_matrix, quantity: 140}
+        - {item_id: information_matrix, quantity: 140}
+        - {item_id: gravity_matrix, quantity: 140}
+      5: [{item_id: universe_matrix, quantity: 272}]
+    max_level: 5
+  - id: df_combat_drone_durability
+    name: 战斗无人机耐久
+    name_en: Combat Drone Durability
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [prototype]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 80}
+        - {item_id: energy_matrix, quantity: 80}
+        - {item_id: structure_matrix, quantity: 80}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 99}
+        - {item_id: energy_matrix, quantity: 99}
+        - {item_id: structure_matrix, quantity: 99}
+        - {item_id: information_matrix, quantity: 99}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 280}
+        - {item_id: energy_matrix, quantity: 280}
+        - {item_id: structure_matrix, quantity: 280}
+        - {item_id: information_matrix, quantity: 280}
+        - {item_id: gravity_matrix, quantity: 280}
+      5: [{item_id: universe_matrix, quantity: 272}]
+    max_level: 5
+  - id: df_em_weapon_strength
+    name: 电磁武器强度
+    name_en: EM Weapon Strength
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [df_jammer_tower_tech]
+    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 110}
+        - {item_id: energy_matrix, quantity: 110}
+        - {item_id: structure_matrix, quantity: 110}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 126}
+        - {item_id: energy_matrix, quantity: 126}
+        - {item_id: structure_matrix, quantity: 126}
+        - {item_id: information_matrix, quantity: 126}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 170}
+        - {item_id: energy_matrix, quantity: 170}
+        - {item_id: structure_matrix, quantity: 170}
+        - {item_id: information_matrix, quantity: 170}
+        - {item_id: gravity_matrix, quantity: 170}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: weapon_damage, value: 0.1}]
+    max_level: 6
+  - id: df_energy_shield
+    name: 能量护盾
+    name_en: Energy Shield
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [electromagnetism]
+    cost: [{item_id: electromagnetic_matrix, quantity: 60}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 60}]
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 55}
+        - {item_id: energy_matrix, quantity: 55}
+        - {item_id: structure_matrix, quantity: 55}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 126}
+        - {item_id: energy_matrix, quantity: 126}
+        - {item_id: structure_matrix, quantity: 126}
+        - {item_id: information_matrix, quantity: 126}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 170}
+        - {item_id: energy_matrix, quantity: 170}
+        - {item_id: structure_matrix, quantity: 170}
+        - {item_id: information_matrix, quantity: 170}
+        - {item_id: gravity_matrix, quantity: 170}
+      6: [{item_id: universe_matrix, quantity: 320}]
+      7: [{item_id: universe_matrix, quantity: 368}]
+    effects: [{type: shield_capacity, value: 10}]
+    max_level: 7
+  - id: df_energy_weapon_damage
+    name: 能量武器伤害
+    name_en: Energy Weapon Damage
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [weapon_system]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 110}
+        - {item_id: energy_matrix, quantity: 110}
+        - {item_id: structure_matrix, quantity: 110}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 126}
+        - {item_id: energy_matrix, quantity: 126}
+        - {item_id: structure_matrix, quantity: 126}
+        - {item_id: information_matrix, quantity: 126}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 170}
+        - {item_id: energy_matrix, quantity: 170}
+        - {item_id: structure_matrix, quantity: 170}
+        - {item_id: information_matrix, quantity: 170}
+        - {item_id: gravity_matrix, quantity: 170}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: weapon_damage, value: 0.1}]
+    max_level: 6
+  - id: df_enhanced_structure
+    name: 强化结构
+    name_en: Enhanced Structure
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [mecha_core]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 110}
+        - {item_id: energy_matrix, quantity: 110}
+        - {item_id: structure_matrix, quantity: 110}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 210}
+        - {item_id: energy_matrix, quantity: 210}
+        - {item_id: structure_matrix, quantity: 210}
+        - {item_id: information_matrix, quantity: 210}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 204}
+        - {item_id: energy_matrix, quantity: 204}
+        - {item_id: structure_matrix, quantity: 204}
+        - {item_id: information_matrix, quantity: 204}
+        - {item_id: gravity_matrix, quantity: 204}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: structure_hp, value: 0.1}]
+    max_level: 6
+  - id: df_explosive_weapon_damage
+    name: 爆破武器伤害
+    name_en: Explosive Weapon Damage
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [combustible_unit]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 110}
+        - {item_id: energy_matrix, quantity: 110}
+        - {item_id: structure_matrix, quantity: 110}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 126}
+        - {item_id: energy_matrix, quantity: 126}
+        - {item_id: structure_matrix, quantity: 126}
+        - {item_id: information_matrix, quantity: 126}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 170}
+        - {item_id: energy_matrix, quantity: 170}
+        - {item_id: structure_matrix, quantity: 170}
+        - {item_id: information_matrix, quantity: 170}
+        - {item_id: gravity_matrix, quantity: 170}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: weapon_damage, value: 0.1}]
+    max_level: 6
+  - id: df_ground_squadron_expansion
+    name: 地面编队扩容
+    name_en: Ground Squadron Expansion
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [prototype]
+    cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 160}
+        - {item_id: energy_matrix, quantity: 160}
+        - {item_id: structure_matrix, quantity: 160}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 330}
+        - {item_id: energy_matrix, quantity: 330}
+        - {item_id: structure_matrix, quantity: 330}
+        - {item_id: information_matrix, quantity: 330}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 420}
+        - {item_id: energy_matrix, quantity: 420}
+        - {item_id: structure_matrix, quantity: 420}
+        - {item_id: information_matrix, quantity: 420}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 680}
+        - {item_id: energy_matrix, quantity: 680}
+        - {item_id: structure_matrix, quantity: 680}
+        - {item_id: information_matrix, quantity: 680}
+        - {item_id: gravity_matrix, quantity: 680}
+      6: [{item_id: universe_matrix, quantity: 1600}]
+      7: [{item_id: universe_matrix, quantity: 1840}]
+    max_level: 7
+  - id: df_kinetic_weapon_damage
+    name: 动能武器伤害
+    name_en: Kinetic Weapon Damage
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [weapon_system]
+    cost: [{item_id: electromagnetic_matrix, quantity: 15}]
+    cost_per_level:
+      1: [{item_id: electromagnetic_matrix, quantity: 15}]
+      2: [{item_id: electromagnetic_matrix, quantity: 40}, {item_id: energy_matrix, quantity: 40}]
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 110}
+        - {item_id: energy_matrix, quantity: 110}
+        - {item_id: structure_matrix, quantity: 110}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 126}
+        - {item_id: energy_matrix, quantity: 126}
+        - {item_id: structure_matrix, quantity: 126}
+        - {item_id: information_matrix, quantity: 126}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 170}
+        - {item_id: energy_matrix, quantity: 170}
+        - {item_id: structure_matrix, quantity: 170}
+        - {item_id: information_matrix, quantity: 170}
+        - {item_id: gravity_matrix, quantity: 170}
+      6: [{item_id: universe_matrix, quantity: 320}]
+    effects: [{type: weapon_damage, value: 0.1}]
+    max_level: 6
+  - id: df_planetary_shield
+    name: 行星护盾
+    name_en: Planetary Shield
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [df_planetary_defense_system]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 25}
+      - {item_id: energy_matrix, quantity: 25}
+      - {item_id: structure_matrix, quantity: 25}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 25}
+        - {item_id: energy_matrix, quantity: 25}
+        - {item_id: structure_matrix, quantity: 25}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 40}
+        - {item_id: energy_matrix, quantity: 40}
+        - {item_id: structure_matrix, quantity: 40}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 99}
+        - {item_id: energy_matrix, quantity: 99}
+        - {item_id: structure_matrix, quantity: 99}
+        - {item_id: information_matrix, quantity: 99}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 280}
+        - {item_id: energy_matrix, quantity: 280}
+        - {item_id: structure_matrix, quantity: 280}
+        - {item_id: information_matrix, quantity: 280}
+        - {item_id: gravity_matrix, quantity: 280}
+      5: [{item_id: universe_matrix, quantity: 272}]
+    max_level: 5
+  - id: df_space_fleet_expansion
+    name: 太空编队扩容
+    name_en: Space Fleet Expansion
+    category: bonus
+    type: combat
+    level: 1
+    prerequisites: [corvette]
+    cost:
+      - {item_id: electromagnetic_matrix, quantity: 75}
+      - {item_id: energy_matrix, quantity: 75}
+      - {item_id: structure_matrix, quantity: 75}
+      - {item_id: information_matrix, quantity: 75}
+    cost_per_level:
+      1:
+        - {item_id: electromagnetic_matrix, quantity: 75}
+        - {item_id: energy_matrix, quantity: 75}
+        - {item_id: structure_matrix, quantity: 75}
+        - {item_id: information_matrix, quantity: 75}
+      2:
+        - {item_id: electromagnetic_matrix, quantity: 120}
+        - {item_id: energy_matrix, quantity: 120}
+        - {item_id: structure_matrix, quantity: 120}
+        - {item_id: information_matrix, quantity: 120}
+      3:
+        - {item_id: electromagnetic_matrix, quantity: 248}
+        - {item_id: energy_matrix, quantity: 248}
+        - {item_id: structure_matrix, quantity: 248}
+        - {item_id: information_matrix, quantity: 248}
+      4:
+        - {item_id: electromagnetic_matrix, quantity: 560}
+        - {item_id: energy_matrix, quantity: 560}
+        - {item_id: structure_matrix, quantity: 560}
+        - {item_id: information_matrix, quantity: 560}
+        - {item_id: gravity_matrix, quantity: 560}
+      5:
+        - {item_id: electromagnetic_matrix, quantity: 680}
+        - {item_id: energy_matrix, quantity: 680}
+        - {item_id: structure_matrix, quantity: 680}
+        - {item_id: information_matrix, quantity: 680}
+        - {item_id: gravity_matrix, quantity: 680}
+      6: [{item_id: universe_matrix, quantity: 1600}]
+      7: [{item_id: universe_matrix, quantity: 1840}]
+    max_level: 7

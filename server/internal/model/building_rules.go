@@ -9,8 +9,8 @@ const (
 
 // BuildingUpgradeRule defines upgrade constraints for a building type.
 type BuildingUpgradeRule struct {
-	Allow          bool    `json:"allow" yaml:"allow"`
-	MaxLevel       int     `json:"max_level" yaml:"max_level"`
+	Allow          bool    `json:"allow" yaml:"allow,omitempty"`
+	MaxLevel       int     `json:"max_level" yaml:"max_level,omitempty"`
 	CostMultiplier float64 `json:"cost_multiplier,omitempty" yaml:"cost_multiplier,omitempty"`
 	DurationTicks  int     `json:"duration_ticks,omitempty" yaml:"duration_ticks,omitempty"`
 	RequireIdle    bool    `json:"require_idle,omitempty" yaml:"require_idle,omitempty"`
@@ -18,9 +18,9 @@ type BuildingUpgradeRule struct {
 
 // BuildingDemolishRule defines demolish constraints for a building type.
 type BuildingDemolishRule struct {
-	Allow         bool    `json:"allow" yaml:"allow"`
-	RefundRate    float64 `json:"refund_rate" yaml:"refund_rate"`
-	DurationTicks int     `json:"duration_ticks" yaml:"duration_ticks"`
+	Allow         bool    `json:"allow" yaml:"allow,omitempty"`
+	RefundRate    float64 `json:"refund_rate" yaml:"refund_rate,omitempty"`
+	DurationTicks int     `json:"duration_ticks" yaml:"duration_ticks,omitempty"`
 	RequireIdle   bool    `json:"require_idle,omitempty" yaml:"require_idle,omitempty"`
 }
 

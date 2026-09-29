@@ -1,0 +1,27 @@
+# 战斗系数表。
+# 格式说明见 docs/dev/数据配置文件.md
+damage_coefficients:
+  cannon:
+    air: 0.5
+    heavy: 1.25
+    light: 0.75
+    ship: 1
+    structure: 1.5
+  gun:
+    air: 1
+    heavy: 0.75
+    light: 1.25
+    ship: 0.75
+    structure: 0.5
+  laser:
+    air: 1.1
+    heavy: 0.9
+    light: 1
+    ship: 1.1
+    structure: 1
+  missile:
+    air: 1.5
+    heavy: 0.75
+    light: 1
+    ship: 1.25
+    structure: 1.25

@@ -1,0 +1,981 @@
+# 配方定义。
+# 格式说明见 docs/dev/数据配置文件.md
+recipes:
+  - id: smelt_iron
+    name: Smelt Iron
+    inputs: [{item_id: iron_ore, quantity: 1}]
+    outputs: [{item_id: iron_ingot, quantity: 1}]
+    duration: 60
+    energy_cost: 1
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    handcraft_allowed: true
+  - id: smelt_copper
+    name: Smelt Copper
+    inputs: [{item_id: copper_ore, quantity: 1}]
+    outputs: [{item_id: copper_ingot, quantity: 1}]
+    duration: 60
+    energy_cost: 1
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    handcraft_allowed: true
+  - id: smelt_stone
+    name: Smelt Stone
+    inputs: [{item_id: stone_ore, quantity: 1}]
+    outputs: [{item_id: stone_brick, quantity: 1}]
+    duration: 50
+    energy_cost: 1
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [automatic_metallurgy]
+    handcraft_allowed: true
+  - id: smelt_magnet
+    name: Smelt Magnet
+    inputs: [{item_id: iron_ore, quantity: 1}]
+    outputs: [{item_id: magnet, quantity: 1}]
+    duration: 60
+    energy_cost: 1
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    handcraft_allowed: true
+  - id: smelt_silicon
+    name: Smelt Silicon
+    inputs: [{item_id: silicon_ore, quantity: 1}]
+    outputs: [{item_id: silicon_ingot, quantity: 1}]
+    duration: 60
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [smelting_purification]
+  - id: smelt_titanium
+    name: Smelt Titanium
+    inputs: [{item_id: titanium_ore, quantity: 1}]
+    outputs: [{item_id: titanium_ingot, quantity: 1}]
+    duration: 60
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [titanium_smelting]
+  - id: coal_to_graphite
+    name: Coal To Energetic Graphite
+    inputs: [{item_id: coal, quantity: 2}]
+    outputs: [{item_id: energetic_graphite, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [smelting_purification]
+    handcraft_allowed: true
+  - id: oil_fractionation
+    name: 等离子精炼
+    inputs: [{item_id: crude_oil, quantity: 2}]
+    outputs: [{item_id: refined_oil, quantity: 2}]
+    byproducts: [{item_id: hydrogen, quantity: 1}]
+    duration: 60
+    building_types: [oil_refinery]
+    tech_unlock: [plasma_refining]
+  - id: xray_cracking
+    name: X 射线裂解
+    inputs: [{item_id: refined_oil, quantity: 1}, {item_id: hydrogen, quantity: 2}]
+    outputs: [{item_id: hydrogen, quantity: 3}]
+    byproducts: [{item_id: energetic_graphite, quantity: 1}]
+    duration: 60
+    building_types: [oil_refinery]
+    tech_unlock: [xray_cracking]
+  - id: reformed_refinement
+    name: 重整精炼
+    inputs: [{item_id: refined_oil, quantity: 2}, {item_id: hydrogen, quantity: 1}, {item_id: coal, quantity: 1}]
+    outputs: [{item_id: refined_oil, quantity: 3}]
+    duration: 60
+    building_types: [oil_refinery]
+    tech_unlock: [reformed_refinement]
+  - id: plastic
+    name: Plastic
+    inputs: [{item_id: refined_oil, quantity: 1}, {item_id: energetic_graphite, quantity: 1}]
+    outputs: [{item_id: plastic, quantity: 2}]
+    duration: 40
+    energy_cost: 1
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [basic_chemical]
+  - id: sulfuric_acid
+    name: Sulfuric Acid
+    inputs: [{item_id: refined_oil, quantity: 2}, {item_id: stone_ore, quantity: 1}, {item_id: water, quantity: 1}]
+    outputs: [{item_id: sulfuric_acid, quantity: 2}]
+    duration: 60
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [basic_chemical]
+  - id: graphene_from_graphite
+    name: Graphene From Graphite
+    inputs: [{item_id: energetic_graphite, quantity: 2}, {item_id: sulfuric_acid, quantity: 1}]
+    outputs: [{item_id: graphene, quantity: 2}]
+    duration: 50
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [superconductor]
+  - id: carbon_nanotube
+    name: Carbon Nanotube
+    inputs: [{item_id: graphene, quantity: 2}, {item_id: titanium_ingot, quantity: 1}]
+    outputs: [{item_id: carbon_nanotube, quantity: 2}]
+    duration: 70
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [high_strength_material]
+  - id: gear
+    name: Gear
+    inputs: [{item_id: iron_ingot, quantity: 1}]
+    outputs: [{item_id: gear, quantity: 1}]
+    duration: 20
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    handcraft_allowed: true
+  - id: logistics_bot
+    name: Logistics Bot
+    inputs: [{item_id: motor, quantity: 1}, {item_id: circuit_board, quantity: 1}, {item_id: iron_ingot, quantity: 2}]
+    outputs: [{item_id: logistics_bot, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [distribution_logistics]
+  - id: logistics_drone
+    name: Logistics Drone
+    inputs: [{item_id: motor, quantity: 2}, {item_id: processor, quantity: 2}, {item_id: iron_ingot, quantity: 5}]
+    outputs: [{item_id: logistics_drone, quantity: 1}]
+    duration: 120
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [planetary_logistics]
+  - id: logistics_vessel
+    name: Logistics Vessel
+    inputs: [{item_id: motor, quantity: 2}, {item_id: processor, quantity: 10}, {item_id: titanium_alloy, quantity: 10}]
+    outputs: [{item_id: logistics_vessel, quantity: 1}]
+    duration: 300
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [interstellar_logistics]
+  - id: motor
+    name: Motor
+    inputs: [{item_id: gear, quantity: 1}, {item_id: circuit_board, quantity: 1}, {item_id: iron_ingot, quantity: 1}]
+    outputs: [{item_id: motor, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [electromagnetic_drive]
+  - id: circuit_board
+    name: Circuit Board
+    inputs: [{item_id: iron_ingot, quantity: 1}, {item_id: copper_ingot, quantity: 1}]
+    outputs: [{item_id: circuit_board, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    handcraft_allowed: true
+  - id: magnetic_coil
+    name: Magnetic Coil
+    inputs: [{item_id: magnet, quantity: 2}, {item_id: copper_ingot, quantity: 1}]
+    outputs: [{item_id: magnetic_coil, quantity: 2}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    handcraft_allowed: true
+  - id: microcrystalline_component
+    name: Microcrystalline Component
+    inputs: [{item_id: silicon_ingot, quantity: 2}, {item_id: copper_ingot, quantity: 1}]
+    outputs: [{item_id: microcrystalline_component, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [semiconductor]
+  - id: processor
+    name: Processor
+    inputs: [{item_id: circuit_board, quantity: 2}, {item_id: microcrystalline_component, quantity: 1}]
+    outputs: [{item_id: processor, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [processor]
+  - id: titanium_crystal
+    name: Titanium Crystal
+    inputs: [{item_id: titanium_ingot, quantity: 2}, {item_id: graphene, quantity: 1}]
+    outputs: [{item_id: titanium_crystal, quantity: 1}]
+    duration: 80
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [high_strength_crystal]
+  - id: titanium_alloy
+    name: Titanium Alloy
+    inputs:
+      - {item_id: titanium_ingot, quantity: 4}
+      - {item_id: energetic_graphite, quantity: 2}
+      - {item_id: sulfuric_acid, quantity: 2}
+    outputs: [{item_id: titanium_alloy, quantity: 2}]
+    duration: 100
+    energy_cost: 6
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [titanium_alloy]
+  - id: frame_material
+    name: Frame Material
+    inputs:
+      - {item_id: carbon_nanotube, quantity: 2}
+      - {item_id: titanium_alloy, quantity: 1}
+      - {item_id: processor, quantity: 1}
+    outputs: [{item_id: frame_material, quantity: 1}]
+    duration: 120
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [lightweight_structure]
+  - id: quantum_chip
+    name: Quantum Chip
+    inputs:
+      - {item_id: processor, quantity: 2}
+      - {item_id: microcrystalline_component, quantity: 2}
+      - {item_id: carbon_nanotube, quantity: 1}
+    outputs: [{item_id: quantum_chip, quantity: 1}]
+    duration: 140
+    energy_cost: 8
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [quantum_chip]
+  - id: graphene_from_fire_ice
+    name: Graphene From Fire Ice
+    inputs: [{item_id: fire_ice, quantity: 2}]
+    outputs: [{item_id: graphene, quantity: 2}]
+    byproducts: [{item_id: hydrogen, quantity: 1}]
+    duration: 50
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [superconductor]
+  - id: crystal_silicon_from_fractal
+    name: Crystal Silicon From Fractal Silicon
+    inputs: [{item_id: fractal_silicon, quantity: 1}]
+    outputs: [{item_id: crystal_silicon, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [crystal_smelting]
+  - id: photon_combiner_from_grating
+    name: Photon Combiner
+    inputs: [{item_id: grating_crystal, quantity: 1}, {item_id: circuit_board, quantity: 1}]
+    outputs: [{item_id: photon_combiner, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [photon_conversion]
+  - id: particle_container_from_monopole
+    name: Particle Container
+    inputs: [{item_id: monopole_magnet, quantity: 1}, {item_id: titanium_ingot, quantity: 2}]
+    outputs: [{item_id: particle_container, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [particle_container]
+  - id: deuterium_collision
+    name: Deuterium Collision
+    inputs: [{item_id: hydrogen, quantity: 10}]
+    outputs: [{item_id: deuterium, quantity: 5}]
+    duration: 300
+    energy_cost: 24
+    building_types: [miniature_particle_collider]
+    tech_unlock: [miniature_collider]
+  - id: antimatter
+    name: Antimatter
+    inputs: [{item_id: critical_photon, quantity: 2}]
+    outputs: [{item_id: antimatter, quantity: 2}]
+    byproducts: [{item_id: hydrogen, quantity: 2}]
+    duration: 120
+    energy_cost: 8
+    building_types: [miniature_particle_collider]
+    tech_unlock: [dirac_inversion]
+  - id: strange_matter
+    name: Strange Matter
+    inputs:
+      - {item_id: particle_container, quantity: 2}
+      - {item_id: deuterium, quantity: 10}
+      - {item_id: iron_ingot, quantity: 2}
+    outputs: [{item_id: strange_matter, quantity: 1}]
+    duration: 480
+    energy_cost: 6
+    building_types: [miniature_particle_collider]
+    tech_unlock: [strange_matter]
+  - id: annihilation_constraint_sphere
+    name: Annihilation Constraint Sphere
+    inputs:
+      - {item_id: particle_container, quantity: 1}
+      - {item_id: processor, quantity: 1}
+      - {item_id: deuterium_fuel_rod, quantity: 1}
+    outputs: [{item_id: annihilation_constraint_sphere, quantity: 1}]
+    duration: 120
+    energy_cost: 3
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [annihilation]
+  - id: hydrogen_fuel_rod
+    name: Hydrogen Fuel Rod
+    inputs: [{item_id: hydrogen, quantity: 5}, {item_id: titanium_ingot, quantity: 1}]
+    outputs: [{item_id: hydrogen_fuel_rod, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [hydrogen_fuel]
+  - id: deuterium_fuel_rod
+    name: Deuterium Fuel Rod
+    inputs: [{item_id: deuterium, quantity: 5}, {item_id: titanium_ingot, quantity: 1}]
+    outputs: [{item_id: deuterium_fuel_rod, quantity: 1}]
+    duration: 80
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [mini_fusion]
+  - id: small_carrier_rocket
+    name: Small Carrier Rocket
+    inputs:
+      - {item_id: frame_material, quantity: 2}
+      - {item_id: deuterium_fuel_rod, quantity: 2}
+      - {item_id: quantum_chip, quantity: 2}
+    outputs: [{item_id: small_carrier_rocket, quantity: 1}]
+    duration: 200
+    energy_cost: 12
+    building_types: [vertical_launching_silo]
+    tech_unlock: [vertical_launching]
+  - id: antimatter_fuel_rod
+    name: Antimatter Fuel Rod
+    inputs:
+      - {item_id: antimatter, quantity: 2}
+      - {item_id: hydrogen, quantity: 2}
+      - {item_id: annihilation_constraint_sphere, quantity: 1}
+      - {item_id: titanium_ingot, quantity: 2}
+    outputs: [{item_id: antimatter_fuel_rod, quantity: 1}]
+    duration: 150
+    energy_cost: 12
+    building_types: [recomposing_assembler]
+    tech_unlock: [annihilation]
+  - id: fuel_rod_recycling
+    name: Fuel Rod Recycling
+    inputs: [{item_id: deuterium_fuel_rod, quantity: 1}]
+    outputs: [{item_id: deuterium, quantity: 2}, {item_id: titanium_ingot, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+  - id: electromagnetic_matrix
+    name: Electromagnetic Matrix
+    inputs: [{item_id: magnetic_coil, quantity: 1}, {item_id: circuit_board, quantity: 1}]
+    outputs: [{item_id: electromagnetic_matrix, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3, matrix_lab, self_evolution_lab]
+  - id: energy_matrix
+    name: Energy Matrix
+    inputs: [{item_id: energetic_graphite, quantity: 1}, {item_id: hydrogen, quantity: 1}]
+    outputs: [{item_id: energy_matrix, quantity: 1}]
+    duration: 80
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3, matrix_lab, self_evolution_lab]
+    tech_unlock: [energy_matrix]
+  - id: structure_matrix
+    name: Structure Matrix
+    inputs: [{item_id: titanium_ingot, quantity: 1}, {item_id: plastic, quantity: 1}]
+    outputs: [{item_id: structure_matrix, quantity: 1}]
+    duration: 90
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3, matrix_lab, self_evolution_lab]
+    tech_unlock: [structure_matrix]
+  - id: information_matrix
+    name: Information Matrix
+    inputs:
+      - {item_id: processor, quantity: 2}
+      - {item_id: quantum_chip, quantity: 1}
+      - {item_id: carbon_nanotube, quantity: 1}
+    outputs: [{item_id: information_matrix, quantity: 1}]
+    duration: 120
+    energy_cost: 6
+    building_types: [matrix_lab, recomposing_assembler, self_evolution_lab]
+    tech_unlock: [information_matrix]
+  - id: gravity_matrix
+    name: Gravity Matrix
+    inputs: [{item_id: quantum_chip, quantity: 2}, {item_id: strange_matter, quantity: 1}]
+    outputs: [{item_id: gravity_matrix, quantity: 1}]
+    duration: 150
+    energy_cost: 8
+    building_types: [matrix_lab, recomposing_assembler, self_evolution_lab]
+    tech_unlock: [gravity_matrix]
+  - id: universe_matrix
+    name: Universe Matrix
+    inputs:
+      - {item_id: electromagnetic_matrix, quantity: 1}
+      - {item_id: energy_matrix, quantity: 1}
+      - {item_id: structure_matrix, quantity: 1}
+      - {item_id: information_matrix, quantity: 1}
+      - {item_id: gravity_matrix, quantity: 1}
+      - {item_id: antimatter, quantity: 1}
+    outputs: [{item_id: universe_matrix, quantity: 1}]
+    duration: 150
+    energy_cost: 10
+    building_types: [matrix_lab, self_evolution_lab]
+    tech_unlock: [universe_matrix]
+  - id: ammo_bullet
+    name: Bullet
+    inputs: [{item_id: iron_ingot, quantity: 1}]
+    outputs: [{item_id: ammo_bullet, quantity: 5}]
+    duration: 20
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [weapon_system]
+  - id: ammo_missile
+    name: Missile
+    inputs: [{item_id: titanium_ingot, quantity: 2}, {item_id: processor, quantity: 1}]
+    outputs: [{item_id: ammo_missile, quantity: 1}]
+    duration: 80
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [missile_turret]
+  - id: plasma_capsule
+    name: 等离子胶囊
+    inputs:
+      - {item_id: titanium_alloy, quantity: 1}
+      - {item_id: particle_container, quantity: 1}
+      - {item_id: hydrogen, quantity: 2}
+    outputs: [{item_id: plasma_capsule, quantity: 1}]
+    duration: 60
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [plasma_turret]
+  - id: antimatter_capsule
+    name: Antimatter Capsule
+    inputs:
+      - {item_id: antimatter, quantity: 2}
+      - {item_id: annihilation_constraint_sphere, quantity: 1}
+      - {item_id: titanium_alloy, quantity: 1}
+    outputs: [{item_id: antimatter_capsule, quantity: 1}]
+    duration: 120
+    energy_cost: 8
+    building_types: [recomposing_assembler]
+    tech_unlock: [mass_energy_storage]
+  - id: gravity_missile
+    name: Gravity Missile
+    inputs:
+      - {item_id: ammo_missile, quantity: 1}
+      - {item_id: strange_matter, quantity: 1}
+      - {item_id: gravity_matrix, quantity: 1}
+    outputs: [{item_id: gravity_missile, quantity: 1}]
+    duration: 120
+    energy_cost: 8
+    building_types: [recomposing_assembler]
+    tech_unlock: [gravity_missile]
+  - id: solar_sail
+    name: Solar Sail
+    inputs: [{item_id: graphene, quantity: 2}, {item_id: carbon_nanotube, quantity: 1}]
+    outputs: [{item_id: solar_sail, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [solar_sail_orbit]
+  - id: glass
+    name: Glass
+    inputs: [{item_id: stone_ore, quantity: 2}]
+    outputs: [{item_id: glass, quantity: 1}]
+    duration: 50
+    energy_cost: 1
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [automatic_metallurgy]
+    handcraft_allowed: true
+  - id: steel
+    name: Steel
+    inputs: [{item_id: iron_ingot, quantity: 3}]
+    outputs: [{item_id: steel, quantity: 1}]
+    duration: 60
+    energy_cost: 1
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [steel_smelting]
+    handcraft_allowed: true
+  - id: silicon_ore
+    name: Silicon Ore From Stone
+    inputs: [{item_id: stone_ore, quantity: 10}]
+    outputs: [{item_id: silicon_ore, quantity: 1}]
+    duration: 60
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [smelting_purification]
+  - id: diamond
+    name: Diamond
+    inputs: [{item_id: energetic_graphite, quantity: 1}]
+    outputs: [{item_id: diamond, quantity: 1}]
+    duration: 80
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [crystal_smelting]
+  - id: crystal
+    name: Crystal Silicon
+    inputs: [{item_id: silicon_ingot, quantity: 1}]
+    outputs: [{item_id: crystal_silicon, quantity: 1}]
+    duration: 80
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [crystal_smelting]
+  - id: organic_crystal
+    name: Organic Crystal
+    inputs: [{item_id: plastic, quantity: 2}, {item_id: refined_oil, quantity: 1}, {item_id: water, quantity: 1}]
+    outputs: [{item_id: organic_crystal, quantity: 1}]
+    duration: 80
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [polymer_chemical]
+  - id: prism
+    name: Prism
+    inputs: [{item_id: glass, quantity: 3}]
+    outputs: [{item_id: prism, quantity: 2}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [plasma_control]
+    handcraft_allowed: true
+  - id: plasma_exciter
+    name: Plasma Exciter
+    inputs: [{item_id: magnetic_coil, quantity: 4}, {item_id: prism, quantity: 2}]
+    outputs: [{item_id: plasma_exciter, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [plasma_control]
+  - id: engine
+    name: Engine
+    inputs: [{item_id: motor, quantity: 2}, {item_id: magnetic_coil, quantity: 1}]
+    outputs: [{item_id: engine, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [engine]
+  - id: electromagnetic_turbine
+    name: Electromagnetic Turbine
+    inputs: [{item_id: motor, quantity: 2}, {item_id: magnetic_coil, quantity: 2}]
+    outputs: [{item_id: electromagnetic_turbine, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [magnetic_levitation]
+  - id: super_magnetic_ring
+    name: Super-Magnetic Ring
+    inputs:
+      - {item_id: electromagnetic_turbine, quantity: 2}
+      - {item_id: magnet, quantity: 3}
+      - {item_id: energetic_graphite, quantity: 1}
+    outputs: [{item_id: super_magnetic_ring, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [super_magnetic]
+  - id: particle_container
+    name: Particle Container
+    inputs:
+      - {item_id: electromagnetic_turbine, quantity: 2}
+      - {item_id: graphene, quantity: 2}
+      - {item_id: copper_ingot, quantity: 2}
+    outputs: [{item_id: particle_container, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [particle_container]
+  - id: proliferator_mk1
+    name: Proliferator Mk.I
+    inputs: [{item_id: coal, quantity: 2}]
+    outputs: [{item_id: proliferator_mk1, quantity: 1}]
+    duration: 20
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [proliferator_mk1]
+    handcraft_allowed: true
+  - id: proliferator_mk2
+    name: Proliferator Mk.II
+    inputs: [{item_id: proliferator_mk1, quantity: 2}, {item_id: diamond, quantity: 1}]
+    outputs: [{item_id: proliferator_mk2, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [proliferator_mk2]
+  - id: combustible_unit
+    name: Combustible Unit
+    inputs: [{item_id: coal, quantity: 3}]
+    outputs: [{item_id: combustible_unit, quantity: 1}]
+    duration: 20
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [combustible_unit]
+    handcraft_allowed: true
+  - id: shell_set
+    name: Shell Set
+    inputs: [{item_id: combustible_unit, quantity: 2}, {item_id: copper_ingot, quantity: 2}]
+    outputs: [{item_id: shell_set, quantity: 1}]
+    duration: 40
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [implosion_cannon]
+  - id: titanium_ammo
+    name: Titanium Ammo Box
+    inputs: [{item_id: ammo_bullet, quantity: 1}, {item_id: titanium_ingot, quantity: 1}]
+    outputs: [{item_id: titanium_ammo, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [titanium_ammo]
+  - id: high_purity_silicon
+    name: High-purity Silicon
+    inputs: [{item_id: silicon_ore, quantity: 2}]
+    outputs: [{item_id: silicon_ingot, quantity: 1}]
+    duration: 120
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [smelting_purification]
+  - id: titanium_ingot
+    name: Titanium Ingot
+    inputs: [{item_id: titanium_ore, quantity: 2}]
+    outputs: [{item_id: titanium_ingot, quantity: 1}]
+    duration: 120
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [titanium_smelting]
+  - id: diamond_advanced
+    name: Diamond (advanced)
+    inputs: [{item_id: kimberlite_ore, quantity: 1}]
+    outputs: [{item_id: diamond, quantity: 2}]
+    duration: 90
+    energy_cost: 2
+    building_types: [arc_smelter, plane_smelter, negentropy_smelter]
+    tech_unlock: [crystal_smelting]
+  - id: plasma_refining
+    name: Plasma Refining
+    inputs: [{item_id: crude_oil, quantity: 2}]
+    outputs: [{item_id: refined_oil, quantity: 2}]
+    byproducts: [{item_id: hydrogen, quantity: 1}]
+    duration: 60
+    building_types: [oil_refinery]
+    tech_unlock: [plasma_refining]
+  - id: x_ray_cracking
+    name: X-ray Cracking
+    inputs: [{item_id: refined_oil, quantity: 1}, {item_id: hydrogen, quantity: 2}]
+    outputs: [{item_id: hydrogen, quantity: 3}]
+    byproducts: [{item_id: energetic_graphite, quantity: 1}]
+    duration: 60
+    building_types: [oil_refinery]
+    tech_unlock: [xray_cracking]
+  - id: graphene
+    name: Graphene
+    inputs: [{item_id: energetic_graphite, quantity: 3}, {item_id: sulfuric_acid, quantity: 1}]
+    outputs: [{item_id: graphene, quantity: 2}]
+    duration: 50
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [superconductor]
+  - id: graphene_advanced
+    name: Graphene (advanced)
+    inputs: [{item_id: fire_ice, quantity: 2}]
+    outputs: [{item_id: graphene, quantity: 2}]
+    byproducts: [{item_id: hydrogen, quantity: 1}]
+    duration: 50
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [superconductor]
+  - id: carbon_nanotube_advanced
+    name: Carbon Nanotube (advanced)
+    inputs: [{item_id: spiniform_stalagmite_crystal, quantity: 6}]
+    outputs: [{item_id: carbon_nanotube, quantity: 2}]
+    duration: 70
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [high_strength_material]
+  - id: df_explosive_unit
+    name: Explosive Unit
+    inputs:
+      - {item_id: combustible_unit, quantity: 2}
+      - {item_id: plastic, quantity: 2}
+      - {item_id: sulfuric_acid, quantity: 1}
+    outputs: [{item_id: combustible_unit, quantity: 2}]
+    duration: 60
+    energy_cost: 2
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [df_explosive_unit_tech]
+  - id: crystal_explosive
+    name: Crystal Explosive Unit
+    inputs:
+      - {item_id: casimir_crystal, quantity: 1}
+      - {item_id: crystal_silicon, quantity: 8}
+      - {item_id: combustible_unit, quantity: 8}
+    outputs: [{item_id: plasma_capsule, quantity: 8}]
+    duration: 240
+    energy_cost: 4
+    building_types: [chemical_plant, quantum_chemical_plant]
+    tech_unlock: [crystal_explosive]
+  - id: deuterium_fractionation
+    name: Deuterium Fractionation
+    inputs: [{item_id: hydrogen, quantity: 100}]
+    outputs: [{item_id: deuterium, quantity: 1}]
+    duration: 1500
+    building_types: [fractionator]
+    tech_unlock: [deuterium_fractionation]
+  - id: proliferator_1
+    name: Proliferator Mk.I
+    inputs: [{item_id: coal, quantity: 1}]
+    outputs: [{item_id: proliferator_mk1, quantity: 1}]
+    duration: 15
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [proliferator_mk1]
+    handcraft_allowed: true
+  - id: proliferator_mk3
+    name: Proliferator Mk.III
+    inputs: [{item_id: carbon_nanotube, quantity: 1}, {item_id: proliferator_mk2, quantity: 2}]
+    outputs: [{item_id: proliferator_mk3, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [proliferator_mk3]
+  - id: df_magnum_ammo_box
+    name: Magnum Ammo Box
+    inputs: [{item_id: copper_ingot, quantity: 3}]
+    outputs: [{item_id: ammo_bullet, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [weapon_system]
+  - id: df_missile_set
+    name: Missile Set
+    inputs:
+      - {item_id: circuit_board, quantity: 3}
+      - {item_id: copper_ingot, quantity: 6}
+      - {item_id: combustible_unit, quantity: 2}
+      - {item_id: engine, quantity: 1}
+    outputs: [{item_id: ammo_missile, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [missile_turret]
+  - id: df_titanium_ammo_box
+    name: Titanium Ammo Box
+    inputs: [{item_id: ammo_bullet, quantity: 1}, {item_id: titanium_ingot, quantity: 2}]
+    outputs: [{item_id: titanium_ammo, quantity: 1}]
+    duration: 60
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [titanium_ammo]
+  - id: df_superalloy_ammo_box
+    name: Superalloy Ammo Box
+    inputs: [{item_id: titanium_ammo, quantity: 1}, {item_id: titanium_alloy, quantity: 1}]
+    outputs: [{item_id: titanium_ammo, quantity: 1}]
+    duration: 90
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [df_superalloy_ammo_box_tech]
+  - id: supersonic_missile
+    name: Supersonic Missile Set
+    inputs:
+      - {item_id: combustible_unit, quantity: 4}
+      - {item_id: ammo_missile, quantity: 2}
+      - {item_id: processor, quantity: 4}
+      - {item_id: engine, quantity: 2}
+    outputs: [{item_id: supersonic_missile_set, quantity: 2}]
+    duration: 120
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [supersonic_missile]
+  - id: df_gravity_missile_set
+    name: Gravity Missile Set
+    inputs:
+      - {item_id: plasma_capsule, quantity: 6}
+      - {item_id: supersonic_missile_set, quantity: 3}
+      - {item_id: strange_matter, quantity: 3}
+    outputs: [{item_id: gravity_missile, quantity: 3}]
+    duration: 180
+    energy_cost: 8
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [gravity_missile]
+  - id: df_plasma_capsule
+    name: Plasma Capsule
+    inputs: [{item_id: deuterium, quantity: 10}, {item_id: graphene, quantity: 1}, {item_id: magnet, quantity: 2}]
+    outputs: [{item_id: plasma_capsule, quantity: 1}]
+    duration: 60
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [plasma_turret]
+  - id: df_shell_set
+    name: Shell Set
+    inputs: [{item_id: copper_ingot, quantity: 9}, {item_id: combustible_unit, quantity: 2}]
+    outputs: [{item_id: shell_set, quantity: 1}]
+    duration: 45
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [implosion_cannon]
+  - id: df_high_explosive_shell_set
+    name: High-Explosive Shell Set
+    inputs:
+      - {item_id: combustible_unit, quantity: 2}
+      - {item_id: shell_set, quantity: 1}
+      - {item_id: titanium_ingot, quantity: 6}
+    outputs: [{item_id: shell_set, quantity: 1}]
+    duration: 90
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [df_high_explosive_shell_set_tech]
+  - id: crystal_shell
+    name: Crystal Shell Set
+    inputs:
+      - {item_id: plasma_capsule, quantity: 2}
+      - {item_id: shell_set, quantity: 1}
+      - {item_id: titanium_alloy, quantity: 3}
+    outputs: [{item_id: crystal_shell_set, quantity: 1}]
+    duration: 180
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [crystal_shell]
+  - id: df_jamming_capsule
+    name: Jamming Capsule
+    inputs:
+      - {item_id: electromagnetic_turbine, quantity: 1}
+      - {item_id: hydrogen, quantity: 3}
+      - {item_id: plasma_exciter, quantity: 1}
+    outputs: [{item_id: jamming_capsule, quantity: 1}]
+    duration: 60
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [df_jammer_tower_tech]
+  - id: df_suppressing_capsule
+    name: Suppressing Capsule
+    inputs:
+      - {item_id: jamming_capsule, quantity: 2}
+      - {item_id: super_magnetic_ring, quantity: 1}
+      - {item_id: titanium_glass, quantity: 2}
+    outputs: [{item_id: suppressing_capsule, quantity: 2}]
+    duration: 240
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [df_suppressing_capsule_tech]
+  - id: df_prototype
+    name: Prototype
+    inputs:
+      - {item_id: circuit_board, quantity: 2}
+      - {item_id: engine, quantity: 1}
+      - {item_id: iron_ingot, quantity: 3}
+      - {item_id: plasma_exciter, quantity: 1}
+    outputs: [{item_id: prototype, quantity: 1}]
+    duration: 60
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [prototype]
+  - id: df_precision_drone
+    name: Precision Drone
+    inputs:
+      - {item_id: circuit_board, quantity: 2}
+      - {item_id: prototype, quantity: 1}
+      - {item_id: electromagnetic_turbine, quantity: 1}
+      - {item_id: photon_combiner, quantity: 2}
+    outputs: [{item_id: precision_drone, quantity: 1}]
+    duration: 120
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [precision_drone]
+  - id: df_attack_drone
+    name: Attack Drone
+    inputs:
+      - {item_id: prototype, quantity: 1}
+      - {item_id: electromagnetic_turbine, quantity: 1}
+      - {item_id: particle_container, quantity: 1}
+      - {item_id: processor, quantity: 1}
+    outputs: [{item_id: attack_drone, quantity: 1}]
+    duration: 120
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [df_attack_drone_tech]
+  - id: df_corvette
+    name: Corvette
+    inputs:
+      - {item_id: particle_container, quantity: 3}
+      - {item_id: processor, quantity: 2}
+      - {item_id: reinforced_thruster, quantity: 1}
+      - {item_id: titanium_alloy, quantity: 5}
+    outputs: [{item_id: corvette, quantity: 1}]
+    duration: 150
+    energy_cost: 10
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [corvette]
+  - id: df_destroyer
+    name: Destroyer
+    inputs:
+      - {item_id: frame_material, quantity: 20}
+      - {item_id: processor, quantity: 4}
+      - {item_id: reinforced_thruster, quantity: 4}
+      - {item_id: strange_matter, quantity: 1}
+    outputs: [{item_id: destroyer, quantity: 1}]
+    duration: 240
+    energy_cost: 12
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [destroyer]
+  - id: df_engine
+    name: Engine
+    inputs: [{item_id: copper_ingot, quantity: 2}, {item_id: magnetic_coil, quantity: 1}]
+    outputs: [{item_id: engine, quantity: 1}]
+    duration: 90
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [engine]
+  - id: thruster
+    name: Thruster
+    inputs: [{item_id: copper_ingot, quantity: 3}, {item_id: steel, quantity: 2}]
+    outputs: [{item_id: engine, quantity: 1}]
+    duration: 120
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [thruster]
+  - id: reinforced_thruster
+    name: Reinforced Thruster
+    inputs: [{item_id: electromagnetic_turbine, quantity: 5}, {item_id: titanium_alloy, quantity: 5}]
+    outputs: [{item_id: reinforced_thruster, quantity: 1}]
+    duration: 180
+    energy_cost: 4
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [reinforced_thruster_technology]
+  - id: titanium_glass
+    name: Titanium Glass
+    inputs: [{item_id: glass, quantity: 2}, {item_id: titanium_ingot, quantity: 2}, {item_id: water, quantity: 2}]
+    outputs: [{item_id: titanium_glass, quantity: 2}]
+    duration: 150
+    energy_cost: 2
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [high_strength_glass]
+  - id: organic_crystal_original
+    name: Organic Crystal (original)
+    inputs: [{item_id: log, quantity: 20}, {item_id: plant_fuel, quantity: 30}, {item_id: water, quantity: 10}]
+    outputs: [{item_id: organic_crystal, quantity: 1}]
+    duration: 180
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [polymer_chemical]
+  - id: photon_combiner
+    name: Photon Combiner
+    inputs: [{item_id: circuit_board, quantity: 1}, {item_id: prism, quantity: 2}]
+    outputs: [{item_id: photon_combiner, quantity: 1}]
+    duration: 90
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [photon_conversion]
+  - id: particle_broadband
+    name: Particle Broadband
+    inputs:
+      - {item_id: carbon_nanotube, quantity: 2}
+      - {item_id: crystal_silicon, quantity: 2}
+      - {item_id: plastic, quantity: 1}
+    outputs: [{item_id: particle_broadband, quantity: 1}]
+    duration: 240
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [particle_control]
+  - id: casimir_crystal
+    name: Casimir Crystal
+    inputs:
+      - {item_id: graphene, quantity: 2}
+      - {item_id: hydrogen, quantity: 12}
+      - {item_id: titanium_crystal, quantity: 1}
+    outputs: [{item_id: casimir_crystal, quantity: 1}]
+    duration: 120
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [casimir_crystal]
+  - id: casimir_crystal_advanced
+    name: Casimir Crystal (advanced)
+    inputs:
+      - {item_id: graphene, quantity: 2}
+      - {item_id: hydrogen, quantity: 12}
+      - {item_id: grating_crystal, quantity: 8}
+    outputs: [{item_id: casimir_crystal, quantity: 1}]
+    duration: 120
+    energy_cost: 6
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [casimir_crystal]
+  - id: plane_filter
+    name: Plane Filter
+    inputs: [{item_id: casimir_crystal, quantity: 1}, {item_id: titanium_glass, quantity: 2}]
+    outputs: [{item_id: plane_filter, quantity: 1}]
+    duration: 360
+    energy_cost: 8
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [wave_interference]
+  - id: gravitational_lens
+    name: Graviton Lens
+    inputs: [{item_id: diamond, quantity: 4}, {item_id: strange_matter, quantity: 1}]
+    outputs: [{item_id: graviton_lens, quantity: 1}]
+    duration: 180
+    energy_cost: 8
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [strange_matter]
+  - id: space_warper
+    name: Space Warper
+    inputs: [{item_id: graviton_lens, quantity: 1}]
+    outputs: [{item_id: space_warper, quantity: 1}]
+    duration: 300
+    energy_cost: 8
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [gravitational_wave]
+  - id: space_warper_advanced
+    name: Space Warper (advanced)
+    inputs: [{item_id: gravity_matrix, quantity: 1}]
+    outputs: [{item_id: space_warper, quantity: 8}]
+    duration: 300
+    energy_cost: 8
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [gravity_matrix]
+  - id: dyson_sphere_component
+    name: Dyson Sphere Component
+    inputs:
+      - {item_id: frame_material, quantity: 3}
+      - {item_id: processor, quantity: 3}
+      - {item_id: solar_sail, quantity: 3}
+    outputs: [{item_id: dyson_sphere_component, quantity: 1}]
+    duration: 240
+    energy_cost: 10
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [lightweight_structure]
+  - id: foundation
+    name: Foundation
+    inputs: [{item_id: steel, quantity: 1}, {item_id: stone_brick, quantity: 3}]
+    outputs: [{item_id: foundation_supply, quantity: 1}]
+    duration: 30
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
+    tech_unlock: [environment_modification]

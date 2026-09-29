@@ -51,41 +51,41 @@ var validPortDirections = map[PortDirection]struct{}{
 
 // GridOffset represents a footprint-relative coordinate.
 type GridOffset struct {
-	X int `json:"x" yaml:"x"`
-	Y int `json:"y" yaml:"y"`
+	X int `json:"x" yaml:"x,omitempty"`
+	Y int `json:"y" yaml:"y,omitempty"`
 }
 
 // ConnectionPoint represents a generic attachment point for power/logistics networks.
 type ConnectionPoint struct {
 	ID       string         `json:"id" yaml:"id"`
-	Kind     ConnectionKind `json:"kind" yaml:"kind"`
-	Offset   GridOffset     `json:"offset" yaml:"offset"`
-	Capacity int            `json:"capacity" yaml:"capacity"`
+	Kind     ConnectionKind `json:"kind" yaml:"kind,omitempty"`
+	Offset   GridOffset     `json:"offset" yaml:"offset,omitempty"`
+	Capacity int            `json:"capacity" yaml:"capacity,omitempty"`
 }
 
 // IOPort represents an input/output port for items or fluids.
 type IOPort struct {
 	ID           string        `json:"id" yaml:"id"`
-	Direction    PortDirection `json:"direction" yaml:"direction"`
-	Offset       GridOffset    `json:"offset" yaml:"offset"`
-	Capacity     int           `json:"capacity" yaml:"capacity"`
+	Direction    PortDirection `json:"direction" yaml:"direction,omitempty"`
+	Offset       GridOffset    `json:"offset" yaml:"offset,omitempty"`
+	Capacity     int           `json:"capacity" yaml:"capacity,omitempty"`
 	AllowedItems []string      `json:"allowed_items,omitempty" yaml:"allowed_items,omitempty"`
 }
 
 // MaintenanceCost represents recurring upkeep costs per tick.
 type MaintenanceCost struct {
-	Minerals int `json:"minerals" yaml:"minerals"`
-	Energy   int `json:"energy" yaml:"energy"`
+	Minerals int `json:"minerals" yaml:"minerals,omitempty"`
+	Energy   int `json:"energy" yaml:"energy,omitempty"`
 }
 
 // BuildingRuntimeParams defines shared runtime parameters for a building.
 type BuildingRuntimeParams struct {
-	EnergyConsume    int               `json:"energy_consume" yaml:"energy_consume"`
-	EnergyGenerate   int               `json:"energy_generate" yaml:"energy_generate"`
-	PowerPriority    int               `json:"power_priority" yaml:"power_priority"`
-	Capacity         int               `json:"capacity" yaml:"capacity"`
-	MaintenanceCost  MaintenanceCost   `json:"maintenance_cost" yaml:"maintenance_cost"`
-	Footprint        Footprint         `json:"footprint" yaml:"footprint"`
+	EnergyConsume    int               `json:"energy_consume" yaml:"energy_consume,omitempty"`
+	EnergyGenerate   int               `json:"energy_generate" yaml:"energy_generate,omitempty"`
+	PowerPriority    int               `json:"power_priority" yaml:"power_priority,omitempty"`
+	Capacity         int               `json:"capacity" yaml:"capacity,omitempty"`
+	MaintenanceCost  MaintenanceCost   `json:"maintenance_cost" yaml:"maintenance_cost,omitempty"`
+	Footprint        Footprint         `json:"footprint" yaml:"footprint,omitempty"`
 	ConnectionPoints []ConnectionPoint `json:"connection_points,omitempty" yaml:"connection_points,omitempty"`
 	IOPorts          []IOPort          `json:"io_ports,omitempty" yaml:"io_ports,omitempty"`
 }
@@ -121,14 +121,14 @@ type BuildingFunctionModules struct {
 
 // ProductionModule handles production throughput.
 type ProductionModule struct {
-	Throughput  int `json:"throughput" yaml:"throughput"`
-	RecipeSlots int `json:"recipe_slots" yaml:"recipe_slots"`
+	Throughput  int `json:"throughput" yaml:"throughput,omitempty"`
+	RecipeSlots int `json:"recipe_slots" yaml:"recipe_slots,omitempty"`
 }
 
 // CollectModule handles resource extraction.
 type CollectModule struct {
 	ResourceKind string `json:"resource_kind,omitempty" yaml:"resource_kind,omitempty"`
-	YieldPerTick int    `json:"yield_per_tick" yaml:"yield_per_tick"`
+	YieldPerTick int    `json:"yield_per_tick" yaml:"yield_per_tick,omitempty"`
 	// MineralsKickback is the amount of minerals credited to the owner's pool
 	// per unit of mined resource stored in the building's local storage.
 	// It keeps the minerals-based construction economy funded while the
@@ -138,35 +138,35 @@ type CollectModule struct {
 
 // OrbitalModule handles orbital collection outputs per tick.
 type OrbitalModule struct {
-	Outputs      []ItemAmount `json:"outputs" yaml:"outputs"`
-	MaxInventory int          `json:"max_inventory" yaml:"max_inventory"`
+	Outputs      []ItemAmount `json:"outputs" yaml:"outputs,omitempty"`
+	MaxInventory int          `json:"max_inventory" yaml:"max_inventory,omitempty"`
 }
 
 // TransportModule handles transport throughput.
 type TransportModule struct {
-	Throughput int `json:"throughput" yaml:"throughput"`
-	StackLimit int `json:"stack_limit" yaml:"stack_limit"`
+	Throughput int `json:"throughput" yaml:"throughput,omitempty"`
+	StackLimit int `json:"stack_limit" yaml:"stack_limit,omitempty"`
 }
 
 // SorterModule handles sorter throughput and range.
 type SorterModule struct {
-	Speed int `json:"speed" yaml:"speed"`
-	Range int `json:"range" yaml:"range"`
+	Speed int `json:"speed" yaml:"speed,omitempty"`
+	Range int `json:"range" yaml:"range,omitempty"`
 }
 
 // SprayModule handles spray coating throughput.
 type SprayModule struct {
-	Throughput int `json:"throughput" yaml:"throughput"`
-	MaxLevel   int `json:"max_level" yaml:"max_level"`
+	Throughput int `json:"throughput" yaml:"throughput,omitempty"`
+	MaxLevel   int `json:"max_level" yaml:"max_level,omitempty"`
 }
 
 // StorageModule handles storage capacity.
 type StorageModule struct {
-	Capacity       int `json:"capacity" yaml:"capacity"`
+	Capacity       int `json:"capacity" yaml:"capacity,omitempty"`
 	Slots          int `json:"slots,omitempty" yaml:"slots,omitempty"`
-	Buffer         int `json:"buffer" yaml:"buffer"`
-	InputPriority  int `json:"input_priority" yaml:"input_priority"`
-	OutputPriority int `json:"output_priority" yaml:"output_priority"`
+	Buffer         int `json:"buffer" yaml:"buffer,omitempty"`
+	InputPriority  int `json:"input_priority" yaml:"input_priority,omitempty"`
+	OutputPriority int `json:"output_priority" yaml:"output_priority,omitempty"`
 }
 
 // AccumulatorItemEnergy is the grid energy stored in one full accumulator
@@ -201,45 +201,45 @@ func IsEnergyExchangerMode(mode EnergyExchangerMode) bool {
 // Mode is per-instance runtime state (cloned per building); the remaining
 // fields are definition parameters for the accumulator item cycle.
 type EnergyExchangerModule struct {
-	Hub bool `json:"hub" yaml:"hub"`
+	Hub bool `json:"hub" yaml:"hub,omitempty"`
 	// Mode selects charge/discharge/standby behavior for the item cycle.
 	Mode EnergyExchangerMode `json:"mode,omitempty" yaml:"mode,omitempty"`
 	// EnergyPerItem is the grid energy consumed to charge one item, or
 	// released when discharging one item.
-	EnergyPerItem int `json:"energy_per_item" yaml:"energy_per_item"`
+	EnergyPerItem int `json:"energy_per_item" yaml:"energy_per_item,omitempty"`
 	// ItemsPerTick caps item conversions per tick in either direction.
-	ItemsPerTick int `json:"items_per_tick" yaml:"items_per_tick"`
+	ItemsPerTick int `json:"items_per_tick" yaml:"items_per_tick,omitempty"`
 	// EmptyItemID is the discharged accumulator item consumed in charge mode.
-	EmptyItemID string `json:"empty_item_id" yaml:"empty_item_id"`
+	EmptyItemID string `json:"empty_item_id" yaml:"empty_item_id,omitempty"`
 	// FullItemID is the charged accumulator item produced in charge mode and
 	// consumed in discharge mode.
-	FullItemID string `json:"full_item_id" yaml:"full_item_id"`
+	FullItemID string `json:"full_item_id" yaml:"full_item_id,omitempty"`
 }
 
 // EnergyStorageModule handles power storage capacity and charge/discharge rules.
 type EnergyStorageModule struct {
-	Capacity            int     `json:"capacity" yaml:"capacity"`
-	ChargePerTick       int     `json:"charge_per_tick" yaml:"charge_per_tick"`
-	DischargePerTick    int     `json:"discharge_per_tick" yaml:"discharge_per_tick"`
-	ChargeEfficiency    float64 `json:"charge_efficiency" yaml:"charge_efficiency"`
-	DischargeEfficiency float64 `json:"discharge_efficiency" yaml:"discharge_efficiency"`
-	Priority            int     `json:"priority" yaml:"priority"`
-	InitialCharge       int     `json:"initial_charge" yaml:"initial_charge"`
+	Capacity            int     `json:"capacity" yaml:"capacity,omitempty"`
+	ChargePerTick       int     `json:"charge_per_tick" yaml:"charge_per_tick,omitempty"`
+	DischargePerTick    int     `json:"discharge_per_tick" yaml:"discharge_per_tick,omitempty"`
+	ChargeEfficiency    float64 `json:"charge_efficiency" yaml:"charge_efficiency,omitempty"`
+	DischargeEfficiency float64 `json:"discharge_efficiency" yaml:"discharge_efficiency,omitempty"`
+	Priority            int     `json:"priority" yaml:"priority,omitempty"`
+	InitialCharge       int     `json:"initial_charge" yaml:"initial_charge,omitempty"`
 }
 
 // ResearchModule handles research throughput.
 type ResearchModule struct {
-	ResearchPerTick int `json:"research_per_tick" yaml:"research_per_tick"`
+	ResearchPerTick int `json:"research_per_tick" yaml:"research_per_tick,omitempty"`
 }
 
 // CombatModule handles defensive or offensive stats.
 type CombatModule struct {
-	Attack       int    `json:"attack" yaml:"attack"`
-	Range        int    `json:"range" yaml:"range"`
+	Attack       int    `json:"attack" yaml:"attack,omitempty"`
+	Range        int    `json:"range" yaml:"range,omitempty"`
 	FireRate     int    `json:"fire_rate,omitempty" yaml:"fire_rate,omitempty"`
 	AmmoItem     string `json:"ammo_item,omitempty" yaml:"ammo_item,omitempty"`
 	AmmoConsume  int    `json:"ammo_consume,omitempty" yaml:"ammo_consume,omitempty"`
-	LastFireTick int64  `json:"last_fire_tick,omitempty" yaml:"last_fire_tick,omitempty"`
+	LastFireTick int64  `json:"last_fire_tick,omitempty" yaml:"-"`
 	// AltAmmoItem is an optional upgraded ammunition the turret may fall back
 	// to when the primary AmmoItem is unavailable. Consumption of AltAmmoItem
 	// is wired in the turret settlement layer; the fields here are the
@@ -251,40 +251,40 @@ type CombatModule struct {
 
 // PowerGridModule handles wireless power transmission coverage.
 type PowerGridModule struct {
-	WirelessRange int `json:"wireless_range" yaml:"wireless_range"`
+	WirelessRange int `json:"wireless_range" yaml:"wireless_range,omitempty"`
 }
 
 // ShieldModule handles planetary shield charge and capacity.
 type ShieldModule struct {
-	Capacity      int `json:"capacity" yaml:"capacity"`
-	ChargePerTick int `json:"charge_per_tick" yaml:"charge_per_tick"`
-	CurrentCharge int `json:"current_charge" yaml:"current_charge"`
+	Capacity      int `json:"capacity" yaml:"capacity,omitempty"`
+	ChargePerTick int `json:"charge_per_tick" yaml:"charge_per_tick,omitempty"`
+	CurrentCharge int `json:"current_charge" yaml:"current_charge,omitempty"`
 }
 
 // LaunchModule handles launch-related parameters for EM Rail Ejector and Vertical Launching Silo.
 type LaunchModule struct {
-	EnergyPerLaunch int     `json:"energy_per_launch" yaml:"energy_per_launch"`               // energy consumed per launch
-	SuccessRate     float64 `json:"success_rate" yaml:"success_rate"`                         // launch success probability (0-1)
-	OrbitRadiusMin  float64 `json:"orbit_radius_min" yaml:"orbit_radius_min"`                 // minimum orbit radius in AU
-	OrbitRadiusMax  float64 `json:"orbit_radius_max" yaml:"orbit_radius_max"`                 // maximum orbit radius in AU
-	InclinationMax  float64 `json:"inclination_max" yaml:"inclination_max"`                   // maximum inclination in degrees
-	LaunchInterval  int     `json:"launch_interval" yaml:"launch_interval"`                   // ticks between launches
-	LaunchQueueSize int     `json:"launch_queue_size" yaml:"launch_queue_size"`               // max launch queue size
+	EnergyPerLaunch int     `json:"energy_per_launch" yaml:"energy_per_launch,omitempty"`               // energy consumed per launch
+	SuccessRate     float64 `json:"success_rate" yaml:"success_rate,omitempty"`                         // launch success probability (0-1)
+	OrbitRadiusMin  float64 `json:"orbit_radius_min" yaml:"orbit_radius_min,omitempty"`                 // minimum orbit radius in AU
+	OrbitRadiusMax  float64 `json:"orbit_radius_max" yaml:"orbit_radius_max,omitempty"`                 // maximum orbit radius in AU
+	InclinationMax  float64 `json:"inclination_max" yaml:"inclination_max,omitempty"`                   // maximum inclination in degrees
+	LaunchInterval  int     `json:"launch_interval" yaml:"launch_interval,omitempty"`                   // ticks between launches
+	LaunchQueueSize int     `json:"launch_queue_size" yaml:"launch_queue_size,omitempty"`               // max launch queue size
 	RocketItemID    string  `json:"rocket_item_id,omitempty" yaml:"rocket_item_id,omitempty"` // rocket type to launch (for silo)
-	ProductionSpeed int     `json:"production_speed" yaml:"production_speed"`                 // rocket production speed (for silo)
+	ProductionSpeed int     `json:"production_speed" yaml:"production_speed,omitempty"`                 // rocket production speed (for silo)
 }
 
 // DeploymentModule marks a building as a squad/fleet deployment hub.
 type DeploymentModule struct {
-	SquadCapacity     int      `json:"squad_capacity" yaml:"squad_capacity"`
-	FleetCapacity     int      `json:"fleet_capacity" yaml:"fleet_capacity"`
+	SquadCapacity     int      `json:"squad_capacity" yaml:"squad_capacity,omitempty"`
+	FleetCapacity     int      `json:"fleet_capacity" yaml:"fleet_capacity,omitempty"`
 	AllowedBlueprints []string `json:"allowed_blueprints,omitempty" yaml:"allowed_blueprints,omitempty"`
 }
 
 // BuildingRuntimeDefinition defines runtime parameters for a building type.
 type BuildingRuntimeDefinition struct {
-	ID        BuildingType            `json:"id" yaml:"id"`
-	Params    BuildingRuntimeParams   `json:"params" yaml:"params"`
+	ID        BuildingType            `json:"id" yaml:"-"` // buildings.yaml 中取所属建筑 id
+	Params    BuildingRuntimeParams   `json:"params" yaml:"params,omitempty"`
 	Functions BuildingFunctionModules `json:"functions,omitempty" yaml:"functions,omitempty"`
 }
 
@@ -352,27 +352,19 @@ func buildBuildingRuntimeCatalog(defs []BuildingRuntimeDefinition) (map[Building
 		if def.Params.Footprint != baseDef.Footprint {
 			return nil, fmt.Errorf("building runtime %s footprint mismatch", def.ID)
 		}
-		if err := validateBuildingRuntimeDefinition(def); err != nil {
+		if err := validateBuildingRuntimeDefinition(def, baseDef, func(id string) bool { _, ok := Item(id); return ok }); err != nil {
 			return nil, err
 		}
 		catalog[def.ID] = def
 	}
-
-	for _, def := range catalog {
-		if err := validateBuildingRuntimeDefinition(def); err != nil {
-			return nil, err
-		}
-	}
 	return catalog, nil
 }
 
-func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
+// validateBuildingRuntimeDefinition 校验运行时定义；baseDef 为所属建筑定义，
+// itemExists 用于校验模块内引用的物品 ID。
+func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition, baseDef BuildingDefinition, itemExists func(string) bool) error {
 	if def.ID == "" {
 		return fmt.Errorf("building runtime id required")
-	}
-	baseDef, ok := BuildingDefinitionByID(def.ID)
-	if !ok {
-		return fmt.Errorf("building runtime %s missing building definition", def.ID)
 	}
 	if def.Params.Footprint.Width <= 0 || def.Params.Footprint.Height <= 0 {
 		return fmt.Errorf("building runtime %s invalid footprint", def.ID)
@@ -425,6 +417,11 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 		if port.Offset.X >= def.Params.Footprint.Width || port.Offset.Y >= def.Params.Footprint.Height {
 			return fmt.Errorf("building runtime %s io port %s offset out of footprint", def.ID, port.ID)
 		}
+		for _, itemID := range port.AllowedItems {
+			if !itemExists(itemID) {
+				return fmt.Errorf("building runtime %s io port %s unknown allowed item %s", def.ID, port.ID, itemID)
+			}
+		}
 		if _, exists := seenPort[port.ID]; exists {
 			return fmt.Errorf("building runtime %s duplicate io port %s", def.ID, port.ID)
 		}
@@ -451,7 +448,7 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			if out.ItemID == "" || out.Quantity <= 0 {
 				return fmt.Errorf("building runtime %s orbital module invalid output", def.ID)
 			}
-			if _, ok := Item(out.ItemID); !ok {
+			if !itemExists(out.ItemID) {
 				return fmt.Errorf("building runtime %s orbital module unknown item %s", def.ID, out.ItemID)
 			}
 		}
@@ -493,6 +490,9 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 		if module.EmptyItemID == "" || module.FullItemID == "" {
 			return fmt.Errorf("building runtime %s energy exchanger item ids required", def.ID)
 		}
+		if !itemExists(module.EmptyItemID) || !itemExists(module.FullItemID) {
+			return fmt.Errorf("building runtime %s energy exchanger unknown item", def.ID)
+		}
 	}
 	if def.Functions.RayReceiver != nil {
 		module := def.Functions.RayReceiver
@@ -516,7 +516,7 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			if photonItem == "" {
 				photonItem = ItemCriticalPhoton
 			}
-			if _, ok := Item(photonItem); !ok {
+			if !itemExists(photonItem) {
 				return fmt.Errorf("building runtime %s ray receiver photon item unknown", def.ID)
 			}
 		}
@@ -556,14 +556,23 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 			if rule.ItemID == "" || rule.ConsumePerTick <= 0 || rule.OutputMultiplier <= 0 {
 				return fmt.Errorf("building runtime %s invalid fuel rule", def.ID)
 			}
+			if !itemExists(rule.ItemID) {
+				return fmt.Errorf("building runtime %s fuel rule unknown item %s", def.ID, rule.ItemID)
+			}
 		}
 	}
 	if def.Functions.Research != nil && def.Functions.Research.ResearchPerTick < 0 {
 		return fmt.Errorf("building runtime %s research module invalid", def.ID)
 	}
 	if def.Functions.Combat != nil {
-		if def.Functions.Combat.Attack < 0 || def.Functions.Combat.Range < 0 {
+		combat := def.Functions.Combat
+		if combat.Attack < 0 || combat.Range < 0 {
 			return fmt.Errorf("building runtime %s combat module invalid", def.ID)
+		}
+		for _, ammo := range []string{combat.AmmoItem, combat.AltAmmoItem} {
+			if ammo != "" && !itemExists(ammo) {
+				return fmt.Errorf("building runtime %s combat module unknown ammo item %s", def.ID, ammo)
+			}
 		}
 	}
 	if def.Functions.PowerGrid != nil && def.Functions.PowerGrid.WirelessRange < 0 {
@@ -600,6 +609,9 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition) error {
 		}
 		if lm.ProductionSpeed < 0 {
 			return fmt.Errorf("building runtime %s launch module production_speed invalid", def.ID)
+		}
+		if lm.RocketItemID != "" && !itemExists(lm.RocketItemID) {
+			return fmt.Errorf("building runtime %s launch module unknown rocket item %s", def.ID, lm.RocketItemID)
 		}
 	}
 	return nil

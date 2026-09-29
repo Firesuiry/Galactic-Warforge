@@ -53,27 +53,27 @@ const (
 
 // TechUnlock describes what content a tech unlocks
 type TechUnlock struct {
-	Type  TechUnlockType `json:"type" yaml:"type"`
+	Type  TechUnlockType `json:"type" yaml:"type,omitempty"`
 	ID    string         `json:"id" yaml:"id"`
 	Level int            `json:"level,omitempty" yaml:"level,omitempty"`
 }
 
 // TechEffect describes bonuses from a tech
 type TechEffect struct {
-	Type  string  `json:"type" yaml:"type"`   // e.g., "research_speed", "build_speed"
-	Value float64 `json:"value" yaml:"value"` // multiplier or flat bonus
+	Type  string  `json:"type" yaml:"type,omitempty"`   // e.g., "research_speed", "build_speed"
+	Value float64 `json:"value" yaml:"value,omitempty"` // multiplier or flat bonus
 }
 
 // TechDefinition defines immutable data for a technology
 type TechDefinition struct {
 	ID            string       `json:"id" yaml:"id"`
 	Name          string       `json:"name" yaml:"name"`
-	NameEN        string       `json:"name_en" yaml:"name_en"`
-	Category      TechCategory `json:"category" yaml:"category"`
-	Type          TechType     `json:"type" yaml:"type"`
-	Level         int          `json:"level" yaml:"level"` // 0 = initial, 1+ = progression
+	NameEN        string       `json:"name_en" yaml:"name_en,omitempty"`
+	Category      TechCategory `json:"category" yaml:"category,omitempty"`
+	Type          TechType     `json:"type" yaml:"type,omitempty"`
+	Level         int          `json:"level" yaml:"level,omitempty"` // 0 = initial, 1+ = progression
 	Prerequisites []string     `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
-	Cost          []ItemAmount `json:"cost" yaml:"cost"` // matrix cost (level 1 cost for repeatable techs)
+	Cost          []ItemAmount `json:"cost" yaml:"cost,omitempty"` // matrix cost (level 1 cost for repeatable techs)
 	// CostPerLevel overrides Cost for repeatable techs whose research cost varies
 	// per level (DSP tech_costs per-level data). Key is the 1-based level being
 	// researched. Levels missing from the map fall back to the nearest lower
@@ -81,7 +81,7 @@ type TechDefinition struct {
 	CostPerLevel map[int][]ItemAmount `json:"cost_per_level,omitempty" yaml:"cost_per_level,omitempty"`
 	Unlocks      []TechUnlock         `json:"unlocks,omitempty" yaml:"unlocks,omitempty"`
 	Effects      []TechEffect         `json:"effects,omitempty" yaml:"effects,omitempty"`
-	LeadsTo      []string             `json:"leads_to,omitempty" yaml:"leads_to,omitempty"`
+	LeadsTo      []string             `json:"leads_to,omitempty" yaml:"-"` // derived
 	MaxLevel     int                  `json:"max_level,omitempty" yaml:"max_level,omitempty"` // 0 = not repeatable, 1+ = repeatable that many times, -1 = infinite
 	Hidden       bool                 `json:"hidden,omitempty" yaml:"hidden,omitempty"`
 }

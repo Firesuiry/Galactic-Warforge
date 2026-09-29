@@ -26,16 +26,16 @@ var validPowerSourceKinds = map[PowerSourceKind]struct{}{
 
 // FuelRule defines a fuel consumption rule for power generation.
 type FuelRule struct {
-	ItemID           string  `json:"item_id" yaml:"item_id"`
-	ConsumePerTick   int     `json:"consume_per_tick" yaml:"consume_per_tick"`
-	OutputMultiplier float64 `json:"output_multiplier" yaml:"output_multiplier"`
+	ItemID           string  `json:"item_id" yaml:"item_id,omitempty"`
+	ConsumePerTick   int     `json:"consume_per_tick" yaml:"consume_per_tick,omitempty"`
+	OutputMultiplier float64 `json:"output_multiplier" yaml:"output_multiplier,omitempty"`
 }
 
 // EnergyModule handles energy conversion/output.
 type EnergyModule struct {
-	OutputPerTick  int             `json:"output_per_tick" yaml:"output_per_tick"`
-	ConsumePerTick int             `json:"consume_per_tick" yaml:"consume_per_tick"`
-	Buffer         int             `json:"buffer" yaml:"buffer"`
+	OutputPerTick  int             `json:"output_per_tick" yaml:"output_per_tick,omitempty"`
+	ConsumePerTick int             `json:"consume_per_tick" yaml:"consume_per_tick,omitempty"`
+	Buffer         int             `json:"buffer" yaml:"buffer,omitempty"`
 	SourceKind     PowerSourceKind `json:"source_kind,omitempty" yaml:"source_kind,omitempty"`
 	FuelRules      []FuelRule      `json:"fuel_rules,omitempty" yaml:"fuel_rules,omitempty"`
 }

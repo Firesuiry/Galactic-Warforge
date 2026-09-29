@@ -137,3 +137,80 @@ func cloneWorldUnitCatalogEntry(entry WorldUnitCatalogEntry) WorldUnitCatalogEnt
 	entry.Commands = append([]string(nil), entry.Commands...)
 	return entry
 }
+
+// UnitProductionCost 单位生产造价。
+type UnitProductionCost struct {
+	Minerals int `yaml:"minerals,omitempty"`
+	Energy   int `yaml:"energy,omitempty"`
+}
+
+// UnitDefinition 世界单位定义（units.yaml 的一个条目）：战斗数值、造价与对外目录信息。
+type UnitDefinition struct {
+	ID                  UnitType           `yaml:"id"`
+	Name                string             `yaml:"name"`
+	MaxHP               int                `yaml:"max_hp,omitempty"`
+	Attack              int                `yaml:"attack,omitempty"`
+	Defense             int                `yaml:"defense,omitempty"`
+	AttackRange         int                `yaml:"attack_range,omitempty"`
+	MoveRange           int                `yaml:"move_range,omitempty"`
+	VisionRange         int                `yaml:"vision_range,omitempty"`
+	MoveSpeed           float64            `yaml:"move_speed,omitempty"`
+	AttackCooldownTicks int64              `yaml:"attack_cooldown_ticks,omitempty"`
+	ArmorClass          ArmorClass         `yaml:"armor_class,omitempty"`
+	WeaponClass         WeaponType         `yaml:"weapon_class,omitempty"`
+	Cost                UnitProductionCost `yaml:"cost,omitempty"`
+	// 以下为 /catalog world_units 对外信息；Public=false 的单位不进目录。
+	Public         bool               `yaml:"public,omitempty"`
+	Domain         UnitDomain         `yaml:"domain,omitempty"`
+	RuntimeClass   UnitRuntimeClass   `yaml:"runtime_class,omitempty"`
+	ProductionMode UnitProductionMode `yaml:"production_mode,omitempty"`
+	QueryScopes    []string           `yaml:"query_scopes,omitempty"`
+	Commands       []string           `yaml:"commands,omitempty"`
+	HiddenReason   string             `yaml:"hidden_reason,omitempty"`
+}
+
+// unitStatsFromDefinition 由单位定义生成出厂状态。
+func unitStatsFromDefinition(def UnitDefinition) Unit {
+	u := Unit{
+		Type:               def.ID,
+		MaxHP:              def.MaxHP,
+		HP:                 def.MaxHP,
+		Attack:             def.Attack,
+		Defense:            def.Defense,
+		AttackRange:        def.AttackRange,
+		MoveRange:          def.MoveRange,
+		VisionRange:        def.VisionRange,
+		MoveSpeed:          def.MoveSpeed,
+		AttackCooldownTick: def.AttackCooldownTicks,
+		AggroRange:         def.VisionRange,
+		Stance:             UnitStanceIdle,
+		ArmorClass:         def.ArmorClass,
+		WeaponClass:        def.WeaponClass,
+	}
+	if def.ID == UnitTypeExecutor {
+		u.Mecha = NewMechaState()
+	}
+	return u
+}
+
+// worldUnitCatalogEntryFromDefinition 生成对外目录条目（战斗数值同源于单位定义）。
+func worldUnitCatalogEntryFromDefinition(def UnitDefinition) WorldUnitCatalogEntry {
+	return WorldUnitCatalogEntry{
+		ID:                 string(def.ID),
+		Name:               def.Name,
+		Domain:             def.Domain,
+		RuntimeClass:       def.RuntimeClass,
+		Public:             def.Public,
+		ProductionMode:     def.ProductionMode,
+		QueryScopes:        append([]string(nil), def.QueryScopes...),
+		Commands:           append([]string(nil), def.Commands...),
+		HiddenReason:       def.HiddenReason,
+		ArmorClass:         def.ArmorClass,
+		WeaponClass:        def.WeaponClass,
+		Attack:             def.Attack,
+		AttackRange:        def.AttackRange,
+		AttackCooldownTick: def.AttackCooldownTicks,
+		MoveSpeed:          def.MoveSpeed,
+		MaxHP:              def.MaxHP,
+	}
+}

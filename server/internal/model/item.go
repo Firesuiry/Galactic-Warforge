@@ -149,21 +149,21 @@ const (
 
 // ItemDefinition defines immutable data for an item.
 type ItemDefinition struct {
-	MechaFuelEnergy int          `json:"mecha_fuel_energy,omitempty"`
-	ID              string       `json:"id"`
-	Name            string       `json:"name"`
-	Category        ItemCategory `json:"category"`
-	Form            ResourceForm `json:"form"`
-	StackLimit      int          `json:"stack_limit"`
-	UnitVolume      int          `json:"unit_volume"`
-	ContainerID     string       `json:"container_id,omitempty"`
-	IsRare          bool         `json:"is_rare,omitempty"`
+	ID              string       `json:"id" yaml:"id"`
+	Name            string       `json:"name" yaml:"name"`
+	Category        ItemCategory `json:"category" yaml:"category"`
+	Form            ResourceForm `json:"form" yaml:"form"`
+	StackLimit      int          `json:"stack_limit" yaml:"stack_limit"`
+	UnitVolume      int          `json:"unit_volume" yaml:"unit_volume"`
+	ContainerID     string       `json:"container_id,omitempty" yaml:"container_id,omitempty"`
+	IsRare          bool         `json:"is_rare,omitempty" yaml:"is_rare,omitempty"`
+	MechaFuelEnergy int          `json:"mecha_fuel_energy,omitempty" yaml:"mecha_fuel_energy,omitempty"`
 }
 
 // ItemAmount couples an item with a quantity.
 type ItemAmount struct {
-	ItemID   string `json:"item_id"`
-	Quantity int    `json:"quantity"`
+	ItemID   string `json:"item_id" yaml:"item_id"`
+	Quantity int    `json:"quantity" yaml:"quantity"`
 }
 
 // ItemStack represents a stack of identical items.

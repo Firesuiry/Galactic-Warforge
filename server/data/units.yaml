@@ -1,0 +1,87 @@
+# 世界单位定义（含黑雾、执行体）。
+# 格式说明见 docs/dev/数据配置文件.md
+units:
+  - id: worker
+    name: Worker
+    max_hp: 60
+    attack: 3
+    defense: 1
+    attack_range: 1
+    move_range: 3
+    vision_range: 4
+    move_speed: 0.3
+    attack_cooldown_ticks: 12
+    armor_class: light
+    weapon_class: gun
+    cost: {minerals: 30, energy: 10}
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move]
+  - id: soldier
+    name: Soldier
+    max_hp: 100
+    attack: 15
+    defense: 5
+    attack_range: 2
+    move_range: 2
+    vision_range: 5
+    move_speed: 0.25
+    attack_cooldown_ticks: 10
+    armor_class: light
+    weapon_class: gun
+    cost: {minerals: 60, energy: 20}
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: mecha
+    name: Mecha
+    max_hp: 240
+    attack: 28
+    defense: 12
+    attack_range: 4
+    move_range: 3
+    vision_range: 7
+    move_speed: 0.35
+    attack_cooldown_ticks: 8
+    armor_class: heavy
+    weapon_class: cannon
+    cost: {minerals: 180, energy: 80}
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: executor
+    name: Executor
+    max_hp: 120
+    attack: 20
+    defense: 8
+    attack_range: 4
+    move_range: 12
+    vision_range: 6
+    move_speed: 0.5
+    attack_cooldown_ticks: 6
+    armor_class: heavy
+    weapon_class: gun
+  - id: dark_fog
+    name: Dark Fog
+    max_hp: 40
+    attack: 8
+    defense: 2
+    attack_range: 2
+    move_range: 3
+    vision_range: 8
+    move_speed: 0.22
+    attack_cooldown_ticks: 12
+    armor_class: light
+    weapon_class: gun
+logistics_units:
+  - logistics_drone
+  - logistics_ship

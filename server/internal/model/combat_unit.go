@@ -16,11 +16,11 @@ const (
 
 // ShieldState 护盾状态
 type ShieldState struct {
-	Level         float64 `json:"level"`          // 当前护盾值
-	MaxLevel      float64 `json:"max_level"`      // 最大护盾值
-	RechargeRate  float64 `json:"recharge_rate"`  // 恢复速度 (每tick)
-	RechargeDelay int     `json:"recharge_delay"` // 恢复延迟 (ticks)
-	LastHitTick   int64   `json:"last_hit_tick"`  // 上次受击tick
+	Level         float64 `json:"level" yaml:"level,omitempty"`          // 当前护盾值
+	MaxLevel      float64 `json:"max_level" yaml:"max_level,omitempty"`      // 最大护盾值
+	RechargeRate  float64 `json:"recharge_rate" yaml:"recharge_rate,omitempty"`  // 恢复速度 (每tick)
+	RechargeDelay int     `json:"recharge_delay" yaml:"recharge_delay,omitempty"` // 恢复延迟 (ticks)
+	LastHitTick   int64   `json:"last_hit_tick" yaml:"-"`  // 上次受击tick
 }
 
 // ProcessShieldRecharge 处理护盾恢复
@@ -56,12 +56,12 @@ func (s *ShieldState) ApplyShieldDamage(damage int) (actualDamage int) {
 
 // WeaponState 武器状态
 type WeaponState struct {
-	Type         WeaponType `json:"type"`           // 武器类型
-	Damage       int        `json:"damage"`         // 伤害值
-	FireRate     int        `json:"fire_rate"`      // 射速 (ticks/发)
-	Range        float64    `json:"range"`          // 射程
-	LastFireTick int64      `json:"last_fire_tick"` // 上次开火tick
-	AmmoCost     int        `json:"ammo_cost"`      // 每发弹药消耗
+	Type         WeaponType `json:"type" yaml:"type,omitempty"`           // 武器类型
+	Damage       int        `json:"damage" yaml:"damage,omitempty"`         // 伤害值
+	FireRate     int        `json:"fire_rate" yaml:"fire_rate,omitempty"`      // 射速 (ticks/发)
+	Range        float64    `json:"range" yaml:"range,omitempty"`          // 射程
+	LastFireTick int64      `json:"last_fire_tick" yaml:"-"` // 上次开火tick
+	AmmoCost     int        `json:"ammo_cost" yaml:"ammo_cost,omitempty"`      // 每发弹药消耗
 }
 
 // LootDrop 掉落物品

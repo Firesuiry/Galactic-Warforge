@@ -22,13 +22,13 @@ var validRayReceiverModes = map[RayReceiverMode]struct{}{
 
 // RayReceiverModule defines Dyson energy reception and conversion rules.
 type RayReceiverModule struct {
-	InputPerTick        int             `json:"input_per_tick" yaml:"input_per_tick"`
-	ReceiveEfficiency   float64         `json:"receive_efficiency" yaml:"receive_efficiency"`
-	PowerOutputPerTick  int             `json:"power_output_per_tick" yaml:"power_output_per_tick"`
-	PowerEfficiency     float64         `json:"power_efficiency" yaml:"power_efficiency"`
-	PhotonOutputPerTick int             `json:"photon_output_per_tick" yaml:"photon_output_per_tick"`
-	PhotonEnergyCost    int             `json:"photon_energy_cost" yaml:"photon_energy_cost"`
-	PhotonEfficiency    float64         `json:"photon_efficiency" yaml:"photon_efficiency"`
+	InputPerTick        int             `json:"input_per_tick" yaml:"input_per_tick,omitempty"`
+	ReceiveEfficiency   float64         `json:"receive_efficiency" yaml:"receive_efficiency,omitempty"`
+	PowerOutputPerTick  int             `json:"power_output_per_tick" yaml:"power_output_per_tick,omitempty"`
+	PowerEfficiency     float64         `json:"power_efficiency" yaml:"power_efficiency,omitempty"`
+	PhotonOutputPerTick int             `json:"photon_output_per_tick" yaml:"photon_output_per_tick,omitempty"`
+	PhotonEnergyCost    int             `json:"photon_energy_cost" yaml:"photon_energy_cost,omitempty"`
+	PhotonEfficiency    float64         `json:"photon_efficiency" yaml:"photon_efficiency,omitempty"`
 	PhotonItemID        string          `json:"photon_item_id,omitempty" yaml:"photon_item_id,omitempty"`
 	Mode                RayReceiverMode `json:"mode,omitempty" yaml:"mode,omitempty"`
 }
