@@ -49,7 +49,7 @@ function statsPayload() {
     production_stats: { total_output: 24, by_building_type: {}, by_item: {}, efficiency: 0.95 },
     energy_stats: { generation: 120, consumption: 90, storage: 100, current_stored: 75, shortage_ticks: 0 },
     logistics_stats: { throughput: 8, avg_distance: 16, avg_travel_time: 10, deliveries: 12 },
-    combat_stats: { units_lost: 1, enemies_killed: 5, threat_level: 3, highest_threat: 4 },
+    combat_stats: { units_killed: 5, units_lost: 1, buildings_destroyed: 0, buildings_lost: 0, threat_level: 3, highest_threat: 4 },
   };
 }
 

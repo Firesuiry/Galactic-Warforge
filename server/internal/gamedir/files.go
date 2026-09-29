@@ -64,6 +64,10 @@ type RuntimeState struct {
 	VictoryReason  string `json:"victory_reason,omitempty"`
 	VictoryRule    string `json:"victory_rule,omitempty"`
 	VictoryTechID  string `json:"victory_tech_id,omitempty"`
+	// VictoryDeclaredTick 宣判 tick（F2）：finished 状态的时间锚点。
+	VictoryDeclaredTick int64 `json:"victory_declared_tick,omitempty"`
+	// Settlement 宣判时冻结的终局结算报告（F2）；未宣判为空。
+	Settlement *model.SettlementReport `json:"settlement,omitempty"`
 }
 
 // CommandLogEntry stores a compact command history entry for debugging/replay.

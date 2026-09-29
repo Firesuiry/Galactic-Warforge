@@ -36,11 +36,20 @@ type LogisticsStats struct {
 }
 
 // CombatStats 战斗统计
+//
+// 战损口径（F2，双边计数）：
+//   - 受害方是玩家实体（单位/编组小队/建筑）时计入受害方 losses；
+//   - 击杀方是玩家且与受害方不同归属时计入击杀方 kills（dark_fog 击杀只计受害方损失，
+//     不进任何玩家的 kills；玩家摧毁黑雾巢穴/黑雾单位不计入 kills，黑雾不是玩家实体）；
+//   - 编组小队整编被毁计 1 个单位击杀/损失。
+// 计数随 PlayerState 走快照 clone/restore，读档/回放一致。
 type CombatStats struct {
-	UnitsLost     int `json:"units_lost"`     // 单位损失
-	EnemiesKilled int `json:"enemies_killed"` // 击杀敌人
-	ThreatLevel   int `json:"threat_level"`   // 当前威胁等级
-	HighestThreat int `json:"highest_threat"` // 最高威胁等级
+	UnitsKilled        int `json:"units_killed"`        // 击杀单位数（含小队整编）
+	UnitsLost          int `json:"units_lost"`          // 损失单位数
+	BuildingsDestroyed int `json:"buildings_destroyed"` // 摧毁建筑数
+	BuildingsLost      int `json:"buildings_lost"`      // 损失建筑数
+	ThreatLevel        int `json:"threat_level"`        // 当前威胁等级
+	HighestThreat      int `json:"highest_threat"`      // 最高威胁等级
 }
 
 // NewPlayerStats 创建玩家统计数据

@@ -13,8 +13,10 @@ import { ProductionQueueForm } from '@/features/war/components/forms/ProductionQ
 import { RefitForm } from '@/features/war/components/forms/RefitForm';
 import { TaskForceForm } from '@/features/war/components/forms/TaskForceForm';
 import { TheaterForm } from '@/features/war/components/forms/TheaterForm';
+import { ProductionQueuePanel } from '@/features/war/components/ProductionQueuePanel';
 import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
 import { toPlayerFacingMessage } from '@/common/player-facing-error';
+import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { useWarRealtime } from '@/features/war/hooks/use-war-realtime';
 import type { WarCommandHint } from '@/features/war/error-hints';
 import {
@@ -234,6 +236,11 @@ export function WarPage() {
   const factoryBuildings = (Object.values(planetSceneQuery.data?.buildings ?? {})
     .filter((building) => building.owner_id === session.playerId
       && building.runtime?.functions?.production));
+  const ownPlanetBuildings = Object.values(planetSceneQuery.data?.buildings ?? {})
+    .filter((building) => building.owner_id === session.playerId);
+  const completedTechIds = normalizeCompletedTechIds(
+    summaryQuery.data?.players?.[session.playerId]?.tech,
+  );
   const scope = { serverUrl: session.serverUrl, playerId: session.playerId };
   const selectedBlueprint = blueprints.find((item) => item.id === selectedBlueprintId) ?? blueprints[0];
   const selectedDeployBlueprint = blueprints.find((item) => item.id === selectedDeployBlueprintId);
@@ -793,97 +800,20 @@ export function WarPage() {
             </div>
           ))}
 
-          <div className="war-section-grid">
-            <article className="war-card">
-              <h3>量产与翻修</h3>
-              <ul className="war-list">
-                {industry.production_orders.length === 0 ? <li>暂无量产单。</li> : industry.production_orders.map((order) => (
-                  <li key={order.id}>
-                    <strong>{order.id}</strong> · {order.blueprint_id} · {formatOrderStatus(order.status)} · {formatProductionStage(order.stage)} · {order.completed_count}/{order.count}
-                  </li>
-                ))}
-              </ul>
-              <ul className="war-list">
-                {industry.refit_orders.length === 0 ? <li>暂无翻修单。</li> : industry.refit_orders.map((order) => (
-                  <li key={order.id}>
-                    <strong>{order.id}</strong> · {order.source_blueprint_id} → {order.target_blueprint_id} · {formatOrderStatus(order.status)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-
-            <article className="war-card">
-              <h3>部署尝试</h3>
-              {blueprints.length === 0 || deploymentHubs.length === 0 ? (
-                <p className="subtle-text" data-testid="deploy-empty-hint">
-                  {blueprints.length === 0 && deploymentHubs.length === 0
-                    ? '暂无蓝图与部署枢纽：先创建并定型蓝图，再在行星建造部署枢纽。'
-                    : blueprints.length === 0
-                      ? '暂无可用蓝图：到「蓝图」页签创建/定型后再部署。'
-                      : '暂无部署枢纽：在行星建造部署枢纽后，才能编成舰队或部署地面单位。'}
-                </p>
-              ) : null}
-              <label className="war-field">
-                <span>部署蓝图</span>
-                <Select
-                  value={selectedDeployBlueprint?.id ?? ''}
-                  onChange={(event) => setSelectedDeployBlueprintId(event.target.value)}
-                  disabled={blueprints.length === 0}
-                >
-                  {blueprints.length === 0 ? (
-                    <option value="">暂无蓝图</option>
-                  ) : blueprints.map((blueprint) => (
-                    <option key={blueprint.id} value={blueprint.id}>
-                      {blueprint.name} ({blueprint.id})
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="war-field">
-                <span>部署枢纽</span>
-                <Select
-                  value={selectedDeploymentHub?.building_id ?? ''}
-                  onChange={(event) => setSelectedDeploymentHubId(event.target.value)}
-                  disabled={deploymentHubs.length === 0}
-                >
-                  {deploymentHubs.length === 0 ? (
-                    <option value="">暂无部署枢纽</option>
-                  ) : deploymentHubs.map((hub) => (
-                    <option key={hub.building_id} value={hub.building_id}>
-                      {hub.building_type} ({hub.building_id})
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              {selectedDeployBlueprint ? (
-                <dl className="war-kv-list">
-                  <div>
-                    <dt>当前蓝图</dt>
-                    <dd>{selectedDeployBlueprint.name}</dd>
-                  </div>
-                  <div>
-                    <dt>部署域</dt>
-                    <dd>{selectedDeployBlueprint.domain}</dd>
-                  </div>
-                </dl>
-              ) : null}
-              <button
-                className="secondary-button war-button"
-                type="button"
-                disabled={isPending || blueprints.length === 0 || deploymentHubs.length === 0}
-                onClick={handleDeploy}
-              >
-                尝试部署
-              </button>
-              <ul className="war-list">
-                {deploymentHubs.length === 0 ? <li>暂无部署枢纽。</li> : deploymentHubs.map((hub) => (
-                  <li key={hub.building_id}>
-                    <strong>{hub.building_id}</strong> · 容量 {hub.capacity ?? 0} · 行星 {hub.planet_id ?? '-'}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </div>
+          {/* C4 主路径：生产队列面板（生产线/枢纽 ready payloads/蓝图卡片量产/世界单位生产） */}
+          <ProductionQueuePanel
+            scope={scope}
+            runCommand={runCommand}
+            isPending={isPending}
+            catalog={catalogQuery.data ?? {}}
+            industry={industry}
+            blueprints={blueprints}
+            factoryBuildings={factoryBuildings}
+            ownBuildings={ownPlanetBuildings}
+            completedTechIds={completedTechIds}
+            focusSystemId={focusSystemId}
+            activePlanetId={activePlanetId}
+          />
 
           <article className="war-card">
             <h3>补给节点</h3>
@@ -896,24 +826,106 @@ export function WarPage() {
             </ul>
           </article>
 
-          <div className="war-section-grid">
-            <ProductionQueueForm
-              scope={scope}
-              runCommand={runCommand}
-              isPending={isPending}
-              buildings={factoryBuildings}
-              deploymentHubs={deploymentHubs}
-              blueprints={blueprints}
-            />
-            <RefitForm
-              scope={scope}
-              runCommand={runCommand}
-              isPending={isPending}
-              buildings={factoryBuildings}
-              fleets={fleets}
-              blueprints={blueprints}
-            />
-          </div>
+          {/* 高级入口：旧的部署/量产/翻修表单原样保留（低频操作与翻修单仍走这里） */}
+          <details className="war-advanced">
+            <summary>高级入口：部署尝试 / 翻修 / 旧量产表单</summary>
+            <div className="war-section-grid">
+              <article className="war-card">
+                <h3>翻修单</h3>
+                <ul className="war-list">
+                  {industry.refit_orders.length === 0 ? <li>暂无翻修单。</li> : industry.refit_orders.map((order) => (
+                    <li key={order.id}>
+                      <strong>{order.id}</strong> · {order.source_blueprint_id} → {order.target_blueprint_id} · {formatOrderStatus(order.status)}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+
+              <article className="war-card">
+                <h3>部署尝试</h3>
+                {blueprints.length === 0 || deploymentHubs.length === 0 ? (
+                  <p className="subtle-text" data-testid="deploy-empty-hint">
+                    {blueprints.length === 0 && deploymentHubs.length === 0
+                      ? '暂无蓝图与部署枢纽：先创建并定型蓝图，再在行星建造部署枢纽。'
+                      : blueprints.length === 0
+                        ? '暂无可用蓝图：到「蓝图」页签创建/定型后再部署。'
+                        : '暂无部署枢纽：在行星建造部署枢纽后，才能编成舰队或部署地面单位。'}
+                  </p>
+                ) : null}
+                <label className="war-field">
+                  <span>部署蓝图</span>
+                  <Select
+                    value={selectedDeployBlueprint?.id ?? ''}
+                    onChange={(event) => setSelectedDeployBlueprintId(event.target.value)}
+                    disabled={blueprints.length === 0}
+                  >
+                    {blueprints.length === 0 ? (
+                      <option value="">暂无蓝图</option>
+                    ) : blueprints.map((blueprint) => (
+                      <option key={blueprint.id} value={blueprint.id}>
+                        {blueprint.name} ({blueprint.id})
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="war-field">
+                  <span>部署枢纽</span>
+                  <Select
+                    value={selectedDeploymentHub?.building_id ?? ''}
+                    onChange={(event) => setSelectedDeploymentHubId(event.target.value)}
+                    disabled={deploymentHubs.length === 0}
+                  >
+                    {deploymentHubs.length === 0 ? (
+                      <option value="">暂无部署枢纽</option>
+                    ) : deploymentHubs.map((hub) => (
+                      <option key={hub.building_id} value={hub.building_id}>
+                        {hub.building_type} ({hub.building_id})
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                {selectedDeployBlueprint ? (
+                  <dl className="war-kv-list">
+                    <div>
+                      <dt>当前蓝图</dt>
+                      <dd>{selectedDeployBlueprint.name}</dd>
+                    </div>
+                    <div>
+                      <dt>部署域</dt>
+                      <dd>{selectedDeployBlueprint.domain}</dd>
+                    </div>
+                  </dl>
+                ) : null}
+                <button
+                  className="secondary-button war-button"
+                  type="button"
+                  disabled={isPending || blueprints.length === 0 || deploymentHubs.length === 0}
+                  onClick={handleDeploy}
+                >
+                  尝试部署
+                </button>
+              </article>
+            </div>
+
+            <div className="war-section-grid">
+              <ProductionQueueForm
+                scope={scope}
+                runCommand={runCommand}
+                isPending={isPending}
+                buildings={factoryBuildings}
+                deploymentHubs={deploymentHubs}
+                blueprints={blueprints}
+              />
+              <RefitForm
+                scope={scope}
+                runCommand={runCommand}
+                isPending={isPending}
+                buildings={factoryBuildings}
+                fleets={fleets}
+                blueprints={blueprints}
+              />
+            </div>
+          </details>
                 </section>
               </div>
             ) : null}

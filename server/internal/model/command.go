@@ -119,6 +119,9 @@ const (
 	CodeUnauthorized         ResultCode = "UNAUTHORIZED"
 	CodeExecutorUnavailable  ResultCode = "EXECUTOR_UNAVAILABLE"
 	CodeExecutorBusy         ResultCode = "EXECUTOR_BUSY"
+	// CodeGameFinished 终局拒绝（F2）：victory 宣判后对局进入 finished，
+	// 常规游戏命令统一以该码拒绝；管理面接口（/save、/games/new、查询类）不受限。
+	CodeGameFinished ResultCode = "GAME_FINISHED"
 )
 
 // CommandResult is the per-command outcome within a response

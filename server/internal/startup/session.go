@@ -97,6 +97,11 @@ type GameSummary struct {
 	StartedAt       time.Time           `json:"started_at"`
 	Players         []GamePlayerSummary `json:"players"`
 	Victory         GameVictorySummary  `json:"victory"`
+	// Status 对局状态（F2）：running|finished；victory 宣判即 finished，
+	// 此后常规游戏命令统一以 GAME_FINISHED 拒绝（管理面不受限）。
+	Status string `json:"status"`
+	// Settlement 宣判时冻结的终局结算报告；仅 finished 时存在。
+	Settlement *model.SettlementReport `json:"settlement,omitempty"`
 }
 
 // Summary 采集当前对局概要。
@@ -108,6 +113,7 @@ func (sess *Session) Summary() GameSummary {
 		VictoryMode:     model.NormalizeVictoryRule(cfg.Battlefield.VictoryRule),
 		MaxTickRate:     cfg.Battlefield.MaxTickRate,
 		StartedAt:       sess.StartedAt,
+		Status:          "running",
 	}
 	if sess.Core != nil {
 		sum.ActivePlanetID = sess.Core.ActivePlanetID()
@@ -118,6 +124,10 @@ func (sess *Session) Summary() GameSummary {
 			WinnerID: victory.WinnerID,
 			TeamID:   victory.TeamID,
 			Reason:   victory.Reason,
+		}
+		if victory.Declared() {
+			sum.Status = "finished"
+			sum.Settlement = sess.Core.Settlement()
 		}
 	}
 	alive := make(map[string]bool, len(cfg.Players))

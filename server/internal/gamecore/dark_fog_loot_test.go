@@ -226,7 +226,7 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 	}
 
 	// 第二回合：p1 阵亡退场，p2 强化后击杀自己的目标，掉落归 p2。
-	killUnit(ws, p1unit, "", "test")
+	killUnit(ws, p1unit, "", "", "test")
 	p2unit.Attack = 500
 	p2unit.AttackRange = 100
 	p2unit.AggroRange = 100

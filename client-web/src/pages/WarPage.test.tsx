@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -65,7 +65,7 @@ describe('WarPage', () => {
           production_stats: { total_output: 24, by_building_type: {}, by_item: {}, efficiency: 0.95 },
           energy_stats: { generation: 320, consumption: 280, storage: 1000, current_stored: 640, shortage_ticks: 0 },
           logistics_stats: { throughput: 18, avg_distance: 22, avg_travel_time: 12, deliveries: 20 },
-          combat_stats: { units_lost: 2, enemies_killed: 9, threat_level: 6, highest_threat: 7 },
+          combat_stats: { units_killed: 9, units_lost: 2, buildings_destroyed: 0, buildings_lost: 0, threat_level: 6, highest_threat: 7 },
         }));
       }
       if (url.endsWith('/catalog')) {
@@ -425,7 +425,8 @@ describe('WarPage', () => {
 
     await user.click(screen.getByRole('tab', { name: '军工' }));
     expect(screen.getByText('军工总览')).toBeInTheDocument();
-    expect(screen.getByText('舰队封锁型')).toBeInTheDocument();
+    // C4：生产队列面板（生产线/蓝图卡片）与高级表单的部署卡都会渲染蓝图名
+    expect(screen.getAllByText('舰队封锁型').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('tab', { name: '战区' }));
     expect(screen.getByText('战区面板')).toBeInTheDocument();
@@ -477,7 +478,7 @@ describe('WarPage', () => {
           production_stats: { total_output: 24, by_building_type: {}, by_item: {}, efficiency: 0.95 },
           energy_stats: { generation: 320, consumption: 280, storage: 1000, current_stored: 640, shortage_ticks: 0 },
           logistics_stats: { throughput: 18, avg_distance: 22, avg_travel_time: 12, deliveries: 20 },
-          combat_stats: { units_lost: 2, enemies_killed: 9, threat_level: 6, highest_threat: 7 },
+          combat_stats: { units_killed: 9, units_lost: 2, buildings_destroyed: 0, buildings_lost: 0, threat_level: 6, highest_threat: 7 },
         });
       }
       if (url.endsWith('/catalog')) {
@@ -940,8 +941,10 @@ describe('WarPage', () => {
     await screen.findByText('blueprint_variant accepted');
     await user.click(screen.getByRole('tab', { name: '军工' }));
 
-    // queue_military_production
-    await user.click(screen.getByRole('button', { name: '下达量产' }));
+    // queue_military_production（旧表单保留在「高级入口」折叠块内，scoped 查询避开新面板的同名按钮）
+    const advanced = screen.getByText('高级入口：部署尝试 / 翻修 / 旧量产表单').closest('details');
+    expect(advanced).not.toBeNull();
+    await user.click(within(advanced as HTMLElement).getByRole('button', { name: '下达量产' }));
     // refit_unit
     await user.click(screen.getByRole('button', { name: '下达翻修' }));
 
@@ -1159,7 +1162,7 @@ describe('WarPage', () => {
           production_stats: { total_output: 24, by_building_type: {}, by_item: {}, efficiency: 0.95 },
           energy_stats: { generation: 320, consumption: 280, storage: 1000, current_stored: 640, shortage_ticks: 0 },
           logistics_stats: { throughput: 18, avg_distance: 22, avg_travel_time: 12, queues: 20 },
-          combat_stats: { units_lost: 2, enemies_killed: 9, threat_level: 6, highest_threat: 7 },
+          combat_stats: { units_killed: 9, units_lost: 2, buildings_destroyed: 0, buildings_lost: 0, threat_level: 6, highest_threat: 7 },
         }));
       }
       if (url.endsWith('/catalog')) {

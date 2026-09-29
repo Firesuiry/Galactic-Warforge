@@ -29,6 +29,10 @@ const (
 )
 
 // WorldUnitCatalogEntry is the authoritative public-facing catalog entry for non-blueprint world units.
+//
+// 战斗数值（armor_class/weapon_class/attack/attack_range/attack_cooldown_tick/
+// move_speed/max_hp）不在本表中重复登记：对外输出时统一从 UnitStats 派生（R6），
+// 保证 catalog 与运行时结算共用单一数据源。
 type WorldUnitCatalogEntry struct {
 	ID             string             `json:"id"`
 	Name           string             `json:"name"`
@@ -39,6 +43,15 @@ type WorldUnitCatalogEntry struct {
 	QueryScopes    []string           `json:"query_scopes,omitempty"`
 	Commands       []string           `json:"commands,omitempty"`
 	HiddenReason   string             `json:"hidden_reason,omitempty"`
+
+	// R6 战斗数值（派生自 UnitStats）。
+	ArmorClass         ArmorClass `json:"armor_class,omitempty"`
+	WeaponClass        WeaponType `json:"weapon_class,omitempty"`
+	Attack             int        `json:"attack"`
+	AttackRange        int        `json:"attack_range"`
+	AttackCooldownTick int64      `json:"attack_cooldown_tick"`
+	MoveSpeed          float64    `json:"move_speed"`
+	MaxHP              int        `json:"max_hp"`
 }
 
 var worldUnitCatalogEntries = []WorldUnitCatalogEntry{
@@ -74,6 +87,19 @@ var worldUnitCatalogEntries = []WorldUnitCatalogEntry{
 	},
 }
 
+// withDerivedCombatStats 从 UnitStats 派生战斗数值（R6 单一数据源）。
+func (entry WorldUnitCatalogEntry) withDerivedCombatStats() WorldUnitCatalogEntry {
+	stats := UnitStats(UnitType(entry.ID))
+	entry.ArmorClass = stats.ArmorClass
+	entry.WeaponClass = stats.WeaponClass
+	entry.Attack = stats.Attack
+	entry.AttackRange = stats.AttackRange
+	entry.AttackCooldownTick = stats.AttackCooldownTick
+	entry.MoveSpeed = stats.MoveSpeed
+	entry.MaxHP = stats.MaxHP
+	return entry
+}
+
 // PublicWorldUnitCatalogEntries returns the public world-unit catalog snapshot.
 func PublicWorldUnitCatalogEntries() []WorldUnitCatalogEntry {
 	out := make([]WorldUnitCatalogEntry, 0, len(worldUnitCatalogEntries))
@@ -81,7 +107,7 @@ func PublicWorldUnitCatalogEntries() []WorldUnitCatalogEntry {
 		if !entry.Public {
 			continue
 		}
-		out = append(out, cloneWorldUnitCatalogEntry(entry))
+		out = append(out, cloneWorldUnitCatalogEntry(entry).withDerivedCombatStats())
 	}
 	return out
 }
@@ -92,7 +118,7 @@ func PublicWorldUnitByID(id string) (WorldUnitCatalogEntry, bool) {
 		if entry.ID != id || !entry.Public {
 			continue
 		}
-		return cloneWorldUnitCatalogEntry(entry), true
+		return cloneWorldUnitCatalogEntry(entry).withDerivedCombatStats(), true
 	}
 	return WorldUnitCatalogEntry{}, false
 }

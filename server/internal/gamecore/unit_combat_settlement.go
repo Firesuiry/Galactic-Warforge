@@ -476,7 +476,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 			})
 		}
 		if victim.HP <= 0 {
-			events = append(events, killUnit(ws, victim, unit.ID, "unit")...)
+			events = append(events, killUnit(ws, victim, unit.ID, unit.OwnerID, "unit")...)
 		}
 	case "building":
 		b := target.building
@@ -503,7 +503,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 			})
 		}
 		if b.HP <= 0 {
-			events = append(events, destroyBuildingCombat(ws, b, unit.ID, "unit"))
+			events = append(events, destroyBuildingCombat(ws, b, unit.ID, unit.OwnerID, "unit"))
 		}
 	case "enemy_force":
 		force := target.force
@@ -554,7 +554,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 			})
 		}
 		if squad.HP <= 0 {
-			events = append(events, destroySquad(ws, squad, unit.ID, "unit")...)
+			events = append(events, destroySquad(ws, squad, unit.ID, unit.OwnerID, "unit")...)
 			unit.AttackTarget = ""
 		}
 	}
@@ -612,7 +612,7 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 				},
 			})
 			if victim.HP <= 0 {
-				events = append(events, killUnit(ws, victim, force.ID, "enemy_force")...)
+				events = append(events, killUnit(ws, victim, force.ID, model.DarkFogOwnerID, "enemy_force")...)
 			}
 			continue
 		}
@@ -653,7 +653,7 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 					},
 				})
 				if targetSquad.HP <= 0 {
-					events = append(events, destroySquad(ws, targetSquad, force.ID, "enemy_force")...)
+					events = append(events, destroySquad(ws, targetSquad, force.ID, model.DarkFogOwnerID, "enemy_force")...)
 				}
 			}
 		}
@@ -661,8 +661,9 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
-// killUnit 统一单位死亡处理：从世界移除并发阵亡事件。
-func killUnit(ws *model.WorldState, unit *model.Unit, killerID, source string) []*model.GameEvent {
+// killUnit 统一单位死亡处理：双边战损计数（F2）、从世界移除并发阵亡事件。
+func killUnit(ws *model.WorldState, unit *model.Unit, killerID, killerOwnerID, source string) []*model.GameEvent {
+	recordCombatUnitKill(ws, unit.OwnerID, killerOwnerID)
 	refundMechaJob(ws, unit)
 	delete(ws.Units, unit.ID)
 	tileKey := model.TileKey(unit.Position.X, unit.Position.Y)
@@ -680,8 +681,9 @@ func killUnit(ws *model.WorldState, unit *model.Unit, killerID, source string) [
 	}}
 }
 
-// destroyBuildingCombat 统一战斗拆毁建筑的处理。
-func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, source string) *model.GameEvent {
+// destroyBuildingCombat 统一战斗拆毁建筑的处理（含双边战损计数，F2）。
+func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, killerOwnerID, source string) *model.GameEvent {
+	recordCombatBuildingKill(ws, b.OwnerID, killerOwnerID)
 	delete(ws.Buildings, b.ID)
 	ws.UnindexBuilding(b)
 	detachStationFleet(ws, b.ID)
@@ -700,8 +702,9 @@ func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, so
 	}
 }
 
-// destroySquad 小队全灭：从运行时移除并发事件（R3）。
-func destroySquad(ws *model.WorldState, squad *model.CombatSquad, killerID, source string) []*model.GameEvent {
+// destroySquad 小队全灭：双边战损计数（整编计 1 个单位，F2）、从运行时移除并发事件（R3）。
+func destroySquad(ws *model.WorldState, squad *model.CombatSquad, killerID, killerOwnerID, source string) []*model.GameEvent {
+	recordCombatUnitKill(ws, squad.OwnerID, killerOwnerID)
 	squad.State = model.CombatSquadStateDestroyed
 	squad.Count = 0
 	if ws.CombatRuntime != nil {

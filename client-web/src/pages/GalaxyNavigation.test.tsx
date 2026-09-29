@@ -188,7 +188,7 @@ describe('Galaxy navigation', () => {
           production_stats: { total_output: 12, by_building_type: {}, by_item: {}, efficiency: 0.9 },
           energy_stats: { generation: 50, consumption: 45, storage: 100, current_stored: 80, shortage_ticks: 0 },
           logistics_stats: { throughput: 3, avg_distance: 8, avg_travel_time: 5, deliveries: 7 },
-          combat_stats: { units_lost: 0, enemies_killed: 2, threat_level: 1, highest_threat: 2 },
+          combat_stats: { units_killed: 2, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 1, highest_threat: 2 },
         }));
       }
 

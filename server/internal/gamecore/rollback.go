@@ -113,6 +113,9 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	}
 	gc.executorUsage = countActiveExecutorUsage(gc.sortedWorlds())
 	gc.setVictoryState(replayCore.Victory())
+	// F2：结算报告与 victory 同源替换——回滚到宣判前两者一起清空，
+	// 回滚到宣判后由重放路径重建同一报告（战损计数随玩家快照恢复+重放累积）。
+	gc.setSettlementState(replayCore.Settlement())
 	gc.setCurrentWorld(gc.world.PlanetID, gc.world)
 	gc.spaceRuntime = model.CloneSpaceRuntimeState(replayCore.spaceRuntime)
 

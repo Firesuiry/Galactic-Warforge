@@ -208,7 +208,7 @@ export function fmtStats(s: PlayerStatsSnapshot): string {
     `  avg_distance=${s.logistics_stats.avg_distance}  avg_travel_time=${s.logistics_stats.avg_travel_time}`,
     '',
     chalk.bold('Combat'),
-    `  enemies_killed=${s.combat_stats.enemies_killed}  units_lost=${s.combat_stats.units_lost}`,
+    `  units_killed=${s.combat_stats.units_killed}  units_lost=${s.combat_stats.units_lost}  buildings_destroyed=${s.combat_stats.buildings_destroyed}  buildings_lost=${s.combat_stats.buildings_lost}`,
     `  threat=${s.combat_stats.threat_level}  highest=${s.combat_stats.highest_threat}`,
   ].join('\n');
 }
@@ -266,7 +266,7 @@ export function fmtAgentBriefing(b: AgentBriefing): string {
     `  gen=${b.energy_stats?.generation ?? 0} cons=${b.energy_stats?.consumption ?? 0} stored=${b.energy_stats?.current_stored ?? 0}/${b.energy_stats?.storage ?? 0}`,
   );
   lines.push(
-    `  killed=${b.combat_stats?.enemies_killed ?? 0} lost=${b.combat_stats?.units_lost ?? 0} threat=${b.combat_stats?.threat_level ?? 0}`,
+    `  killed=${b.combat_stats?.units_killed ?? 0} lost=${b.combat_stats?.units_lost ?? 0} threat=${b.combat_stats?.threat_level ?? 0}`,
   );
   lines.push('');
   lines.push(chalk.bold(`Fleets (${b.fleets?.length ?? 0})`));

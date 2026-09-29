@@ -109,7 +109,7 @@ func TestE4NestSpawnsGuards(t *testing.T) {
 	}
 
 	// 守军死亡后按既有孵化节奏补员：击杀一名守军，下一波次补足到编制。
-	killUnit(ws, guards[0], "test", "test")
+	killUnit(ws, guards[0], "test", "", "test")
 	if got := len(nestGuards(ws, "nest-e4")); got != wantCap-1 {
 		t.Fatalf("expected %d guards after one killed, got %d", wantCap-1, got)
 	}

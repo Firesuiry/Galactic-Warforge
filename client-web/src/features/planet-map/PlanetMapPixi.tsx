@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Application } from 'pixi.js';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { CatalogView, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView } from '@shared/types';
+import type { CatalogView, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 
 import { PixiStage } from '@/engine/PixiStage';
 import { sfx } from '@/engine/audio';
@@ -25,6 +25,13 @@ import {
   wrapMod,
 } from '@/features/planet-map/model';
 import { ownUnitsInTileRect, sameTypeOwnUnitsInView } from '@/features/planet-map/rts-commands';
+import {
+  theaterZoneFromDragRect,
+  theaterZoneTypeLabel,
+  type TheaterZoneGeometry,
+} from '@/features/planet-map/squad-commands';
+import { PlanetSquadLayer } from '@/features/planet-map/PlanetSquadLayer';
+import { PlanetTheaterLayer } from '@/features/planet-map/PlanetTheaterLayer';
 import {
   createAnimationFrameValueScheduler,
   describeSceneRenderSimplifications,
@@ -67,11 +74,17 @@ interface PlanetMapPixiProps {
   overview?: PlanetOverviewView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+  /** C4：战斗小队（默认取 runtime.combat_squads，测试可显式注入）。 */
+  squads?: CombatSquad[];
+  /** C4：战区列表（zones 圆圈覆盖层 + 告警态）。 */
+  theaters?: WarTheaterView[];
   onCanvasReady?: (capture: PlanetMapCapture | null) => void;
   /** build/move/attack/unit_order 模式下的地图点击（inspect 模式不会触发）。 */
   onInteractTile?: (tile: TilePoint) => void;
   /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
   onContextTile?: (tile: TilePoint) => boolean;
+  /** C4：theater_zone 模式拖拽矩形松手 → 战区圆几何（圆心+半径）。 */
+  onDefineZone?: (zone: TheaterZoneGeometry) => void;
 }
 
 interface ViewportSize {
@@ -160,7 +173,7 @@ function areCameraPatchesEqual(left: CameraPatch, right: CameraPatch) {
  * 交互命中仍走 pointToTile 的 tile 换算；语义实体层（PlanetEntityLayer）以 ghost 形式保留
  * （opacity:0 + pointer-events:none，DevTools/agent 可定位，视觉由 Pixi 承担）。
  */
-export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtime, onCanvasReady, onInteractTile, onContextTile }: PlanetMapPixiProps) {
+export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtime, squads, theaters, onCanvasReady, onInteractTile, onContextTile, onDefineZone }: PlanetMapPixiProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const entityLayerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<PlanetScene | null>(null);
@@ -168,6 +181,9 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   // 框选（marquee）：inspect 模式左键拖动出选择框；抬起时选中框内己方单位。
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // 战区划定（C4）：theater_zone 模式左键拖出矩形；抬起时换算圆心+半径回调。
+  const zoneDragRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
+  const [zoneDragRect, setZoneDragRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   // 框选/右键拖拽后抑制紧随的 click/contextmenu（避免刚框选完又被单击清空、刚平移完又下情境指令）。
   const suppressClickRef = useRef(false);
   const suppressContextRef = useRef(false);
@@ -192,6 +208,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     layers,
     selected,
     selectedUnits,
+    selectedSquads,
     incomingWaves,
     consumeFocusRequest,
     consumeZoomRequest,
@@ -202,6 +219,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     setHoveredTile,
     setSelected,
     setSelectedUnits,
+    setSelectedSquads,
     setMapProjection,
   } = usePlanetViewStore(useShallow((state) => ({
     camera: state.camera,
@@ -212,6 +230,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     layers: state.layers,
     selected: state.selected,
     selectedUnits: state.selectedUnits,
+    selectedSquads: state.selectedSquads,
     incomingWaves: state.incomingWaves,
     consumeFocusRequest: state.consumeFocusRequest,
     consumeZoomRequest: state.consumeZoomRequest,
@@ -222,6 +241,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     setHoveredTile: state.setHoveredTile,
     setSelected: state.setSelected,
     setSelectedUnits: state.setSelectedUnits,
+    setSelectedSquads: state.setSelectedSquads,
     setMapProjection: state.setMapProjection,
   })));
   const session = useSessionSnapshot();
@@ -589,6 +609,11 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
     if (overviewMode) {
       return;
     }
+    // 战区划定（C4）：theater_zone 模式左键拖动出区域矩形（优先于相机平移）。
+    if (interactionMode.kind === 'theater_zone' && event.button === 0) {
+      zoneDragRef.current = { startX: event.clientX, startY: event.clientY, active: false };
+      return;
+    }
     // 右键/中键拖动 = 平移相机（inspect 模式左键让位给框选）；非 inspect 模式左键拖动仍平移。
     if (event.button === 2 || event.button === 1 || interactionMode.kind !== 'inspect') {
       dragStateRef.current = {
@@ -616,6 +641,21 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         zoomIndex: camera.zoomIndex,
         ready: true,
       });
+      return;
+    }
+    const zoneDrag = zoneDragRef.current;
+    if (zoneDrag) {
+      if (!zoneDrag.active && Math.abs(event.clientX - zoneDrag.startX) + Math.abs(event.clientY - zoneDrag.startY) > 4) {
+        zoneDrag.active = true;
+      }
+      if (zoneDrag.active) {
+        setZoneDragRect({
+          x0: Math.min(zoneDrag.startX, event.clientX),
+          y0: Math.min(zoneDrag.startY, event.clientY),
+          x1: Math.max(zoneDrag.startX, event.clientX),
+          y1: Math.max(zoneDrag.startY, event.clientY),
+        });
+      }
       return;
     }
     const marquee = marqueeRef.current;
@@ -646,6 +686,20 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         }
       }
       dragStateRef.current = null;
+    }
+    const zoneDrag = zoneDragRef.current;
+    zoneDragRef.current = null;
+    if (zoneDrag) {
+      setZoneDragRect(null);
+      if (zoneDrag.active) {
+        suppressClickRef.current = true;
+        const from = clientToTileFloat(zoneDrag.startX, zoneDrag.startY);
+        const to = clientToTileFloat(event.clientX, event.clientY);
+        if (from && to) {
+          onDefineZone?.(theaterZoneFromDragRect(from, to));
+        }
+      }
+      return;
     }
     const marquee = marqueeRef.current;
     marqueeRef.current = null;
@@ -688,7 +742,9 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
   function handlePointerLeave() {
     dragStateRef.current = null;
     marqueeRef.current = null;
+    zoneDragRef.current = null;
     setMarqueeRect(null);
+    setZoneDragRect(null);
     hoverScheduler.schedule(null);
   }
 
@@ -758,8 +814,28 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         z: 0,
       },
     });
-    // 单选单位同时进入多选集合（右键情境指令/快捷键以 selectedUnits 为命令目标）
+    // 单选单位同时进入多选集合（右键情境指令/快捷键以 selectedUnits 为命令目标）；
+    // 点空白/建筑时清空单位与小队选择（互斥）。
     setSelectedUnits(selection?.kind === 'unit' ? [selection.id] : []);
+    setSelectedSquads([]);
+  }
+
+  /** 点小队标记（C4）：shift=加选/减选；单选同步 selected（详情面板）与音效。 */
+  function handleSelectSquad(squad: CombatSquad, additive: boolean) {
+    if (additive) {
+      const next = selectedSquads.includes(squad.id)
+        ? selectedSquads.filter((id) => id !== squad.id)
+        : [...selectedSquads, squad.id];
+      setSelectedSquads(next);
+      // 加选后恰好剩一个时同步详情面板，否则清掉单选详情（多选走底部选择条）。
+      const remaining = next.length === 1
+        ? (squads ?? runtime?.combat_squads ?? []).find((candidate) => candidate.id === next[0])
+        : undefined;
+      setSelected(remaining ? { kind: 'squad', id: remaining.id, position: remaining.position } : null);
+      return;
+    }
+    setSelectedSquads([squad.id]);
+    setSelected({ kind: 'squad', id: squad.id, position: squad.position });
   }
 
   /**
@@ -797,14 +873,15 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       }
       // inspect 模式 Esc = 清空选择（RTS 惯例）
       const state = usePlanetViewStore.getState();
-      if (state.selectedUnits.length > 0 || state.selected) {
+      if (state.selectedUnits.length > 0 || state.selectedSquads.length > 0 || state.selected) {
         setSelectedUnits([]);
+        setSelectedSquads([]);
         setSelected(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [exitInteractionMode, interactionMode.kind, setSelected, setSelectedUnits]);
+  }, [exitInteractionMode, interactionMode.kind, setSelected, setSelectedSquads, setSelectedUnits]);
 
   function handleDoubleClick(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = viewportRef.current?.getBoundingClientRect();
@@ -873,6 +950,28 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         role="img"
       >
         <PixiStage className="planet-map-canvas__pixi" onReady={handlePixiReady} />
+        {/* 战区覆盖层（C4）：zones 圆圈 + 告警态（指针穿透，2D 战术视图专属） */}
+        {overviewMode ? null : (
+          <PlanetTheaterLayer
+            offsetX={camera.offsetX}
+            offsetY={camera.offsetY}
+            planetId={planet.planet_id}
+            theaters={theaters}
+            tileSize={tileSize}
+          />
+        )}
+        {/* 战斗小队标记层（C4）：点选小队（shift 加选），选中环由标记自绘 */}
+        {overviewMode ? null : (
+          <PlanetSquadLayer
+            offsetX={camera.offsetX}
+            offsetY={camera.offsetY}
+            onSelectSquad={handleSelectSquad}
+            playerId={session.playerId}
+            selectedSquads={selectedSquads}
+            squads={squads ?? runtime?.combat_squads}
+            tileSize={tileSize}
+          />
+        )}
         {marqueeRect ? (
           <div
             aria-hidden="true"
@@ -882,6 +981,19 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
               top: marqueeRect.y0 - (viewportRef.current?.getBoundingClientRect().top ?? 0),
               width: marqueeRect.x1 - marqueeRect.x0,
               height: marqueeRect.y1 - marqueeRect.y0,
+            }}
+          />
+        ) : null}
+        {zoneDragRect ? (
+          <div
+            aria-hidden="true"
+            className="planet-map-canvas__marquee planet-map-canvas__marquee--zone"
+            data-testid="theater-zone-drag-rect"
+            style={{
+              left: zoneDragRect.x0 - (viewportRef.current?.getBoundingClientRect().left ?? 0),
+              top: zoneDragRect.y0 - (viewportRef.current?.getBoundingClientRect().top ?? 0),
+              width: zoneDragRect.x1 - zoneDragRect.x0,
+              height: zoneDragRect.y1 - zoneDragRect.y0,
             }}
           />
         ) : null}
@@ -965,7 +1077,13 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
             {interactionMode.order === 'attack_move' ? '攻击移动：点击目标点（沿途交战）' : interactionMode.order === 'patrol' ? '巡逻：点击巡逻目标点' : '守卫：点击要守卫的目标'} · 右键/Esc 取消
           </span>
         ) : null}
+        {interactionMode.kind === 'theater_zone' ? (
+          <span className="planet-map-canvas__mode planet-map-canvas__mode--zone">
+            战区划定：{theaterZoneTypeLabel(interactionMode.zoneType)} · 左键拖拽矩形画出区域 · 右键/Esc 退出
+          </span>
+        ) : null}
         {selectedUnits.length > 1 ? <span className="planet-map-canvas__mode">已框选 {selectedUnits.length} 个单位 · 右键移动/攻击</span> : null}
+        {selectedSquads.length > 0 ? <span className="planet-map-canvas__mode">已选 {selectedSquads.length} 个小队 · 右键点地部署任务群</span> : null}
         <span>{selectionLabel(selected)}</span>
         {simplificationMessages.length > 0 ? <span>低缩放简化</span> : null}
         {simplificationMessages.map((message) => (

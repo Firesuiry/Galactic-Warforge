@@ -104,7 +104,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -189,7 +189,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -290,7 +290,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -384,7 +384,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -453,7 +453,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -596,7 +596,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -687,7 +687,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -823,7 +823,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -932,7 +932,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -1074,7 +1074,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -1199,7 +1199,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -1347,7 +1347,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -1384,7 +1384,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       if (url.endsWith('/agent-api/health')) {
@@ -1525,7 +1525,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));
@@ -1643,7 +1643,7 @@ describe('AgentsPage', () => {
           production_stats: { total_output: 0, by_building_type: {}, by_item: {}, efficiency: 0 },
           energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
           logistics_stats: { throughput: 0, avg_distance: 0, avg_travel_time: 0, deliveries: 0 },
-          combat_stats: { units_lost: 0, enemies_killed: 0, threat_level: 0, highest_threat: 0 },
+          combat_stats: { units_killed: 0, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0, threat_level: 0, highest_threat: 0 },
         }));
       }
       return Promise.reject(new Error(`unexpected url ${method} ${url}`));

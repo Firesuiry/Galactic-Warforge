@@ -358,8 +358,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     "shortage_ticks": 0
   },
   "combat_stats": {
+    "units_killed": 4,
     "units_lost": 0,
-    "enemies_killed": 4,
+    "buildings_destroyed": 0,
+    "buildings_lost": 0,
     "threat_level": 0,
     "highest_threat": 0
   },
@@ -400,7 +402,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `production_stats`：`total_output` / `by_building_type` / `by_item` / `efficiency`
   - `energy_stats`：`generation` / `consumption` / `storage` / `current_stored` / `shortage_ticks`
   - `logistics_stats`：`throughput` / `avg_distance` / `avg_travel_time` / `deliveries`
-  - `combat_stats`：`units_lost` / `enemies_killed` / `threat_level` / `highest_threat`
+  - `combat_stats`：`units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost` / `threat_level` / `highest_threat`
+  - 战损口径（F2，双边计数）：受害方是玩家实体（单位/编组小队/建筑）时计入受害方 `units_lost` / `buildings_lost`；击杀方是玩家且与受害方归属不同时计入击杀方 `units_killed` / `buildings_destroyed`。黑雾击杀只计受害方损失；玩家摧毁黑雾巢穴/黑雾单位不计入 kills（黑雾不是玩家实体）；编组小队整编被毁计 1 个单位。计数随存档/回滚/回放保持一致。
 - 生产统计口径补充:
   - `total_output` / `by_building_type` / `by_item` 现在都只统计当前 active world、当前 tick 内真实落库 / 落站的 authoritative 产出数量，不再把建筑静态 `throughput` 当作产出
   - 统计来源统一走同一份 `ProductionSettlementSnapshot`，当前覆盖：
@@ -445,8 +448,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
     "deliveries": 18
   },
   "combat_stats": {
+    "units_killed": 6,
     "units_lost": 1,
-    "enemies_killed": 6,
+    "buildings_destroyed": 1,
+    "buildings_lost": 0,
     "threat_level": 2,
     "highest_threat": 3
   }
@@ -1222,7 +1227,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明: 客户端展示元数据总表（需认证）
 - 说明补充:
   - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
-  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `world_units` / `warfare`
+  - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `world_units` / `warfare` / `damage_coefficients`
 - 响应字段:
   - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `combat_range` / `power_range` / `icon_key` / `color`
   - `buildings[].combat_range`：可选，战斗射程（球面四邻接地格距离），仅有战斗能力的建筑（如 `gauss_turret`、`sr_plasma_turret`、`jammer_tower`）携带；与结算同源，取自该建筑 runtime 定义 `functions.combat.range`
@@ -1231,6 +1236,8 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `recipes`：配方元数据，包含 `id` / `name` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `icon_key` / `color`
   - `techs`：科技元数据，包含 `id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to` / `max_level` / `icon_key` / `color`
   - `world_units`：公开世界单位目录，包含 `id` / `name` / `domain` / `runtime_class` / `public` / `production_mode` / `query_scopes` / `commands` / `hidden_reason`
+  - `world_units[]` 战斗数值（R6）：`armor_class` / `weapon_class` / `attack` / `attack_range` / `attack_cooldown_tick` / `move_speed` / `max_hp`；统一从运行时单位数值表派生，与结算同源（无战斗能力的单位 `armor_class`/`weapon_class` 可能缺省，数值为 0）
+  - `damage_coefficients`（R6）：护甲×武器伤害系数表，结构为 `weapon_class -> armor_class -> 系数`（武器 `gun|cannon|missile|laser` × 护甲 `light|heavy|structure|air|ship`，如 `{"gun": {"light": 1.25, "heavy": 0.75, ...}}`；表中缺项按 1.0 结算），与运行时伤害结算共用同一张表；客户端据此展示克制关系
   - `warfare`：战争目录聚合，包含 `base_frames` / `base_hulls` / `components` / `public_blueprints`
   - `warfare.base_frames[]` / `warfare.base_hulls[]`：当前会在 `budgets` 中额外暴露 `signal_capacity`，用于蓝图校验时的信号/隐形预算
   - `warfare.components[]`：当前会额外暴露 `signal_load` / `stealth_rating`，用于蓝图校验时的签名负荷与隐蔽加成
@@ -1836,6 +1843,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `UNAUTHORIZED`
   - `EXECUTOR_UNAVAILABLE`
   - `EXECUTOR_BUSY`
+  - `GAME_FINISHED`：终局拒令（F2）。victory 宣判后对局进入 finished，所有常规游戏命令统一以该码拒绝：网关接受阶段直接返回 `202` + `accepted=false`（每条命令 `status=rejected`、`code=GAME_FINISHED`，不入队）；宣判前已入队的存量命令在执行阶段同样以该码拒绝并产生 `command_result` 事件。管理面（`/save`、`/rollback`、`/games/new`、`/games/current`）与查询类接口不受限
 - 响应示例:
 ```json
 {
@@ -1941,7 +1949,7 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `building_state_changed` 建筑状态变更事件，payload 包含 `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；当同一建筑“状态没变但病因变了”时也会继续发这类事件，此时会表现为 `prev_state == next_state`，但 `prev_reason != reason`。当故障由维护不足触发时额外包含 `cause`（`maintenance_insufficient`）。供电接入失败原因包括 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；若建筑已经 `connected=true` 但当前 tick 因短缺或分配结果为 `0` 而拿不到电，则统一写成 `under_power`；`thermal_power_plant` / `mini_fusion_power_plant` / `artificial_star` 这类燃料型发电建筑在 `input_buffer + inventory` 中都没有可达燃料时，则会写成 `no_fuel`。若某个 tick 已成功发电，则不会再在同一 tick 末尾反向闪回 `running -> no_power/no_fuel`。
     - 当前 Web 建造账本会把 `entity_created` 与后续 `building_state_changed` 收口到同一条结果，用于给新建建筑生成“补供电塔 / 补发电 / 扩容电网”这类下一步提示；如果你要实现同类客户端，至少需要同时订阅这两类事件
   - `production_alert` 产线监控告警事件，payload 包含 `alert`（告警对象：`alert_id`/`tick`/`player_id`/`building_id`/`building_type`/`alert_type`/`severity`/`message`/`metrics`/`details`）。同一建筑同一类型的持续告警条件每个冷却窗口最多重发一次该事件；快照侧（`GET /alerts/production/snapshot`）会把重复发生聚合为单条目的 `last_tick` / `repeat_count`。
-  - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule`；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
+  - `victory_declared` 胜利宣告事件，payload 包含 `winner_id` / `reason` / `victory_rule` / `declared_tick`（宣判 tick，F2）；若是 `mission_complete` 科研获胜，还会额外携带 `tech_id = "mission_complete"`。
   - 若 `mission_complete` 在当前 tick 完成，事件顺序会先出现 `research_completed`，再出现 `victory_declared`。
   - `rocket_launched` 戴森火箭发射事件，payload 包含 `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output`；其中 `construction_bonus` 与 `GET /world/systems/{system_id}/runtime.dyson_sphere.layers[].construction_bonus` 共享同一份 tick 内 authoritative 结果。
   - `squad_deployed`：地面小队部署事件，payload 包含 `squad_id` / `squad`；同时还会伴随一条 `entity_created(entity_type = "combat_squad")`。
@@ -2220,6 +2228,11 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `max_tick_rate`、`active_planet_id`、`tick`、`started_at`（对局开始时间，RFC3339）
   - `players`：玩家概要数组（`player_id`/`role`/`team_id`/`bot`/`is_alive`/`focus_planet_id`（F4 焦点行星，可能为空表示未设置）），**绝不含登录 key**
   - `victory`：`{declared, winner_id?, team_id?, reason?}`
+  - `status`（F2）：`running|finished`；victory 宣判即 `finished`（`sandbox` 永不宣判，故永远 `running`），此后常规游戏命令统一以 `GAME_FINISHED` 拒绝
+  - `settlement`（F2）：终局结算报告，仅 `finished` 时存在；在宣判瞬间聚合并冻结，此后不再随世界继续模拟变化（终局后黑雾造成的伤亡不计入），随 `save.json` 持久化，读档/回滚/回放一致
+    - `winner_id` / `team_id?` / `reason` / `victory_rule` / `tech_id?`
+    - `start_tick`（当前恒为 0）/ `declared_tick` / `duration_ticks`：时间线只给 tick 指针，事件流本体用 `/events/snapshot` 拉取
+    - `players[]`：按 `player_id` 排序，`player_id` / `team_id?` / `is_alive` / `winner?` / `units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost`（宣判时刻冻结的双边战损，口径同 `/state/stats.combat_stats`）
 - 响应示例:
 ```json
 {
@@ -2234,7 +2247,27 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
     {"player_id": "p1", "role": "admin", "team_id": "p1", "is_alive": true},
     {"player_id": "p2", "role": "commander", "team_id": "p2", "bot": "easy", "is_alive": true}
   ],
-  "victory": {"declared": false}
+  "victory": {"declared": false},
+  "status": "running"
+}
+```
+- 终局后响应示例（节选）:
+```json
+{
+  "victory": {"declared": true, "winner_id": "p1", "reason": "elimination"},
+  "status": "finished",
+  "settlement": {
+    "winner_id": "p1",
+    "reason": "elimination",
+    "victory_rule": "elimination",
+    "start_tick": 0,
+    "declared_tick": 5120,
+    "duration_ticks": 5120,
+    "players": [
+      {"player_id": "p1", "team_id": "p1", "is_alive": true, "winner": true, "units_killed": 14, "units_lost": 6, "buildings_destroyed": 3, "buildings_lost": 1},
+      {"player_id": "p2", "team_id": "p2", "is_alive": false, "units_killed": 6, "units_lost": 14, "buildings_destroyed": 1, "buildings_lost": 3}
+    ]
+  }
 }
 ```
 

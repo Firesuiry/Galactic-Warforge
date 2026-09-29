@@ -62,11 +62,13 @@ func (gc *GameCore) exportSaveFileWithBase(trigger string, base *snapshot.Snapsh
 
 	victory := gc.Victory()
 	runtimeState := gamedir.RuntimeState{
-		ActivePlanetID: gc.activePlanetID,
-		Winner:         victory.WinnerID,
-		VictoryReason:  victory.Reason,
-		VictoryRule:    victory.VictoryRule,
-		VictoryTechID:  victory.TechID,
+		ActivePlanetID:      gc.activePlanetID,
+		Winner:              victory.WinnerID,
+		VictoryReason:       victory.Reason,
+		VictoryRule:         victory.VictoryRule,
+		VictoryTechID:       victory.TechID,
+		VictoryDeclaredTick: victory.DeclaredTick,
+		Settlement:          gc.Settlement(),
 	}
 	if runtimeState.ActivePlanetID == "" && gc.world != nil {
 		runtimeState.ActivePlanetID = gc.world.PlanetID
@@ -228,11 +230,13 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 	}
 	core.setActivePlanet(core.activePlanetID)
 	core.setVictoryState(model.VictoryState{
-		WinnerID:    save.RuntimeState.Winner,
-		Reason:      save.RuntimeState.VictoryReason,
-		VictoryRule: save.RuntimeState.VictoryRule,
-		TechID:      save.RuntimeState.VictoryTechID,
+		WinnerID:     save.RuntimeState.Winner,
+		Reason:       save.RuntimeState.VictoryReason,
+		VictoryRule:  save.RuntimeState.VictoryRule,
+		TechID:       save.RuntimeState.VictoryTechID,
+		DeclaredTick: save.RuntimeState.VictoryDeclaredTick,
 	})
+	core.setSettlementState(save.RuntimeState.Settlement)
 
 	core.cmdLog.ReplaceAll(importCommandLog(save.DebugState.CommandLog))
 	core.eventHistory.ReplaceAll(save.DebugState.EventHistory)

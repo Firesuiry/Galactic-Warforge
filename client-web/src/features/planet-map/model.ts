@@ -3,6 +3,7 @@ import type {
   AlertEntry,
   Building,
   CatalogView,
+  CombatSquad,
   FogMapView,
   GameEventDetail,
   ItemInventory,
@@ -77,12 +78,13 @@ export function unitMoveDestination(unit: Pick<Unit, 'path' | 'order_pos'>): Pos
 export type SelectedEntity =
   | { kind: "building"; id: string; position: Position }
   | { kind: "unit"; id: string; position: Position }
+  | { kind: "squad"; id: string; position: Position }
   | { kind: "resource"; id: string; position: Position }
   | { kind: "tile"; position: Position };
 
 export interface SelectionExportPayload {
   selection: SelectedEntity | null;
-  entity: Building | Unit | PlanetResource | null;
+  entity: Building | Unit | CombatSquad | PlanetResource | null;
 }
 
 export type PlanetLayerVisibility = Record<PlanetLayerKey, boolean>;
@@ -266,15 +268,26 @@ export function resolveSelectionAtTile(
 }
 
 /** Resolve current authoritative coordinates; a missing entity has no selection marker. */
-export function resolveSelectionPosition(planet: PlanetRenderView, selection: SelectedEntity | null): Position | null {
+export function resolveSelectionPosition(
+  planet: PlanetRenderView,
+  selection: SelectedEntity | null,
+  runtime?: PlanetRuntimeView,
+): Position | null {
   if (!selection) return null;
   if (selection.kind === 'tile') return selection.position;
+  // 小队实体在 runtime.combat_squads（不在 planet.units）：调用侧未传 runtime 时
+  // 用点击时的快照坐标（地图选中环由小队标记层自绘，这里仅兜底）。
+  if (selection.kind === 'squad') {
+    const squad = runtime?.combat_squads?.find((candidate) => candidate.id === selection.id);
+    return squad?.position ?? selection.position;
+  }
   return findSelectionEntity(planet, selection)?.position ?? null;
 }
 
 export function findSelectionEntity(
   planet: PlanetRenderView,
   selection: SelectedEntity | null,
+  runtime?: PlanetRuntimeView,
 ) {
   if (!selection) {
     return null;
@@ -284,6 +297,12 @@ export function findSelectionEntity(
       return (planet.buildings ?? {})[selection.id] ?? null;
     case "unit":
       return (planet.units ?? {})[selection.id] ?? null;
+    case "squad":
+      return (
+        runtime?.combat_squads?.find(
+          (candidate) => candidate.id === selection.id,
+        ) ?? null
+      );
     case "resource":
       return (
         getResourceList(planet).find(
@@ -306,6 +325,8 @@ export function selectionLabel(selection: SelectedEntity | null) {
       return `建筑 ${selection.id}`;
     case "unit":
       return `单位 ${selection.id}`;
+    case "squad":
+      return `小队 ${selection.id}`;
     case "resource":
       return `资源 ${selection.id}`;
     case "tile":

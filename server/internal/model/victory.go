@@ -19,9 +19,13 @@ type VictoryState struct {
 	TechID      string `json:"tech_id,omitempty"`
 	// TeamID 团队胜利时的获胜队伍（F3）：团队对局中仅存一队时填充。
 	TeamID string `json:"team_id,omitempty"`
+	// DeclaredTick 宣判时刻的 tick（F2）：终局结算与 finished 状态的时间锚点。
+	DeclaredTick int64 `json:"declared_tick,omitempty"`
 }
 
 // Declared reports whether a winner has been resolved.
+// 宣判即对局进入 finished（F2）：常规游戏命令自此被统一拒绝（GAME_FINISHED），
+// 管理面（/save、/games/new、/games/current、查询类接口）不受限。
 func (v VictoryState) Declared() bool {
 	return v.WinnerID != ""
 }

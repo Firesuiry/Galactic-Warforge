@@ -580,6 +580,38 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 		return
 	}
 
+	// F2 终局拒令（接受阶段）：victory 宣判后对局进入 finished，常规游戏命令
+	// 统一以 GAME_FINISHED 拒绝，不入队；执行阶段（executeRequest）同样拒绝，
+	// 覆盖宣判前已入队的存量命令。
+	if sess.Core.Finished() {
+		ws := sess.Core.World()
+		ws.RLock()
+		currentTick := ws.Tick
+		ws.RUnlock()
+		qr := &model.QueuedRequest{
+			Request:     req,
+			PlayerID:    playerID,
+			EnqueueTick: currentTick,
+		}
+		results := make([]model.CommandResult, len(req.Commands))
+		for i := range req.Commands {
+			results[i] = model.CommandResult{
+				CommandIndex: i,
+				Status:       model.StatusRejected,
+				Code:         model.CodeGameFinished,
+				Message:      "game finished: victory already declared, commands are no longer accepted",
+			}
+		}
+		s.recordPrecheckAudit(sess, playerID, qr, results)
+		writeJSON(w, http.StatusAccepted, model.CommandResponse{
+			RequestID:   req.RequestID,
+			Accepted:    false,
+			EnqueueTick: currentTick,
+			Results:     results,
+		})
+		return
+	}
+
 	// Check for duplicate request
 	if sess.Queue.HasSeen(req.RequestID) {
 		ws := sess.Core.World()

@@ -2105,9 +2105,10 @@ func victoryDeclaredEvent(victory model.VictoryState) *model.GameEvent {
 		return nil
 	}
 	payload := map[string]any{
-		"winner_id":    victory.WinnerID,
-		"reason":       victory.Reason,
-		"victory_rule": victory.VictoryRule,
+		"winner_id":     victory.WinnerID,
+		"reason":        victory.Reason,
+		"victory_rule":  victory.VictoryRule,
+		"declared_tick": victory.DeclaredTick,
 	}
 	if victory.TechID != "" {
 		payload["tech_id"] = victory.TechID

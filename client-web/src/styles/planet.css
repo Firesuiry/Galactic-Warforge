@@ -1455,3 +1455,104 @@
   animation: planet-wave-blink 0.9s ease-in-out infinite;
 }
 @keyframes planet-wave-blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.35); } }
+
+/* ============================================================
+ * C4 军事 UI 地图化：小队标记 / 战区圆圈 / 战区划定控件
+ * ============================================================ */
+
+/* 小队标记层：容器指针穿透，标记本身可点（选中/加选） */
+.planet-squad-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 6; }
+.planet-squad-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid rgba(57, 230, 208, 0.9);
+  background: rgba(8, 14, 28, 0.82);
+  color: #9be7dd;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 0 10px rgba(57, 230, 208, 0.35);
+}
+.planet-squad-marker--selected {
+  border-color: #ffe9ad;
+  box-shadow: 0 0 0 2px rgba(255, 233, 173, 0.55), 0 0 16px rgba(255, 233, 173, 0.4);
+}
+.planet-squad-marker__count {
+  position: absolute;
+  right: -6px;
+  top: -8px;
+  min-width: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06202a;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.planet-squad-marker__hp {
+  position: absolute;
+  left: 3px;
+  bottom: -5px;
+  height: 3px;
+  max-width: calc(100% - 6px);
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ff5757, #ffb454 45%, #6ee7b7 75%);
+  pointer-events: none;
+}
+/* HP 条用宽度表达比例后，颜色按整条渐变截断即可，不再单独变色 */
+
+/* 战区覆盖层：zones 圆圈 + 告警态（指针穿透） */
+.planet-theater-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
+.planet-theater-layer__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.planet-theater-zone--alerted { animation: planet-theater-alert 1s ease-in-out infinite; }
+@keyframes planet-theater-alert { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: 0.3; } }
+.planet-theater-zone__label { font-size: 12px; font-weight: 600; paint-order: stroke; stroke: rgba(8, 14, 28, 0.9); stroke-width: 3px; }
+
+/* 战区划定拖拽矩形（语义区别于单位框选的绿色） */
+.planet-map-canvas__marquee--zone {
+  border-color: #39e6d0;
+  background: rgba(57, 230, 208, 0.1);
+}
+.planet-map-canvas__surface--theater_zone { cursor: crosshair; }
+.planet-map-canvas__mode--zone { color: #39e6d0; }
+
+/* 战区划定控件（左下工具条旁） */
+.planet-theater-controls {
+  position: absolute;
+  left: 64px;
+  bottom: 16px;
+  z-index: 7;
+}
+.planet-theater-controls__popover {
+  position: absolute;
+  left: 0;
+  bottom: 48px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.planet-theater-controls__create {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.planet-theater-controls__more > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.planet-theater-controls__more[open] > summary { margin-bottom: 8px; }
+.planet-theater-controls__button--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

@@ -259,8 +259,10 @@ function createStatsPayload() {
       deliveries: 12,
     },
     combat_stats: {
+      units_killed: 5,
       units_lost: 1,
-      enemies_killed: 5,
+      buildings_destroyed: 0,
+      buildings_lost: 0,
       threat_level: 3,
       highest_threat: 4,
     },

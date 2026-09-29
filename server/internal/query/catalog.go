@@ -10,6 +10,9 @@ type CatalogView struct {
 	Techs      []TechCatalogEntry            `json:"techs,omitempty"`
 	WorldUnits []model.WorldUnitCatalogEntry `json:"world_units,omitempty"`
 	Warfare    *model.WarfareCatalogView     `json:"warfare,omitempty"`
+	// DamageCoefficients 护甲×武器伤害系数表（R6）：weapon_class -> armor_class -> 系数，
+	// 原样暴露 model.DamageCoefficient，与运行时结算共用单一数据源。
+	DamageCoefficients map[model.WeaponType]map[model.ArmorClass]float64 `json:"damage_coefficients,omitempty"`
 }
 
 type BuildingCatalogEntry struct {
@@ -175,13 +178,27 @@ func (ql *Layer) Catalog() *CatalogView {
 	warfare := model.PublicWarfareCatalog()
 
 	return &CatalogView{
-		Buildings:  buildings,
-		Items:      items,
-		Recipes:    recipes,
-		Techs:      techs,
-		WorldUnits: worldUnits,
-		Warfare:    warfare,
+		Buildings:          buildings,
+		Items:              items,
+		Recipes:            recipes,
+		Techs:              techs,
+		WorldUnits:         worldUnits,
+		Warfare:            warfare,
+		DamageCoefficients: cloneDamageCoefficients(),
 	}
+}
+
+// cloneDamageCoefficients 原样复制 model.DamageCoefficient（R6），避免调用方改动全局表。
+func cloneDamageCoefficients() map[model.WeaponType]map[model.ArmorClass]float64 {
+	out := make(map[model.WeaponType]map[model.ArmorClass]float64, len(model.DamageCoefficient))
+	for weapon, row := range model.DamageCoefficient {
+		cp := make(map[model.ArmorClass]float64, len(row))
+		for armor, coef := range row {
+			cp[armor] = coef
+		}
+		out[weapon] = cp
+	}
+	return out
 }
 
 func buildingCatalogColor(category model.BuildingCategory) string {

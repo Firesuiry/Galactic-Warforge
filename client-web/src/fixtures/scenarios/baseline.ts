@@ -69,7 +69,7 @@ const statsByPlayer: Record<string, PlayerStatsSnapshot> = {
     production_stats: { total_output: 36, by_building_type: { mining_machine: 12, assembling_machine_mk1: 24 }, by_item: { iron_ore: 18, gear: 18 }, efficiency: 0.91 },
     energy_stats: { generation: 180, consumption: 146, storage: 220, current_stored: 168, shortage_ticks: 2 },
     logistics_stats: { throughput: 14, avg_distance: 18, avg_travel_time: 11, deliveries: 27 },
-    combat_stats: { units_lost: 1, enemies_killed: 6, threat_level: 3, highest_threat: 4 },
+    combat_stats: { units_killed: 6, units_lost: 1, buildings_destroyed: 0, buildings_lost: 0, threat_level: 3, highest_threat: 4 },
   },
   p2: {
     player_id: 'p2',
@@ -77,7 +77,7 @@ const statsByPlayer: Record<string, PlayerStatsSnapshot> = {
     production_stats: { total_output: 14, by_building_type: {}, by_item: {}, efficiency: 0.72 },
     energy_stats: { generation: 90, consumption: 70, storage: 100, current_stored: 56, shortage_ticks: 0 },
     logistics_stats: { throughput: 6, avg_distance: 12, avg_travel_time: 8, deliveries: 10 },
-    combat_stats: { units_lost: 2, enemies_killed: 1, threat_level: 2, highest_threat: 3 },
+    combat_stats: { units_killed: 1, units_lost: 2, buildings_destroyed: 0, buildings_lost: 0, threat_level: 2, highest_threat: 3 },
   },
 };
 

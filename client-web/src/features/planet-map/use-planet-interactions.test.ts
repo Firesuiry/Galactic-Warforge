@@ -16,6 +16,7 @@ const { mockClient, submitMock } = vi.hoisted(() => ({
     cmdMove: vi.fn(),
     cmdAttack: vi.fn(),
     cmdUnitOrder: vi.fn(),
+    cmdTaskForceDeploy: vi.fn(),
     fetchEventSnapshot: vi.fn(),
   },
   // 透传执行 execute，使命令客户端调用可被断言
@@ -288,5 +289,58 @@ describe('usePlanetInteractions', () => {
 
     interactions.orderNow('hold');
     expect(mockClient.cmdUnitOrder).toHaveBeenCalledWith(['u-2'], 'hold', {});
+  });
+
+  it('C4 小队右键部署：按所属任务群下达 task_force_deploy 到目标坐标', () => {
+    resetPlanetViewStore();
+    useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
+    usePlanetCommandStore.getState().resetForPlanet('planet-1-1');
+    const planet = makePlanet();
+    const taskForces = [{
+      id: 'tf-1',
+      stance: 'hold',
+      members: [{ kind: 'squad' as const, entity_id: 'sq-1' }],
+      command_capacity: { total: 10, used: 1 },
+      supply_status: { current: {}, capacity: {}, condition: 'healthy' as const },
+    }] as never;
+    mockClient.cmdTaskForceDeploy.mockResolvedValue({ accepted: true, request_id: 'r-tf' });
+    const onDeployed = vi.fn();
+    const { result } = renderHook(() => usePlanetInteractions({
+      catalog,
+      planet,
+      runtime: { planet_id: 'planet-1-1', enemy_forces: [] } as never,
+      taskForces,
+      onTaskForceDeployed: onDeployed,
+    }));
+    usePlanetViewStore.getState().setSelectedSquads(['sq-1']);
+
+    const handled = result.current.contextTile({ x: 9, y: 8 });
+
+    expect(handled).toBe(true);
+    expect(mockClient.cmdTaskForceDeploy).toHaveBeenCalledWith('tf-1', {
+      planetId: 'planet-1-1',
+      position: { x: 9, y: 8, z: 0 },
+    });
+    expect(mockClient.cmdMove).not.toHaveBeenCalled();
+  });
+
+  it('C4 小队右键部署：未编组小队本地拦截并提示', () => {
+    resetPlanetViewStore();
+    useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
+    usePlanetCommandStore.getState().resetForPlanet('planet-1-1');
+    const planet = makePlanet();
+    const { result } = renderHook(() => usePlanetInteractions({
+      catalog,
+      planet,
+      runtime: { planet_id: 'planet-1-1', enemy_forces: [] } as never,
+      taskForces: [],
+    }));
+    usePlanetViewStore.getState().setSelectedSquads(['sq-free']);
+
+    const handled = result.current.contextTile({ x: 9, y: 8 });
+
+    expect(handled).toBe(true);
+    expect(mockClient.cmdTaskForceDeploy).not.toHaveBeenCalled();
+    expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('未编入任务群');
   });
 });

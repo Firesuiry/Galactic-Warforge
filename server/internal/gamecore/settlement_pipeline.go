@@ -126,7 +126,7 @@ func newSettlementPipeline() settlementPipeline {
 
 		if !gc.Victory().Declared() {
 			victory := resolveVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds)
-			if gc.declareVictory(victory) {
+			if gc.declareVictory(victory, frame.currentTick) {
 				events = append(events, victoryDeclaredEvent(victory))
 				gc.recordVictoryAudit(victory)
 			}

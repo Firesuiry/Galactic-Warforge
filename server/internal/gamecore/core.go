@@ -338,6 +338,7 @@ type GameCore struct {
 	stopCh           chan struct{}
 	stopOnce         sync.Once
 	victory          model.VictoryState
+	settlement       *model.SettlementReport // F2：宣判时冻结的终局结算报告（随 victory 同锁）
 	victoryMu        sync.RWMutex
 	runtimeMu        sync.RWMutex
 	activePlanetID   string
@@ -555,7 +556,21 @@ func (gc *GameCore) Victory() model.VictoryState {
 	return gc.victory
 }
 
-func (gc *GameCore) declareVictory(victory model.VictoryState) bool {
+// Finished 报告对局是否已终局（F2）：victory 宣判即 finished；sandbox 永不宣判故永不 finished。
+func (gc *GameCore) Finished() bool {
+	return gc.Victory().Declared()
+}
+
+// Settlement 返回宣判时冻结的终局结算报告；未宣判（未 finished）时为 nil。
+func (gc *GameCore) Settlement() *model.SettlementReport {
+	gc.victoryMu.RLock()
+	defer gc.victoryMu.RUnlock()
+	return gc.settlement.Clone()
+}
+
+// declareVictory 记录宣判结果并冻结结算报告（F2）。currentTick 为宣判 tick；
+// 调用方须已持有世界写锁（结算管线内），以便读取玩家双边统计。
+func (gc *GameCore) declareVictory(victory model.VictoryState, currentTick int64) bool {
 	if !victory.Declared() {
 		return false
 	}
@@ -564,7 +579,9 @@ func (gc *GameCore) declareVictory(victory model.VictoryState) bool {
 	if gc.victory.Declared() {
 		return false
 	}
+	victory.DeclaredTick = currentTick
 	gc.victory = victory
+	gc.settlement = buildSettlementReport(victory, gc.world, currentTick)
 	return true
 }
 
@@ -572,6 +589,59 @@ func (gc *GameCore) setVictoryState(victory model.VictoryState) {
 	gc.victoryMu.Lock()
 	defer gc.victoryMu.Unlock()
 	gc.victory = victory
+}
+
+// setSettlementState 恢复/回滚结算报告（读档与 rollback 路径与 victory 同步替换）。
+func (gc *GameCore) setSettlementState(report *model.SettlementReport) {
+	gc.victoryMu.Lock()
+	defer gc.victoryMu.Unlock()
+	gc.settlement = report.Clone()
+}
+
+// buildSettlementReport 在宣判时刻聚合结算报告：胜者/队伍/规则/时长 tick +
+// 每玩家冻结的双边战损。时间线只放 tick 指针，事件流本体由 /events/snapshot 提供。
+func buildSettlementReport(victory model.VictoryState, ws *model.WorldState, currentTick int64) *model.SettlementReport {
+	if !victory.Declared() {
+		return nil
+	}
+	report := &model.SettlementReport{
+		WinnerID:      victory.WinnerID,
+		TeamID:        victory.TeamID,
+		Reason:        victory.Reason,
+		VictoryRule:   victory.VictoryRule,
+		TechID:        victory.TechID,
+		StartTick:     0,
+		DeclaredTick:  currentTick,
+		DurationTicks: currentTick,
+	}
+	if ws == nil {
+		return report
+	}
+	playerIDs := make([]string, 0, len(ws.Players))
+	for playerID := range ws.Players {
+		playerIDs = append(playerIDs, playerID)
+	}
+	sort.Strings(playerIDs)
+	for _, playerID := range playerIDs {
+		player := ws.Players[playerID]
+		if player == nil {
+			continue
+		}
+		entry := model.SettlementPlayerStats{
+			PlayerID: playerID,
+			TeamID:   player.TeamID,
+			IsAlive:  player.IsAlive,
+			Winner:   playerID == victory.WinnerID || (victory.TeamID != "" && player.TeamID == victory.TeamID),
+		}
+		if player.Stats != nil {
+			entry.UnitsKilled = player.Stats.CombatStats.UnitsKilled
+			entry.UnitsLost = player.Stats.CombatStats.UnitsLost
+			entry.BuildingsDestroyed = player.Stats.CombatStats.BuildingsDestroyed
+			entry.BuildingsLost = player.Stats.CombatStats.BuildingsLost
+		}
+		report.Players = append(report.Players, entry)
+	}
+	return report
 }
 
 // Run starts the tick loop (blocking); call in a goroutine
@@ -697,6 +767,25 @@ func (gc *GameCore) processTick() {
 func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResult, []*model.GameEvent) {
 	var results []model.CommandResult
 	var allEvts []*model.GameEvent
+
+	// F2 终局拒令：victory 宣判后对局进入 finished，常规游戏命令统一拒绝
+	//（对所有玩家一致，优先于存活/权限校验；管理面 /save、/games/new、
+	// /games/current 与查询类接口不走这里，不受限）。
+	if gc.Finished() {
+		player := gc.world.Players[qr.PlayerID]
+		for i, cmd := range qr.Request.Commands {
+			res := model.CommandResult{
+				CommandIndex: i,
+				Status:       model.StatusRejected,
+				Code:         model.CodeGameFinished,
+				Message:      "game finished: victory already declared, commands are no longer accepted",
+			}
+			results = append(results, res)
+			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
+			gc.recordCommandAudit(qr, cmd, res, player, "execute", boolPtr(false))
+		}
+		return results, allEvts
+	}
 
 	player, ok := gc.world.Players[qr.PlayerID]
 	if !ok || !player.IsAlive {

@@ -29,7 +29,7 @@ function createStats() {
     production_stats: { total_output: 24, by_building_type: {}, by_item: {}, efficiency: 0.95 },
     energy_stats: { generation: 320, consumption: 280, storage: 1000, current_stored: 640, shortage_ticks: 0 },
     logistics_stats: { throughput: 18, avg_distance: 22, avg_travel_time: 12, deliveries: 20 },
-    combat_stats: { units_lost: 2, enemies_killed: 9, threat_level: 6, highest_threat: 7 },
+    combat_stats: { units_killed: 9, units_lost: 2, buildings_destroyed: 0, buildings_lost: 0, threat_level: 6, highest_threat: 7 },
   };
 }
 

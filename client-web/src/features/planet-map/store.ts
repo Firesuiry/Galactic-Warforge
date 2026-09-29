@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { AlertEntry, GameEventDetail } from '@shared/types';
+import type { AlertEntry, GameEventDetail, WarTheaterZoneType } from '@shared/types';
 import type { Direction } from '@shared/api';
 import type { SseStatus } from '@shared/sse';
 
@@ -20,13 +20,15 @@ export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
  * - move：为当前选中单位（store.selectedUnits）选择移动目标点
  * - attack：为当前选中单位选择攻击目标
  * - unit_order：为当前选中单位选择 attack_move/patrol/guard 的目标点/目标实体
+ * - theater_zone（C4）：战区划定模式，左键拖拽矩形 → theater_define_zone（圆心+半径）
  */
 export type PlanetInteractionMode =
   | { kind: 'inspect' }
   | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction }
   | { kind: 'move' }
   | { kind: 'attack' }
-  | { kind: 'unit_order'; order: UnitOrderMode };
+  | { kind: 'unit_order'; order: UnitOrderMode }
+  | { kind: 'theater_zone'; theaterId: string; zoneType: WarTheaterZoneType };
 
 export const INSPECT_MODE: PlanetInteractionMode = { kind: 'inspect' };
 
@@ -364,6 +366,8 @@ interface PlanetViewState {
   selected: SelectedEntity | null;
   /** 多选单位集合（命令目标：框选/编队/双击同类的结果；单选单位时长度=1）。 */
   selectedUnits: string[];
+  /** 多选战斗小队集合（C4：combat_squads id 列表；右键部署/单位卡片的数据源）。 */
+  selectedSquads: string[];
   /** Ctrl+1..9 编队（键位 1..9 → 单位 id 列表；成员可能已阵亡，消费侧按 planet 过滤）。 */
   controlGroups: Record<number, string[]>;
   /** 黑雾袭击预警（未过期）。 */
@@ -388,6 +392,8 @@ interface PlanetViewActions {
   setSelected: (selection: SelectedEntity | null) => void;
   /** 设置多选单位（框选/编队/双击同类；调用侧负责过滤己方与存活）。 */
   setSelectedUnits: (unitIds: string[]) => void;
+  /** 设置多选战斗小队（C4：点选/列表选择；与 selectedUnits 互斥——选小队时清单位）。 */
+  setSelectedSquads: (squadIds: string[]) => void;
   /** 记录 Ctrl+数字编队（index 1..9；空数组表示清除该编队）。 */
   setControlGroup: (index: number, unitIds: string[]) => void;
   /** 记录一条黑雾袭击预警（按事件 id 去重，超时条目顺带清理）。 */
@@ -461,6 +467,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     hoveredTile: null,
     selected: null,
     selectedUnits: [],
+    selectedSquads: [],
     controlGroups: {},
     incomingWaves: [],
     interactionMode: INSPECT_MODE,
@@ -510,7 +517,16 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
       state.selectedUnits.length === unitIds.length
       && state.selectedUnits.every((id, index) => id === unitIds[index])
         ? state
-        : { selectedUnits: unitIds }
+        // 单位与小队选择互斥：框选/编队单位时清空小队选择（右键语义唯一）。
+        : { selectedUnits: unitIds, selectedSquads: [] }
+    ));
+  },
+  setSelectedSquads: (squadIds) => {
+    set((state) => (
+      state.selectedSquads.length === squadIds.length
+      && state.selectedSquads.every((id, index) => id === squadIds[index])
+        ? state
+        : { selectedSquads: squadIds, selectedUnits: [] }
     ));
   },
   setControlGroup: (index, unitIds) => {
@@ -672,6 +688,7 @@ export function resetPlanetViewStore() {
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setSelected: usePlanetViewStore.getState().setSelected,
     setSelectedUnits: usePlanetViewStore.getState().setSelectedUnits,
+    setSelectedSquads: usePlanetViewStore.getState().setSelectedSquads,
     setControlGroup: usePlanetViewStore.getState().setControlGroup,
     recordIncomingWave: usePlanetViewStore.getState().recordIncomingWave,
     setInteractionMode: usePlanetViewStore.getState().setInteractionMode,

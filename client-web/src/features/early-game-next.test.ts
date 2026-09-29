@@ -51,8 +51,10 @@ function midgameStats(overrides?: {
       deliveries: logistics > 0 ? 1 : 0,
     },
     combat_stats: {
+      units_killed: 0,
       units_lost: 0,
-      enemies_killed: 0,
+      buildings_destroyed: 0,
+      buildings_lost: 0,
       threat_level: 0,
       highest_threat: 0,
     },

@@ -4,6 +4,9 @@
  * - 右键情境指令：inspect 模式有己方单位选中时，点敌=批量攻击、点地=批量移动；
  * - 立即指令：S=stop / H=hold（快捷键与多选面板共用）。
  *
+ * C4 增量：选中小队（combat_squads）时右键点地 = 按所属任务群下达 task_force_deploy
+ * 到该坐标（未编组小队给出本地预检提示）；与表单共用同一条 submitPlanetCommand 管道。
+ *
  * 与表单共用同一条 submitPlanetCommand 管道（journal 反馈、authoritative 回写一致）。
  * move/attack 选择器 = 当前多选集合（含执行体：保留瞬移/手动一击语义）；
  * unit_order 选择器额外过滤执行体（服务端不受理，见 rts-commands）。
@@ -16,6 +19,7 @@ import type {
   PlanetRuntimeView,
   Position,
   Unit,
+  WarTaskForceView,
 } from '@shared/types';
 
 import { useApiClient } from '@/hooks/use-api-client';
@@ -33,6 +37,7 @@ import {
   orderEligibleUnitIds,
   resolveContextCommand,
 } from '@/features/planet-map/rts-commands';
+import { resolveSquadDeploy } from '@/features/planet-map/squad-commands';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
 function reportLocalBlock(commandType: string, planetId: string, message: string, focus?: { buildingType?: string; position?: Position }) {
@@ -85,6 +90,10 @@ interface UsePlanetInteractionsInput {
   catalog?: CatalogView;
   planet?: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+  /** C4：任务群列表（小队右键部署的归属解析；缺省时小队右键给出编组提示）。 */
+  taskForces?: WarTaskForceView[];
+  /** C4：小队部署命令提交后的回调（调用侧据此失效/重取任务群查询）。 */
+  onTaskForceDeployed?: () => void;
 }
 
 export interface PlanetInteractions {
@@ -99,7 +108,7 @@ export interface PlanetInteractions {
 /**
  * 地图交互命令中枢：planet 未加载完成时所有入口为空操作。
  */
-export function usePlanetInteractions({ catalog, planet, runtime }: UsePlanetInteractionsInput): PlanetInteractions {
+export function usePlanetInteractions({ catalog, planet, runtime, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
   const client = useApiClient();
   const session = useSessionSnapshot();
 
@@ -266,6 +275,37 @@ export function usePlanetInteractions({ catalog, planet, runtime }: UsePlanetInt
       }
       const store = usePlanetViewStore.getState();
       const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId);
+      const position: Position = { x: tile.x, y: tile.y, z: 0 };
+
+      // C4：小队右键部署——按所属任务群分组下达 task_force_deploy 到目标坐标。
+      if (selector.length === 0 && store.selectedSquads.length > 0) {
+        const resolution = resolveSquadDeploy(taskForces ?? [], store.selectedSquads);
+        if (resolution.unassignedSquadIds.length > 0) {
+          reportLocalBlock(
+            'task_force_deploy',
+            planet.planet_id,
+            `小队 ${resolution.unassignedSquadIds.join('、')} 未编入任务群：到战争页「战区」面板编组后再部署`,
+            { position },
+          );
+        }
+        resolution.plans.forEach((plan) => {
+          void submitPlanetCommand({
+            commandType: 'task_force_deploy',
+            planetId: planet.planet_id,
+            focus: { position },
+            execute: () => client.cmdTaskForceDeploy(plan.taskForceId, {
+              planetId: planet.planet_id,
+              position,
+            }),
+            fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
+              event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+              limit: 50,
+            }),
+          }).then(() => onTaskForceDeployed?.());
+        });
+        return resolution.plans.length > 0 || resolution.unassignedSquadIds.length > 0;
+      }
+
       if (selector.length === 0) {
         return false;
       }
@@ -277,7 +317,7 @@ export function usePlanetInteractions({ catalog, planet, runtime }: UsePlanetInt
       }
       return true;
     },
-    [planet, runtime, session.playerId, submitAttack, submitMove],
+    [client, onTaskForceDeployed, planet, runtime, session.playerId, submitAttack, submitMove, taskForces],
   );
 
   const orderNow = useCallback(

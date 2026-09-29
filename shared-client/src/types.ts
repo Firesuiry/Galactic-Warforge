@@ -884,8 +884,10 @@ export interface LogisticsStats {
 }
 
 export interface CombatStats {
+  units_killed: number;
   units_lost: number;
-  enemies_killed: number;
+  buildings_destroyed: number;
+  buildings_lost: number;
   threat_level: number;
   highest_threat: number;
 }

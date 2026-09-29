@@ -286,3 +286,256 @@
     font-size: 0.68rem;
   }
 }
+
+/* ============================================================
+ * C4 军事 UI 地图化：生产队列面板 / 蓝图卡片 / 单位卡片
+ * ============================================================ */
+
+.production-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.production-queue__lines,
+.production-queue__hubs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.production-line {
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.production-line__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.production-line__orders {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-order {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.production-order__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.production-order__meta {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.production-order__progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-3);
+  overflow: hidden;
+}
+
+.production-order__progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #6ee7b7);
+  transition: width 0.3s ease;
+}
+
+.deployment-hub {
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deployment-hub__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deployment-hub__payloads {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deployment-hub__payloads li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 蓝图/世界单位卡片选择网格 */
+.blueprint-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.blueprint-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-3);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.blueprint-pick:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.blueprint-pick--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(57, 230, 208, 0.18);
+}
+
+.blueprint-pick--disabled,
+.blueprint-pick:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.blueprint-pick__name {
+  font-weight: 600;
+}
+
+.blueprint-pick__meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.blueprint-pick__lock {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+/* 单位卡片 */
+.unit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-glow);
+  background:
+    linear-gradient(180deg, rgba(57, 230, 208, 0.06), transparent 40%),
+    var(--surface-2);
+}
+
+.unit-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.unit-card__title {
+  font-size: 0.98rem;
+}
+
+.unit-card__subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.unit-card__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.unit-card__stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.unit-card__stats dt {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.unit-card__stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.unit-card__stats--classes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.unit-card__tech {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.unit-card__tech--ok {
+  color: #6ee7b7;
+}
+
+.unit-card__tech--locked {
+  color: #ffb454;
+}
+
+.unit-card__counters {
+  margin: 0;
+}
+
+.unit-card__stats-pending {
+  margin: 0;
+}
+
+/* 高级入口折叠块 */
+.war-advanced {
+  border: 1px dashed var(--line-3);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.war-advanced > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.war-advanced[open] > summary {
+  margin-bottom: 12px;
+}

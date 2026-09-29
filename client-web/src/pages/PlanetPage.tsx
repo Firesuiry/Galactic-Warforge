@@ -29,6 +29,10 @@ import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
+import { PlanetTheaterControls } from "@/features/planet-map/PlanetTheaterControls";
+import { submitPlanetCommand } from "@/features/planet-commands/executor";
+import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from "@/features/planet-commands/store";
+import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { usePlanetRtsHotkeys } from "@/features/planet-map/use-planet-rts-hotkeys";
@@ -250,10 +254,62 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
+  // C4 军事 UI：小队右键部署（任务群归属）/战区拖拽划定/小队卡片的蓝图解析。
+  // SSE 失效由各自命令提交点负责，这里给低频兜底轮询。
+  const taskForcesQuery = useQuery({
+    queryKey: ["war-task-forces", session.serverUrl, session.playerId],
+    queryFn: () => client.fetchWarTaskForces(),
+    enabled: Boolean(planetId),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
+  });
+
+  const theatersQuery = useQuery({
+    queryKey: ["war-theaters", session.serverUrl, session.playerId],
+    queryFn: () => client.fetchWarTheaters(),
+    enabled: Boolean(planetId),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
+  });
+
+  const warBlueprintsQuery = useQuery({
+    queryKey: ["war-blueprints", session.serverUrl, session.playerId],
+    queryFn: () => client.fetchWarfareBlueprints(),
+    enabled: Boolean(planetId),
+  });
+
+  /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */
+  function handleDefineZone(zone: TheaterZoneGeometry) {
+    const mode = usePlanetViewStore.getState().interactionMode;
+    if (mode.kind !== "theater_zone" || !planetId) {
+      return;
+    }
+    void submitPlanetCommand({
+      commandType: "theater_define_zone",
+      planetId,
+      focus: { position: zone.position },
+      execute: () => client.cmdTheaterDefineZone(mode.theaterId, {
+        zoneType: mode.zoneType,
+        planetId,
+        position: zone.position,
+        radius: zone.radius,
+      }),
+      fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
+        event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+        limit: 50,
+      }),
+    }).then(() => {
+      void theatersQuery.refetch();
+    });
+    // 保持划定模式，便于连续画多个区域（右键/Esc 退出，对齐建造模式）
+  }
+
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
+    taskForces: taskForcesQuery.data?.task_forces,
+    onTaskForceDeployed: () => { void taskForcesQuery.refetch(); },
   });
 
   // RTS 快捷键体系（C1）：A/S/H/P/G + Ctrl/数字编队，2D/3D 共用（输入框聚焦自动忽略）
@@ -334,8 +390,8 @@ export function PlanetPage() {
   useEffect(() => {
     if (selected) {
       setDrawerOpen(true);
-      // 点选建筑/单位时同步切到"选中对象" Tab，让本地存储等详情立刻可见
-      if (selected.kind === "building" || selected.kind === "unit") {
+      // 点选建筑/单位/小队时同步切到"选中对象" Tab，让本地存储等详情立刻可见
+      if (selected.kind === "building" || selected.kind === "unit" || selected.kind === "squad") {
         setActiveDetailPanel("selection");
       }
     }
@@ -589,6 +645,7 @@ export function PlanetPage() {
         {activeDetailPanel === "selection" ? (
           <div id="planet-detail-panel-selection" role="tabpanel">
             <PlanetEntityPanel
+              blueprints={warBlueprintsQuery.data?.blueprints}
               catalog={catalog}
               fog={planet}
               networks={networks}
@@ -596,6 +653,7 @@ export function PlanetPage() {
               runtime={runtime}
               stats={stats}
               summary={summary}
+              taskForces={taskForcesQuery.data?.task_forces}
             />
           </div>
         ) : null}
@@ -685,10 +743,12 @@ export function PlanetPage() {
             captureRef.current = capture;
           }}
           onContextTile={interactions.contextTile}
+          onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
+          theaters={theatersQuery.data?.theaters}
         />}
         </Suspense>
         <div className="planet-view-switch" aria-label="地图视图">
@@ -776,6 +836,7 @@ export function PlanetPage() {
               setDrawerOpen(true);
             }}
             planet={planet}
+            squads={runtime.combat_squads}
           />
           <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} dimensional={isThree} />
         </div>
@@ -815,6 +876,13 @@ export function PlanetPage() {
           networks={networks}
           planet={planet}
           runtime={runtime}
+        />
+        {/* 战区划定（C4）：2D 平面战术视图拖拽矩形建 zone；3D 下浮层给切换提示 */}
+        <PlanetTheaterControls
+          dimensional={isThree}
+          onChanged={() => { void theatersQuery.refetch(); }}
+          planetId={planet.planet_id}
+          theaters={theatersQuery.data?.theaters ?? []}
         />
         {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出（共用 MapDrawer） */}
         <MapDrawer

@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { surfaceDistanceWithin } from '@shared/surface';
-import type { Building, CatalogView, CommandResponse } from '@shared/types';
+import type { Building, CatalogView, CombatSquad, CommandResponse } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
 import { sfx } from '@/engine/audio';
@@ -30,6 +30,8 @@ interface PlanetSelectionBarProps {
   /** "详情"入口：切到侧栏"选中对象"页签展示完整建筑详情。 */
   onShowDetail?: () => void;
   planet: PlanetRenderView;
+  /** C4：战斗小队列表（planet_runtime.combat_squads），小队选中面板的实体源。 */
+  squads?: CombatSquad[];
 }
 
 /** 建筑本地存储摘要，如 "硅矿 12 · 容量 12/20"；无存储数据时返回 null。 */
@@ -57,11 +59,12 @@ function formatBuildingStorageSummary(
   return parts.join(' · ');
 }
 
-export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSelectionBarProps) {
+export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: PlanetSelectionBarProps) {
   const client = useApiClient();
   const session = useSessionSnapshot();
   const selected = usePlanetViewStore((state) => state.selected);
   const selectedUnits = usePlanetViewStore((state) => state.selectedUnits);
+  const selectedSquads = usePlanetViewStore((state) => state.selectedSquads);
   const interactionMode = usePlanetViewStore((state) => state.interactionMode);
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
@@ -80,6 +83,35 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet }: PlanetSele
         limit: 50,
       }),
     });
+  }
+
+  // 小队选中面板（C4）：≥1 个战斗小队时显示编成与部署提示（右键地图直接部署）。
+  const aliveSquadSelection = selectedSquads
+    .map((id) => (squads ?? []).find((squad) => squad.id === id))
+    .filter((squad): squad is CombatSquad => Boolean(squad && squad.owner_id === session.playerId && squad.state !== 'destroyed'));
+  if (aliveSquadSelection.length > 0) {
+    const composition = aliveSquadSelection
+      .map((squad) => `${squad.blueprint_id}×${squad.count}`)
+      .join(' · ');
+    const totalHp = aliveSquadSelection.reduce((sum, squad) => sum + squad.hp, 0);
+    const totalMaxHp = aliveSquadSelection.reduce((sum, squad) => sum + squad.max_hp, 0);
+    return (
+      <div className="planet-selection-bar" data-testid="planet-selection-bar">
+        <Icon iconKey="soldier" size={20} />
+        <div className="planet-selection-bar__info">
+          <strong>已选 {aliveSquadSelection.length} 个小队</strong>
+          <span className="planet-selection-bar__meta">{composition}</span>
+          <span className="planet-selection-bar__meta">HP {totalHp}/{totalMaxHp} · 右键点地图把所属任务群部署到该点</span>
+        </div>
+        <div className="planet-selection-bar__actions">
+          {aliveSquadSelection.length === 1 && onShowDetail ? (
+            <button className="secondary-button" type="button" onClick={onShowDetail}>
+              小队卡片
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
   }
 
   // 多选面板（C1）：≥2 个单位时显示构成与批量指令入口

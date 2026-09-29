@@ -7,6 +7,7 @@ import type {
   AlertEntry,
   Building,
   CatalogView,
+  CombatSquad,
   FogMapView,
   GameEventDetail,
   PlanetNetworksView,
@@ -15,6 +16,8 @@ import type {
   PlayerStatsSnapshot,
   StateSummary,
   Unit,
+  WarBlueprintDetailView,
+  WarTaskForceView,
 } from "@shared/types";
 
 import {
@@ -74,6 +77,9 @@ import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
 import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 import { unitIsMoving, unitMoveDestination } from '@/features/planet-map/model';
+import { findSquadTaskForceId } from '@/features/planet-map/squad-commands';
+import { UnitCard } from '@/features/war/components/UnitCard';
+import { unitCardFromSquad } from '@/features/war/unit-card-model';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -455,6 +461,10 @@ interface PlanetEntityPanelProps {
   runtime?: PlanetRuntimeView;
   stats?: PlayerStatsSnapshot;
   summary?: StateSummary;
+  /** C4：玩家蓝图（小队卡片的名称/域解析；缺省退回公共蓝图目录）。 */
+  blueprints?: WarBlueprintDetailView[];
+  /** C4：任务群列表（小队卡片的所属任务群展示）。 */
+  taskForces?: WarTaskForceView[];
 }
 
 export function PlanetEntityPanel({
@@ -465,6 +475,8 @@ export function PlanetEntityPanel({
   runtime,
   stats,
   summary,
+  blueprints,
+  taskForces,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
   const { selected } = usePlanetViewStore(
@@ -473,7 +485,7 @@ export function PlanetEntityPanel({
     })),
   );
 
-  const entity = findSelectionEntity(planet, selected);
+  const entity = findSelectionEntity(planet, selected, runtime);
   const currentResearchId =
     Object.values(summary?.players ?? {}).find(
       (player) => player.tech?.current_research,
@@ -879,6 +891,58 @@ export function PlanetEntityPanel({
             </section>
           </>
         ) : null}
+      </div>
+    );
+  }
+
+  if (selected.kind === "squad") {
+    const squad = entity as CombatSquad | null;
+    if (!squad) {
+      return (
+        <div className="planet-panel-stack">
+          <section className="planet-side-section">
+            <div className="section-title">小队详情</div>
+            <p className="subtle-text">小队已不可见或已被摧毁，请重新选择。</p>
+          </section>
+        </div>
+      );
+    }
+    const blueprint = (blueprints ?? []).find((item) => item.id === squad.blueprint_id);
+    const publicEntry = (catalog?.warfare?.public_blueprints ?? []).find(
+      (item) => item.id === squad.blueprint_id || item.id === blueprint?.parent_blueprint_id,
+    );
+    const blueprintName = blueprint?.name ?? publicEntry?.name;
+    const domain = blueprint?.domain ?? publicEntry?.domain;
+    const taskForceId = findSquadTaskForceId(taskForces ?? [], squad.id);
+    const taskForce = (taskForces ?? []).find((item) => item.id === taskForceId);
+    return (
+      <div className="planet-panel-stack">
+        <section className="planet-side-section">
+          <div className="section-title">小队卡片</div>
+          <UnitCard card={unitCardFromSquad(squad, blueprintName, domain)} />
+        </section>
+        <section className="planet-side-section">
+          <div className="section-title">编队归属</div>
+          <dl className="planet-kv-list">
+            <div>
+              <dt>所属任务群</dt>
+              <dd>{taskForce ? `${taskForce.name || taskForce.id} (${taskForce.id})` : "未编组"}</dd>
+            </div>
+            <div>
+              <dt>补给状态</dt>
+              <dd>{squad.sustainment?.condition ?? "-"}</dd>
+            </div>
+            <div>
+              <dt>坐标</dt>
+              <dd>{formatPosition(squad.position)}</dd>
+            </div>
+          </dl>
+          {taskForce ? (
+            <p className="subtle-text">右键点地图可把所属任务群部署到目标点。</p>
+          ) : (
+            <p className="subtle-text">未编入任务群的小队无法接受部署：到战争页「战区」面板编组。</p>
+          )}
+        </section>
       </div>
     );
   }

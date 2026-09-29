@@ -169,10 +169,10 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 		}
 	}
 
-	// 阵亡小队清理（被单位/炮塔/黑雾击杀的在本 tick 已移除；此处兜底）。
+	// 阵亡小队清理（被单位/炮塔/黑雾击杀的在本 tick 已移除；此处兜底，无击杀方不计 kills）。
 	for id, squad := range ws.CombatRuntime.Squads {
 		if squad != nil && squad.HP <= 0 && squad.State != model.CombatSquadStateDestroyed {
-			events = append(events, destroySquad(ws, squad, "", "attrition")...)
+			events = append(events, destroySquad(ws, squad, "", "", "attrition")...)
 		}
 		_ = id
 	}
@@ -320,7 +320,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
 		}
 		if victim.HP <= 0 {
-			events = append(events, killUnit(ws, victim, squad.ID, "combat_squad")...)
+			events = append(events, killUnit(ws, victim, squad.ID, squad.OwnerID, "combat_squad")...)
 		}
 	case "combat_squad":
 		victim := target.squad
@@ -339,7 +339,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
 		}
 		if victim.HP <= 0 {
-			events = append(events, destroySquad(ws, victim, squad.ID, "combat_squad")...)
+			events = append(events, destroySquad(ws, victim, squad.ID, squad.OwnerID, "combat_squad")...)
 		}
 	case "building":
 		b := target.building
@@ -356,7 +356,7 @@ func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, ta
 			events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: scope, Payload: payload})
 		}
 		if b.HP <= 0 {
-			events = append(events, destroyBuildingCombat(ws, b, squad.ID, "combat_squad"))
+			events = append(events, destroyBuildingCombat(ws, b, squad.ID, squad.OwnerID, "combat_squad"))
 		}
 	}
 	return events

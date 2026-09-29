@@ -555,7 +555,7 @@ func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
 	}
 	ws.Players["p1"].SetPermissions([]string{"*"})
 	ws.Players["p1"].Stats.EnergyStats.Generation = 120
-	ws.Players["p1"].Stats.CombatStats.EnemiesKilled = 4
+	ws.Players["p1"].Stats.CombatStats.UnitsKilled = 4
 
 	// Enemy alert should be filtered out; keep newest own alerts within limit.
 	alerts := []*model.ProductionAlert{
@@ -618,7 +618,7 @@ func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
 	if briefing.Self.Tech.ResearchQueueLen != 1 {
 		t.Fatalf("expected research_queue_len=1, got %d", briefing.Self.Tech.ResearchQueueLen)
 	}
-	if briefing.EnergyStats.Generation != 120 || briefing.CombatStats.EnemiesKilled != 4 {
+	if briefing.EnergyStats.Generation != 120 || briefing.CombatStats.UnitsKilled != 4 {
 		t.Fatalf("unexpected stats projection: energy=%+v combat=%+v", briefing.EnergyStats, briefing.CombatStats)
 	}
 	if len(briefing.RecentAlerts) != 2 {
