@@ -4,6 +4,7 @@ import "strings"
 
 // ExecutorState captures executor capability parameters and its unit reference.
 type ExecutorState struct {
+	RespawnAtTick   int64   `json:"respawn_at_tick,omitempty"`
 	UnitID          string  `json:"unit_id"`
 	BuildEfficiency float64 `json:"build_efficiency"`
 	OperateRange    int     `json:"operate_range"`

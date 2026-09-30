@@ -174,3 +174,10 @@ export const sendRollback = client.sendRollback;
 export const sendSave = client.sendSave;
 export const setAuth = client.setAuth;
 export const setServerUrl = client.setServerUrl;
+
+export const cmdConfigureSorter = client.cmdConfigureSorter;
+
+export const cmdSetRallyPoint = client.cmdSetRallyPoint;
+export const cmdFormSquad = client.cmdFormSquad;
+export const cmdSquadOrder = client.cmdSquadOrder;
+export const cmdDissolveSquad = client.cmdDissolveSquad;

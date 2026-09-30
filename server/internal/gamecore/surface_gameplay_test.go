@@ -131,13 +131,13 @@ func TestSurfaceSorterAndIOAcrossRotatedSeam(t *testing.T) {
 	model.InitBuildingConveyor(belt)
 	belt.Conveyor.Output = forward
 	belt.Conveyor.Input = forward.Opposite()
-	id, ok := sorterFindConveyor(ws, sorter, model.ConveyorNorth, 1, false)
-	if !ok || id != belt.ID {
+	id, ok := sorterFindEndpoint(ws, sorter, model.ConveyorNorth, 1, false)
+	if !ok || id.id != belt.ID {
 		t.Fatal("sorter failed to insert across rotated seam")
 	}
 	belt.Conveyor.Output = forward.Opposite()
-	id, ok = sorterFindConveyor(ws, sorter, model.ConveyorNorth, 1, true)
-	if !ok || id != belt.ID {
+	id, ok = sorterFindEndpoint(ws, sorter, model.ConveyorNorth, 1, true)
+	if !ok || id.id != belt.ID {
 		t.Fatal("sorter failed to take across rotated seam")
 	}
 	port := model.IOPort{Offset: model.GridOffset{X: 0, Y: -1}}

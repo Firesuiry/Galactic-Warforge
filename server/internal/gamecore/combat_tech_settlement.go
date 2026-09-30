@@ -45,7 +45,6 @@ func settleCombatTech(ws *model.WorldState, spaceRuntime *model.SpaceRuntimeStat
 			}
 		}
 		settleCombatTechBuildings(ws, effectsByPlayer)
-		settleCombatTechSquads(ws, effFor)
 	}
 	settleCombatTechFleets(ws, spaceRuntime, effFor)
 }
@@ -59,51 +58,6 @@ func scaleCombatTechStat(base int, bonus float64) int {
 
 // settleCombatTechSquads 用蓝图运行时档案作基线。没有档案的小队不改。
 // 只抬 MaxHP 并夹紧，不回满已损失 HP；编制取 MaxHP/单员HP，避免减员后每 tick 缩编。
-func settleCombatTechSquads(ws *model.WorldState, effFor func(string) model.CombatTechEffect) {
-	if ws == nil || ws.CombatRuntime == nil {
-		return
-	}
-	for _, squad := range ws.CombatRuntime.Squads {
-		if squad == nil || squad.State == model.CombatSquadStateDestroyed {
-			continue
-		}
-		profile, ok := resolveWarBlueprintRuntimeProfile(ws, squad.OwnerID, squad.BlueprintID)
-		if !ok || profile.Squad == nil {
-			continue
-		}
-		eff := effFor(squad.OwnerID)
-		base := profile.Squad
-		if base.Weapon.Damage > 0 {
-			squad.Weapon.Damage = scaleCombatTechStat(base.Weapon.Damage, eff.DamageBonus)
-		}
-		if base.HP <= 0 {
-			continue
-		}
-		memberMax := scaleCombatTechStat(base.HP, eff.HPBonus)
-		if memberMax < 1 {
-			continue
-		}
-		roster := squad.Count
-		if roster < 1 {
-			roster = 1
-		}
-		per := squad.MemberMaxHP
-		if per <= 0 {
-			per = base.HP
-		}
-		if squad.MaxHP >= per {
-			if inferred := squad.MaxHP / per; inferred > roster {
-				roster = inferred
-			}
-		}
-		squad.MemberMaxHP = memberMax
-		squad.MaxHP = memberMax * roster
-		if squad.HP > squad.MaxHP {
-			squad.HP = squad.MaxHP
-		}
-	}
-}
-
 // settleCombatTechFleets 把同一套加成写到交火火力与结构上限。没有舰队单位档案的实体不改。
 func settleCombatTechFleets(ws *model.WorldState, spaceRuntime *model.SpaceRuntimeState, effFor func(string) model.CombatTechEffect) {
 	if spaceRuntime == nil {
@@ -173,9 +127,7 @@ func settleCombatTechBuildings(ws *model.WorldState, effectsByPlayer map[string]
 			if baseAttack > 0 {
 				b.Runtime.Functions.Combat.Attack = int(float64(baseAttack) * (1.0 + eff.DamageBonus))
 			}
-			if profile.Runtime.Functions.Combat.AltAmmoAttack > 0 {
-				b.Runtime.Functions.Combat.AltAmmoAttack = int(float64(profile.Runtime.Functions.Combat.AltAmmoAttack) * (1.0 + eff.DamageBonus))
-			}
+
 		}
 		if eff.HPBonus != 0 && profile.MaxHP > 0 {
 			b.MaxHP = int(float64(profile.MaxHP) * (1.0 + eff.HPBonus))

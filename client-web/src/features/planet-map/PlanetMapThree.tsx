@@ -3,6 +3,8 @@ import { useShallow } from 'zustand/react/shallow';
 import type { CatalogView, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { PLANET_LAYER_LABELS, getFogState, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
+import { traceBeltStroke } from './belt-stroke';
+import { isConveyorBeltBuilding } from './build-workflow';
 import { sameTypeOwnUnitsInView } from './rts-commands';
 import { usePlanetViewStore } from './store';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
@@ -50,6 +52,18 @@ export function PlanetMapThree(props: Props) {
   const [tilt, setTilt] = useState(0.65);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
+  const beltDrag = useRef<{ tile: TilePoint; placed: Set<string> } | null>(null);
+  function placeBelt(tile: TilePoint, direction?: 'north' | 'east' | 'south' | 'west') {
+    const store = usePlanetViewStore.getState();
+    const mode = store.interactionMode;
+    if (mode.kind !== 'build' || !beltDrag.current) return;
+    const key = tile.x + ':' + tile.y;
+    if (beltDrag.current.placed.has(key)) return;
+    if (latest.current.fog && !getFogState(latest.current.fog, tile.x, tile.y).visible) return;
+    beltDrag.current.placed.add(key);
+    if (direction) store.setInteractionMode({ ...mode, direction });
+    latest.current.onInteractTile?.(tile);
+  }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
@@ -206,6 +220,15 @@ export function PlanetMapThree(props: Props) {
 
   // Shift+左键框选：capture 阶段拦截，阻止球面旋转；抬起时按屏幕投影选中矩形内己方单位。
   function handleMarqueeDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button === 0 && interactionMode.kind === 'build' && isConveyorBeltBuilding(interactionMode.buildingType)) {
+      const tile = scene.current?.pickAt(event.clientX, event.clientY);
+      if (tile) {
+        beltDrag.current = { tile, placed: new Set() };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.stopPropagation(); event.preventDefault();
+      }
+      return;
+    }
     if (event.button !== 0 || !event.shiftKey || interactionMode.kind !== 'inspect') return;
     marqueeRef.current = { startX: event.clientX, startY: event.clientY, active: false };
     event.stopPropagation();
@@ -213,6 +236,20 @@ export function PlanetMapThree(props: Props) {
   }
 
   function handleMarqueeMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (beltDrag.current) {
+      event.stopPropagation();
+      const tile = scene.current?.pickAt(event.clientX, event.clientY);
+      if (tile) {
+        const segment = traceBeltStroke(beltDrag.current.tile, tile, props.planet.surface.face_size);
+        for (const part of segment.slice(0, -1)) placeBelt(part.tile, part.direction);
+        if (segment.length > 0) {
+          beltDrag.current.tile = tile;
+          const mode = usePlanetViewStore.getState().interactionMode;
+          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: segment[segment.length-1].direction });
+        }
+      }
+      return;
+    }
     const marquee = marqueeRef.current;
     if (!marquee) return;
     event.stopPropagation();
@@ -230,6 +267,13 @@ export function PlanetMapThree(props: Props) {
   }
 
   function handleMarqueeUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (beltDrag.current) {
+      event.stopPropagation();
+      placeBelt(beltDrag.current.tile);
+      beltDrag.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     const marquee = marqueeRef.current;
     marqueeRef.current = null;
     if (!marquee) return;
@@ -261,6 +305,7 @@ export function PlanetMapThree(props: Props) {
     onPointerDownCapture={handleMarqueeDown}
     onPointerMoveCapture={handleMarqueeMove}
     onPointerUpCapture={handleMarqueeUp}
+    onPointerCancelCapture={() => { beltDrag.current = null; }}
     onDoubleClick={event => {
       // 双击单位 = 选中屏幕内全部同类己方单位（投影可见即"同屏"）
       const tile = scene.current?.pickAt(event.clientX, event.clientY);

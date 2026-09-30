@@ -29,7 +29,7 @@ func main() {
 		Samples  []sample `json:"samples"`
 	}{FaceSize: g.Size}
 	for face := 0; face < 6; face++ {
-		for _, local := range []surface.Tile{{0, 0}, {7, 0}, {0, 7}, {7, 7}, {3, 3}} {
+		for _, local := range []surface.Tile{{X: 0, Y: 0}, {X: 7, Y: 0}, {X: 0, Y: 7}, {X: 7, Y: 7}, {X: 3, Y: 3}} {
 			t := surface.Tile{X: face%3*g.Size + local.X, Y: face/3*g.Size + local.Y}
 			s := sample{Tile: tile{t.X, t.Y}, Normal: g.Normal(t)}
 			for d := surface.North; d <= surface.West; d++ {

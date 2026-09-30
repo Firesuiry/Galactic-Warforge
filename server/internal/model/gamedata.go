@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
-	"sort"
 
 	"gopkg.in/yaml.v3"
+
+	"siliconworld/data"
 )
 
 // 游戏数据文件（默认内置于 server/data/，格式见 docs/dev/数据配置文件.md）。
@@ -62,6 +64,7 @@ type UnitsFile struct {
 
 // CombatFile 对应 combat.yaml。
 type CombatFile struct {
+	Ammunition []AmmunitionDefinition `yaml:"ammunition"`
 	// DamageCoefficients 武器类 -> 护甲类 -> 伤害系数，缺省 1.0。
 	DamageCoefficients map[WeaponType]map[ArmorClass]float64 `yaml:"damage_coefficients"`
 }
@@ -116,6 +119,10 @@ func LoadGameData(fsys fs.FS) (*GameData, error) {
 		if err := dec.Decode(f.out); err != nil {
 			return nil, fmt.Errorf("game data: parse %s: %w", f.name, err)
 		}
+		var extra any
+		if err := dec.Decode(&extra); err != io.EOF {
+			return nil, fmt.Errorf("game data: %s must contain exactly one YAML document", f.name)
+		}
 	}
 	if err := gd.Validate(); err != nil {
 		return nil, err
@@ -145,6 +152,10 @@ var knownSpecialUnlocks = map[string]struct{}{
 	"photon_mode":            {},
 	"warp_drive":             {},
 	"game_win":               {},
+	// 战争蓝图由 war.yaml 的 visible_tech_id 门控，这里仅让科技在面板上保持可见。
+	"blueprint_prototype": {},
+	"blueprint_corvette":  {},
+	"blueprint_destroyer": {},
 }
 
 func isItemCategory(c ItemCategory) bool {
@@ -365,13 +376,47 @@ func (gd *GameData) Validate() error {
 		if !IsWeaponType(u.WeaponClass) {
 			errs.addf(GameDataUnitsFile, "%s has invalid weapon_class %q", owner, u.WeaponClass)
 		}
-		if u.Cost.Minerals < 0 || u.Cost.Energy < 0 {
-			errs.addf(GameDataUnitsFile, "%s has negative cost", owner)
+		checkAmounts(GameDataUnitsFile, owner, u.Cost)
+		if u.AmmoCapacity < 0 || u.MinAttackRange < 0 || u.MinAttackRange > u.AttackRange || u.SupplyRadius < 0 || u.SupplyRate < 0 || u.CargoCapacity < 0 {
+			errs.addf(GameDataUnitsFile, "%s invalid combat or supply capacity", owner)
+		}
+		if u.AmmoClass != "" {
+			found := false
+			for _, a := range gd.Combat.Ammunition {
+				if a.Class == u.AmmoClass {
+					found = true
+				}
+			}
+			if !found || u.AmmoCapacity <= 0 {
+				errs.addf(GameDataUnitsFile, "%s invalid ammunition class/capacity", owner)
+			}
+		}
+		if u.UnlockTech != "" && !hasTech(u.UnlockTech) {
+			errs.addf(GameDataUnitsFile, "%s unknown unlock tech %s", owner, u.UnlockTech)
+		}
+		if u.Public && u.ProductionMode == UnitProductionModeWorldProduce {
+			if _, ok := buildingIDs[u.Producer]; !ok || u.ProductionTicks <= 0 || len(u.Cost) == 0 {
+				errs.addf(GameDataUnitsFile, "%s needs a producer, material cost and positive production_ticks", owner)
+			}
 		}
 		if u.Public {
 			if !isUnitDomain(u.Domain) || !isUnitRuntimeClass(u.RuntimeClass) || !isUnitProductionMode(u.ProductionMode) {
 				errs.addf(GameDataUnitsFile, "%s is public but has invalid domain/runtime_class/production_mode", owner)
 			}
+		}
+	}
+	// 代码逻辑直接引用的单位类型必须有定义；执行体还要有 mecha 段。
+	for _, required := range []UnitType{UnitTypeWorker, UnitTypeSoldier, UnitTypeMecha, UnitTypeExecutor, UnitTypeDarkFog} {
+		if _, ok := unitIDs[string(required)]; !ok {
+			errs.addf(GameDataUnitsFile, "required unit %q is missing", required)
+		}
+	}
+	for _, u := range gd.Units.Units {
+		if u.Mecha != nil && (u.Mecha.MaxEnergy <= 0 || u.Mecha.InventoryCapacity <= 0 || u.Mecha.RespawnTicks <= 0) {
+			errs.addf(GameDataUnitsFile, "unit %s mecha needs positive max_energy and inventory_capacity", u.ID)
+		}
+		if u.ID == UnitTypeExecutor && u.Mecha == nil {
+			errs.addf(GameDataUnitsFile, "unit executor must define mecha")
 		}
 	}
 	for _, id := range gd.Units.LogisticsUnits {
@@ -463,11 +508,7 @@ func (gd *GameData) Validate() error {
 		if b.Runtime == nil {
 			continue
 		}
-		rt := *b.Runtime
-		rt.ID = b.ID
-		if rt.Params.Footprint == (Footprint{}) {
-			rt.Params.Footprint = b.Footprint
-		}
+		rt := runtimeDefinitionFromSpec(b)
 		if err := validateBuildingRuntimeDefinition(rt, b.BuildingDefinition, hasItem); err != nil {
 			errs.addf(GameDataBuildingsFile, "%v", err)
 		}
@@ -483,6 +524,13 @@ func (gd *GameData) Validate() error {
 		}
 	}
 
+	seenAmmo := map[string]bool{}
+	for _, a := range gd.Combat.Ammunition {
+		if !hasItem(a.ItemID) || seenAmmo[a.ItemID] || a.Tier <= 0 || a.DamageMultiplier < 1 || (a.Class != "bullet" && a.Class != "shell" && a.Class != "missile") {
+			errs.addf(GameDataCombatFile, "invalid ammunition %s", a.ItemID)
+		}
+		seenAmmo[a.ItemID] = true
+	}
 	for weapon, row := range gd.Combat.DamageCoefficients {
 		if !IsWeaponType(weapon) {
 			errs.addf(GameDataCombatFile, "damage_coefficients has invalid weapon class %q", weapon)
@@ -497,12 +545,12 @@ func (gd *GameData) Validate() error {
 		}
 	}
 
-	gd.validateWar(errs, hasTech, func(id string) bool { _, ok := recipes[id]; return ok })
+	gd.validateWar(errs, hasTech)
 
 	return errs.err()
 }
 
-func (gd *GameData) validateWar(errs *dataErrors, hasTech, hasRecipe func(string) bool) {
+func (gd *GameData) validateWar(errs *dataErrors, hasTech func(string) bool) {
 	const file = GameDataWarFile
 	checkDomains := func(owner string, domains []UnitDomain) {
 		for _, d := range domains {
@@ -596,11 +644,6 @@ func (gd *GameData) validateWar(errs *dataErrors, hasTech, hasRecipe func(string
 				}
 			}
 		}
-		for _, recipeID := range bp.ProducerRecipes {
-			if !hasRecipe(recipeID) {
-				errs.addf(file, "%s producer recipe %q not found", owner, recipeID)
-			}
-		}
 		for _, stack := range []*WarStackRuntimeProfile{bp.Runtime.Squad, bp.Runtime.FleetUnit} {
 			if stack == nil {
 				continue
@@ -612,12 +655,123 @@ func (gd *GameData) validateWar(errs *dataErrors, hasTech, hasRecipe func(string
 	}
 }
 
-// sortedKeys 返回 map 的有序键（用于稳定输出）。
-func sortedKeys[K ~string, V any](m map[K]V) []K {
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// 已安装的游戏数据注册表。只在启动阶段（init / InstallGameData）写入，之后只读。
+var (
+	itemCatalog          map[string]ItemDefinition
+	containerByForm      map[ResourceForm]string
+	recipeCatalog        map[string]RecipeDefinition
+	techDefinitions      []TechDefinition // techs.yaml 原样（未剔除 pending 解锁）
+	pendingRecipeUnlocks map[string]string
+	unitDefinitions      map[UnitType]UnitDefinition
+	unitOrder            []UnitType
+	damageCoefficients   map[WeaponType]map[ArmorClass]float64
+
+	warBaseFrameEntries         []WarBaseFrameCatalogEntry
+	warBaseHullEntries          []WarBaseHullCatalogEntry
+	warComponentEntries         []WarComponentCatalogEntry
+	warPublicBlueprintEntries   []WarPublicBlueprintCatalogEntry
+	warBlueprintRuntimeProfiles map[string]WarBlueprintRuntimeProfile
+)
+
+func init() {
+	gd, err := LoadGameData(data.FS)
+	if err != nil {
+		panic(fmt.Errorf("embedded game data: %w", err))
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	return keys
+	InstallGameData(gd)
+}
+
+// InstallGameData 用一套已通过 Validate 的数据替换全部注册表。
+// 只应在对局开始前调用（启动时加载 game_data_dir）。
+func InstallGameData(gd *GameData) {
+	ammunitionCatalog = append([]AmmunitionDefinition(nil), gd.Combat.Ammunition...)
+	itemCatalog = make(map[string]ItemDefinition, len(gd.Items.Items))
+	for _, it := range gd.Items.Items {
+		itemCatalog[it.ID] = it
+	}
+	containerByForm = make(map[ResourceForm]string, len(gd.Items.FormContainers))
+	for form, id := range gd.Items.FormContainers {
+		containerByForm[form] = id
+	}
+
+	recipeCatalog = make(map[string]RecipeDefinition, len(gd.Recipes.Recipes))
+	for _, r := range gd.Recipes.Recipes {
+		recipeCatalog[r.ID] = r
+	}
+
+	pendingRecipeUnlocks = make(map[string]string, len(gd.Techs.PendingRecipeUnlocks))
+	for id, reason := range gd.Techs.PendingRecipeUnlocks {
+		pendingRecipeUnlocks[id] = reason
+	}
+	techDefinitions = append([]TechDefinition(nil), gd.Techs.Techs...)
+	techs := make(map[string]*TechDefinition, len(techDefinitions))
+	for _, def := range techDefinitions {
+		def.Unlocks = normalizeTechUnlocks(def.Unlocks)
+		techs[def.ID] = &def
+	}
+	techCatalog = &TechCatalog{techs: techs}
+
+	buildingDefs := make([]BuildingDefinition, 0, len(gd.Buildings.Buildings))
+	runtimes := make(map[BuildingType]BuildingRuntimeDefinition, len(gd.Buildings.Buildings))
+	for _, spec := range gd.Buildings.Buildings {
+		buildingDefs = append(buildingDefs, spec.BuildingDefinition)
+		runtimes[spec.ID] = runtimeDefinitionFromSpec(spec)
+	}
+	buildingCatalogMu.Lock()
+	buildingCatalog = make(map[BuildingType]BuildingDefinition, len(buildingDefs))
+	for _, def := range buildingDefs {
+		buildingCatalog[def.ID] = def
+	}
+	buildingCatalogMu.Unlock()
+	buildingRuntimeMu.Lock()
+	buildingRuntime = runtimes
+	buildingRuntimeMu.Unlock()
+
+	unitDefinitions = make(map[UnitType]UnitDefinition, len(gd.Units.Units))
+	unitOrder = unitOrder[:0]
+	for _, u := range gd.Units.Units {
+		unitDefinitions[u.ID] = u
+		unitOrder = append(unitOrder, u.ID)
+	}
+
+	damageCoefficients = make(map[WeaponType]map[ArmorClass]float64, len(gd.Combat.DamageCoefficients))
+	for weapon, row := range gd.Combat.DamageCoefficients {
+		cp := make(map[ArmorClass]float64, len(row))
+		for armor, coef := range row {
+			cp[armor] = coef
+		}
+		damageCoefficients[weapon] = cp
+	}
+
+	warBaseFrameEntries = cloneWarBaseFrameEntries(gd.War.BaseFrames)
+	warBaseHullEntries = cloneWarBaseHullEntries(gd.War.BaseHulls)
+	warComponentEntries = cloneWarComponentEntries(gd.War.Components)
+	warPublicBlueprintEntries = make([]WarPublicBlueprintCatalogEntry, 0, len(gd.War.PublicBlueprints))
+	warBlueprintRuntimeProfiles = make(map[string]WarBlueprintRuntimeProfile, len(gd.War.PublicBlueprints))
+	for _, bp := range gd.War.PublicBlueprints {
+		entry := bp.WarPublicBlueprintCatalogEntry
+		entry.QueryScopes = append([]string(nil), entry.QueryScopes...)
+		entry.Commands = append([]string(nil), entry.Commands...)
+		entry.Components = append([]WarBlueprintComponentSlot(nil), entry.Components...)
+		warPublicBlueprintEntries = append(warPublicBlueprintEntries, entry)
+		warBlueprintRuntimeProfiles[bp.ID] = cloneWarBlueprintRuntimeProfile(bp.Runtime)
+	}
+
+	resetCatalogDerivations()
+}
+
+// runtimeDefinitionFromSpec 取条目的运行时定义；未配置 runtime 的建筑只有占地。
+func runtimeDefinitionFromSpec(spec BuildingSpec) BuildingRuntimeDefinition {
+	def := BuildingRuntimeDefinition{Params: BuildingRuntimeParams{Footprint: spec.Footprint}}
+	if spec.Runtime != nil {
+		def = BuildingRuntimeDefinition{
+			Params:    spec.Runtime.Params.clone(),
+			Functions: spec.Runtime.Functions.clone(),
+		}
+		if def.Params.Footprint == (Footprint{}) {
+			def.Params.Footprint = spec.Footprint
+		}
+	}
+	def.ID = spec.ID
+	return def
 }

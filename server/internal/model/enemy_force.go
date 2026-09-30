@@ -27,12 +27,12 @@ const (
 // EnemyForce 单个敌对势力
 type EnemyForce struct {
 	ID             string         `json:"id"`
-	Type           EnemyForceType `json:"type"`          // 势力类型
-	Position       Position       `json:"position"`      // 当前位置
-	Strength       int            `json:"strength"`      // 实力值
-	SpreadRadius   float64        `json:"spread_radius"` // 扩散半径
-	SpawnTick      int64          `json:"spawn_tick"`    // 生成时间
-	Level          int            `json:"level,omitempty"`          // 巢穴等级（生成时固化，E4：守军编制/掉落放大/威胁回落）
+	Type           EnemyForceType `json:"type"`                       // 势力类型
+	Position       Position       `json:"position"`                   // 当前位置
+	Strength       int            `json:"strength"`                   // 实力值
+	SpreadRadius   float64        `json:"spread_radius"`              // 扩散半径
+	SpawnTick      int64          `json:"spawn_tick"`                 // 生成时间
+	Level          int            `json:"level,omitempty"`            // 巢穴等级（生成时固化，E4：守军编制/掉落放大/威胁回落）
 	LastAttackTick int64          `json:"last_attack_tick,omitempty"` // 上次反击 tick（静态黑雾反击节流）
 	LastWaveTick   int64          `json:"last_wave_tick,omitempty"`   // 上次孵化波次 tick（巢穴）
 }

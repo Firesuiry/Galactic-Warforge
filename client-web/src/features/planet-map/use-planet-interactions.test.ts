@@ -137,7 +137,7 @@ describe('usePlanetInteractions', () => {
     expect(mockClient.cmdBuild).toHaveBeenCalledWith(
       { x: 4, y: 4, z: 0 },
       'wind_turbine',
-      { direction: 'auto' },
+      { direction: 'auto', rotation: 0, autoApproach: true, planetId: 'planet-1-1' },
     );
     expect(submitMock).toHaveBeenCalled();
     // 建造模式保持，便于连续放置

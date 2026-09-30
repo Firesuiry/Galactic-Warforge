@@ -4,6 +4,8 @@ package model
 type CommandType string
 
 const (
+	CmdSetRallyPoint             CommandType = "set_rally_point"
+	CmdConfigureSorter           CommandType = "configure_sorter"
 	CmdConfigureTrafficMonitor   CommandType = "configure_traffic_monitor"
 	CmdConfigureSplitter         CommandType = "configure_splitter"
 	CmdBuild                     CommandType = "build"
@@ -38,6 +40,9 @@ const (
 	CmdLaunchRocket              CommandType = "launch_rocket"
 	CmdSetRayReceiverMode        CommandType = "set_ray_receiver_mode"
 	CmdSetEnergyExchangerMode    CommandType = "set_energy_exchanger_mode"
+	CmdSquadOrder                CommandType = "squad_order"
+	CmdDissolveSquad             CommandType = "dissolve_squad"
+	CmdFormSquad                 CommandType = "form_squad"
 	CmdDeploySquad               CommandType = "deploy_squad"
 	CmdCommissionFleet           CommandType = "commission_fleet"
 	CmdFleetAssign               CommandType = "fleet_assign"
@@ -67,11 +72,11 @@ const (
 
 // CommandTarget specifies what the command targets
 type CommandTarget struct {
-	Layer    string    `json:"layer"`
-	GalaxyID string    `json:"galaxy_id,omitempty"`
-	SystemID string    `json:"system_id,omitempty"`
-	PlanetID string    `json:"planet_id,omitempty"`
-	EntityID string    `json:"entity_id,omitempty"`
+	Layer    string `json:"layer"`
+	GalaxyID string `json:"galaxy_id,omitempty"`
+	SystemID string `json:"system_id,omitempty"`
+	PlanetID string `json:"planet_id,omitempty"`
+	EntityID string `json:"entity_id,omitempty"`
 	// EntityIDs 批量指令（框选多单位）的目标实体集合；与 EntityID 二选一或并用，
 	// 执行器按稳定顺序逐个处理。
 	EntityIDs []string  `json:"entity_ids,omitempty"`
@@ -153,6 +158,8 @@ type QueuedRequest struct {
 // Used by permission surfaces such as GET /state/agent-briefing.
 func AllCommandTypes() []CommandType {
 	return []CommandType{
+		CmdSetRallyPoint,
+		CmdConfigureSorter,
 		CmdConfigureTrafficMonitor,
 		CmdConfigureSplitter,
 		CmdBuild,
@@ -185,7 +192,7 @@ func AllCommandTypes() []CommandType {
 		CmdLaunchRocket,
 		CmdSetRayReceiverMode,
 		CmdSetEnergyExchangerMode,
-		CmdDeploySquad,
+		CmdDeploySquad, CmdFormSquad, CmdSquadOrder, CmdDissolveSquad,
 		CmdCommissionFleet,
 		CmdFleetAssign,
 		CmdFleetAttack,

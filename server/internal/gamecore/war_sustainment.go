@@ -18,7 +18,6 @@ func settleWarSustainment(worlds map[string]*model.WorldState, maps *mapmodel.Un
 		return
 	}
 
-	nodesByPlayerPlanet := make(map[string]map[string][]*warSupplyNode)
 	nodesByPlayerSystem := make(map[string]map[string][]*warSupplyNode)
 
 	for _, ws := range worlds {
@@ -31,39 +30,11 @@ func settleWarSustainment(worlds map[string]*model.WorldState, maps *mapmodel.Un
 			if len(nodes) == 0 {
 				continue
 			}
-			if nodesByPlayerPlanet[playerID] == nil {
-				nodesByPlayerPlanet[playerID] = make(map[string][]*warSupplyNode)
-			}
-			nodesByPlayerPlanet[playerID][ws.PlanetID] = append(nodesByPlayerPlanet[playerID][ws.PlanetID], nodes...)
 
 			if nodesByPlayerSystem[playerID] == nil {
 				nodesByPlayerSystem[playerID] = make(map[string][]*warSupplyNode)
 			}
 			nodesByPlayerSystem[playerID][systemID] = append(nodesByPlayerSystem[playerID][systemID], nodes...)
-		}
-	}
-
-	for _, ws := range worlds {
-		if ws == nil || ws.CombatRuntime == nil {
-			continue
-		}
-		for _, squad := range ws.CombatRuntime.Squads {
-			if squad == nil || squad.State == model.CombatSquadStateDestroyed {
-				continue
-			}
-			nodes := nodesByPlayerPlanet[squad.OwnerID][ws.PlanetID]
-			activeCombat := squad.State == model.CombatSquadStateEngaging || squad.TargetEnemyID != ""
-			hasFrontlineSupport := len(nodes) > 0
-			resupplyUnit(&squad.Sustainment, nodes, currentTick)
-			if activeCombat {
-				consumeUnitStock(&squad.Sustainment, model.WarSupplyStock{Fuel: 1}, currentTick)
-			}
-			repairSquad(squad, hasFrontlineSupport, activeCombat)
-			updateSustainmentStatus(&squad.Sustainment)
-			if squad.Sustainment.RetreatRecommended {
-				squad.State = model.CombatSquadStateIdle
-				squad.TargetEnemyID = ""
-			}
 		}
 	}
 
@@ -265,21 +236,6 @@ func resupplyUnit(state *model.WarSustainmentState, nodes []*warSupplyNode, curr
 			break
 		}
 	}
-}
-
-func repairSquad(squad *model.CombatSquad, hasFrontlineSupport, activeCombat bool) {
-	if squad == nil {
-		return
-	}
-	repairUnit(&squad.Sustainment, squad.MaxHP-squad.HP, squad.Shield.MaxLevel-squad.Shield.Level, hasFrontlineSupport, activeCombat, func(hp int, shield float64) {
-		squad.HP = warMinInt(squad.MaxHP, squad.HP+hp)
-		if shield > 0 {
-			squad.Shield.Level += shield
-			if squad.Shield.Level > squad.Shield.MaxLevel {
-				squad.Shield.Level = squad.Shield.MaxLevel
-			}
-		}
-	})
 }
 
 func repairFleet(fleet *model.SpaceFleet, hasFrontlineSupport, activeCombat bool) {

@@ -82,17 +82,17 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 		ReadyPayloads: map[string]int{model.ItemPrototype: 2, model.ItemCorvette: 1},
 	}
 
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdDeploySquad,
-		Payload: map[string]any{
-			"building_id":  base.ID,
-			"blueprint_id": "prototype",
-			"count":        1,
-			"planet_id":    ws.PlanetID,
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("deploy squad failed: %s (%s)", res.Code, res.Message)
+	// 地面部队：世界单位自带血量与弹药，编队只是命令容器。
+	rifleman := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 7, Y: 7})
+	rifleman.Ammo, rifleman.AmmoCapacity = 3, max(rifleman.AmmoCapacity, 3)
+	deployRes := issueInternalCommand(core, "p1", model.Command{
+		Type:    model.CmdDeploySquad,
+		Payload: map[string]any{"member_ids": []string{rifleman.ID}, "name": "t116"},
+	})
+	if deployRes.Code != model.CodeOK {
+		t.Fatalf("deploy squad failed: %s (%s)", deployRes.Code, deployRes.Message)
 	}
+	squadID := deployRes.Message
 
 	if res := issueInternalCommand(core, "p1", model.Command{
 		Type: model.CmdCommissionFleet,
@@ -107,11 +107,10 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 		t.Fatalf("commission fleet failed: %s (%s)", res.Code, res.Message)
 	}
 
-	squad := ws.CombatRuntime.Squads["squad-1"]
-	if squad == nil {
-		t.Fatalf("expected deployed squad, got %+v", ws.CombatRuntime)
+	squad := ws.CombatRuntime.Squads[squadID]
+	if squad == nil || len(squad.MemberIDs) != 1 || squad.MemberIDs[0] != rifleman.ID {
+		t.Fatalf("expected deployed member squad, got %+v", ws.CombatRuntime)
 	}
-	squad.HP -= 12
 
 	playerSystem := core.SpaceRuntime().PlayerSystem("p1", systemID)
 	if playerSystem == nil || playerSystem.Fleets["fleet-t116"] == nil {
@@ -134,7 +133,7 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 		Payload: map[string]any{
 			"task_force_id": "tf-t116",
 			"member_kind":   string(model.WarTaskForceMemberKindSquad),
-			"member_ids":    []string{"squad-1"},
+			"member_ids":    []string{squadID},
 		},
 	}); res.Code != model.CodeOK {
 		t.Fatalf("task_force_assign squad failed: %s (%s)", res.Code, res.Message)
@@ -150,10 +149,9 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 		t.Fatalf("task_force_assign fleet failed: %s (%s)", res.Code, res.Message)
 	}
 
-	beforeRepairHP := squad.HP
 	core.processTick()
-	if squad.HP <= beforeRepairHP {
-		t.Fatalf("expected damaged squad to repair with available sustainment, before=%d after=%d", beforeRepairHP, squad.HP)
+	if ws.Units[rifleman.ID] == nil {
+		t.Fatal("squad member must survive the tick")
 	}
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
@@ -197,12 +195,11 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 		t.Fatalf("expected one combat squad in planet runtime, got %+v", planetBody)
 	}
 	squadBody := squads[0].(map[string]any)
-	sustainment, ok := squadBody["sustainment"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected squad sustainment query payload, got %+v", squadBody)
+	if members, ok := squadBody["member_ids"].([]any); !ok || len(members) != 1 || members[0] != rifleman.ID {
+		t.Fatalf("expected squad container to expose member_ids only, got %+v", squadBody)
 	}
-	if _, ok := sustainment["repair"].(map[string]any); !ok {
-		t.Fatalf("expected squad repair state nested in sustainment, got %+v", sustainment)
+	if sus, _ := squadBody["sustainment"].(map[string]any); len(sus["current"].(map[string]any)) != 0 {
+		t.Fatalf("member squad must not carry a private supply pool, got %+v", sus)
 	}
 
 	fleetView, ok := ql.Fleet("p1", "fleet-t116", core.SpaceRuntime())

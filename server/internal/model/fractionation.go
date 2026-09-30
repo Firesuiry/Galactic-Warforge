@@ -59,7 +59,7 @@ func (s *FractionationState) Validate() error {
 	if s == nil {
 		return fmt.Errorf("fractionation state required")
 	}
-	if s.BufferCapacity != FractionationBufferCapacity || s.Throughput != FractionationThroughput || s.InputDirection != ConveyorWest || s.HydrogenDirection != ConveyorEast || s.DeuteriumDirection != ConveyorSouth {
+	if s.BufferCapacity != FractionationBufferCapacity || s.Throughput != FractionationThroughput || !s.InputDirection.Valid() || s.HydrogenDirection != s.InputDirection.Opposite() || s.DeuteriumDirection != RotateDirection(s.HydrogenDirection, PlanRotation90) {
 		return fmt.Errorf("invalid fractionation transport configuration")
 	}
 	if s.RNGState == 0 || s.Attempts < 0 || s.Converted < 0 || s.ReturnedHydrogen < 0 || s.Converted+s.ReturnedHydrogen != s.Attempts || s.LastProcessTick < 0 {

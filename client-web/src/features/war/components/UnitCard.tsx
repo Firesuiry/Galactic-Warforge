@@ -1,3 +1,4 @@
+import { AmmunitionBar } from "./AmmunitionBar";
 /**
  * 单位卡片（C4）：蓝图/世界单位/单位/小队的统一展示卡。
  * 纯展示组件——数据映射全部在 unit-card-model.ts（单一出处），这里只渲染。
@@ -31,6 +32,7 @@ export function UnitCard({ card, compact = false }: UnitCardProps) {
       </header>
       {card.subtitle ? <p className="unit-card__subtitle">{card.subtitle}</p> : null}
 
+      {card.ammunition?<AmmunitionBar {...card.ammunition}/>:null}
       {card.stats.length > 0 ? (
         <dl className="unit-card__stats">
           {card.stats.map((entry) => (

@@ -320,9 +320,10 @@ export class PlanetThreeScene {
         occupiedTiles.add(`${tile.x}:${tile.y}`);
       }
       if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
-      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position, footprint, building.conveyor?.output, host?.position, placementFootprint], () => {
+      retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position, footprint, building.rotation, building.conveyor?.output, host?.position, placementFootprint], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
         this.place(group, placement.position, 'buildings');
+        group.rotateY(-Number(building.rotation ?? 0) * Math.PI / 180);
         const center = new THREE.Vector3();
         for(let y=0;y<placementFootprint.height;y++) for(let x=0;x<placementFootprint.width;x++) {
           const cell=surfaceOffset(placement.position,x,y,planet.surface.face_size);
@@ -602,6 +603,29 @@ export class PlanetThreeScene {
       offsets.forEach(([x, y]) => points.push(tileNormal({ x: tile.x + x, y: tile.y + y }, this.data!.planet.surface.face_size, surfaceFace(tile, this.data!.planet.surface.face_size)).multiplyScalar(RADIUS + this.tileScale() * 0.06)));
       this.marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, depthTest: true })));
     };
+    const supplyRing = (position: Position, radius: number, color: string) => {
+      const center = this.normal(position.x, position.y);
+      const { east, south } = tileFrame(position, this.data!.planet.surface.face_size);
+      const angle = radius * this.tileScale() / RADIUS;
+      const points = Array.from({ length: 65 }, (_, i) => {
+        const a = i * Math.PI / 32;
+        return center.clone().multiplyScalar(Math.cos(angle))
+          .addScaledVector(east, Math.sin(angle) * Math.cos(a))
+          .addScaledVector(south, Math.sin(angle) * Math.sin(a))
+          .normalize().multiplyScalar(RADIUS + this.tileScale() * .09);
+      });
+      this.marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, transparent: true, opacity: .55 })));
+    };
+    if (this.interaction.layers.logistics) {
+      for (const b of Object.values(this.data.planet.buildings ?? {})) {
+        const radius = this.data.catalog?.buildings?.find(d => d.id === b.type)?.supply_radius ?? 0;
+        if (b.owner_id === this.data.playerId && b.hp > 0 && radius > 0) supplyRing(b.position, radius, b.runtime?.state === 'running' ? '#72dfad' : '#9d6770');
+      }
+      for (const u of Object.values(this.data.planet.units ?? {})) {
+        const radius = this.data.catalog?.world_units?.find(d => d.id === u.type)?.supply_radius ?? 0;
+        if (u.owner_id === this.data.playerId && u.hp > 0 && u.type === 'supply_truck' && radius > 0) supplyRing(u.position, radius, '#7dc5f4');
+      }
+    }
     const selectedPosition = resolveSelectionPosition(this.data.planet, this.interaction.selected);
     if (this.interaction.layers.selection && selectedPosition) add(selectedPosition, '#fff1a8');
     // 多选单位：每个单位一个选中标记（主选中环之外追加）
@@ -615,7 +639,7 @@ export class PlanetThreeScene {
     if (this.interaction.hoveredTile) {
       const tile = this.interaction.hoveredTile;
       if (this.interaction.interactionMode.kind === 'build') {
-        const assessment = assessBuildTiles(this.data.catalog, this.interaction.interactionMode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId);
+        const assessment = assessBuildTiles(this.data.catalog, this.interaction.interactionMode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId, this.interaction.interactionMode.rotation);
         const footprint = assessment?.footprint ?? { width: 1, height: 1 };
         for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
           const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);

@@ -244,58 +244,6 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 
 	industry := player.EnsureWarIndustry()
 
-	if squad := ws.CombatRuntime.Squads[unitID]; squad != nil {
-		if squad.OwnerID != playerID {
-			res.Code = model.CodeNotOwner
-			res.Message = "cannot refit squad owned by another player"
-			return res, nil
-		}
-		sourceBlueprint, _, err := resolveIndustryBlueprint(player, squad.BlueprintID)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
-		}
-		if err := validateRefitBlueprintChange(sourceBlueprint, targetBlueprint); err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
-		}
-		cost := deriveRefitCost(sourceBlueprint, targetBlueprint, squad.Count)
-		if !player.HasItems(cost) {
-			res.Code = model.CodeInsufficientResource
-			res.Message = "insufficient inventory for refit order"
-			return res, nil
-		}
-		player.DeductItems(cost)
-		delete(ws.CombatRuntime.Squads, unitID)
-
-		order := &model.WarRefitOrder{
-			ID:                nextWarIndustryID(industry, "war-refit"),
-			BuildingID:        building.ID,
-			UnitID:            squad.ID,
-			UnitKind:          model.WarRefitUnitKindSquad,
-			SourcePlanetID:    squad.PlanetID,
-			SourceBuildingID:  squad.SourceBuildingID,
-			SourceBlueprintID: squad.BlueprintID,
-			TargetBlueprintID: targetBlueprint.ID,
-			Count:             squad.Count,
-			Status:            model.WarOrderStatusInProgress,
-			TotalTicks:        deriveRefitTicks(building, sourceBlueprint, targetBlueprint),
-			CreatedTick:       ws.Tick,
-			UpdatedTick:       ws.Tick,
-			QueueIndex:        industry.NextOrderSeq,
-			RepairTier:        model.WarRepairTierOverhaul,
-		}
-		order.RemainingTicks = order.TotalTicks
-		industry.RefitOrders[order.ID] = order
-
-		res.Status = model.StatusExecuted
-		res.Code = model.CodeOK
-		res.Message = fmt.Sprintf("refit order %s started for squad %s", order.ID, squad.ID)
-		return res, nil
-	}
-
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, unitID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
@@ -464,27 +412,6 @@ func settleWarIndustry(gc *GameCore, ws *model.WorldState, spaceRuntime *model.S
 				continue
 			}
 			switch order.UnitKind {
-			case model.WarRefitUnitKindSquad:
-				targetWorld := ws
-				if gc != nil && order.SourcePlanetID != "" {
-					if planetWorld := gc.WorldForPlanet(order.SourcePlanetID); planetWorld != nil {
-						targetWorld = planetWorld
-					}
-				}
-				if targetWorld.CombatRuntime == nil {
-					targetWorld.CombatRuntime = model.NewCombatRuntimeState()
-				}
-				squad := newCombatSquad(targetWorld, playerID, order.UnitID, order.SourcePlanetID, order.SourceBuildingID, targetBlueprint.ID, order.Count)
-				targetWorld.CombatRuntime.Squads[squad.ID] = squad
-				events = append(events, &model.GameEvent{
-					EventType:       model.EvtSquadDeployed,
-					VisibilityScope: playerID,
-					Payload: map[string]any{
-						"squad_id": squad.ID,
-						"squad":    squad,
-						"source":   "refit",
-					},
-				})
 			case model.WarRefitUnitKindFleet:
 				if spaceRuntime == nil {
 					continue

@@ -60,10 +60,10 @@ func planetRoutedCommand(cmdType model.CommandType) bool {
 		model.CmdProduce, model.CmdUpgrade, model.CmdDemolish,
 		model.CmdConfigureDistributor, model.CmdInstallLogisticsBot, model.CmdUninstallLogisticsBot,
 		model.CmdInstallLogisticsVehicle, model.CmdConfigureLogisticsStation, model.CmdConfigureLogisticsSlot,
-		model.CmdSetRecipe, model.CmdConfigureSplitter, model.CmdConfigureTrafficMonitor,
+		model.CmdSetRallyPoint, model.CmdSetRecipe, model.CmdConfigureSorter, model.CmdConfigureSplitter, model.CmdConfigureTrafficMonitor,
 		model.CmdTransferItem, model.CmdLaunchSolarSail, model.CmdLaunchRocket,
 		model.CmdSetRayReceiverMode, model.CmdSetEnergyExchangerMode,
-		model.CmdQueueMilitaryProduction, model.CmdDeploySquad, model.CmdCommissionFleet,
+		model.CmdQueueMilitaryProduction, model.CmdDeploySquad, model.CmdFormSquad, model.CmdSquadOrder, model.CmdDissolveSquad, model.CmdCommissionFleet,
 		model.CmdRefitUnit, model.CmdCancelConstruction, model.CmdRestoreConstruction:
 		return true
 	}
@@ -99,6 +99,9 @@ func commandEntityRefs(cmd model.Command) (buildingIDs, unitIDs, taskIDs []strin
 	}
 
 	switch cmd.Type {
+	case model.CmdDeploySquad:
+		unitIDs, _ = payloadStringSlice(cmd.Payload, "member_ids")
+		buildingIDs = appendPayloadString(buildingIDs, "building_id")
 	case model.CmdMove, model.CmdAttack, model.CmdUnitOrder:
 		if cmd.Target.EntityID != "" {
 			unitIDs = append(unitIDs, cmd.Target.EntityID)
@@ -112,13 +115,13 @@ func commandEntityRefs(cmd model.Command) (buildingIDs, unitIDs, taskIDs []strin
 	case model.CmdProduce, model.CmdUpgrade, model.CmdDemolish,
 		model.CmdConfigureDistributor, model.CmdInstallLogisticsBot, model.CmdUninstallLogisticsBot,
 		model.CmdInstallLogisticsVehicle, model.CmdConfigureLogisticsStation, model.CmdConfigureLogisticsSlot,
-		model.CmdSetRecipe, model.CmdConfigureSplitter, model.CmdConfigureTrafficMonitor:
+		model.CmdSetRallyPoint, model.CmdSetRecipe, model.CmdConfigureSorter, model.CmdConfigureSplitter, model.CmdConfigureTrafficMonitor:
 		if cmd.Target.EntityID != "" {
 			buildingIDs = append(buildingIDs, cmd.Target.EntityID)
 		}
 	case model.CmdTransferItem, model.CmdLaunchSolarSail, model.CmdLaunchRocket,
 		model.CmdSetRayReceiverMode, model.CmdSetEnergyExchangerMode,
-		model.CmdQueueMilitaryProduction, model.CmdDeploySquad, model.CmdCommissionFleet,
+		model.CmdQueueMilitaryProduction, model.CmdCommissionFleet,
 		model.CmdRefitUnit:
 		buildingIDs = appendPayloadString(buildingIDs, "building_id")
 	case model.CmdCancelConstruction, model.CmdRestoreConstruction:

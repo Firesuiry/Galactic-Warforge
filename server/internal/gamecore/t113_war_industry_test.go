@@ -191,150 +191,77 @@ func TestT113QueueMilitaryProductionSupportsPlayerBlueprintDeploymentAndLineReto
 	}
 }
 
-func TestT113RefitUnitReturnsRuntimeUnitAsTargetBlueprint(t *testing.T) {
+func TestT113RefitUnitReturnsFleetAsTargetBlueprint(t *testing.T) {
+	// 地面部队没有蓝图血量池，改造只作用于舰队实体：拆出舰队，工期后以目标蓝图归队。
 	core := newE2ETestCore(t)
 	ws := core.World()
-	grantTechs(ws, "p1", "prototype")
+	grantTechs(ws, "p1", "corvette")
 
-	factory := newBuilding("factory-refit-t113", model.BuildingTypeRecomposingAssembler, "p1", model.Position{X: 6, Y: 6})
-	factory.Runtime.State = model.BuildingWorkRunning
-	factory.Runtime.Params.EnergyConsume = 0
-	if factory.Runtime.Functions.Energy != nil {
-		factory.Runtime.Functions.Energy.ConsumePerTick = 0
+	newRunning := func(id string, typ model.BuildingType, x int) *model.Building {
+		b := newBuilding(id, typ, "p1", model.Position{X: x, Y: 6})
+		b.Runtime.State = model.BuildingWorkRunning
+		b.Runtime.Params.EnergyConsume = 0
+		if b.Runtime.Functions.Energy != nil {
+			b.Runtime.Functions.Energy.ConsumePerTick = 0
+		}
+		attachBuilding(ws, b)
+		return b
 	}
-	attachBuilding(ws, factory)
-
-	hub := newBuilding("hub-refit-t113", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 7, Y: 6})
-	hub.Runtime.State = model.BuildingWorkRunning
-	hub.Runtime.Params.EnergyConsume = 0
-	if hub.Runtime.Functions.Energy != nil {
-		hub.Runtime.Functions.Energy.ConsumePerTick = 0
-	}
-	attachBuilding(ws, hub)
-
+	factory := newRunning("factory-refit-t113", model.BuildingTypeRecomposingAssembler, 6)
+	hub := newRunning("hub-refit-t113", model.BuildingTypeBattlefieldAnalysisBase, 7)
 	power := newBuilding("power-refit-t113", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, power)
 
 	player := ws.Players["p1"]
 	player.Inventory = model.ItemInventory{
-		model.ItemCircuitBoard:     80,
-		model.ItemProcessor:        80,
-		model.ItemTitaniumAlloy:    80,
-		model.ItemQuantumChip:      80,
-		model.ItemDeuteriumFuelRod: 80,
-		model.ItemFrameMaterial:    80,
-		model.ItemGraphene:         80,
-		model.ItemCarbonNanotube:   80,
-		model.ItemIronIngot:        80,
-		model.ItemCopperIngot:      80,
+		model.ItemCircuitBoard:  80,
+		model.ItemProcessor:     80,
+		model.ItemTitaniumAlloy: 80,
+		model.ItemFrameMaterial: 80,
+	}
+	must := func(cmd model.Command) {
+		t.Helper()
+		if res := issueInternalCommand(core, "p1", cmd); res.Code != model.CodeOK {
+			t.Fatalf("%s failed: %s (%s)", cmd.Type, res.Code, res.Message)
+		}
+	}
+	must(model.Command{Type: model.CmdBlueprintVariant, Payload: map[string]any{
+		"parent_blueprint_id": "corvette", "blueprint_id": "corvette_mk2", "allowed_slot_ids": []string{"utility"},
+	}})
+	must(model.Command{Type: model.CmdBlueprintValidate, Payload: map[string]any{"blueprint_id": "corvette_mk2"}})
+	must(model.Command{Type: model.CmdBlueprintFinalize, Payload: map[string]any{"blueprint_id": "corvette_mk2", "target_state": "prototype"}})
+
+	player.EnsureWarIndustry().DeploymentHubs[hub.ID] = &model.WarDeploymentHubState{
+		BuildingID:    hub.ID,
+		Capacity:      8,
+		ReadyPayloads: map[string]int{model.ItemCorvette: 1},
+	}
+	must(model.Command{Type: model.CmdCommissionFleet, Payload: map[string]any{
+		"building_id": hub.ID, "blueprint_id": "corvette", "count": 1, "system_id": "sys-1", "fleet_id": "fleet-refit",
+	}})
+	system := core.spaceRuntime.PlayerSystem("p1", "sys-1")
+	if system.Fleets["fleet-refit"] == nil {
+		t.Fatal("expected commissioned fleet")
 	}
 
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdBlueprintVariant,
-		Payload: map[string]any{
-			"parent_blueprint_id": "prototype",
-			"blueprint_id":        "strike_mk1",
-			"allowed_slot_ids":    []string{"utility"},
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("create strike_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type:    model.CmdBlueprintValidate,
-		Payload: map[string]any{"blueprint_id": "strike_mk1"},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("validate strike_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdBlueprintFinalize,
-		Payload: map[string]any{
-			"blueprint_id": "strike_mk1",
-			"target_state": "prototype",
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("finalize strike_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdBlueprintVariant,
-		Payload: map[string]any{
-			"parent_blueprint_id": "prototype",
-			"blueprint_id":        "support_mk1",
-			"allowed_slot_ids":    []string{"utility"},
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("create support_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type:    model.CmdBlueprintValidate,
-		Payload: map[string]any{"blueprint_id": "support_mk1"},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("validate support_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdBlueprintFinalize,
-		Payload: map[string]any{
-			"blueprint_id": "support_mk1",
-			"target_state": "prototype",
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("finalize support_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-
-	player.WarIndustry = &model.WarIndustryState{
-		DeploymentHubs: map[string]*model.WarDeploymentHubState{
-			hub.ID: {
-				BuildingID:    hub.ID,
-				ReadyPayloads: map[string]int{"strike_mk1": 1},
-			},
-		},
-	}
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdDeploySquad,
-		Payload: map[string]any{
-			"building_id":  hub.ID,
-			"blueprint_id": "strike_mk1",
-			"count":        1,
-			"planet_id":    ws.PlanetID,
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("deploy strike_mk1 failed: %s (%s)", res.Code, res.Message)
-	}
-
-	var squadID string
-	for id := range ws.CombatRuntime.Squads {
-		squadID = id
-	}
-	if squadID == "" {
-		t.Fatal("expected deployed squad id")
-	}
-
-	refitRes := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdRefitUnit,
-		Payload: map[string]any{
-			"building_id":         factory.ID,
-			"unit_id":             squadID,
-			"target_blueprint_id": "support_mk1",
-		},
-	})
-	if refitRes.Code != model.CodeOK {
-		t.Fatalf("refit_unit failed: %s (%s)", refitRes.Code, refitRes.Message)
-	}
-	if ws.CombatRuntime.Squads[squadID] != nil {
-		t.Fatalf("expected squad %s to leave runtime while refitting", squadID)
+	must(model.Command{Type: model.CmdRefitUnit, Payload: map[string]any{
+		"building_id": factory.ID, "unit_id": "fleet-refit", "target_blueprint_id": "corvette_mk2",
+	}})
+	if system.Fleets["fleet-refit"] != nil {
+		t.Fatal("expected fleet to leave runtime while refitting")
 	}
 
 	for i := 0; i < 300; i++ {
 		core.processTick()
 	}
 
-	refitted := ws.CombatRuntime.Squads[squadID]
+	refitted := system.Fleets["fleet-refit"]
 	if refitted == nil {
-		t.Fatalf("expected squad %s to return after refit", squadID)
+		t.Fatal("expected fleet to return after refit")
 	}
-	if refitted.BlueprintID != "support_mk1" {
-		t.Fatalf("expected refitted squad to use target blueprint, got %+v", refitted)
+	if len(refitted.Units) != 1 || refitted.Units[0].BlueprintID != "corvette_mk2" {
+		t.Fatalf("expected refitted fleet to use target blueprint, got %+v", refitted.Units)
 	}
 	if player.WarIndustry == nil || len(player.WarIndustry.RefitOrders) == 0 {
 		t.Fatalf("expected refit order history to remain queryable, got %+v", player.WarIndustry)

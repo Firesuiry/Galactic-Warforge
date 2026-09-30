@@ -4,6 +4,7 @@ import "siliconworld/internal/model"
 
 // CatalogView exposes front-end display metadata derived from server catalogs.
 type CatalogView struct {
+	Ammunition []model.AmmunitionDefinition  `json:"ammunition"`
 	Buildings  []BuildingCatalogEntry        `json:"buildings,omitempty"`
 	Items      []ItemCatalogEntry            `json:"items,omitempty"`
 	Recipes    []RecipeCatalogEntry          `json:"recipes,omitempty"`
@@ -11,11 +12,13 @@ type CatalogView struct {
 	WorldUnits []model.WorldUnitCatalogEntry `json:"world_units,omitempty"`
 	Warfare    *model.WarfareCatalogView     `json:"warfare,omitempty"`
 	// DamageCoefficients 护甲×武器伤害系数表（R6）：weapon_class -> armor_class -> 系数，
-	// 原样暴露 model.DamageCoefficient，与运行时结算共用单一数据源。
+	// 原样暴露 model.DamageCoefficients()（combat.yaml），与运行时结算共用单一数据源。
 	DamageCoefficients map[model.WeaponType]map[model.ArmorClass]float64 `json:"damage_coefficients,omitempty"`
 }
 
 type BuildingCatalogEntry struct {
+	SupplyRadius         int                       `json:"supply_radius,omitempty"`
+	SupplyRate           int                       `json:"supply_rate,omitempty"`
 	ID                   model.BuildingType        `json:"id"`
 	Name                 string                    `json:"name"`
 	Category             model.BuildingCategory    `json:"category"`
@@ -97,9 +100,10 @@ func (ql *Layer) Catalog() *CatalogView {
 			DefaultRecipeID:      def.DefaultRecipeID,
 			RequiresResourceNode: def.RequiresResourceNode,
 			CanProduceUnits:      def.CanProduceUnits,
-			UnlockTech:           append([]string(nil), def.UnlockTech...),
-			IconKey:              string(def.ID),
-			Color:                buildingCatalogColor(def.Category),
+			SupplyRadius:         def.SupplyRadius, SupplyRate: def.SupplyRate,
+			UnlockTech: append([]string(nil), def.UnlockTech...),
+			IconKey:    string(def.ID),
+			Color:      buildingCatalogColor(def.Category),
 		}
 		if runtimeDef, ok := model.BuildingRuntimeDefinitionByID(def.ID); ok {
 			if combat := runtimeDef.Functions.Combat; combat != nil && combat.Range > 0 {
@@ -178,27 +182,15 @@ func (ql *Layer) Catalog() *CatalogView {
 	warfare := model.PublicWarfareCatalog()
 
 	return &CatalogView{
+		Ammunition:         model.AmmunitionCatalog(),
 		Buildings:          buildings,
 		Items:              items,
 		Recipes:            recipes,
 		Techs:              techs,
 		WorldUnits:         worldUnits,
 		Warfare:            warfare,
-		DamageCoefficients: cloneDamageCoefficients(),
+		DamageCoefficients: model.DamageCoefficients(),
 	}
-}
-
-// cloneDamageCoefficients 原样复制 model.DamageCoefficient（R6），避免调用方改动全局表。
-func cloneDamageCoefficients() map[model.WeaponType]map[model.ArmorClass]float64 {
-	out := make(map[model.WeaponType]map[model.ArmorClass]float64, len(model.DamageCoefficient))
-	for weapon, row := range model.DamageCoefficient {
-		cp := make(map[model.ArmorClass]float64, len(row))
-		for armor, coef := range row {
-			cp[armor] = coef
-		}
-		out[weapon] = cp
-	}
-	return out
 }
 
 func buildingCatalogColor(category model.BuildingCategory) string {

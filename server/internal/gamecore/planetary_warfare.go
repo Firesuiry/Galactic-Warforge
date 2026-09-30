@@ -234,19 +234,13 @@ func resolveGroundTaskForcePressure(
 		if squad == nil || squad.State == model.CombatSquadStateDestroyed {
 			continue
 		}
-		base := 1.2 + float64(max(1, squad.Count))
-		base += float64(max(1, squad.Weapon.Damage)) / 18
-		base += float64(max(1, squad.HP)) / float64(max(1, squad.MaxHP))
-		switch squad.PlatformClass {
-		case "drone":
-			base += 0.4
-		case "vehicle":
-			base += 0.7
-		default:
-			base += 0.9
-		}
-		if squad.Sustainment.DamagePenalty > 0 {
-			base *= 1 - min(0.7, squad.Sustainment.DamagePenalty*0.5)
+		base := 0.0
+		for _, unit := range squad.Members(ws) {
+			readiness := 1.0
+			if unit.AmmoCapacity > 0 {
+				readiness = float64(unit.Ammo) / float64(unit.AmmoCapacity)
+			}
+			base += (1 + float64(unit.Attack)/18) * float64(unit.HP) / float64(max(1, unit.MaxHP)) * readiness
 		}
 		power += base
 	}

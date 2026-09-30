@@ -205,9 +205,10 @@ func TestT114TaskForceTheaterCommandsAndQuery(t *testing.T) {
 }
 
 func TestT114TaskForceStanceAffectsEngagementAndRetreat(t *testing.T) {
+	// 任务编队姿态只作用于舰队；地面单位的索敌/撤退由单位自身姿态决定（见 gap_r3 用例）。
 	core := newE2ETestCore(t)
 	ws := core.World()
-	grantTechs(ws, "p1", "prototype")
+	grantTechs(ws, "p1", "corvette")
 
 	base := newBuilding("base-stance-t114", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 6, Y: 6})
 	base.Runtime.State = model.BuildingWorkRunning
@@ -224,107 +225,67 @@ func TestT114TaskForceStanceAffectsEngagementAndRetreat(t *testing.T) {
 	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[base.ID] = &model.WarDeploymentHubState{
 		BuildingID:    base.ID,
 		Capacity:      8,
-		ReadyPayloads: map[string]int{model.ItemPrototype: 1},
+		ReadyPayloads: map[string]int{model.ItemCorvette: 1},
 	}
+	// 目标距地图中心锚点 15 格：超出 hold(8)，落在 intercept(24) 之内。
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: ws.PlanetID,
 		Forces: []model.EnemyForce{{
 			ID:           "enemy-stance-t114",
 			Type:         model.EnemyForceTypeHive,
-			Position:     model.Position{X: 15, Y: 15},
-			Strength:     120,
+			Position:     model.Position{X: ws.MapWidth/2 + 15, Y: ws.MapHeight / 2},
+			Strength:     300,
 			SpreadRadius: 2,
 			SpawnTick:    ws.Tick,
 		}},
 	}
-
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdDeploySquad,
-		Payload: map[string]any{
-			"building_id":  base.ID,
-			"blueprint_id": "prototype",
-			"count":        1,
-			"planet_id":    ws.PlanetID,
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("deploy squad failed: %s (%s)", res.Code, res.Message)
-	}
-
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdTaskForceCreate,
-		Payload: map[string]any{
-			"task_force_id": "tf-stance",
-			"stance":        string(model.WarTaskForceStanceHold),
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("task_force_create failed: %s (%s)", res.Code, res.Message)
-	}
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdTaskForceAssign,
-		Payload: map[string]any{
-			"task_force_id": "tf-stance",
-			"member_kind":   string(model.WarTaskForceMemberKindSquad),
-			"member_ids":    []string{"squad-1"},
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("task_force_assign failed: %s (%s)", res.Code, res.Message)
-	}
-
-	holdEvents := settleCombatRuntime(ws, ws.Tick+1)
-	if len(holdEvents) != 0 {
-		t.Fatalf("expected hold stance to avoid far pursuit, got %+v", holdEvents)
-	}
-	if ws.CombatRuntime.Squads["squad-1"].State != model.CombatSquadStateIdle {
-		t.Fatalf("expected hold stance squad to remain idle, got %+v", ws.CombatRuntime.Squads["squad-1"])
-	}
-
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdTaskForceSetStance,
-		Payload: map[string]any{
-			"task_force_id": "tf-stance",
-			"stance":        string(model.WarTaskForceStanceIntercept),
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("task_force_set_stance intercept failed: %s (%s)", res.Code, res.Message)
-	}
-
-	settleCombatRuntime(ws, ws.Tick+2)
-	if ws.CombatRuntime.Squads["squad-1"].TargetEnemyID != "enemy-stance-t114" {
-		t.Fatalf("expected intercept stance to acquire target, got %+v", ws.CombatRuntime.Squads["squad-1"])
-	}
-	// R3 实体化：超出武器射程时先追击逼近，进入射程后真实开火。
-	fired := false
-	for i := 0; i < 600 && !fired; i++ {
-		ws.Tick++
-		settleSquadMovement(ws)
-		for _, evt := range settleCombatRuntime(ws, ws.Tick) {
-			if evt.EventType == model.EvtDamageApplied {
-				fired = true
-			}
+	mustCmd := func(cmd model.Command) {
+		t.Helper()
+		if res := issueInternalCommand(core, "p1", cmd); res.Code != model.CodeOK {
+			t.Fatalf("%s failed: %s (%s)", cmd.Type, res.Code, res.Message)
 		}
 	}
-	if !fired {
-		t.Fatal("expected intercept stance to close distance and engage the target")
+	mustCmd(model.Command{Type: model.CmdCommissionFleet, Payload: map[string]any{
+		"building_id": base.ID, "blueprint_id": "corvette", "count": 1, "system_id": "sys-1", "fleet_id": "fleet-stance",
+	}})
+	mustCmd(model.Command{Type: model.CmdTaskForceCreate, Payload: map[string]any{
+		"task_force_id": "tf-stance", "stance": string(model.WarTaskForceStanceHold),
+	}})
+	mustCmd(model.Command{Type: model.CmdTaskForceAssign, Payload: map[string]any{
+		"task_force_id": "tf-stance", "member_kind": string(model.WarTaskForceMemberKindFleet), "member_ids": []string{"fleet-stance"},
+	}})
+	attack := func() {
+		mustCmd(model.Command{Type: model.CmdFleetAttack, Payload: map[string]any{
+			"fleet_id": "fleet-stance", "planet_id": ws.PlanetID, "target_id": "enemy-stance-t114",
+		}})
+	}
+	setStance := func(stance model.WarTaskForceStance) {
+		mustCmd(model.Command{Type: model.CmdTaskForceSetStance, Payload: map[string]any{
+			"task_force_id": "tf-stance", "stance": string(stance),
+		}})
+	}
+	fleet := core.spaceRuntime.PlayerSystem("p1", "sys-1").Fleets["fleet-stance"]
+	settle := func() []*model.GameEvent {
+		ws.Tick++
+		return settleSpaceFleets(core.worlds, core.maps, core.spaceRuntime, ws.Tick)
 	}
 
-	squad := ws.CombatRuntime.Squads["squad-1"]
-	squad.HP = squad.MaxHP / 4
-	if res := issueInternalCommand(core, "p1", model.Command{
-		Type: model.CmdTaskForceSetStance,
-		Payload: map[string]any{
-			"task_force_id": "tf-stance",
-			"stance":        string(model.WarTaskForceStanceRetreatOnLosses),
-		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("task_force_set_stance retreat failed: %s (%s)", res.Code, res.Message)
+	attack()
+	if events := settle(); len(events) != 0 || fleet.State != model.FleetStateIdle {
+		t.Fatalf("hold stance must not engage a target outside its radius, got %d events state %s", len(events), fleet.State)
 	}
 
-	retreatEvents := settleCombatRuntime(ws, ws.Tick+3)
-	if len(retreatEvents) != 0 {
-		t.Fatalf("expected retreat stance to suppress further attacks after losses, got %+v", retreatEvents)
+	setStance(model.WarTaskForceStanceIntercept)
+	attack()
+	if damageEventsFor(settle(), "enemy-stance-t114") == 0 {
+		t.Fatal("intercept stance should engage the target inside its radius")
 	}
-	if squad.State != model.CombatSquadStateIdle || squad.TargetEnemyID != "" {
-		t.Fatalf("expected retreat stance to clear engagement, got %+v", squad)
+
+	fleet.Structure.Level = fleet.Structure.MaxLevel / 3
+	setStance(model.WarTaskForceStanceRetreatOnLosses)
+	attack()
+	if events := settle(); len(events) != 0 || fleet.State != model.FleetStateIdle || fleet.Target != nil {
+		t.Fatalf("retreat_on_losses should disengage a damaged fleet, got %d events state %s", len(events), fleet.State)
 	}
 }
 

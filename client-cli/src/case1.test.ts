@@ -185,7 +185,14 @@ describe('case1 cli flow', () => {
     }
     assert.match(listOutput, /agent-hujing/);
 
-    const delegateOutput = await dispatch('agent_message agent-lisi 新建一个矿场', context);
+    let delegateOutput = '';
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      delegateOutput = await dispatch('agent_message agent-lisi 新建一个矿场', context);
+      if (!/agent_already_running/.test(delegateOutput)) {
+        break;
+      }
+      await delay(20);
+    }
     assert.match(delegateOutput, /Accepted message/);
 
     for (let attempt = 0; attempt < 20; attempt += 1) {

@@ -102,11 +102,11 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		ThreatLevel: model.ThreatLevelMedium,
 		LastAttack:  88,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-force-1",
-			Type:         model.EnemyForceTypeSwarm,
-			Position:     model.Position{X: 10, Y: 10},
-			Strength:     25,
-			SpawnTick:    40,
+			ID:        "enemy-force-1",
+			Type:      model.EnemyForceTypeSwarm,
+			Position:  model.Position{X: 10, Y: 10},
+			Strength:  25,
+			SpawnTick: 40,
 		}},
 	}
 	ws.SensorContacts = map[string]*model.SensorContactState{
@@ -281,8 +281,8 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
-	if len(view.WorldUnits) != 3 {
-		t.Fatalf("expected exactly 3 public world units, got %+v", view.WorldUnits)
+	if len(view.WorldUnits) != 9 {
+		t.Fatalf("expected exactly 9 public world units, got %+v", view.WorldUnits)
 	}
 	worldUnitIDs := map[string]bool{}
 	for _, entry := range view.WorldUnits {
@@ -297,7 +297,7 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if !worldUnitIDs[string(model.UnitTypeMecha)] {
 		t.Fatalf("expected mecha in public world unit catalog, got %+v", worldUnitIDs)
 	}
-	for _, id := range []string{"worker", "soldier"} {
+	for _, id := range []string{"worker", "soldier", "scout", "artillery", "missile_vehicle", "repair_vehicle", "supply_truck", "attack_drone"} {
 		if !worldUnitIDs[id] {
 			t.Fatalf("expected %s in catalog world_units, got %+v", id, view.WorldUnits)
 		}
@@ -333,7 +333,7 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 		if blueprint.Source != model.WarBlueprintSourcePreset {
 			t.Fatalf("expected preset public blueprint source, got %+v", blueprint)
 		}
-		if blueprint.VisibleTechID == "" || len(blueprint.ProducerRecipes) == 0 || blueprint.DeployCommand == "" {
+		if blueprint.VisibleTechID == "" || blueprint.DeployCommand == "" {
 			t.Fatalf("expected deployment metadata on public blueprint, got %+v", blueprint)
 		}
 	}

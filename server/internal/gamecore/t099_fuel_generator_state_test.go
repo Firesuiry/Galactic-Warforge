@@ -174,7 +174,7 @@ func TestT099ProduceCorvetteStillRejected(t *testing.T) {
 	if res.Code != model.CodeValidationFailed {
 		t.Fatalf("expected validation failure for corvette, got %+v", res)
 	}
-	if res.Message != "blueprint corvette is not produced via produce; use commission_fleet" {
+	if res.Message != "unit is not publicly available for produce" {
 		t.Fatalf("expected authoritative unit catalog rejection, got %q", res.Message)
 	}
 }

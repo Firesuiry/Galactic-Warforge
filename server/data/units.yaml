@@ -1,27 +1,30 @@
-# 世界单位定义（含黑雾、执行体）。
-# 格式说明见 docs/dev/数据配置文件.md
+# 单位生产、战斗和补给参数；格式见 docs/dev/数据配置文件.md
 units:
   - id: worker
-    name: Worker
+    name: 工程兵
     max_hp: 60
     attack: 3
     defense: 1
     attack_range: 1
     move_range: 3
-    vision_range: 4
+    vision_range: 5
     move_speed: 0.3
     attack_cooldown_ticks: 12
     armor_class: light
     weapon_class: gun
-    cost: {minerals: 30, energy: 10}
+    ammo_class: bullet
+    ammo_capacity: 10
+    producer: barracks
+    production_ticks: 30
+    cost: [{item_id: iron_ingot, quantity: 2}, {item_id: circuit_board, quantity: 1}]
     public: true
     domain: ground
     runtime_class: world_unit
     production_mode: world_produce
     query_scopes: [planet]
-    commands: [move]
+    commands: [move, attack]
   - id: soldier
-    name: Soldier
+    name: 步兵
     max_hp: 100
     attack: 15
     defense: 5
@@ -32,7 +35,34 @@ units:
     attack_cooldown_ticks: 10
     armor_class: light
     weapon_class: gun
-    cost: {minerals: 60, energy: 20}
+    ammo_class: bullet
+    ammo_capacity: 24
+    producer: barracks
+    production_ticks: 40
+    cost: [{item_id: iron_ingot, quantity: 2}, {item_id: circuit_board, quantity: 1}]
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: scout
+    name: 侦察车
+    max_hp: 90
+    attack: 9
+    defense: 3
+    attack_range: 3
+    move_range: 3
+    vision_range: 14
+    move_speed: 0.6
+    attack_cooldown_ticks: 8
+    armor_class: light
+    weapon_class: gun
+    ammo_class: bullet
+    ammo_capacity: 24
+    producer: barracks
+    production_ticks: 50
+    cost: [{item_id: iron_ingot, quantity: 3}, {item_id: circuit_board, quantity: 1}, {item_id: motor, quantity: 1}]
     public: true
     domain: ground
     runtime_class: world_unit
@@ -40,25 +70,149 @@ units:
     query_scopes: [planet]
     commands: [move, attack]
   - id: mecha
-    name: Mecha
+    name: 重装机甲
     max_hp: 240
     attack: 28
     defense: 12
     attack_range: 4
     move_range: 3
-    vision_range: 7
+    vision_range: 6
     move_speed: 0.35
     attack_cooldown_ticks: 8
     armor_class: heavy
     weapon_class: cannon
-    cost: {minerals: 180, energy: 80}
+    ammo_class: shell
+    ammo_capacity: 16
+    producer: vehicle_factory
+    production_ticks: 90
+    cost: [{item_id: steel, quantity: 6}, {item_id: circuit_board, quantity: 3}, {item_id: motor, quantity: 2}]
     public: true
     domain: ground
     runtime_class: world_unit
     production_mode: world_produce
     query_scopes: [planet]
     commands: [move, attack]
+  - id: artillery
+    name: 火炮
+    max_hp: 120
+    attack: 50
+    defense: 3
+    attack_range: 12
+    move_range: 3
+    vision_range: 14
+    move_speed: 0.18
+    attack_cooldown_ticks: 20
+    armor_class: light
+    weapon_class: cannon
+    ammo_class: shell
+    ammo_capacity: 12
+    producer: vehicle_factory
+    production_ticks: 100
+    cost: [{item_id: steel, quantity: 5}, {item_id: gear, quantity: 4}, {item_id: circuit_board, quantity: 2}]
+    min_attack_range: 4
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: missile_vehicle
+    name: 导弹车
+    max_hp: 140
+    attack: 32
+    defense: 6
+    attack_range: 8
+    move_range: 3
+    vision_range: 10
+    move_speed: 0.3
+    attack_cooldown_ticks: 14
+    armor_class: light
+    weapon_class: missile
+    ammo_class: missile
+    ammo_capacity: 12
+    producer: vehicle_factory
+    production_ticks: 100
+    cost: [{item_id: steel, quantity: 4}, {item_id: circuit_board, quantity: 3}, {item_id: motor, quantity: 2}]
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: repair_vehicle
+    name: 维修车
+    max_hp: 150
+    attack: 0
+    defense: 4
+    attack_range: 0
+    move_range: 3
+    vision_range: 5
+    move_speed: 0.32
+    attack_cooldown_ticks: 10
+    armor_class: light
+    weapon_class: gun
+    producer: vehicle_factory
+    production_ticks: 70
+    cost: [{item_id: iron_ingot, quantity: 4}, {item_id: circuit_board, quantity: 2}, {item_id: motor, quantity: 1}]
+    supply_radius: 4
+    repair_rate: 2
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: supply_truck
+    name: 补给车
+    max_hp: 140
+    attack: 0
+    defense: 3
+    attack_range: 0
+    move_range: 3
+    vision_range: 5
+    move_speed: 0.35
+    attack_cooldown_ticks: 10
+    armor_class: light
+    weapon_class: gun
+    producer: vehicle_factory
+    production_ticks: 60
+    cost: [{item_id: iron_ingot, quantity: 6}, {item_id: gear, quantity: 2}, {item_id: motor, quantity: 1}]
+    supply_radius: 5
+    supply_rate: 3
+    cargo_capacity: 180
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
+  - id: attack_drone
+    name: 攻击无人机
+    max_hp: 80
+    attack: 12
+    defense: 2
+    attack_range: 4
+    move_range: 3
+    vision_range: 6
+    move_speed: 0.65
+    attack_cooldown_ticks: 7
+    armor_class: air
+    weapon_class: gun
+    ammo_class: bullet
+    ammo_capacity: 30
+    producer: airfield
+    production_ticks: 100
+    cost: [{item_id: iron_ingot, quantity: 3}, {item_id: circuit_board, quantity: 2}, {item_id: motor, quantity: 1}]
+    public: true
+    domain: air
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack]
   - id: executor
+    ammo_class: bullet
+    ammo_capacity: 40
+    domain: ground
     name: Executor
     max_hp: 120
     attack: 20
@@ -70,6 +224,7 @@ units:
     attack_cooldown_ticks: 6
     armor_class: heavy
     weapon_class: gun
+    mecha: {respawn_ticks: 100, max_energy: 100, inventory_capacity: 200, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10}
   - id: dark_fog
     name: Dark Fog
     max_hp: 40

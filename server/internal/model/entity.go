@@ -11,10 +11,16 @@ type Position struct {
 type UnitType string
 
 const (
-	UnitTypeWorker   UnitType = "worker"
-	UnitTypeSoldier  UnitType = "soldier"
-	UnitTypeMecha    UnitType = "mecha"
-	UnitTypeExecutor UnitType = "executor"
+	UnitTypeWorker         UnitType = "worker"
+	UnitTypeSoldier        UnitType = "soldier"
+	UnitTypeMecha          UnitType = "mecha"
+	UnitTypeExecutor       UnitType = "executor"
+	UnitTypeScout          UnitType = "scout"
+	UnitTypeArtillery      UnitType = "artillery"
+	UnitTypeMissileVehicle UnitType = "missile_vehicle"
+	UnitTypeRepairVehicle  UnitType = "repair_vehicle"
+	UnitTypeSupplyTruck    UnitType = "supply_truck"
+	UnitTypeAttackDrone    UnitType = "attack_drone"
 	// UnitTypeDarkFog 黑雾蜂群单位（E1）：巢穴孵化的实体敌方单位，
 	// 归属保留势力 ID DarkFogOwnerID，与全体玩家互相敌对。
 	UnitTypeDarkFog UnitType = "dark_fog"
@@ -22,6 +28,9 @@ const (
 
 // Building represents a constructed building entity
 type Building struct {
+	Rotation          PlanRotation            `json:"rotation,omitempty"`
+	UnitQueue         []UnitProductionOrder   `json:"unit_queue,omitempty"`
+	RallyPoint        *Position               `json:"rally_point,omitempty"`
 	ID                string                  `json:"id"`
 	Type              BuildingType            `json:"type"`
 	OwnerID           string                  `json:"owner_id"`
@@ -60,6 +69,11 @@ func (b *Building) Clone() *Building {
 		Functions:   b.Runtime.Functions.clone(),
 		State:       b.Runtime.State,
 		StateReason: b.Runtime.StateReason,
+	}
+	out.UnitQueue = append([]UnitProductionOrder(nil), b.UnitQueue...)
+	if b.RallyPoint != nil {
+		p := *b.RallyPoint
+		out.RallyPoint = &p
 	}
 	out.Storage = b.Storage.Clone()
 	out.EnergyStorage = b.EnergyStorage.Clone()
@@ -106,6 +120,17 @@ const (
 
 // Unit represents a mobile unit entity
 type Unit struct {
+	SquadID          string        `json:"squad_id,omitempty"`
+	SquadOrderActive bool          `json:"squad_order_active,omitempty"`
+	AmmoClass        string        `json:"ammo_class,omitempty"`
+	Ammo             int           `json:"ammo,omitempty"`
+	AmmoCapacity     int           `json:"ammo_capacity,omitempty"`
+	AmmoItem         string        `json:"ammo_item,omitempty"`
+	CombatState      string        `json:"combat_state,omitempty"`
+	Cargo            ItemInventory `json:"cargo,omitempty"`
+	Domain           UnitDomain    `json:"domain,omitempty"`
+	MinAttackRange   int           `json:"min_attack_range,omitempty"`
+
 	ID           string      `json:"id"`
 	Type         UnitType    `json:"type"`
 	OwnerID      string      `json:"owner_id"`
@@ -121,10 +146,10 @@ type Unit struct {
 	Mecha        *MechaState `json:"mecha,omitempty"`
 
 	// 实时移动（R1）：每 tick 沿 Path 按 MoveSpeed 推进。
-	MoveSpeed    float64    `json:"move_speed"`              // 格/tick
-	Path         []Position `json:"path,omitempty"`          // 完整路径（含起点）
-	PathIndex    int        `json:"path_index,omitempty"`    // 下一个目标格下标
-	MoveProgress float64    `json:"move_progress,omitempty"` // 向下一格推进的累计进度
+	MoveSpeed      float64    `json:"move_speed"`                 // 格/tick
+	Path           []Position `json:"path,omitempty"`             // 完整路径（含起点）
+	PathIndex      int        `json:"path_index,omitempty"`       // 下一个目标格下标
+	MoveProgress   float64    `json:"move_progress,omitempty"`    // 向下一格推进的累计进度
 	BlockedTicks   int        `json:"blocked_ticks,omitempty"`    // 被占位阻挡的连续 tick 数
 	RepathTick     int64      `json:"repath_tick,omitempty"`      // 上次追击重寻路 tick
 	StuckCount     int        `json:"stuck_count,omitempty"`      // 连续寻路失败次数
@@ -137,13 +162,13 @@ type Unit struct {
 	WeaponClass WeaponType `json:"weapon_class,omitempty"` // 武器类型（缺省按单位类型推导）
 
 	Stance             UnitStance `json:"stance,omitempty"`
-	OrderPos           *Position  `json:"order_pos,omitempty"`            // 攻击移动/巡逻终点/撤退目的地
-	GuardTargetID      string     `json:"guard_target_id,omitempty"`      // 守卫/跟随目标实体
-	CombatAnchor       *Position  `json:"combat_anchor,omitempty"`        // 接战锚点（守位/巡逻起点/追击范围基准）
-	LastAttackerID     string     `json:"last_attacker_id,omitempty"`     // 最近攻击者（还击用）
-	LastAttackTick     int64      `json:"last_attack_tick,omitempty"`     // 上次开火 tick
-	AttackCooldownTick int64      `json:"attack_cooldown_ticks"`          // 开火冷却（tick）
-	AggroRange         int        `json:"aggro_range"`                    // 自动索敌范围
+	OrderPos           *Position  `json:"order_pos,omitempty"`        // 攻击移动/巡逻终点/撤退目的地
+	GuardTargetID      string     `json:"guard_target_id,omitempty"`  // 守卫/跟随目标实体
+	CombatAnchor       *Position  `json:"combat_anchor,omitempty"`    // 接战锚点（守位/巡逻起点/追击范围基准）
+	LastAttackerID     string     `json:"last_attacker_id,omitempty"` // 最近攻击者（还击用）
+	LastAttackTick     int64      `json:"last_attack_tick,omitempty"` // 上次开火 tick
+	AttackCooldownTick int64      `json:"attack_cooldown_ticks"`      // 开火冷却（tick）
+	AggroRange         int        `json:"aggro_range"`                // 自动索敌范围
 }
 
 // Clone returns a deep copy of the unit state for read-only snapshots.
@@ -153,6 +178,12 @@ func (u *Unit) Clone() *Unit {
 	}
 	out := *u
 	out.Mecha = u.Mecha.Clone()
+	if u.Cargo != nil {
+		out.Cargo = make(ItemInventory, len(u.Cargo))
+		for k, v := range u.Cargo {
+			out.Cargo[k] = v
+		}
+	}
 	if u.Path != nil {
 		out.Path = append([]Position(nil), u.Path...)
 	}
@@ -201,79 +232,17 @@ func BuildingCost(btype BuildingType) (minerals, energy int) {
 	return def.BuildCost.Minerals, def.BuildCost.Energy
 }
 
-// UnitStats returns default stats for a unit type
+// UnitStats returns default stats for a unit type (units.yaml)。
+// 未定义的单位类型只带类型与待命姿态。
 func UnitStats(utype UnitType) Unit {
-	u := Unit{Type: utype}
-	switch utype {
-	case UnitTypeWorker:
-		u.MaxHP = 60
-		u.HP = u.MaxHP
-		u.Attack = 3
-		u.Defense = 1
-		u.AttackRange = 1
-		u.MoveRange = 3
-		u.VisionRange = 4
-		u.MoveSpeed = 0.30
-		u.AttackCooldownTick = 12
-	case UnitTypeSoldier:
-		u.MaxHP = 100
-		u.HP = u.MaxHP
-		u.Attack = 15
-		u.Defense = 5
-		u.AttackRange = 2
-		u.MoveRange = 2
-		u.VisionRange = 5
-		u.MoveSpeed = 0.25
-		u.AttackCooldownTick = 10
-	case UnitTypeMecha:
-		u.MaxHP = 240
-		u.HP = u.MaxHP
-		u.Attack = 28
-		u.Defense = 12
-		u.AttackRange = 4
-		u.MoveRange = 3
-		u.VisionRange = 7
-		u.MoveSpeed = 0.35
-		u.AttackCooldownTick = 8
-	case UnitTypeExecutor:
-		u.MaxHP = 120
-		u.HP = u.MaxHP
-		u.Attack = 20
-		u.Defense = 8
-		u.AttackRange = 4
-		u.MoveRange = 12
-		u.VisionRange = 6
-		u.MoveSpeed = 0.50
-		u.AttackCooldownTick = 6
-		u.Mecha = NewMechaState()
+	def, ok := unitDefinitions[utype]
+	if !ok {
+		return Unit{Type: utype, Stance: UnitStanceIdle}
 	}
-	if utype == UnitTypeDarkFog {
-		u.MaxHP = 40
-		u.HP = u.MaxHP
-		u.Attack = 8
-		u.Defense = 2
-		u.AttackRange = 2
-		u.MoveRange = 3
-		u.VisionRange = 8
-		u.MoveSpeed = 0.22
-		u.AttackCooldownTick = 12
-	}
-	u.AggroRange = u.VisionRange
-	u.Stance = UnitStanceIdle
-	u.ArmorClass = ArmorClassForUnitType(utype)
-	u.WeaponClass = WeaponClassForUnitType(utype)
-	return u
+	return unitStatsFromDefinition(def)
 }
 
-// UnitCost returns the resource cost to produce a unit type
-func UnitCost(utype UnitType) (minerals, energy int) {
-	switch utype {
-	case UnitTypeWorker:
-		return 30, 10
-	case UnitTypeSoldier:
-		return 60, 20
-	case UnitTypeMecha:
-		return 180, 80
-	}
-	return 0, 0
+// UnitCost returns the actual inventory required to produce a unit.
+func UnitCost(utype UnitType) []ItemAmount {
+	return append([]ItemAmount(nil), unitDefinitions[utype].Cost...)
 }

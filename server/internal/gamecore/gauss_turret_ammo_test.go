@@ -90,7 +90,7 @@ func TestGaussTurretRuntimeExposesAmmoLoopData(t *testing.T) {
 	if combat.AmmoItem != model.ItemAmmoBullet || combat.AmmoConsume != 1 {
 		t.Fatalf("expected primary ammo ammo_bullet x1, got %+v", combat)
 	}
-	if combat.AltAmmoItem != model.ItemTitaniumAmmo || combat.AltAmmoAttack <= combat.Attack {
+	if ammo, ok := model.AmmunitionByItem(model.ItemTitaniumAmmo); !ok || ammo.Class != "bullet" || ammo.DamageMultiplier <= 1 {
 		t.Fatalf("expected titanium upgrade ammo with higher attack, got %+v", combat)
 	}
 	if def.Functions.Storage == nil {

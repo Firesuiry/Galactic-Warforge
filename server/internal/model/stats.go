@@ -42,6 +42,7 @@ type LogisticsStats struct {
 //   - 击杀方是玩家且与受害方不同归属时计入击杀方 kills（dark_fog 击杀只计受害方损失，
 //     不进任何玩家的 kills；玩家摧毁黑雾巢穴/黑雾单位不计入 kills，黑雾不是玩家实体）；
 //   - 编组小队整编被毁计 1 个单位击杀/损失。
+//
 // 计数随 PlayerState 走快照 clone/restore，读档/回放一致。
 type CombatStats struct {
 	UnitsKilled        int `json:"units_killed"`        // 击杀单位数（含小队整编）

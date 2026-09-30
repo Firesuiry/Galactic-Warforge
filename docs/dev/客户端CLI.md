@@ -43,7 +43,7 @@
 | `health`         | 无                                                           | 查询 `GET /health`                                                |
 | `metrics`        | 无                                                           | 查询 `GET /metrics`                                               |
 | `summary`        | 无                                                           | 查询 `GET /state/summary`                                         |
-| `stats`          | 无                                                           | 查询 `GET /state/stats`；其中 `production_stats` 表示当前 active world 当前 tick 的真实落库 / 落站产出 |
+| `stats`          | 无                                                           | 查询 `GET /state/stats`；其中 `production_stats` 表示所有已加载行星当前 tick 的真实落库 / 落站产出 |
 | `briefing`       | `[alert_limit]`                                              | 查询 `GET /state/agent-briefing`：己方资源/研究/能源战斗摘要 + 舰队/任务群/战区/敌情 + 最近告警 + 可用命令目录 |
 | `catalog_commands` | 无                                                         | 查询 `GET /catalog/commands`：服务端权威公共命令结构目录（必填 target/payload、可选字段、layer、constraints、JSON Schema） |
 | `galaxy`         | 无                                                           | 查询 `GET /world/galaxy`                                          |
@@ -776,3 +776,23 @@ configure_traffic_monitor <building_id> <belt_id|none> --window <1..600> --minim
 配送器命令：`configure_distributor <id> <item_id|none> <none|supply|demand> <local_storage> [--delivery true|false] [--collection true|false]`、`install_logistics_bot <id> <quantity> [--source player|storage]`、`uninstall_logistics_bot <id> <quantity>`、`configure_mecha_logistics <unit_id> <item:min:max,...|none>`。
 
 上述 `configure_distributor` 省略布尔开关时保留原值；`none` 物品必须同时停用仓间和机甲配送。供给只送超出保有量部分，需求补到保有量。机器人安装从真实成品扣除；storage来源只读宿主可输出库存。仅空载停靠机器人可卸载。机甲请求整体替换（最多8种），每项0≤min≤max≤1000且max>0，`none`清空全部。
+
+
+## 行星内军工与建造（2026-09-29）
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| `set_rally_point` | `<building_id> <x> <y> [--planet <planet_id>]` | 设置兵营、战车工厂或机场集结点，出厂单位自动移动。 |
+| `form_squad` | `<entity_id...> [--name <name>] [--planet <planet_id>]` | 选中的己方军事单位（可含补给车）编成军团，返回军团 ID。 |
+| `squad_order` | `<squad_id> <attack\|defend\|retreat\|resupply> [<x> <y>] [--planet <planet_id>]` | 军团指令并自动站位；`resupply` 不带坐标，前往最近补给站。 |
+| `dissolve_squad` | `<squad_id> [--planet <planet_id>]` | 解散军团，成员保留当前指令。 |
+| `configure_sorter` | `<building_id> --inputs <方向列表> --outputs <方向列表> [--mode allow|deny] [--items <物品列表>] [--planet <planet_id>]` | 分拣器连接机器和皮带；方向与物品列表以逗号分隔，输入输出方向不得重叠。 |
+| `transfer` | `<building_id> <item_id> <quantity> [--take] [--planet <planet_id>]` | 默认背包装入建筑；加 `--take` 从建筑主仓/输出缓存取回，受机甲背包容量限制。 |
+
+`produce` 按单位目录的 `producer` 分工：兵营生产工程兵/步兵/侦察车；战车工厂生产机甲/火炮/导弹车/维修车/补给车；机场生产攻击无人机。造价是实物物品清单，从生产建筑自身库存扣除（用 `transfer` 或皮带供料），不再扣矿物/能量；缺料返回 `INSUFFICIENT_RESOURCE`。排入有时长的队列，停电暂停，出口堵塞则等待空位。查询建筑的 `unit_queue` 与 `rally_point` 可观察队列和集结点。
+
+统计按玩家聚合所有已加载行星；焦点切换不改变总量。缺电持续时间按 tick 计数，多个行星同时缺电不重复累计。
+
+建造支持 `--rotation 0|90|180|270`；加 `--approach` 让机甲自动走到建造范围再开工。
+
+单位弹药：`inspect` 单位可见 `ammo_class`/`ammo`/`ammo_capacity`/`ammo_item`，打空后 `combat_state=no_ammunition` 并停火。回到 `supply_station`（光环半径 10）或 `supply_truck`（半径 5，可编入军团随行）范围内自动补满，黑雾单位不耗弹。防空炮 `anti_air_turret` 吃 `ammo_missile`，火炮 `artillery_turret` 吃 `shell_set`，均通过 `transfer` 或皮带装填；防空炮还会击落敌方物流无人机（`entity_destroyed`，`reason=shot_down`）。

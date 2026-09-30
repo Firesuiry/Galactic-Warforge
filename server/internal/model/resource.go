@@ -1,5 +1,7 @@
 package model
 
+import "fmt"
+
 // ResourceNodeState captures the mutable state of a resource node.
 type ResourceNodeState struct {
 	ID           string   `json:"id"`
@@ -36,4 +38,28 @@ func (r *ResourceNodeState) Clone() *ResourceNodeState {
 	}
 	out := *r
 	return &out
+}
+
+// ValidateCollectorSite is shared by commands, blueprints and completion.
+func ValidateCollectorSite(ws *WorldState, btype BuildingType, pos Position) error {
+	def, ok := BuildingDefinitionByID(btype)
+	if !ok || !def.RequiresResourceNode {
+		return nil
+	}
+	if ws == nil || !ws.InBounds(pos.X, pos.Y) {
+		return fmt.Errorf("resource site out of bounds")
+	}
+	node := ws.Resources[ws.Grid[pos.Y][pos.X].ResourceNodeID]
+	if node == nil {
+		return fmt.Errorf("%s requires a resource node", btype)
+	}
+	collect := BuildingProfileFor(btype, 1).Runtime.Functions.Collect
+	if collect != nil {
+		for _, kind := range collect.AllowedResources {
+			if node.Kind == kind {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("%s cannot extract resource %s", btype, node.Kind)
 }

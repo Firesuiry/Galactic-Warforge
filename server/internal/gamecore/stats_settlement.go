@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"math"
+	"sort"
 
 	"siliconworld/internal/model"
 )
@@ -46,28 +47,28 @@ func (gc *GameCore) updateProductionStats(player *model.PlayerState) {
 	stats.ByItem = make(map[string]int)
 	stats.Efficiency = 0
 
-	if snapshot := model.CurrentProductionSettlementSnapshot(gc.world); snapshot != nil {
-		if playerSnapshot, ok := snapshot.Players[player.PlayerID]; ok {
-			stats.TotalOutput = playerSnapshot.TotalOutput
-			stats.ByBuildingType = cloneIntMap(playerSnapshot.ByBuildingType)
-			stats.ByItem = cloneIntMap(playerSnapshot.ByItem)
-		}
-	}
-
 	var totalEfficiency float64
 	var buildingCount int
-
-	for _, building := range gc.world.Buildings {
-		if building.OwnerID != player.PlayerID {
-			continue
+	for _, ws := range gc.statWorlds() {
+		if snapshot := model.CurrentProductionSettlementSnapshot(ws); snapshot != nil {
+			if playerSnapshot, ok := snapshot.Players[player.PlayerID]; ok {
+				stats.TotalOutput += playerSnapshot.TotalOutput
+				for key, value := range playerSnapshot.ByBuildingType {
+					stats.ByBuildingType[key] += value
+				}
+				for key, value := range playerSnapshot.ByItem {
+					stats.ByItem[key] += value
+				}
+			}
 		}
-		if building.Runtime.Functions.Production == nil {
-			continue
-		}
-
-		if building.ProductionMonitor != nil && building.ProductionMonitor.LastStats.Efficiency > 0 {
-			totalEfficiency += building.ProductionMonitor.LastStats.Efficiency
-			buildingCount++
+		for _, building := range ws.Buildings {
+			if building == nil || building.OwnerID != player.PlayerID || building.Runtime.Functions.Production == nil {
+				continue
+			}
+			if building.ProductionMonitor != nil {
+				totalEfficiency += building.ProductionMonitor.LastStats.Efficiency
+				buildingCount++
+			}
 		}
 	}
 
@@ -87,7 +88,17 @@ func cloneIntMap(in map[string]int) map[string]int {
 // updateEnergyStats 更新能源统计
 func (gc *GameCore) updateEnergyStats(player *model.PlayerState) {
 	stats := &player.Stats.EnergyStats
-	aggregated := buildPlayerEnergyStats(gc.world, player.PlayerID)
+	aggregated := model.EnergyStats{}
+	for _, ws := range gc.statWorlds() {
+		local := buildPlayerEnergyStats(ws, player.PlayerID)
+		aggregated.Generation += local.Generation
+		aggregated.Consumption += local.Consumption
+		aggregated.Storage += local.Storage
+		aggregated.CurrentStored += local.CurrentStored
+		if local.ShortageTicks > aggregated.ShortageTicks {
+			aggregated.ShortageTicks = local.ShortageTicks
+		}
+	}
 	shortageTicks := stats.ShortageTicks
 	if aggregated.ShortageTicks > 0 {
 		shortageTicks++
@@ -150,26 +161,37 @@ func (gc *GameCore) updateLogisticsStats(player *model.PlayerState) {
 func (gc *GameCore) updateCombatStats(player *model.PlayerState) {
 	stats := &player.Stats.CombatStats
 
-	// 从 sensor contacts 获取威胁等级
-	if gc.world.SensorContacts != nil {
-		if state, ok := gc.world.SensorContacts[player.PlayerID]; ok && state != nil {
-			maxThreat := 0
+	stats.ThreatLevel = 0
+	for _, ws := range gc.statWorlds() {
+		if state := ws.SensorContacts[player.PlayerID]; state != nil {
 			for _, contact := range state.Contacts {
 				if contact == nil || contact.FalseContact {
 					continue
 				}
-				threatInt := int(math.Ceil(contact.ThreatLevel))
-				if threatInt > maxThreat {
-					maxThreat = threatInt
-				}
-			}
-			stats.ThreatLevel = maxThreat
-			if maxThreat > stats.HighestThreat {
-				stats.HighestThreat = maxThreat
+				stats.ThreatLevel = max(stats.ThreatLevel, int(math.Ceil(contact.ThreatLevel)))
 			}
 		}
 	}
+	stats.HighestThreat = max(stats.HighestThreat, stats.ThreatLevel)
+}
 
-	// 统计击杀数（从事件历史中获取）
-	// 这里简化处理，实际需要更复杂的逻辑
+// statWorlds is stable and counts each loaded planet once, regardless of focus.
+func (gc *GameCore) statWorlds() []*model.WorldState {
+	ids := make([]string, 0, len(gc.worlds))
+	for id := range gc.worlds {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	seen := make(map[*model.WorldState]bool)
+	worlds := make([]*model.WorldState, 0, len(ids)+1)
+	for _, id := range ids {
+		if ws := gc.worlds[id]; ws != nil && !seen[ws] {
+			worlds = append(worlds, ws)
+			seen[ws] = true
+		}
+	}
+	if gc.world != nil && !seen[gc.world] {
+		worlds = append(worlds, gc.world)
+	}
+	return worlds
 }

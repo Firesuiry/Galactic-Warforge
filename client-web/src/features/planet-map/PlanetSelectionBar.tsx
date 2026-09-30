@@ -1,3 +1,4 @@
+import { AmmunitionBar } from "@/features/war/components/AmmunitionBar";
 /**
  * 选中情境条：地图底部的选中对象快捷操作（群星式）。
  * 建筑：升级/拆除；单位：移动/攻击（进入地图点选模式）；地块/资源：只读信息。
@@ -137,6 +138,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
         <Icon iconKey="soldier" size={20} />
         <div className="planet-selection-bar__info">
           <strong>已选 {aliveSelection.length} 个单位</strong>
+          {aliveSelection.some(id=>planet.units?.[id]?.combat_state==='no_ammunition')?<span role="alert">{aliveSelection.filter(id=>planet.units?.[id]?.combat_state==='no_ammunition').length} 个单位弹药耗尽</span>:null}
           <span className="planet-selection-bar__meta">{composition}</span>
           <span className="planet-selection-bar__meta">右键点地移动 / 点敌攻击 · Ctrl+数字编队</span>
         </div>
@@ -269,6 +271,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           <span className="planet-selection-bar__meta">
             ({unit.position.x}, {unit.position.y}) · HP {unit.hp}/{unit.max_hp}
           </span>
+          {unit.ammo_capacity?<AmmunitionBar current={unit.ammo??0} capacity={unit.ammo_capacity}/>:null}
           {unit.mecha ? <span className="planet-selection-bar__meta">
             能量 {unit.mecha.energy}/{unit.mecha.max_energy} · 护盾 {unit.mecha.shield}/{unit.mecha.max_shield}
           </span> : null}

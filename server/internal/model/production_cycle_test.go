@@ -36,16 +36,12 @@ func TestResolveProductionCycleSpeed(t *testing.T) {
 }
 
 func TestAssemblyTierRecipeRestrictionsRemainScoped(t *testing.T) {
-	dfProto, _ := Recipe("df_prototype")
-	if _, err := ResolveProductionCycle(ProductionCycleRequest{Recipe: dfProto, BuildingType: BuildingTypeAssemblingMachineMk2}); err != nil {
-		t.Fatalf("Mk2 should accept df_prototype: %v", err)
+	missile, _ := Recipe("df_missile_set")
+	if _, err := ResolveProductionCycle(ProductionCycleRequest{Recipe: missile, BuildingType: BuildingTypeAssemblingMachineMk2}); err != nil {
+		t.Fatalf("Mk2 should accept df_missile_set: %v", err)
 	}
-	if _, err := ResolveProductionCycle(ProductionCycleRequest{Recipe: dfProto, BuildingType: BuildingTypeAssemblingMachineMk3}); err != nil {
-		t.Fatalf("Mk3 should inherit df_prototype: %v", err)
-	}
-	drone, _ := Recipe("df_precision_drone")
-	if _, err := ResolveProductionCycle(ProductionCycleRequest{Recipe: drone, BuildingType: BuildingTypeAssemblingMachineMk3}); err != nil {
-		t.Fatalf("Mk3 should accept df_precision_drone: %v", err)
+	if _, err := ResolveProductionCycle(ProductionCycleRequest{Recipe: missile, BuildingType: BuildingTypeAssemblingMachineMk3}); err != nil {
+		t.Fatalf("Mk3 should inherit df_missile_set: %v", err)
 	}
 }
 

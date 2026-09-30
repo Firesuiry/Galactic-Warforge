@@ -198,9 +198,11 @@ describe('PlanetBuildBar', () => {
     const user = userEvent.setup();
     render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
-    // 非传送带建筑不显示方向控件
+    // 普通建筑也支持 R 键旋转
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
-    expect(screen.queryByRole('button', { name: /^方向：/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^方向：/ })).toHaveTextContent('0°');
+    await user.keyboard('r');
+    expect(screen.getByRole('button', { name: /^方向：/ })).toHaveTextContent('90°');
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
 
     await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));

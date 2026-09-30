@@ -36,6 +36,7 @@ func TestPlayerMechaAttackConsumesEnergyAndRejectsAtomically(t *testing.T) {
 		t.Fatalf("attack=%+v target=%+v mecha=%+v", res, enemy, unit.Mecha)
 	}
 	unit.Mecha.Energy = 7
+	ws.Tick += unit.AttackCooldownTick
 	res, events := core.execAttack(ws, "p1", mechaAttackCommand(enemy.ID))
 	if res.Code != model.CodeInsufficientResource || enemy.HP != 82 || unit.Mecha.Energy != 7 || len(events) != 0 {
 		t.Fatalf("failed attack mutated state: %+v", res)

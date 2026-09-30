@@ -201,7 +201,7 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 		if squad == nil || squad.OwnerID != playerID {
 			continue
 		}
-		blueprint, ok := model.ResolveWarBlueprintForPlayer(player, squad.BlueprintID)
+		blueprint, ok := model.ResolveWarBlueprintForPlayer(player, squad.Name)
 		if !ok {
 			continue
 		}

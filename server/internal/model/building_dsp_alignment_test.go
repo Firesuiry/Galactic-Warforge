@@ -7,7 +7,7 @@ import (
 
 // dspBuildingCostAlignment 冻结 DSP（develop_tools/dsp-catalog/scope.json，
 // cat=buildings 且 inPlanet）建筑合成配方并入 SW BuildCost 的期望值。
-// minerals/energy 维持对齐前有效值（显式值 > defaultBuildCostOverrides > 类别默认），
+// minerals/energy 维持对齐前有效值（F8 起在 buildings.yaml 中显式填写），
 // items 为 DSP 配方物品输入（数量一致，按 id 排序）。
 // DSP 配方中以建筑为输入的进阶链（如 conveyor-belt-2 消耗 3 个 conveyor-belt-1）
 // 在 SW 中不作为物品存在，按政策不并入 Items。
@@ -135,7 +135,7 @@ var dspBuildingUnlockTechAlignment = map[BuildingType]string{
 	BuildingTypeWirelessPowerTower:           "plasma_control",
 }
 
-// dspUnlockTechPending 是科技定义（tech.go，任务域 C）尚未按 DSP 对齐
+// dspUnlockTechPending 是科技定义（techs.yaml）尚未按 DSP 对齐
 // TechUnlockBuilding 归属的建筑：SW 现行归属有意或暂未与 DSP 一致
 // （起始建筑由预完成的 dyson_sphere_program 直接授予，保证新局可建造）。
 // 这些建筑仅要求 UnlockTech 非空，待科技域对齐后应移出本清单并接受精确匹配。
@@ -166,11 +166,11 @@ func sortedItems(items []ItemAmount) []ItemAmount {
 	return out
 }
 
-// TestDSPBuildingCatalogCount 守住建筑总数 62（对齐只改成本，不增不减）。
+// TestDSPBuildingCatalogCount 守住 62 个工业建筑与 6 个 RTS 建筑。
 func TestDSPBuildingCatalogCount(t *testing.T) {
 	defs := AllBuildingDefinitions()
-	if len(defs) != 62 {
-		t.Fatalf("building catalog should hold 62 definitions, got %d", len(defs))
+	if len(defs) != 68 {
+		t.Fatalf("building catalog should hold 68 definitions, got %d", len(defs))
 	}
 }
 

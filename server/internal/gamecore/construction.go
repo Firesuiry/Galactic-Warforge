@@ -501,6 +501,13 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			continue
 		}
 
+		if task.AutoApproach && gc.requireBuildRange(ws, task.PlayerID, task.Position) != nil {
+			unit, path := planBuildApproach(ws, task.PlayerID, task.Position)
+			if unit != nil && !unit.HasPath() {
+				startBuildApproach(unit, path)
+			}
+			continue
+		}
 		// T079: Before starting a pending task, verify materials are available
 		if !checkMaterialsAvailable(ws, task) {
 			// Materials not available, skip starting this task
@@ -689,12 +696,12 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	} else if _, occupied := ws.TileBuilding[tileKey]; occupied && task.BuildingType != model.BuildingTypeLogisticsDistributor {
 		return nil, fmt.Errorf("construction tile already occupied")
 	}
-	def, ok := model.BuildingDefinitionByID(task.BuildingType)
+	_, ok := model.BuildingDefinitionByID(task.BuildingType)
 	if !ok {
 		return nil, fmt.Errorf("unknown building type: %s", task.BuildingType)
 	}
-	if def.RequiresResourceNode && ws.Grid[pos.Y][pos.X].ResourceNodeID == "" {
-		return nil, fmt.Errorf("resource node missing at construction site")
+	if err := model.ValidateCollectorSite(ws, task.BuildingType, pos); err != nil {
+		return nil, err
 	}
 
 	tiles, err := ws.ConstructionTiles(task)
@@ -757,6 +764,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		b.Position.Z = 1
 		b.Distributor = model.NewDistributorState(host.ID)
 	}
+	model.ApplyBuildingRotation(b, task.Rotation)
 	syncCollectorResourceKind(ws, b)
 	if b.Production != nil {
 		recipeID := task.RecipeID

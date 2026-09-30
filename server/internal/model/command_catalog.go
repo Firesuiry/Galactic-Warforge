@@ -41,6 +41,8 @@ type CommandStructureSpec struct {
 // Order matches AllCommandTypes().
 func commandStructureRegistry() []CommandStructureSpec {
 	return []CommandStructureSpec{
+		{Type: CmdSetRallyPoint, RequiredTargetFields: []string{"entity_id", "position"}},
+		{Type: CmdConfigureSorter, RequiredTargetFields: []string{"entity_id"}, RequiredPayloadFields: []string{"input_directions", "output_directions"}, OptionalPayloadFields: []string{"filter_mode", "filter_items"}},
 		{
 			Type:                  CmdConfigureTrafficMonitor,
 			RequiredTargetFields:  []string{"entity_id"},
@@ -57,7 +59,7 @@ func commandStructureRegistry() []CommandStructureSpec {
 			Type:                  CmdBuild,
 			RequiredTargetFields:  []string{"position"},
 			RequiredPayloadFields: []string{"building_type"},
-			OptionalPayloadFields: []string{"recipe_id", "direction"},
+			OptionalPayloadFields: []string{"recipe_id", "direction", "rotation", "auto_approach"},
 			Constraints:           []string{"F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。"},
 			ExtraValidation: func(cmd Command) []CommandIssue {
 				if recipeID, ok := cmd.Payload["recipe_id"]; ok {
@@ -251,6 +253,7 @@ func commandStructureRegistry() []CommandStructureSpec {
 		{
 			Type:                  CmdTransferItem,
 			RequiredPayloadFields: []string{"building_id", "item_id", "quantity"},
+			OptionalPayloadFields: []string{"direction"},
 		},
 		{
 			Type:                  CmdLaunchSolarSail,
@@ -273,9 +276,12 @@ func commandStructureRegistry() []CommandStructureSpec {
 		},
 		{
 			Type:                  CmdDeploySquad,
-			RequiredPayloadFields: []string{"building_id", "blueprint_id", "count"},
-			OptionalPayloadFields: []string{"planet_id"},
+			RequiredPayloadFields: []string{"member_ids"},
+			OptionalPayloadFields: []string{"name"},
 		},
+		{Type: CmdFormSquad, RequiredPayloadFields: []string{"entity_ids"}, OptionalPayloadFields: []string{"name"}, Constraints: []string{"entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected"}},
+		{Type: CmdSquadOrder, RequiredPayloadFields: []string{"squad_id", "order"}},
+		{Type: CmdDissolveSquad, RequiredPayloadFields: []string{"squad_id"}},
 		{
 			Type:                  CmdCommissionFleet,
 			RequiredPayloadFields: []string{"building_id", "blueprint_id", "count", "system_id"},

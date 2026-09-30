@@ -34,6 +34,11 @@ import {
   cmdMineResource as apiMineResource,
   cmdCraftItem as apiCraftItem,
   cmdCancelMechaJob as apiCancelMechaJob,
+  cmdSetRallyPoint as apiSetRallyPoint,
+  cmdFormSquad as apiFormSquad,
+  cmdSquadOrder as apiSquadOrder,
+  cmdDissolveSquad as apiDissolveSquad,
+  cmdConfigureSorter as apiConfigureSorter,
   cmdConfigureSplitter as apiConfigureSplitter,
   cmdConfigureTrafficMonitor as apiConfigureTrafficMonitor,
   type SplitterConfig,
@@ -212,7 +217,7 @@ export async function cmdRaw(args: string[]): Promise<string> {
 export async function cmdBuild(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
-    return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--planet <planet_id>]');
+    return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--rotation 0|90|180|270] [--approach] [--planet <planet_id>]');
   }
   try {
     const position = parsePosition(
@@ -224,8 +229,13 @@ export async function cmdBuild(args: string[]): Promise<string> {
     if (direction && !DIRECTIONS.has(direction as Direction)) {
       return fmtError('direction 必须是 north/east/south/west/auto');
     }
+    const rotationRaw = getStringOption(parsed, 'rotation');
+    const rotation = rotationRaw === undefined ? undefined : requireInt(rotationRaw, 'rotation');
+    if (rotation !== undefined && ![0, 90, 180, 270].includes(rotation)) return fmtError('rotation 必须是 0/90/180/270');
     return fmtCommandResponse(await apiBuild(position, parsed.positionals[2], {
       direction: direction as Direction | undefined,
+      rotation: rotation as 0 | 90 | 180 | 270 | undefined,
+      autoApproach: parsed.options.approach === true ? true : undefined,
       recipeId: getStringOption(parsed, 'recipe'),
       planetId: getStringOption(parsed, 'planet'),
     }));
@@ -504,6 +514,46 @@ export async function cmdDeploySquad(args: string[]): Promise<string> {
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
       planetId: getStringOption(parsed, 'planet'),
     }));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdFormSquad(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length < 1) {
+    return fmtError('Usage: form_squad <entity_id...> [--name <name>] [--planet <planet_id>]');
+  }
+  try {
+    return fmtCommandResponse(await apiFormSquad(parsed.positionals, getStringOption(parsed, 'name'), getStringOption(parsed, 'planet')));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+const SQUAD_ORDERS = ['attack', 'defend', 'retreat', 'resupply'] as const;
+
+export async function cmdSquadOrder(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  const [squadId, order, x, y] = parsed.positionals;
+  const usage = 'Usage: squad_order <squad_id> <attack|defend|retreat|resupply> [<x> <y>] [--planet <planet_id>] (x y required except resupply)';
+  if (args.includes('--help') || !squadId || !SQUAD_ORDERS.includes(order as typeof SQUAD_ORDERS[number])) return fmtError(usage);
+  if (order === 'resupply' ? parsed.positionals.length !== 2 : parsed.positionals.length !== 4) return fmtError(usage);
+  try {
+    const position = order === 'resupply' ? undefined : { x: requireInt(x, 'x'), y: requireInt(y, 'y') };
+    return fmtCommandResponse(await apiSquadOrder(squadId, order as typeof SQUAD_ORDERS[number], position, getStringOption(parsed, 'planet')));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
+export async function cmdDissolveSquad(args: string[]): Promise<string> {
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length !== 1) {
+    return fmtError('Usage: dissolve_squad <squad_id> [--planet <planet_id>]');
+  }
+  try {
+    return fmtCommandResponse(await apiDissolveSquad(parsed.positionals[0], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -894,7 +944,7 @@ export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
 export async function cmdTransfer(args: string[]): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
-    return fmtError('Usage: transfer <building_id> <item_id> <quantity> [--planet <planet_id>]');
+    return fmtError('Usage: transfer <building_id> <item_id> <quantity> [--take] [--planet <planet_id>]');
   }
   try {
     return fmtCommandResponse(await apiTransferItem(
@@ -902,6 +952,7 @@ export async function cmdTransfer(args: string[]): Promise<string> {
       parsed.positionals[1],
       requireInt(parsed.positionals[2], 'quantity'),
       getStringOption(parsed, 'planet'),
+      parsed.options.take ? 'to_player' : 'to_building',
     ));
   } catch (e) {
     return fmtError(toErrorMessage(e));
@@ -1102,4 +1153,31 @@ export async function cmdConfigureTrafficMonitor(args: string[]): Promise<string
       window_ticks: Number(window), minimum_items_per_tick: Number(minimum), alerts_enabled: alerts === 'on',
     }));
   } catch (error) { return fmtError(toErrorMessage(error)); }
+}
+
+export async function cmdConfigureSorter(args: string[]): Promise<string> {
+ const parsed=parseArgs(args);
+ const usage='Usage: configure_sorter <building_id> --inputs west --outputs east [--mode allow|deny] [--items iron_ore,copper_ore] [--planet <id>]';
+ if(args.includes('--help') || parsed.positionals.length!==1) return fmtError(usage);
+ try {
+  const allowed=new Set(['inputs','outputs','mode','items','planet']);
+  for(const [key,value] of Object.entries(parsed.options)) if(!allowed.has(key)||typeof value!=='string') throw new Error('无效选项 '+key);
+  const dirs=(key:string):CardinalDirection[]=>{
+   const values=parseCSVList(getStringOption(parsed,key),key);
+   if(!values.length||values.some(v=>!['north','east','south','west'].includes(v))||new Set(values).size!==values.length) throw new Error('方向无效');
+   return values as CardinalDirection[];
+  };
+  const inputs=dirs('inputs'), outputs=dirs('outputs');
+  if(inputs.some(v=>outputs.includes(v))) throw new Error('输入和输出方向不能重叠');
+  const mode=getStringOption(parsed,'mode')??'allow';
+  if(mode!=='allow'&&mode!=='deny')throw new Error('mode 必须为 allow 或 deny');
+  const items=getStringOption(parsed,'items');
+  return fmtCommandResponse(await apiConfigureSorter(parsed.positionals[0],{input_directions:inputs,output_directions:outputs,filter_mode:mode,filter_items:items?parseCSVList(items,'items'):[]},getStringOption(parsed,'planet')));
+ }catch(error){return fmtError(toErrorMessage(error));}
+}
+
+export async function cmdSetRallyPoint(args:string[]):Promise<string>{
+ const parsed=parseArgs(args);const [id,x,y]=parsed.positionals;
+ if(args.includes('--help')||parsed.positionals.length!==3||!Number.isInteger(Number(x))||!Number.isInteger(Number(y)))return fmtError('Usage: set_rally_point <building_id> <x> <y> [--planet <id>]');
+ try{return fmtCommandResponse(await apiSetRallyPoint(id,{x:Number(x),y:Number(y),z:0},getStringOption(parsed,'planet')));}catch(error){return fmtError(toErrorMessage(error));}
 }

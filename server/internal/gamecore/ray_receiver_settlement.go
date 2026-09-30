@@ -10,7 +10,7 @@ import (
 
 const maxPlayerEnergy = 10000
 
-func settleRayReceivers(ws *model.WorldState, maps *mapmodel.Universe, spaceRuntime *model.SpaceRuntimeState) map[string]model.RayReceiverSettlementView {
+func settleRayReceivers(ws *model.WorldState, maps *mapmodel.Universe, spaceRuntime *model.SpaceRuntimeState, energyBudget map[string]int) map[string]model.RayReceiverSettlementView {
 	if ws == nil || len(ws.Buildings) == 0 {
 		return nil
 	}
@@ -59,11 +59,17 @@ func settleRayReceivers(ws *model.WorldState, maps *mapmodel.Universe, spaceRunt
 		// `InputPerTick` is the receiver's intake ceiling, not free baseline energy.
 		availableDysonEnergy := GetSolarSailEnergy(spaceRuntime, player.PlayerID, systemID) + GetDysonSphereEnergy(spaceRuntime, player.PlayerID, systemID)
 		view.AvailableDysonEnergy = availableDysonEnergy
-		effectiveInput := availableDysonEnergy
+		budgetKey := systemID + ":" + player.PlayerID
+		remaining, initialized := energyBudget[budgetKey]
+		if !initialized {
+			remaining = availableDysonEnergy
+		}
+		effectiveInput := remaining
 		if module.InputPerTick > 0 && effectiveInput > module.InputPerTick {
 			effectiveInput = module.InputPerTick
 		}
 		view.EffectiveInput = effectiveInput
+		energyBudget[budgetKey] = remaining - effectiveInput
 
 		if effectiveInput > 0 {
 			// `InputPerTick` is replaced with the actually available Dyson energy for this tick.

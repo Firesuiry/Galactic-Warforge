@@ -3,21 +3,38 @@ package model
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
 var (
-	techCatalogDerivedOnce sync.Once
+	techCatalogDerivedMu sync.Mutex
+	techCatalogDerived   atomic.Bool
 
 	buildingCatalogDerivedMu sync.Mutex
 	buildingCatalogDerived   bool
 )
+
+// resetCatalogDerivations 数据重新安装后，让科技 leads_to/hidden 与建筑 unlock_tech 重新派生。
+func resetCatalogDerivations() {
+	techCatalogDerived.Store(false)
+	markBuildingCatalogDerivedDirty()
+}
 
 func ensureTechCatalogDerived() {
 	if techCatalog == nil {
 		return
 	}
 
-	techCatalogDerivedOnce.Do(func() {
+	if techCatalogDerived.Load() {
+		return
+	}
+	techCatalogDerivedMu.Lock()
+	defer techCatalogDerivedMu.Unlock()
+	if techCatalogDerived.Load() {
+		return
+	}
+	defer techCatalogDerived.Store(true)
+	{
 		techCatalog.mu.Lock()
 		defer techCatalog.mu.Unlock()
 
@@ -85,7 +102,7 @@ func ensureTechCatalogDerived() {
 				def.LeadsTo = leadsTo
 			}
 		}
-	})
+	}
 }
 
 func techHasPublicValue(def *TechDefinition) bool {

@@ -24,7 +24,7 @@ func spendMechaEnergy(unit *model.Unit, cost int) *model.CommandResult {
 }
 
 func settleMechas(ws *model.WorldState) []*model.GameEvent {
-	var events []*model.GameEvent
+	events := settleExecutorRespawns(ws)
 	for _, unit := range ws.Units {
 		if unit.Type != model.UnitTypeExecutor || unit.HP <= 0 {
 			continue

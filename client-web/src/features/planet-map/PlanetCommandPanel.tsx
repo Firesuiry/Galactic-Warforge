@@ -957,7 +957,7 @@ export function PlanetCommandPanel({
               <option value="">选择单位</option>
               {produceUnitTypes.map((unit) => (
                 <option key={unit.id} value={unit.id}>
-                  {unit.name} ({unit.id})
+                  {unit.name} ({unit.id}) · {unit.cost?.map(c=>c.item_id+" × "+c.quantity).join(" / ")} · {unit.production_ticks} tick
                 </option>
               ))}
             </select>

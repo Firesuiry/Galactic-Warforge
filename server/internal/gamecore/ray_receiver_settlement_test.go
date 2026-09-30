@@ -18,7 +18,7 @@ func TestSettleRayReceiversRequiresDysonEnergy(t *testing.T) {
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
 
-	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 
 	if player.Resources.Energy != 0 {
 		t.Fatalf("expected no energy gain without dyson energy, got %d", player.Resources.Energy)
@@ -52,7 +52,7 @@ func TestSettleRayReceiversConsumeSolarSailEnergyUpToInputCap(t *testing.T) {
 
 	LaunchSolarSail(core.spaceRuntime, "p1", "sys-1", 1.2, 5, 1)
 
-	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 
 	if player.Resources.Energy != 0 {
 		t.Fatalf("expected no direct energy commit before finalize, got %d", player.Resources.Energy)
@@ -96,7 +96,7 @@ func TestSettleRayReceiversConsumeDysonSphereEnergyUpToInputCap(t *testing.T) {
 	}
 	settleDysonSpheres(core.spaceRuntime, ws.Tick)
 
-	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 
 	if player.Resources.Energy != 0 {
 		t.Fatalf("expected no direct energy commit before finalize, got %d", player.Resources.Energy)
@@ -132,7 +132,7 @@ func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
 	player := ws.Players["p1"]
 	player.Resources.Energy = 0
 	ws.PowerInputs = nil
-	baseViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	baseViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 	basePowerGain := baseViews[receiver.ID].PowerOutput
 
 	player.Resources.Energy = 0
@@ -143,7 +143,7 @@ func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
 	}
 	state.Layers[0].ConstructionBonus = 0.20
 	settleDysonSpheres(core.spaceRuntime, ws.Tick+1)
-	boostedViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	boostedViews := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 
 	if boostedViews[receiver.ID].PowerOutput <= basePowerGain {
 		t.Fatalf("expected rocket bonus to increase ray receiver income, base=%d boosted=%d", basePowerGain, boostedViews[receiver.ID].PowerOutput)
@@ -205,7 +205,7 @@ func TestSettleRayReceiversRespectModesAndKeepExistingPhotonStock(t *testing.T) 
 			player.Resources.Energy = 0
 			ws.PowerInputs = nil
 
-			views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+			views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 			settleStorage(ws)
 			if player.Resources.Energy != 0 {
 				t.Fatalf("expected no direct energy commit in %s mode, got %d", tc.mode, player.Resources.Energy)

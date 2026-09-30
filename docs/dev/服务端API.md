@@ -31,6 +31,7 @@
   - 目录中同时存在合法 `meta.json` 与 `save.json`：直接继续上一局。
   - 目录里只存在其中一个文件，或目录非空但不是完整存档：服务端拒绝启动，需人工清理或重建该目录。
 - 续档时，目录内部保存的 `battlefield`、`players`、`map_config` 优先于本次外部配置。
+- `server.game_data_dir`（可选，F8）：游戏数据目录，放 `items/recipes/techs/buildings/units/combat/war.yaml` 整套文件，非空时替换内置的 `server/data/` 默认数据；启动时做完整引用校验，失败即拒绝启动并列出全部错误。格式见 [数据配置文件](数据配置文件.md)。注意它与 `server.data_dir`（存档目录）是两回事。
 - 纯运行参数仍允许被本次外部配置覆盖，包括：`server.port`、`server.rate_limit`、`server.event_history_limit`、`server.snapshot_max_events`、`server.alert_history_limit`、`server.auto_save_interval_seconds`。
 - 自动保存默认每 `60` 秒刷新一次当前目录中的 `save.json`；`server.auto_save_interval_seconds = 0` 表示关闭自动保存。
 - `save.json` 以 gzip 压缩存储（文件名不变）；读取时按 gzip 魔数自动识别，旧版本写出的未压缩明文 `save.json` 可正常续档，下次保存自动转为压缩格式。
@@ -850,7 +851,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `height`: 可选，与 `terrain` 同形状的高度切片（0..1，omitempty）。旧客户端可忽略。未探索格为 0 或不下发，避免雾区泄露地形
   - `visible` / `explored`: 当前窗口内的迷雾切片
   - `buildings` / `units` / `resources`: 当前窗口内可见实体
-  - `buildings` 为 `model.Building` 直出：传送带类建筑（`conveyor_belt_*`）携带 `conveyor`（`input` / `output` / `max_stack` / `throughput`），其中 `conveyor.buffer` 为带内物品堆数组（`item_id` / `quantity`，队首 = 即将送出的一端，前端物流动画依赖该字段）；采集类建筑 `runtime.functions.collect.resource_kind` 为正在采集的资源种类（由服务端按脚下矿脉同步）
+  - `buildings` 为 `model.Building` 直出：传送带类建筑（`conveyor_belt_*`）携带 `conveyor`（`input` / `output` / `max_stack` / `throughput`），其中 `conveyor.buffer` 为带内物品堆数组（`item_id` / `quantity`，队首 = 即将送出的一端，前端物流动画依赖该字段）；采集类建筑 `runtime.functions.collect.resource_kind` 为正在采集的资源种类（由服务端按脚下矿脉同步）；`runtime.functions.collect.coverage_radius`（可选，F8 起）为多脉同采覆盖半径（切比雪夫距离，当前仅 `advanced_mining_machine` 为 2，缺省 0 只采所在格）
   - 四向分流器 `type=splitter` 携带 `splitter` 配置和统计，真实物品仍放在 `conveyor.buffer`；默认西侧输入、东/南/北侧输出。独立 Transport runtime 为 6 件/tick、缓存 24 件；运行时参加同一皮带结算，刚收到的物品不会在同 tick 再穿过下一节点。暂停时不收发，配置不会删除缓存物品。
   - `splitter.input_directions` / `output_directions` 是互斥且各非空的四方向数组；未列出的口关闭。`input_priority` / `output_priority` 可选且必须属于对应数组，`output_filters` 为可选的 `{输出方向: item_id}` 映射。设过滤的口只允许该物品，未设置过滤的出口可放行任意物品；过滤不改变缓存中的真实物品。
   - `splitter.input_cursor` / `output_cursor` 是对应方向数组中下一轮开始考察的零基索引，范围分别为 `[0, len(input_directions))` / `[0, len(output_directions))`。每次实际接收/输出后移到所用口下一索引；不配置优先口时按游标轮换，配置优先口时先尝试优先口、其余合格口再按游标考察。`transferred_items` 累计皮带结算中从该分流器实际送出的物品件数（仅输入不增加）；`last_transfer_tick` 是最近实际输出的 tick，尚未输出时为 0。配置成功将两个游标重置为 0，但保留累计件数、最近输出 tick 和缓存；快照深复制配置/过滤并保留统计与游标。
@@ -1229,6 +1230,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 - 说明补充:
   - 返回不可变 catalog，用于名称、分类、图标 key、颜色、可建造性、配方和科技展示
   - 当前统一通过单个接口返回 `buildings` / `items` / `recipes` / `techs` / `world_units` / `warfare` / `damage_coefficients`
+  - 数据来源（F8）：全部来自 `server/data/*.yaml`（或 `server.game_data_dir` 覆盖的整套数据），见 [数据配置文件](数据配置文件.md)；接口字段与 F8 之前完全一致
 - 响应字段:
   - `buildings`：建筑元数据，包含 `id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech` / `combat_range` / `power_range` / `icon_key` / `color`
   - `buildings[].combat_range`：可选，战斗射程（球面四邻接地格距离），仅有战斗能力的建筑（如 `gauss_turret`、`sr_plasma_turret`、`jammer_tower`）携带；与结算同源，取自该建筑 runtime 定义 `functions.combat.range`
@@ -1242,7 +1244,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `warfare`：战争目录聚合，包含 `base_frames` / `base_hulls` / `components` / `public_blueprints`
   - `warfare.base_frames[]` / `warfare.base_hulls[]`：当前会在 `budgets` 中额外暴露 `signal_capacity`，用于蓝图校验时的信号/隐形预算
   - `warfare.components[]`：当前会额外暴露 `signal_load` / `stealth_rating`，用于蓝图校验时的签名负荷与隐蔽加成
-  - `warfare.public_blueprints`：公开预置蓝图目录，包含 `id` / `name` / `domain` / `source` / `base_frame_id` / `base_hull_id` / `visible_tech_id` / `runtime_class` / `production_mode` / `producer_recipes` / `deploy_command` / `query_scopes` / `commands` / `components`，以及与结算同源的 `armor_class` / `weapon_class` / `attack` / `range` / `max_hp`（空中小队或 drone 平台为 `air`，其余地面小队为 `heavy`，舰队为 `ship`；武器类取蓝图运行时档案）
+  - `warfare.public_blueprints`：公开预置蓝图目录，包含 `id` / `name` / `domain` / `source` / `base_frame_id` / `base_hull_id` / `visible_tech_id` / `runtime_class` / `production_mode` / `deploy_command` / `query_scopes` / `commands` / `components`，以及与结算同源的 `armor_class` / `weapon_class` / `attack` / `range` / `max_hp`（空中小队或 drone 平台为 `air`，其余地面小队为 `heavy`，舰队为 `ship`；武器类取蓝图运行时档案）
 - 响应示例:
 ```json
 {
@@ -1415,7 +1417,6 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "runtime_class": "combat_squad",
         "visible_tech_id": "prototype",
         "production_mode": "factory_recipe",
-        "producer_recipes": ["prototype"],
         "deploy_command": "deploy_squad"
       },
       {
@@ -1427,7 +1428,6 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
         "runtime_class": "fleet_unit",
         "visible_tech_id": "corvette",
         "production_mode": "factory_recipe",
-        "producer_recipes": ["corvette"],
         "deploy_command": "commission_fleet"
       }
     ]
@@ -1630,7 +1630,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   "issuer_id": "user-001",
   "commands": [
     {
-      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|unit_order|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|set_recipe|transfer_item|switch_active_planet|set_ray_receiver_mode|set_energy_exchanger_mode|deploy_squad|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
+      "type": "scan_galaxy|scan_system|scan_planet|build|move|attack|unit_order|refuel_mecha|mine_resource|craft_item|cancel_mecha_job|produce|upgrade|demolish|configure_splitter|configure_traffic_monitor|configure_logistics_station|configure_logistics_slot|install_logistics_vehicle|cancel_construction|restore_construction|start_research|cancel_research|set_recipe|transfer_item|switch_active_planet|set_ray_receiver_mode|set_energy_exchanger_mode|deploy_squad|form_squad|squad_order|dissolve_squad|set_rally_point|commission_fleet|fleet_assign|fleet_attack|fleet_move|fleet_disband|task_force_create|task_force_assign|task_force_set_stance|task_force_deploy|theater_create|theater_define_zone|theater_set_objective|blockade_planet|blueprint_create|blueprint_set_component|blueprint_validate|blueprint_finalize|blueprint_variant|queue_military_production|refit_unit|launch_solar_sail|launch_rocket|build_dyson_node|build_dyson_frame|build_dyson_shell|demolish_dyson",
       "target": {
         "layer": "galaxy|system|planet",
         "galaxy_id": "galaxy-1",
@@ -1726,7 +1726,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 `build` 的 `building_type=foundation` 可以在水面、熔岩或阻挡地形排队；完成施工后将地形改为可建，并在实体状态保存原地形。拆除地基恢复原地形；已有建筑占用地基时拒绝拆除，材料不足或施工回滚不会改变地形。地基实体不占用已填平的 TileBuilding 格，允许随后建厂；同位置不能重复铺设，有待建任务时也不能拆地基，正在拆除的地基上禁止排工厂，restore_construction 也遵循相同限制。foundation_terrain 原始地形进入深复制和存档恢复，保存后再拆除仍可还原。Planet/Scene/Overview 地形查询反映 ws.Grid 中地基改造后的运行时地形及拆除恢复，不再仅返回初始生成地形。
 
-已加载行星的地面防御炮塔在每个 Tick 自动选取射程内敌方单位或敌对势力并产生 `damage_applied`：`missile_turret` 消耗 `ammo_missile`，`implosion_cannon` 消耗 `gravity_missile`，`plasma_turret` 消耗 `plasma_capsule`，`laser_turret` 使用电力。各塔按 runtime `Combat.fire_rate` 冷却；弹药不足产生 `building_state_changed`（reason=`no_ammunition`）并停火，供电不足由建筑进入 `no_power`。炮塔攻击机甲时仍先结算机甲护盾；攻击玩家单位的伤害事件同时发给射击方和受击方。弹药从 storage 的 input_buffer/inventory/output_buffer 按原子方式消费，不因仓储自动转移缓冲区而失效；重装后清除 no_ammunition 原因。Combat 返回 attack/range/fire_rate/ammo_item/ammo_consume/last_fire_tick；激光塔通过每 tick 电力消耗运行，不另设未结算的每发能耗字段。
+已加载行星的地面防御炮塔在每个 Tick 自动选取射程内敌方单位或敌对势力并产生 `damage_applied`：`missile_turret` 消耗 `ammo_missile`，`implosion_cannon` 消耗 `gravity_missile`，`plasma_turret` 消耗 `plasma_capsule`，`laser_turret` 使用电力。各塔按 runtime `Combat.fire_rate` 冷却；弹药不足产生 `building_state_changed`（reason=`no_ammunition`）并停火，供电不足由建筑进入 `no_power`。炮塔攻击机甲时仍先结算机甲护盾；攻击玩家单位的伤害事件同时发给射击方和受击方。弹药从 storage 的 input_buffer/inventory/output_buffer 按原子方式消费，不因仓储自动转移缓冲区而失效；重装后清除 no_ammunition 原因。Combat 返回 attack/range/fire_rate/ammo_item/ammo_consume/last_fire_tick；`anti_air_turret`（防空炮，`air_only`，射程 10）消耗 `ammo_missile`，只打空中单位，也会击落射程内敌方飞行中的物流无人机/配送机器人：被击落者从世界移除，所载货物损失，发 `entity_destroyed`（`reason="shot_down"`，payload 含 `entity_type=logistics_drone|logistics_bot`、`cargo_lost`、`attacker_id`）；`artillery_turret`（远程火炮，射程 15、最小射程 4）消耗 `shell_set`/`crystal_shell_set`，只打地面。激光塔通过每 tick 电力消耗运行，不另设未结算的每发能耗字段。
 
 `plasma_capsule` 已加入物品/配方目录；`plasma_turret` 科技解锁：1 钛合金 + 1 粒子容器 + 2 氢 → 1 等离子胶囊，基础 60 ticks、配方能耗 4，由 Mk.I/II/III 制造台加工。
 
@@ -1736,7 +1736,12 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
   - `craft_item`：`target.entity_id` 为自己的存活 `executor`；必填非空 `payload.recipe_id` 和正整数 `payload.quantity`（配方批数，不是产物件数）。配方须 `handcraft_allowed=true`、科技可用且全部输入/输出为固体。启动时一次从玩家背包扣留全部请求批次的输入，材料不足原子失败；每批耗时 `max(1, recipe.duration)` tick、每 tick 消耗 1 核心能量，整批产物及副产物进入背包。禁止与采矿或另一制造任务同时运行；不自动递归制造前置材料。
   - `cancel_mecha_job`：只需自己存活 `executor` 的 `target.entity_id`，无 payload。取消当前任务，将尚未完成批次的预留原料返还玩家背包（包含进行中批次）；已完成产物保留，已消耗核心能量不返还。机甲死亡路径也会执行同一退款逻辑且只退一次；无任务时返回 `INVALID_TARGET`。
   - 建造可达性（D2）：`build` 目标处于任一己方建造中心（定义带 `build_radius` 的建筑，当前为 `battlefield_analysis_base`，半径 24）覆盖范围内即可建造；否则回退要求执行体在操作范围内。舰队对舰队（R4 最小版）：同一恒星系内分属敌对玩家的舰队每 tick 自动交火（直瞄火力集火最弱舰队，结构归零摧毁并广播 `entity_destroyed`，跃迁中不参战；同队互不交火）。
-  - `produce`：`target.entity_id` + `payload.unit_type` 必填；目标建筑必须处于可运行状态，停电/停机/故障时会直接拒绝；`payload.unit_type` 的 authoritative 边界以 `/catalog.world_units` 为准，当前只接受 `production_mode=world_produce && runtime_class=world_unit` 的单位，当前接受 `worker`、`soldier`、`mecha`；机甲生产成本为 180 矿物 / 80 能量。
+  - `produce`：`target.entity_id`（己方生产建筑）+ `payload.unit_type` 必填；建筑须可运行（停电/停机/故障直接拒绝）；单位由目录 `producer` 分工：兵营（`barracks`）产工程兵/步兵/侦察车，战车工厂（`vehicle_factory`）产机甲/火炮/导弹车/维修车/补给车，机场产攻击无人机，建筑类型不符返回 `INVALID_TARGET`。单位边界以 `/catalog.world_units` 为准。造价是实物物品清单（`cost[]`，如钢材/电路板/电动机），入队时从**生产建筑自身库存**原子扣除（皮带、分拣器或手动 `transfer_item` 供料），不足返回 `INSUFFICIENT_RESOURCE`；不再扣 minerals/energy。队列上限 20，每项按 `production_ticks` 倒计时，停电暂停，出口堵塞则等待空位；建筑视图带 `unit_queue[]`（`unit_type`/`remaining_ticks`/`total_ticks`）与 `rally_point`。
+  - `set_rally_point`：`target.entity_id` 为己方单位生产建筑，`target.position` 为可通行格；之后出厂单位自动寻路到该点。同时发 `building_state_changed`（含 `unit_queue`、`rally_point`）。
+  - `form_squad`：`payload.entity_ids`（1–300 个己方存活军事单位，可含 `supply_truck`/`repair_vehicle`；不含机甲执行体/工程兵，且不得已在其他军团）必填，可选 `payload.name`（1–40 字符）。成功 `message` 为新军团 ID，发 `squad_deployed`。军团只是指令容器，无共享血条。
+  - `squad_order`：`payload.squad_id` + `payload.order`（`attack|defend|retreat|resupply`）必填。`attack`/`defend`/`retreat` 需 `target.position`；`resupply` 无需目标，自动前往最近的可运行补给站。服务端按射程自动站位（远程在后、近战在前，补给车/维修车殿后并跟随首位成员），逐单位规划路径；`attack` 用攻击移动姿态（沿途接敌），其余为撤退姿态，`defend`/`resupply` 到位后坚守。无可达站位返回 `OUT_OF_RANGE`，无补给站返回 `INVALID_TARGET`。
+  - `dissolve_squad`：`payload.squad_id`；解散军团，成员保留当前指令。
+  - 单位弹药：世界单位带 `ammo_class`（`bullet|shell|missile`，无弹药需求的单位为空）/`ammo`（当前量）/`ammo_capacity`/`ammo_item`（当前装填弹种，高档弹增伤）；每次开火扣 1 发，打空则 `combat_state="no_ammunition"` 并停火。黑雾单位不耗弹。补给：`supply_station`（建筑，`supply_radius=10`、`supply_rate=6`/tick，扣自身库存里的弹药物品，需运行）与 `supply_truck`（单位，`supply_radius=5`、`supply_rate=3`/tick，扣自身 `cargo`，`cargo_capacity=180`，在补给站光环内自动装货，可随军团行动）只给光环内己方单位补弹；其余物流站/部署枢纽不再补弹。攻击移动优先目标为补给站、补给车与弹药产线建筑。
   - `upgrade` / `demolish`：`target.entity_id` 必填
   - `configure_traffic_monitor`：`target.entity_id` 为己方流速监测器，完整替换配置：`target_belt_id`（己方球面相邻 Mk.I/II/III 皮带 ID；空字符串清绑定）、`window_ticks`（1..600 整数）、`minimum_items_per_tick`（0..60 有限数）、`alerts_enabled`（布尔值）均必填。非法配置不改变状态；成功重配清窗口和累计值。建筑耗电1/tick，监测不改变物流。`building.traffic_monitor` 包含配置、`state`、`samples[{tick,items,queued_items}]`、`sample_count`、`window_items`、`items_per_tick`、`total_items`、`last_sample_tick`、`alert_active`。统计目标皮带成功流出的实际件数，包括带间、分拣器和机器取货；同一次流出不重复计数。完整窗口前为 `sampling`，正常为 `flowing|idle`，低于阈值为 `low_flow`，完整窗口每次都有积货且零流出为 `blocked`。无绑定/停电/暂停/目标移除或停用分别为 `unconfigured|no_power|paused|target_missing|target_inactive`，清当前窗口但保留累计；恢复重新采样。关闭告警仍采样。`traffic_monitor_alert` 仅在告警变更时发给所属玩家，载荷含 `building_id`、`planet_id`、`target_belt_id`、`state`、`alert_active`、`items_per_tick`、`minimum_items_per_tick`、`tick`；解除告警同样发出。
   - `configure_splitter`：`target.entity_id` 为自己拥有且已初始化的 `splitter`。必填 `payload.input_directions` / `output_directions`（数组）；仅允许 `north|east|south|west`，每组至少一个、所有端口不重复且输入输出互斥，不接受 `auto`。可选 `input_priority` / `output_priority`（所属方向或空字符串）和 `output_filters`（输出方向到有效物品 ID 的对象）。**完整替换配置**：省略优先级或传 `""` 会清除旧优先级；省略过滤或传 `{}` 会清除全部旧过滤，删除单口过滤需提交不含该口的完整过滤对象，不能用空物品 ID 代替删除。验证失败不改变原配置、缓存、游标或统计；成功发拥有者可见的 `building_state_changed`，payload 含 `entity_id` 和完整 `splitter`。
@@ -2370,3 +2375,15 @@ Mk.II/III 制造台继承全部 Mk.I 配方，Mk.III 也支持 prototype，preci
 `GET /world/planets/{id}/runtime` 返回己方 `logistics_distributors`（building_id/owner_id/position/state/bot_ids/host_available/inventory）和 `logistics_bots`。机器人含真实position、home_pos、target_pos、target_kind、trip_kind、cargo、status、returning、energy_cost、energy_remaining等；仓库仍是唯一库存源，inventory为主仓和输入输出缓存合计。Building也带distributor，MechaState带logistics_requests；快照保存并恢复这些状态。
 
 成功配置配送器发送所属玩家可见的 `entity_updated`，机甲请求配置发送 `mecha_state_changed`。装卸机器人发送 `entity_updated`；发生背包扣除/返还时另发送 `resource_changed`（item_id、inventory_qty）。前端据此刷新详情，库存与充电状态直接读取每tick更新的runtime。
+
+
+## 第一阶段行星军工增量（2026-09-29）
+
+- `produce`：`target.entity_id` 为专属生产建筑，`payload.unit_type` 取 `/catalog.world_units`；真实 `cost` 物品从建筑三个存储桶扣除。最多 20 个订单。`unit_queue` 提供 `remaining_ticks/total_ticks`；断电暂停、出厂等待空格，出生满弹。
+- `set_rally_point`：`target.entity_id` 为己方生产建筑，`target.position` 为可通行落点；新增 `rally_point` 状态。
+- `configure_sorter`：己方分拣器，`input_directions/output_directions` 非空且合法、不重叠；过滤允许/拒绝物品 ID，失败原子拒绝。机器上下料复用真实 IO 端口和配方背压。
+- `transfer_item` 增加可选 `direction`：`to_building`（默认）或 `to_player`。取料仅从主仓/输出缓存扣除且受本行星存活执行体背包容量限制，不凭空生成物品。
+- `build` 增加可选整数 `rotation`（0/90/180/270）和布尔 `auto_approach`。旋转作用于占地、端口、分拣器和专用物流方向。自动靠近时施工先排队，执行体按真实路径耗能移动，进入操作范围后开工；不可达则拒绝，机甲死亡时等待。
+- 世界单位新增 `ammo_class/ammo/ammo_capacity/ammo_item/combat_state/cargo/domain/min_attack_range`。三类实物弹药为 bullet/shell/missile，类内高档增伤；空弹匣停火。补给站和补给车只补给范围内己方单位并扣真实库存，维修车独立维修。攻击无人机无视地形，只有导弹和防空武器可攻击。
+- `/catalog` 增加弹种分档、生产建筑、生产时长、物料造价及补给参数。机甲阵亡后等待配置 `respawn_ticks`，在己方存活 HQ 旁重生；无 HQ 不重生。
+- 玩家生产、能源和威胁统计聚合所有已加载行星；同一 tick 多个行星短缺只增加一次缺电时长。

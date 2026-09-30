@@ -72,13 +72,13 @@ func TestT101RayReceiverReadsSolarSailEnergyFromCurrentSystemOnly(t *testing.T) 
 	attachBuilding(ws, receiver)
 
 	LaunchSolarSail(core.spaceRuntime, "p1", "sys-2", 1.2, 5, 1)
-	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	views := settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 	if got := views[receiver.ID].AvailableDysonEnergy; got != 0 {
 		t.Fatalf("expected no cross-system solar sail energy, got %d", got)
 	}
 
 	LaunchSolarSail(core.spaceRuntime, "p1", "sys-1", 1.2, 5, 1)
-	views = settleRayReceivers(ws, core.Maps(), core.spaceRuntime)
+	views = settleRayReceivers(ws, core.Maps(), core.spaceRuntime, make(map[string]int))
 	if got := views[receiver.ID].AvailableDysonEnergy; got == 0 {
 		t.Fatalf("expected current-system solar sail energy to be visible, got %d", got)
 	}

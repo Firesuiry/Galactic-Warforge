@@ -31,8 +31,8 @@ planet:
     cluster_min: 3
     cluster_max: 8
     cluster_radius: 3
-    vein_amount_min: 80
-    vein_amount_max: 200
+    vein_amount_min: 80000
+    vein_amount_max: 200000
     vein_yield_min: 2
     vein_yield_max: 6
     oil_yield_min: 3

@@ -211,6 +211,7 @@ function findBlockingResource(
 
 function buildTileAssessment(input: {
   playerId?: string;
+  rotation?: number;
   catalog?: CatalogView;
   buildingType?: string;
   planet: PlanetRenderView;
@@ -227,6 +228,7 @@ function buildTileAssessment(input: {
     width: Math.max(1, entry?.footprint?.width ?? 1),
     height: Math.max(1, entry?.footprint?.height ?? 1),
   };
+  if (input.rotation === 90 || input.rotation === 270) [footprint.width, footprint.height] = [footprint.height, footprint.width];
   // 采集建筑（requires_resource_node）必须压在资源点上，与服务端校验对齐：
   // 资源格不算阻挡，但锚点格必须命中资源点，否则本地拦截。
   const requiresResourceNode = entry?.requires_resource_node === true;
@@ -408,8 +410,9 @@ export function assessBuildTiles(
   planet: PlanetRenderView,
   position?: Position,
   playerId?: string,
+  rotation?: number,
 ): BuildTileAssessment | undefined {
-  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position, playerId });
+  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position, playerId, rotation });
 }
 
 /** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */

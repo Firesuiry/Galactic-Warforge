@@ -271,9 +271,17 @@ func collectCombatSquads(ws *model.WorldState, playerID string, vis *visibility.
 		if squad == nil {
 			continue
 		}
-		copy := *squad
-		copy.Sustainment = squad.Sustainment.Clone()
-		out = append(out, copy)
+		copy := squad.Clone()
+		if squad.OwnerID != playerID {
+			copy.Target = nil
+			copy.MemberIDs = nil
+			for _, member := range squad.Members(ws) {
+				if vis != nil && vis.IsVisible(ws, playerID, member.Position) {
+					copy.MemberIDs = append(copy.MemberIDs, member.ID)
+				}
+			}
+		}
+		out = append(out, *copy)
 	}
 	return out
 }

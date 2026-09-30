@@ -150,5 +150,5 @@ func (ws *WorldState) ConstructionTiles(task *ConstructionTask) ([]Position, err
 	if !ok {
 		return nil, fmt.Errorf("unknown building type %s", task.BuildingType)
 	}
-	return ws.FootprintTiles(task.Position, def.Footprint)
+	return ws.FootprintTiles(task.Position, RotatedFootprint(def.Footprint, task.Rotation))
 }

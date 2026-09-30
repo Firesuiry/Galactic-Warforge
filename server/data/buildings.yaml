@@ -53,7 +53,7 @@ buildings:
         connection_points: [{id: power, kind: power, capacity: 1}]
         io_ports: [{id: out-0, direction: output, capacity: 1}]
       functions:
-        collect: {yield_per_tick: 8, minerals_kickback: 1}
+        collect: {allowed_resources: [iron_ore, copper_ore, stone_ore, silicon_ore, titanium_ore, coal, fire_ice, fractal_silicon, grating_crystal, monopole_magnet, kimberlite_ore, spiniform_stalagmite_crystal, organic_crystal], yield_per_tick: 8, minerals_kickback: 1}
         storage: {capacity: 48, slots: 2, buffer: 12, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 2}
   - id: advanced_mining_machine
@@ -80,7 +80,7 @@ buildings:
         connection_points: [{id: power, kind: power, capacity: 1}]
         io_ports: [{id: out-0, direction: output, capacity: 2}]
       functions:
-        collect: {yield_per_tick: 16, minerals_kickback: 0.5}
+        collect: {allowed_resources: [iron_ore, copper_ore, stone_ore, silicon_ore, titanium_ore, coal, fire_ice, fractal_silicon, grating_crystal, monopole_magnet, kimberlite_ore, spiniform_stalagmite_crystal, organic_crystal], yield_per_tick: 16, minerals_kickback: 0.5, coverage_radius: 2}
         storage: {capacity: 96, slots: 3, buffer: 24, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 6}
   - id: water_pump
@@ -104,9 +104,9 @@ buildings:
         energy_consume: 2
         capacity: 8
         connection_points: [{id: power, kind: power, capacity: 1}]
-        io_ports: [{id: out-0, direction: output, capacity: 1, allowed_items: [water]}]
+        io_ports: [{id: out-0, direction: output, capacity: 1, allowed_items: [water, sulfuric_acid]}]
       functions:
-        collect: {yield_per_tick: 8}
+        collect: {allowed_resources: [water, sulfuric_acid], yield_per_tick: 8}
         storage: {capacity: 60, slots: 1, buffer: 20, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 2}
   - id: oil_extractor
@@ -132,7 +132,7 @@ buildings:
         connection_points: [{id: power, kind: power, capacity: 1}]
         io_ports: [{id: out-0, direction: output, capacity: 1, allowed_items: [crude_oil]}]
       functions:
-        collect: {yield_per_tick: 8}
+        collect: {allowed_resources: [crude_oil], yield_per_tick: 8}
         storage: {capacity: 60, slots: 1, buffer: 20, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 2}
   - id: orbital_collector
@@ -453,7 +453,6 @@ buildings:
       energy: 50
       items: [{item_id: circuit_board, quantity: 4}, {item_id: gear, quantity: 8}, {item_id: iron_ingot, quantity: 4}]
     buildable: true
-    can_produce_units: true
     profile: {max_hp_base: 200, max_hp_per_level: 80, vision_range: 3}
     runtime:
       params:
@@ -1016,8 +1015,6 @@ buildings:
           fire_rate: 10
           ammo_item: ammo_bullet
           ammo_consume: 1
-          alt_ammo_item: titanium_ammo
-          alt_ammo_attack: 25
   - id: missile_turret
     name: Missile Turret
     category: command_signal
@@ -1056,16 +1053,16 @@ buildings:
         - {item_id: steel, quantity: 10}
         - {item_id: super_magnetic_ring, quantity: 2}
     buildable: true
-    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: laser}
+    profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2, weapon_class: cannon}
     runtime:
       params:
         energy_consume: 15
         connection_points: [{id: power, kind: power, capacity: 1}]
-        io_ports: [{id: ammo, direction: input, capacity: 4, allowed_items: [gravity_missile]}]
+        io_ports: [{id: ammo, direction: input, capacity: 4, allowed_items: [shell_set, crystal_shell_set]}]
       functions:
-        storage: {capacity: 40, slots: 1, buffer: 20, input_priority: 2, output_priority: 1}
+        storage: {capacity: 40, slots: 2, buffer: 20, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 15}
-        combat: {attack: 75, range: 12, fire_rate: 45, ammo_item: gravity_missile, ammo_consume: 1}
+        combat: {attack: 75, range: 12, fire_rate: 45, ammo_item: shell_set, ammo_consume: 1}
   - id: laser_turret
     name: Laser Turret
     category: command_signal
@@ -1248,3 +1245,106 @@ buildings:
     build_cost: {minerals: 10}
     buildable: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
+  - id: barracks
+    name: 兵营
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 60, energy: 20, items: [{item_id: iron_ingot, quantity: 8}, {item_id: circuit_board, quantity: 4}]}
+    buildable: true
+    can_produce_units: true
+    profile: {max_hp_base: 250, max_hp_per_level: 50, vision_range: 6}
+    runtime:
+      params:
+        energy_consume: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 6}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        storage: {capacity: 1000, slots: 16, buffer: 200, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 2}
+  - id: vehicle_factory
+    name: 战车工厂
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 60, energy: 20, items: [{item_id: steel, quantity: 8}, {item_id: circuit_board, quantity: 6}, {item_id: motor, quantity: 4}]}
+    buildable: true
+    can_produce_units: true
+    profile: {max_hp_base: 250, max_hp_per_level: 50, vision_range: 6}
+    runtime:
+      params:
+        energy_consume: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 6}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        storage: {capacity: 1000, slots: 16, buffer: 200, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 2}
+  - id: airfield
+    name: 机场
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 60, energy: 20, items: [{item_id: steel, quantity: 12}, {item_id: circuit_board, quantity: 10}, {item_id: motor, quantity: 6}]}
+    buildable: true
+    can_produce_units: true
+    profile: {max_hp_base: 250, max_hp_per_level: 50, vision_range: 6}
+    runtime:
+      params:
+        energy_consume: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 6}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        storage: {capacity: 1000, slots: 16, buffer: 200, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 2}
+  - id: supply_station
+    name: 补给站
+    category: production
+    subcategory: production
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 60, energy: 20, items: [{item_id: iron_ingot, quantity: 6}, {item_id: circuit_board, quantity: 2}]}
+    buildable: true
+    supply_radius: 10
+    supply_rate: 6
+    profile: {max_hp_base: 250, max_hp_per_level: 50, vision_range: 6}
+    runtime:
+      params:
+        energy_consume: 2
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: in-0, direction: input, capacity: 6}, {id: out-0, direction: output, capacity: 2}]
+      functions:
+        storage: {capacity: 1000, slots: 16, buffer: 200, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 2}
+  - id: anti_air_turret
+    name: 防空炮
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 100, energy: 40, items: [{item_id: steel, quantity: 8}, {item_id: circuit_board, quantity: 6}]}
+    buildable: true
+    profile: {max_hp_base: 180, max_hp_per_level: 30, vision_range: 10, weapon_class: missile}
+    runtime:
+      params:
+        energy_consume: 4
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: ammo, direction: input, capacity: 4}]
+      functions:
+        storage: {capacity: 100, slots: 4, buffer: 30, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 4}
+        combat: {attack: 30, range: 10, min_range: 0, air_only: true, fire_rate: 15, ammo_item: ammo_missile, ammo_consume: 1}
+  - id: artillery_turret
+    name: 远程火炮
+    category: command_signal
+    subcategory: command_signal
+    footprint: {width: 1, height: 1}
+    build_cost: {minerals: 100, energy: 40, items: [{item_id: steel, quantity: 8}, {item_id: circuit_board, quantity: 6}]}
+    buildable: true
+    profile: {max_hp_base: 180, max_hp_per_level: 30, vision_range: 15, weapon_class: cannon}
+    runtime:
+      params:
+        energy_consume: 4
+        connection_points: [{id: power, kind: power, capacity: 1}]
+        io_ports: [{id: ammo, direction: input, capacity: 4}]
+      functions:
+        storage: {capacity: 100, slots: 4, buffer: 30, input_priority: 2, output_priority: 1}
+        energy: {consume_per_tick: 4}
+        combat: {attack: 55, range: 15, min_range: 4, air_only: false, fire_rate: 15, ammo_item: shell_set, ammo_consume: 1}

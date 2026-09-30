@@ -44,9 +44,9 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		targetedUnit := ""
 
 		// Find enemy forces in range
-		if ws.EnemyForces != nil {
+		if ws.EnemyForces != nil && !combat.AirOnly {
 			for i, force := range ws.EnemyForces.Forces {
-				if ws.SurfaceWithin(turret.Position, force.Position, combat.Range) {
+				if ws.SurfaceWithin(turret.Position, force.Position, combat.Range) && ws.SurfaceDistance(turret.Position, force.Position) >= combat.MinRange {
 					targetedForce = i
 					break // one attack per turret per tick
 				}
@@ -58,6 +58,9 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			for _, unitID := range unitIDs {
 				unit := ws.Units[unitID]
 				if unit == nil || unit.HP <= 0 {
+					continue
+				}
+				if combat.AirOnly && unit.Domain != model.UnitDomainAir || unit.Domain == model.UnitDomainAir && model.WeaponClassForBuilding(turret.Type) != model.WeaponTypeMissile && !combat.AirOnly || ws.SurfaceDistance(turret.Position, unit.Position) < combat.MinRange {
 					continue
 				}
 				if unit.OwnerID == turret.OwnerID {
@@ -73,27 +76,41 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 				break
 			}
 		}
-		if targetedForce < 0 && targetedUnit == "" {
+		// 防空炮最后才找空中物流载具（打击来袭战斗单位优先）。
+		var targetedLogistics *airborneLogistics
+		if targetedForce < 0 && targetedUnit == "" && combat.AirOnly {
+			targetedLogistics = hostileAirborneLogistics(ws, turret, combat)
+		}
+		if targetedForce < 0 && targetedUnit == "" && targetedLogistics == nil {
 			continue
 		}
 		// All storage buckets are parts of the same magazine; storage settlement
 		// may already have moved loaded ammunition to the output buffer.
 		attack := combat.Attack
-		if combat.AmmoItem != "" && !consumeTurretAmmunition(turret.Storage, combat.AmmoItem, max(1, combat.AmmoConsume)) {
-			// Fall back to the upgraded ammunition when the primary magazine
-			// is dry (e.g. gauss turrets burning titanium ammo at higher
-			// damage once the bullet supply runs out).
-			if combat.AltAmmoItem == "" || !consumeTurretAmmunition(turret.Storage, combat.AltAmmoItem, max(1, combat.AmmoConsume)) {
+		if ammo, ok := model.AmmunitionByItem(combat.AmmoItem); ok {
+			loaded := false
+			for _, tier := range model.AmmunitionForClass(ammo.Class) {
+				if consumeTurretAmmunition(turret.Storage, tier.ItemID, max(1, combat.AmmoConsume)) {
+					attack = int(float64(attack) * tier.DamageMultiplier)
+					loaded = true
+					break
+				}
+			}
+			if !loaded {
 				if turret.Runtime.StateReason != "no_ammunition" {
 					turret.Runtime.StateReason = "no_ammunition"
 					events = append(events, turretStateEvent(turret))
 				}
 				continue
 			}
-			if combat.AltAmmoAttack > 0 {
-				attack = combat.AltAmmoAttack
+		} else if combat.AmmoItem != "" && !consumeTurretAmmunition(turret.Storage, combat.AmmoItem, max(1, combat.AmmoConsume)) {
+			if turret.Runtime.StateReason != "no_ammunition" {
+				turret.Runtime.StateReason = "no_ammunition"
+				events = append(events, turretStateEvent(turret))
 			}
+			continue
 		}
+
 		if turret.Runtime.StateReason == "no_ammunition" {
 			turret.Runtime.StateReason = ""
 			events = append(events, turretStateEvent(turret))
@@ -101,7 +118,9 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		combat.LastFireTick = ws.Tick
 
 		// Apply damage to the target
-		if targetedForce >= 0 {
+		if targetedLogistics != nil {
+			events = append(events, shootDownLogistics(ws, turret, targetedLogistics)...)
+		} else if targetedForce >= 0 {
 			// Attack enemy force
 			force := &ws.EnemyForces.Forces[targetedForce]
 			damage := attack
@@ -171,19 +190,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			events = append(events, &shot)
 
 			if unit.HP <= 0 {
-				refundMechaJob(ws, unit)
-				delete(ws.Units, unit.ID)
-				tileKey := model.TileKey(unit.Position.X, unit.Position.Y)
-				removeUnitFromTile(ws, tileKey, unit.ID)
-				events = append(events, &model.GameEvent{
-					EventType:       model.EvtEntityDestroyed,
-					VisibilityScope: "all",
-					Payload: map[string]any{
-						"entity_id":   unit.ID,
-						"entity_type": "unit",
-						"owner_id":    unit.OwnerID,
-					},
-				})
+				events = append(events, killUnit(ws, unit, turret.ID, turret.OwnerID, "turret")...)
 			}
 		}
 	}

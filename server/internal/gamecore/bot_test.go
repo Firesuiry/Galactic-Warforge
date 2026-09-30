@@ -108,8 +108,9 @@ func TestA1BotProducesArmyAndAttacks(t *testing.T) {
 	if asmPos == nil {
 		t.Fatal("no free tile near p2 HQ")
 	}
-	assembler := newBuilding("asm-p2", model.BuildingTypeAssemblingMachineMk1, "p2", *asmPos)
+	assembler := newBuilding("asm-p2", model.BuildingType("barracks"), "p2", *asmPos)
 	assembler.Runtime.State = model.BuildingWorkRunning
+	assembler.Storage.Inventory = model.ItemInventory{"iron_ingot": 80, "circuit_board": 40}
 	placeBuilding(ws, assembler)
 	windPos := botAdjacentFreeTile(ws, home, "")
 	if windPos == nil {
@@ -218,6 +219,14 @@ func TestA1BotProducesMechaWhenAffordable(t *testing.T) {
 	p2.Resources.Energy = 200
 	// 清空会让研究站建得起的物品，避免研究命令挤掉出兵。
 	p2.Inventory = model.ItemInventory{}
+	pos := botBuildSpotNear(ws, home, 24)
+	if pos == nil {
+		t.Fatal("no factory site")
+	}
+	factory := newBuilding("vehicle-p2", model.BuildingType("vehicle_factory"), "p2", *pos)
+	factory.Runtime.State = model.BuildingWorkRunning
+	factory.Storage.Inventory = model.ItemInventory{"steel": 6, "circuit_board": 3, "motor": 2}
+	placeBuilding(ws, factory)
 
 	cmds := core.planBotCommands(ws, "p2", botTuningFor("hard"))
 	unit, ok := botCmdPayload(cmds, model.CmdProduce, "unit_type")

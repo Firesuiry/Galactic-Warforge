@@ -58,16 +58,16 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	}
 
 	replayCore := &GameCore{
-		cfg:              gc.cfg,
-		maps:             gc.maps,
-		discovery:        discovery,
-		world:            world,
-		worlds:           worlds,
-		executorUsage:    make(map[string]int),
-		activePlanetID:   activePlanetID,
-		spaceRuntime:     spaceRuntime,
-		alertHistory:     NewAlertHistory(gc.cfg.Server.AlertHistoryLimit),
-		monitor:          newProductionMonitor(gc.cfg.Server.ProductionMonitor),
+		cfg:            gc.cfg,
+		maps:           gc.maps,
+		discovery:      discovery,
+		world:          world,
+		worlds:         worlds,
+		executorUsage:  make(map[string]int),
+		activePlanetID: activePlanetID,
+		spaceRuntime:   spaceRuntime,
+		alertHistory:   NewAlertHistory(gc.cfg.Server.AlertHistoryLimit),
+		monitor:        newProductionMonitor(gc.cfg.Server.ProductionMonitor),
 	}
 
 	entries := gc.cmdLog.Range(snap.Tick+1, toTick)

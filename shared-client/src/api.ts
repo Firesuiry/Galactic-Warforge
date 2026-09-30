@@ -1,3 +1,4 @@
+import type { SorterConfig } from "./types.js";
 import type { PlanetPathView } from './types';
 import type { GameSummary, NewGameRequest } from './game.js';
 import {
@@ -142,6 +143,8 @@ export type Direction = 'north' | 'east' | 'south' | 'west' | 'auto';
 export type DysonComponentType = 'node' | 'frame' | 'shell';
 
 export interface BuildOptions {
+  rotation?: 0 | 90 | 180 | 270;
+  autoApproach?: boolean;
   direction?: Direction;
   recipeId?: string;
   /** F4：显式落点行星；缺省落在玩家焦点行星。 */
@@ -572,6 +575,8 @@ export function createApiClient(options: ApiClientOptions) {
       target: { layer: 'planet', position, ...(buildOptions.planetId ? { planet_id: buildOptions.planetId } : {}) },
       payload: {
         building_type: buildingType,
+        ...(buildOptions.rotation !== undefined ? { rotation: buildOptions.rotation } : {}),
+        ...(buildOptions.autoApproach !== undefined ? { auto_approach: buildOptions.autoApproach } : {}),
         ...(buildOptions.direction ? { direction: buildOptions.direction } : {}),
         ...(buildOptions.recipeId ? { recipe_id: buildOptions.recipeId } : {}),
       },
@@ -645,6 +650,10 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  function cmdConfigureSorter(entityId: string, config: SorterConfig, planetId?: string) {
+    return sendSingleCommand({type: 'configure_sorter', target: {layer:'planet', entity_id:entityId, ...(planetId ? {planet_id:planetId} : {})}, payload:{...config}});
+  }
+
   function cmdConfigureSplitter(entityId: string, config: SplitterConfig) {
     return sendSingleCommand({
       type: 'configure_splitter',
@@ -657,6 +666,34 @@ export function createApiClient(options: ApiClientOptions) {
     return sendSingleCommand({
       type: 'cancel_mecha_job',
       target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
+    });
+  }
+
+  function cmdSetRallyPoint(entityId:string,position:{x:number;y:number;z:number},planetId?:string) {
+   return sendSingleCommand({type:'set_rally_point',target:{layer:'planet',entity_id:entityId,position,...(planetId?{planet_id:planetId}:{})}});
+  }
+
+  function cmdFormSquad(entityIds: string[], name?: string, planetId?: string) {
+    return sendSingleCommand({
+      type: 'form_squad',
+      target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) },
+      payload: { entity_ids: entityIds, ...(name ? { name } : {}) },
+    });
+  }
+
+  function cmdSquadOrder(squadId: string, order: 'attack' | 'defend' | 'retreat' | 'resupply', position?: { x: number; y: number; z?: number }, planetId?: string) {
+    return sendSingleCommand({
+      type: 'squad_order',
+      target: { layer: 'planet', ...(position ? { position: { z: 0, ...position } } : {}), ...(planetId ? { planet_id: planetId } : {}) },
+      payload: { squad_id: squadId, order },
+    });
+  }
+
+  function cmdDissolveSquad(squadId: string, planetId?: string) {
+    return sendSingleCommand({
+      type: 'dissolve_squad',
+      target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) },
+      payload: { squad_id: squadId },
     });
   }
 
@@ -777,7 +814,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdTransferItem(buildingId: string, itemId: string, quantity: number, planetId?: string) {
+  function cmdTransferItem(buildingId: string, itemId: string, quantity: number, planetId?: string, direction: 'to_building' | 'to_player' = 'to_building') {
     return sendSingleCommand({
       type: 'transfer_item',
       target: { layer: 'planet', entity_id: buildingId, ...(planetId ? { planet_id: planetId } : {}) },
@@ -785,6 +822,7 @@ export function createApiClient(options: ApiClientOptions) {
         building_id: buildingId,
         item_id: itemId,
         quantity,
+        direction,
       },
     });
   }
@@ -1208,6 +1246,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdMineResource,
     cmdCraftItem,
     cmdCancelMechaJob,
+    cmdConfigureSorter,
     cmdConfigureSplitter,
     cmdConfigureTrafficMonitor,
     createNewGame,
@@ -1251,6 +1290,10 @@ export function createApiClient(options: ApiClientOptions) {
     cmdLaunchRocket,
     cmdLaunchSolarSail,
     cmdMove,
+    cmdSetRallyPoint,
+    cmdFormSquad,
+    cmdSquadOrder,
+    cmdDissolveSquad,
     cmdProduce,
     cmdRestoreConstruction,
     cmdScanGalaxy,

@@ -58,7 +58,7 @@ dev-debug.log
 # tasks/ 
 .env
 
-server/data/snapshots/*
+server/data-*/
 agent-gateway/data/
 develop_tools/biliup/venv/
 develop_tools/biliup/cookies.json

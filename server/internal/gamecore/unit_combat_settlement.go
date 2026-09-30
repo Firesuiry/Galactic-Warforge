@@ -7,7 +7,7 @@ import (
 )
 
 // 自动交战结算（R2/R4）：世界单位按冷却开火、自动索敌、还击与追击。
-// 目标统一为四类实体：世界单位、建筑、黑雾（EnemyForce）、编组小队（CombatSquad），
+// 目标统一为四类实体：世界单位、建筑、黑雾（EnemyForce），
 // 敌方玩家与黑雾均为合法目标（PvP 与 PvE 走同一套规则）。
 //
 // 追击节流：chaseRepathTicks 内不重复寻路；守位/追击范围由 CombatAnchor + 脱战距离约束。
@@ -128,6 +128,9 @@ func settleUnitCombat(ws *model.WorldState) []*model.GameEvent {
 
 // settleOneUnitCombat 结算单个单位的索敌、追击与开火。
 func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
+	if unit.Attack <= 0 {
+		return resumeFormation(ws, unit)
+	}
 	if unit.Mecha != nil {
 		// 执行体（玩家机甲）是英雄单位：不自动索敌不还击，只对显式目标持续开火，
 		// 保持玩家对能量经济的掌控（I16 前沿用此边界）。
@@ -136,7 +139,7 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 	var events []*model.GameEvent
 
 	target := resolveCombatTarget(ws, unit.AttackTarget)
-	if target != nil && !hostile(ws, unit.OwnerID, target.ownerID) {
+	if target != nil && (!hostile(ws, unit.OwnerID, target.ownerID) || !unitCanTarget(unit, target)) {
 		target = nil
 		unit.AttackTarget = ""
 	}
@@ -147,7 +150,7 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 	if target == nil {
 		// 还击：最近攻击者仍存活且敌对时优先反打。
 		if unit.LastAttackerID != "" && unit.Stance != model.UnitStanceRetreat && unit.Stance != model.UnitStanceMoving {
-			if counter := resolveCombatTarget(ws, unit.LastAttackerID); counter != nil && hostile(ws, unit.OwnerID, counter.ownerID) {
+			if counter := resolveCombatTarget(ws, unit.LastAttackerID); counter != nil && unitCanTarget(unit, counter) && hostile(ws, unit.OwnerID, counter.ownerID) {
 				if unit.Stance != model.UnitStanceHold || ws.SurfaceDistance(unit.Position, counter.pos) <= unit.AttackRange {
 					target = counter
 					unit.AttackTarget = counter.id
@@ -213,6 +216,10 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		}
 	}
 
+	if dist < unit.MinAttackRange {
+		return events
+	}
+
 	// 进入射程：停下追击，按冷却开火（LastAttackTick==0 视为就绪）。
 	if unit.HasPath() && (unit.AttackTarget == target.id) {
 		unit.ClearMovement()
@@ -224,6 +231,9 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		if failure := spendMechaEnergy(unit, unit.Mecha.AttackEnergyCost); failure != nil {
 			return events
 		}
+	}
+	if !consumeUnitAmmunition(unit) {
+		return events
 	}
 	events = append(events, fireAtTarget(ws, unit, target)...)
 	unit.LastAttackTick = ws.Tick
@@ -346,6 +356,14 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 	bestRank := 99
 
 	adopt := func(t *unitCombatTarget, rank int) bool {
+		if includeBuildings && (t.unit != nil && t.unit.Type == model.UnitTypeSupplyTruck || t.building != nil && militarySupplyTarget(t.building)) {
+			rank = 0
+		} else {
+			rank++
+		}
+		if !unitCanTarget(unit, t) || ws.SurfaceDistance(unit.Position, t.pos) < unit.MinAttackRange {
+			return false
+		}
 		if rank >= bestRank {
 			return false
 		}
@@ -412,17 +430,42 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 
 const maxInt32 = int(^uint32(0) >> 1)
 
+// applySquadDamageToTarget is the shared damage entry used by the legacy
+// blueprint squad path while deployed squads migrate to member units.
+func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, target *unitCombatTarget, damage int, tick int64) []*model.GameEvent {
+	if ws == nil || squad == nil || target == nil || damage <= 0 {
+		return nil
+	}
+	ws.Tick = tick
+	if target.kind != "enemy_force" || target.force == nil {
+		return nil
+	}
+	force := target.force
+	before := force.Strength
+	force.Strength -= damage
+	if force.Strength < 0 {
+		force.Strength = 0
+	}
+	events := []*model.GameEvent{{
+		EventType:       model.EvtDamageApplied,
+		VisibilityScope: squad.OwnerID,
+		Payload: map[string]any{
+			"attacker_id": squad.ID, "attacker_type": "combat_squad", "target_id": force.ID,
+			"target_type": "enemy_force", "damage": damage, "remaining_strength": force.Strength,
+		},
+	}}
+	if force.Strength <= 0 {
+		events = append(events, destroyEnemyForce(ws, force, before, squad.ID, squad.OwnerID, "combat_squad", nil)...)
+	}
+	return events
+}
+
 // squadArmorClass 小队护甲，委托 model.BlueprintCombatClasses（与目录同源）。
 func squadArmorClass(squad *model.CombatSquad) model.ArmorClass {
 	if squad == nil {
 		return model.ArmorHeavy
 	}
-	armor, _ := model.BlueprintCombatClasses(
-		model.UnitRuntimeClassCombatSquad,
-		squad.Domain,
-		squad.PlatformClass,
-		squad.BlueprintID,
-	)
+	armor, _ := model.BlueprintCombatClasses(model.UnitRuntimeClassCombatSquad, squad.Domain, squad.PlatformClass, squad.BlueprintID)
 	if armor == "" {
 		return model.ArmorHeavy
 	}
@@ -435,7 +478,7 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		return nil
 	}
 	target := resolveCombatTarget(ws, unit.AttackTarget)
-	if target == nil || (target.ownerID != "" && !hostile(ws, unit.OwnerID, target.ownerID)) {
+	if target == nil || !unitCanTarget(unit, target) || (target.ownerID != "" && !hostile(ws, unit.OwnerID, target.ownerID)) {
 		unit.AttackTarget = ""
 		return nil
 	}
@@ -445,9 +488,14 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 	if unit.LastAttackTick > 0 && ws.Tick-unit.LastAttackTick < unit.AttackCooldownTick {
 		return nil
 	}
+	if unit.AmmoClass != "" && unit.Ammo <= 0 {
+		unit.CombatState = "no_ammunition"
+		return nil
+	}
 	if failure := spendMechaEnergy(unit, unit.Mecha.AttackEnergyCost); failure != nil {
 		return nil
 	}
+	consumeUnitAmmunition(unit)
 	events := fireAtTarget(ws, unit, target)
 	unit.LastAttackTick = ws.Tick
 	events = append(events, mechaStateEvent(unit))
@@ -457,12 +505,13 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 // fireAtTarget 对目标开火并结算伤害（含死亡处理与事件）。
 func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarget) []*model.GameEvent {
 	var events []*model.GameEvent
+	attack := int(float64(unit.Attack) * model.UnitAmmoDamageMultiplier(unit))
 	switch target.kind {
 	case "unit":
 		victim := target.unit
 		model.SyncMechaCapabilities(victim, ws.Players[victim.OwnerID])
 		normalizeUnitCombatStats(victim)
-		raw := max(1, unit.Attack-victim.Defense)
+		raw := max(1, attack-victim.Defense)
 		raw = max(1, int(float64(raw)*model.ResolveDamageCoefficient(unit.WeaponClass, victim.ArmorClass)))
 		damage, absorbed := model.ApplyUnitDamage(victim, raw, ws.Tick)
 		victim.LastAttackerID = unit.ID
@@ -489,7 +538,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 		}
 	case "building":
 		b := target.building
-		damage := max(1, int(float64(max(1, unit.Attack-2))*model.ResolveDamageCoefficient(unit.WeaponClass, model.ArmorStructure)))
+		damage := max(1, int(float64(max(1, attack-2))*model.ResolveDamageCoefficient(unit.WeaponClass, model.ArmorStructure)))
 		// 行星护盾吸收外部伤害（含黑雾与 PvP，U4 方向）。
 		shieldAbsorbed, remaining := absorbPlanetaryShieldDamage(ws, b.OwnerID, damage)
 		shieldRemaining := totalPlanetaryShieldCharge(ws, b.OwnerID)
@@ -517,7 +566,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 	case "enemy_force":
 		force := target.force
 		strengthBefore := force.Strength
-		damage := max(1, unit.Attack/6)
+		damage := max(1, attack/6)
 		force.Strength -= damage
 		if force.Strength < 0 {
 			force.Strength = 0
@@ -540,7 +589,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 		}
 	case "combat_squad":
 		squad := target.squad
-		damage := max(1, int(float64(unit.Attack)*model.ResolveDamageCoefficient(unit.WeaponClass, squadArmorClass(squad))))
+		damage := max(1, int(float64(attack)*model.ResolveDamageCoefficient(unit.WeaponClass, squadArmorClass(squad))))
 		if squad.Shield.Level > 0 {
 			damage = squad.Shield.ApplyShieldDamage(damage)
 			squad.Shield.LastHitTick = ws.Tick
@@ -548,18 +597,8 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 		losses := squad.ApplySquadDamage(max(1, damage))
 		for _, scope := range []string{unit.OwnerID, squad.OwnerID} {
 			events = append(events, &model.GameEvent{
-				EventType:       model.EvtDamageApplied,
-				VisibilityScope: scope,
-				Payload: map[string]any{
-					"attacker_id":   unit.ID,
-					"attacker_type": "unit",
-					"target_id":     squad.ID,
-					"target_type":   "combat_squad",
-					"damage":        damage,
-					"target_hp":     squad.HP,
-					"squad_count":   squad.Count,
-					"squad_losses":  losses,
-				},
+				EventType: model.EvtDamageApplied, VisibilityScope: scope,
+				Payload: map[string]any{"attacker_id": unit.ID, "attacker_type": "unit", "target_id": squad.ID, "target_type": "combat_squad", "damage": damage, "target_hp": squad.HP, "squad_count": squad.Count, "squad_losses": losses},
 			})
 		}
 		if squad.HP <= 0 {
@@ -625,7 +664,6 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 			}
 			continue
 		}
-		// 无单位目标时打小队。
 		if ws.CombatRuntime != nil {
 			var targetSquad *model.CombatSquad
 			squadDist := maxInt32
@@ -635,8 +673,7 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 				}
 				d := ws.SurfaceDistance(force.Position, squad.Position)
 				if d <= enemyForceStrikeRange && d < squadDist {
-					targetSquad = squad
-					squadDist = d
+					targetSquad, squadDist = squad, d
 				}
 			}
 			if targetSquad != nil {
@@ -647,20 +684,9 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 					targetSquad.Shield.LastHitTick = ws.Tick
 				}
 				losses := targetSquad.ApplySquadDamage(max(1, damage))
-				events = append(events, &model.GameEvent{
-					EventType:       model.EvtDamageApplied,
-					VisibilityScope: targetSquad.OwnerID,
-					Payload: map[string]any{
-						"attacker_id":   force.ID,
-						"attacker_type": "enemy_force",
-						"target_id":     targetSquad.ID,
-						"target_type":   "combat_squad",
-						"damage":        damage,
-						"target_hp":     targetSquad.HP,
-						"squad_count":   targetSquad.Count,
-						"squad_losses":  losses,
-					},
-				})
+				events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: targetSquad.OwnerID, Payload: map[string]any{
+					"attacker_id": force.ID, "attacker_type": "enemy_force", "target_id": targetSquad.ID, "target_type": "combat_squad", "damage": damage, "target_hp": targetSquad.HP, "squad_count": targetSquad.Count, "squad_losses": losses,
+				}})
 				if targetSquad.HP <= 0 {
 					events = append(events, destroySquad(ws, targetSquad, force.ID, model.DarkFogOwnerID, "enemy_force")...)
 				}
@@ -673,6 +699,15 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 // killUnit 统一单位死亡处理：双边战损计数（F2）、从世界移除并发阵亡事件。
 func killUnit(ws *model.WorldState, unit *model.Unit, killerID, killerOwnerID, source string) []*model.GameEvent {
 	recordCombatUnitKill(ws, unit.OwnerID, killerOwnerID)
+	if unit.Type == model.UnitTypeExecutor {
+		if player := ws.Players[unit.OwnerID]; player != nil {
+			if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil && exec.UnitID == unit.ID {
+				exec.RespawnAtTick = ws.Tick + model.ExecutorRespawnTicks()
+				player.SetPlanetExecutor(ws.PlanetID, exec)
+				player.SyncLegacyExecutor(ws.PlanetID)
+			}
+		}
+	}
 	refundMechaJob(ws, unit)
 	delete(ws.Units, unit.ID)
 	tileKey := model.TileKey(unit.Position.X, unit.Position.Y)
@@ -713,21 +748,37 @@ func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, ki
 
 // destroySquad 小队全灭：双边战损计数（整编计 1 个单位，F2）、从运行时移除并发事件（R3）。
 func destroySquad(ws *model.WorldState, squad *model.CombatSquad, killerID, killerOwnerID, source string) []*model.GameEvent {
+	if squad == nil {
+		return nil
+	}
 	recordCombatUnitKill(ws, squad.OwnerID, killerOwnerID)
 	squad.State = model.CombatSquadStateDestroyed
 	squad.Count = 0
+	squad.HP = 0
 	if ws.CombatRuntime != nil {
 		delete(ws.CombatRuntime.Squads, squad.ID)
 	}
-	return []*model.GameEvent{{
-		EventType:       model.EvtEntityDestroyed,
-		VisibilityScope: "all",
-		Payload: map[string]any{
-			"entity_id":   squad.ID,
-			"entity_type": "combat_squad",
-			"owner_id":    squad.OwnerID,
-			"killed_by":   killerID,
-			"source":      source,
-		},
-	}}
+	return []*model.GameEvent{{EventType: model.EvtEntityDestroyed, VisibilityScope: "all", Payload: map[string]any{
+		"entity_id": squad.ID, "entity_type": "combat_squad", "owner_id": squad.OwnerID, "killed_by": killerID, "source": source,
+	}}}
+}
+
+func unitCanTarget(u *model.Unit, t *unitCombatTarget) bool {
+	return t.unit == nil || t.unit.Domain != model.UnitDomainAir || u.WeaponClass == model.WeaponTypeMissile
+}
+
+func militarySupplyTarget(b *model.Building) bool {
+	if def, ok := model.BuildingDefinitionByID(b.Type); ok && def.SupplyRadius > 0 {
+		return true
+	}
+	if b.Production != nil {
+		if recipe, ok := model.Recipe(b.Production.RecipeID); ok {
+			for _, out := range recipe.Outputs {
+				if _, ok := model.AmmunitionByItem(out.ItemID); ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

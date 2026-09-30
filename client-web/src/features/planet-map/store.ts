@@ -24,7 +24,7 @@ export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
  */
 export type PlanetInteractionMode =
   | { kind: 'inspect' }
-  | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction }
+  | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction; rotation?: 0 | 90 | 180 | 270 }
   | { kind: 'move' }
   | { kind: 'attack' }
   | { kind: 'unit_order'; order: UnitOrderMode }

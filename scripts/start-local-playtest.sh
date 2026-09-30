@@ -126,7 +126,7 @@ cleanup_ports() {
 
 prepare_server_config() {
   mkdir -p "$SERVER_DATA_DIR"
-  sed -e "s|data_dir: \"data\"|data_dir: \"$SERVER_DATA_DIR\"|" \
+  sed -e "s|data_dir: \"data-dev\"|data_dir: \"$SERVER_DATA_DIR\"|" \
       -e "s|^  port: 18080|  port: $SERVER_PORT|" \
       "$SERVER_CONFIG_TEMPLATE" >"$SERVER_CONFIG_RUNTIME"
 }

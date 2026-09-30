@@ -63,25 +63,31 @@ func (m *MechaState) Clone() *MechaState {
 	return &out
 }
 
+// NewMechaState 以 units.yaml 中执行体的 mecha 段为基础值生成满能量机甲状态。
 func NewMechaState() *MechaState {
-	return &MechaState{Energy: 100, MaxEnergy: 100, InventoryCapacity: baseMechaInventoryCapacity, AttackEnergyCost: 8, MoveEnergyCost: 1, ShieldRechargeDelay: 10}
+	return newMechaState(executorMechaSpec())
 }
 
-// Base executor stats before any research bonus is applied. Tech bonuses come
-// from TechDefinition.Effects via TechEffectValue; per-level values live in the
-// catalog (tech.go), not in code constants.
-const (
-	baseMechaMaxEnergy         = 100
-	baseMechaMoveRange         = 12
-	baseMechaVisionRange       = 6
-	baseMechaMaxHP             = 120
-	baseMechaAttack            = 20
-	baseMechaDefense           = 8
-	baseMechaAttackRange       = 4
-	baseMechaInventoryCapacity = 200
+func newMechaState(spec MechaSpec) *MechaState {
+	return &MechaState{
+		Energy:              spec.MaxEnergy,
+		MaxEnergy:           spec.MaxEnergy,
+		InventoryCapacity:   spec.InventoryCapacity,
+		AttackEnergyCost:    spec.AttackEnergyCost,
+		MoveEnergyCost:      spec.MoveEnergyCost,
+		ShieldRechargeDelay: spec.ShieldRechargeDelay,
+	}
+}
 
-	chargeRatePercentBase = 100
-)
+// executorMechaSpec 执行体机甲基础值（units.yaml executor.mecha）。
+func executorMechaSpec() MechaSpec {
+	if spec := unitDefinitions[UnitTypeExecutor].Mecha; spec != nil {
+		return *spec
+	}
+	return MechaSpec{}
+}
+
+const chargeRatePercentBase = 100
 
 // MechaChargeRate applies the energy_circuit research bonus (catalog effect
 // "mecha_charge_rate_pct", +20% per level) to a base grid charge rate.
@@ -133,9 +139,12 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 		unit.Mecha = NewMechaState()
 	}
 	m := unit.Mecha
-	m.MaxEnergy = baseMechaMaxEnergy + int(TechEffectValue(player, "core_capacity"))
+	// 研究前的基础值来自 units.yaml 的 executor 条目（战斗数值 + mecha 段）。
+	base := unitDefinitions[UnitTypeExecutor]
+	spec := executorMechaSpec()
+	m.MaxEnergy = spec.MaxEnergy + int(TechEffectValue(player, "core_capacity"))
 	m.MaxShield = int(TechEffectValue(player, "shield_capacity"))
-	m.InventoryCapacity = baseMechaInventoryCapacity + int(TechEffectValue(player, "mecha_inventory_capacity"))
+	m.InventoryCapacity = spec.InventoryCapacity + int(TechEffectValue(player, "mecha_inventory_capacity"))
 	m.Energy = max(0, min(m.Energy, m.MaxEnergy))
 	m.Shield = max(0, min(m.Shield, m.MaxShield))
 	// Logistics requests may not ask for more than the backpack can hold; the
@@ -156,20 +165,20 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 	// mechanical_frame adds to the mecha structure HP track;
 	// flat HP, df_enhanced_structure (structure_hp) scales the total; weapon
 	// damage techs scale the base attack.
-	maxHP := baseMechaMaxHP + int(TechEffectValue(player, "mecha_max_hp"))
+	maxHP := base.MaxHP + int(TechEffectValue(player, "mecha_max_hp"))
 	if hpBonus := TechEffectValue(player, "structure_hp"); hpBonus != 0 {
 		maxHP = int(float64(maxHP) * (1.0 + hpBonus))
 	}
 	unit.MaxHP = maxHP
 	unit.HP = max(0, min(unit.HP, unit.MaxHP))
 	// mecha_engine and drive_engine stack through the shared move_speed effect.
-	unit.MoveRange = baseMechaMoveRange + int(TechEffectValue(player, "move_speed"))
-	unit.VisionRange = baseMechaVisionRange + int(TechEffectValue(player, "exploration_range"))
-	attack := baseMechaAttack
+	unit.MoveRange = base.MoveRange + int(TechEffectValue(player, "move_speed"))
+	unit.VisionRange = base.VisionRange + int(TechEffectValue(player, "exploration_range"))
+	attack := base.Attack
 	if dmgBonus := TechEffectValue(player, "weapon_damage"); dmgBonus != 0 {
 		attack = int(float64(attack) * (1.0 + dmgBonus))
 	}
-	unit.Attack, unit.Defense, unit.AttackRange = attack, baseMechaDefense, baseMechaAttackRange
+	unit.Attack, unit.Defense, unit.AttackRange = attack, base.Defense, base.AttackRange
 }
 
 // ApplyUnitDamage routes all ordinary world-unit damage through the same shield.

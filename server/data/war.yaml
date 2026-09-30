@@ -407,7 +407,6 @@ public_blueprints:
     visible_tech_id: prototype
     runtime_class: combat_squad
     production_mode: factory_recipe
-    producer_recipes: [df_prototype]
     deploy_command: deploy_squad
     query_scopes: [planet_runtime]
     commands: [deploy_squad]
@@ -431,7 +430,6 @@ public_blueprints:
     visible_tech_id: precision_drone
     runtime_class: combat_squad
     production_mode: factory_recipe
-    producer_recipes: [df_precision_drone]
     deploy_command: deploy_squad
     query_scopes: [planet_runtime]
     commands: [deploy_squad]
@@ -455,7 +453,6 @@ public_blueprints:
     visible_tech_id: corvette
     runtime_class: fleet_unit
     production_mode: factory_recipe
-    producer_recipes: [df_corvette]
     deploy_command: commission_fleet
     query_scopes: [system_runtime, fleet]
     commands: [commission_fleet, fleet_assign, fleet_attack, fleet_move, fleet_disband]
@@ -479,7 +476,6 @@ public_blueprints:
     visible_tech_id: destroyer
     runtime_class: fleet_unit
     production_mode: factory_recipe
-    producer_recipes: [df_destroyer]
     deploy_command: commission_fleet
     query_scopes: [system_runtime, fleet]
     commands: [commission_fleet, fleet_assign, fleet_attack, fleet_move, fleet_disband]

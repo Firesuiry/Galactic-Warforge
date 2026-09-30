@@ -7,7 +7,7 @@ export interface Position {
 }
 
 export type BuildingType = string;
-export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor';
+export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor' | 'scout' | 'artillery' | 'missile_vehicle' | 'repair_vehicle' | 'supply_truck' | 'attack_drone' | 'dark_fog';
 
 export type BuildingWorkState = 'idle' | 'running' | 'paused' | 'no_power' | 'error';
 export type ConnectionKind = 'power' | 'transport' | 'logistics';
@@ -256,6 +256,8 @@ export interface BuildingSplitterState extends SplitterConfig {
 }
 
 export interface Building {
+  rotation?: PlanRotation;
+ unit_queue?: {unit_type:UnitType;remaining_ticks:number;total_ticks:number}[]; rally_point?:Position;
   id: string;
   type: BuildingType;
   owner_id: string;
@@ -328,6 +330,7 @@ export type UnitStance =
   | 'retreat';
 
 export interface Unit {
+ ammo_class?: string; ammo?: number; ammo_capacity?: number; ammo_item?: string; combat_state?: string; domain?: string; min_attack_range?: number; cargo?: ItemInventory;
   mecha?: MechaState;
   id: string;
   type: UnitType;
@@ -706,6 +709,8 @@ export type CommandType =
   | 'produce'
   | 'upgrade'
   | 'demolish'
+  | 'set_rally_point'
+  | 'configure_sorter'
   | 'configure_splitter'
   | 'configure_traffic_monitor'
   | 'configure_logistics_station'
@@ -725,6 +730,9 @@ export type CommandType =
   | 'set_ray_receiver_mode'
   | 'set_energy_exchanger_mode'
   | 'deploy_squad'
+  | 'form_squad'
+  | 'squad_order'
+  | 'dissolve_squad'
   | 'commission_fleet'
   | 'fleet_assign'
   | 'fleet_attack'
@@ -1519,6 +1527,7 @@ export interface PlanetNetworksView {
 }
 
 export interface BuildingCatalogEntry {
+ supply_radius?:number; supply_rate?:number;
   id: string;
   name: string;
   category: string;
@@ -1596,6 +1605,7 @@ export interface TechCatalogEntry {
 }
 
 export interface WorldUnitCatalogEntry {
+ cost?:ItemAmount[]; producer?:string; production_ticks?:number; ammo_class?:string; ammo_capacity?:number; min_attack_range?:number; supply_radius?:number; supply_rate?:number; cargo_capacity?:number; repair_rate?:number; unlock_tech?:string;
   id: string;
   name: string;
   domain: string;
@@ -1603,7 +1613,6 @@ export interface WorldUnitCatalogEntry {
   public: boolean;
   visible_tech_id?: string;
   production_mode: string;
-  producer_recipes?: string[];
   deploy_command?: string;
   query_scopes?: string[];
   commands?: string[];
@@ -1692,7 +1701,6 @@ export interface WarPublicBlueprintCatalogEntry {
   visible_tech_id?: string;
   runtime_class: string;
   production_mode: string;
-  producer_recipes?: string[];
   deploy_command?: string;
   query_scopes?: string[];
   commands?: string[];
@@ -2361,3 +2369,5 @@ export interface RollbackResponse {
 }
 
 export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; path: Position[]; waypoints: Position[] }
+
+export interface SorterConfig { input_directions: CardinalDirection[]; output_directions: CardinalDirection[]; filter_mode?: "allow" | "deny"; filter_items?: string[]; }

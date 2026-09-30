@@ -28,6 +28,8 @@ export interface PublicCommandDefinition {
 }
 
 export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
+ {id:"set_rally_point",apiCommandName:"set_rally_point",cliCommandName:"set_rally_point",category:"management",permissionCategory:"management",layer:"planet",requiresActivePlanet:true,webSurface:"required"},
+ {id:"configure_sorter",apiCommandName:"configure_sorter",cliCommandName:"configure_sorter",category:"management",permissionCategory:"management",layer:"planet",requiresActivePlanet:true,webSurface:"required"},
   {
     id: "install_logistics_vehicle",
     apiCommandName: "install_logistics_vehicle",
@@ -358,6 +360,9 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     requiresActivePlanet: true,
     webSurface: "optional",
   },
+  {id:"form_squad",apiCommandName:"form_squad",cliCommandName:"form_squad",category:"management",permissionCategory:"combat",layer:"planet",requiresActivePlanet:true,webSurface:"optional"},
+  {id:"squad_order",apiCommandName:"squad_order",cliCommandName:"squad_order",category:"management",permissionCategory:"combat",layer:"planet",requiresActivePlanet:true,webSurface:"optional"},
+  {id:"dissolve_squad",apiCommandName:"dissolve_squad",cliCommandName:"dissolve_squad",category:"management",permissionCategory:"combat",layer:"planet",requiresActivePlanet:true,webSurface:"optional"},
   {
     id: "commission_fleet",
     apiCommandName: "commission_fleet",

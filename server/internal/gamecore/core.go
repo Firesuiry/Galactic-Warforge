@@ -321,33 +321,33 @@ func (cl *CommandLog) TrimAfter(tick int64) int {
 
 // GameCore orchestrates the tick loop
 type GameCore struct {
-	cfg              *config.Config
-	maps             *mapmodel.Universe
-	discovery        *mapstate.Discovery
-	world            *model.WorldState
-	worlds           map[string]*model.WorldState
-	queue            *queue.CommandQueue
-	bus              *EventBus
-	metrics          *Metrics
-	cmdLog           *CommandLog
-	eventHistory     *EventHistory
-	alertHistory     *AlertHistory
-	snapshotStore    *persistence.Store
-	monitor          *productionMonitor
-	rng              *rand.Rand
-	stopCh           chan struct{}
-	stopOnce         sync.Once
-	victory          model.VictoryState
-	settlement       *model.SettlementReport // F2：宣判时冻结的终局结算报告（随 victory 同锁）
-	victoryMu        sync.RWMutex
-	runtimeMu        sync.RWMutex
-	activePlanetID   string
-	executorUsage    map[string]int
-	spaceRuntime     *model.SpaceRuntimeState
-	saveMu           sync.Mutex
-	gameDir          *gamedir.Dir
-	saveMeta         *gamedir.MetaFile
-	baseSnapshot     *snapshot.Snapshot
+	cfg            *config.Config
+	maps           *mapmodel.Universe
+	discovery      *mapstate.Discovery
+	world          *model.WorldState
+	worlds         map[string]*model.WorldState
+	queue          *queue.CommandQueue
+	bus            *EventBus
+	metrics        *Metrics
+	cmdLog         *CommandLog
+	eventHistory   *EventHistory
+	alertHistory   *AlertHistory
+	snapshotStore  *persistence.Store
+	monitor        *productionMonitor
+	rng            *rand.Rand
+	stopCh         chan struct{}
+	stopOnce       sync.Once
+	victory        model.VictoryState
+	settlement     *model.SettlementReport // F2：宣判时冻结的终局结算报告（随 victory 同锁）
+	victoryMu      sync.RWMutex
+	runtimeMu      sync.RWMutex
+	activePlanetID string
+	executorUsage  map[string]int
+	spaceRuntime   *model.SpaceRuntimeState
+	saveMu         sync.Mutex
+	gameDir        *gamedir.Dir
+	saveMeta       *gamedir.MetaFile
+	baseSnapshot   *snapshot.Snapshot
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
@@ -374,24 +374,24 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	rng := rand.New(rand.NewSource(rngSeed))
 
 	core := &GameCore{
-		cfg:              cfg,
-		maps:             maps,
-		discovery:        mapstate.NewDiscovery(cfg.Players, maps),
-		world:            activeWorld,
-		worlds:           registry.Worlds,
-		queue:            q,
-		bus:              bus,
-		metrics:          NewMetrics(),
-		cmdLog:           &CommandLog{},
-		eventHistory:     NewEventHistory(cfg.Server.EventHistoryLimit),
-		alertHistory:     NewAlertHistory(cfg.Server.AlertHistoryLimit),
-		monitor:          newProductionMonitor(cfg.Server.ProductionMonitor),
-		snapshotStore:    store,
-		rng:              rng,
-		stopCh:           make(chan struct{}),
-		activePlanetID:   registry.ActivePlanetID,
-		executorUsage:    make(map[string]int),
-		spaceRuntime:     registry.SpaceRuntime,
+		cfg:            cfg,
+		maps:           maps,
+		discovery:      mapstate.NewDiscovery(cfg.Players, maps),
+		world:          activeWorld,
+		worlds:         registry.Worlds,
+		queue:          q,
+		bus:            bus,
+		metrics:        NewMetrics(),
+		cmdLog:         &CommandLog{},
+		eventHistory:   NewEventHistory(cfg.Server.EventHistoryLimit),
+		alertHistory:   NewAlertHistory(cfg.Server.AlertHistoryLimit),
+		monitor:        newProductionMonitor(cfg.Server.ProductionMonitor),
+		snapshotStore:  store,
+		rng:            rng,
+		stopCh:         make(chan struct{}),
+		activePlanetID: registry.ActivePlanetID,
+		executorUsage:  make(map[string]int),
+		spaceRuntime:   registry.SpaceRuntime,
 	}
 	if core.spaceRuntime == nil {
 		core.spaceRuntime = model.NewSpaceRuntimeState()
@@ -838,6 +838,8 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execScanSystem(qr.PlayerID, cmd)
 		case model.CmdScanPlanet:
 			res, evts = gc.execScanPlanet(qr.PlayerID, cmd)
+		case model.CmdConfigureSorter:
+			res, evts = gc.execConfigureSorter(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureSplitter:
 			res, evts = gc.execConfigureSplitter(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdConfigureTrafficMonitor:
@@ -858,8 +860,16 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			res, evts = gc.execCraftItem(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCancelMechaJob:
 			res, evts = gc.execCancelMechaJob(cmdWorld, qr.PlayerID, cmd)
+		case model.CmdSetRallyPoint:
+			res, evts = gc.execSetRallyPoint(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdProduce:
 			res, evts = gc.execProduce(cmdWorld, qr.PlayerID, cmd)
+		case model.CmdSquadOrder:
+			res, evts = gc.execSquadOrder(cmdWorld, qr.PlayerID, cmd)
+		case model.CmdDissolveSquad:
+			res, evts = gc.execDissolveSquad(cmdWorld, qr.PlayerID, cmd)
+		case model.CmdFormSquad:
+			res, evts = gc.execFormSquad(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdDeploySquad:
 			res, evts = gc.execDeploySquad(cmdWorld, qr.PlayerID, cmd)
 		case model.CmdCommissionFleet:

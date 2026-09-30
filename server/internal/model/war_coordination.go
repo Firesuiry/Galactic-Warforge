@@ -361,13 +361,8 @@ func ResolveWarTaskForceMembers(player *PlayerState, taskForce *WarTaskForce, wo
 					continue
 				}
 				view.PlanetID = planetID
-				view.BlueprintIDs = []string{squad.BlueprintID}
-				view.Count = squad.Count
+				view.Count = len(squad.Members(world))
 				view.State = string(squad.State)
-				status := squad.Sustainment.StatusView()
-				view.SupplyStatus = &status
-				repair := squad.Sustainment.Repair
-				view.RepairState = &repair
 				break
 			}
 		case WarTaskForceMemberKindFleet:

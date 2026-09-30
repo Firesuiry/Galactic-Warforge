@@ -94,20 +94,10 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		execPos := findNearestOpenTile(ws, pos)
 		execStats := model.UnitStats(model.UnitTypeExecutor)
 		execID := ws.NextEntityID("u")
-		executor := &model.Unit{
-			ID:          execID,
-			Type:        model.UnitTypeExecutor,
-			OwnerID:     p.PlayerID,
-			Position:    execPos,
-			HP:          execStats.HP,
-			MaxHP:       execStats.MaxHP,
-			Attack:      execStats.Attack,
-			Defense:     execStats.Defense,
-			AttackRange: execStats.AttackRange,
-			MoveRange:   execStats.MoveRange,
-			VisionRange: execStats.VisionRange,
-			Mecha:       execStats.Mecha,
-		}
+		executor := &execStats
+		executor.ID = execID
+		executor.OwnerID = p.PlayerID
+		executor.Position = execPos
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)
 		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)

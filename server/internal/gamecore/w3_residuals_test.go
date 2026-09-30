@@ -173,7 +173,7 @@ func TestSetEnergyExchangerModeCommandDispatch(t *testing.T) {
 }
 
 // TestGaussTurretFallsBackToTitaniumAmmo 高斯塔主弹仓耗尽时回退钛弹药，
-// 按 AltAmmoAttack 计伤；主弹药充足时优先消耗主弹药。
+// 按弹种分档倍率计伤；基础子弹与高档弹共存时优先消耗高档弹。
 func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 	t.Run("fallback", func(t *testing.T) {
 		ws, unit := mechaTestWorld()
@@ -187,7 +187,7 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 		events := settleTurrets(ws)
 
 		// 高斯(加农) vs 执行体(重甲) 系数 1.25。
-		wantTotal := max(1, int(float64(max(1, combat.AltAmmoAttack-unit.Defense))*model.ResolveDamageCoefficient(model.WeaponTypeCannon, model.ArmorHeavy)))
+		wantTotal := max(1, int(float64(max(1, int(float64(combat.Attack)*1.25)-unit.Defense))*model.ResolveDamageCoefficient(model.WeaponTypeCannon, model.ArmorHeavy)))
 		found := false
 		for _, evt := range events {
 			if evt.EventType != model.EvtDamageApplied || evt.Payload["target_id"] != unit.ID {
@@ -211,7 +211,7 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 		}
 	})
 
-	t.Run("primary preferred", func(t *testing.T) {
+	t.Run("higher tier preferred", func(t *testing.T) {
 		ws, unit := mechaTestWorld()
 		turret := newGaussTurret(ws, "t-pri", "p2", model.Position{X: 2, Y: 1})
 		combat := turret.Runtime.Functions.Combat
@@ -224,7 +224,7 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 
 		events := settleTurrets(ws)
 
-		wantTotal := max(1, int(float64(max(1, combat.Attack-unit.Defense))*model.ResolveDamageCoefficient(model.WeaponTypeCannon, model.ArmorHeavy)))
+		wantTotal := max(1, int(float64(max(1, int(float64(combat.Attack)*1.25)-unit.Defense))*model.ResolveDamageCoefficient(model.WeaponTypeCannon, model.ArmorHeavy)))
 		found := false
 		for _, evt := range events {
 			if evt.EventType != model.EvtDamageApplied || evt.Payload["target_id"] != unit.ID {
@@ -240,11 +240,11 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 		if !found {
 			t.Fatalf("expected turret to fire with primary ammo, events=%+v", events)
 		}
-		if got := turret.Storage.ItemQuantity(model.ItemAmmoBullet); got != 0 {
-			t.Fatalf("expected primary ammo consumed first, %d left", got)
+		if got := turret.Storage.ItemQuantity(model.ItemAmmoBullet); got != 1 {
+			t.Fatalf("expected primary ammo preserved, %d left", got)
 		}
-		if got := turret.Storage.ItemQuantity(model.ItemTitaniumAmmo); got != 2 {
-			t.Fatalf("titanium ammo must stay untouched while primary available, %d left", got)
+		if got := turret.Storage.ItemQuantity(model.ItemTitaniumAmmo); got != 1 {
+			t.Fatalf("expected titanium ammo consumed first, %d left", got)
 		}
 	})
 }

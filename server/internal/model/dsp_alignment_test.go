@@ -36,6 +36,14 @@ var dspPolicyExcludedTechs = map[string]bool{
 // dspClosureGatedItems 是政策 gated 物品（mapping_overrides.json policy.out_of_scope）：
 // 反物质/临界光子/宇宙矩阵链与黑雾掉落物保留数据但不给行星内免费解锁路径。
 // 这些物品在 scope.json 中 inPlanet=false，本表作为防御性排除守住政策口径。
+// dspRemovedUnitRecipes 是整体规划 3.3 删除的 df_ 单位物品配方与对应物品：
+// 单位改由兵营/战车工厂/机场按 units.yaml 生产，不再有实物载荷。
+var dspRemovedUnitRecipes = map[string]bool{
+	"df-prototype": true, "df-precision-drone": true, "df-attack-drone": true,
+	"df-corvette": true, "df-destroyer": true,
+}
+var dspRemovedUnitItems = dspRemovedUnitRecipes
+
 var dspClosureGatedItems = map[string]bool{
 	"antimatter":          true,
 	"antimatter_fuel_rod": true,
@@ -149,7 +157,7 @@ func dspSnake(id string) string { return strings.ReplaceAll(id, "-", "_") }
 func dspInPlanetComponentItems(c dspCatalog) []string {
 	out := make([]string, 0, len(c.scope.Items))
 	for id, it := range c.scope.Items {
-		if !it.InPlanet {
+		if !it.InPlanet || dspRemovedUnitItems[id] {
 			continue
 		}
 		switch it.Cat {
@@ -166,7 +174,7 @@ func dspInPlanetComponentItems(c dspCatalog) []string {
 func dspInPlanetProductionRecipes(c dspCatalog) []string {
 	out := make([]string, 0, len(c.scope.Recipes))
 	for id, r := range c.scope.Recipes {
-		if r.IsTech || r.Mining || !r.InPlanet {
+		if r.IsTech || r.Mining || !r.InPlanet || dspRemovedUnitRecipes[id] {
 			continue
 		}
 		if r.Cat == "buildings" || r.Cat == "buildings-alt" {
@@ -269,8 +277,8 @@ func dspOutputKey(ids []string) string {
 func TestDSPItemCoverage(t *testing.T) {
 	c := dspLoadCatalog(t)
 	targets := dspInPlanetComponentItems(c)
-	if len(targets) != 99 {
-		t.Errorf("in-planet component item count = %d, want frozen 99", len(targets))
+	if len(targets) != 94 {
+		t.Errorf("in-planet component item count = %d, want frozen 94", len(targets))
 	}
 	var missing, unmapped []string
 	for _, did := range targets {
@@ -324,8 +332,8 @@ func TestDSPResourceCoverage(t *testing.T) {
 func TestDSPRecipeCoverage(t *testing.T) {
 	c := dspLoadCatalog(t)
 	targets := dspInPlanetProductionRecipes(c)
-	if len(targets) != 95 {
-		t.Errorf("in-planet production recipe count = %d, want frozen 95", len(targets))
+	if len(targets) != 90 {
+		t.Errorf("in-planet production recipe count = %d, want frozen 90", len(targets))
 	}
 	var missing []string
 	for _, rid := range targets {

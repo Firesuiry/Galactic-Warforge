@@ -496,30 +496,12 @@ items:
     form: solid
     stack_limit: 100
     unit_volume: 1
-  - id: prototype
-    name: Prototype Payload
-    category: component
-    form: solid
-    stack_limit: 50
-    unit_volume: 2
   - id: precision_drone
     name: Precision Drone Payload
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 2
-  - id: corvette
-    name: Corvette Hull Payload
-    category: component
-    form: solid
-    stack_limit: 20
-    unit_volume: 4
-  - id: destroyer
-    name: Destroyer Hull Payload
-    category: component
-    form: solid
-    stack_limit: 10
-    unit_volume: 6
   - id: solar_sail
     name: Solar Sail
     category: component
@@ -614,12 +596,6 @@ items:
     form: solid
     stack_limit: 100
     unit_volume: 1
-  - id: attack_drone
-    name: Attack Drone
-    category: component
-    form: solid
-    stack_limit: 50
-    unit_volume: 2
   - id: crystal_shell_set
     name: Crystal Shell Set
     category: ammo

@@ -1,12 +1,15 @@
 package model
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func defaultTechDefinitionByID(t *testing.T, techID string) *TechDefinition {
 	t.Helper()
-	for i := range defaultTechDefinitions {
-		if defaultTechDefinitions[i].ID == techID {
-			return &defaultTechDefinitions[i]
+	for i := range techDefinitions {
+		if techDefinitions[i].ID == techID {
+			return &techDefinitions[i]
 		}
 	}
 	t.Fatalf("default tech %s not found", techID)
@@ -40,29 +43,16 @@ func assertTechLacksUnlockType(t *testing.T, techID string, unlockType TechUnloc
 	}
 }
 
-func TestT100FleetTechsExposePublicRecipesAndStayRuntimeBacked(t *testing.T) {
-	cases := map[string]string{
-		"prototype":       "df_prototype",
-		"precision_drone": "df_precision_drone",
-		"corvette":        "df_corvette",
-		"destroyer":       "df_destroyer",
-	}
-	for techID, recipeID := range cases {
+func TestT100FleetTechsStayBlueprintGatedNotRecipeBacked(t *testing.T) {
+	for _, techID := range []string{"prototype", "precision_drone", "corvette", "destroyer"} {
 		def := defaultTechDefinitionByID(t, techID)
 		if def.Hidden {
 			t.Fatalf("expected raw tech %s to be visible after T100 cutover", techID)
 		}
-		foundRecipe := false
 		for _, unlock := range def.Unlocks {
-			if unlock.Type == TechUnlockUnit {
-				t.Fatalf("expected raw tech %s to stay recipe-backed instead of unit-backed, got %+v", techID, def.Unlocks)
+			if unlock.Type == TechUnlockUnit || (unlock.Type == TechUnlockRecipe && strings.HasPrefix(unlock.ID, "df_")) {
+				t.Fatalf("expected raw tech %s to have no unit or df_ unit recipe unlocks, got %+v", techID, def.Unlocks)
 			}
-			if unlock.Type == TechUnlockRecipe && unlock.ID == recipeID {
-				foundRecipe = true
-			}
-		}
-		if !foundRecipe {
-			t.Fatalf("expected tech %s to unlock recipe %s, got %+v", techID, recipeID, def.Unlocks)
 		}
 	}
 }

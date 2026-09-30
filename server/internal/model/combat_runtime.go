@@ -9,53 +9,103 @@ const (
 	CombatSquadStateDestroyed CombatSquadState = "destroyed"
 )
 
-// CombatSquad is the authoritative runtime entity for deployable planetary combat units.
-// 小队是实体化的编组战斗群（R3）：有真实坐标，沿路径移动，HP 池按伤害减员，
-// 全灭后从运行时移除。
+// CombatSquad is a command container. Health, ammunition and movement belong
+// exclusively to its world-unit members; destroying the container never kills units.
 type CombatSquad struct {
-	ID               string              `json:"id"`
-	OwnerID          string              `json:"owner_id"`
-	PlanetID         string              `json:"planet_id"`
+	ID       string `json:"id"`
+	OwnerID  string `json:"owner_id"`
+	PlanetID string `json:"planet_id"`
+	// Legacy runtime fields remain part of the persisted shape for old saves and
+	// war-runtime records. New squads use MemberIDs and leave these unset.
 	SourceBuildingID string              `json:"source_building_id,omitempty"`
-	BlueprintID      string              `json:"blueprint_id"`
+	BlueprintID      string              `json:"blueprint_id,omitempty"`
 	Domain           UnitDomain          `json:"domain,omitempty"`
 	BaseFrameID      string              `json:"base_frame_id,omitempty"`
 	PlatformClass    string              `json:"platform_class,omitempty"`
-	Count            int                 `json:"count"`
-	MemberMaxHP      int                 `json:"member_max_hp,omitempty"` // 单员 HP；MaxHP = Count × MemberMaxHP
-	HP               int                 `json:"hp"`
-	MaxHP            int                 `json:"max_hp"`
-	Shield           ShieldState         `json:"shield"`
-	Weapon           WeaponState         `json:"weapon"`
-	Sustainment      WarSustainmentState `json:"sustainment"`
-	State            CombatSquadState    `json:"state"`
+	Count            int                 `json:"count,omitempty"`
+	MemberMaxHP      int                 `json:"member_max_hp,omitempty"`
+	HP               int                 `json:"hp,omitempty"`
+	MaxHP            int                 `json:"max_hp,omitempty"`
+	Shield           ShieldState         `json:"shield,omitempty"`
+	Weapon           WeaponState         `json:"weapon,omitempty"`
+	Sustainment      WarSustainmentState `json:"sustainment,omitempty"`
 	TargetEnemyID    string              `json:"target_enemy_id,omitempty"`
 	LastAttackTick   int64               `json:"last_attack_tick,omitempty"`
-
-	// 实时位置与移动（R3）：与 model.Unit 同一套推进语义。
-	Position     Position   `json:"position"`
-	MoveSpeed    float64    `json:"move_speed"`              // 格/tick
-	Path         []Position `json:"path,omitempty"`          // 完整路径（含起点）
-	PathIndex    int        `json:"path_index,omitempty"`    // 下一个目标格下标
-	MoveProgress float64    `json:"move_progress,omitempty"` // 向下一格的累计进度
-	RepathTick   int64      `json:"repath_tick,omitempty"`   // 上次重寻路 tick
+	MoveSpeed        float64             `json:"move_speed,omitempty"`
+	Path             []Position          `json:"path,omitempty"`
+	PathIndex        int                 `json:"path_index,omitempty"`
+	MoveProgress     float64             `json:"move_progress,omitempty"`
+	RepathTick       int64               `json:"repath_tick,omitempty"`
+	Name             string              `json:"name"`
+	MemberIDs        []string            `json:"member_ids"`
+	State            CombatSquadState    `json:"state"`
+	Position         Position            `json:"position"`
+	Order            SquadOrder          `json:"order"`
+	Target           *Position           `json:"target,omitempty"`
+	LastOrderTick    int64               `json:"last_order_tick"`
 }
 
-// HasPath 报告小队是否还有未走完的路径。
+type SquadOrder string
+
+const (
+	SquadOrderIdle     SquadOrder = "idle"
+	SquadOrderAttack   SquadOrder = "attack"
+	SquadOrderDefend   SquadOrder = "defend"
+	SquadOrderRetreat  SquadOrder = "retreat"
+	SquadOrderResupply SquadOrder = "resupply"
+)
+
+func (s *CombatSquad) Clone() *CombatSquad {
+	if s == nil {
+		return nil
+	}
+	out := *s
+	out.MemberIDs = append([]string(nil), s.MemberIDs...)
+	out.Path = append([]Position(nil), s.Path...)
+	out.Sustainment = s.Sustainment.Clone()
+	if s.Target != nil {
+		p := *s.Target
+		out.Target = &p
+	}
+	return &out
+}
+
+// HasPath reports whether a legacy HP-pool squad still has a movement path.
+// Member based squads move through their Unit members instead.
 func (s *CombatSquad) HasPath() bool {
 	return s != nil && s.PathIndex < len(s.Path)
 }
 
-// ClearPath 清空小队移动状态。
 func (s *CombatSquad) ClearPath() {
+	if s == nil {
+		return
+	}
 	s.Path = nil
 	s.PathIndex = 0
 	s.MoveProgress = 0
 }
 
-// ApplySquadDamage 对 HP 池结算伤害并按 MemberMaxHP 折算减员；
-// 返回本次减员数（死亡员额）。HP 归零时调用方负责移除小队。
-func (s *CombatSquad) ApplySquadDamage(damage int) (losses int) {
+// AliveCount is used only for legacy HP-pool squads. Member based squads derive
+// their count from Members(WorldState).
+func (s *CombatSquad) AliveCount() int {
+	if s == nil || s.HP <= 0 {
+		return 0
+	}
+	per := s.MemberMaxHP
+	if per <= 0 && s.Count > 0 && s.MaxHP > 0 {
+		per = s.MaxHP / s.Count
+	}
+	if per <= 0 {
+		per = 1
+	}
+	alive := (s.HP + per - 1) / per
+	if s.Count > 0 && alive > s.Count {
+		alive = s.Count
+	}
+	return alive
+}
+
+func (s *CombatSquad) ApplySquadDamage(damage int) int {
 	if s == nil || damage <= 0 || s.HP <= 0 {
 		return 0
 	}
@@ -64,30 +114,22 @@ func (s *CombatSquad) ApplySquadDamage(damage int) (losses int) {
 	if s.HP < 0 {
 		s.HP = 0
 	}
-	after := s.AliveCount()
-	s.Count = after
-	return before - after
+	s.Count = s.AliveCount()
+	return before - s.Count
 }
 
-// AliveCount 按 HP 池折算存活员额。
-func (s *CombatSquad) AliveCount() int {
-	if s == nil || s.HP <= 0 {
-		return 0
+// Members returns living members in stable roster order, never synthetic units.
+func (s *CombatSquad) Members(ws *WorldState) []*Unit {
+	if s == nil || ws == nil {
+		return nil
 	}
-	per := s.MemberMaxHP
-	if per <= 0 {
-		if s.Count > 0 && s.MaxHP > 0 {
-			per = s.MaxHP / s.Count
-		}
-		if per <= 0 {
-			per = 1
+	out := make([]*Unit, 0, len(s.MemberIDs))
+	for _, id := range s.MemberIDs {
+		if u := ws.Units[id]; u != nil && u.HP > 0 && u.OwnerID == s.OwnerID {
+			out = append(out, u)
 		}
 	}
-	alive := (s.HP + per - 1) / per
-	if s.Count > 0 && alive > s.Count {
-		alive = s.Count
-	}
-	return alive
+	return out
 }
 
 // CombatRuntimeState stores authoritative combat runtime entities for one planet world.
@@ -131,12 +173,7 @@ func CloneCombatRuntimeState(rt *CombatRuntimeState) *CombatRuntimeState {
 		if squad == nil {
 			continue
 		}
-		copy := *squad
-		copy.Sustainment = squad.Sustainment.Clone()
-		if squad.Path != nil {
-			copy.Path = append([]Position(nil), squad.Path...)
-		}
-		out.Squads[id] = &copy
+		out.Squads[id] = squad.Clone()
 	}
 	for id, frontline := range rt.Frontlines {
 		if frontline == nil {

@@ -1,3 +1,4 @@
+import { UnitProductionControls } from "./UnitProductionControls";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useShallow } from "zustand/react/shallow";
@@ -73,6 +74,7 @@ import { MechaControls } from "./MechaControls";
 import { LogisticsStationControls } from "./LogisticsStationControls";
 import { DistributorControls } from "./DistributorControls";
 import { TrafficMonitorControls } from "./TrafficMonitorControls";
+import { SorterControls } from "./SorterControls";
 import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
 import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
@@ -659,6 +661,8 @@ export function PlanetEntityPanel({
         </section>
 
         {building.type === "traffic_monitor" ? <TrafficMonitorControls key={building.id} building={building} buildings={Object.values(planet.buildings ?? {})} faceSize={planet.surface?.face_size ?? 1} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
+        <UnitProductionControls key={building.id+"-production"} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id===session.playerId}/>
+        {building.sorter ? <SorterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         {building.type === "splitter" ? <SplitterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         <ProcessingStatus building={building} />
         <BuildingStorageSection building={building} catalog={catalog} />

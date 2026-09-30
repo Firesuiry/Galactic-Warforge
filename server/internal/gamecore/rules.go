@@ -142,9 +142,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			return res, nil
 		}
 	}
-	if def.RequiresResourceNode && ws.Grid[pos.Y][pos.X].ResourceNodeID == "" {
+	if err := model.ValidateCollectorSite(ws, btype, *pos); err != nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("%s must be built on a resource node", btype)
+		res.Message = err.Error()
 		return res, nil
 	}
 	if btype == model.BuildingTypeOrbitalCollector {
@@ -175,6 +175,24 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		}
 	}
 
+	rotation := model.PlanRotation0
+	if _, ok := cmd.Payload["rotation"]; ok {
+		degrees, err := payloadStrictInt(cmd.Payload, "rotation")
+		if err != nil || degrees < 0 || degrees > 270 || degrees%90 != 0 {
+			return mechaJobFailed(model.CodeValidationFailed, "rotation must be 0, 90, 180 or 270")
+		}
+		rotation = model.PlanRotation(fmt.Sprint(degrees))
+	}
+	autoApproach := false
+	if raw, ok := cmd.Payload["auto_approach"]; ok {
+		var valid bool
+		autoApproach, valid = raw.(bool)
+		if !valid {
+			return mechaJobFailed(model.CodeValidationFailed, "auto_approach must be boolean")
+		}
+	}
+	var approachUnit *model.Unit
+	var approachPath []model.Position
 	// Check resource cost (availability validation)
 	mCost, eCost := def.BuildCost.Minerals, def.BuildCost.Energy
 	player = ws.Players[playerID]
@@ -195,7 +213,13 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	}
 
 	if rangeRes := gc.requireBuildRange(ws, playerID, *pos); rangeRes != nil {
-		return *rangeRes, nil
+		if !autoApproach {
+			return *rangeRes, nil
+		}
+		approachUnit, approachPath = planBuildApproach(ws, playerID, *pos)
+		if approachUnit == nil {
+			return mechaJobFailed(model.CodeOutOfRange, "no reachable construction approach")
+		}
 	}
 
 	if ws.Construction == nil {
@@ -207,6 +231,8 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	taskID := ws.NextEntityID("c")
 	task := &model.ConstructionTask{
 		ID:                taskID,
+		Rotation:          rotation,
+		AutoApproach:      autoApproach,
 		PlayerID:          playerID,
 		RegionID:          constructionRegionKey(ws, *pos),
 		BuildingType:      btype,
@@ -231,6 +257,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
+	if approachUnit != nil {
+		startBuildApproach(approachUnit, approachPath)
+	}
 	task.TotalTicks = gc.scaledConstructionDuration()
 	task.RemainingTicks = task.TotalTicks
 
@@ -585,14 +614,26 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 				res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
 				return res, nil
 			}
+			if !unitCanTarget(attacker, target) {
+				return mechaJobFailed(model.CodeInvalidTarget, "weapon cannot engage this target")
+			}
+			attacker.AttackTarget = targetID
+			engaged++
+			if attacker.LastAttackTick > 0 && ws.Tick-attacker.LastAttackTick < attacker.AttackCooldownTick {
+				continue
+			}
+			if attacker.AmmoClass != "" && attacker.Ammo <= 0 {
+				attacker.CombatState = "no_ammunition"
+				continue
+			}
 			if failure := spendMechaEnergy(attacker, attacker.Mecha.AttackEnergyCost); failure != nil {
 				return *failure, nil
 			}
+			consumeUnitAmmunition(attacker)
 			events = append(events, fireAtTarget(ws, attacker, target)...)
 			attacker.LastAttackTick = ws.Tick
 			attacker.AttackTarget = targetID // 后续按冷却自动开火（settleMechaAutoFire）
 			events = append(events, mechaStateEvent(attacker))
-			engaged++
 			continue
 		}
 		attacker.AttackTarget = targetID
@@ -760,133 +801,6 @@ func friendlyOwner(ws *model.WorldState, id string) string {
 		return b.OwnerID
 	}
 	return ""
-}
-
-// execProduce handles the "produce" command to create units at a production building
-func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	res := model.CommandResult{Status: model.StatusFailed}
-
-	producerID := cmd.Target.EntityID
-	if producerID == "" {
-		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id (production building) required"
-		return res, nil
-	}
-
-	building, ok := ws.Buildings[producerID]
-	if !ok {
-		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", producerID)
-		return res, nil
-	}
-	if building.OwnerID != playerID {
-		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
-		return res, nil
-	}
-	def, ok := model.BuildingDefinitionByID(building.Type)
-	if !ok || !def.CanProduceUnits {
-		res.Code = model.CodeInvalidTarget
-		res.Message = "can only produce units at a production building"
-		return res, nil
-	}
-	if ok, reason := buildingOperationalForCommand(ws, building); !ok {
-		res.Code = model.CodeInvalidTarget
-		if reason == "" {
-			reason = "not_operational"
-		}
-		res.Message = fmt.Sprintf("production building is not operational: %s", reason)
-		return res, nil
-	}
-
-	utypeRaw, ok := cmd.Payload["unit_type"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.unit_type required"
-		return res, nil
-	}
-	utypeID := fmt.Sprintf("%v", utypeRaw)
-	unitEntry, ok := model.PublicWorldProduceUnitByID(utypeID)
-	if !ok {
-		if entry, exists := model.PublicWarBlueprintByID(utypeID); exists {
-			res.Code = model.CodeValidationFailed
-			switch entry.DeployCommand {
-			case string(model.CmdDeploySquad):
-				res.Message = fmt.Sprintf("blueprint %s is not produced via produce; use deploy_squad", utypeID)
-			case string(model.CmdCommissionFleet):
-				res.Message = fmt.Sprintf("blueprint %s is not produced via produce; use commission_fleet", utypeID)
-			default:
-				res.Message = fmt.Sprintf("blueprint %s is not produced via produce", utypeID)
-			}
-			return res, nil
-		}
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unit %s is not publicly available", utypeID)
-		return res, nil
-	}
-	utype := model.UnitType(unitEntry.ID)
-
-	// Check cost
-	mCost, eCost := model.UnitCost(utype)
-	player := ws.Players[playerID]
-	if player.Resources.Minerals < mCost {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d minerals, have %d", mCost, player.Resources.Minerals)
-		return res, nil
-	}
-	if player.Resources.Energy < eCost {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d energy, have %d", eCost, player.Resources.Energy)
-		return res, nil
-	}
-
-	if rangeRes := gc.requireBuildRange(ws, playerID, building.Position); rangeRes != nil {
-		return *rangeRes, nil
-	}
-	playerState := ws.Players[playerID]
-	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
-		res.Code = model.CodeExecutorBusy
-		res.Message = "executor is busy"
-		return res, nil
-	}
-
-	// Find a free adjacent tile near production building
-	spawnPos := findAdjacentFree(ws, building.Position)
-	if spawnPos == nil {
-		res.Code = model.CodePositionOccupied
-		res.Message = "no free tile adjacent to production building"
-		return res, nil
-	}
-
-	player.Resources.Minerals -= mCost
-	player.Resources.Energy -= eCost
-
-	stats := model.UnitStats(utype)
-	id := ws.NextEntityID("u")
-	u := &stats
-	u.ID = id
-	u.OwnerID = playerID
-	u.Position = *spawnPos
-	ws.Units[id] = u
-	tileKey := model.TileKey(spawnPos.X, spawnPos.Y)
-	ws.TileUnits[tileKey] = append(ws.TileUnits[tileKey], id)
-
-	events := []*model.GameEvent{
-		{
-			EventType:       model.EvtEntityCreated,
-			VisibilityScope: playerID,
-			Payload: map[string]any{
-				"entity_type": "unit",
-				"entity_id":   id,
-				"unit":        u,
-			},
-		},
-	}
-
-	res.Status = model.StatusExecuted
-	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("unit %s produced at (%d,%d)", id, spawnPos.X, spawnPos.Y)
-	return res, events
 }
 
 // execUpgrade handles upgrading a building
@@ -1312,20 +1226,13 @@ func collectMineralsKickback(module *model.CollectModule, mined int) int {
 }
 
 // veinsUtilizationTechID 矿物利用科技（DSP：每级 +10% 采矿产能、-6% 矿脉消耗）。
-// tech.go 属研究站域，暂未给该科技登记 Effects，故本域直接按等级结算。
+// techs.yaml 暂未给该科技登记 Effects，故这里直接按等级结算。
 const (
 	veinsUtilizationTechID         = "veins_utilization"
 	veinsUtilizationMaxLevel       = 6
 	veinsUtilizationOutputPerLevel = 0.10
 	veinsUtilizationSavingPerLevel = 0.06
 )
-
-// miningCoverageRadiusByType 矿机覆盖半径（切比雪夫距离，单位：格）。
-// building_runtime.go 属其他域、不可新增字段，覆盖范围在此以类型常量表表达：
-// mining_machine 仅采自身所在脉（半径 0），advanced_mining_machine 大范围多脉同采。
-var miningCoverageRadiusByType = map[model.BuildingType]int{
-	model.BuildingTypeAdvancedMiningMachine: 2,
-}
 
 // veinsUtilizationLevel returns the effective veins_utilization research level,
 // capped at the tech's max level so oversized stored levels stay idempotent.
@@ -1384,7 +1291,10 @@ func coveredResourceNodeIDs(ws *model.WorldState, building *model.Building) []st
 	if !ws.InBounds(x, y) {
 		return nil
 	}
-	radius := miningCoverageRadiusByType[building.Type]
+	radius := 0
+	if def, ok := model.BuildingRuntimeDefinitionByID(building.Type); ok && def.Functions.Collect != nil {
+		radius = def.Functions.Collect.CoverageRadius
+	}
 	ids := make([]string, 0, 1)
 	seen := make(map[string]struct{})
 	for dy := -radius; dy <= radius; dy++ {
@@ -1427,6 +1337,9 @@ func mineResource(ws *model.WorldState, player *model.PlayerState, building *mod
 	for _, nodeID := range coveredResourceNodeIDs(ws, building) {
 		node := ws.Resources[nodeID]
 		if node == nil {
+			continue
+		}
+		if collect := building.Runtime.Functions.Collect; collect != nil && len(collect.AllowedResources) > 0 && !allowsItem(collect.AllowedResources, node.Kind) {
 			continue
 		}
 		extracted := extractFromResourceNode(node, perVeinYield, level)
@@ -2397,6 +2310,43 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		res.Code = model.CodeValidationFailed
 		res.Message = "player not found or not alive"
 		return res, nil
+	}
+	direction := "to_building"
+	if raw, ok := cmd.Payload["direction"]; ok {
+		var valid bool
+		direction, valid = raw.(string)
+		if !valid || (direction != "to_building" && direction != "to_player") {
+			return mechaJobFailed(model.CodeValidationFailed, "direction must be to_building or to_player")
+		}
+	}
+	if direction == "to_player" {
+		if building.Storage == nil {
+			return mechaJobFailed(model.CodeInvalidTarget, "take items from a storage building")
+		}
+		executor := player.ExecutorForPlanet(ws.PlanetID)
+		if executor == nil || ws.Units[executor.UnitID] == nil || ws.Units[executor.UnitID].Mecha == nil {
+			return mechaJobFailed(model.CodeInvalidTarget, "living executor required to receive items")
+		}
+		unit := ws.Units[executor.UnitID]
+		model.SyncMechaCapabilities(unit, player)
+		used := 0
+		for _, amount := range player.Inventory {
+			used += amount
+		}
+		quantity = min(quantity, max(0, unit.Mecha.InventoryCapacity-used))
+		quantity = min(quantity, building.Storage.OutputQuantity(itemID))
+		if quantity <= 0 {
+			return mechaJobFailed(model.CodeInsufficientResource, "no output available or inventory full")
+		}
+		taken, _, err := building.Storage.Provide(itemID, quantity)
+		if err != nil {
+			return mechaJobFailed(model.CodeValidationFailed, err.Error())
+		}
+		player.EnsureInventory()[itemID] += taken
+		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("collected %d %s from %s", taken, itemID, buildingID)}, []*model.GameEvent{{
+			EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
+			Payload: map[string]any{"building_id": buildingID, "item_id": itemID, "transferred": taken, "source": "building_storage", "inventory_qty": player.Inventory[itemID]},
+		}}
 	}
 	if player.Inventory[itemID] < quantity {
 		res.Code = model.CodeInsufficientResource

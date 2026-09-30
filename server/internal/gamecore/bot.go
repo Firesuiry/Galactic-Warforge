@@ -29,16 +29,19 @@ type botTuning struct {
 	turretThreat     int   // 威胁进入该半径才造炮塔（越大越早）
 	researchMaxLevel int   // >0 时只研究不超过该等级的科技
 	researchMainOnly bool  // 只推进主线科技（easy 少研究）
+	raidSupply       bool  // 进攻优先袭扰敌方补给站/弹药厂
+	supportAt        int   // 兵力达到该数量后才配补给车
+	heavyAt          int   // 兵力达到该数量后才补火炮/导弹车/维修车/无人机
 }
 
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 8, heavyAt: 12}
 	case "hard":
-		return botTuning{cadence: 15, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false}
+		return botTuning{cadence: 15, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 3, heavyAt: 6}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 5, heavyAt: 8}
 	}
 }
 
@@ -167,12 +170,14 @@ func (gc *GameCore) planBotCommands(ws *model.WorldState, playerID string, tunin
 
 	// 按优先级逐项检查：每项最多一条命令，总量受 maxCmds 限制。
 	gc.botMilitary(ws, playerID, tuning, ctx, issue)
-	gc.botEconomy(ws, playerID, tuning, ctx, issue)
+	gc.botProduce(ws, playerID, tuning, ctx, issue)
+	if !gc.botIndustry(ws, playerID, tuning, ctx, issue) {
+		gc.botEconomy(ws, playerID, tuning, ctx, issue)
+	}
 	gc.botPower(ws, playerID, tuning, ctx, issue)
 	gc.botMiners(ws, playerID, tuning, ctx, issue)
 	gc.botAssembler(ws, playerID, tuning, ctx, issue)
 	gc.botResearch(ws, playerID, tuning, ctx, issue)
-	gc.botProduce(ws, playerID, tuning, ctx, issue)
 	return cmds
 }
 
@@ -189,6 +194,7 @@ type botSurvey struct {
 	turretCount  int
 	labCount     int
 	assemblers   []*model.Building
+	producers    []*model.Building
 	enemyPlayers map[string][]*model.Building
 	nests        []*model.EnemyForce
 }
@@ -221,6 +227,9 @@ func (gc *GameCore) surveyBotWorld(ws *model.WorldState, playerID string) *botSu
 			}
 			def, ok := model.BuildingDefinitionByID(b.Type)
 			if ok && def.CanProduceUnits {
+				survey.producers = append(survey.producers, b)
+			}
+			if b.Runtime.Functions.Production != nil {
 				survey.assemblers = append(survey.assemblers, b)
 			}
 			if b.Type == model.BuildingTypeBattlefieldAnalysisBase && survey.home == nil {
@@ -254,6 +263,10 @@ func (gc *GameCore) surveyBotWorld(ws *model.WorldState, playerID string) *botSu
 		case model.UnitTypeMecha:
 			survey.mechaCount++
 			survey.soldiers = append(survey.soldiers, u)
+		default:
+			if def, ok := model.UnitDefinitionByID(u.Type); ok && def.Public && u.Type != model.UnitTypeWorker {
+				survey.soldiers = append(survey.soldiers, u)
+			}
 		}
 	}
 	if survey.home == nil && survey.executor != nil {
@@ -311,7 +324,7 @@ func (gc *GameCore) botMilitary(ws *model.WorldState, playerID string, tuning bo
 		}
 	}
 	if !armyEngaged && len(ctx.soldiers) >= tuning.attackAt {
-		target := gc.botAttackObjective(ws, playerID, ctx)
+		target := gc.botAttackObjective(ws, playerID, tuning, ctx)
 		if target != nil {
 			ids := make([]string, 0, len(ctx.soldiers))
 			for _, u := range ctx.soldiers {
@@ -362,27 +375,6 @@ func botIncomingThreats(ws *model.WorldState, playerID string, home model.Positi
 			continue
 		}
 		threats = append(threats, botThreat{id: nest.ID, kind: "nest", pos: nest.Position, dist: d})
-	}
-	if ws.CombatRuntime != nil {
-		squadIDs := make([]string, 0, len(ws.CombatRuntime.Squads))
-		for id := range ws.CombatRuntime.Squads {
-			squadIDs = append(squadIDs, id)
-		}
-		sort.Strings(squadIDs)
-		for _, id := range squadIDs {
-			squad := ws.CombatRuntime.Squads[id]
-			if squad == nil || squad.HP <= 0 || squad.State == model.CombatSquadStateDestroyed || squad.OwnerID == playerID {
-				continue
-			}
-			if !hostile(ws, playerID, squad.OwnerID) {
-				continue
-			}
-			d := ws.SurfaceDistance(squad.Position, home)
-			if d > radius {
-				continue
-			}
-			threats = append(threats, botThreat{id: squad.ID, kind: "squad", pos: squad.Position, dist: d})
-		}
 	}
 	sort.Slice(threats, func(i, j int) bool {
 		if threats[i].dist != threats[j].dist {
@@ -540,7 +532,13 @@ func botPendingBuilds(ws *model.WorldState, playerID string, btype model.Buildin
 
 // botAttackObjective 进攻目标：优先最近的敌方玩家建筑中心，其次最近的黑雾巢穴。
 // 距离相同时按玩家 ID / 巢穴 ID 取较小者。
-func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, ctx *botSurvey) *model.Position {
+func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) *model.Position {
+	if tuning.raidSupply {
+		// 袭扰：断掉对方前线的补给比强攻基地更划算；攻击移动本身也会优先打补给设施。
+		if raid := botNearestEnemySupply(ws, *ctx.home, ctx); raid != nil {
+			return raid
+		}
+	}
 	bestDist := -1
 	bestOwner := ""
 	var best *model.Position
@@ -582,6 +580,28 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, ct
 	return best
 }
 
+// botNearestEnemySupply 距离最近的敌方补给站/弹药厂（同距按建筑 ID）。
+func botNearestEnemySupply(ws *model.WorldState, from model.Position, ctx *botSurvey) *model.Position {
+	var best *model.Building
+	bestDist := 0
+	for _, buildings := range ctx.enemyPlayers {
+		for _, b := range buildings {
+			if !militarySupplyTarget(b) {
+				continue
+			}
+			d := ws.SurfaceDistance(from, b.Position)
+			if best == nil || d < bestDist || (d == bestDist && b.ID < best.ID) {
+				best, bestDist = b, d
+			}
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	pos := best.Position
+	return &pos
+}
+
 func buildingCentroid(ws *model.WorldState, buildings []*model.Building) model.Position {
 	if len(buildings) == 1 {
 		return buildings[0].Position
@@ -620,7 +640,7 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 	// 缺料清单：当前建设目标所需物品。
 	missing := gc.botMaterialNeeds(ws, playerID, tuning, ctx)
 	// 燃料不多：提前采煤（手搓链随时会饿死在半路）。
-	if player.Inventory[model.ItemCoal] < 12 {
+	if player.Inventory[model.ItemCoal] < 40 {
 		if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemCoal, ctx); ok {
 			return issue(cmd)
 		}
@@ -832,15 +852,20 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 	if execState == nil {
 		return model.Command{}, false
 	}
-	if ws.SurfaceDistance(exec.Position, node.Position) > execState.OperateRange {
+	if ws.SurfaceDistance(exec.Position, node.Position) > 2 {
 		// 先移动到矿点邻格。
 		dest := botAdjacentFreeTile(ws, node.Position, exec.ID)
 		if dest == nil {
 			return model.Command{}, false
 		}
+		path, reachable := computeUnitPath(ws, exec.Position, *dest, exec.ID)
+		if !reachable || len(path) < 2 {
+			return model.Command{}, false
+		}
+		step := path[min(len(path)-1, exec.MoveRange)]
 		return model.Command{
 			Type:   model.CmdMove,
-			Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID, Position: dest},
+			Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID, Position: &step},
 		}, true
 	}
 	return model.Command{
@@ -1115,26 +1140,37 @@ func botLabsCoverCost(labs []*model.Building, cost []model.ItemAmount, storageOf
 
 // botProduce 混合出兵。产线不消耗工人，因此不另造 worker。
 func (gc *GameCore) botProduce(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, issue func(model.Command) bool) bool {
-	if len(ctx.assemblers) == 0 || len(ctx.soldiers) >= tuning.armyCap {
+	queued := 0
+	for _, b := range ctx.producers {
+		queued += len(b.UnitQueue)
+	}
+	if len(ctx.producers) == 0 || len(ctx.soldiers)+queued >= tuning.armyCap {
 		return false
 	}
-	player := ws.Players[playerID]
-	utype := model.UnitTypeSoldier
-	if botPreferMecha(ctx.soldierCount, ctx.mechaCount, tuning) {
-		mCost, eCost := model.UnitCost(model.UnitTypeMecha)
-		if _, ok := model.PublicWorldProduceUnitByID(string(model.UnitTypeMecha)); ok && player.Resources.Minerals >= mCost && player.Resources.Energy >= eCost {
-			utype = model.UnitTypeMecha
+	types := botArmyPreference(ctx, tuning)
+	for _, utype := range types {
+		spec, _ := model.UnitDefinitionByID(utype)
+		for _, producer := range ctx.producers {
+			if producer.Type != spec.Producer || len(producer.UnitQueue) >= 3 {
+				continue
+			}
+			ready := true
+			for _, cost := range spec.Cost {
+				missing := cost.Quantity - producer.Storage.ItemQuantity(cost.ItemID)
+				if missing <= 0 {
+					continue
+				}
+				ready = false
+				if ws.Players[playerID].Inventory[cost.ItemID] >= missing {
+					return issue(model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": producer.ID, "item_id": cost.ItemID, "quantity": missing}})
+				}
+			}
+			if ready {
+				return issue(model.Command{Type: model.CmdProduce, Target: model.CommandTarget{Layer: "planet", EntityID: producer.ID}, Payload: map[string]any{"unit_type": string(utype)}})
+			}
 		}
 	}
-	mCost, eCost := model.UnitCost(utype)
-	if player.Resources.Minerals < mCost || player.Resources.Energy < eCost {
-		return false
-	}
-	return issue(model.Command{
-		Type:    model.CmdProduce,
-		Target:  model.CommandTarget{Layer: "planet", EntityID: ctx.assemblers[0].ID},
-		Payload: map[string]any{"unit_type": string(utype)},
-	})
+	return false
 }
 
 func botPreferMecha(soldiers, mechas int, tuning botTuning) bool {
@@ -1192,7 +1228,11 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int) 
 		start = 1
 	}
 	for radius := start; radius <= maxRadius; radius++ {
-		for _, candidate := range ws.SurfaceDisc(home, radius) {
+		candidates := ws.SurfaceDisc(home, radius)
+		sort.SliceStable(candidates, func(i, j int) bool {
+			return ws.SurfaceDistance(home, candidates[i]) < ws.SurfaceDistance(home, candidates[j])
+		})
+		for _, candidate := range candidates {
 			d := ws.SurfaceDistance(home, candidate)
 			if d != radius {
 				continue

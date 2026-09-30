@@ -179,7 +179,7 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
 
       if (mode.kind === 'build') {
-        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId);
+        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation);
         if (assessment && !assessment.buildable) {
           const reasons = assessment.blockedTiles
             .map((blocked) => (blocked.reason === 'terrain'
@@ -205,6 +205,9 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
           focus: { buildingType: mode.buildingType, position },
           execute: () => client.cmdBuild(position, mode.buildingType, {
             direction: mode.direction,
+            rotation: mode.rotation ?? 0,
+            autoApproach: true,
+            planetId: planet.planet_id,
             ...(mode.recipeId ? { recipeId: mode.recipeId } : {}),
           }),
           fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({

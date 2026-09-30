@@ -204,16 +204,16 @@ func TestF2BilateralCombatStats(t *testing.T) {
 
 	// 3) 小队整编被毁（combat_squad 目标路径）：计 1 个单位击杀/损失。
 	squad := &model.CombatSquad{
-		ID:           "sq-vic",
-		OwnerID:      "p2",
-		PlanetID:     ws.PlanetID,
-		Count:        1,
-		MemberMaxHP:  1,
-		HP:           1,
-		MaxHP:        1,
-		State:        model.CombatSquadStateIdle,
-		Position:     model.Position{X: 3, Y: 4},
-		Domain:       model.UnitDomainGround,
+		ID:            "sq-vic",
+		OwnerID:       "p2",
+		PlanetID:      ws.PlanetID,
+		Count:         1,
+		MemberMaxHP:   1,
+		HP:            1,
+		MaxHP:         1,
+		State:         model.CombatSquadStateIdle,
+		Position:      model.Position{X: 3, Y: 4},
+		Domain:        model.UnitDomainGround,
 		PlatformClass: "vehicle",
 	}
 	ws.CombatRuntime.Squads[squad.ID] = squad

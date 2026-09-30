@@ -48,7 +48,7 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 		for unit.MoveProgress >= 1 && unit.HasPath() {
 			next := unit.Path[unit.PathIndex]
 			if !tileWalkableForUnit(ws, next, unit.ID) {
-				if !ws.InBounds(next.X, next.Y) || ws.Grid[next.Y][next.X].BuildingID != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable() {
+				if !ws.InBounds(next.X, next.Y) || (!unitIsAir(ws, unit.ID) && (ws.Grid[next.Y][next.X].BuildingID != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable())) {
 					// 路径被新建筑/地形变化堵死：立即重寻路。
 					if !repathUnit(ws, unit) {
 						events = append(events, unitMoveAbortedEvent(unit, "path_blocked"))
@@ -72,6 +72,12 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 					unit.BlockedTicks = 0
 				}
 				break
+			}
+			if unit.Mecha != nil {
+				if failure := spendMechaEnergy(unit, unit.Mecha.MoveEnergyCost); failure != nil {
+					unit.MoveProgress = 1
+					break
+				}
 			}
 			stepUnitTo(ws, unit, next)
 			unit.MoveProgress -= 1
@@ -98,7 +104,6 @@ func settleSquadMovement(ws *model.WorldState) []*model.GameEvent {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-
 	var events []*model.GameEvent
 	for _, id := range ids {
 		squad := ws.CombatRuntime.Squads[id]
@@ -116,29 +121,27 @@ func settleSquadMovement(ws *model.WorldState) []*model.GameEvent {
 					events = append(events, squadMoveAbortedEvent(squad, "path_blocked"))
 					break
 				}
-				squad.Path = path
-				squad.PathIndex = 1
+				squad.Path, squad.PathIndex = path, 1
 				continue
 			}
 			squad.Position = next
 			squad.PathIndex++
-			squad.MoveProgress -= 1
+			squad.MoveProgress--
 		}
 		if !squad.HasPath() {
 			squad.MoveProgress = 0
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtEntityMoved,
-				VisibilityScope: squad.OwnerID,
-				Payload: map[string]any{
-					"entity_id":   squad.ID,
-					"entity_kind": "combat_squad",
-					"to":          squad.Position,
-					"arrived":     true,
-				},
-			})
+			events = append(events, &model.GameEvent{EventType: model.EvtEntityMoved, VisibilityScope: squad.OwnerID, Payload: map[string]any{
+				"entity_id": squad.ID, "entity_kind": "combat_squad", "to": squad.Position, "arrived": true,
+			}})
 		}
 	}
 	return events
+}
+
+func squadMoveAbortedEvent(squad *model.CombatSquad, reason string) *model.GameEvent {
+	return &model.GameEvent{EventType: model.EvtEntityMoved, VisibilityScope: squad.OwnerID, Payload: map[string]any{
+		"entity_id": squad.ID, "entity_kind": "combat_squad", "to": squad.Position, "arrived": false, "reason": reason,
+	}}
 }
 
 // tileWalkableForUnit 校验单位能否进入目标格：界内、可建地形、无建筑、无其他单位。
@@ -146,17 +149,17 @@ func tileWalkableForUnit(ws *model.WorldState, pos model.Position, selfID string
 	if !ws.InBounds(pos.X, pos.Y) {
 		return false
 	}
-	if ws.Grid[pos.Y][pos.X].BuildingID != "" {
+	if !unitIsAir(ws, selfID) && ws.Grid[pos.Y][pos.X].BuildingID != "" {
 		return false
 	}
-	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
+	if !unitIsAir(ws, selfID) && !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
 		return false
 	}
 	for _, otherID := range ws.TileUnits[model.TileKey(pos.X, pos.Y)] {
 		if otherID == selfID {
 			continue
 		}
-		if other := ws.Units[otherID]; other != nil && other.HP > 0 {
+		if other := ws.Units[otherID]; other != nil && other.HP > 0 && (other.Domain == model.UnitDomainAir) == unitIsAir(ws, selfID) {
 			return false
 		}
 	}
@@ -365,10 +368,10 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 			if epoch[nIdx] == gen {
 				continue
 			}
-			if ws.Grid[n.Y][n.X].BuildingID != "" {
+			if !unitIsAir(ws, selfID) && ws.Grid[n.Y][n.X].BuildingID != "" {
 				continue
 			}
-			if !ws.Grid[n.Y][n.X].Terrain.Buildable() {
+			if !unitIsAir(ws, selfID) && !ws.Grid[n.Y][n.X].Terrain.Buildable() {
 				continue
 			}
 			epoch[nIdx] = gen
@@ -412,16 +415,7 @@ func unitMoveAbortedEvent(unit *model.Unit, reason string) *model.GameEvent {
 	}
 }
 
-func squadMoveAbortedEvent(squad *model.CombatSquad, reason string) *model.GameEvent {
-	return &model.GameEvent{
-		EventType:       model.EvtEntityMoved,
-		VisibilityScope: squad.OwnerID,
-		Payload: map[string]any{
-			"entity_id":   squad.ID,
-			"entity_kind": "combat_squad",
-			"to":          squad.Position,
-			"arrived":     false,
-			"reason":      reason,
-		},
-	}
+func unitIsAir(ws *model.WorldState, id string) bool {
+	u := ws.Units[id]
+	return u != nil && u.Domain == model.UnitDomainAir
 }

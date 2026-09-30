@@ -14,73 +14,90 @@ func newGapWorld() *model.WorldState {
 	return ws
 }
 
-func gapSquad(ws *model.WorldState, id string, pos model.Position, weaponRange float64) *model.CombatSquad {
-	squad := &model.CombatSquad{
-		ID:          id,
-		OwnerID:     "p1",
-		PlanetID:    ws.PlanetID,
-		BlueprintID: model.ItemPrototype,
-		Count:       2,
-		MemberMaxHP: 80,
-		HP:          160,
-		MaxHP:       160,
-		Weapon:      model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: weaponRange},
-		State:       model.CombatSquadStateIdle,
-		Position:    pos,
-		MoveSpeed:   1,
-		Sustainment: model.WarSustainmentState{Current: model.WarSupplyStock{Ammo: 8}},
+// gapSoldier 放置一名未编队、自带弹药的步兵；射程与索敌半径显式指定。
+func gapSoldier(ws *model.WorldState, pos model.Position, attackRange, aggroRange int) *model.Unit {
+	u := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", pos)
+	u.AttackRange = attackRange
+	u.AggroRange = aggroRange
+	u.Stance = model.UnitStanceIdle
+	u.Ammo = 8
+	if u.AmmoCapacity < u.Ammo {
+		u.AmmoCapacity = u.Ammo
 	}
-	ws.CombatRuntime.Squads[id] = squad
-	return squad
+	return u
 }
 
-func TestGapR3UngroupedSquadDoesNotChaseDistantEnemy(t *testing.T) {
+func TestGapR3UngroupedUnitDoesNotChaseDistantEnemy(t *testing.T) {
 	ws := newGapWorld()
-	squad := gapSquad(ws, "squad-far", model.Position{X: 6, Y: 6}, 8)
+	unit := gapSoldier(ws, model.Position{X: 6, Y: 6}, 8, defaultUngroupedAggroRange)
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 36, Y: 16})
-	if d := ws.SurfaceDistance(squad.Position, enemy.Position); d <= defaultUngroupedAggroRange {
-		t.Fatalf("fixture distance %d is not beyond ungrouped aggro %d", d, defaultUngroupedAggroRange)
+	if d := ws.SurfaceDistance(unit.Position, enemy.Position); d <= unit.AggroRange {
+		t.Fatalf("fixture distance %d is not beyond aggro %d", d, unit.AggroRange)
 	}
-	squad.TargetEnemyID = enemy.ID
-	squad.Path = []model.Position{squad.Position, enemy.Position}
-	squad.PathIndex = 1
-
-	events := settleCombatRuntime(ws, 1)
-	if squad.TargetEnemyID != "" || squad.State != model.CombatSquadStateIdle {
-		t.Fatalf("distant enemy must be dropped, got %+v", squad)
-	}
-	if squad.HasPath() {
-		t.Fatalf("ungrouped squad must not keep a chase path, got %+v", squad.Path)
+	events := settleUnitCombat(ws)
+	if unit.AttackTarget != "" || unit.HasPath() {
+		t.Fatalf("distant enemy must not be auto-acquired nor chased, got target %q path %v", unit.AttackTarget, unit.Path)
 	}
 	if damageEventsFor(events, enemy.ID) != 0 {
 		t.Fatal("distant enemy must not be fired on")
 	}
 }
 
-func TestGapR3SquadPursuesInsideAggroOutsideWeaponRange(t *testing.T) {
+func TestGapR3UnitPursuesInsideAggroOutsideWeaponRange(t *testing.T) {
 	ws := newGapWorld()
-	squad := gapSquad(ws, "squad-near", model.Position{X: 6, Y: 6}, 8)
+	unit := gapSoldier(ws, model.Position{X: 6, Y: 6}, 8, defaultUngroupedAggroRange)
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 16, Y: 6})
-	dist := ws.SurfaceDistance(squad.Position, enemy.Position)
-	if dist <= int(squad.Weapon.Range) || dist > defaultUngroupedAggroRange {
+	dist := ws.SurfaceDistance(unit.Position, enemy.Position)
+	if dist <= unit.AttackRange || dist > unit.AggroRange {
 		t.Fatalf("fixture distance %d should be inside aggro and outside weapon range", dist)
 	}
 
-	events := settleCombatRuntime(ws, 1)
-	if squad.TargetEnemyID != enemy.ID || squad.State != model.CombatSquadStateEngaging {
-		t.Fatalf("in-radius enemy should be selected, got %+v", squad)
+	events := settleUnitCombat(ws)
+	if unit.AttackTarget != enemy.ID {
+		t.Fatalf("in-radius enemy should be selected, got %q", unit.AttackTarget)
 	}
-	if !squad.HasPath() {
+	if !unit.HasPath() {
 		t.Fatal("pursue should write a path when the target is outside weapon range")
 	}
 	if damageEventsFor(events, enemy.ID) != 0 {
 		t.Fatal("must not fire before closing to weapon range")
 	}
 
-	before := squad.Position
-	settleSquadMovement(ws)
-	if squad.Position == before || ws.SurfaceDistance(squad.Position, enemy.Position) >= dist {
-		t.Fatalf("pursue should close distance, before=%+v after=%+v", before, squad.Position)
+	before := unit.Position
+	for i := 0; i < 20 && unit.Position == before; i++ {
+		ws.Tick++
+		settleUnitMovement(ws)
+	}
+	if unit.Position == before || ws.SurfaceDistance(unit.Position, enemy.Position) >= dist {
+		t.Fatalf("pursue should close distance, before=%+v after=%+v", before, unit.Position)
+	}
+}
+
+func TestGapR3HoldUnitOnlyEngagesInsideWeaponRange(t *testing.T) {
+	ws := newGapWorld()
+	unit := gapSoldier(ws, model.Position{X: 6, Y: 6}, 4, defaultUngroupedAggroRange)
+	unit.Stance = model.UnitStanceHold
+	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 16, Y: 6})
+	if d := ws.SurfaceDistance(unit.Position, enemy.Position); d <= unit.AttackRange || d > unit.AggroRange {
+		t.Fatalf("fixture distance %d should be inside aggro and outside weapon range", d)
+	}
+	events := settleUnitCombat(ws)
+	if unit.AttackTarget != "" || unit.HasPath() || damageEventsFor(events, enemy.ID) != 0 {
+		t.Fatalf("hold stance must not acquire or chase outside weapon range, got target %q path %v", unit.AttackTarget, unit.Path)
+	}
+
+	enemy.Position = model.Position{X: 9, Y: 6}
+	ws.TileUnits = map[string][]string{}
+	for _, u := range ws.Units {
+		key := model.TileKey(u.Position.X, u.Position.Y)
+		ws.TileUnits[key] = append(ws.TileUnits[key], u.ID)
+	}
+	if d := ws.SurfaceDistance(unit.Position, enemy.Position); d > unit.AttackRange {
+		t.Fatalf("moved enemy distance %d must be inside weapon range", d)
+	}
+	settleUnitCombat(ws)
+	if unit.AttackTarget != enemy.ID {
+		t.Fatalf("hold stance should engage inside weapon range, got %q", unit.AttackTarget)
 	}
 }
 
@@ -132,38 +149,10 @@ func TestGapR3UngroupedFleetIgnoresForceFarFromAnchor(t *testing.T) {
 	}
 }
 
-func TestGapR3TaskForceRadiusDropsOutOfRangeEnemy(t *testing.T) {
+func TestGapR3TaskForceRadiusDropsOutOfRangeFleetTarget(t *testing.T) {
 	ws := newGapWorld()
-	squad := gapSquad(ws, "squad-tf", model.Position{X: 6, Y: 6}, 4)
-	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 36, Y: 16})
 	stanceLimit := model.WarTaskForceProfile(model.WarTaskForceStanceIntercept).MaxEngagementDistance
-	if d := ws.SurfaceDistance(squad.Position, enemy.Position); d <= stanceLimit {
-		t.Fatalf("fixture distance %d is inside intercept radius %d", d, stanceLimit)
-	}
-	ws.Players["p1"].EnsureWarCoordination().TaskForces["tf-squad"] = &model.WarTaskForce{
-		ID:      "tf-squad",
-		OwnerID: "p1",
-		Stance:  model.WarTaskForceStanceIntercept,
-		Members: []model.WarTaskForceMemberRef{{
-			Kind:     model.WarTaskForceMemberKindSquad,
-			EntityID: squad.ID,
-		}},
-	}
-	squad.TargetEnemyID = enemy.ID
-	events := settleCombatRuntime(ws, 1)
-	if squad.TargetEnemyID != "" || squad.HasPath() || damageEventsFor(events, enemy.ID) != 0 {
-		t.Fatalf("task force must not acquire outside its stance radius, got %+v", squad)
-	}
-
-	enemy.Position = model.Position{X: 16, Y: 6}
-	if d := ws.SurfaceDistance(squad.Position, enemy.Position); d > stanceLimit || d <= int(squad.Weapon.Range) {
-		t.Fatalf("moved enemy distance %d is not inside intercept radius and outside weapon range", d)
-	}
-	settleCombatRuntime(ws, 2)
-	if squad.TargetEnemyID != enemy.ID || !squad.HasPath() {
-		t.Fatalf("intercept should still pursue inside its finite radius, got %+v", squad)
-	}
-
+	ws.Players["p1"].EnsureWarCoordination()
 	anchor := fleetAnchorPosition(ws, nil)
 	forcePos := model.Position{X: 51, Y: 12}
 	if d := ws.SurfaceDistance(anchor, forcePos); d <= stanceLimit {
@@ -264,7 +253,7 @@ func TestGapE2ThreatLevelEventOnlyOnChange(t *testing.T) {
 	}
 }
 
-func TestGapU6CombatTechScalesSquadAndFleet(t *testing.T) {
+func TestGapU6CombatTechScalesUnitAndFleet(t *testing.T) {
 	ws := newGapWorld()
 	player := ws.Players["p1"]
 	player.EnsureWarBlueprints()["gap_missile"] = &model.WarBlueprint{
@@ -277,24 +266,12 @@ func TestGapU6CombatTechScalesSquadAndFleet(t *testing.T) {
 		},
 	}
 
-	profile, ok := model.WarBlueprintRuntimeProfileByID(model.ItemPrototype)
-	if !ok || profile.Squad == nil {
-		t.Fatal("prototype squad profile missing")
-	}
-	squad := gapSquad(ws, "squad-tech", model.Position{X: 4, Y: 4}, 8)
-	squad.HP = 50
-	custom := &model.CombatSquad{
-		ID:          "squad-custom",
-		OwnerID:     "p1",
-		BlueprintID: "no-such-blueprint",
-		Count:       1,
-		MemberMaxHP: 40,
-		HP:          40,
-		MaxHP:       40,
-		Weapon:      model.WeaponState{Damage: 7},
-		State:       model.CombatSquadStateIdle,
-	}
-	ws.CombatRuntime.Squads[custom.ID] = custom
+	base := model.UnitStats(model.UnitTypeSoldier)
+	unit := gapSoldier(ws, model.Position{X: 4, Y: 4}, 8, 12)
+	unit.HP = 10
+	hero := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 5, Y: 5})
+	hero.Mecha = &model.MechaState{}
+	heroAttack, heroMaxHP := hero.Attack, hero.MaxHP
 
 	space := model.NewSpaceRuntimeState()
 	fleet := &model.SpaceFleet{
@@ -330,13 +307,13 @@ func TestGapU6CombatTechScalesSquadAndFleet(t *testing.T) {
 	player.Tech.CompletedTechs["df_enhanced_structure"] = 1
 	settleCombatTech(ws, space)
 
-	wantDamage := scaleCombatTechStat(profile.Squad.Weapon.Damage, 0.2)
-	wantMember := scaleCombatTechStat(profile.Squad.HP, 0.1)
-	if squad.Weapon.Damage != wantDamage || squad.MemberMaxHP != wantMember || squad.MaxHP != wantMember*squad.Count {
-		t.Fatalf("squad tech = damage %d member %d max %d, want %d/%d/%d", squad.Weapon.Damage, squad.MemberMaxHP, squad.MaxHP, wantDamage, wantMember, wantMember*squad.Count)
+	wantDamage := scaleCombatTechStat(base.Attack, 0.2)
+	wantMaxHP := scaleCombatTechStat(base.MaxHP, 0.1)
+	if unit.Attack != wantDamage || unit.MaxHP != wantMaxHP {
+		t.Fatalf("unit tech = attack %d max %d, want %d/%d", unit.Attack, unit.MaxHP, wantDamage, wantMaxHP)
 	}
-	if squad.HP != 50 {
-		t.Fatalf("structure_hp must not heal lost squad HP, got %d", squad.HP)
+	if unit.HP != 10 {
+		t.Fatalf("structure_hp must not heal lost unit HP, got %d", unit.HP)
 	}
 	if fleet.Weapons.DirectFire != scaleCombatTechStat(baseDirect, 0.2) || fleet.Weapons.Missile != scaleCombatTechStat(baseMissile, 0.2) || fleet.Weapon.Damage != scaleCombatTechStat(baseWeapon, 0.2) {
 		t.Fatalf("fleet firepower = %+v damage %d", fleet.Weapons, fleet.Weapon.Damage)
@@ -344,23 +321,20 @@ func TestGapU6CombatTechScalesSquadAndFleet(t *testing.T) {
 	if fleet.Structure.MaxLevel != scaleCombatTechStat(baseStructure, 0.1) || fleet.Structure.Level != damagedLevel {
 		t.Fatalf("fleet structure = %+v, want max %d level %d", fleet.Structure, scaleCombatTechStat(baseStructure, 0.1), damagedLevel)
 	}
-	if custom.Weapon.Damage != 7 || custom.MaxHP != 40 || bare.Weapons.DirectFire != 33 || bare.Structure.MaxLevel != 20 {
+	if hero.Attack != heroAttack || hero.MaxHP != heroMaxHP || bare.Weapons.DirectFire != 33 || bare.Structure.MaxLevel != 20 {
 		t.Fatal("entities without a runtime profile must not be rewritten")
 	}
 
 	settleCombatTech(ws, space)
-	if squad.Weapon.Damage != wantDamage || squad.MaxHP != wantMember*squad.Count || fleet.Weapons.DirectFire != scaleCombatTechStat(baseDirect, 0.2) || fleet.Structure.MaxLevel != scaleCombatTechStat(baseStructure, 0.1) {
+	if unit.Attack != wantDamage || unit.MaxHP != wantMaxHP || fleet.Weapons.DirectFire != scaleCombatTechStat(baseDirect, 0.2) || fleet.Structure.MaxLevel != scaleCombatTechStat(baseStructure, 0.1) {
 		t.Fatal("second settle must not stack the bonus")
 	}
 
-	squad.HP = squad.MaxHP
 	fleet.Structure.Level = fleet.Structure.MaxLevel
 	delete(player.Tech.CompletedTechs, "df_kinetic_weapon_damage")
 	delete(player.Tech.CompletedTechs, "df_enhanced_structure")
 	settleCombatTech(ws, space)
-	if squad.Weapon.Damage != profile.Squad.Weapon.Damage || squad.MemberMaxHP != profile.Squad.HP || squad.MaxHP != profile.Squad.HP*squad.Count || squad.HP != squad.MaxHP {
-		t.Fatalf("squad did not return to baseline and clamp, got %+v", squad)
-	}
+	// 世界单位仅在有加成时被改写，撤销科技不是游戏路径，因此这里只校验舰队回基线。
 	if fleet.Weapons.DirectFire != baseDirect || fleet.Weapons.Missile != baseMissile || fleet.Weapon.Damage != baseWeapon || fleet.Structure.MaxLevel != baseStructure || fleet.Structure.Level != baseStructure {
 		t.Fatalf("fleet did not return to baseline and clamp, got weapons %+v damage %d structure %+v", fleet.Weapons, fleet.Weapon.Damage, fleet.Structure)
 	}

@@ -19,6 +19,7 @@ const (
 
 // ConstructionTask captures a queued build operation.
 type ConstructionTask struct {
+	AutoApproach      bool              `json:"auto_approach,omitempty"`
 	ID                string            `json:"id"`
 	PlayerID          string            `json:"player_id"`
 	RegionID          string            `json:"region_id,omitempty"`

@@ -41,13 +41,15 @@ func newSettlementPipeline() settlementPipeline {
 
 	pipeline.register("planetary_runtime", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
 		var events []*model.GameEvent
+		// Share each system and owner Dyson output across all planets this tick.
+		energyBudget := make(map[string]int)
 		for _, ws := range frame.worlds {
 			events = append(events, settleMechas(ws)...)
 			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
 
 			env := currentPlanetEnvironment(gc.maps, ws.PlanetID)
 			events = append(events, settlePowerGeneration(ws, env)...)
-			receiverViews := settleRayReceivers(ws, gc.maps, gc.spaceRuntime)
+			receiverViews := settleRayReceivers(ws, gc.maps, gc.spaceRuntime, energyBudget)
 			settlePlanetaryShields(ws)
 			events = append(events, finalizePowerSettlement(ws, receiverViews)...)
 			events = append(events, settleResources(ws)...)
@@ -68,9 +70,10 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleFractionation(ws)...)
 			settleLogisticsStationIO(ws)
 			settleStorage(ws)
+			events = append(events, settleUnitProduction(ws)...)
+			settleAmmunitionSupply(ws)
 			events = append(events, settleTurrets(ws)...)
 			events = append(events, settleUnitMovement(ws)...)
-			events = append(events, settleSquadMovement(ws)...)
 			events = append(events, settleUnitCombat(ws)...)
 			settleCombatTech(ws, gc.spaceRuntime)
 			events = append(events, gc.settleEnemyForcesWithGrowth(ws)...)

@@ -15,6 +15,8 @@ export const PLANET_COMMAND_RENDERERS: Partial<
   install_logistics_vehicle: { cardId: "logistics-station-controls", section: "选中对象" },
   configure_logistics_station: { cardId: "logistics", section: "物流" },
   configure_logistics_slot: { cardId: "logistics", section: "物流" },
+  set_rally_point: {cardId:"unit-production",section:"选中对象"},
+  configure_sorter: { cardId: "sorter-controls", section: "选中对象" },
   configure_splitter: { cardId: "splitter-controls", section: "选中对象" },
   configure_traffic_monitor: { cardId: "traffic-monitor-controls", section: "选中对象" },
   scan_galaxy: { cardId: "scan", section: "基础操作" },

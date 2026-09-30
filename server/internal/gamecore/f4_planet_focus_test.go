@@ -193,12 +193,13 @@ func TestF4DualPlanetIndependentProduce(t *testing.T) {
 	mkFactory := func(ws *model.WorldState, id, owner string) *model.Building {
 		base := f4BasePos(t, ws, owner)
 		pos := f4OpenTileNear(t, ws, base)
-		factory := newBuilding(id, model.BuildingTypeAssemblingMachineMk1, owner, pos)
+		factory := newBuilding(id, model.BuildingType("barracks"), owner, pos)
 		factory.Runtime.State = model.BuildingWorkRunning
 		factory.Runtime.Params.EnergyConsume = 0
 		if factory.Runtime.Functions.Energy != nil {
 			factory.Runtime.Functions.Energy.ConsumePerTick = 0
 		}
+		factory.Storage.Inventory = model.ItemInventory{"iron_ingot": 2, "circuit_board": 1}
 		attachBuilding(ws, factory)
 		return factory
 	}
@@ -224,6 +225,10 @@ func TestF4DualPlanetIndependentProduce(t *testing.T) {
 	if res.Code != model.CodeOK {
 		t.Fatalf("p1 produce on planet-1-1 factory failed: %s (%s)", res.Code, res.Message)
 	}
+	duration := factoryA.UnitQueue[0].TotalTicks
+	for i := 0; i < duration; i++ {
+		settleUnitProduction(planetA)
+	}
 	if got := unitsOf(planetA, "p1"); got != 1 {
 		t.Fatalf("expected p1 worker on planet-1-1, got %d", got)
 	}
@@ -238,6 +243,10 @@ func TestF4DualPlanetIndependentProduce(t *testing.T) {
 	})
 	if res.Code != model.CodeOK {
 		t.Fatalf("p2 produce on planet-1-2 factory failed: %s (%s)", res.Code, res.Message)
+	}
+	duration = factoryB.UnitQueue[0].TotalTicks
+	for i := 0; i < duration; i++ {
+		settleUnitProduction(planetB)
 	}
 	if got := unitsOf(planetB, "p2"); got != 1 {
 		t.Fatalf("expected p2 worker on planet-1-2, got %d", got)

@@ -10,7 +10,7 @@ import (
 
 func TestR6DamageCoefficientTable(t *testing.T) {
 	// 每个武器类至少有一个 >1 的克制对象与一个 <1 的被克制对象。
-	for weapon, row := range model.DamageCoefficient {
+	for weapon, row := range model.DamageCoefficients() {
 		strong, weak := false, false
 		for _, coef := range row {
 			if coef > 1.0 {

@@ -91,7 +91,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
     if (mode.kind !== 'build') {
       return;
     }
-    setInteractionMode({ ...mode, direction: nextBeltDirection(mode.direction) });
+    if (isConveyorBeltBuilding(mode.buildingType)) setInteractionMode({ ...mode, direction: nextBeltDirection(mode.direction) });
+    else setInteractionMode({ ...mode, rotation: ((mode.rotation ?? 0) + 90) % 360 as 0 | 90 | 180 | 270 });
   };
 
   const selectBuildRecipe = (recipeId: string) => {
@@ -104,7 +105,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
 
   // R 键循环传送带方向（输入控件聚焦时不抢按键）。
   useEffect(() => {
-    if (!beltMode) {
+    if (!buildMode) {
       return undefined;
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -122,7 +123,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beltMode, setInteractionMode]);
+  }, [buildMode, setInteractionMode]);
   // 建设资金余额：resources 缺失时视为"未知"，不做置灰（避免旧快照误伤）。
   const mineralsBalance = summary?.players?.[session.playerId]?.resources?.minerals;
 
@@ -225,14 +226,14 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
               选择建筑类型后在地图上点击放置
             </span>
           )}
-          {beltMode ? (
+          {buildMode ? (
             <button
               className="planet-build-bar__control"
               type="button"
-              title="切换传送带方向（快捷键 R）"
+              title="旋转建筑或传送带方向（快捷键 R）"
               onClick={cycleBeltDirection}
             >
-              方向：{DIRECTION_LABELS[buildDirection]}（R）
+              方向：{beltMode ? DIRECTION_LABELS[buildDirection] : (interactionMode.kind === 'build' ? interactionMode.rotation ?? 0 : 0) + '°'}（R）
             </button>
           ) : null}
           {buildMode && availableRecipes.length > 0 ? (

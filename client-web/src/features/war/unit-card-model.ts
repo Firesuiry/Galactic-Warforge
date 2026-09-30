@@ -44,6 +44,7 @@ export interface UnitCardTechGate {
 }
 
 export interface UnitCardModel {
+ ammunition?:{current:number;capacity:number;item?:string};
   /** 卡片标题（蓝图名/单位类型名/小队蓝图名）。 */
   title: string;
   /** 副标题（id / 来源说明）。 */
@@ -217,6 +218,7 @@ export function unitCardFromRuntimeUnit(
   return {
     title: typeName,
     subtitle: unit.id,
+    ammunition:unit.ammo_capacity?{current:unit.ammo??0,capacity:unit.ammo_capacity,item:unit.ammo_item}:undefined,
     domain: entry?.domain ?? 'ground',
     runtimeClass: 'world_unit',
     statsSource: 'runtime',

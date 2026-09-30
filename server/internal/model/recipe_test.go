@@ -274,11 +274,6 @@ func dspAlignmentRecipes() map[string]dspAlignmentRecipeExpectation {
 		"crystal_shell":               {outputs: []ItemAmount{{ItemID: ItemCrystalShellSet, Quantity: 1}}, gate: "crystal_shell", building: assemblers, duration: 180},
 		"df_jamming_capsule":          {outputs: []ItemAmount{{ItemID: ItemJammingCapsule, Quantity: 1}}, gate: "df_jammer_tower_tech", building: assemblers, duration: 60},
 		"df_suppressing_capsule":      {outputs: []ItemAmount{{ItemID: ItemSuppressingCapsule, Quantity: 2}}, gate: "df_suppressing_capsule_tech", building: assemblers, duration: 240},
-		"df_prototype":                {outputs: []ItemAmount{{ItemID: ItemPrototype, Quantity: 1}}, gate: "prototype", building: assemblers, duration: 60},
-		"df_precision_drone":          {outputs: []ItemAmount{{ItemID: ItemPrecisionDrone, Quantity: 1}}, gate: "precision_drone", building: assemblers, duration: 120},
-		"df_attack_drone":             {outputs: []ItemAmount{{ItemID: ItemAttackDrone, Quantity: 1}}, gate: "df_attack_drone_tech", building: assemblers, duration: 120},
-		"df_corvette":                 {outputs: []ItemAmount{{ItemID: ItemCorvette, Quantity: 1}}, gate: "corvette", building: assemblers, duration: 150},
-		"df_destroyer":                {outputs: []ItemAmount{{ItemID: ItemDestroyer, Quantity: 1}}, gate: "destroyer", building: assemblers, duration: 240},
 		"df_engine":                   {outputs: []ItemAmount{{ItemID: ItemEngine, Quantity: 1}}, gate: "engine", building: assemblers, duration: 90},
 		"thruster":                    {outputs: []ItemAmount{{ItemID: ItemEngine, Quantity: 1}}, gate: "thruster", building: assemblers, duration: 120},
 		"reinforced_thruster":         {outputs: []ItemAmount{{ItemID: ItemReinforcedThruster, Quantity: 1}}, gate: "reinforced_thruster_technology", building: assemblers, duration: 180},
@@ -304,8 +299,8 @@ func dspAlignmentRecipes() map[string]dspAlignmentRecipeExpectation {
 // covered generically by gamecore.TestCatalogRecipesAreExplicitlyBasicOrGated.
 func TestDSPAlignmentRecipes(t *testing.T) {
 	expect := dspAlignmentRecipes()
-	if len(expect) != 45 {
-		t.Fatalf("expected 45 DSP alignment recipes in fixture, got %d", len(expect))
+	if len(expect) != 40 {
+		t.Fatalf("expected 40 DSP alignment recipes in fixture, got %d", len(expect))
 	}
 	for id, want := range expect {
 		recipe, ok := Recipe(id)

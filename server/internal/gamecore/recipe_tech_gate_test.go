@@ -21,7 +21,7 @@ func TestCanUseRecipeTechGating(t *testing.T) {
 	for _, recipeID := range []string{
 		"smelt_iron", "smelt_copper", "smelt_magnet",
 		"circuit_board", "magnetic_coil", "gear",
-		"electromagnetic_matrix", "fuel_rod_recycling",
+		"electromagnetic_matrix", "fuel_rod_recycling", "ammo_bullet",
 	} {
 		if !CanUseRecipeTech(player, recipeID) {
 			t.Fatalf("expected basic recipe %s usable without research", recipeID)
@@ -47,7 +47,6 @@ func TestCanUseRecipeTechGating(t *testing.T) {
 		"hydrogen_fuel_rod":                "hydrogen_fuel",
 		"deuterium_fuel_rod":               "mini_fusion",
 		"solar_sail":                       "solar_sail_orbit",
-		"ammo_bullet":                      "weapon_system",
 		"ammo_missile":                     "missile_turret",
 		"energy_matrix":                    "energy_matrix",
 		"structure_matrix":                 "structure_matrix",
@@ -86,7 +85,7 @@ func TestCatalogRecipesAreExplicitlyBasicOrGated(t *testing.T) {
 	basic := map[string]bool{
 		"smelt_iron": true, "smelt_copper": true, "smelt_magnet": true,
 		"circuit_board": true, "magnetic_coil": true, "gear": true,
-		"electromagnetic_matrix": true, "fuel_rod_recycling": true,
+		"electromagnetic_matrix": true, "fuel_rod_recycling": true, "ammo_bullet": true,
 	}
 
 	fresh := func() *model.PlayerState {

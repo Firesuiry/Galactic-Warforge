@@ -14,6 +14,7 @@ import (
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/mapmodel"
+	"siliconworld/internal/model"
 	"siliconworld/internal/queue"
 	"siliconworld/internal/snapshot"
 )
@@ -32,6 +33,9 @@ const (
 func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
+		return nil, err
+	}
+	if err := installGameDataDir(cfg.Server.GameDataDir); err != nil {
 		return nil, err
 	}
 
@@ -218,4 +222,17 @@ func startAutoSaveLoop(core *gamecore.GameCore, interval time.Duration) (chan st
 		}
 	}()
 	return stopCh, doneCh
+}
+
+// installGameDataDir 用 game_data_dir 整套替换内置游戏数据；dir 为空时保持内置数据。
+func installGameDataDir(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	gd, err := model.LoadGameDataDir(dir)
+	if err != nil {
+		return fmt.Errorf("load game_data_dir: %w", err)
+	}
+	model.InstallGameData(gd)
+	return nil
 }

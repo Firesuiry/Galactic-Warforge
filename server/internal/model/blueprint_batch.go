@@ -125,13 +125,13 @@ func BuildBlueprintBatchBuildCommands(ws *WorldState, placement BlueprintPlaceme
 		}
 
 		if def, ok := BuildingDefinitionByID(item.BuildingType); ok && def.RequiresResourceNode {
-			if !ws.InBounds(item.Position.X, item.Position.Y) || ws.Grid[item.Position.Y][item.Position.X].ResourceNodeID == "" {
+			if err := ValidateCollectorSite(ws, item.BuildingType, item.Position); err != nil {
 				invalid[i] = true
 				result.Issues = append(result.Issues, BlueprintBatchIssue{
 					Code:      BatchRequiresResourceNode,
 					ItemIndex: i,
 					Position:  &item.Position,
-					Message:   "requires resource node",
+					Message:   err.Error(),
 				})
 			}
 		}

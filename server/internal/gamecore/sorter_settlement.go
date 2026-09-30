@@ -7,8 +7,9 @@ import (
 )
 
 type sorterLink struct {
-	id  string
-	dir model.ConveyorDirection
+	id   string
+	dir  model.ConveyorDirection
+	port string
 }
 
 func settleSorters(ws *model.WorldState) {
@@ -42,11 +43,11 @@ func settleSorters(ws *model.WorldState) {
 			continue
 		}
 
-		inputs := sorterInputConveyors(ws, building, sorter)
+		inputs := sorterInputEndpoints(ws, building, sorter)
 		if len(inputs) == 0 {
 			continue
 		}
-		outputs := sorterOutputConveyors(ws, building, sorter)
+		outputs := sorterOutputEndpoints(ws, building, sorter)
 		if len(outputs) == 0 {
 			continue
 		}
@@ -63,7 +64,7 @@ func settleSorters(ws *model.WorldState) {
 				break
 			}
 			target := ws.Buildings[out.id]
-			if target == nil || target.Conveyor == nil {
+			if target == nil {
 				continue
 			}
 			for _, in := range inputs {
@@ -74,13 +75,13 @@ func settleSorters(ws *model.WorldState) {
 					continue
 				}
 				source := ws.Buildings[in.id]
-				if source == nil || source.Conveyor == nil {
+				if source == nil {
 					continue
 				}
 				moved := 0
 				movedItemID := ""
 				for remaining > 0 {
-					qty, itemID := sorterGrabOnce(ws, source, target, sorter, grabStacks, pileGrab)
+					qty, itemID := sorterGrabOnce(ws, source, target, in.port, out.port, sorter, grabStacks, pileGrab)
 					if qty <= 0 {
 						break
 					}
@@ -111,68 +112,110 @@ func settleSorters(ws *model.WorldState) {
 // sorterGrabOnce performs a single grab: up to maxStacks stacks from the front
 // of the source buffer. Ordinary sorters take one item per stack; pile
 // sorters lift each stack whole. Returns items moved and the first item ID.
-func sorterGrabOnce(
-	ws *model.WorldState,
-	source, target *model.Building,
-	sorter *model.SorterState,
-	maxStacks int,
-	pileGrab bool,
-) (int, string) {
-	available := conveyorInsertCapacity(ws, target)
-	if available <= 0 {
-		return 0, ""
-	}
-	moved := 0
-	itemID := ""
-	for stacks := 0; stacks < maxStacks && available > 0; stacks++ {
-		if len(source.Conveyor.Buffer) == 0 {
-			break
+func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, sourcePort, targetPort string, sorter *model.SorterState, maxStacks int, pileGrab bool) (int, string) {
+	moved, firstItem := 0, ""
+	for stacks := 0; stacks < maxStacks; stacks++ {
+		itemID, available := "", 0
+		if source.Conveyor != nil {
+			front, ok := peekConveyorFront(source.Conveyor)
+			if !ok {
+				break
+			}
+			itemID, available = front.ItemID, front.Quantity
+		} else {
+			items := make([]string, 0)
+			for id := range source.Storage.Inventory {
+				items = append(items, id)
+			}
+			for id := range source.Storage.OutputBuffer {
+				items = append(items, id)
+			}
+			sort.Strings(items)
+			for _, id := range items {
+				if source.ExportableItemQuantity(id) > 0 && sorter.Filter.Allows(id) {
+					for _, port := range source.Runtime.Params.IOPorts {
+						if port.ID == sourcePort && allowsItem(port.AllowedItems, id) {
+							itemID, available = id, source.ExportableItemQuantity(id)
+							break
+						}
+					}
+				}
+				if itemID != "" {
+					break
+				}
+			}
 		}
-		front := source.Conveyor.Buffer[0]
-		if front.Quantity <= 0 {
-			break
-		}
-		if !sorter.Filter.Allows(front.ItemID) {
+		if itemID == "" || available <= 0 || !sorter.Filter.Allows(itemID) {
 			break
 		}
 		take := 1
 		if pileGrab {
-			take = front.Quantity
-		}
-		if take > available {
 			take = available
+		}
+		if target.Conveyor != nil {
+			take = min(take, conveyorInsertCapacity(ws, target))
+		} else {
+			accepted, _, err := model.StoragePortPreviewInput(target, targetPort, itemID, take)
+			if err != nil {
+				break
+			}
+			take = accepted
 		}
 		if take <= 0 {
 			break
 		}
-		got := source.Conveyor.Take(take)
-		qty := 0
-		for _, stack := range got {
-			qty += stack.Quantity
+		var cargo []model.ItemStack
+		if source.Conveyor != nil {
+			cargo = source.Conveyor.Take(take)
+		} else {
+			got, _, err := model.StoragePortOutput(source, sourcePort, itemID, take)
+			if err != nil || got <= 0 {
+				break
+			}
+			take = got
+			cargo = []model.ItemStack{{ItemID: itemID, Quantity: take}}
 		}
-		if qty == 0 {
-			break
+		if target.Conveyor != nil {
+			target.Conveyor.AppendStacks(cargo)
+		} else {
+			// Preview and commit run serially within this tick; no other producer can fill the port between them.
+			inserted, _, _ := model.StoragePortInput(target, targetPort, itemID, take)
+			if inserted != take {
+				panic("sorter storage preview/commit mismatch")
+			}
 		}
-		target.Conveyor.AppendStacks(got)
-		recordConveyorDeparture(ws, source, qty)
-		if itemID == "" {
-			itemID = front.ItemID
+		if source.Conveyor != nil {
+			recordConveyorDeparture(ws, source, take)
 		}
-		moved += qty
-		available -= qty
+		moved += take
+		if firstItem == "" {
+			firstItem = itemID
+		}
 	}
-	return moved, itemID
+	return moved, firstItem
 }
 
-func sorterInputConveyors(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {
-	return sorterConveyors(ws, sorter, state.InputDirections, state.Range, true)
+func allowsItem(items []string, item string) bool {
+	if len(items) == 0 {
+		return true
+	}
+	for _, id := range items {
+		if id == item {
+			return true
+		}
+	}
+	return false
 }
 
-func sorterOutputConveyors(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {
-	return sorterConveyors(ws, sorter, state.OutputDirections, state.Range, false)
+func sorterInputEndpoints(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {
+	return sorterEndpoints(ws, sorter, state.InputDirections, state.Range, true)
 }
 
-func sorterConveyors(
+func sorterOutputEndpoints(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {
+	return sorterEndpoints(ws, sorter, state.OutputDirections, state.Range, false)
+}
+
+func sorterEndpoints(
 	ws *model.WorldState,
 	sorter *model.Building,
 	dirs []model.ConveyorDirection,
@@ -187,49 +230,50 @@ func sorterConveyors(
 		if !dir.Valid() || dir == model.ConveyorAuto {
 			continue
 		}
-		id, ok := sorterFindConveyor(ws, sorter, dir, maxRange, forInput)
+		link, ok := sorterFindEndpoint(ws, sorter, dir, maxRange, forInput)
 		if !ok {
 			continue
 		}
-		links = append(links, sorterLink{id: id, dir: dir})
+		links = append(links, link)
 	}
 	return links
 }
 
-func sorterFindConveyor(
-	ws *model.WorldState,
-	sorter *model.Building,
-	dir model.ConveyorDirection,
-	maxRange int,
-	forInput bool,
-) (string, bool) {
+func sorterFindEndpoint(ws *model.WorldState, sorter *model.Building, dir model.ConveyorDirection, maxRange int, forInput bool) (sorterLink, bool) {
 	pos := sorter.Position
 	for step := 1; step <= maxRange; step++ {
 		pos, dir = ws.SurfaceStep(pos, dir)
-		nx, ny := pos.X, pos.Y
-		targetID := ws.TileBuilding[model.TileKey(nx, ny)]
+		targetID := ws.TileBuilding[model.TileKey(pos.X, pos.Y)]
 		if targetID == "" {
 			continue
 		}
 		target := ws.Buildings[targetID]
 		if target == nil || target.OwnerID != sorter.OwnerID {
-			return "", false
+			return sorterLink{}, false
 		}
-		if !conveyorActive(target) || target.Splitter != nil {
-			return "", false
-		}
-		if forInput {
-			if !sorterCanTakeFromConveyor(target, dir) {
-				return "", false
+		if target.Conveyor != nil {
+			if !conveyorActive(target) || target.Splitter != nil {
+				return sorterLink{}, false
 			}
-		} else {
-			if !sorterCanInsertToConveyor(target, dir) {
-				return "", false
+			if forInput && !sorterCanTakeFromConveyor(target, dir) || !forInput && !sorterCanInsertToConveyor(target, dir) {
+				return sorterLink{}, false
+			}
+			return sorterLink{id: targetID, dir: dir}, true
+		}
+		if target.Storage != nil {
+			for _, port := range sortedIOPorts(target.Runtime.Params.IOPorts) {
+				portPos := portWorldPosition(ws, target, port)
+				if portPos.X != pos.X || portPos.Y != pos.Y {
+					continue
+				}
+				if (forInput && (port.Direction == model.PortOutput || port.Direction == model.PortBoth)) || (!forInput && (port.Direction == model.PortInput || port.Direction == model.PortBoth)) {
+					return sorterLink{id: targetID, dir: dir, port: port.ID}, true
+				}
 			}
 		}
-		return targetID, true
+		return sorterLink{}, false
 	}
-	return "", false
+	return sorterLink{}, false
 }
 
 func sorterCanTakeFromConveyor(conveyorBuilding *model.Building, dir model.ConveyorDirection) bool {

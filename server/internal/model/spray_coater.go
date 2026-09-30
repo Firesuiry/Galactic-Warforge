@@ -37,7 +37,7 @@ func (s *SprayCoaterState) Clone() *SprayCoaterState {
 	return &out
 }
 func (s *SprayCoaterState) Validate() error {
-	if s == nil || s.BufferCapacity != 24 || s.Throughput != 6 || s.InputDirection != ConveyorWest || s.OutputDirection != ConveyorEast || s.ReagentDirection != ConveyorNorth {
+	if s == nil || s.BufferCapacity != 24 || s.Throughput != 6 || !s.InputDirection.Valid() || s.OutputDirection != s.InputDirection.Opposite() || s.ReagentDirection != RotateDirection(s.OutputDirection, PlanRotation270) {
 		return fmt.Errorf("invalid spray coater configuration")
 	}
 	if s.CoatedItems < 0 || s.ConsumedProliferator < 0 || s.LastSprayTick < 0 || s.SprayUnits < 0 {

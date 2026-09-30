@@ -277,10 +277,10 @@ func TestMineDecaysOilYield(t *testing.T) {
 	ws.Grid[0][0].ResourceNodeID = "r1"
 	building := &model.Building{
 		ID:       "b1",
-		Type:     model.BuildingTypeMiningMachine,
+		Type:     model.BuildingTypeOilExtractor,
 		OwnerID:  "p1",
 		Position: model.Position{X: 0, Y: 0},
-		Runtime:  model.BuildingProfileFor(model.BuildingTypeMiningMachine, 1).Runtime,
+		Runtime:  model.BuildingProfileFor(model.BuildingTypeOilExtractor, 1).Runtime,
 	}
 	building.Runtime.Params.EnergyConsume = 0
 	building.Runtime.Functions.Energy.ConsumePerTick = 0

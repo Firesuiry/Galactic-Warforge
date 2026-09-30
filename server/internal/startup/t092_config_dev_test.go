@@ -23,7 +23,7 @@ func TestT092ConfigDevBootstrapRequiresChainProducedMatrices(t *testing.T) {
 	tempRoot := t.TempDir()
 	tempDataDir := filepath.Join(tempRoot, "data")
 	tempConfigPath := filepath.Join(tempRoot, "config-dev.yaml")
-	tempConfig := strings.Replace(string(rawConfig), `data_dir: "data"`, fmt.Sprintf("data_dir: %q", tempDataDir), 1)
+	tempConfig := strings.Replace(string(rawConfig), `data_dir: "data-dev"`, fmt.Sprintf("data_dir: %q", tempDataDir), 1)
 	if err := os.WriteFile(tempConfigPath, []byte(tempConfig), 0o644); err != nil {
 		t.Fatalf("write temp config: %v", err)
 	}

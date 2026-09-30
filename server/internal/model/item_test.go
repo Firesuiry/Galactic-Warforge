@@ -93,7 +93,6 @@ func TestDSPAlignmentItemsPresent(t *testing.T) {
 		{itemID: ItemDysonSphereComponent, category: ItemCategoryComponent, stackLimit: 100},
 		{itemID: ItemFoundationSupply, category: ItemCategoryMaterial, stackLimit: 1000},
 		{itemID: ItemSupersonicMissileSet, category: ItemCategoryAmmo, stackLimit: 100},
-		{itemID: ItemAttackDrone, category: ItemCategoryComponent, stackLimit: 50},
 		{itemID: ItemCrystalShellSet, category: ItemCategoryAmmo, stackLimit: 100},
 		{itemID: ItemJammingCapsule, category: ItemCategoryAmmo, stackLimit: 100},
 		{itemID: ItemSuppressingCapsule, category: ItemCategoryAmmo, stackLimit: 100},

@@ -1,26 +1,27 @@
 package gamecore
 
 import (
-	"strings"
 	"testing"
 
 	"siliconworld/internal/model"
 )
 
-func TestProduceBlockedWhenBuildingHasNoPower(t *testing.T) {
+func TestProduceQueuePausesWithoutPower(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "basic_assembling_processes")
 
 	building := &model.Building{
 		ID:       "b-prod",
-		Type:     model.BuildingTypeAssemblingMachineMk1,
+		Type:     model.BuildingType("barracks"),
 		OwnerID:  "p1",
 		Position: model.Position{X: 8, Y: 8},
-		Runtime:  model.BuildingProfileFor(model.BuildingTypeAssemblingMachineMk1, 1).Runtime,
+		Runtime:  model.BuildingProfileFor(model.BuildingType("barracks"), 1).Runtime,
 	}
 	building.Runtime.State = model.BuildingWorkNoPower
 	model.InitBuildingStorage(building)
+	building.HP = 100
+	building.Storage.Inventory = model.ItemInventory{"iron_ingot": 2, "circuit_board": 1}
 	ws.Buildings[building.ID] = building
 	ws.TileBuilding[model.TileKey(building.Position.X, building.Position.Y)] = building.ID
 	ws.Grid[building.Position.Y][building.Position.X].BuildingID = building.ID
@@ -32,10 +33,14 @@ func TestProduceBlockedWhenBuildingHasNoPower(t *testing.T) {
 			"unit_type": "worker",
 		},
 	})
-	if res.Code != model.CodeInvalidTarget {
-		t.Fatalf("expected invalid target when building has no power, got %s", res.Code)
+	if res.Code != model.CodeOK || len(building.UnitQueue) != 1 {
+		t.Fatalf("expected a paid production order, got %+v", res)
 	}
-	if !strings.Contains(res.Message, "power") {
-		t.Fatalf("expected no-power message, got %q", res.Message)
+	remaining := building.UnitQueue[0].RemainingTicks
+	for i := 0; i < remaining+1; i++ {
+		settleUnitProduction(ws)
+	}
+	if len(building.UnitQueue) != 1 || building.UnitQueue[0].RemainingTicks != remaining {
+		t.Fatal("unpowered production advanced")
 	}
 }

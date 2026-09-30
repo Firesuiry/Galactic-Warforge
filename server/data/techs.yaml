@@ -17,6 +17,9 @@ techs:
       - {type: building, id: conveyor_belt_mk1}
       - {type: building, id: sorter_mk1}
       - {type: building, id: assembling_machine_mk1}
+      - {type: building, id: barracks}
+      - {type: building, id: supply_station}
+      - {type: recipe, id: ammo_bullet}
   - id: electromagnetism
     name: 电磁学
     name_en: Electromagnetism
@@ -24,7 +27,7 @@ techs:
     type: main
     level: 1
     cost: [{item_id: electromagnetic_matrix, quantity: 10}]
-    unlocks: [{type: building, id: depot_mk1}]
+    unlocks: [{type: building, id: depot_mk1}, {type: building, id: vehicle_factory}]
   - id: basic_logistics_system
     name: 基础物流系统
     name_en: Basic Logistics System
@@ -257,7 +260,7 @@ techs:
     level: 4
     prerequisites: [engine, weapon_system, combustible_unit]
     cost: [{item_id: electromagnetic_matrix, quantity: 15}]
-    unlocks: [{type: recipe, id: df_missile_set}, {type: building, id: missile_turret}, {type: recipe, id: ammo_missile}]
+    unlocks: [{type: recipe, id: df_missile_set}, {type: building, id: missile_turret}, {type: building, id: anti_air_turret}, {type: recipe, id: ammo_missile}]
   - id: prototype
     name: 原型机
     name_en: Prototype
@@ -266,7 +269,7 @@ techs:
     level: 4
     prerequisites: [battlefield_analysis, plasma_control]
     cost: [{item_id: electromagnetic_matrix, quantity: 15}]
-    unlocks: [{type: recipe, id: df_prototype}]
+    unlocks: [{type: special, id: blueprint_prototype}]
   - id: efficient_logistics
     name: 高效物流系统
     name_en: High-Efficiency Logistics System
@@ -390,7 +393,7 @@ techs:
     level: 5
     prerequisites: [missile_turret, magnetic_levitation]
     cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
-    unlocks: [{type: recipe, id: df_shell_set}, {type: building, id: implosion_cannon}, {type: recipe, id: shell_set}]
+    unlocks: [{type: recipe, id: df_shell_set}, {type: building, id: implosion_cannon}, {type: building, id: artillery_turret}, {type: recipe, id: shell_set}]
   - id: precision_drone
     name: 精准无人机
     name_en: Precision Drone
@@ -399,7 +402,7 @@ techs:
     level: 5
     prerequisites: [prototype, photon_conversion]
     cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
-    unlocks: [{type: recipe, id: df_precision_drone}]
+    unlocks: [{type: building, id: airfield}]
   - id: planetary_logistics
     name: 行星物流系统
     name_en: Planetary Logistics System
@@ -804,7 +807,7 @@ techs:
       - {item_id: energy_matrix, quantity: 75}
       - {item_id: structure_matrix, quantity: 75}
       - {item_id: information_matrix, quantity: 75}
-    unlocks: [{type: recipe, id: df_corvette}]
+    unlocks: [{type: special, id: blueprint_corvette}]
   - id: vertical_launching
     name: 垂直发射井
     name_en: Vertical Launching Silo
@@ -1009,7 +1012,7 @@ techs:
       - {item_id: structure_matrix, quantity: 100}
       - {item_id: information_matrix, quantity: 100}
       - {item_id: gravity_matrix, quantity: 100}
-    unlocks: [{type: recipe, id: df_destroyer}]
+    unlocks: [{type: special, id: blueprint_destroyer}]
   - id: dirac_inversion
     name: 狄拉克逆变机制
     name_en: Dirac Inversion Mechanism
@@ -1287,7 +1290,6 @@ techs:
       - {item_id: electromagnetic_matrix, quantity: 50}
       - {item_id: energy_matrix, quantity: 50}
       - {item_id: structure_matrix, quantity: 50}
-    unlocks: [{type: recipe, id: df_attack_drone}]
   - id: df_explosive_unit_tech
     name: 爆破单元
     name_en: Explosive Unit

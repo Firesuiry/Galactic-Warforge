@@ -333,7 +333,7 @@ func TestSplitterCannotBypassPortRulesThroughMachinesOrSorters(t *testing.T) {
 	sorter := newSorterBuilding("sorter", model.Position{X: 2, Y: 3})
 	attachBuilding(ws, sorter)
 	for _, forInput := range []bool{false, true} {
-		if _, ok := sorterFindConveyor(ws, sorter, model.ConveyorEast, 1, forInput); ok {
+		if _, ok := sorterFindEndpoint(ws, sorter, model.ConveyorEast, 1, forInput); ok {
 			t.Fatal("sorter accessed splitter buffer directly")
 		}
 	}
