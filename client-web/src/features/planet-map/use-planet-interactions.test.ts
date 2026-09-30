@@ -16,6 +16,7 @@ const { mockClient, submitMock } = vi.hoisted(() => ({
     cmdMove: vi.fn(),
     cmdAttack: vi.fn(),
     cmdUnitOrder: vi.fn(),
+    cmdSquadOrder: vi.fn(),
     cmdTaskForceDeploy: vi.fn(),
     fetchEventSnapshot: vi.fn(),
   },
@@ -108,6 +109,7 @@ function setup() {
   mockClient.cmdMove.mockResolvedValue({ accepted: true, request_id: 'r-2' });
   mockClient.cmdAttack.mockResolvedValue({ accepted: true, request_id: 'r-3' });
   mockClient.cmdUnitOrder.mockResolvedValue({ accepted: true, request_id: 'r-4' });
+  mockClient.cmdSquadOrder.mockResolvedValue({ accepted: true, request_id: 'r-5' });
   mockClient.fetchEventSnapshot.mockResolvedValue({ events: [] });
 
   const planet = makePlanet();
@@ -122,6 +124,16 @@ function setup() {
 describe('usePlanetInteractions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('squad_order 模式：点地下达军团指令并退出模式', () => {
+    const { interactions } = setup();
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'squad_order', squadId: 'sq-1', order: 'attack' });
+
+    interactions.interactTile({ x: 5, y: 6 });
+
+    expect(mockClient.cmdSquadOrder).toHaveBeenCalledWith('sq-1', 'attack', { x: 5, y: 6, z: 0 }, 'planet-1-1');
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
   });
 
   it('build 模式：可建位置直接下达建造命令', () => {

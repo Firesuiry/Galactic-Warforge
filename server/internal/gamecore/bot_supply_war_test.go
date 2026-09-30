@@ -36,6 +36,11 @@ func botRaidScene(t *testing.T, difficulty string) (*GameCore, *model.WorldState
 	}
 	truck := spawnWorldTestUnit(ws, model.UnitTypeSupplyTruck, "p2", spots[tuning.attackAt-1])
 
+	for _, u := range ws.Units {
+		if u != nil && u.OwnerID == "p2" {
+			u.Ammo = u.AmmoCapacity // 出厂满弹
+		}
+	}
 	supplyPos := botTileAtDistance(t, ws, home, 12)
 	station := newBuilding("enemy-supply", btSupply, "p1", supplyPos)
 	station.Runtime.State = model.BuildingWorkRunning
@@ -43,26 +48,34 @@ func botRaidScene(t *testing.T, difficulty string) (*GameCore, *model.WorldState
 	return core, ws, tuning, truck, supplyPos, hq.Position
 }
 
-func planAttackOrder(t *testing.T, core *GameCore, ws *model.WorldState, tuning botTuning) model.Command {
+// planAttackOrder 先让 bot 编队（form_squad 经真实接口执行），再取其 attack 军令；
+// 返回军令与军团成员 ID。
+func planAttackOrder(t *testing.T, core *GameCore, ws *model.WorldState, tuning botTuning) (model.Command, []string) {
 	t.Helper()
 	botQuietExecutor(ws, "p2")
-	cmds := core.planBotCommands(ws, "p2", tuning)
-	for _, c := range cmds {
-		if c.Type == model.CmdUnitOrder && c.Payload["order"] == "attack_move" && len(c.Target.EntityIDs) >= tuning.attackAt {
-			return c
+	for round := 0; round < 3; round++ {
+		for _, c := range core.planBotCommands(ws, "p2", tuning) {
+			switch c.Type {
+			case model.CmdSquadOrder:
+				if c.Payload["order"] == "attack" {
+					return c, ws.CombatRuntime.Squads[c.Payload["squad_id"].(string)].MemberIDs
+				}
+			case model.CmdFormSquad:
+				botExec(core, ws, c)
+			}
 		}
 	}
-	t.Fatalf("bot did not launch an attack: %+v", cmds)
-	return model.Command{}
+	t.Fatal("bot did not launch an attack")
+	return model.Command{}, nil
 }
 
 func TestBotSortiesWithSupplyTruckAndRaidsSupplyStation(t *testing.T) {
 	for _, difficulty := range []string{"normal", "hard"} {
 		t.Run(difficulty, func(t *testing.T) {
 			core, ws, tuning, truck, supplyPos, _ := botRaidScene(t, difficulty)
-			cmd := planAttackOrder(t, core, ws, tuning)
+			cmd, members := planAttackOrder(t, core, ws, tuning)
 			hasTruck := false
-			for _, id := range cmd.Target.EntityIDs {
+			for _, id := range members {
 				if id == truck.ID {
 					hasTruck = true
 				}
@@ -79,7 +92,7 @@ func TestBotSortiesWithSupplyTruckAndRaidsSupplyStation(t *testing.T) {
 
 func TestBotEasyGoesForTheBaseNotTheSupplyChain(t *testing.T) {
 	core, ws, tuning, _, supplyPos, hqPos := botRaidScene(t, "easy")
-	cmd := planAttackOrder(t, core, ws, tuning)
+	cmd, _ := planAttackOrder(t, core, ws, tuning)
 	if cmd.Target.Position == nil {
 		t.Fatal("no attack target")
 	}
@@ -103,7 +116,7 @@ func TestBotRaidTargetsAmmoFactoryToo(t *testing.T) {
 	fac.Production = &model.ProductionState{RecipeID: model.ItemAmmoBullet}
 	fac.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, fac)
-	cmd := planAttackOrder(t, core, ws, tuning)
+	cmd, _ := planAttackOrder(t, core, ws, tuning)
 	if cmd.Target.Position == nil || ws.SurfaceDistance(*cmd.Target.Position, facPos) > 1 {
 		t.Fatalf("raid must aim at the ammo factory %+v, got %+v", facPos, cmd.Target.Position)
 	}

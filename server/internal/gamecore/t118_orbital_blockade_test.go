@@ -19,11 +19,7 @@ func TestT118BlockadeInterdictsSupplyWithoutSuperiority(t *testing.T) {
 	p1Base := operationalWarHubForT118(ws, "hub-p1-t118", "p1", model.Position{X: 6, Y: 6})
 	p2Base := operationalWarHubForT118(ws, "hub-p2-t118", "p2", model.Position{X: 18, Y: 18})
 
-	p1Base.Storage.EnsureInventory()[model.ItemAmmoBullet] = 50
-	p1Base.Storage.EnsureInventory()[model.ItemHydrogenFuelRod] = 30
-	p1Base.Storage.EnsureInventory()[model.ItemGear] = 20
-	p1Base.Storage.EnsureInventory()[model.ItemPhotonCombiner] = 12
-	p1Base.Storage.EnsureInventory()[model.ItemPrecisionDrone] = 8
+	addSupplyStation(ws, "sup-block-t118", "p1", model.Position{X: 8, Y: 8}, model.ItemInventory{model.ItemAmmoBullet: 50, model.ItemShellSet: 20})
 
 	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[p1Base.ID] = &model.WarDeploymentHubState{
 		BuildingID:    p1Base.ID,
@@ -81,7 +77,7 @@ func TestT118BlockadeInterdictsSupplyWithoutSuperiority(t *testing.T) {
 
 	core.processTick()
 
-	if p1Fleet.Sustainment.Current.Fuel != 0 || p1Fleet.Sustainment.Current.Ammo != 0 {
+	if p1Fleet.Sustainment.Current.Ammo != 0 || p1Fleet.Sustainment.Current.Shells != 0 {
 		t.Fatalf("expected blockade to prevent offworld resupply, got %+v", p1Fleet.Sustainment.Current)
 	}
 
@@ -115,11 +111,7 @@ func TestT118BlockadeBreaksAfterFleetDisband(t *testing.T) {
 	p1Base := operationalWarHubForT118(ws, "hub-p1-success-t118", "p1", model.Position{X: 6, Y: 6})
 	p2Base := operationalWarHubForT118(ws, "hub-p2-success-t118", "p2", model.Position{X: 18, Y: 18})
 
-	p1Base.Storage.EnsureInventory()[model.ItemAmmoBullet] = 50
-	p1Base.Storage.EnsureInventory()[model.ItemHydrogenFuelRod] = 30
-	p1Base.Storage.EnsureInventory()[model.ItemGear] = 20
-	p1Base.Storage.EnsureInventory()[model.ItemPhotonCombiner] = 12
-	p1Base.Storage.EnsureInventory()[model.ItemPrecisionDrone] = 8
+	addSupplyStation(ws, "sup-ok-t118", "p1", model.Position{X: 8, Y: 8}, model.ItemInventory{model.ItemAmmoBullet: 50, model.ItemShellSet: 20})
 
 	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[p1Base.ID] = &model.WarDeploymentHubState{
 		BuildingID:    p1Base.ID,
@@ -157,6 +149,8 @@ func TestT118BlockadeBreaksAfterFleetDisband(t *testing.T) {
 		t.Fatalf("commission p2 fleet failed: %s (%s)", res.Code, res.Message)
 	}
 
+	core.SpaceRuntime().PlayerSystem("p1", systemID).Fleets["fleet-p1-success-t118"].Sustainment.Current = model.WarSupplyStock{}
+
 	createTaskForceForT118(t, core, "p2", "tf-blockade-success-t118", "fleet-p2-success-t118", systemID, ws.PlanetID, model.WarTaskForceStanceSiege)
 
 	if res := issueInternalCommand(core, "p2", model.Command{
@@ -184,11 +178,12 @@ func TestT118BlockadeBreaksAfterFleetDisband(t *testing.T) {
 	if p1Fleet == nil {
 		t.Fatal("expected p1 fleet runtime")
 	}
-	if p1Fleet.Sustainment.Current.Fuel == 0 {
-		t.Fatalf("expected p1 fleet to resupply once blockade breaks, got %+v", p1Fleet.Sustainment.Current)
-	}
-
 	core.processTick()
+	core.processTick()
+
+	if p1Fleet.Sustainment.Current.Ammo == 0 && p1Fleet.Sustainment.Current.Shells == 0 {
+		t.Fatalf("expected p1 fleet to resupply from the supply station once blockade breaks, got %+v", p1Fleet.Sustainment.Current)
+	}
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 	systemView, ok := ql.SystemRuntime("p1", systemID, ws.PlanetID, ws, core.SpaceRuntime())

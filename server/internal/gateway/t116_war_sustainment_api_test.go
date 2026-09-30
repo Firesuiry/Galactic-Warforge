@@ -28,22 +28,14 @@ func TestT116WarfareAndFleetEndpointsExposeSustainmentFields(t *testing.T) {
 	if _, _, err := hub.Storage.Load(model.ItemAmmoBullet, 12); err != nil {
 		t.Fatalf("load hub ammo: %v", err)
 	}
-	if _, _, err := hub.Storage.Load(model.ItemHydrogenFuelRod, 4); err != nil {
-		t.Fatalf("load hub fuel: %v", err)
-	}
 
 	ws.Lock()
 	ws.Buildings[hub.ID] = hub
-	ws.LogisticsStations["station-api-t116"] = &model.LogisticsStationState{
-		Inventory: model.ItemInventory{
-			model.ItemAmmoBullet:     8,
-			model.ItemPrecisionDrone: 1,
-		},
-	}
 	ws.Buildings["station-api-t116"] = &model.Building{
 		ID:          "station-api-t116",
-		Type:        model.BuildingTypePlanetaryLogisticsStation,
+		Type:        model.BuildingTypeSupplyStation,
 		OwnerID:     "p1",
+		Storage:     &model.StorageState{Capacity: 64, Inventory: model.ItemInventory{model.ItemAmmoBullet: 8}},
 		Position:    model.Position{X: 8, Y: 6},
 		HP:          100,
 		MaxHP:       100,
@@ -76,25 +68,22 @@ func TestT116WarfareAndFleetEndpointsExposeSustainmentFields(t *testing.T) {
 		Weapon:    model.WeaponState{Type: model.WeaponTypeLaser, Damage: 12, FireRate: 10, Range: 20, AmmoCost: 1},
 		Shield:    model.ShieldState{Level: 6, MaxLevel: 10, RechargeRate: 1, RechargeDelay: 8},
 		Sustainment: model.WarSustainmentState{
-			Current:            model.WarSupplyStock{Ammo: 2, Fuel: 1, SpareParts: 1, RepairDrones: 1},
-			Capacity:           model.WarSupplyStock{Ammo: 6, Fuel: 4, SpareParts: 3, RepairDrones: 2},
+			Current:            model.WarSupplyStock{Ammo: 2, Shells: 1},
+			Capacity:           model.WarSupplyStock{Ammo: 6, Shells: 4},
 			Condition:          model.WarSupplyConditionCritical,
 			Cohesion:           0.32,
-			MobilityPenalty:    1,
 			RetreatRecommended: true,
-			Shortages:          []string{"fuel_starved", "repair_stalled"},
-			Repair: model.WarRepairState{
-				Tier:           model.WarRepairTierField,
-				BlockedReason:  "repair_supply_exhausted",
-				RemainingTicks: 3,
-			},
+			Shortages:          []string{"ammo_shortage", "shell_shortage"},
 		},
 	}
 
 	industryBody := getAuthorizedJSON(t, srv, "/world/warfare/industry")
 	supplyNodes, ok := industryBody["supply_nodes"].([]any)
-	if !ok || len(supplyNodes) < 2 {
-		t.Fatalf("expected supply_nodes in warfare industry endpoint, got %+v", industryBody)
+	if !ok || len(supplyNodes) != 1 {
+		t.Fatalf("expected only the supply station as a supply node (hub and logistics stations do not resupply), got %+v", industryBody)
+	}
+	if node, _ := supplyNodes[0].(map[string]any); node["source_type"] != string(model.WarSupplySourceSupplyStation) {
+		t.Fatalf("expected supply_station source, got %+v", supplyNodes[0])
 	}
 
 	fleetBody := getAuthorizedJSON(t, srv, "/world/fleets/fleet-api-t116")
@@ -108,7 +97,16 @@ func TestT116WarfareAndFleetEndpointsExposeSustainmentFields(t *testing.T) {
 	if sustainment["retreat_recommended"] != true {
 		t.Fatalf("expected retreat flag in fleet sustainment, got %+v", sustainment)
 	}
-	if _, ok := sustainment["repair"].(map[string]any); !ok {
-		t.Fatalf("expected nested repair state in fleet sustainment, got %+v", sustainment)
+	current, ok := sustainment["current"].(map[string]any)
+	if !ok || current["ammo"] == nil || current["shells"] == nil {
+		t.Fatalf("expected three-class ammunition stock in fleet sustainment, got %+v", sustainment)
+	}
+	for _, removed := range []string{"repair", "fuel", "spare_parts", "shield_cells", "repair_drones"} {
+		if _, exists := sustainment[removed]; exists {
+			t.Fatalf("sustainment must not expose %s, got %+v", removed, sustainment)
+		}
+		if _, exists := current[removed]; exists {
+			t.Fatalf("sustainment stock must not expose %s, got %+v", removed, current)
+		}
 	}
 }

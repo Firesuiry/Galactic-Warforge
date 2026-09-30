@@ -8,6 +8,9 @@ import {
   cmdInstallLogisticsVehicle,
   cmdCommissionFleet,
   cmdDeploySquad,
+  cmdFormSquad,
+  cmdSquadOrder,
+  cmdDissolveSquad,
   cmdProduce,
   cmdRefuelMecha,
   cmdMineResource,
@@ -164,5 +167,49 @@ describe('station installation and wiring command boundaries', () => {
     for (const args of [ ['s', 'planetary', 'iron_ore', '--remove', 'false'], ['s', 'wrong', 'iron_ore', '--remove'], ['s', 'planetary', 'iron_ore', 'none', '0', '--remove'] ]) {
       assert.doesNotMatch(await cmdConfigureLogisticsSlot(args), /missing authenticated player_id/);
     }
+  });
+});
+
+describe('legion commands (form_squad / squad_order / dissolve_squad)', () => {
+  it('form_squad requires at least one entity id', async () => {
+    assert.match(await cmdFormSquad([]), /Usage: form_squad <entity_id\.\.\.>/);
+    assert.match(await cmdFormSquad(['--help']), /Usage: form_squad/);
+  });
+
+  it('form_squad accepts ids and --name then reaches the API layer', async () => {
+    const out = await cmdFormSquad(['u-1', 'u-2', '--name', '先锋', '--planet', 'planet-1']);
+    assert.doesNotMatch(out, /Usage/);
+    assert.match(out, /missing authenticated player_id/);
+  });
+
+  it('squad_order rejects unknown orders and missing squad id', async () => {
+    assert.match(await cmdSquadOrder([]), /Usage: squad_order/);
+    assert.match(await cmdSquadOrder(['sq-1', 'charge', '1', '2']), /Usage: squad_order/);
+  });
+
+  it('squad_order needs x y except for resupply', async () => {
+    assert.match(await cmdSquadOrder(['sq-1', 'attack']), /Usage: squad_order/);
+    assert.match(await cmdSquadOrder(['sq-1', 'attack', '3']), /Usage: squad_order/);
+    assert.match(await cmdSquadOrder(['sq-1', 'resupply', '3', '4']), /Usage: squad_order/);
+  });
+
+  it('squad_order validates integer coordinates', async () => {
+    assert.match(await cmdSquadOrder(['sq-1', 'defend', 'a', '2']), /x/);
+  });
+
+  it('squad_order valid forms reach the API layer', async () => {
+    for (const args of [['sq-1', 'attack', '3', '4'], ['sq-1', 'retreat', '0', '0'], ['sq-1', 'resupply']]) {
+      const out = await cmdSquadOrder(args);
+      assert.doesNotMatch(out, /Usage/);
+      assert.match(out, /missing authenticated player_id/);
+    }
+  });
+
+  it('dissolve_squad takes exactly one squad id', async () => {
+    assert.match(await cmdDissolveSquad([]), /Usage: dissolve_squad/);
+    assert.match(await cmdDissolveSquad(['a', 'b']), /Usage: dissolve_squad/);
+    const out = await cmdDissolveSquad(['sq-1']);
+    assert.doesNotMatch(out, /Usage/);
+    assert.match(out, /missing authenticated player_id/);
   });
 });

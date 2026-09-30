@@ -30,6 +30,8 @@ import {
   theaterZoneTypeLabel,
   type TheaterZoneGeometry,
 } from '@/features/planet-map/squad-commands';
+import { PlanetLegionLayer } from '@/features/planet-map/PlanetLegionLayer';
+import { legionAliveMemberIds } from '@/features/planet-map/legion-model';
 import { PlanetSquadLayer } from '@/features/planet-map/PlanetSquadLayer';
 import { PlanetTheaterLayer } from '@/features/planet-map/PlanetTheaterLayer';
 import {
@@ -966,6 +968,17 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
           />
         )}
         {/* 战斗小队标记层（C4）：点选小队（shift 加选），选中环由标记自绘 */}
+        {overviewMode ? null : (
+          <PlanetLegionLayer
+            offsetX={camera.offsetX}
+            offsetY={camera.offsetY}
+            onSelectLegion={(legion) => usePlanetViewStore.getState().setSelectedUnits(legionAliveMemberIds(legion, planet.units))}
+            playerId={session.playerId}
+            squads={squads ?? runtime?.combat_squads}
+            tileSize={tileSize}
+            units={planet.units}
+          />
+        )}
         {overviewMode ? null : (
           <PlanetSquadLayer
             offsetX={camera.offsetX}

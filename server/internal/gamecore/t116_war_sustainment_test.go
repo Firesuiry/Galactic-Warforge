@@ -33,48 +33,13 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 	interstellar.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, interstellar)
 
-	loadBuildingItems(t, base, map[string]int{
-		model.ItemAmmoBullet:      18,
-		model.ItemAmmoMissile:     8,
-		model.ItemHydrogenFuelRod: 6,
-		model.ItemGear:            12,
-		model.ItemPhotonCombiner:  4,
-		model.ItemPrecisionDrone:  2,
-	})
-	ws.LogisticsStations[planetary.ID].Inventory = model.ItemInventory{
-		model.ItemAmmoBullet:      24,
-		model.ItemAmmoMissile:     10,
-		model.ItemHydrogenFuelRod: 8,
-		model.ItemGear:            6,
-		model.ItemPhotonCombiner:  3,
-		model.ItemPrecisionDrone:  2,
-	}
-	ws.LogisticsStations[interstellar.ID].Inventory = model.ItemInventory{
-		model.ItemAmmoBullet:      12,
-		model.ItemAmmoMissile:     7,
-		model.ItemHydrogenFuelRod: 9,
-		model.ItemFrameMaterial:   5,
-		model.ItemCriticalPhoton:  3,
-		model.ItemPrecisionDrone:  1,
-	}
-
-	drone := model.NewLogisticsDroneState("drone-t116", planetary.ID, planetary.Position)
-	if _, _, err := drone.Load(model.ItemAmmoBullet, 4); err != nil {
-		t.Fatalf("load drone ammo: %v", err)
-	}
-	if _, _, err := drone.Load(model.ItemPrecisionDrone, 1); err != nil {
-		t.Fatalf("load drone repair drones: %v", err)
-	}
-	ws.LogisticsDrones[drone.ID] = drone
-
-	ship := model.NewLogisticsShipState("ship-t116", interstellar.ID, interstellar.Position)
-	if _, _, err := ship.Load(model.ItemAmmoMissile, 3); err != nil {
-		t.Fatalf("load ship missiles: %v", err)
-	}
-	if _, _, err := ship.Load(model.ItemHydrogenFuelRod, 4); err != nil {
-		t.Fatalf("load ship fuel: %v", err)
-	}
-	ws.LogisticsShips[ship.ID] = ship
+	// 部署枢纽与物流站里的弹药不参与补给，只有补给站和补给车补弹。
+	loadBuildingItems(t, base, map[string]int{model.ItemAmmoBullet: 18})
+	ws.LogisticsStations[planetary.ID].Inventory = model.ItemInventory{model.ItemAmmoBullet: 24}
+	ws.LogisticsStations[interstellar.ID].Inventory = model.ItemInventory{model.ItemAmmoMissile: 7}
+	addSupplyStation(ws, "sup-t116", "p1", model.Position{X: 12, Y: 6}, model.ItemInventory{model.ItemAmmoBullet: 30, model.ItemShellSet: 6})
+	truck := spawnWorldTestUnit(ws, model.UnitTypeSupplyTruck, "p1", model.Position{X: 9, Y: 9})
+	truck.Cargo = model.ItemInventory{model.ItemAmmoMissile: 3}
 
 	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[base.ID] = &model.WarDeploymentHubState{
 		BuildingID:    base.ID,
@@ -158,21 +123,18 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 
 	industryBody := marshalAnyMap(t, ql.WarIndustry(ws, "p1"))
 	supplyNodes, ok := industryBody["supply_nodes"].([]any)
-	if !ok || len(supplyNodes) < 5 {
-		t.Fatalf("expected five supply nodes in war industry view, got %+v", industryBody)
+	if !ok || len(supplyNodes) != 2 {
+		t.Fatalf("expected one supply station and one supply truck node, got %+v", industryBody)
 	}
 	nodeTypes := map[string]bool{}
 	for _, raw := range supplyNodes {
 		node := raw.(map[string]any)
 		nodeTypes[node["source_type"].(string)] = true
 	}
-	for _, want := range []string{
-		"planetary_logistics_station",
-		"interstellar_logistics_station",
-		"orbital_supply_port",
-		"supply_ship",
-		"frontline_supply_drop",
-	} {
+	if len(nodeTypes) != 2 {
+		t.Fatalf("hub / logistics nodes must not appear as supply nodes, got %+v", supplyNodes)
+	}
+	for _, want := range []string{"supply_station", "supply_truck"} {
 		if !nodeTypes[want] {
 			t.Fatalf("expected supply node type %s, got %+v", want, supplyNodes)
 		}
@@ -264,12 +226,9 @@ func TestT116SupplyShortageDegradesFleetAndForcesRetreat(t *testing.T) {
 	fleet.Target = &model.FleetTarget{PlanetID: ws.PlanetID, TargetID: "enemy-short-t116"}
 
 	setUnitSustainmentCurrent(t, fleet, map[string]int{
-		"Ammo":         0,
-		"Missiles":     0,
-		"Fuel":         0,
-		"SpareParts":   0,
-		"ShieldCells":  0,
-		"RepairDrones": 0,
+		"Ammo":     0,
+		"Shells":   0,
+		"Missiles": 0,
 	}, 0.4)
 
 	initialEnemyStrength := ws.EnemyForces.Forces[0].Strength
@@ -295,11 +254,8 @@ func TestT116SupplyShortageDegradesFleetAndForcesRetreat(t *testing.T) {
 		t.Fatalf("expected sustainment condition in fleet detail, got %+v", sustainment)
 	}
 	shortages, ok := sustainment["shortages"].([]any)
-	if !ok || len(shortages) < 4 {
+	if !ok || len(shortages) < 1 {
 		t.Fatalf("expected staged shortage reasons in fleet detail, got %+v", sustainment)
-	}
-	if sustainment["mobility_penalty"] == nil {
-		t.Fatalf("expected mobility penalty for fuel starvation, got %+v", sustainment)
 	}
 	if sustainment["retreat_recommended"] != true {
 		t.Fatalf("expected retreat recommendation for critical sustainment collapse, got %+v", sustainment)

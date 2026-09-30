@@ -296,8 +296,8 @@ func taskForceOrbitalBonus(stance model.WarTaskForceStance) float64 {
 }
 
 func sustainmentFillRatio(state model.WarSustainmentState) float64 {
-	currentTotal := state.Current.Ammo + state.Current.Missiles + state.Current.Fuel + state.Current.SpareParts + state.Current.ShieldCells + state.Current.RepairDrones
-	capacityTotal := state.Capacity.Ammo + state.Capacity.Missiles + state.Capacity.Fuel + state.Capacity.SpareParts + state.Capacity.ShieldCells + state.Capacity.RepairDrones
+	currentTotal := state.Current.Ammo + state.Current.Shells + state.Current.Missiles
+	capacityTotal := state.Capacity.Ammo + state.Capacity.Shells + state.Capacity.Missiles
 	if capacityTotal <= 0 {
 		return 1
 	}

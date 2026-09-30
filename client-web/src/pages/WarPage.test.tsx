@@ -250,14 +250,13 @@ describe('WarPage', () => {
           supply_nodes: [
             {
               node_id: 'supply-1',
-              source_type: 'orbital_supply_port',
+              source_type: 'supply_station',
               label: '前线补给港',
               planet_id: 'planet-1-1',
               system_id: 'sys-1',
               inventory: {
-                fuel: 180,
                 ammo: 90,
-                spare_parts: 24,
+                shells: 24,
               },
               updated_tick: 320,
             },
@@ -282,10 +281,10 @@ describe('WarPage', () => {
                 over: 0,
               },
               supply_status: {
-                current: { fuel: 40, ammo: 12 },
-                capacity: { fuel: 100, ammo: 60 },
+                current: { ammo: 12, shells: 4 },
+                capacity: { ammo: 60, shells: 20 },
                 condition: 'critical',
-                shortages: ['fuel', 'ammo'],
+                shortages: ['ammo_shortage', 'shell_shortage'],
                 retreat_recommended: true,
               },
               members: [
@@ -610,10 +609,10 @@ describe('WarPage', () => {
                 used: 6,
               },
               supply_status: {
-                current: { fuel: 40, ammo: 12 },
-                capacity: { fuel: 100, ammo: 60 },
+                current: { ammo: 12, shells: 4 },
+                capacity: { ammo: 60, shells: 20 },
                 condition: 'critical',
-                shortages: ['fuel', 'ammo'],
+                shortages: ['ammo_shortage', 'shell_shortage'],
               },
               members: [
                 {
@@ -841,7 +840,7 @@ describe('WarPage', () => {
             stance: 'hold',
             deployment: { system_id: 'sys-1', planet_id: 'planet-1-1' },
             command_capacity: { total: 8, used: 0 },
-            supply_status: { current: { fuel: 40, ammo: 12 }, capacity: { fuel: 100, ammo: 60 }, condition: 'stable', shortages: [] },
+            supply_status: { current: { ammo: 12, shells: 4 }, capacity: { ammo: 60, shells: 20 }, condition: 'stable', shortages: [] },
             members: [],
           }],
         });

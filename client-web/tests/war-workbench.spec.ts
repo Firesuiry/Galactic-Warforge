@@ -163,14 +163,13 @@ function createIndustry() {
     supply_nodes: [
       {
         node_id: 'supply-1',
-        source_type: 'orbital_supply_port',
+        source_type: 'supply_station',
         label: '前线补给港',
         planet_id: 'planet-1-1',
         system_id: 'sys-1',
         inventory: {
-          fuel: 180,
           ammo: 90,
-          spare_parts: 24,
+          shells: 24,
         },
       },
     ],
@@ -194,10 +193,10 @@ function createTaskForces() {
           used: 6,
         },
         supply_status: {
-          current: { fuel: 40, ammo: 12 },
-          capacity: { fuel: 100, ammo: 60 },
+          current: { ammo: 12, shells: 4 },
+          capacity: { ammo: 60, shells: 20 },
           condition: 'critical',
-          shortages: ['fuel', 'ammo'],
+          shortages: ['ammo_shortage', 'shell_shortage'],
         },
         members: [
           {

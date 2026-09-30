@@ -390,9 +390,9 @@ techs:
     name_en: Implosion Cannon
     category: branch
     type: combat
-    level: 5
-    prerequisites: [missile_turret, magnetic_levitation]
-    cost: [{item_id: electromagnetic_matrix, quantity: 25}, {item_id: energy_matrix, quantity: 25}]
+    level: 3
+    prerequisites: [weapon_system, steel_smelting]
+    cost: [{item_id: electromagnetic_matrix, quantity: 30}]
     unlocks: [{type: recipe, id: df_shell_set}, {type: building, id: implosion_cannon}, {type: building, id: artillery_turret}, {type: recipe, id: shell_set}]
   - id: precision_drone
     name: 精准无人机

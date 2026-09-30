@@ -1,6 +1,9 @@
 package model
 
-import "math"
+import (
+	"math"
+	"sort"
+)
 
 // WarSupplyCondition describes the current sustainment health of a unit or task force.
 type WarSupplyCondition string
@@ -13,14 +16,12 @@ const (
 )
 
 // WarSupplySourceType identifies an authoritative military supply source.
+// Only supply stations and supply trucks resupply ammunition.
 type WarSupplySourceType string
 
 const (
-	WarSupplySourcePlanetaryLogisticsStation WarSupplySourceType = "planetary_logistics_station"
-	WarSupplySourceInterstellarLogistics     WarSupplySourceType = "interstellar_logistics_station"
-	WarSupplySourceOrbitalSupplyPort         WarSupplySourceType = "orbital_supply_port"
-	WarSupplySourceSupplyShip                WarSupplySourceType = "supply_ship"
-	WarSupplySourceFrontlineSupplyDrop       WarSupplySourceType = "frontline_supply_drop"
+	WarSupplySourceSupplyStation WarSupplySourceType = "supply_station"
+	WarSupplySourceSupplyTruck   WarSupplySourceType = "supply_truck"
 )
 
 // WarRepairTier describes the current repair lane.
@@ -32,27 +33,12 @@ const (
 	WarRepairTierOverhaul  WarRepairTier = "overhaul"
 )
 
-// WarSupplyStock stores the six military sustainment dimensions.
+// WarSupplyStock stores the three ammunition classes: bullets, shells and missiles.
+// Ammo is the bullet count; higher-tier ammunition of the same class counts toward it.
 type WarSupplyStock struct {
-	Ammo         int `json:"ammo,omitempty"`
-	Missiles     int `json:"missiles,omitempty"`
-	Fuel         int `json:"fuel,omitempty"`
-	SpareParts   int `json:"spare_parts,omitempty"`
-	ShieldCells  int `json:"shield_cells,omitempty"`
-	RepairDrones int `json:"repair_drones,omitempty"`
-}
-
-// WarRepairState stores the current repair activity for a unit.
-type WarRepairState struct {
-	Tier              WarRepairTier `json:"tier,omitempty"`
-	Active            bool          `json:"active,omitempty"`
-	BlockedReason     string        `json:"blocked_reason,omitempty"`
-	HPPerTick         int           `json:"hp_per_tick,omitempty"`
-	ShieldPerTick     float64       `json:"shield_per_tick,omitempty"`
-	RemainingDamage   int           `json:"remaining_damage,omitempty"`
-	RemainingShield   float64       `json:"remaining_shield,omitempty"`
-	RemainingTicks    int64         `json:"remaining_ticks,omitempty"`
-	CompletedThisTick bool          `json:"completed_this_tick,omitempty"`
+	Ammo     int `json:"ammo,omitempty"`
+	Shells   int `json:"shells,omitempty"`
+	Missiles int `json:"missiles,omitempty"`
 }
 
 // WarSupplySourceRef records the last source set used by a unit.
@@ -73,15 +59,11 @@ type WarSustainmentState struct {
 	Condition           WarSupplyCondition   `json:"condition"`
 	Cohesion            float64              `json:"cohesion,omitempty"`
 	DamagePenalty       float64              `json:"damage_penalty,omitempty"`
-	ShieldPenalty       float64              `json:"shield_penalty,omitempty"`
-	MobilityPenalty     float64              `json:"mobility_penalty,omitempty"`
-	RepairBlocked       bool                 `json:"repair_blocked,omitempty"`
 	RetreatRecommended  bool                 `json:"retreat_recommended,omitempty"`
 	Shortages           []string             `json:"shortages,omitempty"`
 	Sources             []WarSupplySourceRef `json:"sources,omitempty"`
 	LastResupplyTick    int64                `json:"last_resupply_tick,omitempty"`
 	LastConsumptionTick int64                `json:"last_consumption_tick,omitempty"`
-	Repair              WarRepairState       `json:"repair"`
 }
 
 // WarSupplyNodeView exposes military stock held by a specific source node.
@@ -104,14 +86,12 @@ type WarSupplyStatusView struct {
 	Condition          WarSupplyCondition `json:"condition"`
 	Cohesion           float64            `json:"cohesion,omitempty"`
 	DamagePenalty      float64            `json:"damage_penalty,omitempty"`
-	ShieldPenalty      float64            `json:"shield_penalty,omitempty"`
-	MobilityPenalty    float64            `json:"mobility_penalty,omitempty"`
 	RetreatRecommended bool               `json:"retreat_recommended,omitempty"`
 	Shortages          []string           `json:"shortages,omitempty"`
 }
 
 func (stock WarSupplyStock) total() int {
-	return stock.Ammo + stock.Missiles + stock.Fuel + stock.SpareParts + stock.ShieldCells + stock.RepairDrones
+	return stock.Ammo + stock.Shells + stock.Missiles
 }
 
 func (stock WarSupplyStock) clone() WarSupplyStock {
@@ -123,11 +103,8 @@ func (stock *WarSupplyStock) add(other WarSupplyStock) {
 		return
 	}
 	stock.Ammo += other.Ammo
+	stock.Shells += other.Shells
 	stock.Missiles += other.Missiles
-	stock.Fuel += other.Fuel
-	stock.SpareParts += other.SpareParts
-	stock.ShieldCells += other.ShieldCells
-	stock.RepairDrones += other.RepairDrones
 }
 
 func (stock *WarSupplyStock) clampTo(capacity WarSupplyStock) {
@@ -135,11 +112,8 @@ func (stock *WarSupplyStock) clampTo(capacity WarSupplyStock) {
 		return
 	}
 	stock.Ammo = clampInt(stock.Ammo, 0, capacity.Ammo)
+	stock.Shells = clampInt(stock.Shells, 0, capacity.Shells)
 	stock.Missiles = clampInt(stock.Missiles, 0, capacity.Missiles)
-	stock.Fuel = clampInt(stock.Fuel, 0, capacity.Fuel)
-	stock.SpareParts = clampInt(stock.SpareParts, 0, capacity.SpareParts)
-	stock.ShieldCells = clampInt(stock.ShieldCells, 0, capacity.ShieldCells)
-	stock.RepairDrones = clampInt(stock.RepairDrones, 0, capacity.RepairDrones)
 }
 
 // Clone returns a deep copy of the sustainment state.
@@ -157,8 +131,6 @@ func (state WarSustainmentState) StatusView() WarSupplyStatusView {
 		Condition:          state.Condition,
 		Cohesion:           state.Cohesion,
 		DamagePenalty:      state.DamagePenalty,
-		ShieldPenalty:      state.ShieldPenalty,
-		MobilityPenalty:    state.MobilityPenalty,
 		RetreatRecommended: state.RetreatRecommended,
 		Shortages:          append([]string(nil), state.Shortages...),
 	}
@@ -201,89 +173,91 @@ func InitWarSustainmentState(blueprint WarBlueprint, profile WarBlueprintRuntime
 func RefillForAddedCapacity(current, oldCapacity, newCapacity WarSupplyStock) WarSupplyStock {
 	out := current
 	out.Ammo += warMaxInt(0, newCapacity.Ammo-oldCapacity.Ammo)
+	out.Shells += warMaxInt(0, newCapacity.Shells-oldCapacity.Shells)
 	out.Missiles += warMaxInt(0, newCapacity.Missiles-oldCapacity.Missiles)
-	out.Fuel += warMaxInt(0, newCapacity.Fuel-oldCapacity.Fuel)
-	out.SpareParts += warMaxInt(0, newCapacity.SpareParts-oldCapacity.SpareParts)
-	out.ShieldCells += warMaxInt(0, newCapacity.ShieldCells-oldCapacity.ShieldCells)
-	out.RepairDrones += warMaxInt(0, newCapacity.RepairDrones-oldCapacity.RepairDrones)
 	out.clampTo(newCapacity)
 	return out
 }
 
 func warSupplyCapacityForBlueprint(blueprint WarBlueprint, profile WarBlueprintRuntimeProfile, count int) WarSupplyStock {
 	index := PublicWarBlueprintCatalogIndex()
-	components := blueprint.ComponentsBySlot()
 	weapon := WeaponState{}
-	shield := ShieldState{}
 	switch {
 	case profile.Squad != nil:
 		weapon = profile.Squad.Weapon
-		shield = profile.Squad.Shield
 	case profile.FleetUnit != nil:
 		weapon = profile.FleetUnit.Weapon
-		shield = profile.FleetUnit.Shield
 	}
 
-	stock := WarSupplyStock{
-		Ammo:       warMaxInt(4, count*warMaxInt(1, weapon.AmmoCost+2)),
-		SpareParts: warMaxInt(2, count*3),
-	}
-	switch blueprint.Domain {
-	case UnitDomainGround:
-		stock.Fuel = 8 * count
-	case UnitDomainAir, UnitDomainOrbital:
-		stock.Fuel = 10 * count
+	stock := WarSupplyStock{}
+	primary := warMaxInt(4, count*warMaxInt(1, weapon.AmmoCost+2))
+	switch WeaponSupplyClass(weapon.Type) {
+	case AmmoClassShell:
+		stock.Shells = primary
+	case AmmoClassMissile:
+		stock.Missiles = primary
 	default:
-		stock.Fuel = 12 * count
+		stock.Ammo = primary
 	}
-	if shield.MaxLevel > 0 {
-		stock.ShieldCells = warMaxInt(2, count*3)
-	}
-	for _, componentID := range components {
+	for _, componentID := range blueprint.ComponentsBySlot() {
 		component, ok := index.ComponentByID(componentID)
 		if !ok {
 			continue
 		}
-		switch {
-		case warHasString(component.Tags, "missile"):
+		if warHasString(component.Tags, "missile") {
 			stock.Missiles += 6 * count
-		case warHasString(component.Tags, "repair"):
-			stock.RepairDrones += 2 * count
-			stock.SpareParts += count
-		case warHasString(component.Tags, "shield"):
-			stock.ShieldCells += count
 		}
 	}
-	if stock.RepairDrones == 0 {
-		stock.RepairDrones = warMaxInt(1, count)
-	}
 	return stock
+}
+
+// Ammunition classes used by the sustainment stock.
+const (
+	AmmoClassBullet  = "bullet"
+	AmmoClassShell   = "shell"
+	AmmoClassMissile = "missile"
+)
+
+// WeaponSupplyClass maps a weapon type to the ammunition class it consumes.
+func WeaponSupplyClass(weaponType WeaponType) string {
+	switch weaponType {
+	case WeaponTypeCannon:
+		return AmmoClassShell
+	case WeaponTypeMissile:
+		return AmmoClassMissile
+	default:
+		return AmmoClassBullet
+	}
+}
+
+func warClassItemIDs(class string) []string {
+	defs := AmmunitionForClass(class)
+	ids := make([]string, 0, len(defs))
+	for _, def := range defs {
+		ids = append(ids, def.ItemID)
+	}
+	return ids
 }
 
 // MilitarySupplyFromInventory converts generic item inventory into war sustainment stock.
 func MilitarySupplyFromInventory(inv ItemInventory) WarSupplyStock {
 	return WarSupplyStock{
-		Ammo:         warInventoryQty(inv, []string{ItemAmmoBullet}),
-		Missiles:     warInventoryQty(inv, []string{ItemAmmoMissile, ItemGravityMissile}),
-		Fuel:         warInventoryQty(inv, []string{ItemHydrogenFuelRod, ItemDeuteriumFuelRod, ItemAntimatterFuelRod}),
-		SpareParts:   warInventoryQty(inv, []string{ItemGear, ItemMotor, ItemFrameMaterial}),
-		ShieldCells:  warInventoryQty(inv, []string{ItemPhotonCombiner, ItemCriticalPhoton, ItemParticleContainer}),
-		RepairDrones: warInventoryQty(inv, []string{ItemPrecisionDrone}),
+		Ammo:     warInventoryQty(inv, warClassItemIDs(AmmoClassBullet)),
+		Shells:   warInventoryQty(inv, warClassItemIDs(AmmoClassShell)),
+		Missiles: warInventoryQty(inv, warClassItemIDs(AmmoClassMissile)),
 	}
 }
 
 // ConsumeMilitarySupply removes the requested stock from a generic inventory and returns what was actually consumed.
+// Higher-tier ammunition is consumed first.
 func ConsumeMilitarySupply(inv ItemInventory, requested WarSupplyStock) WarSupplyStock {
 	if len(inv) == 0 {
 		return WarSupplyStock{}
 	}
 	return WarSupplyStock{
-		Ammo:         warConsumeInventory(inv, []string{ItemAmmoBullet}, requested.Ammo),
-		Missiles:     warConsumeInventory(inv, []string{ItemAmmoMissile, ItemGravityMissile}, requested.Missiles),
-		Fuel:         warConsumeInventory(inv, []string{ItemHydrogenFuelRod, ItemDeuteriumFuelRod, ItemAntimatterFuelRod}, requested.Fuel),
-		SpareParts:   warConsumeInventory(inv, []string{ItemGear, ItemMotor, ItemFrameMaterial}, requested.SpareParts),
-		ShieldCells:  warConsumeInventory(inv, []string{ItemPhotonCombiner, ItemCriticalPhoton, ItemParticleContainer}, requested.ShieldCells),
-		RepairDrones: warConsumeInventory(inv, []string{ItemPrecisionDrone}, requested.RepairDrones),
+		Ammo:     warConsumeInventory(inv, warClassItemIDs(AmmoClassBullet), requested.Ammo),
+		Shells:   warConsumeInventory(inv, warClassItemIDs(AmmoClassShell), requested.Shells),
+		Missiles: warConsumeInventory(inv, warClassItemIDs(AmmoClassMissile), requested.Missiles),
 	}
 }
 
@@ -342,4 +316,80 @@ func warHasString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// WarSupplyNode is one live ammunition source together with its backing inventory.
+type WarSupplyNode struct {
+	View        WarSupplyNodeView
+	Inventories []ItemInventory
+}
+
+// Stock sums the ammunition held across the node's inventories.
+func (n *WarSupplyNode) Stock() WarSupplyStock {
+	var total WarSupplyStock
+	for _, inv := range n.Inventories {
+		total.add(MilitarySupplyFromInventory(inv))
+	}
+	return total
+}
+
+// Consume takes the requested ammunition from the node and returns what was taken.
+func (n *WarSupplyNode) Consume(requested WarSupplyStock) WarSupplyStock {
+	var taken WarSupplyStock
+	for _, inv := range n.Inventories {
+		got := ConsumeMilitarySupply(inv, requested)
+		taken.add(got)
+		requested.Ammo -= got.Ammo
+		requested.Shells -= got.Shells
+		requested.Missiles -= got.Missiles
+	}
+	n.View.Inventory = n.Stock()
+	return taken
+}
+
+// CollectWarSupplyNodes lists the supply stations and supply trucks a player owns on one planet.
+func CollectWarSupplyNodes(ws *WorldState, playerID, systemID string, tick int64) []*WarSupplyNode {
+	if ws == nil || playerID == "" {
+		return nil
+	}
+	nodes := make([]*WarSupplyNode, 0)
+	buildingIDs := make([]string, 0)
+	for id, b := range ws.Buildings {
+		if b != nil && b.Type == BuildingTypeSupplyStation && b.OwnerID == playerID && b.HP > 0 && b.Storage != nil {
+			buildingIDs = append(buildingIDs, id)
+		}
+	}
+	sort.Strings(buildingIDs)
+	for _, id := range buildingIDs {
+		storage := ws.Buildings[id].Storage
+		node := &WarSupplyNode{
+			View: WarSupplyNodeView{
+				NodeID: "supply_station:" + id, SourceType: WarSupplySourceSupplyStation, Label: "Supply Station",
+				PlanetID: ws.PlanetID, SystemID: systemID, BuildingID: id, UpdatedTick: tick,
+			},
+			Inventories: []ItemInventory{storage.InputBuffer, storage.Inventory, storage.OutputBuffer},
+		}
+		node.View.Inventory = node.Stock()
+		nodes = append(nodes, node)
+	}
+	unitIDs := make([]string, 0)
+	for id, u := range ws.Units {
+		if u != nil && u.Type == UnitTypeSupplyTruck && u.OwnerID == playerID && u.HP > 0 {
+			unitIDs = append(unitIDs, id)
+		}
+	}
+	sort.Strings(unitIDs)
+	for _, id := range unitIDs {
+		u := ws.Units[id]
+		node := &WarSupplyNode{
+			View: WarSupplyNodeView{
+				NodeID: "supply_truck:" + id, SourceType: WarSupplySourceSupplyTruck, Label: "Supply Truck",
+				PlanetID: ws.PlanetID, SystemID: systemID, UnitID: id, UpdatedTick: tick,
+			},
+			Inventories: []ItemInventory{u.Cargo},
+		}
+		node.View.Inventory = node.Stock()
+		nodes = append(nodes, node)
+	}
+	return nodes
 }

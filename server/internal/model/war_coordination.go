@@ -148,7 +148,6 @@ type WarTaskForceMemberView struct {
 	Count        int                  `json:"count,omitempty"`
 	State        string               `json:"state,omitempty"`
 	SupplyStatus *WarSupplyStatusView `json:"supply_status,omitempty"`
-	RepairState  *WarRepairState      `json:"repair_state,omitempty"`
 }
 
 // WarTaskForceView exposes query-facing task-force state.
@@ -394,8 +393,6 @@ func ResolveWarTaskForceMembers(player *PlayerState, taskForce *WarTaskForce, wo
 					view.Count = total
 					status := fleet.Sustainment.StatusView()
 					view.SupplyStatus = &status
-					repair := fleet.Sustainment.Repair
-					view.RepairState = &repair
 					break
 				}
 			}
@@ -433,8 +430,6 @@ func SummarizeWarTaskForceSupply(members []WarTaskForceMemberView) WarSupplyStat
 		summary.Current.add(member.SupplyStatus.Current)
 		summary.Capacity.add(member.SupplyStatus.Capacity)
 		summary.DamagePenalty = maxFloat(summary.DamagePenalty, member.SupplyStatus.DamagePenalty)
-		summary.ShieldPenalty = maxFloat(summary.ShieldPenalty, member.SupplyStatus.ShieldPenalty)
-		summary.MobilityPenalty = maxFloat(summary.MobilityPenalty, member.SupplyStatus.MobilityPenalty)
 		summary.RetreatRecommended = summary.RetreatRecommended || member.SupplyStatus.RetreatRecommended
 		totalCohesion += member.SupplyStatus.Cohesion
 		counted++

@@ -89,8 +89,8 @@ func TestT122OfficialWarScenarioBootstrapsAuthoritativeWarAnchors(t *testing.T) 
 	if got := totalInventoryByTypeT122(ws, "p1", model.BuildingTypePlanetaryLogisticsStation, model.ItemAmmoBullet); got <= 0 {
 		t.Fatalf("expected p1 planetary logistics station to preload ammo, got %d", got)
 	}
-	if got := totalInventoryByTypeT122(ws, "p1", model.BuildingTypeInterstellarLogisticsStation, model.ItemHydrogenFuelRod); got <= 0 {
-		t.Fatalf("expected p1 interstellar logistics station to preload fuel, got %d", got)
+	if got := totalInventoryByTypeT122(ws, "p1", model.BuildingTypeSupplyStation, model.ItemAmmoBullet); got <= 0 {
+		t.Fatalf("expected p1 supply station to preload ammo, got %d", got)
 	}
 }
 

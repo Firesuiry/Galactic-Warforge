@@ -59,9 +59,7 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 	}, "official war blueprint did not reach prototype state")
 
 	industryBody := getAuthorizedJSONT122(t, srv, p1, "/world/warfare/industry")
-	assertSupplyNodeLabelT122(t, industryBody, "Orbital Supply Port")
-	assertSupplyNodeLabelT122(t, industryBody, "Planetary Logistics Station")
-	assertSupplyNodeLabelT122(t, industryBody, "Interstellar Logistics Station")
+	assertSupplyNodeLabelT122(t, industryBody, "Supply Station")
 
 	postCommandsT122(t, srv, p1, []model.Command{{
 		Type: model.CmdQueueMilitaryProduction,
@@ -373,9 +371,13 @@ func assertFleetHasSupplyT122(t *testing.T, fleetBody map[string]any) {
 	if !ok {
 		t.Fatalf("expected sustainment.current on fleet detail, got %+v", sustainment)
 	}
-	ammo, ammoOK := current["ammo"].(float64)
-	fuel, fuelOK := current["fuel"].(float64)
-	if !ammoOK || !fuelOK || ammo <= 0 || fuel <= 0 {
+	total := 0.0
+	for _, class := range []string{"ammo", "shells", "missiles"} {
+		if qty, ok := current[class].(float64); ok {
+			total += qty
+		}
+	}
+	if total <= 0 {
 		t.Fatalf("expected commissioned fleet to carry war supply, got %+v", current)
 	}
 }

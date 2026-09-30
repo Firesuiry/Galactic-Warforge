@@ -7,6 +7,8 @@ import { traceBeltStroke } from './belt-stroke';
 import { isConveyorBeltBuilding } from './build-workflow';
 import { sameTypeOwnUnitsInView } from './rts-commands';
 import { usePlanetViewStore } from './store';
+import { PlanetLegionLayer } from './PlanetLegionLayer';
+import { legionAliveMemberIds } from './legion-model';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene } from './planet-three-scene';
@@ -345,6 +347,16 @@ export function PlanetMapThree(props: Props) {
       projectTile={projectTile}
       theaters={props.theaters}
       tileSize={1}
+    />
+    <PlanetLegionLayer
+      offsetX={0}
+      offsetY={0}
+      onSelectLegion={legion => usePlanetViewStore.getState().setSelectedUnits(legionAliveMemberIds(legion, props.planet.units))}
+      playerId={session.playerId}
+      projectTile={projectTile}
+      squads={props.runtime?.combat_squads}
+      tileSize={1}
+      units={props.planet.units}
     />
     <PlanetSquadLayer
       offsetX={0}

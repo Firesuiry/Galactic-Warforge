@@ -123,7 +123,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 				if attackDelayed(currentTick, fleet.LastAttackTick, status.DelayPenalty) {
 					continue
 				}
-				if attackBlockedBySustainment(&fleet.Sustainment) {
+				if attackBlockedBySustainment(&fleet.Sustainment, fleet.Weapon.Type) {
 					fleet.State = model.FleetStateIdle
 					fleet.Target = nil
 					continue
@@ -261,7 +261,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 					JammingPenalty:     jammingPenalty,
 				}
 
-				rechargeShieldWithSustainment(&fleet.Shield, &fleet.Sustainment, currentTick)
+				fleet.Shield.ProcessShieldRecharge(currentTick)
 
 				if target.Strength <= 0 {
 					report.TargetDestroyed = true

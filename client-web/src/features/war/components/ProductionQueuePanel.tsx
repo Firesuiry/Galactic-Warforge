@@ -12,6 +12,7 @@ import type {
 
 import { Icon } from '@/common/Icon';
 import { Input, Select } from '@/common/controls';
+import { formatUnitCost } from '@/features/planet-map/model';
 import { UnitCard } from '@/features/war/components/UnitCard';
 import { WarField } from '@/features/war/components/WarField';
 import {
@@ -548,7 +549,10 @@ export function ProductionQueuePanel({
               })}
             </div>
             {selectedWorldUnit ? (
-              <UnitCard card={unitCardFromWorldUnit(selectedWorldUnit, catalog, completedTechIdSet)} />
+              <>
+                <UnitCard card={unitCardFromWorldUnit(selectedWorldUnit, catalog, completedTechIdSet)} />
+                <p data-testid="world-unit-cost">造价：{formatUnitCost(catalog, selectedWorldUnit) || '无'}</p>
+              </>
             ) : null}
             <div className="war-slot-row">
               <WarField label="生产建筑">

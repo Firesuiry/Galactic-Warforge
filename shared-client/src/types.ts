@@ -330,7 +330,7 @@ export type UnitStance =
   | 'retreat';
 
 export interface Unit {
- ammo_class?: string; ammo?: number; ammo_capacity?: number; ammo_item?: string; combat_state?: string; domain?: string; min_attack_range?: number; cargo?: ItemInventory;
+ squad_id?: string; ammo_class?: string; ammo?: number; ammo_capacity?: number; ammo_item?: string; combat_state?: string; domain?: string; min_attack_range?: number; cargo?: ItemInventory;
   mecha?: MechaState;
   id: string;
   type: UnitType;
@@ -454,34 +454,15 @@ export type CombatSquadState = 'idle' | 'engaging' | 'destroyed';
 
 export type WarSupplyCondition = 'healthy' | 'strained' | 'critical' | 'collapsed';
 
-export type WarSupplySourceType =
-  | 'planetary_logistics_station'
-  | 'interstellar_logistics_station'
-  | 'orbital_supply_port'
-  | 'supply_ship'
-  | 'frontline_supply_drop';
+export type WarSupplySourceType = 'supply_station' | 'supply_truck';
 
 export type WarRepairTier = 'field_repair' | 'frontline_repair_station' | 'overhaul';
 
+/** 三类弹药库存：子弹、炮弹、导弹（各含类内高档弹）。 */
 export interface WarSupplyStock {
   ammo?: number;
+  shells?: number;
   missiles?: number;
-  fuel?: number;
-  spare_parts?: number;
-  shield_cells?: number;
-  repair_drones?: number;
-}
-
-export interface WarRepairState {
-  tier?: WarRepairTier;
-  active?: boolean;
-  blocked_reason?: string;
-  hp_per_tick?: number;
-  shield_per_tick?: number;
-  remaining_damage?: number;
-  remaining_shield?: number;
-  remaining_ticks?: number;
-  completed_this_tick?: boolean;
 }
 
 export interface WarSupplySourceRef {
@@ -500,15 +481,11 @@ export interface WarSustainmentState {
   condition: WarSupplyCondition;
   cohesion?: number;
   damage_penalty?: number;
-  shield_penalty?: number;
-  mobility_penalty?: number;
-  repair_blocked?: boolean;
   retreat_recommended?: boolean;
   shortages?: string[];
   sources?: WarSupplySourceRef[];
   last_resupply_tick?: number;
   last_consumption_tick?: number;
-  repair: WarRepairState;
 }
 
 export interface WarSupplyNodeView {
@@ -529,16 +506,24 @@ export interface WarSupplyStatusView {
   condition: WarSupplyCondition;
   cohesion?: number;
   damage_penalty?: number;
-  shield_penalty?: number;
-  mobility_penalty?: number;
   retreat_recommended?: boolean;
   shortages?: string[];
 }
 
+export type SquadOrderKind = 'idle' | 'attack' | 'defend' | 'retreat' | 'resupply';
+
+/**
+ * 战斗小队 / 军团。军团（3.4）= 指令容器：name/member_ids/order/target 有值，
+ * 无共享血条（hp/count 为 0 或缺省）；旧式 HP 池小队保留 blueprint_id/count/hp。
+ */
 export interface CombatSquad {
   id: string;
   owner_id: string;
   planet_id: string;
+  name?: string;
+  member_ids?: string[] | null;
+  order?: SquadOrderKind;
+  target?: Position | null;
   source_building_id?: string;
   blueprint_id: string;
   count: number;
@@ -1908,7 +1893,6 @@ export interface WarTaskForceMemberView {
   count?: number;
   state?: string;
   supply_status?: WarSupplyStatusView;
-  repair_state?: WarRepairState;
 }
 
 export interface WarTaskForceView {

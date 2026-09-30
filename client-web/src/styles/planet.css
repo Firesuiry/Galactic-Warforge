@@ -1561,3 +1561,31 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+/* 军团（3.4）：标记 / 指令箭头 / 左侧列表 */
+.planet-legion-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 6; }
+.planet-legion-layer__arrows { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.planet-legion-marker {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: auto;
+  display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 10px;
+  border: 1px solid rgba(255, 220, 120, 0.9); background: rgba(20, 24, 32, 0.85);
+  color: #ffe08a; font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.planet-legion-panel {
+  width: 240px; max-height: 40vh; overflow: auto; pointer-events: auto;
+  padding: 8px; border-radius: 8px; background: rgba(14, 18, 26, 0.88); border: 1px solid rgba(255, 220, 120, 0.4);
+  display: flex; flex-direction: column; gap: 6px; font-size: 12px;
+}
+.planet-legion-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.planet-legion-panel li { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); }
+.planet-legion-panel__pick { display: flex; flex-direction: column; align-items: flex-start; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
+.planet-legion-panel__orders, .planet-legion-panel__form { display: flex; flex-wrap: wrap; gap: 4px; }
+.planet-legion-panel [role="alert"] { color: #ff8a8a; }
+.planet-ammo-alert { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 13; padding: 4px 12px; border-radius: 6px; background: rgba(120, 20, 20, 0.9); color: #ffd0d0; font-size: 12px; }
+
+.planet-left-stack { position: absolute; left: 12px; top: 96px; z-index: 12; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.war-guide-panel { width: 240px; pointer-events: auto; padding: 8px; border-radius: 8px; background: rgba(14, 18, 26, 0.88); border: 1px solid rgba(95, 176, 255, 0.5); font-size: 12px; }
+.war-guide-panel header { display: flex; justify-content: space-between; align-items: center; }
+.war-guide-panel ol { display: flex; flex-wrap: wrap; gap: 4px 10px; list-style: none; margin: 6px 0; padding: 0; opacity: 0.8; }
+.war-guide-panel li.is-current { color: #ffe08a; font-weight: 700; opacity: 1; }
+.war-guide-panel li.is-done { color: #7ee0a8; }

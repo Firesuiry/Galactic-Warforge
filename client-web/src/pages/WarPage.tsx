@@ -815,7 +815,7 @@ export function WarPage() {
             <ul className="war-list">
               {supplyNodes.length === 0 ? <li>暂无补给节点。</li> : supplyNodes.map((node) => (
                 <li key={node.node_id}>
-                  <strong>{node.label || node.node_id}</strong> · fuel {formatMetric(node.inventory.fuel)} · ammo {formatMetric(node.inventory.ammo)} · spare_parts {formatMetric(node.inventory.spare_parts)}
+                  <strong>{node.label || node.node_id}</strong> · 子弹 {formatMetric(node.inventory.ammo)} · 炮弹 {formatMetric(node.inventory.shells)} · 导弹 {formatMetric(node.inventory.missiles)}
                 </li>
               ))}
             </ul>

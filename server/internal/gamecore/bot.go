@@ -15,33 +15,35 @@ import (
 
 // botTuning bot 难度参数。
 type botTuning struct {
-	cadence          int64 // 决策间隔（tick）
-	maxCmds          int   // 每次决策最多下发的命令数
-	attackAt         int   // 进攻兵力阈值
-	armyCap          int   // 兵力上限（士兵+mecha）
-	minerTarget      int   // 目标矿机数
-	powerTarget      int   // 目标发电建筑数
-	craftBatch       int   // 单批手搓数量上限
-	defendRadius     int   // 基地防御拉扯半径
-	mechaEvery       int   // 每多少名士兵配一台 mecha
-	mechaMinSoldiers int   // 第一台 mecha 前至少有多少士兵；0 表示可先出 mecha
-	turretCap        int   // 基地炮塔上限（含在建）
-	turretThreat     int   // 威胁进入该半径才造炮塔（越大越早）
-	researchMaxLevel int   // >0 时只研究不超过该等级的科技
-	researchMainOnly bool  // 只推进主线科技（easy 少研究）
-	raidSupply       bool  // 进攻优先袭扰敌方补给站/弹药厂
-	supportAt        int   // 兵力达到该数量后才配补给车
-	heavyAt          int   // 兵力达到该数量后才补火炮/导弹车/维修车/无人机
+	cadence           int64   // 决策间隔（tick）
+	maxCmds           int     // 每次决策最多下发的命令数
+	attackAt          int     // 进攻兵力阈值
+	armyCap           int     // 兵力上限（士兵+mecha）
+	minerTarget       int     // 目标矿机数
+	powerTarget       int     // 目标发电建筑数
+	craftBatch        int     // 单批手搓数量上限
+	defendRadius      int     // 基地防御拉扯半径
+	mechaEvery        int     // 每多少名士兵配一台 mecha
+	mechaMinSoldiers  int     // 第一台 mecha 前至少有多少士兵；0 表示可先出 mecha
+	turretCap         int     // 基地炮塔上限（含在建）
+	turretThreat      int     // 威胁进入该半径才造炮塔（越大越早）
+	researchMaxLevel  int     // >0 时只研究不超过该等级的科技
+	researchMainOnly  bool    // 只推进主线科技（easy 少研究）
+	raidSupply        bool    // 进攻优先袭扰敌方补给站/弹药厂
+	supportAt         int     // 兵力达到该数量后才配补给车
+	heavyAt           int     // 兵力达到该数量后才补火炮/导弹车/维修车/无人机
+	retreatBelowHP    float64 // 军团平均血量比低于该值即撤退（越高越谨慎）
+	resupplyBelowAmmo float64 // 军团平均弹药比低于该值即回补给站
 }
 
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 8, heavyAt: 12}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 8, heavyAt: 12, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
 	case "hard":
-		return botTuning{cadence: 15, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 3, heavyAt: 6}
+		return botTuning{cadence: 15, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 5, heavyAt: 8}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 5, heavyAt: 8, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
 	}
 }
 
@@ -197,6 +199,8 @@ type botSurvey struct {
 	producers    []*model.Building
 	enemyPlayers map[string][]*model.Building
 	nests        []*model.EnemyForce
+	squads       []*model.CombatSquad // 己方军团，按 ID 排序
+	loose        []*model.Unit        // 未编入军团的作战单位
 }
 
 func (gc *GameCore) surveyBotWorld(ws *model.WorldState, playerID string) *botSurvey {
@@ -273,6 +277,19 @@ func (gc *GameCore) surveyBotWorld(ws *model.WorldState, playerID string) *botSu
 		pos := survey.executor.Position
 		survey.home = &pos
 	}
+	for _, u := range survey.soldiers {
+		if u.SquadID == "" {
+			survey.loose = append(survey.loose, u)
+		}
+	}
+	if ws.CombatRuntime != nil {
+		for _, squad := range ws.CombatRuntime.Squads {
+			if squad != nil && squad.OwnerID == playerID && squad.State != model.CombatSquadStateDestroyed {
+				survey.squads = append(survey.squads, squad)
+			}
+		}
+		sort.Slice(survey.squads, func(i, j int) bool { return survey.squads[i].ID < survey.squads[j].ID })
+	}
 	if ws.EnemyForces != nil {
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
@@ -304,7 +321,7 @@ func (gc *GameCore) botMilitary(ws *model.WorldState, playerID string, tuning bo
 		scan = tuning.turretThreat
 	}
 	threats := botIncomingThreats(ws, playerID, *ctx.home, scan, ctx.nests)
-	if ids, dest, ok := botRecallIDs(ws, ctx.soldiers, threats, tuning.defendRadius); ok {
+	if ids, dest, ok := botRecallIDs(ws, ctx.loose, threats, tuning.defendRadius); ok {
 		pos := dest
 		return issue(model.Command{
 			Type:    model.CmdUnitOrder,
@@ -315,29 +332,7 @@ func (gc *GameCore) botMilitary(ws *model.WorldState, playerID string, tuning bo
 	if gc.botTurret(ws, playerID, tuning, ctx, threats, issue) {
 		return true
 	}
-	// 出击状态由部队自身姿态推导（无记忆，回放/读档天然一致）。
-	armyEngaged := false
-	for _, u := range ctx.soldiers {
-		if u.AttackTarget != "" || (u.Stance == model.UnitStanceAttackMove && u.HasPath()) {
-			armyEngaged = true
-			break
-		}
-	}
-	if !armyEngaged && len(ctx.soldiers) >= tuning.attackAt {
-		target := gc.botAttackObjective(ws, playerID, tuning, ctx)
-		if target != nil {
-			ids := make([]string, 0, len(ctx.soldiers))
-			for _, u := range ctx.soldiers {
-				ids = append(ids, u.ID)
-			}
-			return issue(model.Command{
-				Type:    model.CmdUnitOrder,
-				Target:  model.CommandTarget{Layer: "planet", EntityIDs: ids, Position: target},
-				Payload: map[string]any{"order": "attack_move"},
-			})
-		}
-	}
-	return false
+	return gc.botLegions(ws, playerID, tuning, ctx, threats, issue)
 }
 
 // botIncomingThreats 收集半径内的敌方单位、黑雾单位、敌方小队与巢穴。

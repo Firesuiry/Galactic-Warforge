@@ -107,9 +107,8 @@ describe('official war regression via real server', () => {
 
     const initialIndustry = await runCli('war_industry', p1);
     assert.match(initialIndustry, /Supply Nodes/);
-    assert.match(initialIndustry, /planetary_logistics_station/);
-    assert.match(initialIndustry, /interstellar_logistics_station/);
-    assert.match(initialIndustry, /orbital_supply_port/);
+    assert.match(initialIndustry, /supply_station/);
+    assert.match(initialIndustry, /ammo:\d+/);
 
     await runCli('blueprint_variant corvette corvette_cli_t122 utility --name CLI回归舰', p1);
     await runCli('blueprint_validate corvette_cli_t122', p1);

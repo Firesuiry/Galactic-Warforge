@@ -105,11 +105,11 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - 已通电的 `recomposing_assembler`
   - 已通电的 `planetary_logistics_station`
   - 已通电的 `interstellar_logistics_station`
-  - 这些物流站会预置弹药、燃料、部件等军需库存
+  - 双方各预置一座装有子弹、炮弹、导弹的 `supply_station`（物流站里的弹药不再参与补给）
 - `GET /world/warfare/industry` 在官方战争场景下应直接能看到：
   - `deployment_hubs[]`
   - `supply_nodes[]`
-  - 且 `supply_nodes[].label` 至少能出现 `Orbital Supply Port`、`Planetary Logistics Station`、`Interstellar Logistics Station`
+  - 且 `supply_nodes[].label` 至少能出现 `Supply Station`
 - `/catalog.warfare.public_blueprints` 与 `GET /world/warfare/blueprints/{blueprint_id}` 会暴露当前公开战争预置蓝图：
   - `prototype`
   - `precision_drone`
@@ -550,12 +550,10 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `active_planet_context.ray_receiver_modes`：键为 `power` / `photon` / `hybrid`，值为当前 active planet 上该模式的射线接收站数量
   - `fleets`：包含 `fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapons` / `sustainment` / `armor` / `structure` / `subsystems` / `target` / `transit` / `last_battle_report_id`
   - `fleets[].weapons`：太空战火力画像，字段为 `direct_fire` / `missile` / `point_defense` / `electronic_warfare`
-  - `fleets[].sustainment`：舰队 authoritative 补给态，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `repair_blocked` / `retreat_recommended` / `shortages` / `sources` / `last_resupply_tick` / `last_consumption_tick` / `repair`
-  - `fleets[].sustainment.current` / `capacity`：六类军需库存，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
+  - `fleets[].sustainment`：舰队 authoritative 补给态，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `retreat_recommended` / `shortages` / `sources` / `last_resupply_tick` / `last_consumption_tick`
+  - `fleets[].sustainment.current` / `capacity`：三类弹药库存，字段固定为 `ammo`（子弹，含钛制弹） / `shells`（炮弹，含晶体炮弹） / `missiles`（导弹，含超音速、引力导弹）；燃料、备件、护盾电池、维修无人机已删除
   - `fleets[].sustainment.sources[]`：最近一次补给来源，字段为 `source_id` / `source_type` / `label` / `planet_id` / `system_id` / `building_id` / `unit_id`
-  - `fleets[].sustainment.sources[].source_type`：当前 authoritative 只会返回 `planetary_logistics_station` / `interstellar_logistics_station` / `orbital_supply_port` / `supply_ship` / `frontline_supply_drop`
-  - `fleets[].sustainment.repair`：维修态，字段为 `tier` / `active` / `blocked_reason` / `hp_per_tick` / `shield_per_tick` / `remaining_damage` / `remaining_shield` / `remaining_ticks` / `completed_this_tick`
-  - `fleets[].sustainment.repair.tier`：当前只会返回 `field_repair` / `frontline_repair_station` / `overhaul`
+  - `fleets[].sustainment.sources[].source_type`：当前 authoritative 只会返回 `supply_station` / `supply_truck`
   - `fleets[].armor` / `structure`：太空战分层耐久，字段为 `level` / `max_level`
   - `fleets[].subsystems`：关键子系统状态，包含 `engine` / `fire_control` / `sensors` / `point_defense`；每个子系统都带 `integrity` / `state` / `effect`
   - `fleets[].subsystems.*.state`：当前固定为 `operational` / `degraded` / `disabled`
@@ -1566,13 +1564,13 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `refit_orders[].repair_tier`：当前翻修层级，取值为 `field_repair` / `frontline_repair_station` / `overhaul`
   - `deployment_hubs[]`：部署枢纽军备库存，包含 `building_id` / `building_type` / `planet_id` / `capacity` / `ready_payloads`
   - `supply_nodes[]`：军需补给节点视图，包含 `node_id` / `source_type` / `label` / `planet_id` / `system_id` / `building_id` / `unit_id` / `inventory` / `updated_tick`
-  - `supply_nodes[].inventory`：六类军需库存，字段固定为 `ammo` / `missiles` / `fuel` / `spare_parts` / `shield_cells` / `repair_drones`
-  - `supply_nodes[].source_type`：当前 authoritative 只会返回 `planetary_logistics_station` / `interstellar_logistics_station` / `orbital_supply_port` / `supply_ship` / `frontline_supply_drop`
+  - `supply_nodes[].inventory`：三类弹药库存，字段固定为 `ammo`（子弹，含钛制弹） / `shells`（炮弹，含晶体炮弹） / `missiles`（导弹，含超音速、引力导弹）；燃料、备件、护盾电池、维修无人机已删除
+  - `supply_nodes[].source_type`：当前 authoritative 只会返回 `supply_station` / `supply_truck`
 - 说明补充:
   - `production_orders[].stage` 当前 authoritative 区分为 `components -> assembly -> ready`
   - `repeat_bonus_percent` 表示同一产线连续生产同蓝图时的效率收益；`retool_ticks` 表示切换到不同蓝图时的重整时间
   - `ready_payloads` 已取代把蓝图 ID 当普通 item 塞进建筑 `storage` 的旧做法；`deploy_squad` / `commission_fleet` 只从这里消费军备产物
-  - `supply_nodes` 会同时聚合玩家所属部署枢纽、行星物流站、星际物流站、物流货船与物流无人机上的军需库存，便于直接观察战区补给面
+  - `supply_nodes` 只聚合玩家的补给站（`supply_station`，取三个库存缓冲之和）与补给车（`supply_truck`，取随车货物）；部署枢纽、物流站、物流货船、物流无人机不再补弹，也不出现在该列表；舰队补给由这些节点在同星系内按缺口补满，封锁期间被拦截
 
 **GET /world/warfare/task-forces**
 - 说明: 当前玩家的任务群编制、姿态、成员与指挥容量视图（需认证）
@@ -1580,8 +1578,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `task_forces[]`：任务群列表，包含 `id` / `name` / `theater_id` / `stance` / `deployment` / `members` / `command_capacity` / `supply_status`
   - `deployment`：当前 authoritative 部署意图，包含可选 `system_id` / `planet_id` / `position` / `frontline_id` / `ground_order` / `support_mode`
   - `members[]`：运行态成员解析结果，包含 `kind` / `entity_id` / `planet_id` / `system_id` / `blueprint_ids` / `count` / `state` / `supply_status` / `repair_state`
-  - `members[].supply_status`：成员补给摘要，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `shield_penalty` / `mobility_penalty` / `retreat_recommended` / `shortages`
-  - `members[].repair_state`：成员维修态，包含 `tier` / `active` / `blocked_reason` / `hp_per_tick` / `shield_per_tick` / `remaining_damage` / `remaining_shield` / `remaining_ticks` / `completed_this_tick`
+  - `members[].supply_status`：成员补给摘要，包含 `current` / `capacity` / `condition` / `cohesion` / `damage_penalty` / `retreat_recommended` / `shortages`
   - `command_capacity`：当前任务群指挥容量状态，包含 `total` / `used` / `over` / `delay_penalty` / `hit_penalty` / `formation_penalty` / `coordination_penalty` / `sources`
   - `supply_status`：任务群聚合补给摘要，字段结构与 `members[].supply_status` 一致；当前按成员最差 `condition`、最大惩罚和累计库存汇总
   - `sources[]`：容量来源，包含 `source_id` / `source_type` / `label` / `entity_id` / `planet_id` / `system_id` / `capacity`
@@ -1589,7 +1586,6 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
   - `stance` 当前支持 `hold` / `patrol` / `escort` / `intercept` / `harass` / `siege` / `bombard` / `retreat_on_losses`
   - `command_capacity.sources[].source_type` 当前来自 `command_center` / `command_ship` / `battlefield_analysis_base` / `military_ai_core`
   - 该查询是 authoritative 组织层视图，不是静态配置快照；成员、姿态和超编惩罚会随着当前 runtime 实体状态实时变化
-  - `members[].repair_state.tier` 当前只会返回 `field_repair` / `frontline_repair_station` / `overhaul`
   - `task_force_deploy` 当前既表达跨层部署意图，也表达行星层任务群的前线命令；它仍不等价于已经存在完整跨星系自动航渡系统
 
 **GET /world/warfare/theaters**
@@ -1726,7 +1722,7 @@ env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
 
 `build` 的 `building_type=foundation` 可以在水面、熔岩或阻挡地形排队；完成施工后将地形改为可建，并在实体状态保存原地形。拆除地基恢复原地形；已有建筑占用地基时拒绝拆除，材料不足或施工回滚不会改变地形。地基实体不占用已填平的 TileBuilding 格，允许随后建厂；同位置不能重复铺设，有待建任务时也不能拆地基，正在拆除的地基上禁止排工厂，restore_construction 也遵循相同限制。foundation_terrain 原始地形进入深复制和存档恢复，保存后再拆除仍可还原。Planet/Scene/Overview 地形查询反映 ws.Grid 中地基改造后的运行时地形及拆除恢复，不再仅返回初始生成地形。
 
-已加载行星的地面防御炮塔在每个 Tick 自动选取射程内敌方单位或敌对势力并产生 `damage_applied`：`missile_turret` 消耗 `ammo_missile`，`implosion_cannon` 消耗 `gravity_missile`，`plasma_turret` 消耗 `plasma_capsule`，`laser_turret` 使用电力。各塔按 runtime `Combat.fire_rate` 冷却；弹药不足产生 `building_state_changed`（reason=`no_ammunition`）并停火，供电不足由建筑进入 `no_power`。炮塔攻击机甲时仍先结算机甲护盾；攻击玩家单位的伤害事件同时发给射击方和受击方。弹药从 storage 的 input_buffer/inventory/output_buffer 按原子方式消费，不因仓储自动转移缓冲区而失效；重装后清除 no_ammunition 原因。Combat 返回 attack/range/fire_rate/ammo_item/ammo_consume/last_fire_tick；`anti_air_turret`（防空炮，`air_only`，射程 10）消耗 `ammo_missile`，只打空中单位，也会击落射程内敌方飞行中的物流无人机/配送机器人：被击落者从世界移除，所载货物损失，发 `entity_destroyed`（`reason="shot_down"`，payload 含 `entity_type=logistics_drone|logistics_bot`、`cargo_lost`、`attacker_id`）；`artillery_turret`（远程火炮，射程 15、最小射程 4）消耗 `shell_set`/`crystal_shell_set`，只打地面。激光塔通过每 tick 电力消耗运行，不另设未结算的每发能耗字段。
+已加载行星的地面防御炮塔在每个 Tick 自动选取射程内敌方单位或敌对势力并产生 `damage_applied`：`missile_turret` 消耗 `ammo_missile`，`implosion_cannon` 消耗 `shell_set`（可装 `crystal_shell_set`），`plasma_turret` 消耗 `plasma_capsule`，`laser_turret` 使用电力。各塔按 runtime `Combat.fire_rate` 冷却；弹药不足产生 `building_state_changed`（reason=`no_ammunition`）并停火，供电不足由建筑进入 `no_power`。炮塔攻击机甲时仍先结算机甲护盾；攻击玩家单位的伤害事件同时发给射击方和受击方。弹药从 storage 的 input_buffer/inventory/output_buffer 按原子方式消费，不因仓储自动转移缓冲区而失效；重装后清除 no_ammunition 原因。Combat 返回 attack/range/fire_rate/ammo_item/ammo_consume/last_fire_tick；`anti_air_turret`（防空炮，`air_only`，射程 10）消耗 `ammo_missile`，只打空中单位，也会击落射程内敌方飞行中的物流无人机/配送机器人：被击落者从世界移除，所载货物损失，发 `entity_destroyed`（`reason="shot_down"`，payload 含 `entity_type=logistics_drone|logistics_bot`、`cargo_lost`、`attacker_id`）；`artillery_turret`（远程火炮，射程 15、最小射程 4）消耗 `shell_set`/`crystal_shell_set`，只打地面。激光塔通过每 tick 电力消耗运行，不另设未结算的每发能耗字段。
 
 `plasma_capsule` 已加入物品/配方目录；`plasma_turret` 科技解锁：1 钛合金 + 1 粒子容器 + 2 氢 → 1 等离子胶囊，基础 60 ticks、配方能耗 4，由 Mk.I/II/III 制造台加工。
 

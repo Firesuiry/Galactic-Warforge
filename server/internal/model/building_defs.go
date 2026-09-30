@@ -5,6 +5,7 @@ type BuildingType string
 
 const (
 	BuildingTypeBattlefieldAnalysisBase BuildingType = "battlefield_analysis_base"
+	BuildingTypeSupplyStation           BuildingType = "supply_station"
 
 	BuildingTypeMiningMachine         BuildingType = "mining_machine"
 	BuildingTypeAdvancedMiningMachine BuildingType = "advanced_mining_machine"

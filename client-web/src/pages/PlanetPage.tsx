@@ -29,6 +29,11 @@ import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
+import { WarGuidePanel } from "@/features/onboarding/WarGuidePanel";
+import { resolveWarGuide } from "@/features/onboarding/war-guide";
+import { ownLegions } from "@/features/planet-map/legion-model";
+import { countOutOfAmmoUnits } from "@/features/planet-map/ammo-alert";
+import { PlanetLegionPanel } from "@/features/planet-map/PlanetLegionPanel";
 import { PlanetTheaterControls } from "@/features/planet-map/PlanetTheaterControls";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from "@/features/planet-commands/store";
@@ -878,6 +883,24 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         />
+        {countOutOfAmmoUnits(planet.units, session.playerId) > 0 ? (
+          <div className="planet-ammo-alert" role="alert" data-testid="planet-ammo-alert">
+            {countOutOfAmmoUnits(planet.units, session.playerId)} 个单位弹药耗尽：请补给或建造补给站
+          </div>
+        ) : null}
+        {/* 军团列表（3.4）：编队入口、一键选中、进攻/防守/撤退/补给优先、解散 */}
+        <div className="planet-left-stack">
+          <WarGuidePanel
+            guide={resolveWarGuide({
+              playerId: session.playerId,
+              buildings: Object.values(planet.buildings ?? {}),
+              units: Object.values(planet.units ?? {}),
+              legions: ownLegions(runtime.combat_squads, session.playerId),
+              playerInventory: currentPlayer?.inventory,
+            })}
+          />
+          <PlanetLegionPanel planetId={planet.planet_id} squads={runtime.combat_squads} units={planet.units} />
+        </div>
         {/* 战区划定（C4）：2D 平面战术视图拖拽矩形建 zone；3D 下浮层给切换提示 */}
         <PlanetTheaterControls
           dimensional={isThree}

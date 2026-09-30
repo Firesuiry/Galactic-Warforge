@@ -396,6 +396,16 @@ export function getItemDisplayName(
   return translateItemId(itemId, getItemCatalogEntry(catalog, itemId)?.name);
 }
 
+/** 单位造价文案：「钢材 × 2、电路板 × 1 · 30 tick」；无造价返回空串。 */
+export function formatUnitCost(
+  catalog: CatalogView | undefined,
+  unit: { cost?: { item_id: string; quantity: number }[]; production_ticks?: number },
+): string {
+  const items = (unit.cost ?? []).map((c) => `${getItemDisplayName(catalog, c.item_id)} × ${c.quantity}`).join('、');
+  if (!items) return '';
+  return unit.production_ticks ? `${items} · ${unit.production_ticks} tick` : items;
+}
+
 export function getRecipeDisplayName(
   catalog: CatalogView | undefined,
   recipeId: string,

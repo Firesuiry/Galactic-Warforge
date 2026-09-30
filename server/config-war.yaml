@@ -197,8 +197,6 @@ scenario_bootstrap:
               quantity: 40
             - item_id: ammo_missile
               quantity: 16
-            - item_id: hydrogen_fuel_rod
-              quantity: 20
         - owner_id: "p1"
           building_type: "planetary_logistics_station"
           x: 9
@@ -221,12 +219,22 @@ scenario_bootstrap:
               quantity: 20
             - item_id: ammo_missile
               quantity: 12
-            - item_id: hydrogen_fuel_rod
-              quantity: 24
             - item_id: frame_material
               quantity: 12
             - item_id: critical_photon
               quantity: 6
+        - owner_id: "p1"
+          building_type: "supply_station"
+          x: 11
+          y: 1
+          state: "running"
+          inventory:
+            - item_id: ammo_bullet
+              quantity: 200
+            - item_id: shell_set
+              quantity: 60
+            - item_id: ammo_missile
+              quantity: 40
         - owner_id: "p2"
           building_type: "tesla_tower"
           x: 42
@@ -267,8 +275,6 @@ scenario_bootstrap:
               quantity: 40
             - item_id: ammo_missile
               quantity: 16
-            - item_id: hydrogen_fuel_rod
-              quantity: 20
         - owner_id: "p2"
           building_type: "planetary_logistics_station"
           x: 38
@@ -291,12 +297,22 @@ scenario_bootstrap:
               quantity: 20
             - item_id: ammo_missile
               quantity: 12
-            - item_id: hydrogen_fuel_rod
-              quantity: 24
             - item_id: frame_material
               quantity: 12
             - item_id: critical_photon
               quantity: 6
+        - owner_id: "p2"
+          building_type: "supply_station"
+          x: 36
+          y: 46
+          state: "running"
+          inventory:
+            - item_id: ammo_bullet
+              quantity: 200
+            - item_id: shell_set
+              quantity: 60
+            - item_id: ammo_missile
+              quantity: 40
 
 server:
   port: 18080

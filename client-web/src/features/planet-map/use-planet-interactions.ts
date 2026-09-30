@@ -248,6 +248,21 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
         return;
       }
 
+      if (mode.kind === 'squad_order') {
+        void submitPlanetCommand({
+          commandType: 'squad_order',
+          planetId: planet.planet_id,
+          focus: { position },
+          execute: () => client.cmdSquadOrder(mode.squadId, mode.order, position, planet.planet_id),
+          fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
+            event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+            limit: 50,
+          }),
+        });
+        store.exitInteractionMode();
+        return;
+      }
+
       if (mode.kind === 'unit_order') {
         const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId);
         if (selector.length === 0) {

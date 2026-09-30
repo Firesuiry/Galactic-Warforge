@@ -534,7 +534,7 @@ func botAttackMoveToward(core *GameCore, playerID string, pos model.Position) bo
 			continue
 		}
 		for _, cmd := range entry.Commands {
-			if cmd.Type != model.CmdUnitOrder || cmd.Payload["order"] != "attack_move" || cmd.Target.Position == nil {
+			if (cmd.Type != model.CmdUnitOrder || cmd.Payload["order"] != "attack_move") && (cmd.Type != model.CmdSquadOrder || cmd.Payload["order"] != "attack") || cmd.Target.Position == nil {
 				continue
 			}
 			if ws.SurfaceDistance(*cmd.Target.Position, pos) <= 2 {

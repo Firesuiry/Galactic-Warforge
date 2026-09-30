@@ -472,11 +472,8 @@ func aggregateFleetStacks(ws *model.WorldState, playerID string, stacks []model.
 		agg.weapons.ElectronicWarfare += combatProfile.Weapons.ElectronicWarfare * stack.Count
 		capacity := model.InitWarSustainmentState(blueprint, profile, stack.Count).Capacity
 		agg.supply.Ammo += capacity.Ammo
+		agg.supply.Shells += capacity.Shells
 		agg.supply.Missiles += capacity.Missiles
-		agg.supply.Fuel += capacity.Fuel
-		agg.supply.SpareParts += capacity.SpareParts
-		agg.supply.ShieldCells += capacity.ShieldCells
-		agg.supply.RepairDrones += capacity.RepairDrones
 	}
 	return agg
 }

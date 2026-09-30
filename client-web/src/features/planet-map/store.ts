@@ -20,6 +20,7 @@ export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
  * - move：为当前选中单位（store.selectedUnits）选择移动目标点
  * - attack：为当前选中单位选择攻击目标
  * - unit_order：为当前选中单位选择 attack_move/patrol/guard 的目标点/目标实体
+ * - squad_order（3.4）：为军团选择 attack/defend/retreat 的目标点
  * - theater_zone（C4）：战区划定模式，左键拖拽矩形 → theater_define_zone（圆心+半径）
  */
 export type PlanetInteractionMode =
@@ -28,6 +29,7 @@ export type PlanetInteractionMode =
   | { kind: 'move' }
   | { kind: 'attack' }
   | { kind: 'unit_order'; order: UnitOrderMode }
+  | { kind: 'squad_order'; squadId: string; order: 'attack' | 'defend' | 'retreat' }
   | { kind: 'theater_zone'; theaterId: string; zoneType: WarTheaterZoneType };
 
 export const INSPECT_MODE: PlanetInteractionMode = { kind: 'inspect' };

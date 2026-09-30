@@ -52,6 +52,8 @@ const catalog: CatalogView = {
       runtime_class: 'world_unit',
       public: true,
       production_mode: 'world_produce',
+      cost: [{ item_id: 'steel', quantity: 2 }],
+      production_ticks: 30,
     },
   ],
   warfare: {
@@ -301,6 +303,13 @@ describe('ProductionQueuePanel', () => {
     const second = await runCommand.mock.calls[1][0].execute();
     expect(first.accepted).toBe(true);
     expect(second.accepted).toBe(true);
+  });
+
+  it('世界单位生产：选中后显示物品造价与生产时间', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole('option', { name: /Soldier/ }));
+    expect(screen.getByTestId('world-unit-cost')).toHaveTextContent(/× 2.*30 tick/);
   });
 
   it('世界单位生产：选中单位卡片 + 生产建筑 → produce', async () => {

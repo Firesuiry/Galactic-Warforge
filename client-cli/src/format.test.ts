@@ -81,9 +81,9 @@ describe('warfare formatting', () => {
         ready_payloads: { raider_mk1: 2 },
       }],
       supply_nodes: [{
-        node_id: 'hub:hub-1',
-        source_type: 'orbital_supply_port',
-        label: 'Orbital Supply Port',
+        node_id: 'supply_station:sup-1',
+        source_type: 'supply_station',
+        label: 'Supply Station',
         inventory: { ammo: 5 },
       }],
     });
