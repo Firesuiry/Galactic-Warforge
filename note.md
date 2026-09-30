@@ -51,6 +51,6 @@
 
 - 2026-09-29 F4 每人独立的行星焦点落地：命令按目标行星路由（gamecore/command_routing.go 的 resolveCommandWorld：target.planet_id 显式提示 → 目标实体所在行星 → 玩家 focus_planet_id → 全局活动行星兜底）；switch_active_planet 只写 PlayerState.FocusPlanetID，不再改全局 activePlanetID、不拖拽执行体；settleWarIndustry 小队落地按订单 SourcePlanetID 反查世界、settleDistributors 去掉 active 门控（每颗行星配送器服务本行星执行体）、执行体并发占用跨行星聚合（countActiveExecutorUsage 收 worlds）。CLI 行星层命令普遍支持 --planet；shared-client 同名函数加可选 planetId（后兼容），cmdDeploySquad 的 target 不再带 planet_id（落点只在 payload）。测试 server/internal/gamecore/f4_planet_focus_test.go（TestF4* 五个）。
 
-- 2026-09-29 当前 WSL 会话 Go 实际路径：/mnt/wsl/PHYSICALDRIVE3p1/home/firesuiry/sdk/go1.25.0/usr/lib/go-1.26/bin/go（GOROOT 同级上层）；受限环境测试用 GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local。游戏配置覆盖键为 server.game_data_dir，server.data_dir 仍用于存档，格式见 [数据配置文件](docs/dev/数据配置文件.md)。
+- 2026-09-29 当前 WSL 会话 Go 实际路径：/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin/go（2026-09-30 实测；旧 PHYSICALDRIVE3p1 路径已失效）；受限环境测试用 GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local。游戏配置覆盖键为 server.game_data_dir，server.data_dir 仍用于存档，格式见 [数据配置文件](docs/dev/数据配置文件.md)。
 
 - 2026-09-30 第一阶段自动化收口：3.0–3.6 服务端与客户端已实现，`go test ./...`、client-web（tsc+vitest）、client-cli、command_coverage 全绿。`df_` 单位物品配方已删（弹药类 df_ 配方保留）；新增 form_squad/squad_order/dissolve_squad、set_rally_point、防空击落物流无人机（air_defense.go）。测试注意：client-web 并行跑时 AgentsPage/industrial-finishes 偶发 5s 超时（单跑或 --testTimeout=60000 通过）；client-cli 的 official-war-regression 需要 PATH 里有 go（脚本写死的 /home/firesuiry/sdk 路径在本机不存在）。遗留：bot 尚未用 form_squad 编军团、C9 新手引导、浏览器实拍与 60–90 分钟试玩（整体规划第 4 节）。
