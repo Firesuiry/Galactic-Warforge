@@ -63,7 +63,7 @@ import { __iconNode as wind } from 'lucide-react/dist/esm/icons/wind.mjs';
 import { __iconNode as wrench } from 'lucide-react/dist/esm/icons/wrench.mjs';
 import { __iconNode as zap } from 'lucide-react/dist/esm/icons/zap.mjs';
 
-/** iconKey → lucide 节点数据。建筑 key 与 config/defs 的实体 id 对齐。 */
+/** iconKey → lucide 节点数据。建筑 key 与 server/data/buildings.yaml 的建筑 id 对齐。 */
 export const ICON_MAP: Record<string, IconNode> = {
   // 建筑 —— 采集
   mining_machine: pickaxe,

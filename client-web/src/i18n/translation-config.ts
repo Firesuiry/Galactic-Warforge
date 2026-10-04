@@ -73,7 +73,7 @@ export const TRANSLATIONS = {
     vertical_launching_silo: "垂直发射井",
     foundation: "地基",
   },
-  // 建筑目录分组（catalog.buildings[].category，与 server BuildingCategory 常量/config/defs 对应）
+  // 建筑目录分组（catalog.buildings[].category，与 server BuildingCategory 常量/server/data/buildings.yaml 对应）
   buildingCategory: {
     collect: "采集",
     transport: "运输",
@@ -91,7 +91,7 @@ export const TRANSLATIONS = {
     combat: "军事",
     space: "航天",
   },
-  // 与 config/defs/items/ 下的物品定义一一对应
+  // 与 server/data/items.yaml 的物品定义一一对应
   itemId: {
     // 矿石
     iron_ore: "铁矿",

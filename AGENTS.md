@@ -37,4 +37,4 @@ go安装在/home/firesuiry/sdk/go1.25.0/bin
 # 6. 可以根据需要开子智能体 尤其在复杂任务上 通过子智能体承担实现和测试工作 节约主智能体的上下文
 
 # 7. 上传视频到 B 站
-运行 `bash develop_tools/biliup/publish-bilibili.sh`（首次需扫码登录，cookie 存于 develop_tools/biliup/cookies.json，之后全自动投稿；用法参考项目级 skill：.agents/skills/biliup/）
+用 biliup 命令行投稿（安装与用法见 `.agents/skills/biliup/SKILL.md`；登录 cookie 存于 develop_tools/biliup/cookies.json，不提交）

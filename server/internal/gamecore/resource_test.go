@@ -6,7 +6,7 @@ import (
 	"siliconworld/internal/model"
 )
 
-// Regression for docs/player/issue/2026-07-18-gameplay-02-minerals建造货币零收入发展卡死.md:
+// Regression (2026-07-18 gameplay-02, minerals 零收入卡死):
 // minerals is the only construction currency; the opening build chain must not
 // deadlock the economy once the starter pack runs out. After the mining
 // machine comes online, minerals must grow strictly every tick and the player

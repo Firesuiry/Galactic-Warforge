@@ -53,7 +53,7 @@ func TestGatedRecipesHaveConsistentTechReferences(t *testing.T) {
 
 // planetaryProductionTechIDs is the in-game tech set covering 行星内 production,
 // logistics, energy and combat-ammo unlocks from
-// docs/archive/reference/戴森球计划-分级实现-科技与建筑.md.
+// the DSP 分级实现 reference (see git tag pre-refactor-2026-10).
 // 电磁矩阵 / 改良物流系统 已并入开局配方与 basic_logistics_system，不作为独立科技。
 var planetaryProductionTechIDs = []string{
 	"dyson_sphere_program",

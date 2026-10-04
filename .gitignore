@@ -64,3 +64,7 @@ develop_tools/biliup/venv/
 develop_tools/biliup/cookies.json
 develop_tools/biliup/qrcode.png
 develop_tools/biliup/biliupR-*/
+
+# Build / evidence artifacts
+client-web/storybook-static/
+develop_tools/*-verify/
