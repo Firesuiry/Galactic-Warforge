@@ -1,35 +1,40 @@
-# SiliconWorld 文档入口
+# 文档索引
 
-当前 `docs/` 按读者和用途分成四条主线：
+历史文档已删除，需要时从 git tag `pre-refactor-2026-10` 找回。
 
-- `docs/dev/`：当前有效的开发者文档
-- `docs/player/`：当前有效的玩家与测试文档
-- `docs/process/`：任务流转与自动化流程文档
-- `docs/guide/`：专项制作指南（如试玩介绍视频制作流程）
-- `docs/archive/`：历史设计、旧调研、参考资料
+## 开发（docs/dev）
 
-## 我是开发者
+| 文档 | 内容 |
+| --- | --- |
+| [architecture.md](dev/architecture.md) | 系统边界、模块划分、数据流与当前能力 |
+| [服务端API.md](dev/服务端API.md) | HTTP / SSE 契约；命令一览由脚本生成 |
+| [客户端CLI.md](dev/客户端CLI.md) | CLI 用法；命令一览由脚本生成 |
+| [client-web.md](dev/client-web.md) | Web 客户端页面、启动与回归 |
+| [agent-gateway.md](dev/agent-gateway.md) | 本地 Agent 网关 |
+| [数据配置文件.md](dev/数据配置文件.md) | `server/data/*.yaml` 格式 |
+| [本地环境与测试.md](dev/本地环境与测试.md) | 启动本地环境、各端测试命令 |
+| [战争系统设计.md](dev/战争系统设计.md) | 战争系统当前设计 |
 
-优先阅读：
+命令一览更新：`python3 scripts/gen_command_docs.py`；校验：`python3 scripts/command_coverage.py --check`。
 
-- `docs/dev/项目概览.md`
-- `docs/dev/服务端API.md`
-- `docs/dev/客户端CLI.md`
-- `docs/dev/client-web.md`
-- `docs/dev/server现状与差距.md`
+## 规划（docs/guide）
 
-## 我是玩家或测试者
+| 文档 | 内容 |
+| --- | --- |
+| [整体规划.md](guide/整体规划.md) | 阶段路线图 |
+| [缺失内容清单.md](guide/缺失内容清单.md) / [进度](guide/缺失内容清单-进度.md) | 剩余缺口与实施进度 |
+| [对局设计决策.md](guide/对局设计决策.md) | 已拍板的对局设计 |
+| [星球玩法覆盖与验收.md](guide/星球玩法覆盖与验收.md) | DSP 行星内对齐范围、覆盖状态与浏览器回归 |
+| [3D与画质.md](guide/3D与画质.md) | 立方体球面网格、3D 表现、画质与素材 |
+| [视频制作指南.md](guide/视频制作指南.md) | 试玩介绍视频流程 |
+| [重构方案.md](guide/重构方案.md) | 2026-10 重构分阶段计划 |
 
-优先阅读：
+## 玩家与测试（docs/player）
 
-- `docs/player/上手与验证.md`
-- `docs/player/玩法指南.md`
-- `docs/player/已知问题与回归.md`
+| 文档 | 内容 |
+| --- | --- |
+| [玩法指南.md](player/玩法指南.md) | 当前能玩什么、推进路线、CLI 示例 |
+| [试玩验收清单.md](player/试玩验收清单.md) | 大版本人工试玩脚本 |
+| [known-issues.md](player/known-issues.md) | 未解决问题 |
 
-## 其他目录说明
-
-- `docs/process/`：给任务流转脚本和人工维护流程使用，不是玩家或普通开发入口。
-- `docs/guide/`：专项制作指南，如 `docs/guide/视频制作指南.md`（试玩介绍视频全流程）。
-- `docs/archive/`：保留旧方案、旧报告和参考资料，避免它们继续和当前主文档混在一起。
-- `docs/superpowers/`：agent 设计稿与计划稿。
-- `docs/remotion/`：独立多媒体工程目录。
+`docs/remotion/` 是独立的视频工程。

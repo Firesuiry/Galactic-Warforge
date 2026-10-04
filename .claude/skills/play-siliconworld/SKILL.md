@@ -11,15 +11,14 @@ description: Play SiliconWorld as a player via CLI/HTTP. Start local or official
 
 | 场景 | 文档 |
 | --- | --- |
-| 启动 | `docs/dev/本地试玩环境启动.md`、`scripts/start-local-playtest.sh` |
-| 上手路径 | `docs/player/上手与验证.md` |
+| 启动 | `docs/dev/本地环境与测试.md`、`scripts/start-local-playtest.sh` |
 | 玩法总纲 | `docs/player/玩法指南.md` |
 | 验收勾选 | `docs/player/试玩验收清单.md` |
 | CLI 命令 | `docs/dev/客户端CLI.md` |
 | HTTP API | `docs/dev/服务端API.md` |
-| 已知问题 | `docs/player/issue/`、`docs/player/已知问题与回归.md` |
+| 已知问题 | `docs/player/known-issues.md` |
 
-Go 路径：`PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH`。
+Go 路径：`PATH=/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin:$PATH`（受限环境加 `GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local`）。
 
 ## 1. 起服
 
@@ -205,7 +204,7 @@ start_research electromagnetism     # 成功 → 解锁 depot_mk1
 
 开局资源：`minerals=240`、`energy=100`，**不预置矩阵**。矿机满仓仍 kickback minerals。
 
-详细勾选：`docs/player/试玩验收清单.md` §A；步骤说明：`docs/player/上手与验证.md` §4.1。
+详细勾选与步骤：`docs/player/试玩验收清单.md`。
 
 ### 5.2 官方 midgame（戴森/轨道）
 
@@ -214,7 +213,7 @@ start_research electromagnetism     # 成功 → 解锁 depot_mk1
 - `orbital_collector` / `vertical_launching_silo` / `em_rail_ejector` → `transfer` 装填 → `launch_solar_sail` / `launch_rocket`。
 - 防御与射线：`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`set_ray_receiver_mode`。
 
-详见 `docs/player/上手与验证.md` §4.2。
+详见 `docs/player/试玩验收清单.md`。
 
 ### 5.3 官方战争局（skill 验收主路径）
 
@@ -252,7 +251,7 @@ system_runtime sys-1   # 确认 blockades；theaters 确认区域敌情 hostile_
 
 - 官方战争局预置科技与军工底座，**不会**自动建舰队/任务群/战区。
 - `blockade_planet` 的同步返回只代表入队；以 `system_runtime` 为准。
-- 详细：`docs/player/上手与验证.md` §4.4；GUI 对照 `/war`。
+- 详细：`docs/player/试玩验收清单.md`；GUI 对照 `/war`。
 
 ### 5.4 决策启发式
 
@@ -304,7 +303,7 @@ blockade_planet ...
 2. 用时与最终 tick / winner
 3. 关键节点（首矿、首研究、首舰队、封锁…）
 4. 失败命令与 `code`/`issues`（若有）
-5. 阻塞 issue 是否需记入 `docs/player/issue/`
+5. 阻塞问题是否需记入 `docs/player/known-issues.md`
 
 ## 8. 红线
 

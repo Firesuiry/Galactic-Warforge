@@ -1,11 +1,11 @@
 # agent-gateway 开发说明
 
-`agent-gateway` 是本地智能体协作与运行时层，不属于 `server/`。游戏状态、规则和命令执行仍在 `server/`；频道、私聊、`@` 协作、权限硬限制、定时消息和前端工作台接口都落在 `agent-gateway`。
+`agent-gateway` 是本地智能体协作与运行时层，不属于 `server/`（整体架构见 [architecture](architecture.md)）。游戏状态、规则和命令执行仍在 `server/`；频道、私聊、`@` 协作、权限硬限制、定时消息和前端工作台接口都落在 `agent-gateway`。
 
 ## 1. 启动
 
 ```bash
-cd /home/firesuiry/develop/siliconWorld/agent-gateway
+cd agent-gateway
 npm install
 npm run dev
 ```
@@ -38,7 +38,7 @@ npm run dev
 
 ### 3.1 Agent 扩展字段
 
-`POST /agents` 现在除原有实例信息外，还支持：
+`POST /agents` 除实例信息外还支持：
 
 - `role`: `worker | manager | director`
 - `policy`: 运行时硬限制配置
@@ -70,7 +70,7 @@ npm run dev
 
 ### 3.1.1 受控 runtime action
 
-agent provider 现在以 typed `game.command` 作为唯一游戏动作入口，同时还可以返回以下受控 action：
+agent provider 以 typed `game.command` 作为唯一游戏动作入口，同时还可以返回以下受控 action：
 
 - `game.command`
 - `agent.create`
@@ -155,7 +155,7 @@ turn 额外字段：
 - `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 typed `game.command`
 - 该 thread 入口会把 `agent.create / agent.update / conversation.ensure_dm / conversation.send_message` 的 tool 结果也持久化到 thread；后续同一 agent 的下一条消息会复用这些真实 tool 结果，而不是只看到助手自然语言
 - `GET /agents/:agentId/thread` 除消息、tool call、执行日志外，还会暴露最近一次 turn 的摘要：`status`、`outcomeKind`、`executedActionCount`、`repairCount`、`errorCode/errorMessage/rawErrorMessage`、`finalMessage`
-- 因此 CLI 侧可以直接通过 thread 入口完成“让李斯创建胡景并委派胡景建矿场”这类 case1 链路
+- CLI 侧可通过 thread 入口完成“创建下级 agent 并委派其建矿场”这类链路（`client-cli/src/case1.test.ts`）
 
 ### 3.3 自动唤醒
 
@@ -183,8 +183,6 @@ turn 额外字段：
 
 ### 4.1 命令类别限制
 
-这是当前已经落地的硬限制。
-
 `client-cli/src/command-catalog.ts` 把 agent 可用命令分成：
 
 - `observe`
@@ -197,9 +195,7 @@ turn 额外字段：
 
 ### 4.2 星球范围限制
 
-这也是运行时检查，不是 prompt 建议。
-
-当前实现方式：
+运行时检查，不是 prompt 建议：
 
 - 当命令行里显式出现 `planet-*` 参数时，若不在 `policy.planetIds` 内会直接拒绝
 
@@ -208,13 +204,7 @@ turn 额外字段：
 - 这还不是完整的语义级星球隔离
 - 如果某条命令不把目标星球显式写成 `planet-*` token，现实现阶段不会额外推导
 
-文档和实现要以这个现状为准，不要把它描述成完整权限系统。
-
 ### 4.2.1 军事战区 / 任务群硬限制
-
-这是 T123 新增的军事权限边界。
-
-当前实现方式：
 
 - 只有配置了 `policy.military` 且显式委派了 `theaterIds` 或 `taskForceIds` 的 agent，才能执行战争命令
 - `allowedCommandIds` 是战争命令白名单；即使 `commandCategories` 里已有 `combat`，未列入白名单的战争命令也会被直接拒绝
@@ -226,8 +216,6 @@ turn 额外字段：
 
 - `war_industry / task_forces / theaters` 这类查询目前仍返回玩家可见的全量视图，agent 侧的硬限制主要落在“能否执行”和“能否对范围内对象下命令”上
 - 还没有把战争审计摘要回写到独立结构化表，只是把结果追加到最终回复和 thread 摘要里
-
-文档和实现要以这个现状为准，不要把它描述成“全量军事权限系统已经完成”。
 
 ### 4.3 会话管理能力
 
@@ -264,7 +252,7 @@ agent 实例自身也保留：
 - `message` 事件：增量写入消息列表
 - `turn.*` 事件：增量写入 `ConversationTurn` 列表
 
-`client-web` 的 `/agents` 工作台已经从平铺消息流改成“请求卡片 + turn 状态 + 规划摘要 + 动作摘要 + 最终回复/失败原因”的结构。
+`client-web` 的 `/agents` 工作台按“请求卡片 + turn 状态 + 规划摘要 + 动作摘要 + 最终回复/失败原因”展示，见 [client-web](client-web.md)。
 
 ## 6. Provider 与 CLI 边界
 
@@ -343,18 +331,10 @@ agent-gateway/data/
 - `secrets/`：加密后的 API Key / player key
 - `schemas/`：provider 结构化输出所需 JSON Schema
 
-## 8. 回归建议
-
-至少验证以下命令：
+## 8. 回归
 
 ```bash
-cd /home/firesuiry/develop/siliconWorld/agent-gateway
+cd agent-gateway
 node --import tsx --test src/**/*.test.ts
-```
-
-如果怀疑 glob 没覆盖 `server.test.ts`，单独再跑：
-
-```bash
-cd /home/firesuiry/develop/siliconWorld/agent-gateway
-node --import tsx --test src/server.test.ts
+node --import tsx --test src/server.test.ts   # glob 未覆盖时单独跑
 ```

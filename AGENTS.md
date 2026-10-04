@@ -15,8 +15,10 @@
 
 如果你修改或新增了server项目中的api的行为，你需要在修改完成后更新docs中的服务端api文档。
 如果你修改或新增了client-cli项目中的cli指令，你需要在修改完成后更新docs中的客户端cli文档。
+两份文档里的命令一览由 `python3 scripts/gen_command_docs.py` 生成，`python3 scripts/command_coverage.py --check` 会检查是否过期。
 
-# 3. 尽量降低代码耦合
+# 3. 尽量降低代码耦合，实现简单直接
+模块间避免直接依赖；不绕圈子，不做过度的错误处理。
 
 # 4. 实现完成后要进行测试 测试通过才算完成 测试完成后把修改合并到主分支提交到远程
 
@@ -32,7 +34,7 @@ client-web测试时要用过浏览器去看 是否能显示操作 比如建筑�
 apply_patch 功能可能不正常，试一次如果失败请换方式写文件
 
 # 开发环境
-go安装在/home/firesuiry/sdk/go1.25.0/bin
+go安装在/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin（受限环境测试加 GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local）
 
 # 6. 可以根据需要开子智能体 尤其在复杂任务上 通过子智能体承担实现和测试工作 节约主智能体的上下文
 

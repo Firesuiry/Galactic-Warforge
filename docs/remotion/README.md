@@ -30,11 +30,4 @@ public/audio/design/bgm/war-room-bed.mp3
 
 ## 视频内容来源
 
-- `docs/archive/design/00-总设计.md`
-- `docs/archive/design/04-物流与生产系统.md`
-- `docs/archive/design/05-能源与电网系统.md`
-- `docs/archive/design/07-戴森球系统.md`
-- `docs/archive/design/08-战斗与防御系统.md`
-- `docs/archive/design/09-命令事件与可见性系统.md`
-- `docs/archive/analysis/server现状详尽分析报告.md`
-- `docs/process/finished_task/` 下的已完成任务清单
+原始素材（`docs/archive/design/*`、`docs/archive/analysis/server现状详尽分析报告.md`、`docs/process/finished_task/`）已删除，可从 git tag `pre-refactor-2026-10` 找回。当前设计见 [architecture](../dev/architecture.md)。

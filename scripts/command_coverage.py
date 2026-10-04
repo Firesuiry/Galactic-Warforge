@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T-D1: server command surface vs GUI / CLI / shared catalog / agent.
+"""Command coverage: server command surface vs GUI / CLI / shared catalog / agent.
 
 Sources (no network):
   - server/internal/model/command.go          authoritative CommandType set
@@ -9,9 +9,11 @@ Sources (no network):
   - client-web/src/**/*.{ts,tsx}             client.cmdX(...) call sites
                                             (tests excluded)
 
-Exit 0 always when --write is used for doc generation; use --check to fail
-when required surfaces regress (missing shared catalog entry, or missing CLI
-registration for any server command that has a shared cliCommandName).
+Default: print the matrix as markdown. --write saves /tmp/cmd-coverage.json.
+--check fails when required surfaces regress (missing shared catalog entry,
+missing CLI registration, webSurface=required without GUI call site) or when
+the generated command tables in docs/dev/服务端API.md / 客户端CLI.md are stale
+(see scripts/gen_command_docs.py).
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ import sys
 from collections import Counter
 from datetime import date
 from pathlib import Path
+
+import gen_command_docs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -169,12 +173,11 @@ def render_markdown(matrix: dict) -> str:
     c = matrix["counts"]
     g = matrix["gaps"]
     lines = [
-        "# 命令覆盖率矩阵（T-D1）",
+        "# 命令覆盖率矩阵",
         "",
-        f"> 自动生成：`scripts/command_coverage.py` · {matrix['generated_on']}",
+        f"> `python3 scripts/command_coverage.py` · {matrix['generated_on']}",
         ">",
         "> 对照 server 权威指令全集 vs shared catalog / CLI 注册表 / agent 白名单 / Web GUI 调用点。",
-        "> 重新生成：`python3 scripts/command_coverage.py --write`",
         "> 回归门禁：`python3 scripts/command_coverage.py --check`",
         "",
         "## 汇总",
@@ -232,6 +235,7 @@ def render_markdown(matrix: dict) -> str:
         "1. server 每条 CommandType 必须出现在 shared catalog",
         "2. shared 声明了 `cliCommandName` 的命令必须在 CLI `COMMANDS` 注册",
         "3. `webSurface=required` 的命令必须有 GUI `client.cmd*` 调用点",
+        "4. 服务端API.md / 客户端CLI.md 的生成命令表与目录一致（`scripts/gen_command_docs.py`）",
         "",
     ]
     return "\n".join(lines)
@@ -248,6 +252,11 @@ def check(matrix: dict) -> list[str]:
         errors.append(
             f"webSurface=required without GUI: {g['required_web_missing_gui']}"
         )
+    stale = gen_command_docs.stale_docs()
+    if stale:
+        errors.append(
+            f"stale command docs (run python3 scripts/gen_command_docs.py): {stale}"
+        )
     return errors
 
 
@@ -256,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--write",
         action="store_true",
-        help="write docs/dev/命令覆盖率矩阵.md and /tmp/cmd-coverage.json",
+        help="write /tmp/cmd-coverage.json and print coverage counts",
     )
     parser.add_argument(
         "--check",
@@ -276,14 +285,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(matrix, indent=2, ensure_ascii=False))
 
     if args.write:
-        md_path = ROOT / "docs/dev/命令覆盖率矩阵.md"
-        md_path.write_text(render_markdown(matrix), encoding="utf-8")
         json_path = Path("/tmp/cmd-coverage.json")
         json_path.write_text(
             json.dumps(matrix, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        print(f"wrote {md_path.relative_to(ROOT)}")
         print(f"wrote {json_path}")
         c = matrix["counts"]
         print(
