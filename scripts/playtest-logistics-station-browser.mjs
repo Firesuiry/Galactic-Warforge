@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from 'node:fs'
 process.env.SW_SERVER ??= 'http://127.0.0.1:19498';
 const unregister = register();
 const { dispatch } = await import('../client-cli/src/commands/index.ts');
-const api = await import('../client-cli/src/api.ts');api.setAuth('p1','key_player_1');
+const { api } = await import('../client-cli/src/api.ts');api.setAuth('p1','key_player_1');
 const web=process.env.SW_LOGISTICS_WEB??'http://127.0.0.1:4188',evidence=process.env.SW_LOGISTICS_EVIDENCE??'/tmp/sw-logistics-station-review';mkdirSync(evidence,{recursive:true});
 const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1680,height:1050}});page.setDefaultTimeout(30000);
 const errors=[],results={scenario:'Preconfigured research/materials and two loaded starting outposts; no injected logistics factories, vehicles, flights, or save state; 10 ticks/s flat face48 wind1'};
@@ -21,7 +21,7 @@ const runtime=(planet=planetId)=>api.fetchPlanetRuntime(planet);
 const at=(s,x,y)=>Object.values(s.buildings??{}).find(b=>b.position.x===x&&b.position.y===y);
 const stored=(b,id)=>(b?.logistics_station?.inventory?.[id]??0)+['inventory','input_buffer','output_buffer'].reduce((n,k)=>n+(b?.storage?.[k]?.[id]??0),0);
 async function commandResult(requestId,tick){let event;await expect.poll(async()=>{event=(await api.fetchEventSnapshot({event_types:['command_result'],since_tick:tick,limit:100})).events.find(e=>e.payload.request_id===requestId);return Boolean(event);},{timeout:15000}).toBe(true);expect(event.payload.code,JSON.stringify(event)).toBe('OK');return event;}
-async function cli(line){const before=await api.fetchHealth(),output=await dispatch(line,{currentPlayer:'p1'}),id=output.match(/request_id=([^\s]+)/)?.[1];expect(id,output).toBeTruthy();const event=await commandResult(id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;}
+async function cli(line){const before=await api.fetchHealth(),output=await dispatch(line,{api,currentPlayer:'p1'}),id=output.match(/request_id=([^\s]+)/)?.[1];expect(id,output).toBeTruthy();const event=await commandResult(id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;}
 async function uiCommand(action){const before=await api.fetchHealth(),response=page.waitForResponse(r=>r.url().endsWith('/commands')&&r.request().method()==='POST');const[r]=await Promise.all([response,action()]);expect(r.ok()).toBe(true);const accepted=await r.json();expect(accepted.accepted).toBe(true);const event=await commandResult(accepted.request_id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'browser',payload:r.request().postDataJSON(),event})+'\n');return event;}
 async function build(x,y,type,options='',allowNoPower=false){if(!at(await scene(),x,y))await cli(`build ${x} ${y} ${type} ${options}`.trim());await expect.poll(async()=>{const state=at(await scene(),x,y)?.runtime.state;return state==='running'||(allowNoPower&&state==='no_power');},{timeout:60000}).toBe(true);return at(await scene(),x,y);}
 let executorId;
@@ -46,7 +46,7 @@ async function observe(action){const samples=[];let stopped=false;const recordin
 async function switchPlanet(next){await cli(`scan_planet ${next}`);await cli(`switch_active_planet ${next}`);planetId=next;executorId=Object.values((await scene()).units).find(u=>u.owner_id==='p1'&&u.type==='executor').id;}
 const station=(r,id)=>r.logistics_stations.find(s=>s.building_id===id).state;
 const drones=(r,id)=>(r.logistics_drones??[]).filter(d=>d.station_id===id);
-async function save(){const output=await dispatch('save --reason real-logistics-playtest',{currentPlayer:'p1'});appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line:'save',output})+'\n');expect(output).toContain('Saved at tick');return output;}
+async function save(){const output=await dispatch('save --reason real-logistics-playtest',{api,currentPlayer:'p1'});appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line:'save',output})+'\n');expect(output).toContain('Saved at tick');return output;}
 async function screen(name){const dismiss=page.getByRole('button',{name:'全部忽略',exact:true});if(await dismiss.count())await dismiss.click();await page.screenshot({path:`${evidence}/${name}.png`,fullPage:true});}
 async function waitForDelivery(sourceId,count){await expect.poll(async()=>stored(at(await scene(),43,8),'iron_ingot'),{timeout:90000,intervals:[50,100,200]}).toBe(count);await expect.poll(async()=>drones(await runtime(),sourceId).every(d=>d.status==='idle'&&!d.returning),{timeout:30000,intervals:[50,100]}).toBe(true);}
 async function uiInstall(){const section=page.getByRole('region',{name:'物流站运行与接线',exact:true});await section.getByLabel('运输器类型',{exact:true}).selectOption('logistics_drone');await section.getByLabel('安装数量',{exact:true}).fill('1');return uiCommand(()=>section.getByRole('button',{name:'安装运输器',exact:true}).click());}

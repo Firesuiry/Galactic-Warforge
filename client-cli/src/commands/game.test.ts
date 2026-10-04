@@ -4,8 +4,13 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { GameSummary, NewGameRequest } from '../api.js';
-import { gameNewCommand, gameStatusCommand } from './game.js';
+import type { GameSummary, NewGameRequest } from '@gw/shared/game';
+
+import { gameNewCommand as runGameNew, gameStatusCommand } from './game.js';
+
+function gameNewCommand(args: string[], createNewGame: (req: NewGameRequest) => Promise<GameSummary>) {
+  return runGameNew(args, { createNewGame, setAuth: () => {} });
+}
 
 const sampleGame: GameSummary = {
   map_seed: 'seed-x',

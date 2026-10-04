@@ -2,12 +2,11 @@ import { createSseClient } from '@gw/shared/sse';
 import {
   ALL_EVENT_TYPES,
   DEFAULT_EVENT_TYPES,
-  SERVER_URL,
-  SSE_BUFFER_SIZE,
-  SSE_SILENT_EVENT_TYPES,
-  SSE_VERBOSE,
-} from './config.js';
-import type { SseEvent } from './types.js';
+  DEFAULT_SSE_SILENT_EVENT_TYPES,
+} from '@gw/shared/config';
+import type { SseEvent } from '@gw/shared/types';
+
+import { SERVER_URL, SSE_BUFFER_SIZE, SSE_VERBOSE } from './config.js';
 
 const sseClient = createSseClient({
   serverUrl: SERVER_URL,
@@ -29,7 +28,7 @@ export function startSSE(playerKey: string) {
     playerKey,
     eventTypes: SSE_VERBOSE ? [...ALL_EVENT_TYPES] : [...DEFAULT_EVENT_TYPES],
     onEvent: (event) => {
-      if (!SSE_VERBOSE && event.type === 'game' && SSE_SILENT_EVENT_TYPES.has(event.event.event_type)) {
+      if (!SSE_VERBOSE && event.type === 'game' && DEFAULT_SSE_SILENT_EVENT_TYPES.has(event.event.event_type)) {
         return;
       }
       onEventPrint?.(event);

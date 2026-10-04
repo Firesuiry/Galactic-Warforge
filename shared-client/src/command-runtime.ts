@@ -1,10 +1,9 @@
-import { createApiClient } from '@gw/shared/api';
-import { setAuth, setServerUrl } from './api.js';
-import { AGENT_ALLOWED_COMMANDS, getAllowedCommandsByCategories, getCommandCategory } from '@gw/shared/command-catalog';
+import { createApiClient, type ApiClient } from './api.js';
+import { AGENT_ALLOWED_COMMANDS, getAllowedCommandsByCategories, getCommandCategory } from './command-catalog.js';
 import { parseArgs, getStringOption } from './commands/args.js';
-import { dispatch } from './commands/index.js';
+import { dispatchCommand } from './commands/game-commands.js';
 
-export interface GameCliRuntimeContext {
+export interface AgentCommandRuntimeContext {
   currentPlayer: string;
   serverUrl: string;
   playerKey: string;
@@ -118,17 +117,9 @@ function extractExplicitPlanetIds(line: string, metadata: CommandScopeMetadata) 
 }
 
 async function loadMilitaryScope(
-  context: GameCliRuntimeContext,
+  api: ApiClient,
   military: AgentMilitaryCommandRuntimePolicy,
 ) {
-  const api = createApiClient({
-    serverUrl: context.serverUrl,
-    auth: {
-      playerId: context.currentPlayer,
-      playerKey: context.playerKey,
-    },
-  });
-
   const [theaterList, taskForceList] = await Promise.all([
     api.fetchWarTheaters(),
     api.fetchWarTaskForces(),
@@ -179,7 +170,7 @@ async function loadMilitaryScope(
 
 async function validateMilitaryCommand(
   metadata: CommandScopeMetadata,
-  context: GameCliRuntimeContext,
+  api: ApiClient,
   military: AgentMilitaryCommandRuntimePolicy | undefined,
 ) {
   if (!metadata.military) {
@@ -208,7 +199,7 @@ async function validateMilitaryCommand(
     throw new Error(`${metadata.commandName} exceeds military production limit`);
   }
 
-  const scope = await loadMilitaryScope(context, military);
+  const scope = await loadMilitaryScope(api, military);
   const disallowedTaskForce = metadata.taskForceIds.find((taskForceId) => !scope.taskForceIds.has(taskForceId));
   if (disallowedTaskForce) {
     throw new Error(`task force not allowed for agent: ${disallowedTaskForce}`);
@@ -233,7 +224,7 @@ export function getAgentAllowedCommands(policy?: AgentCommandRuntimePolicy) {
     : [...AGENT_ALLOWED_COMMANDS];
 }
 
-export async function runCommandLine(line: string, context: GameCliRuntimeContext, policy?: AgentCommandRuntimePolicy) {
+export async function runCommandLine(line: string, context: AgentCommandRuntimeContext, policy?: AgentCommandRuntimePolicy) {
   const metadata = parseCommandMetadata(line);
   const commandName = metadata.commandName;
   const allowedCommands = getAgentAllowedCommands(policy);
@@ -257,15 +248,18 @@ export async function runCommandLine(line: string, context: GameCliRuntimeContex
     }
   }
 
+  // 每次执行独立建客户端：网关并发跑多个智能体时互不串号
+  const api = createApiClient({
+    serverUrl: context.serverUrl,
+    auth: {
+      playerId: context.currentPlayer,
+      playerKey: context.playerKey,
+    },
+  });
+
   if (commandName !== 'help') {
-    await validateMilitaryCommand(metadata, context, policy?.military);
+    await validateMilitaryCommand(metadata, api, policy?.military);
   }
 
-  setServerUrl(context.serverUrl);
-  setAuth(context.currentPlayer, context.playerKey);
-
-  return dispatch(line, {
-    currentPlayer: context.currentPlayer,
-    rl: {} as never,
-  });
+  return dispatchCommand(line, { api });
 }

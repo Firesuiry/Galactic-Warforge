@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { getAgentAllowedCommands, runCommandLine } from '../../../client-cli/src/runtime.js';
+import { getAgentAllowedCommands, runCommandLine } from '@gw/shared/command-runtime';
 import { createDefaultPolicy, normalizePolicy } from '../runtime/agent-policy.js';
 import { runAgentLoop } from '../runtime/loop.js';
 import type { CanonicalAgentAction } from '../runtime/action-schema.js';
 import type { GatewayEvent } from '../runtime/events.js';
 import { appendMilitaryAuditSummary, buildMilitaryContextSections, filterCommandsByMilitaryPolicy } from '../runtime/military.js';
 import { classifyPublicTurnError } from '../runtime/provider-error.js';
-import { runProviderTurn, type AgentTurnRunner } from '../runtime/turn.js';
+import { runProviderTurn, type AgentTurnRunner } from '../runtime/provider-turn-runner.js';
 import { countsAsExecutedAction, resolveTurnOutcomeKind } from '../runtime/turn-validator.js';
 import type {
   AgentInstance,

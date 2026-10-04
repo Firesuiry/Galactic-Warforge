@@ -38,3 +38,12 @@ export async function listJsonFiles<T>(dir: string): Promise<T[]> {
   }
   return existingValues;
 }
+
+/** 以 `${id}.json` 逐条落盘的记录仓库（provider / agent / thread / conversation / schedule 共用）。 */
+export function createRecordStore<T extends { id: string }>(root: string) {
+  return {
+    list: () => listJsonFiles<T>(root),
+    get: (id: string) => readJsonFile<T>(root, `${id}.json`),
+    save: (record: T) => writeJsonFile(root, `${record.id}.json`, record),
+  };
+}

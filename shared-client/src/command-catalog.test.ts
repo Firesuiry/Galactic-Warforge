@@ -7,6 +7,7 @@ import {
   getAllowedCommandsByCategories,
   getCommandCategory,
 } from './command-catalog.js';
+import { GAME_COMMANDS } from './commands/game-commands.js';
 
 describe('agent command catalog', () => {
   it('derives public CLI command aliases from the public catalog', () => {
@@ -34,6 +35,12 @@ describe('agent command catalog', () => {
     }
     expect(getCommandCategory('briefing')).toBe('observe');
     expect(getCommandCategory('save')).toBe('management');
+  });
+
+  it('backs every agent-allowed command with a shared game command handler', () => {
+    for (const commandName of AGENT_ALLOWED_COMMANDS) {
+      expect(GAME_COMMANDS[commandName], `missing shared handler: ${commandName}`).toBeDefined();
+    }
   });
 
   it('filters allowed commands by permission category', () => {

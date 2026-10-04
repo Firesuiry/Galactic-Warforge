@@ -1,84 +1,21 @@
-import {
-  cmdScanGalaxy as apiScanGalaxy,
-  cmdScanSystem as apiScanSystem,
-  cmdScanPlanet as apiScanPlanet,
-  sendCommandRequest,
-  cmdBlockadePlanet as apiBlockadePlanet,
-  cmdBlueprintCreate as apiBlueprintCreate,
-  cmdBlueprintFinalize as apiBlueprintFinalize,
-  cmdBlueprintSetComponent as apiBlueprintSetComponent,
-  cmdBlueprintValidate as apiBlueprintValidate,
-  cmdBlueprintVariant as apiBlueprintVariant,
-  cmdBuild as apiBuild,
-  cmdMove as apiMove,
-  cmdUnitOrder as apiUnitOrder,
-  cmdAttack as apiAttack,
-  cmdProduce as apiProduce,
-  cmdUpgrade as apiUpgrade,
-  cmdDemolish as apiDemolish,
-  cmdConfigureLogisticsStation as apiConfigureLogisticsStation,
-  cmdInstallLogisticsVehicle as apiInstallLogisticsVehicle,
-  cmdConfigureLogisticsSlot as apiConfigureLogisticsSlot,
-  cmdCancelConstruction as apiCancelConstruction,
-  cmdRestoreConstruction as apiRestoreConstruction,
-  cmdStartResearch as apiStartResearch,
-  cmdCancelResearch as apiCancelResearch,
-  cmdCommissionFleet as apiCommissionFleet,
-  cmdDeploySquad as apiDeploySquad,
-  cmdFleetAssign as apiFleetAssign,
-  cmdFleetAttack as apiFleetAttack,
-  cmdFleetDisband as apiFleetDisband,
-  cmdFleetMove as apiFleetMove,
-  cmdTransferItem as apiTransferItem,
-  cmdRefuelMecha as apiRefuelMecha,
-  cmdMineResource as apiMineResource,
-  cmdCraftItem as apiCraftItem,
-  cmdCancelMechaJob as apiCancelMechaJob,
-  cmdSetRallyPoint as apiSetRallyPoint,
-  cmdFormSquad as apiFormSquad,
-  cmdSquadOrder as apiSquadOrder,
-  cmdDissolveSquad as apiDissolveSquad,
-  cmdConfigureSorter as apiConfigureSorter,
-  cmdConfigureSplitter as apiConfigureSplitter,
-  cmdConfigureTrafficMonitor as apiConfigureTrafficMonitor,
-  type SplitterConfig,
-  type CardinalDirection,
-
-  cmdSwitchActivePlanet as apiSwitchActivePlanet,
-  cmdSetRayReceiverMode as apiSetRayReceiverMode,
-  cmdSetEnergyExchangerMode as apiSetEnergyExchangerMode,
-  cmdSetRecipe as apiSetRecipe,
-  cmdQueueMilitaryProduction as apiQueueMilitaryProduction,
-  cmdRefitUnit as apiRefitUnit,
-  cmdTaskForceAssign as apiTaskForceAssign,
-  cmdTaskForceCreate as apiTaskForceCreate,
-  cmdTaskForceDeploy as apiTaskForceDeploy,
-  cmdTaskForceSetStance as apiTaskForceSetStance,
-  cmdTheaterCreate as apiTheaterCreate,
-  cmdTheaterDefineZone as apiTheaterDefineZone,
-  cmdTheaterSetObjective as apiTheaterSetObjective,
-  cmdLaunchRocket as apiLaunchRocket,
-  cmdLaunchSolarSail as apiLaunchSolarSail,
-  cmdBuildDysonNode as apiBuildDysonNode,
-  cmdBuildDysonFrame as apiBuildDysonFrame,
-  cmdBuildDysonShell as apiBuildDysonShell,
-  cmdDemolishDyson as apiDemolishDyson,
-  type GroundTaskForceOrder,
-  type OrbitalSupportMode,
-  type WarBlueprintState,
-  type WarTaskForceMemberKind,
-  type WarTaskForceStance,
-  type WarTheaterZoneType,
-  type FleetFormation,
-  type ConfigureLogisticsStationOptions,
-  type Direction,
-  type DysonComponentType,
-  type RayReceiverMode,
-  type EnergyExchangerMode,
-} from '../api.js';
-import { fetchCatalog } from '../api.js';
-import { fmtCommandResponse, fmtError } from '../format.js';
-import type { CommandRequest, Position } from '../types.js';
+import type { Direction, DysonComponentType, FleetFormation } from '../api.js';
+import type { CommandContext } from './game-commands.js';
+import { fmtCommandResponse, fmtError } from './format.js';
+import type {
+  CardinalDirection,
+  CommandRequest,
+  ConfigureLogisticsStationOptions,
+  EnergyExchangerMode,
+  GroundTaskForceOrder,
+  OrbitalSupportMode,
+  Position,
+  RayReceiverMode,
+  SplitterConfig,
+  WarBlueprintState,
+  WarTaskForceMemberKind,
+  WarTaskForceStance,
+  WarTheaterZoneType,
+} from '../types.js';
 import { getStringOption, parseArgs, parseIntegerArg, parseNumberArg } from './args.js';
 
 const DIRECTIONS = new Set<Direction>(['north', 'east', 'south', 'west', 'auto']);
@@ -161,40 +98,40 @@ function parseOptionalPosition(parsed: ReturnType<typeof parseArgs>): Position |
   return parsePosition(xRaw, yRaw, zRaw);
 }
 
-export async function cmdScanGalaxy(args: string[]): Promise<string> {
+export async function cmdScanGalaxy(args: string[], { api }: CommandContext): Promise<string> {
   const galaxyId = args[0] ?? 'galaxy-1';
   try {
-    return fmtCommandResponse(await apiScanGalaxy(galaxyId));
+    return fmtCommandResponse(await api.cmdScanGalaxy(galaxyId));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdScanSystem(args: string[]): Promise<string> {
+export async function cmdScanSystem(args: string[], { api }: CommandContext): Promise<string> {
   const systemId = args[0];
   if (!systemId) {
     return fmtError('Usage: scan_system <system_id>');
   }
   try {
-    return fmtCommandResponse(await apiScanSystem(systemId));
+    return fmtCommandResponse(await api.cmdScanSystem(systemId));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdScanPlanet(args: string[]): Promise<string> {
+export async function cmdScanPlanet(args: string[], { api }: CommandContext): Promise<string> {
   const planetId = args[0];
   if (!planetId) {
     return fmtError('Usage: scan_planet <planet_id>');
   }
   try {
-    return fmtCommandResponse(await apiScanPlanet(planetId));
+    return fmtCommandResponse(await api.cmdScanPlanet(planetId));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdRaw(args: string[]): Promise<string> {
+export async function cmdRaw(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: raw <json>');
   }
@@ -208,13 +145,13 @@ export async function cmdRaw(args: string[]): Promise<string> {
     if (!req.request_id || !req.issuer_type || !req.issuer_id || !Array.isArray(req.commands)) {
       return fmtError('Raw requires request_id, issuer_type, issuer_id, commands[]');
     }
-    return fmtCommandResponse(await sendCommandRequest(req));
+    return fmtCommandResponse(await api.sendCommandRequest(req));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdBuild(args: string[]): Promise<string> {
+export async function cmdBuild(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--rotation 0|90|180|270] [--approach] [--planet <planet_id>]');
@@ -232,7 +169,7 @@ export async function cmdBuild(args: string[]): Promise<string> {
     const rotationRaw = getStringOption(parsed, 'rotation');
     const rotation = rotationRaw === undefined ? undefined : requireInt(rotationRaw, 'rotation');
     if (rotation !== undefined && ![0, 90, 180, 270].includes(rotation)) return fmtError('rotation 必须是 0/90/180/270');
-    return fmtCommandResponse(await apiBuild(position, parsed.positionals[2], {
+    return fmtCommandResponse(await api.cmdBuild(position, parsed.positionals[2], {
       direction: direction as Direction | undefined,
       rotation: rotation as 0 | 90 | 180 | 270 | undefined,
       autoApproach: parsed.options.approach === true ? true : undefined,
@@ -244,7 +181,7 @@ export async function cmdBuild(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdMove(args: string[]): Promise<string> {
+export async function cmdMove(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: move <entity_id> <x> <y> [--z <z>] [--planet <planet_id>]');
@@ -255,7 +192,7 @@ export async function cmdMove(args: string[]): Promise<string> {
       parsed.positionals[2],
       getStringOption(parsed, 'z'),
     );
-    return fmtCommandResponse(await apiMove(parsed.positionals[0], position, getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdMove(parsed.positionals[0], position, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -263,7 +200,7 @@ export async function cmdMove(args: string[]): Promise<string> {
 
 const ORDER_KINDS = ['attack_move', 'patrol', 'guard', 'hold', 'follow', 'retreat', 'stop'] as const;
 
-export async function cmdOrder(args: string[]): Promise<string> {
+export async function cmdOrder(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: order <entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>] [--planet <planet_id>]');
@@ -294,61 +231,61 @@ export async function cmdOrder(args: string[]): Promise<string> {
       }
       options.targetEntityId = target;
     }
-    return fmtCommandResponse(await apiUnitOrder(selector, order, options));
+    return fmtCommandResponse(await api.cmdUnitOrder(selector, order, options));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdAttack(args: string[]): Promise<string> {
+export async function cmdAttack(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: attack <entity_id> <target_entity_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiAttack(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdAttack(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdProduce(args: string[]): Promise<string> {
+export async function cmdProduce(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: produce <entity_id> <unit_type> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiProduce(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdProduce(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdUpgrade(args: string[]): Promise<string> {
+export async function cmdUpgrade(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: upgrade <entity_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiUpgrade(parsed.positionals[0], getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdUpgrade(parsed.positionals[0], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdDemolish(args: string[]): Promise<string> {
+export async function cmdDemolish(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: demolish <entity_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiDemolish(parsed.positionals[0], getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdDemolish(parsed.positionals[0], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdConfigureLogisticsStation(args: string[]): Promise<string> {
+export async function cmdConfigureLogisticsStation(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 1) {
     return fmtError('Usage: configure_logistics_station <building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true|false>] [--warp-enabled <true|false>] [--ship-slots <n>] [--belt-ports west:input:iron_ore,east:output:copper_ore|none]');
@@ -397,13 +334,13 @@ export async function cmdConfigureLogisticsStation(args: string[]): Promise<stri
       }
     }
 
-    return fmtCommandResponse(await apiConfigureLogisticsStation(parsed.positionals[0], options));
+    return fmtCommandResponse(await api.cmdConfigureLogisticsStation(parsed.positionals[0], options));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdConfigureLogisticsSlot(args: string[]): Promise<string> {
+export async function cmdConfigureLogisticsSlot(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args), values = parsed.positionals;
   const remove = parsed.options.remove === true;
   if (args.includes('--help') || values.length !== (remove ? 3 : 5) || Object.keys(parsed.options).some(k => k !== 'remove') || (parsed.options.remove !== undefined && !remove)) {
@@ -412,7 +349,7 @@ export async function cmdConfigureLogisticsSlot(args: string[]): Promise<string>
   if (!LOGISTICS_SCOPES.has(values[1])) return fmtError('scope 必须是 planetary 或 interstellar');
   if (!remove && !LOGISTICS_MODES.has(values[3])) return fmtError('mode 必须是 none/supply/demand/both');
   try {
-    return fmtCommandResponse(await apiConfigureLogisticsSlot(values[0], {
+    return fmtCommandResponse(await api.cmdConfigureLogisticsSlot(values[0], {
       scope: values[1] as 'planetary' | 'interstellar', itemId: values[2],
       mode: remove ? 'none' : values[3] as 'none' | 'supply' | 'demand' | 'both',
       localStorage: remove ? 0 : requireInt(values[4], 'local_storage'), ...(remove ? { remove: true } : {}),
@@ -420,7 +357,7 @@ export async function cmdConfigureLogisticsSlot(args: string[]): Promise<string>
   } catch (e) { return fmtError(toErrorMessage(e)); }
 }
 
-export async function cmdInstallLogisticsVehicle(args: string[]): Promise<string> {
+export async function cmdInstallLogisticsVehicle(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args), values = parsed.positionals;
   if (args.includes('--help') || values.length !== 3 || Object.keys(parsed.options).some(k => k !== 'source')) return fmtError('Usage: install_logistics_vehicle <station_id> <logistics_drone|logistics_vessel> <quantity> [--source player|station]');
   if (!['logistics_drone', 'logistics_vessel'].includes(values[1])) return fmtError('item_id 必须为 logistics_drone 或 logistics_vessel');
@@ -428,67 +365,67 @@ export async function cmdInstallLogisticsVehicle(args: string[]): Promise<string
   if (source !== 'player' && source !== 'station') return fmtError('source 必须为 player 或 station');
   const quantity = Number(values[2]);
   if (!/^[1-9]\d*$/.test(values[2]) || !Number.isSafeInteger(quantity)) return fmtError('quantity 必须是正整数');
-  try { return fmtCommandResponse(await apiInstallLogisticsVehicle(values[0], values[1], quantity, source)); }
+  try { return fmtCommandResponse(await api.cmdInstallLogisticsVehicle(values[0], values[1], quantity, source)); }
   catch (e) { return fmtError(toErrorMessage(e)); }
 }
 
-export async function cmdCancelConstruction(args: string[]): Promise<string> {
+export async function cmdCancelConstruction(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: cancel_construction <task_id>');
   }
   try {
-    return fmtCommandResponse(await apiCancelConstruction(args[0]));
+    return fmtCommandResponse(await api.cmdCancelConstruction(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdRestoreConstruction(args: string[]): Promise<string> {
+export async function cmdRestoreConstruction(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: restore_construction <task_id>');
   }
   try {
-    return fmtCommandResponse(await apiRestoreConstruction(args[0]));
+    return fmtCommandResponse(await api.cmdRestoreConstruction(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdStartResearch(args: string[]): Promise<string> {
+export async function cmdStartResearch(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: start_research <tech_id>');
   }
   try {
-    return fmtCommandResponse(await apiStartResearch(args[0]));
+    return fmtCommandResponse(await api.cmdStartResearch(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdCancelResearch(args: string[]): Promise<string> {
+export async function cmdCancelResearch(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: cancel_research <tech_id>');
   }
   try {
-    return fmtCommandResponse(await apiCancelResearch(args[0]));
+    return fmtCommandResponse(await api.cmdCancelResearch(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdSetRecipe(args: string[]): Promise<string> {
+export async function cmdSetRecipe(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1 || parsed.positionals.length > 2) {
     return fmtError('Usage: set_recipe <entity_id> [recipe_id] [--planet <planet_id>]（省略 recipe_id 时研究站切回研究模式、生产建筑转为空闲）');
   }
   try {
-    return fmtCommandResponse(await apiSetRecipe(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdSetRecipe(parsed.positionals[0], parsed.positionals[1], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdSetEnergyExchangerMode(args: string[]): Promise<string> {
+export async function cmdSetEnergyExchangerMode(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: set_energy_exchanger_mode <building_id> <charge|discharge|standby> [--planet <planet_id>]');
@@ -497,20 +434,20 @@ export async function cmdSetEnergyExchangerMode(args: string[]): Promise<string>
     return fmtError('mode 必须是 charge/discharge/standby');
   }
   try {
-    return fmtCommandResponse(await apiSetEnergyExchangerMode(parsed.positionals[0], parsed.positionals[1] as EnergyExchangerMode, getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdSetEnergyExchangerMode(parsed.positionals[0], parsed.positionals[1] as EnergyExchangerMode, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdDeploySquad(args: string[]): Promise<string> {
+export async function cmdDeploySquad(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]');
   }
   try {
     const countRaw = getStringOption(parsed, 'count');
-    return fmtCommandResponse(await apiDeploySquad(parsed.positionals[0], parsed.positionals[1], {
+    return fmtCommandResponse(await api.cmdDeploySquad(parsed.positionals[0], parsed.positionals[1], {
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
       planetId: getStringOption(parsed, 'planet'),
     }));
@@ -519,13 +456,13 @@ export async function cmdDeploySquad(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdFormSquad(args: string[]): Promise<string> {
+export async function cmdFormSquad(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length < 1) {
     return fmtError('Usage: form_squad <entity_id...> [--name <name>] [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiFormSquad(parsed.positionals, getStringOption(parsed, 'name'), getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdFormSquad(parsed.positionals, getStringOption(parsed, 'name'), getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -533,7 +470,7 @@ export async function cmdFormSquad(args: string[]): Promise<string> {
 
 const SQUAD_ORDERS = ['attack', 'defend', 'retreat', 'resupply'] as const;
 
-export async function cmdSquadOrder(args: string[]): Promise<string> {
+export async function cmdSquadOrder(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   const [squadId, order, x, y] = parsed.positionals;
   const usage = 'Usage: squad_order <squad_id> <attack|defend|retreat|resupply> [<x> <y>] [--planet <planet_id>] (x y required except resupply)';
@@ -541,32 +478,32 @@ export async function cmdSquadOrder(args: string[]): Promise<string> {
   if (order === 'resupply' ? parsed.positionals.length !== 2 : parsed.positionals.length !== 4) return fmtError(usage);
   try {
     const position = order === 'resupply' ? undefined : { x: requireInt(x, 'x'), y: requireInt(y, 'y') };
-    return fmtCommandResponse(await apiSquadOrder(squadId, order as typeof SQUAD_ORDERS[number], position, getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdSquadOrder(squadId, order as typeof SQUAD_ORDERS[number], position, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdDissolveSquad(args: string[]): Promise<string> {
+export async function cmdDissolveSquad(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 1) {
     return fmtError('Usage: dissolve_squad <squad_id> [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiDissolveSquad(parsed.positionals[0], getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdDissolveSquad(parsed.positionals[0], getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdCommissionFleet(args: string[]): Promise<string> {
+export async function cmdCommissionFleet(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: commission_fleet <building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]');
   }
   try {
     const countRaw = getStringOption(parsed, 'count');
-    return fmtCommandResponse(await apiCommissionFleet(
+    return fmtCommandResponse(await api.cmdCommissionFleet(
       parsed.positionals[0],
       parsed.positionals[1],
       parsed.positionals[2],
@@ -580,7 +517,7 @@ export async function cmdCommissionFleet(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdFleetAssign(args: string[]): Promise<string> {
+export async function cmdFleetAssign(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 2) {
     return fmtError('Usage: fleet_assign <fleet_id> <line|vee|circle|wedge>');
   }
@@ -588,46 +525,46 @@ export async function cmdFleetAssign(args: string[]): Promise<string> {
     return fmtError('formation 必须是 line/vee/circle/wedge');
   }
   try {
-    return fmtCommandResponse(await apiFleetAssign(args[0], args[1] as FleetFormation));
+    return fmtCommandResponse(await api.cmdFleetAssign(args[0], args[1] as FleetFormation));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdFleetAttack(args: string[]): Promise<string> {
+export async function cmdFleetAttack(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 3) {
     return fmtError('Usage: fleet_attack <fleet_id> <planet_id> <target_id>');
   }
   try {
-    return fmtCommandResponse(await apiFleetAttack(args[0], args[1], args[2]));
+    return fmtCommandResponse(await api.cmdFleetAttack(args[0], args[1], args[2]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdFleetDisband(args: string[]): Promise<string> {
+export async function cmdFleetDisband(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: fleet_disband <fleet_id>');
   }
   try {
-    return fmtCommandResponse(await apiFleetDisband(args[0]));
+    return fmtCommandResponse(await api.cmdFleetDisband(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdFleetMove(args: string[]): Promise<string> {
+export async function cmdFleetMove(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 2) {
     return fmtError('Usage: fleet_move <fleet_id> <target_system_id>');
   }
   try {
-    return fmtCommandResponse(await apiFleetMove(args[0], args[1]));
+    return fmtCommandResponse(await api.cmdFleetMove(args[0], args[1]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdBlueprintCreate(args: string[]): Promise<string> {
+export async function cmdBlueprintCreate(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: blueprint_create <blueprint_id> <ground|space> [--name <name>] (--base-frame <base_frame_id> | --base-hull <base_hull_id>)');
@@ -644,7 +581,7 @@ export async function cmdBlueprintCreate(args: string[]): Promise<string> {
     return fmtError('blueprint_create 不能同时提供 --base-frame 和 --base-hull');
   }
   try {
-    return fmtCommandResponse(await apiBlueprintCreate(parsed.positionals[0], parsed.positionals[1], {
+    return fmtCommandResponse(await api.cmdBlueprintCreate(parsed.positionals[0], parsed.positionals[1], {
       name: getStringOption(parsed, 'name'),
       baseFrameId,
       baseHullId,
@@ -654,29 +591,29 @@ export async function cmdBlueprintCreate(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdBlueprintSetComponent(args: string[]): Promise<string> {
+export async function cmdBlueprintSetComponent(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 3) {
     return fmtError('Usage: blueprint_set_component <blueprint_id> <slot_id> <component_id>');
   }
   try {
-    return fmtCommandResponse(await apiBlueprintSetComponent(args[0], args[1], args[2]));
+    return fmtCommandResponse(await api.cmdBlueprintSetComponent(args[0], args[1], args[2]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdBlueprintValidate(args: string[]): Promise<string> {
+export async function cmdBlueprintValidate(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: blueprint_validate <blueprint_id>');
   }
   try {
-    return fmtCommandResponse(await apiBlueprintValidate(args[0]));
+    return fmtCommandResponse(await api.cmdBlueprintValidate(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdBlueprintFinalize(args: string[]): Promise<string> {
+export async function cmdBlueprintFinalize(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: blueprint_finalize <blueprint_id> [--target-state <state>]');
@@ -686,7 +623,7 @@ export async function cmdBlueprintFinalize(args: string[]): Promise<string> {
     return fmtError('target-state 必须是 draft/validated/prototype/field_tested/adopted/obsolete');
   }
   try {
-    return fmtCommandResponse(await apiBlueprintFinalize(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdBlueprintFinalize(parsed.positionals[0], {
       targetState: targetState as WarBlueprintState | undefined,
     }));
   } catch (e) {
@@ -694,13 +631,13 @@ export async function cmdBlueprintFinalize(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdBlueprintVariant(args: string[]): Promise<string> {
+export async function cmdBlueprintVariant(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: blueprint_variant <parent_blueprint_id> <blueprint_id> <allowed_slot_ids_csv> [--name <name>]');
   }
   try {
-    return fmtCommandResponse(await apiBlueprintVariant(
+    return fmtCommandResponse(await api.cmdBlueprintVariant(
       parsed.positionals[0],
       parsed.positionals[1],
       parseCSVList(parsed.positionals[2], 'allowed_slot_ids_csv'),
@@ -711,14 +648,14 @@ export async function cmdBlueprintVariant(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdQueueMilitaryProduction(args: string[]): Promise<string> {
+export async function cmdQueueMilitaryProduction(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: queue_military_production <building_id> <deployment_hub_id> <blueprint_id> [--count <n>]');
   }
   try {
     const countRaw = getStringOption(parsed, 'count');
-    return fmtCommandResponse(await apiQueueMilitaryProduction(
+    return fmtCommandResponse(await api.cmdQueueMilitaryProduction(
       parsed.positionals[0],
       parsed.positionals[1],
       parsed.positionals[2],
@@ -729,18 +666,18 @@ export async function cmdQueueMilitaryProduction(args: string[]): Promise<string
   }
 }
 
-export async function cmdRefitUnit(args: string[]): Promise<string> {
+export async function cmdRefitUnit(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 3) {
     return fmtError('Usage: refit_unit <building_id> <unit_id> <target_blueprint_id>');
   }
   try {
-    return fmtCommandResponse(await apiRefitUnit(args[0], args[1], args[2]));
+    return fmtCommandResponse(await api.cmdRefitUnit(args[0], args[1], args[2]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdRefuelMecha(args: string[]): Promise<string> {
+export async function cmdRefuelMecha(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: refuel_mecha <executor_id> <fuel_item_id> <quantity> [--planet <planet_id>]');
@@ -750,20 +687,20 @@ export async function cmdRefuelMecha(args: string[]): Promise<string> {
     return fmtError('quantity 必须是正整数');
   }
   try {
-    const catalog = await fetchCatalog();
+    const catalog = await api.fetchCatalog();
     const fuel = (catalog.items ?? []).find((entry) => entry.id === parsed.positionals[1]) as
       | ({ mecha_fuel_energy?: number })
       | undefined;
     if (!fuel || typeof fuel.mecha_fuel_energy !== 'number' || fuel.mecha_fuel_energy <= 0) {
       return fmtError(`fuel_item_id 不支持机甲燃料: ${parsed.positionals[1]}`);
     }
-    return fmtCommandResponse(await apiRefuelMecha(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdRefuelMecha(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdTaskForceCreate(args: string[]): Promise<string> {
+export async function cmdTaskForceCreate(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: task_force_create <task_force_id> [--name <name>] [--stance <stance>]');
@@ -773,7 +710,7 @@ export async function cmdTaskForceCreate(args: string[]): Promise<string> {
     return fmtError('stance 必须是 hold/patrol/escort/intercept/harass/siege/bombard/retreat_on_losses');
   }
   try {
-    return fmtCommandResponse(await apiTaskForceCreate(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdTaskForceCreate(parsed.positionals[0], {
       name: getStringOption(parsed, 'name'),
       stance: stance as WarTaskForceStance | undefined,
     }));
@@ -782,7 +719,7 @@ export async function cmdTaskForceCreate(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdTaskForceAssign(args: string[]): Promise<string> {
+export async function cmdTaskForceAssign(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: task_force_assign <task_force_id> <squad|fleet> <member_ids_csv> [--system <system_id>] [--planet <planet_id>]');
@@ -791,7 +728,7 @@ export async function cmdTaskForceAssign(args: string[]): Promise<string> {
     return fmtError('member_kind 必须是 squad 或 fleet');
   }
   try {
-    return fmtCommandResponse(await apiTaskForceAssign(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdTaskForceAssign(parsed.positionals[0], {
       memberKind: parsed.positionals[1] as WarTaskForceMemberKind,
       memberIds: parseCSVList(parsed.positionals[2], 'member_ids_csv'),
       systemId: getStringOption(parsed, 'system'),
@@ -802,7 +739,7 @@ export async function cmdTaskForceAssign(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdTaskForceSetStance(args: string[]): Promise<string> {
+export async function cmdTaskForceSetStance(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 2) {
     return fmtError('Usage: task_force_set_stance <task_force_id> <stance>');
   }
@@ -810,13 +747,13 @@ export async function cmdTaskForceSetStance(args: string[]): Promise<string> {
     return fmtError('stance 必须是 hold/patrol/escort/intercept/harass/siege/bombard/retreat_on_losses');
   }
   try {
-    return fmtCommandResponse(await apiTaskForceSetStance(args[0], args[1] as WarTaskForceStance));
+    return fmtCommandResponse(await api.cmdTaskForceSetStance(args[0], args[1] as WarTaskForceStance));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdTaskForceDeploy(args: string[]): Promise<string> {
+export async function cmdTaskForceDeploy(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: task_force_deploy <task_force_id> [--theater <theater_id>] [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y> [--z <z>]] [--frontline <frontline_id>] [--ground-order <order>] [--support-mode <mode>]');
@@ -841,7 +778,7 @@ export async function cmdTaskForceDeploy(args: string[]): Promise<string> {
     if (!hasTarget) {
       return fmtError('task_force_deploy 至少需要 --system/--planet/--x --y/--frontline/--ground-order 之一');
     }
-    return fmtCommandResponse(await apiTaskForceDeploy(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdTaskForceDeploy(parsed.positionals[0], {
       theaterId: getStringOption(parsed, 'theater'),
       systemId: getStringOption(parsed, 'system'),
       planetId: getStringOption(parsed, 'planet'),
@@ -855,13 +792,13 @@ export async function cmdTaskForceDeploy(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdTheaterCreate(args: string[]): Promise<string> {
+export async function cmdTheaterCreate(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: theater_create <theater_id> [--name <name>]');
   }
   try {
-    return fmtCommandResponse(await apiTheaterCreate(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdTheaterCreate(parsed.positionals[0], {
       name: getStringOption(parsed, 'name'),
     }));
   } catch (e) {
@@ -869,7 +806,7 @@ export async function cmdTheaterCreate(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdTheaterDefineZone(args: string[]): Promise<string> {
+export async function cmdTheaterDefineZone(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: theater_define_zone <theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y> [--z <z>]] [--radius <n>]');
@@ -879,7 +816,7 @@ export async function cmdTheaterDefineZone(args: string[]): Promise<string> {
   }
   try {
     const radiusRaw = getStringOption(parsed, 'radius');
-    return fmtCommandResponse(await apiTheaterDefineZone(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdTheaterDefineZone(parsed.positionals[0], {
       zoneType: parsed.positionals[1] as WarTheaterZoneType,
       systemId: getStringOption(parsed, 'system'),
       planetId: getStringOption(parsed, 'planet'),
@@ -891,13 +828,13 @@ export async function cmdTheaterDefineZone(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdTheaterSetObjective(args: string[]): Promise<string> {
+export async function cmdTheaterSetObjective(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: theater_set_objective <theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]');
   }
   try {
-    return fmtCommandResponse(await apiTheaterSetObjective(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdTheaterSetObjective(parsed.positionals[0], {
       objectiveType: parsed.positionals[1],
       systemId: getStringOption(parsed, 'system'),
       planetId: getStringOption(parsed, 'planet'),
@@ -909,19 +846,19 @@ export async function cmdTheaterSetObjective(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdBlockadePlanet(args: string[]): Promise<string> {
+export async function cmdBlockadePlanet(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 2) {
     return fmtError('Usage: blockade_planet <task_force_id> <planet_id>');
   }
   try {
-    return fmtCommandResponse(await apiBlockadePlanet(args[0], { planetId: args[1] }));
+    return fmtCommandResponse(await api.cmdBlockadePlanet(args[0], { planetId: args[1] }));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
 
-export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
+export async function cmdLaunchSolarSail(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 1) {
     return fmtError('Usage: launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]');
@@ -930,7 +867,7 @@ export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
     const countRaw = getStringOption(parsed, 'count');
     const orbitRadiusRaw = getStringOption(parsed, 'orbit-radius');
     const inclinationRaw = getStringOption(parsed, 'inclination');
-    return fmtCommandResponse(await apiLaunchSolarSail(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdLaunchSolarSail(parsed.positionals[0], {
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
       orbitRadius: orbitRadiusRaw !== undefined ? requireNumber(orbitRadiusRaw, 'orbit-radius') : undefined,
       inclination: inclinationRaw !== undefined ? requireNumber(inclinationRaw, 'inclination') : undefined,
@@ -941,13 +878,13 @@ export async function cmdLaunchSolarSail(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdTransfer(args: string[]): Promise<string> {
+export async function cmdTransfer(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
     return fmtError('Usage: transfer <building_id> <item_id> <quantity> [--take] [--planet <planet_id>]');
   }
   try {
-    return fmtCommandResponse(await apiTransferItem(
+    return fmtCommandResponse(await api.cmdTransferItem(
       parsed.positionals[0],
       parsed.positionals[1],
       requireInt(parsed.positionals[2], 'quantity'),
@@ -959,18 +896,18 @@ export async function cmdTransfer(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdSwitchActivePlanet(args: string[]): Promise<string> {
+export async function cmdSwitchActivePlanet(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 1) {
     return fmtError('Usage: switch_active_planet <planet_id>');
   }
   try {
-    return fmtCommandResponse(await apiSwitchActivePlanet(args[0]));
+    return fmtCommandResponse(await api.cmdSwitchActivePlanet(args[0]));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdSetRayReceiverMode(args: string[]): Promise<string> {
+export async function cmdSetRayReceiverMode(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: set_ray_receiver_mode <building_id> <power|photon|hybrid> [--planet <planet_id>]');
@@ -979,13 +916,13 @@ export async function cmdSetRayReceiverMode(args: string[]): Promise<string> {
     return fmtError('mode 必须是 power/photon/hybrid');
   }
   try {
-    return fmtCommandResponse(await apiSetRayReceiverMode(parsed.positionals[0], parsed.positionals[1] as RayReceiverMode, getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdSetRayReceiverMode(parsed.positionals[0], parsed.positionals[1] as RayReceiverMode, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
 }
 
-export async function cmdLaunchRocket(args: string[]): Promise<string> {
+export async function cmdLaunchRocket(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {
     return fmtError('Usage: launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]');
@@ -993,7 +930,7 @@ export async function cmdLaunchRocket(args: string[]): Promise<string> {
   try {
     const layerRaw = getStringOption(parsed, 'layer');
     const countRaw = getStringOption(parsed, 'count');
-    return fmtCommandResponse(await apiLaunchRocket(parsed.positionals[0], parsed.positionals[1], {
+    return fmtCommandResponse(await api.cmdLaunchRocket(parsed.positionals[0], parsed.positionals[1], {
       layerIndex: layerRaw !== undefined ? requireInt(layerRaw, 'layer') : undefined,
       count: countRaw !== undefined ? requireInt(countRaw, 'count') : undefined,
       planetId: getStringOption(parsed, 'planet'),
@@ -1003,14 +940,14 @@ export async function cmdLaunchRocket(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdBuildDysonNode(args: string[]): Promise<string> {
+export async function cmdBuildDysonNode(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 4) {
     return fmtError('Usage: build_dyson_node <system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]');
   }
   try {
     const orbitRadiusRaw = getStringOption(parsed, 'orbit-radius');
-    return fmtCommandResponse(await apiBuildDysonNode({
+    return fmtCommandResponse(await api.cmdBuildDysonNode({
       systemId: parsed.positionals[0],
       layerIndex: requireInt(parsed.positionals[1], 'layer_index'),
       latitude: requireNumber(parsed.positionals[2], 'latitude'),
@@ -1022,12 +959,12 @@ export async function cmdBuildDysonNode(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdBuildDysonFrame(args: string[]): Promise<string> {
+export async function cmdBuildDysonFrame(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 4) {
     return fmtError('Usage: build_dyson_frame <system_id> <layer_index> <node_a_id> <node_b_id>');
   }
   try {
-    return fmtCommandResponse(await apiBuildDysonFrame({
+    return fmtCommandResponse(await api.cmdBuildDysonFrame({
       systemId: args[0],
       layerIndex: requireInt(args[1], 'layer_index'),
       nodeAId: args[2],
@@ -1038,12 +975,12 @@ export async function cmdBuildDysonFrame(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdBuildDysonShell(args: string[]): Promise<string> {
+export async function cmdBuildDysonShell(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 5) {
     return fmtError('Usage: build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>');
   }
   try {
-    return fmtCommandResponse(await apiBuildDysonShell({
+    return fmtCommandResponse(await api.cmdBuildDysonShell({
       systemId: args[0],
       layerIndex: requireInt(args[1], 'layer_index'),
       latitudeMin: requireNumber(args[2], 'latitude_min'),
@@ -1055,7 +992,7 @@ export async function cmdBuildDysonShell(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdDemolishDyson(args: string[]): Promise<string> {
+export async function cmdDemolishDyson(args: string[], { api }: CommandContext): Promise<string> {
   if (args.length < 3) {
     return fmtError('Usage: demolish_dyson <system_id> <node|frame|shell> <component_id>');
   }
@@ -1063,7 +1000,7 @@ export async function cmdDemolishDyson(args: string[]): Promise<string> {
     return fmtError('component_type 必须是 node/frame/shell');
   }
   try {
-    return fmtCommandResponse(await apiDemolishDyson(
+    return fmtCommandResponse(await api.cmdDemolishDyson(
       args[0],
       args[1] as DysonComponentType,
       args[2],
@@ -1073,32 +1010,32 @@ export async function cmdDemolishDyson(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdMineResource(args: string[]): Promise<string> {
+export async function cmdMineResource(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 3) return fmtError('Usage: mine_resource <executor_id> <resource_id> <quantity> [--planet <planet_id>]');
   const quantity = parseIntegerArg(parsed.positionals[2]);
   if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
-  try { return fmtCommandResponse(await apiMineResource(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
+  try { return fmtCommandResponse(await api.cmdMineResource(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
-export async function cmdCraftItem(args: string[]): Promise<string> {
+export async function cmdCraftItem(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 3) return fmtError('Usage: craft_item <executor_id> <recipe_id> <quantity> [--planet <planet_id>]');
   const quantity = parseIntegerArg(parsed.positionals[2]);
   if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
-  try { return fmtCommandResponse(await apiCraftItem(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
+  try { return fmtCommandResponse(await api.cmdCraftItem(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
-export async function cmdCancelMechaJob(args: string[]): Promise<string> {
+export async function cmdCancelMechaJob(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 1) return fmtError('Usage: cancel_mecha_job <executor_id> [--planet <planet_id>]');
-  try { return fmtCommandResponse(await apiCancelMechaJob(parsed.positionals[0], getStringOption(parsed, 'planet'))); }
+  try { return fmtCommandResponse(await api.cmdCancelMechaJob(parsed.positionals[0], getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
-export async function cmdConfigureSplitter(args: string[]): Promise<string> {
+export async function cmdConfigureSplitter(args: string[], { api }: CommandContext): Promise<string> {
   const usage = 'Usage: configure_splitter <building_id> --inputs west --outputs east,south,north [--input-priority west] [--output-priority east] [--filters east:iron_ore,south:copper_ore]';
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 1) return fmtError(usage);
@@ -1129,11 +1066,11 @@ export async function cmdConfigureSplitter(args: string[]): Promise<string> {
       }
       config.output_filters![direction as CardinalDirection] = item.trim();
     }
-    return fmtCommandResponse(await apiConfigureSplitter(parsed.positionals[0], config));
+    return fmtCommandResponse(await api.cmdConfigureSplitter(parsed.positionals[0], config));
   } catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
-export async function cmdConfigureTrafficMonitor(args: string[]): Promise<string> {
+export async function cmdConfigureTrafficMonitor(args: string[], { api }: CommandContext): Promise<string> {
   const usage = 'Usage: configure_traffic_monitor <building_id> <belt_id|none> --window <1..600> --minimum <0..60> --alerts <on|off>';
   const parsed = parseArgs(args);
   if (args.includes('--help') || parsed.positionals.length !== 2) return fmtError(usage);
@@ -1148,14 +1085,14 @@ export async function cmdConfigureTrafficMonitor(args: string[]): Promise<string
     if (!/^\d+$/.test(window) || Number(window) < 1 || Number(window) > 600) throw new Error('window 必须为 1..600 整数');
     if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(minimum) || !Number.isFinite(Number(minimum)) || Number(minimum) > 60) throw new Error('minimum 必须为 0..60 数值');
     if (alerts !== 'on' && alerts !== 'off') throw new Error('alerts 必须为 on 或 off');
-    return fmtCommandResponse(await apiConfigureTrafficMonitor(parsed.positionals[0], {
+    return fmtCommandResponse(await api.cmdConfigureTrafficMonitor(parsed.positionals[0], {
       target_belt_id: parsed.positionals[1] === 'none' ? '' : parsed.positionals[1],
       window_ticks: Number(window), minimum_items_per_tick: Number(minimum), alerts_enabled: alerts === 'on',
     }));
   } catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
-export async function cmdConfigureSorter(args: string[]): Promise<string> {
+export async function cmdConfigureSorter(args: string[], { api }: CommandContext): Promise<string> {
  const parsed=parseArgs(args);
  const usage='Usage: configure_sorter <building_id> --inputs west --outputs east [--mode allow|deny] [--items iron_ore,copper_ore] [--planet <id>]';
  if(args.includes('--help') || parsed.positionals.length!==1) return fmtError(usage);
@@ -1172,12 +1109,12 @@ export async function cmdConfigureSorter(args: string[]): Promise<string> {
   const mode=getStringOption(parsed,'mode')??'allow';
   if(mode!=='allow'&&mode!=='deny')throw new Error('mode 必须为 allow 或 deny');
   const items=getStringOption(parsed,'items');
-  return fmtCommandResponse(await apiConfigureSorter(parsed.positionals[0],{input_directions:inputs,output_directions:outputs,filter_mode:mode,filter_items:items?parseCSVList(items,'items'):[]},getStringOption(parsed,'planet')));
+  return fmtCommandResponse(await api.cmdConfigureSorter(parsed.positionals[0],{input_directions:inputs,output_directions:outputs,filter_mode:mode,filter_items:items?parseCSVList(items,'items'):[]},getStringOption(parsed,'planet')));
  }catch(error){return fmtError(toErrorMessage(error));}
 }
 
-export async function cmdSetRallyPoint(args:string[]):Promise<string>{
+export async function cmdSetRallyPoint(args:string[], { api }: CommandContext):Promise<string>{
  const parsed=parseArgs(args);const [id,x,y]=parsed.positionals;
  if(args.includes('--help')||parsed.positionals.length!==3||!Number.isInteger(Number(x))||!Number.isInteger(Number(y)))return fmtError('Usage: set_rally_point <building_id> <x> <y> [--planet <id>]');
- try{return fmtCommandResponse(await apiSetRallyPoint(id,{x:Number(x),y:Number(y),z:0},getStringOption(parsed,'planet')));}catch(error){return fmtError(toErrorMessage(error));}
+ try{return fmtCommandResponse(await api.cmdSetRallyPoint(id,{x:Number(x),y:Number(y),z:0},getStringOption(parsed,'planet')));}catch(error){return fmtError(toErrorMessage(error));}
 }

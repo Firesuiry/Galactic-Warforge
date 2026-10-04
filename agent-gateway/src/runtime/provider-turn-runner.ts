@@ -1,4 +1,4 @@
-import { getAgentAllowedCommands } from '../../../client-cli/src/runtime.js';
+import { getAgentAllowedCommands } from '@gw/shared/command-runtime';
 import { runClaudeTurn } from '../providers/claude-cli.js';
 import { runCodexTurn } from '../providers/codex-cli.js';
 import { runOpenAICompatibleTurn } from '../providers/openai-compatible.js';
@@ -49,7 +49,7 @@ function buildPrompt(input: AgentTurnRunnerInput) {
   ].join('\n\n');
 }
 
-export const runProviderTurnPipeline: AgentTurnRunner = async (input) => {
+export const runProviderTurn: AgentTurnRunner = async (input) => {
   const prompt = buildPrompt(input);
 
   try {

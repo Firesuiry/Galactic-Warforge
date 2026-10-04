@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import path from 'node:path';
 
-import { getAgentAllowedCommands, runCommandLine } from '../../client-cli/src/runtime.js';
+import { getAgentAllowedCommands, runCommandLine } from '@gw/shared/command-runtime';
 import { ensureBuiltinMiniMaxProvider } from './bootstrap/minimax.js';
 import { exportBundle } from './export/bundle.js';
 import { handleAgentRoutes } from './routes/agents.js';
@@ -12,7 +12,7 @@ import { handleScheduleRoutes } from './routes/schedules.js';
 import { createDefaultPolicy, isSubsetWithin, normalizePolicy } from './runtime/agent-policy.js';
 import type { CanonicalAgentAction } from './runtime/action-schema.js';
 import { createEventBus } from './runtime/events.js';
-import { summarizeGameCommandAction } from './runtime/game-command-executor.js';
+import { summarizeGameCommandAction } from './runtime/game-command-schema.js';
 import { runAgentLoop } from './runtime/loop.js';
 import { appendMilitaryAuditSummary, buildMilitaryContextSections, filterCommandsByMilitaryPolicy } from './runtime/military.js';
 import {
@@ -23,15 +23,10 @@ import {
 } from './runtime/router.js';
 import { runDueSchedules } from './runtime/scheduler.js';
 import { classifyPublicTurnError } from './runtime/provider-error.js';
-import { runProviderTurn, type AgentTurnRunner } from './runtime/turn.js';
+import { runProviderTurn, type AgentTurnRunner } from './runtime/provider-turn-runner.js';
 import { countsAsExecutedAction, resolveTurnOutcomeKind } from './runtime/turn-validator.js';
-import { createAgentStore } from './store/agent-store.js';
-import { createConversationStore } from './store/conversation-store.js';
 import { createMessageStore } from './store/message-store.js';
-import { createProviderStore } from './store/provider-store.js';
-import { createScheduleStore } from './store/schedule-store.js';
 import { createSecretStore } from './store/secret-store.js';
-import { createThreadStore } from './store/thread-store.js';
 import { createTurnStore } from './store/turn-store.js';
 import type {
   AgentInstance,
@@ -42,8 +37,10 @@ import type {
   ConversationTurn,
   ConversationTurnActionSummary,
   GatewayCapabilities,
+  ModelProvider,
   ScheduleJob,
 } from '@gw/shared/agent-gateway';
+import { createRecordStore } from './store/file-store.js';
 
 export interface GatewayServerHandle {
   url: string;
@@ -113,13 +110,13 @@ function buildTurnErrorHint(code: string | undefined, rawMessage: string) {
 }
 
 export async function createGatewayServer(options: GatewayServerOptions): Promise<GatewayServerHandle> {
-  const providerStore = createProviderStore(path.join(options.dataRoot, 'providers'));
-  const agentStore = createAgentStore(path.join(options.dataRoot, 'agents'));
-  const threadStore = createThreadStore(path.join(options.dataRoot, 'threads'));
-  const conversationStore = createConversationStore(path.join(options.dataRoot, 'conversations'));
+  const providerStore = createRecordStore<ModelProvider>(path.join(options.dataRoot, 'providers'));
+  const agentStore = createRecordStore<AgentInstance>(path.join(options.dataRoot, 'agents'));
+  const threadStore = createRecordStore<AgentThread>(path.join(options.dataRoot, 'threads'));
+  const conversationStore = createRecordStore<Conversation>(path.join(options.dataRoot, 'conversations'));
   const messageStore = createMessageStore(path.join(options.dataRoot, 'messages'));
   const turnStore = createTurnStore(path.join(options.dataRoot, 'turns'));
-  const scheduleStore = createScheduleStore(path.join(options.dataRoot, 'schedules'));
+  const scheduleStore = createRecordStore<ScheduleJob>(path.join(options.dataRoot, 'schedules'));
   const secretStore = createSecretStore(path.join(options.dataRoot, 'secrets'));
   const eventBus = createEventBus();
   const agentTurnRunner = options.agentTurnRunner ?? runProviderTurn;

@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19496';
 const unregister = register();
 const { dispatch } = await import('../client-cli/src/commands/index.ts');
-const api = await import('../client-cli/src/api.ts');api.setAuth('p1','key_player_1');
+const { api } = await import('../client-cli/src/api.ts');api.setAuth('p1','key_player_1');
 const web=process.env.SW_ADVANCED_WEB??'http://127.0.0.1:4186',evidence=process.env.SW_ADVANCED_EVIDENCE??'/tmp/sw-advanced-processing-review';mkdirSync(evidence,{recursive:true});
 const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1680,height:1050}});page.setDefaultTimeout(30000);
 const errors=[],results={scenario:'Preconfigured advanced research/materials; flat face48 wind1 map; all factories built and loaded through player commands'};
@@ -20,7 +20,7 @@ const at=(s,x,y)=>Object.values(s.buildings??{}).find(b=>b.position.x===x&&b.pos
 const stored=(b,id)=>['inventory','input_buffer','output_buffer'].reduce((n,k)=>n+(b?.storage?.[k]?.[id]??0),0);
 const stackCount=(stacks,id)=>(stacks??[]).reduce((n,s)=>n+(s.item_id===id?s.quantity:0),0);
 async function commandResult(requestId,tick){let event;await expect.poll(async()=>{event=(await api.fetchEventSnapshot({event_types:['command_result'],since_tick:tick,limit:100})).events.find(e=>e.payload.request_id===requestId);return event?.payload.code;},{timeout:15000}).toBe('OK');return event;}
-async function cli(line){const before=await api.fetchHealth(),output=await dispatch(line,{currentPlayer:'p1'}),id=output.match(/request_id=([^\s]+)/)?.[1];expect(id,output).toBeTruthy();const event=await commandResult(id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;}
+async function cli(line){const before=await api.fetchHealth(),output=await dispatch(line,{api,currentPlayer:'p1'}),id=output.match(/request_id=([^\s]+)/)?.[1];expect(id,output).toBeTruthy();const event=await commandResult(id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;}
 async function uiCommand(action){const before=await api.fetchHealth(),response=page.waitForResponse(r=>r.url().endsWith('/commands')&&r.request().method()==='POST');const[r]=await Promise.all([response,action()]);expect(r.ok()).toBe(true);const accepted=await r.json();expect(accepted.accepted).toBe(true);const event=await commandResult(accepted.request_id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'browser',payload:r.request().postDataJSON(),event})+'\n');return event;}
 async function build(x,y,type,options='',allowNoPower=false){if(!at(await scene(),x,y))await cli(`build ${x} ${y} ${type} ${options}`.trim());await expect.poll(async()=>{const state=at(await scene(),x,y)?.runtime.state;return state==='running'||(allowNoPower&&state==='no_power');},{timeout:60000}).toBe(true);return at(await scene(),x,y);}
 let executorId;

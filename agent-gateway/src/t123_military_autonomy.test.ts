@@ -7,9 +7,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
-import { setAuth, setServerUrl } from '../../client-cli/src/api.js';
-import { dispatch } from '../../client-cli/src/commands/index.js';
 import type { AgentThread } from '@gw/shared/agent-gateway';
+import { createApiClient } from '@gw/shared/api';
+import { dispatchCommand } from '@gw/shared/commands/game-commands';
 
 import { createGatewayServer } from './server.js';
 
@@ -41,11 +41,11 @@ async function waitForHealth(url: string) {
 }
 
 async function runCli(line: string, context: { currentPlayer: string; playerKey: string }) {
-  setServerUrl(TEST_SERVER_URL);
-  setAuth(context.currentPlayer, context.playerKey);
-  return dispatch(line, {
-    currentPlayer: context.currentPlayer,
-    rl: {} as never,
+  return dispatchCommand(line, {
+    api: createApiClient({
+      serverUrl: TEST_SERVER_URL,
+      auth: { playerId: context.currentPlayer, playerKey: context.playerKey },
+    }),
   });
 }
 

@@ -1,11 +1,12 @@
 import readline from 'readline';
 import chalk from 'chalk';
-import { setAuth } from './api.js';
-import { startSSE, setEventPrinter } from './sse.js';
+import { fmtEvent } from '@gw/shared/commands/format';
+import { DEFAULT_PLAYERS } from '@gw/shared/config';
+
+import { api } from './api.js';
+import { SERVER_URL } from './config.js';
 import { startRepl } from './repl.js';
-import { fetchHealth } from './api.js';
-import { DEFAULT_PLAYERS, SERVER_URL } from './config.js';
-import { fmtEvent } from './format.js';
+import { startSSE, setEventPrinter } from './sse.js';
 
 function banner() {
   console.log(chalk.bold.cyan('╔════════════════════════════════╗'));
@@ -17,7 +18,7 @@ function banner() {
 
 async function checkServer(): Promise<boolean> {
   try {
-    const h = await fetchHealth();
+    const h = await api.fetchHealth();
     console.log(chalk.green(`✓ Server online`) + chalk.dim(`  status=${h.status}  tick=${h.tick}`));
     return true;
   } catch {
@@ -80,7 +81,7 @@ async function main() {
   }
 
   const player = await selectPlayer();
-  setAuth(player.id, player.key);
+  api.setAuth(player.id, player.key);
 
   console.log(chalk.green(`\nLogged in as ${player.id}. Type "help" for commands.\n`));
 

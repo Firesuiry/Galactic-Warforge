@@ -1,10 +1,8 @@
+import type { ApiClient } from '../api.js';
+import type { CommandContext } from './game-commands.js';
 import chalk from 'chalk';
-import {
-  fetchAudit, fetchEventSnapshot, fetchAlertSnapshot,
-  sendReplay, sendRollback, sendSave,
-} from '../api.js';
 import { ALL_EVENT_TYPES, DEFAULT_EVENT_TYPES } from '../config.js';
-import { fmtError } from '../format.js';
+import { fmtError } from './format.js';
 import { getStringOption, hasFlag, parseArgs, parseIntegerArg } from './args.js';
 
 function parseOptionalInteger(value: string | undefined, label: string): number | undefined {
@@ -28,7 +26,7 @@ function formatCursor(afterId: string | undefined, sinceTick: number | undefined
   return fallback;
 }
 
-export async function cmdAudit(args: string[]): Promise<string> {
+export async function cmdAudit(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
@@ -51,7 +49,7 @@ export async function cmdAudit(args: string[]): Promise<string> {
   try {
     const granted = getStringOption(parsed, 'granted');
     const order = getStringOption(parsed, 'order');
-    const result = await fetchAudit({
+    const result = await api.fetchAudit({
       player_id: getStringOption(parsed, 'player'),
       issuer_type: getStringOption(parsed, 'issuer-type'),
       issuer_id: getStringOption(parsed, 'issuer-id'),
@@ -92,7 +90,7 @@ export async function cmdAudit(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdEventSnapshot(args: string[]): Promise<string> {
+export async function cmdEventSnapshot(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
@@ -108,7 +106,7 @@ export async function cmdEventSnapshot(args: string[]): Promise<string> {
     const eventTypes = hasFlag(parsed, 'all')
       ? [...ALL_EVENT_TYPES]
       : (getStringOption(parsed, 'types')?.split(',').map(s => s.trim()).filter(Boolean) ?? [...DEFAULT_EVENT_TYPES]);
-    const result = await fetchEventSnapshot({
+    const result = await api.fetchEventSnapshot({
       event_types: eventTypes,
       after_event_id: getStringOption(parsed, 'after-id'),
       since_tick: parseOptionalInteger(getStringOption(parsed, 'since-tick'), 'since-tick'),
@@ -137,7 +135,7 @@ export async function cmdEventSnapshot(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdAlertSnapshot(args: string[]): Promise<string> {
+export async function cmdAlertSnapshot(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
@@ -148,7 +146,7 @@ export async function cmdAlertSnapshot(args: string[]): Promise<string> {
   }
 
   try {
-    const result = await fetchAlertSnapshot({
+    const result = await api.fetchAlertSnapshot({
       after_alert_id: getStringOption(parsed, 'after-id'),
       since_tick: parseOptionalInteger(getStringOption(parsed, 'since-tick'), 'since-tick'),
       limit: parseOptionalInteger(getStringOption(parsed, 'limit'), 'limit'),
@@ -183,7 +181,7 @@ export async function cmdAlertSnapshot(args: string[]): Promise<string> {
 
 export async function runSaveCommand(
   args: string[],
-  saveFn: typeof sendSave = sendSave,
+  saveFn: ApiClient['sendSave'],
 ): Promise<string> {
   const parsed = parseArgs(args);
 
@@ -206,11 +204,11 @@ export async function runSaveCommand(
   }
 }
 
-export async function cmdSave(args: string[]): Promise<string> {
-  return runSaveCommand(args);
+export async function cmdSave(args: string[], { api }: CommandContext): Promise<string> {
+  return runSaveCommand(args, api.sendSave);
 }
 
-export async function cmdReplay(args: string[]): Promise<string> {
+export async function cmdReplay(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
@@ -224,7 +222,7 @@ export async function cmdReplay(args: string[]): Promise<string> {
 
   try {
     const verify = getStringOption(parsed, 'verify');
-    const result = await sendReplay({
+    const result = await api.sendReplay({
       from_tick: parseOptionalInteger(getStringOption(parsed, 'from'), 'from'),
       to_tick: parseOptionalInteger(getStringOption(parsed, 'to'), 'to'),
       step: hasFlag(parsed, 'step'),
@@ -260,7 +258,7 @@ export async function cmdReplay(args: string[]): Promise<string> {
   }
 }
 
-export async function cmdRollback(args: string[]): Promise<string> {
+export async function cmdRollback(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
@@ -269,7 +267,7 @@ export async function cmdRollback(args: string[]): Promise<string> {
   }
 
   try {
-    const result = await sendRollback({
+    const result = await api.sendRollback({
       to_tick: parseOptionalInteger(getStringOption(parsed, 'to'), 'to'),
     });
 

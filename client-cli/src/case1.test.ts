@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, it } from 'node:test';
 
 import { createGatewayServer } from '../../agent-gateway/src/server.js';
-import { setAuth, setServerUrl } from './api.js';
+import { api } from './api.js';
 import { dispatch } from './commands/index.js';
 
 describe('case1 cli flow', () => {
@@ -135,8 +135,8 @@ describe('case1 cli flow', () => {
     servers.push(gateway);
 
     process.env.SW_AGENT_GATEWAY = gateway.url;
-    setServerUrl(servers[0]!.url);
-    setAuth('p1', 'key_player_1');
+    api.setServerUrl(servers[0]!.url);
+    api.setAuth('p1', 'key_player_1');
 
     const providerResponse = await fetch(`${gateway.url}/providers`, {
       method: 'POST',
@@ -165,7 +165,7 @@ describe('case1 cli flow', () => {
     });
     assert.equal(providerResponse.status, 201);
 
-    const context = { currentPlayer: 'p1', rl: {} as never };
+    const context = { api, currentPlayer: 'p1', rl: {} as never };
     const createOutput = await dispatch(
       'agent_create 李斯 --id agent-lisi --provider provider-case1 --role director --can-create-agents true --command-categories observe,build,combat,research,management --planet-ids planet-1-1',
       context,

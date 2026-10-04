@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
+import type { ModelProvider } from '@gw/shared/agent-gateway';
+
 import { createSecretStore } from '../store/secret-store.js';
-import { createProviderStore } from '../store/provider-store.js';
 import { ensureBuiltinMiniMaxProvider, extractMiniMaxApiKey } from './minimax.js';
+import { createRecordStore } from '../store/file-store.js';
 
 describe('minimax bootstrap', () => {
   it('extracts an api key from the current repo env note format', () => {
@@ -21,7 +23,7 @@ apikey:sk-demo-value`);
     const envFile = path.join(root, '.env');
     await writeFile(envFile, '1. minimax\napikey:sk-demo-value\n', 'utf8');
 
-    const providerStore = createProviderStore(path.join(root, 'providers'));
+    const providerStore = createRecordStore<ModelProvider>(path.join(root, 'providers'));
     const secretStore = createSecretStore(path.join(root, 'secrets'));
 
     await ensureBuiltinMiniMaxProvider({

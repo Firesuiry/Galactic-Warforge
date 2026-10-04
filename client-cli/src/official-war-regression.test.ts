@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
-import { setAuth, setServerUrl } from './api.js';
+import { api } from './api.js';
 import { dispatch } from './commands/index.js';
 
 const TEST_PORT = 19482;
@@ -48,9 +48,10 @@ async function waitForOutput(commandLine: string, pattern: RegExp, context: { cu
 }
 
 async function runCli(line: string, context: { currentPlayer: string; playerKey: string }) {
-  setServerUrl(TEST_SERVER_URL);
-  setAuth(context.currentPlayer, context.playerKey);
+  api.setServerUrl(TEST_SERVER_URL);
+  api.setAuth(context.currentPlayer, context.playerKey);
   return dispatch(line, {
+    api,
     currentPlayer: context.currentPlayer,
     rl: {} as never,
   });

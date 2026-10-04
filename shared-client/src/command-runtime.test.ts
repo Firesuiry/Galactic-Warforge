@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 
-import { getAgentAllowedCommands, runCommandLine } from './runtime.js';
+import { getAgentAllowedCommands, runCommandLine } from './command-runtime.js';
 
 describe('game cli runtime', () => {
   it('lists command metadata for agent whitelist', () => {

@@ -2,18 +2,20 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { COMMANDS, dispatch } from './index.js';
-import { cmdHelp } from './util.js';
+import { cmdHelp } from '@gw/shared/commands/help';
+
+import { api } from '../api.js';
 
 describe('save command registration', () => {
   it('registers save in command table', async () => {
     assert.ok(COMMANDS.save);
 
-    const out = await dispatch('save --help', { currentPlayer: 'p1', rl: {} });
+    const out = await dispatch('save --help', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(out, /save \[--reason <text>\]/);
   });
 
   it('shows dedicated help for save', async () => {
-    const out = await cmdHelp(['save']);
+    const out = await cmdHelp(['save'], { api });
     assert.match(out, /^save /);
     assert.match(out, /manual save/i);
   });
@@ -25,10 +27,10 @@ describe('logistics command registration', () => {
     assert.ok(COMMANDS.configure_logistics_station);
     assert.ok(COMMANDS.configure_logistics_slot);
 
-    const stationHelp = await dispatch('help configure_logistics_station', { currentPlayer: 'p1', rl: {} });
+    const stationHelp = await dispatch('help configure_logistics_station', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(stationHelp, /configure_logistics_station <building_id>/);
 
-    const slotHelp = await dispatch('help configure_logistics_slot', { currentPlayer: 'p1', rl: {} });
+    const slotHelp = await dispatch('help configure_logistics_slot', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(slotHelp, /configure_logistics_slot <building_id> <planetary\|interstellar>/);
   });
 });
@@ -37,7 +39,7 @@ describe('rocket command registration', () => {
   it('registers launch_rocket in command table', async () => {
     assert.ok(COMMANDS.launch_rocket);
 
-    const help = await dispatch('help launch_rocket', { currentPlayer: 'p1', rl: {} });
+    const help = await dispatch('help launch_rocket', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(help, /launch_rocket <building_id> <system_id>/);
   });
 });
@@ -46,7 +48,7 @@ describe('transfer command registration', () => {
   it('registers transfer in command table', async () => {
     assert.ok(COMMANDS.transfer);
 
-    const help = await dispatch('help transfer', { currentPlayer: 'p1', rl: {} });
+    const help = await dispatch('help transfer', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(help, /transfer <building_id> <item_id> <quantity>/);
   });
 });
@@ -54,14 +56,14 @@ describe('transfer command registration', () => {
 describe('mecha refuel command registration', () => {
   it('registers refuel_mecha and exposes its fuel arguments', async () => {
     assert.ok(COMMANDS.refuel_mecha);
-    const help = await dispatch('help refuel_mecha', { currentPlayer: 'p1', rl: {} });
+    const help = await dispatch('help refuel_mecha', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(help, /refuel_mecha <executor_id> <fuel_item_id> <quantity>/);
   });
 });
 
 describe('T101 produce help boundary', () => {
   it('does not hardcode worker/soldier in produce help', async () => {
-    const help = await dispatch('help produce', { currentPlayer: 'p1', rl: {} });
+    const help = await dispatch('help produce', { api, currentPlayer: 'p1', rl: {} as never });
     assert.doesNotMatch(help, /worker\/soldier/);
     assert.match(help, /server/i);
     assert.doesNotMatch(help, /corvette|destroyer|precision_drone|prototype/);
@@ -73,10 +75,10 @@ describe('multi-planet command registration', () => {
     assert.ok(COMMANDS.switch_active_planet);
     assert.ok(COMMANDS.set_ray_receiver_mode);
 
-    const switchHelp = await dispatch('help switch_active_planet', { currentPlayer: 'p1', rl: {} });
+    const switchHelp = await dispatch('help switch_active_planet', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(switchHelp, /switch_active_planet <planet_id>/);
 
-    const rayHelp = await dispatch('help set_ray_receiver_mode', { currentPlayer: 'p1', rl: {} });
+    const rayHelp = await dispatch('help set_ray_receiver_mode', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(rayHelp, /set_ray_receiver_mode <building_id> <power\|photon\|hybrid>/);
   });
 });
@@ -89,10 +91,10 @@ describe('agent gateway command registration', () => {
     assert.ok(COMMANDS.agent_message);
     assert.ok(COMMANDS.agent_thread);
 
-    const createHelp = await dispatch('help agent_create', { currentPlayer: 'p1', rl: {} });
+    const createHelp = await dispatch('help agent_create', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(createHelp, /agent_create <name> --provider <provider_id>/);
 
-    const messageHelp = await dispatch('help agent_message', { currentPlayer: 'p1', rl: {} });
+    const messageHelp = await dispatch('help agent_message', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(messageHelp, /agent_message <agent_id> <content>/);
   });
 });
@@ -108,13 +110,13 @@ describe('fleet command registration', () => {
     assert.ok(COMMANDS.fleet_status);
     assert.ok(COMMANDS.system_runtime);
 
-    const deployHelp = await dispatch('help deploy_squad', { currentPlayer: 'p1', rl: {} });
+    const deployHelp = await dispatch('help deploy_squad', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(deployHelp, /deploy_squad <building_id> <blueprint_id>/);
 
-    const fleetHelp = await dispatch('help fleet_status', { currentPlayer: 'p1', rl: {} });
+    const fleetHelp = await dispatch('help fleet_status', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(fleetHelp, /fleet_status \[fleet_id\]/);
 
-    const systemRuntimeHelp = await dispatch('help system_runtime', { currentPlayer: 'p1', rl: {} });
+    const systemRuntimeHelp = await dispatch('help system_runtime', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(systemRuntimeHelp, /system_runtime \[system_id\]/);
   });
 });
@@ -127,13 +129,13 @@ describe('warfare command registration', () => {
     assert.ok(COMMANDS.task_forces);
     assert.ok(COMMANDS.theaters);
 
-    const runtimeHelp = await dispatch('help planet_runtime', { currentPlayer: 'p1', rl: {} });
+    const runtimeHelp = await dispatch('help planet_runtime', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(runtimeHelp, /planet_runtime \[planet_id\]/);
 
-    const blueprintHelp = await dispatch('help blueprints', { currentPlayer: 'p1', rl: {} });
+    const blueprintHelp = await dispatch('help blueprints', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(blueprintHelp, /blueprints \[blueprint_id\]/);
 
-    const industryHelp = await dispatch('help war_industry', { currentPlayer: 'p1', rl: {} });
+    const industryHelp = await dispatch('help war_industry', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(industryHelp, /war_industry/);
   });
 
@@ -154,10 +156,10 @@ describe('warfare command registration', () => {
     assert.ok(COMMANDS.theater_set_objective);
     assert.ok(COMMANDS.blockade_planet);
 
-    const taskForceHelp = await dispatch('help task_force_create', { currentPlayer: 'p1', rl: {} });
+    const taskForceHelp = await dispatch('help task_force_create', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(taskForceHelp, /task_force_create <task_force_id>/);
 
-    const blockadeHelp = await dispatch('help blockade_planet', { currentPlayer: 'p1', rl: {} });
+    const blockadeHelp = await dispatch('help blockade_planet', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(blockadeHelp, /blockade_planet <task_force_id> <planet_id>/);
   });
 });
@@ -172,14 +174,14 @@ describe('personal mecha job help and registration', () => {
     it(`${name} exposes dedicated help and --help without submitting commands`, async () => {
       assert.equal(typeof COMMANDS[name]?.handler, 'function');
       for (const command of [`help ${name}`, `${name} --help`]) {
-        const out = await dispatch(command, { currentPlayer: 'p1', rl: {} });
+        const out = await dispatch(command, { api, currentPlayer: 'p1', rl: {} as never });
         assert.ok(out.includes(usage), out);
         assert.doesNotMatch(out, /missing authenticated player_id/);
       }
     });
   }
   it('craft help explains that quantity counts recipe batches', async () => {
-    assert.match(await cmdHelp(['craft_item']), /批数/);
+    assert.match(await cmdHelp(['craft_item'], { api }), /批数/);
   });
 });
 
@@ -187,7 +189,7 @@ describe('personal mecha job help and registration', () => {
 describe('splitter public command', () => {
   it('registers and documents full port configuration', async () => {
     assert.ok(COMMANDS.configure_splitter);
-    const help = await dispatch('help configure_splitter', { currentPlayer: 'p1', rl: {} });
+    const help = await dispatch('help configure_splitter', { api, currentPlayer: 'p1', rl: {} as never });
     for (const option of ['--inputs', '--outputs', '--input-priority', '--output-priority', '--filters']) assert.ok(help.includes(option));
   });
 });

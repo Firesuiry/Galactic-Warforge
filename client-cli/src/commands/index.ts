@@ -1,87 +1,6 @@
-import {
-  cmdBlueprints,
-  cmdFleetStatus,
-  cmdGalaxy,
-  cmdHealth,
-  cmdInspect,
-  cmdMetrics,
-  cmdPlanet,
-  cmdPlanetRuntime,
-  cmdScene,
-  cmdStats,
-  cmdSummary,
-  cmdBriefing,
-  cmdCatalogCommands,
-  cmdSystem,
-  cmdSystemRuntime,
-  cmdTaskForces,
-  cmdTheaters,
-  cmdWarIndustry,
-} from './query.js';
-import {
-  cmdScanGalaxy,
-  cmdScanSystem,
-  cmdScanPlanet,
-  cmdRaw,
-  cmdBlockadePlanet,
-  cmdBlueprintCreate,
-  cmdBlueprintFinalize,
-  cmdBlueprintSetComponent,
-  cmdBlueprintValidate,
-  cmdBlueprintVariant,
-  cmdBuild,
-  cmdMove,
-  cmdAttack,
-  cmdOrder,
-  cmdProduce,
-  cmdUpgrade,
-  cmdDemolish,
-  cmdConfigureLogisticsStation,
-  cmdInstallLogisticsVehicle,
-  cmdConfigureLogisticsSlot,
-  cmdCancelConstruction,
-  cmdRestoreConstruction,
-  cmdStartResearch,
-  cmdCancelResearch,
-  cmdSetRecipe,
-  cmdSetEnergyExchangerMode,
-  cmdCommissionFleet,
-  cmdDeploySquad,
-  cmdFleetAssign,
-  cmdFleetAttack,
-  cmdFleetDisband,
-  cmdFleetMove,
-  cmdQueueMilitaryProduction,
-  cmdRefitUnit,
-  cmdTaskForceAssign,
-  cmdTaskForceCreate,
-  cmdTaskForceDeploy,
-  cmdTaskForceSetStance,
-  cmdTheaterCreate,
-  cmdTheaterDefineZone,
-  cmdTheaterSetObjective,
-  cmdTransfer,
-  cmdRefuelMecha,
-  cmdMineResource,
-  cmdCraftItem,
-  cmdCancelMechaJob,
-  cmdSetRallyPoint,
-  cmdFormSquad,
-  cmdSquadOrder,
-  cmdDissolveSquad,
-  cmdConfigureSorter,
-  cmdConfigureSplitter,
-  cmdConfigureTrafficMonitor,
+import { GAME_COMMANDS, dispatchCommand, type CommandEntry } from '@gw/shared/commands/game-commands';
 
-  cmdSwitchActivePlanet,
-  cmdSetRayReceiverMode,
-  cmdLaunchRocket,
-  cmdLaunchSolarSail,
-  cmdBuildDysonNode,
-  cmdBuildDysonFrame,
-  cmdBuildDysonShell,
-  cmdDemolishDyson,
-} from './action.js';
+import type { ReplContext } from '../repl.js';
 import {
   cmdAgentCreate,
   cmdAgentList,
@@ -89,122 +8,22 @@ import {
   cmdAgentThread,
   cmdAgentUpdate,
 } from './agent.js';
-import { cmdSwitch, cmdFog, cmdEvents, cmdStatus, cmdHelp } from './util.js';
-import { cmdAudit, cmdEventSnapshot, cmdAlertSnapshot, cmdSave, cmdReplay, cmdRollback } from './debug.js';
 import { cmdGameNew, cmdGameStatus } from './game.js';
-import type { ReplContext } from '../types.js';
-import { configureDistributor, installBot, uninstallBot, configureMechaLogistics } from './distributor.js';
+import { cmdEvents, cmdStatus, cmdSwitch } from './util.js';
 
-export type CommandHandler = (args: string[], ctx: ReplContext) => Promise<string> | string;
-
-export interface CommandEntry {
-  handler: CommandHandler;
-  completions?: string[];
-}
-
-export const COMMANDS: Record<string, CommandEntry> = {
-  configure_distributor: { handler: configureDistributor },
-  install_logistics_bot: { handler: installBot },
-  uninstall_logistics_bot: { handler: uninstallBot },
-  configure_mecha_logistics: { handler: configureMechaLogistics },
-  health: { handler: cmdHealth },
-  metrics: { handler: cmdMetrics },
-  summary: { handler: cmdSummary },
-  stats: { handler: cmdStats },
-  briefing: { handler: cmdBriefing },
-  catalog_commands: { handler: cmdCatalogCommands },
-  galaxy: { handler: cmdGalaxy },
-  system: { handler: cmdSystem },
-  system_runtime: { handler: cmdSystemRuntime },
-  planet: { handler: cmdPlanet },
-  planet_runtime: { handler: cmdPlanetRuntime },
-  blueprints: { handler: cmdBlueprints },
-  war_industry: { handler: cmdWarIndustry },
-  task_forces: { handler: cmdTaskForces },
-  theaters: { handler: cmdTheaters },
-  scene: { handler: cmdScene },
-  inspect: { handler: cmdInspect },
-  fleet_status: { handler: cmdFleetStatus },
-  fog: { handler: cmdFog },
-  scan_galaxy: { handler: cmdScanGalaxy },
-  scan_system: { handler: cmdScanSystem },
-  scan_planet: { handler: cmdScanPlanet },
-  build: { handler: cmdBuild },
-  move: { handler: cmdMove },
-  attack: { handler: cmdAttack },
-  order: { handler: cmdOrder },
-  produce: { handler: cmdProduce },
-  upgrade: { handler: cmdUpgrade },
-  demolish: { handler: cmdDemolish },
-  configure_logistics_station: { handler: cmdConfigureLogisticsStation },
-  install_logistics_vehicle: { handler: cmdInstallLogisticsVehicle },
-  configure_logistics_slot: { handler: cmdConfigureLogisticsSlot },
-  cancel_construction: { handler: cmdCancelConstruction },
-  restore_construction: { handler: cmdRestoreConstruction },
-  start_research: { handler: cmdStartResearch },
-  cancel_research: { handler: cmdCancelResearch },
-  set_recipe: { handler: cmdSetRecipe },
-  set_energy_exchanger_mode: { handler: cmdSetEnergyExchangerMode },
-  blueprint_create: { handler: cmdBlueprintCreate },
-  blueprint_set_component: { handler: cmdBlueprintSetComponent },
-  blueprint_validate: { handler: cmdBlueprintValidate },
-  blueprint_finalize: { handler: cmdBlueprintFinalize },
-  blueprint_variant: { handler: cmdBlueprintVariant },
-  queue_military_production: { handler: cmdQueueMilitaryProduction },
-  refit_unit: { handler: cmdRefitUnit },
-  deploy_squad: { handler: cmdDeploySquad },
-  form_squad: { handler: cmdFormSquad },
-  squad_order: { handler: cmdSquadOrder },
-  dissolve_squad: { handler: cmdDissolveSquad },
-  commission_fleet: { handler: cmdCommissionFleet },
-  fleet_assign: { handler: cmdFleetAssign },
-  fleet_attack: { handler: cmdFleetAttack },
-  fleet_disband: { handler: cmdFleetDisband },
-  fleet_move: { handler: cmdFleetMove },
-  task_force_create: { handler: cmdTaskForceCreate },
-  task_force_assign: { handler: cmdTaskForceAssign },
-  task_force_set_stance: { handler: cmdTaskForceSetStance },
-  task_force_deploy: { handler: cmdTaskForceDeploy },
-  theater_create: { handler: cmdTheaterCreate },
-  theater_define_zone: { handler: cmdTheaterDefineZone },
-  theater_set_objective: { handler: cmdTheaterSetObjective },
-  blockade_planet: { handler: cmdBlockadePlanet },
-  transfer: { handler: cmdTransfer },
-  refuel_mecha: { handler: cmdRefuelMecha },
-  mine_resource: { handler: cmdMineResource },
-  craft_item: { handler: cmdCraftItem },
-  cancel_mecha_job: { handler: cmdCancelMechaJob },
-  set_rally_point: {handler:cmdSetRallyPoint},
-  configure_sorter: { handler: cmdConfigureSorter },
-  configure_splitter: { handler: cmdConfigureSplitter },
-  configure_traffic_monitor: { handler: cmdConfigureTrafficMonitor },
-
-  switch_active_planet: { handler: cmdSwitchActivePlanet },
-  set_ray_receiver_mode: { handler: cmdSetRayReceiverMode },
-  launch_rocket: { handler: cmdLaunchRocket },
-  launch_solar_sail: { handler: cmdLaunchSolarSail },
-  build_dyson_node: { handler: cmdBuildDysonNode },
-  build_dyson_frame: { handler: cmdBuildDysonFrame },
-  build_dyson_shell: { handler: cmdBuildDysonShell },
-  demolish_dyson: { handler: cmdDemolishDyson },
+/** CLI 命令表 = 共享游戏命令 + 终端会话 / 网关管理 / 开局命令。 */
+export const COMMANDS: Record<string, CommandEntry<ReplContext>> = {
+  ...GAME_COMMANDS,
   agent_list: { handler: cmdAgentList },
   agent_create: { handler: cmdAgentCreate },
   agent_update: { handler: cmdAgentUpdate },
   agent_message: { handler: cmdAgentMessage },
   agent_thread: { handler: cmdAgentThread },
-  raw: { handler: cmdRaw },
   switch: { handler: cmdSwitch },
   events: { handler: cmdEvents },
   status: { handler: cmdStatus },
-  audit: { handler: cmdAudit },
-  event_snapshot: { handler: cmdEventSnapshot },
-  alert_snapshot: { handler: cmdAlertSnapshot },
-  save: { handler: cmdSave },
   game_new: { handler: cmdGameNew },
   game_status: { handler: cmdGameStatus },
-  replay: { handler: cmdReplay },
-  rollback: { handler: cmdRollback },
-  help: { handler: cmdHelp, completions: [] },
   clear: { handler: () => { process.stdout.write('\x1Bc'); return ''; } },
   quit: { handler: () => { process.exit(0); return ''; } },
   exit: { handler: () => { process.exit(0); return ''; } },
@@ -214,15 +33,6 @@ export function getCommandNames(): string[] {
   return Object.keys(COMMANDS);
 }
 
-export async function dispatch(line: string, ctx: ReplContext): Promise<string> {
-  const parts = line.trim().split(/\s+/);
-  const name = parts[0].toLowerCase();
-  const args = parts.slice(1);
-
-  const entry = COMMANDS[name];
-  if (!entry) {
-    return `Unknown command: "${name}". Type "help" for commands.`;
-  }
-
-  return entry.handler(args, ctx);
+export function dispatch(line: string, ctx: ReplContext): Promise<string> {
+  return dispatchCommand(line, ctx, COMMANDS);
 }

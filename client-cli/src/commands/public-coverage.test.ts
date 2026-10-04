@@ -6,15 +6,15 @@ import { fileURLToPath } from 'node:url';
 
 import { PUBLIC_COMMAND_DEFINITIONS } from '@gw/shared/command-catalog';
 
-import { setAuth } from '../api.js';
-import { fmtSummary } from '../format.js';
+import { api } from '../api.js';
+import { fmtSummary } from '@gw/shared/commands/format';
 import { COMMANDS, dispatch } from './index.js';
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  setAuth('', '');
+  api.setAuth('', '');
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -31,7 +31,7 @@ describe('public command CLI coverage', () => {
       assert.ok(definition.cliCommandName, `public command ${definition.id} missing CLI verb`);
       const name = definition.cliCommandName as string;
       assert.equal(typeof COMMANDS[name]?.handler, 'function', `CLI missing named handler for ${definition.id} as ${name}`);
-      const help = await dispatch(`help ${name}`, { currentPlayer: 'p1', rl: {} });
+      const help = await dispatch(`help ${name}`, { api, currentPlayer: 'p1', rl: {} as never });
       assert.doesNotMatch(help, /Unknown command/, help);
       assert.match(help, new RegExp(name));
     }
@@ -60,11 +60,11 @@ describe('public command CLI coverage', () => {
         results: [{ command_index: 0, status: 'accepted', code: 'OK', message: 'ok' }],
       });
     }) as typeof fetch;
-    setAuth('p1', 'key_player_1');
+    api.setAuth('p1', 'key_player_1');
 
     const out = await dispatch(
       'configure_traffic_monitor monitor-1 belt-9 --window 12 --minimum 0.25 --alerts off',
-      { currentPlayer: 'p1', rl: {} },
+      { api, currentPlayer: 'p1', rl: {} as never },
     );
     assert.match(out, /ACCEPTED/);
     assert.equal(posts.length, 1);
@@ -121,9 +121,9 @@ describe('observation query CLI paths', () => {
       }
       return jsonResponse({ error: `unexpected ${url}` }, 500);
     }) as typeof fetch;
-    setAuth('p1', 'key_player_1');
+    api.setAuth('p1', 'key_player_1');
 
-    const ctx = { currentPlayer: 'p1', rl: {} };
+    const ctx = { api, currentPlayer: 'p1', rl: {} as never };
     const summary = await dispatch('summary', ctx);
     const stats = await dispatch('stats', ctx);
     const catalog = await dispatch('catalog_commands', ctx);

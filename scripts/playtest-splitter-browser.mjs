@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19495';
 const unregister = register();
 const { dispatch } = await import('../client-cli/src/commands/index.ts');
-const api = await import('../client-cli/src/api.ts');
+const { api } = await import('../client-cli/src/api.ts');
 api.setAuth('p1', 'key_player_1');
 const web = process.env.SW_SPLITTER_WEB ?? 'http://127.0.0.1:4185';
 const evidence = process.env.SW_SPLITTER_EVIDENCE ?? '/tmp/sw-splitter-review';
@@ -25,7 +25,7 @@ async function commandResult(requestId,sinceTick) {
  let event;await expect.poll(async()=>{event=(await api.fetchEventSnapshot({event_types:['command_result'],since_tick:sinceTick,limit:100})).events.find(e=>e.payload.request_id===requestId);return event?.payload.code;},{timeout:15000}).toBe('OK');return event;
 }
 async function cli(line) {
- const before=await api.fetchHealth(),output=await dispatch(line,{currentPlayer:'p1'}),requestId=output.match(/request_id=([^\s]+)/)?.[1];
+ const before=await api.fetchHealth(),output=await dispatch(line,{api,currentPlayer:'p1'}),requestId=output.match(/request_id=([^\s]+)/)?.[1];
  expect(requestId,output).toBeTruthy();const event=await commandResult(requestId,before.tick);
  appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;
 }

@@ -8,7 +8,7 @@ import { runClaudeTurn } from './claude-cli.js';
 import { runCodexTurn } from './codex-cli.js';
 import { parseProviderResult } from './index.js';
 import { runOpenAICompatibleTurn } from './openai-compatible.js';
-import { runProviderTurn } from '../runtime/turn.js';
+import { runProviderTurn } from '../runtime/provider-turn-runner.js';
 
 describe('provider result parser', () => {
   it('parses a valid structured agent response', () => {

@@ -2,7 +2,7 @@ import { createApiClient } from '@gw/shared/api';
 import type { SystemRuntimeView, WarTaskForceView, WarTheaterView } from '@gw/shared/types';
 import type { CanonicalAgentAction } from './action-schema.js';
 import type { CanonicalGameCommandAction } from './game-command-schema.js';
-import { summarizeGameCommandAction } from './game-command-executor.js';
+import { summarizeGameCommandAction } from './game-command-schema.js';
 import type { AgentInstance } from '@gw/shared/agent-gateway';
 
 const MILITARY_GAME_COMMANDS = new Set([

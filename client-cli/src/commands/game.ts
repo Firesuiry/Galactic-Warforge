@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import chalk from 'chalk';
-import {
-  createNewGame, fetchCurrentGame, setAuth,
-} from '../api.js';
-import type { GameSummary, NewGamePlayer, NewGameRequest } from '../api.js';
-import { gameStatusOf } from '@gw/shared/game';
-import { fmtError } from '../format.js';
-import { getStringOption, hasFlag, parseArgs } from './args.js';
+import type { ApiClient } from '@gw/shared/api';
+import { getStringOption, hasFlag, parseArgs } from '@gw/shared/commands/args';
+import { fmtError } from '@gw/shared/commands/format';
+import type { CommandContext } from '@gw/shared/commands/game-commands';
+import { gameStatusOf, type GameSummary, type NewGamePlayer, type NewGameRequest } from '@gw/shared/game';
+
+type NewGameApi = Pick<ApiClient, 'createNewGame' | 'setAuth'>;
 
 function formatGameSummary(game: GameSummary): string {
   const status = gameStatusOf(game);
@@ -49,28 +49,28 @@ function formatGameSummary(game: GameSummary): string {
 }
 
 /** POST /games/new 成功后旧 key 立即失效：优先切换到新局的 admin key，保持 CLI 可用。 */
-function adoptNewGameAuth(game: GameSummary, request: NewGameRequest): string | undefined {
+function adoptNewGameAuth(api: NewGameApi, request: NewGameRequest): string | undefined {
   const admin =
     request.players.find(p => p.role === 'admin')
     ?? request.players[0];
   if (!admin) {
     return undefined;
   }
-  setAuth(admin.player_id, admin.key);
+  api.setAuth(admin.player_id, admin.key);
   return `auth switched to ${admin.player_id}（旧局 key 已失效）`;
 }
 
-export async function cmdGameNew(args: string[]): Promise<string> {
-  return gameNewCommand(args);
+export async function cmdGameNew(args: string[], { api }: CommandContext): Promise<string> {
+  return gameNewCommand(args, api);
 }
 
-export async function cmdGameStatus(args: string[]): Promise<string> {
-  return gameStatusCommand(args);
+export async function cmdGameStatus(args: string[], { api }: CommandContext): Promise<string> {
+  return gameStatusCommand(args, api.fetchCurrentGame);
 }
 
 export async function gameNewCommand(
   args: string[],
-  createFn: typeof createNewGame = createNewGame,
+  api: NewGameApi,
 ): Promise<string> {
   const parsed = parseArgs(args);
 
@@ -136,9 +136,9 @@ export async function gameNewCommand(
       request.victory_mode = victory as NewGameRequest['victory_mode'];
     }
 
-    const game = await createFn(request);
+    const game = await api.createNewGame(request);
     const lines = [chalk.green('新对局已创建：'), formatGameSummary(game)];
-    const authNote = adoptNewGameAuth(game, request);
+    const authNote = adoptNewGameAuth(api, request);
     if (authNote) {
       lines.push(authNote);
     }
@@ -150,7 +150,7 @@ export async function gameNewCommand(
 
 export async function gameStatusCommand(
   args: string[],
-  fetchFn: typeof fetchCurrentGame = fetchCurrentGame,
+  fetchFn: ApiClient['fetchCurrentGame'],
 ): Promise<string> {
   const parsed = parseArgs(args);
 

@@ -4,20 +4,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
+import type { AgentInstance, Conversation, ModelProvider, ScheduleJob } from '@gw/shared/agent-gateway';
+
 import { exportBundle } from '../export/bundle.js';
 import { createDefaultMilitaryPolicy } from '../runtime/agent-policy.js';
-import { createAgentStore } from './agent-store.js';
-import { createConversationStore } from './conversation-store.js';
-import { listJsonFiles, writeJsonFile } from './file-store.js';
+import { createRecordStore, listJsonFiles, writeJsonFile } from './file-store.js';
 import { createMessageStore } from './message-store.js';
-import { createProviderStore } from './provider-store.js';
-import { createScheduleStore } from './schedule-store.js';
 import { createSecretStore } from './secret-store.js';
 
 describe('provider store', () => {
   it('saves and reloads providers from disk', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'sw-agent-templates-'));
-    const store = createProviderStore(root);
+    const store = createRecordStore<ModelProvider>(root);
 
     await store.save({
       id: 'provider-http',
@@ -113,10 +111,10 @@ describe('file store', () => {
 describe('collaboration stores', () => {
   it('persists agent policies, conversations, messages, and schedules', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'sw-agent-collaboration-'));
-    const agentStore = createAgentStore(path.join(root, 'agents'));
-    const conversationStore = createConversationStore(path.join(root, 'conversations'));
+    const agentStore = createRecordStore<AgentInstance>(path.join(root, 'agents'));
+    const conversationStore = createRecordStore<Conversation>(path.join(root, 'conversations'));
     const messageStore = createMessageStore(path.join(root, 'messages'));
-    const scheduleStore = createScheduleStore(path.join(root, 'schedules'));
+    const scheduleStore = createRecordStore<ScheduleJob>(path.join(root, 'schedules'));
 
     await agentStore.save({
       id: 'agent-director',

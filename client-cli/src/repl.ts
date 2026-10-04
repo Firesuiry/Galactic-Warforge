@@ -1,10 +1,16 @@
 import readline from 'readline';
 import chalk from 'chalk';
 import { dispatch, getCommandNames, COMMANDS } from './commands/index.js';
-import { DEFAULT_PLAYERS } from './config.js';
-import type { ReplContext } from './types.js';
+import { DEFAULT_PLAYERS } from '@gw/shared/config';
+import type { CommandContext } from '@gw/shared/commands/game-commands';
 
-export type { ReplContext };
+import { api } from './api.js';
+
+/** REPL 会话上下文：共享命令只用 api，终端命令（switch 等）还会改 currentPlayer。 */
+export interface ReplContext extends CommandContext {
+  currentPlayer: string;
+  rl: readline.Interface;
+}
 
 export function createSerialLineProcessor<T>(handler: (value: T) => Promise<void> | void) {
   let pending = Promise.resolve();
@@ -62,7 +68,7 @@ export function startRepl(playerId: string): ReplContext {
     terminal: true,
   });
 
-  const ctx: ReplContext = { currentPlayer: playerId, rl };
+  const ctx: ReplContext = { api, currentPlayer: playerId, rl };
   const processLine = createSerialLineProcessor(async (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) {

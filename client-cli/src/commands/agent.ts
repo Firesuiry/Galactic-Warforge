@@ -1,8 +1,8 @@
-import { getAuth, getServerUrl } from '../api.js';
 import { createAgentGatewayClient, type AgentPolicyPatch } from '@gw/shared/agent-gateway';
 import { getAgentGatewayUrl } from '../config.js';
-import { fmtError } from '../format.js';
-import { getStringOption, parseArgs } from './args.js';
+import { getStringOption, parseArgs } from '@gw/shared/commands/args';
+import { fmtError } from '@gw/shared/commands/format';
+import type { CommandContext } from '@gw/shared/commands/game-commands';
 
 function gateway() {
   return createAgentGatewayClient({ baseUrl: getAgentGatewayUrl() });
@@ -124,7 +124,7 @@ export async function cmdAgentList(): Promise<string> {
   }
 }
 
-export async function cmdAgentCreate(args: string[]): Promise<string> {
+export async function cmdAgentCreate(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   const name = parsed.positionals[0];
   const providerId = getStringOption(parsed, 'provider');
@@ -132,7 +132,7 @@ export async function cmdAgentCreate(args: string[]): Promise<string> {
     return fmtError('Usage: agent_create <name> --provider <provider_id> [--role <worker|manager|director>] [--can-create-agents <true|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>] [--theater-ids <csv>] [--task-force-ids <csv>] [--military-command-ids <csv>] [--allow-blockade <true|false>] [--allow-military-production <true|false>] [--military-production-limit <n>]');
   }
 
-  const auth = getAuth();
+  const auth = api.getAuth();
   if (!auth.playerId || !auth.playerKey) {
     return fmtError('当前未配置 player 认证，请先 switch');
   }
@@ -142,7 +142,7 @@ export async function cmdAgentCreate(args: string[]): Promise<string> {
       id: getStringOption(parsed, 'id'),
       name,
       providerId,
-      serverUrl: getServerUrl(),
+      serverUrl: api.getServerUrl(),
       playerId: auth.playerId,
       playerKey: auth.playerKey,
       role: getStringOption(parsed, 'role') as 'worker' | 'manager' | 'director' | undefined,

@@ -22,7 +22,7 @@ import type {
   WarSupplyStock,
   WarTaskForceListView,
   WarTheaterListView,
-} from './types.js';
+} from '../types.js';
 
 function pad(s: string, len: number): string {
   return s.length >= len ? s.slice(0, len) : s + ' '.repeat(len - s.length);

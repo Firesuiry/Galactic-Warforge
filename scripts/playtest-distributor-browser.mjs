@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19500';
 const unregister = register();
 const { dispatch } = await import('../client-cli/src/commands/index.ts');
-const api = await import('../client-cli/src/api.ts');api.setAuth('p1','key_player_1');
+const { api } = await import('../client-cli/src/api.ts');api.setAuth('p1','key_player_1');
 const web=process.env.SW_LOGISTICS_WEB??'http://127.0.0.1:4190',evidence=process.env.SW_LOGISTICS_EVIDENCE??fileURLToPath(new URL('../test-results/distributor',import.meta.url));mkdirSync(evidence,{recursive:true});
 const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1680,height:1050}});page.setDefaultTimeout(30000);
 const errors=[],results={scenario:'Pre-unlocked flat face48; materials and bot items only; real CLI builds and UI configuration; 2 ticks/s'};
@@ -17,7 +17,7 @@ const scene=(planet=planetId)=>api.fetchPlanetScene(planet,{x:0,y:0,width:48,hei
 const runtime=(planet=planetId)=>api.fetchPlanetRuntime(planet);
 const stored=(b,id)=>(b?.logistics_station?.inventory?.[id]??0)+['inventory','input_buffer','output_buffer'].reduce((n,k)=>n+(b?.storage?.[k]?.[id]??0),0);
 async function commandResult(requestId,tick){let event;await expect.poll(async()=>{event=(await api.fetchEventSnapshot({event_types:['command_result'],since_tick:tick,limit:100})).events.find(e=>e.payload.request_id===requestId);return Boolean(event);},{timeout:15000}).toBe(true);expect(event.payload.code,JSON.stringify(event)).toBe('OK');return event;}
-async function cli(line){const before=await api.fetchHealth(),output=await dispatch(line,{currentPlayer:'p1'}),id=output.match(/request_id=([^\s]+)/)?.[1];expect(id,output).toBeTruthy();const event=await commandResult(id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;}
+async function cli(line){const before=await api.fetchHealth(),output=await dispatch(line,{api,currentPlayer:'p1'}),id=output.match(/request_id=([^\s]+)/)?.[1];expect(id,output).toBeTruthy();const event=await commandResult(id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'cli',line,output,event})+'\n');console.log(line,'OK');return event;}
 async function uiCommand(action){const before=await api.fetchHealth(),response=page.waitForResponse(r=>r.url().endsWith('/commands')&&r.request().method()==='POST');const[r]=await Promise.all([response,action()]);expect(r.ok()).toBe(true);const accepted=await r.json();expect(accepted.accepted).toBe(true);const event=await commandResult(accepted.request_id,before.tick);appendFileSync(`${evidence}/commands.jsonl`,JSON.stringify({channel:'browser',payload:r.request().postDataJSON(),event})+'\n');return event;}
 async function build(x,y,type){
  const find=s=>Object.values(s.buildings??{}).find(b=>b.position.x===x&&b.position.y===y&&b.type===type);

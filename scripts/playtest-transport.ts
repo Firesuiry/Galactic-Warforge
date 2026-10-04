@@ -6,7 +6,7 @@
  */
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { dispatch } from '../client-cli/src/commands/index.ts';
-import * as api from '../client-cli/src/api.ts';
+import { api } from '../client-cli/src/api.ts';
 
 const evidence = process.env.SW_TRANSPORT_EVIDENCE || '/tmp/sw-transport-review';
 const planet = 'planet-1-1';
@@ -22,7 +22,7 @@ function at(snapshot: Awaited<ReturnType<typeof scene>>, x: number, y: number) {
 
 async function command(line: string) {
   const before = await api.fetchHealth();
-  const output = await dispatch(line, { currentPlayer: 'p1' } as Parameters<typeof dispatch>[1]);
+  const output = await dispatch(line, { api, currentPlayer: 'p1', rl: {} as never } as Parameters<typeof dispatch>[1]);
   const requestId = output.match(/request_id=([^\s]+)/)?.[1];
   if (!requestId) throw new Error(output);
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -103,7 +103,7 @@ async function main() {
       writeFileSync(`${evidence}/snapshot-after.json`, JSON.stringify(after, null, 2));
       writeFileSync(`${evidence}/growth.json`, JSON.stringify({ before: first, after: last }, null, 2));
       console.log(JSON.stringify({ before: first, after: last }, null, 2));
-      console.log(await dispatch('save', { currentPlayer: 'p1' } as Parameters<typeof dispatch>[1]));
+      console.log(await dispatch('save', { api, currentPlayer: 'p1', rl: {} as never } as Parameters<typeof dispatch>[1]));
       return;
     }
   }
