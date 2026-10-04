@@ -1,4 +1,5 @@
 import {
+  AGENT_COMMAND_CATALOG,
   PUBLIC_COMMAND_DEFINITIONS,
   type CommandPermissionCategory,
 } from '@shared/command-catalog';
@@ -9,32 +10,15 @@ export interface ProviderCommandDefinition {
   permissionCategory: CommandPermissionCategory;
 }
 
-const EXTRA_PROVIDER_COMMANDS: ProviderCommandDefinition[] = [
-  { command: 'health', label: 'health', permissionCategory: 'observe' },
-  { command: 'metrics', label: 'metrics', permissionCategory: 'observe' },
-  { command: 'summary', label: 'summary', permissionCategory: 'observe' },
-  { command: 'stats', label: 'stats', permissionCategory: 'observe' },
-  { command: 'galaxy', label: 'galaxy', permissionCategory: 'observe' },
-  { command: 'system', label: 'system', permissionCategory: 'observe' },
-  { command: 'system_runtime', label: 'system_runtime', permissionCategory: 'observe' },
-  { command: 'planet', label: 'planet', permissionCategory: 'observe' },
-  { command: 'scene', label: 'scene', permissionCategory: 'observe' },
-  { command: 'inspect', label: 'inspect', permissionCategory: 'observe' },
-  { command: 'fleet_status', label: 'fleet_status', permissionCategory: 'observe' },
-  { command: 'fog', label: 'fog', permissionCategory: 'observe' },
-  { command: 'save', label: 'save', permissionCategory: 'management' },
-];
-
-function buildPublicProviderCommands() {
-  return PUBLIC_COMMAND_DEFINITIONS
+const API_NAME_BY_CLI_COMMAND = new Map(
+  PUBLIC_COMMAND_DEFINITIONS
     .filter((definition) => definition.cliCommandName)
-    .map((definition) => ({
-      command: definition.cliCommandName as string,
-      label: definition.cliCommandName === definition.apiCommandName
-        ? definition.cliCommandName
-        : `${definition.cliCommandName} (${definition.apiCommandName})`,
-      permissionCategory: definition.permissionCategory,
-    }));
+    .map((definition) => [definition.cliCommandName as string, definition.apiCommandName]),
+);
+
+function providerCommandLabel(command: string) {
+  const apiCommandName = API_NAME_BY_CLI_COMMAND.get(command);
+  return apiCommandName && apiCommandName !== command ? `${command} (${apiCommandName})` : command;
 }
 
 const COMMAND_CATEGORY_ORDER: CommandPermissionCategory[] = [
@@ -52,16 +36,12 @@ function compareCategoryOrder(
   return COMMAND_CATEGORY_ORDER.indexOf(left) - COMMAND_CATEGORY_ORDER.indexOf(right);
 }
 
-export const PROVIDER_COMMAND_DEFINITIONS: ProviderCommandDefinition[] = [
-  ...EXTRA_PROVIDER_COMMANDS,
-  ...buildPublicProviderCommands(),
-]
-  .reduce<ProviderCommandDefinition[]>((definitions, definition) => {
-    if (definitions.some((current) => current.command === definition.command)) {
-      return definitions;
-    }
-    return [...definitions, definition];
-  }, [])
+export const PROVIDER_COMMAND_DEFINITIONS: ProviderCommandDefinition[] = Object.entries(AGENT_COMMAND_CATALOG)
+  .map(([command, { category }]) => ({
+    command,
+    label: providerCommandLabel(command),
+    permissionCategory: category,
+  }))
   .sort((left, right) => (
     compareCategoryOrder(left.permissionCategory, right.permissionCategory)
     || left.command.localeCompare(right.command, 'en')

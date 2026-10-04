@@ -636,3 +636,53 @@ export const REQUIRED_WEB_PUBLIC_COMMAND_IDS = PUBLIC_COMMAND_DEFINITIONS.filter
 export function getPublicCommandDefinition(id: string) {
   return PUBLIC_COMMAND_CATALOG[id as PublicCommandId] ?? null;
 }
+
+/** 智能体可调用、但不在 PUBLIC_COMMAND_DEFINITIONS 中的查询 / 管理命令。 */
+export const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: CommandPermissionCategory }> = {
+  health: { category: "observe" },
+  metrics: { category: "observe" },
+  summary: { category: "observe" },
+  stats: { category: "observe" },
+  briefing: { category: "observe" },
+  galaxy: { category: "observe" },
+  system: { category: "observe" },
+  system_runtime: { category: "observe" },
+  planet: { category: "observe" },
+  planet_runtime: { category: "observe" },
+  blueprints: { category: "observe" },
+  war_industry: { category: "observe" },
+  task_forces: { category: "observe" },
+  theaters: { category: "observe" },
+  scene: { category: "observe" },
+  inspect: { category: "observe" },
+  fleet_status: { category: "observe" },
+  fog: { category: "observe" },
+  save: { category: "management" },
+};
+
+/** 智能体命令白名单：额外命令 + 公开命令的 CLI 别名。 */
+export const AGENT_COMMAND_CATALOG: Record<string, { category: CommandPermissionCategory }> = {
+  ...EXTRA_AGENT_COMMAND_CATALOG,
+  ...Object.fromEntries(
+    PUBLIC_COMMAND_DEFINITIONS
+      .filter((definition) => definition.cliCommandName)
+      .map((definition) => [
+        definition.cliCommandName as string,
+        { category: definition.permissionCategory },
+      ]),
+  ),
+};
+
+export const AGENT_ALLOWED_COMMANDS = Object.keys(AGENT_COMMAND_CATALOG);
+
+export function getCommandCategory(commandName: string): CommandPermissionCategory | null {
+  return AGENT_COMMAND_CATALOG[commandName]?.category ?? null;
+}
+
+export function getAllowedCommandsByCategories(categories?: string[]) {
+  if (!categories || categories.length === 0) {
+    return [...AGENT_ALLOWED_COMMANDS];
+  }
+  const allowed = new Set(categories);
+  return AGENT_ALLOWED_COMMANDS.filter((commandName) => allowed.has(AGENT_COMMAND_CATALOG[commandName].category));
+}

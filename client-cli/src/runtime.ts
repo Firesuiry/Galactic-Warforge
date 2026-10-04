@@ -1,6 +1,6 @@
 import { createApiClient } from '@gw/shared/api';
 import { setAuth, setServerUrl } from './api.js';
-import { AGENT_ALLOWED_COMMANDS, getAllowedCommandsByCategories, getCommandCategory } from './command-catalog.js';
+import { AGENT_ALLOWED_COMMANDS, getAllowedCommandsByCategories, getCommandCategory } from '@gw/shared/command-catalog';
 import { parseArgs, getStringOption } from './commands/args.js';
 import { dispatch } from './commands/index.js';
 
@@ -245,7 +245,7 @@ export async function runCommandLine(line: string, context: GameCliRuntimeContex
     }
   }
 
-  if (!allowedCommands.includes(commandName as typeof AGENT_ALLOWED_COMMANDS[number]) && commandName !== 'help') {
+  if (!allowedCommands.includes(commandName) && commandName !== 'help') {
     throw new Error(`command not allowed for agent: ${commandName}`);
   }
 
