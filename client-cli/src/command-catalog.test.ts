@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { PUBLIC_COMMAND_DEFINITIONS } from '../../shared-client/src/command-catalog.js';
+import { PUBLIC_COMMAND_DEFINITIONS } from '@gw/shared/command-catalog';
 
 import {
   AGENT_ALLOWED_COMMANDS,

@@ -2,8 +2,8 @@
 // Setup: config-war research/materials plus collider tech + 10 photons + 1000 iron;
 // flat face48, wind coefficient1, 10 ticks/s, no prebuilt factories.
 // Ports19497/4187 and independent data directory. Never edit the resulting save.
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
-import { register } from '../client-cli/node_modules/tsx/dist/esm/api/index.mjs';
+import { chromium, expect } from '@playwright/test';
+import { register } from 'tsx/esm/api';
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19497';
 const unregister = register();

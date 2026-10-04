@@ -1,7 +1,7 @@
 // Runs on a fresh normal game: no inventory, technology or terrain injection.
 // VITE_SW_PROXY_TARGET=http://127.0.0.1:19493 vite --port 4183
 // node scripts/playtest-mecha-start-browser.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 const web = process.env.SW_MECHA_START_WEB ?? 'http://127.0.0.1:4183';
 const evidence = process.env.SW_MECHA_START_EVIDENCE ?? '/tmp/sw-mecha-start-review';

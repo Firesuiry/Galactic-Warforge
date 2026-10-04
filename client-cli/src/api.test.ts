@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createApiClient } from '../../shared-client/src/api.js';
+import { createApiClient } from '@gw/shared/api';
 
 import {
   cmdBlockadePlanet,

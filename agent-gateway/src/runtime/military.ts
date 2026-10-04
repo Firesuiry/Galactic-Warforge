@@ -1,5 +1,5 @@
-import { createApiClient } from '../../../shared-client/src/api.js';
-import type { SystemRuntimeView, WarTaskForceView, WarTheaterView } from '../../../shared-client/src/types.js';
+import { createApiClient } from '@gw/shared/api';
+import type { SystemRuntimeView, WarTaskForceView, WarTheaterView } from '@gw/shared/types';
 import type { CanonicalAgentAction } from './action-schema.js';
 import type { CanonicalGameCommandAction } from './game-command-schema.js';
 import { summarizeGameCommandAction } from './game-command-executor.js';

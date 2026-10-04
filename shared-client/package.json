@@ -1,5 +1,19 @@
 {
-  "name": "siliconworld-shared-client",
+  "name": "@gw/shared",
+  "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./surface-fixtures.json": "./src/surface-fixtures.json",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
 }

@@ -1,4 +1,4 @@
-import { createApiClient } from '../../shared-client/src/api.js';
+import { createApiClient } from '@gw/shared/api';
 import {
   DEFAULT_GALAXY_ID,
   DEFAULT_PLANET_ID,
@@ -37,7 +37,7 @@ export type {
   VariantBlueprintOptions,
   BlueprintID,
   WorldUnitID,
-} from '../../shared-client/src/api.js';
+} from '@gw/shared/api';
 export type {
   ConfigureLogisticsSlotOptions,
   ConfigureLogisticsStationOptions,
@@ -54,7 +54,7 @@ export type {
   WarTaskForceMemberKind,
   WarTaskForceStance,
   WarTheaterZoneType,
-} from '../../shared-client/src/types.js';
+} from '@gw/shared/types';
 export type {
   GamePlayerSummary,
   GameStatus,
@@ -69,7 +69,7 @@ export type {
   NewGameVictoryMode,
   SettlementPlayerStats,
   SettlementReport,
-} from '../../shared-client/src/game.js';
+} from '@gw/shared/game';
 
 const client = createApiClient({
   serverUrl: SERVER_URL,

@@ -1,0 +1,15 @@
+{
+  "name": "galactic-warforge",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared-client",
+    "client-cli",
+    "agent-gateway",
+    "client-web"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm test --workspaces"
+  }
+}

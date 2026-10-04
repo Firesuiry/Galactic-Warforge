@@ -1,4 +1,4 @@
-import { createSseClient } from '../../shared-client/src/sse.js';
+import { createSseClient } from '@gw/shared/sse';
 import {
   ALL_EVENT_TYPES,
   DEFAULT_EVENT_TYPES,

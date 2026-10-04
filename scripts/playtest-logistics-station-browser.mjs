@@ -3,8 +3,8 @@
 // Reproduction: scripts/fixtures/logistics-station/README.md (server19498/web4188).
 // Run default → save/stop/rebuild/restart → --resume → --interstellar → --station-install.
 // Default prepares a full destination with cargo waiting; --resume validates unchanged save restoration.
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
-import { register } from '../client-cli/node_modules/tsx/dist/esm/api/index.mjs';
+import { chromium, expect } from '@playwright/test';
+import { register } from 'tsx/esm/api';
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19498';
 const unregister = register();

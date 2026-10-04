@@ -1,6 +1,6 @@
 // Reproduce with scripts/fixtures/distributor/README.md; no save-state injection.
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
-import { register } from '../client-cli/node_modules/tsx/dist/esm/api/index.mjs';
+import { chromium, expect } from '@playwright/test';
+import { register } from 'tsx/esm/api';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19500';

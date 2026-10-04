@@ -1,7 +1,7 @@
 import {
   PUBLIC_COMMAND_DEFINITIONS,
   type CommandPermissionCategory,
-} from '../../shared-client/src/command-catalog.js';
+} from '@gw/shared/command-catalog';
 
 export type AgentCommandCategory = CommandPermissionCategory;
 

@@ -11,9 +11,11 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test:visual": "playwright test",
-    "test:visual:update": "playwright test --update-snapshots"
+    "test:visual:update": "playwright test --update-snapshots",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@gw/shared": "*",
     "@tanstack/react-query": "^5.66.8",
     "lucide-react": "^1.27.0",
     "pixi.js": "^8.6.6",

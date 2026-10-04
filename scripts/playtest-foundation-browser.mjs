@@ -1,6 +1,6 @@
 // Isolated config: environment_modification + dyson_sphere_program, operate_range >= 12.
 // Map seed war-seed-001, map-war surface: water at (0,9), empty land at (1,9).
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const web = process.env.SW_FOUNDATION_WEB ?? 'http://127.0.0.1:4181';
 const evidence = process.env.SW_FOUNDATION_EVIDENCE ?? '/tmp/sw-foundation-review';

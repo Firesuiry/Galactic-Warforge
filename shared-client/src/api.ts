@@ -1,5 +1,4 @@
-import type { SorterConfig } from "./types.js";
-import type { PlanetPathView } from './types';
+import type { PlanetPathView, SorterConfig } from './types.js';
 import type { GameSummary, NewGameRequest } from './game.js';
 import {
   DEFAULT_EVENT_TYPES,

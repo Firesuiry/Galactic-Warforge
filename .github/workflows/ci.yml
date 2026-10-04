@@ -59,6 +59,42 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+  typescript:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [shared-client, client-cli, agent-gateway, client-web]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # client-cli 的 official-war-regression 测试会用 go run 拉起战争测试服
+      - name: Set up Go
+        if: matrix.package == 'client-cli'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: server/go.sum
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck --workspace ${{ matrix.package }}
+
+      - name: Test
+        run: npm test --workspace ${{ matrix.package }}
+
   build-server:
     runs-on: ubuntu-latest
     needs: [test, lint]

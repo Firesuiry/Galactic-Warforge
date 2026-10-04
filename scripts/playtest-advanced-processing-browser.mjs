@@ -3,8 +3,8 @@
 // No factories or save state are injected. CLI builds/loads every facility;
 // browser production planning builds the strange-matter collider.
 // SW_SERVER=http://127.0.0.1:19496 node scripts/playtest-advanced-processing-browser.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
-import { register } from '../client-cli/node_modules/tsx/dist/esm/api/index.mjs';
+import { chromium, expect } from '@playwright/test';
+import { register } from 'tsx/esm/api';
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19496';
 const unregister = register();

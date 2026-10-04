@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createSseClient } from "@shared/sse";
+import { createSseClient } from "./sse.js";
 
 function sseResponse(body: ReadableStream<Uint8Array>) {
   return new Response(body, {

@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "dist"
+    "types": ["node"],
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "vitest.config.ts"]
 }

@@ -4,7 +4,7 @@ import {
   createNewGame, fetchCurrentGame, setAuth,
 } from '../api.js';
 import type { GameSummary, NewGamePlayer, NewGameRequest } from '../api.js';
-import { gameStatusOf } from '../../../shared-client/src/game.js';
+import { gameStatusOf } from '@gw/shared/game';
 import { fmtError } from '../format.js';
 import { getStringOption, hasFlag, parseArgs } from './args.js';
 

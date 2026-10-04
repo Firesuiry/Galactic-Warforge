@@ -5,6 +5,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 
 import { exportBundle } from '../export/bundle.js';
+import { createDefaultMilitaryPolicy } from '../runtime/agent-policy.js';
 import { createAgentStore } from './agent-store.js';
 import { createConversationStore } from './conversation-store.js';
 import { listJsonFiles, writeJsonFile } from './file-store.js';
@@ -138,6 +139,7 @@ describe('collaboration stores', () => {
         canCreateSchedules: true,
         canDirectMessageAgentIds: ['agent-builder'],
         canDispatchAgentIds: ['agent-builder'],
+        military: createDefaultMilitaryPolicy(),
       },
       supervisorAgentIds: [],
       managedAgentIds: ['agent-builder'],

@@ -1,6 +1,6 @@
 // First run scripts/playtest-transport.ts against an isolated config-war/map-war server.
 // SW_TRANSPORT_WEB=http://127.0.0.1:4179 node scripts/playtest-transport-browser.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const web = process.env.SW_TRANSPORT_WEB ?? 'http://127.0.0.1:4179';

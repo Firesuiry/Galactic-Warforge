@@ -1,7 +1,7 @@
 // Requires an isolated war-map server with plasma_refining, xray_cracking and
 // reformed_refinement unlocked, plus 2 crude oil, 3 refined oil, 3 hydrogen, 1 coal.
 // SW_REFINERY_WEB=http://127.0.0.1:4176 node scripts/playtest-refinery.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const web = process.env.SW_REFINERY_WEB ?? 'http://127.0.0.1:4176';
 const evidence = process.env.SW_REFINERY_EVIDENCE ?? '/tmp/sw-refinery-review';

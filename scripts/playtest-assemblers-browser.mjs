@@ -1,7 +1,7 @@
 // Run against an isolated config-war/map-war server (ports 19492 / 4182).
 // Unlock highspeed_assembling, quantum_printing and basic_components in config.
 // Builds all three tiers through public commands; never patches server state.
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const web = process.env.SW_ASSEMBLERS_WEB ?? 'http://127.0.0.1:4182';
 const server = process.env.SW_ASSEMBLERS_SERVER ?? 'http://127.0.0.1:19492';

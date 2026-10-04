@@ -1,6 +1,6 @@
 /**
  * Real CLI replay on an isolated config-war.yaml + map-war.yaml server.
- * SW_SERVER=http://127.0.0.1:19482 client-cli/node_modules/.bin/tsx scripts/playtest-transport.ts
+ * SW_SERVER=http://127.0.0.1:19482 npx tsx scripts/playtest-transport.ts
  * Optional: SW_TRANSPORT_EVIDENCE=/tmp/sw-transport-review
  * The server must use an isolated data_dir; no save/state is edited by this script.
  */

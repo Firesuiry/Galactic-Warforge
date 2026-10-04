@@ -1,6 +1,6 @@
 // Isolated map-war test with p1/p2 spawns (3,3)/(6,3), dyson_sphere_program and missile_turret unlocked, ammo_missile in p1 inventory.
 // SW_DEFENSE_WEB=http://127.0.0.1:4180 node scripts/playtest-defense-browser.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const web = process.env.SW_DEFENSE_WEB ?? 'http://127.0.0.1:4180';
 const server = process.env.SW_DEFENSE_SERVER ?? 'http://127.0.0.1:19490';

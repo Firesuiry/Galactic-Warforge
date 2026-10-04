@@ -1,1 +1,1 @@
-export * from '../../shared-client/src/types.js';
+export * from '@gw/shared/types';

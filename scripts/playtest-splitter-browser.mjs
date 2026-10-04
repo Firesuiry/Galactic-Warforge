@@ -2,8 +2,8 @@
 // no scenario factories, flat face_size=48 map, spawns (3,3)/(14,14), 5 ticks/s.
 // All factories and inventory transfers use the real CLI; port configuration uses browser controls.
 // SW_SERVER=http://127.0.0.1:19495 node scripts/playtest-splitter-browser.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
-import { register } from '../client-cli/node_modules/tsx/dist/esm/api/index.mjs';
+import { chromium, expect } from '@playwright/test';
+import { register } from 'tsx/esm/api';
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 process.env.SW_SERVER ??= 'http://127.0.0.1:19495';
 const unregister = register();

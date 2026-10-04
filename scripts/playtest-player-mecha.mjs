@@ -1,7 +1,7 @@
 // Isolated war-map test: p1/p2 spawns at (3,3)/(6,3), 2 ticks/sec,
 // mecha_core/mecha_engine/energy_shield unlocked, and 10 coal in p1 inventory.
 // SW_MECHA_WEB=http://127.0.0.1:4177 node scripts/playtest-player-mecha.mjs
-import { chromium, expect } from '../client-web/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const web = process.env.SW_MECHA_WEB ?? 'http://127.0.0.1:4177';
 const evidence = process.env.SW_MECHA_EVIDENCE ?? '/tmp/sw-mecha-review';

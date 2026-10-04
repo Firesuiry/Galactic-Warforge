@@ -241,18 +241,19 @@ describe('T123 military agent autonomy', () => {
       assert.equal(messageResponse.status, 202);
 
       const deadline = Date.now() + 120_000;
-      let thread: {
+      type ThreadView = {
         lastTurn?: {
           status: string;
           outcomeKind?: string;
           finalMessage?: string;
         };
         toolCalls: Array<{ type: string; payload: Record<string, unknown> }>;
-      } | null = null;
+      };
+      let thread = null as ThreadView | null;
       while (Date.now() < deadline) {
         const threadResponse = await fetch(`${gateway.url}/agents/agent-war-director/thread`);
         assert.equal(threadResponse.status, 200);
-        thread = await threadResponse.json() as typeof thread;
+        thread = await threadResponse.json() as ThreadView;
         if (thread?.lastTurn?.status === 'completed') {
           break;
         }

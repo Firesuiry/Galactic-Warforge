@@ -6,13 +6,15 @@
   "scripts": {
     "start": "tsx src/main.ts",
     "dev": "tsx src/main.ts",
-    "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts"
+    "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@gw/shared": "*",
     "chalk": "^5.3.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.10.7",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }

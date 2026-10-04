@@ -1,4 +1,4 @@
-import { createApiClient } from '../../shared-client/src/api.js';
+import { createApiClient } from '@gw/shared/api';
 import { setAuth, setServerUrl } from './api.js';
 import { AGENT_ALLOWED_COMMANDS, getAllowedCommandsByCategories, getCommandCategory } from './command-catalog.js';
 import { parseArgs, getStringOption } from './commands/args.js';

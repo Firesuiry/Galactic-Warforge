@@ -8,7 +8,7 @@ import {
   DEFAULT_SSE_BUFFER_SIZE,
   DEFAULT_SSE_SILENT_EVENT_TYPES,
   DEFAULT_SYSTEM_ID,
-} from '../../shared-client/src/config.js';
+} from '@gw/shared/config';
 
 export {
   ALL_EVENT_TYPES,

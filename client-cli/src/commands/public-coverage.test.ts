@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { PUBLIC_COMMAND_DEFINITIONS } from '../../../shared-client/src/command-catalog.js';
+import { PUBLIC_COMMAND_DEFINITIONS } from '@gw/shared/command-catalog';
 
 import { setAuth } from '../api.js';
 import { fmtSummary } from '../format.js';

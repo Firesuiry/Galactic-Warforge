@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createApiClient } from "@shared/api";
-import { DEFAULT_EVENT_TYPES } from "@shared/config";
+import { createApiClient } from "./api.js";
+import { DEFAULT_EVENT_TYPES } from "./config.js";
 
-import { jsonResponse } from "@/test/utils";
+function jsonResponse(payload: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(payload), {
+    headers: { "Content-Type": "application/json" },
+    status: 200,
+    ...init,
+  });
+}
+
 
 describe("shared api client", () => {
   it("在未显式传入 event_types 时为事件快照补默认类型", async () => {

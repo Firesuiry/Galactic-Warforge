@@ -55,10 +55,9 @@ wait_for_http() {
 }
 
 ensure_node_modules() {
-  local dir="$1"
-  if [[ ! -d "$dir/node_modules" ]]; then
-    log "安装依赖: $dir"
-    (cd "$dir" && npm install)
+  if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
+    log "安装 npm workspace 依赖: $ROOT_DIR"
+    (cd "$ROOT_DIR" && npm install)
   fi
 }
 
@@ -146,7 +145,7 @@ start_server() {
 
 start_gateway() {
   log "启动智能体平台"
-  ensure_node_modules "$GATEWAY_DIR"
+  ensure_node_modules
   (
     cd "$GATEWAY_DIR"
     nohup bash -c "echo \$\$ > '$RUN_DIR/agent-gateway.pid'; exec env SW_AGENT_GATEWAY_PORT='$GATEWAY_PORT' SW_AGENT_GATEWAY_ENV_FILE='$ROOT_DIR/.env' npm run dev" \
@@ -157,7 +156,7 @@ start_gateway() {
 
 start_web() {
   log "启动 Web"
-  ensure_node_modules "$WEB_DIR"
+  ensure_node_modules
   (
     cd "$WEB_DIR"
     nohup bash -c "echo \$\$ > '$RUN_DIR/client-web.pid'; exec env VITE_SW_PROXY_TARGET='http://127.0.0.1:$SERVER_PORT' VITE_SW_AGENT_PROXY_TARGET='http://127.0.0.1:$GATEWAY_PORT' npm run dev -- --host 0.0.0.0 --port '$WEB_PORT'" \
