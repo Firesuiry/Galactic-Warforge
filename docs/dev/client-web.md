@@ -1,12 +1,12 @@
 # client-web 开发与联调
 
-`client-web` 是可视化客户端（React + Vite + Pixi.js + Three.js），既是观察端也是操作端：总览、星图、行星、战争、科技、智能体、回放。所有游戏操作最终都是 `POST /commands`，接口契约见 [服务端API](服务端API.md)；与 CLI 共用 `shared-client/` 的类型与 API 层。启动整套环境见 [本地环境与测试](本地环境与测试.md)。
+`client-web` 是可视化客户端（React + Vite + Pixi.js + Three.js），既是观察端也是操作端：总览、星图、行星、战争、科技、智能体、回放。所有游戏操作最终都是 `POST /commands`，接口契约见 [服务端API](服务端API.md)；与 CLI 共用 `shared-client/`（`@gw/shared`，web 内经 `@shared/*` 别名引用）的类型、API 层与 agent-gateway 客户端（`@shared/agent-gateway`）。启动整套环境见 [本地环境与测试](本地环境与测试.md)。
 
 ## 1. 启动
 
 ```bash
+npm install                      # 仓库根目录（npm workspace），首次
 cd client-web
-npm install
 npm run dev                      # 默认 http://localhost:5173/login
 VITE_SW_PROXY_TARGET=http://127.0.0.1:18081 npm run dev        # 改游戏服务端代理（默认 http://localhost:18080）
 VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev  # 改 agent-gateway 代理（默认 18180）

@@ -6,24 +6,18 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, it } from 'node:test';
 
-import { createGatewayServer } from '../../agent-gateway/src/server.js';
-import { api } from './api.js';
-import { dispatch } from './commands/index.js';
+import { createAgentGatewayClient } from '@gw/shared/agent-gateway';
 
-describe('case1 cli flow', () => {
+import { createGatewayServer } from './server.js';
+
+describe('agent delegation flow through the gateway client', () => {
   const servers: Array<{ close: () => Promise<void>; url: string }> = [];
-  const previousGateway = process.env.SW_AGENT_GATEWAY;
 
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => server.close()));
-    if (previousGateway === undefined) {
-      delete process.env.SW_AGENT_GATEWAY;
-    } else {
-      process.env.SW_AGENT_GATEWAY = previousGateway;
-    }
   });
 
-  it('creates lisi, lets lisi create hujing, and delegates mining through cli commands', async () => {
+  it('creates lisi, lets lisi create hujing, and delegates mining', async () => {
     const fakeGameCommands: Array<Record<string, unknown>> = [];
     const fakeGameServer = createServer(async (request, response) => {
       if (request.method === 'POST' && request.url === '/commands') {
@@ -134,9 +128,7 @@ describe('case1 cli flow', () => {
     });
     servers.push(gateway);
 
-    process.env.SW_AGENT_GATEWAY = gateway.url;
-    api.setServerUrl(servers[0]!.url);
-    api.setAuth('p1', 'key_player_1');
+    const client = createAgentGatewayClient({ baseUrl: gateway.url });
 
     const providerResponse = await fetch(`${gateway.url}/providers`, {
       method: 'POST',
@@ -165,35 +157,47 @@ describe('case1 cli flow', () => {
     });
     assert.equal(providerResponse.status, 201);
 
-    const context = { api, currentPlayer: 'p1', rl: {} as never };
-    const createOutput = await dispatch(
-      'agent_create 李斯 --id agent-lisi --provider provider-case1 --role director --can-create-agents true --command-categories observe,build,combat,research,management --planet-ids planet-1-1',
-      context,
-    );
-    assert.match(createOutput, /Created agent agent-lisi/);
+    const created = await client.createAgent({
+      id: 'agent-lisi',
+      name: '李斯',
+      providerId: 'provider-case1',
+      serverUrl: servers[0]!.url,
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+      role: 'director',
+      policy: {
+        canCreateAgents: true,
+        commandCategories: ['observe', 'build', 'combat', 'research', 'management'],
+        planetIds: ['planet-1-1'],
+      },
+    });
+    assert.equal(created.id, 'agent-lisi');
 
-    const createChildOutput = await dispatch('agent_message agent-lisi 创建胡景，并赋予其建筑权限', context);
-    assert.match(createChildOutput, /Accepted message/);
+    const createChild = await client.sendAgentMessage('agent-lisi', '创建胡景，并赋予其建筑权限');
+    assert.equal(createChild.accepted, true);
 
-    let listOutput = '';
+    let agentIds: string[] = [];
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      listOutput = await dispatch('agent_list', context);
-      if (/agent-hujing/.test(listOutput)) {
+      agentIds = (await client.fetchAgents()).map((agent) => agent.id);
+      if (agentIds.includes('agent-hujing')) {
         break;
       }
       await delay(20);
     }
-    assert.match(listOutput, /agent-hujing/);
+    assert.ok(agentIds.includes('agent-hujing'));
 
-    let delegateOutput = '';
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      delegateOutput = await dispatch('agent_message agent-lisi 新建一个矿场', context);
-      if (!/agent_already_running/.test(delegateOutput)) {
-        break;
+    let delegated = false;
+    for (let attempt = 0; attempt < 50 && !delegated; attempt += 1) {
+      try {
+        delegated = (await client.sendAgentMessage('agent-lisi', '新建一个矿场')).accepted;
+      } catch (error) {
+        if (!/agent_already_running/.test(String(error))) {
+          throw error;
+        }
+        await delay(20);
       }
-      await delay(20);
     }
-    assert.match(delegateOutput, /Accepted message/);
+    assert.equal(delegated, true);
 
     for (let attempt = 0; attempt < 20; attempt += 1) {
       if (fakeGameCommands.length > 0) {
@@ -209,7 +213,7 @@ describe('case1 cli flow', () => {
 
     let threadOutput = '';
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      threadOutput = await dispatch('agent_thread agent-lisi', context);
+      threadOutput = JSON.stringify(await client.fetchAgentThread('agent-lisi'));
       if (/胡景/.test(threadOutput) && /建矿场/.test(threadOutput)) {
         break;
       }

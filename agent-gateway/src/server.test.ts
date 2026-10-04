@@ -1766,6 +1766,7 @@ process.stdout.write(JSON.stringify({
       building_id: 'b-27',
       item_id: 'electromagnetic_matrix',
       quantity: 10,
+      direction: 'to_building',
     });
     assert.equal(secondCommand.type, 'start_research');
     assert.deepEqual(secondCommand.payload, {

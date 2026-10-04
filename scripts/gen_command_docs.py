@@ -4,9 +4,10 @@
 数据源：
   - 服务端公开命令目录：`go run ./cmd/catalogdump -commands`（与 GET /catalog/commands 同源）
   - shared-client/src/command-catalog.ts    PUBLIC_COMMAND_DEFINITIONS（API 名 → CLI 动词、分类、层级）
-  - client-cli/src/commands/index.ts         COMMANDS（CLI 全部动词）
-  - client-cli/src/commands/util.ts          HELP_ENTRIES（用法与说明）
-  - client-cli/src/command-catalog.ts        EXTRA_AGENT_COMMAND_CATALOG（agent 可用的查询动词）
+  - shared-client/src/commands/game-commands.ts  GAME_COMMANDS（CLI 与网关共用的游戏动词）
+  - client-cli/src/commands/index.ts         COMMANDS（CLI 终端专属动词，展开 GAME_COMMANDS）
+  - shared-client/src/commands/help.ts       HELP_ENTRIES（用法与说明）
+  - shared-client/src/command-catalog.ts     EXTRA_AGENT_COMMAND_CATALOG（agent 可用的查询动词）
 
 生成内容写在两份文档的标记之间：
   <!-- BEGIN GENERATED COMMANDS -->
@@ -82,13 +83,18 @@ def load_shared_catalog() -> dict[str, dict]:
 
 
 def load_cli_commands() -> list[str]:
-    text = read(ROOT / "client-cli/src/commands/index.ts")
-    table = text.split("export const COMMANDS", 1)[1].split("\n};", 1)[0]
-    return re.findall(r"^\s*([a-z_]+)\s*:\s*\{\s*handler\s*:", table, re.M)
+    names: list[str] = []
+    for path, marker in (
+        ("shared-client/src/commands/game-commands.ts", "export const GAME_COMMANDS"),
+        ("client-cli/src/commands/index.ts", "export const COMMANDS"),
+    ):
+        table = read(ROOT / path).split(marker, 1)[1].split("\n};", 1)[0]
+        names += re.findall(r"^\s*([a-z_]+)\s*:\s*\{\s*handler\s*:", table, re.M)
+    return names
 
 
 def load_cli_help() -> dict[str, dict]:
-    text = read(ROOT / "client-cli/src/commands/util.ts")
+    text = read(ROOT / "shared-client/src/commands/help.ts")
     block = text.split("HELP_ENTRIES", 1)[1].split("\n};", 1)[0]
     out: dict[str, dict] = {}
     for line in block.splitlines():
@@ -101,7 +107,7 @@ def load_cli_help() -> dict[str, dict]:
 
 
 def load_agent_extra() -> set[str]:
-    text = read(ROOT / "client-cli/src/command-catalog.ts")
+    text = read(ROOT / "shared-client/src/command-catalog.ts")
     m = re.search(r"EXTRA_AGENT_COMMAND_CATALOG[^=]*=\s*\{(.*?)\n\}", text, re.S)
     return set(re.findall(r"^\s*([a-z_]+)\s*:\s*\{", m.group(1), re.M)) if m else set()
 
@@ -173,7 +179,7 @@ def render_cli(
 
     lines = [
         BEGIN,
-        "<!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 client-cli 的 COMMANDS/HELP_ENTRIES 与 shared-client 命令目录 -->",
+        "<!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 GAME_COMMANDS/COMMANDS/HELP_ENTRIES 与 shared-client 命令目录 -->",
         "",
         f"### 游戏命令（{len(groups['game'])} 条，对应 `POST /commands`）",
         "",

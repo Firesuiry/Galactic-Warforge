@@ -5,10 +5,12 @@
 ## 1. 启动
 
 ```bash
+npm install            # 仓库根目录（npm workspace），首次
 cd agent-gateway
-npm install
 npm run dev
 ```
+
+网关只依赖 `@gw/shared`（shared-client），不依赖 client-cli：HTTP 契约（记录类型、请求载荷、`createAgentGatewayClient`）在 `shared-client/src/agent-gateway.ts`，命令执行在 `shared-client/src/command-runtime.ts`。
 
 默认端口：
 
@@ -155,7 +157,7 @@ turn 额外字段：
 - `POST /agents/:agentId/messages` 这条传统单 agent thread 入口，现在也支持上面的受控 runtime action，不再只能跑 typed `game.command`
 - 该 thread 入口会把 `agent.create / agent.update / conversation.ensure_dm / conversation.send_message` 的 tool 结果也持久化到 thread；后续同一 agent 的下一条消息会复用这些真实 tool 结果，而不是只看到助手自然语言
 - `GET /agents/:agentId/thread` 除消息、tool call、执行日志外，还会暴露最近一次 turn 的摘要：`status`、`outcomeKind`、`executedActionCount`、`repairCount`、`errorCode/errorMessage/rawErrorMessage`、`finalMessage`
-- CLI 侧可通过 thread 入口完成“创建下级 agent 并委派其建矿场”这类链路（`client-cli/src/case1.test.ts`）
+- CLI 侧可通过 thread 入口完成“创建下级 agent 并委派其建矿场”这类链路（`agent-gateway/src/agent-delegation-flow.test.ts`）
 
 ### 3.3 自动唤醒
 
@@ -183,7 +185,7 @@ turn 额外字段：
 
 ### 4.1 命令类别限制
 
-`client-cli/src/command-catalog.ts` 把 agent 可用命令分成：
+`shared-client/src/command-catalog.ts` 的 `AGENT_COMMAND_CATALOG` 把 agent 可用命令分成：
 
 - `observe`
 - `build`
@@ -191,7 +193,7 @@ turn 额外字段：
 - `research`
 - `management`
 
-`runCommandLine()` 会在真正 dispatch 前检查命令类别，不在 `policy.commandCategories` 内就直接拒绝执行。
+`runCommandLine()`（`shared-client/src/command-runtime.ts`）每次执行都按该 agent 的 serverUrl/playerKey 新建 API 客户端，并发 agent 互不串号；它会在真正 dispatch 前检查命令类别，不在 `policy.commandCategories` 内就直接拒绝执行。
 
 ### 4.2 星球范围限制
 
@@ -272,12 +274,12 @@ agent 实例自身也保留：
 
 ### 6.2 CLI 工具边界
 
-agent 不直接拿 shell，只能走受控 `client-cli` 运行时。
+agent 不直接拿 shell，只能走受控命令运行时（`shared-client/src/command-runtime.ts` + `GAME_COMMANDS`）。
 
 当前白名单命令由两部分组成：
 
 - `shared-client/src/command-catalog.ts`：公共游戏命令与 CLI alias 的单一真相
-- `client-cli/src/command-catalog.ts`：在共享目录基础上补 query/save 等 CLI 专属入口
+- 同文件 `EXTRA_AGENT_COMMAND_CATALOG`：在公共命令基础上补 query/save 等查询入口
 
 例如：
 

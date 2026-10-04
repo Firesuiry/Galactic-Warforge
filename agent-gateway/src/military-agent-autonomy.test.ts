@@ -83,7 +83,7 @@ async function findBuildingId(authKey: string, ownerID: string, buildingType: st
   return building.id;
 }
 
-describe('T123 military agent autonomy', () => {
+describe('military agent autonomy', () => {
   before(async () => {
     warServerProcess = spawn('bash', [warServerScript, String(TEST_PORT)], {
       cwd: repoRoot,
@@ -107,7 +107,7 @@ describe('T123 military agent autonomy', () => {
   });
 
   it('delegates an assigned theater to a military agent and returns audited war results', async () => {
-    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-war-t123-'));
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'sw-agent-war-autonomy-'));
     const gateway = await createGatewayServer({
       dataRoot,
       port: 0,
@@ -121,7 +121,7 @@ describe('T123 military agent autonomy', () => {
                 type: 'game.command',
                 command: 'task_force_set_stance',
                 args: {
-                  task_force_id: 'tf-agent-t123',
+                  task_force_id: 'tf-agent-autonomy',
                   stance: 'patrol',
                 },
               },
@@ -129,8 +129,8 @@ describe('T123 military agent autonomy', () => {
                 type: 'game.command',
                 command: 'task_force_deploy',
                 args: {
-                  task_force_id: 'tf-agent-t123',
-                  theater_id: 'theater-agent-t123',
+                  task_force_id: 'tf-agent-autonomy',
+                  theater_id: 'theater-agent-autonomy',
                   system_id: 'sys-1',
                   planet_id: 'planet-1-1',
                 },
@@ -165,29 +165,29 @@ describe('T123 military agent autonomy', () => {
       const p1HubId = await findBuildingId(p1.playerKey, 'p1', 'battlefield_analysis_base');
       const p1FactoryId = await findBuildingId(p1.playerKey, 'p1', 'recomposing_assembler');
 
-      await runCli('blueprint_variant corvette corvette_agent_t123 utility --name 军事委派舰', p1);
-      await runCli('blueprint_validate corvette_agent_t123', p1);
-      await runCli('blueprint_finalize corvette_agent_t123 --target-state prototype', p1);
-      await runCli(`queue_military_production ${p1FactoryId} ${p1HubId} corvette_agent_t123 --count 1`, p1);
-      await waitForOutput('war_industry', /corvette_agent_t123:1/, p1);
-      await runCli(`commission_fleet ${p1HubId} corvette_agent_t123 sys-1 --fleet-id fleet-agent-t123`, p1);
-      await waitForOutput('fleet_status fleet-agent-t123', /corvette_agent_t123:1/, p1);
+      await runCli('blueprint_variant corvette corvette_agent_autonomy utility --name 军事委派舰', p1);
+      await runCli('blueprint_validate corvette_agent_autonomy', p1);
+      await runCli('blueprint_finalize corvette_agent_autonomy --target-state prototype', p1);
+      await runCli(`queue_military_production ${p1FactoryId} ${p1HubId} corvette_agent_autonomy --count 1`, p1);
+      await waitForOutput('war_industry', /corvette_agent_autonomy:1/, p1);
+      await runCli(`commission_fleet ${p1HubId} corvette_agent_autonomy sys-1 --fleet-id fleet-agent-autonomy`, p1);
+      await waitForOutput('fleet_status fleet-agent-autonomy', /corvette_agent_autonomy:1/, p1);
 
-      await runCli('task_force_create tf-agent-t123 --name AI巡逻群 --stance hold', p1);
-      await runCli('task_force_assign tf-agent-t123 fleet fleet-agent-t123 --system sys-1 --planet planet-1-1', p1);
-      await runCli('task_force_deploy tf-agent-t123 --system sys-1 --planet planet-1-1', p1);
-      await runCli('theater_create theater-agent-t123 --name AI前线战区', p1);
-      await runCli('theater_define_zone theater-agent-t123 primary --system sys-1 --planet planet-1-1 --radius 8', p1);
-      await runCli('theater_set_objective theater-agent-t123 secure_planet --system sys-1 --planet planet-1-1 --description AI军事委派回归', p1);
+      await runCli('task_force_create tf-agent-autonomy --name AI巡逻群 --stance hold', p1);
+      await runCli('task_force_assign tf-agent-autonomy fleet fleet-agent-autonomy --system sys-1 --planet planet-1-1', p1);
+      await runCli('task_force_deploy tf-agent-autonomy --system sys-1 --planet planet-1-1', p1);
+      await runCli('theater_create theater-agent-autonomy --name AI前线战区', p1);
+      await runCli('theater_define_zone theater-agent-autonomy primary --system sys-1 --planet planet-1-1 --radius 8', p1);
+      await runCli('theater_set_objective theater-agent-autonomy secure_planet --system sys-1 --planet planet-1-1 --description AI军事委派回归', p1);
 
       const providerResponse = await fetch(`${gateway.url}/providers`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          id: 'provider-war-t123',
+          id: 'provider-war-autonomy',
           name: 'war provider',
           providerKind: 'codex_cli',
-          description: 't123 regression provider',
+          description: 'military autonomy regression provider',
           defaultModel: 'gpt-5-codex',
           systemPrompt: 'Return JSON.',
           toolPolicy: {
@@ -213,7 +213,7 @@ describe('T123 military agent autonomy', () => {
         body: JSON.stringify({
           id: 'agent-war-director',
           name: '总参谋',
-          providerId: 'provider-war-t123',
+          providerId: 'provider-war-autonomy',
           serverUrl: TEST_SERVER_URL,
           playerId: 'p1',
           playerKey: 'key_player_1',
@@ -221,8 +221,8 @@ describe('T123 military agent autonomy', () => {
           policy: {
             commandCategories: ['observe', 'combat', 'management'],
             military: {
-              theaterIds: ['theater-agent-t123'],
-              taskForceIds: ['tf-agent-t123'],
+              theaterIds: ['theater-agent-autonomy'],
+              taskForceIds: ['tf-agent-autonomy'],
               allowedCommandIds: ['system_runtime', 'task_force_set_stance', 'task_force_deploy'],
               allowBlockade: false,
               allowMilitaryProduction: false,
@@ -237,7 +237,7 @@ describe('T123 military agent autonomy', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          content: '接管 theater-agent-t123，并让 tf-agent-t123 在战区内维持巡逻，汇报当前局势。',
+          content: '接管 theater-agent-autonomy，并让 tf-agent-autonomy 在战区内维持巡逻，汇报当前局势。',
         }),
       });
       assert.equal(messageResponse.status, 202);
@@ -261,10 +261,10 @@ describe('T123 military agent autonomy', () => {
       assert.match(thread?.lastTurn?.finalMessage ?? '', /需要玩家批准：否/);
       assert.ok(thread?.toolCalls.some((call) => (
         call.type === 'game.command'
-        && String(call.payload.commandLine ?? '').includes('task_force_set_stance tf-agent-t123 patrol')
+        && String(call.payload.commandLine ?? '').includes('task_force_set_stance tf-agent-autonomy patrol')
       )));
 
-      const taskForces = await waitForOutput('task_forces', /tf-agent-t123/, p1);
+      const taskForces = await waitForOutput('task_forces', /tf-agent-autonomy/, p1);
       assert.match(taskForces, /patrol/);
     } finally {
       await gateway.close();

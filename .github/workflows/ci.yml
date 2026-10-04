@@ -77,9 +77,9 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # client-cli 的 official-war-regression 测试会用 go run 拉起战争测试服
+      # client-cli / agent-gateway 的战争回归测试会用 go run 拉起测试服
       - name: Set up Go
-        if: matrix.package == 'client-cli'
+        if: matrix.package == 'client-cli' || matrix.package == 'agent-gateway'
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
@@ -94,6 +94,11 @@ jobs:
 
       - name: Test
         run: npm test --workspace ${{ matrix.package }}
+
+      # 命令覆盖率 + 生成的命令文档是否过期（需要 go 导出服务端目录）
+      - name: Command coverage check
+        if: matrix.package == 'client-cli'
+        run: python3 scripts/command_coverage.py --check
 
   build-server:
     runs-on: ubuntu-latest

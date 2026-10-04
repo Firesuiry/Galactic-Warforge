@@ -93,8 +93,8 @@ Authorization: Bearer <player_key>
 ### 3.1 交互 REPL（人类）
 
 ```bash
+npm install   # 首次，在仓库根目录执行（npm workspace，依赖只装一份）
 cd client-cli
-npm install   # 首次
 SW_SERVER=http://localhost:18080 npm run dev
 # 选 [1] p1
 ```
@@ -106,23 +106,22 @@ SW_SERVER=http://localhost:18080 npm run dev
 | 角色 | 入口 | 说明 |
 | --- | --- | --- |
 | **Commander（skill 默认）** | `dispatch` 或 **HTTP** | 全命令面；**不要**给 `runCommandLine` 塞 agent military policy |
-| **委派 Agent** | `runCommandLine(line, ctx, policy)` | 必须带 `policy.military`（theater/taskForce/白名单），否则军事查询/指令会被 CLI 拒绝 |
+| **委派 Agent** | `runCommandLine(line, ctx, policy)`（`@gw/shared/command-runtime`） | 必须带 `policy.military`（theater/taskForce/白名单），否则军事查询/指令会被运行时拒绝 |
 
 Commander 非交互（与官方战争回归一致，走 `dispatch`，无 military 门禁）：
 
 ```bash
 cd client-cli
-# 推荐：本地 runner 文件（tsx -e 对 top-level await 不友好）
-cat > /tmp/sw-dispatch.mjs <<'EOF'
-import { setAuth, setServerUrl } from './src/api.ts';
-import { dispatch } from './src/commands/index.ts';
+# 推荐：本地 runner 文件（tsx -e 对 top-level await 不友好）；EOF 不加引号，$PWD 展开成绝对路径
+cat > /tmp/sw-dispatch.mjs <<EOF
+import { api } from '$PWD/src/api.ts';
+import { dispatch } from '$PWD/src/commands/index.ts';
 const line = process.argv.slice(2).join(' ');
 const player = process.env.SW_PLAYER || 'p1';
 const key = process.env.SW_KEY || 'key_player_1';
-const url = process.env.SW_SERVER || 'http://localhost:18080';
-setServerUrl(url);
-setAuth(player, key);
-console.log(await dispatch(line, { currentPlayer: player, rl: {} }));
+api.setServerUrl(process.env.SW_SERVER || 'http://localhost:18080');
+api.setAuth(player, key);
+console.log(await dispatch(line, { api, currentPlayer: player, rl: {} }));
 EOF
 SW_SERVER=http://localhost:19481 npx tsx /tmp/sw-dispatch.mjs briefing
 SW_SERVER=http://localhost:19481 npx tsx /tmp/sw-dispatch.mjs war_industry

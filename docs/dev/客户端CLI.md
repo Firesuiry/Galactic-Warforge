@@ -1,9 +1,9 @@
 # 客户端 CLI
 
-`client-cli` 是交互式 REPL，覆盖服务端全部公开命令、常用查询、调试接口和 agent-gateway 管理入口。同一套命令分发（`client-cli/src/runtime.ts`）也被 agent-gateway 用来执行智能体动作。
+`client-cli` 是交互式 REPL，覆盖服务端全部公开命令、常用查询、调试接口和 agent-gateway 管理入口。游戏命令的处理器与命令表（`GAME_COMMANDS`）在 `shared-client/src/commands/`，CLI 只在其上叠加终端专属命令（`switch`/`events`/`status`/`agent_*`/`game_*`/`clear`/`quit`）；agent-gateway 通过 `shared-client/src/command-runtime.ts` 复用同一套分发执行智能体动作，不依赖 client-cli。
 
-- 公共命令目录的单一真相是 `shared-client/src/command-catalog.ts`（API 名 ↔ CLI 动词、权限类别、层级）；`client-cli/src/command-catalog.ts` 只补 agent 可用的查询动词（`EXTRA_AGENT_COMMAND_CATALOG`）。
-- 用法与说明来自 `client-cli/src/commands/util.ts` 的 `HELP_ENTRIES`，REPL 内 `help <命令>` 可查。
+- 公共命令目录的单一真相是 `shared-client/src/command-catalog.ts`（API 名 ↔ CLI 动词、权限类别、层级）；同文件的 `EXTRA_AGENT_COMMAND_CATALOG` 补 agent 可用的查询动词，CLI、网关与 Web provider 白名单共用。
+- 用法与说明来自 `shared-client/src/commands/help.ts` 的 `HELP_ENTRIES`，REPL 内 `help <命令>` 可查。
 - 下方“命令一览”由 `python3 scripts/gen_command_docs.py` 生成；改了命令目录或 `HELP_ENTRIES` 后重新生成。
 - 坐标为立方体球面图集 x/y（`map_width=3N`、`map_height=2N`），跨面邻接以服务端为准，见 [3D与画质](../guide/3D与画质.md)。
 - 玩法示例见 [玩法指南](../player/玩法指南.md)，启动方式见 [本地环境与测试](本地环境与测试.md)。
@@ -11,7 +11,8 @@
 ## 启动与连接
 
 ```bash
-cd client-cli && npm install && npm run dev
+npm install            # 仓库根目录（npm workspace），首次
+cd client-cli && npm run dev
 ```
 
 | 环境变量 | 默认 | 说明 |
@@ -121,7 +122,7 @@ agent_thread agent-war-director
 ## 命令一览
 
 <!-- BEGIN GENERATED COMMANDS -->
-<!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 client-cli 的 COMMANDS/HELP_ENTRIES 与 shared-client 命令目录 -->
+<!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 GAME_COMMANDS/COMMANDS/HELP_ENTRIES 与 shared-client 命令目录 -->
 
 ### 游戏命令（64 条，对应 `POST /commands`）
 
@@ -221,23 +222,23 @@ agent_thread agent-war-director
 | 动词 | 用法 | 说明 |
 |---|---|---|
 | `catalog_commands` | — | Public command structure catalog (GET /catalog/commands) |
+| `raw` | `raw <json>` | Send raw /commands request JSON |
+| `audit` | `audit [options]` | Query audit log |
+| `event_snapshot` | `event_snapshot [options]` | Query event snapshot |
+| `alert_snapshot` | `alert_snapshot [options]` | Query production alert snapshot |
+| `replay` | `replay [options]` | Replay tick range |
+| `rollback` | `rollback [options]` | Rollback to tick |
+| `help` | `help [command]` | Show help |
 | `agent_list` | — | List agent-gateway agent profiles |
 | `agent_create` | `agent_create <name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]` | Create an agent-gateway agent profile bound to the current player key |
 | `agent_update` | `agent_update <agent_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]` | Patch agent-gateway agent policy or role |
 | `agent_message` | `agent_message <agent_id> <content>` | Send one direct task message to an agent thread |
 | `agent_thread` | `agent_thread <agent_id>` | Inspect one agent thread including messages, tool calls and logs |
-| `raw` | `raw <json>` | Send raw /commands request JSON |
 | `switch` | `switch [player_id] [key]` | Switch player |
 | `events` | `events [count]` | Show recent SSE events (default: 10) |
 | `status` | — | Current player and connection status |
-| `audit` | `audit [options]` | Query audit log |
-| `event_snapshot` | `event_snapshot [options]` | Query event snapshot |
-| `alert_snapshot` | `alert_snapshot [options]` | Query production alert snapshot |
 | `game_new` | — | — |
 | `game_status` | — | — |
-| `replay` | `replay [options]` | Replay tick range |
-| `rollback` | `rollback [options]` | Rollback to tick |
-| `help` | `help [command]` | Show help |
 | `clear` | — | Clear screen |
 | `quit` | — | Exit |
 | `exit` | — | — |

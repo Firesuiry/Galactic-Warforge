@@ -4,8 +4,9 @@
 Sources (no network):
   - server/internal/model/command.go          authoritative CommandType set
   - shared-client/src/command-catalog.ts     PUBLIC_COMMAND_DEFINITIONS
-  - client-cli/src/commands/index.ts         COMMANDS table (action cmds)
-  - client-cli/src/command-catalog.ts        AGENT_COMMAND_CATALOG (via shared)
+  - client-cli/src/commands/index.ts         COMMANDS table (CLI-only cmds)
+  - shared-client/src/commands/game-commands.ts  GAME_COMMANDS (shared cmds)
+  - shared-client/src/command-catalog.ts     AGENT_COMMAND_CATALOG
   - client-web/src/**/*.{ts,tsx}             client.cmdX(...) call sites
                                             (tests excluded)
 
@@ -73,7 +74,7 @@ def load_shared_catalog() -> dict[str, dict]:
 
 
 def load_cli_commands() -> set[str]:
-    text = read(ROOT / "client-cli/src/commands/index.ts")
+    text = read(ROOT / "client-cli/src/commands/index.ts") + read(ROOT / "shared-client/src/commands/game-commands.ts")
     return set(CLI_TABLE_RE.findall(text))
 
 
@@ -85,7 +86,7 @@ def load_agent_commands() -> set[str]:
         if entry["cli"]:
             agent.add(entry["cli"])
     # EXTRA_AGENT_COMMAND_CATALOG (observe / management query surface)
-    cat = read(ROOT / "client-cli/src/command-catalog.ts")
+    cat = read(ROOT / "shared-client/src/command-catalog.ts")
     m = re.search(
         r"EXTRA_AGENT_COMMAND_CATALOG[^=]*=\s*\{(.*?)\n\}",
         cat,
@@ -221,9 +222,9 @@ def render_markdown(matrix: dict) -> str:
         "## 说明",
         "",
         "- **shared**：`shared-client/src/command-catalog.ts` 的 `PUBLIC_COMMAND_DEFINITIONS`",
-        "- **CLI**：`client-cli/src/commands/index.ts` 的 `COMMANDS` 键；"
+        "- **CLI**：`shared-client/src/commands/game-commands.ts` 的 `GAME_COMMANDS` + `client-cli/src/commands/index.ts` 的 `COMMANDS` 键；"
         "若 catalog 声明 `cliCommandName` 别名（如 `transfer_item`→`transfer`），按别名匹配",
-        "- **agent**：`client-cli/src/command-catalog.ts` 的 "
+        "- **agent**：`shared-client/src/command-catalog.ts` 的 "
         "`AGENT_COMMAND_CATALOG`（shared 公开 CLI 别名 + EXTRA 查询命令）",
         "- **GUI**：`client-web/src` 非测试文件中的 `client.cmdX(...)` 静态调用点；"
         "动态/间接派发不会被计入",
