@@ -1,4 +1,4 @@
-import type { ConversationTurn } from '../types.js';
+import type { ConversationTurn } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 export function createTurnStore(root: string) {

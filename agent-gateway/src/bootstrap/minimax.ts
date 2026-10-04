@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { AGENT_ALLOWED_COMMANDS } from '@gw/shared/command-catalog';
-import type { ModelProvider } from '../types.js';
+import type { ModelProvider } from '@gw/shared/agent-gateway';
 
 const BUILTIN_MINIMAX_PROVIDER_ID = 'builtin-minimax-api';
 const BUILTIN_MINIMAX_SECRET_ID = 'provider-builtin-minimax-api-api-key';

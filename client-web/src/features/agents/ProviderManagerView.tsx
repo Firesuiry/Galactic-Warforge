@@ -9,7 +9,7 @@ import {
   getProviderCommandCoverageCategories,
   listProviderCommandsByCategory,
 } from './provider-command-catalog';
-import type { AgentProviderKindView, CreateProviderPayload, ModelProviderView } from './types';
+import type { ProviderKind, CreateProviderPayload, ModelProviderView } from '@shared/agent-gateway';
 
 interface ProviderManagerViewProps {
   fixtureMode: boolean;
@@ -30,7 +30,7 @@ const PROVIDER_CATEGORY_LABELS: Record<CommandPermissionCategory, string> = {
   combat: '战斗',
 };
 
-function getProviderDefaults(providerKind: AgentProviderKindView) {
+function getProviderDefaults(providerKind: ProviderKind) {
   if (providerKind === 'http_api') {
     return {
       apiUrl: DEFAULT_API_URL,
@@ -68,7 +68,7 @@ function parseArgsText(value: string) {
 export function ProviderManagerView(props: ProviderManagerViewProps) {
   const [providerName, setProviderName] = useState('');
   const [providerDescription, setProviderDescription] = useState('');
-  const [providerKind, setProviderKind] = useState<AgentProviderKindView>('codex_cli');
+  const [providerKind, setProviderKind] = useState<ProviderKind>('codex_cli');
   const [modelName, setModelName] = useState(getProviderDefaults('codex_cli').model);
   const [apiUrl, setApiUrl] = useState(getProviderDefaults('http_api').apiUrl);
   const [apiStyle, setApiStyle] = useState<'openai' | 'claude'>(getProviderDefaults('http_api').apiStyle);
@@ -81,7 +81,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
     DEFAULT_PROVIDER_COMMAND_WHITELIST,
   );
 
-  function handleProviderKindChange(nextProviderKind: AgentProviderKindView) {
+  function handleProviderKindChange(nextProviderKind: ProviderKind) {
     const defaults = getProviderDefaults(nextProviderKind);
     setProviderKind(nextProviderKind);
     setApiUrl(defaults.apiUrl);
@@ -223,7 +223,7 @@ export function ProviderManagerView(props: ProviderManagerViewProps) {
           <Select
             aria-label="Provider 类型"
             value={providerKind}
-            onChange={(event) => handleProviderKindChange(event.target.value as AgentProviderKindView)}
+            onChange={(event) => handleProviderKindChange(event.target.value as ProviderKind)}
           >
             <option value="http_api">HTTP API</option>
             <option value="codex_cli">Codex CLI</option>

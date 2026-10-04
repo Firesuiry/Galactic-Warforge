@@ -1,4 +1,4 @@
-import type { ScheduleJob } from '../types.js';
+import type { ScheduleJob } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 export function createScheduleStore(root: string) {

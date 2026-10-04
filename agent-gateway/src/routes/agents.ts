@@ -10,7 +10,13 @@ import { appendMilitaryAuditSummary, buildMilitaryContextSections, filterCommand
 import { classifyPublicTurnError } from '../runtime/provider-error.js';
 import { runProviderTurn, type AgentTurnRunner } from '../runtime/turn.js';
 import { countsAsExecutedAction, resolveTurnOutcomeKind } from '../runtime/turn-validator.js';
-import type { AgentInstance, AgentPolicyPatch, AgentThread, ModelProvider } from '../types.js';
+import type {
+  AgentInstance,
+  AgentThread,
+  CreateAgentPayload,
+  ModelProvider,
+  UpdateAgentPayload,
+} from '@gw/shared/agent-gateway';
 
 interface AgentStore {
   list: () => Promise<AgentInstance[]>;
@@ -157,20 +163,7 @@ export async function handleAgentRoutes(
   }
 
   if (request.method === 'POST' && url.pathname === '/agents') {
-    const payload = await readJsonBody<{
-      id?: string;
-      name: string;
-      providerId: string;
-      serverUrl: string;
-      playerId: string;
-      playerKey: string;
-      goal?: string;
-      role?: 'worker' | 'manager' | 'director';
-      policy?: AgentPolicyPatch;
-      supervisorAgentIds?: string[];
-      managedAgentIds?: string[];
-      activeConversationIds?: string[];
-    }>(request);
+    const payload = await readJsonBody<CreateAgentPayload>(request);
     const now = new Date().toISOString();
     const id = payload.id || randomUUID();
     const threadId = `thread-${id}`;
@@ -221,19 +214,7 @@ export async function handleAgentRoutes(
       return;
     }
 
-    const payload = await readJsonBody<{
-      name?: string;
-      providerId?: string;
-      serverUrl?: string;
-      playerId?: string;
-      playerKey?: string;
-      goal?: string;
-      role?: 'worker' | 'manager' | 'director';
-      policy?: AgentPolicyPatch;
-      supervisorAgentIds?: string[];
-      managedAgentIds?: string[];
-      activeConversationIds?: string[];
-    }>(request);
+    const payload = await readJsonBody<UpdateAgentPayload>(request);
 
     if (typeof payload.playerKey === 'string' && payload.playerKey.trim() !== '') {
       await context.secretStore.save(agent.playerKeySecretId, payload.playerKey);

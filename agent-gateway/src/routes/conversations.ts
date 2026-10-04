@@ -2,7 +2,16 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { resolveMentionTargetsFromContent } from '../runtime/router.js';
-import type { AgentInstance, Conversation, ConversationMessage, ConversationTurn } from '../types.js';
+import type {
+  AddConversationMembersPayload,
+  AgentInstance,
+  Conversation,
+  ConversationMessage,
+  ConversationTurn,
+  CreateConversationPayload,
+  InviteConversationMembersByPlanetPayload,
+  SendConversationMessagePayload,
+} from '@gw/shared/agent-gateway';
 
 interface AgentStore {
   list: () => Promise<AgentInstance[]>;
@@ -93,16 +102,7 @@ export async function handleConversationRoutes(
   }
 
   if (request.method === 'POST' && url.pathname === '/conversations') {
-    const payload = await readJsonBody<{
-      id?: string;
-      workspaceId?: string;
-      type: 'channel' | 'dm';
-      name: string;
-      topic?: string;
-      createdByType: 'player' | 'agent';
-      createdById: string;
-      memberIds?: string[];
-    }>(request);
+    const payload = await readJsonBody<CreateConversationPayload>(request);
     const now = new Date().toISOString();
     const conversation: Conversation = {
       id: payload.id ?? randomUUID(),
@@ -167,11 +167,7 @@ export async function handleConversationRoutes(
       return;
     }
 
-    const payload = await readJsonBody<{
-      senderType: 'player' | 'agent' | 'system' | 'schedule';
-      senderId: string;
-      content: string;
-    }>(request);
+    const payload = await readJsonBody<SendConversationMessagePayload>(request);
     const agents = await context.agentStore.list();
     const memberAgents = agents.filter((agent) => conversation.memberIds.includes(`agent:${agent.id}`));
     const message: ConversationMessage = {
@@ -206,11 +202,7 @@ export async function handleConversationRoutes(
       return;
     }
 
-    const payload = await readJsonBody<{
-      actorType: 'player' | 'agent';
-      actorId: string;
-      memberIds: string[];
-    }>(request);
+    const payload = await readJsonBody<AddConversationMembersPayload>(request);
 
     if (!await canManageMembers(payload.actorType, payload.actorId, context.agentStore)) {
       writeJson(response, 403, { error: 'manage_members_not_allowed' });
@@ -235,11 +227,7 @@ export async function handleConversationRoutes(
       return;
     }
 
-    const payload = await readJsonBody<{
-      actorType: 'player' | 'agent';
-      actorId: string;
-      planetId: string;
-    }>(request);
+    const payload = await readJsonBody<InviteConversationMembersByPlanetPayload>(request);
 
     if (!await canInviteByPlanet(payload.actorType, payload.actorId, context.agentStore)) {
       writeJson(response, 403, { error: 'invite_by_planet_not_allowed' });

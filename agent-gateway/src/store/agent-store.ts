@@ -1,4 +1,4 @@
-import type { AgentInstance } from '../types.js';
+import type { AgentInstance } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 export function createAgentStore(root: string) {

@@ -1,4 +1,4 @@
-import type { ConversationMessage } from '../types.js';
+import type { ConversationMessage } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 async function readConversationMessages(root: string, conversationId: string) {

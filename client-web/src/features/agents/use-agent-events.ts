@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 
 import type {
-  ConversationMessageView,
-  ConversationTurnView,
-} from './types';
+  ConversationMessage,
+  ConversationTurn,
+} from '@shared/agent-gateway';
 
 export interface ConversationStreamEvent {
   type: 'message' | 'turn.updated' | 'turn.completed' | 'turn.failed';
-  payload: ConversationMessageView | ConversationTurnView;
+  payload: ConversationMessage | ConversationTurn;
 }
 
 function parseEventPayload<T>(event: MessageEvent) {
@@ -27,25 +27,25 @@ export function useConversationEvents(
     const handleMessage = (event: MessageEvent) => {
       onEvent({
         type: 'message',
-        payload: parseEventPayload<ConversationMessageView>(event),
+        payload: parseEventPayload<ConversationMessage>(event),
       });
     };
     const handleTurnUpdated = (event: Event) => {
       onEvent({
         type: 'turn.updated',
-        payload: parseEventPayload<ConversationTurnView>(event as MessageEvent),
+        payload: parseEventPayload<ConversationTurn>(event as MessageEvent),
       });
     };
     const handleTurnCompleted = (event: Event) => {
       onEvent({
         type: 'turn.completed',
-        payload: parseEventPayload<ConversationTurnView>(event as MessageEvent),
+        payload: parseEventPayload<ConversationTurn>(event as MessageEvent),
       });
     };
     const handleTurnFailed = (event: Event) => {
       onEvent({
         type: 'turn.failed',
-        payload: parseEventPayload<ConversationTurnView>(event as MessageEvent),
+        payload: parseEventPayload<ConversationTurn>(event as MessageEvent),
       });
     };
 

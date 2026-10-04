@@ -9,6 +9,8 @@ import { after, before, describe, it } from 'node:test';
 
 import { setAuth, setServerUrl } from '../../client-cli/src/api.js';
 import { dispatch } from '../../client-cli/src/commands/index.js';
+import type { AgentThread } from '@gw/shared/agent-gateway';
+
 import { createGatewayServer } from './server.js';
 
 const TEST_PORT = 19483;
@@ -241,19 +243,11 @@ describe('T123 military agent autonomy', () => {
       assert.equal(messageResponse.status, 202);
 
       const deadline = Date.now() + 120_000;
-      type ThreadView = {
-        lastTurn?: {
-          status: string;
-          outcomeKind?: string;
-          finalMessage?: string;
-        };
-        toolCalls: Array<{ type: string; payload: Record<string, unknown> }>;
-      };
-      let thread = null as ThreadView | null;
+      let thread = null as AgentThread | null;
       while (Date.now() < deadline) {
         const threadResponse = await fetch(`${gateway.url}/agents/agent-war-director/thread`);
         assert.equal(threadResponse.status, 200);
-        thread = await threadResponse.json() as ThreadView;
+        thread = await threadResponse.json() as AgentThread;
         if (thread?.lastTurn?.status === 'completed') {
           break;
         }

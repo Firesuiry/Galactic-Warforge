@@ -1,4 +1,4 @@
-import type { AgentMilitaryPolicy, AgentPolicy, AgentPolicyPatch } from '../types.js';
+import type { AgentMilitaryPolicy, AgentPolicy, AgentPolicyPatch } from '@gw/shared/agent-gateway';
 
 export function createDefaultMilitaryPolicy(): AgentMilitaryPolicy {
   return {

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import type { ModelProvider } from '../types.js';
+import type { CreateProviderPayload, ModelProvider, ModelProviderView } from '@gw/shared/agent-gateway';
 
 interface ProviderStore {
   list: () => Promise<ModelProvider[]>;
@@ -27,7 +27,7 @@ async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
   return JSON.parse(raw) as T;
 }
 
-function sanitizeProvider(provider: ModelProvider) {
+function sanitizeProvider(provider: ModelProvider): ModelProviderView {
   return {
     ...provider,
     providerConfig: 'apiKeySecretId' in provider.providerConfig
@@ -53,15 +53,15 @@ export async function handleProviderRoutes(
   }
 
   if (request.method === 'POST' && url.pathname === '/providers') {
-    const payload = await readJsonBody<ModelProvider & {
-      providerConfig: Record<string, unknown> & { apiKey?: string };
-    }>(request);
+    const payload = await readJsonBody<CreateProviderPayload>(request);
     const now = new Date().toISOString();
     const id = payload.id || randomUUID();
-    let providerConfig: ModelProvider['providerConfig'] = payload.providerConfig;
+    // 未提交 apiKey 的配置（CLI provider、或沿用已有 secret 的 http_api）原样落盘
+    let providerConfig = payload.providerConfig as ModelProvider['providerConfig'];
 
     if (
       payload.providerKind === 'http_api'
+      && 'apiKey' in payload.providerConfig
       && typeof payload.providerConfig.apiKey === 'string'
       && payload.providerConfig.apiKey.trim() !== ''
     ) {
@@ -71,7 +71,7 @@ export async function handleProviderRoutes(
       providerConfig = {
         ...rest,
         apiKeySecretId: secretId,
-      } as ModelProvider['providerConfig'];
+      };
     }
 
     const provider: ModelProvider = {

@@ -3,22 +3,22 @@ import type { FormEvent } from 'react';
 import { Button, Input, Select, Textarea } from '@/common/controls';
 
 import type {
-  AgentProfileView,
-  ConversationMessageView,
-  ConversationTurnActionSummaryView,
-  ConversationTurnView,
-  ConversationView,
-} from './types';
+  AgentInstance,
+  ConversationMessage,
+  ConversationTurnActionSummary,
+  ConversationTurn,
+  Conversation,
+} from '@shared/agent-gateway';
 
 interface ChannelWorkspaceViewProps {
   mode: 'chat' | 'settings';
   fixtureMode: boolean;
-  conversation?: ConversationView;
-  messages: ConversationMessageView[];
+  conversation?: Conversation;
+  messages: ConversationMessage[];
   messagesLoading: boolean;
-  turns: ConversationTurnView[];
+  turns: ConversationTurn[];
   turnsLoading: boolean;
-  agents: AgentProfileView[];
+  agents: AgentInstance[];
   messageInput: string;
   invitePlanetId: string;
   inviteAgentId: string;
@@ -32,7 +32,7 @@ interface ChannelWorkspaceViewProps {
   onBackToChat: () => void;
 }
 
-function formatMemberLabel(memberId: string, agents: AgentProfileView[]) {
+function formatMemberLabel(memberId: string, agents: AgentInstance[]) {
   if (memberId.startsWith('player:')) {
     return `玩家 ${memberId.slice('player:'.length)}`;
   }
@@ -40,7 +40,7 @@ function formatMemberLabel(memberId: string, agents: AgentProfileView[]) {
   return agents.find((agent) => agent.id === agentId)?.name ?? agentId;
 }
 
-function formatMessageSender(message: ConversationMessageView, agents: AgentProfileView[]) {
+function formatMessageSender(message: ConversationMessage, agents: AgentInstance[]) {
   if (message.senderType === 'player') {
     return '玩家';
   }
@@ -53,7 +53,7 @@ function formatMessageSender(message: ConversationMessageView, agents: AgentProf
   return '系统';
 }
 
-function formatTurnStatus(status: ConversationTurnView['status']) {
+function formatTurnStatus(status: ConversationTurn['status']) {
   switch (status) {
     case 'accepted':
       return '已接收';
@@ -72,7 +72,7 @@ function formatTurnStatus(status: ConversationTurnView['status']) {
   }
 }
 
-function formatActionStatus(status: ConversationTurnActionSummaryView['status']) {
+function formatActionStatus(status: ConversationTurnActionSummary['status']) {
   switch (status) {
     case 'pending':
       return '待执行';
@@ -85,11 +85,11 @@ function formatActionStatus(status: ConversationTurnActionSummaryView['status'])
   }
 }
 
-function formatTurnTarget(turn: ConversationTurnView, agents: AgentProfileView[]) {
+function formatTurnTarget(turn: ConversationTurn, agents: AgentInstance[]) {
   return agents.find((agent) => agent.id === turn.targetAgentId)?.name ?? turn.targetAgentId;
 }
 
-function formatOutcomeKind(outcomeKind: ConversationTurnView['outcomeKind']) {
+function formatOutcomeKind(outcomeKind: ConversationTurn['outcomeKind']) {
   switch (outcomeKind) {
     case 'reply_only':
       return '纯回复';
@@ -106,7 +106,7 @@ function formatOutcomeKind(outcomeKind: ConversationTurnView['outcomeKind']) {
   }
 }
 
-function formatTurnFailure(turn: ConversationTurnView) {
+function formatTurnFailure(turn: ConversationTurn) {
   if (turn.errorCode === 'provider_incomplete_execution') {
     if (turn.rawErrorMessage?.includes('最终结果')) {
       return '动作已经执行，但还没有交付最终结果。';
@@ -217,8 +217,8 @@ export function ChannelWorkspaceView(props: ChannelWorkspaceViewProps) {
     (message) => message.senderType === 'player' || message.senderType === 'schedule',
   );
   const requestMessageIds = new Set(requestMessages.map((message) => message.id));
-  const turnsByRequest = new Map<string, ConversationTurnView[]>();
-  const repliesByRequest = new Map<string, ConversationMessageView[]>();
+  const turnsByRequest = new Map<string, ConversationTurn[]>();
+  const repliesByRequest = new Map<string, ConversationMessage[]>();
 
   for (const turn of sortedTurns) {
     const existing = turnsByRequest.get(turn.requestMessageId) ?? [];

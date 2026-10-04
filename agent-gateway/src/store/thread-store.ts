@@ -1,4 +1,4 @@
-import type { AgentThread } from '../types.js';
+import type { AgentThread } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 export function createThreadStore(root: string) {

@@ -1,20 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { jsonResponse } from '@/test/utils';
+import { createAgentGatewayClient } from './agent-gateway.js';
 
-import {
-  addConversationMembers,
-  createAgent,
-  createProvider,
-  createSchedule,
-  fetchConversationTurns,
-  fetchProviders,
-  sendConversationMessage,
-  updateSchedule,
-  updateAgent,
-} from './api';
+function jsonResponse(payload: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(payload), {
+    headers: { 'Content-Type': 'application/json' },
+    status: 200,
+    ...init,
+  });
+}
 
-describe('agents api', () => {
+/** client-web 经 vite 代理访问网关 */
+const gateway = createAgentGatewayClient({ baseUrl: '/agent-api' });
+
+describe('agent gateway client', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -48,7 +47,7 @@ describe('agents api', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(fetchProviders()).resolves.toEqual([
+    await expect(gateway.fetchProviders()).resolves.toEqual([
       expect.objectContaining({
         id: 'provider-builder',
         name: '建造 Provider',
@@ -131,7 +130,7 @@ describe('agents api', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await createProvider({
+    await gateway.createProvider({
       name: '建造 Provider',
       providerKind: 'codex_cli',
       description: '负责建设',
@@ -152,7 +151,7 @@ describe('agents api', () => {
       },
     });
 
-    await createAgent({
+    await gateway.createAgent({
       name: '建造官',
       providerId: 'provider-builder',
       serverUrl: 'http://localhost:8080',
@@ -160,17 +159,17 @@ describe('agents api', () => {
       playerKey: 'key_player_1',
     });
 
-    await updateAgent('agent-builder', {
+    await gateway.updateAgent('agent-builder', {
       providerId: 'provider-director',
     });
 
-    await addConversationMembers('conv-a', {
+    await gateway.addConversationMembers('conv-a', {
       actorType: 'player',
       actorId: 'p1',
       memberIds: ['agent:agent-builder'],
     });
 
-    await createSchedule({
+    await gateway.createSchedule({
       ownerAgentId: 'agent-builder',
       creatorType: 'player',
       creatorId: 'p1',
@@ -180,7 +179,7 @@ describe('agents api', () => {
       messageTemplate: '@建造官 每五分钟汇报一次',
     });
 
-    await updateSchedule('schedule-a', {
+    await gateway.updateSchedule('schedule-a', {
       enabled: false,
     });
 
@@ -249,14 +248,14 @@ describe('agents api', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(fetchConversationTurns('conv-a')).resolves.toEqual([
+    await expect(gateway.fetchConversationTurns('conv-a')).resolves.toEqual([
       expect.objectContaining({
         id: 'turn-1',
         assistantPreview: '先检查矿机。',
       }),
     ]);
 
-    await expect(sendConversationMessage('conv-a', {
+    await expect(gateway.sendConversationMessage('conv-a', {
       senderType: 'player',
       senderId: 'p1',
       content: '@建造官 检查产线',
@@ -274,5 +273,62 @@ describe('agents api', () => {
         ],
       }),
     );
+  });
+
+  it('calls agent list/create/update/message/thread endpoints against an absolute gateway url', async () => {
+    const seen: Array<{ url: string; method: string }> = [];
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      seen.push({ url, method });
+      if (url === 'http://127.0.0.1:18180/agents' && method === 'GET') {
+        return Promise.resolve(jsonResponse([{ id: 'agent-lisi', name: '李斯' }]));
+      }
+      if (url === 'http://127.0.0.1:18180/agents' && method === 'POST') {
+        return Promise.resolve(jsonResponse({ id: 'agent-lisi', name: '李斯' }, { status: 201 }));
+      }
+      if (url === 'http://127.0.0.1:18180/agents/agent-lisi' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ id: 'agent-lisi', name: '李斯', policy: { canCreateAgents: true } }));
+      }
+      if (url === 'http://127.0.0.1:18180/agents/agent-lisi/messages' && method === 'POST') {
+        expect(JSON.parse(String(init?.body))).toEqual({ content: '创建胡景，并赋予其建筑权限' });
+        return Promise.resolve(jsonResponse({ accepted: true }, { status: 202 }));
+      }
+      if (url === 'http://127.0.0.1:18180/agents/agent-lisi/thread' && method === 'GET') {
+        return Promise.resolve(jsonResponse({
+          id: 'thread-agent-lisi',
+          agentId: 'agent-lisi',
+          messages: [{ role: 'assistant', content: '胡景已创建。' }],
+          toolCalls: [],
+          executionLogs: [],
+        }));
+      }
+      return Promise.reject(new Error(`unexpected request: ${method} ${url}`));
+    }));
+
+    const cliGateway = createAgentGatewayClient({ baseUrl: 'http://127.0.0.1:18180/' });
+    const agents = await cliGateway.fetchAgents();
+    const created = await cliGateway.createAgent({
+      name: '李斯',
+      providerId: 'provider-case1',
+      serverUrl: 'http://127.0.0.1:18080',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+    const updated = await cliGateway.updateAgent('agent-lisi', { policy: { canCreateAgents: true } });
+    const accepted = await cliGateway.sendAgentMessage('agent-lisi', '创建胡景，并赋予其建筑权限');
+    const thread = await cliGateway.fetchAgentThread('agent-lisi');
+
+    expect(agents[0]?.id).toBe('agent-lisi');
+    expect(created.id).toBe('agent-lisi');
+    expect(updated.policy?.canCreateAgents).toBe(true);
+    expect(accepted.accepted).toBe(true);
+    expect(thread.id).toBe('thread-agent-lisi');
+    expect(seen).toHaveLength(5);
+  });
+
+  it('surfaces gateway error codes', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ error: 'agent_not_found' }, { status: 404 }))));
+    await expect(gateway.fetchAgentThread('missing')).rejects.toThrow('agent_not_found');
   });
 });

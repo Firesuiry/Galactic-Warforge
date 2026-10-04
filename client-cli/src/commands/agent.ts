@@ -1,14 +1,12 @@
 import { getAuth, getServerUrl } from '../api.js';
-import {
-  createAgentProfile,
-  fetchAgentThread,
-  listAgentProfiles,
-  sendAgentMessage,
-  updateAgentProfile,
-  type AgentGatewayPolicy,
-} from '../agent-api.js';
+import { createAgentGatewayClient, type AgentPolicyPatch } from '@gw/shared/agent-gateway';
+import { getAgentGatewayUrl } from '../config.js';
 import { fmtError } from '../format.js';
 import { getStringOption, parseArgs } from './args.js';
+
+function gateway() {
+  return createAgentGatewayClient({ baseUrl: getAgentGatewayUrl() });
+}
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -54,7 +52,7 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
   );
   const maxMilitaryProductionCountRaw = getStringOption(parsed, 'military-production-limit');
 
-  const policy: AgentGatewayPolicy = {};
+  const policy: AgentPolicyPatch = {};
   if (planetIds) {
     policy.planetIds = planetIds;
   }
@@ -82,7 +80,7 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
   if (canDirectMessageAgentIds) {
     policy.canDirectMessageAgentIds = canDirectMessageAgentIds;
   }
-  const military: NonNullable<AgentGatewayPolicy['military']> = {};
+  const military: NonNullable<AgentPolicyPatch['military']> = {};
   if (theaterIds) {
     military.theaterIds = theaterIds;
   }
@@ -112,7 +110,7 @@ function buildPolicy(parsed: ReturnType<typeof parseArgs>) {
 
 export async function cmdAgentList(): Promise<string> {
   try {
-    const agents = await listAgentProfiles();
+    const agents = await gateway().fetchAgents();
     if (agents.length === 0) {
       return 'No agents found.';
     }
@@ -140,7 +138,7 @@ export async function cmdAgentCreate(args: string[]): Promise<string> {
   }
 
   try {
-    const created = await createAgentProfile({
+    const created = await gateway().createAgent({
       id: getStringOption(parsed, 'id'),
       name,
       providerId,
@@ -165,7 +163,7 @@ export async function cmdAgentUpdate(args: string[]): Promise<string> {
   }
 
   try {
-    const updated = await updateAgentProfile(agentId, {
+    const updated = await gateway().updateAgent(agentId, {
       role: getStringOption(parsed, 'role') as 'worker' | 'manager' | 'director' | undefined,
       goal: getStringOption(parsed, 'goal'),
       policy: buildPolicy(parsed),
@@ -181,7 +179,7 @@ export async function cmdAgentMessage(args: string[]): Promise<string> {
     return fmtError('Usage: agent_message <agent_id> <content>');
   }
   try {
-    const response = await sendAgentMessage(args[0], args.slice(1).join(' '));
+    const response = await gateway().sendAgentMessage(args[0], args.slice(1).join(' '));
     return response.accepted ? `Accepted message for ${args[0]}` : `Rejected message for ${args[0]}`;
   } catch (error) {
     return fmtError(toErrorMessage(error));
@@ -193,7 +191,7 @@ export async function cmdAgentThread(args: string[]): Promise<string> {
     return fmtError('Usage: agent_thread <agent_id>');
   }
   try {
-    const thread = await fetchAgentThread(args[0]);
+    const thread = await gateway().fetchAgentThread(args[0]);
     const summary = thread.lastTurn
       ? [
           `Last turn: ${thread.lastTurn.status}`,

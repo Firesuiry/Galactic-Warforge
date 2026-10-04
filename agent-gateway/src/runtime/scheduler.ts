@@ -1,4 +1,4 @@
-import type { ScheduleJob } from '../types.js';
+import type { ScheduleJob } from '@gw/shared/agent-gateway';
 
 interface RunDueSchedulesInput {
   now: string;

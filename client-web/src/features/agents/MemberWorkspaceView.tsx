@@ -5,18 +5,19 @@ import { Button, Input, Select, Textarea } from '@/common/controls';
 import { getMissingPolicyCategories, getProviderCommandCoverageCategories } from './provider-command-catalog';
 import { ProviderManagerView } from './ProviderManagerView';
 import type {
-  AgentPolicyView,
-  AgentProfileView,
+  AgentPolicy,
+  AgentPolicyPatch,
+  AgentInstance,
   CreateProviderPayload,
   ModelProviderView,
-  ScheduleView,
-} from './types';
+  ScheduleJob,
+} from '@shared/agent-gateway';
 
 interface MemberWorkspaceViewProps {
   fixtureMode: boolean;
-  agents: AgentProfileView[];
+  agents: AgentInstance[];
   providers: ModelProviderView[];
-  schedules: ScheduleView[];
+  schedules: ScheduleJob[];
   selectedAgentId: string;
   showCreateMember: boolean;
   showProviderManager: boolean;
@@ -35,11 +36,11 @@ interface MemberWorkspaceViewProps {
   onScheduleMessageChange: (value: string) => void;
   onCreateSchedule: (event: FormEvent<HTMLFormElement>) => void;
   onToggleScheduleEnabled: (scheduleId: string, enabled: boolean) => void;
-  onSavePolicy: (policy: AgentPolicyView) => void;
+  onSavePolicy: (policy: AgentPolicyPatch) => void;
   onSaveAgentProvider: (providerId: string) => void;
 }
 
-function createEmptyPolicy(): AgentPolicyView {
+function createEmptyPolicy(): Omit<AgentPolicy, 'military'> {
   return {
     planetIds: [],
     commandCategories: [],
@@ -64,7 +65,7 @@ function formatProviderName(providerId: string, providers: ModelProviderView[]) 
   return providers.find((provider) => provider.id === providerId)?.name ?? providerId;
 }
 
-function formatScheduleTarget(schedule: ScheduleView, agent: AgentProfileView) {
+function formatScheduleTarget(schedule: ScheduleJob, agent: AgentInstance) {
   if (schedule.targetType === 'agent_dm') {
     return `投递到与 ${agent.name} 的定时私聊`;
   }

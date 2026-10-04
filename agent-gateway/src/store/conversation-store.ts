@@ -1,4 +1,4 @@
-import type { Conversation } from '../types.js';
+import type { Conversation } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 export function createConversationStore(root: string) {

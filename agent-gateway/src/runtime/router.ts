@@ -1,4 +1,4 @@
-import type { AgentInstance, Conversation, ConversationMessage } from '../types.js';
+import type { AgentInstance, Conversation, ConversationMessage } from '@gw/shared/agent-gateway';
 
 type MailboxStatus = 'idle' | 'running';
 

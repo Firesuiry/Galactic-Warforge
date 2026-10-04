@@ -1,4 +1,4 @@
-import type { ModelProvider } from '../types.js';
+import type { ModelProvider } from '@gw/shared/agent-gateway';
 import { listJsonFiles, readJsonFile, writeJsonFile } from './file-store.js';
 
 export function createProviderStore(root: string) {

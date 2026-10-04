@@ -3,32 +3,16 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AgentWorkspace } from '@/features/agents/AgentWorkspace';
-import {
-  addConversationMembers,
-  createAgent,
-  createConversation,
-  createProvider,
-  createSchedule,
-  fetchAgents,
-  fetchConversationMessages,
-  fetchConversationTurns,
-  fetchConversations,
-  fetchGatewayHealth,
-  fetchProviders,
-  fetchSchedules,
-  inviteConversationMembersByPlanet,
-  sendConversationMessage,
-  updateAgent,
-  updateSchedule,
-} from '@/features/agents/api';
+import { agentGateway } from '@/features/agents/api';
 import { useConversationEvents, type ConversationStreamEvent } from '@/features/agents/use-agent-events';
 import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { isFixtureServerUrl } from '@/fixtures';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import type {
-  ConversationMessageView,
-  ConversationTurnView,
-} from '@/features/agents/types';
+  ConversationMessage,
+  ConversationTurn,
+  UpdateAgentPayload,
+} from '@shared/agent-gateway';
 
 function mergeById<T extends { id: string; createdAt: string }>(items: T[], nextItem: T) {
   const existing = items.find((item) => item.id === nextItem.id);
@@ -38,7 +22,7 @@ function mergeById<T extends { id: string; createdAt: string }>(items: T[], next
   return merged.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-function mergeTurnById(items: ConversationTurnView[], nextItem: ConversationTurnView) {
+function mergeTurnById(items: ConversationTurn[], nextItem: ConversationTurn) {
   const existing = items.find((item) => item.id === nextItem.id);
   const merged = existing
     ? items.map((item) => item.id === nextItem.id ? nextItem : item)
@@ -69,39 +53,39 @@ export function AgentsPage() {
 
   const healthQuery = useQuery({
     queryKey: ['agent-health'],
-    queryFn: fetchGatewayHealth,
+    queryFn: agentGateway.fetchHealth,
   });
 
   const conversationsQuery = useQuery({
     queryKey: ['agent-conversations'],
-    queryFn: fetchConversations,
+    queryFn: agentGateway.fetchConversations,
   });
 
   const agentsQuery = useQuery({
     queryKey: ['agent-profiles'],
-    queryFn: fetchAgents,
+    queryFn: agentGateway.fetchAgents,
   });
 
   const providersQuery = useQuery({
     queryKey: ['agent-providers'],
-    queryFn: fetchProviders,
+    queryFn: agentGateway.fetchProviders,
     enabled: activePane === 'members' || showCreateMember,
   });
 
   const schedulesQuery = useQuery({
     queryKey: ['agent-schedules'],
-    queryFn: fetchSchedules,
+    queryFn: agentGateway.fetchSchedules,
   });
 
   const messagesQuery = useQuery({
     queryKey: ['agent-conversation-messages', selectedConversationId],
-    queryFn: () => fetchConversationMessages(selectedConversationId),
+    queryFn: () => agentGateway.fetchConversationMessages(selectedConversationId),
     enabled: selectedConversationId !== '',
   });
 
   const turnsQuery = useQuery({
     queryKey: ['agent-conversation-turns', selectedConversationId],
-    queryFn: () => fetchConversationTurns(selectedConversationId),
+    queryFn: () => agentGateway.fetchConversationTurns(selectedConversationId),
     enabled: selectedConversationId !== '',
   });
 
@@ -128,14 +112,14 @@ export function AgentsPage() {
 
   useConversationEvents(selectedConversationId, (event: ConversationStreamEvent) => {
     if (event.type === 'message') {
-      const message = event.payload as ConversationMessageView;
-      queryClient.setQueryData<ConversationMessageView[]>(
+      const message = event.payload as ConversationMessage;
+      queryClient.setQueryData<ConversationMessage[]>(
         ['agent-conversation-messages', selectedConversationId],
         (current = []) => mergeById(current, message),
       );
     } else {
-      const turn = event.payload as ConversationTurnView;
-      queryClient.setQueryData<ConversationTurnView[]>(
+      const turn = event.payload as ConversationTurn;
+      queryClient.setQueryData<ConversationTurn[]>(
         ['agent-conversation-turns', selectedConversationId],
         (current = []) => mergeTurnById(current, turn),
       );
@@ -146,7 +130,7 @@ export function AgentsPage() {
   });
 
   const createConversationMutation = useMutation({
-    mutationFn: createConversation,
+    mutationFn: agentGateway.createConversation,
     onSuccess: (conversation) => {
       setActivePane('channels');
       setChannelView('chat');
@@ -159,7 +143,7 @@ export function AgentsPage() {
   });
 
   const createProviderMutation = useMutation({
-    mutationFn: createProvider,
+    mutationFn: agentGateway.createProvider,
     onSuccess: (provider) => {
       setMemberProviderId(provider.id);
       setShowProviderManager(false);
@@ -168,7 +152,7 @@ export function AgentsPage() {
   });
 
   const createAgentMutation = useMutation({
-    mutationFn: createAgent,
+    mutationFn: agentGateway.createAgent,
     onSuccess: (agent) => {
       setActivePane('members');
       setSelectedAgentId(agent.id);
@@ -182,18 +166,18 @@ export function AgentsPage() {
   });
 
   const sendMessageMutation = useMutation({
-    mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) => sendConversationMessage(conversationId, {
+    mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) => agentGateway.sendConversationMessage(conversationId, {
       senderType: 'player',
       senderId: session.playerId,
       content,
     }),
     onSuccess: (result, variables) => {
       setMessageInput('');
-      queryClient.setQueryData<ConversationMessageView[]>(
+      queryClient.setQueryData<ConversationMessage[]>(
         ['agent-conversation-messages', variables.conversationId],
         (current = []) => mergeById(current, result.message),
       );
-      queryClient.setQueryData<ConversationTurnView[]>(
+      queryClient.setQueryData<ConversationTurn[]>(
         ['agent-conversation-turns', variables.conversationId],
         (current = []) => result.turns.reduce(
           (merged, turn) => mergeTurnById(merged, turn),
@@ -205,7 +189,7 @@ export function AgentsPage() {
   });
 
   const inviteByPlanetMutation = useMutation({
-    mutationFn: ({ conversationId, planetId }: { conversationId: string; planetId: string }) => inviteConversationMembersByPlanet(conversationId, {
+    mutationFn: ({ conversationId, planetId }: { conversationId: string; planetId: string }) => agentGateway.inviteConversationMembersByPlanet(conversationId, {
       actorType: 'player',
       actorId: session.playerId,
       planetId,
@@ -218,7 +202,7 @@ export function AgentsPage() {
   });
 
   const addConversationMembersMutation = useMutation({
-    mutationFn: ({ conversationId, memberIds }: { conversationId: string; memberIds: string[] }) => addConversationMembers(conversationId, {
+    mutationFn: ({ conversationId, memberIds }: { conversationId: string; memberIds: string[] }) => agentGateway.addConversationMembers(conversationId, {
       actorType: 'player',
       actorId: session.playerId,
       memberIds,
@@ -231,7 +215,7 @@ export function AgentsPage() {
   });
 
   const createScheduleMutation = useMutation({
-    mutationFn: ({ ownerAgentId, intervalSeconds, messageTemplate }: { ownerAgentId: string; intervalSeconds: number; messageTemplate: string }) => createSchedule({
+    mutationFn: ({ ownerAgentId, intervalSeconds, messageTemplate }: { ownerAgentId: string; intervalSeconds: number; messageTemplate: string }) => agentGateway.createSchedule({
       ownerAgentId,
       creatorType: 'player',
       creatorId: session.playerId,
@@ -246,14 +230,14 @@ export function AgentsPage() {
   });
 
   const updateScheduleMutation = useMutation({
-    mutationFn: ({ scheduleId, enabled }: { scheduleId: string; enabled: boolean }) => updateSchedule(scheduleId, { enabled }),
+    mutationFn: ({ scheduleId, enabled }: { scheduleId: string; enabled: boolean }) => agentGateway.updateSchedule(scheduleId, { enabled }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent-schedules'] });
     },
   });
 
   const updateAgentMutation = useMutation({
-    mutationFn: ({ agentId, payload }: { agentId: string; payload: Parameters<typeof updateAgent>[1] }) => updateAgent(agentId, payload),
+    mutationFn: ({ agentId, payload }: { agentId: string; payload: UpdateAgentPayload }) => agentGateway.updateAgent(agentId, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent-profiles'] });
     },

@@ -43,7 +43,7 @@ import type {
   ConversationTurnActionSummary,
   GatewayCapabilities,
   ScheduleJob,
-} from './types.js';
+} from '@gw/shared/agent-gateway';
 
 export interface GatewayServerHandle {
   url: string;

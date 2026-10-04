@@ -3,7 +3,7 @@ import { runClaudeTurn } from '../providers/claude-cli.js';
 import { runCodexTurn } from '../providers/codex-cli.js';
 import { runOpenAICompatibleTurn } from '../providers/openai-compatible.js';
 import type { ProviderTurnResult } from '../providers/types.js';
-import type { CliProviderConfig, HttpApiProviderConfig, ModelProvider } from '../types.js';
+import type { CliProviderConfig, HttpApiProviderConfig, ModelProvider } from '@gw/shared/agent-gateway';
 import { ensureActionSchemaFile } from './action-schema.js';
 import { listSupportedGameCommandsForPrompt } from './game-command-schema.js';
 import { classifyPublicTurnError } from './provider-error.js';

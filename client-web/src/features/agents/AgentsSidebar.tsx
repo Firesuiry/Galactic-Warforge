@@ -3,9 +3,9 @@ import type { FormEvent } from 'react';
 import { Button, Input } from '@/common/controls';
 
 import type {
-  AgentProfileView,
-  ConversationView,
-} from './types';
+  AgentInstance,
+  Conversation,
+} from '@shared/agent-gateway';
 
 export type AgentsPane = 'channels' | 'members';
 
@@ -13,9 +13,9 @@ interface AgentsSidebarProps {
   gatewayOnline: boolean;
   fixtureMode: boolean;
   activePane: AgentsPane;
-  conversations: ConversationView[];
+  conversations: Conversation[];
   selectedConversationId: string;
-  agents: AgentProfileView[];
+  agents: AgentInstance[];
   selectedAgentId: string;
   showCreateChannel: boolean;
   channelName: string;

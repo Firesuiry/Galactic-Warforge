@@ -4,31 +4,31 @@ import { AgentsSidebar, type AgentsPane } from './AgentsSidebar';
 import { ChannelWorkspaceView } from './ChannelWorkspaceView';
 import { MemberWorkspaceView } from './MemberWorkspaceView';
 import type {
-  AgentPolicyView,
-  AgentProfileView,
-  ConversationMessageView,
-  ConversationTurnView,
-  ConversationView,
+  AgentPolicyPatch,
+  AgentInstance,
+  ConversationMessage,
+  ConversationTurn,
+  Conversation,
   CreateProviderPayload,
   ModelProviderView,
-  ScheduleView,
-} from './types';
+  ScheduleJob,
+} from '@shared/agent-gateway';
 
 interface AgentWorkspaceProps {
   gatewayOnline: boolean;
   fixtureMode: boolean;
   activePane: AgentsPane;
   channelView: 'chat' | 'settings';
-  conversations: ConversationView[];
+  conversations: Conversation[];
   selectedConversationId: string;
-  messages: ConversationMessageView[];
+  messages: ConversationMessage[];
   messagesLoading: boolean;
-  turns: ConversationTurnView[];
+  turns: ConversationTurn[];
   turnsLoading: boolean;
-  agents: AgentProfileView[];
+  agents: AgentInstance[];
   selectedAgentId: string;
   providers: ModelProviderView[];
-  schedules: ScheduleView[];
+  schedules: ScheduleJob[];
   showCreateChannel: boolean;
   showCreateMember: boolean;
   showProviderManager: boolean;
@@ -68,7 +68,7 @@ interface AgentWorkspaceProps {
   onBackToChannelChat: () => void;
   onStartDm: (agentId: string) => void;
   onToggleScheduleEnabled: (scheduleId: string, enabled: boolean) => void;
-  onSaveAgentPolicy: (policy: AgentPolicyView) => void;
+  onSaveAgentPolicy: (policy: AgentPolicyPatch) => void;
   onSaveAgentProvider: (providerId: string) => void;
 }
 

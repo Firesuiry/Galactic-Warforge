@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import type { AgentInstance, ScheduleJob } from '../types.js';
+import type {
+  AgentInstance,
+  CreateSchedulePayload,
+  ScheduleJob,
+  UpdateSchedulePayload,
+} from '@gw/shared/agent-gateway';
 
 interface AgentStore {
   get: (id: string) => Promise<AgentInstance | null>;
@@ -57,18 +62,7 @@ export async function handleScheduleRoutes(
   }
 
   if (request.method === 'POST' && url.pathname === '/schedules') {
-    const payload = await readJsonBody<{
-      id?: string;
-      workspaceId?: string;
-      name?: string;
-      ownerAgentId: string;
-      creatorType: 'player' | 'agent';
-      creatorId: string;
-      targetType: 'agent_dm' | 'conversation';
-      targetId: string;
-      intervalSeconds: number;
-      messageTemplate: string;
-    }>(request);
+    const payload = await readJsonBody<CreateSchedulePayload>(request);
 
     if (!await canCreateSchedule(payload.creatorType, payload.creatorId, context.agentStore)) {
       writeJson(response, 403, { error: 'schedule_not_allowed' });
@@ -105,7 +99,7 @@ export async function handleScheduleRoutes(
       return;
     }
 
-    const payload = await readJsonBody<Partial<Pick<ScheduleJob, 'targetType' | 'targetId' | 'intervalSeconds' | 'messageTemplate' | 'enabled'>>>(request);
+    const payload = await readJsonBody<UpdateSchedulePayload>(request);
     const updated: ScheduleJob = {
       ...schedule,
       ...payload,
