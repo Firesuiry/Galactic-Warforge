@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"math/rand"
 
 	"siliconworld/internal/model"
 )
@@ -197,4 +198,164 @@ func requireDysonTech(ws *model.WorldState, playerID, unlockID string) error {
 		return nil
 	}
 	return fmt.Errorf("dyson structure requires research unlock: %s", unlockID)
+}
+
+type launchSolarSailPayload struct {
+	buildingRef
+	Count       int     `json:"count"`
+	OrbitRadius float64 `json:"orbit_radius"`
+	Inclination float64 `json:"inclination"`
+}
+
+// execLaunchSolarSail handles the "launch_solar_sail" command.
+//
+//	Payload: {
+//	  "building_id": "id of EM rail ejector or vertical launching silo",
+//	  "orbit_radius": 1.0,  // optional, default 1.0 AU
+//	  "inclination": 0.0,   // optional, default 0.0 degrees
+//	}
+func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, cmd model.Command, p launchSolarSailPayload) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+
+	bid := p.BuildingID
+
+	building, ok := ws.Buildings[bid]
+	if !ok {
+		res.Code = model.CodeEntityNotFound
+		res.Message = fmt.Sprintf("building %s not found", bid)
+		return res, nil
+	}
+	if building.OwnerID != playerID {
+		res.Code = model.CodeNotOwner
+		res.Message = "cannot use building owned by another player"
+		return res, nil
+	}
+
+	// Solar sails are launched by the EM Rail Ejector. Vertical silos are reserved for rockets.
+	if building.Type != model.BuildingTypeEMRailEjector {
+		res.Code = model.CodeInvalidTarget
+		res.Message = "only EM Rail Ejector can launch solar sails"
+		return res, nil
+	}
+
+	// Check building is running
+	if building.Runtime.State != model.BuildingWorkRunning {
+		res.Code = model.CodeValidationFailed
+		res.Message = "building is not operational"
+		return res, nil
+	}
+
+	// Check player has solar sails
+	player := ws.Players[playerID]
+	if player == nil || !player.IsAlive {
+		res.Code = model.CodeValidationFailed
+		res.Message = "player not found or not alive"
+		return res, nil
+	}
+
+	sailCount := min(max(p.Count, 1), 10) // default 1, cap at 10 per launch
+
+	// Check launch building has enough loaded solar sails.
+	if building.Storage == nil {
+		res.Code = model.CodeInsufficientResource
+		res.Message = "launch building has no solar sail storage"
+		return res, nil
+	}
+	loadedSails := building.Storage.OutputQuantity(model.ItemSolarSail)
+	if loadedSails < sailCount {
+		res.Code = model.CodeInsufficientResource
+		res.Message = fmt.Sprintf("need %d solar sails loaded, have %d", sailCount, loadedSails)
+		return res, nil
+	}
+
+	// Get orbit parameters
+	orbitRadius := 1.0
+	if p.OrbitRadius > 0 {
+		orbitRadius = p.OrbitRadius
+	}
+	inclination := p.Inclination
+
+	// Validate orbit parameters against building's launch constraints
+	if building.Runtime.Functions.Launch != nil {
+		lm := building.Runtime.Functions.Launch
+		if orbitRadius < lm.OrbitRadiusMin {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("orbit_radius %.2f is below minimum %.2f", orbitRadius, lm.OrbitRadiusMin)
+			return res, nil
+		}
+		if orbitRadius > lm.OrbitRadiusMax {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("orbit_radius %.2f exceeds maximum %.2f", orbitRadius, lm.OrbitRadiusMax)
+			return res, nil
+		}
+		if inclination < -lm.InclinationMax {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("inclination %.2f is below minimum %.2f", inclination, -lm.InclinationMax)
+			return res, nil
+		}
+		if inclination > lm.InclinationMax {
+			res.Code = model.CodeValidationFailed
+			res.Message = fmt.Sprintf("inclination %.2f exceeds maximum %.2f", inclination, lm.InclinationMax)
+			return res, nil
+		}
+	}
+
+	// Check launch success rate
+	launchSuccessRate := 1.0
+	if building.Runtime.Functions.Launch != nil {
+		launchSuccessRate = building.Runtime.Functions.Launch.SuccessRate
+	}
+	if rand.Float64() > launchSuccessRate {
+		// Launch failed, consume sails but no orbit entry
+		provided, _, err := building.Storage.Provide(model.ItemSolarSail, sailCount)
+		if err != nil || provided != sailCount {
+			res.Code = model.CodeInsufficientResource
+			res.Message = "failed to consume loaded solar sails"
+			return res, nil
+		}
+		res.Status = model.StatusFailed
+		res.Code = model.CodeValidationFailed
+		res.Message = "launch failed due to equipment malfunction"
+		return res, nil
+	}
+
+	// Consume solar sails from the ejector's local storage.
+	provided, _, err := building.Storage.Provide(model.ItemSolarSail, sailCount)
+	if err != nil || provided != sailCount {
+		res.Code = model.CodeInsufficientResource
+		res.Message = "failed to consume loaded solar sails"
+		return res, nil
+	}
+
+	// Get system ID from maps
+	systemID := ""
+	if gc.maps != nil {
+		planet, _ := gc.maps.Planet(ws.PlanetID)
+		if planet != nil {
+			systemID = planet.SystemID
+		}
+	}
+
+	// Launch solar sails
+	var events []*model.GameEvent
+	if gc.spaceRuntime == nil {
+		gc.spaceRuntime = model.NewSpaceRuntimeState()
+	}
+	for i := 0; i < sailCount; i++ {
+		sail := LaunchSolarSail(gc.spaceRuntime, playerID, systemID, orbitRadius, inclination, ws.Tick)
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtEntityCreated,
+			VisibilityScope: playerID,
+			Payload: map[string]any{
+				"entity_type": "solar_sail",
+				"entity_id":   sail.ID,
+				"sail":        sail,
+			},
+		})
+	}
+
+	res.Status = model.StatusExecuted
+	res.Code = model.CodeOK
+	res.Message = fmt.Sprintf("launched %d solar sail(s) into orbit", sailCount)
+	return res, events
 }

@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"math"
 	"sort"
 
 	"siliconworld/internal/config"
@@ -519,4 +520,122 @@ func playerHasFootholdOnWorld(ws *model.WorldState, playerID string) bool {
 		}
 	}
 	return false
+}
+
+// computeStartPositions returns N spread-out starting positions
+func computeStartPositions(cfg *config.Config, grid surface.Grid) []model.Position {
+	n := len(cfg.Players)
+	positions := make([]model.Position, n)
+	// Opposite face centers keep two-player starts genuinely far apart.
+	if n <= 6 {
+		faces := []int{0, 2, 4, 5, 1, 3}
+		for i := range positions {
+			f := faces[i]
+			positions[i] = model.Position{X: (f%3)*grid.Size + grid.Size/2, Y: (f/3)*grid.Size + grid.Size/2}
+		}
+		return positions
+	}
+	// Fibonacci sphere distributes larger lobbies across the whole planet.
+	for i := range positions {
+		y := 1 - 2*(float64(i)+0.5)/float64(n)
+		r := math.Sqrt(1 - y*y)
+		a := float64(i) * math.Pi * (3 - math.Sqrt(5))
+		t := grid.FromVector(r*math.Cos(a), y, r*math.Sin(a))
+		positions[i] = model.Position{X: t.X, Y: t.Y}
+	}
+	return positions
+}
+
+func applyPlanetTerrain(ws *model.WorldState, planet *mapmodel.Planet) {
+	if ws == nil || planet == nil || len(planet.Terrain) == 0 {
+		return
+	}
+	if len(planet.Terrain) != ws.MapHeight {
+		return
+	}
+	for y := 0; y < ws.MapHeight; y++ {
+		row := planet.Terrain[y]
+		if len(row) != ws.MapWidth {
+			return
+		}
+		for x := 0; x < ws.MapWidth; x++ {
+			ws.Grid[y][x].Terrain = row[x]
+		}
+	}
+}
+
+func applyPlanetResources(ws *model.WorldState, planet *mapmodel.Planet) {
+	if ws == nil || planet == nil || len(planet.Resources) == 0 {
+		return
+	}
+	if ws.Resources == nil {
+		ws.Resources = make(map[string]*model.ResourceNodeState)
+	}
+	for _, node := range planet.Resources {
+		pos := model.Position{X: node.Position.X, Y: node.Position.Y}
+		if !ws.InBounds(pos.X, pos.Y) {
+			continue
+		}
+		state := &model.ResourceNodeState{
+			ID:           node.ID,
+			PlanetID:     node.PlanetID,
+			Kind:         string(node.Kind),
+			Behavior:     string(node.Behavior),
+			Position:     pos,
+			ClusterID:    node.ClusterID,
+			MaxAmount:    node.Total,
+			Remaining:    node.Total,
+			BaseYield:    node.BaseYield,
+			CurrentYield: node.BaseYield,
+			MinYield:     node.MinYield,
+			RegenPerTick: node.RegenPerTick,
+			DecayPerTick: node.DecayPerTick,
+			IsRare:       node.IsRare,
+		}
+		state.SyncDepleted()
+		ws.Resources[node.ID] = state
+		ws.Grid[pos.Y][pos.X].ResourceNodeID = node.ID
+	}
+}
+
+func findNearestBuildable(ws *model.WorldState, start model.Position) model.Position {
+	if ws == nil || !ws.InBounds(start.X, start.Y) {
+		return start
+	}
+	queue := []model.Position{start}
+	seen := map[model.Position]bool{start: true}
+	for head := 0; head < len(queue); head++ {
+		p := queue[head]
+		if ws.Grid[p.Y][p.X].Terrain.Buildable() {
+			return p
+		}
+		for _, n := range ws.SurfaceNeighbors(p) {
+			if !seen[n] {
+				seen[n] = true
+				queue = append(queue, n)
+			}
+		}
+	}
+	return start
+}
+
+func findNearestOpenTile(ws *model.WorldState, start model.Position) model.Position {
+	if ws == nil || !ws.InBounds(start.X, start.Y) {
+		return start
+	}
+	queue := []model.Position{start}
+	seen := map[model.Position]bool{start: true}
+	for head := 0; head < len(queue); head++ {
+		p := queue[head]
+		if ws.Grid[p.Y][p.X].Terrain.Buildable() && ws.TileBuilding[model.TileKey(p.X, p.Y)] == "" {
+			return p
+		}
+		for _, n := range ws.SurfaceNeighbors(p) {
+			if !seen[n] {
+				seen[n] = true
+				queue = append(queue, n)
+			}
+		}
+	}
+	return start
 }
