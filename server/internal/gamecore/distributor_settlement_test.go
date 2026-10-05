@@ -88,10 +88,10 @@ func TestDistributorWarehouseDeliveryAndPickupReserveDemand(t *testing.T) {
 				t.Fatalf("actual motion/energy: distance=%d bot=%+v", distance, first)
 			}
 			distributorTestTicks(t, ws, 12)
-			if got := commandStorageItemQuantity(model.DistributorHost(ws, source).Storage, model.ItemIronOre); got != 25 {
+			if got := model.DistributorHost(ws, source).Storage.ItemQuantity(model.ItemIronOre); got != 25 {
 				t.Fatalf("source=%d, want 25", got)
 			}
-			if got := commandStorageItemQuantity(model.DistributorHost(ws, sink).Storage, model.ItemIronOre); got != 15 {
+			if got := model.DistributorHost(ws, sink).Storage.ItemQuantity(model.ItemIronOre); got != 15 {
 				t.Fatalf("sink=%d, want 15", got)
 			}
 			for _, bot := range ws.LogisticsBots {

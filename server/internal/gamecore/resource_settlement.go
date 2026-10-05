@@ -44,7 +44,7 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 		}
 
 		if totalEnergyCost > 0 {
-			powered, reason, alloc := buildingPowerAvailability(ws, b, coverage, allocations)
+			powered, reason, alloc := buildingPowerAvailability(b, coverage, allocations)
 			if !powered {
 				if evt := applyBuildingState(b, model.BuildingWorkNoPower, reason); evt != nil {
 					events = append(events, evt)

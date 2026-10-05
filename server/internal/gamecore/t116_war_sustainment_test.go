@@ -24,6 +24,8 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 	power := newBuilding("power-t116", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, power)
+	// 命令期供电判定与 tick 结算同源：先结算一次发电，部署枢纽才有电。
+	settlePowerGeneration(ws, currentPlanetEnvironment(core.maps, ws.PlanetID))
 
 	planetary := newBuilding("pls-t116", model.BuildingTypePlanetaryLogisticsStation, "p1", model.Position{X: 8, Y: 6})
 	planetary.Runtime.State = model.BuildingWorkRunning
@@ -185,6 +187,8 @@ func TestT116SupplyShortageDegradesFleetAndForcesRetreat(t *testing.T) {
 	power := newBuilding("power-short-t116", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, power)
+	// 命令期供电判定与 tick 结算同源：先结算一次发电，部署枢纽才有电。
+	settlePowerGeneration(ws, currentPlanetEnvironment(core.maps, ws.PlanetID))
 
 	ws.Players["p1"].EnsureWarIndustry().DeploymentHubs[base.ID] = &model.WarDeploymentHubState{
 		BuildingID:    base.ID,
