@@ -287,14 +287,11 @@ func newSaveHarnessDeps(t *testing.T) (*config.Config, *mapmodel.Universe, *queu
 		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionTicks: 100,
 		RetentionCount: 4,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 	return cfg, maps, queue.New(), NewEventBus(), store
 }
 

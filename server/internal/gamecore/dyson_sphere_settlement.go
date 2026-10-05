@@ -204,9 +204,6 @@ func GetDysonSphereEnergy(spaceRuntime *model.SpaceRuntimeState, playerID, syste
 	return sphere.TotalEnergy
 }
 
-// ClearDysonSphereStates remains for backward-compatible tests; Dyson sphere state is now per space runtime.
-func ClearDysonSphereStates() {}
-
 func formatDysonCoord(value float64) string {
 	scaled := int(math.Round(value * 100))
 	if scaled < 0 {

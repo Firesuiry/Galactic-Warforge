@@ -128,7 +128,7 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	if gc.alertHistory != nil {
 		trimmedAlerts = gc.alertHistory.TrimAfterTick(toTick)
 	}
-	trimmedSnapshots, trimmedDeltas := gc.snapshotStore.TrimAfter(toTick)
+	trimmedSnapshots := gc.snapshotStore.TrimAfter(toTick)
 	gc.snapshotStore.TrimAuditAfterTick(toTick)
 	trimmedLogBefore := 0
 	if oldest := gc.snapshotStore.OldestSnapshotTick(); oldest > 0 {
@@ -161,7 +161,6 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 		TrimmedEventHistory: trimmedEvents,
 		TrimmedAlertHistory: trimmedAlerts,
 		TrimmedSnapshots:    trimmedSnapshots,
-		TrimmedDeltas:       trimmedDeltas,
 		Digest:              digest,
 	}, nil
 }

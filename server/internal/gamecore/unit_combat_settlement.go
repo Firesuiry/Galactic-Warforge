@@ -430,36 +430,6 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 
 const maxInt32 = int(^uint32(0) >> 1)
 
-// applySquadDamageToTarget is the shared damage entry used by the legacy
-// blueprint squad path while deployed squads migrate to member units.
-func applySquadDamageToTarget(ws *model.WorldState, squad *model.CombatSquad, target *unitCombatTarget, damage int, tick int64) []*model.GameEvent {
-	if ws == nil || squad == nil || target == nil || damage <= 0 {
-		return nil
-	}
-	ws.Tick = tick
-	if target.kind != "enemy_force" || target.force == nil {
-		return nil
-	}
-	force := target.force
-	before := force.Strength
-	force.Strength -= damage
-	if force.Strength < 0 {
-		force.Strength = 0
-	}
-	events := []*model.GameEvent{{
-		EventType:       model.EvtDamageApplied,
-		VisibilityScope: squad.OwnerID,
-		Payload: map[string]any{
-			"attacker_id": squad.ID, "attacker_type": "combat_squad", "target_id": force.ID,
-			"target_type": "enemy_force", "damage": damage, "remaining_strength": force.Strength,
-		},
-	}}
-	if force.Strength <= 0 {
-		events = append(events, destroyEnemyForce(ws, force, before, squad.ID, squad.OwnerID, "combat_squad", nil)...)
-	}
-	return events
-}
-
 // squadArmorClass 小队护甲，委托 model.BlueprintCombatClasses（与目录同源）。
 func squadArmorClass(squad *model.CombatSquad) model.ArmorClass {
 	if squad == nil {

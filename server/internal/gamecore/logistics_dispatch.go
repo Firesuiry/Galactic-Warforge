@@ -275,17 +275,6 @@ func sortedSupplyKeys(supply model.ItemInventory) []string {
 	return keys
 }
 
-func restoreStationInventory(station *model.LogisticsStationState, itemID string, qty int) {
-	if station == nil || itemID == "" || qty <= 0 {
-		return
-	}
-	if station.Inventory == nil {
-		station.Inventory = make(model.ItemInventory)
-	}
-	station.Inventory[itemID] += qty
-	station.RefreshCapacityCache()
-}
-
 func stationInputPriority(station *model.LogisticsStationState) int {
 	if station == nil {
 		return 1

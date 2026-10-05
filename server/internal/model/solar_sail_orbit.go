@@ -18,16 +18,6 @@ type SolarSail struct {
 	EnergyPerTick int     `json:"energy_per_tick"` // energy produced per tick
 }
 
-// SolarSailSwarm represents a group of solar sails working together.
-type SolarSailSwarm struct {
-	ID          string   `json:"id"`
-	PlayerID    string   `json:"player_id"`
-	SystemID    string   `json:"system_id"`
-	MemberIDs   []string `json:"member_ids"` // IDs of SolarSail members
-	TotalCount  int      `json:"total_count"`
-	EnergyBonus float64  `json:"energy_bonus"` // efficiency bonus from swarm
-}
-
 // SolarSailOrbitParams defines parameters for solar sail orbits.
 type SolarSailOrbitParams struct {
 	DefaultRadius      float64 `json:"default_radius"`

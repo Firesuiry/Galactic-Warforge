@@ -160,11 +160,6 @@ func (idx WarBlueprintCatalogIndex) ComponentByID(id string) (WarComponentCatalo
 	return entry, ok
 }
 
-func (idx WarBlueprintCatalogIndex) PublicBlueprintByID(id string) (WarPublicBlueprintCatalogEntry, bool) {
-	entry, ok := idx.publicBlueprints[id]
-	return cloneWarPublicBlueprintEntry(entry), ok
-}
-
 // PresetWarBlueprintByID materializes one public preset into the common blueprint model.
 func PresetWarBlueprintByID(id string) (WarBlueprint, bool) {
 	entry, ok := PublicWarBlueprintByID(id)

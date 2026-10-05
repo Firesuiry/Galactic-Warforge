@@ -42,4 +42,3 @@ server:
   snapshot_retention_ticks: 30000
   snapshot_max_events: 200
   snapshot_max_bytes: 268435456
-  snapshot_delta_max_bytes: 134217728

@@ -1,7 +1,6 @@
 package model
 
 import (
-	"math"
 	"sort"
 )
 
@@ -88,10 +87,6 @@ type WarSupplyStatusView struct {
 	DamagePenalty      float64            `json:"damage_penalty,omitempty"`
 	RetreatRecommended bool               `json:"retreat_recommended,omitempty"`
 	Shortages          []string           `json:"shortages,omitempty"`
-}
-
-func (stock WarSupplyStock) total() int {
-	return stock.Ammo + stock.Shells + stock.Missiles
 }
 
 func (stock WarSupplyStock) clone() WarSupplyStock {
@@ -303,10 +298,6 @@ func warMaxInt(a, b int) int {
 		return a
 	}
 	return b
-}
-
-func roundWarFloat(value float64) float64 {
-	return math.Round(value*100) / 100
 }
 
 func warHasString(values []string, target string) bool {

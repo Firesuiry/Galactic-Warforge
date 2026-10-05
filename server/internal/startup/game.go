@@ -72,10 +72,7 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 		maps = mapgen.Generate(mapCfg, meta.GameplayConfig.Battlefield.MapSeed)
 		q := queue.New()
 		bus := gamecore.NewEventBus()
-		store, err := newSnapshotStore(cfg.Server)
-		if err != nil {
-			return nil, err
-		}
+		store := newSnapshotStore(cfg.Server)
 		core, err := gamecore.NewFromSave(cfg, maps, q, bus, store, save)
 		if err != nil {
 			return nil, err
@@ -91,10 +88,7 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 		maps = mapgen.Generate(externalMapCfg, cfg.Battlefield.MapSeed)
 		q := queue.New()
 		bus := gamecore.NewEventBus()
-		store, err := newSnapshotStore(cfg.Server)
-		if err != nil {
-			return nil, err
-		}
+		store := newSnapshotStore(cfg.Server)
 		core := gamecore.New(cfg, maps, q, bus, store)
 		meta := gamedir.NewMetaFile(cfg, externalMapCfg)
 		core.AttachGameDir(rt.dir, meta, snapshot.Capture(core.World(), core.Discovery()))

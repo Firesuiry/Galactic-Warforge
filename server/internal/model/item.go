@@ -200,24 +200,6 @@ func AllItems() []ItemDefinition {
 	return items
 }
 
-// StackLimit returns the max stack size for an item.
-func StackLimit(itemID string) (int, bool) {
-	def, ok := Item(itemID)
-	if !ok {
-		return 0, false
-	}
-	return def.StackLimit, true
-}
-
-// UnitVolume returns the volume for one unit of an item.
-func UnitVolume(itemID string) (int, bool) {
-	def, ok := Item(itemID)
-	if !ok {
-		return 0, false
-	}
-	return def.UnitVolume, true
-}
-
 // ValidateStack checks the stack size against the rules.
 func ValidateStack(itemID string, qty int) error {
 	if qty <= 0 {
@@ -246,19 +228,4 @@ func StackVolume(itemID string, qty int) (int, error) {
 func ContainerForForm(form ResourceForm) (string, bool) {
 	container, ok := containerByForm[form]
 	return container, ok
-}
-
-// RequiresContainer reports whether the item must be stored in a container.
-func RequiresContainer(itemID string) (bool, string, error) {
-	def, ok := Item(itemID)
-	if !ok {
-		return false, "", fmt.Errorf("unknown item: %s", itemID)
-	}
-	if def.Form == ResourceSolid {
-		return false, "", nil
-	}
-	if def.ContainerID == "" {
-		return true, "", fmt.Errorf("container required for %s", itemID)
-	}
-	return true, def.ContainerID, nil
 }

@@ -1,10 +1,8 @@
 package persistence
 
 import (
-	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"sync"
 
 	"siliconworld/internal/model"
@@ -14,21 +12,13 @@ import (
 // Store persists audit logs and tick snapshots in runtime memory.
 type Store struct {
 	mu        sync.Mutex
-	dataDir   string
 	policy    SnapshotPolicy
 	auditLog  []*model.AuditEntry
 	snapshots []snapshotRecord
-	deltas    []deltaRecord
 }
 
-func New(dataDir string, policy SnapshotPolicy) (*Store, error) {
-	if dataDir == "" {
-		return nil, fmt.Errorf("data dir is required")
-	}
-	return &Store{
-		dataDir: dataDir,
-		policy:  policy.Normalize(),
-	}, nil
+func New(policy SnapshotPolicy) *Store {
+	return &Store{policy: policy.Normalize()}
 }
 
 // SnapshotPolicy returns a copy of the current snapshot policy.
@@ -90,8 +80,6 @@ func (s *Store) SaveSnapshot(snap *snapshot.Snapshot) {
 		latestTick = s.snapshots[len(s.snapshots)-1].Tick
 	}
 	s.pruneSnapshotsLocked(latestTick)
-	minTick := s.oldestSnapshotTickLocked()
-	s.pruneDeltasLocked(minTick)
 }
 
 // ReplaceSnapshots replaces all in-memory snapshots without applying retention.
@@ -134,53 +122,6 @@ func (s *Store) ReplaceSnapshots(snaps ...*snapshot.Snapshot) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshots = recs
-}
-
-// MaybeSaveSnapshot persists a snapshot only when the policy interval matches.
-func (s *Store) MaybeSaveSnapshot(snap *snapshot.Snapshot) bool {
-	if snap == nil {
-		return false
-	}
-	if !s.policy.ShouldSnapshot(snap.Tick) {
-		return false
-	}
-	s.SaveSnapshot(snap)
-	return true
-}
-
-// SaveDelta stores an incremental record between snapshots.
-func (s *Store) SaveDelta(kind string, fromTick, toTick int64, payload []byte) error {
-	if strings.TrimSpace(kind) == "" {
-		return fmt.Errorf("delta kind is required")
-	}
-	if fromTick < 0 || toTick < 0 || toTick < fromTick {
-		return fmt.Errorf("invalid delta tick range %d-%d", fromTick, toTick)
-	}
-	if len(payload) == 0 {
-		return fmt.Errorf("delta payload is empty")
-	}
-
-	rec := deltaRecord{
-		Kind:      kind,
-		FromTick:  fromTick,
-		ToTick:    toTick,
-		SizeBytes: int64(len(payload)),
-	}
-	if s.policy.MaxDeltaBytes > 0 && rec.SizeBytes > s.policy.MaxDeltaBytes {
-		log.Printf("[Persistence] delta %s %d-%d size %d exceeds limit %d", kind, fromTick, toTick, rec.SizeBytes, s.policy.MaxDeltaBytes)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.deltas = append(s.deltas, rec)
-	minTick := s.oldestSnapshotTickLocked()
-	s.pruneDeltasLocked(minTick)
-	return nil
-}
-
-// FlushAuditLog is a no-op for memory-only persistence.
-func (s *Store) FlushAuditLog() error {
-	return nil
 }
 
 // AuditEntries returns a copy of all in-memory audit entries.
@@ -371,40 +312,8 @@ func (s *Store) OldestSnapshotTick() int64 {
 	return s.oldestSnapshotTickLocked()
 }
 
-// SnapshotStats provides a lightweight summary of retained snapshot data.
-type SnapshotStats struct {
-	SnapshotCount      int
-	DeltaCount         int
-	SnapshotBytes      int64
-	DeltaBytes         int64
-	OldestSnapshotTick int64
-	LatestSnapshotTick int64
-}
-
-// SnapshotStats returns aggregate snapshot storage statistics.
-func (s *Store) SnapshotStats() SnapshotStats {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	stats := SnapshotStats{
-		SnapshotCount: len(s.snapshots),
-		DeltaCount:    len(s.deltas),
-	}
-	if len(s.snapshots) > 0 {
-		stats.OldestSnapshotTick = s.snapshots[0].Tick
-		stats.LatestSnapshotTick = s.snapshots[len(s.snapshots)-1].Tick
-	}
-	for _, rec := range s.snapshots {
-		stats.SnapshotBytes += rec.SizeBytes
-	}
-	for _, rec := range s.deltas {
-		stats.DeltaBytes += rec.SizeBytes
-	}
-	return stats
-}
-
-// TrimAfter drops snapshots and deltas strictly after the given tick.
-func (s *Store) TrimAfter(tick int64) (int, int) {
+// TrimAfter drops snapshots strictly after the given tick.
+func (s *Store) TrimAfter(tick int64) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -419,32 +328,12 @@ func (s *Store) TrimAfter(tick int64) (int, int) {
 		}
 	}
 
-	droppedDeltas := 0
-	if len(s.deltas) > 0 {
-		kept := s.deltas[:0]
-		for _, rec := range s.deltas {
-			if rec.FromTick > tick || rec.ToTick > tick {
-				droppedDeltas++
-				continue
-			}
-			kept = append(kept, rec)
-		}
-		s.deltas = kept
-	}
-
-	return droppedSnapshots, droppedDeltas
+	return droppedSnapshots
 }
 
 type snapshotRecord struct {
 	Snapshot  *snapshot.Snapshot
 	Tick      int64
-	SizeBytes int64
-}
-
-type deltaRecord struct {
-	Kind      string
-	FromTick  int64
-	ToTick    int64
 	SizeBytes int64
 }
 
@@ -469,23 +358,6 @@ func (s *Store) pruneSnapshotsLocked(latestTick int64) []snapshotRecord {
 		dropped = append(dropped, s.snapshots[:extra]...)
 		s.snapshots = s.snapshots[extra:]
 	}
-	return dropped
-}
-
-func (s *Store) pruneDeltasLocked(minTick int64) []deltaRecord {
-	if len(s.deltas) == 0 || minTick <= 0 {
-		return nil
-	}
-	var dropped []deltaRecord
-	kept := s.deltas[:0]
-	for _, rec := range s.deltas {
-		if rec.ToTick < minTick {
-			dropped = append(dropped, rec)
-			continue
-		}
-		kept = append(kept, rec)
-	}
-	s.deltas = kept
 	return dropped
 }
 

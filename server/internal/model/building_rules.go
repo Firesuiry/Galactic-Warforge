@@ -109,12 +109,6 @@ func BuildingUpgradeCost(btype BuildingType, level int) BuildCost {
 	}
 }
 
-// BuildingDemolishRefund returns the refund for demolishing a building at the given level.
-func BuildingDemolishRefund(btype BuildingType, level int) BuildCost {
-	rule := BuildingDemolishRuleFor(btype)
-	return BuildingDemolishRefundWithRate(btype, level, rule.RefundRate)
-}
-
 // BuildingDemolishRefundWithRate returns the refund for demolishing a building at the given level and rate.
 func BuildingDemolishRefundWithRate(btype BuildingType, level int, refundRate float64) BuildCost {
 	def, ok := BuildingDefinitionByID(btype)

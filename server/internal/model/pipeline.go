@@ -45,14 +45,6 @@ type PipelineNetworkState struct {
 	Segments map[string]*PipelineSegment `json:"segments,omitempty"`
 }
 
-// NewPipelineNetworkState creates an empty pipeline state container.
-func NewPipelineNetworkState() *PipelineNetworkState {
-	return &PipelineNetworkState{
-		Nodes:    make(map[string]*PipelineNode),
-		Segments: make(map[string]*PipelineSegment),
-	}
-}
-
 // Clone returns a deep copy of the pipeline network state.
 func (p *PipelineNetworkState) Clone() *PipelineNetworkState {
 	if p == nil {

@@ -77,57 +77,6 @@ func TestStorageBuffersAndTick(t *testing.T) {
 	}
 }
 
-func TestStorageNetworkPriority(t *testing.T) {
-	s1 := NewStorageState(StorageModule{
-		Capacity:       4,
-		Slots:          2,
-		InputPriority:  2,
-		OutputPriority: 1,
-	})
-	s2 := NewStorageState(StorageModule{
-		Capacity:       10,
-		Slots:          2,
-		InputPriority:  1,
-		OutputPriority: 3,
-	})
-	network := StorageNetwork{
-		Nodes: []StorageNode{
-			{ID: "a", Storage: s1},
-			{ID: "b", Storage: s2},
-		},
-	}
-
-	accepted, remaining, err := network.Insert(ItemIronOre, 6)
-	if err != nil {
-		t.Fatalf("insert error: %v", err)
-	}
-	if accepted != 6 || remaining != 0 {
-		t.Fatalf("expected accept 6/0, got %d/%d", accepted, remaining)
-	}
-	if s1.Inventory[ItemIronOre] != 4 {
-		t.Fatalf("expected s1 receive 4, got %d", s1.Inventory[ItemIronOre])
-	}
-	if s2.Inventory[ItemIronOre] != 2 {
-		t.Fatalf("expected s2 receive 2, got %d", s2.Inventory[ItemIronOre])
-	}
-
-	_, _, err = s2.Receive(ItemIronOre, 5)
-	if err != nil {
-		t.Fatalf("receive error: %v", err)
-	}
-
-	provided, remaining, err := network.Extract(ItemIronOre, 5)
-	if err != nil {
-		t.Fatalf("extract error: %v", err)
-	}
-	if provided != 5 || remaining != 0 {
-		t.Fatalf("expected provide 5/0, got %d/%d", provided, remaining)
-	}
-	if s1.Inventory[ItemIronOre] != 4 {
-		t.Fatalf("expected s1 untouched by output priority, got %d", s1.Inventory[ItemIronOre])
-	}
-}
-
 func TestStoragePortIO(t *testing.T) {
 	profile := BuildingProfileFor(BuildingTypeDepotMk1, 1)
 	building := &Building{

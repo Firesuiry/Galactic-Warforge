@@ -7,7 +7,6 @@ import (
 )
 
 func TestDysonCommandsExecute(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "lightweight_structure")
@@ -103,7 +102,6 @@ func TestDysonCommandsExecute(t *testing.T) {
 }
 
 func TestDysonCommandsRequireResearchUnlock(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -123,7 +121,6 @@ func TestDysonCommandsRequireResearchUnlock(t *testing.T) {
 }
 
 func TestLaunchSolarSailConsumesLoadedPayload(t *testing.T) {
-	ClearSolarSailOrbits()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "solar_sail_orbit")
@@ -160,7 +157,6 @@ func TestLaunchSolarSailConsumesLoadedPayload(t *testing.T) {
 }
 
 func TestLaunchSolarSailRejectsNonEjectorTarget(t *testing.T) {
-	ClearSolarSailOrbits()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "solar_sail_orbit")
@@ -182,7 +178,6 @@ func TestLaunchSolarSailRejectsNonEjectorTarget(t *testing.T) {
 }
 
 func TestLaunchRocketConsumesStoredRocketAndBoostsLayer(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "vertical_launching", "lightweight_structure")
@@ -234,7 +229,6 @@ func TestLaunchRocketConsumesStoredRocketAndBoostsLayer(t *testing.T) {
 }
 
 func TestLaunchRocketRequiresExistingDysonScaffold(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "vertical_launching")

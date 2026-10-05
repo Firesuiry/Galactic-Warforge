@@ -44,10 +44,7 @@ func newT124Core(t *testing.T, maps *mapmodel.Universe, playerIDs ...string) *Ga
 	for _, id := range playerIDs {
 		cfg.Players = append(cfg.Players, config.PlayerConfig{PlayerID: id, Key: id + "-key"})
 	}
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{IntervalTicks: 100})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := persistence.New(persistence.SnapshotPolicy{IntervalTicks: 100})
 	return New(cfg, maps, queue.New(), NewEventBus(), store)
 }
 
@@ -160,10 +157,7 @@ func TestT124ResumeSyncsFlattenedTerrainToMapModel(t *testing.T) {
 	// Regenerate the map from the same seed: terrain is back to its raw,
 	// unflattened state, as on a fresh resume.
 	resumedMaps := newT124Universe(t, seed, 64, 64, nil)
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{IntervalTicks: 100})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := persistence.New(persistence.SnapshotPolicy{IntervalTicks: 100})
 	resumed, err := NewFromSave(core.cfg, resumedMaps, queue.New(), NewEventBus(), store, save)
 	if err != nil {
 		t.Fatalf("resume from save: %v", err)
@@ -207,10 +201,7 @@ func TestT124StarterIronAndCopperWithinMineDistance(t *testing.T) {
 			Executor: config.ExecutorConfig{OperateRange: 6},
 		}},
 	}
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{IntervalTicks: 100})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := persistence.New(persistence.SnapshotPolicy{IntervalTicks: 100})
 	core := New(cfg, maps, queue.New(), NewEventBus(), store)
 	ws := core.World()
 	base := t124BuildingPos(t, ws, "p1", model.BuildingTypeBattlefieldAnalysisBase)

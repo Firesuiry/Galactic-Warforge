@@ -87,12 +87,6 @@ func (ws *WorldState) SurfacePath(start, target Position, budget int) ([]Positio
 	return nil, false
 }
 
-// SurfaceBoundsSingleFace checks whether an atlas rectangle is a single local
-// chart, as required by blueprint rotation and rectangular selection.
-func (ws *WorldState) SurfaceBoundsSingleFace(b BlueprintBounds) bool {
-	return ws.Surface().SingleFace(surface.Tile{X: b.MinX, Y: b.MinY}, surface.Tile{X: b.MaxX, Y: b.MaxY})
-}
-
 func (ws *WorldState) SurfaceWithin(a, b Position, r int) bool {
 	return ws.Surface().Within(surface.Tile{X: a.X, Y: a.Y}, surface.Tile{X: b.X, Y: b.Y}, r)
 }

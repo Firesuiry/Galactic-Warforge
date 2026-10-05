@@ -57,17 +57,12 @@ func TestSurfaceConveyorsAllFaceSeams(t *testing.T) {
 	}
 }
 
-func TestSurfaceStorageAndPowerAcrossSeam(t *testing.T) {
+func TestSurfacePowerAcrossSeam(t *testing.T) {
 	ws := model.NewWorldState("test", 16)
 	pos := model.Position{X: 0, Y: 8}
 	next, _ := ws.SurfaceStep(pos, model.ConveyorWest)
 	a := surfaceTestBuilding(ws, "a", model.BuildingTypeDepotMk1, pos)
 	b := surfaceTestBuilding(ws, "b", model.BuildingTypeDepotMk1, next)
-	model.InitBuildingStorage(a)
-	model.InitBuildingStorage(b)
-	if got := len(storageNetworkFor(ws, "a").Nodes); got != 2 {
-		t.Fatalf("storage nodes=%d", got)
-	}
 	a.Runtime.Params.ConnectionPoints = []model.ConnectionPoint{{Kind: model.ConnectionPower}}
 	b.Runtime.Params.ConnectionPoints = []model.ConnectionPoint{{Kind: model.ConnectionPower}}
 	model.RebuildPowerGrid(ws)

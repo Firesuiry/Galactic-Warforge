@@ -573,11 +573,6 @@ func getPlayerCenterPosition(ws *model.WorldState, playerID string) model.Positi
 	return model.Position{X: t.X, Y: t.Y}
 }
 
-// updateRadarDetection 更新雷达检测状态
-func (gc *GameCore) updateRadarDetection(ws *model.WorldState, currentTick int64) {
-	settlePlanetSensorContacts(ws, currentTick)
-}
-
 // applySlowFieldEffects 应用减速场效果：降低范围内黑雾单位的移动力。
 func (gc *GameCore) applySlowFieldEffects(ws *model.WorldState) {
 	if ws == nil || ws.Buildings == nil {

@@ -1,9 +1,6 @@
 package persistence_test
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -27,14 +24,11 @@ func TestSnapshotPolicyShouldSnapshot(t *testing.T) {
 }
 
 func TestStoreRetentionByCount(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 2,
 		RetentionTicks: 1000,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	store.SaveSnapshot(testSnapshot(1))
 	store.SaveSnapshot(testSnapshot(2))
@@ -50,14 +44,11 @@ func TestStoreRetentionByCount(t *testing.T) {
 }
 
 func TestStoreRetentionByTick(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionTicks: 5,
 		RetentionCount: 10,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	store.SaveSnapshot(testSnapshot(10))
 	store.SaveSnapshot(testSnapshot(12))
@@ -73,14 +64,11 @@ func TestStoreRetentionByTick(t *testing.T) {
 }
 
 func TestCommandLogCutoffTick(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 2,
 		RetentionTicks: 1000,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	store.SaveSnapshot(testSnapshot(4))
 	store.SaveSnapshot(testSnapshot(8))
@@ -94,14 +82,11 @@ func TestCommandLogCutoffTick(t *testing.T) {
 }
 
 func TestSnapshotLookup(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 10,
 		RetentionTicks: 1000,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	store.SaveSnapshot(testSnapshot(5))
 	store.SaveSnapshot(testSnapshot(10))
@@ -121,32 +106,18 @@ func TestSnapshotLookup(t *testing.T) {
 }
 
 func TestStoreTrimAfter(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 10,
 		RetentionTicks: 1000,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	store.SaveSnapshot(testSnapshot(5))
 	store.SaveSnapshot(testSnapshot(10))
 	store.SaveSnapshot(testSnapshot(15))
 
-	if err := store.SaveDelta("cmdlog", 5, 6, []byte("delta-1")); err != nil {
-		t.Fatalf("save delta: %v", err)
-	}
-	if err := store.SaveDelta("cmdlog", 10, 12, []byte("delta-2")); err != nil {
-		t.Fatalf("save delta: %v", err)
-	}
-
-	trimmedSnaps, trimmedDeltas := store.TrimAfter(10)
-	if trimmedSnaps == 0 {
-		t.Fatalf("expected snapshots trimmed")
-	}
-	if trimmedDeltas == 0 {
-		t.Fatalf("expected deltas trimmed")
+	if trimmed := store.TrimAfter(10); trimmed != 1 {
+		t.Fatalf("expected 1 snapshot trimmed, got %d", trimmed)
 	}
 	if snap := store.SnapshotAt(15); snap != nil {
 		t.Fatalf("expected snapshot at tick 15 trimmed")
@@ -154,24 +125,14 @@ func TestStoreTrimAfter(t *testing.T) {
 	if snap := store.SnapshotAt(10); snap == nil {
 		t.Fatalf("expected snapshot at tick 10 retained")
 	}
-	stats := store.SnapshotStats()
-	if stats.LatestSnapshotTick != 10 {
-		t.Fatalf("expected latest snapshot tick 10, got %d", stats.LatestSnapshotTick)
-	}
-	if stats.DeltaCount != 1 {
-		t.Fatalf("expected 1 delta retained, got %d", stats.DeltaCount)
-	}
 }
 
 func TestStoreReplaceAllSnapshotsAndAudit(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 4,
 		RetentionTicks: 100,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	store.ReplaceSnapshots(testSnapshot(1), testSnapshot(9))
 	store.ReplaceAudit([]*model.AuditEntry{{Tick: 9, PlayerID: "p1", Action: "command"}})
@@ -184,34 +145,12 @@ func TestStoreReplaceAllSnapshotsAndAudit(t *testing.T) {
 	}
 }
 
-func TestStoreFlushAuditLogHasNoDiskSideEffect(t *testing.T) {
-	root := t.TempDir()
-	store, err := persistence.New(root, persistence.SnapshotPolicy{IntervalTicks: 1})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-
-	store.AppendAudit(&model.AuditEntry{Tick: 1, PlayerID: "p1", Action: "command"})
-	if err := store.FlushAuditLog(); err != nil {
-		t.Fatalf("flush audit: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "audit.jsonl")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected no audit file created, got %v", err)
-	}
-	if got := len(store.AuditEntries()); got != 1 {
-		t.Fatalf("expected audit entries retained in memory, got %d", got)
-	}
-}
-
 func TestStoreReplaceSnapshotsSkipsInvalidAndLastWins(t *testing.T) {
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 8,
 		RetentionTicks: 100,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	firstTick2 := testSnapshot(2)
 	firstTick2.World.PlanetID = "planet-first"

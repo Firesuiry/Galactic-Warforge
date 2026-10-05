@@ -19,7 +19,6 @@ type RollbackResponse struct {
 	TrimmedEventHistory int          `json:"trimmed_event_history,omitempty"`
 	TrimmedAlertHistory int          `json:"trimmed_alert_history,omitempty"`
 	TrimmedSnapshots    int          `json:"trimmed_snapshots,omitempty"`
-	TrimmedDeltas       int          `json:"trimmed_deltas,omitempty"`
 	Digest              ReplayDigest `json:"digest"`
 	Notes               []string     `json:"notes,omitempty"`
 }

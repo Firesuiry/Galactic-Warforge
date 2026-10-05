@@ -224,20 +224,6 @@ func AllTechDefinitions() []*TechDefinition {
 	return defs
 }
 
-// TechDefinitionsByType returns all techs of a given type
-func TechDefinitionsByType(typ TechType) []*TechDefinition {
-	ensureTechCatalogDerived()
-	techCatalog.mu.RLock()
-	defer techCatalog.mu.RUnlock()
-	defs := make([]*TechDefinition, 0)
-	for _, def := range techCatalog.techs {
-		if def.Type == typ {
-			defs = append(defs, def)
-		}
-	}
-	return defs
-}
-
 // normalizeTechUnlocks 剔除 techs.yaml pending_recipe_unlocks 中登记的待落地配方解锁并去重。
 // 其余解锁在加载时已通过引用校验。整张解锁表因此清空的科技视为无公开价值，
 // 若也没有可见后继则被隐藏（见 ensureTechCatalogDerived）。

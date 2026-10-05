@@ -10,11 +10,7 @@ import (
 )
 
 func TestT094RayReceiverPowerAppearsInSummaryStatsAndNetworksSameTick(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	t.Cleanup(func() {
-		ClearSolarSailOrbits()
-		ClearDysonSphereStates()
 	})
 
 	core := newE2ETestCore(t)

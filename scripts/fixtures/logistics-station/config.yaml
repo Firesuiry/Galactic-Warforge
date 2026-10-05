@@ -206,7 +206,6 @@ server:
     sample_interval_ticks: 5
     shortage_ratio: 0.2
   rate_limit: 20
-  snapshot_delta_max_bytes: 134217728
   snapshot_interval_ticks: 100000
   snapshot_max_bytes: 268435456
   snapshot_max_events: 200

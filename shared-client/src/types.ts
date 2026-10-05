@@ -2347,7 +2347,6 @@ export interface RollbackResponse {
   trimmed_event_history: number;
   trimmed_alert_history: number;
   trimmed_snapshots: number;
-  trimmed_deltas: number;
   digest: ReplayDigest;
   notes?: string[];
 }

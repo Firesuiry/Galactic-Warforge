@@ -36,14 +36,11 @@ func TestRollbackRestoresState(t *testing.T) {
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  1,
 		RetentionCount: 10,
 		RetentionTicks: 100,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	q := queue.New()
 	bus := NewEventBus()
@@ -180,14 +177,11 @@ func TestRollbackRestoresProductionStateBetweenSnapshots(t *testing.T) {
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 
-	store, err := persistence.New(t.TempDir(), persistence.SnapshotPolicy{
+	store := persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:  10,
 		RetentionCount: 16,
 		RetentionTicks: 200,
 	})
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
 
 	core := New(cfg, maps, queue.New(), NewEventBus(), store)
 	ws := core.World()

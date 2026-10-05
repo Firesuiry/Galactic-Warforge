@@ -640,31 +640,6 @@ func sliceTerrain(terrainGrid [][]terrain.TileType, bounds SceneBounds) [][]terr
 	return out
 }
 
-func sliceBoolGrid(grid [][]bool, bounds SceneBounds) [][]bool {
-	if bounds.Width <= 0 || bounds.Height <= 0 || len(grid) == 0 {
-		return blankFog(bounds.Width, bounds.Height)
-	}
-	out := make([][]bool, 0, bounds.Height)
-	for y := 0; y < bounds.Height; y++ {
-		sourceY := bounds.Y + y
-		if sourceY < 0 || sourceY >= len(grid) {
-			out = append(out, make([]bool, bounds.Width))
-			continue
-		}
-		row := grid[sourceY]
-		next := make([]bool, bounds.Width)
-		for x := 0; x < bounds.Width; x++ {
-			sourceX := bounds.X + x
-			if sourceX < 0 || sourceX >= len(row) {
-				continue
-			}
-			next[x] = row[sourceX]
-		}
-		out = append(out, next)
-	}
-	return out
-}
-
 func pointInBounds(position model.Position, bounds SceneBounds) bool {
 	return position.X >= bounds.X &&
 		position.X < bounds.X+bounds.Width &&
@@ -1001,40 +976,6 @@ type FogMapView struct {
 	Surface    surface.Metadata `json:"surface"`
 	Visible    [][]bool         `json:"visible,omitempty"`
 	Explored   [][]bool         `json:"explored,omitempty"`
-}
-
-// FogMap returns the visibility grid for a player.
-func (ql *Layer) FogMap(ws *model.WorldState, playerID, planetID string) (*FogMapView, bool) {
-	planet, ok := ql.maps.Planet(planetID)
-	if !ok {
-		return nil, false
-	}
-	discovered := ql.discovery.IsPlanetDiscovered(playerID, planetID)
-	view := &FogMapView{
-		Surface:    (surface.Grid{Size: planet.FaceSize}).Metadata(),
-		PlanetID:   planet.ID,
-		Discovered: discovered,
-	}
-	if !discovered {
-		return view, true
-	}
-
-	view.MapWidth = planet.Width
-	view.MapHeight = planet.Height
-	view.Surface = (surface.Grid{Size: planet.FaceSize}).Metadata()
-
-	if ws.PlanetID == planetID {
-		ws.RLock()
-		defer ws.RUnlock()
-		fog := ql.vis.FogState(ws, playerID)
-		view.Visible = fog.Visible
-		view.Explored = fog.Explored
-	} else {
-		view.Visible = blankFog(planet.Width, planet.Height)
-		view.Explored = ql.vis.ExploredSnapshot(planet.ID, planet.Width, planet.Height, playerID)
-	}
-
-	return view, true
 }
 
 func blankFog(w, h int) [][]bool {

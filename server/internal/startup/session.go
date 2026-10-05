@@ -324,10 +324,7 @@ func (rt *Runtime) assemble(cfg *config.Config) (*Session, error) {
 	if maps == nil || maps.PrimaryPlanet() == nil {
 		return nil, fmt.Errorf("%w: map config produces no planets", ErrInvalidNewGame)
 	}
-	store, err := newSnapshotStore(rt.serverCfg)
-	if err != nil {
-		return nil, err
-	}
+	store := newSnapshotStore(rt.serverCfg)
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, store)
@@ -337,13 +334,12 @@ func (rt *Runtime) assemble(cfg *config.Config) (*Session, error) {
 }
 
 // newSnapshotStore 按 server 段的快照策略创建一局一个的内存快照 store。
-func newSnapshotStore(serverCfg config.ServerConfig) (*persistence.Store, error) {
-	return persistence.New(serverCfg.DataDir, persistence.SnapshotPolicy{
+func newSnapshotStore(serverCfg config.ServerConfig) *persistence.Store {
+	return persistence.New(persistence.SnapshotPolicy{
 		IntervalTicks:    serverCfg.SnapshotIntervalTicks,
 		RetentionTicks:   serverCfg.SnapshotRetentionTicks,
 		RetentionCount:   serverCfg.SnapshotRetentionCount,
 		MaxSnapshotBytes: serverCfg.SnapshotMaxBytes,
-		MaxDeltaBytes:    serverCfg.SnapshotDeltaMaxBytes,
 	})
 }
 

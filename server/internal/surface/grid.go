@@ -36,11 +36,6 @@ func (g Grid) Valid(t Tile) bool {
 }
 func (g Grid) Face(t Tile) int { return t.Y/g.Size*3 + t.X/g.Size }
 
-// SingleFace reports whether an ordered atlas rectangle stays in one chart.
-func (g Grid) SingleFace(min, max Tile) bool {
-	return g.Valid(min) && g.Valid(max) && min.X <= max.X && min.Y <= max.Y && g.Face(min) == g.Face(max)
-}
-
 type vector struct{ x, y, z int }
 
 func (a vector) dot(b vector) int    { return a.x*b.x + a.y*b.y + a.z*b.z }

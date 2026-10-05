@@ -77,14 +77,6 @@ func (gc *GameCore) updateProductionStats(player *model.PlayerState) {
 	}
 }
 
-func cloneIntMap(in map[string]int) map[string]int {
-	out := make(map[string]int, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
-}
-
 // updateEnergyStats 更新能源统计
 func (gc *GameCore) updateEnergyStats(player *model.PlayerState) {
 	stats := &player.Stats.EnergyStats

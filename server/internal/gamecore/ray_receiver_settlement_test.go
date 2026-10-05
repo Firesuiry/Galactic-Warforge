@@ -7,8 +7,6 @@ import (
 )
 
 func TestSettleRayReceiversRequiresDysonEnergy(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -38,8 +36,6 @@ func TestSettleRayReceiversRequiresDysonEnergy(t *testing.T) {
 }
 
 func TestSettleRayReceiversConsumeSolarSailEnergyUpToInputCap(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -75,8 +71,6 @@ func TestSettleRayReceiversConsumeSolarSailEnergyUpToInputCap(t *testing.T) {
 }
 
 func TestSettleRayReceiversConsumeDysonSphereEnergyUpToInputCap(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -113,8 +107,6 @@ func TestSettleRayReceiversConsumeDysonSphereEnergyUpToInputCap(t *testing.T) {
 }
 
 func TestSettleRayReceiversGainMoreFromRocketConstructionBonus(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 
@@ -183,8 +175,6 @@ func TestSettleRayReceiversRespectModesAndKeepExistingPhotonStock(t *testing.T) 
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ClearSolarSailOrbits()
-			ClearDysonSphereStates()
 
 			core := newE2ETestCore(t)
 			ws := core.World()

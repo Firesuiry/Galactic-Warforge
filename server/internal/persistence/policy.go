@@ -8,8 +8,6 @@ const (
 	DefaultSnapshotRetentionCount = 60
 	// DefaultSnapshotMaxBytes is the soft size ceiling for snapshot JSON payloads.
 	DefaultSnapshotMaxBytes int64 = 2 * 1024 * 1024
-	// DefaultSnapshotDeltaMaxBytes is the soft size ceiling for delta payloads.
-	DefaultSnapshotDeltaMaxBytes int64 = 1 * 1024 * 1024
 )
 
 // SnapshotPolicy defines snapshot cadence and retention.
@@ -19,7 +17,6 @@ type SnapshotPolicy struct {
 	RetentionTicks   int64 // keep snapshots within the last N ticks
 	RetentionCount   int   // keep at most N snapshots
 	MaxSnapshotBytes int64 // warn when a snapshot exceeds this size
-	MaxDeltaBytes    int64 // warn when a delta exceeds this size
 }
 
 // Normalize fills missing values with defaults and returns a sanitized policy.
@@ -35,9 +32,6 @@ func (p SnapshotPolicy) Normalize() SnapshotPolicy {
 	}
 	if p.MaxSnapshotBytes <= 0 {
 		p.MaxSnapshotBytes = DefaultSnapshotMaxBytes
-	}
-	if p.MaxDeltaBytes <= 0 {
-		p.MaxDeltaBytes = DefaultSnapshotDeltaMaxBytes
 	}
 	return p
 }

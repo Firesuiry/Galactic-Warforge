@@ -3,31 +3,7 @@ package model
 import (
 	"siliconworld/internal/terrain"
 	"testing"
-	"time"
 )
-
-func TestSurfaceFootprintCrossesFaceSeam(t *testing.T) {
-	ws := NewWorldState("test", 8)
-	pos := Position{X: 7, Y: 4}
-	item := PlanItem{ID: "wide", Kind: PlanKindBuilding, BuildingType: BuildingTypeArcSmelter, Position: pos, Footprint: Footprint{Width: 2, Height: 2}}
-	result := EvaluatePlanBatch(ws, PlanBatchRequest{Items: []PlanItem{item}})
-	if len(result.Allowed) != 1 {
-		t.Fatalf("seam footprint rejected: %+v", result)
-	}
-	if len(result.Allowed[0].Occupied) != 4 {
-		t.Fatal("footprint did not reserve all four tiles")
-	}
-	next, _ := ws.SurfaceStep(pos, ConveyorEast)
-	found := false
-	for _, p := range result.Allowed[0].Occupied {
-		if p == next {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("footprint missing neighboring face")
-	}
-}
 
 func TestSurfacePathDetoursAndBlocksTerrain(t *testing.T) {
 	ws := NewWorldState("test", 8)
@@ -44,14 +20,6 @@ func TestSurfacePathDetoursAndBlocksTerrain(t *testing.T) {
 		if !ws.SurfaceWithin(path[i-1], path[i], 1) {
 			t.Fatal("path contains disconnected tiles")
 		}
-	}
-}
-
-func TestBlueprintSelectionRejectsAtlasCuts(t *testing.T) {
-	ws := NewWorldState("test", 8)
-	_, err := CaptureBlueprint(ws, BlueprintBounds{MinX: 7, MinY: 2, MaxX: 8, MaxY: 3}, "p1", time.Now())
-	if err == nil {
-		t.Fatal("blueprint selection crossed cube face")
 	}
 }
 

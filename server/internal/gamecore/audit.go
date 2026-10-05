@@ -26,22 +26,6 @@ func (gc *GameCore) QueryAudit(q model.AuditQuery) ([]*model.AuditEntry, error) 
 	return gc.snapshotStore.QueryAudit(q), nil
 }
 
-// TrimAuditBeforeTick drops audit entries strictly before the given tick.
-func (gc *GameCore) TrimAuditBeforeTick(tick int64) int {
-	if gc == nil || gc.snapshotStore == nil {
-		return 0
-	}
-	return gc.snapshotStore.TrimAuditBeforeTick(tick)
-}
-
-// TrimAuditAfterTick drops audit entries strictly after the given tick.
-func (gc *GameCore) TrimAuditAfterTick(tick int64) int {
-	if gc == nil || gc.snapshotStore == nil {
-		return 0
-	}
-	return gc.snapshotStore.TrimAuditAfterTick(tick)
-}
-
 func clonePermissions(perms []string) []string {
 	if len(perms) == 0 {
 		return nil

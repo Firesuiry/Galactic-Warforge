@@ -10,11 +10,7 @@ import (
 )
 
 func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	t.Cleanup(func() {
-		ClearSolarSailOrbits()
-		ClearDysonSphereStates()
 	})
 
 	core := newOfficialMidgameTestCore(t)

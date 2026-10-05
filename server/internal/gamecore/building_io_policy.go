@@ -57,21 +57,6 @@ func buildingRecipeOutputItems(building *model.Building) []string {
 	return dedupeItemIDs(items)
 }
 
-func buildingRecipePrimaryOutputItems(building *model.Building) []string {
-	recipe, ok := buildingRecipe(building)
-	if !ok {
-		return nil
-	}
-	items := make([]string, 0, len(recipe.Outputs))
-	for _, output := range recipe.Outputs {
-		if output.ItemID == "" {
-			continue
-		}
-		items = append(items, output.ItemID)
-	}
-	return dedupeItemIDs(items)
-}
-
 func buildingRecipeByproductItems(building *model.Building) []string {
 	recipe, ok := buildingRecipe(building)
 	if !ok {

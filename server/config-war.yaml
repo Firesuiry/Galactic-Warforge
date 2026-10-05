@@ -326,7 +326,6 @@ server:
   snapshot_retention_ticks: 30000
   snapshot_retention_count: 6
   snapshot_max_bytes: 268435456
-  snapshot_delta_max_bytes: 134217728
   production_monitor:
     sample_interval_ticks: 5
     max_entities_per_sample: 500

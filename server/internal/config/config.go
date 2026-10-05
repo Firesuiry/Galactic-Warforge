@@ -133,7 +133,6 @@ type ServerConfig struct {
 	SnapshotRetentionTicks  int64                   `yaml:"snapshot_retention_ticks"` // retain snapshots within last N ticks
 	SnapshotRetentionCount  int                     `yaml:"snapshot_retention_count"` // retain at most N snapshots
 	SnapshotMaxBytes        int64                   `yaml:"snapshot_max_bytes"`       // soft max snapshot JSON size
-	SnapshotDeltaMaxBytes   int64                   `yaml:"snapshot_delta_max_bytes"` // soft max delta JSON size
 	AutoSaveIntervalSeconds int                     `yaml:"auto_save_interval_seconds"`
 	ProductionMonitor       ProductionMonitorConfig `yaml:"production_monitor"`
 }
@@ -193,7 +192,6 @@ func ApplyDefaults(cfg *Config) error {
 		defaultSnapshotIntervalTicks   int64 = 100
 		defaultSnapshotRetentionCount        = 60
 		defaultSnapshotMaxBytes        int64 = 2 * 1024 * 1024
-		defaultSnapshotDeltaMaxBytes   int64 = 1 * 1024 * 1024
 		defaultAlertHistoryLimit             = 1000
 		defaultAutoSaveIntervalSeconds       = 60
 	)
@@ -241,9 +239,6 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Server.SnapshotMaxBytes == 0 {
 		cfg.Server.SnapshotMaxBytes = defaultSnapshotMaxBytes
-	}
-	if cfg.Server.SnapshotDeltaMaxBytes == 0 {
-		cfg.Server.SnapshotDeltaMaxBytes = defaultSnapshotDeltaMaxBytes
 	}
 	if cfg.Server.ProductionMonitor.SampleIntervalTicks == 0 {
 		cfg.Server.ProductionMonitor.SampleIntervalTicks = 5

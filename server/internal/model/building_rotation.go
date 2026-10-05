@@ -59,3 +59,38 @@ func ApplyBuildingRotation(b *Building, rotation PlanRotation) {
 		}
 	}
 }
+
+// PlanRotation describes footprint rotation in degrees.
+type PlanRotation string
+
+const (
+	PlanRotation0   PlanRotation = "0"
+	PlanRotation90  PlanRotation = "90"
+	PlanRotation180 PlanRotation = "180"
+	PlanRotation270 PlanRotation = "270"
+)
+
+func normalizePlanRotation(rot PlanRotation) PlanRotation {
+	switch rot {
+	case PlanRotation90, PlanRotation180, PlanRotation270:
+		return rot
+	default:
+		return PlanRotation0
+	}
+}
+
+func rotateOffset(x, y, width, height int, rot PlanRotation) (int, int) {
+	switch rot {
+	case PlanRotation90:
+		return height - 1 - y, x
+	case PlanRotation180:
+		return width - 1 - x, height - 1 - y
+	case PlanRotation270:
+		return y, width - 1 - x
+	default:
+		return x, y
+	}
+}
+
+// BlueprintParams captures per-building parameter payloads.
+type BlueprintParams map[string]any

@@ -155,7 +155,6 @@ func TestAutoLaunchSkipsWithoutLoadedSails(t *testing.T) {
 
 // G2: vertical_launching_silo 装料后自动向戴森层发射火箭并扣能。
 func TestAutoLaunchRocketIntoDysonLayer(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "lightweight_structure")
@@ -202,7 +201,6 @@ func TestAutoLaunchRocketIntoDysonLayer(t *testing.T) {
 
 // G2 边界：没有任何带脚手架的戴森层时火箭不发射。
 func TestAutoLaunchRocketSkipsWithoutDysonScaffold(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 

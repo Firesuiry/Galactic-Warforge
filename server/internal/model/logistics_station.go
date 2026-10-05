@@ -232,15 +232,6 @@ func (s *LogisticsStationState) SettingFor(itemID string) (LogisticsStationItemS
 	return setting, ok
 }
 
-// InterstellarSettingFor returns the interstellar setting for an item.
-func (s *LogisticsStationState) InterstellarSettingFor(itemID string) (LogisticsStationItemSetting, bool) {
-	if s == nil || itemID == "" {
-		return LogisticsStationItemSetting{}, false
-	}
-	setting, ok := s.InterstellarSettings[itemID]
-	return setting, ok
-}
-
 // SetInventory replaces the station inventory and refreshes caches.
 func (s *LogisticsStationState) SetInventory(inv ItemInventory) {
 	if s == nil {
@@ -406,39 +397,6 @@ func (s *LogisticsStationState) LocalCapacity(itemID string) int {
 		return 0
 	}
 	if qty := s.Cache.Local[itemID]; qty > 0 {
-		return qty
-	}
-	return 0
-}
-
-// InterstellarSupplyCapacity returns cached interstellar supply capacity for an item.
-func (s *LogisticsStationState) InterstellarSupplyCapacity(itemID string) int {
-	if s == nil || itemID == "" || s.InterstellarCache.Supply == nil {
-		return 0
-	}
-	if qty := s.InterstellarCache.Supply[itemID]; qty > 0 {
-		return qty
-	}
-	return 0
-}
-
-// InterstellarDemandCapacity returns cached interstellar demand capacity for an item.
-func (s *LogisticsStationState) InterstellarDemandCapacity(itemID string) int {
-	if s == nil || itemID == "" || s.InterstellarCache.Demand == nil {
-		return 0
-	}
-	if qty := s.InterstellarCache.Demand[itemID]; qty > 0 {
-		return qty
-	}
-	return 0
-}
-
-// InterstellarLocalCapacity returns cached interstellar local storage capacity for an item.
-func (s *LogisticsStationState) InterstellarLocalCapacity(itemID string) int {
-	if s == nil || itemID == "" || s.InterstellarCache.Local == nil {
-		return 0
-	}
-	if qty := s.InterstellarCache.Local[itemID]; qty > 0 {
 		return qty
 	}
 	return 0

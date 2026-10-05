@@ -107,25 +107,6 @@ func RecordLogisticsSchedulingObservation(obs LogisticsSchedulingObservation) {
 	}
 }
 
-// CurrentLogisticsSchedulingObservations returns a snapshot of recent observations.
-func CurrentLogisticsSchedulingObservations() []LogisticsSchedulingObservation {
-	logisticsSchedulingObsMu.RLock()
-	defer logisticsSchedulingObsMu.RUnlock()
-	if len(logisticsSchedulingObsStore) == 0 {
-		return nil
-	}
-	out := make([]LogisticsSchedulingObservation, len(logisticsSchedulingObsStore))
-	copy(out, logisticsSchedulingObsStore)
-	return out
-}
-
-// ResetLogisticsSchedulingObservations clears stored observations.
-func ResetLogisticsSchedulingObservations() {
-	logisticsSchedulingObsMu.Lock()
-	logisticsSchedulingObsStore = nil
-	logisticsSchedulingObsMu.Unlock()
-}
-
 func normalizeLogisticsSchedulingConfig(cfg LogisticsSchedulingConfig) (LogisticsSchedulingConfig, error) {
 	out := cfg
 	if !out.PlanetaryStrategy.Valid() {

@@ -9,11 +9,7 @@ import (
 )
 
 func TestT095OfficialMidgameRayReceiverPowerModeStopsPhotonGrowthAndBackfeedsGrid(t *testing.T) {
-	ClearSolarSailOrbits()
-	ClearDysonSphereStates()
 	t.Cleanup(func() {
-		ClearSolarSailOrbits()
-		ClearDysonSphereStates()
 	})
 
 	core := newOfficialMidgameTestCore(t)

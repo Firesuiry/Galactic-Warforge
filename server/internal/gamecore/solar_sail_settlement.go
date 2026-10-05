@@ -96,6 +96,3 @@ func GetSolarSailEnergy(spaceRuntime *model.SpaceRuntimeState, playerID, systemI
 	}
 	return orbit.TotalEnergy
 }
-
-// ClearSolarSailOrbits remains for backward-compatible tests; space runtime is now per-core.
-func ClearSolarSailOrbits() {}

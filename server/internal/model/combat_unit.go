@@ -1,9 +1,5 @@
 package model
 
-import (
-	"math/rand"
-)
-
 // WeaponType 武器类型
 type WeaponType string
 
@@ -68,25 +64,4 @@ type WeaponState struct {
 type LootDrop struct {
 	ItemID   string `json:"item_id"`
 	Quantity int    `json:"quantity"`
-}
-
-// CalculateLoot 计算战斗掉落
-func CalculateLoot(enemy *EnemyForce, rng *rand.Rand) []LootDrop {
-	drops := make([]LootDrop, 0)
-
-	if enemy == nil {
-		return drops
-	}
-
-	// 基于敌人类型和强度计算掉落
-	baseChance := float64(enemy.Strength) / 100.0
-
-	if rng.Float64() < baseChance*0.5 {
-		drops = append(drops, LootDrop{ItemID: "enemy_core", Quantity: 1})
-	}
-	if rng.Float64() < baseChance*0.3 {
-		drops = append(drops, LootDrop{ItemID: "rare_materials", Quantity: rng.Intn(3) + 1})
-	}
-
-	return drops
 }

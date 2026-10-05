@@ -297,35 +297,6 @@ func TestE4NestDestroyRewardsTurretPath(t *testing.T) {
 	}
 }
 
-// 摧毁奖励（小队路径）：舰队/小队结算与单位/炮塔共用统一入口。
-func TestE4NestDestroyRewardsSquadPath(t *testing.T) {
-	ws := newPowerTestWorld()
-	ws.Tick = 10
-	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID, ThreatMeter: 300}
-	spawnE4Nest(ws, "hive-e4s", 2, 4, model.Position{X: 3, Y: 2})
-
-	squad := &model.CombatSquad{ID: "squad-e4", OwnerID: "p1", PlanetID: ws.PlanetID, Position: model.Position{X: 2, Y: 2}}
-	target := resolveCombatTarget(ws, "hive-e4s")
-	if target == nil {
-		t.Fatal("squad target should resolve")
-	}
-	events := applySquadDamageToTarget(ws, squad, target, 1000, ws.Tick)
-
-	if len(ws.EnemyForces.Forces) != 0 {
-		t.Fatalf("squad should destroy the nest, remaining %+v", ws.EnemyForces.Forces)
-	}
-	if got := ws.Players["p1"].Inventory[model.ItemDarkFogMatrix]; got < 3 {
-		t.Fatalf("squad kill should grant >=3 dark_fog_matrix, got %d", got)
-	}
-	if ws.EnemyForces.ThreatMeter != 200 {
-		t.Fatalf("threat meter should drop after squad kill, got %v", ws.EnemyForces.ThreatMeter)
-	}
-	evt := findNestDestroyedEvent(events, "hive-e4s")
-	if evt == nil || evt.Payload["source"] != "combat_squad" || evt.Payload["killed_by"] != "squad-e4" {
-		t.Fatalf("squad nest destroyed event wrong: %+v", evt)
-	}
-}
-
 // 区域安全：遗址冷却期内半径内不刷新新巢，冷却结束解除；遗址随结算过期清理。
 func TestE4NestRuinBlocksRespawn(t *testing.T) {
 	core := newBlackFogTestCore(t, "normal")

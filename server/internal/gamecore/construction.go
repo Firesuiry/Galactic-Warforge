@@ -140,19 +140,6 @@ func releaseConstructionReservation(ws *model.WorldState, task *model.Constructi
 	refundConstructionRefund(ws, task)
 }
 
-// getAvailableConstructionMaterials returns available materials from all sources.
-// Currently only returns local player inventory; logistics integration is for future.
-func getAvailableConstructionMaterials(ws *model.WorldState, playerID string) (minerals, energy int, items model.ItemInventory) {
-	if ws == nil || playerID == "" {
-		return 0, 0, nil
-	}
-	player := ws.Players[playerID]
-	if player == nil {
-		return 0, 0, nil
-	}
-	return player.Resources.Minerals, player.Resources.Energy, player.Inventory
-}
-
 const (
 	constructionRegionSize          = 8
 	defaultConstructionDurationTick = 1
@@ -599,19 +586,6 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 	}
 
 	return events
-}
-
-func refundConstructionCost(ws *model.WorldState, task *model.ConstructionTask) {
-	if ws == nil || task == nil {
-		return
-	}
-	player := ws.Players[task.PlayerID]
-	if player == nil {
-		return
-	}
-	player.Resources.Minerals += task.Cost.Minerals
-	player.Resources.Energy += task.Cost.Energy
-	player.AddItems(task.Cost.Items)
 }
 
 // refundConstructionRefund refunds a portion of the construction cost based on remaining progress.

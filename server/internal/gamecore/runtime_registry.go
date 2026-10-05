@@ -285,13 +285,6 @@ func findOpenTileForResource(ws *model.WorldState, center model.Position, dist i
 	return model.Position{}, false
 }
 
-func manhattanAbs(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-
 // injectResourceNode writes a finite ore node into the runtime world and, when
 // present, the map-model planet so scene/query layers stay consistent.
 func injectResourceNode(ws *model.WorldState, planet *mapmodel.Planet, pos model.Position, kind mapmodel.ResourceKind) {

@@ -369,36 +369,6 @@ func selectConveyorInputCandidate(
 	return best, true
 }
 
-func selectConveyorInputStack(
-	conveyor *model.ConveyorState,
-	port model.IOPort,
-	needs map[string]int,
-) (model.ItemStack, int, bool) {
-	if conveyor == nil || len(conveyor.Buffer) == 0 {
-		return model.ItemStack{}, 0, false
-	}
-	if len(needs) == 0 {
-		stack, ok := peekConveyorFront(conveyor)
-		if !ok || !ioPortAllowsItem(port, stack.ItemID) {
-			return model.ItemStack{}, 0, false
-		}
-		return stack, 0, true
-	}
-	for idx, stack := range conveyor.Buffer {
-		if stack.Quantity <= 0 {
-			continue
-		}
-		if !ioPortAllowsItem(port, stack.ItemID) {
-			continue
-		}
-		if _, ok := needs[stack.ItemID]; !ok {
-			continue
-		}
-		return stack, idx, true
-	}
-	return model.ItemStack{}, 0, false
-}
-
 func selectOutputItem(building *model.Building, port model.IOPort, dir model.ConveyorDirection) string {
 	if building == nil || building.Storage == nil {
 		return ""

@@ -257,27 +257,6 @@ func findEnemyForceByID(ws *model.WorldState, id string) *model.EnemyForce {
 	return nil
 }
 
-// findNearestEnemyForce 查找最近的敌对势力
-func findNearestEnemyForce(ws *model.WorldState, pos model.Position) *model.EnemyForce {
-	if ws.EnemyForces == nil || len(ws.EnemyForces.Forces) == 0 {
-		return nil
-	}
-
-	var nearest *model.EnemyForce
-	minDist := float64(^uint(0) >> 1)
-
-	for i := range ws.EnemyForces.Forces {
-		force := &ws.EnemyForces.Forces[i]
-		dist := float64(ws.SurfaceDistance(pos, force.Position))
-		if dist < minDist {
-			minDist = dist
-			nearest = force
-		}
-	}
-
-	return nearest
-}
-
 // removeEnemyForce 从世界中移除敌对势力
 func removeEnemyForce(ws *model.WorldState, id string) {
 	if ws.EnemyForces == nil {

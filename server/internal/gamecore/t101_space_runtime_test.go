@@ -63,7 +63,6 @@ func TestT101LaunchSolarSailUsesSpaceRuntimeIDsAndSystemScope(t *testing.T) {
 }
 
 func TestT101RayReceiverReadsSolarSailEnergyFromCurrentSystemOnly(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 

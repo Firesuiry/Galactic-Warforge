@@ -45,7 +45,6 @@ func TestTransferItemLoadsOwnedBuildingAndEmitsUpdate(t *testing.T) {
 }
 
 func TestTransferItemAllowsImmediateRocketLaunch(t *testing.T) {
-	ClearDysonSphereStates()
 	core := newE2ETestCore(t)
 	ws := core.World()
 	grantTechs(ws, "p1", "vertical_launching", "lightweight_structure")

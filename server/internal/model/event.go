@@ -107,13 +107,6 @@ type GameEvent struct {
 	Payload         map[string]any `json:"payload"`
 }
 
-// TickSummary is a lightweight summary pushed at tick boundary
-type TickSummary struct {
-	Tick       int64 `json:"tick"`
-	EventCount int   `json:"event_count"`
-	DurationMs int64 `json:"duration_ms"`
-}
-
 // EventSnapshotResponse is the response for GET /events/snapshot.
 type EventSnapshotResponse struct {
 	EventTypes        []EventType  `json:"event_types,omitempty"`

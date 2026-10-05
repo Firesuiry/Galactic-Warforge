@@ -714,60 +714,6 @@ func TechCostForPlayer(player *model.PlayerState, techID string) (cost []model.I
 	return def.CostForLevel(player.Tech.CompletedTechs[techID] + 1), true
 }
 
-// ValidateStartResearch performs a fast pre-check for the start_research command:
-// returns a non-empty issues slice if there is no running research lab or the
-// required matrices are not yet present in any lab storage.  This is called at
-// HTTP-accept time so the player gets an immediate, actionable rejection instead
-// of a silent async failure.
-func (gc *GameCore) ValidateStartResearch(playerID string, techID string) []model.CommandIssue {
-	if gc == nil {
-		return nil
-	}
-	def, ok := model.TechDefinitionByID(techID)
-	if !ok {
-		return []model.CommandIssue{{Field: "payload.tech_id", Code: "unknown_tech", Message: fmt.Sprintf("未知科技：%s", techID)}}
-	}
-
-	labs := runningResearchLabs(gc.worlds, playerID)
-	if len(labs) == 0 {
-		return []model.CommandIssue{{Field: "lab", Code: "no_running_lab", Message: "需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）"}}
-	}
-	storageOf := researchLabStorageResolver(gc.worlds, labs)
-
-	var issues []model.CommandIssue
-	for _, cost := range researchLevelCost(gc.worlds, playerID, def) {
-		if cost.ItemID == "" || cost.Quantity <= 0 {
-			continue
-		}
-		total := 0
-		for _, lab := range labs {
-			storage := storageOf(lab)
-			if storage == nil {
-				continue
-			}
-			total += storage.OutputQuantity(cost.ItemID)
-		}
-		if total <= 0 {
-			issues = append(issues, model.CommandIssue{
-				Field:   "lab.storage",
-				Code:    "missing_research_material",
-				Message: fmt.Sprintf("研究站库存中缺少 %s（当前：0，需要：≥1）", cost.ItemID),
-			})
-		}
-	}
-	return issues
-}
-
-// researchLevelCost resolves the item cost for the level the player would
-// research next (1-based), honoring TechDefinition.CostPerLevel.
-func researchLevelCost(worlds map[string]*model.WorldState, playerID string, def *model.TechDefinition) []model.ItemAmount {
-	level := 1
-	if player := researchPlayers(worlds)[playerID]; player != nil && player.Tech != nil {
-		level = player.Tech.CompletedTechs[def.ID] + 1
-	}
-	return def.CostForLevel(level)
-}
-
 // ValidateStartResearchLocked is the RLock-free variant called by the gateway
 // pre-validator, which already holds ws.RLock().  Returns issues synchronously.
 func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, ws *model.WorldState) []model.CommandIssue {

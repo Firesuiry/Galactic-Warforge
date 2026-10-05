@@ -93,57 +93,6 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
-// settleSquadMovement 推进所有小队（编组战斗群）的实时移动。
-// 小队不受单位占位限制（编队内可共格），仅受建筑与地形约束。
-func settleSquadMovement(ws *model.WorldState) []*model.GameEvent {
-	if ws == nil || ws.CombatRuntime == nil || len(ws.CombatRuntime.Squads) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(ws.CombatRuntime.Squads))
-	for id := range ws.CombatRuntime.Squads {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	var events []*model.GameEvent
-	for _, id := range ids {
-		squad := ws.CombatRuntime.Squads[id]
-		if squad == nil || squad.State == model.CombatSquadStateDestroyed || !squad.HasPath() {
-			continue
-		}
-		squad.MoveProgress += squad.MoveSpeed
-		for squad.MoveProgress >= 1 && squad.HasPath() {
-			next := squad.Path[squad.PathIndex]
-			if !ws.InBounds(next.X, next.Y) || ws.Grid[next.Y][next.X].BuildingID != "" || !ws.Grid[next.Y][next.X].Terrain.Buildable() {
-				dest := squad.Path[len(squad.Path)-1]
-				path, ok := computeSurfacePath(ws, squad.Position, dest)
-				if !ok {
-					squad.ClearPath()
-					events = append(events, squadMoveAbortedEvent(squad, "path_blocked"))
-					break
-				}
-				squad.Path, squad.PathIndex = path, 1
-				continue
-			}
-			squad.Position = next
-			squad.PathIndex++
-			squad.MoveProgress--
-		}
-		if !squad.HasPath() {
-			squad.MoveProgress = 0
-			events = append(events, &model.GameEvent{EventType: model.EvtEntityMoved, VisibilityScope: squad.OwnerID, Payload: map[string]any{
-				"entity_id": squad.ID, "entity_kind": "combat_squad", "to": squad.Position, "arrived": true,
-			}})
-		}
-	}
-	return events
-}
-
-func squadMoveAbortedEvent(squad *model.CombatSquad, reason string) *model.GameEvent {
-	return &model.GameEvent{EventType: model.EvtEntityMoved, VisibilityScope: squad.OwnerID, Payload: map[string]any{
-		"entity_id": squad.ID, "entity_kind": "combat_squad", "to": squad.Position, "arrived": false, "reason": reason,
-	}}
-}
-
 // tileWalkableForUnit 校验单位能否进入目标格：界内、可建地形、无建筑、无其他单位。
 func tileWalkableForUnit(ws *model.WorldState, pos model.Position, selfID string) bool {
 	if !ws.InBounds(pos.X, pos.Y) {
@@ -273,19 +222,6 @@ func onUnitArrived(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 	}
 	unit.ClearMovement()
 	return []*model.GameEvent{arrived}
-}
-
-// computeSurfacePath 以终点可达为前提计算表面路径（供小队等无占位需求的实体）。
-func computeSurfacePath(ws *model.WorldState, from, to model.Position) ([]model.Position, bool) {
-	if from == to {
-		return []model.Position{from}, true
-	}
-	dist := ws.SurfaceDistance(from, to)
-	budget := dist*2 + 40
-	if budget > maxPathBudget {
-		budget = maxPathBudget
-	}
-	return ws.SurfacePath(from, to, budget)
 }
 
 // computePathNear 单次 BFS：到达终点本身（可进入时）或终点邻域（半径 1~2）中
