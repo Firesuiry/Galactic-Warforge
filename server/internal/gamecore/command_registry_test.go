@@ -113,6 +113,10 @@ func TestDecodePayloadAcceptsGoTypedValues(t *testing.T) {
 	if err != nil || node.Latitude != 10 || node.Longitude != -5.5 {
 		t.Fatalf("decode int into float: %+v, %v", node, err)
 	}
+	deploy, err := decodePayload[taskForceDeployPayload](map[string]any{"task_force_id": "tf-1", "position": model.Position{X: 3, Y: 4}})
+	if err != nil || *deploy.Position.toPosition() != (model.Position{X: 3, Y: 4}) {
+		t.Fatalf("decode typed position: %+v, %v", deploy, err)
+	}
 }
 
 func TestPayloadRefsDriveRouting(t *testing.T) {

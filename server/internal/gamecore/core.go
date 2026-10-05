@@ -817,7 +817,7 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			continue
 		}
 
-		res, evts, executed := gc.dispatchCommand(player, cmd)
+		res, evts, executed := gc.dispatchCommand(qr.PlayerID, player, cmd)
 		if !executed {
 			res.CommandIndex = i
 			results = append(results, res)

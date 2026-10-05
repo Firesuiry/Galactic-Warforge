@@ -19,15 +19,17 @@ type noPayload struct{}
 
 func decodePayload[P any](raw map[string]any) (P, error) {
 	var p P
-	if err := checkPayloadFields(reflect.TypeOf(p), raw, "payload"); err != nil {
-		return p, err
-	}
-	if len(raw) == 0 {
-		return p, nil
-	}
+	// 先经 JSON 归一化（Go 类型值 → 与网关解码一致的 map/切片/数字），再按标签校验并解码。
 	data, err := json.Marshal(raw)
 	if err != nil {
 		return p, fmt.Errorf("payload invalid: %v", err)
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal(data, &normalized); err != nil {
+		return p, fmt.Errorf("payload invalid: %v", err)
+	}
+	if err := checkPayloadFields(reflect.TypeOf(p), normalized, "payload"); err != nil {
+		return p, err
 	}
 	if err := json.Unmarshal(data, &p); err != nil {
 		var typeErr *json.UnmarshalTypeError
@@ -66,7 +68,7 @@ func checkPayloadFields(t reflect.Type, raw map[string]any, path string) error {
 			if !present || (value == nil && field.Type.Kind() != reflect.String) {
 				return fmt.Errorf("%s required", fieldPath)
 			}
-			if field.Type.Kind() == reflect.String && !strings.Contains(opts, "allowempty") && isEmptyString(value) {
+			if field.Type.Kind() == reflect.String && !strings.Contains(opts, "allowempty") && (value == nil || value == "") {
 				return fmt.Errorf("%s must be a non-empty string", fieldPath)
 			}
 		}
@@ -123,14 +125,6 @@ func payloadJSONPath(t reflect.Type, path string) string {
 		}
 	}
 	return strings.Join(out, ".")
-}
-
-func isEmptyString(value any) bool {
-	if value == nil {
-		return true
-	}
-	v := reflect.ValueOf(value)
-	return v.Kind() == reflect.String && v.Len() == 0
 }
 
 func payloadKindName(t reflect.Type) string {

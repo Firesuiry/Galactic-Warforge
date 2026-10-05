@@ -149,7 +149,7 @@ var commandHandlers = map[model.CommandType]commandHandler{
 
 // dispatchCommand 查注册表、解码载荷、按行星路由并执行一条命令。
 // executed=false 表示命令在路由阶段被拒、未进入执行。
-func (gc *GameCore) dispatchCommand(player *model.PlayerState, cmd model.Command) (res model.CommandResult, evts []*model.GameEvent, executed bool) {
+func (gc *GameCore) dispatchCommand(playerID string, player *model.PlayerState, cmd model.Command) (res model.CommandResult, evts []*model.GameEvent, executed bool) {
 	handler, ok := commandHandlers[cmd.Type]
 	if !ok {
 		return model.CommandResult{
@@ -168,7 +168,7 @@ func (gc *GameCore) dispatchCommand(player *model.PlayerState, cmd model.Command
 	if routeFailure != nil {
 		return *routeFailure, nil, false
 	}
-	res, evts = bound.exec(gc, ws, player.PlayerID)
+	res, evts = bound.exec(gc, ws, playerID)
 	return res, evts, true
 }
 
