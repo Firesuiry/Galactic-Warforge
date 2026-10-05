@@ -196,19 +196,6 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 		}
 	}
 
-	player := ws.Players[playerID]
-	for _, squad := range ws.CombatRuntime.Squads {
-		if squad == nil || squad.OwnerID != playerID {
-			continue
-		}
-		blueprint, ok := model.ResolveWarBlueprintForPlayer(player, squad.Name)
-		if !ok {
-			continue
-		}
-		profile := model.ResolveWarBlueprintSensorProfile(blueprint)
-		anchor := squad.Position
-		appendBlueprintSensorSources(&sources, clonePosition(anchor), 10+profile.SignalSignature/2, profile, "squad:"+squad.ID)
-	}
 	return sources
 }
 

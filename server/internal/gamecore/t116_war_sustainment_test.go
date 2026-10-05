@@ -162,8 +162,8 @@ func TestT116WarSupplyNodesAndRuntimeQueriesExposeSustainment(t *testing.T) {
 	if members, ok := squadBody["member_ids"].([]any); !ok || len(members) != 1 || members[0] != rifleman.ID {
 		t.Fatalf("expected squad container to expose member_ids only, got %+v", squadBody)
 	}
-	if sus, _ := squadBody["sustainment"].(map[string]any); len(sus["current"].(map[string]any)) != 0 {
-		t.Fatalf("member squad must not carry a private supply pool, got %+v", sus)
+	if _, ok := squadBody["sustainment"]; ok {
+		t.Fatalf("squad container must not carry a private supply pool, got %+v", squadBody)
 	}
 
 	fleetView, ok := ql.Fleet("p1", "fleet-t116", core.SpaceRuntime())

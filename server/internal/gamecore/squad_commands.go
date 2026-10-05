@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// deploySquadPayload 有两种形态：带 member_ids 时把单位编成小队；
-// 否则按 building_id + blueprint_id + count 从部署枢纽投放蓝图小队。
+// deploySquadPayload 有两种形态：带 member_ids 时把已有单位编成小队；
+// 否则按 building_id + blueprint_id [+ count，缺省 1] 从部署枢纽投放蓝图单位并编队。
 type deploySquadPayload struct {
 	MemberIDs   []string `json:"member_ids"`
 	Name        *string  `json:"name"`
@@ -40,13 +40,13 @@ type dissolveSquadPayload struct {
 	SquadID string `json:"squad_id" payload:"required"`
 }
 
-// execDeploySquad groups member_ids into a squad; blueprint payloads deploy
-// through execDeployBlueprintSquad.
+// execDeploySquad groups member_ids into a squad, or materializes blueprint
+// payloads from a deployment hub as world units and groups those.
 func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd model.Command, p deploySquadPayload) (model.CommandResult, []*model.GameEvent) {
-	if p.MemberIDs == nil {
-		return gc.execDeployBlueprintSquad(ws, playerID, p)
+	if p.MemberIDs != nil {
+		return gc.formSquad(ws, playerID, p.MemberIDs, p.Name, "member_ids")
 	}
-	return gc.formSquad(ws, playerID, p.MemberIDs, p.Name, "member_ids")
+	return gc.deployBlueprintSquad(ws, playerID, p)
 }
 
 // execFormSquad turns selected units into a squad (order container); formation
@@ -100,98 +100,110 @@ func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, ids []strin
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: squad.ID}, []*model.GameEvent{squadEvent(squad, model.EvtSquadDeployed)}
 }
 
-// execDeployBlueprintSquad materializes a produced war payload into an HP-pool
-// squad. It remains the deployment path for the blueprint production
-// system; player controlled world units use execDeploySquad's member_ids path.
-func (gc *GameCore) execDeployBlueprintSquad(ws *model.WorldState, playerID string, p deploySquadPayload) (model.CommandResult, []*model.GameEvent) {
-	buildingID, blueprintID := p.BuildingID, p.BlueprintID
-	switch {
-	case buildingID == "":
-		return mechaJobFailed(model.CodeValidationFailed, "payload.building_id required")
-	case blueprintID == "":
-		return mechaJobFailed(model.CodeValidationFailed, "payload.blueprint_id required")
-	case p.Count == nil:
-		return mechaJobFailed(model.CodeValidationFailed, "payload.count required")
-	case *p.Count <= 0:
-		return mechaJobFailed(model.CodeValidationFailed, "payload.count must be positive")
+// deployBlueprintSquad consumes ready ground/air payloads from a deployment hub,
+// spawns one world unit per payload next to the hub (or at the target planet's
+// center when deploying to another planet) and forms them into a squad. Every
+// check runs before payloads are consumed.
+func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, p deploySquadPayload) (model.CommandResult, []*model.GameEvent) {
+	count := 1
+	if p.Count != nil {
+		count = *p.Count
 	}
-	count := *p.Count
-	building, deployment, result := requireOwnedDeploymentHub(ws, playerID, buildingID)
+	switch {
+	case p.BuildingID == "" || p.BlueprintID == "":
+		return mechaJobFailed(model.CodeValidationFailed, "payload.building_id and payload.blueprint_id required without member_ids")
+	case count < 1 || count > 300:
+		return mechaJobFailed(model.CodeValidationFailed, "payload.count must be 1–300")
+	}
+	building, deployment, result := requireOwnedDeploymentHub(ws, playerID, p.BuildingID)
 	if result != nil {
 		return *result, nil
 	}
 	player := ws.Players[playerID]
-	blueprint, visibleTechID, err := resolveIndustryBlueprint(player, blueprintID)
+	blueprint, visibleTechID, err := resolveIndustryBlueprint(player, p.BlueprintID)
 	if err != nil {
 		return mechaJobFailed(model.CodeValidationFailed, err.Error())
 	}
 	if warBlueprintDeployCommand(blueprint) != model.CmdDeploySquad || !deploymentAllowsBlueprint(deployment, blueprint) {
-		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("blueprint %s is not deployable from building %s", blueprintID, building.ID))
+		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("blueprint %s is not deployable from building %s", p.BlueprintID, building.ID))
 	}
 	if err := requireBlueprintTechUnlocked(ws, playerID, visibleTechID); err != nil {
 		return mechaJobFailed(model.CodeValidationFailed, err.Error())
 	}
-	hubState := ensureWarDeploymentHubState(player.EnsureWarIndustry(), building.ID, deploymentHubCapacity(deployment))
-	if hubState.ReadyPayloads[blueprintID] < count {
-		return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("need %d %s in deployment hub inventory", count, blueprintID))
+	profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, p.BlueprintID)
+	if !ok || profile.Squad == nil {
+		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("blueprint %s has no squad runtime profile", p.BlueprintID))
 	}
-	hubState.ReadyPayloads[blueprintID] -= count
-	if hubState.ReadyPayloads[blueprintID] <= 0 {
-		delete(hubState.ReadyPayloads, blueprintID)
+	hubState := ensureWarDeploymentHubState(player.EnsureWarIndustry(), building.ID, deploymentHubCapacity(deployment))
+	if hubState.ReadyPayloads[p.BlueprintID] < count {
+		return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("need %d %s in deployment hub inventory", count, p.BlueprintID))
+	}
+	target := ws
+	if p.PlanetID != "" && p.PlanetID != ws.PlanetID {
+		if target = gc.WorldForPlanet(p.PlanetID); target == nil {
+			return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("planet runtime %s not loaded", p.PlanetID))
+		}
+	}
+	anchor := building.Position
+	if target != ws {
+		anchor = model.Position{X: target.MapWidth / 2, Y: target.MapHeight / 2}
+	}
+	tiles := freeDeployTiles(target, anchor, blueprint.Domain, count)
+	if len(tiles) < count {
+		return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("no room to deploy %d units on %s", count, target.PlanetID))
+	}
+
+	hubState.ReadyPayloads[p.BlueprintID] -= count
+	if hubState.ReadyPayloads[p.BlueprintID] <= 0 {
+		delete(hubState.ReadyPayloads, p.BlueprintID)
 	}
 	hubState.UpdatedTick = ws.Tick
-	targetPlanetID := ws.PlanetID
-	if p.PlanetID != "" {
-		targetPlanetID = p.PlanetID
+	ids := make([]string, 0, count)
+	events := make([]*model.GameEvent, 0, count+1)
+	for _, pos := range tiles {
+		u := model.WarBlueprintUnit(blueprint, *profile.Squad)
+		u.ID = target.NextEntityID("u")
+		u.OwnerID = playerID
+		u.Position = pos
+		target.Units[u.ID] = &u
+		key := model.TileKey(pos.X, pos.Y)
+		target.TileUnits[key] = append(target.TileUnits[key], u.ID)
+		ids = append(ids, u.ID)
+		events = append(events, &model.GameEvent{EventType: model.EvtEntityCreated, VisibilityScope: playerID, Payload: map[string]any{"entity_type": "unit", "entity_id": u.ID, "unit": u.Clone(), "planet_id": target.PlanetID}})
 	}
-	targetWorld := gc.WorldForPlanet(targetPlanetID)
-	if targetWorld == nil {
-		return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("planet runtime %s not loaded", targetPlanetID))
+	name := p.Name
+	if name == nil && blueprint.Name != "" && len([]rune(blueprint.Name)) <= 40 {
+		name = &blueprint.Name
 	}
-	if targetWorld.CombatRuntime == nil {
-		targetWorld.CombatRuntime = model.NewCombatRuntimeState()
-	}
-	squad := newCombatSquad(targetWorld, playerID, targetWorld.CombatRuntime.NextEntityID("squad"), targetPlanetID, building.ID, blueprintID, count)
-	targetWorld.CombatRuntime.Squads[squad.ID] = squad
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("squad %s deployed on %s", squad.ID, targetPlanetID)}, []*model.GameEvent{{
-		EventType: model.EvtSquadDeployed, VisibilityScope: playerID, Payload: map[string]any{"squad_id": squad.ID, "squad": squad},
-	}, {
-		EventType: model.EvtEntityCreated, VisibilityScope: playerID, Payload: map[string]any{"entity_type": "combat_squad", "entity_id": squad.ID, "squad": squad},
-	}}
+	res, squadEvents := gc.formSquad(target, playerID, ids, name, "member_ids")
+	return res, append(events, squadEvents...)
 }
 
-func newCombatSquad(ws *model.WorldState, playerID, id, planetID, buildingID, blueprintID string, count int) *model.CombatSquad {
-	baseHP := 80
-	weapon := model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8}
-	shield := model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10}
-	domain, baseFrameID, platformClass := model.UnitDomainGround, "", "mech"
-	blueprint, hasBlueprint := model.ResolveWarBlueprintForPlayer(ws.Players[playerID], blueprintID)
-	if profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, blueprintID); ok && profile.Squad != nil {
-		baseHP, weapon, shield = profile.Squad.HP, profile.Squad.Weapon, profile.Squad.Shield
-		if hasBlueprint {
-			domain, baseFrameID, platformClass = blueprint.Domain, blueprint.BaseFrameID, combatSquadPlatformClass(blueprint)
+// freeDeployTiles returns up to n distinct tiles nearest to anchor where a new
+// unit of the given domain may stand.
+func freeDeployTiles(ws *model.WorldState, anchor model.Position, domain model.UnitDomain, n int) []model.Position {
+	air := domain == model.UnitDomainAir
+	out := make([]model.Position, 0, n)
+	for _, pos := range ws.SurfaceDisc(anchor, 4+n) {
+		if len(out) == n {
+			break
+		}
+		tile := ws.Grid[pos.Y][pos.X]
+		if !air && (tile.BuildingID != "" || !tile.Terrain.Buildable()) {
+			continue
+		}
+		occupied := false
+		for _, id := range ws.TileUnits[model.TileKey(pos.X, pos.Y)] {
+			if other := ws.Units[id]; other != nil && other.HP > 0 && (other.Domain == model.UnitDomainAir) == air {
+				occupied = true
+				break
+			}
+		}
+		if !occupied {
+			out = append(out, model.Position{X: pos.X, Y: pos.Y})
 		}
 	}
-	position := model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
-	if building := ws.Buildings[buildingID]; building != nil {
-		position = building.Position
-		if free := findAdjacentFree(ws, building.Position); free != nil {
-			position = *free
-		}
-	}
-	return &model.CombatSquad{ID: id, OwnerID: playerID, PlanetID: planetID, SourceBuildingID: buildingID, BlueprintID: blueprintID, Domain: domain, BaseFrameID: baseFrameID, PlatformClass: platformClass, Count: count, MemberMaxHP: baseHP, HP: baseHP * count, MaxHP: baseHP * count, Shield: shield, Weapon: weapon, State: model.CombatSquadStateIdle, Position: position, MoveSpeed: 0.2}
-}
-
-func combatSquadPlatformClass(blueprint model.WarBlueprint) string {
-	if blueprint.Domain == model.UnitDomainAir {
-		return "drone"
-	}
-	for _, slot := range blueprint.Components {
-		if component, ok := model.PublicWarBlueprintCatalogIndex().ComponentByID(slot.ComponentID); ok && (stringSliceContains(component.Tags, "vehicle") || stringSliceContains(component.Tags, "tracked") || stringSliceContains(component.Tags, "hover")) {
-			return "vehicle"
-		}
-	}
-	return "mech"
+	return out
 }
 
 func ownedSquad(ws *model.WorldState, playerID, id string) (*model.CombatSquad, *model.CommandResult) {

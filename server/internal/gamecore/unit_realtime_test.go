@@ -267,58 +267,6 @@ func TestR5PatrolBouncesAndRetreatDoesNotFight(t *testing.T) {
 	}
 }
 
-// R3/R4：小队有真实坐标、按 HP 池减员、全灭移除；玩家部队能推掉敌方建筑。
-func TestR3SquadAttritionAndDestruction(t *testing.T) {
-	ws := newRTTWorld(true)
-	squad := &model.CombatSquad{
-		ID:          "squad-r3",
-		OwnerID:     "p1",
-		PlanetID:    ws.PlanetID,
-		BlueprintID: "prototype",
-		Count:       4,
-		MemberMaxHP: 80,
-		HP:          320,
-		MaxHP:       320,
-		Weapon:      model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8},
-		State:       model.CombatSquadStateIdle,
-		Position:    model.Position{X: 10, Y: 10},
-		MoveSpeed:   0.2,
-	}
-	if ws.CombatRuntime == nil {
-		ws.CombatRuntime = model.NewCombatRuntimeState()
-	}
-	ws.CombatRuntime.Squads[squad.ID] = squad
-
-	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 10, Y: 11})
-	enemy.Attack = 300 // 机枪 vs 重甲 0.75：单发 225 伤，320→95，存活员额 4→2
-	events := advanceRTT(ws, 10)
-	if squad.HP >= 320 {
-		t.Fatal("squad took no damage from enemy unit")
-	}
-	if squad.Count != 2 {
-		t.Fatalf("squad losses not reflected in count: %d, want 2", squad.Count)
-	}
-	if damageEventsFor(events, squad.ID) == 0 {
-		t.Fatal("missing squad damage events")
-	}
-
-	// 全灭：移除并发 entity_destroyed。
-	squad.HP = 10
-	events = advanceRTT(ws, 20)
-	if ws.CombatRuntime.Squads[squad.ID] != nil {
-		t.Fatal("destroyed squad not removed from runtime")
-	}
-	destroyedSeen := false
-	for _, evt := range events {
-		if evt.EventType == model.EvtEntityDestroyed && evt.Payload["entity_type"] == "combat_squad" {
-			destroyedSeen = true
-		}
-	}
-	if !destroyedSeen {
-		t.Fatal("missing squad destroyed event")
-	}
-}
-
 // R4：两名玩家的部队互相消灭，并能推掉对方基地建筑。
 func TestR4PvPUnitsDestroyUnitsAndBase(t *testing.T) {
 	ws := newRTTWorld(true)

@@ -25,17 +25,16 @@ const (
 
 // unitCombatTarget 统一的目标引用。
 type unitCombatTarget struct {
-	kind     string // "unit" | "building" | "enemy_force" | "combat_squad"
+	kind     string // "unit" | "building" | "enemy_force"
 	id       string
 	pos      model.Position
 	ownerID  string
 	unit     *model.Unit
 	building *model.Building
 	force    *model.EnemyForce
-	squad    *model.CombatSquad
 }
 
-// resolveCombatTarget 按实体 ID 解析四类目标；目标不存在或已死亡返回 nil。
+// resolveCombatTarget 按实体 ID 解析三类目标；目标不存在或已死亡返回 nil。
 func resolveCombatTarget(ws *model.WorldState, id string) *unitCombatTarget {
 	if id == "" {
 		return nil
@@ -48,11 +47,6 @@ func resolveCombatTarget(ws *model.WorldState, id string) *unitCombatTarget {
 	}
 	if force := findEnemyForceByID(ws, id); force != nil && force.Strength > 0 {
 		return &unitCombatTarget{kind: "enemy_force", id: id, pos: force.Position, force: force}
-	}
-	if ws.CombatRuntime != nil {
-		if squad := ws.CombatRuntime.Squads[id]; squad != nil && squad.State != model.CombatSquadStateDestroyed && squad.HP > 0 {
-			return &unitCombatTarget{kind: "combat_squad", id: id, pos: squad.Position, ownerID: squad.OwnerID, squad: squad}
-		}
 	}
 	return nil
 }
@@ -365,16 +359,6 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 				}
 			}
 		}
-		if ws.CombatRuntime != nil {
-			for _, squad := range ws.CombatRuntime.Squads {
-				if squad == nil || squad.State == model.CombatSquadStateDestroyed || squad.HP <= 0 {
-					continue
-				}
-				if squad.Position.X == tile.X && squad.Position.Y == tile.Y && hostile(ws, unit.OwnerID, squad.OwnerID) {
-					adopt(&unitCombatTarget{kind: "combat_squad", id: squad.ID, pos: squad.Position, ownerID: squad.OwnerID, squad: squad}, 0)
-				}
-			}
-		}
 	}
 	if bestRank == 0 {
 		return best
@@ -400,18 +384,6 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 }
 
 const maxInt32 = int(^uint32(0) >> 1)
-
-// squadArmorClass 小队护甲，委托 model.BlueprintCombatClasses（与目录同源）。
-func squadArmorClass(squad *model.CombatSquad) model.ArmorClass {
-	if squad == nil {
-		return model.ArmorHeavy
-	}
-	armor, _ := model.BlueprintCombatClasses(model.UnitRuntimeClassCombatSquad, squad.Domain, squad.PlatformClass, squad.BlueprintID)
-	if armor == "" {
-		return model.ArmorHeavy
-	}
-	return armor
-}
 
 // settleMechaAutoFire 执行体对显式攻击目标的持续开火（不索敌、不追击、不还击）。
 func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
@@ -527,29 +499,11 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 			events = append(events, destroyEnemyForce(ws, force, strengthBefore, unit.ID, unit.OwnerID, "unit", nil)...)
 			unit.AttackTarget = ""
 		}
-	case "combat_squad":
-		squad := target.squad
-		damage := max(1, int(float64(attack)*model.ResolveDamageCoefficient(unit.WeaponClass, squadArmorClass(squad))))
-		if squad.Shield.Level > 0 {
-			damage = squad.Shield.ApplyShieldDamage(damage)
-			squad.Shield.LastHitTick = ws.Tick
-		}
-		losses := squad.ApplySquadDamage(max(1, damage))
-		for _, scope := range []string{unit.OwnerID, squad.OwnerID} {
-			events = append(events, &model.GameEvent{
-				EventType: model.EvtDamageApplied, VisibilityScope: scope,
-				Payload: map[string]any{"attacker_id": unit.ID, "attacker_type": "unit", "target_id": squad.ID, "target_type": "combat_squad", "damage": damage, "target_hp": squad.HP, "squad_count": squad.Count, "squad_losses": losses},
-			})
-		}
-		if squad.HP <= 0 {
-			events = append(events, destroySquad(ws, squad, unit.ID, unit.OwnerID, "unit")...)
-			unit.AttackTarget = ""
-		}
 	}
 	return events
 }
 
-// settleEnemyForceRetaliation 静态黑雾对附近玩家单位/小队的反击。
+// settleEnemyForceRetaliation 静态黑雾对附近玩家单位的反击。
 func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 	if ws.EnemyForces == nil || len(ws.EnemyForces.Forces) == 0 {
 		return nil
@@ -601,35 +555,6 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 			})
 			if victim.HP <= 0 {
 				events = append(events, killUnit(ws, victim, force.ID, model.DarkFogOwnerID, "enemy_force")...)
-			}
-			continue
-		}
-		if ws.CombatRuntime != nil {
-			var targetSquad *model.CombatSquad
-			squadDist := maxInt32
-			for _, squad := range ws.CombatRuntime.Squads {
-				if squad == nil || squad.State == model.CombatSquadStateDestroyed || squad.HP <= 0 {
-					continue
-				}
-				d := ws.SurfaceDistance(force.Position, squad.Position)
-				if d <= enemyForceStrikeRange && d < squadDist {
-					targetSquad, squadDist = squad, d
-				}
-			}
-			if targetSquad != nil {
-				force.LastAttackTick = ws.Tick
-				damage := max(1, force.Strength/4)
-				if targetSquad.Shield.Level > 0 {
-					damage = targetSquad.Shield.ApplyShieldDamage(damage)
-					targetSquad.Shield.LastHitTick = ws.Tick
-				}
-				losses := targetSquad.ApplySquadDamage(max(1, damage))
-				events = append(events, &model.GameEvent{EventType: model.EvtDamageApplied, VisibilityScope: targetSquad.OwnerID, Payload: map[string]any{
-					"attacker_id": force.ID, "attacker_type": "enemy_force", "target_id": targetSquad.ID, "target_type": "combat_squad", "damage": damage, "target_hp": targetSquad.HP, "squad_count": targetSquad.Count, "squad_losses": losses,
-				}})
-				if targetSquad.HP <= 0 {
-					events = append(events, destroySquad(ws, targetSquad, force.ID, model.DarkFogOwnerID, "enemy_force")...)
-				}
 			}
 		}
 	}
@@ -683,23 +608,6 @@ func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, ki
 			"source":      source,
 		},
 	}
-}
-
-// destroySquad 小队全灭：双边战损计数（整编计 1 个单位，F2）、从运行时移除并发事件（R3）。
-func destroySquad(ws *model.WorldState, squad *model.CombatSquad, killerID, killerOwnerID, source string) []*model.GameEvent {
-	if squad == nil {
-		return nil
-	}
-	recordCombatUnitKill(ws, squad.OwnerID, killerOwnerID)
-	squad.State = model.CombatSquadStateDestroyed
-	squad.Count = 0
-	squad.HP = 0
-	if ws.CombatRuntime != nil {
-		delete(ws.CombatRuntime.Squads, squad.ID)
-	}
-	return []*model.GameEvent{{EventType: model.EvtEntityDestroyed, VisibilityScope: "all", Payload: map[string]any{
-		"entity_id": squad.ID, "entity_type": "combat_squad", "owner_id": squad.OwnerID, "killed_by": killerID, "source": source,
-	}}}
 }
 
 func unitCanTarget(u *model.Unit, t *unitCombatTarget) bool {

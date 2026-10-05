@@ -90,14 +90,20 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 	if deployRes.Code != model.CodeOK {
 		t.Fatalf("deploy squad failed: %s (%s)", deployRes.Code, deployRes.Message)
 	}
-	if len(deployEvents) == 0 || deployEvents[0].EventType != model.EvtSquadDeployed {
+	if len(deployEvents) == 0 || deployEvents[len(deployEvents)-1].EventType != model.EvtSquadDeployed {
 		t.Fatalf("expected squad_deployed event, got %+v", deployEvents)
 	}
 	if ws.CombatRuntime == nil || len(ws.CombatRuntime.Squads) != 1 {
 		t.Fatalf("expected squad runtime to be created, got %+v", ws.CombatRuntime)
 	}
-	if ws.CombatRuntime.Squads["squad-1"] != nil && ws.CombatRuntime.Squads["squad-1"].BlueprintID != "prototype" {
-		t.Fatalf("expected deployed squad to persist prototype blueprint_id, got %+v", ws.CombatRuntime.Squads["squad-1"])
+	deployedSquad := ws.CombatRuntime.Squads[deployRes.Message]
+	if deployedSquad == nil || len(deployedSquad.Members(ws)) != 2 {
+		t.Fatalf("expected deployed squad with 2 world-unit members, got %+v", deployedSquad)
+	}
+	for _, member := range deployedSquad.Members(ws) {
+		if member.MaxHP != 80 || member.Attack != 20 || member.OwnerID != "p1" {
+			t.Fatalf("expected prototype runtime profile on member, got %+v", member)
+		}
 	}
 
 	commissionRes, commissionEvents := execCommand(core, model.CmdCommissionFleet, ws, "p1", model.Command{

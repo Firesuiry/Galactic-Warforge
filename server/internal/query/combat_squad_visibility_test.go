@@ -20,15 +20,15 @@ func TestPlanetRuntimeExposesVisibleEnemySquads(t *testing.T) {
 	}
 	ws.CombatRuntime.Squads["own"] = &model.CombatSquad{
 		ID: "own", OwnerID: "p1", Position: model.Position{X: 1, Y: 1},
-		HP: 10, MaxHP: 10, Count: 1, State: model.CombatSquadStateIdle,
+		State: model.CombatSquadStateIdle,
 	}
 	ws.CombatRuntime.Squads["seen"] = &model.CombatSquad{
 		ID: "seen", OwnerID: "p2", Position: model.Position{X: 4, Y: 4},
-		HP: 10, MaxHP: 10, Count: 1, State: model.CombatSquadStateIdle,
+		State: model.CombatSquadStateIdle,
 	}
 	ws.CombatRuntime.Squads["hidden"] = &model.CombatSquad{
 		ID: "hidden", OwnerID: "p2", Position: model.Position{X: 40, Y: 20},
-		HP: 10, MaxHP: 10, Count: 1, State: model.CombatSquadStateIdle,
+		State: model.CombatSquadStateIdle,
 	}
 
 	view, ok := ql.PlanetRuntime(ws, "p1", planetID, planetID)

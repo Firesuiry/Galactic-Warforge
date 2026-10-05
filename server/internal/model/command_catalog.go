@@ -275,8 +275,26 @@ var commandSpecs = []CommandStructureSpec{
 	},
 	{
 		Type:                  CmdDeploySquad,
-		RequiredPayloadFields: []string{"member_ids"},
-		OptionalPayloadFields: []string{"name"},
+		OptionalPayloadFields: []string{"member_ids", "name", "building_id", "blueprint_id", "count", "planet_id"},
+		Constraints: []string{
+			"exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)",
+		},
+		ExtraValidation: func(cmd Command) []CommandIssue {
+			_, hasMembers := cmd.Payload["member_ids"]
+			_, hasBuilding := cmd.Payload["building_id"]
+			_, hasBlueprint := cmd.Payload["blueprint_id"]
+			memberForm := hasMembers && !hasBuilding && !hasBlueprint
+			blueprintForm := !hasMembers && hasBuilding && hasBlueprint
+			if memberForm || blueprintForm {
+				return nil
+			}
+			return []CommandIssue{InvalidValueIssue(
+				"payload.member_ids|payload.building_id+payload.blueprint_id",
+				"deploy_squad requires either payload.member_ids or payload.building_id + payload.blueprint_id",
+				"member_ids xor building_id+blueprint_id",
+				nil,
+			)}
+		},
 	},
 	{Type: CmdFormSquad, RequiredPayloadFields: []string{"entity_ids"}, OptionalPayloadFields: []string{"name"}, Constraints: []string{"entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected"}},
 	{Type: CmdSquadOrder, RequiredPayloadFields: []string{"squad_id", "order"}},

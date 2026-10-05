@@ -202,35 +202,7 @@ func TestF2BilateralCombatStats(t *testing.T) {
 		t.Fatalf("p2 buildings_lost = %d, want 1", got)
 	}
 
-	// 3) 小队整编被毁（combat_squad 目标路径）：计 1 个单位击杀/损失。
-	squad := &model.CombatSquad{
-		ID:            "sq-vic",
-		OwnerID:       "p2",
-		PlanetID:      ws.PlanetID,
-		Count:         1,
-		MemberMaxHP:   1,
-		HP:            1,
-		MaxHP:         1,
-		State:         model.CombatSquadStateIdle,
-		Position:      model.Position{X: 3, Y: 4},
-		Domain:        model.UnitDomainGround,
-		PlatformClass: "vehicle",
-	}
-	ws.CombatRuntime.Squads[squad.ID] = squad
-	attacker.AttackTarget = squad.ID
-	attacker.LastAttackTick = 0
-	settleUnitCombat(ws)
-	if _, ok := ws.CombatRuntime.Squads[squad.ID]; ok {
-		t.Fatal("victim squad must be removed after wipeout")
-	}
-	if got := combatStats("p1").UnitsKilled; got != 2 {
-		t.Fatalf("p1 units_killed = %d, want 2 (unit + squad)", got)
-	}
-	if got := combatStats("p2").UnitsLost; got != 2 {
-		t.Fatalf("p2 units_lost = %d, want 2 (unit + squad)", got)
-	}
-
-	// 4) 黑雾反击击杀玩家单位：只计受害方 losses。
+	// 3) 黑雾反击击杀玩家单位：只计受害方 losses。
 	// 反击冷却为 10 tick（LastAttackTick=0），推进世界 tick 绕过节流。
 	ws.Tick += 100
 	dfVictim := addUnit("vic-df", "p2", model.Position{X: 10, Y: 10}, 1)
@@ -245,14 +217,14 @@ func TestF2BilateralCombatStats(t *testing.T) {
 	if _, ok := ws.Units[dfVictim.ID]; ok {
 		t.Fatal("dark fog retaliation must kill the 1HP victim")
 	}
-	if got := combatStats("p2").UnitsLost; got != 3 {
-		t.Fatalf("p2 units_lost = %d, want 3 (dark fog kill counts victim side only)", got)
+	if got := combatStats("p2").UnitsLost; got != 2 {
+		t.Fatalf("p2 units_lost = %d, want 2 (dark fog kill counts victim side only)", got)
 	}
-	if got := combatStats("p1").UnitsKilled; got != 2 {
-		t.Fatalf("p1 units_killed must stay 2, got %d", got)
+	if got := combatStats("p1").UnitsKilled; got != 1 {
+		t.Fatalf("p1 units_killed must stay 1, got %d", got)
 	}
 
-	// 5) 玩家击杀黑雾单位：双边均不计。
+	// 4) 玩家击杀黑雾单位：双边均不计。
 	dfUnit := addUnit("df-unit", model.DarkFogOwnerID, model.Position{X: 3, Y: 3}, 1)
 	attacker.AttackTarget = dfUnit.ID
 	attacker.LastAttackTick = 0
@@ -260,11 +232,11 @@ func TestF2BilateralCombatStats(t *testing.T) {
 	if _, ok := ws.Units[dfUnit.ID]; ok {
 		t.Fatal("dark fog unit must be removed after lethal hit")
 	}
-	if got := combatStats("p1").UnitsKilled; got != 2 {
+	if got := combatStats("p1").UnitsKilled; got != 1 {
 		t.Fatalf("killing dark fog must not credit p1, got %d", got)
 	}
-	if got := combatStats("p2").UnitsLost; got != 3 {
-		t.Fatalf("p2 units_lost must stay 3, got %d", got)
+	if got := combatStats("p2").UnitsLost; got != 2 {
+		t.Fatalf("p2 units_lost must stay 2, got %d", got)
 	}
 }
 

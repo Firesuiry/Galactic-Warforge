@@ -46,15 +46,15 @@ func TestPublicBlueprintCombatClasses(t *testing.T) {
 		}
 	}
 
-	armor, weapon := BlueprintCombatClasses(UnitRuntimeClassCombatSquad, UnitDomainGround, "drone", "")
+	armor, weapon := BlueprintCombatClasses(UnitRuntimeClassCombatSquad, UnitDomainAir, "")
 	if armor != ArmorAir || weapon != "" {
-		t.Fatalf("drone platform without profile = %s/%s, want air and omitted weapon", armor, weapon)
+		t.Fatalf("air squad without profile = %s/%s, want air and omitted weapon", armor, weapon)
 	}
-	armor, weapon = BlueprintCombatClasses(UnitRuntimeClassCombatSquad, UnitDomainGround, "mech", ItemPrototype)
+	armor, weapon = BlueprintCombatClasses(UnitRuntimeClassCombatSquad, UnitDomainGround, ItemPrototype)
 	if armor != ArmorHeavy || weapon != WeaponTypeLaser {
 		t.Fatalf("ground squad = %s/%s, want heavy/laser", armor, weapon)
 	}
-	armor, _ = BlueprintCombatClasses(UnitRuntimeClassFleet, UnitDomainGround, "", ItemCorvette)
+	armor, _ = BlueprintCombatClasses(UnitRuntimeClassFleet, UnitDomainGround, ItemCorvette)
 	if armor != ArmorShip {
 		t.Fatalf("fleet armor = %s, want ship", armor)
 	}

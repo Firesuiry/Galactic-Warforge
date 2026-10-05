@@ -159,15 +159,17 @@ func TestT119PlanetaryFrontlineCaptureAndRuntimeQuery(t *testing.T) {
 	if !ok || len(squads) < 2 {
 		t.Fatalf("expected visible combat squads, got %+v", planetBody["combat_squads"])
 	}
-	classes := map[string]bool{}
+	domains := map[model.UnitDomain]bool{}
 	for _, raw := range squads {
-		squad := raw.(map[string]any)
-		if class, ok := squad["platform_class"].(string); ok {
-			classes[class] = true
+		members, _ := raw.(map[string]any)["member_ids"].([]any)
+		for _, id := range members {
+			if u := ws.Units[id.(string)]; u != nil {
+				domains[u.Domain] = true
+			}
 		}
 	}
-	if !classes["mech"] || !classes["drone"] {
-		t.Fatalf("expected mech and drone platform classes in planet runtime, got %+v", classes)
+	if !domains[model.UnitDomainGround] || !domains[model.UnitDomainAir] {
+		t.Fatalf("expected ground (prototype) and air (precision drone) members in planet runtime squads, got %+v", domains)
 	}
 
 	// p2 地面任务群加入同一前线：前线转为争夺。

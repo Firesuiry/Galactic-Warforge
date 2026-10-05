@@ -178,7 +178,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `craft_item` | planet | `entity_id` | `recipe_id`, `quantity` | `craft_item` | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
 | `demolish` | planet | `entity_id` | — | `demolish` | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | system | — | `system_id`, `component_type`, `component_id` | `demolish_dyson` | Demolish a Dyson sphere component |
-| `deploy_squad` | planet | — | `member_ids`, `name?` | `deploy_squad` | Consume a squad payload from a hub and create a combat squad |
+| `deploy_squad` | planet | — | `member_ids?`, `name?`, `building_id?`, `blueprint_id?`, `count?`, `planet_id?` | `deploy_squad` | Consume a squad payload from a hub and create a combat squad |
 | `dissolve_squad` | planet | — | `squad_id` | `dissolve_squad` | 解散军团，单位保留当前指令 |
 | `fleet_assign` | system | — | `fleet_id`, `formation` | `fleet_assign` | Change a fleet formation |
 | `fleet_attack` | system | — | `fleet_id`, `planet_id`, `target_id` | `fleet_attack` | Order a fleet to attack a target in the same system |
@@ -224,6 +224,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
 - `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
+- `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
 - `form_squad`：entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected
 - `move`：实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。 F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。
 - `set_energy_exchanger_mode`：mode must be one of charge|discharge|standby; target building must be an owned energy_exchanger
@@ -266,7 +267,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - `move` / `attack` / `unit_order` 的单位选择器为 `target.entity_id` 或 `target.entity_ids`（框选批量）。
 - 实时移动：单位每 tick 按 `move_speed` 沿 `path` 推进，可被新命令打断；占位不重叠，被堵自动侧移/重寻路，不可达返回 `OUT_OF_RANGE`；寻路预算上限 800 格。`entity_moved` 带 `path` / `arrived`。
-- 攻击：追击至射程内按 `attack_cooldown_ticks` 开火；自动索敌（`aggro_range`）、还击、守位/追击受 `stance` 与 `combat_anchor` 约束；目标可为单位、建筑、黑雾、小队，PvP 与 PvE 同一套规则。
+- 攻击：追击至射程内按 `attack_cooldown_ticks` 开火；自动索敌（`aggro_range`）、还击、守位/追击受 `stance` 与 `combat_anchor` 约束；目标可为单位、建筑、黑雾，PvP 与 PvE 同一套规则（军团只是命令容器，不是攻击目标）。
 - `unit_order.order`：`attack_move`（沿途索敌）、`patrol`（往返）、`retreat`（途中不还击）——需 `target.position`；`guard`、`follow`——需 `payload.target_entity_id`；`hold`（原地坚守）、`stop`（清空命令）。
 - 单位战斗字段：`move_speed` / `path` / `path_index` / `move_progress` / `stance` / `order_pos` / `guard_target_id` / `combat_anchor` / `last_attacker_id` / `last_attack_tick` / `attack_cooldown_ticks` / `aggro_range` / `domain` / `min_attack_range` / `combat_state`。攻击无人机无视地形，只有导弹与防空武器能打空中单位。
 - 弹药：`ammo_class`（`bullet|shell|missile`，无需弹药为空）/ `ammo` / `ammo_capacity` / `ammo_item`（同类高档弹增伤）；每次开火扣 1 发，打空 `combat_state="no_ammunition"` 停火；出生满弹，黑雾不耗弹。
@@ -338,8 +339,9 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - `blueprint_finalize`：省略 `target_state` 走默认下一阶段；离开 `validated` 前必须校验通过。
   - `blueprint_variant`：父蓝图可为己方定型蓝图或公开蓝图，复制为新 `draft` 并记录 `parent_blueprint_id`。
 - `queue_military_production`：工厂与部署枢纽都须己方、`running`；按 `components → assembly → ready` 推进，成品写入 `industry.deployment_hubs[].ready_payloads`。同蓝图连续生产有 `repeat_bonus_percent`，换蓝图有 `retool_ticks`。
-- `refit_unit`：目标为 `combat_squad.id` 或同构 `fleet.id`，目标蓝图须同域同底盘/船体；单位离场翻修，完成后以同 ID 新蓝图返回。
-- `deploy_squad` / `commission_fleet`：部署枢纽（公开的是 `battlefield_analysis_base`，需通电）须有足量 `ready_payloads` 且已解锁蓝图 `visible_tech_id`。`commission_fleet` 接受 `corvette` / `destroyer` 与己方 `space|orbital` 定型蓝图；传入已有 `fleet_id` 时追加蓝图栈并重算火力/护盾。
+- `refit_unit`：目标为同构 `fleet.id`，目标蓝图须同域同底盘/船体；单位离场翻修，完成后以同 ID 新蓝图返回。
+- `deploy_squad` / `commission_fleet`：部署枢纽（公开的是 `battlefield_analysis_base`，需通电）须有足量 `ready_payloads` 且已解锁蓝图 `visible_tech_id`。
+- `deploy_squad` 两种形态二选一：`member_ids`（把已有单位编成军团，同 `form_squad`）；或 `building_id` + `blueprint_id` [+ `count`，缺省 1，上限 300]（消耗地面/空中载荷，在枢纽旁空地生成 `count` 个真实世界单位并编成军团，`planet_id` 指向其他已加载行星时落在该星中心附近）。蓝图单位以平台模板（空中 `attack_drone`、带 vehicle/tracked/hover 组件 `scout`、其余 `mecha`）提供移速/视野/弹仓，HP、伤害、射程、射速、武器类别取蓝图运行时档案，护甲按域（空中 `air`，地面 `heavy`）；蓝图护盾不进入世界单位。全部校验通过后才扣载荷；`message` 为军团 ID，事件为每个单位的 `entity_created` 加一条 `squad_deployed`。`commission_fleet` 接受 `corvette` / `destroyer` 与己方 `space|orbital` 定型蓝图；传入已有 `fleet_id` 时追加蓝图栈并重算火力/护盾。
 - `fleet_attack`：目标须在同一 `system_id`，`target_id` 取自目标行星 runtime 的 `enemy_forces[].id`。
 - `fleet_move`：舰队须 `idle`，目标星系须与当前星系直连（按星图 k 近邻规则导出，每个星系连最近 2 个邻居）；固定 10 tick，期间 `transit` 非空、`state` 仍为 `idle`、不计入制轨评分，`fleet_assign` / `fleet_attack` / `fleet_disband` / 增援均被拒绝；到达发 `fleet_arrived`。
 - 同一恒星系内敌对舰队每 tick 自动交火（集火最弱舰队，跃迁中不参战）。
@@ -381,7 +383,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `production_stats`：`total_output` / `by_building_type` / `by_item` / `efficiency`。只统计本 tick 真实落库/落站的产出（配方产物与副产物、采集入库、矿物直充、轨道采集）；本 tick 无产出时归零；`efficiency` 是 `ProductionMonitor` 采样均值。
 - `energy_stats`：`generation`（电网真实供电，含射线接收与储能放电）/ `consumption`（真实需求）/ `storage` / `current_stored`（储能建筑电量）/ `shortage_ticks`。
 - `logistics_stats`：`throughput` / `avg_distance` / `avg_travel_time` / `deliveries`。
-- `combat_stats`：`units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost` / `threat_level` / `highest_threat`。双边计数：受害方为玩家实体计损失，击杀方为不同归属玩家计击杀；黑雾不计入击杀；小队整编被毁计 1。
+- `combat_stats`：`units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost` / `threat_level` / `highest_threat`。双边计数：受害方为玩家实体计损失，击杀方为不同归属玩家计击杀；黑雾不计入击杀；军团不单独计数（按成员单位计）。
 - 生产、能源与威胁统计聚合所有已加载行星（同 tick 多行星短缺只计一次）。玩家不存在时返回零值结构。
 
 **`GET /state/agent-briefing`**：agent/GUI 一站式态势。
@@ -406,7 +408,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /world/fleets`**：己方舰队数组（无则 `[]`）。**`GET /world/fleets/{fleet_id}`**：单舰队。字段：`fleet_id` / `owner_id` / `system_id` / `source_building_id` / `formation` / `state` / `units` / `weapon` / `weapons{direct_fire, missile, point_defense, electronic_warfare}` / `shield` / `armor` / `structure`（`level/max_level`）/ `subsystems`（`engine/fire_control/sensors/point_defense`，各含 `integrity`、`state=operational|degraded|disabled`、`effect`）/ `sustainment` / `target{planet_id, target_id}` / `transit{from_system_id, target_system_id, total_ticks, remaining_ticks}` / `last_attack_tick` / `last_battle_report`。
 
-`sustainment`（舰队与地面小队通用）：`current` / `capacity`（三类弹药 `ammo` / `shells` / `missiles`）/ `condition` / `cohesion` / `damage_penalty` / `retreat_recommended` / `shortages` / `sources[]`（`source_type = supply_station|supply_truck`）/ `last_resupply_tick` / `last_consumption_tick`。
+`sustainment`（舰队）：`current` / `capacity`（三类弹药 `ammo` / `shells` / `missiles`）/ `condition` / `cohesion` / `damage_penalty` / `retreat_recommended` / `shortages` / `sources[]`（`source_type = supply_station|supply_truck`）/ `last_resupply_tick` / `last_consumption_tick`。
 
 ### 6.4 行星
 
@@ -432,7 +434,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /world/planets/{planet_id}/runtime`**：行星运行态。
 - 通用：`planet_id` / `discovered` / `available` / `active_planet_id` / `tick` / `threat_level` / `last_attack_tick`。
-- `combat_squads[]`：己方始终返回，敌方仅在视野内返回。字段 `id` / `owner_id` / `blueprint_id` / `domain` / `platform_class`（`mech|vehicle|drone`）/ `count` / `hp` / `max_hp` / `member_max_hp` / `shield` / `weapon` / `sustainment` / `state` / `position` / `move_speed` / `path` / `target_enemy_id`。HP 池按伤害减员（`count = ceil(hp / member_max_hp)`），全灭发 `entity_destroyed`。
+- `combat_squads[]`（军团，命令容器）：己方始终返回，敌方仅在视野内返回。字段 `id` / `owner_id` / `planet_id` / `name` / `member_ids`（敌方军团只含可见成员）/ `state`（`idle|engaging`）/ `position`（领队位置）/ `order`（`idle|attack|defend|retreat|resupply`）/ `target`（敌方不返回）/ `last_order_tick`。血量、弹药、武器都在成员单位上；成员全灭时军团移除并发 `entity_destroyed`（`entity_type=combat_squad`）。
 - `frontlines[]`：`type=outpost`，`status=secured|contested|destroyed`，含 `control` / `fortification` / `obstacle_level` / `supply_flow`。
 - `ground_task_forces[]`：`ground_order`、`status`（`staging|contesting|securing|holding|clearing|supplying|blocked`）、`progress` / `pressure`、`orbital_support_mode` / `orbital_support_available` / `orbital_support_cooldown` / `orbital_support_blocked_reason`（`no_orbital_superiority` / `planetary_defense_screen` / `frontline_not_found`）。
 - `logistics_stations[]`：`building_id` / `building_type` / `position` / `state`（含唯一站库 `inventory`、`slot_capacity` / `item_capacity` / `energy` / `energy_capacity` / `charge_per_tick` / `belt_ports`）/ `drone_ids` / `ship_ids`。

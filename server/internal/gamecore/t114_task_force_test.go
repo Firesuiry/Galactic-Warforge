@@ -31,7 +31,7 @@ func TestT114TaskForceTheaterCommandsAndQuery(t *testing.T) {
 		ReadyPayloads: map[string]int{model.ItemPrototype: 2, model.ItemCorvette: 1},
 	}
 
-	if res := issueInternalCommand(core, "p1", model.Command{
+	deployRes := issueInternalCommand(core, "p1", model.Command{
 		Type: model.CmdDeploySquad,
 		Payload: map[string]any{
 			"building_id":  base.ID,
@@ -39,9 +39,11 @@ func TestT114TaskForceTheaterCommandsAndQuery(t *testing.T) {
 			"count":        1,
 			"planet_id":    ws.PlanetID,
 		},
-	}); res.Code != model.CodeOK {
-		t.Fatalf("deploy squad failed: %s (%s)", res.Code, res.Message)
+	})
+	if deployRes.Code != model.CodeOK {
+		t.Fatalf("deploy squad failed: %s (%s)", deployRes.Code, deployRes.Message)
 	}
+	squadID := deployRes.Message
 
 	if res := issueInternalCommand(core, "p1", model.Command{
 		Type: model.CmdCommissionFleet,
@@ -110,7 +112,7 @@ func TestT114TaskForceTheaterCommandsAndQuery(t *testing.T) {
 		Payload: map[string]any{
 			"task_force_id": "tf-alpha",
 			"member_kind":   string(model.WarTaskForceMemberKindSquad),
-			"member_ids":    []string{"squad-1"},
+			"member_ids":    []string{squadID},
 		},
 	}); res.Code != model.CodeOK {
 		t.Fatalf("task_force_assign squad failed: %s (%s)", res.Code, res.Message)

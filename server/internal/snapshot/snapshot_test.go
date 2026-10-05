@@ -80,17 +80,13 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		EntityCounter: 3,
 		Squads: map[string]*model.CombatSquad{
 			"squad-1": {
-				ID:               "squad-1",
-				OwnerID:          player.PlayerID,
-				PlanetID:         ws.PlanetID,
-				SourceBuildingID: building.ID,
-				BlueprintID:      "prototype",
-				Count:            2,
-				HP:               160,
-				MaxHP:            160,
-				Shield:           model.ShieldState{Level: 20, MaxLevel: 20, RechargeRate: 1, RechargeDelay: 10},
-				Weapon:           model.WeaponState{Type: model.WeaponTypeLaser, Damage: 20, FireRate: 10, Range: 8},
-				State:            model.CombatSquadStateIdle,
+				ID:        "squad-1",
+				OwnerID:   player.PlayerID,
+				PlanetID:  ws.PlanetID,
+				Name:      "prototype",
+				MemberIDs: []string{unit.ID},
+				State:     model.CombatSquadStateIdle,
+				Order:     model.SquadOrderIdle,
 			},
 		},
 	}
@@ -209,8 +205,8 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	if segment.Params.Attenuation < 0.09 || segment.Params.Attenuation > 0.11 {
 		t.Fatalf("pipeline segment attenuation mismatch: %f", segment.Params.Attenuation)
 	}
-	if restored.CombatRuntime == nil || restored.CombatRuntime.Squads["squad-1"] == nil || restored.CombatRuntime.Squads["squad-1"].BlueprintID != "prototype" {
-		t.Fatalf("expected combat runtime blueprint_id roundtrip, got %+v", restored.CombatRuntime)
+	if restored.CombatRuntime == nil || restored.CombatRuntime.Squads["squad-1"] == nil || restored.CombatRuntime.Squads["squad-1"].Name != "prototype" || len(restored.CombatRuntime.Squads["squad-1"].MemberIDs) != 1 {
+		t.Fatalf("expected combat runtime squad roundtrip, got %+v", restored.CombatRuntime)
 	}
 	if restoredSpace == nil || restoredSpace.PlayerSystem(player.PlayerID, "sys-1") == nil {
 		t.Fatalf("expected restored space runtime, got %+v", restoredSpace)

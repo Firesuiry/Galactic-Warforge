@@ -124,14 +124,6 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 			continue
 		}
 		members := squad.Members(ws)
-		// Blueprint-deployed squads (deploy_squad without member_ids) carry an HP
-		// pool instead of a member roster; they stay until combat destroys them.
-		if len(squad.MemberIDs) == 0 && squad.HP > 0 {
-			if squad.State == model.CombatSquadStateDestroyed {
-				delete(ws.CombatRuntime.Squads, squad.ID)
-			}
-			continue
-		}
 		squad.MemberIDs = squad.MemberIDs[:0]
 		for _, u := range members {
 			squad.MemberIDs = append(squad.MemberIDs, u.ID)

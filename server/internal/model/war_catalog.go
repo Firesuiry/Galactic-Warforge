@@ -136,18 +136,18 @@ type WarBlueprintRuntimeProfile struct {
 }
 
 // BlueprintCombatClasses 推导蓝图护甲，并在有档案时返回武器类型。
-// combat_squad：空中域或 drone 平台为 air，否则 heavy。fleet_unit：ship。
+// combat_squad：空中域为 air，否则 heavy。fleet_unit：ship。
 // 无档案时 weapon 为空，目录省略。
-func BlueprintCombatClasses(runtimeClass UnitRuntimeClass, domain UnitDomain, platformClass, blueprintID string) (ArmorClass, WeaponType) {
-	return blueprintArmorClass(runtimeClass, domain, platformClass), blueprintWeaponClass(runtimeClass, blueprintID)
+func BlueprintCombatClasses(runtimeClass UnitRuntimeClass, domain UnitDomain, blueprintID string) (ArmorClass, WeaponType) {
+	return blueprintArmorClass(runtimeClass, domain), blueprintWeaponClass(runtimeClass, blueprintID)
 }
 
-func blueprintArmorClass(runtimeClass UnitRuntimeClass, domain UnitDomain, platformClass string) ArmorClass {
+func blueprintArmorClass(runtimeClass UnitRuntimeClass, domain UnitDomain) ArmorClass {
 	switch runtimeClass {
 	case UnitRuntimeClassFleet:
 		return ArmorShip
 	case UnitRuntimeClassCombatSquad:
-		if domain == UnitDomainAir || platformClass == "drone" {
+		if domain == UnitDomainAir {
 			return ArmorAir
 		}
 		return ArmorHeavy
@@ -180,7 +180,7 @@ func blueprintRuntimeStack(blueprintID string, runtimeClass UnitRuntimeClass) *W
 }
 
 func (entry WarPublicBlueprintCatalogEntry) withDerivedCombatStats() WarPublicBlueprintCatalogEntry {
-	entry.ArmorClass, entry.WeaponClass = BlueprintCombatClasses(entry.RuntimeClass, entry.Domain, "", entry.ID)
+	entry.ArmorClass, entry.WeaponClass = BlueprintCombatClasses(entry.RuntimeClass, entry.Domain, entry.ID)
 	if stack := blueprintRuntimeStack(entry.ID, entry.RuntimeClass); stack != nil {
 		entry.Attack = stack.Weapon.Damage
 		entry.Range = stack.Weapon.Range

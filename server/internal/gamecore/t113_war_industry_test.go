@@ -152,8 +152,8 @@ func TestT113QueueMilitaryProductionSupportsPlayerBlueprintDeploymentAndLineReto
 	for _, squad := range ws.CombatRuntime.Squads {
 		deployed = squad
 	}
-	if deployed == nil || deployed.BlueprintID != "raider_mk1" {
-		t.Fatalf("expected deployed squad to keep player blueprint id, got %+v", deployed)
+	if deployed == nil || len(deployed.Members(ws)) != 1 {
+		t.Fatalf("expected deployed squad with one raider_mk1 world unit, got %+v", deployed)
 	}
 
 	sameBlueprintRes := issueInternalCommand(core, "p1", model.Command{

@@ -125,6 +125,27 @@ func TestValidateCommandStructureUsesSharedRegistry(t *testing.T) {
 	}
 }
 
+// deploy_squad 两种形态互斥：member_ids，或 building_id + blueprint_id（CLI 形态，count 可省）。
+func TestDeploySquadCatalogAcceptsExactlyOneForm(t *testing.T) {
+	cases := []struct {
+		payload map[string]any
+		valid   bool
+	}{
+		{map[string]any{"member_ids": []string{"u-1"}}, true},
+		{map[string]any{"building_id": "hub-1", "blueprint_id": "prototype", "count": 1}, true},
+		{map[string]any{"building_id": "hub-1", "blueprint_id": "prototype"}, true},
+		{map[string]any{"member_ids": []string{"u-1"}, "building_id": "hub-1", "blueprint_id": "prototype"}, false},
+		{map[string]any{"building_id": "hub-1"}, false},
+		{map[string]any{}, false},
+	}
+	for _, c := range cases {
+		issues := model.ValidateCommandStructure(model.Command{Type: model.CmdDeploySquad, Payload: c.payload})
+		if (len(issues) == 0) != c.valid {
+			t.Fatalf("payload %v: valid=%v, issues=%v", c.payload, c.valid, issues)
+		}
+	}
+}
+
 func sameStringSet(got, want []string) bool {
 	if len(got) == 0 && len(want) == 0 {
 		return true
