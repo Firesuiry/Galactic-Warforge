@@ -85,17 +85,21 @@ func TestDeploySquadBlueprintSpawnsUnitsThatFight(t *testing.T) {
 	}
 }
 
-// 校验失败（载荷不足、数量越界）时不消耗载荷、不生成单位。
+// 校验失败（载荷不足、数量越界、非法名称）时不消耗载荷、不生成单位。
 func TestDeploySquadBlueprintValidatesBeforeConsuming(t *testing.T) {
 	core, ws, hub := newSquadDeployTestCore(t, 1)
 	units := len(ws.Units)
-	for _, count := range []int{2, 0, 301} {
-		res := issueInternalCommand(core, "p1", model.Command{
-			Type:    model.CmdDeploySquad,
-			Payload: map[string]any{"building_id": hub.ID, "blueprint_id": model.ItemPrototype, "count": count},
-		})
-		if res.Code == model.CodeOK {
-			t.Fatalf("count %d must be rejected", count)
+	bad := []map[string]any{
+		{"count": 2}, {"count": 0}, {"count": 301},
+		{"name": "   "}, {"name": "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一"},
+	}
+	for _, extra := range bad {
+		payload := map[string]any{"building_id": hub.ID, "blueprint_id": model.ItemPrototype}
+		for k, v := range extra {
+			payload[k] = v
+		}
+		if res := issueInternalCommand(core, "p1", model.Command{Type: model.CmdDeploySquad, Payload: payload}); res.Code == model.CodeOK {
+			t.Fatalf("payload %v must be rejected", extra)
 		}
 	}
 	if len(ws.Units) != units || ws.Players["p1"].WarIndustry.DeploymentHubs[hub.ID].ReadyPayloads[model.ItemPrototype] != 1 {

@@ -55,18 +55,29 @@ func (gc *GameCore) execFormSquad(ws *model.WorldState, playerID string, cmd mod
 	return gc.formSquad(ws, playerID, p.EntityIDs, p.Name, "entity_ids")
 }
 
+const defaultSquadName = "军团"
+
+// squadName validates an optional squad name (1–40 characters, trimmed); nil
+// falls back to the given default.
+func squadName(raw *string, fallback string) (string, bool) {
+	if raw == nil {
+		return fallback, true
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" || len([]rune(*raw)) > 40 {
+		return "", false
+	}
+	return value, true
+}
+
 func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, ids []string, rawName *string, idsField string) (model.CommandResult, []*model.GameEvent) {
 	if len(ids) == 0 || len(ids) > 300 {
 		return mechaJobFailed(model.CodeValidationFailed, idsField+" must contain 1–300 living units")
 	}
 	ids = append([]string(nil), ids...)
-	name := "军团"
-	if rawName != nil {
-		value := *rawName
-		if len([]rune(strings.TrimSpace(value))) == 0 || len([]rune(value)) > 40 {
-			return mechaJobFailed(model.CodeValidationFailed, "name must contain 1–40 characters")
-		}
-		name = strings.TrimSpace(value)
+	name, ok := squadName(rawName, defaultSquadName)
+	if !ok {
+		return mechaJobFailed(model.CodeValidationFailed, "name must contain 1–40 characters")
 	}
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {
@@ -134,6 +145,14 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 	if !ok || profile.Squad == nil {
 		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("blueprint %s has no squad runtime profile", p.BlueprintID))
 	}
+	fallbackName := defaultSquadName
+	if bpName, ok := squadName(&blueprint.Name, ""); ok {
+		fallbackName = bpName
+	}
+	name, ok := squadName(p.Name, fallbackName)
+	if !ok {
+		return mechaJobFailed(model.CodeValidationFailed, "name must contain 1–40 characters")
+	}
 	hubState := ensureWarDeploymentHubState(player.EnsureWarIndustry(), building.ID, deploymentHubCapacity(deployment))
 	if hubState.ReadyPayloads[p.BlueprintID] < count {
 		return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("need %d %s in deployment hub inventory", count, p.BlueprintID))
@@ -171,11 +190,7 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 		ids = append(ids, u.ID)
 		events = append(events, &model.GameEvent{EventType: model.EvtEntityCreated, VisibilityScope: playerID, Payload: map[string]any{"entity_type": "unit", "entity_id": u.ID, "unit": u.Clone(), "planet_id": target.PlanetID}})
 	}
-	name := p.Name
-	if name == nil && blueprint.Name != "" && len([]rune(blueprint.Name)) <= 40 {
-		name = &blueprint.Name
-	}
-	res, squadEvents := gc.formSquad(target, playerID, ids, name, "member_ids")
+	res, squadEvents := gc.formSquad(target, playerID, ids, &name, "member_ids")
 	return res, append(events, squadEvents...)
 }
 
