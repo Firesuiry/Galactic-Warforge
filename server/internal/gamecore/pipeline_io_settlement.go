@@ -72,7 +72,7 @@ func settlePipelineEndpointInput(ws *model.WorldState, graph *model.PipelineGrap
 	if fluidID == "" || !model.IsFluidItem(fluidID) {
 		return
 	}
-	limit := minInt(endpointCapacity(endpoint), node.State.Buffer)
+	limit := min(endpointCapacity(endpoint), node.State.Buffer)
 	if limit <= 0 {
 		return
 	}
@@ -122,7 +122,7 @@ func settlePipelineEndpointOutput(ws *model.WorldState, graph *model.PipelineGra
 	if available <= 0 {
 		return
 	}
-	limit := minInt(endpointCapacity(endpoint), available)
+	limit := min(endpointCapacity(endpoint), available)
 	if limit <= 0 {
 		return
 	}
@@ -130,7 +130,7 @@ func settlePipelineEndpointOutput(ws *model.WorldState, graph *model.PipelineGra
 	if outputQty <= 0 {
 		return
 	}
-	take := minInt(limit, outputQty)
+	take := min(limit, outputQty)
 	if take <= 0 {
 		return
 	}
@@ -144,7 +144,7 @@ func settlePipelineEndpointOutput(ws *model.WorldState, graph *model.PipelineGra
 	}
 	inserted := pipelineNodeAdd(ws.Pipelines, nodeID, fluidID, provided, capacity)
 	if inserted < provided {
-		removedFromOutput := minInt(beforeOut, provided)
+		removedFromOutput := min(beforeOut, provided)
 		removedFromInventory := provided - removedFromOutput
 		rollbackStorageOutput(building.Storage, fluidID, removedFromOutput, removedFromInventory, provided-inserted)
 	}

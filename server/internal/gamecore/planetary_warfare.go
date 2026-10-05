@@ -516,7 +516,7 @@ func normalizePlanetaryFrontline(frontline *model.PlanetaryFrontline) {
 		return
 	}
 	frontline.Fortification = clampBattleFloat(frontline.Fortification*0.98, 0, 1)
-	frontline.SupplyFlow = clampBattleFloat(maxFloat(0.1, frontline.SupplyFlow*0.96), 0, 1)
+	frontline.SupplyFlow = clampBattleFloat(max(0.1, frontline.SupplyFlow*0.96), 0, 1)
 	frontline.ObstacleLevel = clampBattleFloat(frontline.ObstacleLevel, 0, 1)
 	frontline.Control = clampBattleFloat(frontline.Control, 0, 1)
 	if frontline.Status == "" {

@@ -89,7 +89,7 @@ func StoragePortOutput(building *Building, portID, itemID string, qty int) (int,
 	}
 	requested := qty
 	limit := applyPortCapacity(port, qty)
-	limit = minInt(limit, building.ExportableItemQuantity(itemID))
+	limit = min(limit, building.ExportableItemQuantity(itemID))
 	if limit <= 0 {
 		return 0, requested, nil
 	}

@@ -65,7 +65,7 @@ func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.B
 		if !ok {
 			return
 		}
-		limit := minInt(portRemaining, candidate.quantity)
+		limit := min(portRemaining, candidate.quantity)
 		accepted, _, err := model.StoragePortPreviewInput(building, port.ID, candidate.itemID, limit)
 		if err != nil || accepted <= 0 {
 			return
@@ -107,12 +107,12 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 		if available <= 0 {
 			return
 		}
-		limit := minInt(portRemaining, available)
+		limit := min(portRemaining, available)
 		outputQty := building.ExportableItemQuantity(candidate.itemID)
 		if outputQty <= 0 {
 			return
 		}
-		take := minInt(limit, outputQty)
+		take := min(limit, outputQty)
 		if take <= 0 {
 			return
 		}
@@ -124,7 +124,7 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 		if err != nil || provided <= 0 {
 			return
 		}
-		removedFromOutput := minInt(beforeOut, provided)
+		removedFromOutput := min(beforeOut, provided)
 		removedFromInventory := provided - removedFromOutput
 		accepted, remaining, err := candidate.conveyor.Conveyor.Insert(candidate.itemID, provided)
 		if err != nil {
@@ -403,7 +403,7 @@ func rollbackStorageOutput(storage *model.StorageState, itemID string, removedFr
 	if removedFromOutput+removedFromInventory == 0 {
 		return
 	}
-	returnToOutput := minInt(removedFromOutput, qty)
+	returnToOutput := min(removedFromOutput, qty)
 	remaining := qty - returnToOutput
 	if returnToOutput > 0 {
 		buf := storage.EnsureOutputBuffer()

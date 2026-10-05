@@ -142,7 +142,7 @@ func (d *LogisticsDroneState) Load(itemID string, qty int) (int, int, error) {
 	if available <= 0 {
 		return 0, qty, nil
 	}
-	take := minInt(available, qty)
+	take := min(available, qty)
 	if d.Cargo == nil {
 		d.Cargo = make(ItemInventory)
 	}

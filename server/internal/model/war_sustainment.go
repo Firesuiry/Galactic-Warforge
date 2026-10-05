@@ -1,6 +1,7 @@
 package model
 
 import (
+	"cmp"
 	"sort"
 )
 
@@ -106,9 +107,9 @@ func (stock *WarSupplyStock) clampTo(capacity WarSupplyStock) {
 	if stock == nil {
 		return
 	}
-	stock.Ammo = clampInt(stock.Ammo, 0, capacity.Ammo)
-	stock.Shells = clampInt(stock.Shells, 0, capacity.Shells)
-	stock.Missiles = clampInt(stock.Missiles, 0, capacity.Missiles)
+	stock.Ammo = clamp(stock.Ammo, 0, capacity.Ammo)
+	stock.Shells = clamp(stock.Shells, 0, capacity.Shells)
+	stock.Missiles = clamp(stock.Missiles, 0, capacity.Missiles)
 }
 
 // Clone returns a deep copy of the sustainment state.
@@ -283,7 +284,7 @@ func warConsumeInventory(inv ItemInventory, itemIDs []string, qty int) int {
 	return consumed
 }
 
-func clampInt(value, low, high int) int {
+func clamp[T cmp.Ordered](value, low, high T) T {
 	if value < low {
 		return low
 	}

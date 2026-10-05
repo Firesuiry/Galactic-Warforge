@@ -195,7 +195,7 @@ func removeStorageItem(inv model.ItemInventory, itemID string, qty int) int {
 	if available <= 0 {
 		return 0
 	}
-	take := minInt(available, qty)
+	take := min(available, qty)
 	inv[itemID] -= take
 	if inv[itemID] <= 0 {
 		delete(inv, itemID)

@@ -93,7 +93,7 @@ func ResolveRayReceiver(req RayReceiverRequest) (RayReceiverResult, error) {
 		if req.PowerCapacity < powerLimit {
 			powerLimit = req.PowerCapacity
 		}
-		powerOutput = minInt(powerLimit, maxFromEnergy)
+		powerOutput = min(powerLimit, maxFromEnergy)
 	}
 
 	energyUsed := 0.0

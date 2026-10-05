@@ -109,7 +109,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 			if runs <= 0 {
 				runs = 1
 			}
-			repeatBonusPercent = minWarInt(20, runs*5)
+			repeatBonusPercent = min(20, runs*5)
 		} else {
 			retoolTicks = 45
 		}
@@ -556,8 +556,8 @@ func deriveMilitaryProductionTicks(factory *model.Building, blueprint model.WarB
 		componentTicks = componentTicks * int64(100-repeatBonusPercent) / 100
 		assemblyTicks = assemblyTicks * int64(100-repeatBonusPercent) / 100
 	}
-	componentTicks = maxInt64(8, componentTicks/int64(throughput))
-	assemblyTicks = maxInt64(12, assemblyTicks/int64(throughput))
+	componentTicks = max(8, componentTicks/int64(throughput))
+	assemblyTicks = max(12, assemblyTicks/int64(throughput))
 	return componentTicks, assemblyTicks
 }
 
@@ -595,7 +595,7 @@ func deriveRefitTicks(building *model.Building, source, target model.WarBlueprin
 	if target.BaseHullID != "" {
 		total += 30
 	}
-	return maxInt64(12, total/int64(throughput))
+	return max(12, total/int64(throughput))
 }
 
 func validateRefitBlueprintChange(source, target model.WarBlueprint) error {
@@ -754,18 +754,4 @@ func hasComponentTag(component model.WarComponentCatalogEntry, tag string) bool 
 		}
 	}
 	return false
-}
-
-func maxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minWarInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -1,7 +1,5 @@
 package model
 
-import "math"
-
 type SensorContactLevel string
 
 const (
@@ -206,14 +204,14 @@ func EvaluateSensorContact(eval SensorContactEvaluation) (*SensorContact, *Senso
 		Classification:   eval.Target.Classification,
 		ThreatLevel:      eval.Target.ThreatLevel,
 		LastUpdatedTick:  eval.LastUpdated,
-		SignalStrength:   clampSensorValue(effectiveScore, 0, 99),
-		LockQuality:      clampSensorValue((effectiveScore-eval.Target.JammingStrength+4)/30, 0.05, 1),
+		SignalStrength:   clamp(effectiveScore, 0, 99),
+		LockQuality:      clamp((effectiveScore-eval.Target.JammingStrength+4)/30, 0.05, 1),
 		JammingPenalty:   eval.Target.JammingStrength,
-		MissileDriftRisk: clampSensorValue(eval.Target.JammingStrength/maxSensorValue(1, score), 0, 1),
+		MissileDriftRisk: clamp(eval.Target.JammingStrength/max(1, score), 0, 1),
 		Sources:          sources,
 	}
 	if SensorContactLevelRank(level) >= SensorContactLevelRank(SensorContactLevelClassifiedContact) {
-		contact.StrengthEstimate = maxSensorInt(1, eval.Target.StrengthEstimate)
+		contact.StrengthEstimate = max(1, eval.Target.StrengthEstimate)
 	}
 	if SensorContactLevelRank(level) >= SensorContactLevelRank(SensorContactLevelConfirmedType) {
 		contact.ConfirmedType = eval.Target.ResolvedType
@@ -231,7 +229,7 @@ func ResolveWarBlueprintSensorProfile(blueprint WarBlueprint) WarSensorProfile {
 		if !ok {
 			continue
 		}
-		profile.SignalSignature += float64(maxSensorInt(1, component.SignalLoad))
+		profile.SignalSignature += float64(max(1, component.SignalLoad))
 		profile.HeatSignature += float64(component.HeatLoad) + float64(component.PowerDraw)/12
 		profile.StealthRating += float64(component.StealthRating)
 		switch component.Category {
@@ -379,10 +377,10 @@ func buildFalseContact(
 		Level:            level,
 		Classification:   "ghost_signature",
 		LastUpdatedTick:  eval.LastUpdated,
-		SignalStrength:   clampSensorValue(ghostScore, 0, 99),
-		LockQuality:      clampSensorValue(ghostScore/12, 0.05, 0.55),
+		SignalStrength:   clamp(ghostScore, 0, 99),
+		LockQuality:      clamp(ghostScore/12, 0.05, 0.55),
 		JammingPenalty:   eval.Target.JammingStrength,
-		MissileDriftRisk: clampSensorValue(eval.Target.JammingStrength/maxSensorValue(1, effectiveScore), 0.2, 1),
+		MissileDriftRisk: clamp(eval.Target.JammingStrength/max(1, effectiveScore), 0.2, 1),
 		FalseContact:     true,
 		Sources:          ghostSources,
 	}
@@ -412,24 +410,6 @@ func cloneSensorContactPosition(position *Position) *Position {
 	}
 	copy := *position
 	return &copy
-}
-
-func clampSensorValue(value, minValue, maxValue float64) float64 {
-	return math.Max(minValue, math.Min(maxValue, value))
-}
-
-func maxSensorValue(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func maxSensorInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func CloneSensorContactStateMap(states map[string]*SensorContactState) map[string]*SensorContactState {

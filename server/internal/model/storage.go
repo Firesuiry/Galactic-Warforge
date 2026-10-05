@@ -133,7 +133,7 @@ func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 	if inCap > 0 {
 		available := inCap - s.UsedInputBuffer()
 		if available > 0 {
-			take := minInt(available, remaining)
+			take := min(available, remaining)
 			if take > 0 {
 				addToInventory(s.EnsureInputBuffer(), itemID, take)
 				accepted += take
@@ -145,7 +145,7 @@ func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 	if remaining > 0 {
 		available := s.availableInventory()
 		if available > 0 {
-			take := minInt(available, remaining)
+			take := min(available, remaining)
 			if take > 0 {
 				addToInventory(s.EnsureInventory(), itemID, take)
 				accepted += take
@@ -168,7 +168,7 @@ func (s *StorageState) ReceiveOutput(itemID string, qty int) (int, int, error) {
 	if !s.canAcceptNewItem(itemID) {
 		return 0, qty, nil
 	}
-	take := minInt(qty, max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer()))
+	take := min(qty, max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer()))
 	if take > 0 {
 		addToInventory(s.EnsureOutputBuffer(), itemID, take)
 	}
@@ -194,7 +194,7 @@ func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) 
 	if inCap > 0 {
 		available := inCap - s.UsedInputBuffer()
 		if available > 0 {
-			take := minInt(available, remaining)
+			take := min(available, remaining)
 			if take > 0 {
 				accepted += take
 				remaining -= take
@@ -205,7 +205,7 @@ func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) 
 	if remaining > 0 {
 		available := s.availableInventory()
 		if available > 0 {
-			take := minInt(available, remaining)
+			take := min(available, remaining)
 			if take > 0 {
 				accepted += take
 				remaining -= take
@@ -235,7 +235,7 @@ func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
 	if remaining > 0 {
 		available := s.availableInventory()
 		if available > 0 {
-			take := minInt(available, remaining)
+			take := min(available, remaining)
 			if take > 0 {
 				addToInventory(s.EnsureInventory(), itemID, take)
 				accepted += take
@@ -247,7 +247,7 @@ func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
 	if remaining > 0 {
 		available := s.InputBufferCapacity() - s.UsedInputBuffer()
 		if available > 0 {
-			take := minInt(available, remaining)
+			take := min(available, remaining)
 			if take > 0 {
 				addToInventory(s.EnsureInputBuffer(), itemID, take)
 				accepted += take
@@ -510,7 +510,7 @@ func removeFromInventory(inv ItemInventory, itemID string, qty int) int {
 	if current <= 0 {
 		return 0
 	}
-	take := minInt(current, qty)
+	take := min(current, qty)
 	current -= take
 	if current <= 0 {
 		delete(inv, itemID)
@@ -534,7 +534,7 @@ func moveUpTo(src ItemInventory, dest ItemInventory, limit int) int {
 		if qty <= 0 {
 			continue
 		}
-		take := minInt(limit-moved, qty)
+		take := min(limit-moved, qty)
 		if take <= 0 {
 			continue
 		}

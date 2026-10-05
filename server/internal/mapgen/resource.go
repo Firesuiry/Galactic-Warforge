@@ -233,10 +233,3 @@ func pickClusterTile(rng *rng, centerX, centerY, radius, width, height int, terr
 	}
 	return 0, 0, false
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

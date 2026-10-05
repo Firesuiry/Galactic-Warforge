@@ -1368,8 +1368,8 @@ func extractFromResourceNode(node *model.ResourceNodeState, yieldPerTick, veinsL
 		if node.Remaining <= 0 || node.CurrentYield <= 0 {
 			return 0
 		}
-		extracted := minInt(yieldPerTick, node.CurrentYield)
-		extracted = minInt(extracted, node.Remaining)
+		extracted := min(yieldPerTick, node.CurrentYield)
+		extracted = min(extracted, node.Remaining)
 		node.Remaining -= veinConsumption(extracted, veinsLevel)
 		if node.Remaining <= 0 {
 			node.Remaining = 0
@@ -1383,7 +1383,7 @@ func extractFromResourceNode(node *model.ResourceNodeState, yieldPerTick, veinsL
 		if node.CurrentYield <= 0 {
 			return 0
 		}
-		extracted := minInt(yieldPerTick, node.CurrentYield)
+		extracted := min(yieldPerTick, node.CurrentYield)
 		if node.DecayPerTick > 0 {
 			node.CurrentYield -= node.DecayPerTick
 			if node.CurrentYield < node.MinYield {
@@ -2240,20 +2240,6 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	res.Code = model.CodeOK
 	res.Message = fmt.Sprintf("launched %d solar sail(s) into orbit", sailCount)
 	return res, events
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {

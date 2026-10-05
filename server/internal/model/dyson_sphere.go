@@ -157,7 +157,7 @@ func CalculateLayerEnergyOutput(layer DysonLayer, params DysonStressParams) int 
 		stressFactor = 0.5 // 应力不稳定时能量减半
 	}
 
-	bonusFactor := 1.0 + maxFloat(0, layer.ConstructionBonus)
+	bonusFactor := 1.0 + max(0, layer.ConstructionBonus)
 	return int(float64(baseEnergy) * stageFactor * stressFactor * bonusFactor)
 }
 
@@ -210,7 +210,7 @@ func CalculateLayerStress(layer DysonLayer, params DysonStressParams) DysonStres
 		totalStress += shell.Coverage * params.StressFromCoverage
 	}
 
-	strength := params.BaseStrength * (1.0 + maxFloat(0, layer.ConstructionBonus)*0.6)
+	strength := params.BaseStrength * (1.0 + max(0, layer.ConstructionBonus)*0.6)
 	if strength <= 0 {
 		strength = params.BaseStrength
 	}
@@ -232,11 +232,4 @@ func (ds *DysonSphereState) CalculateTotalEnergy(params DysonStressParams) int {
 	}
 	ds.TotalEnergy = total
 	return total
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }

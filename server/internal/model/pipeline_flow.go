@@ -146,7 +146,7 @@ func ResolvePipelineFlow(state *PipelineNetworkState, graph *PipelineGraph, opts
 		if len(candidates) == 0 {
 			continue
 		}
-		acceptTotal := minInt(available, sumCandidateCapacity(candidates))
+		acceptTotal := min(available, sumCandidateCapacity(candidates))
 		if acceptTotal <= 0 {
 			continue
 		}
@@ -197,7 +197,7 @@ func ResolvePipelineFlow(state *PipelineNetworkState, graph *PipelineGraph, opts
 		if len(outgoing) == 0 {
 			continue
 		}
-		sendTotal := minInt(node.State.Buffer, sumCandidateCapacity(outgoing))
+		sendTotal := min(node.State.Buffer, sumCandidateCapacity(outgoing))
 		if sendTotal <= 0 {
 			continue
 		}

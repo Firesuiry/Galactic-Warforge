@@ -429,7 +429,7 @@ func SummarizeWarTaskForceSupply(members []WarTaskForceMemberView) WarSupplyStat
 		}
 		summary.Current.add(member.SupplyStatus.Current)
 		summary.Capacity.add(member.SupplyStatus.Capacity)
-		summary.DamagePenalty = maxFloat(summary.DamagePenalty, member.SupplyStatus.DamagePenalty)
+		summary.DamagePenalty = max(summary.DamagePenalty, member.SupplyStatus.DamagePenalty)
 		summary.RetreatRecommended = summary.RetreatRecommended || member.SupplyStatus.RetreatRecommended
 		totalCohesion += member.SupplyStatus.Cohesion
 		counted++
@@ -494,10 +494,10 @@ func EvaluateWarTaskForce(player *PlayerState, taskForce *WarTaskForce, worlds m
 		return status
 	}
 	load := float64(status.Over) / float64(status.Total)
-	status.DelayPenalty = roundWarPenalty(minFloat(0.75, 0.15+load*0.25))
-	status.HitPenalty = roundWarPenalty(minFloat(0.6, 0.1+load*0.2))
-	status.FormationPenalty = roundWarPenalty(minFloat(0.8, 0.12+load*0.28))
-	status.CoordinationPenalty = roundWarPenalty(minFloat(0.9, 0.14+load*0.3))
+	status.DelayPenalty = roundWarPenalty(min(0.75, 0.15+load*0.25))
+	status.HitPenalty = roundWarPenalty(min(0.6, 0.1+load*0.2))
+	status.FormationPenalty = roundWarPenalty(min(0.8, 0.12+load*0.28))
+	status.CoordinationPenalty = roundWarPenalty(min(0.9, 0.14+load*0.3))
 	return status
 }
 
@@ -577,11 +577,4 @@ func fleetProvidesCommandCapacity(player *PlayerState, blueprintIDs []string) bo
 
 func roundWarPenalty(value float64) float64 {
 	return math.Round(value*100) / 100
-}
-
-func minFloat(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }

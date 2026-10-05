@@ -605,7 +605,7 @@ func consumeResearchProgress(labs []*model.Building, research *model.PlayerResea
 				if available <= 0 {
 					continue
 				}
-				take := minInt(minInt(available, remaining), budget)
+				take := min(min(available, remaining), budget)
 				if take <= 0 {
 					continue
 				}

@@ -75,12 +75,12 @@ func compressPilerBuffer(conveyor *model.ConveyorState, pileHeight int) {
 				}
 			}
 			if open >= 0 {
-				take := minInt(pileHeight-out[open].Quantity, qty)
+				take := min(pileHeight-out[open].Quantity, qty)
 				out[open].Quantity += take
 				qty -= take
 				continue
 			}
-			take := minInt(pileHeight, qty)
+			take := min(pileHeight, qty)
 			out = append(out, model.ItemStack{ItemID: stack.ItemID, Quantity: take, Spray: cloneSpray(stack.Spray)})
 			qty -= take
 		}
@@ -148,10 +148,10 @@ func settleConveyors(ws *model.WorldState) {
 		building := conveyors[id]
 		remaining[id] = building.Conveyor.Clone()
 		grants[id] = make(map[string]int)
-		offers[id] = minInt(building.Conveyor.Throughput, building.Conveyor.TotalItems())
+		offers[id] = min(building.Conveyor.Throughput, building.Conveyor.TotalItems())
 		capacities[id] = conveyorInsertCapacity(ws, building)
 		if building.Splitter != nil {
-			capacities[id] = minInt(capacities[id], building.Conveyor.Throughput)
+			capacities[id] = min(capacities[id], building.Conveyor.Throughput)
 		}
 	}
 	order := conveyorAllocationOrder(ids, ws.Tick)
@@ -200,7 +200,7 @@ func settleConveyors(ws *model.WorldState) {
 					if request.bufferIndex < 0 || request.bufferIndex >= len(buf) || buf[request.bufferIndex].Quantity <= 0 {
 						continue
 					}
-					moveQty = minInt(buf[request.bufferIndex].Quantity, pileHeightFor(ws, source.OwnerID))
+					moveQty = min(buf[request.bufferIndex].Quantity, pileHeightFor(ws, source.OwnerID))
 					if moveQty > capacities[request.link.targetID] {
 						moveQty = capacities[request.link.targetID]
 					}

@@ -198,7 +198,7 @@ func (s *LogisticsShipState) Load(itemID string, qty int) (int, int, error) {
 	if available <= 0 {
 		return 0, qty, nil
 	}
-	take := minInt(available, qty)
+	take := min(available, qty)
 	if s.Cargo == nil {
 		s.Cargo = make(ItemInventory)
 	}

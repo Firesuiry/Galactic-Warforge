@@ -337,7 +337,7 @@ func refillAllowedOutputBuffer(storage *model.StorageState, allowed []string) in
 		if qty <= 0 {
 			continue
 		}
-		take := minInt(qty, available)
+		take := min(qty, available)
 		output[itemID] += take
 		inventory[itemID] -= take
 		if inventory[itemID] <= 0 {

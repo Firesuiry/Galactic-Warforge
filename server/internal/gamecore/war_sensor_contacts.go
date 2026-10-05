@@ -169,7 +169,7 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 						Strength:   5 + combatRange/5,
 					},
 					position:   clonePosition(building.Position),
-					rangeLimit: maxFloat(8, combatRange),
+					rangeLimit: max(8, combatRange),
 				},
 				positionedSensorSource{
 					input: model.SensorContactSourceInput{
@@ -179,7 +179,7 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 						Strength:   3 + combatRange/7,
 					},
 					position:   clonePosition(building.Position),
-					rangeLimit: maxFloat(8, combatRange+2),
+					rangeLimit: max(8, combatRange+2),
 				},
 			)
 		case model.BuildingTypeSignalTower:
@@ -191,7 +191,7 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 					Strength:   4 + combatRange/6,
 				},
 				position:   clonePosition(building.Position),
-				rangeLimit: maxFloat(10, combatRange+4),
+				rangeLimit: max(10, combatRange+4),
 			})
 		}
 	}
@@ -387,7 +387,7 @@ func planetDistancePenalty(ws *model.WorldState, sources []positionedSensorSourc
 			continue
 		}
 		distance := float64(ws.SurfaceDistance(*source.position, target))
-		penalty := distance / maxFloat(1, source.rangeLimit) * 4
+		penalty := distance / max(1, source.rangeLimit) * 4
 		if penalty < best {
 			best = penalty
 		}
@@ -568,13 +568,6 @@ func fleetAnchorPlanetID(worlds map[string]*model.WorldState, ownerID string, fl
 func clonePosition(position model.Position) *model.Position {
 	copy := position
 	return &copy
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func enemyForcesOrEmpty(ws *model.WorldState) []model.EnemyForce {

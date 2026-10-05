@@ -146,7 +146,7 @@ func (g *PowerGridGraph) AddBuilding(building *Building) bool {
 	}
 
 	for _, conn := range connectors {
-		scanRange := maxIntValue(conn.Range, oldMaxRange)
+		scanRange := max(conn.Range, oldMaxRange)
 		g.connectConnector(conn, scanRange)
 	}
 
@@ -434,11 +434,4 @@ func needsPowerConnection(building *Building) bool {
 		}
 	}
 	return false
-}
-
-func maxIntValue(a, b int) int {
-	if a >= b {
-		return a
-	}
-	return b
 }

@@ -162,7 +162,7 @@ func (c *ConveyorState) Insert(itemID string, qty int) (int, int, error) {
 	if available <= 0 {
 		return 0, qty, nil
 	}
-	take := minInt(available, qty)
+	take := min(available, qty)
 	if take <= 0 {
 		return 0, qty, nil
 	}
@@ -205,7 +205,7 @@ func (c *ConveyorState) TakeAt(index, qty int) []ItemStack {
 	if stack.Quantity <= 0 {
 		return nil
 	}
-	take := minInt(qty, stack.Quantity)
+	take := min(qty, stack.Quantity)
 	if take <= 0 {
 		return nil
 	}

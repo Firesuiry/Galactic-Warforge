@@ -169,7 +169,7 @@ func consumeSprayUses(inputs []ItemStack, sources []spraySource, level int, uses
 		if stack.Spray == nil || stack.Spray.Level != level || stack.Spray.RemainingUses <= 0 {
 			continue
 		}
-		consume := minInt(remaining, stack.Spray.RemainingUses)
+		consume := min(remaining, stack.Spray.RemainingUses)
 		stack.Spray.RemainingUses -= consume
 		remaining -= consume
 		if stack.Spray.RemainingUses == 0 {
@@ -207,11 +207,4 @@ func cloneItemStacks(stacks []ItemStack) []ItemStack {
 		}
 	}
 	return out
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
