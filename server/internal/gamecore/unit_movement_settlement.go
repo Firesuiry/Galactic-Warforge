@@ -40,7 +40,6 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 		if unit == nil || unit.HP <= 0 {
 			continue
 		}
-		normalizeUnitCombatStats(unit)
 		if !unit.HasPath() {
 			continue
 		}

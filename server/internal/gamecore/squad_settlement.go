@@ -124,9 +124,8 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 			continue
 		}
 		members := squad.Members(ws)
-		// Legacy deployed squads from snapshots have an HP pool but no member
-		// roster. Keep them in the runtime until the normal combat path destroys
-		// them; newly created squads always have MemberIDs.
+		// Blueprint-deployed squads (deploy_squad without member_ids) carry an HP
+		// pool instead of a member roster; they stay until combat destroys them.
 		if len(squad.MemberIDs) == 0 && squad.HP > 0 {
 			if squad.State == model.CombatSquadStateDestroyed {
 				delete(ws.CombatRuntime.Squads, squad.ID)

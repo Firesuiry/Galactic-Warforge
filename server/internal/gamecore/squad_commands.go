@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// execDeploySquad keeps the legacy member_ids grouping path; blueprint payloads
-// deploy through execDeployBlueprintSquad.
+// execDeploySquad groups member_ids into a squad; blueprint payloads deploy
+// through execDeployBlueprintSquad.
 func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	if _, grouped := cmd.Payload["member_ids"]; !grouped {
 		return gc.execDeployBlueprintSquad(ws, playerID, cmd)
@@ -67,8 +67,8 @@ func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, cmd model.C
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: squad.ID}, []*model.GameEvent{squadEvent(squad, model.EvtSquadDeployed)}
 }
 
-// execDeployBlueprintSquad materializes a produced war payload into the legacy
-// squad runtime. It remains the deployment path for the blueprint production
+// execDeployBlueprintSquad materializes a produced war payload into an HP-pool
+// squad. It remains the deployment path for the blueprint production
 // system; player controlled world units use execDeploySquad's member_ids path.
 func (gc *GameCore) execDeployBlueprintSquad(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	buildingID, err := payloadStrictString(cmd.Payload, "building_id")

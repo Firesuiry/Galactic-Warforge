@@ -69,34 +69,6 @@ func hostile(ws *model.WorldState, attackerOwner, targetOwner string) bool {
 	return !sameTeam(ws, attackerOwner, targetOwner)
 }
 
-// normalizeUnitCombatStats 兼容旧存档：为缺失实时战斗字段的单位补默认值。
-func normalizeUnitCombatStats(u *model.Unit) {
-	if u.MoveSpeed <= 0 || u.AttackCooldownTick <= 0 || u.AggroRange <= 0 || u.Stance == "" {
-		base := model.UnitStats(u.Type)
-		if u.MoveSpeed <= 0 {
-			u.MoveSpeed = base.MoveSpeed
-		}
-		if u.AttackCooldownTick <= 0 {
-			u.AttackCooldownTick = base.AttackCooldownTick
-		}
-		if u.AggroRange <= 0 {
-			u.AggroRange = u.VisionRange
-			if u.AggroRange <= 0 {
-				u.AggroRange = base.AggroRange
-			}
-		}
-		if u.Stance == "" {
-			u.Stance = model.UnitStanceIdle
-		}
-		if u.ArmorClass == "" {
-			u.ArmorClass = model.ArmorClassForUnitType(u.Type)
-		}
-		if u.WeaponClass == "" {
-			u.WeaponClass = model.WeaponClassForUnitType(u.Type)
-		}
-	}
-}
-
 // settleUnitCombat 每 tick 结算一次世界单位交战。
 func settleUnitCombat(ws *model.WorldState) []*model.GameEvent {
 	if ws == nil || len(ws.Units) == 0 {
@@ -114,7 +86,6 @@ func settleUnitCombat(ws *model.WorldState) []*model.GameEvent {
 		if unit == nil || unit.HP <= 0 {
 			continue
 		}
-		normalizeUnitCombatStats(unit)
 		if unit.Mecha != nil {
 			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
 		}
@@ -480,7 +451,6 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 	case "unit":
 		victim := target.unit
 		model.SyncMechaCapabilities(victim, ws.Players[victim.OwnerID])
-		normalizeUnitCombatStats(victim)
 		raw := max(1, attack-victim.Defense)
 		raw = max(1, int(float64(raw)*model.ResolveDamageCoefficient(unit.WeaponClass, victim.ArmorClass)))
 		damage, absorbed := model.ApplyUnitDamage(victim, raw, ws.Tick)

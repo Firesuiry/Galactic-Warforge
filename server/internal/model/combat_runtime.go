@@ -15,8 +15,8 @@ type CombatSquad struct {
 	ID       string `json:"id"`
 	OwnerID  string `json:"owner_id"`
 	PlanetID string `json:"planet_id"`
-	// Legacy runtime fields remain part of the persisted shape for old saves and
-	// war-runtime records. New squads use MemberIDs and leave these unset.
+	// HP-pool runtime fields used by blueprint-deployed squads (deploy_squad
+	// from a war payload). Member based squads use MemberIDs and leave these unset.
 	SourceBuildingID string              `json:"source_building_id,omitempty"`
 	BlueprintID      string              `json:"blueprint_id,omitempty"`
 	Domain           UnitDomain          `json:"domain,omitempty"`
@@ -70,22 +70,7 @@ func (s *CombatSquad) Clone() *CombatSquad {
 	return &out
 }
 
-// HasPath reports whether a legacy HP-pool squad still has a movement path.
-// Member based squads move through their Unit members instead.
-func (s *CombatSquad) HasPath() bool {
-	return s != nil && s.PathIndex < len(s.Path)
-}
-
-func (s *CombatSquad) ClearPath() {
-	if s == nil {
-		return
-	}
-	s.Path = nil
-	s.PathIndex = 0
-	s.MoveProgress = 0
-}
-
-// AliveCount is used only for legacy HP-pool squads. Member based squads derive
+// AliveCount is used only for HP-pool squads. Member based squads derive
 // their count from Members(WorldState).
 func (s *CombatSquad) AliveCount() int {
 	if s == nil || s.HP <= 0 {
