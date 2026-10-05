@@ -168,7 +168,7 @@ func TestAutoLaunchRocketIntoDysonLayer(t *testing.T) {
 			"longitude":   10.0,
 		},
 	}
-	if res, _ := core.execBuildDysonNode(ws, "p1", nodeCmd); res.Code != model.CodeOK {
+	if res, _ := execCommand(core, model.CmdBuildDysonNode, ws, "p1", nodeCmd); res.Code != model.CodeOK {
 		t.Fatalf("build dyson node failed: %s (%s)", res.Code, res.Message)
 	}
 

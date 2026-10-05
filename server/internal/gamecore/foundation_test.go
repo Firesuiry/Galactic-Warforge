@@ -13,7 +13,7 @@ func TestFoundationBuildsOnWaterAndDemolitionRestoresTerrain(t *testing.T) {
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileWater
 	ws.Players["p1"].Resources.Minerals = 100
-	res, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild,
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("foundation should queue on water: %s (%s)", res.Code, res.Message)
@@ -49,7 +49,7 @@ func TestFoundationDoesNotOccupyFilledTile(t *testing.T) {
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileWater
 	ws.Players["p1"].Resources.Minerals = 100
-	res, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild,
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("foundation should queue: %s", res.Message)
@@ -74,7 +74,7 @@ func TestFoundationInsufficientMaterialsDoesNotReserveWater(t *testing.T) {
 	pos := model.Position{X: 5, Y: 5}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileLava
 	ws.Players["p1"].Resources.Minerals = 0
-	res, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild,
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Code != model.CodeInsufficientResource {
 		t.Fatalf("expected insufficient resource, got %s (%s)", res.Code, res.Message)
@@ -91,7 +91,7 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	ws.Grid[4][4].Terrain = terrain.TileWater
 	ws.Players["p1"].Resources.Minerals = 100
 	command := model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "foundation"}}
-	res, _ := core.execBuild(ws, "p1", command)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", command)
 	if res.Status != model.StatusExecuted {
 		t.Fatal(res)
 	}
@@ -110,7 +110,7 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	if foundation.FoundationTerrain[0] != "water" {
 		t.Fatal("clone shares terrain provenance")
 	}
-	res, _ = core.execBuild(ws, "p1", command)
+	res, _ = execCommand(core, model.CmdBuild, ws, "p1", command)
 	if res.Status != model.StatusFailed {
 		t.Fatal("duplicate foundation accepted")
 	}
@@ -118,7 +118,7 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 		t.Fatal("duplicate changed provenance")
 	}
 	ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] = "pending-factory"
-	res, _ = core.execDemolish(ws, "p1", model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: foundation.ID}})
+	res, _ = execCommand(core, model.CmdDemolish, ws, "p1", model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: foundation.ID}})
 	if res.Status != model.StatusFailed || res.Message != "cannot demolish foundation while construction is reserved on it" {
 		t.Fatalf("foundation with pending factory demolition result: %+v", res)
 	}
@@ -128,7 +128,7 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	if err := ws.IndexBuilding(factory); err != nil {
 		t.Fatal(err)
 	}
-	res, _ = core.execDemolish(ws, "p1", model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: foundation.ID}})
+	res, _ = execCommand(core, model.CmdDemolish, ws, "p1", model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: foundation.ID}})
 	if res.Status != model.StatusFailed {
 		t.Fatal("occupied foundation can be demolished")
 	}
@@ -171,7 +171,7 @@ func TestFoundationCancelledTasksCannotBypassLayerConstraints(t *testing.T) {
 			task := &model.ConstructionTask{ID: "cancelled", PlayerID: "p1", BuildingType: kind, Position: pos, State: model.ConstructionCancelled, Cost: model.BuildCost{Minerals: 10}}
 			ws.Construction.Tasks[task.ID] = task
 			before := ws.Players["p1"].Resources.Minerals
-			res, _ := core.execRestoreConstruction(ws, "p1", model.Command{Type: model.CmdRestoreConstruction, Payload: map[string]any{"task_id": task.ID}})
+			res, _ := execCommand(core, model.CmdRestoreConstruction, ws, "p1", model.Command{Type: model.CmdRestoreConstruction, Payload: map[string]any{"task_id": task.ID}})
 			if res.Code != model.CodePositionOccupied || task.State != model.ConstructionCancelled || ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" || ws.Players["p1"].Resources.Minerals != before {
 				t.Fatalf("restore bypassed foundation constraints: %+v", res)
 			}

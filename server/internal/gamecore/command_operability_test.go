@@ -26,7 +26,7 @@ func TestProduceQueuePausesWithoutPower(t *testing.T) {
 	ws.TileBuilding[model.TileKey(building.Position.X, building.Position.Y)] = building.ID
 	ws.Grid[building.Position.Y][building.Position.X].BuildingID = building.ID
 
-	res, _ := core.execProduce(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdProduce, ws, "p1", model.Command{
 		Type:   model.CmdProduce,
 		Target: model.CommandTarget{EntityID: building.ID},
 		Payload: map[string]any{

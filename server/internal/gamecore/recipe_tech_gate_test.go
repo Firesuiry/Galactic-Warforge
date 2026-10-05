@@ -154,7 +154,7 @@ func TestBuildWithGatedMatrixRecipeRequiresResearch(t *testing.T) {
 		if err != nil || pos == nil {
 			t.Fatalf("find adjacent tile: %v", err)
 		}
-		res, _ := core.execBuild(ws, "p1", model.Command{
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 			Type:   model.CmdBuild,
 			Target: model.CommandTarget{Position: pos},
 			Payload: map[string]any{
@@ -185,13 +185,13 @@ func TestHandcraftGatedSmeltingRecipe(t *testing.T) {
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemStoneOre: 1}
 
-	result, _ := core.execCraftItem(ws, "p1", handcraftCommand("smelt_stone", 1))
+	result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("smelt_stone", 1))
 	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || player.Inventory[model.ItemStoneOre] != 1 {
 		t.Fatalf("locked smelt_stone handcraft bypass: %+v", result)
 	}
 
 	player.Tech.CompletedTechs["automatic_metallurgy"] = 1
-	result, _ = core.execCraftItem(ws, "p1", handcraftCommand("smelt_stone", 1))
+	result, _ = execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("smelt_stone", 1))
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}

@@ -37,407 +37,402 @@ type CommandStructureSpec struct {
 	ExtraValidation func(cmd Command) []CommandIssue
 }
 
-// commandStructureRegistry returns one complete structural spec per public command.
-// Order matches AllCommandTypes().
-func commandStructureRegistry() []CommandStructureSpec {
-	return []CommandStructureSpec{
-		{Type: CmdSetRallyPoint, RequiredTargetFields: []string{"entity_id", "position"}},
-		{Type: CmdConfigureSorter, RequiredTargetFields: []string{"entity_id"}, RequiredPayloadFields: []string{"input_directions", "output_directions"}, OptionalPayloadFields: []string{"filter_mode", "filter_items"}},
-		{
-			Type:                  CmdConfigureTrafficMonitor,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"target_belt_id", "window_ticks", "minimum_items_per_tick", "alerts_enabled"},
-			Constraints:           []string{"Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations."},
-		},
-		{
-			Type:                  CmdConfigureSplitter,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"input_directions", "output_directions"},
-			OptionalPayloadFields: []string{"input_priority", "output_priority", "output_filters"},
-		},
-		{
-			Type:                  CmdBuild,
-			RequiredTargetFields:  []string{"position"},
-			RequiredPayloadFields: []string{"building_type"},
-			OptionalPayloadFields: []string{"recipe_id", "direction", "rotation", "auto_approach"},
-			Constraints:           []string{"F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。"},
-			ExtraValidation: func(cmd Command) []CommandIssue {
-				if recipeID, ok := cmd.Payload["recipe_id"]; ok {
-					if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {
-						return []CommandIssue{InvalidValueIssue(
-							"payload.recipe_id",
-							"payload.recipe_id must be a non-empty string when provided",
-							"non-empty string",
-							recipeID,
-						)}
-					}
-				}
-				return nil
-			},
-		},
-		{
-			Type:                 CmdMove,
-			RequiredTargetFields: []string{"position"},
-			ExtraValidation:      requireAnyUnitSelector,
-			Constraints:          []string{"实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。", "F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。"},
-		},
-		{
-			Type:                  CmdAttack,
-			RequiredPayloadFields: []string{"target_entity_id"},
-			ExtraValidation:       requireAnyUnitSelector,
-			Constraints:           []string{"指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
-		},
-		{
-			Type:                  CmdUnitOrder,
-			RequiredPayloadFields: []string{"order"},
-			OptionalPayloadFields: []string{"target_entity_id"},
-			ExtraValidation: func(cmd Command) []CommandIssue {
-				issues := requireAnyUnitSelector(cmd)
-				order := strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["order"]))
-				switch order {
-				case "attack_move", "patrol", "retreat":
-					if cmd.Target.Position == nil {
-						issues = append(issues, MissingFieldIssue("target.position"))
-					}
-				case "guard", "follow":
-					if strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["target_entity_id"])) == "" {
-						issues = append(issues, MissingFieldIssue("payload.target_entity_id"))
-					}
-				case "hold", "stop":
-				default:
-					issues = append(issues, InvalidValueIssue(
-						"payload.order",
-						"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop",
-						"attack_move|patrol|guard|hold|follow|retreat|stop",
-						order,
-					))
-				}
-				return issues
-			},
-			Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
-		},
-		{
-			Type:                  CmdRefuelMecha,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"item_id", "quantity"},
-		},
-		{
-			Type:                  CmdMineResource,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"resource_id", "quantity"},
-		},
-		{
-			Type:                  CmdCraftItem,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"recipe_id", "quantity"},
-		},
-		{
-			Type:                 CmdCancelMechaJob,
-			RequiredTargetFields: []string{"entity_id"},
-		},
-		{
-			Type:                  CmdProduce,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"unit_type"},
-		},
-		{
-			Type:                 CmdUpgrade,
-			RequiredTargetFields: []string{"entity_id"},
-		},
-		{
-			Type:                 CmdDemolish,
-			RequiredTargetFields: []string{"entity_id"},
-		},
-		{
-			Type:                  CmdConfigureDistributor,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"item_id", "mode", "local_storage"},
-			OptionalPayloadFields: []string{"player_delivery_enabled", "player_collection_enabled"},
-		},
-		{
-			Type:                  CmdInstallLogisticsBot,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"quantity"},
-			OptionalPayloadFields: []string{"source"},
-		},
-		{
-			Type:                  CmdUninstallLogisticsBot,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"quantity"},
-		},
-		{
-			Type:                  CmdConfigureMechaLogistics,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"requests"},
-		},
-		{
-			Type:                  CmdInstallLogisticsVehicle,
-			OptionalPayloadFields: []string{"source"},
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"item_id", "quantity"},
-		},
-		{
-			Type:                 CmdConfigureLogisticsStation,
-			RequiredTargetFields: []string{"entity_id"},
-			OptionalPayloadFields: []string{
-				"input_priority",
-				"output_priority",
-				"drone_capacity",
-				"interstellar",
-				"belt_ports",
-			},
-		},
-		{
-			Type:                  CmdConfigureLogisticsSlot,
-			RequiredTargetFields:  []string{"entity_id"},
-			RequiredPayloadFields: []string{"scope", "item_id", "mode", "local_storage"},
-			OptionalPayloadFields: []string{"remove"},
-		},
-		{
-			Type:                 CmdScanGalaxy,
-			RequiredTargetFields: []string{"galaxy_id"},
-			RequiredLayer:        "galaxy",
-		},
-		{
-			Type:                 CmdScanSystem,
-			RequiredTargetFields: []string{"system_id"},
-			RequiredLayer:        "system",
-		},
-		{
-			Type:                 CmdScanPlanet,
-			RequiredTargetFields: []string{"planet_id"},
-			RequiredLayer:        "planet",
-		},
-		{
-			Type:                  CmdCancelConstruction,
-			RequiredPayloadFields: []string{"task_id"},
-		},
-		{
-			Type:                  CmdRestoreConstruction,
-			RequiredPayloadFields: []string{"task_id"},
-		},
-		{
-			Type:                  CmdStartResearch,
-			RequiredPayloadFields: []string{"tech_id"},
-		},
-		{
-			Type:                  CmdCancelResearch,
-			RequiredPayloadFields: []string{"tech_id"},
-		},
-		{
-			Type:                  CmdSetRecipe,
-			RequiredTargetFields:  []string{"entity_id"},
-			OptionalPayloadFields: []string{"recipe_id"},
-			Constraints: []string{
-				"recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.",
-			},
-			ExtraValidation: func(cmd Command) []CommandIssue {
-				if recipeID, ok := cmd.Payload["recipe_id"]; ok {
-					if _, isString := recipeID.(string); !isString && recipeID != nil {
-						return []CommandIssue{InvalidValueIssue(
-							"payload.recipe_id",
-							"payload.recipe_id must be a string when provided",
-							"string",
-							recipeID,
-						)}
-					}
-				}
-				return nil
-			},
-		},
-		{
-			Type:                  CmdSwitchActivePlanet,
-			RequiredPayloadFields: []string{"planet_id"},
-			Constraints:           []string{"F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。"},
-		},
-		{
-			Type:                  CmdTransferItem,
-			RequiredPayloadFields: []string{"building_id", "item_id", "quantity"},
-			OptionalPayloadFields: []string{"direction"},
-		},
-		{
-			Type:                  CmdLaunchSolarSail,
-			RequiredPayloadFields: []string{"building_id"},
-			OptionalPayloadFields: []string{"count", "orbit_radius", "inclination"},
-		},
-		{
-			Type:                  CmdLaunchRocket,
-			RequiredPayloadFields: []string{"building_id", "system_id"},
-			OptionalPayloadFields: []string{"layer_index", "count"},
-		},
-		{
-			Type:                  CmdSetRayReceiverMode,
-			RequiredPayloadFields: []string{"building_id", "mode"},
-		},
-		{
-			Type:                  CmdSetEnergyExchangerMode,
-			RequiredPayloadFields: []string{"building_id", "mode"},
-			Constraints:           []string{"mode must be one of charge|discharge|standby; target building must be an owned energy_exchanger"},
-		},
-		{
-			Type:                  CmdDeploySquad,
-			RequiredPayloadFields: []string{"member_ids"},
-			OptionalPayloadFields: []string{"name"},
-		},
-		{Type: CmdFormSquad, RequiredPayloadFields: []string{"entity_ids"}, OptionalPayloadFields: []string{"name"}, Constraints: []string{"entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected"}},
-		{Type: CmdSquadOrder, RequiredPayloadFields: []string{"squad_id", "order"}},
-		{Type: CmdDissolveSquad, RequiredPayloadFields: []string{"squad_id"}},
-		{
-			Type:                  CmdCommissionFleet,
-			RequiredPayloadFields: []string{"building_id", "blueprint_id", "count", "system_id"},
-			OptionalPayloadFields: []string{"fleet_id"},
-		},
-		{
-			Type:                  CmdFleetAssign,
-			RequiredPayloadFields: []string{"fleet_id", "formation"},
-		},
-		{
-			Type:                  CmdFleetAttack,
-			RequiredPayloadFields: []string{"fleet_id", "planet_id", "target_id"},
-		},
-		{
-			Type:                  CmdFleetMove,
-			RequiredPayloadFields: []string{"fleet_id", "target_system_id"},
-		},
-		{
-			Type:                  CmdFleetDisband,
-			RequiredPayloadFields: []string{"fleet_id"},
-		},
-		{
-			Type:                  CmdTaskForceCreate,
-			RequiredPayloadFields: []string{"task_force_id"},
-			OptionalPayloadFields: []string{"name", "stance"},
-		},
-		{
-			Type:                  CmdTaskForceAssign,
-			RequiredPayloadFields: []string{"task_force_id", "member_kind", "member_ids"},
-		},
-		{
-			Type:                  CmdTaskForceSetStance,
-			RequiredPayloadFields: []string{"task_force_id", "stance"},
-		},
-		{
-			Type:                  CmdTaskForceDeploy,
-			RequiredPayloadFields: []string{"task_force_id"},
-			OptionalPayloadFields: []string{
-				"theater_id",
-				"system_id",
-				"planet_id",
-				"position",
-				"frontline_id",
-				"ground_order",
-				"support_mode",
-			},
-			Constraints: []string{
-				"at least one of system_id, planet_id, position, frontline_id, ground_order is expected at runtime",
-			},
-		},
-		{
-			Type:                  CmdTheaterCreate,
-			RequiredPayloadFields: []string{"theater_id"},
-			OptionalPayloadFields: []string{"name"},
-		},
-		{
-			Type:                  CmdTheaterDefineZone,
-			RequiredPayloadFields: []string{"theater_id", "zone_type"},
-			OptionalPayloadFields: []string{"system_id", "planet_id", "position", "radius"},
-		},
-		{
-			Type:                  CmdTheaterSetObjective,
-			RequiredPayloadFields: []string{"theater_id", "objective_type"},
-			OptionalPayloadFields: []string{"system_id", "planet_id", "entity_id", "description"},
-		},
-		{
-			Type:                  CmdBlockadePlanet,
-			RequiredPayloadFields: []string{"task_force_id", "planet_id"},
-		},
-		{
-			Type:                  CmdBlueprintCreate,
-			RequiredPayloadFields: []string{"blueprint_id", "domain"},
-			OptionalPayloadFields: []string{"name", "base_frame_id", "base_hull_id"},
-			Constraints: []string{
-				"exactly one of base_frame_id or base_hull_id",
-			},
-			ExtraValidation: func(cmd Command) []CommandIssue {
-				_, hasFrame := cmd.Payload["base_frame_id"]
-				_, hasHull := cmd.Payload["base_hull_id"]
-				if hasFrame == hasHull {
-					var actual any
-					if hasFrame && hasHull {
-						actual = []string{"base_frame_id", "base_hull_id"}
-					}
+// commandSpecs is the public command catalog: one complete structural spec per
+// command, in catalog order. Executors bind to it in gamecore's command registry.
+var commandSpecs = []CommandStructureSpec{
+	{Type: CmdSetRallyPoint, RequiredTargetFields: []string{"entity_id", "position"}},
+	{Type: CmdConfigureSorter, RequiredTargetFields: []string{"entity_id"}, RequiredPayloadFields: []string{"input_directions", "output_directions"}, OptionalPayloadFields: []string{"filter_mode", "filter_items"}},
+	{
+		Type:                  CmdConfigureTrafficMonitor,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"target_belt_id", "window_ticks", "minimum_items_per_tick", "alerts_enabled"},
+		Constraints:           []string{"Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations."},
+	},
+	{
+		Type:                  CmdConfigureSplitter,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"input_directions", "output_directions"},
+		OptionalPayloadFields: []string{"input_priority", "output_priority", "output_filters"},
+	},
+	{
+		Type:                  CmdBuild,
+		RequiredTargetFields:  []string{"position"},
+		RequiredPayloadFields: []string{"building_type"},
+		OptionalPayloadFields: []string{"recipe_id", "direction", "rotation", "auto_approach"},
+		Constraints:           []string{"F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。"},
+		ExtraValidation: func(cmd Command) []CommandIssue {
+			if recipeID, ok := cmd.Payload["recipe_id"]; ok {
+				if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {
 					return []CommandIssue{InvalidValueIssue(
-						"payload.base_frame_id|payload.base_hull_id",
-						"blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id",
-						"exactly one of base_frame_id or base_hull_id",
-						actual,
+						"payload.recipe_id",
+						"payload.recipe_id must be a non-empty string when provided",
+						"non-empty string",
+						recipeID,
 					)}
 				}
-				return nil
-			},
+			}
+			return nil
 		},
-		{
-			Type:                  CmdBlueprintSetComponent,
-			RequiredPayloadFields: []string{"blueprint_id", "slot_id", "component_id"},
+	},
+	{
+		Type:                 CmdMove,
+		RequiredTargetFields: []string{"position"},
+		ExtraValidation:      requireAnyUnitSelector,
+		Constraints:          []string{"实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。", "F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。"},
+	},
+	{
+		Type:                  CmdAttack,
+		RequiredPayloadFields: []string{"target_entity_id"},
+		ExtraValidation:       requireAnyUnitSelector,
+		Constraints:           []string{"指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
+	},
+	{
+		Type:                  CmdUnitOrder,
+		RequiredPayloadFields: []string{"order"},
+		OptionalPayloadFields: []string{"target_entity_id"},
+		ExtraValidation: func(cmd Command) []CommandIssue {
+			issues := requireAnyUnitSelector(cmd)
+			order := strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["order"]))
+			switch order {
+			case "attack_move", "patrol", "retreat":
+				if cmd.Target.Position == nil {
+					issues = append(issues, MissingFieldIssue("target.position"))
+				}
+			case "guard", "follow":
+				if strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["target_entity_id"])) == "" {
+					issues = append(issues, MissingFieldIssue("payload.target_entity_id"))
+				}
+			case "hold", "stop":
+			default:
+				issues = append(issues, InvalidValueIssue(
+					"payload.order",
+					"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop",
+					"attack_move|patrol|guard|hold|follow|retreat|stop",
+					order,
+				))
+			}
+			return issues
 		},
-		{
-			Type:                  CmdBlueprintValidate,
-			RequiredPayloadFields: []string{"blueprint_id"},
+		Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
+	},
+	{
+		Type:                  CmdRefuelMecha,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"item_id", "quantity"},
+	},
+	{
+		Type:                  CmdMineResource,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"resource_id", "quantity"},
+	},
+	{
+		Type:                  CmdCraftItem,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"recipe_id", "quantity"},
+	},
+	{
+		Type:                 CmdCancelMechaJob,
+		RequiredTargetFields: []string{"entity_id"},
+	},
+	{
+		Type:                  CmdProduce,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"unit_type"},
+	},
+	{
+		Type:                 CmdUpgrade,
+		RequiredTargetFields: []string{"entity_id"},
+	},
+	{
+		Type:                 CmdDemolish,
+		RequiredTargetFields: []string{"entity_id"},
+	},
+	{
+		Type:                  CmdConfigureDistributor,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"item_id", "mode", "local_storage"},
+		OptionalPayloadFields: []string{"player_delivery_enabled", "player_collection_enabled"},
+	},
+	{
+		Type:                  CmdInstallLogisticsBot,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"quantity"},
+		OptionalPayloadFields: []string{"source"},
+	},
+	{
+		Type:                  CmdUninstallLogisticsBot,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"quantity"},
+	},
+	{
+		Type:                  CmdConfigureMechaLogistics,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"requests"},
+	},
+	{
+		Type:                  CmdInstallLogisticsVehicle,
+		OptionalPayloadFields: []string{"source"},
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"item_id", "quantity"},
+	},
+	{
+		Type:                 CmdConfigureLogisticsStation,
+		RequiredTargetFields: []string{"entity_id"},
+		OptionalPayloadFields: []string{
+			"input_priority",
+			"output_priority",
+			"drone_capacity",
+			"interstellar",
+			"belt_ports",
 		},
-		{
-			Type:                  CmdBlueprintFinalize,
-			RequiredPayloadFields: []string{"blueprint_id"},
-			OptionalPayloadFields: []string{"target_state"},
+	},
+	{
+		Type:                  CmdConfigureLogisticsSlot,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"scope", "item_id", "mode", "local_storage"},
+		OptionalPayloadFields: []string{"remove"},
+	},
+	{
+		Type:                 CmdScanGalaxy,
+		RequiredTargetFields: []string{"galaxy_id"},
+		RequiredLayer:        "galaxy",
+	},
+	{
+		Type:                 CmdScanSystem,
+		RequiredTargetFields: []string{"system_id"},
+		RequiredLayer:        "system",
+	},
+	{
+		Type:                 CmdScanPlanet,
+		RequiredTargetFields: []string{"planet_id"},
+		RequiredLayer:        "planet",
+	},
+	{
+		Type:                  CmdCancelConstruction,
+		RequiredPayloadFields: []string{"task_id"},
+	},
+	{
+		Type:                  CmdRestoreConstruction,
+		RequiredPayloadFields: []string{"task_id"},
+	},
+	{
+		Type:                  CmdStartResearch,
+		RequiredPayloadFields: []string{"tech_id"},
+	},
+	{
+		Type:                  CmdCancelResearch,
+		RequiredPayloadFields: []string{"tech_id"},
+	},
+	{
+		Type:                  CmdSetRecipe,
+		RequiredTargetFields:  []string{"entity_id"},
+		OptionalPayloadFields: []string{"recipe_id"},
+		Constraints: []string{
+			"recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.",
 		},
-		{
-			Type:                  CmdBlueprintVariant,
-			RequiredPayloadFields: []string{"parent_blueprint_id", "blueprint_id", "allowed_slot_ids"},
-			OptionalPayloadFields: []string{"name"},
+		ExtraValidation: func(cmd Command) []CommandIssue {
+			if recipeID, ok := cmd.Payload["recipe_id"]; ok {
+				if _, isString := recipeID.(string); !isString && recipeID != nil {
+					return []CommandIssue{InvalidValueIssue(
+						"payload.recipe_id",
+						"payload.recipe_id must be a string when provided",
+						"string",
+						recipeID,
+					)}
+				}
+			}
+			return nil
 		},
-		{
-			Type:                  CmdQueueMilitaryProduction,
-			RequiredPayloadFields: []string{"building_id", "deployment_hub_id", "blueprint_id", "count"},
+	},
+	{
+		Type:                  CmdSwitchActivePlanet,
+		RequiredPayloadFields: []string{"planet_id"},
+		Constraints:           []string{"F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。"},
+	},
+	{
+		Type:                  CmdTransferItem,
+		RequiredPayloadFields: []string{"building_id", "item_id", "quantity"},
+		OptionalPayloadFields: []string{"direction"},
+	},
+	{
+		Type:                  CmdLaunchSolarSail,
+		RequiredPayloadFields: []string{"building_id"},
+		OptionalPayloadFields: []string{"count", "orbit_radius", "inclination"},
+	},
+	{
+		Type:                  CmdLaunchRocket,
+		RequiredPayloadFields: []string{"building_id", "system_id"},
+		OptionalPayloadFields: []string{"layer_index", "count"},
+	},
+	{
+		Type:                  CmdSetRayReceiverMode,
+		RequiredPayloadFields: []string{"building_id", "mode"},
+	},
+	{
+		Type:                  CmdSetEnergyExchangerMode,
+		RequiredPayloadFields: []string{"building_id", "mode"},
+		Constraints:           []string{"mode must be one of charge|discharge|standby; target building must be an owned energy_exchanger"},
+	},
+	{
+		Type:                  CmdDeploySquad,
+		RequiredPayloadFields: []string{"member_ids"},
+		OptionalPayloadFields: []string{"name"},
+	},
+	{Type: CmdFormSquad, RequiredPayloadFields: []string{"entity_ids"}, OptionalPayloadFields: []string{"name"}, Constraints: []string{"entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected"}},
+	{Type: CmdSquadOrder, RequiredPayloadFields: []string{"squad_id", "order"}},
+	{Type: CmdDissolveSquad, RequiredPayloadFields: []string{"squad_id"}},
+	{
+		Type:                  CmdCommissionFleet,
+		RequiredPayloadFields: []string{"building_id", "blueprint_id", "count", "system_id"},
+		OptionalPayloadFields: []string{"fleet_id"},
+	},
+	{
+		Type:                  CmdFleetAssign,
+		RequiredPayloadFields: []string{"fleet_id", "formation"},
+	},
+	{
+		Type:                  CmdFleetAttack,
+		RequiredPayloadFields: []string{"fleet_id", "planet_id", "target_id"},
+	},
+	{
+		Type:                  CmdFleetMove,
+		RequiredPayloadFields: []string{"fleet_id", "target_system_id"},
+	},
+	{
+		Type:                  CmdFleetDisband,
+		RequiredPayloadFields: []string{"fleet_id"},
+	},
+	{
+		Type:                  CmdTaskForceCreate,
+		RequiredPayloadFields: []string{"task_force_id"},
+		OptionalPayloadFields: []string{"name", "stance"},
+	},
+	{
+		Type:                  CmdTaskForceAssign,
+		RequiredPayloadFields: []string{"task_force_id", "member_kind", "member_ids"},
+	},
+	{
+		Type:                  CmdTaskForceSetStance,
+		RequiredPayloadFields: []string{"task_force_id", "stance"},
+	},
+	{
+		Type:                  CmdTaskForceDeploy,
+		RequiredPayloadFields: []string{"task_force_id"},
+		OptionalPayloadFields: []string{
+			"theater_id",
+			"system_id",
+			"planet_id",
+			"position",
+			"frontline_id",
+			"ground_order",
+			"support_mode",
 		},
-		{
-			Type:                  CmdRefitUnit,
-			RequiredPayloadFields: []string{"building_id", "unit_id", "target_blueprint_id"},
+		Constraints: []string{
+			"at least one of system_id, planet_id, position, frontline_id, ground_order is expected at runtime",
 		},
-		{
-			Type:                  CmdBuildDysonNode,
-			RequiredPayloadFields: []string{"system_id", "layer_index", "latitude", "longitude"},
-			OptionalPayloadFields: []string{"orbit_radius"},
+	},
+	{
+		Type:                  CmdTheaterCreate,
+		RequiredPayloadFields: []string{"theater_id"},
+		OptionalPayloadFields: []string{"name"},
+	},
+	{
+		Type:                  CmdTheaterDefineZone,
+		RequiredPayloadFields: []string{"theater_id", "zone_type"},
+		OptionalPayloadFields: []string{"system_id", "planet_id", "position", "radius"},
+	},
+	{
+		Type:                  CmdTheaterSetObjective,
+		RequiredPayloadFields: []string{"theater_id", "objective_type"},
+		OptionalPayloadFields: []string{"system_id", "planet_id", "entity_id", "description"},
+	},
+	{
+		Type:                  CmdBlockadePlanet,
+		RequiredPayloadFields: []string{"task_force_id", "planet_id"},
+	},
+	{
+		Type:                  CmdBlueprintCreate,
+		RequiredPayloadFields: []string{"blueprint_id", "domain"},
+		OptionalPayloadFields: []string{"name", "base_frame_id", "base_hull_id"},
+		Constraints: []string{
+			"exactly one of base_frame_id or base_hull_id",
 		},
-		{
-			Type:                  CmdBuildDysonFrame,
-			RequiredPayloadFields: []string{"system_id", "layer_index", "node_a_id", "node_b_id"},
+		ExtraValidation: func(cmd Command) []CommandIssue {
+			_, hasFrame := cmd.Payload["base_frame_id"]
+			_, hasHull := cmd.Payload["base_hull_id"]
+			if hasFrame == hasHull {
+				var actual any
+				if hasFrame && hasHull {
+					actual = []string{"base_frame_id", "base_hull_id"}
+				}
+				return []CommandIssue{InvalidValueIssue(
+					"payload.base_frame_id|payload.base_hull_id",
+					"blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id",
+					"exactly one of base_frame_id or base_hull_id",
+					actual,
+				)}
+			}
+			return nil
 		},
-		{
-			Type:                  CmdBuildDysonShell,
-			RequiredPayloadFields: []string{"system_id", "layer_index", "latitude_min", "latitude_max", "coverage"},
-		},
-		{
-			Type:                  CmdDemolishDyson,
-			RequiredPayloadFields: []string{"system_id", "component_type", "component_id"},
-		},
-	}
+	},
+	{
+		Type:                  CmdBlueprintSetComponent,
+		RequiredPayloadFields: []string{"blueprint_id", "slot_id", "component_id"},
+	},
+	{
+		Type:                  CmdBlueprintValidate,
+		RequiredPayloadFields: []string{"blueprint_id"},
+	},
+	{
+		Type:                  CmdBlueprintFinalize,
+		RequiredPayloadFields: []string{"blueprint_id"},
+		OptionalPayloadFields: []string{"target_state"},
+	},
+	{
+		Type:                  CmdBlueprintVariant,
+		RequiredPayloadFields: []string{"parent_blueprint_id", "blueprint_id", "allowed_slot_ids"},
+		OptionalPayloadFields: []string{"name"},
+	},
+	{
+		Type:                  CmdQueueMilitaryProduction,
+		RequiredPayloadFields: []string{"building_id", "deployment_hub_id", "blueprint_id", "count"},
+	},
+	{
+		Type:                  CmdRefitUnit,
+		RequiredPayloadFields: []string{"building_id", "unit_id", "target_blueprint_id"},
+	},
+	{
+		Type:                  CmdBuildDysonNode,
+		RequiredPayloadFields: []string{"system_id", "layer_index", "latitude", "longitude"},
+		OptionalPayloadFields: []string{"orbit_radius"},
+	},
+	{
+		Type:                  CmdBuildDysonFrame,
+		RequiredPayloadFields: []string{"system_id", "layer_index", "node_a_id", "node_b_id"},
+	},
+	{
+		Type:                  CmdBuildDysonShell,
+		RequiredPayloadFields: []string{"system_id", "layer_index", "latitude_min", "latitude_max", "coverage"},
+	},
+	{
+		Type:                  CmdDemolishDyson,
+		RequiredPayloadFields: []string{"system_id", "component_type", "component_id"},
+	},
 }
 
-// CommandStructureByType returns the structural registry keyed by command type.
-func CommandStructureByType() map[CommandType]CommandStructureSpec {
-	specs := commandStructureRegistry()
-	out := make(map[CommandType]CommandStructureSpec, len(specs))
-	for _, spec := range specs {
+var commandSpecByType = func() map[CommandType]CommandStructureSpec {
+	out := make(map[CommandType]CommandStructureSpec, len(commandSpecs))
+	for _, spec := range commandSpecs {
 		out[spec.Type] = spec
 	}
 	return out
-}
+}()
 
 // BuildCommandCatalog builds the full public command catalog for GET /catalog/commands.
 func BuildCommandCatalog() CommandCatalogView {
-	specs := commandStructureRegistry()
-	entries := make([]CommandCatalogEntry, 0, len(specs))
-	oneOf := make([]any, 0, len(specs))
-	for _, spec := range specs {
+	entries := make([]CommandCatalogEntry, 0, len(commandSpecs))
+	oneOf := make([]any, 0, len(commandSpecs))
+	for _, spec := range commandSpecs {
 		entry := CommandCatalogEntry{
 			Type:                  string(spec.Type),
 			RequiredTargetFields:  cloneStringsOrEmpty(spec.RequiredTargetFields),
@@ -465,7 +460,7 @@ func BuildCommandCatalog() CommandCatalogView {
 // ValidateCommandStructure performs fast structural validation without world access.
 // It is the authoritative structural check shared by gateway precheck and catalog consumers.
 func ValidateCommandStructure(cmd Command) []CommandIssue {
-	spec, ok := CommandStructureByType()[cmd.Type]
+	spec, ok := commandSpecByType[cmd.Type]
 	if !ok {
 		return []CommandIssue{UnknownCommandIssue(string(cmd.Type))}
 	}

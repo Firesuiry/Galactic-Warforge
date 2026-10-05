@@ -47,7 +47,7 @@ func TestR1UnitMovesAlongPathInRealTime(t *testing.T) {
 	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 2})
 	dest := model.Position{X: 6, Y: 2}
 
-	res, events := gc.execMove(ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: unit.ID, Position: &dest}})
+	res, events := execCommand(gc, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: unit.ID, Position: &dest}})
 	if res.Code != model.CodeOK {
 		t.Fatalf("move order rejected: %+v", res)
 	}
@@ -88,20 +88,20 @@ func TestR1MoveInterruptAndNoOverlap(t *testing.T) {
 	a := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 2})
 	b := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 5})
 	far := model.Position{X: 10, Y: 2}
-	if res, _ := gc.execMove(ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: a.ID, Position: &far}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: a.ID, Position: &far}}); res.Code != model.CodeOK {
 		t.Fatalf("move rejected: %+v", res)
 	}
 	advanceRTT(ws, 4)
 	// 打断：新目的地反向。
 	other := model.Position{X: 2, Y: 10}
-	if res, _ := gc.execMove(ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: a.ID, Position: &other}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: a.ID, Position: &other}}); res.Code != model.CodeOK {
 		t.Fatalf("interrupt move rejected: %+v", res)
 	}
 	if a.Stance != model.UnitStanceMoving || a.OrderPos != nil {
 		t.Fatalf("interrupt must keep moving stance, got %+v", a)
 	}
 	// b 去 a 原来的方向，二者路径交叉：任何 tick 都不得同格。
-	if res, _ := gc.execMove(ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: b.ID, Position: &far}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: b.ID, Position: &far}}); res.Code != model.CodeOK {
 		t.Fatalf("second move rejected: %+v", res)
 	}
 	for i := 0; i < 120; i++ {
@@ -160,11 +160,11 @@ func TestR2HoldDoesNotChaseAndCeasefire(t *testing.T) {
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 8, Y: 3})
 	enemy.Stance = model.UnitStanceHold // 敌方同样坚守，排除其主动逼近干扰
 
-	if res, _ := gc.execUnitOrder(ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"order": "hold"}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"order": "hold"}}); res.Code != model.CodeOK {
 		t.Fatalf("hold order rejected: %+v", res)
 	}
 	// 显式指定射程外目标：hold 不追击、不开火、不移动。
-	if res, _ := gc.execAttack(ws, "p1", model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"target_entity_id": enemy.ID}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdAttack, ws, "p1", model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"target_entity_id": enemy.ID}}); res.Code != model.CodeOK {
 		t.Fatalf("attack order rejected: %+v", res)
 	}
 	events := advanceRTT(ws, 30)
@@ -195,7 +195,7 @@ func TestR5AttackMoveEngagesThenContinues(t *testing.T) {
 	enemy.HP = 20 // 尽快击杀，验证继续赶路
 	dest := model.Position{X: 9, Y: 2}
 
-	res, _ := gc.execUnitOrder(ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: unit.ID, Position: &dest}, Payload: map[string]any{"order": "attack_move"}})
+	res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: unit.ID, Position: &dest}, Payload: map[string]any{"order": "attack_move"}})
 	if res.Code != model.CodeOK {
 		t.Fatalf("attack_move rejected: %+v", res)
 	}
@@ -223,7 +223,7 @@ func TestR5PatrolBouncesAndRetreatDoesNotFight(t *testing.T) {
 	gc := &GameCore{}
 	patroller := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 8})
 	dest := model.Position{X: 6, Y: 8}
-	if res, _ := gc.execUnitOrder(ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: patroller.ID, Position: &dest}, Payload: map[string]any{"order": "patrol"}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: patroller.ID, Position: &dest}, Payload: map[string]any{"order": "patrol"}}); res.Code != model.CodeOK {
 		t.Fatalf("patrol rejected: %+v", res)
 	}
 	seenX := map[int]bool{}
@@ -243,7 +243,7 @@ func TestR5PatrolBouncesAndRetreatDoesNotFight(t *testing.T) {
 	retreater.MoveSpeed = 0.5 // 加速脱离，保证追击者跟不上
 	shooter := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 12, Y: 13})
 	home := model.Position{X: 15, Y: 15}
-	if res, _ := gc.execUnitOrder(ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: retreater.ID, Position: &home}, Payload: map[string]any{"order": "retreat"}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: retreater.ID, Position: &home}, Payload: map[string]any{"order": "retreat"}}); res.Code != model.CodeOK {
 		t.Fatalf("retreat rejected: %+v", res)
 	}
 	retaliationDuringRetreat := 0
@@ -330,7 +330,7 @@ func TestR4PvPUnitsDestroyUnitsAndBase(t *testing.T) {
 	base.HP = 60
 	placeBuilding(ws, base)
 
-	res, _ := gc.execAttack(ws, "p1", model.Command{
+	res, _ := execCommand(gc, model.CmdAttack, ws, "p1", model.Command{
 		Type:    model.CmdAttack,
 		Target:  model.CommandTarget{EntityIDs: []string{squad1.ID, squad2.ID}},
 		Payload: map[string]any{"target_entity_id": defender.ID},
@@ -344,7 +344,7 @@ func TestR4PvPUnitsDestroyUnitsAndBase(t *testing.T) {
 	}
 
 	// 推基地：集火建筑直至摧毁。
-	res, _ = gc.execAttack(ws, "p1", model.Command{
+	res, _ = execCommand(gc, model.CmdAttack, ws, "p1", model.Command{
 		Type:    model.CmdAttack,
 		Target:  model.CommandTarget{EntityIDs: []string{squad1.ID, squad2.ID}},
 		Payload: map[string]any{"target_entity_id": base.ID},
@@ -374,7 +374,7 @@ func TestR5BatchOrderAndGuardFollow(t *testing.T) {
 	vip := spawnWorldTestUnit(ws, model.UnitTypeWorker, "p1", model.Position{X: 2, Y: 14})
 	guard := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 6, Y: 14})
 
-	res, _ := gc.execUnitOrder(ws, "p1", model.Command{
+	res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{
 		Type:    model.CmdUnitOrder,
 		Target:  model.CommandTarget{EntityIDs: []string{guard.ID}},
 		Payload: map[string]any{"order": "guard", "target_entity_id": vip.ID},

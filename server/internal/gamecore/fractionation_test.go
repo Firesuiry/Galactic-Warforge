@@ -223,7 +223,7 @@ func TestFractionatorRealConstruction(t *testing.T) {
 	core := newConstructionTestCore(t, 2, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
-	result, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "fractionator"}})
+	result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "fractionator"}})
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("fractionator build: %+v", result)
 	}

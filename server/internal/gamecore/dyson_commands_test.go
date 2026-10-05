@@ -20,7 +20,7 @@ func TestDysonCommandsExecute(t *testing.T) {
 			"longitude":   10.0,
 		},
 	}
-	res, _ := core.execBuildDysonNode(ws, "p1", nodeCmdA)
+	res, _ := execCommand(core, model.CmdBuildDysonNode, ws, "p1", nodeCmdA)
 	if res.Code != model.CodeOK {
 		t.Fatalf("build dyson node A failed: %s (%s)", res.Code, res.Message)
 	}
@@ -34,7 +34,7 @@ func TestDysonCommandsExecute(t *testing.T) {
 			"longitude":   25.0,
 		},
 	}
-	res, _ = core.execBuildDysonNode(ws, "p1", nodeCmdB)
+	res, _ = execCommand(core, model.CmdBuildDysonNode, ws, "p1", nodeCmdB)
 	if res.Code != model.CodeOK {
 		t.Fatalf("build dyson node B failed: %s (%s)", res.Code, res.Message)
 	}
@@ -63,7 +63,7 @@ func TestDysonCommandsExecute(t *testing.T) {
 			"node_b_id":   state.Layers[0].Nodes[1].ID,
 		},
 	}
-	res, _ = core.execBuildDysonFrame(ws, "p1", frameCmd)
+	res, _ = execCommand(core, model.CmdBuildDysonFrame, ws, "p1", frameCmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("build dyson frame failed: %s (%s)", res.Code, res.Message)
 	}
@@ -78,7 +78,7 @@ func TestDysonCommandsExecute(t *testing.T) {
 			"coverage":     0.35,
 		},
 	}
-	res, _ = core.execBuildDysonShell(ws, "p1", shellCmd)
+	res, _ = execCommand(core, model.CmdBuildDysonShell, ws, "p1", shellCmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("build dyson shell failed: %s (%s)", res.Code, res.Message)
 	}
@@ -92,7 +92,7 @@ func TestDysonCommandsExecute(t *testing.T) {
 			"component_id":   shellID,
 		},
 	}
-	res, _ = core.execDemolishDyson(ws, "p1", demolishCmd)
+	res, _ = execCommand(core, model.CmdDemolishDyson, ws, "p1", demolishCmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("demolish dyson shell failed: %s (%s)", res.Code, res.Message)
 	}
@@ -114,7 +114,7 @@ func TestDysonCommandsRequireResearchUnlock(t *testing.T) {
 			"longitude":   10.0,
 		},
 	}
-	res, _ := core.execBuildDysonNode(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuildDysonNode, ws, "p1", cmd)
 	if res.Code != model.CodeValidationFailed {
 		t.Fatalf("expected validation failure without unlock, got %s", res.Code)
 	}
@@ -139,7 +139,7 @@ func TestLaunchSolarSailConsumesLoadedPayload(t *testing.T) {
 			"inclination":  5.0,
 		},
 	}
-	res, events := core.execLaunchSolarSail(ws, "p1", cmd)
+	res, events := execCommand(core, model.CmdLaunchSolarSail, ws, "p1", cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("launch solar sail failed: %s (%s)", res.Code, res.Message)
 	}
@@ -171,7 +171,7 @@ func TestLaunchSolarSailRejectsNonEjectorTarget(t *testing.T) {
 			"building_id": silo.ID,
 		},
 	}
-	res, _ := core.execLaunchSolarSail(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdLaunchSolarSail, ws, "p1", cmd)
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("expected invalid target for silo launch, got %s (%s)", res.Code, res.Message)
 	}
@@ -201,7 +201,7 @@ func TestLaunchRocketConsumesStoredRocketAndBoostsLayer(t *testing.T) {
 			"count":       float64(2),
 		},
 	}
-	res, events := core.execLaunchRocket(ws, "p1", cmd)
+	res, events := execCommand(core, model.CmdLaunchRocket, ws, "p1", cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("launch rocket failed: %s (%s)", res.Code, res.Message)
 	}
@@ -240,7 +240,7 @@ func TestLaunchRocketRequiresExistingDysonScaffold(t *testing.T) {
 
 	AddDysonLayer(core.spaceRuntime, "p1", "sys-1", 0, 1.2)
 
-	res, _ := core.execLaunchRocket(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdLaunchRocket, ws, "p1", model.Command{
 		Type: model.CmdLaunchRocket,
 		Payload: map[string]any{
 			"building_id": silo.ID,

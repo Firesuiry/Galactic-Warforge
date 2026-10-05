@@ -138,7 +138,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 
 	// Removed techs must no longer be researchable.
 	for _, techID := range []string{"electromagnetic_matrix", "improved_logistics"} {
-		res, _ := core.execStartResearch(ws, "p1", model.Command{
+		res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 			Type:    model.CmdStartResearch,
 			Payload: map[string]any{"tech_id": techID},
 		})
@@ -166,7 +166,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 	if err != nil || windPos == nil {
 		t.Fatalf("find adjacent wind tile: %v", err)
 	}
-	buildWindRes, _ := core.execBuild(ws, "p1", model.Command{
+	buildWindRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: windPos},
 		Payload: map[string]any{
@@ -184,7 +184,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 	if err != nil || labPos == nil {
 		t.Fatalf("find adjacent lab tile: %v", err)
 	}
-	buildRes, _ := core.execBuild(ws, "p1", model.Command{
+	buildRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: labPos},
 		Payload: map[string]any{
@@ -246,7 +246,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 
 	researchTech := func(techID string) {
 		t.Helper()
-		transferRes, _ := core.execTransferItem(ws, "p1", model.Command{
+		transferRes, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 			Type: model.CmdTransferItem,
 			Payload: map[string]any{
 				"building_id": lab.ID,
@@ -257,7 +257,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 		if transferRes.Code != model.CodeOK {
 			t.Fatalf("transfer matrices for %s: %s (%s)", techID, transferRes.Code, transferRes.Message)
 		}
-		startRes, _ := core.execStartResearch(ws, "p1", model.Command{
+		startRes, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 			Type:    model.CmdStartResearch,
 			Payload: map[string]any{"tech_id": techID},
 		})

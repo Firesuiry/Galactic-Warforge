@@ -21,7 +21,7 @@ func TestT100HiddenTechGateBlocksDarkFogButFleetTechsAreResearchable(t *testing.
 
 	grantTechs(ws, "p1", "battlefield_analysis", "plasma_control", "information_matrix")
 
-	visibleRes, _ := core.execStartResearch(ws, "p1", model.Command{
+	visibleRes, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "prototype"},
 	})
@@ -31,7 +31,7 @@ func TestT100HiddenTechGateBlocksDarkFogButFleetTechsAreResearchable(t *testing.
 
 	// Hidden tech: prerequisites are met but the dark_fog_matrix trigger item
 	// is not held, so the tech stays invisible.
-	hiddenRes, _ := core.execStartResearch(ws, "p1", model.Command{
+	hiddenRes, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "dark_fog_matrix"},
 	})
@@ -77,7 +77,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		}},
 	}
 
-	deployRes, deployEvents := core.execDeploySquad(ws, "p1", model.Command{
+	deployRes, deployEvents := execCommand(core, model.CmdDeploySquad, ws, "p1", model.Command{
 		Type:   model.CmdDeploySquad,
 		Target: model.CommandTarget{EntityID: base.ID},
 		Payload: map[string]any{
@@ -100,7 +100,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		t.Fatalf("expected deployed squad to persist prototype blueprint_id, got %+v", ws.CombatRuntime.Squads["squad-1"])
 	}
 
-	commissionRes, commissionEvents := core.execCommissionFleet(ws, "p1", model.Command{
+	commissionRes, commissionEvents := execCommand(core, model.CmdCommissionFleet, ws, "p1", model.Command{
 		Type:   model.CmdCommissionFleet,
 		Target: model.CommandTarget{EntityID: base.ID, SystemID: "sys-1"},
 		Payload: map[string]any{
@@ -122,7 +122,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		t.Fatalf("expected commissioned fleet to persist corvette blueprint_id, got %+v", runtime)
 	}
 
-	assignRes, _ := core.execFleetAssign(ws, "p1", model.Command{
+	assignRes, _ := execCommand(core, model.CmdFleetAssign, ws, "p1", model.Command{
 		Type: model.CmdFleetAssign,
 		Payload: map[string]any{
 			"fleet_id":  "fleet-alpha",
@@ -133,7 +133,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		t.Fatalf("fleet assign failed: %s (%s)", assignRes.Code, assignRes.Message)
 	}
 
-	attackRes, _ := core.execFleetAttack(ws, "p1", model.Command{
+	attackRes, _ := execCommand(core, model.CmdFleetAttack, ws, "p1", model.Command{
 		Type: model.CmdFleetAttack,
 		Payload: map[string]any{
 			"fleet_id":  "fleet-alpha",
@@ -168,7 +168,7 @@ func TestT100DeploySquadFleetQueryAndAttackClosure(t *testing.T) {
 		t.Fatalf("expected fleet detail view, got %+v", fleetView)
 	}
 
-	disbandRes, _ := core.execFleetDisband(ws, "p1", model.Command{
+	disbandRes, _ := execCommand(core, model.CmdFleetDisband, ws, "p1", model.Command{
 		Type:    model.CmdFleetDisband,
 		Payload: map[string]any{"fleet_id": "fleet-alpha"},
 	})

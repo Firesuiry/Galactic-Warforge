@@ -162,7 +162,7 @@ func TestConfigureTrafficMonitorAtomicValidationAndClearing(t *testing.T) {
 			payload[key] = value
 		}
 		payload[tc.field] = tc.value
-		result, events := gc.execConfigureTrafficMonitor(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: m.ID}, Payload: payload})
+		result, events := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: m.ID}, Payload: payload})
 		if result.Status != model.StatusFailed || len(events) != 0 || !reflect.DeepEqual(original, m.TrafficMonitor) {
 			t.Fatalf("invalid config mutated state %s=%v: %+v", tc.field, tc.value, result)
 		}
@@ -174,26 +174,26 @@ func TestConfigureTrafficMonitorAtomicValidationAndClearing(t *testing.T) {
 				payload[key] = value
 			}
 		}
-		result, _ := gc.execConfigureTrafficMonitor(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: m.ID}, Payload: payload})
+		result, _ := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: m.ID}, Payload: payload})
 		if result.Status != model.StatusFailed {
 			t.Fatalf("accepted missing %s", missing)
 		}
 	}
 	command := model.Command{Target: model.CommandTarget{EntityID: m.ID}, Payload: valid}
 	source.OwnerID = "enemy"
-	if result, _ := gc.execConfigureTrafficMonitor(ws, "p1", command); result.Status != model.StatusFailed {
+	if result, _ := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", command); result.Status != model.StatusFailed {
 		t.Fatal("bound foreign belt")
 	}
 	source.OwnerID = "p1"
 	source.Position = model.Position{X: 7, Y: 7}
-	if result, _ := gc.execConfigureTrafficMonitor(ws, "p1", command); result.Status != model.StatusFailed {
+	if result, _ := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", command); result.Status != model.StatusFailed {
 		t.Fatal("bound remote belt")
 	}
 	source.Position = model.Position{X: 3, Y: 3}
-	if result, _ := gc.execConfigureTrafficMonitor(ws, "enemy", command); result.Code != model.CodeNotOwner {
+	if result, _ := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "enemy", command); result.Code != model.CodeNotOwner {
 		t.Fatal("configured foreign monitor")
 	}
-	result, events := gc.execConfigureTrafficMonitor(ws, "p1", command)
+	result, events := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", command)
 	if result.Status != model.StatusExecuted || len(events) != 1 {
 		t.Fatalf("valid config failed: %+v", result)
 	}
@@ -204,12 +204,12 @@ func TestConfigureTrafficMonitorAtomicValidationAndClearing(t *testing.T) {
 	m.TrafficMonitor.AlertActive = true
 	m.TrafficMonitor.State = "low_flow"
 	valid["alerts_enabled"] = false
-	result, events = gc.execConfigureTrafficMonitor(ws, "p1", command)
+	result, events = execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", command)
 	if result.Status != model.StatusExecuted || len(events) != 2 || events[1].Payload["alert_active"] != false || m.TrafficMonitor.AlertActive {
 		t.Fatal("disabling did not clear active alert")
 	}
 	valid["target_belt_id"] = ""
-	result, _ = gc.execConfigureTrafficMonitor(ws, "p1", command)
+	result, _ = execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", command)
 	if result.Status != model.StatusExecuted || m.TrafficMonitor.State != "unconfigured" || m.TrafficMonitor.TotalItems != 0 {
 		t.Fatal("unbind failed")
 	}
@@ -224,7 +224,7 @@ func TestTrafficMonitorCrossSurfaceBindingAndRealConstruction(t *testing.T) {
 	}
 	core := newConstructionTestCore(t, 2, 2)
 	pos, _ := findTwoOpenTiles(core.world)
-	result, _ := core.execBuild(core.world, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "traffic_monitor"}})
+	result, _ := execCommand(core, model.CmdBuild, core.world, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "traffic_monitor"}})
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("build failed: %+v", result)
 	}

@@ -21,7 +21,7 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 		t.Fatal("expected open tile for automatic_piler test")
 	}
 
-	automaticPilerRes, _ := core.execBuild(ws, "p1", model.Command{
+	automaticPilerRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -48,7 +48,7 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 		t.Fatalf("find second open tile for satellite_substation: %v", err)
 	}
 
-	lockedSatelliteRes, _ := core.execBuild(ws, "p1", model.Command{
+	lockedSatelliteRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: satellitePos},
 		Payload: map[string]any{
@@ -61,7 +61,7 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 
 	grantTechs(ws, "p1", "satellite_power")
 
-	unlockedSatelliteRes, _ := core.execBuild(ws, "p1", model.Command{
+	unlockedSatelliteRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: satellitePos},
 		Payload: map[string]any{

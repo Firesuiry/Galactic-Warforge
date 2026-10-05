@@ -18,7 +18,7 @@ func installTestStationFleet(core *GameCore, ws *model.WorldState, b *model.Buil
 			continue
 		}
 		ws.Players[b.OwnerID].AddItems([]model.ItemAmount{{ItemID: entry.item, Quantity: entry.qty}})
-		result, _ := core.execInstallLogisticsVehicle(ws, b.OwnerID, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"item_id": entry.item, "quantity": entry.qty}})
+		result, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, b.OwnerID, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"item_id": entry.item, "quantity": entry.qty}})
 		if result.Status != model.StatusExecuted {
 			return fmt.Errorf("install fixture: %s", result.Message)
 		}
@@ -50,7 +50,7 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 	player := ws.Players["p1"]
 	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsDrone, Quantity: 12}, {ItemID: model.ItemLogisticsVessel, Quantity: 5}})
 	install := func(owner, item string, qty any) model.CommandResult {
-		r, _ := core.execInstallLogisticsVehicle(ws, owner, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": item, "quantity": qty}})
+		r, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, owner, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": item, "quantity": qty}})
 		return r
 	}
 	if r := install("p1", model.ItemLogisticsDrone, 3); r.Status != model.StatusExecuted {
@@ -445,7 +445,7 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 			}
 			for _, input := range recipe.Inputs {
 				ws.Players["p1"].Inventory[input.ItemID] = input.Quantity
-				result, _ := core.execTransferItem(ws, "p1", model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": factory.ID, "item_id": input.ItemID, "quantity": input.Quantity}})
+				result, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": factory.ID, "item_id": input.ItemID, "quantity": input.Quantity}})
 				if result.Status != model.StatusExecuted {
 					t.Fatalf("input transfer: %+v", result)
 				}
@@ -469,20 +469,20 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 				}
 			}
 			command := model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": itemID, "quantity": 2, "source": "station"}}
-			result, _ := core.execInstallLogisticsVehicle(ws, "p1", command)
+			result, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", command)
 			if result.Code != model.CodeInsufficientResource || station.LogisticsStation.Inventory[itemID] != 1 || len(ws.LogisticsDrones)+len(ws.LogisticsShips) != 0 {
 				t.Fatalf("batch installation was not atomic: %+v", result)
 			}
 			command.Payload["quantity"] = 1
 			for _, source := range []any{"unknown", true, 1, ""} {
 				command.Payload["source"] = source
-				result, _ = core.execInstallLogisticsVehicle(ws, "p1", command)
+				result, _ = execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", command)
 				if result.Code != model.CodeValidationFailed || station.LogisticsStation.Inventory[itemID] != 1 {
 					t.Fatalf("invalid source changed inventory: %+v", result)
 				}
 			}
 			command.Payload["source"] = "station"
-			result, _ = core.execInstallLogisticsVehicle(ws, "p1", command)
+			result, _ = execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", command)
 			if result.Status != model.StatusExecuted || station.LogisticsStation.Inventory[itemID] != 0 || len(ws.LogisticsDrones)+len(ws.LogisticsShips) != 1 || ws.Players["p1"].Inventory[itemID] != 0 {
 				t.Fatalf("station-source installation did not conserve manufactured vehicle: %+v", result)
 			}
@@ -496,7 +496,7 @@ func TestPlanetaryStationRejectsInstallingVesselFromEitherInventory(t *testing.T
 	ws.Players["p1"].Inventory = model.ItemInventory{model.ItemLogisticsVessel: 1}
 	station.LogisticsStation.Inventory[model.ItemLogisticsVessel] = 1
 	for _, source := range []string{"player", "station"} {
-		result, _ := core.execInstallLogisticsVehicle(ws, "p1", model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": model.ItemLogisticsVessel, "quantity": 1, "source": source}})
+		result, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": model.ItemLogisticsVessel, "quantity": 1, "source": source}})
 		if result.Code != model.CodeValidationFailed || station.LogisticsStation.Inventory[model.ItemLogisticsVessel] != 1 || ws.Players["p1"].Inventory[model.ItemLogisticsVessel] != 1 || len(ws.LogisticsShips) != 0 {
 			t.Fatal("planetary station accepted vessel or consumed it")
 		}

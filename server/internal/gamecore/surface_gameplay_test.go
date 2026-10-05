@@ -84,7 +84,7 @@ func TestSurfaceMoveCrossesSeamAndRespectsObstacles(t *testing.T) {
 	unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", start)
 	gc := &GameCore{}
 	cmd := model.Command{Type: "move", Target: model.CommandTarget{EntityID: unit.ID, Position: &target}}
-	result, _ := gc.execMove(ws, "p1", cmd)
+	result, _ := execCommand(gc, model.CmdMove, ws, "p1", cmd)
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("cross seam move order failed: %+v", result)
 	}
@@ -102,13 +102,13 @@ func TestSurfaceMoveCrossesSeamAndRespectsObstacles(t *testing.T) {
 	// 目的地被建筑占用：必须拒绝。
 	occupied := ws.SurfaceNeighbors(target)[0]
 	cmd.Target.Position = &occupied
-	result, _ = gc.execMove(ws, "p1", cmd)
+	result, _ = execCommand(gc, model.CmdMove, ws, "p1", cmd)
 	if result.Status == model.StatusExecuted {
 		t.Fatal("unit moved onto building-occupied tile")
 	}
 	// 四面被建筑封死：寻路必须失败且单位不动。
 	cmd.Target.Position = &far
-	result, _ = gc.execMove(ws, "p1", cmd)
+	result, _ = execCommand(gc, model.CmdMove, ws, "p1", cmd)
 	if result.Status == model.StatusExecuted {
 		t.Fatal("unit escaped enclosed surface cell")
 	}
@@ -202,7 +202,7 @@ func TestSurfaceCombatDestructionClearsFullFootprint(t *testing.T) {
 	unit.Attack = 10
 	unit.AttackRange = 2
 	gc := &GameCore{}
-	result, _ := gc.execAttack(ws, "p1", model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"target_entity_id": b.ID}})
+	result, _ := execCommand(gc, model.CmdAttack, ws, "p1", model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"target_entity_id": b.ID}})
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("attack order failed: %+v", result)
 	}

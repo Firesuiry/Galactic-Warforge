@@ -43,7 +43,7 @@ func TestD2BuildRadiusAllowsRemoteBuildNearHQ(t *testing.T) {
 	if target == nil {
 		t.Fatal("test setup: no buildable tile inside HQ radius outside executor range")
 	}
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: target},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
@@ -57,7 +57,7 @@ func TestD2BuildRadiusAllowsRemoteBuildNearHQ(t *testing.T) {
 	if ws.SurfaceDistance(hq.Position, far) <= 24 {
 		t.Fatal("test setup: far point inside HQ radius")
 	}
-	res, _ = core.execBuild(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &far},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},

@@ -53,7 +53,7 @@ func TestE2E_TickCommandChain(t *testing.T) {
 		},
 	}
 
-	res, _ := core.execBuild(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("build command failed: %s (%s)", res.Status, res.Message)
 	}
@@ -96,7 +96,7 @@ func TestE2E_ResearchUnlockBuildChain(t *testing.T) {
 			"tech_id": "electromagnetism",
 		},
 	}
-	res, _ := core.execStartResearch(ws, "p1", startCmd)
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", startCmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("start research failed: %s (%s)", res.Status, res.Message)
 	}
@@ -122,7 +122,7 @@ func TestE2E_ResearchUnlockBuildChain(t *testing.T) {
 			"building_type": "wind_turbine",
 		},
 	}
-	buildRes, _ := core.execBuild(ws, "p1", buildCmd)
+	buildRes, _ := execCommand(core, model.CmdBuild, ws, "p1", buildCmd)
 	if buildRes.Status != model.StatusExecuted {
 		t.Fatalf("build unlocked wind_turbine failed: %s (%s)", buildRes.Status, buildRes.Message)
 	}
@@ -146,7 +146,7 @@ func TestE2E_CollectorsRequireResourceNodes(t *testing.T) {
 				"building_type": btype,
 			},
 		}
-		res, _ := core.execBuild(ws, "p1", buildCmd)
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", buildCmd)
 		if res.Status != model.StatusFailed {
 			t.Fatalf("%s should fail on non-resource tile, got %s", btype, res.Status)
 		}
@@ -200,7 +200,7 @@ func TestE2E_ProductionChain(t *testing.T) {
 			"recipe_id":     "gear",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", buildCmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", buildCmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("build assembler failed: %s (%s)", res.Status, res.Message)
 	}
@@ -212,7 +212,7 @@ func TestE2E_ProductionChain(t *testing.T) {
 			"building_type": "solar_panel",
 		},
 	}
-	powerRes, _ := core.execBuild(ws, "p1", powerCmd)
+	powerRes, _ := execCommand(core, model.CmdBuild, ws, "p1", powerCmd)
 	if powerRes.Status != model.StatusExecuted {
 		t.Fatalf("build solar panel failed: %s (%s)", powerRes.Status, powerRes.Message)
 	}
@@ -270,7 +270,7 @@ func TestE2E_VerticalLaunchingSiloUsesDefaultRocketRecipe(t *testing.T) {
 		t.Fatalf("find open tile: %v", err)
 	}
 
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -325,7 +325,7 @@ func TestE2E_LogisticsStationConstructionRequiresManufacturedVehicles(t *testing
 		t.Fatal("find open tile: no open tile found")
 	}
 
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -388,7 +388,7 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 		t.Fatal("find open tile: no open tile found")
 	}
 
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -499,7 +499,7 @@ func TestDemolishBuildingRetainsStrandedStationFleet(t *testing.T) {
 	baselineBDrones := model.StationDroneCount(ws, stationB.ID)
 	baselineBShips := model.StationShipCount(ws, stationB.ID)
 
-	res, _ := core.execDemolish(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdDemolish, ws, "p1", model.Command{
 		Type:   model.CmdDemolish,
 		Target: model.CommandTarget{EntityID: stationA.ID},
 	})
@@ -565,7 +565,7 @@ func TestE2E_PlanetaryLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	origin.LogisticsStation.SetInventory(model.ItemInventory{model.ItemIronOre: 120})
 	target.LogisticsStation.SetInventory(model.ItemInventory{})
 
-	res, _ := core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: origin.ID},
 		Payload: map[string]any{
@@ -578,7 +578,7 @@ func TestE2E_PlanetaryLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("configure origin slot failed: %s (%s)", res.Status, res.Message)
 	}
-	res, _ = core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: target.ID},
 		Payload: map[string]any{
@@ -661,7 +661,7 @@ func TestE2E_InterstellarLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	origin.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 200})
 	target.LogisticsStation.SetInventory(model.ItemInventory{})
 
-	res, _ := core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: origin.ID},
 		Payload: map[string]any{
@@ -674,7 +674,7 @@ func TestE2E_InterstellarLogisticsDeliveryAfterConfiguration(t *testing.T) {
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("configure origin slot failed: %s (%s)", res.Status, res.Message)
 	}
-	res, _ = core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: target.ID},
 		Payload: map[string]any{

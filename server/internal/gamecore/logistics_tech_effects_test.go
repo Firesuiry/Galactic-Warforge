@@ -254,7 +254,7 @@ func TestInstallLogisticsVehicleRequiresUnitUnlockTech(t *testing.T) {
 	station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 5, Y: 5})
 	attachBuilding(ws, station)
 	install := func(itemID string) model.CommandResult {
-		r, _ := core.execInstallLogisticsVehicle(ws, "p1", model.Command{
+		r, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", model.Command{
 			Type:    model.CmdInstallLogisticsVehicle,
 			Target:  model.CommandTarget{EntityID: station.ID},
 			Payload: map[string]any{"item_id": itemID, "quantity": 1},

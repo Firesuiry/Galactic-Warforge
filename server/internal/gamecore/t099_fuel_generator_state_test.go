@@ -164,7 +164,7 @@ func TestT099ProduceCorvetteStillRejected(t *testing.T) {
 	}
 	placeBuilding(ws, producer)
 
-	res, _ := core.execProduce(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdProduce, ws, "p1", model.Command{
 		Type:   model.CmdProduce,
 		Target: model.CommandTarget{EntityID: producer.ID},
 		Payload: map[string]any{

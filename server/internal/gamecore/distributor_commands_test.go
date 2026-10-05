@@ -9,7 +9,7 @@ func TestDistributorConfigurationEventsSnapshotAuthoritativeState(t *testing.T) 
 	ws, home, sink := distributorTestWorld(t)
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"item_id": model.ItemIronOre, "mode": "demand", "local_storage": 20, "player_delivery_enabled": true}}
-	result, events := core.execConfigureDistributor(ws, "p1", cmd)
+	result, events := execCommand(core, model.CmdConfigureDistributor, ws, "p1", cmd)
 	if result.Code != model.CodeOK || len(events) != 1 || events[0].EventType != model.EvtEntityUpdated || events[0].VisibilityScope != "p1" || events[0].Payload["building_id"] != home.ID {
 		t.Fatalf("missing distributor refresh event: %+v %+v", result, events)
 	}
@@ -22,13 +22,13 @@ func TestDistributorConfigurationEventsSnapshotAuthoritativeState(t *testing.T) 
 		t.Fatal("event aliases mutable distributor state")
 	}
 	cmd.Payload["local_storage"] = -1
-	if result, events = core.execConfigureDistributor(ws, "p1", cmd); result.Status != model.StatusFailed || len(events) != 0 || home.Distributor.LocalStorage != 30 {
+	if result, events = execCommand(core, model.CmdConfigureDistributor, ws, "p1", cmd); result.Status != model.StatusFailed || len(events) != 0 || home.Distributor.LocalStorage != 30 {
 		t.Fatal("failed command changed state or emitted refresh")
 	}
 
 	unit := distributorTestMecha(ws, sink.Position)
 	cmd = model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"requests": map[string]any{model.ItemIronOre: map[string]any{"min": 3, "max": 18}}}}
-	result, events = core.execConfigureMechaLogistics(ws, "p1", cmd)
+	result, events = execCommand(core, model.CmdConfigureMechaLogistics, ws, "p1", cmd)
 	if result.Code != model.CodeOK || len(events) != 1 || events[0].EventType != model.EvtMechaStateChanged || events[0].VisibilityScope != "p1" || events[0].Payload["entity_id"] != unit.ID {
 		t.Fatalf("missing mecha refresh event: %+v %+v", result, events)
 	}
@@ -41,7 +41,7 @@ func TestDistributorConfigurationEventsSnapshotAuthoritativeState(t *testing.T) 
 		t.Fatal("event aliases mutable requests")
 	}
 	cmd.Payload["requests"] = map[string]any{model.ItemIronOre: map[string]any{"min": 30, "max": 18}}
-	if result, events = core.execConfigureMechaLogistics(ws, "p1", cmd); result.Status != model.StatusFailed || len(events) != 0 || unit.Mecha.LogisticsRequests[model.ItemIronOre].Max != 10 {
+	if result, events = execCommand(core, model.CmdConfigureMechaLogistics, ws, "p1", cmd); result.Status != model.StatusFailed || len(events) != 0 || unit.Mecha.LogisticsRequests[model.ItemIronOre].Max != 10 {
 		t.Fatal("invalid request changed state or emitted refresh")
 	}
 }
@@ -59,7 +59,7 @@ func TestDistributorBotInstallationEventsReflectActualInventory(t *testing.T) {
 			}
 			core := &GameCore{}
 			cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2, "source": source}}
-			result, events := core.execInstallLogisticsBot(ws, "p1", cmd)
+			result, events := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd)
 			want := 1
 			if source == "player" {
 				want = 2
@@ -75,7 +75,7 @@ func TestDistributorBotInstallationEventsReflectActualInventory(t *testing.T) {
 					t.Fatal("private installation event leaked")
 				}
 			}
-			result, events = core.execUninstallLogisticsBot(ws, "p1", cmd)
+			result, events = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", cmd)
 			if result.Code != model.CodeOK || len(events) != 2 || events[0].EventType != model.EvtEntityUpdated || events[0].Payload["bot_count"] != 0 || events[1].EventType != model.EvtResourceChanged || events[1].Payload["inventory_qty"] != 2 {
 				t.Fatalf("missing uninstall refresh: %+v %+v", result, events)
 			}

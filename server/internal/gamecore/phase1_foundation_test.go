@@ -97,7 +97,7 @@ func TestPhase1SorterMachineIOAndAtomicConfiguration(t *testing.T) {
 	attachBuilding(ws, arm)
 	gc := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: arm.ID}, Payload: map[string]any{"input_directions": []string{"west"}, "output_directions": []string{"east"}, "filter_items": []string{"iron_ore"}}}
-	if res, _ := gc.execConfigureSorter(ws, "p1", cmd); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeOK {
 		t.Fatalf("configure: %+v", res)
 	}
 	source.Conveyor.Insert("iron_ore", 3)
@@ -106,7 +106,7 @@ func TestPhase1SorterMachineIOAndAtomicConfiguration(t *testing.T) {
 		t.Fatal("belt to machine transfer lost or failed")
 	}
 	cmd.Payload["output_directions"] = []string{"west"}
-	if res, _ := gc.execConfigureSorter(ws, "p1", cmd); res.Code == model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code == model.CodeOK {
 		t.Fatal("overlapping directions accepted")
 	}
 	if arm.Sorter.OutputDirections[0] != model.ConveyorEast {
@@ -114,7 +114,7 @@ func TestPhase1SorterMachineIOAndAtomicConfiguration(t *testing.T) {
 	}
 	// Reverse direction and extract finished products, never the machine input stock.
 	cmd.Payload = map[string]any{"input_directions": []string{"east"}, "output_directions": []string{"west"}, "filter_items": []string{"iron_ingot"}}
-	if res, _ := gc.execConfigureSorter(ws, "p1", cmd); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeOK {
 		t.Fatalf("reverse: %+v", res)
 	}
 	source.Conveyor.Output = model.ConveyorWest

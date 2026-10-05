@@ -19,7 +19,7 @@ func TestTransferItemLoadsOwnedBuildingAndEmitsUpdate(t *testing.T) {
 	ejector.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, ejector)
 
-	res, events := core.execTransferItem(ws, "p1", model.Command{
+	res, events := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
 			"building_id": ejector.ID,
@@ -63,7 +63,7 @@ func TestTransferItemAllowsImmediateRocketLaunch(t *testing.T) {
 		t.Fatalf("add dyson node: %v", err)
 	}
 
-	transferRes, _ := core.execTransferItem(ws, "p1", model.Command{
+	transferRes, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
 			"building_id": silo.ID,
@@ -75,7 +75,7 @@ func TestTransferItemAllowsImmediateRocketLaunch(t *testing.T) {
 		t.Fatalf("transfer rocket failed: %s (%s)", transferRes.Code, transferRes.Message)
 	}
 
-	launchRes, _ := core.execLaunchRocket(ws, "p1", model.Command{
+	launchRes, _ := execCommand(core, model.CmdLaunchRocket, ws, "p1", model.Command{
 		Type: model.CmdLaunchRocket,
 		Payload: map[string]any{
 			"building_id": silo.ID,
@@ -159,7 +159,7 @@ func TestTransferItemRejectsInvalidTargetsAndInventory(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := core.execTransferItem(ws, "p1", model.Command{
+			res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 				Type: model.CmdTransferItem,
 				Payload: map[string]any{
 					"building_id": tc.buildingID,

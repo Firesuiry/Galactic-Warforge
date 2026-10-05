@@ -67,36 +67,36 @@ func TestT123FleetMoveValidation(t *testing.T) {
 	addTransitTestFleet(core, "p1", "sys-1", "fleet-t123")
 
 	// 舰队不存在
-	res, _ := core.execFleetMove(ws, "p1", fleetMoveCommand("ghost", "sys-2"))
+	res, _ := execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("ghost", "sys-2"))
 	if res.Code != model.CodeEntityNotFound {
 		t.Fatalf("expected ENTITY_NOT_FOUND for unknown fleet, got %s (%s)", res.Code, res.Message)
 	}
 	// 他人舰队不可见
-	res, _ = core.execFleetMove(ws, "p2", fleetMoveCommand("fleet-t123", "sys-2"))
+	res, _ = execCommand(core, model.CmdFleetMove, ws, "p2", fleetMoveCommand("fleet-t123", "sys-2"))
 	if res.Code != model.CodeEntityNotFound {
 		t.Fatalf("expected ENTITY_NOT_FOUND for foreign fleet, got %s (%s)", res.Code, res.Message)
 	}
 	// 目标 = 当前星系
-	res, _ = core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-1"))
+	res, _ = execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-1"))
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("expected INVALID_TARGET for same-system move, got %s (%s)", res.Code, res.Message)
 	}
 	// 目标星系不存在
-	res, _ = core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-99"))
+	res, _ = execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-99"))
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("expected INVALID_TARGET for unknown system, got %s (%s)", res.Code, res.Message)
 	}
 	// attacking 中不可移动
 	fleet := core.spaceRuntime.PlayerSystem("p1", "sys-1").Fleets["fleet-t123"]
 	fleet.State = model.FleetStateAttacking
-	res, _ = core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-2"))
+	res, _ = execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-2"))
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("expected INVALID_TARGET for attacking fleet, got %s (%s)", res.Code, res.Message)
 	}
 	fleet.State = model.FleetStateIdle
 
 	// 正常跃迁：sys-1 → sys-2（双星系互为最近邻，必有航线）
-	res, events := core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-2"))
+	res, events := execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-2"))
 	if res.Code != model.CodeOK {
 		t.Fatalf("fleet_move failed: %s (%s)", res.Code, res.Message)
 	}
@@ -121,7 +121,7 @@ func TestT123FleetMoveValidation(t *testing.T) {
 	}
 
 	// 跃迁中再次跃迁 → 拒绝
-	res, _ = core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-1"))
+	res, _ = execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-1"))
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("expected INVALID_TARGET for in-transit move, got %s (%s)", res.Code, res.Message)
 	}
@@ -132,11 +132,11 @@ func TestT123FleetTransitBlocksCommands(t *testing.T) {
 	ws := core.World()
 	addTransitTestFleet(core, "p1", "sys-1", "fleet-t123")
 
-	if res, _ := core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-2")); res.Code != model.CodeOK {
+	if res, _ := execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-2")); res.Code != model.CodeOK {
 		t.Fatalf("fleet_move failed: %s (%s)", res.Code, res.Message)
 	}
 
-	res, _ := core.execFleetAssign(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdFleetAssign, ws, "p1", model.Command{
 		Type:    model.CmdFleetAssign,
 		Payload: map[string]any{"fleet_id": "fleet-t123", "formation": string(model.FormationTypeWedge)},
 	})
@@ -144,7 +144,7 @@ func TestT123FleetTransitBlocksCommands(t *testing.T) {
 		t.Fatalf("expected fleet_assign blocked during transit, got %s (%s)", res.Code, res.Message)
 	}
 
-	res, _ = core.execFleetAttack(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdFleetAttack, ws, "p1", model.Command{
 		Type:    model.CmdFleetAttack,
 		Payload: map[string]any{"fleet_id": "fleet-t123", "planet_id": ws.PlanetID, "target_id": "enemy-1"},
 	})
@@ -152,7 +152,7 @@ func TestT123FleetTransitBlocksCommands(t *testing.T) {
 		t.Fatalf("expected fleet_attack blocked during transit, got %s (%s)", res.Code, res.Message)
 	}
 
-	res, _ = core.execFleetDisband(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdFleetDisband, ws, "p1", model.Command{
 		Type:    model.CmdFleetDisband,
 		Payload: map[string]any{"fleet_id": "fleet-t123"},
 	})
@@ -174,7 +174,7 @@ func TestT123FleetTransitBlocksCommands(t *testing.T) {
 		Capacity:      12,
 		ReadyPayloads: map[string]int{model.ItemCorvette: 1},
 	}
-	res, _ = core.execCommissionFleet(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdCommissionFleet, ws, "p1", model.Command{
 		Type:   model.CmdCommissionFleet,
 		Target: model.CommandTarget{EntityID: base.ID, SystemID: "sys-1"},
 		Payload: map[string]any{
@@ -200,7 +200,7 @@ func TestT123FleetTransitSettlement(t *testing.T) {
 	ws := core.World()
 	addTransitTestFleet(core, "p1", "sys-1", "fleet-t123")
 
-	if res, _ := core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-2")); res.Code != model.CodeOK {
+	if res, _ := execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-2")); res.Code != model.CodeOK {
 		t.Fatalf("fleet_move failed: %s (%s)", res.Code, res.Message)
 	}
 
@@ -252,7 +252,7 @@ func TestT123FleetTransitExcludedFromOrbitalSuperiority(t *testing.T) {
 		t.Fatalf("expected p1 orbital advantage before transit, got %+v", superiority)
 	}
 
-	if res, _ := core.execFleetMove(ws, "p1", fleetMoveCommand("fleet-t123", "sys-2")); res.Code != model.CodeOK {
+	if res, _ := execCommand(core, model.CmdFleetMove, ws, "p1", fleetMoveCommand("fleet-t123", "sys-2")); res.Code != model.CodeOK {
 		t.Fatalf("fleet_move failed: %s (%s)", res.Code, res.Message)
 	}
 	superiority = evaluateOrbitalSuperiority(core.worlds, core.spaceRuntime, "sys-1", ws.Tick)

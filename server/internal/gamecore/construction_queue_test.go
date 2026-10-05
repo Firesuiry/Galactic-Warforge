@@ -53,12 +53,12 @@ func TestConstructionQueueReservesTiles(t *testing.T) {
 			"building_type": "solar_panel",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("expected first build to execute, got %s (%s)", res.Status, res.Message)
 	}
 
-	res2, _ := core.execBuild(ws, "p1", cmd)
+	res2, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res2.Code != model.CodePositionOccupied {
 		t.Fatalf("expected reserved tile to return POSITION_OCCUPIED, got %s (%s)", res2.Code, res2.Message)
 	}
@@ -87,10 +87,10 @@ func TestConstructionQueueRespectsRegionLimit(t *testing.T) {
 		},
 	}
 
-	if res, _ := core.execBuild(ws, "p1", cmd1); res.Status != model.StatusExecuted {
+	if res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd1); res.Status != model.StatusExecuted {
 		t.Fatalf("expected cmd1 to execute, got %s (%s)", res.Status, res.Message)
 	}
-	if res, _ := core.execBuild(ws, "p1", cmd2); res.Status != model.StatusExecuted {
+	if res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd2); res.Status != model.StatusExecuted {
 		t.Fatalf("expected cmd2 to execute, got %s (%s)", res.Status, res.Message)
 	}
 
@@ -171,7 +171,7 @@ func TestConstructionMaterialReservation(t *testing.T) {
 			"building_type": "solar_panel",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
 	}
@@ -221,7 +221,7 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 			"building_type": "solar_panel",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
 	}
@@ -237,7 +237,7 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 			"task_id": taskID,
 		},
 	}
-	cancelRes, _ := core.execCancelConstruction(ws, "p1", cancelCmd)
+	cancelRes, _ := execCommand(core, model.CmdCancelConstruction, ws, "p1", cancelCmd)
 	if cancelRes.Status != model.StatusExecuted {
 		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
 	}
@@ -276,7 +276,7 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 			"building_type": "solar_panel",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
 	}
@@ -290,7 +290,7 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 			"task_id": taskID,
 		},
 	}
-	cancelRes, _ := core.execCancelConstruction(ws, "p1", cancelCmd)
+	cancelRes, _ := execCommand(core, model.CmdCancelConstruction, ws, "p1", cancelCmd)
 	if cancelRes.Status != model.StatusExecuted {
 		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
 	}
@@ -310,7 +310,7 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 			"task_id": taskID,
 		},
 	}
-	restoreRes, _ := core.execRestoreConstruction(ws, "p1", restoreCmd)
+	restoreRes, _ := execCommand(core, model.CmdRestoreConstruction, ws, "p1", restoreCmd)
 	if restoreRes.Status != model.StatusExecuted {
 		t.Fatalf("expected restore to execute, got %s (%s)", restoreRes.Status, restoreRes.Message)
 	}
@@ -351,7 +351,7 @@ func TestConstructionPendingSkipsWhenMaterialsUnavailable(t *testing.T) {
 			"building_type": "solar_panel",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("expected build to execute, got %s (%s)", res.Status, res.Message)
 	}

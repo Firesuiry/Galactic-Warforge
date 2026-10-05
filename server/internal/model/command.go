@@ -154,68 +154,12 @@ type QueuedRequest struct {
 	EnqueueTick int64
 }
 
-// AllCommandTypes returns every public CommandType in stable declaration order.
+// AllCommandTypes returns every public CommandType in command catalog order.
 // Used by permission surfaces such as GET /state/agent-briefing.
 func AllCommandTypes() []CommandType {
-	return []CommandType{
-		CmdSetRallyPoint,
-		CmdConfigureSorter,
-		CmdConfigureTrafficMonitor,
-		CmdConfigureSplitter,
-		CmdBuild,
-		CmdMove,
-		CmdAttack,
-		CmdUnitOrder,
-		CmdRefuelMecha,
-		CmdMineResource,
-		CmdCraftItem,
-		CmdCancelMechaJob,
-
-		CmdProduce,
-		CmdUpgrade,
-		CmdDemolish,
-		CmdConfigureDistributor, CmdInstallLogisticsBot, CmdUninstallLogisticsBot, CmdConfigureMechaLogistics,
-		CmdInstallLogisticsVehicle,
-		CmdConfigureLogisticsStation,
-		CmdConfigureLogisticsSlot,
-		CmdScanGalaxy,
-		CmdScanSystem,
-		CmdScanPlanet,
-		CmdCancelConstruction,
-		CmdRestoreConstruction,
-		CmdStartResearch,
-		CmdCancelResearch,
-		CmdSetRecipe,
-		CmdSwitchActivePlanet,
-		CmdTransferItem,
-		CmdLaunchSolarSail,
-		CmdLaunchRocket,
-		CmdSetRayReceiverMode,
-		CmdSetEnergyExchangerMode,
-		CmdDeploySquad, CmdFormSquad, CmdSquadOrder, CmdDissolveSquad,
-		CmdCommissionFleet,
-		CmdFleetAssign,
-		CmdFleetAttack,
-		CmdFleetMove,
-		CmdFleetDisband,
-		CmdTaskForceCreate,
-		CmdTaskForceAssign,
-		CmdTaskForceSetStance,
-		CmdTaskForceDeploy,
-		CmdTheaterCreate,
-		CmdTheaterDefineZone,
-		CmdTheaterSetObjective,
-		CmdBlockadePlanet,
-		CmdBlueprintCreate,
-		CmdBlueprintSetComponent,
-		CmdBlueprintValidate,
-		CmdBlueprintFinalize,
-		CmdBlueprintVariant,
-		CmdQueueMilitaryProduction,
-		CmdRefitUnit,
-		CmdBuildDysonNode,
-		CmdBuildDysonFrame,
-		CmdBuildDysonShell,
-		CmdDemolishDyson,
+	out := make([]CommandType, 0, len(commandSpecs))
+	for _, spec := range commandSpecs {
+		out = append(out, spec.Type)
 	}
+	return out
 }

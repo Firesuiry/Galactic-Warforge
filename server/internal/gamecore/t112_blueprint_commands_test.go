@@ -10,7 +10,7 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 
-	createRes, _ := core.execBlueprintCreate(ws, "p1", model.Command{
+	createRes, _ := execCommand(core, model.CmdBlueprintCreate, ws, "p1", model.Command{
 		Type: model.CmdBlueprintCreate,
 		Payload: map[string]any{
 			"blueprint_id":  "falcon_mk1",
@@ -38,13 +38,13 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 		{"blueprint_id": "falcon_mk1", "slot_id": "sensor", "component_id": "tactical_radar"},
 		{"blueprint_id": "falcon_mk1", "slot_id": "weapon_primary", "component_id": "ecm_suite"},
 	} {
-		res, _ := core.execBlueprintSetComponent(ws, "p1", model.Command{Type: model.CmdBlueprintSetComponent, Payload: payload})
+		res, _ := execCommand(core, model.CmdBlueprintSetComponent, ws, "p1", model.Command{Type: model.CmdBlueprintSetComponent, Payload: payload})
 		if res.Code != model.CodeOK {
 			t.Fatalf("expected set_component to accept draft edits, got %s (%s)", res.Code, res.Message)
 		}
 	}
 
-	validateFailRes, _ := core.execBlueprintValidate(ws, "p1", model.Command{
+	validateFailRes, _ := execCommand(core, model.CmdBlueprintValidate, ws, "p1", model.Command{
 		Type:    model.CmdBlueprintValidate,
 		Payload: map[string]any{"blueprint_id": "falcon_mk1"},
 	})
@@ -69,13 +69,13 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 		{"blueprint_id": "falcon_mk1", "slot_id": "weapon_primary", "component_id": "plasma_lance"},
 		{"blueprint_id": "falcon_mk1", "slot_id": "utility", "component_id": "field_repair_pack"},
 	} {
-		res, _ := core.execBlueprintSetComponent(ws, "p1", model.Command{Type: model.CmdBlueprintSetComponent, Payload: payload})
+		res, _ := execCommand(core, model.CmdBlueprintSetComponent, ws, "p1", model.Command{Type: model.CmdBlueprintSetComponent, Payload: payload})
 		if res.Code != model.CodeOK {
 			t.Fatalf("expected set_component repair edit to succeed, got %s (%s)", res.Code, res.Message)
 		}
 	}
 
-	validateOKRes, _ := core.execBlueprintValidate(ws, "p1", model.Command{
+	validateOKRes, _ := execCommand(core, model.CmdBlueprintValidate, ws, "p1", model.Command{
 		Type:    model.CmdBlueprintValidate,
 		Payload: map[string]any{"blueprint_id": "falcon_mk1"},
 	})
@@ -86,7 +86,7 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 		t.Fatalf("expected validated state after validate, got %+v", player.WarBlueprints["falcon_mk1"])
 	}
 
-	finalizeRes, _ := core.execBlueprintFinalize(ws, "p1", model.Command{
+	finalizeRes, _ := execCommand(core, model.CmdBlueprintFinalize, ws, "p1", model.Command{
 		Type: model.CmdBlueprintFinalize,
 		Payload: map[string]any{
 			"blueprint_id": "falcon_mk1",
@@ -100,7 +100,7 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 		t.Fatalf("expected prototype state after finalize, got %+v", player.WarBlueprints["falcon_mk1"])
 	}
 
-	variantRes, _ := core.execBlueprintVariant(ws, "p1", model.Command{
+	variantRes, _ := execCommand(core, model.CmdBlueprintVariant, ws, "p1", model.Command{
 		Type: model.CmdBlueprintVariant,
 		Payload: map[string]any{
 			"parent_blueprint_id": "falcon_mk1",
@@ -127,7 +127,7 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 		t.Fatalf("expected explicit variant slot restrictions, got %+v", variant.AllowedVariantSlots)
 	}
 
-	restrictedRes, _ := core.execBlueprintSetComponent(ws, "p1", model.Command{
+	restrictedRes, _ := execCommand(core, model.CmdBlueprintSetComponent, ws, "p1", model.Command{
 		Type: model.CmdBlueprintSetComponent,
 		Payload: map[string]any{
 			"blueprint_id": "falcon_mk1_ew",
@@ -139,7 +139,7 @@ func TestT112BlueprintLifecycleAndVariantClosure(t *testing.T) {
 		t.Fatalf("expected restricted variant slot edit to fail, got %s (%s)", restrictedRes.Code, restrictedRes.Message)
 	}
 
-	allowedRes, _ := core.execBlueprintSetComponent(ws, "p1", model.Command{
+	allowedRes, _ := execCommand(core, model.CmdBlueprintSetComponent, ws, "p1", model.Command{
 		Type: model.CmdBlueprintSetComponent,
 		Payload: map[string]any{
 			"blueprint_id": "falcon_mk1_ew",

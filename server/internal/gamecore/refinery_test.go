@@ -148,12 +148,12 @@ func TestRefineryBuildRequiresRecipeResearch(t *testing.T) {
 		t.Fatalf("find build tile: %v", err)
 	}
 	command := model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: pos}, Payload: map[string]any{"building_type": "oil_refinery", "recipe_id": "xray_cracking"}}
-	result, _ := core.execBuild(ws, "p1", command)
+	result, _ := execCommand(core, model.CmdBuild, ws, "p1", command)
 	if result.Code != model.CodeValidationFailed {
 		t.Fatalf("unresearched cracking accepted: %+v", result)
 	}
 	grantTechs(ws, "p1", "xray_cracking")
-	result, _ = core.execBuild(ws, "p1", command)
+	result, _ = execCommand(core, model.CmdBuild, ws, "p1", command)
 	if result.Code != model.CodeOK {
 		t.Fatalf("researched cracking rejected: %+v", result)
 	}

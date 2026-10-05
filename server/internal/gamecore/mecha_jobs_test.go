@@ -41,7 +41,7 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	node := addManualCoal(ws, 2)
 	core := &GameCore{}
-	if result, _ := core.execMineResource(ws, "p1", manualMineCommand(2)); result.Code != model.CodeOK {
+	if result, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	if node.Remaining != 2 || ws.Players["p1"].Inventory[model.ItemCoal] != 0 {
@@ -59,7 +59,7 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 	if node.Remaining != 0 || !node.Depleted || unit.Mecha.Job != nil || unit.Mecha.Energy != 80 {
 		t.Fatal("mining did not stop at requested/depleted amount")
 	}
-	result, _ := core.execRefuelMecha(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
+	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
 	if result.Code != model.CodeOK || unit.Mecha.Energy != 100 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
 		t.Fatalf("mined coal could not fuel executor: %+v", result)
 	}
@@ -69,7 +69,7 @@ func TestManualMiningPausesOnDistanceEnergyAndConcurrentExhaustion(t *testing.T)
 	ws, unit := personalJobTestWorld()
 	node := addManualCoal(ws, 3)
 	core := &GameCore{}
-	if result, _ := core.execMineResource(ws, "p1", manualMineCommand(2)); result.Code != model.CodeOK {
+	if result, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	unit.Position = model.Position{X: 7, Y: 7}
@@ -101,7 +101,7 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 	player := ws.Players["p1"]
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 3}
-	result, initialEvents := core.execCraftItem(ws, "p1", handcraftCommand("gear", 3))
+	result, initialEvents := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 3))
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
@@ -117,7 +117,7 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 	if initial.Job.RemainingTicks != 20 || initial.Job.ReservedInputs[0].Quantity != 3 {
 		t.Fatal("event history aliases live job")
 	}
-	result, _ = core.execCancelMechaJob(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}})
+	result, _ = execCommand(core, model.CmdCancelMechaJob, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}})
 	if result.Code != model.CodeOK || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 2 || player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 75 {
 		t.Fatal("cancel duplicated or lost items / refunded consumed energy")
 	}
@@ -133,14 +133,14 @@ func TestHandcraftNoEnergyResumesFromRefuelWithoutConsumingInputsTwice(t *testin
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 1, model.ItemCoal: 2}
 	unit.Mecha.Energy = 5
-	if result, _ := core.execCraftItem(ws, "p1", handcraftCommand("gear", 1)); result.Code != model.CodeOK {
+	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 1)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 10)
 	if unit.Mecha.Job.State != "no_energy" || unit.Mecha.Job.RemainingTicks != 15 || player.Inventory[model.ItemGear] != 0 {
 		t.Fatal("unpowered crafting advanced")
 	}
-	result, _ := core.execRefuelMecha(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
+	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
@@ -181,18 +181,18 @@ func TestMechaJobValidationIsAtomic(t *testing.T) {
 	node := addManualCoal(ws, 2)
 	core := &GameCore{}
 	node.Kind = model.ItemCrudeOil
-	if result, _ := core.execMineResource(ws, "p1", manualMineCommand(1)); result.Code != model.CodeInvalidTarget {
+	if result, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(1)); result.Code != model.CodeInvalidTarget {
 		t.Fatal(result)
 	}
 	node.Kind = model.ItemCoal
-	if result, _ := core.execMineResource(ws, "p1", manualMineCommand(3)); result.Code != model.CodeInsufficientResource {
+	if result, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(3)); result.Code != model.CodeInsufficientResource {
 		t.Fatal(result)
 	}
-	if result, _ := core.execMineResource(ws, "p1", manualMineCommand(1)); result.Code != model.CodeOK {
+	if result, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(1)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	job := unit.Mecha.Job.Clone()
-	if result, _ := core.execCraftItem(ws, "p1", handcraftCommand("gear", 1)); result.Code != model.CodeInvalidTarget || !reflect.DeepEqual(job, unit.Mecha.Job) {
+	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 1)); result.Code != model.CodeInvalidTarget || !reflect.DeepEqual(job, unit.Mecha.Job) {
 		t.Fatal("busy mecha replaced its job")
 	}
 }
@@ -202,7 +202,7 @@ func TestMechaCraftJobSnapshotCloneRestoreAndDeathRefund(t *testing.T) {
 	core := &GameCore{}
 	player := ws.Players["p1"]
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 2}
-	if result, _ := core.execCraftItem(ws, "p1", handcraftCommand("gear", 2)); result.Code != model.CodeOK {
+	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 23)
@@ -270,7 +270,7 @@ func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T)
 	moved := ws.SurfaceDistance(unit.Position, coal.Position) <= 2
 	if !moved {
 		for _, tile := range ws.SurfaceDisc(coal.Position, 2) {
-			result, _ := core.execMove(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID, Position: &tile}})
+			result, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID, Position: &tile}})
 			if result.Code == model.CodeOK {
 				moved = true
 				break
@@ -281,7 +281,7 @@ func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T)
 		t.Fatalf("cannot reach starting coal: executor=%+v coal=%+v", unit.Position, coal.Position)
 	}
 	before := coal.Remaining
-	result, _ := core.execMineResource(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"resource_id": coal.ID, "quantity": 1}})
+	result, _ := execCommand(core, model.CmdMineResource, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"resource_id": coal.ID, "quantity": 1}})
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
@@ -290,7 +290,7 @@ func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T)
 		t.Fatal("ordinary new game did not mine real coal")
 	}
 	energy := unit.Mecha.Energy
-	result, _ = core.execRefuelMecha(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
+	result, _ = execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
 	if result.Code != model.CodeOK || unit.Mecha.Energy <= energy || player.Inventory[model.ItemCoal] != 0 {
 		t.Fatalf("ordinary start cannot refuel with mined coal: %+v", result)
 	}
@@ -302,7 +302,7 @@ func TestMechaJobDeathThroughAttackRefundsRemainingReservation(t *testing.T) {
 	player := ws.Players["p1"]
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 2}
-	if result, _ := core.execCraftItem(ws, "p1", handcraftCommand("gear", 2)); result.Code != model.CodeOK {
+	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 22)
@@ -312,7 +312,7 @@ func TestMechaJobDeathThroughAttackRefundsRemainingReservation(t *testing.T) {
 	attacker.Position = model.Position{X: 2, Y: 1}
 	ws.Units[attacker.ID] = &attacker
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
-	result, _ := core.execAttack(ws, "p2", model.Command{Target: model.CommandTarget{EntityID: attacker.ID}, Payload: map[string]any{"target_entity_id": unit.ID}})
+	result, _ := execCommand(core, model.CmdAttack, ws, "p2", model.Command{Target: model.CommandTarget{EntityID: attacker.ID}, Payload: map[string]any{"target_entity_id": unit.ID}})
 	if result.Code != model.CodeOK {
 		t.Fatalf("attack order failed: %+v", result)
 	}
@@ -330,12 +330,12 @@ func TestHandcraftRequiresRecipeResearchAndDoesNotReserveOnFailure(t *testing.T)
 	player := ws.Players["p1"]
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemCoal: 2}
-	result, _ := core.execCraftItem(ws, "p1", handcraftCommand("coal_to_graphite", 1))
+	result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("coal_to_graphite", 1))
 	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || player.Inventory[model.ItemCoal] != 2 {
 		t.Fatalf("locked recipe bypass: %+v", result)
 	}
 	player.Tech.CompletedTechs["smelting_purification"] = 1
-	result, _ = core.execCraftItem(ws, "p1", handcraftCommand("coal_to_graphite", 1))
+	result, _ = execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("coal_to_graphite", 1))
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}

@@ -41,7 +41,7 @@ func TestGeothermalBuildRequiresLavaProximity(t *testing.T) {
 	clearRing(*pos, 3)
 
 	buildGeo := func(target model.Position) model.CommandResult {
-		res, _ := core.execBuild(ws, "p1", model.Command{
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 			Type:   model.CmdBuild,
 			Target: model.CommandTarget{Position: &target},
 			Payload: map[string]any{
@@ -79,7 +79,7 @@ func TestGeothermalBuildRequiresLavaProximity(t *testing.T) {
 	solarSpot := model.Position{X: pos.X, Y: pos.Y + 1}
 	if ws.InBounds(solarSpot.X, solarSpot.Y) {
 		ws.Grid[solarSpot.Y][solarSpot.X].Terrain = terrain.TileLava
-		resSolar, _ := core.execBuild(ws, "p1", model.Command{
+		resSolar, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 			Type:   model.CmdBuild,
 			Target: model.CommandTarget{Position: &solarSpot},
 			Payload: map[string]any{
@@ -109,7 +109,7 @@ func TestSetEnergyExchangerModeCommand(t *testing.T) {
 		if mode != "" {
 			payload["mode"] = mode
 		}
-		res, _ := core.execSetEnergyExchangerMode(ws, playerID, model.Command{
+		res, _ := execCommand(core, model.CmdSetEnergyExchangerMode, ws, playerID, model.Command{
 			Type:    model.CmdSetEnergyExchangerMode,
 			Payload: payload,
 		})
@@ -257,7 +257,7 @@ func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 1}}
 
-	res, _ := core.execInstallLogisticsBot(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd)
 	if res.Status != model.StatusFailed || res.Code != model.CodeValidationFailed {
 		t.Fatalf("install without research must fail validation, got %+v", res)
 	}
@@ -266,7 +266,7 @@ func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 	}
 
 	grantTechs(ws, "p1", "distribution_logistics")
-	res, _ = core.execInstallLogisticsBot(ws, "p1", cmd)
+	res, _ = execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd)
 	if res.Code != model.CodeOK || len(ws.LogisticsBots) != 1 {
 		t.Fatalf("install with distribution_logistics must succeed: %+v", res)
 	}
@@ -337,7 +337,7 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	}
 
 	// 持有触发物品后隐藏科技已揭示；但研究站库存尚无矩阵，不能入队。
-	res, _ := core.execStartResearch(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", cmd)
 	if res.Code == model.CodeOK {
 		t.Fatal("research must wait for matrices in lab storage")
 	}
@@ -346,7 +346,7 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	}
 
 	// 把掉落矩阵转入研究站：全链闭合，研究入队。
-	tres, _ := core.execTransferItem(ws, "p1", model.Command{
+	tres, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
 			"building_id": lab.ID,
@@ -357,7 +357,7 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	if tres.Code != model.CodeOK {
 		t.Fatalf("transfer looted matrices into lab failed: %+v", tres)
 	}
-	res, _ = core.execStartResearch(ws, "p1", cmd)
+	res, _ = execCommand(core, model.CmdStartResearch, ws, "p1", cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("loot-derived dark_fog_matrix must start hidden research: %s (%s)", res.Code, res.Message)
 	}

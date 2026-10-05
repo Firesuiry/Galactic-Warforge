@@ -187,7 +187,7 @@ func TestParticleColliderBuildResearchGates(t *testing.T) {
 		t.Fatalf("find build tile: %v", err)
 	}
 	build := func(recipe string) model.CommandResult {
-		result, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeMiniatureParticleCollider), "recipe_id": recipe}})
+		result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeMiniatureParticleCollider), "recipe_id": recipe}})
 		return result
 	}
 	if result := build("deuterium_collision"); result.Code != model.CodeValidationFailed || !strings.Contains(result.Message, "research") {
@@ -247,7 +247,7 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 		{1, model.BuildingTypeConveyorBeltMk1, ""},
 	} {
 		pos := model.Position{X: center.X + entry.dx, Y: center.Y}
-		result, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(entry.kind), "recipe_id": entry.recipe, "direction": "east"}})
+		result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(entry.kind), "recipe_id": entry.recipe, "direction": "east"}})
 		if result.Code != model.CodeOK {
 			t.Fatalf("build %s: %+v", entry.kind, result)
 		}

@@ -307,7 +307,7 @@ func TestDistributorInstallConsumesRealItemsAndCannotUninstallActiveCargo(t *tes
 			player := ws.Players["p1"]
 			core := &GameCore{}
 			cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2, "source": source}}
-			result, _ := core.execInstallLogisticsBot(ws, "p1", cmd)
+			result, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd)
 			if result.Code != model.CodeInsufficientResource || len(ws.LogisticsBots) != 0 {
 				t.Fatalf("installed absent items: %+v", result)
 			}
@@ -316,18 +316,18 @@ func TestDistributorInstallConsumesRealItemsAndCannotUninstallActiveCargo(t *tes
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemLogisticsBot, 2)
 			}
-			result, _ = core.execInstallLogisticsBot(ws, "p1", cmd)
+			result, _ = execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd)
 			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 2 || player.Inventory[model.ItemLogisticsBot] != 0 || model.DistributorHost(ws, home).Storage.OutputQuantity(model.ItemLogisticsBot) != 0 {
 				t.Fatalf("install accounting: %+v", result)
 			}
 			distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 			distributorTestTicks(t, ws, 1)
-			result, _ = core.execUninstallLogisticsBot(ws, "p1", cmd)
+			result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", cmd)
 			if result.Status != model.StatusFailed || len(ws.LogisticsBots) != 2 || player.Inventory[model.ItemLogisticsBot] != 0 {
 				t.Fatal("active robots uninstalled")
 			}
 			distributorTestTicks(t, ws, 10)
-			result, _ = core.execUninstallLogisticsBot(ws, "p1", cmd)
+			result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", cmd)
 			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 0 || player.Inventory[model.ItemLogisticsBot] != 2 {
 				t.Fatalf("idle robot recovery failed: %+v", result)
 			}

@@ -89,11 +89,11 @@ func TestPhase1ProductionConsumesMaterialsAndWaits(t *testing.T) {
 	b.Runtime.Functions.Energy.ConsumePerTick = 0
 	cmd := model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}}
 	ws.Players["p1"].Resources.Minerals = 99999
-	if res, _ := gc.execProduce(ws, "p1", cmd); res.Code != model.CodeInsufficientResource {
+	if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd); res.Code != model.CodeInsufficientResource {
 		t.Fatalf("abstract currency bought a unit: %+v", res)
 	}
 	b.Storage.Inventory = model.ItemInventory{"iron_ingot": 2, "circuit_board": 1}
-	if res, _ := gc.execProduce(ws, "p1", cmd); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd); res.Code != model.CodeOK {
 		t.Fatalf("produce: %+v", res)
 	}
 	if len(ws.Units) != 0 || len(b.UnitQueue) != 1 || availableStorageItem(b.Storage, "iron_ingot") != 0 {
@@ -118,7 +118,7 @@ func TestPhase1ProductionConsumesMaterialsAndWaits(t *testing.T) {
 		}
 	}
 	cmd.Payload["unit_type"] = "mecha"
-	if res, _ := gc.execProduce(ws, "p1", cmd); res.Code != model.CodeInvalidTarget {
+	if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd); res.Code != model.CodeInvalidTarget {
 		t.Fatal("barracks produced vehicle")
 	}
 }

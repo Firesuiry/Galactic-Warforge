@@ -27,7 +27,7 @@ func TestUpgradeJobProgress(t *testing.T) {
 		Type:   model.CmdUpgrade,
 		Target: model.CommandTarget{EntityID: building.ID},
 	}
-	res, _ := gc.execUpgrade(ws, building.OwnerID, cmd)
+	res, _ := execCommand(gc, model.CmdUpgrade, ws, building.OwnerID, cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected upgrade OK, got %s (%s)", res.Code, res.Message)
 	}
@@ -84,7 +84,7 @@ func TestDemolishJobRefund(t *testing.T) {
 		Type:   model.CmdDemolish,
 		Target: model.CommandTarget{EntityID: building.ID},
 	}
-	res, _ := gc.execDemolish(ws, building.OwnerID, cmd)
+	res, _ := execCommand(gc, model.CmdDemolish, ws, building.OwnerID, cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
 	}
@@ -128,7 +128,7 @@ func TestUpgradeConsumesItems(t *testing.T) {
 		Type:   model.CmdUpgrade,
 		Target: model.CommandTarget{EntityID: building.ID},
 	}
-	res, _ := gc.execUpgrade(ws, building.OwnerID, cmd)
+	res, _ := execCommand(gc, model.CmdUpgrade, ws, building.OwnerID, cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected upgrade OK, got %s (%s)", res.Code, res.Message)
 	}
@@ -160,7 +160,7 @@ func TestDemolishRefundItems(t *testing.T) {
 		Type:   model.CmdDemolish,
 		Target: model.CommandTarget{EntityID: building.ID},
 	}
-	res, _ := gc.execDemolish(ws, building.OwnerID, cmd)
+	res, _ := execCommand(gc, model.CmdDemolish, ws, building.OwnerID, cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
 	}

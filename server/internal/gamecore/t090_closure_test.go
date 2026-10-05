@@ -90,7 +90,7 @@ func TestStartResearchRequiresRunningLabAndStoredMatrices(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 
-	res, _ := core.execStartResearch(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type: model.CmdStartResearch,
 		Payload: map[string]any{
 			"tech_id": "electromagnetism",
@@ -114,7 +114,7 @@ func TestResearchConsumesRealMatricesFromRunningLabs(t *testing.T) {
 	power := newBuilding("power-1", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	placeBuilding(ws, power)
 
-	res, _ := core.execStartResearch(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type: model.CmdStartResearch,
 		Payload: map[string]any{
 			"tech_id": "electromagnetism",
@@ -400,7 +400,7 @@ func TestT091SelfEvolutionLabSupportsResearchAndMatrixRecipes(t *testing.T) {
 		t.Fatalf("load research matrices: %v", err)
 	}
 
-	res, _ := core.execStartResearch(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type: model.CmdStartResearch,
 		Payload: map[string]any{
 			"tech_id": "electromagnetism",

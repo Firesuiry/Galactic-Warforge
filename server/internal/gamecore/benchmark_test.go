@@ -82,7 +82,7 @@ func BenchmarkBuildCommand(b *testing.B) {
 				"building_type": "solar_panel",
 			},
 		}
-		core.execBuild(ws, "p1", cmd)
+		execCommand(core, model.CmdBuild, ws, "p1", cmd)
 	}
 }
 
@@ -106,7 +106,7 @@ func BenchmarkTickWithBuildings(b *testing.B) {
 				"building_type": "solar_panel",
 			},
 		}
-		core.execBuild(ws, "p1", cmd)
+		execCommand(core, model.CmdBuild, ws, "p1", cmd)
 		core.processTick()
 	}
 
@@ -136,7 +136,7 @@ func BenchmarkLogisticsChain(b *testing.B) {
 				"building_type": "mining_machine",
 			},
 		}
-		core.execBuild(ws, "p1", cmd)
+		execCommand(core, model.CmdBuild, ws, "p1", cmd)
 		core.processTick()
 	}
 
@@ -191,7 +191,7 @@ func TestPerformanceTargetTickP95(t *testing.T) {
 				"building_type": "solar_panel",
 			},
 		}
-		core.execBuild(ws, "p1", cmd)
+		execCommand(core, model.CmdBuild, ws, "p1", cmd)
 		core.processTick()
 	}
 
@@ -234,7 +234,7 @@ func TestPerformanceCommandLatency(t *testing.T) {
 		}
 
 		beforeTick := ws.Tick
-		core.execBuild(ws, "p1", cmd)
+		execCommand(core, model.CmdBuild, ws, "p1", cmd)
 		core.processTick()
 		afterTick := ws.Tick
 

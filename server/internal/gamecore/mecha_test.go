@@ -31,19 +31,19 @@ func TestPlayerMechaAttackConsumesEnergyAndRejectsAtomically(t *testing.T) {
 	enemy.Position = model.Position{X: 2, Y: 1}
 	ws.Units[enemy.ID] = &enemy
 	core := &GameCore{}
-	res, _ := core.execAttack(ws, "p1", mechaAttackCommand(enemy.ID))
+	res, _ := execCommand(core, model.CmdAttack, ws, "p1", mechaAttackCommand(enemy.ID))
 	if res.Code != model.CodeOK || enemy.HP != 82 || unit.Mecha.Energy != 92 {
 		t.Fatalf("attack=%+v target=%+v mecha=%+v", res, enemy, unit.Mecha)
 	}
 	unit.Mecha.Energy = 7
 	ws.Tick += unit.AttackCooldownTick
-	res, events := core.execAttack(ws, "p1", mechaAttackCommand(enemy.ID))
+	res, events := execCommand(core, model.CmdAttack, ws, "p1", mechaAttackCommand(enemy.ID))
 	if res.Code != model.CodeInsufficientResource || enemy.HP != 82 || unit.Mecha.Energy != 7 || len(events) != 0 {
 		t.Fatalf("failed attack mutated state: %+v", res)
 	}
 	unit.Mecha.Energy = 50
 	enemy.Position = model.Position{X: 7, Y: 7}
-	res, _ = core.execAttack(ws, "p1", mechaAttackCommand(enemy.ID))
+	res, _ = execCommand(core, model.CmdAttack, ws, "p1", mechaAttackCommand(enemy.ID))
 	if res.Code != model.CodeOutOfRange || unit.Mecha.Energy != 50 {
 		t.Fatalf("invalid attack spent energy: %+v", res)
 	}
@@ -55,12 +55,12 @@ func TestPlayerMechaMovementConsumesPathEnergyAndRejectsAtomically(t *testing.T)
 	dest := model.Position{X: 4, Y: 1}
 	unit.Mecha.Energy = 2
 	cmd := model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: unit.ID, Position: &dest}}
-	res, _ := core.execMove(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdMove, ws, "p1", cmd)
 	if res.Code != model.CodeInsufficientResource || unit.Position.X != 1 || unit.Mecha.Energy != 2 {
 		t.Fatalf("invalid movement mutated state: %+v", res)
 	}
 	unit.Mecha.Energy = 3
-	res, _ = core.execMove(ws, "p1", cmd)
+	res, _ = execCommand(core, model.CmdMove, ws, "p1", cmd)
 	if res.Code != model.CodeOK || unit.Position != dest || unit.Mecha.Energy != 0 {
 		t.Fatalf("movement not metered: %+v, %+v", res, unit)
 	}
@@ -73,7 +73,7 @@ func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing
 	unit.Mecha.Energy = 50
 	core := &GameCore{}
 	refuel := func(item string, n int) model.CommandResult {
-		res, _ := core.execRefuelMecha(ws, "p1", model.Command{Type: model.CmdRefuelMecha, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": item, "quantity": n}})
+		res, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Type: model.CmdRefuelMecha, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": item, "quantity": n}})
 		return res
 	}
 	if res := refuel(model.ItemCoal, 8); res.Code != model.CodeOK {
@@ -118,7 +118,7 @@ func TestPlayerMechaRefuelValidationDoesNotConsumeInventory(t *testing.T) {
 		{"p1", model.ItemCoal, 1.5, model.CodeValidationFailed},
 		{"p1", model.ItemCoal, 4, model.CodeInsufficientResource},
 	} {
-		res, _ := core.execRefuelMecha(ws, tc.owner, model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": tc.item, "quantity": tc.quantity}})
+		res, _ := execCommand(core, model.CmdRefuelMecha, ws, tc.owner, model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": tc.item, "quantity": tc.quantity}})
 		if res.Code != tc.code || unit.Mecha.Energy != 0 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
 			t.Fatalf("case=%+v result=%+v", tc, res)
 		}
@@ -136,7 +136,7 @@ func TestPlayerMechaShieldAbsorbsAttackThenRechargesUsingEnergy(t *testing.T) {
 	enemy.Position = model.Position{X: 2, Y: 1}
 	ws.Units[enemy.ID] = &enemy
 	core := &GameCore{}
-	res, _ := core.execAttack(ws, "p2", model.Command{Target: model.CommandTarget{EntityID: enemy.ID}, Payload: map[string]any{"target_entity_id": unit.ID}})
+	res, _ := execCommand(core, model.CmdAttack, ws, "p2", model.Command{Target: model.CommandTarget{EntityID: enemy.ID}, Payload: map[string]any{"target_entity_id": unit.ID}})
 	if res.Code != model.CodeOK {
 		t.Fatalf("attack order failed: %+v", res)
 	}
@@ -233,7 +233,7 @@ func TestPlayerMechaCoreResearchConsumesLabMatricesBeforeIncreasingCapacity(t *t
 		t.Fatal(err)
 	}
 	setResearchLabPowerRatio(ws, lab, 4, 4, 1)
-	result, _ := core.execStartResearch(ws, "p1", model.Command{Type: model.CmdStartResearch, Payload: map[string]any{"tech_id": "mecha_core"}})
+	result, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{Type: model.CmdStartResearch, Payload: map[string]any{"tech_id": "mecha_core"}})
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
@@ -266,7 +266,7 @@ func TestMechaResearchSpeedBonusAffectsRealMatrixConsumption(t *testing.T) {
 	}
 	setResearchLabPowerRatio(ws, lab, 4, 4, 1)
 	player.Tech.CompletedTechs["research_speed"] = 1
-	result, _ := core.execStartResearch(ws, "p1", model.Command{Type: model.CmdStartResearch, Payload: map[string]any{"tech_id": "mecha_core"}})
+	result, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{Type: model.CmdStartResearch, Payload: map[string]any{"tech_id": "mecha_core"}})
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}

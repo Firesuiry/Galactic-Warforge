@@ -267,7 +267,7 @@ func TestDemolishBaseCascadesStackedLayers(t *testing.T) {
 	ws, player, base, layer1, layer2 := stackCascadeFixture(t)
 	gc := &GameCore{executorUsage: make(map[string]int)}
 
-	res, events := gc.execDemolish(ws, "p1", model.Command{
+	res, events := execCommand(gc, model.CmdDemolish, ws, "p1", model.Command{
 		Type:   model.CmdDemolish,
 		Target: model.CommandTarget{EntityID: base.ID},
 	})
@@ -318,7 +318,7 @@ func TestDemolishJobCompletionCascadesStackedLayers(t *testing.T) {
 	ws, player, base, layer1, layer2 := stackCascadeFixture(t)
 	gc := &GameCore{executorUsage: make(map[string]int)}
 
-	res, _ := gc.execDemolish(ws, "p1", model.Command{
+	res, _ := execCommand(gc, model.CmdDemolish, ws, "p1", model.Command{
 		Type:   model.CmdDemolish,
 		Target: model.CommandTarget{EntityID: base.ID},
 	})
@@ -345,7 +345,7 @@ func TestDemolishMiddleLayerCascadesUpwardOnly(t *testing.T) {
 	ws, player, base, layer1, layer2 := stackCascadeFixture(t)
 	gc := &GameCore{executorUsage: make(map[string]int)}
 
-	res, _ := gc.execDemolish(ws, "p1", model.Command{
+	res, _ := execCommand(gc, model.CmdDemolish, ws, "p1", model.Command{
 		Type:   model.CmdDemolish,
 		Target: model.CommandTarget{EntityID: layer1.ID},
 	})

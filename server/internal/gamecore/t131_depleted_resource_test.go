@@ -128,7 +128,7 @@ func TestBuildOnDepletedResourceNodeAllowed(t *testing.T) {
 	ws.Resources[node.ID] = node
 	ws.Grid[pos.Y][pos.X].ResourceNodeID = node.ID
 
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{

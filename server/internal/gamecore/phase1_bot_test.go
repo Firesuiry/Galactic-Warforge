@@ -40,19 +40,19 @@ func TestPhase1ExecutorManualFireHonorsCooldown(t *testing.T) {
 	target := spawnWorldTestUnit(ws, model.UnitTypeMecha, "p2", model.Position{X: 2, Y: 1})
 	gc := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"target_entity_id": target.ID}}
-	res, _ := gc.execAttack(ws, unit.OwnerID, cmd)
+	res, _ := execCommand(gc, model.CmdAttack, ws, unit.OwnerID, cmd)
 	if res.Code != model.CodeOK {
 		t.Fatal(res)
 	}
 	hp, ammo, energy := target.HP, unit.Ammo, unit.Mecha.Energy
 	for i := 0; i < 3; i++ {
-		gc.execAttack(ws, unit.OwnerID, cmd)
+		execCommand(gc, model.CmdAttack, ws, unit.OwnerID, cmd)
 	}
 	if target.HP != hp || unit.Ammo != ammo || unit.Mecha.Energy != energy {
 		t.Fatal("clicking bypassed cooldown or consumed extra ammo/energy")
 	}
 	ws.Tick += unit.AttackCooldownTick
-	gc.execAttack(ws, unit.OwnerID, cmd)
+	execCommand(gc, model.CmdAttack, ws, unit.OwnerID, cmd)
 	if target.HP >= hp || unit.Ammo != ammo-1 {
 		t.Fatal("ready weapon did not fire")
 	}
@@ -68,14 +68,14 @@ func TestPhase1CollectStorageOutputConservesInventory(t *testing.T) {
 	player.Inventory = model.ItemInventory{}
 	player.SetPlanetExecutor(ws.PlanetID, &model.ExecutorState{UnitID: unit.ID})
 	cmd := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": "ammo_bullet", "quantity": 5, "direction": "to_player"}}
-	if r, _ := gc.execTransferItem(ws, unit.OwnerID, cmd); r.Code != model.CodeOK {
+	if r, _ := execCommand(gc, model.CmdTransferItem, ws, unit.OwnerID, cmd); r.Code != model.CodeOK {
 		t.Fatal(r)
 	}
 	if player.Inventory["ammo_bullet"] != 5 || b.Storage.ItemQuantity("ammo_bullet") != 2 {
 		t.Fatal("collection failed conservation")
 	}
 	cmd.Payload["direction"] = "invalid"
-	if r, _ := gc.execTransferItem(ws, unit.OwnerID, cmd); r.Code != model.CodeValidationFailed {
+	if r, _ := execCommand(gc, model.CmdTransferItem, ws, unit.OwnerID, cmd); r.Code != model.CodeValidationFailed {
 		t.Fatal(r)
 	}
 	if player.Inventory["ammo_bullet"] != 5 || b.Storage.ItemQuantity("ammo_bullet") != 2 {

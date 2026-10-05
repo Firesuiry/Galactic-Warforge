@@ -30,7 +30,7 @@ func TestPhase1BuildApproachWaitsAndMoves(t *testing.T) {
 	player.Resources.Minerals = 1000
 	player.Resources.Energy = 1000
 	player.AddItems(def.BuildCost.Items)
-	res, _ := core.execBuild(ws, "p1", model.Command{Target: model.CommandTarget{Position: target}, Payload: map[string]any{"building_type": "wind_turbine", "auto_approach": true, "rotation": 90}})
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Target: model.CommandTarget{Position: target}, Payload: map[string]any{"building_type": "wind_turbine", "auto_approach": true, "rotation": 90}})
 	if res.Code != model.CodeOK || !unit.HasPath() {
 		t.Fatalf("approach rejected: %+v", res)
 	}

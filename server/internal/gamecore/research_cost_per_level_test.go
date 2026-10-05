@@ -27,7 +27,7 @@ func TestPerLevelCostDrivesValidationAndConsumption(t *testing.T) {
 	lab := setupPerLevelResearchLab(t, core, ws)
 
 	// L1 成本（DSP drive-engine-1）：coal x15 + engine x5；空研究站应被拒绝。
-	res, _ := core.execStartResearch(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "drive_engine"},
 	})
@@ -41,7 +41,7 @@ func TestPerLevelCostDrivesValidationAndConsumption(t *testing.T) {
 	if _, _, err := lab.Storage.Load("engine", 5); err != nil {
 		t.Fatal(err)
 	}
-	res, _ = core.execStartResearch(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "drive_engine"},
 	})
@@ -87,7 +87,7 @@ func TestPerLevelCostDrivesValidationAndConsumption(t *testing.T) {
 	// 直接注入库存，绕开 36 格仓储容量对测试布景的限制。
 	lab.Storage.EnsureInventory()[model.ItemElectromagneticMatrix] = 80
 	lab.Storage.EnsureInventory()[model.ItemEnergyMatrix] = 80
-	res, _ = core.execStartResearch(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "drive_engine"},
 	})

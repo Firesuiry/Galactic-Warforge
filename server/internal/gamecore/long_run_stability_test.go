@@ -48,7 +48,7 @@ func TestLongRunStability(t *testing.T) {
 				"building_type": buildingType,
 			},
 		}
-		res, _ := core.execBuild(ws, "p1", cmd)
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
 		if res.Status == model.StatusExecuted {
 			built++
 		}
@@ -165,7 +165,7 @@ func TestLongRunStabilityWithSubscriber(t *testing.T) {
 			Target:  model.CommandTarget{Position: pos},
 			Payload: map[string]any{"building_type": "wind_turbine"},
 		}
-		core.execBuild(ws, "p1", cmd)
+		execCommand(core, model.CmdBuild, ws, "p1", cmd)
 		core.processTick()
 	}
 

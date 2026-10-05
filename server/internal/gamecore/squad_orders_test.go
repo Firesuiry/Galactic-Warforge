@@ -77,7 +77,7 @@ func TestFormSquadValidation(t *testing.T) {
 	dead := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 6, Y: 3})
 	dead.HP = 0
 	form := func(payload map[string]any) model.ResultCode {
-		res, _ := gc.execFormSquad(ws, "p1", model.Command{Type: model.CmdFormSquad, Payload: payload})
+		res, _ := execCommand(gc, model.CmdFormSquad, ws, "p1", model.Command{Type: model.CmdFormSquad, Payload: payload})
 		return res.Code
 	}
 	cases := []struct {
@@ -107,7 +107,7 @@ func TestFormSquadValidation(t *testing.T) {
 	if got := form(map[string]any{"entity_ids": []any{mine.ID}}); got != model.CodeInvalidTarget {
 		t.Fatalf("regroup must be rejected, got %s", got)
 	}
-	res, _ := gc.execDissolveSquad(ws, "p1", model.Command{Type: model.CmdDissolveSquad, Payload: map[string]any{"squad_id": squad.ID}})
+	res, _ := execCommand(gc, model.CmdDissolveSquad, ws, "p1", model.Command{Type: model.CmdDissolveSquad, Payload: map[string]any{"squad_id": squad.ID}})
 	if res.Code != model.CodeOK || mine.SquadID != "" || len(ws.CombatRuntime.Squads) != 0 {
 		t.Fatalf("dissolve: %+v", res)
 	}

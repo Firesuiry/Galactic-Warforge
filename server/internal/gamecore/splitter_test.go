@@ -139,7 +139,7 @@ func TestSplitterBuildInitializesTransportWithoutElectricity(t *testing.T) {
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	before := ws.Players["p1"].Resources
-	result, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "splitter", "direction": "east"}})
+	result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "splitter", "direction": "east"}})
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("build: %+v", result)
 	}
@@ -189,17 +189,17 @@ func TestConfigureSplitterAtomicReplacementAndEventIsolation(t *testing.T) {
 		{"input_directions": []string{"west"}, "output_directions": []string{"east"}, "output_filters": map[string]any{"east": 123}},
 	}
 	for i, payload := range invalid {
-		result, events := gc.execConfigureSplitter(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: s.ID}, Payload: payload})
+		result, events := execCommand(gc, model.CmdConfigureSplitter, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: s.ID}, Payload: payload})
 		if result.Status != model.StatusFailed || len(events) != 0 || !reflect.DeepEqual(s.Splitter, initial.Splitter) || !reflect.DeepEqual(s.Conveyor, initial.Conveyor) {
 			t.Fatalf("invalid command %d mutated live state: %+v", i, result)
 		}
 	}
 	payload := map[string]any{"input_directions": []string{"west", "north"}, "output_directions": []string{"east", "south"}, "output_priority": "east", "output_filters": map[string]any{"east": model.ItemIronOre}}
 	command := model.Command{Target: model.CommandTarget{EntityID: s.ID}, Payload: payload}
-	if result, _ := gc.execConfigureSplitter(ws, "enemy", command); result.Code != model.CodeNotOwner {
+	if result, _ := execCommand(gc, model.CmdConfigureSplitter, ws, "enemy", command); result.Code != model.CodeNotOwner {
 		t.Fatal("foreign configuration accepted")
 	}
-	result, events := gc.execConfigureSplitter(ws, "p1", command)
+	result, events := execCommand(gc, model.CmdConfigureSplitter, ws, "p1", command)
 	if result.Status != model.StatusExecuted || len(events) != 1 || s.Splitter.OutputCursor != 0 || s.Splitter.TransferredItems != 9 || s.Splitter.LastTransferTick != 4 {
 		t.Fatalf("configure failed: %+v", result)
 	}
@@ -211,7 +211,7 @@ func TestConfigureSplitterAtomicReplacementAndEventIsolation(t *testing.T) {
 	}
 	delete(payload, "output_filters")
 	delete(payload, "output_priority")
-	result, _ = gc.execConfigureSplitter(ws, "p1", command)
+	result, _ = execCommand(gc, model.CmdConfigureSplitter, ws, "p1", command)
 	if result.Status != model.StatusExecuted || len(s.Splitter.OutputFilters) != 0 || s.Splitter.OutputPriority != "" || !reflect.DeepEqual(s.Conveyor, initial.Conveyor) {
 		t.Fatal("replacement failed to clear optional fields or changed cargo")
 	}

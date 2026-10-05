@@ -29,7 +29,7 @@ func TestOrbitalCollectorBuildRejectedOnNonGasGiant(t *testing.T) {
 		t.Fatalf("find open tile: %v", err)
 	}
 
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -67,7 +67,7 @@ func TestOrbitalCollectorBuildAdmittedOnGasGiant(t *testing.T) {
 	// 故意不发放建造物品：若通过气态巨星校验，应在物品成本处失败。
 	pos := model.Position{X: 0, Y: 0}
 
-	res, _ := core.execBuild(gasWs, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, gasWs, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos},
 		Payload: map[string]any{

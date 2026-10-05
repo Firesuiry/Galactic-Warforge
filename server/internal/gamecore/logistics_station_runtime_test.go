@@ -65,13 +65,13 @@ func TestStationTransferItemCannotBypassConfigurationAndCapacity(t *testing.T) {
 	ws.Players["p1"].Inventory[model.ItemIronOre] = 250
 	ws.Players["p1"].Inventory[model.ItemCopperOre] = 5
 	command := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemCopperOre, "quantity": 5}}
-	result, _ := gc.execTransferItem(ws, "p1", command)
+	result, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", command)
 	if result.Status != model.StatusFailed || ws.Players["p1"].Inventory[model.ItemCopperOre] != 5 {
 		t.Fatal("unconfigured station item accepted")
 	}
 	command.Payload["item_id"] = model.ItemIronOre
 	command.Payload["quantity"] = 250
-	result, _ = gc.execTransferItem(ws, "p1", command)
+	result, _ = execCommand(gc, model.CmdTransferItem, ws, "p1", command)
 	if result.Status != model.StatusExecuted || b.LogisticsStation.Inventory[model.ItemIronOre] != 200 || ws.Players["p1"].Inventory[model.ItemIronOre] != 50 || b.Storage != nil {
 		t.Fatalf("station transfer wrong: %+v", result)
 	}
@@ -127,30 +127,30 @@ func TestConfigureStationPortsAndSlotRemovalAreAtomic(t *testing.T) {
 	original := b.LogisticsStation.Clone()
 	invalid := []any{"bad", map[string]any{"auto": map[string]any{"mode": "input", "item_id": model.ItemIronOre}}, map[string]any{"north": map[string]any{"mode": "none", "item_id": model.ItemIronOre}}, map[string]any{"north": map[string]any{"mode": "input", "item_id": model.ItemCopperOre}}, map[string]any{"north": map[string]any{"mode": true, "item_id": model.ItemIronOre}}}
 	for _, ports := range invalid {
-		result, _ := gc.execConfigureLogisticsStation(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"belt_ports": ports}})
+		result, _ := execCommand(gc, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"belt_ports": ports}})
 		if result.Status != model.StatusFailed || !reflect.DeepEqual(b.LogisticsStation, original) {
 			t.Fatal("invalid port configuration partially applied")
 		}
 	}
 	remove := model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"scope": "planetary", "item_id": model.ItemIronOre, "mode": "none", "local_storage": 0, "remove": true}}
-	if result, _ := gc.execConfigureLogisticsSlot(ws, "p1", remove); result.Status != model.StatusFailed {
+	if result, _ := execCommand(gc, model.CmdConfigureLogisticsSlot, ws, "p1", remove); result.Status != model.StatusFailed {
 		t.Fatal("removed a port-bound slot")
 	}
-	result, _ := gc.execConfigureLogisticsStation(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"belt_ports": map[string]any{}}})
+	result, _ := execCommand(gc, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"belt_ports": map[string]any{}}})
 	if result.Status != model.StatusExecuted || len(b.LogisticsStation.BeltPorts) != 0 {
 		t.Fatal("empty port object failed to clear ports")
 	}
 	b.LogisticsStation.Inventory = model.ItemInventory{model.ItemIronOre: 1}
-	if result, _ := gc.execConfigureLogisticsSlot(ws, "p1", remove); result.Status != model.StatusFailed {
+	if result, _ := execCommand(gc, model.CmdConfigureLogisticsSlot, ws, "p1", remove); result.Status != model.StatusFailed {
 		t.Fatal("removed stocked slot")
 	}
 	b.LogisticsStation.Inventory = nil
 	ws.LogisticsDrones["transit"] = &model.LogisticsDroneState{StationID: b.ID, Cargo: model.ItemInventory{model.ItemIronOre: 1}}
-	if result, _ := gc.execConfigureLogisticsSlot(ws, "p1", remove); result.Status != model.StatusFailed {
+	if result, _ := execCommand(gc, model.CmdConfigureLogisticsSlot, ws, "p1", remove); result.Status != model.StatusFailed {
 		t.Fatal("removed in-transit cargo slot")
 	}
 	delete(ws.LogisticsDrones, "transit")
-	result, _ = gc.execConfigureLogisticsSlot(ws, "p1", remove)
+	result, _ = execCommand(gc, model.CmdConfigureLogisticsSlot, ws, "p1", remove)
 	if result.Status != model.StatusExecuted || b.LogisticsStation.ConfiguredItem(model.ItemIronOre) {
 		t.Fatalf("empty slot removal failed %+v", result)
 	}
@@ -220,7 +220,7 @@ func TestStationSlotRemovalPreservesOtherScopeAndOtherPlanetIdentity(t *testing.
 	other.LogisticsDrones["elsewhere"] = &model.LogisticsDroneState{StationID: b.ID, Cargo: model.ItemInventory{model.ItemIronOre: 1}}
 	gc := &GameCore{worlds: map[string]*model.WorldState{ws.PlanetID: ws, other.PlanetID: other}}
 	command := model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"scope": "planetary", "item_id": model.ItemIronOre, "mode": "none", "local_storage": 0, "remove": true}}
-	result, _ := gc.execConfigureLogisticsSlot(ws, "p1", command)
+	result, _ := execCommand(gc, model.CmdConfigureLogisticsSlot, ws, "p1", command)
 	if result.Status != model.StatusExecuted || !b.LogisticsStation.ConfiguredItem(model.ItemIronOre) || len(b.LogisticsStation.Settings) != 0 || len(b.LogisticsStation.InterstellarSettings) != 1 {
 		t.Fatalf("wrong cross-scope/planet removal: %+v", result)
 	}
@@ -249,7 +249,7 @@ func TestLogisticsStationConstructionInitializesEmptyFiniteInventoryAndEnergy(t 
 			ws := core.world
 			ws.Players["p1"].Resources = model.Resources{Minerals: 1000, Energy: 1000}
 			pos, _ := findTwoOpenTiles(ws)
-			result, _ := core.execBuild(ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(kind)}})
+			result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(kind)}})
 			if result.Status != model.StatusExecuted {
 				t.Fatalf("build station: %+v", result)
 			}

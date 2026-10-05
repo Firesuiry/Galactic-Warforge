@@ -34,7 +34,7 @@ func TestResearchCompletesPlanetaryTechAndUnlocksRecipe(t *testing.T) {
 			"recipe_id":     "smelt_stone",
 		},
 	}
-	res, _ := core.execBuild(ws, "p1", locked)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", locked)
 	if res.Code != model.CodeValidationFailed {
 		t.Fatalf("expected locked smelt_stone build to fail, got %s (%s)", res.Code, res.Message)
 	}
@@ -52,7 +52,7 @@ func TestResearchCompletesPlanetaryTechAndUnlocksRecipe(t *testing.T) {
 		t.Fatalf("expected 10 matrices in lab, got %d", beforeMatrices)
 	}
 
-	start, _ := core.execStartResearch(ws, "p1", model.Command{
+	start, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "automatic_metallurgy"},
 	})
@@ -78,7 +78,7 @@ func TestResearchCompletesPlanetaryTechAndUnlocksRecipe(t *testing.T) {
 		t.Fatal("smelt_stone still locked after automatic_metallurgy")
 	}
 
-	unlocked, _ := core.execBuild(ws, "p1", locked)
+	unlocked, _ := execCommand(core, model.CmdBuild, ws, "p1", locked)
 	if unlocked.Code != model.CodeOK {
 		t.Fatalf("expected smelt_stone build after research, got %s (%s)", unlocked.Code, unlocked.Message)
 	}

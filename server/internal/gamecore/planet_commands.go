@@ -9,7 +9,7 @@ import (
 // execSwitchActivePlanet 设置该玩家的视图焦点/默认落点行星（F4）。
 // 不再修改全局 gc.activePlanetID，也不再拖拽执行体绑定——所有已加载行星
 // 始终参与结算，焦点只决定未显式指定行星的命令默认落在哪颗行星。
-func (gc *GameCore) execSwitchActivePlanet(playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execSwitchActivePlanet(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	planetIDRaw, ok := cmd.Payload["planet_id"]

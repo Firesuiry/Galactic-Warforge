@@ -39,7 +39,7 @@ func TestPlanetaryProductionRecipesSettleFromBuildCommand(t *testing.T) {
 
 			prodPos, powerPos := findAdjacentBuildPair(t, ws, "p1")
 
-			powerRes, _ := core.execBuild(ws, "p1", model.Command{
+			powerRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 				Type:   model.CmdBuild,
 				Target: model.CommandTarget{Position: powerPos},
 				Payload: map[string]any{
@@ -50,7 +50,7 @@ func TestPlanetaryProductionRecipesSettleFromBuildCommand(t *testing.T) {
 				t.Fatalf("build wind turbine: %s (%s)", powerRes.Code, powerRes.Message)
 			}
 
-			buildRes, _ := core.execBuild(ws, "p1", model.Command{
+			buildRes, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 				Type:   model.CmdBuild,
 				Target: model.CommandTarget{Position: prodPos},
 				Payload: map[string]any{

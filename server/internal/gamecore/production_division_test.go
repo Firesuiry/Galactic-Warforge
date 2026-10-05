@@ -57,7 +57,7 @@ func TestProducerDivisionOfLabour(t *testing.T) {
 			for other, b := range producers {
 				stockProducerFor(b, entry)
 				cmd := model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": id}}
-				res, _ := gc.execProduce(ws, "p1", cmd)
+				res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd)
 				if other == typ {
 					if res.Code != model.CodeOK {
 						t.Fatalf("%s must produce %s: %+v", other, id, res)
@@ -76,18 +76,18 @@ func TestProduceRejectsMissingItemsAndForeignOrFullQueue(t *testing.T) {
 	gc := &GameCore{}
 	b := newPoweredProducer(ws, "b", "barracks", model.Position{X: 3, Y: 3})
 	cmd := model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}}
-	if res, _ := gc.execProduce(ws, "p2", cmd); res.Code != model.CodeNotOwner {
+	if res, _ := execCommand(gc, model.CmdProduce, ws, "p2", cmd); res.Code != model.CodeNotOwner {
 		t.Fatalf("foreign producer: %+v", res)
 	}
 	entry, _ := model.PublicWorldProduceUnitByID("soldier")
 	for i := 0; i < 20; i++ {
 		stockProducerFor(b, entry)
-		if res, _ := gc.execProduce(ws, "p1", cmd); res.Code != model.CodeOK {
+		if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd); res.Code != model.CodeOK {
 			t.Fatalf("order %d: %+v", i, res)
 		}
 	}
 	stockProducerFor(b, entry)
-	if res, _ := gc.execProduce(ws, "p1", cmd); res.Code != model.CodeInvalidTarget {
+	if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd); res.Code != model.CodeInvalidTarget {
 		t.Fatalf("queue must cap at 20: %+v", res)
 	}
 	if len(b.UnitQueue) != 20 {
@@ -102,7 +102,7 @@ func TestRallyPointSendsNewUnitsToRally(t *testing.T) {
 	b := newPoweredProducer(ws, "b", "barracks", model.Position{X: 3, Y: 3})
 	rally := model.Position{X: 12, Y: 3}
 
-	res, events := gc.execSetRallyPoint(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID, Position: &rally}})
+	res, events := execCommand(gc, model.CmdSetRallyPoint, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID, Position: &rally}})
 	if res.Code != model.CodeOK || b.RallyPoint == nil || *b.RallyPoint != rally {
 		t.Fatalf("set_rally_point: %+v", res)
 	}
@@ -112,7 +112,7 @@ func TestRallyPointSendsNewUnitsToRally(t *testing.T) {
 
 	entry, _ := model.PublicWorldProduceUnitByID("soldier")
 	stockProducerFor(b, entry)
-	if res, _ := gc.execProduce(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}}); res.Code != model.CodeOK {
+	if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}}); res.Code != model.CodeOK {
 		t.Fatalf("produce: %+v", res)
 	}
 	var unit *model.Unit
@@ -145,7 +145,7 @@ func TestProducedUnitStaysPutWithoutRallyPoint(t *testing.T) {
 	b := newPoweredProducer(ws, "b", "barracks", model.Position{X: 3, Y: 3})
 	entry, _ := model.PublicWorldProduceUnitByID("soldier")
 	stockProducerFor(b, entry)
-	gc.execProduce(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}})
+	execCommand(gc, model.CmdProduce, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}})
 	for i := 0; i < entry.ProductionTicks+2; i++ {
 		ws.Tick++
 		settleUnitProduction(ws)
@@ -185,7 +185,7 @@ func TestSetRallyPointValidation(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if res, _ := gc.execSetRallyPoint(ws, tc.player, model.Command{Target: tc.target}); res.Code != tc.want {
+			if res, _ := execCommand(gc, model.CmdSetRallyPoint, ws, tc.player, model.Command{Target: tc.target}); res.Code != tc.want {
 				t.Fatalf("got %+v want %s", res, tc.want)
 			}
 			if b.RallyPoint != nil {

@@ -77,7 +77,7 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 	if got := player.Inventory[model.ItemElectromagneticMatrix]; got != 0 {
 		t.Fatalf("expected fresh bootstrap without matrices, got %d", got)
 	}
-	startRes, _ := core.execStartResearch(ws, "p1", model.Command{
+	startRes, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type: model.CmdStartResearch,
 		Payload: map[string]any{
 			"tech_id": "electromagnetism",
@@ -177,7 +177,7 @@ func newConfigDevTestCore(t *testing.T) *GameCore {
 func t103BuildAndSettle(t *testing.T, core *GameCore, ws *model.WorldState, playerID string, pos model.Position, btype model.BuildingType) {
 	t.Helper()
 
-	res, _ := core.execBuild(ws, playerID, model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, playerID, model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos},
 		Payload: map[string]any{

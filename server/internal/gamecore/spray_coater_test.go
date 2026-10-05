@@ -119,12 +119,12 @@ func TestSprayCoaterRealTransferAndStorageIOIsolation(t *testing.T) {
 	ws.Players["p1"].Inventory[model.ItemHydrogen] = 1
 	gc := &GameCore{}
 	command := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemHydrogen, "quantity": 1}}
-	result, _ := gc.execTransferItem(ws, "p1", command)
+	result, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", command)
 	if result.Status != model.StatusFailed || ws.Players["p1"].Inventory[model.ItemHydrogen] != 1 {
 		t.Fatal("count-only storage accepted cargo")
 	}
 	command.Payload["item_id"] = model.ItemProliferatorMk3
-	result, _ = gc.execTransferItem(ws, "p1", command)
+	result, _ = execCommand(gc, model.CmdTransferItem, ws, "p1", command)
 	if result.Status != model.StatusExecuted || totalStorageItems(b.Storage) != 1 || ws.Players["p1"].Inventory[model.ItemProliferatorMk3] != 0 {
 		t.Fatalf("real reagent loading failed: %+v", result)
 	}

@@ -8,7 +8,7 @@ import (
 
 func startElectromagnetismResearch(t *testing.T, core *GameCore, ws *model.WorldState) {
 	t.Helper()
-	res, _ := core.execStartResearch(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "electromagnetism"},
 	})

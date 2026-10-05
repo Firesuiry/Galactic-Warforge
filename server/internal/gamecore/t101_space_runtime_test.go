@@ -17,7 +17,7 @@ func TestT101LaunchSolarSailUsesSpaceRuntimeIDsAndSystemScope(t *testing.T) {
 	ejector.Storage.EnsureInventory()[model.ItemSolarSail] = 2
 	attachBuilding(ws, ejector)
 
-	res, events := core.execLaunchSolarSail(ws, "p1", model.Command{
+	res, events := execCommand(core, model.CmdLaunchSolarSail, ws, "p1", model.Command{
 		Type: model.CmdLaunchSolarSail,
 		Payload: map[string]any{
 			"building_id":  ejector.ID,
@@ -93,7 +93,7 @@ func TestT101SaveRestorePreservesSpaceRuntime(t *testing.T) {
 	ejector.Storage.EnsureInventory()[model.ItemSolarSail] = 1
 	attachBuilding(ws, ejector)
 
-	res, _ := core.execLaunchSolarSail(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdLaunchSolarSail, ws, "p1", model.Command{
 		Type: model.CmdLaunchSolarSail,
 		Payload: map[string]any{
 			"building_id": ejector.ID,

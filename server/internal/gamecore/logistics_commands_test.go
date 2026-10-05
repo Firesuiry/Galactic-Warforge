@@ -14,7 +14,7 @@ func TestExecConfigureLogisticsSlotWritesPlanetarySetting(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -51,7 +51,7 @@ func TestExecConfigureLogisticsStationRejectsInterstellarForPlanetaryStation(t *
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -84,7 +84,7 @@ func TestExecConfigureLogisticsStationCapacityDoesNotCreateDrones(t *testing.T) 
 		t.Fatalf("register existing drone: %v", err)
 	}
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -126,7 +126,7 @@ func TestExecConfigureLogisticsStationRejectsInterstellarForOrbitalCollector(t *
 	attachBuilding(ws, collector)
 	model.RegisterLogisticsStation(ws, collector)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: collector.ID},
 		Payload: map[string]any{
@@ -151,7 +151,7 @@ func TestExecConfigureLogisticsStationRejectsNotOwner(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p2", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p2", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -174,7 +174,7 @@ func TestExecConfigureLogisticsStationUpdatesPriorities(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -201,7 +201,7 @@ func TestExecConfigureLogisticsStationAppliesInterstellarConfig(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -277,7 +277,7 @@ func TestExecConfigureLogisticsStationRejectsNonBoolInterstellarEnabled(t *testi
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -302,7 +302,7 @@ func TestExecConfigureLogisticsStationRejectsFractionalInputPriority(t *testing.
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -337,7 +337,7 @@ func TestExecConfigureLogisticsStationRejectsOrbitalCollectorPriorityConfig(t *t
 	attachBuilding(ws, collector)
 	model.RegisterLogisticsStation(ws, collector)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: collector.ID},
 		Payload: map[string]any{
@@ -366,7 +366,7 @@ func TestExecConfigureLogisticsStationPriorityOnlyDoesNotExpandDrones(t *testing
 		t.Fatalf("expected no drones before configure, got %d", got)
 	}
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -394,7 +394,7 @@ func TestExecConfigureLogisticsStationFailureIsAtomic(t *testing.T) {
 	stationBuilding.LogisticsStation.Interstellar.Enabled = false
 	stationBuilding.LogisticsStation.Normalize()
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -424,7 +424,7 @@ func TestExecConfigureLogisticsSlotRejectsFractionalLocalStorage(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -450,7 +450,7 @@ func TestExecConfigureLogisticsSlotRejectsNonStringMode(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -476,7 +476,7 @@ func TestExecConfigureLogisticsSlotRejectsUnknownMode(t *testing.T) {
 	attachBuilding(ws, stationBuilding)
 	model.RegisterLogisticsStation(ws, stationBuilding)
 
-	res, _ := core.execConfigureLogisticsSlot(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsSlot, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsSlot,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{
@@ -514,7 +514,7 @@ func TestExecConfigureLogisticsStationExpansionFailureRollsBackState(t *testing.
 
 	delete(ws.LogisticsStations, stationBuilding.ID)
 
-	res, _ := core.execConfigureLogisticsStation(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdConfigureLogisticsStation, ws, "p1", model.Command{
 		Type:   model.CmdConfigureLogisticsStation,
 		Target: model.CommandTarget{EntityID: stationBuilding.ID},
 		Payload: map[string]any{

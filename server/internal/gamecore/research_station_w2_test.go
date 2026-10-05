@@ -35,7 +35,7 @@ func TestSetRecipeSwitchesResearchLabModes(t *testing.T) {
 	}
 
 	// 研究模式 → 矩阵生产模式（基础配方，无科技门控）。
-	res, _ := core.execSetRecipe(ws, "p1", setRecipeCmd("lab-sr", "electromagnetic_matrix"))
+	res, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("lab-sr", "electromagnetic_matrix"))
 	if res.Code != model.CodeOK {
 		t.Fatalf("set electromagnetic_matrix: %s (%s)", res.Code, res.Message)
 	}
@@ -49,7 +49,7 @@ func TestSetRecipeSwitchesResearchLabModes(t *testing.T) {
 	lab.Production.PendingOutputs = []model.ItemAmount{{ItemID: "electromagnetic_matrix", Quantity: 1}}
 
 	// 未解锁的配方必须原子拒绝：配方、进度、库存全部保持原样。
-	res, _ = core.execSetRecipe(ws, "p1", setRecipeCmd("lab-sr", "energy_matrix"))
+	res, _ = execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("lab-sr", "energy_matrix"))
 	if res.Code != model.CodeValidationFailed {
 		t.Fatalf("gated energy_matrix must fail, got %s (%s)", res.Code, res.Message)
 	}
@@ -59,7 +59,7 @@ func TestSetRecipeSwitchesResearchLabModes(t *testing.T) {
 
 	// 解锁后切换成功：进度清零（DSP 语义），库存保留。
 	grantTechs(ws, "p1", "energy_matrix")
-	res, _ = core.execSetRecipe(ws, "p1", setRecipeCmd("lab-sr", "energy_matrix"))
+	res, _ = execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("lab-sr", "energy_matrix"))
 	if res.Code != model.CodeOK {
 		t.Fatalf("set energy_matrix after unlock: %s (%s)", res.Code, res.Message)
 	}
@@ -74,7 +74,7 @@ func TestSetRecipeSwitchesResearchLabModes(t *testing.T) {
 	}
 
 	// 空 recipe_id 切回研究模式。
-	res, _ = core.execSetRecipe(ws, "p1", setRecipeCmd("lab-sr", ""))
+	res, _ = execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("lab-sr", ""))
 	if res.Code != model.CodeOK {
 		t.Fatalf("clear recipe: %s (%s)", res.Code, res.Message)
 	}
@@ -96,11 +96,11 @@ func TestSetRecipeValidationEdges(t *testing.T) {
 	placeBuilding(ws, turbine)
 
 	// 生产建筑基础配方切换。
-	res, _ := core.execSetRecipe(ws, "p1", setRecipeCmd("smelter-sr", "smelt_iron"))
+	res, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("smelter-sr", "smelt_iron"))
 	if res.Code != model.CodeOK {
 		t.Fatalf("smelter smelt_iron: %s (%s)", res.Code, res.Message)
 	}
-	res, _ = core.execSetRecipe(ws, "p1", setRecipeCmd("smelter-sr", "smelt_copper"))
+	res, _ = execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("smelter-sr", "smelt_copper"))
 	if res.Code != model.CodeOK {
 		t.Fatalf("smelter smelt_copper: %s (%s)", res.Code, res.Message)
 	}
@@ -109,7 +109,7 @@ func TestSetRecipeValidationEdges(t *testing.T) {
 	}
 
 	// 建筑类型不支持的配方。
-	res, _ = core.execSetRecipe(ws, "p1", setRecipeCmd("smelter-sr", "electromagnetic_matrix"))
+	res, _ = execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("smelter-sr", "electromagnetic_matrix"))
 	if res.Code != model.CodeValidationFailed {
 		t.Fatalf("unsupported recipe must fail, got %s", res.Code)
 	}
@@ -118,16 +118,16 @@ func TestSetRecipeValidationEdges(t *testing.T) {
 	}
 
 	// 未知配方 / 非拥有者 / 无生产能力的建筑 / 缺失建筑。
-	if res, _ := core.execSetRecipe(ws, "p1", setRecipeCmd("smelter-sr", "no_such_recipe")); res.Code != model.CodeValidationFailed {
+	if res, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("smelter-sr", "no_such_recipe")); res.Code != model.CodeValidationFailed {
 		t.Fatalf("unknown recipe must fail, got %s", res.Code)
 	}
-	if res, _ := core.execSetRecipe(ws, "p2", setRecipeCmd("smelter-sr", "smelt_iron")); res.Code != model.CodeNotOwner {
+	if res, _ := execCommand(core, model.CmdSetRecipe, ws, "p2", setRecipeCmd("smelter-sr", "smelt_iron")); res.Code != model.CodeNotOwner {
 		t.Fatalf("non-owner must fail with NOT_OWNER, got %s", res.Code)
 	}
-	if res, _ := core.execSetRecipe(ws, "p1", setRecipeCmd("turbine-sr", "smelt_iron")); res.Code != model.CodeInvalidTarget {
+	if res, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("turbine-sr", "smelt_iron")); res.Code != model.CodeInvalidTarget {
 		t.Fatalf("non-production building must fail, got %s", res.Code)
 	}
-	if res, _ := core.execSetRecipe(ws, "p1", setRecipeCmd("ghost", "smelt_iron")); res.Code != model.CodeEntityNotFound {
+	if res, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd("ghost", "smelt_iron")); res.Code != model.CodeEntityNotFound {
 		t.Fatalf("missing building must fail, got %s", res.Code)
 	}
 }
@@ -153,7 +153,7 @@ func TestVerticalStackedLabsShareStorageAndThroughput(t *testing.T) {
 	placeBuilding(ws, newBuilding("power-stack", model.BuildingTypeWindTurbine, "p1", model.Position{X: pos.X + 1, Y: pos.Y}))
 
 	// 通过 build 命令在同位置叠一层。
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -198,7 +198,7 @@ func TestVerticalStackedLabsShareStorageAndThroughput(t *testing.T) {
 	if _, _, err := base.Storage.Load(model.ItemElectromagneticMatrix, 20); err != nil {
 		t.Fatal(err)
 	}
-	start, _ := core.execStartResearch(ws, "p1", model.Command{
+	start, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "automatic_metallurgy"},
 	})
@@ -248,26 +248,26 @@ func TestVerticalStackLimitFollowsTechLevel(t *testing.T) {
 	}
 
 	// 未研究 vertical_construction：不允许叠层。
-	res, _ := core.execBuild(ws, "p1", stackCmd)
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", stackCmd)
 	if res.Code != model.CodePositionOccupied {
 		t.Fatalf("stack without tech must fail with POSITION_OCCUPIED, got %s (%s)", res.Code, res.Message)
 	}
 
 	// 1 级：允许第 2 层。
 	grantTechs(ws, "p1", "vertical_construction")
-	res, _ = core.execBuild(ws, "p1", stackCmd)
+	res, _ = execCommand(core, model.CmdBuild, ws, "p1", stackCmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("first stack layer with tech L1: %s (%s)", res.Code, res.Message)
 	}
 
 	// 队列中已有 1 层 → 第 3 层超出上限，拒绝。
-	res, _ = core.execBuild(ws, "p1", stackCmd)
+	res, _ = execCommand(core, model.CmdBuild, ws, "p1", stackCmd)
 	if res.Code != model.CodePositionOccupied {
 		t.Fatalf("stack beyond tech level must fail, got %s (%s)", res.Code, res.Message)
 	}
 
 	// 不同类型建筑不能叠在矩阵站上。
-	res, _ = core.execBuild(ws, "p1", model.Command{
+	res, _ = execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: pos},
 		Payload: map[string]any{
@@ -446,7 +446,7 @@ func TestHiddenDarkFogTechUnlocksViaLootedItem(t *testing.T) {
 	}
 
 	// 未持有 dark_fog_matrix 物品：隐藏科技不可见，拒绝。
-	res, _ := core.execStartResearch(ws, "p1", cmd)
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", cmd)
 	if res.Code == model.CodeOK {
 		t.Fatal("hidden tech must reject before the trigger item is held")
 	}
@@ -454,7 +454,7 @@ func TestHiddenDarkFogTechUnlocksViaLootedItem(t *testing.T) {
 	// 战利品入手（直接注入研究站库存，绕过仓储容量对布景的限制）：
 	// 隐藏科技变为可研究，并沿 self_evolution_lab 解锁链消耗 dark_fog_matrix。
 	lab.Storage.EnsureInventory()["dark_fog_matrix"] = 60
-	res, _ = core.execStartResearch(ws, "p1", cmd)
+	res, _ = execCommand(core, model.CmdStartResearch, ws, "p1", cmd)
 	if res.Code != model.CodeOK {
 		t.Fatalf("hidden tech with trigger item: %s (%s)", res.Code, res.Message)
 	}

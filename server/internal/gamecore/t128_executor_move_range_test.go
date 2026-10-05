@@ -63,7 +63,7 @@ func TestT128ExecutorMoveRange(t *testing.T) {
 	ws.TileUnits[unitKey] = append(ws.TileUnits[unitKey], unit.ID)
 
 	moveTo := func(pos *model.Position) model.CommandResult {
-		res, _ := core.execMove(ws, "p1", model.Command{
+		res, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{
 			Type:   model.CmdMove,
 			Target: model.CommandTarget{EntityID: unit.ID, Position: pos},
 		})

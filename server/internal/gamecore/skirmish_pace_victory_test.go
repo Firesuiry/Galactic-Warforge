@@ -19,7 +19,7 @@ func TestPaceResearchMultipliesCostWithoutChangingCatalog(t *testing.T) {
 	if _, _, err := lab.Storage.Load("engine", 5); err != nil {
 		t.Fatal(err)
 	}
-	res, _ := core.execStartResearch(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
 		Type:    model.CmdStartResearch,
 		Payload: map[string]any{"tech_id": "drive_engine"},
 	})
@@ -49,7 +49,7 @@ func TestPaceBuildMultipliesConstructionDuration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, _ := core.execBuild(ws, "p1", model.Command{
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: pos},
 		Payload: map[string]any{"building_type": "solar_panel"},
