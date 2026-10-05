@@ -6,7 +6,11 @@ import (
 	"sort"
 )
 
-func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type producePayload struct {
+	UnitType string `json:"unit_type" payload:"required"`
+}
+
+func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model.Command, p producePayload) (model.CommandResult, []*model.GameEvent) {
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
 		return mechaJobFailed(model.CodeEntityNotFound, "production building not found")
@@ -14,10 +18,7 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 	if b.OwnerID != playerID {
 		return mechaJobFailed(model.CodeNotOwner, "cannot use another player's producer")
 	}
-	id, err := payloadStrictString(cmd.Payload, "unit_type")
-	if err != nil {
-		return mechaJobFailed(model.CodeValidationFailed, err.Error())
-	}
+	id := p.UnitType
 	entry, ok := model.PublicWorldProduceUnitByID(id)
 	if !ok {
 		return mechaJobFailed(model.CodeValidationFailed, "unit is not publicly available for produce")
@@ -93,7 +94,7 @@ func settleUnitProduction(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
-func (gc *GameCore) execSetRallyPoint(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execSetRallyPoint(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
 		return mechaJobFailed(model.CodeEntityNotFound, "producer not found")

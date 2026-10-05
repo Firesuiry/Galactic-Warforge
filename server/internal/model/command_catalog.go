@@ -428,6 +428,12 @@ var commandSpecByType = func() map[CommandType]CommandStructureSpec {
 	return out
 }()
 
+// CommandSpec returns the catalog spec for a public command type.
+func CommandSpec(cmdType CommandType) (CommandStructureSpec, bool) {
+	spec, ok := commandSpecByType[cmdType]
+	return spec, ok
+}
+
 // BuildCommandCatalog builds the full public command catalog for GET /catalog/commands.
 func BuildCommandCatalog() CommandCatalogView {
 	entries := make([]CommandCatalogEntry, 0, len(commandSpecs))

@@ -1,7 +1,6 @@
 package gamecore
 
 import (
-	"fmt"
 	"sort"
 
 	"siliconworld/internal/model"
@@ -39,7 +38,14 @@ func trafficAlertEvent(ws *model.WorldState, b *model.Building) *model.GameEvent
 	return &model.GameEvent{EventType: model.EvtTrafficMonitorAlert, VisibilityScope: b.OwnerID, Payload: map[string]any{"building_id": b.ID, "planet_id": ws.PlanetID, "target_belt_id": s.TargetBeltID, "state": s.State, "alert_active": s.AlertActive, "items_per_tick": s.ItemsPerTick, "minimum_items_per_tick": s.MinimumItemsPerTick, "tick": ws.Tick}}
 }
 
-func (gc *GameCore) execConfigureTrafficMonitor(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type configureTrafficMonitorPayload struct {
+	TargetBeltID        string  `json:"target_belt_id" payload:"required,allowempty"`
+	WindowTicks         int     `json:"window_ticks" payload:"required"`
+	MinimumItemsPerTick float64 `json:"minimum_items_per_tick" payload:"required"`
+	AlertsEnabled       bool    `json:"alerts_enabled" payload:"required"`
+}
+
+func (gc *GameCore) execConfigureTrafficMonitor(ws *model.WorldState, playerID string, cmd model.Command, p configureTrafficMonitorPayload) (model.CommandResult, []*model.GameEvent) {
 	fail := func(code model.ResultCode, message string) (model.CommandResult, []*model.GameEvent) {
 		return model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}, nil
 	}
@@ -53,35 +59,11 @@ func (gc *GameCore) execConfigureTrafficMonitor(ws *model.WorldState, playerID s
 	if b.Type != model.BuildingTypeTrafficMonitor || b.TrafficMonitor == nil {
 		return fail(model.CodeInvalidTarget, "target is not an initialized traffic monitor")
 	}
-	target, ok := cmd.Payload["target_belt_id"].(string)
-	if !ok {
-		return fail(model.CodeValidationFailed, "payload.target_belt_id must be a string")
-	}
+	target := p.TargetBeltID
 	if target != "" && trafficMonitorTarget(ws, b, target) == nil {
 		return fail(model.CodeInvalidTarget, "target must be an adjacent owned conveyor belt")
 	}
-	window, err := payloadStrictInt(cmd.Payload, "window_ticks")
-	if err != nil {
-		return fail(model.CodeValidationFailed, err.Error())
-	}
-	raw, exists := cmd.Payload["minimum_items_per_tick"]
-	if !exists {
-		return fail(model.CodeValidationFailed, "payload.minimum_items_per_tick required")
-	}
-	switch raw.(type) {
-	case float64, float32, int, int32, int64:
-	default:
-		return fail(model.CodeValidationFailed, "payload.minimum_items_per_tick must be numeric")
-	}
-	threshold, err := anyToFloat(raw)
-	if err != nil {
-		return fail(model.CodeValidationFailed, fmt.Sprintf("invalid minimum flow: %v", err))
-	}
-	alerts, ok := cmd.Payload["alerts_enabled"].(bool)
-	if !ok {
-		return fail(model.CodeValidationFailed, "payload.alerts_enabled must be boolean")
-	}
-	staged := newTrafficMonitorConfig(target, window, threshold, alerts)
+	staged := newTrafficMonitorConfig(target, p.WindowTicks, p.MinimumItemsPerTick, p.AlertsEnabled)
 	if err := staged.Validate(); err != nil {
 		return fail(model.CodeValidationFailed, err.Error())
 	}

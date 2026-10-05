@@ -6,14 +6,74 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	res := model.CommandResult{Status: model.StatusFailed}
-	taskForceID, err := payloadStrictString(cmd.Payload, "task_force_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
+type taskForceCreatePayload struct {
+	TaskForceID string                   `json:"task_force_id" payload:"required"`
+	Name        string                   `json:"name"`
+	Stance      model.WarTaskForceStance `json:"stance"`
+}
+
+type taskForceAssignPayload struct {
+	TaskForceID string   `json:"task_force_id" payload:"required"`
+	MemberKind  string   `json:"member_kind" payload:"required"`
+	MemberIDs   []string `json:"member_ids" payload:"required"`
+}
+
+type taskForceSetStancePayload struct {
+	TaskForceID string `json:"task_force_id" payload:"required"`
+	Stance      string `json:"stance" payload:"required"`
+}
+
+type taskForceDeployPayload struct {
+	TaskForceID string                     `json:"task_force_id" payload:"required"`
+	TheaterID   string                     `json:"theater_id"`
+	SystemID    string                     `json:"system_id"`
+	PlanetID    string                     `json:"planet_id"`
+	Position    *positionPayload           `json:"position"`
+	FrontlineID string                     `json:"frontline_id"`
+	GroundOrder model.GroundTaskForceOrder `json:"ground_order"`
+	SupportMode model.OrbitalSupportMode   `json:"support_mode"`
+}
+
+type theaterCreatePayload struct {
+	TheaterID string `json:"theater_id" payload:"required"`
+	Name      string `json:"name"`
+}
+
+type theaterDefineZonePayload struct {
+	TheaterID string           `json:"theater_id" payload:"required"`
+	ZoneType  string           `json:"zone_type" payload:"required"`
+	SystemID  string           `json:"system_id"`
+	PlanetID  string           `json:"planet_id"`
+	Position  *positionPayload `json:"position"`
+	Radius    int              `json:"radius"`
+}
+
+type theaterSetObjectivePayload struct {
+	TheaterID     string `json:"theater_id" payload:"required"`
+	ObjectiveType string `json:"objective_type" payload:"required"`
+	SystemID      string `json:"system_id"`
+	PlanetID      string `json:"planet_id"`
+	EntityID      string `json:"entity_id"`
+	Description   string `json:"description"`
+}
+
+// positionPayload 是载荷里的地表坐标；x、y 必填。
+type positionPayload struct {
+	X *int `json:"x" payload:"required"`
+	Y *int `json:"y" payload:"required"`
+	Z int  `json:"z"`
+}
+
+func (p *positionPayload) toPosition() *model.Position {
+	if p == nil {
+		return nil
 	}
+	return &model.Position{X: *p.X, Y: *p.Y, Z: p.Z}
+}
+
+func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, cmd model.Command, p taskForceCreatePayload) (model.CommandResult, []*model.GameEvent) {
+	res := model.CommandResult{Status: model.StatusFailed}
+	taskForceID := p.TaskForceID
 
 	player := ws.Players[playerID]
 	if player == nil {
@@ -29,14 +89,8 @@ func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, c
 	}
 
 	stance := model.WarTaskForceStanceHold
-	if raw, ok := cmd.Payload["stance"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.stance must be a string"
-			return res, nil
-		}
-		stance = model.WarTaskForceStance(value)
+	if p.Stance != "" {
+		stance = p.Stance
 	}
 	if !model.ValidWarTaskForceStance(stance) {
 		res.Code = model.CodeValidationFailed
@@ -51,15 +105,7 @@ func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, c
 		CreatedTick: ws.Tick,
 		UpdatedTick: ws.Tick,
 	}
-	if raw, ok := cmd.Payload["name"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.name must be a string"
-			return res, nil
-		}
-		taskForce.Name = value
-	}
+	taskForce.Name = p.Name
 	coordination.TaskForces[taskForceID] = taskForce
 
 	res.Status = model.StatusExecuted
@@ -76,32 +122,17 @@ func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, c
 	}}
 }
 
-func (gc *GameCore) execTaskForceAssign(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTaskForceAssign(ws *model.WorldState, playerID string, cmd model.Command, p taskForceAssignPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	taskForceID, err := payloadStrictString(cmd.Payload, "task_force_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	kindRaw, err := payloadStrictString(cmd.Payload, "member_kind")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	taskForceID := p.TaskForceID
+	kindRaw := p.MemberKind
 	memberKind := model.WarTaskForceMemberKind(kindRaw)
 	if !model.ValidWarTaskForceMemberKind(memberKind) {
 		res.Code = model.CodeValidationFailed
 		res.Message = fmt.Sprintf("invalid task force member kind: %s", memberKind)
 		return res, nil
 	}
-	memberIDs, err := payloadStringSlice(cmd.Payload, "member_ids")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	memberIDs := p.MemberIDs
 
 	player := ws.Players[playerID]
 	if player == nil {
@@ -150,20 +181,10 @@ func (gc *GameCore) execTaskForceAssign(ws *model.WorldState, playerID string, c
 	}}
 }
 
-func (gc *GameCore) execTaskForceSetStance(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTaskForceSetStance(ws *model.WorldState, playerID string, cmd model.Command, p taskForceSetStancePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	taskForceID, err := payloadStrictString(cmd.Payload, "task_force_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	stanceRaw, err := payloadStrictString(cmd.Payload, "stance")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	taskForceID := p.TaskForceID
+	stanceRaw := p.Stance
 	stance := model.WarTaskForceStance(stanceRaw)
 	if !model.ValidWarTaskForceStance(stance) {
 		res.Code = model.CodeValidationFailed
@@ -199,14 +220,9 @@ func (gc *GameCore) execTaskForceSetStance(ws *model.WorldState, playerID string
 	}}
 }
 
-func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, cmd model.Command, p taskForceDeployPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	taskForceID, err := payloadStrictString(cmd.Payload, "task_force_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	taskForceID := p.TaskForceID
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
@@ -221,67 +237,23 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 	}
 
 	deployment := &model.WarTaskForceDeployment{}
-	if raw, ok := cmd.Payload["system_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.system_id must be a string"
-			return res, nil
-		}
-		deployment.SystemID = value
-	}
-	if raw, ok := cmd.Payload["planet_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.planet_id must be a string"
-			return res, nil
-		}
-		deployment.PlanetID = value
-	}
-	if raw, ok := cmd.Payload["position"]; ok {
-		position, err := payloadPosition(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
-		}
-		deployment.Position = position
-	}
-	if raw, ok := cmd.Payload["frontline_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.frontline_id must be a string"
-			return res, nil
-		}
-		deployment.FrontlineID = value
-	}
-	if raw, ok := cmd.Payload["ground_order"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.ground_order must be a string"
-			return res, nil
-		}
-		deployment.GroundOrder = model.GroundTaskForceOrder(value)
+	deployment.SystemID = p.SystemID
+	deployment.PlanetID = p.PlanetID
+	deployment.Position = p.Position.toPosition()
+	deployment.FrontlineID = p.FrontlineID
+	if p.GroundOrder != "" {
+		deployment.GroundOrder = p.GroundOrder
 		if !model.ValidGroundTaskForceOrder(deployment.GroundOrder) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("invalid ground order: %s", value)
+			res.Message = fmt.Sprintf("invalid ground order: %s", p.GroundOrder)
 			return res, nil
 		}
 	}
-	if raw, ok := cmd.Payload["support_mode"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.support_mode must be a string"
-			return res, nil
-		}
-		deployment.OrbitalSupportMode = model.OrbitalSupportMode(value)
+	if p.SupportMode != "" {
+		deployment.OrbitalSupportMode = p.SupportMode
 		if !model.ValidOrbitalSupportMode(deployment.OrbitalSupportMode) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("invalid orbital support mode: %s", value)
+			res.Message = fmt.Sprintf("invalid orbital support mode: %s", p.SupportMode)
 			return res, nil
 		}
 	}
@@ -290,22 +262,14 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 		res.Message = "task_force_deploy requires at least one target field"
 		return res, nil
 	}
-	if raw, ok := cmd.Payload["theater_id"]; ok {
-		theaterID, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.theater_id must be a string"
+	if theaterID := p.TheaterID; theaterID != "" {
+		theater := player.WarCoordination.Theaters[theaterID]
+		if theater == nil {
+			res.Code = model.CodeEntityNotFound
+			res.Message = fmt.Sprintf("theater %s not found", theaterID)
 			return res, nil
 		}
-		if theaterID != "" {
-			theater := player.WarCoordination.Theaters[theaterID]
-			if theater == nil {
-				res.Code = model.CodeEntityNotFound
-				res.Message = fmt.Sprintf("theater %s not found", theaterID)
-				return res, nil
-			}
-			taskForce.TheaterID = theaterID
-		}
+		taskForce.TheaterID = theaterID
 	}
 	taskForce.Deployment = deployment
 	taskForce.UpdatedTick = ws.Tick
@@ -324,14 +288,9 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 	}}
 }
 
-func (gc *GameCore) execTheaterCreate(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTheaterCreate(ws *model.WorldState, playerID string, cmd model.Command, p theaterCreatePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	theaterID, err := payloadStrictString(cmd.Payload, "theater_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	theaterID := p.TheaterID
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeUnauthorized
@@ -350,15 +309,7 @@ func (gc *GameCore) execTheaterCreate(ws *model.WorldState, playerID string, cmd
 		CreatedTick: ws.Tick,
 		UpdatedTick: ws.Tick,
 	}
-	if raw, ok := cmd.Payload["name"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.name must be a string"
-			return res, nil
-		}
-		theater.Name = value
-	}
+	theater.Name = p.Name
 	coordination.Theaters[theaterID] = theater
 
 	res.Status = model.StatusExecuted
@@ -375,20 +326,10 @@ func (gc *GameCore) execTheaterCreate(ws *model.WorldState, playerID string, cmd
 	}}
 }
 
-func (gc *GameCore) execTheaterDefineZone(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTheaterDefineZone(ws *model.WorldState, playerID string, cmd model.Command, p theaterDefineZonePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	theaterID, err := payloadStrictString(cmd.Payload, "theater_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	zoneTypeRaw, err := payloadStrictString(cmd.Payload, "zone_type")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	theaterID := p.TheaterID
+	zoneTypeRaw := p.ZoneType
 	zoneType := model.WarTheaterZoneType(zoneTypeRaw)
 	if !model.ValidWarTheaterZoneType(zoneType) {
 		res.Code = model.CodeValidationFailed
@@ -409,42 +350,10 @@ func (gc *GameCore) execTheaterDefineZone(ws *model.WorldState, playerID string,
 	}
 
 	zone := model.WarTheaterZone{ZoneType: zoneType}
-	if raw, ok := cmd.Payload["system_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.system_id must be a string"
-			return res, nil
-		}
-		zone.SystemID = value
-	}
-	if raw, ok := cmd.Payload["planet_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.planet_id must be a string"
-			return res, nil
-		}
-		zone.PlanetID = value
-	}
-	if raw, ok := cmd.Payload["position"]; ok {
-		position, err := payloadPosition(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
-		}
-		zone.Position = position
-	}
-	if raw, ok := cmd.Payload["radius"]; ok {
-		value, err := payloadValueInt(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.radius must be integer"
-			return res, nil
-		}
-		zone.Radius = value
-	}
+	zone.SystemID = p.SystemID
+	zone.PlanetID = p.PlanetID
+	zone.Position = p.Position.toPosition()
+	zone.Radius = p.Radius
 
 	replaced := false
 	for index := range theater.Zones {
@@ -473,20 +382,10 @@ func (gc *GameCore) execTheaterDefineZone(ws *model.WorldState, playerID string,
 	}}
 }
 
-func (gc *GameCore) execTheaterSetObjective(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTheaterSetObjective(ws *model.WorldState, playerID string, cmd model.Command, p theaterSetObjectivePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	theaterID, err := payloadStrictString(cmd.Payload, "theater_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	objectiveType, err := payloadStrictString(cmd.Payload, "objective_type")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	theaterID := p.TheaterID
+	objectiveType := p.ObjectiveType
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
@@ -501,42 +400,10 @@ func (gc *GameCore) execTheaterSetObjective(ws *model.WorldState, playerID strin
 	}
 
 	objective := &model.WarTheaterObjective{ObjectiveType: objectiveType}
-	if raw, ok := cmd.Payload["system_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.system_id must be a string"
-			return res, nil
-		}
-		objective.SystemID = value
-	}
-	if raw, ok := cmd.Payload["planet_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.planet_id must be a string"
-			return res, nil
-		}
-		objective.PlanetID = value
-	}
-	if raw, ok := cmd.Payload["entity_id"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.entity_id must be a string"
-			return res, nil
-		}
-		objective.EntityID = value
-	}
-	if raw, ok := cmd.Payload["description"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.description must be a string"
-			return res, nil
-		}
-		objective.Description = value
-	}
+	objective.SystemID = p.SystemID
+	objective.PlanetID = p.PlanetID
+	objective.EntityID = p.EntityID
+	objective.Description = p.Description
 	theater.Objective = objective
 	theater.UpdatedTick = ws.Tick
 
@@ -606,42 +473,4 @@ func removeTaskForceMember(members []model.WarTaskForceMemberRef, kind model.War
 		out = append(out, member)
 	}
 	return out
-}
-
-func payloadPosition(raw any) (*model.Position, error) {
-	if raw == nil {
-		return nil, nil
-	}
-	if position, ok := raw.(model.Position); ok {
-		return &position, nil
-	}
-	record, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("payload.position must be an object with x and y")
-	}
-	xRaw, ok := record["x"]
-	if !ok {
-		return nil, fmt.Errorf("payload.position.x required")
-	}
-	yRaw, ok := record["y"]
-	if !ok {
-		return nil, fmt.Errorf("payload.position.y required")
-	}
-	x, err := payloadValueInt(xRaw)
-	if err != nil {
-		return nil, fmt.Errorf("payload.position.x must be integer")
-	}
-	y, err := payloadValueInt(yRaw)
-	if err != nil {
-		return nil, fmt.Errorf("payload.position.y must be integer")
-	}
-	position := &model.Position{X: x, Y: y}
-	if rawZ, ok := record["z"]; ok {
-		z, err := payloadValueInt(rawZ)
-		if err != nil {
-			return nil, fmt.Errorf("payload.position.z must be integer")
-		}
-		position.Z = z
-	}
-	return position, nil
 }

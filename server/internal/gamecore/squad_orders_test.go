@@ -12,7 +12,7 @@ func formTestSquad(t *testing.T, ws *model.WorldState, units ...*model.Unit) *mo
 	for i, u := range units {
 		ids[i] = u.ID
 	}
-	res, events := (&GameCore{}).execFormSquad(ws, "p1", model.Command{Type: model.CmdFormSquad, Payload: map[string]any{"entity_ids": toAnySlice(ids)}})
+	res, events := execCommand(&GameCore{}, model.CmdFormSquad, ws, "p1", model.Command{Type: model.CmdFormSquad, Payload: map[string]any{"entity_ids": toAnySlice(ids)}})
 	if res.Code != model.CodeOK {
 		t.Fatalf("form_squad: %+v", res)
 	}
@@ -31,7 +31,7 @@ func toAnySlice(ids []string) []any {
 }
 
 func squadOrder(ws *model.WorldState, squadID, order string, pos *model.Position) model.CommandResult {
-	res, _ := (&GameCore{}).execSquadOrder(ws, "p1", model.Command{Type: model.CmdSquadOrder, Target: model.CommandTarget{Position: pos}, Payload: map[string]any{"squad_id": squadID, "order": order}})
+	res, _ := execCommand(&GameCore{}, model.CmdSquadOrder, ws, "p1", model.Command{Type: model.CmdSquadOrder, Target: model.CommandTarget{Position: pos}, Payload: map[string]any{"squad_id": squadID, "order": order}})
 	return res
 }
 
@@ -134,7 +134,7 @@ func TestSquadOrderValidation(t *testing.T) {
 	if r := squadOrder(ws, squad.ID, "attack", &off); r.Code != model.CodeInvalidTarget {
 		t.Fatalf("off-map target: %+v", r)
 	}
-	res, _ := (&GameCore{}).execSquadOrder(ws, "p2", model.Command{Target: model.CommandTarget{Position: &ok}, Payload: map[string]any{"squad_id": squad.ID, "order": "attack"}})
+	res, _ := execCommand(&GameCore{}, model.CmdSquadOrder, ws, "p2", model.Command{Target: model.CommandTarget{Position: &ok}, Payload: map[string]any{"squad_id": squad.ID, "order": "attack"}})
 	if res.Code != model.CodeNotOwner {
 		t.Fatalf("foreign squad: %+v", res)
 	}

@@ -9,45 +9,18 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type launchRocketPayload struct {
+	buildingRef
+	SystemID   string `json:"system_id" payload:"required"`
+	LayerIndex int    `json:"layer_index"`
+	Count      int    `json:"count"`
+}
+
+func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd model.Command, p launchRocketPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	buildingID, err := payloadString(cmd.Payload, "building_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	systemID, err := payloadString(cmd.Payload, "system_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	layerIndex := 0
-	if _, ok := cmd.Payload["layer_index"]; ok {
-		layerIndex, err = payloadInt(cmd.Payload, "layer_index")
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
-		}
-	}
-	count := 1
-	if _, ok := cmd.Payload["count"]; ok {
-		count, err = payloadInt(cmd.Payload, "count")
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
-		}
-	}
-	if count <= 0 {
-		count = 1
-	}
-	if count > 5 {
-		count = 5
-	}
+	buildingID, systemID, layerIndex := p.BuildingID, p.SystemID, p.LayerIndex
+	count := min(max(p.Count, 1), 5)
 
 	building, ok := ws.Buildings[buildingID]
 	if !ok || building == nil {

@@ -2,12 +2,43 @@ package gamecore
 
 import (
 	"fmt"
-	"strconv"
 
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+// dysonLayerRef 是戴森结构命令共用的层定位字段。
+type dysonLayerRef struct {
+	SystemID    string  `json:"system_id" payload:"required"`
+	LayerIndex  int     `json:"layer_index" payload:"required"`
+	OrbitRadius float64 `json:"orbit_radius"`
+}
+
+type buildDysonNodePayload struct {
+	dysonLayerRef
+	Latitude  float64 `json:"latitude" payload:"required"`
+	Longitude float64 `json:"longitude" payload:"required"`
+}
+
+type buildDysonFramePayload struct {
+	dysonLayerRef
+	NodeAID string `json:"node_a_id" payload:"required"`
+	NodeBID string `json:"node_b_id" payload:"required"`
+}
+
+type buildDysonShellPayload struct {
+	dysonLayerRef
+	LatitudeMin float64 `json:"latitude_min" payload:"required"`
+	LatitudeMax float64 `json:"latitude_max" payload:"required"`
+	Coverage    float64 `json:"coverage" payload:"required"`
+}
+
+type demolishDysonPayload struct {
+	SystemID      string `json:"system_id" payload:"required"`
+	ComponentType string `json:"component_type" payload:"required"`
+	ComponentID   string `json:"component_id" payload:"required"`
+}
+
+func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cmd model.Command, p buildDysonNodePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	if err := requireDysonTech(ws, playerID, "dyson_component"); err != nil {
 		res.Code = model.CodeValidationFailed
@@ -15,24 +46,8 @@ func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cm
 		return res, nil
 	}
 
-	systemID, layerIndex, orbitRadius, err := parseDysonLayerPayload(cmd.Payload)
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	latitude, err := payloadFloat(cmd.Payload, "latitude")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	longitude, err := payloadFloat(cmd.Payload, "longitude")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	systemID, layerIndex, orbitRadius := p.SystemID, p.LayerIndex, p.OrbitRadius
+	latitude, longitude := p.Latitude, p.Longitude
 
 	ensureDysonLayer(gc.spaceRuntime, playerID, systemID, layerIndex, orbitRadius)
 	node, err := AddDysonNode(gc.spaceRuntime, playerID, systemID, layerIndex, latitude, longitude)
@@ -58,7 +73,7 @@ func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cm
 	}}
 }
 
-func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, cmd model.Command, p buildDysonFramePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	if err := requireDysonTech(ws, playerID, "dyson_component"); err != nil {
 		res.Code = model.CodeValidationFailed
@@ -66,24 +81,8 @@ func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	systemID, layerIndex, orbitRadius, err := parseDysonLayerPayload(cmd.Payload)
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	nodeAID, err := payloadString(cmd.Payload, "node_a_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	nodeBID, err := payloadString(cmd.Payload, "node_b_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	systemID, layerIndex, orbitRadius := p.SystemID, p.LayerIndex, p.OrbitRadius
+	nodeAID, nodeBID := p.NodeAID, p.NodeBID
 
 	ensureDysonLayer(gc.spaceRuntime, playerID, systemID, layerIndex, orbitRadius)
 	frame, err := AddDysonFrame(gc.spaceRuntime, playerID, systemID, layerIndex, nodeAID, nodeBID)
@@ -109,7 +108,7 @@ func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, c
 	}}
 }
 
-func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, cmd model.Command, p buildDysonShellPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	if err := requireDysonTech(ws, playerID, "dyson_component"); err != nil {
 		res.Code = model.CodeValidationFailed
@@ -117,30 +116,8 @@ func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	systemID, layerIndex, orbitRadius, err := parseDysonLayerPayload(cmd.Payload)
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	latitudeMin, err := payloadFloat(cmd.Payload, "latitude_min")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	latitudeMax, err := payloadFloat(cmd.Payload, "latitude_max")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	coverage, err := payloadFloat(cmd.Payload, "coverage")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	systemID, layerIndex, orbitRadius := p.SystemID, p.LayerIndex, p.OrbitRadius
+	latitudeMin, latitudeMax, coverage := p.LatitudeMin, p.LatitudeMax, p.Coverage
 
 	ensureDysonLayer(gc.spaceRuntime, playerID, systemID, layerIndex, orbitRadius)
 	shell, err := AddDysonShell(gc.spaceRuntime, playerID, systemID, layerIndex, latitudeMin, latitudeMax, coverage)
@@ -166,27 +143,10 @@ func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, c
 	}}
 }
 
-func (gc *GameCore) execDemolishDyson(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execDemolishDyson(ws *model.WorldState, playerID string, cmd model.Command, p demolishDysonPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	systemID, err := payloadString(cmd.Payload, "system_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	componentType, err := payloadString(cmd.Payload, "component_type")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	componentID, err := payloadString(cmd.Payload, "component_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	systemID, componentType, componentID := p.SystemID, p.ComponentType, p.ComponentID
 
 	refunds, err := DemolishDysonComponent(gc.spaceRuntime, playerID, systemID, componentType, componentID)
 	if err != nil {
@@ -237,87 +197,4 @@ func requireDysonTech(ws *model.WorldState, playerID, unlockID string) error {
 		return nil
 	}
 	return fmt.Errorf("dyson structure requires research unlock: %s", unlockID)
-}
-
-func parseDysonLayerPayload(payload map[string]any) (string, int, float64, error) {
-	systemID, err := payloadString(payload, "system_id")
-	if err != nil {
-		return "", 0, 0, err
-	}
-	layerIndex, err := payloadInt(payload, "layer_index")
-	if err != nil {
-		return "", 0, 0, err
-	}
-	orbitRadius := 0.0
-	if raw, ok := payload["orbit_radius"]; ok {
-		orbitRadius, err = anyToFloat(raw)
-		if err != nil {
-			return "", 0, 0, fmt.Errorf("payload.orbit_radius invalid: %w", err)
-		}
-	}
-	return systemID, layerIndex, orbitRadius, nil
-}
-
-func payloadString(payload map[string]any, key string) (string, error) {
-	raw, ok := payload[key]
-	if !ok {
-		return "", fmt.Errorf("payload.%s required", key)
-	}
-	value := fmt.Sprintf("%v", raw)
-	if value == "" {
-		return "", fmt.Errorf("payload.%s required", key)
-	}
-	return value, nil
-}
-
-func payloadInt(payload map[string]any, key string) (int, error) {
-	raw, ok := payload[key]
-	if !ok {
-		return 0, fmt.Errorf("payload.%s required", key)
-	}
-	switch value := raw.(type) {
-	case int:
-		return value, nil
-	case int32:
-		return int(value), nil
-	case int64:
-		return int(value), nil
-	case float64:
-		return int(value), nil
-	default:
-		parsed, err := strconv.Atoi(fmt.Sprintf("%v", raw))
-		if err != nil {
-			return 0, fmt.Errorf("payload.%s invalid", key)
-		}
-		return parsed, nil
-	}
-}
-
-func payloadFloat(payload map[string]any, key string) (float64, error) {
-	raw, ok := payload[key]
-	if !ok {
-		return 0, fmt.Errorf("payload.%s required", key)
-	}
-	value, err := anyToFloat(raw)
-	if err != nil {
-		return 0, fmt.Errorf("payload.%s invalid", key)
-	}
-	return value, nil
-}
-
-func anyToFloat(raw any) (float64, error) {
-	switch value := raw.(type) {
-	case float64:
-		return value, nil
-	case float32:
-		return float64(value), nil
-	case int:
-		return float64(value), nil
-	case int32:
-		return float64(value), nil
-	case int64:
-		return float64(value), nil
-	default:
-		return strconv.ParseFloat(fmt.Sprintf("%v", raw), 64)
-	}
 }

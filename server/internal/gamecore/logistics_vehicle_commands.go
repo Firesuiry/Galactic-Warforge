@@ -5,8 +5,14 @@ import (
 	"siliconworld/internal/model"
 )
 
+type installLogisticsVehiclePayload struct {
+	ItemID   string  `json:"item_id" payload:"required"`
+	Quantity int     `json:"quantity" payload:"required"`
+	Source   *string `json:"source"`
+}
+
 // Installation consumes manufactured vehicles; changing station capacity never creates a fleet.
-func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID string, cmd model.Command, p installLogisticsVehiclePayload) (model.CommandResult, []*model.GameEvent) {
 	building, station, failure := requireOwnedLogisticsStation(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -17,21 +23,16 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 	if building.Type != model.BuildingTypePlanetaryLogisticsStation && building.Type != model.BuildingTypeInterstellarLogisticsStation {
 		return fail("vehicles can only be installed at planetary or interstellar logistics stations")
 	}
-	itemID, err := payloadStrictString(cmd.Payload, "item_id")
-	if err != nil {
-		return fail(err.Error())
-	}
-	quantity, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil || quantity <= 0 {
+	itemID, quantity := p.ItemID, p.Quantity
+	if quantity <= 0 {
 		return fail("quantity must be a positive integer")
 	}
 	source := "player"
-	if raw, ok := cmd.Payload["source"]; ok {
-		value, valid := raw.(string)
-		if !valid || (value != "player" && value != "station") {
+	if p.Source != nil {
+		source = *p.Source
+		if source != "player" && source != "station" {
 			return fail("source must be player or station")
 		}
-		source = value
 	}
 	player := ws.Players[playerID]
 	switch itemID {
@@ -65,6 +66,7 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 	model.RegisterLogisticsStation(ws, building)
 	drones := make([]string, 0, quantity)
 	ships := make([]string, 0, quantity)
+	var err error
 	for i := 0; i < quantity; i++ {
 		if itemID == model.ItemLogisticsDrone {
 			d := model.NewLogisticsDroneState(ws.NextEntityID("drone"), building.ID, building.Position)

@@ -804,37 +804,26 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 	}
 
 	for i, cmd := range qr.Request.Commands {
-		var res model.CommandResult
-		var evts []*model.GameEvent
-
-		res.CommandIndex = i
-
 		if !player.HasPermission(cmd.Type) {
-			res.Status = model.StatusFailed
-			res.Code = model.CodeUnauthorized
-			res.Message = fmt.Sprintf("permission denied for command %s", cmd.Type)
+			res := model.CommandResult{
+				CommandIndex: i,
+				Status:       model.StatusFailed,
+				Code:         model.CodeUnauthorized,
+				Message:      fmt.Sprintf("permission denied for command %s", cmd.Type),
+			}
 			results = append(results, res)
 			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
 			gc.recordCommandAudit(qr, cmd, res, player, "execute", boolPtr(false))
 			continue
 		}
 
-		handler, known := commandHandlers[cmd.Type]
-		if !known {
-			res = unknownCommandResult(cmd.Type)
-		} else {
-			// F4：命令按目标行星路由——显式 planet_id → 目标实体所在行星 →
-			// 玩家焦点行星 → 全局活动行星兜底。
-			cmdWorld, routeFailure := gc.resolveCommandWorld(player, cmd, handler)
-			if routeFailure != nil {
-				res = *routeFailure
-				res.CommandIndex = i
-				results = append(results, res)
-				allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
-				gc.recordCommandAudit(qr, cmd, res, player, "execute", boolPtr(false))
-				continue
-			}
-			res, evts = handler.exec(gc, cmdWorld, qr.PlayerID, cmd)
+		res, evts, executed := gc.dispatchCommand(player, cmd)
+		if !executed {
+			res.CommandIndex = i
+			results = append(results, res)
+			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
+			gc.recordCommandAudit(qr, cmd, res, player, "execute", boolPtr(false))
+			continue
 		}
 
 		res.CommandIndex = i

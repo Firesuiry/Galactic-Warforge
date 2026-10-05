@@ -9,20 +9,15 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execBlockadePlanet(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type blockadePlanetPayload struct {
+	TaskForceID string `json:"task_force_id" payload:"required"`
+	PlanetID    string `json:"planet_id" payload:"required"`
+}
+
+func (gc *GameCore) execBlockadePlanet(ws *model.WorldState, playerID string, cmd model.Command, p blockadePlanetPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	taskForceID, err := payloadStrictString(cmd.Payload, "task_force_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	planetID, err := payloadStrictString(cmd.Payload, "planet_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	taskForceID := p.TaskForceID
+	planetID := p.PlanetID
 	_, taskForce, failure := requireOwnedTaskForce(ws, playerID, taskForceID)
 	if failure != nil {
 		return *failure, nil

@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"reflect"
 
 	"siliconworld/internal/model"
 )
@@ -31,17 +32,51 @@ func (r entityRefs) empty() bool {
 	return len(r.buildings)+len(r.units)+len(r.tasks) == 0
 }
 
-type commandExec func(gc *GameCore, ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent)
-
-// commandHandler 是命令注册表的一项：结算层级/路由 + 执行器。
-// 命令的类型、目录元数据与结构校验登记在 model 的命令目录里，这里只绑定执行。
-type commandHandler struct {
-	route commandRoute
-	exec  commandExec
+// payloadRefs 由引用实体的载荷实现（building_id / task_id / member_ids），供行星路由。
+type payloadRefs interface {
+	entityRefs() entityRefs
 }
 
-func handle(route commandRoute, exec commandExec) commandHandler {
-	return commandHandler{route: route, exec: exec}
+// buildingRef 是载荷里的 building_id：既是执行参数，也是行星路由的实体引用。
+type buildingRef struct {
+	BuildingID string `json:"building_id" payload:"required"`
+}
+
+func (r buildingRef) entityRefs() entityRefs {
+	return entityRefs{buildings: []string{r.BuildingID}}
+}
+
+// commandHandler 是命令注册表的一项：结算层级/路由 + 载荷解码 + 执行器。
+// 命令的类型、目录元数据与结构校验登记在 model 的命令目录里，这里只绑定执行。
+type commandHandler struct {
+	route   commandRoute
+	payload reflect.Type
+	bind    func(cmd model.Command) (boundCommand, error)
+}
+
+// boundCommand 是载荷已解码的命令：带路由引用与执行闭包。
+type boundCommand struct {
+	refs entityRefs
+	exec func(gc *GameCore, ws *model.WorldState, playerID string) (model.CommandResult, []*model.GameEvent)
+}
+
+func handle[P any](route commandRoute, exec func(*GameCore, *model.WorldState, string, model.Command, P) (model.CommandResult, []*model.GameEvent)) commandHandler {
+	return commandHandler{route: route, payload: reflect.TypeFor[P](), bind: func(cmd model.Command) (boundCommand, error) {
+		payload, err := decodePayload[P](cmd.Payload)
+		if err != nil {
+			return boundCommand{}, err
+		}
+		var refs entityRefs
+		if r, ok := any(payload).(payloadRefs); ok {
+			refs = r.entityRefs()
+		}
+		return boundCommand{
+			refs: route.refs(cmd, refs),
+			exec: func(gc *GameCore, ws *model.WorldState, playerID string) (model.CommandResult, []*model.GameEvent) {
+				return exec(gc, ws, playerID, cmd, payload)
+			},
+		}, nil
+	}}
 }
 
 // commandHandlers 每条公开命令只登记一次；与 model 命令目录一一对应（见 command_registry_test.go）。
@@ -112,12 +147,29 @@ var commandHandlers = map[model.CommandType]commandHandler{
 	model.CmdDemolishDyson:             handle(routeSpace, (*GameCore).execDemolishDyson),
 }
 
-func unknownCommandResult(cmdType model.CommandType) model.CommandResult {
-	return model.CommandResult{
-		Status:  model.StatusRejected,
-		Code:    model.CodeValidationFailed,
-		Message: fmt.Sprintf("unknown command type: %s", cmdType),
+// dispatchCommand 查注册表、解码载荷、按行星路由并执行一条命令。
+// executed=false 表示命令在路由阶段被拒、未进入执行。
+func (gc *GameCore) dispatchCommand(player *model.PlayerState, cmd model.Command) (res model.CommandResult, evts []*model.GameEvent, executed bool) {
+	handler, ok := commandHandlers[cmd.Type]
+	if !ok {
+		return model.CommandResult{
+			Status:  model.StatusRejected,
+			Code:    model.CodeValidationFailed,
+			Message: fmt.Sprintf("unknown command type: %s", cmd.Type),
+		}, nil, true
 	}
+	bound, err := handler.bind(cmd)
+	if err != nil {
+		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: err.Error()}, nil, true
+	}
+	// F4：命令按目标行星路由——显式 planet_id → 目标实体所在行星 →
+	// 玩家焦点行星 → 全局活动行星兜底。
+	ws, routeFailure := gc.resolveCommandWorld(player, cmd, handler.route, bound.refs)
+	if routeFailure != nil {
+		return *routeFailure, nil, false
+	}
+	res, evts = bound.exec(gc, ws, player.PlayerID)
+	return res, evts, true
 }
 
 // routeRefs 按注册的路由方式抽取 target 里的实体引用，再并上载荷里的引用。

@@ -798,6 +798,10 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	return events, nil
 }
 
+type setRecipePayload struct {
+	RecipeID string `json:"recipe_id"`
+}
+
 // execSetRecipe handles the "set_recipe" command: switch a production building
 // (or a research lab between research mode and matrix production mode) to a
 // new recipe in place, without demolishing and rebuilding.
@@ -811,7 +815,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 //
 // The switch is atomic: every validation runs before any state is mutated, so
 // an illegal switch leaves the building untouched.
-func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd model.Command, p setRecipePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	buildingID := cmd.Target.EntityID
@@ -837,10 +841,7 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 		return res, nil
 	}
 
-	recipeID := ""
-	if recipeRaw, ok := cmd.Payload["recipe_id"]; ok && recipeRaw != nil {
-		recipeID = fmt.Sprintf("%v", recipeRaw)
-	}
+	recipeID := p.RecipeID
 
 	player := ws.Players[playerID]
 	if recipeID != "" {

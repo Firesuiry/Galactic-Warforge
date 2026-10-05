@@ -6,7 +6,7 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execScanGalaxy(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execScanGalaxy(_ *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	galaxyID := cmd.Target.GalaxyID
 	if galaxyID == "" {
@@ -30,7 +30,7 @@ func (gc *GameCore) execScanGalaxy(_ *model.WorldState, playerID string, cmd mod
 	return res, nil
 }
 
-func (gc *GameCore) execScanSystem(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execScanSystem(_ *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	systemID := cmd.Target.SystemID
 	if systemID == "" {
@@ -52,7 +52,7 @@ func (gc *GameCore) execScanSystem(_ *model.WorldState, playerID string, cmd mod
 	return res, nil
 }
 
-func (gc *GameCore) execScanPlanet(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execScanPlanet(_ *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	planetID := cmd.Target.PlanetID
 	if planetID == "" {

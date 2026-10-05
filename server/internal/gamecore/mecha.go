@@ -51,7 +51,12 @@ func settleMechas(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
-func (gc *GameCore) execRefuelMecha(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type refuelMechaPayload struct {
+	ItemID   string `json:"item_id" payload:"required"`
+	Quantity int    `json:"quantity" payload:"required"`
+}
+
+func (gc *GameCore) execRefuelMecha(ws *model.WorldState, playerID string, cmd model.Command, p refuelMechaPayload) (model.CommandResult, []*model.GameEvent) {
 	fail := func(code model.ResultCode, message string) (model.CommandResult, []*model.GameEvent) {
 		return model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}, nil
 	}
@@ -65,12 +70,8 @@ func (gc *GameCore) execRefuelMecha(ws *model.WorldState, playerID string, cmd m
 	if unit.Type != model.UnitTypeExecutor {
 		return fail(model.CodeInvalidTarget, "refuel_mecha requires the player executor")
 	}
-	itemID, err := payloadStrictString(cmd.Payload, "item_id")
-	if err != nil {
-		return fail(model.CodeValidationFailed, err.Error())
-	}
-	quantity, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil || quantity <= 0 {
+	itemID, quantity := p.ItemID, p.Quantity
+	if quantity <= 0 {
 		return fail(model.CodeValidationFailed, "payload.quantity must be a positive integer")
 	}
 	fuel, ok := model.Item(itemID)

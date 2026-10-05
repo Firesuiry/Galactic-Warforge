@@ -153,7 +153,7 @@ func settleCombatRuntime(ws *model.WorldState, currentTick int64) []*model.GameE
 					order = model.SquadOrderDefend
 				}
 				gc := &GameCore{}
-				_, ev := gc.execSquadOrder(ws, squad.OwnerID, model.Command{Target: model.CommandTarget{Position: &target}, Payload: map[string]any{"squad_id": id, "order": string(order)}})
+				_, ev := gc.execSquadOrder(ws, squad.OwnerID, model.Command{Target: model.CommandTarget{Position: &target}}, squadOrderPayload{SquadID: id, Order: string(order)})
 				events = append(events, ev...)
 			}
 		}

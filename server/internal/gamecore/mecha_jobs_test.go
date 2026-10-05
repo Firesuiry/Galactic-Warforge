@@ -171,7 +171,7 @@ func TestMechaJobValidationIsAtomic(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ws, unit := personalJobTestWorld()
 			ws.Players["p1"].Inventory = model.ItemInventory{model.ItemIronIngot: 2}
-			result, _ := (&GameCore{}).execCraftItem(ws, tc.owner, handcraftCommand(tc.recipe, tc.quantity))
+			result, _ := execCommand(&GameCore{}, model.CmdCraftItem, ws, tc.owner, handcraftCommand(tc.recipe, tc.quantity))
 			if result.Code != tc.code || unit.Mecha.Job != nil || unit.Mecha.Energy != 100 || ws.Players["p1"].Inventory[model.ItemIronIngot] != 2 {
 				t.Fatalf("rejected job mutated state: %+v", result)
 			}

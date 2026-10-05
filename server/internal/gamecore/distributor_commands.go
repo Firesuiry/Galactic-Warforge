@@ -23,7 +23,15 @@ func ownedDistributor(ws *model.WorldState, playerID, id string) (*model.Buildin
 	return b, nil
 }
 
-func (gc *GameCore) execConfigureDistributor(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type configureDistributorPayload struct {
+	ItemID                  string `json:"item_id" payload:"required,allowempty"`
+	Mode                    string `json:"mode" payload:"required"`
+	LocalStorage            int    `json:"local_storage" payload:"required"`
+	PlayerDeliveryEnabled   *bool  `json:"player_delivery_enabled"`
+	PlayerCollectionEnabled *bool  `json:"player_collection_enabled"`
+}
+
+func (gc *GameCore) execConfigureDistributor(ws *model.WorldState, playerID string, cmd model.Command, p configureDistributorPayload) (model.CommandResult, []*model.GameEvent) {
 	b, failure := ownedDistributor(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -32,29 +40,15 @@ func (gc *GameCore) execConfigureDistributor(ws *model.WorldState, playerID stri
 		return mechaJobFailed(model.CodeValidationFailed, s)
 	}
 	state := b.Distributor.Clone()
-	item, ok := cmd.Payload["item_id"].(string)
-	if !ok {
-		return fail("item_id must be a string")
-	}
-	mode, err := payloadStrictString(cmd.Payload, "mode")
-	if err != nil {
-		return fail(err.Error())
-	}
-	quantity, err := payloadStrictInt(cmd.Payload, "local_storage")
-	if err != nil {
-		return fail(err.Error())
-	}
-	state.ItemID = item
-	state.Mode = model.LogisticsStationMode(mode)
+	quantity := p.LocalStorage
+	state.ItemID = p.ItemID
+	state.Mode = model.LogisticsStationMode(p.Mode)
 	state.LocalStorage = quantity
-	for key, dest := range map[string]*bool{"player_delivery_enabled": &state.PlayerDeliveryEnabled, "player_collection_enabled": &state.PlayerCollectionEnabled} {
-		if raw, exists := cmd.Payload[key]; exists {
-			value, valid := raw.(bool)
-			if !valid {
-				return fail(key + " must be boolean")
-			}
-			*dest = value
-		}
+	if p.PlayerDeliveryEnabled != nil {
+		state.PlayerDeliveryEnabled = *p.PlayerDeliveryEnabled
+	}
+	if p.PlayerCollectionEnabled != nil {
+		state.PlayerCollectionEnabled = *p.PlayerCollectionEnabled
 	}
 	if err := state.Validate(); err != nil {
 		return fail(err.Error())
@@ -73,7 +67,12 @@ func (gc *GameCore) execConfigureDistributor(ws *model.WorldState, playerID stri
 	}}
 }
 
-func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type installLogisticsBotPayload struct {
+	Quantity int     `json:"quantity" payload:"required"`
+	Source   *string `json:"source"`
+}
+
+func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p installLogisticsBotPayload) (model.CommandResult, []*model.GameEvent) {
 	b, failure := ownedDistributor(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -85,17 +84,16 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	if host == nil {
 		return fail("distributor host unavailable")
 	}
-	n, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil || n <= 0 || n > b.Distributor.BotCapacity-model.DistributorBotCount(ws, b.ID) {
+	n := p.Quantity
+	if n <= 0 || n > b.Distributor.BotCapacity-model.DistributorBotCount(ws, b.ID) {
 		return fail("quantity exceeds available robot slots")
 	}
 	source := "player"
-	if raw, ok := cmd.Payload["source"]; ok {
-		v, valid := raw.(string)
-		if !valid || (v != "player" && v != "storage") {
+	if p.Source != nil {
+		source = *p.Source
+		if source != "player" && source != "storage" {
 			return fail("source must be player or storage")
 		}
-		source = v
 	}
 	player := ws.Players[playerID]
 	if player == nil {
@@ -140,13 +138,17 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("installed %d logistics bots", n)}, events
 }
 
-func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type uninstallLogisticsBotPayload struct {
+	Quantity int `json:"quantity" payload:"required"`
+}
+
+func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p uninstallLogisticsBotPayload) (model.CommandResult, []*model.GameEvent) {
 	b, failure := ownedDistributor(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
 	}
-	n, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil || n <= 0 {
+	n := p.Quantity
+	if n <= 0 {
 		return mechaJobFailed(model.CodeValidationFailed, "quantity must be positive")
 	}
 	ids := []string{}

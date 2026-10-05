@@ -6,33 +6,41 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type commissionFleetPayload struct {
+	buildingRef
+	BlueprintID string `json:"blueprint_id" payload:"required"`
+	Count       int    `json:"count" payload:"required"`
+	SystemID    string `json:"system_id" payload:"required"`
+	FleetID     string `json:"fleet_id"`
+}
+
+type fleetAssignPayload struct {
+	FleetID   string `json:"fleet_id" payload:"required"`
+	Formation string `json:"formation" payload:"required"`
+}
+
+type fleetAttackPayload struct {
+	FleetID  string `json:"fleet_id" payload:"required"`
+	PlanetID string `json:"planet_id" payload:"required"`
+	TargetID string `json:"target_id" payload:"required"`
+}
+
+type fleetMovePayload struct {
+	FleetID        string `json:"fleet_id" payload:"required"`
+	TargetSystemID string `json:"target_system_id" payload:"required"`
+}
+
+type fleetDisbandPayload struct {
+	FleetID string `json:"fleet_id" payload:"required"`
+}
+
+func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, cmd model.Command, p commissionFleetPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	buildingID, err := payloadStrictString(cmd.Payload, "building_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	blueprintID, err := payloadStrictString(cmd.Payload, "blueprint_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	count, err := payloadStrictInt(cmd.Payload, "count")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	systemID, err := payloadStrictString(cmd.Payload, "system_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	buildingID := p.BuildingID
+	blueprintID := p.BlueprintID
+	count := p.Count
+	systemID := p.SystemID
 	if count <= 0 {
 		res.Code = model.CodeValidationFailed
 		res.Message = "payload.count must be positive"
@@ -74,14 +82,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 		gc.spaceRuntime = model.NewSpaceRuntimeState()
 	}
 	systemRuntime := gc.spaceRuntime.EnsurePlayerSystem(playerID, systemID)
-	fleetID := ""
-	if raw, ok := cmd.Payload["fleet_id"]; ok {
-		if fleetID, err = payloadValueString(raw); err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.fleet_id must be a string"
-			return res, nil
-		}
-	}
+	fleetID := p.FleetID
 	if fleetID == "" {
 		fleetID = gc.spaceRuntime.NextEntityID("fleet")
 	}
@@ -147,20 +148,10 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	return res, events
 }
 
-func (gc *GameCore) execFleetAssign(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execFleetAssign(_ *model.WorldState, playerID string, cmd model.Command, p fleetAssignPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	fleetID, err := payloadStrictString(cmd.Payload, "fleet_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	formationRaw, err := payloadStrictString(cmd.Payload, "formation")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	fleetID := p.FleetID
+	formationRaw := p.Formation
 	formation := model.FormationType(formationRaw)
 	if !validFormationType(formation) {
 		res.Code = model.CodeValidationFailed
@@ -193,26 +184,11 @@ func (gc *GameCore) execFleetAssign(_ *model.WorldState, playerID string, cmd mo
 	}}
 }
 
-func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd model.Command, p fleetAttackPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	fleetID, err := payloadStrictString(cmd.Payload, "fleet_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	planetID, err := payloadStrictString(cmd.Payload, "planet_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	targetID, err := payloadStrictString(cmd.Payload, "target_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	fleetID := p.FleetID
+	planetID := p.PlanetID
+	targetID := p.TargetID
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
@@ -251,20 +227,10 @@ func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd mo
 	}}
 }
 
-func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd model.Command, p fleetMovePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	fleetID, err := payloadStrictString(cmd.Payload, "fleet_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	targetSystemID, err := payloadStrictString(cmd.Payload, "target_system_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	fleetID := p.FleetID
+	targetSystemID := p.TargetSystemID
 	_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil {
 		res.Code = model.CodeEntityNotFound
@@ -318,14 +284,9 @@ func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd mode
 	}}
 }
 
-func (gc *GameCore) execFleetDisband(_ *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execFleetDisband(_ *model.WorldState, playerID string, cmd model.Command, p fleetDisbandPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	fleetID, err := payloadStrictString(cmd.Payload, "fleet_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	fleetID := p.FleetID
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
@@ -622,12 +583,4 @@ func findOwnedFleet(spaceRuntime *model.SpaceRuntimeState, playerID, fleetID str
 		}
 	}
 	return nil, nil
-}
-
-func payloadValueString(raw any) (string, error) {
-	value := fmt.Sprintf("%v", raw)
-	if value == "" {
-		return "", fmt.Errorf("value must be a non-empty string")
-	}
-	return value, nil
 }

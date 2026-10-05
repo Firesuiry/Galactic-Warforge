@@ -2,7 +2,14 @@ package gamecore
 
 import "siliconworld/internal/model"
 
-func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type configureSorterPayload struct {
+	InputDirections  []string `json:"input_directions" payload:"required"`
+	OutputDirections []string `json:"output_directions" payload:"required"`
+	FilterMode       *string  `json:"filter_mode"`
+	FilterItems      []string `json:"filter_items"`
+}
+
+func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, cmd model.Command, p configureSorterPayload) (model.CommandResult, []*model.GameEvent) {
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
 		return mechaJobFailed(model.CodeEntityNotFound, "sorter not found")
@@ -15,9 +22,8 @@ func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, c
 	}
 	staged := b.Sorter.Clone()
 	used := map[string]bool{}
-	for _, key := range []string{"input_directions", "output_directions"} {
-		dirs, err := payloadStringSlice(cmd.Payload, key)
-		if err != nil || len(dirs) == 0 {
+	for i, dirs := range [][]string{p.InputDirections, p.OutputDirections} {
+		if len(dirs) == 0 {
 			return mechaJobFailed(model.CodeValidationFailed, "sorter needs nonempty input and output directions")
 		}
 		values := make([]model.ConveyorDirection, 0, len(dirs))
@@ -29,25 +35,21 @@ func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, c
 			used[value] = true
 			values = append(values, dir)
 		}
-		if key == "input_directions" {
+		if i == 0 {
 			staged.InputDirections = values
 		} else {
 			staged.OutputDirections = values
 		}
 	}
 	staged.Filter = model.SorterFilter{Mode: model.SorterFilterAllow}
-	if _, ok := cmd.Payload["filter_mode"]; ok {
-		value, err := payloadStrictString(cmd.Payload, "filter_mode")
-		if err != nil || value != "allow" && value != "deny" {
+	if p.FilterMode != nil {
+		value := *p.FilterMode
+		if value != "allow" && value != "deny" {
 			return mechaJobFailed(model.CodeValidationFailed, "filter_mode must be allow or deny")
 		}
 		staged.Filter.Mode = model.SorterFilterMode(value)
 	}
-	if _, ok := cmd.Payload["filter_items"]; ok {
-		values, err := payloadStringSlice(cmd.Payload, "filter_items")
-		if err != nil {
-			return mechaJobFailed(model.CodeValidationFailed, err.Error())
-		}
+	if values := p.FilterItems; values != nil {
 		seen := map[string]bool{}
 		for _, id := range values {
 			if _, ok := model.Item(id); !ok || seen[id] {

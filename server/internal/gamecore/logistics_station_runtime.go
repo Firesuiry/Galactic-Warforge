@@ -129,27 +129,6 @@ func settleLogisticsStationIO(ws *model.WorldState) {
 	}
 }
 
-func parseLogisticsBeltPorts(raw any) (map[model.ConveyorDirection]model.LogisticsBeltPort, error) {
-	object, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("payload.belt_ports must be an object")
-	}
-	ports := make(map[model.ConveyorDirection]model.LogisticsBeltPort, len(object))
-	for direction, value := range object {
-		entry, ok := value.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("belt_ports.%s must be an object", direction)
-		}
-		mode, modeOK := entry["mode"].(string)
-		item, itemOK := entry["item_id"].(string)
-		if !modeOK || !itemOK {
-			return nil, fmt.Errorf("belt_ports.%s requires mode and item_id strings", direction)
-		}
-		ports[model.ConveyorDirection(direction)] = model.LogisticsBeltPort{Mode: mode, ItemID: item}
-	}
-	return ports, nil
-}
-
 func (gc *GameCore) removeLogisticsSlot(ws *model.WorldState, b *model.Building, scope, itemID string) error {
 	s := b.LogisticsStation
 	switch scope {

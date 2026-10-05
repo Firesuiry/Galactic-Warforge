@@ -24,8 +24,16 @@ func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAm
 	return model.ItemAmount{}, false
 }
 
+type buildPayload struct {
+	BuildingType model.BuildingType `json:"building_type" payload:"required"`
+	RecipeID     string             `json:"recipe_id"`
+	Direction    *string            `json:"direction"`
+	Rotation     *int               `json:"rotation"`
+	AutoApproach bool               `json:"auto_approach"`
+}
+
 // execBuild handles the "build" command
-func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.Command, p buildPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	pos := cmd.Target.Position
@@ -41,13 +49,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
-	btypeRaw, ok := cmd.Payload["building_type"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.building_type required"
-		return res, nil
-	}
-	btype := model.BuildingType(fmt.Sprintf("%v", btypeRaw))
+	btype := p.BuildingType
 	if btype == model.BuildingTypeLogisticsDistributor {
 		if _, err := model.DistributorPlacementHost(ws, playerID, *pos, ""); err != nil {
 			return mechaJobFailed(model.CodeInvalidTarget, err.Error())
@@ -105,10 +107,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
-	recipeID := ""
-	if recipeRaw, ok := cmd.Payload["recipe_id"]; ok {
-		recipeID = fmt.Sprintf("%v", recipeRaw)
-	}
+	recipeID := p.RecipeID
 	if recipeID == "" && def.DefaultRecipeID != "" {
 		recipeID = def.DefaultRecipeID
 	}
@@ -164,11 +163,11 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	var conveyorDir model.ConveyorDirection
 	if model.IsConveyorBuilding(btype) {
 		conveyorDir = model.ConveyorEast
-		if dirRaw, ok := cmd.Payload["direction"]; ok {
-			dir := model.ConveyorDirection(fmt.Sprintf("%v", dirRaw))
+		if p.Direction != nil {
+			dir := model.ConveyorDirection(*p.Direction)
 			if !dir.Valid() {
 				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("invalid conveyor direction: %v", dirRaw)
+				res.Message = fmt.Sprintf("invalid conveyor direction: %v", *p.Direction)
 				return res, nil
 			}
 			conveyorDir = dir
@@ -176,21 +175,14 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	}
 
 	rotation := model.PlanRotation0
-	if _, ok := cmd.Payload["rotation"]; ok {
-		degrees, err := payloadStrictInt(cmd.Payload, "rotation")
-		if err != nil || degrees < 0 || degrees > 270 || degrees%90 != 0 {
+	if p.Rotation != nil {
+		degrees := *p.Rotation
+		if degrees < 0 || degrees > 270 || degrees%90 != 0 {
 			return mechaJobFailed(model.CodeValidationFailed, "rotation must be 0, 90, 180 or 270")
 		}
 		rotation = model.PlanRotation(fmt.Sprint(degrees))
 	}
-	autoApproach := false
-	if raw, ok := cmd.Payload["auto_approach"]; ok {
-		var valid bool
-		autoApproach, valid = raw.(bool)
-		if !valid {
-			return mechaJobFailed(model.CodeValidationFailed, "auto_approach must be boolean")
-		}
-	}
+	autoApproach := p.AutoApproach
 	var approachUnit *model.Unit
 	var approachPath []model.Position
 	// Check resource cost (availability validation)
@@ -282,17 +274,20 @@ func buildSiteTouchesLava(ws *model.WorldState, btype model.BuildingType, pos mo
 	return model.LavaProximityOk(isLava, pos.X, pos.Y, footprint.Width, footprint.Height)
 }
 
+// constructionTaskPayload 的 task_id 同时是行星路由引用。
+type constructionTaskPayload struct {
+	TaskID string `json:"task_id" payload:"required"`
+}
+
+func (p constructionTaskPayload) entityRefs() entityRefs {
+	return entityRefs{tasks: []string{p.TaskID}}
+}
+
 // execCancelConstruction handles the "cancel_construction" command
-func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string, cmd model.Command, p constructionTaskPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	taskIDRaw, ok := cmd.Payload["task_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.task_id required"
-		return res, nil
-	}
-	taskID := fmt.Sprintf("%v", taskIDRaw)
+	taskID := p.TaskID
 
 	if ws.Construction == nil {
 		res.Code = model.CodeEntityNotFound
@@ -335,16 +330,10 @@ func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string
 }
 
 // execRestoreConstruction handles the "restore_construction" command
-func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID string, cmd model.Command, p constructionTaskPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	taskIDRaw, ok := cmd.Payload["task_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.task_id required"
-		return res, nil
-	}
-	taskID := fmt.Sprintf("%v", taskIDRaw)
+	taskID := p.TaskID
 
 	if ws.Construction == nil {
 		res.Code = model.CodeEntityNotFound
@@ -463,7 +452,7 @@ func resolveCommandUnits(ws *model.WorldState, playerID string, cmd model.Comman
 }
 
 // execMove handles the "move" command for a unit
-func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	units, cmdErr := resolveCommandUnits(ws, playerID, cmd)
@@ -567,8 +556,12 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 	return res, events
 }
 
+type attackPayload struct {
+	TargetEntityID string `json:"target_entity_id" payload:"required"`
+}
+
 // execAttack handles the "attack" command
-func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.Command, p attackPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	attackers, cmdErr := resolveCommandUnits(ws, playerID, cmd)
@@ -576,13 +569,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 		return *cmdErr, nil
 	}
 
-	targetIDRaw, ok := cmd.Payload["target_entity_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.target_entity_id required"
-		return res, nil
-	}
-	targetID := fmt.Sprintf("%v", targetIDRaw)
+	targetID := p.TargetEntityID
 
 	target := resolveCombatTarget(ws, targetID)
 	if target == nil {
@@ -662,22 +649,21 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 	return res, events
 }
 
+type unitOrderPayload struct {
+	Order          string `json:"order" payload:"required"`
+	TargetEntityID string `json:"target_entity_id"`
+}
+
 // execUnitOrder handles the "unit_order" command（R5 指令集）：
 // attack_move / patrol / guard / hold / follow / retreat / stop。
-func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd model.Command, p unitOrderPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	units, cmdErr := resolveCommandUnits(ws, playerID, cmd)
 	if cmdErr != nil {
 		return *cmdErr, nil
 	}
-	orderRaw, ok := cmd.Payload["order"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.order required"
-		return res, nil
-	}
-	order := fmt.Sprintf("%v", orderRaw)
+	order := p.Order
 
 	var events []*model.GameEvent
 	ordered := 0
@@ -736,13 +722,12 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 				unit.CombatAnchor = nil
 			}
 		case "guard", "follow":
-			targetIDRaw, tok := cmd.Payload["target_entity_id"]
-			if !tok {
+			targetID := p.TargetEntityID
+			if targetID == "" {
 				res.Code = model.CodeValidationFailed
 				res.Message = fmt.Sprintf("payload.target_entity_id required for %s", order)
 				return res, nil
 			}
-			targetID := fmt.Sprintf("%v", targetIDRaw)
 			friendly := resolveFriendly(ws, targetID)
 			if friendly == nil {
 				res.Code = model.CodeEntityNotFound
@@ -804,7 +789,7 @@ func friendlyOwner(ws *model.WorldState, id string) string {
 }
 
 // execUpgrade handles upgrading a building
-func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	var events []*model.GameEvent
 
@@ -916,7 +901,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 }
 
 // execDemolish handles demolishing a building
-func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	var events []*model.GameEvent
 
@@ -2060,6 +2045,13 @@ func removeUnitFromTile(ws *model.WorldState, tileKey, unitID string) {
 	}
 }
 
+type launchSolarSailPayload struct {
+	buildingRef
+	Count       int     `json:"count"`
+	OrbitRadius float64 `json:"orbit_radius"`
+	Inclination float64 `json:"inclination"`
+}
+
 // execLaunchSolarSail handles the "launch_solar_sail" command.
 //
 //	Payload: {
@@ -2067,21 +2059,10 @@ func removeUnitFromTile(ws *model.WorldState, tileKey, unitID string) {
 //	  "orbit_radius": 1.0,  // optional, default 1.0 AU
 //	  "inclination": 0.0,   // optional, default 0.0 degrees
 //	}
-func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, cmd model.Command, p launchSolarSailPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	buildingID, ok := cmd.Payload["building_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.building_id required"
-		return res, nil
-	}
-	bid, ok := buildingID.(string)
-	if !ok || bid == "" {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.building_id must be a non-empty string"
-		return res, nil
-	}
+	bid := p.BuildingID
 
 	building, ok := ws.Buildings[bid]
 	if !ok {
@@ -2117,18 +2098,7 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	sailCount := 1
-	if countRaw, ok := cmd.Payload["count"]; ok {
-		if count, ok := countRaw.(float64); ok {
-			sailCount = int(count)
-			if sailCount <= 0 {
-				sailCount = 1
-			}
-			if sailCount > 10 {
-				sailCount = 10 // cap at 10 per launch
-			}
-		}
-	}
+	sailCount := min(max(p.Count, 1), 10) // default 1, cap at 10 per launch
 
 	// Check launch building has enough loaded solar sails.
 	if building.Storage == nil {
@@ -2145,17 +2115,10 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 
 	// Get orbit parameters
 	orbitRadius := 1.0
-	if radiusRaw, ok := cmd.Payload["orbit_radius"]; ok {
-		if radius, ok := radiusRaw.(float64); ok && radius > 0 {
-			orbitRadius = radius
-		}
+	if p.OrbitRadius > 0 {
+		orbitRadius = p.OrbitRadius
 	}
-	inclination := 0.0
-	if inclRaw, ok := cmd.Payload["inclination"]; ok {
-		if incl, ok := inclRaw.(float64); ok {
-			inclination = incl
-		}
-	}
+	inclination := p.Inclination
 
 	// Validate orbit parameters against building's launch constraints
 	if building.Runtime.Functions.Launch != nil {
@@ -2242,27 +2205,17 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	return res, events
 }
 
-func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type transferItemPayload struct {
+	buildingRef
+	ItemID    string  `json:"item_id" payload:"required"`
+	Quantity  int     `json:"quantity" payload:"required"`
+	Direction *string `json:"direction"`
+}
+
+func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd model.Command, p transferItemPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	buildingID, err := payloadStrictString(cmd.Payload, "building_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	itemID, err := payloadStrictString(cmd.Payload, "item_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	quantity, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	buildingID, itemID, quantity := p.BuildingID, p.ItemID, p.Quantity
 	if quantity <= 0 {
 		res.Code = model.CodeValidationFailed
 		res.Message = "payload.quantity must be positive"
@@ -2298,10 +2251,9 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		return res, nil
 	}
 	direction := "to_building"
-	if raw, ok := cmd.Payload["direction"]; ok {
-		var valid bool
-		direction, valid = raw.(string)
-		if !valid || (direction != "to_building" && direction != "to_player") {
+	if p.Direction != nil {
+		direction = *p.Direction
+		if direction != "to_building" && direction != "to_player" {
 			return mechaJobFailed(model.CodeValidationFailed, "direction must be to_building or to_player")
 		}
 	}
@@ -2348,6 +2300,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		}
 	}
 	var accepted, remaining int
+	var err error
 	if model.IsGroundLogisticsBuilding(building.Type) && building.LogisticsStation != nil {
 		accepted, remaining, err = building.LogisticsStation.ReceiveItem(itemID, quantity)
 	} else {
@@ -2392,7 +2345,26 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	}}
 }
 
-func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type configureLogisticsStationPayload struct {
+	InputPriority  *int                                        `json:"input_priority"`
+	OutputPriority *int                                        `json:"output_priority"`
+	DroneCapacity  *int                                        `json:"drone_capacity"`
+	Interstellar   *logisticsInterstellarPayload               `json:"interstellar"`
+	BeltPorts      map[model.ConveyorDirection]beltPortPayload `json:"belt_ports"`
+}
+
+type logisticsInterstellarPayload struct {
+	Enabled     *bool `json:"enabled"`
+	WarpEnabled *bool `json:"warp_enabled"`
+	ShipSlots   *int  `json:"ship_slots"`
+}
+
+type beltPortPayload struct {
+	Mode   string `json:"mode" payload:"required,allowempty"`
+	ItemID string `json:"item_id" payload:"required,allowempty"`
+}
+
+func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID string, cmd model.Command, p configureLogisticsStationPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	building, station, execRes := requireOwnedLogisticsStation(ws, playerID, cmd.Target.EntityID)
@@ -2402,13 +2374,8 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 
 	staged := station.Clone()
 
-	if raw, ok := cmd.Payload["drone_capacity"]; ok {
-		droneCapacity, err := payloadValueInt(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.drone_capacity must be numeric"
-			return res, nil
-		}
+	if p.DroneCapacity != nil {
+		droneCapacity := *p.DroneCapacity
 		if droneCapacity < 1 || droneCapacity > model.DefaultLogisticsStationDroneCapacity {
 			res.Code = model.CodeValidationFailed
 			res.Message = "drone_capacity must be between 1 and 10"
@@ -2416,52 +2383,40 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 		}
 		staged.DroneCapacity = droneCapacity
 	}
-	if raw, ok := cmd.Payload["input_priority"]; ok {
-		inputPriority, err := payloadValueInt(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.input_priority must be numeric"
-			return res, nil
-		}
-		staged.Priority.Input = inputPriority
+	if p.InputPriority != nil {
+		staged.Priority.Input = *p.InputPriority
 	}
-	if raw, ok := cmd.Payload["output_priority"]; ok {
-		outputPriority, err := payloadValueInt(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.output_priority must be numeric"
-			return res, nil
-		}
-		staged.Priority.Output = outputPriority
+	if p.OutputPriority != nil {
+		staged.Priority.Output = *p.OutputPriority
 	}
 
-	if raw, ok := cmd.Payload["interstellar"]; ok {
+	if cfg := p.Interstellar; cfg != nil {
 		if !supportsInterstellarConfigCommand(building) {
 			res.Code = model.CodeValidationFailed
 			res.Message = "planetary logistics station does not support interstellar config"
 			return res, nil
 		}
-		payload, ok := raw.(map[string]any)
-		if !ok {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.interstellar must be an object"
-			return res, nil
+		if cfg.Enabled != nil {
+			staged.Interstellar.Enabled = *cfg.Enabled
 		}
-		if err := applyMinimalInterstellarConfig(&staged.Interstellar, payload); err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
+		if cfg.WarpEnabled != nil {
+			staged.Interstellar.WarpEnabled = *cfg.WarpEnabled
+		}
+		if cfg.ShipSlots != nil {
+			if *cfg.ShipSlots < 1 || *cfg.ShipSlots > model.DefaultLogisticsStationShipSlots {
+				res.Code = model.CodeValidationFailed
+				res.Message = "ship_slots must be between 1 and 5"
+				return res, nil
+			}
+			staged.Interstellar.ShipSlots = *cfg.ShipSlots
 		}
 	}
 
-	if raw, exists := cmd.Payload["belt_ports"]; exists {
-		ports, err := parseLogisticsBeltPorts(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = err.Error()
-			return res, nil
+	if p.BeltPorts != nil {
+		staged.BeltPorts = make(map[model.ConveyorDirection]model.LogisticsBeltPort, len(p.BeltPorts))
+		for direction, port := range p.BeltPorts {
+			staged.BeltPorts[direction] = model.LogisticsBeltPort{Mode: port.Mode, ItemID: port.ItemID}
 		}
-		staged.BeltPorts = ports
 	}
 	if err := staged.Validate(); err != nil {
 		res.Code = model.CodeValidationFailed
@@ -2483,7 +2438,15 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 	return res, nil
 }
 
-func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type configureLogisticsSlotPayload struct {
+	Scope        string `json:"scope" payload:"required"`
+	ItemID       string `json:"item_id" payload:"required"`
+	Mode         string `json:"mode" payload:"required"`
+	LocalStorage int    `json:"local_storage" payload:"required"`
+	Remove       bool   `json:"remove"`
+}
+
+func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID string, cmd model.Command, p configureLogisticsSlotPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	building, station, execRes := requireOwnedLogisticsStation(ws, playerID, cmd.Target.EntityID)
@@ -2491,57 +2454,25 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 		return *execRes, nil
 	}
 
-	scope, err := payloadStrictString(cmd.Payload, "scope")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	itemID, err := payloadStrictString(cmd.Payload, "item_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	modeRaw, err := payloadStrictString(cmd.Payload, "mode")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	mode := model.LogisticsStationMode(modeRaw)
+	scope, itemID, localStorage := p.Scope, p.ItemID, p.LocalStorage
+	mode := model.LogisticsStationMode(p.Mode)
 	if !mode.Valid() {
 		res.Code = model.CodeValidationFailed
 		res.Message = "payload.mode must be one of none|supply|demand|both"
 		return res, nil
 	}
-	localStorage, err := payloadStrictInt(cmd.Payload, "local_storage")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-
-	if raw, exists := cmd.Payload["remove"]; exists {
-		remove, ok := raw.(bool)
-		if !ok {
+	if p.Remove {
+		if mode != model.LogisticsStationModeNone || localStorage != 0 {
 			res.Code = model.CodeValidationFailed
-			res.Message = "payload.remove must be boolean"
+			res.Message = "slot removal requires mode none and local_storage 0"
 			return res, nil
 		}
-		if remove {
-			if mode != model.LogisticsStationModeNone || localStorage != 0 {
-				res.Code = model.CodeValidationFailed
-				res.Message = "slot removal requires mode none and local_storage 0"
-				return res, nil
-			}
-			if err := gc.removeLogisticsSlot(ws, building, scope, itemID); err != nil {
-				res.Code = model.CodeValidationFailed
-				res.Message = err.Error()
-				return res, nil
-			}
-			return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "empty logistics slot removed"}, nil
+		if err := gc.removeLogisticsSlot(ws, building, scope, itemID); err != nil {
+			res.Code = model.CodeValidationFailed
+			res.Message = err.Error()
+			return res, nil
 		}
+		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "empty logistics slot removed"}, nil
 	}
 	setting := model.LogisticsStationItemSetting{
 		ItemID:       itemID,
@@ -2549,6 +2480,7 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 		LocalStorage: localStorage,
 	}
 
+	var err error
 	switch scope {
 	case "planetary":
 		err = station.UpsertSetting(setting)
@@ -2610,90 +2542,4 @@ func requireOwnedLogisticsStation(ws *model.WorldState, playerID, buildingID str
 		return nil, nil, &res
 	}
 	return building, building.LogisticsStation, nil
-}
-
-func payloadStrictString(payload map[string]any, key string) (string, error) {
-	raw, ok := payload[key]
-	if !ok {
-		return "", fmt.Errorf("payload.%s required", key)
-	}
-	value, ok := raw.(string)
-	if !ok || value == "" {
-		return "", fmt.Errorf("payload.%s must be a non-empty string", key)
-	}
-	return value, nil
-}
-
-func payloadStrictInt(payload map[string]any, key string) (int, error) {
-	raw, ok := payload[key]
-	if !ok {
-		return 0, fmt.Errorf("payload.%s required", key)
-	}
-	value, err := payloadValueInt(raw)
-	if err != nil {
-		return 0, fmt.Errorf("payload.%s must be integer", key)
-	}
-	return value, nil
-}
-
-func applyMinimalInterstellarConfig(cfg *model.LogisticsStationInterstellarConfig, payload map[string]any) error {
-	if cfg == nil {
-		return fmt.Errorf("interstellar config required")
-	}
-	if raw, ok := payload["enabled"]; ok {
-		enabled, err := payloadValueBool(raw)
-		if err != nil {
-			return fmt.Errorf("payload.interstellar.enabled must be boolean")
-		}
-		cfg.Enabled = enabled
-	}
-	if raw, ok := payload["warp_enabled"]; ok {
-		warpEnabled, err := payloadValueBool(raw)
-		if err != nil {
-			return fmt.Errorf("payload.interstellar.warp_enabled must be boolean")
-		}
-		cfg.WarpEnabled = warpEnabled
-	}
-	if raw, ok := payload["ship_slots"]; ok {
-		shipSlots, err := payloadValueInt(raw)
-		if err != nil {
-			return fmt.Errorf("payload.interstellar.ship_slots must be numeric")
-		}
-		if shipSlots < 1 || shipSlots > model.DefaultLogisticsStationShipSlots {
-			return fmt.Errorf("ship_slots must be between 1 and 5")
-		}
-		cfg.ShipSlots = shipSlots
-	}
-	return nil
-}
-
-func payloadValueInt(raw any) (int, error) {
-	switch value := raw.(type) {
-	case int:
-		return value, nil
-	case int32:
-		return int(value), nil
-	case int64:
-		return int(value), nil
-	case float64:
-		if math.Trunc(value) != value {
-			return 0, fmt.Errorf("fractional number not allowed")
-		}
-		return int(value), nil
-	case float32:
-		if math.Trunc(float64(value)) != float64(value) {
-			return 0, fmt.Errorf("fractional number not allowed")
-		}
-		return int(value), nil
-	default:
-		return 0, fmt.Errorf("integer required")
-	}
-}
-
-func payloadValueBool(raw any) (bool, error) {
-	value, ok := raw.(bool)
-	if !ok {
-		return false, fmt.Errorf("boolean required")
-	}
-	return value, nil
 }

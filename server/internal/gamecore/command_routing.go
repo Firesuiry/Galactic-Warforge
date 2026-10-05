@@ -21,8 +21,8 @@ import (
 // 它们只读共享玩家状态，落到焦点/全局世界即可。
 //
 // 返回的 CommandResult 非空表示路由失败（显式指定的行星未加载）。
-func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, cmd model.Command, handler commandHandler) (*model.WorldState, *model.CommandResult) {
-	if handler.route != routeSpace && cmd.Target.PlanetID != "" {
+func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, cmd model.Command, route commandRoute, refs entityRefs) (*model.WorldState, *model.CommandResult) {
+	if route != routeSpace && cmd.Target.PlanetID != "" {
 		ws := gc.WorldForPlanet(cmd.Target.PlanetID)
 		if ws == nil {
 			return nil, &model.CommandResult{
@@ -38,7 +38,7 @@ func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, cmd model.Com
 	if player != nil {
 		focusPlanetID = player.FocusPlanetID
 	}
-	if ws := gc.worldForEntityRefs(handler.route.refs(cmd, rawPayloadRefs(cmd)), focusPlanetID); ws != nil {
+	if ws := gc.worldForEntityRefs(refs, focusPlanetID); ws != nil {
 		return ws, nil
 	}
 
@@ -61,21 +61,6 @@ func (gc *GameCore) FocusPlanetIDFor(playerID string) string {
 		}
 	}
 	return gc.ActivePlanetID()
-}
-
-// rawPayloadRefs 临时：从原始载荷抽取 building_id / task_id / member_ids。
-func rawPayloadRefs(cmd model.Command) entityRefs {
-	var refs entityRefs
-	if s, ok := cmd.Payload["building_id"].(string); ok && s != "" {
-		refs.buildings = append(refs.buildings, s)
-	}
-	if s, ok := cmd.Payload["task_id"].(string); ok && s != "" {
-		refs.tasks = append(refs.tasks, s)
-	}
-	if cmd.Type == model.CmdDeploySquad {
-		refs.units, _ = payloadStringSlice(cmd.Payload, "member_ids")
-	}
-	return refs
 }
 
 // worldForEntityRefs 找到包含命令全部引用实体的世界；多个世界同时命中

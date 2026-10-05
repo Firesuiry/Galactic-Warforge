@@ -7,30 +7,63 @@ import (
 	"strings"
 )
 
+// deploySquadPayload 有两种形态：带 member_ids 时把单位编成小队；
+// 否则按 building_id + blueprint_id + count 从部署枢纽投放蓝图小队。
+type deploySquadPayload struct {
+	MemberIDs   []string `json:"member_ids"`
+	Name        *string  `json:"name"`
+	BuildingID  string   `json:"building_id"`
+	BlueprintID string   `json:"blueprint_id"`
+	Count       *int     `json:"count"`
+	PlanetID    string   `json:"planet_id"`
+}
+
+func (p deploySquadPayload) entityRefs() entityRefs {
+	refs := entityRefs{units: p.MemberIDs}
+	if p.BuildingID != "" {
+		refs.buildings = []string{p.BuildingID}
+	}
+	return refs
+}
+
+type formSquadPayload struct {
+	EntityIDs []string `json:"entity_ids" payload:"required"`
+	Name      *string  `json:"name"`
+}
+
+type squadOrderPayload struct {
+	SquadID string `json:"squad_id" payload:"required"`
+	Order   string `json:"order" payload:"required"`
+}
+
+type dissolveSquadPayload struct {
+	SquadID string `json:"squad_id" payload:"required"`
+}
+
 // execDeploySquad groups member_ids into a squad; blueprint payloads deploy
 // through execDeployBlueprintSquad.
-func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	if _, grouped := cmd.Payload["member_ids"]; !grouped {
-		return gc.execDeployBlueprintSquad(ws, playerID, cmd)
+func (gc *GameCore) execDeploySquad(ws *model.WorldState, playerID string, cmd model.Command, p deploySquadPayload) (model.CommandResult, []*model.GameEvent) {
+	if p.MemberIDs == nil {
+		return gc.execDeployBlueprintSquad(ws, playerID, p)
 	}
-	return gc.formSquad(ws, playerID, cmd, "member_ids")
+	return gc.formSquad(ws, playerID, p.MemberIDs, p.Name, "member_ids")
 }
 
 // execFormSquad turns selected units into a squad (order container); formation
 // never manufactures health or ammunition.
-func (gc *GameCore) execFormSquad(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	return gc.formSquad(ws, playerID, cmd, "entity_ids")
+func (gc *GameCore) execFormSquad(ws *model.WorldState, playerID string, cmd model.Command, p formSquadPayload) (model.CommandResult, []*model.GameEvent) {
+	return gc.formSquad(ws, playerID, p.EntityIDs, p.Name, "entity_ids")
 }
 
-func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, cmd model.Command, idsField string) (model.CommandResult, []*model.GameEvent) {
-	ids, err := payloadStringSlice(cmd.Payload, idsField)
-	if err != nil || len(ids) == 0 || len(ids) > 300 {
+func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, ids []string, rawName *string, idsField string) (model.CommandResult, []*model.GameEvent) {
+	if len(ids) == 0 || len(ids) > 300 {
 		return mechaJobFailed(model.CodeValidationFailed, idsField+" must contain 1–300 living units")
 	}
+	ids = append([]string(nil), ids...)
 	name := "军团"
-	if raw, ok := cmd.Payload["name"]; ok {
-		value, ok := raw.(string)
-		if !ok || len([]rune(strings.TrimSpace(value))) == 0 || len([]rune(value)) > 40 {
+	if rawName != nil {
+		value := *rawName
+		if len([]rune(strings.TrimSpace(value))) == 0 || len([]rune(value)) > 40 {
 			return mechaJobFailed(model.CodeValidationFailed, "name must contain 1–40 characters")
 		}
 		name = strings.TrimSpace(value)
@@ -70,22 +103,19 @@ func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, cmd model.C
 // execDeployBlueprintSquad materializes a produced war payload into an HP-pool
 // squad. It remains the deployment path for the blueprint production
 // system; player controlled world units use execDeploySquad's member_ids path.
-func (gc *GameCore) execDeployBlueprintSquad(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	buildingID, err := payloadStrictString(cmd.Payload, "building_id")
-	if err != nil {
-		return mechaJobFailed(model.CodeValidationFailed, err.Error())
-	}
-	blueprintID, err := payloadStrictString(cmd.Payload, "blueprint_id")
-	if err != nil {
-		return mechaJobFailed(model.CodeValidationFailed, err.Error())
-	}
-	count, err := payloadStrictInt(cmd.Payload, "count")
-	if err != nil || count <= 0 {
-		if err != nil {
-			return mechaJobFailed(model.CodeValidationFailed, err.Error())
-		}
+func (gc *GameCore) execDeployBlueprintSquad(ws *model.WorldState, playerID string, p deploySquadPayload) (model.CommandResult, []*model.GameEvent) {
+	buildingID, blueprintID := p.BuildingID, p.BlueprintID
+	switch {
+	case buildingID == "":
+		return mechaJobFailed(model.CodeValidationFailed, "payload.building_id required")
+	case blueprintID == "":
+		return mechaJobFailed(model.CodeValidationFailed, "payload.blueprint_id required")
+	case p.Count == nil:
+		return mechaJobFailed(model.CodeValidationFailed, "payload.count required")
+	case *p.Count <= 0:
 		return mechaJobFailed(model.CodeValidationFailed, "payload.count must be positive")
 	}
+	count := *p.Count
 	building, deployment, result := requireOwnedDeploymentHub(ws, playerID, buildingID)
 	if result != nil {
 		return *result, nil
@@ -111,11 +141,8 @@ func (gc *GameCore) execDeployBlueprintSquad(ws *model.WorldState, playerID stri
 	}
 	hubState.UpdatedTick = ws.Tick
 	targetPlanetID := ws.PlanetID
-	if raw, ok := cmd.Payload["planet_id"]; ok {
-		targetPlanetID, err = payloadValueString(raw)
-		if err != nil {
-			return mechaJobFailed(model.CodeValidationFailed, "payload.planet_id must be a string")
-		}
+	if p.PlanetID != "" {
+		targetPlanetID = p.PlanetID
 	}
 	targetWorld := gc.WorldForPlanet(targetPlanetID)
 	if targetWorld == nil {
@@ -167,13 +194,9 @@ func combatSquadPlatformClass(blueprint model.WarBlueprint) string {
 	return "mech"
 }
 
-func ownedSquad(ws *model.WorldState, playerID string, cmd model.Command) (*model.CombatSquad, *model.CommandResult) {
-	id, err := payloadStrictString(cmd.Payload, "squad_id")
+func ownedSquad(ws *model.WorldState, playerID, id string) (*model.CombatSquad, *model.CommandResult) {
 	fail := func(code model.ResultCode, message string) (*model.CombatSquad, *model.CommandResult) {
 		return nil, &model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}
-	}
-	if err != nil {
-		return fail(model.CodeValidationFailed, err.Error())
 	}
 	if ws.CombatRuntime == nil || ws.CombatRuntime.Squads[id] == nil {
 		return fail(model.CodeEntityNotFound, "squad not found on this planet")
@@ -185,15 +208,12 @@ func ownedSquad(ws *model.WorldState, playerID string, cmd model.Command) (*mode
 	return squad, nil
 }
 
-func (gc *GameCore) execSquadOrder(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	squad, failure := ownedSquad(ws, playerID, cmd)
+func (gc *GameCore) execSquadOrder(ws *model.WorldState, playerID string, cmd model.Command, p squadOrderPayload) (model.CommandResult, []*model.GameEvent) {
+	squad, failure := ownedSquad(ws, playerID, p.SquadID)
 	if failure != nil {
 		return *failure, nil
 	}
-	raw, err := payloadStrictString(cmd.Payload, "order")
-	if err != nil {
-		return mechaJobFailed(model.CodeValidationFailed, err.Error())
-	}
+	raw := p.Order
 	order := model.SquadOrder(raw)
 	switch order {
 	case model.SquadOrderAttack, model.SquadOrderDefend, model.SquadOrderRetreat, model.SquadOrderResupply:
@@ -233,8 +253,8 @@ func (gc *GameCore) execSquadOrder(ws *model.WorldState, playerID string, cmd mo
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("%s: %s", squad.ID, order)}, []*model.GameEvent{squadEvent(squad, model.EvtEntityUpdated)}
 }
 
-func (gc *GameCore) execDissolveSquad(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
-	squad, failure := ownedSquad(ws, playerID, cmd)
+func (gc *GameCore) execDissolveSquad(ws *model.WorldState, playerID string, cmd model.Command, p dissolveSquadPayload) (model.CommandResult, []*model.GameEvent) {
+	squad, failure := ownedSquad(ws, playerID, p.SquadID)
 	if failure != nil {
 		return *failure, nil
 	}

@@ -7,7 +7,14 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type queueMilitaryProductionPayload struct {
+	buildingRef
+	DeploymentHubID string `json:"deployment_hub_id" payload:"required"`
+	BlueprintID     string `json:"blueprint_id" payload:"required"`
+	Count           int    `json:"count" payload:"required"`
+}
+
+func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID string, cmd model.Command, p queueMilitaryProductionPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	player := ws.Players[playerID]
 	if player == nil {
@@ -16,30 +23,10 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 		return res, nil
 	}
 
-	buildingID, err := payloadStrictString(cmd.Payload, "building_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	deploymentHubID, err := payloadStrictString(cmd.Payload, "deployment_hub_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	blueprintID, err := payloadStrictString(cmd.Payload, "blueprint_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	count, err := payloadStrictInt(cmd.Payload, "count")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	buildingID := p.BuildingID
+	deploymentHubID := p.DeploymentHubID
+	blueprintID := p.BlueprintID
+	count := p.Count
 	if count <= 0 {
 		res.Code = model.CodeValidationFailed
 		res.Message = "payload.count must be positive"
@@ -177,7 +164,13 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	}}
 }
 
-func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type refitUnitPayload struct {
+	buildingRef
+	UnitID            string `json:"unit_id" payload:"required"`
+	TargetBlueprintID string `json:"target_blueprint_id" payload:"required"`
+}
+
+func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd model.Command, p refitUnitPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	player := ws.Players[playerID]
 	if player == nil {
@@ -186,24 +179,9 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 		return res, nil
 	}
 
-	buildingID, err := payloadStrictString(cmd.Payload, "building_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	unitID, err := payloadStrictString(cmd.Payload, "unit_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	targetBlueprintID, err := payloadStrictString(cmd.Payload, "target_blueprint_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	buildingID := p.BuildingID
+	unitID := p.UnitID
+	targetBlueprintID := p.TargetBlueprintID
 
 	building := ws.Buildings[buildingID]
 	if building == nil {

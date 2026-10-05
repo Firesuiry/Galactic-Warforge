@@ -6,6 +6,11 @@ import (
 	"siliconworld/internal/model"
 )
 
+type setEnergyExchangerModePayload struct {
+	buildingRef
+	Mode model.EnergyExchangerMode `json:"mode" payload:"required"`
+}
+
 // execSetEnergyExchangerMode handles the "set_energy_exchanger_mode" command.
 //
 //	Payload: {
@@ -16,23 +21,10 @@ import (
 // The mode selects the accumulator item cycle: charge converts empty
 // accumulators into full ones using grid surplus, discharge converts full
 // accumulators back into grid energy, standby leaves items untouched.
-func (gc *GameCore) execSetEnergyExchangerMode(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execSetEnergyExchangerMode(ws *model.WorldState, playerID string, cmd model.Command, p setEnergyExchangerModePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	buildingIDRaw, ok := cmd.Payload["building_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.building_id required"
-		return res, nil
-	}
-	modeRaw, ok := cmd.Payload["mode"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.mode required"
-		return res, nil
-	}
-	buildingID := fmt.Sprintf("%v", buildingIDRaw)
-	mode := model.EnergyExchangerMode(fmt.Sprintf("%v", modeRaw))
+	buildingID, mode := p.BuildingID, p.Mode
 
 	if !model.IsEnergyExchangerMode(mode) {
 		res.Code = model.CodeValidationFailed

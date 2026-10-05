@@ -44,7 +44,12 @@ func manualMineItem(node *model.ResourceNodeState) (string, bool) {
 		(node.Behavior == "finite" || node.Behavior == "renewable")
 }
 
-func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type mineResourcePayload struct {
+	ResourceID string `json:"resource_id" payload:"required"`
+	Quantity   int    `json:"quantity" payload:"required"`
+}
+
+func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd model.Command, p mineResourcePayload) (model.CommandResult, []*model.GameEvent) {
 	unit, _, failure := mechaJobTarget(ws, playerID, cmd)
 	if unit == nil {
 		return failure, nil
@@ -52,12 +57,8 @@ func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd 
 	if unit.Mecha.Job != nil {
 		return mechaJobFailed(model.CodeInvalidTarget, "mecha already has a job; cancel it first")
 	}
-	resourceID, err := payloadStrictString(cmd.Payload, "resource_id")
-	if err != nil {
-		return mechaJobFailed(model.CodeValidationFailed, err.Error())
-	}
-	quantity, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil || quantity <= 0 {
+	resourceID, quantity := p.ResourceID, p.Quantity
+	if quantity <= 0 {
 		return mechaJobFailed(model.CodeValidationFailed, "payload.quantity must be a positive integer")
 	}
 	node := ws.Resources[resourceID]
@@ -77,7 +78,12 @@ func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd 
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "manual mining started"}, []*model.GameEvent{mechaStateEvent(unit)}
 }
 
-func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type craftItemPayload struct {
+	RecipeID string `json:"recipe_id" payload:"required"`
+	Quantity int    `json:"quantity" payload:"required"`
+}
+
+func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd model.Command, p craftItemPayload) (model.CommandResult, []*model.GameEvent) {
 	unit, player, failure := mechaJobTarget(ws, playerID, cmd)
 	if unit == nil {
 		return failure, nil
@@ -85,12 +91,8 @@ func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd mod
 	if unit.Mecha.Job != nil {
 		return mechaJobFailed(model.CodeInvalidTarget, "mecha already has a job; cancel it first")
 	}
-	recipeID, err := payloadStrictString(cmd.Payload, "recipe_id")
-	if err != nil {
-		return mechaJobFailed(model.CodeValidationFailed, err.Error())
-	}
-	quantity, err := payloadStrictInt(cmd.Payload, "quantity")
-	if err != nil || quantity <= 0 {
+	recipeID, quantity := p.RecipeID, p.Quantity
+	if quantity <= 0 {
 		return mechaJobFailed(model.CodeValidationFailed, "payload.quantity must be a positive integer")
 	}
 	recipe, ok := model.Recipe(recipeID)
@@ -135,7 +137,7 @@ func refundMechaJob(ws *model.WorldState, unit *model.Unit) {
 	unit.Mecha.Job = nil
 }
 
-func (gc *GameCore) execCancelMechaJob(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execCancelMechaJob(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	unit, _, failure := mechaJobTarget(ws, playerID, cmd)
 	if unit == nil {
 		return failure, nil

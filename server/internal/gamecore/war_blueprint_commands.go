@@ -6,7 +6,37 @@ import (
 	"siliconworld/internal/model"
 )
 
-func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+type blueprintCreatePayload struct {
+	BlueprintID string `json:"blueprint_id" payload:"required"`
+	Domain      string `json:"domain" payload:"required"`
+	Name        string `json:"name"`
+	BaseFrameID string `json:"base_frame_id"`
+	BaseHullID  string `json:"base_hull_id"`
+}
+
+type blueprintSetComponentPayload struct {
+	BlueprintID string `json:"blueprint_id" payload:"required"`
+	SlotID      string `json:"slot_id" payload:"required"`
+	ComponentID string `json:"component_id" payload:"required"`
+}
+
+type blueprintValidatePayload struct {
+	BlueprintID string `json:"blueprint_id" payload:"required"`
+}
+
+type blueprintFinalizePayload struct {
+	BlueprintID string                  `json:"blueprint_id" payload:"required"`
+	TargetState model.WarBlueprintState `json:"target_state"`
+}
+
+type blueprintVariantPayload struct {
+	ParentBlueprintID string   `json:"parent_blueprint_id" payload:"required"`
+	BlueprintID       string   `json:"blueprint_id" payload:"required"`
+	AllowedSlotIDs    []string `json:"allowed_slot_ids" payload:"required"`
+	Name              string   `json:"name"`
+}
+
+func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, cmd model.Command, p blueprintCreatePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	player := warBlueprintPlayer(ws, playerID)
 	if player == nil {
@@ -15,12 +45,7 @@ func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, c
 		return res, nil
 	}
 
-	blueprintID, err := payloadStrictString(cmd.Payload, "blueprint_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	blueprintID := p.BlueprintID
 	if _, exists := player.EnsureWarBlueprints()[blueprintID]; exists {
 		res.Code = model.CodeDuplicate
 		res.Message = fmt.Sprintf("blueprint %s already exists", blueprintID)
@@ -33,24 +58,12 @@ func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, c
 	}
 
 	name := blueprintID
-	if raw, ok := cmd.Payload["name"]; ok {
-		name, err = payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.name must be a non-empty string"
-			return res, nil
-		}
+	if p.Name != "" {
+		name = p.Name
 	}
-	domainRaw, err := payloadStrictString(cmd.Payload, "domain")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	domain := model.UnitDomain(domainRaw)
+	domain := model.UnitDomain(p.Domain)
 
-	baseFrameID, _ := optionalPayloadString(cmd.Payload, "base_frame_id")
-	baseHullID, _ := optionalPayloadString(cmd.Payload, "base_hull_id")
+	baseFrameID, baseHullID := p.BaseFrameID, p.BaseHullID
 	if (baseFrameID == "" && baseHullID == "") || (baseFrameID != "" && baseHullID != "") {
 		res.Code = model.CodeValidationFailed
 		res.Message = "blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id"
@@ -83,9 +96,9 @@ func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, c
 	return res, nil
 }
 
-func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID string, cmd model.Command, p blueprintSetComponentPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	_, blueprint := warPlayerBlueprint(ws, playerID, cmd)
+	blueprint := warPlayerBlueprint(ws, playerID, p.BlueprintID)
 	if blueprint == nil {
 		res.Code = model.CodeEntityNotFound
 		res.Message = "blueprint not found"
@@ -98,18 +111,8 @@ func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID str
 		return res, nil
 	}
 
-	slotID, err := payloadStrictString(cmd.Payload, "slot_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	componentID, err := payloadStrictString(cmd.Payload, "component_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	slotID := p.SlotID
+	componentID := p.ComponentID
 
 	index := model.PublicWarBlueprintCatalogIndex()
 	if _, ok := index.ComponentByID(componentID); !ok {
@@ -145,9 +148,9 @@ func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID str
 	return res, nil
 }
 
-func (gc *GameCore) execBlueprintValidate(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBlueprintValidate(ws *model.WorldState, playerID string, cmd model.Command, p blueprintValidatePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	_, blueprint := warPlayerBlueprint(ws, playerID, cmd)
+	blueprint := warPlayerBlueprint(ws, playerID, p.BlueprintID)
 	if blueprint == nil {
 		res.Code = model.CodeEntityNotFound
 		res.Message = "blueprint not found"
@@ -179,9 +182,9 @@ func (gc *GameCore) execBlueprintValidate(ws *model.WorldState, playerID string,
 	return res, nil
 }
 
-func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string, cmd model.Command, p blueprintFinalizePayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
-	_, blueprint := warPlayerBlueprint(ws, playerID, cmd)
+	blueprint := warPlayerBlueprint(ws, playerID, p.BlueprintID)
 	if blueprint == nil {
 		res.Code = model.CodeEntityNotFound
 		res.Message = "blueprint not found"
@@ -189,14 +192,8 @@ func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string,
 	}
 
 	targetState := blueprint.DefaultFinalizeTarget()
-	if raw, ok := cmd.Payload["target_state"]; ok {
-		value, err := payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.target_state must be a non-empty string"
-			return res, nil
-		}
-		targetState = model.WarBlueprintState(value)
+	if p.TargetState != "" {
+		targetState = p.TargetState
 	}
 	if targetState == "" || !blueprint.CanTransitionTo(targetState) {
 		res.Code = model.CodeValidationFailed
@@ -226,7 +223,7 @@ func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string,
 	return res, nil
 }
 
-func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, cmd model.Command, p blueprintVariantPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	player := warBlueprintPlayer(ws, playerID)
 	if player == nil {
@@ -235,18 +232,8 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 		return res, nil
 	}
 
-	parentID, err := payloadStrictString(cmd.Payload, "parent_blueprint_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
-	blueprintID, err := payloadStrictString(cmd.Payload, "blueprint_id")
-	if err != nil {
-		res.Code = model.CodeValidationFailed
-		res.Message = err.Error()
-		return res, nil
-	}
+	parentID := p.ParentBlueprintID
+	blueprintID := p.BlueprintID
 	if _, exists := player.EnsureWarBlueprints()[blueprintID]; exists {
 		res.Code = model.CodeDuplicate
 		res.Message = fmt.Sprintf("blueprint %s already exists", blueprintID)
@@ -271,8 +258,8 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 		return res, nil
 	}
 
-	allowedSlots, err := payloadStringSlice(cmd.Payload, "allowed_slot_ids")
-	if err != nil || len(allowedSlots) == 0 {
+	allowedSlots := p.AllowedSlotIDs
+	if len(allowedSlots) == 0 {
 		res.Code = model.CodeValidationFailed
 		res.Message = "payload.allowed_slot_ids must be a non-empty string array"
 		return res, nil
@@ -292,13 +279,8 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 	}
 
 	name := blueprintID
-	if raw, ok := cmd.Payload["name"]; ok {
-		name, err = payloadValueString(raw)
-		if err != nil {
-			res.Code = model.CodeValidationFailed
-			res.Message = "payload.name must be a non-empty string"
-			return res, nil
-		}
+	if p.Name != "" {
+		name = p.Name
 	}
 
 	player.EnsureWarBlueprints()[blueprintID] = &model.WarBlueprint{
@@ -330,51 +312,12 @@ func warBlueprintPlayer(ws *model.WorldState, playerID string) *model.PlayerStat
 	return ws.Players[playerID]
 }
 
-func warPlayerBlueprint(ws *model.WorldState, playerID string, cmd model.Command) (*model.PlayerState, *model.WarBlueprint) {
+func warPlayerBlueprint(ws *model.WorldState, playerID, blueprintID string) *model.WarBlueprint {
 	player := warBlueprintPlayer(ws, playerID)
 	if player == nil {
-		return nil, nil
+		return nil
 	}
-	blueprintID, err := payloadStrictString(cmd.Payload, "blueprint_id")
-	if err != nil {
-		return player, nil
-	}
-	return player, player.EnsureWarBlueprints()[blueprintID]
-}
-
-func optionalPayloadString(payload map[string]any, key string) (string, bool) {
-	raw, ok := payload[key]
-	if !ok {
-		return "", false
-	}
-	value, err := payloadValueString(raw)
-	if err != nil {
-		return "", false
-	}
-	return value, true
-}
-
-func payloadStringSlice(payload map[string]any, key string) ([]string, error) {
-	raw, ok := payload[key]
-	if !ok {
-		return nil, fmt.Errorf("payload.%s required", key)
-	}
-	switch values := raw.(type) {
-	case []string:
-		return append([]string(nil), values...), nil
-	case []any:
-		out := make([]string, 0, len(values))
-		for _, rawValue := range values {
-			value, err := payloadValueString(rawValue)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, value)
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("string array required")
-	}
+	return player.EnsureWarBlueprints()[blueprintID]
 }
 
 func warBlueprintSupportsDomain(index model.WarBlueprintCatalogIndex, blueprint *model.WarBlueprint) bool {

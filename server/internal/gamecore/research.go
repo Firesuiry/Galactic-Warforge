@@ -366,17 +366,15 @@ func completeResearch(player *model.PlayerState, research *model.PlayerResearch,
 	advanceQueuedResearch(player, tick)
 }
 
+type researchPayload struct {
+	TechID string `json:"tech_id" payload:"required"`
+}
+
 // execStartResearch handles the "start_research" command
-func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd model.Command, p researchPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	techIDRaw, ok := cmd.Payload["tech_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.tech_id required"
-		return res, nil
-	}
-	techID := fmt.Sprintf("%v", techIDRaw)
+	techID := p.TechID
 
 	player := ws.Players[playerID]
 	if player == nil {
@@ -512,16 +510,10 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 }
 
 // execCancelResearch handles the "cancel_research" command
-func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cmd model.Command, p researchPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
-	techIDRaw, ok := cmd.Payload["tech_id"]
-	if !ok {
-		res.Code = model.CodeValidationFailed
-		res.Message = "payload.tech_id required"
-		return res, nil
-	}
-	techID := fmt.Sprintf("%v", techIDRaw)
+	techID := p.TechID
 
 	player := ws.Players[playerID]
 	if player == nil || player.Tech == nil {
