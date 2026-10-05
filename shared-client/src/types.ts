@@ -513,34 +513,20 @@ export interface WarSupplyStatusView {
 export type SquadOrderKind = 'idle' | 'attack' | 'defend' | 'retreat' | 'resupply';
 
 /**
- * 战斗小队 / 军团。军团（3.4）= 指令容器：name/member_ids/order/target 有值，
- * 无共享血条（hp/count 为 0 或缺省）；旧式 HP 池小队保留 blueprint_id/count/hp。
+ * 军团（combat_squads）= 指令容器：没有共享血条，血量/弹药/武器都在 member_ids 指向的世界单位上。
+ * 敌方军团的 member_ids 只含可见成员，且不返回 target。
  */
 export interface CombatSquad {
   id: string;
   owner_id: string;
   planet_id: string;
-  name?: string;
-  member_ids?: string[] | null;
-  order?: SquadOrderKind;
+  name: string;
+  member_ids: string[] | null;
+  order: SquadOrderKind;
   target?: Position | null;
-  source_building_id?: string;
-  blueprint_id: string;
-  count: number;
-  member_max_hp?: number;
-  hp: number;
-  max_hp: number;
-  shield: ShieldState;
-  weapon: WeaponState;
-  sustainment: WarSustainmentState;
   state: CombatSquadState;
-  target_enemy_id?: string;
-  last_attack_tick?: number;
   position: Position;
-  move_speed?: number;
-  path?: Position[];
-  path_index?: number;
-  move_progress?: number;
+  last_order_tick: number;
 }
 
 export interface SolarSail {

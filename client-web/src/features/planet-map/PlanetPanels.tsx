@@ -911,19 +911,14 @@ export function PlanetEntityPanel({
         </div>
       );
     }
-    const blueprint = (blueprints ?? []).find((item) => item.id === squad.blueprint_id);
-    const publicEntry = (catalog?.warfare?.public_blueprints ?? []).find(
-      (item) => item.id === squad.blueprint_id || item.id === blueprint?.parent_blueprint_id,
-    );
-    const blueprintName = blueprint?.name ?? publicEntry?.name;
-    const domain = blueprint?.domain ?? publicEntry?.domain;
+    const members = (squad.member_ids ?? []).flatMap((id) => (planet.units?.[id] ? [planet.units[id]] : []));
     const taskForceId = findSquadTaskForceId(taskForces ?? [], squad.id);
     const taskForce = (taskForces ?? []).find((item) => item.id === taskForceId);
     return (
       <div className="planet-panel-stack">
         <section className="planet-side-section">
           <div className="section-title">小队卡片</div>
-          <UnitCard card={unitCardFromSquad(squad, blueprintName, domain, catalog, publicEntry)} />
+          <UnitCard card={unitCardFromSquad(squad, members, catalog)} />
         </section>
         <section className="planet-side-section">
           <div className="section-title">编队归属</div>
@@ -931,10 +926,6 @@ export function PlanetEntityPanel({
             <div>
               <dt>所属任务群</dt>
               <dd>{taskForce ? `${taskForce.name || taskForce.id} (${taskForce.id})` : "未编组"}</dd>
-            </div>
-            <div>
-              <dt>补给状态</dt>
-              <dd>{squad.sustainment?.condition ?? "-"}</dd>
             </div>
             <div>
               <dt>坐标</dt>

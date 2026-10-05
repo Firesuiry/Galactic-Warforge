@@ -28,10 +28,10 @@ describe('legion-model', () => {
     c: unit('c', { hp: 0 }),
   };
 
-  it('ownLegions 只保留己方存活且有成员的军团（旧式小队排除）', () => {
+  it('ownLegions 只保留己方存活且有成员的军团', () => {
     const list = ownLegions([
       legion(), legion({ id: 'x', owner_id: 'p2' }), legion({ id: 'y', state: 'destroyed' }),
-      legion({ id: 'old', member_ids: null, blueprint_id: 'bp', hp: 5 }),
+      legion({ id: 'empty', member_ids: null }),
     ], 'p1');
     expect(list.map((l) => l.id)).toEqual(['sq-1']);
   });

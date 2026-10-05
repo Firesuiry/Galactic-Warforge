@@ -1,5 +1,5 @@
 /**
- * 战斗小队标记层（C4）：把 planet_runtime.combat_squads 画到 2D 平面战术图上。
+ * 敌方军团标记层（C4）：把视野内的敌方 planet_runtime.combat_squads 画到战术图上。
  *
  * 与来袭波次指示同一模式：DOM overlay 绝对定位（指针事件只落在标记本身，
  * 空白处穿透回 Pixi 交互面）。点击标记 = 选中小队（shift=加选），
@@ -31,24 +31,11 @@ interface PlanetSquadLayerProps {
   projectTile?: (tile: { x: number; y: number }) => SquadScreenPoint | null;
 }
 
-/** 小队域/蓝图 → 图标。空中与太空用舰队剪影，加农用机甲，其余用士兵。 */
-export function squadIconKey(squad: CombatSquad): string {
-  const extra = squad as CombatSquad & { domain?: string; platform_class?: string };
-  const blueprint = squad.blueprint_id ?? '';
-  if (extra.domain === 'space' || blueprint.includes('corvette') || blueprint.includes('destroyer')) {
-    return 'fleet';
-  }
-  if (extra.domain === 'air' || extra.platform_class === 'drone' || blueprint.includes('drone')) {
-    return 'orbit';
-  }
-  if (squad.weapon?.type === 'cannon') {
-    return 'mecha';
-  }
-  return 'soldier';
-}
-
-function visibleSquads(squads: CombatSquad[] | undefined): CombatSquad[] {
-  return (squads ?? []).filter((squad) => squad.state !== 'destroyed' && squad.hp > 0);
+/** 己方军团由 PlanetLegionLayer 绘制；本层只标记视野内有可见成员的敌方军团。 */
+function visibleHostileSquads(squads: CombatSquad[] | undefined, playerId: string): CombatSquad[] {
+  return (squads ?? []).filter(
+    (squad) => squad.state !== 'destroyed' && squad.owner_id !== playerId && (squad.member_ids?.length ?? 0) > 0,
+  );
 }
 
 export function PlanetSquadLayer({
@@ -61,7 +48,7 @@ export function PlanetSquadLayer({
   onSelectSquad,
   projectTile,
 }: PlanetSquadLayerProps) {
-  const shown = visibleSquads(squads);
+  const shown = visibleHostileSquads(squads, playerId);
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     if (!projectTile) {
@@ -83,7 +70,6 @@ export function PlanetSquadLayer({
       {shown.map((squad) => {
         const hostile = squad.owner_id !== playerId;
         const selected = selectedSquads.includes(squad.id);
-        const hpRatio = squad.max_hp > 0 ? squad.hp / squad.max_hp : 0;
         const projected = projectTile
           ? projectTile({ x: squad.position.x, y: squad.position.y })
           : null;
@@ -98,7 +84,7 @@ export function PlanetSquadLayer({
             aria-label={`${hostile ? '敌方小队' : '小队'} ${squad.id}`}
             aria-pressed={selected}
             className={`planet-squad-marker${hostile ? ' planet-squad-marker--hostile' : ''}${selected ? ' planet-squad-marker--selected' : ''}`}
-            data-icon={squadIconKey(squad)}
+            data-icon="soldier"
             data-squad-id={squad.id}
             key={squad.id}
             onClick={(event) => {
@@ -108,16 +94,11 @@ export function PlanetSquadLayer({
             }}
             onPointerDown={(event) => event.stopPropagation()}
             style={{ left, top }}
-            title={`${hostile ? '敌方 ' : ''}${squad.blueprint_id} ×${squad.count} · HP ${squad.hp}/${squad.max_hp}`}
+            title={`${hostile ? '敌方 ' : ''}${squad.name || squad.id} ×${squad.member_ids?.length ?? 0}`}
             type="button"
           >
-            <Icon iconKey={squadIconKey(squad)} size={Math.max(14, Math.min(22, tileSize * 0.4))} />
-            <span className="planet-squad-marker__count">{squad.count}</span>
-            <span
-              aria-hidden="true"
-              className="planet-squad-marker__hp"
-              style={{ width: `${Math.max(0, Math.min(1, hpRatio)) * 100}%` }}
-            />
+            <Icon iconKey="soldier" size={Math.max(14, Math.min(22, tileSize * 0.4))} />
+            <span className="planet-squad-marker__count">{squad.member_ids?.length ?? 0}</span>
           </button>
         );
       })}

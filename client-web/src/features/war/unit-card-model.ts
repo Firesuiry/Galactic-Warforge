@@ -2,7 +2,7 @@
  * 单位卡片数据模型：蓝图 / 世界单位 / 运行时单位 / 战斗小队 → 统一卡片视图。
  *
  * 战斗数值与克制来自 catalog 或运行时实体，不在卡片内再推导护甲或系数。
- * - runtime：Unit / CombatSquad 实测字段；缺类别时按 type / blueprint_id 补目录
+ * - runtime：Unit 实测字段（军团卡片汇总成员单位）；缺类别时按 type 补目录
  * - catalog：目录已暴露的 armor/weapon/attack/range/max_hp
  * - none：该来源没有数值
  * 老兵等级不做。
@@ -236,35 +236,26 @@ export function unitCardFromRuntimeUnit(
   };
 }
 
-/** 战斗小队 → 卡片。武器用运行时 weapon.type；护甲只读目录蓝图，不在此推导。 */
+/** 军团 → 卡片。军团只是命令容器：HP 汇总自成员单位，类别取首个成员（缺则按 type 补目录）。 */
 export function unitCardFromSquad(
   squad: CombatSquad,
-  blueprintName: string | undefined,
-  domain: string | undefined,
+  members: readonly Unit[],
   catalog?: CatalogView,
-  preset?: WarPublicBlueprintCatalogEntry,
 ): UnitCardModel {
-  const linked = preset ?? publicBlueprintByID(catalog, squad.blueprint_id);
-  const weapon = squad.weapon;
-  const weaponClass = firstText(weapon?.type, linked?.weapon_class);
+  const lead = members[0];
+  const entry = worldUnitByType(catalog, lead?.type);
+  const weaponClass = firstText(lead?.weapon_class, entry?.weapon_class);
+  const hp = members.reduce((sum, unit) => sum + unit.hp, 0);
+  const maxHp = members.reduce((sum, unit) => sum + unit.max_hp, 0);
   return {
-    title: blueprintName ?? squad.blueprint_id,
-    subtitle: `${squad.id} · 在编 ${squad.count}`,
-    domain,
+    title: squad.name || squad.id,
+    subtitle: `${squad.id} · 在编 ${squad.member_ids?.length ?? 0}`,
+    domain: entry?.domain,
     runtimeClass: 'combat_squad',
-    statsSource: 'runtime',
-    stats: compactStats([
-      { key: 'hp', label: 'HP', value: `${squad.hp}/${squad.max_hp}` },
-      stat('attack', '攻击', weapon?.damage),
-      stat('range', '射程', weapon?.range),
-      stat('cooldown', '冷却', weapon?.fire_rate, ' tick'),
-      stat('speed', '速度', squad.move_speed, ' tile/tick'),
-      squad.shield
-        ? { key: 'shield', label: '护盾', value: `${squad.shield.level}/${squad.shield.max_level}` }
-        : null,
-    ]),
+    statsSource: members.length > 0 ? 'runtime' : 'none',
+    stats: members.length > 0 ? [{ key: 'hp', label: 'HP', value: `${hp}/${maxHp}` }] : [],
     weaponClass,
-    armorClass: linked?.armor_class,
+    armorClass: firstText(lead?.armor_class, entry?.armor_class),
     countersText: unitCardCountersText(weaponClass, catalog?.damage_coefficients),
   };
 }

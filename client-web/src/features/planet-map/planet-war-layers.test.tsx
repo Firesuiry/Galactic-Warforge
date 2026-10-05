@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CombatSquad, WarTheaterView } from '@shared/types';
 
-import { PlanetSquadLayer, squadIconKey } from '@/features/planet-map/PlanetSquadLayer';
+import { PlanetSquadLayer } from '@/features/planet-map/PlanetSquadLayer';
 import { PlanetTheaterControls } from '@/features/planet-map/PlanetTheaterControls';
 import { PlanetTheaterLayer } from '@/features/planet-map/PlanetTheaterLayer';
 import { resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
@@ -15,21 +15,18 @@ function squad(id: string, overrides: Partial<CombatSquad> = {}): CombatSquad {
     id,
     owner_id: 'p1',
     planet_id: 'planet-1',
-    blueprint_id: 'bp-razor',
-    count: 3,
-    hp: 240,
-    max_hp: 300,
-    shield: { level: 40, max_level: 60, recharge_rate: 1, recharge_delay: 10 },
-    weapon: { type: 'cannon', damage: 22, fire_rate: 14, range: 9, ammo_cost: 1 },
-    sustainment: {} as CombatSquad['sustainment'],
+    name: '军团',
+    member_ids: ['u-1', 'u-2', 'u-3'],
+    order: 'idle',
     state: 'idle',
     position: { x: 5, y: 6, z: 0 },
+    last_order_tick: 0,
     ...overrides,
-  } as CombatSquad;
+  };
 }
 
 describe('PlanetSquadLayer', () => {
-  it('渲染己方存活小队标记，点击触发选中回调', async () => {
+  it('只标记有可见成员的敌方军团（己方军团由军团层绘制），点击触发选中回调', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     render(
@@ -42,24 +39,20 @@ describe('PlanetSquadLayer', () => {
         squads={[
           squad('sq-1'),
           squad('sq-2', { owner_id: 'p2' }),
-          squad('sq-3', { state: 'destroyed' }),
+          squad('sq-3', { owner_id: 'p2', state: 'destroyed' }),
+          squad('sq-4', { owner_id: 'p2', member_ids: [] }),
         ]}
         tileSize={48}
       />,
     );
     const markers = screen.getAllByRole('button');
-    expect(markers).toHaveLength(2);
-    expect(screen.getByRole('button', { name: '小队 sq-1' }).style.left).toBe('264px');
-    expect(screen.getByRole('button', { name: '敌方小队 sq-2' })).toHaveClass('planet-squad-marker--hostile');
-    expect(screen.queryByRole('button', { name: /sq-3/ })).toBeNull();
-    await user.click(screen.getByRole('button', { name: '小队 sq-1' }));
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sq-1' }), false);
-  });
-
-  it('图标随域和武器变化，不再写死士兵', () => {
-    expect(squadIconKey(squad('air', { blueprint_id: 'precision_drone' }))).toBe('orbit');
-    expect(squadIconKey(squad('ship', { blueprint_id: 'df_destroyer' }))).toBe('fleet');
-    expect(squadIconKey(squad('gun', { weapon: { type: 'gun', damage: 1, fire_rate: 1, range: 1, ammo_cost: 0 } }))).toBe('soldier');
+    expect(markers).toHaveLength(1);
+    const hostile = screen.getByRole('button', { name: '敌方小队 sq-2' });
+    expect(hostile).toHaveClass('planet-squad-marker--hostile');
+    expect(hostile.style.left).toBe('264px');
+    expect(hostile).toHaveTextContent('3');
+    await user.click(hostile);
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sq-2' }), false);
   });
 
   it('无小队时不渲染', () => {

@@ -119,33 +119,26 @@ describe('unit-card-model', () => {
     expect(typed.countersText).toBe('加农克制重甲、建筑；被轻甲、空中克制');
   });
 
-  it('小队卡片：武器来自 weapon.type，护甲读目录蓝图', () => {
-    const squad = {
+  it('军团卡片：HP 汇总自成员单位，类别取成员', () => {
+    const squad: CombatSquad = {
       id: 'sq-1',
       owner_id: 'p1',
       planet_id: 'planet-1',
-      blueprint_id: 'bp-razor',
-      count: 3,
-      hp: 240,
-      max_hp: 300,
-      shield: { level: 40, max_level: 60, recharge_rate: 1, recharge_delay: 10 },
-      weapon: { type: 'cannon', damage: 22, fire_rate: 14, range: 9, ammo_cost: 1 },
-      sustainment: {},
+      name: '剃刀突击机甲',
+      member_ids: ['u-1', 'u-2', 'u-3'],
+      order: 'idle',
       state: 'idle',
       position: { x: 5, y: 6, z: 0 },
-      move_speed: 0.2,
-    } as unknown as CombatSquad;
-    const card = unitCardFromSquad(squad, '剃刀突击机甲', 'ground', {
-      ...catalog,
-      warfare: { public_blueprints: [publicBlueprint()] },
-    });
+      last_order_tick: 0,
+    };
+    const member = (id: string, hp: number) =>
+      ({ id, type: 'mecha', hp, max_hp: 100, weapon_class: 'cannon', armor_class: 'heavy' }) as unknown as Unit;
+    const card = unitCardFromSquad(squad, [member('u-1', 80), member('u-2', 100)], catalog);
     expect(card.title).toBe('剃刀突击机甲');
     expect(card.subtitle).toBe('sq-1 · 在编 3');
     expect(card.weaponClass).toBe('cannon');
     expect(card.armorClass).toBe('heavy');
-    expect(card.stats).toContainEqual({ key: 'hp', label: 'HP', value: '240/300' });
-    expect(card.stats).toContainEqual({ key: 'shield', label: '护盾', value: '40/60' });
-    expect(card.stats).toContainEqual({ key: 'cooldown', label: '冷却', value: '14 tick' });
+    expect(card.stats).toEqual([{ key: 'hp', label: 'HP', value: '180/200' }]);
     expect(card.countersText).toContain('加农克制重甲');
   });
 

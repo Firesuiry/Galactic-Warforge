@@ -92,17 +92,15 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
     .filter((squad): squad is CombatSquad => Boolean(squad && squad.owner_id === session.playerId && squad.state !== 'destroyed'));
   if (aliveSquadSelection.length > 0) {
     const composition = aliveSquadSelection
-      .map((squad) => `${squad.blueprint_id}×${squad.count}`)
+      .map((squad) => `${squad.name || squad.id}×${squad.member_ids?.length ?? 0}`)
       .join(' · ');
-    const totalHp = aliveSquadSelection.reduce((sum, squad) => sum + squad.hp, 0);
-    const totalMaxHp = aliveSquadSelection.reduce((sum, squad) => sum + squad.max_hp, 0);
     return (
       <div className="planet-selection-bar" data-testid="planet-selection-bar">
         <Icon iconKey="soldier" size={20} />
         <div className="planet-selection-bar__info">
           <strong>已选 {aliveSquadSelection.length} 个小队</strong>
           <span className="planet-selection-bar__meta">{composition}</span>
-          <span className="planet-selection-bar__meta">HP {totalHp}/{totalMaxHp} · 右键点地图把所属任务群部署到该点</span>
+          <span className="planet-selection-bar__meta">右键点地图把所属任务群部署到该点</span>
         </div>
         <div className="planet-selection-bar__actions">
           {aliveSquadSelection.length === 1 && onShowDetail ? (
