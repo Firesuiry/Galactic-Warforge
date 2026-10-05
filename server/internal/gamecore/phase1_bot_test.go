@@ -66,7 +66,7 @@ func TestPhase1CollectStorageOutputConservesInventory(t *testing.T) {
 	b.Storage.Inventory = model.ItemInventory{"ammo_bullet": 7}
 	player := ws.Players[unit.OwnerID]
 	player.Inventory = model.ItemInventory{}
-	player.Executor = &model.ExecutorState{UnitID: unit.ID}
+	player.SetPlanetExecutor(ws.PlanetID, &model.ExecutorState{UnitID: unit.ID})
 	cmd := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": "ammo_bullet", "quantity": 5, "direction": "to_player"}}
 	if r, _ := gc.execTransferItem(ws, unit.OwnerID, cmd); r.Code != model.CodeOK {
 		t.Fatal(r)

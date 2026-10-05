@@ -22,7 +22,6 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 	if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
 		exec.OperateRange = 100
 	}
-	player.SyncLegacyExecutor(ws.PlanetID)
 
 	wind := newBuilding("wind-t096", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
 	wind.Runtime.State = model.BuildingWorkRunning

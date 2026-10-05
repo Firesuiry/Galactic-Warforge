@@ -24,8 +24,8 @@ func New(vis *visibility.Engine, maps *mapmodel.Universe, discovery *mapstate.Di
 
 // StateSummary is the response for GET /state/summary.
 type StateSummary struct {
-	Tick           int64                         `json:"tick"`
-	Players        map[string]*model.PlayerState `json:"players"`
+	Tick           int64                     `json:"tick"`
+	Players        map[string]*SummaryPlayer `json:"players"`
 	Winner         string                        `json:"winner,omitempty"`
 	VictoryReason  string                        `json:"victory_reason,omitempty"`
 	VictoryRule    string                        `json:"victory_rule,omitempty"`
@@ -35,26 +35,33 @@ type StateSummary struct {
 	Surface        surface.Metadata              `json:"surface"`
 }
 
+// SummaryPlayer is a player entry of /state/summary: the player state plus the
+// executor bound to the summarized planet.
+type SummaryPlayer struct {
+	*model.PlayerState
+	Executor *model.ExecutorState `json:"executor,omitempty"`
+}
+
 // Summary returns a high-level view of the world (no fog clipping for own resources).
 func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.VictoryState) *StateSummary {
 	ws.RLock()
 	defer ws.RUnlock()
 
 	// Only expose the requesting player's own resources
-	players := make(map[string]*model.PlayerState)
+	players := make(map[string]*SummaryPlayer)
 	for pid, ps := range ws.Players {
 		if pid == playerID {
 			cp := *ps
 			cp.Inventory = ps.Inventory.Clone()
-			players[pid] = &cp
+			players[pid] = &SummaryPlayer{PlayerState: &cp, Executor: ps.ExecutorForPlanet(ws.PlanetID)}
 		} else {
 			// Expose non-sensitive identity fields
-			players[pid] = &model.PlayerState{
+			players[pid] = &SummaryPlayer{PlayerState: &model.PlayerState{
 				PlayerID: pid,
 				TeamID:   ps.TeamID,
 				Role:     ps.Role,
 				IsAlive:  ps.IsAlive,
-			}
+			}}
 		}
 	}
 

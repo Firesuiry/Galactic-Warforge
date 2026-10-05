@@ -23,7 +23,6 @@ func TestT094OfficialMidgameBuildCommandsAreNoLongerBlockedByResearch(t *testing
 	if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
 		exec.OperateRange = 100
 	}
-	player.SyncLegacyExecutor(ws.PlanetID)
 
 	cases := []struct {
 		name  string

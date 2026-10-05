@@ -393,7 +393,6 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		activePlanetID = activePlanet.ID
 	}
 	for _, ps := range players {
-		ps.SyncLegacyExecutor(activePlanetID)
 		// F4：新玩家的初始焦点 = 其出生行星（即全局默认活动行星）。
 		ps.FocusPlanetID = activePlanetID
 	}
@@ -499,9 +498,6 @@ func (gc *GameCore) setActivePlanet(planetID string) bool {
 		return false
 	}
 	gc.setCurrentWorld(planetID, ws)
-	for _, player := range ws.Players {
-		player.SyncLegacyExecutor(planetID)
-	}
 	return true
 }
 

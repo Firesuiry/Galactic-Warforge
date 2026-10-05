@@ -372,7 +372,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 **`GET /state/summary`**
 - `tick`、`active_planet_id`（全局兜底行星）、`map_width` / `map_height` / `surface`；已宣判时 `winner` / `victory_reason` / `victory_rule`。
 - `players`：所有玩家返回 `player_id` / `team_id` / `role` / `is_alive`；仅自己返回完整状态：`resources`、`inventory`（`item_id → 数量`）、`permissions`、`focus_planet_id`、`executor`、`executors`（按 `planet_id`）、`tech`、`combat_tech`、`stats`（同 `/state/stats`）。
-- `executor`：`unit_id` / `build_efficiency` / `operate_range` / `concurrent_tasks` / `research_boost`。Web 用 `unit_id` 请求 `/path`，以 `operate_range` 为 `stop_range` 分段靠近。
+- `executor`：即 `executors[active_planet_id]`（该行星没有执行体时省略），字段 `unit_id` / `build_efficiency` / `operate_range` / `concurrent_tasks` / `research_boost`。Web 用 `unit_id` 请求 `/path`，以 `operate_range` 为 `stop_range` 分段靠近。
 - `tech`：`completed_techs`（`{tech_id: level}`）、`current_research`、`research_queue`、`total_researched`。研究条目字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason`（`waiting_lab` / `waiting_matrix` / `low_power` / `invalid_tech`）/ `speed_multiplier`（供电倍率，1 = 满速）/ `estimated_ticks_remaining` / `enqueue_tick` / `complete_tick`。矩阵 ID 统一为 `electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
 - `combat_tech`：`unlocked_techs` / `current_research` / `research_progress`。
 - `resources.energy`、`/state/stats.energy_stats`、`/networks` 共用同一 tick 的 `PowerSettlementSnapshot`。

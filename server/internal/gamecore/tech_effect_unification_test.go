@@ -243,7 +243,7 @@ func stackCascadeFixture(t *testing.T) (*model.WorldState, *model.PlayerState, *
 		Resources: model.Resources{Minerals: 0, Energy: 0},
 		Inventory: model.ItemInventory{},
 	}
-	player.Executor = model.NewExecutorState("u-1", 1, 10, 2, 0)
+	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("u-1", 1, 10, 2, 0))
 	ws.Players["p1"] = player
 	ws.Units["u-1"] = &model.Unit{
 		ID:       "u-1",

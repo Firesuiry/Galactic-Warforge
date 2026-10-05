@@ -26,7 +26,6 @@ type PlayerState struct {
 	// FocusPlanetID 是该玩家的视图焦点/默认落点行星（F4）：未显式指定行星的
 	// 命令在此行星结算；switch_active_planet 只改这个字段，不再影响全局模拟。
 	FocusPlanetID   string                    `json:"focus_planet_id,omitempty"`
-	Executor        *ExecutorState            `json:"executor,omitempty"`
 	Executors       map[string]*ExecutorState `json:"executors,omitempty"`
 	Tech            *PlayerTechState          `json:"tech,omitempty"`
 	Stats           *PlayerStats              `json:"stats,omitempty"`

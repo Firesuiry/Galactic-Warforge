@@ -23,9 +23,6 @@ func settleExecutorRespawns(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 		exec := p.Executors[ws.PlanetID]
-		if exec == nil && len(p.Executors) == 0 {
-			exec = p.Executor
-		}
 		if exec == nil || exec.RespawnAtTick <= 0 || exec.RespawnAtTick > ws.Tick || ws.Units[exec.UnitID] != nil {
 			continue
 		}
@@ -49,7 +46,6 @@ func settleExecutorRespawns(ws *model.WorldState) []*model.GameEvent {
 			ws.TileUnits[key] = append(ws.TileUnits[key], u.ID)
 			exec.RespawnAtTick = 0
 			p.SetPlanetExecutor(ws.PlanetID, exec)
-			p.SyncLegacyExecutor(ws.PlanetID)
 			events = append(events, &model.GameEvent{EventType: model.EvtEntityCreated, VisibilityScope: id, Payload: map[string]any{"entity_type": "unit", "entity_id": u.ID, "unit": u.Clone(), "planet_id": ws.PlanetID, "respawn": true}})
 			break
 		}

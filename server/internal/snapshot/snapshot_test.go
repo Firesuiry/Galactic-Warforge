@@ -25,7 +25,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		IsAlive:   true,
 	}
 	player.SetPermissions([]string{"build", "move"})
-	player.Executor = model.NewExecutorState("unit-1", 1.2, 3, 2, 1.1)
+	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("unit-1", 1.2, 3, 2, 1.1))
 	ws.Players[player.PlayerID] = player
 
 	resource := &model.ResourceNodeState{

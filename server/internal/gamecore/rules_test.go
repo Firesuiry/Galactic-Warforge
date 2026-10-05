@@ -78,12 +78,12 @@ func TestExecutorSpawnedForPlayer(t *testing.T) {
 	defer ws.RUnlock()
 
 	p1 := ws.Players["p1"]
-	if p1 == nil || p1.Executor == nil {
+	if p1 == nil || p1.ExecutorForPlanet(ws.PlanetID) == nil {
 		t.Fatal("expected executor for player p1")
 	}
-	execUnit := ws.Units[p1.Executor.UnitID]
+	execUnit := ws.Units[p1.ExecutorForPlanet(ws.PlanetID).UnitID]
 	if execUnit == nil {
-		t.Fatalf("executor unit %s not found", p1.Executor.UnitID)
+		t.Fatalf("executor unit %s not found", p1.ExecutorForPlanet(ws.PlanetID).UnitID)
 	}
 	if execUnit.Type != model.UnitTypeExecutor {
 		t.Fatalf("expected executor unit type, got %s", execUnit.Type)

@@ -674,7 +674,6 @@ func killUnit(ws *model.WorldState, unit *model.Unit, killerID, killerOwnerID, s
 			if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil && exec.UnitID == unit.ID {
 				exec.RespawnAtTick = ws.Tick + model.ExecutorRespawnTicks()
 				player.SetPlanetExecutor(ws.PlanetID, exec)
-				player.SyncLegacyExecutor(ws.PlanetID)
 			}
 		}
 	}

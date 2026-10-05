@@ -27,10 +27,6 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
 	}
-	if ps.Executor != nil {
-		exec := *ps.Executor
-		cp.Executor = &exec
-	}
 	if len(ps.Executors) > 0 {
 		cp.Executors = make(map[string]*model.ExecutorState, len(ps.Executors))
 		for planetID, exec := range ps.Executors {

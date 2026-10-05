@@ -49,11 +49,11 @@ func TestReplayMatchesSnapshot(t *testing.T) {
 	ws := core.World()
 	ws.RLock()
 	p1 := ws.Players["p1"]
-	if p1 == nil || p1.Executor == nil {
+	if p1 == nil || p1.ExecutorForPlanet(ws.PlanetID) == nil {
 		ws.RUnlock()
 		t.Fatal("player executor missing")
 	}
-	execID := p1.Executor.UnitID
+	execID := p1.ExecutorForPlanet(ws.PlanetID).UnitID
 	exec := ws.Units[execID]
 	if exec == nil {
 		ws.RUnlock()

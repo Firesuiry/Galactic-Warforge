@@ -299,14 +299,10 @@ func researchThroughput(player *model.PlayerState, labs []*model.Building, power
 	multiplier := effectiveSpeed / float64(baseSpeed)
 	boost := 0.0
 	if player != nil {
-		if len(player.Executors) > 0 {
-			for _, exec := range player.Executors {
-				if exec != nil && exec.ResearchBoost > boost {
-					boost = exec.ResearchBoost
-				}
+		for _, exec := range player.Executors {
+			if exec != nil && exec.ResearchBoost > boost {
+				boost = exec.ResearchBoost
 			}
-		} else if player.Executor != nil {
-			boost = player.Executor.ResearchBoost
 		}
 	}
 	boost += model.TechEffectValue(player, "research_speed")
