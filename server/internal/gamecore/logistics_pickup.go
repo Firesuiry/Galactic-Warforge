@@ -30,7 +30,7 @@ func reservedPickupStock(worlds map[string]*model.WorldState, planetID, stationI
 }
 
 func settleDronePickups(ws *model.WorldState, worlds map[string]*model.WorldState, buildings map[string]*model.Building) {
-	demand, _ := buildDemandRemaining(ws, buildings, worlds)
+	demand := buildDemandRemaining(ws, buildings, worlds)
 	ids := make([]string, 0, len(ws.LogisticsDrones))
 	for id := range ws.LogisticsDrones {
 		ids = append(ids, id)
@@ -84,7 +84,7 @@ func settleDronePickups(ws *model.WorldState, worlds map[string]*model.WorldStat
 }
 
 func settleShipPickups(worlds map[string]*model.WorldState, maps *mapmodel.Universe, stations map[string]*interstellarStationRuntime) {
-	demand, _ := buildInterstellarDemandAcrossWorlds(worlds, stations)
+	demand := buildInterstellarDemandAcrossWorlds(worlds, stations)
 	idle := collectIdleInterstellarShips(worlds, stations)
 	homeIDs := make([]string, 0, len(idle))
 	for key := range idle {

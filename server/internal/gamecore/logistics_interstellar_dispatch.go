@@ -57,7 +57,7 @@ func settleInterstellarDispatch(worlds map[string]*model.WorldState, maps *mapmo
 		return
 	}
 
-	demandRemaining, demandForecast := buildInterstellarDemandAcrossWorlds(worlds, stations)
+	demandRemaining := buildInterstellarDemandAcrossWorlds(worlds, stations)
 	if len(demandRemaining) == 0 {
 		return
 	}
@@ -143,7 +143,6 @@ func settleInterstellarDispatch(worlds map[string]*model.WorldState, maps *mapmo
 			*ship = *staged
 
 			consumeDemandRemaining(demandRemaining, candidate.targetID, candidate.itemID, accepted)
-			recordInterstellarDispatchObservation(origin.world, originID, candidate, demandForecast)
 		}
 	}
 	settleShipPickups(worlds, maps, stations)
@@ -205,12 +204,11 @@ func collectIdleInterstellarShips(worlds map[string]*model.WorldState, stations 
 	return out
 }
 
-func buildInterstellarDemandAcrossWorlds(worlds map[string]*model.WorldState, stations map[string]*interstellarStationRuntime) (map[string]map[string]int, map[string]map[string]demandForecast) {
+func buildInterstellarDemandAcrossWorlds(worlds map[string]*model.WorldState, stations map[string]*interstellarStationRuntime) map[string]map[string]int {
 	reserved := reservedLogisticsDemand(worlds)
 
 	cfg := model.CurrentLogisticsSchedulingConfig()
 	remaining := make(map[string]map[string]int)
-	forecast := make(map[string]map[string]demandForecast)
 	for targetKey, ref := range stations {
 		if ref == nil || ref.station == nil {
 			continue
@@ -247,18 +245,10 @@ func buildInterstellarDemandAcrossWorlds(worlds map[string]*model.WorldState, st
 			if remaining[targetKey] == nil {
 				remaining[targetKey] = make(map[string]int)
 			}
-			if forecast[targetKey] == nil {
-				forecast[targetKey] = make(map[string]demandForecast)
-			}
 			remaining[targetKey][itemID] = available
-			forecast[targetKey][itemID] = demandForecast{
-				base:       base,
-				forecast:   predicted,
-				oversupply: oversupply,
-			}
 		}
 	}
-	return remaining, forecast
+	return remaining
 }
 
 func selectInterstellarDispatchCandidate(origin *interstellarStationRuntime, demandRemaining map[string]map[string]int, stations map[string]*interstellarStationRuntime, ship *model.LogisticsShipState, maps *mapmodel.Universe, worlds map[string]*model.WorldState) *interstellarDispatchCandidate {

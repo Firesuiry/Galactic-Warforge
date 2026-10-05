@@ -218,6 +218,41 @@ func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
 	}
 }
 
+func TestStateSummaryExecutorIsActivePlanetExecutor(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 20, 20)
+	p1 := &model.PlayerState{PlayerID: "p1", TeamID: "p1", IsAlive: true}
+	p1.SetPlanetExecutor(planetID, model.NewExecutorState("u-here", 1, 6, 2, 0))
+	p1.SetPlanetExecutor("other-planet", model.NewExecutorState("u-there", 1, 6, 2, 0))
+	ws.Players["p1"] = p1
+	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", TeamID: "p2", IsAlive: true}
+	p2 := ws.Players["p2"]
+	p2.SetPlanetExecutor(planetID, model.NewExecutorState("u-enemy", 1, 6, 2, 0))
+
+	raw, err := json.Marshal(ql.Summary(ws, "p1", model.VictoryState{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Players map[string]map[string]json.RawMessage `json:"players"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	var exec model.ExecutorState
+	if err := json.Unmarshal(decoded.Players["p1"]["executor"], &exec); err != nil || exec.UnitID != "u-here" {
+		t.Fatalf("expected executor of active planet, got %s (%v)", decoded.Players["p1"]["executor"], err)
+	}
+	if _, ok := decoded.Players["p1"]["executors"]; !ok {
+		t.Fatalf("expected executors map, got %s", raw)
+	}
+	if _, ok := decoded.Players["p1"]["player_id"]; !ok {
+		t.Fatalf("expected flattened player fields, got %s", raw)
+	}
+	if _, leaked := decoded.Players["p2"]["executor"]; leaked {
+		t.Fatalf("enemy executor must stay hidden, got %s", raw)
+	}
+}
+
 func TestFleetListReturnsNonNilEmptySlice(t *testing.T) {
 	ql, _, _ := newPlanetQueryFixture(t, 16, 16)
 	spaceRuntime := model.NewSpaceRuntimeState()

@@ -59,9 +59,3 @@ type WeaponState struct {
 	LastFireTick int64      `json:"last_fire_tick" yaml:"-"`              // 上次开火tick
 	AmmoCost     int        `json:"ammo_cost" yaml:"ammo_cost,omitempty"` // 每发弹药消耗
 }
-
-// LootDrop 掉落物品
-type LootDrop struct {
-	ItemID   string `json:"item_id"`
-	Quantity int    `json:"quantity"`
-}

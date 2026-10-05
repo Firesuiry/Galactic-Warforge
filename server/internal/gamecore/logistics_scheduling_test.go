@@ -35,13 +35,9 @@ func TestLogisticsDemandForecast(t *testing.T) {
 	}
 	target.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 4})
 
-	remaining, forecast := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target}, map[string]*model.WorldState{ws.PlanetID: ws})
+	remaining := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target}, map[string]*model.WorldState{ws.PlanetID: ws})
 	if remaining[target.ID][model.ItemHydrogen] != 9 {
 		t.Fatalf("expected forecast demand 9, got %d", remaining[target.ID][model.ItemHydrogen])
-	}
-	entry := forecast[target.ID][model.ItemHydrogen]
-	if entry.base != 6 || entry.forecast != 9 || entry.oversupply != 0 {
-		t.Fatalf("unexpected forecast entry: %+v", entry)
 	}
 }
 
@@ -74,13 +70,9 @@ func TestLogisticsOversupplyAllowsExtra(t *testing.T) {
 	}
 	target.LogisticsStation.SetInventory(model.ItemInventory{model.ItemHydrogen: 10})
 
-	remaining, forecast := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target}, map[string]*model.WorldState{ws.PlanetID: ws})
+	remaining := buildDemandRemaining(ws, map[string]*model.Building{target.ID: target}, map[string]*model.WorldState{ws.PlanetID: ws})
 	if remaining[target.ID][model.ItemHydrogen] != 5 {
 		t.Fatalf("expected oversupply demand 5, got %d", remaining[target.ID][model.ItemHydrogen])
-	}
-	entry := forecast[target.ID][model.ItemHydrogen]
-	if entry.base != 0 || entry.forecast != 0 || entry.oversupply != 5 {
-		t.Fatalf("unexpected oversupply entry: %+v", entry)
 	}
 }
 
@@ -140,7 +132,7 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 	near.LogisticsStation.RefreshCapacityCache()
 	far.LogisticsStation.RefreshCapacityCache()
 
-	demandRemaining, _ := buildDemandRemaining(ws, map[string]*model.Building{
+	demandRemaining := buildDemandRemaining(ws, map[string]*model.Building{
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,
@@ -162,7 +154,7 @@ func TestLogisticsLowestCostPrefersBiggerLoads(t *testing.T) {
 		t.Fatalf("set config: %v", err)
 	}
 
-	demandRemaining, _ = buildDemandRemaining(ws, map[string]*model.Building{
+	demandRemaining = buildDemandRemaining(ws, map[string]*model.Building{
 		origin.ID: origin,
 		near.ID:   near,
 		far.ID:    far,

@@ -30,33 +30,9 @@ type LogisticsSchedulingConfig struct {
 	OversupplyMax            int                         `json:"oversupply_max" yaml:"oversupply_max"`
 }
 
-// LogisticsSchedulingObservation captures one dispatch decision for observability.
-type LogisticsSchedulingObservation struct {
-	Tick             int64                       `json:"tick"`
-	Mode             LogisticsSchedulingMode     `json:"mode"`
-	Strategy         LogisticsSchedulingStrategy `json:"strategy"`
-	OriginID         string                      `json:"origin_id"`
-	TargetID         string                      `json:"target_id"`
-	ItemID           string                      `json:"item_id"`
-	Quantity         int                         `json:"quantity"`
-	Distance         int                         `json:"distance"`
-	TravelTicks      int                         `json:"travel_ticks"`
-	RouteCost        int                         `json:"route_cost"`
-	WarpItemCost     int                         `json:"warp_item_cost,omitempty"`
-	DemandBase       int                         `json:"demand_base"`
-	DemandForecast   int                         `json:"demand_forecast"`
-	OversupplyBuffer int                         `json:"oversupply_buffer"`
-}
-
-const DefaultLogisticsSchedulingObservationLimit = 200
-
 var (
 	logisticsSchedulingMu    sync.RWMutex
 	logisticsSchedulingStore LogisticsSchedulingConfig
-
-	logisticsSchedulingObsMu    sync.RWMutex
-	logisticsSchedulingObsLimit = DefaultLogisticsSchedulingObservationLimit
-	logisticsSchedulingObsStore []LogisticsSchedulingObservation
 )
 
 func init() {
@@ -91,20 +67,6 @@ func CurrentLogisticsSchedulingConfig() LogisticsSchedulingConfig {
 	logisticsSchedulingMu.RLock()
 	defer logisticsSchedulingMu.RUnlock()
 	return logisticsSchedulingStore
-}
-
-// RecordLogisticsSchedulingObservation appends a new scheduling observation.
-func RecordLogisticsSchedulingObservation(obs LogisticsSchedulingObservation) {
-	logisticsSchedulingObsMu.Lock()
-	defer logisticsSchedulingObsMu.Unlock()
-	logisticsSchedulingObsStore = append(logisticsSchedulingObsStore, obs)
-	if logisticsSchedulingObsLimit > 0 && len(logisticsSchedulingObsStore) > logisticsSchedulingObsLimit {
-		start := len(logisticsSchedulingObsStore) - logisticsSchedulingObsLimit
-		if start < 0 {
-			start = 0
-		}
-		logisticsSchedulingObsStore = append([]LogisticsSchedulingObservation(nil), logisticsSchedulingObsStore[start:]...)
-	}
 }
 
 func normalizeLogisticsSchedulingConfig(cfg LogisticsSchedulingConfig) (LogisticsSchedulingConfig, error) {

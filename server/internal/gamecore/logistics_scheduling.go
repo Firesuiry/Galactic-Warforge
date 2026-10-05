@@ -6,21 +6,14 @@ import (
 	"siliconworld/internal/model"
 )
 
-type demandForecast struct {
-	base       int
-	forecast   int
-	oversupply int
-}
-
-func buildDemandRemaining(ws *model.WorldState, stationBuildings map[string]*model.Building, worlds map[string]*model.WorldState) (map[string]map[string]int, map[string]map[string]demandForecast) {
+func buildDemandRemaining(ws *model.WorldState, stationBuildings map[string]*model.Building, worlds map[string]*model.WorldState) map[string]map[string]int {
 	if ws == nil {
-		return nil, nil
+		return nil
 	}
 	reserved := reservedLogisticsDemand(worlds)
 
 	cfg := model.CurrentLogisticsSchedulingConfig()
 	remaining := make(map[string]map[string]int)
-	forecast := make(map[string]map[string]demandForecast)
 	for stationID, station := range ws.LogisticsStations {
 		if station == nil || stationBuildings[stationID] == nil {
 			continue
@@ -57,18 +50,10 @@ func buildDemandRemaining(ws *model.WorldState, stationBuildings map[string]*mod
 			if remaining[stationID] == nil {
 				remaining[stationID] = make(map[string]int)
 			}
-			if forecast[stationID] == nil {
-				forecast[stationID] = make(map[string]demandForecast)
-			}
 			remaining[stationID][itemID] = available
-			forecast[stationID][itemID] = demandForecast{
-				base:       base,
-				forecast:   predicted,
-				oversupply: oversupply,
-			}
 		}
 	}
-	return remaining, forecast
+	return remaining
 }
 
 func forecastDemand(base, local int, cfg model.LogisticsSchedulingConfig) (int, int) {
@@ -98,69 +83,6 @@ func forecastDemand(base, local int, cfg model.LogisticsSchedulingConfig) (int, 
 		forecast = 0
 	}
 	return forecast, oversupply
-}
-
-func recordDispatchObservation(ws *model.WorldState, mode model.LogisticsSchedulingMode, originID string, candidate *logisticsDispatchCandidate, forecast map[string]map[string]demandForecast) {
-	if ws == nil || candidate == nil {
-		return
-	}
-	cfg := model.CurrentLogisticsSchedulingConfig()
-	strategy := cfg.PlanetaryStrategy
-	if mode == model.LogisticsSchedulingInterstellar {
-		strategy = cfg.InterstellarStrategy
-	}
-	base, predicted, oversupply := lookupDemandForecast(forecast, candidate.targetID, candidate.itemID)
-	model.RecordLogisticsSchedulingObservation(model.LogisticsSchedulingObservation{
-		Tick:             ws.Tick,
-		Mode:             mode,
-		Strategy:         strategy,
-		OriginID:         originID,
-		TargetID:         candidate.targetID,
-		ItemID:           candidate.itemID,
-		Quantity:         candidate.qty,
-		Distance:         candidate.distance,
-		TravelTicks:      candidate.travelTicks,
-		RouteCost:        candidate.routeCost,
-		DemandBase:       base,
-		DemandForecast:   predicted,
-		OversupplyBuffer: oversupply,
-	})
-}
-
-func recordInterstellarDispatchObservation(ws *model.WorldState, originID string, candidate *interstellarDispatchCandidate, forecast map[string]map[string]demandForecast) {
-	if ws == nil || candidate == nil {
-		return
-	}
-	cfg := model.CurrentLogisticsSchedulingConfig()
-	base, predicted, oversupply := lookupDemandForecast(forecast, candidate.targetID, candidate.itemID)
-	model.RecordLogisticsSchedulingObservation(model.LogisticsSchedulingObservation{
-		Tick:             ws.Tick,
-		Mode:             model.LogisticsSchedulingInterstellar,
-		Strategy:         cfg.InterstellarStrategy,
-		OriginID:         originID,
-		TargetID:         candidate.targetID,
-		ItemID:           candidate.itemID,
-		Quantity:         candidate.qty,
-		Distance:         candidate.distance,
-		TravelTicks:      candidate.travelTicks,
-		RouteCost:        candidate.routeCost,
-		WarpItemCost:     candidate.warpItemCost,
-		DemandBase:       base,
-		DemandForecast:   predicted,
-		OversupplyBuffer: oversupply,
-	})
-}
-
-func lookupDemandForecast(forecast map[string]map[string]demandForecast, stationID, itemID string) (int, int, int) {
-	if forecast == nil || stationID == "" || itemID == "" {
-		return 0, 0, 0
-	}
-	if byItem := forecast[stationID]; byItem != nil {
-		if entry, ok := byItem[itemID]; ok {
-			return entry.base, entry.forecast, entry.oversupply
-		}
-	}
-	return 0, 0, 0
 }
 
 func betterCostPerUnit(costA, qtyA, costB, qtyB int) bool {

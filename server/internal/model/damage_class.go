@@ -41,16 +41,6 @@ func ResolveDamageCoefficient(weapon WeaponType, armor ArmorClass) float64 {
 	return 1.0
 }
 
-// WeaponClassForUnitType 单位的武器类型（units.yaml weapon_class）。
-func WeaponClassForUnitType(utype UnitType) WeaponType {
-	return unitDefinitions[utype].WeaponClass
-}
-
-// ArmorClassForUnitType 单位的护甲类型（units.yaml armor_class）。
-func ArmorClassForUnitType(utype UnitType) ArmorClass {
-	return unitDefinitions[utype].ArmorClass
-}
-
 // WeaponClassForBuilding 防御建筑的武器类型（buildings.yaml profile.weapon_class）。
 func WeaponClassForBuilding(btype BuildingType) WeaponType {
 	def, _ := BuildingDefinitionByID(btype)

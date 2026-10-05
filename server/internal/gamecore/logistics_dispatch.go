@@ -38,7 +38,7 @@ func settleLogisticsDispatch(ws *model.WorldState, worlds map[string]*model.Worl
 		}
 	}
 
-	demandRemaining, demandForecast := buildDemandRemaining(ws, stationBuildings, worlds)
+	demandRemaining := buildDemandRemaining(ws, stationBuildings, worlds)
 	if len(demandRemaining) == 0 {
 		return
 	}
@@ -122,7 +122,6 @@ func settleLogisticsDispatch(ws *model.WorldState, worlds map[string]*model.Worl
 			*drone = *staged
 
 			consumeDemandRemaining(demandRemaining, candidate.targetID, candidate.itemID, accepted)
-			recordDispatchObservation(ws, model.LogisticsSchedulingPlanetary, originID, candidate, demandForecast)
 		}
 	}
 	settleDronePickups(ws, worlds, stationBuildings)

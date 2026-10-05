@@ -974,17 +974,6 @@ func staticPlanetResources(planet *mapmodel.Planet) []*model.ResourceNodeState {
 	return res
 }
 
-// FogMapView is the fog-of-war grid.
-type FogMapView struct {
-	PlanetID   string           `json:"planet_id"`
-	Discovered bool             `json:"discovered"`
-	MapWidth   int              `json:"map_width"`
-	MapHeight  int              `json:"map_height"`
-	Surface    surface.Metadata `json:"surface"`
-	Visible    [][]bool         `json:"visible,omitempty"`
-	Explored   [][]bool         `json:"explored,omitempty"`
-}
-
 func blankFog(w, h int) [][]bool {
 	fog := make([][]bool, h)
 	for y := range fog {
