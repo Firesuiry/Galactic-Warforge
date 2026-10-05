@@ -100,11 +100,11 @@ func TestT122OfficialWarScenarioSupportsAuthoritativeRegressionFlow(t *testing.T
 	ws.EnemyForces = &model.EnemyForceState{
 		SystemID: systemID,
 		Forces: []model.EnemyForce{{
-			ID:           "enemy-gateway-t122",
-			Type:         model.EnemyForceTypeBeacon,
-			Position:     model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
-			Strength:     1,
-			SpawnTick:    ws.Tick,
+			ID:        "enemy-gateway-t122",
+			Type:      model.EnemyForceTypeBeacon,
+			Position:  model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2},
+			Strength:  1,
+			SpawnTick: ws.Tick,
 		}},
 	}
 	ws.Unlock()

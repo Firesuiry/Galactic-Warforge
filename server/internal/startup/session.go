@@ -160,12 +160,12 @@ func (sess *Session) Summary() GameSummary {
 
 // NewGamePlayer 是 POST /games/new 请求体中的玩家定义，字段沿用 config.PlayerConfig 语义。
 type NewGamePlayer struct {
-	PlayerID  string                          `json:"player_id"`
-	Key       string                          `json:"key"`
-	Role      string                          `json:"role,omitempty"`      // admin|commander|observer，空默认 commander
-	TeamID    string                          `json:"team_id,omitempty"`   // 空默认 player_id
-	Bot       string                          `json:"bot,omitempty"`       // easy|normal|hard，空为人类玩家
-	Bootstrap *config.PlayerBootstrapConfig   `json:"bootstrap,omitempty"` // 可选，沿用现有 config 结构
+	PlayerID  string                        `json:"player_id"`
+	Key       string                        `json:"key"`
+	Role      string                        `json:"role,omitempty"`      // admin|commander|observer，空默认 commander
+	TeamID    string                        `json:"team_id,omitempty"`   // 空默认 player_id
+	Bot       string                        `json:"bot,omitempty"`       // easy|normal|hard，空为人类玩家
+	Bootstrap *config.PlayerBootstrapConfig `json:"bootstrap,omitempty"` // 可选，沿用现有 config 结构
 }
 
 // NewGameRequest 是 POST /games/new 的请求体。

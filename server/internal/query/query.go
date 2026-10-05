@@ -26,13 +26,13 @@ func New(vis *visibility.Engine, maps *mapmodel.Universe, discovery *mapstate.Di
 type StateSummary struct {
 	Tick           int64                     `json:"tick"`
 	Players        map[string]*SummaryPlayer `json:"players"`
-	Winner         string                        `json:"winner,omitempty"`
-	VictoryReason  string                        `json:"victory_reason,omitempty"`
-	VictoryRule    string                        `json:"victory_rule,omitempty"`
-	ActivePlanetID string                        `json:"active_planet_id"`
-	MapWidth       int                           `json:"map_width"`
-	MapHeight      int                           `json:"map_height"`
-	Surface        surface.Metadata              `json:"surface"`
+	Winner         string                    `json:"winner,omitempty"`
+	VictoryReason  string                    `json:"victory_reason,omitempty"`
+	VictoryRule    string                    `json:"victory_rule,omitempty"`
+	ActivePlanetID string                    `json:"active_planet_id"`
+	MapWidth       int                       `json:"map_width"`
+	MapHeight      int                       `json:"map_height"`
+	Surface        surface.Metadata          `json:"surface"`
 }
 
 // SummaryPlayer is a player entry of /state/summary: the player state plus the

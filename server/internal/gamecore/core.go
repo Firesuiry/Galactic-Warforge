@@ -997,7 +997,6 @@ func commandResultEvent(qr *model.QueuedRequest, cmd model.Command, res model.Co
 	}
 }
 
-
 // computeStartPositions returns N spread-out starting positions
 func computeStartPositions(cfg *config.Config, grid surface.Grid) []model.Position {
 	n := len(cfg.Players)
