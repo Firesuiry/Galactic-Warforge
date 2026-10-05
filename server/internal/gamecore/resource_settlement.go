@@ -4,7 +4,6 @@ import (
 	"math"
 	"sort"
 
-	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
 	modelpower "siliconworld/internal/model/power"
 )
@@ -382,48 +381,14 @@ func collectorOutputItemID(ws *model.WorldState, building *model.Building) strin
 	return resourceKindToItemID(node.Kind)
 }
 
-// resourceKindToItemID maps a resource node kind to its mined catalog item.
+// resourceKindToItemID: a resource node kind is, by data convention, the ID of
+// the catalog item it yields (items.yaml registers every mapmodel kind), so
+// the mapping is a catalog lookup rather than a table. Unknown kinds yield nothing.
 func resourceKindToItemID(kind string) string {
-	switch kind {
-	case string(mapmodel.ResourceIronOre):
-		return model.ItemIronOre
-	case string(mapmodel.ResourceCopperOre):
-		return model.ItemCopperOre
-	case string(mapmodel.ResourceStoneOre):
-		return model.ItemStoneOre
-	case string(mapmodel.ResourceSiliconOre):
-		return model.ItemSiliconOre
-	case string(mapmodel.ResourceTitaniumOre):
-		return model.ItemTitaniumOre
-	case string(mapmodel.ResourceCoal):
-		return model.ItemCoal
-	case string(mapmodel.ResourceCrudeOil):
-		return model.ItemCrudeOil
-	case string(mapmodel.ResourceWater):
-		return model.ItemWater
-	case string(mapmodel.ResourceFireIce):
-		return model.ItemFireIce
-	case string(mapmodel.ResourceFractalSilicon):
-		return model.ItemFractalSilicon
-	case string(mapmodel.ResourceGratingCrystal):
-		return model.ItemGratingCrystal
-	case string(mapmodel.ResourceMonopoleMagnet):
-		return model.ItemMonopoleMagnet
-	case string(mapmodel.ResourceKimberliteOre):
-		return model.ItemKimberliteOre
-	case string(mapmodel.ResourceSpiniformStalagmiteCrystal):
-		return model.ItemSpiniformStalagmiteCrystal
-	case string(mapmodel.ResourceOrganicCrystal):
-		return model.ItemOrganicCrystal
-	case string(mapmodel.ResourceSulfuricAcid):
-		return model.ItemSulfuricAcid
-	case string(mapmodel.ResourceLog):
-		return model.ItemLog
-	case string(mapmodel.ResourcePlantFuel):
-		return model.ItemPlantFuel
-	default:
+	if _, ok := model.Item(kind); !ok {
 		return ""
 	}
+	return kind
 }
 
 func collectorResourceKind(ws *model.WorldState, building *model.Building) string {

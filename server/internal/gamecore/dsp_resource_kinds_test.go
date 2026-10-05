@@ -72,36 +72,26 @@ func TestManualMineItemAllowsVegetationRenewables(t *testing.T) {
 	}
 }
 
-func TestCollectorOutputItemIDCoversNewKinds(t *testing.T) {
+// 每种资源节点 kind 都在物品目录里登记同名物品，采集产物即该物品。
+func TestCollectorOutputItemIDCoversAllResourceKinds(t *testing.T) {
+	kinds := mapmodel.AllResourceKinds()
 	ws := &model.WorldState{
 		Resources: map[string]*model.ResourceNodeState{},
-		MapWidth:  len(testCollectorKinds),
+		MapWidth:  len(kinds),
 		MapHeight: 1,
 	}
-	// resourceNodeForBuilding resolves through the grid, so exercise the kind
-	// switch directly via a building parked on each node.
 	ws.Grid = make([][]model.MapTile, 1)
-	ws.Grid[0] = make([]model.MapTile, len(testCollectorKinds))
-	for i, kc := range testCollectorKinds {
-		nodeID := "node-" + kc.kind
-		ws.Resources[nodeID] = &model.ResourceNodeState{ID: nodeID, Kind: kc.kind}
+	ws.Grid[0] = make([]model.MapTile, len(kinds))
+	for i, kind := range kinds {
+		nodeID := "node-" + string(kind)
+		ws.Resources[nodeID] = &model.ResourceNodeState{ID: nodeID, Kind: string(kind)}
 		ws.Grid[0][i].ResourceNodeID = nodeID
 		b := &model.Building{Position: model.Position{X: i, Y: 0}}
-		got := collectorOutputItemID(ws, b)
-		if got != kc.wantItem {
-			t.Fatalf("kind %s: want item %s got %q", kc.kind, kc.wantItem, got)
+		if got := collectorOutputItemID(ws, b); got != string(kind) {
+			t.Fatalf("kind %s: want same-named catalog item, got %q", kind, got)
 		}
 	}
-}
-
-var testCollectorKinds = []struct {
-	kind     string
-	wantItem string
-}{
-	{kind: string(mapmodel.ResourceKimberliteOre), wantItem: model.ItemKimberliteOre},
-	{kind: string(mapmodel.ResourceSpiniformStalagmiteCrystal), wantItem: model.ItemSpiniformStalagmiteCrystal},
-	{kind: string(mapmodel.ResourceOrganicCrystal), wantItem: model.ItemOrganicCrystal},
-	{kind: string(mapmodel.ResourceSulfuricAcid), wantItem: model.ItemSulfuricAcid},
-	{kind: string(mapmodel.ResourceLog), wantItem: model.ItemLog},
-	{kind: string(mapmodel.ResourcePlantFuel), wantItem: model.ItemPlantFuel},
+	if got := resourceKindToItemID("not_a_resource"); got != "" {
+		t.Fatalf("unknown kind must yield no item, got %q", got)
+	}
 }
