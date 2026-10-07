@@ -36,6 +36,9 @@ type botTuning struct {
 	resupplyBelowAmmo float64 // 军团平均弹药比低于该值即回补给站
 }
 
+// botCoalReserve 手搓期间背包煤低于该值就先去采煤（约够 300 点能量，足以完成一次采煤任务）。
+const botCoalReserve = 16
+
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
@@ -629,7 +632,15 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 			})
 		}
 	}
-	if exec.Mecha.Job != nil {
+	if job := exec.Mecha.Job; job != nil {
+		// 手搓链耗煤快于回补：煤将尽时打断手搓去采煤。否则能量归零后连采煤都做不了，
+		// 执行体永久卡在 no_energy（遭遇战 bot 曾因此在开局 3 分钟后再无建设）。
+		if job.Kind == "craft" && player.Inventory[model.ItemCoal] < botCoalReserve {
+			return issue(model.Command{
+				Type:   model.CmdCancelMechaJob,
+				Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+			})
+		}
 		return false
 	}
 	// 缺料清单：当前建设目标所需物品。
@@ -785,7 +796,8 @@ func (gc *GameCore) botCraftIngredient(ws *model.WorldState, playerID string, in
 		return model.Command{}, false
 	}
 	for _, ing := range ingredients {
-		if player.Inventory[ing.ItemID] > 0 {
+		// 够一份配方才算备齐：magnet 只有 1、磁线圈要 2 时也得继续搓（曾因 >0 判定卡死在采铁矿）。
+		if player.Inventory[ing.ItemID] >= ing.Quantity {
 			continue
 		}
 		recipeID, sub := botCraftChain(ing.ItemID)
@@ -818,17 +830,34 @@ func botHasIngredients(inv model.ItemInventory, ingredients []model.ItemAmount, 
 }
 
 // botMineFor 按缺口物品反推矿种并前往开采。
+// 复合物品（如电路板 = 铁锭 + 铜锭）要沿手搓链找到背包里真正不足的那种原矿，
+// 否则会一直采同一种矿（遭遇战 bot 曾因此把铜矿采到 2770 却没有铁）。
 func (gc *GameCore) botMineFor(ws *model.WorldState, playerID string, exec *model.Unit, missingItem string, ctx *botSurvey) (model.Command, bool) {
-	oreKind := ""
-	switch missingItem {
-	case model.ItemGear, model.ItemIronIngot, model.ItemMagnet:
-		oreKind = model.ItemIronOre
-	case model.ItemCircuitBoard, model.ItemCopperIngot, model.ItemMagneticCoil:
-		oreKind = model.ItemCopperOre
-	default:
+	oreKind := botRawOreFor(ws.Players[playerID].Inventory, missingItem)
+	if oreKind == "" {
 		oreKind = model.ItemIronOre
 	}
 	return gc.botMineKind(ws, playerID, exec, oreKind, ctx)
+}
+
+// botRawOreFor 沿手搓链找出制造 itemID 时背包里首个不足的原矿；链上原料都够则返回空。
+func botRawOreFor(inv model.ItemInventory, itemID string) string {
+	recipeID, ingredients := botCraftChain(itemID)
+	if recipeID == "" {
+		if itemID == model.ItemIronOre || itemID == model.ItemCopperOre {
+			return itemID
+		}
+		return ""
+	}
+	for _, ing := range ingredients {
+		if inv[ing.ItemID] >= ing.Quantity {
+			continue
+		}
+		if ore := botRawOreFor(inv, ing.ItemID); ore != "" {
+			return ore
+		}
+	}
+	return ""
 }
 
 // botMineKind 前往最近的指定矿种节点开采；不在操作范围时先移动过去。

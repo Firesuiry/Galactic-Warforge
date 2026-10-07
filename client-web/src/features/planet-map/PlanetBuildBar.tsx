@@ -63,6 +63,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
   const [showLocked, setShowLocked] = useState(false);
+  // 新建筑（兵营/补给站/战车工厂等）尚无预渲染缩略图：加载失败则退回图标
+  const [missingModels, setMissingModels] = useState<ReadonlySet<string>>(new Set());
 
   const workflow = useMemo(() => deriveBuildWorkflowView({
     catalog,
@@ -186,7 +188,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
                     }}
                   >
                     <span className="planet-build-card__icon">
-                      {dimensional ? <img className="planet-build-card__model" src={`/assets/buildings/${entry.id}.png`} alt="" loading="lazy" /> : <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />}
+                      {dimensional && !missingModels.has(entry.id) ? <img className="planet-build-card__model" src={`/assets/buildings/${entry.id}.png`} alt="" loading="lazy" onError={() => setMissingModels((prev) => new Set(prev).add(entry.id))} /> : <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />}
                       {locked ? (
                         <Lock aria-hidden="true" className="planet-build-card__lock" size={11} strokeWidth={2.5} />
                       ) : null}

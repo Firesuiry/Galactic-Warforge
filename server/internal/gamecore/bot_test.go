@@ -544,3 +544,95 @@ func botAttackMoveToward(core *GameCore, playerID string, pos model.Position) bo
 	}
 	return false
 }
+
+// 手搓链把煤烧光会让执行体永久卡在 no_energy：煤将尽时 bot 必须打断手搓、回头采煤。
+func TestBotCancelsCraftToMineCoalBeforeStarving(t *testing.T) {
+	core := newBotTestCore(t, "hard")
+	ws := core.World()
+	player := ws.Players["p2"]
+	player.Inventory[model.ItemCoal] = 4
+	var exec *model.Unit
+	for _, u := range ws.Units {
+		if u.OwnerID == "p2" && u.Mecha != nil {
+			exec = u
+		}
+	}
+	if exec == nil {
+		t.Fatal("bot executor missing")
+	}
+	exec.Mecha.Energy = exec.Mecha.MaxEnergy
+	exec.Mecha.Job = &model.MechaJob{Kind: "craft", RecipeID: "smelt_iron", RemainingTicks: 100, TicksPerBatch: 120, RemainingBatches: 5, EnergyPerTick: 1, State: "running"}
+	cmds := core.planBotCommands(ws, "p2", botTuningFor("hard"))
+	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); !ok {
+		t.Fatalf("expected cancel_mecha_job when coal is nearly out, got %+v", cmds)
+	}
+	player.Inventory[model.ItemCoal] = botCoalReserve
+	cmds = core.planBotCommands(ws, "p2", botTuningFor("hard"))
+	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); ok {
+		t.Fatal("must not cancel handcrafting while coal reserve is sufficient")
+	}
+}
+
+// 缺电路板时，铜够了就该去采铁：不能永远只采铜。
+func TestBotRawOreFollowsCraftChain(t *testing.T) {
+	inv := model.ItemInventory{model.ItemCopperIngot: 20, model.ItemCopperOre: 100}
+	if got := botRawOreFor(inv, model.ItemCircuitBoard); got != model.ItemIronOre {
+		t.Fatalf("circuit board with only copper on hand should need iron ore, got %q", got)
+	}
+	inv = model.ItemInventory{model.ItemIronIngot: 5}
+	if got := botRawOreFor(inv, model.ItemCircuitBoard); got != model.ItemCopperOre {
+		t.Fatalf("circuit board with only iron on hand should need copper ore, got %q", got)
+	}
+	inv = model.ItemInventory{model.ItemIronIngot: 5, model.ItemCopperIngot: 5}
+	if got := botRawOreFor(inv, model.ItemCircuitBoard); got != "" {
+		t.Fatalf("no ore needed when ingots are on hand, got %q", got)
+	}
+	if got := botRawOreFor(model.ItemInventory{}, model.ItemMagneticCoil); got != model.ItemIronOre {
+		t.Fatalf("magnetic coil chain starts with iron ore (magnet), got %q", got)
+	}
+}
+
+// 只差 1 个磁铁凑不齐磁线圈时，bot 应继续冶炼磁铁，而不是无限采矿。
+func TestBotCraftsIngredientWhenBelowRecipeQuantity(t *testing.T) {
+	core := newBotTestCore(t, "hard")
+	ws := core.World()
+	player := ws.Players["p2"]
+	player.Inventory = model.ItemInventory{model.ItemMagnet: 1, model.ItemCopperIngot: 7, model.ItemIronOre: 900}
+	cmd, ok := core.botCraftFor(ws, "p2", []string{model.ItemMagneticCoil}, botTuningFor("hard"))
+	if !ok {
+		t.Fatal("bot must craft the missing ingredient")
+	}
+	if got, _ := cmd.Payload["recipe_id"].(string); got != "smelt_magnet" {
+		t.Fatalf("expected smelt_magnet, got %v", cmd.Payload)
+	}
+}
+
+// 遭遇战预设（p2 无预置物资）：bot 必须靠手搓从零起步，最终建出电力和矿机。
+func TestSkirmishBotBootstrapsFromScratch(t *testing.T) {
+	cfg, err := config.Load("../../config-skirmish.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Battlefield.EnemyDifficulty = "off"
+	mapCfg, err := mapconfig.Load("../../map-skirmish.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	core := New(cfg, mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed), queue.New(), NewEventBus(), nil)
+	runBotGame(core, 20000)
+	power, miners := 0, 0
+	for _, b := range core.World().Buildings {
+		if b.OwnerID != "p2" {
+			continue
+		}
+		if b.Runtime.Functions.Energy != nil && b.Runtime.Functions.Energy.OutputPerTick > 0 {
+			power++
+		}
+		if isMinerBuilding(b) {
+			miners++
+		}
+	}
+	if power == 0 || miners == 0 {
+		t.Fatalf("skirmish bot stalled from scratch: power=%d miners=%d inv=%v", power, miners, core.World().Players["p2"].Inventory)
+	}
+}

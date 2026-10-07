@@ -1583,7 +1583,8 @@
 .planet-legion-panel [role="alert"] { color: #ff8a8a; }
 .planet-ammo-alert { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 13; padding: 4px 12px; border-radius: 6px; background: rgba(120, 20, 20, 0.9); color: #ffd0d0; font-size: 12px; }
 
-.planet-left-stack { position: absolute; left: 12px; top: 96px; z-index: 12; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+/* 起点在行星 HUD 卡片之下、终点在相机控制之上；空间不够时自身滚动，不再压住二者 */
+.planet-left-stack { position: absolute; left: 12px; top: 252px; max-height: max(200px, calc(100% - 640px)); overflow-y: auto; z-index: 12; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 .war-guide-panel { width: 240px; pointer-events: auto; padding: 8px; border-radius: 8px; background: rgba(14, 18, 26, 0.88); border: 1px solid rgba(95, 176, 255, 0.5); font-size: 12px; }
 .war-guide-panel header { display: flex; justify-content: space-between; align-items: center; }
 .war-guide-panel ol { display: flex; flex-wrap: wrap; gap: 4px 10px; list-style: none; margin: 6px 0; padding: 0; opacity: 0.8; }

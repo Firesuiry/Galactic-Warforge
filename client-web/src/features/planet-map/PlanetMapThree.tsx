@@ -233,6 +233,8 @@ export function PlanetMapThree(props: Props) {
     }
     if (event.button !== 0 || !event.shiftKey || interactionMode.kind !== 'inspect') return;
     marqueeRef.current = { startX: event.clientX, startY: event.clientY, active: false };
+    // 捕获指针：松开时光标即使落在建造栏等 HUD 上，抬起事件也归框选，选框不会卡住。
+    event.currentTarget.setPointerCapture(event.pointerId);
     event.stopPropagation();
     event.preventDefault();
   }
@@ -280,6 +282,7 @@ export function PlanetMapThree(props: Props) {
     marqueeRef.current = null;
     if (!marquee) return;
     event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     setMarqueeRect(null);
     if (!marquee.active || !scene.current) return;
     const rect = {

@@ -2,24 +2,24 @@
 
 - 2026-09-29 遭遇战骨架：`server/map-skirmish.yaml`（face 96、同面双出生点、`resources.contested_center`）配合 `server/config-skirmish.yaml`（p2 bot hard；pace_research 6 / pace_build 2 / pace_output 2 / time_limit_ticks 54000 / threat_growth_scale 1.5）。启动：`cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-skirmish.yaml`。地形改为球面 3D 噪声，scene 可选 `height`。默认 map.yaml 仍 face_size 816、节奏倍率 1。旧种子的地形/资源位置不再与白噪声生成器一致。缺口余项见 [缺失内容清单](docs/guide/缺失内容清单.md)。
 
-- 2026-09-18 DSP 行星内全量对齐进行中：冻结范围与验收基线见 [dsp行星内生产对齐范围](docs/dev/dsp行星内生产对齐范围.md)；数据工具链 develop_tools/dsp-catalog（scope.json=冻结闭包，mapping.json=未匹配清单，catalogdump 生成 current_dump.json 后跑 build_scope.py 即得差距）。W1 目录对齐已合 main（物品102/资源18/配方118/科技147/建筑62，parity+closure 测试在 model/dsp_alignment_test.go）。
+- 2026-09-18 DSP 行星内全量对齐进行中：冻结范围与验收基线见 [dsp行星内生产对齐范围](docs/guide/星球玩法覆盖与验收.md)；数据工具链 develop_tools/dsp-catalog（scope.json=冻结闭包，mapping.json=未匹配清单，catalogdump 生成 current_dump.json 后跑 build_scope.py 即得差距）。W1 目录对齐已合 main（物品102/资源18/配方118/科技147/建筑62，parity+closure 测试在 model/dsp_alignment_test.go）。
 - 用户要求：复杂游戏计算留在后端；浏览器负责 3D 表现与操作，目标为《戴森球计划》式工业与星球质感，不能把能转动的球体当成画质完成。
 - 行星与恒星系默认 3D，`?view=2d` 切平面战术；3D 必须实际浏览器验证建造、兵力移动和局势显示。
 - Go：`/home/firesuiry/sdk/go1.25.0/bin`。前端构建和测试在 `client-web/` 运行。
-- 3D 开发、验证、素材与待完成事项见 [3D表现开发指南](docs/guide/3D表现开发指南.md)；素材来源见 [3D素材来源](docs/guide/3D素材来源.md)。
+- 3D 开发、验证、素材与待完成事项见 [3D表现开发指南](docs/guide/3D与画质.md)；素材来源见 [3D素材来源](docs/guide/3D与画质.md)。
 - 用户已有的 AGENTS.md、B站 cookie/二维码、视频和下载目录不随本任务提交。只提交当前任务文件，测试通过后提交 main 并推远程。
 - 静态与转子动画部件均已跨建筑实例化；工业材质新增共享PBR纹理。千栋风机24000→16次绘制仅为同类隔离诊断，不等于完整混合工业场景 FPS 达标。
-- 2026-09-15 用户重新要求提升画质、完善玩法与内容，对标《戴森球计划》；本轮新增工业生产规划、六阶段发展导航与动态画质档位，说明见 [工业发展与画质增强](docs/guide/工业发展与画质增强.md)。
+- 2026-09-15 用户重新要求提升画质、完善玩法与内容，对标《戴森球计划》；本轮新增工业生产规划、六阶段发展导航与动态画质档位，说明见 [工业发展与画质增强](docs/guide/3D与画质.md)。
 
-- 行星网格已改为唯一六面 cube_sphere；配置只用 planet.face_size，旧平面存档拒绝加载。坐标/面方向/跨面场景协议见 [立方体球面网格](docs/guide/立方体球面网格.md)。
-- 行星内生产配方已进 `server/internal/model` 权威目录并由科技门控；无科技引用的非基础配方不得默认放行。缺口批次见 [DSP行星内容缺口实现计划](docs/guide/DSP行星内容缺口实现计划.md)。
+- 行星网格已改为唯一六面 cube_sphere；配置只用 planet.face_size，旧平面存档拒绝加载。坐标/面方向/跨面场景协议见 [立方体球面网格](docs/guide/3D与画质.md)。
+- 行星内生产配方已进 `server/internal/model` 权威目录并由科技门控；无科技引用的非基础配方不得默认放行。缺口批次见 [DSP行星内容缺口实现计划](docs/guide/星球玩法覆盖与验收.md)。
 - CLI 具名动词覆盖 `shared-client` 公开命令目录；`summary` 会打印执行体 ID 与背包，便于观察 `craft_item` / `transfer` 结果。
 
 - 全量星球玩法目标与缺口持续记录在 [星球玩法覆盖与验收](docs/guide/星球玩法覆盖与验收.md)。量产战斗 mecha 尚不等于玩家机甲；piler 的总缓存容量尚不等于真实叠层增运。精炼闭环浏览器回放用 `scripts/playtest-refinery.mjs`。
 
 - 玩家机甲核心回放：`scripts/playtest-player-mecha.mjs`。近距双玩家隔离配置、已解锁核心/引擎/护盾及煤库存；UI 补能和真实攻防验证，仍不等于完整玩家机甲（飞行/采集/充电等见覆盖文档）。
 
-- 传送带/分拣器截图必须验证真实库存增长与机械臂动作；慢刷新不能丢弃两次观察间的新搬运。回放与证据见 [物流浏览器回归](docs/guide/传送带与分拣器浏览器回归.md)。
+- 传送带/分拣器截图必须验证真实库存增长与机械臂动作；慢刷新不能丢弃两次观察间的新搬运。回放与证据见 [物流浏览器回归](docs/guide/星球玩法覆盖与验收.md)。
 
 - 制造台/地基/炮塔回放分别用 `scripts/playtest-assemblers-browser.mjs`、`scripts/playtest-foundation-browser.mjs`、`scripts/playtest-defense-browser.mjs`；隔离配置要求见脚本头部，结果与未完成项见星球玩法覆盖文档。
 
@@ -55,3 +55,9 @@
 
 - 2026-09-30 第一阶段自动化收口：3.0–3.6 服务端与客户端已实现，`go test ./...`、client-web（tsc+vitest）、client-cli、command_coverage 全绿。`df_` 单位物品配方已删（弹药类 df_ 配方保留）；新增 form_squad/squad_order/dissolve_squad、set_rally_point、防空击落物流无人机（air_defense.go）。测试注意：client-web 并行跑时 AgentsPage/industrial-finishes 偶发 5s 超时（单跑或 --testTimeout=60000 通过）；client-cli 的 official-war-regression 需要 PATH 里有 go（脚本写死的 /home/firesuiry/sdk 路径在本机不存在）。遗留：bot 尚未用 form_squad 编军团、C9 新手引导、浏览器实拍与 60–90 分钟试玩（整体规划第 4 节）。
 - 2026-09-30 补缺口：补给收敛为三类弹药（ammo/shells/missiles，删燃料/备件/护盾电池/维修无人机；precision_drone 因是无人机载荷保留）；子弹<炮弹<导弹科技门控有测试；舰队只从补给站/补给车补弹；bot 用 form_squad/squad_order 编军团（bot_legion.go）；客户端军团面板/标记/箭头、新手引导（war-guide.ts）、全星球缺弹横幅。case1 测试的 agent_already_running 是 agent-gateway 上一条消息仍 running 的时序竞争，测试改为重试。
+
+- 2026-09-30 第一阶段浏览器验证（AI 自动化）见 [第一阶段浏览器验证](docs/guide/第一阶段浏览器验证.md)，脚本/截图在 develop_tools/phase1-verify/。软件 WebGL 下 3D 只有约 3 fps：视口 ≤1200×1000、画质 `quality=low`，脚本失败会留下 chromium 进程要手动清理（`pkill -f "chromium-121[7]/chrome-linux64"`）。遭遇战预设里不造防御的玩家 tick ~2700 被黑雾灭、bot 首次进攻晚于时限，均待调。
+
+- 2026-10-04 整体重构方案（P0 删除→P1 文档→P2 TS 整合→P3 服务端→P4 web→P5 测试）见 [重构方案](docs/guide/重构方案.md)，待用户拍板后按阶段执行。
+
+- 2026-10-06 默认遭遇战真实试玩（不预置、UI 操作）见 tmp/playtest-1006/试玩报告.md：三局都在 tick ~2600 被第一波黑雾消灭；黑雾只打玩家；bot 从零开局造不出建筑；建造栏不显示物品造价、抽屉挡按钮。修好开局生存后需再试玩。
