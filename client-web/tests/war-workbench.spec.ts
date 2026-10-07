@@ -389,10 +389,10 @@ async function installWarRoutes(page: Page) {
     const command = (request.commands as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
     const commandType = String(command.type ?? '');
     const responseByType: Record<string, { status: string; message: string }> = {
-      blueprint_create: { status: 'executed', message: 'blueprint bp-browser created' },
-      task_force_set_stance: { status: 'executed', message: 'task force tf-1 stance set to siege' },
-      commission_fleet: { status: 'failed', message: 'building hub-1 cannot deploy blueprint fleet-adopted' },
-      blockade_planet: { status: 'executed', message: 'planet planet-1-1 blockade assigned to task force tf-1' },
+      blueprint_create: { status: 'executed', message: '蓝图 bp-browser 已创建' },
+      task_force_set_stance: { status: 'executed', message: '任务群 tf-1 姿态已设为围攻' },
+      commission_fleet: { status: 'failed', message: '建筑 hub-1 无法部署蓝图 fleet-adopted' },
+      blockade_planet: { status: 'executed', message: '行星 planet-1-1 封锁已分配给任务群 tf-1' },
     };
     const result = responseByType[commandType] ?? { status: 'executed', message: `${commandType} accepted` };
     await route.fulfill({
@@ -429,22 +429,22 @@ test('浏览器中可操作战争工作台核心闭环', async ({ page }) => {
   await page.getByLabel('蓝图 ID').fill('bp-browser');
   await page.getByLabel('蓝图名称').fill('浏览器回归型');
   await page.getByRole('button', { name: '创建蓝图' }).click();
-  await expect(page.getByText('blueprint bp-browser created')).toBeVisible();
+  await expect(page.getByText('蓝图 bp-browser 已创建')).toBeVisible();
 
   await page.getByRole('tab', { name: '军工' }).click();
   await expect(page.getByText('军工总览')).toBeVisible();
   await page.getByLabel('部署蓝图').selectOption('fleet-adopted');
   await page.getByRole('button', { name: '尝试部署' }).click();
-  await expect(page.getByText('当前部署枢纽不支持该蓝图')).toBeVisible();
+  await expect(page.getByText('建筑 hub-1 无法部署蓝图 fleet-adopted')).toBeVisible();
 
   await page.getByRole('tab', { name: '战区' }).click();
   await expect(page.getByText('战区面板')).toBeVisible();
   await page.getByLabel('任务群姿态').selectOption('siege');
   await page.getByRole('button', { name: '更新姿态' }).click();
-  await expect(page.getByText('task force tf-1 stance set to siege')).toBeVisible();
+  await expect(page.getByText('任务群 tf-1 姿态已设为围攻')).toBeVisible();
 
   await page.getByRole('button', { name: '发起封锁' }).click();
-  await expect(page.getByText('planet planet-1-1 blockade assigned to task force tf-1')).toBeVisible();
+  await expect(page.getByText('行星 planet-1-1 封锁已分配给任务群 tf-1')).toBeVisible();
 
   await page.getByRole('tab', { name: '战报' }).click();
   await expect(page.getByText('战报与情报')).toBeVisible();

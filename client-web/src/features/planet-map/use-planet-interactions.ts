@@ -16,6 +16,7 @@ import { useCallback } from 'react';
 
 import type {
   CatalogView,
+  ItemInventory,
   PlanetRuntimeView,
   Position,
   Unit,
@@ -25,7 +26,8 @@ import type {
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { sfx } from '@/engine/audio';
-import { assessBuildTiles } from '@/features/planet-map/build-workflow';
+import { assessBuildTiles, describeBuildBlock } from '@/features/planet-map/build-workflow';
+import { getItemDisplayName } from '@/features/planet-map/model';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
@@ -38,6 +40,7 @@ import {
   resolveContextCommand,
 } from '@/features/planet-map/rts-commands';
 import { resolveSquadDeploy } from '@/features/planet-map/squad-commands';
+import { emitCommandMarker } from '@/features/planet-map/command-markers';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
 function reportLocalBlock(commandType: string, planetId: string, message: string, focus?: { buildingType?: string; position?: Position }) {
@@ -88,6 +91,8 @@ export function resolveGuardTargetAtTile(
 
 interface UsePlanetInteractionsInput {
   catalog?: CatalogView;
+  /** 玩家背包：建造前本地校验物品造价。 */
+  inventory?: ItemInventory;
   planet?: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   /** C4：任务群列表（小队右键部署的归属解析；缺省时小队右键给出编组提示）。 */
@@ -108,7 +113,7 @@ export interface PlanetInteractions {
 /**
  * 地图交互命令中枢：planet 未加载完成时所有入口为空操作。
  */
-export function usePlanetInteractions({ catalog, planet, runtime, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
+export function usePlanetInteractions({ catalog, inventory, planet, runtime, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
   const client = useApiClient();
   const session = useSessionSnapshot();
 
@@ -117,6 +122,7 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
       if (!planet) {
         return;
       }
+      emitCommandMarker({ kind: 'move', position });
       void submitPlanetCommand({
         commandType: 'move',
         planetId: planet.planet_id,
@@ -136,6 +142,7 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
       if (!planet) {
         return;
       }
+      emitCommandMarker({ kind: 'attack', position });
       void submitPlanetCommand({
         commandType: 'attack',
         planetId: planet.planet_id,
@@ -154,6 +161,9 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
     (selector: string[], order: 'attack_move' | 'patrol' | 'guard' | 'hold' | 'stop', options: { position?: Position; targetEntityId?: string }) => {
       if (!planet) {
         return;
+      }
+      if (options.position) {
+        emitCommandMarker({ kind: order === 'attack_move' ? 'attack' : 'move', position: options.position });
       }
       void submitPlanetCommand({
         commandType: 'unit_order',
@@ -179,21 +189,10 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
 
       if (mode.kind === 'build') {
-        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation);
+        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory);
         if (assessment && !assessment.buildable) {
-          const reasons = assessment.blockedTiles
-            .map((blocked) => (blocked.reason === 'terrain'
-              ? `(${blocked.x}, ${blocked.y}) 地形不可建`
-              : blocked.reason === 'building'
-                ? `(${blocked.x}, ${blocked.y}) 已被建筑占用`
-                : blocked.reason === 'resource'
-                  ? `(${blocked.x}, ${blocked.y}) 被资源点占用`
-                  : blocked.reason === 'missing_host'
-                    ? `(${blocked.x}, ${blocked.y}) 需要己方仓库原点`
-                    : `(${blocked.x}, ${blocked.y}) 需要建在资源点上`))
-            .slice(0, 3)
-            .join('；');
-          reportLocalBlock('build', planet.planet_id, `该位置无法建造：${reasons}`, {
+          const reasons = describeBuildBlock(assessment, (itemId) => getItemDisplayName(catalog, itemId));
+          reportLocalBlock('build', planet.planet_id, `无法建造：${reasons}`, {
             buildingType: mode.buildingType,
             position,
           });
@@ -249,6 +248,7 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
       }
 
       if (mode.kind === 'squad_order') {
+        emitCommandMarker({ kind: mode.order === 'attack' ? 'attack' : 'move', position });
         void submitPlanetCommand({
           commandType: 'squad_order',
           planetId: planet.planet_id,
@@ -283,7 +283,7 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
         store.exitInteractionMode();
       }
     },
-    [catalog, client, planet, runtime, session.playerId, submitAttack, submitMove, submitUnitOrder],
+    [catalog, client, inventory, planet, runtime, session.playerId, submitAttack, submitMove, submitUnitOrder],
   );
 
   const contextTile = useCallback(
@@ -305,6 +305,9 @@ export function usePlanetInteractions({ catalog, planet, runtime, taskForces, on
             `小队 ${resolution.unassignedSquadIds.join('、')} 未编入任务群：到战争页「战区」面板编组后再部署`,
             { position },
           );
+        }
+        if (resolution.plans.length > 0) {
+          emitCommandMarker({ kind: 'move', position });
         }
         resolution.plans.forEach((plan) => {
           void submitPlanetCommand({

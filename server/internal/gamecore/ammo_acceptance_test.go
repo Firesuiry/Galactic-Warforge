@@ -179,6 +179,7 @@ func TestDarkFogNeverSpendsAmmunition(t *testing.T) {
 	}
 
 	ws := newRTTWorld(true)
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.Tick = 1
 	raider := spawnWorldTestUnit(ws, model.UnitTypeDarkFog, "p2", model.Position{X: 5, Y: 4})
 	raider.OwnerID, raider.AmmoClass, raider.Ammo = model.DarkFogOwnerID, "bullet", 0

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TechCatalogEntry } from "@shared/types";
 
-import { buildTechTreeLayout, techNodeStatusToken } from "./layout";
+import { buildTechTreeLayout, relevantTechIds, techNodeStatusToken } from "./layout";
 
 function tech(overrides: Partial<TechCatalogEntry> & { id: string }): TechCatalogEntry {
   return {
@@ -110,5 +110,14 @@ describe("buildTechTreeLayout", () => {
     expect(techNodeStatusToken("researching")).toBe("researching");
     expect(techNodeStatusToken("available")).toBe("available");
     expect(techNodeStatusToken("locked")).toBe("locked");
+  });
+});
+
+describe("relevantTechIds", () => {
+  it("保留已完成/可研究及可研究项的直接后继，隐藏更远的未解锁科技", () => {
+    const tech = (id: string, prerequisites: string[] = []) => ({ id, name: id, prerequisites }) as unknown as TechCatalogEntry;
+    const techs = [tech("a"), tech("b", ["a"]), tech("c", ["b"]), tech("d", ["c"])];
+    const layout = buildTechTreeLayout(techs, new Set(["a"]), null);
+    expect([...relevantTechIds(layout.nodes)].sort()).toEqual(["a", "b", "c"]);
   });
 });

@@ -281,7 +281,8 @@ func (gc *GameCore) Settlement() *model.SettlementReport {
 
 // declareVictory 记录宣判结果并冻结结算报告（F2）。currentTick 为宣判 tick；
 // 调用方须已持有世界写锁（结算管线内），以便读取玩家双边统计。
-func (gc *GameCore) declareVictory(victory model.VictoryState, currentTick int64) bool {
+// declareVictory 宣判胜负，并把 DeclaredTick 回写到调用方的 victory（事件与审计用）。
+func (gc *GameCore) declareVictory(victory *model.VictoryState, currentTick int64) bool {
 	if !victory.Declared() {
 		return false
 	}
@@ -291,8 +292,8 @@ func (gc *GameCore) declareVictory(victory model.VictoryState, currentTick int64
 		return false
 	}
 	victory.DeclaredTick = currentTick
-	gc.victory = victory
-	gc.settlement = buildSettlementReport(victory, gc.world, currentTick)
+	gc.victory = *victory
+	gc.settlement = buildSettlementReport(*victory, gc.world, currentTick)
 	return true
 }
 

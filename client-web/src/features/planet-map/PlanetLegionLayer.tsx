@@ -3,12 +3,11 @@
  * 2D 用 offset+tileSize 换算，3D 传 projectTile 并逐帧刷新。标记点击 = 选中全部成员。
  */
 
-import { useEffect, useState } from 'react';
-
 import type { CombatSquad } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
 import { sfx } from '@/engine/audio';
+import { useProjectionFrame } from '@/features/planet-map/use-projection-frame';
 import type { SquadScreenPoint } from '@/features/planet-map/PlanetSquadLayer';
 import {
   LEGION_ARROW_COLOR,
@@ -34,17 +33,7 @@ export function PlanetLegionLayer({
   squads, units, playerId, offsetX, offsetY, tileSize, onSelectLegion, projectTile,
 }: PlanetLegionLayerProps) {
   const legions = ownLegions(squads, playerId);
-  const [, setFrame] = useState(0);
-  useEffect(() => {
-    if (!projectTile) return undefined;
-    let raf = 0;
-    const loop = () => {
-      setFrame((value) => value + 1);
-      raf = window.requestAnimationFrame(loop);
-    };
-    raf = window.requestAnimationFrame(loop);
-    return () => window.cancelAnimationFrame(raf);
-  }, [projectTile]);
+  useProjectionFrame(projectTile, legions.length > 0);
   if (legions.length === 0) return null;
 
   const toScreen = (p: { x: number; y: number }) => {

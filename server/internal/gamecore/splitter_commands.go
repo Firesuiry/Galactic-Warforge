@@ -18,13 +18,13 @@ func (gc *GameCore) execConfigureSplitter(ws *model.WorldState, playerID string,
 	}
 	building := ws.Buildings[cmd.Target.EntityID]
 	if building == nil {
-		return fail(model.CodeEntityNotFound, "splitter not found")
+		return fail(model.CodeEntityNotFound, "未找到分流器")
 	}
 	if building.OwnerID != playerID {
-		return fail(model.CodeNotOwner, "cannot configure another player's splitter")
+		return fail(model.CodeNotOwner, "不能配置其他玩家的分流器")
 	}
 	if building.Type != model.BuildingTypeSplitter || building.Splitter == nil {
-		return fail(model.CodeInvalidTarget, "target is not an initialized splitter")
+		return fail(model.CodeInvalidTarget, "目标不是已初始化的分流器")
 	}
 	staged := &model.SplitterState{
 		InputDirections:  p.InputDirections,
@@ -40,5 +40,5 @@ func (gc *GameCore) execConfigureSplitter(ws *model.WorldState, playerID string,
 	}
 	building.Splitter = staged
 	event := &model.GameEvent{EventType: model.EvtBuildingStateChanged, VisibilityScope: playerID, Payload: map[string]any{"entity_id": building.ID, "splitter": staged.Clone()}}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "splitter ports configured"}, []*model.GameEvent{event}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "分流器端口已配置"}, []*model.GameEvent{event}
 }

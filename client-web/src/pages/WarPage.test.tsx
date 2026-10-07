@@ -692,15 +692,15 @@ describe('WarPage', () => {
         commandTypes.push(command?.type);
         switch (command?.type) {
           case 'blueprint_create':
-            return jsonResponse(createCommandResponse('blueprint bp-new created'));
+            return jsonResponse(createCommandResponse('蓝图 bp-new 已创建'));
           case 'blueprint_validate':
-            return jsonResponse(createCommandResponse('blueprint bp-draft invalid', 'failed'));
+            return jsonResponse(createCommandResponse('蓝图 bp-draft 校验未通过', 'failed'));
           case 'task_force_set_stance':
-            return jsonResponse(createCommandResponse('task force tf-1 stance set to siege'));
+            return jsonResponse(createCommandResponse('任务群 tf-1 姿态已设为围攻'));
           case 'commission_fleet':
-            return jsonResponse(createCommandResponse('building hub-1 cannot deploy blueprint fleet-adopted', 'failed'));
+            return jsonResponse(createCommandResponse('建筑 hub-1 无法部署蓝图 fleet-adopted', 'failed'));
           case 'blockade_planet':
-            return jsonResponse(createCommandResponse('planet planet-1-1 blockade assigned to task force tf-1'));
+            return jsonResponse(createCommandResponse('行星 planet-1-1 封锁已分配给任务群 tf-1'));
           default:
             return jsonResponse(createCommandResponse('unexpected command'));
         }
@@ -726,12 +726,12 @@ describe('WarPage', () => {
     await user.click(screen.getByRole('button', { name: '校验蓝图' }));
 
     // 等本组回执落地再切组，避免「新回执自动落组」把 Tab 拉回去
-    await screen.findByText('当前动作未通过服务器校验，请检查输入后重试。');
+    await screen.findByText('蓝图 bp-draft 校验未通过');
     await user.click(screen.getByRole('tab', { name: '军工' }));
     await user.selectOptions(screen.getByLabelText('部署蓝图'), 'fleet-adopted');
     await user.click(screen.getByRole('button', { name: '尝试部署' }));
 
-    await screen.findByText('当前部署枢纽不支持该蓝图');
+    await screen.findByText('建筑 hub-1 无法部署蓝图 fleet-adopted');
     await user.click(screen.getByRole('tab', { name: '战区' }));
     await user.selectOptions(screen.getByLabelText('任务群姿态'), 'siege');
     await user.click(screen.getByRole('button', { name: '更新姿态' }));
@@ -749,11 +749,11 @@ describe('WarPage', () => {
     });
 
     // 各组回执留在各自 Tab 内
-    expect(await screen.findByText('task force tf-1 stance set to siege')).toBeInTheDocument();
+    expect(await screen.findByText('任务群 tf-1 姿态已设为围攻')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: '军工' }));
-    expect(screen.getByText('当前部署枢纽不支持该蓝图')).toBeInTheDocument();
+    expect(screen.getByText('建筑 hub-1 无法部署蓝图 fleet-adopted')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: '蓝图' }));
-    expect(screen.getByText('blueprint bp-new created')).toBeInTheDocument();
+    expect(screen.getByText('蓝图 bp-new 已创建')).toBeInTheDocument();
   });
 
   it('支持 12 个新战争命令表单的纯 GUI 提交', async () => {

@@ -722,7 +722,7 @@ describe("PlanetPage", () => {
     renderApp(["/planet/planet-1-1?view=2d"]);
 
     expect(await screen.findByText("当前路由行星")).toBeInTheDocument();
-    expect(screen.getByText("当前 active planet")).toBeInTheDocument();
+    expect(screen.getByText("服务端活动行星")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "扫描当前行星" }),
     ).toBeInTheDocument();

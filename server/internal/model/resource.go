@@ -47,11 +47,11 @@ func ValidateCollectorSite(ws *WorldState, btype BuildingType, pos Position) err
 		return nil
 	}
 	if ws == nil || !ws.InBounds(pos.X, pos.Y) {
-		return fmt.Errorf("resource site out of bounds")
+		return fmt.Errorf("资源点超出地图范围")
 	}
 	node := ws.Resources[ws.Grid[pos.Y][pos.X].ResourceNodeID]
 	if node == nil {
-		return fmt.Errorf("%s requires a resource node", btype)
+		return fmt.Errorf("%s 必须建在资源节点上", btype)
 	}
 	collect := BuildingProfileFor(btype, 1).Runtime.Functions.Collect
 	if collect != nil {
@@ -61,5 +61,5 @@ func ValidateCollectorSite(ws *WorldState, btype BuildingType, pos Position) err
 			}
 		}
 	}
-	return fmt.Errorf("%s cannot extract resource %s", btype, node.Kind)
+	return fmt.Errorf("%s 无法开采资源 %s", btype, node.Kind)
 }

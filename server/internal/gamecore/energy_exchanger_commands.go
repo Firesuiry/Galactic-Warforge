@@ -28,31 +28,31 @@ func (gc *GameCore) execSetEnergyExchangerMode(ws *model.WorldState, playerID st
 
 	if !model.IsEnergyExchangerMode(mode) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "mode must be charge, discharge, or standby"
+		res.Message = "mode 必须为 charge、discharge 或 standby"
 		return res, nil
 	}
 
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "building not owned by player"
+		res.Message = "建筑不属于该玩家"
 		return res, nil
 	}
 	module := building.Runtime.Functions.EnergyExchanger
 	if building.Type != model.BuildingTypeEnergyExchanger || module == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target building is not an energy exchanger"
+		res.Message = "目标建筑不是能量交换器"
 		return res, nil
 	}
 
 	module.Mode = mode
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("energy exchanger %s mode set to %s", buildingID, mode)
+	res.Message = fmt.Sprintf("能量交换器 %s 模式已设为 %s", buildingID, mode)
 	return res, nil
 }

@@ -115,6 +115,10 @@ type BattlefieldConfig struct {
 	TimeLimitTicks int64 `yaml:"time_limit_ticks,omitempty"`
 	// ThreatGrowthScale 黑雾威胁累积倍率，缺省 1。只放大正向累积，不改黑雾 AI。
 	ThreatGrowthScale float64 `yaml:"threat_growth_scale,omitempty"`
+	// DarkFogCalmTicks 黑雾被动：玩家最后一次伤害黑雾后经过多少 tick 恢复中立，缺省 6000。
+	DarkFogCalmTicks int64 `yaml:"dark_fog_calm_ticks,omitempty"`
+	// BotFirstAttackTick bot 军团首次主动进攻的最早 tick（开局发育期），缺省 0 不限。
+	BotFirstAttackTick int64 `yaml:"bot_first_attack_tick,omitempty"`
 }
 
 // ServerConfig holds HTTP server settings
@@ -284,6 +288,12 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Battlefield.ThreatGrowthScale == 0 {
 		cfg.Battlefield.ThreatGrowthScale = 1
+	}
+	if cfg.Battlefield.DarkFogCalmTicks < 0 || cfg.Battlefield.BotFirstAttackTick < 0 {
+		return fmt.Errorf("battlefield.dark_fog_calm_ticks/bot_first_attack_tick must be >= 0")
+	}
+	if cfg.Battlefield.DarkFogCalmTicks == 0 {
+		cfg.Battlefield.DarkFogCalmTicks = 6000
 	}
 
 	if len(cfg.Players) == 0 {

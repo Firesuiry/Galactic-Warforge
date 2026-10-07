@@ -24,13 +24,18 @@ function buildGenericHint(): PlanetCommandHint {
   };
 }
 
-function parseExecutorOutOfRange(source: string) {
-  const match = source.match(/executor out of range:\s*(\d+)\s*>\s*(\d+)/i);
-  if (!match) {
-    return null;
-  }
-  const [, distance, operateRange] = match;
-  return { distance, operateRange };
+/** 目标超出执行体操作范围：distance/operateRange 已知时给出具体格数。 */
+export function executorOutOfRangeHint(distance?: number, operateRange?: number): PlanetCommandHint {
+  const known = distance !== undefined && operateRange !== undefined;
+  return {
+    tone: "error",
+    title: "当前执行体无法直接建造到目标坐标",
+    detail: known ? `距离 ${distance} 格 / 操作范围 ${operateRange} 格` : "目标超出执行体操作范围。",
+    nextHint: known
+      ? `当前执行体距离目标 ${distance} 格，但可操作范围只有 ${operateRange} 格；先移动执行体再建造。`
+      : "目标超出执行体操作范围；先移动执行体再试。",
+    suggestedAction: "move_executor",
+  };
 }
 
 export function resolvePlanetCommandHint(input: {
@@ -38,23 +43,13 @@ export function resolvePlanetCommandHint(input: {
   message?: string | null;
   reason?: string | null;
 }) {
-  const source = normalizeHintSource(input.reason)
-    || normalizeHintSource(input.message)
-    || normalizeHintSource(input.code);
-
+  // 推导只看错误码与运行态 reason，不匹配服务端文案（文案已是中文玩家口径，直接展示）。
+  if (normalizeHintSource(input.code) === "OUT_OF_RANGE") {
+    return executorOutOfRangeHint();
+  }
+  const source = normalizeHintSource(input.reason);
   if (!source) {
     return undefined;
-  }
-
-  const rangeData = parseExecutorOutOfRange(source);
-  if (rangeData) {
-    return {
-      tone: "error",
-      title: "当前执行体无法直接建造到目标坐标",
-      detail: `distance / operateRange = ${rangeData.distance} / ${rangeData.operateRange}`,
-      nextHint: `当前执行体距离目标 ${rangeData.distance} 格，但可操作范围只有 ${rangeData.operateRange} 格；先移动执行体再建造。`,
-      suggestedAction: "move_executor",
-    } satisfies PlanetCommandHint;
   }
 
   switch (source) {

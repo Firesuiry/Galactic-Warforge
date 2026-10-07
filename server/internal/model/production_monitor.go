@@ -58,7 +58,10 @@ type ProductionMonitorState struct {
 	TotalMoves   int64                         `json:"total_moves"`
 	LastMoveTick int64                         `json:"last_move_tick"`
 	LastAlertAt  map[ProductionAlertType]int64 `json:"last_alert_at,omitempty"`
-	LastStats    MonitorStats                  `json:"last_stats"`
+	// ActiveAlerts 当前仍成立的告警：同一问题持续期间只在开始时报一次，
+	// 之后每 ProductionAlertRemindTicks 提醒一次，问题解除后清除。
+	ActiveAlerts map[ProductionAlertType]bool `json:"active_alerts,omitempty"`
+	LastStats    MonitorStats                 `json:"last_stats"`
 }
 
 // NewProductionMonitorState returns an initialized monitor state.
@@ -78,6 +81,12 @@ func (m *ProductionMonitorState) Clone() *ProductionMonitorState {
 		out.LastAlertAt = make(map[ProductionAlertType]int64, len(m.LastAlertAt))
 		for key, tick := range m.LastAlertAt {
 			out.LastAlertAt[key] = tick
+		}
+	}
+	if len(m.ActiveAlerts) > 0 {
+		out.ActiveAlerts = make(map[ProductionAlertType]bool, len(m.ActiveAlerts))
+		for key, active := range m.ActiveAlerts {
+			out.ActiveAlerts[key] = active
 		}
 	}
 	return &out
@@ -112,25 +121,38 @@ func (m *ProductionMonitorState) RegisterSample(tick int64, moved, backlog, thro
 	m.LastStats = stats
 }
 
-func (m *ProductionMonitorState) ShouldAlert(alertType ProductionAlertType, tick int64, cooldown int64) bool {
-	if m == nil {
-		return true
-	}
-	if cooldown <= 0 {
-		return true
-	}
-	last := m.LastAlertAt[alertType]
-	return tick-last >= cooldown
-}
+// ProductionAlertRemindTicks 同一告警持续存在时的重复提醒间隔（10 tps 下 5 分钟）。
+const ProductionAlertRemindTicks int64 = 3000
 
-func (m *ProductionMonitorState) MarkAlert(alertType ProductionAlertType, tick int64) {
+// Alert 按告警条件决定本次采样是否发出告警（发出时记账）：
+//   - 条件不成立：清除持续状态，不发；
+//   - 新出现：距上次同类告警满 cooldown 才发（防抖动）；
+//   - 持续中：每 ProductionAlertRemindTicks 提醒一次。
+func (m *ProductionMonitorState) Alert(alertType ProductionAlertType, condition bool, tick, cooldown int64) bool {
 	if m == nil {
-		return
+		return condition
+	}
+	if !condition {
+		delete(m.ActiveAlerts, alertType)
+		return false
+	}
+	last, seen := m.LastAlertAt[alertType]
+	if m.ActiveAlerts[alertType] {
+		if tick-last < ProductionAlertRemindTicks {
+			return false
+		}
+	} else if seen && tick-last < cooldown {
+		return false
 	}
 	if m.LastAlertAt == nil {
 		m.LastAlertAt = make(map[ProductionAlertType]int64)
 	}
+	if m.ActiveAlerts == nil {
+		m.ActiveAlerts = make(map[ProductionAlertType]bool)
+	}
 	m.LastAlertAt[alertType] = tick
+	m.ActiveAlerts[alertType] = true
+	return true
 }
 
 // AlertMessage returns a player-facing Chinese message for alert type.

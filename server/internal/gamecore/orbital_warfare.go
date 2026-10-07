@@ -25,19 +25,19 @@ func (gc *GameCore) execBlockadePlanet(ws *model.WorldState, playerID string, cm
 	planet, ok := gc.maps.Planet(planetID)
 	if !ok || planet == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("planet %s not found", planetID)
+		res.Message = fmt.Sprintf("未找到星球 %s", planetID)
 		return res, nil
 	}
 	fleets := taskForceFleetMembers(playerID, taskForce, gc.spaceRuntime)
 	if len(fleets) == 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("task force %s has no fleet members for blockade", taskForceID)
+		res.Message = fmt.Sprintf("任务编队 %s 没有可执行封锁的舰队成员", taskForceID)
 		return res, nil
 	}
 	systemID := planet.SystemID
 	if taskForce.Deployment != nil && taskForce.Deployment.SystemID != "" && taskForce.Deployment.SystemID != systemID {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "task force deployment does not match blockade system"
+		res.Message = "任务编队部署位置与封锁星系不符"
 		return res, nil
 	}
 	if gc.spaceRuntime == nil {
@@ -61,7 +61,7 @@ func (gc *GameCore) execBlockadePlanet(ws *model.WorldState, playerID string, cm
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("planet %s blockade assigned to task force %s", planetID, taskForceID)
+	res.Message = fmt.Sprintf("星球 %s 的封锁已分配给任务编队 %s", planetID, taskForceID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -113,19 +113,19 @@ func requireOwnedTaskForce(ws *model.WorldState, playerID, taskForceID string) (
 	res := &model.CommandResult{Status: model.StatusFailed}
 	if ws == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "world runtime unavailable"
+		res.Message = "世界运行时不可用"
 		return nil, nil, res
 	}
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到任务编队 %s", taskForceID)
 		return nil, nil, res
 	}
 	taskForce := player.WarCoordination.TaskForces[taskForceID]
 	if taskForce == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到任务编队 %s", taskForceID)
 		return nil, nil, res
 	}
 	return player, taskForce, nil

@@ -111,7 +111,7 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       commandType: input.commandType,
       planetId: input.planetId,
       status: "failed",
-      acceptedMessage: `${input.commandType} 提交失败`,
+      acceptedMessage: `${translateCommandType(input.commandType)}提交失败`,
       authoritativeCode: "LOCAL_ERROR",
       authoritativeMessage: playerMessage,
       debugMessage: rawMessage,

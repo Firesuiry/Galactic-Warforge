@@ -617,11 +617,12 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdRefuelMecha(entityId: string, itemId: string, quantity: number, planetId?: string) {
+  /** count：最多烧几块燃料（缺省 1），服务端烧到核心满为止。 */
+  function cmdRefuelMecha(entityId: string, itemId: string, count?: number, planetId?: string) {
     return sendSingleCommand({
       type: 'refuel_mecha',
       target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
-      payload: { item_id: itemId, quantity },
+      payload: { item_id: itemId, ...(count !== undefined ? { count } : {}) },
     });
   }
 

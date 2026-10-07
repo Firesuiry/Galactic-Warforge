@@ -1,4 +1,4 @@
-/** C9 新手引导面板：显示 6 步清单与当前步骤提示，可折叠。 */
+/** 新手引导面板：步骤清单 + 当前步骤提示 + 黑雾说明，可折叠；完成后只留黑雾敌对警示。 */
 
 import { useState } from 'react';
 
@@ -6,7 +6,9 @@ import type { WarGuideState } from '@/features/onboarding/war-guide';
 
 export function WarGuidePanel({ guide }: { guide: WarGuideState }) {
   const [collapsed, setCollapsed] = useState(false);
-  if (guide.complete) return null;
+  if (guide.complete) {
+    return guide.notice?.tone === 'danger' ? <p className="war-guide-notice war-guide-notice--danger" role="alert">{guide.notice.text}</p> : null;
+  }
   return (
     <section aria-label="新手引导" className="war-guide-panel" data-testid="war-guide-panel">
       <header>
@@ -35,6 +37,11 @@ export function WarGuidePanel({ guide }: { guide: WarGuideState }) {
             ))}
           </ol>
           <p data-testid="war-guide-hint">{guide.current?.hint}</p>
+          {guide.notice ? (
+            <p className={`war-guide-notice war-guide-notice--${guide.notice.tone}`} role={guide.notice.tone === 'danger' ? 'alert' : undefined}>
+              {guide.notice.text}
+            </p>
+          ) : null}
         </>
       )}
     </section>

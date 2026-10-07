@@ -1590,3 +1590,32 @@
 .war-guide-panel ol { display: flex; flex-wrap: wrap; gap: 4px 10px; list-style: none; margin: 6px 0; padding: 0; opacity: 0.8; }
 .war-guide-panel li.is-current { color: #ffe08a; font-weight: 700; opacity: 1; }
 .war-guide-panel li.is-done { color: #7ee0a8; }
+
+/* 建造卡物品造价：拥有/需要，不足标红 */
+.planet-build-card__items { display:flex; flex-wrap:wrap; justify-content:center; gap:2px 5px; max-width:84px; font-size:.62rem; font-variant-numeric:tabular-nums; color:var(--text-dim); }
+.planet-build-card__item { display:inline-flex; align-items:center; gap:2px; }
+.planet-build-card__item--short { color:var(--danger, #ff6b6b); font-weight:600; }
+.planet-build-bar { position:relative; }
+.planet-build-bar__detail { position:absolute; left:8px; bottom:calc(100% + 6px); z-index:5; display:flex; flex-direction:column; gap:3px; min-width:180px; padding:8px 10px; border:1px solid var(--border-glow, #39e6d055); border-radius:6px; background:#08111dee; color:var(--text); font-size:.75rem; pointer-events:none; box-shadow:0 6px 20px #0008; }
+.planet-build-bar__detail strong { font-size:.82rem; }
+.planet-build-bar__detail span { display:inline-flex; align-items:center; gap:4px; font-variant-numeric:tabular-nums; }
+.planet-build-bar__detail-head { color:var(--text-muted); font-size:.68rem; }
+.planet-build-bar__detail .is-short { color:var(--danger, #ff6b6b); font-weight:600; }
+
+.build-placement-hint { position:fixed; z-index:40; padding:3px 8px; border-radius:4px; border:1px solid #ff6b6b88; background:#2a0b10e6; color:#ffb3b3; font-size:.75rem; white-space:nowrap; pointer-events:none; box-shadow:0 2px 10px #0008; }
+
+/* 底部选择条/建造栏永远在抽屉之上；抽屉打开时让出抽屉宽度 */
+.planet-map-shell__overlay { z-index:8; }
+.planet-map-shell:has(.planet-drawer--open) .planet-map-shell__overlay { right:calc(min(300px,88vw) + 24px); }
+@media(max-width:600px) {
+  .planet-map-shell:has(.planet-drawer--open) .planet-map-shell__overlay { right:8px; }
+}
+.planet-debug-details { margin-top:6px; font-size:.75rem; color:var(--text-muted); }
+.planet-debug-details summary { cursor:pointer; }
+.planet-selection-bar__hint { font-size:.72rem; color:#ffd88a; font-weight:600; letter-spacing:.02em; }
+.mecha-controls__refuel { display:flex; gap:6px; flex-wrap:wrap; }
+.war-guide-panel p[data-testid="war-guide-hint"] { margin:4px 0; color:#e6eef5; line-height:1.45; }
+.war-guide-notice { margin:6px 0 0; padding:5px 7px; border-radius:5px; font-size:11.5px; line-height:1.45; pointer-events:auto; }
+.war-guide-notice--info { background:#6e5a9a26; border:1px solid #a58fd666; color:#d6c9f2; }
+.war-guide-notice--danger { background:#ff44442b; border:1px solid #ff6b6b99; color:#ffd0d0; font-weight:600; }
+.planet-advanced-progression { margin-top:12px; } .planet-advanced-progression > summary { cursor:pointer; color:var(--text-muted); font-size:.8rem; padding:4px 0; }

@@ -4,6 +4,8 @@ import type { Direction } from "@shared/api";
 import type {
   BuildingCatalogEntry,
   CatalogView,
+  ItemAmount,
+  ItemInventory,
   PlanetResource,
   PlanetNetworksView,
   Position,
@@ -20,6 +22,7 @@ import {
 } from "@/features/planet-map/model";
 import { type PlanetCommandJournalEntry } from "@/features/planet-commands/store";
 import {
+  executorOutOfRangeHint,
   resolvePlanetCommandHint,
   type PlanetCommandHint,
 } from "@/features/planet-commands/error-hints";
@@ -84,6 +87,36 @@ export interface BuildTileAssessment {
   blockingResourceId?: string;
   buildable: boolean;
   blockedTiles: BuildBlockedTile[];
+  /** 背包缺少的建造物品（只在传入背包时计算）。 */
+  missingItems: BuildItemShortage[];
+}
+
+export interface BuildItemShortage extends ItemAmount {
+  owned: number;
+}
+
+/** 建造物品造价逐项对照背包：owned/quantity，缺的标 short。 */
+export function compareBuildItems(entry: Pick<BuildingCatalogEntry, 'build_cost'> | undefined, inventory: ItemInventory | undefined) {
+  return (entry?.build_cost?.items ?? []).map((item) => {
+    const owned = inventory?.[item.item_id] ?? 0;
+    return { ...item, owned, short: owned < item.quantity };
+  });
+}
+
+/** 预览旁显示的中文原因：缺料优先，其次第一处格子阻挡。 */
+export function describeBuildBlock(assessment: BuildTileAssessment, itemName: (itemId: string) => string = (id) => id): string {
+  if (assessment.missingItems.length > 0) {
+    return `缺少 ${assessment.missingItems.map((item) => `${itemName(item.item_id)} ${item.quantity - item.owned}`).join('、')}`;
+  }
+  const blocked = assessment.blockedTiles[0];
+  if (!blocked) return '';
+  switch (blocked.reason) {
+    case 'terrain': return '地形不可建造';
+    case 'building': return '已被建筑占用';
+    case 'resource': return '被资源点占用';
+    case 'missing_host': return '需要建在己方仓库上';
+    default: return '需要建在资源点上';
+  }
 }
 
 export interface BuildApproachPlan {
@@ -212,6 +245,7 @@ function findBlockingResource(
 function buildTileAssessment(input: {
   playerId?: string;
   rotation?: number;
+  inventory?: ItemInventory;
   catalog?: CatalogView;
   buildingType?: string;
   planet: PlanetRenderView;
@@ -224,6 +258,9 @@ function buildTileAssessment(input: {
   const entry = input.catalog?.buildings?.find(
     (candidate) => candidate.id === input.buildingType,
   );
+  const missingItems: BuildItemShortage[] = input.inventory
+    ? compareBuildItems(entry, input.inventory).filter((item) => item.short).map(({ short: _short, ...item }) => item)
+    : [];
   const footprint = {
     width: Math.max(1, entry?.footprint?.width ?? 1),
     height: Math.max(1, entry?.footprint?.height ?? 1),
@@ -248,7 +285,7 @@ function buildTileAssessment(input: {
       && building.position.x === input.selectedPosition!.x && building.position.y === input.selectedPosition!.y);
     const terrain = getTerrainTile(input.planet, input.selectedPosition.x, input.selectedPosition.y);
     if (!host || mounted) blockedTiles.push({ ...input.selectedPosition, terrain, reason: mounted ? 'building' : 'missing_host', buildingId: mounted?.id });
-    return { footprint, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0, blockedTiles, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
+    return { footprint, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0 && missingItems.length === 0, blockedTiles, missingItems, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
   }
 
   for (let dy = 0; dy < footprint.height; dy += 1) {
@@ -314,8 +351,9 @@ function buildTileAssessment(input: {
     terrainBuildable: primaryTerrain === "buildable" || canPrepareTerrain(primaryTerrain),
     blockingBuildingId,
     blockingResourceId,
-    buildable: blockedTiles.length === 0,
+    buildable: blockedTiles.length === 0 && missingItems.length === 0,
     blockedTiles,
+    missingItems,
   } satisfies BuildTileAssessment;
 }
 
@@ -340,10 +378,7 @@ function buildPreflightHints(reachability: BuildReachability) {
     detail: `目标不在执行体的 ${reachability.operateRange} 格操作范围内，请先移动执行体。`,
     suggestedAction: "move_executor" as const,
   }];
-  const hint = resolvePlanetCommandHint({
-    message: `executor out of range: ${reachability.distance} > ${reachability.operateRange}`,
-  });
-  return hint ? [hint] : [];
+  return [executorOutOfRangeHint(reachability.distance, reachability.operateRange)];
 }
 
 function resolveSelectedBuilding(
@@ -411,8 +446,9 @@ export function assessBuildTiles(
   position?: Position,
   playerId?: string,
   rotation?: number,
+  inventory?: ItemInventory,
 ): BuildTileAssessment | undefined {
-  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position, playerId, rotation });
+  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position, playerId, rotation, inventory });
 }
 
 /** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */

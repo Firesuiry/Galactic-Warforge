@@ -3,8 +3,16 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createIndustrialFinishes } from './industrial-finishes';
 import { animateSorterArm } from './sorter-animation';
+import type { UnitFaction } from '../rts-commands';
 
-type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile';
+type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
+/** 单位涂装：己方白蓝、敌方玩家橙、黑雾中立暗紫灰、黑雾敌对暗红。 */
+const UNIT_FINISH: Record<UnitFaction, { armor: Finish; light: Finish }> = {
+  own: { armor: 'ceramic', light: 'blue' },
+  enemy: { armor: 'hostile', light: 'orange' },
+  fog_neutral: { armor: 'fog', light: 'fogGlow' },
+  fog_hostile: { armor: 'fogHostile', light: 'fogHostileGlow' },
+};
 type Rotation = { object: THREE.Object3D; axis: 'x' | 'y' | 'z'; speed: number };
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -30,6 +38,10 @@ export class IndustrialModels {
       glass: { color: 0x153c4f, roughness: 0.17, metalness: 0.72, emissive: 0x073341, emissiveIntensity: 0.5 },
       rubber: { color: 0x18242a, roughness: 0.88, metalness: 0.05 },
       hostile: { color: 0xb9634b, roughness: 0.45, metalness: 0.5 },
+      fog: { color: 0x4d4560, roughness: 0.62, metalness: 0.42 },
+      fogGlow: { color: 0xb9a6ff, emissive: 0x7d5cff, emissiveIntensity: 3.2, roughness: 0.3, metalness: 0.2 },
+      fogHostile: { color: 0x6e2228, roughness: 0.5, metalness: 0.45 },
+      fogHostileGlow: { color: 0xff8a8a, emissive: 0xff2a2a, emissiveIntensity: 5, roughness: 0.3, metalness: 0.2 },
     };
     for (const [key, parameters] of Object.entries(palette)) {
       const finish = key === 'ceramic' || key === 'alloy' || key === 'graphite' ? this.finishes[key] : {};
@@ -482,11 +494,11 @@ export class IndustrialModels {
     return this.remember(key, group);
   }
 
-  unit(type: string, own: boolean): THREE.Group {
-    const key = `unit:${type}:${own}`;
+  unit(type: string, faction: UnitFaction): THREE.Group {
+    const key = `unit:${type}:${faction}`;
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-unit-${type}`;
-    const armor: Finish = own ? 'ceramic' : 'hostile', light: Finish = own ? 'blue' : 'orange';
+    const { armor, light } = UNIT_FINISH[faction];
     if (type === 'logistics_bot') {
       this.box(group, armor, [0.4, 0.16, 0.3], [0, 0.2, 0]);
       this.box(group, 'glass', [0.23, 0.065, 0.025], [0, 0.235, 0.16]);

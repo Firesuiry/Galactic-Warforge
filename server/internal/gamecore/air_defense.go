@@ -96,6 +96,7 @@ func shootDownLogistics(ws *model.WorldState, turret *model.Building, target *ai
 	}
 	payload := map[string]any{
 		"entity_id":   target.id,
+		"entity_kind": target.kind,
 		"entity_type": target.kind,
 		"owner_id":    target.ownerID,
 		"reason":      "shot_down",

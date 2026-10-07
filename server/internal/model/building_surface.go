@@ -7,10 +7,10 @@ import "fmt"
 func (ws *WorldState) FootprintTiles(origin Position, fp Footprint) ([]Position, error) {
 	n := ws.Surface().Size
 	if !ws.InBounds(origin.X, origin.Y) {
-		return nil, fmt.Errorf("footprint origin out of bounds")
+		return nil, fmt.Errorf("占地原点超出地图范围")
 	}
 	if fp.Width <= 0 || fp.Height <= 0 || fp.Width > n || fp.Height > n {
-		return nil, fmt.Errorf("invalid footprint: dimensions must be within face size %d", n)
+		return nil, fmt.Errorf("占地无效：尺寸不能超过面大小 %d", n)
 	}
 	out := make([]Position, 0, fp.Width*fp.Height)
 	seen := map[Position]bool{}
@@ -18,7 +18,7 @@ func (ws *WorldState) FootprintTiles(origin Position, fp Footprint) ([]Position,
 		for x := 0; x < fp.Width; x++ {
 			p := ws.SurfaceOffset(origin, x, y)
 			if seen[p] {
-				return nil, fmt.Errorf("invalid footprint: overlaps itself at cube corner")
+				return nil, fmt.Errorf("占地无效：在立方体角处自身重叠")
 			}
 			seen[p] = true
 			out = append(out, p)
@@ -31,7 +31,7 @@ func (ws *WorldState) BuildingTiles(b *Building) ([]Position, error) {
 	if fp.Width == 0 && fp.Height == 0 {
 		def, ok := BuildingDefinitionByID(b.Type)
 		if !ok {
-			return nil, fmt.Errorf("unknown building type %s", b.Type)
+			return nil, fmt.Errorf("未知建筑类型 %s", b.Type)
 		}
 		fp = def.Footprint
 	}
@@ -148,7 +148,7 @@ func (ws *WorldState) UnindexBuilding(b *Building) {
 func (ws *WorldState) ConstructionTiles(task *ConstructionTask) ([]Position, error) {
 	def, ok := BuildingDefinitionByID(task.BuildingType)
 	if !ok {
-		return nil, fmt.Errorf("unknown building type %s", task.BuildingType)
+		return nil, fmt.Errorf("未知建筑类型 %s", task.BuildingType)
 	}
 	return ws.FootprintTiles(task.Position, RotatedFootprint(def.Footprint, task.Rotation))
 }

@@ -277,12 +277,12 @@ func TestDspPileSorterAndSRPlasmaTurretMapping(t *testing.T) {
 		}
 	}
 	pile, _ := BuildingDefinitionByID(BuildingTypePileSorter)
-	if pile.Name != "Pile Sorter" {
-		t.Errorf("pile_sorter name = %q, want Pile Sorter", pile.Name)
+	if pile.Name != "集装分拣器" {
+		t.Errorf("pile_sorter name = %q, want 集装分拣器", pile.Name)
 	}
 	sr, _ := BuildingDefinitionByID(BuildingTypeSRPlasmaTurret)
-	if sr.Name != "SR Plasma Turret" {
-		t.Errorf("sr_plasma_turret name = %q, want SR Plasma Turret", sr.Name)
+	if sr.Name != "近程电浆塔" {
+		t.Errorf("sr_plasma_turret name = %q, want 近程电浆塔", sr.Name)
 	}
 	if hasUnlockTech(pile.UnlockTech, "integrated_logistics") == false {
 		t.Errorf("pile_sorter unlock tech = %v, want integrated_logistics", pile.UnlockTech)

@@ -39,7 +39,7 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 		droneCapacity := *p.DroneCapacity
 		if droneCapacity < 1 || droneCapacity > model.DefaultLogisticsStationDroneCapacity {
 			res.Code = model.CodeValidationFailed
-			res.Message = "drone_capacity must be between 1 and 10"
+			res.Message = "drone_capacity 必须在 1 到 10 之间"
 			return res, nil
 		}
 		staged.DroneCapacity = droneCapacity
@@ -54,7 +54,7 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 	if cfg := p.Interstellar; cfg != nil {
 		if !supportsInterstellarConfigCommand(building) {
 			res.Code = model.CodeValidationFailed
-			res.Message = "planetary logistics station does not support interstellar config"
+			res.Message = "行星物流站不支持星际配置"
 			return res, nil
 		}
 		if cfg.Enabled != nil {
@@ -66,7 +66,7 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 		if cfg.ShipSlots != nil {
 			if *cfg.ShipSlots < 1 || *cfg.ShipSlots > model.DefaultLogisticsStationShipSlots {
 				res.Code = model.CodeValidationFailed
-				res.Message = "ship_slots must be between 1 and 5"
+				res.Message = "ship_slots 必须在 1 到 5 之间"
 				return res, nil
 			}
 			staged.Interstellar.ShipSlots = *cfg.ShipSlots
@@ -88,14 +88,14 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 
 	if staged.DroneCapacity < model.StationDroneCount(ws, building.ID) || staged.DroneCapacity > model.DefaultLogisticsStationDroneCapacity || staged.Interstellar.ShipSlots < model.StationShipCount(ws, building.ID) || staged.Interstellar.ShipSlots > model.DefaultLogisticsStationShipSlots {
 		res.Code = model.CodeValidationFailed
-		res.Message = "vehicle slots must cover installed fleet and remain within physical limits (10 drones, 5 ships)"
+		res.Message = "运输槽位须覆盖已装载的运输机队，且不超过物理上限（10 架无人机、5 艘运输船）"
 		return res, nil
 	}
 	*station = *staged
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("logistics station %s configured", building.ID)
+	res.Message = fmt.Sprintf("物流站 %s 已配置", building.ID)
 	return res, nil
 }
 
@@ -119,13 +119,13 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 	mode := model.LogisticsStationMode(p.Mode)
 	if !mode.Valid() {
 		res.Code = model.CodeValidationFailed
-		res.Message = "payload.mode must be one of none|supply|demand|both"
+		res.Message = "payload.mode 必须为 none|supply|demand|both 之一"
 		return res, nil
 	}
 	if p.Remove {
 		if mode != model.LogisticsStationModeNone || localStorage != 0 {
 			res.Code = model.CodeValidationFailed
-			res.Message = "slot removal requires mode none and local_storage 0"
+			res.Message = "移除槽位需 mode 为 none 且 local_storage 为 0"
 			return res, nil
 		}
 		if err := gc.removeLogisticsSlot(ws, building, scope, itemID); err != nil {
@@ -133,7 +133,7 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 			res.Message = err.Error()
 			return res, nil
 		}
-		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "empty logistics slot removed"}, nil
+		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "已移除空物流槽位"}, nil
 	}
 	setting := model.LogisticsStationItemSetting{
 		ItemID:       itemID,
@@ -148,13 +148,13 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 	case "interstellar":
 		if !supportsInterstellarConfigCommand(building) {
 			res.Code = model.CodeValidationFailed
-			res.Message = "planetary logistics station does not support interstellar scope"
+			res.Message = "行星物流站不支持星际范围"
 			return res, nil
 		}
 		err = station.UpsertInterstellarSetting(setting)
 	default:
 		res.Code = model.CodeValidationFailed
-		res.Message = "payload.scope must be planetary or interstellar"
+		res.Message = "payload.scope 必须为 planetary 或 interstellar"
 		return res, nil
 	}
 	if err != nil {
@@ -166,7 +166,7 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 	station.Normalize()
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("logistics slot configured for %s", itemID)
+	res.Message = fmt.Sprintf("已为 %s 配置物流槽位", itemID)
 	return res, nil
 }
 
@@ -182,24 +182,24 @@ func requireOwnedLogisticsStation(ws *model.WorldState, playerID, buildingID str
 	res := model.CommandResult{Status: model.StatusFailed}
 	if buildingID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id required"
+		res.Message = "缺少 target.entity_id"
 		return nil, nil, &res
 	}
 
 	building, ok := ws.Buildings[buildingID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return nil, nil, &res
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot configure building owned by another player"
+		res.Message = "不能配置其他玩家的建筑"
 		return nil, nil, &res
 	}
 	if !isConfigurableLogisticsStationType(building.Type) || building.LogisticsStation == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target building is not a logistics station"
+		res.Message = "目标建筑不是物流站"
 		return nil, nil, &res
 	}
 	return building, building.LogisticsStation, nil

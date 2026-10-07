@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { GameEventDetail } from '@shared/types';
 
-import { buildCombatAlert } from '@/features/planet-map/attack-alerts';
+import { buildCombatAlert, findApproachingThreats, notifyApproachingThreats } from '@/features/planet-map/attack-alerts';
+import { useNotificationsStore } from '@/features/notifications/store';
+import { usePlanetViewStore } from '@/features/planet-map/store';
 import type { PlanetRenderView } from '@/features/planet-map/model';
 import { resetNotificationsStore } from '@/features/notifications/store';
 import { resetPlanetViewStore } from '@/features/planet-map/store';
@@ -157,5 +159,33 @@ describe('attack-alerts 受袭警报（C3）', () => {
       { planet: makePlanet(), playerId: 'p1', planetId: 'planet-1-1', currentSearch: '?view=2d&quality=low' },
     );
     expect(alert?.toast?.href).toBe('/planet/planet-1-1?view=2d&quality=low&x=2&y=2');
+  });
+});
+
+describe('敌袭预警（敌对单位逼近己方建筑）', () => {
+  beforeEach(() => {
+    resetNotificationsStore();
+    resetPlanetViewStore();
+  });
+
+  it('中立黑雾不报，敌对黑雾与敌方单位按最近建筑聚合', () => {
+    const planet = makePlanet();
+    expect(findApproachingThreats(planet, 'p1', false)).toEqual([]);
+    const hostile = findApproachingThreats(planet, 'p1', true);
+    expect(hostile).toHaveLength(1);
+    expect(hostile[0]).toMatchObject({ buildingId: 'b-1', count: 1, threatTile: { x: 6, y: 6 } });
+    planet.units!['e-1'] = { id: 'e-1', type: 'soldier', owner_id: 'p2', position: { x: 5, y: 5, z: 0 }, hp: 10, max_hp: 10 } as never;
+    expect(findApproachingThreats(planet, 'p1', false)[0]).toMatchObject({ count: 1, threatTile: { x: 5, y: 5 } });
+    expect(findApproachingThreats(planet, 'p1', false, 1)).toEqual([]);
+  });
+
+  it('告警带定位并写入小地图闪点，冷却内不重复', () => {
+    const planet = makePlanet();
+    notifyApproachingThreats(planet, 'p1', true, 1_000_000);
+    notifyApproachingThreats(planet, 'p1', true, 1_005_000);
+    const toasts = useNotificationsStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toMatchObject({ title: '敌袭预警', locate: { planetId: 'planet-1-1', x: 6, y: 6 } });
+    expect(usePlanetViewStore.getState().incomingWaves).toHaveLength(1);
   });
 });

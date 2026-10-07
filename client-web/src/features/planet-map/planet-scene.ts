@@ -31,7 +31,10 @@ import { surfaceOffset } from '@shared/surface';
  *
  * 战斗特效：组件侧订阅战斗事件总线（battle-events）调 handleBattleEvent，
  * damage_applied 映射为开火闪光/伤害飘字/受击闪白（planet-effects 纯逻辑 + 池化视图），
- * frozen 模式不演出。
+ * frozen 模式不演出。同目标短时连续伤害合并为一条飘字，各类特效有同时存活上限。
+ *
+ * 命令落点标记：订阅 command-markers 总线，move 涟漪 / attack 准星画在特效层下方，frozen 不显示。
+ * 单位描边按阵营（unitFaction）着色，黑雾敌对状态切换时全部单位重画。
  */
 
 import { Application, Container, Graphics, Sprite, Text, Texture, type Ticker } from 'pixi.js';
@@ -72,6 +75,7 @@ import {
   type PlanetEffectKind,
   type PlanetEffectPoint,
   type PlanetEffectSpec,
+  damageFloatText,
 } from '@/features/planet-map/planet-effects';
 import {
   canonicalTileIndex,
@@ -119,6 +123,13 @@ import {
   type TerrainWrapSampling,
 } from '@/features/planet-map/planet-terrain-chunks';
 import { isTilePointVisible, type SceneRenderDetailPolicy } from '@/features/planet-map/render';
+import { FACTION_COLOR, unitFaction } from '@/features/planet-map/rts-commands';
+import {
+  CommandMarkerTrack,
+  crosshairPose,
+  rippleRings,
+  subscribeCommandMarkers,
+} from '@/features/planet-map/command-markers';
 import type { PlanetInteractionMode, PlanetLayerState } from '@/features/planet-map/store';
 import { getResourceColorValue, type VisibleEntities } from '@/features/planet-map/visible-entities';
 
@@ -441,6 +452,8 @@ export interface PlanetSceneEntitiesInput {
   visible: VisibleEntities;
   catalog?: CatalogView;
   playerId: string;
+  /** 黑雾是否对当前玩家敌对（决定黑雾单位配色）。 */
+  darkFogHostile: boolean;
   detailPolicy: SceneRenderDetailPolicy;
   layers: PlanetLayerState;
   overviewMode: boolean;
@@ -563,7 +576,11 @@ const COLOR_GRID = 0xd2e2ff;
 const COLOR_BUILDING_STROKE_OWN = 0x57efe0;
 const COLOR_BUILDING_STROKE_ENEMY = 0xff7b7b;
 const COLOR_UNIT_OWN = 0x91ff70;
-const COLOR_UNIT_ENEMY = 0xff6262;
+/** 中立黑雾单位的小圆点标识。 */
+const COLOR_FOG_NEUTRAL_MARK = 0x8c8a9e;
+/** 命令落点标记：移动涟漪青绿 / 攻击准星红。 */
+const COLOR_MARKER_MOVE = 0x3ee6c4;
+const COLOR_MARKER_ATTACK = 0xff4d4d;
 const COLOR_DRONE = 0x2dd4bf;
 const COLOR_SHIP = 0xffe066;
 const COLOR_POWER_WIRELESS = 0xffd43b;
@@ -728,6 +745,13 @@ export class PlanetScene {
   private readonly effectViews = new Map<number, PlanetEffectView>();
   private readonly freeEffectViews = new Map<PlanetEffectKind, PlanetEffectView[]>();
   private lastHandledSeq = 0;
+  private darkFogHostile = false;
+
+  /** 命令落点标记（move 涟漪 / attack 准星）：独立 Graphics 层，ticker 推进并重绘。 */
+  private readonly commandMarkerTrack = new CommandMarkerTrack();
+  private readonly commandMarkerGraphics: Graphics;
+  private readonly unsubscribeCommandMarkers: () => void;
+  private commandMarkersDrawn = false;
 
   constructor(app: Application, options: PlanetSceneOptions = {}) {
     this.app = app;
@@ -769,6 +793,7 @@ export class PlanetScene {
     this.threatGraphics = new Graphics();
     this.selectionGraphics = new Graphics();
     this.effectsLayer = new Container();
+    this.commandMarkerGraphics = new Graphics();
 
     // z 序对齐旧实现：地形 < 水面/岩浆氛围 < 网格 < 迷雾 < hover 高亮 < 管网/电网 < 资源 < 工地
     // < 实体（建筑+单位统一 y 排序） < 物流 < 敌情 < 选中叠加 < 战斗特效；
@@ -796,6 +821,7 @@ export class PlanetScene {
     this.world.addChild(this.logisticsGraphics);
     this.world.addChild(this.threatGraphics);
     this.world.addChild(this.selectionGraphics);
+    this.world.addChild(this.commandMarkerGraphics);
     this.world.addChild(this.effectsLayer);
     this.app.stage.addChild(this.vignetteSprite);
 
@@ -804,10 +830,18 @@ export class PlanetScene {
     this.handleResize();
     this.app.renderer.on('resize', this.handleResize);
     this.app.ticker.add(this.tick);
+    // frozen 模式 tick 不推进，标记不演出。
+    this.unsubscribeCommandMarkers = subscribeCommandMarkers((spec) => {
+      if (!this.disposed && !this.frozen) {
+        this.commandMarkerTrack.spawn(spec);
+      }
+    });
   }
 
   destroy() {
     this.disposed = true;
+    this.unsubscribeCommandMarkers();
+    this.commandMarkerTrack.clear();
     this.app.ticker.remove(this.tick);
     this.app.renderer.off('resize', this.handleResize);
     this.destroyBaseTextures();
@@ -1059,7 +1093,7 @@ export class PlanetScene {
     this.layers = input.layers;
     this.detailPolicy = input.detailPolicy;
     this.syncBuildings(input.visible.buildings, input.catalog, input.playerId);
-    this.syncUnits(input.visible.units, input.playerId);
+    this.syncUnits(input.visible.units, input.playerId, input.darkFogHostile);
     this.syncResources(input.visible.resources);
     this.redrawStaticLayers();
     // detailPolicy 由本输入提供：首帧 setBase/setCamera 先于 setEntities 时网格尚未绘制，这里补齐。
@@ -1126,7 +1160,20 @@ export class PlanetScene {
   // ---------- 特效（池化视图 + ticker 推进） ----------
 
   private spawnEffect(spec: PlanetEffectSpec) {
-    const effect = this.effectPool.spawn(spec);
+    const result = this.effectPool.spawn(spec);
+    if (!result) {
+      // 超上限丢弃：不建视图。
+      return;
+    }
+    const { effect, merged, evicted } = result;
+    if (evicted) {
+      this.recycleEffectView(evicted);
+    }
+    if (merged) {
+      // 合并进已有飘字：复用原视图，restart 刷新累加后的数值并重新计时。
+      this.effectViews.get(effect.id)?.restart(effect.spec);
+      return;
+    }
     const view = this.obtainEffectView(spec);
     this.effectViews.set(effect.id, view);
     if (view.container.parent !== this.effectsLayer) {
@@ -1231,7 +1278,8 @@ export class PlanetScene {
       container,
       restart(next) {
         spec = next as PlanetDamageFloatEffectSpec;
-        text.text = spec.text;
+        // 池化 Text 只改文本内容，不重建对象。
+        text.text = damageFloatText(spec);
         text.style.fill = spec.tone === 'own_hit' ? COLOR_FLOAT_OWN_HIT : COLOR_FLOAT_ENEMY_HIT;
         text.position.set(spec.x, spec.y);
         text.alpha = 1;
@@ -1762,7 +1810,7 @@ export class PlanetScene {
       return;
     }
     this.syncBuildings(input.visible.buildings, input.catalog, input.playerId);
-    this.syncUnits(input.visible.units, input.playerId);
+    this.syncUnits(input.visible.units, input.playerId, input.darkFogHostile);
     this.syncResources(input.visible.resources);
   }
 
@@ -2080,8 +2128,11 @@ export class PlanetScene {
     return sprite;
   }
 
-  private syncUnits(units: Unit[], playerId: string) {
+  private syncUnits(units: Unit[], playerId: string, darkFogHostile: boolean) {
     const simplify = this.detailPolicy?.simplifyStructures ?? false;
+    // 黑雾敌对状态切换：阵营配色变化，所有单位强制重画。
+    const factionChanged = darkFogHostile !== this.darkFogHostile;
+    this.darkFogHostile = darkFogHostile;
     this.syncNodes(
       this.unitNodes,
       units,
@@ -2097,7 +2148,7 @@ export class PlanetScene {
           node.container.position.set(node.posX, node.posY);
           node.container.zIndex = unitSortKey(node.posY, this.tileSize);
         }
-        if (node.data !== unit) {
+        if (node.data !== unit || factionChanged) {
           node.data = unit;
           this.drawUnitDot(node, playerId, simplify);
         }
@@ -2143,10 +2194,13 @@ export class PlanetScene {
     return node;
   }
 
-  /** 单位：带朝向的楔形（队色描边 + 暗底）+ 受伤 HP 弧；简化档保持色块。 */
+  /**
+   * 单位：带朝向的楔形（阵营色描边 + 暗底）+ 受伤 HP 弧；简化档保持色块。
+   * 阵营色：己方绿 / 敌方橙 / 黑雾中立暗紫灰（楔形旁加小圆点标识）/ 黑雾敌对红。
+   */
   private drawUnitDot(node: UnitNode, playerId: string, simplify: boolean) {
-    const isOwn = node.data.owner_id === playerId;
-    const color = isOwn ? COLOR_UNIT_OWN : COLOR_UNIT_ENEMY;
+    const faction = unitFaction(node.data, playerId, this.darkFogHostile);
+    const color = faction === 'own' ? COLOR_UNIT_OWN : FACTION_COLOR[faction];
     const dot = node.dot.clear();
     const hpGraphics = node.hp.clear();
     if (simplify) {
@@ -2175,6 +2229,11 @@ export class PlanetScene {
         .stroke({ width: 2, color: 0x10151d, alpha: 0.7 });
       hpGraphics.arc(0, 0, arcRadius, startAngle, endAngle)
         .stroke({ width: 2, color: hp.color });
+    }
+    if (faction === 'fog_neutral') {
+      // 中立黑雾标识：右下小圆点（不随朝向旋转）。
+      hpGraphics.circle(radius * 0.95, radius * 0.95, Math.max(1.4, radius * 0.22))
+        .fill({ color: COLOR_FOG_NEUTRAL_MARK, alpha: 0.9 });
     }
   }
 
@@ -2696,5 +2755,42 @@ export class PlanetScene {
     this.effectPool.active().forEach((effect) => {
       this.effectViews.get(effect.id)?.update(effect);
     });
+
+    this.commandMarkerTrack.advance(ticker.deltaMS);
+    this.redrawCommandMarkers();
   };
+
+  /** 命令落点标记：move = 青绿扩散双圈涟漪，attack = 红色准星（圆 + 四向短线）。 */
+  private redrawCommandMarkers() {
+    const markers = this.commandMarkerTrack.active();
+    if (markers.length === 0 && !this.commandMarkersDrawn) {
+      return;
+    }
+    const g = this.commandMarkerGraphics.clear();
+    this.commandMarkersDrawn = markers.length > 0;
+    const ts = this.tileSize;
+    markers.forEach((marker) => {
+      const cx = this.pxCenterX(marker.position.x);
+      const cy = this.pxCenterY(marker.position.y);
+      if (marker.kind === 'move') {
+        rippleRings(marker.progress).forEach((ring) => {
+          g.circle(cx, cy, Math.max(4, ts * 0.9 * ring.scale))
+            .stroke({ width: 2, color: COLOR_MARKER_MOVE, alpha: ring.alpha });
+        });
+        return;
+      }
+      const pose = crosshairPose(marker.progress);
+      if (pose.alpha <= 0) {
+        return;
+      }
+      const r = Math.max(5, ts * 0.55 * pose.scale);
+      const tick = r * 0.55;
+      g.circle(cx, cy, r).stroke({ width: 2, color: COLOR_MARKER_ATTACK, alpha: pose.alpha });
+      g.moveTo(cx - r - tick * 0.4, cy).lineTo(cx - r + tick, cy)
+        .moveTo(cx + r + tick * 0.4, cy).lineTo(cx + r - tick, cy)
+        .moveTo(cx, cy - r - tick * 0.4).lineTo(cx, cy - r + tick)
+        .moveTo(cx, cy + r + tick * 0.4).lineTo(cx, cy + r - tick)
+        .stroke({ width: 2, color: COLOR_MARKER_ATTACK, alpha: pose.alpha });
+    });
+  }
 }

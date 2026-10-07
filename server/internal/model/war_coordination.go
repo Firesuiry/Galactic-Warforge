@@ -522,7 +522,7 @@ func collectWarCommandCapacitySources(player *PlayerState, taskForce *WarTaskFor
 				out = append(out, WarCommandCapacitySource{
 					SourceID:   "analysis:" + building.ID,
 					SourceType: WarCommandCapacitySourceBattlefieldAnalysis,
-					Label:      "Battlefield Analysis Base",
+					Label:      "战场分析基站",
 					EntityID:   building.ID,
 					PlanetID:   planetID,
 					Capacity:   4,

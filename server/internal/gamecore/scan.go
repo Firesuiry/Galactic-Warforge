@@ -11,13 +11,13 @@ func (gc *GameCore) execScanGalaxy(_ *model.WorldState, playerID string, cmd mod
 	galaxyID := cmd.Target.GalaxyID
 	if galaxyID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "galaxy_id required for scan_galaxy"
+		res.Message = "scan_galaxy 缺少 galaxy_id"
 		return res, nil
 	}
 	galaxy, ok := gc.maps.Galaxies[galaxyID]
 	if !ok || galaxy == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("galaxy %s not found", galaxyID)
+		res.Message = fmt.Sprintf("未找到星系 %s", galaxyID)
 		return res, nil
 	}
 
@@ -26,7 +26,7 @@ func (gc *GameCore) execScanGalaxy(_ *model.WorldState, playerID string, cmd mod
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = "galaxy scanned"
+	res.Message = "星系扫描完成"
 	return res, nil
 }
 
@@ -35,12 +35,12 @@ func (gc *GameCore) execScanSystem(_ *model.WorldState, playerID string, cmd mod
 	systemID := cmd.Target.SystemID
 	if systemID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "system_id required for scan_system"
+		res.Message = "scan_system 缺少 system_id"
 		return res, nil
 	}
 	if _, ok := gc.maps.Systems[systemID]; !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("system %s not found", systemID)
+		res.Message = fmt.Sprintf("未找到恒星系 %s", systemID)
 		return res, nil
 	}
 
@@ -48,7 +48,7 @@ func (gc *GameCore) execScanSystem(_ *model.WorldState, playerID string, cmd mod
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = "system scanned"
+	res.Message = "恒星系扫描完成"
 	return res, nil
 }
 
@@ -57,12 +57,12 @@ func (gc *GameCore) execScanPlanet(_ *model.WorldState, playerID string, cmd mod
 	planetID := cmd.Target.PlanetID
 	if planetID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "planet_id required for scan_planet"
+		res.Message = "scan_planet 缺少 planet_id"
 		return res, nil
 	}
 	if _, ok := gc.maps.Planets[planetID]; !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("planet %s not found", planetID)
+		res.Message = fmt.Sprintf("未找到星球 %s", planetID)
 		return res, nil
 	}
 
@@ -70,6 +70,6 @@ func (gc *GameCore) execScanPlanet(_ *model.WorldState, playerID string, cmd mod
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = "planet scanned"
+	res.Message = "星球扫描完成"
 	return res, nil
 }

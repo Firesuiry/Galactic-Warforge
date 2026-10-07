@@ -61,6 +61,7 @@ func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.Vi
 				TeamID:   ps.TeamID,
 				Role:     ps.Role,
 				IsAlive:  ps.IsAlive,
+				DarkFog:  ps.DarkFog,
 			}}
 		}
 	}

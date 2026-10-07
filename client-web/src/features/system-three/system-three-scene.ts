@@ -122,7 +122,7 @@ export class SystemThreeScene {
       this.fleetLayer.clear(); this.fleetObjects.clear();
       for (let index = 0; index < fleets.length; index++) {
         const fleet = fleets[index], target = fleet.target?.planet_id ? this.planets.get(fleet.target.planet_id) : undefined;
-        const marker = this.industrial.unit('cargo_ship', true);
+        const marker = this.industrial.unit('cargo_ship', 'own');
         marker.scale.setScalar(.65);
         const angle = stablePhase(fleet.fleet_id);
         if (target) marker.position.copy(target.position).add(new THREE.Vector3(Math.cos(angle) * 2.4, 1.1 + index % 3 * .25, Math.sin(angle) * 2.4));

@@ -19,7 +19,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = fmt.Sprintf("player %s not found", playerID)
+		res.Message = fmt.Sprintf("未找到玩家 %s", playerID)
 		return res, nil
 	}
 
@@ -29,24 +29,24 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	count := p.Count
 	if count <= 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = "payload.count must be positive"
+		res.Message = "payload.count 必须为正数"
 		return res, nil
 	}
 
 	factory := ws.Buildings[buildingID]
 	if factory == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if factory.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
+		res.Message = "不能使用其他玩家的建筑"
 		return res, nil
 	}
 	if factory.Runtime.Functions.Production == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "target building is not a military production facility"
+		res.Message = "目标建筑不是军工生产设施"
 		return res, nil
 	}
 	if ok, reason := buildingOperationalForCommand(ws, factory); !ok {
@@ -54,7 +54,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 		if reason == "" {
 			reason = "not_operational"
 		}
-		res.Message = fmt.Sprintf("production facility is not operational: %s", reason)
+		res.Message = fmt.Sprintf("生产设施未运行：%s", reason)
 		return res, nil
 	}
 
@@ -76,7 +76,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	}
 	if !deploymentAllowsBlueprint(deployment, blueprint) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building %s cannot deploy blueprint %s", hub.ID, blueprint.ID)
+		res.Message = fmt.Sprintf("建筑 %s 无法部署蓝图 %s", hub.ID, blueprint.ID)
 		return res, nil
 	}
 
@@ -105,7 +105,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	totalCost := mergeItemAmounts(scaleItemAmounts(componentCost, count), scaleItemAmounts(assemblyCost, count))
 	if !player.HasItems(totalCost) {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "insufficient inventory for military production order"
+		res.Message = "库存不足，无法下达军工生产订单"
 		return res, nil
 	}
 
@@ -119,7 +119,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	}
 	if hubCapacity > 0 && projectedLoad+count > hubCapacity {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("deployment hub %s capacity %d would be exceeded", hub.ID, hubCapacity)
+		res.Message = fmt.Sprintf("部署枢纽 %s 将超出容量 %d", hub.ID, hubCapacity)
 		return res, nil
 	}
 
@@ -152,7 +152,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("military production order %s queued for %s x%d", order.ID, blueprint.ID, count)
+	res.Message = fmt.Sprintf("军工生产订单 %s 已排队：%s x%d", order.ID, blueprint.ID, count)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -175,7 +175,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = fmt.Sprintf("player %s not found", playerID)
+		res.Message = fmt.Sprintf("未找到玩家 %s", playerID)
 		return res, nil
 	}
 
@@ -186,17 +186,17 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
+		res.Message = "不能使用其他玩家的建筑"
 		return res, nil
 	}
 	if building.Runtime.Functions.Production == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "target building is not a refit facility"
+		res.Message = "目标建筑不是改装设施"
 		return res, nil
 	}
 	if ok, reason := buildingOperationalForCommand(ws, building); !ok {
@@ -204,7 +204,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 		if reason == "" {
 			reason = "not_operational"
 		}
-		res.Message = fmt.Sprintf("refit facility is not operational: %s", reason)
+		res.Message = fmt.Sprintf("改装设施未运行：%s", reason)
 		return res, nil
 	}
 
@@ -225,12 +225,12 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, unitID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("unit %s not found", unitID)
+		res.Message = fmt.Sprintf("未找到单位 %s", unitID)
 		return res, nil
 	}
 	if len(fleet.Units) != 1 {
 		res.Code = model.CodeValidationFailed
-		res.Message = "refit_unit currently requires a homogeneous fleet"
+		res.Message = "refit_unit 目前仅支持同构舰队"
 		return res, nil
 	}
 	sourceBlueprint, _, err := resolveIndustryBlueprint(player, fleet.Units[0].BlueprintID)
@@ -247,7 +247,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	cost := deriveRefitCost(sourceBlueprint, targetBlueprint, fleet.Units[0].Count)
 	if !player.HasItems(cost) {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "insufficient inventory for refit order"
+		res.Message = "库存不足，无法下达改装订单"
 		return res, nil
 	}
 	player.DeductItems(cost)
@@ -276,7 +276,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("refit order %s started for fleet %s", order.ID, fleet.ID)
+	res.Message = fmt.Sprintf("改装订单 %s 已开始，舰队 %s", order.ID, fleet.ID)
 	return res, nil
 }
 
@@ -428,17 +428,17 @@ func settleWarIndustry(gc *GameCore, ws *model.WorldState, spaceRuntime *model.S
 
 func resolveIndustryBlueprint(player *model.PlayerState, blueprintID string) (model.WarBlueprint, string, error) {
 	if player == nil {
-		return model.WarBlueprint{}, "", fmt.Errorf("player not found")
+		return model.WarBlueprint{}, "", fmt.Errorf("未找到玩家")
 	}
 	blueprint, ok := model.ResolveWarBlueprintForPlayer(player, blueprintID)
 	if !ok {
-		return model.WarBlueprint{}, "", fmt.Errorf("blueprint %s not found", blueprintID)
+		return model.WarBlueprint{}, "", fmt.Errorf("未找到蓝图 %s", blueprintID)
 	}
 	if blueprint.Source != model.WarBlueprintSourcePreset {
 		switch blueprint.State {
 		case model.WarBlueprintStatePrototype, model.WarBlueprintStateFieldTested, model.WarBlueprintStateAdopted:
 		default:
-			return model.WarBlueprint{}, "", fmt.Errorf("blueprint %s must be finalized before production or refit", blueprint.ID)
+			return model.WarBlueprint{}, "", fmt.Errorf("蓝图 %s 须定稿后才能生产或改装", blueprint.ID)
 		}
 	}
 	return blueprint, blueprintVisibleTechID(blueprint), nil
@@ -578,10 +578,10 @@ func deriveRefitTicks(building *model.Building, source, target model.WarBlueprin
 
 func validateRefitBlueprintChange(source, target model.WarBlueprint) error {
 	if source.Domain != target.Domain {
-		return fmt.Errorf("refit target %s must stay in domain %s", target.ID, source.Domain)
+		return fmt.Errorf("改装目标 %s 必须保持在 %s 域", target.ID, source.Domain)
 	}
 	if source.BaseFrameID != target.BaseFrameID || source.BaseHullID != target.BaseHullID {
-		return fmt.Errorf("refit target %s must reuse the same base frame or hull", target.ID)
+		return fmt.Errorf("改装目标 %s 必须沿用相同的底盘或舰体", target.ID)
 	}
 	return nil
 }

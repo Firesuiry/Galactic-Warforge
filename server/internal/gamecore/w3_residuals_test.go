@@ -341,7 +341,7 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	if res.Code == model.CodeOK {
 		t.Fatal("research must wait for matrices in lab storage")
 	}
-	if strings.Contains(res.Message, "hidden") {
+	if strings.Contains(res.Message, "尚未显现") {
 		t.Fatalf("looted trigger item must reveal the hidden tech, got %q", res.Message)
 	}
 

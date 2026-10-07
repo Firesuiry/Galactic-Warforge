@@ -2,9 +2,9 @@
 # 格式说明见 docs/dev/数据配置文件.md
 base_frames:
   - id: light_frame
-    name: Light Frame
+    name: 轻型机架
     role: recon_skirmish
-    description: High mobility frame for scouts, drones and light frontline templates.
+    description: 高机动机架，适合侦察、无人机与轻型前线模板。
     supported_domains: [ground, air]
     visible_tech_id: prototype
     budgets:
@@ -25,9 +25,9 @@ base_frames:
       - {id: weapon_primary, category: weapon, required: true}
       - {id: utility, category: utility}
   - id: medium_frame
-    name: Medium Frame
+    name: 中型机架
     role: frontline_generalist
-    description: Balanced frame for sustained ground pushes and escort duties.
+    description: 均衡机架，适合持续地面推进与护航任务。
     supported_domains: [ground]
     budgets:
       power_output: 240
@@ -48,9 +48,9 @@ base_frames:
       - {id: weapon_aux, category: defense}
       - {id: utility, category: utility}
   - id: heavy_frame
-    name: Heavy Frame
+    name: 重型机架
     role: breakthrough_guard
-    description: Armor-heavy frame for defensive anchors and siege escorts.
+    description: 重装甲机架，适合防御支点与攻城护航。
     supported_domains: [ground]
     budgets:
       power_output: 320
@@ -72,9 +72,9 @@ base_frames:
       - {id: utility_0, category: utility}
       - {id: utility_1, category: utility}
   - id: assault_frame
-    name: Assault Frame
+    name: 突击机架
     role: high_commitment_assault
-    description: Oversized frame for shock assaults that require dedicated logistics.
+    description: 超大型突击机架，需要专门后勤保障。
     supported_domains: [ground]
     budgets:
       power_output: 420
@@ -97,9 +97,9 @@ base_frames:
       - {id: utility_1, category: utility}
 base_hulls:
   - id: corvette_hull
-    name: Corvette Hull
+    name: 护卫舰舰体
     role: recon_intercept
-    description: Fast response hull for patrol, harassment and screening.
+    description: 快速反应舰体，用于巡逻、袭扰与屏护。
     supported_domains: [orbital, space]
     visible_tech_id: corvette
     budgets:
@@ -120,9 +120,9 @@ base_hulls:
       - {id: weapon_primary, category: weapon, required: true}
       - {id: utility, category: utility}
   - id: destroyer_hull
-    name: Destroyer Hull
+    name: 驱逐舰舰体
     role: escort_command
-    description: Multi-role escort hull with stronger shields and point defense.
+    description: 多用途护航舰体，护盾与点防御更强。
     supported_domains: [orbital, space]
     visible_tech_id: destroyer
     budgets:
@@ -144,9 +144,9 @@ base_hulls:
       - {id: weapon_aux, category: defense}
       - {id: utility, category: utility}
   - id: cruiser_hull
-    name: Cruiser Hull
+    name: 巡洋舰舰体
     role: line_fire_support
-    description: Long-range hull reserved for heavier fleet doctrines.
+    description: 远程舰体，供重型舰队编制使用。
     supported_domains: [space]
     budgets:
       power_output: 700
@@ -167,9 +167,9 @@ base_hulls:
       - {id: weapon_aux, category: weapon, required: true}
       - {id: utility, category: utility}
   - id: carrier_hull
-    name: Carrier Hull
+    name: 航母舰体
     role: drone_missile_platform
-    description: Support hull built around hangars, datalinks and standoff fire.
+    description: 以机库、数据链和远程火力为核心的支援舰体。
     supported_domains: [space]
     budgets:
       power_output: 700
@@ -190,9 +190,9 @@ base_hulls:
       - {id: utility_0, category: utility}
       - {id: utility_1, category: utility}
   - id: siege_hull
-    name: Siege Hull
+    name: 攻城舰舰体
     role: orbital_pressure
-    description: Slow heavy hull for orbital suppression and fortified pushes.
+    description: 低速重型舰体，用于轨道压制与攻坚推进。
     supported_domains: [orbital, space]
     budgets:
       power_output: 760
@@ -214,7 +214,7 @@ base_hulls:
       - {id: utility, category: utility}
 components:
   - id: micro_reactor
-    name: Micro Reactor
+    name: 微型反应堆
     category: power
     slot_kind: core
     supported_domains: [ground, air]
@@ -226,7 +226,7 @@ components:
     signal_load: 2
     tags: [starter, reactor]
   - id: naval_fission_core
-    name: Naval Fission Core
+    name: 舰用裂变核心
     category: power
     slot_kind: core
     supported_domains: [orbital, space]
@@ -238,7 +238,7 @@ components:
     signal_load: 4
     tags: [naval, reactor]
   - id: servo_drive
-    name: Servo Drive
+    name: 伺服驱动
     category: propulsion
     slot_kind: mobility
     supported_domains: [ground]
@@ -251,7 +251,7 @@ components:
     signal_load: 1
     tags: [ground]
   - id: vector_thrusters
-    name: Vector Thrusters
+    name: 矢量推进器
     category: propulsion
     slot_kind: drive
     supported_domains: [air, orbital, space]
@@ -264,7 +264,7 @@ components:
     signal_load: 3
     tags: [flight, naval]
   - id: reactive_armor
-    name: Reactive Armor
+    name: 反应装甲
     category: defense
     slot_kind: armor
     supported_domains: [ground, orbital, space]
@@ -276,7 +276,7 @@ components:
     signal_load: 1
     tags: [armor]
   - id: escort_shield
-    name: Escort Shield
+    name: 护航护盾
     category: defense
     slot_kind: shield
     supported_domains: [air, orbital, space]
@@ -288,7 +288,7 @@ components:
     signal_load: 2
     tags: [shield]
   - id: point_defense_grid
-    name: Point Defense Grid
+    name: 点防御网络
     category: defense
     slot_kind: hardpoint
     supported_domains: [orbital, space]
@@ -300,7 +300,7 @@ components:
     signal_load: 1
     tags: [pd]
   - id: tactical_radar
-    name: Tactical Radar
+    name: 战术雷达
     category: sensor
     slot_kind: sensor
     supported_domains: [ground, orbital, space]
@@ -312,7 +312,7 @@ components:
     signal_load: 5
     tags: [active_sensor]
   - id: battle_link_array
-    name: Battle Link Array
+    name: 战斗链路阵列
     category: sensor
     slot_kind: sensor
     supported_domains: [air, orbital, space]
@@ -324,7 +324,7 @@ components:
     signal_load: 4
     tags: [datalink]
   - id: plasma_lance
-    name: Plasma Lance
+    name: 等离子长枪
     category: weapon
     slot_kind: weapon
     supported_domains: [ground, space]
@@ -337,7 +337,7 @@ components:
     signal_load: 4
     tags: [direct_fire]
   - id: swarm_missile_pod
-    name: Swarm Missile Pod
+    name: 蜂群导弹舱
     category: weapon
     slot_kind: weapon
     supported_domains: [air, orbital, space]
@@ -350,7 +350,7 @@ components:
     signal_load: 3
     tags: [missile]
   - id: coilgun_battery
-    name: Coilgun Battery
+    name: 线圈炮阵列
     category: weapon
     slot_kind: weapon
     supported_domains: [orbital, space]
@@ -363,7 +363,7 @@ components:
     signal_load: 4
     tags: [kinetic]
   - id: field_repair_pack
-    name: Field Repair Pack
+    name: 野战维修包
     category: utility
     slot_kind: utility
     supported_domains: [ground]
@@ -374,7 +374,7 @@ components:
     signal_load: 1
     tags: [repair]
   - id: ecm_suite
-    name: ECM Suite
+    name: 电子对抗套件
     category: utility
     slot_kind: utility
     supported_domains: [air, orbital, space]
@@ -387,7 +387,7 @@ components:
     stealth_rating: 2
     tags: [ecm]
   - id: drone_bay
-    name: Drone Bay
+    name: 无人机舱
     category: utility
     slot_kind: utility
     supported_domains: [orbital, space]
@@ -400,7 +400,7 @@ components:
     tags: [hangar]
 public_blueprints:
   - id: prototype
-    name: Prototype
+    name: 原型机
     domain: ground
     source: preset
     base_frame_id: light_frame
@@ -423,7 +423,7 @@ public_blueprints:
         weapon: {type: laser, damage: 20, fire_rate: 10, range: 8}
         shield: {level: 20, max_level: 20, recharge_rate: 1, recharge_delay: 10}
   - id: precision_drone
-    name: Precision Drone
+    name: 精准无人机
     domain: air
     source: preset
     base_frame_id: light_frame
@@ -446,7 +446,7 @@ public_blueprints:
         weapon: {type: missile, damage: 35, fire_rate: 8, range: 12}
         shield: {level: 30, max_level: 30, recharge_rate: 1.5, recharge_delay: 8}
   - id: corvette
-    name: Corvette
+    name: 护卫舰
     domain: space
     source: preset
     base_hull_id: corvette_hull
@@ -469,7 +469,7 @@ public_blueprints:
         weapon: {type: laser, damage: 40, fire_rate: 10, range: 24}
         shield: {level: 40, max_level: 40, recharge_rate: 2, recharge_delay: 10}
   - id: destroyer
-    name: Destroyer
+    name: 驱逐舰
     domain: space
     source: preset
     base_hull_id: destroyer_hull

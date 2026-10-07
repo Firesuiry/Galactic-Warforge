@@ -48,7 +48,7 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 		t.Fatal("mining completed instantly")
 	}
 	advancePersonalTicks(ws, 9)
-	if node.Remaining != 2 || unit.Mecha.Energy != 91 {
+	if node.Remaining != 2 || unit.Mecha.Energy != 100-mechaMineEnergy {
 		t.Fatal("mining ignored tick cost")
 	}
 	advancePersonalTicks(ws, 1)
@@ -56,10 +56,10 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 		t.Fatal("first mining batch incorrect")
 	}
 	advancePersonalTicks(ws, 10)
-	if node.Remaining != 0 || !node.Depleted || unit.Mecha.Job != nil || unit.Mecha.Energy != 80 {
+	if node.Remaining != 0 || !node.Depleted || unit.Mecha.Job != nil || unit.Mecha.Energy != 100-2*mechaMineEnergy {
 		t.Fatal("mining did not stop at requested/depleted amount")
 	}
-	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
+	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
 	if result.Code != model.CodeOK || unit.Mecha.Energy != 100 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
 		t.Fatalf("mined coal could not fuel executor: %+v", result)
 	}
@@ -109,7 +109,7 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 		t.Fatal("craft did not reserve exactly three inputs")
 	}
 	advancePersonalTicks(ws, 20)
-	if player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 80 || unit.Mecha.Job.ReservedInputs[0].Quantity != 2 {
+	if player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 99 || unit.Mecha.Job.ReservedInputs[0].Quantity != 2 {
 		t.Fatal("craft batch accounting incorrect")
 	}
 	advancePersonalTicks(ws, 5)
@@ -118,7 +118,7 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 		t.Fatal("event history aliases live job")
 	}
 	result, _ = execCommand(core, model.CmdCancelMechaJob, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}})
-	if result.Code != model.CodeOK || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 2 || player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 75 {
+	if result.Code != model.CodeOK || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 2 || player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 98 {
 		t.Fatal("cancel duplicated or lost items / refunded consumed energy")
 	}
 	refundMechaJob(ws, unit)
@@ -132,19 +132,19 @@ func TestHandcraftNoEnergyResumesFromRefuelWithoutConsumingInputsTwice(t *testin
 	player := ws.Players["p1"]
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 1, model.ItemCoal: 2}
-	unit.Mecha.Energy = 5
+	unit.Mecha.Energy = 0
 	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 1)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 10)
-	if unit.Mecha.Job.State != "no_energy" || unit.Mecha.Job.RemainingTicks != 15 || player.Inventory[model.ItemGear] != 0 {
+	if unit.Mecha.Job.State != "no_energy" || unit.Mecha.Job.RemainingTicks != 20 || player.Inventory[model.ItemGear] != 0 {
 		t.Fatal("unpowered crafting advanced")
 	}
-	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
+	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	advancePersonalTicks(ws, 15)
+	advancePersonalTicks(ws, 20)
 	if unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 0 || player.Inventory[model.ItemGear] != 1 || player.Inventory[model.ItemCoal] != 1 {
 		t.Fatal("resume changed material accounting")
 	}
@@ -290,7 +290,7 @@ func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T)
 		t.Fatal("ordinary new game did not mine real coal")
 	}
 	energy := unit.Mecha.Energy
-	result, _ = execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "quantity": 1}})
+	result, _ = execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
 	if result.Code != model.CodeOK || unit.Mecha.Energy <= energy || player.Inventory[model.ItemCoal] != 0 {
 		t.Fatalf("ordinary start cannot refuel with mined coal: %+v", result)
 	}

@@ -300,7 +300,8 @@ export interface MechaJob {
   ticks_per_batch: number;
   remaining_batches: number;
   completed_batches: number;
-  energy_per_tick: number;
+  /** 每批开工时一次性扣除的核心能量。 */
+  energy_per_batch: number;
   state: 'running' | 'no_energy' | 'out_of_range';
   reserved_inputs?: ItemAmount[];
 }
@@ -897,7 +898,14 @@ export interface PlayerState {
   combat_tech?: CombatTechState;
   stats?: PlayerStatsSnapshot;
   war_blueprints?: Record<string, WarBlueprintDetailView>;
+  /** 黑雾对该玩家的敌对状态：被攻击后敌对至 hostile_until_tick，之后恢复中立。 */
+  dark_fog?: DarkFogStance;
   is_alive: boolean;
+}
+
+export interface DarkFogStance {
+  hostile: boolean;
+  hostile_until_tick: number;
 }
 
 export interface StateSummary {

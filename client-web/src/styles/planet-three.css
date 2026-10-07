@@ -88,3 +88,19 @@
   pointer-events: none;
   z-index: 6;
 }
+
+/* 悬停浮动提示（2D/3D 共用）：跟随鼠标，指针穿透 */
+.planet-hover-tip {
+  position: absolute; left: 0; top: 0; z-index: 7; pointer-events: none;
+  display: flex; flex-direction: column; gap: 1px; min-width: 84px; max-width: 220px;
+  padding: 5px 8px; border-radius: 3px; border: 1px solid #9fb8bf33;
+  background: #0b1820e8; box-shadow: 0 4px 14px #0006;
+  font-size: 11px; line-height: 1.35; color: #dfe7e4; white-space: nowrap;
+}
+.planet-hover-tip strong { font-size: 12px; font-weight: 600; color: #f1f4ef; }
+.planet-hover-tip small { font-size: 11px; color: #b4c2c4; font-variant-numeric: tabular-nums; }
+.planet-hover-tip__owner { font-size: 10px; letter-spacing: .04em; }
+.planet-hover-tip__owner--own { color: #5ef7a1; }
+.planet-hover-tip__owner--enemy { color: #ffa245; }
+.planet-hover-tip__owner--fog_neutral { color: #b9a6e6; }
+.planet-hover-tip__owner--fog_hostile { color: #ff5a5a; }

@@ -43,12 +43,12 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	systemID := p.SystemID
 	if count <= 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = "payload.count must be positive"
+		res.Message = "payload.count 必须为正数"
 		return res, nil
 	}
 	if _, ok := gc.maps.System(systemID); !ok {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("system %s not found", systemID)
+		res.Message = fmt.Sprintf("未找到星系 %s", systemID)
 		return res, nil
 	}
 
@@ -65,12 +65,12 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	}
 	if warBlueprintDeployCommand(blueprint) != model.CmdCommissionFleet || warBlueprintRuntimeClass(blueprint) != model.UnitRuntimeClassFleet {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s is not commissioned via commission_fleet", blueprintID)
+		res.Message = fmt.Sprintf("蓝图 %s 不能通过 commission_fleet 服役", blueprintID)
 		return res, nil
 	}
 	if !deploymentAllowsBlueprint(deployment, blueprint) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building %s cannot deploy %s", building.ID, blueprintID)
+		res.Message = fmt.Sprintf("建筑 %s 不能部署 %s", building.ID, blueprintID)
 		return res, nil
 	}
 	if err := requireBlueprintTechUnlocked(ws, playerID, visibleTechID); err != nil {
@@ -88,7 +88,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	}
 	if existing := systemRuntime.Fleets[fleetID]; existing != nil && existing.Transit != nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is in transit and cannot take reinforcements", fleetID)
+		res.Message = fmt.Sprintf("舰队 %s 正在航行中，无法补充兵力", fleetID)
 		return res, nil
 	}
 
@@ -96,7 +96,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	hubState := ensureWarDeploymentHubState(hub, building.ID, deploymentHubCapacity(deployment))
 	if hubState.ReadyPayloads[blueprintID] < count {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in deployment hub inventory", count, blueprintID)
+		res.Message = fmt.Sprintf("部署枢纽库存缺少 %d 个 %s", count, blueprintID)
 		return res, nil
 	}
 	hubState.ReadyPayloads[blueprintID] -= count
@@ -144,7 +144,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("fleet %s commissioned in %s", fleet.ID, systemID)
+	res.Message = fmt.Sprintf("舰队 %s 已在 %s 服役", fleet.ID, systemID)
 	return res, events
 }
 
@@ -155,25 +155,25 @@ func (gc *GameCore) execFleetAssign(_ *model.WorldState, playerID string, cmd mo
 	formation := model.FormationType(formationRaw)
 	if !validFormationType(formation) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("invalid formation: %s", formationRaw)
+		res.Message = fmt.Sprintf("无效阵型：%s", formationRaw)
 		return res, nil
 	}
 	_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
+		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
 		return res, nil
 	}
 	if fleet.Transit != nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is in transit and cannot be assigned", fleetID)
+		res.Message = fmt.Sprintf("舰队 %s 正在航行中，无法设置阵型", fleetID)
 		return res, nil
 	}
 	fleet.Formation = formation
 	fleet.State = model.FleetStateIdle
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("fleet %s assigned %s formation", fleetID, formation)
+	res.Message = fmt.Sprintf("舰队 %s 已设为 %s 阵型", fleetID, formation)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtFleetAssigned,
 		VisibilityScope: playerID,
@@ -192,30 +192,30 @@ func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd mo
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
+		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
 		return res, nil
 	}
 	if fleet.Transit != nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is in transit and cannot attack", fleetID)
+		res.Message = fmt.Sprintf("舰队 %s 正在航行中，无法攻击", fleetID)
 		return res, nil
 	}
 	planet, ok := gc.maps.Planet(planetID)
 	if !ok || planet == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("planet %s not found", planetID)
+		res.Message = fmt.Sprintf("未找到星球 %s", planetID)
 		return res, nil
 	}
 	if planet.SystemID != systemRuntime.SystemID {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "fleet_attack currently supports targets in the same system"
+		res.Message = "fleet_attack 目前仅支持同一星系内的目标"
 		return res, nil
 	}
 	fleet.Target = &model.FleetTarget{PlanetID: planetID, TargetID: targetID}
 	fleet.State = model.FleetStateAttacking
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("fleet %s attacking %s on %s", fleetID, targetID, planetID)
+	res.Message = fmt.Sprintf("舰队 %s 正在攻击 %s（%s）", fleetID, targetID, planetID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtFleetAttackStarted,
 		VisibilityScope: playerID,
@@ -234,32 +234,32 @@ func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd mode
 	_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
+		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
 		return res, nil
 	}
 	if fleet.State != model.FleetStateIdle {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is %s and cannot move", fleetID, fleet.State)
+		res.Message = fmt.Sprintf("舰队 %s 处于 %s 状态，无法移动", fleetID, fleet.State)
 		return res, nil
 	}
 	if fleet.Transit != nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is already in transit to %s", fleetID, fleet.Transit.TargetSystemID)
+		res.Message = fmt.Sprintf("舰队 %s 已在前往 %s 的途中", fleetID, fleet.Transit.TargetSystemID)
 		return res, nil
 	}
 	if targetSystemID == fleet.SystemID {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is already in %s", fleetID, targetSystemID)
+		res.Message = fmt.Sprintf("舰队 %s 已在 %s", fleetID, targetSystemID)
 		return res, nil
 	}
 	if _, ok := gc.maps.System(targetSystemID); !ok {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("system %s not found", targetSystemID)
+		res.Message = fmt.Sprintf("未找到星系 %s", targetSystemID)
 		return res, nil
 	}
 	if !gc.maps.SystemsLinkedByLane(fleet.SystemID, targetSystemID, fleetLaneNeighborCount) {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("no direct lane between %s and %s", fleet.SystemID, targetSystemID)
+		res.Message = fmt.Sprintf("%s 与 %s 之间没有直达航道", fleet.SystemID, targetSystemID)
 		return res, nil
 	}
 
@@ -271,7 +271,7 @@ func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd mode
 	}
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("fleet %s jumping from %s to %s (%d ticks)", fleetID, fleet.SystemID, targetSystemID, FleetTransitTicks)
+	res.Message = fmt.Sprintf("舰队 %s 正从 %s 跃迁至 %s（%d tick）", fleetID, fleet.SystemID, targetSystemID, FleetTransitTicks)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtFleetMoveStarted,
 		VisibilityScope: playerID,
@@ -290,18 +290,18 @@ func (gc *GameCore) execFleetDisband(_ *model.WorldState, playerID string, cmd m
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("fleet %s not found", fleetID)
+		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
 		return res, nil
 	}
 	if fleet.Transit != nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("fleet %s is in transit and cannot be disbanded", fleetID)
+		res.Message = fmt.Sprintf("舰队 %s 正在航行中，无法解散", fleetID)
 		return res, nil
 	}
 	delete(systemRuntime.Fleets, fleetID)
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("fleet %s disbanded", fleetID)
+	res.Message = fmt.Sprintf("舰队 %s 已解散", fleetID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtFleetDisbanded,
 		VisibilityScope: playerID,
@@ -316,12 +316,12 @@ func requireOwnedDeploymentHub(ws *model.WorldState, playerID, buildingID string
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return nil, nil, res
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
+		res.Message = "不能使用其他玩家的建筑"
 		return nil, nil, res
 	}
 	if ok, reason := buildingOperationalForCommand(ws, building); !ok {
@@ -329,17 +329,17 @@ func requireOwnedDeploymentHub(ws *model.WorldState, playerID, buildingID string
 		if reason == "" {
 			reason = "not_operational"
 		}
-		res.Message = fmt.Sprintf("deployment hub is not operational: %s", reason)
+		res.Message = fmt.Sprintf("部署枢纽未运行：%s", reason)
 		return nil, nil, res
 	}
 	if building.Runtime.Functions.Deployment == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "target building is not a deployment hub"
+		res.Message = "目标建筑不是部署枢纽"
 		return nil, nil, res
 	}
 	if building.Storage == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "deployment hub has no storage"
+		res.Message = "部署枢纽没有仓储"
 		return nil, nil, res
 	}
 	return building, building.Runtime.Functions.Deployment, nil
@@ -365,7 +365,7 @@ func requireBlueprintTechUnlocked(ws *model.WorldState, playerID, techID string)
 	}
 	player := ws.Players[playerID]
 	if player == nil || player.Tech == nil || !player.Tech.HasTech(techID) {
-		return fmt.Errorf("blueprint tech %s requires research to unlock", techID)
+		return fmt.Errorf("蓝图科技 %s 需要研究解锁", techID)
 	}
 	return nil
 }

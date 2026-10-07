@@ -18,7 +18,7 @@ export function ActivePlanetSwitcher({
         <dd>{routePlanetName ? `${routePlanetName} · ${routePlanetId}` : routePlanetId}</dd>
       </div>
       <div>
-        <dt>当前 active planet</dt>
+        <dt>服务端活动行星</dt>
         <dd>{activePlanetId}</dd>
       </div>
       <div>

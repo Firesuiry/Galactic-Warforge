@@ -133,6 +133,7 @@ func destroyEnemyForce(ws *model.WorldState, force *model.EnemyForce, strengthBe
 		return nil
 	}
 	level := nestLevel(force)
+	recordCombatBuildingKill(ws, model.DarkFogOwnerID, killerOwnerID)
 	drops := darkFogLootDrops(force, strengthBefore, ws.Tick)
 	if force.Type == model.EnemyForceTypeHive {
 		drops = amplifyNestLoot(drops, level)
@@ -146,7 +147,8 @@ func destroyEnemyForce(ws *model.WorldState, force *model.EnemyForce, strengthBe
 		VisibilityScope: "all",
 		Payload: map[string]any{
 			"entity_id":   force.ID,
-			"entity_type": "enemy_force",
+			"entity_kind": "enemy_force",
+			"entity_type": string(force.Type),
 			"killed_by":   killerID,
 			"source":      source,
 		},

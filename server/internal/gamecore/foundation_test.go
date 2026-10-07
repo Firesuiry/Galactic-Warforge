@@ -119,7 +119,7 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	}
 	ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] = "pending-factory"
 	res, _ = execCommand(core, model.CmdDemolish, ws, "p1", model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: foundation.ID}})
-	if res.Status != model.StatusFailed || res.Message != "cannot demolish foundation while construction is reserved on it" {
+	if res.Status != model.StatusFailed || res.Message != "地基上有施工预留，无法拆除" {
 		t.Fatalf("foundation with pending factory demolition result: %+v", res)
 	}
 	delete(ws.Construction.ReservedTiles, model.TileKey(pos.X, pos.Y))

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -159,11 +159,26 @@ describe('PlanetBuildBar', () => {
     };
     render(<PlanetBuildBar catalog={catalog} summary={poorSummary} planet={makePlanet()} />);
 
-    // wind_turbine 矿 30 > 余额 20 → 置灰禁用 + title 提示差额
+    // wind_turbine 矿 30 > 余额 20 → 红边 + 提示差额；仍可选中（预览标红并写原因）
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    expect(card).toBeDisabled();
+    expect(card).not.toBeDisabled();
     expect(card.className).toContain('planet-build-card--unaffordable');
-    expect(card).toHaveAttribute('title', expect.stringContaining('矿不足：需要 30 / 现有 20'));
+    expect(card).toHaveAttribute('aria-label', expect.stringContaining('矿不足：需要 30 / 现有 20'));
+  });
+
+  it('卡片与悬停详情显示物品造价（拥有/需要，不足标红）', () => {
+    const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
+      ? { ...entry, build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
+      : entry) } as CatalogView;
+    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 500, energy: 100 }, inventory: { iron_ingot: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
+    const card = screen.getByRole('button', { name: /风力发电机/ });
+    expect(card.className).toContain('planet-build-card--unaffordable');
+    expect(card.querySelector('.planet-build-card__item--short')?.textContent).toContain('4/6');
+    fireEvent.mouseEnter(card);
+    const detail = screen.getByTestId('planet-build-detail');
+    expect(detail).toHaveTextContent('拥有 / 需要');
+    expect(detail.querySelector('.is-short')?.textContent).toContain('4 / 6');
   });
 
   it('余额充足时卡片可点击进入建造模式', async () => {

@@ -319,7 +319,11 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 		guardNeed = 0
 	}
 
+	// 黑雾被动：没有敌对玩家时只补守军，不派进攻队。
 	target := selectBlackFogRaidTarget(ws, nest.Position)
+	if target == nil {
+		waveSize = 0
+	}
 	spawned := 0
 	spawnedGuards := 0
 	for i, candidate := range blackFogSpawnTiles(ws, nest.Position, waveSize+guardNeed) {
@@ -347,8 +351,8 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 		ws.TileUnits[key] = append(ws.TileUnits[key], unit.ID)
 		spawned++
 	}
-	if spawned == 0 {
-		return nil
+	if spawned == 0 || target == nil {
+		return nil // 只补守军不算来袭
 	}
 
 	payload := map[string]any{
@@ -362,12 +366,10 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 		"wave_tick":  ws.Tick,
 		"unit_speed": model.UnitStats(model.UnitTypeDarkFog).MoveSpeed,
 	}
-	if target != nil {
-		payload["target_building_id"] = target.building.ID
-		payload["target_pos"] = target.building.Position
-		payload["target_owner"] = target.building.OwnerID
-		payload["target_rank"] = target.rank
-	}
+	payload["target_building_id"] = target.building.ID
+	payload["target_pos"] = target.building.Position
+	payload["target_owner"] = target.building.OwnerID
+	payload["target_rank"] = target.rank
 	return []*model.GameEvent{{
 		EventType:       model.EvtEnemyWaveIncoming,
 		VisibilityScope: "all",
@@ -482,7 +484,7 @@ func selectBlackFogRaidTarget(ws *model.WorldState, from model.Position) *blackF
 	var best *blackFogRaidTarget
 	bestDist := -1
 	for _, b := range ws.Buildings {
-		if b == nil || b.HP <= 0 || b.OwnerID == "" || b.OwnerID == model.DarkFogOwnerID {
+		if b == nil || b.HP <= 0 || !hostile(ws, model.DarkFogOwnerID, b.OwnerID) {
 			continue
 		}
 		rank := blackFogBuildingRank(ws, b)
@@ -495,7 +497,8 @@ func selectBlackFogRaidTarget(ws *model.WorldState, from model.Position) *blackF
 	return best
 }
 
-// reassignBlackFogRaidTargets 给失去目标的空闲黑雾单位指派新的袭击目标。
+// reassignBlackFogRaidTargets 给失去目标的空闲黑雾单位指派新的袭击目标；
+// 目标归属已恢复中立的进攻队撤销命令，没有敌对目标时返回最近的巢穴。
 func reassignBlackFogRaidTargets(ws *model.WorldState) {
 	ids := make([]string, 0, len(ws.Units))
 	for id, unit := range ws.Units {
@@ -509,12 +512,28 @@ func reassignBlackFogRaidTargets(ws *model.WorldState) {
 		if unit.Stance == model.UnitStanceGuard {
 			continue // 巢穴守军不外派（E4）
 		}
-		if unit.AttackTarget != "" || unit.HasPath() {
+		if unit.AttackTarget != "" {
+			if t := resolveCombatTarget(ws, unit.AttackTarget); t != nil && hostile(ws, model.DarkFogOwnerID, t.ownerID) {
+				continue
+			}
+			unit.AttackTarget = ""
+			unit.ClearMovement()
+			unit.OrderPos = nil
+			unit.Stance = model.UnitStanceIdle
+		}
+		if unit.HasPath() && unit.Stance != model.UnitStanceAttackMove {
 			continue
 		}
 		target := selectBlackFogRaidTarget(ws, unit.Position)
 		if target == nil {
+			unit.ClearMovement()
+			returnBlackFogUnitHome(ws, unit)
 			continue
+		}
+		if unit.HasPath() && unit.OrderPos != nil {
+			if b := ws.Buildings[ws.TileBuilding[model.TileKey(unit.OrderPos.X, unit.OrderPos.Y)]]; b != nil && hostile(ws, model.DarkFogOwnerID, b.OwnerID) {
+				continue // 仍在奔袭敌对玩家
+			}
 		}
 		unit.AttackTarget = target.building.ID
 		orderPos := target.building.Position
@@ -614,5 +633,28 @@ func (gc *GameCore) applySlowFieldEffects(ws *model.WorldState) {
 				force.SpreadRadius *= slowFactor
 			}
 		}
+	}
+}
+
+// returnBlackFogUnitHome 没有敌对目标的黑雾单位回到最近的巢穴附近待命。
+func returnBlackFogUnitHome(ws *model.WorldState, unit *model.Unit) {
+	unit.Stance = model.UnitStanceIdle
+	unit.OrderPos = nil
+	unit.CombatAnchor = nil
+	var home *model.EnemyForce
+	bestDist := 0
+	for _, nest := range blackFogNests(ws) {
+		d := ws.SurfaceDistance(unit.Position, nest.Position)
+		if home == nil || d < bestDist {
+			home, bestDist = nest, d
+		}
+	}
+	if home == nil || bestDist <= 4 {
+		return
+	}
+	if path, ok := computeUnitPath(ws, unit.Position, home.Position, unit.ID); ok && len(path) > 1 {
+		unit.Path = path
+		unit.PathIndex = 1
+		unit.MoveProgress = 0
 	}
 }

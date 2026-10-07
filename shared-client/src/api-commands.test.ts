@@ -21,7 +21,7 @@ describe('refuel_mecha request serialization', () => {
     assert.deepEqual(request.commands[0], {
       type: 'refuel_mecha',
       target: { layer: 'planet', entity_id: 'executor-1' },
-      payload: { item_id: 'fuel-rod', quantity: 3 },
+      payload: { item_id: 'fuel-rod', count: 3 },
     });
   });
 });

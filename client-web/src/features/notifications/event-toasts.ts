@@ -18,7 +18,7 @@ import type { SoundName } from '@/engine/audio';
 import { isBuildingCompletionEvent } from '@/features/audio/planet-audio';
 import type { ToastInput } from '@/features/notifications/store';
 import { isResearchStationAlertNoise } from '@/features/production-alerts';
-import { translateAlertType, translateBuildingType, translateTechId } from '@/i18n/translate';
+import { translateAlertType, translateBuildingType, translateTechId, translateUnitType } from '@/i18n/translate';
 
 export interface EventToast {
   toast: ToastInput;
@@ -42,12 +42,42 @@ function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 12)}…` : id;
 }
 
+/** 服务端默认 10 tick/s（遭遇战预设）；换算「X 分钟」提示用。 */
+const TICKS_PER_SECOND = 10;
+/** 产线告警节流：同 mergeKey 的 toast 消退后 60s 内只累计到历史，不再弹出。 */
+export const PRODUCTION_ALERT_THROTTLE_MS = 60_000;
+
+/** entity_destroyed 的中文名：按 entity_kind 选字典；旧事件缺字段时按 id 前缀推断。 */
+export function describeDestroyedEntity(payload: Record<string, unknown>): { kind: string; name: string } {
+  const entityId = asString(payload.entity_id) || asString(payload.target_id);
+  const kind = asString(payload.entity_kind)
+    || (entityId.startsWith('b-') ? 'building' : entityId.startsWith('u-') ? 'unit' : '');
+  const type = asString(payload.entity_type);
+  switch (kind) {
+    case 'building':
+      return { kind, name: type ? translateBuildingType(type) : '建筑' };
+    case 'unit':
+      return { kind, name: type ? translateUnitType(type) : '单位' };
+    case 'enemy_force':
+      return { kind, name: '黑雾' };
+    case 'fleet':
+      return { kind, name: '舰队' };
+    case 'combat_squad':
+      return { kind, name: '军团' };
+    default:
+      return { kind, name: '目标' };
+  }
+}
+
 function planetHref(payload: Record<string, unknown>): string | undefined {
   const planetId = asString(payload.planet_id);
   return planetId ? `/planet/${planetId}` : undefined;
 }
 
-export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
+/**
+ * @param viewerId 当前玩家：用于区分「己方被毁 / 击毁敌方」与只对自己弹的黑雾敌对提示。
+ */
+export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): EventToast | null {
   const payload = event.payload ?? {};
 
   switch (event.event_type) {
@@ -71,17 +101,57 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       };
     }
     case 'entity_destroyed': {
-      const entityId = asString(payload.entity_id) || asString(payload.target_id);
+      const { kind, name } = describeDestroyedEntity(payload);
+      const ownerId = asString(payload.owner_id);
+      const own = viewerId !== '' && ownerId === viewerId;
+      if (kind === 'building' || kind === 'unit') {
+        if (own) {
+          return {
+            toast: {
+              kind: 'danger',
+              title: kind === 'building' ? `建筑被摧毁：${name}` : `单位阵亡：${name}`,
+              href: planetHref(payload),
+              mergeKey: `entity_destroyed:own:${kind}:${name}`,
+            },
+          };
+        }
+        // 别家互相交火的伤亡不打扰；没有归属字段（旧事件）时仍按己方损失提示
+        if (ownerId) {
+          return null;
+        }
+        return {
+          toast: { kind: 'danger', title: kind === 'building' ? `建筑被摧毁：${name}` : `单位被摧毁：${name}`, mergeKey: `entity_destroyed:${kind}:${name}` },
+        };
+      }
+      if (kind === 'enemy_force') {
+        return { toast: { kind: 'success', title: '击退黑雾', mergeKey: 'entity_destroyed:enemy_force' } };
+      }
+      return {
+        toast: { kind: 'danger', title: `${name}被摧毁`, href: kind === 'fleet' ? '/war' : undefined, mergeKey: `entity_destroyed:${kind}` },
+      };
+    }
+    case 'dark_fog_provoked': {
+      if (asString(payload.player_id) !== viewerId) {
+        return null;
+      }
+      const until = asNumber(payload.until_tick);
+      const minutes = until !== undefined ? Math.max(1, Math.ceil((until - event.tick) / TICKS_PER_SECOND / 60)) : undefined;
       return {
         toast: {
           kind: 'danger',
-          title: '单位被摧毁',
-          body: entityId ? shortId(entityId) : undefined,
-          href: '/war',
-          mergeKey: 'entity_destroyed',
+          title: '你激怒了黑雾',
+          body: minutes !== undefined ? `${minutes} 分钟内会遭到报复，停止攻击后才会恢复中立。` : '黑雾将报复你的基地，停止攻击后才会恢复中立。',
+          mergeKey: 'dark_fog_provoked',
+          sticky: true,
         },
+        sfx: 'alert',
       };
     }
+    case 'dark_fog_calmed':
+      if (asString(payload.player_id) !== viewerId) {
+        return null;
+      }
+      return { toast: { kind: 'success', title: '黑雾已恢复中立', body: '不主动攻击它就不会再来报复。' }, sfx: 'commandOk' };
     case 'missile_salvo_fired': {
       const count = asNumber(payload.count) ?? asNumber(payload.salvo_size);
       return {
@@ -138,7 +208,7 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       const active = payload.alert_active === true;
       const id = asString(payload.building_id);
       return { toast: { kind: active ? 'warning' : 'info', title: active ? '传送带流量告警' : '传送带告警已解除',
-        body: `${id || '流速监测器'}：${active ? (payload.state === 'blocked' ? '积货且无物料流出' : '流量低于阈值') : '监测状态已更新'}`,
+        body: `流速监测器：${active ? (payload.state === 'blocked' ? '积货且无物料流出' : '流量低于阈值') : '监测状态已更新'}`,
         href: planetHref(payload), mergeKey: `traffic_monitor_alert:${id}` } };
     }
     case 'production_alert': {
@@ -153,17 +223,16 @@ export function toastFromGameEvent(event: GameEventDetail): EventToast | null {
       }
       // 文案本地化：建筑名 + 告警类型，不使用 server 的英文原文 message
       const issue = translateAlertType(alertType, asString(alert?.message) || '产线告警');
-      const buildingLabel = buildingType
-        ? `${translateBuildingType(buildingType)}${buildingId ? ` ${shortId(buildingId)}` : ''}`
-        : (buildingId ? shortId(buildingId) : '');
+      const buildingLabel = buildingType ? translateBuildingType(buildingType) : '建筑';
       return {
         toast: {
           kind: 'warning',
           title: '产线告警',
           body: [buildingLabel, issue].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
-          // 同建筑同原因合并计数，避免刷屏
-          mergeKey: `production_alert:${buildingId || 'unknown'}:${alertType || 'unknown'}`,
+          // 同类建筑同原因合并计数并节流（多台同时缺料只占一条）
+          mergeKey: `production_alert:${buildingType || buildingId || 'unknown'}:${alertType || 'unknown'}`,
+          throttleMs: PRODUCTION_ALERT_THROTTLE_MS,
         },
       };
     }

@@ -22,6 +22,36 @@ export function isDarkFogUnit(unit: Pick<Unit, 'owner_id' | 'type'>): boolean {
   return unit.owner_id === DARK_FOG_OWNER_ID || (unit.type as string) === DARK_FOG_OWNER_ID;
 }
 
+/**
+ * 相对当前玩家的阵营：黑雾被动，玩家攻击后对其敌对（summary 玩家 dark_fog.hostile），
+ * 一段时间不打恢复中立。
+ */
+export type UnitFaction = 'own' | 'enemy' | 'fog_neutral' | 'fog_hostile';
+
+export function unitFaction(
+  unit: Pick<Unit, 'owner_id' | 'type'>,
+  playerId: string | undefined,
+  darkFogHostile: boolean,
+): UnitFaction {
+  if (isDarkFogUnit(unit)) return darkFogHostile ? 'fog_hostile' : 'fog_neutral';
+  return unit.owner_id === playerId ? 'own' : 'enemy';
+}
+
+export const FACTION_LABEL: Record<UnitFaction, string> = {
+  own: '己方',
+  enemy: '敌方',
+  fog_neutral: '黑雾（中立）',
+  fog_hostile: '黑雾（敌对）',
+};
+
+/** 阵营主色（3D 血条/2D 单位描边/悬停提示共用）。 */
+export const FACTION_COLOR: Record<UnitFaction, number> = {
+  own: 0x5ef7a1,
+  enemy: 0xffa245,
+  fog_neutral: 0xa58fd6,
+  fog_hostile: 0xff4444,
+};
+
 /** 当前选中集合里仍存活且属己方的单位（命令下发的最终选择器）。 */
 export function commandableUnitIds(
   planet: PlanetRenderView,

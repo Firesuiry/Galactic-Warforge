@@ -376,7 +376,7 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 				CommandIndex: i,
 				Status:       model.StatusRejected,
 				Code:         model.CodeGameFinished,
-				Message:      "game finished: victory already declared, commands are no longer accepted",
+				Message:      "游戏已结束：胜负已定，不再接受命令",
 			}
 			results = append(results, res)
 			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
@@ -392,7 +392,7 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 				CommandIndex: i,
 				Status:       model.StatusRejected,
 				Code:         model.CodeValidationFailed,
-				Message:      "player not found or eliminated",
+				Message:      "玩家不存在或已被淘汰",
 			}
 			results = append(results, res)
 			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))
@@ -407,7 +407,7 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 				CommandIndex: i,
 				Status:       model.StatusFailed,
 				Code:         model.CodeUnauthorized,
-				Message:      fmt.Sprintf("permission denied for command %s", cmd.Type),
+				Message:      fmt.Sprintf("无权执行命令 %s", cmd.Type),
 			}
 			results = append(results, res)
 			allEvts = append(allEvts, commandResultEvent(qr, cmd, res))

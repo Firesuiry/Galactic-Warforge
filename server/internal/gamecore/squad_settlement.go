@@ -22,7 +22,7 @@ func squadRole(u *model.Unit) int {
 func planSquadFormation(ws *model.WorldState, squad *model.CombatSquad, target model.Position, order model.SquadOrder) ([]squadMemberPlan, error) {
 	members := squad.Members(ws)
 	if len(members) == 0 {
-		return nil, fmt.Errorf("squad has no living members")
+		return nil, fmt.Errorf("小队没有存活成员")
 	}
 	sort.Slice(members, func(i, j int) bool {
 		if squadRole(members[i]) != squadRole(members[j]) {
@@ -77,7 +77,7 @@ func planSquadFormation(ws *model.WorldState, squad *model.CombatSquad, target m
 			break
 		}
 		if !found {
-			return nil, fmt.Errorf("unit %s has no reachable formation slot", u.ID)
+			return nil, fmt.Errorf("单位 %s 没有可到达的阵型位置", u.ID)
 		}
 	}
 	return plans, nil

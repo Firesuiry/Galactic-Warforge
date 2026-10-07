@@ -14,8 +14,8 @@ describe('war command GAME_FINISHED', () => {
     });
   });
 
-  it('仅 message 含 game finished 时同样引导结算页', () => {
-    expect(resolveWarCommandHint('game finished: victory already declared')).toMatchObject({
+  it('仅 message 含 GAME_FINISHED 时同样引导结算页', () => {
+    expect(resolveWarCommandHint('GAME_FINISHED: 对局已结束')).toMatchObject({
       title: '对局已结束',
       href: '/settlement',
     });

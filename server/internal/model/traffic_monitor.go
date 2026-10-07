@@ -64,10 +64,10 @@ func (s *TrafficMonitorState) ClearWindow() {
 
 func (s *TrafficMonitorState) Validate() error {
 	if s == nil || s.WindowTicks < 1 || s.WindowTicks > 600 {
-		return fmt.Errorf("window_ticks must be an integer between 1 and 600")
+		return fmt.Errorf("window_ticks 必须是 1 到 600 之间的整数")
 	}
 	if math.IsNaN(s.MinimumItemsPerTick) || math.IsInf(s.MinimumItemsPerTick, 0) || s.MinimumItemsPerTick < 0 || s.MinimumItemsPerTick > 60 {
-		return fmt.Errorf("minimum_items_per_tick must be a finite number between 0 and 60")
+		return fmt.Errorf("minimum_items_per_tick 必须是 0 到 60 之间的有限数")
 	}
 	if s.TotalItems < 0 || s.LastSampleTick < -1 || len(s.Samples) > s.WindowTicks || s.SampleCount != len(s.Samples) {
 		return fmt.Errorf("invalid traffic monitor counters")

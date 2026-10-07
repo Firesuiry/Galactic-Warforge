@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Application } from 'pixi.js';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { CatalogView, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
+import type { CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 
 import { PixiStage } from '@/engine/PixiStage';
 import { sfx } from '@/engine/audio';
@@ -41,6 +41,8 @@ import {
 } from '@/features/planet-map/render';
 import { assessBuildTiles } from '@/features/planet-map/build-workflow';
 import { PlanetScene } from '@/features/planet-map/planet-scene';
+import { describeHover } from '@/features/planet-map/hover-info';
+import { PlanetHoverTip } from '@/features/planet-map/PlanetHoverTip';
 import { collectVisibleEntities } from '@/features/planet-map/visible-entities';
 import { useImperativeCameraTransform } from '@/features/planet-map/useImperativeCameraTransform';
 import { PlanetEntityLayer } from '@/features/planet-map/PlanetEntityLayer';
@@ -71,6 +73,8 @@ export interface PlanetMapCapture {
 
 interface PlanetMapPixiProps {
   catalog?: CatalogView;
+  /** 玩家背包：建造预览缺料时标红。 */
+  inventory?: ItemInventory;
   fog?: FogMapView | PlanetSceneView;
   networks?: PlanetNetworksView;
   overview?: PlanetOverviewView;
@@ -87,6 +91,8 @@ interface PlanetMapPixiProps {
   onContextTile?: (tile: TilePoint) => boolean;
   /** C4：theater_zone 模式拖拽矩形松手 → 战区圆几何（圆心+半径）。 */
   onDefineZone?: (zone: TheaterZoneGeometry) => void;
+  /** 黑雾是否对当前玩家敌对（单位配色/悬停提示归属）。 */
+  darkFogHostile?: boolean;
 }
 
 interface ViewportSize {
@@ -175,7 +181,7 @@ function areCameraPatchesEqual(left: CameraPatch, right: CameraPatch) {
  * 交互命中仍走 pointToTile 的 tile 换算；语义实体层（PlanetEntityLayer）以 ghost 形式保留
  * （opacity:0 + pointer-events:none，DevTools/agent 可定位，视觉由 Pixi 承担）。
  */
-export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtime, squads, theaters, onCanvasReady, onInteractTile, onContextTile, onDefineZone }: PlanetMapPixiProps) {
+export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, planet, runtime, squads, theaters, onCanvasReady, onInteractTile, onContextTile, onDefineZone, darkFogHostile = false }: PlanetMapPixiProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const entityLayerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<PlanetScene | null>(null);
@@ -413,11 +419,20 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       visible: visibleEntities,
       catalog,
       playerId: session.playerId,
+      darkFogHostile,
       detailPolicy,
       layers: sceneLayers,
       overviewMode,
     });
-  }, [visibleEntities, catalog, session.playerId, detailPolicy, sceneLayers, overviewMode, pixiApp]);
+  }, [visibleEntities, catalog, session.playerId, darkFogHostile, detailPolicy, sceneLayers, overviewMode, pixiApp]);
+
+  // 悬停提示：build 模式与总览档不显示（hoveredTile 已 rAF 合帧）。
+  const hoverInfo = useMemo(
+    () => (hoveredTile && !overviewMode && interactionMode.kind !== 'build'
+      ? describeHover({ planet, runtime, catalog, playerId: session.playerId, darkFogHostile }, hoveredTile)
+      : null),
+    [hoveredTile, overviewMode, interactionMode.kind, planet, runtime, catalog, session.playerId, darkFogHostile],
+  );
 
   useEffect(() => {
     const buildAssessment = !overviewMode && interactionMode.kind === 'build' && hoveredTile
@@ -425,7 +440,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
           x: hoveredTile.x,
           y: hoveredTile.y,
           z: 0,
-        }, session.playerId)
+        }, session.playerId, interactionMode.rotation, inventory)
       : undefined;
     sceneRef.current?.setInteraction({
       hoveredTile,
@@ -439,7 +454,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       overviewMode,
       viewportBounds,
     });
-  }, [catalog, hoveredTile, interactionMode, sceneLayers.selection, overview, overviewMode, planet, selected, selectedUnits, viewportBounds, pixiApp]);
+  }, [catalog, inventory, hoveredTile, interactionMode, sceneLayers.selection, overview, overviewMode, planet, selected, selectedUnits, viewportBounds, pixiApp]);
 
   useEffect(() => () => {
     hoverScheduler.cancel();
@@ -804,7 +819,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
       onInteractTile?.(tile);
       return;
     }
-    const selection = overviewMode ? null : resolveSelectionAtTile(planet, tile.x, tile.y);
+    const selection = overviewMode ? null : resolveSelectionAtTile(planet, tile.x, tile.y, usePlanetViewStore.getState().selected);
     if (selection && (selection.kind === 'building' || selection.kind === 'unit')) {
       sfx.uiClick();
     }
@@ -957,6 +972,7 @@ export function PlanetMapPixi({ catalog, fog, networks, overview, planet, runtim
         role="img"
       >
         <PixiStage className="planet-map-canvas__pixi" onReady={handlePixiReady} />
+        <PlanetHoverTip containerRef={viewportRef} info={hoverInfo} />
         {/* 战区覆盖层（C4）：zones 圆圈 + 告警态（指针穿透，2D 战术视图专属） */}
         {overviewMode ? null : (
           <PlanetTheaterLayer

@@ -48,6 +48,24 @@ type NestRuin struct {
 // DarkFogOwnerID 黑雾单位的保留归属 ID（不是玩家，不参与胜负判定）。
 const DarkFogOwnerID = "dark_fog"
 
+// DefaultDarkFogCalmTicks 黑雾最后一次被伤害后恢复中立的默认 tick 数。
+const DefaultDarkFogCalmTicks int64 = 6000
+
+// DarkFogRelation 黑雾对某玩家的敌对关系。不敌对时 HostileUntilTick 为 0。
+type DarkFogRelation struct {
+	Hostile          bool  `json:"hostile"`
+	HostileUntilTick int64 `json:"hostile_until_tick"`
+}
+
+// DarkFogHostileTo 黑雾当前是否对该归属敌对（非玩家归属一律不敌对）。
+func DarkFogHostileTo(ws *WorldState, ownerID string) bool {
+	if ws == nil || ownerID == "" || ownerID == DarkFogOwnerID {
+		return false
+	}
+	player := ws.Players[ownerID]
+	return player != nil && player.DarkFog.Hostile
+}
+
 // EnemyForceState 敌对势力整体状态
 type EnemyForceState struct {
 	SystemID    string       `json:"system_id"`    // 所属恒星系

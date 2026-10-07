@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
+import type { CatalogView, ItemInventory } from '@shared/types';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, ChartColumn, Cpu, Flag, FlaskConical, Hourglass, Orbit, Rewind, Save, Settings, Swords, TriangleAlert, Users, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
 import { isMuted, setMuted, sfx } from '@/engine/audio';
-import { formatMineralInventory } from '@/features/mineral-summary';
+import { formatMineralInventory, pickKeyItems, sortedInventory } from '@/features/mineral-summary';
+import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { isResearchStationAlertNoise } from '@/features/production-alerts';
@@ -44,6 +47,13 @@ export function TopNav() {
     queryFn: () => client.fetchSummary(),
     enabled: Boolean(session.playerId),
     refetchInterval: 5000,
+  });
+
+  const catalogQuery = useQuery({
+    queryKey: ['catalog', session.serverUrl, session.playerId],
+    queryFn: () => client.fetchCatalog(),
+    enabled: Boolean(session.playerId),
+    staleTime: 5 * 60 * 1000,
   });
 
   const statsQuery = useQuery({
@@ -172,6 +182,7 @@ export function TopNav() {
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>
+        <InventoryChips catalog={catalogQuery.data} inventory={currentPlayer?.inventory} />
         <span
           className={`top-nav__chip${powerClass ? ` ${powerClass}` : ''}${powerPulse}`}
           title="电力 发电/耗电"
@@ -279,5 +290,57 @@ export function TopNav() {
         </div>
       </div>
     </header>
+  );
+}
+
+/** 顶栏关键库存（弹药/电路板/铁块…前 4 项），点击展开完整背包库存。 */
+function InventoryChips({ catalog, inventory }: { catalog?: CatalogView; inventory?: ItemInventory }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [open]);
+  const keyItems = pickKeyItems(inventory);
+  const all = sortedInventory(inventory);
+  return (
+    <div className="top-nav__inventory" ref={ref}>
+      <button
+        className="top-nav__inventory-btn"
+        type="button"
+        aria-expanded={open}
+        aria-label="背包库存"
+        title="背包库存（点击展开全部）"
+        onClick={() => setOpen(!open)}
+      >
+        {keyItems.length === 0 ? <span className="top-nav__chip">背包空</span> : keyItems.map((item) => (
+          <span className="top-nav__chip" key={item.id} title={getItemDisplayName(catalog, item.id)}>
+            <Icon iconKey={item.id} size={14} />
+            <span className="top-nav__chip-label">{getItemDisplayName(catalog, item.id)}</span>
+            <span className="top-nav__chip-value">{item.quantity}</span>
+          </span>
+        ))}
+      </button>
+      {open ? (
+        <div className="top-nav__inventory-panel" role="dialog" aria-label="完整库存">
+          <div className="top-nav__inventory-title">背包库存 · {all.length} 种</div>
+          {all.length === 0 ? <div className="top-nav__inventory-empty">背包是空的</div> : (
+            <ul>
+              {all.map((item) => (
+                <li key={item.id}>
+                  <Icon iconKey={item.id} size={14} />
+                  <span>{getItemDisplayName(catalog, item.id)}</span>
+                  <strong>{item.quantity}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }

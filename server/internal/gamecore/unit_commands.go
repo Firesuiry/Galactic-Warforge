@@ -23,17 +23,17 @@ func resolveCommandUnits(ws *model.WorldState, playerID string, cmd model.Comman
 		ids = append(ids, id)
 	}
 	if len(ids) == 0 {
-		return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: "target.entity_id or target.entity_ids required"}
+		return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: "缺少 target.entity_id 或 target.entity_ids"}
 	}
 	sort.Strings(ids)
 	units := make([]*model.Unit, 0, len(ids))
 	for _, id := range ids {
 		unit, ok := ws.Units[id]
 		if !ok || unit == nil || unit.HP <= 0 {
-			return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeEntityNotFound, Message: fmt.Sprintf("unit %s not found", id)}
+			return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeEntityNotFound, Message: fmt.Sprintf("未找到单位 %s", id)}
 		}
 		if unit.OwnerID != playerID {
-			return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeNotOwner, Message: fmt.Sprintf("cannot command unit %s owned by another player", id)}
+			return nil, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeNotOwner, Message: fmt.Sprintf("不能指挥其他玩家的单位 %s", id)}
 		}
 		units = append(units, unit)
 	}
@@ -52,18 +52,18 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 	pos := cmd.Target.Position
 	if pos == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target.position required for move command"
+		res.Message = "move 指令缺少 target.position"
 		return res, nil
 	}
 	if !ws.InBounds(pos.X, pos.Y) {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("position (%d,%d) out of map bounds", pos.X, pos.Y)
+		res.Message = fmt.Sprintf("位置 (%d,%d) 超出地图范围", pos.X, pos.Y)
 		return res, nil
 	}
 	tileKey := model.TileKey(pos.X, pos.Y)
 	if _, occupied := ws.TileBuilding[tileKey]; occupied {
 		res.Code = model.CodePositionOccupied
-		res.Message = "destination tile is occupied by a building"
+		res.Message = "目标格已被建筑占用"
 		return res, nil
 	}
 
@@ -76,13 +76,13 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 			dist := ws.SurfaceDistance(unit.Position, *pos)
 			if dist > unit.MoveRange {
 				res.Code = model.CodeOutOfRange
-				res.Message = fmt.Sprintf("move distance %d exceeds unit move range %d", dist, unit.MoveRange)
+				res.Message = fmt.Sprintf("移动距离 %d 超出单位移动范围 %d", dist, unit.MoveRange)
 				return res, nil
 			}
 			path, reachable := ws.SurfacePath(unit.Position, *pos, unit.MoveRange)
 			if !reachable {
 				res.Code = model.CodeOutOfRange
-				res.Message = "destination has no walkable surface path within move range"
+				res.Message = "移动范围内没有通往目标的地表路径"
 				return res, nil
 			}
 			if failure := spendMechaEnergy(unit, (len(path)-1)*unit.Mecha.MoveEnergyCost); failure != nil {
@@ -112,7 +112,7 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		path, ok := computeUnitPath(ws, unit.Position, *pos, unit.ID)
 		if !ok {
 			res.Code = model.CodeOutOfRange
-			res.Message = fmt.Sprintf("unit %s has no walkable surface path to destination", unit.ID)
+			res.Message = fmt.Sprintf("单位 %s 没有通往目标的地表路径", unit.ID)
 			return res, nil
 		}
 		oldPos := unit.Position
@@ -141,7 +141,7 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("%d unit(s) moving to (%d,%d)", moved, pos.X, pos.Y)
+	res.Message = fmt.Sprintf("%d 个单位正前往 (%d,%d)", moved, pos.X, pos.Y)
 	return res, events
 }
 
@@ -163,17 +163,17 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 	target := resolveCombatTarget(ws, targetID)
 	if target == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("target entity %s not found", targetID)
+		res.Message = fmt.Sprintf("未找到目标实体 %s", targetID)
 		return res, nil
 	}
 	if target.ownerID == playerID {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "cannot attack own entity"
+		res.Message = "不能攻击己方实体"
 		return res, nil
 	}
 	if target.ownerID != "" && sameTeam(ws, playerID, target.ownerID) {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "cannot attack allied entity"
+		res.Message = "不能攻击盟友实体"
 		return res, nil
 	}
 
@@ -187,11 +187,11 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 			dist := ws.SurfaceDistance(attacker.Position, target.pos)
 			if dist > attacker.AttackRange {
 				res.Code = model.CodeOutOfRange
-				res.Message = fmt.Sprintf("target distance %d exceeds attack range %d", dist, attacker.AttackRange)
+				res.Message = fmt.Sprintf("目标距离 %d 超出攻击范围 %d", dist, attacker.AttackRange)
 				return res, nil
 			}
 			if !unitCanTarget(attacker, target) {
-				return mechaJobFailed(model.CodeInvalidTarget, "weapon cannot engage this target")
+				return mechaJobFailed(model.CodeInvalidTarget, "武器无法攻击该目标")
 			}
 			attacker.AttackTarget = targetID
 			engaged++
@@ -234,7 +234,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("%d unit(s) attacking %s", engaged, targetID)
+	res.Message = fmt.Sprintf("%d 个单位正在攻击 %s", engaged, targetID)
 	return res, events
 }
 
@@ -276,18 +276,18 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 			pos := cmd.Target.Position
 			if pos == nil {
 				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("target.position required for %s", order)
+				res.Message = fmt.Sprintf("%s 指令缺少 target.position", order)
 				return res, nil
 			}
 			if !ws.InBounds(pos.X, pos.Y) {
 				res.Code = model.CodeInvalidTarget
-				res.Message = fmt.Sprintf("position (%d,%d) out of map bounds", pos.X, pos.Y)
+				res.Message = fmt.Sprintf("位置 (%d,%d) 超出地图范围", pos.X, pos.Y)
 				return res, nil
 			}
 			path, pathOK := computeUnitPath(ws, unit.Position, *pos, unit.ID)
 			if !pathOK {
 				res.Code = model.CodeOutOfRange
-				res.Message = fmt.Sprintf("unit %s has no walkable surface path to destination", unit.ID)
+				res.Message = fmt.Sprintf("单位 %s 没有通往目标的地表路径", unit.ID)
 				return res, nil
 			}
 			unit.ClearEngagement()
@@ -314,18 +314,18 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 			targetID := p.TargetEntityID
 			if targetID == "" {
 				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("payload.target_entity_id required for %s", order)
+				res.Message = fmt.Sprintf("%s 指令缺少 payload.target_entity_id", order)
 				return res, nil
 			}
 			friendly := resolveFriendly(ws, targetID)
 			if friendly == nil {
 				res.Code = model.CodeEntityNotFound
-				res.Message = fmt.Sprintf("target entity %s not found", targetID)
+				res.Message = fmt.Sprintf("未找到目标实体 %s", targetID)
 				return res, nil
 			}
 			if owner := friendlyOwner(ws, targetID); owner != playerID && !sameTeam(ws, playerID, owner) {
 				res.Code = model.CodeInvalidTarget
-				res.Message = "can only guard/follow own or allied entity"
+				res.Message = "只能 guard/follow 己方或盟友实体"
 				return res, nil
 			}
 			unit.ClearMovement()
@@ -339,7 +339,7 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 			}
 		default:
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("unknown order %q", order)
+			res.Message = fmt.Sprintf("未知指令 %q", order)
 			return res, nil
 		}
 		events = append(events, &model.GameEvent{
@@ -356,13 +356,13 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 	}
 	if ordered == 0 {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "no commandable units (executors do not take squad orders)"
+		res.Message = "没有可指挥的单位（执行体不接受小队指令）"
 		return res, nil
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("%d unit(s) ordered %s", ordered, order)
+	res.Message = fmt.Sprintf("%d 个单位已执行 %s 指令", ordered, order)
 	return res, events
 }
 

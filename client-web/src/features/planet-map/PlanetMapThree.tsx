@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { CatalogView, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
+import type { CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { PLANET_LAYER_LABELS, getFogState, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
 import { traceBeltStroke } from './belt-stroke';
@@ -12,6 +12,8 @@ import { legionAliveMemberIds } from './legion-model';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene } from './planet-three-scene';
+import { PlanetHoverTip } from './PlanetHoverTip';
+import { describeHover } from './hover-info';
 import type { PlanetRenderQuality } from './three/render-quality';
 import { sfx } from '@/engine/audio';
 import { subscribeBattleEvents } from '@/engine/battle-events';
@@ -32,6 +34,7 @@ function readQuality(): PlanetRenderQuality {
 interface Props {
   planet: PlanetRenderView;
   catalog?: CatalogView;
+  inventory?: ItemInventory;
   fog?: FogMapView | PlanetSceneView;
   overview?: PlanetOverviewView;
   networks?: PlanetNetworksView;
@@ -41,6 +44,8 @@ interface Props {
   onInteractTile?: (tile: TilePoint) => void;
   /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
   onContextTile?: (tile: TilePoint) => boolean;
+  /** 黑雾是否对当前玩家敌对（summary 玩家 dark_fog.hostile）。 */
+  darkFogHostile?: boolean;
 }
 
 export function PlanetMapThree(props: Props) {
@@ -72,6 +77,13 @@ export function PlanetMapThree(props: Props) {
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest,
   })));
+  // 悬停提示：hoveredTile 已由场景节流（格子变化才更新），这里只在格子/数据变化时重算文案。
+  const hoverInfo = useMemo(() => (
+    hoveredTile && interactionMode.kind !== 'build'
+      ? describeHover({ planet: props.planet, runtime: props.runtime, catalog: props.catalog, playerId: session.playerId, darkFogHostile: props.darkFogHostile ?? false }, hoveredTile)
+      : null
+  ), [hoveredTile, interactionMode.kind, props.planet, props.runtime, props.catalog, props.darkFogHostile, session.playerId]);
+  const root = useRef<HTMLDivElement>(null);
   const projectTile = useCallback((tile: { x: number; y: number }) => {
     return scene.current?.project({ x: Math.round(tile.x), y: Math.round(tile.y) }) ?? null;
   }, []);
@@ -136,13 +148,15 @@ export function PlanetMapThree(props: Props) {
         const current = latest.current;
         const store = usePlanetViewStore.getState();
         const fog = current.fog;
-        if (fog && !getFogState(fog, tile.x, tile.y).visible) {
+        // 迷雾格不能查看/建造（点击改为聚焦）；移动、进攻、军团等落点命令照常下达。
+        const kind = store.interactionMode.kind;
+        if ((kind === 'inspect' || kind === 'build') && fog && !getFogState(fog, tile.x, tile.y).visible) {
           store.requestFocus(tile);
           return;
         }
         if (store.interactionMode.kind !== 'inspect') current.onInteractTile?.(tile);
         else {
-          const selection = resolveSelectionAtTile(current.planet, tile.x, tile.y)
+          const selection = resolveSelectionAtTile(current.planet, tile.x, tile.y, store.selected)
             ?? { kind: 'tile', position: { ...tile, z: 0 } } as const;
           store.setSelected(selection);
           // 单选单位进入多选集合（右键情境指令/快捷键的命令目标）
@@ -155,8 +169,9 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
-    // Dev-only projection helper: browser tests still click the rendered canvas.
-    if (import.meta.env.DEV) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
+    // Projection helper for browser tests (dev, or production build opened with ?e2e): tests still click the rendered canvas.
+    const exposeTestHook = import.meta.env.DEV || new URLSearchParams(window.location.search).has('e2e');
+    if (exposeTestHook) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
     // 战斗事件总线 → 3D 战斗演出（弹道/命中/爆炸/残骸）；卸载退订防重复演出
     const unsubscribeBattle = subscribeBattleEvents((event) => renderer.handleBattleEvent(event));
     const timer = window.setInterval(() => {
@@ -180,14 +195,14 @@ export function PlanetMapThree(props: Props) {
       renderer.destroy();
       scene.current = null;
       latest.current.onCanvasReady?.(null);
-      if (import.meta.env.DEV) delete (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree;
+      if (exposeTestHook) delete (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree;
     };
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     scene.current?.setData({ ...props, playerId: session.playerId });
-  }, [ready, props.planet, props.fog, props.overview, props.catalog, props.runtime, props.networks, session.playerId]);
+  }, [ready, props.planet, props.fog, props.overview, props.catalog, props.inventory, props.runtime, props.networks, props.darkFogHostile, session.playerId]);
 
   useEffect(() => {
     if (ready) scene.current?.setQuality(quality);
@@ -306,7 +321,7 @@ export function PlanetMapThree(props: Props) {
     applyUnitSelection(ids);
   }
 
-  return <div className="planet-three"
+  return <div className="planet-three" ref={root}
     onPointerDownCapture={handleMarqueeDown}
     onPointerMoveCapture={handleMarqueeMove}
     onPointerUpCapture={handleMarqueeUp}
@@ -383,6 +398,7 @@ export function PlanetMapThree(props: Props) {
         }}
       />
     ) : null}
+    {!marqueeRect && <PlanetHoverTip containerRef={root} info={hoverInfo} />}
     {error && <div role="alert" className="planet-three__error">{error}</div>}
     <div className="planet-three__navigation" aria-label="3D 视角控制">
       <div>

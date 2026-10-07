@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CatalogView } from '@shared/types';
 
-import { PlanetSelectionBar } from '@/features/planet-map/PlanetSelectionBar';
+import { defaultMiningQuantity, PlanetSelectionBar } from '@/features/planet-map/PlanetSelectionBar';
 import type { PlanetRenderView } from '@/features/planet-map/model';
 import { resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionStore } from '@/stores/session';
@@ -236,7 +236,7 @@ it('blocks distant or busy mecha and offers no mining control for another player
   expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
   expect(screen.getByText('请将机甲移动到矿点 2 格内')).toBeInTheDocument();
   planet.units!['u-1'].position = { x: 1, y: 1, z: 0 };
-  planet.units!['u-1'].mecha!.job = { kind: 'mine', resource_id: 'ore-1', remaining_ticks: 5, ticks_per_batch: 10, remaining_batches: 1, completed_batches: 0, energy_per_tick: 1, state: 'running' };
+  planet.units!['u-1'].mecha!.job = { kind: 'mine', resource_id: 'ore-1', remaining_ticks: 5, ticks_per_batch: 10, remaining_batches: 1, completed_batches: 0, energy_per_batch: 3, state: 'running' };
   rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
   planet.units!['u-1'].owner_id = 'p2';
@@ -254,4 +254,13 @@ it('uses cube-sphere adjacency to allow mining across a face seam', () => {
   planet.resources![0].position = { x: 10, y: 15, z: 0 };
   render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeEnabled();
+});
+
+describe('defaultMiningQuantity', () => {
+  it('按能量可采件数取 1–10 且不超过剩余', () => {
+    expect(defaultMiningQuantity(500, 110)).toBe(10);
+    expect(defaultMiningQuantity(500, 20)).toBe(6);
+    expect(defaultMiningQuantity(2, 110)).toBe(2);
+    expect(defaultMiningQuantity(500, 0)).toBe(1);
+  });
 });

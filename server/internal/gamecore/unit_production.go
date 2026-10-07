@@ -13,35 +13,35 @@ type producePayload struct {
 func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model.Command, p producePayload) (model.CommandResult, []*model.GameEvent) {
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
-		return mechaJobFailed(model.CodeEntityNotFound, "production building not found")
+		return mechaJobFailed(model.CodeEntityNotFound, "未找到生产建筑")
 	}
 	if b.OwnerID != playerID {
-		return mechaJobFailed(model.CodeNotOwner, "cannot use another player's producer")
+		return mechaJobFailed(model.CodeNotOwner, "不能使用其他玩家的生产建筑")
 	}
 	id := p.UnitType
 	entry, ok := model.PublicWorldProduceUnitByID(id)
 	if !ok {
-		return mechaJobFailed(model.CodeValidationFailed, "unit is not publicly available for produce")
+		return mechaJobFailed(model.CodeValidationFailed, "该单位不开放生产")
 	}
 	if b.Type != entry.Producer {
-		return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("%s requires %s", id, entry.Producer))
+		return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("%s 需由 %s 生产", id, entry.Producer))
 	}
 	if entry.UnlockTech != "" && (ws.Players[playerID].Tech == nil || !ws.Players[playerID].Tech.HasTech(entry.UnlockTech)) {
-		return mechaJobFailed(model.CodeValidationFailed, "unit requires research")
+		return mechaJobFailed(model.CodeValidationFailed, "该单位需先研究解锁")
 	}
 	if len(b.UnitQueue) >= 20 {
-		return mechaJobFailed(model.CodeInvalidTarget, "production queue is full")
+		return mechaJobFailed(model.CodeInvalidTarget, "生产队列已满")
 	}
 	for _, cost := range entry.Cost {
 		if b.Storage.ItemQuantity(cost.ItemID) < cost.Quantity {
-			return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("producer needs %d %s", cost.Quantity, cost.ItemID))
+			return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("生产建筑缺少 %d 个 %s", cost.Quantity, cost.ItemID))
 		}
 	}
 	for _, cost := range entry.Cost {
 		consumeTurretAmmunition(b.Storage, cost.ItemID, cost.Quantity)
 	}
 	b.UnitQueue = append(b.UnitQueue, model.UnitProductionOrder{UnitType: model.UnitType(id), RemainingTicks: entry.ProductionTicks, TotalTicks: entry.ProductionTicks})
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("%s queued (%d ticks)", id, entry.ProductionTicks)}, []*model.GameEvent{unitProductionEvent(b)}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("%s 已加入生产队列（%d tick）", id, entry.ProductionTicks)}, []*model.GameEvent{unitProductionEvent(b)}
 }
 
 func unitProductionEvent(b *model.Building) *model.GameEvent {
@@ -97,20 +97,20 @@ func settleUnitProduction(ws *model.WorldState) []*model.GameEvent {
 func (gc *GameCore) execSetRallyPoint(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
-		return mechaJobFailed(model.CodeEntityNotFound, "producer not found")
+		return mechaJobFailed(model.CodeEntityNotFound, "未找到生产建筑")
 	}
 	if b.OwnerID != playerID {
-		return mechaJobFailed(model.CodeNotOwner, "producer belongs to another player")
+		return mechaJobFailed(model.CodeNotOwner, "生产建筑属于其他玩家")
 	}
 	def, ok := model.BuildingDefinitionByID(b.Type)
 	if !ok || !def.CanProduceUnits {
-		return mechaJobFailed(model.CodeInvalidTarget, "target is not a unit producer")
+		return mechaJobFailed(model.CodeInvalidTarget, "目标不是单位生产建筑")
 	}
 	pos := cmd.Target.Position
 	if pos == nil || !ws.InBounds(pos.X, pos.Y) || !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
-		return mechaJobFailed(model.CodeInvalidTarget, "rally point must be walkable")
+		return mechaJobFailed(model.CodeInvalidTarget, "集结点必须可通行")
 	}
 	copy := *pos
 	b.RallyPoint = &copy
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "rally point set"}, []*model.GameEvent{unitProductionEvent(b)}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "集结点已设置"}, []*model.GameEvent{unitProductionEvent(b)}
 }

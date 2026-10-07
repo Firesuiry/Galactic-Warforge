@@ -55,6 +55,7 @@ func driveBlackFogTicks(core *GameCore, ws *model.WorldState, ticks int) []*mode
 func TestE1WaveAttacksAndDestroysUndefendedBase(t *testing.T) {
 	core := newBlackFogTestCore(t, "normal")
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 
 	// 预置巢穴（跳过初始生成的随机性，直接控制场景）与一座不设防电厂。
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID}
@@ -155,6 +156,7 @@ func TestE2ThreatAccumulatesWithGeneration(t *testing.T) {
 // E3：袭击目标优先级——电厂优先于其他建筑。
 func TestE3RaidTargetPriority(t *testing.T) {
 	ws := newRTTWorld(false)
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	depot := newBuilding("depot-e3", model.BuildingTypeDepotMk1, "p1", model.Position{X: 20, Y: 20})
 	placeBuilding(ws, depot)
 	plant := newBuilding("plant-e3", model.BuildingTypeWindTurbine, "p1", model.Position{X: 30, Y: 30})

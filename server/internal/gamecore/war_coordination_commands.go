@@ -78,13 +78,13 @@ func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, c
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = "player not found"
+		res.Message = "未找到玩家"
 		return res, nil
 	}
 	coordination := player.EnsureWarCoordination()
 	if coordination.TaskForces[taskForceID] != nil {
 		res.Code = model.CodeDuplicate
-		res.Message = fmt.Sprintf("task force %s already exists", taskForceID)
+		res.Message = fmt.Sprintf("编队 %s 已存在", taskForceID)
 		return res, nil
 	}
 
@@ -94,7 +94,7 @@ func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, c
 	}
 	if !model.ValidWarTaskForceStance(stance) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("invalid task force stance: %s", stance)
+		res.Message = fmt.Sprintf("无效的编队姿态：%s", stance)
 		return res, nil
 	}
 
@@ -110,7 +110,7 @@ func (gc *GameCore) execTaskForceCreate(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("task force %s created", taskForceID)
+	res.Message = fmt.Sprintf("已创建编队 %s", taskForceID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -129,7 +129,7 @@ func (gc *GameCore) execTaskForceAssign(ws *model.WorldState, playerID string, c
 	memberKind := model.WarTaskForceMemberKind(kindRaw)
 	if !model.ValidWarTaskForceMemberKind(memberKind) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("invalid task force member kind: %s", memberKind)
+		res.Message = fmt.Sprintf("无效的编队成员类型：%s", memberKind)
 		return res, nil
 	}
 	memberIDs := p.MemberIDs
@@ -137,14 +137,14 @@ func (gc *GameCore) execTaskForceAssign(ws *model.WorldState, playerID string, c
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = "player not found"
+		res.Message = "未找到玩家"
 		return res, nil
 	}
 	coordination := player.EnsureWarCoordination()
 	taskForce := coordination.TaskForces[taskForceID]
 	if taskForce == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到编队 %s", taskForceID)
 		return res, nil
 	}
 
@@ -169,7 +169,7 @@ func (gc *GameCore) execTaskForceAssign(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("task force %s assigned %d members", taskForceID, len(memberIDs))
+	res.Message = fmt.Sprintf("编队 %s 已分配 %d 名成员", taskForceID, len(memberIDs))
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -188,19 +188,19 @@ func (gc *GameCore) execTaskForceSetStance(ws *model.WorldState, playerID string
 	stance := model.WarTaskForceStance(stanceRaw)
 	if !model.ValidWarTaskForceStance(stance) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("invalid task force stance: %s", stance)
+		res.Message = fmt.Sprintf("无效的编队姿态：%s", stance)
 		return res, nil
 	}
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到编队 %s", taskForceID)
 		return res, nil
 	}
 	taskForce := player.WarCoordination.TaskForces[taskForceID]
 	if taskForce == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到编队 %s", taskForceID)
 		return res, nil
 	}
 	taskForce.Stance = stance
@@ -208,7 +208,7 @@ func (gc *GameCore) execTaskForceSetStance(ws *model.WorldState, playerID string
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("task force %s stance set to %s", taskForceID, stance)
+	res.Message = fmt.Sprintf("编队 %s 姿态已设为 %s", taskForceID, stance)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -226,13 +226,13 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到编队 %s", taskForceID)
 		return res, nil
 	}
 	taskForce := player.WarCoordination.TaskForces[taskForceID]
 	if taskForce == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("task force %s not found", taskForceID)
+		res.Message = fmt.Sprintf("未找到编队 %s", taskForceID)
 		return res, nil
 	}
 
@@ -245,7 +245,7 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 		deployment.GroundOrder = p.GroundOrder
 		if !model.ValidGroundTaskForceOrder(deployment.GroundOrder) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("invalid ground order: %s", p.GroundOrder)
+			res.Message = fmt.Sprintf("无效的地面指令：%s", p.GroundOrder)
 			return res, nil
 		}
 	}
@@ -253,20 +253,20 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 		deployment.OrbitalSupportMode = p.SupportMode
 		if !model.ValidOrbitalSupportMode(deployment.OrbitalSupportMode) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("invalid orbital support mode: %s", p.SupportMode)
+			res.Message = fmt.Sprintf("无效的轨道支援模式：%s", p.SupportMode)
 			return res, nil
 		}
 	}
 	if deployment.SystemID == "" && deployment.PlanetID == "" && deployment.Position == nil && deployment.FrontlineID == "" && deployment.GroundOrder == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "task_force_deploy requires at least one target field"
+		res.Message = "task_force_deploy 至少需要一个目标字段"
 		return res, nil
 	}
 	if theaterID := p.TheaterID; theaterID != "" {
 		theater := player.WarCoordination.Theaters[theaterID]
 		if theater == nil {
 			res.Code = model.CodeEntityNotFound
-			res.Message = fmt.Sprintf("theater %s not found", theaterID)
+			res.Message = fmt.Sprintf("未找到战区 %s", theaterID)
 			return res, nil
 		}
 		taskForce.TheaterID = theaterID
@@ -276,7 +276,7 @@ func (gc *GameCore) execTaskForceDeploy(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("task force %s deployment updated", taskForceID)
+	res.Message = fmt.Sprintf("编队 %s 部署已更新", taskForceID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -294,13 +294,13 @@ func (gc *GameCore) execTheaterCreate(ws *model.WorldState, playerID string, cmd
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = "player not found"
+		res.Message = "未找到玩家"
 		return res, nil
 	}
 	coordination := player.EnsureWarCoordination()
 	if coordination.Theaters[theaterID] != nil {
 		res.Code = model.CodeDuplicate
-		res.Message = fmt.Sprintf("theater %s already exists", theaterID)
+		res.Message = fmt.Sprintf("战区 %s 已存在", theaterID)
 		return res, nil
 	}
 	theater := &model.WarTheater{
@@ -314,7 +314,7 @@ func (gc *GameCore) execTheaterCreate(ws *model.WorldState, playerID string, cmd
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("theater %s created", theaterID)
+	res.Message = fmt.Sprintf("已创建战区 %s", theaterID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -333,19 +333,19 @@ func (gc *GameCore) execTheaterDefineZone(ws *model.WorldState, playerID string,
 	zoneType := model.WarTheaterZoneType(zoneTypeRaw)
 	if !model.ValidWarTheaterZoneType(zoneType) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("invalid theater zone type: %s", zoneType)
+		res.Message = fmt.Sprintf("无效的战区区域类型：%s", zoneType)
 		return res, nil
 	}
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("theater %s not found", theaterID)
+		res.Message = fmt.Sprintf("未找到战区 %s", theaterID)
 		return res, nil
 	}
 	theater := player.WarCoordination.Theaters[theaterID]
 	if theater == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("theater %s not found", theaterID)
+		res.Message = fmt.Sprintf("未找到战区 %s", theaterID)
 		return res, nil
 	}
 
@@ -370,7 +370,7 @@ func (gc *GameCore) execTheaterDefineZone(ws *model.WorldState, playerID string,
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("theater %s zone %s updated", theaterID, zoneType)
+	res.Message = fmt.Sprintf("战区 %s 的区域 %s 已更新", theaterID, zoneType)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -389,13 +389,13 @@ func (gc *GameCore) execTheaterSetObjective(ws *model.WorldState, playerID strin
 	player := ws.Players[playerID]
 	if player == nil || player.WarCoordination == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("theater %s not found", theaterID)
+		res.Message = fmt.Sprintf("未找到战区 %s", theaterID)
 		return res, nil
 	}
 	theater := player.WarCoordination.Theaters[theaterID]
 	if theater == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("theater %s not found", theaterID)
+		res.Message = fmt.Sprintf("未找到战区 %s", theaterID)
 		return res, nil
 	}
 
@@ -409,7 +409,7 @@ func (gc *GameCore) execTheaterSetObjective(ws *model.WorldState, playerID strin
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("theater %s objective updated", theaterID)
+	res.Message = fmt.Sprintf("战区 %s 目标已更新", theaterID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
@@ -433,19 +433,19 @@ func (gc *GameCore) requireTaskForceMemberOwnership(ws *model.WorldState, player
 				continue
 			}
 			if squad.OwnerID != playerID {
-				return fmt.Errorf("combat squad %s is not owned by %s", entityID, playerID)
+				return fmt.Errorf("作战小队 %s 不属于 %s", entityID, playerID)
 			}
 			return nil
 		}
-		return fmt.Errorf("combat squad %s not found", entityID)
+		return fmt.Errorf("未找到作战小队 %s", entityID)
 	case model.WarTaskForceMemberKindFleet:
 		_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, entityID)
 		if fleet == nil {
-			return fmt.Errorf("fleet %s not found", entityID)
+			return fmt.Errorf("未找到舰队 %s", entityID)
 		}
 		return nil
 	default:
-		return fmt.Errorf("invalid task force member kind: %s", kind)
+		return fmt.Errorf("无效的编队成员类型：%s", kind)
 	}
 }
 

@@ -5,91 +5,91 @@ form_containers:
   liquid: liquid_tank
 items:
   - id: liquid_tank
-    name: Liquid Tank
+    name: 液体罐
     category: container
     form: solid
     stack_limit: 20
     unit_volume: 6
   - id: gas_tank
-    name: Gas Tank
+    name: 气体罐
     category: container
     form: solid
     stack_limit: 20
     unit_volume: 6
   - id: iron_ore
-    name: Iron Ore
+    name: 铁矿
     category: ore
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: copper_ore
-    name: Copper Ore
+    name: 铜矿
     category: ore
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: stone_ore
-    name: Stone
+    name: 石矿
     category: ore
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: silicon_ore
-    name: Silicon Ore
+    name: 硅石
     category: ore
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: titanium_ore
-    name: Titanium Ore
+    name: 钛石
     category: ore
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: coal
-    name: Coal
+    name: 煤矿
     category: ore
     form: solid
     stack_limit: 100
     unit_volume: 1
     mecha_fuel_energy: 25
   - id: fire_ice
-    name: Fire Ice
+    name: 可燃冰
     category: ore
     form: solid
     stack_limit: 50
     unit_volume: 1
     is_rare: true
   - id: fractal_silicon
-    name: Fractal Silicon
+    name: 分形硅石
     category: ore
     form: solid
     stack_limit: 50
     unit_volume: 1
     is_rare: true
   - id: grating_crystal
-    name: Grating Crystal
+    name: 光栅石
     category: ore
     form: solid
     stack_limit: 50
     unit_volume: 1
     is_rare: true
   - id: monopole_magnet
-    name: Monopole Magnet
+    name: 单极磁石
     category: ore
     form: solid
     stack_limit: 50
     unit_volume: 1
     is_rare: true
   - id: crude_oil
-    name: Crude Oil
+    name: 原油
     category: material
     form: liquid
     stack_limit: 1000
     unit_volume: 1
     container_id: liquid_tank
   - id: refined_oil
-    name: Refined Oil
+    name: 精炼油
     category: material
     form: liquid
     stack_limit: 1000
@@ -97,21 +97,21 @@ items:
     container_id: liquid_tank
     mecha_fuel_energy: 40
   - id: water
-    name: Water
+    name: 水
     category: material
     form: liquid
     stack_limit: 1000
     unit_volume: 1
     container_id: liquid_tank
   - id: sulfuric_acid
-    name: Sulfuric Acid
+    name: 硫酸
     category: material
     form: liquid
     stack_limit: 1000
     unit_volume: 1
     container_id: liquid_tank
   - id: hydrogen
-    name: Hydrogen
+    name: 氢
     category: material
     form: gas
     stack_limit: 1000
@@ -119,509 +119,509 @@ items:
     container_id: gas_tank
     mecha_fuel_energy: 30
   - id: deuterium
-    name: Deuterium
+    name: 重氢
     category: material
     form: gas
     stack_limit: 1000
     unit_volume: 1
     container_id: gas_tank
   - id: iron_ingot
-    name: Iron Ingot
+    name: 铁块
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: copper_ingot
-    name: Copper Ingot
+    name: 铜块
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: stone_brick
-    name: Stone Brick
+    name: 石材
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: glass
-    name: Glass
+    name: 玻璃
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: silicon_ingot
-    name: Silicon Ingot
+    name: 高纯硅块
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: titanium_ingot
-    name: Titanium Ingot
+    name: 钛块
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: graphene
-    name: Graphene
+    name: 石墨烯
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: carbon_nanotube
-    name: Carbon Nanotube
+    name: 碳纳米管
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: crystal_silicon
-    name: Crystal Silicon
+    name: 晶格硅
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: plastic
-    name: Plastic
+    name: 塑料
     category: material
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: magnet
-    name: Magnet
+    name: 磁铁
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: steel
-    name: Steel
+    name: 钢材
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: diamond
-    name: Diamond
+    name: 金刚石
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: organic_crystal
-    name: Organic Crystal
+    name: 有机晶体
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: engine
-    name: Engine
+    name: 发动机
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: electromagnetic_turbine
-    name: Electromagnetic Turbine
+    name: 电磁涡轮
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: super_magnetic_ring
-    name: Super-Magnetic Ring
+    name: 超级磁场环
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: prism
-    name: Prism
+    name: 棱镜
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: plasma_exciter
-    name: Plasma Exciter
+    name: 电浆激发器
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: combustible_unit
-    name: Combustible Unit
+    name: 燃烧单元
     category: fuel
     form: solid
     stack_limit: 100
     unit_volume: 1
     mecha_fuel_energy: 40
   - id: shell_set
-    name: Shell Set
+    name: 炮弹组
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: titanium_ammo
-    name: Titanium Ammo Box
+    name: 钛化弹箱
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: gear
-    name: Gear
+    name: 齿轮
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: logistics_bot
-    name: Logistics Bot
+    name: 配送运输机
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: logistics_drone
-    name: Logistics Drone
+    name: 物流运输机
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 1
   - id: logistics_vessel
-    name: Logistics Vessel
+    name: 星际物流运输船
     category: component
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: motor
-    name: Motor
+    name: 电动机
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: magnetic_coil
-    name: Magnetic Coil
+    name: 磁线圈
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: circuit_board
-    name: Circuit Board
+    name: 电路板
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: microcrystalline_component
-    name: Microcrystalline Component
+    name: 微晶元件
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: processor
-    name: Processor
+    name: 处理器
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: titanium_crystal
-    name: Titanium Crystal
+    name: 钛晶石
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: titanium_alloy
-    name: Titanium Alloy
+    name: 钛合金
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: frame_material
-    name: Frame Material
+    name: 框架材料
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: quantum_chip
-    name: Quantum Chip
+    name: 量子芯片
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 1
   - id: photon_combiner
-    name: Photon Combiner
+    name: 光子合并器
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 2
   - id: critical_photon
-    name: Critical Photon
+    name: 临界光子
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 1
   - id: antimatter
-    name: Antimatter
+    name: 反物质
     category: material
     form: solid
     stack_limit: 50
     unit_volume: 1
   - id: particle_container
-    name: Particle Container
+    name: 粒子容器
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 2
   - id: annihilation_constraint_sphere
-    name: Annihilation Constraint Sphere
+    name: 湮灭约束球
     category: component
     form: solid
     stack_limit: 20
     unit_volume: 2
   - id: strange_matter
-    name: Strange Matter
+    name: 奇异物质
     category: material
     form: solid
     stack_limit: 20
     unit_volume: 2
   - id: space_warper
-    name: Space Warper
+    name: 空间翘曲器
     category: component
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: energetic_graphite
-    name: Energetic Graphite
+    name: 高能石墨
     category: fuel
     form: solid
     stack_limit: 100
     unit_volume: 1
     mecha_fuel_energy: 50
   - id: hydrogen_fuel_rod
-    name: Hydrogen Fuel Rod
+    name: 液氢燃料棒
     category: fuel
     form: solid
     stack_limit: 50
     unit_volume: 2
     mecha_fuel_energy: 100
   - id: deuterium_fuel_rod
-    name: Deuterium Fuel Rod
+    name: 氘核燃料棒
     category: fuel
     form: solid
     stack_limit: 50
     unit_volume: 2
     mecha_fuel_energy: 250
   - id: antimatter_fuel_rod
-    name: Antimatter Fuel Rod
+    name: 反物质燃料棒
     category: fuel
     form: solid
     stack_limit: 20
     unit_volume: 3
     mecha_fuel_energy: 1000
   - id: proliferator_mk1
-    name: Proliferator Mk.I
+    name: 增产剂 Mk.I
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: proliferator_mk2
-    name: Proliferator Mk.II
+    name: 增产剂 Mk.II
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: proliferator_mk3
-    name: Proliferator Mk.III
+    name: 增产剂 Mk.III
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: electromagnetic_matrix
-    name: Electromagnetic Matrix
+    name: 电磁矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: energy_matrix
-    name: Energy Matrix
+    name: 能量矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: structure_matrix
-    name: Structure Matrix
+    name: 结构矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: information_matrix
-    name: Information Matrix
+    name: 信息矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: gravity_matrix
-    name: Gravity Matrix
+    name: 引力矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: dark_fog_matrix
-    name: Dark Fog Matrix
+    name: 黑雾矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: universe_matrix
-    name: Universe Matrix
+    name: 宇宙矩阵
     category: matrix
     form: solid
     stack_limit: 20
     unit_volume: 1
   - id: ammo_bullet
-    name: Bullet
+    name: 子弹
     category: ammo
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: ammo_missile
-    name: Missile
+    name: 导弹组
     category: ammo
     form: solid
     stack_limit: 50
     unit_volume: 3
   - id: plasma_capsule
-    name: Plasma Capsule
+    name: 等离子胶囊
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: antimatter_capsule
-    name: Antimatter Capsule
+    name: 反物质胶囊
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: gravity_missile
-    name: Gravity Missile
+    name: 引力导弹组
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: precision_drone
-    name: Precision Drone Payload
+    name: 精准无人机载荷
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 2
   - id: solar_sail
-    name: Solar Sail
+    name: 太阳帆
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: small_carrier_rocket
-    name: Small Carrier Rocket
+    name: 小型运载火箭
     category: ammo
     form: solid
     stack_limit: 10
     unit_volume: 5
   - id: kimberlite_ore
-    name: Kimberlite Ore
+    name: 金伯利矿石
     category: ore
     form: solid
     stack_limit: 50
     unit_volume: 1
     is_rare: true
   - id: spiniform_stalagmite_crystal
-    name: Stalagmite Crystal
+    name: 刺笋结晶
     category: ore
     form: solid
     stack_limit: 50
     unit_volume: 1
     is_rare: true
   - id: log
-    name: Log
+    name: 木材
     category: fuel
     form: solid
     stack_limit: 100
     unit_volume: 1
     mecha_fuel_energy: 15
   - id: plant_fuel
-    name: Plant Fuel
+    name: 植物燃料
     category: fuel
     form: solid
     stack_limit: 500
     unit_volume: 1
     mecha_fuel_energy: 5
   - id: titanium_glass
-    name: Titanium Glass
+    name: 钛化玻璃
     category: material
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: plane_filter
-    name: Plane Filter
+    name: 位面过滤器
     category: component
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: particle_broadband
-    name: Particle Broadband
+    name: 粒子宽带
     category: component
     form: solid
     stack_limit: 200
     unit_volume: 1
   - id: reinforced_thruster
-    name: Reinforced Thruster
+    name: 加力推进器
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: graviton_lens
-    name: Graviton Lens
+    name: 引力透镜
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: casimir_crystal
-    name: Casimir Crystal
+    name: 卡西米尔晶体
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: dyson_sphere_component
-    name: Dyson Sphere Component
+    name: 戴森球组件
     category: component
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: foundation_supply
-    name: Foundation
+    name: 地基
     category: material
     form: solid
     stack_limit: 1000
     unit_volume: 1
   - id: supersonic_missile_set
-    name: Supersonic Missile Set
+    name: 超音速导弹组
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: crystal_shell_set
-    name: Crystal Shell Set
+    name: 晶石炮弹组
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: jamming_capsule
-    name: Jamming Capsule
+    name: 干扰胶囊
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: suppressing_capsule
-    name: Suppressing Capsule
+    name: 压制胶囊
     category: ammo
     form: solid
     stack_limit: 100
     unit_volume: 1
   - id: accumulator
-    name: Accumulator
+    name: 蓄电器
     category: component
     form: solid
     stack_limit: 50
     unit_volume: 2
   - id: accumulator_full
-    name: Accumulator (Full)
+    name: 蓄电器（满）
     category: component
     form: solid
     stack_limit: 50

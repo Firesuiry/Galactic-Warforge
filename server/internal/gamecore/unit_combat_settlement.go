@@ -46,21 +46,35 @@ func resolveCombatTarget(ws *model.WorldState, id string) *unitCombatTarget {
 		return &unitCombatTarget{kind: "building", id: id, pos: b.Position, ownerID: b.OwnerID, building: b}
 	}
 	if force := findEnemyForceByID(ws, id); force != nil && force.Strength > 0 {
-		return &unitCombatTarget{kind: "enemy_force", id: id, pos: force.Position, force: force}
+		return &unitCombatTarget{kind: "enemy_force", id: id, pos: force.Position, ownerID: model.DarkFogOwnerID, force: force}
 	}
 	return nil
 }
 
-// hostile 判定目标归属对攻击方是否为敌对（含黑雾与全体玩家的互相敌对）。
+// hostile 判定双方是否处于敌对（自动索敌/自动还击的口径）。
+// 玩家之间按队伍敌对；黑雾与某玩家只在黑雾被该玩家激怒期间互相敌对。
 func hostile(ws *model.WorldState, attackerOwner, targetOwner string) bool {
-	if targetOwner == "" {
-		// 黑雾巢穴（EnemyForce 无归属）对所有玩家敌对——但不包括黑雾自己的单位。
-		return attackerOwner != model.DarkFogOwnerID
-	}
 	if attackerOwner == targetOwner {
 		return false
 	}
+	if attackerOwner == model.DarkFogOwnerID {
+		return model.DarkFogHostileTo(ws, targetOwner)
+	}
+	if targetOwner == model.DarkFogOwnerID {
+		return model.DarkFogHostileTo(ws, attackerOwner)
+	}
+	if targetOwner == "" {
+		return false
+	}
 	return !sameTeam(ws, attackerOwner, targetOwner)
+}
+
+// canAttack 显式攻击口径：玩家可以随时主动攻击中立黑雾（攻击即激怒），其余同 hostile。
+func canAttack(ws *model.WorldState, attackerOwner, targetOwner string) bool {
+	if targetOwner == model.DarkFogOwnerID && attackerOwner != model.DarkFogOwnerID {
+		return true
+	}
+	return hostile(ws, attackerOwner, targetOwner)
 }
 
 // settleUnitCombat 每 tick 结算一次世界单位交战。
@@ -97,14 +111,13 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		return resumeFormation(ws, unit)
 	}
 	if unit.Mecha != nil {
-		// 执行体（玩家机甲）是英雄单位：不自动索敌不还击，只对显式目标持续开火，
-		// 保持玩家对能量经济的掌控（I16 前沿用此边界）。
+		// 执行体（玩家机甲）是英雄单位：不追击，空闲时只在射程内自动还击/索敌。
 		return settleMechaAutoFire(ws, unit)
 	}
 	var events []*model.GameEvent
 
 	target := resolveCombatTarget(ws, unit.AttackTarget)
-	if target != nil && (!hostile(ws, unit.OwnerID, target.ownerID) || !unitCanTarget(unit, target)) {
+	if target != nil && (!canAttack(ws, unit.OwnerID, target.ownerID) || !unitCanTarget(unit, target)) {
 		target = nil
 		unit.AttackTarget = ""
 	}
@@ -364,8 +377,8 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 		return best
 	}
 	// 黑雾强度点不在瓦片索引中，线性扫描（巢穴数量少，此处可以做精确距离比较）。
-	// 黑雾单位不以自家巢穴为目标。
-	if ws.EnemyForces != nil && unit.OwnerID != model.DarkFogOwnerID {
+	// 只在黑雾对该玩家敌对时自动索敌巢穴（黑雾单位不以自家巢穴为目标）。
+	if ws.EnemyForces != nil && hostile(ws, unit.OwnerID, model.DarkFogOwnerID) {
 		bestForceDist := maxInt32
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
@@ -374,7 +387,7 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 			}
 			d := ws.SurfaceDistance(unit.Position, force.Position)
 			if d <= maxDist && d < bestForceDist && bestRank > 1 {
-				best = &unitCombatTarget{kind: "enemy_force", id: force.ID, pos: force.Position, force: force}
+				best = &unitCombatTarget{kind: "enemy_force", id: force.ID, pos: force.Position, ownerID: model.DarkFogOwnerID, force: force}
 				bestRank = 1
 				bestForceDist = d
 			}
@@ -385,18 +398,45 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 
 const maxInt32 = int(^uint32(0) >> 1)
 
-// settleMechaAutoFire 执行体对显式攻击目标的持续开火（不索敌、不追击、不还击）。
+// settleMechaAutoFire 执行体（玩家机甲）交战：
+//   - 显式攻击目标：射程内持续开火（不追击）；
+//   - 空闲时（无移动路径、无采集任务）：先还击射程内的最近攻击者，再打射程内最近的敌对单位
+//     （敌方玩家单位、对本玩家敌对的黑雾）。自动开火不追击、不写 AttackTarget，
+//     并保留两发的能量，避免把机甲打到无法行动。
 func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
-	if unit.AttackTarget == "" {
-		return nil
-	}
-	target := resolveCombatTarget(ws, unit.AttackTarget)
-	if target == nil || !unitCanTarget(unit, target) || (target.ownerID != "" && !hostile(ws, unit.OwnerID, target.ownerID)) {
-		unit.AttackTarget = ""
-		return nil
-	}
-	if ws.SurfaceDistance(unit.Position, target.pos) > unit.AttackRange {
-		return nil
+	explicit := unit.AttackTarget != ""
+	var target *unitCombatTarget
+	if explicit {
+		target = resolveCombatTarget(ws, unit.AttackTarget)
+		if target == nil || !unitCanTarget(unit, target) || !canAttack(ws, unit.OwnerID, target.ownerID) {
+			unit.AttackTarget = ""
+			return nil
+		}
+		if ws.SurfaceDistance(unit.Position, target.pos) > unit.AttackRange {
+			return nil
+		}
+	} else {
+		if unit.HasPath() || (unit.Mecha.Job != nil && unit.Mecha.Job.ResourceID != "") {
+			return nil
+		}
+		if unit.Mecha.Energy < 2*unit.Mecha.AttackEnergyCost {
+			return nil
+		}
+		if unit.LastAttackerID != "" {
+			counter := resolveCombatTarget(ws, unit.LastAttackerID)
+			if counter != nil && unitCanTarget(unit, counter) && hostile(ws, unit.OwnerID, counter.ownerID) &&
+				ws.SurfaceDistance(unit.Position, counter.pos) <= unit.AttackRange {
+				target = counter
+			} else {
+				unit.LastAttackerID = ""
+			}
+		}
+		if target == nil {
+			target = nearestHostileInRange(ws, unit, unit.AttackRange, false)
+		}
+		if target == nil {
+			return nil
+		}
 	}
 	if unit.LastAttackTick > 0 && ws.Tick-unit.LastAttackTick < unit.AttackCooldownTick {
 		return nil
@@ -418,6 +458,9 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 // fireAtTarget 对目标开火并结算伤害（含死亡处理与事件）。
 func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarget) []*model.GameEvent {
 	var events []*model.GameEvent
+	if target.ownerID == model.DarkFogOwnerID {
+		events = append(events, provokeDarkFog(ws, unit.OwnerID)...)
+	}
 	attack := int(float64(unit.Attack) * model.UnitAmmoDamageMultiplier(unit))
 	switch target.kind {
 	case "unit":
@@ -521,7 +564,7 @@ func settleEnemyForceRetaliation(ws *model.WorldState) []*model.GameEvent {
 		for _, tile := range ws.SurfaceDisc(force.Position, enemyForceStrikeRange) {
 			for _, unitID := range ws.TileUnits[model.TileKey(tile.X, tile.Y)] {
 				u := ws.Units[unitID]
-				if u == nil || u.HP <= 0 || u.OwnerID == model.DarkFogOwnerID {
+				if u == nil || u.HP <= 0 || !hostile(ws, model.DarkFogOwnerID, u.OwnerID) {
 					continue
 				}
 				victim = u
@@ -581,7 +624,8 @@ func killUnit(ws *model.WorldState, unit *model.Unit, killerID, killerOwnerID, s
 		VisibilityScope: "all",
 		Payload: map[string]any{
 			"entity_id":   unit.ID,
-			"entity_type": "unit",
+			"entity_kind": "unit",
+			"entity_type": string(unit.Type),
 			"owner_id":    unit.OwnerID,
 			"killed_by":   killerID,
 			"source":      source,
@@ -602,7 +646,8 @@ func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, ki
 		VisibilityScope: "all",
 		Payload: map[string]any{
 			"entity_id":   b.ID,
-			"entity_type": "building",
+			"entity_kind": "building",
+			"entity_type": string(b.Type),
 			"owner_id":    b.OwnerID,
 			"killed_by":   killerID,
 			"source":      source,

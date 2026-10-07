@@ -379,7 +379,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	player := ws.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "player not found"
+		res.Message = "未找到玩家"
 		return res, nil
 	}
 
@@ -392,13 +392,13 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	for _, r := range player.Tech.ResearchQueue {
 		if r.TechID == techID && r.State == model.ResearchPending {
 			res.Code = model.CodeDuplicate
-			res.Message = "tech already in research queue"
+			res.Message = "科技已在研究队列中"
 			return res, nil
 		}
 	}
 	if player.Tech.CurrentResearch != nil && player.Tech.CurrentResearch.TechID == techID {
 		res.Code = model.CodeDuplicate
-		res.Message = "tech already being researched"
+		res.Message = "科技正在研究中"
 		return res, nil
 	}
 
@@ -406,14 +406,14 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	def, ok := model.TechDefinitionByID(techID)
 	if !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unknown tech: %s", techID)
+		res.Message = fmt.Sprintf("未知科技：%s", techID)
 		return res, nil
 	}
 
 	// Check prerequisites
 	if !player.Tech.HasPrerequisites(def) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "prerequisites not met"
+		res.Message = "前置科技未满足"
 		return res, nil
 	}
 
@@ -421,7 +421,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	if def.MaxLevel == 0 {
 		if player.Tech.HasTech(techID) {
 			res.Code = model.CodeValidationFailed
-			res.Message = "tech already completed"
+			res.Message = "科技已完成"
 			return res, nil
 		}
 	} else {
@@ -432,7 +432,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 		if def.MaxLevel > 0 && currentLevel >= def.MaxLevel {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("tech at max level %d", def.MaxLevel)
+			res.Message = fmt.Sprintf("科技已达最高等级 %d", def.MaxLevel)
 			return res, nil
 		}
 	}
@@ -440,7 +440,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	labs := runningResearchLabs(gc.worlds, playerID)
 	if len(labs) == 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = "at least one running research lab is required"
+		res.Message = "需要至少一台运行中的研究站"
 		return res, nil
 	}
 	storageOf := researchLabStorageResolver(gc.worlds, labs)
@@ -449,7 +449,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	// the trigger items; before that they stay invisible.
 	if def.Hidden && !hiddenTechDiscovered(player, labs, def.CostForLevel(player.Tech.CompletedTechs[techID]+1), storageOf) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("tech %s is hidden; obtain its trigger items to reveal it", techID)
+		res.Message = fmt.Sprintf("科技 %s 尚未显现，需先获得其触发物品", techID)
 		return res, nil
 	}
 
@@ -471,7 +471,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 		if total <= 0 {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("missing %s in research labs", cost.ItemID)
+			res.Message = fmt.Sprintf("研究站中缺少 %s", cost.ItemID)
 			return res, nil
 		}
 	}
@@ -505,7 +505,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("research %s queued (cost: %d)", def.Name, totalCost)
+	res.Message = fmt.Sprintf("研究 %s 已加入队列（消耗：%d）", def.Name, totalCost)
 	return res, nil
 }
 
@@ -518,7 +518,7 @@ func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cm
 	player := ws.Players[playerID]
 	if player == nil || player.Tech == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "no active research"
+		res.Message = "当前没有进行中的研究"
 		return res, nil
 	}
 
@@ -532,7 +532,7 @@ func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cm
 
 		res.Status = model.StatusExecuted
 		res.Code = model.CodeOK
-		res.Message = fmt.Sprintf("research %s cancelled", techID)
+		res.Message = fmt.Sprintf("研究 %s 已取消", techID)
 		return res, nil
 	}
 
@@ -542,13 +542,13 @@ func (gc *GameCore) execCancelResearch(ws *model.WorldState, playerID string, cm
 			player.Tech.ResearchQueue = append(player.Tech.ResearchQueue[:i], player.Tech.ResearchQueue[i+1:]...)
 			res.Status = model.StatusExecuted
 			res.Code = model.CodeOK
-			res.Message = fmt.Sprintf("research %s removed from queue", techID)
+			res.Message = fmt.Sprintf("研究 %s 已移出队列", techID)
 			return res, nil
 		}
 	}
 
 	res.Code = model.CodeValidationFailed
-	res.Message = "research not found"
+	res.Message = "未找到该研究"
 	return res, nil
 }
 

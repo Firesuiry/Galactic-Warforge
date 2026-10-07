@@ -315,7 +315,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if !ok {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueUnknownBase,
-			Message: "blueprint base frame or hull not found",
+			Message: "未找到蓝图底盘（机架或船体）",
 		})
 		return result
 	}
@@ -330,7 +330,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 		if slot.Required && installed[slot.ID] == "" {
 			result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 				Code:    WarBlueprintIssueRequiredSlotMissing,
-				Message: "required slot missing component",
+				Message: "必需槽位缺少组件",
 				SlotID:  slot.ID,
 			})
 		}
@@ -342,7 +342,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 		if !componentOK {
 			result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 				Code:        WarBlueprintIssueUnknownComponent,
-				Message:     "component not found in authoritative warfare catalog",
+				Message:     "组件不在权威军工目录中",
 				SlotID:      slot.SlotID,
 				ComponentID: slot.ComponentID,
 			})
@@ -363,7 +363,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 		if !slotOK || slotSpec.Category != component.Category {
 			result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 				Code:        WarBlueprintIssueHardpointMismatch,
-				Message:     "component category does not match slot hardpoint",
+				Message:     "组件类别与槽位挂点不匹配",
 				SlotID:      slot.SlotID,
 				ComponentID: slot.ComponentID,
 			})
@@ -371,7 +371,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 		if !containsUnitDomain(component.SupportedDomains, blueprint.Domain) {
 			result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 				Code:        WarBlueprintIssueDomainMismatch,
-				Message:     "component does not support blueprint domain",
+				Message:     "组件不支持该蓝图领域",
 				SlotID:      slot.SlotID,
 				ComponentID: slot.ComponentID,
 			})
@@ -382,7 +382,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if usage.PowerOutput <= 0 || usage.PowerDraw > usage.PowerOutput {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssuePowerBudgetExceeded,
-			Message: "component draw exceeds available reactor output",
+			Message: "组件功耗超出反应堆可用输出",
 			Actual:  usage.PowerDraw,
 			Limit:   usage.PowerOutput,
 		})
@@ -390,7 +390,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.PeakDraw > 0 && usage.PowerDraw > limits.PeakDraw {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssuePowerBudgetExceeded,
-			Message: "component draw exceeds hull peak power budget",
+			Message: "组件功耗超出船体峰值功率预算",
 			Actual:  usage.PowerDraw,
 			Limit:   limits.PeakDraw,
 		})
@@ -398,7 +398,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.VolumeCapacity > 0 && usage.Volume > limits.VolumeCapacity {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueVolumeBudgetExceeded,
-			Message: "component volume exceeds chassis capacity",
+			Message: "组件体积超出底盘容量",
 			Actual:  usage.Volume,
 			Limit:   limits.VolumeCapacity,
 		})
@@ -406,7 +406,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.MassCapacity > 0 && usage.Mass > limits.MassCapacity {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueMassBudgetExceeded,
-			Message: "component mass exceeds chassis capacity",
+			Message: "组件质量超出底盘容量",
 			Actual:  usage.Mass,
 			Limit:   limits.MassCapacity,
 		})
@@ -414,7 +414,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.RigidityCapacity > 0 && usage.RigidityLoad > limits.RigidityCapacity {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueRigidityBudgetExceeded,
-			Message: "component rigidity load exceeds frame budget",
+			Message: "组件刚性负载超出机架预算",
 			Actual:  usage.RigidityLoad,
 			Limit:   limits.RigidityCapacity,
 		})
@@ -422,7 +422,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.HeatCapacity > 0 && usage.HeatLoad > limits.HeatCapacity {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueHeatDissipationInsufficient,
-			Message: "component heat exceeds dissipation capacity",
+			Message: "组件发热超出散热能力",
 			Actual:  usage.HeatLoad,
 			Limit:   limits.HeatCapacity,
 		})
@@ -430,7 +430,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.MaintenanceLimit > 0 && usage.Maintenance > limits.MaintenanceLimit {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueMaintenanceBudgetExceeded,
-			Message: "component maintenance exceeds chassis sustainment budget",
+			Message: "组件维护需求超出底盘保障预算",
 			Actual:  usage.Maintenance,
 			Limit:   limits.MaintenanceLimit,
 		})
@@ -442,7 +442,7 @@ func ValidateWarBlueprint(index WarBlueprintCatalogIndex, blueprint WarBlueprint
 	if limits.SignalCapacity > 0 && netSignature > limits.SignalCapacity {
 		result.Issues = append(result.Issues, WarBlueprintValidationIssue{
 			Code:    WarBlueprintIssueSignatureBudgetExceeded,
-			Message: "component signal profile exceeds signature budget",
+			Message: "组件信号特征超出信号预算",
 			Actual:  netSignature,
 			Limit:   limits.SignalCapacity,
 		})

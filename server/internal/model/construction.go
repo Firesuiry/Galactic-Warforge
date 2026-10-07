@@ -101,29 +101,29 @@ func (s ConstructionState) CanTransition(next ConstructionState) bool {
 // Enqueue inserts a task into the queue and reserves its tile.
 func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) error {
 	if q == nil {
-		return fmt.Errorf("construction queue is nil")
+		return fmt.Errorf("施工队列不存在")
 	}
 	q.EnsureInit()
 	if task == nil {
-		return fmt.Errorf("construction task is nil")
+		return fmt.Errorf("施工任务不存在")
 	}
 	if task.ID == "" {
-		return fmt.Errorf("construction task id required")
+		return fmt.Errorf("施工任务缺少 id")
 	}
 	if task.PlayerID == "" {
-		return fmt.Errorf("construction task player_id required")
+		return fmt.Errorf("施工任务缺少 player_id")
 	}
 	if task.BuildingType == "" {
-		return fmt.Errorf("construction task building_type required")
+		return fmt.Errorf("施工任务缺少 building_type")
 	}
 	if _, exists := q.Tasks[task.ID]; exists {
-		return fmt.Errorf("construction task %s already exists", task.ID)
+		return fmt.Errorf("施工任务 %s 已存在", task.ID)
 	}
 	if task.State == "" {
 		task.State = ConstructionPending
 	}
 	if task.State != ConstructionPending {
-		return fmt.Errorf("construction task %s must start in pending state", task.ID)
+		return fmt.Errorf("施工任务 %s 必须以 pending 状态开始", task.ID)
 	}
 	if task.BuildingType == BuildingTypeLogisticsDistributor {
 		if _, err := DistributorPlacementHost(ws, task.PlayerID, task.Position, ""); err != nil {
@@ -141,16 +141,16 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 	for _, p := range tiles {
 		key := TileKey(p.X, p.Y)
 		if existing := q.ReservedTiles[key]; existing != "" {
-			return fmt.Errorf("tile %s already reserved by %s", key, existing)
+			return fmt.Errorf("地块 %s 已被 %s 预留", key, existing)
 		}
 		if !stacked && task.BuildingType != BuildingTypeLogisticsDistributor && (ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != BuildingTypeFoundation && !(RequiresLavaProximity(task.BuildingType) && ws.Grid[p.Y][p.X].Terrain == terrain.TileLava))) {
-			return fmt.Errorf("footprint tile %s is unavailable", key)
+			return fmt.Errorf("占地地块 %s 不可用", key)
 		}
 		if task.BuildingType == BuildingTypeFoundation && ws.FoundationAt(p) != nil {
-			return fmt.Errorf("footprint tile %s already has a foundation", key)
+			return fmt.Errorf("占地地块 %s 已有地基", key)
 		}
 		if foundation := ws.FoundationAt(p); foundation != nil && foundation.Job != nil && foundation.Job.Type == BuildingJobDemolish {
-			return fmt.Errorf("footprint tile %s foundation is being demolished", key)
+			return fmt.Errorf("占地地块 %s 的地基正在拆除", key)
 		}
 	}
 	for _, p := range tiles {
@@ -203,14 +203,14 @@ func (q *ConstructionQueue) IsTileReserved(tileKey string) bool {
 // Transition updates task state if the transition is allowed.
 func (q *ConstructionQueue) Transition(taskID string, next ConstructionState) error {
 	if q == nil {
-		return fmt.Errorf("construction queue is nil")
+		return fmt.Errorf("施工队列不存在")
 	}
 	task := q.Tasks[taskID]
 	if task == nil {
-		return fmt.Errorf("construction task %s not found", taskID)
+		return fmt.Errorf("未找到施工任务 %s", taskID)
 	}
 	if !task.State.CanTransition(next) {
-		return fmt.Errorf("invalid construction state transition %s -> %s", task.State, next)
+		return fmt.Errorf("无效的施工状态转换 %s -> %s", task.State, next)
 	}
 	task.State = next
 	return nil

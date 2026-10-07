@@ -72,8 +72,10 @@ func settleSolarSails(spaceRuntime *model.SpaceRuntimeState, currentTick int64) 
 						EventType:       model.EvtEntityDestroyed,
 						VisibilityScope: playerID,
 						Payload: map[string]any{
-							"entity_id": sail.ID,
-							"reason":    "lifetime_expired",
+							"entity_id":   sail.ID,
+							"entity_kind": "solar_sail",
+							"entity_type": "solar_sail",
+							"reason":      "lifetime_expired",
 						},
 					})
 					continue

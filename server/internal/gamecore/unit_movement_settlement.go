@@ -64,7 +64,8 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 				unit.BlockedTicks++
 				unit.MoveProgress = 1
 				if unit.BlockedTicks >= unitBlockedRepathTicks {
-					if !repathUnit(ws, unit) {
+					// 优先绕开待命单位重寻路；绕不开再按原规则重寻路（继续等对方让开）。
+					if !repathUnitAvoidingIdle(ws, unit) && !repathUnit(ws, unit) {
 						events = append(events, unitMoveAbortedEvent(unit, "blocked"))
 						continue
 					}
@@ -177,6 +178,19 @@ func repathUnit(ws *model.WorldState, unit *model.Unit) bool {
 	return true
 }
 
+// repathUnitAvoidingIdle 被占位阻挡后绕开待命单位重寻路；失败时不改动单位。
+func repathUnitAvoidingIdle(ws *model.WorldState, unit *model.Unit) bool {
+	dest := unit.Path[len(unit.Path)-1]
+	path, ok := computePathNear(ws, unit.Position, dest, unit.ID, true)
+	if !ok || len(path) < 2 {
+		return false
+	}
+	unit.Path = path
+	unit.PathIndex = 1
+	unit.MoveProgress = 0
+	return true
+}
+
 // abortUnitMovement 放弃移动：清路径并回到 idle。
 func abortUnitMovement(unit *model.Unit) {
 	unit.ClearMovement()
@@ -227,7 +241,9 @@ func onUnitArrived(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 // 距终点最近的可进入格。
 // 性能：epoch 戳扁平数组做已访问/父指针（零分配），建筑占位走 Grid.BuildingID
 // （零字符串分配）；大面积寻路下比 map+TileKey 版本快一个数量级。
-func computePathNear(ws *model.WorldState, from, to model.Position, selfID string) ([]model.Position, bool) {
+// avoidIdle 为 true 时把停着不动（无路径）的单位所在格当作障碍——被待命单位堵住后的重寻路用，
+// 否则会反复得到同一条穿过占位格的路。
+func computePathNear(ws *model.WorldState, from, to model.Position, selfID string, avoidIdle bool) ([]model.Position, bool) {
 	if from == to {
 		return []model.Position{from}, true
 	}
@@ -309,6 +325,9 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 			if !unitIsAir(ws, selfID) && !ws.Grid[n.Y][n.X].Terrain.Buildable() {
 				continue
 			}
+			if avoidIdle && tileHasIdleUnit(ws, n, selfID) {
+				continue
+			}
 			epoch[nIdx] = gen
 			parent[nIdx] = cur
 			depth[nIdx] = depth[cur] + 1
@@ -333,7 +352,21 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 
 // computeUnitPath 计算单位路径；终点被占用/不可进入时落到终点邻域。
 func computeUnitPath(ws *model.WorldState, from, to model.Position, selfID string) ([]model.Position, bool) {
-	return computePathNear(ws, from, to, selfID)
+	return computePathNear(ws, from, to, selfID, false)
+}
+
+// tileHasIdleUnit 格内是否有停着不动的同层单位（不含自己）。
+func tileHasIdleUnit(ws *model.WorldState, pos model.Position, selfID string) bool {
+	air := unitIsAir(ws, selfID)
+	for _, otherID := range ws.TileUnits[model.TileKey(pos.X, pos.Y)] {
+		if otherID == selfID {
+			continue
+		}
+		if other := ws.Units[otherID]; other != nil && other.HP > 0 && !other.HasPath() && (other.Domain == model.UnitDomainAir) == air {
+			return true
+		}
+	}
+	return false
 }
 
 func unitMoveAbortedEvent(unit *model.Unit, reason string) *model.GameEvent {

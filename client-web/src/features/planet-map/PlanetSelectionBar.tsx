@@ -6,7 +6,7 @@ import { AmmunitionBar } from "@/features/war/components/AmmunitionBar";
 
 import { useState } from 'react';
 import { surfaceDistanceWithin } from '@shared/surface';
-import type { Building, CatalogView, CombatSquad, CommandResponse } from '@shared/types';
+import type { Building, CatalogView, CombatSquad, CommandResponse, Position } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
 import { sfx } from '@/engine/audio';
@@ -22,6 +22,7 @@ import {
 } from '@/features/planet-map/model';
 import { summarizeUnitSelection } from '@/features/planet-map/rts-commands';
 import { usePlanetViewStore } from '@/features/planet-map/store';
+import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { translateBuildingState, translateUnitType } from '@/i18n/translate';
@@ -60,6 +61,24 @@ function formatBuildingStorageSummary(
   return parts.join(' · ');
 }
 
+/** 默认采集数量：按机甲能量可采件数，1–10 之间，且不超过矿点剩余。 */
+export function defaultMiningQuantity(remaining: number | undefined, energy: number | undefined) {
+  const byEnergy = energy === undefined ? 10 : Math.floor(energy / MECHA_MINE_ENERGY_PER_ITEM);
+  return Math.max(1, Math.min(10, byEnergy, remaining ?? 10));
+}
+
+/** 机甲 2 格内可手动采集的固体矿点（机甲站在矿上时点格会选中机甲，这里给出入口）。 */
+export function findNearbyMinableResource(planet: PlanetRenderView, catalog: CatalogView | undefined, position: Position) {
+  const solid = new Set((catalog?.items ?? []).filter(item => item.form === 'solid').map(item => item.id));
+  let best: { resource: NonNullable<PlanetRenderView['resources']>[number]; distance: number } | undefined;
+  for (const resource of planet.resources ?? []) {
+    if (resource.behavior !== 'finite' || !solid.has(resource.kind) || (resource.remaining ?? 0) <= 0) continue;
+    const distance = surfaceDistanceWithin(position, resource.position, planet.surface.face_size, 2);
+    if (distance !== undefined && (!best || distance < best.distance)) best = { resource, distance };
+  }
+  return best?.resource;
+}
+
 export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: PlanetSelectionBarProps) {
   const client = useApiClient();
   const session = useSessionSnapshot();
@@ -70,7 +89,8 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
   const setSelected = usePlanetViewStore((state) => state.setSelected);
-  const [quantity, setQuantity] = useState(1);
+  // 采集数量草稿按资源点隔离：切换目标后回到默认值，不残留上次输入。
+  const [quantityDraft, setQuantityDraft] = useState<{ resourceId: string; value: number } | null>(null);
   const [miningPending, setMiningPending] = useState(false);
 
   function submit(commandType: string, execute: () => Promise<CommandResponse>, focus?: { entityId?: string }) {
@@ -138,7 +158,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           <strong>已选 {aliveSelection.length} 个单位</strong>
           {aliveSelection.some(id=>planet.units?.[id]?.combat_state==='no_ammunition')?<span role="alert">{aliveSelection.filter(id=>planet.units?.[id]?.combat_state==='no_ammunition').length} 个单位弹药耗尽</span>:null}
           <span className="planet-selection-bar__meta">{composition}</span>
-          <span className="planet-selection-bar__meta">右键点地移动 / 点敌攻击 · Ctrl+数字编队</span>
+          <span className="planet-selection-bar__hint">右键地面移动 · 右键敌人攻击 · Ctrl+数字编队</span>
         </div>
         <div className="planet-selection-bar__actions">
           {orderButtons.map((button) => (
@@ -171,6 +191,9 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
     const mecha = ownMechas.find(unit => surfaceDistanceWithin(unit.position, resource.position, planet.surface.face_size, 2) !== undefined) ?? ownMechas[0];
     const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, 2) !== undefined;
     const solid = catalog?.items?.some(item => item.id === resource.kind && item.form === 'solid') && resource.behavior === 'finite';
+    const quantity = quantityDraft?.resourceId === resource.id
+      ? quantityDraft.value
+      : defaultMiningQuantity(resource.remaining, mecha?.mecha?.energy);
     const count = Number.isFinite(quantity) ? Math.max(1, Math.min(999, Math.floor(quantity))) : 1;
     const enough = (resource.remaining ?? 0) >= count;
     return <div className="planet-selection-bar" data-testid="planet-selection-bar">
@@ -178,7 +201,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
       <div className="planet-selection-bar__info">
         <strong>{getItemDisplayName(catalog, resource.kind)}</strong>
         <span className="planet-selection-bar__meta">剩余 {resource.remaining ?? '—'} · ({resource.position.x}, {resource.position.y})</span>
-        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? '请将机甲移动到矿点 2 格内' : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 10 tick · 消耗 ${count * 10} 核心能量`}</span>
+        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? '请将机甲移动到矿点 2 格内' : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
       </div>
       {solid && mecha ? <form className="planet-selection-bar__actions" onSubmit={async event => {
         event.preventDefault();
@@ -191,7 +214,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           });
         } finally { setMiningPending(false); }
       }}>
-        <label>采集数量<input aria-label="采集数量" type="number" min={1} max={Math.min(999, resource.remaining ?? 1)} step={1} value={quantity} onChange={event => setQuantity(Number(event.target.value))} /></label>
+        <label>采集数量<input aria-label="采集数量" type="number" min={1} max={Math.min(999, resource.remaining ?? 1)} step={1} value={quantity} onChange={event => setQuantityDraft({ resourceId: resource.id, value: Number(event.target.value) })} /></label>
         <button className="secondary-button" disabled={!inRange || !enough || Boolean(mecha.mecha?.job) || miningPending} type="submit">手动采集</button>
         <button className="secondary-button" type="button" onClick={() => { setSelected({ kind: 'unit', id: mecha.id, position: mecha.position }); onShowDetail?.(); }}>机甲详情</button>
       </form> : null}
@@ -258,6 +281,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
       return null;
     }
     const ownUnit = unit.owner_id === session.playerId;
+    const underfootResource = ownUnit && unit.mecha ? findNearbyMinableResource(planet, catalog, unit.position) : undefined;
     const activeMode = interactionMode.kind !== 'inspect' && interactionMode.kind !== 'build'
       ? interactionMode
       : null;
@@ -273,12 +297,23 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           {unit.mecha ? <span className="planet-selection-bar__meta">
             能量 {unit.mecha.energy}/{unit.mecha.max_energy} · 护盾 {unit.mecha.shield}/{unit.mecha.max_shield}
           </span> : null}
+          {ownUnit ? <span className="planet-selection-bar__hint">右键地面移动 · 右键敌人攻击</span> : null}
         </div>
         {ownUnit ? (
           <div className="planet-selection-bar__actions">
             {onShowDetail ? <button className="secondary-button" type="button" onClick={onShowDetail}>
               {unit.mecha ? '机甲详情' : '详情'}
             </button> : null}
+            {underfootResource ? (
+              <button
+                className="secondary-button"
+                type="button"
+                title="选中机甲附近的矿点，进入手动采集"
+                onClick={() => setSelected({ kind: 'resource', id: underfootResource.id, position: underfootResource.position })}
+              >
+                采集脚下{getItemDisplayName(catalog, underfootResource.kind)}
+              </button>
+            ) : null}
             <button
               className={`secondary-button${activeMode?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
               type="button"

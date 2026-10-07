@@ -21,46 +21,46 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: message}, nil
 	}
 	if building.Type != model.BuildingTypePlanetaryLogisticsStation && building.Type != model.BuildingTypeInterstellarLogisticsStation {
-		return fail("vehicles can only be installed at planetary or interstellar logistics stations")
+		return fail("运输载具只能安装到行星或星际物流站")
 	}
 	itemID, quantity := p.ItemID, p.Quantity
 	if quantity <= 0 {
-		return fail("quantity must be a positive integer")
+		return fail("quantity 必须为正整数")
 	}
 	source := "player"
 	if p.Source != nil {
 		source = *p.Source
 		if source != "player" && source != "station" {
-			return fail("source must be player or station")
+			return fail("source 必须为 player 或 station")
 		}
 	}
 	player := ws.Players[playerID]
 	switch itemID {
 	case model.ItemLogisticsDrone:
 		if !CanBuildTech(player, model.TechUnlockUnit, "logistics_drone") {
-			return fail("research required: logistics drone unit unlock (planetary_logistics or distribution_logistics)")
+			return fail("需要研究解锁物流无人机（planetary_logistics 或 distribution_logistics）")
 		}
 		limit := min(station.DroneCapacityValue(), model.DefaultLogisticsStationDroneCapacity)
 		if quantity > limit-model.StationDroneCount(ws, building.ID) {
-			return fail("drone capacity exceeded")
+			return fail("无人机容量已满")
 		}
 	case model.ItemLogisticsVessel:
 		if building.Type != model.BuildingTypeInterstellarLogisticsStation || !station.Interstellar.Enabled {
-			return fail("vessels require an enabled interstellar logistics station")
+			return fail("运输船需要已启用的星际物流站")
 		}
 		if !CanBuildTech(player, model.TechUnlockUnit, "logistics_ship") {
-			return fail("research required: logistics ship unit unlock (interstellar_logistics)")
+			return fail("需要研究解锁物流运输船（interstellar_logistics）")
 		}
 		limit := min(station.ShipSlotCapacityValue(), model.DefaultLogisticsStationShipSlots)
 		if quantity > limit-model.StationShipCount(ws, building.ID) {
-			return fail("ship slots exceeded")
+			return fail("运输船槽位已满")
 		}
 	default:
-		return fail("item_id must be logistics_drone or logistics_vessel")
+		return fail("item_id 必须为 logistics_drone 或 logistics_vessel")
 	}
 	cost := []model.ItemAmount{{ItemID: itemID, Quantity: quantity}}
 	if (source == "player" && (player == nil || !player.HasItems(cost))) || (source == "station" && station.Inventory[itemID] < quantity) {
-		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeInsufficientResource, Message: "manufactured vehicles required in " + source + " inventory"}, nil
+		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeInsufficientResource, Message: source + " 库存中缺少已制造的运输载具"}, nil
 	}
 	// Capacity and ownership are checked for the whole batch before inventory or registry mutation.
 	model.RegisterLogisticsStation(ws, building)
@@ -103,5 +103,5 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 		}
 		station.RefreshCapacityCache()
 	}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("installed %d %s at %s", quantity, itemID, building.ID)}, nil
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已在 %[3]s 安装 %[1]d 个 %[2]s", quantity, itemID, building.ID)}, nil
 }

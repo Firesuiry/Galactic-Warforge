@@ -4,7 +4,7 @@ import type { GameEventDetail } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
 import { toastFromGameEvent } from '@/features/notifications/event-toasts';
-import { notifyGameEvent } from '@/features/notifications/notify';
+import { historyFromEvents, notifyGameEvent } from '@/features/notifications/notify';
 import {
   HISTORY_SIZE,
   MAX_VISIBLE_TOASTS,
@@ -70,6 +70,24 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(mapped?.sfx).toBeUndefined();
   });
 
+  it('entity_destroyed：己方建筑写中文名，别家伤亡不弹，旧事件按 id 前缀推断', () => {
+    const own = toastFromGameEvent(gameEvent('entity_destroyed', { entity_id: 'b-6', entity_kind: 'building', entity_type: 'wind_turbine', owner_id: 'p1' }), 'p1');
+    expect(own?.toast.title).toBe('建筑被摧毁：风力涡轮机');
+    expect(own?.toast.title).not.toContain('b-6');
+    expect(toastFromGameEvent(gameEvent('entity_destroyed', { entity_id: 'u-3', entity_kind: 'unit', entity_type: 'soldier', owner_id: 'p2' }), 'p1')).toBeNull();
+    expect(toastFromGameEvent(gameEvent('entity_destroyed', { entity_id: 'b-9' }), 'p1')?.toast.title).toBe('建筑被摧毁：建筑');
+  });
+
+  it('dark_fog_provoked 只对自己弹显眼提示并换算分钟', () => {
+    const event = { ...gameEvent('dark_fog_provoked', { player_id: 'p1', until_tick: 3200 }), tick: 200 };
+    const mine = toastFromGameEvent(event, 'p1');
+    expect(mine?.toast.title).toBe('你激怒了黑雾');
+    expect(mine?.toast.body).toContain('5 分钟内会遭到报复');
+    expect(mine?.toast.sticky).toBe(true);
+    expect(toastFromGameEvent(event, 'p2')).toBeNull();
+    expect(toastFromGameEvent(gameEvent('dark_fog_calmed', { player_id: 'p1' }), 'p1')?.toast.title).toBe('黑雾已恢复中立');
+  });
+
   it('missile_salvo_fired → info 且带 mergeKey（高频合并）', () => {
     const mapped = toastFromGameEvent(gameEvent('missile_salvo_fired', { count: 4 }));
     expect(mapped?.toast.kind).toBe('info');
@@ -104,8 +122,9 @@ describe('toastFromGameEvent 事件映射', () => {
       alert: { alert_id: 'a1', building_id: 'b7', message: '电力不足' },
     }));
     expect(mapped?.toast.kind).toBe('warning');
-    expect(mapped?.toast.body).toBe('b7：电力不足');
+    expect(mapped?.toast.body).toBe('建筑：电力不足');
     expect(mapped?.toast.mergeKey).toBe('production_alert:b7:unknown');
+    expect(mapped?.toast.throttleMs).toBeGreaterThan(0);
     expect(mapped?.sfx).toBeUndefined();
   });
 
@@ -119,9 +138,9 @@ describe('toastFromGameEvent 事件映射', () => {
         message: 'building b-25 input shortage detected',
       },
     }));
-    expect(mapped?.toast.body).toBe('风力涡轮机 b-25：原料短缺');
+    expect(mapped?.toast.body).toBe('风力涡轮机：原料短缺');
     expect(mapped?.toast.body).not.toContain('detected');
-    expect(mapped?.toast.mergeKey).toBe('production_alert:b-25:input_shortage');
+    expect(mapped?.toast.mergeKey).toBe('production_alert:wind_turbine:input_shortage');
   });
 
   it('production_alert：研究站（空 matrix_lab）吞吐类告警属噪音不弹，断电仍提醒', () => {
@@ -146,7 +165,7 @@ describe('toastFromGameEvent 事件映射', () => {
       },
     }));
     expect(power?.toast.kind).toBe('warning');
-    expect(power?.toast.body).toBe('矩阵研究站 b-25：电力不足');
+    expect(power?.toast.body).toBe('矩阵研究站：电力不足');
   });
 
   it('rocket_launched → info（不配音）', () => {
@@ -156,15 +175,15 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(mapped?.sfx).toBeUndefined();
   });
 
-  it('command_result 执行期失败 → danger toast（英文原文翻成中文），成功 → null', () => {
+  it('command_result 执行期失败 → danger toast（中文原文直出），成功 → null', () => {
     const failed = toastFromGameEvent(gameEvent('command_result', {
       request_id: 'req-1',
       code: 'INSUFFICIENT_RESOURCES',
-      message: 'need 1 gear for build',
+      message: '建造还需要 1 个齿轮',
     }));
     expect(failed?.toast.kind).toBe('danger');
     expect(failed?.toast.title).toBe('命令执行失败');
-    expect(failed?.toast.body).toBe('建造材料不足：还需要 1 个「齿轮」，请先生产或采集。');
+    expect(failed?.toast.body).toBe('建造还需要 1 个齿轮');
     expect(failed?.toast.mergeKey).toBe('command_result_fail:INSUFFICIENT_RESOURCES');
     expect(failed?.sfx).toBe('alert');
 
@@ -347,4 +366,37 @@ it('traffic monitor alarms report blockage and clearing without repeating a warn
   expect(cleared?.toast.kind).toBe('info');
   expect(cleared?.toast.title).toContain('已解除');
   expect(cleared?.toast.mergeKey).toBe(alarm?.toast.mergeKey);
+});
+
+describe('产线告警节流与历史回填', () => {
+  beforeEach(() => resetNotificationsStore());
+
+  it('同 mergeKey 消退后节流期内只并入历史，不再弹出', () => {
+    const store = useNotificationsStore.getState();
+    const input = { kind: 'warning' as const, title: '产线告警', mergeKey: 'production_alert:x:y', throttleMs: 60_000 };
+    store.push(input, 1_000);
+    store.push(input, 1_000 + TOAST_TTL_MS + 1000);
+    const state = useNotificationsStore.getState();
+    expect(state.toasts.filter((toast) => !toast.leaving)).toHaveLength(1);
+    expect(state.history[0].count).toBe(2);
+  });
+
+  it('服务端事件历史回填铃铛：合并计数、不弹 toast、不计未读', () => {
+    const events = [
+      { event_id: 'h1', tick: 10, event_type: 'entity_destroyed', visibility_scope: 'all', payload: { entity_id: 'b-1', entity_kind: 'building', entity_type: 'wind_turbine', owner_id: 'p1' } },
+      { event_id: 'h2', tick: 12, event_type: 'entity_destroyed', visibility_scope: 'all', payload: { entity_id: 'b-2', entity_kind: 'building', entity_type: 'wind_turbine', owner_id: 'p1' } },
+      { event_id: 'h3', tick: 15, event_type: 'research_completed', visibility_scope: 'p1', payload: {} },
+    ];
+    const entries = historyFromEvents(events, 'p1');
+    expect(entries.map((entry) => entry.title)).toEqual(['研究完成：科技', '建筑被摧毁：风力涡轮机']);
+    expect(entries[1].count).toBe(2);
+    useNotificationsStore.getState().restoreHistory(entries);
+    const state = useNotificationsStore.getState();
+    expect(state.history).toHaveLength(2);
+    expect(state.toasts).toHaveLength(0);
+    expect(state.unread).toBe(0);
+    // SSE 重放同一事件不再弹出
+    notifyGameEvent(events[0]);
+    expect(useNotificationsStore.getState().toasts).toHaveLength(0);
+  });
 });

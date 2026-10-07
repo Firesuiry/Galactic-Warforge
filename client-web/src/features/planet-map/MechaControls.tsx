@@ -6,6 +6,13 @@ import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { MechaLogisticsControls } from './MechaLogisticsControls';
+import { mechaCraftEnergyPerBatch } from './mecha-costs';
+
+/** 补满所需燃料块数：按缺口向上取整，受背包持有量限制（服务端同样按缺口截断）。 */
+export function refuelFullQuantity(missingEnergy: number, fuelEnergy: number, owned: number) {
+  if (missingEnergy <= 0 || fuelEnergy <= 0) return 0;
+  return Math.min(owned, Math.ceil(missingEnergy / fuelEnergy));
+}
 
 /** All values and fuel choices come from the authoritative scene and catalog. */
 export function MechaControls({ unit, catalog, planetId, canControl, player }: {
@@ -21,6 +28,8 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
   const fuels = catalog?.items?.filter(item => (item.mecha_fuel_energy ?? 0) > 0) ?? [];
   const fuel = fuels.find(item => item.id === fuelId) ?? fuels[0];
   const full = mecha.energy >= mecha.max_energy || mecha.fuel_energy > 0;
+  const fuelOwned = fuel ? player?.inventory?.[fuel.id] ?? 0 : 0;
+  const fillQuantity = fuel ? refuelFullQuantity(mecha.max_energy - mecha.energy, fuel.mecha_fuel_energy ?? 0, fuelOwned) : 0;
   const recipes = catalog?.recipes?.filter(recipe => recipe.handcraft_allowed) ?? [];
   const completed = new Set(normalizeCompletedTechIds(player?.tech));
   const isUnlocked = (required: string[] | undefined) => !required?.length || required.some(id => completed.has(id));
@@ -55,23 +64,29 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
         <strong>{job.kind === 'mine' ? '手动采集中' : `制造 ${getRecipeDisplayName(catalog, job.recipe_id ?? '')}`}</strong>
         <p>已完成 {job.completed_batches} · 剩余 {job.remaining_batches} · 本批剩余 {job.remaining_ticks} tick</p>
         <progress aria-label="当前任务进度" max={Math.max(1, job.ticks_per_batch)} value={Math.max(0, job.ticks_per_batch - job.remaining_ticks)} />
-        <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? '距离矿点过远，回到 2 格内继续采集。' : `工作中 · 每 tick 消耗 ${job.energy_per_tick} 核心能量`}</p>
+        <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? '距离矿点过远，回到 2 格内继续采集。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
         {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(unit.id))}>取消机甲任务</button> : null}
       </section> : null}
       {canControl ? <form onSubmit={async event => {
         event.preventDefault();
-        if (!fuel || full || pending) return;
-        await submit('refuel_mecha', () => client.cmdRefuelMecha(unit.id, fuel.id, 1));
+        if (!fuel || full || pending || fillQuantity <= 0) return;
+        await submit('refuel_mecha', () => client.cmdRefuelMecha(unit.id, fuel.id, fillQuantity));
       }}>
         <label>背包燃料
           <select aria-label="机甲燃料" value={fuel?.id ?? ''} onChange={event => setFuelId(event.target.value)}>
             {fuels.map(item => <option key={item.id} value={item.id}>{getItemDisplayName(catalog, item.id)} · {item.mecha_fuel_energy} 能量</option>)}
           </select>
         </label>
-        <button className="secondary-button" type="submit" disabled={!fuel || full || pending}>
-          {pending ? '提交中…' : '消耗 1 个燃料补能'}
-        </button>
-        <p className="muted">从背包扣除燃料。核心已满或尚有燃料余能时无需添加。</p>
+        <div className="mecha-controls__refuel">
+          <button className="primary-button" type="submit" disabled={!fuel || full || pending || fillQuantity <= 0}>
+            {pending ? '提交中…' : fillQuantity > 0 ? `补满（${fillQuantity} 个）` : '补满'}
+          </button>
+          <button className="secondary-button" type="button" disabled={!fuel || full || pending || fuelOwned <= 0}
+            onClick={() => { if (fuel) void submit('refuel_mecha', () => client.cmdRefuelMecha(unit.id, fuel.id, 1)); }}>
+            补 1 个
+          </button>
+        </div>
+        <p className="muted">背包有 {fuelOwned} 个{fuel ? getItemDisplayName(catalog, fuel.id) : '燃料'}。{full ? '核心已满或尚有燃料余能，暂不需补能。' : ''}</p>
       </form> : null}
       {canControl ? <form aria-label="个人制造" onSubmit={event => {
         event.preventDefault();
@@ -88,7 +103,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
         {recipe ? <>
           <p>原料：{recipe.inputs.map(input => `${getItemDisplayName(catalog, input.item_id)} ${input.quantity * count}（背包 ${player ? player.inventory?.[input.item_id] ?? 0 : '…'}）`).join('、') || '无'}</p>
           <p>产物：{[...recipe.outputs, ...(recipe.byproducts ?? [])].map(output => `${getItemDisplayName(catalog, output.item_id)} ${output.quantity * count}`).join('、')}</p>
-          <p>耗时 {recipe.duration * count} tick · 核心耗能 {recipe.duration * count}（每 tick 1）</p>
+          <p>耗时 {recipe.duration * count} tick · 核心耗能 {mechaCraftEnergyPerBatch(recipe.duration) * count}（每批 {mechaCraftEnergyPerBatch(recipe.duration)}）</p>
           {missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !player ? <p role="status">正在读取背包…</p> : missingItems ? <p role="status">背包原料不足，请先采集或取回原料。</p> : null}
         </> : <p>暂无可手工制造的配方。</p>}
         <button className="secondary-button" disabled={!recipe || missingTech || missingItems || Boolean(job) || pending || !player} type="submit">开始制造</button>

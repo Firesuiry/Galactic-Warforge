@@ -155,7 +155,7 @@ func (gc *GameCore) dispatchCommand(playerID string, player *model.PlayerState, 
 		return model.CommandResult{
 			Status:  model.StatusRejected,
 			Code:    model.CodeValidationFailed,
-			Message: fmt.Sprintf("unknown command type: %s", cmd.Type),
+			Message: fmt.Sprintf("未知命令类型：%s", cmd.Type),
 		}, nil, true
 	}
 	bound, err := handler.bind(cmd)

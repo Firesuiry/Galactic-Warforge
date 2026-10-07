@@ -68,3 +68,6 @@ develop_tools/biliup/biliupR-*/
 # Build / evidence artifacts
 client-web/storybook-static/
 develop_tools/*-verify/
+
+# tmp
+tmp

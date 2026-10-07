@@ -264,7 +264,7 @@ func TestInstallLogisticsVehicleRequiresUnitUnlockTech(t *testing.T) {
 
 	for _, itemID := range []string{model.ItemLogisticsDrone, model.ItemLogisticsVessel} {
 		r := install(itemID)
-		if r.Status != model.StatusFailed || r.Code != model.CodeValidationFailed || !strings.Contains(r.Message, "research required") {
+		if r.Status != model.StatusFailed || r.Code != model.CodeValidationFailed || !strings.Contains(r.Message, "需要研究解锁") {
 			t.Fatalf("%s install without unit unlock tech must be rejected: %+v", itemID, r)
 		}
 		if ws.Players["p1"].Inventory[itemID] != 2 {
@@ -276,7 +276,7 @@ func TestInstallLogisticsVehicleRequiresUnitUnlockTech(t *testing.T) {
 	if r := install(model.ItemLogisticsDrone); r.Status != model.StatusExecuted {
 		t.Fatalf("drone install with planetary_logistics must succeed: %+v", r)
 	}
-	if r := install(model.ItemLogisticsVessel); r.Status != model.StatusFailed || !strings.Contains(r.Message, "research required") {
+	if r := install(model.ItemLogisticsVessel); r.Status != model.StatusFailed || !strings.Contains(r.Message, "需要研究解锁") {
 		t.Fatalf("vessel install still requires interstellar_logistics: %+v", r)
 	}
 

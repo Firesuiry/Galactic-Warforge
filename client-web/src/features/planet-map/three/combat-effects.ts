@@ -47,7 +47,7 @@ export type CombatEffectSpec =
   | { kind: 'projectile'; from: Vec3Like; to: Vec3Like; tone: FireTone; durationMs: number }
   | { kind: 'muzzle'; at: Vec3Like; tone: FireTone; durationMs: number }
   | { kind: 'hit_flash'; at: Vec3Like; durationMs: number }
-  | { kind: 'damage_float'; at: Vec3Like; text: string; tone: HitTone; durationMs: number }
+  | { kind: 'damage_float'; at: Vec3Like; targetId: string; amount: number; tone: HitTone; durationMs: number }
   | { kind: 'shield_ripple'; at: Vec3Like; durationMs: number }
   | { kind: 'explosion'; at: Vec3Like; scale: number; durationMs: number }
   | { kind: 'wreck'; at: Vec3Like; scale: number; durationMs: number };
@@ -78,8 +78,9 @@ export function specsFromCombatEvent(
   const { payload } = event;
 
   if (event.type === 'damage_applied') {
-    const target = resolve(asString(payload.target_id));
-    if (!target) {
+    const targetId = asString(payload.target_id);
+    const target = resolve(targetId);
+    if (!target || !targetId) {
       return [];
     }
     const specs: CombatEffectSpec[] = [];
@@ -100,7 +101,8 @@ export function specsFromCombatEvent(
       specs.push({
         kind: 'damage_float',
         at: target,
-        text: `-${damage}`,
+        targetId,
+        amount: damage,
         tone: target.owner === 'own' ? 'own_hit' : 'enemy_hit',
         durationMs: DAMAGE_FLOAT_MS,
       });
@@ -133,6 +135,23 @@ export function specsFromCombatEvent(
 }
 
 // ---------- Three.js 特效池 ----------
+//
+// 交战时伤害事件极密（软件 WebGL 下每帧 ~300ms），所以：
+// - 每类特效有全局上限；弹道/闪光超限直接丢新，飘字超限顶掉最旧；
+// - 同一目标 DAMAGE_MERGE_MS 内的伤害合并成一个飘字（数字累加）；
+// - 所有对象（含飘字 canvas 纹理、爆炸/残骸材质）进池复用，只在 dispose 时释放。
+
+/** 同一目标的伤害在该窗口内合并为一个飘字。 */
+export const DAMAGE_MERGE_MS = 450;
+
+export const COMBAT_FX_LIMITS = {
+  projectiles: 64,
+  flashes: 32,
+  damageFloats: 24,
+  ripples: 10,
+  explosions: 12,
+  wrecks: 10,
+} as const;
 
 const FIRE_TONE_COLORS: Record<FireTone, number> = {
   unit: 0x8befff,
@@ -145,49 +164,51 @@ const HIT_TONE_COLORS: Record<HitTone, string> = {
   enemy_hit: '#ff6b6b',
 };
 
-interface ProjectileFx {
+interface Timed {
+  elapsed: number;
+  duration: number;
+}
+
+interface ProjectileFx extends Timed {
   mesh: THREE.Mesh;
   from: THREE.Vector3;
   mid: THREE.Vector3;
   to: THREE.Vector3;
-  elapsed: number;
-  duration: number;
 }
 
-interface SpriteFx {
+interface FlashFx extends Timed {
   sprite: THREE.Sprite;
   baseScale: number;
-  /** 高宽比（飘字 0.375，闪光 1）。 */
-  aspect: number;
-  rise: number;
-  /** 一次性特效（飘字）：结束时销毁材质纹理，不进自由表。 */
-  disposable: boolean;
-  elapsed: number;
-  duration: number;
 }
 
-interface RippleFx {
+interface DamageFloatFx extends Timed {
+  sprite: THREE.Sprite;
+  canvas: HTMLCanvasElement;
+  texture: THREE.CanvasTexture;
+  targetId: string;
+  amount: number;
+  tone: HitTone;
+  base: THREE.Vector3;
+  width: number;
+  rise: number;
+}
+
+interface RippleFx extends Timed {
   mesh: THREE.Mesh;
   baseScale: number;
-  elapsed: number;
-  duration: number;
 }
 
-interface ExplosionFx {
+interface ExplosionFx extends Timed {
   mesh: THREE.Mesh;
   flash: THREE.Sprite;
   baseScale: number;
-  elapsed: number;
-  duration: number;
 }
 
-interface WreckFx {
+interface WreckFx extends Timed {
   group: THREE.Group;
   materials: THREE.MeshStandardMaterial[];
   normal: THREE.Vector3;
   sink: number;
-  elapsed: number;
-  duration: number;
 }
 
 function makeFlashTexture(): THREE.Texture {
@@ -207,32 +228,57 @@ function makeFlashTexture(): THREE.Texture {
   return new THREE.CanvasTexture(canvas);
 }
 
+function drawDamageText(canvas: HTMLCanvasElement, text: string, tone: HitTone): void {
+  const context = canvas.getContext('2d');
+  // jsdom 等无真实 canvas 实现的环境跳过文字绘制（空白纹理，特效照常计时）
+  if (!context || typeof context.strokeText !== 'function') return;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.font = 'bold 28px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.strokeStyle = 'rgba(0,0,0,0.85)';
+  context.lineWidth = 5;
+  context.strokeText(text, 64, 24);
+  context.fillStyle = HIT_TONE_COLORS[tone];
+  context.fillText(text, 64, 24);
+}
+
+/** 推进一组定时特效：到期的交给 release 回收，返回存活列表。 */
+function advance<T extends Timed>(list: T[], dt: number, release: (fx: T) => void, step: (fx: T, t: number) => void): T[] {
+  return list.filter((fx) => {
+    fx.elapsed += dt;
+    const t = Math.min(fx.elapsed / fx.duration, 1);
+    if (t >= 1) {
+      release(fx);
+      return false;
+    }
+    step(fx, t);
+    return true;
+  });
+}
+
 /**
- * 战斗特效池：各类特效有界复用（高频伤害事件下不持续分配）；
- * spawn 即加入 parent（world 组），生命周期结束自动移除并回收。
+ * 战斗特效池：spawn 即加入 parent（world 组），生命周期结束移出并回到自由表。
  */
 export class CombatEffects {
   private projectiles: ProjectileFx[] = [];
   private readonly freeProjectiles: ProjectileFx[] = [];
-  private spriteFx: SpriteFx[] = [];
-  private readonly freeSpriteFx: SpriteFx[] = [];
+  private flashes: FlashFx[] = [];
+  private readonly freeFlashes: FlashFx[] = [];
+  private floats: DamageFloatFx[] = [];
+  private readonly freeFloats: DamageFloatFx[] = [];
   private ripples: RippleFx[] = [];
   private readonly freeRipples: RippleFx[] = [];
   private explosions: ExplosionFx[] = [];
-  private wreckGroups: WreckFx[] = [];
-  private readonly projectileGeometry = new THREE.IcosahedronGeometry(0.5, 1);
+  private readonly freeExplosions: ExplosionFx[] = [];
+  private wrecks: WreckFx[] = [];
+  private readonly freeWrecks: WreckFx[] = [];
+  private readonly projectileGeometry = new THREE.IcosahedronGeometry(0.5, 0);
   private readonly explosionGeometry = new THREE.IcosahedronGeometry(0.5, 1);
   private readonly rippleGeometry = new THREE.RingGeometry(0.42, 0.5, 40);
   private readonly wreckGeometry = new THREE.BoxGeometry(1, 1, 1);
   private readonly flashTexture = makeFlashTexture();
   private readonly projectileMaterials = new Map<FireTone, THREE.MeshBasicMaterial>();
-
-  /** 各类特效同时在场上限（超出丢弃最旧 spawn，防雪崩）。 */
-  static readonly MAX_PROJECTILES = 32;
-  static readonly MAX_SPRITES = 28;
-  static readonly MAX_RIPPLES = 10;
-  static readonly MAX_EXPLOSIONS = 12;
-  static readonly MAX_WRECKS = 10;
 
   constructor(
     private readonly parent: THREE.Group,
@@ -261,10 +307,10 @@ export class CombatEffects {
           this.spawnProjectile(spec);
           break;
         case 'muzzle':
-          this.spawnSpriteFx(spec.at, FIRE_TONE_COLORS[spec.tone], 0.5, 0, spec.durationMs, 0.5);
+          this.spawnFlash(spec.at, FIRE_TONE_COLORS[spec.tone], 0.5, spec.durationMs, 0.5);
           break;
         case 'hit_flash':
-          this.spawnSpriteFx(spec.at, 0xffffff, 0.65, 0, spec.durationMs, 0.9);
+          this.spawnFlash(spec.at, 0xffffff, 0.65, spec.durationMs, 0.9);
           break;
         case 'damage_float':
           this.spawnDamageFloat(spec);
@@ -282,217 +328,216 @@ export class CombatEffects {
     }
   }
 
-  private surfacePoint(at: Vec3Like, lift: number): THREE.Vector3 {
-    const point = new THREE.Vector3(at.x, at.y, at.z);
-    const length = point.length() || 1;
-    return point.multiplyScalar((length + lift * this.scaleHint()) / length);
+  private surfacePoint(at: Vec3Like, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
+    out.set(at.x, at.y, at.z);
+    const length = out.length() || 1;
+    return out.multiplyScalar((length + lift * this.scaleHint()) / length);
   }
 
   private spawnProjectile(spec: Extract<CombatEffectSpec, { kind: 'projectile' }>): void {
-    if (this.projectiles.length >= CombatEffects.MAX_PROJECTILES) {
-      return;
-    }
-    let fx = this.freeProjectiles.pop();
-    if (!fx) {
-      fx = {
-        mesh: new THREE.Mesh(this.projectileGeometry, this.projectileMaterial(spec.tone)),
-        from: new THREE.Vector3(),
-        mid: new THREE.Vector3(),
-        to: new THREE.Vector3(),
-        elapsed: 0,
-        duration: spec.durationMs,
-      };
-    }
+    if (this.projectiles.length >= COMBAT_FX_LIMITS.projectiles) return;
+    const fx = this.freeProjectiles.pop() ?? {
+      mesh: new THREE.Mesh(this.projectileGeometry, this.projectileMaterial(spec.tone)),
+      from: new THREE.Vector3(),
+      mid: new THREE.Vector3(),
+      to: new THREE.Vector3(),
+      elapsed: 0,
+      duration: spec.durationMs,
+    };
     fx.mesh.material = this.projectileMaterial(spec.tone);
-    fx.from.copy(this.surfacePoint(spec.from, 0.3));
-    fx.to.copy(this.surfacePoint(spec.to, 0.3));
+    this.surfacePoint(spec.from, 0.3, fx.from);
+    this.surfacePoint(spec.to, 0.3, fx.to);
     fx.mid.copy(fx.from).add(fx.to).multiplyScalar(0.5);
     const arcLift = Math.min(fx.from.distanceTo(fx.to) * 0.18, this.scaleHint() * 1.2);
     fx.mid.normalize().multiplyScalar(fx.from.length() + arcLift);
     fx.elapsed = 0;
     fx.duration = spec.durationMs;
-    const size = this.scaleHint() * 0.22;
-    fx.mesh.scale.setScalar(size);
+    fx.mesh.scale.setScalar(this.scaleHint() * 0.22);
     fx.mesh.position.copy(fx.from);
-    fx.mesh.visible = true;
     this.parent.add(fx.mesh);
     this.projectiles.push(fx);
   }
 
-  private spawnSpriteFx(at: Vec3Like, color: number, scale: number, rise: number, durationMs: number, opacity: number): void {
-    if (this.spriteFx.length >= CombatEffects.MAX_SPRITES) {
-      return;
-    }
-    let fx = this.freeSpriteFx.pop();
-    if (!fx) {
-      fx = {
-        sprite: new THREE.Sprite(new THREE.SpriteMaterial({
-          map: this.flashTexture,
-          blending: THREE.AdditiveBlending,
-          transparent: true,
-          depthWrite: false,
-        })),
-        baseScale: scale,
-        aspect: 1,
-        rise,
-        disposable: false,
-        elapsed: 0,
-        duration: durationMs,
-      };
-    }
-    (fx.sprite.material as THREE.SpriteMaterial).color.setHex(color);
-    (fx.sprite.material as THREE.SpriteMaterial).opacity = opacity;
+  private spawnFlash(at: Vec3Like, color: number, scale: number, durationMs: number, opacity: number): void {
+    if (this.flashes.length >= COMBAT_FX_LIMITS.flashes) return;
+    const fx = this.freeFlashes.pop() ?? {
+      sprite: new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this.flashTexture,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      })),
+      baseScale: 1,
+      elapsed: 0,
+      duration: durationMs,
+    };
+    const material = fx.sprite.material as THREE.SpriteMaterial;
+    material.color.setHex(color);
+    material.opacity = opacity;
     fx.baseScale = scale * this.scaleHint();
-    fx.aspect = 1;
-    fx.rise = rise * this.scaleHint();
-    fx.disposable = false;
     fx.elapsed = 0;
     fx.duration = durationMs;
-    fx.sprite.position.copy(this.surfacePoint(at, 0.35));
+    this.surfacePoint(at, 0.35, fx.sprite.position);
     fx.sprite.scale.setScalar(fx.baseScale);
-    fx.sprite.visible = true;
     this.parent.add(fx.sprite);
-    this.spriteFx.push(fx);
+    this.flashes.push(fx);
   }
 
   private spawnDamageFloat(spec: Extract<CombatEffectSpec, { kind: 'damage_float' }>): void {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 48;
-    const context = canvas.getContext('2d');
-    // jsdom 等无真实 canvas 实现的环境跳过文字绘制（空白纹理，特效照常计时）
-    if (context && typeof context.strokeText === 'function') {
-      context.font = 'bold 28px sans-serif';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.strokeStyle = 'rgba(0,0,0,0.85)';
-      context.lineWidth = 5;
-      context.strokeText(spec.text, 64, 24);
-      context.fillStyle = HIT_TONE_COLORS[spec.tone];
-      context.fillText(spec.text, 64, 24);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-    }));
-    const width = this.scaleHint() * 1.15;
-    sprite.scale.set(width, width * 0.375, 1);
-    sprite.position.copy(this.surfacePoint(spec.at, 0.8));
-    this.parent.add(sprite);
-    const fx: SpriteFx = {
-      sprite,
-      baseScale: width,
-      aspect: 0.375,
-      rise: this.scaleHint() * 0.9,
-      disposable: true,
-      elapsed: 0,
-      duration: spec.durationMs,
-    };
-    this.spriteFx.push(fx);
-  }
-
-  private spawnRipple(spec: Extract<CombatEffectSpec, { kind: 'shield_ripple' }>): void {
-    if (this.ripples.length >= CombatEffects.MAX_RIPPLES) {
+    // 合并：同一目标、同色调、仍在合并窗口内的飘字累加数字并重新计时。
+    const merged = this.floats.find((fx) => fx.targetId === spec.targetId && fx.tone === spec.tone && fx.elapsed < DAMAGE_MERGE_MS);
+    if (merged) {
+      merged.amount += spec.amount;
+      merged.elapsed = 0;
+      merged.sprite.position.copy(merged.base);
+      drawDamageText(merged.canvas, `-${merged.amount}`, merged.tone);
+      merged.texture.needsUpdate = true;
       return;
     }
-    let fx = this.freeRipples.pop();
+    if (this.floats.length >= COMBAT_FX_LIMITS.damageFloats) {
+      // 超限顶掉最旧的（最新的伤害反馈更重要）。
+      const oldest = this.floats.shift()!;
+      this.releaseFloat(oldest);
+    }
+    let fx = this.freeFloats.pop();
     if (!fx) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 48;
+      const texture = new THREE.CanvasTexture(canvas);
       fx = {
-        mesh: new THREE.Mesh(this.rippleGeometry, new THREE.MeshBasicMaterial({
-          color: 0x5fd7ff,
-          blending: THREE.AdditiveBlending,
-          transparent: true,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        })),
-        baseScale: 1,
+        sprite: new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false })),
+        canvas,
+        texture,
+        targetId: '',
+        amount: 0,
+        tone: spec.tone,
+        base: new THREE.Vector3(),
+        width: 1,
+        rise: 0,
         elapsed: 0,
         duration: spec.durationMs,
       };
     }
+    fx.targetId = spec.targetId;
+    fx.amount = spec.amount;
+    fx.tone = spec.tone;
+    fx.elapsed = 0;
+    fx.duration = spec.durationMs;
+    fx.width = this.scaleHint() * 1.15;
+    fx.rise = this.scaleHint() * 0.9;
+    drawDamageText(fx.canvas, `-${fx.amount}`, fx.tone);
+    fx.texture.needsUpdate = true;
+    this.surfacePoint(spec.at, 0.8, fx.base);
+    fx.sprite.position.copy(fx.base);
+    fx.sprite.scale.set(fx.width, fx.width * 0.375, 1);
+    (fx.sprite.material as THREE.SpriteMaterial).opacity = 1;
+    this.parent.add(fx.sprite);
+    this.floats.push(fx);
+  }
+
+  private releaseFloat(fx: DamageFloatFx): void {
+    fx.sprite.removeFromParent();
+    this.freeFloats.push(fx);
+  }
+
+  private spawnRipple(spec: Extract<CombatEffectSpec, { kind: 'shield_ripple' }>): void {
+    if (this.ripples.length >= COMBAT_FX_LIMITS.ripples) return;
+    const fx = this.freeRipples.pop() ?? {
+      mesh: new THREE.Mesh(this.rippleGeometry, new THREE.MeshBasicMaterial({
+        color: 0x5fd7ff,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })),
+      baseScale: 1,
+      elapsed: 0,
+      duration: spec.durationMs,
+    };
     const normal = new THREE.Vector3(spec.at.x, spec.at.y, spec.at.z).normalize();
-    fx.mesh.position.copy(this.surfacePoint(spec.at, 0.25));
+    this.surfacePoint(spec.at, 0.25, fx.mesh.position);
     fx.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
     fx.baseScale = this.scaleHint() * 1.6;
     fx.elapsed = 0;
     fx.duration = spec.durationMs;
     (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95;
     fx.mesh.scale.setScalar(fx.baseScale * 0.3);
-    fx.mesh.visible = true;
     this.parent.add(fx.mesh);
     this.ripples.push(fx);
   }
 
   private spawnExplosion(spec: Extract<CombatEffectSpec, { kind: 'explosion' }>): void {
-    if (this.explosions.length >= CombatEffects.MAX_EXPLOSIONS) {
-      return;
-    }
-    const mesh = new THREE.Mesh(this.explosionGeometry, new THREE.MeshBasicMaterial({
-      color: 0xffa245,
-      blending: THREE.AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-    }));
-    const baseScale = this.scaleHint() * spec.scale;
-    mesh.position.copy(this.surfacePoint(spec.at, 0.3));
-    mesh.scale.setScalar(baseScale * 0.3);
-    const flash = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.flashTexture,
-      color: 0xfff3c9,
-      blending: THREE.AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-    }));
-    flash.position.copy(mesh.position);
-    flash.scale.setScalar(baseScale * 1.6);
-    this.parent.add(mesh, flash);
-    this.explosions.push({ mesh, flash, baseScale, elapsed: 0, duration: spec.durationMs });
+    if (this.explosions.length >= COMBAT_FX_LIMITS.explosions) return;
+    const fx = this.freeExplosions.pop() ?? {
+      mesh: new THREE.Mesh(this.explosionGeometry, new THREE.MeshBasicMaterial({
+        color: 0xffa245,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      })),
+      flash: new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this.flashTexture,
+        color: 0xfff3c9,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      })),
+      baseScale: 1,
+      elapsed: 0,
+      duration: spec.durationMs,
+    };
+    fx.baseScale = this.scaleHint() * spec.scale;
+    fx.elapsed = 0;
+    fx.duration = spec.durationMs;
+    this.surfacePoint(spec.at, 0.3, fx.mesh.position);
+    fx.mesh.scale.setScalar(fx.baseScale * 0.3);
+    (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 1;
+    fx.flash.position.copy(fx.mesh.position);
+    fx.flash.scale.setScalar(fx.baseScale * 1.6);
+    (fx.flash.material as THREE.SpriteMaterial).opacity = 1;
+    this.parent.add(fx.mesh, fx.flash);
+    this.explosions.push(fx);
   }
 
   private spawnWreck(spec: Extract<CombatEffectSpec, { kind: 'wreck' }>): void {
-    if (this.wreckGroups.length >= CombatEffects.MAX_WRECKS) {
-      return;
+    if (this.wrecks.length >= COMBAT_FX_LIMITS.wrecks) return;
+    let fx = this.freeWrecks.pop();
+    if (!fx) {
+      const group = new THREE.Group();
+      const materials: THREE.MeshStandardMaterial[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        const material = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.9, metalness: 0.3, transparent: true });
+        materials.push(material);
+        group.add(new THREE.Mesh(this.wreckGeometry, material));
+      }
+      fx = { group, materials, normal: new THREE.Vector3(), sink: 0, elapsed: 0, duration: spec.durationMs };
     }
-    const normal = new THREE.Vector3(spec.at.x, spec.at.y, spec.at.z).normalize();
-    const group = new THREE.Group();
-    group.position.copy(this.surfacePoint(spec.at, 0.12));
-    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+    fx.normal.set(spec.at.x, spec.at.y, spec.at.z).normalize();
+    this.surfacePoint(spec.at, 0.12, fx.group.position);
+    fx.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), fx.normal);
     const size = this.scaleHint() * 0.4 * spec.scale;
-    const materials: THREE.MeshStandardMaterial[] = [];
-    for (let i = 0; i < 3; i += 1) {
-      const material = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.9, metalness: 0.3, transparent: true });
-      materials.push(material);
-      const debris = new THREE.Mesh(this.wreckGeometry, material);
+    fx.group.children.forEach((debris, i) => {
       debris.scale.set(size * (0.5 + (i % 2) * 0.35), size * 0.32, size * (0.45 + ((i + 1) % 2) * 0.4));
       debris.position.set((i - 1) * size * 0.5, size * 0.16, ((i * 7) % 3 - 1) * size * 0.4);
       debris.rotation.set(0, i * 1.3, (i % 2) * 0.35);
-      group.add(debris);
-    }
-    this.parent.add(group);
-    this.wreckGroups.push({
-      group,
-      materials,
-      normal,
-      sink: this.scaleHint() * 0.28,
-      elapsed: 0,
-      duration: spec.durationMs,
     });
+    fx.materials.forEach((material) => { material.opacity = 1; });
+    fx.sink = this.scaleHint() * 0.28;
+    fx.elapsed = 0;
+    fx.duration = spec.durationMs;
+    this.parent.add(fx.group);
+    this.wrecks.push(fx);
   }
 
-  /** 逐帧推进（dtMs 毫秒）；完成的特效移除并回收。 */
+  /** 逐帧推进（dtMs 毫秒）；完成的特效移除并回到自由表。 */
   update(dtMs: number): void {
     const dt = Math.max(dtMs, 0);
 
-    this.projectiles = this.projectiles.filter((fx) => {
-      fx.elapsed += dt;
-      const t = Math.min(fx.elapsed / fx.duration, 1);
-      if (t >= 1) {
-        fx.mesh.removeFromParent();
-        this.freeProjectiles.push(fx);
-        return false;
-      }
+    this.projectiles = advance(this.projectiles, dt, (fx) => {
+      fx.mesh.removeFromParent();
+      this.freeProjectiles.push(fx);
+    }, (fx, t) => {
       // 二次贝塞尔：from → mid（抬高弧顶）→ to
       const a = (1 - t) * (1 - t);
       const b = 2 * (1 - t) * t;
@@ -502,118 +547,107 @@ export class CombatEffects {
         a * fx.from.y + b * fx.mid.y + c * fx.to.y,
         a * fx.from.z + b * fx.mid.z + c * fx.to.z,
       );
-      return true;
     });
 
-    this.spriteFx = this.spriteFx.filter((fx) => {
-      fx.elapsed += dt;
-      const t = Math.min(fx.elapsed / fx.duration, 1);
-      if (t >= 1) {
-        const material = fx.sprite.material as THREE.SpriteMaterial;
-        fx.sprite.removeFromParent();
-        if (fx.disposable) {
-          // 飘字：专属 canvas 纹理随特效销毁，不进自由表
-          material.map?.dispose();
-          material.dispose();
-        } else {
-          this.freeSpriteFx.push(fx);
-        }
-        return false;
-      }
-      const pop = 0.6 + 0.9 * Math.sin(Math.min(t * Math.PI, Math.PI));
-      fx.sprite.scale.set(fx.baseScale * pop, fx.baseScale * fx.aspect * (fx.rise > 0 ? 1 : pop), 1);
-      if (fx.rise > 0) {
-        fx.sprite.position.add(fx.sprite.position.clone().normalize().multiplyScalar(fx.rise * (dt / fx.duration)));
-      }
+    this.flashes = advance(this.flashes, dt, (fx) => {
+      fx.sprite.removeFromParent();
+      this.freeFlashes.push(fx);
+    }, (fx, t) => {
+      const pop = 0.6 + 0.9 * Math.sin(t * Math.PI);
+      fx.sprite.scale.setScalar(fx.baseScale * pop);
       (fx.sprite.material as THREE.SpriteMaterial).opacity = 1 - t * t;
-      return true;
     });
 
-    this.ripples = this.ripples.filter((fx) => {
-      fx.elapsed += dt;
-      const t = Math.min(fx.elapsed / fx.duration, 1);
-      if (t >= 1) {
-        fx.mesh.removeFromParent();
-        this.freeRipples.push(fx);
-        return false;
-      }
+    this.floats = advance(this.floats, dt, (fx) => this.releaseFloat(fx), (fx, t) => {
+      const pop = t < 0.15 ? 1 + (0.15 - t) * 2 : 1;
+      fx.sprite.scale.set(fx.width * pop, fx.width * 0.375 * pop, 1);
+      const length = fx.base.length() || 1;
+      fx.sprite.position.copy(fx.base).multiplyScalar((length + fx.rise * t) / length);
+      (fx.sprite.material as THREE.SpriteMaterial).opacity = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+    });
+
+    this.ripples = advance(this.ripples, dt, (fx) => {
+      fx.mesh.removeFromParent();
+      this.freeRipples.push(fx);
+    }, (fx, t) => {
       fx.mesh.scale.setScalar(fx.baseScale * (0.3 + t * 1.4));
       (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95 * (1 - t);
-      return true;
     });
 
-    this.explosions = this.explosions.filter((fx) => {
-      fx.elapsed += dt;
-      const t = Math.min(fx.elapsed / fx.duration, 1);
-      if (t >= 1) {
-        (fx.mesh.material as THREE.Material).dispose();
-        (fx.flash.material as THREE.SpriteMaterial).dispose();
-        fx.mesh.removeFromParent();
-        fx.flash.removeFromParent();
-        return false;
-      }
+    this.explosions = advance(this.explosions, dt, (fx) => {
+      fx.mesh.removeFromParent();
+      fx.flash.removeFromParent();
+      this.freeExplosions.push(fx);
+    }, (fx, t) => {
       fx.mesh.scale.setScalar(fx.baseScale * (0.3 + t * 1.5));
       (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - t;
       (fx.flash.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - t * 2.2);
-      return true;
     });
 
-    this.wreckGroups = this.wreckGroups.filter((fx) => {
-      fx.elapsed += dt;
-      const t = Math.min(fx.elapsed / fx.duration, 1);
-      if (t >= 1) {
-        fx.materials.forEach((material) => material.dispose());
-        fx.group.removeFromParent();
-        return false;
-      }
+    this.wrecks = advance(this.wrecks, dt, (fx) => {
+      fx.group.removeFromParent();
+      this.freeWrecks.push(fx);
+    }, (fx, t) => {
       // 残骸短暂留存并缓缓下沉，末段淡出
       const sinkT = Math.min(t * 3, 1);
       fx.group.position.addScaledVector(fx.normal, -fx.sink * (dt / fx.duration) * 3 * (1 - sinkT + 0.2));
       const fade = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
-      fx.materials.forEach((material) => {
-        material.opacity = fade;
-      });
-      return true;
+      fx.materials.forEach((material) => { material.opacity = fade; });
     });
   }
 
-  /** 场上存活特效数（测试/诊断用）。 */
+  /** 各类存活特效数（测试/诊断用）。 */
+  counts() {
+    return {
+      projectiles: this.projectiles.length,
+      flashes: this.flashes.length,
+      damageFloats: this.floats.length,
+      ripples: this.ripples.length,
+      explosions: this.explosions.length,
+      wrecks: this.wrecks.length,
+    };
+  }
+
+  /** 当前飘字（测试用：目标与累计伤害）。 */
+  damageFloats(): readonly { targetId: string; amount: number }[] {
+    return this.floats;
+  }
+
   get activeCount(): number {
-    return this.projectiles.length + this.spriteFx.length + this.ripples.length + this.explosions.length + this.wreckGroups.length;
+    return Object.values(this.counts()).reduce((sum, value) => sum + value, 0);
   }
 
   dispose(): void {
-    this.projectiles.forEach((fx) => fx.mesh.removeFromParent());
-    this.freeProjectiles.length = 0;
-    this.projectiles.length = 0;
-    this.spriteFx.forEach((fx) => {
-      const material = fx.sprite.material as THREE.SpriteMaterial;
-      if (fx.disposable) {
-        material.map?.dispose();
-      }
-      material.dispose();
+    for (const fx of [...this.projectiles, ...this.freeProjectiles]) fx.mesh.removeFromParent();
+    for (const fx of [...this.flashes, ...this.freeFlashes]) {
       fx.sprite.removeFromParent();
-    });
-    this.freeSpriteFx.forEach((fx) => {
       (fx.sprite.material as THREE.SpriteMaterial).dispose();
-    });
-    this.freeSpriteFx.length = 0;
-    this.spriteFx.length = 0;
-    this.ripples.forEach((fx) => fx.mesh.removeFromParent());
-    this.freeRipples.length = 0;
-    this.ripples.length = 0;
-    this.explosions.forEach((fx) => {
+    }
+    for (const fx of [...this.floats, ...this.freeFloats]) {
+      fx.sprite.removeFromParent();
+      fx.texture.dispose();
+      (fx.sprite.material as THREE.SpriteMaterial).dispose();
+    }
+    for (const fx of [...this.ripples, ...this.freeRipples]) {
+      fx.mesh.removeFromParent();
       (fx.mesh.material as THREE.Material).dispose();
-      (fx.flash.material as THREE.SpriteMaterial).dispose();
+    }
+    for (const fx of [...this.explosions, ...this.freeExplosions]) {
       fx.mesh.removeFromParent();
       fx.flash.removeFromParent();
-    });
-    this.explosions.length = 0;
-    this.wreckGroups.forEach((fx) => {
-      fx.materials.forEach((material) => material.dispose());
+      (fx.mesh.material as THREE.Material).dispose();
+      (fx.flash.material as THREE.SpriteMaterial).dispose();
+    }
+    for (const fx of [...this.wrecks, ...this.freeWrecks]) {
       fx.group.removeFromParent();
-    });
-    this.wreckGroups.length = 0;
+      fx.materials.forEach((material) => material.dispose());
+    }
+    this.projectiles = []; this.freeProjectiles.length = 0;
+    this.flashes = []; this.freeFlashes.length = 0;
+    this.floats = []; this.freeFloats.length = 0;
+    this.ripples = []; this.freeRipples.length = 0;
+    this.explosions = []; this.freeExplosions.length = 0;
+    this.wrecks = []; this.freeWrecks.length = 0;
     this.projectileMaterials.forEach((material) => material.dispose());
     this.projectileMaterials.clear();
     this.projectileGeometry.dispose();

@@ -139,3 +139,22 @@ export function techNodeStatusToken(status: TechNodeStatus): string {
       return "locked";
   }
 }
+
+/**
+ * 「当前相关」科技：已完成 / 研究中 / 可研究，以及可研究项的直接后继（下一步）。
+ * 科技页默认只看这些，切换后才看全部。
+ */
+export function relevantTechIds(nodes: readonly TechNode[]): Set<string> {
+  const ids = new Set<string>();
+  const frontier = new Set<string>();
+  for (const node of nodes) {
+    if (node.status !== "locked") ids.add(node.entry.id);
+    if (node.status === "available" || node.status === "researching") frontier.add(node.entry.id);
+  }
+  for (const node of nodes) {
+    if (node.status === "locked" && (node.entry.prerequisites ?? []).some((id) => frontier.has(id))) {
+      ids.add(node.entry.id);
+    }
+  }
+  return ids;
+}

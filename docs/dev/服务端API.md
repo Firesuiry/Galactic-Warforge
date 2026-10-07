@@ -53,6 +53,17 @@ cd server && go run ./cmd/server -config config-dev.yaml -map-config map.yaml
 - 出生点：每个基地 `spawnMineDistance`（默认 `operate_range-2`，config-dev 为 4）内保证有 `iron_ore` 与 `copper_ore` 有限矿脉（缺失则注入 `Total=2000 / BaseYield=8`）；出生点半径 8 格平整为可建地形。
 - starter 闭环示例：`build 3 2 wind_turbine` → `build 4 2 tesla_tower` → `build 5 1 mining_machine`；矩阵投产后 `build 2 3 matrix_lab` → `transfer <lab> electromagnetic_matrix 10` → `start_research electromagnetism`。
 
+### 遭遇战预设（`config-skirmish.yaml` + `map-skirmish.yaml`）
+
+```bash
+cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-skirmish.yaml
+```
+
+- p1 人类、p2 bot（hard）；`pace_research 6` / `pace_build 2` / `pace_output 2` / `time_limit_ticks 54000` / `threat_growth_scale 1.5`。
+- `battlefield.dark_fog_calm_ticks`（任何配置可用，默认 6000）：黑雾被激怒后多久恢复中立，见 5.4。
+- `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 16000，之前军团只守家。
+- 双方相同的开局物资包（`players[].bootstrap`）：`minerals 1200`、`energy 400`，铁块 100、齿轮 40、磁线圈 26、电路板 20、石砖 4、煤 20，够直接建风机 ×3、电感应塔 ×4、采矿机 ×4、电弧熔炉 ×2、制造台 ×1、传送带约 20 段。回归测试 `TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500`（约 3 秒一条命令，tick 1500 内供电、采矿、冶炼都已运转）与 `TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，tick 15000–25000 首次进攻玩家）。
+
 ### 官方中后期场景（`config-midgame.yaml` + `map-midgame.yaml`）
 
 ```bash
@@ -105,7 +116,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   "request_id": "uuid",
   "accepted": true,
   "enqueue_tick": 120,
-  "results": [{ "command_index": 0, "status": "accepted", "code": "OK", "message": "accepted, will execute at next tick" }]
+  "results": [{ "command_index": 0, "status": "accepted", "code": "OK", "message": "已受理，下一 tick 执行" }]
 }
 ```
 
@@ -194,7 +205,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `produce` | planet | `entity_id` | `unit_type` | `produce` | Produce a server-public world unit（按建筑所在行星结算） |
 | `queue_military_production` | planet | — | `building_id`, `deployment_hub_id`, `blueprint_id`, `count` | `queue_military_production` | Queue military production and deliver ready payloads into a deployment hub |
 | `refit_unit` | planet | — | `building_id`, `unit_id`, `target_blueprint_id` | `refit_unit` | Send a squad or fleet into authoritative refit |
-| `refuel_mecha` | planet | `entity_id` | `item_id`, `quantity` | `refuel_mecha` | Refuel an executor mecha with a catalog-declared mecha fuel item |
+| `refuel_mecha` | planet | `entity_id` | `item_id`, `count?` | `refuel_mecha` | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
 | `restore_construction` | planet | — | `task_id` | `restore_construction` | Restore a cancelled construction task |
 | `scan_galaxy` | galaxy | `galaxy_id` | — | `scan_galaxy` | Discover all systems in a galaxy |
 | `scan_planet` | planet | `planet_id` | — | `scan_planet` | Discover a planet |
@@ -227,6 +238,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
 - `form_squad`：entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected
 - `move`：实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。 F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。
+- `refuel_mecha`：payload.count 可选，缺省 1：最多烧几块燃料，烧到核心满为止；背包不足时烧掉现有的。
 - `set_energy_exchanger_mode`：mode must be one of charge|discharge|standby; target building must be an owned energy_exchanger
 - `set_recipe`：recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.
 - `switch_active_planet`：F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。
@@ -256,18 +268,19 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 初始核心 100、护盾容量 0。科技：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +2 移动范围/级（基础 12）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +1 视野/级（基础 6）。研究只提高上限，不补能。
 - 受击满 10 tick 后每 tick 消耗 1 核心恢复最多 2 护盾。
 - 移动：每走一格真实路径耗 1 核心，能量不足整条拒绝。攻击：基础攻击 20、防御 8、射程 4，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
-- `refuel_mecha`：仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；按核心缺口限制消耗件数，核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
-- `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 2 格内且余量足够；每 10 tick 采 1 件入背包。
-- `craft_item`：配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `max(1, duration)` tick；不递归制造前置。
-- 个人任务（`mecha.job`：`kind=mine|craft`、`remaining_ticks`、`ticks_per_batch`、`remaining_batches`、`completed_batches`、`energy_per_tick`、`state=running|no_energy|out_of_range`、`reserved_inputs`）同时只能有一个；每推进 1 tick 耗 1 核心，缺能或超距暂停、恢复后继续。`cancel_mecha_job` 返还未完成批次原料，死亡也走同一退款（只退一次）。
+- 自动交战：有显式 `attack` 目标时只打它（不追击）；空闲时（无移动路径、无采集任务）先还击射程内的最近攻击者，再打射程内最近的敌对单位（敌方玩家单位、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火。移动、采集命令优先。
+- `refuel_mecha`：`payload.item_id` 必填，`payload.count` 可选（缺省 1，最多烧几块）。仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；实际消耗 = min(count, 补满所需件数, 背包现有)，背包没有该燃料 `INSUFFICIENT_RESOURCE`；核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
+- `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 2 格内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
+- `craft_item`：配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `duration` tick（不受 `pace_output` 影响），每批耗 `max(1, duration/20)` 核心（铁块 3、齿轮 1）；不递归制造前置。
+- 个人任务（`mecha.job`：`kind=mine|craft`、`remaining_ticks`、`ticks_per_batch`、`remaining_batches`、`completed_batches`、`energy_per_batch`、`state=running|no_energy|out_of_range`、`reserved_inputs`）同时只能有一个；每批开工时一次性扣 `energy_per_batch` 核心，缺能或超距暂停、恢复后继续。`cancel_mecha_job` 返还未完成批次原料，死亡也走同一退款（只退一次）。
 - 电网充电（无需命令）：自有运行中的 `wireless_power_tower` 6 格内最多 10/tick（塔自耗 1/tick），`tesla_tower` 4 格内最多 2/tick；只用塔所在电网的剩余供电，优先保建筑用电；每机甲每 tick 只从一塔受电，优先无线塔。
 - 机甲阵亡后等待配置的 `respawn_ticks`，在己方存活 HQ 旁重生；无 HQ 不重生。
 
 ### 5.3 世界单位、军团与生产
 
 - `move` / `attack` / `unit_order` 的单位选择器为 `target.entity_id` 或 `target.entity_ids`（框选批量）。
-- 实时移动：单位每 tick 按 `move_speed` 沿 `path` 推进，可被新命令打断；占位不重叠，被堵自动侧移/重寻路，不可达返回 `OUT_OF_RANGE`；寻路预算上限 800 格。`entity_moved` 带 `path` / `arrived`。
-- 攻击：追击至射程内按 `attack_cooldown_ticks` 开火；自动索敌（`aggro_range`）、还击、守位/追击受 `stance` 与 `combat_anchor` 约束；目标可为单位、建筑、黑雾，PvP 与 PvE 同一套规则（军团只是命令容器，不是攻击目标）。
+- 实时移动：单位每 tick 按 `move_speed` 沿 `path` 推进，可被新命令打断；占位不重叠，被堵先侧移，堵满 20 tick 后把停着不动的单位当障碍绕路重寻路（绕不开再按原路等待），不可达返回 `OUT_OF_RANGE`；寻路预算上限 800 格。`entity_moved` 带 `path` / `arrived`。
+- 攻击：追击至射程内按 `attack_cooldown_ticks` 开火；自动索敌（`aggro_range`）、还击、守位/追击受 `stance` 与 `combat_anchor` 约束；目标可为单位、建筑、黑雾，PvP 与 PvE 同一套规则（军团只是命令容器，不是攻击目标）。中立黑雾只能显式攻击，自动索敌/炮塔只打已敌对的黑雾。
 - `unit_order.order`：`attack_move`（沿途索敌）、`patrol`（往返）、`retreat`（途中不还击）——需 `target.position`；`guard`、`follow`——需 `payload.target_entity_id`；`hold`（原地坚守）、`stop`（清空命令）。
 - 单位战斗字段：`move_speed` / `path` / `path_index` / `move_progress` / `stance` / `order_pos` / `guard_target_id` / `combat_anchor` / `last_attacker_id` / `last_attack_tick` / `attack_cooldown_ticks` / `aggro_range` / `domain` / `min_attack_range` / `combat_state`。攻击无人机无视地形，只有导弹与防空武器能打空中单位。
 - 弹药：`ammo_class`（`bullet|shell|missile`，无需弹药为空）/ `ammo` / `ammo_capacity` / `ammo_item`（同类高档弹增伤）；每次开火扣 1 发，打空 `combat_state="no_ammunition"` 停火；出生满弹，黑雾不耗弹。
@@ -282,6 +295,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 炮塔每 tick 自动选取射程内敌方目标并产生 `damage_applied`，按 `Combat.fire_rate` 冷却：`missile_turret` 耗 `ammo_missile`；`implosion_cannon` 耗 `shell_set`（可装 `crystal_shell_set`）；`plasma_turret` 耗 `plasma_capsule`；`laser_turret` 只耗电；`anti_air_turret`（射程 10，只打空中，耗 `ammo_missile`）还会击落敌方飞行中的物流无人机/配送机器人（`entity_destroyed.reason="shot_down"`，含 `cargo_lost`）；`artillery_turret`（射程 15、最小射程 4，只打地面）耗 `shell_set`/`crystal_shell_set`。缺弹发 `building_state_changed(reason=no_ammunition)` 停火，重装后恢复。
 - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator` 接入电网后才 `running`。行星护盾先吸收对建筑的所有外部伤害（`damage_applied.shield_absorbed` / `shield_remaining`）。
 - 黑雾：巢穴（`enemy_forces[]` 中的 hive，`strength` 即 HP，`level` 为等级）按威胁节奏孵化 `owner_id="dark_fog"` 单位，与玩家单位共用移动/交战结算。威胁值随全行星发电累积，决定巢穴等级、孵化间隔、波次规模和扩张；袭击优先级：电厂 > 矿区 > 物流线 > 炮塔 > 其他。巢穴位置由（行星, 序号）哈希确定性派生。
+- 黑雾被动：默认对所有玩家中立——不派进攻波次（只补守军，不发 `enemy_wave_incoming`），黑雾单位、巢穴不攻击中立玩家，新巢只建在离玩家建筑足够远的空地，不吞建筑。玩家（含 bot）的单位、炮塔、舰队对黑雾单位或巢穴造成伤害时，黑雾对该玩家敌对到 `当前 tick + battlefield.dark_fog_calm_ticks`（默认 6000，每次再伤害都顺延），首次转敌对发 `dark_fog_provoked`。敌对期间波次只派向敌对玩家，黑雾单位、巢穴反击只打敌对玩家，玩家单位和炮塔也会自动打黑雾。到期恢复中立、发 `dark_fog_calmed`，奔袭中的黑雾撤回巢穴。bot 不主动攻击中立黑雾。
 - 巢穴守军：编制 = 难度基数 + 每级增量（easy 1+1/级 上限 4，normal 2+1/级 上限 6，hard 3+2/级 上限 10），守巢半径随等级 +2/级，不外派，死亡由后续波次补足。
 - 巢穴摧毁：掉落数量乘 `1+0.5×(level−1)`（向上取整，`dark_fog_matrix` 保底 level+1），威胁扣 `level×50`（下限 0），广播 `enemy_nest_destroyed`；遗址冷却期内（easy 4000 / normal 3000 / hard 2400 tick）半径（10 / 12 / 14 格）内不刷新巢。
 - 隐藏科技（如 `dark_fog_matrix`）在玩家持有其成本物品前不可见、拒绝研究。
@@ -373,7 +387,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /state/summary`**
 - `tick`、`active_planet_id`（全局兜底行星）、`map_width` / `map_height` / `surface`；已宣判时 `winner` / `victory_reason` / `victory_rule`。
-- `players`：所有玩家返回 `player_id` / `team_id` / `role` / `is_alive`；仅自己返回完整状态：`resources`、`inventory`（`item_id → 数量`）、`permissions`、`focus_planet_id`、`executor`、`executors`（按 `planet_id`）、`tech`、`combat_tech`、`stats`（同 `/state/stats`）。
+- `players`：所有玩家返回 `player_id` / `team_id` / `role` / `is_alive` / `dark_fog`（`{hostile: bool, hostile_until_tick: int}`，黑雾对该玩家的敌对状态，不敌对时 `hostile_until_tick=0`）；仅自己返回完整状态：`resources`、`inventory`（`item_id → 数量`）、`permissions`、`focus_planet_id`、`executor`、`executors`（按 `planet_id`）、`tech`、`combat_tech`、`stats`（同 `/state/stats`）。
 - `executor`：即 `executors[active_planet_id]`（该行星没有执行体时省略），字段 `unit_id` / `build_efficiency` / `operate_range` / `concurrent_tasks` / `research_boost`。Web 用 `unit_id` 请求 `/path`，以 `operate_range` 为 `stop_range` 分段靠近。
 - `tech`：`completed_techs`（`{tech_id: level}`）、`current_research`、`research_queue`、`total_researched`。研究条目字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason`（`waiting_lab` / `waiting_matrix` / `low_power` / `invalid_tech`）/ `speed_multiplier`（供电倍率，1 = 满速）/ `estimated_ticks_remaining` / `enqueue_tick` / `complete_tick`。矩阵 ID 统一为 `electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
 - `combat_tech`：`unlocked_techs` / `current_research` / `research_progress`。
@@ -383,7 +397,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `production_stats`：`total_output` / `by_building_type` / `by_item` / `efficiency`。只统计本 tick 真实落库/落站的产出（配方产物与副产物、采集入库、矿物直充、轨道采集）；本 tick 无产出时归零；`efficiency` 是 `ProductionMonitor` 采样均值。
 - `energy_stats`：`generation`（电网真实供电，含射线接收与储能放电）/ `consumption`（真实需求）/ `storage` / `current_stored`（储能建筑电量）/ `shortage_ticks`。
 - `logistics_stats`：`throughput` / `avg_distance` / `avg_travel_time` / `deliveries`。
-- `combat_stats`：`units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost` / `threat_level` / `highest_threat`。双边计数：受害方为玩家实体计损失，击杀方为不同归属玩家计击杀；黑雾不计入击杀；军团不单独计数（按成员单位计）。
+- `combat_stats`：`units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost` / `threat_level` / `highest_threat`。双边计数：受害方为玩家实体计损失，击杀方为不同归属玩家计击杀；击杀黑雾单位计 `units_killed`，摧毁黑雾巢穴计 `buildings_destroyed`（黑雾自身没有战损）；军团不单独计数（按成员单位计）。
 - 生产、能源与威胁统计聚合所有已加载行星（同 tick 多行星短缺只计一次）。玩家不存在时返回零值结构。
 
 **`GET /state/agent-briefing`**：agent/GUI 一站式态势。
@@ -549,18 +563,18 @@ GameEvent：
 | 类型 | payload 要点 |
 | --- | --- |
 | `command_result` | `request_id` / `command_index` / `command_type` / `status` / `code` / `message`；蓝图命令可带 `validation` |
-| `entity_created` / `entity_updated` / `entity_destroyed` | 实体 ID 与类型；`entity_destroyed` 可带 `reason`（如 `shot_down`）、`refunds` |
+| `entity_created` / `entity_updated` / `entity_destroyed` | 实体 ID 与类型；`entity_destroyed` 带 `entity_kind`（`unit` / `building` / `enemy_force` / `fleet` / `combat_squad` / `logistics_drone` / `logistics_bot` / `dyson_component` / `solar_sail`）和 `entity_type`（具体类型，如 `wind_turbine`、`soldier`、`hive`），战斗摧毁带 `owner_id` / `killed_by` / `source`，可带 `reason`（如 `shot_down`、`demolish`）、`refunds` |
 | `entity_moved` | `path` / `arrived` |
 | `damage_applied` | `damage`（实际 HP 伤害）、`shield_absorbed` / `shield_remaining`（护盾） |
 | `building_state_changed` | `building_id` / `building_type` / `prev_state` / `next_state` / `prev_reason` / `reason`；病因变化而状态不变时也发；维护故障带 `cause`；可带 `unit_queue` / `rally_point` / `splitter` |
 | `resource_changed` | 资源与背包变化；同 tick 的 `energy` 为最终结算值；机甲任务带 `entity_id` / `items` / `job_kind` / `completed_batches` |
 | `mecha_state_changed` | 仅拥有者；`entity_id` + 完整 `mecha` + `move_range` / `attack` / `defense` / `attack_range`；加燃料带 `fuel_item_id` / `fuel_used`；电网充电带 `charging_building_id` / `charging_network_id` / `grid_charge` |
 | `tick_completed` | `tick` / `duration_ms` |
-| `production_alert` | `alert`（同告警快照），按冷却窗口重发 |
+| `production_alert` | `alert`（同告警快照）。同一建筑同一类问题只在出现时发一次，持续存在时每 3000 tick 提醒一次，解除后再出现（距上次满 `alert_cooldown_ticks`）才重新发 |
 | `traffic_monitor_alert` | `building_id` / `planet_id` / `target_belt_id` / `state` / `alert_active` / `items_per_tick` / `minimum_items_per_tick` / `tick` |
 | `construction_paused` / `construction_resumed` | 施工任务状态 |
 | `research_completed` | 科技 ID；`mission_complete` 完成时先于 `victory_declared` |
-| `victory_declared` | `winner_id` / `reason` / `victory_rule` / `declared_tick`，团队胜带 `team_id`，科研胜带 `tech_id` |
+| `victory_declared` | `winner_id` / `reason` / `victory_rule` / `declared_tick`（宣判 tick），团队胜带 `team_id`，科研胜带 `tech_id` |
 | `threat_level_changed` / `loot_dropped` | 威胁等级；战利品 |
 | `rocket_launched` | `building_id` / `system_id` / `layer_index` / `count` / `rocket_launches` / `construction_bonus` / `layer_energy_output` |
 | `squad_deployed` | `squad_id` / `squad`（伴随 `entity_created`） |
@@ -569,7 +583,9 @@ GameEvent：
 | `orbital_superiority_changed` | `system_id` / `advantage_player_id` / `contest_intensity` / `reason` |
 | `theater_zone_alert` | `theater_id` / `zone_type` / `planet_id` / `position` / `radius` / `hostile_count` |
 | `supply_line_disrupted` | 预留；封锁拦截计数目前只在 `planet_blockades[]` 中 |
-| `enemy_wave_incoming` | 全员可见；`nest_id` / `planet_id` / `from` / `count` / `guards` / `level` / `threat` / `wave_tick` / `unit_speed` / 目标信息 |
+| `dark_fog_provoked` | 全员可见；`player_id` / `until_tick`：黑雾开始对该玩家敌对 |
+| `dark_fog_calmed` | 全员可见；`player_id`：黑雾对该玩家恢复中立 |
+| `enemy_wave_incoming` | 全员可见；只在有敌对玩家时发；`nest_id` / `planet_id` / `from` / `count` / `guards` / `level` / `threat` / `wave_tick` / `unit_speed` / 目标信息 |
 | `enemy_nest_destroyed` | 全员可见；`nest_id` / `position` / `level` / `killed_by` / `killer_owner` / `source` / `drops[]` / `threat_meter` |
 
 ## 8. 关键概念与事实源

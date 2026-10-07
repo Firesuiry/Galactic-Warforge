@@ -51,17 +51,17 @@ func (gc *GameCore) execConfigureTrafficMonitor(ws *model.WorldState, playerID s
 	}
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
-		return fail(model.CodeEntityNotFound, "traffic monitor not found")
+		return fail(model.CodeEntityNotFound, "未找到流量监视器")
 	}
 	if b.OwnerID != playerID {
-		return fail(model.CodeNotOwner, "cannot configure another player's traffic monitor")
+		return fail(model.CodeNotOwner, "不能配置其他玩家的流量监视器")
 	}
 	if b.Type != model.BuildingTypeTrafficMonitor || b.TrafficMonitor == nil {
-		return fail(model.CodeInvalidTarget, "target is not an initialized traffic monitor")
+		return fail(model.CodeInvalidTarget, "目标不是已初始化的流量监视器")
 	}
 	target := p.TargetBeltID
 	if target != "" && trafficMonitorTarget(ws, b, target) == nil {
-		return fail(model.CodeInvalidTarget, "target must be an adjacent owned conveyor belt")
+		return fail(model.CodeInvalidTarget, "目标必须是相邻的己方传送带")
 	}
 	staged := newTrafficMonitorConfig(target, p.WindowTicks, p.MinimumItemsPerTick, p.AlertsEnabled)
 	if err := staged.Validate(); err != nil {
@@ -73,7 +73,7 @@ func (gc *GameCore) execConfigureTrafficMonitor(ws *model.WorldState, playerID s
 	if wasActive {
 		events = append(events, trafficAlertEvent(ws, b))
 	}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "traffic monitor configured"}, events
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "流量监视器已配置"}, events
 }
 
 func newTrafficMonitorConfig(target string, window int, threshold float64, alerts bool) *model.TrafficMonitorState {

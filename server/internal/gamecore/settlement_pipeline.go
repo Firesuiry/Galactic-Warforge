@@ -43,7 +43,12 @@ func newSettlementPipeline() settlementPipeline {
 		var events []*model.GameEvent
 		// Share each system and owner Dyson output across all planets this tick.
 		energyBudget := make(map[string]int)
+		if len(frame.worlds) > 0 {
+			// 玩家表跨世界共享：黑雾冷静期每 tick 只结算一次。
+			events = append(events, settleDarkFogCalm(frame.worlds[0].Players, frame.worlds[0].Tick)...)
+		}
 		for _, ws := range frame.worlds {
+			ws.DarkFogCalmTicks = gc.cfg.Battlefield.DarkFogCalmTicks
 			events = append(events, settleMechas(ws)...)
 			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
 
@@ -130,7 +135,7 @@ func newSettlementPipeline() settlementPipeline {
 
 		if !gc.Victory().Declared() {
 			victory := resolveBattlefieldVictory(gc.cfg.Battlefield.VictoryRule, gc.worlds, frame.currentTick, gc.timeLimitTicks())
-			if gc.declareVictory(victory, frame.currentTick) {
+			if gc.declareVictory(&victory, frame.currentTick) {
 				events = append(events, victoryDeclaredEvent(victory))
 				gc.recordVictoryAudit(victory)
 			}

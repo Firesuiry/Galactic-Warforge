@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/terrain"
 )
 
 // 实时战斗核心（R1–R5）验收测试：移动寻路、自动交战、指令集、小队实体化与 PvP。
@@ -143,7 +144,7 @@ func TestR2AutoEngageCounterattackAndDeath(t *testing.T) {
 	}
 	deathSeen := false
 	for _, evt := range events {
-		if evt.EventType == model.EvtEntityDestroyed && evt.Payload["entity_type"] == "unit" {
+		if evt.EventType == model.EvtEntityDestroyed && evt.Payload["entity_kind"] == "unit" {
 			deathSeen = true
 		}
 	}
@@ -306,7 +307,7 @@ func TestR4PvPUnitsDestroyUnitsAndBase(t *testing.T) {
 	}
 	baseDown := false
 	for _, evt := range events {
-		if evt.EventType == model.EvtEntityDestroyed && evt.Payload["entity_type"] == "building" && evt.Payload["entity_id"] == base.ID {
+		if evt.EventType == model.EvtEntityDestroyed && evt.Payload["entity_kind"] == "building" && evt.Payload["entity_type"] == string(base.Type) && evt.Payload["entity_id"] == base.ID {
 			baseDown = true
 		}
 	}
@@ -340,5 +341,28 @@ func TestR5BatchOrderAndGuardFollow(t *testing.T) {
 	advanceRTT(ws, 200)
 	if ws.Units[raider.ID] != nil && ws.Units[guard.ID] == nil {
 		t.Fatal("guard failed to defend VIP")
+	}
+}
+
+// 记录项 B：被待命单位堵在唯一近路上时，绕开占位格重寻路，不再原地反复撞。
+func TestBlockedUnitRepathsAroundIdleUnits(t *testing.T) {
+	ws := newRTTWorld(false)
+	// x=5 一列是墙，只在 y=5（被待命单位占住）和 y=11 留口。
+	for y := 0; y < ws.MapHeight; y++ {
+		if y != 5 && y != 11 && ws.InBounds(5, y) {
+			ws.Grid[y][5].Terrain = terrain.TileBlocked
+		}
+	}
+	blocker := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 5, Y: 5})
+	mover := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 5})
+	dest := model.Position{X: 9, Y: 5}
+	path, ok := computeUnitPath(ws, mover.Position, dest, mover.ID)
+	if !ok {
+		t.Fatal("no initial path")
+	}
+	mover.Path, mover.PathIndex, mover.Stance = path, 1, model.UnitStanceMoving
+	advanceRTT(ws, 400)
+	if ws.SurfaceDistance(mover.Position, dest) > 1 {
+		t.Fatalf("mover stuck at %v behind idle unit %v (dest %v)", mover.Position, blocker.Position, dest)
 	}
 }

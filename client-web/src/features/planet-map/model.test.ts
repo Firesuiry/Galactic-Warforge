@@ -99,6 +99,16 @@ describe('planet map model helpers', () => {
     expect(resolveHomeTile(noBuilding, 'p2')).toBeNull();
   });
 
+  it('同一格再次点击轮换到下一层（机甲站在矿上时选中矿）', () => {
+    const base = {...createPlanetFixture(),surface: { topology: 'cube_sphere' as const, face_size: 12 / 3 }, map_width:12,map_height:8};
+    const worker = base.units!['worker-1'];
+    const planet = { ...base, units: { ...base.units, 'worker-1': { ...worker, position: { x: 0, y: 0, z: 0 } } } };
+    const first = resolveSelectionAtTile(planet, 0, 0);
+    expect(first).toMatchObject({ kind: 'unit', id: 'worker-1' });
+    expect(resolveSelectionAtTile(planet, 0, 0, first)).toMatchObject({ kind: 'resource', id: 'iron-1' });
+    expect(resolveSelectionAtTile(planet, 0, 0, resolveSelectionAtTile(planet, 0, 0, first))).toMatchObject({ kind: 'unit' });
+  });
+
   it('按建筑、单位、资源优先级解析地块选中对象', () => {
     const planet = {...createPlanetFixture(),surface: { topology: 'cube_sphere' as const, face_size: 12 / 3 }, map_width:12,map_height:8};
 

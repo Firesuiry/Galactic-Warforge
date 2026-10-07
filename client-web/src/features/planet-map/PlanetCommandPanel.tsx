@@ -121,7 +121,7 @@ const COMMAND_WORKFLOWS: Array<{
   {
     id: "cross_planet",
     label: "跨星球",
-    description: "先确认观察行星与 active planet，再切换命令上下文。",
+    description: "先确认观察行星与服务端活动行星，再切换命令上下文。",
   },
   {
     id: "dyson",
@@ -1717,7 +1717,7 @@ export function PlanetCommandPanel({
             }}
             type="button"
           >
-            切换 active planet
+            切换活动行星
           </button>
         </div>
         </section>

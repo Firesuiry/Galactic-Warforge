@@ -707,3 +707,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 顶栏关键库存 + 完整库存弹层 */
+.top-nav__inventory { position:relative; display:flex; }
+.top-nav__inventory-btn { display:flex; gap:4px; padding:0; border:0; background:none; color:inherit; cursor:pointer; }
+.top-nav__inventory-btn:hover .top-nav__chip { border-color:var(--border-glow); }
+.top-nav__chip-label { font-size:.68rem; color:var(--text-muted); max-width:4.5em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.top-nav__inventory-panel { position:absolute; top:calc(100% + 6px); left:0; z-index:60; min-width:220px; max-height:360px; overflow-y:auto; padding:8px 10px; border:1px solid var(--border-glow, #39e6d055); border-radius:6px; background:#08111df2; box-shadow:0 8px 24px #000a; }
+.top-nav__inventory-title { font-size:.75rem; color:var(--text-muted); margin-bottom:6px; }
+.top-nav__inventory-panel ul { list-style:none; margin:0; padding:0; display:grid; gap:3px; }
+.top-nav__inventory-panel li { display:grid; grid-template-columns:16px 1fr auto; align-items:center; gap:6px; font-size:.78rem; }
+.top-nav__inventory-panel li strong { font-variant-numeric:tabular-nums; }
+.top-nav__inventory-empty { font-size:.78rem; color:var(--text-muted); }
+@media(max-width:1500px) { .top-nav__chip-label { display:none; } }
+.top-nav__status { flex-wrap:nowrap; }
+@media(max-width:1400px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+3) { display:none; } }
+.top-nav__status { min-width:0; }

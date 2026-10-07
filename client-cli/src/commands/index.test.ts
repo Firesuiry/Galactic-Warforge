@@ -57,7 +57,7 @@ describe('mecha refuel command registration', () => {
   it('registers refuel_mecha and exposes its fuel arguments', async () => {
     assert.ok(COMMANDS.refuel_mecha);
     const help = await dispatch('help refuel_mecha', { api, currentPlayer: 'p1', rl: {} as never });
-    assert.match(help, /refuel_mecha <executor_id> <fuel_item_id> <quantity>/);
+    assert.match(help, /refuel_mecha <executor_id> <fuel_item_id> \[count\]/);
   });
 });
 

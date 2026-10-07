@@ -151,6 +151,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 				targetStrengthLoss := max(1, directDamage+fleetMissileDamage/6)
 				targetStrengthBefore := target.Strength
 				target.Strength -= targetStrengthLoss
+				provoked := provokeDarkFog(targetWorld, fleet.OwnerID)
 				fleet.LastAttackTick = currentTick
 				fleet.Weapon.LastFireTick = currentTick
 				settleAttackConsumption(&fleet.Sustainment, fleet.Weapon, currentTick)
@@ -166,6 +167,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 						"damage":        targetStrengthLoss,
 					},
 				})
+				events = append(events, provoked...)
 				if fleetMissilesFired > 0 {
 					events = append(events, &model.GameEvent{
 						EventType:       model.EvtMissileSalvoFired,
@@ -850,6 +852,7 @@ func fleetPairExchange(fleets []fleetRefLike, attackerOwner, defenderOwner strin
 			VisibilityScope: "all",
 			Payload: map[string]any{
 				"entity_id":   target.ID,
+				"entity_kind": "fleet",
 				"entity_type": "fleet",
 				"owner_id":    defenderOwner,
 				"killed_by":   shooters[0].ID,

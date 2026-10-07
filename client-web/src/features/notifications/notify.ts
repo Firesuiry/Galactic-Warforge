@@ -14,7 +14,8 @@ import type { GameEventDetail } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
 import { toastFromGameEvent } from '@/features/notifications/event-toasts';
-import { useNotificationsStore } from '@/features/notifications/store';
+import { HISTORY_SIZE, useNotificationsStore, type Toast } from '@/features/notifications/store';
+import { useSessionStore } from '@/stores/session';
 
 const DEDUP_BUFFER_SIZE = 64;
 const recentEventIds: string[] = [];
@@ -46,12 +47,45 @@ export function notifyGameEvent(event: GameEventDetail): void {
   if (isDuplicateEvent(event.event_id)) {
     return;
   }
-  const mapped = toastFromGameEvent(event);
+  const mapped = toastFromGameEvent(event, useSessionStore.getState().playerId);
   if (!mapped) {
     return;
   }
-  useNotificationsStore.getState().push(mapped.toast);
+  useNotificationsStore.getState().push({ ...mapped.toast, tick: event.tick });
   if (mapped.sfx) {
     sfx[mapped.sfx]();
   }
+}
+
+/** 会产生通知的事件类型（历史回填时向服务端拉取）。 */
+export const NOTIFICATION_EVENT_TYPES = [
+  'entity_destroyed', 'building_state_changed', 'research_completed', 'production_alert',
+  'traffic_monitor_alert', 'command_result', 'dark_fog_provoked', 'dark_fog_calmed',
+  'rocket_launched', 'squad_deployed', 'fleet_commissioned', 'theater_zone_alert',
+  'supply_line_disrupted', 'victory_declared',
+] as const;
+
+/**
+ * 服务端事件历史 → 铃铛历史条目（最新在前，同 mergeKey 合并计数）。
+ * 回填的事件登记进去重缓冲，SSE 重放时不再弹 toast。
+ */
+export function historyFromEvents(events: GameEventDetail[], viewerId: string): Toast[] {
+  const entries: Toast[] = [];
+  const byKey = new Map<string, Toast>();
+  for (const event of [...events].sort((a, b) => b.tick - a.tick)) {
+    isDuplicateEvent(event.event_id);
+    const mapped = toastFromGameEvent(event, viewerId);
+    if (!mapped) continue;
+    const key = mapped.toast.mergeKey;
+    const existing = key ? byKey.get(key) : undefined;
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    if (entries.length >= HISTORY_SIZE) continue;
+    const entry: Toast = { ...mapped.toast, id: 0, at: 0, count: 1, tick: event.tick };
+    entries.push(entry);
+    if (key) byKey.set(key, entry);
+  }
+  return entries;
 }

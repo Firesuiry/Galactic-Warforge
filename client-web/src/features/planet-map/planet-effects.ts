@@ -13,6 +13,16 @@ export const FIRE_FLASH_MS = 200;
 export const PLANET_DAMAGE_FLOAT_MS = 800;
 export const HIT_FLASH_MS = 150;
 
+/** 同一目标同色调飘字在此窗口内合并（数值累加、重新计时）。 */
+export const PLANET_DAMAGE_MERGE_MS = 450;
+
+/** 各类特效同时存活上限（交战密集时控制渲染开销）。 */
+export const PLANET_EFFECT_LIMITS: Record<PlanetEffectKind, number> = {
+  damage_float: 24,
+  fire_flash: 64,
+  hit_flash: 32,
+};
+
 /** 开火闪光配色基调：防御塔类岔开（黄白），普通单位青白。 */
 export type FireTone = 'unit' | 'defense';
 
@@ -31,9 +41,11 @@ export interface FireFlashEffectSpec {
 
 export interface PlanetDamageFloatEffectSpec {
   kind: 'damage_float';
+  /** 受击实体 id：同目标短时间内的飘字合并。 */
+  targetId: string;
   x: number;
   y: number;
-  text: string;
+  amount: number;
   tone: HitTone;
   durationMs?: number;
 }
@@ -78,36 +90,65 @@ function defaultDuration(spec: PlanetEffectSpec): number {
  * 特效对象池：active 列表 + 已完成槽位复用（free 列表里的 effect 对象
  * 在下次 spawn 时被覆盖重用，避免高频事件下持续分配）。
  */
+export interface PlanetEffectSpawnResult {
+  effect: PlanetEffect;
+  /** true = 合并进已有飘字（effect 为该已有特效，场景需刷新其视图）。 */
+  merged: boolean;
+  /** 因上限被顶掉的最旧特效（场景需回收其视图）。 */
+  evicted?: PlanetEffect;
+}
+
+export function damageFloatText(spec: PlanetDamageFloatEffectSpec): string {
+  return `-${spec.amount}`;
+}
+
 export class PlanetEffectPool {
   private activeEffects: PlanetEffect[] = [];
   private freeEffects: PlanetEffect[] = [];
   private nextId = 1;
 
-  spawn(spec: PlanetEffectSpec): PlanetEffect {
-    const durationMs = Math.max(spec.durationMs ?? defaultDuration(spec), 1);
-    const slot = this.freeEffects.pop();
-    if (slot) {
-      slot.id = this.nextId;
-      slot.spec = spec;
-      slot.elapsedMs = 0;
-      slot.durationMs = durationMs;
-      slot.progress = 0;
-      slot.done = false;
-      this.nextId += 1;
-      this.activeEffects.push(slot);
-      return slot;
+  /**
+   * 生成特效；返回 null 表示因上限丢弃（fire_flash/hit_flash 超限丢新）。
+   * damage_float 超限顶掉最旧；同目标同色调窗口内合并。
+   */
+  spawn(spec: PlanetEffectSpec): PlanetEffectSpawnResult | null {
+    if (spec.kind === 'damage_float') {
+      const existing = this.activeEffects.find((effect) => effect.spec.kind === 'damage_float'
+        && effect.spec.targetId === spec.targetId
+        && effect.spec.tone === spec.tone
+        && effect.elapsedMs < PLANET_DAMAGE_MERGE_MS);
+      if (existing) {
+        const prev = existing.spec as PlanetDamageFloatEffectSpec;
+        existing.spec = { ...spec, amount: prev.amount + spec.amount };
+        existing.elapsedMs = 0;
+        existing.progress = 0;
+        return { effect: existing, merged: true };
+      }
     }
-    const effect: PlanetEffect = {
-      id: this.nextId,
-      spec,
-      elapsedMs: 0,
-      durationMs,
-      progress: 0,
-      done: false,
-    };
+
+    let evicted: PlanetEffect | undefined;
+    const count = this.activeEffects.reduce((sum, effect) => sum + (effect.spec.kind === spec.kind ? 1 : 0), 0);
+    if (count >= PLANET_EFFECT_LIMITS[spec.kind]) {
+      if (spec.kind !== 'damage_float') return null;
+      const index = this.activeEffects.findIndex((effect) => effect.spec.kind === 'damage_float');
+      evicted = this.activeEffects.splice(index, 1)[0]!;
+      evicted.done = true;
+    }
+
+    const durationMs = Math.max(spec.durationMs ?? defaultDuration(spec), 1);
+    // 被顶掉的对象由场景持有引用读取（回收视图），本次不复用其槽位，留到下次 spawn。
+    const slot = this.freeEffects.pop();
+    const effect: PlanetEffect = slot ?? { id: 0, spec, elapsedMs: 0, durationMs, progress: 0, done: false };
+    effect.id = this.nextId;
+    effect.spec = spec;
+    effect.elapsedMs = 0;
+    effect.durationMs = durationMs;
+    effect.progress = 0;
+    effect.done = false;
     this.nextId += 1;
     this.activeEffects.push(effect);
-    return effect;
+    if (evicted) this.freeEffects.push(evicted);
+    return evicted ? { effect, merged: false, evicted } : { effect, merged: false };
   }
 
   /**
@@ -227,9 +268,10 @@ export function specsFromPlanetBattleEvent(
   if (damage !== undefined && damage > 0) {
     specs.push({
       kind: 'damage_float',
+      targetId: asString(payload.target_id)!,
       x: target.x,
       y: target.y - 10,
-      text: `-${damage}`,
+      amount: damage,
       tone: target.owner === 'own' ? 'own_hit' : 'enemy_hit',
     });
   }

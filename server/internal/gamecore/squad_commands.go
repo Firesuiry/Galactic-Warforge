@@ -72,31 +72,31 @@ func squadName(raw *string, fallback string) (string, bool) {
 
 func (gc *GameCore) formSquad(ws *model.WorldState, playerID string, ids []string, rawName *string, idsField string) (model.CommandResult, []*model.GameEvent) {
 	if len(ids) == 0 || len(ids) > 300 {
-		return mechaJobFailed(model.CodeValidationFailed, idsField+" must contain 1–300 living units")
+		return mechaJobFailed(model.CodeValidationFailed, idsField+" 必须包含 1–300 个存活单位")
 	}
 	ids = append([]string(nil), ids...)
 	name, ok := squadName(rawName, defaultSquadName)
 	if !ok {
-		return mechaJobFailed(model.CodeValidationFailed, "name must contain 1–40 characters")
+		return mechaJobFailed(model.CodeValidationFailed, "name 必须为 1–40 个字符")
 	}
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		if seen[id] {
-			return mechaJobFailed(model.CodeValidationFailed, "duplicate member_id")
+			return mechaJobFailed(model.CodeValidationFailed, "member_id 重复")
 		}
 		seen[id] = true
 		u := ws.Units[id]
 		if u == nil || u.HP <= 0 {
-			return mechaJobFailed(model.CodeEntityNotFound, "member is not alive on this planet")
+			return mechaJobFailed(model.CodeEntityNotFound, "成员不在本星球或已阵亡")
 		}
 		if u.OwnerID != playerID {
-			return mechaJobFailed(model.CodeNotOwner, "member belongs to another player")
+			return mechaJobFailed(model.CodeNotOwner, "成员属于其他玩家")
 		}
 		if u.Mecha != nil || u.Type == model.UnitTypeExecutor || u.Type == model.UnitTypeWorker {
-			return mechaJobFailed(model.CodeInvalidTarget, "only military units may join a squad")
+			return mechaJobFailed(model.CodeInvalidTarget, "只有军事单位可以编入小队")
 		}
 		if u.SquadID != "" {
-			return mechaJobFailed(model.CodeInvalidTarget, "dissolve the previous squad before regrouping its members")
+			return mechaJobFailed(model.CodeInvalidTarget, "请先解散原小队再重新编组其成员")
 		}
 	}
 	sort.Strings(ids)
@@ -122,9 +122,9 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 	}
 	switch {
 	case p.BuildingID == "" || p.BlueprintID == "":
-		return mechaJobFailed(model.CodeValidationFailed, "payload.building_id and payload.blueprint_id required without member_ids")
+		return mechaJobFailed(model.CodeValidationFailed, "未提供 member_ids 时需要 payload.building_id 和 payload.blueprint_id")
 	case count < 1 || count > 300:
-		return mechaJobFailed(model.CodeValidationFailed, "payload.count must be 1–300")
+		return mechaJobFailed(model.CodeValidationFailed, "payload.count 必须为 1–300")
 	}
 	building, deployment, result := requireOwnedDeploymentHub(ws, playerID, p.BuildingID)
 	if result != nil {
@@ -136,14 +136,14 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 		return mechaJobFailed(model.CodeValidationFailed, err.Error())
 	}
 	if warBlueprintDeployCommand(blueprint) != model.CmdDeploySquad || !deploymentAllowsBlueprint(deployment, blueprint) {
-		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("blueprint %s is not deployable from building %s", p.BlueprintID, building.ID))
+		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("蓝图 %s 不能从建筑 %s 部署", p.BlueprintID, building.ID))
 	}
 	if err := requireBlueprintTechUnlocked(ws, playerID, visibleTechID); err != nil {
 		return mechaJobFailed(model.CodeValidationFailed, err.Error())
 	}
 	profile, ok := resolveWarBlueprintRuntimeProfile(ws, playerID, p.BlueprintID)
 	if !ok || profile.Squad == nil {
-		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("blueprint %s has no squad runtime profile", p.BlueprintID))
+		return mechaJobFailed(model.CodeValidationFailed, fmt.Sprintf("蓝图 %s 没有小队运行时配置", p.BlueprintID))
 	}
 	fallbackName := defaultSquadName
 	if bpName, ok := squadName(&blueprint.Name, ""); ok {
@@ -151,16 +151,16 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 	}
 	name, ok := squadName(p.Name, fallbackName)
 	if !ok {
-		return mechaJobFailed(model.CodeValidationFailed, "name must contain 1–40 characters")
+		return mechaJobFailed(model.CodeValidationFailed, "name 必须为 1–40 个字符")
 	}
 	hubState := ensureWarDeploymentHubState(player.EnsureWarIndustry(), building.ID, deploymentHubCapacity(deployment))
 	if hubState.ReadyPayloads[p.BlueprintID] < count {
-		return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("need %d %s in deployment hub inventory", count, p.BlueprintID))
+		return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("部署枢纽库存缺少 %d 个 %s", count, p.BlueprintID))
 	}
 	target := ws
 	if p.PlanetID != "" && p.PlanetID != ws.PlanetID {
 		if target = gc.WorldForPlanet(p.PlanetID); target == nil {
-			return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("planet runtime %s not loaded", p.PlanetID))
+			return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("星球 %s 运行时未加载", p.PlanetID))
 		}
 	}
 	anchor := building.Position
@@ -169,7 +169,7 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 	}
 	tiles := freeDeployTiles(target, anchor, blueprint.Domain, count)
 	if len(tiles) < count {
-		return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("no room to deploy %d units on %s", count, target.PlanetID))
+		return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("%[2]s 上没有空间部署 %[1]d 个单位", count, target.PlanetID))
 	}
 
 	hubState.ReadyPayloads[p.BlueprintID] -= count
@@ -226,11 +226,11 @@ func ownedSquad(ws *model.WorldState, playerID, id string) (*model.CombatSquad, 
 		return nil, &model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}
 	}
 	if ws.CombatRuntime == nil || ws.CombatRuntime.Squads[id] == nil {
-		return fail(model.CodeEntityNotFound, "squad not found on this planet")
+		return fail(model.CodeEntityNotFound, "本星球上未找到该小队")
 	}
 	squad := ws.CombatRuntime.Squads[id]
 	if squad.OwnerID != playerID {
-		return fail(model.CodeNotOwner, "squad belongs to another player")
+		return fail(model.CodeNotOwner, "该小队属于其他玩家")
 	}
 	return squad, nil
 }
@@ -245,18 +245,18 @@ func (gc *GameCore) execSquadOrder(ws *model.WorldState, playerID string, cmd mo
 	switch order {
 	case model.SquadOrderAttack, model.SquadOrderDefend, model.SquadOrderRetreat, model.SquadOrderResupply:
 	default:
-		return mechaJobFailed(model.CodeValidationFailed, "order must be attack, defend, retreat or resupply")
+		return mechaJobFailed(model.CodeValidationFailed, "order 必须为 attack、defend、retreat 或 resupply")
 	}
 	var target model.Position
 	if order == model.SquadOrderResupply {
 		station := nearestSquadSupply(ws, squad)
 		if station == nil {
-			return mechaJobFailed(model.CodeInvalidTarget, "no operational supply station on this planet")
+			return mechaJobFailed(model.CodeInvalidTarget, "本星球没有可运行的补给站")
 		}
 		target = station.Position
 	} else {
 		if cmd.Target.Position == nil || !ws.InBounds(cmd.Target.Position.X, cmd.Target.Position.Y) {
-			return mechaJobFailed(model.CodeInvalidTarget, "target.position must be on this planet")
+			return mechaJobFailed(model.CodeInvalidTarget, "target.position 必须位于本星球")
 		}
 		target = *cmd.Target.Position
 	}
@@ -289,11 +289,11 @@ func (gc *GameCore) execDissolveSquad(ws *model.WorldState, playerID string, cmd
 		u.SquadID = ""
 		u.SquadOrderActive = false
 	}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "squad dissolved; units retain their orders"}, removeSquad(ws, squad)
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "小队已解散，单位保留原有指令"}, removeSquad(ws, squad)
 }
 
 func squadEvent(squad *model.CombatSquad, eventType model.EventType) *model.GameEvent {
-	return &model.GameEvent{EventType: eventType, VisibilityScope: squad.OwnerID, Payload: map[string]any{"entity_id": squad.ID, "entity_type": "combat_squad", "squad_id": squad.ID, "squad": squad.Clone()}}
+	return &model.GameEvent{EventType: eventType, VisibilityScope: squad.OwnerID, Payload: map[string]any{"entity_id": squad.ID, "entity_kind": "combat_squad", "entity_type": "combat_squad", "squad_id": squad.ID, "squad": squad.Clone()}}
 }
 
 func removeSquad(ws *model.WorldState, squad *model.CombatSquad) []*model.GameEvent {

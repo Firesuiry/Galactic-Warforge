@@ -12,25 +12,25 @@ type configureSorterPayload struct {
 func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, cmd model.Command, p configureSorterPayload) (model.CommandResult, []*model.GameEvent) {
 	b := ws.Buildings[cmd.Target.EntityID]
 	if b == nil {
-		return mechaJobFailed(model.CodeEntityNotFound, "sorter not found")
+		return mechaJobFailed(model.CodeEntityNotFound, "未找到分拣器")
 	}
 	if b.OwnerID != playerID {
-		return mechaJobFailed(model.CodeNotOwner, "cannot configure another player's sorter")
+		return mechaJobFailed(model.CodeNotOwner, "不能配置其他玩家的分拣器")
 	}
 	if b.Sorter == nil {
-		return mechaJobFailed(model.CodeInvalidTarget, "target is not a sorter")
+		return mechaJobFailed(model.CodeInvalidTarget, "目标不是分拣器")
 	}
 	staged := b.Sorter.Clone()
 	used := map[string]bool{}
 	for i, dirs := range [][]string{p.InputDirections, p.OutputDirections} {
 		if len(dirs) == 0 {
-			return mechaJobFailed(model.CodeValidationFailed, "sorter needs nonempty input and output directions")
+			return mechaJobFailed(model.CodeValidationFailed, "分拣器的输入和输出方向不能为空")
 		}
 		values := make([]model.ConveyorDirection, 0, len(dirs))
 		for _, value := range dirs {
 			dir := model.ConveyorDirection(value)
 			if !dir.Valid() || dir == model.ConveyorAuto || used[value] {
-				return mechaJobFailed(model.CodeValidationFailed, "directions must be unique cardinal directions with no overlap")
+				return mechaJobFailed(model.CodeValidationFailed, "方向必须是互不重复的东南西北方向")
 			}
 			used[value] = true
 			values = append(values, dir)
@@ -45,7 +45,7 @@ func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, c
 	if p.FilterMode != nil {
 		value := *p.FilterMode
 		if value != "allow" && value != "deny" {
-			return mechaJobFailed(model.CodeValidationFailed, "filter_mode must be allow or deny")
+			return mechaJobFailed(model.CodeValidationFailed, "filter_mode 必须为 allow 或 deny")
 		}
 		staged.Filter.Mode = model.SorterFilterMode(value)
 	}
@@ -53,12 +53,12 @@ func (gc *GameCore) execConfigureSorter(ws *model.WorldState, playerID string, c
 		seen := map[string]bool{}
 		for _, id := range values {
 			if _, ok := model.Item(id); !ok || seen[id] {
-				return mechaJobFailed(model.CodeValidationFailed, "filter_items must contain unique catalog item IDs")
+				return mechaJobFailed(model.CodeValidationFailed, "filter_items 必须是不重复的物品目录 ID")
 			}
 			seen[id] = true
 		}
 		staged.Filter.Items = values
 	}
 	b.Sorter = staged
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "sorter configured"}, []*model.GameEvent{{EventType: model.EvtBuildingStateChanged, VisibilityScope: playerID, Payload: map[string]any{"entity_id": b.ID, "sorter": staged.Clone()}}}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "分拣器已配置"}, []*model.GameEvent{{EventType: model.EvtBuildingStateChanged, VisibilityScope: playerID, Payload: map[string]any{"entity_id": b.ID, "sorter": staged.Clone()}}}
 }

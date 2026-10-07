@@ -149,10 +149,11 @@ func TestF2SandboxNeverFinishes(t *testing.T) {
 //   - 玩家单位拆建筑：击杀方 buildings_destroyed++，受害方 buildings_lost++；
 //   - 小队整编被毁：计 1 个单位击杀/损失；
 //   - 黑雾击杀玩家单位：只计受害方 losses，不进任何玩家 kills；
-//   - 玩家击杀黑雾单位：双边均不计（PvE 不进战报）。
+//   - 玩家击杀黑雾单位：计击杀方 kills。
 func TestF2BilateralCombatStats(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 
 	addUnit := func(id, owner string, pos model.Position, hp int) *model.Unit {
 		u := model.UnitStats(model.UnitTypeSoldier)
@@ -224,7 +225,7 @@ func TestF2BilateralCombatStats(t *testing.T) {
 		t.Fatalf("p1 units_killed must stay 1, got %d", got)
 	}
 
-	// 4) 玩家击杀黑雾单位：双边均不计。
+	// 4) 玩家击杀黑雾单位：计击杀方 kills（结算击杀包含黑雾）。
 	dfUnit := addUnit("df-unit", model.DarkFogOwnerID, model.Position{X: 3, Y: 3}, 1)
 	attacker.AttackTarget = dfUnit.ID
 	attacker.LastAttackTick = 0
@@ -232,8 +233,8 @@ func TestF2BilateralCombatStats(t *testing.T) {
 	if _, ok := ws.Units[dfUnit.ID]; ok {
 		t.Fatal("dark fog unit must be removed after lethal hit")
 	}
-	if got := combatStats("p1").UnitsKilled; got != 1 {
-		t.Fatalf("killing dark fog must not credit p1, got %d", got)
+	if got := combatStats("p1").UnitsKilled; got != 2 {
+		t.Fatalf("killing dark fog must credit p1, got %d", got)
 	}
 	if got := combatStats("p2").UnitsLost; got != 2 {
 		t.Fatalf("p2 units_lost must stay 2, got %d", got)

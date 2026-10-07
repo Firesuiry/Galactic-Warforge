@@ -3,7 +3,9 @@ import * as THREE from 'three';
 
 import type { BattleEvent } from '@/engine/battle-events';
 import {
+  COMBAT_FX_LIMITS,
   CombatEffects,
+  DAMAGE_MERGE_MS,
   specsFromCombatEvent,
   type CombatPoint,
 } from '@/features/planet-map/three/combat-effects';
@@ -32,7 +34,8 @@ describe('combat-effects 事件 → 特效指令（C2）', () => {
     const projectile = specs[0];
     expect(projectile.kind === 'projectile' && projectile.tone).toBe('defense');
     const float = specs[3];
-    expect(float.kind === 'damage_float' && float.text).toBe('-12');
+    expect(float.kind === 'damage_float' && float.amount).toBe(12);
+    expect(float.kind === 'damage_float' && float.targetId).toBe('e-1');
     expect(float.kind === 'damage_float' && float.tone).toBe('enemy_hit');
   });
 
@@ -136,5 +139,53 @@ describe('CombatEffects 特效池', () => {
     effects.update(4000);
     expect(effects.activeCount).toBe(0);
     effects.dispose();
+  });
+
+  it('同一目标短时间内的伤害合并为一个飘字（数字累加），窗口外另起一个', () => {
+    const parent = new THREE.Group();
+    const effects = new CombatEffects(parent, () => 1);
+    const resolve = resolveMap({ 't-1': turret, 'e-1': enemyMecha, 'e-2': fogUnit });
+    const hit = (target: string, damage: number, seq: number) => effects.spawnSpecs(specsFromCombatEvent(
+      makeEvent('damage_applied', { attacker_id: 't-1', target_id: target, damage }, seq), resolve,
+    ));
+    hit('e-1', 5, 1);
+    effects.update(100);
+    hit('e-1', 7, 2);
+    hit('e-2', 3, 3);
+    expect(effects.damageFloats().map((fx) => [fx.targetId, fx.amount])).toEqual([['e-1', 12], ['e-2', 3]]);
+    effects.update(DAMAGE_MERGE_MS + 10);
+    hit('e-1', 4, 4);
+    expect(effects.damageFloats().filter((fx) => fx.targetId === 'e-1').map((fx) => fx.amount)).toEqual([12, 4]);
+    effects.dispose();
+  });
+
+  it('全局上限：飘字 ≤24（顶掉最旧）、弹道 ≤64；到期后对象回收复用不再新建', () => {
+    const parent = new THREE.Group();
+    const effects = new CombatEffects(parent, () => 1);
+    const points: Record<string, CombatPoint> = { 't-1': turret };
+    for (let i = 0; i < 100; i += 1) points[`e-${i}`] = { ...enemyMecha, x: i };
+    const resolve = resolveMap(points);
+    for (let i = 0; i < 100; i += 1) {
+      effects.spawnSpecs(specsFromCombatEvent(makeEvent('damage_applied', { attacker_id: 't-1', target_id: `e-${i}`, damage: 1 }, i + 1), resolve));
+    }
+    const counts = effects.counts();
+    expect(counts.damageFloats).toBe(COMBAT_FX_LIMITS.damageFloats);
+    expect(counts.projectiles).toBe(COMBAT_FX_LIMITS.projectiles);
+    expect(counts.flashes).toBe(COMBAT_FX_LIMITS.flashes);
+    expect(effects.damageFloats()[effects.damageFloats().length - 1].targetId).toBe('e-99');
+    expect(effects.damageFloats()[0].targetId).toBe(`e-${100 - COMBAT_FX_LIMITS.damageFloats}`);
+
+    const sprites = new Set<THREE.Object3D>();
+    parent.children.forEach((child) => sprites.add(child));
+    effects.update(5000);
+    expect(effects.activeCount).toBe(0);
+    expect(parent.children.length).toBe(0);
+    // 第二轮：所有对象来自自由表（与第一轮同一批实例）
+    for (let i = 0; i < 100; i += 1) {
+      effects.spawnSpecs(specsFromCombatEvent(makeEvent('damage_applied', { attacker_id: 't-1', target_id: `e-${i}`, damage: 1 }, 200 + i), resolve));
+    }
+    expect(parent.children.every((child) => sprites.has(child))).toBe(true);
+    effects.dispose();
+    expect(parent.children.length).toBe(0);
   });
 });

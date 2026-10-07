@@ -3,6 +3,8 @@ import type { Building } from '@shared/types';
 
 import {
   assessBuildTiles,
+  compareBuildItems,
+  describeBuildBlock,
   deriveBuildWorkflowView,
   isConveyorBeltBuilding,
   listBuildingRecipes,
@@ -474,4 +476,20 @@ it('mounts a distributor only on an available owned depot origin and blocks dupl
   buildings[host.id] = host;
   buildings.mount = { ...host, id: 'mount', type: 'logistics_distributor', position: { ...host.position, z: 1 } };
   expect(assess()?.buildable).toBe(false);
+});
+
+describe('build item cost', () => {
+  const catalog = { buildings: [{ id: 'wind_turbine', name: '风机', buildable: true, footprint: { width: 1, height: 1 }, build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }] } as never;
+  it('compares owned vs required per item', () => {
+    expect(compareBuildItems({ build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 6 }] } }, { iron_ingot: 4 }))
+      .toEqual([{ item_id: 'iron_ingot', quantity: 6, owned: 4, short: true }]);
+  });
+  it('marks preview illegal with a missing-item reason when inventory is short', () => {
+    const planet = { ...createPlanet(), units: {}, discovered: true, tick: 0, bounds: { x: 0, y: 0, width: 24, height: 16 } };
+    const ok = assessBuildTiles(catalog, 'wind_turbine', planet, { x: 1, y: 1, z: 0 }, 'p1', 0, { iron_ingot: 6, gear: 1 });
+    expect(ok?.buildable).toBe(true);
+    const short = assessBuildTiles(catalog, 'wind_turbine', planet, { x: 1, y: 1, z: 0 }, 'p1', 0, { iron_ingot: 2 })!;
+    expect(short.buildable).toBe(false);
+    expect(describeBuildBlock(short, (id) => ({ iron_ingot: '铁块', gear: '齿轮' }[id] ?? id))).toBe('缺少 铁块 4、齿轮 1');
+  });
 });

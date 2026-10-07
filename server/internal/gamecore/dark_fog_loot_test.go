@@ -165,6 +165,7 @@ func TestGrantDarkFogLootRouting(t *testing.T) {
 // TestCombatUnitKillGrantsDarkFogLoot 结算级：战斗单位击杀黑雾建筑，掉落进入击杀者库存。
 func TestCombatUnitKillGrantsDarkFogLoot(t *testing.T) {
 	ws := newPowerTestWorld()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.Tick = 10
 
 	unit := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
@@ -251,6 +252,7 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 // 弹仓槽位被弹药占用时保留弹药，战利品转入击杀者机甲背包。
 func TestTurretKillGrantsDarkFogLoot(t *testing.T) {
 	ws := newPowerTestWorld()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.Tick = 10
 
 	turret := newBuilding("turret-1", model.BuildingTypeMissileTurret, "p1", model.Position{X: 2, Y: 2})

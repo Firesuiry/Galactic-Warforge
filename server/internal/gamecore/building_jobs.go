@@ -148,7 +148,8 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 		VisibilityScope: building.OwnerID,
 		Payload: map[string]any{
 			"entity_id":   entityID,
-			"entity_type": "building",
+			"entity_kind": "building",
+			"entity_type": string(building.Type),
 			"owner_id":    building.OwnerID,
 			"reason":      "demolish",
 		},

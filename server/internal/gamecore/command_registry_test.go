@@ -83,14 +83,14 @@ func TestDecodePayloadErrors(t *testing.T) {
 		payload map[string]any
 		want    string
 	}{
-		{model.CmdTransferItem, map[string]any{"item_id": "iron_ore", "quantity": 1}, "payload.building_id required"},
-		{model.CmdTransferItem, map[string]any{"building_id": "", "item_id": "iron_ore", "quantity": 1}, "payload.building_id must be a non-empty string"},
-		{model.CmdTransferItem, map[string]any{"building_id": "b1", "item_id": "iron_ore", "quantity": 1.5}, "payload.quantity must be integer"},
-		{model.CmdTransferItem, map[string]any{"building_id": 7, "item_id": "iron_ore", "quantity": 1}, "payload.building_id must be a string"},
-		{model.CmdBuild, map[string]any{"building_type": "wind_turbine", "auto_approach": "yes"}, "payload.auto_approach must be boolean"},
-		{model.CmdTaskForceDeploy, map[string]any{"task_force_id": "tf", "position": map[string]any{"x": 1}}, "payload.position.y required"},
-		{model.CmdConfigureMechaLogistics, map[string]any{"requests": map[string]any{"iron_ore": map[string]any{"max": 5}}}, "payload.requests.iron_ore.min required"},
-		{model.CmdConfigureLogisticsStation, map[string]any{"interstellar": map[string]any{"enabled": "on"}}, "payload.interstellar.enabled must be boolean"},
+		{model.CmdTransferItem, map[string]any{"item_id": "iron_ore", "quantity": 1}, "缺少 payload.building_id"},
+		{model.CmdTransferItem, map[string]any{"building_id": "", "item_id": "iron_ore", "quantity": 1}, "payload.building_id 必须是非空字符串"},
+		{model.CmdTransferItem, map[string]any{"building_id": "b1", "item_id": "iron_ore", "quantity": 1.5}, "payload.quantity 必须是整数"},
+		{model.CmdTransferItem, map[string]any{"building_id": 7, "item_id": "iron_ore", "quantity": 1}, "payload.building_id 必须是字符串"},
+		{model.CmdBuild, map[string]any{"building_type": "wind_turbine", "auto_approach": "yes"}, "payload.auto_approach 必须是布尔值"},
+		{model.CmdTaskForceDeploy, map[string]any{"task_force_id": "tf", "position": map[string]any{"x": 1}}, "缺少 payload.position.y"},
+		{model.CmdConfigureMechaLogistics, map[string]any{"requests": map[string]any{"iron_ore": map[string]any{"max": 5}}}, "缺少 payload.requests.iron_ore.min"},
+		{model.CmdConfigureLogisticsStation, map[string]any{"interstellar": map[string]any{"enabled": "on"}}, "payload.interstellar.enabled 必须是布尔值"},
 	}
 	for _, tc := range cases {
 		_, err := commandHandlers[tc.cmdType].bind(model.Command{Type: tc.cmdType, Payload: tc.payload})

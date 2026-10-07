@@ -134,24 +134,24 @@ func (gc *GameCore) removeLogisticsSlot(ws *model.WorldState, b *model.Building,
 	switch scope {
 	case "planetary":
 		if _, ok := s.Settings[itemID]; !ok {
-			return fmt.Errorf("planetary slot is not configured")
+			return fmt.Errorf("行星槽位未配置")
 		}
 	case "interstellar":
 		if !supportsInterstellarConfigCommand(b) {
-			return fmt.Errorf("station does not support interstellar slots")
+			return fmt.Errorf("该物流站不支持星际槽位")
 		}
 		if _, ok := s.InterstellarSettings[itemID]; !ok {
-			return fmt.Errorf("interstellar slot is not configured")
+			return fmt.Errorf("星际槽位未配置")
 		}
 	default:
-		return fmt.Errorf("scope must be planetary or interstellar")
+		return fmt.Errorf("scope 必须为 planetary 或 interstellar")
 	}
 	if s.Inventory[itemID] > 0 {
-		return fmt.Errorf("cannot remove a slot with stored inventory")
+		return fmt.Errorf("槽位仍有库存，不能移除")
 	}
 	for _, port := range s.BeltPorts {
 		if port.ItemID == itemID {
-			return fmt.Errorf("remove belt port references before removing this slot")
+			return fmt.Errorf("移除该槽位前需先解除传送带端口引用")
 		}
 	}
 	worlds := make(map[string]*model.WorldState, len(gc.worlds)+1)
@@ -160,7 +160,7 @@ func (gc *GameCore) removeLogisticsSlot(ws *model.WorldState, b *model.Building,
 	}
 	worlds[ws.PlanetID] = ws
 	if logisticsItemInFlight(worlds, ws.PlanetID, b.ID, itemID) {
-		return fmt.Errorf("cannot remove a slot while its cargo is in transit")
+		return fmt.Errorf("槽位货物运输中，不能移除")
 	}
 	if scope == "planetary" {
 		s.RemoveSetting(itemID)

@@ -205,7 +205,7 @@ techs:
     cost: [{item_id: electromagnetic_matrix, quantity: 60}]
     unlocks: [{type: recipe, id: microcrystalline_component}]
   - id: proliferator_mk1
-    name: 增产剂Mk.I
+    name: 增产剂 Mk.I
     name_en: Proliferator Mk.I
     category: branch
     type: main
@@ -471,7 +471,7 @@ techs:
     cost: [{item_id: energy_matrix, quantity: 50}]
     unlocks: [{type: recipe, id: thruster}]
   - id: proliferator_mk2
-    name: 增产剂Mk.II
+    name: 增产剂 Mk.II
     name_en: Proliferator Mk.II
     category: branch
     type: main
@@ -645,7 +645,7 @@ techs:
       - {item_id: structure_matrix, quantity: 60}
     unlocks: [{type: building, id: miniature_particle_collider}, {type: recipe, id: deuterium_collision}]
   - id: proliferator_mk3
-    name: 增产剂Mk.III
+    name: 增产剂 Mk.III
     name_en: Proliferator Mk.III
     category: branch
     type: main
@@ -1126,7 +1126,7 @@ techs:
     effects: [{type: core_capacity, value: 10}]
     max_level: 6
   - id: mecha_engine
-    name: 驱动引擎
+    name: 机甲驱动引擎
     name_en: Drive Engine
     category: bonus
     type: mecha
@@ -1164,7 +1164,7 @@ techs:
     effects: [{type: drone_speed, value: 3}]
     max_level: 6
   - id: energy_shield
-    name: 能量护盾
+    name: 机甲能量护盾
     name_en: Energy Shield
     category: bonus
     type: mecha
@@ -2184,7 +2184,7 @@ techs:
     effects: [{type: weapon_damage, value: 0.1}]
     max_level: 6
   - id: df_planetary_shield
-    name: 行星护盾
+    name: 行星护盾（升级）
     name_en: Planetary Shield
     category: bonus
     type: combat

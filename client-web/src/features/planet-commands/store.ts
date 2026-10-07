@@ -9,12 +9,12 @@ import type {
 
 import {
   GAME_FINISHED_MESSAGE,
+  isGameFinishedCode,
   isGameFinishedResult,
-  isGameFinishedText,
-  toPlayerFacingFeedback,
   toPlayerFacingMessage,
 } from "@/common/player-facing-error";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
+import { translateCommandType } from "@/i18n/translate";
 
 export type CommandJournalStatus = "pending" | "succeeded" | "failed";
 export type CommandAuthoritativeSource = "response" | "event" | "snapshot";
@@ -217,29 +217,13 @@ const ASYNC_AUTHORITATIVE_RULES: AsyncAuthoritativeRule[] = [
 ];
 
 function resolveNextHint(entry: PlanetCommandJournalEntry) {
-  if (entry.authoritativeCode === "GAME_FINISHED" || isGameFinishedText(entry.debugMessage)) {
-    return "对局已结束，请前往结算页查看战报。";
+  if (isGameFinishedCode(entry.authoritativeCode)) {
+    return GAME_FINISHED_MESSAGE;
   }
-  // 提示推导依赖服务端英文原文（debugMessage），玩家向的
-  // authoritativeMessage 已被翻译成中文，不能直接用于模式匹配。
-  const matchSource = entry.debugMessage ?? entry.authoritativeMessage;
-  const authoritativeHint = resolvePlanetCommandHint({
-    code: entry.authoritativeCode,
-    message: matchSource,
-  });
+  // 提示推导只看错误码；服务端文案已是中文，直接作为 authoritativeMessage 展示。
+  const authoritativeHint = resolvePlanetCommandHint({ code: entry.authoritativeCode });
   if (authoritativeHint?.nextHint) {
     return authoritativeHint.nextHint;
-  }
-
-  const message = `${entry.authoritativeCode ?? ""} ${matchSource ?? ""}`.toLowerCase();
-
-  if (entry.commandType === "start_research") {
-    if (message.includes("matrix") || message.includes("waiting_matrix")) {
-      return "先把 electromagnetic_matrix 装入研究站，再继续启动研究。";
-    }
-    if (message.includes("lab") || message.includes("waiting_lab")) {
-      return "先选中一台空配方研究站，再继续研究。";
-    }
   }
 
   if (
@@ -261,7 +245,7 @@ function resolveNextHint(entry: PlanetCommandJournalEntry) {
     entry.commandType === "switch_active_planet"
     && entry.status === "succeeded"
   ) {
-    return "active planet 已切换，现在可以继续在该星球执行建造、装料和戴森命令。";
+    return "活动行星已切换，现在可以继续在该星球执行建造、装料和戴森命令。";
   }
 
   if (
@@ -348,10 +332,10 @@ function reconcileBuildStateChangedEntry(
 
 function buildAcceptedMessage(commandType: string, response: CommandResponse) {
   return response.results
-    .map((result) => toPlayerFacingFeedback(result.message))
+    .map((result) => result.message?.trim())
     .filter(Boolean)
     .join(" / ")
-    || `${commandType} accepted`;
+    || `${translateCommandType(commandType)}已提交`;
 }
 
 function mapJournalEntries(
@@ -402,7 +386,7 @@ function reconcileCommandResultEntry(
       : rawMessage
         ? status === "failed"
           ? toPlayerFacingMessage(rawMessage)
-          : toPlayerFacingFeedback(rawMessage)
+          : rawMessage
         : entry.authoritativeMessage,
     debugMessage: rawMessage && status === "failed" ? rawMessage : entry.debugMessage,
     authoritativeSource: source,

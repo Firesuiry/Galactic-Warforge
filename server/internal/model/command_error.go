@@ -28,7 +28,7 @@ func MissingFieldIssue(field string) CommandIssue {
 	return CommandIssue{
 		Code:     IssueMissingField,
 		Field:    field,
-		Message:  fmt.Sprintf("%s is required", field),
+		Message:  fmt.Sprintf("缺少 %s", field),
 		Expected: "required",
 	}
 }
@@ -36,7 +36,7 @@ func MissingFieldIssue(field string) CommandIssue {
 // InvalidValueIssue builds an invalid_value issue with optional expected/actual hints.
 func InvalidValueIssue(field, message string, expected, actual any) CommandIssue {
 	if message == "" {
-		message = fmt.Sprintf("%s has invalid value", field)
+		message = fmt.Sprintf("%s 的值无效", field)
 	}
 	return CommandIssue{
 		Code:     IssueInvalidValue,
@@ -52,7 +52,7 @@ func UnknownCommandIssue(cmdType string) CommandIssue {
 	return CommandIssue{
 		Code:     IssueUnknownCommand,
 		Field:    "type",
-		Message:  fmt.Sprintf("unknown command type: %s", cmdType),
+		Message:  fmt.Sprintf("未知命令类型：%s", cmdType),
 		Actual:   cmdType,
 		Expected: "known CommandType",
 	}
@@ -61,7 +61,7 @@ func UnknownCommandIssue(cmdType string) CommandIssue {
 // UnauthorizedIssue builds an unauthorized permission issue.
 func UnauthorizedIssue(message string) CommandIssue {
 	if message == "" {
-		message = "permission denied"
+		message = "无权限"
 	}
 	return CommandIssue{
 		Code:    IssueUnauthorized,
@@ -74,7 +74,7 @@ func DuplicateRequestIssue() CommandIssue {
 	return CommandIssue{
 		Code:     IssueDuplicateRequest,
 		Field:    "request_id",
-		Message:  "duplicate request_id",
+		Message:  "request_id 重复",
 		Expected: "unique request_id",
 	}
 }

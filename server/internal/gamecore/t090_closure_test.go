@@ -289,6 +289,7 @@ func TestSetRayReceiverModeRequiresUnlockAndPersistsOnBuilding(t *testing.T) {
 func TestT091SRPlasmaTurretDamagesEnemyForceWhenPowered(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 
 	turret := newBuilding("sr-1", model.BuildingTypeSRPlasmaTurret, "p1", model.Position{X: 6, Y: 6})
 	turret.Runtime.State = model.BuildingWorkRunning
@@ -325,6 +326,7 @@ func TestT091SRPlasmaTurretDamagesEnemyForceWhenPowered(t *testing.T) {
 func TestT091PlanetaryShieldGeneratorChargesAndAbsorbsDamage(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 
 	generator := newBuilding("shield-1", model.BuildingTypePlanetaryShieldGenerator, "p1", model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2})
 	generator.Runtime.State = model.BuildingWorkRunning

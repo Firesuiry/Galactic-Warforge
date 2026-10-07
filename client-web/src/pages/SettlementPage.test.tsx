@@ -87,9 +87,10 @@ describe('SettlementPage', () => {
 
     renderApp(['/settlement']);
 
-    expect(await screen.findByRole('heading', { name: '你获胜' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '胜利' })).toBeInTheDocument();
     expect(screen.getAllByText('歼灭').length).toBeGreaterThan(0);
-    expect(screen.getByText('5120 tick')).toBeInTheDocument();
+    expect(screen.getByText('8 分 32 秒')).toBeInTheDocument();
+    expect(screen.queryByText(/reason:|victory_rule:/)).not.toBeInTheDocument();
     const table = screen.getByRole('table');
     expect(table).toHaveTextContent('14');
     expect(table).toHaveTextContent('6');
@@ -104,15 +105,15 @@ describe('SettlementPage', () => {
     expect(screen.queryByText(/请前往结算页/)).not.toBeInTheDocument();
   });
 
-  it('失败视角显示你失败', async () => {
+  it('失败视角显示战败', async () => {
     loginAs('p2');
     mockGame(FINISHED);
 
     renderApp(['/settlement']);
 
-    expect(await screen.findByRole('heading', { name: '你失败' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '战败' })).toBeInTheDocument();
     expect(screen.getByText('已淘汰')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '你获胜' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '胜利' })).not.toBeInTheDocument();
   });
 
   it('进行中不编造战报，并链回大厅与战场', async () => {
@@ -145,7 +146,7 @@ describe('SettlementPage', () => {
 
     renderApp(['/settlement']);
 
-    expect(await screen.findByRole('heading', { name: '你失败' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '战败' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '重开新局' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回大厅' })).toBeInTheDocument();
   });

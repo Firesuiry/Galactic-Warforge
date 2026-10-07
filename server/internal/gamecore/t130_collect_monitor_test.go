@@ -116,8 +116,8 @@ func TestCollectorMonitoringStaysQuietWhileOutputDrains(t *testing.T) {
 	}
 }
 
-// Cooldown gates repeat occurrences per (building, alert type): a persistent
-// blockage re-raises at most once per cooldown window.
+// 持续存在的堵塞只在出现时报一次，之后每 ProductionAlertRemindTicks 提醒一次；
+// 解除后再出现，需距上次满 cooldown 才重新告警。
 func TestCollectorMonitoringRespectsAlertCooldown(t *testing.T) {
 	ws, miner := newCollectorTestWorld(t, model.BuildingTypeMiningMachine)
 	fillStorage(48, 4, 8, model.ItemSiliconOre, miner)
@@ -126,11 +126,23 @@ func TestCollectorMonitoringRespectsAlertCooldown(t *testing.T) {
 	if _, alerts := pm.settleProductionMonitoring(ws, 25); len(alerts) != 1 {
 		t.Fatalf("expected first alert at tick 25, got %d", len(alerts))
 	}
-	if _, alerts := pm.settleProductionMonitoring(ws, 30); len(alerts) != 0 {
-		t.Fatalf("expected cooldown to suppress repeat at tick 30, got %d", len(alerts))
+	for _, tick := range []int64{30, 45, 1000, 25 + model.ProductionAlertRemindTicks - 5} {
+		if _, alerts := pm.settleProductionMonitoring(ws, tick); len(alerts) != 0 {
+			t.Fatalf("persistent blockage must not repeat at tick %d, got %d", tick, len(alerts))
+		}
 	}
-	if _, alerts := pm.settleProductionMonitoring(ws, 45); len(alerts) != 1 {
-		t.Fatalf("expected repeat after cooldown at tick 45, got %d", len(alerts))
+	if _, alerts := pm.settleProductionMonitoring(ws, 25+model.ProductionAlertRemindTicks); len(alerts) != 1 {
+		t.Fatalf("expected reminder after %d ticks, got %d", model.ProductionAlertRemindTicks, len(alerts))
+	}
+	// 解除后重新堵塞：新一轮告警。
+	miner.Storage.Inventory, miner.Storage.InputBuffer, miner.Storage.OutputBuffer = model.ItemInventory{}, model.ItemInventory{}, model.ItemInventory{}
+	base := 25 + model.ProductionAlertRemindTicks
+	if _, alerts := pm.settleProductionMonitoring(ws, base+5); len(alerts) != 0 {
+		t.Fatalf("cleared blockage must not alert, got %d", len(alerts))
+	}
+	fillStorage(48, 4, 8, model.ItemSiliconOre, miner)
+	if _, alerts := pm.settleProductionMonitoring(ws, base+40); len(alerts) != 1 {
+		t.Fatalf("recurring blockage must alert again, got %d", len(alerts))
 	}
 }
 

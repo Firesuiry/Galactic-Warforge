@@ -128,17 +128,17 @@ func (b *LogisticsBotState) Validate() error {
 }
 func RegisterLogisticsBot(ws *WorldState, b *LogisticsBotState) error {
 	if ws == nil || b == nil {
-		return fmt.Errorf("world and bot required")
+		return fmt.Errorf("缺少世界状态或机器人")
 	}
 	distributor := ws.Buildings[b.DistributorID]
 	if distributor == nil || distributor.Distributor == nil || DistributorHost(ws, distributor) == nil {
-		return fmt.Errorf("valid distributor host required")
+		return fmt.Errorf("需要有效的配送器宿主仓库")
 	}
 	if DistributorBotCount(ws, b.DistributorID) >= distributor.Distributor.BotCapacity {
-		return fmt.Errorf("distributor robot slots full")
+		return fmt.Errorf("配送器机器人槽位已满")
 	}
 	if _, exists := ws.LogisticsBots[b.ID]; exists {
-		return fmt.Errorf("bot id already registered")
+		return fmt.Errorf("机器人 id 已注册")
 	}
 	b.OwnerID = distributor.OwnerID
 	home := distributor.Position

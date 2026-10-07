@@ -44,20 +44,20 @@ func (s *DistributorState) SpendEnergy(n int) bool {
 }
 func (s *DistributorState) Validate() error {
 	if s == nil || s.HostBuildingID == "" {
-		return fmt.Errorf("distributor host required")
+		return fmt.Errorf("配送器缺少宿主仓库")
 	}
 	if (s.Mode != LogisticsStationModeNone && s.Mode != LogisticsStationModeSupply && s.Mode != LogisticsStationModeDemand) || s.LocalStorage < 0 {
-		return fmt.Errorf("invalid distributor mode or local_storage")
+		return fmt.Errorf("配送器 mode 或 local_storage 无效")
 	}
 	if s.ItemID == "" {
 		if s.Mode != LogisticsStationModeNone || s.LocalStorage != 0 || s.PlayerDeliveryEnabled || s.PlayerCollectionEnabled {
-			return fmt.Errorf("unconfigured distributor must be inactive")
+			return fmt.Errorf("未配置物品的配送器不能启用 mode、local_storage 或玩家收发")
 		}
 	} else if item, ok := Item(s.ItemID); !ok || item.Form != ResourceSolid {
-		return fmt.Errorf("distributor item must be a known solid item")
+		return fmt.Errorf("配送器物品必须是已知固体物品")
 	}
 	if s.EnergyCapacity != 1000 || s.ChargePerTick != 10 || s.Range != 12 || s.BotCapacity != 10 || s.Energy < 0 || s.Energy > s.EnergyCapacity || s.LastChargeTick < -1 || s.LastChargeAmount < 0 || s.LastChargeAmount > s.ChargePerTick {
-		return fmt.Errorf("invalid distributor capacity or energy")
+		return fmt.Errorf("配送器容量或能量无效")
 	}
 	return nil
 }
@@ -89,7 +89,7 @@ func DistributorOnHost(ws *WorldState, hostID string) *Building {
 // DistributorPlacementHost checks the physical mount at the warehouse's origin, not any occupied footprint cell.
 func DistributorPlacementHost(ws *WorldState, owner string, pos Position, excludeID string) (*Building, error) {
 	if ws == nil || !ws.InBounds(pos.X, pos.Y) {
-		return nil, fmt.Errorf("distributor position out of bounds")
+		return nil, fmt.Errorf("配送器位置超出地图范围")
 	}
 	var host *Building
 	for _, candidate := range ws.Buildings {
@@ -99,11 +99,11 @@ func DistributorPlacementHost(ws *WorldState, owner string, pos Position, exclud
 		}
 	}
 	if host == nil || host.OwnerID != owner || host.Storage == nil || (host.Job != nil && host.Job.Type == BuildingJobDemolish) {
-		return nil, fmt.Errorf("distributor requires an available owned depot_mk1 or depot_mk2")
+		return nil, fmt.Errorf("配送器需安装在可用的己方 depot_mk1 或 depot_mk2 上")
 	}
 	for _, b := range ws.Buildings {
 		if b != nil && b.ID != excludeID && b.Type == BuildingTypeLogisticsDistributor && b.Position.X == pos.X && b.Position.Y == pos.Y {
-			return nil, fmt.Errorf("warehouse already has a distributor")
+			return nil, fmt.Errorf("该仓库已有配送器")
 		}
 	}
 	return host, nil

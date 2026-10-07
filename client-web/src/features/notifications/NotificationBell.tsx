@@ -1,5 +1,5 @@
 /**
- * TopNav 铃铛：未读角标 + 最近 20 条历史面板（store 环形缓冲，不持久化）。
+ * TopNav 铃铛：未读角标 + 最近 20 条历史面板（store 环形缓冲；页面重载后从服务端事件历史回填）。
  * 展开/收起播 uiClick；面板外点击关闭（复用 TopNav 设置面板模式）。
  */
 
@@ -8,7 +8,42 @@ import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 
 import { sfx } from '@/engine/audio';
-import { useNotificationsStore } from '@/features/notifications/store';
+import { historyFromEvents, NOTIFICATION_EVENT_TYPES } from '@/features/notifications/notify';
+import { useNotificationsStore, type Toast } from '@/features/notifications/store';
+import { useApiClient } from '@/hooks/use-api-client';
+import { useSessionSnapshot } from '@/hooks/use-session';
+
+/** 已回填过的会话（serverUrl::playerId），同一会话只回填一次。 */
+const restoredSessions = new Set<string>();
+/** 回填窗口：最近 3000 tick（10 tick/s 约 5 分钟）。 */
+const RESTORE_WINDOW_TICKS = 3000;
+
+function useRestoreHistory() {
+  const client = useApiClient();
+  const session = useSessionSnapshot();
+  useEffect(() => {
+    const key = `${session.serverUrl}::${session.playerId}`;
+    if (!session.playerId || restoredSessions.has(key)) {
+      return;
+    }
+    restoredSessions.add(key);
+    // 快照按时间正序分页：只取最近一段（约 5 分钟）的事件，再从中挑最新的回填
+    client.fetchSummary()
+      .then((summary) => client.fetchEventSnapshot({
+        event_types: [...NOTIFICATION_EVENT_TYPES],
+        since_tick: Math.max(0, summary.tick - RESTORE_WINDOW_TICKS),
+        limit: 1000,
+      }))
+      .then((snapshot) => {
+        useNotificationsStore.getState().restoreHistory(historyFromEvents(snapshot.events ?? [], session.playerId));
+      })
+      .catch(() => restoredSessions.delete(key));
+  }, [client, session.serverUrl, session.playerId]);
+}
+
+function formatStamp(toast: Toast): string {
+  return toast.at > 0 ? formatTime(toast.at) : toast.tick !== undefined ? `t${toast.tick}` : '';
+}
 
 function formatTime(at: number): string {
   const date = new Date(at);
@@ -23,6 +58,7 @@ export function NotificationBell() {
   const markAllRead = useNotificationsStore((state) => state.markAllRead);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  useRestoreHistory();
 
   useEffect(() => {
     if (!open) {
@@ -39,13 +75,11 @@ export function NotificationBell() {
 
   function handleToggle() {
     sfx.uiClick();
-    setOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        markAllRead();
-      }
-      return next;
-    });
+    // 不在 setState 更新函数里改 store（React 会报 render 期间 setState）
+    if (!open) {
+      markAllRead();
+    }
+    setOpen(!open);
   }
 
   return (
@@ -82,7 +116,7 @@ export function NotificationBell() {
                       }
                     }}
                   >
-                    <span className="notification-bell__item-time">{formatTime(toast.at)}</span>
+                    <span className="notification-bell__item-time">{formatStamp(toast)}</span>
                     <span className="notification-bell__item-text">
                       {toast.title}
                       {toast.count > 1 ? ` ×${toast.count}` : ''}

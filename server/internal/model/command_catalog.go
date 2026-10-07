@@ -118,7 +118,9 @@ var commandSpecs = []CommandStructureSpec{
 	{
 		Type:                  CmdRefuelMecha,
 		RequiredTargetFields:  []string{"entity_id"},
-		RequiredPayloadFields: []string{"item_id", "quantity"},
+		RequiredPayloadFields: []string{"item_id"},
+		OptionalPayloadFields: []string{"count"},
+		Constraints:           []string{"payload.count 可选，缺省 1：最多烧几块燃料，烧到核心满为止；背包不足时烧掉现有的。"},
 	},
 	{
 		Type:                  CmdMineResource,

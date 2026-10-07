@@ -28,7 +28,7 @@ func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, cmd model.Com
 			return nil, &model.CommandResult{
 				Status:  model.StatusFailed,
 				Code:    model.CodeInvalidTarget,
-				Message: fmt.Sprintf("planet runtime %s not loaded", cmd.Target.PlanetID),
+				Message: fmt.Sprintf("星球运行时 %s 未加载", cmd.Target.PlanetID),
 			}
 		}
 		return ws, nil

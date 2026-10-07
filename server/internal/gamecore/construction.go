@@ -20,22 +20,22 @@ const (
 // Returns the reservation tracking what was locked and from which source.
 func reserveConstructionMaterials(ws *model.WorldState, task *model.ConstructionTask) (*model.MaterialReservation, error) {
 	if ws == nil || task == nil {
-		return nil, fmt.Errorf("world state or task is nil")
+		return nil, fmt.Errorf("世界状态或施工任务为空")
 	}
 	player := ws.Players[task.PlayerID]
 	if player == nil {
-		return nil, fmt.Errorf("player %s not found", task.PlayerID)
+		return nil, fmt.Errorf("未找到玩家 %s", task.PlayerID)
 	}
 
 	// Validate availability (check but don't deduct)
 	if player.Resources.Minerals < task.Cost.Minerals {
-		return nil, fmt.Errorf("insufficient minerals: need %d, have %d", task.Cost.Minerals, player.Resources.Minerals)
+		return nil, fmt.Errorf("矿物不足：需要 %d，当前 %d", task.Cost.Minerals, player.Resources.Minerals)
 	}
 	if player.Resources.Energy < task.Cost.Energy {
-		return nil, fmt.Errorf("insufficient energy: need %d, have %d", task.Cost.Energy, player.Resources.Energy)
+		return nil, fmt.Errorf("能量不足：需要 %d，当前 %d", task.Cost.Energy, player.Resources.Energy)
 	}
 	if missing, ok := missingItem(player.Inventory, task.Cost.Items); ok {
-		return nil, fmt.Errorf("insufficient items: need %d %s", missing.Quantity, missing.ItemID)
+		return nil, fmt.Errorf("物品不足：需要 %d 个 %s", missing.Quantity, missing.ItemID)
 	}
 
 	// Create reservation record (locking without deduction)
@@ -57,7 +57,7 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 		return reservation, nil
 	}
 	if err := ws.Construction.MaterialRes.AddReservation(reservation); err != nil {
-		return nil, fmt.Errorf("failed to add material reservation: %w", err)
+		return nil, fmt.Errorf("添加材料预留失败：%w", err)
 	}
 
 	return reservation, nil
@@ -68,7 +68,7 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 // Returns error if deduction fails (which should cause task completion to fail).
 func deductLockedMaterials(ws *model.WorldState, task *model.ConstructionTask) error {
 	if ws == nil || task == nil {
-		return fmt.Errorf("world state or task is nil")
+		return fmt.Errorf("世界状态或施工任务为空")
 	}
 	if task.MaterialsDeducted {
 		// Already deducted, nothing to do
@@ -77,7 +77,7 @@ func deductLockedMaterials(ws *model.WorldState, task *model.ConstructionTask) e
 
 	player := ws.Players[task.PlayerID]
 	if player == nil {
-		return fmt.Errorf("player %s not found", task.PlayerID)
+		return fmt.Errorf("未找到玩家 %s", task.PlayerID)
 	}
 
 	// Deduct minerals
@@ -99,7 +99,7 @@ func deductLockedMaterials(ws *model.WorldState, task *model.ConstructionTask) e
 		// Rollback mineral and energy deduction
 		player.Resources.Minerals += task.Cost.Minerals
 		player.Resources.Energy += task.Cost.Energy
-		return fmt.Errorf("failed to deduct items for task %s", task.ID)
+		return fmt.Errorf("扣除施工任务 %s 的物品失败", task.ID)
 	}
 
 	// Mark as deducted
@@ -235,16 +235,16 @@ func stackReservedLayers(ws *model.WorldState, btype model.BuildingType, x, y in
 // another layer.
 func resolveVerticalPlacement(ws *model.WorldState, player *model.PlayerState, btype model.BuildingType, pos model.Position) (model.Position, error) {
 	if !isVerticallyStackable(btype) {
-		return pos, fmt.Errorf("tile is already occupied by a building")
+		return pos, fmt.Errorf("地块已被建筑占用")
 	}
 	top := stackLayersAt(ws, btype, pos.X, pos.Y)
 	if top < 0 {
-		return pos, fmt.Errorf("tile is already occupied by a different building type")
+		return pos, fmt.Errorf("地块已被其他类型建筑占用")
 	}
 	next := top + 1 + stackReservedLayers(ws, btype, pos.X, pos.Y)
 	limit := maxVerticalStackHeight(player)
 	if next+1 > limit {
-		return pos, fmt.Errorf("vertical stack layer %d exceeds unlocked height %d (research vertical_construction)", next+1, limit)
+		return pos, fmt.Errorf("垂直堆叠层 %d 超出已解锁高度 %d（需研究 vertical_construction）", next+1, limit)
 	}
 	stacked := pos
 	stacked.Z = next
@@ -258,17 +258,17 @@ func validateStackCompletion(ws *model.WorldState, task *model.ConstructionTask)
 	baseID := ws.TileBuilding[model.TileKey(task.Position.X, task.Position.Y)]
 	base := ws.Buildings[baseID]
 	if base == nil || base.Type != task.BuildingType || base.Position.Z != 0 {
-		return fmt.Errorf("stack base building missing at construction site")
+		return fmt.Errorf("施工位置缺少堆叠底座建筑")
 	}
 	if base.OwnerID != task.PlayerID {
-		return fmt.Errorf("stack base building owned by another player")
+		return fmt.Errorf("堆叠底座建筑属于其他玩家")
 	}
 	for _, b := range ws.Buildings {
 		if b == nil {
 			continue
 		}
 		if b.Position.X == task.Position.X && b.Position.Y == task.Position.Y && b.Position.Z == task.Position.Z {
-			return fmt.Errorf("stack layer already occupied")
+			return fmt.Errorf("堆叠层已被占用")
 		}
 	}
 	return nil
@@ -652,12 +652,12 @@ func rollbackConstructionDeduction(ws *model.WorldState, task *model.Constructio
 
 func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.ConstructionTask) ([]*model.GameEvent, error) {
 	if ws == nil || task == nil {
-		return nil, fmt.Errorf("construction task missing")
+		return nil, fmt.Errorf("施工任务不存在")
 	}
 
 	pos := task.Position
 	if !ws.InBounds(pos.X, pos.Y) {
-		return nil, fmt.Errorf("construction position out of bounds")
+		return nil, fmt.Errorf("施工位置超出地图范围")
 	}
 	tileKey := model.TileKey(pos.X, pos.Y)
 	stacked := pos.Z > 0 && task.BuildingType != model.BuildingTypeLogisticsDistributor
@@ -668,11 +668,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 			return nil, err
 		}
 	} else if _, occupied := ws.TileBuilding[tileKey]; occupied && task.BuildingType != model.BuildingTypeLogisticsDistributor {
-		return nil, fmt.Errorf("construction tile already occupied")
+		return nil, fmt.Errorf("施工地块已被占用")
 	}
 	_, ok := model.BuildingDefinitionByID(task.BuildingType)
 	if !ok {
-		return nil, fmt.Errorf("unknown building type: %s", task.BuildingType)
+		return nil, fmt.Errorf("未知建筑类型：%s", task.BuildingType)
 	}
 	if err := model.ValidateCollectorSite(ws, task.BuildingType, pos); err != nil {
 		return nil, err
@@ -689,13 +689,13 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 			continue
 		}
 		if task.BuildingType != model.BuildingTypeLogisticsDistributor && (ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation)) {
-			return nil, fmt.Errorf("construction footprint tile unavailable")
+			return nil, fmt.Errorf("施工占地地块不可用")
 		}
 		if task.BuildingType == model.BuildingTypeFoundation && ws.FoundationAt(p) != nil {
-			return nil, fmt.Errorf("construction footprint already has a foundation")
+			return nil, fmt.Errorf("施工占地已有地基")
 		}
 		if foundation := ws.FoundationAt(p); foundation != nil && foundation.Job != nil && foundation.Job.Type == model.BuildingJobDemolish {
-			return nil, fmt.Errorf("construction footprint foundation is being demolished")
+			return nil, fmt.Errorf("施工占地的地基正在拆除")
 		}
 	}
 	profile := model.BuildingProfileFor(task.BuildingType, 1)
@@ -756,7 +756,7 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	// T078: Deduct locked materials at completion time (not at enqueue time).
 	// After this point, any failure must fully roll back spent materials and staged world state.
 	if err := deductLockedMaterials(ws, task); err != nil {
-		return nil, fmt.Errorf("failed to deduct materials: %w", err)
+		return nil, fmt.Errorf("扣除材料失败：%w", err)
 	}
 	if task.BuildingType == model.BuildingTypeFoundation {
 		for _, p := range tiles {
@@ -821,23 +821,23 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 	buildingID := cmd.Target.EntityID
 	if buildingID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id (building) required"
+		res.Message = "缺少 target.entity_id（建筑）"
 		return res, nil
 	}
 	building, ok := ws.Buildings[buildingID]
 	if !ok || building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot reconfigure building owned by another player"
+		res.Message = "不能重新配置其他玩家的建筑"
 		return res, nil
 	}
 	if building.Runtime.Functions.Production == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("building type %s does not support recipes", building.Type)
+		res.Message = fmt.Sprintf("建筑类型 %s 不支持配方", building.Type)
 		return res, nil
 	}
 
@@ -848,7 +848,7 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 		recipe, ok := model.Recipe(recipeID)
 		if !ok {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("unknown recipe: %s", recipeID)
+			res.Message = fmt.Sprintf("未知配方：%s", recipeID)
 			return res, nil
 		}
 		supportsRecipe := false
@@ -860,12 +860,12 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 		}
 		if !supportsRecipe {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("recipe %s not supported by building type %s", recipeID, building.Type)
+			res.Message = fmt.Sprintf("配方 %s 不适用于建筑类型 %s", recipeID, building.Type)
 			return res, nil
 		}
 		if !CanUseRecipeTech(player, recipeID) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("recipe %s requires research to unlock", recipeID)
+			res.Message = fmt.Sprintf("配方 %s 需先研究解锁", recipeID)
 			return res, nil
 		}
 	}
@@ -882,12 +882,12 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 	res.Code = model.CodeOK
 	if recipeID == "" {
 		if building.Runtime.Functions.Research != nil {
-			res.Message = fmt.Sprintf("building %s switched to research mode", buildingID)
+			res.Message = fmt.Sprintf("建筑 %s 已切换为研究模式", buildingID)
 		} else {
-			res.Message = fmt.Sprintf("building %s recipe cleared (idle)", buildingID)
+			res.Message = fmt.Sprintf("建筑 %s 已清除配方（idle）", buildingID)
 		}
 	} else {
-		res.Message = fmt.Sprintf("building %s recipe set to %s", buildingID, recipeID)
+		res.Message = fmt.Sprintf("建筑 %s 配方已设为 %s", buildingID, recipeID)
 	}
 	return res, nil
 }

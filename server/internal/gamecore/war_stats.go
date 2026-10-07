@@ -9,11 +9,11 @@ import (
 // 口径（与 model.CombatStats 注释一致）：
 //   - 受害方是玩家实体（单位/编组小队/建筑）→ 受害方 losses +1，与击杀方身份无关；
 //   - 击杀方与受害方都是玩家且归属不同 → 击杀方 kills +1；
-//   - dark_fog 不是玩家：黑雾击杀玩家只计受害方 losses；玩家击杀黑雾单位/巢穴
-//     不产生任何计数（纯 PvE 不进双边战报）；
+//   - dark_fog 不是玩家：黑雾击杀玩家只计受害方 losses；玩家击杀黑雾单位计 kills，
+//     摧毁黑雾巢穴计 buildings_destroyed（黑雾自身没有战损表）；
 //   - 编组小队整编被毁计 1 个单位击杀/损失；
 //   - 统一入口：killUnit / destroyBuildingCombat / destroySquad（单位/小队/炮塔/
-//     舰队/黑雾反击所有路径都经此计数）；destroyEnemyForce 不计（受害方非玩家）。
+//     舰队/黑雾反击所有路径都经此计数）；destroyEnemyForce 计击杀方 buildings_destroyed。
 //
 // 计数挂在 PlayerState.Stats.CombatStats（玩家表跨世界共享），随快照
 // clone/restore 持久化，读档/回放/回滚一致。
@@ -43,7 +43,10 @@ func recordCombatLoss(ws *model.WorldState, victimOwnerID, killerOwnerID string,
 	victim := combatStatsOf(ws, victimOwnerID)
 	killer := combatStatsOf(ws, killerOwnerID)
 	if victim == nil {
-		// 受害方非玩家（黑雾）：不进双边统计。
+		// 受害方是黑雾：只计击杀方战果。
+		if victimOwnerID == model.DarkFogOwnerID && killer != nil {
+			killerFn(killer)
+		}
 		return
 	}
 	victimFn(victim)

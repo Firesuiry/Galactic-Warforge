@@ -14,6 +14,10 @@ battlefield:
   pace_output: 2
   time_limit_ticks: 54000
   threat_growth_scale: 1.5
+  # 黑雾被动：被某玩家伤害后才对其敌对，最后一次伤害后 6000 tick 恢复中立。
+  dark_fog_calm_ticks: 6000
+  # bot 开局发育期：tick 16000（约 27 分钟）前军团只守家，给玩家时间起产线。
+  bot_first_attack_tick: 16000
 
 players:
   - player_id: "p1"
@@ -26,6 +30,18 @@ players:
       operate_range: 6
       concurrent_tasks: 2
       research_boost: 0.0
+    # 开局物资包（双方相同）：够直接建 风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、传送带×20，
+    # 外加 20 块煤给机甲补能。之后靠自己的产线推进。
+    bootstrap: &skirmish_kit
+      minerals: 1200
+      energy: 400
+      inventory:
+        - { item_id: iron_ingot, quantity: 100 }
+        - { item_id: gear, quantity: 40 }
+        - { item_id: magnetic_coil, quantity: 26 }
+        - { item_id: circuit_board, quantity: 20 }
+        - { item_id: stone_brick, quantity: 4 }
+        - { item_id: coal, quantity: 20 }
   - player_id: "p2"
     key: "key_player_2"
     team_id: "team-2"
@@ -37,6 +53,7 @@ players:
       operate_range: 6
       concurrent_tasks: 2
       research_boost: 0.0
+    bootstrap: *skirmish_kit
 
 server:
   port: 18082

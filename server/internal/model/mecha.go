@@ -12,7 +12,7 @@ type MechaJob struct {
 	TicksPerBatch    int          `json:"ticks_per_batch"`
 	RemainingBatches int          `json:"remaining_batches"`
 	CompletedBatches int          `json:"completed_batches"`
-	EnergyPerTick    int          `json:"energy_per_tick"`
+	EnergyPerBatch   int          `json:"energy_per_batch"` // 每批开工时一次性扣除的核心能量
 	State            string       `json:"state"`
 	ReservedInputs   []ItemAmount `json:"reserved_inputs,omitempty"`
 }

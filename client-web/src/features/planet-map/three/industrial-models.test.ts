@@ -27,8 +27,8 @@ it('renders a compact rooftop distributor and independently visible bot cargo', 
   const size = new THREE.Box3().setFromObject(distributor).getSize(new THREE.Vector3());
   expect(size.y).toBeLessThan(.5);
   expect(size.x).toBeLessThan(.7);
-  const carrying = assets.unit('logistics_bot', true);
-  const empty = assets.unit('logistics_bot', true);
+  const carrying = assets.unit('logistics_bot', 'own');
+  const empty = assets.unit('logistics_bot', 'own');
   const carryingCargo = carrying.getObjectByName('logistics-bot-cargo')!;
   const emptyCargo = empty.getObjectByName('logistics-bot-cargo')!;
   expect(carryingCargo).toBeDefined();

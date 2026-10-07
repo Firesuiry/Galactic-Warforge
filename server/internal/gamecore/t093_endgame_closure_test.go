@@ -61,6 +61,9 @@ func TestMissionCompleteDeclaresVictoryAndRecordsOutputs(t *testing.T) {
 	if events[1].EventType != model.EvtVictoryDeclared {
 		t.Fatalf("expected second event victory_declared, got %+v", events)
 	}
+	if tick, _ := events[1].Payload["declared_tick"].(int64); tick == 0 || tick != events[1].Tick {
+		t.Fatalf("victory_declared must carry the real declared_tick, got %+v (event tick %d)", events[1].Payload["declared_tick"], events[1].Tick)
+	}
 
 	victoryAuditFound := false
 	for _, entry := range core.snapshotStore.AuditEntries() {

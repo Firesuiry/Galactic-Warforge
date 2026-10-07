@@ -194,7 +194,7 @@ describe("planet command executor", () => {
     expect(sfxMock.commandOk).not.toHaveBeenCalled();
   });
 
-  it("服务端拒绝时弹出显眼的失败 toast（英文原文翻成中文）", async () => {
+  it("服务端拒绝时弹出显眼的失败 toast（中文原文直出）", async () => {
     const execute = vi.fn().mockResolvedValue({
       request_id: "req-reject-2",
       accepted: false,
@@ -203,7 +203,7 @@ describe("planet command executor", () => {
           command_index: 0,
           status: "rejected",
           code: "INSUFFICIENT_RESOURCES",
-          message: "need 1 gear for build",
+          message: "建造还需要 1 个齿轮",
         },
       ],
     });
@@ -219,13 +219,13 @@ describe("planet command executor", () => {
     expect(toasts[0]).toMatchObject({
       kind: "danger",
       title: "建造失败",
-      body: "建造材料不足：还需要 1 个「齿轮」，请先生产或采集。",
+      body: "建造还需要 1 个齿轮",
     });
-    // 日志里玩家文案同样是翻译后的中文，原文只留在 debugMessage
+    // 服务端中文文案直接进入日志
     expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
       status: "failed",
-      authoritativeMessage: "建造材料不足：还需要 1 个「齿轮」，请先生产或采集。",
-      debugMessage: "need 1 gear for build",
+      authoritativeMessage: "建造还需要 1 个齿轮",
+      debugMessage: "建造还需要 1 个齿轮",
     });
   });
 

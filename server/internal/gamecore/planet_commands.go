@@ -19,32 +19,32 @@ func (gc *GameCore) execSwitchActivePlanet(_ *model.WorldState, playerID string,
 	planetID := p.PlanetID
 	if !gc.discovery.IsPlanetDiscovered(playerID, planetID) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target planet not discovered"
+		res.Message = "目标星球未被发现"
 		return res, nil
 	}
 
 	targetWorld := gc.WorldForPlanet(planetID)
 	if targetWorld == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "planet runtime not available"
+		res.Message = "星球运行时不可用"
 		return res, nil
 	}
 	if !playerHasFootholdOnWorld(targetWorld, playerID) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target planet requires foothold"
+		res.Message = "目标星球需先建立据点"
 		return res, nil
 	}
 	player := targetWorld.Players[playerID]
 	if player == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "player not found"
+		res.Message = "未找到玩家"
 		return res, nil
 	}
 	player.FocusPlanetID = planetID
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("focus planet switched to %s", planetID)
+	res.Message = fmt.Sprintf("焦点星球已切换为 %s", planetID)
 	return res, nil
 }
 
@@ -60,37 +60,37 @@ func (gc *GameCore) execSetRayReceiverMode(ws *model.WorldState, playerID string
 
 	if !model.IsRayReceiverMode(mode) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "mode must be power, photon, or hybrid"
+		res.Message = "mode 必须为 power、photon 或 hybrid"
 		return res, nil
 	}
 
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "building not owned by player"
+		res.Message = "建筑不属于该玩家"
 		return res, nil
 	}
 	if building.Type != model.BuildingTypeRayReceiver || building.Runtime.Functions.RayReceiver == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target building is not a ray receiver"
+		res.Message = "目标建筑不是射线接收站"
 		return res, nil
 	}
 
 	player := ws.Players[playerID]
 	if mode == model.RayReceiverModePhoton && (player == nil || player.Tech == nil || !player.Tech.HasTech("dirac_inversion")) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "photon mode requires dirac_inversion"
+		res.Message = "photon 模式需先研究 dirac_inversion"
 		return res, nil
 	}
 
 	building.Runtime.Functions.RayReceiver.Mode = mode
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("ray receiver %s mode set to %s", buildingID, mode)
+	res.Message = fmt.Sprintf("射线接收站 %s 模式已设为 %s", buildingID, mode)
 	return res, nil
 }

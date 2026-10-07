@@ -117,7 +117,7 @@ func (s *StorageState) DistinctItems() int {
 // Receive accepts items into storage buffers/inventory and returns accepted and remaining quantities.
 func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 	if s == nil {
-		return 0, qty, fmt.Errorf("storage required")
+		return 0, qty, fmt.Errorf("缺少存储")
 	}
 	if err := validateItemQuantity(itemID, qty); err != nil {
 		return 0, qty, err
@@ -160,7 +160,7 @@ func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 // ReceiveOutput deposits finished products without mixing them with recipe inputs.
 func (s *StorageState) ReceiveOutput(itemID string, qty int) (int, int, error) {
 	if s == nil {
-		return 0, qty, fmt.Errorf("storage required")
+		return 0, qty, fmt.Errorf("缺少存储")
 	}
 	if err := validateItemQuantity(itemID, qty); err != nil {
 		return 0, qty, err
@@ -178,7 +178,7 @@ func (s *StorageState) ReceiveOutput(itemID string, qty int) (int, int, error) {
 // PreviewReceive calculates how many items would be accepted without mutating state.
 func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) {
 	if s == nil {
-		return 0, qty, fmt.Errorf("storage required")
+		return 0, qty, fmt.Errorf("缺少存储")
 	}
 	if err := validateItemQuantity(itemID, qty); err != nil {
 		return 0, qty, err
@@ -220,7 +220,7 @@ func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) 
 // consumed immediately by building logic such as production or launch.
 func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
 	if s == nil {
-		return 0, qty, fmt.Errorf("storage required")
+		return 0, qty, fmt.Errorf("缺少存储")
 	}
 	if err := validateItemQuantity(itemID, qty); err != nil {
 		return 0, qty, err
@@ -317,7 +317,7 @@ func (s *StorageState) OutputCandidates() []string {
 // Provide supplies items from output buffers/inventory and returns provided and remaining quantities.
 func (s *StorageState) Provide(itemID string, qty int) (int, int, error) {
 	if s == nil {
-		return 0, qty, fmt.Errorf("storage required")
+		return 0, qty, fmt.Errorf("缺少存储")
 	}
 	if err := validateItemQuantity(itemID, qty); err != nil {
 		return 0, qty, err
@@ -474,10 +474,10 @@ func normalizePriority(input, output int) (int, int) {
 
 func validateItemQuantity(itemID string, qty int) error {
 	if qty <= 0 {
-		return fmt.Errorf("quantity must be positive")
+		return fmt.Errorf("数量必须为正数")
 	}
 	if _, ok := Item(itemID); !ok {
-		return fmt.Errorf("unknown item: %s", itemID)
+		return fmt.Errorf("未知物品：%s", itemID)
 	}
 	return nil
 }

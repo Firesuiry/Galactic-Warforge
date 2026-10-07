@@ -222,49 +222,37 @@ export function tileContainsBuilding(building: Building, x: number, y: number, f
   return false;
 }
 
+/**
+ * 点格选中：建筑 > 单位 > 资源。同一格再次点击时轮换到下一层
+ * （机甲站在矿上时，第二次点击选中矿点）。
+ */
 export function resolveSelectionAtTile(
   planet: PlanetRenderView,
   x: number,
   y: number,
+  current?: SelectedEntity | null,
 ): SelectedEntity | null {
+  const atTile = (position: Position) => {
+    const tile = toTilePoint(position);
+    return tile.x === x && tile.y === y;
+  };
   const buildings = getBuildingList(planet).filter((candidate) =>
     tileContainsBuilding(candidate, x, y, planet.map_width / 3),
   );
   const building = buildings.find((candidate) => candidate.type === "logistics_distributor")
     ?? buildings.find((candidate) => candidate.type !== "foundation") ?? buildings[0];
-  if (building) {
-    return {
-      kind: "building",
-      id: building.id,
-      position: building.position,
-    };
-  }
-
-  const unit = getUnitList(planet).find((candidate) => {
-    const position = toTilePoint(candidate.position);
-    return position.x === x && position.y === y;
-  });
-  if (unit) {
-    return {
-      kind: "unit",
-      id: unit.id,
-      position: unit.position,
-    };
-  }
-
-  const resource = getResourceList(planet).find((candidate) => {
-    const position = toTilePoint(candidate.position);
-    return position.x === x && position.y === y;
-  });
-  if (resource) {
-    return {
-      kind: "resource",
-      id: resource.id,
-      position: resource.position,
-    };
-  }
-
-  return null;
+  const unit = getUnitList(planet).find((candidate) => atTile(candidate.position));
+  const resource = getResourceList(planet).find((candidate) => atTile(candidate.position));
+  const stack: SelectedEntity[] = [
+    ...(building ? [{ kind: "building" as const, id: building.id, position: building.position }] : []),
+    ...(unit ? [{ kind: "unit" as const, id: unit.id, position: unit.position }] : []),
+    ...(resource ? [{ kind: "resource" as const, id: resource.id, position: resource.position }] : []),
+  ];
+  if (stack.length === 0) return null;
+  const index = current && current.kind !== "tile"
+    ? stack.findIndex((entry) => entry.kind === current.kind && "id" in entry && entry.id === current.id)
+    : -1;
+  return stack[(index + 1) % stack.length];
 }
 
 /** Resolve current authoritative coordinates; a missing entity has no selection marker. */

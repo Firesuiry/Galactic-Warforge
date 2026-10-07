@@ -6,7 +6,7 @@
  */
 
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, Info, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 
 import {
@@ -16,6 +16,7 @@ import {
   useNotificationsStore,
   type Toast,
 } from '@/features/notifications/store';
+import { usePlanetViewStore } from '@/features/planet-map/store';
 
 const EXIT_ANIMATION_MS = 320;
 const SWEEP_INTERVAL_MS = 250;
@@ -29,6 +30,7 @@ const KIND_ICON: Record<Toast['kind'], LucideIcon> = {
 
 function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const pause = useNotificationsStore((state) => state.pause);
   const resume = useNotificationsStore((state) => state.resume);
   const dismiss = useNotificationsStore((state) => state.dismiss);
@@ -48,6 +50,17 @@ function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
       navigate(toast.href);
     }
     dismiss(toast.id);
+  }
+
+  /** 定位：已在该行星页时直接移镜头，否则带坐标深链跳过去。 */
+  function locate() {
+    const target = toast.locate;
+    if (!target) return;
+    if (location.pathname === `/planet/${target.planetId}`) {
+      usePlanetViewStore.getState().requestFocus({ x: target.x, y: target.y });
+    } else {
+      navigate(`/planet/${target.planetId}?x=${target.x}&y=${target.y}`);
+    }
   }
 
   const KindIcon = KIND_ICON[toast.kind];
@@ -75,6 +88,18 @@ function ToastCard({ toast, frozen }: { toast: Toast; frozen: boolean }) {
           {toast.count > 1 ? <span className="toast__count">×{toast.count}</span> : null}
         </div>
         {toast.body ? <div className="toast__body">{toast.body}</div> : null}
+        {toast.locate ? (
+          <button
+            className="toast__action"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              locate();
+            }}
+          >
+            定位
+          </button>
+        ) : null}
       </div>
       <button
         className="toast__close"

@@ -24,6 +24,16 @@ export interface ToastInput {
    * 消退计时（高频事件 5s 窗口内合并为 1 条计数，见 event-toasts）。
    */
   mergeKey?: string;
+  /**
+   * 节流：同 mergeKey 的 toast 消退后此时长内再来，只并入历史计数，不再弹出（产线告警防刷屏）。
+   */
+  throttleMs?: number;
+  /** 重要提示：停留 STICKY_TTL_MS 而非 TOAST_TTL_MS。 */
+  sticky?: boolean;
+  /** 「定位」按钮：把镜头移到行星上的该位置。 */
+  locate?: { planetId: string; x: number; y: number };
+  /** 来源事件 tick（历史面板在缺少本地时刻时显示）。 */
+  tick?: number;
 }
 
 export interface Toast extends ToastInput {
@@ -45,12 +55,17 @@ export const TOAST_TTL_MS = 5000;
 export const HISTORY_SIZE = 20;
 /** 同 mergeKey 合并窗口（ms）：窗口内的重复事件并入已有 toast 计数。 */
 export const MERGE_WINDOW_MS = 5000;
+export const STICKY_TTL_MS = 12000;
+
+const ttlOf = (input: ToastInput) => (input.sticky ? STICKY_TTL_MS : TOAST_TTL_MS);
 
 interface NotificationsState {
   toasts: Toast[];
   history: Toast[];
   unread: number;
   nextId: number;
+  /** mergeKey → 最近一次弹出时刻（节流用）。 */
+  lastShown: Record<string, number>;
 }
 
 interface NotificationsActions {
@@ -70,6 +85,8 @@ interface NotificationsActions {
   remove: (id: number) => void;
   /** 清空未读（打开历史面板时）。 */
   markAllRead: () => void;
+  /** 页面重载后用服务端事件历史回填铃铛（不弹 toast、不计未读）。 */
+  restoreHistory: (entries: Toast[]) => void;
   /** 全部清空（测试/会话切换）。 */
   resetNotifications: () => void;
 }
@@ -81,6 +98,7 @@ const initialState: NotificationsState = {
   history: [],
   unread: 0,
   nextId: 1,
+  lastShown: {},
 };
 
 function upsertHistory(history: Toast[], toast: Toast): Toast[] {
@@ -111,7 +129,7 @@ export const useNotificationsStore = create<NotificationsStore>()((set, get) => 
         id: existing.id,
         count: existing.count + 1,
         at: now,
-        expiresAt: existing.pausedAt !== undefined ? undefined : now + TOAST_TTL_MS,
+        expiresAt: existing.pausedAt !== undefined ? undefined : now + ttlOf(input),
       };
       set({
         toasts: get().toasts.map((toast) => (toast.id === existing.id ? merged : toast)),
@@ -121,12 +139,22 @@ export const useNotificationsStore = create<NotificationsStore>()((set, get) => 
       return merged;
     }
 
+    const shownAt = input.mergeKey ? state.lastShown[input.mergeKey] : undefined;
+    if (input.mergeKey && input.throttleMs && shownAt !== undefined && now - shownAt < input.throttleMs) {
+      const previous = state.history.find((entry) => entry.mergeKey === input.mergeKey);
+      if (previous) {
+        const merged: Toast = { ...previous, ...input, id: previous.id, count: previous.count + 1, at: now, leaving: true };
+        set({ history: upsertHistory(state.history, merged) });
+        return merged;
+      }
+    }
+
     const toast: Toast = {
       ...input,
       id: state.nextId,
       at: now,
       count: 1,
-      expiresAt: now + TOAST_TTL_MS,
+      expiresAt: now + ttlOf(input),
     };
     let toasts = [...state.toasts, toast];
     // 超上限：最旧的标记 leaving（出场动画后由组件 remove），不直接删
@@ -146,6 +174,7 @@ export const useNotificationsStore = create<NotificationsStore>()((set, get) => 
       history: upsertHistory(state.history, toast),
       unread: state.unread + 1,
       nextId: state.nextId + 1,
+      lastShown: input.mergeKey ? { ...state.lastShown, [input.mergeKey]: now } : state.lastShown,
     });
     return toast;
   },
@@ -185,7 +214,7 @@ export const useNotificationsStore = create<NotificationsStore>()((set, get) => 
         }
         // push 时恒有 expiresAt = at + TTL，故暂停时刻的剩余时长
         // = expiresAt - pausedAt = TTL - (pausedAt - at)，按此恢复。
-        const remaining = Math.max(TOAST_TTL_MS - (toast.pausedAt - toast.at), 300);
+        const remaining = Math.max(ttlOf(toast) - (toast.pausedAt - toast.at), 300);
         return { ...toast, pausedAt: undefined, expiresAt: now + remaining };
       }),
     });
@@ -211,6 +240,18 @@ export const useNotificationsStore = create<NotificationsStore>()((set, get) => 
 
   markAllRead: () => {
     set({ unread: 0 });
+  },
+
+  restoreHistory: (entries) => {
+    const state = get();
+    const known = new Set(state.history.map((entry) => entry.mergeKey ? `k:${entry.mergeKey}` : `t:${entry.title}:${entry.tick}`));
+    const restored = entries
+      .filter((entry) => !known.has(entry.mergeKey ? `k:${entry.mergeKey}` : `t:${entry.title}:${entry.tick}`))
+      .map((entry, index) => ({ ...entry, id: state.nextId + index, leaving: true }));
+    set({
+      history: [...state.history, ...restored].slice(0, HISTORY_SIZE),
+      nextId: state.nextId + restored.length,
+    });
   },
 
   resetNotifications: () => {

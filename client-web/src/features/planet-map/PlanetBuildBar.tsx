@@ -13,6 +13,7 @@ import type { CatalogView, StateSummary } from '@shared/types';
 import { Icon } from '@/common/Icon';
 import { sfx } from '@/engine/audio';
 import {
+  compareBuildItems,
   deriveBuildWorkflowView,
   DIRECTION_LABELS,
   isConveyorBeltBuilding,
@@ -20,7 +21,7 @@ import {
   nextBeltDirection,
   type BuildCatalogEntryView,
 } from '@/features/planet-map/build-workflow';
-import { getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
+import { getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -63,6 +64,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
   const [showLocked, setShowLocked] = useState(false);
+  // 悬停/聚焦的卡片：造价详情浮在建造栏上方（卡片滚动容器会裁掉卡内浮层）。
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   // 新建筑（兵营/补给站/战车工厂等）尚无预渲染缩略图：加载失败则退回图标
   const [missingModels, setMissingModels] = useState<ReadonlySet<string>>(new Set());
 
@@ -128,6 +131,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
   }, [buildMode, setInteractionMode]);
   // 建设资金余额：resources 缺失时视为"未知"，不做置灰（避免旧快照误伤）。
   const mineralsBalance = summary?.players?.[session.playerId]?.resources?.minerals;
+  const inventory = summary?.players?.[session.playerId]?.inventory;
 
   const visibleEntries = [
     ...workflow.catalog.recommended,
@@ -151,8 +155,34 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
     return null;
   }
 
+  const detailEntry = visibleEntries.find((entry) => entry.id === (hoveredId ?? activeBuildingType));
+  const detail = detailEntry ? (() => {
+    const locked = detailEntry.visibility === 'locked' || detailEntry.visibility === 'debugOnly';
+    const unlockCondition = locked ? formatUnlockCondition(catalog, detailEntry) : '';
+    const mineralCost = detailEntry.build_cost?.minerals ?? 0;
+    return (
+      <div className="planet-build-bar__detail" role="tooltip" data-testid="planet-build-detail">
+        <strong>{translateBuildingType(detailEntry.id, detailEntry.name)}</strong>
+        {locked ? <span className="is-short">未解锁{unlockCondition ? `：需要科技 ${unlockCondition}` : ''}</span> : null}
+        <span className="planet-build-bar__detail-head">拥有 / 需要</span>
+        {mineralCost > 0 ? (
+          <span className={mineralsBalance !== undefined && mineralsBalance < mineralCost ? 'is-short' : ''}>
+            矿石 {mineralsBalance ?? '?'} / {mineralCost}
+          </span>
+        ) : null}
+        {compareBuildItems(detailEntry, inventory).map((item) => (
+          <span key={item.item_id} className={item.short ? 'is-short' : ''}>
+            <Icon iconKey={item.item_id} size={12} /> {getItemDisplayName(catalog, item.item_id)} {item.owned} / {item.quantity}
+          </span>
+        ))}
+        {(detailEntry.build_cost?.energy ?? 0) > 0 ? <span>能量 {detailEntry.build_cost?.energy}</span> : null}
+      </div>
+    );
+  })() : null;
+
   return (
     <div className="planet-build-bar" data-testid="planet-build-bar">
+      {detail}
       <div className="planet-build-bar__scroller">
         {[...groups.entries()].map(([category, entries]) => (
           <div className="planet-build-group" key={category || '__uncategorized'}>
@@ -165,19 +195,25 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
                 const cost = formatCost(entry);
                 const mineralCost = entry.build_cost?.minerals ?? 0;
                 const energyCost = entry.build_cost?.energy ?? 0;
-                const unaffordable =
-                  !locked && mineralsBalance !== undefined && mineralsBalance < mineralCost;
+                const items = compareBuildItems(entry, inventory);
+                const itemsShort = items.some((item) => item.short);
+                const mineralsShort = mineralsBalance !== undefined && mineralsBalance < mineralCost;
+                const unaffordable = !locked && (mineralsShort || itemsShort);
                 const unlockCondition = locked ? formatUnlockCondition(catalog, entry) : '';
-                const title = `${name}${cost ? ` · ${cost}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需要科技：${unlockCondition}` : ''}` : ''}${unaffordable ? ` · 矿不足：需要 ${mineralCost} / 现有 ${mineralsBalance}` : ''}`;
+                const itemText = items.map((item) => `${getItemDisplayName(catalog, item.item_id)} ${item.owned}/${item.quantity}${item.short ? '（不足）' : ''}`).join('、');
+                const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（拥有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需要科技：${unlockCondition}` : ''}` : ''}${mineralsShort && !locked ? ` · 矿不足：需要 ${mineralCost} / 现有 ${mineralsBalance}` : ''}`;
                 return (
                   <button
                     key={entry.id}
                     className={`planet-build-card${active ? ' planet-build-card--active' : ''}${locked ? ' planet-build-card--locked' : ''}${unaffordable ? ' planet-build-card--unaffordable' : ''}`}
                     data-building-id={entry.id}
                     type="button"
-                    disabled={locked || unaffordable}
-                    title={title}
+                    disabled={locked}
                     aria-label={title}
+                    onMouseEnter={() => setHoveredId(entry.id)}
+                    onMouseLeave={() => setHoveredId((id) => (id === entry.id ? null : id))}
+                    onFocus={() => setHoveredId(entry.id)}
+                    onBlur={() => setHoveredId((id) => (id === entry.id ? null : id))}
                     onClick={() => {
                       sfx.uiClick();
                       if (active) {
@@ -208,6 +244,19 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
                             {energyCost}
                           </span>
                         ) : null}
+                      </span>
+                    ) : null}
+                    {items.length > 0 ? (
+                      <span className="planet-build-card__items">
+                        {items.map((item) => (
+                          <span
+                            key={item.item_id}
+                            className={`planet-build-card__item${item.short ? ' planet-build-card__item--short' : ''}`}
+                          >
+                            <Icon iconKey={item.item_id} size={10} />
+                            {item.owned}/{item.quantity}
+                          </span>
+                        ))}
                       </span>
                     ) : null}
                   </button>

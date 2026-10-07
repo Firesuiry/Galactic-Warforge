@@ -73,7 +73,7 @@ func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing
 	unit.Mecha.Energy = 50
 	core := &GameCore{}
 	refuel := func(item string, n int) model.CommandResult {
-		res, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Type: model.CmdRefuelMecha, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": item, "quantity": n}})
+		res, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Type: model.CmdRefuelMecha, Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": item, "count": n}})
 		return res
 	}
 	if res := refuel(model.ItemCoal, 8); res.Code != model.CodeOK {
@@ -102,6 +102,23 @@ func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing
 	}
 }
 
+// count 缺省 1；多块时烧到满为止，背包不够就烧掉现有的。
+func TestPlayerMechaRefuelCountDefaultsToOneAndBurnsUntilFull(t *testing.T) {
+	ws, unit := mechaTestWorld()
+	player := ws.Players["p1"]
+	player.Inventory = model.ItemInventory{model.ItemCoal: 3}
+	unit.Mecha.Energy = 0
+	core := &GameCore{}
+	res, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal}})
+	if res.Code != model.CodeOK || player.Inventory[model.ItemCoal] != 2 || unit.Mecha.Energy != 25 {
+		t.Fatalf("default count must burn one coal: %+v %+v", res, unit.Mecha)
+	}
+	res, _ = execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 10}})
+	if res.Code != model.CodeOK || player.Inventory[model.ItemCoal] != 0 || unit.Mecha.Energy != 75 {
+		t.Fatalf("count must burn what is available: %+v %+v", res, unit.Mecha)
+	}
+}
+
 func TestPlayerMechaRefuelValidationDoesNotConsumeInventory(t *testing.T) {
 	ws, unit := mechaTestWorld()
 	unit.Mecha.Energy = 0
@@ -114,11 +131,11 @@ func TestPlayerMechaRefuelValidationDoesNotConsumeInventory(t *testing.T) {
 	}{
 		{"p2", model.ItemCoal, 1, model.CodeNotOwner},
 		{"p1", model.ItemIronOre, 1, model.CodeInvalidTarget},
-		{"p1", model.ItemCoal, 0, model.CodeValidationFailed},
+		{"p1", model.ItemCoal, -1, model.CodeValidationFailed},
 		{"p1", model.ItemCoal, 1.5, model.CodeValidationFailed},
-		{"p1", model.ItemCoal, 4, model.CodeInsufficientResource},
+		{"p1", model.ItemAntimatterFuelRod, 1, model.CodeInsufficientResource},
 	} {
-		res, _ := execCommand(core, model.CmdRefuelMecha, ws, tc.owner, model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": tc.item, "quantity": tc.quantity}})
+		res, _ := execCommand(core, model.CmdRefuelMecha, ws, tc.owner, model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": tc.item, "count": tc.quantity}})
 		if res.Code != tc.code || unit.Mecha.Energy != 0 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
 			t.Fatalf("case=%+v result=%+v", tc, res)
 		}
@@ -141,6 +158,8 @@ func TestPlayerMechaShieldAbsorbsAttackThenRechargesUsingEnergy(t *testing.T) {
 		t.Fatalf("attack order failed: %+v", res)
 	}
 	settleUnitCombat(ws)
+	// 空闲机甲被打会自动还手（耗能），这里只验证护盾，把能量复位。
+	unit.Mecha.Energy = 100
 	// 机枪 vs 重甲系数 0.75：(15-8)×0.75=5，护盾 20→15。
 	if unit.HP != unit.MaxHP || unit.Mecha.Shield != 15 || unit.Mecha.LastHitTick != 20 {
 		t.Fatalf("shield failed: %+v %+v", res, unit)

@@ -42,14 +42,8 @@ export function PlanetOperationHeader(props: PlanetOperationHeaderProps) {
   return (
     <section className="planet-side-section planet-operation-header">
       <div className="section-title">行星工作台</div>
-      <ActivePlanetSwitcher
-        activePlanetId={props.activePlanetId}
-        routePlanetId={props.routePlanetId}
-        routePlanetName={props.routePlanetName}
-        systemName={props.systemName}
-      />
       <div className={`planet-command-bar planet-command-bar--${tone}`}>
-        <span>待处理命令 {props.pendingCount}</span>
+        {props.pendingCount > 0 ? <span>执行中 {props.pendingCount}</span> : null}
         <span
           className={`planet-command-bar__feedback planet-command-bar__feedback--${tone}`}
           data-testid="planet-latest-feedback"
@@ -57,6 +51,15 @@ export function PlanetOperationHeader(props: PlanetOperationHeaderProps) {
           最新反馈 {describeLatestEntry(props.latestEntry)}
         </span>
       </div>
+      <details className="planet-debug-details">
+        <summary>展开调试</summary>
+        <ActivePlanetSwitcher
+          activePlanetId={props.activePlanetId}
+          routePlanetId={props.routePlanetId}
+          routePlanetName={props.routePlanetName}
+          systemName={props.systemName}
+        />
+      </details>
     </section>
   );
 }

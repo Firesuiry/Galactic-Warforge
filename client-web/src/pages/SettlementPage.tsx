@@ -50,7 +50,7 @@ export function SettlementPage() {
       <div className="page-grid lobby-page settlement-page">
         <section className="panel page-hero">
           <div className="page-header">
-            <p className="eyebrow">Settlement</p>
+            <p className="eyebrow">对局结算</p>
             <h1>{gameStatusOf(game) === 'finished' ? '对局已结束' : '对局尚未结束'}</h1>
             <p className="subtle-text">
               {gameStatusOf(game) === 'finished'
@@ -71,10 +71,10 @@ export function SettlementPage() {
     <div className="page-grid lobby-page settlement-page">
       <section className="panel page-hero">
         <div className="page-header">
-          <p className="eyebrow">Settlement</p>
-          <h1>{won ? '你获胜' : '你失败'}</h1>
+          <p className="eyebrow">对局结算</p>
+          <h1>{report.winner_id || report.team_id ? (won ? '胜利' : '战败') : '平局'}</h1>
           <p className="subtle-text">
-            胜者 {report.winner_id || '-'}
+            {report.winner_id ? `胜者：${playerLabel(report.winner_id, session.playerId)}` : '无胜者'}
             {report.team_id ? ` · 队伍 ${report.team_id}` : ''}
           </p>
         </div>
@@ -83,25 +83,22 @@ export function SettlementPage() {
 
       <section className="card-grid lobby-summary">
         <article className="panel stat-card">
-          <span className="stat-card__label">原因</span>
+          <span className="stat-card__label">结束原因</span>
           <strong>{translateVictoryReason(report.reason)}</strong>
-          <span>reason: {report.reason || '-'}</span>
         </article>
         <article className="panel stat-card">
           <span className="stat-card__label">胜利规则</span>
           <strong>{translateVictoryMode(report.victory_rule)}</strong>
-          <span>victory_rule: {report.victory_rule || '-'}</span>
         </article>
         <article className="panel stat-card">
           <span className="stat-card__label">时长</span>
-          <strong>{report.duration_ticks} tick</strong>
-          <span>第 {report.start_tick}–{report.declared_tick} tick</span>
+          <strong>{formatDuration(report.duration_ticks)}</strong>
+          <span>共 {report.duration_ticks} tick</span>
         </article>
         {report.tech_id ? (
           <article className="panel stat-card">
             <span className="stat-card__label">关键科技</span>
             <strong>{translateTechId(report.tech_id)}</strong>
-            <span>tech_id: {report.tech_id}</span>
           </article>
         ) : null}
       </section>
@@ -152,6 +149,17 @@ export function SettlementPage() {
       </section>
     </div>
   );
+}
+
+/** 对局时长（按 10 tick/s 换算成分秒）。 */
+function formatDuration(ticks: number) {
+  const seconds = Math.round(ticks / 10);
+  const minutes = Math.floor(seconds / 60);
+  return minutes > 0 ? `${minutes} 分 ${seconds % 60} 秒` : `${seconds} 秒`;
+}
+
+function playerLabel(playerId: string, selfId: string) {
+  return playerId === selfId ? `你（${playerId}）` : playerId;
 }
 
 function SettlementActions({ isAdmin, planetHref }: { isAdmin: boolean; planetHref: string }) {

@@ -26,9 +26,9 @@ import {
 const ctx = { api: createApiClient({ serverUrl: 'http://127.0.0.1:1' }) };
 
 describe('mecha refuel command boundary', () => {
-  it('requires a positive integer quantity', async () => {
-    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '0'], ctx), /quantity 必须是正整数/);
-    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '1.5'], ctx), /quantity 必须是正整数/);
+  it('requires a positive integer count when given', async () => {
+    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '0'], ctx), /count 必须是正整数/);
+    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '1.5'], ctx), /count 必须是正整数/);
   });
 });
 

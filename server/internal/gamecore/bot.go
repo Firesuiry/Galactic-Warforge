@@ -293,7 +293,8 @@ func (gc *GameCore) surveyBotWorld(ws *model.WorldState, playerID string) *botSu
 		}
 		sort.Slice(survey.squads, func(i, j int) bool { return survey.squads[i].ID < survey.squads[j].ID })
 	}
-	if ws.EnemyForces != nil {
+	// bot 不主动招惹黑雾：只有黑雾已对 bot 敌对时，巢穴才算威胁/进攻目标。
+	if ws.EnemyForces != nil && hostile(ws, playerID, model.DarkFogOwnerID) {
 		for i := range ws.EnemyForces.Forces {
 			force := &ws.EnemyForces.Forces[i]
 			if force.Type == model.EnemyForceTypeHive && force.Strength > 0 {
@@ -338,7 +339,7 @@ func (gc *GameCore) botMilitary(ws *model.WorldState, playerID string, tuning bo
 	return gc.botLegions(ws, playerID, tuning, ctx, threats, issue)
 }
 
-// botIncomingThreats 收集半径内的敌方单位、黑雾单位、敌方小队与巢穴。
+// botIncomingThreats 收集半径内的敌对单位（含已敌对的黑雾）与巢穴。
 // 排序：距离，然后实体 ID，再 kind。
 func botIncomingThreats(ws *model.WorldState, playerID string, home model.Position, radius int, nests []*model.EnemyForce) []botThreat {
 	if ws == nil || radius < 0 {
@@ -355,7 +356,7 @@ func botIncomingThreats(ws *model.WorldState, playerID string, home model.Positi
 		if u == nil || u.HP <= 0 || u.OwnerID == playerID {
 			continue
 		}
-		if !hostile(ws, playerID, u.OwnerID) && u.Type != model.UnitTypeDarkFog && u.OwnerID != model.DarkFogOwnerID {
+		if !hostile(ws, playerID, u.OwnerID) {
 			continue
 		}
 		d := ws.SurfaceDistance(u.Position, home)
@@ -528,7 +529,7 @@ func botPendingBuilds(ws *model.WorldState, playerID string, btype model.Buildin
 	return n
 }
 
-// botAttackObjective 进攻目标：优先最近的敌方玩家建筑中心，其次最近的黑雾巢穴。
+// botAttackObjective 进攻目标：优先最近的敌方玩家建筑中心，其次最近的（已敌对的）黑雾巢穴。
 // 距离相同时按玩家 ID / 巢穴 ID 取较小者。
 func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) *model.Position {
 	if tuning.raidSupply {

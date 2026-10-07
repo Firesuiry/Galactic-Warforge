@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crosshair, ChevronDown, ChevronRight, Hammer, Factory, Milestone, ScrollText, type LucideIcon } from "lucide-react";
+import { Crosshair, ChevronDown, ChevronRight, Hammer, Factory, ScrollText, type LucideIcon } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { ALL_EVENT_TYPES } from "@shared/config";
@@ -26,6 +26,8 @@ import {
 } from "@/features/planet-commands/store";
 import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
+import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";
+import { notifyApproachingThreats } from "@/features/planet-map/attack-alerts";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
@@ -96,21 +98,20 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-type PlanetDetailPanel = "workbench" | "selection" | "production" | "progression" | "activity";
+type PlanetDetailPanel = "workbench" | "selection" | "production" | "activity";
 
 interface DetailTabConfig {
   id: PlanetDetailPanel;
   /** 桌面端图标 Tab 用的 lucide 图标组件（工作台/选中/活动）。 */
   icon: LucideIcon;
   /** i18n key → 文案（移动端文本 Tab + 桌面端 aria-label 共用）。 */
-  labelKey: "planet.tab.workbench" | "planet.tab.selection" | "planet.tab.production" | "planet.tab.progression" | "planet.tab.activity";
+  labelKey: "planet.tab.workbench" | "planet.tab.selection" | "planet.tab.production" | "planet.tab.activity";
 }
 
 const DETAIL_TABS: DetailTabConfig[] = [
   { id: "workbench", icon: Hammer, labelKey: "planet.tab.workbench" },
   { id: "selection", icon: Crosshair, labelKey: "planet.tab.selection" },
   { id: "production", icon: Factory, labelKey: "planet.tab.production" },
-  { id: "progression", icon: Milestone, labelKey: "planet.tab.progression" },
   { id: "activity", icon: ScrollText, labelKey: "planet.tab.activity" },
 ];
 
@@ -311,11 +312,20 @@ export function PlanetPage() {
 
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
+    inventory: summaryQuery.data?.players?.[session.playerId]?.inventory,
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
     taskForces: taskForcesQuery.data?.task_forces,
     onTaskForceDeployed: () => { void taskForcesQuery.refetch(); },
   });
+
+  // 敌袭预警：敌对单位逼近己方建筑（20 格）时告警 + 小地图闪点（中立黑雾不报）
+  const darkFogHostile = summaryQuery.data?.players?.[session.playerId]?.dark_fog?.hostile ?? false;
+  useEffect(() => {
+    if (sceneQuery.data && session.playerId) {
+      notifyApproachingThreats(sceneQuery.data, session.playerId, darkFogHostile);
+    }
+  }, [sceneQuery.data, session.playerId, darkFogHostile]);
 
   // RTS 快捷键体系（C1）：A/S/H/P/G + Ctrl/数字编队，2D/3D 共用（输入框聚焦自动忽略）
   usePlanetRtsHotkeys({
@@ -391,22 +401,12 @@ export function PlanetPage() {
     setDrawerOpen(false);
   }, [planetId, resetCommandStore, resetForPlanet]);
 
-  // 点选实体 / 收到新命令回执时，工作台抽屉自动滑出。
+  // 抽屉只由玩家点开；点选实体时预先切到"选中对象" Tab，打开时即见详情。
   useEffect(() => {
-    if (selected) {
-      setDrawerOpen(true);
-      // 点选建筑/单位/小队时同步切到"选中对象" Tab，让本地存储等详情立刻可见
-      if (selected.kind === "building" || selected.kind === "unit" || selected.kind === "squad") {
-        setActiveDetailPanel("selection");
-      }
+    if (selected && (selected.kind === "building" || selected.kind === "unit" || selected.kind === "squad")) {
+      setActiveDetailPanel("selection");
     }
   }, [selected]);
-
-  useEffect(() => {
-    if (latestCommandEntry) {
-      setDrawerOpen(true);
-    }
-  }, [latestCommandEntry]);
 
   useEffect(() => {
     if (!sceneQuery.data) {
@@ -472,8 +472,6 @@ export function PlanetPage() {
         buildingType: buildType.trim(),
         direction: "auto",
       });
-      setActiveDetailPanel("workbench");
-      setDrawerOpen(true);
     }
 
     // 深链 workflow=research|logistics|dyson…：打开工作台并落到对应命令 Tab
@@ -587,6 +585,7 @@ export function PlanetPage() {
   const systemRuntime = systemRuntimeQuery.data;
   const stats = statsQuery.data;
   const currentPlayer = summary?.players?.[session.playerId];
+  const liveTick = Math.max(summary?.tick ?? 0, planet.tick);
   const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
   const currentResearchName = getTechDisplayName(
     catalog,
@@ -680,10 +679,9 @@ export function PlanetPage() {
                 setDrawerOpen(false);
               }}
             />
-          </div>
-        ) : null}
-        {activeDetailPanel === "progression" ? (
-          <div id="planet-detail-panel-progression" role="tabpanel">
+            {/* 戴森式长线发展路线：遭遇战之外的进阶内容，默认折叠，不和新手引导抢主线 */}
+            <details className="planet-advanced-progression">
+              <summary>进阶：长线发展路线</summary>
             <ColonyProgressionPanel
               key={planet.planet_id}
               catalog={catalog}
@@ -710,6 +708,7 @@ export function PlanetPage() {
                 setDrawerOpen(true);
               }}
             />
+            </details>
           </div>
         ) : null}
         {activeDetailPanel === "activity" ? (
@@ -732,6 +731,8 @@ export function PlanetPage() {
         {isThree ? <PlanetMapThree
           key={planet.planet_id}
           catalog={catalog}
+          inventory={summary?.players?.[session.playerId]?.inventory}
+          darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
           onCanvasReady={(capture) => { captureRef.current = capture; }}
@@ -743,6 +744,8 @@ export function PlanetPage() {
           theaters={theatersQuery.data?.theaters}
         /> : <PlanetMapPixi
           catalog={catalog}
+          inventory={summary?.players?.[session.playerId]?.inventory}
+          darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
           onCanvasReady={(capture) => {
@@ -757,6 +760,7 @@ export function PlanetPage() {
           theaters={theatersQuery.data?.theaters}
         />}
         </Suspense>
+        <BuildPlacementHint catalog={catalog} inventory={summary?.players?.[session.playerId]?.inventory} planet={planet} playerId={session.playerId} />
         <div className="planet-view-switch" aria-label="地图视图">
           {isThree && systemId && <Link className="secondary-button" to={`/system/${systemId}?planet=${planet.planet_id}`}>恒星系 ↗</Link>}
           <button className="secondary-button" aria-pressed={isThree} onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete("view"); return next; }, { replace: true })}>3D 星球</button>
@@ -789,8 +793,9 @@ export function PlanetPage() {
               </span>
             </button>
             <p className="subtle-text">
-              <span className="tick-pulse" key={`hero-tick-${planet.tick}`}>
-                tick {planet.tick}
+              {/* 场景只在相关事件后重取，tick 以 2s 轮询的 summary 为准 */}
+              <span className="tick-pulse" key={`hero-tick-${liveTick}`}>
+                tick {liveTick}
               </span>
               {" · "}
               {translatePlanetKind(planet.kind)} ·{" "}
@@ -828,9 +833,6 @@ export function PlanetPage() {
           <div className="planet-management-actions" aria-label="工业发展">
             <button className="secondary-button" onClick={() => { setActiveDetailPanel("production"); setDrawerOpen(true); }}>
               <Factory size={13} aria-hidden="true" /> 生产规划
-            </button>
-            <button className="secondary-button" onClick={() => { setActiveDetailPanel("progression"); setDrawerOpen(true); }}>
-              <Milestone size={13} aria-hidden="true" /> 发展路线
             </button>
           </div>
         </div>
@@ -897,6 +899,7 @@ export function PlanetPage() {
               units: Object.values(planet.units ?? {}),
               legions: ownLegions(runtime.combat_squads, session.playerId),
               playerInventory: currentPlayer?.inventory,
+              darkFogHostile,
             })}
           />
           <PlanetLegionPanel planetId={planet.planet_id} squads={runtime.combat_squads} units={planet.units} />
@@ -914,10 +917,10 @@ export function PlanetPage() {
           onToggle={() => setDrawerOpen((open) => !open)}
           open={drawerOpen}
         >
-          {activeDetailPanel === "production" || activeDetailPanel === "progression" ? (
+          {activeDetailPanel === "production" ? (
             <div className="planet-management-context">
               <strong>{planet.name || planet.planet_id}</strong>
-              <span>{activeDetailPanel === "production" ? "工业生产" : "发展路线"}</span>
+              <span>工业生产</span>
             </div>
           ) : <PlanetOperationHeader
             activePlanetId={summary?.active_planet_id ?? planet.planet_id}

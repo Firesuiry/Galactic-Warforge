@@ -6,11 +6,11 @@
  * 选中态由标记层自绘选中环（小队会移动，不走 Pixi 的静态选中环）。
  */
 
-import { useEffect, useState } from 'react';
 import type { CombatSquad } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
 import { sfx } from '@/engine/audio';
+import { useProjectionFrame } from '@/features/planet-map/use-projection-frame';
 
 export interface SquadScreenPoint {
   x: number;
@@ -49,19 +49,7 @@ export function PlanetSquadLayer({
   projectTile,
 }: PlanetSquadLayerProps) {
   const shown = visibleHostileSquads(squads, playerId);
-  const [frame, setFrame] = useState(0);
-  useEffect(() => {
-    if (!projectTile) {
-      return undefined;
-    }
-    let raf = 0;
-    const loop = () => {
-      setFrame((value) => value + 1);
-      raf = window.requestAnimationFrame(loop);
-    };
-    raf = window.requestAnimationFrame(loop);
-    return () => window.cancelAnimationFrame(raf);
-  }, [projectTile]);
+  const frame = useProjectionFrame(projectTile, shown.length > 0);
   if (shown.length === 0) {
     return null;
   }

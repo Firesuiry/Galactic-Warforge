@@ -38,7 +38,7 @@ func TestT100HiddenTechGateBlocksDarkFogButFleetTechsAreResearchable(t *testing.
 	if hiddenRes.Code != model.CodeValidationFailed {
 		t.Fatalf("expected hidden tech to fail validation, got %s (%s)", hiddenRes.Code, hiddenRes.Message)
 	}
-	if hiddenRes.Message != "tech dark_fog_matrix is hidden; obtain its trigger items to reveal it" {
+	if hiddenRes.Message != "科技 dark_fog_matrix 尚未显现，需先获得其触发物品" {
 		t.Fatalf("unexpected hidden-tech message: %s", hiddenRes.Message)
 	}
 }

@@ -172,40 +172,34 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	// Factory-line throughput metrics only apply to true production buildings.
 	lineAlerts := !collector && !researchMode
 
-	if building.Runtime.State == model.BuildingWorkNoPower && state.ShouldAlert(model.AlertTypePowerShortage, tick, cooldown) {
+	if state.Alert(model.AlertTypePowerShortage, building.Runtime.State == model.BuildingWorkNoPower, tick, cooldown) {
 		details := map[string]any{"power_priority": building.Runtime.Params.PowerPriority}
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypePowerShortage, model.AlertSeverityWarning, state.LastStats, details))
-		state.MarkAlert(model.AlertTypePowerShortage, tick)
 	}
 
-	if lineAlerts && throughput > 0 {
-		ratio := float64(backlog) / float64(throughput)
-		if ratio >= pm.cfg.BacklogCriticalRatio && state.ShouldAlert(model.AlertTypeBacklog, tick, cooldown) {
-			details := map[string]any{"backlog_ratio": ratio}
-			alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeBacklog, model.AlertSeverityCritical, state.LastStats, details))
-			state.MarkAlert(model.AlertTypeBacklog, tick)
-		} else if ratio >= pm.cfg.BacklogWarnRatio && state.ShouldAlert(model.AlertTypeBacklog, tick, cooldown) {
-			details := map[string]any{"backlog_ratio": ratio}
-			alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeBacklog, model.AlertSeverityWarning, state.LastStats, details))
-			state.MarkAlert(model.AlertTypeBacklog, tick)
+	backlogRatio := 0.0
+	if throughput > 0 {
+		backlogRatio = float64(backlog) / float64(throughput)
+	}
+	if state.Alert(model.AlertTypeBacklog, lineAlerts && throughput > 0 && backlogRatio >= pm.cfg.BacklogWarnRatio, tick, cooldown) {
+		severity := model.AlertSeverityWarning
+		if backlogRatio >= pm.cfg.BacklogCriticalRatio {
+			severity = model.AlertSeverityCritical
 		}
+		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeBacklog, severity, state.LastStats, map[string]any{"backlog_ratio": backlogRatio}))
 	}
 
-	if lineAlerts && inputShortage && state.ShouldAlert(model.AlertTypeInputShortage, tick, cooldown) {
+	if state.Alert(model.AlertTypeInputShortage, lineAlerts && inputShortage, tick, cooldown) {
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil))
-		state.MarkAlert(model.AlertTypeInputShortage, tick)
 	}
 
-	if outputBlocked && state.ShouldAlert(model.AlertTypeOutputBlocked, tick, cooldown) {
+	if state.Alert(model.AlertTypeOutputBlocked, outputBlocked, tick, cooldown) {
 		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeOutputBlocked, model.AlertSeverityWarning, state.LastStats, nil))
-		state.MarkAlert(model.AlertTypeOutputBlocked, tick)
 	}
 
 	eff := state.LastStats.Efficiency
-	if lineAlerts && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio && state.ShouldAlert(model.AlertTypeThroughputDrop, tick, cooldown) {
-		details := map[string]any{"efficiency": eff}
-		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, details))
-		state.MarkAlert(model.AlertTypeThroughputDrop, tick)
+	if state.Alert(model.AlertTypeThroughputDrop, lineAlerts && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio, tick, cooldown) {
+		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, map[string]any{"efficiency": eff}))
 	}
 
 	return alerts

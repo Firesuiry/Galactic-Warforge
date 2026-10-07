@@ -561,7 +561,7 @@ func TestBotCancelsCraftToMineCoalBeforeStarving(t *testing.T) {
 		t.Fatal("bot executor missing")
 	}
 	exec.Mecha.Energy = exec.Mecha.MaxEnergy
-	exec.Mecha.Job = &model.MechaJob{Kind: "craft", RecipeID: "smelt_iron", RemainingTicks: 100, TicksPerBatch: 120, RemainingBatches: 5, EnergyPerTick: 1, State: "running"}
+	exec.Mecha.Job = &model.MechaJob{Kind: "craft", RecipeID: "smelt_iron", RemainingTicks: 100, TicksPerBatch: 120, RemainingBatches: 5, EnergyPerBatch: 3, State: "running"}
 	cmds := core.planBotCommands(ws, "p2", botTuningFor("hard"))
 	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); !ok {
 		t.Fatalf("expected cancel_mecha_job when coal is nearly out, got %+v", cmds)
@@ -604,35 +604,5 @@ func TestBotCraftsIngredientWhenBelowRecipeQuantity(t *testing.T) {
 	}
 	if got, _ := cmd.Payload["recipe_id"].(string); got != "smelt_magnet" {
 		t.Fatalf("expected smelt_magnet, got %v", cmd.Payload)
-	}
-}
-
-// 遭遇战预设（p2 无预置物资）：bot 必须靠手搓从零起步，最终建出电力和矿机。
-func TestSkirmishBotBootstrapsFromScratch(t *testing.T) {
-	cfg, err := config.Load("../../config-skirmish.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.Battlefield.EnemyDifficulty = "off"
-	mapCfg, err := mapconfig.Load("../../map-skirmish.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	core := New(cfg, mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed), queue.New(), NewEventBus(), nil)
-	runBotGame(core, 20000)
-	power, miners := 0, 0
-	for _, b := range core.World().Buildings {
-		if b.OwnerID != "p2" {
-			continue
-		}
-		if b.Runtime.Functions.Energy != nil && b.Runtime.Functions.Energy.OutputPerTick > 0 {
-			power++
-		}
-		if isMinerBuilding(b) {
-			miners++
-		}
-	}
-	if power == 0 || miners == 0 {
-		t.Fatalf("skirmish bot stalled from scratch: power=%d miners=%d inv=%v", power, miners, core.World().Players["p2"].Inventory)
 	}
 }

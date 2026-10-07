@@ -156,13 +156,13 @@ func (s *LogisticsStationState) Normalize() {
 // UpsertSetting adds or updates an item setting.
 func (s *LogisticsStationState) UpsertSetting(setting LogisticsStationItemSetting) error {
 	if s == nil {
-		return fmt.Errorf("station required")
+		return fmt.Errorf("缺少物流站")
 	}
 	if setting.ItemID == "" {
-		return fmt.Errorf("item_id required")
+		return fmt.Errorf("缺少 item_id")
 	}
 	if _, ok := Item(setting.ItemID); !ok {
-		return fmt.Errorf("unknown item: %s", setting.ItemID)
+		return fmt.Errorf("未知物品：%s", setting.ItemID)
 	}
 	if err := s.validateSettingCapacity(setting); err != nil {
 		return err
@@ -191,13 +191,13 @@ func (s *LogisticsStationState) RemoveSetting(itemID string) {
 // UpsertInterstellarSetting adds or updates an interstellar item setting.
 func (s *LogisticsStationState) UpsertInterstellarSetting(setting LogisticsStationItemSetting) error {
 	if s == nil {
-		return fmt.Errorf("station required")
+		return fmt.Errorf("缺少物流站")
 	}
 	if setting.ItemID == "" {
-		return fmt.Errorf("item_id required")
+		return fmt.Errorf("缺少 item_id")
 	}
 	if _, ok := Item(setting.ItemID); !ok {
-		return fmt.Errorf("unknown item: %s", setting.ItemID)
+		return fmt.Errorf("未知物品：%s", setting.ItemID)
 	}
 	if err := s.validateSettingCapacity(setting); err != nil {
 		return err

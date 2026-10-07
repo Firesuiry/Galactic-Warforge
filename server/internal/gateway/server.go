@@ -599,7 +599,7 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 				CommandIndex: i,
 				Status:       model.StatusRejected,
 				Code:         model.CodeGameFinished,
-				Message:      "game finished: victory already declared, commands are no longer accepted",
+				Message:      "对局已结束：胜负已定，不再接受命令",
 			}
 		}
 		s.recordPrecheckAudit(sess, playerID, qr, results)
@@ -692,7 +692,7 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 		} else {
 			results[i].Status = model.StatusAccepted
 			results[i].Code = model.CodeOK
-			results[i].Message = "accepted, will execute at next tick"
+			results[i].Message = "已受理，下一 tick 执行"
 		}
 	}
 

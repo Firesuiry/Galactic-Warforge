@@ -288,13 +288,41 @@ func botArmyPreference(ctx *botSurvey, tuning botTuning) []model.UnitType {
 	return append(types, model.UnitTypeSoldier)
 }
 
+// botTeslaCap bot 电感应塔上限：够把十来座建筑连进电网即可，避免满地铺塔。
+const botTeslaCap = 10
+
+// botPowerLink 给断电建筑接电：从已带电电网里离它最近的节点出发，
+// 在无线覆盖范围内朝它放一座电感应塔，逐座延伸，直到接上。
 func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSurvey) (model.Command, bool) {
 	if botPendingBuilds(ws, owner, model.BuildingTypeTeslaTower) > 0 {
 		return model.Command{}, false
 	}
+	towers := 0
+	for _, b := range ctx.buildings {
+		if b.Type == model.BuildingTypeTeslaTower {
+			towers++
+		}
+	}
+	if towers >= botTeslaCap {
+		return model.Command{}, false
+	}
+	powered := botPoweredGrid(ws, ctx)
+	reach := model.BuildingProfileFor(model.BuildingTypeTeslaTower, 1).Runtime.Functions.PowerGrid.WirelessRange
 	for _, b := range ctx.buildings {
 		if b.Runtime.StateReason != "power_out_of_range" && b.Runtime.StateReason != "power_no_provider" {
 			continue
+		}
+		var anchor *model.Building
+		for _, node := range ctx.buildings {
+			if !powered[node.ID] {
+				continue
+			}
+			if anchor == nil || ws.SurfaceDistance(node.Position, b.Position) < ws.SurfaceDistance(anchor.Position, b.Position) {
+				anchor = node
+			}
+		}
+		if anchor == nil {
+			return model.Command{}, false
 		}
 		def, _ := model.BuildingDefinitionByID(model.BuildingTypeTeslaTower)
 		for _, cost := range def.BuildCost.Items {
@@ -303,16 +331,60 @@ func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSur
 			}
 		}
 		if !botCanAffordBuild(ws.Players[owner], def) {
-			continue
+			return model.Command{}, false
 		}
-		pos := botBuildSpotNear(ws, b.Position, 2)
-		if pos == nil {
-			continue
-		}
-		if gc.requireBuildRange(ws, owner, *pos) != nil {
+		pos := botTowerStep(ws, anchor.Position, b.Position, reach)
+		// 只放能朝目标推进的塔：地形挡住时跳过这座建筑，避免原地堆塔。
+		if pos == nil || ws.SurfaceDistance(*pos, b.Position) >= ws.SurfaceDistance(anchor.Position, b.Position) || gc.requireBuildRange(ws, owner, *pos) != nil {
 			continue
 		}
 		return model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Layer: "planet", Position: pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeTeslaTower)}}, true
 	}
 	return model.Command{}, false
+}
+
+// botPoweredGrid 与己方发电建筑连通的电网节点（按电网图的边做 BFS）。
+func botPoweredGrid(ws *model.WorldState, ctx *botSurvey) map[string]bool {
+	powered := map[string]bool{}
+	if ws.PowerGrid == nil {
+		return powered
+	}
+	queue := []string{}
+	for _, b := range ctx.buildings {
+		if b.Runtime.Functions.Energy != nil && b.Runtime.Functions.Energy.OutputPerTick > 0 {
+			powered[b.ID] = true
+			queue = append(queue, b.ID)
+		}
+	}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for next := range ws.PowerGrid.Edges[id] {
+			if !powered[next] {
+				powered[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+	return powered
+}
+
+// botTowerStep 在 from 的无线覆盖范围内选离 to 最近的空地（同距取坐标小者）。
+func botTowerStep(ws *model.WorldState, from, to model.Position, reach int) *model.Position {
+	var best *model.Position
+	bestDist := 0
+	for _, c := range ws.SurfaceDisc(from, reach) {
+		if !ws.InBounds(c.X, c.Y) || !ws.Grid[c.Y][c.X].Terrain.Buildable() || ws.Grid[c.Y][c.X].BuildingID != "" || ws.Grid[c.Y][c.X].ResourceNodeID != "" {
+			continue
+		}
+		if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(c.X, c.Y)) {
+			continue
+		}
+		d := ws.SurfaceDistance(c, to)
+		if best == nil || d < bestDist || (d == bestDist && (c.Y < best.Y || c.Y == best.Y && c.X < best.X)) {
+			p := c
+			best, bestDist = &p, d
+		}
+	}
+	return best
 }

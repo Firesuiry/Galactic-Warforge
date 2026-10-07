@@ -190,12 +190,12 @@ func TestParticleColliderBuildResearchGates(t *testing.T) {
 		result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeMiniatureParticleCollider), "recipe_id": recipe}})
 		return result
 	}
-	if result := build("deuterium_collision"); result.Code != model.CodeValidationFailed || !strings.Contains(result.Message, "research") {
+	if result := build("deuterium_collision"); result.Code != model.CodeValidationFailed || !strings.Contains(result.Message, "研究") {
 		t.Fatalf("locked collider accepted: %+v", result)
 	}
 	grantTechs(ws, "p1", "miniature_collider")
 	for _, recipe := range []string{"antimatter", "strange_matter"} {
-		if result := build(recipe); result.Code != model.CodeValidationFailed || !strings.Contains(result.Message, "research") {
+		if result := build(recipe); result.Code != model.CodeValidationFailed || !strings.Contains(result.Message, "研究") {
 			t.Fatalf("locked recipe %s accepted: %+v", recipe, result)
 		}
 	}

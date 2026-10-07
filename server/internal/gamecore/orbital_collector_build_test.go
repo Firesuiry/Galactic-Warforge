@@ -39,7 +39,7 @@ func TestOrbitalCollectorBuildRejectedOnNonGasGiant(t *testing.T) {
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("expected code %s, got %s (%q)", model.CodeInvalidTarget, res.Code, res.Message)
 	}
-	if !strings.Contains(res.Message, "gas giant") {
+	if !strings.Contains(res.Message, "气态巨行星") {
 		t.Fatalf("expected readable gas giant hint, got %q", res.Message)
 	}
 }
@@ -74,7 +74,7 @@ func TestOrbitalCollectorBuildAdmittedOnGasGiant(t *testing.T) {
 			"building_type": string(model.BuildingTypeOrbitalCollector),
 		},
 	})
-	if strings.Contains(res.Message, "gas giant") {
+	if strings.Contains(res.Message, "气态巨行星") {
 		t.Fatalf("expected gas giant gate to admit gas giant planet, got %q", res.Message)
 	}
 	if res.Code != model.CodeInsufficientResource {

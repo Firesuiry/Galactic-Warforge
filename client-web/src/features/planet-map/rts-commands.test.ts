@@ -139,3 +139,15 @@ describe('rts-commands 多选构成与编队', () => {
     expect(pruneControlGroup(planet, 'p1', ['u-1', 'u-9', 'gone', 'u-2'])).toEqual(['u-1', 'u-2']);
   });
 });
+
+describe('黑雾阵营判定', () => {
+  it('黑雾按 dark_fog.hostile 区分中立/敌对，其余按属主', async () => {
+    const { unitFaction, FACTION_LABEL, FACTION_COLOR } = await import('@/features/planet-map/rts-commands');
+    expect(unitFaction({ owner_id: 'dark_fog', type: 'soldier' }, 'p1', false)).toBe('fog_neutral');
+    expect(unitFaction({ owner_id: 'x', type: 'dark_fog' }, 'p1', true)).toBe('fog_hostile');
+    expect(unitFaction({ owner_id: 'p1', type: 'soldier' }, 'p1', true)).toBe('own');
+    expect(unitFaction({ owner_id: 'p2', type: 'soldier' }, 'p1', true)).toBe('enemy');
+    expect(FACTION_LABEL.fog_neutral).toBe('黑雾（中立）');
+    expect(FACTION_COLOR.fog_hostile).not.toBe(FACTION_COLOR.fog_neutral);
+  });
+});

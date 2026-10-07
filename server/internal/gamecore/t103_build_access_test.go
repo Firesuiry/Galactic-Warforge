@@ -55,7 +55,7 @@ func TestT103BuildAccessMatchesPublicClosure(t *testing.T) {
 			"building_type": string(model.BuildingTypeSatelliteSubstation),
 		},
 	})
-	if lockedSatelliteRes.Code != model.CodeValidationFailed || !strings.Contains(lockedSatelliteRes.Message, "requires research to unlock") {
+	if lockedSatelliteRes.Code != model.CodeValidationFailed || !strings.Contains(lockedSatelliteRes.Message, "需先研究解锁") {
 		t.Fatalf("expected locked satellite_substation to require research, got code=%s message=%q", lockedSatelliteRes.Code, lockedSatelliteRes.Message)
 	}
 

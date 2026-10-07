@@ -54,13 +54,13 @@ func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cm
 	node, err := AddDysonNode(gc.spaceRuntime, playerID, systemID, layerIndex, latitude, longitude)
 	if err != nil || node == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "failed to build dyson node"
+		res.Message = "建造戴森节点失败"
 		return res, nil
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("dyson node %s built", node.ID)
+	res.Message = fmt.Sprintf("已建造戴森节点 %s", node.ID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -89,13 +89,13 @@ func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, c
 	frame, err := AddDysonFrame(gc.spaceRuntime, playerID, systemID, layerIndex, nodeAID, nodeBID)
 	if err != nil || frame == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "failed to build dyson frame"
+		res.Message = "建造戴森框架失败"
 		return res, nil
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("dyson frame %s built", frame.ID)
+	res.Message = fmt.Sprintf("已建造戴森框架 %s", frame.ID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -124,13 +124,13 @@ func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, c
 	shell, err := AddDysonShell(gc.spaceRuntime, playerID, systemID, layerIndex, latitudeMin, latitudeMax, coverage)
 	if err != nil || shell == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "failed to build dyson shell"
+		res.Message = "建造戴森壳失败"
 		return res, nil
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("dyson shell %s built", shell.ID)
+	res.Message = fmt.Sprintf("已建造戴森壳 %s", shell.ID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -157,17 +157,18 @@ func (gc *GameCore) execDemolishDyson(ws *model.WorldState, playerID string, cmd
 	}
 	if len(refunds) == 0 {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("dyson component %s not found", componentID)
+		res.Message = fmt.Sprintf("未找到戴森组件 %s", componentID)
 		return res, nil
 	}
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("dyson component %s demolished", componentID)
+	res.Message = fmt.Sprintf("已拆除戴森组件 %s", componentID)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityDestroyed,
 		VisibilityScope: playerID,
 		Payload: map[string]any{
+			"entity_kind":    "dyson_component",
 			"entity_type":    "dyson_" + componentType,
 			"entity_id":      componentID,
 			"system_id":      systemID,
@@ -197,7 +198,7 @@ func requireDysonTech(ws *model.WorldState, playerID, unlockID string) error {
 	if CanBuildTech(player, model.TechUnlockSpecial, unlockID) {
 		return nil
 	}
-	return fmt.Errorf("dyson structure requires research unlock: %s", unlockID)
+	return fmt.Errorf("戴森结构需先研究解锁：%s", unlockID)
 }
 
 type launchSolarSailPayload struct {
@@ -222,26 +223,26 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	building, ok := ws.Buildings[bid]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", bid)
+		res.Message = fmt.Sprintf("未找到建筑 %s", bid)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
+		res.Message = "不能使用其他玩家的建筑"
 		return res, nil
 	}
 
 	// Solar sails are launched by the EM Rail Ejector. Vertical silos are reserved for rockets.
 	if building.Type != model.BuildingTypeEMRailEjector {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "only EM Rail Ejector can launch solar sails"
+		res.Message = "只有电磁轨道弹射器可以发射太阳帆"
 		return res, nil
 	}
 
 	// Check building is running
 	if building.Runtime.State != model.BuildingWorkRunning {
 		res.Code = model.CodeValidationFailed
-		res.Message = "building is not operational"
+		res.Message = "建筑未在运行"
 		return res, nil
 	}
 
@@ -249,7 +250,7 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	player := ws.Players[playerID]
 	if player == nil || !player.IsAlive {
 		res.Code = model.CodeValidationFailed
-		res.Message = "player not found or not alive"
+		res.Message = "玩家不存在或已阵亡"
 		return res, nil
 	}
 
@@ -258,13 +259,13 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	// Check launch building has enough loaded solar sails.
 	if building.Storage == nil {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "launch building has no solar sail storage"
+		res.Message = "发射建筑没有太阳帆存储"
 		return res, nil
 	}
 	loadedSails := building.Storage.OutputQuantity(model.ItemSolarSail)
 	if loadedSails < sailCount {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d solar sails loaded, have %d", sailCount, loadedSails)
+		res.Message = fmt.Sprintf("需装填 %d 张太阳帆，当前 %d 张", sailCount, loadedSails)
 		return res, nil
 	}
 
@@ -280,22 +281,22 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		lm := building.Runtime.Functions.Launch
 		if orbitRadius < lm.OrbitRadiusMin {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("orbit_radius %.2f is below minimum %.2f", orbitRadius, lm.OrbitRadiusMin)
+			res.Message = fmt.Sprintf("orbit_radius %.2f 低于最小值 %.2f", orbitRadius, lm.OrbitRadiusMin)
 			return res, nil
 		}
 		if orbitRadius > lm.OrbitRadiusMax {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("orbit_radius %.2f exceeds maximum %.2f", orbitRadius, lm.OrbitRadiusMax)
+			res.Message = fmt.Sprintf("orbit_radius %.2f 超过最大值 %.2f", orbitRadius, lm.OrbitRadiusMax)
 			return res, nil
 		}
 		if inclination < -lm.InclinationMax {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("inclination %.2f is below minimum %.2f", inclination, -lm.InclinationMax)
+			res.Message = fmt.Sprintf("inclination %.2f 低于最小值 %.2f", inclination, -lm.InclinationMax)
 			return res, nil
 		}
 		if inclination > lm.InclinationMax {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("inclination %.2f exceeds maximum %.2f", inclination, lm.InclinationMax)
+			res.Message = fmt.Sprintf("inclination %.2f 超过最大值 %.2f", inclination, lm.InclinationMax)
 			return res, nil
 		}
 	}
@@ -310,12 +311,12 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 		provided, _, err := building.Storage.Provide(model.ItemSolarSail, sailCount)
 		if err != nil || provided != sailCount {
 			res.Code = model.CodeInsufficientResource
-			res.Message = "failed to consume loaded solar sails"
+			res.Message = "消耗已装填的太阳帆失败"
 			return res, nil
 		}
 		res.Status = model.StatusFailed
 		res.Code = model.CodeValidationFailed
-		res.Message = "launch failed due to equipment malfunction"
+		res.Message = "设备故障，发射失败"
 		return res, nil
 	}
 
@@ -323,7 +324,7 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	provided, _, err := building.Storage.Provide(model.ItemSolarSail, sailCount)
 	if err != nil || provided != sailCount {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "failed to consume loaded solar sails"
+		res.Message = "消耗已装填的太阳帆失败"
 		return res, nil
 	}
 
@@ -356,6 +357,6 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("launched %d solar sail(s) into orbit", sailCount)
+	res.Message = fmt.Sprintf("已发射 %d 张太阳帆入轨", sailCount)
 	return res, events
 }

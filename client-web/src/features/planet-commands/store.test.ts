@@ -402,7 +402,7 @@ describe("planet command store", () => {
     });
   });
 
-  it("把 executor out of range 翻译成可操作的建造提示", () => {
+  it("按错误码 OUT_OF_RANGE 给出移动执行体提示", () => {
     act(() => {
       usePlanetCommandStore.getState().reconcileAcceptedResponse({
         commandType: "build",
@@ -433,13 +433,13 @@ describe("planet command store", () => {
         payload: {
           request_id: "req-build-range",
           code: "OUT_OF_RANGE",
-          message: "executor out of range: 7 > 6",
+          message: "执行体距离目标 7 格，超出操作范围 6 格",
         },
       } as never);
     });
 
     expect(usePlanetCommandStore.getState().journal[0]?.nextHint).toBe(
-      "当前执行体距离目标 7 格，但可操作范围只有 6 格；先移动执行体再建造。",
+      "目标超出执行体操作范围；先移动执行体再试。",
     );
   });
 });

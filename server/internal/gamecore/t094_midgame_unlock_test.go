@@ -54,7 +54,7 @@ func TestT094OfficialMidgameBuildCommandsAreNoLongerBlockedByResearch(t *testing
 				"building_type": string(tc.btype),
 			},
 		})
-		if strings.Contains(res.Message, "requires research to unlock") {
+		if strings.Contains(res.Message, "需先研究解锁") {
 			t.Fatalf("expected %s not to be blocked by research, got %s (%s)", tc.name, res.Code, res.Message)
 		}
 	}

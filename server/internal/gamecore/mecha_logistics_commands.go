@@ -24,21 +24,21 @@ func (gc *GameCore) execConfigureMechaLogistics(ws *model.WorldState, playerID s
 		return mechaJobFailed(model.CodeValidationFailed, message)
 	}
 	if len(p.Requests) > 8 {
-		return fail("requests must be an object with at most 8 item slots")
+		return fail("requests 必须是最多含 8 个物品槽位的对象")
 	}
 	requests := make(map[string]model.MechaLogisticsRequest, len(p.Requests))
 	for itemID, entry := range p.Requests {
 		if item, ok := model.Item(itemID); !ok || item.Form != model.ResourceSolid {
-			return fail("unknown logistics request item: " + itemID)
+			return fail("未知的物流请求物品：" + itemID)
 		}
 		minimum, maximum := *entry.Min, *entry.Max
 		if minimum < 0 || maximum < 1 || maximum > 1000 || minimum > maximum {
-			return fail("request bounds require 0 <= min <= max <= 1000 and positive max")
+			return fail("请求范围须满足 0 <= min <= max <= 1000 且 max 为正数")
 		}
 		requests[itemID] = model.MechaLogisticsRequest{Min: minimum, Max: maximum}
 	}
 	unit.Mecha.LogisticsRequests = requests
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "mecha logistics requests replaced"}, []*model.GameEvent{mechaStateEvent(unit)}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "机甲物流请求已更新"}, []*model.GameEvent{mechaStateEvent(unit)}
 }
 
 type transferItemPayload struct {
@@ -54,52 +54,52 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	buildingID, itemID, quantity := p.BuildingID, p.ItemID, p.Quantity
 	if quantity <= 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = "payload.quantity must be positive"
+		res.Message = "payload.quantity 必须为正数"
 		return res, nil
 	}
 	if _, ok := model.Item(itemID); !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unknown item: %s", itemID)
+		res.Message = fmt.Sprintf("未知物品：%s", itemID)
 		return res, nil
 	}
 
 	building, ok := ws.Buildings[buildingID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
+		res.Message = "不能使用其他玩家的建筑"
 		return res, nil
 	}
 	if building.Storage == nil && !(model.IsGroundLogisticsBuilding(building.Type) && building.LogisticsStation != nil) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target building has no storage"
+		res.Message = "目标建筑没有存储"
 		return res, nil
 	}
 
 	player := ws.Players[playerID]
 	if player == nil || !player.IsAlive {
 		res.Code = model.CodeValidationFailed
-		res.Message = "player not found or not alive"
+		res.Message = "玩家不存在或已阵亡"
 		return res, nil
 	}
 	direction := "to_building"
 	if p.Direction != nil {
 		direction = *p.Direction
 		if direction != "to_building" && direction != "to_player" {
-			return mechaJobFailed(model.CodeValidationFailed, "direction must be to_building or to_player")
+			return mechaJobFailed(model.CodeValidationFailed, "direction 必须为 to_building 或 to_player")
 		}
 	}
 	if direction == "to_player" {
 		if building.Storage == nil {
-			return mechaJobFailed(model.CodeInvalidTarget, "take items from a storage building")
+			return mechaJobFailed(model.CodeInvalidTarget, "只能从存储建筑取出物品")
 		}
 		executor := player.ExecutorForPlanet(ws.PlanetID)
 		if executor == nil || ws.Units[executor.UnitID] == nil || ws.Units[executor.UnitID].Mecha == nil {
-			return mechaJobFailed(model.CodeInvalidTarget, "living executor required to receive items")
+			return mechaJobFailed(model.CodeInvalidTarget, "需要存活的执行者来接收物品")
 		}
 		unit := ws.Units[executor.UnitID]
 		model.SyncMechaCapabilities(unit, player)
@@ -110,28 +110,28 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		quantity = min(quantity, max(0, unit.Mecha.InventoryCapacity-used))
 		quantity = min(quantity, building.Storage.OutputQuantity(itemID))
 		if quantity <= 0 {
-			return mechaJobFailed(model.CodeInsufficientResource, "no output available or inventory full")
+			return mechaJobFailed(model.CodeInsufficientResource, "无可取出物品或背包已满")
 		}
 		taken, _, err := building.Storage.Provide(itemID, quantity)
 		if err != nil {
 			return mechaJobFailed(model.CodeValidationFailed, err.Error())
 		}
 		player.EnsureInventory()[itemID] += taken
-		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("collected %d %s from %s", taken, itemID, buildingID)}, []*model.GameEvent{{
+		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已取出 %d 个 %s（来自 %s）", taken, itemID, buildingID)}, []*model.GameEvent{{
 			EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
 			Payload: map[string]any{"building_id": buildingID, "item_id": itemID, "transferred": taken, "source": "building_storage", "inventory_qty": player.Inventory[itemID]},
 		}}
 	}
 	if player.Inventory[itemID] < quantity {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s in inventory, have %d", quantity, itemID, player.Inventory[itemID])
+		res.Message = fmt.Sprintf("背包需有 %d 个 %s，当前 %d 个", quantity, itemID, player.Inventory[itemID])
 		return res, nil
 	}
 
 	if building.Type == model.BuildingTypeSprayCoater {
 		if _, ok := model.SprayDefinitionByItem(itemID); !ok {
 			res.Code = model.CodeValidationFailed
-			res.Message = "spray coater storage accepts proliferator only; route cargo through its west belt"
+			res.Message = "喷涂机存储仅接受增产剂，其他货物请经其西侧传送带送入"
 			return res, nil
 		}
 	}
@@ -149,7 +149,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	}
 	if accepted <= 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building %s cannot accept %s", buildingID, itemID)
+		res.Message = fmt.Sprintf("建筑 %s 无法接收 %s", buildingID, itemID)
 		return res, nil
 	}
 
@@ -162,9 +162,9 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
 	if remaining > 0 {
-		res.Message = fmt.Sprintf("transferred %d %s into %s (%d remaining)", accepted, itemID, buildingID, remaining)
+		res.Message = fmt.Sprintf("已传输 %d 个 %s 至 %s（剩余 %d 个）", accepted, itemID, buildingID, remaining)
 	} else {
-		res.Message = fmt.Sprintf("transferred %d %s into %s", accepted, itemID, buildingID)
+		res.Message = fmt.Sprintf("已传输 %d 个 %s 至 %s", accepted, itemID, buildingID)
 	}
 
 	return res, []*model.GameEvent{{

@@ -35,13 +35,13 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	pos := cmd.Target.Position
 	if pos == nil {
 		res.Code = model.CodeValidationFailed
-		res.Message = "position required for build command"
+		res.Message = "build 命令缺少 position"
 		return res, nil
 	}
 
 	if !ws.InBounds(pos.X, pos.Y) {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("position (%d,%d) out of map bounds", pos.X, pos.Y)
+		res.Message = fmt.Sprintf("位置 (%d,%d) 超出地图范围", pos.X, pos.Y)
 		return res, nil
 	}
 
@@ -59,7 +59,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		// building still requires buildable ground.
 		if !(model.RequiresLavaProximity(btype) && ws.Grid[pos.Y][pos.X].Terrain == terrain.TileLava) {
 			res.Code = model.CodeInvalidTarget
-			res.Message = "target tile is not buildable"
+			res.Message = "目标地块不可建造"
 			return res, nil
 		}
 	}
@@ -78,7 +78,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	}
 	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) && pos.Z == 0 {
 		res.Code = model.CodePositionOccupied
-		res.Message = "tile is reserved for construction"
+		res.Message = "地块已被施工预留"
 		return res, nil
 	}
 
@@ -86,12 +86,12 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	def, ok := model.BuildingDefinitionByID(btype)
 	if !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("unknown building type: %s", btype)
+		res.Message = fmt.Sprintf("未知建筑类型：%s", btype)
 		return res, nil
 	}
 	if !def.Buildable {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building type not buildable: %s", btype)
+		res.Message = fmt.Sprintf("该建筑类型不可建造：%s", btype)
 		return res, nil
 	}
 
@@ -99,7 +99,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	player := ws.Players[playerID]
 	if !CanBuildTech(player, model.TechUnlockBuilding, string(btype)) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("building type %s requires research to unlock", btype)
+		res.Message = fmt.Sprintf("建筑类型 %s 需先研究解锁", btype)
 		return res, nil
 	}
 
@@ -111,12 +111,12 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		recipe, ok := model.Recipe(recipeID)
 		if !ok {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("unknown recipe: %s", recipeID)
+			res.Message = fmt.Sprintf("未知配方：%s", recipeID)
 			return res, nil
 		}
 		if def := model.BuildingProfileFor(btype, 1); def.Runtime.Functions.Production == nil {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("building type %s does not support recipes", btype)
+			res.Message = fmt.Sprintf("建筑类型 %s 不支持配方", btype)
 			return res, nil
 		}
 		supportsRecipe := false
@@ -128,12 +128,12 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		}
 		if !supportsRecipe {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("recipe %s not supported by building type %s", recipeID, btype)
+			res.Message = fmt.Sprintf("配方 %s 不适用于建筑类型 %s", recipeID, btype)
 			return res, nil
 		}
 		if !CanUseRecipeTech(player, recipeID) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("recipe %s requires research to unlock", recipeID)
+			res.Message = fmt.Sprintf("配方 %s 需先研究解锁", recipeID)
 			return res, nil
 		}
 	}
@@ -146,13 +146,13 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		planet, ok := gc.maps.Planet(ws.PlanetID)
 		if !ok || planet == nil || planet.Kind != mapmodel.PlanetKindGasGiant {
 			res.Code = model.CodeInvalidTarget
-			res.Message = "orbital collector must be built on a gas giant"
+			res.Message = "轨道采集器必须建在气态巨行星上"
 			return res, nil
 		}
 	}
 	if model.RequiresLavaProximity(btype) && !buildSiteTouchesLava(ws, btype, *pos) {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("%s must be built on or adjacent to lava", btype)
+		res.Message = fmt.Sprintf("%s 必须建在熔岩上或紧邻熔岩", btype)
 		return res, nil
 	}
 
@@ -163,7 +163,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			dir := model.ConveyorDirection(*p.Direction)
 			if !dir.Valid() {
 				res.Code = model.CodeValidationFailed
-				res.Message = fmt.Sprintf("invalid conveyor direction: %v", *p.Direction)
+				res.Message = fmt.Sprintf("无效的传送带方向：%v", *p.Direction)
 				return res, nil
 			}
 			conveyorDir = dir
@@ -174,7 +174,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	if p.Rotation != nil {
 		degrees := *p.Rotation
 		if degrees < 0 || degrees > 270 || degrees%90 != 0 {
-			return mechaJobFailed(model.CodeValidationFailed, "rotation must be 0, 90, 180 or 270")
+			return mechaJobFailed(model.CodeValidationFailed, "rotation 必须为 0、90、180 或 270")
 		}
 		rotation = model.PlanRotation(fmt.Sprint(degrees))
 	}
@@ -186,17 +186,17 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	player = ws.Players[playerID]
 	if player.Resources.Minerals < mCost {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d minerals, have %d", mCost, player.Resources.Minerals)
+		res.Message = fmt.Sprintf("矿物不足：需要 %d，当前 %d", mCost, player.Resources.Minerals)
 		return res, nil
 	}
 	if player.Resources.Energy < eCost {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d energy, have %d", eCost, player.Resources.Energy)
+		res.Message = fmt.Sprintf("能量不足：需要 %d，当前 %d", eCost, player.Resources.Energy)
 		return res, nil
 	}
 	if missing, ok := missingItem(player.Inventory, def.BuildCost.Items); ok {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s for build", missing.Quantity, missing.ItemID)
+		res.Message = fmt.Sprintf("建造缺少 %d 个 %s", missing.Quantity, missing.ItemID)
 		return res, nil
 	}
 
@@ -206,7 +206,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		}
 		approachUnit, approachPath = planBuildApproach(ws, playerID, *pos)
 		if approachUnit == nil {
-			return mechaJobFailed(model.CodeOutOfRange, "no reachable construction approach")
+			return mechaJobFailed(model.CodeOutOfRange, "没有可到达的施工位置")
 		}
 	}
 
@@ -253,7 +253,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("construction task %s queued at (%d,%d)", taskID, pos.X, pos.Y)
+	res.Message = fmt.Sprintf("施工任务 %s 已排队，位置 (%d,%d)", taskID, pos.X, pos.Y)
 	return res, nil
 }
 
@@ -287,23 +287,23 @@ func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string
 
 	if ws.Construction == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = "construction queue not found"
+		res.Message = "未找到施工队列"
 		return res, nil
 	}
 	task := ws.Construction.Tasks[taskID]
 	if task == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("construction task %s not found", taskID)
+		res.Message = fmt.Sprintf("未找到施工任务 %s", taskID)
 		return res, nil
 	}
 	if task.PlayerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot cancel construction task owned by another player"
+		res.Message = "不能取消其他玩家的施工任务"
 		return res, nil
 	}
 	if task.State != model.ConstructionPending && task.State != model.ConstructionInProgress {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("construction task cannot be cancelled in state %s", task.State)
+		res.Message = fmt.Sprintf("施工任务处于 %s 状态，无法取消", task.State)
 		return res, nil
 	}
 
@@ -321,7 +321,7 @@ func (gc *GameCore) execCancelConstruction(ws *model.WorldState, playerID string
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("construction task %s cancelled", taskID)
+	res.Message = fmt.Sprintf("施工任务 %s 已取消", taskID)
 	return res, nil
 }
 
@@ -333,23 +333,23 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 
 	if ws.Construction == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = "construction queue not found"
+		res.Message = "未找到施工队列"
 		return res, nil
 	}
 	task := ws.Construction.Tasks[taskID]
 	if task == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("construction task %s not found", taskID)
+		res.Message = fmt.Sprintf("未找到施工任务 %s", taskID)
 		return res, nil
 	}
 	if task.PlayerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot restore construction task owned by another player"
+		res.Message = "不能恢复其他玩家的施工任务"
 		return res, nil
 	}
 	if task.State != model.ConstructionCancelled && task.State != model.ConstructionPaused {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("construction task cannot be restored in state %s", task.State)
+		res.Message = fmt.Sprintf("施工任务处于 %s 状态，无法恢复", task.State)
 		return res, nil
 	}
 
@@ -364,12 +364,12 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 		lavaSite := model.RequiresLavaProximity(task.BuildingType) && ws.Grid[p.Y][p.X].Terrain == terrain.TileLava
 		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation && !lavaSite) || (ws.Construction.ReservedTiles[key] != "" && ws.Construction.ReservedTiles[key] != taskID) {
 			res.Code = model.CodePositionOccupied
-			res.Message = "construction footprint unavailable"
+			res.Message = "施工占地不可用"
 			return res, nil
 		}
 		if foundation := ws.FoundationAt(p); foundation != nil && (task.BuildingType == model.BuildingTypeFoundation || (foundation.Job != nil && foundation.Job.Type == model.BuildingJobDemolish)) {
 			res.Code = model.CodePositionOccupied
-			res.Message = "construction foundation unavailable"
+			res.Message = "施工地基不可用"
 			return res, nil
 		}
 	}
@@ -379,7 +379,7 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 	if task.State == model.ConstructionCancelled {
 		if _, err := reserveConstructionMaterials(ws, task); err != nil {
 			res.Code = model.CodeInsufficientResource
-			res.Message = "insufficient resources to restore construction: " + err.Error()
+			res.Message = "资源不足，无法恢复施工：" + err.Error()
 			return res, nil
 		}
 	}
@@ -410,7 +410,7 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("construction task %s restored to pending", taskID)
+	res.Message = fmt.Sprintf("施工任务 %s 已恢复为 pending", taskID)
 	return res, nil
 }
 
@@ -422,41 +422,41 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 	entityID := cmd.Target.EntityID
 	if entityID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id required"
+		res.Message = "缺少 target.entity_id"
 		return res, nil
 	}
 
 	building, ok := ws.Buildings[entityID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", entityID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", entityID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot upgrade building owned by another player"
+		res.Message = "不能升级其他玩家的建筑"
 		return res, nil
 	}
 	if building.Job != nil {
 		res.Code = model.CodeDuplicate
-		res.Message = "building already has a job"
+		res.Message = "建筑已有进行中的作业"
 		return res, nil
 	}
 
 	rule := model.BuildingUpgradeRuleFor(building.Type)
 	if !rule.Allow {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "building upgrade not allowed"
+		res.Message = "该建筑不允许升级"
 		return res, nil
 	}
 	if building.Level >= rule.MaxLevel {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("building already at max level %d", rule.MaxLevel)
+		res.Message = fmt.Sprintf("建筑已达最高等级 %d", rule.MaxLevel)
 		return res, nil
 	}
 	if rule.RequireIdle && building.Runtime.State != model.BuildingWorkIdle {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "building must be idle to upgrade"
+		res.Message = "建筑须处于 idle 状态才能升级"
 		return res, nil
 	}
 
@@ -467,17 +467,17 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 	player := ws.Players[playerID]
 	if player.Resources.Minerals < upgradeCostM {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d minerals for upgrade", upgradeCostM)
+		res.Message = fmt.Sprintf("升级需要 %d 矿物", upgradeCostM)
 		return res, nil
 	}
 	if player.Resources.Energy < upgradeCostE {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d energy for upgrade", upgradeCostE)
+		res.Message = fmt.Sprintf("升级需要 %d 能量", upgradeCostE)
 		return res, nil
 	}
 	if missing, ok := missingItem(player.Inventory, cost.Items); ok {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d %s for upgrade", missing.Quantity, missing.ItemID)
+		res.Message = fmt.Sprintf("升级缺少 %d 个 %s", missing.Quantity, missing.ItemID)
 		return res, nil
 	}
 
@@ -487,7 +487,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 	playerState := ws.Players[playerID]
 	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
 		res.Code = model.CodeExecutorBusy
-		res.Message = "executor is busy"
+		res.Message = "机甲正忙"
 		return res, nil
 	}
 
@@ -497,7 +497,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		player.Resources.Minerals += upgradeCostM
 		player.Resources.Energy += upgradeCostE
 		res.Code = model.CodeInsufficientResource
-		res.Message = "insufficient items for upgrade"
+		res.Message = "升级所需物品不足"
 		return res, nil
 	}
 
@@ -514,7 +514,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		}
 		res.Status = model.StatusExecuted
 		res.Code = model.CodeOK
-		res.Message = fmt.Sprintf("building %s upgrade started (level %d -> %d, %d ticks)", entityID, building.Level, nextLevel, rule.DurationTicks)
+		res.Message = fmt.Sprintf("建筑 %s 开始升级（等级 %d -> %d，%d tick）", entityID, building.Level, nextLevel, rule.DurationTicks)
 		return res, events
 	}
 
@@ -522,7 +522,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("building %s upgraded to level %d", entityID, building.Level)
+	res.Message = fmt.Sprintf("建筑 %s 已升级到 %d 级", entityID, building.Level)
 	return res, events
 }
 
@@ -534,27 +534,27 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 	entityID := cmd.Target.EntityID
 	if entityID == "" {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target.entity_id required"
+		res.Message = "缺少 target.entity_id"
 		return res, nil
 	}
 
 	building, ok := ws.Buildings[entityID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", entityID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", entityID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot demolish building owned by another player"
+		res.Message = "不能拆除其他玩家的建筑"
 		return res, nil
 	}
 	if model.DistributorOnHost(ws, building.ID) != nil || model.DistributorBotCount(ws, building.ID) > 0 {
-		return mechaJobFailed(model.CodeInvalidTarget, "remove the warehouse distributor and uninstall its robots before demolition")
+		return mechaJobFailed(model.CodeInvalidTarget, "拆除前需先移除仓库上的配送器并卸下其机器人")
 	}
 	if building.Type == model.BuildingTypeBattlefieldAnalysisBase {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "cannot demolish your own base"
+		res.Message = "不能拆除自己的基地"
 		return res, nil
 	}
 	if building.Type == model.BuildingTypeFoundation {
@@ -564,7 +564,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 			key := model.TileKey(tile.X, tile.Y)
 			if ws.Construction != nil && ws.Construction.ReservedTiles[key] != "" {
 				res.Code = model.CodeInvalidTarget
-				res.Message = "cannot demolish foundation while construction is reserved on it"
+				res.Message = "地基上有施工预留，无法拆除"
 				return res, nil
 			}
 			occupied[key] = struct{}{}
@@ -577,7 +577,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 			for _, tile := range otherTiles {
 				if _, overlaps := occupied[model.TileKey(tile.X, tile.Y)]; overlaps {
 					res.Code = model.CodeInvalidTarget
-					res.Message = "cannot demolish foundation while another building occupies it"
+					res.Message = "地基上有其他建筑，无法拆除"
 					return res, nil
 				}
 			}
@@ -585,18 +585,18 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 	}
 	if building.Job != nil {
 		res.Code = model.CodeDuplicate
-		res.Message = "building already has a job"
+		res.Message = "建筑已有进行中的作业"
 		return res, nil
 	}
 	rule := model.BuildingDemolishRuleFor(building.Type)
 	if !rule.Allow {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "building demolish not allowed"
+		res.Message = "该建筑不允许拆除"
 		return res, nil
 	}
 	if rule.RequireIdle && building.Runtime.State != model.BuildingWorkIdle {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "building must be idle to demolish"
+		res.Message = "建筑须处于 idle 状态才能拆除"
 		return res, nil
 	}
 
@@ -606,7 +606,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 	playerState := ws.Players[playerID]
 	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
 		res.Code = model.CodeExecutorBusy
-		res.Message = "executor is busy"
+		res.Message = "机甲正忙"
 		return res, nil
 	}
 
@@ -622,7 +622,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		}
 		res.Status = model.StatusExecuted
 		res.Code = model.CodeOK
-		res.Message = fmt.Sprintf("building %s demolish started (%d ticks)", entityID, rule.DurationTicks)
+		res.Message = fmt.Sprintf("建筑 %s 开始拆除（%d tick）", entityID, rule.DurationTicks)
 		return res, events
 	}
 
@@ -630,6 +630,6 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("building %s demolished", entityID)
+	res.Message = fmt.Sprintf("建筑 %s 已拆除", entityID)
 	return res, events
 }

@@ -213,7 +213,7 @@ units:
     ammo_class: bullet
     ammo_capacity: 40
     domain: ground
-    name: Executor
+    name: 执行体机甲
     max_hp: 120
     attack: 20
     defense: 8
@@ -226,7 +226,7 @@ units:
     weapon_class: gun
     mecha: {respawn_ticks: 100, max_energy: 100, inventory_capacity: 200, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10}
   - id: dark_fog
-    name: Dark Fog
+    name: 黑雾
     max_hp: 40
     attack: 8
     defense: 2

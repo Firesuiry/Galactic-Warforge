@@ -41,19 +41,19 @@ func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, c
 	player := warBlueprintPlayer(ws, playerID)
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = fmt.Sprintf("player %s not found", playerID)
+		res.Message = fmt.Sprintf("未找到玩家 %s", playerID)
 		return res, nil
 	}
 
 	blueprintID := p.BlueprintID
 	if _, exists := player.EnsureWarBlueprints()[blueprintID]; exists {
 		res.Code = model.CodeDuplicate
-		res.Message = fmt.Sprintf("blueprint %s already exists", blueprintID)
+		res.Message = fmt.Sprintf("蓝图 %s 已存在", blueprintID)
 		return res, nil
 	}
 	if _, exists := model.PublicWarBlueprintByID(blueprintID); exists {
 		res.Code = model.CodeDuplicate
-		res.Message = fmt.Sprintf("blueprint %s conflicts with preset blueprint", blueprintID)
+		res.Message = fmt.Sprintf("蓝图 %s 与预设蓝图冲突", blueprintID)
 		return res, nil
 	}
 
@@ -66,7 +66,7 @@ func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, c
 	baseFrameID, baseHullID := p.BaseFrameID, p.BaseHullID
 	if (baseFrameID == "" && baseHullID == "") || (baseFrameID != "" && baseHullID != "") {
 		res.Code = model.CodeValidationFailed
-		res.Message = "blueprint_create requires exactly one of payload.base_frame_id or payload.base_hull_id"
+		res.Message = "blueprint_create 必须且只能提供 payload.base_frame_id 或 payload.base_hull_id 之一"
 		return res, nil
 	}
 
@@ -85,14 +85,14 @@ func (gc *GameCore) execBlueprintCreate(ws *model.WorldState, playerID string, c
 	}
 	if !warBlueprintSupportsDomain(index, blueprint) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint base does not support domain %s", domain)
+		res.Message = fmt.Sprintf("蓝图底盘不支持 %s 领域", domain)
 		return res, nil
 	}
 
 	player.EnsureWarBlueprints()[blueprintID] = blueprint
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("blueprint %s created", blueprintID)
+	res.Message = fmt.Sprintf("蓝图 %s 已创建", blueprintID)
 	return res, nil
 }
 
@@ -101,12 +101,12 @@ func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID str
 	blueprint := warPlayerBlueprint(ws, playerID, p.BlueprintID)
 	if blueprint == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = "blueprint not found"
+		res.Message = "未找到蓝图"
 		return res, nil
 	}
 	if blueprint.State != model.WarBlueprintStateDraft && blueprint.State != model.WarBlueprintStateValidated {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s in state %s cannot be edited directly", blueprint.ID, blueprint.State)
+		res.Message = fmt.Sprintf("蓝图 %s 处于 %s 状态，不能直接编辑", blueprint.ID, blueprint.State)
 		res.Validation = invalidBlueprintAction(model.WarBlueprintIssueInvalidStateTransition, res.Message)
 		return res, nil
 	}
@@ -117,23 +117,23 @@ func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID str
 	index := model.PublicWarBlueprintCatalogIndex()
 	if _, ok := index.ComponentByID(componentID); !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("component %s not found", componentID)
+		res.Message = fmt.Sprintf("未找到组件 %s", componentID)
 		return res, nil
 	}
 	slotMap, ok := warBlueprintSlotMap(index, blueprint)
 	if !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s base not found", blueprint.ID)
+		res.Message = fmt.Sprintf("未找到蓝图 %s 的底盘", blueprint.ID)
 		return res, nil
 	}
 	if _, ok := slotMap[slotID]; !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("slot %s not defined on blueprint %s", slotID, blueprint.ID)
+		res.Message = fmt.Sprintf("槽位 %s 未在蓝图 %s 中定义", slotID, blueprint.ID)
 		return res, nil
 	}
 	if !blueprint.CanEditSlot(slotID) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("slot %s is locked by variant controls", slotID)
+		res.Message = fmt.Sprintf("槽位 %s 已被变体限制锁定", slotID)
 		res.Validation = invalidBlueprintAction(model.WarBlueprintIssueVariantSlotLocked, res.Message)
 		return res, nil
 	}
@@ -144,7 +144,7 @@ func (gc *GameCore) execBlueprintSetComponent(ws *model.WorldState, playerID str
 	blueprint.UpdatedTick = ws.Tick
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("blueprint %s slot %s updated", blueprint.ID, slotID)
+	res.Message = fmt.Sprintf("蓝图 %s 槽位 %s 已更新", blueprint.ID, slotID)
 	return res, nil
 }
 
@@ -153,12 +153,12 @@ func (gc *GameCore) execBlueprintValidate(ws *model.WorldState, playerID string,
 	blueprint := warPlayerBlueprint(ws, playerID, p.BlueprintID)
 	if blueprint == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = "blueprint not found"
+		res.Message = "未找到蓝图"
 		return res, nil
 	}
 	if blueprint.State != model.WarBlueprintStateDraft && blueprint.State != model.WarBlueprintStateValidated {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s in state %s cannot be validated", blueprint.ID, blueprint.State)
+		res.Message = fmt.Sprintf("蓝图 %s 处于 %s 状态，不能校验", blueprint.ID, blueprint.State)
 		res.Validation = invalidBlueprintAction(model.WarBlueprintIssueInvalidStateTransition, res.Message)
 		return res, nil
 	}
@@ -169,7 +169,7 @@ func (gc *GameCore) execBlueprintValidate(ws *model.WorldState, playerID string,
 	if !validation.Valid {
 		blueprint.State = model.WarBlueprintStateDraft
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s invalid", blueprint.ID)
+		res.Message = fmt.Sprintf("蓝图 %s 校验未通过", blueprint.ID)
 		res.Validation = &validation
 		return res, nil
 	}
@@ -177,7 +177,7 @@ func (gc *GameCore) execBlueprintValidate(ws *model.WorldState, playerID string,
 	blueprint.State = model.WarBlueprintStateValidated
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("blueprint %s validated", blueprint.ID)
+	res.Message = fmt.Sprintf("蓝图 %s 校验通过", blueprint.ID)
 	res.Validation = &validation
 	return res, nil
 }
@@ -187,7 +187,7 @@ func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string,
 	blueprint := warPlayerBlueprint(ws, playerID, p.BlueprintID)
 	if blueprint == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = "blueprint not found"
+		res.Message = "未找到蓝图"
 		return res, nil
 	}
 
@@ -197,7 +197,7 @@ func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string,
 	}
 	if targetState == "" || !blueprint.CanTransitionTo(targetState) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s cannot transition from %s to %s", blueprint.ID, blueprint.State, targetState)
+		res.Message = fmt.Sprintf("蓝图 %s 不能从 %s 转为 %s", blueprint.ID, blueprint.State, targetState)
 		res.Validation = invalidBlueprintAction(model.WarBlueprintIssueInvalidStateTransition, res.Message)
 		return res, nil
 	}
@@ -208,7 +208,7 @@ func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string,
 		}
 		if blueprint.Validation == nil || !blueprint.Validation.Valid {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("blueprint %s must validate before finalize", blueprint.ID)
+			res.Message = fmt.Sprintf("蓝图 %s 须先校验才能定型", blueprint.ID)
 			res.Validation = blueprint.Validation
 			return res, nil
 		}
@@ -218,7 +218,7 @@ func (gc *GameCore) execBlueprintFinalize(ws *model.WorldState, playerID string,
 	blueprint.UpdatedTick = ws.Tick
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("blueprint %s promoted to %s", blueprint.ID, targetState)
+	res.Message = fmt.Sprintf("蓝图 %s 已晋升为 %s", blueprint.ID, targetState)
 	res.Validation = blueprint.Validation
 	return res, nil
 }
@@ -228,7 +228,7 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 	player := warBlueprintPlayer(ws, playerID)
 	if player == nil {
 		res.Code = model.CodeUnauthorized
-		res.Message = fmt.Sprintf("player %s not found", playerID)
+		res.Message = fmt.Sprintf("未找到玩家 %s", playerID)
 		return res, nil
 	}
 
@@ -236,24 +236,24 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 	blueprintID := p.BlueprintID
 	if _, exists := player.EnsureWarBlueprints()[blueprintID]; exists {
 		res.Code = model.CodeDuplicate
-		res.Message = fmt.Sprintf("blueprint %s already exists", blueprintID)
+		res.Message = fmt.Sprintf("蓝图 %s 已存在", blueprintID)
 		return res, nil
 	}
 	if _, exists := model.PublicWarBlueprintByID(blueprintID); exists {
 		res.Code = model.CodeDuplicate
-		res.Message = fmt.Sprintf("blueprint %s conflicts with preset blueprint", blueprintID)
+		res.Message = fmt.Sprintf("蓝图 %s 与预设蓝图冲突", blueprintID)
 		return res, nil
 	}
 
 	parent, ok := model.ResolveWarBlueprintForPlayer(player, parentID)
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("parent blueprint %s not found", parentID)
+		res.Message = fmt.Sprintf("未找到父蓝图 %s", parentID)
 		return res, nil
 	}
 	if !parent.CanCreateVariant() {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("blueprint %s in state %s cannot spawn variants", parent.ID, parent.State)
+		res.Message = fmt.Sprintf("蓝图 %s 处于 %s 状态，不能派生变体", parent.ID, parent.State)
 		res.Validation = invalidBlueprintAction(model.WarBlueprintIssueInvalidStateTransition, res.Message)
 		return res, nil
 	}
@@ -261,19 +261,19 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 	allowedSlots := p.AllowedSlotIDs
 	if len(allowedSlots) == 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = "payload.allowed_slot_ids must be a non-empty string array"
+		res.Message = "payload.allowed_slot_ids 必须是非空字符串数组"
 		return res, nil
 	}
 	slotMap, ok := warBlueprintSlotMap(model.PublicWarBlueprintCatalogIndex(), &parent)
 	if !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("parent blueprint %s base not found", parent.ID)
+		res.Message = fmt.Sprintf("未找到父蓝图 %s 的底盘", parent.ID)
 		return res, nil
 	}
 	for _, slotID := range allowedSlots {
 		if _, exists := slotMap[slotID]; !exists {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("slot %s not defined on parent blueprint %s", slotID, parent.ID)
+			res.Message = fmt.Sprintf("槽位 %s 未在父蓝图 %s 中定义", slotID, parent.ID)
 			return res, nil
 		}
 	}
@@ -301,7 +301,7 @@ func (gc *GameCore) execBlueprintVariant(ws *model.WorldState, playerID string, 
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("variant %s created from %s", blueprintID, parent.ID)
+	res.Message = fmt.Sprintf("已从 %[2]s 派生变体 %[1]s", blueprintID, parent.ID)
 	return res, nil
 }
 

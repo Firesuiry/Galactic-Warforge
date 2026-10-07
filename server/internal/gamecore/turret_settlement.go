@@ -44,7 +44,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		targetedUnit := ""
 
 		// Find enemy forces in range
-		if ws.EnemyForces != nil && !combat.AirOnly {
+		if ws.EnemyForces != nil && !combat.AirOnly && hostile(ws, turret.OwnerID, model.DarkFogOwnerID) {
 			for i, force := range ws.EnemyForces.Forces {
 				if ws.SurfaceWithin(turret.Position, force.Position, combat.Range) && ws.SurfaceDistance(turret.Position, force.Position) >= combat.MinRange {
 					targetedForce = i
@@ -63,10 +63,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 				if combat.AirOnly && unit.Domain != model.UnitDomainAir || unit.Domain == model.UnitDomainAir && model.WeaponClassForBuilding(turret.Type) != model.WeaponTypeMissile && !combat.AirOnly || ws.SurfaceDistance(turret.Position, unit.Position) < combat.MinRange {
 					continue
 				}
-				if unit.OwnerID == turret.OwnerID {
-					continue
-				}
-				if sameTeam(ws, unit.OwnerID, turret.OwnerID) {
+				if !hostile(ws, turret.OwnerID, unit.OwnerID) {
 					continue
 				}
 				if !ws.SurfaceWithin(turret.Position, unit.Position, combat.Range) {
@@ -123,6 +120,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		} else if targetedForce >= 0 {
 			// Attack enemy force
 			force := &ws.EnemyForces.Forces[targetedForce]
+			events = append(events, provokeDarkFog(ws, turret.OwnerID)...)
 			damage := attack
 			// Shield mitigation (30% damage to shield, 70% to HP)
 			if force.SpreadRadius > 0 { // using spreadRadius as shield proxy
@@ -163,6 +161,9 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		} else if targetedUnit != "" {
 			// Attack enemy unit
 			unit := ws.Units[targetedUnit]
+			if unit.OwnerID == model.DarkFogOwnerID {
+				events = append(events, provokeDarkFog(ws, turret.OwnerID)...)
+			}
 			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
 			turretWeapon := model.WeaponClassForBuilding(turret.Type)
 			raw := max(1, int(float64(max(1, attack-unit.Defense))*model.ResolveDamageCoefficient(turretWeapon, unit.ArmorClass)))

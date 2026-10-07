@@ -82,8 +82,9 @@ export const VICTORY_MODE_LABELS: Record<string, string> = {
 };
 
 export const VICTORY_REASON_LABELS: Record<string, string> = {
-  elimination: '歼灭',
-  game_win: '任务完成',
+  elimination: '基地被全歼',
+  game_win: '完成任务目标',
+  time_limit: '时限到达，按战绩判定',
 };
 
 export const PLAYER_ROLE_LABELS: Record<string, string> = {
@@ -103,11 +104,11 @@ export function translateEnemyDifficulty(value: string) {
 }
 
 export function translateVictoryMode(value: string) {
-  return VICTORY_MODE_LABELS[value] ?? value;
+  return VICTORY_MODE_LABELS[value] ?? '标准';
 }
 
 export function translateVictoryReason(value: string) {
-  return VICTORY_REASON_LABELS[value] ?? value;
+  return VICTORY_REASON_LABELS[value] ?? '对局结束';
 }
 
 export function translatePlayerRole(value: string) {

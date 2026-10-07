@@ -45,7 +45,7 @@
 - 2026-09-29 用户纠偏：只要红警/星际的“感觉”，不照搬红警内容（超武、EVA、英雄/空降等不做）。两条主线：①多兵种交战（星际式少而精）②弹药补给由 DSP 产线生产并运到前线。D7 已拍板（大混战+军团指挥、单位实物造价、弹药三类、打空停火、补给站+补给车、不做墙），见 docs/guide/对局设计决策.md。
 - 2026-09-29 整体规划：docs/guide/整体规划.md（阶段一 行星内可玩：3.0 数据配置化 F8→3.1 底座→3.2 弹药补给 U10→3.3 兵种/生产→3.4 军团→3.5 防御袭扰→3.6 bot 与收口；阶段二 舰队/星际；阶段三 终局）。各块靠自动化测试收口，全部完成后统一试玩（用户 2026-09-29 要求）。
 - 2026-09-28 缺失内容清单实施启动：目标文档 docs/guide/缺失内容清单.md，拍板 docs/guide/对局设计决策.md（D1 60-90分钟遭遇战主模式/D2 机甲英雄+建造半径/D3 黑雾+bot+PvP 三位一体/D4 暂缓/D5 顾问+对手/D6 双轨划界），进度追踪 docs/guide/缺失内容清单-进度.md。M1 服务端核心已完成：单位统一实时移动/自动交战/unit_order 指令集/小队实体化/地面 PvP；执行体（机甲）保留瞬移与手动一击至 I16；单位寻路预算上限 800 格，占位不重叠+侧移绕行。
-- 2026-09-28 落地视图与失败提示：登录/根路径默认直达 active_planet 的 3D 行星视图（OnlyGuests 改跳 "/"，由 routes 的 ActivePlanetLanding 统一决定落地页，回退 /galaxy）；命令失败三条提示路径都要中文+显眼——HTTP 拒绝走 executor 弹 danger toast，执行期失败靠 event-toasts 的 command_result 映射兜底（accepted 后 executor 不弹），日志文案在 store 写入时翻译（toPlayerFacingMessage 错误兜底/toPlayerFacingFeedback 成功保留原文）；提示推导（resolveNextHint/error-hints）依赖英文原文，必须用 debugMessage 匹配。planet-terrain-chunks 环绕像素测试在全量并行下偶发 5s 超时，单跑稳定通过（既有性能抖动）。
+- 2026-09-28 落地视图与失败提示：登录/根路径默认直达 active_planet 的 3D 行星视图（OnlyGuests 改跳 "/"，由 routes 的 ActivePlanetLanding 统一决定落地页，回退 /galaxy）；命令失败三条提示路径都要中文+显眼——HTTP 拒绝走 executor 弹 danger toast，执行期失败靠 event-toasts 的 command_result 映射兜底（accepted 后 executor 不弹），服务端回执已全中文（2026-10-07），前端原样显示，只翻译传输层/GAME_FINISHED（toPlayerFacingMessage）；提示推导（resolveNextHint/error-hints）只按错误码 code，不匹配文案。planet-terrain-chunks 环绕像素测试在全量并行下偶发 5s 超时，单跑稳定通过（既有性能抖动）。
 - 2026-09-29 F1 新局热重置落地：服务端从“一局一生”改为 Runtime/Session 原子换局（startup.Runtime 持有 atomic.Pointer[Session]，gateway 全部 handler 经 rt.Current() 访问）；新增 POST /games/new（仅 admin）与 GET /games/current；victory_rule 新增 sandbox；快照 store 按局隔离防止跨局 rollback 污染；autosave/tick goroutine 由 Runtime 交接；CLI 新增 game_new/game_status（game_new 成功后自动切到新局 admin key）。注意 LoadRuntime 现在不启动 goroutine，须显式 rt.Start()（main.go 已接）。
 - 2026-09-29 F2 客户端结算：路由 `/settlement`（AppShell 已登录）。终局提示记 `sessionStorage` 键 `gw.settlement-prompted`（started_at::declared_tick），同一局不重复刷。命令拒绝码 `GAME_FINISHED` 走行星 executor、战争 `useWarCommand`、SSE `command_result`。终局不登出。CLI `game_status` 打 status/战损。
 
@@ -61,3 +61,7 @@
 - 2026-10-04 整体重构方案（P0 删除→P1 文档→P2 TS 整合→P3 服务端→P4 web→P5 测试）见 [重构方案](docs/guide/重构方案.md)，待用户拍板后按阶段执行。
 
 - 2026-10-06 默认遭遇战真实试玩（不预置、UI 操作）见 tmp/playtest-1006/试玩报告.md：三局都在 tick ~2600 被第一波黑雾消灭；黑雾只打玩家；bot 从零开局造不出建筑；建造栏不显示物品造价、抽屉挡按钮。修好开局生存后需再试玩。
+- 2026-10-07 用户拍板：黑雾改为被动，玩家攻击它后才对该玩家敌对（一段时间不打恢复中立）。测试报告（含逐步截图的 md）放项目 tmp/ 下（已 gitignore）。
+
+- 2026-10-07 服务端试玩修复：黑雾改被动（伤害黑雾才对该玩家敌对，`battlefield.dark_fog_calm_ticks` 默认 6000 后恢复中立；summary `players[].dark_fog`、事件 `dark_fog_provoked/dark_fog_calmed`）；遭遇战双方同款开局物资包 + `bot_first_attack_tick: 16000`；机甲空闲自动还手/索敌；`refuel_mecha` 的 `count`；手搓/采矿改为每批扣能（`mecha.job.energy_per_batch`）；`entity_destroyed` 加 `entity_kind`、`entity_type` 改为具体类型；产线告警只在出现时报、持续时 3000 tick 提醒一次。回归在 `server/internal/gamecore/skirmish_opening_test.go`、`dark_fog_passive_test.go`。
+- 2026-10-07 浏览器测试别用软件渲染（SwiftShader 占满约 9 核、仅 1–2 fps）：生产构建 `npx vite build --outDir /tmp/gw-dist` + `VITE_SW_PROXY_TARGET=http://127.0.0.1:<端口> npx vite preview --outDir /tmp/gw-dist`，页面加 `?e2e=1` 暴露 window.__planetThree；Chromium 用 headless + `--use-angle=gl --enable-gpu --ignore-gpu-blocklist`，环境变量 `GALLIUM_DRIVER=d3d12 LD_LIBRARY_PATH=/usr/lib/wsl/lib`（走 WSL 的 GTX 1050 Ti，约 28 fps）。headed 更慢。

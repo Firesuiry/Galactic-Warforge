@@ -32,6 +32,9 @@ type PlayerState struct {
 	WarBlueprints   map[string]*WarBlueprint  `json:"war_blueprints,omitempty"`
 	WarIndustry     *WarIndustryState         `json:"war_industry,omitempty"`
 	WarCoordination *WarCoordinationState     `json:"war_coordination,omitempty"`
+	// DarkFog 黑雾对该玩家的敌对关系：黑雾默认中立，被该玩家伤害后敌对，
+	// 最后一次伤害后经过 dark_fog_calm_ticks 恢复中立。
+	DarkFog DarkFogRelation `json:"dark_fog"`
 
 	permissionSet map[string]struct{} `json:"-"`
 }
@@ -52,7 +55,9 @@ type WorldState struct {
 
 	Tick int64 `json:"tick"`
 	// PaceOutput 生产配方时长倍率。0 表示 1。由结算管线按战场配置每 tick 写入，不进快照。
-	PaceOutput         float64                           `json:"-"`
+	PaceOutput float64 `json:"-"`
+	// DarkFogCalmTicks 黑雾被激怒后恢复中立所需 tick。0 表示默认值。由结算管线按战场配置写入，不进快照。
+	DarkFogCalmTicks   int64                             `json:"-"`
 	PlanetID           string                            `json:"planet_id"`
 	MapWidth           int                               `json:"map_width"`
 	MapHeight          int                               `json:"map_height"`

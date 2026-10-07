@@ -5,7 +5,7 @@ import type { CatalogView, TechCatalogEntry } from '@shared/types';
 
 import { Icon } from '@/common/Icon';
 import { formatTechUnlockLabel, normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
-import { buildTechTreeLayout, type TechNode } from '@/features/tech-tree/layout';
+import { buildTechTreeLayout, relevantTechIds, type TechNode } from '@/features/tech-tree/layout';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { getItemDisplayName, getTechDisplayName } from '@/features/planet-map/model';
@@ -28,6 +28,16 @@ const STATUS_LABELS = {
   locked: '未解锁',
 } as const;
 
+const SHOW_ALL_STORAGE_KEY = 'siliconworld-tech-show-all';
+
+function readShowAll() {
+  try {
+    return localStorage.getItem(SHOW_ALL_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /** 节点格宽高（与 tech.css 中的 --tech-node-* 保持一致）。 */
 const COL_WIDTH = 208;
 const ROW_HEIGHT = 84;
@@ -37,6 +47,8 @@ export function TechPage() {
   const session = useSessionSnapshot();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [laneFilter, setLaneFilter] = useState<string | null>(null);
+  // 默认只看当前相关（可研究/研究中/已完成/下一步），切换后才展开全部科技
+  const [showAll, setShowAll] = useState(readShowAll);
 
   const catalogQuery = useQuery({
     queryKey: ['tech-catalog', session.serverUrl],
@@ -60,20 +72,25 @@ export function TechPage() {
     [player?.tech],
   );
 
-  const layout = useMemo(
+  const fullLayout = useMemo(
     () => buildTechTreeLayout(catalog?.techs ?? [], completedIds, currentResearch?.tech_id ?? null),
     [catalog?.techs, completedIds, currentResearch?.tech_id],
   );
+  const layout = useMemo(() => {
+    if (showAll) return fullLayout;
+    const relevant = relevantTechIds(fullLayout.nodes);
+    return buildTechTreeLayout((catalog?.techs ?? []).filter((tech) => relevant.has(tech.id)), completedIds, currentResearch?.tech_id ?? null);
+  }, [showAll, fullLayout, catalog?.techs, completedIds, currentResearch?.tech_id]);
 
   const visibleLanes = laneFilter ? layout.lanes.filter((l) => l === laneFilter) : layout.lanes;
   const selected = layout.nodes.find((n) => n.entry.id === selectedId) ?? null;
 
   const stats = useMemo(() => {
-    const total = layout.nodes.length;
-    const done = layout.nodes.filter((n) => n.status === 'completed').length;
-    const ready = layout.nodes.filter((n) => n.status === 'available').length;
+    const total = fullLayout.nodes.length;
+    const done = fullLayout.nodes.filter((n) => n.status === 'completed').length;
+    const ready = fullLayout.nodes.filter((n) => n.status === 'available').length;
     return { total, done, ready };
-  }, [layout.nodes]);
+  }, [fullLayout.nodes]);
 
   if (catalogQuery.isLoading) {
     return <div className="panel">正在加载科技目录...</div>;
@@ -102,6 +119,18 @@ export function TechPage() {
           </div>
         </dl>
         <div className="tech-header__lanes" role="group" aria-label="科技分支筛选">
+          <button
+            type="button"
+            className={showAll ? 'tech-lane-chip tech-scope-toggle' : 'tech-lane-chip tech-scope-toggle is-active'}
+            aria-pressed={!showAll}
+            onClick={() => {
+              const next = !showAll;
+              setShowAll(next);
+              try { localStorage.setItem(SHOW_ALL_STORAGE_KEY, next ? '1' : '0'); } catch { /* 偏好可选 */ }
+            }}
+          >
+            {showAll ? `全部 ${stats.total} 项 · 只看当前相关` : `当前相关 ${layout.nodes.length} 项 · 显示全部`}
+          </button>
           <button
             type="button"
             className={laneFilter === null ? 'tech-lane-chip is-active' : 'tech-lane-chip'}

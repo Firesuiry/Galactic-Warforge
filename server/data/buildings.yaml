@@ -2,7 +2,7 @@
 # 格式说明见 docs/dev/数据配置文件.md
 buildings:
   - id: battlefield_analysis_base
-    name: Battlefield Analysis Base
+    name: 战场分析基站
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -31,7 +31,7 @@ buildings:
           fleet_capacity: 2
           allowed_blueprints: [prototype, precision_drone, corvette, destroyer]
   - id: mining_machine
-    name: Mining Machine
+    name: 采矿机
     category: collect
     subcategory: collect
     footprint: {width: 1, height: 1}
@@ -57,7 +57,7 @@ buildings:
         storage: {capacity: 48, slots: 2, buffer: 12, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 2}
   - id: advanced_mining_machine
-    name: Advanced Mining Machine
+    name: 大型采矿机
     category: collect
     subcategory: collect
     footprint: {width: 1, height: 1}
@@ -84,7 +84,7 @@ buildings:
         storage: {capacity: 96, slots: 3, buffer: 24, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 6}
   - id: water_pump
-    name: Water Pump
+    name: 抽水站
     category: collect
     subcategory: collect
     footprint: {width: 1, height: 1}
@@ -110,7 +110,7 @@ buildings:
         storage: {capacity: 60, slots: 1, buffer: 20, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 2}
   - id: oil_extractor
-    name: Oil Extractor
+    name: 原油萃取站
     category: collect
     subcategory: collect
     footprint: {width: 1, height: 1}
@@ -136,7 +136,7 @@ buildings:
         storage: {capacity: 60, slots: 1, buffer: 20, input_priority: 1, output_priority: 2}
         energy: {consume_per_tick: 2}
   - id: orbital_collector
-    name: Orbital Collector
+    name: 轨道采集器
     category: collect
     subcategory: collect
     footprint: {width: 1, height: 1}
@@ -152,7 +152,7 @@ buildings:
         orbital: {outputs: [{item_id: hydrogen, quantity: 4}, {item_id: deuterium, quantity: 1}], max_inventory: 1000}
         energy: {consume_per_tick: 4}
   - id: conveyor_belt_mk1
-    name: Conveyor Belt Mk.I
+    name: 传送带 Mk.I
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -161,7 +161,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 2, stack_limit: 2}}}
   - id: conveyor_belt_mk2
-    name: Conveyor Belt Mk.II
+    name: 高速传送带 Mk.II
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -170,7 +170,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 4, stack_limit: 2}}}
   - id: conveyor_belt_mk3
-    name: Conveyor Belt Mk.III
+    name: 极速传送带 Mk.III
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -179,7 +179,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 6, stack_limit: 3}}}
   - id: splitter
-    name: Splitter
+    name: 四向分流器
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -191,7 +191,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 6, stack_limit: 24}}}
   - id: automatic_piler
-    name: Automatic Piler
+    name: 自动集装机
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -207,7 +207,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 2, stack_limit: 4}}}
   - id: traffic_monitor
-    name: Traffic Monitor
+    name: 流速监测器
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -225,7 +225,7 @@ buildings:
       params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 1}}
   - id: spray_coater
-    name: Spray Coater
+    name: 喷涂机
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -253,7 +253,7 @@ buildings:
             allowed_items: [proliferator_mk1, proliferator_mk2, proliferator_mk3]
       functions: {spray: {throughput: 6, max_level: 3}, storage: {capacity: 48, slots: 3}, energy: {consume_per_tick: 2}}
   - id: sorter_mk1
-    name: Sorter Mk.I
+    name: 分拣器 Mk.I
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -262,7 +262,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {sorter: {speed: 1, range: 1}}}
   - id: sorter_mk2
-    name: Sorter Mk.II
+    name: 高速分拣器 Mk.II
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -271,7 +271,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {sorter: {speed: 2, range: 2}}}
   - id: sorter_mk3
-    name: Sorter Mk.III
+    name: 极速分拣器 Mk.III
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -280,7 +280,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {sorter: {speed: 3, range: 3}}}
   - id: pile_sorter
-    name: Pile Sorter
+    name: 集装分拣器
     category: transport
     subcategory: transport
     footprint: {width: 1, height: 1}
@@ -292,7 +292,7 @@ buildings:
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {sorter: {speed: 4, range: 3}}}
   - id: logistics_distributor
-    name: Logistics Distributor
+    name: 物流配送器
     category: logistics_hub
     subcategory: logistics_hub
     footprint: {width: 1, height: 1}
@@ -309,7 +309,7 @@ buildings:
       params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 1}}
   - id: planetary_logistics_station
-    name: Planetary Logistics Station
+    name: 行星内物流运输站
     category: logistics_hub
     subcategory: logistics_hub
     footprint: {width: 1, height: 1}
@@ -327,7 +327,7 @@ buildings:
       params: {energy_consume: 1, capacity: 600, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 1}}
   - id: interstellar_logistics_station
-    name: Interstellar Logistics Station
+    name: 星际物流运输站
     category: logistics_hub
     subcategory: logistics_hub
     footprint: {width: 1, height: 1}
@@ -341,7 +341,7 @@ buildings:
       params: {energy_consume: 2, capacity: 2500, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 2}}
   - id: depot_mk1
-    name: Depot Mk.I
+    name: 小型储物仓
     category: storage
     subcategory: storage
     footprint: {width: 1, height: 1}
@@ -352,7 +352,7 @@ buildings:
       params: {io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]}
       functions: {storage: {capacity: 300, slots: 3, buffer: 40, input_priority: 2, output_priority: 1}}
   - id: depot_mk2
-    name: Depot Mk.II
+    name: 大型储物仓
     category: storage
     subcategory: storage
     footprint: {width: 1, height: 1}
@@ -363,7 +363,7 @@ buildings:
       params: {io_ports: [{id: in-0, direction: input, capacity: 3}, {id: out-0, direction: output, capacity: 3}]}
       functions: {storage: {capacity: 900, slots: 6, buffer: 80, input_priority: 2, output_priority: 2}}
   - id: storage_tank
-    name: Storage Tank
+    name: 储液罐
     category: storage
     subcategory: storage
     footprint: {width: 1, height: 1}
@@ -377,7 +377,7 @@ buildings:
       params: {io_ports: [{id: in-0, direction: input, capacity: 2}, {id: out-0, direction: output, capacity: 2}]}
       functions: {storage: {capacity: 600, slots: 2, buffer: 60, input_priority: 1, output_priority: 2}}
   - id: arc_smelter
-    name: Arc Smelter
+    name: 电弧熔炉
     category: refining
     subcategory: refining
     footprint: {width: 1, height: 1}
@@ -402,7 +402,7 @@ buildings:
         storage: {capacity: 24, slots: 3, buffer: 8, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 4}
   - id: plane_smelter
-    name: Plane Smelter
+    name: 位面熔炉
     category: refining
     subcategory: refining
     footprint: {width: 1, height: 1}
@@ -426,7 +426,7 @@ buildings:
         storage: {capacity: 36, slots: 4, buffer: 12, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 6}
   - id: negentropy_smelter
-    name: Negentropy Smelter
+    name: 负熵熔炉
     category: refining
     subcategory: refining
     footprint: {width: 1, height: 1}
@@ -444,7 +444,7 @@ buildings:
         storage: {capacity: 48, slots: 4, buffer: 12, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 9}
   - id: assembling_machine_mk1
-    name: Assembling Machine Mk.I
+    name: 制造台 Mk.I
     category: production
     subcategory: production
     footprint: {width: 1, height: 1}
@@ -465,7 +465,7 @@ buildings:
         storage: {capacity: 24, slots: 4, buffer: 8, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 5}
   - id: assembling_machine_mk2
-    name: Assembling Machine Mk.II
+    name: 制造台 Mk.II
     category: production
     subcategory: production
     footprint: {width: 1, height: 1}
@@ -483,7 +483,7 @@ buildings:
         storage: {capacity: 48, slots: 6, buffer: 16, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 8}
   - id: assembling_machine_mk3
-    name: Assembling Machine Mk.III
+    name: 制造台 Mk.III
     category: production
     subcategory: production
     footprint: {width: 1, height: 1}
@@ -504,7 +504,7 @@ buildings:
         storage: {capacity: 72, slots: 8, buffer: 24, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 12}
   - id: recomposing_assembler
-    name: Re-Composing Assembler
+    name: 重组式制造台
     category: production
     subcategory: production
     footprint: {width: 1, height: 1}
@@ -522,7 +522,7 @@ buildings:
         storage: {capacity: 48, slots: 6, buffer: 16, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 12}
   - id: oil_refinery
-    name: Oil Refinery
+    name: 原油精炼厂
     category: refining
     subcategory: refining
     footprint: {width: 1, height: 1}
@@ -548,7 +548,7 @@ buildings:
         storage: {capacity: 48, slots: 4, buffer: 12, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 6}
   - id: fractionator
-    name: Fractionator
+    name: 分馏塔
     category: refining
     subcategory: refining
     footprint: {width: 1, height: 1}
@@ -573,7 +573,7 @@ buildings:
           - {id: deuterium-out, direction: output, capacity: 6, allowed_items: [deuterium]}
       functions: {energy: {consume_per_tick: 6}}
   - id: chemical_plant
-    name: Chemical Plant
+    name: 化工厂
     category: chemical
     subcategory: chemical
     footprint: {width: 1, height: 1}
@@ -598,7 +598,7 @@ buildings:
         storage: {capacity: 24, slots: 4, buffer: 8, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 6}
   - id: quantum_chemical_plant
-    name: Quantum Chemical Plant
+    name: 量子化工厂
     category: chemical
     subcategory: chemical
     footprint: {width: 1, height: 1}
@@ -622,7 +622,7 @@ buildings:
         storage: {capacity: 36, slots: 5, buffer: 12, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 8}
   - id: miniature_particle_collider
-    name: Miniature Particle Collider
+    name: 微型粒子对撞机
     category: production
     subcategory: production
     footprint: {width: 1, height: 1}
@@ -651,7 +651,7 @@ buildings:
         storage: {capacity: 96, slots: 6, buffer: 24, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 24}
   - id: matrix_lab
-    name: Matrix Lab
+    name: 矩阵研究站
     category: research
     subcategory: research
     footprint: {width: 1, height: 1}
@@ -677,7 +677,7 @@ buildings:
         energy: {consume_per_tick: 4}
         research: {research_per_tick: 1}
   - id: self_evolution_lab
-    name: Self-Evolution Lab
+    name: 自演化研究站
     category: research
     subcategory: research
     footprint: {width: 1, height: 1}
@@ -696,7 +696,7 @@ buildings:
         energy: {consume_per_tick: 16}
         research: {research_per_tick: 3}
   - id: tesla_tower
-    name: Tesla Tower
+    name: 电力感应塔
     category: power_grid
     subcategory: power_grid
     footprint: {width: 1, height: 1}
@@ -710,7 +710,7 @@ buildings:
       params: {connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {power_grid: {wireless_range: 4}}
   - id: wireless_power_tower
-    name: Wireless Power Tower
+    name: 无线输电塔
     category: power_grid
     subcategory: power_grid
     footprint: {width: 1, height: 1}
@@ -721,7 +721,7 @@ buildings:
       params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 1}, power_grid: {wireless_range: 6}}
   - id: satellite_substation
-    name: Satellite Substation
+    name: 卫星配电站
     category: power_grid
     subcategory: power_grid
     footprint: {width: 1, height: 1}
@@ -735,7 +735,7 @@ buildings:
       params: {connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {power_grid: {wireless_range: 10}}
   - id: wind_turbine
-    name: Wind Turbine
+    name: 风力涡轮机
     category: power
     subcategory: power
     footprint: {width: 1, height: 1}
@@ -748,7 +748,7 @@ buildings:
       params: {energy_generate: 10, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {output_per_tick: 10, source_kind: wind}}
   - id: thermal_power_plant
-    name: Thermal Power Plant
+    name: 火力发电厂
     category: power
     subcategory: power
     footprint: {width: 1, height: 1}
@@ -784,7 +784,7 @@ buildings:
             - {item_id: log, consume_per_tick: 1, output_multiplier: 0.6}
             - {item_id: plant_fuel, consume_per_tick: 1, output_multiplier: 0.2}
   - id: solar_panel
-    name: Solar Panel
+    name: 太阳能板
     category: power
     subcategory: power
     footprint: {width: 1, height: 1}
@@ -800,7 +800,7 @@ buildings:
       params: {energy_generate: 12, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {output_per_tick: 12, source_kind: solar}}
   - id: geothermal_power_station
-    name: Geothermal Power Station
+    name: 地热发电站
     category: power
     subcategory: power
     footprint: {width: 1, height: 1}
@@ -818,7 +818,7 @@ buildings:
       params: {energy_generate: 30, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {output_per_tick: 30, source_kind: geothermal}}
   - id: mini_fusion_power_plant
-    name: Mini Fusion Power Plant
+    name: 微型聚变发电站
     category: power
     subcategory: power
     footprint: {width: 1, height: 1}
@@ -846,7 +846,7 @@ buildings:
             - {item_id: hydrogen_fuel_rod, consume_per_tick: 1, output_multiplier: 1}
             - {item_id: deuterium_fuel_rod, consume_per_tick: 1, output_multiplier: 2.5}
   - id: energy_exchanger
-    name: Energy Exchanger
+    name: 能量枢纽
     category: power_grid
     subcategory: power_grid
     footprint: {width: 1, height: 1}
@@ -883,7 +883,7 @@ buildings:
           discharge_efficiency: 0.95
           priority: 2
   - id: accumulator
-    name: Accumulator
+    name: 蓄电器
     category: power_grid
     subcategory: power_grid
     footprint: {width: 1, height: 1}
@@ -907,7 +907,7 @@ buildings:
           discharge_efficiency: 0.9
           priority: 1
   - id: accumulator_full
-    name: Accumulator (Full)
+    name: 蓄电器（满）
     category: power_grid
     subcategory: power_grid
     footprint: {width: 1, height: 1}
@@ -924,7 +924,7 @@ buildings:
           priority: 1
           initial_charge: 100
   - id: ray_receiver
-    name: Ray Receiver
+    name: 射线接收站
     category: dyson
     subcategory: dyson
     footprint: {width: 1, height: 1}
@@ -956,7 +956,7 @@ buildings:
           photon_item_id: critical_photon
           mode: hybrid
   - id: artificial_star
-    name: Artificial Star
+    name: 人造恒星
     category: power
     subcategory: power
     footprint: {width: 1, height: 1}
@@ -982,7 +982,7 @@ buildings:
           source_kind: artificial_star
           fuel_rules: [{item_id: antimatter_fuel_rod, consume_per_tick: 1, output_multiplier: 1}]
   - id: gauss_turret
-    name: Gauss Turret
+    name: 高斯机枪塔
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1016,7 +1016,7 @@ buildings:
           ammo_item: ammo_bullet
           ammo_consume: 1
   - id: missile_turret
-    name: Missile Turret
+    name: 导弹防御塔
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1040,7 +1040,7 @@ buildings:
         energy: {consume_per_tick: 8}
         combat: {attack: 40, range: 10, fire_rate: 30, ammo_item: ammo_missile, ammo_consume: 1}
   - id: implosion_cannon
-    name: Implosion Cannon
+    name: 聚爆加农炮
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1064,7 +1064,7 @@ buildings:
         energy: {consume_per_tick: 15}
         combat: {attack: 75, range: 12, fire_rate: 45, ammo_item: shell_set, ammo_consume: 1}
   - id: laser_turret
-    name: Laser Turret
+    name: 高频激光塔
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1082,7 +1082,7 @@ buildings:
       params: {energy_consume: 18, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 18}, combat: {attack: 30, range: 8, fire_rate: 8}}
   - id: plasma_turret
-    name: Plasma Turret
+    name: 磁化电浆炮
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1107,7 +1107,7 @@ buildings:
         energy: {consume_per_tick: 25}
         combat: {attack: 55, range: 11, fire_rate: 20, ammo_item: plasma_capsule, ammo_consume: 1}
   - id: sr_plasma_turret
-    name: SR Plasma Turret
+    name: 近程电浆塔
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1125,7 +1125,7 @@ buildings:
       params: {energy_consume: 20, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 20}, combat: {attack: 60, range: 12}}
   - id: jammer_tower
-    name: Jammer Tower
+    name: 干扰塔
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1143,7 +1143,7 @@ buildings:
       params: {energy_consume: 6, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 6}, combat: {range: 8}}
   - id: signal_tower
-    name: Signal Tower
+    name: 信号塔
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1151,7 +1151,7 @@ buildings:
     buildable: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
   - id: planetary_shield_generator
-    name: Planetary Shield Generator
+    name: 行星护盾发生器
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}
@@ -1169,7 +1169,7 @@ buildings:
       params: {energy_consume: 50, connection_points: [{id: power, kind: power, capacity: 1}]}
       functions: {energy: {consume_per_tick: 50}, shield: {capacity: 1000, charge_per_tick: 5}}
   - id: em_rail_ejector
-    name: EM-Rail Ejector
+    name: 电磁轨道弹射器
     category: dyson
     subcategory: dyson
     footprint: {width: 1, height: 1}
@@ -1200,7 +1200,7 @@ buildings:
           launch_interval: 60
           launch_queue_size: 10
   - id: vertical_launching_silo
-    name: Vertical Launching Silo
+    name: 垂直发射井
     category: dyson
     subcategory: dyson
     footprint: {width: 1, height: 1}
@@ -1238,7 +1238,7 @@ buildings:
           rocket_item_id: small_carrier_rocket
           production_speed: 1
   - id: foundation
-    name: Foundation
+    name: 地基
     category: command_signal
     subcategory: command_signal
     footprint: {width: 1, height: 1}

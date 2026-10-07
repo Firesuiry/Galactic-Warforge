@@ -38,6 +38,8 @@ const (
 	EvtSupplyLineDisrupted       EventType = "supply_line_disrupted"
 	EvtEnemyWaveIncoming         EventType = "enemy_wave_incoming"
 	EvtEnemyNestDestroyed        EventType = "enemy_nest_destroyed"
+	EvtDarkFogProvoked           EventType = "dark_fog_provoked"
+	EvtDarkFogCalmed             EventType = "dark_fog_calmed"
 )
 
 var allEventTypes = []EventType{
@@ -75,6 +77,8 @@ var allEventTypes = []EventType{
 	EvtSupplyLineDisrupted,
 	EvtEnemyWaveIncoming,
 	EvtEnemyNestDestroyed,
+	EvtDarkFogProvoked,
+	EvtDarkFogCalmed,
 }
 
 var validEventTypes = func() map[EventType]struct{} {

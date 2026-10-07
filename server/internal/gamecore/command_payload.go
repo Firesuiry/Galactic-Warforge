@@ -22,11 +22,11 @@ func decodePayload[P any](raw map[string]any) (P, error) {
 	// 先经 JSON 归一化（Go 类型值 → 与网关解码一致的 map/切片/数字），再按标签校验并解码。
 	data, err := json.Marshal(raw)
 	if err != nil {
-		return p, fmt.Errorf("payload invalid: %v", err)
+		return p, fmt.Errorf("payload 无效：%v", err)
 	}
 	var normalized map[string]any
 	if err := json.Unmarshal(data, &normalized); err != nil {
-		return p, fmt.Errorf("payload invalid: %v", err)
+		return p, fmt.Errorf("payload 无效：%v", err)
 	}
 	if err := checkPayloadFields(reflect.TypeOf(p), normalized, "payload"); err != nil {
 		return p, err
@@ -34,9 +34,9 @@ func decodePayload[P any](raw map[string]any) (P, error) {
 	if err := json.Unmarshal(data, &p); err != nil {
 		var typeErr *json.UnmarshalTypeError
 		if errors.As(err, &typeErr) {
-			return p, fmt.Errorf("payload.%s must be %s", payloadJSONPath(reflect.TypeOf(p), typeErr.Field), payloadKindName(typeErr.Type))
+			return p, fmt.Errorf("payload.%s 必须是%s", payloadJSONPath(reflect.TypeOf(p), typeErr.Field), payloadKindName(typeErr.Type))
 		}
-		return p, fmt.Errorf("payload invalid: %v", err)
+		return p, fmt.Errorf("payload 无效：%v", err)
 	}
 	return p, nil
 }
@@ -66,10 +66,10 @@ func checkPayloadFields(t reflect.Type, raw map[string]any, path string) error {
 		fieldPath := path + "." + name
 		if strings.Contains(opts, "required") {
 			if !present || (value == nil && field.Type.Kind() != reflect.String) {
-				return fmt.Errorf("%s required", fieldPath)
+				return fmt.Errorf("缺少 %s", fieldPath)
 			}
 			if field.Type.Kind() == reflect.String && !strings.Contains(opts, "allowempty") && (value == nil || value == "") {
-				return fmt.Errorf("%s must be a non-empty string", fieldPath)
+				return fmt.Errorf("%s 必须是非空字符串", fieldPath)
 			}
 		}
 		nested, ok := value.(map[string]any)
@@ -133,17 +133,17 @@ func payloadKindName(t reflect.Type) string {
 	}
 	switch t.Kind() {
 	case reflect.String:
-		return "a string"
+		return "字符串"
 	case reflect.Bool:
-		return "boolean"
+		return "布尔值"
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "integer"
+		return "整数"
 	case reflect.Float32, reflect.Float64:
-		return "a number"
+		return "数字"
 	case reflect.Slice, reflect.Array:
-		return "an array"
+		return "数组"
 	default:
-		return "an object"
+		return "对象"
 	}
 }

@@ -25,39 +25,39 @@ func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd 
 	building, ok := ws.Buildings[buildingID]
 	if !ok || building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("building %s not found", buildingID)
+		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
 		return res, nil
 	}
 	if building.OwnerID != playerID {
 		res.Code = model.CodeNotOwner
-		res.Message = "cannot use building owned by another player"
+		res.Message = "不能使用其他玩家的建筑"
 		return res, nil
 	}
 	if building.Type != model.BuildingTypeVerticalLaunchingSilo {
 		res.Code = model.CodeInvalidTarget
-		res.Message = "only vertical_launching_silo can launch rockets"
+		res.Message = "只有 vertical_launching_silo 可以发射火箭"
 		return res, nil
 	}
 	if building.Runtime.State != model.BuildingWorkRunning {
 		res.Code = model.CodeValidationFailed
-		res.Message = "building is not operational"
+		res.Message = "建筑未在运行"
 		return res, nil
 	}
 	if building.Storage == nil {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "launch building has no rocket storage"
+		res.Message = "发射建筑没有火箭存储"
 		return res, nil
 	}
 	loadedRockets := building.Storage.OutputQuantity(model.ItemSmallCarrierRocket)
 	if loadedRockets < count {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("need %d small_carrier_rocket loaded, have %d", count, loadedRockets)
+		res.Message = fmt.Sprintf("需装填 %d 枚 small_carrier_rocket，当前 %d 枚", count, loadedRockets)
 		return res, nil
 	}
 	if gc.maps != nil {
 		if _, ok := gc.maps.System(systemID); !ok {
 			res.Code = model.CodeInvalidTarget
-			res.Message = fmt.Sprintf("system %s not found", systemID)
+			res.Message = fmt.Sprintf("未找到星系 %s", systemID)
 			return res, nil
 		}
 	}
@@ -65,26 +65,26 @@ func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd 
 	state := GetDysonSphereState(gc.spaceRuntime, playerID, systemID)
 	if state == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("dyson layer %d for system %s not found", layerIndex, systemID)
+		res.Message = fmt.Sprintf("未找到戴森层 %d（星系 %s）", layerIndex, systemID)
 		return res, nil
 	}
 	if layerIndex < 0 || layerIndex >= len(state.Layers) {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("dyson layer %d for system %s not found", layerIndex, systemID)
+		res.Message = fmt.Sprintf("未找到戴森层 %d（星系 %s）", layerIndex, systemID)
 		return res, nil
 	}
 
 	layer := &state.Layers[layerIndex]
 	if !hasDysonScaffold(*layer) {
 		res.Code = model.CodeValidationFailed
-		res.Message = "target dyson layer requires at least one scaffold"
+		res.Message = "目标戴森层至少需要一个骨架"
 		return res, nil
 	}
 
 	provided, _, err := building.Storage.Provide(model.ItemSmallCarrierRocket, count)
 	if err != nil || provided != count {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "failed to consume loaded rockets"
+		res.Message = "消耗已装填的火箭失败"
 		return res, nil
 	}
 
@@ -96,7 +96,7 @@ func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd 
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("launched %d rocket(s) into dyson layer %d", count, layerIndex)
+	res.Message = fmt.Sprintf("已发射 %d 枚火箭至戴森层 %d", count, layerIndex)
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtRocketLaunched,
 		VisibilityScope: playerID,

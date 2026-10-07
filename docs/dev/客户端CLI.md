@@ -55,7 +55,7 @@ cd client-cli && npm run dev
 - **军团**：`form_squad` 可含补给车；`squad_order ... resupply` 不带坐标，自动前往最近补给站；`dissolve_squad` 后成员保留当前指令。
 - **弹药**：`inspect` 单位可见 `ammo_class`/`ammo`/`ammo_capacity`/`ammo_item`，打空后 `combat_state=no_ammunition` 停火；进入 `supply_station`（半径 10）或 `supply_truck`（半径 5）范围自动补满。防空炮吃 `ammo_missile`、火炮吃 `shell_set`，用 `transfer` 或皮带装填。
 - **研究**：至少 1 个 `running` 研究站（`matrix_lab` 不设配方即研究模式），所需矩阵须已在研究站本地库存，推进时真实消耗。`summary` 的 `tech.current_research.blocked_reason` 为 `waiting_lab`/`waiting_matrix`/`low_power`，`speed_multiplier` 与 `estimated_ticks_remaining` 反映供电降速。
-- **机甲**：`mine_resource` 在 2 格内采有限固体矿点（`resource_id` 是矿点 ID，不是物品 ID），每 10 tick 1 件；`craft_item` 只限 `handcraft_allowed=true` 且已解锁的配方，quantity 为批数。两者每 tick 耗 1 核心能量，缺能暂停。quantity 只接受正十进制安全整数。`refuel_mecha` 只接受 `items[].mecha_fuel_energy > 0` 的燃料。靠近运行中的自有无线输电塔（6 格）或电力感应塔（4 格）自动充电。
+- **机甲**：`mine_resource` 在 2 格内采有限固体矿点（`resource_id` 是矿点 ID，不是物品 ID），每 10 tick 1 件；`craft_item` 只限 `handcraft_allowed=true` 且已解锁的配方，quantity 为批数。采矿每件耗 3 核心，手搓每批耗 `max(1, 时长/20)` 核心，缺能暂停。quantity 只接受正十进制安全整数。`refuel_mecha <executor_id> <fuel_item_id> [count]` 只接受 `items[].mecha_fuel_energy > 0` 的燃料，count 缺省 1，烧到核心满为止。靠近运行中的自有无线输电塔（6 格）或电力感应塔（4 格）自动充电。
 - **分流器**：`configure_splitter` 每次完整替换端口、优先级与过滤；省略可选项即清除。方向限 `north/east/south/west`，至少一入一出、方向不重复。未过滤出口可作旁路；优先是“可用优先”。
 - **分拣器**：`configure_sorter` 输入/输出方向不得重叠，`--mode allow|deny` 配 `--items`。
 - **流速监测器**：`configure_traffic_monitor` 完整替换配置，绑定相邻自有 Mk.I/II/III 传送带，`none` 清绑定；任何配置都会重置统计。告警事件为 `traffic_monitor_alert`。
@@ -170,7 +170,7 @@ agent_thread agent-war-director
 | `produce` | `produce <entity_id> <unit_type> [--planet <planet_id>]` | `produce` | build | Produce a server-public world unit（按建筑所在行星结算） |
 | `queue_military_production` | `queue_military_production <building_id> <deployment_hub_id> <blueprint_id> [--count <n>]` | `queue_military_production` | management | Queue military production and deliver ready payloads into a deployment hub |
 | `refit_unit` | `refit_unit <building_id> <unit_id> <target_blueprint_id>` | `refit_unit` | management | Send a squad or fleet into authoritative refit |
-| `refuel_mecha` | `refuel_mecha <executor_id> <fuel_item_id> <quantity> [--planet <planet_id>]` | `refuel_mecha` | management | Refuel an executor mecha with a catalog-declared mecha fuel item |
+| `refuel_mecha` | `refuel_mecha <executor_id> <fuel_item_id> [count] [--planet <planet_id>]` | `refuel_mecha` | management | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
 | `restore_construction` | `restore_construction <task_id>` | `restore_construction` | build | Restore a cancelled construction task |
 | `scan_galaxy` | `scan_galaxy [galaxy_id]` | `scan_galaxy` | observe | Discover all systems in a galaxy |
 | `scan_planet` | `scan_planet <planet_id>` | `scan_planet` | observe | Discover a planet |

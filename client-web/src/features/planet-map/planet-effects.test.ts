@@ -5,7 +5,11 @@ import {
   FIRE_FLASH_MS,
   HIT_FLASH_MS,
   PLANET_DAMAGE_FLOAT_MS,
+  PLANET_DAMAGE_MERGE_MS,
+  PLANET_EFFECT_LIMITS,
   PlanetEffectPool,
+  damageFloatText,
+  type PlanetDamageFloatEffectSpec,
   specsFromPlanetBattleEvent,
   type PlanetEffectContext,
   type PlanetEffectPoint,
@@ -38,7 +42,7 @@ describe('PlanetEffectPool 生命周期', () => {
       toX: 10,
       toY: 0,
       tone: 'unit',
-    });
+    })!.effect;
     expect(effect.id).toBe(1);
     expect(effect.durationMs).toBe(FIRE_FLASH_MS);
     expect(pool.active()).toHaveLength(1);
@@ -57,21 +61,92 @@ describe('PlanetEffectPool 生命周期', () => {
 
   it('完成的槽位被后续 spawn 复用（id 不复用）；clear 清空存活特效', () => {
     const pool = new PlanetEffectPool();
-    const first = pool.spawn({ kind: 'hit_flash', targetId: 'unit-1' });
+    const first = pool.spawn({ kind: 'hit_flash', targetId: 'unit-1' })!.effect;
     expect(first.durationMs).toBe(HIT_FLASH_MS);
     pool.advance(HIT_FLASH_MS);
     expect(pool.active()).toHaveLength(0);
 
-    const second = pool.spawn({ kind: 'hit_flash', targetId: 'unit-2' });
+    const second = pool.spawn({ kind: 'hit_flash', targetId: 'unit-2' })!.effect;
     expect(second).toBe(first);
     expect(second.id).not.toBe(1);
     expect(second.progress).toBe(0);
     expect(second.spec).toEqual({ kind: 'hit_flash', targetId: 'unit-2' });
 
-    const float = pool.spawn({ kind: 'damage_float', x: 0, y: 0, text: '-3', tone: 'enemy_hit' });
+    const float = pool.spawn({ kind: 'damage_float', targetId: 'unit-1', x: 0, y: 0, amount: 3, tone: 'enemy_hit' })!.effect;
     expect(float.durationMs).toBe(PLANET_DAMAGE_FLOAT_MS);
     pool.clear();
     expect(pool.active()).toHaveLength(0);
+  });
+});
+
+function floatSpec(targetId: string, amount: number, tone: 'enemy_hit' | 'own_hit' = 'enemy_hit'): PlanetDamageFloatEffectSpec {
+  return { kind: 'damage_float', targetId, x: 0, y: 0, amount, tone };
+}
+
+describe('PlanetEffectPool 上限与飘字合并', () => {
+  it('fire_flash / hit_flash 超上限丢弃新的（返回 null）', () => {
+    const pool = new PlanetEffectPool();
+    for (let i = 0; i < PLANET_EFFECT_LIMITS.fire_flash; i += 1) {
+      expect(pool.spawn({ kind: 'fire_flash', fromX: 0, fromY: 0, toX: 1, toY: 1, tone: 'unit' })).not.toBeNull();
+    }
+    expect(pool.spawn({ kind: 'fire_flash', fromX: 0, fromY: 0, toX: 1, toY: 1, tone: 'unit' })).toBeNull();
+    expect(PLANET_EFFECT_LIMITS.fire_flash).toBe(64);
+
+    for (let i = 0; i < PLANET_EFFECT_LIMITS.hit_flash; i += 1) {
+      expect(pool.spawn({ kind: 'hit_flash', targetId: `u-${i}` })).not.toBeNull();
+    }
+    expect(pool.spawn({ kind: 'hit_flash', targetId: 'u-x' })).toBeNull();
+    expect(PLANET_EFFECT_LIMITS.hit_flash).toBe(32);
+    // 各类上限独立计数。
+    expect(pool.active()).toHaveLength(64 + 32);
+  });
+
+  it('damage_float 超上限顶掉最旧（evicted 返回给场景回收）', () => {
+    const pool = new PlanetEffectPool();
+    const firsts = [];
+    for (let i = 0; i < PLANET_EFFECT_LIMITS.damage_float; i += 1) {
+      const result = pool.spawn(floatSpec(`t-${i}`, 1))!;
+      expect(result.evicted).toBeUndefined();
+      firsts.push({ id: result.effect.id, effect: result.effect });
+    }
+    expect(PLANET_EFFECT_LIMITS.damage_float).toBe(24);
+    const oldestId = firsts[0]!.id;
+    const result = pool.spawn(floatSpec('t-new', 5))!;
+    expect(result.merged).toBe(false);
+    expect(result.evicted?.id).toBe(oldestId);
+    expect(result.evicted?.done).toBe(true);
+    const floats = pool.active().filter((effect) => effect.spec.kind === 'damage_float');
+    expect(floats).toHaveLength(24);
+    expect(floats.some((effect) => effect.id === oldestId)).toBe(false);
+    expect(floats.at(-1)).toBe(result.effect);
+  });
+
+  it('同目标同色调窗口内合并：数值累加、计时归零、不新建', () => {
+    const pool = new PlanetEffectPool();
+    const first = pool.spawn(floatSpec('enemy-1', 7))!;
+    pool.advance(PLANET_DAMAGE_MERGE_MS - 50);
+    const second = pool.spawn(floatSpec('enemy-1', 5))!;
+    expect(second.merged).toBe(true);
+    expect(second.effect).toBe(first.effect);
+    expect(second.effect.elapsedMs).toBe(0);
+    expect(second.effect.progress).toBe(0);
+    expect(damageFloatText(second.effect.spec as PlanetDamageFloatEffectSpec)).toBe('-12');
+    expect(pool.active()).toHaveLength(1);
+  });
+
+  it('窗口外、不同目标或不同色调不合并', () => {
+    const pool = new PlanetEffectPool();
+    pool.spawn(floatSpec('enemy-1', 7));
+    expect(pool.spawn(floatSpec('enemy-2', 1))!.merged).toBe(false);
+    expect(pool.spawn(floatSpec('enemy-1', 1, 'own_hit'))!.merged).toBe(false);
+    expect(pool.active()).toHaveLength(3);
+
+    const late = new PlanetEffectPool();
+    late.spawn(floatSpec('enemy-1', 7));
+    late.advance(PLANET_DAMAGE_MERGE_MS);
+    const result = late.spawn(floatSpec('enemy-1', 3))!;
+    expect(result.merged).toBe(false);
+    expect(late.active()).toHaveLength(2);
   });
 });
 
@@ -111,9 +186,10 @@ describe('specsFromPlanetBattleEvent（damage_applied → 行星特效）', () =
       },
       {
         kind: 'damage_float',
+        targetId: 'enemy-1',
         x: POINTS['enemy-1']!.x,
         y: POINTS['enemy-1']!.y - 10,
-        text: '-7',
+        amount: 7,
         tone: 'enemy_hit',
       },
       { kind: 'hit_flash', targetId: 'enemy-1' },
@@ -126,7 +202,7 @@ describe('specsFromPlanetBattleEvent（damage_applied → 行星特效）', () =
       context,
     );
     const float = specs.find((spec) => spec.kind === 'damage_float');
-    expect(float).toMatchObject({ text: '-3', tone: 'own_hit' });
+    expect(float).toMatchObject({ targetId: 'unit-2', amount: 3, tone: 'own_hit' });
   });
 
   it('防御塔攻击（建筑节点 attacker）：黄白岔开配色', () => {

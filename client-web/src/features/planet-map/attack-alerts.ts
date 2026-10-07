@@ -10,6 +10,7 @@
  * toast 推送 + 波次落库 + 提示音），由 use-planet-realtime 在每条 SSE 事件上调用。
  */
 
+import { surfaceDistanceWithin } from '@shared/surface';
 import type { GameEventDetail } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
@@ -18,6 +19,7 @@ import { toTilePoint, type TilePoint } from '@/features/planet-map/model';
 import { isNotificationsFrozen } from '@/features/notifications/notify';
 import { useNotificationsStore, type ToastInput } from '@/features/notifications/store';
 import { usePlanetViewStore, type IncomingWave } from '@/features/planet-map/store';
+import { unitFaction } from '@/features/planet-map/rts-commands';
 import { translateBuildingType, translateUnitType } from '@/i18n/translate';
 
 function asString(value: unknown): string {
@@ -105,6 +107,7 @@ export function buildCombatAlert(
         title: ownBuilding ? '建筑遭受攻击' : '单位遭受攻击',
         body: `${name} (${tile.x}, ${tile.y}) 正遭受攻击`,
         href: planetFocusHref(context.planetId, tile, context.currentSearch),
+        locate: { planetId: context.planetId, ...tile },
         mergeKey: `base_attack:${targetId}`,
       },
     };
@@ -134,6 +137,7 @@ export function buildCombatAlert(
         title: '侦测到黑雾袭击',
         body: `${count} 个单位来自 (${from.x}, ${from.y})${target ? `，目标 (${target.x}, ${target.y})` : ''}`,
         href: planetFocusHref(context.planetId, focus, context.currentSearch),
+        locate: { planetId: context.planetId, ...focus },
         mergeKey: `enemy_wave:${wave.nestId || wave.id}`,
       },
     };
@@ -183,5 +187,103 @@ export function notifyCombatAlert(event: GameEventDetail, context: CombatAlertCo
     if (toast.count === 1) {
       sfx.alert();
     }
+  }
+}
+
+/** 敌袭预警半径（格）：敌对单位进入己方建筑此距离内即告警。 */
+export const APPROACH_ALERT_RADIUS = 20;
+/** 同一建筑的敌袭预警冷却（ms）。 */
+export const APPROACH_ALERT_COOLDOWN_MS = 30_000;
+
+export interface ApproachingThreat {
+  buildingId: string;
+  buildingType: string;
+  buildingTile: TilePoint;
+  /** 最近一个来犯单位的位置。 */
+  threatTile: TilePoint;
+  count: number;
+}
+
+/**
+ * 逼近己方建筑的敌对单位：敌方玩家单位，以及对我敌对的黑雾（中立黑雾不算）。
+ * 每个来犯单位归到最近的己方建筑；结果按建筑聚合。
+ */
+export function findApproachingThreats(
+  planet: PlanetRenderView,
+  playerId: string,
+  darkFogHostile: boolean,
+  radius = APPROACH_ALERT_RADIUS,
+): ApproachingThreat[] {
+  // 部分场景（fixture/旧快照）缺 surface 元数据：按立方体球 3 面宽推算
+  const faceSize = planet.surface?.face_size ?? planet.map_width / 3;
+  const own = Object.values(planet.buildings ?? {}).filter((building) => building.owner_id === playerId && building.hp > 0);
+  if (own.length === 0) return [];
+  const byBuilding = new Map<string, ApproachingThreat & { best: number }>();
+  for (const unit of Object.values(planet.units ?? {})) {
+    if (unit.hp <= 0) continue;
+    const faction = unitFaction(unit, playerId, darkFogHostile);
+    if (faction !== 'enemy' && faction !== 'fog_hostile') continue;
+    let nearest: { building: typeof own[number]; distance: number } | undefined;
+    for (const building of own) {
+      const distance = surfaceDistanceWithin(unit.position, building.position, faceSize, radius);
+      if (distance !== undefined && (!nearest || distance < nearest.distance)) nearest = { building, distance };
+    }
+    if (!nearest) continue;
+    const entry = byBuilding.get(nearest.building.id);
+    if (entry) {
+      entry.count += 1;
+      if (nearest.distance < entry.best) {
+        entry.best = nearest.distance;
+        entry.threatTile = toTilePoint(unit.position);
+      }
+    } else {
+      byBuilding.set(nearest.building.id, {
+        buildingId: nearest.building.id,
+        buildingType: nearest.building.type,
+        buildingTile: toTilePoint(nearest.building.position),
+        threatTile: toTilePoint(unit.position),
+        count: 1,
+        best: nearest.distance,
+      });
+    }
+  }
+  return [...byBuilding.values()].map(({ best: _best, ...threat }) => threat);
+}
+
+const lastApproachAlertAt = new Map<string, number>();
+
+/**
+ * 敌袭预警副作用入口（PlanetPage 在场景/黑雾敌对状态更新时调用）：
+ * 每个受威胁建筑冷却期内只告警一次；toast 带「定位」，小地图闪点。
+ */
+export function notifyApproachingThreats(
+  planet: PlanetRenderView,
+  playerId: string,
+  darkFogHostile: boolean,
+  now = Date.now(),
+): void {
+  for (const threat of findApproachingThreats(planet, playerId, darkFogHostile)) {
+    const last = lastApproachAlertAt.get(threat.buildingId);
+    if (last !== undefined && now - last < APPROACH_ALERT_COOLDOWN_MS) continue;
+    lastApproachAlertAt.set(threat.buildingId, now);
+    usePlanetViewStore.getState().recordIncomingWave({
+      id: `approach:${threat.buildingId}:${now}`,
+      nestId: '',
+      from: threat.threatTile,
+      target: threat.buildingTile,
+      count: threat.count,
+      level: 1,
+      at: now,
+    });
+    if (isNotificationsFrozen()) continue;
+    useNotificationsStore.getState().push({
+      kind: 'danger',
+      title: '敌袭预警',
+      body: `${threat.count} 个敌对单位逼近${translateBuildingType(threat.buildingType)} (${threat.buildingTile.x}, ${threat.buildingTile.y})`,
+      locate: { planetId: planet.planet_id, ...threat.threatTile },
+      mergeKey: `approach:${threat.buildingId}`,
+      sticky: true,
+    }, now);
+    sfx.alert();
   }
 }

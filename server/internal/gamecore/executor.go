@@ -32,7 +32,7 @@ func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, targe
 		res := model.CommandResult{
 			Status:  model.StatusFailed,
 			Code:    model.CodeExecutorUnavailable,
-			Message: "executor not available",
+			Message: "机甲不可用",
 		}
 		return nil, nil, &res
 	}
@@ -41,7 +41,7 @@ func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, targe
 		res := model.CommandResult{
 			Status:  model.StatusFailed,
 			Code:    model.CodeExecutorUnavailable,
-			Message: "executor not available",
+			Message: "机甲不可用",
 		}
 		return nil, nil, &res
 	}
@@ -50,7 +50,7 @@ func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, targe
 		res := model.CommandResult{
 			Status:  model.StatusFailed,
 			Code:    model.CodeExecutorUnavailable,
-			Message: fmt.Sprintf("executor unit %s not found", execState.UnitID),
+			Message: fmt.Sprintf("未找到机甲单位 %s", execState.UnitID),
 		}
 		return nil, nil, &res
 	}
@@ -59,7 +59,7 @@ func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, targe
 		res := model.CommandResult{
 			Status:  model.StatusFailed,
 			Code:    model.CodeOutOfRange,
-			Message: fmt.Sprintf("executor out of range: %d > %d", dist, execState.OperateRange),
+			Message: fmt.Sprintf("超出机甲作业范围：%d > %d", dist, execState.OperateRange),
 		}
 		return nil, nil, &res
 	}

@@ -332,6 +332,7 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 // 全程全局活动行星保持 planet-1-2。
 func TestF4NonActivePlanetEnemyCombatSettles(t *testing.T) {
 	core, planetA, _ := newF4DualPlanetCore(t, "normal")
+	provokeDarkFogFor(planetA, "p1", "p2") // 玩家已与黑雾交战
 	spawnE4Nest(planetA, "nest-f4", 1, 200, model.Position{X: 40, Y: 40})
 	planetA.EnemyForces.Forces[0].LastWaveTick = planetA.Tick - blackFogBaseWaveInterval
 

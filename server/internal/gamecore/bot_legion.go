@@ -121,6 +121,9 @@ func botLegionDecide(gc *GameCore, ws *model.WorldState, playerID string, tuning
 			return botLegionPlan{order: model.SquadOrderDefend, target: &pos}, true
 		}
 	}
+	if ws.Tick < gc.cfg.Battlefield.BotFirstAttackTick {
+		return botLegionPlan{}, false // 开局发育期：军团留守基地，不主动出击
+	}
 	target := gc.botAttackObjective(ws, playerID, tuning, ctx)
 	if target == nil {
 		return botLegionPlan{}, false

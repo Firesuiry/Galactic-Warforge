@@ -53,6 +53,7 @@ func findNestDestroyedEvent(events []*model.GameEvent, nestID string) *model.Gam
 func TestE4NestSpawnsGuards(t *testing.T) {
 	core := newBlackFogTestCore(t, "normal")
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID}
 	spawnE4Nest(ws, "nest-e4", 2, 200, model.Position{X: 40, Y: 40})
 
@@ -126,6 +127,7 @@ func TestE4NestSpawnsGuards(t *testing.T) {
 func TestE4GuardsEngageIntruder(t *testing.T) {
 	core := newBlackFogTestCore(t, "normal")
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID}
 	spawnE4Nest(ws, "nest-e4b", 1, 200, model.Position{X: 40, Y: 40})
 
@@ -187,6 +189,7 @@ func TestE4GuardsEngageIntruder(t *testing.T) {
 // enemy_nest_destroyed 事件字段齐全（含 planet_id），威胁回落，遗址登记。
 func TestE4NestDestroyRewardsUnitPath(t *testing.T) {
 	ws := newPowerTestWorld()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.Tick = 10
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID, ThreatMeter: 500}
 	spawnE4Nest(ws, "hive-e4", 3, 10, model.Position{X: 3, Y: 2})
@@ -256,6 +259,7 @@ func TestE4NestDestroyRewardsUnitPath(t *testing.T) {
 // 摧毁奖励（炮塔路径）：与单位路径同语义——掉落放大、战报事件、遗址登记。
 func TestE4NestDestroyRewardsTurretPath(t *testing.T) {
 	ws := newPowerTestWorld()
+	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.Tick = 10
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID, ThreatMeter: 300}
 
@@ -388,6 +392,7 @@ func TestE4NestRuinSurvivesSaveRestore(t *testing.T) {
 func TestE4BlackFogEventsCarryPlanetID(t *testing.T) {
 	core := newBlackFogTestCore(t, "normal")
 	ws := core.World()
+	provokeDarkFogFor(ws, "p1") // 玩家已与黑雾交战
 
 	// 初始巢穴生成：entity_created(enemy_force) 带 planet_id 与 level。
 	ws.Tick++
