@@ -35,7 +35,7 @@ function pointAt(tile: { x: number; y: number }) {
   });
 }
 
-describe('BuildPlacementHint 同格施工任务提示（试玩 1010 G）', () => {
+describe('BuildPlacementHint 同格施工任务提示（试玩 1010 G / 1011 E）', () => {
   beforeEach(() => {
     resetPlanetViewStore();
     usePlanetViewStore.getState().setInteractionMode({
@@ -45,7 +45,7 @@ describe('BuildPlacementHint 同格施工任务提示（试玩 1010 G）', () =>
     });
   });
 
-  it('同一格已有自己的施工任务时提前提示「此格已有你的施工任务」', () => {
+  it('同一格已有自己的施工任务时，文案与服务端 constructionReservationMessage 同口径', () => {
     render(
       <BuildPlacementHint
         planet={makePlanet()}
@@ -63,11 +63,13 @@ describe('BuildPlacementHint 同格施工任务提示（试玩 1010 G）', () =>
     pointAt({ x: 5, y: 6 });
 
     const hint = screen.getByRole('status');
-    expect(hint).toHaveTextContent('此格已有你的施工任务');
+    expect(hint).toHaveTextContent('该格已有你的施工任务：风力涡轮机（排队中）');
     expect(hint).not.toHaveTextContent('已被建筑占用');
+    // 进行中 → 建造中
+    expect(hint).not.toHaveTextContent('建造中');
   });
 
-  it('别人的施工任务不提示（以服务端回执为准）', () => {
+  it('别人的施工任务同样按服务端口径提示', () => {
     render(
       <BuildPlacementHint
         planet={makePlanet()}
@@ -77,14 +79,14 @@ describe('BuildPlacementHint 同格施工任务提示（试玩 1010 G）', () =>
           player_id: 'p2',
           building_type: 'wind_turbine',
           position: { x: 5, y: 6, z: 0 },
-          state: 'pending',
+          state: 'in_progress',
           enqueue_tick: 1,
         } as never])}
       />,
     );
     pointAt({ x: 5, y: 6 });
 
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('该格已有其他玩家的施工任务：风力涡轮机（建造中）');
   });
 
   it('已取消/已完成的施工任务不提示', () => {

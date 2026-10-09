@@ -27,7 +27,7 @@ import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { sfx } from '@/engine/audio';
 import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
-import { getItemDisplayName } from '@/features/planet-map/model';
+import { getBuildingDisplayName, getItemDisplayName } from '@/features/planet-map/model';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
@@ -113,6 +113,8 @@ export interface PlanetInteractions {
   interactTile: (tile: TilePoint) => void;
   /** 右键情境指令：有批量命令下达时返回 true（调用侧据此抑制"取消模式"）。 */
   contextTile: (tile: TilePoint) => boolean;
+  /** 攻击移动（A 模式）到该格：缩略图右键在攻击交互模式下走这条路径。 */
+  attackMove: (tile: TilePoint) => boolean;
   /** 立即指令（stop/hold），快捷键 S/H 与多选面板共用。 */
   orderNow: (order: 'stop' | 'hold') => void;
 }
@@ -196,11 +198,16 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
 
       if (mode.kind === 'build') {
-        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory);
+        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory, runtime);
         // 未探索区（地形 unknown）不本地拦截：客户端没有该格地形，是否可建由服务端判定，
         // 命令照常下发，以回执为准（试玩 1009 F：本地「地形不可建造」把合法建造拦掉了）。
         if (shouldBlockBuildLocally(assessment)) {
-          const reasons = describeBuildBlock(assessment!, (itemId) => getItemDisplayName(catalog, itemId));
+          // 占位文案与服务端回执同口径（建筑/施工任务 + 己方/他人 + 目录中文名，试玩 1011 E）。
+          const reasons = describeBuildBlock(
+            assessment!,
+            (itemId) => getItemDisplayName(catalog, itemId),
+            (buildingType) => getBuildingDisplayName(catalog, buildingType),
+          );
           reportLocalBlock('build', planet.planet_id, `无法建造：${reasons}`, {
             buildingType: mode.buildingType,
             position,
@@ -365,5 +372,25 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
     [knownOwnUnits, planet, session.playerId, submitUnitOrder],
   );
 
-  return { interactTile, contextTile, orderNow };
+  /**
+   * 攻击移动（A 模式）到目标格。缩略图右键在「攻击移动」交互模式下用它，
+   * 与主地图点击同一条 submitUnitOrder('attack_move') 路径与回执口径。
+   */
+  const attackMove = useCallback(
+    (tile: TilePoint): boolean => {
+      if (!planet) {
+        return false;
+      }
+      const store = usePlanetViewStore.getState();
+      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+      if (selector.length === 0) {
+        return false;
+      }
+      submitUnitOrder(selector, 'attack_move', { position: { x: tile.x, y: tile.y, z: 0 } });
+      return true;
+    },
+    [knownOwnUnits, planet, session.playerId, submitUnitOrder],
+  );
+
+  return { attackMove, interactTile, contextTile, orderNow };
 }

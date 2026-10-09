@@ -249,10 +249,10 @@ describe('PlanetBuildBar', () => {
     });
 
     // 按钮循环：auto → north → east
-    const directionButton = screen.getByRole('button', { name: '方向：自动（R）' });
+    const directionButton = screen.getByRole('button', { name: /^方向：自动/ });
     await user.click(directionButton);
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'north' });
-    await user.click(screen.getByRole('button', { name: '方向：北（R）' }));
+    await user.click(screen.getByRole('button', { name: /^方向：北/ }));
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
 
     // R 键循环：east → south → west → auto

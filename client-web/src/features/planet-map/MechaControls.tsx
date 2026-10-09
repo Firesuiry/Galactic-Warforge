@@ -45,6 +45,10 @@ export function totalJobBatches(job: { completed_batches: number; remaining_batc
  * 「开始制造」被禁用的准确原因（按玩家能采取的行动排序）：
  * 机甲正在执行上一个任务时，缺料只是次要原因——玩家看到「背包原料不足」会去采集，
  * 但真正要等的是当前任务完成（试玩 1009 I）。原因里带上当前任务与预计剩余时间。
+ *
+ * 任务名必须取 **job 自己的配方/资源**（jobRecipeName / resourceName），
+ * 不能用下拉框当前选中的配方：机甲在手搓磁铁、玩家把下拉框切到玻璃时，
+ * 面板会写「机甲正在手搓 玻璃」（试玩 1011 F）。
  */
 export function craftBlockReason(input: {
   hasRecipe: boolean;
@@ -52,7 +56,8 @@ export function craftBlockReason(input: {
   missingItems: boolean;
   hasPlayer: boolean;
   job?: { kind: string; recipe_id?: string; resource_id?: string; completed_batches: number; remaining_batches: number; remaining_ticks: number; ticks_per_batch: number };
-  recipeName: string;
+  /** 当前 job 的配方显示名（job.recipe_id 的显示名，不是下拉框选中的配方）。 */
+  jobRecipeName: string;
   resourceName: string;
 }): string | null {
   if (!input.hasRecipe) return '暂无可手工制造的配方。';
@@ -62,7 +67,7 @@ export function craftBlockReason(input: {
     const total = totalJobBatches(input.job);
     const subject = input.job.kind === 'mine'
       ? `手动采集 ${input.resourceName}`
-      : `手搓 ${input.recipeName}`;
+      : `手搓 ${input.jobRecipeName}`;
     return `机甲正在${subject}（已完成 ${input.job.completed_batches}/${total}，剩余约 ${formatDuration(remainingJobTicks(input.job))}），完成后可开始新任务；需要中断请点「取消机甲任务」。`;
   }
   if (input.missingTech) return null; // 科技未解锁由独立提示行负责
@@ -104,7 +109,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
     missingItems: Boolean(missingItems),
     hasPlayer: Boolean(player),
     job,
-    recipeName: recipe ? getRecipeDisplayName(catalog, recipe.id) : '',
+    jobRecipeName: job?.recipe_id ? getRecipeDisplayName(catalog, job.recipe_id) : '',
     resourceName: job?.resource_id ? getItemDisplayName(catalog, job.resource_id) : '',
   });
   async function submit(commandType: string, execute: () => Promise<CommandResponse>) {

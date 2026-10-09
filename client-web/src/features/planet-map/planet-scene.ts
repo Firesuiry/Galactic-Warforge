@@ -37,7 +37,7 @@ import { surfaceOffset } from '@shared/surface';
  * 单位描边按阵营（unitFaction）着色，黑雾敌对状态切换时全部单位重画。
  */
 
-import { Application, Container, Graphics, Sprite, Text, Texture, type Ticker } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite, type Ticker } from 'pixi.js';
 
 import type {
   Building,
@@ -65,6 +65,9 @@ import {
   harvestPulseEnvelope,
   resolveHarvestPulse,
 } from '@/features/planet-map/planet-logistics-flow';
+import { buildGhostDirection, directionVector, isSorterBuilding } from '@/features/planet-map/logistics-direction';
+import { advanceLogisticsFlow, createLogisticsFlowSprite, logisticsFlowSpriteKey } from '@/features/planet-map/logistics-flow-marks';
+import { logisticsArrows, resolveLogisticsDirection } from '@/features/planet-map/logistics-direction';
 import {
   PlanetEffectPool,
   specsFromPlanetBattleEvent,
@@ -516,6 +519,10 @@ interface BuildingNode extends SceneNode {
   glow: Sprite | null;
   /** 传送带货物流（buffer 有货的传送带才挂载，ticker 驱动圆点沿输出方向循环）。 */
   beltFlow: BeltItemFlow | null;
+  /** 传送带/分拣器流向箭头（TilingSprite 平铺纹理，ticker 沿输出方向滚动）。 */
+  flow: TilingSprite | null;
+  /** 流向箭头签名（方向/纹理变体），不变时不重建 sprite。 */
+  flowKey: string;
   /** 采集产出脉冲（running 的采集建筑才挂载，ticker 驱动"矿石被采出"上抛粒子）。 */
   harvest: HarvestPulseView | null;
   data: Building;
@@ -1870,6 +1877,8 @@ export class PlanetScene {
       blades: null,
       glow: null,
       beltFlow: null,
+      flow: null,
+      flowKey: '',
       harvest: null,
       data: building,
       phase: entityAnimPhase(building.id),
@@ -1897,6 +1906,7 @@ export class PlanetScene {
       this.setBuildingAttachment(node, 'blades', null);
       this.setBuildingAttachment(node, 'glow', null);
       this.destroyBeltItemFlow(node);
+      this.destroyLogisticsFlow(node);
       this.destroyHarvestPulse(node);
       node.base
         .clear()
@@ -1919,6 +1929,8 @@ export class PlanetScene {
     });
     const scale = this.tileSize / BUILDING_SPRITE_TILE_PX;
     const layout = buildingSpriteLayout(width, height);
+    // 传送带/分拣器的结构剪影只留底座与钢轨（方向纹由 syncLogisticsFlow 的平铺箭头承担），
+    // 避免「烘焙 chevron + 平铺箭头」两层方向纹叠在一起看错。
     node.sprite.scale.set(scale);
     node.sprite.position.set(-layout.padX * scale, -layout.topExtra * scale);
     node.sprite.visible = true;
@@ -1999,7 +2011,48 @@ export class PlanetScene {
 
     // 物流可视化：传送带货物圆点（buffer 有货时沿输出方向流动）+ 采集产出脉冲。
     this.syncBeltItemFlow(node, pixelWidth, pixelHeight);
+    this.syncLogisticsFlow(node, pixelWidth, pixelHeight);
     this.syncHarvestPulse(node, pixelWidth, pixelHeight);
+  }
+
+  /**
+   * 传送带/分拣器流向箭头：每格一个 TilingSprite（纹理平铺，沿流向滚动）。
+   * 方向来自 logistics-direction（服务端 output / sorter 配置）；四向皆可的分拣器不画单一流向。
+   */
+  private syncLogisticsFlow(node: BuildingNode, pixelWidth: number, pixelHeight: number) {
+    const building = node.data;
+    const belt = Boolean(building.conveyor);
+    const sorter = Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type));
+    const direction = belt || sorter ? resolveLogisticsDirection(building) : null;
+    if (!direction || this.tileSize < BELT_FLOW_MIN_TILE_SIZE) {
+      this.destroyLogisticsFlow(node);
+      return;
+    }
+    const kind = belt ? 'belt' : 'sorter';
+    const key = logisticsFlowSpriteKey(kind, direction);
+    if (node.flow && node.flowKey === key) {
+      const size = Math.max(pixelWidth, pixelHeight);
+      node.flow.width = size;
+      node.flow.height = size * 0.5;
+      node.flow.tileScale.set(this.tileSize / 32, this.tileSize / 32);
+      node.flow.visible = true;
+      return;
+    }
+    this.destroyLogisticsFlow(node);
+    const sprite = createLogisticsFlowSprite(kind, direction, Math.max(pixelWidth, pixelHeight));
+    sprite.alpha = kind === 'belt' ? 0.95 : 0.9;
+    node.container.addChildAt(sprite, 1); // 压在结构精灵之下、底座描边之上
+    node.flow = sprite;
+    node.flowKey = key;
+  }
+
+  /** 流向箭头卸载。 */
+  private destroyLogisticsFlow(node: BuildingNode) {
+    if (node.flow) {
+      node.flow.destroy();
+      node.flow = null;
+      node.flowKey = '';
+    }
   }
 
   /**
@@ -2609,6 +2662,28 @@ export class PlanetScene {
       return;
     }
 
+    // 分拣器/分流器 ghost：顶面朝向箭头（旋转后一眼看出取放侧），与 3D ghost 同一套推导。
+    if (!overviewMode && mode.kind === 'build' && hoveredTile && isSorterBuilding({ type: mode.buildingType })) {
+      const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
+      if (direction) {
+        const vector = directionVector(direction);
+        const cx = this.pxTileX(hoveredTile.x) + ts / 2;
+        const cy = this.pxTileY(hoveredTile.y) + ts / 2;
+        const half = ts * 0.34;
+        const wing = ts * 0.18;
+        const tipX = cx + vector.x * half;
+        const tipY = cy + vector.y * half;
+        g.moveTo(cx - vector.x * half, cy - vector.y * half)
+          .lineTo(tipX, tipY)
+          .moveTo(tipX, tipY)
+          .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
+          .moveTo(tipX, tipY)
+          .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
+          .stroke({ width: 2.5, color: COLOR_GHOST_OK, alpha: 0.95 });
+      }
+      return;
+    }
+
     // 移动/攻击/单位指令模式：目标点准星高亮
     if (!overviewMode && (mode.kind === 'move' || mode.kind === 'attack' || mode.kind === 'unit_order') && hoveredTile) {
       const screenX = this.pxTileX(hoveredTile.x);
@@ -2767,6 +2842,12 @@ export class PlanetScene {
           const pos = beltDotPosition(dot.progress, flow.cx, flow.cy, flow.ax, flow.ay);
           dot.sprite.position.set(pos.x, pos.y);
         }
+      }
+      // 流向箭头：纹理沿带体滚动（速度与货物圆点同口径；无货/停摆时静止）。
+      if (node.flow) {
+        const moving = node.beltFlow !== null || node.data.runtime?.state === 'running';
+        const speed = moving ? beltItemSpeedTilesPerSec(node.data.conveyor?.throughput) : 0;
+        advanceLogisticsFlow(node.flow, dt, speed, this.tileSize, node.flow.rotation === 0 ? 'x' : 'y');
       }
       // 采集产出脉冲：周期性"矿石被采出"上抛渐隐。
       if (node.harvest) {

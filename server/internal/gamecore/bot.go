@@ -1000,6 +1000,11 @@ func botNearestNode(ws *model.WorldState, from model.Position, kind string) *mod
 		if node == nil || node.Kind != kind || node.Remaining <= 0 || node.Depleted {
 			continue
 		}
+		// 先用带上限的判定剪掉比当前最优更远的矿点：全图几百个矿点逐个算
+		// 无上限的跨面距离（每次一个小 A*）曾让一次 bot 决策耗时 25ms。
+		if bestDist >= 0 && !ws.SurfaceWithin(from, node.Position, bestDist) {
+			continue
+		}
 		d := ws.SurfaceDistance(from, node.Position)
 		if bestDist < 0 || d < bestDist || (d == bestDist && (best == nil || node.ID < best.ID)) {
 			best = node

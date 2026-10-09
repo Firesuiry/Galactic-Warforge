@@ -152,6 +152,27 @@ export function getTerrainTile(planet: PlanetRenderView, x: number, y: number) {
   return planet.terrain?.[y]?.[x] ?? "unknown";
 }
 
+/**
+ * 该格是否「确知从未探索」：只在迷雾数据覆盖到该格时才下结论。
+ * 场景窗口跟着镜头异步移动，窗口外的格子没有数据——那是「未知」不是「未探索」，返回 false，
+ * 避免镜头刚飞过去、窗口还没跟上时误报。
+ */
+export function isTileUncharted(
+  fog: FogMapView | PlanetSceneView | undefined,
+  x: number,
+  y: number,
+): boolean {
+  if (!fog) return false;
+  if ("bounds" in fog) {
+    const inPatch = fog.surface_patches?.some(p => x >= p.bounds.x && y >= p.bounds.y && x < p.bounds.x + p.bounds.width && y < p.bounds.y + p.bounds.height);
+    const inWindow = x >= fog.bounds.x && y >= fog.bounds.y && x < fog.bounds.x + fog.bounds.width && y < fog.bounds.y + fog.bounds.height;
+    if (!inPatch && !inWindow) return false;
+  } else if (!fog.explored?.[y]) {
+    return false;
+  }
+  return !getFogState(fog, x, y).explored;
+}
+
 export function getFogState(
   fog: FogMapView | PlanetSceneView | undefined,
   x: number,
@@ -191,24 +212,76 @@ export function getResourceList(planet: PlanetRenderView) {
   );
 }
 
+/** 基地/HQ：相机「回家」的首要落点。 */
+const HOME_BUILDING_TYPE = 'battlefield_analysis_base';
+/** 机甲/执行体：HQ 未建成时它们总在基地附近，比任意一座建筑更接近"家"。 */
+const HOME_UNIT_TYPES = new Set(['executor', 'mecha']);
+
+/** 图集环面坐标差：按图集跨度取最短绕行，避免接缝两侧被算成很远。 */
+function wrappedDelta(left: number, right: number, span: number) {
+  if (span <= 0) return Math.abs(left - right);
+  const delta = Math.abs(left - right) % span;
+  return Math.min(delta, span - delta);
+}
+
+/** 图集平面距离（带环面绕行）：只用于「离质心最近」这类相对排序。 */
+function atlasDistance(left: TilePoint, right: TilePoint, mapWidth: number, mapHeight: number) {
+  return Math.hypot(
+    wrappedDelta(left.x, right.x, mapWidth),
+    wrappedDelta(left.y, right.y, mapHeight),
+  );
+}
+
+/** 质心（图集坐标平均，取整）：己方建筑群的中心，用于挑"最靠近基地"的落点。 */
+function centroidOf(points: TilePoint[]): TilePoint | null {
+  if (points.length === 0) return null;
+  const sum = points.reduce(
+    (total, point) => ({ x: total.x + point.x, y: total.y + point.y }),
+    { x: 0, y: 0 },
+  );
+  return { x: Math.round(sum.x / points.length), y: Math.round(sum.y / points.length) };
+}
+
 /**
- * 玩家"家"的位置：优先第一个自有建筑（基地），没有建筑时退到第一个自有单位。
- * 用于首次进入行星页的相机定位与 ⌂（回到基地）。
+ * 玩家"家"的位置：用于首次进入行星页的相机定位与 ⌂（回到基地）。
+ *
+ * 优先级：己方基地（战情分析基站，HP>0）→ 己方机甲/执行体 → 离己方建筑质心最近的建筑
+ * → 任意己方单位。**绝不按 id 排序取第一个**：建筑 id 是字符串，`b-113` < `b-12`，
+ * 玩家在远处建一段传送带后「聚焦基地」就会飞到荒郊（试玩 1011 A）。
  */
 export function resolveHomeTile(
   planet: PlanetRenderView,
   playerId: string,
 ): TilePoint | null {
-  const building = getBuildingList(planet).find(
-    (candidate) => candidate.owner_id === playerId,
+  const ownBuildings = getBuildingList(planet).filter(
+    (building) => building.owner_id === playerId && building.hp > 0,
   );
-  if (building) {
-    return toTilePoint(building.position);
-  }
-  const unit = getUnitList(planet).find(
-    (candidate) => candidate.owner_id === playerId,
+  const ownUnits = getUnitList(planet).filter(
+    (unit) => unit.owner_id === playerId && unit.hp > 0,
   );
-  return unit ? toTilePoint(unit.position) : null;
+  const centroid = centroidOf(ownBuildings.map((building) => toTilePoint(building.position)));
+  const nearestToCentroid = <T,>(candidates: T[], position: (candidate: T) => TilePoint): T | undefined => {
+    if (candidates.length === 0 || !centroid) return candidates[0];
+    let best = candidates[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of candidates) {
+      const distance = atlasDistance(position(candidate), centroid, planet.map_width, planet.map_height);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = candidate;
+      }
+    }
+    return best;
+  };
+  const home = nearestToCentroid(
+    ownBuildings.filter((building) => building.type === HOME_BUILDING_TYPE),
+    (building) => toTilePoint(building.position),
+  ) ?? nearestToCentroid(
+    ownUnits.filter((unit) => unit.mecha != null || HOME_UNIT_TYPES.has(unit.type)),
+    (unit) => toTilePoint(unit.position),
+  ) ?? nearestToCentroid(ownBuildings, (building) => toTilePoint(building.position))
+    ?? nearestToCentroid(ownUnits, (unit) => toTilePoint(unit.position));
+  return home ? toTilePoint(home.position) : null;
 }
 
 export function getBuildingFootprint(building: Building) {

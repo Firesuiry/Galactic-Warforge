@@ -30,19 +30,22 @@ import (
 //
 // 每个 seed 会 t.Logf 出进攻波次时间点、科技完成时间、p95/最坏 tick。
 //
-// 已知差距（2026-10-08/09 实测，未达 D 的节奏目标，留待下一轮）：
-//   - 电磁学在 tick 15000–25000 之间才完成（目标 8000），weapon_system 更晚。
+// 已知差距（2026-10-09 第六轮实测，物资包含研究站后）：
+//   - 电磁学在 tick 13000–15500 之间完成（目标 8000；第五轮是 15000–25000），weapon_system 更晚。
 //     建议方向：提高熔炉/制造台目标数（hard 当前 smelterTarget=3/assemblerTarget=4），
 //     让矩阵专机的上游（磁线圈/电路板）优先用机器而非机甲手搓补料。
 //
 // pt1009-g2（试玩 G2 的 seed）修复前把玩家出生点放在一座 145 格孤岛上；
 // mapgen/connectivity.go 的连通性保证落地后纳入回归。
 // pt1010-85s8io / pt1010-g4 是 1010 试玩里 bot 把自己封进口袋的两个 seed。
+// pt1011-0e2bz1 是 1011 试玩 G2（玩家被淘汰后服务端慢 tick）的 seed。
+// 第六轮开局物资包加入矩阵研究站后，pt1009-g2 曾因 bot 机甲被自家待命步兵堵在窄口
+// 整局只打一波——由 unit_movement_settlement.go 的 yieldIdleBlocker（自家待命单位让路）修复。
 func TestSkirmishFullMatchRegression(t *testing.T) {
 	if testing.Short() {
 		t.Skip("整局遭遇战模拟（每个 seed 约 2–4 分钟）；用 -run 单跑")
 	}
-	for _, seed := range []string{"skirmish-seed-001", "pt1009-seed", "pt1009-g2", "pt1010-85s8io", "pt1010-g4"} {
+	for _, seed := range []string{"skirmish-seed-001", "pt1009-seed", "pt1009-g2", "pt1010-85s8io", "pt1010-g4", "pt1011-0e2bz1"} {
 		t.Run(seed, func(t *testing.T) {
 			runSkirmishFullMatch(t, seed)
 		})

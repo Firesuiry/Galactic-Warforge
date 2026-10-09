@@ -302,7 +302,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
         <div className="planet-build-bar__status">
           {buildMode ? (
             <span className="planet-build-bar__hint">
-              放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览，点击放置，右键/Esc 退出
+              放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出
             </span>
           ) : (
             <span className="planet-build-bar__hint planet-build-bar__hint--dim">
@@ -316,7 +316,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               title="旋转建筑或传送带方向（快捷键 R）"
               onClick={cycleBeltDirection}
             >
-              方向：{beltMode ? DIRECTION_LABELS[buildDirection] : (interactionMode.kind === 'build' ? interactionMode.rotation ?? 0 : 0) + '°'}（R）
+              方向：{beltMode ? DIRECTION_LABELS[buildDirection] : (interactionMode.kind === 'build' ? interactionMode.rotation ?? 0 : 0) + '°'} · R 旋转
             </button>
           ) : null}
           {buildMode && availableRecipes.length > 0 ? (

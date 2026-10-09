@@ -51,6 +51,8 @@ type GameCore struct {
 	// botReachCache 本 tick 的"目标是否可达"缓存（键 = 目标格，见 botTargetReachable）。
 	botReachCache     map[string]bool
 	botReachCacheTick int64
+	// prof 本 tick 的分段计时（只在 tick 协程里读写），慢 tick 告警时输出。
+	prof tickProfile
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
@@ -290,12 +292,15 @@ func (gc *GameCore) Stop() {
 // processTick runs a single tick
 func (gc *GameCore) processTick() {
 	start := time.Now()
+	gc.prof.reset(start)
 
 	var allEvents []*model.GameEvent
 	batch := gc.queue.Drain()
 	gc.metrics.QueueBacklog = gc.queue.Len()
 	currentTick := int64(0)
 	gc.withLockedWorlds(func() {
+		// 等锁耗时单列：查询协程长时间持有读锁时，慢的是它而不是结算。
+		gc.prof.mark("lock_wait")
 		frame := gc.advanceWorldsOneTick()
 		currentTick = frame.currentTick
 
@@ -314,6 +319,7 @@ func (gc *GameCore) processTick() {
 			})
 		}
 
+		gc.prof.mark("commands")
 		phaseEvents := gc.runSettlementPipeline(frame)
 		allEvents = append(allEvents, phaseEvents...)
 
@@ -337,8 +343,8 @@ func (gc *GameCore) processTick() {
 
 	// Warn if tick is slow (p95 target: <100ms)
 	if dur > 100*time.Millisecond {
-		log.Printf("[WARN] slow tick %d: %v (p95: %.2fms, p99: %.2fms)",
-			currentTick, dur, gc.metrics.p95(), gc.metrics.p99())
+		log.Printf("[WARN] slow tick %d: %v (p95: %.2fms, p99: %.2fms) top: %s",
+			currentTick, dur, gc.metrics.p95(), gc.metrics.p99(), gc.prof.top(4))
 	}
 
 	allEvents = append(allEvents, &model.GameEvent{

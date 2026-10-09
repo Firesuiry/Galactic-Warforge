@@ -18,11 +18,14 @@ import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
+import { LogisticsDirectionMarks, directionArrowTexture, disposeLogisticsTextures } from './three/logistics-marks';
+import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
+import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isSorterBuilding, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
 import type { Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
-import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
+import { getBuildingCatalogEntry, getBuildingFootprint, getFogState, getItemCatalogEntry, getItemDisplayName, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
 import { isOwnStalledBuilding } from './power-status';
 import { FACTION_COLOR, unitFaction, type UnitFaction } from './rts-commands';
 import { subscribeCommandMarkers } from './command-markers';
@@ -88,6 +91,8 @@ export class PlanetThreeScene {
   private readonly staticBatches = new StaticBatches();
   private readonly dynamicBatches = new DynamicBatches();
   private readonly conveyors = new ConveyorGeometry();
+  /** 分拣器/分流器顶面方向箭头（全网络合并 1 draw）+ 过滤物品标签。 */
+  private readonly logisticsMarks = new LogisticsDirectionMarks();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
   private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
   private dressing?: THREE.Group;
@@ -127,6 +132,15 @@ export class PlanetThreeScene {
   /** 右键/军团命令落点反馈（涟漪/准星）。 */
   private readonly commandMarkers = new CommandMarkerMeshes(this.world, tile => this.data ? this.normal(tile.x, tile.y) : null, RADIUS, () => this.tileScale());
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
+  /** 建造 ghost 朝向箭头（传送带/分拣器/带旋转的建筑）：跟随悬停格，2D/3D 同一套方向推导。 */
+  private readonly ghostMarks = new THREE.Group();
+  /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向，松手清空。 */
+  private beltDragPath: TilePoint[] = [];
+
+  setBeltDragPath(tiles: readonly TilePoint[] | null) {
+    this.beltDragPath = tiles ? tiles.map(tile => ({ ...tile })) : [];
+    this.updateBuildGhost();
+  }
   /** 悬停拾取节流：射线检测较重，指针移动只记录坐标，最多每 HOVER_PICK_MS 拾取一次。 */
   private hoverPoint: { x: number; y: number } | null = null;
   private hoverTimer = 0;
@@ -166,6 +180,7 @@ export class PlanetThreeScene {
     this.scene.add(this.world);
     this.world.add(this.content, this.staticMarks, this.marks);
     this.world.add(this.powerAlertMarksGroup);
+    this.world.add(this.logisticsMarks.group, this.ghostMarks);
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
@@ -273,6 +288,17 @@ export class PlanetThreeScene {
     return p ? surfaceTileSize(RADIUS, p.surface.face_size) : 1;
   }
 
+  /** 可见传送带的代表吞吐（视觉流速近似，与 2D 货物圆点同源）。 */
+  private beltThroughput(): number {
+    const buildings = this.data?.planet.buildings ?? {};
+    let throughput = 0;
+    for (const building of Object.values(buildings)) {
+      if (!building.conveyor) continue;
+      throughput = Math.max(throughput, building.conveyor.throughput ?? 1);
+    }
+    return throughput || 1;
+  }
+
   private known(position: TilePoint) {
     if (!this.data) return false;
     const fog = this.data.fog ?? ('bounds' in this.data.planet ? this.data.planet : undefined);
@@ -335,6 +361,15 @@ export class PlanetThreeScene {
     const visibleBuildings = Object.values(planet.buildings ?? {}).filter(building => building.owner_id === playerId || this.visible(building.position));
     this.conveyors.refresh(visibleBuildings, planet.surface.face_size, RADIUS);
     this.layer('buildings').add(this.conveyors.group);
+    // 分拣器/分流器顶面箭头：方向取自服务端 sorter/splitter 配置，合并成 1 个 draw。
+    this.logisticsMarks.refresh(visibleBuildings, planet.surface.face_size, RADIUS);
+    this.logisticsMarks.refreshLabels(visibleBuildings, planet.surface.face_size, RADIUS, itemId => {
+      const entry = getItemCatalogEntry(this.data?.catalog, itemId);
+      const name = getItemDisplayName(this.data?.catalog, itemId);
+      if (!name) return null;
+      return { text: name.slice(0, 1), color: entry?.color || '#ffc76a' };
+    });
+    this.layer('logistics').add(this.logisticsMarks.group);
     const dimensions = [planet.surface.face_size];
     const staticKeys = new Set<string>();
     const occupiedTiles = new Set<string>();
@@ -846,16 +881,54 @@ export class PlanetThreeScene {
         }
       } else add(tile, this.interaction.interactionMode.kind === 'attack' ? '#ff6666' : '#5ef7dc');
     }
+    this.updateBuildGhost();
+  }
+
+  /** 建造预览的朝向箭头 + 拖拽铺带时每格路径方向。 */
+  private updateBuildGhost() {
+    this.clearMarks(this.ghostMarks);
+    const mode = this.interaction?.interactionMode;
+    const hovered = this.interaction?.hoveredTile;
+    if (!this.data || !this.interaction || !mode || mode.kind !== 'build' || !hovered) return;
+    const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
+    if (!direction) return;
+    // 拖拽铺带：整条路径逐格画方向；否则只画悬停格（分拣器 ghost 抬高一点压在顶面）。
+    const tiles = mode.buildingType.startsWith('conveyor_belt') && this.beltDragPath.length > 0 ? this.beltDragPath : [hovered];
+    const elevated = isSorterBuilding({ type: mode.buildingType });
+    for (const tile of tiles) this.ghostArrow(tile, direction, elevated);
+  }
+
+  /** 一个朝 direction 的琥珀箭头（贴格中心，指示物流输出侧）。 */
+  private ghostArrow(tile: TilePoint, direction: CardinalDirection, elevated = false) {
+    const size = this.tileScale();
+    const faceSize = this.data!.planet.surface.face_size;
+    const { east, south } = tileFrame(tile, faceSize);
+    const normal = this.normal(tile.x, tile.y);
+    const vector = directionVector(direction);
+    const forward = east.clone().multiplyScalar(vector.x).addScaledVector(south, vector.y).normalize();
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(size * .82, size * .82),
+      new THREE.MeshBasicMaterial({ map: directionArrowTexture(), color: '#ffd76a', transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
+    );
+    mesh.position.copy(normal).multiplyScalar(RADIUS + size * (elevated ? .18 : .1));
+    // 平面局部 +X = 流向、+Z = 格法线；纹理里的 chevron 指向 +U（局部 +X）。
+    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, normal, new THREE.Vector3().crossVectors(forward, normal).normalize()));
+    mesh.renderOrder = 20;
+    this.ghostMarks.add(mesh);
   }
 
   focus(tile: TilePoint, close = true) {
     if (!this.data) return;
     this.world.quaternion.setFromUnitVectors(this.normal(tile.x, tile.y), FRONT);
     this.groundView = true;
-    this.altitude = close ? Math.min(75, Math.max(this.tileScale() * 9, .08)) : Math.min(75, Math.max(this.tileScale() * 10, .1));
+    // 聚焦高度按格宽定：约 16 格高时地面视角能看清半径 ~15 格（建筑仍可辨），
+    // 旧的 9 格只看得到 5 格内，远一点的格子都点不到（试玩 1011 D）。
+    this.altitude = close ? Math.min(75, Math.max(this.tileScale() * 16, .08)) : Math.min(75, Math.max(this.tileScale() * 18, .1));
     this.updateCamera();
   }
   orbit() { this.groundView = false; this.altitude = 300; this.updateCamera(); }
+  /** 是否处于地面视角（全球视角下不需要「未探索区域」这类贴地提示）。 */
+  isGroundView() { return this.groundView; }
   setTilt(value: number) { this.tilt = THREE.MathUtils.clamp(value, 0, 1.1); this.groundView = true; this.updateCamera(); }
   project(tile: TilePoint) {
     if (!this.data) return null;
@@ -988,6 +1061,11 @@ export class PlanetThreeScene {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
+      // 传送带流向箭头沿带滚动：速度与 2D 货物圆点同一口径；无货/冻结时静止。
+      this.conveyors.update(
+        this.frozen || reducedMotion ? 0 : dt,
+        this.frozen || reducedMotion || !(this.interaction?.layers.logistics ?? true) ? 0 : beltItemSpeedTilesPerSec(this.beltThroughput()),
+      );
       if (!this.frozen) {
         this.combat.update(dt * 1000);
         this.commandMarkers.update(dt * 1000);
@@ -1029,6 +1107,10 @@ export class PlanetThreeScene {
     this.staticBatches.dispose();
     this.dynamicBatches.dispose();
     this.conveyors.dispose();
+    this.logisticsMarks.dispose();
+    this.clearMarks(this.ghostMarks);
+    this.ghostMarks.removeFromParent();
+    disposeLogisticsTextures();
     this.combat.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });
     this.spriteMaterials.clear();

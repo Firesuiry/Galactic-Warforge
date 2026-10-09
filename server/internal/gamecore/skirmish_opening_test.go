@@ -266,3 +266,88 @@ func TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500(t *testing.T) {
 		t.Fatal("no iron ingot smelted by tick 1500")
 	}
 }
+
+// 开局物资包必须刚好够直接建「风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、
+// 传送带×20、矩阵研究站×1」：试玩报告 1011 里玩家三局都卡在「研究站要 4 玻璃」、
+// 0 研究，所以这套组合（含 4 玻璃）要能在不下产线的情况下一次建成。
+func TestSkirmishKitBuildsFullOpeningIncludingMatrixLab(t *testing.T) {
+	core := newRealSkirmishCore(t)
+	ws := core.World()
+	player := ws.Players["p1"]
+	if player.Resources.Minerals < 910 || player.Resources.Energy < 350 {
+		t.Fatalf("kit resources too small for the opening: %+v", player.Resources)
+	}
+	plan := []struct {
+		btype model.BuildingType
+		count int
+	}{
+		{model.BuildingTypeWindTurbine, 3},
+		{model.BuildingTypeTeslaTower, 4},
+		{model.BuildingTypeMiningMachine, 4},
+		{model.BuildingTypeArcSmelter, 2},
+		{model.BuildingTypeAssemblingMachineMk1, 1},
+		{model.BuildingTypeConveyorBeltMk1, 20},
+		{model.BuildingTypeMatrixLab, 1},
+	}
+	totalItems := map[string]int{}
+	for _, step := range plan {
+		def, ok := model.BuildingDefinitionByID(step.btype)
+		if !ok {
+			t.Fatalf("unknown building %s", step.btype)
+		}
+		for _, item := range def.BuildCost.Items {
+			totalItems[item.ItemID] += item.Quantity * step.count
+		}
+	}
+	// 物资包必须覆盖整套组合的每一件物品（不多要、也不能缺）。
+	for itemID, need := range totalItems {
+		if got := player.Inventory[itemID]; got < need {
+			t.Fatalf("kit is short on %s: have %d, opening combo needs %d", itemID, got, need)
+		}
+	}
+	if player.Inventory[model.ItemGlass] < 4 {
+		t.Fatalf("kit must ship the 4 glass the matrix lab needs, got %d", player.Inventory[model.ItemGlass])
+	}
+	// 每种建筑都能在基地半径内找到位置并成功下发建造命令（同一份物资包）。
+	// 采矿机必须压在资源节点上，其余建筑用普通的基地附近空位。
+	ctx := core.surveyBotWorld(ws, "p1")
+	radius := botConstructRadius(ws, "p1", ctx)
+	var nodes []*model.ResourceNodeState
+	for _, node := range ws.Resources {
+		switch node.Kind {
+		case model.ItemIronOre, model.ItemCopperOre, model.ItemCoal, model.ItemStoneOre:
+		default:
+			continue
+		}
+		if ws.SurfaceDistance(*ctx.home, node.Position) <= radius && ws.TileBuilding[model.TileKey(node.Position.X, node.Position.Y)] == "" {
+			nodes = append(nodes, node)
+		}
+	}
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
+	if len(nodes) < 4 {
+		t.Fatalf("need 4 ore nodes near the base for the kit test, got %d", len(nodes))
+	}
+	mineIdx := 0
+	for _, step := range plan {
+		for i := 0; i < step.count; i++ {
+			var pos *model.Position
+			if step.btype == model.BuildingTypeMiningMachine {
+				p := nodes[mineIdx].Position
+				mineIdx++
+				pos = &p
+			} else {
+				pos = botBuildSpotNear(ws, *ctx.home, radius, step.btype)
+			}
+			if pos == nil {
+				t.Fatalf("no spot for %s #%d", step.btype, i+1)
+			}
+			res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
+				Target:  model.CommandTarget{Layer: "planet", Position: pos},
+				Payload: map[string]any{"building_type": string(step.btype)},
+			})
+			if res.Code != model.CodeOK {
+				t.Fatalf("kit cannot afford %s #%d: %+v (inventory=%v)", step.btype, i+1, res, player.Inventory)
+			}
+		}
+	}
+}

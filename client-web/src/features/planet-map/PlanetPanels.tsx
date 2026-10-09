@@ -52,6 +52,7 @@ import {
   toTilePoint,
   type PlanetRenderView,
 } from "@/features/planet-map/model";
+import { describeLogisticsDetail, isSorterBuilding } from "@/features/planet-map/logistics-direction";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -449,7 +450,7 @@ export function PlanetLayerPanel({
   const session = useSessionSnapshot();
 
   const handleHome = () => {
-    const home = resolveHomeTile(planet, session.playerId);
+    const home = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(planet, session.playerId);
     if (home) {
       requestFocus(home, PLANET_FOCUS_FIT_ZOOM);
     } else {
@@ -840,6 +841,12 @@ export function PlanetEntityPanel({
               <dt>坐标</dt>
               <dd>{formatPosition(building.position)}</dd>
             </div>
+            {building.conveyor || isSorterBuilding(building) ? (
+              <div>
+                <dt>流向</dt>
+                <dd>{describeLogisticsDetail(building, Object.values(planet.buildings ?? {}), planet.surface?.face_size ?? 1, catalog)}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>状态</dt>
               <dd>{translateBuildingState(building.runtime.state)}</dd>

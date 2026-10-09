@@ -8,12 +8,15 @@ import {
   getTerrainTile,
   getViewportTileBounds,
   type PlanetRenderView,
+  type TilePoint,
   type ViewportTileBounds,
   wrapMod,
 } from "@/features/planet-map/model";
 import { isDarkFogUnit } from "@/features/planet-map/rts-commands";
 import { INCOMING_WAVE_TTL_MS, usePlanetViewStore } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
+
+import { MINI_CSS, computeLayout, miniTileAt, type MinimapLayout } from "./minimap-geometry";
 
 /**
  * PlanetMinimap：浮在地图右下角的全图缩略图（V2 布局）。
@@ -37,9 +40,20 @@ interface PlanetMinimapProps {
   overview?: PlanetOverviewView;
   /** 敌我标记层数据源（C3）：敌方兵力 marker + 来袭波次以外的实时敌情。 */
   runtime?: PlanetRuntimeView;
+  /**
+   * RTS 标准「右键缩略图下令」：走与 3D/2D 地图右键完全相同的命令路径
+   * （use-planet-interactions 的 contextTile：有选中己方单位时点地=移动、点敌=攻击；
+   * 未编组小队=任务群部署）。返回 false 表示当前没有可下达命令的选择，由本组件给出提示。
+   */
+  onContextTile?: (tile: TilePoint) => boolean;
+  /**
+   * 当前交互模式为「攻击移动」（unit_order + attack_move）时的目标点下令，
+   * 与 3D 地图左键点击 attack_move 同一条 submitUnitOrder 路径。
+   */
+  onAttackMove?: (tile: TilePoint) => boolean;
+  /** 无选中单位时的本地提示（复用命令 journal 的失败条目口径）。 */
+  onOrderBlocked?: (message: string, tile: TilePoint) => void;
 }
-
-const MINI_CSS = 152;
 
 const terrainColors: Record<string, string> = {
   buildable: "#27344d",
@@ -76,30 +90,11 @@ function darken(hex: string, alpha: number): string {
   return `rgb(${Math.round(r * mix)}, ${Math.round(g * mix)}, ${Math.round(b * mix)})`;
 }
 
-interface MinimapLayout {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-  drawWidth: number;
-  drawHeight: number;
-}
-
-function computeLayout(mapWidth: number, mapHeight: number): MinimapLayout {
-  const scale = Math.min(MINI_CSS / Math.max(mapWidth, 1), MINI_CSS / Math.max(mapHeight, 1));
-  const drawWidth = mapWidth * scale;
-  const drawHeight = mapHeight * scale;
-  return {
-    scale,
-    drawWidth,
-    drawHeight,
-    offsetX: (MINI_CSS - drawWidth) / 2,
-    offsetY: (MINI_CSS - drawHeight) / 2,
-  };
-}
-
-export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapProps) {
+export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, onAttackMove, onOrderBlocked }: PlanetMinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // 右键下令的 hover 坐标（显示在标签上，与主地图 hover 提示同口径）
+  const [hoverTile, setHoverTile] = useState<TilePoint | null>(null);
   const session = useSessionSnapshot();
   // 来袭波次闪烁：有未过期波次时 500ms 切换一次（闪烁红点 + 红线）。
   // ?freeze=1（截图测试确定性约定，与星图/战场同口径）不闪烁，固定为「亮」态。
@@ -129,6 +124,12 @@ export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapP
     const timer = window.setInterval(() => setBlinkOn((on) => !on), 500);
     return () => window.clearInterval(timer);
   }, [frozen, liveWaves.length]);
+
+  // 右键下令在攻击移动模式下改走 attack_move；用 store 订阅保证回调最新且不额外渲染主图。
+  const interactionKind = usePlanetViewStore((state) => state.interactionMode.kind);
+  const interactionOrder = usePlanetViewStore((state) => (
+    state.interactionMode.kind === 'unit_order' ? state.interactionMode.order : null
+  ));
 
   const mapWidth = planet.map_width;
   const mapHeight = planet.map_height;
@@ -344,27 +345,55 @@ export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapP
     }
   }, [blinkOn, fog, layout, liveWaves, mapHeight, mapWidth, planet, runtime, session.playerId, viewportBounds]);
 
-  function handleClick(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return;
-    }
+  /** 缩略图 CSS 坐标 → tile；越界返回 null（换算逻辑见 minimap-geometry，单测覆盖）。 */
+  function tileAt(event: React.MouseEvent<HTMLCanvasElement>): TilePoint | null {
     const canvas = canvasRef.current;
     if (!canvas) {
-      return;
+      return null;
     }
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return miniTileAt(
+      ((event.clientX - rect.left) / rect.width) * MINI_CSS,
+      ((event.clientY - rect.top) / rect.height) * MINI_CSS,
+      layout,
+      mapWidth,
+      mapHeight,
+    );
+  }
+
+  function handleClick(event: React.MouseEvent<HTMLCanvasElement>) {
+    const tile = tileAt(event);
+    if (tile) {
+      requestFocus(tile);
+    }
+  }
+
+  /**
+   * 右键缩略图 = RTS 标准「给选中单位下移动/攻击命令到该格」，与主地图右键同一条路径；
+   * 处于「攻击移动」交互模式时改为攻击移动。
+   */
+  function handleContextMenu(event: React.MouseEvent<HTMLCanvasElement>) {
+    // 缩略图永远不给浏览器原生菜单（否则会盖住整张地图）。
+    event.preventDefault();
+    const tile = tileAt(event);
+    if (!tile) {
       return;
     }
-    const px = ((event.clientX - rect.left) / rect.width) * MINI_CSS;
-    const py = ((event.clientY - rect.top) / rect.height) * MINI_CSS;
-    const { scale, offsetX, offsetY } = layout;
-    const tx = Math.floor((px - offsetX) / scale);
-    const ty = Math.floor((py - offsetY) / scale);
-    if (tx < 0 || ty < 0 || tx >= mapWidth || ty >= mapHeight) {
+    if (interactionKind === 'unit_order' && interactionOrder === 'attack_move' && onAttackMove) {
+      if (!onAttackMove(tile)) {
+        onOrderBlocked?.(`没有可接受攻击移动的单位：右键缩略图 (${tile.x},${tile.y}) 需要先在地图上选中单位`, tile);
+      }
       return;
     }
-    requestFocus({ x: tx, y: ty });
+    if (!onContextTile) {
+      return;
+    }
+    if (!onContextTile(tile)) {
+      onOrderBlocked?.(`没有选中的己方单位：右键缩略图 (${tile.x},${tile.y}) 需要先在地图上选中单位`, tile);
+    }
   }
 
   if (mapWidth <= 0 || mapHeight <= 0) {
@@ -385,11 +414,16 @@ export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapP
         className="planet-minimap__canvas"
         height={devSize}
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        onMouseLeave={() => setHoverTile(null)}
+        onMouseMove={event => setHoverTile(tileAt(event))}
         ref={canvasRef}
         role="img"
         width={devSize}
       />
-      <span className="planet-minimap__label">缩略</span>
+      <span className="planet-minimap__label">
+        {hoverTile ? `${hoverTile.x}, ${hoverTile.y}` : '缩略'}
+      </span>
     </div>
   );
 }

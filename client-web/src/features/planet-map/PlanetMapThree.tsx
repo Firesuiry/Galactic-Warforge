@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
-import { PLANET_LAYER_LABELS, getFogState, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
+import { PLANET_LAYER_LABELS, getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
 import { traceBeltStroke } from './belt-stroke';
 import { isConveyorBeltBuilding } from './build-workflow';
 import { sameTypeOwnUnitsInView } from './rts-commands';
@@ -60,8 +60,10 @@ export function PlanetMapThree(props: Props) {
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
   const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
+  // 镜头中心落在未探索区：地表只有测绘网格，给一条「回到基地」的出路（试玩 1010 D / 1011 A）。
+  const [centerUncharted, setCenterUncharted] = useState(false);
   // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
-  const beltDrag = useRef<{ tile: TilePoint; placed: Set<string> } | null>(null);
+  const beltDrag = useRef<{ tile: TilePoint; placed: Set<string>; path: TilePoint[] } | null>(null);
   function placeBelt(tile: TilePoint, direction?: 'north' | 'east' | 'south' | 'west') {
     const store = usePlanetViewStore.getState();
     const mode = store.interactionMode;
@@ -199,7 +201,8 @@ export function PlanetMapThree(props: Props) {
       if (document.hidden) return;
       const tile = renderer.getCenterTile();
       if (!tile) return;
-      const { planet } = latest.current;
+      const { planet, fog } = latest.current;
+      setCenterUncharted(renderer.isGroundView() && isTileUncharted(fog, tile.x, tile.y));
       const width = Math.min(96, planet.map_width);
       const height = Math.min(96, planet.map_height);
       const next = {
@@ -252,7 +255,7 @@ export function PlanetMapThree(props: Props) {
   }, [ready, focusRequest]);
 
   const home = () => {
-    const tile = resolveHomeTile(props.planet, session.playerId);
+    const tile = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(props.planet, session.playerId);
     if (tile) scene.current?.focus(tile);
   };
 
@@ -261,7 +264,8 @@ export function PlanetMapThree(props: Props) {
     if (event.button === 0 && interactionMode.kind === 'build' && isConveyorBeltBuilding(interactionMode.buildingType)) {
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
       if (tile) {
-        beltDrag.current = { tile, placed: new Set() };
+        beltDrag.current = { tile, placed: new Set(), path: [tile] };
+        scene.current?.setBeltDragPath([tile]);
         event.currentTarget.setPointerCapture(event.pointerId);
         event.stopPropagation(); event.preventDefault();
       }
@@ -283,6 +287,8 @@ export function PlanetMapThree(props: Props) {
         const segment = traceBeltStroke(beltDrag.current.tile, tile, props.planet.surface.face_size);
         for (const part of segment.slice(0, -1)) placeBelt(part.tile, part.direction);
         if (segment.length > 0) {
+          beltDrag.current.path.push(...segment.map(part => part.tile));
+          scene.current?.setBeltDragPath(beltDrag.current.path);
           beltDrag.current.tile = tile;
           const mode = usePlanetViewStore.getState().interactionMode;
           if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: segment[segment.length-1].direction });
@@ -311,6 +317,7 @@ export function PlanetMapThree(props: Props) {
       event.stopPropagation();
       placeBelt(beltDrag.current.tile);
       beltDrag.current = null;
+      scene.current?.setBeltDragPath(null);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
@@ -346,7 +353,7 @@ export function PlanetMapThree(props: Props) {
     onPointerDownCapture={handleMarqueeDown}
     onPointerMoveCapture={handleMarqueeMove}
     onPointerUpCapture={handleMarqueeUp}
-    onPointerCancelCapture={() => { beltDrag.current = null; }}
+    onPointerCancelCapture={() => { beltDrag.current = null; scene.current?.setBeltDragPath(null); }}
     onDoubleClick={event => {
       // 双击单位 = 选中屏幕内全部同类己方单位（投影可见即"同屏"）
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
@@ -424,6 +431,13 @@ export function PlanetMapThree(props: Props) {
     {fogNotice && !error ? (
       <div className="planet-three__fog-notice" role="status">
         该区域尚未探索（{fogNotice.x}, {fogNotice.y}）：不能查看详情或建造，可派单位移动/进攻过去开视野
+      </div>
+    ) : null}
+    {centerUncharted && !error ? (
+      <div className="planet-three__uncharted" role="status">
+        <span className="planet-three__uncharted-title">未探索区域</span>
+        <span className="planet-three__uncharted-text">派单位前往可揭开地形</span>
+        <button className="secondary-button" onClick={home} type="button">回到基地</button>
       </div>
     ) : null}
     <div className="planet-three__navigation" aria-label="3D 视角控制">

@@ -69,6 +69,16 @@ func hostile(ws *model.WorldState, attackerOwner, targetOwner string) bool {
 	return !sameTeam(ws, attackerOwner, targetOwner)
 }
 
+// darkFogHostileToAnyone 黑雾当前是否对任一玩家敌对。
+func darkFogHostileToAnyone(ws *model.WorldState) bool {
+	for id := range ws.Players {
+		if model.DarkFogHostileTo(ws, id) {
+			return true
+		}
+	}
+	return false
+}
+
 // canAttack 显式攻击口径：玩家可以随时主动攻击中立黑雾（攻击即激怒），其余同 hostile。
 func canAttack(ws *model.WorldState, attackerOwner, targetOwner string) bool {
 	if targetOwner == model.DarkFogOwnerID && attackerOwner != model.DarkFogOwnerID {
@@ -229,6 +239,7 @@ func chaseTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarge
 	}
 	unit.Path = path
 	unit.PathIndex = 1
+	unit.PathIntent = model.PathIntentCombat
 	unit.MoveProgress = 0
 	unit.RepathTick = ws.Tick
 }
@@ -316,6 +327,11 @@ func resolveFriendly(ws *model.WorldState, id string) *friendlyTargetRef {
 
 // autoAcquireTarget 按姿态自动索敌：单位/小队优先，其次黑雾，最后建筑（仅攻击移动）。
 func autoAcquireTarget(ws *model.WorldState, unit *model.Unit) *unitCombatTarget {
+	// 中立黑雾（没被任何玩家激怒）不会主动打任何东西：跳过每 tick 的圆盘扫描。
+	// 黑雾单位越积越多时这是整局最大的固定开销（试玩 1011：15 个黑雾单位 ≈ 7ms/tick）。
+	if unit.OwnerID == model.DarkFogOwnerID && !darkFogHostileToAnyone(ws) {
+		return nil
+	}
 	switch unit.Stance {
 	case model.UnitStanceRetreat, model.UnitStanceMoving:
 		return nil
@@ -351,7 +367,8 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 	}
 
 	for _, tile := range ws.SurfaceDisc(unit.Position, maxDist) {
-		for _, otherID := range ws.TileUnits[model.TileKey(tile.X, tile.Y)] {
+		key := model.TileKey(tile.X, tile.Y)
+		for _, otherID := range ws.TileUnits[key] {
 			other := ws.Units[otherID]
 			if other == nil || other.HP <= 0 || other.ID == unit.ID {
 				continue
@@ -365,7 +382,7 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 			break // 已找到最近的最高优先级目标
 		}
 		if includeBuildings {
-			if buildingID := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]; buildingID != "" {
+			if buildingID := ws.TileBuilding[key]; buildingID != "" {
 				if b := ws.Buildings[buildingID]; b != nil && b.HP > 0 && hostile(ws, unit.OwnerID, b.OwnerID) {
 					adopt(&unitCombatTarget{kind: "building", id: b.ID, pos: b.Position, ownerID: b.OwnerID, building: b}, 2)
 				}
@@ -397,15 +414,23 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 
 const maxInt32 = int(^uint32(0) >> 1)
 
-// settleMechaAutoFire 执行体（玩家机甲）交战：
-//   - 显式攻击目标：射程内持续开火（不追击）；
-//   - 空闲时（无移动路径）：先还击射程内的最近攻击者，再打范围内最近的敌对目标。
-//     空闲与手搓中的机甲都按 aggro_range 索敌，目标在射程外就靠近到射程内开火，
-//     追击以"接战锚点 + AggroRange+leashSlack"为上限、超限即放弃（试玩报告 E：
-//     敌人在 5 格外拆家，机甲站在射程外一动不动）；
-//     **手搓中的机甲会被自动防御打断**：进入 aggro_range 就暂停手搓、靠近到射程内
-//     还手，威胁消失后自动从原进度恢复手搓。采集（mine）作业不打断——离开矿点即失效。
-//     自动开火不写 AttackTarget，并保留两发的能量，避免把机甲打到无法行动。
+// settleMechaAutoFire 执行体（玩家机甲）交战。机甲永远不因为「正在走路」而放弃开火：
+//
+//   - 显式攻击目标：射程内按冷却开火；射程外沿攻击路径继续靠近（moveMecha 已下好路径）。
+//   - 无显式目标且无路径（空闲/手搓中）：按 aggro_range 索敌（含敌方建筑），
+//     目标在射程外就靠近到射程内开火；追击以"接战锚点 + AggroRange+leashSlack"
+//     为上限、超限即放弃（试玩报告 E：敌人在 5 格外拆家，机甲站在射程外一动不动）；
+//     手搓中的机甲会被自动防御打断（暂停作业、保留进度与预留原料），威胁消失后恢复。
+//     采集（mine）作业不打断——离开矿点即失效，但仍会在射程内还手。
+//   - 有路径时（边走边打）：
+//   - 路径是玩家显式 move/attack 命令下达的（PathIntentOrder）：不改路径、不停下，
+//     照常对射程内的敌对目标开火（优先还击 LastAttackerID）；不被敌人钓走。
+//   - 路径是作业/建造驱动的行走（PathIntentTask）：正在挨打或 aggro 内有敌对目标时，
+//     按空闲那套防御逻辑暂停作业、去还手（受 CombatAnchor 牵引约束），
+//     威胁解除后从原进度恢复作业并走回工地。
+//   - 路径是自动交战的追击（PathIntentCombat）：继续追，进射程就开火。
+//
+// 自动开火不写 AttackTarget，并保留两发的能量，避免把机甲打到无法行动。
 func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 	explicit := unit.AttackTarget != ""
 	var target *unitCombatTarget
@@ -429,17 +454,33 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 			// 只有空闲/手搓防御会占用机甲的交战锚点：作业结束/换成采集时清掉。
 			unit.CombatAnchor = nil
 		}
-		// 交战锚点 = 第一次主动靠近时的位置：机甲只在这个范围内追击敌人，
-		// 追得太远就放弃这一目标、回去（手搓或原地待命），否则会被一路钓走。
-		// 必须在 HasPath 早退之前判断，否则追击中的机甲永远走不到这一支。
-		if hunting && unit.CombatAnchor != nil &&
-			ws.SurfaceDistance(unit.Position, *unit.CombatAnchor) > unit.AggroRange+leashSlack {
-			unit.LastAttackerID = ""
-			unit.ClearMovement()
-			return mechaStandDown(ws, unit)
-		}
+		// 有路径时的两类分支（试玩报告 1011 C：有路径的机甲完全不还手，被 8 个兵打死）：
+		//   - 作业/建造驱动的行走（PathIntentTask）：附近有敌对目标就按防御处理，
+		//     暂停作业去还手（受 CombatAnchor 牵引约束），威胁解除后恢复作业与赶路。
+		//   - 玩家显式 move/attack 命令或自动追击（order/combat）：边走边打，不改路径。
 		if unit.HasPath() {
-			return nil
+			taskWalk := unit.PathIntent == model.PathIntentTask
+			// 牵引约束（只对自动交战建立的锚点生效；玩家 move/attack 路径没有锚点）：
+			// 追出 aggro+leash 就放弃目标，不被敌人一路钓走。
+			if unit.CombatAnchor != nil &&
+				ws.SurfaceDistance(unit.Position, *unit.CombatAnchor) > unit.AggroRange+leashSlack {
+				unit.LastAttackerID = ""
+				unit.ClearMovement()
+				return mechaStandDown(ws, unit)
+			}
+			if !taskWalk {
+				return mechaFireWhileMoving(ws, unit)
+			}
+			// 作业驱动的行走：只有真被威胁才打断作业，否则继续赶路。
+			if !mechaThreatened(ws, unit) {
+				return nil
+			}
+			// 打断作业去还手：锚点记在被打断的位置，机甲只在这个范围内追击。
+			if unit.CombatAnchor == nil {
+				anchor := unit.Position
+				unit.CombatAnchor = &anchor
+			}
+			defending, hunting = true, true
 		}
 		// 低能量时不主动交火，但必须先把被打断的手搓恢复掉，否则机甲会
 		// 一直停在"暂停手搓 + 不还手"的死状态（能量耗尽后永远恢复不了）。
@@ -494,6 +535,60 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 				return events
 			}
 		}
+	}
+	if unit.LastAttackTick > 0 && ws.Tick-unit.LastAttackTick < unit.AttackCooldownTick {
+		return nil
+	}
+	if unit.AmmoClass != "" && unit.Ammo <= 0 {
+		unit.CombatState = "no_ammunition"
+		return nil
+	}
+	if failure := spendMechaEnergy(unit, unit.Mecha.AttackEnergyCost); failure != nil {
+		return nil
+	}
+	consumeUnitAmmunition(unit)
+	events := fireAtTarget(ws, unit, target)
+	unit.LastAttackTick = ws.Tick
+	events = append(events, mechaStateEvent(unit))
+	return events
+}
+
+// mechaThreatened 机甲是否正处于威胁之下：正在挨打（有攻击者），
+// 或 aggro 范围内已有敌对目标（单位/建筑，含对本玩家敌对的黑雾）。
+// 只用于判断作业/建造驱动的行走要不要被打断去还手。
+func mechaThreatened(ws *model.WorldState, unit *model.Unit) bool {
+	if unit.LastAttackerID != "" {
+		if attacker := resolveCombatTarget(ws, unit.LastAttackerID); attacker != nil &&
+			hostile(ws, unit.OwnerID, attacker.ownerID) {
+			return true
+		}
+		unit.LastAttackerID = ""
+	}
+	return nearestHostileInRange(ws, unit, max(unit.AttackRange, unit.AggroRange), true) != nil
+}
+
+// mechaFireWhileMoving 边走边打：机甲正沿玩家命令/追击路径前进时不改路径、不停下，
+// 只对 AttackRange 内最近的敌对目标（优先 LastAttackerID）按冷却开火。
+func mechaFireWhileMoving(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
+	// 低能量时不主动交火（保留两发能量，避免把机甲打到无法行动）。
+	if unit.Mecha.Energy < 2*unit.Mecha.AttackEnergyCost {
+		return nil
+	}
+	var target *unitCombatTarget
+	if unit.LastAttackerID != "" {
+		if counter := resolveCombatTarget(ws, unit.LastAttackerID); counter != nil && unitCanTarget(unit, counter) &&
+			hostile(ws, unit.OwnerID, counter.ownerID) &&
+			ws.SurfaceDistance(unit.Position, counter.pos) <= unit.AttackRange {
+			target = counter
+		} else if counter != nil && !hostile(ws, unit.OwnerID, counter.ownerID) {
+			unit.LastAttackerID = ""
+		}
+	}
+	if target == nil {
+		target = nearestHostileInRange(ws, unit, unit.AttackRange, false)
+	}
+	if target == nil {
+		return nil
 	}
 	if unit.LastAttackTick > 0 && ws.Tick-unit.LastAttackTick < unit.AttackCooldownTick {
 		return nil

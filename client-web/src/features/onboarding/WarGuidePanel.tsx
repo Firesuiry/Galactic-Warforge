@@ -37,6 +37,18 @@ export function WarGuidePanel({ guide }: { guide: WarGuideState }) {
             ))}
           </ol>
           <p data-testid="war-guide-hint">{guide.current?.hint}</p>
+          {guide.shortage ? (
+            <div className="war-guide-shortage" data-testid="war-guide-shortage">
+              <p className="war-guide-shortage__total">{guide.shortage.text}</p>
+              <ul>
+                {guide.shortage.sources.map((source) => (
+                  <li key={source.itemId}>
+                    {source.source ? `${source.itemName}：${source.source}` : source.itemName}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {guide.notice ? (
             <p className={`war-guide-notice war-guide-notice--${guide.notice.tone}`} role={guide.notice.tone === 'danger' ? 'alert' : undefined}>
               {guide.notice.text}

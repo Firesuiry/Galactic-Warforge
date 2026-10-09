@@ -12,6 +12,7 @@ import {
   getFogState,
   getTerrainTile,
   getViewportTileBounds,
+  isTileUncharted,
   mergeRecentEvents,
   resolveCameraAxisOffset,
   resolveFocusCameraAxisOffset,
@@ -99,6 +100,71 @@ describe('planet map model helpers', () => {
 
     expect(resolveHomeTile(planet, 'p2')).toBeNull();
     expect(resolveHomeTile(noBuilding, 'p2')).toBeNull();
+  });
+
+  it('回归（试玩 1011 A）：id 字符串最小的建筑在远处时，不把「聚焦基地」带到荒郊', () => {
+    const planet = createPlanetFixture();
+    // 基地在 (1,1)（id 字典序更大），玩家在远处 (10,6) 建了一段传送带（id b-113 < b-2）。
+    const base = {
+      ...planet.buildings!['miner-1'],
+      id: 'b-2',
+      type: 'battlefield_analysis_base',
+      position: { x: 1, y: 1, z: 0 },
+    };
+    const farBelt = {
+      ...planet.buildings!['miner-1'],
+      id: 'b-113',
+      type: 'conveyor_belt_mk1',
+      position: { x: 10, y: 6, z: 0 },
+    };
+    const buildings = { 'b-2': base, 'b-113': farBelt } as unknown as typeof planet.buildings;
+
+    // 修复前：getBuildingList 按 id 排序取第一个 ⇒ 'b-113'（荒郊）。
+    expect(resolveHomeTile({ ...planet, buildings }, 'p1')).toEqual({ x: 1, y: 1 });
+  });
+
+  it('回归：没有 HQ 时取离己方建筑质心最近的建筑，而不是 id 最小的那座', () => {
+    const planet = createPlanetFixture();
+    const mk = (id: string, type: string, x: number, y: number) => ({
+      ...planet.buildings!['miner-1'],
+      id,
+      type,
+      position: { x, y, z: 0 },
+    });
+    // 基地群在 (2,2)/(3,2)/(2,3) 附近；远处 (10,6) 有 id 最小的 b-1。
+    const buildings = {
+      'b-1': mk('b-1', 'conveyor_belt_mk1', 10, 6),
+      'b-9': mk('b-9', 'tesla_tower', 2, 2),
+      'b-10': mk('b-10', 'wind_turbine', 3, 2),
+      'b-11': mk('b-11', 'mining_machine', 2, 3),
+    } as unknown as typeof planet.buildings;
+    // 质心 ≈ (4,3)：最近的是 (3,2) 的风机，而不是 id 最小、远在 (10,6) 的 b-1。
+    expect(resolveHomeTile({ ...planet, buildings }, 'p1')).toEqual({ x: 3, y: 2 });
+  });
+
+  it('回归：没有 HQ 也没有机甲时，优先取机甲/执行体单位位置', () => {
+    const planet = createPlanetFixture();
+    const mk = (id: string, type: string, x: number, y: number) => ({
+      ...planet.buildings!['miner-1'],
+      id,
+      type,
+      position: { x, y, z: 0 },
+    });
+    const buildings = {
+      'b-1': mk('b-1', 'conveyor_belt_mk1', 10, 6),
+      'b-9': mk('b-9', 'tesla_tower', 2, 2),
+    } as unknown as typeof planet.buildings;
+    const units = {
+      'exec-1': {
+        ...planet.units!['worker-1'],
+        id: 'exec-1',
+        type: 'executor',
+        owner_id: 'p1',
+        position: { x: 2, y: 2, z: 0 },
+        mecha: { energy: 10, max_energy: 100 } as never,
+      },
+    } as unknown as typeof planet.units;
+    expect(resolveHomeTile({ ...planet, buildings, units }, 'p1')).toEqual({ x: 2, y: 2 });
   });
 
   it('同一格再次点击轮换到下一层（机甲站在矿上时选中矿）', () => {
@@ -432,4 +498,29 @@ it('建造任务排队原因给中文说明，未知原因原样透出', () => {
 it('建造任务标签优先用服务端中文名，不露内部 id', () => {
   expect(constructionTaskLabel({ id: 'task-7', building_type: 'wind_turbine', building_name: '风力涡轮机' })).toBe('风力涡轮机');
   expect(constructionTaskLabel({ id: 'task-7', building_type: 'wind_turbine' })).not.toBe('task-7');
+});
+
+describe('isTileUncharted：只在有迷雾数据时判「未探索」', () => {
+  const sceneFog = {
+    bounds: { x: 10, y: 10, width: 2, height: 2 },
+    explored: [[true, false], [false, false]],
+    visible: [[true, false], [false, false]],
+  } as never;
+
+  it('窗口内未探索格为 true，已探索格为 false', () => {
+    expect(isTileUncharted(sceneFog, 11, 10)).toBe(true);
+    expect(isTileUncharted(sceneFog, 10, 10)).toBe(false);
+  });
+
+  it('场景窗口外（镜头刚飞过去、窗口未跟上）视为未知而不是未探索', () => {
+    expect(isTileUncharted(sceneFog, 40, 40)).toBe(false);
+    expect(isTileUncharted(undefined, 0, 0)).toBe(false);
+  });
+
+  it('全图迷雾：没有该行数据时不下结论', () => {
+    const fullFog = { explored: [[false, true]], visible: [[false, false]] } as never;
+    expect(isTileUncharted(fullFog, 0, 0)).toBe(true);
+    expect(isTileUncharted(fullFog, 1, 0)).toBe(false);
+    expect(isTileUncharted(fullFog, 0, 5)).toBe(false);
+  });
 });

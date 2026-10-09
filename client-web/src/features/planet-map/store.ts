@@ -386,6 +386,12 @@ interface PlanetViewState {
   focusRequest: FocusRequest | null;
   zoomRequest: ZoomRequest | null;
   mapProjection: PlanetMapProjection;
+  /**
+   * 玩家的「家」（HQ 优先，见 resolveHomeTile），由行星页按**跨窗口累积**的己方实体算出。
+   * 场景查询只返回镜头窗口内的实体：镜头在荒郊时窗口里没有基地，「聚焦基地/回到基地」
+   * 若只看窗口数据就无家可回（试玩 1011 A）。
+   */
+  homeTile: TilePoint | null;
 }
 
 interface PlanetViewActions {
@@ -421,6 +427,7 @@ interface PlanetViewActions {
   toggleDebugOpen: () => void;
   requestFocus: (position: TilePoint, zoomIndex?: number) => void;
   consumeFocusRequest: (nonce: number) => void;
+  setHomeTile: (tile: TilePoint | null) => void;
   /** 请求切到指定缩放档（anchor=null 时以视口中心为锚）。 */
   requestZoom: (zoomIndex: number, anchor?: TilePoint | null) => void;
   consumeZoomRequest: (nonce: number) => void;
@@ -487,6 +494,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     focusRequest: null,
     zoomRequest: null,
     mapProjection: { viewportWidth: 0, viewportHeight: 0, tileSize: 0 },
+    homeTile: null,
   };
 }
 
@@ -659,6 +667,11 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
         : {}
     ));
   },
+  setHomeTile: (tile) => {
+    set((state) => (
+      state.homeTile?.x === tile?.x && state.homeTile?.y === tile?.y ? {} : { homeTile: tile }
+    ));
+  },
   requestZoom: (zoomIndex, anchor = null) => {
     set(() => ({
       zoomRequest: {
@@ -718,6 +731,7 @@ export function resetPlanetViewStore() {
     toggleDebugOpen: usePlanetViewStore.getState().toggleDebugOpen,
     requestFocus: usePlanetViewStore.getState().requestFocus,
     consumeFocusRequest: usePlanetViewStore.getState().consumeFocusRequest,
+    setHomeTile: usePlanetViewStore.getState().setHomeTile,
     requestZoom: usePlanetViewStore.getState().requestZoom,
     consumeZoomRequest: usePlanetViewStore.getState().consumeZoomRequest,
     setMapProjection: usePlanetViewStore.getState().setMapProjection,

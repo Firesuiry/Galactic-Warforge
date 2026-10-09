@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { surfaceFace, surfaceOffset, surfaceStep, type SurfaceDirection } from '@shared/surface';
 import type { Building, ConveyorDirection, PortDirection } from '@shared/types';
 import type { TilePoint } from '../model';
+import { beltChevronTexture } from './logistics-marks';
 import { surfaceTileSize, tileNormal } from './projection';
 
 const directions: SurfaceDirection[] = ['north', 'east', 'south', 'west'];
@@ -130,20 +131,40 @@ export function conveyorPaths(buildings: readonly Building[], faceSize: number, 
   return paths;
 }
 
-interface MeshBuffer { positions: number[]; tiles: number[] }
+interface MeshBuffer { positions: number[]; tiles: number[]; uvs: number[] }
 
 /** Three merged draws for the entire visible network, with triangle-to-tile picking. */
 export class ConveyorGeometry {
   readonly group = new THREE.Group();
   private signature = '';
   private tiles: TilePoint[] = [];
+  private scroll = 0;
   private readonly materials = [
     new THREE.MeshStandardMaterial({ color: '#26363e', roughness: .8, metalness: .25 }),
     new THREE.MeshStandardMaterial({ color: '#c1cacc', roughness: .4, metalness: .7 }),
     new THREE.MeshStandardMaterial({ color: '#d7a353', roughness: .48, metalness: .6 }),
   ];
+  /** 带体顶面的流向 chevron 贴图材质（map.offset 沿带滚动 = 流向动画；1 次重复 = 1 格）。 */
+  private readonly surfaceMaterial = new THREE.MeshBasicMaterial({
+    map: beltChevronTexture(), transparent: true, depthWrite: false, toneMapped: false,
+  });
 
-  constructor() { this.group.name = 'continuous-conveyors'; }
+  constructor() {
+    this.group.name = 'continuous-conveyors';
+    this.surfaceMaterial.polygonOffset = true;
+    this.surfaceMaterial.polygonOffsetFactor = -2;
+  }
+
+  /**
+   * 流向滚动：offset 以「格」为单位，与 2D 货物圆点同一套速度口径（planet-logistics-flow）。
+   * 停止/冻结时传入 0，箭头静止（不闪）。只有可见带体参与。
+   */
+  update(deltaSeconds: number, speedTilesPerSecond = 0) {
+    if (deltaSeconds <= 0 || speedTilesPerSecond <= 0) return;
+    // 带体 UV 的 v 指向横向，u 指向流向；负号让 chevron 朝下游方向滚动。
+    const map = this.surfaceMaterial.map;
+    if (map) map.offset.x = (map.offset.x - deltaSeconds * speedTilesPerSecond) % 1;
+  }
 
   refresh(buildings: readonly Building[], faceSize: number, radius = 100) {
     const belts = buildings.filter(building => isTransportBuilding(building));
@@ -157,11 +178,18 @@ export class ConveyorGeometry {
     this.signature = signature;
     this.clear();
     const paths = conveyorPaths(buildings, faceSize, radius), size = surfaceTileSize(radius, faceSize);
-    const buffers: MeshBuffer[] = this.materials.map(() => ({ positions: [], tiles: [] }));
+    const buffers: MeshBuffer[] = this.materials.map(() => ({ positions: [], tiles: [], uvs: [] }));
+    const surface: MeshBuffer = { positions: [], tiles: [], uvs: [] };
     this.tiles = belts.map(building => ({ x: building.position.x, y: building.position.y }));
     const indices = new Map(belts.map((building, index) => [building.id, index]));
-    const quad = (buffer: MeshBuffer, tile: number, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => {
-      for (const point of [a,b,c,a,c,d]) { buffer.positions.push(point.x, point.y, point.z); buffer.tiles.push(tile); }
+    const quad = (buffer: MeshBuffer, tile: number, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3,
+      u0 = 0, u1 = 1, v0 = 0, v1 = 1) => {
+      const corners: [THREE.Vector3, number, number][] = [[a, u0, v0], [b, u1, v0], [c, u1, v1], [a, u0, v0], [c, u1, v1], [d, u0, v1]];
+      for (const [point, u, v] of corners) {
+        buffer.positions.push(point.x, point.y, point.z);
+        buffer.uvs.push(u, v);
+        buffer.tiles.push(tile);
+      }
     };
     for (const path of paths) {
       const tile = indices.get(path.building.id)!;
@@ -185,10 +213,17 @@ export class ConveyorGeometry {
       }
       // Transverse metal slats expose belt direction even in a frozen screenshot.
       for (let i=0;i<10;i++) ribbon(buffers[1],-.245,.245,.001,.012,(i+.18)/10,(i+.38)/10,1);
-      // A pair of chevrons points along the configured route.
-      const t = .64;
-      const tip = point(t+.055,0,.017);
-      for (const sign of [-1,1]) quad(buffers[2],tile,point(t-.045,sign*.13,.017),tip,point(t+.025,0,.017),point(t-.08,sign*.13,.017));
+      // 顶面流向贴图：起点=输入端口、终点=输出端口，UV.u 沿流向（1 次重复 = 1 格）。
+      // 转角拆成两段、u 各占半格，避免在弯道处把 chevron 拉长。
+      const turning = path.input !== path.output && path.input !== opposite[path.output];
+      const sections: [number, number, number, number][] = turning ? [[0, .5, 0, .5], [.5, 1, .5, 1]] : [[0, 1, 0, 1]];
+      for (const [start, end, uStart, uEnd] of sections) {
+        for (let i=0; i<8; i++) {
+          const a = start + (end-start)*i/8, b = start + (end-start)*(i+1)/8;
+          const ua = uStart + (uEnd-uStart)*i/8, ub = uStart + (uEnd-uStart)*(i+1)/8;
+          quad(surface, tile, point(a,-.25,.013), point(b,-.25,.013), point(b,.25,.013), point(a,.25,.013), ua, ub);
+        }
+      }
     }
     buffers.forEach((buffer,index) => {
       if (!buffer.positions.length) return;
@@ -199,6 +234,16 @@ export class ConveyorGeometry {
       const mesh = new THREE.Mesh(geometry,this.materials[index]);
       mesh.castShadow = true; mesh.receiveShadow = true; this.group.add(mesh);
     });
+    if (surface.positions.length) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(surface.positions, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(surface.uvs, 2));
+      geometry.setAttribute('tileIndex', new THREE.Uint32BufferAttribute(surface.tiles, 1));
+      geometry.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geometry, this.surfaceMaterial);
+      mesh.renderOrder = 6;
+      this.group.add(mesh);
+    }
     return true;
   }
 
@@ -214,5 +259,10 @@ export class ConveyorGeometry {
       child.removeFromParent();
     }
   }
-  dispose() { this.clear(); this.materials.forEach(material => material.dispose()); this.group.removeFromParent(); }
+  dispose() {
+    this.clear();
+    this.materials.forEach(material => material.dispose());
+    this.surfaceMaterial.dispose();
+    this.group.removeFromParent();
+  }
 }

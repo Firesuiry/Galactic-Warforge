@@ -64,7 +64,7 @@ export function PlanetMapToolbar({
   }, [panelOpen]);
 
   const handleHome = () => {
-    const home = resolveHomeTile(planet, session.playerId);
+    const home = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(planet, session.playerId);
     if (home) {
       requestFocus(home, PLANET_FOCUS_FIT_ZOOM);
     } else {

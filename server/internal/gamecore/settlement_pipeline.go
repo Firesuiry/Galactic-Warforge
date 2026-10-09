@@ -47,6 +47,8 @@ func newSettlementPipeline() settlementPipeline {
 			// 玩家表跨世界共享：黑雾冷静期每 tick 只结算一次。
 			events = append(events, settleDarkFogCalm(frame.worlds[0].Players, frame.worlds[0].Tick)...)
 		}
+		// 行星运行时是最重的一段：按子步骤分段计时（同名跨行星累加），
+		// 剩余未单列的部分落在 "planetary_runtime" 名下。
 		for _, ws := range frame.worlds {
 			ws.DarkFogCalmTicks = gc.cfg.Battlefield.DarkFogCalmTicks
 			events = append(events, settleMechas(ws)...)
@@ -60,6 +62,7 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleResources(ws)...)
 			events = append(events, gc.settleAutoLaunch(ws)...)
 			events = append(events, settleLogisticsCharging(ws)...)
+			gc.prof.mark("power_resources")
 
 			settleOrbitalCollectors(ws, gc.maps)
 			ws.ConveyorTraffic = nil
@@ -75,13 +78,18 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleFractionation(ws)...)
 			settleLogisticsStationIO(ws)
 			settleStorage(ws)
+			gc.prof.mark("logistics_production")
 			events = append(events, settleUnitProduction(ws)...)
 			settleAmmunitionSupply(ws)
 			events = append(events, settleTurrets(ws)...)
+			gc.prof.mark("units_turrets")
 			events = append(events, settleUnitMovement(ws)...)
+			gc.prof.mark("unit_movement")
 			events = append(events, settleUnitCombat(ws)...)
 			settleCombatTech(ws, gc.spaceRuntime)
+			gc.prof.mark("unit_combat")
 			events = append(events, gc.settleEnemyForcesWithGrowth(ws)...)
+			gc.prof.mark("enemy_forces")
 			events = append(events, settleTrafficMonitors(ws)...)
 
 			if gc.monitor != nil {
@@ -156,8 +164,8 @@ func (p *settlementPipeline) register(name string, run func(*GameCore, *settleme
 func (p settlementPipeline) run(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
 	var events []*model.GameEvent
 	for _, phase := range p.phases {
-		_ = phase.name
 		events = append(events, phase.run(gc, frame)...)
+		gc.prof.mark(phase.name)
 	}
 	return events
 }

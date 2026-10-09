@@ -1,7 +1,9 @@
 package model
 
 import (
+	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"siliconworld/internal/surface"
 
@@ -150,28 +152,32 @@ func (ws *WorldState) NextEntityID(prefix string) string {
 	return prefix + "-" + int64ToStr(ws.EntityCounter)
 }
 
+// tileKeyCacheDim TileKey 缓存覆盖的坐标范围（x、y 均 < 该值）。立方体球面地图
+// 宽 = 3×面宽、高 = 2×面宽，面宽 ≤170 都落在缓存内。
+const tileKeyCacheDim = 512
+
+// tileKeyCache 惰性填充的 TileKey 字符串表：TileKey 是索敌/寻路/占位判定里每格
+// 都要调的热路径，按需拼字符串会让整局 GC 压力随单位数线性上涨（试玩 1011：
+// 大量单位空闲索敌时 TileKey 分配占 CPU 15%，GC 占一半以上）。
+// 并发安全：查询协程与 tick 可能同时调用，原子指针保证读到的总是完整字符串。
+var tileKeyCache [tileKeyCacheDim * tileKeyCacheDim]atomic.Pointer[string]
+
 // TileKey returns a string key for tile coordinates
 func TileKey(x, y int) string {
-	return int64ToStr(int64(x)) + "," + int64ToStr(int64(y))
+	if uint(x) >= tileKeyCacheDim || uint(y) >= tileKeyCacheDim {
+		return strconv.Itoa(x) + "," + strconv.Itoa(y)
+	}
+	slot := &tileKeyCache[y*tileKeyCacheDim+x]
+	if key := slot.Load(); key != nil {
+		return *key
+	}
+	key := strconv.Itoa(x) + "," + strconv.Itoa(y)
+	slot.Store(&key)
+	return key
 }
 
 func int64ToStr(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	buf := make([]byte, 0, 20)
-	for n > 0 {
-		buf = append([]byte{byte('0' + n%10)}, buf...)
-		n /= 10
-	}
-	if neg {
-		buf = append([]byte{'-'}, buf...)
-	}
-	return string(buf)
+	return strconv.FormatInt(n, 10)
 }
 
 // InBounds returns true if the position is within map bounds

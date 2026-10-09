@@ -64,6 +64,7 @@ describe('usePlanetRtsHotkeys（C1 快捷键体系）', () => {
     const interactions: PlanetInteractions = {
       interactTile: vi.fn(),
       contextTile: vi.fn(() => false),
+      attackMove: vi.fn(() => false),
       orderNow,
     };
     renderHook(() => usePlanetRtsHotkeys({ planet, interactions }));

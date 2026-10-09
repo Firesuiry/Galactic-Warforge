@@ -124,9 +124,13 @@ for (const viewport of [
       [x, y],
     );
     let verified = 0;
-    for (const tile of [
+    // 先试几处典型格，再按网格兜底扫：窄屏下抽屉、新手引导（9 步时多折一行）会盖住不同的格子，
+    // 本用例校验的是「点到的就是那一格」，不关心具体是哪几格。
+    const candidates = [
       { x: 6, y: 6 }, { x: 4, y: 6 }, { x: 6, y: 8 }, { x: 9, y: 4 }, { x: 12, y: 6 },
-    ]) {
+    ];
+    for (let y = 0; y <= 14; y += 1) for (let x = 0; x <= 15; x += 1) candidates.push({ x, y });
+    for (const tile of candidates) {
       const local = await tileToLocalPoint(page, tile);
       if (local.x < 4 || local.y < 4 || local.x > local.width - 4 || local.y > local.height - 4) {
         continue; // 该格在当前缩放下不在画布内
@@ -148,6 +152,9 @@ for (const viewport of [
         .toEqual(tile);
       const status = await page.locator('.planet-map-canvas__status').innerText();
       const selectionLine = status.split('\n').find((line) => /地块|建筑|单位|资源|小队|未选中对象/.test(line)) ?? '';
+      if (/^(资源|建筑|单位|小队) /.test(selectionLine) && !/\(\d+, \d+/.test(selectionLine)) {
+        continue; // 点中了格上的实体（状态栏只报实体名、不带坐标），换一格校验坐标
+      }
       expect(selectionLine, `点击 (${tile.x}, ${tile.y}) 后状态栏应报同一格`).toMatch(
         new RegExp(`(未选中对象|\\(${tile.x}, ${tile.y}, \\d+\\))`),
       );

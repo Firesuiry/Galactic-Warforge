@@ -20,6 +20,12 @@ import (
 const (
 	// unitBlockedRepathTicks 单位被占位阻挡超过该 tick 数后尝试重寻路。
 	unitBlockedRepathTicks = 20
+	// unitBlockedRepathEvery 首次重寻路仍没走通后，每隔该 tick 数再试一次
+	// （一群单位挤在一起时每 tick 重寻路是纯开销：路况几乎不变）。
+	unitBlockedRepathEvery = 10
+	// unitYieldAfterTicks 被自家待命单位挡住超过该 tick 数后请它让路
+	// （先给对方自然走开/侧移的机会，避免擦肩而过时也互相推挤）。
+	unitYieldAfterTicks = 3
 	// unitBlockedAbandonTicks 连续被单位阻挡且绕不开超过该 tick 数后放弃当前路径：
 	// 单位停在原地（不瞬移、不重叠），姿态/终点保留，由上层（姿态恢复/索敌）
 	// 重新决策。这是单位挤成一团时唯一的出口——否则 path_index/move_progress
@@ -69,6 +75,13 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 				}
 				unit.BlockedTicks++
 				unit.MoveProgress = 1
+				// 挡路的是自家闲着的单位：让它让路（侧移或与赶路者互换位置）。
+				// 窄口被自家待命兵堵住时绕路无解，只能请它挪开（试玩 1011 回归 seed pt1009-g2：
+				// bot 机甲被自家一个待命步兵堵在基地窄口 6000+ tick，整局只打了一波）。
+				if unit.BlockedTicks >= unitYieldAfterTicks && yieldIdleBlocker(ws, unit, next) {
+					unit.BlockedTicks = 0
+					continue
+				}
 				if unit.BlockedTicks >= unitBlockedAbandonTicks {
 					// 长期绕不开：放弃当前路径但保留命令意图，避免
 					// path_index/move_progress 永久不变地把单位钉死。
@@ -78,15 +91,18 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 					stopUnitMovement(unit)
 					continue
 				}
-				if unit.BlockedTicks >= unitBlockedRepathTicks {
+				if unit.BlockedTicks >= unitBlockedRepathTicks && (unit.BlockedTicks-unitBlockedRepathTicks)%unitBlockedRepathEvery == 0 {
 					// 优先绕开待命单位重寻路；绕不开再按原规则重寻路（继续等对方让开）。
 					// 注意：重寻路成功不代表能走通——一群单位互相占位时 BFS 会把
 					// 占位单位当障碍，仍可能回到同一条被堵死的路，因此 BlockedTicks
 					// 继续累积，由上面的放弃阈值兜底。
+					// 新路径第一步仍被占位就等下一 tick：同一 tick 里"重寻路成功→仍被堵
+					// →再重寻路"会一口气空转到放弃阈值，几百次寻路压在一个 tick 上。
 					if repathUnitAvoidingIdle(ws, unit) || repathUnit(ws, unit) {
-						continue
+						if !unit.HasPath() || tileWalkableForUnit(ws, unit.Path[unit.PathIndex], unit.ID) {
+							continue
+						}
 					}
-					unit.BlockedTicks = unitBlockedRepathTicks
 				}
 				break
 			}
@@ -182,6 +198,50 @@ func sidestepUnit(ws *model.WorldState, unit *model.Unit) bool {
 	unit.BlockedTicks = 0
 	newKey := model.TileKey(best.X, best.Y)
 	ws.TileUnits[newKey] = append(ws.TileUnits[newKey], unit.ID)
+	return true
+}
+
+// yieldIdleBlocker 下一格被一个己方待命地面单位独占时请它让路，返回是否让开。
+// 只挪无路径、非坚守、不在作业中的同阵营单位：优先侧移到不挡路的空邻格
+// （不回赶路者当前格、不占它路径的下一步）；没有空邻格（一格宽窄口）就与赶路者互换位置。
+// 互换时赶路者本 tick 必须走得动（机甲要付得起一步的能量），否则两者会叠在同一格。
+func yieldIdleBlocker(ws *model.WorldState, unit *model.Unit, next model.Position) bool {
+	air := unitIsAir(ws, unit.ID)
+	var blocker *model.Unit
+	for _, id := range ws.TileUnits[model.TileKey(next.X, next.Y)] {
+		other := ws.Units[id]
+		if other == nil || other.HP <= 0 || other.ID == unit.ID || (other.Domain == model.UnitDomainAir) != air {
+			continue
+		}
+		if blocker != nil {
+			return false
+		}
+		blocker = other
+	}
+	if blocker == nil || blocker.OwnerID != unit.OwnerID || blocker.HasPath() || blocker.Stance == model.UnitStanceHold ||
+		(blocker.Mecha != nil && blocker.Mecha.Job != nil) {
+		return false
+	}
+	var after *model.Position
+	if unit.PathIndex+1 < len(unit.Path) {
+		p := unit.Path[unit.PathIndex+1]
+		after = &p
+	}
+	dest := unit.Position
+	for _, n := range ws.SurfaceNeighbors(blocker.Position) {
+		if n == unit.Position || (after != nil && n == *after) || !tileWalkableForUnit(ws, n, blocker.ID) {
+			continue
+		}
+		dest = n
+		break
+	}
+	if dest == unit.Position && unit.Mecha != nil && unit.Mecha.Energy < unit.Mecha.MoveEnergyCost {
+		return false
+	}
+	removeUnitFromTile(ws, model.TileKey(blocker.Position.X, blocker.Position.Y), blocker.ID)
+	blocker.Position = dest
+	key := model.TileKey(dest.X, dest.Y)
+	ws.TileUnits[key] = append(ws.TileUnits[key], blocker.ID)
 	return true
 }
 

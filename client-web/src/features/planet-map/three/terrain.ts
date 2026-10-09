@@ -149,6 +149,10 @@ export const SHADER_COLOR = /* glsl */`
   vec3 swAlbedo = texture2D(swOverviewColor, swOverviewUV).rgb;
   vec4 swCoast = texture2D(swOverviewCoast, swOverviewUV);
   vec2 swCellUV = fract(swUV * swOverviewDimensions);
+  // Fog boundary glow: an unknown cell that touches an explored cell in the local
+  // scene window. Sampled from the same atlas the surface reads, so a fog edge can
+  // never imply undiscovered terrain data.
+  float swKnownEdge = 0.0;
   for(int i=0;i<7;i++) {
     vec4 bounds = swPatchBounds[i];
     if(bounds.z <= 0.0) continue;
@@ -161,6 +165,16 @@ export const SHADER_COLOR = /* glsl */`
       swAlbedo = texture2D(swLocalColor,packedUV).rgb;
       swCoast = texture2D(swLocalCoast,packedUV);
       swCellUV = fract(swUV * swMapDimensions);
+      if(swProps.b < 0.5) {
+        vec2 low = rect.xy+texel, high = rect.xy+rect.zw-texel;
+        for(int dy=-1;dy<=1;dy++) {
+          for(int dx=-1;dx<=1;dx++) {
+            if(dx==0 && dy==0) continue;
+            float neighbor = texture2D(swLocalProperties, clamp(packedUV + vec2(float(dx),float(dy))*texel, low, high)).b;
+            swKnownEdge = max(swKnownEdge, smoothstep(0.05,0.95,neighbor));
+          }
+        }
+      }
     }
   }
   float swMapWidth = swMapDimensions.x;
@@ -197,15 +211,34 @@ export const SHADER_COLOR = /* glsl */`
   swAlbedo += vec3(0.12, 0.20, 0.19) * swFoam * (0.6 + swWaveB * 0.2);
   // The uncharted hemisphere is an unmapped survey veil: a clearly visible dark
   // slate surface so the planet silhouette never disappears into the starfield.
-  // It stays well below explored land values, and its grain is a pure function of
-  // position (never swTime) so screenshot baselines remain reproducible.
+  // Close up it must read as terrain, not a flat wash: a tile-scale survey grid
+  // (thin, low contrast, anti-aliased through fwidth) plus tile-scale fine relief.
+  // The grid fades out with distance so the globe keeps the original dark veil
+  // and never shimmers into moire. Everything is a pure function of position
+  // (never swTime) so screenshot baselines remain reproducible.
   float swVeilPatch = swFbm(swP * 6.5 + 3.1);
   float swVeilGrain = mix(0.5, swFbm(swSurfacePosition * 1.6 + 11.0), swMicroDetail);
-  vec3 swVeil = vec3(0.046, 0.062, 0.088) * (0.82 + swContinental * 0.08 + swVeilPatch * 0.10 + swVeilGrain * 0.10);
+  float swVeilRelief = mix(0.5, swNoise(swSurfacePosition * 24.0 + 5.0), 1.0 - smoothstep(0.03, 0.14, swPixelFootprint));
+  // Tile-scale grid: one line per map cell, only legible while a cell spans a
+  // reasonable pixel footprint (close range); fades out well before the globe view.
+  float swGridCell = max(1.0, swMapWidth * 0.02);
+  vec2 swGridUV = swCellUV * max(1.0, 1.0 / swGridCell);
+  vec2 swGridWidth = fwidth(swGridUV);
+  vec2 swGridLine = 1.0 - smoothstep(vec2(0.0), swGridWidth * 1.6, abs(fract(swGridUV + 0.5) - 0.5));
+  float swGridFade = 1.0 - smoothstep(0.02, 0.10, swPixelFootprint);
+  float swSurveyGrid = max(swGridLine.x, swGridLine.y) * swGridFade;
+  vec3 swVeil = vec3(0.046, 0.062, 0.088) * (0.82 + swContinental * 0.08 + swVeilPatch * 0.10 + swVeilGrain * 0.10 + swVeilRelief * 0.07);
+  swVeil += vec3(0.030, 0.052, 0.062) * swSurveyGrid * 0.75;
+  // Fog frontier edge light: a soft band where the unknown region meets explored
+  // land, so the boundary reads as a scan frontier instead of a hard cut.
+  swVeil += vec3(0.055, 0.105, 0.115) * swKnownEdge * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 0.5, length(swCellUV - 0.5))));
   swAlbedo = mix(swVeil, swAlbedo, swKnown);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
   float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swWaveHeight, swWater) * swKnown;
+  // Unknown cells keep a shallow tile-scale relief so the close ground view has
+  // horizon/relief cues (gated by (1 - swKnown), never leaks explored terrain).
+  swHeight += swVeilRelief * 0.010 * (1.0 - swKnown);
 `;
 
 export function createPlanetSurface(radius: number): PlanetSurface {
@@ -236,7 +269,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v3';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v4';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';

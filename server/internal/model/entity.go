@@ -118,6 +118,20 @@ const (
 	UnitStanceRetreat UnitStance = "retreat"
 )
 
+// PathIntent 当前路径的意图。它区分「玩家显式命令的行走」与「作业/建造驱动的行走」，
+// 决定执行体机甲被威胁时的行为：显式命令的路径边走边打（不停下、不被钓走），
+// 作业/建造驱动的行走则暂停去还手、威胁解除后继续赶路。
+type PathIntent string
+
+const (
+	// PathIntentOrder 玩家显式 move/attack 命令下达的路径：边走边打。
+	PathIntentOrder PathIntent = "order"
+	// PathIntentTask 作业/建造驱动的行走（施工自动靠近）：被威胁时暂停。
+	PathIntentTask PathIntent = "task"
+	// PathIntentCombat 自动交战的追击路径：持续追到射程内开火。
+	PathIntentCombat PathIntent = "combat"
+)
+
 // Unit represents a mobile unit entity
 type Unit struct {
 	SquadID          string        `json:"squad_id,omitempty"`
@@ -149,6 +163,7 @@ type Unit struct {
 	MoveSpeed      float64    `json:"move_speed"`                 // 格/tick
 	Path           []Position `json:"path,omitempty"`             // 完整路径（含起点）
 	PathIndex      int        `json:"path_index,omitempty"`       // 下一个目标格下标
+	PathIntent     PathIntent `json:"path_intent,omitempty"`      // 当前路径的意图（order/task/combat）
 	MoveProgress   float64    `json:"move_progress,omitempty"`    // 向下一格推进的累计进度
 	BlockedTicks   int        `json:"blocked_ticks,omitempty"`    // 被占位阻挡的连续 tick 数
 	RepathTick     int64      `json:"repath_tick,omitempty"`      // 上次追击重寻路 tick
@@ -206,6 +221,7 @@ func (u *Unit) Clone() *Unit {
 func (u *Unit) ClearMovement() {
 	u.Path = nil
 	u.PathIndex = 0
+	u.PathIntent = ""
 	u.MoveProgress = 0
 	u.BlockedTicks = 0
 }

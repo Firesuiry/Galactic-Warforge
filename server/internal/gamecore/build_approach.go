@@ -32,5 +32,6 @@ func startBuildApproach(unit *model.Unit, path []model.Position) {
 	unit.ClearEngagement()
 	unit.Path = path
 	unit.PathIndex = 1
+	unit.PathIntent = model.PathIntentTask
 	unit.Stance = model.UnitStanceMoving
 }

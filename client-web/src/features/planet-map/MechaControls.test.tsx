@@ -136,10 +136,37 @@ it('explains the busy job instead of claiming the backpack is short', () => {
 
 it('craftBlockReason prioritizes the running job over a material shortage', () => {
   const job = { kind: 'craft', recipe_id: 'gear', completed_batches: 14, remaining_batches: 15, remaining_ticks: 30, ticks_per_batch: 100 };
-  expect(craftBlockReason({ hasRecipe: true, missingTech: false, missingItems: true, hasPlayer: true, job, recipeName: '铜块', resourceName: '' }))
+  expect(craftBlockReason({ hasRecipe: true, missingTech: false, missingItems: true, hasPlayer: true, job, jobRecipeName: '铜块', resourceName: '' }))
     .toContain('机甲正在手搓 铜块');
-  expect(craftBlockReason({ hasRecipe: true, missingTech: false, missingItems: true, hasPlayer: true, recipeName: '铜块', resourceName: '' }))
+  expect(craftBlockReason({ hasRecipe: true, missingTech: false, missingItems: true, hasPlayer: true, jobRecipeName: '', resourceName: '' }))
     .toBe('背包原料不足，请先采集或取回原料。');
-  expect(craftBlockReason({ hasRecipe: true, missingTech: false, missingItems: false, hasPlayer: true, recipeName: '铜块', resourceName: '' }))
+  expect(craftBlockReason({ hasRecipe: true, missingTech: false, missingItems: false, hasPlayer: true, jobRecipeName: '', resourceName: '' }))
     .toBeNull();
+});
+
+it('任务名取 job.recipe_id 的显示名，而不是下拉框选中的配方（试玩 1011 F）', () => {
+  // 机甲正在手搓磁铁（job.recipe_id = smelt_magnet），玩家把下拉框切到玻璃：
+  // 面板必须写「机甲正在手搓 磁铁」，不能写「玻璃」。
+  const magnetCatalog = {
+    ...craftingCatalog,
+    recipes: [
+      ...(craftingCatalog.recipes ?? []),
+      { id: 'smelt_magnet', name: '磁铁', handcraft_allowed: true, inputs: [{ item_id: 'iron_ingot', quantity: 1 }], outputs: [{ item_id: 'magnet', quantity: 1 }], duration: 4, energy_cost: 20 },
+      { id: 'glass', name: '玻璃', handcraft_allowed: true, inputs: [{ item_id: 'iron_ingot', quantity: 1 }], outputs: [{ item_id: 'glass', quantity: 1 }], duration: 4, energy_cost: 20 },
+    ],
+  } as CatalogView;
+  const busy: Unit = {
+    ...unit,
+    mecha: {
+      ...unit.mecha!,
+      job: { kind: 'craft', recipe_id: 'smelt_magnet', remaining_ticks: 30, ticks_per_batch: 100, remaining_batches: 15, completed_batches: 14, energy_per_batch: 3, state: 'running' },
+    },
+  };
+  render(<MechaControls unit={busy} catalog={magnetCatalog} planetId="planet-1-1" canControl player={{ player_id: 'p1', is_alive: true, inventory: { iron_ingot: 20 } }} />);
+  // 下拉框切到玻璃（默认选中第一个可手搓配方 = gear；显式切到 glass）
+  fireEvent.change(screen.getByLabelText('个人制造配方'), { target: { value: 'glass' } });
+  expect(screen.getByRole('status')).toHaveTextContent('机甲正在手搓 磁铁');
+  expect(screen.getByRole('status')).not.toHaveTextContent('机甲正在手搓 玻璃');
+  // 任务面板标题同样取 job.recipe_id
+  expect(screen.getByLabelText('机甲任务')).toHaveTextContent('制造 磁铁');
 });

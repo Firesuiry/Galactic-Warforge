@@ -163,11 +163,15 @@ describe('conveyor rendering batches', () => {
     expect(renderer.refresh([lane], 16)).toBe(true);
     renderer.dispose();
   });
-  it('keeps the whole network at three draws and picks the correct original tile', () => {
+  it('keeps the whole network at three draws plus one flow-texture surface, and picks the correct original tile', () => {
     const renderer=new ConveyorGeometry();
     const buildings=Array.from({length:10},(_,i)=>belt(String(i),i+2,7));
     expect(renderer.refresh(buildings,16)).toBe(true);
-    expect(renderer.group.children).toHaveLength(3);
+    // 三段结构 + 一段带体顶面流向贴图（流向 chevron 全部走 UV 滚动，不新增每格几何体）。
+    expect(renderer.group.children).toHaveLength(4);
+    const surface = renderer.group.children[3] as THREE.Mesh;
+    expect(surface.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect((surface.material as THREE.MeshBasicMaterial).map).toBeTruthy();
     const mesh=renderer.group.children[0] as THREE.Mesh;
     const indices=mesh.geometry.getAttribute('tileIndex');
     const triangle=Array.from({length:indices.count/3},(_,i)=>i).find(i=>indices.getX(i*3)===7)!;
@@ -177,11 +181,30 @@ describe('conveyor rendering batches', () => {
     const ray = new THREE.Raycaster(normal.clone().multiplyScalar(110),normal.clone().negate());
     const hits = ray.intersectObject(renderer.group,true);
     expect(hits.length).toBeGreaterThan(0);
-    expect(renderer.resolveHit(hits[0])).toEqual({x:9,y:7});
+    // 拾取必须命中结构层（顶面流向层是独立 mesh，resolveHit 只认它自己的 tileIndex）。
+    expect(renderer.resolveHit(hits.find(hit => hit.object === mesh)!)).toEqual({x:9,y:7});
     expect(renderer.refresh(buildings.map(b=>({...b,conveyor:{...b.conveyor!,buffer:[{item_id:'iron_ore',quantity:3}]}})),16)).toBe(false);
     expect(renderer.group.children[0]).toBe(mesh);
     expect(renderer.refresh([],16)).toBe(true);
     expect(renderer.group.children).toHaveLength(0);
+    renderer.dispose();
+  });
+
+  it('scrolls the flow texture with belt speed and freezes when idle', () => {
+    const renderer = new ConveyorGeometry();
+    renderer.refresh(Array.from({length:3},(_,i)=>belt(String(i),i+2,7)),16);
+    const map = (renderer.group.children[3] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>).material.map!;
+    const before = map.offset.x;
+    renderer.update(1, 0);
+    expect(map.offset.x).toBe(before);
+    renderer.update(1, 0.25);
+    expect(map.offset.x).toBeCloseTo(before - 0.25, 6);
+    renderer.update(1, 0.25);
+    expect(map.offset.x).toBeCloseTo(before - 0.5, 6);
+    // 偏移量循环在 [-1, 0)，长时间运行不会丢精度。
+    for (let i = 0; i < 10; i++) renderer.update(1, 0.25);
+    expect(map.offset.x).toBeLessThanOrEqual(0);
+    expect(map.offset.x).toBeGreaterThan(-1);
     renderer.dispose();
   });
 });

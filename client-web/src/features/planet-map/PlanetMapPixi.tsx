@@ -446,7 +446,7 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
           x: hoveredTile.x,
           y: hoveredTile.y,
           z: 0,
-        }, session.playerId, interactionMode.rotation, inventory)
+        }, session.playerId, interactionMode.rotation, inventory, runtime)
       : undefined;
     sceneRef.current?.setInteraction({
       hoveredTile,

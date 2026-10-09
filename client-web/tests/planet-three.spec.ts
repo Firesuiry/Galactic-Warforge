@@ -322,3 +322,52 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   await page.screenshot({ path: '/tmp/siliconworld-3d.png', fullPage: true });
   expect(errors).toEqual([]);
 });
+
+test('镜头聚焦未探索区：地表是测绘网格而不是一片空白，提示条可一键回到基地', async ({ page }) => {
+  test.setTimeout(120_000);
+  // 找一格对 p1 确实未探索的格子（场景窗口里 explored=false）。
+  let target: Tile | null = null;
+  for (const candidate of [{ x: 120, y: 80 }, { x: 100, y: 20 }, { x: 70, y: 90 }, { x: 140, y: 10 }]) {
+    const response = await fetch(`${backend}/world/planets/${planetId}/scene?x=${candidate.x}&y=${candidate.y}&width=1&height=1`, {
+      headers: { authorization: 'Bearer key_player_1' },
+    });
+    const data = await response.json() as { explored?: boolean[][] };
+    if (data.explored?.[0]?.[0] === false) { target = candidate; break; }
+  }
+  expect(target, '战争服地图上应有 p1 未探索的格子').not.toBeNull();
+  await page.addInitScript(() => {
+    localStorage.setItem('siliconworld-client-web-session', JSON.stringify({
+      state: { serverUrl: location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0,
+    }));
+  });
+  await page.goto(`/planet/${planetId}?quality=low`);
+  const canvas = page.locator('.planet-three__surface canvas');
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
+  await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: ThreeDebug }).__planetThree?.project));
+  const home = await page.evaluate(() => (window as unknown as { __planetThree: ThreeDebug }).__planetThree.getCenterTile());
+
+  await page.evaluate(point => (window as unknown as { __planetThree: ThreeDebug }).__planetThree.focus(point, true), target!);
+  const notice = page.locator('.planet-three__uncharted');
+  await expect(notice).toContainText('未探索区域', { timeout: 15_000 });
+
+  // 画面不能是单一颜色（1010 D / 1011 截图 56：整屏均匀灰蓝）：统计亮度标准差。
+  const spread = await page.evaluate(() => {
+    const element = document.querySelector('.planet-three__surface canvas') as HTMLCanvasElement;
+    const gl = (element.getContext('webgl2') ?? element.getContext('webgl')) as WebGLRenderingContext;
+    const pixels = new Uint8Array(element.width * element.height * 4);
+    gl.readPixels(0, 0, element.width, element.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let count = 0, sum = 0, squares = 0;
+    for (let index = 0; index < pixels.length; index += 4 * 31) {
+      const luma = 0.299 * pixels[index] + 0.587 * pixels[index + 1] + 0.114 * pixels[index + 2];
+      count++; sum += luma; squares += luma * luma;
+    }
+    const mean = sum / count;
+    return Math.sqrt(squares / count - mean * mean);
+  });
+  expect(spread).toBeGreaterThan(4);
+
+  await notice.getByRole('button', { name: '回到基地' }).click();
+  await expect(notice).toHaveCount(0, { timeout: 15_000 });
+  const back = await page.evaluate(() => (window as unknown as { __planetThree: ThreeDebug }).__planetThree.getCenterTile());
+  expect(Math.abs(back.x - home.x) + Math.abs(back.y - home.y)).toBeLessThan(8);
+});

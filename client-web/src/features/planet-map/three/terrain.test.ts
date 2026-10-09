@@ -83,10 +83,32 @@ describe('3D player-visible terrain', () => {
     const veilBlock = SHADER_COLOR.slice(SHADER_COLOR.indexOf('float swVeilPatch'), SHADER_COLOR.indexOf('swAlbedo = mix(swVeil'));
     expect(veilBlock).toContain('swFbm');
     expect(veilBlock).not.toContain('swTime');
-    // Terrain relief stays exclusive to known cells: height is gated by swKnown.
+    // Close ground view must not be a flat wash: tile-scale survey grid + fine
+    // relief, both faded out with camera distance so the globe view stays clean.
+    expect(veilBlock).toContain('swSurveyGrid');
+    expect(veilBlock).toContain('swVeilRelief');
+    expect(veilBlock).toContain('swGridFade');
+    expect(SHADER_COLOR).toContain('fwidth(swGridUV)');
+    // Terrain relief stays exclusive to known cells for explored terrain, while
+    // unknown cells get their own relief gated by (1.0 - swKnown).
     expect(SHADER_COLOR).toContain('* swKnown;');
+    expect(SHADER_COLOR).toContain('swVeilRelief * 0.010 * (1.0 - swKnown)');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v3');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v4');
+    disposePlanetSurface(mesh);
+  });
+
+  it('lights the fog frontier from explored neighbours without reading hidden biomes', () => {
+    // The frontier glow is derived from the same properties atlas the surface
+    // samples: unknown cells (b < 0.5) inspect their 8 atlas neighbours' known bit
+    // and never read hidden terrain/colour data.
+    const edgeBlock = SHADER_COLOR.slice(SHADER_COLOR.indexOf('if(swProps.b < 0.5)'), SHADER_COLOR.indexOf('float swMapWidth'));
+    expect(edgeBlock).toContain('swProps.b < 0.5');
+    expect(edgeBlock).toContain('swLocalProperties');
+    expect(edgeBlock).not.toContain('swLocalColor');
+    expect(SHADER_COLOR).toContain('swKnownEdge *');
+    const mesh = createPlanetSurface(100);
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v4');
     disposePlanetSurface(mesh);
   });
 

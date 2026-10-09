@@ -36,17 +36,20 @@ players:
       operate_range: 6
       concurrent_tasks: 2
       research_boost: 0.0
-    # 开局物资包（双方相同）：够直接建 风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、传送带×20，
-    # 外加 20 块煤给机甲补能。之后靠自己的产线推进。
+    # 开局物资包（双方相同）：够直接建 风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、
+    # 传送带×20、矩阵研究站×1，外加 20 块煤给机甲补能。之后靠自己的产线推进。
+    # 各建筑成本合计：铁块 102、齿轮 39、磁线圈 29、电路板 24、石砖 4、玻璃 4，
+    # 矿物 910、能量 350；这里留少量余量（铁块 110、磁线圈 30）供施工期间的损耗。
     bootstrap: &skirmish_kit
       minerals: 1200
       energy: 400
       inventory:
-        - { item_id: iron_ingot, quantity: 100 }
+        - { item_id: iron_ingot, quantity: 110 }
         - { item_id: gear, quantity: 40 }
-        - { item_id: magnetic_coil, quantity: 26 }
-        - { item_id: circuit_board, quantity: 20 }
+        - { item_id: magnetic_coil, quantity: 30 }
+        - { item_id: circuit_board, quantity: 24 }
         - { item_id: stone_brick, quantity: 4 }
+        - { item_id: glass, quantity: 4 }
         - { item_id: coal, quantity: 20 }
   - player_id: "p2"
     key: "key_player_2"

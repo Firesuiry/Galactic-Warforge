@@ -8,6 +8,7 @@ import type {
   ItemInventory,
   PlanetResource,
   PlanetNetworksView,
+  PlanetRuntimeView,
   Position,
   RecipeCatalogEntry,
   StateSummary,
@@ -79,6 +80,20 @@ export interface BuildBlockedTile {
   reason: "terrain" | "building" | "resource" | "missing_resource" | "missing_host" | "unexplored";
   buildingId?: string;
   resourceId?: string;
+  /**
+   * 占位者信息（reason === 'building' 时）：建筑类型与是否己方，用于本地文案与服务端
+   * tileOccupiedMessage 完全同口径（「该格已有你的建筑：风力涡轮机」/「该格已有其他玩家的建筑：X」）。
+   * 类型未知（数据缺失）时留空，由文案层回退到「已被建筑占用」。
+   */
+  blockingBuildingType?: string;
+  blockingBuildingOwn?: boolean;
+  /** 施工任务信息（reason === 'building' 且该格被施工预留时）。 */
+  blockingConstruction?: {
+    /** 该施工任务的建筑类型（服务端 constructionReservationMessage 用目录显示名）。 */
+    buildingType?: string;
+    own: boolean;
+    state: string;
+  };
 }
 
 export interface BuildTileAssessment {
@@ -140,8 +155,20 @@ export function compareBuildItems(entry: Pick<BuildingCatalogEntry, 'build_cost'
   });
 }
 
-/** 预览旁显示的中文原因：缺料优先，其次第一处格子阻挡（原因与锚点格由 primaryBlockedTile 定序）。 */
-export function describeBuildBlock(assessment: BuildTileAssessment, itemName: (itemId: string) => string = (id) => id): string {
+/**
+ * 预览旁显示的中文原因：缺料优先，其次第一处格子阻挡（原因与锚点格由 primaryBlockedTile 定序）。
+ *
+ * 占位（reason 'building'）必须与服务端回执完全同口径
+ * （server/internal/gamecore/build_commands.go 的 tileOccupiedMessage /
+ * constructionReservationMessage）：「该格已有你的建筑：风力涡轮机」/
+ * 「该格已有其他玩家的建筑：X」/「该格已有你的施工任务：传送带 Mk.I（排队中）」。
+ * 本地仍然拦截（不发命令），但玩家看到的文字与服务端一致（试玩 1011 E）。
+ */
+export function describeBuildBlock(
+  assessment: BuildTileAssessment,
+  itemName: (itemId: string) => string = (id) => id,
+  buildingName: (buildingType: string) => string = (type) => type,
+): string {
   if (assessment.missingItems.length > 0) {
     return `缺少 ${assessment.missingItems.map((item) => `${itemName(item.item_id)} ${item.quantity - item.owned}`).join('、')}`;
   }
@@ -149,12 +176,35 @@ export function describeBuildBlock(assessment: BuildTileAssessment, itemName: (i
   if (!blocked) return '';
   switch (blocked.reason) {
     case 'terrain': return '地形不可建造';
-    case 'building': return '已被建筑占用';
+    case 'building': return describeTileOccupant(blocked, buildingName);
     case 'resource': return '被资源点占用';
     case 'missing_host': return '需要建在己方仓库上';
     case 'unexplored': return '未探索区域，是否可建由服务器判定';
     default: return '需要建在资源点上';
   }
+}
+
+/** 施工任务状态 → 服务端 constructionReservationMessage 的措辞（排队中 / 建造中）。 */
+function constructionStateLabel(state: string) {
+  return state === 'in_progress' ? '建造中' : '排队中';
+}
+
+/** 占位回执文案：施工任务优先（服务端先查建筑再查施工预留，但同格两者不可能共存）。 */
+function describeTileOccupant(
+  blocked: BuildBlockedTile,
+  buildingName: (buildingType: string) => string,
+): string {
+  const task = blocked.blockingConstruction;
+  if (task) {
+    const owner = task.own ? '你的' : '其他玩家的';
+    const name = task.buildingType ? buildingName(task.buildingType) : '';
+    return `该格已有${owner}施工任务：${name}（${constructionStateLabel(task.state)}）`;
+  }
+  if (blocked.blockingBuildingType) {
+    const owner = blocked.blockingBuildingOwn ? '你的' : '其他玩家的';
+    return `该格已有${owner}建筑：${buildingName(blocked.blockingBuildingType)}`;
+  }
+  return '已被建筑占用';
 }
 
 /**
@@ -301,6 +351,7 @@ function buildTileAssessment(input: {
   catalog?: CatalogView;
   buildingType?: string;
   planet: PlanetRenderView;
+  runtime?: PlanetRuntimeView;
   selectedPosition?: Position;
 }) {
   if (!input.selectedPosition) {
@@ -327,6 +378,19 @@ function buildTileAssessment(input: {
   const canPrepareTerrain = (terrain: string) => isFoundation && ["water", "lava", "blocked"].includes(terrain);
   const blockedTiles: BuildBlockedTile[] = [];
   const resources = getResourceList(input.planet);
+  // 施工任务（服务端权威）：同格已有施工预留时，占位回执必须说「施工任务」而不是「建筑」
+  // （试玩 1011 E）。施工任务列表只含己方任务，别人的任务只能靠「同一格 + 类型不同」推断。
+  const constructionTasks = input.runtime?.construction_tasks?.filter(
+    (task) => task.state !== 'cancelled' && task.state !== 'completed',
+  ) ?? [];
+  const constructionAt = (x: number, y: number) => constructionTasks.find(
+    (task) => Math.round(task.position.x) === x && Math.round(task.position.y) === y,
+  );
+  const constructionBlocker = (task: NonNullable<ReturnType<typeof constructionAt>>) => ({
+    buildingType: task.building_type,
+    own: Boolean(input.playerId) && task.player_id === input.playerId,
+    state: task.state,
+  });
   let unexploredTiles = 0;
 
   if (isDistributor) {
@@ -338,7 +402,16 @@ function buildTileAssessment(input: {
     const mounted = buildings.find(building => building.type === 'logistics_distributor'
       && building.position.x === input.selectedPosition!.x && building.position.y === input.selectedPosition!.y);
     const terrain = getTerrainTile(input.planet, input.selectedPosition.x, input.selectedPosition.y);
-    if (!host || mounted) blockedTiles.push({ ...input.selectedPosition, terrain, reason: mounted ? 'building' : 'missing_host', buildingId: mounted?.id });
+    if (!host || mounted) blockedTiles.push({
+      ...input.selectedPosition,
+      terrain,
+      reason: mounted ? 'building' : 'missing_host',
+      buildingId: mounted?.id,
+      ...(mounted ? {
+        blockingBuildingType: mounted.type,
+        blockingBuildingOwn: Boolean(input.playerId) && mounted.owner_id === input.playerId,
+      } : {}),
+    });
     return { footprint, anchor, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0 && missingItems.length === 0, blockedTiles, unexploredTiles, missingItems, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
   }
 
@@ -348,6 +421,7 @@ function buildTileAssessment(input: {
       const terrain = getTerrainTile(input.planet, x, y);
       const blockingBuilding = Object.values(input.planet.buildings ?? {}).find((building) => (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3));
       const blockingResource = findBlockingResource(resources, x, y);
+      const blockingTask = constructionAt(x, y);
 
       // 未探索格：客户端没有该格地形（unknown），是否可建只有服务端知道——
       // 记为 unexplored（不拦截），让 build 命令照常下发，以服务端回执为准。
@@ -364,6 +438,19 @@ function buildTileAssessment(input: {
           terrain,
           reason: "building",
           buildingId: blockingBuilding.id,
+          blockingBuildingType: blockingBuilding.type,
+          blockingBuildingOwn: Boolean(input.playerId) && blockingBuilding.owner_id === input.playerId,
+        });
+      } else if (blockingTask) {
+        // 该格已被施工任务预留：服务端 execBuild 在占位检查之后、Enqueue 之前直接回
+        // constructionReservationMessage（IsTileReserved 命中即拒，与建筑类型无关）。
+        // 这里据此把该格记为阻挡，文案与服务端同口径（试玩 1011 E）。
+        blockedTiles.push({
+          x,
+          y,
+          terrain,
+          reason: "building",
+          blockingConstruction: constructionBlocker(blockingTask),
         });
       }
       if (blockingResource && !requiresResourceNode) {
@@ -508,8 +595,9 @@ export function assessBuildTiles(
   playerId?: string,
   rotation?: number,
   inventory?: ItemInventory,
+  runtime?: PlanetRuntimeView,
 ): BuildTileAssessment | undefined {
-  return buildTileAssessment({ catalog, buildingType, planet, selectedPosition: position, playerId, rotation, inventory });
+  return buildTileAssessment({ catalog, buildingType, planet, runtime, selectedPosition: position, playerId, rotation, inventory });
 }
 
 /** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */
@@ -561,6 +649,7 @@ export function deriveBuildWorkflowView(input: {
   networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   playerId: string;
+  runtime?: PlanetRuntimeView;
   selectedPosition?: Position;
   summary?: StateSummary;
 }): BuildWorkflowView {

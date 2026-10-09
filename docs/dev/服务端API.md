@@ -64,7 +64,7 @@ cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-sk
   - 取值依据（`pace_research 2`）：1 台制造台产 1 个电磁矩阵 60 tick（无加速）；熟练玩家并行 2–3 台制造台供矩阵时，电磁学 = 20 个矩阵约 tick 5000–8000 完成；`weapon_system`（基准 20 → 40 个）连同 `automatic_metallurgy` 前置链约 tick 12000–18000 拿到炮塔，即 `bot_first_attack_tick`（16000）前后玩家已有防御。回归测试 `TestSkirmishResearchPaceAllowsCoreTechs`。
 - `battlefield.dark_fog_calm_ticks`（任何配置可用，默认 6000）：黑雾被激怒后多久恢复中立，见 5.4。
 - `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 16000，之前军团只守家。
-- 双方相同的开局物资包（`players[].bootstrap`）：`minerals 1200`、`energy 400`，铁块 100、齿轮 40、磁线圈 26、电路板 20、石砖 4、煤 20，够直接建风机 ×3、电感应塔 ×4、采矿机 ×4、电弧熔炉 ×2、制造台 ×1、传送带约 20 段。回归测试 `TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500`（约 3 秒一条命令，tick 1500 内供电、采矿、冶炼都已运转）与 `TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，tick 15000–25000 首次进攻玩家）。
+- 双方相同的开局物资包（`players[].bootstrap`）：`minerals 1200`、`energy 400`，铁块 110、齿轮 40、磁线圈 30、电路板 24、石砖 4、玻璃 4、煤 20，够直接建风机 ×3、电感应塔 ×4、采矿机 ×4、电弧熔炉 ×2、制造台 ×1、传送带约 20 段、矩阵研究站 ×1（含 4 玻璃，试玩报告 1011：三局都卡在「研究站要 4 玻璃」）。回归测试 `TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500`（约 3 秒一条命令，tick 1500 内供电、采矿、冶炼都已运转）、`TestSkirmishKitBuildsFullOpeningIncludingMatrixLab`（同一份物资包刚好够建完整套含矩阵研究站）与 `TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，tick 15000–25000 首次进攻玩家）。
 
 ### 官方中后期场景（`config-midgame.yaml` + `map-midgame.yaml`）
 
@@ -275,11 +275,14 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - `mecha` 字段：`energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `inventory_capacity` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick` / `job` / `logistics_requests`。
 - 初始核心 100、护盾容量 0。科技：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +2 移动范围/级（基础 12）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +1 视野/级（基础 6）。研究只提高上限，不补能。
-- 自动交战（`settleMechaAutoFire`）：显式 `attack` 目标在射程内持续开火；**空闲**与**手搓中**的机甲都按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+6`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。自动开火不写 `attack_target`，并保留两发的能量。
+- 自动交战（`settleMechaAutoFire`）：**机甲不会因为「正在走路」而不还手**（试玩报告 1011 新问题 C：执行移动/建造指令的机甲被 8 个兵从 120 血打到 0、一次没开火）。
+  - 有路径时按 `path_intent` 分两类：玩家显式 `move` / `attack` 命令的路径（`order`）**边走边打**——不改路径、不停下，只对 `attack_range` 内的敌对目标（优先 `last_attacker_id`）按冷却开火；作业/建造驱动的行走（`task`，即 `build` + `auto_approach` 的施工自动靠近）附近有威胁时按防御处理——暂停作业、去还手（受接战锚点牵引约束），威胁消失后恢复作业并重新规划施工路径。
+  - 无路径（空闲/手搓中）：按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+6`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。
+  - 自动开火不写 `attack_target`，并保留两发的能量。
 - 受击满 10 tick 后每 tick 消耗 1 核心恢复最多 2 护盾。
 - **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/格、0.5 格/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
 - 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 4，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
-- 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+6` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。
+- 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+6` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。**有路径的机甲不会因为「在走路」而不还手**（试玩报告 1011 新问题 C）：玩家显式 `move`/`attack` 路径（`path_intent=order`）边走边打、不改路径不停下；作业/建造驱动的行走（`path_intent=task`）有威胁时暂停作业去还手，威胁消失后恢复作业并重新规划施工路径。
 - `refuel_mecha`：`payload.item_id` 必填，`payload.count` 可选（缺省 1，最多烧几块）。仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；实际消耗 = min(count, 补满所需件数, 背包现有)，背包没有该燃料 `INSUFFICIENT_RESOURCE`；核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
 - `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 2 格内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
 - `craft_item`：配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `duration` tick（不受 `pace_output` 影响），每批耗 `max(1, duration/20)` 核心（铁块 3、齿轮 1）；不递归制造前置。
@@ -290,10 +293,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ### 5.3 世界单位、军团与生产
 
 - `move` / `attack` / `unit_order` 的单位选择器为 `target.entity_id` 或 `target.entity_ids`（框选批量）。
-- 实时移动：单位每 tick 按 `move_speed` 沿 `path` 推进，可被新命令打断；占位不重叠，被堵先侧移，堵满 20 tick 后把停着不动的单位当障碍绕路重寻路（绕不开再按原路等待），**连续被单位阻挡 300 tick 仍走不动则放弃当前路径**（单位停在原地、不瞬移不重叠，姿态与终点保留，由姿态恢复/索敌重新决策），避免一群单位互堵时 `path_index`/`move_progress` 永久不变；不可达返回 `OUT_OF_RANGE`；寻路预算上限 800 格。`entity_moved` 带 `path` / `arrived`（放弃时 `arrived=false` + `reason=blocked`）。
+- 实时移动：单位每 tick 按 `move_speed` 沿 `path` 推进，可被新命令打断；占位不重叠，被堵先侧移；挡路的是**自家待命单位**（无路径、非 `hold`、非作业中的机甲）时，堵满 3 tick 后请它侧移到不挡路的空邻格让路，一格宽窄口里没有侧移空间就与赶路者互换位置；堵满 20 tick 后把停着不动的单位当障碍绕路重寻路（绕不开再按原路等待，之后每 10 tick 再试一次），**连续被单位阻挡 300 tick 仍走不动则放弃当前路径**（单位停在原地、不瞬移不重叠，姿态与终点保留，由姿态恢复/索敌重新决策），避免一群单位互堵时 `path_index`/`move_progress` 永久不变；不可达返回 `OUT_OF_RANGE`；寻路预算上限 800 格。`entity_moved` 带 `path` / `arrived`（放弃时 `arrived=false` + `reason=blocked`）。
 - 攻击：追击至射程内按 `attack_cooldown_ticks` 开火；自动索敌（`aggro_range`）、还击、守位/追击受 `stance` 与 `combat_anchor` 约束；目标可为单位、建筑、黑雾，PvP 与 PvE 同一套规则（军团只是命令容器，不是攻击目标）。中立黑雾只能显式攻击，自动索敌/炮塔只打已敌对的黑雾。
 - `unit_order.order`：`attack_move`（沿途索敌）、`patrol`（往返）、`retreat`（途中不还击）——需 `target.position`（目标可在未探索区，按真实地形寻路）；`guard`、`follow`——需 `payload.target_entity_id`；`hold`（原地坚守）、`stop`（清空命令）。
-- 单位战斗字段：`move_speed` / `path` / `path_index` / `move_progress` / `stance` / `order_pos` / `guard_target_id` / `combat_anchor` / `last_attacker_id` / `last_attack_tick` / `attack_cooldown_ticks` / `aggro_range` / `domain` / `min_attack_range` / `combat_state`。攻击无人机无视地形，只有导弹与防空武器能打空中单位。
+- 单位战斗字段：`move_speed` / `path` / `path_index` / `path_intent` / `move_progress` / `stance` / `order_pos` / `guard_target_id` / `combat_anchor` / `last_attacker_id` / `last_attack_tick` / `attack_cooldown_ticks` / `aggro_range` / `domain` / `min_attack_range` / `combat_state`。`path_intent` 标记当前路径意图：`order`（玩家 `move`/`attack` 命令）、`task`（作业/建造驱动的行走）、`combat`（自动交战追击），执行体机甲据此决定被威胁时是边走边打还是暂停作业。攻击无人机无视地形，只有导弹与防空武器能打空中单位。
 - 弹药：`ammo_class`（`bullet|shell|missile`，无需弹药为空）/ `ammo` / `ammo_capacity` / `ammo_item`（同类高档弹增伤）；每次开火扣 1 发，打空 `combat_state="no_ammunition"` 停火；出生满弹，黑雾不耗弹。
 - 补给：`supply_station`（建筑，`supply_radius=10`、`supply_rate=6`/tick，扣自身库存，需运行）与 `supply_truck`（单位，`supply_radius=5`、`supply_rate=3`/tick，扣自身 `cargo`，容量 180，在补给站光环内自动装货）只给光环内己方单位补弹；物流站、部署枢纽不补弹。维修车独立维修。攻击移动优先打补给站、补给车与弹药产线。
 - `produce`：单位由目录 `producer` 分工——兵营（`barracks`）产工程兵/步兵/侦察车，战车工厂（`vehicle_factory`）产机甲/火炮/导弹车/维修车/补给车，机场产攻击无人机；建筑类型不符 `INVALID_TARGET`，建筑须可运行。造价是实物 `cost[]`，入队时从**生产建筑自身三个存储桶**原子扣除（皮带、分拣器或 `transfer_item` 供料），不足 `INSUFFICIENT_RESOURCE`。队列上限 20，断电暂停，出口堵塞等待空格。建筑视图带 `unit_queue[]`（`unit_type`/`remaining_ticks`/`total_ticks`）与 `rally_point`。

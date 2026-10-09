@@ -567,14 +567,52 @@ describe('未探索区（地形 unknown）不被本地拦截', () => {
       'wind_turbine',
       planet as never,
       { x: 5, y: 4, z: 0 },
+      'p1',
     )!;
-    expect(describeBuildBlock(assessment)).toBe('已被建筑占用');
+    // 占位文案与服务端 tileOccupiedMessage 同口径（试玩 1011 E）。
+    const nameOf = (type: string) => ({ matrix_lab: '矩阵研究站' }[type] ?? type);
+    expect(describeBuildBlock(assessment, undefined, nameOf)).toBe('该格已有你的建筑：矩阵研究站');
     // 多次评估结果完全一致（不再随遍历顺序跳变）
     for (let i = 0; i < 5; i += 1) {
-      const again = assessBuildTiles(catalog as never, 'wind_turbine', planet as never, { x: 5, y: 4, z: 0 })!;
-      expect(describeBuildBlock(again)).toBe('已被建筑占用');
+      const again = assessBuildTiles(catalog as never, 'wind_turbine', planet as never, { x: 5, y: 4, z: 0 }, 'p1')!;
+      expect(describeBuildBlock(again, undefined, nameOf)).toBe('该格已有你的建筑：矩阵研究站');
       expect(primaryBlockedTile(again)).toEqual(primaryBlockedTile(assessment));
     }
+  });
+
+  it('占位文案区分己方/他人建筑与施工任务（与服务端 tileOccupiedMessage / constructionReservationMessage 同口径）', () => {
+    const planet = createPlanet();
+    const nameOf = (type: string) => ({ matrix_lab: '矩阵研究站', conveyor_belt_mk1: '传送带 Mk.I' }[type] ?? type);
+
+    // 他人建筑：p2 拥有一座 lab（同一格）。
+    const enemyLab = { ...planet.buildings['lab-1'], id: 'lab-p2', owner_id: 'p2' };
+    planet.buildings = { 'lab-p2': enemyLab } as unknown as typeof planet.buildings;
+    const enemy = assessBuildTiles(catalog as never, 'wind_turbine', planet as never, { x: 5, y: 4, z: 0 }, 'p1')!;
+    expect(describeBuildBlock(enemy, undefined, nameOf)).toBe('该格已有其他玩家的建筑：矩阵研究站');
+
+    // 己方施工任务：同格已有传送带施工任务（pending → 排队中）。
+    const taskPlanet = { ...createPlanet(), buildings: {} };
+    const runtime = {
+      construction_tasks: [{
+        id: 'c-1', player_id: 'p1', building_type: 'conveyor_belt_mk1',
+        position: { x: 5, y: 4, z: 0 }, state: 'pending', enqueue_tick: 1,
+      }],
+    };
+    const task = assessBuildTiles(catalog as never, 'wind_turbine', taskPlanet as never, { x: 5, y: 4, z: 0 }, 'p1', undefined, undefined, runtime as never)!;
+    expect(describeBuildBlock(task, undefined, nameOf)).toBe('该格已有你的施工任务：传送带 Mk.I（排队中）');
+    // 进行中 → 建造中；他人任务 → 其他玩家的施工任务。
+    const inProgress = { construction_tasks: [{ ...runtime.construction_tasks[0], state: 'in_progress' }] };
+    expect(describeBuildBlock(
+      assessBuildTiles(catalog as never, 'wind_turbine', taskPlanet as never, { x: 5, y: 4, z: 0 }, 'p1', undefined, undefined, inProgress as never)!,
+      undefined,
+      nameOf,
+    )).toBe('该格已有你的施工任务：传送带 Mk.I（建造中）');
+    const foreign = { construction_tasks: [{ ...runtime.construction_tasks[0], player_id: 'p2' }] };
+    expect(describeBuildBlock(
+      assessBuildTiles(catalog as never, 'wind_turbine', taskPlanet as never, { x: 5, y: 4, z: 0 }, 'p1', undefined, undefined, foreign as never)!,
+      undefined,
+      nameOf,
+    )).toBe('该格已有其他玩家的施工任务：传送带 Mk.I（排队中）');
   });
 
   it('锚点格优先：footprint 内其他格的阻挡不覆盖玩家点的那一格', () => {

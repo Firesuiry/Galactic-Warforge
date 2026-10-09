@@ -119,6 +119,7 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		oldPos := unit.Position
 		unit.Path = path
 		unit.PathIndex = 1
+		unit.PathIntent = model.PathIntentOrder
 		unit.MoveProgress = 0
 		unit.BlockedTicks = 0
 		unit.Stance = model.UnitStanceMoving
@@ -178,6 +179,7 @@ func moveMecha(ws *model.WorldState, unit *model.Unit, pos model.Position) ([]*m
 	unit.ClearEngagement()
 	unit.Path = path
 	unit.PathIndex = 1
+	unit.PathIntent = model.PathIntentOrder
 	unit.MoveProgress = 0
 	unit.BlockedTicks = 0
 	unit.OrderPos = nil
@@ -261,6 +263,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 						return *failure, nil
 					}
 					attacker.Path, attacker.PathIndex, attacker.MoveProgress = path, 1, 0
+					attacker.PathIntent = model.PathIntentOrder
 					attacker.BlockedTicks = 0
 					// 兜底路径是「逐 tick 追击」，不能沿用 moveMecha 的清交战语义：
 					// 必须保留 AttackTarget，settleMechaAutoFire 才会在射程内开火。
@@ -382,6 +385,7 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 			unit.ClearEngagement()
 			unit.Path = path
 			unit.PathIndex = 1
+			unit.PathIntent = model.PathIntentOrder
 			unit.MoveProgress = 0
 			unit.BlockedTicks = 0
 			unit.GuardTargetID = ""

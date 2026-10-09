@@ -237,8 +237,12 @@ func (g Grid) Disc(center Tile, radius int) []Tile {
 	if !g.Valid(center) || radius < 0 {
 		return nil
 	}
-	result := []Tile{center}
-	seen := map[Tile]bool{center: true}
+	// 曼哈顿圆盘格数 2r²+2r+1：一次分配到位，避免索敌热路径上反复扩容。
+	n := 2*radius*radius + 2*radius + 1
+	result := make([]Tile, 1, n)
+	result[0] = center
+	seen := make(map[Tile]bool, n)
+	seen[center] = true
 	start := 0
 	for r := 0; r < radius && start < len(result); r++ {
 		end := len(result)

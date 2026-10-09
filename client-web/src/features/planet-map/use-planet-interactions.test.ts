@@ -183,7 +183,8 @@ describe('usePlanetInteractions', () => {
     const journal = usePlanetCommandStore.getState().journal;
     expect(journal[0]?.status).toBe('failed');
     expect(journal[0]?.authoritativeCode).toBe('LOCAL_PREFLIGHT');
-    expect(journal[0]?.authoritativeMessage).toContain('建筑占用');
+    // 占位文案与服务端 tileOccupiedMessage 同口径（试玩 1011 E）。
+    expect(journal[0]?.authoritativeMessage).toBe('无法建造：该格已有你的建筑：电力感应塔');
   });
 
   it('build 模式：未探索区（地形 unknown）不本地拦截，命令照常下发（试玩 1009 F）', () => {

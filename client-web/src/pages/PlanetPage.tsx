@@ -307,6 +307,26 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
+  /**
+   * 缩略图右键下令的本地拦截回执（无选中单位 / 未编组小队）：
+   * 与 use-planet-interactions 的 reportLocalBlock 同口径，写进命令 journal 的失败条目，
+   * 让「右键缩略图没反应」变成一个可见的失败提示而不是静默。
+   */
+  function reportMinimapBlock(message: string, position: { x: number; y: number }) {
+    usePlanetCommandStore.getState().addJournalEntry({
+      requestId: globalThis.crypto?.randomUUID?.() ?? `minimap-block-${Date.now()}`,
+      commandType: "move",
+      planetId: planet.planet_id,
+      status: "failed",
+      acceptedMessage: "move 未下达",
+      authoritativeCode: "LOCAL_PREFLIGHT",
+      authoritativeMessage: message,
+      authoritativeSource: "response",
+      focus: { position: { ...position, z: 0 } },
+      pendingRecovery: false,
+    });
+  }
+
   /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */
   function handleDefineZone(zone: TheaterZoneGeometry) {
     const mode = usePlanetViewStore.getState().interactionMode;
@@ -346,6 +366,17 @@ export function PlanetPage() {
     [sceneQuery.data, session.playerId, gameIdentity],
   );
   const knownOwnUnits = useMemo(() => indexUnitsById(guideEntities.units), [guideEntities.units]);
+  // 「家」按累积的己方实体算（不随镜头窗口丢失），供聚焦基地/回到基地共用。
+  useEffect(() => {
+    const scene = sceneQuery.data;
+    if (!scene) return;
+    const home = resolveHomeTile({
+      ...scene,
+      buildings: Object.fromEntries(guideEntities.buildings.map((building) => [building.id, building])),
+      units: Object.fromEntries(guideEntities.units.map((unit) => [unit.id, unit])),
+    }, session.playerId);
+    if (home) usePlanetViewStore.getState().setHomeTile(home);
+  }, [guideEntities, sceneQuery.data, session.playerId]);
 
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
@@ -899,9 +930,13 @@ export function PlanetPage() {
             dimensional={isThree}
           />
         </div>
-        {/* 小地图（C3）：2D/3D 均可用；3D 下无视口框（mapProjection 缺省优雅降级），敌我标记层照常 */}
+        {/* 小地图（C3）：2D/3D 均可用；3D 下无视口框（mapProjection 缺省优雅降级），敌我标记层照常。
+            左键=移镜头（requestFocus），右键=RTS 标准「给选中单位下移动/攻击命令到该格」。 */}
         <PlanetMinimap
           fog={planet}
+          onAttackMove={interactions.attackMove}
+          onContextTile={interactions.contextTile}
+          onOrderBlocked={reportMinimapBlock}
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
@@ -972,6 +1007,8 @@ export function PlanetPage() {
               units: [...guideEntities.units, ...guideEntities.fogUnits],
               legions: ownLegions(runtime.combat_squads, session.playerId),
               playerInventory: currentPlayer?.inventory,
+              tech: currentPlayer?.tech,
+              catalog,
               darkFogHostile,
             })}
           />

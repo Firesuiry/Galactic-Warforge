@@ -8,7 +8,7 @@ import { expect, test, type Page, type APIRequestContext } from '@playwright/tes
  * - web-13：toast 文案本地化（单测覆盖，浏览器端抽查顶栏告警文案）。
  */
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
 const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 
 async function installSession(page: Page) {

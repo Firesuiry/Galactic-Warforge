@@ -95,11 +95,14 @@ func TestIdleMechaEngagesWithinAggroRange(t *testing.T) {
 	damaged := false
 	for i := 0; i < 200; i++ {
 		events := advanceRTT(ws, 1)
-		if damaged = damaged || damageEventsFor(events, enemy.ID) > 0; damaged {
-			break
-		}
+		// 先记录距离再判断伤害：机甲进入射程的那一 tick 就会开火，
+		// 先判断会漏掉它刚好走到射程内的位置（试玩报告 1011 C 后机甲边走边打）。
 		if d := ws.SurfaceDistance(mecha.Position, enemy.Position); d < minDist {
 			minDist = d
+		}
+		if damageEventsFor(events, enemy.ID) > 0 {
+			damaged = true
+			break
 		}
 	}
 	if !damaged {

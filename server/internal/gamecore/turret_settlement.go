@@ -46,7 +46,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		// Find enemy forces in range
 		if ws.EnemyForces != nil && !combat.AirOnly && hostile(ws, turret.OwnerID, model.DarkFogOwnerID) {
 			for i, force := range ws.EnemyForces.Forces {
-				if ws.SurfaceWithin(turret.Position, force.Position, combat.Range) && ws.SurfaceDistance(turret.Position, force.Position) >= combat.MinRange {
+				if ws.SurfaceWithin(turret.Position, force.Position, combat.Range) && (combat.MinRange <= 0 || ws.SurfaceDistance(turret.Position, force.Position) >= combat.MinRange) {
 					targetedForce = i
 					break // one attack per turret per tick
 				}
@@ -60,13 +60,19 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 				if unit == nil || unit.HP <= 0 {
 					continue
 				}
-				if combat.AirOnly && unit.Domain != model.UnitDomainAir || unit.Domain == model.UnitDomainAir && model.WeaponClassForBuilding(turret.Type) != model.WeaponTypeMissile && !combat.AirOnly || ws.SurfaceDistance(turret.Position, unit.Position) < combat.MinRange {
+				if combat.AirOnly && unit.Domain != model.UnitDomainAir || unit.Domain == model.UnitDomainAir && model.WeaponClassForBuilding(turret.Type) != model.WeaponTypeMissile && !combat.AirOnly {
 					continue
 				}
+				// 先做便宜的敌对判定与带上限的射程判定，最后才算精确距离：
+				// 炮塔空闲时每 tick 对全图单位逐个判定，跨面的无上限 SurfaceDistance
+				// 是一次小 A*，全图单位 × 炮塔数会把一个 tick 拖到上百毫秒（试玩 1011 B）。
 				if !hostile(ws, turret.OwnerID, unit.OwnerID) {
 					continue
 				}
 				if !ws.SurfaceWithin(turret.Position, unit.Position, combat.Range) {
+					continue
+				}
+				if combat.MinRange > 0 && ws.SurfaceDistance(turret.Position, unit.Position) < combat.MinRange {
 					continue
 				}
 				targetedUnit = unit.ID

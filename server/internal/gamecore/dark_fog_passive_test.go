@@ -130,7 +130,8 @@ func TestPlayerUnitsDoNotAutoProvokeDarkFog(t *testing.T) {
 	_ = soldier
 }
 
-// 执行体空闲时自动打射程内敌对单位；有移动路径时不自动开火。
+// 执行体空闲时自动打射程内敌对单位；作业/建造驱动的行走不被威胁时不主动开火，
+// 玩家显式 move 路径则边走边打（试玩报告 1011 C）。
 func TestMechaAutoFiresWhenIdle(t *testing.T) {
 	ws, mecha := mechaTestWorld()
 	enemy := model.UnitStats(model.UnitTypeSoldier)
@@ -141,12 +142,20 @@ func TestMechaAutoFiresWhenIdle(t *testing.T) {
 	ws.Units[enemy.ID] = &enemy
 	ws.TileUnits[model.TileKey(2, 1)] = []string{enemy.ID}
 
+	// 作业/建造驱动的行走：附近没有威胁时不开火，照常赶路。
+	enemy.Position = ws.SurfaceOffset(mecha.Position, 0, 8) // aggro 之外
+	ws.TileUnits[model.TileKey(2, 1)] = nil
+	ws.TileUnits[model.TileKey(enemy.Position.X, enemy.Position.Y)] = []string{enemy.ID}
 	mecha.Path = []model.Position{{X: 1, Y: 1}, {X: 1, Y: 2}}
 	mecha.PathIndex = 1
+	mecha.PathIntent = model.PathIntentTask
 	settleUnitCombat(ws)
-	if enemy.HP != enemy.MaxHP {
-		t.Fatal("moving mecha must not auto-fire")
+	if enemy.HP != enemy.MaxHP || !mecha.HasPath() || mecha.PathIntent != model.PathIntentTask {
+		t.Fatal("task walk without a threat must keep walking and not divert fire")
 	}
+	// 回到射程内：空闲机甲自动开火。
+	enemy.Position = model.Position{X: 2, Y: 1}
+	ws.TileUnits[model.TileKey(2, 1)] = []string{enemy.ID}
 	mecha.ClearMovement()
 	ws.Tick++
 	settleUnitCombat(ws)

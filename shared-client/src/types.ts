@@ -350,6 +350,8 @@ export interface Unit {
   move_speed?: number;
   path?: Position[];
   path_index?: number;
+  /** 当前路径意图：order=玩家 move/attack 命令（机甲边走边打）、task=作业/建造行走（被威胁时暂停去还手）、combat=自动追击。 */
+  path_intent?: 'order' | 'task' | 'combat';
   move_progress?: number;
   blocked_ticks?: number;
   stance?: UnitStance;

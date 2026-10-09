@@ -10,8 +10,8 @@ import { expect, test, type Page } from '@playwright/test';
  * data-camera-offset-x/y 与 data-tile-size 换算成屏幕坐标点击。
  */
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = 'http://127.0.0.1:19481';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
+const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const PLANET_ID = 'planet-1-1';
 const OPERATE_RANGE = 6;
 const BUILDING_ID = 'wind_turbine';
@@ -68,12 +68,13 @@ async function fetchAuthorized<T>(path: string): Promise<T> {
 }
 
 async function installSession(page: Page) {
-  await page.addInitScript((serverUrl) => {
+  // serverUrl 用页面自己的 origin（同源走 vite 代理）：写死 WEB_ENTRY 时换端口会打到旧实例。
+  await page.addInitScript(() => {
     window.localStorage.setItem(
       'siliconworld-client-web-session',
-      JSON.stringify({ state: { serverUrl, playerId: 'p1', playerKey: 'key_player_1' }, version: 0 }),
+      JSON.stringify({ state: { serverUrl: window.location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0 }),
     );
-  }, WEB_ENTRY);
+  });
 }
 
 /** 记录发往 /commands 的 POST 请求体，用于断言「命令真的发到了服务端」。 */

@@ -681,7 +681,8 @@ function drawBelt(
     ctx.fillRect(bx + bw - rail, by, rail, bh);
   }
 
-  // 方向箭头纹（chevron 指向物流输出方向）
+  // 方向箭头纹（chevron 指向物流输出方向）：2D 战术图另有 logistics-flow-marks 的
+  // 平铺箭头负责「流向」，这里保留烘焙纹是给低缩放档/无平铺时兜底，两者指向一致。
   ctx.fillStyle = numToCss(palette.accent, 0.85);
   const span = horizontal ? bw : bh;
   const thickness = horizontal ? bh : bw;
