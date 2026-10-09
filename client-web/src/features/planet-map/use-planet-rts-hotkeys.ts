@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 
-import type { PlanetRuntimeView } from '@shared/types';
+import type { PlanetRuntimeView, Unit } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
 import type { PlanetRenderView } from '@/features/planet-map/model';
@@ -30,10 +30,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
 interface UsePlanetRtsHotkeysInput {
   planet?: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+  /** 跨窗口累积的己方单位：单位掉出相机窗口后编队/指令仍能命中（试玩 1010 E）。 */
+  knownOwnUnits?: ReadonlyMap<string, Unit>;
   interactions: PlanetInteractions;
 }
 
-export function usePlanetRtsHotkeys({ planet, interactions }: UsePlanetRtsHotkeysInput) {
+export function usePlanetRtsHotkeys({ planet, knownOwnUnits, interactions }: UsePlanetRtsHotkeysInput) {
   const session = useSessionSnapshot();
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function usePlanetRtsHotkeys({ planet, interactions }: UsePlanetRtsHotkey
       if ((event.ctrlKey || event.metaKey) && /^[1-9]$/.test(key)) {
         const index = Number(key);
         if (index <= CONTROL_GROUP_COUNT) {
-          const ids = commandableUnitIds(planet, store.selectedUnits, playerId);
+          const ids = commandableUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits);
           store.setControlGroup(index, ids);
           if (ids.length > 0) {
             sfx.uiClick();
@@ -79,25 +81,25 @@ export function usePlanetRtsHotkeys({ planet, interactions }: UsePlanetRtsHotkey
         return;
       }
 
-      const selection = commandableUnitIds(planet, store.selectedUnits, playerId);
+      const selection = commandableUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits);
       if (selection.length === 0) {
         return;
       }
       switch (key.toLowerCase()) {
         case 'a':
-          if (orderEligibleUnitIds(planet, store.selectedUnits, playerId).length > 0) {
+          if (orderEligibleUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits).length > 0) {
             store.setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
             sfx.uiClick();
           }
           break;
         case 'p':
-          if (orderEligibleUnitIds(planet, store.selectedUnits, playerId).length > 0) {
+          if (orderEligibleUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits).length > 0) {
             store.setInteractionMode({ kind: 'unit_order', order: 'patrol' });
             sfx.uiClick();
           }
           break;
         case 'g':
-          if (orderEligibleUnitIds(planet, store.selectedUnits, playerId).length > 0) {
+          if (orderEligibleUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits).length > 0) {
             store.setInteractionMode({ kind: 'unit_order', order: 'guard' });
             sfx.uiClick();
           }
@@ -114,5 +116,5 @@ export function usePlanetRtsHotkeys({ planet, interactions }: UsePlanetRtsHotkey
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [interactions, planet, session.playerId]);
+  }, [interactions, knownOwnUnits, planet, session.playerId]);
 }

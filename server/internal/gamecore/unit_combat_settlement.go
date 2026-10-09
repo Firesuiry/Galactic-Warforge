@@ -400,10 +400,11 @@ const maxInt32 = int(^uint32(0) >> 1)
 // settleMechaAutoFire 执行体（玩家机甲）交战：
 //   - 显式攻击目标：射程内持续开火（不追击）；
 //   - 空闲时（无移动路径）：先还击射程内的最近攻击者，再打范围内最近的敌对目标。
-//     无作业的机甲只在射程内开火、不追击（英雄单位能量经济）；
-//     **手搓中的机甲会被自动防御打断**：敌对单位/建筑进入 aggro_range 就暂停手搓、
-//     靠近到射程内还手，威胁消失后自动从原进度恢复手搓（试玩报告 E：手搓 30 铜块期间
-//     敌军在 5 格外拆家，机甲全程不还手）。采集（mine）作业不打断——离开矿点即失效。
+//     空闲与手搓中的机甲都按 aggro_range 索敌，目标在射程外就靠近到射程内开火，
+//     追击以"接战锚点 + AggroRange+leashSlack"为上限、超限即放弃（试玩报告 E：
+//     敌人在 5 格外拆家，机甲站在射程外一动不动）；
+//     **手搓中的机甲会被自动防御打断**：进入 aggro_range 就暂停手搓、靠近到射程内
+//     还手，威胁消失后自动从原进度恢复手搓。采集（mine）作业不打断——离开矿点即失效。
 //     自动开火不写 AttackTarget，并保留两发的能量，避免把机甲打到无法行动。
 func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 	explicit := unit.AttackTarget != ""
@@ -422,18 +423,20 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		// 手搓会被自动防御打断（可以靠近、暂停作业）；采集不打断（离开矿点作业即失效），
 		// 但采集中的机甲仍在射程内还手。
 		defending := job != nil && job.Kind == "craft"
-		if !defending {
-			// 只有手搓防御会占用机甲的交战锚点：作业结束/换成采集时清掉。
+		// 空闲（无作业）与手搓中一样主动交战：按 aggro 索敌并靠近。
+		hunting := defending || job == nil
+		if !hunting {
+			// 只有空闲/手搓防御会占用机甲的交战锚点：作业结束/换成采集时清掉。
 			unit.CombatAnchor = nil
 		}
-		// 防御锚点 = 第一次被打断时的位置：机甲只在这个范围内主动靠近敌人，
-		// 追得太远就放弃这一目标、回去手搓（否则会被敌人一路钓走）。
+		// 交战锚点 = 第一次主动靠近时的位置：机甲只在这个范围内追击敌人，
+		// 追得太远就放弃这一目标、回去（手搓或原地待命），否则会被一路钓走。
 		// 必须在 HasPath 早退之前判断，否则追击中的机甲永远走不到这一支。
-		if defending && unit.CombatAnchor != nil &&
+		if hunting && unit.CombatAnchor != nil &&
 			ws.SurfaceDistance(unit.Position, *unit.CombatAnchor) > unit.AggroRange+leashSlack {
 			unit.LastAttackerID = ""
 			unit.ClearMovement()
-			return resumeMechaJobAfterDefense(unit)
+			return mechaStandDown(ws, unit)
 		}
 		if unit.HasPath() {
 			return nil
@@ -441,12 +444,12 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		// 低能量时不主动交火，但必须先把被打断的手搓恢复掉，否则机甲会
 		// 一直停在"暂停手搓 + 不还手"的死状态（能量耗尽后永远恢复不了）。
 		if unit.Mecha.Energy < 2*unit.Mecha.AttackEnergyCost {
-			return resumeMechaJobAfterDefense(unit)
+			return mechaStandDown(ws, unit)
 		}
 		scan := unit.AttackRange
-		if defending {
-			// 手搓被打断时按 aggro 索敌（含敌方建筑）：手搓通常发生在基地里，
-			// 敌人多半在拆建筑而不是贴身，只按射程索敌等于不还手。
+		if hunting {
+			// 空闲/手搓机甲按 aggro 索敌（含敌方建筑）：敌人多半在拆建筑而不是贴身，
+			// 只按射程索敌等于不还手（试玩报告 E）。
 			scan = max(unit.AttackRange, unit.AggroRange)
 		}
 		if unit.LastAttackerID != "" {
@@ -459,15 +462,21 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 			}
 		}
 		if target == nil {
-			target = nearestHostileInRange(ws, unit, scan, defending)
+			target = nearestHostileInRange(ws, unit, scan, hunting)
+		}
+		// 追击上限（锚点口径）：目标本身已经跑出锚点 + aggro + leash 就不再追，
+		// 否则机甲会被敌人一路钓走（空闲机甲没有手搓作业，只能靠这条约束）。
+		if target != nil && hunting && unit.CombatAnchor != nil &&
+			ws.SurfaceDistance(*unit.CombatAnchor, target.pos) > unit.AggroRange+leashSlack {
+			target = nil
 		}
 		if target == nil {
-			return resumeMechaJobAfterDefense(unit)
+			return mechaStandDown(ws, unit)
 		}
 		dist := ws.SurfaceDistance(unit.Position, target.pos)
 		if dist > unit.AttackRange {
-			if !defending {
-				return nil // 无作业/采集中的机甲不追击
+			if !hunting {
+				return nil // 采集中的机甲不追击
 			}
 			if unit.CombatAnchor == nil {
 				anchor := unit.Position
@@ -529,6 +538,26 @@ func resumeMechaJobAfterDefense(unit *model.Unit) []*model.GameEvent {
 	unit.CombatAnchor = nil
 	unit.ChaseGoalPos = nil
 	return []*model.GameEvent{mechaStateEvent(unit)}
+}
+
+// mechaStandDown 机甲放弃当前自动交战目标：手搓中的恢复作业；空闲机甲清掉追击
+// 路径并走回接战锚点（不被敌人一路钓走）；采集中的只清路径（作业不受影响）。
+func mechaStandDown(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
+	if unit == nil || unit.Mecha == nil {
+		return nil
+	}
+	if unit.Mecha.Job != nil {
+		if unit.Mecha.Job.Kind == "craft" {
+			return resumeMechaJobAfterDefense(unit)
+		}
+		unit.ClearMovement()
+		unit.LastAttackerID = ""
+		return nil
+	}
+	unit.LastAttackerID = ""
+	unit.ClearMovement()
+	// 空闲机甲：resumeFormation 会沿接战锚点把它带回原位（锚点只用于这次脱战）。
+	return resumeFormation(ws, unit)
 }
 
 // fireAtTarget 对目标开火并结算伤害（含死亡处理与事件）。

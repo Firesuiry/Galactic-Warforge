@@ -203,3 +203,114 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 		t.Fatalf("free-tile build must stay allowed: %s (%s)", res.Code, res.Message)
 	}
 }
+
+// teleportUnitForTest 直接把单位挪到目标格（测试用，绕开寻路）。
+func teleportUnitForTest(ws *model.WorldState, unit *model.Unit, pos model.Position) {
+	if ws == nil || unit == nil {
+		return
+	}
+	if ids := ws.TileUnits[model.TileKey(unit.Position.X, unit.Position.Y)]; len(ids) > 0 {
+		kept := ids[:0]
+		for _, id := range ids {
+			if id != unit.ID {
+				kept = append(kept, id)
+			}
+		}
+		if len(kept) == 0 {
+			delete(ws.TileUnits, model.TileKey(unit.Position.X, unit.Position.Y))
+		} else {
+			ws.TileUnits[model.TileKey(unit.Position.X, unit.Position.Y)] = kept
+		}
+	}
+	unit.Position = pos
+	unit.ClearMovement()
+	key := model.TileKey(pos.X, pos.Y)
+	ws.TileUnits[key] = append(ws.TileUnits[key], unit.ID)
+}
+
+// 试玩报告 1010 阻断 A：bot 用一圈建筑把自家基地封成口袋。
+// 旧的"口袋判定"是增量的（建造前能到、建造后不能才拒绝），一圈圈收紧时永远
+// 不触发；baseSealedByPlacement 是绝对不变量，最后一块必须被拒。
+func TestBuildRejectsSealingOwnBaseFromOutside(t *testing.T) {
+	core := newEnclosureTestCore(t)
+	ws := core.World()
+	// 把机甲挪远：本用例只验证"基地被封死"，别让单位口袋判定先触发。
+	mecha := findExecutorUnit(t, ws)
+	home, ok := botHomePosition(ws, "p1")
+	if !ok {
+		t.Fatal("expected p1 home base")
+	}
+	teleportUnitForTest(ws, mecha, ws.SurfaceOffset(home, 20, 0))
+
+	ring := make([]model.Position, 0, 8)
+	for _, tile := range ws.SurfaceDisc(home, 2) {
+		if ws.SurfaceDistance(home, tile) == 2 {
+			ring = append(ring, tile)
+		}
+	}
+	if len(ring) < 4 {
+		t.Fatalf("expected a ring of at least 4 tiles, got %d", len(ring))
+	}
+	rejected := 0
+	for _, tile := range ring {
+		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		switch res.Code {
+		case model.CodeOK:
+		case model.CodeInvalidTarget:
+			rejected++
+			if !strings.Contains(res.Message, "会把基地与外界的通路封死") {
+				t.Fatalf("base-seal rejection must explain itself, got %q", res.Message)
+			}
+		default:
+			t.Fatalf("unexpected rejection at %+v: %s (%s)", tile, res.Code, res.Message)
+		}
+	}
+	if rejected == 0 {
+		t.Fatalf("walling the base in must be rejected (ring=%v home=%+v)", ring, home)
+	}
+	// 基地必须仍然走得到外界（对手基地）：拒绝生效。
+	if !sealFloodReachedForTest(ws, home, "p1") {
+		t.Fatal("p1 base must stay connected to the outside after the rejected builds")
+	}
+}
+
+// 正常建造不受影响：基地附近零星几格照常放行。
+func TestBuildNearBaseStaysAllowed(t *testing.T) {
+	core := newEnclosureTestCore(t)
+	ws := core.World()
+	mecha := findExecutorUnit(t, ws)
+	home, ok := botHomePosition(ws, "p1")
+	if !ok {
+		t.Fatal("expected p1 home base")
+	}
+	teleportUnitForTest(ws, mecha, ws.SurfaceOffset(home, 20, 0))
+	built := 0
+	for _, tile := range ws.SurfaceDisc(home, 3) {
+		d := ws.SurfaceDistance(home, tile)
+		if d != 2 && d != 3 {
+			continue
+		}
+		if built >= 3 {
+			break
+		}
+		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		if res.Code != model.CodeOK {
+			t.Fatalf("sparse build at %+v must stay allowed: %s (%s)", tile, res.Code, res.Message)
+		}
+		built++
+	}
+	if built < 3 {
+		t.Fatalf("expected to build at least 3 tiles near the base, got %d", built)
+	}
+}
+
+// sealFloodReachedForTest 基地能否走到外界（争夺中心或对手基地）。
+func sealFloodReachedForTest(ws *model.WorldState, home model.Position, owner string) bool {
+	goal, ok := baseSealGoal(ws, owner)
+	if !ok {
+		return true
+	}
+	budget := 4*ws.SurfaceDistance(home, goal) + 256
+	reached, _ := sealFloodReaches(ws, home, goal, nil, budget)
+	return reached
+}

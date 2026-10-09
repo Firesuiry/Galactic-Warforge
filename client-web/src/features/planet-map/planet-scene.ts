@@ -50,7 +50,7 @@ import type {
 } from '@shared/types';
 
 import type { BattleEvent } from '@/engine/battle-events';
-import { getDiscTexture, getGlowTexture, getIconTexture, getVignetteTexture } from '@/engine/textures';
+import { getDiscTexture, getGlowTexture, getIconTexture, getPowerAlertTexture, getVignetteTexture } from '@/engine/textures';
 import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
 import { isConveyorBeltBuilding } from '@/features/planet-map/build-workflow';
@@ -123,6 +123,7 @@ import {
   type TerrainWrapSampling,
 } from '@/features/planet-map/planet-terrain-chunks';
 import { isTilePointVisible, type SceneRenderDetailPolicy } from '@/features/planet-map/render';
+import { isOwnStalledBuilding } from '@/features/planet-map/power-status';
 import { FACTION_COLOR, unitFaction } from '@/features/planet-map/rts-commands';
 import {
   CommandMarkerTrack,
@@ -502,6 +503,13 @@ interface BuildingNode extends SceneNode {
   badge: Sprite;
   /** 受损/故障警示角标（ticker 呼吸，frozen 停 0 相位）。 */
   warning: Sprite;
+  /**
+   * 缺电/停机角标（试玩 1010 F）：闪电划线，任何缩放档都显示在左上角，
+   * 与右上角的类型角标分开，玩家一眼就能看出「哪座建筑没在干活」。
+   */
+  powerAlert: Sprite;
+  /** 当前是否已判定为缺电/停机（避免每帧重画结构精灵）。 */
+  stalled?: boolean;
   /** 风机旋转叶片（独立小 sprite，ticker 驱动；非风机为 null）。 */
   blades: Sprite | null;
   /** furnace 发光窗呼吸辉光（非 furnace 为 null）。 */
@@ -1822,7 +1830,8 @@ export class PlanetScene {
       this.entitiesLayer,
       (building) => this.createBuildingNode(building, catalog, playerId, simplify),
       (node, building) => {
-        if (node.data !== building) {
+        const stalled = isOwnStalledBuilding(building, playerId);
+        if (node.data !== building || node.stalled !== stalled) {
           node.data = building;
           this.drawBuildingNode(node, catalog, playerId, simplify);
         }
@@ -1843,16 +1852,21 @@ export class PlanetScene {
     badge.anchor.set(0.5);
     const warning = new Sprite(getIconTexture('alert', 0xffb020));
     warning.anchor.set(0.5);
+    const powerAlert = new Sprite(getPowerAlertTexture());
+    powerAlert.anchor.set(0.5);
     container.addChild(base);
     container.addChild(sprite);
     container.addChild(badge);
     container.addChild(warning);
+    container.addChild(powerAlert);
     const node: BuildingNode = {
       container,
       base,
       sprite,
       badge,
       warning,
+      powerAlert,
+      stalled: false,
       blades: null,
       glow: null,
       beltFlow: null,
@@ -1888,6 +1902,7 @@ export class PlanetScene {
         .clear()
         .rect(0, 0, Math.max(pixelWidth, 2), Math.max(pixelHeight, 2))
         .fill(isOwn ? { color: 0x24c9b6, alpha: 0.4 } : { color: 0xde5757, alpha: 0.38 });
+      this.updatePowerAlertBadge(node, building, playerId, pixelWidth, pixelHeight);
       return;
     }
 
@@ -1942,6 +1957,11 @@ export class PlanetScene {
     } else {
       node.warning.visible = false;
     }
+
+    // 缺电/停机：闪电划线角标（左上，任何缩放档都显示，ticker 呼吸）。
+    // 石矿机 no_power 挂了 50 分钟玩家没发现（试玩 1010 F）——受损角标只画在结构精灵档，
+    // 低缩放档被 simplify 短路，缺电就彻底看不到了。
+    this.updatePowerAlertBadge(node, building, playerId, pixelWidth, pixelHeight);
 
     // 风机旋转叶片：独立小 sprite，轮毂对齐结构机舱位置。
     if (hasRotorBlades(building.type)) {
@@ -2102,6 +2122,22 @@ export class PlanetScene {
   }
 
   /** 附件（叶片/辉光）按需挂载/卸载：factory 为 null 时销毁并置空。 */
+  /** 缺电/停机角标：左上闪电划线，任何缩放档都画（试玩 1010 F）。 */
+  private updatePowerAlertBadge(node: BuildingNode, building: Building, playerId: string, pixelWidth: number, pixelHeight: number) {
+    const stalled = isOwnStalledBuilding(building, playerId);
+    node.stalled = stalled;
+    if (!stalled) {
+      node.powerAlert.visible = false;
+      return;
+    }
+    const badgeSize = Math.max(Math.min(pixelWidth, pixelHeight) * 0.42, 5);
+    node.powerAlert.width = badgeSize;
+    node.powerAlert.height = badgeSize;
+    node.powerAlert.position.set(badgeSize * 0.42, badgeSize * 0.42);
+    node.powerAlert.alpha = WARNING_BADGE_BASE_ALPHA;
+    node.powerAlert.visible = true;
+  }
+
   private setBuildingAttachment<K extends 'blades' | 'glow'>(node: BuildingNode, slot: K, factory: () => Sprite): Sprite;
   private setBuildingAttachment<K extends 'blades' | 'glow'>(node: BuildingNode, slot: K, factory: null): null;
   private setBuildingAttachment<K extends 'blades' | 'glow'>(
@@ -2713,6 +2749,10 @@ export class PlanetScene {
       }
       if (node.warning.visible) {
         node.warning.alpha = WARNING_BADGE_BASE_ALPHA
+          + WARNING_BADGE_ALPHA_SWING * Math.sin(this.ambientTime * 3.4 + node.phase);
+      }
+      if (node.powerAlert.visible) {
+        node.powerAlert.alpha = WARNING_BADGE_BASE_ALPHA
           + WARNING_BADGE_ALPHA_SWING * Math.sin(this.ambientTime * 3.4 + node.phase);
       }
       if (node.glow) {

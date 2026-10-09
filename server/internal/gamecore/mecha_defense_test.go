@@ -81,20 +81,69 @@ func TestMechaCraftDefenseNeverDeadlocksOnEmptyEnergy(t *testing.T) {
 	}
 }
 
-// 无作业的机甲仍不追击（英雄单位能量经济）：只在射程内还手。
-func TestMechaWithoutJobDoesNotChase(t *testing.T) {
+// 空闲机甲同样按 aggro 索敌（试玩报告 E）：敌人在射程外、aggro 内拆家时，
+// 机甲要靠近到射程内开火，而不是站着不动。
+func TestIdleMechaEngagesWithinAggroRange(t *testing.T) {
 	ws, mecha := mechaTestWorld()
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", ws.SurfaceOffset(mecha.Position, 5, 0))
 	enemy.Stance = model.UnitStanceHold
 	enemy.Attack = 0
+	enemy.MaxHP, enemy.HP = 4000, 4000
 	start := mecha.Position
-	advanceRTT(ws, 200)
-	if mecha.Position != start {
-		t.Fatalf("idle mecha must not chase out-of-range targets: %+v", mecha.Position)
+	minDist := ws.SurfaceDistance(start, enemy.Position)
+	damaged := false
+	for i := 0; i < 200; i++ {
+		events := advanceRTT(ws, 1)
+		if damaged = damaged || damageEventsFor(events, enemy.ID) > 0; damaged {
+			break
+		}
+		if d := ws.SurfaceDistance(mecha.Position, enemy.Position); d < minDist {
+			minDist = d
+		}
 	}
-	if enemy.HP != enemy.MaxHP {
-		t.Fatalf("idle mecha must not shoot outside its attack range: hp=%d", enemy.HP)
+	if !damaged {
+		t.Fatalf("idle mecha must engage a target inside aggro range: pos=%+v minDist=%d enemyHP=%d", mecha.Position, minDist, enemy.HP)
+	}
+	if minDist > mecha.AttackRange {
+		t.Fatalf("idle mecha must close to its attack range, closest was %d (range %d)", minDist, mecha.AttackRange)
+	}
+}
+
+// 追击有上限：目标跑出 aggro+leash 之外，机甲放弃追击并走回接战锚点。
+func TestIdleMechaChaseIsLeashed(t *testing.T) {
+	ws, mecha := mechaTestWorld()
+	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
+	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", ws.SurfaceOffset(mecha.Position, 5, 0))
+	enemy.Stance = model.UnitStanceHold
+	enemy.Attack = 0
+	enemy.MaxHP, enemy.HP = 100000, 100000
+	start := mecha.Position
+	for i := 0; i < 20 && mecha.CombatAnchor == nil; i++ {
+		advanceRTT(ws, 1)
+	}
+	if mecha.CombatAnchor == nil {
+		t.Fatalf("idle mecha must set an engagement anchor when it starts chasing: %+v", mecha)
+	}
+	// 把敌人挪到锚点外（模拟被一路钓走）：机甲必须放弃追击并走回锚点。
+	far := ws.SurfaceDisc(*mecha.CombatAnchor, 64)[0]
+	for _, p := range ws.SurfaceDisc(*mecha.CombatAnchor, 64) {
+		if ws.SurfaceDistance(p, *mecha.CombatAnchor) > ws.SurfaceDistance(far, *mecha.CombatAnchor) {
+			far = p
+		}
+	}
+	if ws.SurfaceDistance(far, *mecha.CombatAnchor) <= mecha.AggroRange+leashSlack {
+		t.Fatalf("test world too small: no tile beyond the leash (max %d)", ws.SurfaceDistance(far, *mecha.CombatAnchor))
+	}
+	teleportUnitForTest(ws, enemy, far)
+	for i := 0; i < 400; i++ {
+		advanceRTT(ws, 1)
+		if !mecha.HasPath() && ws.SurfaceDistance(mecha.Position, start) <= 1 {
+			break
+		}
+	}
+	if d := ws.SurfaceDistance(mecha.Position, start); d > 2 {
+		t.Fatalf("idle mecha must walk back to its engagement anchor: %+v (start %+v, d=%d)", mecha.Position, start, d)
 	}
 }
 

@@ -43,3 +43,30 @@ go安装在/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin（受限环境测试加
 
 # 7. 上传视频到 B 站
 用 biliup 命令行投稿（安装与用法见 `.agents/skills/biliup/SKILL.md`；登录 cookie 存于 develop_tools/biliup/cookies.json，不提交）
+
+# 通知用户的方式 
+
+请在任务完工时通过下面的接口通知用户 只有主代理在最终完工时通知 子代理不要通知
+有问题需要用户协助也可以通知用户 尽量你自己干
+
+请求方式：POST
+
+请求URL：https://wxpusher.zjiecode.com/api/send/message/simple-push
+
+请求格式：Content-Type:application/json
+
+请求内容：
+
+//JSON不支持注释，发送的时候，需要删除注释。
+{
+    //推送内容，必传
+    "content":"<h1>极简推送</h1><br/><p style=\"color:red;\">欢迎你使用WxPusher，推荐使用HTML发送</p>",
+    //消息摘要；接口侧最长100，可以不传，不传默认截取 content 前面内容。各端通知/卡片实际展示可能更短（如部分场景约20字）。
+    "summary":"消息摘要",
+    //内容类型 1表示文字  2表示html(只发送body标签内部的数据即可，不包括body标签，推荐使用这种) 3表示markdown 
+    "contentType":2,
+    //发送SPT，WXPUSH_SPT_TOKEN 定义在E:\smart下的.env
+    "spt":"WXPUSH_SPT_TOKEN",
+    //原文链接，可选参数
+    "url":"https://wxpusher.zjiecode.com",
+}

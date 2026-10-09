@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -13,32 +14,35 @@ import (
 
 // 遭遇战整局多 seed 回归（试玩报告 C/D/E 的验收）：p1 只放 6 个防守兵不操作，
 // bot(hard) 从真实遭遇战预设（config-skirmish + map-skirmish）开局，逐 seed 跑到
-// tick 30000，断言：
+// tick 32000，断言：
 //   - bot 在 bot_first_attack_tick 之后发起不止一波进攻（单位多次推进到 p1 基地附近）；
 //   - 不存在两个及以上地面单位同格；
 //   - 除留守外，没有单位在出击状态下位置长期（≥3000 tick）不变；
 //   - 双方执行体都能从当前位置走回自家基地（试玩报告 D：执行体被自家建筑围死）；
+//   - 双方基地**始终**与争夺中心连通（每 500 tick 抽检一次；试玩报告 1010 阻断 A：
+//     bot 用一圈建筑把自家基地封成 126 格口袋，22 个兵与执行体全困死、整局 0 波进攻）；
 //   - 整局没有 >100ms 的 tick；
 //   - bot 科技链已启动：完成 electromagnetism，并在 weapon 链上再完成至少一项。
 //
-// 跑得慢（3 个 seed 约 6–10 分钟）：`go test -short` 会跳过。单跑方式：
+// 跑得慢（5 个 seed 约 9 分钟）：`go test -short` 会跳过。单跑方式：
 //
-//	cd server && go test ./internal/gamecore/ -run TestSkirmishFullMatchRegression -v -timeout 40m
+//	cd server && go test ./internal/gamecore/ -run TestSkirmishFullMatchRegression -v -timeout 50m
 //
 // 每个 seed 会 t.Logf 出进攻波次时间点、科技完成时间、p95/最坏 tick。
 //
-// 已知差距（2026-10-08 实测，未达 D 的节奏目标，留待下一轮）：
-//   - 电磁学在 tick 8000–16000 之间才完成（目标 8000），weapon_system 更晚。
+// 已知差距（2026-10-08/09 实测，未达 D 的节奏目标，留待下一轮）：
+//   - 电磁学在 tick 15000–25000 之间才完成（目标 8000），weapon_system 更晚。
 //     建议方向：提高熔炉/制造台目标数（hard 当前 smelterTarget=3/assemblerTarget=4），
 //     让矩阵专机的上游（磁线圈/电路板）优先用机器而非机甲手搓补料。
 //
 // pt1009-g2（试玩 G2 的 seed）修复前把玩家出生点放在一座 145 格孤岛上；
 // mapgen/connectivity.go 的连通性保证落地后纳入回归。
+// pt1010-85s8io / pt1010-g4 是 1010 试玩里 bot 把自己封进口袋的两个 seed。
 func TestSkirmishFullMatchRegression(t *testing.T) {
 	if testing.Short() {
 		t.Skip("整局遭遇战模拟（每个 seed 约 2–4 分钟）；用 -run 单跑")
 	}
-	for _, seed := range []string{"skirmish-seed-001", "pt1009-seed", "pt1009-g2"} {
+	for _, seed := range []string{"skirmish-seed-001", "pt1009-seed", "pt1009-g2", "pt1010-85s8io", "pt1010-g4"} {
 		t.Run(seed, func(t *testing.T) {
 			runSkirmishFullMatch(t, seed)
 		})
@@ -76,10 +80,13 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	p2Home := botPlayerHQ(t, ws, "p2").Position
 
 	const (
-		simTicks    = 30000
+		simTicks    = 32000
 		nearBase    = 12
 		stuckTicks  = 3000
 		waveGapTick = 800 // 两次"推进到基地附近"至少间隔这么久才算新的一波
+		// connectivityEvery 基地连通性的抽样间隔：每 500 tick 检查一次双方基地
+		// 是否仍走得到争夺中心（绝对不变量，试玩报告 1010 阻断 A）。
+		connectivityEvery = 500
 	)
 	type snapshot struct {
 		pos  model.Position
@@ -95,9 +102,35 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	var worstTick int64
 	var worstDur int64
 	techAt := map[string]int64{}
+	// sealSeen 记录"基地被封死"的第一次出现（整局每 500 tick 抽检一次）。
+	var sealSeen string
+	checkBaseConnectivity := func() {
+		if sealSeen != "" {
+			return
+		}
+		for _, owner := range []string{"p1", "p2"} {
+			home, ok := botHomePosition(ws, owner)
+			if !ok {
+				continue // 基地已被打掉：没有基地就无所谓"被封死"
+			}
+			goal, ok := baseSealGoal(ws, owner)
+			if !ok {
+				continue
+			}
+			budget := 4*ws.SurfaceDistance(home, goal) + 256
+			reached, truncated := sealFloodReaches(ws, home, goal, nil, budget)
+			if !reached && !truncated {
+				sealSeen = fmt.Sprintf("%s base %+v sealed off from %+v at tick %d", owner, home, goal, ws.Tick)
+				return
+			}
+		}
+	}
 
 	for ws.Tick < simTicks {
 		core.processTick()
+		if ws.Tick%connectivityEvery == 0 {
+			checkBaseConnectivity()
+		}
 		if d := core.metrics.LastTickDur.Milliseconds(); d > worstDur {
 			worstDur, worstTick = d, ws.Tick
 		}
@@ -184,6 +217,14 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 			t.Fatalf("%s executor %s at %+v cannot reach its home %+v (trapped by buildings)",
 				tc.name, tc.unit.ID, tc.unit.Position, tc.home)
 		}
+	}
+
+	// 4b) 双方基地**始终**与争夺中心（没有则对手基地）连通：试玩报告 1010 阻断 A
+	// 的绝对不变量——bot 不能再把自家基地一圈圈封成口袋（整局 0 波进攻）。
+	// 循环里每 connectivityEvery tick 抽检一次，这里再补一次终局检查。
+	checkBaseConnectivity()
+	if sealSeen != "" {
+		t.Fatalf("base got sealed off by its own buildings: %s", sealSeen)
 	}
 
 	// 5) 整局没有 >100ms 的 tick（告警线）。

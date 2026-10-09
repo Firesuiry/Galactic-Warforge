@@ -56,8 +56,8 @@ export function craftBlockReason(input: {
   resourceName: string;
 }): string | null {
   if (!input.hasRecipe) return '暂无可手工制造的配方。';
-  if (input.missingTech) return null; // 科技未解锁由独立提示行负责
-  if (!input.hasPlayer) return null; // 背包未加载由独立提示行负责
+  // 机甲正在忙排在科技/背包之前：它才是「按钮为什么点不动」的真正原因，
+  // 缺料只是次要（试玩 1010 H：手搓中打开面板看不出在忙什么）。
   if (input.job) {
     const total = totalJobBatches(input.job);
     const subject = input.job.kind === 'mine'
@@ -65,6 +65,8 @@ export function craftBlockReason(input: {
       : `手搓 ${input.recipeName}`;
     return `机甲正在${subject}（已完成 ${input.job.completed_batches}/${total}，剩余约 ${formatDuration(remainingJobTicks(input.job))}），完成后可开始新任务；需要中断请点「取消机甲任务」。`;
   }
+  if (input.missingTech) return null; // 科技未解锁由独立提示行负责
+  if (!input.hasPlayer) return null; // 背包未加载由独立提示行负责
   if (input.missingItems) return '背包原料不足，请先采集或取回原料。';
   return null;
 }
@@ -178,7 +180,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
           <p>原料：{recipe.inputs.map(input => `${getItemDisplayName(catalog, input.item_id)} ${input.quantity * count}（背包 ${player ? player.inventory?.[input.item_id] ?? 0 : '…'}）`).join('、') || '无'}</p>
           <p>产物：{[...recipe.outputs, ...(recipe.byproducts ?? [])].map(output => `${getItemDisplayName(catalog, output.item_id)} ${output.quantity * count}`).join('、')}</p>
           <p>耗时 {recipe.duration * count} tick · 核心耗能 {mechaCraftEnergyPerBatch(recipe.duration) * count}（每批 {mechaCraftEnergyPerBatch(recipe.duration)}）</p>
-          {missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !player ? <p role="status">正在读取背包…</p> : craftBlockReasonText ? <p role="status">{craftBlockReasonText}</p> : null}
+          {craftBlockReasonText ? <p role="status">{craftBlockReasonText}</p> : missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !player ? <p role="status">正在读取背包…</p> : null}
         </> : <p>暂无可手工制造的配方。</p>}
         <button className="secondary-button" disabled={!recipe || missingTech || missingItems || Boolean(job) || pending || !player} type="submit">开始制造</button>
         <p className="muted">制造时预留原料；取消会退回未完成部分。</p>

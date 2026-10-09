@@ -68,9 +68,11 @@ export function PlanetMapThree(props: Props) {
     if (mode.kind !== 'build' || !beltDrag.current) return;
     const key = tile.x + ':' + tile.y;
     if (beltDrag.current.placed.has(key)) return;
-    if (latest.current.fog && !getFogState(latest.current.fog, tile.x, tile.y).visible) return;
     beltDrag.current.placed.add(key);
     if (direction) store.setInteractionMode({ ...mode, direction });
+    // 与其它建筑同一口径：地形未知的格子客户端没有数据，是否可建由服务端判定，
+    // 命令照常下发（本地预检统一在 use-planet-interactions 的 shouldBlockBuildLocally）。
+    // 早期这里直接 return，传送带在未探索区被静默丢弃（试玩 1010 B）。
     latest.current.onInteractTile?.(tile);
   }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);

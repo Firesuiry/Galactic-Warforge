@@ -3,9 +3,11 @@ package gamecore
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 	"siliconworld/internal/terrain"
 )
 
@@ -68,18 +70,18 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	// Check tile is unoccupied; an occupied tile may still accept a vertically
 	// stacked layer of the same building type (vertical_construction tech).
 	tileKey := model.TileKey(pos.X, pos.Y)
-	if _, occupied := ws.TileBuilding[tileKey]; occupied && btype != model.BuildingTypeLogisticsDistributor {
+	if buildingID, occupied := ws.TileBuilding[tileKey]; occupied && btype != model.BuildingTypeLogisticsDistributor {
 		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
 		if stackErr != nil {
 			res.Code = model.CodePositionOccupied
-			res.Message = stackErr.Error()
+			res.Message = tileOccupiedMessage(ws, playerID, buildingID, stackErr.Error())
 			return res, nil
 		}
 		pos = &stackedPos
 	}
 	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) && pos.Z == 0 {
 		res.Code = model.CodePositionOccupied
-		res.Message = "地块已被施工预留"
+		res.Message = constructionReservationMessage(ws, playerID, tileKey)
 		return res, nil
 	}
 
@@ -269,6 +271,36 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	return res, nil
 }
 
+// constructionReservationMessage 施工预留回执：区分"你自己的施工任务"与
+// "别人的施工任务"（试玩报告 G：同格重复建造被笼统地回成"已被建筑占用"，
+// 玩家以为那里本来就有别人的建筑）。
+func constructionReservationMessage(ws *model.WorldState, playerID, tileKey string) string {
+	taskID := ws.Construction.ReservedTiles[tileKey]
+	if task := ws.Construction.Tasks[taskID]; task != nil {
+		state := "排队中"
+		if task.State == model.ConstructionInProgress {
+			state = "建造中"
+		}
+		if task.PlayerID == playerID {
+			return fmt.Sprintf("该格已有你的施工任务：%s（%s）", buildingTypeDisplayName(task.BuildingType), state)
+		}
+		return fmt.Sprintf("该格已有其他玩家的施工任务：%s（%s）", buildingTypeDisplayName(task.BuildingType), state)
+	}
+	return "该格已被施工预留"
+}
+
+// tileOccupiedMessage 占位回执：区分"你自己的建筑"与"别人的建筑"。
+func tileOccupiedMessage(ws *model.WorldState, playerID, buildingID, fallback string) string {
+	building := ws.Buildings[buildingID]
+	if building == nil {
+		return fallback
+	}
+	if building.OwnerID == playerID {
+		return fmt.Sprintf("该格已有你的建筑：%s", buildingTypeDisplayName(building.Type))
+	}
+	return fmt.Sprintf("该格已有其他玩家的建筑：%s", buildingTypeDisplayName(building.Type))
+}
+
 // buildingEnclosure 在 pos 放置 btype 后，某个地面单位是否会被关进死角。
 // 返回被围单位的名称/坐标与最后被堵死的那个出口（供回执写明细节）。
 //
@@ -287,10 +319,16 @@ type buildingEnclosureInfo struct {
 	unitPos  model.Position
 	lastExit model.Position // 建造前最后一个仍可通行的邻格（建造后即被堵死）
 	pocket   bool           // true = 口袋形态（能到基地，但被切断）
+	// baseSeal 非 nil：本次建造会把该玩家基地与外界的通路封死（绝对不变量，
+	// 见 baseSealedByPlacement）。
+	baseSeal *baseSealInfo
 }
 
 // enclosureMessage 围死回执：点名单位、坐标与最后出口。
 func enclosureMessage(info *buildingEnclosureInfo) string {
+	if info.baseSeal != nil {
+		return info.baseSeal.message()
+	}
 	if info.pocket {
 		return fmt.Sprintf("会把%s（%d,%d）与基地之间的通路切断（最后通道 %d,%d），单位会困死在封闭区域里",
 			info.unitName, info.unitPos.X, info.unitPos.Y, info.lastExit.X, info.lastExit.Y)
@@ -308,6 +346,153 @@ const pocketCheckRadius = 16
 // SurfaceDistance），所以预算必须在直线距离之外留足余量，否则会把连通误判成
 // 不可达（bot 测试图面 48、基地到玩家基地直线 93，实际路径 ~240）。
 const pocketFloodBudget = 2000
+
+// baseSealInfo 基地被自己围死的回执细节（绝对不变量，见 baseSealedByPlacement）。
+type baseSealInfo struct {
+	lastExit model.Position // 最后一条通道：本次建造的落点
+}
+
+func (info *baseSealInfo) message() string {
+	return fmt.Sprintf("会把基地与外界的通路封死（最后通道 %d,%d）", info.lastExit.X, info.lastExit.Y)
+}
+
+// baseSealGoal 基地必须保持连通的"外界"目标点：优先争夺中心（mapgen 在出生点
+// 球面中点放的资源簇，ClusterID 以 -contested 结尾），其次对手基地。
+// 两者都没有（单人沙盒）时返回 false，跳过该检查。
+func baseSealGoal(ws *model.WorldState, owner string) (model.Position, bool) {
+	bestID := ""
+	var best model.Position
+	for id, node := range ws.Resources {
+		if node == nil || !strings.HasSuffix(node.ClusterID, "-contested") {
+			continue
+		}
+		if bestID == "" || id < bestID {
+			bestID, best = id, node.Position
+		}
+	}
+	if bestID != "" {
+		return best, true
+	}
+	// 没有争夺中心（非遭遇战地图）：用对手基地当锚点，能走到对手基地就不算被关住。
+	bestID = ""
+	for id, b := range ws.Buildings {
+		if b == nil || b.HP <= 0 || b.OwnerID == owner || b.OwnerID == "" || b.Type != model.BuildingTypeBattlefieldAnalysisBase {
+			continue
+		}
+		if bestID == "" || id < bestID {
+			bestID, best = id, b.Position
+		}
+	}
+	if bestID == "" {
+		return model.Position{}, false
+	}
+	return best, true
+}
+
+// baseSealedByPlacement 绝对不变量：任何建造放下后，每个玩家的基地（战地分析基站）
+// 仍须能沿地面（建筑算障碍）走到争夺中心（没有争夺中心时用对手基地）。
+//
+// 这是试玩报告 1010 阻断 A 的修法：旧的"口袋判定"是增量的（建造前能到、建造后
+// 到不了才拒绝），bot 一圈一圈收紧时每一步都还"能到"，于是把自家基地封成 126 格
+// 口袋、22 个兵与执行体全困死。这里改成绝对口径：只要建造后走不到外界就拒绝，
+// 无论建造前是什么状态。
+//
+// 预算按基地到目标的距离给余量（跨面绕行可能远长于 SurfaceDistance），上限为全图
+// 格数；洪泛提前命中目标即停。只有"可能切断连通区"的落点（buildMayCutRegion 预筛）
+// 才会真的跑洪泛，常规建造的额外开销可忽略。
+func baseSealedByPlacement(ws *model.WorldState, pos model.Position, occupied map[model.Position]bool) *baseSealInfo {
+	if ws == nil || len(occupied) == 0 {
+		return nil
+	}
+	owners := make([]string, 0, len(ws.Players))
+	for id := range ws.Players {
+		owners = append(owners, id)
+	}
+	sort.Strings(owners)
+	for _, owner := range owners {
+		home, ok := botHomePosition(ws, owner)
+		if !ok {
+			continue
+		}
+		goal, ok := baseSealGoal(ws, owner)
+		if !ok || home == goal {
+			continue
+		}
+		budget := 4*ws.SurfaceDistance(home, goal) + 256
+		if full := ws.MapWidth * ws.MapHeight; budget > full {
+			budget = full
+		}
+		reached, truncated := sealFloodReaches(ws, home, goal, occupied, budget)
+		if reached || truncated {
+			continue
+		}
+		// 建造前就已经走不到外界（旧存档/地形变化）：放行，否则该玩家再也建不了东西。
+		if before, _ := sealFloodReaches(ws, home, goal, nil, budget); before {
+			return &baseSealInfo{lastExit: pos}
+		}
+	}
+	return nil
+}
+
+// sealFloodReaches 从 from 出发的地面洪泛（地形/建筑/施工预留/本次占地都是障碍），
+// 预算内能否走到 goal。扁平数组 + epoch 戳（复用 ws.PathScratch*，与 pathFlood
+// 同一套口径），调用点在命令执行/选址期，不在移动结算期。
+// truncated 表示预算耗尽、连通区没走完——此时不能断定"被封死"，交由调用方放行
+// （宁可漏报也不误拒；真要围死一个比 4×直线距离还大的区域，也不是"口袋"了）。
+func sealFloodReaches(ws *model.WorldState, from, goal model.Position, occupied map[model.Position]bool, budget int) (reached, truncated bool) {
+	if !ws.InBounds(from.X, from.Y) || !ws.InBounds(goal.X, goal.Y) || budget < 0 {
+		return false, false
+	}
+	width := ws.MapWidth
+	size := width * ws.MapHeight
+	if len(ws.PathScratchDepth) != size {
+		ws.PathScratchParent = make([]int32, size)
+		ws.PathScratchDepth = make([]int32, size)
+		ws.PathScratchEpoch = make([]int32, size)
+		ws.PathScratchGen = 0
+	}
+	ws.PathScratchGen++
+	gen := ws.PathScratchGen
+	depth := ws.PathScratchDepth
+	epoch := ws.PathScratchEpoch
+	grid := ws.Surface()
+
+	startIdx := int32(from.Y*width + from.X)
+	goalIdx := int32(goal.Y*width + goal.X)
+	queue := append(ws.PathScratchQueue[:0], startIdx)
+	epoch[startIdx] = gen
+	depth[startIdx] = 0
+	for head := 0; head < len(queue); head++ {
+		cur := queue[head]
+		if int(depth[cur]) >= budget {
+			truncated = true
+			continue
+		}
+		tile := surface.Tile{X: int(cur) % width, Y: int(cur) / width}
+		for d := surface.North; d <= surface.West; d++ {
+			n, _ := grid.Step(tile, d)
+			if !ws.InBounds(n.X, n.Y) {
+				continue
+			}
+			nIdx := int32(n.Y*width + n.X)
+			if epoch[nIdx] == gen {
+				continue
+			}
+			if nIdx == goalIdx {
+				ws.PathScratchQueue = queue
+				return true, false
+			}
+			if unitTileBlockedAfterBuild(ws, model.Position{X: n.X, Y: n.Y}, occupied) {
+				continue
+			}
+			epoch[nIdx] = gen
+			depth[nIdx] = depth[cur] + 1
+			queue = append(queue, nIdx)
+		}
+	}
+	ws.PathScratchQueue = queue
+	return false, truncated
+}
 
 func buildingEnclosure(ws *model.WorldState, btype model.BuildingType, rotation model.PlanRotation, pos model.Position) *buildingEnclosureInfo {
 	if ws == nil {
@@ -361,6 +546,12 @@ func buildingEnclosure(ws *model.WorldState, btype model.BuildingType, rotation 
 	// 仍然互通，直接放行；只有真的可能切断时才做（较贵的）两次连通区检查。
 	if !buildMayCutRegion(ws, occupied) {
 		return nil
+	}
+	// 第三遍（绝对不变量）：所有玩家的基地都必须仍然走得到争夺中心。
+	// 与第二遍不同，它不看"增量"，因此能拦住 bot 一圈一圈收紧的口袋
+	// （试玩报告 1010 阻断 A）。预筛已通过，只有真正可能切断时才付洪泛成本。
+	if seal := baseSealedByPlacement(ws, pos, occupied); seal != nil {
+		return &buildingEnclosureInfo{baseSeal: seal}
 	}
 	owner := pocketEnclosureOwner(ws, pos)
 	if owner == "" {

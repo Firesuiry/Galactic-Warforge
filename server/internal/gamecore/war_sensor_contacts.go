@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"math"
+	"sort"
 
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
@@ -136,7 +137,23 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 	if ws == nil {
 		return nil
 	}
-	sources := make([]positionedSensorSource, 0)
+	// 玩家单位（含机甲）自带一套车载传感器：光学/红外/被动电磁，半径 = 单位视野。
+	// 只收集建筑传感器时，玩家把机甲开到黑雾巢穴 3 格外也拿不到任何 contact，
+	// enemy_forces 恒为空、黑雾在网页上不可见不可打（试玩报告 1010 阻断 C）。
+	// 口径与 visibility 模块一致：单位视野 = unit.VisionRange。
+	sources := make([]positionedSensorSource, 0, len(ws.Units)*3+len(ws.Buildings))
+	unitIDs := make([]string, 0, len(ws.Units))
+	for id := range ws.Units {
+		unitIDs = append(unitIDs, id)
+	}
+	sort.Strings(unitIDs)
+	for _, id := range unitIDs {
+		unit := ws.Units[id]
+		if unit == nil || unit.OwnerID != playerID || unit.HP <= 0 {
+			continue
+		}
+		sources = append(sources, unitSensorSources(unit, id)...)
+	}
 	for _, building := range ws.Buildings {
 		if building == nil || building.OwnerID != playerID || building.HP <= 0 || building.Runtime.State != model.BuildingWorkRunning {
 			continue
@@ -197,6 +214,49 @@ func collectPlanetSensorSources(ws *model.WorldState, playerID string) []positio
 	}
 
 	return sources
+}
+
+// unitSensorSources 单位车载传感器：光学（主动识别）+ 红外 + 被动电磁。
+// 强度按"单位视野内的稳定识别"给（光学源会 +2 且置 activeResolution，
+// 因此视野内的目标必然能到 confirmed_type 以上）。
+func unitSensorSources(unit *model.Unit, sourceID string) []positionedSensorSource {
+	if unit == nil || unit.HP <= 0 {
+		return nil
+	}
+	visionRange := float64(max(1, unit.VisionRange))
+	position := clonePosition(unit.Position)
+	return []positionedSensorSource{
+		{
+			input: model.SensorContactSourceInput{
+				SourceType: model.SensorSourceVision,
+				SourceID:   sourceID,
+				SourceKind: "unit",
+				Strength:   3 + visionRange/4,
+			},
+			position:   position,
+			rangeLimit: visionRange,
+		},
+		{
+			input: model.SensorContactSourceInput{
+				SourceType: model.SensorSourceInfrared,
+				SourceID:   sourceID,
+				SourceKind: "unit",
+				Strength:   2 + visionRange/6,
+			},
+			position:   position,
+			rangeLimit: visionRange,
+		},
+		{
+			input: model.SensorContactSourceInput{
+				SourceType: model.SensorSourcePassiveEM,
+				SourceID:   sourceID,
+				SourceKind: "unit",
+				Strength:   2 + visionRange/8,
+			},
+			position:   position,
+			rangeLimit: visionRange + 2,
+		},
+	}
 }
 
 func collectSystemSensorSources(

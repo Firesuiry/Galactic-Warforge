@@ -276,9 +276,18 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
   }
 
   if (selected.kind === 'unit') {
+    // 单位可能已掉出相机窗口（/scene 只返回窗口内实体），此时不能整条清空选择条：
+    // 玩家仍然持有这个选中单位，右键/移动按钮还要继续对它下命令（试玩 1010 E）。
     const unit = planet.units?.[selected.id];
     if (!unit) {
-      return null;
+      return (
+        <div className="planet-selection-bar" data-testid="planet-selection-bar">
+          <div className="planet-selection-bar__info">
+            <strong>已选中的单位不在当前视野</strong>
+            <span className="planet-selection-bar__meta">镜头移出了它的位置；右键地图仍可下达移动/攻击指令</span>
+          </div>
+        </div>
+      );
     }
     const ownUnit = unit.owner_id === session.playerId;
     const underfootResource = ownUnit && unit.mecha ? findNearbyMinableResource(planet, catalog, unit.position) : undefined;

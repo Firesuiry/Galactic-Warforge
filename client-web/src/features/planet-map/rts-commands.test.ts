@@ -63,6 +63,25 @@ describe('rts-commands 选择器推导', () => {
     expect(orderEligibleUnitIds(planet, ['u-1', 'u-2', 'u-3'], 'p1')).toEqual(['u-2', 'u-3']);
   });
 
+  it('commandableUnitIds：单位掉出相机窗口时回退到跨窗口累积缓存（试玩 1010 E）', () => {
+    const planet = makePlanet();
+    // 镜头移开：/scene 不再返回 u-2（模拟真实响应只含窗口内实体）。
+    delete (planet.units as Record<string, unknown>)['u-2'];
+    expect(commandableUnitIds(planet, ['u-2'], 'p1')).toEqual([]);
+    const known = new Map([['u-2', makeUnit('u-2', 'soldier', 'p1', 2, 2)]]);
+    expect(commandableUnitIds(planet, ['u-2'], 'p1', known)).toEqual(['u-2']);
+    // 缓存里是非己方单位时仍要过滤掉。
+    const foreign = new Map([['u-9', makeUnit('u-9', 'soldier', 'p2', 3, 3)]]);
+    expect(commandableUnitIds(planet, ['u-9'], 'p1', foreign)).toEqual([]);
+  });
+
+  it('orderEligibleUnitIds：缓存里的执行体同样不受理 unit_order', () => {
+    const planet = makePlanet();
+    delete (planet.units as Record<string, unknown>)['u-1'];
+    const known = new Map([['u-1', makeUnit('u-1', 'executor', 'p1', 1, 1, true)]]);
+    expect(orderEligibleUnitIds(planet, ['u-1'], 'p1', known)).toEqual([]);
+  });
+
   it('isDarkFogUnit：owner 或 type 命中 dark_fog 均判定为黑雾', () => {
     expect(isDarkFogUnit({ owner_id: 'dark_fog', type: 'worker' })).toBe(true);
     expect(isDarkFogUnit({ owner_id: 'p1', type: 'dark_fog' as never })).toBe(true);

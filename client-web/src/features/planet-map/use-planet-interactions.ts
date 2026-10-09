@@ -36,6 +36,7 @@ import {
 import type { PlanetRenderView, TilePoint } from '@/features/planet-map/model';
 import {
   commandableUnitIds,
+  indexUnitsById,
   orderEligibleUnitIds,
   resolveContextCommand,
 } from '@/features/planet-map/rts-commands';
@@ -95,6 +96,12 @@ interface UsePlanetInteractionsInput {
   inventory?: ItemInventory;
   planet?: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+  /**
+   * 跨窗口累积的己方单位（id → Unit，见 own-entity-cache）。
+   * `/scene` 只返回相机窗口内的实体，镜头移开后被选中的单位会掉出 `planet.units`，
+   * 命令选择器必须能回退到这份缓存，否则「右键远处格」会静默不下发（试玩 1010 E）。
+   */
+  knownOwnUnits?: ReadonlyMap<string, Unit>;
   /** C4：任务群列表（小队右键部署的归属解析；缺省时小队右键给出编组提示）。 */
   taskForces?: WarTaskForceView[];
   /** C4：小队部署命令提交后的回调（调用侧据此失效/重取任务群查询）。 */
@@ -113,7 +120,7 @@ export interface PlanetInteractions {
 /**
  * 地图交互命令中枢：planet 未加载完成时所有入口为空操作。
  */
-export function usePlanetInteractions({ catalog, inventory, planet, runtime, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
+export function usePlanetInteractions({ catalog, inventory, planet, runtime, knownOwnUnits, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
   const client = useApiClient();
   const session = useSessionSnapshot();
 
@@ -221,7 +228,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
       }
 
       if (mode.kind === 'move') {
-        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId);
+        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
         if (selector.length === 0) {
           reportLocalBlock('move', planet.planet_id, '没有选中的己方单位', { position });
           store.exitInteractionMode();
@@ -233,7 +240,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
       }
 
       if (mode.kind === 'attack') {
-        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId);
+        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
         if (selector.length === 0) {
           reportLocalBlock('attack', planet.planet_id, '没有选中的己方单位', { position });
           store.exitInteractionMode();
@@ -266,7 +273,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
       }
 
       if (mode.kind === 'unit_order') {
-        const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId);
+        const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
         if (selector.length === 0) {
           reportLocalBlock('unit_order', planet.planet_id, '没有可接受指令的单位（执行体不受理编队指令）', { position });
           store.exitInteractionMode();
@@ -285,7 +292,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
         store.exitInteractionMode();
       }
     },
-    [catalog, client, inventory, planet, runtime, session.playerId, submitAttack, submitMove, submitUnitOrder],
+    [catalog, client, inventory, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitMove, submitUnitOrder],
   );
 
   const contextTile = useCallback(
@@ -294,7 +301,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
         return false;
       }
       const store = usePlanetViewStore.getState();
-      const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId);
+      const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
 
       // C4：小队右键部署——按所属任务群分组下达 task_force_deploy 到目标坐标。
@@ -340,7 +347,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
       }
       return true;
     },
-    [client, onTaskForceDeployed, planet, runtime, session.playerId, submitAttack, submitMove, taskForces],
+    [client, knownOwnUnits, onTaskForceDeployed, planet, runtime, session.playerId, submitAttack, submitMove, taskForces],
   );
 
   const orderNow = useCallback(
@@ -349,13 +356,13 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
         return;
       }
       const store = usePlanetViewStore.getState();
-      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId);
+      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
       if (selector.length === 0) {
         return;
       }
       submitUnitOrder(selector, order, {});
     },
-    [planet, session.playerId, submitUnitOrder],
+    [knownOwnUnits, planet, session.playerId, submitUnitOrder],
   );
 
   return { interactTile, contextTile, orderNow };

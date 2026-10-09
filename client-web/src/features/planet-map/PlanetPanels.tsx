@@ -80,6 +80,7 @@ import {
 } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
+import { isInIsolatedNetwork } from "./power-status";
 import { LogisticsStationControls } from "./LogisticsStationControls";
 import { DistributorControls } from "./DistributorControls";
 import { TrafficMonitorControls } from "./TrafficMonitorControls";
@@ -777,6 +778,12 @@ export function PlanetEntityPanel({
                   }).join("、")}
               </dd>
             </div>
+            {constructionTasks.some((task) => task.player_id === session.playerId) ? (
+              <div>
+                <dt>提示</dt>
+                <dd className="planet-kv-list__warning">此格已有你的施工任务，正在排队/施工中，无需重复下单。</dd>
+              </div>
+            ) : null}
             <div>
               <dt>管网节点</dt>
               <dd>{pipelineNode?.id ?? "-"}</dd>
@@ -845,6 +852,15 @@ export function PlanetEntityPanel({
               <dt>建议下一步</dt>
               <dd>{stateReasonHint?.nextHint ?? "-"}</dd>
             </div>
+            {isInIsolatedNetwork(networks, session.playerId, building.id) ? (
+              <div>
+                <dt>电网</dt>
+                <dd className="planet-kv-list__warning">
+                  未接入主电网（孤立电网）：这座建筑自成一个电网，不会给基地供电。
+                  建议在 4 格内补一座电塔把它并进主网。
+                </dd>
+              </div>
+            ) : null}
             <div>
               <dt>血量</dt>
               <dd>

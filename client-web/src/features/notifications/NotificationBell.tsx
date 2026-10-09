@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 
 import { sfx } from '@/engine/audio';
+import { isPowerAlertToast } from '@/features/notifications/event-toasts';
 import { historyFromEvents, NOTIFICATION_EVENT_TYPES } from '@/features/notifications/notify';
 import { useNotificationHistoryPersistence } from '@/features/notifications/persistence';
 import { useNotificationsStore, type Toast } from '@/features/notifications/store';
@@ -55,6 +56,23 @@ function formatTime(at: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+/**
+ * 历史分组：断电类单独归到顶部，其余保持原有时间倒序。
+ * 断电类判定见 event-toasts 的 isPowerAlertToast（按 mergeKey 前缀 + 告警类型）。
+ */
+export function groupHistoryByPower(history: readonly Toast[]): { power: Toast[]; others: Toast[] } {
+  const power: Toast[] = [];
+  const others: Toast[] = [];
+  for (const toast of history) {
+    if (isPowerAlertToast(toast)) {
+      power.push(toast);
+    } else {
+      others.push(toast);
+    }
+  }
+  return { power, others };
+}
+
 export function NotificationBell() {
   const navigate = useNavigate();
   const history = useNotificationsStore((state) => state.history);
@@ -88,6 +106,32 @@ export function NotificationBell() {
     setOpen(!open);
   }
 
+  const { power: powerAlerts, others: otherAlerts } = groupHistoryByPower(history);
+
+  function renderItem(toast: Toast) {
+    return (
+      <li key={toast.id}>
+        <button
+          className={`notification-bell__item notification-bell__item--${toast.kind}`}
+          type="button"
+          onClick={() => {
+            if (toast.href) {
+              setOpen(false);
+              navigate(toast.href);
+            }
+          }}
+        >
+          <span className="notification-bell__item-time">{formatStamp(toast)}</span>
+          <span className="notification-bell__item-text">
+            {toast.title}
+            {toast.count > 1 ? ` ×${toast.count}` : ''}
+            {toast.body ? <span className="notification-bell__item-body">{toast.body}</span> : null}
+          </span>
+        </button>
+      </li>
+    );
+  }
+
   return (
     <div className="notification-bell" ref={panelRef}>
       <button
@@ -109,29 +153,27 @@ export function NotificationBell() {
           {history.length === 0 ? (
             <div className="notification-bell__empty">暂无通知</div>
           ) : (
-            <ul className="notification-bell__list">
-              {history.map((toast) => (
-                <li key={toast.id}>
-                  <button
-                    className={`notification-bell__item notification-bell__item--${toast.kind}`}
-                    type="button"
-                    onClick={() => {
-                      if (toast.href) {
-                        setOpen(false);
-                        navigate(toast.href);
-                      }
-                    }}
-                  >
-                    <span className="notification-bell__item-time">{formatStamp(toast)}</span>
-                    <span className="notification-bell__item-text">
-                      {toast.title}
-                      {toast.count > 1 ? ` ×${toast.count}` : ''}
-                      {toast.body ? <span className="notification-bell__item-body">{toast.body}</span> : null}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              {/* 断电类置顶单独分组：试玩报告 F——断电告警被上百条产线吞吐告警淹没 */}
+              {powerAlerts.length > 0 ? (
+                <section className="notification-bell__group">
+                  <div className="notification-bell__group-title notification-bell__group-title--power">
+                    断电告警
+                  </div>
+                  <ul className="notification-bell__list">
+                    {powerAlerts.map((toast) => renderItem(toast))}
+                  </ul>
+                </section>
+              ) : null}
+              {otherAlerts.length > 0 ? (
+                <section className="notification-bell__group">
+                  <div className="notification-bell__group-title">其他通知</div>
+                  <ul className="notification-bell__list">
+                    {otherAlerts.map((toast) => renderItem(toast))}
+                  </ul>
+                </section>
+              ) : null}
+            </>
           )}
         </div>
       ) : null}

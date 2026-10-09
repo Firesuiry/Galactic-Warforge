@@ -56,6 +56,7 @@ import {
 } from "@/features/planet-map/model";
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
 import { accumulateOwnEntities, createOwnEntityCache, ownEntitySnapshot } from "@/features/planet-map/own-entity-cache";
+import { indexUnitsById } from "@/features/planet-map/rts-commands";
 import { useApiClient } from "@/hooks/use-api-client";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { translatePlanetKind, translateUi } from "@/i18n/translate";
@@ -332,11 +333,26 @@ export function PlanetPage() {
     // 保持划定模式，便于连续画多个区域（右键/Esc 退出，对齐建造模式）
   }
 
+  // 每来一帧窗口数据就并入累积缓存；引导只看这份历史（见 own-entity-cache 注释）。
+  // 放在 useMemo 里而不是 effect：ref 更新不会触发重渲染，写在 effect 里引导会晚一帧且可能一直不更新。
+  // 对局标识（started_at::map_seed）一起作为失效条件：同一行星开新局时实体 id 会复用，
+  // 只按 planetId 判断会用上一局的建筑点亮新手引导。
+  // 同一份缓存也喂给命令选择器（commandableUnitIds）：/scene 只返回相机窗口内的实体，
+  // 镜头移开后被选中的单位会掉出窗口，右键就成了静默无命令（试玩 1010 E）。
+  const currentGameQuery = useCurrentGameQuery();
+  const gameIdentity = currentGameQuery.data ? gameIdentityOf(currentGameQuery.data) : '';
+  const guideEntities = useMemo(
+    () => ownEntitySnapshot(accumulateOwnEntities(ownEntityCacheRef.current, sceneQuery.data, session.playerId, gameIdentity)),
+    [sceneQuery.data, session.playerId, gameIdentity],
+  );
+  const knownOwnUnits = useMemo(() => indexUnitsById(guideEntities.units), [guideEntities.units]);
+
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
     inventory: summaryQuery.data?.players?.[session.playerId]?.inventory,
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
+    knownOwnUnits,
     taskForces: taskForcesQuery.data?.task_forces,
     onTaskForceDeployed: () => { void taskForcesQuery.refetch(); },
   });
@@ -349,21 +365,11 @@ export function PlanetPage() {
     }
   }, [sceneQuery.data, session.playerId, darkFogHostile]);
 
-  // 每来一帧窗口数据就并入累积缓存；引导只看这份历史（见 own-entity-cache 注释）。
-  // 放在 useMemo 里而不是 effect：ref 更新不会触发重渲染，写在 effect 里引导会晚一帧且可能一直不更新。
-  // 对局标识（started_at::map_seed）一起作为失效条件：同一行星开新局时实体 id 会复用，
-  // 只按 planetId 判断会用上一局的建筑点亮新手引导。
-  const currentGameQuery = useCurrentGameQuery();
-  const gameIdentity = currentGameQuery.data ? gameIdentityOf(currentGameQuery.data) : '';
-  const guideEntities = useMemo(
-    () => ownEntitySnapshot(accumulateOwnEntities(ownEntityCacheRef.current, sceneQuery.data, session.playerId, gameIdentity)),
-    [sceneQuery.data, session.playerId, gameIdentity],
-  );
-
   // RTS 快捷键体系（C1）：A/S/H/P/G + Ctrl/数字编队，2D/3D 共用（输入框聚焦自动忽略）
   usePlanetRtsHotkeys({
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
+    knownOwnUnits,
     interactions,
   });
 
@@ -793,7 +799,7 @@ export function PlanetPage() {
           theaters={theatersQuery.data?.theaters}
         />}
         </Suspense>
-        <BuildPlacementHint catalog={catalog} inventory={summary?.players?.[session.playerId]?.inventory} planet={planet} playerId={session.playerId} />
+        <BuildPlacementHint catalog={catalog} inventory={summary?.players?.[session.playerId]?.inventory} planet={planet} playerId={session.playerId} runtime={runtime} />
         <div className="planet-view-switch" aria-label="地图视图">
           {isThree && systemId && <Link className="secondary-button" to={`/system/${systemId}?planet=${planet.planet_id}`}>恒星系 ↗</Link>}
           <button className="secondary-button" aria-pressed={isThree} onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete("view"); return next; }, { replace: true })}>3D 星球</button>

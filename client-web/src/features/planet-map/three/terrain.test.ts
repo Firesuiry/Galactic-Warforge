@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
-import { createPlanetSurface, disposePlanetSurface, updatePlanetSurface } from './terrain';
+import { SHADER_COLOR, createPlanetSurface, disposePlanetSurface, updatePlanetSurface } from './terrain';
 
 function scene(): PlanetSceneView {
   return {
@@ -66,6 +66,27 @@ describe('3D player-visible terrain', () => {
     // Water at (123,76): south is known land, east is hidden rock.
     expect(Array.from(coast.image.data!.slice(0, 4))).toEqual([0, 0, 255, 0]);
     expect(Array.from(coast.image.data!.slice(4))).toEqual(Array(12).fill(0));
+    disposePlanetSurface(mesh);
+  });
+
+  it('paints unexplored cells as a visible slate survey veil, never near-black space', () => {
+    // Old semantics mixed an almost-black (0.004, 0.011, 0.023) veil, which ACES
+    // tonemapped into the starfield, so the planet vanished when the camera moved
+    // into unexplored space. The base must stay a clearly readable dark slate.
+    const veil = /vec3 swVeil = (vec3\([^)]*\))/.exec(SHADER_COLOR);
+    expect(veil).not.toBeNull();
+    const base = veil![1].slice('vec3('.length, -1).split(',').map((value) => Number(value.trim()));
+    expect(base[0]).toBeGreaterThanOrEqual(0.04);
+    expect(base[0]).toBeLessThanOrEqual(0.08);
+    expect(base[2]).toBeGreaterThan(base[0]);
+    // Veil detail must be deterministic: no animation time may leak into unknown cells.
+    const veilBlock = SHADER_COLOR.slice(SHADER_COLOR.indexOf('float swVeilPatch'), SHADER_COLOR.indexOf('swAlbedo = mix(swVeil'));
+    expect(veilBlock).toContain('swFbm');
+    expect(veilBlock).not.toContain('swTime');
+    // Terrain relief stays exclusive to known cells: height is gated by swKnown.
+    expect(SHADER_COLOR).toContain('* swKnown;');
+    const mesh = createPlanetSurface(100);
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v3');
     disposePlanetSurface(mesh);
   });
 

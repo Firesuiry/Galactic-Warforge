@@ -8,6 +8,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
 import { isMuted, setMuted, sfx } from '@/engine/audio';
+import { isPowerAlertType } from '@/features/notifications/event-toasts';
 import { formatMineralInventory, pickKeyItems, sortedInventory } from '@/features/mineral-summary';
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
@@ -65,7 +66,9 @@ export function TopNav() {
 
   const alertQuery = useQuery({
     queryKey: ['shell-alerts', session.serverUrl, session.playerId],
-    queryFn: () => client.fetchAlertSnapshot({ limit: 3 }),
+    // 拉更多条：既要顶栏告警计数，也要按建筑去重统计「几座建筑缺电」。
+    // 服务端已按 (建筑, 告警类型) 聚合，同一建筑不会重复占用条目。
+    queryFn: () => client.fetchAlertSnapshot({ limit: 50 }),
     enabled: Boolean(session.playerId),
     refetchInterval: 8000,
   });
@@ -137,7 +140,47 @@ export function TopNav() {
     (alert) => !isResearchStationAlertNoise(alert),
   );
   const alertCount = alerts.length + (powerDelta != null && powerDelta < 0 ? 1 : 0);
+  // 缺电建筑：按 building_id 去重统计断电类告警（试玩报告 F——需要一眼看出
+  // 有几座建筑缺电，而不是被产线吞吐类告警稀释）。保留每座建筑的**首条**告警
+  // （通常带更多 details）用于点击定位。
+  const unpoweredByBuilding = new Map<string, (typeof alerts)[number]>();
+  for (const alert of alerts) {
+    if (isPowerAlertType(alert.alert_type) && !unpoweredByBuilding.has(alert.building_id)) {
+      unpoweredByBuilding.set(alert.building_id, alert);
+    }
+  }
+  const unpoweredAlerts = [...unpoweredByBuilding.values()];
+  const unpoweredCount = unpoweredAlerts.length;
+  const powerAlerting = unpoweredCount > 0;
+  // 缺电告警或电力赤字都进 danger/pulse 态（沿用既有 chip 风格）
+  const powerDeficit = powerDelta != null && powerDelta < 0;
+  const powerChipClass = powerAlerting || powerDeficit ? 'top-nav__chip--danger' : powerClass;
+  const powerChipPulse = powerAlerting || powerDeficit ? ' top-nav__chip--pulse' : '';
+  const powerChipTitle = powerAlerting
+    ? `${unpoweredCount} 座建筑缺电 · 点击定位`
+    : '电力 发电/耗电';
   const activePlanetId = summaryQuery.data?.active_planet_id;
+
+  /** 缺电建筑定位：带上 select 深链（行星页据此选中建筑并打开详情页签）。 */
+  function handlePowerChipClick() {
+    if (!activePlanetId) {
+      return;
+    }
+    const target = unpoweredAlerts[0];
+    if (!target) {
+      navigate(`/planet/${activePlanetId}`);
+      return;
+    }
+    // 手拼 query（不用 URLSearchParams：它会把 `building:b-1` 里的冒号转义成 %3A，
+    // 深链可读性差；行星页 searchParams.get 两种写法都能解析）
+    let href = `/planet/${activePlanetId}?select=building:${target.building_id}`;
+    // 位置不一定有（服务端断电告警不带坐标）：有才带 x/y，否则只带 select
+    const position = alertPosition(target.details);
+    if (position) {
+      href += `&x=${position.x}&y=${position.y}`;
+    }
+    navigate(href);
+  }
 
   return (
     <header className="top-nav">
@@ -183,9 +226,11 @@ export function TopNav() {
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>
         <InventoryChips catalog={catalogQuery.data} inventory={currentPlayer?.inventory} />
-        <span
-          className={`top-nav__chip${powerClass ? ` ${powerClass}` : ''}${powerPulse}`}
-          title="电力 发电/耗电"
+        <button
+          className={`top-nav__chip top-nav__chip--button${powerChipClass ? ` ${powerChipClass}` : ''}${powerChipPulse}`}
+          type="button"
+          title={powerChipTitle}
+          onClick={handlePowerChipClick}
         >
           <Icon iconKey="ray_receiver" color="#39e6d0" size={16} />
           <span className="top-nav__chip-value">
@@ -197,7 +242,13 @@ export function TopNav() {
               {powerDelta}
             </span>
           ) : null}
-        </span>
+          {powerAlerting ? (
+            <span className="top-nav__chip-alert" title={`${unpoweredCount} 座建筑缺电`}>
+              <TriangleAlert size={12} strokeWidth={2} aria-hidden="true" />
+              <span className="top-nav__chip-alert-count">{unpoweredCount}</span>
+            </span>
+          ) : null}
+        </button>
       </div>
 
       <div className="top-nav__alerts">
@@ -291,6 +342,24 @@ export function TopNav() {
       </div>
     </header>
   );
+}
+
+/**
+ * 断电告警里的建筑位置：`details.position` / `details.{x,y}` 任一存在才返回。
+ * 服务端当前不带位置，此时返回 null（跳转只带 select，不编造坐标）。
+ */
+function alertPosition(details: Record<string, unknown> | undefined): { x: number; y: number } | null {
+  if (!details) {
+    return null;
+  }
+  const nested = details.position;
+  const source = (typeof nested === 'object' && nested !== null ? nested : details) as Record<string, unknown>;
+  const x = typeof source.x === 'number' && Number.isFinite(source.x) ? source.x : undefined;
+  const y = typeof source.y === 'number' && Number.isFinite(source.y) ? source.y : undefined;
+  if (x === undefined || y === undefined) {
+    return null;
+  }
+  return { x: Math.round(x), y: Math.round(y) };
 }
 
 /** 顶栏关键库存（弹药/电路板/铁块…前 4 项），点击展开完整背包库存。 */

@@ -54,14 +54,21 @@ export const FACTION_COLOR: Record<UnitFaction, number> = {
   fog_hostile: 0xff4444,
 };
 
-/** 当前选中集合里仍存活且属己方的单位（命令下发的最终选择器）。 */
+/**
+ * 当前选中集合里仍存活且属己方的单位（命令下发的最终选择器）。
+ *
+ * `knownOwnUnits` 是跨窗口累积的己方单位（见 own-entity-cache）：`/scene` 只返回相机窗口内的
+ * 实体，镜头一移开，`planet.units` 里就没有被选中的单位了，早期这里直接把它过滤掉，
+ * 于是「右键远处格」变成静默不下发任何命令（试玩 1010 E）。
+ */
 export function commandableUnitIds(
   planet: PlanetRenderView,
   selectedUnits: readonly string[],
   playerId: string,
+  knownOwnUnits?: ReadonlyMap<string, Unit>,
 ): string[] {
   return selectedUnits.filter((id) => {
-    const unit = planet.units?.[id];
+    const unit = planet.units?.[id] ?? knownOwnUnits?.get(id);
     return Boolean(unit && unit.owner_id === playerId);
   });
 }
@@ -74,8 +81,15 @@ export function orderEligibleUnitIds(
   planet: PlanetRenderView,
   selectedUnits: readonly string[],
   playerId: string,
+  knownOwnUnits?: ReadonlyMap<string, Unit>,
 ): string[] {
-  return commandableUnitIds(planet, selectedUnits, playerId).filter((id) => !planet.units?.[id]?.mecha);
+  return commandableUnitIds(planet, selectedUnits, playerId, knownOwnUnits)
+    .filter((id) => !(planet.units?.[id] ?? knownOwnUnits?.get(id))?.mecha);
+}
+
+/** 己方单位列表 → id 索引（跨窗口累积缓存喂给选择器）。 */
+export function indexUnitsById(units: readonly Unit[] | undefined): Map<string, Unit> {
+  return new Map((units ?? []).map((unit) => [unit.id, unit]));
 }
 
 export interface TileRect {

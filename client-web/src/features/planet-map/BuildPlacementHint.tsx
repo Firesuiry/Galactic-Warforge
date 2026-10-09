@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 
-import type { CatalogView, ItemInventory } from '@shared/types';
+import type { CatalogView, ItemInventory, PlanetRuntimeView } from '@shared/types';
 
 import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
 import { getItemDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
@@ -14,9 +14,11 @@ interface Props {
   inventory?: ItemInventory;
   planet: PlanetRenderView;
   playerId: string;
+  /** 施工任务列表：同一格已有自己的施工任务时给出本地提示（试玩 1010 G）。 */
+  runtime?: PlanetRuntimeView;
 }
 
-export function BuildPlacementHint({ catalog, inventory, planet, playerId }: Props) {
+export function BuildPlacementHint({ catalog, inventory, planet, playerId, runtime }: Props) {
   const mode = usePlanetViewStore((state) => state.interactionMode);
   const tile = usePlanetViewStore((state) => state.hoveredTile);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
@@ -30,6 +32,20 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId }: Pro
   }, [building]);
 
   if (mode.kind !== 'build' || !tile || !pointer) return null;
+  // 同一格已有自己的施工任务：本地提前提示，别让玩家以为「这里本来就有别人的建筑」（试玩 1010 G）。
+  // construction_tasks 是服务端权威数据（含 player_id），可靠；服务端仍会给新回执。
+  const ownTask = (runtime?.construction_tasks ?? []).find(
+    (task) => task.player_id === playerId
+      && task.position.x === tile.x && task.position.y === tile.y
+      && task.state !== 'cancelled' && task.state !== 'completed',
+  );
+  if (ownTask) {
+    return (
+      <div className="build-placement-hint build-placement-hint--unknown" role="status" style={{ left: pointer.x + 16, top: pointer.y + 14 }}>
+        此格已有你的施工任务（{ownTask.state}），无需重复下单
+      </div>
+    );
+  }
   const assessment = assessBuildTiles(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, playerId, mode.rotation, inventory);
   if (!assessment || assessment.buildable) return null;
   // 未探索区不本地拦截（是否可建只有服务端知道）：用中性提示，不显示红色「无法建造」。

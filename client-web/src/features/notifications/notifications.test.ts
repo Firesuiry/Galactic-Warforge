@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameEventDetail } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
-import { toastFromGameEvent } from '@/features/notifications/event-toasts';
+import { isPowerAlertToast, isPowerAlertType, toastFromGameEvent } from '@/features/notifications/event-toasts';
+import { groupHistoryByPower } from '@/features/notifications/NotificationBell';
 import { historyFromEvents, notifyGameEvent } from '@/features/notifications/notify';
 import {
   HISTORY_SIZE,
   MAX_VISIBLE_TOASTS,
   resetNotificationsStore,
+  STICKY_TTL_MS,
   TOAST_TTL_MS,
   useNotificationsStore,
 } from '@/features/notifications/store';
@@ -214,8 +216,66 @@ describe('toastFromGameEvent 事件映射', () => {
         message: 'building b-25 power shortage',
       },
     }));
-    expect(power?.toast.kind).toBe('warning');
+    expect(power?.toast.kind).toBe('danger');
     expect(power?.toast.body).toBe('矩阵研究站：电力不足');
+  });
+
+  it('production_alert：断电类 → danger + sticky 且不节流（试玩报告 F）', () => {
+    for (const alertType of ['power_shortage', 'power_low']) {
+      const mapped = toastFromGameEvent(gameEvent('production_alert', {
+        alert: {
+          alert_id: `a-${alertType}`,
+          building_id: 'b-77',
+          building_type: 'mining_machine',
+          alert_type: alertType,
+          message: 'building b-77 power shortage',
+        },
+      }));
+      expect(mapped?.toast.kind).toBe('danger');
+      expect(mapped?.toast.title).toBe('建筑断电');
+      expect(mapped?.toast.sticky).toBe(true);
+      // 不套用产线 60s 节流：否则第二次断电提醒会被吞掉
+      expect(mapped?.toast.throttleMs).toBeUndefined();
+      expect(mapped?.toast.body).toBe('采矿机：电力不足');
+      // 合并粒度仍按建筑分开
+      expect(mapped?.toast.mergeKey).toBe(`production_alert:b-77:${alertType}`);
+      expect(isPowerAlertToast(mapped!.toast)).toBe(true);
+    }
+    expect(isPowerAlertType('power_shortage')).toBe(true);
+    expect(isPowerAlertType('power_low')).toBe(true);
+    expect(isPowerAlertType('input_shortage')).toBe(false);
+  });
+
+  it('production_alert：payload 无位置时不编造坐标，有位置才补上', () => {
+    const withoutPosition = toastFromGameEvent(gameEvent('production_alert', {
+      alert: { alert_id: 'a5', building_id: 'b-5', building_type: 'mining_machine', alert_type: 'power_shortage' },
+    }));
+    expect(withoutPosition?.toast.body).toBe('采矿机：电力不足');
+
+    const withPosition = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a6', building_id: 'b-6', building_type: 'mining_machine',
+        alert_type: 'power_shortage', position: { x: 12.4, y: 7.6 },
+      },
+    }));
+    expect(withPosition?.toast.body).toBe('采矿机：电力不足：(12, 8)');
+  });
+
+  it('production_alert：吞吐类仍是 warning + 60s 节流（不被断电优先级波及）', () => {
+    const mapped = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a7',
+        building_id: 'b-9',
+        building_type: 'mining_machine',
+        alert_type: 'output_blocked',
+        message: 'building b-9 output blocked',
+      },
+    }));
+    expect(mapped?.toast.kind).toBe('warning');
+    expect(mapped?.toast.title).toBe('产线告警');
+    expect(mapped?.toast.sticky).toBeUndefined();
+    expect(mapped?.toast.throttleMs).toBeGreaterThan(0);
+    expect(isPowerAlertToast(mapped!.toast)).toBe(false);
   });
 
   it('rocket_launched → info（不配音）', () => {
@@ -369,6 +429,54 @@ describe('notifications store', () => {
     const { toasts } = useNotificationsStore.getState();
     expect(toasts.length).toBe(2);
     expect(toasts.every((toast) => toast.leaving)).toBe(true);
+  });
+
+  it('断电 toast 停留 STICKY_TTL_MS（比普通 toast 久），且节流窗口内仍会再弹', () => {
+    const store = useNotificationsStore.getState();
+    const power = {
+      kind: 'danger' as const,
+      title: '建筑断电',
+      mergeKey: 'production_alert:b-1:power_shortage',
+      sticky: true,
+    };
+    const first = store.push(power, 1_000);
+    expect(first.expiresAt).toBe(1_000 + STICKY_TTL_MS);
+
+    // 消退 + 120s 后再来一条断电：必须重新弹出（不能被 60s 产线节流吞掉）
+    const later = 1_000 + TOAST_TTL_MS + 120_000;
+    store.sweep(later);
+    const second = store.push(power, later);
+    const visible = useNotificationsStore.getState().toasts.filter((toast) => !toast.leaving);
+    expect(visible).toHaveLength(1);
+    expect(visible[0].id).toBe(second.id);
+    expect(second.id).not.toBe(first.id);
+    expect(visible[0].at).toBe(later);
+    expect(visible[0].expiresAt).toBe(later + STICKY_TTL_MS);
+  });
+});
+
+describe('通知历史断电分组', () => {
+  it('断电类归到顶部组，其余保持原顺序；两组为空时不渲染', () => {
+    const store = useNotificationsStore.getState();
+    store.push({ kind: 'warning', title: '产线告警', mergeKey: 'production_alert:b-1:output_blocked' }, 1_000);
+    store.push({ kind: 'danger', title: '建筑断电', mergeKey: 'production_alert:b-2:power_shortage' }, 1_100);
+    store.push({ kind: 'info', title: '火箭发射' }, 1_200);
+    store.push({ kind: 'danger', title: '建筑断电', mergeKey: 'production_alert:b-3:power_low' }, 1_300);
+
+    const { power, others } = groupHistoryByPower(useNotificationsStore.getState().history);
+    expect(power.map((toast) => toast.mergeKey)).toEqual([
+      'production_alert:b-3:power_low',
+      'production_alert:b-2:power_shortage',
+    ]);
+    expect(others.map((toast) => toast.title)).toEqual(['火箭发射', '产线告警']);
+
+    const onlyThroughput = groupHistoryByPower([{ ...others[1] }]);
+    expect(onlyThroughput.power).toHaveLength(0);
+    expect(onlyThroughput.others).toHaveLength(1);
+
+    const onlyPower = groupHistoryByPower([{ ...power[0] }]);
+    expect(onlyPower.power).toHaveLength(1);
+    expect(onlyPower.others).toHaveLength(0);
   });
 });
 

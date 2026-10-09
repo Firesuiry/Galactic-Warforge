@@ -47,6 +47,34 @@ const TICKS_PER_SECOND = 10;
 /** 产线告警节流：同 mergeKey 的 toast 消退后 60s 内只累计到历史，不再弹出。 */
 export const PRODUCTION_ALERT_THROTTLE_MS = 60_000;
 
+/**
+ * 断电类告警类型（优先级高于吞吐类）：试玩报告 F——
+ * 石矿机缺电 50 分钟没人发现，因为 `power_shortage` 混在上百条
+ * `input_shortage` / `output_blocked` 里。
+ */
+const POWER_ALERT_TYPES: ReadonlySet<string> = new Set(['power_shortage', 'power_low']);
+
+/** 该告警类型是否属于断电类。 */
+export function isPowerAlertType(alertType: string | undefined | null): boolean {
+  return Boolean(alertType && POWER_ALERT_TYPES.has(alertType));
+}
+
+/**
+ * 该通知条目是否属于断电类（铃铛历史分组用）。
+ *
+ * 判据放在 mergeKey 上而不是给 Toast 加字段：mergeKey 已经写进
+ * sessionStorage（persistence.ts），刷新后回填的历史条目仍能正确分组；
+ * 新增字段则要在持久化层同步（本任务不涉及该文件）。
+ * mergeKey 形如 `production_alert:${buildingId}:${alertType}`。
+ */
+export function isPowerAlertToast(toast: { mergeKey?: string }): boolean {
+  const key = toast.mergeKey;
+  if (!key || !key.startsWith('production_alert:')) {
+    return false;
+  }
+  return isPowerAlertType(key.slice(key.lastIndexOf(':') + 1));
+}
+
 /** 玩家机甲（executor）的单位类型 id；词典译名「玩家机甲」。 */
 const MECHA_UNIT_TYPES = new Set(['executor', 'mecha']);
 
@@ -100,6 +128,20 @@ function battleTargetName(report: Record<string, unknown> | undefined): string {
 function planetHref(payload: Record<string, unknown>): string | undefined {
   const planetId = asString(payload.planet_id);
   return planetId ? `/planet/${planetId}` : undefined;
+}
+
+/**
+ * 告警位置文案：`(x, y)`。只在 payload 真的带了坐标时给出——
+ * 当前服务端 production_alert 没有位置字段，此时返回空串，绝不编造。
+ */
+function formatPositionLabel(position: unknown): string {
+  const record = asRecord(position);
+  const x = asNumber(record?.x);
+  const y = asNumber(record?.y);
+  if (x === undefined || y === undefined) {
+    return '';
+  }
+  return `(${Math.round(x)}, ${Math.round(y)})`;
 }
 
 /**
@@ -266,16 +308,25 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       // 文案本地化：建筑名 + 告警类型，不使用 server 的英文原文 message
       const issue = translateAlertType(alertType, asString(alert?.message) || '产线告警');
       const buildingLabel = buildingType ? translateBuildingType(buildingType) : '建筑';
+      const power = isPowerAlertType(alertType);
+      // 位置不一定有（服务端 production_alert payload 只有建筑 id/类型）；有才写，绝不编造
+      const position = alert?.position ?? payload.position;
+      const positionLabel = position
+        ? formatPositionLabel(position)
+        : '';
       return {
         toast: {
-          kind: 'warning',
-          title: '产线告警',
-          body: [buildingLabel, issue].filter(Boolean).join('：') || undefined,
+          // 断电类：danger + 常驻（sticky）且不套用产线节流——
+          // 否则第二次断电提醒会被节流吞掉（试玩报告 F）。
+          kind: power ? 'danger' : 'warning',
+          title: power ? '建筑断电' : '产线告警',
+          body: [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
           // 同一建筑的同类告警合并计数并节流（采矿机满仓后每 3000 tick 重复提醒，
           // 不合并会刷屏）；键含建筑 id，不同建筑的同类告警分开显示。
+          // 断电类不节流，且停留 STICKY_TTL_MS。
           mergeKey: `production_alert:${buildingId || buildingType || 'unknown'}:${alertType || 'unknown'}`,
-          throttleMs: PRODUCTION_ALERT_THROTTLE_MS,
+          ...(power ? { sticky: true } : { throttleMs: PRODUCTION_ALERT_THROTTLE_MS }),
         },
       };
     }

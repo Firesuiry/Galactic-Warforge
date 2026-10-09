@@ -21,8 +21,9 @@ import { ConveyorGeometry } from './three/conveyor-geometry';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
-import type { CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
+import type { Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
 import { getBuildingFootprint, getFogState, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
+import { isOwnStalledBuilding } from './power-status';
 import { FACTION_COLOR, unitFaction, type UnitFaction } from './rts-commands';
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
@@ -115,6 +116,9 @@ export class PlanetThreeScene {
   private readonly spriteMaterials = new Map<string, THREE.SpriteMaterial>();
   /** 低频变化的地表标记（补给光环、网格），按签名重建；hover/选中不触发。 */
   private readonly staticMarks = new THREE.Group();
+  /** 缺电/停机建筑头顶的 billboard 角标（试玩 1010 F）：按建筑 id 复用，随数据增删。 */
+  private readonly powerAlertMarks = new Map<string, THREE.Sprite>();
+  private readonly powerAlertMarksGroup = new THREE.Group();
   private staticMarksSignature = '';
   /** 地表标记共享材质（按颜色/透明度缓存，色带几何每次重建、材质复用）。 */
   private readonly markMaterials = new Map<string, THREE.MeshBasicMaterial>();
@@ -161,6 +165,7 @@ export class PlanetThreeScene {
     host.appendChild(this.renderer.domElement);
     this.scene.add(this.world);
     this.world.add(this.content, this.staticMarks, this.marks);
+    this.world.add(this.powerAlertMarksGroup);
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
@@ -408,6 +413,7 @@ export class PlanetThreeScene {
     for (const [key, entry] of this.staticEntities) {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
+    this.syncPowerAlertMarks(visibleBuildings);
     const batchEntries = [...this.staticEntities.values()].map(({ group }) => ({
       root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
     }));
@@ -499,6 +505,79 @@ export class PlanetThreeScene {
       material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
     } else material = new THREE.SpriteMaterial({ color: FACTION_COLOR[key], transparent: true, depthWrite: false });
     this.spriteMaterials.set(key, material);
+    return material;
+  }
+
+  /**
+   * 缺电/停机建筑头顶的 billboard 角标（试玩 1010 F）：黄底黑闪电 + 红斜杠，
+   * 与 2D 视图的缺电角标同一语义。己方建筑才画；随数据出现/消失。
+   */
+  private syncPowerAlertMarks(buildings: Building[]) {
+    const playerId = this.data?.playerId;
+    const material = this.powerAlertMaterial();
+    const live = new Set<string>();
+    for (const building of buildings) {
+      if (!isOwnStalledBuilding(building, playerId ?? '')) continue;
+      live.add(building.id);
+      let sprite = this.powerAlertMarks.get(building.id);
+      if (!sprite) {
+        sprite = new THREE.Sprite(material);
+        sprite.renderOrder = 23;
+        this.powerAlertMarksGroup.add(sprite);
+        this.powerAlertMarks.set(building.id, sprite);
+      }
+      // 角标按格宽取 0.42：与单位数量徽标同一量级，醒目但不盖住建筑本体。
+      const mark = this.tileScale() * .42;
+      sprite.scale.set(mark, mark, 1);
+      const normal = this.normal(building.position.x, building.position.y);
+      const height = Math.max(.8, getBuildingFootprint(building).height * .86);
+      sprite.position.copy(normal).multiplyScalar(RADIUS + this.tileScale() * (height + .45));
+    }
+    for (const [id, sprite] of this.powerAlertMarks) {
+      if (!live.has(id)) { sprite.removeFromParent(); this.powerAlertMarks.delete(id); }
+    }
+  }
+
+  /** 缺电角标共享材质（懒建，destroy 时统一释放）。 */
+  private powerAlertMaterial() {
+    let material = this.spriteMaterials.get('power-alert');
+    if (material) return material;
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const context = canvas.getContext('2d');
+    if (context) {
+      const center = size / 2;
+      context.beginPath();
+      context.arc(center, center, size * 0.46, 0, Math.PI * 2);
+      context.fillStyle = 'rgba(255, 176, 32, 0.95)';
+      context.fill();
+      context.lineWidth = size * 0.06;
+      context.strokeStyle = 'rgba(18, 12, 4, 0.9)';
+      context.stroke();
+      const bolt = size * 0.56;
+      context.beginPath();
+      context.moveTo(center + 0.16 * bolt, center - 0.5 * bolt);
+      context.lineTo(center - 0.24 * bolt, center + 0.04 * bolt);
+      context.lineTo(center + 0.02 * bolt, center + 0.04 * bolt);
+      context.lineTo(center - 0.14 * bolt, center + 0.5 * bolt);
+      context.lineTo(center + 0.26 * bolt, center - 0.06 * bolt);
+      context.lineTo(center, center - 0.06 * bolt);
+      context.closePath();
+      context.fillStyle = 'rgba(24, 16, 2, 0.96)';
+      context.fill();
+      context.lineCap = 'round';
+      context.lineWidth = size * 0.1;
+      context.strokeStyle = 'rgba(12, 8, 6, 0.9)';
+      context.beginPath(); context.moveTo(size * 0.2, size * 0.82); context.lineTo(size * 0.84, size * 0.2); context.stroke();
+      context.lineWidth = size * 0.055;
+      context.strokeStyle = 'rgba(255, 86, 70, 0.98)';
+      context.beginPath(); context.moveTo(size * 0.2, size * 0.82); context.lineTo(size * 0.84, size * 0.2); context.stroke();
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+    this.spriteMaterials.set('power-alert', material);
     return material;
   }
 

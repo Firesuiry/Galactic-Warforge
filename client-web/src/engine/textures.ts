@@ -311,6 +311,62 @@ export function getIconTexture(iconKey: string | undefined, color = 0x39e6d0, si
   return toTexture(key, canvas);
 }
 
+/**
+ * 建筑停机/缺电角标（试玩 1010 F）：黄底黑闪电 + 右下角红色斜杠（「断电」语义）。
+ * 与类型角标（右上）分开位置，任何缩放档都画，保证地图上「哪座建筑没在干活」一眼可见。
+ * 静态纹理、无时间输入 → 截图可复现。
+ */
+export function getPowerAlertTexture(size = 64): Texture {
+  const key = `power-alert:${size}`;
+  const hit = cache.get(key);
+  if (hit) {
+    return hit;
+  }
+  const [canvas, ctx] = makeCanvas(size);
+  const radius = size * 0.46;
+  const center = size / 2;
+  // 深色描边圆底 + 琥珀色填充：在深色地表和浅色地表上都够醒目。
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 176, 32, 0.94)';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, size * 0.06);
+  ctx.strokeStyle = 'rgba(18, 12, 4, 0.85)';
+  ctx.stroke();
+  // 闪电（黑），画在圆内偏左上。
+  const boltScale = size * 0.56;
+  ctx.save();
+  ctx.translate(center - size * 0.02, center - size * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(0.16 * boltScale, -0.5 * boltScale);
+  ctx.lineTo(-0.24 * boltScale, 0.04 * boltScale);
+  ctx.lineTo(0.02 * boltScale, 0.04 * boltScale);
+  ctx.lineTo(-0.14 * boltScale, 0.5 * boltScale);
+  ctx.lineTo(0.26 * boltScale, -0.06 * boltScale);
+  ctx.lineTo(0.0 * boltScale, -0.06 * boltScale);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(24, 16, 2, 0.96)';
+  ctx.fill();
+  ctx.restore();
+  // 断电斜杠（红），压住右下角。
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(2, size * 0.1);
+  ctx.strokeStyle = 'rgba(12, 8, 6, 0.9)';
+  ctx.beginPath();
+  ctx.moveTo(size * 0.2, size * 0.82);
+  ctx.lineTo(size * 0.84, size * 0.2);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1, size * 0.055);
+  ctx.strokeStyle = 'rgba(255, 86, 70, 0.98)';
+  ctx.beginPath();
+  ctx.moveTo(size * 0.2, size * 0.82);
+  ctx.lineTo(size * 0.84, size * 0.2);
+  ctx.stroke();
+  ctx.restore();
+  return toTexture(key, canvas);
+}
+
 /** 未命中映射时的字母回退纹理（对齐 DOM Icon 的首字母回退）。 */
 function renderFallbackLetterCanvas(
   iconKey: string | undefined,

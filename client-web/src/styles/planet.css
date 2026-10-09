@@ -242,6 +242,15 @@
   text-align:right;
 }
 
+/* 建筑详情里的电网提示（孤立电网，试玩 1010 I）：偏左对齐的长文案 + 琥珀色 */
+.planet-kv-list dd.planet-kv-list__warning {
+  flex:1;
+  text-align:left;
+  color:#ffc46b;
+  font-size:.78rem;
+  line-height:1.5;
+}
+
 /* 建筑详情「取出」表单：物品下拉 + 数量 + 按钮 */
 .planet-withdraw-form {
   display:flex;
@@ -1605,6 +1614,41 @@
 /* HP 条用宽度表达比例后，颜色按整条渐变截断即可，不再单独变色 */
 
 /* 战区覆盖层：zones 圆圈 + 告警态（指针穿透） */
+/* 缺电建筑标记层（试玩 1010 F）：指针穿透，缺电/停机建筑头顶常驻闪电划线角标 */
+.planet-power-alert-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 7; }
+.planet-power-alert-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35em;
+  height: 1.35em;
+  border-radius: 50%;
+  background: rgba(255, 176, 32, 0.95);
+  border: 1.5px solid rgba(18, 12, 4, 0.85);
+  color: #24180a;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  animation: planet-power-alert-pulse 1.6s ease-in-out infinite;
+}
+.planet-power-alert-marker::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1.5px),
+    rgba(255, 86, 70, 0.95) calc(50% - 1.5px),
+    rgba(255, 86, 70, 0.95) calc(50% + 1.5px),
+    transparent calc(50% + 1.5px)
+  );
+}
+@keyframes planet-power-alert-pulse { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .planet-power-alert-marker { animation: none; }
+}
+
 .planet-theater-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
 .planet-theater-layer__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .planet-theater-zone--alerted { animation: planet-theater-alert 1s ease-in-out infinite; }

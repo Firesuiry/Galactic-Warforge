@@ -660,6 +660,11 @@ func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSur
 		if pos == nil || ws.SurfaceDistance(*pos, b.Position) >= ws.SurfaceDistance(anchor.Position, b.Position) || gc.requireBuildRange(ws, owner, *pos) != nil {
 			continue
 		}
+		// 复用与 execBuild 相同的围死校验：拉线时的电塔同样不能把基地封死
+		// （试玩报告 1010 阻断 A 的修法，否则 bot 会反复发注定被拒的建造命令）。
+		if buildingEnclosure(ws, model.BuildingTypeTeslaTower, model.PlanRotation0, *pos) != nil {
+			continue
+		}
 		return model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Layer: "planet", Position: pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeTeslaTower)}}, true
 	}
 	return model.Command{}, false

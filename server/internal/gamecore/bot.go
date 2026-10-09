@@ -1106,6 +1106,12 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 			if covered {
 				continue
 			}
+			// 复用与 execBuild 相同的围死校验：矿机同样不能把基地封死
+			// （试玩报告 1010 阻断 A 的修法——否则 bot 会反复发注定被拒的建造命令，
+			// 整局卡在"矿机建不起来"上）。
+			if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, node.Position) != nil {
+				continue
+			}
 			pos := node.Position
 			return issue(model.Command{
 				Type:    model.CmdBuild,

@@ -32,6 +32,7 @@ import {
 } from '@/features/planet-map/squad-commands';
 import { PlanetLegionLayer } from '@/features/planet-map/PlanetLegionLayer';
 import { legionAliveMemberIds } from '@/features/planet-map/legion-model';
+import { PlanetPowerAlertLayer } from '@/features/planet-map/PlanetPowerAlertLayer';
 import { PlanetSquadLayer } from '@/features/planet-map/PlanetSquadLayer';
 import { PlanetTheaterLayer } from '@/features/planet-map/PlanetTheaterLayer';
 import {
@@ -1010,6 +1011,17 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
             playerId={session.playerId}
             selectedSquads={selectedSquads}
             squads={squads ?? runtime?.combat_squads}
+            tileSize={tileSize}
+          />
+        )}
+        {/* 缺电建筑标记（试玩 1010 F）：2D 视图缺电/停机建筑头顶常驻闪电划线角标 */}
+        {overviewMode ? null : (
+          <PlanetPowerAlertLayer
+            networks={networks}
+            offsetX={camera.offsetX}
+            offsetY={camera.offsetY}
+            planet={planet}
+            playerId={session.playerId}
             tileSize={tileSize}
           />
         )}

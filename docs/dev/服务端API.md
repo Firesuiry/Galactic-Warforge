@@ -258,7 +258,11 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
   - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。
-  - 围堵校验：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，命令以 `INVALID_TARGET` 拒绝，回执为「此处建造会把<单位名>四周完全堵死，请先留出通路」。单位自身站在建造格上的情况由既有的占位校验处理。此外还会做**口袋校验**：若建造点 16 格内的己方地面单位本可以走到自家主基地、建造后走不到，则以 `INVALID_TARGET` 拒绝，回执为「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止 bot/玩家用一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
+  - 围堵校验（三层，全部 `INVALID_TARGET`）：
+    1. **四邻全堵死**：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，回执「会把<单位名>（x,y）四周完全堵死，最后一个出口（x,y）」。单位自身站在建造格上的情况由既有的占位校验处理。
+    2. **口袋（增量）**：若建造点 16 格内的己方地面单位本可以走到自家主基地、建造后走不到，回执「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
+    3. **基地绝对不变量**：对**所有玩家**，任何建造放下后该玩家的基地（`battlefield_analysis_base`）仍须能沿地面（地形 + 建筑 + 施工预留都算障碍）走到争夺中心（遭遇战地图出生点球面中点的资源簇；没有争夺中心时用对手基地）。不满足即拒绝，回执「会把基地与外界的通路封死（最后通道 x,y）」。与第 2 层不同，这一层不看"增量"，因此能拦住一圈圈逐步收紧的口袋（试玩报告 1010 阻断 A：bot 用 14 座建筑把自家基地封成 126 格口袋，22 个兵与执行体全部困死、整局 0 波进攻）。bot 的选址函数（`botBuildSpotNear` / 矿机点位 / 拉线电塔）复用同一套校验，会自动换格。
+  - 占位回执会区分「该格已有你的施工任务：<建筑名>（排队中/建造中）」「该格已有你的建筑：<建筑名>」「该格已有其他玩家的建筑：<建筑名>」「该格已有其他玩家的施工任务：<建筑名>（…）」（试玩报告 1010 一般级 G）。
   - 垂直叠层：对已有同类研究站/生产建筑的格子再 `build` 同类建筑会叠到上层（`position.z` 递增），上限 `1 + vertical_construction` 等级；研究站叠层共享底层库存、吞吐线性叠加。拆除任一层会级联拆除其上所有层，各层分别退款并发 `entity_destroyed`。
   - `foundation` 可在水面、熔岩、阻挡地形施工，完成后改为可建地形并在实体保存原地形；拆除恢复原地形。已有建筑占用或有待建任务时拒绝拆除；同格不能重复铺。planet/scene/overview 反映改造后的运行时地形。
   - `logistics_distributor` 指向己方 `depot_mk1/mk2` 原点，服务器设 `z=1`、不占地面，一仓一个；拆除前须先回收机器人，再拆宿主仓库。
@@ -271,6 +275,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - `mecha` 字段：`energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `inventory_capacity` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick` / `job` / `logistics_requests`。
 - 初始核心 100、护盾容量 0。科技：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +2 移动范围/级（基础 12）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +1 视野/级（基础 6）。研究只提高上限，不补能。
+- 自动交战（`settleMechaAutoFire`）：显式 `attack` 目标在射程内持续开火；**空闲**与**手搓中**的机甲都按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+6`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。自动开火不写 `attack_target`，并保留两发的能量。
 - 受击满 10 tick 后每 tick 消耗 1 核心恢复最多 2 护盾。
 - **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/格、0.5 格/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
 - 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 4，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
@@ -462,7 +467,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `logistics_drones[]` / `logistics_ships[]`：`station_id`（归属站）/ `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `cargo` / `trip_kind` / `pickup_item_id` / `pickup_quantity` / `home_pos` / `returning` / `state_reason` / `energy_cost`；船另有 `current_planet_id`、`warp_*`、`warped`、`warp_item_spent`。
 - `logistics_distributors[]`（`bot_ids` / `host_available` / `inventory`）与 `logistics_bots[]`（`position` / `home_pos` / `target_pos` / `target_kind` / `trip_kind` / `cargo` / `status` / `returning` / `energy_remaining`）。
 - `construction_tasks[]`：`id` / `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释 pending 任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（执行体 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）；开工后清空。排队不是失败——`build` 命令本身返回成功。
-- `contacts[]`（同 system contacts）、`enemy_forces[]`（至少 `confirmed_type` 的接触：`id` / `type` / `position` / `strength` / `level` / `threat_level`；`id` 是 `fleet_attack` 与自动交战使用的目标 ID；hive 遗址见 `nest_ruins[]`）、`detections[]`（由 contacts 聚合的摘要）。
+- `contacts[]`（同 system contacts）、`enemy_forces[]`（至少 `confirmed_type` 的接触：`id` / `type` / `position` / `strength` / `level` / `threat_level`；`id` 是 `fleet_attack` 与自动交战使用的目标 ID；hive 遗址见 `nest_ruins[]`）、`detections[]`（由 contacts 聚合的摘要）。行星传感器源 = 己方建筑（视野 / 雷达 / 信号塔）**加己方单位（含机甲）的车载传感器**（光学 + 红外 + 被动电磁，半径 = 单位 `vision_range`）——把机甲开到黑雾巢穴视野内即可让巢穴升到 `confirmed_type` 并出现在 `enemy_forces` 里（试玩报告 1010 阻断 C：此前只收集建筑传感器，`enemy_forces` 恒为空、黑雾不可见不可打）。
 
 **`GET /world/planets/{planet_id}/networks`**：电网与管网，整体来自同一 tick 的 `PowerSettlementSnapshot`。
 - `power_networks[]`：`id` / `owner_id` / `supply` / `demand` / `allocated` / `net` / `shortage` / `node_ids`。

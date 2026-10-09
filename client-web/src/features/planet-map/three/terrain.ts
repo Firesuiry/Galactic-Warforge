@@ -124,7 +124,8 @@ const SHADER_HEADER = /* glsl */`
   }
 `;
 
-const SHADER_COLOR = /* glsl */`
+/** Exported for tests: the map_fragment replacement, including the unexplored survey veil. */
+export const SHADER_COLOR = /* glsl */`
   vec3 swP = normalize(swSurfacePosition);
   vec3 swA = abs(swP);
   float swFace; vec2 swFaceUV;
@@ -194,8 +195,13 @@ const SHADER_COLOR = /* glsl */`
   float swFoamAA = max(fwidth(swShoreDistance), 0.003);
   float swFoam = (1.0-smoothstep(swFoamEdge,swFoamEdge+swFoamAA,swShoreDistance)) * swWater * swKnown;
   swAlbedo += vec3(0.12, 0.20, 0.19) * swFoam * (0.6 + swWaveB * 0.2);
-  // The uncharted hemisphere is a neutral scan veil, never fabricated land/water.
-  vec3 swVeil = vec3(0.004, 0.011, 0.023) * (0.97 + swContinental * 0.06);
+  // The uncharted hemisphere is an unmapped survey veil: a clearly visible dark
+  // slate surface so the planet silhouette never disappears into the starfield.
+  // It stays well below explored land values, and its grain is a pure function of
+  // position (never swTime) so screenshot baselines remain reproducible.
+  float swVeilPatch = swFbm(swP * 6.5 + 3.1);
+  float swVeilGrain = mix(0.5, swFbm(swSurfacePosition * 1.6 + 11.0), swMicroDetail);
+  vec3 swVeil = vec3(0.046, 0.062, 0.088) * (0.82 + swContinental * 0.08 + swVeilPatch * 0.10 + swVeilGrain * 0.10);
   swAlbedo = mix(swVeil, swAlbedo, swKnown);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
@@ -230,7 +236,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v2';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v3';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';

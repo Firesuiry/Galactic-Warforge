@@ -60,6 +60,9 @@ func TestDarkFogProvokedRetaliatesThenCalms(t *testing.T) {
 	placeBuilding(ws, plant2)
 	soldier := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 30, Y: 30})
 	fog := spawnWorldTestUnit(ws, model.UnitTypeDarkFog, model.DarkFogOwnerID, model.Position{X: 31, Y: 30})
+	// 机甲现在也按 aggro 索敌（试玩报告 E），会顺手补刀；给黑雾足够血量，
+	// 保证"被激怒的黑雾还手"这一段仍可观察。
+	fog.MaxHP, fog.HP = 400, 400
 	soldier.AttackTarget = fog.ID
 
 	events := driveBlackFogTicks(core, ws, 1)
@@ -87,6 +90,10 @@ func TestDarkFogProvokedRetaliatesThenCalms(t *testing.T) {
 	}
 
 	// 冷静期到：恢复中立并发 dark_fog_calmed。
+	// 机甲现在也按 aggro 索敌（试玩报告 E）：把 p1 的参战单位移出黑雾范围，
+	// 否则它们会继续开火、把刚冷静下来的关系重新激怒。
+	teleportUnitForTest(ws, findExecutorUnit(t, ws), model.Position{X: 3, Y: 3})
+	teleportUnitForTest(ws, soldier, model.Position{X: 4, Y: 3})
 	ws.Tick = ws.Players["p1"].DarkFog.HostileUntilTick
 	calmed := settleDarkFogCalm(ws.Players, ws.Tick)
 	if len(calmed) != 1 || calmed[0].EventType != model.EvtDarkFogCalmed || calmed[0].Payload["player_id"] != "p1" {

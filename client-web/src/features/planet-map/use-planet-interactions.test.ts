@@ -329,6 +329,25 @@ describe('usePlanetInteractions', () => {
     expect(mockClient.cmdMove).not.toHaveBeenCalled();
   });
 
+  it('右键情境指令：选中单位掉出相机窗口时回退跨窗口缓存并照常下达（试玩 1010 E）', () => {
+    const { planet } = setup();
+    usePlanetViewStore.getState().setSelectedUnits(['u-2']);
+    // 镜头推到远处：/scene 只返回窗口内实体，u-2 不在响应里。
+    delete (planet.units as Record<string, unknown>)['u-2'];
+    const knownOwnUnits = new Map([['u-2', makeUnit('u-2', 'soldier', 'p1', 2, 2)]]);
+    const { result } = renderHook(() => usePlanetInteractions({
+      catalog,
+      planet,
+      runtime: { planet_id: 'planet-1-1', enemy_forces: [] } as never,
+      knownOwnUnits,
+    }));
+
+    const handled = result.current.contextTile({ x: 7, y: 7 });
+
+    expect(handled).toBe(true);
+    expect(mockClient.cmdMove).toHaveBeenCalledWith(['u-2'], { x: 7, y: 7, z: 0 });
+  });
+
   it('orderNow：S/H 立即指令对非执行体选择器下达 stop/hold', () => {
     const { interactions } = setup();
     usePlanetViewStore.getState().setSelectedUnits(['u-1', 'u-2']);
