@@ -217,7 +217,8 @@ export function unitCardFromRuntimeUnit(
   const armorClass = firstText(unit.armor_class, entry?.armor_class);
   return {
     title: typeName,
-    subtitle: unit.id,
+    // 副标题用实体位置而不是内部 id（u-7 这类裸 id 不上界面）
+    subtitle: `(${unit.position.x}, ${unit.position.y})`,
     ammunition:unit.ammo_capacity?{current:unit.ammo??0,capacity:unit.ammo_capacity,item:unit.ammo_item}:undefined,
     domain: entry?.domain ?? 'ground',
     runtimeClass: 'world_unit',
@@ -248,8 +249,8 @@ export function unitCardFromSquad(
   const hp = members.reduce((sum, unit) => sum + unit.hp, 0);
   const maxHp = members.reduce((sum, unit) => sum + unit.max_hp, 0);
   return {
-    title: squad.name || squad.id,
-    subtitle: `${squad.id} · 在编 ${squad.member_ids?.length ?? 0}`,
+    title: squad.name || '军团',
+    subtitle: `在编 ${squad.member_ids?.length ?? 0} 个单位`,
     domain: entry?.domain,
     runtimeClass: 'combat_squad',
     statsSource: members.length > 0 ? 'runtime' : 'none',
@@ -283,7 +284,7 @@ export function unitCardFromBlueprint(input: {
   ]);
   return {
     title: input.name,
-    subtitle: input.subtitle ?? input.id,
+    subtitle: input.subtitle,
     domain: input.domain,
     runtimeClass: input.runtimeClass,
     statsSource: stats.length > 0 ? 'catalog' : 'none',
@@ -324,7 +325,7 @@ export function unitCardFromBlueprintDetail(
     domain: blueprint.domain,
     runtimeClass: publicEntry?.runtime_class,
     visibleTechId: publicEntry?.visible_tech_id,
-    subtitle: blueprint.id,
+    subtitle: '定型蓝图',
     ...combatFieldsOf(publicEntry),
     catalog,
     completedTechIds,
@@ -343,7 +344,7 @@ export function unitCardFromPublicBlueprint(
     domain: entry.domain,
     runtimeClass: entry.runtime_class,
     visibleTechId: entry.visible_tech_id,
-    subtitle: `${entry.id} · 公共蓝图`,
+    subtitle: '公共蓝图',
     ...combatFieldsOf(entry),
     catalog,
     completedTechIds,
@@ -365,7 +366,7 @@ export function unitCardFromWorldUnit(
   ]);
   return {
     title: entry.name,
-    subtitle: `${entry.id} · 世界单位`,
+    subtitle: '世界单位',
     domain: entry.domain,
     runtimeClass: entry.runtime_class,
     statsSource: stats.length > 0 ? 'catalog' : 'none',

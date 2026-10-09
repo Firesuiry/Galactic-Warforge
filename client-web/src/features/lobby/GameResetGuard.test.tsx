@@ -138,3 +138,33 @@ describe('GameResetGuard', () => {
     expect(useSessionStore.getState().playerKey).toBe('key_p1');
   });
 });
+
+describe('GameResetGuard：重启恢复同一存档不报「对局重置」', () => {
+  it('started_at 刷新但 tick 连续（服务端重启恢复存档）→ 只提示重新连接', async () => {
+    loginAs('p1');
+    let currentGame: unknown = GAME_A;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/games/current')) {
+        return Promise.resolve(jsonResponse(currentGame));
+      }
+      return Promise.resolve(jsonResponse({ error: 'not found' }, { status: 404 }));
+    }));
+
+    const { queryClient } = renderApp(['/lobby']);
+    expect(await screen.findByText('seed-001')).toBeInTheDocument();
+
+    // 服务端重启：started_at 变成「刚刚」，但同一存档（同 seed、tick 继续增长）。
+    currentGame = {
+      ...GAME_A,
+      tick: 5200,
+      started_at: new Date().toISOString(),
+    };
+    await queryClient.invalidateQueries({ queryKey: ['current-game'] });
+
+    expect(await screen.findByText(/已重新连接到服务器/)).toBeInTheDocument();
+    expect(screen.queryByText(/对局已被管理员重置/)).not.toBeInTheDocument();
+    // 缓存没被清掉：大厅仍在（没有整页重拉）
+    expect(useSessionStore.getState().playerKey).toBe('key_p1');
+  });
+});

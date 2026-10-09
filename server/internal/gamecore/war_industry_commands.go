@@ -36,7 +36,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	factory := ws.Buildings[buildingID]
 	if factory == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if factory.OwnerID != playerID {
@@ -76,7 +76,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	}
 	if !deploymentAllowsBlueprint(deployment, blueprint) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("建筑 %s 无法部署蓝图 %s", hub.ID, blueprint.ID)
+		res.Message = fmt.Sprintf("%s无法部署蓝图「%s」", buildingDisplayName(hub), blueprint.ID)
 		return res, nil
 	}
 
@@ -186,7 +186,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if building.OwnerID != playerID {
@@ -225,7 +225,7 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, unitID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到单位 %s", unitID)
+		res.Message = "未找到单位（可能已阵亡）"
 		return res, nil
 	}
 	if len(fleet.Units) != 1 {

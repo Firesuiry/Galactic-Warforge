@@ -19,7 +19,9 @@ test('真实恒星系 3D 星体点击、镜头、行星往返与战术调兵入�
   const canvas = page.locator('.system-orbit__canvas canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.system-orbit__body')).not.toHaveCount(0);
-  await expect(page.locator('.system-orbit__telemetry')).toContainText('暂无轨道观测数据');
+  // 战争场景已开启轨道工程：遥测面板显示能源输出与军事指挥入口（旧的「暂无轨道观测数据」占位已不再出现）
+  await expect(page.locator('.system-orbit__telemetry')).toContainText('恒星能源工程');
+  await expect(page.locator('.system-orbit__telemetry')).toContainText('军事指挥');
   await page.locator('.system-orbit__body').first().click();
   await expect(page.locator('.system-orbit__selection')).toContainText('行星勘测');
   await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __systemThree?: { selection?: unknown } }).__systemThree?.selection))).toBe(true);

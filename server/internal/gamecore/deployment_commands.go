@@ -70,7 +70,7 @@ func (gc *GameCore) execCommissionFleet(ws *model.WorldState, playerID string, c
 	}
 	if !deploymentAllowsBlueprint(deployment, blueprint) {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("建筑 %s 不能部署 %s", building.ID, blueprintID)
+		res.Message = fmt.Sprintf("%s不能部署蓝图「%s」", buildingDisplayName(building), blueprintID)
 		return res, nil
 	}
 	if err := requireBlueprintTechUnlocked(ws, playerID, visibleTechID); err != nil {
@@ -161,7 +161,7 @@ func (gc *GameCore) execFleetAssign(_ *model.WorldState, playerID string, cmd mo
 	_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
+		res.Message = "未找到舰队（可能已解散）"
 		return res, nil
 	}
 	if fleet.Transit != nil {
@@ -192,7 +192,7 @@ func (gc *GameCore) execFleetAttack(_ *model.WorldState, playerID string, cmd mo
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
+		res.Message = "未找到舰队（可能已解散）"
 		return res, nil
 	}
 	if fleet.Transit != nil {
@@ -234,7 +234,7 @@ func (gc *GameCore) execFleetMove(_ *model.WorldState, playerID string, cmd mode
 	_, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
+		res.Message = "未找到舰队（可能已解散）"
 		return res, nil
 	}
 	if fleet.State != model.FleetStateIdle {
@@ -290,7 +290,7 @@ func (gc *GameCore) execFleetDisband(_ *model.WorldState, playerID string, cmd m
 	systemRuntime, fleet := findOwnedFleet(gc.spaceRuntime, playerID, fleetID)
 	if fleet == nil || systemRuntime == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到舰队 %s", fleetID)
+		res.Message = "未找到舰队（可能已解散）"
 		return res, nil
 	}
 	if fleet.Transit != nil {
@@ -316,7 +316,7 @@ func requireOwnedDeploymentHub(ws *model.WorldState, playerID, buildingID string
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return nil, nil, res
 	}
 	if building.OwnerID != playerID {

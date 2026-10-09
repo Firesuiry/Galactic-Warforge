@@ -55,10 +55,10 @@ func TestGameDataValidationRejectsBrokenReferences(t *testing.T) {
 	}{
 		{"recipe unknown item", GameDataRecipesFile, "{item_id: iron_ore, quantity: 1}", "{item_id: no_such_ore, quantity: 1}", `unknown item "no_such_ore"`},
 		{"recipe unknown building", GameDataRecipesFile, "[arc_smelter, plane_smelter", "[no_such_smelter, plane_smelter", `unknown building "no_such_smelter"`},
-		{"recipe unknown tech", GameDataRecipesFile, "tech_unlock: [automatic_metallurgy]", "tech_unlock: [no_such_tech]", `unknown tech "no_such_tech"`},
+		{"recipe unknown tech", GameDataRecipesFile, "tech_unlock: [steel_smelting]", "tech_unlock: [no_such_tech]", `unknown tech "no_such_tech"`},
 		{"tech unknown prereq", GameDataTechsFile, "prerequisites: [electromagnetism]", "prerequisites: [no_such_tech]", `prerequisite "no_such_tech" not found`},
 		{"tech unknown building", GameDataTechsFile, "{type: building, id: matrix_lab}", "{type: building, id: no_such_lab}", `unknown building "no_such_lab"`},
-		{"tech unknown recipe", GameDataTechsFile, "{type: recipe, id: smelt_stone}", "{type: recipe, id: no_such_recipe}", `unknown recipe "no_such_recipe"`},
+		{"tech unknown recipe", GameDataTechsFile, "{type: recipe, id: motor}", "{type: recipe, id: no_such_recipe}", `unknown recipe "no_such_recipe"`},
 		{"pending recipe exists", GameDataTechsFile, "df_strange_annihilation_fuel_rod: ", "smelt_iron: ", `"smelt_iron" already exists`},
 		{"building unknown cost item", GameDataBuildingsFile, "{item_id: circuit_board, quantity: 18}", "{item_id: no_such_board, quantity: 18}", `unknown item "no_such_board"`},
 		{"turret without weapon class", GameDataBuildingsFile, "      weapon_class: cannon\n", "", "profile.weapon_class is empty"},

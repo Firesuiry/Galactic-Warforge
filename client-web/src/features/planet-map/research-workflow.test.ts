@@ -82,12 +82,15 @@ describe("research workflow", () => {
         state: "in_progress",
         progress: 4,
         total_cost: 10,
+        required_cost: [{ item_id: "electromagnetic_matrix", quantity: 10 }],
+        consumed_cost: { electromagnetic_matrix: 4 },
         blocked_reason: "waiting_matrix",
       },
     });
 
     expect(groups.current?.id).toBe("electromagnetism");
-    expect(groups.current?.blockedReasonLabel).toContain("矩阵");    expect(groups.current?.costLabels).toContain("电磁矩阵 x10");
+    expect(groups.current?.blockedReasonLabel).toContain("矩阵");
+    expect(groups.current?.costLabels).toContain("电磁矩阵 ×10");
     expect(groups.current?.unlockLabels).toEqual(
       expect.arrayContaining(["特斯拉塔", "磁铁配方"]),
     );
@@ -117,8 +120,52 @@ describe("research workflow", () => {
     expect(groups.current?.blockedReasonLabel).toBe("研究站供电不足，研究降速或停滞");
   });
 
-  it("只在 electromagnetism 尚未完成时显示开局推荐路径", () => {
-    expect(
+  it("研究中一律以结算字段（required_cost / consumed_cost）为准，并给出还差多少", () => {
+    // 试玩报告阻断级 #3：catalog 写 10、结算要 60（pace_research=6）。
+    // 研究中的成本必须取 required_cost，不用 catalog 的目录成本。
+    const groups = deriveResearchGroups(createCatalog(), {
+      player_id: "p1",
+      completed_techs: ["dyson_sphere_program"],
+      current_research: {
+        tech_id: "electromagnetism",
+        state: "in_progress",
+        progress: 10,
+        total_cost: 60,
+        required_cost: [{ item_id: "electromagnetic_matrix", quantity: 60 }],
+        consumed_cost: { electromagnetic_matrix: 10 },
+        blocked_reason: "waiting_matrix",
+      },
+    });
+
+    expect(groups.current?.costLabels).toEqual(["电磁矩阵 ×60"]);
+    expect(groups.current?.costLines).toEqual([
+      { itemId: "electromagnetic_matrix", itemName: "电磁矩阵", required: 60, consumed: 10, missing: 50 },
+    ]);
+    expect(groups.current?.matrixShortageNotice).toBe(
+      "研究站缺 50 个电磁矩阵（已装入 电磁矩阵 10 / 需要 电磁矩阵 60）",
+    );
+  });
+
+  it("成本已满足时不显示缺口提示", () => {
+    const groups = deriveResearchGroups(createCatalog(), {
+      player_id: "p1",
+      completed_techs: ["dyson_sphere_program"],
+      current_research: {
+        tech_id: "electromagnetism",
+        state: "in_progress",
+        progress: 30,
+        total_cost: 60,
+        required_cost: [{ item_id: "electromagnetic_matrix", quantity: 60 }],
+        consumed_cost: { electromagnetic_matrix: 60 },
+        blocked_reason: "low_power",
+      },
+    });
+
+    expect(groups.current?.costLines[0]).toMatchObject({ consumed: 60, missing: 0 });
+    expect(groups.current?.matrixShortageNotice).toBeUndefined();
+  });
+
+  it("只在 electromagnetism 尚未完成时显示开局推荐路径", () => {    expect(
       buildStarterGuide({
         player_id: "p1",
         completed_techs: ["dyson_sphere_program"],

@@ -35,5 +35,5 @@ test('开局无自有蓝图时可从公开预置蓝图派生变体', async ({ pa
   await parentSelect.selectOption('corvette');
   await page.getByLabel('变体 ID').fill(`corvette_pw_${Date.now().toString(36)}`);
   await page.getByRole('button', { name: '派生变体' }).click();
-  await expect(page.getByText('accepted, will execute at next tick').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('已受理，下一 tick 执行').first()).toBeVisible({ timeout: 10_000 });
 });

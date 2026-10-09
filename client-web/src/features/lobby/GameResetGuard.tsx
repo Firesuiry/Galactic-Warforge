@@ -5,6 +5,7 @@ import { Flag, TriangleAlert } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import {
+  detectGameContinuity,
   gameIdentityOf,
   gameStatusOf,
   isAuthErrorMessage,
@@ -52,7 +53,9 @@ export function GameResetGuard() {
   const navigate = useNavigate();
   const clearSession = useSessionStore((state) => state.clearSession);
   const resetNotice = useLobbyStore((state) => state.resetNotice);
+  const reconnectNotice = useLobbyStore((state) => state.reconnectNotice);
   const dismissResetNotice = useLobbyStore((state) => state.dismissResetNotice);
+  const dismissReconnectNotice = useLobbyStore((state) => state.dismissReconnectNotice);
   const settlementNotice = useLobbyStore((state) => state.settlementNotice);
   const promptedRef = useRef(readPromptedSettlementKey());
 
@@ -66,23 +69,30 @@ export function GameResetGuard() {
     }
     const store = useLobbyStore.getState();
     store.resetAuthFailure();
-    const identity = gameIdentityOf(game);
-    if (store.knownScope !== scope) {
-      // 换会话/换服务器：以当前对局为新基线，清掉残留提示
-      store.recordIdentity(scope, identity);
+    const previous = store.knownScope === scope && store.knownIdentity
+      ? { identity: store.knownIdentity, tick: store.knownTick }
+      : null;
+    const continuity = detectGameContinuity(previous, game);
+    if (!previous) {
+      // 换会话/换服务器，或本会话第一次拿到对局概要：以当前对局为新基线，清掉残留提示。
+      store.recordIdentity(scope, gameIdentityOf(game), game.tick);
       store.dismissResetNotice();
       return;
     }
-    if (!store.knownIdentity) {
-      store.recordIdentity(scope, identity);
+    if (continuity === 'none') {
+      // 同一局：只推进 tick 基线（SSE 重连/心跳恢复都不算重置）。
+      store.recordIdentity(scope, store.knownIdentity, game.tick);
       return;
     }
-    if (store.knownIdentity !== identity) {
-      // 局变了但本机 key 仍有效（管理员保留了该玩家的 key）：全量重拉 + 提示
-      store.recordIdentity(scope, identity);
+    store.recordIdentity(scope, gameIdentityOf(game), game.tick);
+    if (continuity === 'reset') {
+      // 真换局（或 tick 回退）：全量重拉 + 提示重置。
       store.flagResetNotice();
       queryClient.clear();
+      return;
     }
+    // 同一存档被服务端重启恢复：只提示重新连接，不动缓存。
+    store.flagReconnectNotice();
   }, [gameQuery.data, scope, queryClient]);
 
   useEffect(() => {
@@ -139,7 +149,7 @@ export function GameResetGuard() {
     navigate('/login', { replace: true });
   }, [gameQuery.error, clearSession, navigate, queryClient]);
 
-  if (!resetNotice && !settlementNotice) {
+  if (!resetNotice && !settlementNotice && !reconnectNotice) {
     return null;
   }
 
@@ -158,9 +168,22 @@ export function GameResetGuard() {
           </button>
         </div>
       ) : null}
+      {reconnectNotice && !resetNotice ? (
+        <div className="game-reset-banner" role="status">
+          <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
+          <span>已重新连接到服务器（同一存档继续）。</span>
+          <button
+            className="game-reset-banner__dismiss"
+            type="button"
+            onClick={dismissReconnectNotice}
+          >
+            知道了
+          </button>
+        </div>
+      ) : null}
       {settlementNotice ? (
         <div
-          className={`game-reset-banner${resetNotice ? ' game-reset-banner--below' : ''}`}
+          className={`game-reset-banner${resetNotice || reconnectNotice ? ' game-reset-banner--below' : ''}`}
           role="status"
         >
           <Flag size={16} strokeWidth={2} aria-hidden="true" />

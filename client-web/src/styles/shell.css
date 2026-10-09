@@ -5,6 +5,10 @@
   flex-direction: column;
   height: 100vh;
   min-height: 100vh;
+  /* 顶栏状态药丸在窄屏比视口宽：不裁剪的话整页 document 会横向溢出，
+     浏览器为「滚动到可见」会把整页横向滚走（地图画布随之位移，点格错位；试玩 1009 H）。
+     clip 只裁剪、不产生滚动容器，页面本身仍只纵向滚动。 */
+  overflow-x: clip;
 }
 
 .app-body {

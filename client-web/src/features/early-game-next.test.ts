@@ -94,6 +94,9 @@ describe("resolveEarlyGameNextAction", () => {
     expect(next.to).toBe("/planet/planet-1-1");
     expect(next.idle).toBe(false);
     expect(next.text).toContain("电力不足");
+    // 建筑中文名 + 「编号」，不裸拼 building_id
+    expect(next.text).toContain("制造台 Mk.I · 编号 assembler-1");
+    expect(next.text).not.toContain("building_id");
   });
 
   it("新局无电：引导建造风力涡轮机（深链 build）", () => {

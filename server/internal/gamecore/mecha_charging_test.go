@@ -126,6 +126,7 @@ func TestMechaGridChargingDoesNotDuplicateFuelCharge(t *testing.T) {
 	ws, _, _, u := mechaChargingWorld()
 	u.Mecha.Energy = 95
 	u.Mecha.FuelEnergy = 50
+	ws.Tick = 3 // 非回能 tick，隔离被动回能
 	settleMechas(ws)
 	events := settleChargingPower(ws)
 	if u.Mecha.Energy != 100 || u.Mecha.FuelEnergy != 45 {

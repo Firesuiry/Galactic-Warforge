@@ -6,13 +6,18 @@ import (
 	"siliconworld/internal/surface"
 )
 
-// PlanetPathView is a bounded route over explored surface tiles. Commands
+// PlanetPathView is a bounded route over the authoritative surface. Commands
 // revalidate each waypoint against the current authoritative world.
+//
+// 目标格允许落在未探索区：服务端是权威，寻路按真实地形做（只回路线，不回未探索区
+// 的地形细节），客户端据此可以右键未探索格下达移动。Explored 表示终点是否在玩家的
+// 已探索范围内，供客户端展示提示用。
 type PlanetPathView struct {
 	PlanetID  string           `json:"planet_id"`
 	Surface   surface.Metadata `json:"surface"`
 	Reachable bool             `json:"reachable"`
 	Distance  int              `json:"distance"`
+	Explored  bool             `json:"explored"`
 	Path      []model.Position `json:"path"`
 	Waypoints []model.Position `json:"waypoints"`
 }
@@ -32,8 +37,8 @@ func (ql *Layer) PlanetPath(ws *model.WorldState, playerID, unitID string, targe
 	}
 	view := &PlanetPathView{PlanetID: ws.PlanetID, Surface: ws.Surface().Metadata(), Distance: -1, Path: []model.Position{}, Waypoints: []model.Position{}}
 	explored := ql.vis.ExploredMask(ws, playerID)
-	if !explored[target.Y*ws.MapWidth+target.X] {
-		return view, nil
+	if ws.InBounds(target.X, target.Y) {
+		view.Explored = explored[target.Y*ws.MapWidth+target.X]
 	}
 	blocked := map[model.Position]bool{}
 	for _, b := range ql.vis.FilterBuildings(ws, playerID) {
@@ -86,7 +91,8 @@ func (ql *Layer) PlanetPath(ws *model.WorldState, playerID, unitID string, targe
 			if _, seen := parents[n]; seen {
 				continue
 			}
-			if !explored[n.Y*ws.MapWidth+n.X] || blocked[n] || !ws.Grid[n.Y][n.X].Terrain.Buildable() {
+			// 只按真实地形/建筑阻挡寻路，不做已探索掩码：目标可以在未探索区。
+			if blocked[n] || !ws.Grid[n.Y][n.X].Terrain.Buildable() {
 				continue
 			}
 			parents[n] = p

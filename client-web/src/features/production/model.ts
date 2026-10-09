@@ -1,6 +1,7 @@
 import type { Building, CatalogView, ItemAmount, RecipeCatalogEntry } from '@shared/types';
 import { listBuildingRecipes } from '@/features/planet-map/build-workflow';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
+import { isBuildingUnlocked, missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 
 export interface InputRequirement extends ItemAmount {
   available: number;
@@ -68,8 +69,10 @@ export function recipeBuildOptions(recipe: RecipeCatalogEntry, catalog: CatalogV
     building.buildable && Boolean(building.unlock_tech?.filter(Boolean).length) && recipe.building_types?.includes(building.id),
   ).map((building) => ({
     building,
-    missingTechs: (building.unlock_tech ?? []).filter((tech) => tech && !completed.has(tech)),
+    // 任一已完成科技声明解锁即可（对齐服务端 CanBuildTech）；missingTechs 仅供「需研究」展示。
+    unlocked: isBuildingUnlocked(building, completed),
+    missingTechs: missingUnlockTechIds(building.unlock_tech, completed),
     recipeTechOptions: listBuildingRecipes(catalog, building.id, completed).some((entry) => entry.id === recipe.id)
-      ? [] : recipe.tech_unlock?.filter(Boolean) ?? [],
+      ? [] : missingUnlockTechIds(recipe.tech_unlock, completed),
   }));
 }

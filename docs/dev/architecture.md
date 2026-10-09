@@ -38,7 +38,7 @@
 | `gamecore` | Tick 循环、命令执行（`core.go` 分发）、结算管线（`settlement_pipeline.go`）、bot、审计、回放、回滚 |
 | `model` | 世界状态与领域类型；YAML 数据注册表（`gamedata.go`）；公开命令目录（`command_catalog.go`） |
 | `query` | 只读投影：summary、briefing、catalog、scene、inspect、networks、path、runtime 视图 |
-| `mapgen` / `mapmodel` / `mapstate` | 星系/恒星/行星/资源生成、宇宙模型、探索状态 |
+| `mapgen` / `mapmodel` / `mapstate` | 星系/恒星/行星/资源生成、宇宙模型、探索状态；配了 `spawn_points` 的地图还会做可玩性连通性保证（`connectivity.go`：出生点/争夺中心通路、就近开局原矿、封死 <200 格孤立陆地） |
 | `surface` / `terrain` | 六面立方体球面网格（面序、跨面邻接、坐标转换）与地形 |
 | `visibility` | 战争迷雾 |
 | `snapshot` / `persistence` / `gamedir` | 快照克隆、存档（gzip `save.json` + `meta.json`）、游戏目录读写 |

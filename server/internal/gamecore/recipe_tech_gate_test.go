@@ -17,9 +17,10 @@ func TestCanUseRecipeTechGating(t *testing.T) {
 		t.Fatal("expected player p1")
 	}
 
-	// 基础配方：无任何门控，新玩家直接可用。
+	// 基础配方：无任何门控，新玩家直接可用。石材/玻璃为 DSP 基础冶炼
+	// （stone-brick 未锁定、glass 属 arc-smelter 自带），子弹为开局弹药。
 	for _, recipeID := range []string{
-		"smelt_iron", "smelt_copper", "smelt_magnet",
+		"smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone", "glass",
 		"circuit_board", "magnetic_coil", "gear",
 		"electromagnetic_matrix", "fuel_rod_recycling", "ammo_bullet",
 	} {
@@ -30,7 +31,6 @@ func TestCanUseRecipeTechGating(t *testing.T) {
 
 	// 门控配方：新玩家必须被拒绝，包括此前形同虚设的矩阵配方。
 	gated := map[string]string{
-		"smelt_stone":                      "automatic_metallurgy",
 		"smelt_silicon":                    "smelting_purification",
 		"smelt_titanium":                   "titanium_smelting",
 		"coal_to_graphite":                 "smelting_purification",
@@ -83,7 +83,7 @@ func TestCanUseRecipeTechGating(t *testing.T) {
 
 func TestCatalogRecipesAreExplicitlyBasicOrGated(t *testing.T) {
 	basic := map[string]bool{
-		"smelt_iron": true, "smelt_copper": true, "smelt_magnet": true,
+		"smelt_iron": true, "smelt_copper": true, "smelt_magnet": true, "smelt_stone": true, "glass": true,
 		"circuit_board": true, "magnetic_coil": true, "gear": true,
 		"electromagnetic_matrix": true, "fuel_rod_recycling": true, "ammo_bullet": true,
 	}
@@ -178,25 +178,25 @@ func TestBuildWithGatedMatrixRecipeRequiresResearch(t *testing.T) {
 }
 
 // TestHandcraftGatedSmeltingRecipe 验证机甲手工路径（mecha_jobs.go）
-// 与建造路径共享同一门控：smelt_stone 需要 automatic_metallurgy。
+// 与建造路径共享同一门控：steel 需要 steel_smelting。
 func TestHandcraftGatedSmeltingRecipe(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	player.Inventory = model.ItemInventory{model.ItemStoneOre: 1}
+	player.Inventory = model.ItemInventory{model.ItemIronIngot: 3}
 
-	result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("smelt_stone", 1))
-	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || player.Inventory[model.ItemStoneOre] != 1 {
-		t.Fatalf("locked smelt_stone handcraft bypass: %+v", result)
+	result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("steel", 1))
+	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 3 {
+		t.Fatalf("locked steel handcraft bypass: %+v", result)
 	}
 
-	player.Tech.CompletedTechs["automatic_metallurgy"] = 1
-	result, _ = execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("smelt_stone", 1))
+	player.Tech.CompletedTechs["steel_smelting"] = 1
+	result, _ = execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("steel", 1))
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	advancePersonalTicks(ws, 50)
-	if player.Inventory[model.ItemStoneBrick] != 1 {
-		t.Fatal("unlocked smelt_stone handcraft did not produce stone brick")
+	advancePersonalTicks(ws, 60)
+	if player.Inventory[model.ItemSteel] != 1 {
+		t.Fatal("unlocked steel handcraft did not produce steel")
 	}
 }

@@ -11,6 +11,7 @@ import { isResearchStationAlertNoise } from '@/features/production-alerts';
 import { MiniGalaxyMap } from '@/features/starmap/MiniGalaxyMap';
 import { planetColorOf } from '@/features/starmap/model';
 import { toPlayerFacingMessage } from '@/common/player-facing-error';
+import { describeEventPayload } from '@/i18n/event-payload';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import {
@@ -27,23 +28,22 @@ function formatNumber(value: number | undefined) {
   return value ?? 0;
 }
 
-function formatPayload(payload: Record<string, unknown>) {
-  const entries = Object.entries(payload).slice(0, 3);
-  if (entries.length === 0) {
-    return '无附加字段';
-  }
-  return entries
-    .map(([key, value]) => `${key}=${typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}`)
-    .join(' · ');
-}
+/** 服务端遭遇战预设的 tick 速率（config-skirmish.yaml max_tick_rate）。 */
+const TICKS_PER_SECOND = 10;
 
-/** 相对 tick 时间：与当前 tick 的差值，友好中文。 */
+/** 相对 tick 时间：绝对 tick + 可读的相对时间（「约 75 分钟前（tick 8905）」）。 */
 function formatTickAge(currentTick: number, tick: number) {
   const delta = currentTick - tick;
   if (delta <= 0) {
-    return '本 tick';
+    return `本 tick（tick ${tick}）`;
   }
-  return `${delta} tick 前`;
+  const totalSeconds = Math.ceil(delta / TICKS_PER_SECOND);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const relative = minutes > 0
+    ? `约 ${minutes} 分钟前`
+    : `约 ${seconds} 秒前`;
+  return `${relative}（tick ${tick}）`;
 }
 
 // ---------- 情报时间线（告警 + 事件合并） ----------
@@ -212,7 +212,7 @@ export function OverviewPage() {
         iconKey: alert.building_type || 'alert',
         title: translateAlertType(alert.alert_type, translateSeverity(alert.severity)),
         detail: alert.building_type
-          ? `${translateBuildingType(alert.building_type)} ${alert.building_id}`
+          ? `${translateBuildingType(alert.building_type)} · 编号 ${alert.building_id}`
           : alert.message,
       });
     });
@@ -223,7 +223,7 @@ export function OverviewPage() {
         tone: EVENT_TONES[event.event_type] ?? 'info',
         iconKey: EVENT_ICON_KEYS[event.event_type] ?? 'intel',
         title: translateEventType(event.event_type),
-        detail: formatPayload(event.payload),
+        detail: describeEventPayload(event.payload),
       });
     });
     items.sort((a, b) => b.tick - a.tick || a.id.localeCompare(b.id));
@@ -407,7 +407,7 @@ export function OverviewPage() {
                     <div className="command-feed__title">
                       <strong>{item.title}</strong>
                       <span className="command-feed__tick">
-                        T{item.tick} · {formatTickAge(summary.tick, item.tick)}
+                        {formatTickAge(summary.tick, item.tick)}
                       </span>
                     </div>
                     <span className="command-feed__detail">{item.detail}</span>

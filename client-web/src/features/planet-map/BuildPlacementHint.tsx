@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 import type { CatalogView, ItemInventory } from '@shared/types';
 
-import { assessBuildTiles, describeBuildBlock } from '@/features/planet-map/build-workflow';
+import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
 import { getItemDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
@@ -32,6 +32,14 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId }: Pro
   if (mode.kind !== 'build' || !tile || !pointer) return null;
   const assessment = assessBuildTiles(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, playerId, mode.rotation, inventory);
   if (!assessment || assessment.buildable) return null;
+  // 未探索区不本地拦截（是否可建只有服务端知道）：用中性提示，不显示红色「无法建造」。
+  if (!shouldBlockBuildLocally(assessment)) {
+    return (
+      <div className="build-placement-hint build-placement-hint--unknown" role="status" style={{ left: pointer.x + 16, top: pointer.y + 14 }}>
+        {describeBuildBlock(assessment, (itemId) => getItemDisplayName(catalog, itemId))}
+      </div>
+    );
+  }
   return (
     <div className="build-placement-hint" role="status" style={{ left: pointer.x + 16, top: pointer.y + 14 }}>
       无法建造：{describeBuildBlock(assessment, (itemId) => getItemDisplayName(catalog, itemId))}

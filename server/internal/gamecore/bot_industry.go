@@ -29,18 +29,6 @@ func (gc *GameCore) botIndustry(ws *model.WorldState, owner string, tuning botTu
 	if cmd, ok := gc.botPowerLink(ws, owner, ctx); ok {
 		return issue(cmd)
 	}
-	// Keep the basic army fed before investing in advanced vehicles.
-	for _, producer := range ctx.producers {
-		for _, cost := range model.UnitCost(model.UnitTypeSoldier) {
-			if producer.Type != "barracks" || producer.Storage.ItemQuantity(cost.ItemID) >= cost.Quantity*3 {
-				continue
-			}
-			need := cost.Quantity*3 - producer.Storage.ItemQuantity(cost.ItemID)
-			if cmd, ok := gc.botFeedBuilding(ws, owner, ctx, producer, cost.ItemID, need); ok {
-				return issue(cmd)
-			}
-		}
-	}
 	// Supply stations and turrets use the same manufactured ammunition.
 	for _, b := range ctx.buildings {
 		ammo := ""
@@ -57,17 +45,65 @@ func (gc *GameCore) botIndustry(ws *model.WorldState, owner string, tuning botTu
 			return issue(cmd)
 		}
 	}
-	// Research receives physical matrices, including a dedicated matrix machine.
-	for _, lab := range ctx.buildings {
-		if lab.Type != model.BuildingTypeMatrixLab || lab.Production != nil && lab.Production.RecipeID != "" {
-			continue
+	// 冶炼产线：矿石→锭/磁铁必须由电弧熔炉做，否则全部落在机甲手搓上——
+	// 一台机甲既是采矿车又是唯一的冶炼厂，矩阵链永远供不上
+	// （试玩报告 D：bot 的电磁学要 7000+ tick 才开工）。
+	if cmd, ok := gc.botSmelters(ws, owner, ctx, tuning); ok {
+		return issue(cmd)
+	}
+	// 矩阵产线（磁线圈/电路板专机 + 矩阵专机）要在研究站之前就位：
+	// 全靠机甲手搓时，20 个矩阵要 7000+ tick 纯手搓时间（每矩阵约 360 tick），
+	// 电磁学永远赶不上首攻（试玩报告 D：tick 8000 后发育冻结）。
+	if cmd, ok := gc.botMatrixLine(ws, owner, ctx, tuning); ok {
+		return issue(cmd)
+	}
+	// 研究站是整条科技链的前提：没有它矩阵备料无处可去，科技永远开不了
+	// （试玩报告 D：bot 在 tick 8000 后发育冻结）。放在 botIndustry 而不是
+	// botResearch，是因为 botResearch 在决策链末尾、命令槽位会被前面吃光。
+	if ctx.labCount == 0 && botPendingBuilds(ws, owner, model.BuildingTypeMatrixLab) == 0 {
+		if cmd, ok := gc.botEnsureBuilding(ws, owner, ctx, model.BuildingTypeMatrixLab, "", map[string]bool{}); ok {
+			return issue(cmd)
 		}
-		if lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix) < 20 {
-			if cmd, ok := gc.botFeedBuilding(ws, owner, ctx, lab, model.ItemElectromagneticMatrix, 20); ok {
+	}
+	// Keep the basic army fed before investing in advanced vehicles.
+	for _, producer := range ctx.producers {
+		for _, cost := range model.UnitCost(model.UnitTypeSoldier) {
+			if producer.Type != "barracks" || producer.Storage.ItemQuantity(cost.ItemID) >= cost.Quantity*3 {
+				continue
+			}
+			need := cost.Quantity*3 - producer.Storage.ItemQuantity(cost.ItemID)
+			if cmd, ok := gc.botFeedBuilding(ws, owner, ctx, producer, cost.ItemID, need); ok {
 				return issue(cmd)
 			}
 		}
 	}
+	// 备料量按本局 pace_research 缩放后的主攻科技成本计算（与结算一致），
+	// 否则高倍率下 bot 会以为 20 个矩阵就够、反复发起开不了的 research。
+	// 单台研究站缓存上限 96（matrix_lab storage.capacity），超过就取上限。
+	// 这里的补料必须让位给"缺料时的手搓/采矿"：矩阵进研究站是终点，
+	// 而机甲手搓磁铁/电路板/磁线圈才是研究站真正等的东西。
+	reserve := botResearchMatrixReserve(ws.Players[owner], tuning)
+	labShort := false
+	for _, lab := range ctx.buildings {
+		if lab.Type != model.BuildingTypeMatrixLab || lab.Production != nil && lab.Production.RecipeID != "" {
+			continue
+		}
+		target := reserve
+		if lab.Storage.Capacity > 0 && target > lab.Storage.Capacity {
+			target = lab.Storage.Capacity
+		}
+		if lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix) < target {
+			labShort = true
+		}
+	}
+	// 研究站缺矩阵：送料（弹药槽位若排在前面，会每拍抢走唯一的一条命令，
+	// 研究站永远等不到矩阵——试玩报告 D 的根因）。
+	if labShort {
+		if cmd, ok := gc.botMatrixReserve(ws, owner, ctx, tuning, reserve); ok {
+			return issue(cmd)
+		}
+	}
+	// 研究站缺矩阵时的补料已在上面的 labShort 分支处理（优先级高于弹药/兵力备料）。
 	for _, typ := range []model.BuildingType{model.BuildingTypeMatrixLab, "vehicle_factory", "airfield"} {
 		if !CanBuildTech(ws.Players[owner], model.TechUnlockBuilding, string(typ)) || botBuildingOfType(ctx, typ) != nil {
 			continue
@@ -104,6 +140,277 @@ func botBuildingOfType(ctx *botSurvey, typ model.BuildingType) *model.Building {
 	return nil
 }
 
+// botMatrixLine 研究矩阵专用产线：矩阵专机 + 前置（磁线圈/电路板）专机，
+// 前置专机也缺料时沿缺料链下钻（熔炉→采矿），必要时让机甲手搓补位。
+// 与研究站/研究命令解耦，先于它们执行，保证科技链不断料。
+func (gc *GameCore) botMatrixLine(ws *model.WorldState, owner string, ctx *botSurvey, tuning botTuning) (model.Command, bool) {
+	if tuning.matrixMachineTarget <= 0 {
+		return model.Command{}, false
+	}
+	if pending := botPendingMatrixMachines(ws, owner); len(matrixMachines(ctx))+pending < tuning.matrixMachineTarget {
+		if cmd, ok := gc.botEnsureBuilding(ws, owner, ctx, model.BuildingTypeAssemblingMachineMk1, model.ItemElectromagneticMatrix, map[string]bool{}); ok {
+			return cmd, true
+		}
+	}
+	for _, input := range botMatrixInputRecipes() {
+		if botDedicatedAssembler(ctx, input) {
+			continue
+		}
+		if cmd, ok := gc.botEnsureBuilding(ws, owner, ctx, model.BuildingTypeAssemblingMachineMk1, input, map[string]bool{}); ok {
+			return cmd, true
+		}
+	}
+	// 专机就位后按缺口补料（缺料会下钻到熔炉/采矿/手搓）。
+	for _, recipeID := range append([]string{model.ItemElectromagneticMatrix}, botMatrixInputRecipes()...) {
+		r, ok := model.Recipe(recipeID)
+		if !ok {
+			continue
+		}
+		for _, b := range ctx.assemblers {
+			if b.Production == nil || b.Production.RecipeID != recipeID {
+				continue
+			}
+			for _, input := range r.Inputs {
+				need := input.Quantity*8 - b.Storage.ItemQuantity(input.ItemID)
+				if need <= 0 {
+					continue
+				}
+				if cmd, ok := gc.botEnsureItem(ws, owner, ctx, input.ItemID, need, map[string]bool{}); ok {
+					return cmd, true
+				}
+			}
+		}
+	}
+	return model.Command{}, false
+}
+
+// botMatrixReserve 研究站缺矩阵时优先走这条路：先确保矩阵产线本身在跑
+// （专用制造台 + 前置料），再补研究站库存，最后才轮到机甲手搓。
+// 与 botIndustry 后面的"常规补料"分开，是为了让缺矩阵时的优先级
+// 高于弹药/兵力备料——否则弹药补货每拍抢走唯一的一条命令，
+// 矩阵链永远供不上（试玩报告 D 的根因）。
+func (gc *GameCore) botMatrixReserve(ws *model.WorldState, owner string, ctx *botSurvey, tuning botTuning, reserve int) (model.Command, bool) {
+	// 矩阵产线本身由 botMatrixLine 保证（先于本函数执行）。
+	// 矩阵有货：送进研究站。
+	for _, lab := range ctx.buildings {
+		if lab.Type != model.BuildingTypeMatrixLab || lab.Production != nil && lab.Production.RecipeID != "" {
+			continue
+		}
+		target := reserve
+		if lab.Storage.Capacity > 0 && target > lab.Storage.Capacity {
+			target = lab.Storage.Capacity
+		}
+		if lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix) >= target {
+			continue
+		}
+		if cmd, ok := gc.botFeedBuilding(ws, owner, ctx, lab, model.ItemElectromagneticMatrix, target); ok {
+			return cmd, true
+		}
+	}
+	// 都没有：走常规缺料链（botEnsureItem 会选配方/建产线/手搓/采矿）。
+	if cmd, ok := gc.botEnsureItem(ws, owner, ctx, model.ItemElectromagneticMatrix, reserve, map[string]bool{}); ok {
+		return cmd, true
+	}
+	return model.Command{}, false
+}
+
+// botSmelters 冶炼产线建设：铁/铜/磁铁各一台电弧熔炉，按缺口补。
+// 不建熔炉时，bot 只能靠机甲手搓把矿石变成锭，产能远远不够
+// （试玩报告 D：电磁学要 7000+ tick 才开工）。
+//
+// 只建"现在付得起"的炉子，绝不追着备料：熔炉只是手段，若为了它把机甲
+// 绑在采铜上，研究站/矩阵专机反而永远排不上（botIndustry 每拍只出一条命令）。
+func (gc *GameCore) botSmelters(ws *model.WorldState, owner string, ctx *botSurvey, tuning botTuning) (model.Command, bool) {
+	if tuning.smelterTarget <= 0 {
+		return model.Command{}, false
+	}
+	player := ws.Players[owner]
+	built := 0
+	for _, b := range ctx.buildings {
+		if b.Type == model.BuildingTypeArcSmelter {
+			built++
+		}
+	}
+	if built+botPendingBuilds(ws, owner, model.BuildingTypeArcSmelter) >= tuning.smelterTarget {
+		return model.Command{}, false
+	}
+	def, ok := model.BuildingDefinitionByID(model.BuildingTypeArcSmelter)
+	if !ok || !CanBuildTech(player, model.TechUnlockBuilding, string(model.BuildingTypeArcSmelter)) {
+		return model.Command{}, false
+	}
+	if !botCanAffordBuild(player, def) {
+		return model.Command{}, false
+	}
+	// 铁/铜/磁铁/石材按缺口各补一台，直到 smelterTarget：
+	// 一台熔炉只能跑一个配方，磁铁与铜块共用一台会把研究站备料串死。
+	for _, recipe := range botSmelterRecipes {
+		if _, ok := model.Recipe(recipe); !ok || !CanUseRecipeTech(player, recipe) {
+			continue
+		}
+		if botSmelterCovers(ctx, recipe) || botPendingSmelter(ws, owner, recipe) {
+			continue
+		}
+		pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), model.BuildingTypeArcSmelter)
+		if pos == nil {
+			return model.Command{}, false
+		}
+		return model.Command{
+			Type:    model.CmdBuild,
+			Target:  model.CommandTarget{Layer: "planet", Position: pos},
+			Payload: map[string]any{"building_type": string(model.BuildingTypeArcSmelter), "recipe_id": recipe},
+		}, true
+	}
+	return model.Command{}, false
+}
+
+// botPendingSmelter 是否已有在建熔炉指定了该配方。
+func botPendingSmelter(ws *model.WorldState, owner, recipeID string) bool {
+	if ws == nil || ws.Construction == nil {
+		return false
+	}
+	ids := make([]string, 0, len(ws.Construction.Tasks))
+	for id := range ws.Construction.Tasks {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		task := ws.Construction.Tasks[id]
+		if task == nil || task.PlayerID != owner || task.BuildingType != model.BuildingTypeArcSmelter {
+			continue
+		}
+		if task.State == model.ConstructionCancelled || task.State == model.ConstructionCompleted {
+			continue
+		}
+		if task.RecipeID == recipeID {
+			return true
+		}
+	}
+	return false
+}
+
+// botSmelterCovers 是否已有熔炉按该配方生产。
+func botSmelterCovers(ctx *botSurvey, recipeID string) bool {
+	for _, b := range ctx.buildings {
+		if b.Type != model.BuildingTypeArcSmelter || b.Production == nil {
+			continue
+		}
+		if b.Production.RecipeID == recipeID {
+			return true
+		}
+	}
+	return false
+}
+
+// botMatrixInputRecipes 矩阵专用产线的前置配方（磁线圈、电路板）。
+func botMatrixInputRecipes() []string {
+	r, ok := model.Recipe(model.ItemElectromagneticMatrix)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(r.Inputs))
+	for _, input := range r.Inputs {
+		if recipe, ok := botRecipeFor(&model.PlayerState{}, input.ItemID); ok {
+			out = append(out, recipe.ID)
+		}
+	}
+	return out
+}
+
+// botDedicatedAssembler 是否已有（或已有在建）制造台专跑该配方。
+func botDedicatedAssembler(ctx *botSurvey, recipeID string) bool {
+	for _, b := range ctx.buildings {
+		if b.Type != model.BuildingTypeAssemblingMachineMk1 || b.Production == nil {
+			continue
+		}
+		if b.Production.RecipeID == recipeID {
+			return true
+		}
+	}
+	return false
+}
+
+// matrixMachines 已建成的电磁矩阵专用制造台。
+func matrixMachines(ctx *botSurvey) []*model.Building {
+	var out []*model.Building
+	for _, b := range ctx.buildings {
+		if b.Type != model.BuildingTypeAssemblingMachineMk1 || b.Production == nil {
+			continue
+		}
+		if b.Production.RecipeID == model.ItemElectromagneticMatrix {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// botPendingMatrixMachines 在建中的矩阵专用制造台（同一 tick 只能发一条建造命令，
+// 因此按在建数量补齐目标，避免重复下单）。
+func botPendingMatrixMachines(ws *model.WorldState, owner string) int {
+	if ws == nil || ws.Construction == nil {
+		return 0
+	}
+	n := 0
+	ids := make([]string, 0, len(ws.Construction.Tasks))
+	for id := range ws.Construction.Tasks {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		task := ws.Construction.Tasks[id]
+		if task == nil || task.PlayerID != owner || task.BuildingType != model.BuildingTypeAssemblingMachineMk1 {
+			continue
+		}
+		if task.State == model.ConstructionCancelled || task.State == model.ConstructionCompleted {
+			continue
+		}
+		if task.RecipeID == model.ItemElectromagneticMatrix {
+			n++
+		}
+	}
+	return n
+}
+
+// botResearchMatrixReserve 研究站矩阵备料目标：默认 20，主攻科技（researchTarget）
+// 在缩放后的实际成本更高时按实际成本备料（上限 200，避免囤到天荒地老）。
+// 只算还没完成的那部分：已经研究完的前置科技不再计入，否则 bot 会一直
+// 囤到整条链的总成本（hard 下 80+ 个矩阵），把研究站缓存占满、
+// 后续科技反而开不了（试玩报告 D：15 个矩阵用完后 research 一直空转）。
+func botResearchMatrixReserve(player *model.PlayerState, tuning botTuning) int {
+	reserve := tuning.researchReserve
+	if reserve <= 0 {
+		reserve = 20
+	}
+	if player == nil || player.Tech == nil || tuning.researchTarget == "" {
+		return reserve
+	}
+	pace := player.Tech.ResearchPace
+	for _, id := range botResearchChain(tuning.researchTarget) {
+		def, ok := model.TechDefinitionByID(id)
+		if !ok || def == nil {
+			continue
+		}
+		level := player.Tech.CompletedTechs[id] + 1
+		if def.MaxLevel == 0 && player.Tech.HasTech(id) {
+			continue // 已完成的一次性科技不再备料
+		}
+		if def.MaxLevel > 0 && player.Tech.CompletedTechs[id] >= def.MaxLevel {
+			continue
+		}
+		for _, item := range model.ScaledResearchCost(def.CostForLevel(level), pace) {
+			if item.ItemID != model.ItemElectromagneticMatrix {
+				continue
+			}
+			if item.Quantity > reserve {
+				reserve = item.Quantity
+			}
+		}
+	}
+	if reserve > 200 {
+		reserve = 200
+	}
+	return reserve
+}
+
 func (gc *GameCore) botFeedBuilding(ws *model.WorldState, owner string, ctx *botSurvey, b *model.Building, item string, n int) (model.Command, bool) {
 	if n <= 0 || b.Storage == nil {
 		return model.Command{}, false
@@ -120,16 +427,9 @@ func botTransferCommand(id, item string, n int, direction string) model.Command 
 
 // Catalog recipes are sorted: a map iteration must never change a bot replay.
 func botRecipeFor(player *model.PlayerState, item string) (model.RecipeDefinition, bool) {
-	recipes := model.AllRecipes()
-	sort.Slice(recipes, func(i, j int) bool { return recipes[i].ID < recipes[j].ID })
-	for _, r := range recipes {
-		if !CanUseRecipeTech(player, r.ID) {
-			continue
-		}
-		for _, o := range r.Outputs {
-			if o.ItemID == item {
-				return r, true
-			}
+	for _, def := range model.RecipesProducingItem(item) {
+		if CanUseRecipeTech(player, def.ID) {
+			return def, true
 		}
 	}
 	return model.RecipeDefinition{}, false
@@ -183,6 +483,27 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 			batches = min(8, max(1, (quantity-player.Inventory[item]+o.Quantity-1)/o.Quantity))
 		}
 	}
+	// 已有机器在跑这个配方：先喂机器，只有机器吃不下的部分才留给机甲手搓。
+	// 手搓每批 60 tick/个且与机甲所有其它作业串行，把机甲当唯一产线时
+	// 矩阵链永远供不上（试玩报告 D：电磁学要 7000+ tick 才开工）。
+	for _, b := range ctx.assemblers {
+		if b.Production == nil || b.Production.RecipeID != recipe.ID {
+			continue
+		}
+		for _, input := range recipe.Inputs {
+			needed := input.Quantity*batches - b.Storage.ItemQuantity(input.ItemID)
+			if needed <= 0 {
+				continue
+			}
+			if n := min(needed, player.Inventory[input.ItemID]); n > 0 {
+				return botTransferCommand(b.ID, input.ItemID, n, "to_building"), true
+			}
+			if cmd, ok := gc.botEnsureItem(ws, owner, ctx, input.ItemID, needed, visiting); ok {
+				return cmd, true
+			}
+		}
+		return model.Command{}, false // In production: never invent its output.
+	}
 	if recipe.HandcraftAllowed {
 		for _, input := range recipe.Inputs {
 			if player.Inventory[input.ItemID] < input.Quantity*batches {
@@ -194,6 +515,7 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 		}
 		return model.Command{Type: model.CmdCraftItem, Target: model.CommandTarget{Layer: "planet", EntityID: ctx.executor.ID}, Payload: map[string]any{"recipe_id": recipe.ID, "quantity": batches}}, true
 	}
+	// 已有机器在跑这个配方：喂机器而不是新建产线。
 	for _, b := range ctx.assemblers {
 		if b.Production == nil || b.Production.RecipeID != recipe.ID {
 			continue
@@ -250,7 +572,7 @@ func (gc *GameCore) botEnsureBuilding(ws *model.WorldState, owner string, ctx *b
 	if !botCanAffordBuild(player, def) {
 		return model.Command{}, false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx))
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), typ)
 	if pos == nil {
 		return model.Command{}, false
 	}

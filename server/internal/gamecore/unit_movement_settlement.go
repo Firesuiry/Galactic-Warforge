@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 )
 
 // 实时移动结算（R1）：世界单位与小队每 tick 按 MoveSpeed 沿路径推进。
@@ -19,6 +20,11 @@ import (
 const (
 	// unitBlockedRepathTicks 单位被占位阻挡超过该 tick 数后尝试重寻路。
 	unitBlockedRepathTicks = 20
+	// unitBlockedAbandonTicks 连续被单位阻挡且绕不开超过该 tick 数后放弃当前路径：
+	// 单位停在原地（不瞬移、不重叠），姿态/终点保留，由上层（姿态恢复/索敌）
+	// 重新决策。这是单位挤成一团时唯一的出口——否则 path_index/move_progress
+	// 会永远停在同一个值（试玩报告 #4：11 个兵 4 万 tick 不动）。
+	unitBlockedAbandonTicks = 300
 	// maxPathBudget 单次寻路的深度上限（格），超出即视为不可达，需要分段指令。
 	maxPathBudget = 800
 )
@@ -63,13 +69,24 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 				}
 				unit.BlockedTicks++
 				unit.MoveProgress = 1
+				if unit.BlockedTicks >= unitBlockedAbandonTicks {
+					// 长期绕不开：放弃当前路径但保留命令意图，避免
+					// path_index/move_progress 永久不变地把单位钉死。
+					// 必须在重寻路之前判断：重寻路"成功"不代表能走通
+					// （一群单位互相占位时 BFS 仍会给出穿过占位格的路）。
+					events = append(events, unitMoveAbortedEvent(unit, "blocked"))
+					stopUnitMovement(unit)
+					continue
+				}
 				if unit.BlockedTicks >= unitBlockedRepathTicks {
 					// 优先绕开待命单位重寻路；绕不开再按原规则重寻路（继续等对方让开）。
-					if !repathUnitAvoidingIdle(ws, unit) && !repathUnit(ws, unit) {
-						events = append(events, unitMoveAbortedEvent(unit, "blocked"))
+					// 注意：重寻路成功不代表能走通——一群单位互相占位时 BFS 会把
+					// 占位单位当障碍，仍可能回到同一条被堵死的路，因此 BlockedTicks
+					// 继续累积，由上面的放弃阈值兜底。
+					if repathUnitAvoidingIdle(ws, unit) || repathUnit(ws, unit) {
 						continue
 					}
-					unit.BlockedTicks = 0
+					unit.BlockedTicks = unitBlockedRepathTicks
 				}
 				break
 			}
@@ -81,6 +98,13 @@ func settleUnitMovement(ws *model.WorldState) []*model.GameEvent {
 			}
 			stepUnitTo(ws, unit, next)
 			unit.MoveProgress -= 1
+		}
+		// 长跑但始终走不动（绕不开的单位团）：放弃当前路径但保留命令意图。
+		// 检查放在内层循环之外，因为内层可能被重寻路 continue 掉，
+		// 不再有机会在循环体内累计判断。
+		if unit.HasPath() && unit.BlockedTicks >= unitBlockedAbandonTicks {
+			events = append(events, unitMoveAbortedEvent(unit, "blocked"))
+			stopUnitMovement(unit)
 		}
 		if !unit.HasPath() && unit.MoveProgress > 0 {
 			// 路径走完了剩余进度清零，避免下次寻路带入。
@@ -179,10 +203,15 @@ func repathUnit(ws *model.WorldState, unit *model.Unit) bool {
 }
 
 // repathUnitAvoidingIdle 被占位阻挡后绕开待命单位重寻路；失败时不改动单位。
+// 绕开待命单位的路径若仍被移动中的单位堵死，回退到普通寻路（可能与旧路径相同）。
 func repathUnitAvoidingIdle(ws *model.WorldState, unit *model.Unit) bool {
 	dest := unit.Path[len(unit.Path)-1]
 	path, ok := computePathNear(ws, unit.Position, dest, unit.ID, true)
 	if !ok || len(path) < 2 {
+		return false
+	}
+	// 新路径若第一步就走不通（仍被占位），说明"避开待命单位"没有解，交给调用方回退。
+	if !tileWalkableForUnit(ws, path[1], unit.ID) {
 		return false
 	}
 	unit.Path = path
@@ -197,6 +226,16 @@ func abortUnitMovement(unit *model.Unit) {
 	if unit.Stance != model.UnitStanceHold {
 		unit.Stance = model.UnitStanceIdle
 	}
+}
+
+// stopUnitMovement 放弃当前路径但保留命令意图（stance/OrderPos 不动）：
+// 单位挤成一团绕不开时用它脱困，避免把"攻击移动/撤退"等指令一并丢掉。
+// 单位不再有路径，因此不会继续被阻挡计数钉住；上层（姿态恢复/索敌）会重新决策。
+func stopUnitMovement(unit *model.Unit) {
+	unit.Path = nil
+	unit.PathIndex = 0
+	unit.MoveProgress = 0
+	unit.BlockedTicks = 0
 }
 
 // onUnitArrived 处理单位到达终点后的姿态转移。
@@ -261,6 +300,7 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 	}
 
 	targetOK := tileWalkableForUnit(ws, to, selfID)
+	targetIdx := int32(to.Y*ws.MapWidth + to.X)
 	// 终点邻域命中集（预算一次，BFS 中 O(1) 查询）。
 	var nearSet map[int32]bool
 	if !targetOK {
@@ -272,6 +312,31 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 		}
 	}
 
+	flood := pathFlood(ws, from, selfID, avoidIdle, budget, func(cur int32) bool {
+		if targetOK {
+			return cur == targetIdx
+		}
+		return nearSet[cur] && tileWalkableForUnit(ws, model.Position{X: int(cur) % ws.MapWidth, Y: int(cur) / ws.MapWidth}, selfID)
+	})
+	if flood.hit < 0 {
+		return nil, false
+	}
+	return floodPath(ws, flood.hit), true
+}
+
+// floodResult 一次洪泛的结果。visited 与 ws 上的 scratch 数组共用，
+// 只在下一次 pathFlood 之前有效。
+type floodResult struct {
+	hit       int32
+	visited   []int32
+	truncated bool // 有格子因到达 budget 深度而没有继续扩展（连通区未走完）
+}
+
+// pathFlood 从 from 出发按单位通行规则做一次 BFS 洪泛：epoch 戳扁平数组做
+// 已访问/父指针，队列复用 ws.PathScratchQueue，邻居用 Grid.Step 逐方向取，
+// 整个洪泛零分配。每个出队格先交给 stop，返回 true 即提前结束并记为 hit；
+// 否则扩展到 budget 深度为止。parent/depth 链在下一次洪泛前可用 floodPath 回溯。
+func pathFlood(ws *model.WorldState, from model.Position, selfID string, avoidIdle bool, budget int, stop func(idx int32) bool) floodResult {
 	size := ws.MapWidth * ws.MapHeight
 	if len(ws.PathScratchParent) != size {
 		ws.PathScratchParent = make([]int32, size)
@@ -285,47 +350,43 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 	depth := ws.PathScratchDepth
 	epoch := ws.PathScratchEpoch
 
-	fromIdx := int32(from.Y*ws.MapWidth + from.X)
-	queue := make([]int32, 1, 256)
-	queue[0] = fromIdx
+	width := ws.MapWidth
+	fromIdx := int32(from.Y*width + from.X)
+	queue := append(ws.PathScratchQueue[:0], fromIdx)
 	parent[fromIdx] = fromIdx
 	depth[fromIdx] = 0
 	epoch[fromIdx] = gen
 
-	hit := int32(-1)
+	air := unitIsAir(ws, selfID)
+	grid := ws.Surface()
+	result := floodResult{hit: -1}
 	for head := 0; head < len(queue); head++ {
 		cur := queue[head]
-		if targetOK {
-			if int(cur) == to.Y*ws.MapWidth+to.X {
-				hit = cur
-				break
-			}
-		} else if nearSet[cur] {
-			cx, cy := int(cur)%ws.MapWidth, int(cur)/ws.MapWidth
-			if tileWalkableForUnit(ws, model.Position{X: cx, Y: cy}, selfID) {
-				hit = cur
-				break
-			}
+		if stop != nil && stop(cur) {
+			result.hit = cur
+			break
 		}
 		if int(depth[cur]) >= budget {
+			result.truncated = true
 			continue
 		}
-		cx, cy := int(cur)%ws.MapWidth, int(cur)/ws.MapWidth
-		for _, n := range ws.SurfaceNeighbors(model.Position{X: cx, Y: cy}) {
+		tile := surface.Tile{X: int(cur) % width, Y: int(cur) / width}
+		for d := surface.North; d <= surface.West; d++ {
+			n, _ := grid.Step(tile, d)
 			if !ws.InBounds(n.X, n.Y) {
 				continue
 			}
-			nIdx := int32(n.Y*ws.MapWidth + n.X)
+			nIdx := int32(n.Y*width + n.X)
 			if epoch[nIdx] == gen {
 				continue
 			}
-			if !unitIsAir(ws, selfID) && ws.Grid[n.Y][n.X].BuildingID != "" {
-				continue
+			if !air {
+				cell := &ws.Grid[n.Y][n.X]
+				if cell.BuildingID != "" || !cell.Terrain.Buildable() {
+					continue
+				}
 			}
-			if !unitIsAir(ws, selfID) && !ws.Grid[n.Y][n.X].Terrain.Buildable() {
-				continue
-			}
-			if avoidIdle && tileHasIdleUnit(ws, n, selfID) {
+			if avoidIdle && tileHasIdleUnit(ws, model.Position{X: n.X, Y: n.Y}, selfID) {
 				continue
 			}
 			epoch[nIdx] = gen
@@ -334,20 +395,24 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 			queue = append(queue, nIdx)
 		}
 	}
-	if hit < 0 {
-		return nil, false
+	ws.PathScratchQueue = queue
+	result.visited = queue
+	return result
+}
+
+// floodVisited 该格是否在最近一次 pathFlood 中被访问。
+func floodVisited(ws *model.WorldState, idx int32) bool {
+	return ws.PathScratchEpoch[idx] == ws.PathScratchGen
+}
+
+// floodPath 沿最近一次 pathFlood 的 parent 链回溯出到 idx 的路径（含起点）。
+func floodPath(ws *model.WorldState, idx int32) []model.Position {
+	path := make([]model.Position, ws.PathScratchDepth[idx]+1)
+	for i, cur := len(path)-1, idx; i >= 0; i-- {
+		path[i] = model.Position{X: int(cur) % ws.MapWidth, Y: int(cur) / ws.MapWidth}
+		cur = ws.PathScratchParent[cur]
 	}
-	path := make([]model.Position, 0, depth[hit]+1)
-	for cur := hit; ; cur = parent[cur] {
-		path = append(path, model.Position{X: int(cur) % ws.MapWidth, Y: int(cur) / ws.MapWidth})
-		if cur == fromIdx {
-			break
-		}
-	}
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-	return path, true
+	return path
 }
 
 // computeUnitPath 计算单位路径；终点被占用/不可进入时落到终点邻域。

@@ -30,3 +30,14 @@ cd ../develop_tools/dsp-catalog && python3 build_scope.py
 - **行星内可完成**：种子资源（18 种：12 矿脉 + 硫酸/有机晶体/刺笋/金伯利/木材/植物燃料 + 原油/水/可燃冰等）经行星内机器（排除轨道采集器、射线接收站系）闭包可达。
 - **科技消耗**：游戏引擎公式 `总消耗 = ItemPoints × Hashes / 3600`（ItemPoints 见 factoriolab `in`，Hashes 优先取 dsp-wiki 实测，缺失按矩阵档位校准表估计并标 `estimated`）。
 - **ID 规范**：DSP kebab-case → SW snake_case；差异项一律写进 `mapping_overrides.json` 别名，不允许在代码里写特判。
+
+## 有意偏离（可玩性优先，2026-10-07 科技树可达性修复）
+
+DSP 原版的锁定关系在 SW 会造成新玩家死锁（研究站造价含玻璃、玻璃被 `automatic-metallurgy` 锁、而该科技研究又需要研究站），因此以下项有意偏离 DSP，均有 `server/internal/model/tech_reachability_test.go` 与 `server/internal/gamecore/bot_ammo_test.go` 守着：
+
+- `smelt_stone` / `glass` 改为基础配方（DSP 中 stone-brick 未锁定、glass 属 `automatic-metallurgy` 解锁）；`automatic_metallurgy` 不再解锁配方，只作 `smelting_purification` / `steel_smelting` / `titanium_smelting` 的前置节点。
+- `ammo_bullet` 开局可用（DSP 中子弹配方属 `weapon-system`）；SW 把开局防御所需的基础弹药视为起始内容，`weapon_system` 只留炮塔与高级弹药。
+- `accumulator`（蓄电器物品）新增 DSP 原版合成配方并挂到 `energy_storage`：此前 SW 只有建筑形态，物品只能由建筑合成路径凭空获得，违反「所有物品有真实来源」。
+
+另有一批 SW 与 DSP 配方数值本身不一致（比例不同，如 `circuit-board` 2 产出 vs SW 1、`information_matrix` 输入差异等，2026-10-07 统计 35 条），属既有对齐欠账、不影响可达性，未在本轮处理。
+

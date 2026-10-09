@@ -29,7 +29,7 @@ func (gc *GameCore) execConfigureMechaLogistics(ws *model.WorldState, playerID s
 	requests := make(map[string]model.MechaLogisticsRequest, len(p.Requests))
 	for itemID, entry := range p.Requests {
 		if item, ok := model.Item(itemID); !ok || item.Form != model.ResourceSolid {
-			return fail("未知的物流请求物品：" + itemID)
+			return fail("未知的物流请求物品：" + itemDisplayName(itemID))
 		}
 		minimum, maximum := *entry.Min, *entry.Max
 		if minimum < 0 || maximum < 1 || maximum > 1000 || minimum > maximum {
@@ -59,14 +59,14 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	}
 	if _, ok := model.Item(itemID); !ok {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("未知物品：%s", itemID)
+		res.Message = fmt.Sprintf("未知物品：%s", itemDisplayName(itemID))
 		return res, nil
 	}
 
 	building, ok := ws.Buildings[buildingID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if building.OwnerID != playerID {
@@ -117,14 +117,14 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			return mechaJobFailed(model.CodeValidationFailed, err.Error())
 		}
 		player.EnsureInventory()[itemID] += taken
-		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已取出 %d 个 %s（来自 %s）", taken, itemID, buildingID)}, []*model.GameEvent{{
+		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已取出 %d 个「%s」（来自%s）", taken, itemDisplayName(itemID), buildingDisplayName(building))}, []*model.GameEvent{{
 			EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
 			Payload: map[string]any{"building_id": buildingID, "item_id": itemID, "transferred": taken, "source": "building_storage", "inventory_qty": player.Inventory[itemID]},
 		}}
 	}
 	if player.Inventory[itemID] < quantity {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("背包需有 %d 个 %s，当前 %d 个", quantity, itemID, player.Inventory[itemID])
+		res.Message = fmt.Sprintf("背包需有 %d 个「%s」，当前 %d 个", quantity, itemDisplayName(itemID), player.Inventory[itemID])
 		return res, nil
 	}
 
@@ -149,7 +149,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	}
 	if accepted <= 0 {
 		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("建筑 %s 无法接收 %s", buildingID, itemID)
+		res.Message = fmt.Sprintf("%s无法接收「%s」", buildingDisplayName(building), itemDisplayName(itemID))
 		return res, nil
 	}
 
@@ -162,9 +162,9 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
 	if remaining > 0 {
-		res.Message = fmt.Sprintf("已传输 %d 个 %s 至 %s（剩余 %d 个）", accepted, itemID, buildingID, remaining)
+		res.Message = fmt.Sprintf("已传输 %d 个「%s」至%s（剩余 %d 个）", accepted, itemDisplayName(itemID), buildingDisplayName(building), remaining)
 	} else {
-		res.Message = fmt.Sprintf("已传输 %d 个 %s 至 %s", accepted, itemID, buildingID)
+		res.Message = fmt.Sprintf("已传输 %d 个「%s」至%s", accepted, itemDisplayName(itemID), buildingDisplayName(building))
 	}
 
 	return res, []*model.GameEvent{{

@@ -1,6 +1,7 @@
 import type { CatalogView, PlanetRuntimeView, PlayerState, SystemRuntimeView, TechCatalogEntry } from '@shared/types';
 import { getBuildingDisplayName, getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
+import { isBuildingUnlocked, missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 
 export interface ProgressionInput {
   catalog: CatalogView;
@@ -68,8 +69,9 @@ export function buildColonyProgression({ catalog, planet, player, runtime, syste
   const buildingGoal = (id: string): ProgressionGoal => {
     const entry = catalog.buildings?.find(building => building.id === id);
     const count = buildings.filter(building => building.type === id).length;
-    const missing = entry?.unlock_tech?.filter(techId => !completed.has(techId)) ?? [];
-    const canBuild = entry?.buildable && Boolean(entry.unlock_tech?.length) && !missing.length;
+    const missing = missingUnlockTechIds(entry?.unlock_tech, completed);
+    // 任一已完成科技声明解锁即可（对齐服务端 CanBuildTech），不再要求全部完成。
+    const canBuild = isBuildingUnlocked(entry, completed);
     return {
       id: `building:${id}`, label: `部署${getBuildingDisplayName(catalog, id)}`, complete: count > 0,
       detail: count ? `当前载入区域可见 ${count} 座` : missing.length ? `解锁：${missing.map(techId => getTechDisplayName(catalog, techId)).join('、')}` : canBuild ? '选择位置建造；材料与范围在建造栏检查' : '当前建造目录尚未开放',

@@ -1,17 +1,12 @@
 package gamecore
 
 import (
-	"math"
-
 	"siliconworld/internal/model"
 )
 
 // paceOrOne treats unset/non-positive multipliers as the historical rate.
 func paceOrOne(v float64) float64 {
-	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
-		return 1
-	}
-	return v
+	return model.PaceOrOne(v)
 }
 
 func (gc *GameCore) researchPace() float64 {
@@ -50,18 +45,7 @@ func (gc *GameCore) timeLimitTicks() int64 {
 }
 
 func scaleTicks(base int, pace float64) int {
-	if base < 1 {
-		base = 1
-	}
-	pace = paceOrOne(pace)
-	if pace == 1 {
-		return base
-	}
-	scaled := int(math.Round(float64(base) * pace))
-	if scaled < 1 {
-		return 1
-	}
-	return scaled
+	return model.ScalePaceTicks(base, pace)
 }
 
 func (gc *GameCore) scaledConstructionDuration() int {
@@ -69,18 +53,7 @@ func (gc *GameCore) scaledConstructionDuration() int {
 }
 
 func scaleResearchCost(cost []model.ItemAmount, pace float64) []model.ItemAmount {
-	out := make([]model.ItemAmount, len(cost))
-	copy(out, cost)
-	pace = paceOrOne(pace)
-	if pace == 1 {
-		return out
-	}
-	for i := range out {
-		if out[i].Quantity > 0 {
-			out[i].Quantity = scaleTicks(out[i].Quantity, pace)
-		}
-	}
-	return out
+	return model.ScaledResearchCost(cost, pace)
 }
 
 func (gc *GameCore) applyOutputPace(ws *model.WorldState) {

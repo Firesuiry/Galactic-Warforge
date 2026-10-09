@@ -824,6 +824,8 @@ export interface TechState {
   current_research?: TechQueueEntry;
   research_queue?: TechQueueEntry[];
   total_researched?: number;
+  /** 本局研究消耗倍率镜像（缺省 1）；与 GET /catalog 的 research_pace 同源。 */
+  research_pace?: number;
 }
 
 export interface CombatTechItem {
@@ -1301,6 +1303,10 @@ export interface ConstructionTaskView {
   recipe_id?: string;
   cost?: BuildCost;
   state: ConstructionState;
+  /** 建筑中文名（服务端 building_name）。 */
+  building_name?: string;
+  /** pending 未开工的原因：insufficient_materials / executor_concurrent_limit / region_concurrent_limit。 */
+  wait_reason?: 'insufficient_materials' | 'executor_concurrent_limit' | 'region_concurrent_limit' | string;
   enqueue_tick: number;
   start_tick?: number;
   update_tick?: number;
@@ -2102,6 +2108,12 @@ export interface CatalogView {
   techs?: TechCatalogEntry[];
   world_units?: WorldUnitCatalogEntry[];
   warfare?: WarfareCatalogView;
+  /**
+   * 本局研究消耗倍率（battlefield.pace_research，缺省 1；服务端总是下发）。
+   * `techs[].cost` 已按它缩放为实际成本，与研究结算的
+   * `current_research.required_cost/total_cost` 同源；本字段仅作展示。
+   */
+  research_pace?: number;
   /** weapon_class -> armor_class -> 系数，与结算表同源。 */
   damage_coefficients?: Record<string, Record<string, number>>;
 }
@@ -2345,6 +2357,6 @@ export interface RollbackResponse {
   notes?: string[];
 }
 
-export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; path: Position[]; waypoints: Position[] }
+export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; /** 终点是否在玩家已探索范围内（目标可以在未探索区，服务端照常按真实地形寻路）。 */ explored: boolean; path: Position[]; waypoints: Position[] }
 
 export interface SorterConfig { input_directions: CardinalDirection[]; output_directions: CardinalDirection[]; filter_mode?: "allow" | "deny"; filter_items?: string[]; }

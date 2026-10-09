@@ -351,8 +351,7 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 	}
 
 	for _, tile := range ws.SurfaceDisc(unit.Position, maxDist) {
-		key := model.TileKey(tile.X, tile.Y)
-		for _, otherID := range ws.TileUnits[key] {
+		for _, otherID := range ws.TileUnits[model.TileKey(tile.X, tile.Y)] {
 			other := ws.Units[otherID]
 			if other == nil || other.HP <= 0 || other.ID == unit.ID {
 				continue
@@ -366,7 +365,7 @@ func nearestHostileInRange(ws *model.WorldState, unit *model.Unit, maxDist int, 
 			break // 已找到最近的最高优先级目标
 		}
 		if includeBuildings {
-			if buildingID := ws.TileBuilding[key]; buildingID != "" {
+			if buildingID := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]; buildingID != "" {
 				if b := ws.Buildings[buildingID]; b != nil && b.HP > 0 && hostile(ws, unit.OwnerID, b.OwnerID) {
 					adopt(&unitCombatTarget{kind: "building", id: b.ID, pos: b.Position, ownerID: b.OwnerID, building: b}, 2)
 				}
@@ -400,9 +399,12 @@ const maxInt32 = int(^uint32(0) >> 1)
 
 // settleMechaAutoFire 执行体（玩家机甲）交战：
 //   - 显式攻击目标：射程内持续开火（不追击）；
-//   - 空闲时（无移动路径、无采集任务）：先还击射程内的最近攻击者，再打射程内最近的敌对单位
-//     （敌方玩家单位、对本玩家敌对的黑雾）。自动开火不追击、不写 AttackTarget，
-//     并保留两发的能量，避免把机甲打到无法行动。
+//   - 空闲时（无移动路径）：先还击射程内的最近攻击者，再打范围内最近的敌对目标。
+//     无作业的机甲只在射程内开火、不追击（英雄单位能量经济）；
+//     **手搓中的机甲会被自动防御打断**：敌对单位/建筑进入 aggro_range 就暂停手搓、
+//     靠近到射程内还手，威胁消失后自动从原进度恢复手搓（试玩报告 E：手搓 30 铜块期间
+//     敌军在 5 格外拆家，机甲全程不还手）。采集（mine）作业不打断——离开矿点即失效。
+//     自动开火不写 AttackTarget，并保留两发的能量，避免把机甲打到无法行动。
 func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 	explicit := unit.AttackTarget != ""
 	var target *unitCombatTarget
@@ -416,26 +418,72 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 			return nil
 		}
 	} else {
-		if unit.HasPath() || (unit.Mecha.Job != nil && unit.Mecha.Job.ResourceID != "") {
+		job := unit.Mecha.Job
+		// 手搓会被自动防御打断（可以靠近、暂停作业）；采集不打断（离开矿点作业即失效），
+		// 但采集中的机甲仍在射程内还手。
+		defending := job != nil && job.Kind == "craft"
+		if !defending {
+			// 只有手搓防御会占用机甲的交战锚点：作业结束/换成采集时清掉。
+			unit.CombatAnchor = nil
+		}
+		// 防御锚点 = 第一次被打断时的位置：机甲只在这个范围内主动靠近敌人，
+		// 追得太远就放弃这一目标、回去手搓（否则会被敌人一路钓走）。
+		// 必须在 HasPath 早退之前判断，否则追击中的机甲永远走不到这一支。
+		if defending && unit.CombatAnchor != nil &&
+			ws.SurfaceDistance(unit.Position, *unit.CombatAnchor) > unit.AggroRange+leashSlack {
+			unit.LastAttackerID = ""
+			unit.ClearMovement()
+			return resumeMechaJobAfterDefense(unit)
+		}
+		if unit.HasPath() {
 			return nil
 		}
+		// 低能量时不主动交火，但必须先把被打断的手搓恢复掉，否则机甲会
+		// 一直停在"暂停手搓 + 不还手"的死状态（能量耗尽后永远恢复不了）。
 		if unit.Mecha.Energy < 2*unit.Mecha.AttackEnergyCost {
-			return nil
+			return resumeMechaJobAfterDefense(unit)
+		}
+		scan := unit.AttackRange
+		if defending {
+			// 手搓被打断时按 aggro 索敌（含敌方建筑）：手搓通常发生在基地里，
+			// 敌人多半在拆建筑而不是贴身，只按射程索敌等于不还手。
+			scan = max(unit.AttackRange, unit.AggroRange)
 		}
 		if unit.LastAttackerID != "" {
 			counter := resolveCombatTarget(ws, unit.LastAttackerID)
 			if counter != nil && unitCanTarget(unit, counter) && hostile(ws, unit.OwnerID, counter.ownerID) &&
-				ws.SurfaceDistance(unit.Position, counter.pos) <= unit.AttackRange {
+				ws.SurfaceDistance(unit.Position, counter.pos) <= scan {
 				target = counter
 			} else {
 				unit.LastAttackerID = ""
 			}
 		}
 		if target == nil {
-			target = nearestHostileInRange(ws, unit, unit.AttackRange, false)
+			target = nearestHostileInRange(ws, unit, scan, defending)
 		}
 		if target == nil {
-			return nil
+			return resumeMechaJobAfterDefense(unit)
+		}
+		dist := ws.SurfaceDistance(unit.Position, target.pos)
+		if dist > unit.AttackRange {
+			if !defending {
+				return nil // 无作业/采集中的机甲不追击
+			}
+			if unit.CombatAnchor == nil {
+				anchor := unit.Position
+				unit.CombatAnchor = &anchor
+			}
+			events := pauseMechaJobForDefense(unit)
+			chaseTarget(ws, unit, target)
+			return events
+		}
+		if defending {
+			// 进入射程：停下开火（保留路径会让机甲一直贴着敌人走不动）。
+			unit.ClearMovement()
+			if events := pauseMechaJobForDefense(unit); len(events) > 0 {
+				// 本 tick 只暂停，下一 tick 起按冷却开火（暂停本身已是状态变化）。
+				return events
+			}
 		}
 	}
 	if unit.LastAttackTick > 0 && ws.Tick-unit.LastAttackTick < unit.AttackCooldownTick {
@@ -453,6 +501,34 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 	unit.LastAttackTick = ws.Tick
 	events = append(events, mechaStateEvent(unit))
 	return events
+}
+
+// pauseMechaJobForDefense 手搓中的机甲进入自动防御时暂停手搓（保留进度与预留原料）。
+// 返回状态事件（仅首次暂停时非空），让调用方知道本 tick 的状态变化。
+func pauseMechaJobForDefense(unit *model.Unit) []*model.GameEvent {
+	if unit == nil || unit.Mecha == nil || unit.Mecha.Job == nil || unit.Mecha.Job.Kind != "craft" {
+		return nil
+	}
+	if unit.Mecha.Job.Paused {
+		return nil
+	}
+	unit.Mecha.Job.Paused = true
+	unit.Mecha.Job.State = "paused_defense"
+	return []*model.GameEvent{mechaStateEvent(unit)}
+}
+
+// resumeMechaJobAfterDefense 威胁消失后恢复被自动防御暂停的手搓：
+// 清掉防御时的追击路径与锚点，机甲回到原地继续手搓。
+func resumeMechaJobAfterDefense(unit *model.Unit) []*model.GameEvent {
+	if unit == nil || unit.Mecha == nil || unit.Mecha.Job == nil || !unit.Mecha.Job.Paused {
+		return nil
+	}
+	unit.Mecha.Job.Paused = false
+	unit.Mecha.Job.State = "running"
+	unit.ClearMovement()
+	unit.CombatAnchor = nil
+	unit.ChaseGoalPos = nil
+	return []*model.GameEvent{mechaStateEvent(unit)}
 }
 
 // fireAtTarget 对目标开火并结算伤害（含死亡处理与事件）。

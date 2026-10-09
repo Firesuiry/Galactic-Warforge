@@ -46,22 +46,33 @@ beforeEach(() => {
 });
 
 describe('toastFromGameEvent 事件映射', () => {
-  it('battle_report_generated：击毁/交火 danger，带 damage 文案', () => {
+  it('battle_report_generated：击毁/交火 danger，带 damage 文案且不暴露目标 id', () => {
     const destroyed = toastFromGameEvent(gameEvent('battle_report_generated', {
-      report: { target_destroyed: true, target_id: 'fleet-enemy-1', fleet_id: 'f1' },
+      report: { target_destroyed: true, target_id: 'fleet-enemy-1', target_type: 'enemy_force', fleet_id: 'f1' },
     }));
     expect(destroyed?.toast.kind).toBe('danger');
-    expect(destroyed?.toast.title).toContain('击毁');
+    expect(destroyed?.toast.title).toBe('击毁目标：黑雾');
     expect(destroyed?.toast.href).toBe('/war');
 
     const skirmish = toastFromGameEvent(gameEvent('battle_report_generated', {
-      report: { target_destroyed: false, target_id: 'fleet-enemy-1', target_strength_loss: 37, fleet_id: 'f1' },
+      report: { target_destroyed: false, target_id: 'fleet-enemy-1', target_type: 'enemy_force', target_strength_loss: 37, fleet_id: 'f1' },
     }));
     expect(skirmish?.toast.kind).toBe('danger');
-    expect(skirmish?.toast.body).toContain('-37');
+    expect(skirmish?.toast.body).toBe('黑雾 · -37');
     // 战斗总线已播 explosion，toast 不再配音
     expect(skirmish?.sfx).toBeUndefined();
     expect(skirmish?.toast.mergeKey).toBe('battle:f1');
+  });
+
+  it('battle_report_generated：无中文名可用时也不把原始 id 拼进文案', () => {
+    const mapped = toastFromGameEvent(gameEvent('battle_report_generated', {
+      report: { target_destroyed: false, target_id: 'fleet-enemy-1', target_strength_loss: 12, fleet_id: 'f1' },
+    }));
+    expect(mapped?.toast.title).toBe('舰队交火');
+    expect(mapped?.toast.body).toBe('-12');
+    expect(mapped?.toast.title).not.toContain('fleet-enemy-1');
+    expect(mapped?.toast.body).not.toContain('fleet-enemy-1');
+    expect(mapped?.toast.mergeKey).toBe('battle:f1');
   });
 
   it('entity_destroyed → danger（不配音，总线已播大爆炸）', () => {
@@ -76,6 +87,44 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(own?.toast.title).not.toContain('b-6');
     expect(toastFromGameEvent(gameEvent('entity_destroyed', { entity_id: 'u-3', entity_kind: 'unit', entity_type: 'soldier', owner_id: 'p2' }), 'p1')).toBeNull();
     expect(toastFromGameEvent(gameEvent('entity_destroyed', { entity_id: 'b-9' }), 'p1')?.toast.title).toBe('建筑被摧毁：建筑');
+  });
+
+  it('entity_destroyed：己方机甲被毁写「机甲被击毁」，标题不含实体 id', () => {
+    const mecha = toastFromGameEvent(gameEvent('entity_destroyed', {
+      entity_id: 'u-7', entity_kind: 'unit', entity_type: 'executor', owner_id: 'p1', killed_by: 'df-1', source: 'combat',
+    }), 'p1');
+    expect(mecha?.toast.kind).toBe('danger');
+    expect(mecha?.toast.title).toBe('机甲被击毁：玩家机甲');
+    expect(mecha?.toast.title).not.toContain('u-7');
+    expect(mecha?.toast.body ?? '').not.toContain('u-7');
+    // 服务端 payload 无复活信息时不得编造倒计时
+    expect(mecha?.toast.body ?? '').not.toMatch(/复活|重生|秒/);
+    expect(mecha?.toast.mergeKey).toBe('entity_destroyed:own:unit:玩家机甲');
+
+    // mecha 别名同属机甲
+    expect(toastFromGameEvent(gameEvent('entity_destroyed', {
+      entity_id: 'u-8', entity_kind: 'unit', entity_type: 'mecha', owner_id: 'p1',
+    }), 'p1')?.toast.title).toBe('机甲被击毁：机甲');
+  });
+
+  it('entity_destroyed：己方普通单位仍写「单位阵亡：中文名」', () => {
+    const soldier = toastFromGameEvent(gameEvent('entity_destroyed', {
+      entity_id: 'u-9', entity_kind: 'unit', entity_type: 'soldier', owner_id: 'p1',
+    }), 'p1');
+    expect(soldier?.toast.title).toBe('单位阵亡：士兵');
+    expect(soldier?.toast.title).not.toContain('u-9');
+
+    const worker = toastFromGameEvent(gameEvent('entity_destroyed', {
+      entity_id: 'u-10', entity_kind: 'unit', entity_type: 'worker', owner_id: 'p1',
+    }), 'p1');
+    expect(worker?.toast.title).toBe('单位阵亡：工人');
+
+    // 未知类型回退「单位」，仍不出现 id
+    const unknown = toastFromGameEvent(gameEvent('entity_destroyed', {
+      entity_id: 'u-11', entity_kind: 'unit', owner_id: 'p1',
+    }), 'p1');
+    expect(unknown?.toast.title).toBe('单位阵亡：单位');
+    expect(unknown?.toast.title).not.toContain('u-11');
   });
 
   it('dark_fog_provoked 只对自己弹显眼提示并换算分钟', () => {
@@ -140,7 +189,8 @@ describe('toastFromGameEvent 事件映射', () => {
     }));
     expect(mapped?.toast.body).toBe('风力涡轮机：原料短缺');
     expect(mapped?.toast.body).not.toContain('detected');
-    expect(mapped?.toast.mergeKey).toBe('production_alert:wind_turbine:input_shortage');
+    // 合并键含建筑实例 id：同一建筑的同类告警合并计数（不同建筑分开显示）
+    expect(mapped?.toast.mergeKey).toBe('production_alert:b-25:input_shortage');
   });
 
   it('production_alert：研究站（空 matrix_lab）吞吐类告警属噪音不弹，断电仍提醒', () => {
@@ -379,6 +429,27 @@ describe('产线告警节流与历史回填', () => {
     const state = useNotificationsStore.getState();
     expect(state.toasts.filter((toast) => !toast.leaving)).toHaveLength(1);
     expect(state.history[0].count).toBe(2);
+  });
+
+  it('历史面板里同一 mergeKey 只留一条并累计计数（同类告警不刷屏）', () => {
+    const store = useNotificationsStore.getState();
+    const input = { kind: 'warning' as const, title: '产线告警', body: '采矿机：产物阻塞', mergeKey: 'production_alert:b-9:output_blocked', throttleMs: 60_000 };
+    // 三条跨越节流窗口的同键告警：toast 层可能弹两条，但历史只应留一条 ×3
+    store.push(input, 1_000);
+    store.push(input, 1_000 + TOAST_TTL_MS + 1000);
+    store.push(input, 1_000 + (TOAST_TTL_MS + 1000) * 2);
+    const history = useNotificationsStore.getState().history;
+    expect(history.filter((toast) => toast.mergeKey === input.mergeKey)).toHaveLength(1);
+    expect(history[0].count).toBe(3);
+  });
+
+  it('不同建筑的同类告警在历史里各自一条（键含建筑 id）', () => {
+    const store = useNotificationsStore.getState();
+    const base = { kind: 'warning' as const, title: '产线告警', throttleMs: 60_000 };
+    store.push({ ...base, mergeKey: 'production_alert:b-1:output_blocked' }, 1_000);
+    store.push({ ...base, mergeKey: 'production_alert:b-2:output_blocked' }, 1_100);
+    const keys = useNotificationsStore.getState().history.map((toast) => toast.mergeKey);
+    expect(keys).toEqual(['production_alert:b-2:output_blocked', 'production_alert:b-1:output_blocked']);
   });
 
   it('服务端事件历史回填铃铛：合并计数、不弹 toast、不计未读', () => {

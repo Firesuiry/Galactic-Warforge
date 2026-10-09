@@ -758,6 +758,7 @@ func InstallGameData(gd *GameData) {
 	}
 
 	resetCatalogDerivations()
+	markRecipeOutputIndexDirty()
 }
 
 // runtimeDefinitionFromSpec 取条目的运行时定义；未配置 runtime 的建筑只有占地。

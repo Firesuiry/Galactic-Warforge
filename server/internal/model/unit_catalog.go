@@ -101,6 +101,10 @@ type MechaSpec struct {
 	AttackEnergyCost    int   `yaml:"attack_energy_cost"`
 	MoveEnergyCost      int   `yaml:"move_energy_cost"`
 	ShieldRechargeDelay int64 `yaml:"shield_recharge_delay"`
+	// EnergyRegenTicks 被动回能间隔：每多少 tick 自动回 1 点核心能量（0 = 不回能）。
+	// 取 4 时约 0.25 点/tick，只有行军耗能（1 点/格、0.5 格/tick）的一半左右：
+	// 长途行军不用反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。
+	EnergyRegenTicks int `yaml:"energy_regen_ticks,omitempty"`
 }
 
 // UnitDefinition 世界单位定义（units.yaml 的一个条目）：战斗数值、造价与对外目录信息。
@@ -143,6 +147,9 @@ type UnitDefinition struct {
 
 // ExecutorRespawnTicks is the configured recovery delay after the player mecha dies.
 func ExecutorRespawnTicks() int64 { return unitDefinitions[UnitTypeExecutor].Mecha.RespawnTicks }
+
+// MechaEnergyRegenTicks 执行体机甲的被动回能间隔（units.yaml executor.mecha.energy_regen_ticks）。
+func MechaEnergyRegenTicks() int { return unitDefinitions[UnitTypeExecutor].Mecha.EnergyRegenTicks }
 
 // unitStatsFromDefinition 由单位定义生成出厂状态。
 func unitStatsFromDefinition(def UnitDefinition) Unit {

@@ -35,7 +35,7 @@ func (gc *GameCore) execSetEnergyExchangerMode(ws *model.WorldState, playerID st
 	building := ws.Buildings[buildingID]
 	if building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if building.OwnerID != playerID {
@@ -53,6 +53,6 @@ func (gc *GameCore) execSetEnergyExchangerMode(ws *model.WorldState, playerID st
 	module.Mode = mode
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("能量交换器 %s 模式已设为 %s", buildingID, mode)
+	res.Message = fmt.Sprintf("能量交换器模式已设为 %s", mode)
 	return res, nil
 }

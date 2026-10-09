@@ -24,11 +24,30 @@ export interface ResearchTechCard {
   unlockLabels: string[];
 }
 
+export interface ResearchCostLine {
+  itemId: string;
+  itemName: string;
+  /** 结算要求的总量（required_cost，已含本局研究倍率）。 */
+  required: number;
+  /** 已装入研究站的量（consumed_cost）。 */
+  consumed: number;
+  /** 还差多少（>=0）。 */
+  missing: number;
+}
+
 export interface CurrentResearchCard extends ResearchTechCard {
   progress: number;
   totalCost: number;
   blockedReason?: string;
   blockedReasonLabel?: string;
+  /**
+   * 逐项成本对照（已装入 / 需要 / 还差）。
+   * 口径是服务端结算的 required_cost / consumed_cost，不用 catalog 里的目录成本——
+   * 目录成本不含 pace_research 倍率时会让玩家按错的数字装矩阵（试玩报告阻断级 #3）。
+   */
+  costLines: ResearchCostLine[];
+  /** waiting_matrix 时的缺口文案：「研究站缺 50 个电磁矩阵（已装入 10 / 需要 60）」。 */
+  matrixShortageNotice?: string;
 }
 
 export interface StarterGuideCard {
@@ -76,12 +95,42 @@ function translateResearchBlockedReason(blockedReason?: string) {
     case "low_power":
       return "研究站供电不足，研究降速或停滞";
     case "waiting_matrix":
-      return "缺少所需矩阵";
+      return "研究站缺少所需矩阵";
     case "invalid_tech":
       return "科技数据无效";
     default:
       return blockedReason || "";
   }
+}
+
+/**
+ * 逐项成本对照：以结算字段 required_cost / consumed_cost 为准，
+ * 不用 catalog 的目录成本（目录成本不含 pace_research 倍率）。
+ */
+export function buildResearchCostLines(
+  catalog: CatalogView | undefined,
+  research: Pick<TechQueueEntry, "required_cost" | "consumed_cost">,
+): ResearchCostLine[] {
+  const consumed = research.consumed_cost ?? {};
+  return (research.required_cost ?? []).map((cost) => {
+    const already = consumed[cost.item_id] ?? 0;
+    return {
+      itemId: cost.item_id,
+      itemName: getItemDisplayName(catalog, cost.item_id),
+      required: cost.quantity,
+      consumed: already,
+      missing: Math.max(0, cost.quantity - already),
+    };
+  });
+}
+
+/** waiting_matrix 的缺口提示：「研究站缺 50 个电磁矩阵（已装入 10 / 需要 60）」。 */
+function formatMatrixShortage(lines: ResearchCostLine[]): string | undefined {
+  const short = lines.filter((line) => line.missing > 0);
+  if (short.length === 0) {
+    return undefined;
+  }
+  return `研究站缺 ${short.map((line) => `${line.missing} 个${line.itemName}`).join("、")}（已装入 ${short.map((line) => `${line.itemName} ${line.consumed}`).join("、")} / 需要 ${short.map((line) => `${line.itemName} ${line.required}`).join("、")}）`;
 }
 
 function deriveTechCard(
@@ -118,6 +167,13 @@ function deriveCurrentResearchCard(
     return null;
   }
 
+  // 研究中一律以结算字段（required_cost / consumed_cost）为准，
+  // 不用 catalog 里按目录写死的成本（试玩报告阻断级 #3：UI 写 10、结算要 60）。
+  const costLines = buildResearchCostLines(catalog, currentResearch);
+  const shortage = currentResearch.blocked_reason === "waiting_matrix"
+    ? formatMatrixShortage(costLines)
+    : undefined;
+
   const tech = (catalog?.techs ?? []).find((entry) => entry.id === currentResearch.tech_id);
   if (!tech) {
     return {
@@ -126,9 +182,7 @@ function deriveCurrentResearchCard(
       level: currentResearch.current_level ?? 0,
       prerequisiteLabels: [],
       missingPrerequisiteLabels: [],
-      costLabels: (currentResearch.required_cost ?? []).map((cost) =>
-        formatCostLabel(catalog, cost),
-      ),
+      costLabels: costLines.map((line) => `${line.itemName} ×${line.required}`),
       unlockLabels: [],
       progress: currentResearch.progress,
       totalCost: currentResearch.total_cost,
@@ -136,17 +190,23 @@ function deriveCurrentResearchCard(
       blockedReasonLabel: translateResearchBlockedReason(
         currentResearch.blocked_reason,
       ),
+      costLines,
+      matrixShortageNotice: shortage,
     };
   }
 
   return {
     ...deriveTechCard(catalog, tech, completedTechIds),
+    // 覆盖目录成本：正在研究的科技用结算值，目录值只作参考。
+    costLabels: costLines.map((line) => `${line.itemName} ×${line.required}`),
     progress: currentResearch.progress,
     totalCost: currentResearch.total_cost,
     blockedReason: currentResearch.blocked_reason,
     blockedReasonLabel: translateResearchBlockedReason(
       currentResearch.blocked_reason,
     ),
+    costLines,
+    matrixShortageNotice: shortage,
   };
 }
 

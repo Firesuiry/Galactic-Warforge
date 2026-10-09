@@ -77,7 +77,7 @@ func hiddenTechDiscovered(player *model.PlayerState, labs []*model.Building, cos
 }
 
 // settleResearch processes research progress for all players using real matrix items.
-func settleResearch(worlds map[string]*model.WorldState) []*model.GameEvent {
+func settleResearch(worlds map[string]*model.WorldState, pace float64) []*model.GameEvent {
 	var events []*model.GameEvent
 
 	for _, player := range researchPlayers(worlds) {
@@ -87,6 +87,8 @@ func settleResearch(worlds map[string]*model.WorldState) []*model.GameEvent {
 		if player.Tech == nil {
 			player.Tech = model.NewPlayerTechState(player.PlayerID)
 		}
+		// 镜像本局研究倍率，保证查询层（/catalog、agent briefing）与结算同源。
+		player.Tech.ResearchPace = paceOrOne(pace)
 		if player.Tech.CurrentResearch == nil {
 			advanceQueuedResearch(player, currentResearchTick(worlds))
 			continue
@@ -471,7 +473,7 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 		}
 		if total <= 0 {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("研究站中缺少 %s", cost.ItemID)
+			res.Message = fmt.Sprintf("研究站中缺少「%s」", itemDisplayName(cost.ItemID))
 			return res, nil
 		}
 	}
@@ -652,6 +654,9 @@ func CanBuildTech(player *model.PlayerState, unlockType model.TechUnlockType, un
 // the recipe itself declares tech gates via RecipeDefinition.TechUnlock; a
 // gated recipe becomes usable once any of those techs is completed. Recipes
 // with no gate at all are basic recipes and stay usable from the start.
+// CanUseRecipeTech 配方是否可用：玩家已完成任一"解锁该配方的科技"即可。
+// 性能：按配方 ID 缓存"哪些科技解锁了它"，避免每次调用都遍历全部科技定义
+// （settleUnitCombat/bot 备料每 tick 调用上千次，是 tick p95 的热点）。
 func CanUseRecipeTech(player *model.PlayerState, recipeID string) bool {
 	if recipeID == "" {
 		return false
@@ -659,24 +664,16 @@ func CanUseRecipeTech(player *model.PlayerState, recipeID string) bool {
 	if player == nil || player.Tech == nil {
 		return false
 	}
-	gated := false
 	recipe, known := model.Recipe(recipeID)
 	if !known {
 		return false
 	}
-	for _, def := range model.AllTechDefinitions() {
-		if def == nil {
-			continue
+	gated := false
+	for _, techID := range model.TechsUnlockingRecipe(recipeID) {
+		if player.Tech.HasTech(techID) {
+			return true
 		}
-		for _, unlock := range def.Unlocks {
-			if unlock.Type != model.TechUnlockRecipe || unlock.ID != recipeID {
-				continue
-			}
-			if player.Tech.HasTech(def.ID) {
-				return true
-			}
-			gated = true
-		}
+		gated = true
 	}
 	for _, techID := range recipe.TechUnlock {
 		if player.Tech.HasTech(techID) {
@@ -685,21 +682,6 @@ func CanUseRecipeTech(player *model.PlayerState, recipeID string) bool {
 		gated = true
 	}
 	return !gated
-}
-
-// TechCostForPlayer returns the cost breakdown for a tech based on player's current state
-func TechCostForPlayer(player *model.PlayerState, techID string) (cost []model.ItemAmount, ok bool) {
-	def, ok := model.TechDefinitionByID(techID)
-	if !ok {
-		return nil, false
-	}
-
-	if !player.Tech.HasPrerequisites(def) {
-		return nil, false
-	}
-
-	// Return the cost items for the level the player would research next
-	return def.CostForLevel(player.Tech.CompletedTechs[techID] + 1), true
 }
 
 // ValidateStartResearchLocked is the RLock-free variant called by the gateway
@@ -733,10 +715,12 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 
 	var issues []model.CommandIssue
 	level := 1
+	pace := 1.0
 	if player := ws.Players[playerID]; player != nil && player.Tech != nil {
 		level = player.Tech.CompletedTechs[def.ID] + 1
+		pace = player.Tech.ResearchPace
 	}
-	for _, cost := range def.CostForLevel(level) {
+	for _, cost := range model.ScaledResearchCost(def.CostForLevel(level), pace) {
 		if cost.ItemID == "" || cost.Quantity <= 0 {
 			continue
 		}
@@ -752,7 +736,7 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 			issues = append(issues, model.CommandIssue{
 				Field:   "lab.storage",
 				Code:    "missing_research_material",
-				Message: fmt.Sprintf("研究站库存中缺少 %s（当前：0，需要：≥1）", cost.ItemID),
+				Message: fmt.Sprintf("研究站库存中缺少「%s」（当前：0，需要：≥1）", itemDisplayName(cost.ItemID)),
 			})
 		}
 	}

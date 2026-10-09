@@ -720,6 +720,42 @@ describe("PlanetCommandPanel", () => {
     );
   });
 
+  it("建造任务列表显示中文建筑名与排队原因（不露 b-92）", () => {
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    const runtime = {
+      ...createRuntime(),
+      construction_tasks: [
+        {
+          id: "task-7",
+          player_id: "p1",
+          building_type: "wind_turbine",
+          building_name: "风力涡轮机",
+          position: { x: 2, y: 3, z: 0 },
+          state: "pending",
+          wait_reason: "executor_concurrent_limit",
+          enqueue_tick: 100,
+        },
+      ],
+    };
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={runtime as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=cancel"] },
+    );
+    const note = screen.getByTestId("construction-wait-note");
+    expect(note).toHaveTextContent("风力涡轮机");
+    expect(note).toHaveTextContent("排队中：执行体正在施工其他任务，排队等待");
+    expect(note).not.toHaveTextContent("task-7");
+    const option = within(screen.getByLabelText("待取消任务")).getByRole("option", { name: /风力涡轮机/ });
+    expect(option).toHaveTextContent("排队中：执行体正在施工其他任务，排队等待");
+  });
+
   it("URL ?workflow=dyson 落到戴森 Tab", () => {
     const planet = createPlanet();
     const catalog = createCatalog();

@@ -15,10 +15,15 @@ import type {
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import {
+  constructionTaskLabel,
+  describeConstructionWait,
   findLogisticsStation,
   formatItemInventorySummary,
+  formatPosition,
   getBuildingDisplayName,
   getItemDisplayName,
+  formatUnitOptionLabel,
+  getTechDisplayName,
   isLogisticsStationBuildingType,
   listOwnLogisticsStations,
   type PlanetRenderView,
@@ -292,6 +297,15 @@ export function PlanetCommandPanel({
     ),
     [runtime?.construction_tasks, playerId],
   );
+  const cancelWaitNote = useMemo(() => {
+    const waiting = cancellableTasks.filter((task) => task.wait_reason);
+    if (waiting.length === 0) {
+      return null;
+    }
+    return waiting
+      .map((task) => `${constructionTaskLabel(task, catalog)}（${formatPosition(task.position)}）排队中：${describeConstructionWait(task.wait_reason, catalog)}`)
+      .join('；');
+  }, [cancellableTasks, catalog]);
   const dysonComponents = useMemo(() => {
     const layers = systemRuntime?.dyson_sphere?.layers ?? [];
     const components: Array<{ id: string; label: string; type: string }> = [];
@@ -338,6 +352,12 @@ export function PlanetCommandPanel({
     () => deriveResearchGroups(catalog, playerTechState),
     [catalog, playerTechState],
   );
+  // 本局研究成本倍率（catalog.research_pace，缺省 1）：techs[].cost 已是缩放后的实际值，
+  // 这里只作展示说明（试玩报告：玩家不知道 pace_research=6 把成本乘了 6）。
+  const researchPaceHint = useMemo(() => {
+    const pace = catalog?.research_pace ?? playerTechState?.research_pace ?? 1;
+    return pace > 1 ? `本局研究成本 ×${pace}（目录成本已按倍率缩放）` : "";
+  }, [catalog?.research_pace, playerTechState?.research_pace]);
   const starterGuide = useMemo(
     () => buildStarterGuide(playerTechState),
     [playerTechState],
@@ -943,7 +963,7 @@ export function PlanetCommandPanel({
               <option value="">选择建筑</option>
               {ownBuildings.map((building) => (
                 <option key={building.id} value={building.id}>
-                  {building.id} · {building.type}
+                  {getBuildingDisplayName(catalog, building.type)} · {formatPosition(building.position)}
                 </option>
               ))}
             </select>
@@ -957,7 +977,7 @@ export function PlanetCommandPanel({
               <option value="">选择单位</option>
               {produceUnitTypes.map((unit) => (
                 <option key={unit.id} value={unit.id}>
-                  {unit.name} ({unit.id}) · {unit.cost?.map(c=>c.item_id+" × "+c.quantity).join(" / ")} · {unit.production_ticks} tick
+                  {formatUnitOptionLabel(catalog, unit)}
                 </option>
               ))}
             </select>
@@ -1003,7 +1023,8 @@ export function PlanetCommandPanel({
               <option value="">选择任务</option>
               {cancellableTasks.map((task) => (
                 <option key={task.id} value={task.id}>
-                  {task.id} · {task.building_type} · {task.state}
+                  {constructionTaskLabel(task, catalog)} · {formatPosition(task.position)} · {task.state}
+                  {task.wait_reason ? ` · 排队中：${describeConstructionWait(task.wait_reason, catalog)}` : ''}
                 </option>
               ))}
             </select>
@@ -1019,6 +1040,11 @@ export function PlanetCommandPanel({
             取消建造
           </button>
         </div>
+        {cancelWaitNote ? (
+          <p className="subtle-text" data-testid="construction-wait-note">
+            {cancelWaitNote}
+          </p>
+        ) : null}
       </section>
 
       <section className="planet-side-section">
@@ -1033,7 +1059,7 @@ export function PlanetCommandPanel({
               <option value="">选择任务</option>
               {restorableTasks.map((task) => (
                 <option key={task.id} value={task.id}>
-                  {task.id} · {task.building_type} · {task.state}
+                  {constructionTaskLabel(task, catalog)} · {formatPosition(task.position)} · {task.state}
                 </option>
               ))}
             </select>
@@ -1056,7 +1082,7 @@ export function PlanetCommandPanel({
         <div className="compact-form-grid">
           <p className="subtle-text field--span-2">
             {playerTechState?.current_research
-              ? `当前研究：${playerTechState.current_research.tech_id}（${playerTechState.current_research.progress ?? 0}/${playerTechState.current_research.total_cost ?? 0}）`
+              ? `当前研究：${getTechDisplayName(catalog, playerTechState.current_research.tech_id)}（${playerTechState.current_research.progress ?? 0}/${playerTechState.current_research.total_cost ?? 0}）`
               : '当前没有进行中的研究。'}
           </p>
           <button
@@ -1137,8 +1163,8 @@ export function PlanetCommandPanel({
               <option value="">选择物流站</option>
               {ownLogisticsStations.map((station) => (
                 <option key={station.building_id} value={station.building_id}>
-                  {station.building_id} ·{" "}
-                  {getBuildingDisplayName(catalog, station.building_type)}
+                  {getBuildingDisplayName(catalog, station.building_type)} ·{" "}
+                  {formatPosition(station.position)}
                 </option>
               ))}
             </select>
@@ -1252,8 +1278,8 @@ export function PlanetCommandPanel({
               <option value="">选择物流站</option>
               {ownLogisticsStations.map((station) => (
                 <option key={station.building_id} value={station.building_id}>
-                  {station.building_id} ·{" "}
-                  {getBuildingDisplayName(catalog, station.building_type)}
+                  {getBuildingDisplayName(catalog, station.building_type)} ·{" "}
+                  {formatPosition(station.position)}
                 </option>
               ))}
             </select>
@@ -1349,6 +1375,9 @@ export function PlanetCommandPanel({
             role="tabpanel"
           >
             <div className="section-title">研究工作台</div>
+            {researchPaceHint ? (
+              <p className="subtle-text" data-testid="research-pace-hint">{researchPaceHint}</p>
+            ) : null}
 
             {researchGroups.current ? (
               <article className="research-panel research-panel--current">
@@ -1365,9 +1394,30 @@ export function PlanetCommandPanel({
                   </span>
                   <span>{currentResearchProgressPercent}%</span>
                 </div>
+                <progress
+                  aria-label="研究进度"
+                  className="research-panel__bar"
+                  max={Math.max(1, playerTechState?.current_research?.total_cost ?? 1)}
+                  value={Math.max(0, playerTechState?.current_research?.progress ?? 0)}
+                />
+                {researchGroups.current.costLines.length > 0 ? (
+                  <ul className="research-panel__costs" aria-label="研究成本对照">
+                    {researchGroups.current.costLines.map((line) => (
+                      <li key={line.itemId} className={line.missing > 0 ? "is-short" : undefined}>
+                        {line.itemName}：已装入 {line.consumed} / 需要 {line.required}
+                        {line.missing > 0 ? ` · 还差 ${line.missing}` : " · 已满足"}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {researchGroups.current.blockedReasonLabel ? (
                   <div className="research-panel__hint">
                     当前阻塞：{researchGroups.current.blockedReasonLabel}
+                  </div>
+                ) : null}
+                {researchGroups.current.matrixShortageNotice ? (
+                  <div className="research-panel__hint research-panel__hint--danger" role="status">
+                    {researchGroups.current.matrixShortageNotice}
                   </div>
                 ) : null}
                 <div className="research-panel__details">
@@ -1378,7 +1428,7 @@ export function PlanetCommandPanel({
                       : "无"}
                   </span>
                   <span>
-                    所需矩阵：
+                    研究成本：
                     {researchGroups.current.costLabels.length > 0
                       ? researchGroups.current.costLabels.join(" · ")
                       : "无"}
@@ -1435,7 +1485,7 @@ export function PlanetCommandPanel({
                             : "无"}
                         </span>
                         <span className="subtle-text">
-                          所需矩阵：
+                          研究成本：
                           {tech.costLabels.length > 0
                             ? tech.costLabels.join(" · ")
                             : "无"}
@@ -1507,7 +1557,7 @@ export function PlanetCommandPanel({
                           {tech.missingPrerequisiteLabels.join(" · ")}
                         </span>
                         <span className="subtle-text">
-                          所需矩阵：
+                          研究成本：
                           {tech.costLabels.length > 0
                             ? tech.costLabels.join(" · ")
                             : "无"}
@@ -1539,7 +1589,7 @@ export function PlanetCommandPanel({
               <div className="research-execute">
                 <div className="research-execute__details">
                   <span>前置：{selectedResearch.prerequisiteLabels.join(" · ") || "无"}</span>
-                  <span>所需矩阵：{selectedResearch.costLabels.join(" · ") || "无"}</span>
+                  <span>研究成本：{selectedResearch.costLabels.join(" · ") || "无"}</span>
                   <span>解锁：{selectedResearch.unlockLabels.join(" · ") || "无"}</span>
                 </div>
                 <button

@@ -36,6 +36,12 @@ func settleMechas(ws *model.WorldState) []*model.GameEvent {
 		beforeMove, beforeAttack, beforeDefense, beforeRange := unit.MoveRange, unit.Attack, unit.Defense, unit.AttackRange
 		model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
 		m := unit.Mecha
+		// 被动回能：units.yaml executor.mecha.energy_regen_ticks 决定每多少 tick 回 1 点核心能量。
+		// 只有行军耗能（1 点/格）的一半左右，长途行军不用反复回家补能，
+		// 但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能，保持幂等。
+		if regenTicks := model.MechaEnergyRegenTicks(); regenTicks > 0 && ws.Tick%int64(regenTicks) == 0 && m.Energy < m.MaxEnergy {
+			m.Energy++
+		}
 		charge := min(10, min(m.MaxEnergy-m.Energy, m.FuelEnergy))
 		m.Energy += charge
 		m.FuelEnergy -= charge

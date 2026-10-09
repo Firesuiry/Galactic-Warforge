@@ -1,10 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
 
+/**
+ * 进入离线样例（fixture）会话。
+ * 登录后落在 fixture 行星页（不再有旧版的「Silicon Frontier」服务端切换按钮，属有意改动）；
+ * 顶栏 tick chip 显示 fixture 基线 tick=128，用它确认已进入样例会话。
+ */
 async function openFixtureMode(page: Page) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
-  await expect(page.getByRole('button', { name: 'Silicon Frontier' })).toBeVisible();
+  await expect(page.getByTitle('游戏 tick')).toContainText('tick 128', { timeout: 20_000 });
+  // 等字体就位再截图：HUD 文本（display 字体）在字体切换前后有亚像素差，
+  // 满载跑全量用例时字体可能还没加载完，会让基线截图偶发 0.01% 像素漂移。
+  await page.evaluate(() => document.fonts?.ready);
 }
 
 test('总览页截图基线', async ({ page }) => {
@@ -23,7 +31,9 @@ test('银河星图截图基线', async ({ page }) => {
   await expect(page.locator('.starmap-stage canvas')).toBeVisible();
   await page.waitForTimeout(800);
   const screenshot = await page.screenshot({ animations: 'disabled' });
-  expect(screenshot).toMatchSnapshot('starmap-galaxy.png');
+  // 容差 0.1%：GPU 光栅化在满载跑全量用例时会让星点/文字边缘出现 1 单位亚像素抖动，
+  // 真实 UI 回归（节点/文字位移）是数万像素级别，这点容差不会掩盖回归。
+  expect(screenshot).toMatchSnapshot('starmap-galaxy.png', { maxDiffPixelRatio: 0.001 });
 });
 
 test('行星地图主视图截图基线', async ({ page }) => {
@@ -60,7 +70,10 @@ test('行星地图主视图截图基线', async ({ page }) => {
       height: Math.ceil(bounds.height),
     },
   });
-  expect(screenshot).toMatchSnapshot('planet-map-shell.png');
+  // 容差 0.1%（约 1200 px）：GPU 光栅化在满载跑全量用例时会让中文字形边缘出现 1 单位
+  // 亚像素抖动（实测 10–320 px，最大色差 8），而真实 UI 回归（建造栏/抽屉位移）是数万像素级别，
+  // 因此这点容差不会掩盖回归。
+  expect(screenshot).toMatchSnapshot('planet-map-shell.png', { maxDiffPixelRatio: 0.001 });
 });
 
 test('移动端行星页保留地图首屏并提供工作台切换', async ({ page }) => {

@@ -89,7 +89,16 @@ test('真实产线配方规划可建造带配方的工厂，发展路线可进�
     && building.production?.recipe_id === 'electromagnetic_matrix'), { timeout: 20_000 }).toBe(true);
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: '发展路线', exact: true }).click();
+  // 长线发展路线已并入「生产」面板内的折叠区（<summary>进阶：长线发展路线</summary>），不再是独立按钮。
+  // Esc 退出建造后抽屉可能已收起，先像玩家一样点「工作台」把手展开。
+  if (await page.locator('.planet-drawer--open').count() === 0) {
+    await page.getByRole('button', { name: '工作台' }).first().click();
+  }
+  await page.getByRole('tab', { name: '生产', exact: true }).click();
+  // 抽屉打开时建造栏自动收起为一行把手（.planet-build-bar--docked），折叠区标题在抽屉里，
+  // 建造栏展开着会盖住它：这里先确保建造栏处于收起态，点折叠区标题前不被遮挡。
+  await expect(page.locator('.planet-build-bar--docked')).toBeVisible();
+  await page.locator('.planet-advanced-progression summary').click();
   const development = page.getByRole('region', { name: '工业发展导航' });
   await development.getByRole('tab', { name: /戴森能源/ }).click();
   await expect(development).toContainText('恒星能源');
@@ -112,7 +121,10 @@ test('390px 生产与发展入口可操作，配方检索和画质设置不溢�
   const planner = page.getByRole('region', { name: '生产规划' });
   await planner.getByRole('textbox', { name: '搜索生产配方' }).fill('electromagnetic_matrix');
   await expect(planner.getByRole('combobox', { name: '规划配方' })).toHaveValue('electromagnetic_matrix');
-  await page.getByRole('tab', { name: '发展', exact: true }).click();
+  await page.getByRole('tab', { name: '生产', exact: true }).click();
+  // 抽屉打开时建造栏自动收起为一行把手，折叠区标题不再被遮挡（见 planet-build-workflow.spec.ts 的几何断言）
+  await expect(page.locator('.planet-build-bar--docked')).toBeVisible();
+  await page.locator('.planet-advanced-progression summary').click();
   await expect(page.getByRole('region', { name: '工业发展导航' })).toBeVisible();
   await page.getByRole('tab', { name: /戴森能源/ }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);

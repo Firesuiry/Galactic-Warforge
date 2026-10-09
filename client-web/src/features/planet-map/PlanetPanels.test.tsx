@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { CatalogView } from "@shared/types";
 
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 import {
@@ -7,6 +9,21 @@ import {
   PlanetEntityPanel,
 } from "@/features/planet-map/PlanetPanels";
 import { usePlanetViewStore } from "@/features/planet-map/store";
+import { useSessionStore } from "@/stores/session";
+
+const { mockClient, mockSubmit } = vi.hoisted(() => ({
+  mockClient: {
+    cmdTransferItem: vi.fn(),
+    fetchEventSnapshot: vi.fn().mockResolvedValue({ events: [] }),
+  },
+  mockSubmit: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-api-client", () => ({ useApiClient: () => mockClient }));
+vi.mock("@/features/planet-commands/executor", () => ({
+  submitPlanetCommand: (input: { execute: () => Promise<unknown> }) =>
+    mockSubmit(input),
+}));
 
 function createPlanet() {
   return {
@@ -175,8 +192,23 @@ describe("PlanetActivityPanel", () => {
 
 describe("PlanetEntityPanel 建筑库存", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmit.mockImplementation((input: { execute: () => Promise<unknown> }) =>
+      input.execute(),
+    );
+    mockClient.cmdTransferItem.mockResolvedValue({
+      accepted: true,
+      request_id: "r-transfer",
+      results: [],
+    });
+    mockClient.fetchEventSnapshot.mockResolvedValue({ events: [] });
     usePlanetViewStore.getState().resetForPlanet("planet-1-1");
     usePlanetCommandStore.getState().resetForPlanet("planet-1-1");
+    useSessionStore.getState().setSession({
+      serverUrl: "http://test.local",
+      playerId: "p1",
+      playerKey: "key",
+    });
   });
 
   it("结构化展示本地存储/容量/产出速率，积压将满时给出警示", () => {
@@ -236,5 +268,112 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(screen.getByText("库存与任务")).toBeInTheDocument();
     expect(screen.queryByText(/存储将满/)).not.toBeInTheDocument();
     expect(screen.getByText("未配置")).toBeInTheDocument();
+  });
+
+  it("生产建筑详情提供「取出」控件：下拉列库存与输出缓存去重，提交 to_player 转运", async () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-smelt"] = {
+      id: "b-smelt",
+      type: "smelter",
+      owner_id: "p1",
+      position: { x: 3, y: 3, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 2, height: 2 },
+        },
+        functions: { storage: { capacity: 50 } },
+        state: "running",
+      },
+      // 本地库存与输出缓存含同一物品 → 下拉去重
+      storage: { inventory: { iron_ingot: 12 }, output_buffer: { iron_ingot: 3, copper_ingot: 5 } },
+      production: { recipe_id: "iron_ingot" },
+    };
+    const catalog = {
+      items: [
+        { id: "iron_ingot", name: "铁块" },
+        { id: "copper_ingot", name: "铜锭" },
+      ],
+    } as CatalogView;
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-smelt",
+      position: { x: 3, y: 3, z: 0 },
+    });
+
+    render(<PlanetEntityPanel catalog={catalog} planet={planet as never} />);
+
+    const select = screen.getByRole("combobox", { name: "取出物品" });
+    expect(
+      Array.from(select.querySelectorAll("option")).map((option) => option.textContent),
+    ).toEqual(["选择物品", "铁块", "铜锭"]);
+
+    const button = screen.getByRole("button", { name: "取出" });
+    // 未选物品 → 禁用
+    expect(button).toBeDisabled();
+
+    fireEvent.change(select, { target: { value: "iron_ingot" } });
+    // 数量非正整数 → 仍禁用
+    fireEvent.change(screen.getByLabelText("取出数量"), { target: { value: "0" } });
+    expect(button).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("取出数量"), { target: { value: "4" } });
+    expect(button).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockClient.cmdTransferItem).toHaveBeenCalledWith(
+      "b-smelt",
+      "iron_ingot",
+      4,
+      "planet-1-1",
+      "to_player",
+    );
+  });
+
+  it("非本方建筑的取出控件禁用", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-enemy"] = {
+      id: "b-enemy",
+      type: "smelter",
+      owner_id: "p2",
+      position: { x: 6, y: 6, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 2, height: 2 },
+        },
+        functions: {},
+        state: "running",
+      },
+      storage: { inventory: { iron_ingot: 2 } },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-enemy",
+      position: { x: 6, y: 6, z: 0 },
+    });
+
+    render(<PlanetEntityPanel planet={planet as never} />);
+
+    expect(screen.getByRole("combobox", { name: "取出物品" })).toBeDisabled();
+    expect(screen.getByLabelText("取出数量")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "取出" })).toBeDisabled();
   });
 });

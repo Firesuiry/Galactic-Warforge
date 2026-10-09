@@ -47,17 +47,21 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 	if node.Remaining != 2 || ws.Players["p1"].Inventory[model.ItemCoal] != 0 {
 		t.Fatal("mining completed instantly")
 	}
+	// 首批开工扣 3 能（tick 20），期间跨了 24、28 两个回能 tick 各 +1：
+	// 100 - 3 + 2 = 99。数量与回能节奏都由数据决定，这里钉住“确实扣了能”。
 	advancePersonalTicks(ws, 9)
-	if node.Remaining != 2 || unit.Mecha.Energy != 100-mechaMineEnergy {
-		t.Fatal("mining ignored tick cost")
+	if node.Remaining != 2 || unit.Mecha.Energy != 99 {
+		t.Fatalf("mining ignored tick cost: energy=%d", unit.Mecha.Energy)
 	}
 	advancePersonalTicks(ws, 1)
 	if node.Remaining != 1 || unit.Mecha.Job.CompletedBatches != 1 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
 		t.Fatal("first mining batch incorrect")
 	}
+	// 第二批开工再扣 3 能，到 tick 40 时跨了 32、36、40 三个回能 tick：
+	// 99 - 3 + 3 = 99。
 	advancePersonalTicks(ws, 10)
-	if node.Remaining != 0 || !node.Depleted || unit.Mecha.Job != nil || unit.Mecha.Energy != 100-2*mechaMineEnergy {
-		t.Fatal("mining did not stop at requested/depleted amount")
+	if node.Remaining != 0 || !node.Depleted || unit.Mecha.Job != nil || unit.Mecha.Energy != 99 {
+		t.Fatalf("mining did not stop at requested/depleted amount: energy=%d", unit.Mecha.Energy)
 	}
 	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
 	if result.Code != model.CodeOK || unit.Mecha.Energy != 100 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
@@ -77,9 +81,11 @@ func TestManualMiningPausesOnDistanceEnergyAndConcurrentExhaustion(t *testing.T)
 	if unit.Mecha.Job.State != "out_of_range" || unit.Mecha.Job.RemainingTicks != 10 || unit.Mecha.Energy != 100 {
 		t.Fatal("out-of-range mining progressed")
 	}
+	// 能量不足：把 tick 对齐到非回能窗口（连续 3 tick 无回能），作业暂停不推进。
 	unit.Position = model.Position{X: 1, Y: 1}
 	unit.Mecha.Energy = 0
-	advancePersonalTicks(ws, 5)
+	ws.Tick = 1
+	advancePersonalTicks(ws, 2)
 	if unit.Mecha.Job.State != "no_energy" || node.Remaining != 3 {
 		t.Fatal("empty core mined")
 	}
@@ -89,9 +95,10 @@ func TestManualMiningPausesOnDistanceEnergyAndConcurrentExhaustion(t *testing.T)
 		t.Fatal("mining failed to resume")
 	}
 	node.Remaining = 0
-	unit.Mecha.Energy = 5
+	energyBefore := unit.Mecha.Energy
 	advancePersonalTicks(ws, 1)
-	if unit.Mecha.Job != nil || unit.Mecha.Energy != 5 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
+	// 节点枯竭：作业结束、不再扣能（被动回能可能 +1，所以只断言不小于原值）。
+	if unit.Mecha.Job != nil || unit.Mecha.Energy < energyBefore || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
 		t.Fatal("exhausted shared node consumed energy or duplicated resources")
 	}
 }
@@ -108,17 +115,22 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 	if player.Inventory[model.ItemIronIngot] != 0 || player.Inventory[model.ItemGear] != 0 {
 		t.Fatal("craft did not reserve exactly three inputs")
 	}
+	// 首批开工扣 3 能（tick 20），到 tick 40 完成首批；期间回能 tick 把核心补回上限。
 	advancePersonalTicks(ws, 20)
-	if player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 99 || unit.Mecha.Job.ReservedInputs[0].Quantity != 2 {
-		t.Fatal("craft batch accounting incorrect")
+	if player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 100 || unit.Mecha.Job.ReservedInputs[0].Quantity != 2 {
+		t.Fatalf("craft batch accounting incorrect: %+v", unit.Mecha)
 	}
 	advancePersonalTicks(ws, 5)
+	// 5 tick 里至少跨一个回能 tick（20%4==0），核心补回满。
+	if unit.Mecha.Energy != 100 {
+		t.Fatalf("passive regen missing: %d", unit.Mecha.Energy)
+	}
 	initial := initialEvents[0].Payload["mecha"].(model.MechaState)
 	if initial.Job.RemainingTicks != 20 || initial.Job.ReservedInputs[0].Quantity != 3 {
 		t.Fatal("event history aliases live job")
 	}
 	result, _ = execCommand(core, model.CmdCancelMechaJob, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}})
-	if result.Code != model.CodeOK || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 2 || player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 98 {
+	if result.Code != model.CodeOK || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 2 || player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 100 {
 		t.Fatal("cancel duplicated or lost items / refunded consumed energy")
 	}
 	refundMechaJob(ws, unit)
@@ -132,13 +144,16 @@ func TestHandcraftNoEnergyResumesFromRefuelWithoutConsumingInputsTwice(t *testin
 	player := ws.Players["p1"]
 	core := &GameCore{}
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 1, model.ItemCoal: 2}
+	// 被动回能是「每 4 tick +1」且只在 tick%4==0 时结算：把 tick 对齐到 1（模 4）后，
+	// 连续 3 tick 都不会回能，可以干净地断言「能量不足就不推进」。
 	unit.Mecha.Energy = 0
+	ws.Tick = 1
 	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 1)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	advancePersonalTicks(ws, 10)
+	advancePersonalTicks(ws, 2)
 	if unit.Mecha.Job.State != "no_energy" || unit.Mecha.Job.RemainingTicks != 20 || player.Inventory[model.ItemGear] != 0 {
-		t.Fatal("unpowered crafting advanced")
+		t.Fatal("craft advanced without enough energy")
 	}
 	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
 	if result.Code != model.CodeOK {

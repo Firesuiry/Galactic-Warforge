@@ -41,14 +41,25 @@ func TestPlayerMechaAttackConsumesEnergyAndRejectsAtomically(t *testing.T) {
 	if res.Code != model.CodeInsufficientResource || enemy.HP != 82 || unit.Mecha.Energy != 7 || len(events) != 0 {
 		t.Fatalf("failed attack mutated state: %+v", res)
 	}
+	// 射程外：不再直接拒绝，而是自动靠近（实时路径），随后按冷却开火。
 	unit.Mecha.Energy = 50
 	enemy.Position = model.Position{X: 7, Y: 7}
+	before := unit.Position
 	res, _ = execCommand(core, model.CmdAttack, ws, "p1", mechaAttackCommand(enemy.ID))
-	if res.Code != model.CodeOutOfRange || unit.Mecha.Energy != 50 {
-		t.Fatalf("invalid attack spent energy: %+v", res)
+	if res.Code != model.CodeOK || !unit.HasPath() || unit.Position != before {
+		t.Fatalf("out-of-range attack must approach, not teleport: %+v %+v", res, unit.Position)
+	}
+	for i := 0; i < 200 && ws.SurfaceDistance(unit.Position, enemy.Position) > unit.AttackRange; i++ {
+		ws.Tick++
+		settleUnitMovement(ws)
+	}
+	if ws.SurfaceDistance(unit.Position, enemy.Position) > unit.AttackRange {
+		t.Fatalf("mecha never closed to attack range: %+v -> %+v", unit.Position, enemy.Position)
 	}
 }
 
+// 机甲移动与普通单位同语义：一条命令下达整条路径，按移速逐 tick 推进；
+// 起步按整条路径扣能，能量不足整条拒绝（原子性）。
 func TestPlayerMechaMovementConsumesPathEnergyAndRejectsAtomically(t *testing.T) {
 	ws, unit := mechaTestWorld()
 	core := &GameCore{}
@@ -61,8 +72,18 @@ func TestPlayerMechaMovementConsumesPathEnergyAndRejectsAtomically(t *testing.T)
 	}
 	unit.Mecha.Energy = 3
 	res, _ = execCommand(core, model.CmdMove, ws, "p1", cmd)
-	if res.Code != model.CodeOK || unit.Position != dest || unit.Mecha.Energy != 0 {
-		t.Fatalf("movement not metered: %+v, %+v", res, unit)
+	if res.Code != model.CodeOK || unit.Position != (model.Position{X: 1, Y: 1}) || unit.Mecha.Energy != 0 || !unit.HasPath() {
+		t.Fatalf("movement not metered as a real-time path: %+v, %+v", res, unit)
+	}
+	// 起步时核心 0 能，途中每格耗 1 能；被动回能只在 tick%4==0 补 1 点，
+	// 所以走 3 格要跨 4 个回能 tick 才有能量。这里给足 tick 数。
+	for i := 0; i < 80 && unit.HasPath(); i++ {
+		ws.Tick++
+		settleMechas(ws)
+		settleUnitMovement(ws)
+	}
+	if unit.Position != dest {
+		t.Fatalf("mecha never reached %+v, at %+v", dest, unit.Position)
 	}
 }
 
@@ -96,8 +117,10 @@ func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing
 	if res := refuel(model.ItemCoal, 1); res.Code != model.CodeInvalidTarget {
 		t.Fatal("allowed refuel with stored fuel")
 	}
+	// mechaTestWorld 的 tick 停在 20（20%4==0，正好是回能 tick），
+	// 所以这一 tick 燃料 +10 与被动 +1 同时结算。
 	settleMechas(ws)
-	if unit.Mecha.Energy != 90 || unit.Mecha.FuelEnergy != 890 {
+	if unit.Mecha.Energy != 91 || unit.Mecha.FuelEnergy != 890 {
 		t.Fatalf("fuel did not replenish core: %+v", unit.Mecha)
 	}
 }
@@ -175,7 +198,7 @@ func TestPlayerMechaShieldAbsorbsAttackThenRechargesUsingEnergy(t *testing.T) {
 		t.Fatal("shield recharge did not use energy")
 	}
 	unit.Mecha.Energy = 0
-	ws.Tick++
+	ws.Tick = 31 // 非回能 tick（31%4 != 0），确保这一 tick 完全没有能量来源。
 	settleMechas(ws)
 	if unit.Mecha.Shield != 17 {
 		t.Fatal("shield regenerated without energy")
@@ -198,13 +221,19 @@ func TestPlayerMechaCompletedResearchChangesLiveCapabilitiesWithoutFreeEnergy(t 
 		completeResearch(player, research, def, ws.Tick, &events)
 	}
 	settleMechas(ws)
-	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 14 || unit.Mecha.MaxShield != 20 || unit.Mecha.Energy != 22 || unit.Mecha.Shield != 2 {
+	// 研究生效后：能量上限 110、移动范围 14、护盾上限 20；护盾回复 1 点耗 1 能。
+	// 回能 tick（tick%4==0）额外 +1，两种都合法，这里断言能量落在 [22,24] 且护盾 2。
+	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 14 || unit.Mecha.MaxShield != 20 || unit.Mecha.Shield != 2 ||
+		unit.Mecha.Energy < 22 || unit.Mecha.Energy > 24 {
 		t.Fatalf("research not effective: %+v %+v", unit, unit.Mecha)
 	}
+	// 反复同步不得叠加加成或凭空加能量：先把护盾与能量固定，再同步。
+	unit.Mecha.Shield = 0
+	unit.Mecha.Energy = 50
 	for range 3 {
 		model.SyncMechaCapabilities(unit, player)
 	}
-	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 14 || unit.Mecha.Energy != 22 {
+	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 14 || unit.Mecha.Energy != 50 {
 		t.Fatal("repeated sync stacks bonuses or adds energy")
 	}
 }
@@ -256,7 +285,7 @@ func TestPlayerMechaCoreResearchConsumesLabMatricesBeforeIncreasingCapacity(t *t
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	settleResearch(core.worlds)
+	settleResearch(core.worlds, 1)
 	if player.Tech.CompletedTechs["mecha_core"] != 0 || player.Tech.CurrentResearch.Progress != 10 {
 		t.Fatal("research completed without consuming required matrices")
 	}
@@ -264,10 +293,12 @@ func TestPlayerMechaCoreResearchConsumesLabMatricesBeforeIncreasingCapacity(t *t
 		if accepted, _, err := lab.Storage.Load(model.ItemElectromagneticMatrix, 10); err != nil || accepted != 10 {
 			t.Fatalf("matrix replenishment failed: %d %v", accepted, err)
 		}
-		settleResearch(core.worlds)
+		settleResearch(core.worlds, 1)
 	}
 	settleMechas(ws)
-	if player.Tech.CompletedTechs["mecha_core"] != 1 || lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix) != 0 || unit.Mecha.MaxEnergy != 110 || unit.Mecha.Energy != 23 {
+	// 研究完成的这一 tick 若恰好是回能 tick，则被动回能 +1（上限抬到 110 后为 24）；
+	// 否则保持 23。两种都合法，断言区间即可。
+	if player.Tech.CompletedTechs["mecha_core"] != 1 || lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix) != 0 || unit.Mecha.MaxEnergy != 110 || (unit.Mecha.Energy != 23 && unit.Mecha.Energy != 24) {
 		t.Fatalf("core research not backed by consumed matrices: %+v", unit.Mecha)
 	}
 }
@@ -289,7 +320,7 @@ func TestMechaResearchSpeedBonusAffectsRealMatrixConsumption(t *testing.T) {
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	settleResearch(core.worlds)
+	settleResearch(core.worlds, 1)
 	if player.Tech.CurrentResearch.Progress != 11 || lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix) != 19 {
 		t.Fatalf("research speed did not consume 11 matrices: %+v", player.Tech.CurrentResearch)
 	}
@@ -335,6 +366,8 @@ func TestPlayerMechaTechSyncEmitsDerivedCapabilityChange(t *testing.T) {
 	if payload["move_range"] != 12 || payload["attack"] != 20 {
 		t.Fatalf("missing derived fields: %#v", payload)
 	}
+	// 满能量：被动回能不做任何事，重复同步必须仍然零事件。
+	unit.Mecha.Energy = unit.Mecha.MaxEnergy
 	if events := settleMechas(ws); len(events) != 0 {
 		t.Fatalf("idempotent sync emitted duplicate event: %v", events)
 	}

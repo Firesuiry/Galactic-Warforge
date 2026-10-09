@@ -16,6 +16,8 @@ import {
 import { PlanetCommandCenter } from "@/features/planet-commands/PlanetCommandCenter";
 import { ProductionPlanner } from "@/features/production/ProductionPlanner";
 import { ColonyProgressionPanel } from "@/features/progression/ColonyProgressionPanel";
+import { gameIdentityOf } from "@/features/lobby/current-game";
+import { useCurrentGameQuery } from "@/features/lobby/use-current-game";
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import { PlanetOperationHeader } from "@/features/planet-commands/PlanetOperationHeader";
 import { parseCommandWorkflowId } from "@/features/planet-map/PlanetCommandPanel";
@@ -35,6 +37,7 @@ import { WarGuidePanel } from "@/features/onboarding/WarGuidePanel";
 import { resolveWarGuide } from "@/features/onboarding/war-guide";
 import { ownLegions } from "@/features/planet-map/legion-model";
 import { countOutOfAmmoUnits } from "@/features/planet-map/ammo-alert";
+import { useMechaJobProgress } from "@/features/planet-map/mecha-job-progress";
 import { PlanetLegionPanel } from "@/features/planet-map/PlanetLegionPanel";
 import { PlanetTheaterControls } from "@/features/planet-map/PlanetTheaterControls";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
@@ -52,6 +55,7 @@ import {
   getTechDisplayName,
 } from "@/features/planet-map/model";
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
+import { accumulateOwnEntities, createOwnEntityCache, ownEntitySnapshot } from "@/features/planet-map/own-entity-cache";
 import { useApiClient } from "@/hooks/use-api-client";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { translatePlanetKind, translateUi } from "@/i18n/translate";
@@ -62,7 +66,7 @@ import {
   PLANET_FOCUS_FIT_ZOOM,
   resolvePlanetZoomIndex,
 } from "@/features/planet-map/store";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const PlanetMapThree = lazy(() => import("@/features/planet-map/PlanetMapThree").then(module => ({ default: module.PlanetMapThree })));
 import { createFixtureFetch, isFixtureServerUrl } from "@/fixtures";
@@ -130,6 +134,10 @@ export function PlanetPage() {
   );
   const { planetId = "" } = useParams();
   const captureRef = useRef<PlanetMapCapture | null>(null);
+  // 跨场景窗口的己方实体累积（只增不减）：新手引导是「有没有建过」的历史推导，
+  // 不能用只覆盖相机窗口的 sceneQuery 数据——镜头一平移，窗口外的基地就从响应里
+  // 消失，引导会从 4/8 回退到 1/8（试玩报告 2026-10-07 阻断级 4）。
+  const ownEntityCacheRef = useRef(createOwnEntityCache());
   const restoredViewRef = useRef("");
   const {
     hydrateRecentAlerts,
@@ -181,6 +189,16 @@ export function PlanetPage() {
   );
   // 右侧工作台抽屉：默认收起为边缘把手；点选实体/新命令回执时自动滑出。
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const buildBarDocked = usePlanetViewStore((state) => state.buildBarDocked);
+  const setBuildBarDocked = usePlanetViewStore((state) => state.setBuildBarDocked);
+  // 抽屉打开时建造栏自动收起（覆盖式抽屉会压住右下角建造卡片）；关闭时不自动展开，
+  // 尊重玩家手动收起的意图。buildBarDocked 是 store 状态，供 PlanetBuildBar 渲染把手。
+  const toggleDrawer = useCallback((open: boolean) => {
+    setDrawerOpen(open);
+    if (open) {
+      setBuildBarDocked(true);
+    }
+  }, [setBuildBarDocked]);
   // 左上信息片：可折叠成窄条，减少对地图的遮挡（折叠按钮单独恢复 pointer-events）。
   const [titleChipCollapsed, setTitleChipCollapsed] = useState(false);
 
@@ -246,6 +264,10 @@ export function PlanetPage() {
     queryFn: () => client.fetchCatalog(),
     enabled: Boolean(planetId),
   });
+
+  // 机甲批量进度（主界面常驻横幅 + 完成通知）：与 scene/catalog 同源，
+  // 放在 query 定义之后、任何早返回之前，避免 hooks 出现在条件分支后。
+  const mechaJob = useMechaJobProgress(catalogQuery.data, sceneQuery.data, session.playerId);
 
   const summaryQuery = useQuery({
     queryKey: ["summary", session.serverUrl, session.playerId],
@@ -327,6 +349,17 @@ export function PlanetPage() {
     }
   }, [sceneQuery.data, session.playerId, darkFogHostile]);
 
+  // 每来一帧窗口数据就并入累积缓存；引导只看这份历史（见 own-entity-cache 注释）。
+  // 放在 useMemo 里而不是 effect：ref 更新不会触发重渲染，写在 effect 里引导会晚一帧且可能一直不更新。
+  // 对局标识（started_at::map_seed）一起作为失效条件：同一行星开新局时实体 id 会复用，
+  // 只按 planetId 判断会用上一局的建筑点亮新手引导。
+  const currentGameQuery = useCurrentGameQuery();
+  const gameIdentity = currentGameQuery.data ? gameIdentityOf(currentGameQuery.data) : '';
+  const guideEntities = useMemo(
+    () => ownEntitySnapshot(accumulateOwnEntities(ownEntityCacheRef.current, sceneQuery.data, session.playerId, gameIdentity)),
+    [sceneQuery.data, session.playerId, gameIdentity],
+  );
+
   // RTS 快捷键体系（C1）：A/S/H/P/G + Ctrl/数字编队，2D/3D 共用（输入框聚焦自动忽略）
   usePlanetRtsHotkeys({
     planet: sceneQuery.data,
@@ -398,7 +431,7 @@ export function PlanetPage() {
     resetForPlanet(planetId);
     resetCommandStore(planetId);
     setActiveDetailPanel("workbench");
-    setDrawerOpen(false);
+    toggleDrawer(false);
   }, [planetId, resetCommandStore, resetForPlanet]);
 
   // 抽屉只由玩家点开；点选实体时预先切到"选中对象" Tab，打开时即见详情。
@@ -480,7 +513,7 @@ export function PlanetPage() {
       // 校验合法 id（非法时仍打开抽屉，子面板回落 basic）
       parseCommandWorkflowId(workflowRaw);
       setActiveDetailPanel("workbench");
-      setDrawerOpen(true);
+      toggleDrawer(true);
     }
 
     restoredViewRef.current = signature;
@@ -676,7 +709,7 @@ export function PlanetPage() {
               }}
               onBuildRecipe={(buildingType, recipeId) => {
                 setInteractionMode({ kind: "build", buildingType, recipeId, direction: "auto" });
-                setDrawerOpen(false);
+                toggleDrawer(false);
               }}
             />
             {/* 戴森式长线发展路线：遭遇战之外的进阶内容，默认折叠，不和新手引导抢主线 */}
@@ -705,7 +738,7 @@ export function PlanetPage() {
                 const buildingType = destination.searchParams.get("build");
                 if (buildingType) setInteractionMode({ kind: "build", buildingType, direction: "auto" });
                 setActiveDetailPanel("workbench");
-                setDrawerOpen(true);
+                toggleDrawer(true);
               }}
             />
             </details>
@@ -831,7 +864,7 @@ export function PlanetPage() {
             </div>
           )}
           <div className="planet-management-actions" aria-label="工业发展">
-            <button className="secondary-button" onClick={() => { setActiveDetailPanel("production"); setDrawerOpen(true); }}>
+            <button className="secondary-button" onClick={() => { setActiveDetailPanel("production"); toggleDrawer(true); }}>
               <Factory size={13} aria-hidden="true" /> 生产规划
             </button>
           </div>
@@ -841,12 +874,24 @@ export function PlanetPage() {
             catalog={catalog}
             onShowDetail={() => {
               setActiveDetailPanel("selection");
-              setDrawerOpen(true);
+              toggleDrawer(true);
             }}
             planet={planet}
             squads={runtime.combat_squads}
           />
-          <PlanetBuildBar catalog={catalog} planet={planet} summary={summary} dimensional={isThree} />
+          <PlanetBuildBar
+            catalog={catalog}
+            onExpand={() => {
+              // 窄屏：抽屉是覆盖式的，展开建造栏会与抽屉抢同一块底部空间（必然重叠），
+              // 让抽屉让位；宽屏选择条/建造栏本就右移让出抽屉宽度，保持抽屉不动。
+              if (isCompactLayout) {
+                setDrawerOpen(false);
+              }
+            }}
+            planet={planet}
+            summary={summary}
+            dimensional={isThree}
+          />
         </div>
         {/* 小地图（C3）：2D/3D 均可用；3D 下无视口框（mapProjection 缺省优雅降级），敌我标记层照常 */}
         <PlanetMinimap
@@ -882,6 +927,10 @@ export function PlanetPage() {
         <PlanetMapToolbar
           dimensional={isThree}
           networks={networks}
+          onOpenSelection={() => {
+            setActiveDetailPanel("selection");
+            toggleDrawer(true);
+          }}
           planet={planet}
           runtime={runtime}
         />
@@ -890,13 +939,31 @@ export function PlanetPage() {
             {countOutOfAmmoUnits(planet.units, session.playerId)} 个单位弹药耗尽：请补给或建造补给站
           </div>
         ) : null}
+        {/* 机甲手搓/采集批量进度：主界面常驻，不必展开机甲详情（试玩报告 #8） */}
+        {mechaJob ? (
+          <div className="planet-mecha-job" data-testid="planet-mecha-job" role="status">
+            <span className="planet-mecha-job__title">
+              {mechaJob.title} · 已完成 {mechaJob.completed} / {mechaJob.total}
+            </span>
+            <progress
+              aria-label="机甲批量进度"
+              className="planet-mecha-job__bar"
+              max={Math.max(1, mechaJob.total)}
+              value={mechaJob.completed}
+            />
+            <span className="planet-mecha-job__meta">
+              预计剩余 {mechaJob.remainingLabel}
+              {mechaJob.stateLabel ? ` · ${mechaJob.stateLabel}` : ""}
+            </span>
+          </div>
+        ) : null}
         {/* 军团列表（3.4）：编队入口、一键选中、进攻/防守/撤退/补给优先、解散 */}
         <div className="planet-left-stack">
           <WarGuidePanel
             guide={resolveWarGuide({
               playerId: session.playerId,
-              buildings: Object.values(planet.buildings ?? {}),
-              units: Object.values(planet.units ?? {}),
+              buildings: guideEntities.buildings,
+              units: [...guideEntities.units, ...guideEntities.fogUnits],
               legions: ownLegions(runtime.combat_squads, session.playerId),
               playerInventory: currentPlayer?.inventory,
               darkFogHostile,
@@ -914,8 +981,9 @@ export function PlanetPage() {
         {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出（共用 MapDrawer） */}
         <MapDrawer
           label="工作台"
-          onToggle={() => setDrawerOpen((open) => !open)}
+          onToggle={() => toggleDrawer(!drawerOpen)}
           open={drawerOpen}
+          reserveBottom
         >
           {activeDetailPanel === "production" ? (
             <div className="planet-management-context">

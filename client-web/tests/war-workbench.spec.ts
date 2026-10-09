@@ -433,6 +433,10 @@ test('浏览器中可操作战争工作台核心闭环', async ({ page }) => {
 
   await page.getByRole('tab', { name: '军工' }).click();
   await expect(page.getByText('军工总览')).toBeVisible();
+  // 「部署蓝图」旧表单已收进折叠的「高级入口」details，先展开
+  await page.locator('details.war-advanced').evaluate((el: HTMLDetailsElement) => {
+    el.open = true;
+  });
   await page.getByLabel('部署蓝图').selectOption('fleet-adopted');
   await page.getByRole('button', { name: '尝试部署' }).click();
   await expect(page.getByText('建筑 hub-1 无法部署蓝图 fleet-adopted')).toBeVisible();
@@ -462,6 +466,10 @@ test('窄屏下战争工作台仍保留最小操作闭环', async ({ page }) => 
   await page.getByRole('button', { name: '工作台' }).click();
   await expect(page.getByLabel('蓝图 ID')).toBeVisible();
   await page.getByRole('tab', { name: '军工' }).click();
+  // 「部署蓝图」旧表单已收进折叠的「高级入口」details，先展开
+  await page.locator('details.war-advanced').evaluate((el: HTMLDetailsElement) => {
+    el.open = true;
+  });
   await expect(page.getByLabel('部署蓝图')).toBeVisible();
   await page.getByRole('tab', { name: '战区' }).click();
   await expect(page.getByLabel('任务群姿态')).toBeVisible();

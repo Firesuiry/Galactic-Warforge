@@ -1,5 +1,8 @@
 /**
- * TopNav 铃铛：未读角标 + 最近 20 条历史面板（store 环形缓冲；页面重载后从服务端事件历史回填）。
+ * TopNav 铃铛：未读角标 + 最近 20 条历史面板。
+ * 历史来源两路（互补）：
+ * - 本机持久化：sessionStorage 按 serverUrl::playerId 隔离，刷新后立即回填（persistence.ts）；
+ * - 服务端回填：仅最近 RESTORE_WINDOW_TICKS tick、每会话一次，补跨设备/清缓存的历史。
  * 展开/收起播 uiClick；面板外点击关闭（复用 TopNav 设置面板模式）。
  */
 
@@ -9,6 +12,7 @@ import { Bell } from 'lucide-react';
 
 import { sfx } from '@/engine/audio';
 import { historyFromEvents, NOTIFICATION_EVENT_TYPES } from '@/features/notifications/notify';
+import { useNotificationHistoryPersistence } from '@/features/notifications/persistence';
 import { useNotificationsStore, type Toast } from '@/features/notifications/store';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -58,6 +62,8 @@ export function NotificationBell() {
   const markAllRead = useNotificationsStore((state) => state.markAllRead);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // 先恢复本机持久化历史（同步），服务端回填（异步）随后到达，二者按 mergeKey 去重
+  useNotificationHistoryPersistence();
   useRestoreHistory();
 
   useEffect(() => {

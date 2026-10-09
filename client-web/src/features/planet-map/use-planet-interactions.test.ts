@@ -186,6 +186,43 @@ describe('usePlanetInteractions', () => {
     expect(journal[0]?.authoritativeMessage).toContain('建筑占用');
   });
 
+  it('build 模式：未探索区（地形 unknown）不本地拦截，命令照常下发（试玩 1009 F）', () => {
+    const { interactions } = setup();
+    // (12, 12) 在 makePlanet 里是 unknown（客户端没有该格地形数据）。
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'wind_turbine',
+      direction: 'auto',
+    });
+
+    interactions.interactTile({ x: 12, y: 12 });
+
+    expect(mockClient.cmdBuild).toHaveBeenCalledWith(
+      { x: 12, y: 12, z: 0 },
+      'wind_turbine',
+      { direction: 'auto', rotation: 0, autoApproach: true, planetId: 'planet-1-1' },
+    );
+    const journal = usePlanetCommandStore.getState().journal;
+    expect(journal.some((entry) => entry.authoritativeCode === 'LOCAL_PREFLIGHT')).toBe(false);
+  });
+
+  it('build 模式：确知地形不可建（水）仍本地拦截且原因正确', () => {
+    const { interactions, planet } = setup();
+    planet.terrain![12][12] = 'water';
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'wind_turbine',
+      direction: 'auto',
+    });
+
+    interactions.interactTile({ x: 12, y: 12 });
+
+    expect(mockClient.cmdBuild).not.toHaveBeenCalled();
+    const journal = usePlanetCommandStore.getState().journal;
+    expect(journal[0]?.authoritativeCode).toBe('LOCAL_PREFLIGHT');
+    expect(journal[0]?.authoritativeMessage).toContain('地形不可建造');
+  });
+
   it('move 模式：对多选集合下达批量移动并退出模式', () => {
     const { interactions } = setup();
     usePlanetViewStore.getState().setSelectedUnits(['u-1', 'u-2', 'u-3']);

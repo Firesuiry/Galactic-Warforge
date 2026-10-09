@@ -30,7 +30,7 @@ func newSettlementPipeline() settlementPipeline {
 	})
 
 	pipeline.register("research_and_dyson", func(gc *GameCore, frame *settlementFrame) []*model.GameEvent {
-		events := settleResearch(gc.worlds)
+		events := settleResearch(gc.worlds, gc.researchPace())
 		// Refresh research-derived drone speed and sail lifetimes before decay.
 		settleTechAssetSync(gc, frame)
 		events = append(events, settleWarIndustry(gc, frame.currentWorld, gc.spaceRuntime, frame.currentTick)...)

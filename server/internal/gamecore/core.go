@@ -46,6 +46,11 @@ type GameCore struct {
 	gameDir        *gamedir.Dir
 	saveMeta       *gamedir.MetaFile
 	baseSnapshot   *snapshot.Snapshot
+	// recorder 战况录制器（recorder.go）：随 runtimeMu 保护，nil = 未录制。
+	recorder *BattleRecorder
+	// botReachCache 本 tick 的"目标是否可达"缓存（键 = 目标格，见 botTargetReachable）。
+	botReachCache     map[string]bool
+	botReachCacheTick int64
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
@@ -174,6 +179,11 @@ func (gc *GameCore) Discovery() *mapstate.Discovery {
 // SpaceRuntime returns the authoritative shared space runtime.
 func (gc *GameCore) SpaceRuntime() *model.SpaceRuntimeState {
 	return gc.spaceRuntime
+}
+
+// ResearchPace 返回本局研究消耗倍率（归一化后，缺省 1）。
+func (gc *GameCore) ResearchPace() float64 {
+	return gc.researchPace()
 }
 
 // CanIssueCommand checks whether a player can issue a given command type.

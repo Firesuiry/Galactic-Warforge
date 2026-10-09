@@ -25,6 +25,7 @@ func TestPhase1BotIndustrialCycle(t *testing.T) {
 			return
 		}
 	}
+
 	ctx := core.surveyBotWorld(ws, "p2")
 	for _, b := range ctx.buildings {
 		t.Logf("building %s %s state=%s reason=%s production=%+v storage=%+v", b.ID, b.Type, b.Runtime.State, b.Runtime.StateReason, b.Production, b.Storage)

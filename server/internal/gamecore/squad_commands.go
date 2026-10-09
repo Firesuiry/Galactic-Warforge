@@ -195,7 +195,8 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 }
 
 // freeDeployTiles returns up to n distinct tiles nearest to anchor where a new
-// unit of the given domain may stand.
+// unit of the given domain may stand. 与出厂/复活共用同一套占位判定
+// （tileHasLiveUnit）：部署单位同样不与同层单位堆叠。
 func freeDeployTiles(ws *model.WorldState, anchor model.Position, domain model.UnitDomain, n int) []model.Position {
 	air := domain == model.UnitDomainAir
 	out := make([]model.Position, 0, n)
@@ -207,16 +208,10 @@ func freeDeployTiles(ws *model.WorldState, anchor model.Position, domain model.U
 		if !air && (tile.BuildingID != "" || !tile.Terrain.Buildable()) {
 			continue
 		}
-		occupied := false
-		for _, id := range ws.TileUnits[model.TileKey(pos.X, pos.Y)] {
-			if other := ws.Units[id]; other != nil && other.HP > 0 && (other.Domain == model.UnitDomainAir) == air {
-				occupied = true
-				break
-			}
+		if tileHasLiveUnit(ws, pos, air) {
+			continue
 		}
-		if !occupied {
-			out = append(out, model.Position{X: pos.X, Y: pos.Y})
-		}
+		out = append(out, model.Position{X: pos.X, Y: pos.Y})
 	}
 	return out
 }
@@ -277,7 +272,7 @@ func (gc *GameCore) execSquadOrder(ws *model.WorldState, playerID string, cmd mo
 			u.Stance = model.UnitStanceRetreat
 		}
 	}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("%s: %s", squad.ID, order)}, []*model.GameEvent{squadEvent(squad, model.EvtEntityUpdated)}
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("军团「%s」已执行 %s 指令", squad.Name, order)}, []*model.GameEvent{squadEvent(squad, model.EvtEntityUpdated)}
 }
 
 func (gc *GameCore) execDissolveSquad(ws *model.WorldState, playerID string, cmd model.Command, p dissolveSquadPayload) (model.CommandResult, []*model.GameEvent) {

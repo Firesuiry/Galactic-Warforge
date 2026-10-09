@@ -5,16 +5,19 @@ import "sort"
 // MechaJob is one asynchronous personal task. ReservedInputs contains only
 // uncompleted craft batches, including the batch currently in progress.
 type MechaJob struct {
-	Kind             string       `json:"kind"`
-	ResourceID       string       `json:"resource_id,omitempty"`
-	RecipeID         string       `json:"recipe_id,omitempty"`
-	RemainingTicks   int          `json:"remaining_ticks"`
-	TicksPerBatch    int          `json:"ticks_per_batch"`
-	RemainingBatches int          `json:"remaining_batches"`
-	CompletedBatches int          `json:"completed_batches"`
-	EnergyPerBatch   int          `json:"energy_per_batch"` // 每批开工时一次性扣除的核心能量
-	State            string       `json:"state"`
-	ReservedInputs   []ItemAmount `json:"reserved_inputs,omitempty"`
+	Kind             string `json:"kind"`
+	ResourceID       string `json:"resource_id,omitempty"`
+	RecipeID         string `json:"recipe_id,omitempty"`
+	RemainingTicks   int    `json:"remaining_ticks"`
+	TicksPerBatch    int    `json:"ticks_per_batch"`
+	RemainingBatches int    `json:"remaining_batches"`
+	CompletedBatches int    `json:"completed_batches"`
+	EnergyPerBatch   int    `json:"energy_per_batch"` // 每批开工时一次性扣除的核心能量
+	State            string `json:"state"`
+	// Paused 作业被自动防御暂停（机甲去交战），恢复后从原进度继续：
+	// 与"取消作业"不同，进度与预留原料都保留。
+	Paused         bool         `json:"paused,omitempty"`
+	ReservedInputs []ItemAmount `json:"reserved_inputs,omitempty"`
 }
 
 func (j *MechaJob) Clone() *MechaJob {

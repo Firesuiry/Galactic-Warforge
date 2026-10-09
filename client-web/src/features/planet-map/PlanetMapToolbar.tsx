@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { House, Layers, Minus, Plus } from "lucide-react";
+import { Crosshair, House, Layers, Minus, Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import type { PlanetNetworksView, PlanetRuntimeView } from "@shared/types";
@@ -18,6 +18,8 @@ interface PlanetMapToolbarProps {
   /** 3D 球面视图：缩放 ± 走 3D 自带控件（requestZoom 无消费者），这里隐藏。 */
   dimensional?: boolean;
   networks?: PlanetNetworksView;
+  /** 打开右侧抽屉的「选中对象」页签（抽屉打开时底部选择条会被让位，这里给一个固定入口）。 */
+  onOpenSelection?: () => void;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
 }
@@ -32,6 +34,7 @@ interface PlanetMapToolbarProps {
 export function PlanetMapToolbar({
   dimensional = false,
   networks,
+  onOpenSelection,
   planet,
   runtime,
 }: PlanetMapToolbarProps) {
@@ -122,6 +125,17 @@ export function PlanetMapToolbar({
         >
           <House size={18} strokeWidth={2} aria-hidden="true" />
         </button>
+        {onOpenSelection ? (
+          <button
+            aria-label="选中对象"
+            className="secondary-button planet-map-toolbar__button"
+            onClick={onOpenSelection}
+            title="选中对象"
+            type="button"
+          >
+            <Crosshair size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </div>
   );

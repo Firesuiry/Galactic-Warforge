@@ -164,7 +164,8 @@ func TestR2HoldDoesNotChaseAndCeasefire(t *testing.T) {
 	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"order": "hold"}}); res.Code != model.CodeOK {
 		t.Fatalf("hold order rejected: %+v", res)
 	}
-	// 显式指定射程外目标：hold 不追击、不开火、不移动。
+	// 显式指定射程外目标：hold 原地坚守——不接受自动靠近，不开火、不移动。
+	// 显式攻击对普通单位按姿态处理：hold 姿态下忽略追击。
 	if res, _ := execCommand(gc, model.CmdAttack, ws, "p1", model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"target_entity_id": enemy.ID}}); res.Code != model.CodeOK {
 		t.Fatalf("attack order rejected: %+v", res)
 	}

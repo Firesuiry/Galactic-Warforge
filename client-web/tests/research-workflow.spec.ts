@@ -455,6 +455,15 @@ async function installPlanetRoutes(
   };
 }
 
+// 工作台抽屉默认收起；收起时页签在视口外（地图外壳 overflow:clip 后不会再被
+// 自动滚进来），先像玩家一样点「工作台」把手展开。
+async function openWorkbenchDrawer(page: Page) {
+  if (await page.locator(".planet-drawer--open").count() === 0) {
+    await page.getByRole("button", { name: "工作台" }).first().click();
+  }
+  await expect(page.locator(".planet-drawer--open")).toBeVisible();
+}
+
 test("默认新局在浏览器中展示推荐路径、分组研究列表并可启动 electromagnetism", async ({ page }) => {
   const scenario = await installPlanetRoutes(page, {
     completedTechIds: ["dyson_sphere_program"],
@@ -462,6 +471,7 @@ test("默认新局在浏览器中展示推荐路径、分组研究列表并可�
 
   await page.goto("/planet/planet-1-1?view=2d");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
+  await openWorkbenchDrawer(page);
   await page.getByRole("tab", { name: "研究与装料" }).click();
 
   await expect(page.getByText("开局推荐路径")).toBeVisible();
@@ -492,6 +502,7 @@ test("midgame 在浏览器中按建筑上下文展示装料与射线接收站提
 
   await page.goto("/planet/planet-1-1?view=2d");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
+  await openWorkbenchDrawer(page);
   await page.getByRole("tab", { name: "研究与装料" }).click();
 
   await page.getByLabel("建筑 ID").selectOption("ejector-1");

@@ -3,6 +3,7 @@ import type { GameSummary } from '@shared/game';
 import {
   buildNewGameRequest,
   createEmptyPlayerRow,
+  detectGameContinuity,
   gameIdentityOf,
   isAuthErrorMessage,
   newGameAdminWarning,
@@ -176,5 +177,36 @@ describe('resolveAdoptedAuth', () => {
       samePlayer: false,
     });
     expect(resolveAdoptedAuth({ players: [] }, 'ghost')).toBeNull();
+  });
+});
+
+describe('detectGameContinuity（服务端重启后 SSE 重连不应报「对局重置」）', () => {
+  const now = Date.parse('2026-09-29T12:10:00Z');
+  const base = createGameSummary({ tick: 9000, started_at: '2026-09-29T11:00:00Z' });
+
+  it('身份与 tick 都没变 → none（普通 SSE 重连/心跳恢复）', () => {
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 8999 }, base, now)).toBe('none');
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, base, now)).toBe('none');
+  });
+
+  it('服务端重启恢复同一存档（started_at 新但 tick 仍是长跑值）→ reconnected', () => {
+    const restarted = { ...base, tick: 9000, started_at: new Date(now - 30_000).toISOString() };
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, restarted, now)).toBe('reconnected');
+    // tick 略回退（快照恢复丢几 tick）也算重连
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9050 }, restarted, now)).toBe('reconnected');
+  });
+
+  it('真换局（新 seed 或 tick 回到 0 附近）→ reset', () => {
+    const newGame = { ...base, tick: 0, map_seed: 'seed-002', started_at: new Date(now - 5_000).toISOString() };
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, newGame, now)).toBe('reset');
+    const newSeed = { ...base, map_seed: 'seed-002' };
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, newSeed, now)).toBe('reset');
+    // 老 session（started_at 很久以前）却 tick 回退：不是重启恢复，按重置处理
+    const regressed = { ...base, tick: 100 };
+    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, regressed, now)).toBe('reset');
+  });
+
+  it('没有基线（首次拿到对局概要）→ none', () => {
+    expect(detectGameContinuity(null, base, now)).toBe('none');
   });
 });

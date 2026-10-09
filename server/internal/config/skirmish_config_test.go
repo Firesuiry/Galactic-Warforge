@@ -10,7 +10,7 @@ func TestSkirmishConfigPaceAndTimeLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config-skirmish: %v", err)
 	}
-	if cfg.Battlefield.PaceResearch != 6 || cfg.Battlefield.PaceBuild != 2 || cfg.Battlefield.PaceOutput != 2 {
+	if cfg.Battlefield.PaceResearch != 2 || cfg.Battlefield.PaceBuild != 2 || cfg.Battlefield.PaceOutput != 2 {
 		t.Fatalf("unexpected pace: %+v", cfg.Battlefield)
 	}
 	if cfg.Battlefield.TimeLimitTicks != 54000 {

@@ -113,6 +113,7 @@ type ConstructionTaskView struct {
 	PlayerID          string                  `json:"player_id"`
 	RegionID          string                  `json:"region_id,omitempty"`
 	BuildingType      model.BuildingType      `json:"building_type"`
+	BuildingName      string                  `json:"building_name,omitempty"`
 	Position          model.Position          `json:"position"`
 	Rotation          model.PlanRotation      `json:"rotation,omitempty"`
 	BlueprintParams   model.BlueprintParams   `json:"blueprint_params,omitempty"`
@@ -120,6 +121,7 @@ type ConstructionTaskView struct {
 	RecipeID          string                  `json:"recipe_id,omitempty"`
 	Cost              model.BuildCost         `json:"cost,omitempty"`
 	State             model.ConstructionState `json:"state"`
+	WaitReason        string                  `json:"wait_reason,omitempty"`
 	EnqueueTick       int64                   `json:"enqueue_tick"`
 	StartTick         int64                   `json:"start_tick,omitempty"`
 	UpdateTick        int64                   `json:"update_tick,omitempty"`
@@ -524,6 +526,8 @@ func collectConstructionTasks(ws *model.WorldState, playerID string) []Construct
 				Items:    costItems,
 			},
 			State:             task.State,
+			WaitReason:        task.WaitReason,
+			BuildingName:      buildingTypeName(task.BuildingType),
 			EnqueueTick:       task.EnqueueTick,
 			StartTick:         task.StartTick,
 			UpdateTick:        task.UpdateTick,
@@ -685,4 +689,12 @@ func ownerForStation(ws *model.WorldState, stationID string) string {
 		return ""
 	}
 	return building.OwnerID
+}
+
+// buildingTypeName 建筑类型中文名（回执/视图展示用；目录缺失时回退原始 id）。
+func buildingTypeName(buildingType model.BuildingType) string {
+	if def, ok := model.BuildingDefinitionByID(buildingType); ok && def.Name != "" {
+		return def.Name
+	}
+	return string(buildingType)
 }

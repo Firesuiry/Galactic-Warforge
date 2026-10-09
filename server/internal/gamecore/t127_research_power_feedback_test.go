@@ -50,7 +50,7 @@ func TestT127ResearchReportsFullPowerSpeed(t *testing.T) {
 	setResearchLabPowerRatio(ws, lab, 4, 4, 1)
 	startElectromagnetismResearch(t, core, ws)
 
-	settleResearch(core.worlds)
+	settleResearch(core.worlds, 1)
 
 	research := currentResearch(t, ws)
 	if research.BlockedReason != "" {
@@ -80,7 +80,7 @@ func TestT127ResearchReportsLowPowerSlowdown(t *testing.T) {
 	setResearchLabPowerRatio(ws, lab, 16, 8, 0.5)
 	startElectromagnetismResearch(t, core, ws)
 
-	settleResearch(core.worlds)
+	settleResearch(core.worlds, 1)
 
 	research := currentResearch(t, ws)
 	if research.BlockedReason != "low_power" {
@@ -111,7 +111,7 @@ func TestT127ResearchReportsLowPowerWhenLabUnpowered(t *testing.T) {
 	startElectromagnetismResearch(t, core, ws)
 
 	lab.Runtime.State = model.BuildingWorkNoPower
-	settleResearch(core.worlds)
+	settleResearch(core.worlds, 1)
 
 	research := currentResearch(t, ws)
 	if research.BlockedReason != "low_power" {
@@ -142,7 +142,7 @@ func TestT127ResearchStillReportsWaitingLabWithoutPowerIssue(t *testing.T) {
 	startElectromagnetismResearch(t, core, ws)
 
 	lab.Runtime.State = model.BuildingWorkPaused
-	settleResearch(core.worlds)
+	settleResearch(core.worlds, 1)
 
 	research := currentResearch(t, ws)
 	if research.BlockedReason != "waiting_lab" {

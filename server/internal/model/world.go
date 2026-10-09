@@ -88,6 +88,7 @@ type WorldState struct {
 	PathScratchDepth  []int32             `json:"-"`
 	PathScratchEpoch  []int32             `json:"-"`
 	PathScratchGen    int32               `json:"-"`
+	PathScratchQueue  []int32             `json:"-"`
 	TileUnits         map[string][]string `json:"-"`
 
 	EntityCounter int64 `json:"-"`

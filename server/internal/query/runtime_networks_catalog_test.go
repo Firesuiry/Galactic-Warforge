@@ -277,7 +277,7 @@ func TestPlanetNetworksReturnsOwnPowerAndPipelineViews(t *testing.T) {
 func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	ql, _, _ := newQueryTestContext(t)
 
-	view := ql.Catalog()
+	view := ql.Catalog(1)
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}

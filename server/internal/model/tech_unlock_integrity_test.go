@@ -51,6 +51,73 @@ func TestGatedRecipesHaveConsistentTechReferences(t *testing.T) {
 	}
 }
 
+// TestTechSideRecipeUnlocksAreMirroredOnRecipes 守住客户端可推导性：科技侧
+// TechUnlockRecipe 声明的每个配方，都必须在配方自身的 TechUnlock 里回指该科技。
+// 服务端 CanUseRecipeTech 两处都看，但客户端（client-web 的 listBuildingRecipes /
+// MechaControls）只按 recipe.tech_unlock 推导，仅科技侧声明的门控会让前端
+// 认为「开局可用」而服务端拒绝。
+//
+// 例外：开局预完成的科技（DefaultCompletedTechs，如 dyson_sphere_program）上的
+// 声明等价于「基础配方」——新玩家一开始就拥有该科技，客户端按空 tech_unlock
+// 显示为可用与服务端判定一致，因此这类声明不需要回指。
+func TestTechSideRecipeUnlocksAreMirroredOnRecipes(t *testing.T) {
+	initial := DefaultCompletedTechs()
+	for _, def := range AllTechDefinitions() {
+		if def == nil {
+			continue
+		}
+		if _, precompleted := initial[def.ID]; precompleted {
+			continue
+		}
+		for _, unlock := range def.Unlocks {
+			if unlock.Type != TechUnlockRecipe {
+				continue
+			}
+			recipe, ok := Recipe(unlock.ID)
+			if !ok {
+				continue
+			}
+			found := false
+			for _, techID := range recipe.TechUnlock {
+				if techID == def.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("tech %s lists recipe %s in its unlocks, but the recipe's tech_unlock %v does not include it; clients deriving availability from recipe.tech_unlock would disagree",
+					def.ID, unlock.ID, recipe.TechUnlock)
+			}
+		}
+	}
+}
+
+// TestRecipeTechUnlockEntriesHaveTechSideUnlock 守住反方向：配方声明的每个
+// 门控科技都要在科技侧 unlocks 里回指该配方（客户端按 recipe.tech_unlock 推导，
+// 科技侧缺声明会让服务端 CanUseRecipeTech 与前端一致但科技面板漏报解锁）。
+func TestRecipeTechUnlockEntriesHaveTechSideUnlock(t *testing.T) {
+	for _, recipe := range AllRecipes() {
+		for _, techID := range recipe.TechUnlock {
+			def, ok := TechDefinitionByID(techID)
+			if !ok {
+				t.Errorf("recipe %s declares unknown gate tech %q", recipe.ID, techID)
+				continue
+			}
+			found := false
+			for _, unlock := range def.Unlocks {
+				if unlock.Type == TechUnlockRecipe && unlock.ID == recipe.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("recipe %s is gated by tech %s, but that tech's unlocks %v do not list it",
+					recipe.ID, techID, def.Unlocks)
+			}
+		}
+	}
+}
+
 // planetaryProductionTechIDs is the in-game tech set covering 行星内 production,
 // logistics, energy and combat-ammo unlocks from
 // the DSP 分级实现 reference (see git tag pre-refactor-2026-10).

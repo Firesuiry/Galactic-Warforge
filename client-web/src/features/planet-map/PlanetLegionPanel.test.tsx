@@ -87,4 +87,20 @@ describe('PlanetLegionLayer', () => {
     expect(arrow).toHaveAttribute('data-order', 'attack');
     expect(arrow).toHaveAttribute('x2', '85');
   });
+
+  it('军团标签不拦截指针：标签条自身不吞事件，只有图标按钮可点', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const { container } = render(
+      <PlanetLegionLayer offsetX={0} offsetY={0} onSelectLegion={onSelect} playerId="p1" squads={[legion]} tileSize={10} units={units} />,
+    );
+    const marker = container.querySelector('.planet-legion-marker')!;
+    // 标签文字不参与命中测试（aria-hidden），点标签 = 点到标签下面的单位
+    const label = marker.querySelector('.planet-legion-marker__label')!;
+    expect(label).toHaveAttribute('aria-hidden', 'true');
+    expect(label.textContent).toBe('先锋 · 进攻');
+    // 图标按钮是唯一的可点区域：点它才选中军团
+    await user.click(marker.querySelector('.planet-legion-marker__hit')!);
+    expect(onSelect).toHaveBeenCalledWith(legion);
+  });
 });

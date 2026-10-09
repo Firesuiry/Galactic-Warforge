@@ -8,7 +8,7 @@
  * 到该坐标（未编组小队给出本地预检提示）；与表单共用同一条 submitPlanetCommand 管道。
  *
  * 与表单共用同一条 submitPlanetCommand 管道（journal 反馈、authoritative 回写一致）。
- * move/attack 选择器 = 当前多选集合（含执行体：保留瞬移/手动一击语义）；
+ * move/attack 选择器 = 当前多选集合（含执行体：机甲和普通单位一样按实时路径移动）；
  * unit_order 选择器额外过滤执行体（服务端不受理，见 rts-commands）。
  */
 
@@ -26,7 +26,7 @@ import type {
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { sfx } from '@/engine/audio';
-import { assessBuildTiles, describeBuildBlock } from '@/features/planet-map/build-workflow';
+import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import {
@@ -190,8 +190,10 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, tas
 
       if (mode.kind === 'build') {
         const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory);
-        if (assessment && !assessment.buildable) {
-          const reasons = describeBuildBlock(assessment, (itemId) => getItemDisplayName(catalog, itemId));
+        // 未探索区（地形 unknown）不本地拦截：客户端没有该格地形，是否可建由服务端判定，
+        // 命令照常下发，以回执为准（试玩 1009 F：本地「地形不可建造」把合法建造拦掉了）。
+        if (shouldBlockBuildLocally(assessment)) {
+          const reasons = describeBuildBlock(assessment!, (itemId) => getItemDisplayName(catalog, itemId));
           reportLocalBlock('build', planet.planet_id, `无法建造：${reasons}`, {
             buildingType: mode.buildingType,
             position,

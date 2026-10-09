@@ -6,9 +6,11 @@ import {
   canonicalTileIndex,
   centerCameraAxisOffset,
   clampCameraAxisOffset,
+  constructionTaskLabel,
+  describeConstructionWait,
   getBuildingDisplayName,
-  getTerrainTile,
   getFogState,
+  getTerrainTile,
   getViewportTileBounds,
   mergeRecentEvents,
   resolveCameraAxisOffset,
@@ -186,6 +188,52 @@ describe('planet map model helpers', () => {
     expect(getBuildingDisplayName(undefined, 'unknown_building')).toBe(
       'unknown_building',
     );
+  });
+
+  it('实体事件摘要用中文名，不裸露 u-7 / b-92 这类内部 id', () => {
+    expect(
+      summarizeEvent({
+        event_id: 'evt-move',
+        tick: 20,
+        event_type: 'entity_moved',
+        visibility_scope: 'p1',
+        payload: { entity_id: 'u-7', entity_kind: 'unit', entity_type: 'soldier', to: { x: 3, y: 4, z: 0 } },
+      }),
+    ).toBe('士兵 移动到 (3, 4, 0)');
+
+    expect(
+      summarizeEvent({
+        event_id: 'evt-destroy',
+        tick: 21,
+        event_type: 'entity_destroyed',
+        visibility_scope: 'p1',
+        payload: { entity_id: 'b-92', entity_kind: 'building', entity_type: 'wind_turbine' },
+      }),
+    ).toBe('风力涡轮机 已销毁');
+
+    // 缺 entity_type 时按 id 前缀回退，仍不露 id。
+    expect(
+      summarizeEvent({
+        event_id: 'evt-move-legacy',
+        tick: 22,
+        event_type: 'entity_moved',
+        visibility_scope: 'p1',
+        payload: { entity_id: 'u-9' },
+      }),
+    ).not.toContain('u-9');
+  });
+
+  it('势力/未知枚举类型不裸显 snake_case（黑雾巢穴的 enemy_force）', () => {
+    const summary = summarizeEvent({
+      event_id: 'evt-enemy',
+      tick: 23,
+      event_type: 'entity_created',
+      visibility_scope: 'all',
+      payload: { entity_id: 'enemy-10', entity_type: 'enemy_force', force_type: 'hive', position: { x: 4, y: 115, z: 0 } },
+    });
+    expect(summary).not.toMatch(/[a-z]{2,}_[a-z]{2,}/);
+    expect(summary).not.toContain('enemy_force');
+    expect(summary).toContain('黑雾单位');
   });
 });
 
@@ -370,4 +418,18 @@ it('selects a rooftop distributor before its host warehouse', () => {
   expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: distributor.id });
   delete planet.buildings[distributor.id];
   expect(resolveSelectionAtTile(planet, 1, 1)).toMatchObject({ kind: 'building', id: host.id });
+});
+
+it('建造任务排队原因给中文说明，未知原因原样透出', () => {
+  expect(describeConstructionWait('insufficient_materials')).toContain('材料未到齐');
+  expect(describeConstructionWait('executor_concurrent_limit')).toContain('执行体正在施工其他任务');
+  expect(describeConstructionWait('region_concurrent_limit')).toContain('区域');
+  expect(describeConstructionWait(undefined)).toBeNull();
+  expect(describeConstructionWait('')).toBeNull();
+  expect(describeConstructionWait('mystery_reason')).toBe('mystery_reason');
+});
+
+it('建造任务标签优先用服务端中文名，不露内部 id', () => {
+  expect(constructionTaskLabel({ id: 'task-7', building_type: 'wind_turbine', building_name: '风力涡轮机' })).toBe('风力涡轮机');
+  expect(constructionTaskLabel({ id: 'task-7', building_type: 'wind_turbine' })).not.toBe('task-7');
 });

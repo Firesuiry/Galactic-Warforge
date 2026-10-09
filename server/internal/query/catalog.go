@@ -11,6 +11,9 @@ type CatalogView struct {
 	Techs      []TechCatalogEntry            `json:"techs,omitempty"`
 	WorldUnits []model.WorldUnitCatalogEntry `json:"world_units,omitempty"`
 	Warfare    *model.WarfareCatalogView     `json:"warfare,omitempty"`
+	// ResearchPace 本局研究消耗倍率（仅展示用）：techs[].cost 已按它缩放为实际成本，
+	// 与研究结算（current_research.required_cost/total_cost）同源。
+	ResearchPace float64 `json:"research_pace"`
 	// DamageCoefficients 护甲×武器伤害系数表（R6）：weapon_class -> armor_class -> 系数，
 	// 原样暴露 model.DamageCoefficients()（combat.yaml），与运行时结算共用单一数据源。
 	DamageCoefficients map[model.WeaponType]map[model.ArmorClass]float64 `json:"damage_coefficients,omitempty"`
@@ -84,7 +87,10 @@ type TechCatalogEntry struct {
 }
 
 // Catalog returns immutable metadata for UI display and command composition.
-func (ql *Layer) Catalog() *CatalogView {
+// pace 是本局研究倍率：techs[].cost 按它缩放为实际成本（取整规则与结算一致），
+// 顶层 research_pace 原样下发供 UI 展示，两者必须同源，避免 UI 与结算不一致。
+func (ql *Layer) Catalog(pace float64) *CatalogView {
+	pace = model.PaceOrOne(pace)
 	buildDefs := model.AllBuildingDefinitions()
 	buildings := make([]BuildingCatalogEntry, 0, len(buildDefs))
 	for _, def := range buildDefs {
@@ -167,7 +173,7 @@ func (ql *Layer) Catalog() *CatalogView {
 			Type:          tech.Type,
 			Level:         tech.Level,
 			Prerequisites: append([]string(nil), tech.Prerequisites...),
-			Cost:          append([]model.ItemAmount(nil), tech.Cost...),
+			Cost:          model.ScaledResearchCost(tech.Cost, pace),
 			Unlocks:       append([]model.TechUnlock(nil), tech.Unlocks...),
 			Effects:       append([]model.TechEffect(nil), tech.Effects...),
 			LeadsTo:       append([]string(nil), tech.LeadsTo...),
@@ -189,6 +195,7 @@ func (ql *Layer) Catalog() *CatalogView {
 		Techs:              techs,
 		WorldUnits:         worldUnits,
 		Warfare:            warfare,
+		ResearchPace:       pace,
 		DamageCoefficients: model.DamageCoefficients(),
 	}
 }

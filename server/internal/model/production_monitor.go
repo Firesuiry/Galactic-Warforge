@@ -14,11 +14,12 @@ const (
 type ProductionAlertType string
 
 const (
-	AlertTypeThroughputDrop ProductionAlertType = "throughput_drop"
-	AlertTypeBacklog        ProductionAlertType = "backlog"
-	AlertTypeInputShortage  ProductionAlertType = "input_shortage"
-	AlertTypeOutputBlocked  ProductionAlertType = "output_blocked"
-	AlertTypePowerShortage  ProductionAlertType = "power_shortage"
+	AlertTypeThroughputDrop   ProductionAlertType = "throughput_drop"
+	AlertTypeBacklog          ProductionAlertType = "backlog"
+	AlertTypeInputShortage    ProductionAlertType = "input_shortage"
+	AlertTypeOutputBlocked    ProductionAlertType = "output_blocked"
+	AlertTypePowerShortage    ProductionAlertType = "power_shortage"
+	AlertTypeUnitSpawnBlocked ProductionAlertType = "unit_spawn_blocked"
 )
 
 // ProductionAlert is a monitoring alert raised for a single building.
@@ -169,6 +170,8 @@ func AlertMessage(alertType ProductionAlertType, buildingID string) string {
 		return fmt.Sprintf("建筑 %s：产物阻塞", buildingID)
 	case AlertTypePowerShortage:
 		return fmt.Sprintf("建筑 %s：电力不足", buildingID)
+	case AlertTypeUnitSpawnBlocked:
+		return fmt.Sprintf("建筑 %s：出厂口被占满", buildingID)
 	default:
 		return fmt.Sprintf("建筑 %s：产线告警", buildingID)
 	}

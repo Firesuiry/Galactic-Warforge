@@ -95,7 +95,7 @@ func (gc *GameCore) execConfigureLogisticsStation(ws *model.WorldState, playerID
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("物流站 %s 已配置", building.ID)
+	res.Message = "物流站已配置"
 	return res, nil
 }
 
@@ -166,7 +166,7 @@ func (gc *GameCore) execConfigureLogisticsSlot(ws *model.WorldState, playerID st
 	station.Normalize()
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("已为 %s 配置物流槽位", itemID)
+	res.Message = fmt.Sprintf("已为「%s」配置物流槽位", itemDisplayName(itemID))
 	return res, nil
 }
 
@@ -189,7 +189,7 @@ func requireOwnedLogisticsStation(ws *model.WorldState, playerID, buildingID str
 	building, ok := ws.Buildings[buildingID]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return nil, nil, &res
 	}
 	if building.OwnerID != playerID {

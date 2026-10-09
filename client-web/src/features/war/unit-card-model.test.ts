@@ -135,7 +135,7 @@ describe('unit-card-model', () => {
       ({ id, type: 'mecha', hp, max_hp: 100, weapon_class: 'cannon', armor_class: 'heavy' }) as unknown as Unit;
     const card = unitCardFromSquad(squad, [member('u-1', 80), member('u-2', 100)], catalog);
     expect(card.title).toBe('剃刀突击机甲');
-    expect(card.subtitle).toBe('sq-1 · 在编 3');
+    expect(card.subtitle).toBe('在编 3 个单位');
     expect(card.weaponClass).toBe('cannon');
     expect(card.armorClass).toBe('heavy');
     expect(card.stats).toEqual([{ key: 'hp', label: 'HP', value: '180/200' }]);

@@ -159,21 +159,23 @@ func (sess *Session) Summary() GameSummary {
 }
 
 // NewGamePlayer 是 POST /games/new 请求体中的玩家定义，字段沿用 config.PlayerConfig 语义。
+// 未给出的字段（role/team_id/bot/bootstrap）继承启动配置中同名玩家的取值。
 type NewGamePlayer struct {
 	PlayerID  string                        `json:"player_id"`
 	Key       string                        `json:"key"`
-	Role      string                        `json:"role,omitempty"`      // admin|commander|observer，空默认 commander
-	TeamID    string                        `json:"team_id,omitempty"`   // 空默认 player_id
-	Bot       string                        `json:"bot,omitempty"`       // easy|normal|hard，空为人类玩家
-	Bootstrap *config.PlayerBootstrapConfig `json:"bootstrap,omitempty"` // 可选，沿用现有 config 结构
+	Role      string                        `json:"role,omitempty"`      // admin|commander|observer，空则继承启动配置（无则 commander）
+	TeamID    string                        `json:"team_id,omitempty"`   // 空则继承启动配置（无则 player_id）
+	Bot       string                        `json:"bot,omitempty"`       // easy|normal|hard，空则继承启动配置（无则人类玩家）
+	Bootstrap *config.PlayerBootstrapConfig `json:"bootstrap,omitempty"` // 空则继承启动配置中同名玩家的开局物资包
 }
 
 // NewGameRequest 是 POST /games/new 的请求体。
-// 地图规则沿用服务端启动时的 mapconfig 文件，仅允许通过 map_seed 换地图。
+// 新局默认完整继承启动配置（battlefield 全字段 + 同名玩家的 bootstrap/bot/executor/permissions），
+// 只有请求里显式给出的字段才覆盖；地图规则沿用服务端启动时的 mapconfig 文件，仅允许通过 map_seed 换地图。
 type NewGameRequest struct {
 	MapSeed         string          `json:"map_seed,omitempty"`         // 空则随机生成
-	EnemyDifficulty string          `json:"enemy_difficulty,omitempty"` // off|easy|normal|hard，空默认 normal
-	VictoryMode     string          `json:"victory_mode,omitempty"`     // elimination|mission_complete|hybrid|sandbox，空默认 elimination
+	EnemyDifficulty string          `json:"enemy_difficulty,omitempty"` // off|easy|normal|hard，空则继承启动配置
+	VictoryMode     string          `json:"victory_mode,omitempty"`     // elimination|mission_complete|hybrid|sandbox，空则继承启动配置
 	Players         []NewGamePlayer `json:"players"`
 }
 
@@ -343,16 +345,21 @@ func newSnapshotStore(serverCfg config.ServerConfig) *persistence.Store {
 	})
 }
 
-// buildConfig 校验请求并构建新局配置：server 段保留，battlefield/players 由请求给出。
+// buildConfig 校验请求并构建新局配置：默认完整继承当前局（即启动配置）的
+// battlefield 与同名玩家定义，仅请求里显式给出的字段覆盖。地图拓扑仍由启动时
+// 的 mapconfig 决定（Reset/assemble 使用 rt.mapCfg），此处只换 map_seed。
 func (rt *Runtime) buildConfig(req *NewGameRequest) (*config.Config, error) {
 	if req == nil {
 		return nil, fmt.Errorf("%w: request body is required", ErrInvalidNewGame)
 	}
 	cfg := &config.Config{Server: rt.serverCfg}
-	if cur := rt.current.Load(); cur != nil && cur.Config != nil {
-		// tick 速率与施工并发上限视作进程级旋钮，沿用当前对局的取值。
-		cfg.Battlefield.MaxTickRate = cur.Config.Battlefield.MaxTickRate
-		cfg.Battlefield.ConstructionRegionConcurrentLimit = cur.Config.Battlefield.ConstructionRegionConcurrentLimit
+	var source *config.Config
+	if cur := rt.current.Load(); cur != nil {
+		source = cur.Config
+	}
+	if source != nil {
+		cfg.Battlefield = source.Battlefield
+		cfg.ScenarioBootstrap = source.ScenarioBootstrap
 	}
 
 	seed := req.MapSeed
@@ -361,25 +368,29 @@ func (rt *Runtime) buildConfig(req *NewGameRequest) (*config.Config, error) {
 	}
 	cfg.Battlefield.MapSeed = seed
 
-	switch req.EnemyDifficulty {
-	case "", "off", "easy", "normal", "hard":
-		cfg.Battlefield.EnemyDifficulty = req.EnemyDifficulty
-	default:
-		return nil, fmt.Errorf("%w: enemy_difficulty must be off|easy|normal|hard", ErrInvalidNewGame)
+	if req.EnemyDifficulty != "" {
+		switch req.EnemyDifficulty {
+		case "off", "easy", "normal", "hard":
+			cfg.Battlefield.EnemyDifficulty = req.EnemyDifficulty
+		default:
+			return nil, fmt.Errorf("%w: 黑雾难度必须为 off|easy|normal|hard", ErrInvalidNewGame)
+		}
 	}
 
-	switch model.NormalizeVictoryRule(req.VictoryMode) {
-	case model.VictoryRuleElimination:
-		if req.VictoryMode != "" && req.VictoryMode != model.VictoryRuleElimination {
-			return nil, fmt.Errorf("%w: victory_mode must be elimination|mission_complete|hybrid|sandbox", ErrInvalidNewGame)
+	if req.VictoryMode != "" {
+		switch model.NormalizeVictoryRule(req.VictoryMode) {
+		case model.VictoryRuleElimination:
+			if req.VictoryMode != model.VictoryRuleElimination {
+				return nil, fmt.Errorf("%w: 胜利模式必须为 elimination|mission_complete|hybrid|sandbox", ErrInvalidNewGame)
+			}
+			cfg.Battlefield.VictoryRule = model.VictoryRuleElimination
+		case model.VictoryRuleMissionComplete, model.VictoryRuleHybrid, model.VictoryRuleSandbox:
+			cfg.Battlefield.VictoryRule = model.NormalizeVictoryRule(req.VictoryMode)
 		}
-		cfg.Battlefield.VictoryRule = model.VictoryRuleElimination
-	case model.VictoryRuleMissionComplete, model.VictoryRuleHybrid, model.VictoryRuleSandbox:
-		cfg.Battlefield.VictoryRule = model.NormalizeVictoryRule(req.VictoryMode)
 	}
 
 	if len(req.Players) == 0 {
-		return nil, fmt.Errorf("%w: players must not be empty", ErrInvalidNewGame)
+		return nil, fmt.Errorf("%w: 至少需要一名玩家", ErrInvalidNewGame)
 	}
 	seenIDs := make(map[string]bool, len(req.Players))
 	seenKeys := make(map[string]bool, len(req.Players))
@@ -387,43 +398,73 @@ func (rt *Runtime) buildConfig(req *NewGameRequest) (*config.Config, error) {
 	for i := range req.Players {
 		p := req.Players[i]
 		if p.PlayerID == "" {
-			return nil, fmt.Errorf("%w: players[%d].player_id is required", ErrInvalidNewGame, i)
+			return nil, fmt.Errorf("%w: 第 %d 名玩家缺少玩家 ID", ErrInvalidNewGame, i+1)
 		}
 		if seenIDs[p.PlayerID] {
-			return nil, fmt.Errorf("%w: duplicate player_id %q", ErrInvalidNewGame, p.PlayerID)
+			return nil, fmt.Errorf("%w: 玩家 ID「%s」重复", ErrInvalidNewGame, p.PlayerID)
 		}
 		seenIDs[p.PlayerID] = true
 		if p.Key == "" {
-			return nil, fmt.Errorf("%w: players[%d].key is required", ErrInvalidNewGame, i)
+			return nil, fmt.Errorf("%w: 第 %d 名玩家缺少 key", ErrInvalidNewGame, i+1)
 		}
 		if seenKeys[p.Key] {
-			return nil, fmt.Errorf("%w: duplicate key for player %q", ErrInvalidNewGame, p.PlayerID)
+			return nil, fmt.Errorf("%w: 玩家「%s」的 key 与其他玩家重复", ErrInvalidNewGame, p.PlayerID)
 		}
 		seenKeys[p.Key] = true
 		switch p.Role {
 		case "", "admin", "commander", "observer":
 		default:
-			return nil, fmt.Errorf("%w: players[%d].role must be admin|commander|observer", ErrInvalidNewGame, i)
+			return nil, fmt.Errorf("%w: 第 %d 名玩家的角色必须为 admin|commander|observer", ErrInvalidNewGame, i+1)
 		}
 		switch p.Bot {
 		case "", "easy", "normal", "hard":
 		default:
-			return nil, fmt.Errorf("%w: players[%d].bot must be easy|normal|hard", ErrInvalidNewGame, i)
+			return nil, fmt.Errorf("%w: 第 %d 名玩家的 bot 难度必须为 easy|normal|hard", ErrInvalidNewGame, i+1)
 		}
-		pc := config.PlayerConfig{
-			PlayerID: p.PlayerID,
-			Key:      p.Key,
-			Role:     p.Role,
-			TeamID:   p.TeamID,
-			Bot:      p.Bot,
+		pc := inheritedPlayerConfig(source, p.PlayerID)
+		pc.PlayerID = p.PlayerID
+		pc.Key = p.Key
+		if p.Role != "" {
+			pc.Role = p.Role
+		}
+		if p.TeamID != "" {
+			pc.TeamID = p.TeamID
+		}
+		if p.Bot != "" {
+			pc.Bot = p.Bot
 		}
 		if p.Bootstrap != nil {
-			pc.Bootstrap = *p.Bootstrap
+			pc.Bootstrap = cloneBootstrap(*p.Bootstrap)
 		}
 		players = append(players, pc)
 	}
 	cfg.Players = players
 	return cfg, nil
+}
+
+// inheritedPlayerConfig 取启动配置中同名玩家的定义作为新局默认值（含 executor/
+// permissions/bootstrap/bot）；没有同名玩家时返回零值，交由 ApplyDefaults 补默认。
+func inheritedPlayerConfig(source *config.Config, playerID string) config.PlayerConfig {
+	if source == nil {
+		return config.PlayerConfig{}
+	}
+	for i := range source.Players {
+		if source.Players[i].PlayerID != playerID {
+			continue
+		}
+		pc := source.Players[i]
+		pc.Permissions = append([]string(nil), source.Players[i].Permissions...)
+		pc.Bootstrap = cloneBootstrap(source.Players[i].Bootstrap)
+		return pc
+	}
+	return config.PlayerConfig{}
+}
+
+func cloneBootstrap(in config.PlayerBootstrapConfig) config.PlayerBootstrapConfig {
+	out := in
+	out.Inventory = append([]config.BootstrapItemConfig(nil), in.Inventory...)
+	out.CompletedTechs = append([]string(nil), in.CompletedTechs...)
+	return out
 }
 
 // startSessionLocked 为新对局拉起 tick 循环与 autosave goroutine（需持 resetMu 且 rt.started）。

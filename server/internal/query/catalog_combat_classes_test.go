@@ -6,7 +6,7 @@ import (
 )
 
 func TestCatalogJSONExposesBlueprintCombatClasses(t *testing.T) {
-	data, err := json.Marshal((&Layer{}).Catalog())
+	data, err := json.Marshal((&Layer{}).Catalog(1))
 	if err != nil {
 		t.Fatal(err)
 	}

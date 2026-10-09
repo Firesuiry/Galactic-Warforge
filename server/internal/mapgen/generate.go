@@ -110,8 +110,18 @@ func Generate(cfg *mapconfig.Config, seed string) *mapmodel.Universe {
 	applySpawnPoints(u, cfg.SpawnPoints)
 	ensureSpawnPads(u)
 	placeContestedCenter(u.PrimaryPlanet(), cfg.Planet.Resources)
+	// 遭遇战可玩性保证：出生点/争夺中心连通、附近开局原矿齐全、小陆地封死。
+	// 无 spawn_points 的地图不受影响。
+	if connectivityObserver != nil {
+		connectivityObserver(u.PrimaryPlanet())
+	}
+	ensurePlayableConnectivity(u.PrimaryPlanet(), cfg)
 	return u
 }
+
+// connectivityObserver 在连通性保证生效前拿到行星快照，供回归测试测量这一步的
+// 改动量（生产路径为 nil）。
+var connectivityObserver func(*mapmodel.Planet)
 
 // applySpawnPoints pins explicit spawn tiles onto the primary planet.
 func applySpawnPoints(u *mapmodel.Universe, points []mapconfig.SpawnPointConfig) {

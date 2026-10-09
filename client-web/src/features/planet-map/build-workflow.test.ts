@@ -9,6 +9,8 @@ import {
   isConveyorBeltBuilding,
   listBuildingRecipes,
   nextBeltDirection,
+  primaryBlockedTile,
+  shouldBlockBuildLocally,
 } from "@/features/planet-map/build-workflow";
 
 function createCatalog() {
@@ -143,6 +145,26 @@ function createSummary() {
 }
 
 describe("build workflow", () => {
+  it("矩阵研究站声明多个科技时，任一已完成即解锁（对齐服务端 CanBuildTech）", () => {
+    // 试玩报告阻断级 #2：unlock_tech 用 every 判定，matrix_lab 声明了
+    // dyson_sphere_program + electromagnetic_matrix_technology 两个科技，
+    // 开局只完成前者，卡片被硬禁用。
+    const catalog = createCatalog();
+    catalog.buildings = catalog.buildings.map((entry) => entry.id === "matrix_lab"
+      ? { ...entry, unlock_tech: ["dyson_sphere_program", "electromagnetic_matrix_technology"] }
+      : entry);
+    const view = deriveBuildWorkflowView({
+      catalog: catalog as never,
+      playerId: "p1",
+      planet: createPlanet() as never,
+      summary: createSummary() as never,
+      selectedPosition: { x: 1, y: 1, z: 0 },
+    });
+
+    expect(view.catalog.recommended.map((entry) => entry.id)).toContain("matrix_lab");
+    expect(view.catalog.locked.map((entry) => entry.id)).not.toContain("matrix_lab");
+  });
+
   it("按已解锁/未解锁/目录异常拆分建造目录，并突出主流程建筑", () => {
     const view = deriveBuildWorkflowView({
       catalog: createCatalog() as never,
@@ -266,7 +288,7 @@ describe("build workflow", () => {
       planet: planet as never,
       summary: createSummary() as never,
       selectedPosition: { x: 9, y: 2, z: 0 },
-      pathPlan: {planet_id:'p',surface:{topology:'cube_sphere',face_size:4},reachable:true,distance:3,path:[{x:1,y:1,z:0},{x:4,y:1,z:0}],waypoints:[{x:4,y:1,z:0}]},
+      pathPlan: {planet_id:'p',surface:{topology:'cube_sphere',face_size:4},reachable:true,distance:3,explored:true,path:[{x:1,y:1,z:0},{x:4,y:1,z:0}],waypoints:[{x:4,y:1,z:0}]},
       buildingType: "wind_turbine",
     });
 
@@ -491,5 +513,110 @@ describe('build item cost', () => {
     const short = assessBuildTiles(catalog, 'wind_turbine', planet, { x: 1, y: 1, z: 0 }, 'p1', 0, { iron_ingot: 2 })!;
     expect(short.buildable).toBe(false);
     expect(describeBuildBlock(short, (id) => ({ iron_ingot: '铁块', gear: '齿轮' }[id] ?? id))).toBe('缺少 铁块 4、齿轮 1');
+  });
+});
+
+describe('未探索区（地形 unknown）不被本地拦截', () => {
+  const catalog = {
+    buildings: [
+      { id: 'wind_turbine', name: '风力涡轮机', buildable: true, footprint: { width: 1, height: 1 } },
+      { id: 'mining_machine', name: '采矿机', buildable: true, requires_resource_node: true, footprint: { width: 1, height: 1 } },
+    ],
+  };
+
+  it('未探索格：buildable=false 但 reason 是 unexplored，且不应本地拦截', () => {
+    // createPlanet 的 terrain：x<8 且 y<8 是 buildable，其余是 unknown（未探索）。
+    const assessment = assessBuildTiles(
+      catalog as never,
+      'wind_turbine',
+      createPlanet() as never,
+      { x: 12, y: 12, z: 0 },
+    )!;
+    expect(assessment.blockedTiles.map((tile) => tile.reason)).toContain('unexplored');
+    expect(assessment.unexploredTiles).toBe(1);
+    expect(assessment.buildable).toBe(false);
+    // 不拦截：命令照常下发，由服务端判定
+    expect(shouldBlockBuildLocally(assessment)).toBe(false);
+    expect(describeBuildBlock(assessment)).toBe('未探索区域，是否可建由服务器判定');
+  });
+
+  it('已知水域仍然本地拦截（地形不可建造）', () => {
+    const planet = createPlanet();
+    planet.terrain[12][12] = 'water';
+    const assessment = assessBuildTiles(
+      catalog as never,
+      'wind_turbine',
+      planet as never,
+      { x: 12, y: 12, z: 0 },
+    )!;
+    expect(assessment.blockedTiles.map((tile) => tile.reason)).toEqual(['terrain']);
+    expect(shouldBlockBuildLocally(assessment)).toBe(true);
+    expect(describeBuildBlock(assessment)).toBe('地形不可建造');
+  });
+
+  it('已知水域 + 资源点 + 建筑同时命中时，提示原因稳定且优先报建筑/资源', () => {
+    const planet = createPlanet();
+    planet.terrain[4][5] = 'water';
+    planet.resources = [{
+      id: 'iron-1', planet_id: 'planet-1-1', kind: 'iron_ore', behavior: 'finite',
+      position: { x: 5, y: 4, z: 0 }, remaining: 900, current_yield: 3,
+    }];
+    // lab-1 就在 (5,4)：同一格同时是建筑 / 资源 / 水域。
+    const assessment = assessBuildTiles(
+      catalog as never,
+      'wind_turbine',
+      planet as never,
+      { x: 5, y: 4, z: 0 },
+    )!;
+    expect(describeBuildBlock(assessment)).toBe('已被建筑占用');
+    // 多次评估结果完全一致（不再随遍历顺序跳变）
+    for (let i = 0; i < 5; i += 1) {
+      const again = assessBuildTiles(catalog as never, 'wind_turbine', planet as never, { x: 5, y: 4, z: 0 })!;
+      expect(describeBuildBlock(again)).toBe('已被建筑占用');
+      expect(primaryBlockedTile(again)).toEqual(primaryBlockedTile(assessment));
+    }
+  });
+
+  it('锚点格优先：footprint 内其他格的阻挡不覆盖玩家点的那一格', () => {
+    const planet = createPlanet();
+    // (2,2) 空地上放一座建筑；(3,3) 放另一座。footprint 2x2 同时压到两格，
+    // 提示必须报玩家点的锚点格（2,2）那一座，而不是遍历顺序里先撞上的那一格。
+    planet.terrain[2][2] = 'buildable';
+    const lab = planet.buildings['lab-1'];
+    const blockAt = (id: string, x: number, y: number) => ({
+      ...lab,
+      id,
+      type: 'matrix_lab',
+      position: { x, y, z: 0 },
+      runtime: {
+        ...lab.runtime,
+        params: { ...lab.runtime.params, footprint: { width: 1, height: 1 } },
+      },
+    });
+    const buildings: Record<string, Building> = {
+      'block-2': blockAt('block-2', 3, 3),
+      'block-1': blockAt('block-1', 2, 2),
+    };
+    planet.buildings = buildings as unknown as typeof planet.buildings;
+    const wideCatalog = {
+      buildings: [{ id: 'wind_turbine', name: '风机', buildable: true, footprint: { width: 2, height: 2 } }],
+    };
+    const anchored = assessBuildTiles(wideCatalog as never, 'wind_turbine', planet as never, { x: 2, y: 2, z: 0 })!;
+    expect(primaryBlockedTile(anchored)).toMatchObject({ x: 2, y: 2, reason: 'building', buildingId: 'block-1' });
+  });
+
+  it('背包缺料优先于未探索提示（本地可确知的原因先说）', () => {
+    const shortCatalog = {
+      buildings: [{
+        id: 'wind_turbine', name: '风机', buildable: true, footprint: { width: 1, height: 1 },
+        build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 4 }] },
+      }],
+    };
+    const assessment = assessBuildTiles(
+      shortCatalog as never, 'wind_turbine', createPlanet() as never,
+      { x: 12, y: 12, z: 0 }, 'p1', 0, {},
+    )!;
+    expect(shouldBlockBuildLocally(assessment)).toBe(true);
+    expect(describeBuildBlock(assessment, () => '铁块')).toBe('缺少 铁块 4');
   });
 });

@@ -1,10 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
+/**
+ * 进入离线样例（fixture）会话：登录后落在 fixture 行星页，
+ * 顶栏 tick chip 显示 fixture 基线 tick=128（旧版的「Silicon Frontier」服务端切换按钮已移除）。
+ */
 async function openFixtureMode(page: Page) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
-  await expect(page.getByRole('button', { name: 'Silicon Frontier' })).toBeVisible();
+  await expect(page.getByTitle('游戏 tick')).toContainText('tick 128', { timeout: 20_000 });
 }
 
 // 验证棋盘实体已成为 agent/DevTools 可定位的真实 DOM 节点（重构前是读不到的 canvas 位图）。

@@ -59,6 +59,9 @@ func TestRollbackRestoresState(t *testing.T) {
 		ws.RUnlock()
 		t.Fatal("executor unit missing")
 	}
+	// 机甲走实时移动：本测试只关心快照回滚，把移速调成 1 格/tick，让每条移动命令
+	// 在一个 tick 内走完，保持原有的 tick 计数。
+	exec.MoveSpeed = 1
 	target1 := findMoveTarget(ws, exec.Position)
 	ws.RUnlock()
 	if target1 == nil {

@@ -8,7 +8,9 @@
 import type { PlanetRuntimeView, Position, Unit } from '@shared/types';
 
 import {
+  getBuildingList,
   getUnitList,
+  tileContainsBuilding,
   toTilePoint,
   type PlanetRenderView,
   type TilePoint,
@@ -65,8 +67,8 @@ export function commandableUnitIds(
 }
 
 /**
- * 可接受 unit_order 的选择器：执行体（玩家机甲，unit.mecha != null）保留瞬移与
- * 手动一击、不受理 unit_order（服务端协议），这里直接过滤，避免无效命令回执。
+ * 可接受 unit_order 的选择器：执行体（玩家机甲，unit.mecha != null）只走 move/attack
+ * 单条指令、不受理 unit_order（服务端协议），这里直接过滤，避免无效命令回执。
  */
 export function orderEligibleUnitIds(
   planet: PlanetRenderView,
@@ -125,7 +127,13 @@ export function sameTypeOwnUnitsInView(
     .map((unit) => unit.id);
 }
 
-/** 右键情境指令：点敌=攻击（敌军势力优先，其次非己方单位），否则=移动到点。 */
+/**
+ * 右键情境指令：点敌=攻击（敌军势力 / 非己方单位 / 非己方建筑），否则=移动到点。
+ *
+ * 敌方建筑同样属于可攻击目标：服务端 attack 的 resolveCombatTarget 支持
+ * unit / building / enemy_force 三类，早期只判定前两类，导致「右键敌方基地 =
+ * 移动过去」，与「右键敌方单位 = 开火」语义不一致（试玩报告 G3 截图 47）。
+ */
 export type ContextCommand =
   | { type: 'move'; position: Position }
   | { type: 'attack'; targetId: string; targetLabel: string };
@@ -152,6 +160,17 @@ export function resolveContextCommand(
   });
   if (hostileUnit) {
     return { type: 'attack', targetId: hostileUnit.id, targetLabel: hostileUnit.type };
+  }
+  // 建筑可能带 2x2 以上占地：命中判定与 resolveSelectionAtTile 保持一致（按占地包含）。
+  const faceSize = planet.map_width / 3;
+  const hostileBuilding = getBuildingList(planet).find((building) => {
+    if (building.owner_id === playerId) {
+      return false;
+    }
+    return tileContainsBuilding(building, tile.x, tile.y, faceSize);
+  });
+  if (hostileBuilding) {
+    return { type: 'attack', targetId: hostileBuilding.id, targetLabel: hostileBuilding.type };
   }
   return { type: 'move', position: { x: tile.x, y: tile.y, z: 0 } };
 }

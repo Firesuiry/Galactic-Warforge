@@ -159,7 +159,8 @@ test('战争工作台可直接连接 authoritative 战争场景并操作核心�
 
   await page.getByRole('tab', { name: '军工' }).click();
   await expect(page.getByText('军工总览')).toBeVisible();
-  await expect(page.getByText('Planetary Logistics Station').first()).toBeVisible();
+  // 军工总览里的建筑名走目录中文名（部署枢纽 = 战地分析基站，量产工厂 = 重组式制造台）
+  await expect(page.getByText('战场分析基站').first()).toBeVisible();
 
   await page.getByRole('tab', { name: '战区' }).click();
   await expect(page.getByText('战区面板')).toBeVisible();
@@ -167,10 +168,10 @@ test('战争工作台可直接连接 authoritative 战争场景并操作核心�
 
   await page.getByLabel('任务群姿态').selectOption('siege');
   await page.getByRole('button', { name: '更新姿态' }).click();
-  await expect(page.getByText('accepted, will execute at next tick').first()).toBeVisible();
+  await expect(page.getByText('已受理，下一 tick 执行').first()).toBeVisible();
 
   await page.getByRole('button', { name: '发起封锁' }).click();
-  await expect(page.getByText('accepted, will execute at next tick').first()).toBeVisible();
+  await expect(page.getByText('已受理，下一 tick 执行').first()).toBeVisible();
 
   await page.getByRole('tab', { name: '战报' }).click();
   await expect(page.getByText('战报与情报')).toBeVisible();

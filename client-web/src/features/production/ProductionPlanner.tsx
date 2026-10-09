@@ -98,11 +98,11 @@ export function ProductionPlanner({ catalog, buildings, playerId, completedTechs
         </div>
         <p className="production-planner__hint">按基础配方估算用料；实际生产受供电、物流与生产加成影响。</p>
         <div className="production-planner__build-options">
-          {buildOptions.map(({ building, missingTechs, recipeTechOptions }) => <div key={building.id}>
-            <button type="button" disabled={missingTechs.length > 0 || recipeTechOptions.length > 0} onClick={() => onBuildRecipe(building.id, recipe.id)}>
+          {buildOptions.map(({ building, unlocked, missingTechs, recipeTechOptions }) => <div key={building.id}>
+            <button type="button" disabled={!unlocked || recipeTechOptions.length > 0} onClick={() => onBuildRecipe(building.id, recipe.id)}>
               <Hammer size={14} aria-hidden="true" />建造{getBuildingDisplayName(catalog, building.id)}
             </button>
-            {missingTechs.length > 0 && <small>需研究：{missingTechs.map((tech) => getTechDisplayName(catalog, tech)).join('、')}</small>}
+            {!unlocked && missingTechs.length > 0 && <small>需研究：{missingTechs.map((tech) => getTechDisplayName(catalog, tech)).join(' 或 ')}</small>}
             {recipeTechOptions.length > 0 && <small>配方需任选研究：{recipeTechOptions.map((tech) => getTechDisplayName(catalog, tech)).join(' / ')}</small>}
           </div>)}
           {!buildOptions.length && <p className="production-planner__hint">此配方暂无可直接建造的生产设施。</p>}

@@ -25,7 +25,9 @@ import {
   buildSelectionExport,
   buildViewLinkSearchParams,
   buildViewportExport,
+  constructionTaskLabel,
   describeAlert,
+  describeConstructionWait,
   findLogisticsStation,
   findSelectionEntity,
   formatItemInventorySummary,
@@ -50,9 +52,16 @@ import {
   toTilePoint,
   type PlanetRenderView,
 } from "@/features/planet-map/model";
-import { usePlanetCommandStore } from "@/features/planet-commands/store";
+import {
+  PLANET_COMMAND_RECOVERY_EVENT_TYPES,
+  usePlanetCommandStore,
+} from "@/features/planet-commands/store";
+import { submitPlanetCommand } from "@/features/planet-commands/executor";
+import { useApiClient } from "@/hooks/use-api-client";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
 import { isResearchStationAlertNoise } from "@/features/production-alerts";
+import { listBuildingRecipes } from "@/features/planet-map/build-workflow";
+import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import {
   translateBuildingState,
   translateEventType,
@@ -138,14 +147,30 @@ function translateJobType(jobType: string) {
 /**
  * 选中建筑的"库存与任务"区：结构化展示本地存储（物品/数量/容量）、
  * 输入/输出缓存、生产配方与剩余 tick、当前任务；积压将满时给出警示。
+ * 另附「取出」表单：把建筑库存/输出缓存里的物品转回玩家背包（不依赖分拣器）。
  */
 function BuildingStorageSection({
   building,
   catalog,
+  planetId,
+  canControl,
+  completedTechIds,
 }: {
   building: Building;
   catalog?: CatalogView;
+  planetId?: string;
+  canControl: boolean;
+  /** 已完成科技（生产建筑配方下拉按 CanUseRecipeTech 过滤）。 */
+  completedTechIds?: ReadonlySet<string>;
 }) {
+  const client = useApiClient();
+  const [withdrawItemId, setWithdrawItemId] = useState("");
+  const [withdrawQuantity, setWithdrawQuantity] = useState("1");
+  const [withdrawPending, setWithdrawPending] = useState(false);
+  // 配方切换（set_recipe）：选中值先落到本地草稿，确认后下发。
+  const [recipeDraft, setRecipeDraft] = useState<string | null>(null);
+  const [recipePending, setRecipePending] = useState(false);
+
   const inventory = building.storage?.inventory;
   const inventorySummary = formatItemInventorySummary(catalog, inventory);
   const totalStored = Object.values(inventory ?? {}).reduce(
@@ -161,6 +186,90 @@ function BuildingStorageSection({
   const collect = building.runtime?.functions?.collect;
   const production = building.production;
   const job = building.job;
+
+  // 可取出的物品：本地库存 + 输出缓存（去重，保持首次出现顺序）。
+  const withdrawableItemIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const source of [inventory, building.storage?.output_buffer]) {
+      for (const [itemId, quantity] of Object.entries(source ?? {})) {
+        if (quantity <= 0 || seen.has(itemId)) continue;
+        seen.add(itemId);
+        ids.push(itemId);
+      }
+    }
+    return ids;
+  }, [inventory, building.storage?.output_buffer]);
+
+  const withdrawQuantityValue = Number.parseInt(withdrawQuantity, 10);
+  const withdrawQuantityValid =
+    Number.isInteger(withdrawQuantityValue) && withdrawQuantityValue > 0;
+  const withdrawDisabled =
+    withdrawPending || !canControl || !withdrawItemId || !withdrawQuantityValid;
+
+  // 配方下拉：只列该建筑类型支持且科技已解锁的配方（含「无配方」= 研究模式/空闲）。
+  const recipeOptions = useMemo(
+    () => listBuildingRecipes(catalog, building.type, completedTechIds ?? []),
+    [catalog, building.type, completedTechIds],
+  );
+  const currentRecipeId = recipeDraft ?? building.production?.recipe_id ?? "";
+  const recipeDirty = recipeDraft !== null && recipeDraft !== (building.production?.recipe_id ?? "");
+  const recipeSwitchDisabled = recipePending || !canControl || !planetId || !recipeDirty;
+  // 只在真正进入生产周期的建筑上给配方入口（纯采集建筑没有配方）。
+  const supportsRecipe = Boolean(building.runtime?.functions?.production) && recipeOptions.length > 0;
+
+  async function submitRecipeSwitch() {
+    if (recipeSwitchDisabled) {
+      return;
+    }
+    setRecipePending(true);
+    try {
+      const nextRecipeId = recipeDraft ?? "";
+      await submitPlanetCommand({
+        commandType: "set_recipe",
+        planetId,
+        focus: { entityId: building.id },
+        execute: () => client.cmdSetRecipe(building.id, nextRecipeId || undefined, planetId),
+        fetchAuthoritativeSnapshot: () =>
+          client.fetchEventSnapshot({
+            event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+            limit: 50,
+          }),
+      });
+      setRecipeDraft(null);
+    } finally {
+      setRecipePending(false);
+    }
+  }
+
+  async function submitWithdraw() {
+    if (withdrawDisabled || !planetId) {
+      return;
+    }
+    setWithdrawPending(true);
+    try {
+      await submitPlanetCommand({
+        commandType: "transfer_item",
+        planetId,
+        focus: { entityId: building.id, itemId: withdrawItemId },
+        execute: () =>
+          client.cmdTransferItem(
+            building.id,
+            withdrawItemId,
+            withdrawQuantityValue,
+            planetId,
+            "to_player",
+          ),
+        fetchAuthoritativeSnapshot: () =>
+          client.fetchEventSnapshot({
+            event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+            limit: 50,
+          }),
+      });
+    } finally {
+      setWithdrawPending(false);
+    }
+  }
 
   return (
     <section className="planet-side-section">
@@ -218,6 +327,89 @@ function BuildingStorageSection({
           </dd>
         </div>
       </dl>
+      {supportsRecipe ? (
+        <form
+          aria-label="切换配方表单"
+          className="planet-recipe-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitRecipeSwitch();
+          }}
+        >
+          <label className="field">
+            <span>切换配方</span>
+            <select
+              aria-label="切换配方"
+              disabled={!canControl || recipePending}
+              onChange={(event) => setRecipeDraft(event.target.value)}
+              value={currentRecipeId}
+            >
+              <option value="">无配方（研究模式 / 空闲）</option>
+              {recipeOptions.map((recipe) => (
+                <option key={recipe.id} value={recipe.id}>
+                  {getRecipeDisplayName(catalog, recipe.id)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button"
+            disabled={recipeSwitchDisabled}
+            title="切换后生产进度清零，库存保留"
+            type="submit"
+          >
+            {recipePending ? "切换中…" : "应用配方"}
+          </button>
+          {recipeDirty ? (
+            <p className="subtle-text" role="status">切换配方会清空当前生产进度（已产出的产物与库存保留）。</p>
+          ) : null}
+        </form>
+      ) : null}
+      {withdrawableItemIds.length > 0 ? (
+        <form
+          aria-label="取出物品表单"
+          className="planet-withdraw-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitWithdraw();
+          }}
+        >
+          <label className="field">
+            <span>取出物品</span>
+            <select
+              aria-label="取出物品"
+              disabled={!canControl}
+              onChange={(event) => setWithdrawItemId(event.target.value)}
+              value={withdrawItemId}
+            >
+              <option value="">选择物品</option>
+              {withdrawableItemIds.map((itemId) => (
+                <option key={itemId} value={itemId}>
+                  {getItemDisplayName(catalog, itemId)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>数量</span>
+            <input
+              aria-label="取出数量"
+              disabled={!canControl}
+              min={1}
+              onChange={(event) => setWithdrawQuantity(event.target.value)}
+              type="number"
+              value={withdrawQuantity}
+            />
+          </label>
+          <button
+            className="secondary-button"
+            disabled={withdrawDisabled}
+            type="submit"
+          >
+            {withdrawPending ? "取出中…" : "取出"}
+          </button>
+        </form>
+      ) : null}
     </section>
   );
 }
@@ -492,6 +684,11 @@ export function PlanetEntityPanel({
     Object.values(summary?.players ?? {}).find(
       (player) => player.tech?.current_research,
     )?.tech?.current_research?.tech_id ?? "";
+  // 己方已完成科技（生产建筑的配方下拉按 CanUseRecipeTech 过滤）。
+  const completedTechIds = useMemo(
+    () => new Set(normalizeCompletedTechIds(summary?.players?.[session.playerId]?.tech)),
+    [summary, session.playerId],
+  );
 
   if (!selected) {
     return (
@@ -572,7 +769,12 @@ export function PlanetEntityPanel({
             <div>
               <dt>施工任务</dt>
               <dd>
-                {constructionTasks.map((task) => task.id).join(", ") || "-"}
+                {constructionTasks.length === 0
+                  ? "-"
+                  : constructionTasks.map((task) => {
+                    const wait = describeConstructionWait(task.wait_reason, catalog);
+                    return `${constructionTaskLabel(task, catalog)}（${task.state}${wait ? ` · 排队中：${wait}` : ''}）`;
+                  }).join("、")}
               </dd>
             </div>
             <div>
@@ -612,7 +814,7 @@ export function PlanetEntityPanel({
           <div className="section-title">建筑详情</div>
           <dl className="planet-kv-list">
             <div>
-              <dt>ID</dt>
+              <dt>编号</dt>
               <dd>{building.id}</dd>
             </div>
             <div>
@@ -620,7 +822,7 @@ export function PlanetEntityPanel({
               <dd>{buildingName}</dd>
             </div>
             <div>
-              <dt>类型 ID</dt>
+              <dt>类型编号</dt>
               <dd>{building.type}</dd>
             </div>
             <div>
@@ -665,7 +867,13 @@ export function PlanetEntityPanel({
         {building.sorter ? <SorterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         {building.type === "splitter" ? <SplitterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         <ProcessingStatus building={building} />
-        <BuildingStorageSection building={building} catalog={catalog} />
+        <BuildingStorageSection
+          building={building}
+          canControl={building.owner_id === session.playerId}
+          catalog={catalog}
+          completedTechIds={completedTechIds}
+          planetId={planet.planet_id}
+        />
         {Object.values(planet.buildings ?? {}).filter(candidate => candidate.distributor?.host_building_id === building.id || candidate.id === building.distributor?.host_building_id).map(candidate => (
           <button key={candidate.id} className="secondary-button" onClick={() => usePlanetViewStore.getState().setSelected({ kind: 'building', id: candidate.id, position: candidate.position })}>
             {candidate.distributor ? '查看仓顶配送器' : '查看绑定仓库'}
@@ -952,7 +1160,7 @@ export function PlanetEntityPanel({
           <UnitCard card={unitCardFromRuntimeUnit(unit, translateUnitType(unit.type), catalog)} />
           <dl className="planet-kv-list">
             <div>
-              <dt>ID</dt>
+              <dt>编号</dt>
               <dd>{unit.id}</dd>
             </div>
             <div>
@@ -1003,7 +1211,7 @@ export function PlanetEntityPanel({
           <div className="section-title">资源点详情</div>
           <dl className="planet-kv-list">
             <div>
-              <dt>ID</dt>
+              <dt>编号</dt>
               <dd>{resource.id}</dd>
             </div>
             <div>
@@ -1097,6 +1305,25 @@ export function PlanetActivityPanel({
     [alerts],
   );
 
+  // 同一建筑的同类告警合并为一条（带计数）：服务端每 3000 tick 重复提醒一次，
+  // 不合并会刷屏（试玩报告：采矿机满仓后同一建筑刷 5 条）。
+  const groupedAlerts = useMemo(() => {
+    const byKey = new Map<string, { alert: AlertEntry; count: number; lastTick: number }>();
+    for (const alert of visibleAlerts) {
+      const key = `${alert.building_id}::${alert.alert_type}`;
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.lastTick = Math.max(existing.lastTick, alert.tick);
+        // 展示用最新一条（tick 更大者）
+        if (alert.tick >= existing.alert.tick) existing.alert = alert;
+        continue;
+      }
+      byKey.set(key, { alert, count: 1, lastTick: alert.tick });
+    }
+    return [...byKey.values()];
+  }, [visibleAlerts]);
+
   // V3：新增告警条目入场闪烁（首次填充不闪）
   const freshAlertIds = useNewItemIds(visibleAlerts, (alert) => alert.alert_id);
 
@@ -1169,18 +1396,19 @@ export function PlanetActivityPanel({
       <section className="panel split-panel__section">
         <div className="section-title">告警面板</div>
         <ul className="timeline-list timeline-list--dense">
-          {visibleAlerts.length === 0 ? <li>暂无告警</li> : null}
-          {visibleAlerts.map((alert) => {
+          {groupedAlerts.length === 0 ? <li>暂无告警</li> : null}
+          {groupedAlerts.map(({ alert, count }) => {
             const presentation = describeAlert(planet, alert);
             const isFresh = freshAlertIds.has(alert.alert_id);
             return (
               <li
                 className={isFresh ? "alert-flash" : undefined}
-                key={alert.alert_id}
+                key={`${alert.building_id}::${alert.alert_type}`}
               >
                 <div className="timeline-list__row">
                   <strong>
                     [t{alert.tick}] {presentation.issueLabel.replace("问题：", "")}
+                    {count > 1 ? ` ×${count}` : ""}
                   </strong>
                   <button
                     className="secondary-button timeline-action"
@@ -1194,6 +1422,7 @@ export function PlanetActivityPanel({
                 </div>
                 <span>{presentation.buildingLabel}</span>
                 <span>{presentation.issueLabel}</span>
+                {count > 1 ? <span className="subtle-text">同类告警合并 ×{count}</span> : null}
                 <span>{presentation.recommendationLabel}</span>
                 <details>
                   <summary>运行指标</summary>
@@ -1406,7 +1635,7 @@ export function PlanetDebugPanel({
               </dd>
             </div>
             <div>
-              <dt>选中 ID</dt>
+              <dt>选中编号</dt>
               <dd>{selectionEntityId(selected) || "-"}</dd>
             </div>
           </dl>

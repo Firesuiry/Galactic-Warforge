@@ -102,6 +102,9 @@ export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapP
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const session = useSessionSnapshot();
   // 来袭波次闪烁：有未过期波次时 500ms 切换一次（闪烁红点 + 红线）。
+  // ?freeze=1（截图测试确定性约定，与星图/战场同口径）不闪烁，固定为「亮」态。
+  const frozen = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).has("freeze");
   const [blinkOn, setBlinkOn] = useState(true);
 
   const { camera, mapProjection, requestFocus, incomingWaves } = usePlanetViewStore(
@@ -120,12 +123,12 @@ export function PlanetMinimap({ planet, fog, overview, runtime }: PlanetMinimapP
   );
 
   useEffect(() => {
-    if (liveWaves.length === 0) {
+    if (frozen || liveWaves.length === 0) {
       return undefined;
     }
     const timer = window.setInterval(() => setBlinkOn((on) => !on), 500);
     return () => window.clearInterval(timer);
-  }, [liveWaves.length]);
+  }, [frozen, liveWaves.length]);
 
   const mapWidth = planet.map_width;
   const mapHeight = planet.map_height;

@@ -172,9 +172,9 @@ agent_thread agent-war-director
 | `refit_unit` | `refit_unit <building_id> <unit_id> <target_blueprint_id>` | `refit_unit` | management | Send a squad or fleet into authoritative refit |
 | `refuel_mecha` | `refuel_mecha <executor_id> <fuel_item_id> [count] [--planet <planet_id>]` | `refuel_mecha` | management | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
 | `restore_construction` | `restore_construction <task_id>` | `restore_construction` | build | Restore a cancelled construction task |
-| `scan_galaxy` | `scan_galaxy [galaxy_id]` | `scan_galaxy` | observe | Discover all systems in a galaxy |
-| `scan_planet` | `scan_planet <planet_id>` | `scan_planet` | observe | Discover a planet |
-| `scan_system` | `scan_system <system_id>` | `scan_system` | observe | Discover a system |
+| `scan_galaxy` | `scan_galaxy [galaxy_id]` | `scan_galaxy` | observe | 登记星系到星图（不改地表迷雾） |
+| `scan_planet` | `scan_planet <planet_id>` | `scan_planet` | observe | 登记星球到星图（不改地表迷雾） |
+| `scan_system` | `scan_system <system_id>` | `scan_system` | observe | 登记恒星系到星图（不改地表迷雾） |
 | `set_energy_exchanger_mode` | `set_energy_exchanger_mode <building_id> <charge\|discharge\|standby> [--planet <planet_id>]` | `set_energy_exchanger_mode` | management | 切换蓄电器能量枢纽模式：charge 电网盈余充蓄电池，discharge 放电回电网，standby 不转换 |
 | `set_rally_point` | `set_rally_point <building_id> <x> <y> [--planet <id>]` | `set_rally_point` | management | 设置出厂单位集结点 |
 | `set_ray_receiver_mode` | `set_ray_receiver_mode <building_id> <power\|photon\|hybrid> [--planet <planet_id>]` | `set_ray_receiver_mode` | management | Switch ray receiver mode（按建筑所在行星结算） |

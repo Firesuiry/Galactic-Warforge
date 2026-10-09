@@ -224,7 +224,7 @@ units:
     attack_cooldown_ticks: 6
     armor_class: heavy
     weapon_class: gun
-    mecha: {respawn_ticks: 100, max_energy: 100, inventory_capacity: 200, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10}
+    mecha: {respawn_ticks: 100, max_energy: 100, inventory_capacity: 200, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10, energy_regen_ticks: 4}
   - id: dark_fog
     name: 黑雾
     max_hp: 40

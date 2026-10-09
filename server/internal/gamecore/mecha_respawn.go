@@ -34,7 +34,8 @@ func settleExecutorRespawns(ws *model.WorldState) []*model.GameEvent {
 		}
 		sort.Slice(hqs, func(i, j int) bool { return hqs[i].ID < hqs[j].ID })
 		for _, hq := range hqs {
-			pos := findAdjacentFree(ws, hq.Position)
+			// 复活点走与出厂同一个找空位函数：不复用被占格，避免与地面单位堆叠。
+			pos := findUnitSpawnTile(ws, hq.Position, false, unitSpawnRadius)
 			if pos == nil {
 				continue
 			}

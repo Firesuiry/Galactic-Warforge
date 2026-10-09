@@ -416,6 +416,18 @@ func createConstructionResumeEvent(task *model.ConstructionTask) *model.GameEven
 	}
 }
 
+// noteConstructionWait 记录 pending 任务的排队原因，供 runtime 视图向玩家解释
+// 「为什么还没开工」；开工/暂停/取消时清空。
+func noteConstructionWait(ws *model.WorldState, task *model.ConstructionTask, reason string) {
+	if ws == nil || task == nil {
+		return
+	}
+	if task.WaitReason != reason {
+		task.WaitReason = reason
+		task.UpdateTick = ws.Tick
+	}
+}
+
 func countActiveConstructionByRegion(ws *model.WorldState) map[string]int {
 	counts := make(map[string]int)
 	if ws == nil || ws.Construction == nil {
@@ -498,16 +510,22 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		// T079: Before starting a pending task, verify materials are available
 		if !checkMaterialsAvailable(ws, task) {
 			// Materials not available, skip starting this task
+			noteConstructionWait(ws, task, "insufficient_materials")
 			continue
 		}
 
 		playerLimit := executorConcurrentLimit(ws, task.PlayerID)
 		if activeByPlayer[task.PlayerID] >= playerLimit {
+			// 玩家并发上限（executor.concurrent_tasks）已满：排队等待，不是失败。
+			noteConstructionWait(ws, task, "executor_concurrent_limit")
 			continue
 		}
 		// mass_construction tech levels raise the owner's region concurrent limit.
 		regionLimit := gc.constructionRegionLimitFor(ws, task.PlayerID)
 		if regionLimit > 0 && activeByRegion[task.RegionID] >= regionLimit {
+			// 区域并发上限（battlefield.construction_region_concurrent_limit，8×8 格一块区域）
+			// 已满：排队等待，不是失败。
+			noteConstructionWait(ws, task, "region_concurrent_limit")
 			continue
 		}
 		if err := ws.Construction.Transition(task.ID, model.ConstructionInProgress); err != nil {
@@ -515,6 +533,7 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		}
 		task.StartTick = currentTick
 		task.UpdateTick = currentTick
+		task.WaitReason = ""
 		if task.TotalTicks <= 0 {
 			task.TotalTicks = gc.scaledConstructionDuration()
 		}
@@ -827,7 +846,7 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 	building, ok := ws.Buildings[buildingID]
 	if !ok || building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if building.OwnerID != playerID {
@@ -837,7 +856,7 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 	}
 	if building.Runtime.Functions.Production == nil {
 		res.Code = model.CodeInvalidTarget
-		res.Message = fmt.Sprintf("建筑类型 %s 不支持配方", building.Type)
+		res.Message = fmt.Sprintf("%s不支持配方", buildingTypeDisplayName(building.Type))
 		return res, nil
 	}
 
@@ -848,7 +867,7 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 		recipe, ok := model.Recipe(recipeID)
 		if !ok {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("未知配方：%s", recipeID)
+			res.Message = fmt.Sprintf("未知配方：%s", recipeDisplayName(recipeID))
 			return res, nil
 		}
 		supportsRecipe := false
@@ -860,12 +879,12 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 		}
 		if !supportsRecipe {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("配方 %s 不适用于建筑类型 %s", recipeID, building.Type)
+			res.Message = fmt.Sprintf("配方「%s」不适用于%s", recipeDisplayName(recipeID), buildingTypeDisplayName(building.Type))
 			return res, nil
 		}
 		if !CanUseRecipeTech(player, recipeID) {
 			res.Code = model.CodeValidationFailed
-			res.Message = fmt.Sprintf("配方 %s 需先研究解锁", recipeID)
+			res.Message = fmt.Sprintf("配方「%s」需先研究解锁", recipeDisplayName(recipeID))
 			return res, nil
 		}
 	}
@@ -882,12 +901,12 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 	res.Code = model.CodeOK
 	if recipeID == "" {
 		if building.Runtime.Functions.Research != nil {
-			res.Message = fmt.Sprintf("建筑 %s 已切换为研究模式", buildingID)
+			res.Message = fmt.Sprintf("%s已切换为研究模式", buildingDisplayName(building))
 		} else {
-			res.Message = fmt.Sprintf("建筑 %s 已清除配方（idle）", buildingID)
+			res.Message = fmt.Sprintf("%s已清除配方（idle）", buildingDisplayName(building))
 		}
 	} else {
-		res.Message = fmt.Sprintf("建筑 %s 配方已设为 %s", buildingID, recipeID)
+		res.Message = fmt.Sprintf("%s配方已设为「%s」", buildingDisplayName(building), recipeDisplayName(recipeID))
 	}
 	return res, nil
 }

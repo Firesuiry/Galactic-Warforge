@@ -24,7 +24,6 @@ recipes:
     duration: 50
     energy_cost: 1
     building_types: [arc_smelter, plane_smelter, negentropy_smelter]
-    tech_unlock: [automatic_metallurgy]
     handcraft_allowed: true
   - id: smelt_magnet
     name: 磁铁
@@ -352,10 +351,9 @@ recipes:
     name: 信息矩阵
     inputs:
       - {item_id: processor, quantity: 2}
-      - {item_id: quantum_chip, quantity: 1}
-      - {item_id: carbon_nanotube, quantity: 1}
+      - {item_id: particle_broadband, quantity: 1}
     outputs: [{item_id: information_matrix, quantity: 1}]
-    duration: 120
+    duration: 300
     energy_cost: 6
     building_types: [matrix_lab, recomposing_assembler, self_evolution_lab]
     tech_unlock: [information_matrix]
@@ -387,7 +385,6 @@ recipes:
     outputs: [{item_id: ammo_bullet, quantity: 5}]
     duration: 20
     building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
-    tech_unlock: [weapon_system]
   - id: ammo_missile
     name: 导弹
     inputs: [{item_id: titanium_ingot, quantity: 2}, {item_id: processor, quantity: 1}]
@@ -442,7 +439,6 @@ recipes:
     duration: 50
     energy_cost: 1
     building_types: [arc_smelter, plane_smelter, negentropy_smelter]
-    tech_unlock: [automatic_metallurgy]
     handcraft_allowed: true
   - id: steel
     name: 钢材
@@ -919,3 +915,17 @@ recipes:
     duration: 30
     building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3]
     tech_unlock: [environment_modification]
+  # 蓄电器（物品）按 DSP 原版（scope.json accumulator）：制造台合成，能量枢纽充/放电循环
+  # 产出 accumulator_full。此前只有建筑形态、物品只能由建筑合成路径凭空获得，
+  # 导致「所有物品从新局可达」不成立。
+  - id: accumulator
+    name: 蓄电器
+    inputs:
+      - {item_id: crystal_silicon, quantity: 3}
+      - {item_id: iron_ingot, quantity: 6}
+      - {item_id: super_magnetic_ring, quantity: 1}
+    outputs: [{item_id: accumulator, quantity: 1}]
+    duration: 90
+    energy_cost: 3
+    building_types: [assembling_machine_mk1, assembling_machine_mk2, assembling_machine_mk3, recomposing_assembler]
+    tech_unlock: [energy_storage]

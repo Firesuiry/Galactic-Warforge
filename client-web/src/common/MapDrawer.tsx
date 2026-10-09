@@ -7,6 +7,12 @@ interface MapDrawerProps {
   onToggle: () => void;
   /** 追加在抽屉体上的页面级类名（如战争页的加宽样式）。 */
   bodyClassName?: string;
+  /**
+   * 让出底部选择条：窄屏下抽屉是覆盖式的，抽屉体若铺满整高会盖住底部选择条
+   * （选择条的「详情/移动」等按钮点不到）。为 true 时抽屉体底部留出选择条高度，
+   * 由 planet.css 的 `--planet-bottom-reserve` 统一定义（宽屏选择条已右移让位，留 0）。
+   */
+  reserveBottom?: boolean;
   children: ReactNode;
 }
 
@@ -20,6 +26,7 @@ export function MapDrawer({
   open,
   onToggle,
   bodyClassName,
+  reserveBottom = false,
   children,
 }: MapDrawerProps) {
   return (
@@ -37,11 +44,11 @@ export function MapDrawer({
         </span>
       </button>
       <div
-        className={
-          bodyClassName
-            ? `panel planet-detail-shell planet-drawer__body ${bodyClassName}`
-            : "panel planet-detail-shell planet-drawer__body"
-        }
+        className={[
+          "panel planet-detail-shell planet-drawer__body",
+          bodyClassName ?? "",
+          reserveBottom ? "planet-drawer__body--reserve-bottom" : "",
+        ].filter(Boolean).join(" ")}
       >
         {children}
       </div>

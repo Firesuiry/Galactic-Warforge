@@ -203,7 +203,7 @@ func TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500(t *testing.T) {
 			case s.pos != nil:
 				pos = botTowerStep(ws, *s.pos, home, 2)
 			default:
-				pos = botBuildSpotNear(ws, home, radius)
+				pos = botBuildSpotNear(ws, home, radius, s.btype)
 			}
 			if pos == nil {
 				t.Fatalf("no spot for %s", s.btype)

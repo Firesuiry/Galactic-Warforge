@@ -477,7 +477,8 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, playerID 
 		return
 	}
 	_ = playerID
-	writeJSON(w, http.StatusOK, sess.Query.Catalog())
+	// 科技成本按当前局 pace_research 缩放后下发（与研究结算同源）。
+	writeJSON(w, http.StatusOK, sess.Query.Catalog(sess.Core.ResearchPace()))
 }
 
 // handleCommandCatalog returns GET /catalog/commands

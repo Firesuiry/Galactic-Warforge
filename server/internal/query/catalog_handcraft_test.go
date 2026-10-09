@@ -6,7 +6,7 @@ import (
 )
 
 func TestCatalogExposesExplicitHandcraftPolicy(t *testing.T) {
-	catalog := (&Layer{}).Catalog()
+	catalog := (&Layer{}).Catalog(1)
 	policies := map[string]bool{}
 	for _, recipe := range catalog.Recipes {
 		policies[recipe.ID] = recipe.HandcraftAllowed

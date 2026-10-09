@@ -2515,7 +2515,13 @@ export class PlanetScene {
     // 建造模式：幽灵 footprint 预览（绿=可建 红=阻塞），替代普通 hover 高亮
     if (!overviewMode && mode.kind === 'build' && hoveredTile && input.buildAssessment) {
       const assessment = input.buildAssessment;
-      const blockedSet = new Set(assessment.blockedTiles.map((tile) => `${tile.x},${tile.y}`));
+      // 未探索格不画红：客户端没有该格地形，是否可建由服务端判定（命令照常下发），
+      // 画红会和「确知不可建」混淆（试玩 1009 F）。
+      const blockedSet = new Set(
+        assessment.blockedTiles
+          .filter((tile) => tile.reason !== 'unexplored')
+          .map((tile) => `${tile.x},${tile.y}`),
+      );
       for (let dy = 0; dy < assessment.footprint.height; dy += 1) {
         for (let dx = 0; dx < assessment.footprint.width; dx += 1) {
           const { x: tx, y: ty } = surfaceOffset(hoveredTile,dx,dy,(this.baseInput?.planet.map_width ?? 3)/3);

@@ -331,10 +331,15 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
     }
 
     function updateViewport() {
-      const rect = viewportRef.current?.getBoundingClientRect();
+      // 用布局尺寸（clientWidth/Height）而不是 getBoundingClientRect：路由转场
+      // `.page-shell { animation: page-enter }` 会以 scale(0.992)→1 缩放整页，
+      // 挂载时量到的 rect 是缩放后的亚像素宽度，被 floor 后写进 store 就再也不更新
+      // （ResizeObserver 只报布局盒变化，不受祖先 transform 影响），导致同一页面
+      // 在不同运行下相机 offset 落在 210 / 214 / 214.5（行星地图截图基线随之漂移）。
+      const element = viewportRef.current;
       setViewport({
-        width: Math.max(MIN_VIEWPORT_WIDTH, Math.floor(rect?.width || 0) || getViewportDefaults().width),
-        height: Math.max(MIN_VIEWPORT_HEIGHT, Math.floor(rect?.height || 0) || getViewportDefaults().height),
+        width: Math.max(MIN_VIEWPORT_WIDTH, element?.clientWidth || getViewportDefaults().width),
+        height: Math.max(MIN_VIEWPORT_HEIGHT, element?.clientHeight || getViewportDefaults().height),
       });
       setViewportMeasured(true);
     }
@@ -959,6 +964,8 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
           : `planet-map-canvas__viewport planet-map-canvas__surface planet-map-canvas__surface--${interactionMode.kind}`}
         data-camera-offset-x={camera.offsetX}
         data-camera-offset-y={camera.offsetY}
+        data-map-height={planet.map_height}
+        data-map-width={planet.map_width}
         data-tile-size={tileSize}
         onClick={handleClick}
         onContextMenu={handleContextMenu}

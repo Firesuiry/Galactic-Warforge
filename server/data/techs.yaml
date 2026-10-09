@@ -45,7 +45,8 @@ techs:
     level: 2
     prerequisites: [electromagnetism]
     cost: [{item_id: electromagnetic_matrix, quantity: 10}]
-    unlocks: [{type: recipe, id: smelt_stone}, {type: recipe, id: glass}]
+    # 石材/玻璃为 DSP 基础冶炼配方（stone-brick 未锁定、glass 属 arc-smelter 自带），
+    # 新局即可用；本科技只保留为通往 冶炼提纯/钢材/钛材 的前置节点。
   - id: basic_assembling_processes
     name: 基础制造工艺
     name_en: Basic Assembling Processes
@@ -101,7 +102,7 @@ techs:
     unlocks:
       - {type: recipe, id: df_magnum_ammo_box}
       - {type: building, id: gauss_turret}
-      - {type: recipe, id: ammo_bullet}
+      # ammo_bullet 为开局可用配方（dyson_sphere_program 授予），不在此重复门控。
   - id: steel_smelting
     name: 钢材冶炼
     name_en: Steel Smelting
@@ -308,7 +309,9 @@ techs:
     level: 5
     prerequisites: [crystal_smelting, solar_collection, super_magnetic]
     cost: [{item_id: electromagnetic_matrix, quantity: 50}, {item_id: energy_matrix, quantity: 50}]
-    unlocks: [{type: building, id: accumulator}]
+    unlocks:
+      - {type: building, id: accumulator}
+      - {type: recipe, id: accumulator}
   - id: photon_conversion
     name: 光子变频
     name_en: Photon Frequency Conversion
@@ -845,7 +848,7 @@ techs:
       - {item_id: energy_matrix, quantity: 75}
       - {item_id: structure_matrix, quantity: 75}
       - {item_id: information_matrix, quantity: 75}
-    unlocks: [{type: recipe, id: plane_filter}, {type: building, id: plane_smelter}]
+    unlocks: [{type: building, id: plane_smelter}]
   - id: gravitational_wave
     name: 引力波折射
     name_en: Gravitational Wave Refraction
@@ -1278,7 +1281,8 @@ techs:
       - {item_id: structure_matrix, quantity: 200}
       - {item_id: information_matrix, quantity: 200}
       - {item_id: gravity_matrix, quantity: 200}
-    unlocks: [{type: recipe, id: antimatter_capsule}]
+    # antimatter_capsule 配方门控在 mass_energy_storage（DSP 原版），本科技不再重复声明。
+    unlocks: []
   - id: df_attack_drone_tech
     name: 攻击无人机
     name_en: Attack Drone

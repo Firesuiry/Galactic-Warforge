@@ -105,7 +105,7 @@ export function resolveEarlyGameNextAction(
       to: planetPath(planetId),
       iconKey: recommendedAlert.building_type || "alert",
       color: "#ffb454",
-      text: `${translateAlertType(recommendedAlert.alert_type, translateSeverity(recommendedAlert.severity))} · ${translateBuildingType(recommendedAlert.building_type)} ${recommendedAlert.building_id}`,
+      text: `${translateAlertType(recommendedAlert.alert_type, translateSeverity(recommendedAlert.severity))} · ${translateBuildingType(recommendedAlert.building_type)} · 编号 ${recommendedAlert.building_id}`,
       idle: false,
       stage: "alert",
     };

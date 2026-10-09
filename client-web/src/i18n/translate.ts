@@ -63,12 +63,82 @@ export function translateItemId(itemId: string, displayName?: string) {
   return translateCatalogBackedValue(TRANSLATIONS.itemId, itemId, displayName);
 }
 
+/**
+ * 物品 id → 中文名（界面用，绝不回退裸 id）。
+ * 优先级与 translateCatalogBackedValue 一致：目录中文名 > 词典；
+ * 两者都没有时回退中性词「物品」，避免把 ammo_bullet 这类内部 id 写进文案。
+ */
+export function translateItemIdSafe(itemId: string | undefined | null, displayName?: string) {
+  if (!itemId) {
+    return TRANSLATIONS.ui.unknown;
+  }
+  if (hasDisplayName(displayName) && displayName && isProbablyChinese(displayName)) {
+    return displayName;
+  }
+  const translated = TRANSLATIONS.itemId[itemId as keyof typeof TRANSLATIONS.itemId];
+  if (translated) {
+    return translated;
+  }
+  if (hasDisplayName(displayName) && displayName) {
+    return displayName;
+  }
+  return TRANSLATIONS.ui.item;
+}
+
 export function translateTechId(techId: string, displayName?: string) {
   return translateCatalogBackedValue(TRANSLATIONS.techId, techId, displayName);
 }
 
 export function translateUnitType(unitType: string | undefined | null) {
   return translateByDictionary(TRANSLATIONS.unitType, unitType, TRANSLATIONS.ui.unknown);
+}
+
+/**
+ * 单位类型词典命中（未命中返回 null）。
+ * 事件摘要用它区分「目录/词典里有中文名」与「只是个内部枚举 id」，
+ * 后者一律回退中性词，不把 enemy_force 这类 snake_case 写进界面。
+ */
+export function translateUnitTypeOrNull(unitType: string | undefined | null): string | null {
+  if (!unitType) return null;
+  return TRANSLATIONS.unitType[unitType as keyof typeof TRANSLATIONS.unitType] ?? null;
+}
+
+/** 建筑类型词典命中（未命中返回 null，语义同 translateUnitTypeOrNull）。 */
+export function translateBuildingTypeOrNull(buildingType: string | undefined | null): string | null {
+  if (!buildingType) return null;
+  return TRANSLATIONS.buildingType[buildingType as keyof typeof TRANSLATIONS.buildingType] ?? null;
+}
+
+/** 单位类型 id → 中文名：词典优先，其次目录中文名，最后回退中性词（不暴露 soldier 这类 id）。 */
+export function translateUnitTypeWithName(
+  unitType: string | undefined | null,
+  displayName?: string,
+) {
+  if (!unitType) {
+    return TRANSLATIONS.ui.unknown;
+  }
+  const translated = TRANSLATIONS.unitType[unitType as keyof typeof TRANSLATIONS.unitType];
+  if (translated) {
+    return translated;
+  }
+  if (hasDisplayName(displayName) && displayName && isProbablyChinese(displayName)) {
+    return displayName;
+  }
+  return TRANSLATIONS.ui.unknown;
+}
+
+/**
+ * 配方 id → 中文名：没有配方词典，只有目录中文名可用；
+ * 目录缺名时回退中性词（配方 id 一律是 snake_case 英文，不上界面）。
+ */
+export function translateRecipeId(recipeId: string, displayName?: string) {
+  if (!recipeId) {
+    return TRANSLATIONS.ui.unknown;
+  }
+  if (hasDisplayName(displayName) && displayName && isProbablyChinese(displayName)) {
+    return displayName;
+  }
+  return hasDisplayName(displayName) && displayName ? displayName : TRANSLATIONS.ui.unknown;
 }
 
 export function translateEventType(eventType: string | undefined | null) {

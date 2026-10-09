@@ -40,6 +40,10 @@ type ConstructionTask struct {
 	SpeedBonus        float64           `json:"speed_bonus,omitempty"`
 	Priority          int               `json:"priority,omitempty"`
 	Error             string            `json:"error,omitempty"`
+	// WaitReason 说明 pending 任务为什么还没开工（insufficient_materials /
+	// executor_concurrent_limit / region_concurrent_limit），随 runtime 视图下发；
+	// 开工后清空。它只解释排队，不代表命令失败。
+	WaitReason string `json:"wait_reason,omitempty"`
 	// MaterialsDeducted indicates whether materials have been deducted for this task.
 	// When false, materials are "locked" but not yet deducted (deducted at completion).
 	// When true, materials have been deducted (used for proper refund handling).

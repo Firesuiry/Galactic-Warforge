@@ -77,25 +77,28 @@ export function PlanetLegionLayer({
         const p = toScreen(legionCenter(legion, units));
         if (!p) return null;
         const order = LEGION_ORDER_LABEL[legion.order ?? 'idle'];
+        // 标签不拦截指针（pointer-events:none），否则军团名条会盖住它下面的单位，
+        // 玩家点不到被标签压住的机甲。可点区域收缩成左侧图标按钮：点图标=选中军团，
+        // 点标签=事件穿透到地图（选中标签下面的单位）。
         return (
-          <button
-            aria-label={`军团 ${legion.name || legion.id}`}
-            className="planet-legion-marker"
-            data-legion-id={legion.id}
-            key={legion.id}
-            onClick={(event) => {
-              event.stopPropagation();
-              sfx.uiClick();
-              onSelectLegion(legion);
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            style={{ left: p.x, top: p.y }}
-            title={`${legion.name || legion.id} · ${order} · ${legion.member_ids?.length ?? 0} 名成员`}
-            type="button"
-          >
-            <Icon iconKey="fleet" size={14} />
-            <span className="planet-legion-marker__label">{legion.name || legion.id} · {order}</span>
-          </button>
+          <div className="planet-legion-marker" key={legion.id} style={{ left: p.x, top: p.y }}>
+            <button
+              aria-label={`军团 ${legion.name || legion.id}`}
+              className="planet-legion-marker__hit"
+              data-legion-id={legion.id}
+              onClick={(event) => {
+                event.stopPropagation();
+                sfx.uiClick();
+                onSelectLegion(legion);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              title={`${legion.name || legion.id} · ${order} · ${legion.member_ids?.length ?? 0} 名成员`}
+              type="button"
+            >
+              <Icon iconKey="fleet" size={14} />
+            </button>
+            <span aria-hidden="true" className="planet-legion-marker__label">{legion.name || legion.id} · {order}</span>
+          </div>
         );
       })}
     </div>

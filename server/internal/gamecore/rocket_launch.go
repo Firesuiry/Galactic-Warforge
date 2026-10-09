@@ -25,7 +25,7 @@ func (gc *GameCore) execLaunchRocket(ws *model.WorldState, playerID string, cmd 
 	building, ok := ws.Buildings[buildingID]
 	if !ok || building == nil {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", buildingID)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if building.OwnerID != playerID {

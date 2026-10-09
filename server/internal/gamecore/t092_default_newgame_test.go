@@ -132,8 +132,12 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 			t.Fatalf("expected chain recipe %s to be usable without research", recipeID)
 		}
 	}
-	if CanUseRecipeTech(player, "smelt_stone") {
-		t.Fatal("expected smelt_stone to stay locked behind automatic_metallurgy")
+	// 石材/玻璃是 DSP 基础冶炼配方，新局即可用。
+	if !CanUseRecipeTech(player, "smelt_stone") || !CanUseRecipeTech(player, "glass") {
+		t.Fatal("expected smelt_stone and glass to be usable from a fresh new game")
+	}
+	if CanUseRecipeTech(player, "smelt_silicon") {
+		t.Fatal("expected smelt_silicon to stay locked behind smelting_purification")
 	}
 
 	// Removed techs must no longer be researchable.
@@ -318,8 +322,12 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 		}
 	}
 
-	if !CanUseRecipeTech(player, "smelt_stone") {
-		t.Fatal("expected smelt_stone usable after automatic_metallurgy")
+	// 早期闭环（electromagnetism/物流/自动化冶金/基础制造）不解锁硅提纯。
+	if CanUseRecipeTech(player, "smelt_silicon") {
+		t.Fatal("expected smelt_silicon to stay locked without smelting_purification")
+	}
+	if !CanUseRecipeTech(player, "smelt_stone") || !CanUseRecipeTech(player, "glass") {
+		t.Fatal("expected basic smelting recipes to stay usable after the early closure")
 	}
 
 	if player.Tech == nil {

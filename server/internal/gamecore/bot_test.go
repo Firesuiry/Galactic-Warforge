@@ -20,6 +20,9 @@ func newBotTestCore(t *testing.T, botDifficulty string) *GameCore {
 			MapSeed:         "bot-test-seed",
 			MaxTickRate:     50,
 			EnemyDifficulty: "off",
+			// 沙盒规则：bot 产业测试只关心运营链条，不希望被淘汰胜利提前终结对局
+			// （p1 没有 bot，开局就判定被淘汰，会让整局在 tick ~14000 结束）。
+			VictoryRule: model.VictoryRuleSandbox,
 		},
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1"},
@@ -219,7 +222,7 @@ func TestA1BotProducesMechaWhenAffordable(t *testing.T) {
 	p2.Resources.Energy = 200
 	// 清空会让研究站建得起的物品，避免研究命令挤掉出兵。
 	p2.Inventory = model.ItemInventory{}
-	pos := botBuildSpotNear(ws, home, 24)
+	pos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine)
 	if pos == nil {
 		t.Fatal("no factory site")
 	}
@@ -244,7 +247,7 @@ func TestA1BotResearchesWhenMatricesReady(t *testing.T) {
 	home := botPlayerHome(t, ws, "p2")
 	botFillIndustry(t, ws, "p2", home, botTuningFor("normal"))
 	botQuietExecutor(ws, "p2")
-	labPos := botBuildSpotNear(ws, home, 24)
+	labPos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine)
 	if labPos == nil {
 		t.Fatal("no tile for lab")
 	}
@@ -276,7 +279,7 @@ func TestA1BotSkipsResearchWithoutMatrices(t *testing.T) {
 	home := botPlayerHome(t, ws, "p2")
 	botFillIndustry(t, ws, "p2", home, botTuningFor("normal"))
 	botQuietExecutor(ws, "p2")
-	labPos := botBuildSpotNear(ws, home, 24)
+	labPos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine)
 	if labPos == nil {
 		t.Fatal("no tile for lab")
 	}
@@ -313,7 +316,7 @@ func TestA1BotDecisionsDeterministic(t *testing.T) {
 	inv[model.ItemGear] = 16
 	inv[model.ItemIronIngot] = 16
 	inv[model.ItemMagneticCoil] = 8
-	labPos := botBuildSpotNear(ws, home, 24)
+	labPos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine)
 	if labPos == nil {
 		t.Fatal("no tile for lab")
 	}
@@ -461,7 +464,7 @@ func botFillIndustry(t *testing.T, ws *model.WorldState, playerID string, home m
 	t.Helper()
 	placeN := func(n int, btype model.BuildingType, prefix string) {
 		for i := 0; i < n; i++ {
-			pos := botBuildSpotNear(ws, home, 24)
+			pos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine)
 			if pos == nil {
 				t.Fatalf("no tile for %s", btype)
 			}

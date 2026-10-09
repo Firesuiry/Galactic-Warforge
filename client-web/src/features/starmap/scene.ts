@@ -64,7 +64,7 @@ const COLOR_FLEET_TRANSIT = 0x7ef9d2;
 /** 战火航线：流动亮点遍历整条航线的周期（秒）与每条航线亮点数。 */
 const WAR_LANE_TRAVEL_SECONDS = 1.8;
 const WAR_LANE_DOT_COUNT = 2;
-/** 徽标脉冲相位差个数（确定性，不用随机，保证 frozen 截图稳定）。 */
+/** 徽标/星系脉冲相位差个数（确定性，不用随机，保证 frozen 截图稳定）。 */
 const FLEET_PULSE_PHASE_STEP = (Math.PI * 2) / 7;
 
 export interface StarmapSceneCallbacks {
@@ -362,8 +362,8 @@ export class StarmapScene {
         .stroke({ width: 1.2, color: 0x5fb0ff, alpha: 0.14 });
     });
 
-    systems.forEach((system) => {
-      const node = this.createSystemNode(system);
+    systems.forEach((system, index) => {
+      const node = this.createSystemNode(system, index);
       this.systemNodes.set(system.system_id, node);
       this.galaxyLayer.addChild(node.container);
     });
@@ -569,7 +569,7 @@ export class StarmapScene {
     });
   }
 
-  private createSystemNode(system: SystemRef): SystemNode {
+  private createSystemNode(system: SystemRef, phaseIndex = 0): SystemNode {
     const color = starColorOf(typeof system.star?.type === 'string' ? system.star.type : undefined);
     const scale = systemGlyphScale(system);
     const container = new Container();
@@ -636,7 +636,7 @@ export class StarmapScene {
       core,
       ring,
       label,
-      pulsePhase: Math.random() * Math.PI * 2,
+      pulsePhase: phaseIndex * FLEET_PULSE_PHASE_STEP,
     };
   }
 

@@ -384,6 +384,10 @@ test("浏览器里建造戴森节点后无需刷新即可继续选择新节点�
     await expect(page.getByRole("heading", { name: "Aster Prime" })).toBeVisible();
 
     const dysonSection = page.locator(".planet-side-section").filter({ hasText: "戴森建造" });
+    // 工作台抽屉默认收起，先点「工作台」把手展开再切页签。
+    if (await page.locator(".planet-drawer--open").count() === 0) {
+      await page.getByRole("button", { name: "工作台" }).first().click();
+    }
     await page.getByRole("tab", { name: "戴森" }).click();
     await dysonSection.getByRole("button", { name: "提交戴森建造命令" }).click();
 

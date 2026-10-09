@@ -381,6 +381,8 @@ interface PlanetViewState {
   lastEventId: string;
   lastFullSyncAt: number | null;
   debugOpen: boolean;
+  /** 建造栏是否收起为一行把手（覆盖式抽屉打开时避免遮挡抽屉底部）。 */
+  buildBarDocked: boolean;
   focusRequest: FocusRequest | null;
   zoomRequest: ZoomRequest | null;
   mapProjection: PlanetMapProjection;
@@ -391,6 +393,8 @@ interface PlanetViewActions {
   resetCamera: () => void;
   toggleLayer: (layer: PlanetLayerKey) => void;
   setHoveredTile: (tile: TilePoint | null) => void;
+  /** 收起/展开底部建造栏（收起后只留一行把手）。 */
+  setBuildBarDocked: (docked: boolean) => void;
   setSelected: (selection: SelectedEntity | null) => void;
   /** 设置多选单位（框选/编队/双击同类；调用侧负责过滤己方与存活）。 */
   setSelectedUnits: (unitIds: string[]) => void;
@@ -479,6 +483,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     lastEventId: '',
     lastFullSyncAt: null,
     debugOpen: false,
+    buildBarDocked: false,
     focusRequest: null,
     zoomRequest: null,
     mapProjection: { viewportWidth: 0, viewportHeight: 0, tileSize: 0 },
@@ -510,6 +515,9 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   },
   setHoveredTile: (hoveredTile) => {
     set({ hoveredTile });
+  },
+  setBuildBarDocked: (buildBarDocked) => {
+    set({ buildBarDocked });
   },
   setSelected: (selected) => {
     set({ selected });
@@ -688,6 +696,7 @@ export function resetPlanetViewStore() {
     resetCamera: usePlanetViewStore.getState().resetCamera,
     toggleLayer: usePlanetViewStore.getState().toggleLayer,
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
+    setBuildBarDocked: usePlanetViewStore.getState().setBuildBarDocked,
     setSelected: usePlanetViewStore.getState().setSelected,
     setSelectedUnits: usePlanetViewStore.getState().setSelectedUnits,
     setSelectedSquads: usePlanetViewStore.getState().setSelectedSquads,

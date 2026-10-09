@@ -47,6 +47,14 @@ const TICKS_PER_SECOND = 10;
 /** 产线告警节流：同 mergeKey 的 toast 消退后 60s 内只累计到历史，不再弹出。 */
 export const PRODUCTION_ALERT_THROTTLE_MS = 60_000;
 
+/** 玩家机甲（executor）的单位类型 id；词典译名「玩家机甲」。 */
+const MECHA_UNIT_TYPES = new Set(['executor', 'mecha']);
+
+/** 是否玩家机甲/执行者单位（击毁文案与普通单位区分开）。 */
+export function isMechaUnitType(unitType: string): boolean {
+  return MECHA_UNIT_TYPES.has(unitType);
+}
+
 /** entity_destroyed 的中文名：按 entity_kind 选字典；旧事件缺字段时按 id 前缀推断。 */
 export function describeDestroyedEntity(payload: Record<string, unknown>): { kind: string; name: string } {
   const entityId = asString(payload.entity_id) || asString(payload.target_id);
@@ -69,6 +77,26 @@ export function describeDestroyedEntity(payload: Record<string, unknown>): { kin
   }
 }
 
+/**
+ * 战报目标的中文名（不暴露 fleet/单位 id）。
+ * 服务端战报只给 target_type 这个类别码（当前仅 'enemy_force'），
+ * 未知类别返回空串而不是把原始码/ id 拼进文案。
+ */
+function battleTargetName(report: Record<string, unknown> | undefined): string {
+  switch (asString(report?.target_type)) {
+    case 'enemy_force':
+      return '黑雾';
+    case 'fleet':
+      return '舰队';
+    case 'building':
+      return '建筑';
+    case 'unit':
+      return '单位';
+    default:
+      return '';
+  }
+}
+
 function planetHref(payload: Record<string, unknown>): string | undefined {
   const planetId = asString(payload.planet_id);
   return planetId ? `/planet/${planetId}` : undefined;
@@ -86,13 +114,16 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       const report = asRecord(payload.report);
       const destroyed = report?.target_destroyed === true;
       const damage = asNumber(report?.target_strength_loss);
-      const targetId = asString(report?.target_id);
+      // 目标名走类别码中文化；服务端战报没有实体中文名，绝不把 fleet-xxx 之类 id 拼进文案
+      const targetName = battleTargetName(report);
       return {
         toast: {
           kind: 'danger',
-          title: destroyed ? '击毁目标' : '舰队交火',
+          title: destroyed
+            ? (targetName ? `击毁目标：${targetName}` : '击毁目标')
+            : '舰队交火',
           body: [
-            targetId ? shortId(targetId) : '',
+            !destroyed && targetName ? targetName : '',
             damage !== undefined ? `-${Math.round(damage)}` : '',
           ].filter(Boolean).join(' · ') || undefined,
           href: '/war',
@@ -105,11 +136,15 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       const ownerId = asString(payload.owner_id);
       const own = viewerId !== '' && ownerId === viewerId;
       if (kind === 'building' || kind === 'unit') {
+        const type = asString(payload.entity_type);
+        const mecha = kind === 'unit' && isMechaUnitType(type);
         if (own) {
           return {
             toast: {
               kind: 'danger',
-              title: kind === 'building' ? `建筑被摧毁：${name}` : `单位阵亡：${name}`,
+              title: kind === 'building'
+                ? `建筑被摧毁：${name}`
+                : mecha ? `机甲被击毁：${name}` : `单位阵亡：${name}`,
               href: planetHref(payload),
               mergeKey: `entity_destroyed:own:${kind}:${name}`,
             },
@@ -120,7 +155,13 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
           return null;
         }
         return {
-          toast: { kind: 'danger', title: kind === 'building' ? `建筑被摧毁：${name}` : `单位被摧毁：${name}`, mergeKey: `entity_destroyed:${kind}:${name}` },
+          toast: {
+            kind: 'danger',
+            title: kind === 'building'
+              ? `建筑被摧毁：${name}`
+              : mecha ? `机甲被击毁：${name}` : `单位被摧毁：${name}`,
+            mergeKey: `entity_destroyed:${kind}:${name}`,
+          },
         };
       }
       if (kind === 'enemy_force') {
@@ -215,6 +256,7 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       const alert = asRecord(payload.alert);
       const alertType = asString(alert?.alert_type);
       const buildingType = asString(alert?.building_type);
+      // 建筑实例 id（合并键用）：同一建筑的同类告警合并计数，不同建筑分开显示
       const buildingId = asString(alert?.building_id) || asString(payload.building_id);
       // 研究模式（无配方）的 matrix_lab / self_evolution_lab 是合法开局状态，
       // 其吞吐类告警属噪音，不弹 toast（见 production-alerts.ts）
@@ -230,8 +272,9 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
           title: '产线告警',
           body: [buildingLabel, issue].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
-          // 同类建筑同原因合并计数并节流（多台同时缺料只占一条）
-          mergeKey: `production_alert:${buildingType || buildingId || 'unknown'}:${alertType || 'unknown'}`,
+          // 同一建筑的同类告警合并计数并节流（采矿机满仓后每 3000 tick 重复提醒，
+          // 不合并会刷屏）；键含建筑 id，不同建筑的同类告警分开显示。
+          mergeKey: `production_alert:${buildingId || buildingType || 'unknown'}:${alertType || 'unknown'}`,
           throttleMs: PRODUCTION_ALERT_THROTTLE_MS,
         },
       };

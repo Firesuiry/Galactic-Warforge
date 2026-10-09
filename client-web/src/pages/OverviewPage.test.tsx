@@ -167,6 +167,19 @@ const sampleEvents = [
     visibility_scope: 'p1',
     payload: { entity_id: 'miner-1', type: 'miner' },
   },
+  {
+    // 缺电原因枚举（服务端 building_state_changed 的 reason=power_no_provider）必须中文化。
+    event_id: 'evt-2',
+    tick: 87,
+    event_type: 'building_state_changed',
+    visibility_scope: 'p1',
+    payload: {
+      building_id: 'b-7',
+      building_type: 'battlefield_analysis_base',
+      next_state: 'no_power',
+      reason: 'power_no_provider',
+    },
+  },
 ];
 
 const sampleAlerts = [
@@ -209,15 +222,18 @@ describe('OverviewPage', () => {
     // 文明6 式"下一步"主行动条：推荐告警 + 跳转当前行星
     const nextAction = within(hero).getByRole('link', { name: /下一步优先处理/ });
     expect(nextAction).toHaveAttribute('href', '/planet/planet-1-1');
-    expect(within(nextAction).getByText('电力不足 · 制造台 Mk.I assembler-1')).toBeInTheDocument();
+    expect(within(nextAction).getByText('电力不足 · 制造台 Mk.I · 编号 assembler-1')).toBeInTheDocument();
 
     // 中央时间线前置：告警与事件直接可见（不再折叠）
     const timeline = document.querySelector('.command-timeline') as HTMLElement;
     expect(within(timeline).getByText('实体已创建')).toBeInTheDocument();
-    expect(within(timeline).getByText('T87 · 1 tick 前')).toBeInTheDocument();
+    expect(within(timeline).getAllByText('约 1 秒前（tick 87）').length).toBeGreaterThan(0);
     expect(within(timeline).getByText('电力不足')).toBeInTheDocument();
-    expect(within(timeline).getByText('制造台 Mk.I assembler-1')).toBeInTheDocument();
-    expect(within(timeline).getByText('T88 · 本 tick')).toBeInTheDocument();
+    // 告警详情：建筑中文名 + 编号（不再裸拼 building_id 字段名）
+    expect(within(timeline).getByText('制造台 Mk.I · 编号 assembler-1')).toBeInTheDocument();
+    expect(within(timeline).getByText('本 tick（tick 88）')).toBeInTheDocument();
+    // 缺电 reason 枚举中文化（不再裸显 power_no_provider）
+    expect(within(timeline).getByText(/电网里没有供电来源/)).toBeInTheDocument();
 
     // 左栏：mini 星图卡（canvas）+ 快捷入口
     expect(screen.getByRole('link', { name: '打开银河星图' })).toHaveAttribute('href', '/galaxy');

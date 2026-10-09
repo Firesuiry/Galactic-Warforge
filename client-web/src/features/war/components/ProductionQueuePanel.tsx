@@ -12,7 +12,7 @@ import type {
 
 import { Icon } from '@/common/Icon';
 import { Input, Select } from '@/common/controls';
-import { formatUnitCost } from '@/features/planet-map/model';
+import { formatUnitCost, getBuildingDisplayName } from '@/features/planet-map/model';
 import { UnitCard } from '@/features/war/components/UnitCard';
 import { WarField } from '@/features/war/components/WarField';
 import {
@@ -221,7 +221,7 @@ export function ProductionQueuePanel({
   const buildingLabelById = useMemo(() => {
     const map = new Map<string, string>();
     ownBuildings.forEach((building) => {
-      map.set(building.id, `${building.type} (${building.id})`);
+      map.set(building.id, `${getBuildingDisplayName(catalog, building.type)} (${building.id})`);
     });
     return map;
   }, [ownBuildings]);
@@ -381,7 +381,7 @@ export function ProductionQueuePanel({
                 <article className="deployment-hub" key={entry.building_id} data-testid="deployment-hub">
                   <header className="deployment-hub__head">
                     <Icon iconKey="supply_depot" size={16} />
-                    <strong>{entry.building_type} ({entry.building_id})</strong>
+                    <strong>{getBuildingDisplayName(catalog, entry.building_type)} ({entry.building_id})</strong>
                   </header>
                   <p className="subtle-text">
                     容量 {entry.capacity ?? 0} · 行星 {entry.planet_id ?? '-'}
@@ -482,7 +482,7 @@ export function ProductionQueuePanel({
                 <option value="">当前行星暂无生产建筑</option>
               ) : factoryBuildings.map((building) => (
                 <option key={building.id} value={building.id}>
-                  {building.type} ({building.id})
+                  {getBuildingDisplayName(catalog, building.type)} ({building.id})
                 </option>
               ))}
             </Select>
@@ -497,7 +497,7 @@ export function ProductionQueuePanel({
                 <option value="">暂无部署枢纽</option>
               ) : hubs.map((entry) => (
                 <option key={entry.building_id} value={entry.building_id}>
-                  {entry.building_type} ({entry.building_id})
+                  {getBuildingDisplayName(catalog, entry.building_type)} ({entry.building_id})
                 </option>
               ))}
             </Select>
@@ -562,7 +562,7 @@ export function ProductionQueuePanel({
                 >
                   {producerBuildings.map((building) => (
                     <option key={building.id} value={building.id}>
-                      {building.type} ({building.id})
+                      {getBuildingDisplayName(catalog, building.type)} ({building.id})
                     </option>
                   ))}
                 </Select>

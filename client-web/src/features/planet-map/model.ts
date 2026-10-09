@@ -22,9 +22,15 @@ import {
   translateAlertType,
   translateBuildingState,
   translateBuildingType,
+  translateBuildingTypeOrNull,
   translateEventType,
   translateItemId,
+  translateItemIdSafe,
+  translateRecipeId,
   translateTechId,
+  translateUnitType,
+  translateUnitTypeOrNull,
+  translateUnitTypeWithName,
 } from "@/i18n/translate";
 
 export type PlanetLayerKey =
@@ -381,7 +387,8 @@ export function getItemDisplayName(
   catalog: CatalogView | undefined,
   itemId: string,
 ) {
-  return translateItemId(itemId, getItemCatalogEntry(catalog, itemId)?.name);
+  // 界面用：词典 > 目录中文名 > 中性词，绝不回退 ammo_bullet 这类裸 id。
+  return translateItemIdSafe(itemId, getItemCatalogEntry(catalog, itemId)?.name);
 }
 
 /** 单位造价文案：「钢材 × 2、电路板 × 1 · 30 tick」；无造价返回空串。 */
@@ -394,11 +401,24 @@ export function formatUnitCost(
   return unit.production_ticks ? `${items} · ${unit.production_ticks} tick` : items;
 }
 
+/**
+ * 量产单位下拉的整行文案：「步兵 · 铁块 × 2、电路板 × 1 · 40 tick」。
+ * 单位名与物品名一律中文（词典优先，catalog 中文名兜底），不出现 soldier / iron_ingot 这类裸 id。
+ */
+export function formatUnitOptionLabel(
+  catalog: CatalogView | undefined,
+  unit: { id: string; name?: string; cost?: { item_id: string; quantity: number }[]; production_ticks?: number },
+): string {
+  const name = translateUnitTypeWithName(unit.id, unit.name);
+  const cost = formatUnitCost(catalog, unit);
+  return [name, cost].filter(Boolean).join(' · ');
+}
+
 export function getRecipeDisplayName(
   catalog: CatalogView | undefined,
   recipeId: string,
 ) {
-  return translateItemId(recipeId, getRecipeCatalogEntry(catalog, recipeId)?.name);
+  return translateRecipeId(recipeId, getRecipeCatalogEntry(catalog, recipeId)?.name);
 }
 
 export function getTechDisplayName(
@@ -707,7 +727,8 @@ function asNumber(value: unknown) {
 }
 
 function extractPayloadPosition(payload: Record<string, unknown>) {
-  const direct = asRecord(payload.position);
+  // entity_moved 的载荷用 to（含 from/path），先读它，否则摘要会退化成 "-"。
+  const direct = asRecord(payload.position) ?? asRecord(payload.to);
   if (direct) {
     const x = asNumber(direct.x);
     const y = asNumber(direct.y);
@@ -776,6 +797,26 @@ export function describeAlert(
   };
 }
 
+/** 事件摘要里的实体名：不裸露 u-7 / b-92 这类内部 id，也不裸露 enemy_force 这类枚举 id。 */
+function eventEntityLabel(payload: Record<string, unknown>, fallback: string) {
+  const type = asString(payload.entity_type);
+  const kind = asString(payload.entity_kind);
+  if (kind === 'building' && type) return translateBuildingType(type);
+  if (kind === 'unit' && type) return translateUnitTypeWithName(type);
+  if (type) {
+    // 词典命中才用中文名；未命中（如 enemy_force 这类势力枚举）不裸显 id。
+    const asUnit = translateUnitTypeOrNull(type);
+    if (asUnit) return asUnit;
+    const asBuilding = translateBuildingTypeOrNull(type);
+    if (asBuilding) return asBuilding;
+  }
+  const id = asString(payload.entity_id);
+  if (id.startsWith('b-')) return '建筑';
+  if (id.startsWith('u-')) return '单位';
+  if (id.startsWith('enemy-') || id.startsWith('df-')) return '黑雾单位';
+  return fallback;
+}
+
 export function summarizeEvent(event: GameEventDetail) {
   const payload = event.payload ?? {};
   switch (event.event_type) {
@@ -785,11 +826,11 @@ export function summarizeEvent(event: GameEventDetail) {
         `${asString(payload.command_type) || "command"} ${asString(payload.status) || "updated"}`
       );
     case "entity_created":
-      return `${asString(payload.entity_id) || "entity"} 已创建`;
+      return `${eventEntityLabel(payload, "实体")} 已创建`;
     case "entity_moved":
-      return `${asString(payload.entity_id) || "entity"} 移动到 ${formatPosition(extractPayloadPosition(payload))}`;
+      return `${eventEntityLabel(payload, "实体")} 移动到 ${formatPosition(extractPayloadPosition(payload))}`;
     case "entity_destroyed":
-      return `${asString(payload.entity_id) || "entity"} 已销毁`;
+      return `${eventEntityLabel(payload, "实体")} 已销毁`;
     case "entity_updated":
       return `${asString(payload.entity_id) || "entity"} 属性已更新`;
     case "building_state_changed":
@@ -1200,4 +1241,36 @@ export function buildSceneWindow(
     width: crossX ? planet.map_width : width,
     height: crossY ? planet.map_height : height,
   };
+}
+
+/**
+ * 建造任务排队原因的中文说明（服务端 construction_tasks[].wait_reason）。
+ * 第三台风机「点了没反应」其实是任务已入队但没开工：把原因显式写出来，
+ * 玩家才知道是缺料、执行体忙，还是这块 8×8 区域已到并发上限。
+ */
+export function describeConstructionWait(
+  reason: string | undefined,
+  catalog?: CatalogView,
+): string | null {
+  switch (reason) {
+    case 'insufficient_materials':
+      return '材料未到齐（执行体正在从背包/仓库补齐）';
+    case 'executor_concurrent_limit':
+      return '执行体正在施工其他任务，排队等待';
+    case 'region_concurrent_limit':
+      return '该区域同时在施工的工程已达上限，排队等待';
+    case '':
+    case undefined:
+      return null;
+    default:
+      return reason;
+  }
+}
+
+/** 建造任务展示名：中文建筑名（服务端 building_name / 目录名），不露 b-92 这类内部 id。 */
+export function constructionTaskLabel(
+  task: { id: string; building_type: string; building_name?: string },
+  catalog?: CatalogView,
+): string {
+  return task.building_name || getBuildingDisplayName(catalog, task.building_type);
 }

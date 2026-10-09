@@ -1,5 +1,54 @@
 package model
 
+import (
+	"sort"
+	"sync"
+)
+
+// recipeOutputIndex 产出物品 → 配方列表（按配方 ID 排序）。供热路径
+// （bot 备料）按物品取候选配方，避免每次遍历整张配方表。
+var (
+	recipeOutputIndexMu sync.RWMutex
+	recipeOutputIndex   map[string][]RecipeDefinition
+	recipeOutputIndexOK bool
+)
+
+// ensureRecipeOutputIndex 惰性重建产出索引；InstallGameData 会先置脏。
+func ensureRecipeOutputIndex() {
+	recipeOutputIndexMu.RLock()
+	ok := recipeOutputIndexOK
+	recipeOutputIndexMu.RUnlock()
+	if ok {
+		return
+	}
+	recipeOutputIndexMu.Lock()
+	defer recipeOutputIndexMu.Unlock()
+	if recipeOutputIndexOK {
+		return
+	}
+	index := make(map[string][]RecipeDefinition, len(recipeCatalog))
+	ids := make([]string, 0, len(recipeCatalog))
+	for id := range recipeCatalog {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		def := recipeCatalog[id]
+		for _, out := range def.Outputs {
+			index[out.ItemID] = append(index[out.ItemID], def)
+		}
+	}
+	recipeOutputIndex = index
+	recipeOutputIndexOK = true
+}
+
+// markRecipeOutputIndexDirty 数据重装后置脏。
+func markRecipeOutputIndexDirty() {
+	recipeOutputIndexMu.Lock()
+	recipeOutputIndexOK = false
+	recipeOutputIndexMu.Unlock()
+}
+
 // RecipeDefinition captures a production recipe.
 type RecipeDefinition struct {
 	ID               string         `json:"id" yaml:"id"`
@@ -38,4 +87,13 @@ func AllRecipes() []RecipeDefinition {
 		recipes = append(recipes, def)
 	}
 	return recipes
+}
+
+// RecipesProducingItem 返回产出 item 的候选配方（按配方 ID 排序）。
+// 供热路径（bot 备料）O(1) 查询，避免每次遍历整张配方表并排序。
+func RecipesProducingItem(item string) []RecipeDefinition {
+	ensureRecipeOutputIndex()
+	recipeOutputIndexMu.RLock()
+	defer recipeOutputIndexMu.RUnlock()
+	return recipeOutputIndex[item]
 }

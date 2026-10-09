@@ -4,6 +4,8 @@ import { AmmunitionBar } from "./AmmunitionBar";
  * 纯展示组件——数据映射全部在 unit-card-model.ts（单一出处），这里只渲染。
  */
 
+import type { CatalogView } from '@shared/types';
+
 import {
   UNIT_CARD_RUNTIME_CLASS_LABELS,
   unitCardArmorLabel,
@@ -14,11 +16,13 @@ import {
 
 interface UnitCardProps {
   card: UnitCardModel;
+  /** 目录（弹药条上的物品名本地化用）。 */
+  catalog?: CatalogView;
   /** 紧凑模式（选择条等窄位）：隐藏克制说明与出处注记。 */
   compact?: boolean;
 }
 
-export function UnitCard({ card, compact = false }: UnitCardProps) {
+export function UnitCard({ card, catalog, compact = false }: UnitCardProps) {
   return (
     <article className="unit-card" data-testid="unit-card">
       <header className="unit-card__head">
@@ -32,7 +36,7 @@ export function UnitCard({ card, compact = false }: UnitCardProps) {
       </header>
       {card.subtitle ? <p className="unit-card__subtitle">{card.subtitle}</p> : null}
 
-      {card.ammunition?<AmmunitionBar {...card.ammunition}/>:null}
+      {card.ammunition?<AmmunitionBar {...card.ammunition} catalog={catalog}/>:null}
       {card.stats.length > 0 ? (
         <dl className="unit-card__stats">
           {card.stats.map((entry) => (
@@ -67,7 +71,7 @@ export function UnitCard({ card, compact = false }: UnitCardProps) {
         >
           {card.techGate.unlocked
             ? `科技已解锁：${card.techGate.techName}`
-            : `需要科技：${card.techGate.techName}（${card.techGate.techId}）`}
+            : `需要科技：${card.techGate.techName}`}
         </p>
       ) : null}
 

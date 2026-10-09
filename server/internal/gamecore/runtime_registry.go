@@ -20,13 +20,16 @@ type PlanetRuntimeRegistry struct {
 func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 	players := make(map[string]*model.PlayerState, len(cfg.Players))
 	for _, p := range cfg.Players {
+		tech := model.NewPlayerTechState(p.PlayerID)
+		// 研究倍率镜像：查询层据此把目录成本缩放成实际成本（与结算一致）。
+		tech.ResearchPace = model.PaceOrOne(cfg.Battlefield.PaceResearch)
 		ps := &model.PlayerState{
 			PlayerID:  p.PlayerID,
 			TeamID:    p.TeamID,
 			Role:      p.Role,
 			Resources: model.Resources{Minerals: 200, Energy: 100},
 			IsAlive:   true,
-			Tech:      model.NewPlayerTechState(p.PlayerID),
+			Tech:      tech,
 			Stats:     model.NewPlayerStats(p.PlayerID),
 		}
 		ps.SetPermissions(p.Permissions)
@@ -92,13 +95,18 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		ws.TileBuilding[tileKey] = id
 		ws.Grid[pos.Y][pos.X].BuildingID = id
 
-		execPos := findNearestOpenTile(ws, pos)
+		// 开局机甲也走统一的找空位函数：不与其它地面单位堆叠。
+		execPos := findUnitSpawnTile(ws, pos, false, unitSpawnRadius)
+		if execPos == nil {
+			fallback := findNearestOpenTile(ws, pos)
+			execPos = &fallback
+		}
 		execStats := model.UnitStats(model.UnitTypeExecutor)
 		execID := ws.NextEntityID("u")
 		executor := &execStats
 		executor.ID = execID
 		executor.OwnerID = p.PlayerID
-		executor.Position = execPos
+		executor.Position = *execPos
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)
 		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)

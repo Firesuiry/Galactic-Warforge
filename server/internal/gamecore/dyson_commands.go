@@ -60,7 +60,7 @@ func (gc *GameCore) execBuildDysonNode(ws *model.WorldState, playerID string, cm
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("已建造戴森节点 %s", node.ID)
+	res.Message = "已建造戴森节点"
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -95,7 +95,7 @@ func (gc *GameCore) execBuildDysonFrame(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("已建造戴森框架 %s", frame.ID)
+	res.Message = "已建造戴森框架"
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -130,7 +130,7 @@ func (gc *GameCore) execBuildDysonShell(ws *model.WorldState, playerID string, c
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("已建造戴森壳 %s", shell.ID)
+	res.Message = "已建造戴森壳"
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityCreated,
 		VisibilityScope: playerID,
@@ -163,7 +163,7 @@ func (gc *GameCore) execDemolishDyson(ws *model.WorldState, playerID string, cmd
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("已拆除戴森组件 %s", componentID)
+	res.Message = "已拆除戴森组件"
 	return res, []*model.GameEvent{{
 		EventType:       model.EvtEntityDestroyed,
 		VisibilityScope: playerID,
@@ -223,7 +223,7 @@ func (gc *GameCore) execLaunchSolarSail(ws *model.WorldState, playerID string, c
 	building, ok := ws.Buildings[bid]
 	if !ok {
 		res.Code = model.CodeEntityNotFound
-		res.Message = fmt.Sprintf("未找到建筑 %s", bid)
+		res.Message = "未找到建筑（可能已被拆除）"
 		return res, nil
 	}
 	if building.OwnerID != playerID {

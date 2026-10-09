@@ -31,7 +31,7 @@ func TestSceneSeamPatchesIncludeVisibleNeighbor(t *testing.T) {
 	}
 }
 
-func TestPlanetPathCrossesSeamAndDoesNotRevealUnknown(t *testing.T) {
+func TestPlanetPathCrossesSeamAndRoutesIntoUnknown(t *testing.T) {
 	ql, ws, _ := newPlanetQueryFixture(t, 16, 16)
 	start := model.Position{X: 0, Y: 8}
 	target, _ := ws.SurfaceStep(start, model.ConveyorWest)
@@ -40,13 +40,27 @@ func TestPlanetPathCrossesSeamAndDoesNotRevealUnknown(t *testing.T) {
 	if err != nil || !route.Reachable || route.Distance != 1 || len(route.Waypoints) != 1 || route.Waypoints[0] != target {
 		t.Fatalf("bad seam path: %+v %v", route, err)
 	}
+	if !route.Explored {
+		t.Fatal("adjacent target should be explored")
+	}
 	if _, err := ql.PlanetPath(ws, "p2", "u", target, 0); err == nil {
 		t.Fatal("must reject foreign unit")
 	}
+	// 目标落在未探索区：服务端是权威，按真实地形照常给出路线（只回路线，
+	// 不回未探索区的地形细节），并用 explored=false 告诉客户端终点未知。
 	hidden := model.Position{X: 8, Y: 8}
 	route, err = ql.PlanetPath(ws, "p1", "u", hidden, 0)
-	if err != nil || route.Reachable || len(route.Path) != 0 {
-		t.Fatal("must not reveal unknown route")
+	if err != nil || !route.Reachable || len(route.Path) == 0 {
+		t.Fatalf("unexplored target must still be routable: %+v %v", route, err)
+	}
+	if route.Explored {
+		t.Fatal("unexplored target must report explored=false")
+	}
+	// 未探索区里的地形阻挡仍然生效（权威地形寻路）。
+	ws.Grid[hidden.Y][hidden.X].Terrain = "blocked"
+	route, err = ql.PlanetPath(ws, "p1", "u", hidden, 0)
+	if err != nil || route.Reachable {
+		t.Fatalf("blocked target cannot be routed: %+v %v", route, err)
 	}
 	ws.Grid[target.Y][target.X].Terrain = "blocked"
 	route, err = ql.PlanetPath(ws, "p1", "u", target, 0)

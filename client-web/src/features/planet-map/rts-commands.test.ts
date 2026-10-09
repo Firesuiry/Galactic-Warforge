@@ -123,6 +123,41 @@ describe('rts-commands 右键情境指令', () => {
       position: { x: 2, y: 2, z: 0 },
     });
   });
+
+  it('右键敌方建筑=攻击（含 2x2 占地的非原点格）；己方建筑仍是移动', () => {
+    const planet = makePlanet();
+    planet.buildings = {
+      'b-enemy': {
+        id: 'b-enemy',
+        type: 'barracks',
+        owner_id: 'p2',
+        position: { x: 10, y: 10, z: 0 },
+        hp: 200,
+        max_hp: 200,
+        runtime: { params: { footprint: { width: 2, height: 2 } } },
+      } as never,
+      'b-own': {
+        id: 'b-own',
+        type: 'barracks',
+        owner_id: 'p1',
+        position: { x: 14, y: 14, z: 0 },
+        hp: 200,
+        max_hp: 200,
+      } as never,
+    };
+    // 敌方建筑：按占地包含判定，非原点格也算命中
+    expect(resolveContextCommand(planet, undefined, 'p1', { x: 10, y: 10 })).toEqual({
+      type: 'attack',
+      targetId: 'b-enemy',
+      targetLabel: 'barracks',
+    });
+    expect(resolveContextCommand(planet, undefined, 'p1', { x: 11, y: 11 })).toMatchObject({
+      type: 'attack',
+      targetId: 'b-enemy',
+    });
+    // 己方建筑：仍是移动（不攻击自己人）
+    expect(resolveContextCommand(planet, undefined, 'p1', { x: 14, y: 14 })).toMatchObject({ type: 'move' });
+  });
 });
 
 describe('rts-commands 多选构成与编队', () => {

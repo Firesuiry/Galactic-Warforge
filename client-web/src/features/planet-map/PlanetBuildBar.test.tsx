@@ -181,6 +181,27 @@ describe('PlanetBuildBar', () => {
     expect(detail.querySelector('.is-short')?.textContent).toContain('4 / 6');
   });
 
+  it('卡片物品造价内联显示中文物品名与拥有/需要数量', () => {
+    const itemCatalog = { ...catalog, items: [
+      { id: 'custom_plate', name: '定制板材' },
+      { id: 'gear', name: '齿轮' },
+    ], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
+      ? { ...entry, build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'custom_plate', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
+      : entry) } as CatalogView;
+    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 500, energy: 100 }, inventory: { custom_plate: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
+
+    const card = screen.getByRole('button', { name: /风力发电机/ });
+    const itemNames = Array.from(card.querySelectorAll('.planet-build-card__item-name')).map((node) => node.textContent);
+    // 中文物品名内联在卡片上（不再只有图标 + 数字）
+    expect(itemNames).toEqual(['定制板材', '齿轮']);
+    // 名称与 owned/quantity 数字同处一个 __item 元素
+    const shortItem = card.querySelector('.planet-build-card__item--short');
+    expect(shortItem?.textContent).toContain('定制板材');
+    expect(shortItem?.textContent).toContain('4/6');
+    expect(card.textContent).toContain('齿轮3/1');
+  });
+
   it('余额充足时卡片可点击进入建造模式', async () => {
     const user = userEvent.setup();
     const richSummary: StateSummary = {

@@ -15,25 +15,30 @@ import (
 
 // botTuning bot 难度参数。
 type botTuning struct {
-	cadence           int64   // 决策间隔（tick）
-	maxCmds           int     // 每次决策最多下发的命令数
-	attackAt          int     // 进攻兵力阈值
-	armyCap           int     // 兵力上限（士兵+mecha）
-	minerTarget       int     // 目标矿机数
-	powerTarget       int     // 目标发电建筑数
-	craftBatch        int     // 单批手搓数量上限
-	defendRadius      int     // 基地防御拉扯半径
-	mechaEvery        int     // 每多少名士兵配一台 mecha
-	mechaMinSoldiers  int     // 第一台 mecha 前至少有多少士兵；0 表示可先出 mecha
-	turretCap         int     // 基地炮塔上限（含在建）
-	turretThreat      int     // 威胁进入该半径才造炮塔（越大越早）
-	researchMaxLevel  int     // >0 时只研究不超过该等级的科技
-	researchMainOnly  bool    // 只推进主线科技（easy 少研究）
-	raidSupply        bool    // 进攻优先袭扰敌方补给站/弹药厂
-	supportAt         int     // 兵力达到该数量后才配补给车
-	heavyAt           int     // 兵力达到该数量后才补火炮/导弹车/维修车/无人机
-	retreatBelowHP    float64 // 军团平均血量比低于该值即撤退（越高越谨慎）
-	resupplyBelowAmmo float64 // 军团平均弹药比低于该值即回补给站
+	cadence             int64   // 决策间隔（tick）
+	maxCmds             int     // 每次决策最多下发的命令数
+	attackAt            int     // 进攻兵力阈值
+	armyCap             int     // 兵力上限（士兵+mecha）
+	minerTarget         int     // 目标矿机数
+	powerTarget         int     // 目标发电建筑数
+	assemblerTarget     int     // 目标制造台数（研究矩阵链与弹药链并行需要多台）
+	smelterTarget       int     // 目标电弧熔炉数（铁/铜/磁铁并行冶炼）
+	matrixMachineTarget int     // 目标电磁矩阵制造台数（研究站备料的专用产线）
+	craftBatch          int     // 单批手搓数量上限
+	defendRadius        int     // 基地防御拉扯半径
+	mechaEvery          int     // 每多少名士兵配一台 mecha
+	mechaMinSoldiers    int     // 第一台 mecha 前至少有多少士兵；0 表示可先出 mecha
+	turretCap           int     // 基地炮塔上限（含在建）
+	turretThreat        int     // 威胁进入该半径才造炮塔（越大越早）
+	researchMaxLevel    int     // >0 时只研究不超过该等级的科技
+	researchMainOnly    bool    // 只推进主线科技（easy 少研究）
+	researchTarget      string  // 主攻科技 ID（hard 优先冲这条链；空=按等级序）
+	researchReserve     int     // 研究站矩阵库存低于该值就补料
+	raidSupply          bool    // 进攻优先袭扰敌方补给站/弹药厂
+	supportAt           int     // 兵力达到该数量后才配补给车
+	heavyAt             int     // 兵力达到该数量后才补火炮/导弹车/维修车/无人机
+	retreatBelowHP      float64 // 军团平均血量比低于该值即撤退（越高越谨慎）
+	resupplyBelowAmmo   float64 // 军团平均弹药比低于该值即回补给站
 }
 
 // botCoalReserve 手搓期间背包煤低于该值就先去采煤（约够 300 点能量，足以完成一次采煤任务）。
@@ -42,11 +47,11 @@ const botCoalReserve = 16
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 8, heavyAt: 12, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 8, heavyAt: 12, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
 	case "hard":
-		return botTuning{cadence: 15, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
+		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, raidSupply: true, supportAt: 5, heavyAt: 8, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 8, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
 	}
 }
 
@@ -438,7 +443,7 @@ func (gc *GameCore) botTurret(ws *model.WorldState, playerID string, tuning botT
 	if !ok {
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx))
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), btype)
 	if pos == nil {
 		return false
 	}
@@ -534,6 +539,7 @@ func botPendingBuilds(ws *model.WorldState, playerID string, btype model.Buildin
 func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) *model.Position {
 	if tuning.raidSupply {
 		// 袭扰：断掉对方前线的补给比强攻基地更划算；攻击移动本身也会优先打补给设施。
+		// 只挑走得到的：目标在孤岛/被切断时军团会白跑一趟（试玩报告 C/G2 的教训）。
 		if raid := botNearestEnemySupply(ws, *ctx.home, ctx); raid != nil {
 			return raid
 		}
@@ -552,6 +558,9 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 			continue
 		}
 		center := buildingCentroid(ws, buildings)
+		if !gc.botTargetReachable(ws, *ctx.home, center, ctx) {
+			continue
+		}
 		d := ws.SurfaceDistance(*ctx.home, center)
 		if bestDist < 0 || d < bestDist || (d == bestDist && (bestOwner == "" || owner < bestOwner)) {
 			c := center
@@ -568,6 +577,9 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 		if nest == nil {
 			continue
 		}
+		if !gc.botTargetReachable(ws, *ctx.home, nest.Position, ctx) {
+			continue
+		}
 		d := ws.SurfaceDistance(*ctx.home, nest.Position)
 		if bestDist < 0 || d < bestDist || (d == bestDist && (bestNest == "" || nest.ID < bestNest)) {
 			pos := nest.Position
@@ -577,6 +589,33 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 		}
 	}
 	return best
+}
+
+// botTargetReachable 目标是否走得到：预算内从 bot 执行体（缺省用基地）做一次
+// 连通区检查。走不到的目标直接跳过，bot 不会无限重复下令去打一个到不了的地方
+// （试玩报告 C/G2：玩家在孤岛上，bot 军团不该反复空跑）；结果按 tick 缓存，
+// 避免每拍都为同一目标重复洪泛。
+func (gc *GameCore) botTargetReachable(ws *model.WorldState, home, target model.Position, ctx *botSurvey) bool {
+	if ws == nil {
+		return false
+	}
+	key := model.TileKey(target.X, target.Y)
+	if gc.botReachCacheTick != ws.Tick || gc.botReachCache == nil {
+		gc.botReachCache = make(map[string]bool, 8)
+		gc.botReachCacheTick = ws.Tick
+	} else if v, ok := gc.botReachCache[key]; ok {
+		return v
+	}
+	from := home
+	if ctx != nil && ctx.executor != nil {
+		from = ctx.executor.Position
+	}
+	ok := false
+	if ws.InBounds(from.X, from.Y) {
+		ok = pocketReach(ws, from, target, nil)
+	}
+	gc.botReachCache[key] = ok
+	return ok
 }
 
 // botNearestEnemySupply 距离最近的敌方补给站/弹药厂（同距按建筑 ID）。
@@ -642,6 +681,15 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 				Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID},
 			})
 		}
+		// 采集作业因离矿点太远而停摆（例如被挤走/目标失效）：取消后下一拍
+		// 会先移动再开矿，否则执行体永远钉在 out_of_range、bot 全线停摆
+		// （试玩报告 D：bot 的机甲在 tick 20000 后一直不动）。
+		if job.Kind == "mine" && job.State == "out_of_range" {
+			return issue(model.Command{
+				Type:   model.CmdCancelMechaJob,
+				Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+			})
+		}
 		return false
 	}
 	// 缺料清单：当前建设目标所需物品。
@@ -664,13 +712,35 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 		return false
 	}
 	// 无明确缺口：采煤/铁备用（背包留空位时）。
-	if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemCoal, ctx); ok {
-		return issue(cmd)
+	// 必须设上限：无限"备用采煤"会把机甲 200 格背包塞满煤，
+	// 之后所有物品转移都报「背包已满」，矩阵链/研究站供料全线卡死
+	// （试玩报告 D：bot 的电磁学在 tick 20000 后不再推进）。
+	if player.Inventory[model.ItemCoal] < botSpareCoalCap && botInventoryHasRoom(player, ctx.executor) {
+		if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemCoal, ctx); ok {
+			return issue(cmd)
+		}
 	}
-	if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemIronOre, ctx); ok {
-		return issue(cmd)
+	if botInventoryHasRoom(player, ctx.executor) {
+		if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemIronOre, ctx); ok {
+			return issue(cmd)
+		}
 	}
 	return false
+}
+
+// botSpareCoalCap 备用采煤的库存上限（块）：够长期手搓与补能即可。
+const botSpareCoalCap = 80
+
+// botInventoryHasRoom 机甲背包是否还有余量（留 1/4 空间给其它物料）。
+func botInventoryHasRoom(player *model.PlayerState, exec *model.Unit) bool {
+	if player == nil || exec == nil || exec.Mecha == nil || exec.Mecha.InventoryCapacity <= 0 {
+		return true
+	}
+	used := 0
+	for _, qty := range player.Inventory {
+		used += qty
+	}
+	return used < exec.Mecha.InventoryCapacity*3/4
 }
 
 // botMaterialNeeds 当前建设目标的物料缺口（按建设优先级：电力→矿机→制造台）。
@@ -781,6 +851,12 @@ func botCraftChain(itemID string) (recipeID string, ingredients []model.ItemAmou
 		return "magnetic_coil", []model.ItemAmount{{ItemID: model.ItemMagnet, Quantity: 2}, {ItemID: model.ItemCopperIngot, Quantity: 1}}
 	case model.ItemMagnet:
 		return "smelt_magnet", []model.ItemAmount{{ItemID: model.ItemIronOre, Quantity: 1}}
+	case model.ItemGlass:
+		// 玻璃是研究站建造成本里的关键一环；不在手搓链里时 bot 会一直
+		// 缺玻璃、建不出研究站、整局不研究（试玩报告 D）。
+		return "glass", []model.ItemAmount{{ItemID: model.ItemStoneOre, Quantity: 2}}
+	case model.ItemStoneBrick:
+		return "smelt_stone", []model.ItemAmount{{ItemID: model.ItemStoneOre, Quantity: 1}}
 	}
 	return "", nil
 }
@@ -842,10 +918,13 @@ func (gc *GameCore) botMineFor(ws *model.WorldState, playerID string, exec *mode
 }
 
 // botRawOreFor 沿手搓链找出制造 itemID 时背包里首个不足的原矿；链上原料都够则返回空。
+// 认任何"可直接开采的固体原矿"（iron_ore / copper_ore / stone_ore / coal…），
+// 否则玻璃（石矿）这类新入链的物品会被当成无矿可采、退回去采铁
+// （试玩报告 D：bot 缺玻璃建不出研究站）。
 func botRawOreFor(inv model.ItemInventory, itemID string) string {
 	recipeID, ingredients := botCraftChain(itemID)
 	if recipeID == "" {
-		if itemID == model.ItemIronOre || itemID == model.ItemCopperOre {
+		if isManuallyMinableOre(itemID) {
 			return itemID
 		}
 		return ""
@@ -859,6 +938,12 @@ func botRawOreFor(inv model.ItemInventory, itemID string) string {
 		}
 	}
 	return ""
+}
+
+// isManuallyMinableOre 该物品是否是可直接开采的固体原矿（机甲手采口径）。
+func isManuallyMinableOre(itemID string) bool {
+	def, ok := model.Item(itemID)
+	return ok && def.Form == model.ResourceSolid && def.Category == model.ItemCategoryOre
 }
 
 // botMineKind 前往最近的指定矿种节点开采；不在操作范围时先移动过去。
@@ -887,7 +972,8 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 		if !reachable || len(path) < 2 {
 			return model.Command{}, false
 		}
-		step := path[min(len(path)-1, exec.MoveRange)]
+		// 移动不再受 move_range 限制：直接下达完整路径，实时移动逐 tick 走完。
+		step := path[len(path)-1]
 		return model.Command{
 			Type:   model.CmdMove,
 			Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID, Position: &step},
@@ -957,7 +1043,7 @@ func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTu
 		_ = missing
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx))
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeWindTurbine)
 	if pos == nil {
 		return false
 	}
@@ -996,7 +1082,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		nodeIDs = append(nodeIDs, id)
 	}
 	sort.Strings(nodeIDs)
-	for _, kind := range []string{model.ItemIronOre, model.ItemCopperOre, model.ItemCoal, "stone"} {
+	for _, kind := range []string{model.ItemIronOre, model.ItemCopperOre, model.ItemCoal, model.ItemStoneOre} {
 		for _, id := range nodeIDs {
 			node := ws.Resources[id]
 			if node == nil || node.Kind != kind || node.Remaining <= 0 || node.Depleted {
@@ -1047,7 +1133,7 @@ func (gc *GameCore) botAssembler(ws *model.WorldState, playerID string, tuning b
 	if _, short := missingItem(player.Inventory, def.BuildCost.Items); short {
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx))
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeAssemblingMachineMk1)
 	if pos == nil {
 		return false
 	}
@@ -1057,6 +1143,9 @@ func (gc *GameCore) botAssembler(ws *model.WorldState, playerID string, tuning b
 		Payload: map[string]any{"building_type": string(model.BuildingTypeAssemblingMachineMk1)},
 	})
 }
+
+// botSmelterRecipes 冶炼产线的配方顺序：铁→铜→磁铁→石材。
+var botSmelterRecipes = []string{"smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone"}
 
 // botResearch 有研究站就开一条付得起矩阵的科技；没有就建矩阵研究站。
 // 缺矩阵会失败的研究本决策直接跳过，不空转同一条命令。
@@ -1076,7 +1165,6 @@ func (gc *GameCore) botResearch(ws *model.WorldState, playerID string, tuning bo
 		Payload: map[string]any{"tech_id": techID},
 	})
 }
-
 func (gc *GameCore) botBuildLab(ws *model.WorldState, playerID string, ctx *botSurvey, issue func(model.Command) bool) bool {
 	player := ws.Players[playerID]
 	def, ok := model.BuildingDefinitionByID(model.BuildingTypeMatrixLab)
@@ -1086,7 +1174,7 @@ func (gc *GameCore) botBuildLab(ws *model.WorldState, playerID string, ctx *botS
 	if !botCanAffordBuild(player, def) {
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx))
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeMatrixLab)
 	if pos == nil {
 		return false
 	}
@@ -1098,7 +1186,9 @@ func (gc *GameCore) botBuildLab(ws *model.WorldState, playerID string, ctx *botS
 }
 
 // botNextResearchTech 选一条前置已解锁、研究站里已有成本物品的科技。
-// 等级优先，同级按 ID。没有可开工的科技（含缺矩阵）返回 false。
+// 备料按本局 pace_research 缩放后的实际成本判断，与结算一致。
+// 有 researchTarget（如 weapon_system）时优先沿该科技的前置链推进，
+// 避免 bot 在电磁学上把所有矩阵烧光、整局拿不到武器/炮塔；否则按等级、ID 顺序。
 func (gc *GameCore) botNextResearchTech(player *model.PlayerState, tuning botTuning) (string, bool) {
 	if player == nil || player.Tech == nil || player.Tech.CurrentResearch != nil {
 		return "", false
@@ -1114,7 +1204,8 @@ func (gc *GameCore) botNextResearchTech(player *model.PlayerState, tuning botTun
 		return "", false
 	}
 	storageOf := researchLabStorageResolver(gc.worlds, labs)
-	for _, def := range model.AllTechDefinitions() {
+	candidates := botResearchCandidates(tuning)
+	for _, def := range candidates {
 		if def == nil || def.Hidden || queued[def.ID] {
 			continue
 		}
@@ -1134,13 +1225,63 @@ func (gc *GameCore) botNextResearchTech(player *model.PlayerState, tuning botTun
 		} else if def.MaxLevel > 0 && player.Tech.CompletedTechs[def.ID] >= def.MaxLevel {
 			continue
 		}
-		cost := def.CostForLevel(player.Tech.CompletedTechs[def.ID] + 1)
+		cost := model.ScaledResearchCost(def.CostForLevel(player.Tech.CompletedTechs[def.ID]+1), player.Tech.ResearchPace)
 		if !botLabsCoverCost(labs, cost, storageOf) {
 			continue
 		}
 		return def.ID, true
 	}
 	return "", false
+}
+
+// botResearchCandidates 研究候选顺序：先按 researchTarget 的前置链推进，
+// 链上科技全部完成后回到目录默认顺序（等级、ID）。
+func botResearchCandidates(tuning botTuning) []*model.TechDefinition {
+	all := model.AllTechDefinitions()
+	if tuning.researchTarget == "" {
+		return all
+	}
+	chain := botResearchChain(tuning.researchTarget)
+	if len(chain) == 0 {
+		return all
+	}
+	inChain := make(map[string]bool, len(chain))
+	out := make([]*model.TechDefinition, 0, len(all))
+	for _, id := range chain {
+		if def, ok := model.TechDefinitionByID(id); ok && def != nil {
+			inChain[id] = true
+			out = append(out, def)
+		}
+	}
+	for _, def := range all {
+		if def != nil && !inChain[def.ID] {
+			out = append(out, def)
+		}
+	}
+	return out
+}
+
+// botResearchChain 返回 target 及其全部前置（递归），顺序为目标优先、前置随后。
+func botResearchChain(target string) []string {
+	var chain []string
+	seen := make(map[string]bool)
+	var walk func(id string)
+	walk = func(id string) {
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		def, ok := model.TechDefinitionByID(id)
+		if !ok || def == nil {
+			return
+		}
+		chain = append(chain, id)
+		for _, prereq := range def.Prerequisites {
+			walk(prereq)
+		}
+	}
+	walk(target)
+	return chain
 }
 
 func botLabsCoverCost(labs []*model.Building, cost []model.ItemAmount, storageOf func(*model.Building) *model.StorageState) bool {
@@ -1244,7 +1385,9 @@ func botConstructRadius(ws *model.WorldState, playerID string, ctx *botSurvey) i
 }
 
 // botBuildSpotNear 基地附近的可建格（由内向外扫描），跳过在建格。
-func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int) *model.Position {
+// 建造会围死地面单位（含己方机甲）的格子同样跳过：bot 不再反复发注定被拒的
+// 建造命令（试玩报告 I），复用与 execBuild 相同的 buildingEnclosure 校验。
+func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, btype model.BuildingType) *model.Position {
 	if maxRadius < 1 {
 		return nil
 	}
@@ -1272,6 +1415,10 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int) 
 				continue
 			}
 			if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(candidate.X, candidate.Y)) {
+				continue
+			}
+			// 复用围死校验：跳过会把地面单位四周堵死的格子。
+			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
 				continue
 			}
 			c := candidate

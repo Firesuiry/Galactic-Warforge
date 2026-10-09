@@ -22,6 +22,7 @@ import {
   type BuildCatalogEntryView,
 } from '@/features/planet-map/build-workflow';
 import { getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
+import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -32,6 +33,11 @@ interface PlanetBuildBarProps {
   planet: PlanetRenderView;
   summary?: StateSummary;
   dimensional?: boolean;
+  /**
+   * 收起态把手被点开时的回调（PlanetPage 用它在窄屏下同时收起抽屉）。
+   * 建造栏与覆盖式抽屉在窄屏抢同一块空间，展开建造栏必须让抽屉让位，否则必然重叠。
+   */
+  onExpand?: () => void;
 }
 
 function formatCost(entry: BuildCatalogEntryView) {
@@ -49,21 +55,25 @@ function formatCost(entry: BuildCatalogEntryView) {
   return parts.join(' ');
 }
 
-/** 锁定卡的解锁条件提示：catalog 缺科技名时回退 tech id。 */
-function formatUnlockCondition(catalog: CatalogView | undefined, entry: BuildCatalogEntryView) {
-  const techIds = entry.unlock_tech?.filter(Boolean) ?? [];
-  if (techIds.length === 0) {
+/** 锁定卡的解锁条件提示：任一未完成科技即可解锁（与服务端 any 语义一致），目录缺科技名时回退 tech id。 */
+function formatUnlockCondition(catalog: CatalogView | undefined, entry: BuildCatalogEntryView, completedTechIds: ReadonlySet<string>) {
+  const missing = missingUnlockTechIds(entry.unlock_tech, completedTechIds);
+  if (missing.length === 0) {
     return '';
   }
-  return techIds.map((techId) => getTechDisplayName(catalog, techId)).join('、');
+  return missing.map((techId) => getTechDisplayName(catalog, techId)).join(' 或 ');
 }
 
-export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }: PlanetBuildBarProps) {
+export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, onExpand }: PlanetBuildBarProps) {
   const session = useSessionSnapshot();
   const interactionMode = usePlanetViewStore((state) => state.interactionMode);
   const setInteractionMode = usePlanetViewStore((state) => state.setInteractionMode);
   const exitInteractionMode = usePlanetViewStore((state) => state.exitInteractionMode);
   const [showLocked, setShowLocked] = useState(false);
+  // 建造栏收起（贴底为一行把手）：右侧工作台抽屉是覆盖式的，展开的建造栏会盖住抽屉底部
+  // 区域（试玩报告：抽屉里的「进阶：长线发展路线」点不到，命中被建造栏的造价 span 拦走）。
+  const docked = usePlanetViewStore((state) => state.buildBarDocked);
+  const setBuildBarDocked = usePlanetViewStore((state) => state.setBuildBarDocked);
   // 悬停/聚焦的卡片：造价详情浮在建造栏上方（卡片滚动容器会裁掉卡内浮层）。
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   // 新建筑（兵营/补给站/战车工厂等）尚无预渲染缩略图：加载失败则退回图标
@@ -83,13 +93,16 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
   const buildDirection = interactionMode.kind === 'build' ? interactionMode.direction : 'auto';
   // 生产类建造模式：可在建造时指定配方（无配方 = 服务端默认行为，如 matrix_lab 作研究站）。
   const activeRecipeId = interactionMode.kind === 'build' ? interactionMode.recipeId : undefined;
+  const completedTechIds = useMemo(
+    () => new Set(normalizeCompletedTechIds(summary?.players?.[session.playerId]?.tech)),
+    [summary, session.playerId],
+  );
   const availableRecipes = useMemo(() => {
     if (!buildMode || !activeBuildingType) {
       return [];
     }
-    const completedTechIds = normalizeCompletedTechIds(summary?.players?.[session.playerId]?.tech);
     return listBuildingRecipes(catalog, activeBuildingType, completedTechIds);
-  }, [buildMode, activeBuildingType, catalog, summary, session.playerId]);
+  }, [buildMode, activeBuildingType, catalog, completedTechIds]);
 
   const cycleBeltDirection = () => {
     const mode = usePlanetViewStore.getState().interactionMode;
@@ -155,10 +168,28 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
     return null;
   }
 
+  // 收起态：只留一行把手，避免遮挡右侧抽屉底部。
+  if (docked) {
+    return (
+      <div className="planet-build-bar planet-build-bar--docked" data-testid="planet-build-bar">
+        <button
+          className="planet-build-bar__dock-handle"
+          onClick={() => {
+            setBuildBarDocked(false);
+            onExpand?.();
+          }}
+          type="button"
+        >
+          建造栏
+        </button>
+      </div>
+    );
+  }
+
   const detailEntry = visibleEntries.find((entry) => entry.id === (hoveredId ?? activeBuildingType));
   const detail = detailEntry ? (() => {
     const locked = detailEntry.visibility === 'locked' || detailEntry.visibility === 'debugOnly';
-    const unlockCondition = locked ? formatUnlockCondition(catalog, detailEntry) : '';
+    const unlockCondition = locked ? formatUnlockCondition(catalog, detailEntry, completedTechIds) : '';
     const mineralCost = detailEntry.build_cost?.minerals ?? 0;
     return (
       <div className="planet-build-bar__detail" role="tooltip" data-testid="planet-build-detail">
@@ -199,7 +230,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
                 const itemsShort = items.some((item) => item.short);
                 const mineralsShort = mineralsBalance !== undefined && mineralsBalance < mineralCost;
                 const unaffordable = !locked && (mineralsShort || itemsShort);
-                const unlockCondition = locked ? formatUnlockCondition(catalog, entry) : '';
+                const unlockCondition = locked ? formatUnlockCondition(catalog, entry, completedTechIds) : '';
                 const itemText = items.map((item) => `${getItemDisplayName(catalog, item.item_id)} ${item.owned}/${item.quantity}${item.short ? '（不足）' : ''}`).join('、');
                 const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（拥有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需要科技：${unlockCondition}` : ''}` : ''}${mineralsShort && !locked ? ` · 矿不足：需要 ${mineralCost} / 现有 ${mineralsBalance}` : ''}`;
                 return (
@@ -254,6 +285,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
                             className={`planet-build-card__item${item.short ? ' planet-build-card__item--short' : ''}`}
                           >
                             <Icon iconKey={item.item_id} size={10} />
+                            <span className="planet-build-card__item-name">{getItemDisplayName(catalog, item.item_id)}</span>
                             {item.owned}/{item.quantity}
                           </span>
                         ))}
@@ -301,6 +333,14 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false }
             </select>
           ) : null}
         </div>
+        <button
+          className="planet-build-bar__dock"
+          type="button"
+          onClick={() => setBuildBarDocked(true)}
+          title="收起建造栏（避免遮挡右侧工作台）"
+        >
+          收起
+        </button>
         <button
           className="planet-build-bar__toggle"
           type="button"

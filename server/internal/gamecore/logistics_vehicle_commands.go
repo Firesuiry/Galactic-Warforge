@@ -103,5 +103,5 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 		}
 		station.RefreshCapacityCache()
 	}
-	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已在 %[3]s 安装 %[1]d 个 %[2]s", quantity, itemID, building.ID)}, nil
+	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已在%s安装 %d 个「%s」", buildingDisplayName(building), quantity, itemDisplayName(itemID))}, nil
 }

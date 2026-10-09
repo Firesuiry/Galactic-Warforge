@@ -9,7 +9,13 @@ battlefield:
   victory_rule: "elimination"
   enemy_difficulty: "normal"
   construction_region_concurrent_limit: 4
-  pace_research: 6
+  # 研究倍率 2：目录基准成本（电磁学 10 个电磁矩阵）×2 = 20 个。
+  # 目标区间（熟练玩家，产线摆好、持续供料）：
+  #   电磁学约 tick 5000–8000 完成；武器系统（基准 20 → 40 个）连同
+  #   自动化冶金/基础制造前置链，约 tick 12000–18000 拿到炮塔，
+  #   即 bot 首攻（bot_first_attack_tick 16000）前后玩家已有防御。
+  # 旧的 6 倍（电磁学 60 个）在 60–90 分钟一局里根本完不成任何科技。
+  pace_research: 2
   pace_build: 2
   pace_output: 2
   time_limit_ticks: 54000

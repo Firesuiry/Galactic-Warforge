@@ -119,7 +119,7 @@ func TestTechCostForPlayerReflectsNextLevel(t *testing.T) {
 	player := ws.Players["p1"]
 	grantTechs(ws, "p1", "mecha_core")
 
-	cost, ok := TechCostForPlayer(player, "drive_engine")
+	cost, ok := model.TechCostForPlayer(player, "drive_engine")
 	if !ok {
 		t.Fatal("TechCostForPlayer drive_engine not ok")
 	}
@@ -132,7 +132,7 @@ func TestTechCostForPlayerReflectsNextLevel(t *testing.T) {
 	}
 
 	grantTechs(ws, "p1", "drive_engine") // 已完成 1 级 → 下一级为 L2
-	cost, ok = TechCostForPlayer(player, "drive_engine")
+	cost, ok = model.TechCostForPlayer(player, "drive_engine")
 	if !ok {
 		t.Fatal("TechCostForPlayer drive_engine L2 not ok")
 	}

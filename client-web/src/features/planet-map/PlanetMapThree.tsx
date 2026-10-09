@@ -58,6 +58,8 @@ export function PlanetMapThree(props: Props) {
   const [ready, setReady] = useState(false);
   const [tilt, setTilt] = useState(0.65);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
+  // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
+  const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
   // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
   const beltDrag = useRef<{ tile: TilePoint; placed: Set<string> } | null>(null);
   function placeBelt(tile: TilePoint, direction?: 'north' | 'east' | 'south' | 'west') {
@@ -148,12 +150,29 @@ export function PlanetMapThree(props: Props) {
         const current = latest.current;
         const store = usePlanetViewStore.getState();
         const fog = current.fog;
-        // 迷雾格不能查看/建造（点击改为聚焦）；移动、进攻、军团等落点命令照常下达。
         const kind = store.interactionMode.kind;
-        if ((kind === 'inspect' || kind === 'build') && fog && !getFogState(fog, tile.x, tile.y).visible) {
-          store.requestFocus(tile);
+        // 迷雾格只用于「看」和「建」，但即使不可见也要先尝试选中格上的实体（资源/建筑/单位），
+        // 再决定是否聚焦——早期实现直接 requestFocus，把镜头推进未探索区，
+        // 那里没有地形浮雕也没有实体，画面变成一片空白，玩家还会以为游戏崩了。
+        if (kind === 'build' && fog && !getFogState(fog, tile.x, tile.y).visible) {
+          // 未探索区不本地拦截：客户端没有该格地形，是否可建由服务端判定（试玩 1009 F）。
+          // 照常下发建造命令，以服务端回执为准。
+          setFogNotice(null);
+          current.onInteractTile?.(tile);
           return;
         }
+        if (kind === 'inspect' && fog && !getFogState(fog, tile.x, tile.y).visible) {
+          const hidden = resolveSelectionAtTile(current.planet, tile.x, tile.y);
+          if (hidden && hidden.kind !== 'tile') {
+            store.setSelected(hidden);
+            store.setSelectedUnits(hidden.kind === 'unit' ? [hidden.id] : []);
+            setFogNotice(null);
+            return;
+          }
+          setFogNotice(tile);
+          return;
+        }
+        setFogNotice(null);
         if (store.interactionMode.kind !== 'inspect') current.onInteractTile?.(tile);
         else {
           const selection = resolveSelectionAtTile(current.planet, tile.x, tile.y, store.selected)
@@ -400,6 +419,11 @@ export function PlanetMapThree(props: Props) {
     ) : null}
     {!marqueeRect && <PlanetHoverTip containerRef={root} info={hoverInfo} />}
     {error && <div role="alert" className="planet-three__error">{error}</div>}
+    {fogNotice && !error ? (
+      <div className="planet-three__fog-notice" role="status">
+        该区域尚未探索（{fogNotice.x}, {fogNotice.y}）：不能查看详情或建造，可派单位移动/进攻过去开视野
+      </div>
+    ) : null}
     <div className="planet-three__navigation" aria-label="3D 视角控制">
       <div>
         <button className="secondary-button" onClick={() => scene.current?.orbit()}>全球视角</button>

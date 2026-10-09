@@ -141,3 +141,44 @@ describe('PlanetMapPixi 交互（拖拽/缩放/点选）', () => {
     expect(selected && 'id' in selected ? selected.id : '').toBe('miner-1');
   });
 });
+
+describe('视口量测：路由转场 scale 不影响初始相机', () => {
+  afterEach(() => {
+    resetSessionStore();
+    resetPlanetViewStore();
+  });
+
+  it('用布局尺寸（clientWidth）而不是被祖先 transform 缩放的 rect 结算视口', async () => {
+    seedStores();
+    // 路由转场 `.page-shell { animation: page-enter }` 的 scale(0.992) 会让
+    // getBoundingClientRect() 返回亚像素宽度；clientWidth 是布局尺寸，不受影响。
+    const planet = getFixtureScenario('baseline').planets['planet-1-1'];
+    // 捕获组件注册的 ResizeObserver 回调，用它模拟“布局盒变化”的一次重测。
+    const observers: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { observers.push(callback); }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
+    try {
+      render(createElement(PlanetMapPixi, { planet, fog: buildFullyVisibleFog() }));
+      const viewport = document.querySelector('.planet-map-canvas__viewport') as HTMLElement | null;
+      expect(viewport).not.toBeNull();
+      Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 1188 });
+      Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 974 });
+      // 路由转场 scale(0.992) 下 getBoundingClientRect 会给出亚像素（偏小）尺寸；
+      // 视口必须按布局尺寸结算，否则初始相机会随量测时机漂移。
+      vi.spyOn(viewport!, 'getBoundingClientRect').mockReturnValue({
+        width: 1178.9, height: 966.2, x: 0, y: 0, top: 0, right: 0, bottom: 0, left: 0, toJSON: () => ({}),
+      } as DOMRect);
+      await act(async () => {
+        for (const notify of observers) notify();
+      });
+      expect(usePlanetViewStore.getState().mapProjection.viewportWidth).toBe(1188);
+      expect(usePlanetViewStore.getState().mapProjection.viewportHeight).toBe(974);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

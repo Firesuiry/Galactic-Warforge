@@ -206,6 +206,21 @@ describe('PlanetSelectionBar', () => {
     await user.click(screen.getByRole('button', { name: '详情' }));
     expect(onShowDetail).toHaveBeenCalledTimes(1);
   });
+
+  it('单位选中时保留"详情"入口（抽屉盖住选择条时的备用通道）', async () => {
+    const user = userEvent.setup();
+    const onShowDetail = vi.fn();
+    usePlanetViewStore.getState().setSelected({
+      kind: 'unit',
+      id: 'u-1',
+      position: { x: 1, y: 1, z: 0 },
+    });
+    usePlanetViewStore.getState().setSelectedUnits(['u-1']);
+    render(<PlanetSelectionBar catalog={catalog} onShowDetail={onShowDetail} planet={makePlanet()} />);
+
+    await user.click(screen.getByRole('button', { name: '详情' }));
+    expect(onShowDetail).toHaveBeenCalledTimes(1);
+  });
 });
 
 function miningPlanet(): PlanetRenderView {

@@ -1,7 +1,8 @@
 /**
  * 全局事件通知 store（zustand）：
  * - toasts：当前可见的 toast 栈（上限 MAX_VISIBLE_TOASTS 条，超出挤掉最旧的）；
- * - history：最近 HISTORY_SIZE 条环形历史（铃铛面板用，不持久化）；
+ * - history：最近 HISTORY_SIZE 条环形历史（铃铛面板用）；store 本身不碰存储，
+ *   刷新后的恢复由 persistence.ts 按会话写入 sessionStorage（见该文件头注释）；
  * - unread：未读计数（铃铛角标），打开历史面板时清零。
  *
  * 消退模型：push 时记录 expiresAt = now + TOAST_TTL_MS，组件周期性 sweep(now)
@@ -101,12 +102,32 @@ const initialState: NotificationsState = {
   lastShown: {},
 };
 
+/**
+ * 历史条目插入（最新在前，上限 HISTORY_SIZE）。
+ * 同 id 覆盖；否则同 mergeKey 合并计数（同一建筑的同类告警不刷屏：
+ * 服务端持续告警每 3000 tick 提醒一次，历史面板只保留一条带 ×N）。
+ */
 function upsertHistory(history: Toast[], toast: Toast): Toast[] {
   const index = history.findIndex((entry) => entry.id === toast.id);
-  const next = index >= 0
-    ? history.map((entry) => (entry.id === toast.id ? toast : entry))
-    : [toast, ...history];
-  return next.slice(0, HISTORY_SIZE);
+  if (index >= 0) {
+    const next = history.map((entry) => (entry.id === toast.id ? toast : entry));
+    return next.slice(0, HISTORY_SIZE);
+  }
+  const mergedIndex = toast.mergeKey
+    ? history.findIndex((entry) => entry.mergeKey === toast.mergeKey)
+    : -1;
+  if (mergedIndex >= 0) {
+    const previous = history[mergedIndex];
+    const merged: Toast = {
+      ...toast,
+      id: previous.id,
+      count: previous.count + (toast.count > 0 ? toast.count : 1),
+      leaving: true,
+    };
+    const next = [merged, ...history.filter((_, position) => position !== mergedIndex)];
+    return next.slice(0, HISTORY_SIZE);
+  }
+  return [toast, ...history].slice(0, HISTORY_SIZE);
 }
 
 export const useNotificationsStore = create<NotificationsStore>()((set, get) => ({

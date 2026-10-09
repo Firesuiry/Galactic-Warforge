@@ -58,22 +58,22 @@ test('顶栏矿产位显示 minerals 余额，建造卡片名全部本地化', a
   }
   await expect(page.locator('.planet-build-card', { hasText: '风力涡轮机' })).toBeVisible();
 
-  // 卡片 title 含成本；余额充足时可用
+  // 卡片成本文案在 aria-label（title 已移除，改用悬浮详情）
   const windCard = page.locator('.planet-build-card[data-building-id="wind_turbine"]');
-  await expect(windCard).toHaveAttribute('title', /风力涡轮机 · 矿 \d+/);
+  await expect(windCard).toHaveAttribute('aria-label', /风力涡轮机 · 矿 \d+/);
   await expect(windCard).toBeEnabled();
 });
 
 test('选中建筑：迷你条显示库存摘要，自动切到选中对象页签展示本地存储', async ({ page, request }) => {
   await installSession(page);
-  // 战争服 p1 的 battlefield_analysis_base（战地分析基站），带 60 格本地存储
+  // 战争服 p1 的 battlefield_analysis_base（战场分析基站），带 60 格本地存储
   const baseId = await findOwnedBuildingId(request, 'battlefield_analysis_base');
   await page.goto(`${WEB_ENTRY}/planet/planet-1-1?view=2d&select=building:${baseId}`);
 
   // web-14：深链选中建筑 → 迷你条 + 侧栏"选中对象"页签
   const bar = page.locator('[data-testid="planet-selection-bar"]');
   await expect(bar).toBeVisible({ timeout: 30_000 });
-  await expect(bar).toContainText('战地分析基站');
+  await expect(bar).toContainText('战场分析基站');
   // 建筑有存储模块 → 迷你条出现库存/容量摘要行
   await expect(bar).toContainText(/容量 \d+\/60/, { timeout: 15_000 });
   await expect(bar.getByRole('button', { name: '详情' })).toBeVisible();

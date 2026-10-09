@@ -10,6 +10,10 @@ var (
 	techCatalogDerivedMu sync.Mutex
 	techCatalogDerived   atomic.Bool
 
+	recipeUnlockIndexMu sync.RWMutex
+	recipeUnlockIndex   map[string][]string
+	recipeUnlockIndexOK bool
+
 	buildingCatalogDerivedMu sync.Mutex
 	buildingCatalogDerived   bool
 )
@@ -18,6 +22,57 @@ var (
 func resetCatalogDerivations() {
 	techCatalogDerived.Store(false)
 	markBuildingCatalogDerivedDirty()
+	recipeUnlockIndexMu.Lock()
+	recipeUnlockIndexOK = false
+	recipeUnlockIndexMu.Unlock()
+}
+
+// TechsUnlockingRecipe 返回"解锁该配方的科技 ID"（含隐藏科技，与
+// AllTechDefinitions 遍历口径一致，顺序按科技等级/ID 排序）。
+// 供 CanUseRecipeTech 等每 tick 高频调用点 O(1) 查询。
+func TechsUnlockingRecipe(recipeID string) []string {
+	ensureRecipeUnlockIndex()
+	recipeUnlockIndexMu.RLock()
+	defer recipeUnlockIndexMu.RUnlock()
+	return recipeUnlockIndex[recipeID]
+}
+
+func ensureRecipeUnlockIndex() {
+	recipeUnlockIndexMu.RLock()
+	ok := recipeUnlockIndexOK
+	recipeUnlockIndexMu.RUnlock()
+	if ok {
+		return
+	}
+	recipeUnlockIndexMu.Lock()
+	defer recipeUnlockIndexMu.Unlock()
+	if recipeUnlockIndexOK {
+		return
+	}
+	index := make(map[string][]string, len(recipeCatalog))
+	if techCatalog != nil {
+		techCatalog.mu.RLock()
+		ids := make([]string, 0, len(techCatalog.techs))
+		for id := range techCatalog.techs {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			def := techCatalog.techs[id]
+			if def == nil {
+				continue
+			}
+			for _, unlock := range def.Unlocks {
+				if unlock.Type != TechUnlockRecipe || unlock.ID == "" {
+					continue
+				}
+				index[unlock.ID] = appendStringUnique(index[unlock.ID], id)
+			}
+		}
+		techCatalog.mu.RUnlock()
+	}
+	recipeUnlockIndex = index
+	recipeUnlockIndexOK = true
 }
 
 func ensureTechCatalogDerived() {

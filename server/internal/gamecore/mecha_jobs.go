@@ -192,6 +192,10 @@ func settleMechaJobs(ws *model.WorldState) []*model.GameEvent {
 
 func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.PlayerState) []*model.GameEvent {
 	job := unit.Mecha.Job
+	// 被自动防御暂停的手搓：保留进度与预留原料，等威胁消失后由交战结算恢复。
+	if job.Paused {
+		return nil
+	}
 	var node *model.ResourceNodeState
 	var recipe model.RecipeDefinition
 	switch job.Kind {

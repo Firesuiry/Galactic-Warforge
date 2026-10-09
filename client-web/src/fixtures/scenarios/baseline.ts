@@ -410,7 +410,7 @@ const planets: Record<string, PlanetView> = {
             footprint: { width: 2, height: 2 },
           },
           state: 'paused',
-          state_reason: 'power_low',
+          state_reason: 'under_power',
         },
         storage: {
           inventory: {
@@ -944,6 +944,8 @@ const catalog = {
       color: '#12b886',
     },
   ],
+  // 目录基准 pace=1（离线样例）；在线时 server 会按 pace_research 缩放 techs[].cost。
+  research_pace: 1,
 } satisfies CatalogView;
 
 const events = [
@@ -968,7 +970,7 @@ const events = [
       building_type: 'assembling_machine_mk1',
       prev_state: 'running',
       next_state: 'paused',
-      reason: 'power_low',
+      reason: 'under_power',
     },
   },
   {

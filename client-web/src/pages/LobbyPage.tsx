@@ -115,12 +115,12 @@ export function LobbyPage() {
         <article className="panel stat-card">
           <span className="stat-card__label">黑雾难度</span>
           <strong>{translateEnemyDifficulty(game.enemy_difficulty)}</strong>
-          <span>enemy_difficulty: {game.enemy_difficulty}</span>
+          <span>开局时确定，决定黑雾的强度与节奏</span>
         </article>
         <article className="panel stat-card">
           <span className="stat-card__label">胜利模式</span>
           <strong>{translateVictoryMode(game.victory_mode)}</strong>
-          <span>victory_mode: {game.victory_mode}</span>
+          <span>决定这局以什么条件分出胜负</span>
         </article>
         <article className="panel stat-card">
           <span className="stat-card__label">开始时间</span>
