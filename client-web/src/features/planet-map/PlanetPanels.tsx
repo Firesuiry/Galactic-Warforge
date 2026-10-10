@@ -677,6 +677,12 @@ interface PlanetEntityPanelProps {
   blueprints?: WarBlueprintDetailView[];
   /** C4：任务群列表（小队卡片的所属任务群展示）。 */
   taskForces?: WarTaskForceView[];
+  /**
+   * 跨场景窗口累积的己方单位（id → Unit，见 own-entity-cache）。
+   * `/scene` 只返回相机窗口内的实体：镜头移开后被选中的机甲会掉出 planet.units，
+   * 机甲面板/手搓表单不能因此整段卸载——只要仍被选中就保持可用（试玩 1014 问题 2）。
+   */
+  knownOwnUnits?: ReadonlyMap<string, Unit>;
 }
 
 export function PlanetEntityPanel({
@@ -689,6 +695,7 @@ export function PlanetEntityPanel({
   summary,
   blueprints,
   taskForces,
+  knownOwnUnits,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
   const { selected } = usePlanetViewStore(
@@ -697,7 +704,9 @@ export function PlanetEntityPanel({
     })),
   );
 
-  const entity = findSelectionEntity(planet, selected, runtime);
+  // 选中单位掉出相机窗口时回退到累积缓存：面板/手搓表单继续按「仍被选中」渲染（试玩 1014 问题 2）。
+  const selectedUnit = selected?.kind === "unit" ? planet.units?.[selected.id] ?? knownOwnUnits?.get(selected.id) : undefined;
+  const entity = selectedUnit ?? findSelectionEntity(planet, selected, runtime);
   const currentResearchId =
     Object.values(summary?.players ?? {}).find(
       (player) => player.tech?.current_research,
@@ -1191,8 +1200,15 @@ export function PlanetEntityPanel({
 
   if (selected.kind === "unit" && entity) {
     const unit = entity as Unit;
+    // 单位已不在相机窗口（用累积缓存渲染）：坐标是最后一次见到的位置，给一行说明避免误读。
+    const offWindow = !planet.units?.[unit.id];
     return (
       <div className="planet-panel-stack">
+        {offWindow ? (
+          <section className="planet-side-section">
+            <p className="subtle-text">单位不在当前镜头窗口：下面显示的是最后一次见到的状态，面板保持可用。</p>
+          </section>
+        ) : null}
         <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} />
         <section className="planet-side-section">
           <div className="section-title">单位详情</div>

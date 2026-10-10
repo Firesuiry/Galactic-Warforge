@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CatalogView } from "@shared/types";
+import type { CatalogView, Unit } from "@shared/types";
 
 import { usePlanetCommandStore } from "@/features/planet-commands/store";
 import {
@@ -510,14 +510,25 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(screen.getByRole("button", { name: "开始制造" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("缺少：铁块（背包 5 / 需要 9）");
 
-    // 单位落到场景窗口外：详情面板卸载机甲表单（旧实现连 useState 一起丢掉）。
+    // 回归（试玩 1014 问题 2）：单位落到场景窗口外，但仍在累积缓存里 → 面板保持可用，不整段卸载。
+    const known = new Map([["u-1", unit]]) as unknown as ReadonlyMap<string, Unit>;
+    act(() => {
+      rerender(<PlanetEntityPanel catalog={catalog} knownOwnUnits={known} planet={withoutUnit as never} summary={summary} />);
+    });
+    const offWindowSelect = screen.getByLabelText("个人制造配方") as HTMLSelectElement;
+    expect(offWindowSelect.value).toBe("smelt_magnet");
+    expect(screen.getByText(/单位不在当前镜头窗口/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始制造" })).toBeDisabled();
+
+    // 没有任何来源（不在窗口、也不在缓存）：仍然降级为「不可见」提示。
     act(() => {
       rerender(<PlanetEntityPanel catalog={catalog} planet={withoutUnit as never} summary={summary} />);
     });
     expect(screen.queryByLabelText("个人制造配方")).toBeNull();
+    expect(screen.getByText(/选中对象已不可见/)).toBeInTheDocument();
 
     act(() => {
-      rerender(<PlanetEntityPanel catalog={catalog} planet={withUnit as never} summary={summary} />);
+      rerender(<PlanetEntityPanel catalog={catalog} knownOwnUnits={known} planet={withUnit as never} summary={summary} />);
     });
     expect((screen.getByLabelText("个人制造配方") as HTMLSelectElement).value).toBe("smelt_magnet");
   });

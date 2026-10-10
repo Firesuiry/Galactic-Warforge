@@ -24,6 +24,7 @@ import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isSort
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
+import { PointerPress } from './pointer-press';
 import type { Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
 import { getBuildingCatalogEntry, getBuildingFootprint, getFogState, getItemCatalogEntry, getItemDisplayName, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
 import { isOwnStalledBuilding } from './power-status';
@@ -83,7 +84,8 @@ export class PlanetThreeScene {
   private frame = 0;
   private destroyed = false;
   private altitude = 300;
-  private down: { x: number; y: number; moved: boolean } | null = null;
+  /** 左键按下/抬起与指针捕获（画布外抬起、捕获丢失等异常序列的兜底收尾）。 */
+  private readonly press: PointerPress;
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly environment: THREE.WebGLRenderTarget;
@@ -200,13 +202,16 @@ export class PlanetThreeScene {
     const { sky, atmosphere } = createSpace(RADIUS, this.sunlight.position.clone().sub(this.sunlight.target.position).normalize());
     this.scene.add(sky); this.world.add(atmosphere);
     this.updateCamera();
+    this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
+      if (tap) { const tile = this.pick(event); if (tile) this.onPick(tile); }
+    });
     const canvas = this.renderer.domElement;
-    canvas.addEventListener('pointerdown', this.pointerDown);
     canvas.addEventListener('pointermove', this.pointerMove);
-    canvas.addEventListener('pointerup', this.pointerUp);
-    canvas.addEventListener('pointercancel', this.pointerCancel);
     canvas.addEventListener('pointerleave', this.pointerLeave);
     canvas.addEventListener('wheel', this.wheel, { passive: false });
+    // 左键按下/抬起状态与指针捕获由 PointerPress 统一收尾（画布外抬起、捕获丢失、window blur
+    // 都不会让按下状态粘住——粘住会让之后所有点击被当成拖拽，见 pointer-press.ts）。
+    this.press.attach();
     this.observer = new ResizeObserver(this.resize);
     this.observer.observe(host);
     this.resize();
@@ -1009,23 +1014,18 @@ export class PlanetThreeScene {
     }
     return null;
   }
-  private pick(event: PointerEvent) {
+  private pick(event: { clientX: number; clientY: number }) {
     return this.pickAtCoords(event.clientX, event.clientY);
   }
-  private pointerDown = (event: PointerEvent) => {
-    if (event.button !== 0) return;
-    this.down = { x: event.clientX, y: event.clientY, moved: false };
-    this.renderer.domElement.setPointerCapture(event.pointerId);
-  };
   private pointerMove = (event: PointerEvent) => {
-    if (this.down) {
-      const dx = event.clientX - this.down.x, dy = event.clientY - this.down.y;
-      if (Math.abs(dx) + Math.abs(dy) > 3 || this.down.moved) {
-        this.down.moved = true;
+    const press = this.press.press;
+    if (press) {
+      const dx = event.clientX - press.x, dy = event.clientY - press.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3 || press.moved) {
+        this.press.markMoved(event.clientX, event.clientY);
         const sensitivity = Math.min(0.006, this.altitude / Math.max(this.host.clientHeight, 1) / RADIUS * 0.9);
         const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(dy * sensitivity, dx * sensitivity, 0));
         this.world.quaternion.premultiply(rotation);
-        this.down.x = event.clientX; this.down.y = event.clientY;
         this.emitHover(null);
       }
     } else {
@@ -1036,7 +1036,7 @@ export class PlanetThreeScene {
   /** 节流后的悬停拾取：只在格子变化时通知，避免每次指针移动都触发 store 更新与标记重建。 */
   private flushHover = () => {
     this.hoverTimer = 0;
-    if (this.destroyed || !this.hoverPoint || this.down?.moved) return;
+    if (this.destroyed || !this.hoverPoint || this.press.press?.moved) return;
     this.emitHover(this.pickAtCoords(this.hoverPoint.x, this.hoverPoint.y));
   };
   private emitHover(tile: TilePoint | null) {
@@ -1044,12 +1044,6 @@ export class PlanetThreeScene {
     this.lastHover = tile;
     this.onHover(tile);
   }
-  private pointerUp = (event: PointerEvent) => {
-    if (this.down && !this.down.moved) { const tile = this.pick(event); if (tile) this.onPick(tile); }
-    this.down = null;
-    if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
-  };
-  private pointerCancel = () => { this.down = null; };
   private pointerLeave = () => { this.hoverPoint = null; this.emitHover(null); };
   private wheel = (event: WheelEvent) => { event.preventDefault(); this.zoom(Math.exp(-event.deltaY * 0.0015)); };
   private animate = (time: number) => {
@@ -1098,10 +1092,8 @@ export class PlanetThreeScene {
     this.commandMarkers.dispose();
     this.observer.disconnect();
     const canvas = this.renderer.domElement;
-    canvas.removeEventListener('pointerdown', this.pointerDown);
+    this.press.detach();
     canvas.removeEventListener('pointermove', this.pointerMove);
-    canvas.removeEventListener('pointerup', this.pointerUp);
-    canvas.removeEventListener('pointercancel', this.pointerCancel);
     canvas.removeEventListener('pointerleave', this.pointerLeave);
     canvas.removeEventListener('wheel', this.wheel);
     this.staticBatches.dispose();

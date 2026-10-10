@@ -745,6 +745,7 @@ export function PlanetPage() {
               blueprints={warBlueprintsQuery.data?.blueprints}
               catalog={catalog}
               fog={planet}
+              knownOwnUnits={knownOwnUnits}
               networks={networks}
               planet={planet}
               runtime={runtime}
