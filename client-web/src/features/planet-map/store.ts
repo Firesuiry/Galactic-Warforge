@@ -383,6 +383,14 @@ interface PlanetViewState {
   debugOpen: boolean;
   /** 建造栏是否收起为一行把手（覆盖式抽屉打开时避免遮挡抽屉底部）。 */
   buildBarDocked: boolean;
+  /**
+   * 个人制造（手搓）下拉框选中的配方 id。
+   *
+   * 存在 store 而不是 MechaControls 的 useState：详情面板会随「选中单位是否落在
+   * 场景窗口内」卸载重挂，组件内 state 会丢，下拉框于是跳回第一个可用配方，
+   * 玩家刚选的配方连同「开始制造」一起失效（试玩 1013 bug-1013-2）。
+   */
+  craftRecipeId: string;
   focusRequest: FocusRequest | null;
   zoomRequest: ZoomRequest | null;
   mapProjection: PlanetMapProjection;
@@ -401,6 +409,8 @@ interface PlanetViewActions {
   setHoveredTile: (tile: TilePoint | null) => void;
   /** 收起/展开底部建造栏（收起后只留一行把手）。 */
   setBuildBarDocked: (docked: boolean) => void;
+  /** 记录玩家在手搓下拉框里选中的配方（跨详情面板卸载保留）。 */
+  setCraftRecipeId: (recipeId: string) => void;
   setSelected: (selection: SelectedEntity | null) => void;
   /** 设置多选单位（框选/编队/双击同类；调用侧负责过滤己方与存活）。 */
   setSelectedUnits: (unitIds: string[]) => void;
@@ -491,6 +501,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     lastFullSyncAt: null,
     debugOpen: false,
     buildBarDocked: false,
+    craftRecipeId: '',
     focusRequest: null,
     zoomRequest: null,
     mapProjection: { viewportWidth: 0, viewportHeight: 0, tileSize: 0 },
@@ -526,6 +537,9 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   },
   setBuildBarDocked: (buildBarDocked) => {
     set({ buildBarDocked });
+  },
+  setCraftRecipeId: (craftRecipeId) => {
+    set({ craftRecipeId });
   },
   setSelected: (selected) => {
     set({ selected });
@@ -710,6 +724,7 @@ export function resetPlanetViewStore() {
     toggleLayer: usePlanetViewStore.getState().toggleLayer,
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setBuildBarDocked: usePlanetViewStore.getState().setBuildBarDocked,
+    setCraftRecipeId: usePlanetViewStore.getState().setCraftRecipeId,
     setSelected: usePlanetViewStore.getState().setSelected,
     setSelectedUnits: usePlanetViewStore.getState().setSelectedUnits,
     setSelectedSquads: usePlanetViewStore.getState().setSelectedSquads,

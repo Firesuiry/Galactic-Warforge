@@ -12,6 +12,17 @@ const RESEARCH_STATION_BUILDING_TYPES = new Set([
   'self_evolution_lab',
 ]);
 
+/**
+ * 是否为研究站类建筑（matrix_lab / self_evolution_lab）。
+ *
+ * 服务端 isResearchLab 的判定还要看 Research 功能模块与空配方；界面上的
+ * 「给研究站装料 / 研究站切配方会退出研究」这类提示只按建筑类型走，
+ * 与产线告警的过滤口径一致（同一份名单，避免两处漂移）。
+ */
+export function isResearchStationBuildingType(buildingType: string | undefined): boolean {
+  return Boolean(buildingType && RESEARCH_STATION_BUILDING_TYPES.has(buildingType));
+}
+
 /** 产线吞吐类告警（断电类 power_shortage / power_low 不在其列，仍保留）。 */
 const THROUGHPUT_ALERT_TYPES = new Set([
   'throughput_drop',

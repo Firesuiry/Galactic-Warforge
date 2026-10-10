@@ -47,6 +47,18 @@ function notifyCommandFailure(commandType: string, playerMessage: string, href?:
 }
 
 export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
+  // 下发前先写一条本地占位：请求在途时「最新反馈」立刻变成这条命令，
+  // 不再残留上一条命令的结果（试玩 1013 H）。回执到达后按 localRequestId 原位替换。
+  const localRequestId = createLocalRequestId(input.commandType);
+  usePlanetCommandStore.getState().addJournalEntry({
+    requestId: localRequestId,
+    commandType: input.commandType,
+    planetId: input.planetId,
+    status: "pending",
+    acceptedMessage: `${translateCommandType(input.commandType)}已提交，等待服务器确认…`,
+    focus: input.focus,
+    pendingRecovery: false,
+  });
   try {
     const response = await input.execute();
     usePlanetCommandStore.getState().reconcileAcceptedResponse({
@@ -54,6 +66,7 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       planetId: input.planetId,
       response,
       focus: input.focus,
+      localRequestId,
     });
 
     // 与战争页对齐：HTTP 接受/拒绝即刻反馈，不等权威回写。
@@ -106,8 +119,9 @@ export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {
       ? error.message
       : `${input.commandType} failed`;
     const playerMessage = toPlayerFacingMessage(rawMessage);
+    // 原位把占位条目改成失败，保持它在队列里的位置（提交失败也是一次「本次操作」的结论）。
     usePlanetCommandStore.getState().addJournalEntry({
-      requestId: createLocalRequestId(input.commandType),
+      requestId: localRequestId,
       commandType: input.commandType,
       planetId: input.planetId,
       status: "failed",
