@@ -45,6 +45,10 @@ import type {
   RollbackResponse,
   SaveRequest,
   SaveResponse,
+  CheckpointListView,
+  CheckpointLoadResult,
+  CheckpointSaveRequest,
+  CheckpointSummary,
   AgentBriefing,
   StateSummary,
   SystemRuntimeView,
@@ -551,6 +555,24 @@ export function createApiClient(options: ApiClientOptions) {
     return apiFetch<SaveResponse>('/save', {
       method: 'POST',
       body: JSON.stringify(request),
+    });
+  }
+
+  // 命名存档点：列表任意登录玩家可查，创建/加载仅 role=admin。
+  function fetchCheckpoints(): Promise<CheckpointListView> {
+    return apiFetch<CheckpointListView>('/checkpoints');
+  }
+
+  function saveCheckpoint(request: CheckpointSaveRequest): Promise<CheckpointSummary> {
+    return apiFetch<CheckpointSummary>('/checkpoints', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  function loadCheckpoint(name: string): Promise<CheckpointLoadResult> {
+    return apiFetch<CheckpointLoadResult>(`/checkpoints/${encodeURIComponent(name)}/load`, {
+      method: 'POST',
     });
   }
 
@@ -1309,6 +1331,7 @@ export function createApiClient(options: ApiClientOptions) {
     fetchAlertSnapshot,
     fetchAudit,
     fetchCatalog,
+    fetchCheckpoints,
     fetchCommandCatalog,
     fetchCurrentGame,
     fetchEventSnapshot,
@@ -1336,6 +1359,8 @@ export function createApiClient(options: ApiClientOptions) {
     fetchWarTheaters,
     getAuth,
     getServerUrl,
+    loadCheckpoint,
+    saveCheckpoint,
     sendCommandRequest,
     sendCommands,
     sendReplay,

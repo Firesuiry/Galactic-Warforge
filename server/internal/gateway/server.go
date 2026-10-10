@@ -126,6 +126,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /games/current", s.auth(s.handleGameCurrent))
 	mux.HandleFunc("POST /games/new", s.auth(s.handleGameNew))
 
+	// 命名存档点：列表登录即可，创建/加载仅 admin。
+	mux.HandleFunc("GET /checkpoints", s.auth(s.handleCheckpointList))
+	mux.HandleFunc("POST /checkpoints", s.auth(s.handleCheckpointSave))
+	mux.HandleFunc("POST /checkpoints/{name}/load", s.auth(s.handleCheckpointLoad))
+
 	// SSE event stream
 	mux.HandleFunc("GET /events/stream", s.auth(s.handleEventStream))
 	// Event snapshot

@@ -17,7 +17,7 @@
 | --- | --- |
 | 400 | 请求体/参数非法 |
 | 401 | 缺少或无效的 Bearer key（热重置后旧 key 也返回 401） |
-| 403 | 越权：`issuer_id` 与鉴权玩家不一致；`/save` `/rollback` `/games/new` 非 `role=admin` |
+| 403 | 越权：`issuer_id` 与鉴权玩家不一致；`/save` `/rollback` `/games/new` `/checkpoints` 写接口非 `role=admin` |
 | 404 | 实体不存在或对当前玩家不可见 |
 | 429 | 超过每玩家命令速率限制（`server.rate_limit`） |
 | 500 | 存档写盘失败等内部错误 |
@@ -558,6 +558,54 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `players` 必填非空，`player_id` / `key` 必填且唯一；`role=admin|commander|observer`；`team_id` 缺省同名玩家配置，再缺省 `player_id`；`bot=easy|normal|hard`（空为人类，bot 走同一命令接口）；`bootstrap` 结构同 `config.yaml` 的 `players[].bootstrap`。
 - 语义：校验通过后先写新局 `meta.json` / `save.json`（失败 500，旧局不变）再原子切换；旧 key 立即 401，旧 SSE 被断开；并发请求串行执行，后到者覆盖。进程级配置不变。
 - 响应 `201`，结构同 `GET /games/current`（`tick=0`）。客户端须用新 key 重新登录、重新订阅 SSE 并全量拉取状态。
+
+### 6.9 命名存档点
+
+试玩加速：开局从某个命名存档点读档，跑一段后行为符合预期就存成新的存档点，下次从这里继续。
+存档点目录 `server.checkpoint_dir`（每个存档点一个子目录：`meta.json` + `save.json` + `manifest.json`）；未配置时三个接口都返回 `503`。存档点目录只读，读档不会改写它；当前对局的 `data_dir` 才是可写存档。
+
+名字规则：`^[a-z0-9][a-z0-9-]{0,63}$`；以 `bug-` 开头的存档点 `kind=bug`，其余 `kind=regression`。
+
+**`GET /checkpoints`**：任意登录玩家可调。
+- 响应：`checkpoint_dir` / `source`（当前对局的来源存档点名，新局与启动新建为空）/ `checkpoints[]`。
+- `checkpoints[]` 是 manifest 摘要 + `stale`（存档点的 `commit` 与当前二进制不同，或任一方 `dirty`）；读不出 manifest 的目录只带 `name` 与 `error`。
+
+**`POST /checkpoints`**（仅 admin）：把当前对局固化成命名存档点。
+
+```json
+{
+  "name": "base-ok",
+  "note": "开局 20 分钟后",
+  "replace": false,
+  "contract": { "checks": [ { "kind": "tick_gte", "tick": 1000 }, { "kind": "item_gte", "player": "p1", "item_id": "iron_ingot", "n": 5 } ] }
+}
+```
+
+- `name` 必填（规则同上）；同名已存在且未给 `replace` → `409`，`replace:true` 覆盖。
+- `contract` 可选，创建瞬间在服务端评估：**regression 存档点有任一谓词未通过就整体拒绝**（`400`，`contract_report` 带逐条 `actual`/`detail`），**bug 存档点只记录结果照存**。
+- 响应 `201`，是列表里的同构条目（manifest + `stale`）。manifest 含 `name` / `kind` / `parent`（当前对局的来源存档点名，新局为空）/ `tick` / `map_seed` / `players[]`（`player_id` / `role` / `key`，测试员用它登录）/ `commit` / `dirty`（来自二进制构建信息 `vcs.revision` / `vcs.modified`）/ `created_at` / `note` / `contract` / `contract_report`。
+
+谓词词表（每条可选 `player` 字段；缺省针对全体玩家，任一玩家满足即通过）：
+
+| kind | 字段 | 含义 |
+| --- | --- | --- |
+| `tick_gte` / `tick_lt` | `tick` | 当前 tick 与给定值比较 |
+| `game_not_finished` | — | 对局未宣判结束 |
+| `player_alive` | — | 玩家存活 |
+| `tech_researched` | `tech_id` | 已完成该科技（等级 > 0） |
+| `building_count_gte` | `type`, `n` | 存活建筑数 >= n |
+| `unit_count_gte` | `type`, `n` | 存活单位数 >= n（含机甲 `executor`） |
+| `item_gte` | `item_id`, `n` | 玩家可用物资 >= n |
+| `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
+| `enemy_attack_seen` | `bool` | 该玩家是否已被**敌方玩家**造成过伤害/损失（黑雾偷袭不算） |
+
+「玩家可用物资」口径：`PlayerState.Inventory`（就是机甲背包，采矿 / 手搓 / 战利品都落这里，也是 transfer / build 的扣料来源）；`minerals` / `energy` 是资源池，不在物品背包里。
+
+**`POST /checkpoints/{name}/load`**（仅 admin）：热加载存档点。
+- 按存档内的 `battlefield` / `players` 与固化的地图拓扑重建对局，写入 `data_dir` 作为当前局存档，原子替换当前对局（与 `POST /games/new` 同样的互斥与 autosave 处理）。
+- 响应 `200`：`manifest` / `warnings[]`（`stale` 时给出警告但**仍然加载**）/ `game`（结构同 `GET /games/current`，`started_at` 是新 Session 的创建时间）。
+- 与 `/games/new` 不同：**玩家 key 不变**，SSE 连接会被断开（旧 Session 关闭），客户端重新订阅并全量拉取即可。
+
 
 ## 7. SSE `GET /events/stream`
 

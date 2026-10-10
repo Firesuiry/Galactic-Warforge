@@ -129,6 +129,9 @@ type ServerConfig struct {
 	SnapshotMaxEvents int    `yaml:"snapshot_max_events"` // max events returned by snapshot endpoint
 	AlertHistoryLimit int    `yaml:"alert_history_limit"` // max production alerts kept for snapshot queries
 	DataDir           string `yaml:"data_dir"`            // single-game working directory (meta.json + save.json)
+	// CheckpointDir 命名存档点根目录：每个存档点一子目录（meta.json + save.json + manifest.json）。
+	// 为空时 /checkpoints 系列接口返回明确错误。
+	CheckpointDir string `yaml:"checkpoint_dir,omitempty"`
 	// GameDataDir 可选：游戏数据目录（items/recipes/techs/buildings/units/combat/war.yaml），
 	// 非空时整套替换内置的 server/data/ 默认数据，启动时校验失败即退出。
 	GameDataDir string `yaml:"game_data_dir,omitempty"`

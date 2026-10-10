@@ -1,3 +1,4 @@
+import type { GameSummary } from './game.js';
 // Mirror of Go model structs
 
 export interface Position {
@@ -2304,6 +2305,85 @@ export interface SaveResponse {
   saved_at: string;
   path: string;
   trigger: string;
+}
+
+/** 命名存档点：状态契约的单条谓词（服务端 checkpoint.ContractCheck）。 */
+export interface CheckpointContractCheck {
+  kind: string;
+  player?: string;
+  tick?: number;
+  tech_id?: string;
+  type?: string;
+  n?: number;
+  item_id?: string;
+  bool?: boolean;
+}
+
+export interface CheckpointContract {
+  checks: CheckpointContractCheck[];
+}
+
+export interface CheckpointContractResult {
+  check: CheckpointContractCheck;
+  passed: boolean;
+  actual: string;
+  detail?: string;
+}
+
+export interface CheckpointContractReport {
+  passed: boolean;
+  results: CheckpointContractResult[] | null;
+}
+
+/** 存档点里记录的玩家身份（含登录 key，测试员用它登录）。 */
+export interface CheckpointPlayer {
+  player_id: string;
+  role: string;
+  key: string;
+}
+
+export interface CheckpointManifest {
+  format_version: number;
+  name: string;
+  /** regression（默认，契约须全过）| bug（名字以 bug- 开头，只记录结果）。 */
+  kind: string;
+  parent?: string;
+  tick: number;
+  map_seed: string;
+  players: CheckpointPlayer[];
+  commit?: string;
+  dirty: boolean;
+  created_at: string;
+  note?: string;
+  contract: CheckpointContract;
+  contract_report: CheckpointContractReport;
+}
+
+/** GET /checkpoints 的条目：manifest + 相对当前二进制的 stale 标记。 */
+export interface CheckpointSummary extends CheckpointManifest {
+  stale: boolean;
+  /** 非空表示该目录的 manifest 读不出来。 */
+  error?: string;
+}
+
+export interface CheckpointListView {
+  checkpoint_dir: string;
+  /** 当前对局的来源存档点名：新局/启动新建为空。 */
+  source: string;
+  checkpoints: CheckpointSummary[];
+}
+
+export interface CheckpointSaveRequest {
+  name: string;
+  note?: string;
+  contract?: CheckpointContract;
+  replace?: boolean;
+}
+
+export interface CheckpointLoadResult {
+  manifest: CheckpointManifest;
+  warnings: string[];
+  game: GameSummary;
 }
 
 export interface ReplayDigest {

@@ -74,6 +74,9 @@ audit --player <id> --issuer-type <type> --issuer-id <id> --action <action> --re
 event_snapshot --types <a,b,c> --all --after-id <id> --since-tick <n> --limit <n>
 alert_snapshot --after-id <id> --since-tick <n> --limit <n>
 save [--reason <text>]                       # 刷新 server.data_dir 下的 save.json，不建多槽位
+checkpoint list                              # 列出命名存档点（任意登录玩家）
+checkpoint save <name> [--note <text>] [--contract <file.json>] [--replace]
+checkpoint load <name>                       # 热加载存档点
 replay --from <tick> --to <tick> --step --speed <n> --verify <true|false>
 rollback --to <tick>
 raw <json>                                   # 直接发送完整 /commands 请求体
@@ -95,6 +98,23 @@ game_new --players-file ./players.json
 - `--players`（或 `--players-file`）必填；`player_id`/`key` 必填且唯一，`role`/`team_id`/`bot`/`bootstrap` 语义同 `config.yaml`。
 - 成功后旧 key 全部失效，CLI 自动切到新局第一个 admin 并重连 SSE。
 - `game_status` 调 `GET /games/current`，打印 status/seed/tick/难度/胜利模式/玩家；`finished` 时打印胜者、原因、时长与战损。
+
+## 命名存档点（checkpoint）
+
+试玩加速：从某个存档点读档跑一段，行为符合预期就存成新存档点，下次继续。
+
+```bash
+checkpoint list
+checkpoint save base-ok --note "开局 20 分钟后" --contract ./contract.json
+checkpoint save bug-lost-miner --note "采矿机丢失"          # bug- 前缀：契约只记录不拦截
+checkpoint save base-ok --replace                           # 覆盖同名
+checkpoint load base-ok
+```
+
+- `checkpoint list` 调 `GET /checkpoints`，任意登录玩家可用；打印存档点目录、当前对局来源与每个存档点的 kind/tick/seed/parent/note 及 `stale` 标记。
+- `checkpoint save` 调 `POST /checkpoints`，**仅 `role=admin`**；名字须匹配 `[a-z0-9][a-z0-9-]{0,63}`，同名默认 409，`--replace` 覆盖。
+- `--contract <file.json>` 传状态契约（`{"checks":[{"kind":"tick_gte","tick":1000}]}`）：**regression 存档点契约未全过时服务端 400 拒绝创建**并返回逐条结果，**`bug-` 前缀的 bug 存档点只记录结果照存**。谓词词表见 [服务端 API](服务端API.md) 6.9。
+- `checkpoint load` 调 `POST /checkpoints/{name}/load`，**仅 `role=admin`**：按存档内配置与地图拓扑重建对局并原子替换；`stale` 只警告不阻止。与 `game_new` 不同，**玩家 key 不变**，CLI 的鉴权无需切换；SSE 会被服务端断开，重新订阅即可。
 
 ## Agent 相关
 
@@ -193,7 +213,7 @@ agent_thread agent-war-director
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 
-### 查询命令（19 条，agent 可用）
+### 查询命令（20 条，agent 可用）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
@@ -216,6 +236,7 @@ agent_thread agent-war-director
 | `fleet_status` | `fleet_status [fleet_id]` | Fleet list or one fleet detail |
 | `fog` | `fog [planet_id] [x y width height]` | ASCII fog slice via /scene (default: 0 0 32 16) |
 | `save` | `save [--reason <text>]` | Trigger manual save |
+| `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
 ### 管理、调试与工具（21 条）
 

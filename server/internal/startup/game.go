@@ -56,29 +56,13 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 
 	switch state {
 	case gameDirStateResume:
-		meta, save, err := rt.dir.Load()
-		if err != nil {
-			return nil, err
-		}
-		cfg, err = applySavedGameplayConfig(cfg, meta)
-		if err != nil {
-			return nil, err
-		}
 		// 恢复对局必须用存档内固化的地图配置（与 saved surface 一一对应）；
 		// 热重置所用地图模板（F1）则优先启动时指定的 mapconfig 文件，读不到再退回存档。
-		mapCfg := cloneSavedMapConfig(meta.MapConfig)
-		startupMapCfg := loadStartupMapConfig(mapCfgPath, meta.MapConfig)
-		rt.mapCfg = startupMapCfg
-		maps = mapgen.Generate(mapCfg, meta.GameplayConfig.Battlefield.MapSeed)
-		q := queue.New()
-		bus := gamecore.NewEventBus()
-		store := newSnapshotStore(cfg.Server)
-		core, err := gamecore.NewFromSave(cfg, maps, q, bus, store, save)
+		sess, err = rt.assembleFromSave(cfg, rt.dir, true)
 		if err != nil {
 			return nil, err
 		}
-		core.AttachGameDir(rt.dir, meta, choosePersistedBaseSnapshot(save))
-		sess = NewSession(cfg, maps, core, bus, q)
+		rt.mapCfg = loadStartupMapConfig(mapCfgPath, sess.Meta.MapConfig)
 	case gameDirStateNew:
 		externalMapCfg, err := mapconfig.Load(mapCfgPath)
 		if err != nil {
@@ -96,12 +80,58 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 			return nil, fmt.Errorf("initial save: %w", err)
 		}
 		sess = NewSession(cfg, maps, core, bus, q)
+		sess.Meta = meta
 	default:
 		return nil, fmt.Errorf("unsupported game dir state %d", state)
 	}
 
 	rt.current.Store(sess)
 	return rt, nil
+}
+
+// assembleFromSave 由存档（meta.json + save.json）装配完整 session，并把 data_dir
+// 指向 rt.dir：启动恢复（saveDir = rt.dir）与热加载存档点（saveDir = 只读存档点目录）
+// 共用这一条组装路径。
+//
+// live 是进程级配置（server 段：端口/快照策略/autosave 间隔保持不变），
+// 存档内的 battlefield 与 players 覆盖它；地图拓扑始终以存档内固化的 mapconfig 为准。
+func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, writable bool) (*Session, error) {
+	if saveDir == nil {
+		return nil, fmt.Errorf("save dir is nil")
+	}
+	var (
+		meta *gamedir.MetaFile
+		save *gamedir.SaveFile
+		err  error
+	)
+	if writable {
+		meta, save, err = saveDir.Load()
+	} else {
+		meta, save, err = saveDir.LoadReadOnly()
+	}
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := applySavedGameplayConfig(live, meta)
+	if err != nil {
+		return nil, err
+	}
+	mapCfg := cloneSavedMapConfig(meta.MapConfig)
+	maps := mapgen.Generate(mapCfg, meta.GameplayConfig.Battlefield.MapSeed)
+	if maps == nil || maps.PrimaryPlanet() == nil {
+		return nil, fmt.Errorf("存档的地图配置生成不出行星")
+	}
+	q := queue.New()
+	bus := gamecore.NewEventBus()
+	store := newSnapshotStore(cfg.Server)
+	core, err := gamecore.NewFromSave(cfg, maps, q, bus, store, save)
+	if err != nil {
+		return nil, err
+	}
+	core.AttachGameDir(rt.dir, meta, choosePersistedBaseSnapshot(save))
+	sess := NewSession(cfg, maps, core, bus, q)
+	sess.Meta = meta
+	return sess, nil
 }
 
 // loadStartupMapConfig 读取启动时指定的 mapconfig 文件；不可读时退回存档内固化的配置。

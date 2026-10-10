@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"siliconworld/internal/checkpoint"
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamecore"
 	"siliconworld/internal/gamedir"
@@ -37,6 +38,9 @@ type Session struct {
 	Vis       *visibility.Engine
 	KeyMap    map[string]string // bearer key -> player_id
 	StartedAt time.Time
+	// Meta 是本局写盘用的 meta（当前 data_dir 的 meta.json 内存副本）。
+	// 写存档点（只读来源）时复制一份，避免改动当前局的指纹。
+	Meta *gamedir.MetaFile
 }
 
 // NewSession 装配一个完整对局 session（查询层/可视化引擎/键映射在这里一次性构建）。
@@ -188,11 +192,15 @@ type Runtime struct {
 	serverCfg config.ServerConfig
 	mapCfg    *mapconfig.Config
 	dir       *gamedir.Dir
+	// checkpoints 是命名存档点存储（server.checkpoint_dir 为空时禁用）。
+	checkpoints *checkpoint.Store
 
 	current atomic.Pointer[Session]
 
 	resetMu sync.Mutex // 串行化 Reset/Save/Start/Stop：存档写入热重置间隙不允许交叉
 	started bool       // Start 之后 adopt 新局才会拉起 tick 循环与 autosave
+	// sourceCheckpoint 是当前局的来源存档点名：新局/启动新建为空（resetMu 保护）。
+	sourceCheckpoint string
 
 	autosaveStop chan struct{}
 	autosaveDone chan struct{}
@@ -208,9 +216,10 @@ func NewRuntime(serverCfg config.ServerConfig, mapCfg *mapconfig.Config) (*Runti
 		mapCfg = &cp
 	}
 	return &Runtime{
-		serverCfg: serverCfg,
-		mapCfg:    mapCfg,
-		dir:       gamedir.Open(serverCfg.DataDir),
+		serverCfg:   serverCfg,
+		mapCfg:      mapCfg,
+		dir:         gamedir.Open(serverCfg.DataDir),
+		checkpoints: checkpoint.Open(serverCfg.CheckpointDir),
 	}, nil
 }
 
@@ -309,6 +318,7 @@ func (rt *Runtime) Reset(req NewGameRequest) (*Session, error) {
 
 	old := rt.current.Swap(sess)
 	old.shutdown()
+	rt.sourceCheckpoint = ""
 	if rt.started {
 		rt.startSessionLocked(sess)
 	}
@@ -332,7 +342,9 @@ func (rt *Runtime) assemble(cfg *config.Config) (*Session, error) {
 	core := gamecore.New(cfg, maps, q, bus, store)
 	meta := gamedir.NewMetaFile(cfg, rt.mapCfg)
 	core.AttachGameDir(rt.dir, meta, snapshot.Capture(core.World(), core.Discovery()))
-	return NewSession(cfg, maps, core, bus, q), nil
+	sess := NewSession(cfg, maps, core, bus, q)
+	sess.Meta = meta
+	return sess, nil
 }
 
 // newSnapshotStore 按 server 段的快照策略创建一局一个的内存快照 store。

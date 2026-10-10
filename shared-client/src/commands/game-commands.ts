@@ -63,6 +63,7 @@ import {
   cmdDemolishDyson,
 } from './action.js';
 import { cmdAlertSnapshot, cmdAudit, cmdEventSnapshot, cmdReplay, cmdRollback, cmdSave } from './debug.js';
+import { cmdCheckpoint } from './checkpoint.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
 import {
@@ -190,6 +191,7 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   event_snapshot: { handler: cmdEventSnapshot },
   alert_snapshot: { handler: cmdAlertSnapshot },
   save: { handler: cmdSave },
+  checkpoint: { handler: cmdCheckpoint, completions: ['list', 'save', 'load'] },
   replay: { handler: cmdReplay },
   rollback: { handler: cmdRollback },
   help: { handler: cmdHelp, completions: [] },

@@ -657,6 +657,7 @@ export const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: CommandPerm
   inspect: { category: "observe" },
   fleet_status: { category: "observe" },
   fog: { category: "observe" },
+  checkpoint: { category: "management" },
   save: { category: "management" },
 };
 

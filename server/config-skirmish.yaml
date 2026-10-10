@@ -71,6 +71,8 @@ server:
   snapshot_max_events: 200
   alert_history_limit: 1000
   data_dir: "data-skirmish"
+  # 命名存档点根目录（试玩读档用）。留空则 /checkpoints 系列接口返回 503。
+  checkpoint_dir: "checkpoints-skirmish"
   auto_save_interval_seconds: 60
   snapshot_interval_ticks: 100
   snapshot_retention_ticks: 6000

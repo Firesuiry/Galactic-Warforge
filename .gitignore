@@ -59,6 +59,7 @@ dev-debug.log
 .env
 
 server/data-*/
+server/checkpoints-*/
 agent-gateway/data/
 develop_tools/biliup/venv/
 develop_tools/biliup/cookies.json

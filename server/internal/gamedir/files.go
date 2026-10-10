@@ -180,6 +180,16 @@ func (d *Dir) WriteSave(meta *MetaFile, save *SaveFile) error {
 
 // Load loads meta.json and save.json.
 func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
+	return d.load(true)
+}
+
+// LoadReadOnly 与 Load 相同，但不做 meta.json 自愈写回：只读目录（存档点）用它读取，
+// 避免读档顺手改动只读来源。
+func (d *Dir) LoadReadOnly() (*MetaFile, *SaveFile, error) {
+	return d.load(false)
+}
+
+func (d *Dir) load(heal bool) (*MetaFile, *SaveFile, error) {
 	meta := &MetaFile{}
 	if err := d.readJSON(d.MetaPath(), meta); err != nil {
 		return nil, nil, err
@@ -204,7 +214,7 @@ func (d *Dir) Load() (*MetaFile, *SaveFile, error) {
 	if err := validateSave(save); err != nil {
 		return nil, nil, err
 	}
-	if meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint || !meta.LastSavedAt.Equal(save.SavedAt) {
+	if heal && (meta.SaveFingerprint == "" || meta.SaveFingerprint != actualFingerprint || !meta.LastSavedAt.Equal(save.SavedAt)) {
 		healedMeta := *meta
 		if err := d.writeMeta(&healedMeta, save.SavedAt, actualFingerprint); err != nil {
 			return nil, nil, fmt.Errorf("heal meta.json: %w", err)
