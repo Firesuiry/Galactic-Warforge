@@ -146,6 +146,47 @@ describe("planet command executor", () => {
     });
   });
 
+  it("回归（试玩 1013 H）：请求在途时最新反馈就是这条命令，回执到达后原位替换", async () => {
+    let resolveCommand: ((value: unknown) => void) | undefined;
+    const execute = vi.fn(() => new Promise((resolve) => {
+      resolveCommand = resolve;
+    }));
+
+    const pendingSubmit = submitPlanetCommand({
+      commandType: "scan_planet",
+      planetId: "planet-1-1",
+      execute: execute as never,
+    });
+
+    // 还没有任何回执：账本里已经有一条 pending 占位，文案说明「已提交，等待服务器确认…」。
+    const placeholder = usePlanetCommandStore.getState().journal[0];
+    expect(placeholder).toMatchObject({
+      commandType: "scan_planet",
+      planetId: "planet-1-1",
+      status: "pending",
+      acceptedMessage: "扫描行星已提交，等待服务器确认…",
+    });
+
+    await act(async () => {
+      resolveCommand?.({
+        request_id: "req-scan-pending",
+        accepted: true,
+        enqueue_tick: 500,
+        results: [{ command_index: 0, status: "queued", code: "OK", message: "scan_planet accepted" }],
+      });
+      await pendingSubmit;
+    });
+
+    // 占位被原位替换成服务器 request_id，位置不变（没有插到队首、也没有留下两条）。
+    const journal = usePlanetCommandStore.getState().journal;
+    expect(journal).toHaveLength(1);
+    expect(journal[0]).toMatchObject({
+      requestId: "req-scan-pending",
+      status: "pending",
+      acceptedMessage: "scan_planet accepted",
+    });
+  });
+
   it("本地提交失败时只向玩家展示翻译后的文案，原文留在 debugMessage", async () => {
     const execute = vi.fn().mockRejectedValue(new Error("502 Bad Gateway"));
 

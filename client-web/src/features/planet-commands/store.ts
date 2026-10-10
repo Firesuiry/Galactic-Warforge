@@ -76,6 +76,8 @@ interface PlanetCommandActions {
     response: CommandResponse;
     focus?: CommandJournalFocus;
     submittedAt?: number;
+    /** 下发时写入的本地占位 requestId：回执按它**原位**替换，不把旧命令顶到最前。 */
+    localRequestId?: string;
   }) => void;
   reconcileAuthoritativeEvent: (event: GameEventDetail) => void;
   hydrateAuthoritativeSnapshot: (snapshot: EventSnapshotResponse) => void;
@@ -533,17 +535,26 @@ export const usePlanetCommandStore = create<
         pendingRecovery: false,
       };
 
-      return {
-        journal: [
-          {
-            ...nextEntry,
-            nextHint: resolveNextHint(nextEntry),
-          },
-          ...state.journal.filter(
-            (entry) => entry.requestId !== input.response.request_id,
-          ),
-        ].slice(0, 40),
+      const resolvedEntry: PlanetCommandJournalEntry = {
+        ...nextEntry,
+        nextHint: resolveNextHint(nextEntry),
       };
+
+      // 回执按「本地占位 → 服务器 request_id」**原位**替换：并发下发多条命令时，
+      // 后到的旧命令回执不能把新命令顶到最新反馈（试玩 1013 H：最新反馈显示上一条命令结果）。
+      const replacedIndex = input.localRequestId
+        ? state.journal.findIndex((entry) => entry.requestId === input.localRequestId)
+        : -1;
+      const journal = replacedIndex >= 0
+        ? state.journal.map((entry, index) => (index === replacedIndex ? resolvedEntry : entry))
+        : [
+            resolvedEntry,
+            ...state.journal.filter(
+              (entry) => entry.requestId !== input.response.request_id,
+            ),
+          ];
+
+      return { journal: journal.slice(0, 40) };
     });
   },
   reconcileAuthoritativeEvent: (event) => {

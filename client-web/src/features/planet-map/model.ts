@@ -302,8 +302,12 @@ export function tileContainsBuilding(building: Building, x: number, y: number, f
 }
 
 /**
- * 点格选中：建筑 > 单位 > 资源。同一格再次点击时轮换到下一层
- * （机甲站在矿上时，第二次点击选中矿点）。
+ * 点格选中：建筑 > 单位 > 资源。
+ *
+ * 资源点是格子的**兜底**：格子上有建筑/单位时资源不参与选中，也不参与
+ * 重复点击轮换（试玩 1013 G：矿机压在资源点上时，点到的却是资源点，
+ * 玩家以为矿机消失了）。同一格再次点击只在建筑/单位之间轮换；
+ * 机甲站在矿上时，想点资源点先移开机甲，或点到没有实体的格子上。
  */
 export function resolveSelectionAtTile(
   planet: PlanetRenderView,
@@ -321,13 +325,16 @@ export function resolveSelectionAtTile(
   const building = buildings.find((candidate) => candidate.type === "logistics_distributor")
     ?? buildings.find((candidate) => candidate.type !== "foundation") ?? buildings[0];
   const unit = getUnitList(planet).find((candidate) => atTile(candidate.position));
-  const resource = getResourceList(planet).find((candidate) => atTile(candidate.position));
   const stack: SelectedEntity[] = [
     ...(building ? [{ kind: "building" as const, id: building.id, position: building.position }] : []),
     ...(unit ? [{ kind: "unit" as const, id: unit.id, position: unit.position }] : []),
-    ...(resource ? [{ kind: "resource" as const, id: resource.id, position: resource.position }] : []),
   ];
-  if (stack.length === 0) return null;
+  if (stack.length === 0) {
+    const resource = getResourceList(planet).find((candidate) => atTile(candidate.position));
+    return resource
+      ? { kind: "resource", id: resource.id, position: resource.position }
+      : null;
+  }
   const index = current && current.kind !== "tile"
     ? stack.findIndex((entry) => entry.kind === current.kind && "id" in entry && entry.id === current.id)
     : -1;

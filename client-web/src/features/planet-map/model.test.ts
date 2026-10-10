@@ -167,14 +167,49 @@ describe('planet map model helpers', () => {
     expect(resolveHomeTile({ ...planet, buildings, units }, 'p1')).toEqual({ x: 2, y: 2 });
   });
 
-  it('同一格再次点击轮换到下一层（机甲站在矿上时选中矿）', () => {
+  it('同一格再次点击在建筑/单位之间轮换，资源点不参与', () => {
     const base = {...createPlanetFixture(),surface: { topology: 'cube_sphere' as const, face_size: 12 / 3 }, map_width:12,map_height:8};
     const worker = base.units!['worker-1'];
-    const planet = { ...base, units: { ...base.units, 'worker-1': { ...worker, position: { x: 0, y: 0, z: 0 } } } };
+    const planet = {
+      ...base,
+      buildings: {
+        ...base.buildings,
+        'miner-1': {
+          ...base.buildings!['miner-1'],
+          position: { x: 0, y: 0, z: 0 },
+          runtime: { ...base.buildings!['miner-1'].runtime, params: { ...base.buildings!['miner-1'].runtime!.params, footprint: { width: 1, height: 1 } } },
+        },
+      },
+      units: { ...base.units, 'worker-1': { ...worker, position: { x: 0, y: 0, z: 0 } } },
+    };
     const first = resolveSelectionAtTile(planet, 0, 0);
-    expect(first).toMatchObject({ kind: 'unit', id: 'worker-1' });
-    expect(resolveSelectionAtTile(planet, 0, 0, first)).toMatchObject({ kind: 'resource', id: 'iron-1' });
-    expect(resolveSelectionAtTile(planet, 0, 0, resolveSelectionAtTile(planet, 0, 0, first))).toMatchObject({ kind: 'unit' });
+    expect(first).toMatchObject({ kind: 'building', id: 'miner-1' });
+    const second = resolveSelectionAtTile(planet, 0, 0, first);
+    expect(second).toMatchObject({ kind: 'unit', id: 'worker-1' });
+    expect(resolveSelectionAtTile(planet, 0, 0, second)).toMatchObject({ kind: 'building', id: 'miner-1' });
+  });
+
+  it('回归（试玩 1013 G）：矿机与资源点同格时点选矿机，重复点击也不落到资源点', () => {
+    const base = {...createPlanetFixture(),surface: { topology: 'cube_sphere' as const, face_size: 12 / 3 }, map_width:12,map_height:8};
+    const planet = {
+      ...base,
+      buildings: {
+        ...base.buildings,
+        'miner-1': {
+          ...base.buildings!['miner-1'],
+          position: { x: 0, y: 0, z: 0 },
+          runtime: { ...base.buildings!['miner-1'].runtime, params: { ...base.buildings!['miner-1'].runtime!.params, footprint: { width: 1, height: 1 } } },
+        },
+      },
+      units: {},
+    };
+    // (0,0) 上同时有矿机（铁矿石资源点也在 (0,0)）：第一次与第二次点击都必须是矿机。
+    const first = resolveSelectionAtTile(planet, 0, 0);
+    expect(first).toMatchObject({ kind: 'building', id: 'miner-1' });
+    expect(resolveSelectionAtTile(planet, 0, 0, first)).toMatchObject({ kind: 'building', id: 'miner-1' });
+    // 资源点单独占格（没有建筑/单位）时仍可选中。
+    const bare = { ...base, buildings: {}, units: {} };
+    expect(resolveSelectionAtTile(bare, 0, 0)).toMatchObject({ kind: 'resource', id: 'iron-1' });
   });
 
   it('按建筑、单位、资源优先级解析地块选中对象', () => {

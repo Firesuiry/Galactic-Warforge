@@ -376,4 +376,149 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(screen.getByLabelText("取出数量")).toBeDisabled();
     expect(screen.getByRole("button", { name: "取出" })).toBeDisabled();
   });
+
+  it("回归（试玩 1013 bug-1013-4）：研究站从「无配方」切到生产配方时提示会退出研究", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-lab"] = {
+      id: "b-lab",
+      type: "matrix_lab",
+      owner_id: "p1",
+      position: { x: 4, y: 4, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 1, height: 1 },
+        },
+        functions: { production: { recipe_options: ["iron_ingot"] } },
+        state: "running",
+      },
+      // 无配方 = 研究模式（服务端 isResearchLab 只认空配方的研究站）
+      storage: { inventory: {} },
+    };
+    const catalog = {
+      items: [{ id: "iron_ingot", name: "铁块" }],
+      recipes: [
+        {
+          id: "iron_ingot",
+          name: "铁块",
+          building_types: ["matrix_lab"],
+          inputs: [{ item_id: "silicon_ore", quantity: 1 }],
+          outputs: [{ item_id: "iron_ingot", quantity: 1 }],
+          duration: 4,
+        },
+      ],
+    } as unknown as CatalogView;
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-lab",
+      position: { x: 4, y: 4, z: 0 },
+    });
+
+    render(<PlanetEntityPanel catalog={catalog} planet={planet as never} />);
+
+    const select = screen.getByRole("combobox", { name: "切换配方" });
+    expect(select).toHaveValue("");
+    expect(screen.queryByText(/不再参与研究/)).toBeNull();
+
+    // 切到生产配方：必须在按下「应用配方」之前就说明会退出研究。
+    fireEvent.change(select, { target: { value: "iron_ingot" } });
+    expect(screen.getByText(/不再参与研究/)).toBeInTheDocument();
+    expect(screen.getByText(/清空当前生产进度/)).toBeInTheDocument();
+
+    // 切回「无配方」：警告消失。
+    fireEvent.change(select, { target: { value: "" } });
+    expect(screen.queryByText(/不再参与研究/)).toBeNull();
+  });
+
+  it("回归（试玩 1013 bug-1013-2）：手搓缺料时保持玩家选中的配方并说明缺什么", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-lab-2"] = {
+      id: "b-lab-2",
+      type: "matrix_lab",
+      owner_id: "p1",
+      position: { x: 5, y: 5, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 1, height: 1 },
+        },
+        functions: { research: { research_per_tick: 1 } },
+        state: "running",
+      },
+      storage: { inventory: {} },
+    };
+    const unit = {
+      id: "u-1",
+      type: "executor",
+      owner_id: "p1",
+      position: { x: 3, y: 2, z: 0 },
+      hp: 120,
+      max_hp: 120,
+      attack: 20,
+      defense: 8,
+      attack_range: 4,
+      move_range: 14,
+      vision_range: 6,
+      mecha: {
+        energy: 40,
+        max_energy: 110,
+        fuel_energy: 0,
+        shield: 8,
+        max_shield: 20,
+        attack_energy_cost: 8,
+        move_energy_cost: 1,
+        shield_recharge_delay: 10,
+        last_hit_tick: 5,
+      },
+    };
+    const withUnit = { ...planet, units: { "u-1": unit } };
+    const withoutUnit = { ...planet, units: {} };
+    const catalog = {
+      items: [{ id: "iron_ingot", name: "铁块" }],
+      recipes: [
+        { id: "gear", name: "齿轮", handcraft_allowed: true, inputs: [{ item_id: "iron_ingot", quantity: 1 }], outputs: [{ item_id: "gear", quantity: 1 }], duration: 4 },
+        { id: "smelt_magnet", name: "磁铁", handcraft_allowed: true, inputs: [{ item_id: "iron_ingot", quantity: 9 }], outputs: [{ item_id: "magnet", quantity: 1 }], duration: 4 },
+      ],
+    } as unknown as CatalogView;
+    const summary = {
+      players: { p1: { player_id: "p1", is_alive: true, inventory: { iron_ingot: 5 } } },
+    } as never;
+    usePlanetViewStore.getState().setSelected({ kind: "unit", id: "u-1", position: { x: 3, y: 2, z: 0 } });
+
+    const { rerender } = render(
+      <PlanetEntityPanel catalog={catalog} planet={withUnit as never} summary={summary} />,
+    );
+    const select = screen.getByLabelText("个人制造配方") as HTMLSelectElement;
+    expect(select.value).toBe("gear");
+    // 选中缺料配方（磁铁要 9 铁块，背包只有 5）：下拉框保持磁铁，按钮禁用并说明差多少。
+    fireEvent.change(select, { target: { value: "smelt_magnet" } });
+    expect(select.value).toBe("smelt_magnet");
+    expect(screen.getByRole("button", { name: "开始制造" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("缺少：铁块（背包 5 / 需要 9）");
+
+    // 单位落到场景窗口外：详情面板卸载机甲表单（旧实现连 useState 一起丢掉）。
+    act(() => {
+      rerender(<PlanetEntityPanel catalog={catalog} planet={withoutUnit as never} summary={summary} />);
+    });
+    expect(screen.queryByLabelText("个人制造配方")).toBeNull();
+
+    act(() => {
+      rerender(<PlanetEntityPanel catalog={catalog} planet={withUnit as never} summary={summary} />);
+    });
+    expect((screen.getByLabelText("个人制造配方") as HTMLSelectElement).value).toBe("smelt_magnet");
+  });
 });

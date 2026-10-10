@@ -41,6 +41,7 @@ import {
   type PlanetCommandJournalEntry,
 } from "@/features/planet-commands/store";
 import { usePlanetViewStore } from "@/features/planet-map/store";
+import { isResearchStationBuildingType } from "@/features/production-alerts";
 import {
   translateCommandType,
   translateLogisticsMode,
@@ -162,10 +163,6 @@ function getPreferredSlotItemId(
 ) {
   const settings = getScopeSettings(runtime, buildingId, scope);
   return Object.values(settings ?? {})[0]?.item_id ?? fallbackItemId;
-}
-
-function isResearchBuildingType(buildingType: string) {
-  return buildingType === "matrix_lab" || buildingType === "self_evolution_lab";
 }
 
 function fieldLabel(key: string) {
@@ -458,6 +455,8 @@ export function PlanetCommandPanel({
     : ["planetary"];
   const previousSlotConfigContextRef = useRef("");
   const previousSlotSettingsContextRef = useRef("");
+  /** 上一次「装料目标建筑」上下文（建筑 id:类型）：变化时才重置装料物品。 */
+  const previousTransferContextRef = useRef("");
   const selectedOwnedBuildingId =
     selected?.kind === "building" &&
     ownBuildings.some((building) => building.id === selected.id)
@@ -480,6 +479,14 @@ export function PlanetCommandPanel({
   const currentResearchProgressPercent = getResearchProgressPercent(
     playerTechState?.current_research,
   );
+  /** 背包里该物品的数量（装料只从背包扣，与服务端 execTransferItem 一致）。 */
+  const transferItemOwned =
+    summary?.players?.[playerId]?.inventory?.[transferItemId];
+  const transferQuantityValue = toOptionalInt(transferQuantity);
+  const transferQuantityShort =
+    transferItemOwned !== undefined &&
+    transferQuantityValue !== undefined &&
+    transferQuantityValue > transferItemOwned;
 
   useEffect(() => {
     const nextResearchId = researchGroups.available[0]?.id ?? "";
@@ -654,27 +661,36 @@ export function PlanetCommandPanel({
     }
   }, [transferBuildingId, transferTargets]);
 
+  /**
+   * 装料物品只在**切换目标建筑**时给默认值（研究站 → 电磁矩阵，其他 → 首件物品）；
+   * 玩家手动选过之后不再覆盖。旧实现只要目标是 matrix_lab 就把物品重置回电磁矩阵，
+   * 玩家选好电路板一按就变回矩阵（试玩 1013 bug-1013-5）。
+   */
   useEffect(() => {
-    const preferredMatrixItemId =
-      logisticsItems.find((item) => item.id === "electromagnetic_matrix")?.id ??
-      logisticsItems[0]?.id ??
-      "";
     const activeTransferBuilding =
       transferTargets.find((building) => building.id === transferBuildingId) ??
       transferTargets[0];
-    const nextTransferItemId =
-      activeTransferBuilding && isResearchBuildingType(activeTransferBuilding.type)
-        ? preferredMatrixItemId
-        : logisticsItems[0]?.id ?? "";
+    const context = `${activeTransferBuilding?.id ?? ""}:${activeTransferBuilding?.type ?? ""}`;
+    const selectionStillAvailable =
+      transferItemId !== "" &&
+      logisticsItems.some((item) => item.id === transferItemId);
 
     if (
-      nextTransferItemId &&
-      (!transferItemId ||
-        !logisticsItems.some((item) => item.id === transferItemId) ||
-        activeTransferBuilding?.type === "matrix_lab")
+      previousTransferContextRef.current !== context ||
+      !selectionStillAvailable
     ) {
+      const preferredMatrixItemId =
+        logisticsItems.find((item) => item.id === "electromagnetic_matrix")?.id ??
+        logisticsItems[0]?.id ??
+        "";
+      const nextTransferItemId =
+        activeTransferBuilding && isResearchStationBuildingType(activeTransferBuilding.type)
+          ? preferredMatrixItemId
+          : logisticsItems[0]?.id ?? "";
       setTransferItemId(nextTransferItemId);
     }
+
+    previousTransferContextRef.current = context;
   }, [logisticsItems, transferBuildingId, transferItemId, transferTargets]);
 
   useEffect(() => {
@@ -1669,13 +1685,18 @@ export function PlanetCommandPanel({
                   )}
                 </div>
               </div>
+              {/* 装料只从背包扣（服务端 execTransferItem）：先报背包数量，不足时按钮直接禁用并说明差多少。 */}
+              <p className="subtle-text field--span-2">
+                背包 {transferItemId ? `${getItemDisplayName(catalog, transferItemId)} ${transferItemOwned ?? 0} 个` : "—"}
+              </p>
               <button
                 className="secondary-button field--span-2"
                 disabled={
                   busyAction !== "" ||
                   !transferBuildingId ||
                   !transferItemId ||
-                  !toOptionalInt(transferQuantity)
+                  !transferQuantityValue ||
+                  transferQuantityShort
                 }
                 onClick={() => {
                   const quantity = toOptionalInt(transferQuantity);
@@ -1697,7 +1718,7 @@ export function PlanetCommandPanel({
                         buildingType: selectedTransferBuilding?.type,
                         techId:
                           selectedTransferBuilding
-                            && isResearchBuildingType(selectedTransferBuilding.type)
+                            && isResearchStationBuildingType(selectedTransferBuilding.type)
                             ? currentResearchId || selectedResearch?.id || undefined
                             : undefined,
                       },
@@ -1708,6 +1729,13 @@ export function PlanetCommandPanel({
               >
                 装入建筑
               </button>
+              {transferQuantityShort ? (
+                <p className="subtle-text field--span-2" role="status">
+                  数量不足：背包里只有 {transferItemOwned} 个
+                  {getItemDisplayName(catalog, transferItemId)}
+                  ，需要 {transferQuantityValue} 个。
+                </p>
+              ) : null}
             </div>
           </section>
         </>

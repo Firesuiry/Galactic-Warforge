@@ -60,7 +60,7 @@ import {
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import { useApiClient } from "@/hooks/use-api-client";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
-import { isResearchStationAlertNoise } from "@/features/production-alerts";
+import { isResearchStationAlertNoise, isResearchStationBuildingType } from "@/features/production-alerts";
 import { listBuildingRecipes } from "@/features/planet-map/build-workflow";
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import {
@@ -217,6 +217,16 @@ function BuildingStorageSection({
   const currentRecipeId = recipeDraft ?? building.production?.recipe_id ?? "";
   const recipeDirty = recipeDraft !== null && recipeDraft !== (building.production?.recipe_id ?? "");
   const recipeSwitchDisabled = recipePending || !canControl || !planetId || !recipeDirty;
+  /**
+   * 研究站（matrix_lab / self_evolution_lab）从「无配方」切到生产配方 = 退出研究模式：
+   * 服务端 isResearchLab 只认「Research 模块 + 空配方」的建筑，设了配方就不再算研究站，
+   * 正在研究的科技会因缺少运行中的研究站而暂停（试玩 1013 bug-1013-4，当时界面零提示）。
+   */
+  const leavingResearchMode =
+    recipeDirty
+    && (building.production?.recipe_id ?? "") === ""
+    && (recipeDraft ?? "") !== ""
+    && isResearchStationBuildingType(building.type);
   // 只在真正进入生产周期的建筑上给配方入口（纯采集建筑没有配方）。
   const supportsRecipe = Boolean(building.runtime?.functions?.production) && recipeOptions.length > 0;
 
@@ -364,6 +374,12 @@ function BuildingStorageSection({
           </button>
           {recipeDirty ? (
             <p className="subtle-text" role="status">切换配方会清空当前生产进度（已产出的产物与库存保留）。</p>
+          ) : null}
+          {leavingResearchMode ? (
+            <p className="subtle-text planet-recipe-form__research-warning" role="status">
+              切换后此研究站不再参与研究：服务端只把「无配方」的研究站算作研究站，
+              研究中的科技会因缺少运行中的研究站而暂停。想继续研究请把配方切回「无配方」。
+            </p>
           ) : null}
         </form>
       ) : null}

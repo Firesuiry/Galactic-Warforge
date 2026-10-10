@@ -309,6 +309,8 @@ function createCatalog() {
 function createSummary(options?: {
   completedTechIds?: string[];
   currentResearch?: { tech_id: string; progress?: number; total_cost?: number } | null;
+  /** 玩家背包（装料只从背包扣，数量提示依赖它）。 */
+  inventory?: Record<string, number>;
 }) {
   const currentResearch = options?.currentResearch === null
     ? undefined
@@ -324,6 +326,7 @@ function createSummary(options?: {
       p1: {
         player_id: "p1",
         is_alive: true,
+        ...(options?.inventory ? { inventory: options.inventory } : {}),
         resources: {
           minerals: 100,
           energy: 80,
@@ -772,6 +775,87 @@ describe("PlanetCommandPanel", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  it("回归（试玩 1013 bug-1013-5）：研究站装料时玩家选好的物品不被强制改回电磁矩阵", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    const runtime = createRuntime();
+
+    const { rerender } = renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={runtime as never}
+        summary={createSummary() as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    // 选中研究站：物品默认给电磁矩阵。
+    await user.selectOptions(screen.getByLabelText("建筑 ID"), "lab-1");
+    const itemSelect = await screen.findByLabelText("装料物品");
+    await waitFor(() => {
+      expect((itemSelect as HTMLSelectElement).value).toBe(
+        "electromagnetic_matrix",
+      );
+    });
+
+    // 玩家改成硅石：旧实现每次 effect 都把 matrix_lab 目标重置回电磁矩阵。
+    await user.selectOptions(itemSelect, "silicon_ore");
+    expect((itemSelect as HTMLSelectElement).value).toBe("silicon_ore");
+
+    // 服务端刷新（新对象引用）后仍然保持玩家选择。
+    rerender(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={{ ...runtime } as never}
+        summary={createSummary() as never}
+      />,
+    );
+    expect((screen.getByLabelText("装料物品") as HTMLSelectElement).value).toBe(
+      "silicon_ore",
+    );
+  });
+
+  it("回归（试玩 1013 C）：背包数量不足时禁用「装入建筑」并说明背包里只有几个", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    const catalog = createCatalog();
+    const client = createClient();
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({ inventory: { electromagnetic_matrix: 4 } }) as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    const itemSelect = await screen.findByLabelText("装料物品");
+    await user.selectOptions(screen.getByLabelText("建筑 ID"), "lab-1");
+    await waitFor(() => {
+      expect((itemSelect as HTMLSelectElement).value).toBe(
+        "electromagnetic_matrix",
+      );
+    });
+    // 默认数量 10 > 背包 4：按钮禁用并说明差多少。
+    expect(screen.getByRole("button", { name: "装入建筑" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("背包里只有 4 个");
+
+    // 数量降到背包持有量以内：按钮恢复可用。
+    const quantity = screen.getByLabelText("数量");
+    await user.clear(quantity);
+    await user.type(quantity, "4");
+    expect(screen.getByRole("button", { name: "装入建筑" })).toBeEnabled();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
 });

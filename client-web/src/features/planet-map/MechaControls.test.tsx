@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import type { CatalogView, PlayerState, Unit } from '@shared/types';
 import { MechaControls, craftBlockReason, refuelFullQuantity } from './MechaControls';
 import { shouldRefreshPlanet, shouldRefreshSummary } from './model';
+import { usePlanetViewStore } from './store';
 
 const { client } = vi.hoisted(() => ({ client: {
   cmdRefuelMecha: vi.fn().mockResolvedValue({ accepted: false, request_id: 'refuel' }),
@@ -22,7 +23,11 @@ const catalog = { items: [
   { id: 'custom_fuel', name: '测试燃料', mecha_fuel_energy: 37 },
   { id: 'iron_ingot', name: '铁块' }, // 与服务端 items.yaml 一致
 ] } as CatalogView;
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // 手搓配方选择存在行星视图 store 里（跨面板卸载保留），逐测试重置避免串场。
+  usePlanetViewStore.getState().resetForPlanet('planet-1-1');
+});
 
 const fuelPlayer: PlayerState = { player_id: 'p1', is_alive: true, inventory: { coal: 10, custom_fuel: 1 } };
 
@@ -109,8 +114,26 @@ it('treats omitted inventory in a fresh player snapshot as an empty backpack', (
   render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" canControl player={{ player_id: 'p1', is_alive: true }} />);
   expect(screen.getByText('原料：铁块 1（背包 0）')).toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('背包原料不足');
+  expect(screen.getByRole('status')).toHaveTextContent('缺少：铁块（背包 0 / 需要 1）');
   expect(screen.queryByText('正在读取背包…')).toBeNull();
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
+});
+
+it('回归（试玩 1013 D）：缺料时保持玩家选中的配方，并在按钮旁说明缺什么', () => {
+  // 齿轮只要 1 铁块（背包 5 够），磁铁要 9 铁块（不够）：选中磁铁后必须保持磁铁。
+  const shortCatalog = { ...craftingCatalog, recipes: [
+    ...(craftingCatalog.recipes ?? []),
+    { id: 'smelt_magnet', name: '磁铁', handcraft_allowed: true, inputs: [{ item_id: 'iron_ingot', quantity: 9 }], outputs: [{ item_id: 'magnet', quantity: 1 }], duration: 4, energy_cost: 20 },
+  ] } as CatalogView;
+  render(<MechaControls unit={unit} catalog={shortCatalog} planetId="planet-1-1" canControl player={player} />);
+  const select = screen.getByLabelText('个人制造配方') as HTMLSelectElement;
+  expect(select.value).toBe('gear');
+  fireEvent.change(select, { target: { value: 'smelt_magnet' } });
+  expect(select.value).toBe('smelt_magnet');
+  expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
+  expect(screen.getByRole('status')).toHaveTextContent('背包原料不足');
+  expect(screen.getByRole('status')).toHaveTextContent('缺少：铁块（背包 5 / 需要 9）');
+  expect(client.cmdCraftItem).not.toHaveBeenCalled();
 });
 
 it('explains the busy job instead of claiming the backpack is short', () => {

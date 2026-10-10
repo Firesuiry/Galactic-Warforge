@@ -8,6 +8,7 @@ import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { MechaLogisticsControls } from './MechaLogisticsControls';
 import { mechaCraftEnergyPerBatch } from './mecha-costs';
+import { usePlanetViewStore } from './store';
 
 /** 补满所需燃料块数：按缺口向上取整，受背包持有量限制（服务端同样按缺口截断）。 */
 export function refuelFullQuantity(missingEnergy: number, fuelEnergy: number, owned: number) {
@@ -83,7 +84,10 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
   const client = useApiClient();
   const [fuelId, setFuelId] = useState('coal');
   const [pending, setPending] = useState(false);
-  const [recipeId, setRecipeId] = useState('');
+  // 配方选择放在行星视图 store：详情面板会随「选中单位是否落在场景窗口内」卸载重挂，
+  // 组件内 state 会丢，下拉框跳回第一个可用配方（试玩 1013 bug-1013-2）。
+  const recipeId = usePlanetViewStore((state) => state.craftRecipeId);
+  const setRecipeId = usePlanetViewStore((state) => state.setCraftRecipeId);
   const [batches, setBatches] = useState(1);
   const mecha = unit.mecha;
   if (!mecha) return null;
@@ -100,6 +104,17 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
   const missingTech = recipe && !isUnlocked(recipe);
   const count = Number.isFinite(batches) ? Math.max(1, Math.min(999, Math.floor(batches))) : 1;
   const missingItems = recipe?.inputs.some(input => (player?.inventory?.[input.item_id] ?? 0) < input.quantity * count);
+  // 缺料时按钮禁用，并把缺什么说清楚：只看「背包原料不足」玩家不知道差几个（试玩 1013 C/D）。
+  const missingInputs = (recipe?.inputs ?? []).flatMap(input => {
+    const owned = player?.inventory?.[input.item_id] ?? 0;
+    const required = input.quantity * count;
+    return owned < required
+      ? [{ itemId: input.item_id, owned, required }]
+      : [];
+  });
+  const missingInputsText = missingInputs
+    .map(input => `${getItemDisplayName(catalog, input.itemId)}（背包 ${input.owned} / 需要 ${input.required}）`)
+    .join('、');
   const job = mecha.job;
   const totalBatches = job ? totalJobBatches(job) : 0;
   const remainingTicks = job ? remainingJobTicks(job) : 0;
@@ -185,7 +200,14 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
           <p>原料：{recipe.inputs.map(input => `${getItemDisplayName(catalog, input.item_id)} ${input.quantity * count}（背包 ${player ? player.inventory?.[input.item_id] ?? 0 : '…'}）`).join('、') || '无'}</p>
           <p>产物：{[...recipe.outputs, ...(recipe.byproducts ?? [])].map(output => `${getItemDisplayName(catalog, output.item_id)} ${output.quantity * count}`).join('、')}</p>
           <p>耗时 {recipe.duration * count} tick · 核心耗能 {mechaCraftEnergyPerBatch(recipe.duration) * count}（每批 {mechaCraftEnergyPerBatch(recipe.duration)}）</p>
-          {craftBlockReasonText ? <p role="status">{craftBlockReasonText}</p> : missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !player ? <p role="status">正在读取背包…</p> : null}
+          {craftBlockReasonText
+            ? (
+              <p role="status">
+                {craftBlockReasonText}
+                {missingInputsText && !job ? ` 缺少：${missingInputsText}` : ''}
+              </p>
+            )
+            : missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !player ? <p role="status">正在读取背包…</p> : null}
         </> : <p>暂无可手工制造的配方。</p>}
         <button className="secondary-button" disabled={!recipe || missingTech || missingItems || Boolean(job) || pending || !player} type="submit">开始制造</button>
         <p className="muted">制造时预留原料；取消会退回未完成部分。</p>

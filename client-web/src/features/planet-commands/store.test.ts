@@ -282,6 +282,104 @@ describe("planet command store", () => {
     );
   });
 
+  it("回归（试玩 1013 H）：旧命令的回执按占位原位替换，不把新命令顶到最新反馈", () => {
+    act(() => {
+      // 第一条命令下发时的本地占位。
+      usePlanetCommandStore.getState().addJournalEntry({
+        requestId: "local-build-1",
+        commandType: "build",
+        planetId: "planet-1-1",
+        status: "pending",
+        acceptedMessage: "建造已提交，等待服务器确认…",
+      });
+    });
+    act(() => {
+      // 第二条命令下发时又写一条占位：它才是「最新反馈」。
+      usePlanetCommandStore.getState().addJournalEntry({
+        requestId: "local-move-1",
+        commandType: "move",
+        planetId: "planet-1-1",
+        status: "pending",
+        acceptedMessage: "移动已提交，等待服务器确认…",
+      });
+    });
+    expect(usePlanetCommandStore.getState().journal[0]?.requestId).toBe("local-move-1");
+
+    act(() => {
+      // 第一条命令的回执后到：必须原位替换自己的占位，不能插到队首。
+      usePlanetCommandStore.getState().reconcileAcceptedResponse({
+        commandType: "build",
+        planetId: "planet-1-1",
+        localRequestId: "local-build-1",
+        response: {
+          request_id: "req-build-1",
+          accepted: true,
+          enqueue_tick: 300,
+          results: [
+            {
+              command_index: 0,
+              status: "queued",
+              code: "OK",
+              message: "build accepted",
+            },
+          ],
+        },
+      });
+    });
+
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      requestId: "local-move-1",
+      status: "pending",
+    });
+    expect(usePlanetCommandStore.getState().journal[1]).toMatchObject({
+      requestId: "req-build-1",
+      commandType: "build",
+      status: "pending",
+      acceptedMessage: "build accepted",
+    });
+
+    act(() => {
+      // 回执事件按 request_id 命中，改的仍是同一条。
+      usePlanetCommandStore.getState().reconcileAuthoritativeEvent({
+        event_id: "evt-build-result",
+        tick: 301,
+        event_type: "command_result",
+        visibility_scope: "p1",
+        payload: {
+          request_id: "req-build-1",
+          code: "OK",
+          message: "wind_turbine 已开始施工",
+        },
+      } as never);
+    });
+
+    expect(usePlanetCommandStore.getState().journal[1]).toMatchObject({
+      requestId: "req-build-1",
+      status: "succeeded",
+      authoritativeMessage: "wind_turbine 已开始施工",
+    });
+    expect(usePlanetCommandStore.getState().journal[0]?.requestId).toBe("local-move-1");
+  });
+
+  it("没有本地占位时（旧路径）回执仍插到队首", () => {
+    act(() => {
+      usePlanetCommandStore.getState().reconcileAcceptedResponse({
+        commandType: "scan_planet",
+        planetId: "planet-1-1",
+        response: {
+          request_id: "req-scan-9",
+          accepted: true,
+          enqueue_tick: 400,
+          results: [{ command_index: 0, status: "queued", code: "OK", message: "scan accepted" }],
+        },
+      });
+    });
+    expect(usePlanetCommandStore.getState().journal[0]).toMatchObject({
+      requestId: "req-scan-9",
+      status: "pending",
+    });
+  });
+
   it("根据射线接收站模式生成不同的下一步提示", () => {
     for (const [requestId, receiverMode, expectedHint] of [
       [
