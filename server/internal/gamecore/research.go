@@ -199,6 +199,104 @@ func isResearchLab(building *model.Building) bool {
 	return building.Production.RecipeID == ""
 }
 
+// researchLabIntakeRejection 报告「研究模式的研究站不该收下这件物品」，
+// 空字符串表示可以照常装入。
+//
+// 研究模式（isResearchLab，即未设配方）的研究站只把库存里的矩阵当作研究
+// 耗材；其它物品（电路板、磁线圈、铁块……）装进去既不会被消耗，也不会被
+// 产出，只会占住站的库存格、把机甲背包里的料锁死。与其收下，不如拒绝并
+// 说清它真正需要什么（试玩报告 1013：把电路板/磁线圈直接装进研究站时，
+// 回执只说「已传输」，玩家以为这就够了）。
+func researchLabIntakeRejection(building *model.Building, itemID string) string {
+	if building == nil || building.Runtime.Functions.Research == nil || !isResearchLab(building) {
+		return ""
+	}
+	if def, ok := model.Item(itemID); ok && def.Category == model.ItemCategoryMatrix {
+		return ""
+	}
+	return fmt.Sprintf("%s处于研究模式，只接受矩阵（研究耗材）；「%s」请送到制造台或仓库，需要研究材料时把矩阵装入本建筑",
+		buildingDisplayName(building), itemDisplayName(itemID))
+}
+
+// researchLabBlockReason 解释「为什么没有一台可用的研究站」，供 start_research 的
+// 回执使用；玩家一台研究类建筑都没有时返回 ok=false（此时才是真的没建）。
+//
+// 试玩报告 1013 B：玩家明明有矩阵研究站，却因为两种完全不同的原因被同一句
+// 「需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）」拒掉：
+//  1. 研究站设了生产配方 —— 它按 DSP 语义不再算研究站，界面上没有任何提示；
+//  2. 研究站不在供电范围内 —— 整局 state=no_power。
+//
+// 两种原因的可操作修复完全不同，所以分开说：配方问题点名建筑与当前配方、
+// 指明要切回「无配方（研究模式）」；断电问题直接说断电并提示接电。
+func researchLabBlockReason(worlds map[string]*model.WorldState, playerID string) (string, bool) {
+	planetIDs := make([]string, 0, len(worlds))
+	for id := range worlds {
+		planetIDs = append(planetIDs, id)
+	}
+	sort.Strings(planetIDs)
+
+	type researchLab struct {
+		building *model.Building
+		recipe   string
+	}
+	var labs []researchLab
+	for _, planetID := range planetIDs {
+		ws := worlds[planetID]
+		if ws == nil {
+			continue
+		}
+		ids := make([]string, 0, len(ws.Buildings))
+		for id := range ws.Buildings {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			building := ws.Buildings[id]
+			if building == nil || building.OwnerID != playerID || building.HP <= 0 || building.Runtime.Functions.Research == nil {
+				continue
+			}
+			recipe := ""
+			if building.Production != nil {
+				recipe = building.Production.RecipeID
+			}
+			labs = append(labs, researchLab{building: building, recipe: recipe})
+		}
+	}
+	if len(labs) == 0 {
+		return "", false
+	}
+
+	// 1) 研究模式下不在运行：断电最常见，直接说断电与修法。
+	for _, lab := range labs {
+		if lab.recipe != "" {
+			continue
+		}
+		if lab.building.Runtime.State == model.BuildingWorkNoPower {
+			return fmt.Sprintf("%s（%d,%d）已断电，无法研究：先把它接进电网（电塔或无线输电塔的无线覆盖范围内）",
+				buildingDisplayName(lab.building), lab.building.Position.X, lab.building.Position.Y), true
+		}
+	}
+	// 2) 研究模式但停在其它非运行状态（停工/空闲/出错）。
+	for _, lab := range labs {
+		if lab.recipe != "" {
+			continue
+		}
+		if lab.building.Runtime.State != model.BuildingWorkRunning {
+			return fmt.Sprintf("%s（%d,%d）当前状态为 %s，不在运行：先让它恢复运行再开始研究",
+				buildingDisplayName(lab.building), lab.building.Position.X, lab.building.Position.Y, lab.building.Runtime.State), true
+		}
+	}
+	// 3) 有研究站，但全部被设成了生产建筑。
+	for _, lab := range labs {
+		if lab.recipe == "" {
+			continue
+		}
+		return fmt.Sprintf("%s（%d,%d）当前设为生产「%s」，不算研究站：把它的配方切换为「无配方（研究模式）」后才能研究",
+			buildingDisplayName(lab.building), lab.building.Position.X, lab.building.Position.Y, recipeDisplayName(lab.recipe)), true
+	}
+	return "", false
+}
+
 func runningResearchLabs(worlds map[string]*model.WorldState, playerID string) []*model.Building {
 	var labs []*model.Building
 	for _, ws := range worlds {
@@ -443,6 +541,9 @@ func (gc *GameCore) execStartResearch(ws *model.WorldState, playerID string, cmd
 	if len(labs) == 0 {
 		res.Code = model.CodeValidationFailed
 		res.Message = "需要至少一台运行中的研究站"
+		if detail, ok := researchLabBlockReason(gc.worlds, playerID); ok {
+			res.Message = detail
+		}
 		return res, nil
 	}
 	storageOf := researchLabStorageResolver(gc.worlds, labs)
@@ -710,7 +811,11 @@ func (gc *GameCore) ValidateStartResearchLocked(playerID string, techID string, 
 		labs = append(labs, b)
 	}
 	if len(labs) == 0 {
-		return []model.CommandIssue{{Field: "lab", Code: "no_running_lab", Message: "需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）"}}
+		message := "需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）"
+		if detail, ok := researchLabBlockReason(gc.worlds, playerID); ok {
+			message = detail
+		}
+		return []model.CommandIssue{{Field: "lab", Code: "no_running_lab", Message: message}}
 	}
 
 	var issues []model.CommandIssue

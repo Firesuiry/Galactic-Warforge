@@ -19,6 +19,7 @@ import (
 //	player_alive        {}
 //	tech_researched     {tech_id}
 //	building_count_gte  {type, n}
+//	building_running_gte {type, n}      只统计 Runtime.State == running 的存活建筑
 //	unit_count_gte      {type, n}
 //	item_gte            {item_id, n}
 //	dark_fog_hostile    {bool}
@@ -126,6 +127,25 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%d", count))
 		}
 		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求 %s >= %d", check.Type, check.N))
+	case "building_running_gte":
+		// 只认真正在运行的建筑：断电（no_power）、停工（paused/idle）、
+		// 出错（error）都不算。试玩报告 1013 第 5 节：cp-lab 第一版的研究站
+		// 建在电塔供电范围外，整局 no_power，但 building_count_gte 照样通过，
+		// 坏层因此被存进了接力链。
+		count := 0
+		for _, world := range gc.sortedWorlds() {
+			world.RLock()
+			for _, building := range world.Buildings {
+				if building != nil && building.OwnerID == player.PlayerID && building.HP > 0 && string(building.Type) == check.Type && building.Runtime.State == model.BuildingWorkRunning {
+					count++
+				}
+			}
+			world.RUnlock()
+		}
+		if count >= check.N {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求运行中的 %s >= %d（只统计 state=running）", check.Type, check.N))
 	case "unit_count_gte":
 		count := 0
 		for _, world := range gc.sortedWorlds() {

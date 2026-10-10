@@ -269,7 +269,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `upgrade` / `demolish` 受建筑定义规则约束（是否允许、最大等级、耗时、返还率、是否要求停机）；`duration_ticks > 0` 时生成 `job`、建筑置 `paused`，完成时生效。
 - `scan_galaxy` / `scan_system` / `scan_planet`：**星图登记**，不是开图。它们把星系/恒星系/星球登记进玩家的星图（`Discovery`），供星图导航与运行时加载使用；**不揭示行星地表的迷雾**（`explored` 掩码只由视野源推进）。回执会写明"已登记到星图"或"本就在星图中（扫描只登记星图，不揭示地表迷雾）"，不要期待它改变 `explored`。
 - `set_recipe`：原地切换配方，进度清零（`remaining_ticks`、`progress_fraction`、待产出）、库存保留；省略/空 `recipe_id` 时研究站回研究模式、生产建筑转空闲；校验失败原子拒绝（`recipe_id` 未知 / 该配方不支持此建筑类型 / 配方未研究解锁 / 建筑无 `Production` 模块 / 非本人建筑）。熔炉、制造台建成后随时可用它改配方，无需拆除重建；`target.entity_id` 是建筑 ID（可带 `target.planet_id` 跨行星消歧）。
-- `transfer_item`：`direction` 可选 `to_building`（默认，从背包装入，容量不足部分装填、只扣实际量）或 `to_player`（从主仓/输出缓存取出，受本行星执行体背包容量限制）。地面物流站须先配物品槽，写入唯一站库 `logistics_station.inventory`；喷涂机只收增产剂；分馏塔与轨道采集器不开放装料。
+- `transfer_item`：`direction` 可选 `to_building`（默认，从背包装入，容量不足部分装填、只扣实际量）或 `to_player`（从主仓/输出缓存取出，受本行星执行体背包容量限制）。`to_player` 的两种失败分开报：「<建筑>里没有可取出的「<物品>」」是建筑里真没有该物品，「背包已满（N/200），装不下取出的「<物品>」」是执行体背包装不下（试玩报告 1013 C）。`to_building` 装入**研究模式**（未设配方）的 `matrix_lab` / `self_evolution_lab` 时只接受矩阵类物品，其它物品当场拒绝并说明「…处于研究模式，只接受矩阵（研究耗材）；「…」请送到制造台或仓库」——研究站不会消耗它们，收下只会把背包里的料锁死（试玩报告 1013 B）；把该站切到生产配方后即按普通制造建筑收料。地面物流站须先配物品槽，写入唯一站库 `logistics_station.inventory`；喷涂机只收增产剂；分馏塔与轨道采集器不开放装料。
 
 ### 5.2 机甲（执行体）
 
@@ -316,7 +316,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.5 研究与生产规则
 
-- `start_research`：前置满足；至少一个 `running` 且未设 `recipe_id` 的研究站（`matrix_lab` / `self_evolution_lab`）；所需矩阵须已在研究站库存中，tick 内真实消耗矩阵推进进度。`research_speed` 科技在矩阵吞吐中生效。
+- `start_research`：前置满足；至少一个 `running` 且未设 `recipe_id` 的研究站（`matrix_lab` / `self_evolution_lab`）；所需矩阵须已在研究站库存中，tick 内真实消耗矩阵推进进度。`research_speed` 科技在矩阵吞吐中生效。被拒时回执说清是哪一种原因（试玩报告 1013 B）：研究站设了生产配方 → 「<建筑>（x,y）当前设为生产「<配方>」，不算研究站：把它的配方切换为「无配方（研究模式）」后才能研究」；研究站在断电 → 「<建筑>（x,y）已断电，无法研究：先把它接进电网（电塔或无线输电塔的无线覆盖范围内）」；研究站停在其它非运行状态 → 报出该状态；一台研究类建筑都没有时才是「需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）」。
 - 配方门控：配方声明 `tech_unlock` 或被科技 recipe 解锁引用时，必须完成对应科技才能在建筑或手工中使用；五个高级矩阵配方由同名科技门控。
 - 生产周期：`ceil(增产剂调整后的时长 / max(1, throughput))`，最短 1 tick。`production.progress_fraction ∈ [0,1)` 按真实供电比例推进（供电 20/需求 24 时速度 5/6，零供电不推进、不开新批）。输出缓存不足时整批保留在 `production.pending_outputs` / `pending_byproducts`，不部分提交。
 - Mk.II/III 制造台继承 Mk.I 配方（Mk.III 支持 `prototype`、`precision_drone`），吞吐 2/3、仓储 48/72、功耗 8/12。
@@ -596,6 +596,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `player_alive` | — | 玩家存活 |
 | `tech_researched` | `tech_id` | 已完成该科技（等级 > 0） |
 | `building_count_gte` | `type`, `n` | 存活建筑数 >= n |
+| `building_running_gte` | `type`, `n` | 存活且 `runtime.state=running` 的建筑数 >= n（断电 `no_power`、停工 `paused`/`idle`、出错 `error` 都不算；试玩报告 1013 第 5 节：`building_count_gte` 放过了一座整局没电的研究站） |
 | `unit_count_gte` | `type`, `n` | 存活单位数 >= n（含机甲 `executor`） |
 | `item_gte` | `item_id`, `n` | 玩家可用物资 >= n |
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
