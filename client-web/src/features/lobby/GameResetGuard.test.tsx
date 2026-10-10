@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -198,5 +198,55 @@ describe('GameResetGuard：读档存档点按换局处理', () => {
 
     expect(await screen.findByText(/已读档存档点「cp-a」/)).toBeInTheDocument();
     expect(screen.queryByText(/已重新连接到服务器/)).not.toBeInTheDocument();
+  });
+
+  it("连续读档两次：提示条文案跟着最新存档点刷新（不留上一档的名字）", async () => {
+    loginAs('p1');
+    let currentGame: unknown = GAME_A;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/games/current')) {
+        return Promise.resolve(jsonResponse(currentGame));
+      }
+      return Promise.resolve(jsonResponse({ error: 'not found' }, { status: 404 }));
+    }));
+
+    const { queryClient } = renderApp(['/lobby']);
+    expect(await screen.findByText('seed-001')).toBeInTheDocument();
+
+    currentGame = {
+      ...GAME_A,
+      tick: 12037,
+      started_at: '2026-09-30T08:00:00Z',
+      origin: 'checkpoint',
+      source_checkpoint: 'cp-a',
+    };
+    await queryClient.invalidateQueries({ queryKey: ['current-game'] });
+    expect(await screen.findByText(/已读档存档点「cp-a」/)).toBeInTheDocument();
+
+    // 第二次读档（另一档、另一对局身份）：提示条必须换成 cp-b。
+    currentGame = {
+      ...GAME_A,
+      tick: 24011,
+      started_at: '2026-10-01T09:30:00Z',
+      origin: 'checkpoint',
+      source_checkpoint: 'cp-b',
+    };
+    await queryClient.invalidateQueries({ queryKey: ['current-game'] });
+
+    // 文案在判定换局的那一刻就定稿进 store（此刻 game 还在手上）。
+    await waitFor(() => {
+      expect(useLobbyStore.getState().resetNoticeText).toContain('已读档存档点「cp-b」');
+    });
+
+    // 关键场景：queryClient.clear() 之后 data 会短暂变 undefined（重拉还没回来）。
+    // 提示条只读 store 的定稿文案，此时仍要显示 cp-b，而不是退化成通用文案。
+    act(() => {
+      queryClient.clear();
+    });
+    const banner = document.querySelector('.game-reset-banner');
+    expect(banner?.textContent ?? '').toContain('已读档存档点「cp-b」');
+    expect(banner?.textContent ?? '').not.toContain('cp-a');
+    expect(banner?.textContent ?? '').not.toContain('对局已被管理员重置');
   });
 });

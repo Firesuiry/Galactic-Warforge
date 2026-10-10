@@ -15,6 +15,7 @@ import {
 } from '@/features/lobby/current-game';
 import { useCurrentGameQuery } from '@/features/lobby/use-current-game';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import type { GameSummary } from '@shared/game';
 import {
   AUTH_FAILURE_LOGOUT_THRESHOLD,
   resetLobbyStore,
@@ -39,6 +40,17 @@ function writePromptedSettlementKey(key: string) {
 }
 
 /**
+ * 换局提示条文案（纯函数，便于单测）。
+ * origin=checkpoint 时点名来源存档点，其余（开新局 / 同局回滚）用通用文案。
+ */
+export function resetNoticeTextFor(game: Pick<GameSummary, 'origin' | 'source_checkpoint'>) {
+  if (game.origin === 'checkpoint') {
+    return `已读档存档点「${game.source_checkpoint ?? ''}」，本地缓存已刷新为最新状态；实时事件流会自动重连。`;
+  }
+  return '对局已被管理员重置，本地缓存已刷新为最新状态；实时事件流会自动重连。';
+}
+
+/**
  * C10 局变更守卫（挂在 AppShell，全页面生效）：
  * - 轮询 /games/current，started_at/seed 变化 → 判定管理员热重置：
  *   清空 react-query 缓存强制全量重拉，并弹出顶部提示条
@@ -53,6 +65,7 @@ export function GameResetGuard() {
   const navigate = useNavigate();
   const clearSession = useSessionStore((state) => state.clearSession);
   const resetNotice = useLobbyStore((state) => state.resetNotice);
+  const resetNoticeText = useLobbyStore((state) => state.resetNoticeText);
   const reconnectNotice = useLobbyStore((state) => state.reconnectNotice);
   const dismissResetNotice = useLobbyStore((state) => state.dismissResetNotice);
   const dismissReconnectNotice = useLobbyStore((state) => state.dismissReconnectNotice);
@@ -87,7 +100,9 @@ export function GameResetGuard() {
     store.recordIdentity(scope, gameIdentityOf(game), game.tick);
     if (continuity === 'reset') {
       // 换局、读档存档点或同局回滚：全量重拉 + 提示。
-      store.flagResetNotice();
+      // 文案在这里定稿（此刻 game 一定在手上）：queryClient.clear() 之后 data 会短暂
+      // 变 undefined，渲染时再取就只能退化成通用文案（连续读档看起来像「名字没刷新」）。
+      store.flagResetNotice(resetNoticeTextFor(game));
       queryClient.clear();
       return;
     }
@@ -159,9 +174,7 @@ export function GameResetGuard() {
         <div className="game-reset-banner" role="alert">
           <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
           <span>
-            {gameQuery.data?.origin === 'checkpoint'
-              ? `已读档存档点「${gameQuery.data.source_checkpoint ?? ''}」，本地缓存已刷新为最新状态；实时事件流会自动重连。`
-              : '对局已被管理员重置，本地缓存已刷新为最新状态；实时事件流会自动重连。'}
+            {resetNoticeText || '对局已被管理员重置，本地缓存已刷新为最新状态；实时事件流会自动重连。'}
           </span>
           <button
             className="game-reset-banner__dismiss"

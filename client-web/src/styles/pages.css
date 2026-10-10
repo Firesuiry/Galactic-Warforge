@@ -1183,7 +1183,7 @@
   top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: 97;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1214,6 +1214,138 @@
 
 .game-reset-banner--below {
   top: 116px;
+}
+
+/*
+ * 终局/出局胜负横幅：比提示条更醒目（大号标题 + 胜负配色），
+ * 位于顶部提示条之下、右侧抽屉（95）之上，避免被工作面压住。
+ * 试玩 1012：被歼灭/终局只有一条会消失的 toast，玩家看不出自己已经出局。
+ */
+.endgame-banner {
+  position: fixed;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 96;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 14px 22px;
+  border-radius: 14px;
+  border: 1px solid;
+  background: rgba(10, 14, 22, 0.94);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: endgame-banner-in var(--dur) var(--ease);
+}
+
+.endgame-banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.endgame-banner__title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  letter-spacing: 0.18em;
+}
+
+.endgame-banner__hint {
+  font-size: 0.84rem;
+  color: var(--text-dim);
+}
+
+.endgame-banner__action,
+.endgame-banner__dismiss {
+  flex: 0 0 auto;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.86rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.endgame-banner__action {
+  font-weight: 700;
+}
+
+.endgame-banner__dismiss {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.endgame-banner__dismiss:hover {
+  color: var(--text);
+  border-color: var(--border-glow);
+}
+
+/* 胜利：金/青色；战败：红/橙色 */
+.endgame-banner--victory {
+  border-color: rgba(57, 230, 208, 0.55);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 32px rgba(57, 230, 208, 0.18);
+}
+
+.endgame-banner--victory .endgame-banner__title {
+  color: var(--accent);
+  text-shadow: 0 0 18px rgba(57, 230, 208, 0.5);
+}
+
+.endgame-banner--victory .endgame-banner__action {
+  border-color: rgba(57, 230, 208, 0.55);
+  color: var(--accent);
+}
+
+.endgame-banner--victory .endgame-banner__action:hover {
+  background: rgba(57, 230, 208, 0.14);
+}
+
+.endgame-banner--defeat {
+  border-color: rgba(255, 107, 107, 0.55);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 32px rgba(255, 107, 107, 0.16);
+}
+
+.endgame-banner--defeat .endgame-banner__title {
+  color: var(--danger);
+  text-shadow: 0 0 18px rgba(255, 107, 107, 0.45);
+}
+
+.endgame-banner--defeat .endgame-banner__action {
+  border-color: rgba(255, 107, 107, 0.55);
+  color: var(--danger);
+}
+
+.endgame-banner--defeat .endgame-banner__action:hover {
+  background: rgba(255, 107, 107, 0.14);
+}
+
+@keyframes endgame-banner-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (max-width: 760px) {
+  .endgame-banner {
+    top: 104px;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .endgame-banner__title {
+    font-size: 1.3rem;
+  }
 }
 
 .lobby-finished {

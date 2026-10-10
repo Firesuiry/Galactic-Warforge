@@ -1076,6 +1076,26 @@
   pointer-events:none;
 }
 
+/*
+ * 抽屉展开时的层级（试玩 1012 问题 1：工作台「装入建筑」按钮右半被 .toast__body 拦走）。
+ *
+ * 只把抽屉自己抬到 z-index:95 是不够的：.planet-map-shell 继承 .panel 的 backdrop-filter，
+ * 因而自成一个原子堆叠上下文——壳内任何 z-index 都只在壳内排序，整个壳仍按「无 z-index 的
+ * 普通流块」绘制，会被 DOM 靠后的 .outliner、.toast-stack（z-index 90）盖住。
+ * 所以展开时把整个地图壳抬到页面级浮层之上（见下方 .planet-map-shell:has(...) 规则）。
+ * 抽屉是玩家主动展开的工作面，命中优先级高于瞬时通知；被它盖住的 toast 仍留在铃铛历史，
+ * 关掉抽屉即可继续操作。
+ */
+.planet-drawer--open {
+  z-index:95;
+}
+
+/* 地图壳自带的 backdrop-filter 使其成为原子堆叠上下文（见上），抽屉展开时整壳抬升；
+   提示条 .game-reset-banner 已相应抬到 z-index:97，仍在其上。 */
+.planet-map-shell:has(.planet-drawer--open) {
+  z-index:95;
+}
+
 .planet-drawer__handle {
   position:absolute;
   right:0;
@@ -1127,7 +1147,12 @@
   border-right:none;
   border-bottom:none;
   transform:translate(100%);
-  transition:transform var(--dur) var(--ease);
+  /* 收起时整块抽屉体滑出右缘之外，但它的盒子仍覆盖在右缘（视口内的 outliner 上方）：
+     不可见却可命中，点击会被这层「幽灵」拦走（试玩 1012：窄屏点地图、宽屏点 outliner 命中的是
+     抽屉里滚到顶的详情页签）。收起态设为不可命中，滑出动画结束后才生效（visibility 延迟切换），
+     打开时立即恢复。 */
+  visibility:hidden;
+  transition:transform var(--dur) var(--ease),visibility 0s linear var(--dur);
 }
 
 /* 抽屉底部为选择条留出的高度：宽屏选择条已右移让位，留 0；窄屏抽屉是覆盖式，必须留。 */
@@ -1141,6 +1166,8 @@
 
 .planet-drawer--open .planet-drawer__body {
   transform:translate(0);
+  visibility:visible;
+  transition-delay:0s;
 }
 
 .planet-map-canvas__surface--build,.planet-map-canvas__surface--move,.planet-map-canvas__surface--attack {

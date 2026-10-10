@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useGameAudio } from '@/features/audio/use-game-audio';
+import { EndgameBanner } from '@/features/lobby/EndgameBanner';
 import { GameResetGuard } from '@/features/lobby/GameResetGuard';
 import { NotificationToasts } from '@/features/notifications/NotificationToasts';
 import { Outliner } from '@/widgets/Outliner';
@@ -27,6 +28,8 @@ export function AppShell() {
       <NotificationToasts />
       {/* C10 局变更守卫：轮询 /games/current，热重置/凭证失效时全局引导 */}
       <GameResetGuard />
+      {/* 终局/出局胜负横幅：只在胜利/战败时出现，读档或开新局后自动复位 */}
+      <EndgameBanner />
     </div>
   );
 }
