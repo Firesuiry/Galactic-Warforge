@@ -260,7 +260,7 @@ func (gc *GameCore) Run() {
 	if tickRate <= 0 {
 		tickRate = 10
 	}
-	tickInterval := time.Duration(1000/tickRate) * time.Millisecond
+	tickInterval := time.Second / time.Duration(tickRate)
 
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()

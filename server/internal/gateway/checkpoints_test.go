@@ -177,6 +177,9 @@ func TestCheckpointAPILifecycle(t *testing.T) {
 	if game == nil || game["tick"] != float64(1234) {
 		t.Fatalf("loaded game tick wrong: %v", game)
 	}
+	if game["origin"] != "checkpoint" || game["source_checkpoint"] != "base-ok" {
+		t.Fatalf("loaded game origin/source wrong: %v / %v", game["origin"], game["source_checkpoint"])
+	}
 	newSess := rt.Current()
 	if newSess.StartedAt.Equal(startedBefore) {
 		t.Fatal("hot load must produce a new session (started_at should change)")

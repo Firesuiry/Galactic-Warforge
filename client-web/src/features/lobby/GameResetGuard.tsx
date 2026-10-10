@@ -86,7 +86,7 @@ export function GameResetGuard() {
     }
     store.recordIdentity(scope, gameIdentityOf(game), game.tick);
     if (continuity === 'reset') {
-      // 真换局（或 tick 回退）：全量重拉 + 提示重置。
+      // 换局、读档存档点或同局回滚：全量重拉 + 提示。
       store.flagResetNotice();
       queryClient.clear();
       return;
@@ -158,7 +158,11 @@ export function GameResetGuard() {
       {resetNotice ? (
         <div className="game-reset-banner" role="alert">
           <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
-          <span>对局已被管理员重置，本地缓存已刷新为最新状态；实时事件流会自动重连。</span>
+          <span>
+            {gameQuery.data?.origin === 'checkpoint'
+              ? `已读档存档点「${gameQuery.data.source_checkpoint ?? ''}」，本地缓存已刷新为最新状态；实时事件流会自动重连。`
+              : '对局已被管理员重置，本地缓存已刷新为最新状态；实时事件流会自动重连。'}
+          </span>
           <button
             className="game-reset-banner__dismiss"
             type="button"

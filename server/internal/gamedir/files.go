@@ -55,6 +55,9 @@ type MetaFile struct {
 	SaveFingerprint   string           `json:"save_fingerprint"`
 	GameplayConfig    GameplayConfig   `json:"gameplay_config"`
 	MapConfig         mapconfig.Config `json:"map_config"`
+	// SourceCheckpoint 本局的来源存档点名（读档时写入，随存档持久化，重启后仍在）；
+	// 新局为空。新存档点的 parent 取自这里。
+	SourceCheckpoint string `json:"source_checkpoint,omitempty"`
 }
 
 // RuntimeState stores runtime-only state that should survive restart.

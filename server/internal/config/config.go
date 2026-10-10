@@ -232,6 +232,10 @@ func ApplyDefaults(cfg *Config) error {
 	if cfg.Server.AutoSaveIntervalSeconds == 0 {
 		cfg.Server.AutoSaveIntervalSeconds = defaultAutoSaveIntervalSeconds
 	}
+	// 上限 1000：tick 间隔按毫秒级 ticker 调度，再高没有意义。
+	if cfg.Battlefield.MaxTickRate < 0 || cfg.Battlefield.MaxTickRate > 1000 {
+		return fmt.Errorf("battlefield.max_tick_rate must be in 1..1000")
+	}
 	if cfg.Server.AutoSaveIntervalSeconds < 0 {
 		return fmt.Errorf("server.auto_save_interval_seconds must be >= 0")
 	}

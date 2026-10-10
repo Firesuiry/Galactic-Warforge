@@ -20,6 +20,7 @@ const sampleGame: GameSummary = {
   active_planet_id: 'planet-1-1',
   tick: 0,
   started_at: '2026-09-29T00:00:00Z',
+  origin: 'new',
   players: [
     { player_id: 'p1', role: 'admin', team_id: 'p1', is_alive: true },
     { player_id: 'p2', role: 'commander', team_id: 'p2', bot: 'easy', is_alive: true },

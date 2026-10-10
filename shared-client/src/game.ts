@@ -89,6 +89,10 @@ export interface GameSummary {
   active_planet_id: string;
   tick: number;
   started_at: string;
+  /** 本 session 的来源：new 新局 / resume 进程重启恢复同一局 / checkpoint 热加载存档点。 */
+  origin: GameOrigin;
+  /** 本局的来源存档点名；不是从存档点读出来的局没有。 */
+  source_checkpoint?: string;
   players: GamePlayerSummary[];
   victory: GameVictorySummary;
   /**
@@ -99,6 +103,8 @@ export interface GameSummary {
   /** 仅 finished 时存在。 */
   settlement?: SettlementReport;
 }
+
+export type GameOrigin = 'new' | 'resume' | 'checkpoint';
 
 /** 缺省 status 视为 running，兼容尚未带该字段的旧响应。 */
 export function gameStatusOf(game: Pick<GameSummary, 'status'>): GameStatus {

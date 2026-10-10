@@ -14,6 +14,7 @@ const GAME_A = {
   active_planet_id: 'planet-1-1',
   tick: 100,
   started_at: '2026-09-29T12:00:00Z',
+  origin: 'new',
   players: [
     { player_id: 'p1', role: 'admin', team_id: 'p1', is_alive: true },
   ],
@@ -26,6 +27,7 @@ const GAME_B = {
   map_seed: 'seed-002',
   tick: 0,
   started_at: '2026-09-30T08:00:00Z',
+  origin: 'new',
 };
 
 function loginAs(playerId: string) {
@@ -159,6 +161,7 @@ describe('GameResetGuard：重启恢复同一存档不报「对局重置」', ()
       ...GAME_A,
       tick: 5200,
       started_at: new Date().toISOString(),
+      origin: 'resume',
     };
     await queryClient.invalidateQueries({ queryKey: ['current-game'] });
 
@@ -166,5 +169,34 @@ describe('GameResetGuard：重启恢复同一存档不报「对局重置」', ()
     expect(screen.queryByText(/对局已被管理员重置/)).not.toBeInTheDocument();
     // 缓存没被清掉：大厅仍在（没有整页重拉）
     expect(useSessionStore.getState().playerKey).toBe('key_p1');
+  });
+});
+
+describe('GameResetGuard：读档存档点按换局处理', () => {
+  it('origin=checkpoint（session 刚建、tick 很大）→ 清缓存并提示读档', async () => {
+    loginAs('p1');
+    let currentGame: unknown = GAME_A;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/games/current')) {
+        return Promise.resolve(jsonResponse(currentGame));
+      }
+      return Promise.resolve(jsonResponse({ error: 'not found' }, { status: 404 }));
+    }));
+
+    const { queryClient } = renderApp(['/lobby']);
+    expect(await screen.findByText('seed-001')).toBeInTheDocument();
+
+    currentGame = {
+      ...GAME_A,
+      tick: 12037,
+      started_at: new Date().toISOString(),
+      origin: 'checkpoint',
+      source_checkpoint: 'cp-a',
+    };
+    await queryClient.invalidateQueries({ queryKey: ['current-game'] });
+
+    expect(await screen.findByText(/已读档存档点「cp-a」/)).toBeInTheDocument();
+    expect(screen.queryByText(/已重新连接到服务器/)).not.toBeInTheDocument();
   });
 });

@@ -534,6 +534,8 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /games/current`**：任意登录玩家可调。
 - `map_seed`、`enemy_difficulty`、`victory_mode`、`max_tick_rate`、`active_planet_id`、`tick`、`started_at`。
+- `origin`：本 session 的来源，`new`（开新局 / 启动新建）、`resume`（进程重启后从 `data_dir` 恢复同一局）、`checkpoint`（热加载存档点）。客户端据此区分「同一局重连」（resume）与「换局」（new / checkpoint，需清缓存：实体 id 会复用）。
+- `source_checkpoint`：本局的来源存档点名（随存档持久化，重启后仍在），不是从存档点读出来的局省略。
 - `players[]`：`player_id` / `role` / `team_id` / `bot` / `is_alive` / `focus_planet_id`（不含 key）。
 - `victory`：`{declared, winner_id?, team_id?, reason?}`；`status`：`running|finished`。
 - `settlement`（仅 finished）：宣判瞬间冻结，随存档持久化。`winner_id` / `team_id?` / `reason` / `victory_rule` / `tech_id?` / `start_tick`（0）/ `declared_tick` / `duration_ticks` / `players[]`（按 `player_id` 排序，`is_alive` / `winner?` / 双边战损）。
@@ -604,6 +606,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 **`POST /checkpoints/{name}/load`**（仅 admin）：热加载存档点。
 - 按存档内的 `battlefield` / `players` 与固化的地图拓扑重建对局，写入 `data_dir` 作为当前局存档，原子替换当前对局（与 `POST /games/new` 同样的互斥与 autosave 处理）。
 - 响应 `200`：`manifest` / `warnings[]`（`stale` 时给出警告但**仍然加载**）/ `game`（结构同 `GET /games/current`，`started_at` 是新 Session 的创建时间）。
+- 来源存档点名写进 `data_dir` 的 `meta.json`（`source_checkpoint`），重启进程后再存档点，`parent` 仍指向它。
 - 与 `/games/new` 不同：**玩家 key 不变**，SSE 连接会被断开（旧 Session 关闭），客户端重新订阅并全量拉取即可。
 
 

@@ -22,6 +22,7 @@ function createGameSummary(overrides: Partial<GameSummary> = {}): GameSummary {
     active_planet_id: 'planet-1-1',
     tick: 100,
     started_at: '2026-09-29T12:00:00Z',
+    origin: 'new',
     players: [
       { player_id: 'p1', role: 'admin', team_id: 'p1', is_alive: true },
       { player_id: 'p2', role: 'commander', team_id: 'team-b', bot: 'easy', is_alive: true },
@@ -180,33 +181,33 @@ describe('resolveAdoptedAuth', () => {
   });
 });
 
-describe('detectGameContinuity（服务端重启后 SSE 重连不应报「对局重置」）', () => {
-  const now = Date.parse('2026-09-29T12:10:00Z');
+describe('detectGameContinuity（按服务端 origin 区分重连与换局）', () => {
   const base = createGameSummary({ tick: 9000, started_at: '2026-09-29T11:00:00Z' });
+  const prev = { identity: gameIdentityOf(base), tick: 9000 };
 
-  it('身份与 tick 都没变 → none（普通 SSE 重连/心跳恢复）', () => {
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 8999 }, base, now)).toBe('none');
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, base, now)).toBe('none');
+  it('身份没变、tick 前进 → none（普通 SSE 重连/心跳恢复）', () => {
+    expect(detectGameContinuity({ ...prev, tick: 8999 }, base)).toBe('none');
+    expect(detectGameContinuity(prev, base)).toBe('none');
   });
 
-  it('服务端重启恢复同一存档（started_at 新但 tick 仍是长跑值）→ reconnected', () => {
-    const restarted = { ...base, tick: 9000, started_at: new Date(now - 30_000).toISOString() };
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, restarted, now)).toBe('reconnected');
-    // tick 略回退（快照恢复丢几 tick）也算重连
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9050 }, restarted, now)).toBe('reconnected');
+  it('身份没变但 tick 回退（同局回滚）→ reset', () => {
+    expect(detectGameContinuity(prev, { ...base, tick: 100 })).toBe('reset');
   });
 
-  it('真换局（新 seed 或 tick 回到 0 附近）→ reset', () => {
-    const newGame = { ...base, tick: 0, map_seed: 'seed-002', started_at: new Date(now - 5_000).toISOString() };
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, newGame, now)).toBe('reset');
-    const newSeed = { ...base, map_seed: 'seed-002' };
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, newSeed, now)).toBe('reset');
-    // 老 session（started_at 很久以前）却 tick 回退：不是重启恢复，按重置处理
-    const regressed = { ...base, tick: 100 };
-    expect(detectGameContinuity({ identity: gameIdentityOf(base), tick: 9000 }, regressed, now)).toBe('reset');
+  it('服务端重启恢复同一存档（origin=resume）→ reconnected，tick 略回退也算', () => {
+    const restarted = { ...base, origin: 'resume' as const, tick: 8950, started_at: '2026-09-29T12:09:30Z' };
+    expect(detectGameContinuity(prev, restarted)).toBe('reconnected');
+  });
+
+  it('开新局（origin=new）或读档存档点（origin=checkpoint）→ reset', () => {
+    const newGame = { ...base, origin: 'new' as const, tick: 0, map_seed: 'seed-002', started_at: '2026-09-29T12:09:55Z' };
+    expect(detectGameContinuity(prev, newGame)).toBe('reset');
+    // 读档：tick 很大、session 刚建——旧的时间/tick 启发式会误判成重连
+    const loaded = { ...base, origin: 'checkpoint' as const, source_checkpoint: 'cp-a', tick: 12037, started_at: '2026-09-29T12:09:55Z' };
+    expect(detectGameContinuity(prev, loaded)).toBe('reset');
   });
 
   it('没有基线（首次拿到对局概要）→ none', () => {
-    expect(detectGameContinuity(null, base, now)).toBe('none');
+    expect(detectGameContinuity(null, base)).toBe('none');
   });
 });

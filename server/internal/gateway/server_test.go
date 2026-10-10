@@ -42,7 +42,7 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q, startup.OriginNew)))
 	return srv, core
 }
 
@@ -433,7 +433,7 @@ func TestPostCommandsPermissionDenied(t *testing.T) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q, startup.OriginNew)))
 
 	payload := model.CommandRequest{
 		RequestID:  "req-perm-deny",
@@ -809,7 +809,7 @@ func TestMetricsEndpointIncludesDroppedEvents(t *testing.T) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q, startup.OriginNew)))
 
 	ch := bus.Subscribe("metrics-sub", nil)
 	defer bus.Unsubscribe("metrics-sub")

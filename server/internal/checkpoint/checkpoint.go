@@ -128,6 +128,9 @@ func StaleWarning(name string, m *Manifest) string {
 		return ""
 	}
 	commit, dirty := BuildInfo()
+	if commit != "" && commit == m.Commit {
+		return fmt.Sprintf("存档点 %s 与当前服务端同为 commit=%s，但有未提交改动（dirty），读档结果可能与创建时不同", name, commit)
+	}
 	now := commit
 	if now == "" {
 		now = "(unknown)"
@@ -242,23 +245,35 @@ func (s *Store) Write(name string, meta *gamedir.MetaFile, save *gamedir.SaveFil
 	if exists && !replace {
 		return fmt.Errorf("%w: %s", ErrExists, name)
 	}
-	if exists {
-		if err := os.RemoveAll(dir); err != nil {
-			return fmt.Errorf("覆盖存档点 %s: %w", name, err)
-		}
+	// 先在同级临时目录写全三份文件，再 rename 换上：覆盖中途失败不会留下半个存档点。
+	// 临时目录以 "." 开头，不满足存档点命名规则，List 会因缺 manifest 跳过它。
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		return fmt.Errorf("创建存档点根目录: %w", err)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("创建存档点目录: %w", err)
+	tmp, err := os.MkdirTemp(s.root, "."+name+".tmp-")
+	if err != nil {
+		return fmt.Errorf("创建存档点临时目录: %w", err)
 	}
-	if err := gamedir.Open(dir).WriteInitial(meta, save); err != nil {
+	defer os.RemoveAll(tmp)
+	if err := gamedir.Open(tmp).WriteInitial(meta, save); err != nil {
 		return fmt.Errorf("写入存档点 %s: %w", name, err)
 	}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化 manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "manifest.json"), append(data, '\n'), 0o644); err != nil {
 		return fmt.Errorf("写入 manifest.json: %w", err)
+	}
+	if exists {
+		old := tmp + ".old"
+		if err := os.Rename(dir, old); err != nil {
+			return fmt.Errorf("覆盖存档点 %s: %w", name, err)
+		}
+		defer os.RemoveAll(old)
+	}
+	if err := os.Rename(tmp, dir); err != nil {
+		return fmt.Errorf("落盘存档点 %s: %w", name, err)
 	}
 	return nil
 }

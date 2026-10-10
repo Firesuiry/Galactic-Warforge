@@ -52,41 +52,26 @@ export function gameIdentityOf(game: GameSummary) {
   return `${game.started_at}::${game.map_seed}`;
 }
 
-/** 服务端 session 的「刚启动」窗口：这段时间内 started_at 很新但 tick 已经很长 = 同一存档被恢复。 */
-export const FRESH_SESSION_MS = 5 * 60 * 1000;
-/** tick 回退容忍：快照恢复最多丢 snapshot_interval_ticks 级别的 tick，不算换局。 */
-export const TICK_REGRESSION_TOLERANCE = 600;
-
-/** 对局连续性判定：换局（重置）/ 重连（同一存档恢复）/ 无变化。 */
+/** 对局连续性判定：换局（重置/读档）/ 重连（同一局被服务端重启恢复）/ 无变化。 */
 export type GameContinuity = 'none' | 'reset' | 'reconnected';
 
 /**
- * 「对局已被管理员重置」的判定依据（试玩 1009 J：服务端重启后 SSE 重连被误报为重置）：
- * - 身份（started_at+map_seed）与 tick 都没变 → 无变化（普通 SSE 重连、心跳恢复）；
- * - 身份变了但服务端 session 刚启动、且 tick 仍是长跑值 → **同一存档被恢复**
- *   （重启/热替换二进制；started_at 每次建 session 都会刷新，不能单独作为换局依据），
- *   只提示「已重新连接服务器」；
- * - 其余变化（tick 明显回退、或回到 0 附近的新局）→ 真重置，提示重置。
+ * 「对局已被重置」的判定：以服务端给出的 session 来源 `origin` 为准，不再按时间/tick 猜。
+ * - 身份（started_at+map_seed）没变：tick 回退 = 同局回滚 → reset，否则 none；
+ * - 身份变了：origin=resume（进程重启恢复同一局存档）→ reconnected，
+ *   new（开新局）/ checkpoint（读档存档点，实体 id 会复用）→ reset。
  */
 export function detectGameContinuity(
   previous: { identity: string; tick: number } | null,
   game: GameSummary,
-  nowMs: number = Date.now(),
 ): GameContinuity {
   if (!previous) {
     return 'none';
   }
-  const identityChanged = previous.identity !== gameIdentityOf(game);
-  const tickRegressed = typeof game.tick === 'number' && game.tick < previous.tick;
-  if (!identityChanged && !tickRegressed) {
-    return 'none';
+  if (previous.identity === gameIdentityOf(game)) {
+    return game.tick < previous.tick ? 'reset' : 'none';
   }
-  const sessionAgeMs = Date.parse(game.started_at);
-  const freshSession = Number.isFinite(sessionAgeMs)
-    && nowMs - sessionAgeMs >= 0
-    && nowMs - sessionAgeMs <= FRESH_SESSION_MS;
-  const restoredSameSave = freshSession && game.tick > TICK_REGRESSION_TOLERANCE;
-  return restoredSameSave ? 'reconnected' : 'reset';
+  return game.origin === 'resume' ? 'reconnected' : 'reset';
 }
 
 /**

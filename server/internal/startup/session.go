@@ -38,13 +38,23 @@ type Session struct {
 	Vis       *visibility.Engine
 	KeyMap    map[string]string // bearer key -> player_id
 	StartedAt time.Time
+	Origin    SessionOrigin
 	// Meta 是本局写盘用的 meta（当前 data_dir 的 meta.json 内存副本）。
 	// 写存档点（只读来源）时复制一份，避免改动当前局的指纹。
 	Meta *gamedir.MetaFile
 }
 
+// SessionOrigin 说明当前 session 从哪来，客户端据此区分「同一局重连」与「换局」。
+type SessionOrigin string
+
+const (
+	OriginNew        SessionOrigin = "new"        // 新开的一局（启动新建 / 开新局）
+	OriginResume     SessionOrigin = "resume"     // 进程重启后从 data_dir 恢复的同一局
+	OriginCheckpoint SessionOrigin = "checkpoint" // 热加载存档点
+)
+
 // NewSession 装配一个完整对局 session（查询层/可视化引擎/键映射在这里一次性构建）。
-func NewSession(cfg *config.Config, maps *mapmodel.Universe, core *gamecore.GameCore, bus *gamecore.EventBus, q *queue.CommandQueue) *Session {
+func NewSession(cfg *config.Config, maps *mapmodel.Universe, core *gamecore.GameCore, bus *gamecore.EventBus, q *queue.CommandQueue, origin SessionOrigin) *Session {
 	vis := visibility.New()
 	return &Session{
 		Config:    cfg,
@@ -56,6 +66,7 @@ func NewSession(cfg *config.Config, maps *mapmodel.Universe, core *gamecore.Game
 		Vis:       vis,
 		KeyMap:    cfg.KeyToPlayer(),
 		StartedAt: time.Now().UTC(),
+		Origin:    origin,
 	}
 }
 
@@ -92,15 +103,19 @@ type GameVictorySummary struct {
 
 // GameSummary 描述当前对局概况，供大厅 UI / CLI 使用。
 type GameSummary struct {
-	MapSeed         string              `json:"map_seed"`
-	EnemyDifficulty string              `json:"enemy_difficulty"`
-	VictoryMode     string              `json:"victory_mode"`
-	MaxTickRate     int                 `json:"max_tick_rate"`
-	ActivePlanetID  string              `json:"active_planet_id"`
-	Tick            int64               `json:"tick"`
-	StartedAt       time.Time           `json:"started_at"`
-	Players         []GamePlayerSummary `json:"players"`
-	Victory         GameVictorySummary  `json:"victory"`
+	MapSeed         string    `json:"map_seed"`
+	EnemyDifficulty string    `json:"enemy_difficulty"`
+	VictoryMode     string    `json:"victory_mode"`
+	MaxTickRate     int       `json:"max_tick_rate"`
+	ActivePlanetID  string    `json:"active_planet_id"`
+	Tick            int64     `json:"tick"`
+	StartedAt       time.Time `json:"started_at"`
+	// Origin 本 session 的来源：new | resume | checkpoint（见 SessionOrigin）。
+	Origin SessionOrigin `json:"origin"`
+	// SourceCheckpoint 本局的来源存档点名；不是从存档点读出来的为空。
+	SourceCheckpoint string              `json:"source_checkpoint,omitempty"`
+	Players          []GamePlayerSummary `json:"players"`
+	Victory          GameVictorySummary  `json:"victory"`
 	// Status 对局状态（F2）：running|finished；victory 宣判即 finished，
 	// 此后常规游戏命令统一以 GAME_FINISHED 拒绝（管理面不受限）。
 	Status string `json:"status"`
@@ -117,7 +132,11 @@ func (sess *Session) Summary() GameSummary {
 		VictoryMode:     model.NormalizeVictoryRule(cfg.Battlefield.VictoryRule),
 		MaxTickRate:     cfg.Battlefield.MaxTickRate,
 		StartedAt:       sess.StartedAt,
+		Origin:          sess.Origin,
 		Status:          "running",
+	}
+	if sess.Meta != nil {
+		sum.SourceCheckpoint = sess.Meta.SourceCheckpoint
 	}
 	if sess.Core != nil {
 		sum.ActivePlanetID = sess.Core.ActivePlanetID()
@@ -199,8 +218,6 @@ type Runtime struct {
 
 	resetMu sync.Mutex // 串行化 Reset/Save/Start/Stop：存档写入热重置间隙不允许交叉
 	started bool       // Start 之后 adopt 新局才会拉起 tick 循环与 autosave
-	// sourceCheckpoint 是当前局的来源存档点名：新局/启动新建为空（resetMu 保护）。
-	sourceCheckpoint string
 
 	autosaveStop chan struct{}
 	autosaveDone chan struct{}
@@ -318,7 +335,6 @@ func (rt *Runtime) Reset(req NewGameRequest) (*Session, error) {
 
 	old := rt.current.Swap(sess)
 	old.shutdown()
-	rt.sourceCheckpoint = ""
 	if rt.started {
 		rt.startSessionLocked(sess)
 	}
@@ -342,7 +358,7 @@ func (rt *Runtime) assemble(cfg *config.Config) (*Session, error) {
 	core := gamecore.New(cfg, maps, q, bus, store)
 	meta := gamedir.NewMetaFile(cfg, rt.mapCfg)
 	core.AttachGameDir(rt.dir, meta, snapshot.Capture(core.World(), core.Discovery()))
-	sess := NewSession(cfg, maps, core, bus, q)
+	sess := NewSession(cfg, maps, core, bus, q, OriginNew)
 	sess.Meta = meta
 	return sess, nil
 }

@@ -58,7 +58,7 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 	case gameDirStateResume:
 		// 恢复对局必须用存档内固化的地图配置（与 saved surface 一一对应）；
 		// 热重置所用地图模板（F1）则优先启动时指定的 mapconfig 文件，读不到再退回存档。
-		sess, err = rt.assembleFromSave(cfg, rt.dir, true)
+		sess, err = rt.assembleFromSave(cfg, rt.dir, OriginResume)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 		if _, err := core.Save("startup"); err != nil {
 			return nil, fmt.Errorf("initial save: %w", err)
 		}
-		sess = NewSession(cfg, maps, core, bus, q)
+		sess = NewSession(cfg, maps, core, bus, q, OriginNew)
 		sess.Meta = meta
 	default:
 		return nil, fmt.Errorf("unsupported game dir state %d", state)
@@ -91,11 +91,12 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 
 // assembleFromSave 由存档（meta.json + save.json）装配完整 session，并把 data_dir
 // 指向 rt.dir：启动恢复（saveDir = rt.dir）与热加载存档点（saveDir = 只读存档点目录）
-// 共用这一条组装路径。
+// 共用这一条组装路径。origin 只能是 OriginResume（读写 data_dir）或
+// OriginCheckpoint（存档点目录只读，读取时不做 meta 自愈写回）。
 //
 // live 是进程级配置（server 段：端口/快照策略/autosave 间隔保持不变），
 // 存档内的 battlefield 与 players 覆盖它；地图拓扑始终以存档内固化的 mapconfig 为准。
-func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, writable bool) (*Session, error) {
+func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, origin SessionOrigin) (*Session, error) {
 	if saveDir == nil {
 		return nil, fmt.Errorf("save dir is nil")
 	}
@@ -104,7 +105,7 @@ func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, w
 		save *gamedir.SaveFile
 		err  error
 	)
-	if writable {
+	if origin == OriginResume {
 		meta, save, err = saveDir.Load()
 	} else {
 		meta, save, err = saveDir.LoadReadOnly()
@@ -129,7 +130,7 @@ func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, w
 		return nil, err
 	}
 	core.AttachGameDir(rt.dir, meta, choosePersistedBaseSnapshot(save))
-	sess := NewSession(cfg, maps, core, bus, q)
+	sess := NewSession(cfg, maps, core, bus, q, origin)
 	sess.Meta = meta
 	return sess, nil
 }

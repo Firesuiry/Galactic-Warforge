@@ -40,7 +40,15 @@ func (rt *Runtime) SourceCheckpoint() string {
 	}
 	rt.resetMu.Lock()
 	defer rt.resetMu.Unlock()
-	return rt.sourceCheckpoint
+	return rt.current.Load().sourceCheckpoint()
+}
+
+// sourceCheckpoint 读本局 meta 里持久化的来源存档点名。
+func (sess *Session) sourceCheckpoint() string {
+	if sess == nil || sess.Meta == nil {
+		return ""
+	}
+	return sess.Meta.SourceCheckpoint
 }
 
 // SaveCheckpoint 把当前对局固化成命名存档点。
@@ -82,7 +90,7 @@ func (rt *Runtime) SaveCheckpoint(req SaveCheckpointRequest) (*checkpoint.Summar
 		FormatVersion:  checkpoint.FormatVersion,
 		Name:           req.Name,
 		Kind:           kind,
-		Parent:         rt.sourceCheckpoint,
+		Parent:         sess.sourceCheckpoint(),
 		Tick:           save.Tick,
 		MapSeed:        sess.Config.Battlefield.MapSeed,
 		Players:        manifestPlayers(sess.Config),
@@ -117,10 +125,13 @@ func (rt *Runtime) LoadCheckpoint(name string) (*LoadCheckpointResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	sess, err := rt.assembleFromSave(&config.Config{Server: rt.serverCfg}, gamedir.Open(store.Dir(name)), false)
+	sess, err := rt.assembleFromSave(&config.Config{Server: rt.serverCfg}, gamedir.Open(store.Dir(name)), OriginCheckpoint)
 	if err != nil {
 		return nil, err
 	}
+
+	// 来源存档点写进本局 meta，随 data_dir 存档持久化：重启后派生存档点的 parent 不丢。
+	sess.Meta.SourceCheckpoint = name
 
 	// 先停 autosave 并等待收尾，保证写当前局存档期间没有旧局落盘。
 	rt.stopAutosaveLocked()
@@ -131,7 +142,6 @@ func (rt *Runtime) LoadCheckpoint(name string) (*LoadCheckpointResult, error) {
 
 	old := rt.current.Swap(sess)
 	old.shutdown()
-	rt.sourceCheckpoint = name
 	if rt.started {
 		rt.startSessionLocked(sess)
 	}

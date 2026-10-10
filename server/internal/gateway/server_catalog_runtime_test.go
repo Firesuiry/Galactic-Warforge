@@ -82,7 +82,7 @@ func newTwoPlanetRuntimeServer(t *testing.T) (*gateway.Server, *gamecore.GameCor
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	return gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q))), core
+	return gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q, startup.OriginNew))), core
 }
 
 func TestPlanetRuntimeEndpointUsesLoadedPlanetRuntime(t *testing.T) {

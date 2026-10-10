@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"siliconworld/internal/checkpoint"
 	"siliconworld/internal/config"
 	"siliconworld/internal/gamedir"
 	"siliconworld/internal/mapconfig"
@@ -471,4 +472,49 @@ func minimalMetaFile(t *testing.T) *gamedir.MetaFile {
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
 		Planet: mapconfig.PlanetConfig{FaceSize: 16, ResourceDensity: 8},
 	})
+}
+
+// 来源存档点随 data_dir 存档持久化：读档 → 重启进程 → 再存档，parent 仍指向原存档点，
+// 且三种来源（新局 / 读存档点 / 重启恢复）在 GameSummary.origin 上可区分。
+func TestCheckpointLineageSurvivesRestart(t *testing.T) {
+	cfgPath, mapCfgPath, _ := writeBootstrapFixtures(t)
+	cpDir := filepath.Join(t.TempDir(), "checkpoints")
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	app.checkpoints = checkpoint.Open(cpDir)
+	if got := app.Current().Summary().Origin; got != OriginNew {
+		t.Fatalf("fresh game origin = %q, want %q", got, OriginNew)
+	}
+	if _, err := app.SaveCheckpoint(SaveCheckpointRequest{Name: "cp-root"}); err != nil {
+		t.Fatalf("save cp-root: %v", err)
+	}
+	if _, err := app.LoadCheckpoint("cp-root"); err != nil {
+		t.Fatalf("load cp-root: %v", err)
+	}
+	sum := app.Current().Summary()
+	if sum.Origin != OriginCheckpoint || sum.SourceCheckpoint != "cp-root" {
+		t.Fatalf("after load origin=%q source=%q, want checkpoint/cp-root", sum.Origin, sum.SourceCheckpoint)
+	}
+	app.Stop()
+
+	resumed, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("resume runtime: %v", err)
+	}
+	defer resumed.Stop()
+	resumed.checkpoints = checkpoint.Open(cpDir)
+	sum = resumed.Current().Summary()
+	if sum.Origin != OriginResume || sum.SourceCheckpoint != "cp-root" {
+		t.Fatalf("after restart origin=%q source=%q, want resume/cp-root", sum.Origin, sum.SourceCheckpoint)
+	}
+	derived, err := resumed.SaveCheckpoint(SaveCheckpointRequest{Name: "cp-next"})
+	if err != nil {
+		t.Fatalf("save cp-next: %v", err)
+	}
+	if derived.Parent != "cp-root" {
+		t.Fatalf("derived parent after restart = %q, want cp-root", derived.Parent)
+	}
 }

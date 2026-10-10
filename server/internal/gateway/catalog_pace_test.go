@@ -39,7 +39,7 @@ func TestCatalogEndpointScalesTechCostByPace(t *testing.T) {
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	core := gamecore.New(cfg, maps, q, bus, nil)
-	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q)))
+	srv := gateway.New(startup.NewStaticRuntime(startup.NewSession(cfg, maps, core, bus, q, startup.OriginNew)))
 
 	rec := doGameRequest(t, srv, "GET", "/catalog", "key1", nil)
 	if rec.Code != http.StatusOK {
