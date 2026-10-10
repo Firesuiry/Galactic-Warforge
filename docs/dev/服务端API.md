@@ -59,12 +59,13 @@ cd server && go run ./cmd/server -config config-dev.yaml -map-config map.yaml
 cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-skirmish.yaml
 ```
 
-- p1 人类、p2 bot（hard）；`pace_research 2` / `pace_build 2` / `pace_output 2` / `time_limit_ticks 54000` / `threat_growth_scale 1.5`。
+- p1 人类、p2 bot（**normal**）；`pace_research 2` / `pace_build 2` / `pace_output 2` / `time_limit_ticks 90000` / `threat_growth_scale 1.5`。
   - `pace_research` 只放大研究消耗（目录基准 × 倍率，四舍五入、下限 1），不改 `server/data/techs.yaml` 的目录数字；`GET /catalog` 的 `techs[].cost` 与 `current_research.required_cost` / `total_cost` 都按同一规则缩放，UI 与结算永远一致。
-  - 取值依据（`pace_research 2`）：1 台制造台产 1 个电磁矩阵 60 tick（无加速）；熟练玩家并行 2–3 台制造台供矩阵时，电磁学 = 20 个矩阵约 tick 5000–8000 完成；`weapon_system`（基准 20 → 40 个）连同 `automatic_metallurgy` 前置链约 tick 12000–18000 拿到炮塔，即 `bot_first_attack_tick`（16000）前后玩家已有防御。回归测试 `TestSkirmishResearchPaceAllowsCoreTechs`。
+  - 取值依据（`pace_research 2`）：1 台制造台产 1 个电磁矩阵 60 tick（无加速）；无物资包开局下玩家先手搓铺线，熟练玩家并行 2–3 台制造台供矩阵时，电磁学 = 20 个矩阵约 tick 30000 完成，即 `bot_first_attack_tick`（30000）前后玩家已有兵营/步兵。回归测试 `TestSkirmishResearchPaceAllowsCoreTechs`。
 - `battlefield.dark_fog_calm_ticks`（任何配置可用，默认 6000）：黑雾被激怒后多久恢复中立，见 5.4。
-- `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 16000，之前军团只守家。
-- 双方相同的开局物资包（`players[].bootstrap`）：`minerals 1200`、`energy 400`，铁块 110、齿轮 40、磁线圈 30、电路板 24、石砖 4、玻璃 4、煤 20，够直接建风机 ×3、电感应塔 ×4、采矿机 ×4、电弧熔炉 ×2、制造台 ×1、传送带约 20 段、矩阵研究站 ×1（含 4 玻璃，试玩报告 1011：三局都卡在「研究站要 4 玻璃」）。回归测试 `TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500`（约 3 秒一条命令，tick 1500 内供电、采矿、冶炼都已运转）、`TestSkirmishKitBuildsFullOpeningIncludingMatrixLab`（同一份物资包刚好够建完整套含矩阵研究站）与 `TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，tick 15000–25000 首次进攻玩家）。
+- `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 30000（约 50 分钟），之前军团只守家。
+- **无开局物资包（2026-10-10 起）**：双方背包为空，`players[].bootstrap` 只留 `minerals 400` / `energy 100`——建造要花 minerals/energy，而两者在「第一座矿机通电」之前没有任何产出途径（矿机通电后 minerals 按 `minerals_kickback=1` 自增长），必须留启动量，否则双方都会卡死。玩家与 bot 同一份，全部靠「手动采矿 → 手搓 → 早期建筑 → 产线」起步（DSP 式）。
+  - 回归测试：`TestSkirmishFromZeroOpeningByTick6000`（空背包开局链不变量：风机/电塔/矿机通电，快）、`TestSkirmishFromZeroChainIsWalkable`（开局链走到兵营/研究站无死锁）、`TestSkirmishFromZeroFullMatch`（两 seed 整局 45000 tick，记录里程碑/首攻/存活，`-short` 跳过）、`TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，`bot_first_attack_tick` 之后首次进攻玩家）、`TestSkirmishDefenseProbe`（从零布防到 tick 45000 的存活探针）。
 
 ### 官方中后期场景（`config-midgame.yaml` + `map-midgame.yaml`）
 
@@ -269,7 +270,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `upgrade` / `demolish` 受建筑定义规则约束（是否允许、最大等级、耗时、返还率、是否要求停机）；`duration_ticks > 0` 时生成 `job`、建筑置 `paused`，完成时生效。
 - `scan_galaxy` / `scan_system` / `scan_planet`：**星图登记**，不是开图。它们把星系/恒星系/星球登记进玩家的星图（`Discovery`），供星图导航与运行时加载使用；**不揭示行星地表的迷雾**（`explored` 掩码只由视野源推进）。回执会写明"已登记到星图"或"本就在星图中（扫描只登记星图，不揭示地表迷雾）"，不要期待它改变 `explored`。
 - `set_recipe`：原地切换配方，进度清零（`remaining_ticks`、`progress_fraction`、待产出）、库存保留；省略/空 `recipe_id` 时研究站回研究模式、生产建筑转空闲；校验失败原子拒绝（`recipe_id` 未知 / 该配方不支持此建筑类型 / 配方未研究解锁 / 建筑无 `Production` 模块 / 非本人建筑）。熔炉、制造台建成后随时可用它改配方，无需拆除重建；`target.entity_id` 是建筑 ID（可带 `target.planet_id` 跨行星消歧）。
-- `transfer_item`：`direction` 可选 `to_building`（默认，从背包装入，容量不足部分装填、只扣实际量）或 `to_player`（从主仓/输出缓存取出，受本行星执行体背包容量限制）。地面物流站须先配物品槽，写入唯一站库 `logistics_station.inventory`；喷涂机只收增产剂；分馏塔与轨道采集器不开放装料。
+- `transfer_item`：`direction` 可选 `to_building`（默认，从背包装入，容量不足部分装填、只扣实际量）或 `to_player`（从主仓/输出缓存取出，受本行星执行体背包容量限制）。`to_player` 的两种失败分开报：「<建筑>里没有可取出的「<物品>」」是建筑里真没有该物品，「背包已满（N/200），装不下取出的「<物品>」」是执行体背包装不下（试玩报告 1013 C）。`to_building` 装入**研究模式**（未设配方）的 `matrix_lab` / `self_evolution_lab` 时只接受矩阵类物品，其它物品当场拒绝并说明「…处于研究模式，只接受矩阵（研究耗材）；「…」请送到制造台或仓库」——研究站不会消耗它们，收下只会把背包里的料锁死（试玩报告 1013 B）；把该站切到生产配方后即按普通制造建筑收料。地面物流站须先配物品槽，写入唯一站库 `logistics_station.inventory`；喷涂机只收增产剂；分馏塔与轨道采集器不开放装料。
 
 ### 5.2 机甲（执行体）
 
@@ -316,7 +317,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.5 研究与生产规则
 
-- `start_research`：前置满足；至少一个 `running` 且未设 `recipe_id` 的研究站（`matrix_lab` / `self_evolution_lab`）；所需矩阵须已在研究站库存中，tick 内真实消耗矩阵推进进度。`research_speed` 科技在矩阵吞吐中生效。
+- `start_research`：前置满足；至少一个 `running` 且未设 `recipe_id` 的研究站（`matrix_lab` / `self_evolution_lab`）；所需矩阵须已在研究站库存中，tick 内真实消耗矩阵推进进度。`research_speed` 科技在矩阵吞吐中生效。被拒时回执说清是哪一种原因（试玩报告 1013 B）：研究站设了生产配方 → 「<建筑>（x,y）当前设为生产「<配方>」，不算研究站：把它的配方切换为「无配方（研究模式）」后才能研究」；研究站在断电 → 「<建筑>（x,y）已断电，无法研究：先把它接进电网（电塔或无线输电塔的无线覆盖范围内）」；研究站停在其它非运行状态 → 报出该状态；一台研究类建筑都没有时才是「需要至少一台运行中的研究站（matrix_lab 或 self_evolution_lab）」。
 - 配方门控：配方声明 `tech_unlock` 或被科技 recipe 解锁引用时，必须完成对应科技才能在建筑或手工中使用；五个高级矩阵配方由同名科技门控。
 - 生产周期：`ceil(增产剂调整后的时长 / max(1, throughput))`，最短 1 tick。`production.progress_fraction ∈ [0,1)` 按真实供电比例推进（供电 20/需求 24 时速度 5/6，零供电不推进、不开新批）。输出缓存不足时整批保留在 `production.pending_outputs` / `pending_byproducts`，不部分提交。
 - Mk.II/III 制造台继承 Mk.I 配方（Mk.III 支持 `prototype`、`precision_drone`），吞吐 2/3、仓储 48/72、功耗 8/12。
@@ -556,7 +557,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ```
 
 - `map_seed` 可选（缺省随机）；地图拓扑沿用启动时的 map 配置，未知字段 400。
-- `enemy_difficulty` / `victory_mode` / `players[].role` / `players[].team_id` / `players[].bot` / `players[].bootstrap` 都**缺省继承启动配置**（battlefield 全字段 + 同名玩家的 executor / permissions / bootstrap），只有请求里显式给出的字段才覆盖。所以从大厅开的遭遇战新局会带上 `bot_first_attack_tick`、`dark_fog_calm_ticks`、`time_limit_ticks`、`pace_*` 与双方开局物资包；不传 `bootstrap` 时沿用同名玩家的配置（`config-skirmish.yaml` 里 p1/p2 都是同一份物资包）。
+- `enemy_difficulty` / `victory_mode` / `players[].role` / `players[].team_id` / `players[].bot` / `players[].bootstrap` 都**缺省继承启动配置**（battlefield 全字段 + 同名玩家的 executor / permissions / bootstrap），只有请求里显式给出的字段才覆盖。所以从大厅开的遭遇战新局会带上 `bot_first_attack_tick`、`dark_fog_calm_ticks`、`time_limit_ticks`、`pace_*` 与双方的启动量（`minerals`/`energy`，无物品背包）；不传 `bootstrap` 时沿用同名玩家的配置（`config-skirmish.yaml` 里 p1/p2 都是同一份启动量）。
 - `players` 必填非空，`player_id` / `key` 必填且唯一；`role=admin|commander|observer`；`team_id` 缺省同名玩家配置，再缺省 `player_id`；`bot=easy|normal|hard`（空为人类，bot 走同一命令接口）；`bootstrap` 结构同 `config.yaml` 的 `players[].bootstrap`。
 - 语义：校验通过后先写新局 `meta.json` / `save.json`（失败 500，旧局不变）再原子切换；旧 key 立即 401，旧 SSE 被断开；并发请求串行执行，后到者覆盖。进程级配置不变。
 - 响应 `201`，结构同 `GET /games/current`（`tick=0`）。客户端须用新 key 重新登录、重新订阅 SSE 并全量拉取状态。
@@ -596,6 +597,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `player_alive` | — | 玩家存活 |
 | `tech_researched` | `tech_id` | 已完成该科技（等级 > 0） |
 | `building_count_gte` | `type`, `n` | 存活建筑数 >= n |
+| `building_running_gte` | `type`, `n` | 存活且 `runtime.state=running` 的建筑数 >= n（断电 `no_power`、停工 `paused`/`idle`、出错 `error` 都不算；试玩报告 1013 第 5 节：`building_count_gte` 放过了一座整局没电的研究站） |
 | `unit_count_gte` | `type`, `n` | 存活单位数 >= n（含机甲 `executor`） |
 | `item_gte` | `item_id`, `n` | 玩家可用物资 >= n |
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |

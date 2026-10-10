@@ -17,6 +17,10 @@ func TestEvaluateContractPredicateVocabulary(t *testing.T) {
 	player.Tech = model.NewPlayerTechState("p1")
 	player.Tech.CompletedTechs["electromagnetism"] = 1
 	placeBuilding(ws, newBuilding("plant-c", model.BuildingTypeWindTurbine, "p1", model.Position{X: 20, Y: 20}))
+	// 断电的风机：building_count_gte 数它，building_running_gte 不数它。
+	stalled := newBuilding("plant-stalled", model.BuildingTypeWindTurbine, "p1", model.Position{X: 24, Y: 20})
+	stalled.Runtime.State = model.BuildingWorkNoPower
+	placeBuilding(ws, stalled)
 	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 21, Y: 20})
 	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 22, Y: 20})
 
@@ -34,8 +38,10 @@ func TestEvaluateContractPredicateVocabulary(t *testing.T) {
 		{"player_alive", checkpoint.ContractCheck{Kind: "player_alive", Player: "p1"}, true, "true"},
 		{"tech_researched pass", checkpoint.ContractCheck{Kind: "tech_researched", Player: "p1", TechID: "electromagnetism"}, true, "1"},
 		{"tech_researched fail", checkpoint.ContractCheck{Kind: "tech_researched", Player: "p1", TechID: "dirac_inversion"}, false, "0"},
-		{"building_count_gte pass", checkpoint.ContractCheck{Kind: "building_count_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 1}, true, "1"},
-		{"building_count_gte fail", checkpoint.ContractCheck{Kind: "building_count_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 2}, false, "1"},
+		{"building_count_gte pass", checkpoint.ContractCheck{Kind: "building_count_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 2}, true, "2"},
+		{"building_count_gte counts stalled", checkpoint.ContractCheck{Kind: "building_count_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 3}, false, "2"},
+		{"building_running_gte pass", checkpoint.ContractCheck{Kind: "building_running_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 1}, true, "1"},
+		{"building_running_gte skips no_power", checkpoint.ContractCheck{Kind: "building_running_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 2}, false, "1"},
 		{"unit_count_gte pass", checkpoint.ContractCheck{Kind: "unit_count_gte", Player: "p1", Type: string(model.UnitTypeSoldier), N: 2}, true, "2"},
 		{"unit_count_gte fail", checkpoint.ContractCheck{Kind: "unit_count_gte", Player: "p1", Type: string(model.UnitTypeSoldier), N: 3}, false, "2"},
 		{"item_gte pass", checkpoint.ContractCheck{Kind: "item_gte", Player: "p1", ItemID: string(model.ItemIronIngot), N: 7}, true, "7"},

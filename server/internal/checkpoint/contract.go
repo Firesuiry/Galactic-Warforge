@@ -11,6 +11,7 @@ package checkpoint
 //	player_alive        {}              玩家存活
 //	tech_researched     {tech_id}       已完成该科技（等级 > 0）
 //	building_count_gte  {type, n}       存活建筑数 >= n
+//	building_running_gte {type, n}      存活且 state=running 的建筑数 >= n
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）
 //	item_gte            {item_id, n}    玩家可用物资 >= n
 //	dark_fog_hostile    {bool}          黑雾对该玩家是否敌对

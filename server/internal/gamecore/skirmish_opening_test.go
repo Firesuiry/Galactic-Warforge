@@ -3,6 +3,7 @@ package gamecore
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"siliconworld/internal/config"
@@ -67,16 +68,18 @@ func fmtCounts(counts map[model.BuildingType]int) string {
 	return out
 }
 
-// 遭遇战 bot 从默认开局物资包起步：建基地、出兵、编军团，并在 15000–25000 tick 对玩家首次进攻。
-// 玩家 p1 不操作；黑雾是被动的，不应干扰双方。
+// 遭遇战 bot 从零（无物资包）起步：建基地、出兵、编军团，并在
+// bot_first_attack_tick（30000）之后对玩家首次进攻。玩家 p1 不操作；
+// 黑雾是被动的，不应干扰双方。
 func TestSkirmishBotOpensAndAttacksInWindow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long skirmish simulation")
 	}
 	core := newRealSkirmishCore(t)
 	ws := core.World()
+	gate := core.cfg.Battlefield.BotFirstAttackTick
 	firstAttack := int64(0)
-	for ws.Tick < 25000 {
+	for ws.Tick < gate+15000 {
 		core.processTick()
 		if ws.Tick%2500 == 0 {
 			units := 0
@@ -100,9 +103,9 @@ func TestSkirmishBotOpensAndAttacksInWindow(t *testing.T) {
 			break
 		}
 	}
-	t.Logf("first attack tick=%d", firstAttack)
-	if firstAttack < 15000 || firstAttack > 25000 {
-		t.Fatalf("bot first attack at tick %d, want 15000–25000", firstAttack)
+	t.Logf("first attack tick=%d（门槛 %d）", firstAttack, gate)
+	if firstAttack < gate || firstAttack > gate+9000 {
+		t.Fatalf("bot first attack at tick %d, want %d–%d", firstAttack, gate, gate+9000)
 	}
 	counts := skirmishBuildingCounts(ws, "p2")
 	if counts[model.BuildingTypeWindTurbine] == 0 || counts[model.BuildingTypeMiningMachine] == 0 || counts["barracks"] == 0 {
@@ -131,223 +134,81 @@ func TestSkirmishBotOpensAndAttacksInWindow(t *testing.T) {
 	}
 }
 
-// 真人开局节奏：用开局物资包以 UI 正常速度（约 3 秒一条命令）铺出 风机/电塔/矿机/熔炉/制造台，
-// 10 tps 下 tick 1500 内供电、采矿、冶炼都要跑起来。
-func TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500(t *testing.T) {
-	core := newRealSkirmishCore(t)
-	ws := core.World()
-	ctx := core.surveyBotWorld(ws, "p1")
-	home := *ctx.home
-	radius := botConstructRadius(ws, "p1", ctx)
-
-	// 基地建造半径内最近的矿点：先保证一座铁矿，其余取最近的铁/铜/煤/石矿，共 4 座矿机。
-	var nodes []*model.ResourceNodeState
-	for _, node := range ws.Resources {
-		switch node.Kind {
-		case model.ItemIronOre, model.ItemCopperOre, model.ItemCoal, model.ItemStoneOre:
-		default:
-			continue
-		}
-		if ws.SurfaceDistance(home, node.Position) <= radius && ws.Grid[node.Position.Y][node.Position.X].BuildingID == "" {
-			nodes = append(nodes, node)
-		}
-	}
-	sort.Slice(nodes, func(i, j int) bool {
-		di, dj := ws.SurfaceDistance(home, nodes[i].Position), ws.SurfaceDistance(home, nodes[j].Position)
-		if (nodes[i].Kind == model.ItemIronOre) != (nodes[j].Kind == model.ItemIronOre) {
-			return nodes[i].Kind == model.ItemIronOre
-		}
-		if di != dj {
-			return di < dj
-		}
-		return nodes[i].ID < nodes[j].ID
-	})
-	if len(nodes) < 4 || nodes[0].Kind != model.ItemIronOre {
-		t.Fatalf("not enough ore nodes near base: %d", len(nodes))
-	}
-	var mines []model.Position
-	for _, n := range nodes[:4] {
-		mines = append(mines, n.Position)
-	}
-
-	type step struct {
-		btype  model.BuildingType
-		pos    *model.Position
-		recipe string
-	}
-	var plan []step
-	for i := 0; i < 3; i++ {
-		plan = append(plan, step{btype: model.BuildingTypeWindTurbine})
-	}
-	for i := range mines {
-		p := mines[i]
-		plan = append(plan, step{btype: model.BuildingTypeMiningMachine, pos: &p})
-		plan = append(plan, step{btype: model.BuildingTypeTeslaTower, pos: &p}) // 每座矿机旁一座电塔
-	}
-	plan = append(plan,
-		step{btype: model.BuildingTypeArcSmelter, recipe: "smelt_iron"},
-		step{btype: model.BuildingTypeArcSmelter, recipe: "smelt_iron"},
-		step{btype: model.BuildingTypeAssemblingMachineMk1, recipe: "gear"},
-	)
-
-	const commandEvery = 30 // UI 正常速度：约 3 秒一条命令
-	next := 0
-	var smelters []string
-	for ws.Tick < 1500 {
-		if next < len(plan) && ws.Tick > 0 && ws.Tick%commandEvery == 0 {
-			s := plan[next]
-			var pos *model.Position
-			switch {
-			case s.btype == model.BuildingTypeMiningMachine:
-				pos = s.pos
-			case s.pos != nil:
-				pos = botTowerStep(ws, *s.pos, home, 2)
-			default:
-				pos = botBuildSpotNear(ws, home, radius, s.btype)
-			}
-			if pos == nil {
-				t.Fatalf("no spot for %s", s.btype)
-			}
-			payload := map[string]any{"building_type": string(s.btype)}
-			if s.recipe != "" {
-				payload["recipe_id"] = s.recipe
-			}
-			res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Target: model.CommandTarget{Layer: "planet", Position: pos}, Payload: payload})
-			if res.Code != model.CodeOK {
-				t.Fatalf("tick %d build %s at %v: %+v", ws.Tick, s.btype, *pos, res)
-			}
-			next++
-		}
-		// 冶炼原料：玩家从矿机取矿、送进熔炉（与 UI 的 transfer 相同命令）。
-		if ws.Tick%100 == 0 {
-			smelters = smelters[:0]
-			for _, b := range ws.Buildings {
-				if b.OwnerID == "p1" && b.Type == model.BuildingTypeArcSmelter {
-					smelters = append(smelters, b.ID)
-				}
-			}
-			sort.Strings(smelters)
-			for _, b := range ws.Buildings {
-				if b.OwnerID == "p1" && isMinerBuilding(b) && b.Storage != nil {
-					if n := b.Storage.OutputQuantity(model.ItemIronOre); n > 0 {
-						execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{Target: model.CommandTarget{Layer: "planet", EntityID: b.ID}, Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemIronOre, "quantity": n, "direction": "to_player"}})
-					}
-				}
-			}
-			for _, id := range smelters {
-				if ore := ws.Players["p1"].Inventory[model.ItemIronOre]; ore > 0 {
-					execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{Target: model.CommandTarget{Layer: "planet", EntityID: id}, Payload: map[string]any{"building_id": id, "item_id": model.ItemIronOre, "quantity": min(ore, 10)}})
-				}
-			}
-		}
-		core.processTick()
-	}
-
-	counts := map[model.BuildingType]int{}
-	running := map[model.BuildingType]int{}
+// 真人开局节奏（无物资包）：从空背包手搓起步，以 UI 正常速度（约 3 秒一条命令）
+// 铺出 风机/电塔/矿机/熔炉，10 tps 下 tick 7000 内供电、采矿、冶炼都要跑起来。
+// （实测第一座熔炉在 tick 6123——手搓链要先走完 齿轮/磁线圈/电路板，再攒熔炉的
+// 4 电路板 + 4 铁块 + 2 磁线圈 + 2 石砖，所以窗口给到 7000。）
+func TestSkirmishPlayerOpensPowerMiningSmeltingBy7000(t *testing.T) {
+	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
+	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
+	op := newZeroOpening(t, core, 7000)
+	op.run()
+	ws := op.ws
+	counts := skirmishBuildingCounts(ws, "p1")
+	running := skirmishRunningCounts(ws, "p1")
 	ingots := 0
 	for _, b := range ws.Buildings {
-		if b.OwnerID != "p1" {
-			continue
-		}
-		counts[b.Type]++
-		if b.Runtime.State == model.BuildingWorkRunning {
-			running[b.Type]++
-		}
-		if b.Type == model.BuildingTypeArcSmelter && b.Storage != nil {
+		if b.OwnerID == "p1" && b.Type == model.BuildingTypeArcSmelter && b.Storage != nil {
 			ingots += b.Storage.OutputQuantity(model.ItemIronIngot)
 		}
 	}
-	t.Logf("tick %d built=%s running=%s smelter ingots=%d", ws.Tick, fmtCounts(counts), fmtCounts(running), ingots)
-	if running[model.BuildingTypeWindTurbine] < 3 || running[model.BuildingTypeMiningMachine] < 4 || counts[model.BuildingTypeArcSmelter] < 2 || counts[model.BuildingTypeAssemblingMachineMk1] < 1 {
-		t.Fatalf("opening kit not up by tick 1500: built=%s running=%s", fmtCounts(counts), fmtCounts(running))
+	t.Logf("tick %d built=%s running=%s smelter ingots=%d milestones=%v", ws.Tick, fmtCounts(counts), fmtCounts(running), ingots, op.milestone)
+	if running[model.BuildingTypeWindTurbine] < 1 || running[model.BuildingTypeMiningMachine] < 1 {
+		t.Fatalf("无物资包开局没通电/没采矿：built=%s running=%s", fmtCounts(counts), fmtCounts(running))
+	}
+	if counts[model.BuildingTypeArcSmelter] < 1 {
+		t.Fatalf("tick 7000 还没建起熔炉：built=%s", fmtCounts(counts))
 	}
 	if ingots == 0 {
-		t.Fatal("no iron ingot smelted by tick 1500")
+		t.Fatal("no iron ingot smelted by tick 7000")
 	}
 }
 
-// 开局物资包必须刚好够直接建「风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、
-// 传送带×20、矩阵研究站×1」：试玩报告 1011 里玩家三局都卡在「研究站要 4 玻璃」、
-// 0 研究，所以这套组合（含 4 玻璃）要能在不下产线的情况下一次建成。
-func TestSkirmishKitBuildsFullOpeningIncludingMatrixLab(t *testing.T) {
-	core := newRealSkirmishCore(t)
-	ws := core.World()
-	player := ws.Players["p1"]
-	if player.Resources.Minerals < 910 || player.Resources.Energy < 350 {
-		t.Fatalf("kit resources too small for the opening: %+v", player.Resources)
-	}
-	plan := []struct {
-		btype model.BuildingType
-		count int
-	}{
-		{model.BuildingTypeWindTurbine, 3},
-		{model.BuildingTypeTeslaTower, 4},
-		{model.BuildingTypeMiningMachine, 4},
-		{model.BuildingTypeArcSmelter, 2},
-		{model.BuildingTypeAssemblingMachineMk1, 1},
-		{model.BuildingTypeConveyorBeltMk1, 20},
-		{model.BuildingTypeMatrixLab, 1},
-	}
-	totalItems := map[string]int{}
-	for _, step := range plan {
-		def, ok := model.BuildingDefinitionByID(step.btype)
-		if !ok {
-			t.Fatalf("unknown building %s", step.btype)
+// 无物资包的开局链：空背包下，仅靠「手动采矿 + 手搓」必须能一路走到
+// 风机/电塔/矿机/熔炉/制造台/兵营/补给站/研究站，每一环都不能死锁
+// （试玩报告 1007 的「玻璃/石砖」死锁就是这条链上的缺口）。
+// 这是「开局链可走通」的最小断言集，与 TestSkirmishFromZeroFullMatch 共用同一套脚本。
+func TestSkirmishFromZeroChainIsWalkable(t *testing.T) {
+	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
+	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
+	op := newZeroOpening(t, core, 30000)
+	op.includeBarracks = true
+	op.run()
+	ws := op.ws
+	for _, key := range []string{
+		"wind_turbine", "tesla_tower", "mining_machine", "arc_smelter",
+		"assembling_machine", "barracks", "soldier", "matrix_lab",
+	} {
+		tick, ok := op.milestone[key]
+		if !ok || tick <= 0 {
+			t.Fatalf("开局链死锁：%s 到 tick %d 都没达成（milestones=%v）", key, ws.Tick, op.milestone)
 		}
-		for _, item := range def.BuildCost.Items {
-			totalItems[item.ItemID] += item.Quantity * step.count
-		}
+		t.Logf("milestone %s = %d", key, tick)
 	}
-	// 物资包必须覆盖整套组合的每一件物品（不多要、也不能缺）。
-	for itemID, need := range totalItems {
-		if got := player.Inventory[itemID]; got < need {
-			t.Fatalf("kit is short on %s: have %d, opening combo needs %d", itemID, got, need)
-		}
-	}
-	if player.Inventory[model.ItemGlass] < 4 {
-		t.Fatalf("kit must ship the 4 glass the matrix lab needs, got %d", player.Inventory[model.ItemGlass])
-	}
-	// 每种建筑都能在基地半径内找到位置并成功下发建造命令（同一份物资包）。
-	// 采矿机必须压在资源节点上，其余建筑用普通的基地附近空位。
-	ctx := core.surveyBotWorld(ws, "p1")
-	radius := botConstructRadius(ws, "p1", ctx)
-	var nodes []*model.ResourceNodeState
-	for _, node := range ws.Resources {
-		switch node.Kind {
-		case model.ItemIronOre, model.ItemCopperOre, model.ItemCoal, model.ItemStoneOre:
-		default:
+	// 死锁判据：某个建筑一直建不起来，而且它缺的物品**没有手搓配方**
+	// （原矿除外——那是手动采矿的事），说明开局链断在这一环上。
+	// 缺齿轮/电路板/磁线圈这类「能手搓但产能不够」只记日志：无物资包下
+	// 机甲 20 tick 搓 1 个齿轮，脚本排的制造台越多、齿轮缺口越大，
+	// 这是节奏问题不是死锁。
+	deadlock := false
+	for msg, n := range op.buildFails {
+		if n < 200 {
 			continue
 		}
-		if ws.SurfaceDistance(*ctx.home, node.Position) <= radius && ws.TileBuilding[model.TileKey(node.Position.X, node.Position.Y)] == "" {
-			nodes = append(nodes, node)
+		t.Logf("建造长期失败（%d 次）：%s", n, msg)
+		if !strings.Contains(msg, "建造缺少") {
+			deadlock = true
+			continue
+		}
+		for _, item := range strings.Split(msg, "「")[1:] {
+			name := strings.SplitN(item, "」", 2)[0]
+			id := itemIDByName(name)
+			if _, ok := op.handcraftRecipeFor(id); !ok && !isManuallyMinableOre(id) {
+				t.Fatalf("死锁：长期缺「%s」且它既不能手搓也不是原矿（%d 次）：%s", name, n, msg)
+			}
 		}
 	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
-	if len(nodes) < 4 {
-		t.Fatalf("need 4 ore nodes near the base for the kit test, got %d", len(nodes))
-	}
-	mineIdx := 0
-	for _, step := range plan {
-		for i := 0; i < step.count; i++ {
-			var pos *model.Position
-			if step.btype == model.BuildingTypeMiningMachine {
-				p := nodes[mineIdx].Position
-				mineIdx++
-				pos = &p
-			} else {
-				pos = botBuildSpotNear(ws, *ctx.home, radius, step.btype)
-			}
-			if pos == nil {
-				t.Fatalf("no spot for %s #%d", step.btype, i+1)
-			}
-			res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
-				Target:  model.CommandTarget{Layer: "planet", Position: pos},
-				Payload: map[string]any{"building_type": string(step.btype)},
-			})
-			if res.Code != model.CodeOK {
-				t.Fatalf("kit cannot afford %s #%d: %+v (inventory=%v)", step.btype, i+1, res, player.Inventory)
-			}
-		}
+	if deadlock {
+		t.Fatal("建造长期失败且原因不是缺料（见日志）")
 	}
 }

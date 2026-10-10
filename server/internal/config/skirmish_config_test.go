@@ -13,8 +13,11 @@ func TestSkirmishConfigPaceAndTimeLimit(t *testing.T) {
 	if cfg.Battlefield.PaceResearch != 2 || cfg.Battlefield.PaceBuild != 2 || cfg.Battlefield.PaceOutput != 2 {
 		t.Fatalf("unexpected pace: %+v", cfg.Battlefield)
 	}
-	if cfg.Battlefield.TimeLimitTicks != 54000 {
-		t.Fatalf("time limit %d, want 54000", cfg.Battlefield.TimeLimitTicks)
+	if cfg.Battlefield.TimeLimitTicks != 90000 {
+		t.Fatalf("time limit %d, want 90000", cfg.Battlefield.TimeLimitTicks)
+	}
+	if cfg.Battlefield.BotFirstAttackTick != 30000 {
+		t.Fatalf("bot first attack tick %d, want 30000", cfg.Battlefield.BotFirstAttackTick)
 	}
 	if cfg.Battlefield.ThreatGrowthScale != 1.5 {
 		t.Fatalf("threat scale %v, want 1.5", cfg.Battlefield.ThreatGrowthScale)
@@ -24,33 +27,36 @@ func TestSkirmishConfigPaceAndTimeLimit(t *testing.T) {
 	}
 }
 
-// 开局物资包必须带 4 玻璃（矩阵研究站成本），双方同一份；
-// 其余数量覆盖「风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、传送带×20、矩阵研究站×1」。
-func TestSkirmishKitIncludesMatrixLabGlass(t *testing.T) {
+// 无开局物资包：双方背包为空，minerals/energy 只留「第一座风机通电前」的启动量
+// （这两者在通电前没有任何产出途径，必须给，否则死锁）；bot 是 normal 难度。
+func TestSkirmishStartsWithoutKit(t *testing.T) {
 	cfg, err := Load(filepath.Join("..", "..", "config-skirmish.yaml"))
 	if err != nil {
 		t.Fatalf("load config-skirmish: %v", err)
-	}
-	want := map[string]int{
-		"iron_ingot": 110, "gear": 40, "magnetic_coil": 30,
-		"circuit_board": 24, "stone_brick": 4, "glass": 4, "coal": 20,
 	}
 	if len(cfg.Players) < 2 {
 		t.Fatalf("skirmish needs p1/p2, got %d players", len(cfg.Players))
 	}
 	for _, pc := range cfg.Players {
-		got := map[string]int{}
-		for _, item := range pc.Bootstrap.Inventory {
-			got[item.ItemID] = item.Quantity
+		if len(pc.Bootstrap.Inventory) != 0 {
+			t.Fatalf("%s bootstrap inventory must be empty, got %v", pc.PlayerID, pc.Bootstrap.Inventory)
 		}
-		for itemID, qty := range want {
-			if got[itemID] != qty {
-				t.Fatalf("%s bootstrap %s = %d, want %d (%v)", pc.PlayerID, itemID, got[itemID], qty, got)
-			}
+		// 启动量必须够「手搓 → 建第一座风机/电塔/矿机」：风机 30 矿物 + 齿轮/铁块/磁线圈，
+		// 再加 2 座电塔（20 矿物/座）与第二座矿机（50 矿物）。实测 200 矿物时 bot
+		// 正好把 3 风机 + 2 矿机建完就归零，连 20 矿物的电塔都建不起，整局冻结。
+		if pc.Bootstrap.Minerals < 300 || pc.Bootstrap.Minerals > 800 {
+			t.Fatalf("%s minerals = %d, want a small starter amount (300–800)", pc.PlayerID, pc.Bootstrap.Minerals)
 		}
-		if pc.Bootstrap.Minerals < 910 || pc.Bootstrap.Energy < 350 {
-			t.Fatalf("%s kit resources too small for the opening combo: %+v", pc.PlayerID, pc.Bootstrap)
+		if pc.Bootstrap.Energy < 50 || pc.Bootstrap.Energy > 200 {
+			t.Fatalf("%s energy = %d, want a small starter amount (50–200)", pc.PlayerID, pc.Bootstrap.Energy)
 		}
+	}
+	if cfg.Players[0].Bootstrap.Minerals != cfg.Players[1].Bootstrap.Minerals ||
+		cfg.Players[0].Bootstrap.Energy != cfg.Players[1].Bootstrap.Energy {
+		t.Fatalf("both sides must start from the same kit: %+v vs %+v", cfg.Players[0].Bootstrap, cfg.Players[1].Bootstrap)
+	}
+	if cfg.Players[1].Bot != "normal" {
+		t.Fatalf("bot difficulty = %q, want normal", cfg.Players[1].Bot)
 	}
 }
 

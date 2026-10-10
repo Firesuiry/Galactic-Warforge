@@ -107,10 +107,25 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		for _, amount := range player.Inventory {
 			used += amount
 		}
-		quantity = min(quantity, max(0, unit.Mecha.InventoryCapacity-used))
-		quantity = min(quantity, building.Storage.OutputQuantity(itemID))
+		// 试玩报告 1013 C：「无可取出物品或背包已满」把两种完全不同的原因混在
+		// 一起，玩家看不出是建筑里没货还是自己装不下。分开报，并给出背包占用。
+		stored := building.Storage.OutputQuantity(itemID)
+		if stored <= 0 {
+			return mechaJobFailed(model.CodeInsufficientResource,
+				fmt.Sprintf("%s里没有可取出的「%s」", buildingDisplayName(building), itemDisplayName(itemID)))
+		}
+		capacity := unit.Mecha.InventoryCapacity
+		if capacity-used <= 0 {
+			return mechaJobFailed(model.CodeInsufficientResource,
+				fmt.Sprintf("背包已满（%d/%d），装不下取出的「%s」：先腾出空位或改送到别的建筑",
+					used, capacity, itemDisplayName(itemID)))
+		}
+		quantity = min(quantity, capacity-used)
+		quantity = min(quantity, stored)
 		if quantity <= 0 {
-			return mechaJobFailed(model.CodeInsufficientResource, "无可取出物品或背包已满")
+			return mechaJobFailed(model.CodeInsufficientResource,
+				fmt.Sprintf("背包已满（%d/%d），装不下取出的「%s」：先腾出空位或改送到别的建筑",
+					used, capacity, itemDisplayName(itemID)))
 		}
 		taken, _, err := building.Storage.Provide(itemID, quantity)
 		if err != nil {
@@ -134,6 +149,15 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			res.Message = "喷涂机存储仅接受增产剂，其他货物请经其西侧传送带送入"
 			return res, nil
 		}
+	}
+	// 研究模式的研究站只吃矩阵：普通制造建筑收下原料但永远用不上，会把
+	// 机甲背包里的料卡在站里（试玩报告 1013：玩家把电路板/磁线圈塞进研究站
+	// 后只看到「已传输」，完全不知道它们不会被消耗）。与其收下，不如拒绝并
+	// 说清该往哪里送。
+	if rejected := researchLabIntakeRejection(building, itemID); rejected != "" {
+		res.Code = model.CodeValidationFailed
+		res.Message = rejected
+		return res, nil
 	}
 	var accepted, remaining int
 	var err error

@@ -391,7 +391,10 @@ func TestA1SkirmishConfigLoads(t *testing.T) {
 	if cfg.Players[0].PlayerID != "p1" || cfg.Players[0].Role != "admin" || cfg.Players[0].Bot != "" {
 		t.Fatalf("p1 = %+v", cfg.Players[0])
 	}
-	if cfg.Players[1].PlayerID != "p2" || cfg.Players[1].Bot != "hard" {
+	// 2026-10-10 起遭遇战预设改为「双方都没有开局物资包、从零采集」，
+	// bot 难度同步下调为 normal（hard 的 cadence/军团阈值在无物资包下发育过慢，
+	// 且首攻推迟到 tick 30000）。
+	if cfg.Players[1].PlayerID != "p2" || cfg.Players[1].Bot != "normal" {
 		t.Fatalf("p2 = %+v", cfg.Players[1])
 	}
 }

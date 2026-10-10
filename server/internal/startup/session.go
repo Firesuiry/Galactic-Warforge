@@ -189,7 +189,7 @@ type NewGamePlayer struct {
 	Role      string                        `json:"role,omitempty"`      // admin|commander|observer，空则继承启动配置（无则 commander）
 	TeamID    string                        `json:"team_id,omitempty"`   // 空则继承启动配置（无则 player_id）
 	Bot       string                        `json:"bot,omitempty"`       // easy|normal|hard，空则继承启动配置（无则人类玩家）
-	Bootstrap *config.PlayerBootstrapConfig `json:"bootstrap,omitempty"` // 空则继承启动配置中同名玩家的开局物资包
+	Bootstrap *config.PlayerBootstrapConfig `json:"bootstrap,omitempty"` // 空则继承启动配置中同名玩家的启动量（minerals/energy，遭遇战预设无物品背包）
 }
 
 // NewGameRequest 是 POST /games/new 的请求体。

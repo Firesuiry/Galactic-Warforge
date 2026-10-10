@@ -17,7 +17,8 @@ import (
 type botTuning struct {
 	cadence             int64   // 决策间隔（tick）
 	maxCmds             int     // 每次决策最多下发的命令数
-	attackAt            int     // 进攻兵力阈值
+	attackAt            int     // 进攻兵力阈值（编成军团 + 军团出击的最小兵力；也是单支军团规模 = 首波规模）
+	squadCap            int     // 同时存在的军团上限（低难度只留 1 支：首波只有 attackAt 个兵，不会 2 支同时压家）
 	armyCap             int     // 兵力上限（士兵+mecha）
 	minerTarget         int     // 目标矿机数
 	powerTarget         int     // 目标发电建筑数
@@ -47,11 +48,11 @@ const botCoalReserve = 16
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 6, armyCap: 8, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 8, heavyAt: 12, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 4, squadCap: 1, armyCap: 8, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
 	case "hard":
-		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, armyCap: 22, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
+		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 10, armyCap: 14, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 8, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
 	}
 }
 
@@ -1082,50 +1083,100 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 			execRange = execState.OperateRange
 		}
 	}
-	nodeIDs := make([]string, 0, len(ws.Resources))
-	for id := range ws.Resources {
-		nodeIDs = append(nodeIDs, id)
+	// 候选矿点按「先近后远、矿种按 铁→铜→煤→石」排序（同类同距再按 ID 字典序，
+	// 保证可复现）。旧实现按节点 ID 字典序取第一个候选：基地旁的开局补矿簇 ID 形如
+	// `res-4`，字典序排在最后，而远处大矿簇 ID 形如 `planet-1-1-res-1843` 排在前面，
+	// 于是矿机被丢到 24 格外的远矿点上——见下面的选址注释。
+	//
+	// 距离优先还让开局矿机落在基地旁的开局补矿簇上（地图生成时放在 HQ 边上、
+	// 天然接进基地电网），不必先拉一串电塔；矿机一通电，minerals 就按
+	// minerals_kickback 自增长，后续建造才有钱。
+	kindRank := map[string]int{
+		model.ItemIronOre:   0,
+		model.ItemCopperOre: 1,
+		model.ItemCoal:      2,
+		model.ItemStoneOre:  3,
 	}
-	sort.Strings(nodeIDs)
-	for _, kind := range []string{model.ItemIronOre, model.ItemCopperOre, model.ItemCoal, model.ItemStoneOre} {
-		for _, id := range nodeIDs {
-			node := ws.Resources[id]
-			if node == nil || node.Kind != kind || node.Remaining <= 0 || node.Depleted {
-				continue
-			}
-			homeDist := ws.SurfaceDistance(*ctx.home, node.Position)
-			inRange := homeDist <= 24
-			if !inRange && ctx.executor != nil && ws.SurfaceDistance(ctx.executor.Position, node.Position) <= execRange {
-				inRange = true
-			}
-			if !inRange {
-				continue
-			}
-			covered := false
-			for _, b := range ctx.buildings {
-				if isMinerBuilding(b) && ws.SurfaceDistance(b.Position, node.Position) <= 4 {
-					covered = true
-					break
-				}
-			}
-			if covered {
-				continue
-			}
-			// 复用与 execBuild 相同的围死校验：矿机同样不能把基地封死
-			// （试玩报告 1010 阻断 A 的修法——否则 bot 会反复发注定被拒的建造命令，
-			// 整局卡在"矿机建不起来"上）。
-			if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, node.Position) != nil {
-				continue
-			}
-			pos := node.Position
-			return issue(model.Command{
-				Type:    model.CmdBuild,
-				Target:  model.CommandTarget{Layer: "planet", Position: &pos},
-				Payload: map[string]any{"building_type": string(model.BuildingTypeMiningMachine)},
-			})
+	type minerCandidate struct {
+		kind string
+		dist int
+		id   string
+		node *model.ResourceNodeState
+	}
+	candidates := make([]minerCandidate, 0, len(ws.Resources))
+	for id, node := range ws.Resources {
+		if node == nil || node.Remaining <= 0 || node.Depleted {
+			continue
 		}
+		if _, ok := kindRank[node.Kind]; !ok {
+			continue
+		}
+		candidates = append(candidates, minerCandidate{
+			kind: node.Kind,
+			dist: ws.SurfaceDistance(*ctx.home, node.Position),
+			id:   id,
+			node: node,
+		})
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		ri, rj := kindRank[candidates[i].kind], kindRank[candidates[j].kind]
+		if ri != rj {
+			return ri < rj
+		}
+		if candidates[i].dist != candidates[j].dist {
+			return candidates[i].dist < candidates[j].dist
+		}
+		return candidates[i].id < candidates[j].id
+	})
+	for _, cand := range candidates {
+		node := cand.node
+		homeDist := cand.dist
+		inRange := homeDist <= 24
+		if !inRange && ctx.executor != nil && ws.SurfaceDistance(ctx.executor.Position, node.Position) <= execRange {
+			inRange = true
+		}
+		if !inRange {
+			continue
+		}
+		// 建造半径 ≠ 电力半径：矿机只有 line 接口，落在电塔无线覆盖之外会一直
+		// no_power、不产矿也拿不到 minerals 回充，只能靠 botPowerLink 一座座塔
+		// 拉过去。这里**不能**直接跳过够不着的矿点：botIndustry 在
+		// `minerCount < minerTarget` 时提前返回，而 botPowerLink 就在 botIndustry
+		// 里——跳过会让「没矿机 → 不拉线 → 永远够不着 → 没矿机」死锁
+		// （实测 seed 001 上 p2 冻结在 tick 9000：矿物 10000 却一座塔都不建）。
+		// 因此仍然选最近的矿点建机，由 botPowerLink 负责把电网推过去。
+		covered := false
+		for _, b := range ctx.buildings {
+			if isMinerBuilding(b) && ws.SurfaceDistance(b.Position, node.Position) <= 4 {
+				covered = true
+				break
+			}
+		}
+		if covered {
+			continue
+		}
+		// 复用与 execBuild 相同的围死校验：矿机同样不能把基地封死
+		// （试玩报告 1010 阻断 A 的修法——否则 bot 会反复发注定被拒的建造命令，
+		// 整局卡在"矿机建不起来"上）。
+		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, node.Position) != nil {
+			continue
+		}
+		pos := node.Position
+		return issue(model.Command{
+			Type:    model.CmdBuild,
+			Target:  model.CommandTarget{Layer: "planet", Position: &pos},
+			Payload: map[string]any{"building_type": string(model.BuildingTypeMiningMachine)},
+		})
 	}
 	return false
+}
+
+// botWirelessRange 建筑的无线送电半径（0 = 不是无线电网节点，只能贴线连接）。
+func botWirelessRange(b *model.Building) int {
+	if b == nil || b.Runtime.Functions.PowerGrid == nil {
+		return 0
+	}
+	return b.Runtime.Functions.PowerGrid.WirelessRange
 }
 
 // botAssembler 制造台建设：物料齐了就在基地附近建一台。
