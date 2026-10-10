@@ -41,7 +41,10 @@ func TestCheckpointKeepsBotFirstAttackSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 把首攻门槛压到 2000 tick，测试才跑得动（实测首攻落在门槛后约 350 tick）。
+	// 把首攻门槛压到 2000 tick，测试才跑得动。无开局物资包后 bot 从零发育，
+	// 首攻不再由门槛决定（旧预设 hard + 物资包时门槛后约 350 tick 就出兵），
+	// 而是等「散兵攒够 attackAt=6」——normal 档实测门槛 2000 时首攻落在
+	// tick 9169（6 个兵、兵营 1 座），因此观察窗口放到 12000。
 	cfg.Battlefield.MapSeed = "skirmish-seed-001"
 	cfg.Battlefield.BotFirstAttackTick = 2000
 	cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
@@ -66,7 +69,7 @@ func TestCheckpointKeepsBotFirstAttackSchedule(t *testing.T) {
 
 	// 对照组：不读档，继续跑到首攻。
 	origFirst := int64(-1)
-	for ws.Tick < 4000 {
+	for ws.Tick < 12000 {
 		core.processTick()
 		if origFirst < 0 && skirmishBotAttackingPlayer(ws) {
 			origFirst = ws.Tick
@@ -86,7 +89,7 @@ func TestCheckpointKeepsBotFirstAttackSchedule(t *testing.T) {
 		t.Fatalf("读档瞬间 bot 已在进攻（存档时并未进攻）")
 	}
 	loadedFirst := int64(-1)
-	for rws.Tick < 4000 {
+	for rws.Tick < 12000 {
 		restored.processTick()
 		if loadedFirst < 0 && skirmishBotAttackingPlayer(rws) {
 			loadedFirst = rws.Tick

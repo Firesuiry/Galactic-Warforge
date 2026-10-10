@@ -2,7 +2,7 @@
 # 地图不是本文件字段，启动参数要单独给 map 文件。需配合：
 #   cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-skirmish.yaml
 # 地图文件：server/map-skirmish.yaml（由地图任务创建，本预设不创建地图）。
-# 10 tick/s 时 60 分钟 = 36000 tick，90 分钟 = 54000 tick。
+# 10 tick/s 时 60 分钟 = 36000 tick，90 分钟 = 54000 tick，150 分钟 = 90000 tick。
 battlefield:
   map_seed: "skirmish-seed-001"
   max_tick_rate: 10
@@ -10,20 +10,35 @@ battlefield:
   enemy_difficulty: "normal"
   construction_region_concurrent_limit: 4
   # 研究倍率 2：目录基准成本（电磁学 10 个电磁矩阵）×2 = 20 个。
-  # 目标区间（熟练玩家，产线摆好、持续供料）：
-  #   电磁学约 tick 5000–8000 完成；武器系统（基准 20 → 40 个）连同
-  #   自动化冶金/基础制造前置链，约 tick 12000–18000 拿到炮塔，
-  #   即 bot 首攻（bot_first_attack_tick 16000）前后玩家已有防御。
-  # 旧的 6 倍（电磁学 60 个）在 60–90 分钟一局里根本完不成任何科技。
+  # 目标区间（2026-10-10 起为「无物资包、全部自己采集」的节奏，见下面的 bootstrap 说明）：
+  #   从零手搓起步 → 第一座风机约 tick 2400；4 矿机 + 2 熔炉 + 制造台约 tick 9000；
+  #   兵营与首批步兵约 tick 15000；矩阵研究站约 tick 18000；
+  #   电磁学（20 个矩阵，产线 + 手搓混合）约 tick 30000 完成。
+  # 实测（脚本化新手开局，`skirmish_from_zero_test.go` 两个 seed，2026-10-10 跑）：
+  #   seed 001：风机 1413 / 电塔 1443 / 矿机 3513 / 熔炉 6123 / 3 熔炉 8193 /
+  #   制造台 9573 / 3 制造台 12393 / 兵营 12573 / 首个步兵 14921 / 研究站 14133 /
+  #   4 矿机 38403；电磁学（20 个矩阵）tick 40541 完成（手搓 + 一台矩阵制造台）。
+  #   pt1011：熔炉 6153 / 制造台 9603 / 3 制造台 14103 / 兵营 14433 / 步兵 17291 /
+  #   研究站 16233，比 seed 001 慢 1500–3000 tick；tick 45000 时建造队列还没推进到
+  #   矩阵制造台（「制造台缺 4 个电路板」972 次），电磁学未开工。
+  #   节奏瓶颈是机甲手搓（20 tick/件），齿轮最紧（每台制造台 8 个齿轮全手搓）；
+  #   4 矿机与后续建筑靠 minerals 回充滚动，脚本已按「先手搓当前建造步骤」排序。
+  # bot 首攻（bot_first_attack_tick 30000）落在电磁学完成之前，玩家此时已有兵营/步兵，
+  # 武器系统（炮塔）仍在更后面——这是「先降难度」的取法：首波只摸家，不压垮玩家。
+  # 旧的 6 倍（电磁学 60 个）在整局里根本完不成任何科技。
   pace_research: 2
   pace_build: 2
   pace_output: 2
-  time_limit_ticks: 54000
+  # 150 分钟一局：无物资包后开局链更长，且 bot 首攻推到 30000，
+  # 54000 会在第一波交战中途到时判分。
+  time_limit_ticks: 90000
   threat_growth_scale: 1.5
   # 黑雾被动：被某玩家伤害后才对其敌对，最后一次伤害后 6000 tick 恢复中立。
   dark_fog_calm_ticks: 6000
-  # bot 开局发育期：tick 16000（约 27 分钟）前军团只守家，给玩家时间起产线。
-  bot_first_attack_tick: 16000
+  # bot 开局发育期：tick 30000（约 50 分钟）前军团只守家，给玩家时间起产线。
+  # bot 也没有物资包，发育到「6 个兵 + 军团」本身就要两万多 tick（normal 档
+  # attackAt=6：首波 6 个兵，实测首攻 tick 30019、峰值 6）。
+  bot_first_attack_tick: 30000
 
 players:
   - player_id: "p1"
@@ -36,27 +51,23 @@ players:
       operate_range: 6
       concurrent_tasks: 2
       research_boost: 0.0
-    # 开局物资包（双方相同）：够直接建 风机×3、电感应塔×4、采矿机×4、电弧熔炉×2、制造台×1、
-    # 传送带×20、矩阵研究站×1，外加 20 块煤给机甲补能。之后靠自己的产线推进。
-    # 各建筑成本合计：铁块 102、齿轮 39、磁线圈 29、电路板 24、石砖 4、玻璃 4，
-    # 矿物 910、能量 350；这里留少量余量（铁块 110、磁线圈 30）供施工期间的损耗。
+    # 无开局物资包（2026-10-10）：背包为空，minerals/energy 只留「第一座矿机通电前」
+    # 的启动量——建造要花 minerals/energy，而两者在「矿机通电」之前没有任何产出
+    # 途径（矿机的 minerals 回充、风机的 energy 盈余都要通电才跑），必须留一点，
+    # 否则双方都会卡在「有矿机、没电、没矿物」的死锁里（实测 200 矿物时 bot 正好
+    # 把 3 风机 + 2 矿机建完就归零，连 20 矿物的电塔都建不起，整局冻结在 tick 12000）。
+    # 400 = 3 风机(30×3) + 2 矿机(50×2) + 2 座电塔(20×2) 的余量：第一座矿机一通电，
+    # minerals 就按 mining_machine 的 minerals_kickback=1 自增长（每挖 1 单位矿回充
+    # 1 点，8/tick/台），此后不再需要发料。双方同一份：bot 也没有物资包。
     bootstrap: &skirmish_kit
-      minerals: 1200
-      energy: 400
-      inventory:
-        - { item_id: iron_ingot, quantity: 110 }
-        - { item_id: gear, quantity: 40 }
-        - { item_id: magnetic_coil, quantity: 30 }
-        - { item_id: circuit_board, quantity: 24 }
-        - { item_id: stone_brick, quantity: 4 }
-        - { item_id: glass, quantity: 4 }
-        - { item_id: coal, quantity: 20 }
+      minerals: 400
+      energy: 100
   - player_id: "p2"
     key: "key_player_2"
     team_id: "team-2"
     role: "commander"
     permissions: ["*"]
-    bot: "hard"
+    bot: "normal"
     executor:
       build_efficiency: 1.0
       operate_range: 6

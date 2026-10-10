@@ -45,14 +45,19 @@ func (gc *GameCore) botLegions(ws *model.WorldState, playerID string, tuning bot
 		}
 		return issue(cmd)
 	}
-	if len(ctx.loose) >= tuning.attackAt && len(ctx.squads) < 4 {
+	// 首波按 attackAt 封顶：散兵够门槛就编队，但只带 attackAt 个，其余留作
+	// 后续波次/守家（实测 normal 的 attackAt 门槛下，散兵会一直攒到 armyCap=14，
+	// 编队时把 14 个全带上，首波规模与「低难度小首波」的预设不符）。
+	// 同时存在的军团数按难度封顶（easy/normal 各 1 支）：否则第一支刚走，
+	// 剩下 8 个散兵又够门槛，第二支军团紧接着一起压家，首波变成 12 个。
+	if len(ctx.loose) >= tuning.attackAt && len(ctx.squads) < tuning.squadCap {
 		ids := make([]string, 0, len(ctx.loose))
 		for _, u := range ctx.loose {
 			ids = append(ids, u.ID)
 		}
 		sort.Strings(ids)
-		if len(ids) > 300 {
-			ids = ids[:300]
+		if len(ids) > tuning.attackAt {
+			ids = ids[:tuning.attackAt]
 		}
 		anyIDs := make([]any, len(ids))
 		for i, id := range ids {

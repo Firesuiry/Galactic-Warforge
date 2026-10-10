@@ -616,6 +616,11 @@ const botTeslaCap = 10
 // botPowerLink 给断电建筑接电：从已带电电网里离它最近的节点出发，
 // 在无线覆盖范围内朝它放一座电感应塔，逐座延伸，直到接上。
 func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSurvey) (model.Command, bool) {
+	// 拉线要用机甲手搓/搬运电塔的料（botEnsureItem 会读 ctx.executor.Mecha），
+	// 机甲阵亡等待复活时直接跳过这一拍，避免空指针（试玩/探针里机甲一死就崩）。
+	if ctx == nil || ctx.executor == nil || ctx.executor.Mecha == nil {
+		return model.Command{}, false
+	}
 	if botPendingBuilds(ws, owner, model.BuildingTypeTeslaTower) > 0 {
 		return model.Command{}, false
 	}
