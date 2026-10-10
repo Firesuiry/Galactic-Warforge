@@ -135,6 +135,11 @@ type ServerConfig struct {
 	// GameDataDir 可选：游戏数据目录（items/recipes/techs/buildings/units/combat/war.yaml），
 	// 非空时整套替换内置的 server/data/ 默认数据，启动时校验失败即退出。
 	GameDataDir string `yaml:"game_data_dir,omitempty"`
+	// TickRateOverride 进程级 tick 速率覆盖：0 = 不覆盖，沿用新局或存档里固化的
+	// battlefield.max_tick_rate；非 0 时取 1..1000（校验同 max_tick_rate），
+	// 新开局、启动恢复、热加载存档点后都用它调度 tick，/games/current 的
+	// max_tick_rate 也返回它。tick 速率是运行参数，不写回存档。
+	TickRateOverride int `yaml:"tick_rate_override,omitempty"`
 	// Snapshot storage policy (tick-based).
 	SnapshotIntervalTicks   int64                   `yaml:"snapshot_interval_ticks"`  // full snapshot interval
 	SnapshotRetentionTicks  int64                   `yaml:"snapshot_retention_ticks"` // retain snapshots within last N ticks
@@ -235,6 +240,9 @@ func ApplyDefaults(cfg *Config) error {
 	// 上限 1000：tick 间隔按毫秒级 ticker 调度，再高没有意义。
 	if cfg.Battlefield.MaxTickRate < 0 || cfg.Battlefield.MaxTickRate > 1000 {
 		return fmt.Errorf("battlefield.max_tick_rate must be in 1..1000")
+	}
+	if cfg.Server.TickRateOverride < 0 || cfg.Server.TickRateOverride > 1000 {
+		return fmt.Errorf("server.tick_rate_override must be in 1..1000 (0 = 不覆盖)")
 	}
 	if cfg.Server.AutoSaveIntervalSeconds < 0 {
 		return fmt.Errorf("server.auto_save_interval_seconds must be >= 0")

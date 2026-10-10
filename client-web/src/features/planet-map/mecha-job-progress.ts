@@ -2,7 +2,7 @@
  * 机甲手搓/采集的批量进度（主界面常驻横幅 + 完成通知）。
  *
  * 服务端 MechaJob 只给「当前批剩余 tick / 剩余批数 / 已完成批数」，不下发总批数，
- * 这里按 `已完成 + 剩余` 复原总数，并按 10 tick/s 估算剩余时间。
+ * 这里按 `已完成 + 剩余` 复原总数，并按服务端实际 tick 速率（`/games/current` 的 `max_tick_rate`，可被 `server.tick_rate_override` 覆盖）估算剩余时间。
  * 进度条与「已完成 x / 总数」常驻在地图主界面，玩家不必展开机甲面板
  * （试玩报告：30 个铜块 = 1800 tick 只在展开详情时可见，容易以为卡死）。
  *
@@ -21,8 +21,8 @@ import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { getRecipeDisplayName, getItemDisplayName } from '@/features/planet-map/model';
 import type { PlanetRenderView } from '@/features/planet-map/model';
 
-/** 服务端默认 10 tick/s（遭遇战预设）。 */
-const TICKS_PER_SECOND = 10;
+/** 服务端默认 10 tick/s（遭遇战预设）兜底；实际速率由调用方从 /games/current 传入。 */
+const DEFAULT_TICKS_PER_SECOND = 10;
 /** 取消命令提交后这段时间内不报「完成」（避免把取消当完成）。 */
 const CANCEL_GRACE_MS = 8000;
 
@@ -40,11 +40,12 @@ export interface MechaJobProgress {
 }
 
 /** 剩余 tick → 「1 分 12 秒」；<=0 或非法 → 「即将完成」。 */
-export function formatRemaining(ticks: number): string {
+export function formatRemaining(ticks: number, tickRate: number = DEFAULT_TICKS_PER_SECOND): string {
   if (!Number.isFinite(ticks) || ticks <= 0) {
     return '即将完成';
   }
-  const totalSeconds = Math.ceil(ticks / TICKS_PER_SECOND);
+  const rate = tickRate > 0 ? tickRate : DEFAULT_TICKS_PER_SECOND;
+  const totalSeconds = Math.ceil(ticks / rate);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
@@ -86,6 +87,7 @@ export function findOwnExecutor(planet: PlanetRenderView | undefined, playerId: 
 export function deriveMechaJobProgress(
   catalog: CatalogView | undefined,
   unit: Unit | undefined,
+  tickRate: number = DEFAULT_TICKS_PER_SECOND,
 ): MechaJobProgress | null {
   const job = unit?.mecha?.job;
   if (!unit || !job) {
@@ -103,7 +105,7 @@ export function deriveMechaJobProgress(
     completed: job.completed_batches,
     total,
     remainingTicks,
-    remainingLabel: formatRemaining(remainingTicks),
+    remainingLabel: formatRemaining(remainingTicks, tickRate),
     state: job.state,
     stateLabel: jobStateLabel(job.state),
     percent: Math.max(0, Math.min(100, Math.round((job.completed_batches / total) * 100))),
@@ -139,9 +141,10 @@ export function useMechaJobProgress(
   catalog: CatalogView | undefined,
   planet: PlanetRenderView | undefined,
   playerId: string,
+  tickRate: number = DEFAULT_TICKS_PER_SECOND,
 ): MechaJobProgress | null {
   const unit = findOwnExecutor(planet, playerId);
-  const progress = deriveMechaJobProgress(catalog, unit);
+  const progress = deriveMechaJobProgress(catalog, unit, tickRate);
   const lastJobRef = useRef<{ unitId: string; job: NonNullable<Unit['mecha']>['job'] } | null>(null);
 
   useEffect(() => {

@@ -130,15 +130,18 @@ func (sess *Session) Summary() GameSummary {
 		MapSeed:         cfg.Battlefield.MapSeed,
 		EnemyDifficulty: cfg.Battlefield.EnemyDifficulty,
 		VictoryMode:     model.NormalizeVictoryRule(cfg.Battlefield.VictoryRule),
-		MaxTickRate:     cfg.Battlefield.MaxTickRate,
-		StartedAt:       sess.StartedAt,
-		Origin:          sess.Origin,
-		Status:          "running",
+		// MaxTickRate 兜底值：有 core 时下面用 Core.TickRate() 覆盖（含进程级覆盖）。
+		MaxTickRate: cfg.Battlefield.MaxTickRate,
+		StartedAt:   sess.StartedAt,
+		Origin:      sess.Origin,
+		Status:      "running",
 	}
 	if sess.Meta != nil {
 		sum.SourceCheckpoint = sess.Meta.SourceCheckpoint
 	}
 	if sess.Core != nil {
+		// tick 速率取实际调度值：进程级覆盖优先于存档/新局的 battlefield 设置。
+		sum.MaxTickRate = sess.Core.TickRate()
 		sum.ActivePlanetID = sess.Core.ActivePlanetID()
 		sum.Tick = sess.Core.CurrentTick()
 		victory := sess.Core.Victory()
@@ -358,6 +361,8 @@ func (rt *Runtime) assemble(cfg *config.Config) (*Session, error) {
 	core := gamecore.New(cfg, maps, q, bus, store)
 	meta := gamedir.NewMetaFile(cfg, rt.mapCfg)
 	core.AttachGameDir(rt.dir, meta, snapshot.Capture(core.World(), core.Discovery()))
+	// 覆盖值只作用于本进程：meta 已在覆盖前构建，写进存档的仍是请求里的速率。
+	core.ApplyTickRateOverride(cfg.Server.TickRateOverride)
 	sess := NewSession(cfg, maps, core, bus, q, OriginNew)
 	sess.Meta = meta
 	return sess, nil

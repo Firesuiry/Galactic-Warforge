@@ -13,6 +13,7 @@ import { planetColorOf } from '@/features/starmap/model';
 import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { describeEventPayload } from '@/i18n/event-payload';
 import { useApiClient } from '@/hooks/use-api-client';
+import { useCurrentGameQuery } from '@/features/lobby/use-current-game';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import {
   translateAlertType,
@@ -28,16 +29,21 @@ function formatNumber(value: number | undefined) {
   return value ?? 0;
 }
 
-/** 服务端遭遇战预设的 tick 速率（config-skirmish.yaml max_tick_rate）。 */
-const TICKS_PER_SECOND = 10;
+/** 服务端遭遇战预设的 tick 速率（config-skirmish.yaml max_tick_rate）兜底值。 */
+const DEFAULT_TICKS_PER_SECOND = 10;
 
-/** 相对 tick 时间：绝对 tick + 可读的相对时间（「约 75 分钟前（tick 8905）」）。 */
-function formatTickAge(currentTick: number, tick: number) {
+/**
+ * 相对 tick 时间：绝对 tick + 可读的相对时间（「约 75 分钟前（tick 8905）」）。
+ * tickRate 取 `/games/current` 的 max_tick_rate：服务端可能用
+ * server.tick_rate_override 调速（试玩 3、构建段 100），不能用写死的 10 换算。
+ */
+function formatTickAge(currentTick: number, tick: number, tickRate: number) {
   const delta = currentTick - tick;
   if (delta <= 0) {
     return `本 tick（tick ${tick}）`;
   }
-  const totalSeconds = Math.ceil(delta / TICKS_PER_SECOND);
+  const rate = tickRate > 0 ? tickRate : DEFAULT_TICKS_PER_SECOND;
+  const totalSeconds = Math.ceil(delta / rate);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   const relative = minutes > 0
@@ -157,6 +163,10 @@ export function OverviewPage() {
   const summary = summaryQuery.data;
   const stats = statsQuery.data;
   const activePlanetId = summary?.active_planet_id ?? '';
+  // tick 速率是运行参数（server.tick_rate_override 可覆盖存档设置），
+  // 相对时间换算必须用 /games/current 的 max_tick_rate，不能用写死的 10。
+  const gameQuery = useCurrentGameQuery();
+  const tickRate = gameQuery.data?.max_tick_rate ?? 0;
 
   // 行星态势列表：已探明行星，活跃行星置顶，其余按 id 稳定排序
   const planetEntries = useMemo(() => {
@@ -407,7 +417,7 @@ export function OverviewPage() {
                     <div className="command-feed__title">
                       <strong>{item.title}</strong>
                       <span className="command-feed__tick">
-                        {formatTickAge(summary.tick, item.tick)}
+                        {formatTickAge(summary.tick, item.tick, tickRate)}
                       </span>
                     </div>
                     <span className="command-feed__detail">{item.detail}</span>

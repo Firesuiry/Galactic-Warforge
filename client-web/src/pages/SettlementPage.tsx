@@ -92,7 +92,7 @@ export function SettlementPage() {
         </article>
         <article className="panel stat-card">
           <span className="stat-card__label">时长</span>
-          <strong>{formatDuration(report.duration_ticks)}</strong>
+          <strong>{formatDuration(report.duration_ticks, gameQuery.data.max_tick_rate)}</strong>
           <span>共 {report.duration_ticks} tick</span>
         </article>
         {report.tech_id ? (
@@ -151,9 +151,10 @@ export function SettlementPage() {
   );
 }
 
-/** 对局时长（按 10 tick/s 换算成分秒）。 */
-function formatDuration(ticks: number) {
-  const seconds = Math.round(ticks / 10);
+/** 对局时长（按服务端实际 tick 速率换算成分秒；速率来自 /games/current）。 */
+function formatDuration(ticks: number, tickRate: number) {
+  const rate = tickRate > 0 ? tickRate : 10;
+  const seconds = Math.round(ticks / rate);
   const minutes = Math.floor(seconds / 60);
   return minutes > 0 ? `${minutes} 分 ${seconds % 60} 秒` : `${seconds} 秒`;
 }

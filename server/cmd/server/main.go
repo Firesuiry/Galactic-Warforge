@@ -33,7 +33,7 @@ func main() {
 
 	log.Printf("SiliconWorld server starting")
 	log.Printf("  players: %d", len(sess.Config.Players))
-	log.Printf("  tick rate: %d/s", sess.Config.Battlefield.MaxTickRate)
+	log.Printf("  tick rate: %d/s", sess.Core.TickRate())
 	log.Printf("  systems: %d", len(sess.Maps.SystemOrder))
 	log.Printf("  primary planet: %s", primarySize)
 	log.Printf("  port: %d", sess.Config.Server.Port)

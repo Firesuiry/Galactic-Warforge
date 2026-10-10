@@ -16,13 +16,14 @@ export function refuelFullQuantity(missingEnergy: number, fuelEnergy: number, ow
   return Math.min(owned, Math.ceil(missingEnergy / fuelEnergy));
 }
 
-/** 服务端默认 10 tick/s（遭遇战预设）：tick 数换算成「X 分 Y 秒」。 */
-const TICKS_PER_SECOND = 10;
+/** 服务端默认 10 tick/s（遭遇战预设）兜底：实际速率由调用方从 /games/current 传入。 */
+const DEFAULT_TICKS_PER_SECOND = 10;
 
 /** 剩余 tick → 「1 分 12 秒」（负数/零 → 「即将完成」）。 */
-export function formatDuration(ticks: number): string {
+export function formatDuration(ticks: number, tickRate: number = DEFAULT_TICKS_PER_SECOND): string {
   if (!Number.isFinite(ticks) || ticks <= 0) return '即将完成';
-  const totalSeconds = Math.ceil(ticks / TICKS_PER_SECOND);
+  const rate = tickRate > 0 ? tickRate : DEFAULT_TICKS_PER_SECOND;
+  const totalSeconds = Math.ceil(ticks / rate);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
@@ -60,6 +61,8 @@ export function craftBlockReason(input: {
   /** 当前 job 的配方显示名（job.recipe_id 的显示名，不是下拉框选中的配方）。 */
   jobRecipeName: string;
   resourceName: string;
+  /** 服务端实际 tick 速率（/games/current 的 max_tick_rate）；缺省按 10 换算。 */
+  tickRate?: number;
 }): string | null {
   if (!input.hasRecipe) return '暂无可手工制造的配方。';
   // 机甲正在忙排在科技/背包之前：它才是「按钮为什么点不动」的真正原因，
@@ -69,7 +72,7 @@ export function craftBlockReason(input: {
     const subject = input.job.kind === 'mine'
       ? `手动采集 ${input.resourceName}`
       : `手搓 ${input.jobRecipeName}`;
-    return `机甲正在${subject}（已完成 ${input.job.completed_batches}/${total}，剩余约 ${formatDuration(remainingJobTicks(input.job))}），完成后可开始新任务；需要中断请点「取消机甲任务」。`;
+    return `机甲正在${subject}（已完成 ${input.job.completed_batches}/${total}，剩余约 ${formatDuration(remainingJobTicks(input.job), input.tickRate ?? DEFAULT_TICKS_PER_SECOND)}），完成后可开始新任务；需要中断请点「取消机甲任务」。`;
   }
   if (input.missingTech) return null; // 科技未解锁由独立提示行负责
   if (!input.hasPlayer) return null; // 背包未加载由独立提示行负责
@@ -78,8 +81,10 @@ export function craftBlockReason(input: {
 }
 
 /** All values and fuel choices come from the authoritative scene and catalog. */
-export function MechaControls({ unit, catalog, planetId, canControl, player }: {
+export function MechaControls({ unit, catalog, planetId, canControl, player, tickRate }: {
   unit: Unit; catalog?: CatalogView; planetId: string; canControl: boolean; player?: PlayerState;
+  /** 服务端实际 tick 速率（/games/current 的 max_tick_rate）；缺省按 10 换算。 */
+  tickRate?: number;
 }) {
   const client = useApiClient();
   const [fuelId, setFuelId] = useState('coal');
@@ -126,6 +131,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
     job,
     jobRecipeName: job?.recipe_id ? getRecipeDisplayName(catalog, job.recipe_id) : '',
     resourceName: job?.resource_id ? getItemDisplayName(catalog, job.resource_id) : '',
+    tickRate,
   });
   async function submit(commandType: string, execute: () => Promise<CommandResponse>) {
     if (pending) return;
@@ -159,7 +165,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player }: {
           />
           <span>已完成 {job.completed_batches} / {totalBatches}</span>
         </div>
-        <p>本批剩余 {job.remaining_ticks} tick · 剩余 {job.remaining_batches} 批 · 预计还需 {formatDuration(remainingTicks)}</p>
+        <p>本批剩余 {job.remaining_ticks} tick · 剩余 {job.remaining_batches} 批 · 预计还需 {formatDuration(remainingTicks, tickRate)}</p>
         <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? '距离矿点过远，回到 2 格内继续采集。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
         {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(unit.id))}>取消机甲任务</button> : null}
       </section> : null}

@@ -76,6 +76,7 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 		core := gamecore.New(cfg, maps, q, bus, store)
 		meta := gamedir.NewMetaFile(cfg, externalMapCfg)
 		core.AttachGameDir(rt.dir, meta, snapshot.Capture(core.World(), core.Discovery()))
+		core.ApplyTickRateOverride(cfg.Server.TickRateOverride)
 		if _, err := core.Save("startup"); err != nil {
 			return nil, fmt.Errorf("initial save: %w", err)
 		}
@@ -94,7 +95,7 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 // 共用这一条组装路径。origin 只能是 OriginResume（读写 data_dir）或
 // OriginCheckpoint（存档点目录只读，读取时不做 meta 自愈写回）。
 //
-// live 是进程级配置（server 段：端口/快照策略/autosave 间隔保持不变），
+// live 是进程级配置（server 段：端口/快照策略/autosave 间隔/tick 速率覆盖保持不变），
 // 存档内的 battlefield 与 players 覆盖它；地图拓扑始终以存档内固化的 mapconfig 为准。
 func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, origin SessionOrigin) (*Session, error) {
 	if saveDir == nil {
@@ -130,6 +131,7 @@ func (rt *Runtime) assembleFromSave(live *config.Config, saveDir *gamedir.Dir, o
 		return nil, err
 	}
 	core.AttachGameDir(rt.dir, meta, choosePersistedBaseSnapshot(save))
+	core.ApplyTickRateOverride(cfg.Server.TickRateOverride)
 	sess := NewSession(cfg, maps, core, bus, q, origin)
 	sess.Meta = meta
 	return sess, nil

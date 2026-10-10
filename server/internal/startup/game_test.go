@@ -345,10 +345,11 @@ overrides:
 }
 
 type savedGameOptions struct {
-	Seed      string
-	FaceSize  int
-	PlayerIDs []string
-	Tick      int64
+	Seed        string
+	FaceSize    int
+	PlayerIDs   []string
+	Tick        int64
+	MaxTickRate int
 }
 
 type externalOverrideOptions struct {
@@ -363,6 +364,7 @@ type runtimeOverrideOptions struct {
 	EventHistoryLimit       int
 	AlertHistoryLimit       int
 	AutoSaveIntervalSeconds int
+	TickRateOverride        int
 }
 
 func writeBootstrapFixtures(t *testing.T) (cfgPath string, mapCfgPath string, gameDir string) {
@@ -385,6 +387,9 @@ func writeSavedGame(t *testing.T, gameDir string, opts savedGameOptions) {
 	}
 	if opts.FaceSize > 0 {
 		meta.MapConfig.Planet.FaceSize = opts.FaceSize
+	}
+	if opts.MaxTickRate > 0 {
+		meta.GameplayConfig.Battlefield.MaxTickRate = opts.MaxTickRate
 	}
 	if len(opts.PlayerIDs) > 0 {
 		meta.GameplayConfig.Players = nil
@@ -441,7 +446,8 @@ players:
   event_history_limit: %d
   alert_history_limit: %d
   auto_save_interval_seconds: %d
-`, battlefield.MapSeed, battlefield.MaxTickRate, playerBlock.String(), gameDir, opts.Port, opts.RateLimit, opts.EventHistoryLimit, opts.AlertHistoryLimit, opts.AutoSaveIntervalSeconds)
+  tick_rate_override: %d
+`, battlefield.MapSeed, battlefield.MaxTickRate, playerBlock.String(), gameDir, opts.Port, opts.RateLimit, opts.EventHistoryLimit, opts.AlertHistoryLimit, opts.AutoSaveIntervalSeconds, opts.TickRateOverride)
 	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -516,5 +522,99 @@ func TestCheckpointLineageSurvivesRestart(t *testing.T) {
 	}
 	if derived.Parent != "cp-root" {
 		t.Fatalf("derived parent after restart = %q, want cp-root", derived.Parent)
+	}
+}
+
+// server.tick_rate_override 是进程级运行参数：非 0 时读档（启动恢复）后实际 tick
+// 速率与 /games/current 的 max_tick_rate 都用它，存档里固化的 battlefield 不变。
+func TestTickRateOverrideAppliesOnResume(t *testing.T) {
+	cfgPath, mapCfgPath, gameDir := writeBootstrapFixtures(t)
+	writeSavedGame(t, gameDir, savedGameOptions{Tick: 21, MaxTickRate: 10})
+	writeRuntimeOverrideConfig(t, cfgPath, runtimeOverrideOptions{TickRateOverride: 3})
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	defer app.Stop()
+
+	if got := app.Current().Core.TickRate(); got != 3 {
+		t.Fatalf("tick rate after resume with override = %d, want 3", got)
+	}
+	if got := app.Current().Summary().MaxTickRate; got != 3 {
+		t.Fatalf("summary max_tick_rate with override = %d, want 3", got)
+	}
+	if got := app.Current().Core.World().Tick; got != 21 {
+		t.Fatalf("resumed tick = %d, want 21", got)
+	}
+
+	// 覆盖值不写回存档：再存一次盘，meta 里的 battlefield 仍是存档原值 10。
+	if _, err := app.Current().Core.Save("manual"); err != nil {
+		t.Fatalf("manual save: %v", err)
+	}
+	meta, _, err := gamedir.Open(gameDir).Load()
+	if err != nil {
+		t.Fatalf("reload meta: %v", err)
+	}
+	if got := meta.GameplayConfig.Battlefield.MaxTickRate; got != 10 {
+		t.Fatalf("saved battlefield.max_tick_rate = %d, want 10 (覆盖值不落盘)", got)
+	}
+}
+
+// 不给 tick_rate_override（0 = 不覆盖）时，读档沿用存档里的 battlefield.max_tick_rate。
+func TestSavedTickRateUsedWithoutOverride(t *testing.T) {
+	cfgPath, mapCfgPath, gameDir := writeBootstrapFixtures(t)
+	writeSavedGame(t, gameDir, savedGameOptions{Tick: 5, MaxTickRate: 25})
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	defer app.Stop()
+
+	if got := app.Current().Core.TickRate(); got != 25 {
+		t.Fatalf("tick rate after resume without override = %d, want saved 25", got)
+	}
+	if got := app.Current().Summary().MaxTickRate; got != 25 {
+		t.Fatalf("summary max_tick_rate without override = %d, want saved 25", got)
+	}
+}
+
+// 热加载存档点（POST /checkpoints/{name}/load）同样用进程级覆盖值；存档点目录只读，
+// 里面的 battlefield 保持固化时的速率。
+func TestTickRateOverrideAppliesOnCheckpointLoad(t *testing.T) {
+	cfgPath, mapCfgPath, _ := writeBootstrapFixtures(t)
+	cpDir := filepath.Join(t.TempDir(), "checkpoints")
+	writeRuntimeOverrideConfig(t, cfgPath, runtimeOverrideOptions{TickRateOverride: 3})
+
+	app, err := LoadRuntime(cfgPath, mapCfgPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	defer app.Stop()
+	app.checkpoints = checkpoint.Open(cpDir)
+	if got := app.Current().Core.TickRate(); got != 3 {
+		t.Fatalf("fresh game tick rate with override = %d, want 3", got)
+	}
+	if _, err := app.SaveCheckpoint(SaveCheckpointRequest{Name: "cp-tick"}); err != nil {
+		t.Fatalf("save cp-tick: %v", err)
+	}
+
+	res, err := app.LoadCheckpoint("cp-tick")
+	if err != nil {
+		t.Fatalf("load cp-tick: %v", err)
+	}
+	if got := app.Current().Core.TickRate(); got != 3 {
+		t.Fatalf("tick rate after checkpoint load = %d, want 3", got)
+	}
+	if res.Game.MaxTickRate != 3 {
+		t.Fatalf("load result max_tick_rate = %d, want 3", res.Game.MaxTickRate)
+	}
+	meta, _, err := gamedir.Open(cpDir + "/cp-tick").Load()
+	if err != nil {
+		t.Fatalf("read checkpoint meta: %v", err)
+	}
+	if got := meta.GameplayConfig.Battlefield.MaxTickRate; got != 10 {
+		t.Fatalf("checkpoint battlefield.max_tick_rate = %d, want 10 (存档点不被改写)", got)
 	}
 }

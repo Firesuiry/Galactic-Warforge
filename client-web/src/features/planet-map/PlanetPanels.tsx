@@ -677,6 +677,8 @@ interface PlanetEntityPanelProps {
   blueprints?: WarBlueprintDetailView[];
   /** C4：任务群列表（小队卡片的所属任务群展示）。 */
   taskForces?: WarTaskForceView[];
+  /** 服务端实际 tick 速率（/games/current 的 max_tick_rate）：机甲剩余时间换算用。 */
+  tickRate?: number;
   /**
    * 跨场景窗口累积的己方单位（id → Unit，见 own-entity-cache）。
    * `/scene` 只返回相机窗口内的实体：镜头移开后被选中的机甲会掉出 planet.units，
@@ -696,6 +698,7 @@ export function PlanetEntityPanel({
   blueprints,
   taskForces,
   knownOwnUnits,
+  tickRate,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
   const { selected } = usePlanetViewStore(
@@ -1209,7 +1212,7 @@ export function PlanetEntityPanel({
             <p className="subtle-text">单位不在当前镜头窗口：下面显示的是最后一次见到的状态，面板保持可用。</p>
           </section>
         ) : null}
-        <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} />
+        <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} tickRate={tickRate} />
         <section className="planet-side-section">
           <div className="section-title">单位详情</div>
           <UnitCard card={unitCardFromRuntimeUnit(unit, translateUnitType(unit.type), catalog)} />

@@ -266,9 +266,12 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
+  // tick 速率是运行参数（server.tick_rate_override 可覆盖存档设置）：
+  // 机甲剩余时间换算必须用 /games/current 的 max_tick_rate，不能用写死的 10。
+  const currentGameQuery = useCurrentGameQuery();
   // 机甲批量进度（主界面常驻横幅 + 完成通知）：与 scene/catalog 同源，
   // 放在 query 定义之后、任何早返回之前，避免 hooks 出现在条件分支后。
-  const mechaJob = useMechaJobProgress(catalogQuery.data, sceneQuery.data, session.playerId);
+  const mechaJob = useMechaJobProgress(catalogQuery.data, sceneQuery.data, session.playerId, currentGameQuery.data?.max_tick_rate ?? 0);
 
   const summaryQuery = useQuery({
     queryKey: ["summary", session.serverUrl, session.playerId],
@@ -359,7 +362,6 @@ export function PlanetPage() {
   // 只按 planetId 判断会用上一局的建筑点亮新手引导。
   // 同一份缓存也喂给命令选择器（commandableUnitIds）：/scene 只返回相机窗口内的实体，
   // 镜头移开后被选中的单位会掉出窗口，右键就成了静默无命令（试玩 1010 E）。
-  const currentGameQuery = useCurrentGameQuery();
   const gameIdentity = currentGameQuery.data ? gameIdentityOf(currentGameQuery.data) : '';
   const guideEntities = useMemo(
     () => ownEntitySnapshot(accumulateOwnEntities(ownEntityCacheRef.current, sceneQuery.data, session.playerId, gameIdentity)),
@@ -752,6 +754,7 @@ export function PlanetPage() {
               stats={stats}
               summary={summary}
               taskForces={taskForcesQuery.data?.task_forces}
+              tickRate={currentGameQuery.data?.max_tick_rate}
             />
           </div>
         ) : null}

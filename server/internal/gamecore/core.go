@@ -53,6 +53,9 @@ type GameCore struct {
 	botReachCacheTick int64
 	// prof 本 tick 的分段计时（只在 tick 协程里读写），慢 tick 告警时输出。
 	prof tickProfile
+	// tickRateOverride 进程级 tick 速率覆盖（server.tick_rate_override，0 = 不覆盖）：
+	// 只影响 tick 循环调度与对外汇报，不写回存档。
+	tickRateOverride int
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
@@ -256,10 +259,7 @@ func (gc *GameCore) AlertHistory() *AlertHistory {
 
 // Run starts the tick loop (blocking); call in a goroutine
 func (gc *GameCore) Run() {
-	tickRate := gc.cfg.Battlefield.MaxTickRate
-	if tickRate <= 0 {
-		tickRate = 10
-	}
+	tickRate := gc.TickRate()
 	tickInterval := time.Second / time.Duration(tickRate)
 
 	ticker := time.NewTicker(tickInterval)
@@ -276,6 +276,37 @@ func (gc *GameCore) Run() {
 			gc.processTick()
 		}
 	}
+}
+
+// TickRate 返回本局实际使用的 tick 速率：进程级覆盖优先，否则取对局配置的
+// battlefield.max_tick_rate（<=0 时兜底 10）。
+func (gc *GameCore) TickRate() int {
+	if gc == nil {
+		return 0
+	}
+	if gc.tickRateOverride > 0 {
+		return gc.tickRateOverride
+	}
+	if rate := gc.cfg.Battlefield.MaxTickRate; rate > 0 {
+		return rate
+	}
+	return 10
+}
+
+// ApplyTickRateOverride 设置进程级 tick 速率覆盖（server.tick_rate_override）：
+// 0 或负数表示不覆盖，沿用对局配置的 battlefield.max_tick_rate。
+func (gc *GameCore) ApplyTickRateOverride(override int) {
+	gc.applyTickRateOverride(override)
+}
+
+// applyTickRateOverride 记下进程级 tick 速率覆盖（server.tick_rate_override）。
+// 覆盖只作用于本进程的 tick 循环调度与对外汇报（Session.Summary 走 TickRate），
+// 不改对局配置，因此不会随存档写进 meta.json。
+func (gc *GameCore) applyTickRateOverride(override int) {
+	if gc == nil || override <= 0 {
+		return
+	}
+	gc.tickRateOverride = override
 }
 
 // Stop signals the tick loop to stop; it is idempotent (F1: hot reset and

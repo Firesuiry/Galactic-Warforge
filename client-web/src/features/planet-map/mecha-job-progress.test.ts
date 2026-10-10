@@ -45,6 +45,9 @@ describe('机甲批量进度', () => {
     expect(formatRemaining(285)).toBe('29 秒'); // 285/10 = 28.5 → 向上取整
     expect(formatRemaining(1200)).toBe('2 分 0 秒');
     expect(formatRemaining(0)).toBe('即将完成');
+    // tick 速率是运行参数（server.tick_rate_override）：传 3 时按 3 tick/s 换算。
+    expect(formatRemaining(285, 3)).toBe('1 分 35 秒');
+    expect(formatRemaining(285, 0)).toBe('29 秒'); // 非法速率回落到 10
   });
 
   it('派生进度模型：标题、已完成/总数、百分比、暂停原因', () => {

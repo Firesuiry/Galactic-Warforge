@@ -49,3 +49,37 @@ func TestApplyDefaultsRejectsNegativeAutoSaveInterval(t *testing.T) {
 		t.Fatal("expected negative auto save interval to be rejected")
 	}
 }
+
+// server.tick_rate_override：0 = 不覆盖（保留默认），1..1000 合法，越界拒绝。
+func TestApplyDefaultsTickRateOverride(t *testing.T) {
+	base := func() *Config {
+		return &Config{Players: []PlayerConfig{{PlayerID: "p1", Key: "key-1"}}}
+	}
+
+	cfg := base()
+	if err := ApplyDefaults(cfg); err != nil {
+		t.Fatalf("apply defaults: %v", err)
+	}
+	if cfg.Server.TickRateOverride != 0 {
+		t.Fatalf("default tick_rate_override = %d, want 0 (不覆盖)", cfg.Server.TickRateOverride)
+	}
+
+	for _, override := range []int{1, 3, 1000} {
+		cfg := base()
+		cfg.Server.TickRateOverride = override
+		if err := ApplyDefaults(cfg); err != nil {
+			t.Fatalf("tick_rate_override %d rejected: %v", override, err)
+		}
+		if cfg.Server.TickRateOverride != override {
+			t.Fatalf("tick_rate_override = %d, want %d", cfg.Server.TickRateOverride, override)
+		}
+	}
+
+	for _, override := range []int{-1, 1001} {
+		cfg := base()
+		cfg.Server.TickRateOverride = override
+		if err := ApplyDefaults(cfg); err == nil {
+			t.Fatalf("tick_rate_override %d must be rejected", override)
+		}
+	}
+}

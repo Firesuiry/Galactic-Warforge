@@ -34,9 +34,10 @@
   - 目录不存在或为空：按本次 `-config` 与 `-map-config` 新建一局，对外服务前先写出首个存档。
   - 两个文件都合法：续档；存档内的 `battlefield`、`players`、`map_config` 优先于外部配置。
   - 只有其一或目录非空但不完整：拒绝启动。
-- 续档时仍可被外部覆盖的纯运行参数：`server.port`、`rate_limit`、`event_history_limit`、`snapshot_max_events`、`alert_history_limit`、`auto_save_interval_seconds`。
+- 续档时仍可被外部覆盖的纯运行参数：`server.port`、`rate_limit`、`event_history_limit`、`snapshot_max_events`、`alert_history_limit`、`auto_save_interval_seconds`、`tick_rate_override`。
 - `server.game_data_dir`（可选）：游戏数据目录，放整套 `items/recipes/techs/buildings/units/combat/war.yaml`，非空时替换内置 `server/data/`；启动时做完整引用校验，失败即拒绝启动并列出全部错误。格式见 [数据配置文件](数据配置文件.md)。与 `data_dir`（存档）是两回事。
 - 自动保存默认每 60 秒覆盖 `save.json`，`auto_save_interval_seconds = 0` 关闭；只有一个存档槽，手动保存同样覆盖。
+- `server.tick_rate_override`（可选，默认 0）：进程级 tick 速率覆盖。0 = 不覆盖，沿用新局或存档里固化的 `battlefield.max_tick_rate`；非 0 时取 1..1000（校验同 `max_tick_rate`），新开局、启动恢复、热加载存档点后的实际 tick 速率以及 `GET /games/current` 的 `max_tick_rate` 都用它。tick 速率是运行参数，覆盖值不写进 `meta.json`，同一个存档点可以用不同速率读档（试玩用 3 慢跑、构建段用 100 快进，见 [存档点回归测试](../guide/存档点回归测试.md) 第 7 节）。
 - `save.json` 为 gzip 压缩（按魔数识别，明文旧档可读）。持久化内容包括世界快照、`space` runtime（太阳帆按 `player + system` 分桶）、`winner` / `victory_reason` / `victory_rule` / `victory_tech_id`、结算报告等；不持久化 RNG 状态，续档后随机事件不保证与不停服一致。
 
 ### 普通新局（`config-dev.yaml` + `map.yaml`）
@@ -534,7 +535,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ### 6.8 对局管理
 
 **`GET /games/current`**：任意登录玩家可调。
-- `map_seed`、`enemy_difficulty`、`victory_mode`、`max_tick_rate`、`active_planet_id`、`tick`、`started_at`。
+- `map_seed`、`enemy_difficulty`、`victory_mode`、`max_tick_rate`（**实际调度速率**：`server.tick_rate_override` 非 0 时报覆盖值，否则报存档/新局的 `battlefield.max_tick_rate`）、`active_planet_id`、`tick`、`started_at`。
 - `origin`：本 session 的来源，`new`（开新局 / 启动新建）、`resume`（进程重启后从 `data_dir` 恢复同一局）、`checkpoint`（热加载存档点）。客户端据此区分「同一局重连」（resume）与「换局」（new / checkpoint，需清缓存：实体 id 会复用）。
 - `source_checkpoint`：本局的来源存档点名（随存档持久化，重启后仍在），不是从存档点读出来的局省略。
 - `players[]`：`player_id` / `role` / `team_id` / `bot` / `is_alive` / `focus_planet_id`（不含 key）。
