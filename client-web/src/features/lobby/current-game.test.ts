@@ -4,6 +4,7 @@ import {
   buildNewGameRequest,
   createEmptyPlayerRow,
   detectGameContinuity,
+  endgameBannerKind,
   gameIdentityOf,
   isAuthErrorMessage,
   newGameAdminWarning,
@@ -209,5 +210,60 @@ describe('detectGameContinuity（按服务端 origin 区分重连与换局）', 
 
   it('没有基线（首次拿到对局概要）→ none', () => {
     expect(detectGameContinuity(null, base)).toBe('none');
+  });
+});
+
+describe('endgameBannerKind：胜负横幅判定', () => {
+  const settlement = {
+    winner_id: 'p1',
+    reason: 'elimination',
+    victory_rule: 'elimination',
+    start_tick: 0,
+    declared_tick: 5120,
+    duration_ticks: 5120,
+    players: [
+      { player_id: 'p1', is_alive: true, winner: true, units_killed: 1, units_lost: 0, buildings_destroyed: 0, buildings_lost: 0 },
+      { player_id: 'p2', is_alive: false, winner: false, units_killed: 0, units_lost: 1, buildings_destroyed: 0, buildings_lost: 1 },
+    ],
+  };
+
+  it('对局进行中且本人存活 → 不显示横幅', () => {
+    expect(endgameBannerKind(createGameSummary(), 'p1')).toBeNull();
+  });
+
+  it('对局进行中但本人已被歼灭 → 战败横幅', () => {
+    const game = createGameSummary({
+      players: [
+        { player_id: 'p1', role: 'admin', team_id: 'p1', is_alive: false },
+        { player_id: 'p2', role: 'commander', team_id: 'team-b', is_alive: true },
+      ],
+    });
+    expect(endgameBannerKind(game, 'p1')).toBe('defeat');
+    expect(endgameBannerKind(game, 'p2')).toBeNull();
+  });
+
+  it('已结算：胜者本人 → 胜利，败者 → 战败', () => {
+    const finished = createGameSummary({ status: 'finished', settlement });
+    expect(endgameBannerKind(finished, 'p1')).toBe('victory');
+    expect(endgameBannerKind(finished, 'p2')).toBe('defeat');
+  });
+
+  it('已宣判但结算报告未到：按 victory.winner_id / team_id 判定', () => {
+    const declared = createGameSummary({
+      status: 'finished',
+      victory: { declared: true, winner_id: 'p2', team_id: 'team-b' },
+    });
+    expect(endgameBannerKind(declared, 'p1')).toBe('defeat');
+    expect(endgameBannerKind(declared, 'p2')).toBe('victory');
+  });
+
+  it('平局（无 winner）与未知玩家 → 不显示横幅', () => {
+    const draw = createGameSummary({
+      status: 'finished',
+      settlement: { ...settlement, winner_id: '', team_id: '', players: [] },
+    });
+    expect(endgameBannerKind(draw, 'p1')).toBeNull();
+    expect(endgameBannerKind(createGameSummary(), 'ghost')).toBeNull();
+    expect(endgameBannerKind(createGameSummary(), '')).toBeNull();
   });
 });

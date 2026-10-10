@@ -52,6 +52,45 @@ export function gameIdentityOf(game: GameSummary) {
   return `${game.started_at}::${game.map_seed}`;
 }
 
+/**
+ * 终局/出局横幅的判定结果。
+ * - victory：本局已结束且本人（或本队）获胜；
+ * - defeat：本局已结束但本人未获胜，或对局仍在进行而本人已被歼灭（试玩 1012：
+ *   被歼灭只弹一条会消失的 toast，玩家看不出自己已经出局）；
+ * - null：无需展示（对局进行中且本人存活、平局、或没有自己的玩家记录）。
+ */
+export type EndgameBannerKind = 'victory' | 'defeat';
+
+export function endgameBannerKind(
+  game: Pick<GameSummary, 'status' | 'victory' | 'settlement' | 'players'>,
+  playerId: string,
+): EndgameBannerKind | null {
+  if (!playerId) {
+    return null;
+  }
+  const me = game.players.find((player) => player.player_id === playerId);
+  if (gameStatusOf(game) === 'finished') {
+    const report = game.settlement;
+    if (report) {
+      if (!report.winner_id && !report.team_id) {
+        // 平局：不判胜负，横幅让位给终局提示条。
+        return null;
+      }
+      return didPlayerWin(playerId, report) ? 'victory' : 'defeat';
+    }
+    if (!game.victory?.declared) {
+      return null;
+    }
+    const won = game.victory.winner_id === playerId
+      || (Boolean(game.victory.team_id) && me?.team_id === game.victory.team_id);
+    return won ? 'victory' : 'defeat';
+  }
+  if (me && !me.is_alive) {
+    return 'defeat';
+  }
+  return null;
+}
+
 /** 对局连续性判定：换局（重置/读档）/ 重连（同一局被服务端重启恢复）/ 无变化。 */
 export type GameContinuity = 'none' | 'reset' | 'reconnected';
 

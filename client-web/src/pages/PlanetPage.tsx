@@ -365,6 +365,29 @@ export function PlanetPage() {
     () => ownEntitySnapshot(accumulateOwnEntities(ownEntityCacheRef.current, sceneQuery.data, session.playerId, gameIdentity)),
     [sceneQuery.data, session.playerId, gameIdentity],
   );
+
+  /*
+   * 换局（读档存档点 / 管理员开新局）时把行星页的本地交互状态一起复位。
+   *
+   * 试玩 1012 问题 3：连读两次存档后建造卡「点了没反应」——planetId 没变，上面的
+   * planetId effect 不跑，上一局的残留状态就活到了新局：
+   * - interactionMode 停在 build：点卡片只是「选中另一个建筑」，地图上不会放置；
+   * - buildBarDocked 停在 true：建造栏只剩一行把手，看起来就像卡片消失/失灵；
+   * - drawerOpen/activeDetailPanel 停在上一局的抽屉；
+   * - PlanetCommandPanel 的表单（装入建筑/生产/物流参数等）留着上一局选中的建筑 id，
+   *   新局里该 id 已不存在，提交只会静默失败——工作台内容区用 key 按对局身份重挂载。
+   * 首次拿到对局概要时 identity 由空串变成实际值，只做一次无副作用的重挂载。
+   */
+  useEffect(() => {
+    if (!gameIdentity) {
+      return;
+    }
+    restoredViewRef.current = "";
+    resetForPlanet(planetId);
+    resetCommandStore(planetId);
+    setActiveDetailPanel("workbench");
+    toggleDrawer(false);
+  }, [gameIdentity, planetId, resetCommandStore, resetForPlanet]);
   const knownOwnUnits = useMemo(() => indexUnitsById(guideEntities.units), [guideEntities.units]);
   // 「家」按累积的己方实体算（不随镜头窗口丢失），供聚焦基地/回到基地共用。
   useEffect(() => {
@@ -702,7 +725,7 @@ export function PlanetPage() {
           );
         })}
       </div>
-      <div className="planet-detail-shell__content">
+      <div className="planet-detail-shell__content" key={gameIdentity || "pending"}>
         {activeDetailPanel === "workbench" ? (
           <div id="planet-detail-panel-workbench" role="tabpanel">
             <PlanetCommandCenter

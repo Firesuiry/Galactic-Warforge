@@ -5,6 +5,10 @@ import { create } from 'zustand';
  * - knownScope/knownIdentity：已确认的对局基线（scope = serverUrl::playerId）
  * - knownTick：基线对局已见到的最大 tick（tick 回退才是真重置；单纯 SSE 重连不算）
  * - resetNotice：检测到对局被管理员重置（本机 key 仍有效），提示用户状态已刷新
+ * - resetNoticeText：重置提示条的文案。判定换局的那一刻就按当时的对局概要定稿，
+ *   提示条只读它、不再读 react-query 的 data——`queryClient.clear()` 之后 data 会短暂
+ *   变 undefined（或在途请求迟迟不回），若在渲染时现取，就会退化成通用文案，
+ *   连续读档两次时看起来像「名字没刷新」（试玩 1012 问题 2）。
  * - reconnectNotice：只是服务端重启/SSE 重连（同一存档），提示已重新连接
  * - authFailureCount：/games/current 连续 401 次数（≥2 才登出，容忍换局瞬间的竞态）
  */
@@ -13,6 +17,7 @@ interface LobbyStore {
   knownIdentity: string;
   knownTick: number;
   resetNotice: boolean;
+  resetNoticeText: string;
   reconnectNotice: boolean;
   authFailureCount: number;
   /** 登出跳登录页时附带的引导提示（location.state 会被路由守卫的 Navigate 覆盖，故放 store） */
@@ -21,7 +26,7 @@ interface LobbyStore {
   settlementPromptedKey: string;
   settlementNotice: boolean;
   recordIdentity: (scope: string, identity: string, tick: number) => void;
-  flagResetNotice: () => void;
+  flagResetNotice: (text?: string) => void;
   dismissResetNotice: () => void;
   flagReconnectNotice: () => void;
   dismissReconnectNotice: () => void;
@@ -38,6 +43,7 @@ function createInitialLobbyState() {
     knownIdentity: '',
     knownTick: 0,
     resetNotice: false,
+    resetNoticeText: '',
     reconnectNotice: false,
     authFailureCount: 0,
     loginNotice: '',
@@ -54,11 +60,11 @@ export const useLobbyStore = create<LobbyStore>()((set, get) => ({
   recordIdentity: (scope, identity, tick) => {
     set({ knownScope: scope, knownIdentity: identity, knownTick: tick });
   },
-  flagResetNotice: () => {
-    set({ resetNotice: true });
+  flagResetNotice: (text) => {
+    set({ resetNotice: true, resetNoticeText: text ?? '' });
   },
   dismissResetNotice: () => {
-    set({ resetNotice: false });
+    set({ resetNotice: false, resetNoticeText: '' });
   },
   flagReconnectNotice: () => {
     set({ reconnectNotice: true });

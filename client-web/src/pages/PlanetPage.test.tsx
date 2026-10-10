@@ -1994,4 +1994,118 @@ describe("PlanetPage", () => {
       ]);
     });
   });
+
+  it("换局（读档存档点）后重置本地交互状态：建造模式/选中/建造栏停靠", async () => {
+    let currentGame: unknown = {
+      map_seed: "seed-001",
+      enemy_difficulty: "normal",
+      victory_mode: "elimination",
+      max_tick_rate: 10,
+      active_planet_id: "planet-1-1",
+      tick: 120,
+      started_at: "2026-09-29T12:00:00Z",
+      origin: "new",
+      players: [{ player_id: "p1", role: "admin", team_id: "p1", is_alive: true }],
+      victory: { declared: false },
+      status: "running",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/games/current")) {
+          return Promise.resolve(jsonResponse(currentGame));
+        }
+        if (url.endsWith("/state/summary")) {
+          return Promise.resolve(jsonResponse(createSummaryPayload()));
+        }
+        if (url.endsWith("/state/stats")) {
+          return Promise.resolve(jsonResponse(createStatsPayload()));
+        }
+        if (url.endsWith("/world/systems/sys-1")) {
+          return Promise.resolve(jsonResponse({
+            system_id: "sys-1",
+            galaxy_id: "galaxy-1",
+            name: "Helios",
+            star_type: "main_sequence",
+            planets: [{ planet_id: "planet-1-1", name: "Gaia", kind: "terrestrial" }],
+          }));
+        }
+        if (url.endsWith("/world/systems/sys-1/runtime")) {
+          return Promise.resolve(jsonResponse({
+            system_id: "sys-1",
+            orbiting_fleets: [],
+            enemy_fleets: [],
+            solar_sails: [],
+            dyson_sphere: { system_id: "sys-1", layers: [], ray_receivers: [], sails: [] },
+          }));
+        }
+        if (url.includes("/world/planets/planet-1-1/scene")) {
+          return Promise.resolve(jsonResponse(createScenePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
+          return Promise.resolve(jsonResponse(createRuntimePayload()));
+        }
+        if (url.endsWith("/world/planets/planet-1-1/networks")) {
+          return Promise.resolve(jsonResponse(createNetworksPayload()));
+        }
+        if (url.endsWith("/catalog")) {
+          return Promise.resolve(jsonResponse(createCatalogPayload()));
+        }
+        if (url.includes("/events/snapshot") || url.includes("/alerts/production/snapshot")) {
+          return Promise.resolve(jsonResponse({ event_types: [], available_from_tick: 1, next_event_id: "", has_more: false, events: [], alerts: [] }));
+        }
+        if (url.includes("/events/stream")) {
+          return Promise.resolve(sseResponse([{ event: "connected", data: { player_id: "p1", event_types: [] } }]));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    const { queryClient } = renderApp(["/planet/planet-1-1?view=2d"]);
+    await screen.findByRole("tab", { name: /工作台/ });
+
+    // 模拟上一局残留的本地交互状态：建造模式、选中实体、建造栏已收起
+    act(() => {
+      usePlanetViewStore.getState().setInteractionMode({
+        kind: "build",
+        buildingType: "mining_machine",
+        direction: "north",
+      });
+      usePlanetViewStore.getState().setSelected({
+        kind: "building",
+        id: "miner-1",
+        position: { x: 1, y: 1, z: 0 },
+      });
+      usePlanetViewStore.getState().setBuildBarDocked(true);
+    });
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe("build");
+    expect(usePlanetViewStore.getState().buildBarDocked).toBe(true);
+
+    // 读档到更早的存档点：planetId 不变，但对局身份（started_at::map_seed）变化
+    currentGame = {
+      map_seed: "seed-001",
+      enemy_difficulty: "normal",
+      victory_mode: "elimination",
+      max_tick_rate: 10,
+      active_planet_id: "planet-1-1",
+      tick: 12037,
+      started_at: "2026-09-30T08:00:00Z",
+      origin: "checkpoint",
+      source_checkpoint: "cp-a",
+      players: [{ player_id: "p1", role: "admin", team_id: "p1", is_alive: true }],
+      victory: { declared: false },
+      status: "running",
+    };
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["current-game"] });
+    });
+
+    await waitFor(() => {
+      expect(usePlanetViewStore.getState().interactionMode.kind).toBe("inspect");
+    });
+    expect(usePlanetViewStore.getState().selected).toBeNull();
+    expect(usePlanetViewStore.getState().buildBarDocked).toBe(false);
+  });
 });
