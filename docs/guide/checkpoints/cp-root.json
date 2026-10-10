@@ -1,0 +1,15 @@
+{
+  "parent": null,
+  "note": "1013 原点：大厅「开新局」，seed skirmish-seed-001，普通难度 / 歼灭胜利，p1 admin + p2 bot hard。tick 92 存。",
+  "build": [
+    "POST /games/new {map_seed: skirmish-seed-001, enemy_difficulty: normal, victory_mode: elimination, players: [p1/key_player_1/admin, p2/key_player_2/commander/bot=hard]}（网页 UI：大厅 → 开新局 → 填 map_seed 与 p2 key → 确认）",
+    "服务端按 config-skirmish.yaml 的 bootstrap 物资包发料；tick ~90 时 checkpoint save cp-root"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "tick_lt", "tick": 2000},
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"}
+    ]
+  }
+}

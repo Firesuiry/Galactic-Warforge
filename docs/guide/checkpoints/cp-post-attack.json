@@ -1,0 +1,22 @@
+{
+  "parent": "cp-lab",
+  "note": "1013 L4：bot 首攻（tick 16000 起）后仍在局，验证「机甲边走边打」可用。UI 铺了一条「矿机 16,42 → 传送带 ×10 → 熔炉 b-71」的自动链，熔炉自 tick 16852 起自动产出铁块（无需手动装料）。同时被 bot 打掉 2 台制造台、1 台熔炉、1 台矿机、1 台风机等 8 座建筑；机甲单挑波次、反复阵亡复活。tick 20029 存（replace，旧版 tick 20537）。",
+  "build": [
+    "从 cp-lab 读档（tick 8976）",
+    "UI：机甲选中 → 移动/攻击指令交替（边走边打），点敌人挡住第一波",
+    "UI：拆除错向传送带并重铺（每格建造前用建造栏「方向 · R 旋转」切向）",
+    "UI：取出矿机产物（铁矿/铜矿）→ 机甲手搓齿轮/铜块/铁块",
+    "推进到 tick ~20000 存档"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "tick_gte", "tick": 17000},
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": true},
+      {"kind": "building_count_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1},
+      {"kind": "building_count_gte", "player": "p1", "type": "matrix_lab", "n": 1},
+      {"kind": "unit_count_gte", "player": "p1", "type": "executor", "n": 1}
+    ]
+  }
+}

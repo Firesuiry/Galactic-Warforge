@@ -1,0 +1,28 @@
+{
+  "parent": "cp-root",
+  "note": "1013 L1：供电/采矿/冶炼/制造台 全部建成并运行（4 矿机、2 熔炉、2 制造台、3 风机、3 电塔）。测试段全程只用网页 UI 下命令。",
+  "build": [
+    "从 cp-root 读档（tick ~90）",
+    "UI：建造栏选「风力涡轮机」→ 点 (16,49)/(17,50)/(20,50)/(22,49)",
+    "UI：「电力感应塔」→ 点 (16,45)/(18,49)/(17,43)",
+    "UI：「采矿机」→ 点矿点 (16,42)=铁矿、(18,42)=铁矿、(19,43)=铜矿、(19,44)=石矿",
+    "UI：「电弧熔炉」→ 点 (20,49) 配方 smelt_iron、(21,49) 配方 smelt_copper",
+    "UI：「制造台 Mk.I」→ 点 (21,50) 配方 ammo_bullet、(22,50) 配方 circuit_board",
+    "UI：取出采矿机产物（铁矿 8 / 铜矿 8），「装入建筑」给两台熔炉；再取出锭给制造台（验证自动产线）",
+    "推进到 tick ~5900 存档"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "tick_gte", "tick": 3000},
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "building_count_gte", "player": "p1", "type": "wind_turbine", "n": 3},
+      {"kind": "building_count_gte", "player": "p1", "type": "tesla_tower", "n": 2},
+      {"kind": "building_count_gte", "player": "p1", "type": "mining_machine", "n": 4},
+      {"kind": "building_count_gte", "player": "p1", "type": "arc_smelter", "n": 2},
+      {"kind": "building_count_gte", "player": "p1", "type": "assembling_machine_mk1", "n": 2},
+      {"kind": "unit_count_gte", "player": "p1", "type": "executor", "n": 1},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+    ]
+  }
+}

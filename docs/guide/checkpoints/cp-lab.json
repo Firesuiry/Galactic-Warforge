@@ -1,0 +1,46 @@
+{
+  "parent": "cp-base",
+  "note": "1013 L2（重建后）：从 cp-base 出发，用机甲手搓面板搓 磁铁 → 磁线圈，在 (17,48) 建成矩阵研究站 b-104。关键教训：研究站必须建在电塔 b-61@(18,49) 的 wireless_range=4 之内，否则永远 state=no_power、无法研究；本层第一次把站建在 (17,52)（超出供电范围）导致 L3 全废，故回推重建。本层期间 bot 首攻（tick 16000 起）连续拆家，2 台电弧熔炉与 2 台制造台被推平，所以契约只锚定「研究站 + 指挥中心 + 机甲」这一核，不锚定产线。tick 8976 存（replace）。",
+  "build": [
+    "从 cp-base 读档（tick 5868）",
+    "UI：机甲选中 → 打开工作台抽屉「选中对象」→ 手搓面板（个人制造配方）",
+    "UI：取出采矿机铁矿（取出 20 个「铁矿」）→ 手搓 磁铁 ×2（配方 smelt_magnet，批数 2）",
+    "UI：手搓 磁线圈（配方 magnetic_coil，批数 1，消耗 磁铁 2 + 铜块 1，产出 2）",
+    "UI：建造栏 → 矩阵研究站 → 点 (17,48)（反馈「施工任务已排队（位置 17,48）」），位置在电塔 b-61@(18,49) 的供电范围内（wireless_range 4）",
+    "API 只读校验：b-104 runtime.state=running、供电 已接入、电力分配 4/4",
+    "tick 8976 存档"
+  ],
+  "contract": {
+    "checks": [
+      {
+        "kind": "tick_gte",
+        "tick": 8000
+      },
+      {
+        "kind": "game_not_finished"
+      },
+      {
+        "kind": "player_alive",
+        "player": "p1"
+      },
+      {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "n": 1
+      },
+      {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "battlefield_analysis_base",
+        "n": 1
+      },
+      {
+        "kind": "unit_count_gte",
+        "player": "p1",
+        "type": "executor",
+        "n": 1
+      }
+    ]
+  }
+}

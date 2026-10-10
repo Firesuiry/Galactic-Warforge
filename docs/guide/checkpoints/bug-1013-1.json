@@ -1,0 +1,17 @@
+{
+  "parent": "cp-base",
+  "note": "1013 问题存档（bug）：bot 的 soldier 波次从 tick 16000 起持续压家，玩家机甲 1 打 N 必然阵亡并循环复活（u-5 在 16458/20554/23396/23534 四次阵亡），到 tick 23600 累计损失 16 座建筑，只剩 HQ + 2 风机 + 1 电塔 + 2 矿机。开局科技树里唯一的防御建筑「高斯机枪塔」要先研究「武器系统」（40 电磁矩阵），而武器系统又排在「电磁学」（20 矩阵）之后——第一波之前拿不到任何自动防御手段，也没提示玩家「机甲会被打光、基地会被推平」。tick 11656 存（该局当时从 cp-base 重开）。",
+  "build": [
+    "从 cp-base 读档（tick 5868）",
+    "不做任何事，让 bot 波次自然推进到 tick ~23600（观察是否必然崩盘）",
+    "存档点仅作证据，不含玩家操作"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": true},
+      {"kind": "building_count_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1}
+    ]
+  }
+}
