@@ -272,6 +272,9 @@ export interface Building {
     capacity?: number;
     slots?: number;
     buffer_capacity?: number;
+    /** 产出预留：主库存顶端必须留出的空位数（服务端 StorageState.Reserve 原样下发）。 */
+    reserve?: number;
+    priority?: { input?: number; output?: number };
     inventory?: ItemInventory;
     input_buffer?: ItemInventory;
     output_buffer?: ItemInventory;

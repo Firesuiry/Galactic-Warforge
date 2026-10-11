@@ -627,6 +627,147 @@ export function isSprayCoaterBuildingType(buildingType: string | undefined) {
   return buildingType === "spray_coater";
 }
 
+/** 主库存已用件数（只计正数，与服务端 inventoryQty 同口径）。 */
+function usedQuantity(inventory: ItemInventory | undefined): number {
+  return Object.values(inventory ?? {}).reduce(
+    (sum, amount) => sum + (amount > 0 ? amount : 0),
+    0,
+  );
+}
+
+/** 库存里的物品种类数（主库存 + 输入/输出缓冲，与服务端 distinctItems 同口径）。 */
+function distinctItemCount(storage: NonNullable<Building["storage"]>): number {
+  const ids = new Set<string>();
+  for (const inventory of [storage.inventory, storage.input_buffer, storage.output_buffer]) {
+    for (const [id, amount] of Object.entries(inventory ?? {})) {
+      if ((amount ?? 0) > 0) {
+        ids.add(id);
+      }
+    }
+  }
+  return ids.size;
+}
+
+export interface TransferAcceptance {
+  /**
+   * 目标建筑这一次最多还能收下多少件（已按「主库存可用量（容量 − 产出预留）+ 输入缓冲可用量」
+   * 与背包现有数量裁剪）。
+   */
+  accepted: number;
+  /** 建筑装不下的部分，仍留在背包里。 */
+  remaining: number;
+  /** 建筑整体已经收不下任何一件（主库存到产出预留线、缓冲满、槽位满、未配物流站槽位…）。 */
+  blocked: boolean;
+  /** 阻断原因的中文说明；blocked=false 时为 null。 */
+  reason: string | null;
+}
+
+/**
+ * 「装入建筑」事前可收量估算（试玩 1014 层 15 问题 4）：装料表单要在下达前就告诉玩家
+ * 目标建筑还能收多少、超出的部分会留在背包，而不是等回执里一句「已装入 N 个…M 个留在背包」。
+ *
+ * 服务端没有下发这个预估（装入按 tick 结算），这里按 execTransferItem 的实际结算路径
+ * 复刻同一套口径，因此是「约」值：
+ * - 物流站：min(数量, 单项容量 item_capacity − 该物品现有库存)，且必须先配置槽位；
+ * - 其他建筑：Storage.Load 先填主库存可用量（capacity − reserve − 已用），再填输入缓冲
+ *   （buffer_capacity 按 priority 拆分后减去已用）；槽位满（slots 用尽且不含该物品）直接拒收。
+ *
+ * 传入的 quantity 是玩家输入的数量；返回 accepted/remaining 已按背包现有量裁剪。
+ */
+export function estimateTransferAcceptance(
+  building: Building | undefined,
+  itemId: string,
+  quantity: number,
+  ownedQuantity?: number,
+): TransferAcceptance {
+  const requested = Math.max(0, Math.floor(quantity || 0));
+  const owned = ownedQuantity === undefined ? requested : Math.max(0, Math.floor(ownedQuantity || 0));
+  const budget = Math.min(requested, owned);
+  const none = (reason: string): TransferAcceptance => ({
+    accepted: 0,
+    remaining: requested,
+    blocked: true,
+    reason,
+  });
+
+  if (!building || !itemId || requested <= 0) {
+    return { accepted: 0, remaining: requested, blocked: true, reason: "先选择目标建筑与物品" };
+  }
+
+  if (isLogisticsStationBuildingType(building.type)) {
+    const station = building.logistics_station;
+    const itemCapacity = station?.item_capacity ?? 0;
+    if (!station || itemCapacity <= 0) {
+      return none("该物流站还没有初始化仓储容量");
+    }
+    const configured =
+      itemId in (station.settings ?? {}) || itemId in (station.interstellar_settings ?? {});
+    if (!configured) {
+      return none("物流站还没有为该物品配置槽位，先到物流页配好槽位再装入");
+    }
+    const free = Math.max(0, itemCapacity - (station.inventory?.[itemId] ?? 0));
+    if (free <= 0) {
+      return none(`物流站该物品已满 ${itemCapacity}/${itemCapacity}`);
+    }
+    const accepted = Math.min(budget, free);
+    return { accepted, remaining: requested - accepted, blocked: false, reason: null };
+  }
+
+  const storage = building.storage;
+  if (!storage) {
+    return none("该建筑没有存储，不能装入物品");
+  }
+  const capacity = storage.capacity ?? 0;
+  const reserve = Math.max(0, storage.reserve ?? 0);
+  const usedInventory = usedQuantity(storage.inventory);
+  // 主库存可用量：容量 − 产出预留 − 已用。capacity 缺失（老视图）时不设限。
+  const inventoryFree =
+    capacity > 0 ? Math.max(0, capacity - reserve - usedInventory) : Number.POSITIVE_INFINITY;
+
+  const bufferCapacity = storage.buffer_capacity ?? 0;
+  let inputBufferFree = 0;
+  if (bufferCapacity > 0) {
+    // 与服务端 bufferCaps 同口径：priority 全为 0 时按 1:1 拆分，否则按输入/输出占比。
+    const rawInput = Math.max(0, storage.priority?.input ?? 0);
+    const rawOutput = Math.max(0, storage.priority?.output ?? 0);
+    const balanced = rawInput === 0 && rawOutput === 0;
+    const input = balanced ? 1 : rawInput;
+    const output = balanced ? 1 : rawOutput;
+    const total = input + output;
+    let inputCapacity = total > 0 ? Math.floor((bufferCapacity * input) / total) : 0;
+    // 与服务端 bufferCaps 的 +1 兜底一致：某一侧算出 0 时至少分到 1 个槽位。
+    if (inputCapacity === 0 && input > 0) {
+      inputCapacity = 1;
+    }
+    inputBufferFree = Math.max(0, inputCapacity - usedQuantity(storage.input_buffer));
+  }
+
+  const slots = storage.slots ?? 0;
+  const holdsItem =
+    (storage.inventory?.[itemId] ?? 0) > 0 ||
+    (storage.input_buffer?.[itemId] ?? 0) > 0 ||
+    (storage.output_buffer?.[itemId] ?? 0) > 0;
+  if (slots > 0 && !holdsItem && distinctItemCount(storage) >= slots) {
+    return none(`建筑只接受 ${slots} 种物品，槽位已满`);
+  }
+
+  const free = inventoryFree + inputBufferFree;
+  if (free <= 0) {
+    if (reserve > 0 && usedInventory >= capacity - reserve) {
+      return none(
+        `主库存 ${usedInventory}/${capacity} 已到产出预留线（预留 ${reserve} 个空位给成品），先取出成品再装入`,
+      );
+    }
+    if (usedInventory >= capacity) {
+      return none(`主库存已满 ${usedInventory}/${capacity}，先取出部分物品`);
+    }
+    return none("建筑暂存已满，等建筑消耗后再装入");
+  }
+
+  const accepted = Math.min(budget, free);
+  return { accepted, remaining: requested - accepted, blocked: false, reason: null };
+}
+
 export function findLogisticsStation(
   runtime: PlanetRuntimeView | undefined,
   buildingId: string,

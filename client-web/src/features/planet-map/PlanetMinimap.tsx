@@ -397,11 +397,16 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     }
   }
 
-  // 小地图实际占位高度写进 CSS 变量：右下角 toast 栈据此整体抬高，
-  // 避免在「黑雾报复」这类成堆弹 toast 的时刻压住小地图、吞掉右键移动令
-  // （试玩 1014 层 14 问题 1 / 层 13 问题 2）。
-  // 用变量而不是常量：小地图高度随 label 换行、字号缩放变化，常量会在某些
-  // 字号/窄屏下让 toast 栈「差几像素」压住画布。
+  // 小地图实测几何写进 CSS 变量：右下角 toast 栈与底部 HUD 浮层（选中条/建造栏）
+  // 据此让位，避免在「黑雾报复」成堆弹 toast、或「选中单位 → 用缩略图下令」的
+  // 必经时刻压住小地图、吞掉右键移动令（试玩 1014 层 14 问题 1 / 层 16 问题 1 /
+  // 层 15 问题 2 / 层 13 问题 3）。
+  //
+  // 变量而不是常量：小地图高度随 label 换行、字号缩放变化，宽度随右侧停靠栏
+  // （总览栏/工作台抽屉）变化，常量会在某些字号/布局下让浮层「差几像素」压住画布。
+  // - --planet-minimap-height：toast 栈抬升量（沿用旧契约，勿改语义）；
+  // - --planet-minimap-width：浮层让出右下角走廊（见 planet.css 的
+  //   --planet-hud-right-reserve）。
   useEffect(() => {
     const root = rootRef.current;
     if (!root) {
@@ -409,7 +414,10 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     }
     function report() {
       const height = root?.offsetHeight ?? 0;
-      document.documentElement.style.setProperty('--planet-minimap-height', `${height}px`);
+      const width = root?.offsetWidth ?? 0;
+      const styles = document.documentElement.style;
+      styles.setProperty('--planet-minimap-height', `${height}px`);
+      styles.setProperty('--planet-minimap-width', `${width}px`);
     }
     report();
     let observer: ResizeObserver | null = null;
@@ -422,7 +430,9 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', report);
-      document.documentElement.style.removeProperty('--planet-minimap-height');
+      const styles = document.documentElement.style;
+      styles.removeProperty('--planet-minimap-height');
+      styles.removeProperty('--planet-minimap-width');
     };
   }, []);
 

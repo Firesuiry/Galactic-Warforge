@@ -912,11 +912,27 @@
   box-shadow:0 0 12px #39e6d047;
 }
 
+/*
+ * 小地图的右侧让位机制（试玩 1014 层 16 问题 1 / 层 15 问题 2 / 层 13 问题 3）。
+ *
+ * 底部 HUD 浮层（.planet-map-shell__overlay 里的选中条/建造栏）与小地图都在
+ * .planet-map-shell 内右下角，浮层 z-index 8 > 小地图 4，于是「选中多个单位 →
+ * 用缩略图下令」这一刻浮层正好盖住小地图、吃掉 contextmenu。
+ *
+ * 修法不是给每个浮层单独打补丁，而是让小地图把「自己占了右下角多少宽」写进
+ * :root 变量（--planet-minimap-width，PlanetMinimap 的 ResizeObserver），
+ * 浮层统一读它让出这条走廊（见文件末尾的 --planet-hud-right-reserve）。
+ *
+ * 小地图自身也要躲开右侧停靠栏：工作台抽屉（覆盖式，宽 300px）展开时会盖住它，
+ * --planet-right-dock 由 :has(.planet-drawer--open) 写入，小地图整体左移。
+ * 右侧总览栏是地图壳外的 flex 兄弟节点（壳右缘之外），不存在遮挡，无需处理。
+ */
 .planet-minimap {
   position:absolute;
-  right:14px;
+  right:calc(14px + var(--planet-right-dock, 0px));
   bottom:14px;
   z-index:4;
+  transition:right var(--dur) var(--ease);
   display:flex;
   flex-direction:column;
   align-items:flex-end;
@@ -1230,7 +1246,9 @@ body:has([data-planet-minimap]) .toast-stack {
 .planet-map-shell__overlay {
   position:absolute;
   left:20px;
-  right:20px;
+  /* 让出右下角小地图走廊：--planet-hud-right-reserve 由小地图实测几何算出
+     （见文件末尾）。窄屏小地图不渲染时变量为 0，浮层照旧铺满。 */
+  right:calc(20px + var(--planet-hud-right-reserve, 0px));
   bottom:20px;
   z-index:5;
   display:flex;
@@ -1238,6 +1256,7 @@ body:has([data-planet-minimap]) .toast-stack {
   align-items:center;
   gap:8px;
   pointer-events:none;
+  transition:right var(--dur) var(--ease);
 }
 
 .planet-map-shell__overlay>* {
@@ -1526,7 +1545,7 @@ body:has([data-planet-minimap]) .toast-stack {
 @media(max-width:900px) {
   .planet-map-shell__overlay {
     left:8px;
-    right:8px;
+    right:calc(8px + var(--planet-hud-right-reserve, 0px));
     bottom:8px;
   }
 
@@ -1859,10 +1878,17 @@ body:has([data-planet-minimap]) .toast-stack {
 /* 未探索区：本地无法判定是否可建（服务端说了算），用中性色而不是红色拒绝。 */
 .build-placement-hint--unknown { border-color:#7cbcc355; background:#06131ee6; color:#a6c4d1; }
 
-/* 底部选择条/建造栏永远在抽屉之上；抽屉打开时让出抽屉宽度 */
+/* 底部选择条/建造栏永远在抽屉之上；抽屉打开时让出抽屉宽度 + 小地图走廊。 */
 .planet-map-shell__overlay { z-index:8; }
-.planet-map-shell:has(.planet-drawer--open) .planet-map-shell__overlay { right:calc(min(300px,88vw) + 24px); }
+/* 抽屉展开 = 右侧停靠栏占位（小地图整体左移，见 .planet-minimap 的 right）。 */
+.planet-map-shell:has(.planet-drawer--open) {
+  --planet-right-dock:min(300px,88vw);
+}
+.planet-map-shell:has(.planet-drawer--open) .planet-map-shell__overlay {
+  right:calc(min(300px,88vw) + 24px + var(--planet-hud-right-reserve, 0px));
+}
 @media(max-width:600px) {
+  /* 窄屏（<1100px）小地图本就不渲染，--planet-hud-right-reserve=0，等价旧值 8px。 */
   .planet-map-shell:has(.planet-drawer--open) .planet-map-shell__overlay { right:8px; }
 }
 .planet-debug-details { margin-top:6px; font-size:.75rem; color:var(--text-muted); }
@@ -1920,5 +1946,42 @@ body:has([data-planet-minimap]) .toast-stack {
   }
   .planet-map-shell:has(.planet-drawer--open) .planet-build-bar__scroller {
     max-width:100%;
+  }
+}
+
+/*
+ * 小地图走廊（试玩 1014 层 16 问题 1 / 层 15 问题 2 / 层 13 问题 3）。
+ *
+ * 结构性问题：小地图（.planet-minimap）与底部 HUD 浮层（.planet-map-shell__overlay
+ * 里的选中条、建造栏）同在 .planet-map-shell 内、同在右下角，浮层 z-index 8 高于
+ * 小地图 4，于是浮层永远压在小地图上：选中多个单位要右键缩略图下令的**必经时刻**，
+ * 命令被静默吞掉（层 16 问题 1）；建造栏展开时同理（层 15 问题 2）；右侧总览栏
+ * 吃掉地图右半区右键（层 13 问题 3）。
+ *
+ * 修法不是逐个给浮层加避让补丁，而是把「小地图实际占了多少」变成布局事实：
+ * PlanetMinimap 用 ResizeObserver 把实测的宽/高写进 :root 变量，浮层统一读
+ * --planet-hud-right-reserve 让出这条走廊。
+ * 变量缺失（窄屏 <1100px 小地图不渲染）时回退 0，浮层照旧铺满整条底边。
+ *
+ * 注意：小地图不改变层级——抽屉展开时地图壳整体抬到 z-index 95，抬小地图压不过
+ * 壳外的 toast 栈（见上方 toast 让位注释），所以这里只做几何避让。
+ */
+:root {
+  --planet-minimap-height: 0px;
+  --planet-minimap-width: 0px;
+  --planet-right-dock: 0px;
+  --planet-minimap-gap: 16px;
+  /* 右下角走廊宽度：浮层右侧必须让出的量（小地图宽 + 间距）。 */
+  --planet-hud-right-reserve: 0px;
+}
+
+body:has([data-planet-minimap]) {
+  --planet-hud-right-reserve:calc(var(--planet-minimap-width, 0px) + var(--planet-minimap-gap));
+}
+
+/* 窄屏小地图不渲染（见上 max-width:1100px），走廊归零，浮层恢复铺满。 */
+@media(max-width:1100px) {
+  body:has([data-planet-minimap]) {
+    --planet-hud-right-reserve:0px;
   }
 }
