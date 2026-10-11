@@ -304,7 +304,8 @@ func (op *zeroOpening) observe() {
 	if op.firstAttackTick < 0 && skirmishBotAttackingPlayer(ws) {
 		op.firstAttackTick = ws.Tick
 		// 首波窗口取 600 tick（1 分钟）：首攻后 p1 基地附近 p2 地面单位的峰值
-		// 就是首波规模（easy 档 attackAt=4、squadCap=1 → 4 个兵）。
+		// 就是首波规模（easy 档 attackAt=3、squadCap=1 → 3 个兵；waveCooldown=12000
+		// 保证窗口内不会有第二波叠上来）。
 		op.wavePeakEnd = ws.Tick + 600
 	}
 	if op.wavePeakEnd > 0 && ws.Tick <= op.wavePeakEnd {
@@ -1397,7 +1398,8 @@ func runFromZeroMatch(t *testing.T, seed string) {
 	if tick, ok := op.milestone["matrix_lab"]; !ok || tick <= 0 {
 		t.Fatalf("研究站到 tick %d 都没建起（milestones=%v）", ws.Tick, op.milestone)
 	}
-	// 3) bot 首攻在 bot_first_attack_tick 之后，且首波规模小（4–8 个地面单位）。
+	// 3) bot 首攻在 bot_first_attack_tick 之后，且首波规模小（easy 档 attackAt=3
+	//    → 3 个兵；上限放宽到 8 只为兜住守家兵/补兵的误差）。
 	if op.firstAttackTick < 0 {
 		t.Fatal("bot 整局没有发起进攻")
 	}
@@ -1412,11 +1414,12 @@ func runFromZeroMatch(t *testing.T, seed string) {
 		t.Fatalf("bot 首攻没有兵力压到 p1 基地 20 格内（峰值 0）")
 	}
 	if op.firstWavePeak > 8 {
-		t.Fatalf("首波规模 %d 超出「小规模 4–6 兵」的上限 8", op.firstWavePeak)
+		t.Fatalf("首波规模 %d 超出「easy 小规模（attackAt=3）」的上限 8", op.firstWavePeak)
 	}
 	// 首波之后的后续波次峰值只记录：bot 后续会持续补兵压家，那是中后期的事。
 	// 注意首波规模取的是「首攻后 600 tick 内 p1 基地 20 格内的 p2 地面单位峰值」，
-	// easy 档 attackAt=4、squadCap=1 时第一支军团是 4 个兵。
+	// easy 档 attackAt=3、squadCap=1 时第一支军团是 3 个兵；波次冷却 12000 tick
+	// 保证首波窗口内不会有后续波次叠加。
 	// 4) p1 靠自己的兵活下来。
 	if !player.IsAlive {
 		t.Fatalf("p1 在 tick %d 被淘汰（首攻 %d，首波峰值 %d）", ws.Tick, op.firstAttackTick, op.firstWavePeak)

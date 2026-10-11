@@ -32,6 +32,9 @@ func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 			Tech:      tech,
 			Stats:     model.NewPlayerStats(p.PlayerID),
 		}
+		if p.Bot != "" {
+			ps.Bot = &model.BotRuntimeState{}
+		}
 		ps.SetPermissions(p.Permissions)
 		applyPlayerBootstrap(ps, p.Bootstrap)
 		players[p.PlayerID] = ps
