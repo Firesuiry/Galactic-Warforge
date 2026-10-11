@@ -17,7 +17,7 @@ func installTestStationFleet(core *GameCore, ws *model.WorldState, b *model.Buil
 		if entry.item == model.ItemLogisticsVessel && b.Type != model.BuildingTypeInterstellarLogisticsStation {
 			continue
 		}
-		ws.Players[b.OwnerID].AddItems([]model.ItemAmount{{ItemID: entry.item, Quantity: entry.qty}})
+		ws.Players[b.OwnerID].AddItems([]model.ItemAmount{{ItemID: entry.item, Quantity: entry.qty}}, 0)
 		result, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, b.OwnerID, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"item_id": entry.item, "quantity": entry.qty}})
 		if result.Status != model.StatusExecuted {
 			return fmt.Errorf("install fixture: %s", result.Message)
@@ -48,7 +48,7 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 	attachBuilding(ws, station)
 	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 	player := ws.Players["p1"]
-	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsDrone, Quantity: 12}, {ItemID: model.ItemLogisticsVessel, Quantity: 5}})
+	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsDrone, Quantity: 12}, {ItemID: model.ItemLogisticsVessel, Quantity: 5}}, 0)
 	install := func(owner, item string, qty any) model.CommandResult {
 		r, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, owner, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": item, "quantity": qty}})
 		return r

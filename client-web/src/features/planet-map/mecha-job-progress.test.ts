@@ -70,6 +70,12 @@ describe('机甲批量进度', () => {
       remaining_batches: 5, completed_batches: 15, energy_per_batch: 3, state: 'no_energy',
     }));
     expect(paused?.stateLabel).toBe('核心能量不足，补能后自动继续');
+
+    const full = deriveMechaJobProgress(catalog, executor({
+      kind: 'craft', recipe_id: 'smelt_copper', remaining_ticks: 45, ticks_per_batch: 60,
+      remaining_batches: 5, completed_batches: 15, energy_per_batch: 3, state: 'inventory_full',
+    }));
+    expect(full?.stateLabel).toBe('背包已满，腾出空位后自动继续');
   });
 
   it('无任务 / 无机甲返回 null', () => {

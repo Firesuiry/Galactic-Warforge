@@ -303,7 +303,12 @@ export interface MechaJob {
   completed_batches: number;
   /** 每批开工时一次性扣除的核心能量。 */
   energy_per_batch: number;
-  state: 'running' | 'no_energy' | 'out_of_range';
+  /**
+   * inventory_full：背包（机甲背包）装不下本批产出，作业停在原地保留进度与
+   * 预留原料，腾出空位后自动继续（试玩 1014：手搓产出曾无视 inventory_capacity
+   * 把背包顶到 201/200）。
+   */
+  state: 'running' | 'no_energy' | 'out_of_range' | 'inventory_full';
   reserved_inputs?: ItemAmount[];
 }
 

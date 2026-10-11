@@ -29,9 +29,9 @@ func newBotTestCore(t *testing.T, botDifficulty string) *GameCore {
 			{PlayerID: "p2", Key: "key2", Bot: botDifficulty, Bootstrap: config.PlayerBootstrapConfig{
 				Minerals: 5000, Energy: 2000,
 				Inventory: []config.BootstrapItemConfig{
-					{ItemID: model.ItemIronOre, Quantity: 200},
-					{ItemID: model.ItemCopperOre, Quantity: 100},
-					{ItemID: model.ItemCoal, Quantity: 100},
+					{ItemID: model.ItemIronOre, Quantity: 80},
+					{ItemID: model.ItemCopperOre, Quantity: 40},
+					{ItemID: model.ItemCoal, Quantity: 40},
 				},
 			}},
 		},

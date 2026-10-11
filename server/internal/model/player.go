@@ -131,18 +131,48 @@ func (ps *PlayerState) DeductItems(cost []ItemAmount) bool {
 	return true
 }
 
-// AddItems adds item amounts to inventory.
-func (ps *PlayerState) AddItems(items []ItemAmount) {
+// InventoryCount returns how many items the bag holds in total.
+func (ps *PlayerState) InventoryCount() int {
+	if ps == nil {
+		return 0
+	}
+	total := 0
+	for _, qty := range ps.Inventory {
+		total += qty
+	}
+	return total
+}
+
+// AddItems adds item amounts to inventory and returns how many were accepted.
+// capacity > 0 是背包上限（本行星执行体的 inventory_capacity）：装不下的部分
+// 直接丢弃，任何调用方都不可能把背包顶到上限之上（试玩 1014：手搓产出无视上限，
+// 背包 200/200 时搓出 1 个磁铁变成 201/200）。capacity <= 0 表示不限。
+func (ps *PlayerState) AddItems(items []ItemAmount, capacity int) int {
 	if len(items) == 0 || ps == nil {
-		return
+		return 0
 	}
 	inv := ps.EnsureInventory()
+	total := 0
+	if capacity > 0 {
+		total = ps.InventoryCount()
+	}
+	accepted := 0
 	for _, item := range items {
 		if item.Quantity <= 0 {
 			continue
 		}
-		inv[item.ItemID] += item.Quantity
+		add := item.Quantity
+		if capacity > 0 {
+			add = min(add, capacity-total)
+			if add <= 0 {
+				continue
+			}
+		}
+		inv[item.ItemID] += add
+		total += add
+		accepted += add
 	}
+	return accepted
 }
 
 // EnsureWarBlueprints returns a writable blueprint map.

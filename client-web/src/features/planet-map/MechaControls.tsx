@@ -166,7 +166,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
           <span>已完成 {job.completed_batches} / {totalBatches}</span>
         </div>
         <p>本批剩余 {job.remaining_ticks} tick · 剩余 {job.remaining_batches} 批 · 预计还需 {formatDuration(remainingTicks, tickRate)}</p>
-        <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? '距离矿点过远，回到 2 格内继续采集。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
+        <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? '距离矿点过远，回到 2 格内继续采集。' : job.state === 'inventory_full' ? '背包已满，装不下的产出不会丢失：腾出空位后自动继续。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
         {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(unit.id))}>取消机甲任务</button> : null}
       </section> : null}
       {canControl ? <form onSubmit={async event => {

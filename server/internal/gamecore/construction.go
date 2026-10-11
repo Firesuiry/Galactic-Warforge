@@ -622,14 +622,14 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 	if task.State == model.ConstructionPending {
 		player.Resources.Minerals += task.Cost.Minerals
 		player.Resources.Energy += task.Cost.Energy
-		player.AddItems(task.Cost.Items)
+		refundConstructionItems(ws, player, task.Cost.Items)
 		return
 	}
 	// Partial refund for in_progress tasks: remaining / total
 	if task.TotalTicks <= 0 {
 		player.Resources.Minerals += task.Cost.Minerals
 		player.Resources.Energy += task.Cost.Energy
-		player.AddItems(task.Cost.Items)
+		refundConstructionItems(ws, player, task.Cost.Items)
 		return
 	}
 	ratio := float64(task.RemainingTicks) / float64(task.TotalTicks)
@@ -652,7 +652,16 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 			refundItems = append(refundItems, model.ItemAmount{ItemID: item.ItemID, Quantity: refundQty})
 		}
 	}
-	player.AddItems(refundItems)
+	refundConstructionItems(ws, player, refundItems)
+}
+
+// refundConstructionItems 退回施工材料：玩家背包就是机甲背包，退款同样受
+// 机甲背包上限约束（capacity 之外的部分丢弃，背包永远不会超过上限）。
+func refundConstructionItems(ws *model.WorldState, player *model.PlayerState, items []model.ItemAmount) {
+	if player == nil || len(items) == 0 {
+		return
+	}
+	player.AddItems(items, mechaInventoryCapacity(ws, nil, player))
 }
 
 func rollbackConstructionDeduction(ws *model.WorldState, task *model.ConstructionTask) {
@@ -665,7 +674,7 @@ func rollbackConstructionDeduction(ws *model.WorldState, task *model.Constructio
 	}
 	player.Resources.Minerals += task.Cost.Minerals
 	player.Resources.Energy += task.Cost.Energy
-	player.AddItems(task.Cost.Items)
+	refundConstructionItems(ws, player, task.Cost.Items)
 	task.MaterialsDeducted = false
 }
 

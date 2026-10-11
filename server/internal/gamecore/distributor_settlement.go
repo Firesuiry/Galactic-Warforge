@@ -357,9 +357,12 @@ func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, ho
 			request = unit.Mecha.LogisticsRequests[item]
 		}
 		if bot.TripKind == "delivery" {
+			// 机甲背包上限优先：请求 Max 之外还要受 inventory_capacity 约束，
+			// 否则配送机器人会把背包顶到上限之上。
 			qty := min(bot.Cargo[item], max(0, request.Max-p.Inventory[item]))
+			qty = min(qty, mechaInventoryFree(p, mechaInventoryCapacity(ws, unit, p), qty))
 			if qty > 0 {
-				p.AddItems([]model.ItemAmount{{ItemID: item, Quantity: qty}})
+				p.AddItems([]model.ItemAmount{{ItemID: item, Quantity: qty}}, mechaInventoryCapacity(ws, unit, p))
 				bot.Unload(item, qty)
 			}
 		} else {
