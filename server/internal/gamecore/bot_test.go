@@ -382,7 +382,7 @@ func TestA1SkirmishConfigLoads(t *testing.T) {
 	if cfg.Battlefield.VictoryRule != "elimination" {
 		t.Fatalf("victory_rule=%q", cfg.Battlefield.VictoryRule)
 	}
-	if cfg.Battlefield.EnemyDifficulty != "normal" {
+	if cfg.Battlefield.EnemyDifficulty != "easy" {
 		t.Fatalf("enemy_difficulty=%q", cfg.Battlefield.EnemyDifficulty)
 	}
 	if len(cfg.Players) < 2 {
@@ -392,9 +392,9 @@ func TestA1SkirmishConfigLoads(t *testing.T) {
 		t.Fatalf("p1 = %+v", cfg.Players[0])
 	}
 	// 2026-10-10 起遭遇战预设改为「双方都没有开局物资包、从零采集」，
-	// bot 难度同步下调为 normal（hard 的 cadence/军团阈值在无物资包下发育过慢，
-	// 且首攻推迟到 tick 30000）。
-	if cfg.Players[1].PlayerID != "p2" || cfg.Players[1].Bot != "normal" {
+	// bot 难度先下调为 normal、同日再按试玩节奏降为 easy（cadence/军团阈值在
+	// 无物资包下发育过慢，且首攻推迟到 tick 60000）。
+	if cfg.Players[1].PlayerID != "p2" || cfg.Players[1].Bot != "easy" {
 		t.Fatalf("p2 = %+v", cfg.Players[1])
 	}
 }

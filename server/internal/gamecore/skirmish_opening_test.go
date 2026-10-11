@@ -69,7 +69,7 @@ func fmtCounts(counts map[model.BuildingType]int) string {
 }
 
 // 遭遇战 bot 从零（无物资包）起步：建基地、出兵、编军团，并在
-// bot_first_attack_tick（30000）之后对玩家首次进攻。玩家 p1 不操作；
+// bot_first_attack_tick（60000）之后对玩家首次进攻。玩家 p1 不操作；
 // 黑雾是被动的，不应干扰双方。
 func TestSkirmishBotOpensAndAttacksInWindow(t *testing.T) {
 	if testing.Short() {

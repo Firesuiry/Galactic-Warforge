@@ -60,13 +60,13 @@ cd server && go run ./cmd/server -config config-dev.yaml -map-config map.yaml
 cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-skirmish.yaml
 ```
 
-- p1 人类、p2 bot（**normal**）；`pace_research 2` / `pace_build 2` / `pace_output 2` / `time_limit_ticks 90000` / `threat_growth_scale 1.5`。
+- p1 人类、p2 bot（**easy**）、黑雾 `enemy_difficulty: easy`；`pace_research 2` / `pace_build 2` / `pace_output 2` / `time_limit_ticks 180000` / `threat_growth_scale 1.5`。
   - `pace_research` 只放大研究消耗（目录基准 × 倍率，四舍五入、下限 1），不改 `server/data/techs.yaml` 的目录数字；`GET /catalog` 的 `techs[].cost` 与 `current_research.required_cost` / `total_cost` 都按同一规则缩放，UI 与结算永远一致。
-  - 取值依据（`pace_research 2`）：1 台制造台产 1 个电磁矩阵 60 tick（无加速）；无物资包开局下玩家先手搓铺线，熟练玩家并行 2–3 台制造台供矩阵时，电磁学 = 20 个矩阵约 tick 30000 完成，即 `bot_first_attack_tick`（30000）前后玩家已有兵营/步兵。回归测试 `TestSkirmishResearchPaceAllowsCoreTechs`。
+  - 取值依据（`pace_research 2`）：1 台制造台产 1 个电磁矩阵 60 tick（无加速）；无物资包开局下玩家先手搓铺线，脚本节奏（`skirmish_from_zero_test.go`）下电磁学 = 20 个矩阵约 tick 40000 完成，真人走网页 UI 的试玩节奏约为脚本的 2 倍（第一座风机脚本 1413 / 试玩 2589），因此 `bot_first_attack_tick` 按试玩节奏设为 60000——首攻落在「玩家试玩节奏下已有兵营/步兵、武器系统还没起」的位置。回归测试 `TestSkirmishResearchPaceAllowsCoreTechs`。
 - `battlefield.dark_fog_calm_ticks`（任何配置可用，默认 6000）：黑雾被激怒后多久恢复中立，见 5.4。
-- `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 30000（约 50 分钟），之前军团只守家。
+- `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 60000（约 100 分钟），之前军团只守家。
 - **无开局物资包（2026-10-10 起）**：双方背包为空，`players[].bootstrap` 只留 `minerals 400` / `energy 100`——建造要花 minerals/energy，而两者在「第一座矿机通电」之前没有任何产出途径（矿机通电后 minerals 按 `minerals_kickback=1` 自增长），必须留启动量，否则双方都会卡死。玩家与 bot 同一份，全部靠「手动采矿 → 手搓 → 早期建筑 → 产线」起步（DSP 式）。
-  - 回归测试：`TestSkirmishFromZeroOpeningByTick6000`（空背包开局链不变量：风机/电塔/矿机通电，快）、`TestSkirmishFromZeroChainIsWalkable`（开局链走到兵营/研究站无死锁）、`TestSkirmishFromZeroFullMatch`（两 seed 整局 45000 tick，记录里程碑/首攻/存活，`-short` 跳过）、`TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，`bot_first_attack_tick` 之后首次进攻玩家）、`TestSkirmishDefenseProbe`（从零布防到 tick 45000 的存活探针）。
+  - 回归测试：`TestSkirmishFromZeroOpeningByTick6000`（空背包开局链不变量：风机/电塔/矿机通电，快）、`TestSkirmishFromZeroChainIsWalkable`（开局链走到兵营/研究站无死锁）、`TestSkirmishFromZeroFullMatch`（两 seed 整局 75000 tick，记录里程碑/首攻/存活，`-short` 跳过）、`TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，`bot_first_attack_tick` 之后首次进攻玩家）、`TestSkirmishDefenseProbe`（从零布防到 tick 75000 的存活探针）。
 
 ### 官方中后期场景（`config-midgame.yaml` + `map-midgame.yaml`）
 

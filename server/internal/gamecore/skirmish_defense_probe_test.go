@@ -1,33 +1,36 @@
 package gamecore
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"siliconworld/internal/model"
 )
 
-// 防守探针（2026-10-10 改为「无开局物资包」版本）：
+// 防守探针（2026-10-10 改为「无开局物资包」版本；同日再按试玩节奏把首攻推到 60000）：
 //
-// 遭遇战预设（config-skirmish + map-skirmish，bot normal）下，玩家 p1 从空背包
+// 遭遇战预设（config-skirmish + map-skirmish，bot easy）下，玩家 p1 从空背包
 // 起步，靠「手动采矿 + 手搓 + 早期建筑」铺出兵营 barracks + 步兵 soldier +
 // 子弹 ammo_bullet + 补给站 supply_station + 执行体机甲，能不能扛住 bot 首攻
-// （bot_first_attack_tick=30000）与后续波次？
+// （bot_first_attack_tick=60000）与后续波次？
 //
 // p1 的脚本就是一个照着 UI 点的真人：手搓起步 → 风机/电塔/矿机/熔炉/制造台 →
 // 电路板与子弹 → 兵营与补给站 → 8 个步兵站到 HQ 周围一圈的阵位上（姿态 hold：
 // 原地坚守，不追出基地），机甲留在家里自动还手。不造炮塔（高斯机枪塔要武器系统，
 // 而武器系统要先有电磁学 20 矩阵）。
 //
-// 跑到 tick 45000，输出 p1 是否存活、首攻时间与规模、进攻波次（各波 20 格内兵力峰值）、
-// 双方兵力与损失。跑得慢（2 seed 约 4–6 分钟）：`go test -short` 会跳过。
+// 跑到 tick 75000（首攻 60000 + 15000 的观察窗口），输出 p1 是否存活、首攻时间与规模、
+// 进攻波次（各波 20 格内兵力峰值）、双方兵力与损失。跑得慢（2 seed 约 6–9 分钟）：
+// `go test -short` 会跳过。
 //
 // 单跑方式：
 //
 //	cd server && go test ./internal/gamecore/ -run TestSkirmishDefenseProbe -v -timeout 30m
 func TestSkirmishDefenseProbe(t *testing.T) {
 	if testing.Short() {
-		t.Skip("整局遭遇战探针（每 seed 约 2–3 分钟）")
+		t.Skip("整局遭遇战探针（每 seed 约 3–5 分钟）")
 	}
 	for _, seed := range []string{"skirmish-seed-001", "pt1011-0e2bz1"} {
 		// hold 与 attack_move 实测逐 tick 结果一致（bot 是先到先打，站桩与前顶
@@ -44,9 +47,35 @@ func runSkirmishDefenseProbe(t *testing.T, seed, stance string) {
 	t.Helper()
 	core := newSkirmishCoreForSeed(t, seed)
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
-	op := newZeroOpening(t, core, 45000)
+	op := newZeroOpening(t, core, 75000)
 	op.includeBarracks = true
 	op.rallyOrder = stance
+	// bot 发育里程碑（easy 无物资包下能不能自己走起来、还是死锁在某个环上）：
+	// 每 tick 结算后采样一次，记录第一次达成。
+	botMarks := map[string]int64{}
+	op.onTick = func() {
+		ws := op.ws
+		counts := skirmishBuildingCounts(ws, "p2")
+		mark := func(key string, cond bool) {
+			if !cond {
+				return
+			}
+			if _, ok := botMarks[key]; !ok {
+				botMarks[key] = ws.Tick
+			}
+		}
+		mark("wind_turbine", counts[model.BuildingTypeWindTurbine] >= 1)
+		mark("tesla_tower", counts[model.BuildingTypeTeslaTower] >= 1)
+		mark("mining_machine", counts[model.BuildingTypeMiningMachine] >= 1)
+		mark("arc_smelter", counts[model.BuildingTypeArcSmelter] >= 1)
+		mark("assembling_machine", counts[model.BuildingTypeAssemblingMachineMk1] >= 1)
+		mark("barracks", counts[model.BuildingType("barracks")] >= 1)
+		mark("soldier", countUnitsOfType(ws, "p2", model.UnitTypeSoldier) >= 1)
+		mark("matrix_lab", counts[model.BuildingTypeMatrixLab] >= 1)
+		if tech := ws.Players["p2"].Tech; tech != nil {
+			mark("electromagnetism", tech.CompletedTechs["electromagnetism"] > 0)
+		}
+	}
 	op.run()
 
 	ws := op.ws
@@ -54,6 +83,7 @@ func runSkirmishDefenseProbe(t *testing.T, seed, stance string) {
 	p1Home := op.home
 
 	t.Logf("seed=%s stance=%s 里程碑=%v", seed, stance, op.milestone)
+	t.Logf("seed=%s stance=%s bot 发育里程碑=%v（-1 = 整局未达成）", seed, stance, botMarksOrMissing(botMarks))
 	t.Logf("seed=%s stance=%s 结束 tick=%d p1 存活=%v 建筑=%s 运行中=%s 部队=%d 损失(单位/建筑)=%d/%d 击杀=%d",
 		seed, stance, ws.Tick, player.IsAlive, fmtCounts(skirmishBuildingCounts(ws, "p1")), fmtCounts(skirmishRunningCounts(ws, "p1")),
 		countArmy(ws, "p1"), player.Stats.CombatStats.UnitsLost, player.Stats.CombatStats.BuildingsLost, player.Stats.CombatStats.UnitsKilled)
@@ -315,4 +345,32 @@ func executorUnitQuiet(ws *model.WorldState, playerID string) *model.Unit {
 		return unit
 	}
 	return nil
+}
+
+// countUnitsOfType 玩家某类型单位的存活数（探针记录 bot 的出兵里程碑）。
+func countUnitsOfType(ws *model.WorldState, owner string, typ model.UnitType) int {
+	n := 0
+	for _, u := range ws.Units {
+		if u != nil && u.OwnerID == owner && u.HP > 0 && u.Type == typ {
+			n++
+		}
+	}
+	return n
+}
+
+// botMarksOrMissing 把里程碑 map 补齐成固定键序，未达成的写 -1，便于一眼看出卡在哪一环。
+func botMarksOrMissing(marks map[string]int64) string {
+	keys := []string{
+		"wind_turbine", "tesla_tower", "mining_machine", "arc_smelter",
+		"assembling_machine", "barracks", "soldier", "matrix_lab", "electromagnetism",
+	}
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if tick, ok := marks[k]; ok {
+			parts = append(parts, fmt.Sprintf("%s=%d", k, tick))
+			continue
+		}
+		parts = append(parts, k+"=-1")
+	}
+	return strings.Join(parts, " ")
 }

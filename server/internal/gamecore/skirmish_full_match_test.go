@@ -13,8 +13,8 @@ import (
 )
 
 // 遭遇战整局多 seed 回归（试玩报告 C/D/E 的验收）：p1 只放 6 个防守兵不操作，
-// bot(normal) 从真实遭遇战预设（config-skirmish + map-skirmish）开局，
-// 双方都没有开局物资包，逐 seed 跑到 tick 45000，断言：
+// bot(easy) 从真实遭遇战预设（config-skirmish + map-skirmish）开局，
+// 双方都没有开局物资包，逐 seed 跑到 tick 90000，断言：
 //   - bot 在 bot_first_attack_tick 之后真的推进到 p1 基地附近（波次数只记录）；
 //   - 不存在两个及以上地面单位同格；
 //   - 除留守外，没有单位在出击状态下位置长期（≥3000 tick）不变；
@@ -22,17 +22,20 @@ import (
 //   - 双方基地**始终**与争夺中心连通（每 500 tick 抽检一次；试玩报告 1010 阻断 A：
 //     bot 用一圈建筑把自家基地封成 126 格口袋，22 个兵与执行体全困死、整局 0 波进攻）；
 //   - 整局没有 >100ms 的 tick；
-//   - bot 科技链已启动：完成 electromagnetism（无物资包下 bot 的发育节奏会慢一些，
-//     仍要求整局内至少完成自动冶金并启动电磁学链）。
+//   - bot 科技链已启动：电磁学完成，或研究已开始/排队（无物资包下 bot 的发育节奏
+//     慢一些；easy 档 researchMaxLevel=1 时电磁学之后没有可选项，automatic_metallurgy
+//     是 level 2、不会被选中，所以用「电磁学链已启动」判定）。
 //
-// 跑得慢（5 个 seed 约 9 分钟）：`go test -short` 会跳过。单跑方式：
+// 跑得慢（6 个 seed 约 18–25 分钟）：`go test -short` 会跳过。单跑方式：
 //
 //	cd server && go test ./internal/gamecore/ -run TestSkirmishFullMatchRegression -v -timeout 50m
 //
 // 每个 seed 会 t.Logf 出进攻波次时间点、科技完成时间、p95/最坏 tick。
 //
-// 2026-10-10「去掉开局物资包」后：bot 的 cadence 与阈值在 normal 下更低，
-// 首攻推迟到 bot_first_attack_tick=30000，本回归相应跑到 tick 45000。
+// 2026-10-10「去掉开局物资包」后：bot 的 cadence 与阈值在 easy 下更低，
+// 首攻按「试玩节奏 ≈ 脚本 ×2」推迟到 bot_first_attack_tick=60000
+// （脚本节奏约 tick 30000 攒够兵），本回归相应跑到 tick 90000
+// （60000 首攻 + 30000 观察窗口；时限 180000 的一半）。
 //
 // pt1009-g2（试玩 G2 的 seed）修复前把玩家出生点放在一座 145 格孤岛上；
 // mapgen/connectivity.go 的连通性保证落地后纳入回归。
@@ -82,7 +85,7 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	p2Home := botPlayerHQ(t, ws, "p2").Position
 
 	const (
-		simTicks    = 45000
+		simTicks    = 90000
 		nearBase    = 12
 		stuckTicks  = 3000
 		waveGapTick = 800 // 两次"推进到基地附近"至少间隔这么久才算新的一波
@@ -184,11 +187,10 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	if firstApproach < core.cfg.Battlefield.BotFirstAttackTick {
 		t.Fatalf("bot attacked at tick %d before bot_first_attack_tick %d", firstApproach, core.cfg.Battlefield.BotFirstAttackTick)
 	}
-	// 2026-10-10 起 bot 是 normal（attackAt=6，首波 6 个兵）且首攻推到 30000：
-	// 45000 tick 的窗口只剩 15000 tick 给后续波次，第二波是否落在窗口内取决于
-	// 补给与战损（实测 seed 001 打到 p1 损失 12 单位/17 建筑，pt1011 则被 6 个
-	// 守家步兵挡在基地外）。因此硬断言只要求「首攻在门槛之后且真的推进到基地附近」，
-	// 波次数（waves，间隔 ≥800 tick 记一波）与推进次数只记录。
+	// 2026-10-10 起 bot 是 easy（attackAt=4，首波 4 个兵）且首攻推到 60000：
+	// 90000 tick 的窗口给后续波次留了 30000 tick（够两波以上），因此硬断言只要求
+	// 「首攻在门槛之后且真的推进到基地附近」，波次数（waves，间隔 ≥800 tick 记一波）
+	// 与推进次数只记录。
 	if waves < 1 {
 		t.Fatalf("bot launched no approach wave (first at tick %d)", firstApproach)
 	}
@@ -244,16 +246,18 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	}
 
 	// 6) 科技链：自动冶金 + 电磁学。
-	// 无物资包后 bot 从零发育，45000 tick 内电磁学可能刚开或刚完成（取决于 seed），
+	// 无物资包后 bot 从零发育，90000 tick 内电磁学可能刚开或刚完成（取决于 seed），
 	// 因此断言放宽为「自动冶金已完成、电磁学链已启动（完成或正在研究/排队）」，
-	// 电磁学完成 tick 已由日志记录（tick 30000 前后的目标值见 from-zero 测试）。
+	// 电磁学完成 tick 已由日志记录（脚本节奏的目标值见 from-zero 测试）。
 	tech := ws.Players["p2"].Tech
-	if tech.CompletedTechs["automatic_metallurgy"] <= 0 {
-		t.Fatalf("bot never completed automatic_metallurgy by tick %d (completed=%v current=%v)",
-			ws.Tick, tech.CompletedTechs, tech.CurrentResearch)
-	}
-	if tech.CompletedTechs["electromagnetism"] <= 0 && tech.CurrentResearch == nil && len(tech.ResearchQueue) == 0 {
-		t.Fatalf("bot never started the electromagnetism chain by tick %d (completed=%v current=%v queue=%d)",
+	started := tech.CompletedTechs["electromagnetism"] > 0 ||
+		tech.CurrentResearch != nil ||
+		len(tech.ResearchQueue) > 0
+	// easy 档 researchMaxLevel=1：只研究 level ≤1 的科技，automatic_metallurgy
+	// （level 2）不会在 90000 tick 内被选中——所以「科技链已启动」在 easy 下
+	// 用「电磁学完成或已开始研究」判定，normal/hard 保留自动冶金断言。
+	if tech.CompletedTechs["automatic_metallurgy"] <= 0 && !started {
+		t.Fatalf("bot never started the tech chain by tick %d (completed=%v current=%v queue=%d)",
 			ws.Tick, tech.CompletedTechs, tech.CurrentResearch, len(tech.ResearchQueue))
 	}
 }

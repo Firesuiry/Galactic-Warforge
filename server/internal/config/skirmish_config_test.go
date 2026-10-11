@@ -13,11 +13,11 @@ func TestSkirmishConfigPaceAndTimeLimit(t *testing.T) {
 	if cfg.Battlefield.PaceResearch != 2 || cfg.Battlefield.PaceBuild != 2 || cfg.Battlefield.PaceOutput != 2 {
 		t.Fatalf("unexpected pace: %+v", cfg.Battlefield)
 	}
-	if cfg.Battlefield.TimeLimitTicks != 90000 {
-		t.Fatalf("time limit %d, want 90000", cfg.Battlefield.TimeLimitTicks)
+	if cfg.Battlefield.TimeLimitTicks != 180000 {
+		t.Fatalf("time limit %d, want 180000", cfg.Battlefield.TimeLimitTicks)
 	}
-	if cfg.Battlefield.BotFirstAttackTick != 30000 {
-		t.Fatalf("bot first attack tick %d, want 30000", cfg.Battlefield.BotFirstAttackTick)
+	if cfg.Battlefield.BotFirstAttackTick != 60000 {
+		t.Fatalf("bot first attack tick %d, want 60000", cfg.Battlefield.BotFirstAttackTick)
 	}
 	if cfg.Battlefield.ThreatGrowthScale != 1.5 {
 		t.Fatalf("threat scale %v, want 1.5", cfg.Battlefield.ThreatGrowthScale)
@@ -28,7 +28,7 @@ func TestSkirmishConfigPaceAndTimeLimit(t *testing.T) {
 }
 
 // 无开局物资包：双方背包为空，minerals/energy 只留「第一座风机通电前」的启动量
-// （这两者在通电前没有任何产出途径，必须给，否则死锁）；bot 是 normal 难度。
+// （这两者在通电前没有任何产出途径，必须给，否则死锁）；bot 是 easy 难度。
 func TestSkirmishStartsWithoutKit(t *testing.T) {
 	cfg, err := Load(filepath.Join("..", "..", "config-skirmish.yaml"))
 	if err != nil {
@@ -55,8 +55,8 @@ func TestSkirmishStartsWithoutKit(t *testing.T) {
 		cfg.Players[0].Bootstrap.Energy != cfg.Players[1].Bootstrap.Energy {
 		t.Fatalf("both sides must start from the same kit: %+v vs %+v", cfg.Players[0].Bootstrap, cfg.Players[1].Bootstrap)
 	}
-	if cfg.Players[1].Bot != "normal" {
-		t.Fatalf("bot difficulty = %q, want normal", cfg.Players[1].Bot)
+	if cfg.Players[1].Bot != "easy" {
+		t.Fatalf("bot difficulty = %q, want easy", cfg.Players[1].Bot)
 	}
 }
 

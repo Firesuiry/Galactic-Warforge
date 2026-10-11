@@ -1029,35 +1029,36 @@ func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID str
 	return nil
 }
 
-// botPower 电力建设：发电建筑不足时在基地附近补风机。
+// botPower 电力建设：发电建筑不足，或有带电接口的建筑长期断电时补风机。
+//
+// 只数"已建成"的发电建筑是不够的：电网里发电量够了，但一座建在电网外的
+// 用电建筑（电弧熔炉）会长期 no_power，而 bot 看发电数已达标就再也不补电——
+// 试玩节奏下 easy bot 的电弧熔炉 tick 25000 起一直断电，矩阵链整局 0 产出。
+// 因此只要还有**带供电接口**的建筑拿不到电，就继续补风机；材料不足时走
+// botEnsureBuilding 的缺料链（铁块/齿轮/磁线圈都能手搓）。
 func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, issue func(model.Command) bool) bool {
-	if ctx.powerCount >= tuning.powerTarget {
+	starved := false
+	for _, b := range ctx.buildings {
+		if b.Runtime.State != model.BuildingWorkNoPower || b.Type == model.BuildingTypeWindTurbine {
+			continue
+		}
+		for _, cp := range b.Runtime.Params.ConnectionPoints {
+			if cp.Kind == model.ConnectionPower {
+				starved = true
+				break
+			}
+		}
+		if starved {
+			break
+		}
+	}
+	if ctx.powerCount >= tuning.powerTarget && !starved {
 		return false
 	}
-	player := ws.Players[playerID]
-	cost := model.BuildCost{}
-	def, ok := model.BuildingDefinitionByID(model.BuildingTypeWindTurbine)
-	if !ok {
-		return false
+	if cmd, ok := gc.botEnsureBuilding(ws, playerID, ctx, model.BuildingTypeWindTurbine, "", map[string]bool{}); ok {
+		return issue(cmd)
 	}
-	cost = def.BuildCost
-	if player.Resources.Minerals < cost.Minerals || player.Resources.Energy < cost.Energy {
-		return false
-	}
-	missing, short := missingItem(player.Inventory, cost.Items)
-	if short {
-		_ = missing
-		return false
-	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeWindTurbine)
-	if pos == nil {
-		return false
-	}
-	return issue(model.Command{
-		Type:    model.CmdBuild,
-		Target:  model.CommandTarget{Layer: "planet", Position: pos},
-		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
-	})
+	return false
 }
 
 // botMiners 矿机建设：目标数量内且附近有未覆盖矿点。

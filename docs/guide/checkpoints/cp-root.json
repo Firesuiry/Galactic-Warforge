@@ -1,8 +1,8 @@
 {
   "parent": null,
-  "note": "1013 原点：大厅「开新局」，seed skirmish-seed-001，普通难度 / 歼灭胜利，p1 admin + p2 bot normal。tick 92 存。",
+  "note": "1013 原点：大厅「开新局」，seed skirmish-seed-001，easy 难度 / 歼灭胜利，p1 admin + p2 bot easy。tick 92 存。（2026-10-10 按试玩节奏降难度：预设改为 bot easy / enemy_difficulty easy / 首攻 60000 / 时限 180000，本层需按新预设重建。）",
   "build": [
-    "POST /games/new {map_seed: skirmish-seed-001, enemy_difficulty: normal, victory_mode: elimination, players: [p1/key_player_1/admin, p2/key_player_2/commander/bot=normal]}（网页 UI：大厅 → 开新局 → 填 map_seed 与 p2 key → 确认）",
+    "POST /games/new {map_seed: skirmish-seed-001, enemy_difficulty: easy, victory_mode: elimination, players: [p1/key_player_1/admin, p2/key_player_2/commander/bot=easy]}（网页 UI：大厅 → 开新局 → 填 map_seed 与 p2 key → 确认）",
     "服务端按 config-skirmish.yaml 的 bootstrap 启动量发料（无物资包：minerals 400 / energy 100）；tick ~90 时 checkpoint save cp-root"
   ],
   "contract": {

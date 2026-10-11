@@ -13,17 +13,20 @@ import (
 //
 // p1 用脚本化的「合理新手开局」——背包全空，先手动采矿、手搓起步，
 // 再铺产线（风机/电塔/矿机/熔炉/制造台），出兵营与步兵守家，最后建研究站、
-// 研究电磁学。bot 用预设难度（normal）同样从零发育，tick 30000 后才首攻。
+// 研究电磁学。bot 用预设难度（easy）同样从零发育，tick 60000 后才首攻
+// （按「试玩节奏 ≈ 脚本 ×2」定的：脚本约 tick 30000 攒够兵，试玩要 ~60000）。
 //
 // 断言/记录（两个 seed）：
 //   - 各里程碑实际 tick（风机/电塔/矿机/熔炉/制造台/兵营/首个步兵/研究站/电磁学）
-//     与目标（2400/9000/15000/18000/30000）的对照；
+//     与脚本目标（2400/9000/15000/18000/~40000）的对照；
 //   - bot 首攻 tick（≥ bot_first_attack_tick）与首波规模（p1 基地 20 格内 p2 地面单位峰值）；
 //   - p1 整局存活（无物资包下必须能靠手搓链活下来）；
 //   - 无死锁：手搓链每一环都能靠「手动采矿 + 手搓 + 早期建筑」拿到，
 //     即开局链在 tick 6000 内跑通（TestSkirmishFromZeroOpeningByTick6000）。
 //
-// 跑得慢（2 seed 约 3–5 分钟）：`go test -short` 会跳过。单跑方式：
+// 本测试是脚本节奏的验收：跑到 tick 75000（首攻 60000 + 观察窗口 15000），
+// 首攻的硬断言是「不早于门槛、且不超过门槛 +9000（easy 从零发育也不会拖太久）」。
+// 跑得慢（2 seed 约 6–9 分钟）：`go test -short` 会跳过。单跑方式：
 //
 //	cd server && go test ./internal/gamecore/ -run TestSkirmishFromZeroFullMatch -v -timeout 30m
 func TestSkirmishFromZeroFullMatch(t *testing.T) {
@@ -301,7 +304,7 @@ func (op *zeroOpening) observe() {
 	if op.firstAttackTick < 0 && skirmishBotAttackingPlayer(ws) {
 		op.firstAttackTick = ws.Tick
 		// 首波窗口取 600 tick（1 分钟）：首攻后 p1 基地附近 p2 地面单位的峰值
-		// 就是首波规模（normal 档 attackAt=6、squadCap=1 → 6 个兵）。
+		// 就是首波规模（easy 档 attackAt=4、squadCap=1 → 4 个兵）。
 		op.wavePeakEnd = ws.Tick + 600
 	}
 	if op.wavePeakEnd > 0 && ws.Tick <= op.wavePeakEnd {
@@ -1310,13 +1313,13 @@ func (op *zeroOpening) powerReasons() []string {
 func runFromZeroMatch(t *testing.T, seed string) {
 	t.Helper()
 	core := newSkirmishCoreForSeed(t, seed)
-	op := newZeroOpening(t, core, 45000)
+	op := newZeroOpening(t, core, 75000)
 	op.run()
 	ws := op.ws
 	player := ws.Players["p1"]
 
 	t.Logf("seed=%s 里程碑=%v", seed, op.milestone)
-	t.Logf("seed=%s 目标对照：风机 2400 / 矿机×4+熔炉×2+制造台 9000 / 兵营+步兵 15000 / 研究站 18000 / 电磁学 30000", seed)
+	t.Logf("seed=%s 目标对照（脚本节奏）：风机 2400 / 矿机×4+熔炉×2+制造台 9000 / 兵营+步兵 15000 / 研究站 18000 / 电磁学 ~40000", seed)
 	t.Logf("seed=%s 结束 tick=%d p1 存活=%v 建筑=%s 运行中=%s 部队=%d 损失(单位/建筑)=%d/%d 击杀=%d",
 		seed, ws.Tick, player.IsAlive, fmtCounts(skirmishBuildingCounts(ws, "p1")), fmtCounts(skirmishRunningCounts(ws, "p1")),
 		countArmy(ws, "p1"), player.Stats.CombatStats.UnitsLost, player.Stats.CombatStats.BuildingsLost, player.Stats.CombatStats.UnitsKilled)
@@ -1359,11 +1362,10 @@ func runFromZeroMatch(t *testing.T, seed string) {
 		}
 	}
 	// 2) 电磁学：整局末尾记录完成 tick（研究站 + 矩阵链已跑通即算达标）。
-	// 无物资包下 45000 tick 内完成 20 个矩阵是上限目标而非硬断言：
+	// 无物资包下 75000 tick 内完成 20 个矩阵是上限目标而非硬断言：
 	// 手搓链要把 20 个矩阵（每个 60 tick + 上游磁线圈/电路板）堆出来，
-	// 脚本只能给「手搓 + 一台矩阵制造台」的产能。实测 seed 001 在 tick 40541 完成，
-	// pt1011 慢一些（研究站晚 2000 tick、步兵晚 2500 tick），45000 前开始研究、
-	// 45000–60000 之间完成。
+	// 脚本只能给「手搓 + 一台矩阵制造台」的产能。实测 seed 001 在 tick 39641 完成，
+	// pt1011 慢一些（研究站晚 2000 tick、步兵晚 2500 tick），tick 67201 完成。
 	if tick, ok := op.milestone["electromagnetism"]; ok {
 		t.Logf("seed=%s 电磁学完成 tick=%d", seed, tick)
 	} else {
@@ -1414,7 +1416,7 @@ func runFromZeroMatch(t *testing.T, seed string) {
 	}
 	// 首波之后的后续波次峰值只记录：bot 后续会持续补兵压家，那是中后期的事。
 	// 注意首波规模取的是「首攻后 600 tick 内 p1 基地 20 格内的 p2 地面单位峰值」，
-	// normal 档 attackAt=6、squadCap=1 时第一支军团是 6 个兵。
+	// easy 档 attackAt=4、squadCap=1 时第一支军团是 4 个兵。
 	// 4) p1 靠自己的兵活下来。
 	if !player.IsAlive {
 		t.Fatalf("p1 在 tick %d 被淘汰（首攻 %d，首波峰值 %d）", ws.Tick, op.firstAttackTick, op.firstWavePeak)
