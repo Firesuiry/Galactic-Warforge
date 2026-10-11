@@ -1,6 +1,6 @@
 {
   "parent": "cp-research-start",
-  "note": "1014 L10（cp-pre-attack）：从 cp-research-start（tick 43785，电磁学已完成）读档，只用网页 UI 完成「首攻前备战」。三件事全做到：(1) 新建补给站 b-89(23,47)，state=running、供电 2/2（在电塔 b-17(21,47) 无线范围 4 内）、def supply_radius=10/supply_rate=6；(2) 把 b-66 制造台 Mk.I(22,44) 配方从 electromagnetic_matrix 切回 ammo_bullet（下拉选中「子弹」后必须再点「应用配方」才生效），装入铁块 16 产弹，取出后给 b-89 装入子弹 10（落 output_buffer，补给逻辑按 Storage.ItemQuantity 合并计算，不影响补弹）；(3) 6 个老步兵原地不动（23–25,43–46，均在 HQ b-4(18,48) 附近且距补给站 ≤10 格覆盖内），额外在兵营 b-72(23,45) 排队造 2 个步兵（耗铁块 4 + 电路板 2），tick ~45658 出厂，共 8 步兵。电力 40/31（+9），p2 无建筑无单位，combat 全 0、enemy_attack_seen=false。契约 6 条服务端全过（actual：running/true/1/1/8/false）。tick 45773 存。",
+  "note": "1014 L10（cp-pre-attack）：从 cp-research-start（tick 43785，电磁学已完成）读档，只用网页 UI 完成「首攻前备战」。三件事全做到：(1) 新建补给站 b-89(23,47)，state=running、供电 2/2（在电塔 b-17(21,47) 无线范围 4 内）、def supply_radius=10/supply_rate=6；(2) 把 b-66 制造台 Mk.I(22,44) 配方从 electromagnetic_matrix 切回 ammo_bullet（下拉选中「子弹」后必须再点「应用配方」才生效），装入铁块 16 产弹，取出后给 b-89 装入子弹 10（落主库存 inventory——1014 修复后不再搬进 output_buffer；补给逻辑按 Storage.ItemQuantity 合并计算，不影响补弹）；(3) 6 个老步兵原地不动（23–25,43–46，均在 HQ b-4(18,48) 附近且距补给站 ≤10 格覆盖内），额外在兵营 b-72(23,45) 排队造 2 个步兵（耗铁块 4 + 电路板 2），tick ~45658 出厂，共 8 步兵。电力 40/31（+9），p2 无建筑无单位，combat 全 0、enemy_attack_seen=false。契约 6 条服务端全过（actual：running/true/1/1/8/false）。tick 45773 存。",
   "build": [
     "读档 cp-research-start（tick 43785），等约 50 tick，L.open3d + G.home（tick 43831）",
     "UI：机甲手搓 smelt_iron ×8（耗铁矿 8），tick 43948 开始",
@@ -12,10 +12,10 @@
     "UI：机甲手搓 circuit_board ×2 两批（tick 44585 / 45328），耗铁块 4 + 铜块 4",
     "UI：建造补给站：建造栏选 supply_station → 点地图 (23,46) 附近 → 落成 b-89(23,47) running，扣铁块 6 + 电路板 2（tick 44885）",
     "UI：取出 b-66 输出缓存 子弹 3（tick 44917）",
-    "UI：研究与装料 → 装入建筑 b-89：子弹 10（回执「已传输 10 个「子弹」至补给站」，落 output_buffer，tick 44991）",
+    "UI：研究与装料 → 装入建筑 b-89：子弹 10（回执「已传输 10 个「子弹」至补给站」，落主库存 inventory（1014 修复后不再搬进 output_buffer），tick 44991）",
     "UI：取出 b-72 兵营(23,45) 铁块 4 → 装入建筑 b-72：铁块 6 + 电路板 2（tick 45460）",
     "UI：选中 b-72 → 单位生产「生产步兵」×2（回执「步兵已加入生产队列（40 tick）」，tick 45527）",
-    "GET 核对：tick 45658 两个新步兵 u-90(24,46)/u-91(22,46) 出厂，p1 soldier=8；b-89 running、供电 2/2、output_buffer 子弹 10",
+    "GET 核对：tick 45658 两个新步兵 u-90(24,46)/u-91(22,46) 出厂，p1 soldier=8；b-89 running、供电 2/2、主库存子弹 10",
     "tick 45773 存档 cp-pre-attack（契约 6 条全过）"
   ],
   "contract": {

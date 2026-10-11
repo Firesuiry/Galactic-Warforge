@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import type { FogMapView } from '@shared/types';
 
 import { getFixtureScenario } from '@/fixtures';
+import { resolveSelectionAtTile } from '@/features/planet-map/model';
 import { PlanetMapPixi } from '@/features/planet-map/PlanetMapPixi';
 import { DEFAULT_PLANET_ZOOM_INDEX, getPlanetZoomLevel, resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
 import { resetSessionStore, useSessionStore } from '@/stores/session';
@@ -139,6 +140,44 @@ describe('PlanetMapPixi 交互（拖拽/缩放/点选）', () => {
     const selected = usePlanetViewStore.getState().selected;
     expect(selected?.kind).toBe('building');
     expect(selected && 'id' in selected ? selected.id : '').toBe('miner-1');
+  });
+
+  it('回归（试玩 1014 层 13）：inspect 下点空地清空单位选区（否则没法做部分重选）', async () => {
+    seedStores();
+    const planet = getFixtureScenario('baseline').planets['planet-1-1'];
+    const { container } = render(createElement(PlanetMapPixi, { planet, fog: buildFullyVisibleFog() }));
+    const surface = container.querySelector('.planet-map-canvas__surface');
+    if (!surface) {
+      throw new Error('交互面未渲染');
+    }
+
+    // 找一个没有建筑/单位/资源的空格。
+    let empty: { x: number; y: number } | null = null;
+    for (let y = 0; y < 8 && !empty; y += 1) {
+      for (let x = 0; x < 8 && !empty; x += 1) {
+        if (!resolveSelectionAtTile(planet, x, y)) empty = { x, y };
+      }
+    }
+    if (!empty) {
+      throw new Error('样例行星上没有空格');
+    }
+
+    act(() => {
+      usePlanetViewStore.getState().setSelectedUnits(['worker-1']);
+    });
+    expect(usePlanetViewStore.getState().selectedUnits).toEqual(['worker-1']);
+
+    const tileSize = getPlanetZoomLevel(DEFAULT_PLANET_ZOOM_INDEX).tileSize ?? 48;
+    await act(async () => {
+      surface.dispatchEvent(new MouseEvent('click', {
+        clientX: SEED_OFFSET + (empty!.x + 0.5) * tileSize,
+        clientY: SEED_OFFSET + (empty!.y + 0.5) * tileSize,
+        bubbles: true,
+      }));
+    });
+
+    expect(usePlanetViewStore.getState().selectedUnits).toEqual([]);
+    expect(usePlanetViewStore.getState().selected).toMatchObject({ kind: 'tile' });
   });
 });
 

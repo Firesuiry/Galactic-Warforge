@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PlanetRenderView } from '@/features/planet-map/model';
@@ -145,5 +145,36 @@ describe('PlanetMinimap 右键下令', () => {
     expect(screen.getByText('5, 6')).toBeInTheDocument();
     fireEvent.mouseLeave(canvas);
     expect(screen.getByText('缩略')).toBeInTheDocument();
+  });
+
+  it('把实测占位高度写进 --planet-minimap-height（toast 栈据此避开小地图）', async () => {
+    // 试玩 1014 层 14 问题 1：右下角 toast 栈压住小地图吞掉右键。CSS 用
+    // --planet-minimap-height 抬高 toast 栈，值必须来自小地图实测高度，
+    // 而不是写死常量（label 换行/字号缩放下常量会差几像素重新压住画布）。
+    const observers: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { observers.push(callback); }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
+    try {
+      const { unmount } = render(<PlanetMinimap fog={makePlanet()} planet={makePlanet()} />);
+      const root = document.querySelector('.planet-minimap') as HTMLElement;
+      Object.defineProperty(root, 'offsetHeight', { configurable: true, value: 214 });
+      await act(async () => {
+        for (const notify of observers) notify();
+      });
+      expect(
+        document.documentElement.style.getPropertyValue('--planet-minimap-height'),
+      ).toBe('214px');
+
+      unmount();
+      expect(
+        document.documentElement.style.getPropertyValue('--planet-minimap-height'),
+      ).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -23,6 +23,8 @@ interface PlanetCommandCenterProps {
   systemRuntime?: SystemRuntimeView;
   /** 深链初值：研究/物流/戴森工作流 Tab。 */
   initialWorkflow?: CommandWorkflowId;
+  /** 命令结算回调：由页面重取 summary（装料表单的背包数量依赖它）。 */
+  onCommandSettled?: () => void;
 }
 
 export function PlanetCommandCenter(props: PlanetCommandCenterProps) {

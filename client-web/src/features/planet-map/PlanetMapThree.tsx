@@ -170,9 +170,16 @@ export function PlanetMapThree(props: Props) {
           if (hidden && hidden.kind !== 'tile') {
             store.setSelected(hidden);
             store.setSelectedUnits(hidden.kind === 'unit' ? [hidden.id] : []);
+            store.setSelectedSquads([]);
             setFogNotice(null);
             return;
           }
+          // 未探索的空格：只提示、不移动镜头，但「点空地清空选区」仍要生效——
+          // 否则玩家没法用「点空地 + 框选」做部分重选（试玩 1014 层 13 问题 1：
+          // 想切出 6/8 个兵，旧选区一直留着，marquee 结果总被旧选区放大成全选）。
+          store.setSelected(null);
+          store.setSelectedUnits([]);
+          store.setSelectedSquads([]);
           setFogNotice(tile);
           return;
         }
@@ -182,8 +189,10 @@ export function PlanetMapThree(props: Props) {
           const selection = resolveSelectionAtTile(current.planet, tile.x, tile.y, store.selected)
             ?? { kind: 'tile', position: { ...tile, z: 0 } } as const;
           store.setSelected(selection);
-          // 单选单位进入多选集合（右键情境指令/快捷键的命令目标）
+          // 单选单位进入多选集合（右键情境指令/快捷键的命令目标）；
+          // 点空地/建筑/资源时清空单位与小队选择（与 2D 的 handleClick 同口径）。
           store.setSelectedUnits(selection.kind === 'unit' ? [selection.id] : []);
+          store.setSelectedSquads([]);
         }
       }, tile => usePlanetViewStore.getState().setHoveredTile(tile));
     } catch {

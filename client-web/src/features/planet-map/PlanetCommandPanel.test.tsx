@@ -370,7 +370,12 @@ function createClient() {
     getAuth: () => ({ playerId: "p1", playerKey: "key_player_1" }),
     cmdScanPlanet: vi.fn(),
     cmdStartResearch: vi.fn(),
-    cmdTransferItem: vi.fn(),
+    cmdTransferItem: vi.fn().mockResolvedValue({
+      request_id: "req-transfer-1",
+      accepted: true,
+      enqueue_tick: 121,
+      results: [],
+    }),
     cmdSetRayReceiverMode: vi.fn(),
     cmdConfigureLogisticsSlot: vi.fn(),
     cmdConfigureLogisticsStation: vi.fn(),
@@ -379,6 +384,32 @@ function createClient() {
       has_more: false,
       events: [],
     }),
+  };
+}
+
+/** 有存储、无配方、无研究模块的建筑（补给站/储物仓一类的装料目标）。 */
+function supplyStationBuilding(id = "supply-1") {
+  return {
+    id,
+    type: "supply_station",
+    owner_id: "p1",
+    position: { x: 3, y: 3, z: 0 },
+    hp: 300,
+    max_hp: 300,
+    level: 1,
+    vision_range: 3,
+    runtime: {
+      params: {
+        energy_consume: 0,
+        energy_generate: 0,
+        capacity: 1000,
+        maintenance_cost: { minerals: 0, energy: 0 },
+        footprint: { width: 1, height: 1 },
+      },
+      functions: { storage: { capacity: 1000 } },
+      state: "running",
+    },
+    storage: { capacity: 1000, inventory: {} },
   };
 }
 
@@ -1075,6 +1106,109 @@ describe("PlanetCommandPanel", () => {
     });
     expect(screen.getByRole("status")).toHaveTextContent("只接受矩阵");
     expect(screen.getByRole("button", { name: "装入建筑" })).toBeDisabled();
+  });
+
+  it("回归（试玩 1014 层 12 P1）：提交的 building_id 必须等于下拉里显示的建筑（选中变化只同步一次）", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["supply-1"] = supplyStationBuilding();
+    const baseCatalog = createCatalog();
+    const catalog = {
+      ...baseCatalog,
+      items: [...baseCatalog.items, { id: "iron_ingot", name: "铁块" }],
+    };
+    const client = createClient();
+    const inventory = { electromagnetic_matrix: 10, iron_ingot: 10 };
+
+    const { rerender } = renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({ inventory }) as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    const buildingSelect = (await screen.findByLabelText(
+      "建筑 ID",
+    )) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(buildingSelect.value).toBe("lab-1");
+    });
+
+    // 玩家手动把目标改成补给站（地图选中仍停在研究站上）。
+    await user.selectOptions(buildingSelect, "supply-1");
+    expect(buildingSelect.value).toBe("supply-1");
+
+    // 服务端每 2 秒换一次 /scene 引用：旧实现的地图选中同步 effect 每次重跑，
+    // 会把玩家刚选的补给站改回研究站（回执里就成了「已装入…至矩阵研究站」）。
+    for (let refresh = 0; refresh < 3; refresh += 1) {
+      rerender(
+        <PlanetCommandPanel
+          catalog={catalog as never}
+          client={client as never}
+          // /scene 轮询 + SSE 失效都会换掉 buildings 的引用：同步 effect 的依赖随之变化。
+          planet={{ ...planet, buildings: { ...planet.buildings } } as never}
+          runtime={{ ...createRuntime() } as never}
+          summary={createSummary({ inventory }) as never}
+        />,
+      );
+    }
+    expect(
+      (screen.getByLabelText("建筑 ID") as HTMLSelectElement).value,
+    ).toBe("supply-1");
+
+    const quantity = screen.getByLabelText("数量");
+    await user.clear(quantity);
+    await user.type(quantity, "5");
+    await user.click(screen.getByRole("button", { name: "装入建筑" }));
+
+    await waitFor(() => {
+      expect(client.cmdTransferItem).toHaveBeenCalled();
+    });
+    // 回执目标 = 下拉显示的建筑（两者同源，结构上不可能分叉）。
+    expect(client.cmdTransferItem.mock.calls[0][0]).toBe("supply-1");
+  });
+
+  it("回归（试玩 1014 层 12 P2）：装入结算后回调 onCommandSettled，让背包数量立刻刷新", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["supply-1"] = supplyStationBuilding();
+    const baseCatalog = createCatalog();
+    const catalog = {
+      ...baseCatalog,
+      items: [...baseCatalog.items, { id: "iron_ingot", name: "铁块" }],
+    };
+    const client = createClient();
+    const onCommandSettled = vi.fn();
+
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        onCommandSettled={onCommandSettled}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={
+          createSummary({
+            inventory: { electromagnetic_matrix: 10, iron_ingot: 10 },
+          }) as never
+        }
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    await user.selectOptions(await screen.findByLabelText("建筑 ID"), "supply-1");
+    const quantity = screen.getByLabelText("数量");
+    await user.clear(quantity);
+    await user.type(quantity, "4");
+    await user.click(screen.getByRole("button", { name: "装入建筑" }));
+
+    await waitFor(() => {
+      expect(onCommandSettled).toHaveBeenCalled();
+    });
   });
 
 });

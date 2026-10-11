@@ -20,7 +20,7 @@ import { gameIdentityOf } from "@/features/lobby/current-game";
 import { useCurrentGameQuery } from "@/features/lobby/use-current-game";
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import { PlanetOperationHeader } from "@/features/planet-commands/PlanetOperationHeader";
-import { parseCommandWorkflowId } from "@/features/planet-map/PlanetCommandPanel";
+import { parseCommandWorkflowId, type CommandWorkflowId } from "@/features/planet-map/PlanetCommandPanel";
 import {
   getLatestCommandEntry,
   getPendingCommandCount,
@@ -319,6 +319,29 @@ export function PlanetPage() {
    */
   function reportMinimapBlock(message: string, position: { x: number; y: number }) {
     reportLocalPreflightBlock("move", planet.planet_id, message, { position: { ...position, z: 0 } });
+  }
+
+  /**
+   * 工作台命令结算后立刻重取 summary（装料表单的背包数量/按钮禁用判定读它）。
+   * 只靠 2s 轮询 + SSE 失效会出现「背包够料却灰着，重开抽屉才恢复」（试玩 1014 层 12 P2）。
+   */
+  function refetchSummaryAfterCommand() {
+    void summaryQuery.refetch();
+  }
+
+  /**
+   * 建筑详情 → 工作台直达入口（试玩 1014 层 12：「装入建筑/切换配方/量产」藏得太深）。
+   * 只切抽屉页签 + ?workflow= 深链：PlanetCommandPanel 已按 ?workflow= 同步命令 Tab，
+   * 不需要第二套跳转协议。
+   */
+  function openWorkflow(workflow: CommandWorkflowId) {
+    setActiveDetailPanel("workbench");
+    toggleDrawer(true);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("workflow", workflow);
+      return next;
+    }, { replace: true });
   }
 
   /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */
@@ -729,6 +752,7 @@ export function PlanetPage() {
               summary={summary}
               system={system}
               systemRuntime={systemRuntime}
+              onCommandSettled={refetchSummaryAfterCommand}
             />
           </div>
         ) : null}
@@ -740,6 +764,7 @@ export function PlanetPage() {
               fog={planet}
               knownOwnUnits={knownOwnUnits}
               networks={networks}
+              onOpenWorkflow={openWorkflow}
               planet={planet}
               runtime={runtime}
               stats={stats}

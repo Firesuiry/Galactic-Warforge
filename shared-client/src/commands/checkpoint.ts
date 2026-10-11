@@ -22,7 +22,8 @@ const HELP = `checkpoint <subcommand> [options]
       热加载存档点（仅 role=admin）：按存档内配置与地图拓扑重建对局并原子替换，
       读档后当前对局写入 data_dir；stale 只警告不阻止。读档后旧 key 仍有效。
 
-谓词：tick_gte/tick_lt/game_not_finished/player_alive/tech_researched/building_count_gte/
+谓词：tick_gte/tick_lt/game_not_finished/player_alive/tech_researched/research_in_progress/
+      building_count_gte/
       building_running_gte（只数 state=running 的建筑）/unit_count_gte/item_gte/
       dark_fog_hostile/enemy_attack_seen（可带 player 字段）。`;
 
