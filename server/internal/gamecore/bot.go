@@ -20,6 +20,7 @@ type botTuning struct {
 	attackAt            int     // 进攻兵力阈值（编成军团 + 军团出击的最小兵力；也是单支军团规模 = 首波规模）
 	squadCap            int     // 同时存在的军团上限（低难度只留 1 支：首波只有 attackAt 个兵，不会 2 支同时压家）
 	armyCap             int     // 兵力上限（士兵+mecha）
+	waveCooldown        int64   // 波次冷却（tick）：上一波军团出发后至少隔这么久才编下一波
 	minerTarget         int     // 目标矿机数
 	powerTarget         int     // 目标发电建筑数
 	assemblerTarget     int     // 目标制造台数（研究矩阵链与弹药链并行需要多台）
@@ -48,11 +49,11 @@ const botCoalReserve = 16
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 4, squadCap: 1, armyCap: 8, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 3, squadCap: 1, armyCap: 6, waveCooldown: 12000, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
 	case "hard":
-		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
+		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, waveCooldown: 2000, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, waveCooldown: 6000, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
 	}
 }
 

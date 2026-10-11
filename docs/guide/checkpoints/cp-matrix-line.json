@@ -1,0 +1,25 @@
+{
+  "parent": "cp-lab",
+  "note": "1014 L8（cp-matrix-line）：从 cp-lab（tick 33205）读档，只用网页 UI 让电磁矩阵（electromagnetic_matrix）量产并出货，最终背包 8 个（契约要 ≥3）。做法：先取出 b-64 电弧熔炉(21,45) 铁块、b-68 电弧熔炉(21,44) 铜块腾背包；机甲手搓 磁铁/电路板/磁线圈补料；把 b-66 制造台 Mk.I(22,44) 的配方从 ammo_bullet 切到 electromagnetic_matrix（磁线圈1+电路板1→矩阵1，60 tick，输出缓存上限 3、满了停）；工作台「研究与装料」装入 b-66 磁线圈+电路板；轮询 b-66 输出缓存、每次「取出」1 个，两轮投料共 8 个全部进背包。注意：切配方不清本地存储（b-66 主库存里还留着旧配方子弹 10 发），只清生产进度。b-80 矩阵研究站(19,46) 保持空配方 running 未动；电力 40/29（+11）；6 个步兵原地待命；无战损。契约 6 条服务端全过（actual：running/true/8/1/6/false）。tick 38760 存（replace，此前无同名档）。",
+  "build": [
+    "读档 cp-lab（tick 33205），等约 150 tick 后开始",
+    "UI：取出 b-64 电弧熔炉 铁块 4、b-68 电弧熔炉 铜块 16（腾背包）",
+    "UI：机甲手搓 玻璃 ×2（glass，石矿×2/个，实测只为顺手清料，未用于本层）",
+    "UI：机甲手搓 磁铁 ×4（smelt_magnet，铁矿×1/个）、电路板 ×4（circuit_board，铁块×1+铜块×1）、磁线圈 ×2 批（magnetic_coil，磁铁×2+铜块×1 → 产出 2/批）",
+    "UI：选中 b-66 制造台 Mk.I(22,44) → 切换配方 → 电磁矩阵 → 应用配方（回执「制造台 Mk.I配方已设为「电磁矩阵」」）",
+    "UI：抽屉 → 工作台 → 研究与装料 → 装入建筑 b-66：磁线圈 4、电路板 4（回执「已传输 4 个「磁线圈」/「电路板」至制造台 Mk.I」）",
+    "UI：轮询 b-66 输出缓存（每 ~60 tick 出 1 个矩阵，缓存上限 3），「取出」电磁矩阵，两轮投料累计取出 8 个（每次 1 个，回执「已取出 1 个「电磁矩阵」（来自制造台 Mk.I）」）",
+    "API 只读校验：背包 electromagnetic_matrix=8、matrix_lab b-80 state=running、soldier=6、combat_stats 全 0、电力 40/29",
+    "tick 38760 存档 cp-matrix-line（replace，契约 6 条全过）"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "item_gte", "player": "p1", "item_id": "electromagnetic_matrix", "n": 3},
+      {"kind": "building_running_gte", "player": "p1", "type": "matrix_lab", "n": 1},
+      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+    ]
+  }
+}

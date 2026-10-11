@@ -1,0 +1,26 @@
+{
+  "parent": "cp-matrix-line",
+  "note": "1014 L9（cp-research-start）：从 cp-matrix-line（tick 38760）读档，只用网页 UI 把电磁矩阵装进研究站 b-80(19,46) 并开始研究「电磁学」(electromagnetism)，确认研究进度在走、不是 waiting_matrix 卡死。做法：工作台「研究与装料」把背包 8 个矩阵全部装入 b-80（表单数量框默认 10，改成 8；装入后落本地存储 2 + 输出缓存 6）→ 研究面板选中「电磁学」卡片 → 点「开始研究」，回执「研究 电磁学 已加入队列（消耗：20）」，进度立即变 8/20、blocked_reason=waiting_matrix（缺 12）→ 为验证进度推进，让 b-66 制造台 Mk.I(22,44) 继续产矩阵：机甲手搓 磁铁/磁线圈/电路板 各轮补料、给两台熔炉喂矿、装入 b-66 磁线圈+电路板 各 12，两轮轮询取出 12 个矩阵（输出缓存上限 3 已复验）→ 再把 12 个矩阵装入 b-80，进度 8→17（tick 43284）→20（tick 43287），服务端落 research_completed 事件（evt-43287-1），CompletedTechs.electromagnetism=1、TotalResearched=20。**注意**：本层目标只要求「进度在走」，但研究站吞吐 1 矩阵/tick、服务端 4 tick/s，供满 20 个矩阵后 12 tick（约 3 s）内研究即完成，所以本层实际把电磁学研究跑完了——进度 8→17→20 的三个时间点均用 GET 查询留证（见报告）。研究站 b-80 保持空配方（研究模式）running、供电 4/4；电力 40/29（+11）；6 步兵 + 1 机甲原地待命；战斗统计全 0、enemy_attack_seen=false。契约 5 条服务端全过（actual：running/true/1/6/false）。tick 43785 存（此前无同名档，未用 replace）。",
+  "build": [
+    "读档 cp-matrix-line（tick 38760），等约 150 tick 后开始",
+    "UI：抽屉 → 工作台 → 研究与装料 → 装入建筑 b-80：电磁矩阵 8（默认数量框 10，改为 8；回执「已传输 8 个「电磁矩阵」至矩阵研究站」）",
+    "UI：同一 panel 选中「电磁学」研究卡 → 点「开始研究」（回执「研究 电磁学 已加入队列（消耗：20）」）；GET 核对 current_research progress=8/20 total_cost=20 blocked_reason=waiting_matrix",
+    "UI：给 b-68 电弧熔炉(21,44) 装入 铜矿 16、b-64 电弧熔炉(21,45) 装入 铁矿 16；取出 b-44 采矿机(19,45) 铁矿 24、b-33(20,47)/b-46(21,43) 采矿机 铜矿 各 24",
+    "UI：机甲手搓 磁铁 ×12（smelt_magnet）→ 磁线圈 ×6 批（magnetic_coil，产出 12）；取出熔炉铜块/铁块，手搓 电路板 ×12（circuit_board，分两轮，中间补铁块）",
+    "UI：取出 b-66 旧配方残留 子弹 10；研究与装料 → 装入建筑 b-66：磁线圈 12、电路板 12（回执「已传输 12 个「磁线圈」/「电路板」至制造台 Mk.I」）",
+    "UI：轮询 b-66 输出缓存（每 ~60 tick 出 1 个矩阵，缓存上限 3），「取出」电磁矩阵，8 轮累计取出 12 个（tick 41952→43218）",
+    "UI：研究与装料 → 装入建筑 b-80：电磁矩阵 12（回执「已传输 12 个「电磁矩阵」至矩阵研究站」）；GET 核对进度 8→17（tick 43284，estimated_ticks_remaining=3）",
+    "GET 核对：tick 43287 research_completed 事件（evt-43287-1，tech_id=electromagnetism，level=1）；CompletedTechs.electromagnetism=1、TotalResearched=20；b-80 仍空配方 running、供电 4/4",
+    "API 只读校验：电力 40/29、soldier=6、executor=1、combat_stats 全 0、enemy_attack_seen=false、p2 建筑/单位 0",
+    "tick 43785 存档 cp-research-start（此前无同名档，契约 5 条全过）"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "building_running_gte", "player": "p1", "type": "matrix_lab", "n": 1},
+      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+    ]
+  }
+}

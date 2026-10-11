@@ -1,0 +1,12 @@
+{
+  "parent": "cp-pre-attack",
+  "note": "从 cp-pre-attack（tick 45773）读档后不下任何命令，服务端临时 tick_rate_override 50 空等到首攻前，tick 59276 存档。局面只有自然推进（产线、bot 发育），用于让打首攻的层不必空等一小时。",
+  "build": ["读档 cp-pre-attack", "不下命令，50 tick/s 空跑到 tick 59276", "存档 cp-pre-attack-late，契约通过"],
+  "contract": {"checks": [
+    {"kind": "game_not_finished"},
+    {"kind": "player_alive", "player": "p1"},
+    {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"},
+    {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+    {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+  ]}
+}

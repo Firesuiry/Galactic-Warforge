@@ -187,10 +187,10 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	if firstApproach < core.cfg.Battlefield.BotFirstAttackTick {
 		t.Fatalf("bot attacked at tick %d before bot_first_attack_tick %d", firstApproach, core.cfg.Battlefield.BotFirstAttackTick)
 	}
-	// 2026-10-10 起 bot 是 easy（attackAt=4，首波 4 个兵）且首攻推到 60000：
-	// 90000 tick 的窗口给后续波次留了 30000 tick（够两波以上），因此硬断言只要求
-	// 「首攻在门槛之后且真的推进到基地附近」，波次数（waves，间隔 ≥800 tick 记一波）
-	// 与推进次数只记录。
+	// 2026-10-11 起 bot 是 easy（attackAt=3，首波 3 个兵，waveCooldown=12000）：
+	// 首攻推到 60000，90000 tick 的窗口给后续波次留了 30000 tick，按冷却只够 2 波左右，
+	// 因此硬断言只要求「首攻在门槛之后且真的推进到基地附近」，波次数
+	// （waves，间隔 ≥800 tick 记一波）与推进次数只记录。
 	if waves < 1 {
 		t.Fatalf("bot launched no approach wave (first at tick %d)", firstApproach)
 	}

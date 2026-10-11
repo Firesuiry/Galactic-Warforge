@@ -1,0 +1,23 @@
+{
+  "parent": "cp-barracks",
+  "note": "1014 L6：从 cp-barracks（tick 28267）读档，只用网页 UI 让兵营 b-72(23,45) 产出 6 个步兵（soldier）。做法：先取消机甲残留的 smelt_iron 手搓，取出 b-64 铁块 17 与 b-68 铜块 8 腾背包，手搓 circuit_board ×6，用「装入建筑」把 铁块 16 + 电路板 6 塞进 b-72（兵营没有配方，装入物会被 tick 结算搬进 output_buffer，生产时照样扣），再在「单位生产与集结」连点 6 次「生产步兵」（每个 铁块 2 + 电路板 1 / 40 tick），全部出厂，落点 23,44 / 24,45 / 23,46 / 23,43 / 24,44 / 25,45。结束 tick 30507（最后核对 30955），未见敌方攻击，电力 30/25，兵营 running。",
+  "build": [
+    "读档 cp-barracks（tick 28267），服务端 4 tick/s；等约 500 tick 后开始（tick ~28300）",
+    "UI：「取出」b-64 电弧熔炉铁块 17、b-68 电弧熔炉铜块 8（腾背包 + 解 b-68 产物阻塞）（tick 28999）",
+    "UI：机甲面板「取消机甲任务」，清掉上一层残留的 smelt_iron ×20 手搓（退回铁矿 5）（tick 29070）",
+    "UI：手搓 circuit_board ×6（原料 铁块 6 + 铜块 6，约 180 tick）（tick 29881–30091）",
+    "UI：抽屉 → 工作台 → 研究与装料 →「装入建筑」给 b-72 喂 铁块 16、电路板 6（tick 29934–30091）",
+    "UI：选中 b-72 →「单位生产与集结」→ 连点「生产步兵」×6（tick 30100–30218）",
+    "验证：6 个 soldier 全部出厂（u-73..u-78，hp100），兵营队列清空（tick 30429）",
+    "存档 cp-squad（tick 30531，契约 5 条全过；replace=true）"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+      {"kind": "building_running_gte", "player": "p1", "type": "barracks", "n": 1},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+    ]
+  }
+}

@@ -23,8 +23,29 @@ type botLegionPlan struct {
 // 建筑后 4 万 tick 零战斗）。周期性重下发会重新寻路并把姿态恢复为 attack_move。
 const botLegionRefreshTicks int64 = 300
 
+// botWaveReady 波次冷却是否已过：上一波军团出发后至少隔 waveCooldown tick 才编下一波。
+// 冷却锚点（last_wave_tick）存在 PlayerState.Bot 上、随存档持久化，读档后继续倒计时。
+// 没有状态（人类玩家/旧存档零值）视为"没发过波"，不受冷却限制。
+func botWaveReady(player *model.PlayerState, tuning botTuning, tick int64) bool {
+	if player == nil || player.Bot == nil || player.Bot.LastWaveTick <= 0 {
+		return true
+	}
+	return tick-player.Bot.LastWaveTick >= tuning.waveCooldown
+}
+
+// botRecordWave 记下本波出发的 tick（编队命令下发时调用，见 botLegions）。
+func botRecordWave(player *model.PlayerState, tick int64) {
+	if player == nil {
+		return
+	}
+	if player.Bot == nil {
+		player.Bot = &model.BotRuntimeState{}
+	}
+	player.Bot.LastWaveTick = tick
+}
+
 // botLegions 先给已有军团下令（来袭回防 > 残血撤退 > 缺弹补给 > 进攻），
-// 再在散兵达标时编成新军团。
+// 再在散兵达标、且波次冷却已过时编成新军团。
 func (gc *GameCore) botLegions(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, threats []botThreat, issue func(model.Command) bool) bool {
 	for _, squad := range ctx.squads {
 		plan, ok := botLegionDecide(gc, ws, playerID, tuning, ctx, squad, threats)
@@ -50,7 +71,9 @@ func (gc *GameCore) botLegions(ws *model.WorldState, playerID string, tuning bot
 	// 编队时把 14 个全带上，首波规模与「低难度小首波」的预设不符）。
 	// 同时存在的军团数按难度封顶（easy/normal 各 1 支）：否则第一支刚走，
 	// 剩下 8 个散兵又够门槛，第二支军团紧接着一起压家，首波变成 12 个。
-	if len(ctx.loose) >= tuning.attackAt && len(ctx.squads) < tuning.squadCap {
+	// 波次冷却：上一波出发后 waveCooldown tick 内不再编新军团——否则散兵一攒够
+	// 门槛就又是一波（试玩 1014 P1：首攻后每 300–600 tick 一波，8 个步兵被逐波耗光）。
+	if len(ctx.loose) >= tuning.attackAt && len(ctx.squads) < tuning.squadCap && botWaveReady(ws.Players[playerID], tuning, ws.Tick) {
 		ids := make([]string, 0, len(ctx.loose))
 		for _, u := range ctx.loose {
 			ids = append(ids, u.ID)
@@ -63,6 +86,7 @@ func (gc *GameCore) botLegions(ws *model.WorldState, playerID string, tuning bot
 		for i, id := range ids {
 			anyIDs[i] = id
 		}
+		botRecordWave(ws.Players[playerID], ws.Tick)
 		return issue(model.Command{
 			Type:    model.CmdFormSquad,
 			Target:  model.CommandTarget{Layer: "planet"},
@@ -98,10 +122,14 @@ func botSquadStalled(ws *model.WorldState, squad *model.CombatSquad) bool {
 	return true
 }
 
-// botLegionStats 军团存活成员的平均血量比与作战单位平均弹药比。
-func botLegionStats(ws *model.WorldState, squad *model.CombatSquad) (hp, ammo float64, alive int) {
+// botLegionStats 军团存活成员的平均血量比、作战单位平均弹药比与最低弹药比。
+// 平均比用来判断"整支军团该不该回补给站"；最低比用来抓"个别兵打空了"——
+// 平均比会把弹尽的兵藏在小队平均里（试玩 1014 P2：u-99/u-101 打空后停在
+// 玩家基地中央僵持数百 tick，既不撤退也不换目标）。
+func botLegionStats(ws *model.WorldState, squad *model.CombatSquad) (hp, ammo, minAmmo float64, alive int) {
 	var hpSum, ammoSum float64
 	hpN, ammoN := 0, 0
+	minAmmo = 1
 	for _, id := range squad.MemberIDs {
 		u := ws.Units[id]
 		if u == nil || u.HP <= 0 {
@@ -113,8 +141,12 @@ func botLegionStats(ws *model.WorldState, squad *model.CombatSquad) (hp, ammo fl
 			hpN++
 		}
 		if u.AmmoCapacity > 0 {
-			ammoSum += float64(u.Ammo) / float64(u.AmmoCapacity)
+			ratio := float64(u.Ammo) / float64(u.AmmoCapacity)
+			ammoSum += ratio
 			ammoN++
+			if ratio < minAmmo {
+				minAmmo = ratio
+			}
 		}
 	}
 	hp, ammo = 1, 1
@@ -123,8 +155,10 @@ func botLegionStats(ws *model.WorldState, squad *model.CombatSquad) (hp, ammo fl
 	}
 	if ammoN > 0 {
 		ammo = ammoSum / float64(ammoN)
+	} else {
+		minAmmo = 1 // 军团里没有耗弹单位（例如只剩补给车）：不触发补弹
 	}
-	return hp, ammo, alive
+	return hp, ammo, minAmmo, alive
 }
 
 // botRetreatHoldTicks 撤退滞回时限：军团回家整补这么久之后，滞回阈值回落。
@@ -133,7 +167,7 @@ func botLegionStats(ws *model.WorldState, squad *model.CombatSquad) (hp, ammo fl
 const botRetreatHoldTicks int64 = 1500
 
 func botLegionDecide(gc *GameCore, ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, squad *model.CombatSquad, threats []botThreat) (botLegionPlan, bool) {
-	hp, ammo, alive := botLegionStats(ws, squad)
+	hp, ammo, minAmmo, alive := botLegionStats(ws, squad)
 	if alive == 0 {
 		return botLegionPlan{}, false
 	}
@@ -151,7 +185,9 @@ func botLegionDecide(gc *GameCore, ws *model.WorldState, playerID string, tuning
 	if hp < retreatLine {
 		return botLegionPlan{order: model.SquadOrderRetreat, target: &home}, true
 	}
-	if ammo < ammoLine {
+	// 弹尽：军团平均弹药或**任何一名**成员低于阈值就整队撤回补给（有己方补给站
+	// 则去补给站，否则回基地）。个别兵打空也算——否则它会留在原地僵持。
+	if ammo < ammoLine || minAmmo < ammoLine {
 		if nearestSquadSupply(ws, squad) != nil {
 			return botLegionPlan{order: model.SquadOrderResupply}, true
 		}

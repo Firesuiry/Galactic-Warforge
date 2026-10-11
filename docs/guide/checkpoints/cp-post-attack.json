@@ -1,22 +1,25 @@
 {
-  "parent": "cp-lab",
-  "note": "1013 L4：bot 首攻（当时 tick 30000 起）后仍在局，验证「机甲边走边打」可用。UI 铺了一条「矿机 16,42 → 传送带 ×10 → 熔炉 b-71」的自动链，熔炉自 tick 16852 起自动产出铁块（无需手动装料）。同时被 bot 打掉 2 台制造台、1 台熔炉、1 台矿机、1 台风机等 8 座建筑；机甲单挑波次、反复阵亡复活。tick 20029 存（replace，旧版 tick 20537）。关键建筑用 building_running_gte（研究站 b-104 与指挥中心都必须 state=running）。注：2026-10-10 按试玩节奏把预设降为 easy、首攻推到 60000、时限 180000 后，本层的 tick 20029 与「首攻后」语义失效，需按新预设重建。",
+  "parent": "cp-pre-attack-late",
+  "note": "1014 L11（cp-post-attack）：从 cp-pre-attack-late（tick 59276）读档，只用网页 UI 观战 bot easy 首攻。bot 首攻于 tick ~60240 抵达（4 个 soldier u-30/u-31/u-34/u-35，从东侧推进到基地 22-28,42-46），8 个步兵自动接战（未下任何命令），tick 60321 全歼首波（我方损失 1 步兵 u-90）。tick ~60590 第二波 4 个 soldier（u-37/u-38/u-39/u-40）抵达，tick 60737 被歼，我方再损 u-74/u-75/u-76/u-78。存档时（tick 61119）HQ b-4(18,48) 700/700、兵营 b-72(23,45) 300/300、研究站 b-80(19,46) 120/120、补给站 b-89(23,47) 300/300、制造台 b-66(22,44) 280/280 全部存活，buildings_lost=0，p1 剩 3 步兵 + 1 机甲。机甲 u-5 全程未参战（驻 18,43，敌兵停在 aggro_range 6 之外）。警报及时（「敌袭预警」+「单位遭受攻击」toast），敌人进入视野后在地图上可见，步兵自动还手。**注意**：bot 是连续波次（60240 / 60590 / 61326，每波 3-4 兵），存档后约 200 tick 就会出现第三波；不指挥的话基地会被逐波拆掉（见 bug-1014-lost-first-attack）。旧 cp-post-attack（1013 L4，tick 20029，parent=cp-lab）按新预设已失效，本文件为其 replace 版本。",
   "build": [
-    "从 cp-lab 读档（tick 8976）",
-    "UI：机甲选中 → 移动/攻击指令交替（边走边打），点敌人挡住第一波",
-    "UI：拆除错向传送带并重铺（每格建造前用建造栏「方向 · R 旋转」切向）",
-    "UI：取出矿机产物（铁矿/铜矿）→ 机甲手搓齿轮/铜块/铁块",
-    "推进到 tick ~20000 存档"
+    "读档 cp-pre-attack-late（tick 59276），等约 60 tick，L.open3d + G.home（tick 59337）",
+    "GET 基线核对：19 建筑全 running、8 步兵 + 1 机甲、背包 子弹 8/铜块 13/铜矿 83/齿轮 8/玻璃 2/磁铁 2/石矿 24、p2 无建筑无单位",
+    "G.look(26,46) 盯住基地东侧，轮询 scene/summary 观战（全程不下任何游戏命令）",
+    "tick ~60240 首攻 4 兵进入基地视野，UI 弹「敌袭预警」「单位遭受攻击」，8 步兵自动接战",
+    "tick 60321 首波全歼（损 u-90）；tick 60590 第二波 4 兵抵达，tick 60737 全歼（损 u-74/u-75/u-76/u-78）",
+    "G.home 全景 + 选中 b-89 核对详情；GET /world/warfare/industry 确认 supply_nodes 弹药被消耗",
+    "tick 61119 存档 cp-post-attack（契约 7 条服务端全过）",
+    "（存档后继续观察）tick 61326 第三波 3 兵抵达，8 步兵只剩 3 → 全灭；b-89 被围至 36 HP 后敌兵弹尽僵持；tick 63900 机甲东出反击单杀 8 个敌兵；tick 64356 b-89 被毁、64548/64556 两座风机被毁、65439 兵营被毁；机甲 tick ~65430 阵亡后在 HQ 满血复活。全程记录在 bug-1014-lost-first-attack"
   ],
   "contract": {
     "checks": [
-      {"kind": "tick_gte", "tick": 17000},
       {"kind": "game_not_finished"},
       {"kind": "player_alive", "player": "p1"},
       {"kind": "enemy_attack_seen", "player": "p1", "bool": true},
-      {"kind": "building_running_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1},
-      {"kind": "building_running_gte", "player": "p1", "type": "matrix_lab", "n": 1},
-      {"kind": "unit_count_gte", "player": "p1", "type": "executor", "n": 1}
+      {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1},
+      {"kind": "building_count_gte", "player": "p1", "type": "matrix_lab", "n": 1},
+      {"kind": "building_count_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1},
+      {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"}
     ]
   }
 }
