@@ -98,6 +98,12 @@ describe('resolveWarGuide', () => {
     expect(army.hint).toContain('步兵');
   });
 
+  it('出兵步骤文案：说明兵营要先装入铁块与电路板才会开工', () => {
+    const army = resolveWarGuide(base).steps.find((step) => step.id === 'army')!;
+    expect(army.hint).toContain('装入铁块与电路板');
+    expect(army.hint).toContain('装料');
+  });
+
   it('黑雾说明：开局不提示，见到黑雾或到出兵阶段说明中立，被激怒时转为防守警示', () => {
     expect(resolveWarGuide(base).notice).toBeNull();
     const fog = u('dark_fog', { owner_id: 'dark_fog' });

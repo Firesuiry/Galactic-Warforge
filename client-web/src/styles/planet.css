@@ -282,6 +282,22 @@
   flex-basis:100%;
   margin:0;
 }
+/* 配方下拉改了但没点「应用配方」：明确标出「未应用」，避免看起来已经生效（试玩 1014 层 08/09）。 */
+.planet-recipe-form__pending {
+  color:#ffd88a;
+  font-weight:600;
+}
+/* 建筑详情 → 工作台直达入口（装入建筑 / 切换配方 / 量产单位） */
+.planet-storage-shortcuts {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:10px;
+}
+.planet-storage-shortcuts .secondary-button {
+  padding:5px 12px;
+  font-size:.78rem;
+}
 .planet-withdraw-form .field {
   display:flex;
   flex-direction:column;
@@ -944,6 +960,12 @@
     display:none;
   }
 
+  /* 小地图不显示，toast 栈不必为它让位（与上面 body:has([data-planet-minimap]) 同源）。 */
+  body:has([data-planet-minimap]) .toast-stack {
+    bottom:16px;
+    max-height:min(70vh, calc(100dvh - 100px));
+  }
+
 }
 
 .planet-title-chip {
@@ -1094,6 +1116,28 @@
    提示条 .game-reset-banner 已相应抬到 z-index:97，仍在其上。 */
 .planet-map-shell:has(.planet-drawer--open) {
   z-index:95;
+}
+
+/*
+ * 右下角 toast 栈必须避开小地图（试玩 1014 层 14 问题 1，bug-1014-toast-blocks-minimap）。
+ *
+ * .toast-stack 是 position:fixed; right:16px; bottom:16px; z-index:90，每张 .toast 卡片
+ * pointer-events:auto；小地图（.planet-minimap，right:14px; bottom:14px，152px 画布）
+ * 挂在 .planet-map-shell 内，而 .panel 的 backdrop-filter 让整个壳成为**原子堆叠上下文**：
+ * 壳内任何 z-index 都只在壳内排序，抬小地图的 z-index 压不过壳外的 fixed toast 栈。
+ * 于是「黑雾报复」这种成堆弹 toast 的时刻，小地图右键的 contextmenu 被 toast 卡片吃掉，
+ * 移动令静默失效（层 13「小地图右键无反馈」的真正原因）。
+ *
+ * 修法：小地图存在时（PlanetMinimap 渲染即带 data-planet-minimap，窄屏 <1100px 不渲染，
+ * 见下方 media query）把 toast 栈整体抬到小地图之上，并相应压缩最大高度。
+ * 抬升量读 --planet-minimap-height（PlanetMinimap 用 ResizeObserver 实测小地图占位高度写进
+ * :root），而不是写死常量：小地图高度随 label 换行/字号缩放变化，常量会在某些字号下
+ * 让 toast 栈「差几像素」重新压住画布，右键又被吃掉。变量缺失时回退到 196px。
+ */
+body:has([data-planet-minimap]) .toast-stack {
+  --planet-toast-avoid:calc(var(--planet-minimap-height, 196px) + 20px);
+  bottom:calc(16px + var(--planet-toast-avoid));
+  max-height:min(56vh, calc(100dvh - 40px - var(--planet-toast-avoid)));
 }
 
 .planet-drawer__handle {

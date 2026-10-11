@@ -62,6 +62,12 @@ interface PlanetCommandPanelProps {
   systemRuntime?: SystemRuntimeView;
   /** 深链初值（PlanetPage ?workflow=）；未传则读 URL。 */
   initialWorkflow?: CommandWorkflowId;
+  /**
+   * 命令结算（成功或失败）后的回调：PlanetPage 用它立即重取 summary，
+   * 让「装入建筑」的背包数量/建筑库存不再依赖 ≤2s 的轮询快照
+   * （试玩 1014 层 12 P2：背包够料却灰着，重开抽屉才恢复）。
+   */
+  onCommandSettled?: () => void;
 }
 
 type LogisticsScope = "planetary" | "interstellar";
@@ -190,6 +196,7 @@ export function PlanetCommandPanel({
   system,
   systemRuntime,
   initialWorkflow,
+  onCommandSettled,
 }: PlanetCommandPanelProps) {
   const [searchParams] = useSearchParams();
   const selected = usePlanetViewStore((state) => state.selected);
@@ -488,6 +495,16 @@ export function PlanetCommandPanel({
       ?? null,
     [transferBuildingId, transferTargets],
   );
+  /**
+   * 装料目标只认一个来源：`selectedTransferBuilding`。
+   *
+   * 旧实现下拉 `value={transferBuildingId}`、提交也用 `transferBuildingId`，而展示名/物品过滤
+   * 用 `selectedTransferBuilding`——一旦 state 停在 transferTargets 里没有的 id（例如刚被拆除、
+   * 或建筑列表换了引用），下拉显示空值、提交的是旧 id，两处口径就分叉了（试玩 1014 层 12 P1：
+   * 玩家以为装给补给站，实际进了制造台）。改成「显示、禁用判定、提交、focus」全部取同一个派生值，
+   * 从结构上保证「提交的 building_id == 下拉里显示的建筑」。
+   */
+  const effectiveTransferBuildingId = selectedTransferBuilding?.id ?? "";
   const currentResearchProgressPercent = getResearchProgressPercent(
     playerTechState?.current_research,
   );
@@ -540,30 +557,49 @@ export function PlanetCommandPanel({
     }
   }, [currentSystemId, dysonSystemId, scanSystemId]);
 
+  /**
+   * 地图选中建筑 → 预填装料/发射表单，但只在**地图选中真的变化**时同步一次。
+   *
+   * 旧实现的依赖数组里放了 rayReceiverBuildings / rocketLaunchers / solarSailLaunchers，
+   * 它们都由 ownBuildings 派生（/scene 轮询 + SSE 失效每 2 秒换一次引用），于是这个 effect
+   * 每 2 秒重跑一次，把玩家刚在下拉里选的建筑改回地图上选中的那座；而下拉的 value 与提交
+   * 用的变量是两个不同来源，最终表现为「表单显示补给站、子弹却进了制造台」（试玩 1014 层
+   * 12 P1）。现在用 ref 记住上次同步过的建筑 id，只在变化时写一次，且只同步真能装料的建筑。
+   */
+  const syncedSelectionRef = useRef("");
   useEffect(() => {
-    if (selectedOwnedBuildingId) {
+    if (!selectedOwnedBuildingId) {
+      syncedSelectionRef.current = "";
+      return;
+    }
+    if (syncedSelectionRef.current === selectedOwnedBuildingId) {
+      return;
+    }
+    syncedSelectionRef.current = selectedOwnedBuildingId;
+    if (transferTargets.some((building) => building.id === selectedOwnedBuildingId)) {
       setTransferBuildingId(selectedOwnedBuildingId);
-      if (
-        rayReceiverBuildings.some(
-          (building) => building.id === selectedOwnedBuildingId,
-        )
-      ) {
-        setRayReceiverBuildingId(selectedOwnedBuildingId);
-      }
-      if (
-        solarSailLaunchers.some(
-          (building) => building.id === selectedOwnedBuildingId,
-        ) ||
-        rocketLaunchers.some((building) => building.id === selectedOwnedBuildingId)
-      ) {
-        setLaunchBuildingId(selectedOwnedBuildingId);
-      }
+    }
+    if (
+      rayReceiverBuildings.some(
+        (building) => building.id === selectedOwnedBuildingId,
+      )
+    ) {
+      setRayReceiverBuildingId(selectedOwnedBuildingId);
+    }
+    if (
+      solarSailLaunchers.some(
+        (building) => building.id === selectedOwnedBuildingId,
+      ) ||
+      rocketLaunchers.some((building) => building.id === selectedOwnedBuildingId)
+    ) {
+      setLaunchBuildingId(selectedOwnedBuildingId);
     }
   }, [
     rayReceiverBuildings,
     rocketLaunchers,
     selectedOwnedBuildingId,
     solarSailLaunchers,
+    transferTargets,
   ]);
 
   useEffect(() => {
@@ -820,6 +856,10 @@ export function PlanetCommandPanel({
       });
     } finally {
       setBusyAction("");
+      // 命令结算后立刻重取 summary：装料表单的「背包 N 个」与按钮禁用判定都读它，
+      // 只靠 ≤2s 的轮询/SSE 失效会出现「背包够料却灰着，重开抽屉才恢复」
+      // （试玩 1014 层 12 P2）。失败也要重取——服务端可能已扣掉一部分。
+      onCommandSettled?.();
     }
   }
 
@@ -1676,7 +1716,7 @@ export function PlanetCommandPanel({
                 <select
                   disabled={noTransferTarget}
                   onChange={(event) => setTransferBuildingId(event.target.value)}
-                  value={transferBuildingId}
+                  value={effectiveTransferBuildingId}
                 >
                   <option value="">
                     {noTransferTarget ? "没有可装料的建筑" : "选择建筑"}
@@ -1747,27 +1787,28 @@ export function PlanetCommandPanel({
                 disabled={
                   busyAction !== "" ||
                   noTransferTarget ||
-                  !transferBuildingId ||
+                  !effectiveTransferBuildingId ||
                   !transferItemId ||
                   !transferQuantityValue ||
                   transferQuantityShort
                 }
                 onClick={() => {
                   const quantity = toOptionalInt(transferQuantity);
-                  if (!quantity) {
+                  const buildingId = selectedTransferBuilding?.id;
+                  if (!quantity || !buildingId) {
                     return;
                   }
                   void runCommand(
                     "transfer_item",
                     () =>
                       client.cmdTransferItem(
-                        transferBuildingId,
+                        buildingId,
                         transferItemId,
                         quantity,
                       ),
                     {
                       focus: {
-                        entityId: transferBuildingId,
+                        entityId: buildingId,
                         itemId: transferItemId,
                         buildingType: selectedTransferBuilding?.type,
                         techId:

@@ -10,6 +10,7 @@ package checkpoint
 //	game_not_finished   {}              对局未宣判结束
 //	player_alive        {}              玩家存活
 //	tech_researched     {tech_id}       已完成该科技（等级 > 0）
+//	research_in_progress {tech_id?}     该玩家当前有进行中的研究；给了 tech_id 时还要求正在研究的就是它
 //	building_count_gte  {type, n}       存活建筑数 >= n
 //	building_running_gte {type, n}      存活且 state=running 的建筑数 >= n
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）

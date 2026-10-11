@@ -18,6 +18,7 @@ import (
 //	game_not_finished   {}
 //	player_alive        {}
 //	tech_researched     {tech_id}
+//	research_in_progress {tech_id?}
 //	building_count_gte  {type, n}
 //	building_running_gte {type, n}      只统计 Runtime.State == running 的存活建筑
 //	unit_count_gte      {type, n}
@@ -112,6 +113,17 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%d", level))
 		}
 		return fail("0", fmt.Sprintf("未完成科技 %s", check.TechID))
+	case "research_in_progress":
+		// 试玩 1014 层 09 P1：研究层无法用契约自证——tech_researched 只认已完成。
+		// 进行中的研究在 PlayerState.Tech.CurrentResearch（State == in_progress）。
+		current := player.Tech.CurrentResearch
+		if current == nil || current.State != model.ResearchInProgress {
+			return fail("false", "当前没有进行中的研究")
+		}
+		if check.TechID == "" || current.TechID == check.TechID {
+			return pass(current.TechID)
+		}
+		return fail(current.TechID, fmt.Sprintf("要求正在研究 %s", check.TechID))
 	case "building_count_gte":
 		count := 0
 		for _, world := range gc.sortedWorlds() {

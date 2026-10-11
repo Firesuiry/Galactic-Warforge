@@ -62,6 +62,7 @@ import { useApiClient } from "@/hooks/use-api-client";
 import { resolvePlanetCommandHint } from "@/features/planet-commands/error-hints";
 import { isResearchStationAlertNoise, isResearchStationBuildingType } from "@/features/production-alerts";
 import { listBuildingRecipes } from "@/features/planet-map/build-workflow";
+import type { CommandWorkflowId } from "@/features/planet-map/PlanetCommandPanel";
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import {
   translateBuildingState,
@@ -157,6 +158,7 @@ function BuildingStorageSection({
   planetId,
   canControl,
   completedTechIds,
+  onOpenWorkflow,
 }: {
   building: Building;
   catalog?: CatalogView;
@@ -164,6 +166,11 @@ function BuildingStorageSection({
   canControl: boolean;
   /** 已完成科技（生产建筑配方下拉按 CanUseRecipeTech 过滤）。 */
   completedTechIds?: ReadonlySet<string>;
+  /**
+   * 打开工作台的某个命令工作流（试玩 1014 层 12 入口太深：装料/量产要点开抽屉→工作台→
+   * 「研究与装料」子页签）。建筑详情里给一条直达快捷入口，落地页仍是同一个表单。
+   */
+  onOpenWorkflow?: (workflow: CommandWorkflowId) => void;
 }) {
   const client = useApiClient();
   const [withdrawItemId, setWithdrawItemId] = useState("");
@@ -229,6 +236,10 @@ function BuildingStorageSection({
     && isResearchStationBuildingType(building.type);
   // 只在真正进入生产周期的建筑上给配方入口（纯采集建筑没有配方）。
   const supportsRecipe = Boolean(building.runtime?.functions?.production) && recipeOptions.length > 0;
+  /** 该建筑能生产的单位类型（与 UnitProductionControls 的 `u.producer === building.type` 同口径）。 */
+  const unitProducible = (catalog?.world_units ?? []).some(
+    (unit) => unit.producer === building.type,
+  );
 
   async function submitRecipeSwitch() {
     if (recipeSwitchDisabled) {
@@ -339,6 +350,42 @@ function BuildingStorageSection({
           </dd>
         </div>
       </dl>
+      {/*
+        试玩 1014 层 12：「装入建筑」「切换配方」「量产」都藏在抽屉 → 工作台 → 子页签里，
+        选中建筑后要翻三层才够得着。这里给一条直达入口，落地页是同一个表单/工作流。
+      */}
+      {canControl && onOpenWorkflow ? (
+        <div className="planet-storage-shortcuts">
+          <button
+            className="secondary-button"
+            onClick={() => onOpenWorkflow("research")}
+            title="打开工作台「研究与装料」，把背包里的物品装入建筑"
+            type="button"
+          >
+            装入建筑
+          </button>
+          {supportsRecipe ? (
+            <button
+              className="secondary-button"
+              onClick={() => onOpenWorkflow("research")}
+              title="打开工作台切换本建筑的配方（也可用下方「切换配方」）"
+              type="button"
+            >
+              切换配方
+            </button>
+          ) : null}
+          {unitProducible ? (
+            <button
+              className="secondary-button"
+              onClick={() => onOpenWorkflow("combat")}
+              title="打开工作台「战斗与制造」，为本建筑下量产队列"
+              type="button"
+            >
+              量产单位
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {supportsRecipe ? (
         <form
           aria-label="切换配方表单"
@@ -354,6 +401,11 @@ function BuildingStorageSection({
               aria-label="切换配方"
               disabled={!canControl || recipePending}
               onChange={(event) => setRecipeDraft(event.target.value)}
+              title={
+                recipeDirty
+                  ? `下拉里是「${getRecipeDisplayName(catalog, recipeDraft ?? "") || "无配方"}」，尚未应用；当前生效的仍是「${building.production?.recipe_id ? getRecipeDisplayName(catalog, building.production.recipe_id) : "无配方"}」`
+                  : "选中后点「应用配方」才生效"
+              }
               value={currentRecipeId}
             >
               <option value="">无配方（研究模式 / 空闲）</option>
@@ -372,6 +424,25 @@ function BuildingStorageSection({
           >
             {recipePending ? "切换中…" : "应用配方"}
           </button>
+          {/*
+            试玩 1014 层 08/09：下拉选中后不点「应用配方」不会生效，但界面看起来已经改了。
+            这里给一条明确的「未应用」提示，写清「下拉里选了什么」和「当前真正生效的是什么」。
+          */}
+          {recipeDirty ? (
+            <p
+              className="subtle-text planet-recipe-form__pending"
+              data-testid="recipe-dirty-hint"
+              role="status"
+            >
+              未应用：下拉已选「
+              {recipeDraft === "" ? "无配方" : getRecipeDisplayName(catalog, recipeDraft ?? "")}
+              」，当前生效的仍是「
+              {building.production?.recipe_id
+                ? getRecipeDisplayName(catalog, building.production.recipe_id)
+                : "无配方"}
+              」，点「应用配方」后才切换。
+            </p>
+          ) : null}
           {recipeDirty ? (
             <p className="subtle-text" role="status">切换配方会清空当前生产进度（已产出的产物与库存保留）。</p>
           ) : null}
@@ -685,6 +756,8 @@ interface PlanetEntityPanelProps {
    * 机甲面板/手搓表单不能因此整段卸载——只要仍被选中就保持可用（试玩 1014 问题 2）。
    */
   knownOwnUnits?: ReadonlyMap<string, Unit>;
+  /** 建筑详情的快捷入口：打开工作台对应命令工作流（装入建筑/切换配方/量产）。 */
+  onOpenWorkflow?: (workflow: CommandWorkflowId) => void;
 }
 
 export function PlanetEntityPanel({
@@ -699,6 +772,7 @@ export function PlanetEntityPanel({
   taskForces,
   knownOwnUnits,
   tickRate,
+  onOpenWorkflow,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
   const { selected } = usePlanetViewStore(
@@ -923,6 +997,7 @@ export function PlanetEntityPanel({
           canControl={building.owner_id === session.playerId}
           catalog={catalog}
           completedTechIds={completedTechIds}
+          onOpenWorkflow={onOpenWorkflow}
           planetId={planet.planet_id}
         />
         {Object.values(planet.buildings ?? {}).filter(candidate => candidate.distributor?.host_building_id === building.id || candidate.id === building.distributor?.host_building_id).map(candidate => (

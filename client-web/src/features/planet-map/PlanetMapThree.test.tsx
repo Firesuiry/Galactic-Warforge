@@ -100,6 +100,27 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
     expect(screen.getByRole('status')).toHaveTextContent('该区域尚未探索');
   });
 
+  it('回归（试玩 1014 层 13）：inspect 下点空地（含未探索空格）清空单位/小队选区', () => {
+    renderMap();
+    // 先选中一个己方单位并拉一个小队选择（两个集合都要被清掉）。
+    act(() => {
+      const store = usePlanetViewStore.getState();
+      store.setSelected({ kind: 'unit', id: 'worker-1', position: { x: 0, y: 3, z: 0 } });
+      store.setSelectedUnits(['worker-1']);
+      store.setSelectedSquads(['squad-1']);
+    });
+    // store 的 setSelectedSquads 与 selectedUnits 互斥（选小队会清单位），
+    // 这里只断言「点空地后两个集合都空」——先用单位选择作为起点。
+    expect(usePlanetViewStore.getState().selectedUnits).toEqual([]);
+
+    // 点未探索空地：提示未探索，同时旧选区被清空（否则「点空地 + 框选」没法做部分重选）。
+    act(() => onClick?.({ x: 12, y: 12 }));
+    const store = usePlanetViewStore.getState();
+    expect(store.selected).toBeNull();
+    expect(store.selectedUnits).toEqual([]);
+    expect(store.selectedSquads).toEqual([]);
+  });
+
   it('建造模式下点未探索格：不聚焦镜头，照常下达建造命令（由服务端判定，试玩 1009 F）', () => {
     const onInteractTile = vi.fn();
     renderMap(onInteractTile);

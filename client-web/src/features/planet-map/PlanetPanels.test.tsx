@@ -437,6 +437,80 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(screen.queryByText(/不再参与研究/)).toBeNull();
   });
 
+  it("回归（试玩 1014 层 08）：下拉选了配方但没点「应用配方」时明确提示「未应用」", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-recipe"] = {
+      id: "b-recipe",
+      type: "assembling_machine_mk1",
+      owner_id: "p1",
+      position: { x: 5, y: 5, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 1, height: 1 },
+        },
+        functions: { production: { recipe_options: ["iron_ingot", "gear"] } },
+        state: "running",
+      },
+      storage: { inventory: {} },
+      // 当前生效的是铁块配方
+      production: { recipe_id: "iron_ingot" },
+    };
+    const catalog = {
+      items: [{ id: "iron_ingot", name: "铁块" }, { id: "gear", name: "齿轮" }],
+      recipes: [
+        { id: "iron_ingot", name: "铁块", building_types: ["assembling_machine_mk1"], inputs: [{ item_id: "iron_ore", quantity: 1 }], outputs: [{ item_id: "iron_ingot", quantity: 1 }], duration: 4 },
+        { id: "gear", name: "齿轮", building_types: ["assembling_machine_mk1"], inputs: [{ item_id: "iron_ingot", quantity: 1 }], outputs: [{ item_id: "gear", quantity: 1 }], duration: 4 },
+      ],
+    } as unknown as CatalogView;
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-recipe",
+      position: { x: 5, y: 5, z: 0 },
+    });
+
+    render(<PlanetEntityPanel catalog={catalog} planet={planet as never} />);
+
+    const select = screen.getByRole("combobox", { name: "切换配方" });
+    expect(select).toHaveValue("iron_ingot");
+    expect(screen.queryByTestId("recipe-dirty-hint")).toBeNull();
+
+    // 下拉改成齿轮但没点「应用配方」：必须明确写出「未应用」+ 当前真正生效的仍是铁块。
+    fireEvent.change(select, { target: { value: "gear" } });
+    const hint = screen.getByTestId("recipe-dirty-hint");
+    expect(hint).toHaveTextContent("未应用");
+    expect(hint).toHaveTextContent("齿轮");
+    expect(hint).toHaveTextContent("铁块");
+  });
+
+  it("建筑详情提供直达工作台的快捷入口（装入建筑/切换配方/量产）", () => {
+    const planet = createPlanet();
+    const onOpenWorkflow = vi.fn();
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-44",
+      position: { x: 2, y: 1, z: 0 },
+    });
+
+    render(
+      <PlanetEntityPanel
+        catalog={{} as CatalogView}
+        onOpenWorkflow={onOpenWorkflow}
+        planet={planet as never}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "装入建筑" }));
+    expect(onOpenWorkflow).toHaveBeenCalledWith("research");
+  });
+
   it("回归（试玩 1013 bug-1013-2）：手搓缺料时保持玩家选中的配方并说明缺什么", () => {
     const planet = createPlanet();
     (planet.buildings as Record<string, unknown>)["b-lab-2"] = {

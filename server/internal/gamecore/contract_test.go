@@ -16,6 +16,8 @@ func TestEvaluateContractPredicateVocabulary(t *testing.T) {
 	player.Inventory = model.ItemInventory{model.ItemIronIngot: 7}
 	player.Tech = model.NewPlayerTechState("p1")
 	player.Tech.CompletedTechs["electromagnetism"] = 1
+	// 进行中的研究：research_in_progress 表用例（table 用例共享同一份状态）。
+	player.Tech.CurrentResearch = &model.PlayerResearch{TechID: "electromagnetism", State: model.ResearchInProgress}
 	placeBuilding(ws, newBuilding("plant-c", model.BuildingTypeWindTurbine, "p1", model.Position{X: 20, Y: 20}))
 	// 断电的风机：building_count_gte 数它，building_running_gte 不数它。
 	stalled := newBuilding("plant-stalled", model.BuildingTypeWindTurbine, "p1", model.Position{X: 24, Y: 20})
@@ -38,6 +40,9 @@ func TestEvaluateContractPredicateVocabulary(t *testing.T) {
 		{"player_alive", checkpoint.ContractCheck{Kind: "player_alive", Player: "p1"}, true, "true"},
 		{"tech_researched pass", checkpoint.ContractCheck{Kind: "tech_researched", Player: "p1", TechID: "electromagnetism"}, true, "1"},
 		{"tech_researched fail", checkpoint.ContractCheck{Kind: "tech_researched", Player: "p1", TechID: "dirac_inversion"}, false, "0"},
+		{"research_in_progress pass", checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1"}, true, "electromagnetism"},
+		{"research_in_progress tech match", checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1", TechID: "electromagnetism"}, true, "electromagnetism"},
+		{"research_in_progress tech mismatch", checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1", TechID: "dirac_inversion"}, false, "electromagnetism"},
 		{"building_count_gte pass", checkpoint.ContractCheck{Kind: "building_count_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 2}, true, "2"},
 		{"building_count_gte counts stalled", checkpoint.ContractCheck{Kind: "building_count_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 3}, false, "2"},
 		{"building_running_gte pass", checkpoint.ContractCheck{Kind: "building_running_gte", Player: "p1", Type: string(model.BuildingTypeWindTurbine), N: 1}, true, "1"},
@@ -63,6 +68,52 @@ func TestEvaluateContractPredicateVocabulary(t *testing.T) {
 				t.Fatalf("actual=%q want %q", result.Actual, tc.actual)
 			}
 		})
+	}
+}
+
+// research_in_progress：无进行中研究 → fail("false")；有 → pass(tech_id)，
+// 指定 tech_id 时还要求正在研究的就是它（actual 写实际值）。
+func TestResearchInProgressPredicate(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	player := ws.Players["p1"]
+	player.Tech = model.NewPlayerTechState("p1")
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+
+	if result := eval(checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1"}); result.Passed || result.Actual != "false" {
+		t.Fatalf("no active research must fail with actual=false, got %+v", result)
+	}
+
+	player.Tech.CurrentResearch = &model.PlayerResearch{TechID: "electromagnetism", State: model.ResearchInProgress}
+	if result := eval(checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1"}); !result.Passed || result.Actual != "electromagnetism" {
+		t.Fatalf("active research must pass with actual=tech_id, got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1", TechID: "electromagnetism"}); !result.Passed {
+		t.Fatalf("matching tech_id must pass, got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1", TechID: "dirac_inversion"}); result.Passed || result.Actual != "electromagnetism" {
+		t.Fatalf("mismatching tech_id must fail with the actual tech_id, got %+v", result)
+	}
+
+	// 非 in_progress 状态不算「进行中」。
+	player.Tech.CurrentResearch.State = model.ResearchPending
+	if result := eval(checkpoint.ContractCheck{Kind: "research_in_progress", Player: "p1"}); result.Passed {
+		t.Fatalf("pending research must not count as in progress, got %+v", result)
+	}
+
+	// 未指定 player 时任一玩家满足即通过（"或"语义）：p1 没有进行中研究、p2 有 → 通过，
+	// actual 写的是满足条件的那个玩家的 tech_id（不能因为 p1 空手就判 false）。
+	other := newBlackFogTestCore(t, "normal")
+	otherWs := other.World()
+	otherWs.Players["p1"].Tech = model.NewPlayerTechState("p1")
+	otherWs.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true, Tech: model.NewPlayerTechState("p2")}
+	otherWs.Players["p2"].Tech.CurrentResearch = &model.PlayerResearch{TechID: "electromagnetism", State: model.ResearchInProgress}
+	report := other.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{{Kind: "research_in_progress"}}})
+	if !report.Passed || report.Results[0].Actual != "electromagnetism" {
+		t.Fatalf("任一玩家有进行中研究即应通过，report=%+v", report)
 	}
 }
 

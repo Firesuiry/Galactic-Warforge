@@ -62,15 +62,18 @@ func TestTurretLoadedAmmoSurvivesStorageSettlementAndCooldown(t *testing.T) {
 				t.Fatalf("load: %d %v", accepted, err)
 			}
 			settleStorage(ws)
-			if b.Storage.OutputBuffer[combat.AmmoItem] != 2 {
-				t.Fatal("must exercise loaded ammo moved into output buffer")
+			// 炮塔没有配方也没有输出准入清单，装入的弹药留在主库存
+			// （试玩 1014 层 06/09/10/11/12：搬进输出缓存会让「本地存储」显示 0）。
+			if b.Storage.Inventory[combat.AmmoItem] != 2 || b.Storage.UsedOutputBuffer() != 0 {
+				t.Fatalf("loaded ammo must stay in the main inventory, inventory=%v output=%v",
+					b.Storage.Inventory, b.Storage.OutputBuffer)
 			}
 			enemy := model.UnitStats(model.UnitTypeSoldier)
 			enemy.ID, enemy.OwnerID, enemy.Position, enemy.HP = "enemy", "p2", model.Position{X: 3, Y: 2}, 500
 			ws.Units[enemy.ID] = &enemy
 			events := settleTurrets(ws)
 			firstHP := enemy.HP
-			if firstHP >= 500 || b.Storage.OutputBuffer[combat.AmmoItem] != 1 {
+			if firstHP >= 500 || b.Storage.Inventory[combat.AmmoItem] != 1 {
 				t.Fatal("loaded ammo did not fire")
 			}
 			notified := false
@@ -84,12 +87,12 @@ func TestTurretLoadedAmmoSurvivesStorageSettlementAndCooldown(t *testing.T) {
 			}
 			ws.Tick += int64(combat.FireRate - 1)
 			settleTurrets(ws)
-			if enemy.HP != firstHP || b.Storage.OutputBuffer[combat.AmmoItem] != 1 {
+			if enemy.HP != firstHP || b.Storage.Inventory[combat.AmmoItem] != 1 {
 				t.Fatal("cooldown consumed ammo or damaged target")
 			}
 			ws.Tick++
 			settleTurrets(ws)
-			if enemy.HP >= firstHP || b.Storage.OutputBuffer[combat.AmmoItem] != 0 {
+			if enemy.HP >= firstHP || b.Storage.Inventory[combat.AmmoItem] != 0 {
 				t.Fatal("cooldown boundary did not fire exactly once")
 			}
 			ws.Tick += int64(combat.FireRate)

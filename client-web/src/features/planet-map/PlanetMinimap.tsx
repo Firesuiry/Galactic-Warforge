@@ -93,6 +93,7 @@ function darken(hex: string, alpha: number): string {
 export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, onAttackMove, onOrderBlocked }: PlanetMinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   // 右键下令的 hover 坐标（显示在标签上，与主地图 hover 提示同口径）
   const [hoverTile, setHoverTile] = useState<TilePoint | null>(null);
   const session = useSessionSnapshot();
@@ -396,6 +397,35 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     }
   }
 
+  // 小地图实际占位高度写进 CSS 变量：右下角 toast 栈据此整体抬高，
+  // 避免在「黑雾报复」这类成堆弹 toast 的时刻压住小地图、吞掉右键移动令
+  // （试玩 1014 层 14 问题 1 / 层 13 问题 2）。
+  // 用变量而不是常量：小地图高度随 label 换行、字号缩放变化，常量会在某些
+  // 字号/窄屏下让 toast 栈「差几像素」压住画布。
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) {
+      return undefined;
+    }
+    function report() {
+      const height = root?.offsetHeight ?? 0;
+      document.documentElement.style.setProperty('--planet-minimap-height', `${height}px`);
+    }
+    report();
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(report);
+      observer.observe(root);
+    } else {
+      window.addEventListener('resize', report);
+    }
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', report);
+      document.documentElement.style.removeProperty('--planet-minimap-height');
+    };
+  }, []);
+
   if (mapWidth <= 0 || mapHeight <= 0) {
     return null;
   }
@@ -407,7 +437,11 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     <div
       className="planet-minimap"
       aria-hidden={false}
+      ref={rootRef}
       data-camera-zoom-index={camera.zoomIndex}
+      /* 供样式层判定「小地图在场」：右下角 toast 栈据此抬高，避免盖住小地图
+         并吞掉右键移动令（试玩 1014 层 14 问题 1 / 层 13 问题 2）。 */
+      data-planet-minimap
     >
       <canvas
         aria-label="行星缩略地图"
