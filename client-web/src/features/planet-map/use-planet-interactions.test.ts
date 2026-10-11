@@ -256,6 +256,64 @@ describe('usePlanetInteractions', () => {
     expect(useNotificationsStore.getState().toasts).toHaveLength(0);
   });
 
+  it('回归（试玩 1014 层 04 P2）：缺料时点建造卡同样给全局 toast，不再「点了没反应」', () => {
+    const planet = makePlanet();
+    resetPlanetViewStore();
+    resetStarmapViewStore();
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+    usePlanetCommandStore.getState().resetForPlanet('planet-1-1');
+    mockClient.cmdBuild.mockResolvedValue({ accepted: true, request_id: 'r-1' });
+    // 电弧熔炉造价要实物（磁线圈 1）：背包空时本地预检必须拦下并报「缺少 磁线圈 1」
+    // ——试玩 1014 层 04 的 (21,46) 首点无反馈就是这条路径（截图底部短缺行同时变红）。
+    const costCatalog = {
+      ...catalog,
+      items: [{ id: 'magnetic_coil', name: '磁线圈', category: 'component' }],
+      buildings: [
+        ...(catalog.buildings ?? []),
+        {
+          id: 'arc_smelter',
+          name: '电弧熔炉',
+          category: 'production',
+          footprint: { width: 1, height: 1 },
+          build_cost: {
+            minerals: 20,
+            energy: 10,
+            items: [{ item_id: 'magnetic_coil', quantity: 1 }],
+          },
+          buildable: true,
+          icon_key: 'arc_smelter',
+          color: '#e07b4a',
+        } as never,
+      ],
+    } as never;
+    const { result } = renderHook(() => usePlanetInteractions({
+      catalog: costCatalog,
+      planet,
+      inventory: {},
+      runtime: { planet_id: 'planet-1-1', enemy_forces: [] } as never,
+    }));
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'arc_smelter',
+      direction: 'auto',
+    });
+
+    result.current.interactTile({ x: 4, y: 4 });
+
+    expect(mockClient.cmdBuild).not.toHaveBeenCalled();
+    const journal = usePlanetCommandStore.getState().journal;
+    expect(journal[0]?.authoritativeCode).toBe('LOCAL_PREFLIGHT');
+    expect(journal[0]?.authoritativeMessage).toContain('缺少 磁线圈 1');
+    const toasts = useNotificationsStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]?.kind).toBe('danger');
+    expect(toasts[0]?.body).toContain('缺少 磁线圈 1');
+  });
+
   it('build 模式：未探索区（地形 unknown）不本地拦截，命令照常下发（试玩 1009 F）', () => {
     const { interactions } = setup();
     // (12, 12) 在 makePlanet 里是 unknown（客户端没有该格地形数据）。

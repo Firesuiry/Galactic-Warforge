@@ -24,6 +24,9 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 		model.InitBuildingProduction(building)
+		// 产出预留跟着配方走：配方可能在别处被改写（建造/切换配方/读档），每 tick 重算一次
+		// 是唯一能保证「装入不会挤占成品落货位」的地方（试玩 1014 层 04 P1）。
+		building.SyncStorageReserve()
 		if building.Production == nil || building.Production.RecipeID == "" {
 			continue
 		}
@@ -59,7 +62,19 @@ func settleProduction(ws *model.WorldState) []*model.GameEvent {
 		if len(state.PendingOutputs) > 0 || len(state.PendingByproducts) > 0 {
 			combinedOutputs := combineItemAmounts(state.PendingOutputs, state.PendingByproducts)
 			if !storeProductionOutputs(building, combinedOutputs) {
+				// 产出无处可放：显式报阻塞（而不是继续 running 让玩家看不出原因）。
+				// applyBuildingState 会在 state=running 时清空 reason，所以这里直接写
+				// reason 并发状态事件（与炮塔 no_ammunition 同一手法）。resource_settlement
+				// 每 tick 会把它清掉，因此这里每 tick 重写一次。
+				if evt := setBuildingStateReason(building, stateReasonOutputBlocked); evt != nil {
+					events = append(events, evt)
+				}
 				continue
+			}
+			if building.Runtime.StateReason == stateReasonOutputBlocked {
+				if evt := setBuildingStateReason(building, ""); evt != nil {
+					events = append(events, evt)
+				}
 			}
 			snapshot.RecordBuildingOutputs(building, combinedOutputs)
 			events = append(events, &model.GameEvent{
@@ -152,6 +167,14 @@ func consumeRecipeInputs(storage *model.StorageState, recipe model.RecipeDefinit
 
 // Commit the entire batch atomically. Feedback outputs are separate from the
 // unprocessed seed stock and can leave only after the production cycle completes.
+//
+// 「装入/传送带送料不会把建筑塞死」这件事由产出预留保证（见 model.StorageState.Reserve：
+// 主库存的可用量一律是「容量 − 预留」，Receive/Load/PreviewReceive/FlushInput 都走
+// StorageState.availableInventory），落货本身仍按原有顺序：反馈料只进输出缓冲（进主
+// 库存会被当成未处理原料消耗掉），普通产出走 Receive 的「输入缓冲 → 主库存」。整批
+// 任一项放不下就整批保留、下 tick 重试——输入侧永远给成品留着预留空位，所以
+// 「running 却不产出」在真实流程里不会再发生；万一还是落不下（预留被外部状态占满），
+// settleProduction 会写 output_blocked 让玩家在 runtime 里看见原因（试玩 1014 层 04 P1）。
 func storeProductionOutputs(building *model.Building, outputs []model.ItemAmount) bool {
 	if building == nil || building.Storage == nil {
 		return false
@@ -171,6 +194,13 @@ func storeProductionOutputs(building *model.Building, outputs []model.ItemAmount
 	}
 	*building.Storage = *simulated
 	return true
+}
+
+func addItemToInventory(inv model.ItemInventory, itemID string, qty int) {
+	if inv == nil || qty <= 0 {
+		return
+	}
+	inv[itemID] += qty
 }
 
 func availableStorageItem(storage *model.StorageState, itemID string) int {

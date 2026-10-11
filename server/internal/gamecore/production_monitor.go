@@ -121,6 +121,19 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 			building.ProductionMonitor = model.NewProductionMonitorState()
 		}
 		building.ProductionMonitor.RegisterSample(currentTick, moved, backlog, throughput, idle, inputShortage, outputBlocked, powerState)
+		// 产出阻塞的 runtime 原因：有配方的生产建筑在 settleProduction 里写（那里能看到
+		// 整批产出落不下的瞬间）；这里补采掘类（无配方，产出无处可放时 state 会掉成 idle）
+		// 以及本 tick 没跑到 settleProduction 的情况。running 的 reason 交给
+		// settleProduction 管理，避免在这里把 input_shortage 之类的原因写串。
+		if outputBlocked && building.Runtime.State != model.BuildingWorkRunning {
+			if evt := setBuildingStateReason(building, stateReasonOutputBlocked); evt != nil {
+				events = append(events, evt)
+			}
+		} else if !outputBlocked && building.Runtime.StateReason == stateReasonOutputBlocked && building.Runtime.State != model.BuildingWorkRunning {
+			if evt := setBuildingStateReason(building, ""); evt != nil {
+				events = append(events, evt)
+			}
+		}
 
 		newAlerts := pm.evaluateAlerts(building, currentTick, backlog, throughput, inputShortage, outputBlocked)
 		if len(newAlerts) == 0 {
@@ -152,10 +165,12 @@ func storageOutputBlocked(storage *model.StorageState, collector bool) bool {
 	if storage.UsedOutputBuffer() < storage.OutputBufferCapacity() {
 		return false
 	}
-	if !collector {
-		return true
+	if collector {
+		return storage.Capacity > 0 && storage.UsedInventory() >= storage.Capacity
 	}
-	return storage.Capacity > 0 && storage.UsedInventory() >= storage.Capacity
+	// 生产建筑：产出的落货路径是「输出缓冲 → 输入缓冲 → 主库存（扣掉产出预留）」，
+	// 三处都放不下才算真的阻塞（与 storeProductionOutputs 的判定同一口径）。
+	return storage.InputBufferSpace() <= 0 && storage.AvailableInventory() <= 0
 }
 
 func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) []*model.ProductionAlert {

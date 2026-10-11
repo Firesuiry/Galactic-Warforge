@@ -805,7 +805,13 @@ describe("PlanetCommandPanel", () => {
   it("回归（试玩 1013 bug-1013-5）：研究站装料时玩家选好的物品不被强制改回电磁矩阵", async () => {
     const user = userEvent.setup();
     const planet = createPlanet();
-    const catalog = createCatalog();
+    // 研究站只列矩阵（P4 过滤）：目录里再加一种矩阵，才能验证「玩家换成另一种矩阵后
+    // 不会被 effect 重置回电磁矩阵」。
+    const baseCatalog = createCatalog();
+    const catalog = {
+      ...baseCatalog,
+      items: [...baseCatalog.items, { id: "energy_matrix", name: "能量矩阵" }],
+    };
     const client = createClient();
     const runtime = createRuntime();
 
@@ -815,7 +821,11 @@ describe("PlanetCommandPanel", () => {
         client={client as never}
         planet={planet as never}
         runtime={runtime as never}
-        summary={createSummary() as never}
+        summary={
+          createSummary({
+            inventory: { electromagnetic_matrix: 3, energy_matrix: 2 },
+          }) as never
+        }
       />,
       { initialEntries: ["/planet/planet-1-1?workflow=research"] },
     );
@@ -829,9 +839,9 @@ describe("PlanetCommandPanel", () => {
       );
     });
 
-    // 玩家改成硅石：旧实现每次 effect 都把 matrix_lab 目标重置回电磁矩阵。
-    await user.selectOptions(itemSelect, "silicon_ore");
-    expect((itemSelect as HTMLSelectElement).value).toBe("silicon_ore");
+    // 玩家改成能量矩阵：旧实现每次 effect 都把 matrix_lab 目标重置回电磁矩阵。
+    await user.selectOptions(itemSelect, "energy_matrix");
+    expect((itemSelect as HTMLSelectElement).value).toBe("energy_matrix");
 
     // 服务端刷新（新对象引用）后仍然保持玩家选择。
     rerender(
@@ -840,11 +850,15 @@ describe("PlanetCommandPanel", () => {
         client={client as never}
         planet={planet as never}
         runtime={{ ...runtime } as never}
-        summary={createSummary() as never}
+        summary={
+          createSummary({
+            inventory: { electromagnetic_matrix: 3, energy_matrix: 2 },
+          }) as never
+        }
       />,
     );
     expect((screen.getByLabelText("装料物品") as HTMLSelectElement).value).toBe(
-      "silicon_ore",
+      "energy_matrix",
     );
   });
 
@@ -942,6 +956,125 @@ describe("PlanetCommandPanel", () => {
     await user.type(quantity, "4");
     expect(screen.getByRole("button", { name: "装入建筑" })).toBeEnabled();
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("回归（试玩 1014 层 04 P4）：装料物品下拉只列「背包里有 ∩ 目标建筑会收」", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    // 加一台带配方（smelt_iron，输入铁矿）的电弧熔炉：装料物品只该出现铁矿。
+    (planet.buildings as Record<string, unknown>)["smelter-1"] = {
+      id: "smelter-1",
+      type: "arc_smelter",
+      owner_id: "p1",
+      position: { x: 0, y: 3, z: 0 },
+      hp: 120,
+      max_hp: 120,
+      level: 1,
+      vision_range: 2,
+      runtime: {
+        params: {
+          energy_consume: 0,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 1, height: 1 },
+        },
+        functions: { production: {} },
+        state: "running",
+      },
+      storage: { inventory: { iron_ore: 5 } },
+      production: { recipe_id: "smelt_iron" },
+    };
+    const baseCatalog = createCatalog();
+    const catalog = {
+      ...baseCatalog,
+      items: [...baseCatalog.items, { id: "iron_ore", name: "铁矿" }],
+      recipes: [
+        ...baseCatalog.recipes,
+        {
+          id: "smelt_iron",
+          name: "铁块",
+          inputs: [{ item_id: "iron_ore", quantity: 1 }],
+          outputs: [{ item_id: "iron_ingot", quantity: 1 }],
+        },
+      ],
+    };
+    const client = createClient();
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={
+          createSummary({
+            inventory: { iron_ore: 30, electromagnetic_matrix: 2 },
+          }) as never
+        }
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    const buildingSelect = (await screen.findByLabelText(
+      "建筑 ID",
+    )) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(Array.from(buildingSelect.options).map((o) => o.value)).toContain(
+        "smelter-1",
+      );
+    });
+    await user.selectOptions(buildingSelect, "smelter-1");
+
+    const itemSelect = (await screen.findByLabelText("装料物品")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(Array.from(itemSelect.options).map((o) => o.value)).toEqual([
+        "",
+        "iron_ore",
+      ]);
+    });
+  });
+
+  it("回归（试玩 1014 层 04 P4）：背包里没有目标建筑会收的物品时禁用下拉并说明原因", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    // 研究站只吃矩阵（runtime.functions.research 是服务端判定研究模式的依据），
+    // 背包里只有硅矿：下拉没有可选项。
+    (planet.buildings as Record<string, unknown>)["lab-1"] = {
+      ...(planet.buildings as Record<string, any>)["lab-1"],
+      runtime: {
+        ...(planet.buildings as Record<string, any>)["lab-1"].runtime,
+        functions: { research: { research_per_tick: 1 } },
+      },
+    };
+    const baseCatalog = createCatalog();
+    const catalog = {
+      ...baseCatalog,
+      // 目录里的物品带 category（服务端 /catalog 一直如此）：研究站「只吃矩阵」
+      // 的过滤按 category === "matrix" 判定。
+      items: baseCatalog.items.map((item) => ({
+        ...item,
+        category: item.id.endsWith("_matrix") ? "matrix" : "material",
+      })),
+    };
+    const client = createClient();
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({ inventory: { silicon_ore: 5 } }) as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    await user.selectOptions(await screen.findByLabelText("建筑 ID"), "lab-1");
+    const itemSelect = (await screen.findByLabelText("装料物品")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(itemSelect).toBeDisabled();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("只接受矩阵");
+    expect(screen.getByRole("button", { name: "装入建筑" })).toBeDisabled();
   });
 
 });

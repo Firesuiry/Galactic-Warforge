@@ -27,6 +27,7 @@ import {
   getTechDisplayName,
   isLogisticsStationBuildingType,
   listOwnLogisticsStations,
+  listTransferItemOptions,
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import {
@@ -490,6 +491,23 @@ export function PlanetCommandPanel({
   const currentResearchProgressPercent = getResearchProgressPercent(
     playerTechState?.current_research,
   );
+  /**
+   * 「装入建筑」的可选物品：背包里有 ∩ 目标建筑真的会收（试玩 1014 层 04 P4：
+   * 旧实现把 90+ 件物品全列出来，玩家得自己猜研究站只吃矩阵、熔炉只吃当前配方原料）。
+   */
+  const transferItemOptions = useMemo(
+    () =>
+      listTransferItemOptions(
+        catalog,
+        selectedTransferBuilding ?? undefined,
+        summary?.players?.[playerId]?.inventory,
+      ),
+    [catalog, selectedTransferBuilding, summary, playerId],
+  );
+  const noTransferItemOption =
+    !noTransferTarget &&
+    selectedTransferBuilding != null &&
+    transferItemOptions.length === 0;
   /** 背包里该物品的数量（装料只从背包扣，与服务端 execTransferItem 一致）。 */
   const transferItemOwned =
     summary?.players?.[playerId]?.inventory?.[transferItemId];
@@ -676,33 +694,35 @@ export function PlanetCommandPanel({
    * 装料物品只在**切换目标建筑**时给默认值（研究站 → 电磁矩阵，其他 → 首件物品）；
    * 玩家手动选过之后不再覆盖。旧实现只要目标是 matrix_lab 就把物品重置回电磁矩阵，
    * 玩家选好电路板一按就变回矩阵（试玩 1013 bug-1013-5）。
+   *
+   * 可选集合用 transferItemOptions（背包有 ∩ 建筑会收）：P4 过滤之后，选中的物品
+   * 可能因为配方/背包变化不再出现在下拉里，这里用同一集合判定「选中项还有效吗」，
+   * 失效就重选，避免下拉显示空值而 transferItemId 还停在旧物品上。
    */
   useEffect(() => {
-    const activeTransferBuilding =
-      transferTargets.find((building) => building.id === transferBuildingId) ??
-      transferTargets[0];
+    const activeTransferBuilding = selectedTransferBuilding;
     const context = `${activeTransferBuilding?.id ?? ""}:${activeTransferBuilding?.type ?? ""}`;
     const selectionStillAvailable =
       transferItemId !== "" &&
-      logisticsItems.some((item) => item.id === transferItemId);
+      transferItemOptions.some((item) => item.id === transferItemId);
 
     if (
       previousTransferContextRef.current !== context ||
       !selectionStillAvailable
     ) {
       const preferredMatrixItemId =
-        logisticsItems.find((item) => item.id === "electromagnetic_matrix")?.id ??
-        logisticsItems[0]?.id ??
+        transferItemOptions.find((item) => item.id === "electromagnetic_matrix")?.id ??
+        transferItemOptions[0]?.id ??
         "";
       const nextTransferItemId =
         activeTransferBuilding && isResearchStationBuildingType(activeTransferBuilding.type)
           ? preferredMatrixItemId
-          : logisticsItems[0]?.id ?? "";
+          : transferItemOptions[0]?.id ?? "";
       setTransferItemId(nextTransferItemId);
     }
 
     previousTransferContextRef.current = context;
-  }, [logisticsItems, transferBuildingId, transferItemId, transferTargets]);
+  }, [selectedTransferBuilding, transferItemId, transferItemOptions]);
 
   useEffect(() => {
     if (
@@ -1677,20 +1697,31 @@ export function PlanetCommandPanel({
               <label className="field field--span-2">
                 <span>装料物品</span>
                 <select
+                  disabled={noTransferTarget || noTransferItemOption}
                   onChange={(event) => setTransferItemId(event.target.value)}
                   value={transferItemId}
                 >
-                  <option value="">选择物品</option>
-                  {logisticsItems.map((item) => (
+                  <option value="">
+                    {noTransferItemOption ? "没有可装入的物品" : "选择物品"}
+                  </option>
+                  {transferItemOptions.map((item) => (
                     <option key={item.id} value={item.id}>
                       {getItemDisplayName(catalog, item.id)} · {item.id}
                     </option>
                   ))}
                 </select>
               </label>
+              {noTransferItemOption ? (
+                <p className="subtle-text field--span-2" role="status">
+                  {isResearchStationBuildingType(selectedTransferBuilding?.type)
+                    ? "该研究站处于研究模式，只接受矩阵（研究耗材）；背包里现在没有矩阵，先手工制造或从别的建筑取出矩阵再装料。"
+                    : "背包里没有该建筑能接收的物品（装入物品按目标建筑的配方输入/准入规则过滤）。"}
+                </p>
+              ) : null}
               <label className="field">
                 <span>{fieldLabel("quantity")}</span>
                 <input
+                  disabled={noTransferTarget || noTransferItemOption}
                   onChange={(event) => setTransferQuantity(event.target.value)}
                   type="number"
                   value={transferQuantity}
@@ -1706,9 +1737,11 @@ export function PlanetCommandPanel({
                 </div>
               </div>
               {/* 装料只从背包扣（服务端 execTransferItem）：先报背包数量，不足时按钮直接禁用并说明差多少。 */}
-              <p className="subtle-text field--span-2">
-                背包 {transferItemId ? `${getItemDisplayName(catalog, transferItemId)} ${transferItemOwned ?? 0} 个` : "—"}
-              </p>
+              {!noTransferItemOption ? (
+                <p className="subtle-text field--span-2">
+                  背包 {transferItemId ? `${getItemDisplayName(catalog, transferItemId)} ${transferItemOwned ?? 0} 个` : "—"}
+                </p>
+              ) : null}
               <button
                 className="secondary-button field--span-2"
                 disabled={

@@ -6,6 +6,7 @@ import type {
   CombatSquad,
   FogMapView,
   GameEventDetail,
+  ItemCatalogEntry,
   ItemInventory,
   LogisticsStationItemSetting,
   PlanetNetworksView,
@@ -542,6 +543,88 @@ export function isLogisticsStationBuildingType(buildingType: string) {
     buildingType === "planetary_logistics_station" ||
     buildingType === "interstellar_logistics_station"
   );
+}
+
+/**
+ * 「装入建筑」下拉里的物品过滤（试玩 1014 层 04 P4）。
+ *
+ * 旧实现把 90+ 件物品全列出来，玩家得自己猜目标建筑收不收；这里按服务端
+ * execTransferItem 的准入条件过滤成「背包里有 ∩ 目标建筑真的会收」：
+ * - 研究模式的研究站（matrix_lab / self_evolution_lab 且当前无配方）只收矩阵
+ *   （服务端 researchLabIntakeRejection 的同一口径，物品 category === "matrix"）；
+ * - 有配方的生产建筑只列该配方的输入（装入其它物品既不会被消耗也不会被产出）；
+ * - 喷涂机只收增产剂（proliferator_mk1/2/3）；
+ * - 物流站只收已配置槽位的物品（服务端要求先配槽位）；
+ * - 其余仓储/发射类建筑收背包里的一切。
+ *
+ * 返回 id 已按名称排序，可直接渲染；为空时由调用方给出「背包里没有可装入的物品」。
+ */
+export function listTransferItemOptions(
+  catalog: CatalogView | undefined,
+  building: Building | undefined,
+  inventory: ItemInventory | undefined,
+  ownedItemIds: Iterable<string> = Object.keys(inventory ?? {}),
+): ItemCatalogEntry[] {
+  const owned = new Set(ownedItemIds);
+  const allItems = catalog?.items ?? [];
+  const ownedItems = allItems.filter((item) => owned.has(item.id));
+
+  const allowed = transferItemAllowList(catalog, building, inventory);
+  const filtered = allowed
+    ? ownedItems.filter((item) => allowed.has(item.id))
+    : ownedItems;
+  return [...filtered].sort((left, right) =>
+    left.name.localeCompare(right.name, "zh-CN"),
+  );
+}
+
+/** 目标建筑可接收的物品集合；undefined 表示「背包里的一切都能装」。 */
+function transferItemAllowList(
+  catalog: CatalogView | undefined,
+  building: Building | undefined,
+  inventory: ItemInventory | undefined,
+): Set<string> | undefined {
+  if (!building) {
+    return undefined;
+  }
+  if (isSprayCoaterBuildingType(building.type)) {
+    return new Set(["proliferator_mk1", "proliferator_mk2", "proliferator_mk3"]);
+  }
+  if (isLogisticsStationBuildingType(building.type)) {
+    const settings = building.logistics_station?.settings ?? {};
+    const configured = new Set(Object.keys(settings));
+    // 还没配槽位时给出所有自有物品（否则下拉会整个空掉），命令本身会被服务端
+    // 以「请先为 X 配置物流站槽位」拒绝，与旧行为一致。
+    return configured.size > 0 ? configured : undefined;
+  }
+  // 研究模式的研究站（有 Research 模块且当前无配方）只吃矩阵。
+  if (building.runtime?.functions?.research != null && !building.production?.recipe_id) {
+    const matrices = new Set(
+      (catalog?.items ?? [])
+        .filter((item) => item.category === "matrix")
+        .map((item) => item.id),
+    );
+    // 目录里查不到矩阵定义时回退到背包里的矩阵（category 缺失的旧目录），再退化为全量。
+    if (matrices.size > 0) {
+      return matrices;
+    }
+    const ownedMatrices = Object.keys(inventory ?? {}).filter((id) =>
+      id.endsWith("_matrix"),
+    );
+    return ownedMatrices.length > 0 ? new Set(ownedMatrices) : undefined;
+  }
+  const recipeId = building.production?.recipe_id;
+  if (recipeId) {
+    const recipe = getRecipeCatalogEntry(catalog, recipeId);
+    if (recipe) {
+      return new Set(recipe.inputs.map((input) => input.item_id));
+    }
+  }
+  return undefined;
+}
+
+export function isSprayCoaterBuildingType(buildingType: string | undefined) {
+  return buildingType === "spray_coater";
 }
 
 export function findLogisticsStation(
