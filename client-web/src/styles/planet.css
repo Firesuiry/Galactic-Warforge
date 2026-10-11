@@ -1419,6 +1419,13 @@
   font-size:.74rem;
 }
 
+/* 选中了买不起的建筑：建造栏里立刻给出缺料清单（与鼠标旁放置提示同口径，试玩 1014 层 01 P2）。 */
+.planet-build-bar__shortage {
+  color:var(--danger, #ff6b6b);
+  font-size:.74rem;
+  font-weight:600;
+}
+
 .planet-build-bar__hint--dim {
   color:var(--text-dim);
 }

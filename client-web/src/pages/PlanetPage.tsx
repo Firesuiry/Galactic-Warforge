@@ -41,6 +41,7 @@ import { useMechaJobProgress } from "@/features/planet-map/mecha-job-progress";
 import { PlanetLegionPanel } from "@/features/planet-map/PlanetLegionPanel";
 import { PlanetTheaterControls } from "@/features/planet-map/PlanetTheaterControls";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
+import { reportLocalPreflightBlock } from "@/features/planet-commands/local-preflight";
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from "@/features/planet-commands/store";
 import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
@@ -312,22 +313,12 @@ export function PlanetPage() {
 
   /**
    * 缩略图右键下令的本地拦截回执（无选中单位 / 未编组小队）：
-   * 与 use-planet-interactions 的 reportLocalBlock 同口径，写进命令 journal 的失败条目，
-   * 让「右键缩略图没反应」变成一个可见的失败提示而不是静默。
+   * 与 use-planet-interactions 的 reportLocalBlock 共用 local-preflight 同一条路径
+   * （journal 失败条目 + 全局 danger toast），让「右键缩略图没反应」变成一个
+   * 可见的失败提示而不是静默（试玩 1014 层 01 P1）。
    */
   function reportMinimapBlock(message: string, position: { x: number; y: number }) {
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: globalThis.crypto?.randomUUID?.() ?? `minimap-block-${Date.now()}`,
-      commandType: "move",
-      planetId: planet.planet_id,
-      status: "failed",
-      acceptedMessage: "move 未下达",
-      authoritativeCode: "LOCAL_PREFLIGHT",
-      authoritativeMessage: message,
-      authoritativeSource: "response",
-      focus: { position: { ...position, z: 0 } },
-      pendingRecovery: false,
-    });
+    reportLocalPreflightBlock("move", planet.planet_id, message, { position: { ...position, z: 0 } });
   }
 
   /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */

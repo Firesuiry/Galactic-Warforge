@@ -25,10 +25,10 @@ import type {
 
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
-import { sfx } from '@/engine/audio';
 import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
 import { getBuildingDisplayName, getItemDisplayName } from '@/features/planet-map/model';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
+import { reportLocalPreflightBlock } from '@/features/planet-commands/local-preflight';
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -45,19 +45,7 @@ import { emitCommandMarker } from '@/features/planet-map/command-markers';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
 function reportLocalBlock(commandType: string, planetId: string, message: string, focus?: { buildingType?: string; position?: Position }) {
-  usePlanetCommandStore.getState().addJournalEntry({
-    requestId: globalThis.crypto?.randomUUID?.() ?? `local-block-${Date.now()}`,
-    commandType,
-    planetId,
-    status: 'failed',
-    acceptedMessage: `${commandType} 未下达`,
-    authoritativeCode: 'LOCAL_PREFLIGHT',
-    authoritativeMessage: message,
-    authoritativeSource: 'response',
-    focus,
-    pendingRecovery: false,
-  });
-  sfx.commandFail();
+  reportLocalPreflightBlock(commandType, planetId, message, focus);
 }
 
 /** 在指定 tile 上寻找攻击目标：优先敌军势力，其次非己方单位。 */

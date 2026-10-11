@@ -7,6 +7,7 @@ import { usePlanetInteractions } from '@/features/planet-map/use-planet-interact
 import type { PlanetRenderView } from '@/features/planet-map/model';
 import { resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
+import { useNotificationsStore } from '@/features/notifications/store';
 import { useSessionStore } from '@/stores/session';
 import { renderHook } from '@testing-library/react';
 
@@ -28,7 +29,10 @@ vi.mock('@/hooks/use-api-client', () => ({
   useApiClient: () => mockClient,
 }));
 
-vi.mock('@/features/planet-commands/executor', () => ({
+vi.mock('@/features/planet-commands/executor', async (importOriginal) => ({
+  // notifyLocalBlock 保留真实实现：本地拦截 toast 的合并/节流行为正是本文件的断言对象。
+  ...(await importOriginal<typeof import('@/features/planet-commands/executor')>()),
+  // 透传执行 execute，使命令客户端调用可被断言
   submitPlanetCommand: (input: { execute: () => Promise<unknown> }) => submitMock(input),
 }));
 
@@ -185,6 +189,71 @@ describe('usePlanetInteractions', () => {
     expect(journal[0]?.authoritativeCode).toBe('LOCAL_PREFLIGHT');
     // 占位文案与服务端 tileOccupiedMessage 同口径（试玩 1011 E）。
     expect(journal[0]?.authoritativeMessage).toBe('无法建造：该格已有你的建筑：电力感应塔');
+  });
+
+  it('本地预检拦截也弹全局 danger toast：抽屉关闭时玩家仍看得到（试玩 1014 层 01 P1）', () => {
+    const { interactions, planet } = setup();
+    planet.buildings = {
+      'b-1': {
+        id: 'b-1',
+        type: 'tesla_tower',
+        owner_id: 'p1',
+        position: { x: 4, y: 4, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 3,
+        runtime: {},
+      } as never,
+    };
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'wind_turbine',
+      direction: 'auto',
+    });
+
+    interactions.interactTile({ x: 4, y: 4 });
+
+    const toasts = useNotificationsStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toMatchObject({
+      kind: 'danger',
+      title: '建造失败',
+      body: '无法建造：该格已有你的建筑：电力感应塔',
+    });
+  });
+
+  it('本地预检拦截：同原因连续点按合并计数，不刷屏（试玩 1014 层 01 P1）', () => {
+    const { interactions, planet } = setup();
+    planet.terrain![12][12] = 'water';
+    // 建造模式连续点同一片不可建地形（建造模式保持，可连点）
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'wind_turbine',
+      direction: 'auto',
+    });
+
+    interactions.interactTile({ x: 12, y: 12 });
+    interactions.interactTile({ x: 12, y: 12 });
+    interactions.interactTile({ x: 12, y: 12 });
+
+    const toasts = useNotificationsStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]?.count).toBe(3);
+    expect(toasts[0]?.body).toBe('无法建造：地形不可建造');
+  });
+
+  it('未探索区不本地拦截时也不弹 toast（命令照常下发，以服务端回执为准）', () => {
+    const { interactions } = setup();
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'wind_turbine',
+      direction: 'auto',
+    });
+
+    interactions.interactTile({ x: 12, y: 12 });
+
+    expect(useNotificationsStore.getState().toasts).toHaveLength(0);
   });
 
   it('build 模式：未探索区（地形 unknown）不本地拦截，命令照常下发（试玩 1009 F）', () => {

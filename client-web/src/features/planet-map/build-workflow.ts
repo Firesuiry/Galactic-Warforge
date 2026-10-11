@@ -156,6 +156,27 @@ export function compareBuildItems(entry: Pick<BuildingCatalogEntry, 'build_cost'
 }
 
 /**
+ * 买不起的原因文案（不看格子，只看造价余额）：缺的物品在前、矿石在后，
+ * 与服务端拒绝/本地预检同口径——「缺少 齿轮 1、铁块 6、矿石 10」。
+ * 建造栏的缺料提示条与鼠标旁的放置提示都用它，玩家在两处看到同一句话（试玩 1014 层 01 P2）。
+ */
+export function describeBuildShortage(
+  entry: Pick<BuildingCatalogEntry, 'build_cost'> | undefined,
+  inventory: ItemInventory | undefined,
+  mineralsBalance: number | undefined,
+  itemName: (itemId: string) => string = (id) => id,
+): string {
+  const parts = compareBuildItems(entry, inventory)
+    .filter((item) => item.short)
+    .map((item) => `${itemName(item.item_id)} ${item.quantity - item.owned}`);
+  const mineralCost = entry?.build_cost?.minerals ?? 0;
+  if (mineralsBalance !== undefined && mineralsBalance < mineralCost) {
+    parts.push(`矿石 ${mineralCost - mineralsBalance}`);
+  }
+  return parts.join('、');
+}
+
+/**
  * 预览旁显示的中文原因：缺料优先，其次第一处格子阻挡（原因与锚点格由 primaryBlockedTile 定序）。
  *
  * 占位（reason 'building'）必须与服务端回执完全同口径

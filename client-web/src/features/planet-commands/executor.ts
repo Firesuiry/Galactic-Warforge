@@ -29,11 +29,17 @@ function createLocalRequestId(commandType: string) {
     ?? `local-${commandType}-${Date.now()}`;
 }
 
+/** 本地预检拦截的节流窗口（ms）：消退后此时长内同原因只进历史，不再弹（连点不刷屏）。 */
+const LOCAL_BLOCK_THROTTLE_MS = 8000;
+
 /**
  * 命令失败时弹全局 danger toast：工作台抽屉里的文字反馈不够显眼，
  * 玩家需要立刻知道「哪条命令失败、为什么」。
+ *
+ * throttleMs 只给本地预检拦截用（同原因连点合并计数 + 消退后节流）；
+ * 服务端拒绝是每次操作的真实结论，不节流。
  */
-function notifyCommandFailure(commandType: string, playerMessage: string, href?: string) {
+function notifyCommandFailure(commandType: string, playerMessage: string, href?: string, throttleMs?: number) {
   if (isNotificationsFrozen()) {
     return;
   }
@@ -43,7 +49,18 @@ function notifyCommandFailure(commandType: string, playerMessage: string, href?:
     body: playerMessage,
     href,
     mergeKey: href ? "command-fail:GAME_FINISHED" : `command-fail:${commandType}`,
+    ...(throttleMs ? { throttleMs } : {}),
   });
+}
+
+/**
+ * 本地预检拦截（缺料 / 占格 / 资源点 / 无选中单位…）也走同一条全局 danger toast：
+ * 这类拦截根本不下发命令，若只写 journal 条目，玩家在工作台抽屉关闭时（默认布局）
+ * 拿不到任何持久反馈，触屏/笔更没有 hover 提示，观感就是「点了没反应」（试玩 1014 层 01 P1）。
+ * 同 mergeKey 在窗口内合并计数、消退后节流，避免连续点同一原因刷屏。
+ */
+export function notifyLocalBlock(commandType: string, playerMessage: string) {
+  notifyCommandFailure(commandType, playerMessage, undefined, LOCAL_BLOCK_THROTTLE_MS);
 }
 
 export async function submitPlanetCommand(input: SubmitPlanetCommandInput) {

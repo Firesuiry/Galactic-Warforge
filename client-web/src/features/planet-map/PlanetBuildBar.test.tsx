@@ -113,6 +113,33 @@ describe('PlanetBuildBar', () => {
     });
   });
 
+  it('选中买不起的卡片时，建造栏立即给出缺料提示（试玩 1014 层 01 P2）', async () => {
+    const user = userEvent.setup();
+    const itemCatalog = { ...catalog, items: [{ id: 'gear', name: '齿轮' }, { id: 'iron_ingot', name: '铁块' }], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
+      ? { ...entry, build_cost: { minerals: 30, energy: 0, items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
+      : entry) } as CatalogView;
+    const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 20, energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
+
+    const card = screen.getByRole('button', { name: /风力发电机/ });
+    // 买不起的卡片仍可选中（玩家可能想先看预览）
+    expect(card).not.toBeDisabled();
+    expect(screen.queryByTestId('planet-build-shortage')).not.toBeInTheDocument();
+
+    await user.click(card);
+
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ kind: 'build', buildingType: 'wind_turbine' });
+    const shortage = screen.getByTestId('planet-build-shortage');
+    // 文案与鼠标旁放置提示同口径：缺的物品在前、矿石在后
+    expect(shortage).toHaveTextContent('无法建造：缺少 齿轮 1、铁块 6、矿石 10');
+    // 缺料时不再显示「移动鼠标预览」的常规提示
+    expect(screen.queryByText(/移动鼠标预览/)).not.toBeInTheDocument();
+
+    // 再次点击退出建造模式后提示消失
+    await user.click(card);
+    expect(screen.queryByTestId('planet-build-shortage')).not.toBeInTheDocument();
+  });
+
   it('点击建筑卡片进入建造模式，再次点击退出', async () => {
     const user = userEvent.setup();
     render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);

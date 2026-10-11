@@ -15,6 +15,7 @@ import { sfx } from '@/engine/audio';
 import {
   compareBuildItems,
   deriveBuildWorkflowView,
+  describeBuildShortage,
   DIRECTION_LABELS,
   isConveyorBeltBuilding,
   listBuildingRecipes,
@@ -145,6 +146,19 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   // 建设资金余额：resources 缺失时视为"未知"，不做置灰（避免旧快照误伤）。
   const mineralsBalance = summary?.players?.[session.playerId]?.resources?.minerals;
   const inventory = summary?.players?.[session.playerId]?.inventory;
+  // 选中的建筑买不起：卡片与建造栏提示条立刻给出「还缺什么」（试玩 1014 层 01 P2）。
+  // 允许选中（玩家可能想先看预览），但反馈必须与鼠标旁放置提示同口径。
+  const activeShortage = useMemo(() => {
+    if (!activeBuildingType) {
+      return '';
+    }
+    return describeBuildShortage(
+      catalog?.buildings?.find((entry) => entry.id === activeBuildingType),
+      inventory,
+      mineralsBalance,
+      (itemId) => getItemDisplayName(catalog, itemId),
+    );
+  }, [activeBuildingType, catalog, inventory, mineralsBalance]);
 
   const visibleEntries = [
     ...workflow.catalog.recommended,
@@ -300,7 +314,11 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       </div>
       <div className="planet-build-bar__footer">
         <div className="planet-build-bar__status">
-          {buildMode ? (
+          {buildMode && activeShortage ? (
+            <span className="planet-build-bar__shortage" role="status" data-testid="planet-build-shortage">
+              无法建造：缺少 {activeShortage}
+            </span>
+          ) : buildMode ? (
             <span className="planet-build-bar__hint">
               放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出
             </span>
