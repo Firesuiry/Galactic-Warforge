@@ -34,6 +34,9 @@ type PlayerState struct {
 	WarBlueprints   map[string]*WarBlueprint  `json:"war_blueprints,omitempty"`
 	WarIndustry     *WarIndustryState         `json:"war_industry,omitempty"`
 	WarCoordination *WarCoordinationState     `json:"war_coordination,omitempty"`
+	// Bot 是服务端 bot 玩家的运营状态（人类玩家为 nil）。随存档持久化：
+	// 波次冷却以它为锚点，读档必须延续而不是从零重算。
+	Bot *BotRuntimeState `json:"bot,omitempty"`
 	// DarkFog 黑雾对该玩家的敌对关系：黑雾默认中立，被该玩家伤害后敌对，
 	// 最后一次伤害后经过 dark_fog_calm_ticks 恢复中立。
 	DarkFog DarkFogRelation `json:"dark_fog"`

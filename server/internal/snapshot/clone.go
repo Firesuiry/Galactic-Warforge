@@ -24,6 +24,7 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		WarBlueprints:   cloneWarBlueprintMap(ps.WarBlueprints),
 		WarIndustry:     cloneWarIndustryState(ps.WarIndustry),
 		WarCoordination: cloneWarCoordinationState(ps.WarCoordination),
+		Bot:             ps.Bot.Clone(),
 	}
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
