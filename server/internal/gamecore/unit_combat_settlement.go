@@ -659,7 +659,7 @@ func mechaStandDown(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarget) []*model.GameEvent {
 	var events []*model.GameEvent
 	if target.ownerID == model.DarkFogOwnerID {
-		events = append(events, provokeDarkFog(ws, unit.OwnerID)...)
+		events = append(events, provokeDarkFog(ws, unit.OwnerID, darkFogStrikeIsAggressive(ws, unit, target))...)
 	}
 	attack := int(float64(unit.Attack) * model.UnitAmmoDamageMultiplier(unit))
 	switch target.kind {

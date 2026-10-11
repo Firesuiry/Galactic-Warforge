@@ -29,6 +29,14 @@ type blackFogTuning struct {
 	guardMax     int     // 守军编制上限
 	ruinRadius   int     // 巢穴遗址安全半径（格）：冷却期内半径内不刷新新巢
 	ruinCooldown int64   // 巢穴遗址冷却（tick）
+	// raidWaveCap 单波报复进攻队的规模上限（守军补员不受限）。
+	// 试玩 1014 TC-07：level 4 巢穴在 tick ~70000 一波就派 7 个进攻单位
+	// （payload count 11 含 4 个守军），三处巢穴同时发波把只有 10 个步兵、
+	// 没炮塔的基地拆光。报复要能造成压力，但不该在早中期一波灭门。
+	raidWaveCap int
+	// raidUnitCap 全场在途报复进攻队的数量上限（守军不计）：敌对的 6000 tick 里
+	// 最多这么多单位同时在奔袭，打完一批才会再放下一批。
+	raidUnitCap int
 }
 
 func blackFogTuningFor(difficulty string) blackFogTuning {
@@ -38,13 +46,16 @@ func blackFogTuningFor(difficulty string) blackFogTuning {
 		return blackFogTuning{}
 	case "easy":
 		return blackFogTuning{meterRate: 0.00008, waveSizeMul: 0.7, nestCap: 4, darkUnitCap: 40, initialNests: 1,
-			guardBase: 1, guardPerLvl: 1, guardMax: 4, ruinRadius: 10, ruinCooldown: 4000}
+			guardBase: 1, guardPerLvl: 1, guardMax: 4, ruinRadius: 10, ruinCooldown: 4000,
+			raidWaveCap: 4, raidUnitCap: 8}
 	case "hard":
 		return blackFogTuning{meterRate: 0.0003, waveSizeMul: 1.4, nestCap: 9, darkUnitCap: 90, initialNests: 3,
-			guardBase: 3, guardPerLvl: 2, guardMax: 10, ruinRadius: 14, ruinCooldown: 2400}
+			guardBase: 3, guardPerLvl: 2, guardMax: 10, ruinRadius: 14, ruinCooldown: 2400,
+			raidWaveCap: 8, raidUnitCap: 20}
 	default: // normal
 		return blackFogTuning{meterRate: 0.00015, waveSizeMul: 1.0, nestCap: 6, darkUnitCap: 60, initialNests: 2,
-			guardBase: 2, guardPerLvl: 1, guardMax: 6, ruinRadius: 12, ruinCooldown: 3000}
+			guardBase: 2, guardPerLvl: 1, guardMax: 6, ruinRadius: 12, ruinCooldown: 3000,
+			raidWaveCap: 6, raidUnitCap: 12}
 	}
 }
 
@@ -57,6 +68,11 @@ const (
 	blackFogWaveIntervalLevelScale = 0.25
 	// blackFogMaxWaveSize 单波次规模上限。
 	blackFogMaxWaveSize = 14
+	// blackFogMaxRaidWaveSize 报复波次（进攻队）单波规模上限的硬顶（难度参数之上）。
+	// 与孵化总上限 blackFogMaxWaveSize 分开：守军补员不受此限，报复才受限。
+	blackFogMaxRaidWaveSize = 8
+	// blackFogRaidUnitCap 报复进攻队的全场数量上限硬顶（守军不计）。
+	blackFogRaidUnitCap = 20
 	// blackFogRaidReassignTicks 空闲黑雾单位重新指派袭击目标的间隔。
 	blackFogRaidReassignTicks = 40
 	// blackFogNestMinPlayerDistance 新巢穴距玩家建筑的最小距离（尽力满足）。
@@ -118,13 +134,17 @@ func (gc *GameCore) settleEnemyForces(ws *model.WorldState) []*model.GameEvent {
 	}
 
 	// 3. 波次孵化（E1）：每个巢穴按自身节奏孵化一波蜂群单位。
+	//    报复进攻队另有单波/在途规模上限（raidWaveCap/raidUnitCap）：黑雾被激怒后
+	//    不会一口气把所有巢穴的兵全压向玩家基地（试玩 1014 TC-07）。
 	if tuning.darkUnitCap > 0 && blackFogUnitCount(ws) < tuning.darkUnitCap {
+		raidRemaining := blackFogRaidUnitCapFor(tuning) - blackFogRaidUnitCount(ws)
 		for _, nest := range blackFogNests(ws) {
 			if ws.Tick-nest.LastWaveTick < blackFogWaveInterval(level) {
 				continue
 			}
 			nest.LastWaveTick = ws.Tick
-			events = append(events, gc.spawnBlackFogWave(ws, nest, level, tuning)...)
+			events = append(events, gc.spawnBlackFogWave(ws, nest, level, tuning, raidRemaining)...)
+			raidRemaining = blackFogRaidUnitCapFor(tuning) - blackFogRaidUnitCount(ws)
 			if blackFogUnitCount(ws) >= tuning.darkUnitCap {
 				break
 			}
@@ -223,6 +243,30 @@ func blackFogUnitCount(ws *model.WorldState) int {
 	return count
 }
 
+// blackFogRaidUnitCapFor 难度参数的在途报复上限，夹在硬顶内（配置写错也不会失控）。
+func blackFogRaidUnitCapFor(tuning blackFogTuning) int {
+	if tuning.raidUnitCap <= 0 || tuning.raidUnitCap > blackFogRaidUnitCap {
+		return blackFogRaidUnitCap
+	}
+	return tuning.raidUnitCap
+}
+
+// blackFogRaidUnitCount 统计当前在途/在攻的报复进攻队数量（守军不计）。
+// 报复规模上限用它计余额：守军补员不受限，进攻队才受限。
+func blackFogRaidUnitCount(ws *model.WorldState) int {
+	count := 0
+	for _, unit := range ws.Units {
+		if unit == nil || unit.OwnerID != model.DarkFogOwnerID || unit.HP <= 0 {
+			continue
+		}
+		if unit.Stance == model.UnitStanceGuard {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 // spawnBlackFogNest 在远离玩家建筑的位置生成新巢穴。
 // 位置由 (行星, 巢穴序号, 盐值) 的 FNV 哈希确定性派生——不消费随机序列，
 // 回放、读档与回滚在任何时刻得到完全相同的位置。
@@ -304,7 +348,9 @@ func nestSiteInRuinCooldown(ws *model.WorldState, pos model.Position, tuning bla
 
 // spawnBlackFogWave 巢穴孵化一波蜂群单位：守军先补足编制（guard 姿态锚定巢位，E4），
 // 其余为进攻队（attack_move 指派袭击目标，E1/E3）。
-func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyForce, level int, tuning blackFogTuning) []*model.GameEvent {
+// raidRemaining 是本次波次还能派出的进攻单位上限（在途报复上限的余额，<0 视为 0）；
+// 守军补员不受它约束，所以巢穴被激怒时仍能补防，但不会一次把兵全压向玩家。
+func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyForce, level int, tuning blackFogTuning, raidRemaining int) []*model.GameEvent {
 	waveSize := int(float64(3+level+int(ws.EnemyForces.ThreatMeter/200.0)) * tuning.waveSizeMul)
 	if waveSize > blackFogMaxWaveSize {
 		waveSize = blackFogMaxWaveSize
@@ -312,21 +358,32 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 	if waveSize < 1 {
 		waveSize = 1
 	}
-
 	nestLvl := nestLevel(nest)
-	guardNeed := blackFogGuardCap(nestLvl, tuning) - blackFogNestGuardCount(ws, nest.ID)
+	guardCap := blackFogGuardCap(nestLvl, tuning)
+	guardNeed := guardCap - blackFogNestGuardCount(ws, nest.ID)
 	if guardNeed < 0 {
 		guardNeed = 0
 	}
 
+	// 报复规模封顶：波次规模是「编制之外的出击富余」（waveSize 里本来就含守军编制，
+	// 守军不外派），再夹上单波 raidWaveCap（含硬顶）与全场在途余额。
+	// 巢穴满编时出击富余就是整波规模，正是试玩 1014 里三巢齐发压垮基地的场景。
+	waveCap := tuning.raidWaveCap
+	if waveCap <= 0 || waveCap > blackFogMaxRaidWaveSize {
+		waveCap = blackFogMaxRaidWaveSize
+	}
+	raiderBudget := min(max(waveSize-guardCap, 0), waveCap)
+	raiderBudget = min(raiderBudget, max(raidRemaining, 0))
+
 	// 黑雾被动：没有敌对玩家时只补守军，不派进攻队。
 	target := selectBlackFogRaidTarget(ws, nest.Position)
 	if target == nil {
-		waveSize = 0
+		raiderBudget = 0
 	}
 	spawned := 0
 	spawnedGuards := 0
-	for i, candidate := range blackFogSpawnTiles(ws, nest.Position, waveSize+guardNeed) {
+	spawnedRaiders := 0
+	for i, candidate := range blackFogSpawnTiles(ws, nest.Position, guardNeed+raiderBudget) {
 		unit := newBlackFogUnit(ws, candidate, level)
 		if i < guardNeed {
 			// 守军：守卫巢穴，锚点在巢位，守巢半径随巢穴等级缩放。
@@ -338,6 +395,8 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 			spawnedGuards++
 		} else if target != nil {
 			unit.AttackTarget = target.building.ID
+			// 用局部变量取址，别直接 OrderPos = &target.building.Position：
+			// 那会让 OrderPos 指进 EnemyForce 的存储，且目标建筑被摧毁后仍指向旧值。
 			orderPos := target.building.Position
 			unit.OrderPos = &orderPos
 			unit.Stance = model.UnitStanceAttackMove
@@ -345,13 +404,14 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 				unit.Path = path
 				unit.PathIndex = 1
 			}
+			spawnedRaiders++
 		}
 		ws.Units[unit.ID] = unit
 		key := model.TileKey(candidate.X, candidate.Y)
 		ws.TileUnits[key] = append(ws.TileUnits[key], unit.ID)
 		spawned++
 	}
-	if spawned == 0 || target == nil {
+	if spawned == 0 || spawnedRaiders == 0 {
 		return nil // 只补守军不算来袭
 	}
 
@@ -361,6 +421,7 @@ func (gc *GameCore) spawnBlackFogWave(ws *model.WorldState, nest *model.EnemyFor
 		"from":       nest.Position,
 		"count":      spawned,
 		"guards":     spawnedGuards,
+		"raiders":    spawnedRaiders,
 		"level":      level,
 		"threat":     ws.EnemyForces.ThreatLevel,
 		"wave_tick":  ws.Tick,
@@ -479,11 +540,19 @@ func blackFogBuildingRank(ws *model.WorldState, b *model.Building) int {
 	return 4
 }
 
-// selectBlackFogRaidTarget 选取最优袭击目标：最优优先级内距离最近。
+// selectBlackFogRaidTarget 选取最优袭击目标：最优优先级内距离最近，同优先级同距离按建筑 ID 定序。
+// 建筑表是 map，等距时必须用 ID 兜底，否则同一存档在不同进程里会选出不同的袭击目标
+// （回放/读档不再逐 tick 一致）。
 func selectBlackFogRaidTarget(ws *model.WorldState, from model.Position) *blackFogRaidTarget {
+	ids := make([]string, 0, len(ws.Buildings))
+	for id := range ws.Buildings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
 	var best *blackFogRaidTarget
 	bestDist := -1
-	for _, b := range ws.Buildings {
+	for _, id := range ids {
+		b := ws.Buildings[id]
 		if b == nil || b.HP <= 0 || !hostile(ws, model.DarkFogOwnerID, b.OwnerID) {
 			continue
 		}

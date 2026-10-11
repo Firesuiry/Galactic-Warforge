@@ -126,7 +126,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 		} else if targetedForce >= 0 {
 			// Attack enemy force
 			force := &ws.EnemyForces.Forces[targetedForce]
-			events = append(events, provokeDarkFog(ws, turret.OwnerID)...)
+			events = append(events, provokeDarkFog(ws, turret.OwnerID, darkFogForceIsStatic(force))...)
 			damage := attack
 			// Shield mitigation (30% damage to shield, 70% to HP)
 			if force.SpreadRadius > 0 { // using spreadRadius as shield proxy
@@ -168,7 +168,7 @@ func settleTurrets(ws *model.WorldState) []*model.GameEvent {
 			// Attack enemy unit
 			unit := ws.Units[targetedUnit]
 			if unit.OwnerID == model.DarkFogOwnerID {
-				events = append(events, provokeDarkFog(ws, turret.OwnerID)...)
+				events = append(events, provokeDarkFog(ws, turret.OwnerID, !darkFogUnitIsRetaliating(ws, unit))...)
 			}
 			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
 			turretWeapon := model.WeaponClassForBuilding(turret.Type)

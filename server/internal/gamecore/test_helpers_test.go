@@ -70,6 +70,6 @@ func grantItems(ws *model.WorldState, playerID string, items ...model.ItemAmount
 // provokeDarkFogFor 测试用：让黑雾对这些玩家处于敌对（模拟玩家先动手）。
 func provokeDarkFogFor(ws *model.WorldState, playerIDs ...string) {
 	for _, pid := range playerIDs {
-		provokeDarkFog(ws, pid)
+		provokeDarkFog(ws, pid, true)
 	}
 }

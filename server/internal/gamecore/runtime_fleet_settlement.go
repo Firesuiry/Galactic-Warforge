@@ -151,7 +151,7 @@ func settleSpaceFleets(worlds map[string]*model.WorldState, _ any, spaceRuntime 
 				targetStrengthLoss := max(1, directDamage+fleetMissileDamage/6)
 				targetStrengthBefore := target.Strength
 				target.Strength -= targetStrengthLoss
-				provoked := provokeDarkFog(targetWorld, fleet.OwnerID)
+				provoked := provokeDarkFog(targetWorld, fleet.OwnerID, darkFogForceIsStatic(target))
 				fleet.LastAttackTick = currentTick
 				fleet.Weapon.LastFireTick = currentTick
 				settleAttackConsumption(&fleet.Sustainment, fleet.Weapon, currentTick)

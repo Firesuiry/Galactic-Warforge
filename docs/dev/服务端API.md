@@ -313,7 +313,9 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 炮塔每 tick 自动选取射程内敌方目标并产生 `damage_applied`，按 `Combat.fire_rate` 冷却：`missile_turret` 耗 `ammo_missile`；`implosion_cannon` 耗 `shell_set`（可装 `crystal_shell_set`）；`plasma_turret` 耗 `plasma_capsule`；`laser_turret` 只耗电；`anti_air_turret`（射程 10，只打空中，耗 `ammo_missile`）还会击落敌方飞行中的物流无人机/配送机器人（`entity_destroyed.reason="shot_down"`，含 `cargo_lost`）；`artillery_turret`（射程 15、最小射程 4，只打地面）耗 `shell_set`/`crystal_shell_set`。缺弹发 `building_state_changed(reason=no_ammunition)` 停火，重装后恢复。
 - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator` 接入电网后才 `running`。行星护盾先吸收对建筑的所有外部伤害（`damage_applied.shield_absorbed` / `shield_remaining`）。
 - 黑雾：巢穴（`enemy_forces[]` 中的 hive，`strength` 即 HP，`level` 为等级）按威胁节奏孵化 `owner_id="dark_fog"` 单位，与玩家单位共用移动/交战结算。威胁值随全行星发电累积，决定巢穴等级、孵化间隔、波次规模和扩张；袭击优先级：电厂 > 矿区 > 物流线 > 炮塔 > 其他。巢穴位置由（行星, 序号）哈希确定性派生。
-- 黑雾被动：默认对所有玩家中立——不派进攻波次（只补守军，不发 `enemy_wave_incoming`），黑雾单位、巢穴不攻击中立玩家，新巢只建在离玩家建筑足够远的空地，不吞建筑。玩家（含 bot）的单位、炮塔、舰队对黑雾单位或巢穴造成伤害时，黑雾对该玩家敌对到 `当前 tick + battlefield.dark_fog_calm_ticks`（默认 6000，每次再伤害都顺延），首次转敌对发 `dark_fog_provoked`。敌对期间波次只派向敌对玩家，黑雾单位、巢穴反击只打敌对玩家，玩家单位和炮塔也会自动打黑雾。到期恢复中立、发 `dark_fog_calmed`，奔袭中的黑雾撤回巢穴。bot 不主动攻击中立黑雾。
+- 黑雾被动：默认对所有玩家中立——不派进攻波次（只补守军，不发 `enemy_wave_incoming`），黑雾单位、巢穴不攻击中立玩家，新巢只建在离玩家建筑足够远的空地，不吞建筑。**只有「主动挑衅」才会激怒黑雾**：伤害黑雾建筑（巢穴/中继等静态强度点），或攻击一个当时**没有在攻击该玩家**的黑雾单位。**自卫还手不算挑衅**——对正在攻击自己/己方单位/己方建筑的黑雾单位（已锁定该玩家实体，或该玩家单位记着它是 `LastAttackerID`）开火，不新激怒、也不顺延敌对计时；否则黑雾只要在打你，自动还手就会把计时无限续下去，玩家永远回不到中立（试玩 1014 TC-07）。首次主动挑衅时黑雾对该玩家敌对到 `当前 tick + battlefield.dark_fog_calm_ticks`（默认 6000），此后**每次主动挑衅**再顺延，首次转敌对发 `dark_fog_provoked`。敌对期间波次只派向敌对玩家，黑雾单位、巢穴反击只打敌对玩家，玩家单位和炮塔也会自动打黑雾。到期恢复中立、发 `dark_fog_calmed`，奔袭中的黑雾撤销奔袭返回巢穴。bot 不主动攻击中立黑雾。
+- 报复强度封顶（试玩 1014 TC-07：level 4 巢穴一次发波就把没有炮塔的基地拆光）：单波进攻队 ≤ `raidWaveCap`、全场在途进攻队 ≤ `raidUnitCap`（easy 4/8，normal 6/12，hard 8/20），巢穴守军补员不受限（被激怒的巢穴仍能补防）。到在途上限后打完一批才放下一批。
+- 袭击目标选择确定性：同等优先级、同等距离时按建筑 ID 定序（建筑表是 map，等距必须有 ID 兜底），否则同一存档在不同进程会选出不同目标、回放/读档不再逐 tick 一致。
 - 巢穴守军：编制 = 难度基数 + 每级增量（easy 1+1/级 上限 4，normal 2+1/级 上限 6，hard 3+2/级 上限 10），守巢半径随等级 +2/级，不外派，死亡由后续波次补足。
 - 巢穴摧毁：掉落数量乘 `1+0.5×(level−1)`（向上取整，`dark_fog_matrix` 保底 level+1），威胁扣 `level×50`（下限 0），广播 `enemy_nest_destroyed`；遗址冷却期内（easy 4000 / normal 3000 / hard 2400 tick）半径（10 / 12 / 14 格）内不刷新巢。
 - 隐藏科技（如 `dark_fog_matrix`）在玩家持有其成本物品前不可见、拒绝研究。
@@ -658,7 +660,7 @@ GameEvent：
 | `supply_line_disrupted` | 预留；封锁拦截计数目前只在 `planet_blockades[]` 中 |
 | `dark_fog_provoked` | 全员可见；`player_id` / `until_tick`：黑雾开始对该玩家敌对 |
 | `dark_fog_calmed` | 全员可见；`player_id`：黑雾对该玩家恢复中立 |
-| `enemy_wave_incoming` | 全员可见；只在有敌对玩家时发；`nest_id` / `planet_id` / `from` / `count` / `guards` / `level` / `threat` / `wave_tick` / `unit_speed` / 目标信息 |
+| `enemy_wave_incoming` | 全员可见；只在有敌对玩家时发；`nest_id` / `planet_id` / `from` / `count`（本波单位总数）/ `guards`（守军补员数）/ `raiders`（进攻队数量，受 `raidWaveCap`/`raidUnitCap` 限制）/ `level` / `threat` / `wave_tick` / `unit_speed` / 目标信息；只补守军的波次不发 |
 | `enemy_nest_destroyed` | 全员可见；`nest_id` / `position` / `level` / `killed_by` / `killer_owner` / `source` / `drops[]` / `threat_meter` |
 
 ## 8. 关键概念与事实源
