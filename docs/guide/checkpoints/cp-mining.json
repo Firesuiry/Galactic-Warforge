@@ -1,0 +1,23 @@
+{
+  "parent": "cp-power",
+  "note": "1014 L2 层 02（第二轮重建）：从 cp-power（tick 5875）读档，只用网页 UI 手动采集 + 机甲面板手搓，把第一台采矿机建在铜矿 (20,47) 上并通电出矿（b-33，state=running，电力分配 2/2，产出速率 8/tick）。上一层的 4 座电塔 (20,46)/(20,45)/(21,46)/(21,47) 已经覆盖 (20,47)（到 (21,47) 地表距离 1 格），因此本层没有补电塔。契约用 building_running_gte 卡风机与矿机（矿机必须真的 running 出矿，不能是没电/缺料的坏层）。",
+  "build": [
+    "读档 cp-power（tick 5875），等约 50 tick 后开始",
+    "UI：选中机甲 u-5(18,43) →「采集脚下铁矿」→ 采集数量 12 →「手动采集」（tick 6190 起，采到 tick 6311；铁矿 12）",
+    "UI：点铜矿格 (19,43) →「手动采集」×4（tick 6425；铜矿 6）",
+    "UI：机甲面板手搓 smelt_iron ×8（tick 6464 起，8 批 ×60 tick）",
+    "UI：手搓 smelt_copper ×3（tick 6957 起）",
+    "UI：依次手搓 smelt_magnet ×2（→磁铁2）、circuit_board ×2、gear ×2、magnetic_coil ×1（→磁线圈2），tick 7625 全部完成",
+    "UI：建造栏「采矿机」→ 点铜矿格 (20,47)（tick 7646），建成 b-33 state=running（首点即落地，无需刷新）",
+    "存档 cp-mining（契约 5 条全过）"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 1},
+      {"kind": "building_running_gte", "player": "p1", "type": "mining_machine", "n": 1},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+    ]
+  }
+}
