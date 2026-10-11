@@ -1,18 +1,17 @@
 {
   "parent": "cp-near-hive",
-  "note": "1014 L14（TC-07 分支层）：从 cp-near-hive（tick 70285）读档，只用网页 UI 让 10 个步兵（u-108..u-117）整队右键攻击最近的已确认黑雾巢穴 enemy-92（type=hive，@(101,179)，level 4，strength 220）。首帧伤害 tick 70345 触发 dark_fog_provoked（payload until_tick=76357），dark_fog.hostile 翻 true；此后 p1 对黑雾的每次伤害都把 hostile_until_tick 顺延到「本次伤害 tick + 6000」，最后一次伤害 tick 70595（步兵在此时打爆巢穴 enemy-92），故冻结态 hostile_until_tick=76595，与 config DarkFogCalmTicks=6000 精确一致。UI 表现全部到位：新手引导提示条变红「黑雾正在报复你：先回防基地…」、悬停巢穴显示「黑雾（敌对）」、铃铛历史有「你激怒了黑雾｜10 分钟内会遭到报复，停止攻击后才会恢复中立」。黑雾报复已发生：巢穴立刻孵化守卫 df-130..df-140 扑向步兵（tick 70367-70487 打死 5 个步兵，units_lost 8→13），三个巢穴（enemy-92/83/8，另有新巢 enemy-118）先后发出 enemy_wave_incoming 波次打向基地 (20,49)/(21,48)/(22,47)，波次单位 attack_target 指向 b-72/b-48/b-33 等基地建筑（一次未干预的子跑里黑雾把基地拆光、p1 于 tick 72307 被淘汰，故本层刻意撤兵停火）。步兵已用「停止」清目标停火、并撤到距巢穴 78+ 格的 (82,97-102)。本存档点冻结在「已停火、等待 6000 tick 冷静期」的状态，供主代理用高 tick 速率空等到 tick >= 76595 验证 dark_fog_calmed 事件与 dark_fog.hostile=false（恢复中立）。契约 5 条服务端校验 passed=true（含 dark_fog_hostile=true）。",
+  "note": "1014 L16（TC-07 重跑，黑雾修复版 42ffb26 之后）：从 cp-near-hive（tick 70285）读档，只用网页 UI 让 10 个步兵（u-108..u-117）整队右键攻击最近的已确认黑雾巢穴 enemy-92（type=hive，@(101,179)）。首帧伤害 tick 70460 触发 dark_fog_provoked（payload until_tick=76460），dark_fog.hostile 翻 true；新手引导提示条变红「黑雾正在报复你：先回防基地。停止攻击黑雾一段时间后，它会恢复中立。」，toast「你激怒了黑雾｜10 分钟内会遭到报复…」，悬停巢穴显示「黑雾（敌对）」。报复封顶（修复 B）生效：三处巢穴的 enemy_wave_incoming 波次 raiders=4/3/1/3/2/2（easy raidWaveCap=4、raidUnitCap=8），不再是旧档的 7-11/波；但巢穴附近的守卫补员不受限，仍成批扑向步兵（df-93..df-132）。5 个步兵用「停止」停火并撤出射程（改用 3D 主视图右键远距离移动，小地图右键被选中条遮挡，见层报告问题 2）；最后一枪是 tick 70698 打爆巢穴 enemy-92，这同时是 p1 对黑雾的最后一次伤害，故 hostile_until_tick = 70698 + 6000 = 76698（与 config dark_fog_calm_ticks=6000 精确一致）。停火后 1800+ tick 内多次 GET /state/summary 采样：黑雾持续打步兵/基地，p1 的自动还手（机甲 u-5 于 71568/71710 还击 df-119/df-128，正是修复口径里的「自卫还手」）**不再顺延** hostile_until_tick，恒为 76698（修复口径 A 验证通过）。本存档点冻结在「已停火、hostile=true、hostile_until_tick=76698」的状态，供主代理用高 tick 速率空跑到 tick >= 76698 验证 dark_fog_calmed 事件与 dark_fog.hostile=false。契约 5 条服务端校验 passed=true。",
   "build": [
-    "读档 cp-near-hive（tick 70285，10 步兵已在 enemy-92 巢穴外 4-7 格、黑雾中立），等约 50 tick 后 L.open3d + G.look(101,179) 归位视角",
-    "GET 基线核对：p1 10 步兵 u-108..u-117 hp100/ammo24、机甲 u-5 hp10@(25,45)、19 建筑、dark_fog.hostile=false / hostile_until_tick=0（截图 14-a-hive-neutral）",
-    "UI：双击一名步兵全选 10 兵（「已选 10 个单位 · 士兵×10」），再右键巢穴 tile (101,179) 下令攻击（截图 14-b-select10-before-attack、14-c-attack-order）",
-    "tick 70345 首帧伤害触发 dark_fog_provoked（until_tick=76357），dark_fog.hostile 翻 true；引导条转红、铃铛出现「你激怒了黑雾」（截图 14-c-provoked-hostile、14-e-notification-history）",
-    "UI：悬停巢穴 tile 确认提示显示「黑雾兵力 / 黑雾（敌对） / 强度」（截图 14-d-hive-hostile-hover）",
-    "观察报复：巢穴孵化守卫 df-130..df-140 扑向步兵并交火；enemy_wave_incoming 三处巢穴同时发波打基地（截图 14-d-hostile-armed、14-i-base-under-attack）",
-    "tick 70595：步兵打爆巢穴 enemy-92（entity_destroyed enemy_force/hive）；这是 p1 对黑雾的最后一次伤害 → hostile_until_tick = 70595+6000 = 76595",
-    "UI：重新全选存活 5 兵 → 点「停止」（unit_order stop，清 attack_target），再收起总览栏 → 小地图右键 (86,179) 下令撤退（截图 14-f-stop-hold、14-f-withdraw-stop）",
-    "观察撤退：5 兵撤到 (82,97-102)，距巢穴 78+ 格，attack_target 全空、不再交火（截图 14-g-army-retreated、14-h-army-retreated-away）",
-    "GET 核对：hostile=true、hostile_until_tick=76595；最后一次 p1→黑雾伤害 tick=70595，70595+6000=76595 与 dark_fog_calm_ticks=6000 吻合",
-    "存 tc07-hostile（tick 71346，契约 5 条服务端全过 passed=true）"
+    "读档 cp-near-hive（tick 70285，10 步兵已在 enemy-92 巢穴外 4-7 格、黑雾中立），等约 50 tick 后 L.open3d + G.look(101,179) 归位视角（截图 16-a-hive-neutral）",
+    "UI：双击一名步兵全选 10 兵（「已选 10 个单位 · 士兵×10」），右键巢穴 tile (101,179) 下令攻击（截图 16-b-select10-before-attack、16-c-attack-order）",
+    "tick 70460 首帧伤害触发 dark_fog_provoked（until_tick=76460），dark_fog.hostile 翻 true；引导条转红、toast「你激怒了黑雾」、toast「侦测到黑雾袭击」（截图 16-d-provoked-hostile）",
+    "UI：悬停巢穴 tile 确认提示显示「黑雾兵力 / 黑雾（敌对） / 强度」（截图 16-e-hive-hostile-hover）",
+    "观察报复：巢穴补守卫 df-93..df-132 扑向步兵并交火；enemy_wave_incoming 三处巢穴发波 raiders=4/3/1（easy 封顶 4/波、8 在途），payload target_pos 指向基地 (20,49)/(21,48)（截图 16-i-base-under-attack）",
+    "UI：重新选中存活 5 兵 → 点「停止」（清 attack_target、不再交战，截图 16-f-stop-order）",
+    "UI：3D 主视图把镜头移到 (62,179) 后右键下令撤退（小地图右键被选中条遮挡，改用主视图；截图 16-g-look-west、16-g-withdraw-order）",
+    "tick 70698：5 兵在撤出射程的最后一刻打爆巢穴 enemy-92（entity_destroyed enemy_force/hive）；这是 p1 对黑雾的最后一次伤害 → hostile_until_tick = 70698 + 6000 = 76698",
+    "GET 采样核对（tick 71527-72819）：hostile=true、hostile_until_tick 恒为 76698；期间机甲 u-5 自卫还击 df-119/df-128（tick 71568/71574/71580/71586/71592/71598/71604/71710/71716/71722）**未顺延**计时（修复口径 A 验证）",
+    "存 tc07-hostile（tick 71527，契约 5 条服务端全过 passed=true）"
   ],
   "contract": {
     "checks": [
