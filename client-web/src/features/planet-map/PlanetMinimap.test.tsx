@@ -177,4 +177,35 @@ describe('PlanetMinimap 右键下令', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('把实测宽度写进 --planet-minimap-width（底部浮层据此让出右下角走廊）', async () => {
+    // 试玩 1014 层 16 问题 1 / 层 15 问题 2：选中条/建造栏（z-index 8）压住小地图
+    // （z-index 4）吞掉右键移动令。CSS 用 --planet-minimap-width 让浮层右侧留出走廊，
+    // 值同样必须来自实测（宽度随右侧停靠栏/总览栏变化），不能写死。
+    const observers: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { observers.push(callback); }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
+    try {
+      const { unmount } = render(<PlanetMinimap fog={makePlanet()} planet={makePlanet()} />);
+      const root = document.querySelector('.planet-minimap') as HTMLElement;
+      Object.defineProperty(root, 'offsetWidth', { configurable: true, value: 170 });
+      await act(async () => {
+        for (const notify of observers) notify();
+      });
+      expect(
+        document.documentElement.style.getPropertyValue('--planet-minimap-width'),
+      ).toBe('170px');
+
+      unmount();
+      expect(
+        document.documentElement.style.getPropertyValue('--planet-minimap-width'),
+      ).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

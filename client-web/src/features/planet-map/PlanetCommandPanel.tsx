@@ -18,6 +18,7 @@ import {
   canReceiveTransferItems,
   constructionTaskLabel,
   describeConstructionWait,
+  estimateTransferAcceptance,
   findLogisticsStation,
   formatItemInventorySummary,
   formatPosition,
@@ -533,6 +534,24 @@ export function PlanetCommandPanel({
     transferItemOwned !== undefined &&
     transferQuantityValue !== undefined &&
     transferQuantityValue > transferItemOwned;
+  /**
+   * 装入前的事前可收量估算（试玩 1014 层 15 问题 4）：旧表单只报背包有多少，玩家要等回执
+   * 「已装入 N 个…M 个留在背包」才知道建筑装不下。这里按服务端结算口径复刻（物流站按单项
+   * 容量、其他建筑按主库存可用量 + 输入缓冲），所以文案统一带「约」。
+   *
+   * 估算的量必须与服务端真正提交的量一致，所以两个入口（空数量 = 背包全部、有数量 = 该数量）
+   * 都按「背包持有量」裁剪，不能把估算口径和提交口径分开算。
+   */
+  const transferAcceptance = useMemo(() => {
+    const owned = transferItemOwned ?? 0;
+    const requested = transferQuantityValue ?? owned;
+    return estimateTransferAcceptance(
+      selectedTransferBuilding ?? undefined,
+      transferItemId,
+      requested,
+      owned,
+    );
+  }, [selectedTransferBuilding, transferItemId, transferQuantityValue, transferItemOwned]);
 
   useEffect(() => {
     const nextResearchId = researchGroups.available[0]?.id ?? "";
@@ -1780,6 +1799,22 @@ export function PlanetCommandPanel({
               {!noTransferItemOption ? (
                 <p className="subtle-text field--span-2">
                   背包 {transferItemId ? `${getItemDisplayName(catalog, transferItemId)} ${transferItemOwned ?? 0} 个` : "—"}
+                </p>
+              ) : null}
+              {/* 事前可收量（试玩 1014 层 15 问题 4）：装不下时先说清楚，别等回执才告诉玩家。
+                  这里不用 role="status"：数量不足的提示已经占用了那个 live region。
+                  「留在背包」= 提交量 − 可收量，与回执里服务端算出的数同一口径（估算本身按
+                  建筑 storage 字段复刻服务端结算路径，故带「约」）。 */}
+              {!noTransferItemOption && transferItemId && effectiveTransferBuildingId ? (
+                <p
+                  className="subtle-text field--span-2"
+                  data-testid="transfer-acceptance"
+                >
+                  {transferAcceptance.blocked
+                    ? `目标建筑现在收不下：${transferAcceptance.reason}`
+                    : transferAcceptance.accepted >= (transferQuantityValue ?? transferItemOwned ?? 0)
+                      ? `目标建筑还能收约 ${transferAcceptance.accepted} 个 ${getItemDisplayName(catalog, transferItemId)}。`
+                      : `目标建筑还能收约 ${transferAcceptance.accepted} 个 ${getItemDisplayName(catalog, transferItemId)}，超出的 ${transferAcceptance.remaining} 个会留在背包。`}
                 </p>
               ) : null}
               <button

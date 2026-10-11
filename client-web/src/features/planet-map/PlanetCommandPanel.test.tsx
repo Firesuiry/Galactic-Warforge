@@ -1108,6 +1108,78 @@ describe("PlanetCommandPanel", () => {
     expect(screen.getByRole("button", { name: "装入建筑" })).toBeDisabled();
   });
 
+  it("回归（试玩 1014 层 15 问题 4）：装入前先报目标建筑还能收多少，超量时说明留在背包几个", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    // 小容量储物仓：容量 20，空库存。背包 50 个矩阵，默认数量 10 装得下。
+    (planet.buildings as Record<string, unknown>)["depot-1"] = {
+      ...supplyStationBuilding("depot-1"),
+      type: "depot_mk1",
+      storage: { capacity: 20, inventory: {} },
+    };
+    const client = createClient();
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={createCatalog() as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({ inventory: { electromagnetic_matrix: 50 } }) as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    const buildingSelect = (await screen.findByLabelText("建筑 ID")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(Array.from(buildingSelect.options).map((o) => o.value)).toContain("depot-1");
+    });
+    await user.selectOptions(buildingSelect, "depot-1");
+
+    // 默认数量 10 ≤ 可收 20：只报还能收多少，不提示剩余。
+    await waitFor(() => {
+      expect(screen.getByTestId("transfer-acceptance")).toHaveTextContent(
+        "目标建筑还能收约 10 个 电磁矩阵",
+      );
+    });
+    expect(screen.getByTestId("transfer-acceptance")).not.toHaveTextContent("留在背包");
+
+    // 数量超过可收量：提前说明会装多少、多少留在背包（不用等回执）。
+    const quantity = screen.getByLabelText("数量");
+    await user.clear(quantity);
+    await user.type(quantity, "30");
+    expect(screen.getByTestId("transfer-acceptance")).toHaveTextContent(
+      "目标建筑还能收约 20 个 电磁矩阵，超出的 10 个会留在背包",
+    );
+  });
+
+  it("回归（试玩 1014 层 15 问题 4）：目标建筑装不下时事前给出原因", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    // 主库存已满（20/20）：服务端会回「装入 0 个」，表单要提前说清楚。
+    (planet.buildings as Record<string, unknown>)["depot-1"] = {
+      ...supplyStationBuilding("depot-1"),
+      type: "depot_mk1",
+      storage: { capacity: 20, inventory: { electromagnetic_matrix: 20 } },
+    };
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={createCatalog() as never}
+        client={createClient() as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary({ inventory: { electromagnetic_matrix: 50 } }) as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    await user.selectOptions(await screen.findByLabelText("建筑 ID"), "depot-1");
+    await waitFor(() => {
+      expect(screen.getByTestId("transfer-acceptance")).toHaveTextContent(
+        "目标建筑现在收不下：主库存已满 20/20",
+      );
+    });
+  });
+
   it("回归（试玩 1014 层 12 P1）：提交的 building_id 必须等于下拉里显示的建筑（选中变化只同步一次）", async () => {
     const user = userEvent.setup();
     const planet = createPlanet();
