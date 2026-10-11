@@ -1,27 +1,23 @@
 {
-  "parent": "cp-root",
-  "note": "1013 L1：供电/采矿/冶炼/制造台 全部建成并运行（4 矿机、2 熔炉、2 制造台、3 风机、3 电塔）。测试段全程只用网页 UI 下命令。产线建筑用 building_running_gte（4 矿机 / 2 熔炉 / 2 制造台 / 3 风机 / 2 电塔都必须 state=running，断电的不算）。",
+  "parent": "cp-base-a",
+  "note": "1014 L4 层正式版 cp-base（第二轮重建，replace 掉第一轮从 cp-root 起的旧版）：内容与 cp-base-b 同一局面，是检查点树上 cp-base-a 之后的正规「基地成型」节点。从 cp-base-a（tick 11858）只用网页 UI 建成 3 风机（发电 30）+ 4 采矿机 + 2 电弧熔炉（smelt_iron@21,45 / smelt_copper@21,44）+ 1 制造台 Mk.I（gear@22,44），全部 state=running 且已实际产出成品（铁块/铜块/齿轮）。契约沿用 cp-base-b 的 6 条：4 矿机 + 2 熔炉 + 1 组装机必须 running、p1 存活、游戏未结束、未见敌方攻击。下一层（cp-base 之后的科技/产线层）可直接从这里读档。",
   "build": [
-    "从 cp-root 读档（tick ~90）",
-    "UI：建造栏选「风力涡轮机」→ 点 (16,49)/(17,50)/(20,50)/(22,49)",
-    "UI：「电力感应塔」→ 点 (16,45)/(18,49)/(17,43)",
-    "UI：「采矿机」→ 点矿点 (16,42)=铁矿、(18,42)=铁矿、(19,43)=铜矿、(19,44)=石矿",
-    "UI：「电弧熔炉」→ 点 (20,49) 配方 smelt_iron、(21,49) 配方 smelt_copper",
-    "UI：「制造台 Mk.I」→ 点 (21,50) 配方 ammo_bullet、(22,50) 配方 circuit_board",
-    "UI：取出采矿机产物（铁矿 8 / 铜矿 8），「装入建筑」给两台熔炉；再取出锭给制造台（验证自动产线）",
-    "推进到 tick ~5900 存档"
+    "读档 cp-base-a（tick 11858），等约 50 tick 后开始",
+    "UI：手搓建材序列（smelt_iron / smelt_copper / smelt_magnet / gear / circuit_board / smelt_stone / magnetic_coil），tick 13300–19300",
+    "UI：建造风力涡轮机 (22,48)、(20,49)，发电 10 → 30（tick ~19000）",
+    "UI：建造电弧熔炉 (21,45) smelt_iron、(21,44) smelt_copper、制造台 Mk.I (22,44) gear（tick ~20200–20300）",
+    "UI：「装入建筑」给两台熔炉喂矿（tick ~20900）",
+    "UI：取出铁块并「装入建筑」喂给组装机（tick 21606）",
+    "验证：背包 200 上限硬生效（手搓停在 inventory_full、不扣能、腾空自动继续）；装入建筑表单只列有存储的建筑（tick 21851–22773）",
+    "存档 cp-base（tick 22876，契约 6 条全过）"
   ],
   "contract": {
     "checks": [
-      {"kind": "tick_gte", "tick": 3000},
       {"kind": "game_not_finished"},
       {"kind": "player_alive", "player": "p1"},
-      {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 3},
-      {"kind": "building_running_gte", "player": "p1", "type": "tesla_tower", "n": 2},
       {"kind": "building_running_gte", "player": "p1", "type": "mining_machine", "n": 4},
       {"kind": "building_running_gte", "player": "p1", "type": "arc_smelter", "n": 2},
-      {"kind": "building_running_gte", "player": "p1", "type": "assembling_machine_mk1", "n": 2},
-      {"kind": "unit_count_gte", "player": "p1", "type": "executor", "n": 1},
+      {"kind": "building_running_gte", "player": "p1", "type": "assembling_machine_mk1", "n": 1},
       {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
     ]
   }

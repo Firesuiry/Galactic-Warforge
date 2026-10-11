@@ -1,23 +1,26 @@
 {
-  "parent": "cp-base",
-  "note": "1013 L2（重建后）：从 cp-base 出发，用机甲手搓面板搓 磁铁 → 磁线圈，在 (17,48) 建成矩阵研究站 b-104。关键教训：研究站必须建在电塔 b-61@(18,49) 的 wireless_range=4 之内，否则永远 state=no_power、无法研究；本层第一次把站建在 (17,52)（超出供电范围）导致 L3 全废，故回推重建。本层期间 bot 首攻（当时 tick 30000 起）连续拆家，2 台电弧熔炉与 2 台制造台被推平，所以契约只锚定「研究站 + 指挥中心 + 机甲」这一核，不锚定产线。关键建筑改用 building_running_gte（试玩报告 1013 第 5 节：旧契约只查「研究站 ≥1」，把一座整局 no_power 的研究站也放进了接力链）。tick 8976 存（replace）。注：2026-10-10 按试玩节奏把预设降为 easy、首攻推到 60000 后，本层（tick 8976）不再落在首攻窗口里，需按新预设重建。",
+  "parent": "cp-squad",
+  "note": "1014 L7（cp-lab）：从 cp-squad（tick 30531）读档，只用网页 UI 建成矩阵研究站 b-80@(19,46)——电力感应塔 b-11@(20,46) 无线范围 4 之内（相邻 1 格），空配方（研究模式/空闲）、state=running、供电已接入、电力分配 4/4。材料全部由机甲手搓：先取出熔炉成品铁块 12/铜块 8 腾背包，再手搓 玻璃×4（石矿×2/个）、磁铁×8、磁线圈×3 批（产出 6）、电路板×4；建站时一次性扣掉 circuit_board 4 + glass 4 + iron_ingot 8 + magnetic_coil 4。建站后电力从 30/25 变 30/29（只富余 1），为给下一层研究留余量又在 (22,47) 建了第 4 台风机 b-82，发电 30→40，电力 40/29。契约：matrix_lab 运行中 ≥1、soldier ≥6（沿用 cp-squad 的 6 个步兵）、p1 存活、游戏未结束、未见敌方攻击。验证了 brief 的担心不成立——空配方研究站稳定 state=running（resource_settlement 每 tick 给通电建筑置 running），building_running_gte 的 actual 就是 1，无需退化成 building_count_gte。tick 33205 存（replace）。",
   "build": [
-    "从 cp-base 读档（tick 5868）",
-    "UI：机甲选中 → 打开工作台抽屉「选中对象」→ 手搓面板（个人制造配方）",
-    "UI：取出采矿机铁矿（取出 20 个「铁矿」）→ 手搓 磁铁 ×2（配方 smelt_magnet，批数 2）",
-    "UI：手搓 磁线圈（配方 magnetic_coil，批数 1，消耗 磁铁 2 + 铜块 1，产出 2）",
-    "UI：建造栏 → 矩阵研究站 → 点 (17,48)（反馈「施工任务已排队（位置 17,48）」），位置在电塔 b-61@(18,49) 的供电范围内（wireless_range 4）",
-    "API 只读校验：b-104 runtime.state=running、供电 已接入、电力分配 4/4",
-    "tick 8976 存档"
+    "读档 cp-squad（tick 30531），等约 150 tick 后开始",
+    "UI：取出 b-64 电弧熔炉 铁块 12、b-68 电弧熔炉 铜块 8（腾出背包）",
+    "UI：机甲手搓 玻璃 ×4（配方 glass，石矿 ×2/个，批数 4）",
+    "UI：机甲手搓 磁铁 ×8（配方 smelt_magnet，铁矿 ×1/个，批数 8）",
+    "UI：机甲手搓 磁线圈 ×3 批（配方 magnetic_coil，磁铁 2 + 铜块 1 → 产出 2）",
+    "UI：机甲手搓 电路板 ×4（配方 circuit_board，铁块 1 + 铜块 1）",
+    "UI：建造栏 → 矩阵研究站 → 点 (19,46)（在电塔 b-11@(20,46) 的 wireless_range 4 内），建成 b-80，落地即 running",
+    "API 只读校验：b-80 runtime.state=running、供电已接入、电力分配 4/4、network_id=b-11",
+    "UI：抽屉 → 工作台 → 工作流「研究与装料」→ 点「开始研究」→ 回执「研究站库存中缺少「电磁矩阵」（当前：0，需要：≥1）」，证明研究站已被服务端认作可用研究站",
+    "UI：机甲手搓 磁线圈 ×1 批（备用），建造栏 → 风力涡轮机 → (22,47)，建成 b-82，发电 30 → 40",
+    "tick 33205 存档 cp-lab（replace，契约 5 条全过）"
   ],
   "contract": {
     "checks": [
-      {"kind": "tick_gte", "tick": 8000},
       {"kind": "game_not_finished"},
       {"kind": "player_alive", "player": "p1"},
       {"kind": "building_running_gte", "player": "p1", "type": "matrix_lab", "n": 1},
-      {"kind": "building_running_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1},
-      {"kind": "unit_count_gte", "player": "p1", "type": "executor", "n": 1}
+      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
     ]
   }
 }
