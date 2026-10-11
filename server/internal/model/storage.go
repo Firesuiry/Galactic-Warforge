@@ -12,11 +12,18 @@ type StoragePriority struct {
 }
 
 // StorageState tracks the storage inventory and IO buffers.
+//
+// Reserve 是「产出预留」：主库存里必须留出的空位数，产出结算（storeProductionOutputs）
+// 只用这段空位落成品。生产建筑按当前配方写入预留量（见 Building.SyncStorageReserve），
+// 玩家装入（Load）/传送带送入（Receive）都不得越过它——否则整批产出会被
+// storeProductionOutputs 丢弃，建筑表面 running 却永远不产出（试玩 1014 层 04 P1）。
+// 输入缓冲不受预留约束：FlushInput 把输入搬进主库存时也只填到「容量 − 预留」。
 type StorageState struct {
 	Capacity       int             `json:"capacity"`
 	Slots          int             `json:"slots"`
 	BufferCapacity int             `json:"buffer_capacity"`
 	Priority       StoragePriority `json:"priority"`
+	Reserve        int             `json:"reserve,omitempty"`
 	Inventory      ItemInventory   `json:"inventory,omitempty"`
 	InputBuffer    ItemInventory   `json:"input_buffer,omitempty"`
 	OutputBuffer   ItemInventory   `json:"output_buffer,omitempty"`
@@ -114,8 +121,45 @@ func (s *StorageState) DistinctItems() int {
 	return distinctItems(s.Inventory, s.InputBuffer, s.OutputBuffer)
 }
 
+// OutputBufferSpace returns the free room in the output buffer.
+func (s *StorageState) OutputBufferSpace() int {
+	if s == nil {
+		return 0
+	}
+	return max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer())
+}
+
+// InputBufferSpace returns the free room in the input buffer.
+func (s *StorageState) InputBufferSpace() int {
+	if s == nil {
+		return 0
+	}
+	return max(0, s.InputBufferCapacity()-s.UsedInputBuffer())
+}
+
+// ReservedSpace returns the free room inside the production output reserve.
+// 预留段是主库存顶端 Reserve 个槽位；总空位先算给预留段。
+func (s *StorageState) ReservedSpace() int {
+	if s == nil || s.Reserve <= 0 || s.Capacity <= 0 {
+		return 0
+	}
+	return min(s.Reserve, max(0, s.Capacity-s.UsedInventory()))
+}
+
 // Receive accepts items into storage buffers/inventory and returns accepted and remaining quantities.
 func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
+	return s.receive(itemID, qty, false)
+}
+
+// Load stores player-delivered items directly into local storage so they can be
+// consumed immediately by building logic such as production or launch.
+func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
+	return s.receive(itemID, qty, true)
+}
+
+// receive 是 Receive（输入缓冲优先）与 Load（主库存优先）的共用实现。
+// 两者的主库存可用量都必须扣掉产出预留（见 StorageState.Reserve）。
+func (s *StorageState) receive(itemID string, qty int, inventoryFirst bool) (int, int, error) {
 	if s == nil {
 		return 0, qty, fmt.Errorf("缺少存储")
 	}
@@ -128,30 +172,42 @@ func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 
 	accepted := 0
 	remaining := qty
-
-	inCap := s.InputBufferCapacity()
-	if inCap > 0 {
-		available := inCap - s.UsedInputBuffer()
-		if available > 0 {
-			take := min(available, remaining)
-			if take > 0 {
-				addToInventory(s.EnsureInputBuffer(), itemID, take)
-				accepted += take
-				remaining -= take
-			}
+	fillInventory := func() {
+		if remaining <= 0 {
+			return
+		}
+		available := s.availableInventory()
+		if available <= 0 {
+			return
+		}
+		take := min(available, remaining)
+		if take > 0 {
+			addToInventory(s.EnsureInventory(), itemID, take)
+			accepted += take
+			remaining -= take
 		}
 	}
-
-	if remaining > 0 {
-		available := s.availableInventory()
-		if available > 0 {
-			take := min(available, remaining)
-			if take > 0 {
-				addToInventory(s.EnsureInventory(), itemID, take)
-				accepted += take
-				remaining -= take
-			}
+	fillInputBuffer := func() {
+		if remaining <= 0 {
+			return
 		}
+		available := s.InputBufferCapacity() - s.UsedInputBuffer()
+		if available <= 0 {
+			return
+		}
+		take := min(available, remaining)
+		if take > 0 {
+			addToInventory(s.EnsureInputBuffer(), itemID, take)
+			accepted += take
+			remaining -= take
+		}
+	}
+	if inventoryFirst {
+		fillInventory()
+		fillInputBuffer()
+	} else {
+		fillInputBuffer()
+		fillInventory()
 	}
 
 	return accepted, remaining, nil
@@ -207,49 +263,6 @@ func (s *StorageState) PreviewReceive(itemID string, qty int) (int, int, error) 
 		if available > 0 {
 			take := min(available, remaining)
 			if take > 0 {
-				accepted += take
-				remaining -= take
-			}
-		}
-	}
-
-	return accepted, remaining, nil
-}
-
-// Load stores player-delivered items directly into local storage so they can be
-// consumed immediately by building logic such as production or launch.
-func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
-	if s == nil {
-		return 0, qty, fmt.Errorf("缺少存储")
-	}
-	if err := validateItemQuantity(itemID, qty); err != nil {
-		return 0, qty, err
-	}
-	if !s.canAcceptNewItem(itemID) {
-		return 0, qty, nil
-	}
-
-	accepted := 0
-	remaining := qty
-
-	if remaining > 0 {
-		available := s.availableInventory()
-		if available > 0 {
-			take := min(available, remaining)
-			if take > 0 {
-				addToInventory(s.EnsureInventory(), itemID, take)
-				accepted += take
-				remaining -= take
-			}
-		}
-	}
-
-	if remaining > 0 {
-		available := s.InputBufferCapacity() - s.UsedInputBuffer()
-		if available > 0 {
-			take := min(available, remaining)
-			if take > 0 {
-				addToInventory(s.EnsureInputBuffer(), itemID, take)
 				accepted += take
 				remaining -= take
 			}
@@ -350,7 +363,8 @@ func (s *StorageState) Tick() {
 	s.RefillOutput()
 }
 
-// FlushInput moves items from input buffer to main inventory.
+// FlushInput moves items from input buffer to main inventory. 主库存只填到
+// 「容量 − 产出预留」，输入缓冲里超出预留的空位搬不动的部分留在原地等下一 tick。
 func (s *StorageState) FlushInput() int {
 	if s == nil {
 		return 0
@@ -437,15 +451,53 @@ func (s *StorageState) bufferCaps() (int, int) {
 	return inCap, outCap
 }
 
+// SetReserve 写入产出预留（调用方负责夹取到 [0, Capacity]）。
+func (s *StorageState) SetReserve(reserve int) {
+	if s == nil {
+		return
+	}
+	if reserve < 0 {
+		reserve = 0
+	}
+	if reserve > s.Capacity {
+		reserve = s.Capacity
+	}
+	s.Reserve = reserve
+}
+
+// SyncStorageReserve 按建筑当前配方写入「产出预留」：主库存里必须留出的空位数，
+// 等于该配方一批产出的总量（不含增产模式加成——没有任何命令能切换 Mode，加成
+// 只在目录配置里存在）。没有配方（含研究模式的研究站）时预留归零。
+//
+// 不变量：预留 ≤ 主库存容量。批产出大于容量的配方（分馏塔无存储模块，走独立结算）
+// 退化为预留整个容量，由产出结算走输入缓冲 + 输出缓冲落货。
+func (s *StorageState) SyncStorageReserve(batch int) {
+	if s == nil {
+		return
+	}
+	if batch > s.Capacity {
+		batch = s.Capacity
+	}
+	s.SetReserve(batch)
+}
+
 func (s *StorageState) availableInventory() int {
-	if s.Capacity <= 0 {
+	if s == nil || s.Capacity <= 0 {
 		return 0
 	}
 	used := s.UsedInventory()
-	if used >= s.Capacity {
+	limit := s.Capacity - s.Reserve
+	if used >= limit {
 		return 0
 	}
-	return s.Capacity - used
+	return limit - used
+}
+
+// AvailableInventory 是 availableInventory 的导出形式（产出落货判定用：产出的
+// 落货路径是输出缓冲 → 输入缓冲 → 主库存的产出预留空位，gamecore 的阻塞判定
+// 需要与这里同一口径）。
+func (s *StorageState) AvailableInventory() int {
+	return s.availableInventory()
 }
 
 func (s *StorageState) canAcceptNewItem(itemID string) bool {
@@ -456,6 +508,11 @@ func (s *StorageState) canAcceptNewItem(itemID string) bool {
 		return true
 	}
 	return s.DistinctItems() < s.Slots
+}
+
+// CanAcceptNewItem 导出给装入回执（gamecore.transferLoadBlockReason）判定槽位。
+func (s *StorageState) CanAcceptNewItem(itemID string) bool {
+	return s.canAcceptNewItem(itemID)
 }
 
 func normalizePriority(input, output int) (int, int) {

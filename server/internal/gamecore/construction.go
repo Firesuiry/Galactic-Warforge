@@ -777,6 +777,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		}
 		b.Production.RecipeID = recipeID
 	}
+	if b.Production != nil {
+		// 产出预留必须跟着配方走：装入/传送带送入都不得占用成品的落货空位
+		// （试玩 1014 层 04 P1：熔炉被 60 铁矿喂满后 running 却永不产出）。
+		b.SyncStorageReserve()
+	}
 	if b.Runtime.Functions.Production != nil || b.Runtime.Functions.Collect != nil {
 		b.ProductionMonitor = model.NewProductionMonitorState()
 	}
@@ -905,6 +910,7 @@ func (gc *GameCore) execSetRecipe(ws *model.WorldState, playerID string, cmd mod
 	building.Production.ProgressFraction = 0
 	building.Production.PendingOutputs = nil
 	building.Production.PendingByproducts = nil
+	building.SyncStorageReserve()
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK

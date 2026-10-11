@@ -100,10 +100,36 @@ func InitBuildingProduction(building *Building) {
 	}
 }
 
+// SyncStorageReserve 按建筑当前配方写入「产出预留」：主库存里必须留出的空位数，
+// 等于该配方一批产出的总量（不含增产模式加成——没有任何命令能切换 Mode，加成
+// 只在目录配置里存在）。没有配方（含研究模式的研究站）时预留归零。
+func (building *Building) SyncStorageReserve() {
+	if building == nil || building.Storage == nil {
+		return
+	}
+	if building.Runtime.Functions.Production == nil || building.Production == nil || building.Production.RecipeID == "" {
+		building.Storage.SyncStorageReserve(0)
+		return
+	}
+	recipe, ok := Recipe(building.Production.RecipeID)
+	if !ok {
+		building.Storage.SyncStorageReserve(0)
+		return
+	}
+	batch := 0
+	for _, output := range recipe.AllOutputs() {
+		if output.Quantity > 0 {
+			batch += output.Quantity
+		}
+	}
+	building.Storage.SyncStorageReserve(batch)
+}
+
 // SyncBuildingProduction reconciles production state after runtime changes.
 func SyncBuildingProduction(building *Building) {
 	InitBuildingProduction(building)
 	if building == nil || building.Production == nil || building.Production.RecipeID == "" {
+		building.SyncStorageReserve()
 		return
 	}
 	recipe, ok := Recipe(building.Production.RecipeID)
@@ -114,4 +140,5 @@ func SyncBuildingProduction(building *Building) {
 		building.Production.PendingOutputs = nil
 		building.Production.PendingByproducts = nil
 	}
+	building.SyncStorageReserve()
 }

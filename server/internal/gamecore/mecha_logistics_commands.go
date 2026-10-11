@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"strings"
 
 	"siliconworld/internal/model"
 )
@@ -188,8 +189,12 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
+	// 回执必须说清「实际装入多少、为什么装不下」（试玩 1014 层 04 P1：装入 60 铁矿只
+	// 显示「已受理」，实际只收 29，玩家完全不知道差额去哪了）。剩余量仍在背包里，
+	// 未装入不扣背包。
 	if remaining > 0 {
-		res.Message = fmt.Sprintf("已传输 %d 个「%s」至%s（剩余 %d 个）", accepted, itemDisplayName(itemID), buildingDisplayName(building), remaining)
+		res.Message = fmt.Sprintf("已装入 %d 个「%s」至%s，%d 个留在背包（%s）",
+			accepted, itemDisplayName(itemID), buildingDisplayName(building), remaining, transferLoadBlockReason(building, itemID))
 	} else {
 		res.Message = fmt.Sprintf("已传输 %d 个「%s」至%s", accepted, itemDisplayName(itemID), buildingDisplayName(building))
 	}
@@ -206,4 +211,48 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			"inventory_qty": inv[itemID],
 		},
 	}}
+}
+
+// transferLoadBlockReason 解释「装入为什么没全收」：优先说产出预留（玩家最难看懂的
+// 那一类——建筑明明没满却收不下），否则给主库存/输入缓冲的占用情况。
+func transferLoadBlockReason(building *model.Building, itemID string) string {
+	if building == nil || building.Storage == nil {
+		return "建筑暂存已满"
+	}
+	storage := building.Storage
+	if storage.Reserve > 0 && storage.UsedInventory() >= storage.Capacity-storage.Reserve {
+		return fmt.Sprintf("主库存 %d/%d 已到产出预留线（预留 %d 个空位给成品「%s」，先取出成品再装入）",
+			storage.UsedInventory(), storage.Capacity, storage.Reserve, transferReservedItemNames(building))
+	}
+	if storage.Capacity > 0 && storage.UsedInventory() >= storage.Capacity {
+		return fmt.Sprintf("主库存已满 %d/%d，先取出部分物品", storage.UsedInventory(), storage.Capacity)
+	}
+	if storage.InputBufferSpace() <= 0 && storage.UsedInputBuffer() > 0 {
+		return "输入缓冲已满，等建筑消耗后再装入"
+	}
+	if !storage.CanAcceptNewItem(itemID) {
+		return fmt.Sprintf("建筑只接受 %d 种物品，槽位已满", storage.Slots)
+	}
+	return "建筑暂存已满"
+}
+
+// transferReservedItemNames 列出产出预留服务的成品中文名（预留来自当前配方的一批产出）。
+func transferReservedItemNames(building *model.Building) string {
+	if building == nil || building.Production == nil || building.Production.RecipeID == "" {
+		return "成品"
+	}
+	recipe, ok := model.Recipe(building.Production.RecipeID)
+	if !ok {
+		return "成品"
+	}
+	names := make([]string, 0, len(recipe.Outputs))
+	for _, output := range recipe.Outputs {
+		if output.ItemID != "" {
+			names = append(names, itemDisplayName(output.ItemID))
+		}
+	}
+	if len(names) == 0 {
+		return "成品"
+	}
+	return strings.Join(names, "、")
 }
