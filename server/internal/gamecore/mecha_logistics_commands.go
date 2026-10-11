@@ -103,10 +103,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		}
 		unit := ws.Units[executor.UnitID]
 		model.SyncMechaCapabilities(unit, player)
-		used := 0
-		for _, amount := range player.Inventory {
-			used += amount
-		}
+		used := player.InventoryCount()
 		// 试玩报告 1013 C：「无可取出物品或背包已满」把两种完全不同的原因混在
 		// 一起，玩家看不出是建筑里没货还是自己装不下。分开报，并给出背包占用。
 		stored := building.Storage.OutputQuantity(itemID)
@@ -131,7 +128,13 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		if err != nil {
 			return mechaJobFailed(model.CodeValidationFailed, err.Error())
 		}
-		player.EnsureInventory()[itemID] += taken
+		// 上限兜底：真正入包的数量仍由 AddItems 裁剪（容量科技在取出过程中变化也不会超）。
+		// 上面已按剩余空间裁剪过，正常不会少收；万一少收，多拿出来的部分退回建筑，
+		// 不能凭空消失。
+		if accepted := player.AddItems([]model.ItemAmount{{ItemID: itemID, Quantity: taken}}, capacity); accepted < taken {
+			_, _, _ = building.Storage.Load(itemID, taken-accepted)
+			taken = accepted
+		}
 		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已取出 %d 个「%s」（来自%s）", taken, itemDisplayName(itemID), buildingDisplayName(building))}, []*model.GameEvent{{
 			EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
 			Payload: map[string]any{"building_id": buildingID, "item_id": itemID, "transferred": taken, "source": "building_storage", "inventory_qty": player.Inventory[itemID]},

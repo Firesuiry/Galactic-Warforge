@@ -177,6 +177,31 @@ function createPlanet() {
   };
 }
 
+/** 没有存储的纯发电建筑（试玩 1014 问题 2 的反例：不能作为装料目标）。 */
+function windTurbineBuilding() {
+  return {
+    id: "wind-1",
+    type: "wind_turbine",
+    owner_id: "p1",
+    position: { x: 0, y: 0, z: 0 },
+    hp: 120,
+    max_hp: 120,
+    level: 1,
+    vision_range: 2,
+    runtime: {
+      params: {
+        energy_consume: 0,
+        energy_generate: 10,
+        capacity: 0,
+        maintenance_cost: { minerals: 0, energy: 0 },
+        footprint: { width: 1, height: 1 },
+      },
+      functions: { energy: { output_per_tick: 10 } },
+      state: "running",
+    },
+  };
+}
+
 function createRuntime() {
   return {
     available: true,
@@ -820,6 +845,67 @@ describe("PlanetCommandPanel", () => {
     );
     expect((screen.getByLabelText("装料物品") as HTMLSelectElement).value).toBe(
       "silicon_ore",
+    );
+  });
+
+  it("回归（试玩 1014 问题 2）：装料目标只列有存储的建筑，默认不再选中风机", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    // 在默认场景上追加一台没有存储的风机：旧实现会把它当成装料目标（必然让第一次
+    // 「装入建筑」报「目标建筑没有存储」）。
+    (planet.buildings as Record<string, unknown>)["wind-1"] = windTurbineBuilding();
+    const catalog = createCatalog();
+    const client = createClient();
+
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary() as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    const buildingSelect = (await screen.findByLabelText(
+      "建筑 ID",
+    )) as HTMLSelectElement;
+    const optionIds = Array.from(buildingSelect.options).map(
+      (option) => option.value,
+    );
+    // 风机没有存储：不列在选项里（研究站优先排第一）。
+    expect(optionIds).not.toContain("wind-1");
+    expect(optionIds).toContain("lab-1");
+    await waitFor(() => {
+      expect(buildingSelect.value).toBe("lab-1");
+    });
+  });
+
+  it("自有建筑都没有存储时禁用装料表单并说明原因", async () => {
+    const user = userEvent.setup();
+    const planet = createPlanet();
+    // 只留风机：装料下拉没有任何可选项，按钮禁用且给出解释。
+    planet.buildings = { "wind-1": windTurbineBuilding() } as never;
+    const catalog = createCatalog();
+    const client = createClient();
+
+    renderPanel(
+      <PlanetCommandPanel
+        catalog={catalog as never}
+        client={client as never}
+        planet={planet as never}
+        runtime={createRuntime() as never}
+        summary={createSummary() as never}
+      />,
+      { initialEntries: ["/planet/planet-1-1?workflow=research"] },
+    );
+
+    const buildingSelect = await screen.findByLabelText("建筑 ID");
+    expect(buildingSelect).toBeDisabled();
+    expect(screen.getByRole("button", { name: "装入建筑" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "当前星球的自有建筑都没有存储",
     );
   });
 

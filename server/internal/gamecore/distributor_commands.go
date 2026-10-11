@@ -160,11 +160,19 @@ func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID str
 	if n > len(ids) || ws.Players[playerID] == nil {
 		return mechaJobFailed(model.CodeValidationFailed, "空闲且空载的机器人不足")
 	}
+	player := ws.Players[playerID]
+	// 回收的机器人也要占背包格：背包放不下就只卸下装得下的部分。
+	if free := mechaInventoryFree(player, mechaInventoryCapacity(ws, nil, player), n); free < n {
+		if free <= 0 {
+			return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("背包已满（%d/%d），先腾出空位再卸下机器人", player.InventoryCount(), mechaInventoryCapacity(ws, nil, player)))
+		}
+		n = free
+	}
 	sort.Strings(ids)
 	for _, id := range ids[:n] {
 		model.UnregisterLogisticsBot(ws, id)
 	}
-	ws.Players[playerID].AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}})
+	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}}, mechaInventoryCapacity(ws, nil, player))
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "机器人已退回玩家背包"}, []*model.GameEvent{{
 		EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
 		Payload: map[string]any{"building_id": b.ID, "uninstalled": n, "bot_count": model.DistributorBotCount(ws, b.ID)},

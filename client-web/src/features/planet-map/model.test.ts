@@ -3,6 +3,7 @@ import type { PlanetView } from '@shared/types';
 
 import {
   buildSceneWindow,
+  canReceiveTransferItems,
   canonicalTileIndex,
   centerCameraAxisOffset,
   clampCameraAxisOffset,
@@ -557,5 +558,55 @@ describe('isTileUncharted：只在有迷雾数据时判「未探索」', () => {
     expect(isTileUncharted(fullFog, 0, 0)).toBe(true);
     expect(isTileUncharted(fullFog, 1, 0)).toBe(false);
     expect(isTileUncharted(fullFog, 0, 5)).toBe(false);
+  });
+});
+
+describe('canReceiveTransferItems：装料下拉只列服务端真能收物品的建筑', () => {
+  it('有仓储模块的建筑可装料（capacity 来自 storage 或 runtime.functions.storage）', () => {
+    expect(
+      canReceiveTransferItems({
+        id: 'lab-1',
+        type: 'matrix_lab',
+        storage: { capacity: 60 },
+        runtime: { functions: {} },
+      } as never),
+    ).toBe(true);
+    // 建造时按 runtime.functions.storage 初始化，序列化后可能只有 runtime 一侧。
+    expect(
+      canReceiveTransferItems({
+        id: 'depot-1',
+        type: 'depot_mk1',
+        runtime: { functions: { storage: { capacity: 60 } } },
+      } as never),
+    ).toBe(true);
+  });
+
+  it('纯发电建筑（风机）没有存储：不列进装料目标（试玩 1014 问题 2）', () => {
+    expect(
+      canReceiveTransferItems({
+        id: 'wind-1',
+        type: 'wind_turbine',
+        runtime: { functions: { energy: { output_per_tick: 10 } } },
+      } as never),
+    ).toBe(false);
+    expect(canReceiveTransferItems(undefined)).toBe(false);
+  });
+
+  it('物流站只有在服务端初始化了 station 状态时才可装料', () => {
+    expect(
+      canReceiveTransferItems({
+        id: 'b-35',
+        type: 'planetary_logistics_station',
+        runtime: { functions: {} },
+        logistics_station: { slot_capacity: 3, item_capacity: 200 },
+      } as never),
+    ).toBe(true);
+    expect(
+      canReceiveTransferItems({
+        id: 'b-36',
+        type: 'planetary_logistics_station',
+        runtime: { functions: {} },
+      } as never),
+    ).toBe(false);
   });
 });

@@ -508,6 +508,35 @@ export function getTechDisplayName(
   return translateTechId(techId, getTechCatalogEntry(catalog, techId)?.name);
 }
 
+/**
+ * 装料（transfer_item，direction=to_building）的服务端准入条件：有仓储模块的
+ * 建筑，或已初始化的行星内/星际物流站。风机、太阳能板等纯发电建筑没有
+ * 存储，服务端会直接回「目标建筑没有存储」（试玩 1014 问题 2：默认选中的
+ * 就是风机，第一次点「装入建筑」必然报错）。客户端据此过滤下拉选项。
+ *
+ * 只看建筑类型不够：仓储状态是服务端在建造时按 runtime.functions.storage
+ * 初始化的，所以两个字段都查（与 PlanetPanels 的存储判定口径一致）。
+ */
+export function canReceiveTransferItems(building: Building | undefined): boolean {
+  if (!building) {
+    return false;
+  }
+  // 服务端只在建筑有 storage 模块时创建仓储状态（entity.go 的 `storage,omitempty`），
+  // 因此「有 storage 对象」本身就是有仓储的充分证据；再兜一层 capacity 与
+  // runtime.functions.storage，兼容只下发部分字段的视图。
+  if (building.storage != null) {
+    return true;
+  }
+  const capacity = building.runtime?.functions?.storage?.capacity;
+  if (typeof capacity === "number" && capacity > 0) {
+    return true;
+  }
+  return (
+    isLogisticsStationBuildingType(building.type) &&
+    building.logistics_station != null
+  );
+}
+
 export function isLogisticsStationBuildingType(buildingType: string) {
   return (
     buildingType === "planetary_logistics_station" ||

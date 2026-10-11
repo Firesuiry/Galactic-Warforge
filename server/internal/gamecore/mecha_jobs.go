@@ -138,13 +138,14 @@ func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd mod
 
 // refundMechaJob is shared by explicit cancellation and all unit death paths.
 // Clearing the job makes the refund idempotent; completed batches have already
-// removed their ingredients from ReservedInputs.
+// removed their ingredients from ReservedInputs. 退款同样受背包上限约束：
+// 取消/阵亡时背包已满的话，未完成批次的原料直接丢失（背包永远不会超上限）。
 func refundMechaJob(ws *model.WorldState, unit *model.Unit) {
 	if unit == nil || unit.Mecha == nil || unit.Mecha.Job == nil {
 		return
 	}
 	if player := ws.Players[unit.OwnerID]; player != nil {
-		player.AddItems(unit.Mecha.Job.ReservedInputs)
+		player.AddItems(unit.Mecha.Job.ReservedInputs, mechaInventoryCapacity(ws, unit, player))
 	}
 	unit.Mecha.Job = nil
 }
@@ -220,7 +221,23 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 		refundMechaJob(ws, unit)
 		return nil
 	}
+	var output []model.ItemAmount
+	if job.Kind == "mine" {
+		output = []model.ItemAmount{{ItemID: node.Kind, Quantity: 1}}
+	} else {
+		output = append([]model.ItemAmount(nil), recipe.AllOutputs()...)
+	}
+	capacity := mechaInventoryCapacity(ws, unit, player)
 	if job.RemainingTicks >= job.TicksPerBatch {
+		// 每批开工前先确认背包装得下整批产出（多产出配方要一次装得下全部），
+		// 装不下就停在这里等腾空，既不扣能也不推进；否则背包满时每批都会白扣
+		// 一份核心能量却毫无产出。绝不允许绕过 inventory_capacity 把背包顶到
+		// 上限之上（试玩 1014：手搓产出无视上限，背包 200/200 时搓出 1 个磁铁
+		// 变成 201/200）。
+		if need := itemAmountTotal(output); mechaInventoryFree(player, capacity, need) < need {
+			job.State = "inventory_full"
+			return nil
+		}
 		// 每批开工时一次性扣能；不足则暂停，补能后继续。
 		if unit.Mecha.Energy < job.EnergyPerBatch {
 			job.State = "no_energy"
@@ -233,13 +250,22 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 	if job.RemainingTicks > 0 {
 		return nil
 	}
-	var output []model.ItemAmount
+	// 兜底：批内背包被塞满时本批不结算（节点/原料都不动，进度保留），
+	// 玩家腾出空位后自动继续，产出与原料都不会丢。
+	accepted := player.AddItems(output, capacity)
+	if accepted < itemAmountTotal(output) {
+		job.State = "inventory_full"
+		return []*model.GameEvent{{EventType: model.EvtResourceChanged, VisibilityScope: unit.OwnerID, Payload: map[string]any{
+			"entity_id": unit.ID, "items": output, "job_kind": job.Kind,
+			"completed_batches": job.CompletedBatches, "blocked": "inventory_full",
+			"inventory_used": player.InventoryCount(), "inventory_capacity": capacity,
+		}}}
+	}
+	// 入包成功才结算本批：消耗矿点余量、扣减预留原料。
 	if job.Kind == "mine" {
 		node.Remaining--
 		node.SyncDepleted()
-		output = []model.ItemAmount{{ItemID: node.Kind, Quantity: 1}}
 	} else {
-		output = append([]model.ItemAmount(nil), recipe.AllOutputs()...)
 		for i := range job.ReservedInputs {
 			for _, item := range recipe.Inputs {
 				if item.ItemID == job.ReservedInputs[i].ItemID {
@@ -248,7 +274,7 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 			}
 		}
 	}
-	player.AddItems(output)
+	job.State = "running"
 	job.CompletedBatches++
 	job.RemainingBatches--
 	job.RemainingTicks = job.TicksPerBatch

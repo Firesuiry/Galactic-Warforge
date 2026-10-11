@@ -15,6 +15,7 @@ import type {
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
 import {
+  canReceiveTransferItems,
   constructionTaskLabel,
   describeConstructionWait,
   findLogisticsStation,
@@ -368,15 +369,25 @@ export function PlanetCommandPanel({
     ),
     [system?.planets],
   );
+  /**
+   * 可装料建筑（试玩 1014 问题 2）：只列服务端真能接收物品的建筑。旧实现几乎
+   * 原样返回全部自有建筑，风机这种没有存储的会被默认选中，第一次点「装入建筑」
+   * 必然报「目标建筑没有存储」。研究站优先（开局缺矩阵的主要动作是给它装料），
+   * 其余按 id 稳定排序。
+   */
   const transferTargets = useMemo(
     () =>
-      ownBuildings.filter(
-        (building) =>
-          !isLogisticsStationBuildingType(building.type) ||
-          building.type === "planetary_logistics_station" || building.type === "interstellar_logistics_station",
-      ),
+      ownBuildings
+        .filter((building) => canReceiveTransferItems(building))
+        .sort((left, right) => {
+          const leftLab = isResearchStationBuildingType(left.type) ? 0 : 1;
+          const rightLab = isResearchStationBuildingType(right.type) ? 0 : 1;
+          return leftLab - rightLab || left.id.localeCompare(right.id);
+        }),
     [ownBuildings],
   );
+  /** 有自有建筑但没有一个有存储：表单整体禁用并说明原因，而不是让玩家点了才报错。 */
+  const noTransferTarget = ownBuildings.length > 0 && transferTargets.length === 0;
   const rayReceiverBuildings = useMemo(
     () => ownBuildings.filter((building) => building.type === "ray_receiver"),
     [ownBuildings],
@@ -1643,10 +1654,13 @@ export function PlanetCommandPanel({
               <label className="field field--span-2">
                 <span>{fieldLabel("building_id")}</span>
                 <select
+                  disabled={noTransferTarget}
                   onChange={(event) => setTransferBuildingId(event.target.value)}
                   value={transferBuildingId}
                 >
-                  <option value="">选择建筑</option>
+                  <option value="">
+                    {noTransferTarget ? "没有可装料的建筑" : "选择建筑"}
+                  </option>
                   {transferTargets.map((building) => (
                     <option key={building.id} value={building.id}>
                       {building.id} · {getBuildingDisplayName(catalog, building.type)}
@@ -1654,6 +1668,12 @@ export function PlanetCommandPanel({
                   ))}
                 </select>
               </label>
+              {noTransferTarget ? (
+                <p className="subtle-text field--span-2" role="status">
+                  当前星球的自有建筑都没有存储（风机、太阳能板等纯发电建筑不收物品），
+                  先建造储物仓或研究站再装料。
+                </p>
+              ) : null}
               <label className="field field--span-2">
                 <span>装料物品</span>
                 <select
@@ -1693,6 +1713,7 @@ export function PlanetCommandPanel({
                 className="secondary-button field--span-2"
                 disabled={
                   busyAction !== "" ||
+                  noTransferTarget ||
                   !transferBuildingId ||
                   !transferItemId ||
                   !transferQuantityValue ||

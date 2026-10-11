@@ -34,7 +34,7 @@ export interface MechaJobProgress {
   total: number;
   remainingTicks: number;
   remainingLabel: string;
-  state: 'running' | 'no_energy' | 'out_of_range' | string;
+  state: 'running' | 'no_energy' | 'out_of_range' | 'inventory_full' | string;
   stateLabel?: string;
   percent: number;
 }
@@ -71,6 +71,8 @@ function jobStateLabel(state: string): string | undefined {
       return '核心能量不足，补能后自动继续';
     case 'out_of_range':
       return '距离矿点过远，回到 2 格内继续采集';
+    case 'inventory_full':
+      return '背包已满，腾出空位后自动继续';
     default:
       return undefined;
   }

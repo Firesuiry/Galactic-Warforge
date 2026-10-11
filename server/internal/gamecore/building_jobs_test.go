@@ -233,3 +233,58 @@ func overrideBuildingRule(t *testing.T, btype model.BuildingType, mutate func(*m
 		_ = model.ReplaceBuildingCatalog(orig)
 	}
 }
+
+// 回归（试玩 1014 问题 1）：拆除返还在背包已满时不得把背包顶过上限。
+func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
+	restore := overrideBuildingRule(t, model.BuildingTypeMiningMachine, func(def *model.BuildingDefinition) {
+		def.Demolish = model.BuildingDemolishRule{
+			Allow:         true,
+			RefundRate:    0.5,
+			DurationTicks: 1,
+		}
+		def.BuildCost.Items = []model.ItemAmount{
+			{ItemID: model.ItemGear, Quantity: 4},
+		}
+	})
+	defer restore()
+
+	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
+	player := ws.Players[building.OwnerID]
+	player.Resources.Minerals = 0
+	player.Resources.Energy = 0
+	unit := ws.Units["u-1"]
+	model.SyncMechaCapabilities(unit, player)
+	capacity := unit.Mecha.InventoryCapacity
+	player.Inventory = model.ItemInventory{model.ItemCoal: capacity}
+
+	cmd := model.Command{
+		Type:   model.CmdDemolish,
+		Target: model.CommandTarget{EntityID: building.ID},
+	}
+	if res, _ := execCommand(gc, model.CmdDemolish, ws, building.OwnerID, cmd); res.Code != model.CodeOK {
+		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
+	}
+	settleBuildingJobs(ws)
+	if got := player.InventoryCount(); got > capacity {
+		t.Fatalf("demolish refund pushed the bag over capacity: %d/%d", got, capacity)
+	}
+	if player.Inventory[model.ItemGear] != 0 {
+		t.Fatalf("full bag should have discarded the refund, got %v", player.Inventory)
+	}
+
+	// 腾出空间后返还照常入包。
+	player.Inventory = model.ItemInventory{}
+	ws2, gc2, building2 := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
+	player2 := ws2.Players[building2.OwnerID]
+	player2.Resources.Minerals = 0
+	player2.Resources.Energy = 0
+	player2.Inventory = model.ItemInventory{}
+	cmd2 := model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: building2.ID}}
+	if res, _ := execCommand(gc2, model.CmdDemolish, ws2, building2.OwnerID, cmd2); res.Code != model.CodeOK {
+		t.Fatalf("second demolish: %s", res.Message)
+	}
+	settleBuildingJobs(ws2)
+	if player2.Inventory[model.ItemGear] != 4 {
+		t.Fatalf("expected item refund after demolish completion, got %d", player2.Inventory[model.ItemGear])
+	}
+}

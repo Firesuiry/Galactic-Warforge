@@ -23,6 +23,48 @@ func spendMechaEnergy(unit *model.Unit, cost int) *model.CommandResult {
 	return nil
 }
 
+// mechaInventoryCapacity 返回该玩家在本行星的机甲背包上限（执行体
+// inventory_capacity）。unit 为空时回退到玩家在本行星的执行体；找不到执行体
+// 时返回 0（不限），只有测试世界或尚未生成执行体的场景会这样。
+//
+// 所有「往玩家背包装物品」的路径都必须经过它：玩家背包就是机甲背包，
+// inventory_capacity 科技既然限制取出与物流请求，就不能让采矿/手搓产出、
+// 退款、战利品把背包顶到上限之上（试玩 1014：手搓产出无视上限，背包正好
+// 200/200 时搓出 1 个磁铁变成 201/200）。
+func mechaInventoryCapacity(ws *model.WorldState, unit *model.Unit, player *model.PlayerState) int {
+	if unit == nil && ws != nil && player != nil {
+		if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
+			unit = ws.Units[exec.UnitID]
+		}
+	}
+	if unit == nil || unit.Mecha == nil {
+		return 0
+	}
+	return unit.Mecha.InventoryCapacity
+}
+
+// mechaInventoryFree 返回背包还能装下的数量（capacity <= 0 表示不限）。
+func mechaInventoryFree(player *model.PlayerState, capacity, request int) int {
+	if player == nil || request <= 0 {
+		return 0
+	}
+	if capacity <= 0 {
+		return request
+	}
+	return max(0, min(request, capacity-player.InventoryCount()))
+}
+
+// itemAmountTotal 求和一组物品数量（忽略非正数项）。
+func itemAmountTotal(items []model.ItemAmount) int {
+	total := 0
+	for _, item := range items {
+		if item.Quantity > 0 {
+			total += item.Quantity
+		}
+	}
+	return total
+}
+
 func settleMechas(ws *model.WorldState) []*model.GameEvent {
 	events := settleExecutorRespawns(ws)
 	for _, unit := range ws.Units {
