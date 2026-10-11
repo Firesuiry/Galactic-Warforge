@@ -737,11 +737,7 @@ func botInventoryHasRoom(player *model.PlayerState, exec *model.Unit) bool {
 	if player == nil || exec == nil || exec.Mecha == nil || exec.Mecha.InventoryCapacity <= 0 {
 		return true
 	}
-	used := 0
-	for _, qty := range player.Inventory {
-		used += qty
-	}
-	return used < exec.Mecha.InventoryCapacity*3/4
+	return player.InventoryCount() < exec.Mecha.InventoryCapacity*3/4
 }
 
 // botMaterialNeeds 当前建设目标的物料缺口（按建设优先级：电力→矿机→制造台）。
@@ -980,10 +976,17 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 			Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID, Position: &step},
 		}, true
 	}
+	// 一次开采量受背包剩余空间限制：请求量超过空位会让作业停在
+	// inventory_full 等玩家腾位置，而 bot 腾不出空位就整局停摆
+	// （背包上限成为硬约束后暴露：新开局只有 200 格，采 20 个往往放不下）。
+	quantity := min(20, mechaInventoryFree(ws.Players[playerID], mechaInventoryCapacity(ws, exec, ws.Players[playerID]), 20))
+	if quantity <= 0 {
+		return model.Command{}, false
+	}
 	return model.Command{
 		Type:    model.CmdMineResource,
 		Target:  model.CommandTarget{Layer: "planet", EntityID: exec.ID},
-		Payload: map[string]any{"resource_id": node.ID, "quantity": 20},
+		Payload: map[string]any{"resource_id": node.ID, "quantity": quantity},
 	}, true
 }
 
