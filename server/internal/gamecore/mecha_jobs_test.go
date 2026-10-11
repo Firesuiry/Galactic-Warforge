@@ -25,6 +25,7 @@ func handcraftCommand(id string, quantity any) model.Command {
 func manualMineCommand(quantity any) model.Command {
 	return model.Command{Target: model.CommandTarget{EntityID: "executor"}, Payload: map[string]any{"resource_id": "coal", "quantity": quantity}}
 }
+
 // setTestInventory 把背包设为恰好 used 件（全部是煤），并返回该行星执行体的背包上限。
 // 机甲背包上限来自 units.yaml 的 executor.mecha.inventory_capacity（默认 200），
 // 这里统一通过 SyncMechaCapabilities 同步，避免测试写死数字。
