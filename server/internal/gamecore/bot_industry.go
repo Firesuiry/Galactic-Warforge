@@ -218,8 +218,10 @@ func (gc *GameCore) botMatrixReserve(ws *model.WorldState, owner string, ctx *bo
 // 不建熔炉时，bot 只能靠机甲手搓把矿石变成锭，产能远远不够
 // （试玩报告 D：电磁学要 7000+ tick 才开工）。
 //
-// 只建"现在付得起"的炉子，绝不追着备料：熔炉只是手段，若为了它把机甲
-// 绑在采铜上，研究站/矩阵专机反而永远排不上（botIndustry 每拍只出一条命令）。
+// 与 botEnsureItem 的"绝不追着备料"不同：熔炉是矩阵链的地基，缺料必须
+// 主动去凑（缺电路板就采矿/手搓）。否则一旦机甲库存停在"差一两件"上，
+// 整局都不会再建炉子——试玩节奏下 easy bot 在 tick 75000 都没建出第一台
+// 电弧熔炉、也没开出任何研究，就是这么卡住的。
 func (gc *GameCore) botSmelters(ws *model.WorldState, owner string, ctx *botSurvey, tuning botTuning) (model.Command, bool) {
 	if tuning.smelterTarget <= 0 {
 		return model.Command{}, false
@@ -234,11 +236,10 @@ func (gc *GameCore) botSmelters(ws *model.WorldState, owner string, ctx *botSurv
 	if built+botPendingBuilds(ws, owner, model.BuildingTypeArcSmelter) >= tuning.smelterTarget {
 		return model.Command{}, false
 	}
-	def, ok := model.BuildingDefinitionByID(model.BuildingTypeArcSmelter)
-	if !ok || !CanBuildTech(player, model.TechUnlockBuilding, string(model.BuildingTypeArcSmelter)) {
+	if _, ok := model.BuildingDefinitionByID(model.BuildingTypeArcSmelter); !ok {
 		return model.Command{}, false
 	}
-	if !botCanAffordBuild(player, def) {
+	if !CanBuildTech(player, model.TechUnlockBuilding, string(model.BuildingTypeArcSmelter)) {
 		return model.Command{}, false
 	}
 	// 铁/铜/磁铁/石材按缺口各补一台，直到 smelterTarget：
@@ -254,11 +255,11 @@ func (gc *GameCore) botSmelters(ws *model.WorldState, owner string, ctx *botSurv
 		if pos == nil {
 			return model.Command{}, false
 		}
-		return model.Command{
-			Type:    model.CmdBuild,
-			Target:  model.CommandTarget{Layer: "planet", Position: pos},
-			Payload: map[string]any{"building_type": string(model.BuildingTypeArcSmelter), "recipe_id": recipe},
-		}, true
+		// 走 botEnsureBuilding 的缺料链把建造材料凑齐（缺电路板/磁线圈就下钻到
+		// 采矿与手搓），而不是只等机甲背包里现成有一整套。
+		if cmd, ok := gc.botEnsureBuilding(ws, owner, ctx, model.BuildingTypeArcSmelter, recipe, map[string]bool{}); ok {
+			return cmd, true
+		}
 	}
 	return model.Command{}, false
 }
@@ -447,6 +448,12 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 		if b.Storage == nil {
 			continue
 		}
+		// 研究站里的矩阵是研究耗材，不是产物：抽出来再送回去只会让
+		// 「取料 → 补料」在唯一命令槽里无限打转，研究永远开不了
+		// （试玩节奏下 easy bot 整局 0 研究）。
+		if isResearchLab(b) {
+			continue
+		}
 		if b.Production != nil && b.Production.RecipeID != "" {
 			r, _ := model.Recipe(b.Production.RecipeID)
 			product := false
@@ -458,6 +465,15 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 			if !product {
 				continue
 			}
+			// 只取"这台机器真的产出来"的量（ExportableItemQuantity 会剔除
+			// 尚未加工的反馈输入），不碰它的输入料：否则产线在
+			// 「补料 → 被抽走 → 补料」之间打转、永远不出货
+			// （试玩节奏下 easy bot 的电磁矩阵专机整局 0 产出）。
+			exports := b.ExportableItemQuantity(item)
+			if exports <= 0 {
+				continue
+			}
+			return botTransferCommand(b.ID, item, min(quantity-player.Inventory[item], exports), "to_player"), true
 		}
 		exports := b.ExportableItemQuantity(item)
 		if b.Runtime.Functions.Collect == nil && b.Runtime.Functions.Production == nil {
@@ -502,7 +518,9 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 				return cmd, true
 			}
 		}
-		return model.Command{}, false // In production: never invent its output.
+		// 这台机器在跑这个配方：绝不凭空产出它的产物（避免假库存）。
+		// 但不能因此整条链罢工——同一配方可能有别的机器/分支还能吃料。
+		continue
 	}
 	if recipe.HandcraftAllowed {
 		for _, input := range recipe.Inputs {
@@ -532,7 +550,7 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 				return cmd, true
 			}
 		}
-		return model.Command{}, false // In production: never invent its output.
+		continue
 	}
 	for _, b := range ctx.assemblers {
 		if b.Production != nil && b.Production.RecipeID != "" {

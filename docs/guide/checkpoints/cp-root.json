@@ -2,7 +2,7 @@
   "parent": null,
   "note": "1014 遭遇战从零开局（无物资包：背包空、矿物 400、能量 100；bot easy，首攻 60000，时限 180000）。试玩服务端 tick_rate_override 2。",
   "build": [
-    "服务端启动后自动开新局（seed skirmish-seed-001），tick ~239 直接存档"
+    "服务端启动后自动开新局（seed skirmish-seed-001），tick 27 直接存档（第 14 轮第三次重建）"
   ],
   "contract": {
     "checks": [
