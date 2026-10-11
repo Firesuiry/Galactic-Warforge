@@ -1,0 +1,24 @@
+{
+  "parent": "cp-army",
+  "note": "1014 L13（cp-near-hive）：从 cp-army（tick 67563）读档，只用网页 UI 侦察/探索黑雾，找到最近的已确认黑雾巢穴 enemy-92（type=hive，坐标 (101,179)，基地到巢穴地表路径距离约 75 格），再把 10 个步兵（u-108..u-117）整队开过去，停在巢穴守卫射程外 4-7 格、进入视野但不交火。全程 dark_fog.hostile=false（hostile_until_tick=0），10 兵 hp100/ammo24 未开一枪（combat_stats.units_killed 仍为 11）。本层是为 TC-07「黑雾激怒 → 报复 → 恢复中立」准备的起点：步兵已贴到巢穴边上，下一层可从这里攻击巢穴验证激怒/报复/6000 tick 恢复中立。基地留守：机甲 u-5（hp10，(25,45)）未出、无其他单位留守（10 兵全部东出，巢穴附近无我方单位威胁）。",
+  "build": [
+    "读档 cp-army（tick 67563），等约 50 tick 后 L.open3d + G.home 归位视角（tick ~67620）",
+    "GET 基线核对：p1 10 步兵 u-108..u-117 hp100/ammo24、机甲 u-5 hp10、19 建筑、dark_fog.hostile=false",
+    "从 cp-army 存档快照 + GET /events/snapshot（entity_created）核对三个黑雾巢穴：enemy-8 hive@(4,115) str100 lvl1、enemy-83 hive@(206,179) str140 lvl2、enemy-92 hive@(101,179) str220 lvl4（nest_seq 3）；最近且最贴基地的是 enemy-92",
+    "UI：双击一名步兵全选 10 兵 → 多选面板点「坚守」（unit_order hold），GET scene 确认 10 兵 Stance=Hold（截图 13-b/13-c）",
+    "UI：先收起右侧总览栏（button[aria-label=收起总览栏]），右键小地图（PlanetMinimap）校准像素点 → 对 tile (106,179) 下移动令，10 兵同时收到 move（截图 13-d-minimap-hover）",
+    "UI：观察行军（截图 13-e），约 82 s 墙钟走完 75 格，停在 (105-108,179-181)（截图 13-f）",
+    "验证：GET scene 确认 10 兵距巢穴 4-7 格、hp100、未开火；2 个黑雾守卫 df-94@(102,179) hp58 / df-95@(101,180) hp58 stance=guard aggro_range14 全程被动（截图 13-g/13-h）",
+    "GET 核对 dark_fog.hostile=false、hostile_until_tick=0、combat_stats.units_killed=11（未变）",
+    "存 cp-near-hive（tick 70285，契约 5 条服务端全过 passed=true）"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "dark_fog_hostile", "player": "p1", "bool": false},
+      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+      {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1}
+    ]
+  }
+}
