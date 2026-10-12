@@ -100,9 +100,11 @@ func TestRefineryFeedbackOutputBackpressureIsAtomic(t *testing.T) {
 func TestRefinerySeparatesOilAndHydrogenOverRepeatedBatches(t *testing.T) {
 	ws := model.NewWorldState("planet", 8)
 	b := newProductionTestBuilding("refinery", model.BuildingTypeOilRefinery, model.Position{X: 3, Y: 3}, "oil_fractionation")
-	input := newConveyorBuilding("input", model.Position{X: 3, Y: 4}, model.ConveyorNorth)
-	oil := newConveyorBuilding("oil", model.Position{X: 3, Y: 2}, model.ConveyorNorth)
-	hydrogen := newConveyorBuilding("hydrogen", model.Position{X: 2, Y: 3}, model.ConveyorWest)
+	// 细分网格：精炼厂 3×3（x3..5,y3..5）。输入带贴南侧外圈朝北（指向占地）；
+	// 主产物带贴北侧外圈朝北、副产物带贴西侧外圈朝西（都背离占地）。
+	input := newConveyorBuilding("input", model.Position{X: 4, Y: 6}, model.ConveyorNorth)
+	oil := newConveyorBuilding("oil", model.Position{X: 4, Y: 2}, model.ConveyorNorth)
+	hydrogen := newConveyorBuilding("hydrogen", model.Position{X: 2, Y: 4}, model.ConveyorWest)
 	for _, building := range []*model.Building{b, input, oil, hydrogen} {
 		attachBuilding(ws, building)
 	}

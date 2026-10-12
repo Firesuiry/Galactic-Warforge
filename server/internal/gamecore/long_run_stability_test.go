@@ -28,11 +28,13 @@ func TestLongRunStability(t *testing.T) {
 	// Seed a denser base than the short p95 check so settlement work is real.
 	const seedBuildings = 40
 	built := 0
-	for i := 0; i < seedBuildings; i++ {
-		pos, err := findOpenTile(ws, 1)
-		if err != nil {
-			break
+	seedCenter := model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
+	if exec := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID); exec != nil {
+		if u := ws.Units[exec.UnitID]; u != nil {
+			seedCenter = u.Position
 		}
+	}
+	for i := 0; i < seedBuildings; i++ {
 		buildingType := "solar_panel"
 		if i%4 == 0 {
 			buildingType = "mining_machine"
@@ -41,15 +43,27 @@ func TestLongRunStability(t *testing.T) {
 		} else if i%4 == 2 {
 			buildingType = "tesla_tower"
 		}
-		cmd := model.Command{
-			Type:   model.CmdBuild,
-			Target: model.CommandTarget{Position: pos},
-			Payload: map[string]any{
-				"building_type": buildingType,
-			},
+		// 细分网格：按建筑真实占地找落位点（3×3/2×2）。选址还要绕开围堵校验
+		// （不能把机甲关死），因此逐个候选点试建，第一个被接受的才算数。
+		placed := false
+		for _, candidate := range ws.SurfaceDisc(seedCenter, 40) {
+			if !ws.FootprintFits(candidate, footprintForType(buildingType), model.BuildingType(buildingType), "") {
+				continue
+			}
+			cmd := model.Command{
+				Type:   model.CmdBuild,
+				Target: model.CommandTarget{Position: &candidate},
+				Payload: map[string]any{
+					"building_type": buildingType,
+				},
+			}
+			res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
+			if res.Status == model.StatusExecuted {
+				placed = true
+				break
+			}
 		}
-		res, _ := execCommand(core, model.CmdBuild, ws, "p1", cmd)
-		if res.Status == model.StatusExecuted {
+		if placed {
 			built++
 		}
 		core.processTick()
@@ -200,4 +214,12 @@ func TestLongRunStabilityWithSubscriber(t *testing.T) {
 
 	core.bus.Unsubscribe("soak-sub")
 	<-done
+}
+
+// footprintForType 返回建筑类型的占地（未知类型按 1×1）。
+func footprintForType(btype string) model.Footprint {
+	if def, ok := model.BuildingDefinitionByID(model.BuildingType(btype)); ok && def.Footprint.Width > 0 {
+		return def.Footprint
+	}
+	return model.Footprint{Width: 1, Height: 1}
 }

@@ -103,7 +103,10 @@ func TestProductionPowerSaveResumesFractionAndBlockedBatch(t *testing.T) {
 	b.Production.RecipeID = "antimatter"
 	b.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, b)
-	generator := addPowerTestBuilding(ws, "brownout-generator", model.BuildingTypeWindTurbine, model.Position{X: 39, Y: 25})
+	// 细分网格：对撞机 5×5（x40..44,y25..29），风机 2×2 放在它西侧外圈之外。
+	// 电网连线距离 ×3（1→3），锚点间距必须 ≤3 才能连线。
+	generator := addPowerTestBuilding(ws, "brownout-generator", model.BuildingTypeWindTurbine, model.Position{X: 37, Y: 25})
+	ws.PowerGrid = model.BuildPowerGridGraph(ws)
 	b.Storage.EnsureInventory()[model.ItemCriticalPhoton] = 4
 	productionPowerTick(ws, generator, 20)
 	productionPowerTick(ws, generator, 20)
@@ -174,8 +177,13 @@ func supplyProductionFixture(t *testing.T, ws *model.WorldState, building *model
 	id := building.ID + "-test-power"
 	generator := ws.Buildings[id]
 	if generator == nil {
-		for _, pos := range ws.SurfaceNeighbors(building.Position) {
-			if ws.TileBuilding[model.TileKey(pos.X, pos.Y)] != "" {
+		// 细分网格：风机 2×2、被供电建筑可能是 5×5，贴着锚点的邻居多半落在
+		// 占地里。按图距找一个整块 2×2 可落、且不与被供电建筑占地重叠的位置。
+		for _, pos := range ws.SurfaceDisc(building.Position, 12) {
+			if ws.SurfaceDistance(pos, building.Position) == 0 {
+				continue
+			}
+			if !ws.FootprintFits(pos, model.Footprint{Width: 2, Height: 2}, model.BuildingTypeWindTurbine, "") {
 				continue
 			}
 			generator = newBuilding(id, model.BuildingTypeWindTurbine, building.OwnerID, pos)

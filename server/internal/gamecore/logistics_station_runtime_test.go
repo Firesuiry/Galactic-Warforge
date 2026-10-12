@@ -11,13 +11,15 @@ import (
 func stationRuntimeFixture() (*model.WorldState, *model.Building, *model.Building, *model.Building) {
 	ws := model.NewWorldState("station-runtime", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Resources: model.Resources{Energy: 100}, Inventory: model.ItemInventory{}}
+	// 细分网格：物流运输站 5×5（x3..7,y3..7），IO 是占地外圈。输入带贴西侧
+	// 外圈、方向朝东（指向占地）；输出带贴东侧外圈、方向朝东（背离占地）。
 	b := newLogisticsStationBuilding("station", model.Position{X: 3, Y: 3})
 	attachBuilding(ws, b)
 	model.RegisterLogisticsStation(ws, b)
 	b.LogisticsStation.UpsertSetting(model.LogisticsStationItemSetting{ItemID: model.ItemIronOre, Mode: model.LogisticsStationModeSupply})
 	b.LogisticsStation.BeltPorts = map[model.ConveyorDirection]model.LogisticsBeltPort{model.ConveyorWest: {Mode: "input", ItemID: model.ItemIronOre}, model.ConveyorEast: {Mode: "output", ItemID: model.ItemIronOre}}
-	input := newConveyorBuilding("input", model.Position{X: 2, Y: 3}, model.ConveyorEast)
-	output := newConveyorBuilding("output", model.Position{X: 4, Y: 3}, model.ConveyorEast)
+	input := newConveyorBuilding("input", model.Position{X: 2, Y: 5}, model.ConveyorEast)
+	output := newConveyorBuilding("output", model.Position{X: 8, Y: 5}, model.ConveyorEast)
 	attachBuilding(ws, input)
 	attachBuilding(ws, output)
 	return ws, b, input, output

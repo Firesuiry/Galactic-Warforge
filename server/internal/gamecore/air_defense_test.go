@@ -32,7 +32,7 @@ func addRunningTurret(ws *model.WorldState, id string, typ model.BuildingType, p
 
 // 敌方物流无人机：从 (0,5) 飞往 (20,5)，共 10 tick，可按剩余时间摆位。
 func addEnemyFlyingDrone(ws *model.WorldState, remaining int) *model.LogisticsDroneState {
-	target := model.Position{X: 20, Y: 5}
+	target := model.Position{X: 60, Y: 5}
 	d := &model.LogisticsDroneState{
 		ID: "drone-x", StationID: "st-x", OwnerID: "p2", Status: model.LogisticsDroneInFlight,
 		Position: model.Position{X: 0, Y: 5}, TargetPos: &target, TravelTicks: 10, RemainingTicks: remaining,
@@ -53,14 +53,15 @@ func destroyedShotDown(events []*model.GameEvent, id string) *model.GameEvent {
 
 func TestAntiAirShootsDownEnemyLogisticsDrone(t *testing.T) {
 	ws := newAirDefenseWorld()
-	turret := addRunningTurret(ws, "aa", btAntiAir, model.Position{X: 12, Y: 5}, model.ItemAmmoMissile, 3)
+	// 细分网格：防空炮射程 ×3（10→30），摆位也要按新射程来。
+	turret := addRunningTurret(ws, "aa", btAntiAir, model.Position{X: 40, Y: 5}, model.ItemAmmoMissile, 3)
 	drone := addEnemyFlyingDrone(ws, 10)
 
-	// 刚起飞在 (0,5)，距防空炮 12 > 射程 10：不会被击落。
+	// 刚起飞在 (0,5)，距防空炮 40 格，在射程 30 之外：不会被击落。
 	if events := settleTurrets(ws); destroyedShotDown(events, drone.ID) != nil || ws.LogisticsDrones[drone.ID] == nil {
 		t.Fatal("drone outside range must survive")
 	}
-	// 飞行过半后插值到 (10,5)，进入射程。
+	// 飞行过半后插值到 (30,5)，距炮 10 格，进入射程。
 	drone.RemainingTicks = 5
 	ws.Tick += 100
 	events := settleTurrets(ws)

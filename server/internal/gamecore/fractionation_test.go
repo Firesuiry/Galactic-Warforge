@@ -13,13 +13,21 @@ func fractionationFixture() (*model.WorldState, *model.Building, map[model.Conve
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	b := surfaceTestBuilding(ws, "fractionator", model.BuildingTypeFractionator, model.Position{X: 3, Y: 3})
 	model.InitBuildingFractionation(b)
+	// 细分网格：分馏塔 3×3（x3..5,y3..5），IO 是占地外圈。西侧输入带贴外圈、
+	// 方向朝东（指向占地）；东侧回流带与南侧产物带都在外圈、方向背离占地。
 	belts := map[model.ConveyorDirection]*model.Building{}
+	placement := map[model.ConveyorDirection]struct {
+		dx, dy int
+		out    model.ConveyorDirection
+	}{
+		model.ConveyorWest:  {-1, 1, model.ConveyorEast},
+		model.ConveyorEast:  {3, 1, model.ConveyorEast},
+		model.ConveyorSouth: {1, 3, model.ConveyorSouth},
+	}
 	for _, dir := range []model.ConveyorDirection{model.ConveyorWest, model.ConveyorEast, model.ConveyorSouth} {
-		pos, forward := ws.SurfaceStep(b.Position, dir)
-		if dir == model.ConveyorWest {
-			forward = forward.Opposite()
-		}
-		belt := newConveyorBuilding(string(dir), pos, forward)
+		spec := placement[dir]
+		pos := ws.SurfaceOffset(b.Position, spec.dx, spec.dy)
+		belt := newConveyorBuilding(string(dir), pos, spec.out)
 		attachBuilding(ws, belt)
 		belts[dir] = belt
 	}
@@ -150,10 +158,23 @@ func TestFractionationPhysicalBeltLoopConservationAndSnapshotReplay(t *testing.T
 	belts[model.ConveyorWest].Conveyor.MaxStack = 100
 	belts[model.ConveyorSouth].Conveyor.MaxStack = 100
 	belts[model.ConveyorSouth].Conveyor.Output = model.ConveyorEast
+	// 回流环：从东侧回流带绕分馏塔一圈，最后回到西侧输入带上方（朝北指向它）。
 	path := []struct {
 		pos model.Position
 		dir model.ConveyorDirection
-	}{{model.Position{X: 5, Y: 3}, model.ConveyorSouth}, {model.Position{X: 5, Y: 4}, model.ConveyorSouth}, {model.Position{X: 5, Y: 5}, model.ConveyorWest}, {model.Position{X: 4, Y: 5}, model.ConveyorWest}, {model.Position{X: 3, Y: 5}, model.ConveyorWest}, {model.Position{X: 2, Y: 5}, model.ConveyorNorth}, {model.Position{X: 2, Y: 4}, model.ConveyorNorth}}
+	}{
+		{model.Position{X: 7, Y: 4}, model.ConveyorSouth},
+		{model.Position{X: 7, Y: 5}, model.ConveyorSouth},
+		{model.Position{X: 7, Y: 6}, model.ConveyorSouth},
+		{model.Position{X: 7, Y: 7}, model.ConveyorWest},
+		{model.Position{X: 6, Y: 7}, model.ConveyorWest},
+		{model.Position{X: 5, Y: 7}, model.ConveyorWest},
+		{model.Position{X: 4, Y: 7}, model.ConveyorWest},
+		{model.Position{X: 3, Y: 7}, model.ConveyorWest},
+		{model.Position{X: 2, Y: 7}, model.ConveyorNorth},
+		{model.Position{X: 2, Y: 6}, model.ConveyorNorth},
+		{model.Position{X: 2, Y: 5}, model.ConveyorNorth},
+	}
 	for i, p := range path {
 		belt := newConveyorBuilding(string(rune('a'+i)), p.pos, p.dir)
 		belt.Conveyor.MaxStack = 100

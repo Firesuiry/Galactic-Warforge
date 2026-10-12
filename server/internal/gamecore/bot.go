@@ -1019,9 +1019,9 @@ func botNearestNode(ws *model.WorldState, from model.Position, kind string) *mod
 	return best
 }
 
-// botAdjacentFreeTile 目标格附近的可站立格。
+// botAdjacentFreeTile 目标格附近的可站立格（细分网格下搜索半径 ×3）。
 func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID string) *model.Position {
-	for _, candidate := range ws.SurfaceDisc(center, 6) {
+	for _, candidate := range ws.SurfaceDisc(center, 18) {
 		if candidate == center {
 			continue
 		}

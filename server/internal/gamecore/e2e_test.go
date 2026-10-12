@@ -726,6 +726,15 @@ func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
 	return findOpenTileSized(ws, margin, model.Footprint{Width: 5, Height: 5})
 }
 
+// findOpenTileForType 按建筑真实占地的 findOpenTile。
+func findOpenTileForType(ws *model.WorldState, margin int, btype model.BuildingType) (*model.Position, error) {
+	fp := model.Footprint{Width: 1, Height: 1}
+	if def, ok := model.BuildingDefinitionByID(btype); ok && def.Footprint.Width > 0 {
+		fp = def.Footprint
+	}
+	return findOpenTileSized(ws, margin, fp)
+}
+
 // findOpenTileSized 是 findOpenTile 的占地参数化版本：细分网格下建筑的占地
 // 从 1×1 变成 2×2..5×5，"一个空格空着"不再等于"放得下"，返回的位置必须保证
 // 整块 footprint 都能落位。
@@ -812,14 +821,50 @@ func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist
 				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
 					continue
 				}
-				if !ws.FootprintFits(model.Position{X: x, Y: y}, fp, model.BuildingTypeArcSmelter, "") {
+				origin := model.Position{X: x, Y: y}
+				if !ws.FootprintFits(origin, fp, model.BuildingTypeArcSmelter, "") {
 					continue
 				}
-				return &model.Position{X: x, Y: y}
+				// 施工任务是按锚点格预留的，落位点必须与已有施工任务（含各自占地）
+				// 都不重叠，否则第二次建造会撞上"该格已有你的施工任务"。
+				if constructionTileTaken(ws, origin, fp) {
+					continue
+				}
+				return &origin
 			}
 		}
 	}
 	return nil
+}
+
+// constructionTileTaken 判断以 origin 为锚点的整块占地是否与已有施工任务（或
+// 其预留占地）重叠。细分网格后建筑占多格，只看锚点格会挑到"看起来空着、
+// 实际压在别人占地上"的位置。
+func constructionTileTaken(ws *model.WorldState, origin model.Position, fp model.Footprint) bool {
+	if ws == nil || ws.Construction == nil {
+		return false
+	}
+	tiles, err := ws.FootprintTiles(origin, fp)
+	if err != nil {
+		return true
+	}
+	for _, task := range ws.Construction.Tasks {
+		if task == nil {
+			continue
+		}
+		taskTiles, err := ws.ConstructionTiles(task)
+		if err != nil {
+			continue
+		}
+		for _, a := range tiles {
+			for _, b := range taskTiles {
+				if a.X == b.X && a.Y == b.Y {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.Position, error) {

@@ -33,13 +33,21 @@ func TestPowerShortageShutdown(t *testing.T) {
 
 func TestPowerShortageSlowdown(t *testing.T) {
 	ws := newPowerTestWorld()
-	gen := addPowerTestBuilding(ws, "gen-1", model.BuildingTypeWindTurbine, model.Position{X: 1, Y: 1})
+	// 细分网格：采矿机 3×3 + 采集覆盖 1 圈 = 5×5，两台机器必须离得比这更远，
+	// 才不会有人的覆盖范围吃到别人的矿；电网连线距离只有 3，改用无线输电塔
+	// （无线覆盖 18）把两台都接上。
+	gen := addPowerTestBuilding(ws, "gen-1", model.BuildingTypeWirelessPowerTower, model.Position{X: 1, Y: 1})
 	gen.Runtime.Params.ConnectionPoints = []model.ConnectionPoint{
 		{ID: "power", Kind: model.ConnectionPower, Offset: model.GridOffset{X: 0, Y: 0}, Capacity: 0},
 	}
+	// 本用例只关心两个耗电建筑之间的分配：输电塔当纯电源，自身不耗电。
+	gen.Runtime.Params.EnergyConsume = 0
+	if gen.Runtime.Functions.Energy != nil {
+		gen.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
 
 	high := addPowerTestBuilding(ws, "c-1", model.BuildingTypeMiningMachine, model.Position{X: 2, Y: 1})
-	low := addPowerTestBuilding(ws, "c-2", model.BuildingTypeMiningMachine, model.Position{X: 3, Y: 1})
+	low := addPowerTestBuilding(ws, "c-2", model.BuildingTypeMiningMachine, model.Position{X: 2, Y: 8})
 	addResourceNode(ws, "r-1", high.Position, 8)
 	addResourceNode(ws, "r-2", low.Position, 8)
 
@@ -57,8 +65,16 @@ func TestPowerShortageSlowdown(t *testing.T) {
 	if low.Runtime.State != model.BuildingWorkRunning {
 		t.Fatalf("expected low priority running (slow), got %s", low.Runtime.State)
 	}
-	if got := totalStorageItems(high.Storage) + totalStorageItems(low.Storage); got != 12 {
-		t.Fatalf("expected 12 ore buffered after partial power, got %d", got)
+	// 供电 3 分给两台（优先级 5 与 1）：高优先级按满功率 8，低优先级按剩余比例。
+	// 细分网格后采矿机是 3×3，覆盖范围内的资源格数量变了，这里只断言"高优先级
+	// 拿满、低优先级被压产"，不再钉死绝对件数。
+	highOre := totalStorageItems(high.Storage)
+	lowOre := totalStorageItems(low.Storage)
+	if highOre != 8 {
+		t.Fatalf("expected high priority to mine at full yield 8, got %d", highOre)
+	}
+	if lowOre <= 0 || lowOre >= 8 {
+		t.Fatalf("expected low priority throttled between 1 and 7, got %d", lowOre)
 	}
 	if ws.Players["p1"].Resources.Energy != 20 {
 		t.Fatalf("expected energy unchanged before finalize, got %d", ws.Players["p1"].Resources.Energy)
