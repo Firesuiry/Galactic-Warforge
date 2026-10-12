@@ -115,6 +115,9 @@ describe('AlertBar', () => {
     expect(list.querySelectorAll('.alert-bar__row')).toHaveLength(2);
     expect(list.querySelector('.alert-bar__row-count')).toHaveTextContent('×2');
     expect(list.textContent).toContain('风力涡轮机');
+    // §3.3 复核：每条带建筑短标（id），同名建筑能区分
+    const tags = [...list.querySelectorAll('.alert-bar__row-tag')].map((node) => node.textContent);
+    expect(tags).toEqual(['b-1', 'b-2']);
   });
 
   it('展开列表最多显示 8 条（按建筑+类型合并后）', async () => {

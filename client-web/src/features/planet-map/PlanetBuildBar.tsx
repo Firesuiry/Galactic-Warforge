@@ -2,20 +2,21 @@
  * DSP 式快捷建造栏（§3.2）。
  *
  * 结构（自下而上）：
- * 1. 分类页签行（电力/采集/运输/生产/研究/仓储/军事…，带数字键 1–9）；
- * 2. 方形图标格一行（约 52px，角标快捷键，缺料格变暗 + 红角）；
- * 3. 状态行（建造模式提示 / 缺料 / 方向 / 配方）。
+ * 1. 图标格一行（52px 方格：只有图标 + 左上角快捷键数字）；
+ * 2. 选中建筑后才出现的状态行（放置提示 / 缺料 / 方向 / 配方）。
+ * 分类页签与状态行都**不参与栏宽**：页签行浮在栏上方（绝对定位、随内容滚动），
+ * 状态行只在建造模式出现，因此栏体始终收缩到图标格的实际宽度（不再是一个 640px 空框）。
  *
- * 造价与缺料只在悬停浮层里显示（不再常驻大卡片），因此常驻高度只有一行图标格，
- * 地图可见面积比旧的大卡片版大得多。选中条贴在它上方（PlanetPage 的 overlay 栈）。
+ * 名称/造价/缺料只走悬停浮层（`planet-build-detail`）与 aria-label：
+ * 格子里写被截断的名称在 52px 下毫无可读性（§3.2 复核）。
  *
  * 兼容既有测试契约：`data-testid="planet-build-bar"` / `planet-build-detail` /
  * `planet-build-shortage`、`.planet-build-card[data-building-id]`（可点选语义）、
- * `.planet-build-card__name`、`.planet-build-card__item--short`、`.planet-build-bar__hint`、
+ * `.planet-build-bar__hint`、`.planet-build-bar__scroller`、`.planet-build-bar__categories`、
  * `planet-build-card--unaffordable`、`planet-build-card--locked`、`planet-build-card--active`。
  */
 
-import { Lock, Mountain, Zap } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Lock, Minimize2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { CatalogView, StateSummary } from '@shared/types';
@@ -67,7 +68,6 @@ function formatCost(entry: BuildCatalogEntryView) {
   }
   return parts.join(' ');
 }
-
 /** 锁定卡的解锁条件提示：任一未完成科技即可解锁（与服务端 any 语义一致）。 */
 function formatUnlockCondition(catalog: CatalogView | undefined, entry: BuildCatalogEntryView, completedTechIds: ReadonlySet<string>) {
   const missing = missingUnlockTechIds(entry.unlock_tech, completedTechIds);
@@ -290,7 +290,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   })() : null;
 
   return (
-    <div className="planet-build-bar" data-testid="planet-build-bar">
+    <div
+      className={`planet-build-bar${categoriesOpen ? ' planet-build-bar--categories-open' : ''}`}
+      data-testid="planet-build-bar"
+    >
       {detail}
       {categoriesOpen ? (
         <div className="planet-build-bar__categories" role="tablist" aria-label="建造分类">
@@ -352,38 +355,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                     <Lock aria-hidden="true" className="planet-build-card__lock" size={11} strokeWidth={2.5} />
                   ) : null}
                   {unaffordable ? <span aria-hidden="true" className="planet-build-card__shortage-dot" /> : null}
+                  {/* 数字键角标贴在图标左上角（DSP 口径）。 */}
+                  {index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
                 </span>
-                <span className="planet-build-card__name">{name}</span>
-                {/* 造价/缺料只走悬停浮层；卡面保留极简数字供快速扫读，缺料标红 */}
-                <span className="planet-build-card__cost">
-                  {mineralCost > 0 ? (
-                    <span className="planet-build-card__cost-item planet-build-card__cost-item--minerals">
-                      <Mountain aria-hidden="true" size={11} strokeWidth={2.5} />
-                      {mineralCost}
-                    </span>
-                  ) : null}
-                  {(entry.build_cost?.energy ?? 0) > 0 ? (
-                    <span className="planet-build-card__cost-item planet-build-card__cost-item--energy">
-                      <Zap aria-hidden="true" size={11} strokeWidth={2.5} />
-                      {entry.build_cost?.energy}
-                    </span>
-                  ) : null}
-                </span>
-                {items.length > 0 ? (
-                  <span className="planet-build-card__items">
-                    {items.map((item) => (
-                      <span
-                        key={item.item_id}
-                        className={`planet-build-card__item${item.short ? ' planet-build-card__item--short' : ''}`}
-                      >
-                        <Icon iconKey={item.item_id} size={10} />
-                        <span className="planet-build-card__item-name">{getItemDisplayName(catalog, item.item_id)}</span>
-                        {item.owned}/{item.quantity}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-                {index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
+                {/* 格内不再写名称：52px 下只能显示被截断的两三个字，名称在 aria-label / 悬停浮层标题里。 */}
               </button>
             );
           })}
@@ -391,46 +366,49 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
         <div className="planet-build-bar__tools">
           <button
             aria-expanded={categoriesOpen}
-            className="planet-build-bar__toggle"
+            aria-label={categoriesOpen ? '收起分类页签' : '展开分类页签'}
+            className="planet-build-bar__tool"
             onClick={() => setCategoriesOpen(!categoriesOpen)}
             title={categoriesOpen ? '收起分类页签' : '展开分类页签'}
             type="button"
           >
-            {categoriesOpen ? '▾' : '▸'} 分类
+            <ChevronDown aria-hidden="true" className={categoriesOpen ? 'is-open' : ''} size={14} strokeWidth={2} />
           </button>
           <button
-            className="planet-build-bar__toggle"
-            type="button"
+            aria-expanded={showLocked}
+            aria-label={showLocked ? '隐藏未解锁' : '显示未解锁'}
+            className="planet-build-bar__tool"
             onClick={() => setShowLocked((value) => !value)}
+            title={showLocked ? '隐藏未解锁' : '显示未解锁'}
+            type="button"
           >
-            {showLocked ? '收起未解锁' : '显示未解锁'}
+            {showLocked ? <Eye aria-hidden="true" size={14} strokeWidth={2} /> : <EyeOff aria-hidden="true" size={14} strokeWidth={2} />}
           </button>
           <button
-            className="planet-build-bar__dock"
-            type="button"
+            aria-label="收起建造栏"
+            className="planet-build-bar__tool"
             onClick={() => setBuildBarDocked(true)}
             title="收起建造栏"
+            type="button"
           >
-            收起
+            <Minimize2 aria-hidden="true" size={14} strokeWidth={2} />
           </button>
         </div>
       </div>
-      <div className="planet-build-bar__footer">
-        <div className="planet-build-bar__status">
-          {buildMode && activeShortage ? (
-            <span className="planet-build-bar__shortage" role="status" data-testid="planet-build-shortage">
-              无法建造：缺少 {activeShortage}
-            </span>
-          ) : buildMode ? (
-            <span className="planet-build-bar__hint">
-              放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出
-            </span>
-          ) : (
-            <span className="planet-build-bar__hint planet-build-bar__hint--dim">
-              选择建筑类型后在地图上点击放置
-            </span>
-          )}
-          {buildMode ? (
+      {/* 底部提示行只在**选中了建筑**时显示（放置/缺料/方向/配方）；
+          未选中的「选择建筑类型后在地图上点击放置」是常驻噪音，已删（§3.2 复核）。 */}
+      {buildMode ? (
+        <div className="planet-build-bar__footer">
+          <div className="planet-build-bar__status">
+            {activeShortage ? (
+              <span className="planet-build-bar__shortage" role="status" data-testid="planet-build-shortage">
+                无法建造：缺少 {activeShortage}
+              </span>
+            ) : (
+              <span className="planet-build-bar__hint">
+                放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出
+              </span>
+            )}
             <button
               className="planet-build-bar__control"
               type="button"
@@ -439,22 +417,22 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             >
               方向：{beltMode ? DIRECTION_LABELS[buildDirection] : (interactionMode.kind === 'build' ? interactionMode.rotation ?? 0 : 0) + '°'} · R 旋转
             </button>
-          ) : null}
-          {buildMode && availableRecipes.length > 0 ? (
-            <select
-              className="planet-build-bar__select"
-              aria-label="建造配方"
-              value={activeRecipeId ?? ''}
-              onChange={(event) => selectBuildRecipe(event.target.value)}
-            >
-              <option value="">无配方（默认）</option>
-              {availableRecipes.map((recipe) => (
-                <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
-              ))}
-            </select>
-          ) : null}
+            {availableRecipes.length > 0 ? (
+              <select
+                className="planet-build-bar__select"
+                aria-label="建造配方"
+                value={activeRecipeId ?? ''}
+                onChange={(event) => selectBuildRecipe(event.target.value)}
+              >
+                <option value="">无配方（默认）</option>
+                {availableRecipes.map((recipe) => (
+                  <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
+                ))}
+              </select>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -16,13 +16,13 @@
 .planet-map-shell--3d .planet-title-chip__head h1 { letter-spacing:.10em; font-size:17px; font-weight:500; }
 .planet-map-shell--3d .hero-chip { border:0; background:none; padding:2px 4px; }
 .planet-map-shell--3d .planet-build-bar { background:#0d1b25ed; border:1px solid #799ba33b; border-radius:6px; box-shadow:0 12px 40px #0005; }
-.planet-map-shell--3d .planet-build-card { width:86px; min-width:86px; padding:3px 5px 7px; border-radius:4px; background:linear-gradient(155deg,#24343d99,#16232c); border-color:#7694a022; gap:3px; }
+.planet-map-shell--3d .planet-build-card { width:86px; min-width:86px; height:78px; padding:0; border-radius:4px; background:linear-gradient(155deg,#24343d99,#16232c); border-color:#7694a022; }
 .planet-map-shell--3d .planet-build-card:hover:not(:disabled) { background:#30464e; border-color:#abc9c4; transform:translateY(-3px); box-shadow:0 3px 15px #0003; }
 .planet-map-shell--3d .planet-build-card--active { border-color:#e9bd74; background:#67513955; box-shadow:inset 0 -2px #e9bd74; }
 .planet-map-shell--3d .planet-build-card__icon { width:74px; height:62px; background:none; box-shadow:none; border:0; }
+.planet-map-shell--3d .planet-build-card .planet-build-card__icon svg { width:46px; height:46px; }
+.planet-map-shell--3d .planet-build-card__hotkey { left:4px; top:3px; font-size:11px; color:#cfdcd8; opacity:.9; }
 .planet-build-card__model { width:82px; height:72px; display:block; object-fit:contain; pointer-events:none; filter:drop-shadow(0 3px 3px #0004); }
-.planet-map-shell--3d .planet-build-card__name { font-size:10px; color:#e0e6e3; }
-.planet-map-shell--3d .planet-build-card__cost { font-size:10px; opacity:.8; }
 .planet-map-shell--3d .planet-build-group__label { color:#b8b9aa; }
 /* §3.2 3D 镜头控制是竖排小图标栏，不是一块常驻面板：只调外观，不改尺寸契约。 */
 .planet-map-shell--3d .planet-three__nav-rail { border-radius:4px; background:#10212cde; border-color:#8faab52b; }
@@ -37,9 +37,9 @@
 .planet-map-shell--3d .planet-view-switch { border-radius:4px; right:24px; top:64px; background:#10212ce8; border-color:#809da02b; z-index:16; }
 .planet-map-shell--3d .planet-view-switch button { border-radius:3px; padding:6px 12px; }
 .planet-map-shell--3d .planet-view-switch button[aria-pressed=true] { background:#e4c1831c; color:#ecd1a1; border-color:#ebc68250; }
-.planet-map-shell--3d .debug-panel { top:116px; right:24px; width:auto; z-index:16; }
-.planet-map-shell--3d .debug-panel--open { width:280px; }
-.planet-map-shell--3d .debug-panel__toggle { font-size:10px; padding:5px 9px; color:#8ca0ae; background:#11232cb0; }
+/* §3.2 复核：调试面板与 2D 同一口径——浮在左下竖排图标栏上方（PlanetMapToolbar 的
+   --planet-hud-rail-top 实测值），不再在右上角挂一个「展开调试」文字按钮。 */
+.planet-map-shell--3d .debug-panel { left:24px; bottom:calc(var(--planet-hud-rail-top, 150px) + 8px); z-index:16; }
 .planet-map-shell--3d .planet-drawer { top:164px; }
 .planet-map-shell--3d .planet-drawer__body { border-radius:5px 0 0 5px; box-shadow:-8px 6px 30px #0004; border-color:#9bb3ba30; background:#11212af5; }
 .planet-map-shell--3d .planet-selection-bar { border-color:#d4bf8944; background:#142630ed; border-radius:4px; }
@@ -47,7 +47,6 @@
   .planet-map-shell--3d .planet-title-chip { left:12px; top:104px; max-width:285px; }
   .planet-map-shell--3d .planet-view-switch { top:148px; right:12px; }
   .planet-map-shell--3d .planet-view-switch .secondary-button { font-size:11px; padding:6px 8px; }
-  .planet-map-shell--3d .debug-panel { top:192px; right:12px; }
   .planet-map-shell--3d .planet-three__navigation { left:12px; bottom:180px; }
   .planet-map-shell--3d .planet-drawer { top:224px; }
 }
@@ -66,7 +65,6 @@
   .planet-map-shell--3d .planet-title-chip { max-width:calc(100% - 24px); padding:8px 12px; }
   .planet-map-shell--3d .planet-title-chip__head h1 { font-size:14px; }
   .planet-map-shell--3d .planet-view-switch { top:148px; }
-  .planet-map-shell--3d .debug-panel { top:192px; }
   .planet-map-shell--3d .planet-drawer { top:224px; }
   .planet-map-shell--3d .planet-drawer__body { width:min(290px,calc(100vw - 65px)); max-width:calc(100vw - 65px); }
   .planet-map-shell--3d .planet-drawer--open .planet-drawer__handle { right:min(290px,calc(100vw - 65px)); }

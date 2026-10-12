@@ -30,6 +30,7 @@ import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/Plan
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";
 import { notifyApproachingThreats } from "@/features/planet-map/attack-alerts";
+import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
@@ -204,6 +205,53 @@ export function PlanetPage() {
   // 左上行星胶囊（§3.2）：默认收成一行（名称 · 电力 · 研究），展开才看详情与「生产规划」。
   // 默认收起是因为它常驻在左上角地图上——展开态的四张资源芯片会盖掉一块可点区域。
   const [titleChipCollapsed, setTitleChipCollapsed] = useState(true);
+  // 胶囊实测底边写进 :root：左上「新手引导 + 军团」栈据此下移，保证与胶囊垂直堆叠、
+  // 留 8px 间距（3D 壳的 --planet-top-inset 与 2D 不同，写死偏移会在 3D 下压住胶囊下沿）。
+  //
+  // 用**回调 ref** 而不是「ref + useLayoutEffect」：行星数据到达前页面先渲染一版骨架，
+  // 那时 effect 已经跑过一次（ref 还是 null），而 deps 不会再变，于是永远量不到胶囊，
+  // 引导条就压在胶囊下沿上（§3.2 复核 2 的成因）。回调 ref 在节点真正挂载时才执行。
+  // ResizeObserver 只报尺寸变化，所以再挂一个 window.resize 兜底视口变化。
+  const titleChipRef = useRef<HTMLDivElement | null>(null);
+  const titleChipObserverRef = useRef<ResizeObserver | null>(null);
+  const publishTitleChipBottom = useCallback((node: HTMLDivElement | null) => {
+    titleChipObserverRef.current?.disconnect();
+    titleChipObserverRef.current = null;
+    titleChipRef.current = node;
+    if (!node) {
+      return;
+    }
+    const publish = () => {
+      const shell = node.closest(".planet-map-shell");
+      if (!shell) {
+        return;
+      }
+      const bottom = node.getBoundingClientRect().bottom - shell.getBoundingClientRect().top;
+      document.documentElement.style.setProperty("--planet-title-chip-bottom", `${Math.round(bottom)}px`);
+    };
+    publish();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(publish);
+      observer.observe(node);
+      titleChipObserverRef.current = observer;
+    }
+  }, []);
+  useEffect(() => {
+    const onResize = () => {
+      const node = titleChipRef.current;
+      const shell = node?.closest(".planet-map-shell");
+      if (!node || !shell) {
+        return;
+      }
+      const bottom = node.getBoundingClientRect().bottom - shell.getBoundingClientRect().top;
+      document.documentElement.style.setProperty("--planet-title-chip-bottom", `${Math.round(bottom)}px`);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      titleChipObserverRef.current?.disconnect();
+    };
+  }, []);
 
   const sceneQuery = useQuery({
     queryKey: [
@@ -852,10 +900,17 @@ export function PlanetPage() {
           onCanvasReady={(capture) => { captureRef.current = capture; }}
           onContextTile={interactions.contextTile}
           onInteractTile={interactions.interactTile}
+          onSelectEntity={() => {
+            setActiveDetailPanel("selection");
+            toggleDrawer(true);
+          }}
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
           theaters={theatersQuery.data?.theaters}
+          /* 3D 左下那一列的「图层与视角」与 2D 工具条是**同一份**面板：
+             两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
+          layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} />}
         /> : <PlanetMapPixi
           catalog={catalog}
           inventory={summary?.players?.[session.playerId]?.inventory}
@@ -888,6 +943,7 @@ export function PlanetPage() {
               ? "planet-title-chip planet-title-chip--collapsed"
               : "planet-title-chip"
           }
+          ref={publishTitleChipBottom}
         >
           <div className="planet-title-chip__head">
             <h1>{planet.name || planet.planet_id}</h1>
@@ -919,15 +975,19 @@ export function PlanetPage() {
                 )}
               </span>
             </button>
-            <p className="subtle-text">
-              {/* 场景只在相关事件后重取，tick 以 2s 轮询的 summary 为准 */}
-              <span className="tick-pulse" key={`hero-tick-${liveTick}`}>
-                tick {liveTick}
-              </span>
-              {" · "}
-              {translatePlanetKind(planet.kind)} ·{" "}
-              {planet.map_width} x {planet.map_height}
-            </p>
+            {/* tick / 星球类型 / 尺寸只在展开态显示：收起态是一行胶囊
+                （名称 · 电力 · 研究），多这一行会让「PLANET-1-1」折成两行。 */}
+            {titleChipCollapsed ? null : (
+              <p className="subtle-text">
+                {/* 场景只在相关事件后重取，tick 以 2s 轮询的 summary 为准 */}
+                <span className="tick-pulse" key={`hero-tick-${liveTick}`}>
+                  tick {liveTick}
+                </span>
+                {" · "}
+                {translatePlanetKind(planet.kind)} ·{" "}
+                {planet.map_width} x {planet.map_height}
+              </p>
+            )}
           </div>
           {titleChipCollapsed ? null : (
             <>
@@ -1023,7 +1083,10 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         />
-        {/* 工具条（C3）：2D/3D 均可用；3D 下缩放 ± 无消费者，由 dimensional 隐藏（3D 自带缩放控件） */}
+        {/* 工具条（C3）：2D 的左下图标列；3D 由 PlanetMapThree 自带的同构列渲染
+            （dimensional 时整条返回 null，避免左下出现两列重复图标）。
+            战区划定（C4）作为这一列的最后一格：2D 拖矩形建 zone；
+            3D 不渲染——球面拖拽是旋转，划不出矩形（§3.2 复核）。 */}
         <PlanetMapToolbar
           dimensional={isThree}
           networks={networks}
@@ -1033,7 +1096,16 @@ export function PlanetPage() {
           }}
           planet={planet}
           runtime={runtime}
-        />
+        >
+          {isThree ? null : (
+            <PlanetTheaterControls
+              dimensional={false}
+              onChanged={() => { void theatersQuery.refetch(); }}
+              planetId={planet.planet_id}
+              theaters={theatersQuery.data?.theaters ?? []}
+            />
+          )}
+        </PlanetMapToolbar>
         {countOutOfAmmoUnits(planet.units, session.playerId) > 0 ? (
           <div className="planet-ammo-alert" role="alert" data-testid="planet-ammo-alert">
             {countOutOfAmmoUnits(planet.units, session.playerId)} 个单位弹药耗尽：请补给或建造补给站
@@ -1073,13 +1145,6 @@ export function PlanetPage() {
           />
           <PlanetLegionPanel planetId={planet.planet_id} squads={runtime.combat_squads} units={planet.units} />
         </div>
-        {/* 战区划定（C4）：2D 平面战术视图拖拽矩形建 zone；3D 下浮层给切换提示 */}
-        <PlanetTheaterControls
-          dimensional={isThree}
-          onChanged={() => { void theatersQuery.refetch(); }}
-          planetId={planet.planet_id}
-          theaters={theatersQuery.data?.theaters ?? []}
-        />
         {/* 右侧工作台抽屉：默认收起为边缘把手，点击/选中实体/新回执时滑出（共用 MapDrawer） */}
         <MapDrawer
           label="工作台"

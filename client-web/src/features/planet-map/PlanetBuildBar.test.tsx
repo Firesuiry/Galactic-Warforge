@@ -210,14 +210,15 @@ describe('PlanetBuildBar', () => {
     render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card.className).toContain('planet-build-card--unaffordable');
-    expect(card.querySelector('.planet-build-card__item--short')?.textContent).toContain('4/6');
+    // §3.2 复核：格子里只有图标 + 快捷键数字，物品造价走 aria-label 与悬停浮层。
+    expect(card).toHaveAttribute('aria-label', expect.stringContaining('铁块 4/6（不足）'));
     fireEvent.mouseEnter(card);
     const detail = screen.getByTestId('planet-build-detail');
     expect(detail).toHaveTextContent('拥有 / 需要');
     expect(detail.querySelector('.is-short')?.textContent).toContain('4 / 6');
   });
 
-  it('卡片物品造价内联显示中文物品名与拥有/需要数量', () => {
+  it('悬停浮层内联显示中文物品名与拥有/需要数量', () => {
     const itemCatalog = { ...catalog, items: [
       { id: 'custom_plate', name: '定制板材' },
       { id: 'gear', name: '齿轮' },
@@ -228,14 +229,16 @@ describe('PlanetBuildBar', () => {
     render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    const itemNames = Array.from(card.querySelectorAll('.planet-build-card__item-name')).map((node) => node.textContent);
-    // 中文物品名内联在卡片上（不再只有图标 + 数字）
-    expect(itemNames).toEqual(['定制板材', '齿轮']);
-    // 名称与 owned/quantity 数字同处一个 __item 元素
-    const shortItem = card.querySelector('.planet-build-card__item--short');
+    // 卡片 aria-label 与悬停浮层都带中文物品名 + 拥有/需要（格子里不再内联截断文本）
+    expect(card).toHaveAttribute('aria-label', expect.stringContaining('定制板材 4/6（不足）'));
+    expect(card).toHaveAttribute('aria-label', expect.stringContaining('齿轮 3/1'));
+    fireEvent.mouseEnter(card);
+    const detail = screen.getByTestId('planet-build-detail');
+    expect(detail.textContent).toContain('定制板材');
+    expect(detail.textContent).toContain('齿轮');
+    const shortItem = detail.querySelector('.is-short');
     expect(shortItem?.textContent).toContain('定制板材');
-    expect(shortItem?.textContent).toContain('4/6');
-    expect(card.textContent).toContain('齿轮3/1');
+    expect(shortItem?.textContent).toContain('4 / 6');
   });
 
   it('余额充足时卡片可点击进入建造模式', async () => {
@@ -374,11 +377,11 @@ describe('PlanetBuildBar', () => {
 
     expect(screen.getByRole('button', { name: /风力涡轮机/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Future Building X/ })).toBeInTheDocument();
-    // 任何卡片名都不允许是 snake_case 裸 ID
+    // 格子里不再写名称，可读名走 aria-label：任何卡片名都不允许是 snake_case 裸 ID
     const names = screen
       .getAllByRole('button')
-      .map((button) => button.querySelector('.planet-build-card__name')?.textContent ?? '')
-      .filter(Boolean);
+      .filter((button) => button.classList.contains('planet-build-card'))
+      .map((button) => button.getAttribute('aria-label')?.split(' · ')[0] ?? '');
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) {
       expect(name).not.toMatch(/^[a-z0-9_]+$/);

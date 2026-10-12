@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Globe2, House, Minus, Plus, Settings2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Bug, Crosshair, Globe2, House, Layers, Minus, Plus, Settings2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import type { CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
-import { PLANET_LAYER_LABELS, getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetLayerKey, type PlanetRenderView, type TilePoint } from './model';
+import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
 import { traceBeltStroke } from './belt-stroke';
 import { isConveyorBeltBuilding } from './build-workflow';
 import { sameTypeOwnUnitsInView } from './rts-commands';
@@ -14,6 +14,7 @@ import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene } from './planet-three-scene';
 import { PlanetHoverTip } from './PlanetHoverTip';
+import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
 import type { PlanetRenderQuality } from './three/render-quality';
 import { sfx } from '@/engine/audio';
@@ -45,6 +46,11 @@ interface Props {
   onInteractTile?: (tile: TilePoint) => void;
   /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
   onContextTile?: (tile: TilePoint) => boolean;
+  /** 打开右侧抽屉的「选中对象」页签（与 2D 工具条的同一入口）。 */
+  onSelectEntity?: () => void;
+  /** 图层与视角浮层的内容（由 PlanetPage 复用 PlanetLayerPanel：与 2D 同一份勾选项）。
+      传 `null` = 本视图不提供「图层与视角」入口（例如战争图之外的简化场景）。 */
+  layerPanel?: ReactNode;
   /** 黑雾是否对当前玩家敌对（summary 玩家 dark_fog.hostile）。 */
   darkFogHostile?: boolean;
 }
@@ -63,9 +69,14 @@ export function PlanetMapThree(props: Props) {
   const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
   // 镜头中心落在未探索区：地表只有测绘网格，给一条「回到基地」的出路（试玩 1010 D / 1011 A）。
   const [centerUncharted, setCenterUncharted] = useState(false);
-  // §3.2：镜头设置（俯仰/画质/图层）收进竖排图标栏的弹出层。
+  // §3.2：镜头设置（俯仰/画质）与图层收进竖排图标栏的弹出层。
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement | null>(null);
+  const layersRef = useRef<HTMLDivElement | null>(null);
+  // 底部状态行浮在这一列**上方**（与 2D 的 PlanetMapToolbar 同一变量口径）。
+  const railRef = useRef<HTMLDivElement | null>(null);
+  useHudRailTop(railRef, [props.layerPanel, props.onSelectEntity]);
   // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
   const beltDrag = useRef<{ tile: TilePoint; placed: Set<string>; path: TilePoint[] } | null>(null);
   function placeBelt(tile: TilePoint, direction?: 'north' | 'east' | 'south' | 'west') {
@@ -83,9 +94,9 @@ export function PlanetMapThree(props: Props) {
   }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest } = usePlanetViewStore(useShallow(s => ({
+  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugOpen } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
-    layers: s.layers, focusRequest: s.focusRequest,
+    layers: s.layers, focusRequest: s.focusRequest, debugOpen: s.debugOpen,
   })));
   // 悬停提示：hoveredTile 已由场景节流（格子变化才更新），这里只在格子/数据变化时重算文案。
   const hoverInfo = useMemo(() => (
@@ -281,6 +292,19 @@ export function PlanetMapThree(props: Props) {
     return () => window.removeEventListener('pointerdown', onPointerDown);
   }, [settingsOpen]);
 
+  useEffect(() => {
+    if (!layersOpen) {
+      return undefined;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!layersRef.current?.contains(event.target as Node)) {
+        setLayersOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [layersOpen]);
+
   const home = () => {
     const tile = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(props.planet, session.playerId);
     if (tile) scene.current?.focus(tile);
@@ -468,9 +492,13 @@ export function PlanetMapThree(props: Props) {
       </div>
     ) : null}
     <div className="planet-three__navigation" aria-label="3D 视角控制">
-      {/* §3.2：镜头控制收成竖排小图标，设置项（俯仰/画质/图层）走弹出层。
-          按钮文案保持「全球视角 / 聚焦基地 / 3D 放大 / 3D 缩小」不变（测试契约）。 */}
-      <div className="planet-three__nav-rail">
+      {/* §3.2：镜头控制收成**一列**竖排小图标（全球视角 / 聚焦基地 / 放大 / 缩小 / 图层与视角 /
+          选中对象 / 视角设置），设置项（俯仰/画质/图层）走弹出层。按钮文案保持「全球视角 / 聚焦基地 /
+          3D 放大 / 3D 缩小」不变（测试契约）。
+          3D 不再另起一列：过去左下同时存在「3D 自带控件列」与「2D 工具条列」，两列图标重复且互相压住。
+          图层勾选与 2D 的「图层与视角」是**同一份内容**（PlanetPage 传同一组件进来），
+          免得两个视图各维护一套图层开关。 */}
+      <div className="planet-three__nav-rail" ref={railRef}>
         <button className="secondary-button planet-three__nav-btn" title="全球视角" aria-label="全球视角" onClick={() => scene.current?.orbit()}>
           <Globe2 size={16} strokeWidth={2} aria-hidden="true" />
         </button>
@@ -483,6 +511,36 @@ export function PlanetMapThree(props: Props) {
         <button className="secondary-button planet-three__nav-btn" title="3D 缩小" aria-label="3D 缩小" onClick={() => scene.current?.zoom(1 / 1.4)}>
           <Minus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
+        {props.layerPanel !== undefined ? (
+          <div className="planet-three__nav-settings" ref={layersRef}>
+            <button
+              aria-expanded={layersOpen}
+              aria-label="图层与视角"
+              className="secondary-button planet-three__nav-btn"
+              onClick={() => setLayersOpen(open => !open)}
+              title="图层与视角"
+              type="button"
+            >
+              <Layers size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+            {layersOpen ? (
+              <div className="panel planet-three__nav-pop" role="dialog" aria-label="图层与视角">
+                {props.layerPanel}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {props.onSelectEntity ? (
+          <button
+            aria-label="选中对象"
+            className="secondary-button planet-three__nav-btn"
+            onClick={props.onSelectEntity}
+            title="选中对象"
+            type="button"
+          >
+            <Crosshair size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ) : null}
         <div className="planet-three__nav-settings" ref={settingsRef}>
           <button
             aria-expanded={settingsOpen}
@@ -496,6 +554,8 @@ export function PlanetMapThree(props: Props) {
           </button>
           {settingsOpen ? (
             <div className="panel planet-three__nav-pop" role="dialog" aria-label="视角设置">
+              {/* 俯仰/画质只有 3D 场景能消费（scene.current 是本组件的 ref），
+                  所以这一层留在组件内，不通过 props 注入。 */}
               <label className="planet-three__tilt">镜头俯仰
                 <input aria-label="镜头俯仰" type="range" min="0" max="1.1" step="0.05" value={tilt}
                   onChange={event => { const value = Number(event.target.value); setTilt(value); scene.current?.setTilt(value); }} />
@@ -511,22 +571,31 @@ export function PlanetMapThree(props: Props) {
                   <option value="high">精细</option>
                 </select>
               </label>
-              <details className="planet-three__layers">
-                <summary>显示图层</summary>
-                <div>{(['buildings', 'units', 'resources', 'logistics', 'power', 'pipelines', 'construction', 'threat', 'grid'] satisfies PlanetLayerKey[]).map(layer => <label key={layer}>
-                  <input type="checkbox" checked={layers[layer]} onChange={event => usePlanetViewStore.getState().setLayers({ [layer]: event.target.checked })} />
-                  {PLANET_LAYER_LABELS[layer]}
-                </label>)}</div>
-              </details>
             </div>
           ) : null}
         </div>
+        {/* 调试入口（§3.2 复核）：2D 的那条工具条在 3D 下整条不渲染，
+            所以 3D 的调试开关放在这一列的最后，面板同样浮在列上方。 */}
+        <button
+          aria-expanded={debugOpen}
+          aria-label={debugOpen ? "收起调试" : "展开调试"}
+          className="secondary-button planet-three__nav-btn"
+          onClick={() => usePlanetViewStore.getState().toggleDebugOpen()}
+          title={debugOpen ? "收起调试" : "展开调试"}
+          type="button"
+        >
+          <Bug size={16} strokeWidth={2} aria-hidden="true" />
+        </button>
       </div>
       <div className="planet-three__nav-status">
         {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
         {selectedUnits.length > 1 && <small>已框选 {selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击</small>}
-        {interactionMode.kind !== 'inspect' && <button className="secondary-button" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : '指令'} · Esc</button>}
       </div>
+      {interactionMode.kind !== 'inspect' ? (
+        <button className="secondary-button planet-three__nav-cancel" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>
+          取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : '指令'} · Esc
+        </button>
+      ) : null}
     </div>
   </div>;
 }

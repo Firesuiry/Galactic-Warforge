@@ -49,14 +49,18 @@ test('顶栏矿产位显示 minerals 余额，建造卡片名全部本地化', a
     return Number(balanceText.replace(/\D/g, ''));
   }, { timeout: 15_000 }).toBeGreaterThan(0);
 
-  // web-12：建造卡片名无 snake_case 裸 ID
+  // web-12：建造卡片名无 snake_case 裸 ID（§3.2 复核后格子里不再写名称，
+  // 可读名在 aria-label 的第一段：`${name} · 矿 30 · …`）
   await expect(page.locator('.planet-build-card').first()).toBeVisible({ timeout: 30_000 });
-  const cardNames = await page.locator('.planet-build-card__name').allTextContents();
+  const cardNames = (await page.locator('.planet-build-card').evaluateAll((nodes) => nodes
+    .map((node) => node.getAttribute('aria-label')?.split(' · ')[0] ?? '')))
+    .filter(Boolean);
   expect(cardNames.length).toBeGreaterThan(0);
   for (const name of cardNames) {
     expect(name.trim()).not.toMatch(/^[a-z0-9_]+$/);
   }
-  await expect(page.locator('.planet-build-card', { hasText: '风力涡轮机' })).toBeVisible();
+  // 格子里只剩图标，中文名在 aria-label 里（不再用 hasText 找卡片）
+  await expect(page.locator('.planet-build-card[data-building-id="wind_turbine"]')).toHaveAttribute('aria-label', /^风力涡轮机/);
 
   // 卡片成本文案在 aria-label（title 已移除，改用悬浮详情）
   const windCard = page.locator('.planet-build-card[data-building-id="wind_turbine"]');

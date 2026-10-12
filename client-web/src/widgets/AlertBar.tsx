@@ -88,6 +88,14 @@ function buildingLabel(catalog: CatalogView | undefined, row: AlertRow): string 
   return getBuildingDisplayName(catalog, row.buildingType) || row.buildingId;
 }
 
+/**
+ * 建筑短标：完整 id（b-33）能区分同名的多台建筑，比只写「采矿机」有用。
+ * 已按 id 命名（目录缺失）时不重复显示。
+ */
+function buildingTag(row: AlertRow): string {
+  return row.buildingId;
+}
+
 export function AlertBar() {
   const client = useApiClient();
   const navigate = useNavigate();
@@ -202,7 +210,12 @@ export function AlertBar() {
                 <span className="alert-bar__row-type">
                   {translateAlertType(row.alertType, translateSeverity(row.severity))}
                 </span>
-                <span className="alert-bar__row-building">{buildingLabel(catalogQuery.data, row)}</span>
+                {/* 建筑名 + 短标（id 尾号）：同名建筑（多台风机/制造台）靠短标区分，
+                    点条目聚焦的是哪一台必须一眼可辨。 */}
+                <span className="alert-bar__row-building">
+                  {buildingLabel(catalogQuery.data, row)}
+                  <span className="alert-bar__row-tag">{buildingTag(row)}</span>
+                </span>
                 {row.count > 1 ? <span className="alert-bar__row-count">×{row.count}</span> : null}
                 <span className="alert-bar__row-tick">t{row.tick}</span>
               </button>

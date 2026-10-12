@@ -46,8 +46,7 @@
 
 .planet-map-canvas {
   display:grid;
-  grid-template-rows:minmax(0,1fr) auto;
-  gap:8px;
+  grid-template-rows:minmax(0,1fr);
   min-height:0;
   height:100%;
 }
@@ -180,13 +179,28 @@
   border-radius:50%;
 }
 
+/* 2D 底部状态行（§3.2 复核）：过去它是画布网格的第二行、被快捷栏整条压住。
+   现在浮在左下工具条列**上方**（--planet-hud-rail-top 由 PlanetMapToolbar 的
+   ResizeObserver 实测写入），与工具条同一列：不与底部居中的快捷栏抢位置，
+   也不吃地图高度。调试面板展开时整块让位（面板就在同一位置）。 */
 .planet-map-canvas__status {
+  position:absolute;
+  left:60px;
+  /* 与工具条列**右对齐到同一基线**：状态行贴在这一列的右上方，
+     既不压住列本身，也不与底部居中的快捷栏抢位置。 */
+  bottom:calc(var(--planet-hud-rail-top, 150px) + 2px);
+  max-width:min(560px,calc(100% - 96px));
+  z-index:3;
   display:flex;
   flex-wrap:wrap;
-  gap:12px;
+  gap:2px 12px;
   color:#b6c7ec;
-  font-size:.875rem;
+  font-size:.76rem;
+  line-height:1.45;
+  pointer-events:none;
+  text-shadow:0 1px 3px #000c;
 }
+
 
 .toggle-grid {
   display:grid;
@@ -438,27 +452,28 @@
   border-radius:10px;
 }
 
+/* 调试面板（§3.2 复核）：入口是左下工具条里的调试图标，面板浮在那一列**上方**
+   （--planet-hud-rail-top 由 PlanetMapToolbar 实测写入），不再在顶部中右侧挂一个
+   突兀的「展开调试」文字按钮。收起态整个面板不渲染（见 PlanetDebugPanel）。 */
 .debug-panel {
   position:absolute;
-  top:var(--planet-top-inset, 56px);
-  right:14px;
+  left:16px;
+  bottom:calc(var(--planet-hud-rail-top, 150px) + 8px);
   width:280px;
   max-width:calc(100% - 28px);
-  z-index:2;
-}
-
-.debug-panel__toggle {
-  margin-left:auto;
+  z-index:12;
+  pointer-events:auto;
 }
 
 .debug-panel__body {
-  margin-top:8px;
   padding:14px;
   border-radius:18px;
   border:1px solid var(--line-2);
   background:#060c16eb;
   -webkit-backdrop-filter:blur(10px);
   backdrop-filter:blur(10px);
+  max-height:min(52vh,420px);
+  overflow:auto;
 }
 
 .debug-panel__actions {
@@ -971,9 +986,10 @@
 }
 
 @media(min-width:1101px) {
-  .planet-map-canvas__status {
-    padding-right:220px;
-    padding-left:72px;
+  /* 小地图在右下角：底部两行浮层让出它占的走廊宽度。 */
+  .planet-map-canvas__status,
+  .planet-map-canvas__modes {
+    padding-right:calc(var(--planet-hud-right-reserve, 0px) + 8px);
   }
 
 }
@@ -1007,9 +1023,17 @@
   pointer-events:none;
 }
 
-/* 一行胶囊（§3.2）：名称 · 电力 · 研究 同排；展开态才切成竖排详情。 */
+/* 一行胶囊（§3.2）：名称 · 电力 · 研究 同排；展开态才切成竖排详情。
+   收起态**任何视口都不折行**：`.planet-title-chip--collapsed` 的宽度上限可能小于
+   名字的固有宽度（PLANET-1-1 / tick … · 岩质行星 · 144 x 96），折行会让胶囊变成两行、
+   压住下面的引导条。flex 子项要能缩必须 min-width:0 + overflow:hidden。 */
 .planet-title-chip:not(.planet-title-chip--collapsed) {
   border-radius:var(--radius);
+}
+
+.planet-title-chip--collapsed {
+  max-width:min(340px,calc(100% - 32px));
+  overflow:hidden;
 }
 
 .planet-title-chip--collapsed .planet-title-chip__head {
@@ -1017,20 +1041,31 @@
   align-items:center;
   gap:8px;
   padding-right:24px;
+  white-space:nowrap;
+  overflow:hidden;
 }
 
 .planet-title-chip--collapsed .planet-title-chip__head h1 {
   font-size:.9rem;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
+  flex:0 1 auto;
 }
 
-/* 收起态内联的电力/研究小项；展开态隐藏（避免与下方芯片重复）。 */
+/* 收起态内联的电力/研究小项；展开态隐藏（避免与下方芯片重复）。
+   窄视口下先截断的是这两项，而不是行星名。 */
 .planet-title-chip__inline {
   display:flex;
   align-items:center;
   gap:8px;
+  min-width:0;
+  overflow:hidden;
   color:var(--text-muted);
   font-size:.72rem;
   font-variant-numeric:tabular-nums;
+  white-space:nowrap;
 }
 
 .planet-title-chip:not(.planet-title-chip--collapsed) .planet-title-chip__inline {
@@ -1352,10 +1387,17 @@
 }
 
 .planet-build-bar {
+  position:relative;
+  /* 分类页签行浮在栏上方（见下），它占的竖向空间由这一条 margin 预留：
+     否则页签行会压在「选中条」的动作按钮上（Playwright 点「详情」被 tablist 拦走）。 */
+  --planet-build-categories-height:35px;
   display:flex;
   flex-direction:column;
+  align-items:flex-start;
   gap:5px;
-  max-width:100%;
+  /* §3.2 复核：宽度随内容收缩（DSP 口径）。只有选中建筑后才出现的状态行
+     用 min-width 给一个下限，避免长提示把栏拉成整条。 */
+  max-width:min(760px,calc(100vw - 96px));
   padding:6px 8px 5px;
   border-radius:var(--radius-lg);
   border:1px solid var(--border-glow);
@@ -1368,13 +1410,31 @@
 
 /* DSP 式快捷栏：一行分类页签（带数字键）+ 一行 52px 方形图标格。
    旧的横向大卡片（一屏多组、常驻造价）已删，高度从 ~230px 收到 ~110px。 */
+/* 分类页签浮在栏**上方**（绝对定位）：它不参与栏宽，否则页签多的分类会把
+   整条快捷栏撑成一屏宽的空框（§3.2 复核）。
+   锚在栏**右缘**向左生长：栏本身已经落在小地图走廊之外，向左展开才不会
+   横穿右下角小地图（页签行比图标行宽得多）。 */
+.planet-build-bar--categories-open {
+  margin-top:calc(var(--planet-build-categories-height) + 6px);
+}
+
 .planet-build-bar__categories {
+  position:absolute;
+  right:0;
+  bottom:calc(100% + 6px);
+  height:var(--planet-build-categories-height);
   display:flex;
   gap:4px;
-  max-width:100%;
+  max-width:min(720px,calc(100vw - 200px));
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid var(--border-glow);
+  background:rgba(8,14,28,.86);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  box-shadow:var(--shadow-hud);
   overflow-x:auto;
   scrollbar-width:none;
-  padding:0 2px;
 }
 
 .planet-build-bar__categories::-webkit-scrollbar {
@@ -1447,7 +1507,7 @@
   gap:6px;
   overflow-x:auto;
   scrollbar-width:thin;
-  max-width:min(760px,calc(100vw - 320px));
+  max-width:100%;
   padding-bottom:2px;
 }
 
@@ -1485,15 +1545,12 @@
 .planet-build-card {
   position:relative;
   flex:0 0 auto;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:flex-start;
-  gap:1px;
+  display:grid;
+  place-items:center;
   width:52px;
   min-width:52px;
   height:52px;
-  padding:3px 2px;
+  padding:0;
   border-radius:var(--radius-sm);
   border:1px solid var(--border);
   background:var(--surface-1);
@@ -1503,10 +1560,7 @@
   transition:border-color var(--dur-fast) var(--ease),background var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease);
 }
 
-/* 图标占满方格上半，名称压在下沿（造价/缺料只在悬停浮层里）。 */
 .planet-build-card .planet-build-card__icon svg { width:26px; height:26px; }
-.planet-build-card .planet-build-card__cost,
-.planet-build-card .planet-build-card__items { display:none; }
 
 .planet-build-card:hover:not(:disabled) {
   border-color:var(--border-glow);
@@ -1547,15 +1601,12 @@
   box-shadow:0 0 6px rgba(255,107,107,.8);
 }
 
-.planet-build-card--unaffordable .planet-build-card__cost,
-.planet-build-card--unaffordable .planet-build-card__cost-item {
-  color:var(--danger, #ff6b6b);
-}
-
 .planet-build-card__icon {
   position:relative;
   display:grid;
   place-items:center;
+  width:100%;
+  height:100%;
 }
 
 .planet-build-card__lock {
@@ -1570,67 +1621,60 @@
   box-sizing:content-box;
 }
 
-.planet-build-card__name {
-  font-size:.6rem;
-  line-height:1.1;
-  max-width:100%;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  color:var(--text-muted);
-}
-
-/* 数字键角标（1–9）：贴在格子右下角。 */
+/* 数字键角标（1–9）：贴在格子左上角（DSP 口径）。 */
 .planet-build-card__hotkey {
   position:absolute;
-  right:2px;
-  bottom:1px;
+  left:2px;
+  top:1px;
   font-family:var(--font-display);
-  font-size:.55rem;
+  font-size:.58rem;
   line-height:1;
   color:var(--text-dim);
-  opacity:.7;
+  opacity:.85;
   pointer-events:none;
 }
 
-.planet-build-card__cost {
-  display:flex;
-  gap:6px;
-  white-space:nowrap;
-}
-
-.planet-build-card__cost-item {
-  display:inline-flex;
-  align-items:center;
-  gap:2px;
-  font-size:.6rem;
-  font-variant-numeric:tabular-nums;
-  color:var(--text-dim);
-}
-
-.planet-build-card__cost-item--minerals {
-  color:#c9a06a;
-}
-
-.planet-build-card__cost-item--energy {
-  color:var(--amber);
-}
-
+/* 状态行只在**选中了建筑**时渲染（放置/缺料/方向/配方）：未选中时整条不存在。 */
 .planet-build-bar__footer {
   display:flex;
   align-items:center;
-  justify-content:space-between;
   gap:10px;
-  min-height:20px;
+  min-width:0;
+  max-width:100%;
   padding:0 2px;
 }
 
-/* 右侧工具（分类开关 / 显示未解锁 / 收起）：一列紧凑文字按钮。 */
+/* 栏右侧工具（分类页签 / 显示未解锁 / 收起）：小图标按钮（过去是三个文字按钮）。 */
 .planet-build-bar__tools {
   display:flex;
   align-items:center;
   gap:2px;
   flex:0 0 auto;
+  padding-left:2px;
+  border-left:1px solid var(--line-2);
+}
+
+.planet-build-bar__tool {
+  display:grid;
+  place-items:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:none;
+  border-radius:4px;
+  background:none;
+  color:var(--text-muted);
+  cursor:pointer;
+  transition:color var(--dur-fast) var(--ease),background var(--dur-fast) var(--ease);
+}
+
+.planet-build-bar__tool:hover {
+  color:var(--accent);
+  background:rgba(57,230,208,.1);
+}
+
+.planet-build-bar__tool .is-open {
+  transform:rotate(180deg);
 }
 
 .planet-build-bar__hint {
@@ -1645,13 +1689,10 @@
   font-weight:600;
 }
 
-.planet-build-bar__hint--dim {
-  color:var(--text-dim);
-}
-
 .planet-build-bar__status {
   display:flex;
   align-items:center;
+  flex-wrap:wrap;
   gap:8px;
   min-width:0;
 }
@@ -1683,21 +1724,6 @@
   max-width:180px;
 }
 
-.planet-build-bar__toggle {
-  border:none;
-  background:none;
-  color:var(--accent-2);
-  font-size:.72rem;
-  cursor:pointer;
-  padding:2px 6px;
-  border-radius:4px;
-  white-space:nowrap;
-}
-
-.planet-build-bar__toggle:hover {
-  background:#5fb0ff1f;
-}
-
 @media(max-width:900px) {
   .planet-map-shell__overlay {
     left:8px;
@@ -1705,8 +1731,8 @@
     bottom:8px;
   }
 
-  .planet-build-bar__scroller {
-    max-width:calc(100vw - 60px);
+  .planet-build-bar {
+    max-width:calc(100vw - 24px);
   }
 
 }
@@ -1718,14 +1744,25 @@
 .planet-three__surface canvas { display:block; width:100%; height:100%; }
 /* §3.2 3D 镜头控制：竖排小图标 + 设置弹出层（原来是一大块常驻面板，压住左下角地图）。 */
 .planet-three__navigation { position:absolute; left:24px; bottom:150px; display:flex; flex-direction:column; gap:6px; align-items:flex-start; pointer-events:auto; }
+.planet-three__navigation:has(.planet-three__nav-cancel) .planet-three__nav-status { bottom:calc(100% + 38px); }
+/* §3.2 复核：3D 左下只留**一列**图标（全球视角 / 聚焦基地 / 放大 / 缩小 / 图层与视角 /
+   选中对象 / 视角设置）。图层勾选与视角设置分别走各自的弹出层，不再另起一列。 */
 .planet-three__nav-rail { display:flex; flex-direction:column; gap:6px; padding:6px; border-radius:10px; border:1px solid #76cbd52e; background:#06131ece; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
 .planet-three__nav-btn { display:grid; place-items:center; width:34px; height:34px; padding:0; border-radius:6px; color:#a6c4d1; }
 .planet-three__nav-btn:hover { color:#d8f4f2; }
 .planet-three__nav-settings { position:relative; }
 .planet-three__nav-pop { position:absolute; left:calc(100% + 8px); bottom:0; z-index:12; display:flex; flex-direction:column; gap:10px; width:240px; max-width:calc(100vw - 48px); padding:12px; }
-.planet-three__nav-status { display:flex; flex-direction:column; gap:6px; align-items:flex-start; font-size:11px; color:#a6c4d1; }
+.planet-three__layers-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.planet-three__layers-grid label { display:flex; gap:5px; align-items:center; font-size:11px; }
+/* 状态行浮在图标列**上方**（--planet-hud-rail-top）：过去它接在列下面，
+   列长到 8 个按钮时整块会沉到视口外（§3.2 复核）。 */
+.planet-three__nav-status { position:absolute; left:0; bottom:calc(100% + 8px); display:flex; flex-direction:column; gap:6px; align-items:flex-start; font-size:11px; color:#a6c4d1; }
 .planet-three__nav-status small { max-width:280px; padding:3px 8px; border-radius:999px; background:#06131ece; }
 .planet-three__nav-status:empty { display:none; }
+/* 取消当前交互模式的按钮：单独一行贴在状态行上方（它可点，不能放进 pointer-events:none 的容器里）。 */
+.planet-three__nav-cancel { position:absolute; left:0; bottom:calc(100% + 8px); font-size:11px; }
+/* 调试面板展开时（浮在同一位置、层级更高）让位：与 2D 状态行同一口径。 */
+.planet-map-shell:has(.debug-panel--open) .planet-three__nav-status { visibility:hidden; }
 .planet-three__eyebrow { color:#68dece; letter-spacing:3px; font-size:10px; }
 .planet-three__error { position:absolute; top:40%; left:20%; right:20%; padding:24px; border:1px solid #ffb454; background:#111e2a; }
 /* 迷雾格点击提示：不移动镜头，只在顶部给一行说明（避免把镜头推进未探索区导致画面空白） */
@@ -1747,13 +1784,7 @@
   .planet-three__navigation { left:12px; bottom:170px; }
   .planet-three__nav-pop { left:auto; right:calc(100% + 8px); }
 }
-.planet-map-shell:not(.planet-map-shell--3d):has(.planet-view-switch) .debug-panel { top:calc(var(--planet-top-inset, 56px) + 62px); }
-.planet-three__layers { font-size:12px; }
-.planet-three__layers summary { cursor:pointer; padding:3px 0; }
-.planet-three__layers > div { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:8px; }
-.planet-three__layers label { display:flex; gap:5px; align-items:center; }
 @media(max-width:900px) {
-  .planet-map-shell:not(.planet-map-shell--3d):has(.planet-view-switch) .debug-panel { top:160px; }
 }
 
 .mecha-controls { gap: 8px; }
@@ -1932,17 +1963,16 @@
 .planet-map-canvas__surface--theater_zone { cursor: crosshair; }
 .planet-map-canvas__mode--zone { color: #39e6d0; }
 
-/* 战区划定控件（左下工具条旁） */
+/* 战区划定控件：作为左下工具条列的最后一格（PlanetMapToolbar 的 children），
+   不再是紧贴右侧的第二列；浮层从整条列上方展开。 */
 .planet-theater-controls {
-  position: absolute;
-  left: 64px;
-  bottom: 16px;
+  position: relative;
   z-index: 7;
 }
 .planet-theater-controls__popover {
   position: absolute;
   left: 0;
-  bottom: 48px;
+  bottom: calc(100% + 8px);
   width: 260px;
   display: flex;
   flex-direction: column;
@@ -2017,7 +2047,11 @@
 
 /* 起点在左上行星胶囊之下（§3.2 胶囊已收成一行，不再需要给旧的大卡片让位），
    终点在底部快捷栏之上；空间不够时自身滚动，不再压住二者。 */
-.planet-left-stack { position: absolute; left: 12px; top: calc(var(--planet-top-inset, 56px) + 44px); max-height: max(160px, calc(100% - 260px)); overflow-y: auto; z-index: 12; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+/* 左上「新手引导 + 军团」栈：必须与行星胶囊垂直堆叠、留 8px 间距。
+   3D 壳的 --planet-top-inset 与 2D 不同（3D 没有顶部浮层基线），旧写法用固定 +44px
+   会在 3D 下把引导条压在胶囊下沿上——改成「胶囊实测高度 + 间距」由 JS 写进
+   --planet-title-chip-bottom（见 PlanetPage 的 ResizeObserver），没有实测值时退回 52px。 */
+.planet-left-stack { position: absolute; left: 12px; top: calc(var(--planet-title-chip-bottom, calc(var(--planet-top-inset, 56px) + 52px)) + 8px); max-height: max(160px, calc(100% - 260px)); overflow-y: auto; z-index: 12; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 /* 窄屏下抽屉几乎占满宽度：新手引导/军团列表叠在抽屉上会盖住工作台内容，抽屉打开时先让位。 */
 @media (max-width: 760px) {
   body:has(.planet-drawer--open) .planet-left-stack { display: none; }
@@ -2032,13 +2066,7 @@
 .war-guide-panel li.is-current { color: #ffe08a; font-weight: 700; opacity: 1; }
 .war-guide-panel li.is-done { color: #7ee0a8; }
 
-/* 建造卡物品造价：拥有/需要，不足标红（DSP 式快捷栏里卡面不显示，只在悬停浮层里） */
-.planet-build-card__items { display:flex; flex-wrap:wrap; justify-content:center; gap:2px 5px; max-width:84px; font-size:.62rem; font-variant-numeric:tabular-nums; color:var(--text-dim); }
-.planet-build-card__item { display:inline-flex; align-items:center; gap:2px; max-width:100%; }
-.planet-build-card__item-name { font-size:.58rem; color:var(--text-muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.planet-build-card__item--short { color:var(--danger, #ff6b6b); font-weight:600; }
-.planet-build-bar { position:relative; }
-.planet-build-bar__detail { position:absolute; left:8px; bottom:calc(100% + 6px); z-index:5; display:flex; flex-direction:column; gap:3px; min-width:180px; max-width:min(260px,calc(100vw - 32px)); padding:8px 10px; border:1px solid var(--border-glow, #39e6d055); border-radius:6px; background:#08111dee; color:var(--text); font-size:.75rem; pointer-events:none; box-shadow:0 6px 20px #0008; }
+.planet-build-bar__detail { position:absolute; left:0; bottom:calc(100% + 6px); z-index:5; display:flex; flex-direction:column; gap:3px; min-width:180px; max-width:min(260px,calc(100vw - 32px)); padding:8px 10px; border:1px solid var(--border-glow, #39e6d055); border-radius:6px; background:#08111dee; color:var(--text); font-size:.75rem; pointer-events:none; box-shadow:0 6px 20px #0008; }
 .planet-build-bar__detail strong { font-size:.82rem; }
 .planet-build-bar__detail span { display:inline-flex; align-items:center; gap:4px; font-variant-numeric:tabular-nums; }
 .planet-build-bar__detail-head { color:var(--text-muted); font-size:.68rem; }
@@ -2092,17 +2120,6 @@
   cursor:pointer;
 }
 .planet-build-bar__dock-handle:hover { color:var(--accent); }
-.planet-build-bar__dock {
-  border:none;
-  background:none;
-  color:var(--text-muted);
-  font-size:.72rem;
-  cursor:pointer;
-  padding:2px 6px;
-  border-radius:4px;
-  white-space:nowrap;
-}
-.planet-build-bar__dock:hover { background:#5fb0ff1f; }
 
 /*
  * 抽屉打开时建造栏整体让位：抽屉是覆盖式（宽屏 300px），底部 overlay 里的建造栏
