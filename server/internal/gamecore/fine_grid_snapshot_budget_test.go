@@ -173,3 +173,52 @@ func TestFineGridSnapshotStaysWithinBudgetMidGame(t *testing.T) {
 	}
 	t.Logf("读档后再存档 %d 字节（预算 %d）", len(data), skirmishSnapshotBudgetBytes)
 }
+
+// 从磁盘读回来的快照（基线快照 / 存档点 / 回滚 / 回放的起点）也要能还原资源：
+// ResourceBaseline 标了 json:"-"，JSON 往返后为空，必须由地图模型重新挂上，
+// 否则恢复出来的世界一个资源节点都没有（矿机全部空转）。
+func TestSnapshotFromJSONRestoresResourcesWithAttachedBaseline(t *testing.T) {
+	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
+	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
+	ws := core.World()
+	for ws.Tick < 1500 {
+		core.processTick()
+	}
+	// 走一次 JSON 往返：模拟磁盘快照 / 存档点里的基线快照。
+	raw, err := json.Marshal(snapshot.CaptureRuntime(core.worlds, core.activePlanetID, core.discovery, core.spaceRuntime))
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	decoded, err := snapshot.Decode(raw)
+	if err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	if decoded.World.ResourceBaseline != nil {
+		t.Fatal("JSON 往返后不该带资源基线（json:\"-\"）：测试夹具失效")
+	}
+	mapCfg, err := mapconfig.Load("../../map-skirmish.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	maps := mapgen.Generate(mapCfg, core.cfg.Battlefield.MapSeed)
+	attachSnapshotResourceBaseline(decoded, maps)
+	worlds, activePlanetID, _, err := decoded.RestoreRuntime()
+	if err != nil {
+		t.Fatalf("restore runtime: %v", err)
+	}
+	restored := worlds[activePlanetID]
+	if restored == nil {
+		t.Fatal("active world missing after restore")
+	}
+	if len(restored.Resources) != len(ws.Resources) {
+		t.Fatalf("JSON 快照恢复后资源节点数 %d != 原局 %d（基线没挂上）",
+			len(restored.Resources), len(ws.Resources))
+	}
+	for id, want := range ws.Resources {
+		got := restored.Resources[id]
+		if got == nil || *got != *want {
+			t.Fatalf("资源节点 %s 不一致：读档 %+v 原局 %+v", id, got, want)
+		}
+	}
+	t.Logf("JSON 快照 + 挂基线后恢复 %d 个资源节点，逐项一致", len(restored.Resources))
+}
