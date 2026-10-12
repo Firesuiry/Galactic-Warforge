@@ -54,6 +54,9 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	applyPlanetResources(ws, planet)
 	// 可再生矿脉索引：结算每 tick 只扫这些（资源 cell 数在细分网格下是万级）。
 	IndexRenewableResources(ws)
+	// 资源基线：地图生成 + bootstrap 完成后的初始资源节点。细分网格后全图资源
+	// cell 上万，快照只存与基线的差异（见 model.WorldState.ResourceBaseline）。
+	ws.SetResourceBaseline()
 	return ws
 }
 
@@ -423,6 +426,9 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		}
 		planet, _ := maps.Planet(planetID)
 		seedPlayerOutposts(ws, planet, cfg.Players)
+		// bootstrap 还会注入开局矿簇并整地，基线必须在这之后重建一次，
+		// 否则读档会把 bootstrap 注入的矿当成「相对基线的差异」丢掉。
+		ws.SetResourceBaseline()
 		worlds[planetID] = ws
 	}
 	if err := applyScenarioBootstrap(cfg, maps, worlds, spaceRuntime); err != nil {
@@ -635,6 +641,7 @@ func applyPlanetResources(ws *model.WorldState, planet *mapmodel.Planet) {
 		}
 		state.SyncDepleted()
 		ws.Resources[node.ID] = state
+		ws.MapResourceIDs[node.ID] = true
 		ws.Grid[pos.Y][pos.X].ResourceNodeID = node.ID
 	}
 }

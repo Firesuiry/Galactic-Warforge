@@ -29,6 +29,7 @@ func (ws *WorldState) FootprintTiles(origin Position, fp Footprint) ([]Position,
 	}
 	return out, nil
 }
+
 // FindFootprintOrigin 从 start 出发（含自身）按图距由近及远寻找一个「整个占地
 // 都能合法落位」的原点：footprintTiles 不报错、每格都在界内、地形可建（foundation
 // 例外，它自己铺地形）、且没有被其它建筑占用（exceptID 可用于重新索引自己）。

@@ -7,7 +7,6 @@ import (
 	"siliconworld/internal/model"
 	"siliconworld/internal/persistence"
 	"siliconworld/internal/snapshot"
-	"siliconworld/internal/terrain"
 )
 
 func TestSnapshotPolicyShouldSnapshot(t *testing.T) {
@@ -181,15 +180,15 @@ func testSnapshot(tick int64) *snapshot.Snapshot {
 		Tick:      tick,
 		Timestamp: time.Unix(0, 0).UTC(),
 		World: &snapshot.WorldSnapshot{
-			Tick:      tick,
-			PlanetID:  "p-1",
-			MapWidth:  1,
-			MapHeight: 1,
-			Players:   map[string]*model.PlayerState{},
-			Buildings: map[string]*snapshot.BuildingSnapshot{},
-			Units:     map[string]*model.Unit{},
-			Resources: map[string]*model.ResourceNodeState{},
-			Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+			Tick:           tick,
+			PlanetID:       "p-1",
+			MapWidth:       1,
+			MapHeight:      1,
+			Players:        map[string]*model.PlayerState{},
+			Buildings:      map[string]*snapshot.BuildingSnapshot{},
+			Units:          map[string]*model.Unit{},
+			ResourceDeltas: map[string]model.ResourceNodeDelta{},
+			Terrain:        "0",
 		},
 	}
 }
