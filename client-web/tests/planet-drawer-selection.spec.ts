@@ -26,6 +26,19 @@ async function dismissToasts(page: Page) {
   await expect(page.locator('.toast')).toHaveCount(0);
 }
 
+/**
+ * 收起会盖住地图的浮层：左上行星胶囊（§3.2 默认收起，展开态的四张资源芯片会压住
+ * 上方格子）、警报条（顶栏下方居中的窄条）。两者都不在 elementFromPoint 的 HUD 清单里，
+ * 但它们确实盖住地图——不收起来，这条「点实体 → 选择条」的用例会挑不到干净格子。
+ */
+async function collapseHudOverlays(page: Page) {
+  const collapse = page.getByRole('button', { name: '折叠行星信息' });
+  if (await collapse.count() > 0) {
+    await collapse.click();
+  }
+  await expect(page.locator('.planet-title-chip--collapsed')).toHaveCount(1);
+}
+
 /** 点地图上的一个实体 → 底部选择条出现（挑中心点没被 HUD 按钮盖住的实体）。 */
 async function selectFirstBuilding(page: Page) {
   const surface = page.locator('.planet-map-canvas__surface');
@@ -75,6 +88,7 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await openFixturePlanet(page);
     await dismissToasts(page);
+    await collapseHudOverlays(page);
     await selectFirstBuilding(page);
 
     await page.getByRole('button', { name: '工作台' }).first().click();

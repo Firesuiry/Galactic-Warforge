@@ -1110,12 +1110,15 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
           />
         </div>
       </div>
+      {/* 底部状态浮层（§3.2 复核）：不再占画布网格的一行——那会让快捷栏把它整条压住。
+          现在浮在左下工具条列**上方**（读 --planet-hud-rail-top），与工具条同一列，
+          因此永远不与底部居中的快捷栏抢位置；调试面板展开时整块让位（CSS :has）。 */}
       <div className="planet-map-canvas__status">
-        <span>六面展开图 · 虚线两侧不一定相邻，跨面连接请使用球面视图</span>
         <span>{overviewMode ? `缩放 ${getPlanetZoomStatusLabel(camera.zoomIndex, planet.map_width, planet.map_height)}` : `缩放 ${sceneZoomStatusLabel}`}</span>
         <span>
           Hover {hoveredTile ? `(${hoveredTile.x}, ${hoveredTile.y})` : '-'}
         </span>
+        <span>{selectionLabel(selected)}</span>
         {interactionMode.kind === 'build' ? (
           <span className="planet-map-canvas__mode">建造模式：点击放置 · 右键/Esc 取消</span>
         ) : null}
@@ -1137,7 +1140,6 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
         ) : null}
         {selectedUnits.length > 1 ? <span className="planet-map-canvas__mode">已框选 {selectedUnits.length} 个单位 · 右键移动/攻击</span> : null}
         {selectedSquads.length > 0 ? <span className="planet-map-canvas__mode">已选 {selectedSquads.length} 个小队 · 右键点地部署任务群</span> : null}
-        <span>{selectionLabel(selected)}</span>
         {simplificationMessages.length > 0 ? <span>低缩放简化</span> : null}
         {simplificationMessages.map((message) => (
           <span key={message}>{message}</span>

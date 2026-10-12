@@ -21,8 +21,28 @@ async function login(page: Page) {
   })));
 }
 
-function buildSite(data: Scene): Tile {
-  const executor = Object.values(data.units).find(unit => unit.owner_id === 'p1' && unit.type === 'executor')!;
+/**
+ * §3.2 界面重排后，「生产规划」按钮不再常驻：它在左上行星胶囊的展开态里
+ * （胶囊默认收成一行「名称 · 电力 · 研究」，点箭头展开才出现）。
+ */
+async function openProductionPlanner(page: Page) {
+  const plannerButton = page.getByRole('button', { name: '生产规划', exact: true });
+  if (!(await plannerButton.isVisible())) {
+    await page.getByRole('button', { name: '展开行星信息' }).click();
+  }
+  await plannerButton.click();
+}
+
+/** §3.2 画面质量/镜头俯仰/图层收进左下竖排图标栏的「视角设置」弹出层。 */
+async function openViewSettings(page: Page) {
+  const quality = page.getByRole('combobox', { name: '画面质量' });
+  if (!(await quality.isVisible())) {
+    await page.getByRole('button', { name: '视角设置' }).click();
+  }
+  await expect(quality).toBeVisible();
+}
+
+function buildSite(data: Scene): Tile {  const executor = Object.values(data.units).find(unit => unit.owner_id === 'p1' && unit.type === 'executor')!;
   const occupied = [...Object.values(data.buildings), ...Object.values(data.units), ...data.resources];
   for (let radius = 1; radius <= 5; radius++) {
     for (let y = executor.position.y - radius; y <= executor.position.y + radius; y++) {
@@ -45,14 +65,15 @@ test('真实产线配方规划可建造带配方的工厂，发展路线可进�
   await page.goto(`/planet/${planetId}?quality=low`);
   await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: DebugScene }).__planetThree?.getQuality));
-  const quality = page.getByRole('combobox', { name: '画面质量' });
+  // §3.2：行星胶囊默认收成一行，「生产规划」在展开态里；画质下拉在左下视角设置弹层里。
+  const quality = await openViewSettings(page).then(() => page.getByRole('combobox', { name: '画面质量' }));
   for (const value of ['high', 'balanced', 'low']) {
     await quality.selectOption(value);
     await expect.poll(() => page.evaluate(() => (window as unknown as { __planetThree: DebugScene }).__planetThree.getQuality())).toBe(value);
   }
   expect(await page.evaluate(() => localStorage.getItem('siliconworld-planet-quality'))).toBe('low');
 
-  await page.getByRole('button', { name: '生产规划', exact: true }).click();
+  await openProductionPlanner(page);
   const planner = page.getByRole('region', { name: '生产规划' });
   await expect(planner).toContainText('当前载入区域');
   await expect(planner.getByRole('button', { name: /定位建筑/ }).first()).toBeVisible();
@@ -117,7 +138,7 @@ test('390px 生产与发展入口可操作，配方检索和画质设置不溢�
   await login(page);
   await page.goto(`/planet/${planetId}?quality=low`);
   await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: '生产规划', exact: true }).click();
+  await openProductionPlanner(page);
   const planner = page.getByRole('region', { name: '生产规划' });
   await planner.getByRole('textbox', { name: '搜索生产配方' }).fill('electromagnetic_matrix');
   await expect(planner.getByRole('combobox', { name: '规划配方' })).toHaveValue('electromagnetic_matrix');
@@ -129,7 +150,8 @@ test('390px 生产与发展入口可操作，配方检索和画质设置不溢�
   await page.getByRole('tab', { name: /戴森能源/ }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: '/tmp/sw-dsp-review/development-mobile.png' });
-  await page.getByRole('button', { name: '工作台', exact: true }).click();
+  await page.getByRole('button', { name: '工作台', exact: true }).first().click();
+  await openViewSettings(page);
   await page.getByRole('combobox', { name: '画面质量' }).selectOption('balanced');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __planetThree: DebugScene }).__planetThree.getQuality())).toBe('balanced');
   await page.getByRole('button', { name: '平面战术', exact: true }).click();

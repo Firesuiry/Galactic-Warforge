@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { surfaceFace, surfaceStep, type SurfacePoint } from '../../shared-client/src/surface';
 
+import { revealBuildCard } from './support/build-bar';
+
 const backend = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const planet = 'planet-1-1';
 type Entity = { id: string; type: string; owner_id: string; position: SurfacePoint; move_range?: number };
@@ -73,7 +75,7 @@ test('cube face seam: real GUI construction, movement, neighbor streaming and fi
   await page.goto(`/planet/${planet}`);
   await page.waitForFunction(()=>Boolean((window as any).__planetThree?.data?.planet?.surface_patches?.length));
   const beforeScale=await page.evaluate(id=>(window as any).__planetThree.moving.get(`unit:${id}`).group.scale.toArray(),executor.id);
-  await page.locator('.planet-build-card[data-building-id="wind_turbine"]').click();
+  await (await revealBuildCard(page, 'wind_turbine')).click();
   // 3D 软渲染下 React 状态传播慢，等建造模式真正激活再点地图，避免点选被当成普通选中
   await expect(page.getByText(/放置 风力涡轮机/)).toBeVisible();
   const {response:built,tile:buildTile}=await clickTileExpectingCommand(page,async()=>acrossFace(await scene(),executor.position),'build');

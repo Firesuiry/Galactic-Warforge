@@ -2,11 +2,13 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * 试玩 1014 层 14 问题 1（bug-1014-toast-blocks-minimap）：
- * 右下角 toast 栈压在小地图上，把右键 contextmenu 吃掉，移动令被静默吞掉
- * （层 13「小地图右键无命令反馈」的真正原因）。
+ * 右下角 toast 栈压在小地图上，把右键 contextmenu 吃掉，移动令被静默吞掉。
  *
- * 几何契约（不依赖截图）：
- * - 小地图在场时（.planet-minimap 渲染，宽屏 ≥1101px），toast 栈的盒子不得与小地图相交；
+ * §3.2 的修法不是继续给小地图做避让，而是把 toast 栈整体搬到右上角（顶栏下方，
+ * 见 components.css 的 .toast-stack）——右下角是小地图的走廊，两者物理上不再可能相交。
+ * 本用例把这个新契约写成几何断言（不依赖截图）：
+ * - toast 栈的盒子必须落在视口上半部、贴右缘，且与小地图（右下角）不相交；
+ * - toast 栈不得压住顶栏（顶栏是 44px 的常驻导航，压住就点不到导航按钮）；
  * - 小地图 canvas 的中心点 elementFromPoint 必须命中 canvas 自身，而不是 .toast；
  * - 在 canvas 上派发 contextmenu，事件必须真的到达 canvas（派发点与命中点同源）。
  *
@@ -27,7 +29,7 @@ async function installSession(page: Page) {
   });
 }
 
-/** 注入一叠与真实 toast 同层级同尺寸的卡片，压住右下角（复现「黑雾报复时 toast 成堆」）。 */
+/** 注入一叠与真实 toast 同层级同尺寸的卡片（复现「黑雾报复时 toast 成堆」）。 */
 async function stackToasts(page: Page, count: number) {
   await page.evaluate((toastCount) => {
     document.getElementById('toast-stub')?.remove();
@@ -44,7 +46,7 @@ async function stackToasts(page: Page, count: number) {
   }, count);
 }
 
-test('行星页宽屏：右下角 toast 栈不得盖住小地图、不得吞掉小地图右键', async ({ page }) => {
+test('行星页宽屏：右上角 toast 栈不压顶栏、不碰右下角小地图，小地图右键仍到达 canvas', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1080 });
   await installSession(page);
   await page.goto(`/planet/${PLANET_ID}?view=2d`);
@@ -64,51 +66,54 @@ test('行星页宽屏：右下角 toast 栈不得盖住小地图、不得吞掉�
     const minimap = document.querySelector('.planet-minimap') as HTMLElement;
     const canvas = document.querySelector('.planet-minimap__canvas') as HTMLCanvasElement;
     const stack = document.getElementById('toast-stub') as HTMLElement;
+    const nav = document.querySelector('.top-nav') as HTMLElement;
     const minimapRect = minimap.getBoundingClientRect();
     const stackRect = stack.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
+    const navRect = nav.getBoundingClientRect();
     const cx = canvasRect.x + canvasRect.width / 2;
     const cy = canvasRect.y + canvasRect.height / 2;
     const top = document.elementFromPoint(cx, cy) as HTMLElement | null;
+    const overlaps = (a: DOMRect, b: DOMRect) =>
+      a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
     return {
       minimapRect: { x: minimapRect.x, y: minimapRect.y, w: minimapRect.width, h: minimapRect.height },
       stackRect: { x: stackRect.x, y: stackRect.y, w: stackRect.width, h: stackRect.height },
+      navRect: { x: navRect.x, y: navRect.y, w: navRect.width, h: navRect.height },
       canvasCenter: { x: cx, y: cy },
-      overlaps:
-        minimapRect.right > stackRect.x
-        && minimapRect.x < stackRect.right
-        && minimapRect.bottom > stackRect.y
-        && minimapRect.top < stackRect.bottom,
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+      overlapsMinimap: overlaps(minimapRect, stackRect),
+      overlapsNav: overlaps(navRect, stackRect),
       hit: top ? `${top.tagName}.${typeof top.className === 'string' ? top.className : ''}` : 'none',
       hitIsCanvas: top === canvas,
-      // 抬升量必须来自小地图实测高度（PlanetMinimap 的 ResizeObserver 写进 :root），
-      // 而不是写死的常量——写死会在字号/label 换行时差几像素重新压住画布。
-      reportedHeight: Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--planet-minimap-height'),
-      ),
     };
   });
 
-  // 前提：注入的 toast 栈必须真的铺在右下角（否则这条断言没有意义）。
+  // 前提：注入的 toast 栈必须真的有高度（否则这些断言没有意义）。
   expect(report.stackRect.h, '注入的 toast 栈必须有高度').toBeGreaterThan(0);
 
   expect(
-    report.reportedHeight,
-    '--planet-minimap-height 必须由小地图实测写入（PlanetMinimap 的 ResizeObserver）',
-  ).toBeGreaterThan(0);
-
-  expect(
-    report.reportedHeight,
-    `--planet-minimap-height=${report.reportedHeight} 与实际小地图高度 ${report.minimapRect.h} 不符：toast 栈抬升量算错`,
-  ).toBeCloseTo(report.minimapRect.h, 0);
-
-  expect(
-    report.overlaps,
+    report.overlapsMinimap,
     `toast 栈与小地图相交（toast ${JSON.stringify(report.stackRect)} vs 小地图 ${JSON.stringify(report.minimapRect)}）：右键会被 toast 卡片吃掉`,
   ).toBe(false);
 
   expect(
-  report.hitIsCanvas,
+    report.overlapsNav,
+    `toast 栈压住顶栏（toast ${JSON.stringify(report.stackRect)} vs 顶栏 ${JSON.stringify(report.navRect)}）：导航按钮点不到`,
+  ).toBe(false);
+
+  // 右上角：盒子在视口上半部、贴右缘（.toast-stack 的 right:16px）。
+  expect(
+    report.stackRect.y,
+    `toast 栈应贴在右上角（顶栏下方），实际 y=${report.stackRect.y}`,
+  ).toBeLessThan(report.viewport.h / 2);
+  expect(
+    report.stackRect.x + report.stackRect.w,
+    `toast 栈右缘 ${report.stackRect.x + report.stackRect.w} 应贴视口右缘 ${report.viewport.w}`,
+  ).toBeGreaterThan(report.viewport.w - 40);
+
+  expect(
+    report.hitIsCanvas,
     `小地图画布中心 ${JSON.stringify(report.canvasCenter)} 命中的是 ${report.hit}，不是 canvas：右键移动令会被静默吞掉`,
   ).toBe(true);
 
