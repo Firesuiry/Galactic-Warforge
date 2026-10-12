@@ -32,6 +32,14 @@ func (gc *GameCore) execProduce(ws *model.WorldState, playerID string, cmd model
 	if len(b.UnitQueue) >= 20 {
 		return mechaJobFailed(model.CodeInvalidTarget, "生产队列已满")
 	}
+	// 运输机器人有每玩家上限（§2：每玩家 20 台）：把在途（队列里的）也算进去，
+	// 否则玩家连点 produce 就能绕过上限。
+	if model.UnitType(id) == model.UnitTypeTransportRobot {
+		if alive, queued := countTransportRobots(ws, playerID); alive+queued >= maxHaulPerPlayer {
+			return mechaJobFailed(model.CodeInvalidTarget,
+				fmt.Sprintf("运输机器人已达上限（%d 台，含在生产的 %d 台）", maxHaulPerPlayer, queued))
+		}
+	}
 	for _, cost := range entry.Cost {
 		if b.Storage.ItemQuantity(cost.ItemID) < cost.Quantity {
 			return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("生产建筑缺少 %d 个「%s」", cost.Quantity, itemDisplayName(cost.ItemID)))

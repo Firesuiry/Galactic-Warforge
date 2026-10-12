@@ -13,6 +13,12 @@ import (
 
 func newE2ETestCore(t *testing.T) *GameCore {
 	t.Helper()
+	return newE2ETestCoreWithFace(t, 32)
+}
+
+// newE2ETestCoreWithFace 指定 cube_sphere 面大小（细分网格下 face 32 = 96×64 cell）。
+func newE2ETestCoreWithFace(t *testing.T, faceSize int) *GameCore {
+	t.Helper()
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
 			MapSeed:     "e2e-test-seed",
@@ -27,7 +33,7 @@ func newE2ETestCore(t *testing.T) *GameCore {
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
 		System: mapconfig.SystemConfig{PlanetsPerSystem: 1},
-		Planet: mapconfig.PlanetConfig{FaceSize: 32, ResourceDensity: 12},
+		Planet: mapconfig.PlanetConfig{FaceSize: faceSize, ResourceDensity: 12},
 	}
 	maps := mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed)
 	q := queue.New()

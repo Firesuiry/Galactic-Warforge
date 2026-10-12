@@ -626,17 +626,25 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop';
+  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop' | 'haul';
 
-  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string; planetId?: string } = {}) {
+  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string; planetId?: string; fromBuildingId?: string; toBuildingId?: string; itemId?: string } = {}) {
     return sendSingleCommand({
       type: 'unit_order',
       target: { layer: 'planet', ...unitSelectorTarget(selector), ...(options.position ? { position: options.position } : {}), ...(options.planetId ? { planet_id: options.planetId } : {}) },
       payload: {
         order,
         ...(options.targetEntityId ? { target_entity_id: options.targetEntityId } : {}),
+        ...(options.fromBuildingId ? { from_building_id: options.fromBuildingId } : {}),
+        ...(options.toBuildingId ? { to_building_id: options.toBuildingId } : {}),
+        ...(options.itemId ? { item_id: options.itemId } : {}),
       },
     });
+  }
+
+  /** haul：运输机器人（transport_robot）在两座建筑之间往返搬运单一物品。 */
+  function cmdHaul(selector: string | string[], fromBuildingId: string, toBuildingId: string, itemId?: string, planetId?: string) {
+    return cmdUnitOrder(selector, 'haul', { fromBuildingId, toBuildingId, itemId, planetId });
   }
 
   /** count：最多烧几块燃料（缺省 1），服务端烧到核心满为止。 */
@@ -1264,6 +1272,7 @@ export function createApiClient(options: ApiClientOptions) {
     clearAuth,
     cmdAttack,
     cmdUnitOrder,
+    cmdHaul,
     cmdRefuelMecha,
     cmdMineResource,
     cmdCraftItem,

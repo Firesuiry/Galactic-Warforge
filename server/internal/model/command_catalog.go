@@ -89,7 +89,7 @@ var commandSpecs = []CommandStructureSpec{
 	{
 		Type:                  CmdUnitOrder,
 		RequiredPayloadFields: []string{"order"},
-		OptionalPayloadFields: []string{"target_entity_id"},
+		OptionalPayloadFields: []string{"target_entity_id", "from_building_id", "to_building_id", "item_id"},
 		ExtraValidation: func(cmd Command) []CommandIssue {
 			issues := requireAnyUnitSelector(cmd)
 			order := strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["order"]))
@@ -102,18 +102,27 @@ var commandSpecs = []CommandStructureSpec{
 				if strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["target_entity_id"])) == "" {
 					issues = append(issues, MissingFieldIssue("payload.target_entity_id"))
 				}
+			case "haul":
+				from := strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["from_building_id"]))
+				to := strings.TrimSpace(fmt.Sprintf("%v", cmd.Payload["to_building_id"]))
+				if from == "" {
+					issues = append(issues, MissingFieldIssue("payload.from_building_id"))
+				}
+				if to == "" {
+					issues = append(issues, MissingFieldIssue("payload.to_building_id"))
+				}
 			case "hold", "stop":
 			default:
 				issues = append(issues, InvalidValueIssue(
 					"payload.order",
-					"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop",
-					"attack_move|patrol|guard|hold|follow|retreat|stop",
+					"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop/haul",
+					"attack_move|patrol|guard|hold|follow|retreat|stop|haul",
 					order,
 				))
 			}
 			return issues
 		},
-		Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
+		Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "haul（运输机器人专用）：需 payload.from_building_id + payload.to_building_id，可选 payload.item_id 锁定单一物品；两端须为己方同行星建筑，起点能取货、终点能收货。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
 	},
 	{
 		Type:                  CmdRefuelMecha,

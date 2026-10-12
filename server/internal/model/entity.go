@@ -21,6 +21,9 @@ const (
 	UnitTypeRepairVehicle  UnitType = "repair_vehicle"
 	UnitTypeSupplyTruck    UnitType = "supply_truck"
 	UnitTypeAttackDrone    UnitType = "attack_drone"
+	// UnitTypeTransportRobot 运输机器人（§2）：HQ 生产的带货地面单位，
+	// 按 haul 指令在两座建筑之间往返搬运单一物品，运力远小于传送带。
+	UnitTypeTransportRobot UnitType = "transport_robot"
 	// UnitTypeDarkFog 黑雾蜂群单位（E1）：巢穴孵化的实体敌方单位，
 	// 归属保留势力 ID DarkFogOwnerID，与全体玩家互相敌对。
 	UnitTypeDarkFog UnitType = "dark_fog"
@@ -158,6 +161,8 @@ type Unit struct {
 	VisionRange  int         `json:"vision_range"`
 	AttackTarget string      `json:"attack_target,omitempty"` // entity ID
 	Mecha        *MechaState `json:"mecha,omitempty"`
+	// Haul 运输机器人的搬运路线与行程（§2）；其它单位为空。
+	Haul *UnitHaulState `json:"haul,omitempty"`
 
 	// 实时移动（R1）：每 tick 沿 Path 按 MoveSpeed 推进。
 	MoveSpeed      float64    `json:"move_speed"`                 // 格/tick
@@ -193,6 +198,7 @@ func (u *Unit) Clone() *Unit {
 	}
 	out := *u
 	out.Mecha = u.Mecha.Clone()
+	out.Haul = u.Haul.Clone()
 	if u.Cargo != nil {
 		out.Cargo = make(ItemInventory, len(u.Cargo))
 		for k, v := range u.Cargo {

@@ -8,7 +8,20 @@ export interface Position {
 }
 
 export type BuildingType = string;
-export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor' | 'scout' | 'artillery' | 'missile_vehicle' | 'repair_vehicle' | 'supply_truck' | 'attack_drone' | 'dark_fog';
+export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor' | 'scout' | 'artillery' | 'missile_vehicle' | 'repair_vehicle' | 'supply_truck' | 'attack_drone' | 'transport_robot' | 'dark_fog';
+
+/** 运输机器人（transport_robot）的当前阶段（§2）。 */
+export type HaulPhase = 'to_source' | 'loading' | 'to_target' | 'unloading' | 'waiting_source' | 'waiting_target';
+
+/** 运输机器人的搬运路线与行程（单位 JSON 的 haul 字段）。 */
+export interface UnitHaulState {
+  from_building_id: string;
+  to_building_id: string;
+  item_id?: string;
+  phase?: HaulPhase;
+  cargo?: ItemAmount;
+  delivered_total?: number;
+}
 
 export type BuildingWorkState = 'idle' | 'running' | 'paused' | 'no_power' | 'error';
 export type ConnectionKind = 'power' | 'transport' | 'logistics';
@@ -340,6 +353,8 @@ export type UnitStance =
   | 'retreat';
 
 export interface Unit {
+  /** 运输机器人的搬运路线与行程（其它单位为空）。 */
+  haul?: UnitHaulState;
  squad_id?: string; ammo_class?: string; ammo?: number; ammo_capacity?: number; ammo_item?: string; combat_state?: string; domain?: string; min_attack_range?: number; cargo?: ItemInventory;
   mecha?: MechaState;
   id: string;

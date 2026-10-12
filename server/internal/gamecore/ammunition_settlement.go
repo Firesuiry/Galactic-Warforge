@@ -78,7 +78,9 @@ func settleAmmunitionSupply(ws *model.WorldState) {
 			}
 			remaining -= refillUnit(u, remaining, available, take)
 			spec, _ := model.UnitDefinitionByID(u.Type)
-			if spec.CargoCapacity <= 0 || remaining <= 0 {
+			// 只有"补给载具"（supply_radius > 0 的补给车/维修车）才接受补给站
+			// 塞弹药；运输机器人这类带货单位没有补给能力，别把子弹倒进它的货舱。
+			if spec.CargoCapacity <= 0 || spec.SupplyRadius <= 0 || remaining <= 0 {
 				continue
 			}
 			if u.Cargo == nil {
