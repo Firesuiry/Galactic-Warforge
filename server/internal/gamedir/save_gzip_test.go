@@ -2,10 +2,11 @@ package gamedir
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
-	"siliconworld/internal/terrain"
+	"siliconworld/internal/model"
 )
 
 func TestWriteSaveStoresGzipPayload(t *testing.T) {
@@ -70,27 +71,22 @@ func TestLoadReadsLegacyPlainJSONSave(t *testing.T) {
 }
 
 func TestGzipSaveShrinksTerrainHeavyPayload(t *testing.T) {
+	// 细分网格后地形不再逐格写盘（快照只存非 buildable 格的行内游程），
+	// 「大 payload 压缩」改用一个仍然逐格写盘、规模可比的状态字段验证：
+	// 512×512 的资源差异表（每个节点一条 remaining/current_yield）。
 	const size = 512
-	grid := make([][]terrain.TileType, size)
+	deltas := make(map[string]model.ResourceNodeDelta, size*size)
 	for y := 0; y < size; y++ {
-		row := make([]terrain.TileType, size)
 		for x := 0; x < size; x++ {
-			switch (x + y) % 10 {
-			case 0:
-				row[x] = terrain.TileWater
-			case 5:
-				row[x] = terrain.TileBlocked
-			default:
-				row[x] = terrain.TileBuildable
-			}
+			id := fmt.Sprintf("planet-1-1-res-%d", y*size+x)
+			deltas[id] = model.ResourceNodeDelta{Remaining: 1000 + x, CurrentYield: 3 + y%7}
 		}
-		grid[y] = row
 	}
 
 	save := minimalSave(9)
 	save.Snapshot.World.MapWidth = size
 	save.Snapshot.World.MapHeight = size
-	save.Snapshot.World.Terrain = grid
+	save.Snapshot.World.ResourceDeltas = deltas
 
 	dir := Open(t.TempDir())
 	if err := dir.WriteInitial(minimalMeta(), save); err != nil {
@@ -111,12 +107,13 @@ func TestGzipSaveShrinksTerrainHeavyPayload(t *testing.T) {
 
 	_, loaded, err := dir.Load()
 	if err != nil {
-		t.Fatalf("load terrain-heavy save: %v", err)
+		t.Fatalf("load resource-heavy save: %v", err)
 	}
-	if len(loaded.Snapshot.World.Terrain) != size || len(loaded.Snapshot.World.Terrain[0]) != size {
-		t.Fatalf("expected terrain restored to %dx%d", size, size)
+	if len(loaded.Snapshot.World.ResourceDeltas) != size*size {
+		t.Fatalf("expected %d resource deltas restored, got %d", size*size, len(loaded.Snapshot.World.ResourceDeltas))
 	}
-	if loaded.Snapshot.World.Terrain[0][0] != terrain.TileWater {
-		t.Fatalf("expected terrain content preserved, got %s", loaded.Snapshot.World.Terrain[0][0])
+	first := loaded.Snapshot.World.ResourceDeltas["planet-1-1-res-0"]
+	if first.Remaining != 1000 || first.CurrentYield != 3 {
+		t.Fatalf("expected resource delta content preserved, got %+v", first)
 	}
 }

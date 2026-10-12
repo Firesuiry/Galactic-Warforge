@@ -664,10 +664,20 @@ func schemaForPayloadField(field string) map[string]any {
 	case "latitude", "longitude", "latitude_min", "latitude_max", "coverage",
 		"orbit_radius", "inclination":
 		return map[string]any{"type": "number"}
-	case "member_ids", "allowed_slot_ids":
+	case "member_ids", "allowed_slot_ids", "input_directions", "output_directions", "filter_items":
+		// 分拣器/分流器的方向与过滤物品都是数组：服务端 configure_sorter /
+		// configure_splitter 要求数组载荷（单个字符串会被拒绝），目录必须与实现一致。
 		return map[string]any{
 			"type":  "array",
 			"items": map[string]any{"type": "string"},
+		}
+	case "filter_mode":
+		return map[string]any{"type": "string", "enum": []string{"allow", "deny"}}
+	case "output_filters":
+		return map[string]any{
+			"type":                 "object",
+			"propertyNames":        map[string]any{"enum": []string{"north", "east", "south", "west"}},
+			"additionalProperties": map[string]any{"type": "string"},
 		}
 	case "position":
 		return map[string]any{

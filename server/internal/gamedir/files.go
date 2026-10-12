@@ -20,8 +20,9 @@ import (
 )
 
 // CurrentFormatVersion 细分网格后坐标语义改变：旧存档点/存档一律拒绝加载，
-// 不写兼容层。版本 1 = 旧网格。
-const CurrentFormatVersion = 2
+// 不写兼容层。版本 1 = 旧网格；版本 3 = 快照只存地形游程与资源差异
+// （可由地图配置 + seed 重建的部分不入快照）。
+const CurrentFormatVersion = 3
 
 var syncFile = func(file *os.File) error {
 	return file.Sync()

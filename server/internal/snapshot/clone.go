@@ -133,6 +133,17 @@ func cloneResource(res *model.ResourceNodeState) *model.ResourceNodeState {
 	return &cp
 }
 
+func cloneResourceBaseline(in map[string]model.ResourceBaselineEntry) map[string]model.ResourceBaselineEntry {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]model.ResourceBaselineEntry, len(in))
+	for id, entry := range in {
+		out[id] = entry
+	}
+	return out
+}
+
 func clonePipelineNetworkState(state *model.PipelineNetworkState) *model.PipelineNetworkState {
 	if state == nil {
 		return nil
