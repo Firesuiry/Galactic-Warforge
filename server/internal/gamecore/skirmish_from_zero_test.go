@@ -309,7 +309,9 @@ func (op *zeroOpening) observe() {
 		op.wavePeakEnd = ws.Tick + 600
 	}
 	if op.wavePeakEnd > 0 && ws.Tick <= op.wavePeakEnd {
-		if near := countP2ArmyNear(ws, op.home, 20); near > op.wavePeak {
+		// 首波规模按"基地 60 cell 内的 p2 地面单位"统计：细分网格后交火距离
+		// 与射程都 ×3（军团停在 ~10–30 cell 处），20 已判不到首波。
+		if near := countP2ArmyNear(ws, op.home, 60); near > op.wavePeak {
 			op.wavePeak = near
 		}
 		if op.wavePeak > op.firstWavePeak {

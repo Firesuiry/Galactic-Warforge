@@ -198,7 +198,8 @@ func TestA1BotRecallsAgainstIncomingUnits(t *testing.T) {
 	home := botPlayerHome(t, ws, "p2")
 	enemyPos := botTileAtDistance(t, ws, home, 2)
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", enemyPos)
-	soldierPos := botTileAtDistance(t, ws, home, 8)
+	// 细分网格：召回阈值 ×3（"已足够近就不召回" 4→36），部队要放得更远。
+	soldierPos := botTileAtDistance(t, ws, home, 48)
 	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", soldierPos)
 
 	cmds := core.planBotCommands(ws, "p2", botTuningFor("hard"))

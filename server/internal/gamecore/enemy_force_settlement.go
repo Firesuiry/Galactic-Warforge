@@ -294,8 +294,13 @@ func (gc *GameCore) spawnBlackFogNest(ws *model.WorldState, level int) *model.En
 		if nestSiteInRuinCooldown(ws, pos, tuning) {
 			continue
 		}
-		// 随尝试次数放宽距离要求，保证小地图也能生成。
-		need := minDist - attempt/8*30
+		// 随尝试次数放宽距离要求，保证小地图也能生成。候选点由哈希直接给出、
+		// 与地图大小无关，而"距玩家建筑 ≥150"在 face 288 上命中率极低：早先
+		// 每次放宽只有 30 cell（细分网格前是 10 格），96 次尝试后下限才降到 150-330
+		// → 归到 24，绝大多数尝试都花在必然失败的 150 cell 上，一次 spawn 要
+		// 跑上百次 O(建筑数) 的距离检查（实测每个"该建巢"的 tick 都要 ~200ms）。
+		// 改成每次尝试放宽 60：下限 150→24 只需 3 组尝试。
+		need := minDist - attempt/8*60
 		if need < 24 {
 			need = 24
 		}

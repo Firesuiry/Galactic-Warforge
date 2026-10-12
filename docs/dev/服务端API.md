@@ -281,20 +281,20 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ### 5.2 机甲（执行体）
 
 - `mecha` 字段：`energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `inventory_capacity` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick` / `job` / `logistics_requests`。
-- 初始核心 100、护盾容量 0。科技：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +2 移动范围/级（基础 12）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +1 视野/级（基础 6）。研究只提高上限，不补能。
+- 初始核心 100、护盾容量 0。科技（距离类数值已随细分网格 ×3）：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +6 移动范围/级（基础 36 cell）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +3 视野/级（基础 18 cell）。研究只提高上限，不补能。
 - 自动交战（`settleMechaAutoFire`）：**机甲不会因为「正在走路」而不还手**（试玩报告 1011 新问题 C：执行移动/建造指令的机甲被 8 个兵从 120 血打到 0、一次没开火）。
   - 有路径时按 `path_intent` 分两类：玩家显式 `move` / `attack` 命令的路径（`order`）**边走边打**——不改路径、不停下，只对 `attack_range` 内的敌对目标（优先 `last_attacker_id`）按冷却开火；作业/建造驱动的行走（`task`，即 `build` + `auto_approach` 的施工自动靠近）附近有威胁时按防御处理——暂停作业、去还手（受接战锚点牵引约束），威胁消失后恢复作业并重新规划施工路径。
-  - 无路径（空闲/手搓中）：按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+6`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。
+  - 无路径（空闲/手搓中）：按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+18`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。
   - 自动开火不写 `attack_target`，并保留两发的能量。
 - 受击满 10 tick 后每 tick 消耗 1 核心恢复最多 2 护盾。
-- **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/格、0.5 格/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
-- 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 4，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
-- 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+6` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。**有路径的机甲不会因为「在走路」而不还手**（试玩报告 1011 新问题 C）：玩家显式 `move`/`attack` 路径（`path_intent=order`）边走边打、不改路径不停下；作业/建造驱动的行走（`path_intent=task`）有威胁时暂停作业去还手，威胁消失后恢复作业并重新规划施工路径。
+- **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/cell、0.5 cell/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
+- 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 12 cell，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
+- 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+18` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。**有路径的机甲不会因为「在走路」而不还手**（试玩报告 1011 新问题 C）：玩家显式 `move`/`attack` 路径（`path_intent=order`）边走边打、不改路径不停下；作业/建造驱动的行走（`path_intent=task`）有威胁时暂停作业去还手，威胁消失后恢复作业并重新规划施工路径。
 - `refuel_mecha`：`payload.item_id` 必填，`payload.count` 可选（缺省 1，最多烧几块）。仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；实际消耗 = min(count, 补满所需件数, 背包现有)，背包没有该燃料 `INSUFFICIENT_RESOURCE`；核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
 - `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 6 格（cell，细分网格前为 2）内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
 - `craft_item`：配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `duration` tick（不受 `pace_output` 影响），每批耗 `max(1, duration/20)` 核心（铁块 3、齿轮 1）；不递归制造前置。
 - 个人任务（`mecha.job`：`kind=mine|craft`、`remaining_ticks`、`ticks_per_batch`、`remaining_batches`、`completed_batches`、`energy_per_batch`、`state=running|no_energy|out_of_range|paused_defense|inventory_full`、`paused`、`reserved_inputs`）同时只能有一个；每批开工时一次性扣 `energy_per_batch` 核心，缺能或超距暂停、恢复后继续。`inventory_full` 表示本批产出装不进背包（容量满）：该批不结算（矿点不扣量、预留原料不减、`completed_batches` 不变），腾出空位后自动继续，产出与原料都不会丢失（试玩 1014：手搓产出曾无视 `inventory_capacity` 把背包顶到 201/200）。`paused_defense` 是自动防御打断手搓的暂停态（`paused=true`），威胁消失后自动恢复为 `running`。`cancel_mecha_job` 返还未完成批次原料，死亡也走同一退款（只退一次）。
-- 电网充电（无需命令）：自有运行中的 `wireless_power_tower` 6 格内最多 10/tick（塔自耗 1/tick），`tesla_tower` 4 格内最多 2/tick；只用塔所在电网的剩余供电，优先保建筑用电；每机甲每 tick 只从一塔受电，优先无线塔。
+- 电网充电（无需命令）：自有运行中的 `wireless_power_tower` 18 cell 内最多 10/tick（塔自耗 1/tick），`tesla_tower` 12 cell 内最多 2/tick；只用塔所在电网的剩余供电，优先保建筑用电；每机甲每 tick 只从一塔受电，优先无线塔。
 - 机甲阵亡后等待配置的 `respawn_ticks`，在己方存活 HQ 旁重生；无 HQ 不重生。
 
 ### 5.3 世界单位、军团与生产
@@ -320,7 +320,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 报复强度封顶（试玩 1014 TC-07：level 4 巢穴一次发波就把没有炮塔的基地拆光）：单波进攻队 ≤ `raidWaveCap`、全场在途进攻队 ≤ `raidUnitCap`（easy 4/8，normal 6/12，hard 8/20），巢穴守军补员不受限（被激怒的巢穴仍能补防）。到在途上限后打完一批才放下一批。
 - 袭击目标选择确定性：同等优先级、同等距离时按建筑 ID 定序（建筑表是 map，等距必须有 ID 兜底），否则同一存档在不同进程会选出不同目标、回放/读档不再逐 tick 一致。
 - 巢穴守军：编制 = 难度基数 + 每级增量（easy 1+1/级 上限 4，normal 2+1/级 上限 6，hard 3+2/级 上限 10），守巢半径随等级 +2/级，不外派，死亡由后续波次补足。
-- 巢穴摧毁：掉落数量乘 `1+0.5×(level−1)`（向上取整，`dark_fog_matrix` 保底 level+1），威胁扣 `level×50`（下限 0），广播 `enemy_nest_destroyed`；遗址冷却期内（easy 4000 / normal 3000 / hard 2400 tick）半径（10 / 12 / 14 格）内不刷新巢。
+- 巢穴摧毁：掉落数量乘 `1+0.5×(level−1)`（向上取整，`dark_fog_matrix` 保底 level+1），威胁扣 `level×50`（下限 0），广播 `enemy_nest_destroyed`；遗址冷却期内（easy 4000 / normal 3000 / hard 2400 tick）半径（30 / 36 / 42 cell）内不刷新巢。
 - 隐藏科技（如 `dark_fog_matrix`）在玩家持有其成本物品前不可见、拒绝研究。
 
 ### 5.5 研究与生产规则
@@ -355,7 +355,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - `configure_distributor`：单种固体物品，`mode=none|supply|demand`，`local_storage` ≤ 宿主容量；可选 `player_delivery_enabled` / `player_collection_enabled`（省略保留原值）。
   - `install_logistics_bot`：`source=player|storage`，最多 10 个，需 `distribution_logistics`；`uninstall_logistics_bot` 只回收空载停靠机器人。
   - `configure_mecha_logistics`：`requests: {"motor": {"min": 5, "max": 10}}` 整体替换，最多 8 种，`0 ≤ min ≤ max ≤ 1000`；max 钳制到机甲背包容量。
-  - 配送范围 12 格（+5/级 `distribution_range`），机器人每 tick 2 格、载 10 件；配送器储能 1000、充电 ≤10/tick。机甲背包低于 min 补到 max、高于 max 回收到 max。
+  - 配送范围 36 cell（+15/级 `distribution_range`），机器人每 tick 2 cell、载 10 件（机器人速度是时间类语义——一格一格的推进节奏，不随网格 ×3）；配送器储能 1000、充电 ≤10/tick。机甲背包低于 min 补到 max、高于 max 回收到 max。
   - 事件：配置配送器/装卸机器人发 `entity_updated`，机甲请求发 `mecha_state_changed`，背包变化另发 `resource_changed`。
 
 ### 5.7 电力与能源

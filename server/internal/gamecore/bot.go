@@ -536,6 +536,12 @@ func botPendingBuilds(ws *model.WorldState, playerID string, btype model.Buildin
 	return n
 }
 
+// botFloodSlack 进攻目标连通洪泛相对"最近敌方基地质心"的额外余量（cell）：
+// 目标是基地外圈的落点，比质心还要远一个基地半径（37 座建筑铺开约 30 cell），
+// 再留一点球面绕行的余量。实测（skirmish-seed-001，质心距 177 cell）：
+// slack 40 → 8.6 万格 / 15ms，slack 120 → 14 万格 / 17ms，无上限 → 38 万格 / 100ms。
+const botFloodSlack = 64
+
 // botAttackObjective 进攻目标：优先最近的敌方玩家建筑中心，其次最近的（已敌对的）黑雾巢穴。
 // 距离相同时按玩家 ID / 巢穴 ID 取较小者。
 func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) *model.Position {
@@ -554,14 +560,67 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 		owners = append(owners, owner)
 	}
 	sort.Strings(owners)
+	// 先把敌方基地按"到出发点"的直线距离排序，取最近一座的距离作为洪泛上限。
+	// 连通判定只需要回答"最近的这座基地够不够得着"，没必要把整张图都洪泛一遍：
+	// 细分网格后一张 864×576 的图有 49.8 万格，无上限的一次洪泛实测 100ms
+	// （整局 8 个 >100ms 的 tick 全出在这里）；按最近基地的距离封顶后洪泛只
+	// 覆盖 ~6 万格、单次 ~15ms。更远的敌方基地直接判为够不着——bot 只打最近的
+	// 那座，够不着最近的基地时去打更远的没有意义。
+	from := *ctx.home
+	if ctx.executor != nil {
+		from = ctx.executor.Position
+	}
+	type enemyBase struct {
+		owner  string
+		center model.Position
+		dist   int
+	}
+	bases := make([]enemyBase, 0, len(owners))
 	for _, owner := range owners {
 		buildings := ctx.enemyPlayers[owner]
 		if len(buildings) == 0 {
 			continue
 		}
 		center := buildingCentroid(ws, buildings)
-		if !gc.botTargetReachable(ws, *ctx.home, center, ctx) {
-			continue
+		bases = append(bases, enemyBase{owner: owner, center: center, dist: ws.SurfaceDistance(from, center)})
+	}
+	limit := 0
+	for _, b := range bases {
+		if limit == 0 || b.dist < limit {
+			limit = b.dist
+		}
+	}
+	limit += botFloodSlack
+	floodReady := false
+	// 只做**一次**连通洪泛，本拍内所有"目标格走不走得到"都按它判定。
+	// 旧实现每座敌建筑一次 pocketReach（质心 + 逐个外圈格），37 座建筑 × 17 格
+	// 全都要走满 4000 格预算时单拍 400ms+（实测 tick 13998 = 219ms）。
+	reachable := func(pos model.Position) bool {
+		if !ws.InBounds(from.X, from.Y) || !ws.InBounds(pos.X, pos.Y) {
+			return false
+		}
+		if ws.SurfaceDistance(from, pos) > limit {
+			return false
+		}
+		if !floodReady {
+			pathFlood(ws, from, "", false, limit+botFloodSlack, nil)
+			floodReady = true
+		}
+		return floodVisited(ws, int32(pos.Y*ws.MapWidth+pos.X))
+	}
+	for _, base := range bases {
+		owner, center := base.owner, base.center
+		// 目标点必须"走得过去"：基地中心通常是某座建筑占地的中心格（多格占地后
+		// 建筑变密，37 座建筑的质心必落在占地里），而连通判定只认空着的目标格，
+		// 于是质心永远不可达、bot 整局选不出进攻目标（实测首攻 tick=-1、逼近=0）。
+		// 质心走不到时退到"最近的、外圈有可达空格的建筑"——攻击目标仍是这座基地，
+		// 只是落点取基地外圈能站人的地方。
+		if !reachable(center) {
+			alt := botReachableBuildingObjective(ws, center, ctx.enemyPlayers[owner], reachable)
+			if alt == nil {
+				continue
+			}
+			center = *alt
 		}
 		d := ws.SurfaceDistance(*ctx.home, center)
 		if bestDist < 0 || d < bestDist || (d == bestDist && (bestOwner == "" || owner < bestOwner)) {
@@ -591,6 +650,48 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 		}
 	}
 	return best
+}
+
+// botReachableBuildingObjective 在敌方建筑里挑一座「外圈有可达空格」的，
+// 返回那个空格作为进攻落点（多格占地后基地中心常落在占地内、走不进去）。
+// 建筑按到基地的距离排序，取最近的一座。reachable 由调用方给出：它背后是
+// 一次按拍缓存的连通洪泛（见 botAttackObjective），本函数不再自己洪泛。
+func botReachableBuildingObjective(ws *model.WorldState, home model.Position, buildings []*model.Building, reachable func(model.Position) bool) *model.Position {
+	if ws == nil || len(buildings) == 0 {
+		return nil
+	}
+	sorted := make([]*model.Building, 0, len(buildings))
+	for _, b := range buildings {
+		if b != nil && b.HP > 0 {
+			sorted = append(sorted, b)
+		}
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		di, dj := ws.SurfaceDistance(home, sorted[i].Position), ws.SurfaceDistance(home, sorted[j].Position)
+		if di != dj {
+			return di < dj
+		}
+		return sorted[i].ID < sorted[j].ID
+	})
+	for _, b := range sorted {
+		ring, err := ws.BuildingRingCells(b)
+		if err != nil {
+			continue
+		}
+		for _, cell := range ring {
+			if !ws.InBounds(cell.X, cell.Y) {
+				continue
+			}
+			if ws.TileBuilding[model.TileKey(cell.X, cell.Y)] != "" || !ws.Grid[cell.Y][cell.X].Terrain.Buildable() {
+				continue
+			}
+			if reachable(cell) {
+				c := cell
+				return &c
+			}
+		}
+	}
+	return nil
 }
 
 // botTargetReachable 目标是否走得到：预算内从 bot 执行体（缺省用基地）做一次
@@ -1108,12 +1209,24 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		id   string
 		node *model.ResourceNodeState
 	}
-	candidates := make([]minerCandidate, 0, len(ws.Resources))
+	// 候选先用**带上限**的 SurfaceWithin 预筛，再对幸存者算精确距离：
+	// 全图有上万个矿点 cell，逐个算无上限的跨面 A* 距离在 face 288 上要 ~200ms
+	// （实测：11050 个矿点 198ms），而带上限的判定只要 15ms。预筛半径取
+	// 「基地半径 72 + 基地到执行体的距离 + 执行体操作范围」：三角形不等式保证
+	// 被滤掉的矿点既超出基地半径、也超出执行体操作范围，不可能进入 inRange。
+	prefilter := 72 + execRange
+	if ctx.executor != nil {
+		prefilter += ws.SurfaceDistance(*ctx.home, ctx.executor.Position)
+	}
+	candidates := make([]minerCandidate, 0, 64)
 	for id, node := range ws.Resources {
 		if node == nil || node.Remaining <= 0 || node.Depleted {
 			continue
 		}
 		if _, ok := kindRank[node.Kind]; !ok {
+			continue
+		}
+		if !ws.SurfaceWithin(*ctx.home, node.Position, prefilter) {
 			continue
 		}
 		candidates = append(candidates, minerCandidate{

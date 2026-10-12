@@ -60,6 +60,13 @@ func TestE4NestSpawnsGuards(t *testing.T) {
 	// 袭击目标：保证进攻队照常外派。
 	plant := newBuilding("plant-e4", model.BuildingTypeWindTurbine, "p1", model.Position{X: 60, Y: 40})
 	placeBuilding(ws, plant)
+	// 细分网格：守军守巢半径 ×3（等级 2 时 30 格），执行体出生点距巢穴 16 格，
+	// 会被守军当成入侵者一路追击。本用例只验证守军编制，把执行体挪远。
+	if exec := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID); exec != nil {
+		if u := ws.Units[exec.UnitID]; u != nil {
+			teleportUnitForTest(ws, u, model.Position{X: 150, Y: 100})
+		}
+	}
 
 	tuning := blackFogTuningFor("normal")
 	wantCap := blackFogGuardCap(2, tuning)

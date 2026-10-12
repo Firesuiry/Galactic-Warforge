@@ -12,7 +12,8 @@ func TestBotBuildSpotAvoidsEnclosingTile(t *testing.T) {
 	core := newEnclosureTestCore(t)
 	ws := core.World()
 	mecha := findExecutorUnit(t, ws)
-	target := model.Position{X: 20, Y: 20}
+	// 细分网格：基地占地大得多，(20,20) 已在自家施工区里，换到更远的空地。
+	target := model.Position{X: 40, Y: 40}
 	if res, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: mecha.ID, Position: &target}}); res.Code != model.CodeOK {
 		t.Fatalf("move mecha: %s (%s)", res.Code, res.Message)
 	}

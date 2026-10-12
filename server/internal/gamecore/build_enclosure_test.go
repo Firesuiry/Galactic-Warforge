@@ -61,8 +61,9 @@ func TestBuildRejectsEnclosingFriendlyUnit(t *testing.T) {
 	ws := core.World()
 	mecha := findExecutorUnit(t, ws)
 
-	// 先把机甲挪到一块空地（四邻可建）。
-	target := model.Position{X: 20, Y: 20}
+	// 先把机甲挪到一块空地（四邻可建）。细分网格：基地（5×5 HQ + 周边建筑）
+	// 占地大得多，(20,20) 已经压在家门口的施工区里，换到更远的空地。
+	target := model.Position{X: 40, Y: 40}
 	if res, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: mecha.ID, Position: &target}}); res.Code != model.CodeOK {
 		t.Fatalf("move mecha: %s (%s)", res.Code, res.Message)
 	}
@@ -162,7 +163,7 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 	core := newEnclosureTestCore(t)
 	ws := core.World()
 	mecha := findExecutorUnit(t, ws)
-	target := model.Position{X: 20, Y: 20}
+	target := model.Position{X: 40, Y: 40}
 	if res, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: mecha.ID, Position: &target}}); res.Code != model.CodeOK {
 		t.Fatalf("move mecha: %s (%s)", res.Code, res.Message)
 	}
@@ -189,8 +190,8 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 		if res.Code != model.CodeInvalidTarget {
 			t.Fatalf("build wall at %+v: %s (%s)", tile, res.Code, res.Message)
 		}
-		// 最后一块被拦下：必须是口袋形态的回执，并点名机甲与坐标。
-		if !strings.Contains(res.Message, "机甲") || !strings.Contains(res.Message, "（20,20）") {
+		// 最后一块被拦下：必须是口袋/通路形态的回执，并点名机甲与坐标。
+		if !strings.Contains(res.Message, "机甲") || !strings.Contains(res.Message, "（40,40）") {
 			t.Fatalf("rejection must name the trapped unit and its coordinates, got %q", res.Message)
 		}
 		rejected = true

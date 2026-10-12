@@ -76,8 +76,10 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	ws := core.World()
 	p1Home := botPlayerHQ(t, ws, "p1").Position
+	// 细分网格：HQ 占 5×5（锚点起 x..x+4），守军必须摆到占地之外（距离 ≥5），
+	// 否则会落在建筑里被推挤结算挪走。
 	for i := 0; i < 6; i++ {
-		pos := botTileAtDistance(t, ws, p1Home, 2+i)
+		pos := botTileAtDistance(t, ws, p1Home, 5+i)
 		spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", pos)
 	}
 	p1Exec := executorForPlayer(t, ws, "p1")
@@ -85,8 +87,11 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 	p2Home := botPlayerHQ(t, ws, "p2").Position
 
 	const (
-		simTicks    = 90000
-		nearBase    = 12
+		simTicks = 90000
+		// nearBase 是"推进到基地附近"的判定半径：细分网格后单位间距与攻击
+		// 射程都 ×3，bot 军团停在离基地 ~10–30 cell 处交火，12 已判不到
+		// （实测首攻 tick 72731 却 totalApproaches=0），同步放大到 36。
+		nearBase    = 36
 		stuckTicks  = 3000
 		waveGapTick = 800 // 两次"推进到基地附近"至少间隔这么久才算新的一波
 		// connectivityEvery 基地连通性的抽样间隔：每 500 tick 检查一次双方基地
@@ -152,7 +157,7 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 			} else if ws.Tick-prev.tick >= stuckTicks {
 				// "留守"不算卡死：只有已经离开基地、处于出击姿态却原地不动的
 				// 单位才是问题（试玩报告 B/C：军团到位后僵住不再开火）。
-				if u.Stance == model.UnitStanceAttackMove && ws.SurfaceDistance(u.Position, p2Home) > 20 {
+				if u.Stance == model.UnitStanceAttackMove && ws.SurfaceDistance(u.Position, p2Home) > 60 {
 					stuck = append(stuck, id)
 				}
 			}

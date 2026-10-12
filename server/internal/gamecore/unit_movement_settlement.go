@@ -430,6 +430,9 @@ func pathFlood(ws *model.WorldState, from model.Position, selfID string, avoidId
 			result.hit = cur
 			break
 		}
+		// 深度上限判定必须用"已扩展的层数"而不是访问顺序：同一层的格子入队后
+		// 会排在更深的格子之前，所以这里改用入队时记录的深度即可（父深度 +1）。
+		// 注意 depth[cur] 已经是在入队时算好的，直接比较即可。
 		if int(depth[cur]) >= budget {
 			result.truncated = true
 			continue

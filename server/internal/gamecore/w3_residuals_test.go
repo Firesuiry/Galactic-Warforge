@@ -22,7 +22,8 @@ func TestGeothermalBuildRequiresLavaProximity(t *testing.T) {
 	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 
-	pos, err := findOpenTile(ws, 2)
+	// 细分网格：地热站 3×3，按它自己的占地找落位点。
+	pos, err := findOpenTileForType(ws, 2, model.BuildingTypeGeothermalPowerStation)
 	if err != nil || pos == nil {
 		t.Fatalf("find open tile: %v", err)
 	}
@@ -71,19 +72,32 @@ func TestGeothermalBuildRequiresLavaProximity(t *testing.T) {
 	// 直接建在岩浆格上：放行（其他建筑类型仍然拒绝岩浆格）。
 	// 细分网格：地热站是 3×3 占地，测试先把候选格周围一片地形整成岩浆，保证
 	// 整块占地都能落在岩浆上（旧 1×1 网格里只铺一格就够）。
-	lavaSite := model.Position{X: pos.X + 6, Y: pos.Y}
-	if !ws.InBounds(lavaSite.X, lavaSite.Y) {
-		lavaSite = model.Position{X: pos.X, Y: pos.Y + 6}
+	// 选一块远离 HQ 的空地做岩浆区（测试地图里 HQ 占 5×5，紧邻处会撞占地）。
+	lavaSite := model.Position{}
+	found := false
+	for _, candidate := range ws.SurfaceDisc(*pos, 40) {
+		if ws.SurfaceDistance(candidate, *pos) < 8 {
+			continue
+		}
+		if !ws.FootprintFits(candidate, model.Footprint{Width: 3, Height: 3}, model.BuildingTypeGeothermalPowerStation, "") {
+			continue
+		}
+		lavaSite, found = candidate, true
+		break
 	}
-	if !ws.InBounds(lavaSite.X, lavaSite.Y) {
+	if !found {
 		t.Fatalf("no room for a lava site near %+v", *pos)
 	}
 	for dy := -2; dy <= 2; dy++ {
 		for dx := -2; dx <= 2; dx++ {
 			x, y := lavaSite.X+dx, lavaSite.Y+dy
-			if ws.InBounds(x, y) {
-				ws.Grid[y][x].Terrain = terrain.TileLava
+			if !ws.InBounds(x, y) {
+				continue
 			}
+			if ws.TileBuilding[model.TileKey(x, y)] != "" {
+				continue
+			}
+			ws.Grid[y][x].Terrain = terrain.TileLava
 		}
 	}
 	res = buildGeo(lavaSite)

@@ -821,6 +821,11 @@ func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist
 				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
 					continue
 				}
+				// 目标格还得没有地面单位站着：移动/建造的落点若压在单位上，
+				// 单位的推挤结算会把刚走到的单位挪开（细分网格后单位生成半径也 ×3）。
+				if occupiedByGroundUnit(ws, x, y) {
+					continue
+				}
 				origin := model.Position{X: x, Y: y}
 				if !ws.FootprintFits(origin, fp, model.BuildingTypeArcSmelter, "") {
 					continue
@@ -835,6 +840,19 @@ func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist
 		}
 	}
 	return nil
+}
+
+// occupiedByGroundUnit 判断该格是否已有存活的地面单位。
+func occupiedByGroundUnit(ws *model.WorldState, x, y int) bool {
+	if ws == nil {
+		return false
+	}
+	for _, id := range ws.TileUnits[model.TileKey(x, y)] {
+		if u := ws.Units[id]; u != nil && u.HP > 0 && u.Domain != model.UnitDomainAir {
+			return true
+		}
+	}
+	return false
 }
 
 // constructionTileTaken 判断以 origin 为锚点的整块占地是否与已有施工任务（或
@@ -875,32 +893,32 @@ func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.P
 	// "放得下"。按图距由近及远找第一个整块可落、且与 origin 整块不重叠的原点。
 	ws.RLock()
 	defer ws.RUnlock()
-	originTiles, err := ws.FootprintTiles(origin, model.Footprint{Width: 3, Height: 3})
+	// 细分网格：HQ 自身占 5×5，候选必须与它整块不重叠（按格集合判，不用距离
+	// 近似），也不与已有施工任务重叠。
+	hqTiles, err := ws.FootprintTiles(origin, model.Footprint{Width: 5, Height: 5})
 	if err != nil {
-		originTiles = nil
+		hqTiles = nil
 	}
-	for _, candidate := range ws.SurfaceDisc(origin, 8) {
+	fp := model.Footprint{Width: 3, Height: 3}
+	for _, candidate := range ws.SurfaceDisc(origin, 12) {
 		if !ws.InBounds(candidate.X, candidate.Y) {
 			continue
 		}
 		if ws.SurfaceDistance(candidate, origin) == 0 {
 			continue
 		}
-		if !ws.FootprintFits(candidate, model.Footprint{Width: 3, Height: 3}, model.BuildingTypeArcSmelter, "") {
+		if !ws.FootprintFits(candidate, fp, model.BuildingTypeArcSmelter, "") {
 			continue
 		}
-		overlap := false
-		for _, tile := range originTiles {
-			if ws.SurfaceDistance(candidate, tile) <= 2 {
-				overlap = true
-				break
-			}
+		tiles := mustFootprintTiles(ws, candidate, fp)
+		if footprintOverlaps(tiles, hqTiles) {
+			continue
 		}
-		if overlap {
+		if constructionTileTaken(ws, candidate, fp) {
 			continue
 		}
 		resource := false
-		for _, tile := range mustFootprintTiles(ws, candidate, model.Footprint{Width: 3, Height: 3}) {
+		for _, tile := range tiles {
 			if ws.Grid[tile.Y][tile.X].ResourceNodeID != "" {
 				resource = true
 				break
@@ -913,6 +931,18 @@ func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.P
 		return &pos, nil
 	}
 	return nil, nil
+}
+
+// footprintOverlaps 判断两组格集合是否有交集。
+func footprintOverlaps(a, b []model.Position) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if x.X == y.X && x.Y == y.Y {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func mustFootprintTiles(ws *model.WorldState, origin model.Position, fp model.Footprint) []model.Position {

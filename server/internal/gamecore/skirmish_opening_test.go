@@ -36,8 +36,10 @@ func skirmishBotAttackingPlayer(ws *model.WorldState) bool {
 		if squad == nil || squad.OwnerID != "p2" || squad.Order != model.SquadOrderAttack || squad.Target == nil {
 			continue
 		}
+		// 细分网格：军团目标与建筑的距离都 ×3，判定半径同步放大到 36
+		// （军团停在离基地 ~10–30 cell 的交火位，12 已判不到首攻）。
 		for _, b := range ws.Buildings {
-			if b.OwnerID == "p1" && ws.SurfaceDistance(*squad.Target, b.Position) <= 12 {
+			if b.OwnerID == "p1" && ws.SurfaceDistance(*squad.Target, b.Position) <= 36 {
 				return true
 			}
 		}
@@ -146,7 +148,10 @@ func TestSkirmishPlayerOpensPowerMiningSmeltingBy7000(t *testing.T) {
 	ws := op.ws
 	counts := skirmishBuildingCounts(ws, "p1")
 	running := skirmishRunningCounts(ws, "p1")
-	ingots := 0
+	// 已炼出的铁块 = 熔炉里剩的 + 已经被 feedIndustry 取进背包的。
+	// 只看熔炉存储会在「取料恰好在 tick 7000 结算」时误判（细分网格下开局链
+	// 慢了几百 tick，第一炉铁块正好落在取料节拍上）。
+	ingots := ws.Players["p1"].Inventory[model.ItemIronIngot]
 	for _, b := range ws.Buildings {
 		if b.OwnerID == "p1" && b.Type == model.BuildingTypeArcSmelter && b.Storage != nil {
 			ingots += b.Storage.OutputQuantity(model.ItemIronIngot)

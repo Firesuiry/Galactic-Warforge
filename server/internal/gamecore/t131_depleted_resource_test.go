@@ -174,7 +174,9 @@ func findOpenTileNearExecutor(ws *model.WorldState, playerID string) (*model.Pos
 				if ws.Grid[y][x].ResourceNodeID != "" {
 					continue
 				}
-				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
+				// 细分网格：太阳能板 3×3，必须整块可落（只看锚点格会挑到
+				// 压在已有占地上的位置，回执变成 POSITION_OCCUPIED）。
+				if !ws.FootprintFits(pos, model.Footprint{Width: 3, Height: 3}, model.BuildingTypeSolarPanel, "") {
 					continue
 				}
 				return &pos, nil
