@@ -1141,6 +1141,11 @@ func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID str
 // 试玩节奏下 easy bot 的电弧熔炉 tick 25000 起一直断电，矩阵链整局 0 产出。
 // 因此只要还有**带供电接口**的建筑拿不到电，就继续补风机；材料不足时走
 // botEnsureBuilding 的缺料链（铁块/齿轮/磁线圈都能手搓）。
+//
+// 选址：补的风机必须落进"己方已带电电网"的无线覆盖内。细分网格后
+// botBuildSpotNear 从半径 9 起扫，风机（2×2）会落在 HQ 的电感应塔覆盖（12）之外，
+// 发出来的电送不进电网 → HQ 长期 no_power → starved 恒真 → bot 无限补风机
+// （实测旧局 332 座风机、minerals/energy 归零，而电网里始终 0 供电）。
 func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, issue func(model.Command) bool) bool {
 	starved := false
 	for _, b := range ctx.buildings {
@@ -1160,10 +1165,105 @@ func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTu
 	if ctx.powerCount >= tuning.powerTarget && !starved {
 		return false
 	}
-	if cmd, ok := gc.botEnsureBuilding(ws, playerID, ctx, model.BuildingTypeWindTurbine, "", map[string]bool{}); ok {
+	pos := gc.botPoweredSpot(ws, playerID, ctx, model.BuildingTypeWindTurbine)
+	if pos == nil {
+		return false
+	}
+	if cmd, ok := gc.botEnsureBuildingAt(ws, playerID, ctx, model.BuildingTypeWindTurbine, "", map[string]bool{}, pos); ok {
 		return issue(cmd)
 	}
 	return false
+}
+
+// botPoweredSpot 在"己方已带电电网"的无线覆盖内选一格可建位：覆盖内没有可建位时
+// 返回 nil，宁可不补也不要发一座电送不出去的风机（否则 starved 恒真、无限补电）。
+//
+// 只在覆盖圈（电感应塔 12 / 无线输电塔 18 / 卫星配电站 30）内挑格子，不走
+// botBuildSpotNear 的大半径扫描：后者从半径 9 扫到建造半径 72，逐锚点各扫一遍
+// 会让单拍 bot 决策变成 anchors×（半径² 的 SurfaceDisc），实测 37 座建筑时单拍
+// 400ms+（整局回归因此出现上百个 >100ms 的 tick）。
+func (gc *GameCore) botPoweredSpot(ws *model.WorldState, owner string, ctx *botSurvey, btype model.BuildingType) *model.Position {
+	if ws == nil || ctx == nil || ctx.home == nil {
+		return nil
+	}
+	def, ok := model.BuildingDefinitionByID(btype)
+	if !ok {
+		return nil
+	}
+	footprint := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
+
+	powered := botPoweredGrid(ws, ctx)
+	anchors := make([]*model.Building, 0, len(ctx.buildings))
+	for _, b := range ctx.buildings {
+		if b != nil && powered[b.ID] {
+			anchors = append(anchors, b)
+		}
+	}
+	if len(anchors) == 0 {
+		// 电网里还没有发电建筑（第一座风机）：仍按常规选址贴基地建，
+		// 它的供电接口在电感应塔无线范围内就能把电送进电网。
+		return botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), btype)
+	}
+	sort.Slice(anchors, func(i, j int) bool {
+		di, dj := ws.SurfaceDistance(*ctx.home, anchors[i].Position), ws.SurfaceDistance(*ctx.home, anchors[j].Position)
+		if di != dj {
+			return di < dj
+		}
+		return anchors[i].ID < anchors[j].ID
+	})
+
+	// 候选 = 各带电锚点无线覆盖圈的并集。逐锚点分别扫描再挑最近会让单拍决策变成
+	// anchors×（Disc(cover) 的排序与距离计算）；这里先把并集去重成一张候选表，
+	// 对每个候选只算一次到基地的球面距离，再按距离排序逐格校验（实测锚点多时
+	// 单拍 400ms+ → 每拍 ≤ 2 万次距离计算）。
+	seen := make(map[model.Position]struct{})
+	candidates := make([]model.Position, 0, 256)
+	for _, anchor := range anchors {
+		cover := model.DefaultPowerLineRange
+		if runtimeDef, ok := model.BuildingRuntimeDefinitionByID(anchor.Type); ok && runtimeDef.Functions.PowerGrid != nil {
+			cover = runtimeDef.Functions.PowerGrid.WirelessRange
+		}
+		for _, tile := range ws.SurfaceDisc(anchor.Position, cover) {
+			if !ws.InBounds(tile.X, tile.Y) {
+				continue
+			}
+			if _, ok := seen[tile]; ok {
+				continue
+			}
+			seen[tile] = struct{}{}
+			candidates = append(candidates, tile)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		di, dj := ws.SurfaceDistance(*ctx.home, candidates[i]), ws.SurfaceDistance(*ctx.home, candidates[j])
+		if di != dj {
+			return di < dj
+		}
+		if candidates[i].Y != candidates[j].Y {
+			return candidates[i].Y < candidates[j].Y
+		}
+		return candidates[i].X < candidates[j].X
+	})
+	for _, candidate := range candidates {
+		if !ws.Grid[candidate.Y][candidate.X].Terrain.Buildable() {
+			continue
+		}
+		if ws.Grid[candidate.Y][candidate.X].BuildingID != "" {
+			continue
+		}
+		if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(candidate.X, candidate.Y)) {
+			continue
+		}
+		if !ws.FootprintFits(candidate, footprint, btype, "") {
+			continue
+		}
+		if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
+			continue
+		}
+		c := candidate
+		return &c
+	}
+	return nil
 }
 
 // botMiners 矿机建设：目标数量内且附近有未覆盖矿点。
