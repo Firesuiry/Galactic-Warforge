@@ -639,6 +639,20 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
+  /** 运输机器人往返路线（order=haul）：起点/终点建筑必填，item_id 缺省时由服务端取终点能接收的第一种。 */
+  function cmdHaulOrder(selector: string | string[], route: { fromBuildingId: string; toBuildingId: string; itemId?: string }, planetId?: string) {
+    return sendSingleCommand({
+      type: 'unit_order',
+      target: { layer: 'planet', ...unitSelectorTarget(selector), ...(planetId ? { planet_id: planetId } : {}) },
+      payload: {
+        order: 'haul',
+        from_building_id: route.fromBuildingId,
+        to_building_id: route.toBuildingId,
+        ...(route.itemId ? { item_id: route.itemId } : {}),
+      },
+    });
+  }
+
   /** count：最多烧几块燃料（缺省 1），服务端烧到核心满为止。 */
   function cmdRefuelMecha(entityId: string, itemId: string, count?: number, planetId?: string) {
     return sendSingleCommand({
@@ -1264,6 +1278,7 @@ export function createApiClient(options: ApiClientOptions) {
     clearAuth,
     cmdAttack,
     cmdUnitOrder,
+    cmdHaulOrder,
     cmdRefuelMecha,
     cmdMineResource,
     cmdCraftItem,

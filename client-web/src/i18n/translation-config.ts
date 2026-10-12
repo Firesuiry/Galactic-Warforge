@@ -254,6 +254,7 @@ export const TRANSLATIONS = {
     repair_vehicle: "维修车",
     supply_truck: "补给车",
     attack_drone: "攻击无人机",
+    transport_robot: "运输机器人",
     dark_fog: "黑雾单位",
   },
   eventType: {

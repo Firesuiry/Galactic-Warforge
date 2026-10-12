@@ -18,6 +18,8 @@ import type {
 
 import { Icon } from '@/common/Icon';
 import { unitIsMoving, unitMoveDestination, getBuildingCatalogEntry, getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
+import { getItemColorValue } from '@/features/planet-map/item-colors';
+import { transportCargo, transportHaulRoute } from '@/features/planet-map/transport-haul';
 import { getResourceColor } from '@/features/planet-map/visible-entities';
 
 /**
@@ -110,7 +112,10 @@ export interface UnitNodeProps {
 export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps) {
   const point = toTilePoint(unit.position);
   const isOwn = unit.owner_id === playerId;
+  // 细分网格：单位占 1 cell（旧实现按 0.44 格画，cell 化后同一比例只是 0.44 cell）。
   const sizeFactor = simplify ? 0.32 : 0.44;
+  const cargo = transportCargo(unit);
+  const haul = transportHaulRoute(unit);
   return (
     <div
       className="entity-node entity-node--unit"
@@ -133,8 +138,21 @@ export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps
       data-max-hp={unit.max_hp}
       data-is-moving={unitIsMoving(unit) ? 'true' : 'false'}
       data-target-pos={(() => { const dest = unitMoveDestination(unit); return dest ? `${dest.x},${dest.y}` : undefined; })()}
+      data-haul-phase={haul?.phase}
+      data-haul-from={haul?.from_building_id}
+      data-haul-to={haul?.to_building_id}
+      data-haul-delivered={haul?.delivered_total}
+      data-haul-cargo={cargo ? `${cargo.item_id}:${cargo.quantity}` : undefined}
     >
       <Icon className="entity-node__icon" iconKey={unit.type} color={isOwn ? '#91ff70' : '#ff6262'} fluid />
+      {/* 运输机器人车顶货物点（有货才显示，颜色 = 物品配色） */}
+      {cargo ? (
+        <span
+          className="entity-node__cargo"
+          style={{ background: getItemColorValue(cargo.item_id) }}
+          title={`${cargo.item_id} ×${cargo.quantity}`}
+        />
+      ) : null}
     </div>
   );
 }

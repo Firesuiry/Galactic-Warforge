@@ -21,6 +21,7 @@ import {
   type PlanetRenderView,
 } from '@/features/planet-map/model';
 import { summarizeUnitSelection } from '@/features/planet-map/rts-commands';
+import { describeHaul, isTransportRobot, transportHaulRoute } from '@/features/planet-map/transport-haul';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
@@ -107,8 +108,8 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
   }
 
   // 小队选中面板（C4）：≥1 个战斗小队时显示编成与部署提示（右键地图直接部署）。
-  const aliveSquadSelection = selectedSquads
-    .map((id) => (squads ?? []).find((squad) => squad.id === id))
+  const activeHaul = interactionMode.kind === 'haul' ? interactionMode : null;
+  const aliveSquadSelection = selectedSquads    .map((id) => (squads ?? []).find((squad) => squad.id === id))
     .filter((squad): squad is CombatSquad => Boolean(squad && squad.owner_id === session.playerId && squad.state !== 'destroyed'));
   if (aliveSquadSelection.length > 0) {
     const composition = aliveSquadSelection
@@ -140,9 +141,26 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
       .map((entry) => `${translateUnitType(entry.type)}×${entry.count}`)
       .join(' · ');
     const orderEligible = aliveSelection.filter((id) => !planet.units?.[id]?.mecha);
+    // 运输机器人（§4）：多选可一次设同一路线（同一 unit_order haul 带 entity_ids）。
+    const robotIds = aliveSelection.filter((id) => isTransportRobot(planet.units?.[id]));
     const orderButtons: { label: string; title: string; action: () => void }[] = [
       { label: '移动', title: '右键点地也可移动', action: () => setInteractionMode({ kind: 'move' }) },
       { label: '攻击', title: '右键点敌也可攻击', action: () => setInteractionMode({ kind: 'attack' }) },
+      ...(robotIds.length > 0 ? [
+        {
+          label: activeHaul ? (activeHaul.fromBuildingId ? '已选起点，点终点' : '点起点建筑') : '设置运输',
+          title: '依次点击起点建筑、终点建筑，为选中的运输机器人设同一条路线',
+          action: () => {
+            if (activeHaul) exitInteractionMode();
+            else setInteractionMode({ kind: 'haul' as const });
+          },
+        },
+        ...(robotIds.some((id) => transportHaulRoute(planet.units?.[id])) ? [{
+          label: '停止运输',
+          title: '清空这些机器人的路线',
+          action: () => submit('unit_order', () => client.cmdUnitOrder(robotIds, 'stop'), { entityId: robotIds[0] }),
+        }] : []),
+      ] : []),
       ...(orderEligible.length > 0 ? [
         { label: '攻击移动', title: 'A · 沿途交战推进', action: () => setInteractionMode({ kind: 'unit_order' as const, order: 'attack_move' as const }) },
         { label: '巡逻', title: 'P · 点击巡逻目标点', action: () => setInteractionMode({ kind: 'unit_order' as const, order: 'patrol' as const }) },
@@ -302,6 +320,11 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           <span className="planet-selection-bar__meta">
             ({unit.position.x}, {unit.position.y}) · HP {unit.hp}/{unit.max_hp}
           </span>
+          {isTransportRobot(unit) ? (
+            <span className="planet-selection-bar__meta">
+              {describeHaul(unit, (itemId) => getItemDisplayName(catalog, itemId)) ?? '未设路线'}
+            </span>
+          ) : null}
           {unit.ammo_capacity?<AmmunitionBar current={unit.ammo??0} capacity={unit.ammo_capacity}/>:null}
           {unit.mecha ? <span className="planet-selection-bar__meta">
             能量 {unit.mecha.energy}/{unit.mecha.max_energy} · 护盾 {unit.mecha.shield}/{unit.mecha.max_shield}
@@ -382,6 +405,38 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
                 >
                   停止
                 </button>
+              </>
+            ) : null}
+            {/* 运输机器人（§4）：设置运输 = 依次点起点/终点建筑，停止运输 = unit_order stop。 */}
+            {isTransportRobot(unit) ? (
+              <>
+                <button
+                  className={`secondary-button${activeMode?.kind === 'haul' ? ' planet-selection-bar__active' : ''}`}
+                  type="button"
+                  title="依次点击起点建筑、终点建筑；物品留空由服务端取终点能接收的第一种"
+                  onClick={() => {
+                    sfx.uiClick();
+                    if (activeMode?.kind === 'haul') {
+                      exitInteractionMode();
+                    } else {
+                      setInteractionMode({ kind: 'haul' });
+                    }
+                  }}
+                >
+                  {activeMode?.kind === 'haul'
+                    ? (activeMode.fromBuildingId ? '已选起点，点终点' : '点起点建筑')
+                    : '设置运输'}
+                </button>
+                {transportHaulRoute(unit) ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    title="清空路线，机器人原地待命"
+                    onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
+                  >
+                    停止运输
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>

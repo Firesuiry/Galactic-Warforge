@@ -10,6 +10,7 @@ import {
   harvestPulseEnvelope,
   resolveHarvestPulse,
 } from '@/features/planet-map/planet-logistics-flow';
+import { getItemColorNumber } from '@/features/planet-map/item-colors';
 import { getResourceColorValue } from '@/features/planet-map/visible-entities';
 
 function makeBuilding(overrides: Partial<Building>): Building {
@@ -37,16 +38,19 @@ describe('beltItemDotColors：buffer → 圆点颜色序列', () => {
     expect(beltItemDotColors([{ item_id: 'iron_ore', quantity: 0 }])).toEqual([]);
   });
 
-  it('按堆展开：数量决定圆点个数，颜色取资源调色板', () => {
+  it('按堆展开：数量决定圆点个数，颜色取物品配色表（细分网格后矿石/材料各自可辨）', () => {
     const colors = beltItemDotColors([
       { item_id: 'iron_ore', quantity: 2 },
       { item_id: 'copper_ore', quantity: 1 },
     ]);
     expect(colors).toEqual([
-      getResourceColorValue('iron_ore'),
-      getResourceColorValue('iron_ore'),
-      getResourceColorValue('copper_ore'),
+      getItemColorNumber('iron_ore'),
+      getItemColorNumber('iron_ore'),
+      getItemColorNumber('copper_ore'),
     ]);
+    // 细分网格的核心诉求：铁矿与铜矿在带上必须不同色（服务端目录只按大类给色）。
+    expect(getItemColorNumber('iron_ore')).not.toBe(getItemColorNumber('copper_ore'));
+    expect(getItemColorNumber('iron_ingot')).not.toBe(getItemColorNumber('copper_ingot'));
   });
 
   it('超过上限时截断（队首优先）', () => {
@@ -55,12 +59,12 @@ describe('beltItemDotColors：buffer → 圆点颜色序列', () => {
       { item_id: 'copper_ore', quantity: 99 },
     ]);
     expect(colors).toHaveLength(BELT_ITEM_MAX_DOTS);
-    expect(colors.every((color) => color === getResourceColorValue('iron_ore'))).toBe(true);
+    expect(colors.every((color) => color === getItemColorNumber('iron_ore'))).toBe(true);
   });
 
   it('未知物品回退通用色', () => {
-    const [color] = beltItemDotColors([{ item_id: 'quantum_chip', quantity: 1 }]);
-    expect(color).toBe(getResourceColorValue(''));
+    const [color] = beltItemDotColors([{ item_id: 'not_a_real_item', quantity: 1 }]);
+    expect(color).toBe(getItemColorNumber(''));
   });
 });
 

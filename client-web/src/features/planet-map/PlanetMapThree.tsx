@@ -593,7 +593,7 @@ export function PlanetMapThree(props: Props) {
       </div>
       {interactionMode.kind !== 'inspect' ? (
         <button className="secondary-button planet-three__nav-cancel" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>
-          取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : '指令'} · Esc
+          取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : interactionMode.kind === 'haul' ? '运输设置' : '指令'} · Esc
         </button>
       ) : null}
     </div>

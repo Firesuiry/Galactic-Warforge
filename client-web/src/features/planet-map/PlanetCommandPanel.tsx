@@ -44,6 +44,7 @@ import {
   type PlanetCommandJournalEntry,
 } from "@/features/planet-commands/store";
 import { usePlanetViewStore } from "@/features/planet-map/store";
+import { isUnitProducerBuilding, listWorldProduceUnits, orderBuildingsForProduce } from "@/features/planet-map/unit-production";
 import { isResearchStationBuildingType } from "@/features/production-alerts";
 import {
   translateCommandType,
@@ -336,8 +337,17 @@ export function PlanetCommandPanel({
     return components;
   }, [systemRuntime?.dyson_sphere?.layers]);
   const produceUnitTypes = useMemo(
-    () => (catalog?.world_units ?? []).filter((unit) => unit.production_mode === 'world_produce'),
+    () => listWorldProduceUnits(catalog),
     [catalog?.world_units],
+  );
+  /**
+   * 量产载体（§4）：真正的生产建筑（目录 can_produce_units 标记 ∪ 单位 producer 配对）
+   * 排在最前，其余己方建筑照旧可选——服务端的配对校验（「步兵需由兵营生产」）是玩法反馈，
+   * 过滤掉会让玩家选不到、也看不到原因。
+   */
+  const produceBuildings = useMemo(
+    () => orderBuildingsForProduce(catalog, ownBuildings),
+    [catalog?.buildings, catalog?.world_units, ownBuildings],
   );
   const ownLogisticsStations = useMemo(
     () => listOwnLogisticsStations(planet, runtime, playerId),
@@ -1067,12 +1077,18 @@ export function PlanetCommandPanel({
               value={produceBuildingId}
             >
               <option value="">选择建筑</option>
-              {ownBuildings.map((building) => (
+              {produceBuildings.map((building) => (
                 <option key={building.id} value={building.id}>
+                  {isUnitProducerBuilding(catalog, building.type) ? '★ ' : ''}
                   {getBuildingDisplayName(catalog, building.type)} · {formatPosition(building.position)}
                 </option>
               ))}
             </select>
+            {produceBuildings.length === 0 ? (
+              <span className="subtle-text">
+                当前没有己方建筑（步兵/工程兵需兵营，运输机器人需战场分析基站）。
+              </span>
+            ) : null}
           </label>
           <label className="field">
             <span>单位类型</span>

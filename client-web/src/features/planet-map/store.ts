@@ -20,6 +20,7 @@ export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
  * - move：为当前选中单位（store.selectedUnits）选择移动目标点
  * - attack：为当前选中单位选择攻击目标
  * - unit_order：为当前选中单位选择 attack_move/patrol/guard 的目标点/目标实体
+ * - haul（§4 运输机器人）：依次点起点建筑、终点建筑，选好物品后确认发 unit_order haul
  * - squad_order（3.4）：为军团选择 attack/defend/retreat 的目标点
  * - theater_zone（C4）：战区划定模式，左键拖拽矩形 → theater_define_zone（圆心+半径）
  */
@@ -29,6 +30,7 @@ export type PlanetInteractionMode =
   | { kind: 'move' }
   | { kind: 'attack' }
   | { kind: 'unit_order'; order: UnitOrderMode }
+  | { kind: 'haul'; fromBuildingId?: string; toBuildingId?: string; itemId?: string }
   | { kind: 'squad_order'; squadId: string; order: 'attack' | 'defend' | 'retreat' }
   | { kind: 'theater_zone'; theaterId: string; zoneType: WarTheaterZoneType };
 
@@ -42,24 +44,33 @@ export interface PlanetZoomLevel {
   tileSize?: number;
 }
 
+/**
+ * 缩放档（§4 细分网格后按 **cell** 重排）。
+ *
+ * 服务端 1 格 = 3×3 cell，因此同一视觉尺寸下 px/cell 只有旧 px/tile 的 1/3：
+ * 旧默认 48px/tile 的观感 = 16px/cell。档位整体重排后：
+ * - 概览档标签按 cell 记（1px/300cell ≈ 旧 1px/100tile）；
+ * - scene 档从 1px/cell（远景）到 32px/cell（近景，1 cell = 32px，3×3 建筑 96px）。
+ * 默认/回家档 = 16px/cell（建筑约 48px，传送带一格 16px，接近戴森球计划比例）。
+ */
 export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
   {
-    label: '1px/100tile',
+    label: '1px/300cell',
     mode: 'overview',
     scale: 0.01,
-    overviewStep: 100,
+    overviewStep: 300,
   },
   {
-    label: '1px/20tile',
+    label: '1px/60cell',
     mode: 'overview',
     scale: 0.05,
-    overviewStep: 20,
+    overviewStep: 60,
   },
   {
-    label: '1px/4tile',
+    label: '1px/12cell',
     mode: 'overview',
     scale: 0.25,
-    overviewStep: 4,
+    overviewStep: 12,
   },
   {
     label: '1px',
@@ -92,45 +103,28 @@ export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
     tileSize: 16,
   },
   {
+    label: '24px',
+    mode: 'scene',
+    scale: 24,
+    tileSize: 24,
+  },
+  {
     label: '32px',
     mode: 'scene',
     scale: 32,
     tileSize: 32,
   },
-  {
-    label: '48px',
-    mode: 'scene',
-    scale: 48,
-    tileSize: 48,
-  },
-  {
-    label: '64px',
-    mode: 'scene',
-    scale: 64,
-    tileSize: 64,
-  },
-  {
-    label: '96px',
-    mode: 'scene',
-    scale: 96,
-    tileSize: 96,
-  },
-  {
-    label: '128px',
-    mode: 'scene',
-    scale: 128,
-    tileSize: 128,
-  },
 ];
 /**
- * 默认缩放档：PLANET_ZOOM_LEVELS[9] = 48px/tile。
- * 试玩反馈 32px/tile 下建筑/地块图标偏小、缺乏沉浸感，默认档统一提到 48px。
+ * 默认缩放档：PLANET_ZOOM_LEVELS[7] = 16px/cell。
+ * 1 cell 是传送带/单位的最小件，16px 时 3×3 熔炉 48px、5×5 HQ 80px，
+ * 与旧「48px/tile」的观感一致（旧 1 tile = 新 3 cell）。
  */
-export const DEFAULT_PLANET_ZOOM_INDEX = 9;
-/** 概览双击进入 scene 的落点档：与回家档一致（48px/tile），避免落进过小的 8px 档。 */
+export const DEFAULT_PLANET_ZOOM_INDEX = 7;
+/** 概览双击进入 scene 的落点档：与回家档一致（16px/cell）。 */
 export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;
-/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[9] = 48px/tile，大行星首次进入/⌂ 聚焦基地时使用。 */
-export const PLANET_HOME_ZOOM_INDEX = 9;
+/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[7] = 16px/cell，大行星首次进入/⌂ 聚焦基地时使用。 */
+export const PLANET_HOME_ZOOM_INDEX = 7;
 /**
  * requestFocus 缩放哨兵：由渲染侧按"视口 × 地图尺寸"自适应选档（resolvePlanetFitZoomIndex）。
  * 小行星整图放大到 60-80% 占屏，大行星回落"回家"档（行为不变）。
@@ -138,9 +132,17 @@ export const PLANET_HOME_ZOOM_INDEX = 9;
 export const PLANET_FOCUS_FIT_ZOOM = -1;
 /** 自适应选档的目标占屏比：地图内容占视口短边 ~70%（可接受区间 60-80%）。 */
 export const PLANET_FIT_TARGET_OCCUPANCY = 0.7;
-/** scene 档缺省 tile 边长（px/tile），与默认缩放档一致。 */
-export const DEFAULT_PLANET_SCENE_TILE_SIZE = 48;
+/** scene 档缺省 cell 边长（px/cell），与默认缩放档一致。 */
+export const DEFAULT_PLANET_SCENE_TILE_SIZE = 16;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
+/**
+ * scene 档单轴可见 cell 上限。
+ *
+ * 细网格下面宽 288 cell（旧 96 tile），视口 1440px 时 16px/cell 正好 90 cell 全宽入画；
+ * 再放大一档（24/32px）就要靠 /scene 窗口取景，窗口越小边缘实体越晚出现。
+ * 320 保留「整面铺满 + 少量余量」的余量，同时把低分辨率档（1px/cell）的 /scene 请求
+ * 限制在 320×320（服务端 maxSceneWindowSize=257 会自行再钳一次）。
+ */
 export const MAX_PLANET_SCENE_TILES_PER_AXIS = 320;
 
 export function getPlanetZoomLevel(zoomIndex: number) {
@@ -192,7 +194,7 @@ export function getPlanetZoomStatusLabel(
   if (!actualStep || actualStep === zoomLevel.overviewStep) {
     return zoomLevel.label;
   }
-  return `${zoomLevel.label} (实际 1px/${actualStep}tile)`;
+  return `${zoomLevel.label} (实际 1px/${actualStep}cell)`;
 }
 
 export function isPlanetOverviewZoom(zoomIndex: number) {

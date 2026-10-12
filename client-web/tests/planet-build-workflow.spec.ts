@@ -418,12 +418,13 @@ test('首次进入行星页视角聚焦基地，基地不被信息片遮挡且�
   const surface = page.locator('.planet-map-canvas__surface');
   await expect(surface).toBeVisible({ timeout: 30_000 });
 
-  // 回家视角：48px/tile，基地落在视口内且不压在左上行星胶囊区域。
+  // 回家视角：细分网格后是 16px/**cell**（旧 48px/tile 的观感，1 tile = 3 cell），
+  // 基地落在视口内且不压在左上行星胶囊区域。
   // §3.2 把胶囊默认收成一行（名称 · 电力 · 研究），可点区域比旧的四芯片版小得多，
   // 这里按收起态实测盒子判定，不再用写死的 456×150。
   await expect
     .poll(async () => Number(await surface.getAttribute('data-tile-size')), { timeout: 10_000 })
-    .toBe(48);
+    .toBe(16);
   const surfaceBox = await surface.boundingBox();
   if (!surfaceBox) {
     throw new Error('交互面不可见');

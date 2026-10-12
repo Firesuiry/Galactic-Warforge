@@ -543,8 +543,9 @@ test('行星页宽屏：四种 HUD 状态下小地图中心与四角都命中 ca
     Math.abs(pair!.a.position.x - pair!.b.position.x),
     Math.abs(pair!.a.position.y - pair!.b.position.y),
   ) + 6;
-  // 缩放档取「两个单位只占视口一小块」：48px/tile 下跨度 6 格就是 288px，再远就出画。
-  const focusZoom = Math.max(1, Math.min(48, Math.floor(360 / span)));
+  // 缩放档取「两个单位只占视口一小块」：细分网格后是 px/**cell**（1 tile = 3 cell），
+  // 16px/cell 下跨度 6 cell 就是 96px；这里按 cell 跨度算档位（服务端单位坐标已是 cell）。
+  const focusZoom = Math.max(1, Math.min(32, Math.floor(360 / span)));
   await page.goto(`/planet/${PLANET_ID}?view=2d&x=${focusX}&y=${focusY}&zoom=${focusZoom}`);
   await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.planet-minimap__canvas')).toBeVisible({ timeout: 20_000 });
@@ -579,7 +580,7 @@ test('行星页宽屏：四种 HUD 状态下小地图中心与四角都命中 ca
         Math.abs(live.a.position.y - live.b.position.y),
       ) + 6;
       await page.goto(
-        `/planet/${PLANET_ID}?view=2d&x=${liveX}&y=${liveY}&zoom=${Math.max(1, Math.min(48, Math.floor(360 / liveSpan)))}`,
+        `/planet/${PLANET_ID}?view=2d&x=${liveX}&y=${liveY}&zoom=${Math.max(1, Math.min(32, Math.floor(360 / liveSpan)))}`,
       );
       await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 20_000 });
       await page.waitForTimeout(1500);

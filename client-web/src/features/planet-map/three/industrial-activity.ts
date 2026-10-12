@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { ConveyorDirection } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
+import { getItemColorValue } from '../item-colors';
 import { tileNormal, tileFrame, surfaceTileSize } from './projection';
 import { conveyorPaths, type ConveyorPath } from './conveyor-geometry';
 import { logisticsFlightNormal } from './logistics-flight';
@@ -32,7 +33,9 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
   const sources: ActivitySource[] = [];
   const fog = data.fog ?? ('bounds' in data.planet ? data.planet : undefined);
   const visible = (position: TilePoint) => Boolean(fog && getFogState(fog, Math.round(position.x), Math.round(position.y)).visible);
-  const itemColors = new Map(data.catalog?.items?.map(item => [item.id, item.color]));
+  // 物品配色走客户端配色表（item-colors）：服务端目录只按大类给色，矿石/材料各自同色，
+  // 细分网格后带上每格都要能分辨物品，不能再用目录色。目录色作为兜底。
+  const itemColors = new Map(data.catalog?.items?.map(item => [item.id, getItemColorValue(item.id, item.color)]));
   const definitions = new Map(data.catalog?.buildings?.map(building => [building.id, building]));
   const resources = new Map(data.planet.resources?.map(resource => [`${resource.position.x}:${resource.position.y}`, resource]));
   for (const building of Object.values(data.planet.buildings ?? {})) {
@@ -46,8 +49,7 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
       if (stack.quantity > 0) sources.push({ ...base, id: `${building.id}:cargo:${index}`, kind: 'cargo',
         itemId: stack.item_id, quantity: stack.quantity, direction: building.conveyor?.output, buildingId: building.id,
         color: itemColors.get(stack.item_id) ?? '#d8ae67' });
-    }
-    if (!running) continue;
+    }    if (!running) continue;
     const functions = building.runtime.functions;
     if ((functions?.energy?.output_per_tick ?? 0) > 0) sources.push({ ...base, id: `${building.id}:energy`, kind: 'energy', color: '#bfe7ff' });
     const definition = definitions.get(building.type);
@@ -187,7 +189,9 @@ export class IndustrialActivity {
         if (entry.path) this.position.copy(entry.path.point(offset + .5)).addScaledVector(normal, size * .1);
         else this.position.copy(normal).multiplyScalar(this.radius + size * .29).addScaledVector(tangent, offset * size * .95);
         this.rotation.setFromUnitVectors(this.up, normal);
-        this.scale.setScalar(size * Math.min(.16, .5 / entry.stackCount));
+        // 细分网格：1 cell = 1 段带体，方块按 cell 尺寸取 ~1/3 格（DSP 式「带上看得清物品」），
+        // 同格多堆时按 sqrt 收缩，避免叠成一坨。
+        this.scale.setScalar(size * Math.min(.34, .44 / Math.sqrt(entry.stackCount)));
         this.matrix.compose(this.position, this.rotation, this.scale);
         this.cargo.setMatrixAt(cargoCount, this.matrix);
         this.cargo.setColorAt(cargoCount++, color);

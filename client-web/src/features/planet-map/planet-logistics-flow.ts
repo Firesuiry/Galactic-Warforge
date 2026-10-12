@@ -12,12 +12,19 @@
 
 import type { Building, ItemAmount } from '@shared/types';
 
+import { getItemColorNumber } from '@/features/planet-map/item-colors';
 import { getResourceColorValue } from '@/features/planet-map/visible-entities';
 
-/** 单段传送带上同时渲染的货物圆点上限（buffer 可能堆很多，视觉抽样即可）。 */
+/**
+ * 单段传送带上同时渲染的货物圆点上限（buffer 可能堆很多，视觉抽样即可）。
+ * 细分网格后 1 cell = 1 段带体，圆点按 cell 尺寸画，4 个仍能看清。
+ */
 export const BELT_ITEM_MAX_DOTS = 4;
-/** 货物圆点/采集脉冲显示的最低 tile 边长（px）：更低缩放档圆点小到无意义。 */
-export const BELT_FLOW_MIN_TILE_SIZE = 8;
+/**
+ * 货物圆点/采集脉冲显示的最低 cell 边长（px）。
+ * 细分网格后默认档是 16px/cell，4px/cell 档圆点已小到无意义。
+ */
+export const BELT_FLOW_MIN_TILE_SIZE = 4;
 /** 采集产出脉冲周期（s）：近似"每周期一粒矿被采出"的节奏，与产量解耦（视觉近似）。 */
 export const HARVEST_PULSE_PERIOD_SEC = 2.6;
 
@@ -41,7 +48,7 @@ export function beltFlowVector(direction: string | undefined): { x: number; y: n
 
 /**
  * 货物圆点颜色序列：按 buffer 堆顺序展开（队首 = 即将送出的一端），
- * 每堆按数量占比取圆点，颜色取资源调色板（未知物品回退通用色）。上限 maxDots。
+ * 每堆按数量占比取圆点，颜色取物品配色表（item-colors，与服务端目录同源兜底）。上限 maxDots。
  */
 export function beltItemDotColors(
   buffer: ItemAmount[] | undefined,
@@ -55,7 +62,7 @@ export function beltItemDotColors(
     if (!stack || stack.quantity <= 0 || !stack.item_id) {
       continue;
     }
-    const color = getResourceColorValue(stack.item_id);
+    const color = getItemColorNumber(stack.item_id);
     const take = Math.min(stack.quantity, maxDots - colors.length);
     for (let i = 0; i < take; i += 1) {
       colors.push(color);
@@ -65,6 +72,23 @@ export function beltItemDotColors(
     }
   }
   return colors;
+}
+
+/** 带上物料的文本摘要（选中传送带详情面板用）：按 buffer 顺序「铁块 ×12 · 齿轮 ×4」。 */
+export function beltBufferSummary(
+  buffer: ItemAmount[] | undefined,
+  label: (itemId: string) => string,
+): string {
+  const stacks = (buffer ?? []).filter((stack) => stack && stack.quantity > 0 && stack.item_id);
+  if (stacks.length === 0) {
+    return '空';
+  }
+  return stacks.map((stack) => `${label(stack.item_id)} ×${stack.quantity}`).join(' · ');
+}
+
+/** 单件物品颜色（带上圆点/3D 方块/机器人货箱共用），供测试与详情面板色块使用。 */
+export function beltItemColor(itemId: string): number {
+  return getItemColorNumber(itemId);
 }
 
 /**
