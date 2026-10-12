@@ -9,7 +9,7 @@ import (
 // mechaCraftDefenseWorld 一台正在手搓的 p1 机甲 + 一个 p2 敌兵场景。
 func mechaCraftDefenseWorld(t *testing.T, enemyDist int) (*model.WorldState, *model.Unit, *model.Unit) {
 	t.Helper()
-	ws, mecha := mechaTestWorld()
+	ws, mecha := mechaTestWorldFar()
 	ws.Players["p1"].Tech = model.NewPlayerTechState("p1")
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
 	grantItems(ws, "p1", model.ItemAmount{ItemID: model.ItemIronOre, Quantity: 20})
@@ -29,9 +29,9 @@ func mechaCraftDefenseWorld(t *testing.T, enemyDist int) (*model.WorldState, *mo
 }
 
 // 试玩报告 E：手搓中的机甲被 aggro 范围内的敌人打断，靠近并还手，威胁消失后恢复手搓。
-// 敌人保持在 5 格外不动（射程 4 外、aggro 6 内）——旧实现整局不还手。
+// 敌人保持在射程外、aggro 内不动（细分网格后射程 12、aggro 18，取 16 格）。
 func TestMechaCraftIsInterruptedByAggroAndResumesAfter(t *testing.T) {
-	ws, mecha, enemy := mechaCraftDefenseWorld(t, 5)
+	ws, mecha, enemy := mechaCraftDefenseWorld(t, 16)
 	start := mecha.Position
 	everPaused := false
 	for i := 0; i < 60; i++ {
@@ -70,7 +70,7 @@ func TestMechaCraftIsInterruptedByAggroAndResumesAfter(t *testing.T) {
 
 // 能量耗尽时不会卡在"暂停手搓 + 不还手"的死状态：机甲收工恢复手搓（回能后续做）。
 func TestMechaCraftDefenseNeverDeadlocksOnEmptyEnergy(t *testing.T) {
-	ws, mecha, enemy := mechaCraftDefenseWorld(t, 5)
+	ws, mecha, enemy := mechaCraftDefenseWorld(t, 16)
 	enemy.MaxHP, enemy.HP = 100000, 100000 // 打不死，持续消耗机甲能量
 	advanceRTT(ws, 4000)
 	if mecha.Mecha.Job == nil {
@@ -86,7 +86,7 @@ func TestMechaCraftDefenseNeverDeadlocksOnEmptyEnergy(t *testing.T) {
 func TestIdleMechaEngagesWithinAggroRange(t *testing.T) {
 	ws, mecha := mechaTestWorld()
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
-	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", ws.SurfaceOffset(mecha.Position, 5, 0))
+	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", ws.SurfaceOffset(mecha.Position, 16, 0))
 	enemy.Stance = model.UnitStanceHold
 	enemy.Attack = 0
 	enemy.MaxHP, enemy.HP = 4000, 4000
@@ -115,9 +115,9 @@ func TestIdleMechaEngagesWithinAggroRange(t *testing.T) {
 
 // 追击有上限：目标跑出 aggro+leash 之外，机甲放弃追击并走回接战锚点。
 func TestIdleMechaChaseIsLeashed(t *testing.T) {
-	ws, mecha := mechaTestWorld()
+	ws, mecha := mechaTestWorldFar()
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
-	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", ws.SurfaceOffset(mecha.Position, 5, 0))
+	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", ws.SurfaceOffset(mecha.Position, 16, 0))
 	enemy.Stance = model.UnitStanceHold
 	enemy.Attack = 0
 	enemy.MaxHP, enemy.HP = 100000, 100000
@@ -175,28 +175,46 @@ func TestMechaMiningJobIsNotPausedByDefense(t *testing.T) {
 
 // 手搓中的机甲不会被敌人一路钓走：追击超出防御锚点范围就放弃、回到手搓。
 func TestMechaDefenseLeashReturnsToCraft(t *testing.T) {
-	ws, mecha, enemy := mechaCraftDefenseWorld(t, 5)
+	ws, mecha, enemy := mechaCraftDefenseWorld(t, 16)
+	start := mecha.Position
 	for i := 0; i < 30 && (mecha.Mecha.Job == nil || !mecha.Mecha.Job.Paused); i++ {
 		advanceRTT(ws, 1) // 进入防御：暂停手搓、建立锚点
 	}
 	if mecha.CombatAnchor == nil || mecha.Mecha.Job == nil || !mecha.Mecha.Job.Paused {
 		t.Fatalf("mecha should be defending: anchor=%v job=%+v", mecha.CombatAnchor, mecha.Mecha.Job)
 	}
-	// 把机甲挪到锚点外（模拟已被引离手搓点）：即使敌人还在 aggro 内也必须放弃追击。
+	// 把机甲挪到锚点外（模拟已被引离手搓点）：超限就必须放弃追击、回到手搓。
+	// 细分网格后 aggro 与脱战距离都 ×3，位置取「离锚点 > AggroRange+leashSlack」
+	// 且「离敌人 > AggroRange」，让"放弃"的判据只可能是脱战距离。
 	var far model.Position
-	for _, p := range ws.SurfaceDisc(*mecha.CombatAnchor, 20) {
-		if ws.SurfaceDistance(p, *mecha.CombatAnchor) > mecha.AggroRange+leashSlack {
-			far = p
-			break
+	for _, p := range ws.SurfaceDisc(*mecha.CombatAnchor, 60) {
+		if ws.SurfaceDistance(p, *mecha.CombatAnchor) <= mecha.AggroRange+leashSlack {
+			continue
 		}
+		if ws.SurfaceDistance(p, enemy.Position) <= mecha.AggroRange {
+			continue
+		}
+		far = p
+		break
 	}
+	if (far == model.Position{}) {
+		t.Fatal("test world too small: no tile beyond the leash")
+	}
+	// 传送本身也要清掉旧路径：否则本 tick 的移动结算会沿旧路径把机甲拉回原位
+	// （位置被路径节点覆盖），测的就不再是"超出脱战距离"。
 	mecha.Position = far
+	mecha.ClearMovement()
 	advanceRTT(ws, 5)
-	if mecha.HasPath() {
-		t.Fatalf("mecha must abandon an over-extended chase: path=%d", len(mecha.Path))
-	}
 	if mecha.Mecha.Job == nil || mecha.Mecha.Job.Paused {
 		t.Fatalf("mecha must be back on its craft after the leash breaks: %+v", mecha.Mecha.Job)
+	}
+	// 放弃追击后要么原地不动，要么已经在走回手搓点的路——但不能还朝着敌人走
+	// （旧实现被敌人一路钓走：路径终点一直在敌人身上）。
+	if mecha.HasPath() {
+		last := mecha.Path[len(mecha.Path)-1]
+		if ws.SurfaceDistance(last, enemy.Position) < ws.SurfaceDistance(last, start) {
+			t.Fatalf("mecha must not keep chasing past the leash: path=%d last=%+v", len(mecha.Path), last)
+		}
 	}
 	_ = enemy
 }

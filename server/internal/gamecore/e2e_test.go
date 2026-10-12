@@ -723,6 +723,13 @@ func TestE2E_InterstellarLogisticsDeliveryAfterConfiguration(t *testing.T) {
 }
 
 func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
+	return findOpenTileSized(ws, margin, model.Footprint{Width: 5, Height: 5})
+}
+
+// findOpenTileSized 是 findOpenTile 的占地参数化版本：细分网格下建筑的占地
+// 从 1×1 变成 2×2..5×5，"一个空格空着"不再等于"放得下"，返回的位置必须保证
+// 整块 footprint 都能落位。
+func findOpenTileSized(ws *model.WorldState, margin int, fp model.Footprint) (*model.Position, error) {
 	if ws == nil {
 		return nil, nil
 	}
@@ -749,7 +756,7 @@ func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
 		if execUnit == nil {
 			continue
 		}
-		if pos := findOpenTileNearLocked(ws, execUnit.Position, execState.OperateRange, margin); pos != nil {
+		if pos := findOpenTileNearLocked(ws, execUnit.Position, execState.OperateRange, margin, fp); pos != nil {
 			return pos, nil
 		}
 	}
@@ -765,16 +772,18 @@ func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
 			if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
 				continue
 			}
+			if !ws.FootprintFits(model.Position{X: x, Y: y}, fp, model.BuildingTypeArcSmelter, "") {
+				continue
+			}
 			return &model.Position{X: x, Y: y}, nil
 		}
 	}
 	return nil, nil
 }
 
-func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist, margin int) *model.Position {
-	// 细分网格：占地下限 2×2，最大是 5×5（粒子对撞机/HQ），按最大占地找整块
-	// 可落位，任何建筑的测试都能复用同一个位置。
-	fp := model.Footprint{Width: 5, Height: 5}
+func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist, margin int, fp model.Footprint) *model.Position {
+	// 细分网格：占地下限 2×2，最大是 5×5（粒子对撞机/HQ），按调用方给的占地
+	// 找整块可落位，任何建筑的测试都能复用同一个位置。
 	for dist := 0; dist <= maxDist; dist++ {
 		for dy := -dist; dy <= dist; dy++ {
 			absDy := dy
@@ -818,27 +827,53 @@ func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.P
 		return nil, nil
 	}
 	// 细分网格：风机/熔炉/制造台都是 2×2 或 3×3 占地，"相邻单格空着"不再等于
-	// "放得下"。从 HQ 锚点向外按图距找第一个整块可落的原点（跳过资源格）。
+	// "放得下"。按图距由近及远找第一个整块可落、且与 origin 整块不重叠的原点。
 	ws.RLock()
 	defer ws.RUnlock()
-	fp := model.Footprint{Width: 3, Height: 3}
-	if fixed, ok := ws.FindFootprintOrigin(origin, fp, model.BuildingTypeArcSmelter, ""); ok && fixed != origin {
-		pos := fixed
-		return &pos, nil
+	originTiles, err := ws.FootprintTiles(origin, model.Footprint{Width: 3, Height: 3})
+	if err != nil {
+		originTiles = nil
 	}
-	for _, candidate := range ws.SurfaceNeighbors(origin) {
+	for _, candidate := range ws.SurfaceDisc(origin, 8) {
 		if !ws.InBounds(candidate.X, candidate.Y) {
 			continue
 		}
-		tile := ws.Grid[candidate.Y][candidate.X]
-		if !tile.Terrain.Buildable() || tile.ResourceNodeID != "" {
+		if ws.SurfaceDistance(candidate, origin) == 0 {
 			continue
 		}
-		if _, occupied := ws.TileBuilding[model.TileKey(candidate.X, candidate.Y)]; occupied {
+		if !ws.FootprintFits(candidate, model.Footprint{Width: 3, Height: 3}, model.BuildingTypeArcSmelter, "") {
+			continue
+		}
+		overlap := false
+		for _, tile := range originTiles {
+			if ws.SurfaceDistance(candidate, tile) <= 2 {
+				overlap = true
+				break
+			}
+		}
+		if overlap {
+			continue
+		}
+		resource := false
+		for _, tile := range mustFootprintTiles(ws, candidate, model.Footprint{Width: 3, Height: 3}) {
+			if ws.Grid[tile.Y][tile.X].ResourceNodeID != "" {
+				resource = true
+				break
+			}
+		}
+		if resource {
 			continue
 		}
 		pos := candidate
 		return &pos, nil
 	}
 	return nil, nil
+}
+
+func mustFootprintTiles(ws *model.WorldState, origin model.Position, fp model.Footprint) []model.Position {
+	tiles, err := ws.FootprintTiles(origin, fp)
+	if err != nil {
+		return nil
+	}
+	return tiles
 }

@@ -59,7 +59,7 @@ func f4BasePos(t *testing.T, ws *model.WorldState, playerID string) model.Positi
 
 func f4OpenTileNear(t *testing.T, ws *model.WorldState, center model.Position) model.Position {
 	t.Helper()
-	pos := findOpenTileNearLocked(ws, center, 8, 0)
+	pos := findOpenTileNearLocked(ws, center, 8, 0, model.Footprint{Width: 5, Height: 5})
 	if pos == nil {
 		t.Fatalf("no open tile near %+v on %s", center, ws.PlanetID)
 	}

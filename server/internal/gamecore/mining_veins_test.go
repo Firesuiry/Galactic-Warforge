@@ -158,13 +158,15 @@ func TestAdvancedMiningMachineMinesMultipleVeins(t *testing.T) {
 	}
 }
 
-// F2: mining_machine 只采自身所在脉，相邻脉不受影响。
+// F2: mining_machine 只采自身覆盖范围内的脉（占地 + 1 圈），范围外的脉不受影响。
+// 细分网格：采矿机 3×3，覆盖半径 1，因此"范围内/范围外"的脉要按 5×5 的覆盖框摆。
 func TestMiningMachineMinesOnlyOwnVein(t *testing.T) {
-	ws := newMiningTestWorld(2)
-	addFiniteVein(ws, "n1", "iron_ore", "cluster-a", 2, 1, 20, 100)
-	addFiniteVein(ws, "n2", "iron_ore", "cluster-a", 3, 1, 20, 100)
+	ws := newMiningTestWorld(8)
+	addFiniteVein(ws, "n1", "iron_ore", "cluster-a", 10, 10, 20, 100)
+	// 距离占地 3 格（覆盖框 5×5 之外）。
+	addFiniteVein(ws, "n2", "iron_ore", "cluster-a", 10, 14, 20, 100)
 
-	miner := newMiningTestBuilding("b1", model.BuildingTypeMiningMachine, model.Position{X: 2, Y: 1}, 8)
+	miner := newMiningTestBuilding("b1", model.BuildingTypeMiningMachine, model.Position{X: 9, Y: 9}, 8)
 	ws.Buildings["b1"] = miner
 
 	settleResources(ws)
@@ -173,7 +175,7 @@ func TestMiningMachineMinesOnlyOwnVein(t *testing.T) {
 		t.Fatalf("expected own vein remaining 92, got %d", got)
 	}
 	if got := ws.Resources["n2"].Remaining; got != 100 {
-		t.Fatalf("expected adjacent vein untouched, got %d", got)
+		t.Fatalf("expected out-of-range vein untouched, got %d", got)
 	}
 	if got := totalStorageItems(miner.Storage); got != 8 {
 		t.Fatalf("expected 8 ore stored, got %d", got)

@@ -202,7 +202,7 @@ func TestFluidCollectorsDoNotYieldMinerals(t *testing.T) {
 		ID:       "pump",
 		Type:     model.BuildingTypeWaterPump,
 		OwnerID:  "p1",
-		Position: model.Position{X: 0, Y: 0},
+		Position: model.Position{X: 1, Y: 1},
 		Runtime:  model.BuildingProfileFor(model.BuildingTypeWaterPump, 1).Runtime,
 	}
 	model.InitBuildingStorage(pump)
@@ -324,6 +324,9 @@ func TestRenewableResourceRegens(t *testing.T) {
 	building.Runtime.Functions.Collect.YieldPerTick = 2
 	model.InitBuildingStorage(building)
 	ws.Buildings["b1"] = building
+	// 细分网格：再生结算只遍历可再生矿脉索引（地图生成/读档后重建），
+	// 手工搭的世界必须显式重建一次。
+	IndexRenewableResources(ws)
 
 	settleResources(ws)
 
@@ -371,14 +374,14 @@ func TestMaintenanceCostBlocksProduction(t *testing.T) {
 }
 
 func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
 
 	miner := &model.Building{
 		ID:       "miner",
 		Type:     model.BuildingTypeMiningMachine,
 		OwnerID:  "p1",
-		Position: model.Position{X: 0, Y: 0},
+		Position: model.Position{X: 1, Y: 1},
 		Runtime:  model.BuildingProfileFor(model.BuildingTypeMiningMachine, 1).Runtime,
 	}
 	model.InitBuildingStorage(miner)
@@ -386,8 +389,9 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 	if miner.Runtime.Functions.Energy != nil {
 		miner.Runtime.Functions.Energy.ConsumePerTick = 0
 	}
-	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
-	depot := newDepotBuilding("depot", model.Position{X: 2, Y: 0})
+	// 细分网格：采矿机 3×3（x1..3,y1..3），传送带贴在东侧外圈、方向背离建筑。
+	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
+	depot := newDepotBuilding("depot", model.Position{X: 5, Y: 1})
 	attachBuilding(ws, miner)
 	attachBuilding(ws, belt)
 	attachBuilding(ws, depot)
@@ -403,7 +407,7 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 		BaseYield:    8,
 		CurrentYield: 8,
 	}
-	ws.Grid[0][0].ResourceNodeID = "r1"
+	ws.Grid[1][1].ResourceNodeID = "r1"
 	settleResources(ws)
 	settleStorage(ws)
 	settleBuildingIO(ws)
@@ -416,14 +420,14 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 }
 
 func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
 
 	pump := &model.Building{
 		ID:       "pump",
 		Type:     model.BuildingTypeWaterPump,
 		OwnerID:  "p1",
-		Position: model.Position{X: 0, Y: 0},
+		Position: model.Position{X: 1, Y: 1},
 		Runtime:  model.BuildingProfileFor(model.BuildingTypeWaterPump, 1).Runtime,
 	}
 	model.InitBuildingStorage(pump)
@@ -431,8 +435,8 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 	if pump.Runtime.Functions.Energy != nil {
 		pump.Runtime.Functions.Energy.ConsumePerTick = 0
 	}
-	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
-	depot := newDepotBuilding("depot", model.Position{X: 2, Y: 0})
+	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
+	depot := newDepotBuilding("depot", model.Position{X: 5, Y: 1})
 	attachBuilding(ws, pump)
 	attachBuilding(ws, belt)
 	attachBuilding(ws, depot)
@@ -449,7 +453,7 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 		CurrentYield: 5,
 		RegenPerTick: 2,
 	}
-	ws.Grid[0][0].ResourceNodeID = "r1"
+	ws.Grid[1][1].ResourceNodeID = "r1"
 
 	settleResources(ws)
 	settleStorage(ws)
@@ -463,14 +467,14 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 }
 
 func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", Resources: model.Resources{Energy: 20}, IsAlive: true}
 
 	extractor := &model.Building{
 		ID:       "extractor",
 		Type:     model.BuildingTypeOilExtractor,
 		OwnerID:  "p1",
-		Position: model.Position{X: 0, Y: 0},
+		Position: model.Position{X: 1, Y: 1},
 		Runtime:  model.BuildingProfileFor(model.BuildingTypeOilExtractor, 1).Runtime,
 	}
 	model.InitBuildingStorage(extractor)
@@ -478,8 +482,8 @@ func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
 	if extractor.Runtime.Functions.Energy != nil {
 		extractor.Runtime.Functions.Energy.ConsumePerTick = 0
 	}
-	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
-	depot := newDepotBuilding("depot", model.Position{X: 2, Y: 0})
+	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
+	depot := newDepotBuilding("depot", model.Position{X: 5, Y: 1})
 	attachBuilding(ws, extractor)
 	attachBuilding(ws, belt)
 	attachBuilding(ws, depot)
@@ -495,7 +499,7 @@ func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
 		MinYield:     2,
 		DecayPerTick: 1,
 	}
-	ws.Grid[0][0].ResourceNodeID = "r1"
+	ws.Grid[1][1].ResourceNodeID = "r1"
 
 	settleResources(ws)
 	settleStorage(ws)

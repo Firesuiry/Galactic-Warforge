@@ -78,27 +78,13 @@ func TestMechaBuildTaskWalkFiresBackAndResumesConstruction(t *testing.T) {
 	core := newEnclosureTestCore(t)
 	ws := core.World()
 	mecha := findExecutorUnit(t, ws)
+	// 细分网格：HQ 建造半径 ×3（24→72），测试地图最远也只有 72 格，全图都在
+	// 建造中心覆盖内，auto_approach 无从触发；这些用例验证的是"作业行走被打断
+	// 后恢复"，因此让开建造中心（HP=0），退回执行体作业半径。
 	home := botPlayerHQ(t, ws, "p1").Position
-
-	// 选一个超出建造中心半径（24）但机甲能走到的施工点：触发 auto_approach 的作业行走。
-	var target *model.Position
-	for _, p := range ws.SurfaceDisc(home, 60) {
-		if ws.SurfaceDistance(home, p) <= 26 || ws.SurfaceDistance(mecha.Position, p) < 8 {
-			continue
-		}
-		if ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
-			continue
-		}
-		if _, path := planBuildApproach(ws, "p1", p); len(path) < 5 {
-			continue
-		}
-		c := p
-		target = &c
-		break
-	}
-	if target == nil {
-		t.Fatal("no reachable out-of-range build site")
-	}
+	_ = home
+	site := findApproachSite(t, core, ws, "p1", model.BuildingTypeWindTurbine, 8)
+	target := &site
 
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
 		Type:    model.CmdBuild,
@@ -113,8 +99,7 @@ func TestMechaBuildTaskWalkFiresBackAndResumesConstruction(t *testing.T) {
 	}
 	walkStart := mecha.Position
 
-	// 8 个敌兵贴上来打它（复现报告场景）：机甲血量拉高以保证测试可重复。
-	mecha.MaxHP, mecha.HP = 5000, 5000
+	// 8 个敌兵贴上来打它（复现报告场景）。
 	var enemies []*model.Unit
 	for _, offset := range ws.SurfaceDisc(mecha.Position, 3) {
 		if len(enemies) >= 8 || ws.SurfaceDistance(mecha.Position, offset) == 0 {
@@ -128,6 +113,11 @@ func TestMechaBuildTaskWalkFiresBackAndResumesConstruction(t *testing.T) {
 		}
 		enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", offset)
 		enemy.MaxHP, enemy.HP = 100000, 100000
+		// 细分网格：敌兵射程 ×3（2→6）后能贴身持续输出，8 个兵会在几 tick 内
+		// 打死机甲（机甲血量上限由 SyncMechaCapabilities 从数据重算，不能靠
+		// 抬高 MaxHP 作弊）。本用例只关心"被打断 → 还手 → 恢复施工"，
+		// 因此把敌兵攻击压到最低（仍能造成 1 点伤害，tookDamage 断言成立）。
+		enemy.Attack = 1
 		enemies = append(enemies, enemy)
 	}
 	if len(enemies) < 8 {

@@ -167,6 +167,9 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			home.Distributor.LocalStorage = 0
 			home.Distributor.PlayerDeliveryEnabled = true
 			home.Distributor.PlayerCollectionEnabled = true
+			// 细分网格：航程 ×3（12→36）后单趟预付能量也 ×3（2×航程），
+			// 100 点只够一趟；本用例要 3 台机器人各飞一趟，充满电。
+			home.Distributor.Energy = home.Distributor.EnergyCapacity
 			distributorTestMecha(ws, sink.Position)
 			player := ws.Players["p1"]
 			if collection {
@@ -177,7 +180,9 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			for _, id := range []string{"a", "b", "c"} {
 				distributorTestBot(t, ws, home, id)
 			}
-			distributorTestTicks(t, ws, 15)
+			// 细分网格：配送器航程 ×3（12→36），机甲(15,8) 与 home(8,8) 相距 7，
+			// 仍在范围内；但 3 台机器人各飞一趟要更多 tick（速度没变）。
+			distributorTestTicks(t, ws, 60)
 			if player.Inventory[model.ItemIronOre] != 12 {
 				t.Fatalf("request max violated: %d", player.Inventory[model.ItemIronOre])
 			}
@@ -217,7 +222,8 @@ func TestDistributorMechaLeavesRangeOrActivePlanetReturnsCargo(t *testing.T) {
 			bot := distributorTestBot(t, ws, home, "bot")
 			distributorTestTicks(t, ws, 2)
 			if !gone {
-				unit.Position = model.Position{X: 26, Y: 8}
+				// 细分网格：航程 ×3（12→36），必须挪到 36 格之外才算"离开配送范围"。
+				unit.Position = model.Position{X: 48, Y: 8}
 			} else {
 				delete(ws.Units, unit.ID)
 			}

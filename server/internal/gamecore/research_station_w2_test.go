@@ -371,8 +371,18 @@ func TestMassConstructionRaisesRegionConcurrentLimit(t *testing.T) {
 			if !ws.Grid[y][x].Terrain.Buildable() {
 				continue
 			}
-			key := model.TileKey(x, y)
-			if ws.TileBuilding[key] != "" || ws.Grid[y][x].ResourceNodeID != "" {
+			// 细分网格：太阳能板 3×3，三个任务必须整块落位且互不重叠。
+			if !ws.FootprintFits(model.Position{X: x, Y: y}, model.Footprint{Width: 3, Height: 3}, model.BuildingTypeSolarPanel, "") {
+				continue
+			}
+			overlaps := false
+			for _, taken := range positions {
+				if ws.SurfaceDistance(taken, model.Position{X: x, Y: y}) <= 4 {
+					overlaps = true
+					break
+				}
+			}
+			if overlaps {
 				continue
 			}
 			region := constructionRegionKey(ws, model.Position{X: x, Y: y})

@@ -102,10 +102,11 @@ func TestAttackOutOfRangeAutoApproaches(t *testing.T) {
 		t.Fatalf("unit never closed to attack range: %+v -> %+v", unit.Position, enemy.Position)
 	}
 
-	// 机甲（执行体）。
-	mechaWS, mecha := mechaTestWorld()
+	// 机甲（执行体）。细分网格后机甲射程 ×3（4→12），必须用大一点的地图，
+	// 否则 24×16 的最小测试面上没有"射程外"的目标。
+	mechaWS, mecha := mechaTestWorldFar()
 	mecha.Mecha.Energy = 100
-	target := spawnWorldTestUnit(mechaWS, model.UnitTypeSoldier, "p2", model.Position{X: 9, Y: 1})
+	target := spawnWorldTestUnit(mechaWS, model.UnitTypeSoldier, "p2", model.Position{X: 40, Y: 1})
 	res, _ = execCommand(gc, model.CmdAttack, mechaWS, "p1", model.Command{
 		Type:    model.CmdAttack,
 		Target:  model.CommandTarget{EntityID: mecha.ID},
@@ -306,16 +307,24 @@ func TestBuildConcurrencyLimitIsReportedAsWaitNotFailure(t *testing.T) {
 		return res
 	}
 
+	// 细分网格：风机 2×2，三个施工点必须整块落位且互不重叠。
 	var placed []model.Position
+	fp := model.Footprint{Width: 2, Height: 2}
 	for _, p := range ws.SurfaceDisc(execUnit.Position, 12) {
 		if len(placed) >= 3 {
 			break
 		}
-		tile := ws.Grid[p.Y][p.X]
-		if !tile.Terrain.Buildable() || tile.ResourceNodeID != "" {
+		if !ws.FootprintFits(p, fp, model.BuildingTypeWindTurbine, "") {
 			continue
 		}
-		if _, occupied := ws.TileBuilding[model.TileKey(p.X, p.Y)]; occupied {
+		overlaps := false
+		for _, taken := range placed {
+			if ws.SurfaceDistance(taken, p) <= 3 {
+				overlaps = true
+				break
+			}
+		}
+		if overlaps {
 			continue
 		}
 		placed = append(placed, p)

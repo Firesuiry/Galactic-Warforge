@@ -20,6 +20,28 @@ func mechaTestWorld() (*model.WorldState, *model.Unit) {
 	return ws, &unit
 }
 
+// mechaTestWorldFar 返回一张更大的地图（细分网格后距离类数值 ×3，24×16 的
+// 最小测试面放不下"射程外但可走到"的目标；普通 mechaTestWorld 保留给
+// 贴脸场景，避免改动大量既有用例的坐标）。
+func mechaTestWorldFar() (*model.WorldState, *model.Unit) {
+	ws := model.NewWorldState("p1", 32)
+	ws.Players["p1"] = &model.PlayerState{
+		PlayerID: "p1",
+		IsAlive:  true,
+		Resources: model.Resources{
+			Minerals: 0,
+			Energy:   20,
+		},
+	}
+	ws.Tick = 20
+	unit := model.UnitStats(model.UnitTypeExecutor)
+	unit.ID, unit.OwnerID, unit.Type = "executor", "p1", model.UnitTypeExecutor
+	unit.Position = model.Position{X: 1, Y: 1}
+	ws.Units[unit.ID] = &unit
+	ws.TileUnits[model.TileKey(1, 1)] = []string{unit.ID}
+	return ws, &unit
+}
+
 func mechaAttackCommand(id string) model.Command {
 	return model.Command{Type: model.CmdAttack, Target: model.CommandTarget{EntityID: "executor"}, Payload: map[string]any{"target_entity_id": id}}
 }
@@ -42,8 +64,9 @@ func TestPlayerMechaAttackConsumesEnergyAndRejectsAtomically(t *testing.T) {
 		t.Fatalf("failed attack mutated state: %+v", res)
 	}
 	// 射程外：不再直接拒绝，而是自动靠近（实时路径），随后按冷却开火。
+	// 细分网格后机甲射程 ×3（4→12），(1,1)→(7,7) 的图距只有 12，换成更远处。
 	unit.Mecha.Energy = 50
-	enemy.Position = model.Position{X: 7, Y: 7}
+	enemy.Position = model.Position{X: 23, Y: 15}
 	before := unit.Position
 	res, _ = execCommand(core, model.CmdAttack, ws, "p1", mechaAttackCommand(enemy.ID))
 	if res.Code != model.CodeOK || !unit.HasPath() || unit.Position != before {
@@ -221,9 +244,10 @@ func TestPlayerMechaCompletedResearchChangesLiveCapabilitiesWithoutFreeEnergy(t 
 		completeResearch(player, research, def, ws.Tick, &events)
 	}
 	settleMechas(ws)
-	// 研究生效后：能量上限 110、移动范围 14、护盾上限 20；护盾回复 1 点耗 1 能。
+	// 研究生效后：能量上限 110、移动范围 42（基础 36 + mecha_engine 6，细分网格
+	// 后距离类数值 ×3）、护盾上限 20；护盾回复 1 点耗 1 能。
 	// 回能 tick（tick%4==0）额外 +1，两种都合法，这里断言能量落在 [22,24] 且护盾 2。
-	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 14 || unit.Mecha.MaxShield != 20 || unit.Mecha.Shield != 2 ||
+	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 42 || unit.Mecha.MaxShield != 20 || unit.Mecha.Shield != 2 ||
 		unit.Mecha.Energy < 22 || unit.Mecha.Energy > 24 {
 		t.Fatalf("research not effective: %+v %+v", unit, unit.Mecha)
 	}
@@ -233,7 +257,7 @@ func TestPlayerMechaCompletedResearchChangesLiveCapabilitiesWithoutFreeEnergy(t 
 	for range 3 {
 		model.SyncMechaCapabilities(unit, player)
 	}
-	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 14 || unit.Mecha.Energy != 50 {
+	if unit.Mecha.MaxEnergy != 110 || unit.MoveRange != 42 || unit.Mecha.Energy != 50 {
 		t.Fatal("repeated sync stacks bonuses or adds energy")
 	}
 }
@@ -363,7 +387,7 @@ func TestPlayerMechaTechSyncEmitsDerivedCapabilityChange(t *testing.T) {
 		t.Fatalf("expected capability sync event, unit=%+v events=%v", unit.Mecha, events)
 	}
 	payload := events[0].Payload
-	if payload["move_range"] != 12 || payload["attack"] != 20 {
+	if payload["move_range"] != 36 || payload["attack"] != 20 {
 		t.Fatalf("missing derived fields: %#v", payload)
 	}
 	// 满能量：被动回能不做任何事，重复同步必须仍然零事件。

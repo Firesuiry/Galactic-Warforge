@@ -7,7 +7,7 @@ import (
 )
 
 func TestBuildingIOInputFromConveyor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 1, Y: 0})
@@ -31,7 +31,7 @@ func TestBuildingIOInputFromConveyor(t *testing.T) {
 }
 
 func TestBuildingIOInputToEMRailEjector(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2)
+	ws := model.NewWorldState("planet-1", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	ejector := newEMRailEjectorBuilding("ejector", model.Position{X: 1, Y: 0}, "p1")
@@ -55,11 +55,12 @@ func TestBuildingIOInputToEMRailEjector(t *testing.T) {
 }
 
 func TestBuildingIOOutputToConveyor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})
-	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
+	// 细分网格：仓库占地 3×3（x0..2,y0..2），输出带必须落在占地外圈且方向背离仓库。
+	belt := newConveyorBuilding("belt", model.Position{X: 3, Y: 0}, model.ConveyorEast)
 	belt.Conveyor.MaxStack = 1
 
 	attachBuilding(ws, depot)
@@ -83,7 +84,7 @@ func TestBuildingIOOutputToConveyor(t *testing.T) {
 }
 
 func TestBuildingIOInputRollbackOnFullStorage(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 1, Y: 0})
@@ -117,11 +118,11 @@ func TestBuildingIOInputRollbackOnFullStorage(t *testing.T) {
 }
 
 func TestBuildingIOOutputRollbackOnBlockedConveyor(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 2)
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})
-	belt := newConveyorBuilding("belt", model.Position{X: 1, Y: 0}, model.ConveyorEast)
+	belt := newConveyorBuilding("belt", model.Position{X: 3, Y: 0}, model.ConveyorEast)
 	belt.Conveyor.MaxStack = 1
 
 	attachBuilding(ws, depot)
@@ -149,7 +150,7 @@ func TestBuildingIOOutputRollbackOnBlockedConveyor(t *testing.T) {
 }
 
 func TestBuildingIOOutputPrefersNonDuplicateConveyorTarget(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
 	profile := model.BuildingProfileFor(model.BuildingTypeWaterPump, 1)
@@ -157,7 +158,7 @@ func TestBuildingIOOutputPrefersNonDuplicateConveyorTarget(t *testing.T) {
 		ID:          "pump",
 		Type:        model.BuildingTypeWaterPump,
 		OwnerID:     "p1",
-		Position:    model.Position{X: 1, Y: 1},
+		Position:    model.Position{X: 3, Y: 3},
 		Runtime:     profile.Runtime,
 		VisionRange: profile.VisionRange,
 		MaxHP:       profile.MaxHP,
@@ -169,8 +170,10 @@ func TestBuildingIOOutputPrefersNonDuplicateConveyorTarget(t *testing.T) {
 		model.ItemWater: 1,
 	}
 
-	south := newConveyorBuilding("south", model.Position{X: 1, Y: 2}, model.ConveyorNorth)
-	west := newConveyorBuilding("west", model.Position{X: 0, Y: 1}, model.ConveyorWest)
+	// 细分网格：抽水站占地 3×3（x3..5,y3..5）。两条候选输出带都在占地外圈且
+	// 方向背离建筑；south 上已有水（重复），west 为空（优先）。
+	south := newConveyorBuilding("south", model.Position{X: 3, Y: 6}, model.ConveyorSouth)
+	west := newConveyorBuilding("west", model.Position{X: 2, Y: 3}, model.ConveyorWest)
 
 	if _, _, err := south.Conveyor.Insert(model.ItemWater, 1); err != nil {
 		t.Fatalf("insert south water: %v", err)

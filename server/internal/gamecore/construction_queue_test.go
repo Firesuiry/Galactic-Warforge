@@ -117,27 +117,30 @@ func TestConstructionQueueRespectsRegionLimit(t *testing.T) {
 	}
 }
 
+// findTwoOpenTiles 返回两个互不重叠、且整块 5×5 占地都能落位的建造原点。
+// 细分网格下"一个空格空着"不再等于"放得下"（建筑占地最大 5×5），两处必须
+// 相距足够远，否则第二个建筑会压到第一个的占地（POSITION_OCCUPIED）。
 func findTwoOpenTiles(ws *model.WorldState) (model.Position, model.Position) {
 	if ws == nil {
 		return model.Position{}, model.Position{}
 	}
+	fp := model.Footprint{Width: 5, Height: 5}
 	var first *model.Position
 	for y := 0; y < ws.MapHeight; y++ {
 		for x := 0; x < ws.MapWidth; x++ {
-			if !ws.Grid[y][x].Terrain.Buildable() {
+			origin := model.Position{X: x, Y: y}
+			if !ws.FootprintFits(origin, fp, model.BuildingTypeArcSmelter, "") {
 				continue
 			}
-			if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
-				continue
-			}
-			pos := model.Position{X: x, Y: y}
 			if first == nil {
-				first = &pos
+				c := origin
+				first = &c
 				continue
 			}
-			if pos.X != first.X || pos.Y != first.Y {
-				return *first, pos
+			if ws.SurfaceDistance(origin, *first) <= 6 {
+				continue
 			}
+			return *first, origin
 		}
 	}
 	if first == nil {

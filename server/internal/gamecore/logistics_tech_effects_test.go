@@ -217,10 +217,10 @@ func TestLogisticsShipTechStatsSurviveSnapshotRestore(t *testing.T) {
 
 func TestDistributionRangeTechExtendsDeliveryRange(t *testing.T) {
 	ws, source, sink := distributorTestWorld(t)
-	// Base range is 12; distance 16 needs distribution_range level 1 (+5).
-	// The host depot must move with its distributor (hosts bind by position).
-	sink.Position = model.Position{X: 24, Y: 8, Z: 1}
-	ws.Buildings[sink.Distributor.HostBuildingID].Position = model.Position{X: 24, Y: 8}
+	// 细分网格：基础航程 12→36，科技每级 +5→+15。距离 44 需要 distribution_range
+	// 1 级（+15，36+15=51 ≥ 44）。host 必须跟着配送器一起搬（按位置绑定）。
+	sink.Position = model.Position{X: 52, Y: 8, Z: 1}
+	ws.Buildings[sink.Distributor.HostBuildingID].Position = model.Position{X: 52, Y: 8}
 	distributorTestLoad(t, ws, source, model.ItemIronOre, 30)
 	bot := distributorTestBot(t, ws, source, "bot")
 
@@ -239,8 +239,8 @@ func TestDistributionRangeTechExtendsDeliveryRange(t *testing.T) {
 	if bot.TargetID != sink.ID || bot.TripKind != "delivery" {
 		t.Fatalf("extended flight targets the far sink: %+v", bot)
 	}
-	if ws.SurfaceDistance(source.Position, sink.Position) != 16 {
-		t.Fatalf("fixture distance changed: %d", ws.SurfaceDistance(source.Position, sink.Position))
+	if d := ws.SurfaceDistance(source.Position, sink.Position); d <= 36 || d > 51 {
+		t.Fatalf("fixture distance must need exactly one tech level: %d", d)
 	}
 }
 
