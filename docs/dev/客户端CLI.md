@@ -57,7 +57,7 @@ cd client-cli && npm run dev
 - **研究**：至少 1 个 `running` 研究站（`matrix_lab` 不设配方即研究模式），所需矩阵须已在研究站本地库存，推进时真实消耗。`summary` 的 `tech.current_research.blocked_reason` 为 `waiting_lab`/`waiting_matrix`/`low_power`，`speed_multiplier` 与 `estimated_ticks_remaining` 反映供电降速。
 - **机甲**：`mine_resource` 在 2 格内采有限固体矿点（`resource_id` 是矿点 ID，不是物品 ID），每 10 tick 1 件；`craft_item` 只限 `handcraft_allowed=true` 且已解锁的配方，quantity 为批数。采矿每件耗 3 核心，手搓每批耗 `max(1, 时长/20)` 核心，缺能暂停。quantity 只接受正十进制安全整数。`refuel_mecha <executor_id> <fuel_item_id> [count]` 只接受 `items[].mecha_fuel_energy > 0` 的燃料，count 缺省 1，烧到核心满为止。靠近运行中的自有无线输电塔（6 格）或电力感应塔（4 格）自动充电。
 - **分流器**：`configure_splitter` 每次完整替换端口、优先级与过滤；省略可选项即清除。方向限 `north/east/south/west`，至少一入一出、方向不重复。未过滤出口可作旁路；优先是“可用优先”。
-- **分拣器**：`configure_sorter` 输入/输出方向不得重叠，`--mode allow|deny` 配 `--items`。
+- **分拣器**：`configure_sorter` 输入/输出方向不得重叠（`--inputs`/`--outputs` 逗号分隔，服务端收的是字符串数组），`--mode allow|deny` 配 `--items`（同样逗号分隔成数组）。
 - **流速监测器**：`configure_traffic_monitor` 完整替换配置，绑定相邻自有 Mk.I/II/III 传送带，`none` 清绑定；任何配置都会重置统计。告警事件为 `traffic_monitor_alert`。
 - **物流站**：新站无库存、无电、无端口、无运输器。`install_logistics_vehicle` 默认扣背包成品，`--source station` 扣站内同物品成品（可经皮带入站）；调大容量不会生成载具。`configure_logistics_station --belt-ports` 完整替换全部端口（`none` 清空），端口物品须先配槽。`configure_logistics_slot ... --remove` 删除槽，有库存、端口引用或在途货物时拒绝。PLS 3 槽×200，ILS 5 槽×500。曲速需起飞站配 `space_warper` 槽并装入至少 2 份曲速器。
 - **配送器**：`configure_distributor` 省略布尔开关保留原值；物品为 `none` 时须同时停用仓间与机甲配送。`uninstall_logistics_bot` 只回收空载停靠的机器人。`configure_mecha_logistics` 整体替换请求（最多 8 项，`0≤min≤max≤1000` 且 `max>0`）。
