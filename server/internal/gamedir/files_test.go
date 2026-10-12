@@ -14,7 +14,6 @@ import (
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/model"
 	"siliconworld/internal/snapshot"
-	"siliconworld/internal/terrain"
 )
 
 func TestWriteRoundTrip(t *testing.T) {
@@ -38,15 +37,15 @@ func TestWriteRoundTrip(t *testing.T) {
 			Version: snapshot.CurrentVersion,
 			Tick:    12,
 			World: &snapshot.WorldSnapshot{
-				Tick:      12,
-				PlanetID:  "planet-1-1",
-				MapWidth:  1,
-				MapHeight: 1,
-				Players:   map[string]*model.PlayerState{},
-				Buildings: map[string]*snapshot.BuildingSnapshot{},
-				Units:     map[string]*model.Unit{},
-				Resources: map[string]*model.ResourceNodeState{},
-				Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+				Tick:           12,
+				PlanetID:       "planet-1-1",
+				MapWidth:       1,
+				MapHeight:      1,
+				Players:        map[string]*model.PlayerState{},
+				Buildings:      map[string]*snapshot.BuildingSnapshot{},
+				Units:          map[string]*model.Unit{},
+				ResourceDeltas: map[string]model.ResourceNodeDelta{},
+				Terrain:        "0",
 			},
 		},
 		RuntimeState: RuntimeState{
@@ -61,15 +60,15 @@ func TestWriteRoundTrip(t *testing.T) {
 				Version: snapshot.CurrentVersion,
 				Tick:    10,
 				World: &snapshot.WorldSnapshot{
-					Tick:      10,
-					PlanetID:  "planet-1-1",
-					MapWidth:  1,
-					MapHeight: 1,
-					Players:   map[string]*model.PlayerState{},
-					Buildings: map[string]*snapshot.BuildingSnapshot{},
-					Units:     map[string]*model.Unit{},
-					Resources: map[string]*model.ResourceNodeState{},
-					Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+					Tick:           10,
+					PlanetID:       "planet-1-1",
+					MapWidth:       1,
+					MapHeight:      1,
+					Players:        map[string]*model.PlayerState{},
+					Buildings:      map[string]*snapshot.BuildingSnapshot{},
+					Units:          map[string]*model.Unit{},
+					ResourceDeltas: map[string]model.ResourceNodeDelta{},
+					Terrain:        "0",
 				},
 			},
 			CommandLog: []CommandLogEntry{{
@@ -535,15 +534,15 @@ func minimalSave(tick int64) *SaveFile {
 			Version: snapshot.CurrentVersion,
 			Tick:    tick,
 			World: &snapshot.WorldSnapshot{
-				Tick:      tick,
-				PlanetID:  "planet-1-1",
-				MapWidth:  1,
-				MapHeight: 1,
-				Players:   map[string]*model.PlayerState{},
-				Buildings: map[string]*snapshot.BuildingSnapshot{},
-				Units:     map[string]*model.Unit{},
-				Resources: map[string]*model.ResourceNodeState{},
-				Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+				Tick:           tick,
+				PlanetID:       "planet-1-1",
+				MapWidth:       1,
+				MapHeight:      1,
+				Players:        map[string]*model.PlayerState{},
+				Buildings:      map[string]*snapshot.BuildingSnapshot{},
+				Units:          map[string]*model.Unit{},
+				ResourceDeltas: map[string]model.ResourceNodeDelta{},
+				Terrain:        "0",
 			},
 		},
 		RuntimeState: RuntimeState{ActivePlanetID: "planet-1-1"},

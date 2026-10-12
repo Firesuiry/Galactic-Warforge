@@ -146,6 +146,64 @@ func TestDeploySquadCatalogAcceptsExactlyOneForm(t *testing.T) {
 	}
 }
 
+// 分拣器/分流器的方向与过滤物品在目录里必须是数组：服务端 configure_sorter /
+// configure_splitter 都按数组解析载荷，目录声明成 string 会让 GUI/CLI/agent
+// 生成出必被拒绝的单个字符串（2026-10-12 遗留问题 3）。
+func TestCommandCatalogDirectionPayloadsAreArrays(t *testing.T) {
+	byType := map[string]model.CommandCatalogEntry{}
+	for _, entry := range model.BuildCommandCatalog().Commands {
+		byType[entry.Type] = entry
+	}
+	payloadProps := func(cmdType string) map[string]any {
+		t.Helper()
+		entry, ok := byType[cmdType]
+		if !ok {
+			t.Fatalf("missing catalog entry %s", cmdType)
+		}
+		props, ok := entry.Schema["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s schema has no properties", cmdType)
+		}
+		payload, ok := props["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s schema has no payload object", cmdType)
+		}
+		fields, ok := payload["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s schema payload has no properties", cmdType)
+		}
+		return fields
+	}
+	assertArrayField := func(cmdType, field string) {
+		t.Helper()
+		fieldSchema, ok := payloadProps(cmdType)[field].(map[string]any)
+		if !ok {
+			t.Fatalf("%s schema missing payload.%s", cmdType, field)
+		}
+		if fieldSchema["type"] != "array" {
+			t.Fatalf("%s payload.%s schema type = %v, want array", cmdType, field, fieldSchema["type"])
+		}
+		if items, ok := fieldSchema["items"].(map[string]any); !ok || items["type"] != "string" {
+			t.Fatalf("%s payload.%s items = %v, want string items", cmdType, field, fieldSchema["items"])
+		}
+	}
+	for _, cmdType := range []string{"configure_sorter", "configure_splitter"} {
+		assertArrayField(cmdType, "input_directions")
+		assertArrayField(cmdType, "output_directions")
+	}
+	assertArrayField("configure_sorter", "filter_items")
+
+	// filter_mode 仍是 allow|deny 枚举字符串。
+	modeSchema, ok := payloadProps("configure_sorter")["filter_mode"].(map[string]any)
+	if !ok || modeSchema["type"] != "string" {
+		t.Fatalf("configure_sorter payload.filter_mode schema = %v, want string enum", modeSchema)
+	}
+	enum, ok := modeSchema["enum"].([]string)
+	if !ok || len(enum) != 2 || enum[0] != "allow" || enum[1] != "deny" {
+		t.Fatalf("configure_sorter payload.filter_mode enum = %v, want [allow deny]", modeSchema["enum"])
+	}
+}
+
 func sameStringSet(got, want []string) bool {
 	if len(got) == 0 && len(want) == 0 {
 		return true

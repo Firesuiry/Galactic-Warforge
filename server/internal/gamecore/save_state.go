@@ -33,6 +33,12 @@ func (gc *GameCore) AttachGameDir(dir *gamedir.Dir, meta *gamedir.MetaFile, base
 	defer gc.saveMu.Unlock()
 	gc.gameDir = dir
 	gc.saveMeta = meta
+	// 基线快照可能刚从磁盘读回来（存档点/回滚/回放的起点）：它的资源基线不进
+	// JSON，必须在这里用地图模型重新挂上，否则回滚/回放会把资源节点整批丢掉。
+	// 进程内新建的基线快照（CaptureWorld）本来就带基线，这里是 no-op。
+	if base != nil {
+		attachSnapshotResourceBaseline(base, gc.maps)
+	}
 	gc.baseSnapshot = base
 }
 
@@ -163,6 +169,10 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
+	// 快照只存与资源基线的差异；基线本身可由存档固化的地图配置 + seed 确定性
+	// 重建（与启动时 mapgen.Generate 出来的行星完全一致），这里先重建并挂到快照上，
+	// 读档才能还原每个资源节点的种类/位置/储量上限/基础产速。
+	attachSnapshotResourceBaseline(save.Snapshot, maps)
 	worlds, activePlanetID, spaceRuntime, err := save.Snapshot.RestoreRuntime()
 	if err != nil {
 		return nil, fmt.Errorf("restore runtime: %w", err)
@@ -248,6 +258,51 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 	}
 
 	return core, nil
+}
+
+// attachSnapshotResourceBaseline 用地图模型重建每个行星快照的资源基线。
+// 快照里不存资源节点的静态字段（种类/位置/储量上限/基础产速）——它们只由地图
+// 配置与 seed 决定，读档时由 mapgen.Generate 出来的行星确定性重建。地形同理，
+// 快照只存非 buildable 格的行内游程，读档时叠加到同一份 mapgen 地形上。
+func attachSnapshotResourceBaseline(snap *snapshot.Snapshot, maps *mapmodel.Universe) {
+	if snap == nil || maps == nil {
+		return
+	}
+	attachSnapshotWorldResourceBaseline(snap.World, maps)
+	for _, worldSnap := range snap.PlanetWorlds {
+		attachSnapshotWorldResourceBaseline(worldSnap, maps)
+	}
+}
+
+// attachSnapshotWorldResourceBaseline 给单个行星快照挂上资源基线。
+// 磁盘快照读档（NewFromSave）与「恢复旧档点的基线快照」（AttachGameDir，
+// 存档点/回滚/回放共用）都要走这一步：进程内快照本来带基线（CaptureWorld 填的），
+// 从 JSON 读回来的那份没有（json:"-"），不挂基线就会在读档时把节点整批丢掉。
+func attachSnapshotWorldResourceBaseline(worldSnap *snapshot.WorldSnapshot, maps *mapmodel.Universe) {
+	if worldSnap == nil || maps == nil || worldSnap.ResourceBaseline != nil {
+		return
+	}
+	planet, ok := maps.Planet(worldSnap.PlanetID)
+	if !ok || planet == nil {
+		return
+	}
+	baseline := make(map[string]model.ResourceBaselineEntry, len(planet.Resources))
+	for _, node := range planet.Resources {
+		baseline[node.ID] = model.ResourceBaselineEntry{
+			Kind:         string(node.Kind),
+			Behavior:     string(node.Behavior),
+			X:            node.Position.X,
+			Y:            node.Position.Y,
+			ClusterID:    node.ClusterID,
+			MaxAmount:    node.Total,
+			BaseYield:    node.BaseYield,
+			MinYield:     node.MinYield,
+			RegenPerTick: node.RegenPerTick,
+			DecayPerTick: node.DecayPerTick,
+			IsRare:       node.IsRare,
+		}
+	}
+	worldSnap.ResourceBaseline = baseline
 }
 
 func exportCommandLog(entries []commandLogEntry) []gamedir.CommandLogEntry {
