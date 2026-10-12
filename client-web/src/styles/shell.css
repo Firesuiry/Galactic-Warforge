@@ -1,4 +1,4 @@
-/* 全局壳：app 骨架 / page-shell / top-nav / outliner / 通知铃铛 */
+/* 全局壳：app 骨架 / page-shell / top-nav / 通知铃铛 */
 
 .app-shell {
   display: flex;
@@ -30,8 +30,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 14px;
-  padding: 12px 16px;
+  gap: 12px;
+  /* 薄顶栏（§3.2）：44px 一级，行星页还要叠在地图上当半透明浮层。 */
+  min-height: 44px;
+  padding: 5px 14px;
   border-bottom: 1px solid var(--border-glow);
   background:
     linear-gradient(180deg, rgba(5, 14, 18, 0.92), rgba(7, 18, 22, 0.82)),
@@ -339,36 +341,6 @@
   box-shadow: 0 0 12px rgba(57, 230, 208, 0.25);
 }
 
-/* 警报按钮 */
-.top-nav__alerts {
-  display: flex;
-  align-items: center;
-  /* 与状态 chip 区之间留出间隙：状态区是 flex:1 + overflow:hidden，
-     边界与这里贴合时告警按钮的 padding/border 会吃掉电力 chip 的右端
-     （缺电角标正好在最右侧，被盖住就点不到，试玩 1010 F 实测）。 */
-  margin-left: 8px;
-}
-
-.top-nav__alert-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 87, 87, 0.4);
-  background: rgba(255, 87, 87, 0.1);
-  color: #ffd2d2;
-  cursor: pointer;
-  animation: sw-chip-pulse 1.8s var(--ease) infinite;
-}
-
-.top-nav__alert-count {
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
 /* 右侧动作区：保存 / 设置 */
 .top-nav__actions {
   display: flex;
@@ -456,173 +428,6 @@
   width: 100%;
 }
 
-/* Outliner：右侧悬浮总览栏 */
-.outliner-handle {
-  flex: 0 0 26px;
-  border: none;
-  border-left: 1px solid var(--border-glow);
-  background: rgba(10, 18, 34, 0.9);
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 0.72rem;
-  transition: background var(--dur-fast) var(--ease);
-}
-
-.outliner-handle:hover {
-  background: rgba(57, 230, 208, 0.12);
-}
-
-.outliner {
-  flex: 0 0 240px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 240px;
-  padding: 12px;
-  border-left: 1px solid var(--border-glow);
-  background: rgba(8, 14, 28, 0.88);
-  overflow-y: auto;
-  animation: outliner-in var(--dur) var(--ease);
-}
-
-@keyframes outliner-in {
-  from {
-    opacity: 0;
-    transform: translateX(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.outliner__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.outliner__title {
-  font-family: var(--font-display);
-  font-size: 0.82rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.outliner__collapse {
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 0.8rem;
-  padding: 4px 6px;
-  border-radius: 6px;
-}
-
-.outliner__collapse:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.outliner__section {
-  display: grid;
-  gap: 4px;
-}
-
-.outliner__section-title {
-  display: inline-block;
-  margin: 0;
-  padding: 0 0 2px 8px;
-  border-left: 2px solid var(--accent);
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.outliner__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text);
-  font-size: 0.84rem;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
-    transform var(--dur-fast) var(--ease);
-}
-
-.outliner__item:hover {
-  background: rgba(57, 230, 208, 0.07);
-  border-color: var(--border-glow);
-  transform: translateX(2px);
-}
-
-.outliner__item:active {
-  transform: translateX(0);
-}
-
-.outliner__item--accent {
-  color: var(--accent);
-}
-
-.outliner__item--alert {
-  color: #ffd2d2;
-}
-
-/* 告警严重度色条（左缘，群星式列表标记） */
-.outliner__item--info {
-  border-left: 2px solid var(--accent-2);
-}
-
-.outliner__item--warning {
-  border-left: 2px solid var(--amber);
-}
-
-.outliner__item--error,
-.outliner__item--critical {
-  border-left: 2px solid var(--danger);
-}
-
-.outliner__item-meta {
-  margin-left: auto;
-  color: var(--text-dim);
-  font-size: 0.72rem;
-}
-
-.outliner__dot {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  box-shadow: 0 0 6px currentColor;
-}
-
-.outliner__empty {
-  margin: 0;
-  padding: 7px 8px;
-  border: 1px dashed var(--line-2);
-  border-radius: var(--radius-sm);
-  color: var(--text-dim);
-  font-size: 0.78rem;
-  text-align: center;
-}
-
-@media (max-width: 900px) {
-  .outliner {
-    width: 210px;
-  }
-}
 
 /* 铃铛 + 历史面板 */
 .notification-bell {
@@ -788,3 +593,272 @@
 @media(max-width:1500px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+3) { display:none; } }
 @media(max-width:1400px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+2) { display:none; } }
 .top-nav__status { min-width:0; }
+
+/* ============================================================
+   §3.2 行星页：顶栏叠在地图上（半透明浮层，不占布局高度）
+   ============================================================
+   地图要占满视口，顶栏就必须「浮」在它上面而不是压着它：
+   行星页的 .app-body 不再是普通流（absolute 铺满壳），顶栏脱离文档流浮在其上，
+   地图壳自己撑满整个 app-shell 高度。参考戴森球计划——顶栏是贴边的一条薄玻璃，
+   不是一条把画面推下去的黑带。 */
+.app-shell:has(.planet-map-shell) .app-body {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* .app-body 是 absolute：定位包含块必须是 .app-shell 自己。 */
+.app-shell:has(.planet-map-shell) {
+  position: relative;
+}
+
+.app-shell:has(.planet-map-shell) .app-body > .page-shell {
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell:has(.planet-map-shell) .top-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background:
+    linear-gradient(180deg, rgba(5, 14, 18, 0.86), rgba(7, 18, 22, 0.58) 70%, rgba(7, 18, 22, 0));
+  border-bottom: 1px solid rgba(57, 230, 208, 0.16);
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+/* 顶栏只有一条 44px 的玻璃带：内部控件同步收薄，别把带子撑高。 */
+.app-shell:has(.planet-map-shell) .top-nav__brand-mark { width: 26px; height: 26px; border-radius: 7px; }
+.app-shell:has(.planet-map-shell) .top-nav__title { font-size: 0.86rem; }
+.app-shell:has(.planet-map-shell) .top-nav__icon-btn { width: 30px; height: 30px; }
+.app-shell:has(.planet-map-shell) .top-nav__chip { padding: 4px 9px; font-size: 0.78rem; }
+
+/* §3.2 行星页 HUD 顶部基线：顶栏在行星页是叠在地图上的浮层，所有顶部 HUD
+   （行星胶囊/视图切换/调试面板/抽屉把手/左侧图标栏）都从这条基线往下排。
+   定义在 .app-shell 上而不是 .planet-map-shell：地图壳与 .toast-stack 都是它的后代，
+   一处定义两边都拿得到（toast 栈在 .app-body 之外，定义在壳上它会读不到）。
+   数值按顶栏实测高度：宽屏 53px 顶栏 → 56px 基线；≤900px 两行 84px → 96px
+   （≤430px 隐藏状态 chip 行后仍是两行，同一档）。 */
+.app-shell:has(.planet-map-shell) {
+  --planet-top-inset: 56px;
+  --planet-toast-top: 56px;
+}
+
+@media (max-width: 900px) {
+  .app-shell:has(.planet-map-shell) {
+    --planet-top-inset: 96px;
+    --planet-toast-top: 96px;
+  }
+}
+
+/* 顶栏之下的居中窄条（警报条，§3.3）叠在地图上，与顶栏共用同一套玻璃语言。 */
+.app-shell:has(.planet-map-shell) .alert-bar { top: 50px; }
+
+/* §3.2：toast 栈移到右上角后，窄屏上会盖住行星胶囊/视图切换（顶栏折成三行，HUD 基线更低）。
+   让行星页的 toast 栈从 --planet-toast-top 开始排（宽屏 56px = 顶栏下沿，窄屏由 planet.css 抬高）。 */
+.app-shell:has(.planet-map-shell) .toast-stack {
+  top: var(--planet-toast-top, 56px);
+  max-height: min(70vh, calc(100dvh - var(--planet-toast-top, 56px) - 24px));
+}
+
+@media (max-width: 900px) {
+  /* 窄屏顶栏本来就折成两行，浮动版本让它压住更多地图：仍浮着，但更矮更密。 */
+  .app-shell:has(.planet-map-shell) .top-nav { padding: 4px 8px; gap: 6px; }
+  .app-shell:has(.planet-map-shell) .alert-bar { top: 46px; }
+}
+
+/* §3.2 行星页窄屏顶栏重排：通用 ≤900px 规则把顶栏折成 column（品牌/导航/状态/动作
+   各占一行，390px 实测 173px 高），行星页的地图要占满视口，这样太贵。这里按用途重排：
+   行 1 = 徽标 + 导航图标（标题文字对定位地图无用，窄屏隐藏），行 2 = 右侧动作 +
+   状态 chip（横向滚动）。两行 84px，HUD 基线 96px 站得住。 */
+@media (max-width: 900px) {
+  .app-shell:has(.planet-map-shell) .top-nav {
+    /* shell.css 的通用 ≤900px 规则把顶栏折成 column（品牌/导航/状态/动作各占一行，
+       390px 实测 173px 高）。行星页改成 wrap 的横排：三行压到两行。 */
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 4px;
+  }
+  .app-shell:has(.planet-map-shell) .top-nav__title { display: none; }
+  .app-shell:has(.planet-map-shell) .top-nav__brand { order: 1; }
+  .app-shell:has(.planet-map-shell) .top-nav__menu { order: 2; }
+  .app-shell:has(.planet-map-shell) .top-nav__actions { order: 3; margin-left: auto; }
+  .app-shell:has(.planet-map-shell) .top-nav__status {
+    order: 4;
+    flex-basis: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .app-shell:has(.planet-map-shell) .top-nav__status::-webkit-scrollbar { display: none; }
+}
+
+/* 手机竖屏：导航图标一行装不下 8 个 + 右侧动作，状态 chip 再挤在同一行会把顶栏撑到
+   三行（390px 实测 137px）。隐藏状态 chip（tick/矿产/能量/电力/库存的数字在行星胶囊
+   展开态与工作台详情里都有），顶栏保持两行，HUD 基线 96px 才站得住。 */
+@media (max-width: 430px) {
+  .app-shell:has(.planet-map-shell) .top-nav__status { display: none; }
+}
+
+/* ============================================================
+   §3.3 警报条：顶栏下方居中的窄条
+   ============================================================
+   收起态只有一条（图标 · 类型 · 建筑 · tick）+ 总数徽标 + 展开箭头，宽度贴着内容，
+   绝不铺满；展开态是下拉列表（最多 8 条、可滚动）。无警报时组件返回 null，整条不存在。 */
+.alert-bar {
+  position: fixed;
+  left: 50%;
+  top: 50px;
+  transform: translateX(-50%);
+  z-index: 39;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.alert-bar__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-glow);
+  background: rgba(8, 14, 28, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-hud);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.alert-bar__summary:hover {
+  background: rgba(12, 22, 38, 0.9);
+}
+
+/* 三档严重度：左缘色条 + 图标同色（沿用既有 info/warning/danger 色板）。 */
+.alert-bar__summary--info { border-color: rgba(95, 176, 255, 0.5); color: #cfe4ff; }
+.alert-bar__summary--warning { border-color: rgba(255, 180, 84, 0.5); color: #ffe3b8; }
+.alert-bar__summary--danger { border-color: rgba(255, 107, 107, 0.55); color: #ffd2d2; }
+.alert-bar__summary--danger svg { color: var(--danger); animation: sw-chip-pulse 2.4s var(--ease) infinite; }
+.alert-bar__summary--warning svg { color: var(--amber); }
+
+.alert-bar__type {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.alert-bar__building {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.alert-bar__tick {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+}
+
+.alert-bar__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 107, 107, 0.16);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  color: #ffd2d2;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.alert-bar__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-glow);
+  background: var(--popover-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  animation: alert-bar-in var(--dur-fast) var(--ease);
+}
+
+@keyframes alert-bar-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.alert-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 0.76rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.alert-bar__row:hover {
+  background: rgba(57, 230, 208, 0.08);
+}
+
+.alert-bar__row--info { border-left-color: var(--accent-2); }
+.alert-bar__row--warning { border-left-color: var(--amber); }
+.alert-bar__row--danger { border-left-color: var(--danger); }
+.alert-bar__row--info svg { color: var(--accent-2); }
+.alert-bar__row--warning svg { color: var(--amber); }
+.alert-bar__row--danger svg { color: var(--danger); }
+
+.alert-bar__row-type { white-space: nowrap; }
+
+.alert-bar__row-building {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.alert-bar__row-count {
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.alert-bar__row-tick {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+}

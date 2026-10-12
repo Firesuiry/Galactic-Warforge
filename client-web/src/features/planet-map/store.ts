@@ -349,6 +349,29 @@ export const INCOMING_WAVE_TTL_MS = 45_000;
 export const CONTROL_GROUP_COUNT = 9;
 
 /**
+ * 底部快捷栏收起态的持久化键。
+ * 它是玩家的显示偏好而不是对局状态：刷新页面 / 切行星都不该弹回来，
+ * 也不能像以前那样由「抽屉打开」单向下压后永久留在收起态。
+ */
+const BUILD_BAR_DOCKED_KEY = 'siliconworld-build-bar-docked';
+
+function readDockedPreference(): boolean {
+  try {
+    return window.localStorage.getItem(BUILD_BAR_DOCKED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeDockedPreference(docked: boolean): void {
+  try {
+    window.localStorage.setItem(BUILD_BAR_DOCKED_KEY, docked ? '1' : '0');
+  } catch {
+    // 隐私模式等场景下忽略持久化失败
+  }
+}
+
+/**
  * 缩放请求：所有缩放入口（滚轮/±按钮/档位按钮/快捷键）的统一通道。
  * anchor 为视口内像素坐标（zoom-to-cursor 锚点）；null = 视口中心。
  * 数据层档位仍是离散的（zoomIndex 立即落库），渲染层由 Pixi 场景做补间。
@@ -381,8 +404,14 @@ interface PlanetViewState {
   lastEventId: string;
   lastFullSyncAt: number | null;
   debugOpen: boolean;
-  /** 建造栏是否收起为一行把手（覆盖式抽屉打开时避免遮挡抽屉底部）。 */
+  /**
+   * 底部快捷栏是否收起为一行把手（覆盖式抽屉打开时避免遮挡抽屉底部；
+   * 也用于玩家手动收起）。持久化到 localStorage：它是玩家的显示偏好，
+   * 刷新页面不该弹回来。
+   */
   buildBarDocked: boolean;
+  /** 桌面端是否展开分类页签（DSP 式快捷栏：收起只留一行图标格）。 */
+  buildBarCategoriesOpen: boolean;
   /**
    * 个人制造（手搓）下拉框选中的配方 id。
    *
@@ -407,8 +436,10 @@ interface PlanetViewActions {
   resetCamera: () => void;
   toggleLayer: (layer: PlanetLayerKey) => void;
   setHoveredTile: (tile: TilePoint | null) => void;
-  /** 收起/展开底部建造栏（收起后只留一行把手）。 */
+  /** 收起/展开底部快捷栏（收起后只留一行把手）。 */
   setBuildBarDocked: (docked: boolean) => void;
+  /** 展开/收起快捷栏的分类页签行（只影响桌面端布局）。 */
+  setBuildBarCategoriesOpen: (open: boolean) => void;
   /** 记录玩家在手搓下拉框里选中的配方（跨详情面板卸载保留）。 */
   setCraftRecipeId: (recipeId: string) => void;
   setSelected: (selection: SelectedEntity | null) => void;
@@ -481,6 +512,21 @@ function createDefaultSceneWindow(): PlanetSceneWindow {
   };
 }
 
+/**
+ * 对局身份/行星切换时的重置。
+ *
+ * 快捷栏收起态（buildBarDocked）是**显示偏好**而不是对局状态：它持久化在
+ * localStorage，读档/换局/切行星都不该把它复位——否则玩家手动收起的快捷栏
+ * 会在每次换局时弹回来。因此这里显式沿用当前值（createInitialState 读的是
+ * 初始加载时的偏好快照）。
+ */
+function resetKeepingPreferences(planetId: string): PlanetViewState {
+  return {
+    ...createInitialState(planetId),
+    buildBarDocked: usePlanetViewStore.getState().buildBarDocked,
+  };
+}
+
 function createInitialState(planetId = ''): PlanetViewState {
   return {
     planetId,
@@ -500,7 +546,8 @@ function createInitialState(planetId = ''): PlanetViewState {
     lastEventId: '',
     lastFullSyncAt: null,
     debugOpen: false,
-    buildBarDocked: false,
+    buildBarDocked: readDockedPreference(),
+    buildBarCategoriesOpen: true,
     craftRecipeId: '',
     focusRequest: null,
     zoomRequest: null,
@@ -512,9 +559,7 @@ function createInitialState(planetId = ''): PlanetViewState {
 export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   ...createInitialState(),
   resetForPlanet: (planetId) => {
-    set({
-      ...createInitialState(planetId),
-    });
+    set(resetKeepingPreferences(planetId));
   },
   resetCamera: () => {
     set((state) => ({
@@ -536,7 +581,11 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
     set({ hoveredTile });
   },
   setBuildBarDocked: (buildBarDocked) => {
+    writeDockedPreference(buildBarDocked);
     set({ buildBarDocked });
+  },
+  setBuildBarCategoriesOpen: (buildBarCategoriesOpen) => {
+    set({ buildBarCategoriesOpen });
   },
   setCraftRecipeId: (craftRecipeId) => {
     set({ craftRecipeId });
@@ -718,12 +767,15 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
 
 export function resetPlanetViewStore() {
   usePlanetViewStore.setState({
+    // 收起态是持久化偏好：测试里 reset 不该把它拉回默认（与 resetForPlanet 同口径）。
     ...createInitialState(),
+    buildBarDocked: false,
     resetForPlanet: usePlanetViewStore.getState().resetForPlanet,
     resetCamera: usePlanetViewStore.getState().resetCamera,
     toggleLayer: usePlanetViewStore.getState().toggleLayer,
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setBuildBarDocked: usePlanetViewStore.getState().setBuildBarDocked,
+    setBuildBarCategoriesOpen: usePlanetViewStore.getState().setBuildBarCategoriesOpen,
     setCraftRecipeId: usePlanetViewStore.getState().setCraftRecipeId,
     setSelected: usePlanetViewStore.getState().setSelected,
     setSelectedUnits: usePlanetViewStore.getState().setSelectedUnits,

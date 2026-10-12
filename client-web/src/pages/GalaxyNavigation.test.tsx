@@ -242,7 +242,7 @@ describe('Galaxy navigation', () => {
 
     await user.click(screen.getByRole('button', { name: '进入星系' }));
     expect(useStarmapViewStore.getState().focusedSystemId).toBe('sys-1');
-    // 面包屑出现当前恒星系（Outliner 也会列出同名恒星系，按 class 限定）
+    // 面包屑出现当前恒星系（同名恒星系在侧栏也会列出，按 class 限定）
     expect(await screen.findByText('Alpha', { selector: '.starmap-breadcrumb__current' })).toBeInTheDocument();
 
     // 系内选中行星

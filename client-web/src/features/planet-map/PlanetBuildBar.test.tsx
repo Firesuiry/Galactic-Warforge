@@ -113,6 +113,15 @@ describe('PlanetBuildBar', () => {
     });
   });
 
+  /**
+   * §3.2 DSP 式快捷栏：一次只显示一个分类页签下的图标格，
+   * 跨分类的建筑要先点对应页签（或按数字键）才在 DOM 里出现。
+   * 测试统一走这个 helper，避免把「页签」当成实现细节写进每条断言。
+   */
+  async function openCategory(user: ReturnType<typeof userEvent.setup>, label: string) {
+    await user.click(screen.getByRole('tab', { name: new RegExp(`^\\d+\\s*${label}$`) }));
+  }
+
   it('选中买不起的卡片时，建造栏立即给出缺料提示（试玩 1014 层 01 P2）', async () => {
     const user = userEvent.setup();
     const itemCatalog = { ...catalog, items: [{ id: 'gear', name: '齿轮' }, { id: 'iron_ingot', name: '铁块' }], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
@@ -162,9 +171,9 @@ describe('PlanetBuildBar', () => {
 
     // matrix_lab 所需科技未完成，属 locked 组，默认隐藏；wind_turbine 已解锁默认可见
     expect(screen.getByRole('button', { name: /风力发电机/ })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: /矩阵研究站/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '显示未解锁' }));
+    await openCategory(user, '研究');
     const lockedCard = screen.getByRole('button', { name: /矩阵研究站/ });
     expect(lockedCard).toBeDisabled();
   });
@@ -268,6 +277,7 @@ describe('PlanetBuildBar', () => {
     expect(screen.getByRole('button', { name: /^方向：/ })).toHaveTextContent('90°');
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
 
+    await openCategory(user, '运输');
     await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
     expect(usePlanetViewStore.getState().interactionMode).toEqual({
       kind: 'build',
@@ -300,6 +310,7 @@ describe('PlanetBuildBar', () => {
     expect(screen.queryByRole('combobox', { name: '建造配方' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
 
+    await openCategory(user, '生产');
     await user.click(screen.getByRole('button', { name: /组装机 Mk.I/ }));
     const select = screen.getByRole('combobox', { name: '建造配方' });
     // tech-electronics 未完成 → circuit 被过滤，仅"无配方 + 齿轮"

@@ -78,7 +78,9 @@ test('选中建筑：迷你条显示库存摘要，自动切到选中对象页�
   await expect(bar).toContainText(/容量 \d+\/60/, { timeout: 15_000 });
   await expect(bar.getByRole('button', { name: '详情' })).toBeVisible();
 
-  // 侧栏自动落在"选中对象"页签，结构化展示本地存储（非 JSON dump）
+  // 侧栏（工作台抽屉）自动落在"选中对象"页签，结构化展示本地存储（非 JSON dump）。
+  // §3.2：抽屉不再常驻——深链只切页签，抽屉仍由玩家点「工作台」把手拉开。
+  await page.getByRole('button', { name: '工作台' }).first().click();
   await expect(page.getByRole('tab', { name: '选中对象' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.planet-side-section', { hasText: '库存与任务' })).toContainText('本地存储');
   await expect(page.locator('.planet-side-section', { hasText: '库存与任务' })).toContainText(/\d+\/60/);

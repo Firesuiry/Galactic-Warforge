@@ -1,18 +1,25 @@
-/** 新手引导面板：步骤清单 + 当前步骤提示 + 黑雾说明，可折叠；完成后只留黑雾敌对警示。 */
+/** 新手引导面板：默认收成一行（当前步骤标题 + 进度 n/9），点开看步骤清单/提示/缺料；完成后只留黑雾敌对警示。 */
 
 import { useState } from 'react';
 
 import type { WarGuideState } from '@/features/onboarding/war-guide';
 
 export function WarGuidePanel({ guide }: { guide: WarGuideState }) {
-  const [collapsed, setCollapsed] = useState(false);
+  // §3.2：默认收起成一行（当前步骤标题 + 进度 n/9）——新手引导常驻在左上，
+  // 展开态会把地图左上角盖掉一大块。收起态仍带当前步骤与进度，信息不丢。
+  const [collapsed, setCollapsed] = useState(true);
   if (guide.complete) {
     return guide.notice?.tone === 'danger' ? <p className="war-guide-notice war-guide-notice--danger" role="alert">{guide.notice.text}</p> : null;
   }
+  const progress = `${guide.currentIndex + 1}/${guide.steps.length}`;
   return (
     <section aria-label="新手引导" className="war-guide-panel" data-testid="war-guide-panel">
       <header>
-        <strong>新手引导 {guide.currentIndex + 1}/{guide.steps.length}</strong>
+        <strong>
+          新手引导
+          <span className="war-guide-panel__step">{guide.current?.label}</span>
+          <span className="war-guide-panel__progress">{progress}</span>
+        </strong>
         <button
           aria-expanded={!collapsed}
           className="secondary-button"
