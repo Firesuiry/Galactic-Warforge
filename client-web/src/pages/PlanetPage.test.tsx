@@ -967,6 +967,8 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "行星地图" })).toBeInTheDocument();
+    // §3.2：行星胶囊默认收成一行，展开后才显示 hero 资源芯片
+    await user.click(screen.getByRole("button", { name: "展开行星信息" }));
     // hero 矿产位显示建设资金 resources.minerals（背包矿石库存收进 title 提示）
     expect(screen.getAllByText("矿产 240").length).toBeGreaterThan(0);
     expect(
@@ -2106,6 +2108,11 @@ describe("PlanetPage", () => {
       expect(usePlanetViewStore.getState().interactionMode.kind).toBe("inspect");
     });
     expect(usePlanetViewStore.getState().selected).toBeNull();
-    expect(usePlanetViewStore.getState().buildBarDocked).toBe(false);
+    // 快捷栏收起态是持久化的显示偏好（§3.2）：换局重置交互状态时不能把它弹回来，
+    // 否则玩家手动收起的快捷栏会在每次读档后重新铺开。
+    expect(usePlanetViewStore.getState().buildBarDocked).toBe(true);
+    act(() => {
+      usePlanetViewStore.getState().setBuildBarDocked(false);
+    });
   });
 });

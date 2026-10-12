@@ -4,7 +4,7 @@
  */
 
 /** 缩略图 CSS 边长（与 PlanetMinimap 一致）。 */
-export const MINI_CSS = 152;
+export const MINI_CSS = 180;
 
 export interface MinimapLayout {
   scale: number;

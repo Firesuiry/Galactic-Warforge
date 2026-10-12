@@ -535,19 +535,22 @@
 }
 
 /* ============================================================
-   全局事件通知 toast（右下角悬浮栈）+ 铃铛历史面板
-   ============================================================ */
+   全局事件通知 toast（右上角悬浮栈）+ 铃铛历史面板
+   ============================================================
+   §3.2：toast 从右下角移到右上角（顶栏下方）。右下角是小地图的走廊，
+   toast 压在那里会吃掉小地图右键；移到右上后两者物理上不可能相交。 */
 
 .toast-stack {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  /* 顶栏（44px）+ 间隙：toast 贴着顶栏下沿排，不再跟底部小地图抢位置。 */
+  top: 56px;
   z-index: 90;
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: min(320px, calc(100vw - 32px));
-  max-height: min(70vh, calc(100dvh - 100px));
+  max-height: min(70vh, calc(100dvh - 120px));
   overflow-y: auto;
   pointer-events: none;
 }

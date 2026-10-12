@@ -13,10 +13,10 @@ import { formatMineralInventory, pickKeyItems, sortedInventory } from '@/feature
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
-import { isResearchStationAlertNoise } from '@/features/production-alerts';
+import { useShellAlerts } from '@/features/production-alerts-query';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
-import { translateAlertType, translateSeverity, translateUi } from '@/i18n/translate';
+import { translateUi } from '@/i18n/translate';
 import { useSessionStore } from '@/stores/session';
 
 const MENU_ITEMS: ReadonlyArray<{ to: string; icon: LucideIcon; label: string }> = [
@@ -64,14 +64,8 @@ export function TopNav() {
     refetchInterval: 5000,
   });
 
-  const alertQuery = useQuery({
-    queryKey: ['shell-alerts', session.serverUrl, session.playerId],
-    // 拉更多条：既要顶栏告警计数，也要按建筑去重统计「几座建筑缺电」。
-    // 服务端已按 (建筑, 告警类型) 聚合，同一建筑不会重复占用条目。
-    queryFn: () => client.fetchAlertSnapshot({ limit: 50 }),
-    enabled: Boolean(session.playerId),
-    refetchInterval: 8000,
-  });
+  // 产线告警快照：与警报条共用同一份 hook（key/limit/过滤都只有一处定义）。
+  const alerts = useShellAlerts().alerts;
 
   const saveMutation = useMutation({
     mutationFn: () => client.sendSave({ reason: 'manual' }),
@@ -136,12 +130,7 @@ export function TopNav() {
   const powerPulse = powerDelta != null && powerDelta < 0 ? ' top-nav__chip--pulse' : '';
   const saveDisabled = isFixtureServerUrl(session.serverUrl) || saveMutation.isPending;
 
-  const alerts = (alertQuery.data?.alerts ?? []).filter(
-    (alert) => !isResearchStationAlertNoise(alert),
-  );
-  const alertCount = alerts.length + (powerDelta != null && powerDelta < 0 ? 1 : 0);
-  // 缺电建筑：按 building_id 去重统计断电类告警（试玩报告 F——需要一眼看出
-  // 有几座建筑缺电，而不是被产线吞吐类告警稀释）。保留每座建筑的**首条**告警
+  // 缺电建筑：按 building_id 去重统计断电类告警（试玩报告 F——需要一眼看出  // 有几座建筑缺电，而不是被产线吞吐类告警稀释）。保留每座建筑的**首条**告警
   // （通常带更多 details）用于点击定位。
   const unpoweredByBuilding = new Map<string, (typeof alerts)[number]>();
   for (const alert of alerts) {
@@ -249,22 +238,6 @@ export function TopNav() {
             </span>
           ) : null}
         </button>
-      </div>
-
-      <div className="top-nav__alerts">
-        {alertCount > 0 ? (
-          <button
-            className="top-nav__alert-btn"
-            type="button"
-            title={alerts[0]
-              ? `${translateAlertType(alerts[0].alert_type, translateSeverity(alerts[0].severity))}：${alerts[0].message}`
-              : '电力赤字'}
-            onClick={() => activePlanetId && navigate(`/planet/${activePlanetId}`)}
-          >
-            <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
-            <span className="top-nav__alert-count">{alertCount}</span>
-          </button>
-        ) : null}
       </div>
 
       <div className="top-nav__actions">

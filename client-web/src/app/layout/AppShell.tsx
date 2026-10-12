@@ -4,7 +4,7 @@ import { useGameAudio } from '@/features/audio/use-game-audio';
 import { EndgameBanner } from '@/features/lobby/EndgameBanner';
 import { GameResetGuard } from '@/features/lobby/GameResetGuard';
 import { NotificationToasts } from '@/features/notifications/NotificationToasts';
-import { Outliner } from '@/widgets/Outliner';
+import { AlertBar } from '@/widgets/AlertBar';
 import { TopNav } from '@/widgets/TopNav';
 
 export function AppShell() {
@@ -14,6 +14,8 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <TopNav />
+      {/* 警报条（§3.3）：顶栏下方居中的窄条，无警报时整条不渲染 */}
+      <AlertBar />
       <div className="app-body">
         {/*
           key 按 pathname 变化 → 路由切换时 .page-shell 重挂载，触发 CSS page-enter 动画重放。
@@ -22,9 +24,8 @@ export function AppShell() {
         <main className="page-shell" key={pathname}>
           <Outlet />
         </main>
-        <Outliner />
       </div>
-      {/* 全局事件通知 toast 栈（右下角悬浮，全页面可见） */}
+      {/* 全局事件通知 toast 栈（右上角悬浮，全页面可见） */}
       <NotificationToasts />
       {/* C10 局变更守卫：轮询 /games/current，热重置/凭证失效时全局引导 */}
       <GameResetGuard />

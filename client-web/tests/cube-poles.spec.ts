@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { surfaceNormal, surfaceStep } from '../../shared-client/src/surface';
 
+import { revealBuildCard } from './support/build-bar';
+
 // Run with SW_TEST_MAP=<repo>/server/testdata/map-cube-poles.yaml SW_CUBE_POLES=1.
 test.skip(process.env.SW_CUBE_POLES !== '1', 'Requires the isolated north/south pole backend fixture.');
 const backend=process.env.SW_BACKEND_ENTRY??`http://127.0.0.1:${process.env.SW_BACKEND_PORT??'19481'}`;
@@ -57,7 +59,7 @@ for(const [player,key,hemisphere] of [['p1','key_player_1','north'],['p2','key_p
       expect(p.visible).toBe(true);
       await page.locator('.planet-three__surface canvas').click({position:{x:p.x,y:p.y}});
     };
-    await page.locator('.planet-build-card[data-building-id="wind_turbine"]').click();
+    await (await revealBuildCard(page, 'wind_turbine')).click();
     const build=page.waitForResponse(r=>r.url().endsWith('/commands')&&r.request().postDataJSON()?.commands?.[0]?.type==='build');
     await click(buildTile);
     expect(await(await build).json()).toMatchObject({accepted:true,results:[{code:'OK'}]});

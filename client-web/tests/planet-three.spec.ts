@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { revealBuildCard } from './support/build-bar';
+
 const backend = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const planetId = 'planet-1-1';
 type Tile = { x: number; y: number };
@@ -222,7 +224,8 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('button', { name: '3D 星球', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: ThreeDebug }).__planetThree?.project));
-  await expect(page.locator('.planet-build-card[data-building-id="wind_turbine"]')).toBeVisible();
+  // §3.2 快捷栏按分类页签分页：切到风力涡轮机所在的分类（推荐位通常已在首页）。
+  await revealBuildCard(page, 'wind_turbine');
 
   // 真实鼠标拖动应改变星球中心地块；滚轮应改变附近地块的投影距离。
   await clickTile(page, home!.position);
@@ -247,8 +250,7 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   // 上一步点「详情」打开了工作台抽屉 → 建造栏自动收起为一行把手（.planet-build-bar--docked），
   // 卡片被收起隐藏：先点把手把建造栏展开，再点卡片进入建造模式。
   await page.getByRole('button', { name: '建造栏', exact: true }).click();
-  await expect(page.locator('.planet-build-card[data-building-id="wind_turbine"]')).toBeVisible({ timeout: 10_000 });
-  await page.locator('.planet-build-card[data-building-id="wind_turbine"]').click();
+  await (await revealBuildCard(page, 'wind_turbine')).click();
   // 3D 软渲染下 React 状态传播慢，等建造模式真正激活再点地图，避免点选被当成普通选中
   await expect(page.getByText(/放置 风力涡轮机/)).toBeVisible();
   const { response: buildResponse, tile: buildTile, skippedReason } = await clickTileExpectingCommand(

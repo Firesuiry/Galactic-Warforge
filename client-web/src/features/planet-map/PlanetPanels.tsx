@@ -1604,7 +1604,6 @@ export function PlanetDebugPanel({
     requestFocus,
     selected,
     sseStatus,
-    toggleDebugOpen,
   } = usePlanetViewStore(
     useShallow((state) => ({
       camera: state.camera,
@@ -1616,7 +1615,6 @@ export function PlanetDebugPanel({
       requestFocus: state.requestFocus,
       selected: state.selected,
       sseStatus: state.sseStatus,
-      toggleDebugOpen: state.toggleDebugOpen,
     })),
   );
   const [shareMessage, setShareMessage] = useState("");
@@ -1717,14 +1715,9 @@ export function PlanetDebugPanel({
     <div
       className={debugOpen ? "debug-panel debug-panel--open" : "debug-panel"}
     >
-      <button
-        className="secondary-button debug-panel__toggle"
-        onClick={toggleDebugOpen}
-        type="button"
-      >
-        {debugOpen ? "收起调试" : "展开调试"}
-      </button>
-
+      {/* 展开/收起入口在左下工具条的调试图标里（§3.2 复核）：过去这里单独挂一个
+          「展开调试」文字按钮，浮在顶部中右侧的地图上非常突兀。
+          收起态整个面板不渲染，不给地图留空壳。 */}
       {debugOpen ? (
         <div className="debug-panel__body">
           <div className="section-title">调试面板</div>

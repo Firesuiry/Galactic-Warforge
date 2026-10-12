@@ -199,7 +199,7 @@ describe('TopNav save', () => {
     await waitFor(() => expect(chip).toHaveTextContent('240'));
   });
 
-  it('研究站（空 matrix_lab）的吞吐类告警不计入顶栏告警数', async () => {
+  it('研究站（空 matrix_lab）的吞吐类告警不计入顶栏缺电角标', async () => {
     const researchNoiseAlert = {
       alert_id: 'a-noise',
       tick: 12,
@@ -253,10 +253,10 @@ describe('TopNav save', () => {
     }));
 
     const { unmount } = renderTopNav();
-    // 等告警快照请求返回后：噪音被过滤 → 不出现告警按钮
+    // 等告警快照请求返回后：噪音被过滤 → 电力 chip 不进告警态
     await waitFor(() => expect(alertFetched).toBe(true));
     await screen.findByText('tick 12');
-    expect(document.querySelector('.top-nav__alert-btn')).not.toBeInTheDocument();
+    expect(document.querySelector('.top-nav__chip-alert')).not.toBeInTheDocument();
     unmount();
 
     // 断电告警保留 → 显示计数 1
@@ -286,7 +286,7 @@ describe('TopNav save', () => {
       throw new Error(`unexpected request ${url.pathname}`);
     }));
     renderTopNav();
-    expect(await screen.findByText('1', { selector: '.top-nav__alert-count' })).toBeInTheDocument();
+    expect(await screen.findByText('1', { selector: '.top-nav__chip-alert-count' })).toBeInTheDocument();
   });
 
   it('电力 chip 显示缺电建筑数（按 building_id 去重）并进入告警态', async () => {

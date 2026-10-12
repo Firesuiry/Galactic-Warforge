@@ -105,6 +105,11 @@ function createScene() {
           functions: {},
           state: "running",
         },
+        // 发射建筑自身带存储：服务端 entity.go 会为它建 storage 模块，
+        // 而「装入建筑」下拉只列真能接收物品的建筑（canReceiveTransferItems）。
+        storage: {
+          inventory: {},
+        },
       },
       "silo-1": {
         id: "silo-1",
@@ -126,6 +131,9 @@ function createScene() {
           functions: {},
           state: "running",
         },
+        storage: {
+          inventory: {},
+        },
       },
       "ray-1": {
         id: "ray-1",
@@ -146,6 +154,9 @@ function createScene() {
           },
           functions: {},
           state: "running",
+        },
+        storage: {
+          inventory: {},
         },
       },
     },
@@ -226,6 +237,13 @@ function createSummary(completedTechIds: string[]) {
         resources: {
           minerals: 100,
           energy: 80,
+        },
+        // 背包：「装入建筑」下拉只列「背包里有 ∩ 目标建筑真会收」的物品
+        // （listTransferItemOptions，c484aa4 起）。发射类建筑收一切仓储物品，
+        // 所以这里给发射井/弹射器备好太阳帆与运载火箭。
+        inventory: {
+          solar_sail: 10,
+          small_carrier_rocket: 10,
         },
         tech: {
           player_id: "p1",
