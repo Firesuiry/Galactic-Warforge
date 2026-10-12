@@ -10,7 +10,9 @@ import (
 	"siliconworld/internal/model"
 )
 
-const CurrentVersion = 1
+// CurrentVersion 细分网格（1 格 = 3×3 cell）后坐标语义改变，旧存档一律拒绝加载，
+// 不写兼容层（与当年 cube_sphere 迁移同样处理）。版本 1 = 旧网格。
+const CurrentVersion = 2
 
 // Snapshot captures a tick-level world snapshot with versioned payload.
 type Snapshot struct {
@@ -84,7 +86,7 @@ func Encode(snap *Snapshot) ([]byte, error) {
 		snap.Version = CurrentVersion
 	}
 	if snap.Version != CurrentVersion {
-		return nil, fmt.Errorf("unsupported snapshot version %d", snap.Version)
+		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
 	}
 	if snap.Timestamp.IsZero() {
 		snap.Timestamp = time.Now().UTC()
@@ -108,7 +110,7 @@ func Decode(data []byte) (*Snapshot, error) {
 		return nil, errors.New("snapshot version required")
 	}
 	if snap.Version != CurrentVersion {
-		return nil, fmt.Errorf("unsupported snapshot version %d", snap.Version)
+		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
 	}
 	return &snap, nil
 }

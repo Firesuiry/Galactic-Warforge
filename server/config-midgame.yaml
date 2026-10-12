@@ -13,7 +13,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
     bootstrap:
@@ -61,7 +61,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
     bootstrap:
@@ -109,47 +109,47 @@ scenario_bootstrap:
       buildings:
         - owner_id: "p1"
           building_type: "tesla_tower"
-          x: 5
-          y: 3
+          x: 15
+          y: 9
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 4
-          y: 5
+          x: 12
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 6
-          y: 5
+          x: 18
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 8
-          y: 5
+          x: 24
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 10
-          y: 5
+          x: 30
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "ray_receiver"
-          x: 8
-          y: 2
+          x: 24
+          y: 6
           state: "running"
           ray_receiver_mode: "power"
         - owner_id: "p1"
           building_type: "em_rail_ejector"
-          x: 10
-          y: 2
+          x: 30
+          y: 6
           state: "running"
           inventory:
             - item_id: solar_sail
               quantity: 4
         - owner_id: "p1"
           building_type: "vertical_launching_silo"
-          x: 10
-          y: 4
+          x: 30
+          y: 12
           state: "running"
           inventory:
             - item_id: small_carrier_rocket

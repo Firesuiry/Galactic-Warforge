@@ -15,8 +15,9 @@ func TestSkirmishMapSpawnsBuildableAndContestedCenterIsFair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load map-skirmish: %v", err)
 	}
-	if cfg.Planet.FaceSize < 64 || cfg.Planet.FaceSize > 128 {
-		t.Fatalf("face_size %d outside 64-128", cfg.Planet.FaceSize)
+	// 细分网格：cell 单位，遭遇战地图 96 格 → 288 cell（×3）。
+	if cfg.Planet.FaceSize != 288 {
+		t.Fatalf("face_size = %d, want 288", cfg.Planet.FaceSize)
 	}
 	if cfg.Galaxy.SystemCount != 1 || cfg.System.PlanetsPerSystem != 1 {
 		t.Fatalf("skirmish map must stay single-planet, got systems=%d planets=%d", cfg.Galaxy.SystemCount, cfg.System.PlanetsPerSystem)

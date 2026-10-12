@@ -772,6 +772,9 @@ func findOpenTile(ws *model.WorldState, margin int) (*model.Position, error) {
 }
 
 func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist, margin int) *model.Position {
+	// 细分网格：占地下限 2×2，最大是 5×5（粒子对撞机/HQ），按最大占地找整块
+	// 可落位，任何建筑的测试都能复用同一个位置。
+	fp := model.Footprint{Width: 5, Height: 5}
 	for dist := 0; dist <= maxDist; dist++ {
 		for dy := -dist; dy <= dist; dy++ {
 			absDy := dy
@@ -800,6 +803,9 @@ func findOpenTileNearLocked(ws *model.WorldState, center model.Position, maxDist
 				if _, occupied := ws.TileBuilding[model.TileKey(x, y)]; occupied {
 					continue
 				}
+				if !ws.FootprintFits(model.Position{X: x, Y: y}, fp, model.BuildingTypeArcSmelter, "") {
+					continue
+				}
 				return &model.Position{X: x, Y: y}
 			}
 		}
@@ -811,10 +817,16 @@ func findAdjacentOpenTile(ws *model.WorldState, origin model.Position) (*model.P
 	if ws == nil {
 		return nil, nil
 	}
-	candidates := ws.SurfaceNeighbors(origin)
+	// 细分网格：风机/熔炉/制造台都是 2×2 或 3×3 占地，"相邻单格空着"不再等于
+	// "放得下"。从 HQ 锚点向外按图距找第一个整块可落的原点（跳过资源格）。
 	ws.RLock()
 	defer ws.RUnlock()
-	for _, candidate := range candidates {
+	fp := model.Footprint{Width: 3, Height: 3}
+	if fixed, ok := ws.FindFootprintOrigin(origin, fp, model.BuildingTypeArcSmelter, ""); ok && fixed != origin {
+		pos := fixed
+		return &pos, nil
+	}
+	for _, candidate := range ws.SurfaceNeighbors(origin) {
 		if !ws.InBounds(candidate.X, candidate.Y) {
 			continue
 		}

@@ -200,7 +200,7 @@ func (gc *GameCore) deployBlueprintSquad(ws *model.WorldState, playerID string, 
 func freeDeployTiles(ws *model.WorldState, anchor model.Position, domain model.UnitDomain, n int) []model.Position {
 	air := domain == model.UnitDomainAir
 	out := make([]model.Position, 0, n)
-	for _, pos := range ws.SurfaceDisc(anchor, 4+n) {
+	for _, pos := range ws.SurfaceDisc(anchor, 12+3*n) {
 		if len(out) == n {
 			break
 		}

@@ -12,11 +12,12 @@ import (
 // A finite node mined down to zero must flip its depleted marker so scene
 // output can render it as exhausted instead of a live resource point.
 func TestMineResourceMarksFiniteNodeDepleted(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 1)
+	// 细分网格：采矿机是 3×3 占地 + 外扩 1 圈，测试世界要放得下整块占地。
+	ws := model.NewWorldState("planet-1", 2)
 	node := &model.ResourceNodeState{
 		ID:           "r1",
 		PlanetID:     ws.PlanetID,
-		Kind:         "crude_oil",
+		Kind:         "iron_ore",
 		Behavior:     "finite",
 		MaxAmount:    100,
 		Remaining:    5,
@@ -24,8 +25,10 @@ func TestMineResourceMarksFiniteNodeDepleted(t *testing.T) {
 		CurrentYield: 8,
 	}
 	ws.Resources["r1"] = node
-	ws.Grid[0][0].ResourceNodeID = "r1"
-	miner := &model.Building{ID: "miner", Position: model.Position{X: 0, Y: 0}}
+	ws.Grid[1][1].ResourceNodeID = "r1"
+	// 细分网格：采矿机是 3×3 占地，夹具要按建筑定义给出 footprint 才能算出
+	// "占地 + 外圈"的覆盖范围（旧的 1×1 只看锚点格）。
+	miner := newBuilding("miner", model.BuildingTypeMiningMachine, "p1", model.Position{X: 1, Y: 1})
 
 	if got, _ := mineResource(ws, nil, miner, 8); got != 5 {
 		t.Fatalf("expected to extract remaining 5, got %d", got)
@@ -52,7 +55,7 @@ func TestRenewableNodeDepletedFollowsRegen(t *testing.T) {
 	}
 	ws.Resources["r1"] = node
 	ws.Grid[0][0].ResourceNodeID = "r1"
-	pump := &model.Building{ID: "pump", Position: model.Position{X: 0, Y: 0}}
+	pump := newBuilding("pump", model.BuildingTypeWaterPump, "p1", model.Position{X: 0, Y: 0})
 
 	if got, _ := mineResource(ws, nil, pump, 8); got != 3 {
 		t.Fatalf("expected to extract remaining 3, got %d", got)
@@ -61,6 +64,8 @@ func TestRenewableNodeDepletedFollowsRegen(t *testing.T) {
 		t.Fatal("expected renewable node depleted after being drained")
 	}
 
+	// 细分网格：可再生矿脉索引在资源写入后重建（生产路径由地图生成/读档完成）。
+	IndexRenewableResources(ws)
 	regenResourceNodes(ws)
 	if node.Remaining != 2 || node.Depleted {
 		t.Fatalf("expected regen to clear depleted marker, got remaining=%d depleted=%v", node.Remaining, node.Depleted)

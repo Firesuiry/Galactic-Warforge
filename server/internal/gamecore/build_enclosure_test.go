@@ -70,18 +70,19 @@ func TestBuildRejectsEnclosingFriendlyUnit(t *testing.T) {
 		ws.Tick++
 		settleUnitMovement(ws)
 	}
-	// 机甲四周先建 3 座风机，第 4 座必须被拒绝。
+	// 机甲四周先建 3 面墙，第 4 面必须被拒绝。
+	// 细分网格：围堵用 1×1 的传送带（2×2 的风机第一座就会盖住相邻的出口格）。
 	neighbors := ws.SurfaceNeighbors(target)
 	if len(neighbors) != 4 {
 		t.Fatalf("expected 4 neighbors, got %d", len(neighbors))
 	}
 	for i := 0; i < 3; i++ {
-		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeWindTurbine)
+		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeConveyorBeltMk1)
 		if res.Code != model.CodeOK {
 			t.Fatalf("build %d at %+v: %s (%s)", i, neighbors[i], res.Code, res.Message)
 		}
 	}
-	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeWindTurbine)
+	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeConveyorBeltMk1)
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("enclosing build must be rejected, got %s (%s)", res.Code, res.Message)
 	}
@@ -108,12 +109,12 @@ func TestBuildRejectsEnclosingEnemyUnit(t *testing.T) {
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 24, Y: 24})
 	neighbors := ws.SurfaceNeighbors(enemy.Position)
 	for i := 0; i < 3; i++ {
-		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeWindTurbine)
+		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeConveyorBeltMk1)
 		if res.Code != model.CodeOK {
 			t.Fatalf("build %d at %+v: %s (%s)", i, neighbors[i], res.Code, res.Message)
 		}
 	}
-	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeWindTurbine)
+	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeConveyorBeltMk1)
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("enclosing an enemy unit must be rejected, got %s (%s)", res.Code, res.Message)
 	}
@@ -180,7 +181,8 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 		if ws.SurfaceDistance(tile, target) != 2 {
 			continue
 		}
-		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		// 细分网格：围堵用 1×1 的传送带（2×2 风机第一座就会盖住相邻的口袋边界格）。
+		res := buildAt(t, core, ws, tile, model.BuildingTypeConveyorBeltMk1)
 		if res.Code == model.CodeOK {
 			continue
 		}
@@ -199,7 +201,7 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 	}
 	// 口袋判定不影响远离任何单位/基地的空地建造。
 	free := ws.SurfaceOffset(target, 4, 0)
-	if res := buildAt(t, core, ws, free, model.BuildingTypeWindTurbine); res.Code != model.CodeOK {
+	if res := buildAt(t, core, ws, free, model.BuildingTypeConveyorBeltMk1); res.Code != model.CodeOK {
 		t.Fatalf("free-tile build must stay allowed: %s (%s)", res.Code, res.Message)
 	}
 }
@@ -253,7 +255,12 @@ func TestBuildRejectsSealingOwnBaseFromOutside(t *testing.T) {
 	}
 	rejected := 0
 	for _, tile := range ring {
-		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		// 细分网格：围堵用 1×1 的传送带（2×2 风机放不下这一圈）。
+		// 围堵环会压在 5×5 的 HQ 上，先跳过已经被建筑占着的格。
+		if ws.TileBuilding[model.TileKey(tile.X, tile.Y)] != "" {
+			continue
+		}
+		res := buildAt(t, core, ws, tile, model.BuildingTypeConveyorBeltMk1)
 		switch res.Code {
 		case model.CodeOK:
 		case model.CodeInvalidTarget:
@@ -293,7 +300,7 @@ func TestBuildNearBaseStaysAllowed(t *testing.T) {
 		if built >= 3 {
 			break
 		}
-		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		res := buildAt(t, core, ws, tile, model.BuildingTypeConveyorBeltMk1)
 		if res.Code != model.CodeOK {
 			t.Fatalf("sparse build at %+v must stay allowed: %s (%s)", tile, res.Code, res.Message)
 		}

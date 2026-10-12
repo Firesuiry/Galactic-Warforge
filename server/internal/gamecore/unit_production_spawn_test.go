@@ -29,18 +29,27 @@ func unitStackTestCore(t *testing.T) *GameCore {
 
 // testBarracks 生成一座队列可控的兵营（直接放世界，不经过电力/施工链）。
 // 兵营是耗电建筑：结算要求电网带电才出货，这里给它一座相邻的风机。
+// 细分网格：兵营是 3×3 占地，锚点要按整块可落位修正（夹具不经过建造命令的
+// 占地校验，锚点落在别的建筑占地里会让兵营的其余 cell 与基地重叠）。
 func testBarracks(ws *model.WorldState, id string, pos model.Position, owner string) *model.Building {
 	b := newBuilding(id, "barracks", owner, pos)
 	b.Runtime.State = model.BuildingWorkRunning
 	b.Storage.Inventory = model.ItemInventory{model.ItemIronIngot: 400, model.ItemCircuitBoard: 400}
 	placeBuilding(ws, b)
-	power := ws.SurfaceOffset(pos, 1, 0)
-	if ws.InBounds(power.X, power.Y) && ws.Grid[power.Y][power.X].BuildingID == "" {
-		gen := newBuilding("gen-"+id, model.BuildingTypeWindTurbine, owner, power)
+	// 细分网格：兵营是 3×3 占地，锚点邻格仍在占地内，风机必须落在占地之外。
+	for _, candidate := range ws.SurfaceDisc(pos, 5) {
+		if candidate == pos || !ws.InBounds(candidate.X, candidate.Y) || ws.BuildingOccupies(b, candidate) {
+			continue
+		}
+		if !ws.FootprintFits(candidate, model.Footprint{Width: 2, Height: 2}, model.BuildingTypeWindTurbine, "") {
+			continue
+		}
+		gen := newBuilding("gen-"+id, model.BuildingTypeWindTurbine, owner, candidate)
 		gen.Runtime.State = model.BuildingWorkRunning
 		placeBuilding(ws, gen)
 		settlePowerGeneration(ws, currentPlanetEnvironment(nil, ws.PlanetID))
 		finalizePowerSettlement(ws, nil)
+		break
 	}
 	return b
 }
@@ -132,7 +141,8 @@ func TestUnitProductionWaitsWhenSpawnBlocked(t *testing.T) {
 		if !ws.InBounds(tile.X, tile.Y) || ws.Grid[tile.Y][tile.X].BuildingID != "" {
 			continue
 		}
-		b := newBuilding("wall-"+model.TileKey(tile.X, tile.Y), model.BuildingTypeWindTurbine, "p1", tile)
+		// 细分网格：用 1×1 的传送带把出生圈逐格封死（2×2 的风机做不到）。
+		b := newBuilding("wall-"+model.TileKey(tile.X, tile.Y), model.BuildingTypeConveyorBeltMk1, "p1", tile)
 		b.Runtime.State = model.BuildingWorkRunning
 		placeBuilding(ws, b)
 		blocked++

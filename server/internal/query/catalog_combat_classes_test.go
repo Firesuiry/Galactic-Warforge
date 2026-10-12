@@ -35,10 +35,11 @@ func TestCatalogJSONExposesBlueprintCombatClasses(t *testing.T) {
 		rang          float64
 		maxHP         int
 	}{
-		"prototype":       {"heavy", "laser", 20, 8, 80},
-		"precision_drone": {"air", "missile", 35, 12, 60},
-		"corvette":        {"ship", "laser", 40, 24, 100},
-		"destroyer":       {"ship", "laser", 80, 24, 180},
+		// 细分网格：射程类数值 ×3（war.yaml 24/36/72/72）。
+		"prototype":       {"heavy", "laser", 20, 24, 80},
+		"precision_drone": {"air", "missile", 35, 36, 60},
+		"corvette":        {"ship", "laser", 40, 72, 100},
+		"destroyer":       {"ship", "laser", 80, 72, 180},
 	}
 	if len(body.Warfare.PublicBlueprints) != len(want) {
 		t.Fatalf("expected %d public blueprints, got %+v", len(want), body.Warfare.PublicBlueprints)

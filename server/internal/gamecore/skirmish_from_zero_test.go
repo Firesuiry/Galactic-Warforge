@@ -54,7 +54,7 @@ func TestSkirmishFromZeroOpeningByTick6000(t *testing.T) {
 	tesla := op.milestone["tesla_tower"]
 	miner := op.milestone["mining_machine"]
 	if wind <= 0 || tesla <= 0 || miner <= 0 {
-		t.Fatalf("开局链没跑通（死锁？）：milestones=%v", op.milestone)
+		t.Fatalf("开局链没跑通（死锁？）：milestones=%v buildFails=%v", op.milestone, op.buildFails)
 	}
 	if running := skirmishRunningCounts(op.ws, "p1"); running[model.BuildingTypeMiningMachine] < 1 {
 		t.Fatalf("矿机没通电运转：running=%s reasons=%v", fmtCounts(running), op.powerReasons())
@@ -328,12 +328,20 @@ func (op *zeroOpening) buildNext() {
 	if s.node != nil {
 		// 矿点随时重选：botBuildSpotNear 不跳过资源格，新手随手放的建筑可能
 		// 正好压在矿脉上（实测第一座电塔就压在铜矿上，矿机再也放不下）。
-		node := op.freeNode(s.node.Kind, s.node)
+		// 细分网格：矿机是 3×3 占地，锚点必须"整块可落位且不封死基地"。
+		var node *model.ResourceNodeState
+		var origin model.Position
+		for _, cand := range op.candidateNodes(s.node.Kind, s.node) {
+			if o, ok := op.minerOriginFor(cand); ok {
+				node, origin = cand, o
+				break
+			}
+		}
 		if node == nil {
 			op.buildFails["no_free_node:"+s.node.Kind]++
 			return
 		}
-		p := node.Position
+		p := origin
 		pos = &p
 	} else {
 		pos = op.buildSpot(s.btype)
@@ -357,6 +365,9 @@ func (op *zeroOpening) buildNext() {
 		return
 	}
 	key := fmt.Sprintf("%s: %s", s.btype, res.Message)
+	if strings.Contains(res.Message, "战场分析基站") {
+		key = fmt.Sprintf("%s: %s @ %v", s.btype, res.Message, *pos)
+	}
 	op.buildFails[key]++
 }
 
@@ -492,6 +503,8 @@ func (op *zeroOpening) dumpToIndustry(item string, qty int) {
 }
 
 // freeNode 基地半径内最近的、地块还空着的同类矿点；fallback 不可用时按距离找替代。
+// 细分网格：矿机是 3×3 占地，矿点格空 ≠ 矿机放得下，所以这里连同"整块落位 +
+// 围死校验"一起判，只返回真的能建矿机的矿点。
 func (op *zeroOpening) freeNode(kind string, fallback *model.ResourceNodeState) *model.ResourceNodeState {
 	var best *model.ResourceNodeState
 	bestDist := -1
@@ -517,10 +530,76 @@ func (op *zeroOpening) freeNode(kind string, fallback *model.ResourceNodeState) 
 	return best
 }
 
+// candidateNodes 基地半径内、地块还空着的同类矿点，按「先近后远、同距按 ID」
+// 排序；fallback 排在最后（它在计划里是"最初选中的那个"，可能已被建筑压住）。
+func (op *zeroOpening) candidateNodes(kind string, fallback *model.ResourceNodeState) []*model.ResourceNodeState {
+	nodes := make([]*model.ResourceNodeState, 0, 8)
+	seen := map[string]bool{}
+	for _, node := range op.ws.Resources {
+		if node == nil || node.Kind != kind || node.Remaining <= 0 {
+			continue
+		}
+		if op.ws.SurfaceDistance(op.home, node.Position) > op.radius {
+			continue
+		}
+		key := model.TileKey(node.Position.X, node.Position.Y)
+		if op.ws.TileBuilding[key] != "" || (op.ws.Construction != nil && op.ws.Construction.IsTileReserved(key)) {
+			continue
+		}
+		nodes = append(nodes, node)
+		seen[node.ID] = true
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		di, dj := op.ws.SurfaceDistance(op.home, nodes[i].Position), op.ws.SurfaceDistance(op.home, nodes[j].Position)
+		if di != dj {
+			return di < dj
+		}
+		return nodes[i].ID < nodes[j].ID
+	})
+	if fallback != nil && !seen[fallback.ID] {
+		nodes = append(nodes, fallback)
+	}
+	return nodes
+}
+
+// minerOriginFor 采矿机的建造锚点：以矿点为中心求最近的"整块可落位、且不把
+// 基地封死"的 3×3 原点；找不到返回 false（调用方换下一个矿点）。
+// 细分网格下这一步是必需的：矿点格本身空着不代表 3×3 占地放得下——开局
+// HQ（5×5）与风机（2×2）就在矿脉边上，按矿点格直接下锚点会被"占地重叠/封死
+// 基地"拒绝（实测第一台矿机被拒 83–112 次，整条开局链卡死在"没矿机"）。
+func (op *zeroOpening) minerOriginFor(node *model.ResourceNodeState) (model.Position, bool) {
+	if node == nil {
+		return model.Position{}, false
+	}
+	def, ok := model.BuildingDefinitionByID(model.BuildingTypeMiningMachine)
+	if !ok {
+		return model.Position{}, false
+	}
+	fp := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
+	origin, ok := op.ws.FindFootprintOrigin(node.Position, fp, model.BuildingTypeMiningMachine, "")
+	if !ok || !op.ws.FootprintFits(origin, fp, model.BuildingTypeMiningMachine, "") {
+		return model.Position{}, false
+	}
+	if model.ValidateCollectorSite(op.ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
+		return model.Position{}, false
+	}
+	if buildingEnclosure(op.ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
+		return model.Position{}, false
+	}
+	return origin, true
+}
+
 // buildSpot 基地附近的可建空位：与 botBuildSpotNear 同规则，但额外跳过资源格
-// （压在矿脉上的建筑会让那条矿脉永远采不了）。
+// （压在矿脉上的建筑会让那条矿脉永远采不了）。细分网格下占地是 2×2/3×3/5×5，
+// 所以判定必须走 FindFootprintOrigin 求"整块可落位"的锚点——候选格本身空着
+// 不代表以它为锚点的整块占地放得下（实测风机反复撞在 5×5 的 HQ 上，开局链死锁）。
 func (op *zeroOpening) buildSpot(btype model.BuildingType) *model.Position {
 	ws := op.ws
+	def, ok := model.BuildingDefinitionByID(btype)
+	if !ok {
+		return nil
+	}
+	fp := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
 	for radius := 3; radius <= op.radius; radius++ {
 		candidates := ws.SurfaceDisc(op.home, radius)
 		sort.SliceStable(candidates, func(i, j int) bool {
@@ -537,6 +616,23 @@ func (op *zeroOpening) buildSpot(btype model.BuildingType) *model.Position {
 				continue
 			}
 			if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(candidate.X, candidate.Y)) {
+				continue
+			}
+			// 细分网格：锚点格空 ≠ 放得下，整块占地都要可落位。
+			if !ws.FootprintFits(candidate, fp, btype, "") {
+				continue
+			}
+			// 占地内不得压矿脉（压在矿脉上的建筑会让那条矿脉永远采不了）。
+			blocked := false
+			if tiles, err := ws.FootprintTiles(candidate, fp); err == nil {
+				for _, tile := range tiles {
+					if ws.Grid[tile.Y][tile.X].ResourceNodeID != "" {
+						blocked = true
+						break
+					}
+				}
+			}
+			if blocked {
 				continue
 			}
 			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {

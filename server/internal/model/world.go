@@ -71,6 +71,10 @@ type WorldState struct {
 	Units              map[string]*Unit                  `json:"units"`
 	Grid               [][]MapTile                       `json:"-"` // grid[y][x]
 	Resources          map[string]*ResourceNodeState     `json:"resources"`
+	// RenewableResources 只含可再生矿脉（水/硫酸/木/植物燃料）的索引：细分网格
+	// 后资源 cell 数上了一个数量级，每 tick 的再生结算不能逐格扫描全表。
+	// 由 gamecore.IndexRenewableResources 在地图生成与读档后重建，不进快照。
+	RenewableResources []*ResourceNodeState `json:"-"`
 	LogisticsStations  map[string]*LogisticsStationState `json:"-"`
 	LogisticsBots      map[string]*LogisticsBotState     `json:"-"`
 	LogisticsDrones    map[string]*LogisticsDroneState   `json:"-"`

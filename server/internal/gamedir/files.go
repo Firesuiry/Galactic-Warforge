@@ -19,7 +19,9 @@ import (
 	"siliconworld/internal/snapshot"
 )
 
-const currentFormatVersion = 1
+// CurrentFormatVersion 细分网格后坐标语义改变：旧存档点/存档一律拒绝加载，
+// 不写兼容层。版本 1 = 旧网格。
+const CurrentFormatVersion = 2
 
 var syncFile = func(file *os.File) error {
 	return file.Sync()
@@ -113,7 +115,7 @@ func Open(root string) *Dir {
 func NewMetaFile(cfg *config.Config, mapCfg *mapconfig.Config) *MetaFile {
 	now := time.Now().UTC()
 	meta := &MetaFile{
-		FormatVersion: currentFormatVersion,
+		FormatVersion: CurrentFormatVersion,
 		CreatedAt:     now,
 		LastSavedAt:   now,
 	}
@@ -368,7 +370,7 @@ func normalizeMetaForWrite(meta *MetaFile) error {
 		return fmt.Errorf("meta is nil")
 	}
 	if meta.FormatVersion == 0 {
-		meta.FormatVersion = currentFormatVersion
+		meta.FormatVersion = CurrentFormatVersion
 	}
 	return validateMeta(meta)
 }
@@ -378,7 +380,7 @@ func normalizeSaveForWrite(save *SaveFile) error {
 		return fmt.Errorf("save is nil")
 	}
 	if save.FormatVersion == 0 {
-		save.FormatVersion = currentFormatVersion
+		save.FormatVersion = CurrentFormatVersion
 	}
 	return validateSave(save)
 }
@@ -387,8 +389,8 @@ func validateMeta(meta *MetaFile) error {
 	if meta == nil {
 		return fmt.Errorf("meta is nil")
 	}
-	if meta.FormatVersion != currentFormatVersion {
-		return fmt.Errorf("meta format_version %d unsupported", meta.FormatVersion)
+	if meta.FormatVersion != CurrentFormatVersion {
+		return fmt.Errorf("存档点版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档点无法加载", meta.FormatVersion, CurrentFormatVersion)
 	}
 	return nil
 }
@@ -397,8 +399,8 @@ func validateSave(save *SaveFile) error {
 	if save == nil {
 		return fmt.Errorf("save is nil")
 	}
-	if save.FormatVersion != currentFormatVersion {
-		return fmt.Errorf("save format_version %d unsupported", save.FormatVersion)
+	if save.FormatVersion != CurrentFormatVersion {
+		return fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载", save.FormatVersion, CurrentFormatVersion)
 	}
 	if err := validateSnapshotStrict("snapshot", save.Snapshot); err != nil {
 		return err

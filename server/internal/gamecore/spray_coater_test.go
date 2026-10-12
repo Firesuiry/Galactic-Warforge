@@ -7,17 +7,31 @@ import (
 	"testing"
 )
 
+// sprayCoaterFixture 细分网格版布局：喷涂机 3×3 占 (3,3)-(5,5)，IO 走「占地外圈」
+// 契约——西/东/北三面各贴一条带（(2,4)/(6,4)/(4,2)），不再像旧网格那样只有 1×1
+// 锚点四邻。东圈那条带 (6,4) 同时也是分馏塔的西进料口（见
+// TestSprayCoaterFeedsRealSprayedFractionation）。
 func sprayCoaterFixture() (*model.WorldState, *model.Building, map[model.ConveyorDirection]*model.Building) {
-	ws := model.NewWorldState("sprayer", 8)
+	ws := model.NewWorldState("sprayer", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: model.ItemInventory{}}
 	b := surfaceTestBuilding(ws, "sprayer", model.BuildingTypeSprayCoater, model.Position{X: 3, Y: 3})
 	model.InitBuildingStorage(b)
 	model.InitBuildingSprayCoater(b)
 	belts := map[model.ConveyorDirection]*model.Building{}
 	for _, dir := range []model.ConveyorDirection{model.ConveyorWest, model.ConveyorEast, model.ConveyorNorth} {
-		pos, forward := ws.SurfaceStep(b.Position, dir)
-		if dir != model.ConveyorEast {
-			forward = forward.Opposite()
+		// 西/北是进料面（带输出朝机器），东是出料面（带输出朝外）。
+		pos := model.Position{X: 4, Y: 4}
+		forward := model.ConveyorEast
+		switch dir {
+		case model.ConveyorWest:
+			pos = model.Position{X: 2, Y: 4}
+			forward = model.ConveyorEast
+		case model.ConveyorEast:
+			pos = model.Position{X: 6, Y: 4}
+			forward = model.ConveyorEast
+		case model.ConveyorNorth:
+			pos = model.Position{X: 4, Y: 2}
+			forward = model.ConveyorSouth
 		}
 		belt := newConveyorBuilding(string(dir), pos, forward)
 		belt.Conveyor.MaxStack = 100
@@ -137,12 +151,13 @@ func TestSprayCoaterRealTransferAndStorageIOIsolation(t *testing.T) {
 
 func TestSprayCoaterFeedsRealSprayedFractionation(t *testing.T) {
 	ws, coater, belts := sprayCoaterFixture()
-	fractionator := surfaceTestBuilding(ws, "fractionator", model.BuildingTypeFractionator, model.Position{X: 5, Y: 3})
+	fractionator := surfaceTestBuilding(ws, "fractionator", model.BuildingTypeFractionator, model.Position{X: 7, Y: 3})
 	model.InitBuildingFractionation(fractionator)
-	returned := newConveyorBuilding("return", model.Position{X: 6, Y: 3}, model.ConveyorEast)
+	// 分馏塔西圈 (6,4) 就是喷涂机的东出口带：氢进入分馏塔，失败的氢原路退回。
+	returned := newConveyorBuilding("return", model.Position{X: 8, Y: 3}, model.ConveyorWest)
 	returned.Conveyor.MaxStack = 100
 	attachBuilding(ws, returned)
-	product := newConveyorBuilding("product", model.Position{X: 5, Y: 4}, model.ConveyorSouth)
+	product := newConveyorBuilding("product", model.Position{X: 8, Y: 5}, model.ConveyorSouth)
 	product.Conveyor.MaxStack = 100
 	attachBuilding(ws, product)
 	belts[model.ConveyorNorth].Conveyor.Insert(model.ItemProliferatorMk3, 1)

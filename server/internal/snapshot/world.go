@@ -286,7 +286,24 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		cell.ResourceNodeID = id
 	}
 
+	// 可再生矿脉索引：结算每 tick 只扫这些（资源 cell 数在细分网格下是万级）。
+	indexRenewableResources(ws)
+
 	return ws, nil
+}
+
+// indexRenewableResources 重建可再生矿脉索引（与 gamecore.IndexRenewableResources
+// 同一口径；snapshot 包不能反向依赖 gamecore，故这里就地实现）。
+func indexRenewableResources(ws *model.WorldState) {
+	if ws == nil {
+		return
+	}
+	ws.RenewableResources = ws.RenewableResources[:0]
+	for _, node := range ws.Resources {
+		if node != nil && node.Behavior == "renewable" && node.RegenPerTick > 0 {
+			ws.RenewableResources = append(ws.RenewableResources, node)
+		}
+	}
 }
 
 func cloneEnemyForceState(state *model.EnemyForceState) *model.EnemyForceState {

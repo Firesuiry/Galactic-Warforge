@@ -8,7 +8,7 @@ import (
 )
 
 func TestProcessingSnapshotPreservesRealSprayAndRandomState(t *testing.T) {
-	ws := model.NewWorldState("processing", 8)
+	ws := model.NewWorldState("processing", 16)
 	for _, kind := range []model.BuildingType{model.BuildingTypeFractionator, model.BuildingTypeSprayCoater} {
 		profile := model.BuildingProfileFor(kind, 1)
 		b := &model.Building{ID: string(kind), Type: kind, OwnerID: "p1", Position: model.Position{X: 3, Y: 3}, Level: 1, Runtime: profile.Runtime}
@@ -24,7 +24,8 @@ func TestProcessingSnapshotPreservesRealSprayAndRandomState(t *testing.T) {
 			b.Fractionation.RNGState = 12345
 		}
 		if b.SprayCoater != nil {
-			b.Position.X = 5
+			// 细分网格：喷涂机 3×3，分馏塔 3×3，同锚点会重叠，分馏塔挪到 (6,6)。
+			b.Position = model.Position{X: 6, Y: 6}
 			b.SprayCoater.SprayItemID = model.ItemProliferatorMk3
 			b.SprayCoater.SprayUnits = 57
 			b.SprayCoater.SprayEffect = &model.SprayState{Level: 3, RemainingUses: 8}

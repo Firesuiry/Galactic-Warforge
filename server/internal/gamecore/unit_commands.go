@@ -475,7 +475,7 @@ func friendlyOwner(ws *model.WorldState, id string) string {
 // unitSpawnRadius 生成单位时向外扩展的搜索半径：先看相邻一圈，全被占就往外扩。
 // 出生点必须避开已有同层（地面/空中）单位，否则批量出厂的单位会全部落在同一格，
 // 互相堵死（试玩报告 C：p2 的 22 个地面单位只占 8 格，最多 15 个挤在一格）。
-const unitSpawnRadius = 8
+const unitSpawnRadius = 24
 
 // findUnitSpawnTile 从 center 向外逐圈找一格可站立、且没有同层存活单位的格子。
 // air 为 true 时只要求界内（空中单位不受地形/建筑限制），但同样不与同层单位重叠。

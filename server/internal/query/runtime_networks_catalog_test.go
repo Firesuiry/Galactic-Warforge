@@ -91,8 +91,9 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		ID:           "c-2",
 		PlayerID:     "p2",
 		BuildingType: model.BuildingTypeArcSmelter,
-		Position:     model.Position{X: 3, Y: 3},
-		State:        model.ConstructionPending,
+		// 细分网格：熔炉 3×3，邻格 (3,3) 会和 (2,2) 的占地重叠。
+		Position: model.Position{X: 6, Y: 6},
+		State:    model.ConstructionPending,
 	}
 	if err := ws.Construction.Enqueue(ws, enemyTask); err != nil {
 		t.Fatalf("enqueue enemy task: %v", err)
@@ -387,8 +388,8 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 		t.Fatalf("expected gauss turret without power_range, got %+v", gauss)
 	}
 	srPlasma := buildingByID[model.BuildingTypeSRPlasmaTurret]
-	if srPlasma == nil || srPlasma.CombatRange != 12 {
-		t.Fatalf("expected sr plasma turret combat_range 12, got %+v", srPlasma)
+	if srPlasma == nil || srPlasma.CombatRange != 36 {
+		t.Fatalf("expected sr plasma turret combat_range 36, got %+v", srPlasma)
 	}
 	tesla := buildingByID[model.BuildingTypeTeslaTower]
 	if tesla == nil || tesla.PowerRange != model.DefaultTeslaTowerRange {

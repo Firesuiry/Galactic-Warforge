@@ -39,18 +39,19 @@ func absInt(v int) int {
 	return v
 }
 
-// move_range 仍是机甲的数据字段（驱动引擎科技 +2/级，客户端 /path 的 waypoints 也用它切段），
+// move_range 仍是机甲的数据字段（驱动引擎科技 +6/级，客户端 /path 的 waypoints 也用它切段），
 // 但移动命令本身不再受它限制：一条命令下达整条路径，按移速逐 tick 推进。
+// 细分网格：move_range 是距离类数值，已整体 ×3（机甲 12→36、工程兵 3→9、步兵 2→6）。
 func TestT128ExecutorMoveRange(t *testing.T) {
 	execStats := model.UnitStats(model.UnitTypeExecutor)
-	if execStats.MoveRange != 12 {
-		t.Fatalf("expected executor move range 12, got %d", execStats.MoveRange)
+	if execStats.MoveRange != 36 {
+		t.Fatalf("expected executor move range 36, got %d", execStats.MoveRange)
 	}
-	if got := model.UnitStats(model.UnitTypeWorker).MoveRange; got != 3 {
-		t.Fatalf("worker move range should stay 3, got %d", got)
+	if got := model.UnitStats(model.UnitTypeWorker).MoveRange; got != 9 {
+		t.Fatalf("worker move range should stay 9, got %d", got)
 	}
-	if got := model.UnitStats(model.UnitTypeSoldier).MoveRange; got != 2 {
-		t.Fatalf("soldier move range should stay 2, got %d", got)
+	if got := model.UnitStats(model.UnitTypeSoldier).MoveRange; got != 6 {
+		t.Fatalf("soldier move range should stay 6, got %d", got)
 	}
 
 	core := newE2ETestCore(t)

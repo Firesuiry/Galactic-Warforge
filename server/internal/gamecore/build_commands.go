@@ -57,35 +57,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		mounted.Z = 1
 		pos = &mounted
 	}
-	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() && btype != model.BuildingTypeFoundation {
-		// Geothermal power stations may sit on lava itself; every other
-		// building still requires buildable ground.
-		if !(model.RequiresLavaProximity(btype) && ws.Grid[pos.Y][pos.X].Terrain == terrain.TileLava) {
-			res.Code = model.CodeInvalidTarget
-			res.Message = "目标地块不可建造"
-			return res, nil
-		}
-	}
 
-	// Check tile is unoccupied; an occupied tile may still accept a vertically
-	// stacked layer of the same building type (vertical_construction tech).
-	tileKey := model.TileKey(pos.X, pos.Y)
-	if buildingID, occupied := ws.TileBuilding[tileKey]; occupied && btype != model.BuildingTypeLogisticsDistributor {
-		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
-		if stackErr != nil {
-			res.Code = model.CodePositionOccupied
-			res.Message = tileOccupiedMessage(ws, playerID, buildingID, stackErr.Error())
-			return res, nil
-		}
-		pos = &stackedPos
-	}
-	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) && pos.Z == 0 {
-		res.Code = model.CodePositionOccupied
-		res.Message = constructionReservationMessage(ws, playerID, tileKey)
-		return res, nil
-	}
-
-	// Validate building type
+	// Validate building type before footprint maths: the footprint drives
+	// occupancy, terrain and reservation checks for every covered cell.
 	def, ok := model.BuildingDefinitionByID(btype)
 	if !ok {
 		res.Code = model.CodeValidationFailed
@@ -96,6 +70,58 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		res.Code = model.CodeValidationFailed
 		res.Message = fmt.Sprintf("该建筑类型不可建造：%s", buildingTypeDisplayName(btype))
 		return res, nil
+	}
+
+	rotation := model.PlanRotation0
+	if p.Rotation != nil {
+		degrees := *p.Rotation
+		if degrees < 0 || degrees > 270 || degrees%90 != 0 {
+			return mechaJobFailed(model.CodeValidationFailed, "rotation 必须为 0、90、180 或 270")
+		}
+		rotation = model.PlanRotation(fmt.Sprint(degrees))
+	}
+	footprint := model.RotatedFootprint(def.Footprint, rotation)
+	footprintTiles, err := ws.FootprintTiles(*pos, footprint)
+	if err != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = err.Error()
+		return res, nil
+	}
+
+	// 占地内每一格都必须可建造（熔岩上的地热站是唯一例外）。
+	for _, tile := range footprintTiles {
+		if ws.Grid[tile.Y][tile.X].Terrain.Buildable() || btype == model.BuildingTypeFoundation {
+			continue
+		}
+		if model.RequiresLavaProximity(btype) && ws.Grid[tile.Y][tile.X].Terrain == terrain.TileLava {
+			continue
+		}
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("占地地块 (%d,%d) 不可建造", tile.X, tile.Y)
+		return res, nil
+	}
+
+	// Check the whole footprint is unoccupied; an occupied footprint may still
+	// accept a vertically stacked layer of the same building type
+	// (vertical_construction tech).
+	if occupying := footprintOccupant(ws, footprintTiles); occupying != nil && btype != model.BuildingTypeLogisticsDistributor {
+		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
+		if stackErr != nil {
+			res.Code = model.CodePositionOccupied
+			res.Message = tileOccupiedMessage(ws, playerID, occupying.ID, stackErr.Error())
+			return res, nil
+		}
+		pos = &stackedPos
+	}
+	if ws.Construction != nil && pos.Z == 0 {
+		for _, tile := range footprintTiles {
+			key := model.TileKey(tile.X, tile.Y)
+			if ws.Construction.IsTileReserved(key) {
+				res.Code = model.CodePositionOccupied
+				res.Message = constructionReservationMessage(ws, playerID, key)
+				return res, nil
+			}
+		}
 	}
 
 	// Check tech unlock requirement
@@ -140,7 +166,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			return res, nil
 		}
 	}
-	if err := model.ValidateCollectorSite(ws, btype, *pos); err != nil {
+	if err := model.ValidateCollectorSite(ws, btype, rotation, *pos); err != nil {
 		res.Code = model.CodeInvalidTarget
 		res.Message = err.Error()
 		return res, nil
@@ -173,14 +199,6 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		}
 	}
 
-	rotation := model.PlanRotation0
-	if p.Rotation != nil {
-		degrees := *p.Rotation
-		if degrees < 0 || degrees > 270 || degrees%90 != 0 {
-			return mechaJobFailed(model.CodeValidationFailed, "rotation 必须为 0、90、180 或 270")
-		}
-		rotation = model.PlanRotation(fmt.Sprint(degrees))
-	}
 	autoApproach := p.AutoApproach
 	var approachUnit *model.Unit
 	var approachPath []model.Position
@@ -301,6 +319,29 @@ func tileOccupiedMessage(ws *model.WorldState, playerID, buildingID, fallback st
 	return fmt.Sprintf("该格已有其他玩家的建筑：%s", buildingTypeDisplayName(building.Type))
 }
 
+// footprintOccupant returns the ground building already covering any of the
+// given footprint tiles, or nil when every tile is free. Deterministic: the
+// lexicographically smallest building ID wins when several footprints overlap.
+func footprintOccupant(ws *model.WorldState, tiles []model.Position) *model.Building {
+	if ws == nil {
+		return nil
+	}
+	bestID := ""
+	for _, tile := range tiles {
+		id := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]
+		if id == "" {
+			continue
+		}
+		if bestID == "" || id < bestID {
+			bestID = id
+		}
+	}
+	if bestID == "" {
+		return nil
+	}
+	return ws.Buildings[bestID]
+}
+
 // buildingEnclosure 在 pos 放置 btype 后，某个地面单位是否会被关进死角。
 // 返回被围单位的名称/坐标与最后被堵死的那个出口（供回执写明细节）。
 //
@@ -338,14 +379,15 @@ func enclosureMessage(info *buildingEnclosureInfo) string {
 }
 
 // pocketCheckRadius 口袋判定的关注半径：单座建筑只可能切断它自己边界处的通路，
-// 因此只需检查建造点附近的单位（外加主人的执行体）。
-const pocketCheckRadius = 16
+// 因此只需检查建造点附近的单位（外加主人的执行体）。细分网格下 ×3。
+const pocketCheckRadius = 48
 
 // pocketFloodBudget 口袋判定的洪泛预算（格），与单位寻路 maxPathBudget 同一量级：
 // 立方球面图距离的三角不等式对"实际路径长度"并不成立（跨面绕行可能远长于
 // SurfaceDistance），所以预算必须在直线距离之外留足余量，否则会把连通误判成
-// 不可达（bot 测试图面 48、基地到玩家基地直线 93，实际路径 ~240）。
-const pocketFloodBudget = 2000
+// 不可达（bot 测试图面 48、基地到玩家基地直线 93，实际路径 ~240；细分网格后
+// 世界边长 ×3，预算同比放大到与 maxPathBudget 一致）。
+const pocketFloodBudget = 4000
 
 // baseSealInfo 基地被自己围死的回执细节（绝对不变量，见 baseSealedByPlacement）。
 type baseSealInfo struct {

@@ -247,7 +247,8 @@ func TestBootstrapRejectsPartialSaveDir(t *testing.T) {
 	if err := os.MkdirAll(gameDir, 0o755); err != nil {
 		t.Fatalf("mkdir game dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(gameDir, "meta.json"), []byte(`{"format_version":1}`), 0o644); err != nil {
+	partialMeta := fmt.Sprintf(`{"format_version":%d}`, gamedir.CurrentFormatVersion)
+	if err := os.WriteFile(filepath.Join(gameDir, "meta.json"), []byte(partialMeta), 0o644); err != nil {
 		t.Fatalf("write partial meta: %v", err)
 	}
 
@@ -400,7 +401,9 @@ func writeSavedGame(t *testing.T, gameDir string, opts savedGameOptions) {
 	world := model.NewWorldState("planet-1-1", meta.MapConfig.Planet.FaceSize)
 	world.Tick = opts.Tick
 	save := &gamedir.SaveFile{
-		FormatVersion: 1,
+		// 细分网格：存档版本号语义化，测试夹具必须写当前版本（版本 1 = 旧网格，
+		// 会被明确拒绝加载）。
+		FormatVersion: gamedir.CurrentFormatVersion,
 		Tick:          opts.Tick,
 		Snapshot:      snapshot.Capture(world, nil),
 		RuntimeState:  gamedir.RuntimeState{ActivePlanetID: "planet-1-1"},

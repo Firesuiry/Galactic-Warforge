@@ -69,7 +69,24 @@ func TestGeothermalBuildRequiresLavaProximity(t *testing.T) {
 	}
 
 	// 直接建在岩浆格上：放行（其他建筑类型仍然拒绝岩浆格）。
-	res = buildGeo(lavaAdj)
+	// 细分网格：地热站是 3×3 占地，测试先把候选格周围一片地形整成岩浆，保证
+	// 整块占地都能落在岩浆上（旧 1×1 网格里只铺一格就够）。
+	lavaSite := model.Position{X: pos.X + 6, Y: pos.Y}
+	if !ws.InBounds(lavaSite.X, lavaSite.Y) {
+		lavaSite = model.Position{X: pos.X, Y: pos.Y + 6}
+	}
+	if !ws.InBounds(lavaSite.X, lavaSite.Y) {
+		t.Fatalf("no room for a lava site near %+v", *pos)
+	}
+	for dy := -2; dy <= 2; dy++ {
+		for dx := -2; dx <= 2; dx++ {
+			x, y := lavaSite.X+dx, lavaSite.Y+dy
+			if ws.InBounds(x, y) {
+				ws.Grid[y][x].Terrain = terrain.TileLava
+			}
+		}
+	}
+	res = buildGeo(lavaSite)
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("geothermal on lava tile must be accepted, got %+v", res)
 	}

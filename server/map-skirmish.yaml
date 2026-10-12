@@ -1,4 +1,5 @@
-# 遭遇战地图：单行星、每面 96。出生点在同一面两侧，中点强制一小团铁/铜。
+# 遭遇战地图：单行星、每面 288（细分网格：cell 单位，原 96 格 ×3）。
+# 出生点在同一面两侧，中点强制一小团铁/铜。
 # 不覆盖默认 map.yaml（face_size 816）。
 galaxy:
   system_count: 1
@@ -9,7 +10,7 @@ system:
   gas_giant_ratio: 0
   max_moons: 0
 planet:
-  face_size: 96
+  face_size: 288
   resource_density: 8
   terrain:
     water_ratio: 0.12
@@ -41,7 +42,7 @@ planet:
     oil_decay_per_tick: 1
     renewable_regen_per_tick: 2
     contested_center: true
-# 同一面两侧，距离约为面宽的 61%（59/96）。球面中点落在两点之间。
+# 同一面两侧，距离约为面宽的 61%（177/288，与原 59/96 同比例）。球面中点落在两点之间。
 spawn_points:
-  - {x: 18, y: 48}
-  - {x: 77, y: 48}
+  - {x: 54, y: 144}
+  - {x: 231, y: 144}

@@ -158,7 +158,8 @@ func TestR2HoldDoesNotChaseAndCeasefire(t *testing.T) {
 	ws := newRTTWorld(true)
 	gc := &GameCore{}
 	holder := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 3, Y: 3})
-	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 8, Y: 3})
+	// 细分网格：步兵射程 6 cell（旧 2 格），"射程外"要放在 6 以外。
+	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 12, Y: 3})
 	enemy.Stance = model.UnitStanceHold // 敌方同样坚守，排除其主动逼近干扰
 
 	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: holder.ID}, Payload: map[string]any{"order": "hold"}}); res.Code != model.CodeOK {
@@ -178,7 +179,7 @@ func TestR2HoldDoesNotChaseAndCeasefire(t *testing.T) {
 	}
 
 	// 敌人走进射程：hold 开火；敌人死亡后停火清空目标。
-	enemy.Position = model.Position{X: 4, Y: 3}
+	enemy.Position = model.Position{X: 5, Y: 3}
 	events = advanceRTT(ws, 200)
 	if ws.Units[enemy.ID] != nil {
 		t.Fatal("hold unit failed to destroy in-range enemy")
@@ -224,7 +225,7 @@ func TestR5PatrolBouncesAndRetreatDoesNotFight(t *testing.T) {
 	ws := newRTTWorld(true)
 	gc := &GameCore{}
 	patroller := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 8})
-	dest := model.Position{X: 6, Y: 8}
+	dest := model.Position{X: 20, Y: 8}
 	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: patroller.ID, Position: &dest}, Payload: map[string]any{"order": "patrol"}}); res.Code != model.CodeOK {
 		t.Fatalf("patrol rejected: %+v", res)
 	}
@@ -236,15 +237,16 @@ func TestR5PatrolBouncesAndRetreatDoesNotFight(t *testing.T) {
 	if patroller.Stance != model.UnitStancePatrol {
 		t.Fatalf("patrol stance lost: %s", patroller.Stance)
 	}
-	if !seenX[2] || !seenX[6] {
+	if !seenX[2] || !seenX[20] {
 		t.Fatalf("patrol did not bounce between ends: %+v", seenX)
 	}
 
 	// 撤退：被打不还击，到达后转 idle。
 	retreater := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 12, Y: 12})
 	retreater.MoveSpeed = 0.5 // 加速脱离，保证追击者跟不上
-	shooter := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 12, Y: 13})
-	home := model.Position{X: 15, Y: 15}
+	// 细分网格：步兵射程 6 cell，追击者要贴在射程内才能持续开火。
+	shooter := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 12, Y: 16})
+	home := model.Position{X: 18, Y: 12}
 	if res, _ := execCommand(gc, model.CmdUnitOrder, ws, "p1", model.Command{Type: model.CmdUnitOrder, Target: model.CommandTarget{EntityID: retreater.ID, Position: &home}, Payload: map[string]any{"order": "retreat"}}); res.Code != model.CodeOK {
 		t.Fatalf("retreat rejected: %+v", res)
 	}

@@ -687,7 +687,6 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	if !ws.InBounds(pos.X, pos.Y) {
 		return nil, fmt.Errorf("施工位置超出地图范围")
 	}
-	tileKey := model.TileKey(pos.X, pos.Y)
 	stacked := pos.Z > 0 && task.BuildingType != model.BuildingTypeLogisticsDistributor
 	if stacked {
 		// Stacked layers share the ground building's tile; re-validate the
@@ -695,14 +694,12 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		if err := validateStackCompletion(ws, task); err != nil {
 			return nil, err
 		}
-	} else if _, occupied := ws.TileBuilding[tileKey]; occupied && task.BuildingType != model.BuildingTypeLogisticsDistributor {
-		return nil, fmt.Errorf("施工地块已被占用")
 	}
 	_, ok := model.BuildingDefinitionByID(task.BuildingType)
 	if !ok {
 		return nil, fmt.Errorf("未知建筑类型：%s", task.BuildingType)
 	}
-	if err := model.ValidateCollectorSite(ws, task.BuildingType, pos); err != nil {
+	if err := model.ValidateCollectorSite(ws, task.BuildingType, task.Rotation, pos); err != nil {
 		return nil, err
 	}
 
@@ -710,13 +707,18 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	if err != nil {
 		return nil, err
 	}
+	if !stacked && task.BuildingType != model.BuildingTypeLogisticsDistributor {
+		if occupying := footprintOccupant(ws, tiles); occupying != nil {
+			return nil, fmt.Errorf("施工占地地块已被 %s 占用", occupying.ID)
+		}
+	}
 	for _, p := range tiles {
 		if stacked {
 			// Footprint tiles of a stacked layer are occupied by the base
 			// building by definition; the stack was validated above.
 			continue
 		}
-		if task.BuildingType != model.BuildingTypeLogisticsDistributor && (ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation)) {
+		if task.BuildingType != model.BuildingTypeLogisticsDistributor && (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation && !(model.RequiresLavaProximity(task.BuildingType) && ws.Grid[p.Y][p.X].Terrain == terrain.TileLava)) {
 			return nil, fmt.Errorf("施工占地地块不可用")
 		}
 		if task.BuildingType == model.BuildingTypeFoundation && ws.FoundationAt(p) != nil {

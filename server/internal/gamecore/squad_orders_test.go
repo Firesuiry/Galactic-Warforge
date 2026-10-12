@@ -223,7 +223,9 @@ func TestSquadDefendHoldsAndRetreatDisengages(t *testing.T) {
 		t.Fatalf("defenders must hold at their posts: %s %s", a.Stance, b.Stance)
 	}
 	// 坚守：射程内的敌人被打，射程外的敌人不追。
-	far := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 8, Y: 12})
+	// 细分网格：步兵攻击射程 6、脱战余量 leashSlack=18，因此"追出多远"要超过
+	// 18 格才算越界，这里把远敌放到 24 格外（旧的 7 格在新网格下仍属追击允许范围）。
+	far := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 8, Y: 29})
 	far.Ammo = 0
 	farHP := far.HP
 	stepSquad(ws, 100)
@@ -238,8 +240,10 @@ func TestSquadDefendHoldsAndRetreatDisengages(t *testing.T) {
 		t.Fatal("defenders must fire on enemies in range")
 	}
 
-	// 撤退：不索敌不还击，回到指定点。
-	home := model.Position{X: 1, Y: 1}
+	// 撤退：不索敌不还击，回到指定点。细分网格下 28 格路径约 38 tick 才走完，
+	// 途中（前 25 tick）必须一直保持撤退姿态且不开火；到家后转 idle 会正常索敌，
+	// 因此"开火检查"只覆盖撤退途中。
+	home := model.Position{X: 1, Y: 25}
 	if r := squadOrder(ws, squad.ID, "retreat", &home); r.Code != model.CodeOK {
 		t.Fatalf("retreat: %+v", r)
 	}
@@ -247,10 +251,14 @@ func TestSquadDefendHoldsAndRetreatDisengages(t *testing.T) {
 		t.Fatal("retreat order not applied to members")
 	}
 	nearHP = near.HP
-	stepSquad(ws, 400)
+	stepSquad(ws, 25)
+	if a.Stance != model.UnitStanceRetreat || b.Stance != model.UnitStanceRetreat {
+		t.Fatalf("retreating units must keep the retreat stance: %s %s", a.Stance, b.Stance)
+	}
 	if near.HP != nearHP {
 		t.Fatal("retreating units must not fire")
 	}
+	stepSquad(ws, 375)
 	if ws.SurfaceDistance(a.Position, home) > 4 || ws.SurfaceDistance(b.Position, home) > 4 {
 		t.Fatalf("retreat must reach the fallback point: %+v %+v", a.Position, b.Position)
 	}

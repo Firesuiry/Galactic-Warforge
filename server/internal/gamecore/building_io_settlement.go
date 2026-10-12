@@ -35,22 +35,67 @@ func settleBuildingIO(ws *model.WorldState) {
 		if len(ports) == 0 {
 			continue
 		}
+		ring := buildingIORing(ws, building)
+		if len(ring) == 0 {
+			continue
+		}
 		for _, port := range ports {
 			if port.Direction != model.PortInput && port.Direction != model.PortBoth {
 				continue
 			}
-			settleBuildingPortInput(ws, conveyors, building, port)
+			settleBuildingPortInput(ws, conveyors, building, port, ring)
 		}
 		for _, port := range ports {
 			if port.Direction != model.PortOutput && port.Direction != model.PortBoth {
 				continue
 			}
-			settleBuildingPortOutput(ws, conveyors, building, port)
+			settleBuildingPortOutput(ws, conveyors, building, port, ring)
 		}
 	}
 }
 
-func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort) {
+// ioRingCell is one cell of the ring surrounding a building footprint, with
+// the world direction pointing from that cell into the footprint.
+type ioRingCell struct {
+	pos    model.Position
+	facing model.ConveyorDirection
+}
+
+// buildingIORing lists the cells around the building's footprint together with
+// their facing direction. IO is a ring contract: any footprint-adjacent belt
+// can be a port candidate, no matter which cell of a multi-cell building it
+// touches, and the facing direction is derived by stepping the surface graph
+// so cube-face seams need no special case.
+func buildingIORing(ws *model.WorldState, building *model.Building) []ioRingCell {
+	if ws == nil || building == nil {
+		return nil
+	}
+	ring, err := ws.BuildingRingCells(building)
+	if err != nil || len(ring) == 0 {
+		return nil
+	}
+	tiles, err := ws.BuildingTiles(building)
+	if err != nil {
+		return nil
+	}
+	inside := make(map[model.Position]bool, len(tiles))
+	for _, p := range tiles {
+		inside[p] = true
+	}
+	out := make([]ioRingCell, 0, len(ring))
+	for _, cell := range ring {
+		for _, dir := range conveyorDirOrder {
+			next, _ := ws.SurfaceStep(cell, dir)
+			if inside[next] {
+				out = append(out, ioRingCell{pos: cell, facing: dir})
+				break
+			}
+		}
+	}
+	return out
+}
+
+func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, ring []ioRingCell) {
 	if ws == nil || building == nil || building.Storage == nil {
 		return
 	}
@@ -58,10 +103,9 @@ func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.B
 	if portRemaining <= 0 {
 		return
 	}
-	portPos := portWorldPosition(ws, building, port)
 
 	for portRemaining > 0 {
-		candidate, ok := selectInputCandidate(ws, conveyors, building, port, portPos)
+		candidate, ok := selectInputCandidate(ws, conveyors, building, port, ring)
 		if !ok {
 			return
 		}
@@ -88,7 +132,7 @@ func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.B
 	}
 }
 
-func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort) {
+func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, ring []ioRingCell) {
 	if ws == nil || building == nil || building.Storage == nil {
 		return
 	}
@@ -96,10 +140,9 @@ func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.
 	if portRemaining <= 0 {
 		return
 	}
-	portPos := portWorldPosition(ws, building, port)
 
 	for portRemaining > 0 {
-		candidate, ok := selectOutputCandidate(ws, conveyors, building, port, portPos)
+		candidate, ok := selectOutputCandidate(ws, conveyors, building, port, ring)
 		if !ok {
 			return
 		}
@@ -149,23 +192,29 @@ type outputCandidate struct {
 	duplicate bool
 }
 
+// selectOutputCandidate scans the footprint ring: a belt on any ring cell is a
+// valid output sink as long as it leaves the footprint edge (its own output
+// direction continues away from the building, so it cannot feed the machine
+// back into itself). Candidates are ranked by the port's preferred direction
+// order first, then by ring-cell order.
 func selectOutputCandidate(
 	ws *model.WorldState,
 	conveyors map[string]*model.Building,
 	building *model.Building,
 	port model.IOPort,
-	portPos model.Position,
+	ring []ioRingCell,
 ) (outputCandidate, bool) {
 	if ws == nil || building == nil {
 		return outputCandidate{}, false
 	}
-	baseOrder := outputDirectionOrder(building, port)
-	candidates := make([]outputCandidate, 0, len(baseOrder))
-	for idx, dir := range baseOrder {
-		portDir := ws.SurfaceOffsetDirection(building.Position, port.Offset.X, port.Offset.Y, dir)
-		next, nextDir := ws.SurfaceStep(portPos, portDir)
-		nx, ny := next.X, next.Y
-		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
+	order := outputDirectionOrder(building, port)
+	rank := make(map[model.ConveyorDirection]int, len(order))
+	for i, dir := range order {
+		rank[dir] = i
+	}
+	candidates := make([]outputCandidate, 0, len(ring))
+	for _, cell := range ring {
+		neighborID := ws.TileBuilding[model.TileKey(cell.pos.X, cell.pos.Y)]
 		if neighborID == "" {
 			continue
 		}
@@ -176,22 +225,28 @@ func selectOutputCandidate(
 		if neighbor.OwnerID != building.OwnerID {
 			continue
 		}
-		if !allowsInput(conveyorAllowedInputs(neighbor), nextDir.Opposite()) {
+		// 只有"背离建筑"的传送带能收下产出：朝向建筑（或横穿）的带子会把
+		// 产出又送回机器，属于输入侧。
+		if neighbor.Conveyor.Output != cell.facing.Opposite() {
 			continue
 		}
 		if neighbor.Conveyor.AvailableCapacity() <= 0 {
 			continue
 		}
-		itemID := selectOutputItem(building, port, dir)
+		itemID := selectOutputItem(building, port, neighbor.Conveyor.Output)
 		if itemID == "" {
 			continue
 		}
 		if building.ExportableItemQuantity(itemID) <= 0 {
 			continue
 		}
+		itemOrder := len(order)
+		if r, ok := rank[neighbor.Conveyor.Output]; ok {
+			itemOrder = r
+		}
 		candidates = append(candidates, outputCandidate{
-			order:     idx,
-			dir:       dir,
+			order:     itemOrder,
+			dir:       neighbor.Conveyor.Output,
 			itemID:    itemID,
 			conveyor:  neighbor,
 			duplicate: conveyorHasItem(neighbor.Conveyor, itemID),
@@ -275,18 +330,18 @@ func sortedIOPorts(ports []model.IOPort) []model.IOPort {
 	return out
 }
 
-func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, portPos model.Position) (buildingInputCandidate, bool) {
+// selectInputCandidate scans the footprint ring: any belt whose output points
+// into the footprint (i.e. at the ring cell's facing direction) is an input
+// source, regardless of which footprint cell it touches.
+func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, ring []ioRingCell) (buildingInputCandidate, bool) {
 	if ws == nil || building == nil {
 		return buildingInputCandidate{}, false
 	}
 	needs := buildingRecipeInputNeeds(building)
 	var best buildingInputCandidate
 	found := false
-	for idx, dir := range conveyorDirOrder {
-		portDir := ws.SurfaceOffsetDirection(building.Position, port.Offset.X, port.Offset.Y, dir)
-		next, nextDir := ws.SurfaceStep(portPos, portDir)
-		nx, ny := next.X, next.Y
-		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
+	for idx, cell := range ring {
+		neighborID := ws.TileBuilding[model.TileKey(cell.pos.X, cell.pos.Y)]
 		if neighborID == "" {
 			continue
 		}
@@ -297,10 +352,10 @@ func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Buil
 		if neighbor.OwnerID != building.OwnerID {
 			continue
 		}
-		if neighbor.Conveyor.Output != nextDir.Opposite() {
+		if neighbor.Conveyor.Output != cell.facing {
 			continue
 		}
-		candidate, ok := selectConveyorInputCandidate(building, neighbor, port, dir, idx, needs)
+		candidate, ok := selectConveyorInputCandidate(building, neighbor, port, cell.facing, idx, needs)
 		if !ok {
 			continue
 		}

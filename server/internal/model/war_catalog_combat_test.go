@@ -16,10 +16,10 @@ func TestPublicBlueprintCombatClasses(t *testing.T) {
 		rang   float64
 		maxHP  int
 	}{
-		{ItemPrototype, ArmorHeavy, WeaponTypeLaser, 20, 8, 80},
-		{ItemPrecisionDrone, ArmorAir, WeaponTypeMissile, 35, 12, 60},
-		{ItemCorvette, ArmorShip, WeaponTypeLaser, 40, 24, 100},
-		{ItemDestroyer, ArmorShip, WeaponTypeLaser, 80, 24, 180},
+		{ItemPrototype, ArmorHeavy, WeaponTypeLaser, 20, 24, 80},
+		{ItemPrecisionDrone, ArmorAir, WeaponTypeMissile, 35, 36, 60},
+		{ItemCorvette, ArmorShip, WeaponTypeLaser, 40, 72, 100},
+		{ItemDestroyer, ArmorShip, WeaponTypeLaser, 80, 72, 180},
 	}
 	if len(byID) != len(checks) {
 		t.Fatalf("expected %d public blueprints, got %d", len(checks), len(byID))

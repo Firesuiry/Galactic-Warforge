@@ -68,17 +68,17 @@ func TestPhase1MiningResourceValidation(t *testing.T) {
 	node := &model.ResourceNodeState{ID: "ore", Kind: "crude_oil", Position: pos}
 	ws.Resources[node.ID] = node
 	ws.Grid[pos.Y][pos.X].ResourceNodeID = node.ID
-	if model.ValidateCollectorSite(ws, model.BuildingTypeMiningMachine, pos) == nil {
+	if model.ValidateCollectorSite(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, pos) == nil {
 		t.Fatal("miner accepted oil")
 	}
-	if err := model.ValidateCollectorSite(ws, model.BuildingTypeOilExtractor, pos); err != nil {
+	if err := model.ValidateCollectorSite(ws, model.BuildingTypeOilExtractor, model.PlanRotation0, pos); err != nil {
 		t.Fatal(err)
 	}
 	node.Kind = "iron_ore"
-	if model.ValidateCollectorSite(ws, model.BuildingTypeOilExtractor, pos) == nil {
+	if model.ValidateCollectorSite(ws, model.BuildingTypeOilExtractor, model.PlanRotation0, pos) == nil {
 		t.Fatal("oil extractor accepted iron")
 	}
-	if err := model.ValidateCollectorSite(ws, model.BuildingTypeMiningMachine, pos); err != nil {
+	if err := model.ValidateCollectorSite(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, pos); err != nil {
 		t.Fatal(err)
 	}
 }

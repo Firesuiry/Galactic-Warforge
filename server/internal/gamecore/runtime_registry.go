@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"fmt"
 	"math"
 	"sort"
 
@@ -51,6 +52,8 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	ws.Players = players
 	applyPlanetTerrain(ws, planet)
 	applyPlanetResources(ws, planet)
+	// 可再生矿脉索引：结算每 tick 只扫这些（资源 cell 数在细分网格下是万级）。
+	IndexRenewableResources(ws)
 	return ws
 }
 
@@ -74,6 +77,11 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 
 		pos := basePositions[i%len(basePositions)]
 		profile := model.BuildingProfileFor(model.BuildingTypeBattlefieldAnalysisBase, 1)
+		// 细分网格：HQ 是 5×5 大占地，贴到立方体角会折角自重叠，且占地 25 格
+		// 必须整块可建、无占用。把落位从"单格可建"提升为"整块可建"。
+		if fixed, ok := ws.FindFootprintOrigin(pos, profile.Runtime.Params.Footprint, model.BuildingTypeBattlefieldAnalysisBase, ""); ok {
+			pos = fixed
+		}
 		id := ws.NextEntityID("b")
 		base := &model.Building{
 			ID:          id,
@@ -94,9 +102,11 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		model.RegisterLogisticsStation(ws, base)
 		model.RegisterPowerGridBuilding(ws, base)
 		ws.Buildings[id] = base
-		tileKey := model.TileKey(pos.X, pos.Y)
-		ws.TileBuilding[tileKey] = id
-		ws.Grid[pos.Y][pos.X].BuildingID = id
+		// 5×5 的 HQ 必须按占地登记全部 cell（旧的锚点单格登记会让占地里的其余
+		// 24 格看起来是空地：单位能走进去、其它建筑能叠上来）。
+		if err := ws.IndexBuilding(base); err != nil {
+			panic(fmt.Sprintf("starter HQ indexing failed: %v", err))
+		}
 
 		// 开局机甲也走统一的找空位函数：不与其它地面单位堆叠。
 		execPos := findUnitSpawnTile(ws, pos, false, unitSpawnRadius)
@@ -119,11 +129,11 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 
 // spawnAreaRadius is the radius around each spawn point flattened to
 // buildable terrain so a fresh base always has room to expand.
-const spawnAreaRadius = 8
+const spawnAreaRadius = 24
 
 // spawnResourceSearchRadius caps how far an auto spawn may wander when
 // looking for a tile with minable resources nearby.
-const spawnResourceSearchRadius = 32
+const spawnResourceSearchRadius = 96
 
 // starterResourceKinds are injected near every spawn when missing so the
 // opening matrix chain (iron → magnet/coil, copper → circuit) and the mecha
@@ -183,7 +193,7 @@ func spawnMineDistance(players []config.PlayerConfig) int {
 		}
 	}
 	if operateRange <= 0 {
-		operateRange = 6
+		operateRange = 18
 	}
 	dist := operateRange - 2
 	if dist < 1 {
@@ -283,7 +293,7 @@ func findOpenTileForResource(ws *model.WorldState, center model.Position, dist i
 	grid := surface.Grid{Size: ws.MapWidth / 3}
 	origin := surface.Tile{X: center.X, Y: center.Y}
 	tiles := grid.Disc(origin, dist)
-	for _, minimum := range []int{2, 1} {
+	for _, minimum := range []int{6, 3, 1} {
 		for _, tile := range tiles {
 			if grid.Distance(origin, tile) < minimum || ws.Grid[tile.Y][tile.X].ResourceNodeID != "" {
 				continue
@@ -300,41 +310,61 @@ func findOpenTileForResource(ws *model.WorldState, center model.Position, dist i
 // injectResourceNode writes a finite ore node into the runtime world and, when
 // present, the map-model planet so scene/query layers stay consistent.
 func injectResourceNode(ws *model.WorldState, planet *mapmodel.Planet, pos model.Position, kind mapmodel.ResourceKind) {
-	if ws == nil || !ws.InBounds(pos.X, pos.Y) {
+	// 细分网格：一个资源"格"变成 3×3 的一簇 cell（与 mapgen 的矿脉按 cell 成簇
+	// 同口径），每格保留原来的储量/产速——世界边长 ×3，矿脉覆盖的世界范围不变，
+	// 3×3 采矿机框选整簇时的总产速与采空时间与旧的单格矿一致。
+	injectResourceCluster(ws, planet, pos, kind, 3)
+}
+
+// injectResourceCluster 在 pos 处放一簇 size×size 的同类矿，每格与旧的单格矿
+// 同储量同产速（世界尺度不变）。
+func injectResourceCluster(ws *model.WorldState, planet *mapmodel.Planet, pos model.Position, kind mapmodel.ResourceKind, size int) {
+	if ws == nil || !ws.InBounds(pos.X, pos.Y) || size < 1 {
 		return
 	}
 	if ws.Grid[pos.Y][pos.X].ResourceNodeID != "" {
 		return
 	}
-	id := ws.NextEntityID("res")
-	state := &model.ResourceNodeState{
-		ID:           id,
-		PlanetID:     ws.PlanetID,
-		Kind:         string(kind),
-		Behavior:     string(mapmodel.ResourceFinite),
-		Position:     pos,
-		MaxAmount:    starterVeinTotal,
-		Remaining:    starterVeinTotal,
-		BaseYield:    starterVeinYield,
-		CurrentYield: starterVeinYield,
-	}
-	state.SyncDepleted()
-	ws.Resources[id] = state
-	ws.Grid[pos.Y][pos.X].ResourceNodeID = id
-	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileBuildable
-	if planet != nil {
-		if pos.Y < len(planet.Terrain) && pos.X < len(planet.Terrain[pos.Y]) {
-			planet.Terrain[pos.Y][pos.X] = terrain.TileBuildable
+	clusterID := ws.NextEntityID("cluster")
+	for dy := 0; dy < size; dy++ {
+		for dx := 0; dx < size; dx++ {
+			cell := ws.SurfaceOffset(pos, dx, dy)
+			if !ws.InBounds(cell.X, cell.Y) || ws.Grid[cell.Y][cell.X].ResourceNodeID != "" {
+				continue
+			}
+			id := ws.NextEntityID("res")
+			state := &model.ResourceNodeState{
+				ID:           id,
+				PlanetID:     ws.PlanetID,
+				Kind:         string(kind),
+				Behavior:     string(mapmodel.ResourceFinite),
+				Position:     cell,
+				ClusterID:    clusterID,
+				MaxAmount:    starterVeinTotal,
+				Remaining:    starterVeinTotal,
+				BaseYield:    starterVeinYield,
+				CurrentYield: starterVeinYield,
+			}
+			state.SyncDepleted()
+			ws.Resources[id] = state
+			ws.Grid[cell.Y][cell.X].ResourceNodeID = id
+			ws.Grid[cell.Y][cell.X].Terrain = terrain.TileBuildable
+			if planet != nil {
+				if cell.Y < len(planet.Terrain) && cell.X < len(planet.Terrain[cell.Y]) {
+					planet.Terrain[cell.Y][cell.X] = terrain.TileBuildable
+				}
+				planet.Resources = append(planet.Resources, mapmodel.ResourceNode{
+					ID:        id,
+					PlanetID:  planet.ID,
+					Kind:      kind,
+					Behavior:  mapmodel.ResourceFinite,
+					Position:  mapmodel.GridPos{X: cell.X, Y: cell.Y},
+					ClusterID: clusterID,
+					Total:     starterVeinTotal,
+					BaseYield: starterVeinYield,
+				})
+			}
 		}
-		planet.Resources = append(planet.Resources, mapmodel.ResourceNode{
-			ID:        id,
-			PlanetID:  planet.ID,
-			Kind:      kind,
-			Behavior:  mapmodel.ResourceFinite,
-			Position:  mapmodel.GridPos{X: pos.X, Y: pos.Y},
-			Total:     starterVeinTotal,
-			BaseYield: starterVeinYield,
-		})
 	}
 }
 

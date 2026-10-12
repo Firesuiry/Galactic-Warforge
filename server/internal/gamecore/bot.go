@@ -49,11 +49,11 @@ const botCoalReserve = 16
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 3, squadCap: 1, armyCap: 6, waveCooldown: 12000, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 3, squadCap: 1, armyCap: 6, waveCooldown: 12000, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 42, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 18, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
 	case "hard":
-		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, waveCooldown: 2000, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
+		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, waveCooldown: 2000, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 60, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 66, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, waveCooldown: 6000, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, waveCooldown: 6000, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 48, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 36, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
 	}
 }
 
@@ -411,10 +411,10 @@ func botRecallIDs(ws *model.WorldState, units []*model.Unit, threats []botThreat
 	}
 	ids := make([]string, 0, len(units))
 	for _, u := range units {
-		if ws.SurfaceDistance(u.Position, dest) <= 4 {
+		if ws.SurfaceDistance(u.Position, dest) <= 36 {
 			continue
 		}
-		if u.Stance == model.UnitStanceAttackMove && u.OrderPos != nil && ws.SurfaceDistance(*u.OrderPos, dest) <= 1 {
+		if u.Stance == model.UnitStanceAttackMove && u.OrderPos != nil && ws.SurfaceDistance(*u.OrderPos, dest) <= 3 {
 			continue
 		}
 		ids = append(ids, u.ID)
@@ -960,7 +960,7 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 	if execState == nil {
 		return model.Command{}, false
 	}
-	if ws.SurfaceDistance(exec.Position, node.Position) > 2 {
+	if ws.SurfaceDistance(exec.Position, node.Position) > 6 {
 		// 先移动到矿点邻格。
 		dest := botAdjacentFreeTile(ws, node.Position, exec.ID)
 		if dest == nil {
@@ -1021,7 +1021,7 @@ func botNearestNode(ws *model.WorldState, from model.Position, kind string) *mod
 
 // botAdjacentFreeTile 目标格附近的可站立格。
 func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID string) *model.Position {
-	for _, candidate := range ws.SurfaceDisc(center, 2) {
+	for _, candidate := range ws.SurfaceDisc(center, 6) {
 		if candidate == center {
 			continue
 		}
@@ -1082,7 +1082,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		return false
 	}
 	// 找一台附近没有己方矿机的矿点（必须在建造可达范围内：基地半径或执行体操作范围）。
-	execRange := 6
+	execRange := 18
 	if ctx.executor != nil {
 		if execState := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID); execState != nil {
 			execRange = execState.OperateRange
@@ -1136,7 +1136,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 	for _, cand := range candidates {
 		node := cand.node
 		homeDist := cand.dist
-		inRange := homeDist <= 24
+		inRange := homeDist <= 72
 		if !inRange && ctx.executor != nil && ws.SurfaceDistance(ctx.executor.Position, node.Position) <= execRange {
 			inRange = true
 		}
@@ -1152,7 +1152,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		// 因此仍然选最近的矿点建机，由 botPowerLink 负责把电网推过去。
 		covered := false
 		for _, b := range ctx.buildings {
-			if isMinerBuilding(b) && ws.SurfaceDistance(b.Position, node.Position) <= 4 {
+			if isMinerBuilding(b) && ws.SurfaceDistance(b.Position, node.Position) <= 12 {
 				covered = true
 				break
 			}
@@ -1163,10 +1163,26 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		// 复用与 execBuild 相同的围死校验：矿机同样不能把基地封死
 		// （试玩报告 1010 阻断 A 的修法——否则 bot 会反复发注定被拒的建造命令，
 		// 整局卡在"矿机建不起来"上）。
-		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, node.Position) != nil {
+		// 细分网格：矿机是 3×3 占地，矿点格本身空着不代表放得下——开局 HQ（5×5）
+		// 与风机（2×2）就压在矿脉边上，按矿点格下锚点会被"占地重叠"拒绝（实测
+		// 开局链第一台矿机被拒 83–112 次，整局卡死在"没矿机"）。这里按与 execBuild
+		// 相同的整块落位求锚点，并确认锚点仍覆盖这个矿点。
+		def, ok := model.BuildingDefinitionByID(model.BuildingTypeMiningMachine)
+		if !ok {
+			return false
+		}
+		fp := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
+		origin, ok := ws.FindFootprintOrigin(node.Position, fp, model.BuildingTypeMiningMachine, "")
+		if !ok || !ws.FootprintFits(origin, fp, model.BuildingTypeMiningMachine, "") {
 			continue
 		}
-		pos := node.Position
+		if model.ValidateCollectorSite(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
+			continue
+		}
+		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
+			continue
+		}
+		pos := origin
 		return issue(model.Command{
 			Type:    model.CmdBuild,
 			Target:  model.CommandTarget{Layer: "planet", Position: &pos},
@@ -1458,7 +1474,7 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, 
 	if maxRadius < 1 {
 		return nil
 	}
-	start := 3
+	start := 9
 	if maxRadius < start {
 		start = 1
 	}
@@ -1483,6 +1499,14 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, 
 			}
 			if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(candidate.X, candidate.Y)) {
 				continue
+			}
+			// 细分网格：锚点格空 ≠ 放得下。2×2/3×3/5×5 的占地必须整块可落位，
+			// 否则发出的建造命令会被"占地与已有建筑重叠"拒绝（脚本化开局实测
+			// 风机反复撞在 5×5 的 HQ 上，整局卡死在第一座风机）。
+			if def, ok := model.BuildingDefinitionByID(btype); ok {
+				if !ws.FootprintFits(candidate, model.RotatedFootprint(def.Footprint, model.PlanRotation0), btype, "") {
+					continue
+				}
 			}
 			// 复用围死校验：跳过会把地面单位四周堵死的格子。
 			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {

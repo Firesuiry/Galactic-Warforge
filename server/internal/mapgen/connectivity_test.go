@@ -22,9 +22,11 @@ const skirmishDefaultSeed = "skirmish-seed-001"
 
 // defaultSeedMaxChangedTiles 是默认 seed 允许被连通性保证改动的格子上限。默认局
 // 出生点/争夺中心本就连通，改动只来自封小陆地与就近补矿，实测远低于此值。
+// 细分网格：cell 单位（世界边长 ×3）后，同一块陆地的格子数是原来的 9 倍，
+// 资源节点数是 3×3 成簇后的约 9 倍，故两个上限同步 ×9/×3 放宽。
 const (
-	defaultSeedMaxChangedTiles  = 256
-	defaultSeedMaxResourceDelta = 32
+	defaultSeedMaxChangedTiles  = 2304
+	defaultSeedMaxResourceDelta = 288
 )
 
 func skirmishConfig(t *testing.T) *mapconfig.Config {

@@ -92,7 +92,7 @@ func (gc *GameCore) exportSaveFileWithBase(trigger string, base *snapshot.Snapsh
 	}
 
 	return &gamedir.SaveFile{
-		FormatVersion: 1,
+		FormatVersion: gamedir.CurrentFormatVersion,
 		Tick:          current.Tick,
 		Snapshot:      current,
 		RuntimeState:  runtimeState,

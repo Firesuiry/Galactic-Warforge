@@ -5,10 +5,10 @@ units:
     max_hp: 60
     attack: 3
     defense: 1
-    attack_range: 1
-    move_range: 3
-    vision_range: 5
-    move_speed: 0.3
+    attack_range: 3
+    move_range: 9
+    vision_range: 15
+    move_speed: 0.9
     attack_cooldown_ticks: 12
     armor_class: light
     weapon_class: gun
@@ -28,10 +28,10 @@ units:
     max_hp: 100
     attack: 15
     defense: 5
-    attack_range: 2
-    move_range: 2
-    vision_range: 5
-    move_speed: 0.25
+    attack_range: 6
+    move_range: 6
+    vision_range: 15
+    move_speed: 0.75
     attack_cooldown_ticks: 10
     armor_class: light
     weapon_class: gun
@@ -51,10 +51,10 @@ units:
     max_hp: 90
     attack: 9
     defense: 3
-    attack_range: 3
-    move_range: 3
-    vision_range: 14
-    move_speed: 0.6
+    attack_range: 9
+    move_range: 9
+    vision_range: 42
+    move_speed: 1.8
     attack_cooldown_ticks: 8
     armor_class: light
     weapon_class: gun
@@ -74,10 +74,10 @@ units:
     max_hp: 240
     attack: 28
     defense: 12
-    attack_range: 4
-    move_range: 3
-    vision_range: 6
-    move_speed: 0.35
+    attack_range: 12
+    move_range: 9
+    vision_range: 18
+    move_speed: 1.05
     attack_cooldown_ticks: 8
     armor_class: heavy
     weapon_class: cannon
@@ -97,10 +97,10 @@ units:
     max_hp: 120
     attack: 50
     defense: 3
-    attack_range: 12
-    move_range: 3
-    vision_range: 14
-    move_speed: 0.18
+    attack_range: 36
+    move_range: 9
+    vision_range: 42
+    move_speed: 0.54
     attack_cooldown_ticks: 20
     armor_class: light
     weapon_class: cannon
@@ -109,7 +109,7 @@ units:
     producer: vehicle_factory
     production_ticks: 100
     cost: [{item_id: steel, quantity: 5}, {item_id: gear, quantity: 4}, {item_id: circuit_board, quantity: 2}]
-    min_attack_range: 4
+    min_attack_range: 12
     public: true
     domain: ground
     runtime_class: world_unit
@@ -121,10 +121,10 @@ units:
     max_hp: 140
     attack: 32
     defense: 6
-    attack_range: 8
-    move_range: 3
-    vision_range: 10
-    move_speed: 0.3
+    attack_range: 24
+    move_range: 9
+    vision_range: 30
+    move_speed: 0.9
     attack_cooldown_ticks: 14
     armor_class: light
     weapon_class: missile
@@ -145,16 +145,16 @@ units:
     attack: 0
     defense: 4
     attack_range: 0
-    move_range: 3
-    vision_range: 5
-    move_speed: 0.32
+    move_range: 9
+    vision_range: 15
+    move_speed: 0.96
     attack_cooldown_ticks: 10
     armor_class: light
     weapon_class: gun
     producer: vehicle_factory
     production_ticks: 70
     cost: [{item_id: iron_ingot, quantity: 4}, {item_id: circuit_board, quantity: 2}, {item_id: motor, quantity: 1}]
-    supply_radius: 4
+    supply_radius: 12
     repair_rate: 2
     public: true
     domain: ground
@@ -168,16 +168,16 @@ units:
     attack: 0
     defense: 3
     attack_range: 0
-    move_range: 3
-    vision_range: 5
-    move_speed: 0.35
+    move_range: 9
+    vision_range: 15
+    move_speed: 1.05
     attack_cooldown_ticks: 10
     armor_class: light
     weapon_class: gun
     producer: vehicle_factory
     production_ticks: 60
     cost: [{item_id: iron_ingot, quantity: 6}, {item_id: gear, quantity: 2}, {item_id: motor, quantity: 1}]
-    supply_radius: 5
+    supply_radius: 15
     supply_rate: 3
     cargo_capacity: 180
     public: true
@@ -191,10 +191,10 @@ units:
     max_hp: 80
     attack: 12
     defense: 2
-    attack_range: 4
-    move_range: 3
-    vision_range: 6
-    move_speed: 0.65
+    attack_range: 12
+    move_range: 9
+    vision_range: 18
+    move_speed: 1.95
     attack_cooldown_ticks: 7
     armor_class: air
     weapon_class: gun
@@ -217,10 +217,10 @@ units:
     max_hp: 120
     attack: 20
     defense: 8
-    attack_range: 4
-    move_range: 12
-    vision_range: 6
-    move_speed: 0.5
+    attack_range: 12
+    move_range: 36
+    vision_range: 18
+    move_speed: 1.5
     attack_cooldown_ticks: 6
     armor_class: heavy
     weapon_class: gun
@@ -230,10 +230,10 @@ units:
     max_hp: 40
     attack: 8
     defense: 2
-    attack_range: 2
-    move_range: 3
-    vision_range: 8
-    move_speed: 0.22
+    attack_range: 6
+    move_range: 9
+    vision_range: 24
+    move_speed: 0.66
     attack_cooldown_ticks: 12
     armor_class: light
     weapon_class: gun

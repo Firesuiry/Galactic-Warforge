@@ -82,22 +82,33 @@ func settleFractionation(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
-// A directional machine port connects only to an adjacent active owned belt.
-// Splitters arbitrate their own ports and cannot be accessed as a raw inventory.
+// machineBelt resolves the belt sitting on the footprint ring side `direction`:
+// for multi-cell buildings the belt must be adjacent to the footprint edge, not
+// to the anchor cell. `direction` is the world direction from the building
+// towards that side, so the ring cell whose facing direction is its opposite
+// is the candidate.
 func machineBelt(ws *model.WorldState, b *model.Building, direction model.ConveyorDirection, input bool) *model.Building {
-	pos, forward := ws.SurfaceStep(b.Position, direction)
-	belt := ws.Buildings[ws.TileBuilding[model.TileKey(pos.X, pos.Y)]]
-	if !conveyorActive(belt) || belt.OwnerID != b.OwnerID || belt.Splitter != nil {
+	if ws == nil || b == nil || !direction.Valid() || direction == model.ConveyorAuto {
 		return nil
 	}
-	if input {
-		if belt.Conveyor.Output != forward.Opposite() && belt.Conveyor.Output != model.ConveyorAuto {
-			return nil
+	for _, cell := range buildingIORing(ws, b) {
+		if cell.facing != direction.Opposite() {
+			continue
 		}
-	} else if !allowsInput(conveyorAllowedInputs(belt), forward.Opposite()) {
-		return nil
+		belt := ws.Buildings[ws.TileBuilding[model.TileKey(cell.pos.X, cell.pos.Y)]]
+		if !conveyorActive(belt) || belt.OwnerID != b.OwnerID || belt.Splitter != nil {
+			continue
+		}
+		if input {
+			if belt.Conveyor.Output != direction.Opposite() && belt.Conveyor.Output != model.ConveyorAuto {
+				continue
+			}
+		} else if !allowsInput(conveyorAllowedInputs(belt), direction.Opposite()) {
+			continue
+		}
+		return belt
 	}
-	return belt
+	return nil
 }
 
 func stackBufferQuantity(stacks []model.ItemStack) int {
