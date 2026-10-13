@@ -31,6 +31,10 @@ type BuildingCatalogEntry struct {
 	Buildable            bool                      `json:"buildable"`
 	DefaultRecipeID      string                    `json:"default_recipe_id,omitempty"`
 	RequiresResourceNode bool                      `json:"requires_resource_node,omitempty"`
+	// CoverageRadius：采集建筑占地外再覆盖几圈（服务端 ValidateCollectorSite /
+	// CollectorCoverageCells 的同一数值）。客户端本地预检用它判断「锚点附近有没有矿」，
+	// 否则 3×3 矿机的锚点落在矿脉外圈时会被本地误拦（试玩 1015 实测）。
+	CoverageRadius int `json:"coverage_radius,omitempty"`
 	CanProduceUnits      bool                      `json:"can_produce_units,omitempty"`
 	UnlockTech           []string                  `json:"unlock_tech,omitempty"`
 	CombatRange          int                       `json:"combat_range,omitempty"`
@@ -105,6 +109,7 @@ func (ql *Layer) Catalog(pace float64) *CatalogView {
 			Buildable:            def.Buildable,
 			DefaultRecipeID:      def.DefaultRecipeID,
 			RequiresResourceNode: def.RequiresResourceNode,
+			CoverageRadius:       collectorCoverageRadius(def.ID),
 			CanProduceUnits:      def.CanProduceUnits,
 			SupplyRadius:         def.SupplyRadius, SupplyRate: def.SupplyRate,
 			UnlockTech: append([]string(nil), def.UnlockTech...),
@@ -289,4 +294,17 @@ func techCatalogColor(techType model.TechType) string {
 	default:
 		return "#9775fa"
 	}
+}
+
+// collectorCoverageRadius 返回采集建筑占地外再覆盖的圈数（与 model.CollectorCoverageCells
+// 的 max(1, coverage_radius) 同口径）；非采集建筑为 0。
+func collectorCoverageRadius(btype model.BuildingType) int {
+	def, ok := model.BuildingRuntimeDefinitionByID(btype)
+	if !ok || def.Functions.Collect == nil {
+		return 0
+	}
+	if def.Functions.Collect.CoverageRadius < 1 {
+		return 1
+	}
+	return def.Functions.Collect.CoverageRadius
 }

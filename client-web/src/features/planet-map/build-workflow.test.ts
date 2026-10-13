@@ -658,3 +658,36 @@ describe('未探索区（地形 unknown）不被本地拦截', () => {
     expect(describeBuildBlock(assessment, () => '铁块')).toBe('缺少 铁块 4');
   });
 });
+
+describe("采集建筑覆盖范围（coverage_radius）与服务端 ValidateCollectorSite 同口径", () => {
+  const catalog = {
+    buildings: [
+      { id: "mining_machine", name: "采矿机", buildable: true, requires_resource_node: true, coverage_radius: 2, footprint: { width: 3, height: 3 } },
+      { id: "wind_turbine", name: "风力涡轮机", buildable: true, footprint: { width: 1, height: 1 } },
+    ],
+  };
+  function planetWithOreAt(x: number, y: number) {
+    const planet = createPlanet();
+    planet.resources = [{ id: "ore-1", planet_id: "planet-1-1", kind: "iron_ore", behavior: "finite", position: { x, y, z: 0 }, remaining: 900, current_yield: 3 }];
+    return planet;
+  }
+
+  it("矿在占地内、锚点格不是矿也能放置（DSP 式框选矿脉）", () => {
+    // 锚点 (1,1)、占地 1..3 × 1..3；矿在 (3,3) 属占地内，锚点格本身无矿。
+    const assessment = assessBuildTiles(catalog as never, "mining_machine", planetWithOreAt(3, 3) as never, { x: 1, y: 1, z: 0 });
+    expect(assessment?.blockedTiles.filter((tile) => tile.reason === "missing_resource")).toEqual([]);
+    expect(assessment?.buildable).toBe(true);
+  });
+
+  it("矿在覆盖圈内（占地外 2 圈）仍合法", () => {
+    // 覆盖格 = -2..4 偏移 → 1..5 圈内；矿在 (5,5) 属第二圈。
+    const assessment = assessBuildTiles(catalog as never, "mining_machine", planetWithOreAt(5, 5) as never, { x: 1, y: 1, z: 0 });
+    expect(assessment?.blockedTiles.filter((tile) => tile.reason === "missing_resource")).toEqual([]);
+  });
+
+  it("覆盖范围之外没有矿 → 本地拦截（missing_resource）", () => {
+    const assessment = assessBuildTiles(catalog as never, "mining_machine", planetWithOreAt(7, 7) as never, { x: 1, y: 1, z: 0 });
+    expect(assessment?.buildable).toBe(false);
+    expect(assessment?.blockedTiles).toContainEqual(expect.objectContaining({ x: 1, y: 1, reason: "missing_resource" }));
+  });
+});

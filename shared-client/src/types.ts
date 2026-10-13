@@ -1552,6 +1552,8 @@ export interface BuildingCatalogEntry {
   buildable: boolean;
   default_recipe_id?: string;
   requires_resource_node?: boolean;
+  /** 采集建筑占地外再覆盖几圈（服务端 CollectorCoverageCells 同口径）；非采集建筑无此字段。 */
+  coverage_radius?: number;
   can_produce_units?: boolean;
   unlock_tech?: string[];
   combat_range?: number;
