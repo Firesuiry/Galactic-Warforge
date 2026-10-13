@@ -134,6 +134,8 @@ export class PlanetThreeScene {
   /** 运输机器人往返路线（选中时画起点→终点虚线）：签名驱动的独立层。 */
   private readonly haulRoutes = new THREE.Group();
   private haulRouteSignature = '';
+  /** 阶段胶囊标签：随机器人移动每帧重贴位置（只重建于路线签名变化时）。 */
+  private haulLabels: { sprite: THREE.Sprite; unitId: string }[] = [];
   /** 补给光环材质：动画循环里做缓慢呼吸。 */
   private readonly auraMaterials = new Set<THREE.MeshBasicMaterial>();
   /** 右键/军团命令落点反馈（涟漪/准星）。 */
@@ -943,12 +945,12 @@ export class PlanetThreeScene {
     const planet = this.data?.planet;
     const interaction = this.interaction;
     if (!planet || !interaction || !interaction.layers.selection) {
-      if (this.haulRouteSignature !== '') { this.clearMarks(this.haulRoutes); this.haulRouteSignature = ''; }
+      if (this.haulRouteSignature !== '') { this.clearMarks(this.haulRoutes); this.haulRouteSignature = ''; this.haulLabels = []; }
       return;
     }
     const selectedIds = new Set<string>(interaction.selectedUnits ?? []);
     if (interaction.selected?.kind === 'unit') selectedIds.add(interaction.selected.id);
-    const routes: { from: Position; to: Position; color: string; phase: string }[] = [];
+    const routes: { from: Position; to: Position; color: string; phase: string; unitId: string }[] = [];
     const seen = new Set<string>();
     for (const id of selectedIds) {
       const unit = planet.units?.[id];
@@ -965,12 +967,14 @@ export class PlanetThreeScene {
         to: to.position,
         color: `#${FACTION_COLOR[unitFaction(unit, this.data?.playerId, this.data?.darkFogHostile ?? false)].toString(16).padStart(6, '0')}`,
         phase: haul.phase,
+        unitId: id,
       });
     }
     const signature = JSON.stringify(routes.map(route => [route.from.x, route.from.y, route.to.x, route.to.y, route.color, route.phase]));
     if (signature === this.haulRouteSignature) return;
     this.haulRouteSignature = signature;
     this.clearMarks(this.haulRoutes);
+    this.haulLabels = [];
     const size = this.tileScale();
     for (const route of routes) {
       const a = this.normal(route.from.x, route.from.y), b = this.normal(route.to.x, route.to.y);
@@ -987,16 +991,32 @@ export class PlanetThreeScene {
       for (const endpoint of [route.from, route.to]) {
         this.haulRoutes.add(this.tileOutline({ x: Math.round(endpoint.x), y: Math.round(endpoint.y) }, route.color));
       }
-      // 阶段中文（前往取货/装货中/…）：贴在路线中点上方，与 2D/选中条同一文案。
+      // 阶段中文（前往取货/装货中/…）：机器人旁的小号胶囊标签（字号与单位名牌同量级，
+      // 不再是一块压住半屏的大牌子）；位置每帧跟着机器人走（见 updateHaulLabels）。
       const label = haulPhaseLabel(route.phase);
       if (label) {
-        const mid = a.clone().lerp(b, .5).normalize().multiplyScalar(RADIUS + size * .9);
         const sprite = new THREE.Sprite(this.haulLabelMaterial(label));
         sprite.renderOrder = 24;
-        sprite.scale.set(size * 2.6, size * .62, 1);
-        sprite.position.copy(mid);
+        // 胶囊锚点在左端：贴着机器人向右展开，像单位名牌一样不盖住机器人本体。
+        sprite.center.set(0, .5);
+        sprite.scale.set(size * .64, size * .16, 1);
         this.haulRoutes.add(sprite);
+        this.haulLabels.push({ sprite, unitId: route.unitId });
       }
+    }
+    this.updateHaulLabels();
+  }
+
+  /** 阶段标签跟随机器人（移动组每帧插值，标签也每帧贴到它头顶右侧）。 */
+  private updateHaulLabels() {
+    if (this.haulLabels.length === 0) return;
+    const size = this.tileScale();
+    for (const { sprite, unitId } of this.haulLabels) {
+      const group = this.moving.get(`unit:${unitId}`)?.group;
+      if (!group) { sprite.visible = false; continue; }
+      sprite.visible = true;
+      // 高度对齐单位名牌（血条 0.73 cell、中立标签 0.92 cell），贴在机器人右上方。
+      sprite.position.copy(group.position).normalize().multiplyScalar(RADIUS + size * .95);
     }
   }
 
@@ -1005,18 +1025,20 @@ export class PlanetThreeScene {
     const key = `haul-label:${text}`;
     const cached = this.spriteMaterials.get(key);
     if (cached) return cached;
+    // 画布比例 16:4 = 世界 0.64×0.16 cell；字号占画布高约 45%，
+    // 与 3D 单位名牌（0.6×0.25 cell 的「中立」标签）同一量级。
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 64;
     const context = canvas.getContext('2d');
     if (context) {
-      context.fillStyle = 'rgba(10, 22, 26, 0.82)';
+      context.fillStyle = 'rgba(10, 22, 26, 0.86)';
       context.strokeStyle = 'rgba(145, 255, 112, 0.9)';
       context.lineWidth = 3;
       context.beginPath();
-      context.roundRect?.(3, 3, 250, 58, 12);
+      context.roundRect?.(3, 3, 250, 58, 14);
       context.fill();
       context.stroke();
-      context.font = '600 34px "PingFang SC", "Microsoft YaHei", sans-serif';
+      context.font = '600 30px "PingFang SC", "Microsoft YaHei", sans-serif';
       context.textAlign = 'center';
       context.textBaseline = 'middle';
       context.fillStyle = '#dffcf6';
@@ -1205,6 +1227,8 @@ export class PlanetThreeScene {
         up.set(0, 1, 0).applyQuaternion(group.quaternion);
         group.quaternion.premultiply(rotation.setFromUnitVectors(up, to.copy(group.position).normalize()));
       }
+      // 阶段标签贴机器人（机器人移动是每帧插值的，标签跟着走才不脱节）。
+      this.updateHaulLabels();
       this.composer.render();
     }
     this.frame = requestAnimationFrame(this.animate);

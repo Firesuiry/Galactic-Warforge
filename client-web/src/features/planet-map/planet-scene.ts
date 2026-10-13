@@ -57,6 +57,8 @@ import { isConveyorBeltBuilding } from '@/features/planet-map/build-workflow';
 import { GRID_MAJOR_CELL } from '@/features/planet-map/fine-grid';
 import {
   BELT_FLOW_MIN_TILE_SIZE,
+  BELT_ITEM_DOT_FRACTION,
+  BELT_ITEM_DOT_MIN_PX,
   BELT_ITEM_MAX_DOTS,
   beltDotInitialProgress,
   beltDotPosition,
@@ -632,9 +634,6 @@ const WARNING_BADGE_ALPHA_SWING = 0.25;
 const FURNACE_GLOW_BASE_ALPHA = 0.55;
 const FURNACE_GLOW_ALPHA_SWING = 0.3;
 
-/** 传送带货物圆点直径（占 tileSize 比例，带下限保证低缩放档可辨）。 */
-const BELT_ITEM_DOT_FRACTION = 0.24;
-const BELT_ITEM_DOT_MIN_PX = 2.5;
 /** 采集矿粒直径（占 tileSize 比例）与上抛行程（占 tileSize 比例）。 */
 const HARVEST_DOT_FRACTION = 0.3;
 const HARVEST_RISE_TILES = 0.62;

@@ -21,6 +21,13 @@ import { getResourceColorValue } from '@/features/planet-map/visible-entities';
  */
 export const BELT_ITEM_MAX_DOTS = 4;
 /**
+ * 货物圆点直径占 cell 的比例：与 3D 物料方块同一量纲（方块 0.3 cell 边长，
+ * 圆点取 0.3 cell 直径），DSP 式「带上的小物件」——远小于带宽，一格内多个。
+ */
+export const BELT_ITEM_DOT_FRACTION = 0.3;
+/** 圆点最小像素（更小的档位已不画圆点，这里只兜底亚像素抖动）。 */
+export const BELT_ITEM_DOT_MIN_PX = 2;
+/**
  * 货物圆点/采集脉冲显示的最低 cell 边长（px）。
  * 细分网格后默认档是 16px/cell，4px/cell 档圆点已小到无意义。
  */
