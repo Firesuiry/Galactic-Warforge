@@ -84,6 +84,9 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleTurrets(ws)...)
 			gc.prof.mark("units_turrets")
 			events = append(events, settleUnitMovement(ws)...)
+			// 运输机器人（§2）的装卸与路线循环：必须在移动之后，才能看到本 tick
+			// 是否走到了建筑外圈。
+			events = append(events, settleTransportRobots(ws)...)
 			gc.prof.mark("unit_movement")
 			events = append(events, settleUnitCombat(ws)...)
 			settleCombatTech(ws, gc.spaceRuntime)

@@ -626,31 +626,25 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop';
+  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop' | 'haul';
 
-  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string; planetId?: string } = {}) {
+  function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string; planetId?: string; fromBuildingId?: string; toBuildingId?: string; itemId?: string } = {}) {
     return sendSingleCommand({
       type: 'unit_order',
       target: { layer: 'planet', ...unitSelectorTarget(selector), ...(options.position ? { position: options.position } : {}), ...(options.planetId ? { planet_id: options.planetId } : {}) },
       payload: {
         order,
         ...(options.targetEntityId ? { target_entity_id: options.targetEntityId } : {}),
+        ...(options.fromBuildingId ? { from_building_id: options.fromBuildingId } : {}),
+        ...(options.toBuildingId ? { to_building_id: options.toBuildingId } : {}),
+        ...(options.itemId ? { item_id: options.itemId } : {}),
       },
     });
   }
 
-  /** 运输机器人往返路线（order=haul）：起点/终点建筑必填，item_id 缺省时由服务端取终点能接收的第一种。 */
-  function cmdHaulOrder(selector: string | string[], route: { fromBuildingId: string; toBuildingId: string; itemId?: string }, planetId?: string) {
-    return sendSingleCommand({
-      type: 'unit_order',
-      target: { layer: 'planet', ...unitSelectorTarget(selector), ...(planetId ? { planet_id: planetId } : {}) },
-      payload: {
-        order: 'haul',
-        from_building_id: route.fromBuildingId,
-        to_building_id: route.toBuildingId,
-        ...(route.itemId ? { item_id: route.itemId } : {}),
-      },
-    });
+  /** haul：运输机器人（transport_robot）在两座建筑之间往返搬运单一物品。 */
+  function cmdHaul(selector: string | string[], fromBuildingId: string, toBuildingId: string, itemId?: string, planetId?: string) {
+    return cmdUnitOrder(selector, 'haul', { fromBuildingId, toBuildingId, itemId, planetId });
   }
 
   /** count：最多烧几块燃料（缺省 1），服务端烧到核心满为止。 */
@@ -1278,7 +1272,7 @@ export function createApiClient(options: ApiClientOptions) {
     clearAuth,
     cmdAttack,
     cmdUnitOrder,
-    cmdHaulOrder,
+    cmdHaul,
     cmdRefuelMecha,
     cmdMineResource,
     cmdCraftItem,

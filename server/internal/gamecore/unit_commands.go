@@ -333,10 +333,14 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 type unitOrderPayload struct {
 	Order          string `json:"order" payload:"required"`
 	TargetEntityID string `json:"target_entity_id"`
+	// FromBuildingID / ToBuildingID / ItemID 只用于 order=haul（运输机器人路线）。
+	FromBuildingID string `json:"from_building_id"`
+	ToBuildingID   string `json:"to_building_id"`
+	ItemID         string `json:"item_id"`
 }
 
-// execUnitOrder handles the "unit_order" command（R5 指令集）：
-// attack_move / patrol / guard / hold / follow / retreat / stop。
+// execUnitOrder handles the "unit_order" command（R5 指令集 + §2 运输路线）：
+// attack_move / patrol / guard / hold / follow / retreat / stop / haul。
 func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd model.Command, p unitOrderPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
@@ -348,6 +352,7 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 
 	var events []*model.GameEvent
 	ordered := 0
+	haulReply := ""
 	for _, unit := range units {
 		// 执行体（玩家机甲）不参与部队指令集。
 		if unit.Mecha != nil {
@@ -360,6 +365,19 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 			unit.Stance = model.UnitStanceIdle
 			unit.OrderPos = nil
 			unit.GuardTargetID = ""
+			if unit.Haul != nil {
+				unit.Haul.ClearHaul()
+			}
+		case "haul":
+			if unit.Mecha == nil && unit.Type != model.UnitTypeTransportRobot {
+				// 运输路线只对运输机器人有意义：与其静默接受，不如说清该用什么单位。
+				return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("%s不是运输机器人，只有运输机器人可以执行 haul（运输）指令", unitDisplayName(unit)))
+			}
+			message, failure := assignHaulRoute(ws, playerID, unit, p)
+			if failure != nil {
+				return *failure, nil
+			}
+			haulReply = message
 		case "hold":
 			unit.ClearMovement()
 			unit.ClearEngagement()
@@ -455,7 +473,11 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("%d 个单位已执行 %s 指令", ordered, order)
+	if order == "haul" && haulReply != "" {
+		res.Message = haulReply
+	} else {
+		res.Message = fmt.Sprintf("%d 个单位已执行 %s 指令", ordered, order)
+	}
 	return res, events
 }
 

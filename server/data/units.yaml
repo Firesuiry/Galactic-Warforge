@@ -186,6 +186,28 @@ units:
     production_mode: world_produce
     query_scopes: [planet]
     commands: [move, attack]
+  - id: transport_robot
+    name: 运输机器人
+    max_hp: 60
+    attack: 0
+    defense: 1
+    attack_range: 0
+    move_range: 9
+    vision_range: 12
+    move_speed: 0.9
+    attack_cooldown_ticks: 10
+    armor_class: light
+    weapon_class: gun
+    producer: battlefield_analysis_base
+    production_ticks: 300
+    cost: [{item_id: iron_ingot, quantity: 4}, {item_id: gear, quantity: 2}, {item_id: magnetic_coil, quantity: 1}]
+    cargo_capacity: 4
+    public: true
+    domain: ground
+    runtime_class: world_unit
+    production_mode: world_produce
+    query_scopes: [planet]
+    commands: [move, attack, unit_order]
   - id: attack_drone
     name: 攻击无人机
     max_hp: 80

@@ -205,7 +205,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
         commandType: 'unit_order',
         planetId: planet.planet_id,
         focus: { entityId: selector[0] },
-        execute: () => client.cmdHaulOrder(selector, route, planet.planet_id),
+        execute: () => client.cmdHaul(selector, route.fromBuildingId, route.toBuildingId, route.itemId, planet.planet_id),
         fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
           event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
           limit: 50,

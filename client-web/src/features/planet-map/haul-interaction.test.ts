@@ -15,7 +15,7 @@ const { mockClient, submitMock } = vi.hoisted(() => ({
     cmdMove: vi.fn(),
     cmdAttack: vi.fn(),
     cmdUnitOrder: vi.fn(),
-    cmdHaulOrder: vi.fn(),
+    cmdHaul: vi.fn(),
     cmdSquadOrder: vi.fn(),
     cmdTaskForceDeploy: vi.fn(),
     fetchEventSnapshot: vi.fn(),
@@ -73,7 +73,7 @@ function setup() {
   resetPlanetViewStore();
   useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
   usePlanetCommandStore.getState().resetForPlanet('planet-1-1');
-  mockClient.cmdHaulOrder.mockResolvedValue({ accepted: true, request_id: 'r-haul' });
+  mockClient.cmdHaul.mockResolvedValue({ accepted: true, request_id: 'r-haul' });
   mockClient.cmdUnitOrder.mockResolvedValue({ accepted: true, request_id: 'r-order' });
   mockClient.fetchEventSnapshot.mockResolvedValue({ events: [] });
   const planet = makePlanet();
@@ -97,14 +97,16 @@ describe('「设置运输」交互（§4 运输机器人）', () => {
 
     // 第一点：起点（点建筑占地内任意一格都算命中）
     interactions.interactTile({ x: 5, y: 5 });
-    expect(mockClient.cmdHaulOrder).not.toHaveBeenCalled();
+    expect(mockClient.cmdHaul).not.toHaveBeenCalled();
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ kind: 'haul', fromBuildingId: 'depot-1' });
 
     // 第二点：终点 → 立即下达并退出模式
     interactions.interactTile({ x: 11, y: 11 });
-    expect(mockClient.cmdHaulOrder).toHaveBeenCalledWith(
+    expect(mockClient.cmdHaul).toHaveBeenCalledWith(
       ['robot-1', 'robot-2'],
-      { fromBuildingId: 'depot-1', toBuildingId: 'smelter-1', itemId: undefined },
+      'depot-1',
+      'smelter-1',
+      undefined,
       'planet-1-1',
     );
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
@@ -117,7 +119,7 @@ describe('「设置运输」交互（§4 运输机器人）', () => {
 
     interactions.interactTile({ x: 20, y: 2 });
 
-    expect(mockClient.cmdHaulOrder).not.toHaveBeenCalled();
+    expect(mockClient.cmdHaul).not.toHaveBeenCalled();
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('haul');
     expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('请点击建筑');
   });
@@ -129,7 +131,7 @@ describe('「设置运输」交互（§4 运输机器人）', () => {
 
     interactions.interactTile({ x: 4, y: 4 });
 
-    expect(mockClient.cmdHaulOrder).not.toHaveBeenCalled();
+    expect(mockClient.cmdHaul).not.toHaveBeenCalled();
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ kind: 'haul', fromBuildingId: 'depot-1' });
     expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('终点不能与起点相同');
   });
@@ -141,7 +143,7 @@ describe('「设置运输」交互（§4 运输机器人）', () => {
 
     interactions.interactTile({ x: 11, y: 11 });
 
-    expect(mockClient.cmdHaulOrder).not.toHaveBeenCalled();
+    expect(mockClient.cmdHaul).not.toHaveBeenCalled();
     expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('没有选中的运输机器人');
   });
 });

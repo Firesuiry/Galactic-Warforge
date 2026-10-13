@@ -282,8 +282,9 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
-	if len(view.WorldUnits) != 9 {
-		t.Fatalf("expected exactly 9 public world units, got %+v", view.WorldUnits)
+	// 10 = 9 个战斗/支援单位 + 运输机器人（transport_robot，§2）。
+	if len(view.WorldUnits) != 10 {
+		t.Fatalf("expected exactly 10 public world units, got %d", len(view.WorldUnits))
 	}
 	worldUnitIDs := map[string]bool{}
 	for _, entry := range view.WorldUnits {
@@ -297,6 +298,9 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	}
 	if !worldUnitIDs[string(model.UnitTypeMecha)] {
 		t.Fatalf("expected mecha in public world unit catalog, got %+v", worldUnitIDs)
+	}
+	if !worldUnitIDs[string(model.UnitTypeTransportRobot)] {
+		t.Fatalf("expected transport_robot in public world unit catalog, got %+v", worldUnitIDs)
 	}
 	for _, id := range []string{"worker", "soldier", "scout", "artillery", "missile_vehicle", "repair_vehicle", "supply_truck", "attack_drone"} {
 		if !worldUnitIDs[id] {

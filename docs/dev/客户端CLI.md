@@ -49,7 +49,8 @@ cd client-cli && npm run dev
 命令表里放不下的语义：
 
 - **build**：接受任意服务端 `buildable` 建筑；`--recipe` 设初始配方，`--direction` 用于传送带（含 `auto`），`--rotation 0|90|180|270`，`--approach` 让机甲先走到建造范围再开工。采集建筑必须压在对应资源点上（矿机→矿点，`water_pump`→`water`，`oil_extractor`→`crude_oil`）。`vertical_launching_silo` 默认挂 `small_carrier_rocket` 配方。以 `/catalog` 为准，例如 `satellite_substation` 需 `satellite_power`。
-- **produce**：只生产 `world_produce` 地表单位（`help produce` 会读 `/catalog.world_units`）。按 `producer` 分工：兵营（工程兵/步兵/侦察车）、战车工厂（机甲/火炮/导弹车/维修车/补给车）、机场（攻击无人机）。造价是实物清单，从生产建筑自身库存扣（`transfer` 或皮带供料），缺料返回 `INSUFFICIENT_RESOURCE`；排队有时长，停电暂停。`inspect` 建筑可见 `unit_queue` 与 `rally_point`。
+- **produce**：只生产 `world_produce` 地表单位（`help produce` 会读 `/catalog.world_units`）。按 `producer` 分工：兵营（工程兵/步兵/侦察车）、战车工厂（机甲/火炮/导弹车/维修车/补给车）、机场（攻击无人机）、战场分析基站 HQ（运输机器人 `transport_robot`，造价铁块×4/齿轮×2/磁线圈×1、300 tick、每玩家上限 20 台）。造价是实物清单，从生产建筑自身库存扣（`transfer` 或皮带供料），缺料返回 `INSUFFICIENT_RESOURCE`；排队有时长，停电暂停。`inspect` 建筑可见 `unit_queue` 与 `rally_point`。
+- **haul**：运输机器人专用（API 仍是 `unit_order`，`order=haul`）。`haul <unit_id[,unit_id...]> --from <building_id> --to <building_id> [--item <item_id>]` 让机器人在两座己方建筑之间往返搬运单一物品（每趟 4 件）；省略 `--item` 时自动挑「起点可取、终点能收」的第一种。起点无货在起点等、终点收不下在终点等；`order stop` 清空路线。只有 `transport_robot` 能执行，其它单位被中文拒绝。
 - **蓝图单位**：`prototype`/`precision_drone`/`corvette`/`destroyer` 等先做成载荷物品进部署枢纽（默认 `battlefield_analysis_base`，需通电 `running`），再 `deploy_squad` / `commission_fleet`；玩家定型蓝图同样可部署。
 - **transfer**：对应 API `transfer_item`；默认背包→建筑，`--take` 从建筑主仓/输出缓存取回（受背包容量限制）。
 - **军团**：`form_squad` 可含补给车；`squad_order ... resupply` 不带坐标，自动前往最近补给站；`dissolve_squad` 后成员保留当前指令。
@@ -238,11 +239,12 @@ agent_thread agent-war-director
 | `save` | `save [--reason <text>]` | Trigger manual save |
 | `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
-### 管理、调试与工具（21 条）
+### 管理、调试与工具（22 条）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
 | `catalog_commands` | — | Public command structure catalog (GET /catalog/commands) |
+| `haul` | `haul <unit_id[,unit_id...]> --from <building_id> --to <building_id> [--item <item_id>] [--planet <planet_id>]` | 运输机器人往返搬运：起点建筑 → 终点建筑，--item 锁定单一物品（缺省自动选终点能收的第一种） |
 | `raw` | `raw <json>` | Send raw /commands request JSON |
 | `audit` | `audit [options]` | Query audit log |
 | `event_snapshot` | `event_snapshot [options]` | Query event snapshot |

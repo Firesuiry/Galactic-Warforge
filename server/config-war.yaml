@@ -235,6 +235,27 @@ scenario_bootstrap:
               quantity: 60
             - item_id: ammo_missile
               quantity: 40
+        # 运输机器人（§2）试玩夹具：p1 起点储物仓（有铁矿）→ 终点储物仓。
+        # 两仓紧邻预置电厂（HQ 由 runtime_registry 生成在出生点，拉线距离只有
+        # 3 cell，故用电力感应塔把电接过去），便于用 CLI `haul` 看 phase 与库存增长。
+        - owner_id: "p1"
+          building_type: "tesla_tower"
+          x: 15
+          y: 12
+          state: "running"
+        - owner_id: "p1"
+          building_type: "depot_mk1"
+          x: 15
+          y: 16
+          state: "running"
+          inventory:
+            - item_id: iron_ore
+              quantity: 60
+        - owner_id: "p1"
+          building_type: "depot_mk2"
+          x: 15
+          y: 24
+          state: "running"
         - owner_id: "p2"
           building_type: "tesla_tower"
           x: 126

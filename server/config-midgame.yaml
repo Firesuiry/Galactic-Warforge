@@ -154,6 +154,39 @@ scenario_bootstrap:
           inventory:
             - item_id: small_carrier_rocket
               quantity: 2
+        # 运输机器人（§2）试玩夹具：起点储物仓（有铁矿）→ 终点储物仓，
+        # 便于用 CLI `haul` 设一条路线看 phase 与终点库存增长。
+        # 细分网格下默认拉线距离只有 3 cell，这两个仓离出生点电网很远，
+        # 中间补三座电力感应塔把电接过去（否则仓是 no_power，虽然不影响
+        # haul 装卸，但试玩时会被误当成故障）。
+        - owner_id: "p1"
+          building_type: "tesla_tower"
+          x: 15
+          y: 12
+          state: "running"
+        - owner_id: "p1"
+          building_type: "tesla_tower"
+          x: 15
+          y: 15
+          state: "running"
+        - owner_id: "p1"
+          building_type: "tesla_tower"
+          x: 15
+          y: 18
+          state: "running"
+        - owner_id: "p1"
+          building_type: "depot_mk1"
+          x: 18
+          y: 20
+          state: "running"
+          inventory:
+            - item_id: iron_ore
+              quantity: 60
+        - owner_id: "p1"
+          building_type: "depot_mk2"
+          x: 36
+          y: 20
+          state: "running"
   systems:
     - player_id: "p1"
       system_id: "sys-1"
