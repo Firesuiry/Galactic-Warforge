@@ -322,3 +322,94 @@ func sealFloodReachedForTest(ws *model.WorldState, home model.Position, owner st
 	reached, _ := sealFloodReaches(ws, home, goal, nil, budget)
 	return reached
 }
+
+// reserveForTest 往施工队列塞一个 1×1 传送带任务，占住一格（模拟"在队施工"）。
+func reserveForTest(t *testing.T, ws *model.WorldState, id string, pos model.Position) {
+	t.Helper()
+	if ws.Construction == nil {
+		ws.Construction = model.NewConstructionQueue()
+	}
+	task := &model.ConstructionTask{
+		ID:           id,
+		PlayerID:     "p1",
+		BuildingType: model.BuildingTypeConveyorBeltMk1,
+		Position:     pos,
+		State:        model.ConstructionPending,
+	}
+	if err := ws.Construction.Enqueue(ws, task); err != nil {
+		t.Fatalf("reserve %+v: %v", pos, err)
+	}
+}
+
+// 试玩报告 pt1010-85s8io 的确定性复现：施工队列一格一格收紧基地出口，
+// 最后一块落点盖住基地唯一的可通行邻格时，必须被围死判定拒掉。
+//
+// 真 bug 出在预筛（buildMayCutRegion）：它只比较"占地自己的可通行邻格"是否
+// 互通，看不见基地格这个端点（基地格被自家建筑占着、是洪泛的起点/目标），
+// 于是当占地正好盖住基地最后一条对外通路时会误判"安全"，直接放行，
+// 三层完整判定（基地封死/单位口袋）全被跳过——自己的执行体就这样被自家建筑困死。
+func TestBuildRejectsSealingOwnBaseViaConstructionQueue(t *testing.T) {
+	core := newEnclosureTestCore(t)
+	ws := core.World()
+	mecha := findExecutorUnit(t, ws)
+	home, ok := botHomePosition(ws, "p1")
+	if !ok {
+		t.Fatal("expected p1 home base")
+	}
+	teleportUnitForTest(ws, mecha, ws.SurfaceOffset(home, 20, 0))
+
+	// 基地锚点格的可通行邻格 = 基地对外仅有的出口（其余邻格被 5×5 占地自己占着）。
+	exits := make([]model.Position, 0, 4)
+	for _, n := range ws.SurfaceNeighbors(home) {
+		if unitTileBlockedBeforeBuild(ws, n) {
+			continue
+		}
+		exits = append(exits, n)
+	}
+	if len(exits) < 2 {
+		t.Fatalf("expected at least two base exits, got %v", exits)
+	}
+
+	// 用施工队列把其余出口一格格预留（每一步基地都还必须连着外界）。
+	gap := exits[len(exits)-1]
+	for i, tile := range exits[:len(exits)-1] {
+		reserveForTest(t, ws, fmt.Sprintf("seal-%d", i), tile)
+		if !sealFloodReachedForTest(ws, home, "p1") {
+			t.Fatalf("base must stay connected after reserving %+v", tile)
+		}
+	}
+
+	// 最后一格：本次建造会把基地与外界的通路封死，必须被拒。
+	res := buildAt(t, core, ws, gap, model.BuildingTypeConveyorBeltMk1)
+	if res.Code != model.CodeInvalidTarget {
+		t.Fatalf("sealing the base's last exit %+v must be rejected, got %s (%s)", gap, res.Code, res.Message)
+	}
+	if !strings.Contains(res.Message, "会把基地与外界的通路封死") {
+		t.Fatalf("rejection must be the base-seal verdict, got %q", res.Message)
+	}
+	// 拒绝之后基地仍连着外界。
+	if !sealFloodReachedForTest(ws, home, "p1") {
+		t.Fatal("p1 base must stay connected to the outside after the rejected build")
+	}
+}
+
+// 施工队列逐步围堵执行体：一圈建筑排队围上来，最后一块把机甲四邻堵死时被拒。
+func TestBuildRejectsEnclosingUnitViaConstructionQueue(t *testing.T) {
+	core := newEnclosureTestCore(t)
+	ws := core.World()
+	mecha := findExecutorUnit(t, ws)
+	target := model.Position{X: 40, Y: 40}
+	teleportUnitForTest(ws, mecha, target)
+
+	neighbors := ws.SurfaceNeighbors(target)
+	if len(neighbors) != 4 {
+		t.Fatalf("expected 4 neighbors, got %d", len(neighbors))
+	}
+	// 先排队围住三面，机甲还剩一个出口。
+	for i := 0; i < 3; i++ {
+		reserveForTest(t, ws, fmt.Sprintf("ring-%d", i), neighbors[i])
+	}
+	if res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeConveyorBeltMk1); res.Code != model.CodeInvalidTarget {
+		t.Fatalf("closing the unit's last exit must be rejected, got %s (%s)", res.Code, res.Message)
+	}
+}
