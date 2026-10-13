@@ -8,7 +8,7 @@ export interface Position {
 }
 
 export type BuildingType = string;
-export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor' | 'scout' | 'artillery' | 'missile_vehicle' | 'repair_vehicle' | 'supply_truck' | 'attack_drone' | 'dark_fog';
+export type UnitType = 'worker' | 'soldier' | 'mecha' | 'executor' | 'scout' | 'artillery' | 'missile_vehicle' | 'repair_vehicle' | 'supply_truck' | 'attack_drone' | 'transport_robot' | 'dark_fog';
 
 export type BuildingWorkState = 'idle' | 'running' | 'paused' | 'no_power' | 'error';
 export type ConnectionKind = 'power' | 'transport' | 'logistics';
@@ -339,9 +339,28 @@ export type UnitStance =
   | 'follow'
   | 'retreat';
 
+/**
+ * 运输机器人往返路线（服务端 unit_order order=haul 的运行时状态）。
+ * 无路线时不带 haul 字段。
+ */
+export type TransportHaulPhase =
+  | 'to_source' | 'loading' | 'to_target' | 'unloading' | 'waiting_source' | 'waiting_target';
+
+export interface TransportHaul {
+  from_building_id: string;
+  to_building_id: string;
+  /** 玩家指定的物品；未指定时服务端取终点当前能接收的第一种。 */
+  item_id?: string;
+  phase: TransportHaulPhase;
+  cargo?: ItemAmount;
+  delivered_total: number;
+}
+
 export interface Unit {
  squad_id?: string; ammo_class?: string; ammo?: number; ammo_capacity?: number; ammo_item?: string; combat_state?: string; domain?: string; min_attack_range?: number; cargo?: ItemInventory;
   mecha?: MechaState;
+  /** 运输机器人往返路线（仅 type=transport_robot 且已设路线时出现）。 */
+  haul?: TransportHaul;
   id: string;
   type: UnitType;
   owner_id: string;

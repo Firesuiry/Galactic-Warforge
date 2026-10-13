@@ -89,7 +89,7 @@ func runSkirmishDefenseProbe(t *testing.T, seed, stance string) {
 		countArmy(ws, "p1"), player.Stats.CombatStats.UnitsLost, player.Stats.CombatStats.BuildingsLost, player.Stats.CombatStats.UnitsKilled)
 	t.Logf("seed=%s stance=%s bot 首攻 tick=%d（首波 20 格内峰值=%d）p2 部队=%d p2 建筑=%s 逼近(20/40/80 格内)=%d/%d/%d 最近距离=%d",
 		seed, stance, op.firstAttackTick, op.firstWavePeak, countArmy(ws, "p2"), fmtCounts(skirmishBuildingCounts(ws, "p2")),
-		countP2ArmyNear(ws, p1Home, 20), countP2ArmyNear(ws, p1Home, 40), countP2ArmyNear(ws, p1Home, 80),
+		countP2ArmyNear(ws, p1Home, 60), countP2ArmyNear(ws, p1Home, 120), countP2ArmyNear(ws, p1Home, 240),
 		nearestP2GroundDistance(ws, p1Home))
 	t.Logf("seed=%s stance=%s p1 库存弹药=%d HQ=%v", seed, stance, countItemInBuildings(ws, "p1", model.ItemAmmoBullet), botPlayerHQQuiet(ws, "p1") != nil)
 	if v := core.Victory(); v.Declared() {

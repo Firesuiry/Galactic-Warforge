@@ -237,6 +237,26 @@ export async function cmdOrder(args: string[], { api }: CommandContext): Promise
   }
 }
 
+export async function cmdHaul(args: string[], { api }: CommandContext): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 1) {
+    return fmtError('Usage: haul <unit_id[,unit_id...]> --from <building_id> --to <building_id> [--item <item_id>] [--planet <planet_id>]');
+  }
+  const from = getStringOption(parsed, 'from');
+  const to = getStringOption(parsed, 'to');
+  if (!from || !to) {
+    return fmtError('Usage: haul <unit_id[,unit_id...]> --from <building_id> --to <building_id> [--item <item_id>] [--planet <planet_id>]');
+  }
+  const selector = parsed.positionals[0].includes(',')
+    ? parsed.positionals[0].split(',').map((v) => v.trim()).filter(Boolean)
+    : parsed.positionals[0];
+  try {
+    return fmtCommandResponse(await api.cmdHaul(selector, from, to, getStringOption(parsed, 'item'), getStringOption(parsed, 'planet')));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
 export async function cmdAttack(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {

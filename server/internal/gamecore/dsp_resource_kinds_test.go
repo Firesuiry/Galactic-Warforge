@@ -75,18 +75,22 @@ func TestManualMineItemAllowsVegetationRenewables(t *testing.T) {
 // 每种资源节点 kind 都在物品目录里登记同名物品，采集产物即该物品。
 func TestCollectorOutputItemIDCoversAllResourceKinds(t *testing.T) {
 	kinds := mapmodel.AllResourceKinds()
+	// 细分网格：采集覆盖 = 占地 + 1 圈，行主序取第一个覆盖到的资源格——相邻的
+	// 资源格会互相"串味"。这里每个 kind 之间隔开足够远（每 8 格一个），
+	// 用 1×1 的建筑让覆盖范围内只有它自己的资源格。
 	ws := &model.WorldState{
 		Resources: map[string]*model.ResourceNodeState{},
-		MapWidth:  len(kinds),
+		MapWidth:  8 * len(kinds),
 		MapHeight: 1,
 	}
 	ws.Grid = make([][]model.MapTile, 1)
-	ws.Grid[0] = make([]model.MapTile, len(kinds))
+	ws.Grid[0] = make([]model.MapTile, 8*len(kinds))
 	for i, kind := range kinds {
+		x := i * 8
 		nodeID := "node-" + string(kind)
 		ws.Resources[nodeID] = &model.ResourceNodeState{ID: nodeID, Kind: string(kind)}
-		ws.Grid[0][i].ResourceNodeID = nodeID
-		b := &model.Building{Position: model.Position{X: i, Y: 0}}
+		ws.Grid[0][x].ResourceNodeID = nodeID
+		b := &model.Building{Type: model.BuildingTypeConveyorBeltMk1, Position: model.Position{X: x, Y: 0}}
 		if got := collectorOutputItemID(ws, b); got != string(kind) {
 			t.Fatalf("kind %s: want same-named catalog item, got %q", kind, got)
 		}

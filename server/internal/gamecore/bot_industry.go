@@ -574,6 +574,12 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 }
 
 func (gc *GameCore) botEnsureBuilding(ws *model.WorldState, owner string, ctx *botSurvey, typ model.BuildingType, recipe string, visiting map[string]bool) (model.Command, bool) {
+	return gc.botEnsureBuildingAt(ws, owner, ctx, typ, recipe, visiting, nil)
+}
+
+// botEnsureBuildingAt 与 botEnsureBuilding 相同，但允许调用方指定落点（nil 时
+// 用 botBuildSpotNear 选点）。用于"必须落在己方电网覆盖内"这类选址约束。
+func (gc *GameCore) botEnsureBuildingAt(ws *model.WorldState, owner string, ctx *botSurvey, typ model.BuildingType, recipe string, visiting map[string]bool, fixed *model.Position) (model.Command, bool) {
 	player := ws.Players[owner]
 	if !CanBuildTech(player, model.TechUnlockBuilding, string(typ)) || botPendingBuilds(ws, owner, typ) > 0 {
 		return model.Command{}, false
@@ -590,7 +596,10 @@ func (gc *GameCore) botEnsureBuilding(ws *model.WorldState, owner string, ctx *b
 	if !botCanAffordBuild(player, def) {
 		return model.Command{}, false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), typ)
+	pos := fixed
+	if pos == nil {
+		pos = botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), typ)
+	}
 	if pos == nil {
 		return model.Command{}, false
 	}

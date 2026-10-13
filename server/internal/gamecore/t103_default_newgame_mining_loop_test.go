@@ -55,7 +55,12 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 	}
 	t103BuildAndSettle(t, core, ws, "p1", *windPos, model.BuildingTypeWindTurbine)
 
-	labPos, err := findAdjacentOpenTile(ws, base.Position)
+	// 细分网格：电网连线距离只有 3 格，实验室必须贴着风机建（贴 HQ 会 out_of_range）。
+	firstWind := findOwnedBuildingByType(ws, "p1", model.BuildingTypeWindTurbine)
+	if firstWind == nil {
+		t.Fatal("expected first wind_turbine")
+	}
+	labPos, err := findAdjacentOpenTile(ws, firstWind.Position)
 	if err != nil {
 		t.Fatalf("find lab tile: %v", err)
 	}

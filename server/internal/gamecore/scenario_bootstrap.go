@@ -70,11 +70,17 @@ func applyScenarioBuildingBootstrap(
 	}
 
 	buildingType := model.BuildingType(buildingCfg.BuildingType)
-	if _, ok := model.BuildingDefinitionByID(buildingType); !ok {
+	def, ok := model.BuildingDefinitionByID(buildingType)
+	if !ok {
 		return fmt.Errorf("unknown scenario building type %s", buildingCfg.BuildingType)
 	}
 
-	position := resolveScenarioBuildPosition(ws, model.Position{X: buildingCfg.X, Y: buildingCfg.Y})
+	position := model.Position{X: buildingCfg.X, Y: buildingCfg.Y}
+	// 细分网格：占地 2×2~5×5，场景预设的锚点坐标是旧网格语义，必须整块落位
+	// （"锚点格空着"不够——会与相邻预设建筑的占地重叠）。
+	if fixed, ok := ws.FindFootprintOrigin(position, def.Footprint, buildingType, ""); ok {
+		position = fixed
+	}
 	task := &model.ConstructionTask{
 		PlayerID:     buildingCfg.OwnerID,
 		BuildingType: buildingType,
@@ -161,21 +167,6 @@ func isScenarioBuildingState(value string) bool {
 	default:
 		return false
 	}
-}
-
-func resolveScenarioBuildPosition(ws *model.WorldState, desired model.Position) model.Position {
-	if ws == nil {
-		return desired
-	}
-	if ws.InBounds(desired.X, desired.Y) {
-		tileKey := model.TileKey(desired.X, desired.Y)
-		if ws.Grid[desired.Y][desired.X].Terrain.Buildable() {
-			if _, occupied := ws.TileBuilding[tileKey]; !occupied {
-				return desired
-			}
-		}
-	}
-	return findNearestOpenTile(ws, desired)
 }
 
 func applyScenarioSystemBootstrap(

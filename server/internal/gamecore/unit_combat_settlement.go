@@ -15,10 +15,10 @@ import (
 const (
 	// chaseRepathTicks 追击重寻路间隔。
 	chaseRepathTicks = 8
-	// leashSlack 脱战距离 = AggroRange + leashSlack（以接战锚点为基准）。
-	leashSlack = 6
-	// enemyForceStrikeRange 静态黑雾反击范围（格）。
-	enemyForceStrikeRange = 6
+	// leashSlack 脱战距离 = AggroRange + leashSlack（以接战锚点为基准），细分网格下 ×3。
+	leashSlack = 18
+	// enemyForceStrikeRange 静态黑雾反击范围（格），细分网格下 ×3。
+	enemyForceStrikeRange = 18
 	// enemyForceStrikeCooldown 静态黑雾反击冷却（tick）。
 	enemyForceStrikeCooldown = 10
 )

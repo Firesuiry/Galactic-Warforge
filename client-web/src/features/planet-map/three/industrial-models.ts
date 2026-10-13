@@ -511,6 +511,18 @@ export class IndustrialModels {
         this.box(group, light, [0.045, 0.025, 0.045], [x, 0.19, z]);
       }
       for (const x of [-0.16, 0.16]) this.box(group, 'graphite', [0.025, 0.13, 0.19], [x, 0.055, 0]);
+    } else if (type === 'transport_robot') {
+      // 运输机器人（§4）：小型轮式底盘 + 青色灯带，车顶货箱有货才显示
+      // （planet-three-scene 按 haul.cargo 上色/显隐，节点名 transport-robot-cargo）。
+      for (const side of [-1, 1]) {
+        this.box(group, 'graphite', [0.055, 0.12, 0.36], [side * 0.17, 0.1, 0]);
+        for (const z of [-0.12, 0.12]) this.part(group, 'cylinder', 'rubber', [0.13, 0.06, 0.13], [side * 0.18, 0.065, z], [0, 0, Math.PI / 2]);
+      }
+      this.box(group, armor, [0.4, 0.1, 0.44], [0, 0.18, 0]);
+      this.box(group, 'glass', [0.18, 0.05, 0.02], [0, 0.21, 0.225], [-0.16, 0, 0]);
+      for (const x of [-0.15, 0.15]) this.box(group, light, [0.05, 0.03, 0.02], [x, 0.155, 0.225]);
+      this.box(group, light, [0.34, 0.016, 0.02], [0, 0.24, -0.22]);
+      this.pipe(group, 'alloy', [0.1, 0.24, -0.1], [0.1, 0.38, -0.1], 0.005);
     } else if (type === 'executor' || /mech|mecha/.test(type)) {
       // 重型机甲：双腿、装甲躯干、驾驶舱与肩部武器，和普通工人/士兵模型明确区分。
       for (const side of [-1, 1]) {
@@ -555,6 +567,13 @@ export class IndustrialModels {
     if (type === 'logistics_bot') {
       const cargo = this.box(group, 'copper', [0.22, 0.15, 0.19], [0, 0.035, 0]);
       cargo.name = 'logistics-bot-cargo';
+      cargo.visible = false;
+    }
+    if (type === 'transport_robot') {
+      // 车顶货箱：有货才显示，颜色由场景按 haul.cargo.item_id 写入物品配色。
+      // batchStatic 之后单独加（合并静态网格会吞掉需要独立改色/显隐的节点）。
+      const cargo = this.box(group, 'copper', [0.3, 0.14, 0.3], [0, 0.33, 0]);
+      cargo.name = 'transport-robot-cargo';
       cargo.visible = false;
     }
     return this.remember(key, group);

@@ -20,7 +20,7 @@ type DistributorState struct {
 }
 
 func NewDistributorState(hostID string) *DistributorState {
-	return &DistributorState{HostBuildingID: hostID, Mode: LogisticsStationModeNone, EnergyCapacity: 1000, ChargePerTick: 10, LastChargeTick: -1, Range: 12, BotCapacity: 10}
+	return &DistributorState{HostBuildingID: hostID, Mode: LogisticsStationModeNone, EnergyCapacity: 1000, ChargePerTick: 10, LastChargeTick: -1, Range: 36, BotCapacity: 10}
 }
 func (s *DistributorState) Clone() *DistributorState {
 	if s == nil {
@@ -56,7 +56,7 @@ func (s *DistributorState) Validate() error {
 	} else if item, ok := Item(s.ItemID); !ok || item.Form != ResourceSolid {
 		return fmt.Errorf("配送器物品必须是已知固体物品")
 	}
-	if s.EnergyCapacity != 1000 || s.ChargePerTick != 10 || s.Range != 12 || s.BotCapacity != 10 || s.Energy < 0 || s.Energy > s.EnergyCapacity || s.LastChargeTick < -1 || s.LastChargeAmount < 0 || s.LastChargeAmount > s.ChargePerTick {
+	if s.EnergyCapacity != 1000 || s.ChargePerTick != 10 || s.Range != 36 || s.BotCapacity != 10 || s.Energy < 0 || s.Energy > s.EnergyCapacity || s.LastChargeTick < -1 || s.LastChargeAmount < 0 || s.LastChargeAmount > s.ChargePerTick {
 		return fmt.Errorf("配送器容量或能量无效")
 	}
 	return nil

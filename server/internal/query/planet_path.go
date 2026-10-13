@@ -32,8 +32,8 @@ func (ql *Layer) PlanetPath(ws *model.WorldState, playerID, unitID string, targe
 	if unit == nil || unit.OwnerID != playerID {
 		return nil, fmt.Errorf("own unit required")
 	}
-	if !ws.InBounds(target.X, target.Y) || stopRange < 0 || stopRange > 128 {
-		return nil, fmt.Errorf("invalid target or stop_range (0..128)")
+	if !ws.InBounds(target.X, target.Y) || stopRange < 0 || stopRange > 384 {
+		return nil, fmt.Errorf("invalid target or stop_range (0..384)")
 	}
 	view := &PlanetPathView{PlanetID: ws.PlanetID, Surface: ws.Surface().Metadata(), Distance: -1, Path: []model.Position{}, Waypoints: []model.Position{}}
 	explored := ql.vis.ExploredMask(ws, playerID)
@@ -84,7 +84,7 @@ func (ql *Layer) PlanetPath(ws *model.WorldState, playerID, unitID string, targe
 			}
 			return view, nil
 		}
-		if depth[p] >= 512 {
+		if depth[p] >= 1536 {
 			continue
 		}
 		for _, n := range ws.SurfaceNeighbors(p) {

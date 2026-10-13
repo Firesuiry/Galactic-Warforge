@@ -1,5 +1,10 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
+import { footprintFits, occupiedCells } from './support/footprint';
+
+/** 兵营的占地（server/data/buildings.yaml：barracks footprint 3×3）。 */
+const BARRACKS_FOOTPRINT = { width: 3, height: 3 };
+
 /**
  * 试玩 1014 层 16 问题 1 / 层 15 问题 2 / 层 13 问题 3：任何 HUD 浮层都不得覆盖
  * 小地图的可交互区域，否则「选中单位 → 用缩略图下令」的必经时刻右键会被静默吞掉。
@@ -168,13 +173,6 @@ async function ensureTwoOwnUnits(request: APIRequestContext): Promise<boolean> {
     );
     expect(executor, '战争服应预置 p1 执行体').toBeTruthy();
     const origin = executor!.position;
-    const occupied = new Set<string>();
-    for (const building of Object.values(scene.buildings ?? {})) {
-      occupied.add(`${building.position.x}:${building.position.y}`);
-    }
-    for (const unit of Object.values(scene.units ?? {})) {
-      occupied.add(`${unit.position.x}:${unit.position.y}`);
-    }
 
     // 并行跑这个用例的多个副本时会共用同一个战争服：别的副本可能先抢走这个格子
     // （「该格已有你的建筑」/「该格已有你的施工任务」）。命令是同步受理、tick 结算的，
@@ -188,13 +186,9 @@ async function ensureTwoOwnUnits(request: APIRequestContext): Promise<boolean> {
     let site: { x: number; y: number } | undefined;
     for (let attempt = 0; attempt < 5 && !barracks; attempt += 1) {
       scene = await fetchScene(request);
-      const liveOccupied = new Set<string>(occupied);
-      for (const building of Object.values(scene.buildings ?? {})) {
-        liveOccupied.add(`${building.position.x}:${building.position.y}`);
-      }
-      for (const unit of Object.values(scene.units ?? {})) {
-        liveOccupied.add(`${unit.position.x}:${unit.position.y}`);
-      }
+      // 细分网格后建筑按整块 footprint 占地（兵营 3×3）：只标原点会让落点与旁边的
+      // 5×5 基地/3×3 制造台重叠，服务端下一 tick 静默拒收，表现为「受理了但没落地」。
+      const liveOccupied = occupiedCells(scene);
       site = undefined;
       for (let distance = 1; distance <= 6 && !site; distance += 1) {
         for (let dx = -distance; dx <= distance && !site; dx += 1) {
@@ -204,7 +198,7 @@ async function ensureTwoOwnUnits(request: APIRequestContext): Promise<boolean> {
             const y = origin.y + stepY;
             if (x < 0 || y < 0 || x >= scene.map_width || y >= scene.map_height) continue;
             if (scene.terrain?.[y]?.[x] !== 'buildable') continue;
-            if (liveOccupied.has(`${x}:${y}`)) continue;
+            if (!footprintFits(scene, { x, y }, BARRACKS_FOOTPRINT)) continue;
             // 不能落在任何单位（含己方机甲）的正邻格：长跑后基地附近已被别的用例塞满建筑，
             // 再堵住机甲最后一个出口会被服务端以「会把单位围死」拒收——而 build 是**受理即 202、
             // 下一 tick 才校验**的，拒收只体现在「任务从未出现」上，回执里看不出来。
@@ -543,8 +537,9 @@ test('行星页宽屏：四种 HUD 状态下小地图中心与四角都命中 ca
     Math.abs(pair!.a.position.x - pair!.b.position.x),
     Math.abs(pair!.a.position.y - pair!.b.position.y),
   ) + 6;
-  // 缩放档取「两个单位只占视口一小块」：48px/tile 下跨度 6 格就是 288px，再远就出画。
-  const focusZoom = Math.max(1, Math.min(48, Math.floor(360 / span)));
+  // 缩放档取「两个单位只占视口一小块」：细分网格后是 px/**cell**（1 tile = 3 cell），
+  // 16px/cell 下跨度 6 cell 就是 96px；这里按 cell 跨度算档位（服务端单位坐标已是 cell）。
+  const focusZoom = Math.max(1, Math.min(32, Math.floor(360 / span)));
   await page.goto(`/planet/${PLANET_ID}?view=2d&x=${focusX}&y=${focusY}&zoom=${focusZoom}`);
   await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.planet-minimap__canvas')).toBeVisible({ timeout: 20_000 });
@@ -579,7 +574,7 @@ test('行星页宽屏：四种 HUD 状态下小地图中心与四角都命中 ca
         Math.abs(live.a.position.y - live.b.position.y),
       ) + 6;
       await page.goto(
-        `/planet/${PLANET_ID}?view=2d&x=${liveX}&y=${liveY}&zoom=${Math.max(1, Math.min(48, Math.floor(360 / liveSpan)))}`,
+        `/planet/${PLANET_ID}?view=2d&x=${liveX}&y=${liveY}&zoom=${Math.max(1, Math.min(32, Math.floor(360 / liveSpan)))}`,
       );
       await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 20_000 });
       await page.waitForTimeout(1500);

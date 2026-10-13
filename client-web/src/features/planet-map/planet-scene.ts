@@ -54,17 +54,22 @@ import { getDiscTexture, getGlowTexture, getIconTexture, getPowerAlertTexture, g
 import { createTween, easeOutCubic, lerp, type Tween } from '@/engine/tween';
 import type { BuildTileAssessment } from '@/features/planet-map/build-workflow';
 import { isConveyorBeltBuilding } from '@/features/planet-map/build-workflow';
+import { GRID_MAJOR_CELL } from '@/features/planet-map/fine-grid';
 import {
   BELT_FLOW_MIN_TILE_SIZE,
+  BELT_ITEM_DOT_FRACTION,
+  BELT_ITEM_DOT_MIN_PX,
   BELT_ITEM_MAX_DOTS,
   beltDotInitialProgress,
   beltDotPosition,
   beltFlowVector,
+  beltItemColor,
   beltItemDotColors,
   beltItemSpeedTilesPerSec,
   harvestPulseEnvelope,
   resolveHarvestPulse,
 } from '@/features/planet-map/planet-logistics-flow';
+import { transportCargo, transportHaulRoute, haulPhaseLabel } from '@/features/planet-map/transport-haul';
 import { buildGhostDirection, directionVector, isSorterBuilding } from '@/features/planet-map/logistics-direction';
 import { advanceLogisticsFlow, createLogisticsFlowSprite, logisticsFlowSpriteKey } from '@/features/planet-map/logistics-flow-marks';
 import { logisticsArrows, resolveLogisticsDirection } from '@/features/planet-map/logistics-direction';
@@ -559,6 +564,10 @@ interface UnitNode extends SceneNode {
   dot: Graphics;
   /** HP 弧（不随朝向旋转，恒在屏幕上方）。 */
   hp: Graphics;
+  /** 运输机器人车顶货物点（有货才显示，颜色 = 物品配色）；其他单位恒隐藏。 */
+  cargo: Graphics;
+  /** 上次绘制的货物签名（item:quantity）：同对象原地更新时也能触发重画。 */
+  cargoKey: string;
   data: Unit;
   targetX: number;
   targetY: number;
@@ -609,8 +618,11 @@ const COLOR_GHOST_OK = 0x6ee7b7;
 const COLOR_GHOST_BLOCKED = 0xff5757;
 const COLOR_RANGE_COMBAT = 0xff922b;
 
-/** 建筑 emoji 角标显示门槛（tileSize 低于该值时类型靠剪影+配色辨认）。 */
-export const BUILDING_BADGE_MIN_TILE_SIZE = 16;
+/**
+ * 建筑 emoji 角标显示门槛（px/cell，细分网格后按 cell 记）：
+ * 默认档 16px/cell 下 3×3 建筑 48px，角标清楚；更低档只靠剪影+配色辨认。
+ */
+export const BUILDING_BADGE_MIN_TILE_SIZE = 12;
 /** 单位楔形填充暗底色（队色描边）。 */
 const COLOR_UNIT_WEDGE_FILL = 0x1c2430;
 /** 风机叶片转速（rad/s，ticker 驱动，frozen 停 0 相位）。 */
@@ -622,9 +634,6 @@ const WARNING_BADGE_ALPHA_SWING = 0.25;
 const FURNACE_GLOW_BASE_ALPHA = 0.55;
 const FURNACE_GLOW_ALPHA_SWING = 0.3;
 
-/** 传送带货物圆点直径（占 tileSize 比例，带下限保证低缩放档可辨）。 */
-const BELT_ITEM_DOT_FRACTION = 0.24;
-const BELT_ITEM_DOT_MIN_PX = 2.5;
 /** 采集矿粒直径（占 tileSize 比例）与上抛行程（占 tileSize 比例）。 */
 const HARVEST_DOT_FRACTION = 0.3;
 const HARVEST_RISE_TILES = 0.62;
@@ -693,6 +702,8 @@ export class PlanetScene {
   private readonly logisticsGraphics: Graphics;
   private readonly threatGraphics: Graphics;
   private readonly selectionGraphics: Graphics;
+  /** 运输机器人路线阶段标签（Text，随 redrawInteraction 重建）。 */
+  private readonly haulLabelLayer: Container;
   private readonly effectsLayer: Container;
 
   private terrainTexture: Texture | null = null;
@@ -807,6 +818,7 @@ export class PlanetScene {
     this.logisticsGraphics = new Graphics();
     this.threatGraphics = new Graphics();
     this.selectionGraphics = new Graphics();
+    this.haulLabelLayer = new Container();
     this.effectsLayer = new Container();
     this.commandMarkerGraphics = new Graphics();
 
@@ -836,6 +848,7 @@ export class PlanetScene {
     this.world.addChild(this.logisticsGraphics);
     this.world.addChild(this.threatGraphics);
     this.world.addChild(this.selectionGraphics);
+    this.world.addChild(this.haulLabelLayer);
     this.world.addChild(this.commandMarkerGraphics);
     this.world.addChild(this.effectsLayer);
     this.app.stage.addChild(this.vignetteSprite);
@@ -1731,18 +1744,34 @@ export class PlanetScene {
       return;
     }
     // 只画可见范围的网格线（unwrapped 坐标，环绕轴上自然跨过接缝）：
-    // 网格周期 = 1 tile，任意副本里的线位置一致，无需感知地图边界。
+    // 网格周期 = 1 cell（细分网格后最小件就是 1 cell），任意副本里的线位置一致，无需感知地图边界。
+    // §4：近景（cellSize ≥ 8px）额外每 3 cell 画一条更亮的线，保留「旧 1 格」的尺度感。
     const minTX = Math.floor(-this.offsetX / this.tileSize);
     const maxTX = Math.ceil((this.app.screen.width - this.offsetX) / this.tileSize);
     const minTY = Math.floor(-this.offsetY / this.tileSize);
     const maxTY = Math.ceil((this.app.screen.height - this.offsetY) / this.tileSize);
+    const majorEvery = this.tileSize >= 8 ? GRID_MAJOR_CELL : 0;
+    const isMajor = (index: number) => majorEvery > 0 && ((index % majorEvery) + majorEvery) % majorEvery === 0;
     for (let x = minTX; x <= maxTX; x += 1) {
+      if (isMajor(x)) continue;
       g.moveTo(x * this.tileSize, minTY * this.tileSize).lineTo(x * this.tileSize, maxTY * this.tileSize);
     }
     for (let y = minTY; y <= maxTY; y += 1) {
+      if (isMajor(y)) continue;
       g.moveTo(minTX * this.tileSize, y * this.tileSize).lineTo(maxTX * this.tileSize, y * this.tileSize);
     }
-    g.stroke({ width: 1, color: COLOR_GRID, alpha: 0.08 });
+    g.stroke({ width: 1, color: COLOR_GRID, alpha: 0.06 });
+    if (majorEvery > 0) {
+      const firstMajorX = Math.ceil(minTX / majorEvery) * majorEvery;
+      const firstMajorY = Math.ceil(minTY / majorEvery) * majorEvery;
+      for (let x = firstMajorX; x <= maxTX; x += majorEvery) {
+        g.moveTo(x * this.tileSize, minTY * this.tileSize).lineTo(x * this.tileSize, maxTY * this.tileSize);
+      }
+      for (let y = firstMajorY; y <= maxTY; y += majorEvery) {
+        g.moveTo(minTX * this.tileSize, y * this.tileSize).lineTo(maxTX * this.tileSize, y * this.tileSize);
+      }
+      g.stroke({ width: 1, color: COLOR_GRID, alpha: 0.16 });
+    }
   }
 
   // ---------- 图层可见性 ----------
@@ -1898,7 +1927,7 @@ export class PlanetScene {
     node.container.position.set(this.pxTileX(point.x), this.pxTileY(point.y));
     node.container.zIndex = buildingSortKey(this.canonTileY(point.y), height);
 
-    // 低缩放档（tileSize < 6）保持简化色块，不做结构精灵。
+    // 低缩放档（tileSize < 4，细分网格后按 cell 记）保持简化色块，不做结构精灵。
     if (simplify) {
       node.sprite.visible = false;
       node.badge.visible = false;
@@ -2237,8 +2266,12 @@ export class PlanetScene {
           node.container.position.set(node.posX, node.posY);
           node.container.zIndex = unitSortKey(node.posY, this.tileSize);
         }
-        if (node.data !== unit || factionChanged) {
+        // 车顶货物/路线可能在同一单位对象上原地更新（结构化共享），单独比对后再重画。
+        const cargo = transportCargo(unit);
+        const cargoKey = cargo ? `${cargo.item_id}:${cargo.quantity}` : '';
+        if (node.data !== unit || factionChanged || node.cargoKey !== cargoKey) {
           node.data = unit;
+          node.cargoKey = cargoKey;
           this.drawUnitDot(node, playerId, simplify);
         }
       },
@@ -2262,13 +2295,17 @@ export class PlanetScene {
     const container = new Container();
     const dot = new Graphics();
     const hp = new Graphics();
+    const cargo = new Graphics();
     container.addChild(dot);
     container.addChild(hp);
+    container.addChild(cargo);
     const point = toTilePoint(unit.position);
     const node: UnitNode = {
       container,
       dot,
       hp,
+      cargo,
+      cargoKey: '',
       data: unit,
       targetX: this.pxCenterX(point.x),
       targetY: this.pxCenterY(point.y),
@@ -2292,6 +2329,7 @@ export class PlanetScene {
     const color = faction === 'own' ? COLOR_UNIT_OWN : FACTION_COLOR[faction];
     const dot = node.dot.clear();
     const hpGraphics = node.hp.clear();
+    this.drawUnitCargo(node, simplify);
     if (simplify) {
       const size = Math.max(3, this.tileSize * 0.32);
       dot.rect(-size / 2, -size / 2, size, size).fill(color);
@@ -2301,7 +2339,8 @@ export class PlanetScene {
     const direction = resolveUnitDirection(node.data, { x: node.dirX, y: node.dirY }, this.resolveEntityTilePoint);
     node.dirX = direction.x;
     node.dirY = direction.y;
-    const radius = Math.max(3.5, this.tileSize * 0.3);
+    // 细分网格：单位占 1 cell，楔形取 cell 的 0.34（士兵站在小格里，不再占一大格）。
+    const radius = Math.max(2, this.tileSize * 0.34);
     dot.poly(unitWedgePoints(radius), true)
       .fill({ color: COLOR_UNIT_WEDGE_FILL, alpha: 0.92 })
       .stroke({ width: 1.6, color });
@@ -2324,6 +2363,24 @@ export class PlanetScene {
       hpGraphics.circle(radius * 0.95, radius * 0.95, Math.max(1.4, radius * 0.22))
         .fill({ color: COLOR_FOG_NEUTRAL_MARK, alpha: 0.9 });
     }
+  }
+
+  /**
+   * 运输机器人车顶货物点（§4）：有货才显示，颜色取物品配色表（与服务端目录同源兜底）。
+   * 其他单位（无 haul 或无货）恒隐藏——不让「空手机器人」看起来像带着东西。
+   */
+  private drawUnitCargo(node: UnitNode, simplify: boolean) {
+    const cargo = node.cargo.clear();
+    const haulCargo = transportCargo(node.data);
+    if (!haulCargo) {
+      node.cargo.visible = false;
+      return;
+    }
+    const size = Math.max(simplify ? 2.5 : 3.5, this.tileSize * 0.26);
+    cargo.rect(-size / 2, -size / 2, size, size)
+      .fill({ color: beltItemColor(haulCargo.item_id), alpha: 0.96 })
+      .stroke({ width: 1, color: 0x10151d, alpha: 0.8 });
+    node.cargo.visible = true;
   }
 
   private syncResources(resources: PlanetResource[]) {
@@ -2594,6 +2651,8 @@ export class PlanetScene {
   private redrawInteraction() {
     this.updateHoverHighlight();
     const g = this.selectionGraphics.clear();
+    // 运输路线阶段标签每帧重建（选中态低频变化，Text 数量 ≤ 路线数）。
+    for (const child of [...this.haulLabelLayer.children]) child.destroy();
     const input = this.interactionInput;
     if (!input) {
       return;
@@ -2718,6 +2777,46 @@ export class PlanetScene {
         .stroke({ width: 2, color: COLOR_SELECTED });
     }
 
+    // 运输机器人路线（§4）：选中（单选或多选）的机器人带 haul 路线时，画起点→终点虚线 +
+    // 两端建筑占地框，终点附近标阶段中文（与选中条/详情面板同一文案）。
+    if (input.selectionVisible && this.baseInput) {
+      const selectedIds = new Set<string>(input.selectedUnits ?? []);
+      if (selected?.kind === 'unit') selectedIds.add(selected.id);
+      const planet = this.baseInput.planet;
+      const drawn = new Set<string>();
+      for (const unitId of selectedIds) {
+        const unit = planet.units?.[unitId];
+        const haul = transportHaulRoute(unit);
+        if (!haul || !unit) continue;
+        const key = `${haul.from_building_id}->${haul.to_building_id}`;
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        const from = planet.buildings?.[haul.from_building_id];
+        const to = planet.buildings?.[haul.to_building_id];
+        if (!from || !to) continue;
+        const a = toTilePoint(from.position);
+        const b = toTilePoint(to.position);
+        const ax = this.pxTileX(a.x) + (ts / 2), ay = this.pxTileY(a.y) + (ts / 2);
+        const bx = this.pxTileX(b.x) + (ts / 2), by = this.pxTileY(b.y) + (ts / 2);
+        for (const [sx, sy, ex, ey] of buildDashSegments(ax, ay, bx, by, [ts * 0.42, ts * 0.3])) {
+          g.moveTo(sx, sy).lineTo(ex, ey);
+        }
+        g.stroke({ width: 2.5, color: COLOR_UNIT_OWN, alpha: 0.9 });
+        for (const building of [from, to]) {
+          const footprint = getBuildingFootprint(building);
+          const origin = toTilePoint(building.position);
+          g.rect(
+            this.pxTileX(origin.x) + 1,
+            this.pxTileY(origin.y) + 1,
+            Math.max(footprint.width * ts - 2, 2),
+            Math.max(footprint.height * ts - 2, 2),
+          ).stroke({ width: 2, color: COLOR_UNIT_OWN, alpha: 0.85 });
+        }
+        // 阶段中文（前往取货/装货中/…）：贴在起点→终点连线中点，字号随 cell 缩放。
+        this.haulRouteLabel(haul.phase, (ax + bx) / 2, (ay + by) / 2 - ts * 0.6, ts);
+      }
+    }
+
     const selectedPosition = this.baseInput ? resolveSelectionPosition(this.baseInput.planet, selected) : null;
     const highlightTile = selected ? selectedPosition && toTilePoint(selectedPosition) : hoveredTile;
     if (!highlightTile) {
@@ -2739,6 +2838,21 @@ export class PlanetScene {
     if (!isTilePointVisible(highlightTile, input.viewportBounds, 1)) {
       return;
     }
+    // 选中建筑：按**整个占地**画选中框（细分网格后 3×3/5×5 建筑必须整块高亮）。
+    if (selected?.kind === 'building') {
+      const node = this.buildingNodes.get(selected.id);
+      if (node) {
+        const footprint = getBuildingFootprint(node.data);
+        const origin = toTilePoint(node.data.position);
+        for (let dy = 0; dy < footprint.height; dy += 1) {
+          for (let dx = 0; dx < footprint.width; dx += 1) {
+            const cell = surfaceOffset(origin, dx, dy, (this.baseInput?.planet.map_width ?? 3) / 3);
+            g.rect(this.pxTileX(cell.x) + 1.5, this.pxTileY(cell.y) + 1.5, Math.max(ts - 3, 2), Math.max(ts - 3, 2))
+              .stroke({ width: 2, color: COLOR_SELECTED, alpha: 0.95 });
+          }
+        }
+      }
+    }
     // 选中防御建筑：画射程圈（数据来自该建筑 runtime.functions.combat.range）；
     // 供电建筑的无线覆盖由电网图层承担，这里不重复画。
     if (selected?.kind === 'building') {
@@ -2756,6 +2870,10 @@ export class PlanetScene {
         );
       }
     }
+    // 建筑选中框已按整个占地画过，这里只给单位/资源/地块画单格高亮（避免 5×5 建筑上多画一个内框）。
+    if (selected?.kind === 'building') {
+      return;
+    }
     const screenX = this.pxTileX(highlightTile.x);
     const screenY = this.pxTileY(highlightTile.y);
     g.rect(screenX + 1.5, screenY + 1.5, Math.max(ts - 3, 2), Math.max(ts - 3, 2))
@@ -2764,9 +2882,30 @@ export class PlanetScene {
         : { width: 2, color: 0xffffff, alpha: 0.65 });
   }
 
+  /**
+   * 运输机器人路线阶段标签：文字按 cell 缩放（低缩放档不显示，字会糊成一团）。
+   * 用 Graphics 之外的共享 Text 池代价高，这里只在近景档画一个贴图无关的矢量文字。
+   */
+  private haulRouteLabel(phase: string, cx: number, cy: number, ts: number) {
+    if (ts < 10) {
+      return;
+    }
+    const label = haulPhaseLabel(phase);
+    if (!label) {
+      return;
+    }
+    const size = Math.max(9, Math.min(14, ts * 0.7));
+    const text = new Text({
+      text: label,
+      style: { fontSize: size, fill: 0xdffcf6, fontFamily: 'system-ui, sans-serif', stroke: { color: 0x0b1218, width: 3 } },
+    });
+    text.anchor.set(0.5);
+    text.position.set(cx, cy);
+    this.haulLabelLayer.addChild(text);
+  }
+
   /** 范围圈绘制：combat 橙红细实线，power 黄色虚线（对齐电网 wireless 配色语义）。 */
-  private drawRangeCircles(g: Graphics, cx: number, cy: number, circles: RangeCircleSpec[], ts: number) {
-    for (const circle of circles) {
+  private drawRangeCircles(g: Graphics, cx: number, cy: number, circles: RangeCircleSpec[], ts: number) {    for (const circle of circles) {
       const radius = circle.radiusTiles * ts;
       if (radius <= 0) {
         continue;

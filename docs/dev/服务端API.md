@@ -26,6 +26,10 @@
 
 行星统一为立方体球面六面网格。各查询返回 `surface: {topology: "cube_sphere", face_size: N}`；`map_width = 3N`、`map_height = 2N` 只是存储图集尺寸，x/y 不具有平面邻接语义，距离和方向一律按球面邻接计算（可跨面）。配置只用 `planet.face_size`，旧平面存档拒绝加载。面序与坐标协议见 [3D与画质](../guide/3D与画质.md)。
 
+**细分网格（2026-10-12 起）**：`Position` 的单位从"格"细化为 cell（1 旧格 = 3×3 cell），坐标系不变、仍是一套整数。世界尺度不变，因此地图 `face_size` 与出生点/资源坐标、`units.yaml` 与建筑/战斗数据里的**距离类数值整体 ×3**（`move_speed`、攻击/视野/建造/补给/配送半径、电网覆盖与连接距离、炮塔射程、黑雾与 bot 的各类半径和基地布局偏移）；时间类数值（tick、冷却、生产时长）不变，传送带 `throughput`（件/tick）也不变（视觉上物料按 cell 走，世界速度自然变成原来的 1/3）。旧存档/存档点因坐标语义改变**直接拒绝加载**（存档 `format_version` 1 → 2；随后快照改为只存地形游程与资源差异，`format_version` 2 → 3），不提供兼容层。
+
+**快照体积（2026-10-12 起）**：网格边长 ×3 后世界状态整体 ×9，整幅地形（遭遇战 49.8 万 cell）与全部资源节点（3.4 万个）的静态字段一度被整表写进快照，tick 0 就有 57MB，自动存档/存档点/读档全被拖垮。现在凡「可由地图配置 + seed 确定性重建」的数据都不进快照：地形只存非 buildable 格的行内游程（实测 2597 条 / 77KB），资源只存与基线的差异（`remaining`/`current_yield`/`depleted`，tick 0 约 14 个节点）。tick 0 快照 132KB、读档后再存 149KB，均在 2MB 软上限内（`snapshot_max_bytes` 未调整）。读档时基线由 `mapgen` 重建的地图模型挂回。
+
 ## 2. 启动、存档与场景
 
 ### 游戏目录
@@ -51,7 +55,7 @@ cd server && go run ./cmd/server -config config-dev.yaml -map-config map.yaml
 - 每名玩家只预完成 `dyson_sphere_program`，它直接解锁 `matrix_lab`、`wind_turbine`、`mining_machine`、`arc_smelter`、`tesla_tower`、`conveyor_belt_mk1`、`sorter_mk1`、`assembling_machine_mk1`。
 - 启动包：`minerals = 240`、`energy = 100`，不送矩阵。第一门 `electromagnetism`（10 电磁矩阵）须自产：铁→磁铁→磁线圈，铜→电路板，磁线圈 + 电路板→`electromagnetic_matrix`（配方无需研究，`assembling_machine_mk1` / `matrix_lab` / `self_evolution_lab` 可产）。
 - `battlefield_analysis_base` 不发电，先补 `wind_turbine` 否则研究站无电。
-- 出生点：每个基地 `spawnMineDistance`（默认 `operate_range-2`，config-dev 为 4）内保证有 `iron_ore` 与 `copper_ore` 有限矿脉（缺失则注入 `Total=2000 / BaseYield=8`）；出生点半径 8 格平整为可建地形。
+- 出生点：每个基地 `spawnMineDistance`（默认 `operate_range-2`，config-dev 为 16）内保证有 `iron_ore` 与 `copper_ore` 有限矿脉（缺失则注入 `Total=2000 / BaseYield=8`）；出生点半径 24 cell 平整为可建地形。基地 HQ 是 5×5 占地，落位用 `FindFootprintOrigin` 找整块可落的原点。
 - starter 闭环示例：`build 3 2 wind_turbine` → `build 4 2 tesla_tower` → `build 5 1 mining_machine`；矩阵投产后 `build 2 3 matrix_lab` → `transfer <lab> electromagnetic_matrix 10` → `start_research electromagnetism`。
 
 ### 遭遇战预设（`config-skirmish.yaml` + `map-skirmish.yaml`）
@@ -232,7 +236,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `theater_set_objective` | system | — | `theater_id`, `objective_type`, `system_id?`, `planet_id?`, `entity_id?`, `description?` | `theater_set_objective` | Set a theater objective anchor and description |
 | `transfer_item` | planet | — | `building_id`, `item_id`, `quantity`, `direction?` | `transfer` | Load items from player inventory into building local storage（按建筑所在行星结算） |
 | `uninstall_logistics_bot` | planet | `entity_id` | `quantity` | `uninstall_logistics_bot` | 回收空载停靠的配送机器人至背包 |
-| `unit_order` | planet | — | `order`, `target_entity_id?` | `order` | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
+| `unit_order` | planet | — | `order`, `target_entity_id?`, `from_building_id?`, `to_building_id?`, `item_id?` | `order` | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
 | `upgrade` | planet | `entity_id` | — | `upgrade` | Upgrade building（按建筑所在行星结算） |
 
 **附加约束**（来自目录 `constraints`）：
@@ -249,7 +253,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `set_recipe`：recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.
 - `switch_active_planet`：F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。
 - `task_force_deploy`：at least one of system_id, planet_id, position, frontline_id, ground_order is expected at runtime
-- `unit_order`：R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
+- `unit_order`：R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。 haul（运输机器人专用）：需 payload.from_building_id + payload.to_building_id，可选 payload.item_id 锁定单一物品；两端须为己方同行星建筑，起点能取货、终点能收货。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 <!-- END GENERATED COMMANDS -->
 
 ## 5. 命令语义（表格之外的规则）
@@ -260,7 +264,8 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 并发上限按玩家跨全部行星聚合：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
-  - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。
+  - **占地（细分网格）**：`position` 是占地原点（左上 cell）。建筑按 `buildings.yaml` 的 `footprint {width, height}` 真实占 1×1 / 2×2 / 3×3 / 5×5 个 cell，旋转 90/270 交换宽高；占地内每一格都必须在界内、可建造（`foundation` 例外，它自己铺地形）且空闲，否则 `INVALID_TARGET`（「占地地块 (x,y) 不可建造」）或 `POSITION_OCCUPIED`。`TileBuilding` 与 `Grid[].BuildingID` 为占地每一格登记，拆除时整块释放；垂直叠层仍按原点 `position.z` 递增。
+  - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。采矿机覆盖**占地内及外扩 1 圈**的资源 cell（矿脉在生成时按 cell 成簇）。
   - 围堵校验（三层，全部 `INVALID_TARGET`）：
     1. **四邻全堵死**：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，回执「会把<单位名>（x,y）四周完全堵死，最后一个出口（x,y）」。单位自身站在建造格上的情况由既有的占位校验处理。
     2. **口袋（增量）**：若建造点 16 格内的己方地面单位本可以走到自家主基地、建造后走不到，回执「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
@@ -278,32 +283,33 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ### 5.2 机甲（执行体）
 
 - `mecha` 字段：`energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `inventory_capacity` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick` / `job` / `logistics_requests`。
-- 初始核心 100、护盾容量 0。科技：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +2 移动范围/级（基础 12）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +1 视野/级（基础 6）。研究只提高上限，不补能。
+- 初始核心 100、护盾容量 0。科技（距离类数值已随细分网格 ×3）：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +6 移动范围/级（基础 36 cell）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +60 背包/级（基础 200）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +3 视野/级（基础 18 cell）。研究只提高上限，不补能。
 - 自动交战（`settleMechaAutoFire`）：**机甲不会因为「正在走路」而不还手**（试玩报告 1011 新问题 C：执行移动/建造指令的机甲被 8 个兵从 120 血打到 0、一次没开火）。
   - 有路径时按 `path_intent` 分两类：玩家显式 `move` / `attack` 命令的路径（`order`）**边走边打**——不改路径、不停下，只对 `attack_range` 内的敌对目标（优先 `last_attacker_id`）按冷却开火；作业/建造驱动的行走（`task`，即 `build` + `auto_approach` 的施工自动靠近）附近有威胁时按防御处理——暂停作业、去还手（受接战锚点牵引约束），威胁消失后恢复作业并重新规划施工路径。
-  - 无路径（空闲/手搓中）：按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+6`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。
+  - 无路径（空闲/手搓中）：按 `aggro_range` 索敌（含敌方建筑），目标在射程外就靠近到 `attack_range` 内开火，追击以"接战锚点 + `aggro_range+18`"为上限、超限即放弃并走回锚点（试玩报告 1010 严重 E：敌人在 5 格外拆家，机甲站在射程外一动不动）。手搓中的机甲被自动防御打断时会暂停作业（进度与预留原料保留），威胁消失后自动恢复；采集（`mine`）作业不打断，但仍会在射程内还手。
   - 自动开火不写 `attack_target`，并保留两发的能量。
 - 受击满 10 tick 后每 tick 消耗 1 核心恢复最多 2 护盾。
-- **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/格、0.5 格/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
-- 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 4，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
-- 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+6` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。**有路径的机甲不会因为「在走路」而不还手**（试玩报告 1011 新问题 C）：玩家显式 `move`/`attack` 路径（`path_intent=order`）边走边打、不改路径不停下；作业/建造驱动的行走（`path_intent=task`）有威胁时暂停作业去还手，威胁消失后恢复作业并重新规划施工路径。
+- **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/cell、0.5 cell/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
+- 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 12 cell，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
+- 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+18` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。**有路径的机甲不会因为「在走路」而不还手**（试玩报告 1011 新问题 C）：玩家显式 `move`/`attack` 路径（`path_intent=order`）边走边打、不改路径不停下；作业/建造驱动的行走（`path_intent=task`）有威胁时暂停作业去还手，威胁消失后恢复作业并重新规划施工路径。
 - `refuel_mecha`：`payload.item_id` 必填，`payload.count` 可选（缺省 1，最多烧几块）。仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；实际消耗 = min(count, 补满所需件数, 背包现有)，背包没有该燃料 `INSUFFICIENT_RESOURCE`；核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
-- `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 2 格内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
+- `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 6 格（cell，细分网格前为 2）内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
 - `craft_item`：配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `duration` tick（不受 `pace_output` 影响），每批耗 `max(1, duration/20)` 核心（铁块 3、齿轮 1）；不递归制造前置。
 - 个人任务（`mecha.job`：`kind=mine|craft`、`remaining_ticks`、`ticks_per_batch`、`remaining_batches`、`completed_batches`、`energy_per_batch`、`state=running|no_energy|out_of_range|paused_defense|inventory_full`、`paused`、`reserved_inputs`）同时只能有一个；每批开工时一次性扣 `energy_per_batch` 核心，缺能或超距暂停、恢复后继续。`inventory_full` 表示本批产出装不进背包（容量满）：该批不结算（矿点不扣量、预留原料不减、`completed_batches` 不变），腾出空位后自动继续，产出与原料都不会丢失（试玩 1014：手搓产出曾无视 `inventory_capacity` 把背包顶到 201/200）。`paused_defense` 是自动防御打断手搓的暂停态（`paused=true`），威胁消失后自动恢复为 `running`。`cancel_mecha_job` 返还未完成批次原料，死亡也走同一退款（只退一次）。
-- 电网充电（无需命令）：自有运行中的 `wireless_power_tower` 6 格内最多 10/tick（塔自耗 1/tick），`tesla_tower` 4 格内最多 2/tick；只用塔所在电网的剩余供电，优先保建筑用电；每机甲每 tick 只从一塔受电，优先无线塔。
+- 电网充电（无需命令）：自有运行中的 `wireless_power_tower` 18 cell 内最多 10/tick（塔自耗 1/tick），`tesla_tower` 12 cell 内最多 2/tick；只用塔所在电网的剩余供电，优先保建筑用电；每机甲每 tick 只从一塔受电，优先无线塔。
 - 机甲阵亡后等待配置的 `respawn_ticks`，在己方存活 HQ 旁重生；无 HQ 不重生。
 
 ### 5.3 世界单位、军团与生产
 
 - `move` / `attack` / `unit_order` 的单位选择器为 `target.entity_id` 或 `target.entity_ids`（框选批量）。
-- 实时移动：单位每 tick 按 `move_speed` 沿 `path` 推进，可被新命令打断；占位不重叠，被堵先侧移；挡路的是**自家待命单位**（无路径、非 `hold`、非作业中的机甲）时，堵满 3 tick 后请它侧移到不挡路的空邻格让路，一格宽窄口里没有侧移空间就与赶路者互换位置；堵满 20 tick 后把停着不动的单位当障碍绕路重寻路（绕不开再按原路等待，之后每 10 tick 再试一次），**连续被单位阻挡 300 tick 仍走不动则放弃当前路径**（单位停在原地、不瞬移不重叠，姿态与终点保留，由姿态恢复/索敌重新决策），避免一群单位互堵时 `path_index`/`move_progress` 永久不变；不可达返回 `OUT_OF_RANGE`；寻路预算上限 800 格。`entity_moved` 带 `path` / `arrived`（放弃时 `arrived=false` + `reason=blocked`）。
+- 实时移动：单位每 tick 按 `move_speed`（cell/tick）沿 `path` 推进，可被新命令打断；占位不重叠（一 cell 一地面单位 + 一空中单位），被堵先侧移；挡路的是**自家待命单位**（无路径、非 `hold`、非作业中的机甲）时，堵满 3 tick 后请它侧移到不挡路的空邻格让路，一格宽窄口里没有侧移空间就与赶路者互换位置；堵满 20 tick 后把停着不动的单位当障碍绕路重寻路（绕不开再按原路等待，之后每 10 tick 再试一次），**连续被单位阻挡 300 tick 仍走不动则放弃当前路径**（单位停在原地、不瞬移不重叠，姿态与终点保留，由姿态恢复/索敌重新决策），避免一群单位互堵时 `path_index`/`move_progress` 永久不变；不可达返回 `OUT_OF_RANGE`；**单位不能进入任何建筑占地**（占地内每一格都不可通行）。寻路预算上限 4000 cell（细分网格前为 800 格，世界边长 ×3 后按实测放大：遭遇战 face 288 上两基地相距 ~180 cell，跨基地一条 `move` 的路径约 180–280 cell，单次 `move` 的路径上限 `maxMoveRouteTiles = 800` 仍容得下）。`entity_moved` 带 `path` / `arrived`（放弃时 `arrived=false` + `reason=blocked`）。
 - 攻击：追击至射程内按 `attack_cooldown_ticks` 开火；自动索敌（`aggro_range`）、还击、守位/追击受 `stance` 与 `combat_anchor` 约束；目标可为单位、建筑、黑雾，PvP 与 PvE 同一套规则（军团只是命令容器，不是攻击目标）。中立黑雾只能显式攻击，自动索敌/炮塔只打已敌对的黑雾。
-- `unit_order.order`：`attack_move`（沿途索敌）、`patrol`（往返）、`retreat`（途中不还击）——需 `target.position`（目标可在未探索区，按真实地形寻路）；`guard`、`follow`——需 `payload.target_entity_id`；`hold`（原地坚守）、`stop`（清空命令）。
-- 单位战斗字段：`move_speed` / `path` / `path_index` / `path_intent` / `move_progress` / `stance` / `order_pos` / `guard_target_id` / `combat_anchor` / `last_attacker_id` / `last_attack_tick` / `attack_cooldown_ticks` / `aggro_range` / `domain` / `min_attack_range` / `combat_state`。`path_intent` 标记当前路径意图：`order`（玩家 `move`/`attack` 命令）、`task`（作业/建造驱动的行走）、`combat`（自动交战追击），执行体机甲据此决定被威胁时是边走边打还是暂停作业。攻击无人机无视地形，只有导弹与防空武器能打空中单位。
+- `unit_order.order`：`attack_move`（沿途索敌）、`patrol`（往返）、`retreat`（途中不还击）——需 `target.position`（目标可在未探索区，按真实地形寻路）；`guard`、`follow`——需 `payload.target_entity_id`；`hold`（原地坚守）、`stop`（清空命令，运输机器人同时清空运输路线）；`haul`（运输机器人专用）——需 `payload.from_building_id` + `payload.to_building_id`，可选 `payload.item_id` 锁定单一物品。
+- `haul`（运输机器人）：只有 `transport_robot` 能执行，其它单位下 haul 一律 `INVALID_TARGET` 并给中文回执。两端必须是己方、同行星、存活的建筑；起点要有可取货的存储、终点要有可收货的存储；`item_id` 必须是已知物品且终点在结构上能收（研究站只收矩阵、喷涂机只收增产剂、物流站需先配槽位）——「终点暂时满了」不算校验失败。机器人走到建筑**占地外圈的相邻空 cell** 装货，装货取 `ExportableItemQuantity`（输出缓存 + 主库存，反馈料除外），卸货走与 `transfer_item to_building` 完全相同的接收规则（含产出预留）。起点无货在起点等、终点收不下在终点等；任一端建筑消失则清空路线、停下并发 `entity_updated`（`order=haul_aborted`，带中文 `message`）。无能耗，可被攻击，bot 不使用。
+- 单位战斗字段：`move_speed` / `path` / `path_index` / `path_intent` / `move_progress` / `stance` / `order_pos` / `guard_target_id` / `combat_anchor` / `last_attacker_id` / `last_attack_tick` / `attack_cooldown_ticks` / `aggro_range` / `domain` / `min_attack_range` / `combat_state`。 运输机器人另有 `haul` 字段：`{from_building_id, to_building_id, item_id, phase(to_source|loading|to_target|unloading|waiting_source|waiting_target), cargo:{item_id,quantity}, delivered_total}`，随单位快照持久化。`path_intent` 标记当前路径意图：`order`（玩家 `move`/`attack` 命令）、`task`（作业/建造驱动的行走）、`combat`（自动交战追击），执行体机甲据此决定被威胁时是边走边打还是暂停作业。攻击无人机无视地形，只有导弹与防空武器能打空中单位。
 - 弹药：`ammo_class`（`bullet|shell|missile`，无需弹药为空）/ `ammo` / `ammo_capacity` / `ammo_item`（同类高档弹增伤）；每次开火扣 1 发，打空 `combat_state="no_ammunition"` 停火；出生满弹，黑雾不耗弹。
 - 补给：`supply_station`（建筑，`supply_radius=10`、`supply_rate=6`/tick，扣自身库存，需运行）与 `supply_truck`（单位，`supply_radius=5`、`supply_rate=3`/tick，扣自身 `cargo`，容量 180，在补给站光环内自动装货）只给光环内己方单位补弹；物流站、部署枢纽不补弹。维修车独立维修。攻击移动优先打补给站、补给车与弹药产线。
-- `produce`：单位由目录 `producer` 分工——兵营（`barracks`）产工程兵/步兵/侦察车，战车工厂（`vehicle_factory`）产机甲/火炮/导弹车/维修车/补给车，机场产攻击无人机；建筑类型不符 `INVALID_TARGET`，建筑须可运行。造价是实物 `cost[]`，入队时从**生产建筑自身三个存储桶**原子扣除（皮带、分拣器或 `transfer_item` 供料），不足 `INSUFFICIENT_RESOURCE`。队列上限 20，断电暂停，出口堵塞等待空格。建筑视图带 `unit_queue[]`（`unit_type`/`remaining_ticks`/`total_ticks`）与 `rally_point`。
+- `produce`：单位由目录 `producer` 分工——兵营（`barracks`）产工程兵/步兵/侦察车，战车工厂（`vehicle_factory`）产机甲/火炮/导弹车/维修车/补给车，机场产攻击无人机，战场分析基站（HQ，`battlefield_analysis_base`）产运输机器人（`transport_robot`，造价铁块×4/齿轮×2/磁线圈×1、300 tick、每玩家上限 20 台，含在产队列）；建筑类型不符 `INVALID_TARGET`，建筑须可运行。造价是实物 `cost[]`，入队时从**生产建筑自身三个存储桶**原子扣除（皮带、分拣器或 `transfer_item` 供料），不足 `INSUFFICIENT_RESOURCE`。队列上限 20，断电暂停，出口堵塞等待空格。建筑视图带 `unit_queue[]`（`unit_type`/`remaining_ticks`/`total_ticks`）与 `rally_point`。
 - `set_rally_point`：出厂单位自动寻路到集结点，发 `building_state_changed`（含 `unit_queue`、`rally_point`）。
 - `form_squad`：`entity_ids` 为 1–300 个己方存活军事单位（可含补给车/维修车，不含执行体/工程兵，且不在其他军团），`name` 1–40 字符；成功 `message` 为新军团 ID 并发 `squad_deployed`。军团只是指令容器，无共享血条。
 - `squad_order`：`attack|defend|retreat` 需 `target.position`，`resupply` 自动前往最近可运行补给站（无则 `INVALID_TARGET`）。服务端按射程站位（远程在后、补给/维修车殿后），`attack` 用攻击移动，其余为撤退姿态，`defend`/`resupply` 到位后坚守；无可达站位 `OUT_OF_RANGE`。`dissolve_squad` 解散军团，成员保留当前指令。bot 对同一 `(order, target)` 不重复下令，但军团到位后全员无路径、无交战目标时会按 `botLegionRefreshTicks`（300 tick）重下发，让成员重新寻路并恢复攻击移动姿态（否则一次性的攻击令会在成员姿态回落 idle 后永久停摆，试玩报告 C）。
@@ -317,7 +323,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 报复强度封顶（试玩 1014 TC-07：level 4 巢穴一次发波就把没有炮塔的基地拆光）：单波进攻队 ≤ `raidWaveCap`、全场在途进攻队 ≤ `raidUnitCap`（easy 4/8，normal 6/12，hard 8/20），巢穴守军补员不受限（被激怒的巢穴仍能补防）。到在途上限后打完一批才放下一批。
 - 袭击目标选择确定性：同等优先级、同等距离时按建筑 ID 定序（建筑表是 map，等距必须有 ID 兜底），否则同一存档在不同进程会选出不同目标、回放/读档不再逐 tick 一致。
 - 巢穴守军：编制 = 难度基数 + 每级增量（easy 1+1/级 上限 4，normal 2+1/级 上限 6，hard 3+2/级 上限 10），守巢半径随等级 +2/级，不外派，死亡由后续波次补足。
-- 巢穴摧毁：掉落数量乘 `1+0.5×(level−1)`（向上取整，`dark_fog_matrix` 保底 level+1），威胁扣 `level×50`（下限 0），广播 `enemy_nest_destroyed`；遗址冷却期内（easy 4000 / normal 3000 / hard 2400 tick）半径（10 / 12 / 14 格）内不刷新巢。
+- 巢穴摧毁：掉落数量乘 `1+0.5×(level−1)`（向上取整，`dark_fog_matrix` 保底 level+1），威胁扣 `level×50`（下限 0），广播 `enemy_nest_destroyed`；遗址冷却期内（easy 4000 / normal 3000 / hard 2400 tick）半径（30 / 36 / 42 cell）内不刷新巢。
 - 隐藏科技（如 `dark_fog_matrix`）在玩家持有其成本物品前不可见、拒绝研究。
 
 ### 5.5 研究与生产规则
@@ -352,7 +358,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - `configure_distributor`：单种固体物品，`mode=none|supply|demand`，`local_storage` ≤ 宿主容量；可选 `player_delivery_enabled` / `player_collection_enabled`（省略保留原值）。
   - `install_logistics_bot`：`source=player|storage`，最多 10 个，需 `distribution_logistics`；`uninstall_logistics_bot` 只回收空载停靠机器人。
   - `configure_mecha_logistics`：`requests: {"motor": {"min": 5, "max": 10}}` 整体替换，最多 8 种，`0 ≤ min ≤ max ≤ 1000`；max 钳制到机甲背包容量。
-  - 配送范围 12 格（+5/级 `distribution_range`），机器人每 tick 2 格、载 10 件；配送器储能 1000、充电 ≤10/tick。机甲背包低于 min 补到 max、高于 max 回收到 max。
+  - 配送范围 36 cell（+15/级 `distribution_range`），机器人每 tick 2 cell、载 10 件（机器人速度是时间类语义——一格一格的推进节奏，不随网格 ×3）；配送器储能 1000、充电 ≤10/tick。机甲背包低于 min 补到 max、高于 max 回收到 max。
   - 事件：配置配送器/装卸机器人发 `entity_updated`，机甲请求发 `mecha_state_changed`，背包变化另发 `resource_changed`。
 
 ### 5.7 电力与能源

@@ -19,11 +19,14 @@ const (
 	PowerConnectorWireless PowerConnectorKind = "wireless"
 )
 
+// 距离类数值在细分网格（1 格 = 3×3 cell）下整体 ×3：电线杆贴合范围 1→3、
+// 电力感应塔 4→12、无线输电塔 6→18、卫星配电站 10→30。这些常量与
+// buildings.yaml 的 power_grid.wireless_range 必须一致。
 const (
-	DefaultPowerLineRange           = 1
-	DefaultTeslaTowerRange          = 4
-	DefaultWirelessPowerTowerRange  = 6
-	DefaultSatelliteSubstationRange = 10
+	DefaultPowerLineRange           = 3
+	DefaultTeslaTowerRange          = 12
+	DefaultWirelessPowerTowerRange  = 18
+	DefaultSatelliteSubstationRange = 30
 )
 
 // PowerConnector describes a single connection point for power grid linking.

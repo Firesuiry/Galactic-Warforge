@@ -184,7 +184,12 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 		core.processTick()
 	}
 
-	labPos, err := findAdjacentOpenTile(ws, base.Position)
+	// 细分网格：电网连线距离只有 3 格，实验室必须贴着风机建（贴 HQ 会 out_of_range）。
+	wind := findOwnedBuildingByType(ws, "p1", model.BuildingTypeWindTurbine)
+	if wind == nil {
+		t.Fatal("expected wind_turbine to be constructed")
+	}
+	labPos, err := findAdjacentOpenTile(ws, wind.Position)
 	if err != nil || labPos == nil {
 		t.Fatalf("find adjacent lab tile: %v", err)
 	}

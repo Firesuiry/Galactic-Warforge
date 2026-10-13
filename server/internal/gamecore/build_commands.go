@@ -57,35 +57,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		mounted.Z = 1
 		pos = &mounted
 	}
-	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() && btype != model.BuildingTypeFoundation {
-		// Geothermal power stations may sit on lava itself; every other
-		// building still requires buildable ground.
-		if !(model.RequiresLavaProximity(btype) && ws.Grid[pos.Y][pos.X].Terrain == terrain.TileLava) {
-			res.Code = model.CodeInvalidTarget
-			res.Message = "目标地块不可建造"
-			return res, nil
-		}
-	}
 
-	// Check tile is unoccupied; an occupied tile may still accept a vertically
-	// stacked layer of the same building type (vertical_construction tech).
-	tileKey := model.TileKey(pos.X, pos.Y)
-	if buildingID, occupied := ws.TileBuilding[tileKey]; occupied && btype != model.BuildingTypeLogisticsDistributor {
-		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
-		if stackErr != nil {
-			res.Code = model.CodePositionOccupied
-			res.Message = tileOccupiedMessage(ws, playerID, buildingID, stackErr.Error())
-			return res, nil
-		}
-		pos = &stackedPos
-	}
-	if ws.Construction != nil && ws.Construction.IsTileReserved(tileKey) && pos.Z == 0 {
-		res.Code = model.CodePositionOccupied
-		res.Message = constructionReservationMessage(ws, playerID, tileKey)
-		return res, nil
-	}
-
-	// Validate building type
+	// Validate building type before footprint maths: the footprint drives
+	// occupancy, terrain and reservation checks for every covered cell.
 	def, ok := model.BuildingDefinitionByID(btype)
 	if !ok {
 		res.Code = model.CodeValidationFailed
@@ -96,6 +70,58 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		res.Code = model.CodeValidationFailed
 		res.Message = fmt.Sprintf("该建筑类型不可建造：%s", buildingTypeDisplayName(btype))
 		return res, nil
+	}
+
+	rotation := model.PlanRotation0
+	if p.Rotation != nil {
+		degrees := *p.Rotation
+		if degrees < 0 || degrees > 270 || degrees%90 != 0 {
+			return mechaJobFailed(model.CodeValidationFailed, "rotation 必须为 0、90、180 或 270")
+		}
+		rotation = model.PlanRotation(fmt.Sprint(degrees))
+	}
+	footprint := model.RotatedFootprint(def.Footprint, rotation)
+	footprintTiles, err := ws.FootprintTiles(*pos, footprint)
+	if err != nil {
+		res.Code = model.CodeInvalidTarget
+		res.Message = err.Error()
+		return res, nil
+	}
+
+	// 占地内每一格都必须可建造（熔岩上的地热站是唯一例外）。
+	for _, tile := range footprintTiles {
+		if ws.Grid[tile.Y][tile.X].Terrain.Buildable() || btype == model.BuildingTypeFoundation {
+			continue
+		}
+		if model.RequiresLavaProximity(btype) && ws.Grid[tile.Y][tile.X].Terrain == terrain.TileLava {
+			continue
+		}
+		res.Code = model.CodeInvalidTarget
+		res.Message = fmt.Sprintf("占地地块 (%d,%d) 不可建造", tile.X, tile.Y)
+		return res, nil
+	}
+
+	// Check the whole footprint is unoccupied; an occupied footprint may still
+	// accept a vertically stacked layer of the same building type
+	// (vertical_construction tech).
+	if occupying := footprintOccupant(ws, footprintTiles); occupying != nil && btype != model.BuildingTypeLogisticsDistributor {
+		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
+		if stackErr != nil {
+			res.Code = model.CodePositionOccupied
+			res.Message = tileOccupiedMessage(ws, playerID, occupying.ID, stackErr.Error())
+			return res, nil
+		}
+		pos = &stackedPos
+	}
+	if ws.Construction != nil && pos.Z == 0 {
+		for _, tile := range footprintTiles {
+			key := model.TileKey(tile.X, tile.Y)
+			if ws.Construction.IsTileReserved(key) {
+				res.Code = model.CodePositionOccupied
+				res.Message = constructionReservationMessage(ws, playerID, key)
+				return res, nil
+			}
+		}
 	}
 
 	// Check tech unlock requirement
@@ -140,7 +166,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			return res, nil
 		}
 	}
-	if err := model.ValidateCollectorSite(ws, btype, *pos); err != nil {
+	if err := model.ValidateCollectorSite(ws, btype, rotation, *pos); err != nil {
 		res.Code = model.CodeInvalidTarget
 		res.Message = err.Error()
 		return res, nil
@@ -173,14 +199,6 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		}
 	}
 
-	rotation := model.PlanRotation0
-	if p.Rotation != nil {
-		degrees := *p.Rotation
-		if degrees < 0 || degrees > 270 || degrees%90 != 0 {
-			return mechaJobFailed(model.CodeValidationFailed, "rotation 必须为 0、90、180 或 270")
-		}
-		rotation = model.PlanRotation(fmt.Sprint(degrees))
-	}
 	autoApproach := p.AutoApproach
 	var approachUnit *model.Unit
 	var approachPath []model.Position
@@ -301,6 +319,29 @@ func tileOccupiedMessage(ws *model.WorldState, playerID, buildingID, fallback st
 	return fmt.Sprintf("该格已有其他玩家的建筑：%s", buildingTypeDisplayName(building.Type))
 }
 
+// footprintOccupant returns the ground building already covering any of the
+// given footprint tiles, or nil when every tile is free. Deterministic: the
+// lexicographically smallest building ID wins when several footprints overlap.
+func footprintOccupant(ws *model.WorldState, tiles []model.Position) *model.Building {
+	if ws == nil {
+		return nil
+	}
+	bestID := ""
+	for _, tile := range tiles {
+		id := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]
+		if id == "" {
+			continue
+		}
+		if bestID == "" || id < bestID {
+			bestID = id
+		}
+	}
+	if bestID == "" {
+		return nil
+	}
+	return ws.Buildings[bestID]
+}
+
 // buildingEnclosure 在 pos 放置 btype 后，某个地面单位是否会被关进死角。
 // 返回被围单位的名称/坐标与最后被堵死的那个出口（供回执写明细节）。
 //
@@ -338,14 +379,15 @@ func enclosureMessage(info *buildingEnclosureInfo) string {
 }
 
 // pocketCheckRadius 口袋判定的关注半径：单座建筑只可能切断它自己边界处的通路，
-// 因此只需检查建造点附近的单位（外加主人的执行体）。
-const pocketCheckRadius = 16
+// 因此只需检查建造点附近的单位（外加主人的执行体）。细分网格下 ×3。
+const pocketCheckRadius = 48
 
 // pocketFloodBudget 口袋判定的洪泛预算（格），与单位寻路 maxPathBudget 同一量级：
 // 立方球面图距离的三角不等式对"实际路径长度"并不成立（跨面绕行可能远长于
 // SurfaceDistance），所以预算必须在直线距离之外留足余量，否则会把连通误判成
-// 不可达（bot 测试图面 48、基地到玩家基地直线 93，实际路径 ~240）。
-const pocketFloodBudget = 2000
+// 不可达（bot 测试图面 48、基地到玩家基地直线 93，实际路径 ~240；细分网格后
+// 世界边长 ×3，预算同比放大到与 maxPathBudget 一致）。
+const pocketFloodBudget = 4000
 
 // baseSealInfo 基地被自己围死的回执细节（绝对不变量，见 baseSealedByPlacement）。
 type baseSealInfo struct {
@@ -434,15 +476,17 @@ func baseSealedByPlacement(ws *model.WorldState, pos model.Position, occupied ma
 	return nil
 }
 
-// sealFloodReaches 从 from 出发的地面洪泛（地形/建筑/施工预留/本次占地都是障碍），
-// 预算内能否走到 goal。扁平数组 + epoch 戳（复用 ws.PathScratch*，与 pathFlood
-// 同一套口径），调用点在命令执行/选址期，不在移动结算期。
+// sealFloodReaches 从 from 出发的地面洪泛（障碍集合由 buildObstacles 统一提供：
+// 地形/建筑/施工预留/本次占地），预算内能否走到 goal。扁平数组 + epoch 戳
+// （复用 ws.PathScratch*，与 pathFlood 同一套口径），调用点在命令执行/选址期，
+// 不在移动结算期。
 // truncated 表示预算耗尽、连通区没走完——此时不能断定"被封死"，交由调用方放行
 // （宁可漏报也不误拒；真要围死一个比 4×直线距离还大的区域，也不是"口袋"了）。
 func sealFloodReaches(ws *model.WorldState, from, goal model.Position, occupied map[model.Position]bool, budget int) (reached, truncated bool) {
 	if !ws.InBounds(from.X, from.Y) || !ws.InBounds(goal.X, goal.Y) || budget < 0 {
 		return false, false
 	}
+	obs := newBuildObstacles(ws, occupied)
 	width := ws.MapWidth
 	size := width * ws.MapHeight
 	if len(ws.PathScratchDepth) != size {
@@ -482,7 +526,7 @@ func sealFloodReaches(ws *model.WorldState, from, goal model.Position, occupied 
 				ws.PathScratchQueue = queue
 				return true, false
 			}
-			if unitTileBlockedAfterBuild(ws, model.Position{X: n.X, Y: n.Y}, occupied) {
+			if obs.blocked(model.Position{X: n.X, Y: n.Y}) {
 				continue
 			}
 			epoch[nIdx] = gen
@@ -592,20 +636,30 @@ func buildingEnclosure(ws *model.WorldState, btype model.BuildingType, rotation 
 }
 
 // buildMayCutRegion 预筛：本次建造的占地是否可能切断任何连通区。
-// 把占地当作障碍后，占地自己的所有可通行邻格是否还能在小半径内互相连通——
-// 能，则它绝不是割点（证明无切断，直接放行）；不能，则结果不确定，交给完整判定。
-// 预筛只可能"漏报为不确定"，不会把真正的切断判成安全。
+//
+// 判据：令 G 为建造前的连通图（可通行格 + 由 buildObstacles 认定的受保护顶点，
+// 后者是挂在可通行格上的叶子），A = 与占地 S 相邻、且属于 G 的那些格。若 A 中
+// 所有格在 G−S 里仍互相连通，则 S 不是割点——任何原本经过 S 的路径都能在入口
+// 邻格与出口邻格之间绕行，故可确定"安全"，直接放行。反之只要有一个锚点够不到，
+// 就说明预筛无法证明安全，返回 true 交给完整判定（宁可多跑一次完整检查，绝不
+// 漏报成安全）。
+//
+// 关键：A 必须包含受保护顶点（基地格/资源点格）。旧实现只看占地的可通行邻格，
+// 于是当占地正好盖住基地最后一个可通行邻格时，基地格这个"叶子"被悄悄剪掉却
+// 无人发现，预筛误判安全，三层完整判定全被跳过（pt1010-85s8io 的真 bug）。
 func buildMayCutRegion(ws *model.WorldState, occupied map[model.Position]bool) bool {
-	neighbors := make([]model.Position, 0, 8)
+	if ws == nil || len(occupied) == 0 {
+		return false
+	}
+	obs := newBuildObstacles(ws, occupied)
+	anchors := make([]model.Position, 0, 8)
 	seen := make(map[int32]bool, 8)
 	for tile := range occupied {
 		for _, n := range ws.SurfaceNeighbors(tile) {
-			if occupied[n] || !ws.InBounds(n.X, n.Y) {
+			if !ws.InBounds(n.X, n.Y) || occupied[n] {
 				continue
 			}
-			if !unitTileBlockedAfterBuild(ws, n, occupied) {
-				// 可通行邻格
-			} else {
+			if obs.blocked(n) && !isEnclosureProtectedTile(ws, n) {
 				continue
 			}
 			idx := int32(n.Y*ws.MapWidth + n.X)
@@ -613,20 +667,37 @@ func buildMayCutRegion(ws *model.WorldState, occupied map[model.Position]bool) b
 				continue
 			}
 			seen[idx] = true
-			neighbors = append(neighbors, n)
+			anchors = append(anchors, n)
 		}
 	}
-	if len(neighbors) <= 1 {
-		return false // 只有一个出口（或没有）：不构成"切断两块区域"
+	// 起点锚点必须是可通行格（受保护顶点只作为"待摸到的目标"，洪泛不会从它扩展）。
+	// 全部锚点都是受保护顶点时退化为完整判定。
+	start := -1
+	for i, a := range anchors {
+		if !obs.blocked(a) {
+			start = i
+			break
+		}
 	}
-	targets := make([]int32, 0, len(neighbors))
-	for _, n := range neighbors {
-		targets = append(targets, int32(n.Y*ws.MapWidth+n.X))
+	if start < 0 {
+		return true
 	}
-	// 从第一个邻格出发小半径洪泛，看其余邻格是否都能摸到。
-	budget := 4*len(neighbors) + 24
-	res := reachableFrom(ws, neighbors[0], occupied, targets, budget)
-	return len(res) < len(neighbors)
+	startAnchor := anchors[start]
+	anchors = append(anchors[:start], anchors[start+1:]...)
+	if len(anchors) == 0 {
+		return false // 唯一出入口，不构成"把两块区域分开"
+	}
+	rest := make([]int32, 0, len(anchors))
+	for _, a := range anchors {
+		rest = append(rest, int32(a.Y*ws.MapWidth+a.X))
+	}
+	// 从起点的可通行邻格小半径洪泛，看其余锚点（含受保护顶点）是否都能摸到。
+	// 预算耗尽（truncated）时"没摸到"不能当作切断的证据，落到完整判定。
+	res, truncated := reachableFromLimited(ws, startAnchor, occupied, rest, 4*len(anchors)+24)
+	if truncated {
+		return true
+	}
+	return len(res) < len(rest)
 }
 
 // pocketEnclosureOwner 口袋判定的归属玩家：建造点附近的执行体主人（没有则取附近单位）。
@@ -682,14 +753,26 @@ func botHomePosition(ws *model.WorldState, playerID string) (model.Position, boo
 }
 
 // reachableFrom 从 start 做一次深度受限的连通区洪泛，返回所有命中的 target（结果集）。
-// 通行口径与 unitTileBlockedBeforeBuild 一致：地形不可建、已有建筑、施工预留
-// 以及本次建造的占地（occupied）都算障碍。深度超过 budget 即停（不再扩展），
-// 因此"超预算"等于"不可达"（与单位寻路 maxPathBudget 的口径一致）。
+// 通行口径由 buildObstacles 统一提供：地形不可建、已有建筑、施工预留以及本赛季
+// 建造的占地（occupied）都算障碍。target 命中在障碍判定之前，因此受保护顶点
+// （基地格/资源点格）即使自身不可通行也算"到达"（叶子，不再从它扩展）。
+// 深度超过 budget 即停（不再扩展），因此"超预算"等于"不可达"
+// （与单位寻路 maxPathBudget 的口径一致）。
 func reachableFrom(ws *model.WorldState, start model.Position, occupied map[model.Position]bool, targets []int32, budget int) map[int32]bool {
+	out, _ := reachableFromLimited(ws, start, occupied, targets, budget)
+	return out
+}
+
+// reachableFromLimited 与 reachableFrom 同一套口径，另外报告 truncated：
+// 预算耗尽、连通区没走完。truncated 时"没摸到的 target"不代表不可达，
+// 调用方若要据此判定切断必须自行降级（预筛用它落到完整判定）。
+func reachableFromLimited(ws *model.WorldState, start model.Position, occupied map[model.Position]bool, targets []int32, budget int) (map[int32]bool, bool) {
 	out := make(map[int32]bool, len(targets))
 	if !ws.InBounds(start.X, start.Y) || budget < 0 {
-		return out
+		return out, false
 	}
+	obs := newBuildObstacles(ws, occupied)
+	truncated := false
 	pending := make(map[int32]bool, len(targets))
 	for _, t := range targets {
 		pending[t] = true
@@ -705,6 +788,7 @@ func reachableFrom(ws *model.WorldState, start model.Position, occupied map[mode
 	for head := 0; head < len(queue) && len(pending) > 0; head++ {
 		cur := queue[head]
 		if depth[cur] >= budget {
+			truncated = true
 			continue
 		}
 		tile := model.Position{X: int(cur) % ws.MapWidth, Y: int(cur) / ws.MapWidth}
@@ -720,13 +804,10 @@ func reachableFrom(ws *model.WorldState, start model.Position, occupied map[mode
 				out[idx] = true
 				delete(pending, idx)
 				if len(pending) == 0 {
-					return out
+					return out, truncated
 				}
 			}
-			if occupied[n] || ws.TileBuilding[model.TileKey(n.X, n.Y)] != "" || !ws.Grid[n.Y][n.X].Terrain.Buildable() {
-				continue
-			}
-			if ws.Construction != nil && ws.Construction.ReservedTiles[model.TileKey(n.X, n.Y)] != "" {
+			if obs.blocked(n) {
 				continue
 			}
 			seen[idx] = true
@@ -734,12 +815,12 @@ func reachableFrom(ws *model.WorldState, start model.Position, occupied map[mode
 			queue = append(queue, idx)
 		}
 	}
-	return out
+	return out, truncated
 }
 
 // pocketReach 从 from 出发的连通区洪泛：能否走到 home（occupied 额外视为障碍）。
-// 通行口径与 unitTileBlockedBeforeBuild 一致：地形不可建、已有建筑、施工队列已
-// 预留的格都算障碍（否则"正在排队的一圈建筑"看不出已经把单位围住）。
+// 通行口径由 buildObstacles 统一提供：地形不可建、已有建筑、在队施工的预留格、
+// 以及本次占地都算障碍（否则"正在排队的一圈建筑"看不出已经把单位围住）。
 // 预算用 pocketFloodBudget（与单位寻路同一量级）：立方球面图上"实际路径长度"
 // 可能远大于 SurfaceDistance（跨面绕行），按直线距离给预算会把连通误判为不可达。
 // 命中目标即提前返回，因此可达时开销 ≈ 路径长度。
@@ -747,6 +828,7 @@ func pocketReach(ws *model.WorldState, from, home model.Position, occupied map[m
 	if !ws.InBounds(from.X, from.Y) || !ws.InBounds(home.X, home.Y) {
 		return false
 	}
+	obs := newBuildObstacles(ws, occupied)
 	startIdx := int32(from.Y*ws.MapWidth + from.X)
 	goalIdx := int32(home.Y*ws.MapWidth + home.X)
 	if startIdx == goalIdx {
@@ -772,10 +854,7 @@ func pocketReach(ws *model.WorldState, from, home model.Position, occupied map[m
 			if idx == goalIdx {
 				return true // 基地本身被建筑占着，但"走得到基地格"就是走得到家
 			}
-			if occupied[n] || ws.TileBuilding[model.TileKey(n.X, n.Y)] != "" || !ws.Grid[n.Y][n.X].Terrain.Buildable() {
-				continue
-			}
-			if ws.Construction != nil && ws.Construction.ReservedTiles[model.TileKey(n.X, n.Y)] != "" {
+			if obs.blocked(n) {
 				continue
 			}
 			seen[idx] = true
@@ -786,43 +865,76 @@ func pocketReach(ws *model.WorldState, from, home model.Position, occupied map[m
 	return false
 }
 
-// unitTileBlockedBeforeBuild 单格在本次建造之前是否已不可通行（建筑/地形/界外/施工预留）。
-func unitTileBlockedBeforeBuild(ws *model.WorldState, pos model.Position) bool {
-	if !ws.InBounds(pos.X, pos.Y) {
+// buildObstacles 围死判定唯一的障碍集合：界外 + 不可建地形 + 已建建筑 +
+// 施工队列已预留格，外加本次建造即将占用的格（extra）。
+//
+// 围死判定的各层（单位四邻全堵、预筛、基地封死、口袋洪泛）必须共用同一口径：
+// 只要有一层"看不见"某个障碍，就会出现某层放行、另一层才发现被封死的不一致
+// （试玩报告 pt1010-85s8io：基地最后一个可通行邻格被本次占地盖住，而旧预筛
+// 只比较占地自身可通行邻格之间的互通，压根没把基地格算进去，于是误判安全）。
+type buildObstacles struct {
+	ws    *model.WorldState
+	extra map[model.Position]bool // 本次建造的占地（建造后不可通行）
+}
+
+func newBuildObstacles(ws *model.WorldState, extra map[model.Position]bool) buildObstacles {
+	return buildObstacles{ws: ws, extra: extra}
+}
+
+// blocked 单格作为洪泛中转点是否不可通行。
+func (o buildObstacles) blocked(pos model.Position) bool {
+	if o.ws == nil || !o.ws.InBounds(pos.X, pos.Y) {
 		return true
 	}
-	if ws.TileBuilding[model.TileKey(pos.X, pos.Y)] != "" {
+	if len(o.extra) > 0 {
+		tile := pos
+		tile.Z = 0
+		if o.extra[tile] {
+			return true
+		}
+	}
+	if o.ws.TileBuilding[model.TileKey(pos.X, pos.Y)] != "" {
 		return true
 	}
-	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
+	if !o.ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
 		return true
 	}
-	if ws.Construction != nil && ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" {
+	if o.ws.Construction != nil && o.ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" {
 		return true
 	}
 	return false
 }
 
-// unitTileBlockedAfterBuild 单格在本次建造之后是否不可通行（建筑/地形/界外/施工预留）。
+// unitTileBlockedBeforeBuild 单格在本次建造之前是否已不可通行。
+func unitTileBlockedBeforeBuild(ws *model.WorldState, pos model.Position) bool {
+	return newBuildObstacles(ws, nil).blocked(pos)
+}
+
+// unitTileBlockedAfterBuild 单格在本次建造之后是否不可通行。
 func unitTileBlockedAfterBuild(ws *model.WorldState, pos model.Position, occupied map[model.Position]bool) bool {
-	if !ws.InBounds(pos.X, pos.Y) {
+	return newBuildObstacles(ws, occupied).blocked(pos)
+}
+
+// isEnclosureProtectedTile 单格是否是围死判定里的"受保护顶点"：玩家主基地格，
+// 或资源点格（争夺中心资源点、对手基地格都落在这两类里）。
+//
+// 这些格即使自身不可通行，各层洪泛也会把它们当端点：基地是 baseSealedByPlacement
+// 与口袋判定的起点（洪泛无条件入队起点），争夺中心/对手基地是目标（命中即算到达）。
+// 它们相当于挂在可通行图上的叶子——只要叶子与图相连的那条边（它唯一/最后的可通行
+// 邻格）被本次建造盖住，叶子就与图断开，这正是「把基地封死」。
+func isEnclosureProtectedTile(ws *model.WorldState, pos model.Position) bool {
+	if ws == nil || !ws.InBounds(pos.X, pos.Y) {
+		return false
+	}
+	if ws.Grid[pos.Y][pos.X].ResourceNodeID != "" {
 		return true
 	}
-	tile := pos
-	tile.Z = 0
-	if occupied[tile] {
-		return true
+	bid := ws.TileBuilding[model.TileKey(pos.X, pos.Y)]
+	if bid == "" {
+		return false
 	}
-	if ws.TileBuilding[model.TileKey(pos.X, pos.Y)] != "" {
-		return true
-	}
-	if !ws.Grid[pos.Y][pos.X].Terrain.Buildable() {
-		return true
-	}
-	if ws.Construction != nil && ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" {
-		return true
-	}
-	return false
+	b := ws.Buildings[bid]
+	return b != nil && b.Type == model.BuildingTypeBattlefieldAnalysisBase
 }
 
 // buildSiteTouchesLava reports whether the building footprint at pos or its

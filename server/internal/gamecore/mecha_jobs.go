@@ -79,8 +79,10 @@ func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd 
 	if _, ok := manualMineItem(node); !ok {
 		return mechaJobFailed(model.CodeInvalidTarget, "只能手动采集固体资源节点")
 	}
-	if ws.SurfaceDistance(unit.Position, node.Position) > 2 {
-		return mechaJobFailed(model.CodeOutOfRange, "资源须在 2 格地表范围内")
+	// 细分网格：距离类数值整体 ×3，采集判定半径由 2 格放宽到 6 格，
+	// 与 bot 的 botMineKind 移动阈值保持一致，否则执行器永远停在判定圈外。
+	if ws.SurfaceDistance(unit.Position, node.Position) > 6 {
+		return mechaJobFailed(model.CodeOutOfRange, "资源须在 6 格地表范围内")
 	}
 	if node.Remaining < quantity {
 		return mechaJobFailed(model.CodeInsufficientResource, "资源节点剩余量少于请求数量")
@@ -206,7 +208,8 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 			refundMechaJob(ws, unit)
 			return nil
 		}
-		if ws.SurfaceDistance(unit.Position, node.Position) > 2 {
+		// 细分网格：判定半径随距离类数值 ×3 放宽到 6 格，与 execMineResource 一致。
+		if ws.SurfaceDistance(unit.Position, node.Position) > 6 {
 			job.State = "out_of_range"
 			return nil
 		}

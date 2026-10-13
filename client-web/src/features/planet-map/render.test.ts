@@ -11,7 +11,6 @@ import {
 describe("planet map render helpers", () => {
   it("低缩放时会关闭细网格和建筑标签，并返回简化提示", () => {
     const policy = getSceneRenderDetailPolicy(3);
-
     expect(policy.showSceneGrid).toBe(false);
     expect(policy.showBuildingLabels).toBe(false);
     expect(policy.simplifyFog).toBe(true);

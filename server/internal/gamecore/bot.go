@@ -49,11 +49,11 @@ const botCoalReserve = 16
 func botTuningFor(difficulty string) botTuning {
 	switch difficulty {
 	case "easy":
-		return botTuning{cadence: 60, maxCmds: 1, attackAt: 3, squadCap: 1, armyCap: 6, waveCooldown: 12000, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 14, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 6, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
+		return botTuning{cadence: 60, maxCmds: 1, attackAt: 3, squadCap: 1, armyCap: 6, waveCooldown: 12000, minerTarget: 1, powerTarget: 2, assemblerTarget: 1, smelterTarget: 1, matrixMachineTarget: 1, craftBatch: 4, defendRadius: 42, mechaEvery: 8, mechaMinSoldiers: 6, turretCap: 1, turretThreat: 18, researchMaxLevel: 1, researchMainOnly: true, raidSupply: false, supportAt: 6, heavyAt: 10, retreatBelowHP: 0.25, resupplyBelowAmmo: 0.15}
 	case "hard":
-		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, waveCooldown: 2000, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 20, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 22, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
+		return botTuning{cadence: 10, maxCmds: 3, attackAt: 14, squadCap: 4, armyCap: 22, waveCooldown: 2000, minerTarget: 3, powerTarget: 4, assemblerTarget: 4, smelterTarget: 3, matrixMachineTarget: 2, craftBatch: 10, defendRadius: 60, mechaEvery: 2, mechaMinSoldiers: 0, turretCap: 3, turretThreat: 66, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 3, heavyAt: 6, retreatBelowHP: 0.5, resupplyBelowAmmo: 0.4}
 	default: // normal
-		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, waveCooldown: 6000, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 16, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 12, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
+		return botTuning{cadence: 30, maxCmds: 2, attackAt: 6, squadCap: 1, armyCap: 14, waveCooldown: 6000, minerTarget: 2, powerTarget: 3, assemblerTarget: 3, smelterTarget: 2, matrixMachineTarget: 1, craftBatch: 6, defendRadius: 48, mechaEvery: 4, mechaMinSoldiers: 3, turretCap: 2, turretThreat: 36, researchMaxLevel: 0, researchMainOnly: false, researchTarget: "weapon_system", researchReserve: 40, raidSupply: true, supportAt: 5, heavyAt: 7, retreatBelowHP: 0.4, resupplyBelowAmmo: 0.3}
 	}
 }
 
@@ -411,10 +411,10 @@ func botRecallIDs(ws *model.WorldState, units []*model.Unit, threats []botThreat
 	}
 	ids := make([]string, 0, len(units))
 	for _, u := range units {
-		if ws.SurfaceDistance(u.Position, dest) <= 4 {
+		if ws.SurfaceDistance(u.Position, dest) <= 36 {
 			continue
 		}
-		if u.Stance == model.UnitStanceAttackMove && u.OrderPos != nil && ws.SurfaceDistance(*u.OrderPos, dest) <= 1 {
+		if u.Stance == model.UnitStanceAttackMove && u.OrderPos != nil && ws.SurfaceDistance(*u.OrderPos, dest) <= 3 {
 			continue
 		}
 		ids = append(ids, u.ID)
@@ -536,6 +536,12 @@ func botPendingBuilds(ws *model.WorldState, playerID string, btype model.Buildin
 	return n
 }
 
+// botFloodSlack 进攻目标连通洪泛相对"最近敌方基地质心"的额外余量（cell）：
+// 目标是基地外圈的落点，比质心还要远一个基地半径（37 座建筑铺开约 30 cell），
+// 再留一点球面绕行的余量。实测（skirmish-seed-001，质心距 177 cell）：
+// slack 40 → 8.6 万格 / 15ms，slack 120 → 14 万格 / 17ms，无上限 → 38 万格 / 100ms。
+const botFloodSlack = 64
+
 // botAttackObjective 进攻目标：优先最近的敌方玩家建筑中心，其次最近的（已敌对的）黑雾巢穴。
 // 距离相同时按玩家 ID / 巢穴 ID 取较小者。
 func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) *model.Position {
@@ -554,14 +560,67 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 		owners = append(owners, owner)
 	}
 	sort.Strings(owners)
+	// 先把敌方基地按"到出发点"的直线距离排序，取最近一座的距离作为洪泛上限。
+	// 连通判定只需要回答"最近的这座基地够不够得着"，没必要把整张图都洪泛一遍：
+	// 细分网格后一张 864×576 的图有 49.8 万格，无上限的一次洪泛实测 100ms
+	// （整局 8 个 >100ms 的 tick 全出在这里）；按最近基地的距离封顶后洪泛只
+	// 覆盖 ~6 万格、单次 ~15ms。更远的敌方基地直接判为够不着——bot 只打最近的
+	// 那座，够不着最近的基地时去打更远的没有意义。
+	from := *ctx.home
+	if ctx.executor != nil {
+		from = ctx.executor.Position
+	}
+	type enemyBase struct {
+		owner  string
+		center model.Position
+		dist   int
+	}
+	bases := make([]enemyBase, 0, len(owners))
 	for _, owner := range owners {
 		buildings := ctx.enemyPlayers[owner]
 		if len(buildings) == 0 {
 			continue
 		}
 		center := buildingCentroid(ws, buildings)
-		if !gc.botTargetReachable(ws, *ctx.home, center, ctx) {
-			continue
+		bases = append(bases, enemyBase{owner: owner, center: center, dist: ws.SurfaceDistance(from, center)})
+	}
+	limit := 0
+	for _, b := range bases {
+		if limit == 0 || b.dist < limit {
+			limit = b.dist
+		}
+	}
+	limit += botFloodSlack
+	floodReady := false
+	// 只做**一次**连通洪泛，本拍内所有"目标格走不走得到"都按它判定。
+	// 旧实现每座敌建筑一次 pocketReach（质心 + 逐个外圈格），37 座建筑 × 17 格
+	// 全都要走满 4000 格预算时单拍 400ms+（实测 tick 13998 = 219ms）。
+	reachable := func(pos model.Position) bool {
+		if !ws.InBounds(from.X, from.Y) || !ws.InBounds(pos.X, pos.Y) {
+			return false
+		}
+		if ws.SurfaceDistance(from, pos) > limit {
+			return false
+		}
+		if !floodReady {
+			pathFlood(ws, from, "", false, limit+botFloodSlack, nil)
+			floodReady = true
+		}
+		return floodVisited(ws, int32(pos.Y*ws.MapWidth+pos.X))
+	}
+	for _, base := range bases {
+		owner, center := base.owner, base.center
+		// 目标点必须"走得过去"：基地中心通常是某座建筑占地的中心格（多格占地后
+		// 建筑变密，37 座建筑的质心必落在占地里），而连通判定只认空着的目标格，
+		// 于是质心永远不可达、bot 整局选不出进攻目标（实测首攻 tick=-1、逼近=0）。
+		// 质心走不到时退到"最近的、外圈有可达空格的建筑"——攻击目标仍是这座基地，
+		// 只是落点取基地外圈能站人的地方。
+		if !reachable(center) {
+			alt := botReachableBuildingObjective(ws, center, ctx.enemyPlayers[owner], reachable)
+			if alt == nil {
+				continue
+			}
+			center = *alt
 		}
 		d := ws.SurfaceDistance(*ctx.home, center)
 		if bestDist < 0 || d < bestDist || (d == bestDist && (bestOwner == "" || owner < bestOwner)) {
@@ -591,6 +650,48 @@ func (gc *GameCore) botAttackObjective(ws *model.WorldState, playerID string, tu
 		}
 	}
 	return best
+}
+
+// botReachableBuildingObjective 在敌方建筑里挑一座「外圈有可达空格」的，
+// 返回那个空格作为进攻落点（多格占地后基地中心常落在占地内、走不进去）。
+// 建筑按到基地的距离排序，取最近的一座。reachable 由调用方给出：它背后是
+// 一次按拍缓存的连通洪泛（见 botAttackObjective），本函数不再自己洪泛。
+func botReachableBuildingObjective(ws *model.WorldState, home model.Position, buildings []*model.Building, reachable func(model.Position) bool) *model.Position {
+	if ws == nil || len(buildings) == 0 {
+		return nil
+	}
+	sorted := make([]*model.Building, 0, len(buildings))
+	for _, b := range buildings {
+		if b != nil && b.HP > 0 {
+			sorted = append(sorted, b)
+		}
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		di, dj := ws.SurfaceDistance(home, sorted[i].Position), ws.SurfaceDistance(home, sorted[j].Position)
+		if di != dj {
+			return di < dj
+		}
+		return sorted[i].ID < sorted[j].ID
+	})
+	for _, b := range sorted {
+		ring, err := ws.BuildingRingCells(b)
+		if err != nil {
+			continue
+		}
+		for _, cell := range ring {
+			if !ws.InBounds(cell.X, cell.Y) {
+				continue
+			}
+			if ws.TileBuilding[model.TileKey(cell.X, cell.Y)] != "" || !ws.Grid[cell.Y][cell.X].Terrain.Buildable() {
+				continue
+			}
+			if reachable(cell) {
+				c := cell
+				return &c
+			}
+		}
+	}
+	return nil
 }
 
 // botTargetReachable 目标是否走得到：预算内从 bot 执行体（缺省用基地）做一次
@@ -960,7 +1061,7 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 	if execState == nil {
 		return model.Command{}, false
 	}
-	if ws.SurfaceDistance(exec.Position, node.Position) > 2 {
+	if ws.SurfaceDistance(exec.Position, node.Position) > 6 {
 		// 先移动到矿点邻格。
 		dest := botAdjacentFreeTile(ws, node.Position, exec.ID)
 		if dest == nil {
@@ -1019,9 +1120,9 @@ func botNearestNode(ws *model.WorldState, from model.Position, kind string) *mod
 	return best
 }
 
-// botAdjacentFreeTile 目标格附近的可站立格。
+// botAdjacentFreeTile 目标格附近的可站立格（细分网格下搜索半径 ×3）。
 func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID string) *model.Position {
-	for _, candidate := range ws.SurfaceDisc(center, 2) {
+	for _, candidate := range ws.SurfaceDisc(center, 18) {
 		if candidate == center {
 			continue
 		}
@@ -1040,6 +1141,11 @@ func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID str
 // 试玩节奏下 easy bot 的电弧熔炉 tick 25000 起一直断电，矩阵链整局 0 产出。
 // 因此只要还有**带供电接口**的建筑拿不到电，就继续补风机；材料不足时走
 // botEnsureBuilding 的缺料链（铁块/齿轮/磁线圈都能手搓）。
+//
+// 选址：补的风机必须落进"己方已带电电网"的无线覆盖内。细分网格后
+// botBuildSpotNear 从半径 9 起扫，风机（2×2）会落在 HQ 的电感应塔覆盖（12）之外，
+// 发出来的电送不进电网 → HQ 长期 no_power → starved 恒真 → bot 无限补风机
+// （实测旧局 332 座风机、minerals/energy 归零，而电网里始终 0 供电）。
 func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, issue func(model.Command) bool) bool {
 	starved := false
 	for _, b := range ctx.buildings {
@@ -1059,10 +1165,105 @@ func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTu
 	if ctx.powerCount >= tuning.powerTarget && !starved {
 		return false
 	}
-	if cmd, ok := gc.botEnsureBuilding(ws, playerID, ctx, model.BuildingTypeWindTurbine, "", map[string]bool{}); ok {
+	pos := gc.botPoweredSpot(ws, playerID, ctx, model.BuildingTypeWindTurbine)
+	if pos == nil {
+		return false
+	}
+	if cmd, ok := gc.botEnsureBuildingAt(ws, playerID, ctx, model.BuildingTypeWindTurbine, "", map[string]bool{}, pos); ok {
 		return issue(cmd)
 	}
 	return false
+}
+
+// botPoweredSpot 在"己方已带电电网"的无线覆盖内选一格可建位：覆盖内没有可建位时
+// 返回 nil，宁可不补也不要发一座电送不出去的风机（否则 starved 恒真、无限补电）。
+//
+// 只在覆盖圈（电感应塔 12 / 无线输电塔 18 / 卫星配电站 30）内挑格子，不走
+// botBuildSpotNear 的大半径扫描：后者从半径 9 扫到建造半径 72，逐锚点各扫一遍
+// 会让单拍 bot 决策变成 anchors×（半径² 的 SurfaceDisc），实测 37 座建筑时单拍
+// 400ms+（整局回归因此出现上百个 >100ms 的 tick）。
+func (gc *GameCore) botPoweredSpot(ws *model.WorldState, owner string, ctx *botSurvey, btype model.BuildingType) *model.Position {
+	if ws == nil || ctx == nil || ctx.home == nil {
+		return nil
+	}
+	def, ok := model.BuildingDefinitionByID(btype)
+	if !ok {
+		return nil
+	}
+	footprint := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
+
+	powered := botPoweredGrid(ws, ctx)
+	anchors := make([]*model.Building, 0, len(ctx.buildings))
+	for _, b := range ctx.buildings {
+		if b != nil && powered[b.ID] {
+			anchors = append(anchors, b)
+		}
+	}
+	if len(anchors) == 0 {
+		// 电网里还没有发电建筑（第一座风机）：仍按常规选址贴基地建，
+		// 它的供电接口在电感应塔无线范围内就能把电送进电网。
+		return botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), btype)
+	}
+	sort.Slice(anchors, func(i, j int) bool {
+		di, dj := ws.SurfaceDistance(*ctx.home, anchors[i].Position), ws.SurfaceDistance(*ctx.home, anchors[j].Position)
+		if di != dj {
+			return di < dj
+		}
+		return anchors[i].ID < anchors[j].ID
+	})
+
+	// 候选 = 各带电锚点无线覆盖圈的并集。逐锚点分别扫描再挑最近会让单拍决策变成
+	// anchors×（Disc(cover) 的排序与距离计算）；这里先把并集去重成一张候选表，
+	// 对每个候选只算一次到基地的球面距离，再按距离排序逐格校验（实测锚点多时
+	// 单拍 400ms+ → 每拍 ≤ 2 万次距离计算）。
+	seen := make(map[model.Position]struct{})
+	candidates := make([]model.Position, 0, 256)
+	for _, anchor := range anchors {
+		cover := model.DefaultPowerLineRange
+		if runtimeDef, ok := model.BuildingRuntimeDefinitionByID(anchor.Type); ok && runtimeDef.Functions.PowerGrid != nil {
+			cover = runtimeDef.Functions.PowerGrid.WirelessRange
+		}
+		for _, tile := range ws.SurfaceDisc(anchor.Position, cover) {
+			if !ws.InBounds(tile.X, tile.Y) {
+				continue
+			}
+			if _, ok := seen[tile]; ok {
+				continue
+			}
+			seen[tile] = struct{}{}
+			candidates = append(candidates, tile)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		di, dj := ws.SurfaceDistance(*ctx.home, candidates[i]), ws.SurfaceDistance(*ctx.home, candidates[j])
+		if di != dj {
+			return di < dj
+		}
+		if candidates[i].Y != candidates[j].Y {
+			return candidates[i].Y < candidates[j].Y
+		}
+		return candidates[i].X < candidates[j].X
+	})
+	for _, candidate := range candidates {
+		if !ws.Grid[candidate.Y][candidate.X].Terrain.Buildable() {
+			continue
+		}
+		if ws.Grid[candidate.Y][candidate.X].BuildingID != "" {
+			continue
+		}
+		if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(candidate.X, candidate.Y)) {
+			continue
+		}
+		if !ws.FootprintFits(candidate, footprint, btype, "") {
+			continue
+		}
+		if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
+			continue
+		}
+		c := candidate
+		return &c
+	}
+	return nil
 }
 
 // botMiners 矿机建设：目标数量内且附近有未覆盖矿点。
@@ -1082,7 +1283,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		return false
 	}
 	// 找一台附近没有己方矿机的矿点（必须在建造可达范围内：基地半径或执行体操作范围）。
-	execRange := 6
+	execRange := 18
 	if ctx.executor != nil {
 		if execState := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID); execState != nil {
 			execRange = execState.OperateRange
@@ -1108,12 +1309,24 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		id   string
 		node *model.ResourceNodeState
 	}
-	candidates := make([]minerCandidate, 0, len(ws.Resources))
+	// 候选先用**带上限**的 SurfaceWithin 预筛，再对幸存者算精确距离：
+	// 全图有上万个矿点 cell，逐个算无上限的跨面 A* 距离在 face 288 上要 ~200ms
+	// （实测：11050 个矿点 198ms），而带上限的判定只要 15ms。预筛半径取
+	// 「基地半径 72 + 基地到执行体的距离 + 执行体操作范围」：三角形不等式保证
+	// 被滤掉的矿点既超出基地半径、也超出执行体操作范围，不可能进入 inRange。
+	prefilter := 72 + execRange
+	if ctx.executor != nil {
+		prefilter += ws.SurfaceDistance(*ctx.home, ctx.executor.Position)
+	}
+	candidates := make([]minerCandidate, 0, 64)
 	for id, node := range ws.Resources {
 		if node == nil || node.Remaining <= 0 || node.Depleted {
 			continue
 		}
 		if _, ok := kindRank[node.Kind]; !ok {
+			continue
+		}
+		if !ws.SurfaceWithin(*ctx.home, node.Position, prefilter) {
 			continue
 		}
 		candidates = append(candidates, minerCandidate{
@@ -1136,7 +1349,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 	for _, cand := range candidates {
 		node := cand.node
 		homeDist := cand.dist
-		inRange := homeDist <= 24
+		inRange := homeDist <= 72
 		if !inRange && ctx.executor != nil && ws.SurfaceDistance(ctx.executor.Position, node.Position) <= execRange {
 			inRange = true
 		}
@@ -1152,7 +1365,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		// 因此仍然选最近的矿点建机，由 botPowerLink 负责把电网推过去。
 		covered := false
 		for _, b := range ctx.buildings {
-			if isMinerBuilding(b) && ws.SurfaceDistance(b.Position, node.Position) <= 4 {
+			if isMinerBuilding(b) && ws.SurfaceDistance(b.Position, node.Position) <= 12 {
 				covered = true
 				break
 			}
@@ -1163,10 +1376,26 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		// 复用与 execBuild 相同的围死校验：矿机同样不能把基地封死
 		// （试玩报告 1010 阻断 A 的修法——否则 bot 会反复发注定被拒的建造命令，
 		// 整局卡在"矿机建不起来"上）。
-		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, node.Position) != nil {
+		// 细分网格：矿机是 3×3 占地，矿点格本身空着不代表放得下——开局 HQ（5×5）
+		// 与风机（2×2）就压在矿脉边上，按矿点格下锚点会被"占地重叠"拒绝（实测
+		// 开局链第一台矿机被拒 83–112 次，整局卡死在"没矿机"）。这里按与 execBuild
+		// 相同的整块落位求锚点，并确认锚点仍覆盖这个矿点。
+		def, ok := model.BuildingDefinitionByID(model.BuildingTypeMiningMachine)
+		if !ok {
+			return false
+		}
+		fp := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
+		origin, ok := ws.FindFootprintOrigin(node.Position, fp, model.BuildingTypeMiningMachine, "")
+		if !ok || !ws.FootprintFits(origin, fp, model.BuildingTypeMiningMachine, "") {
 			continue
 		}
-		pos := node.Position
+		if model.ValidateCollectorSite(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
+			continue
+		}
+		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
+			continue
+		}
+		pos := origin
 		return issue(model.Command{
 			Type:    model.CmdBuild,
 			Target:  model.CommandTarget{Layer: "planet", Position: &pos},
@@ -1458,7 +1687,7 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, 
 	if maxRadius < 1 {
 		return nil
 	}
-	start := 3
+	start := 9
 	if maxRadius < start {
 		start = 1
 	}
@@ -1483,6 +1712,14 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, 
 			}
 			if ws.Construction != nil && ws.Construction.IsTileReserved(model.TileKey(candidate.X, candidate.Y)) {
 				continue
+			}
+			// 细分网格：锚点格空 ≠ 放得下。2×2/3×3/5×5 的占地必须整块可落位，
+			// 否则发出的建造命令会被"占地与已有建筑重叠"拒绝（脚本化开局实测
+			// 风机反复撞在 5×5 的 HQ 上，整局卡死在第一座风机）。
+			if def, ok := model.BuildingDefinitionByID(btype); ok {
+				if !ws.FootprintFits(candidate, model.RotatedFootprint(def.Footprint, model.PlanRotation0), btype, "") {
+					continue
+				}
 			}
 			// 复用围死校验：跳过会把地面单位四周堵死的格子。
 			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {

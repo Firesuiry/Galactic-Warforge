@@ -32,7 +32,10 @@ const (
 	// 会永远停在同一个值（试玩报告 #4：11 个兵 4 万 tick 不动）。
 	unitBlockedAbandonTicks = 300
 	// maxPathBudget 单次寻路的深度上限（格），超出即视为不可达，需要分段指令。
-	maxPathBudget = 800
+	// 细分网格后世界边长 ×3，跨基地寻路（skirmish face 288 上两基地相距数百格）
+	// 需要更大的预算；预算同时是 pathFlood 的深度上限，浅层命中会提前结束，
+	// 因此放大只在真的需要绕远时才付出代价。
+	maxPathBudget = 4000
 )
 
 // settleUnitMovement 推进所有世界单位的实时移动，返回到达/放弃事件。
@@ -351,8 +354,9 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 		return []model.Position{from, to}, true
 	}
 	budget := dist*2 + 40
-	if dist <= 12 {
+	if dist <= 36 {
 		// 近距寻路（围堵/贴身场景）用小预算，避免单位堆中对全图做 BFS。
+		// 阈值同样按细分网格 ×3（原 12 格 ≈ 现在 36 格）。
 		budget = dist*2 + 24
 	}
 	if budget > maxPathBudget {
@@ -426,6 +430,9 @@ func pathFlood(ws *model.WorldState, from model.Position, selfID string, avoidId
 			result.hit = cur
 			break
 		}
+		// 深度上限判定必须用"已扩展的层数"而不是访问顺序：同一层的格子入队后
+		// 会排在更深的格子之前，所以这里改用入队时记录的深度即可（父深度 +1）。
+		// 注意 depth[cur] 已经是在入队时算好的，直接比较即可。
 		if int(depth[cur]) >= budget {
 			result.truncated = true
 			continue

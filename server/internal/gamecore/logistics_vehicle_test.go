@@ -319,8 +319,9 @@ func TestShipUnavailableDestinationReturnsCargoAndStrandedSnapshot(t *testing.T)
 		t.Run(fmt.Sprint(lostHome), func(t *testing.T) {
 			ws := model.NewWorldState("planet-1", 12)
 			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+			// 细分网格：星际物流运输站 5×5，两站要隔开以免占地重叠。
 			a := newInterstellarLogisticsStationBuilding("a", model.Position{X: 1, Y: 1})
-			b := newInterstellarLogisticsStationBuilding("b", model.Position{X: 3, Y: 1})
+			b := newInterstellarLogisticsStationBuilding("b", model.Position{X: 8, Y: 1})
 			attachBuilding(ws, a)
 			attachBuilding(ws, b)
 			a.LogisticsStation.UpsertInterstellarSetting(model.LogisticsStationItemSetting{ItemID: model.ItemIronOre, Mode: model.LogisticsStationModeSupply})
@@ -340,7 +341,8 @@ func TestShipUnavailableDestinationReturnsCargoAndStrandedSnapshot(t *testing.T)
 			}
 			ws.PowerInputs = nil
 			ws.PowerSnapshot = nil
-			for i := 0; i < 10; i++ {
+			// 细分网格：站距变远（5×5 占地 + 站间距离），返航需要更多 tick。
+			for i := 0; i < 30; i++ {
 				settleLogisticsShips(worlds)
 			}
 			if lostHome {
@@ -427,13 +429,15 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: make(model.ItemInventory)}
 			grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 			core := &GameCore{}
+			// 细分网格：制造台 3×3（x3..5）、运输站 5×5。输出带贴在制造台东侧
+			// 外圈（朝东背离），运输站放在带子东侧，其西侧外圈正好吃到这条带子。
 			factory := newBuilding("factory", model.BuildingTypeAssemblingMachineMk1, "p1", model.Position{X: 3, Y: 3})
 			factory.Production.RecipeID = itemID
 			factory.Runtime.State = model.BuildingWorkRunning
 			attachBuilding(ws, factory)
-			belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 3}, model.ConveyorEast)
+			belt := newConveyorBuilding("belt", model.Position{X: 6, Y: 4}, model.ConveyorEast)
 			attachBuilding(ws, belt)
-			station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 5, Y: 3})
+			station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 7, Y: 2})
 			attachBuilding(ws, station)
 			if err := station.LogisticsStation.UpsertSetting(model.LogisticsStationItemSetting{ItemID: itemID, Mode: model.LogisticsStationModeNone}); err != nil {
 				t.Fatal(err)

@@ -12,7 +12,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
   - player_id: "p2"
@@ -22,7 +22,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
 

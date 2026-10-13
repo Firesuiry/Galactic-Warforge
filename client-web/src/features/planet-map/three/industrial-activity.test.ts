@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
-import { collectActivity, IndustrialActivity } from './industrial-activity';
-import { tileNormal } from './projection';
+import { collectActivity, IndustrialActivity, BELT_CARGO_CELL, BELT_CARGO_MAX_PER_STACK } from './industrial-activity';
+import { tileNormal, surfaceTileSize } from './projection';
 
 function fixture(): PlanetThreeData {
   return {
@@ -112,7 +112,30 @@ describe('authoritative industrial activity', () => {
     data.planet.buildings!.b.runtime.state = 'idle';
     activity.update(data); activity.animate(.1, 21);
     expect(particles.geometry.drawRange.count).toBe(0);
-    expect(cargo.count).toBe(1);
+    // 一堆 12 件画 BELT_CARGO_MAX_PER_STACK 个小方块（不是一件一个满格大方块）。
+    expect(cargo.count).toBe(BELT_CARGO_MAX_PER_STACK);
     activity.destroy(); expect(world.children).toHaveLength(0);
+  });
+
+  it('draws one small cube per item up to the cap, each BELT_CARGO_CELL wide', () => {
+    const data = fixture(); const building = factory();
+    building.conveyor!.buffer = [{ item_id: 'iron_ore', quantity: 2 }, { item_id: 'gear', quantity: 9 }];
+    data.planet.buildings!.b = building;
+    const world = new THREE.Group(); const activity = new IndustrialActivity(world);
+    activity.update(data); activity.animate(.1, 0);
+    const cargo = world.children[0].children[0] as THREE.InstancedMesh;
+    // 2 件 → 2 个，9 件（超上限）→ BELT_CARGO_MAX_PER_STACK 个。
+    expect(cargo.count).toBe(2 + BELT_CARGO_MAX_PER_STACK);
+    const size = surfaceTileSize(100, 4);
+    const scale = new THREE.Vector3();
+    for (let i = 0; i < cargo.count; i++) {
+      const matrix = new THREE.Matrix4().fromArray(cargo.instanceMatrix.array, i * 16);
+      matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+      // 方块边长 = 0.3 cell：远小于 0.52 cell 的带宽，一格内可见多个。
+      // instanceMatrix 是 Float32，比较放到 1e-5 的相对精度即可。
+      expect(scale.x).toBeCloseTo(size * BELT_CARGO_CELL, 5);
+      expect(scale.x).toBeLessThan(size * .52);
+    }
+    activity.destroy();
   });
 });

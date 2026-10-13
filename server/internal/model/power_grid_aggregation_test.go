@@ -40,9 +40,10 @@ func TestPowerGridSplitMerge(t *testing.T) {
 	ws := NewWorldState("p1", 10)
 	ws.Players["p1"] = &PlayerState{PlayerID: "p1", IsAlive: true}
 
+	// 细分网格后电塔无线覆盖 12 格：把桥接塔放在两座建筑之间。
 	gen := newTestBuilding("g-1", BuildingTypeWindTurbine, Position{X: 1, Y: 1})
-	bridge := newTestBuilding("b-1", BuildingTypeTeslaTower, Position{X: 2, Y: 1})
-	consumer := newTestBuilding("c-1", BuildingTypeAssemblingMachineMk1, Position{X: 3, Y: 1})
+	bridge := newTestBuilding("b-1", BuildingTypeTeslaTower, Position{X: 7, Y: 1})
+	consumer := newTestBuilding("c-1", BuildingTypeAssemblingMachineMk1, Position{X: 13, Y: 1})
 	ws.Buildings[gen.ID] = gen
 	ws.Buildings[bridge.ID] = bridge
 	ws.Buildings[consumer.ID] = consumer

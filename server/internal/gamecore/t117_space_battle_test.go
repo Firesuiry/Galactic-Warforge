@@ -16,6 +16,7 @@ func TestT117SpaceBattleSettlementGeneratesBattleReportAndPersistsRuntime(t *tes
 
 	grantTechs(ws, "p1", "destroyer")
 
+	// 细分网格：HQ 占 5×5（x6..10,y6..10），配电站必须摆到占地之外，否则压在 HQ 上。
 	base := newBuilding("battle-hub-t117", model.BuildingTypeBattlefieldAnalysisBase, "p1", model.Position{X: 6, Y: 6})
 	base.Runtime.State = model.BuildingWorkRunning
 	base.Runtime.Params.EnergyConsume = 0
@@ -24,7 +25,7 @@ func TestT117SpaceBattleSettlementGeneratesBattleReportAndPersistsRuntime(t *tes
 	}
 	attachBuilding(ws, base)
 
-	power := newBuilding("battle-power-t117", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
+	power := newBuilding("battle-power-t117", model.BuildingTypeWindTurbine, "p1", model.Position{X: 12, Y: 6})
 	power.Runtime.State = model.BuildingWorkRunning
 	attachBuilding(ws, power)
 

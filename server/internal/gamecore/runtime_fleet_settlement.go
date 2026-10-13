@@ -12,8 +12,8 @@ const (
 	FleetTransitTicks int64 = 10
 	// fleetLaneNeighborCount mirrors the starmap lane rule (k nearest neighbors).
 	fleetLaneNeighborCount = 2
-	// defaultUngroupedAggroRange 未编队索敌半径（格）。Pursue 只允许在该半径内走近开火，不扩大搜索。
-	defaultUngroupedAggroRange = 12
+	// defaultUngroupedAggroRange 未编队索敌半径（格，细分网格下 ×3）。Pursue 只允许在该半径内走近开火，不扩大搜索。
+	defaultUngroupedAggroRange = 36
 )
 
 // settleFleetTransit advances in-flight fleet jumps: each tick decrements the

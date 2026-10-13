@@ -8,12 +8,27 @@ import { expect, test, type Page } from '@playwright/test';
  * 且点击某格得到的悬停/选中坐标必须与换算出的格子相同（400px 与 1280px 两档）。
  */
 
-async function openFixturePlanet(page: Page) {
+/**
+ * 打开离线样例行星页。
+ *
+ * `zoom` 是 px/cell 缩放档（细分网格后按 cell 记）。窄屏必须显式给一个较大的档并同时给
+ * `x`/`y`：fixture 图只有 24×16 cell，无深链坐标时页面会用「自适应占屏」覆盖 zoom，
+ * 400px 视口下落到 8px/cell（整图 192px 宽，居中后正好被 300px 宽的抽屉整个盖住，
+ * 一个可点格都不剩）。带 x/y 深链后相机按指定档位聚焦，整图 384px 宽、左缘留出抽屉之外
+ * 的一条可点区域——这才是这条用例要验证的「抽屉覆盖下点格仍然命中」。
+ */
+async function openFixturePlanet(page: Page, zoom?: number, focus?: { x: number; y: number }) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
   await page.waitForURL(/\/planet\//, { timeout: 15_000 });
-  await page.goto('/planet/planet-1-1?view=2d');
+  const query = [
+    'view=2d',
+    zoom ? `zoom=${zoom}` : '',
+    focus ? `x=${focus.x}` : '',
+    focus ? `y=${focus.y}` : '',
+  ].filter(Boolean).join('&');
+  await page.goto(`/planet/planet-1-1?${query}`);
   await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -96,13 +111,16 @@ for (const viewport of [
 ]) {
   test(`抽屉开/关画布不横向位移且点格命中正确（${viewport.label}）`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await openFixturePlanet(page);
+    await openFixturePlanet(page, 16, { x: 6, y: 6 });
     await dismissToasts(page);
 
     const closed = await canvasGeometry(page);
 
     await page.getByRole('button', { name: '工作台' }).first().click();
     await expect(page.getByRole('tab', { name: '工作台' })).toBeVisible();
+    // 抽屉是覆盖式的（不挤压画布），展开动画 300ms 后才完全盖住右侧格子；
+    // 细分网格后窄屏下画布上的可用格子本就不多，必须等动画落定再挑。
+    await page.waitForTimeout(600);
     const opened = await canvasGeometry(page);
 
     // 画布不横向位移：x 一致、壳没有横向滚动、overflow 不是可滚动的 hidden/auto/scroll
@@ -126,10 +144,36 @@ for (const viewport of [
     let verified = 0;
     // 先试几处典型格，再按网格兜底扫：窄屏下抽屉、新手引导（9 步时多折一行）会盖住不同的格子，
     // 本用例校验的是「点到的就是那一格」，不关心具体是哪几格。
-    const candidates = [
-      { x: 6, y: 6 }, { x: 4, y: 6 }, { x: 6, y: 8 }, { x: 9, y: 4 }, { x: 12, y: 6 },
-    ];
-    for (let y = 0; y <= 14; y += 1) for (let x = 0; x <= 15; x += 1) candidates.push({ x, y });
+    //
+    // 细分网格后 fixture 图仍是 24×16 格（face_size 8），但 400px 视口下自适应档是 8px/cell，
+    // 画布只放得下约 50×105 格——候选格要按实际可视范围生成，写死 0–15 会全部落在画布外。
+    const visibleTiles = await page.evaluate(() => {
+      const surface = document.querySelector('.planet-map-canvas__surface') as HTMLElement;
+      const tileSize = Number(surface.getAttribute('data-tile-size'));
+      const offsetX = Number(surface.getAttribute('data-camera-offset-x'));
+      const offsetY = Number(surface.getAttribute('data-camera-offset-y'));
+      const mapWidth = Number(surface.getAttribute('data-map-width') ?? 0);
+      const mapHeight = Number(surface.getAttribute('data-map-height') ?? 0);
+      const wrapMod = (value: number, size: number) => ((value % size) + size) % size;
+      const canon = (value: number, offset: number, mapTiles: number, viewportPx: number) => (
+        mapTiles * tileSize > viewportPx
+          ? Math.floor(-offset / tileSize) + wrapMod(value - Math.floor(-offset / tileSize), mapTiles)
+          : value
+      );
+      const list: Array<{ x: number; y: number }> = [];
+      for (let screenY = 1; screenY * tileSize + tileSize <= surface.clientHeight - 2; screenY += 1) {
+        for (let screenX = 1; screenX * tileSize + tileSize <= surface.clientWidth - 2; screenX += 1) {
+          const x = canon(screenX, offsetX, mapWidth, surface.clientWidth);
+          const y = canon(screenY, offsetY, mapHeight, surface.clientHeight);
+          // 小图（fixture 24×16）在画布里只占一块：画布其余位置的屏幕点不对应任何格子，
+          // 悬停会被渲染层钳成 null。只取真的落在图内的格。
+          if (x < 0 || y < 0 || x >= mapWidth || y >= mapHeight) continue;
+          list.push({ x, y });
+        }
+      }
+      return list;
+    });
+    const candidates = visibleTiles;
     for (const tile of candidates) {
       const local = await tileToLocalPoint(page, tile);
       if (local.x < 4 || local.y < 4 || local.x > local.width - 4 || local.y > local.height - 4) {

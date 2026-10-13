@@ -40,13 +40,21 @@ func newTwoPlanetTestCore(t *testing.T) (*GameCore, *config.Config, *mapconfig.C
 	return New(cfg, maps, queue.New(), NewEventBus(), nil), cfg, mapCfg
 }
 
+// placeBuilding 把建筑直接放进世界（测试夹具，不经过建造命令）。
+// 细分网格：占地是多格的，登记必须走 IndexBuilding——只写锚点格会让 2×2/3×3
+// 建筑的其余 cell 看起来是空地（单位能走进去、别的建筑能叠上来、单位出厂点
+// 也会落在占地里）。
 func placeBuilding(ws *model.WorldState, building *model.Building) {
 	ws.Buildings[building.ID] = building
 	model.RegisterPowerGridBuilding(ws, building)
 	model.RegisterLogisticsStation(ws, building)
-	key := model.TileKey(building.Position.X, building.Position.Y)
-	ws.TileBuilding[key] = building.ID
-	ws.Grid[building.Position.Y][building.Position.X].BuildingID = building.ID
+	if err := ws.IndexBuilding(building); err != nil {
+		// 夹具里手工摆放的建筑可能整块放不下（老测试按 1×1 的紧邻位置摆的）：
+		// 退回只登记锚点格，保持这些夹具的原有语义；生产路径一律走 IndexBuilding。
+		key := model.TileKey(building.Position.X, building.Position.Y)
+		ws.TileBuilding[key] = building.ID
+		ws.Grid[building.Position.Y][building.Position.X].BuildingID = building.ID
+	}
 }
 
 func newBuilding(id string, btype model.BuildingType, owner string, pos model.Position) *model.Building {

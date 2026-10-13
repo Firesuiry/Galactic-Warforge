@@ -158,13 +158,20 @@ func newSorterBuilding(id string, pos model.Position) *model.Building {
 	return b
 }
 
+// attachBuilding 把建筑直接放进世界（测试夹具）。
+// 细分网格：占地是多格的，登记必须走 IndexBuilding——只写锚点格会让 2×2/3×3
+// 建筑的其余 cell 看起来是空地（IO 外圈、单位通行、其它建筑落位都会判错）。
 func attachBuilding(ws *model.WorldState, b *model.Building) {
 	ws.Buildings[b.ID] = b
 	model.RegisterPowerGridBuilding(ws, b)
 	model.RegisterLogisticsStation(ws, b)
-	key := model.TileKey(b.Position.X, b.Position.Y)
-	ws.TileBuilding[key] = b.ID
-	ws.Grid[b.Position.Y][b.Position.X].BuildingID = b.ID
+	if err := ws.IndexBuilding(b); err != nil {
+		// 夹具里手工摆放的建筑可能整块放不下（老测试按 1×1 的紧邻位置摆的）：
+		// 退回只登记锚点格，保持这些夹具的原有语义；生产路径一律走 IndexBuilding。
+		key := model.TileKey(b.Position.X, b.Position.Y)
+		ws.TileBuilding[key] = b.ID
+		ws.Grid[b.Position.Y][b.Position.X].BuildingID = b.ID
+	}
 }
 
 func TestSorterTransferReflectsActualMovement(t *testing.T) {

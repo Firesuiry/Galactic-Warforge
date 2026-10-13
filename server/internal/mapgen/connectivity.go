@@ -23,16 +23,19 @@ import (
 // terrain.TileType.Buildable() 的格子可通行（水/岩浆/blocked 都不可通行）。
 // 邻居一律用 surface.Grid.Step 取，跨面相邻正确。
 const (
-	// smallLandmassTiles 孤立陆地阈值（格）。小于它的连通区会被封成阻挡地形。
-	smallLandmassTiles = 200
-	// spawnResourcePathRange 出生点到开局必需原矿的地面路径上限（格）。
-	spawnResourcePathRange = 24
+	// smallLandmassTiles 孤立陆地阈值（cell）。小于它的连通区会被封成阻挡地形。
+	// 细分网格：世界边长 ×3，同一块陆地的 cell 数是原来的 9 倍（200 ×9 = 1800）。
+	smallLandmassTiles = 1800
+	// spawnResourcePathRange 出生点到开局必需原矿的地面路径上限（cell）。
+	// 细分网格：距离类数值 ×3（旧 24 格）。
+	spawnResourcePathRange = 72
 	// 补矿簇优先选在这个距离带内。不能太远：开局矿机是「矿机 + 紧挨着它的一座
 	// 电塔」配着建的，电塔要落在基地电塔的无线覆盖（4 格）里才接得上电网；把补的
 	// 矿放到 12–20 格会让基地那 4 座矿机里 3 座落在供电范围外（实测
-	// `TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500` 失败），5–8 格才稳定。
-	openingClusterMinRange = 5
-	openingClusterMaxRange = 8
+	// `TestSkirmishPlayerKitRunsPowerMiningSmeltingBy1500` 失败），15–24 cell 才稳定。
+	// 细分网格：距离类数值 ×3（旧 5..8 格）。
+	openingClusterMinRange = 15
+	openingClusterMaxRange = 24
 	// carveCost 走廊 Dijkstra 里每抹平一格挡路地形的代价（陆地代价为 0）。
 	carveCost = 1
 )

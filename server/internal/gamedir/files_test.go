@@ -14,13 +14,12 @@ import (
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/model"
 	"siliconworld/internal/snapshot"
-	"siliconworld/internal/terrain"
 )
 
 func TestWriteRoundTrip(t *testing.T) {
 	dir := Open(t.TempDir())
 	meta := &MetaFile{
-		FormatVersion: 1,
+		FormatVersion: CurrentFormatVersion,
 		GameplayConfig: GameplayConfig{
 			Battlefield: config.BattlefieldConfig{MapSeed: "seed-a", MaxTickRate: 10},
 			Players:     []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}},
@@ -32,21 +31,21 @@ func TestWriteRoundTrip(t *testing.T) {
 		},
 	}
 	save := &SaveFile{
-		FormatVersion: 1,
+		FormatVersion: CurrentFormatVersion,
 		Tick:          12,
 		Snapshot: &snapshot.Snapshot{
 			Version: snapshot.CurrentVersion,
 			Tick:    12,
 			World: &snapshot.WorldSnapshot{
-				Tick:      12,
-				PlanetID:  "planet-1-1",
-				MapWidth:  1,
-				MapHeight: 1,
-				Players:   map[string]*model.PlayerState{},
-				Buildings: map[string]*snapshot.BuildingSnapshot{},
-				Units:     map[string]*model.Unit{},
-				Resources: map[string]*model.ResourceNodeState{},
-				Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+				Tick:           12,
+				PlanetID:       "planet-1-1",
+				MapWidth:       1,
+				MapHeight:      1,
+				Players:        map[string]*model.PlayerState{},
+				Buildings:      map[string]*snapshot.BuildingSnapshot{},
+				Units:          map[string]*model.Unit{},
+				ResourceDeltas: map[string]model.ResourceNodeDelta{},
+				Terrain:        "0",
 			},
 		},
 		RuntimeState: RuntimeState{
@@ -61,15 +60,15 @@ func TestWriteRoundTrip(t *testing.T) {
 				Version: snapshot.CurrentVersion,
 				Tick:    10,
 				World: &snapshot.WorldSnapshot{
-					Tick:      10,
-					PlanetID:  "planet-1-1",
-					MapWidth:  1,
-					MapHeight: 1,
-					Players:   map[string]*model.PlayerState{},
-					Buildings: map[string]*snapshot.BuildingSnapshot{},
-					Units:     map[string]*model.Unit{},
-					Resources: map[string]*model.ResourceNodeState{},
-					Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+					Tick:           10,
+					PlanetID:       "planet-1-1",
+					MapWidth:       1,
+					MapHeight:      1,
+					Players:        map[string]*model.PlayerState{},
+					Buildings:      map[string]*snapshot.BuildingSnapshot{},
+					Units:          map[string]*model.Unit{},
+					ResourceDeltas: map[string]model.ResourceNodeDelta{},
+					Terrain:        "0",
 				},
 			},
 			CommandLog: []CommandLogEntry{{
@@ -195,8 +194,8 @@ func TestNewMetaFileSetsMetadata(t *testing.T) {
 	if meta == nil {
 		t.Fatalf("expected meta file")
 	}
-	if meta.FormatVersion != 1 {
-		t.Fatalf("expected format version 1, got %d", meta.FormatVersion)
+	if meta.FormatVersion != CurrentFormatVersion {
+		t.Fatalf("expected format version %d, got %d", CurrentFormatVersion, meta.FormatVersion)
 	}
 	if meta.CreatedAt.IsZero() || meta.LastSavedAt.IsZero() {
 		t.Fatalf("expected timestamps initialized")
@@ -421,8 +420,8 @@ func TestWriteInitialRejectsUnknownFormatVersions(t *testing.T) {
 	t.Run("meta", func(t *testing.T) {
 		dir := Open(t.TempDir())
 		meta := minimalMeta()
-		meta.FormatVersion = currentFormatVersion + 1
-		if err := dir.WriteInitial(meta, minimalSave(2)); err == nil || !strings.Contains(err.Error(), "format_version") {
+		meta.FormatVersion = CurrentFormatVersion + 1
+		if err := dir.WriteInitial(meta, minimalSave(2)); err == nil || !strings.Contains(err.Error(), "不受支持") {
 			t.Fatalf("expected meta format version rejected, got %v", err)
 		}
 	})
@@ -430,8 +429,8 @@ func TestWriteInitialRejectsUnknownFormatVersions(t *testing.T) {
 	t.Run("save", func(t *testing.T) {
 		dir := Open(t.TempDir())
 		save := minimalSave(2)
-		save.FormatVersion = currentFormatVersion + 1
-		if err := dir.WriteInitial(minimalMeta(), save); err == nil || !strings.Contains(err.Error(), "format_version") {
+		save.FormatVersion = CurrentFormatVersion + 1
+		if err := dir.WriteInitial(minimalMeta(), save); err == nil || !strings.Contains(err.Error(), "不受支持") {
 			t.Fatalf("expected save format version rejected, got %v", err)
 		}
 	})
@@ -447,7 +446,7 @@ func TestLoadRejectsUnknownFormatVersions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load baseline: %v", err)
 		}
-		meta.FormatVersion = currentFormatVersion + 1
+		meta.FormatVersion = CurrentFormatVersion + 1
 		data, err := json.Marshal(meta)
 		if err != nil {
 			t.Fatalf("marshal meta: %v", err)
@@ -455,7 +454,7 @@ func TestLoadRejectsUnknownFormatVersions(t *testing.T) {
 		if err := os.WriteFile(dir.MetaPath(), data, 0o644); err != nil {
 			t.Fatalf("write meta: %v", err)
 		}
-		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "meta format_version") {
+		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "存档点版本") {
 			t.Fatalf("expected meta format version rejected, got %v", err)
 		}
 	})
@@ -469,7 +468,7 @@ func TestLoadRejectsUnknownFormatVersions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load baseline: %v", err)
 		}
-		save.FormatVersion = currentFormatVersion + 1
+		save.FormatVersion = CurrentFormatVersion + 1
 		data, err := json.Marshal(save)
 		if err != nil {
 			t.Fatalf("marshal save: %v", err)
@@ -477,7 +476,7 @@ func TestLoadRejectsUnknownFormatVersions(t *testing.T) {
 		if err := os.WriteFile(dir.SavePath(), data, 0o644); err != nil {
 			t.Fatalf("write save: %v", err)
 		}
-		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "save format_version") {
+		if _, _, err := dir.Load(); err == nil || !strings.Contains(err.Error(), "存档版本") {
 			t.Fatalf("expected save format version rejected, got %v", err)
 		}
 	})
@@ -529,21 +528,21 @@ func minimalMeta() *MetaFile {
 
 func minimalSave(tick int64) *SaveFile {
 	return &SaveFile{
-		FormatVersion: 1,
+		FormatVersion: CurrentFormatVersion,
 		Tick:          tick,
 		Snapshot: &snapshot.Snapshot{
 			Version: snapshot.CurrentVersion,
 			Tick:    tick,
 			World: &snapshot.WorldSnapshot{
-				Tick:      tick,
-				PlanetID:  "planet-1-1",
-				MapWidth:  1,
-				MapHeight: 1,
-				Players:   map[string]*model.PlayerState{},
-				Buildings: map[string]*snapshot.BuildingSnapshot{},
-				Units:     map[string]*model.Unit{},
-				Resources: map[string]*model.ResourceNodeState{},
-				Terrain:   [][]terrain.TileType{{terrain.TileBuildable}},
+				Tick:           tick,
+				PlanetID:       "planet-1-1",
+				MapWidth:       1,
+				MapHeight:      1,
+				Players:        map[string]*model.PlayerState{},
+				Buildings:      map[string]*snapshot.BuildingSnapshot{},
+				Units:          map[string]*model.Unit{},
+				ResourceDeltas: map[string]model.ResourceNodeDelta{},
+				Terrain:        "0",
 			},
 		},
 		RuntimeState: RuntimeState{ActivePlanetID: "planet-1-1"},

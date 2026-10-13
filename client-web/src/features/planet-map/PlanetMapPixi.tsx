@@ -289,9 +289,10 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
     },
     [detailPolicy, sceneLayers, overviewMode],
   );
+  // 细分网格后 scene 档的 px 是「每 cell」：状态条写 px/cell，标签沿用「16px」这类档位名。
   const sceneZoomStatusLabel = zoomLevel.mode === 'scene' && zoomLevel.tileSize !== undefined && zoomLevel.tileSize !== tileSize
-    ? `${zoomLevel.label} (实际 ${tileSize}px/tile)`
-    : `${tileSize}px/tile`;
+    ? `${zoomLevel.label}/cell (实际 ${tileSize}px/cell)`
+    : `${tileSize}px/cell`;
   const hoverScheduler = useMemo(
     () => createAnimationFrameValueScheduler<TilePoint | null>({
       commit: (tile) => {
@@ -1136,6 +1137,11 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
         {interactionMode.kind === 'theater_zone' ? (
           <span className="planet-map-canvas__mode planet-map-canvas__mode--zone">
             战区划定：{theaterZoneTypeLabel(interactionMode.zoneType)} · 左键拖拽矩形画出区域 · 右键/Esc 退出
+          </span>
+        ) : null}
+        {interactionMode.kind === 'haul' ? (
+          <span className="planet-map-canvas__mode">
+            设置运输：{interactionMode.fromBuildingId ? '已选起点，点击终点建筑' : '点击起点建筑'} · 右键/Esc 取消
           </span>
         ) : null}
         {selectedUnits.length > 1 ? <span className="planet-map-canvas__mode">已框选 {selectedUnits.length} 个单位 · 右键移动/攻击</span> : null}

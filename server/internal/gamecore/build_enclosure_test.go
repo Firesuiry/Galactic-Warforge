@@ -61,8 +61,9 @@ func TestBuildRejectsEnclosingFriendlyUnit(t *testing.T) {
 	ws := core.World()
 	mecha := findExecutorUnit(t, ws)
 
-	// 先把机甲挪到一块空地（四邻可建）。
-	target := model.Position{X: 20, Y: 20}
+	// 先把机甲挪到一块空地（四邻可建）。细分网格：基地（5×5 HQ + 周边建筑）
+	// 占地大得多，(20,20) 已经压在家门口的施工区里，换到更远的空地。
+	target := model.Position{X: 40, Y: 40}
 	if res, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: mecha.ID, Position: &target}}); res.Code != model.CodeOK {
 		t.Fatalf("move mecha: %s (%s)", res.Code, res.Message)
 	}
@@ -70,18 +71,19 @@ func TestBuildRejectsEnclosingFriendlyUnit(t *testing.T) {
 		ws.Tick++
 		settleUnitMovement(ws)
 	}
-	// 机甲四周先建 3 座风机，第 4 座必须被拒绝。
+	// 机甲四周先建 3 面墙，第 4 面必须被拒绝。
+	// 细分网格：围堵用 1×1 的传送带（2×2 的风机第一座就会盖住相邻的出口格）。
 	neighbors := ws.SurfaceNeighbors(target)
 	if len(neighbors) != 4 {
 		t.Fatalf("expected 4 neighbors, got %d", len(neighbors))
 	}
 	for i := 0; i < 3; i++ {
-		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeWindTurbine)
+		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeConveyorBeltMk1)
 		if res.Code != model.CodeOK {
 			t.Fatalf("build %d at %+v: %s (%s)", i, neighbors[i], res.Code, res.Message)
 		}
 	}
-	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeWindTurbine)
+	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeConveyorBeltMk1)
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("enclosing build must be rejected, got %s (%s)", res.Code, res.Message)
 	}
@@ -108,12 +110,12 @@ func TestBuildRejectsEnclosingEnemyUnit(t *testing.T) {
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 24, Y: 24})
 	neighbors := ws.SurfaceNeighbors(enemy.Position)
 	for i := 0; i < 3; i++ {
-		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeWindTurbine)
+		res := buildAt(t, core, ws, neighbors[i], model.BuildingTypeConveyorBeltMk1)
 		if res.Code != model.CodeOK {
 			t.Fatalf("build %d at %+v: %s (%s)", i, neighbors[i], res.Code, res.Message)
 		}
 	}
-	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeWindTurbine)
+	res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeConveyorBeltMk1)
 	if res.Code != model.CodeInvalidTarget {
 		t.Fatalf("enclosing an enemy unit must be rejected, got %s (%s)", res.Code, res.Message)
 	}
@@ -161,7 +163,7 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 	core := newEnclosureTestCore(t)
 	ws := core.World()
 	mecha := findExecutorUnit(t, ws)
-	target := model.Position{X: 20, Y: 20}
+	target := model.Position{X: 40, Y: 40}
 	if res, _ := execCommand(core, model.CmdMove, ws, "p1", model.Command{Type: model.CmdMove, Target: model.CommandTarget{EntityID: mecha.ID, Position: &target}}); res.Code != model.CodeOK {
 		t.Fatalf("move mecha: %s (%s)", res.Code, res.Message)
 	}
@@ -180,15 +182,16 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 		if ws.SurfaceDistance(tile, target) != 2 {
 			continue
 		}
-		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		// 细分网格：围堵用 1×1 的传送带（2×2 风机第一座就会盖住相邻的口袋边界格）。
+		res := buildAt(t, core, ws, tile, model.BuildingTypeConveyorBeltMk1)
 		if res.Code == model.CodeOK {
 			continue
 		}
 		if res.Code != model.CodeInvalidTarget {
 			t.Fatalf("build wall at %+v: %s (%s)", tile, res.Code, res.Message)
 		}
-		// 最后一块被拦下：必须是口袋形态的回执，并点名机甲与坐标。
-		if !strings.Contains(res.Message, "机甲") || !strings.Contains(res.Message, "（20,20）") {
+		// 最后一块被拦下：必须是口袋/通路形态的回执，并点名机甲与坐标。
+		if !strings.Contains(res.Message, "机甲") || !strings.Contains(res.Message, "（40,40）") {
 			t.Fatalf("rejection must name the trapped unit and its coordinates, got %q", res.Message)
 		}
 		rejected = true
@@ -199,7 +202,7 @@ func TestBuildRejectsSealingUnitIntoPocket(t *testing.T) {
 	}
 	// 口袋判定不影响远离任何单位/基地的空地建造。
 	free := ws.SurfaceOffset(target, 4, 0)
-	if res := buildAt(t, core, ws, free, model.BuildingTypeWindTurbine); res.Code != model.CodeOK {
+	if res := buildAt(t, core, ws, free, model.BuildingTypeConveyorBeltMk1); res.Code != model.CodeOK {
 		t.Fatalf("free-tile build must stay allowed: %s (%s)", res.Code, res.Message)
 	}
 }
@@ -253,7 +256,12 @@ func TestBuildRejectsSealingOwnBaseFromOutside(t *testing.T) {
 	}
 	rejected := 0
 	for _, tile := range ring {
-		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		// 细分网格：围堵用 1×1 的传送带（2×2 风机放不下这一圈）。
+		// 围堵环会压在 5×5 的 HQ 上，先跳过已经被建筑占着的格。
+		if ws.TileBuilding[model.TileKey(tile.X, tile.Y)] != "" {
+			continue
+		}
+		res := buildAt(t, core, ws, tile, model.BuildingTypeConveyorBeltMk1)
 		switch res.Code {
 		case model.CodeOK:
 		case model.CodeInvalidTarget:
@@ -293,7 +301,7 @@ func TestBuildNearBaseStaysAllowed(t *testing.T) {
 		if built >= 3 {
 			break
 		}
-		res := buildAt(t, core, ws, tile, model.BuildingTypeWindTurbine)
+		res := buildAt(t, core, ws, tile, model.BuildingTypeConveyorBeltMk1)
 		if res.Code != model.CodeOK {
 			t.Fatalf("sparse build at %+v must stay allowed: %s (%s)", tile, res.Code, res.Message)
 		}
@@ -313,4 +321,95 @@ func sealFloodReachedForTest(ws *model.WorldState, home model.Position, owner st
 	budget := 4*ws.SurfaceDistance(home, goal) + 256
 	reached, _ := sealFloodReaches(ws, home, goal, nil, budget)
 	return reached
+}
+
+// reserveForTest 往施工队列塞一个 1×1 传送带任务，占住一格（模拟"在队施工"）。
+func reserveForTest(t *testing.T, ws *model.WorldState, id string, pos model.Position) {
+	t.Helper()
+	if ws.Construction == nil {
+		ws.Construction = model.NewConstructionQueue()
+	}
+	task := &model.ConstructionTask{
+		ID:           id,
+		PlayerID:     "p1",
+		BuildingType: model.BuildingTypeConveyorBeltMk1,
+		Position:     pos,
+		State:        model.ConstructionPending,
+	}
+	if err := ws.Construction.Enqueue(ws, task); err != nil {
+		t.Fatalf("reserve %+v: %v", pos, err)
+	}
+}
+
+// 试玩报告 pt1010-85s8io 的确定性复现：施工队列一格一格收紧基地出口，
+// 最后一块落点盖住基地唯一的可通行邻格时，必须被围死判定拒掉。
+//
+// 真 bug 出在预筛（buildMayCutRegion）：它只比较"占地自己的可通行邻格"是否
+// 互通，看不见基地格这个端点（基地格被自家建筑占着、是洪泛的起点/目标），
+// 于是当占地正好盖住基地最后一条对外通路时会误判"安全"，直接放行，
+// 三层完整判定（基地封死/单位口袋）全被跳过——自己的执行体就这样被自家建筑困死。
+func TestBuildRejectsSealingOwnBaseViaConstructionQueue(t *testing.T) {
+	core := newEnclosureTestCore(t)
+	ws := core.World()
+	mecha := findExecutorUnit(t, ws)
+	home, ok := botHomePosition(ws, "p1")
+	if !ok {
+		t.Fatal("expected p1 home base")
+	}
+	teleportUnitForTest(ws, mecha, ws.SurfaceOffset(home, 20, 0))
+
+	// 基地锚点格的可通行邻格 = 基地对外仅有的出口（其余邻格被 5×5 占地自己占着）。
+	exits := make([]model.Position, 0, 4)
+	for _, n := range ws.SurfaceNeighbors(home) {
+		if unitTileBlockedBeforeBuild(ws, n) {
+			continue
+		}
+		exits = append(exits, n)
+	}
+	if len(exits) < 2 {
+		t.Fatalf("expected at least two base exits, got %v", exits)
+	}
+
+	// 用施工队列把其余出口一格格预留（每一步基地都还必须连着外界）。
+	gap := exits[len(exits)-1]
+	for i, tile := range exits[:len(exits)-1] {
+		reserveForTest(t, ws, fmt.Sprintf("seal-%d", i), tile)
+		if !sealFloodReachedForTest(ws, home, "p1") {
+			t.Fatalf("base must stay connected after reserving %+v", tile)
+		}
+	}
+
+	// 最后一格：本次建造会把基地与外界的通路封死，必须被拒。
+	res := buildAt(t, core, ws, gap, model.BuildingTypeConveyorBeltMk1)
+	if res.Code != model.CodeInvalidTarget {
+		t.Fatalf("sealing the base's last exit %+v must be rejected, got %s (%s)", gap, res.Code, res.Message)
+	}
+	if !strings.Contains(res.Message, "会把基地与外界的通路封死") {
+		t.Fatalf("rejection must be the base-seal verdict, got %q", res.Message)
+	}
+	// 拒绝之后基地仍连着外界。
+	if !sealFloodReachedForTest(ws, home, "p1") {
+		t.Fatal("p1 base must stay connected to the outside after the rejected build")
+	}
+}
+
+// 施工队列逐步围堵执行体：一圈建筑排队围上来，最后一块把机甲四邻堵死时被拒。
+func TestBuildRejectsEnclosingUnitViaConstructionQueue(t *testing.T) {
+	core := newEnclosureTestCore(t)
+	ws := core.World()
+	mecha := findExecutorUnit(t, ws)
+	target := model.Position{X: 40, Y: 40}
+	teleportUnitForTest(ws, mecha, target)
+
+	neighbors := ws.SurfaceNeighbors(target)
+	if len(neighbors) != 4 {
+		t.Fatalf("expected 4 neighbors, got %d", len(neighbors))
+	}
+	// 先排队围住三面，机甲还剩一个出口。
+	for i := 0; i < 3; i++ {
+		reserveForTest(t, ws, fmt.Sprintf("ring-%d", i), neighbors[i])
+	}
+	if res := buildAt(t, core, ws, neighbors[3], model.BuildingTypeConveyorBeltMk1); res.Code != model.CodeInvalidTarget {
+		t.Fatalf("closing the unit's last exit must be rejected, got %s (%s)", res.Code, res.Message)
+	}
 }

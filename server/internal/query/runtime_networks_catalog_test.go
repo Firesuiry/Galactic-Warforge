@@ -91,8 +91,9 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		ID:           "c-2",
 		PlayerID:     "p2",
 		BuildingType: model.BuildingTypeArcSmelter,
-		Position:     model.Position{X: 3, Y: 3},
-		State:        model.ConstructionPending,
+		// 细分网格：熔炉 3×3，邻格 (3,3) 会和 (2,2) 的占地重叠。
+		Position: model.Position{X: 6, Y: 6},
+		State:    model.ConstructionPending,
 	}
 	if err := ws.Construction.Enqueue(ws, enemyTask); err != nil {
 		t.Fatalf("enqueue enemy task: %v", err)
@@ -281,8 +282,9 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
-	if len(view.WorldUnits) != 9 {
-		t.Fatalf("expected exactly 9 public world units, got %+v", view.WorldUnits)
+	// 10 = 9 个战斗/支援单位 + 运输机器人（transport_robot，§2）。
+	if len(view.WorldUnits) != 10 {
+		t.Fatalf("expected exactly 10 public world units, got %d", len(view.WorldUnits))
 	}
 	worldUnitIDs := map[string]bool{}
 	for _, entry := range view.WorldUnits {
@@ -296,6 +298,9 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	}
 	if !worldUnitIDs[string(model.UnitTypeMecha)] {
 		t.Fatalf("expected mecha in public world unit catalog, got %+v", worldUnitIDs)
+	}
+	if !worldUnitIDs[string(model.UnitTypeTransportRobot)] {
+		t.Fatalf("expected transport_robot in public world unit catalog, got %+v", worldUnitIDs)
 	}
 	for _, id := range []string{"worker", "soldier", "scout", "artillery", "missile_vehicle", "repair_vehicle", "supply_truck", "attack_drone"} {
 		if !worldUnitIDs[id] {
@@ -387,8 +392,8 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 		t.Fatalf("expected gauss turret without power_range, got %+v", gauss)
 	}
 	srPlasma := buildingByID[model.BuildingTypeSRPlasmaTurret]
-	if srPlasma == nil || srPlasma.CombatRange != 12 {
-		t.Fatalf("expected sr plasma turret combat_range 12, got %+v", srPlasma)
+	if srPlasma == nil || srPlasma.CombatRange != 36 {
+		t.Fatalf("expected sr plasma turret combat_range 36, got %+v", srPlasma)
 	}
 	tesla := buildingByID[model.BuildingTypeTeslaTower]
 	if tesla == nil || tesla.PowerRange != model.DefaultTeslaTowerRange {

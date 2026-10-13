@@ -59,9 +59,11 @@ func TestAssemblerTiersBeltIOPowerAndBackpressure(t *testing.T) {
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			ws := model.NewWorldState("planet", 12)
+			// 细分网格：制造台 3×3（x3..5,y3..5），输入带贴西侧外圈朝东，
+			// 输出带贴东侧外圈朝东（背离占地）。
 			b := newProductionTestBuilding("assembler", tc.kind, model.Position{X: 3, Y: 3}, "gear")
-			input := newConveyorBuilding("input", model.Position{X: 2, Y: 3}, model.ConveyorEast)
-			output := newConveyorBuilding("output", model.Position{X: 4, Y: 3}, model.ConveyorEast)
+			input := newConveyorBuilding("input", model.Position{X: 2, Y: 4}, model.ConveyorEast)
+			output := newConveyorBuilding("output", model.Position{X: 6, Y: 4}, model.ConveyorEast)
 			for _, building := range []*model.Building{b, input, output} {
 				attachBuilding(ws, building)
 			}

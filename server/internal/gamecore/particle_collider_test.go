@@ -33,9 +33,11 @@ func TestParticleColliderRecipesThroughBelts(t *testing.T) {
 			ws := model.NewWorldState("planet", 12)
 			b := colliderForTest(ws, tc.recipe)
 			supplyProductionFixture(t, ws, b)
-			input := newConveyorBuilding("input", model.Position{X: 2, Y: 3}, model.ConveyorEast)
-			output := newConveyorBuilding("output", model.Position{X: 4, Y: 3}, model.ConveyorEast)
-			side := newConveyorBuilding("side", model.Position{X: 3, Y: 4}, model.ConveyorSouth)
+			// 细分网格：对撞机 5×5（x3..7,y3..7）。输入带贴西侧外圈朝东，
+			// 主输出带贴东侧外圈朝东，副产物带贴南侧外圈朝南。
+			input := newConveyorBuilding("input", model.Position{X: 2, Y: 5}, model.ConveyorEast)
+			output := newConveyorBuilding("output", model.Position{X: 8, Y: 5}, model.ConveyorEast)
+			side := newConveyorBuilding("side", model.Position{X: 5, Y: 8}, model.ConveyorSouth)
 			for _, belt := range []*model.Building{input, output, side} {
 				attachBuilding(ws, belt)
 			}
@@ -219,34 +221,40 @@ func TestParticleColliderBuildResearchGates(t *testing.T) {
 func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 	core := newConstructionTestCore(t, 4, 4)
 	ws := core.World()
+	// 细分网格：粒子对撞机占地 5×5，IO 是占地外圈的一圈 cell。输入带贴在
+	// 占地西侧外圈、方向朝东（指向占地）；输出带贴在东侧外圈、方向朝东（背离）。
+	colliderFP := model.Footprint{Width: 5, Height: 5}
 	var center *model.Position
-	for y := 2; y < ws.MapHeight-2 && center == nil; y++ {
-		for x := 2; x < ws.MapWidth-2; x++ {
-			clear := true
-			for dx := -1; dx <= 1; dx++ {
-				if !ws.Grid[y][x+dx].Terrain.Buildable() || ws.TileBuilding[model.TileKey(x+dx, y)] != "" {
-					clear = false
-				}
+	for y := 8; y < ws.MapHeight-8 && center == nil; y++ {
+		for x := 8; x < ws.MapWidth-8; x++ {
+			origin := model.Position{X: x, Y: y}
+			if !ws.FootprintFits(origin, colliderFP, model.BuildingTypeMiniatureParticleCollider, "") {
+				continue
 			}
-			if clear {
-				center = &model.Position{X: x, Y: y}
-				break
+			inPos := model.Position{X: x - 1, Y: y + 2}
+			outPos := model.Position{X: x + 5, Y: y + 2}
+			if ws.TileBuilding[model.TileKey(inPos.X, inPos.Y)] != "" || ws.TileBuilding[model.TileKey(outPos.X, outPos.Y)] != "" {
+				continue
 			}
+			center = &origin
+			break
 		}
 	}
 	if center == nil {
-		t.Fatal("no buildable three-tile line")
+		t.Fatal("no buildable collider site with belt ring cells")
 	}
+	inPos := model.Position{X: center.X - 1, Y: center.Y + 2}
+	outPos := model.Position{X: center.X + 5, Y: center.Y + 2}
 	for _, entry := range []struct {
-		dx     int
+		pos    model.Position
 		kind   model.BuildingType
 		recipe string
 	}{
-		{-1, model.BuildingTypeConveyorBeltMk1, ""},
-		{0, model.BuildingTypeMiniatureParticleCollider, "antimatter"},
-		{1, model.BuildingTypeConveyorBeltMk1, ""},
+		{inPos, model.BuildingTypeConveyorBeltMk1, ""},
+		{*center, model.BuildingTypeMiniatureParticleCollider, "antimatter"},
+		{outPos, model.BuildingTypeConveyorBeltMk1, ""},
 	} {
-		pos := model.Position{X: center.X + entry.dx, Y: center.Y}
+		pos := entry.pos
 		result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(entry.kind), "recipe_id": entry.recipe, "direction": "east"}})
 		if result.Code != model.CodeOK {
 			t.Fatalf("build %s: %+v", entry.kind, result)
@@ -256,9 +264,9 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 		ws.Tick++
 		core.settleConstructionQueue(ws)
 	}
-	input := ws.Buildings[ws.TileBuilding[model.TileKey(center.X-1, center.Y)]]
+	input := ws.Buildings[ws.TileBuilding[model.TileKey(inPos.X, inPos.Y)]]
 	collider := ws.Buildings[ws.TileBuilding[model.TileKey(center.X, center.Y)]]
-	output := ws.Buildings[ws.TileBuilding[model.TileKey(center.X+1, center.Y)]]
+	output := ws.Buildings[ws.TileBuilding[model.TileKey(outPos.X, outPos.Y)]]
 	if input == nil || collider == nil || output == nil {
 		t.Fatal("line construction failed")
 	}

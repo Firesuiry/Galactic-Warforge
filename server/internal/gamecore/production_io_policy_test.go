@@ -7,10 +7,10 @@ import (
 )
 
 func TestSettleStorageProductionBuildingKeepsOnlyRecipeOutputsInOutputBuffer(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 1, Y: 1}, "sulfuric_acid")
+	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 3, Y: 3}, "sulfuric_acid")
 	plant.Storage.Inventory = model.ItemInventory{
 		model.ItemStoneOre:     3,
 		model.ItemSulfuricAcid: 2,
@@ -31,15 +31,17 @@ func TestSettleStorageProductionBuildingKeepsOnlyRecipeOutputsInOutputBuffer(t *
 }
 
 func TestBuildingIOProductionInputSelectionBalancesRecipeNeeds(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5)
+	ws := model.NewWorldState("planet-1", 16)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 2, Y: 2}, "sulfuric_acid")
-	north := newConveyorBuilding("north", model.Position{X: 2, Y: 1}, model.ConveyorSouth)
-	east := newConveyorBuilding("east", model.Position{X: 3, Y: 2}, model.ConveyorWest)
-	south := newConveyorBuilding("south", model.Position{X: 2, Y: 3}, model.ConveyorNorth)
-	west := newConveyorBuilding("west", model.Position{X: 1, Y: 2}, model.ConveyorWest)
-	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 2})
+	// 细分网格：化工厂 3×3（x4..6,y4..6）。输入带分别从北/东/南指向占地内，
+	// west 是输出带（背离建筑）。
+	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 4, Y: 4}, "sulfuric_acid")
+	north := newConveyorBuilding("north", model.Position{X: 5, Y: 3}, model.ConveyorSouth)
+	east := newConveyorBuilding("east", model.Position{X: 7, Y: 5}, model.ConveyorWest)
+	south := newConveyorBuilding("south", model.Position{X: 5, Y: 7}, model.ConveyorNorth)
+	west := newConveyorBuilding("west", model.Position{X: 3, Y: 5}, model.ConveyorWest)
+	depot := newDepotBuilding("depot", model.Position{X: 0, Y: 0})
 
 	attachBuilding(ws, depot)
 	attachBuilding(ws, west)
@@ -79,12 +81,12 @@ func TestBuildingIOProductionInputSelectionBalancesRecipeNeeds(t *testing.T) {
 }
 
 func TestBuildingIOProductionInputSelectionCanPullNeededItemBehindMixedFrontStack(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5)
+	ws := model.NewWorldState("planet-1", 16)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 2, Y: 2}, "sulfuric_acid")
-	east := newConveyorBuilding("east", model.Position{X: 3, Y: 2}, model.ConveyorWest)
-	south := newConveyorBuilding("south", model.Position{X: 2, Y: 3}, model.ConveyorNorth)
+	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 4, Y: 4}, "sulfuric_acid")
+	east := newConveyorBuilding("east", model.Position{X: 7, Y: 5}, model.ConveyorWest)
+	south := newConveyorBuilding("south", model.Position{X: 5, Y: 7}, model.ConveyorNorth)
 
 	attachBuilding(ws, east)
 	attachBuilding(ws, south)
@@ -115,12 +117,12 @@ func TestBuildingIOProductionInputSelectionCanPullNeededItemBehindMixedFrontStac
 }
 
 func TestBuildingIOProductionBuildingDoesNotExportRecipeInputsAlreadyInOutputBuffer(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 1, Y: 1}, "sulfuric_acid")
+	plant := newProductionTestBuilding("plant", model.BuildingTypeChemicalPlant, model.Position{X: 3, Y: 3}, "sulfuric_acid")
 	plant.Storage.OutputBuffer = model.ItemInventory{model.ItemStoneOre: 2}
-	west := newConveyorBuilding("west", model.Position{X: 0, Y: 1}, model.ConveyorWest)
+	west := newConveyorBuilding("west", model.Position{X: 2, Y: 4}, model.ConveyorWest)
 
 	attachBuilding(ws, west)
 	attachBuilding(ws, plant)
@@ -140,11 +142,11 @@ func TestBuildingIOProductionBuildingDoesNotExportRecipeInputsAlreadyInOutputBuf
 }
 
 func TestBuildingIOProductionInputCapLeavesRoomForOutputsAndByproducts(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	assembler := newProductionTestBuilding("assembler", model.BuildingTypeOilRefinery, model.Position{X: 1, Y: 1}, "oil_fractionation")
-	south := newConveyorBuilding("south", model.Position{X: 1, Y: 2}, model.ConveyorNorth)
+	assembler := newProductionTestBuilding("assembler", model.BuildingTypeOilRefinery, model.Position{X: 3, Y: 3}, "oil_fractionation")
+	south := newConveyorBuilding("south", model.Position{X: 4, Y: 6}, model.ConveyorNorth)
 	south.Conveyor.MaxStack = 32
 
 	attachBuilding(ws, south)

@@ -10,12 +10,13 @@ export interface SceneRenderDetailPolicy {
   simplifyStructures: boolean;
 }
 
+/** 细分网格后阈值按 px/cell 记：默认档 16px/cell，最低 scene 档 1px/cell。 */
 export function getSceneRenderDetailPolicy(tileSize: number): SceneRenderDetailPolicy {
   return {
-    showSceneGrid: tileSize >= 6,
-    showBuildingLabels: tileSize >= 16,
+    showSceneGrid: tileSize >= 4,
+    showBuildingLabels: tileSize >= 12,
     simplifyFog: tileSize < 4,
-    simplifyStructures: tileSize < 6,
+    simplifyStructures: tileSize < 4,
   };
 }
 

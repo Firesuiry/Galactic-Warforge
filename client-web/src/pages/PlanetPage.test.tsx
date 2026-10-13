@@ -1484,7 +1484,7 @@ describe("PlanetPage", () => {
     expect(commandRequests[0]?.commands?.[0]?.payload?.local_storage).toBe(80);
   });
 
-  it("切到 1px/4tile 缩放时，小地图会按 step=4 请求行星总览", async () => {
+  it("切到 1px/12cell 缩放时，小地图会按 step=12 请求行星总览", async () => {
     let overviewCalls = 0;
     const fetchMock = vi.fn(
       (input: string | URL | Request, init?: RequestInit) => {
@@ -1502,8 +1502,8 @@ describe("PlanetPage", () => {
         if (url.includes("/world/planets/planet-1-1/overview")) {
           overviewCalls += 1;
           const parsedUrl = new URL(url);
-          expect(parsedUrl.searchParams.get("step")).toBe("4");
-          return Promise.resolve(jsonResponse(createOverviewPayload(4)));
+          expect(parsedUrl.searchParams.get("step")).toBe("12");
+          return Promise.resolve(jsonResponse(createOverviewPayload(12)));
         }
         if (url.endsWith("/world/planets/planet-1-1/runtime")) {
           return Promise.resolve(jsonResponse(createRuntimePayload()));
@@ -1566,15 +1566,15 @@ describe("PlanetPage", () => {
 
     // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里
     await user.click(screen.getByRole("button", { name: "图层与视角" }));
-    await user.click(screen.getByRole("button", { name: "1px/4tile" }));
+    await user.click(screen.getByRole("button", { name: "1px/12cell" }));
 
-    expect(await screen.findByText("缩放 1px/4tile")).toBeInTheDocument();
+    expect(await screen.findByText("缩放 1px/12cell")).toBeInTheDocument();
     await waitFor(() => {
       expect(overviewCalls).toBeGreaterThan(0);
     });
   });
 
-  it("大地图切到 1px/4tile 缩放时会抬高总览 step，避免单次响应过大", async () => {
+  it("大地图切到 1px/12cell 缩放时会抬高总览 step，避免单次响应过大", async () => {
     let requestedOverviewStep = "";
 
     const fetchMock = vi.fn(
@@ -1665,13 +1665,13 @@ describe("PlanetPage", () => {
 
     // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里
     await user.click(screen.getByRole("button", { name: "图层与视角" }));
-    await user.click(screen.getByRole("button", { name: "1px/4tile" }));
+    await user.click(screen.getByRole("button", { name: "1px/12cell" }));
 
     await waitFor(() => {
       expect(requestedOverviewStep).toBe("16");
     });
     expect(
-      await screen.findByText("缩放 1px/4tile (实际 1px/16tile)"),
+      await screen.findByText("缩放 1px/12cell (实际 1px/16cell)"),
     ).toBeInTheDocument();
   });
 
@@ -1931,7 +1931,13 @@ describe("PlanetPage", () => {
         if (url.endsWith("/catalog")) {
           return Promise.resolve(jsonResponse({
             ...createCatalogPayload(),
-            world_units: [{ id: "combat_drone", name: "战斗无人机", domain: "ground_unit", runtime_class: "squad", public: true, production_mode: "world_produce" }],
+            // 量产载体按 `unit.producer === building.type` 配对（与服务端 execProduce 同口径）：
+            // 「生产建筑」下拉只列真能生产该单位类型的建筑。
+            buildings: [
+              ...createCatalogPayload().buildings,
+              { id: "recomposing_assembler", name: "重组式制造台", category: "production", subcategory: "assembling", footprint: { width: 3, height: 3 }, build_cost: { minerals: 10 }, buildable: true, can_produce_units: true, icon_key: "recomposing_assembler", color: "#f59f00" },
+            ],
+            world_units: [{ id: "combat_drone", name: "战斗无人机", domain: "ground_unit", runtime_class: "squad", producer: "recomposing_assembler", public: true, production_mode: "world_produce" }],
           }));
         }
         if (url.includes("/events/snapshot") || url.includes("/alerts/production/snapshot")) {

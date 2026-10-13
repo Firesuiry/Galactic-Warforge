@@ -53,6 +53,9 @@ import {
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import { describeLogisticsDetail, isSorterBuilding } from "@/features/planet-map/logistics-direction";
+import { beltBufferSummary } from "@/features/planet-map/planet-logistics-flow";
+import { getItemColorValue } from "@/features/planet-map/item-colors";
+import { describeHaul, isTransportRobot, transportHaulRoute } from "@/features/planet-map/transport-haul";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -949,6 +952,27 @@ export function PlanetEntityPanel({
                 <dd>{describeLogisticsDetail(building, Object.values(planet.buildings ?? {}), planet.surface?.face_size ?? 1, catalog)}</dd>
               </div>
             ) : null}
+            {building.conveyor ? (
+              <div>
+                <dt>带上物品</dt>
+                <dd>{beltBufferSummary(building.conveyor.buffer, (itemId) => getItemDisplayName(catalog, itemId))}</dd>
+              </div>
+            ) : null}
+            {building.conveyor?.buffer?.length ? (
+              <div>
+                <dt>货物色块</dt>
+                <dd className="planet-kv-list__swatches">
+                  {building.conveyor.buffer.filter((stack) => stack.quantity > 0).map((stack, index) => (
+                    <span
+                      key={`${stack.item_id}-${index}`}
+                      className="planet-kv-list__swatch"
+                      style={{ background: getItemColorValue(stack.item_id, catalog?.items?.find((item) => item.id === stack.item_id)?.color) }}
+                      title={`${getItemDisplayName(catalog, stack.item_id)} ×${stack.quantity}`}
+                    />
+                  ))}
+                </dd>
+              </div>
+            ) : null}
             <div>
               <dt>状态</dt>
               <dd>{translateBuildingState(building.runtime.state)}</dd>
@@ -1324,6 +1348,30 @@ export function PlanetEntityPanel({
               <dt>移动状态</dt>
               <dd>{unitIsMoving(unit) ? "移动中" : unit.stance === 'hold' ? "坚守" : "待命"}</dd>
             </div>
+            {/* 运输机器人（§4）：路线两端、阶段、载货与已送达累计。 */}
+            {isTransportRobot(unit) ? (
+              <>
+                <div>
+                  <dt>运输阶段</dt>
+                  <dd>{describeHaul(unit, (itemId) => getItemDisplayName(catalog, itemId)) ?? '未设路线（选中条「设置运输」）'}</dd>
+                </div>
+                <div>
+                  <dt>起点 / 终点</dt>
+                  <dd>
+                    {(() => {
+                      const route = transportHaulRoute(unit);
+                      if (!route) return '-';
+                      const from = planet.buildings?.[route.from_building_id];
+                      const to = planet.buildings?.[route.to_building_id];
+                      const label = (buildingId: string, building: typeof from) => building
+                        ? `${getBuildingDisplayName(catalog, building.type)} (${buildingId})`
+                        : `${buildingId}（已不存在）`;
+                      return `${label(route.from_building_id, from)} → ${label(route.to_building_id, to)}`;
+                    })()}
+                  </dd>
+                </div>
+              </>
+            ) : null}
             <div>
               <dt>目标</dt>
               <dd>

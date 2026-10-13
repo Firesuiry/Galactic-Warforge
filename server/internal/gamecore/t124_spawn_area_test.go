@@ -133,7 +133,8 @@ func TestT124RelocatedSpawnAreaIsFlattened(t *testing.T) {
 	if base.X == ws.MapWidth/2 && base.Y == ws.MapHeight/2 {
 		t.Fatalf("expected spawn relocated away from center (%d,%d)", base.X, base.Y)
 	}
-	if dist := ws.SurfaceDistance(base, model.Position{X: 20, Y: 20}); dist > spawnMineDistance([]config.PlayerConfig{{Executor: config.ExecutorConfig{OperateRange: 6}}}) {
+	// 细分网格：执行体作业半径默认 ×3（6→18），可迁入的资源距离随之变大。
+	if dist := ws.SurfaceDistance(base, model.Position{X: 20, Y: 20}); dist > spawnMineDistance([]config.PlayerConfig{{Executor: config.ExecutorConfig{OperateRange: 18}}}) {
 		t.Fatalf("base (%d,%d) not relocated next to ore node (20,20), dist=%d", base.X, base.Y, dist)
 	}
 	assertT124SurfacePosition(t, ws, base, 8)

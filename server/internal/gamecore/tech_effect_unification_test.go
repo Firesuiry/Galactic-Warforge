@@ -16,9 +16,9 @@ type migratedTechEffect struct {
 var migratedTechEffects = []migratedTechEffect{
 	{"mechanical_frame", "mecha_max_hp", 20},
 	{"inventory_capacity", "mecha_inventory_capacity", 60},
-	{"drive_engine", "move_speed", 2},
+	{"drive_engine", "move_speed", 6},
 	{"energy_circuit", "mecha_charge_rate_pct", 20},
-	{"distribution_range", "distribution_range", 5},
+	{"distribution_range", "distribution_range", 15},
 	{"logistics_carrier_capacity", "logistics_ship_capacity", 100},
 	{"logistics_carrier_engine", "logistics_ship_speed", 1},
 	{"sorter_cargo_stacking", "sorter_grab_stacks", 1},
@@ -71,6 +71,8 @@ func TestTechEffectCatalogValuesMatchLegacyPerLevelFormulas(t *testing.T) {
 
 // TestMigratedDerivationsMatchLegacyStats sweeps the end-to-end derived stats
 // that used to read tech levels directly and asserts the legacy numbers.
+// 细分网格：move_speed / distribution_range 这类**距离**效果在目录里已整体
+// ×3（世界边长 ×3），这里断言的是 ×3 之后的基准值。
 func TestMigratedDerivationsMatchLegacyStats(t *testing.T) {
 	executor := func() *model.Unit {
 		u := model.UnitStats(model.UnitTypeExecutor)
@@ -100,12 +102,12 @@ func TestMigratedDerivationsMatchLegacyStats(t *testing.T) {
 		}
 	}
 
-	// drive_engine: move range = 12 + 2*L
+	// drive_engine: move range = 36 + 6*L（细分网格：距离类数值 ×3）
 	def, _ = model.TechDefinitionByID("drive_engine")
 	for level := 0; level <= def.MaxLevel; level++ {
 		unit := executor()
 		model.SyncMechaCapabilities(unit, techPlayer(map[string]int{"drive_engine": level}))
-		if want := 12 + 2*level; unit.MoveRange != want {
+		if want := 36 + 6*level; unit.MoveRange != want {
 			t.Fatalf("drive_engine L%d move=%d, want %d", level, unit.MoveRange, want)
 		}
 	}
@@ -138,7 +140,7 @@ func TestMigratedDerivationsMatchLegacyStats(t *testing.T) {
 		}
 	}
 
-	// distribution_range: effective range = base + 5*L
+	// distribution_range: effective range = base + 15*L（细分网格：距离类数值 ×3）
 	def, _ = model.TechDefinitionByID("distribution_range")
 	for level := 0; level <= def.MaxLevel; level++ {
 		ws := model.NewWorldState("planet-range", 8)
@@ -151,7 +153,7 @@ func TestMigratedDerivationsMatchLegacyStats(t *testing.T) {
 				Range: 12,
 			},
 		}
-		if want := 12 + 5*level; distributorEffectiveRange(ws, home) != want {
+		if want := 12 + 15*level; distributorEffectiveRange(ws, home) != want {
 			t.Fatalf("distribution_range L%d range=%d, want %d", level, distributorEffectiveRange(ws, home), want)
 		}
 	}
@@ -175,7 +177,8 @@ func TestSyncMechaCapabilitiesWeaponDamageRaisesAttack(t *testing.T) {
 	unit.OwnerID = "p1"
 
 	model.SyncMechaCapabilities(&unit, techPlayer(nil))
-	if unit.Attack != 20 || unit.Defense != 8 || unit.AttackRange != 4 {
+	// 细分网格：机甲攻击射程是距离类数值，已 ×3（12 cell）。
+	if unit.Attack != 20 || unit.Defense != 8 || unit.AttackRange != 12 {
 		t.Fatalf("base combat stats wrong: attack=%d defense=%d range=%d", unit.Attack, unit.Defense, unit.AttackRange)
 	}
 

@@ -27,8 +27,10 @@ import { assessBuildTiles } from './build-workflow';
 import { PointerPress } from './pointer-press';
 import type { Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
 import { getBuildingCatalogEntry, getBuildingFootprint, getFogState, getItemCatalogEntry, getItemDisplayName, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
+import { getItemColorValue } from './item-colors';
 import { isOwnStalledBuilding } from './power-status';
 import { FACTION_COLOR, unitFaction, type UnitFaction } from './rts-commands';
+import { transportCargo, transportHaulRoute, haulPhaseLabel } from './transport-haul';
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
@@ -129,6 +131,11 @@ export class PlanetThreeScene {
   private staticMarksSignature = '';
   /** 地表标记共享材质（按颜色/透明度缓存，色带几何每次重建、材质复用）。 */
   private readonly markMaterials = new Map<string, THREE.MeshBasicMaterial>();
+  /** 运输机器人往返路线（选中时画起点→终点虚线）：签名驱动的独立层。 */
+  private readonly haulRoutes = new THREE.Group();
+  private haulRouteSignature = '';
+  /** 阶段胶囊标签：随机器人移动每帧重贴位置（只重建于路线签名变化时）。 */
+  private haulLabels: { sprite: THREE.Sprite; unitId: string }[] = [];
   /** 补给光环材质：动画循环里做缓慢呼吸。 */
   private readonly auraMaterials = new Set<THREE.MeshBasicMaterial>();
   /** 右键/军团命令落点反馈（涟漪/准星）。 */
@@ -182,7 +189,7 @@ export class PlanetThreeScene {
     this.scene.add(this.world);
     this.world.add(this.content, this.staticMarks, this.marks);
     this.world.add(this.powerAlertMarksGroup);
-    this.world.add(this.logisticsMarks.group, this.ghostMarks);
+    this.world.add(this.logisticsMarks.group, this.ghostMarks, this.haulRoutes);
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
@@ -363,6 +370,8 @@ export class PlanetThreeScene {
   private buildEntities() {
     if (!this.data) return;
     const { planet, playerId, runtime, networks } = this.data;
+    // 细分网格：模型局部单位 = 1 cell（`building(w, d)` 的 .86 就是格内留缝），
+    // 场景侧只按 tileScale 统一缩放，不乘 footprint——否则 5×5 的 HQ 会被放大成 25 格。
     const visibleBuildings = Object.values(planet.buildings ?? {}).filter(building => building.owner_id === playerId || this.visible(building.position));
     this.conveyors.refresh(visibleBuildings, planet.surface.face_size, RADIUS);
     this.layer('buildings').add(this.conveyors.group);
@@ -470,9 +479,20 @@ export class PlanetThreeScene {
     for (const unit of Object.values(planet.units ?? {})) {
       if (unit.owner_id === playerId || this.visible(unit.position)) {
         const faction = unitFaction(unit, playerId, fogHostile);
+        // 细分网格：单位占 1 cell（士兵站在小格里，不再占旧的一大格），模型按 cell 的 .72 缩放。
         move(`unit:${unit.id}`, unit.type, faction, unit.position, 'units', .72);
         // 血条（C2）：头顶 billboard，受击比例实时更新，按阵营着色；中立黑雾头顶挂「中立」标签
         this.syncUnitBar(this.moving.get(`unit:${unit.id}`), unit, faction);
+        // 运输机器人车顶货物方块：有货才显示，颜色取物品配色表。
+        const robot = this.moving.get(`unit:${unit.id}`)?.group.getObjectByName('transport-robot-cargo');
+        if (robot instanceof THREE.Mesh) {
+          const cargo = transportCargo(unit);
+          robot.visible = Boolean(cargo);
+          if (cargo) {
+            const material = robot.material as THREE.MeshStandardMaterial;
+            material.color.set(getItemColorValue(cargo.item_id, getItemCatalogEntry(this.data.catalog, cargo.item_id)?.color));
+          }
+        }
       }
     }
     const logisticsLinks: { from: Position; to: Position }[] = [];
@@ -875,6 +895,19 @@ export class PlanetThreeScene {
         if (unit) add({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) }, '#9ef7c9');
       }
     }
+    // 选中建筑：按**整个占地**画选中框（细分网格后 3×3/5×5 建筑必须整块高亮，
+    // 只框左上 1 cell 会让玩家以为选错了格）。
+    if (this.interaction.layers.selection && this.interaction.selected?.kind === 'building') {
+      const building = this.data.planet.buildings?.[this.interaction.selected.id];
+      if (building) {
+        const footprint = getBuildingFootprint(building);
+        for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
+          add(surfaceOffset(building.position, dx, dy, this.data.planet.surface.face_size), '#ffd166');
+        }
+      }
+    }
+    // 运输机器人：选中时画起点→终点虚线（可一次多选，同一路线只画一条）。
+    this.updateHaulRoutes();
     if (this.interaction.hoveredTile) {
       const tile = this.interaction.hoveredTile;
       if (this.interaction.interactionMode.kind === 'build') {
@@ -903,9 +936,123 @@ export class PlanetThreeScene {
     for (const tile of tiles) this.ghostArrow(tile, direction, elevated);
   }
 
-  /** 一个朝 direction 的琥珀箭头（贴格中心，指示物流输出侧）。 */
-  private ghostArrow(tile: TilePoint, direction: CardinalDirection, elevated = false) {
+  /**
+   * 运输机器人路线虚线：选中（单选或多选集合）的机器人若带 haul 路线，
+   * 画起点建筑 → 终点建筑的贴地虚线（同一条路线只画一次，颜色取机器人阵营色）。
+   * 签名只含端点与阵营，数据刷新不重建几何。
+   */
+  private updateHaulRoutes() {
+    const planet = this.data?.planet;
+    const interaction = this.interaction;
+    if (!planet || !interaction || !interaction.layers.selection) {
+      if (this.haulRouteSignature !== '') { this.clearMarks(this.haulRoutes); this.haulRouteSignature = ''; this.haulLabels = []; }
+      return;
+    }
+    const selectedIds = new Set<string>(interaction.selectedUnits ?? []);
+    if (interaction.selected?.kind === 'unit') selectedIds.add(interaction.selected.id);
+    const routes: { from: Position; to: Position; color: string; phase: string; unitId: string }[] = [];
+    const seen = new Set<string>();
+    for (const id of selectedIds) {
+      const unit = planet.units?.[id];
+      const haul = transportHaulRoute(unit);
+      if (!haul || !unit) continue;
+      const key = `${haul.from_building_id}->${haul.to_building_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const from = planet.buildings?.[haul.from_building_id];
+      const to = planet.buildings?.[haul.to_building_id];
+      if (!from || !to) continue;
+      routes.push({
+        from: from.position,
+        to: to.position,
+        color: `#${FACTION_COLOR[unitFaction(unit, this.data?.playerId, this.data?.darkFogHostile ?? false)].toString(16).padStart(6, '0')}`,
+        phase: haul.phase,
+        unitId: id,
+      });
+    }
+    const signature = JSON.stringify(routes.map(route => [route.from.x, route.from.y, route.to.x, route.to.y, route.color, route.phase]));
+    if (signature === this.haulRouteSignature) return;
+    this.haulRouteSignature = signature;
+    this.clearMarks(this.haulRoutes);
+    this.haulLabels = [];
     const size = this.tileScale();
+    for (const route of routes) {
+      const a = this.normal(route.from.x, route.from.y), b = this.normal(route.to.x, route.to.y);
+      // 贴地弧线：沿球面插值并抬 0.12 格，避免埋进地形/建筑底座。
+      const points = Array.from({ length: 33 }, (_, i) => a.clone().lerp(b, i / 32).normalize().multiplyScalar(RADIUS + size * .12));
+      // 虚线：LineDashedMaterial 需要 computeLineDistances，段长按 cell 尺寸给。
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(geometry, new THREE.LineDashedMaterial({
+        color: route.color, dashSize: size * .55, gapSize: size * .35, transparent: true, opacity: .95, depthWrite: false, toneMapped: false,
+      }));
+      line.computeLineDistances();
+      line.renderOrder = 18;
+      this.haulRoutes.add(line);
+      for (const endpoint of [route.from, route.to]) {
+        this.haulRoutes.add(this.tileOutline({ x: Math.round(endpoint.x), y: Math.round(endpoint.y) }, route.color));
+      }
+      // 阶段中文（前往取货/装货中/…）：机器人旁的小号胶囊标签（字号与单位名牌同量级，
+      // 不再是一块压住半屏的大牌子）；位置每帧跟着机器人走（见 updateHaulLabels）。
+      const label = haulPhaseLabel(route.phase);
+      if (label) {
+        const sprite = new THREE.Sprite(this.haulLabelMaterial(label));
+        sprite.renderOrder = 24;
+        // 胶囊锚点在左端：贴着机器人向右展开，像单位名牌一样不盖住机器人本体。
+        sprite.center.set(0, .5);
+        sprite.scale.set(size * .64, size * .16, 1);
+        this.haulRoutes.add(sprite);
+        this.haulLabels.push({ sprite, unitId: route.unitId });
+      }
+    }
+    this.updateHaulLabels();
+  }
+
+  /** 阶段标签跟随机器人（移动组每帧插值，标签也每帧贴到它头顶右侧）。 */
+  private updateHaulLabels() {
+    if (this.haulLabels.length === 0) return;
+    const size = this.tileScale();
+    for (const { sprite, unitId } of this.haulLabels) {
+      const group = this.moving.get(`unit:${unitId}`)?.group;
+      if (!group) { sprite.visible = false; continue; }
+      sprite.visible = true;
+      // 高度对齐单位名牌（血条 0.73 cell、中立标签 0.92 cell），贴在机器人右上方。
+      sprite.position.copy(group.position).normalize().multiplyScalar(RADIUS + size * .95);
+    }
+  }
+
+  /** 阶段标签共享材质：按文本缓存（阶段只有 6 种，画布一次）。 */
+  private haulLabelMaterial(text: string) {
+    const key = `haul-label:${text}`;
+    const cached = this.spriteMaterials.get(key);
+    if (cached) return cached;
+    // 画布比例 16:4 = 世界 0.64×0.16 cell；字号占画布高约 45%，
+    // 与 3D 单位名牌（0.6×0.25 cell 的「中立」标签）同一量级。
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 64;
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.fillStyle = 'rgba(10, 22, 26, 0.86)';
+      context.strokeStyle = 'rgba(145, 255, 112, 0.9)';
+      context.lineWidth = 3;
+      context.beginPath();
+      context.roundRect?.(3, 3, 250, 58, 14);
+      context.fill();
+      context.stroke();
+      context.font = '600 30px "PingFang SC", "Microsoft YaHei", sans-serif';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillStyle = '#dffcf6';
+      context.fillText(text, 128, 34);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+    this.spriteMaterials.set(key, material);
+    return material;
+  }
+
+  /** 一个朝 direction 的琥珀箭头（贴格中心，指示物流输出侧）。 */
+  private ghostArrow(tile: TilePoint, direction: CardinalDirection, elevated = false) {    const size = this.tileScale();
     const faceSize = this.data!.planet.surface.face_size;
     const { east, south } = tileFrame(tile, faceSize);
     const normal = this.normal(tile.x, tile.y);
@@ -1080,6 +1227,8 @@ export class PlanetThreeScene {
         up.set(0, 1, 0).applyQuaternion(group.quaternion);
         group.quaternion.premultiply(rotation.setFromUnitVectors(up, to.copy(group.position).normalize()));
       }
+      // 阶段标签贴机器人（机器人移动是每帧插值的，标签跟着走才不脱节）。
+      this.updateHaulLabels();
       this.composer.render();
     }
     this.frame = requestAnimationFrame(this.animate);

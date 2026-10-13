@@ -23,8 +23,10 @@ func TestSkirmishMapConfigFaceSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Planet.FaceSize < 64 || cfg.Planet.FaceSize > 128 {
-		t.Fatalf("face_size %d outside 64-128", cfg.Planet.FaceSize)
+	// 细分网格：cell 单位把遭遇战地图从 96 格放大到 288 cell（×3），
+	// 世界尺度不变；旧 96 会让出生点间距与基地布局全部错位。
+	if cfg.Planet.FaceSize != 288 {
+		t.Fatalf("face_size = %d, want 288 (96 cells x 3)", cfg.Planet.FaceSize)
 	}
 	if !cfg.Planet.Resources.ContestedCenter {
 		t.Fatal("skirmish map must enable contested_center")

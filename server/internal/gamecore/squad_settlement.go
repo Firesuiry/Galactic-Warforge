@@ -30,8 +30,9 @@ func planSquadFormation(ws *model.WorldState, squad *model.CombatSquad, target m
 		}
 		return members[i].ID < members[j].ID
 	})
-	radius := 3
-	for radius*radius < len(members)*2 {
+	// 编队半径按细分网格 ×3（同人数占的世界范围不变）。
+	radius := 9
+	for radius*radius < len(members)*18 {
 		radius++
 	}
 	// 候选格里与成员无关的部分只算一次：跨面 SurfaceDistance 很贵，
@@ -42,7 +43,7 @@ func planSquadFormation(ws *model.WorldState, squad *model.CombatSquad, target m
 		behind     int // 比军团当前位置更远离目标的格数
 	}
 	anchorDist := ws.SurfaceDistance(squad.Position, target)
-	disc := ws.SurfaceDisc(target, radius+6)
+	disc := ws.SurfaceDisc(target, radius+18)
 	candidates := make(map[int32]candidate, len(disc))
 	for _, p := range disc {
 		behind := ws.SurfaceDistance(p, squad.Position) - anchorDist
@@ -60,15 +61,15 @@ func planSquadFormation(ws *model.WorldState, squad *model.CombatSquad, target m
 	// 已确认到不了任何候选格的连通区（洪泛没被预算截断）：同一区里的其他
 	// 地面成员直接跳过，不再重复洪泛。
 	sealed := make(map[int32]bool)
-	slack := int32(2 * (radius + 6))
+	slack := int32(2 * (radius + 18))
 	for _, u := range members {
 		fromIdx := int32(u.Position.Y*ws.MapWidth + u.Position.X)
-		if u.Domain != model.UnitDomainAir && sealed[fromIdx] && ws.SurfaceDistance(u.Position, target) > radius+6 {
+		if u.Domain != model.UnitDomainAir && sealed[fromIdx] && ws.SurfaceDistance(u.Position, target) > radius+18 {
 			continue
 		}
 		desired := 0
 		if order == model.SquadOrderAttack || order == model.SquadOrderDefend {
-			desired = min(6, max(0, squadRole(u)-members[0].AttackRange))
+			desired = min(18, max(0, squadRole(u)-members[0].AttackRange))
 		}
 		// 每个成员只洪泛一次，边洪泛边给可达候选格打分。旧实现按得分顺序
 		// 对每个候选格各跑一次 BFS：目标附近被建筑围住时是「成员数 × 候选数
@@ -76,7 +77,7 @@ func planSquadFormation(ws *model.WorldState, squad *model.CombatSquad, target m
 		// 首个可用候选格命中后再多扩展一个候选圆直径的深度即停，同一侧的
 		// 候选格都能参与比较，又不必走满全图。路径长度代替原来的直线距离做末项。
 		best, bestScore, firstDepth := int32(-1), 0, int32(-1)
-		budget := 2*(ws.SurfaceDistance(u.Position, target)+radius+6) + 40
+		budget := 2*(ws.SurfaceDistance(u.Position, target)+radius+18) + 40
 		if budget > maxPathBudget {
 			budget = maxPathBudget
 		}

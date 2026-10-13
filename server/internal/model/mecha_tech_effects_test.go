@@ -27,7 +27,7 @@ func TestSyncMechaCapabilitiesDefaultsWithoutResearch(t *testing.T) {
 	if unit.Mecha.MaxEnergy != 100 || unit.Mecha.MaxShield != 0 || unit.Mecha.InventoryCapacity != 200 {
 		t.Fatalf("unexpected base mecha limits: %+v", unit.Mecha)
 	}
-	if unit.MaxHP != 120 || unit.MoveRange != 12 || unit.VisionRange != 6 {
+	if unit.MaxHP != 120 || unit.MoveRange != 36 || unit.VisionRange != 18 {
 		t.Fatalf("unexpected base unit stats: hp=%d move=%d vision=%d", unit.MaxHP, unit.MoveRange, unit.VisionRange)
 	}
 }
@@ -62,9 +62,9 @@ func TestSyncMechaCapabilitiesDriveEngineStacksWithMechaEngine(t *testing.T) {
 	unit := mechaExecutorUnit()
 	player := mechaTechPlayer(map[string]int{"mecha_engine": 2, "drive_engine": 3})
 	SyncMechaCapabilities(unit, player)
-	// 12 base + 2*2 (mecha_engine move_speed) + 2*3 (drive_engine) = 22.
-	if unit.MoveRange != 22 {
-		t.Fatalf("expected stacked move range 22, got %d", unit.MoveRange)
+	// 36 base + 6*2 (mecha_engine move_speed) + 6*3 (drive_engine) = 66.
+	if unit.MoveRange != 66 {
+		t.Fatalf("expected stacked move range 66, got %d", unit.MoveRange)
 	}
 }
 
@@ -72,8 +72,8 @@ func TestSyncMechaCapabilitiesUniverseExplorationRaisesVision(t *testing.T) {
 	unit := mechaExecutorUnit()
 	player := mechaTechPlayer(map[string]int{"universe_exploration": 4})
 	SyncMechaCapabilities(unit, player)
-	if unit.VisionRange != 10 {
-		t.Fatalf("universe_exploration L4 should raise vision to 10, got %d", unit.VisionRange)
+	if unit.VisionRange != 30 {
+		t.Fatalf("universe_exploration L4 should raise vision to 30, got %d", unit.VisionRange)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestSyncMechaCapabilitiesIdempotentAcrossRestore(t *testing.T) {
 	if restored.MaxHP != firstHP || restored.MoveRange != firstMove || restored.VisionRange != firstVision {
 		t.Fatal("second sync changed derived unit stats")
 	}
-	if restored.Mecha.MaxEnergy != 160 || restored.MoveRange != 24 || restored.MaxHP != 280 {
+	if restored.Mecha.MaxEnergy != 160 || restored.MoveRange != 72 || restored.MaxHP != 280 {
 		t.Fatalf("max-level bonuses wrong: %+v move=%d hp=%d", restored.Mecha, restored.MoveRange, restored.MaxHP)
 	}
 }

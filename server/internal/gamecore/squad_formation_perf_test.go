@@ -74,7 +74,9 @@ func TestSquadOrderFastWhenWholeTargetAreaSealed(t *testing.T) {
 	ws, squad := newSquadPerfWorld(t)
 	target := model.Position{X: 144, Y: 48}
 	// 整个候选圆都在墙内：没有任何成员到得了，命令应快速失败而不是挨个洪泛。
-	wallRing(ws, target, 20)
+	// 细分网格：编队半径 ×3（9/18），候选圆直径约 2*(radius+18)=54 格，
+	// 墙半径必须盖住整个候选圆（旧网格是 20）。
+	wallRing(ws, target, 40)
 
 	if res := timedSquadOrder(t, ws, squad, target); res.Code == model.CodeOK {
 		t.Fatalf("sealed target should be rejected: %+v", res)

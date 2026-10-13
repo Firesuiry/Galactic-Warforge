@@ -330,7 +330,8 @@ func ApplyDefaults(cfg *Config) error {
 			p.Executor.BuildEfficiency = 1.0
 		}
 		if p.Executor.OperateRange == 0 {
-			p.Executor.OperateRange = 6
+			// 细分网格：距离类数值 ×3（6→18），与 config*.yaml 的 operate_range 一致。
+			p.Executor.OperateRange = 18
 		}
 		if p.Executor.ConcurrentTasks == 0 {
 			p.Executor.ConcurrentTasks = 2

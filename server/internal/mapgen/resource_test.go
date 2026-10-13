@@ -1,6 +1,8 @@
 package mapgen
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 
 	"siliconworld/internal/mapconfig"
@@ -128,4 +130,88 @@ func TestNewRareKindsGeneratedOnIcePlanets(t *testing.T) {
 			t.Fatalf("expected rare kind %s on ice planet", kind)
 		}
 	}
+}
+
+// TestResourceClusterConservesTotalReserves 细分网格下「一个资源格 = 3×3 cell」的
+// 守恒口径：簇内每个 cell 与簇首格同储量同产速（世界尺度上的矿脉范围、总产速
+// 与采空时间都不变），且密度基准格数除以成簇倍数，矿脉个数/世界面积保持原值。
+func TestResourceClusterConservesTotalReserves(t *testing.T) {
+	rc := mapconfig.ResourceConfig{}
+	rc.RareChance = 0.2
+	rc.ClusterMin = 3
+	rc.ClusterMax = 8
+	rc.ClusterRadius = 3
+	rc.VeinAmountMin = 80000
+	rc.VeinAmountMax = 200000
+	rc.VeinYieldMin = 2
+	rc.VeinYieldMax = 6
+	rc.OilYieldMin = 3
+	rc.OilYieldMax = 8
+	rc.OilMinYield = 1
+	rc.OilDecayPerTick = 1
+	rc.RenewableRegenPerTick = 2
+
+	const width, height, density = 288, 192, 8
+	planet := newResourceTestPlanet(mapmodel.PlanetKindRocky, width, height, density)
+	planet.FaceSize = width / 3
+	nodes := generateResources(newRNG("seed-cluster-conserve"), planet, rc)
+	if len(nodes) == 0 {
+		t.Fatal("expected resource nodes to be generated")
+	}
+
+	// 基准格数 = 面积 × 密度 ÷ (100 × 成簇倍数)：矿脉个数/世界面积与细分前一致。
+	wantBase := (width * height * density) / (100 * resourceClusterScale)
+	// 一个"资源格"的 ID 形如 "<planet>-res-<n>"，其 3×3 cell 簇的 ID 是
+	// "<planet>-res-<n>-<cell>"。位置 (x,y) 就是它的簇首格：同簇 cell 全部
+	// 落在以簇首为中心的 3×3 邻域内（一个矿脉由 3–8 个资源格组成，同一
+	// ClusterID 里可以有多个资源格，所以按簇首格分组而不是按 ClusterID 分组）。
+	byVein := map[string][]mapmodel.ResourceNode{}
+	heads := 0
+	for _, n := range nodes {
+		head, isHead := resourceVeinHeadID(n.ID)
+		byVein[head] = append(byVein[head], n)
+		if isHead {
+			heads++
+		}
+	}
+	if heads > wantBase {
+		t.Fatalf("vein heads %d exceed the density budget %d", heads, wantBase)
+	}
+
+	// 每个 cell 与同资源格的其他 cell 同储量同产速（成簇不改变世界尺度上的矿量）。
+	for base, group := range byVein {
+		if len(group) == 0 {
+			continue
+		}
+		first := group[0]
+		for _, n := range group {
+			if n.Kind != first.Kind || n.Behavior != first.Behavior {
+				t.Fatalf("vein %s mixes kinds: %s vs %s", base, n.Kind, first.Kind)
+			}
+			if n.Total != first.Total || n.BaseYield != first.BaseYield || n.RegenPerTick != first.RegenPerTick {
+				t.Fatalf("vein %s cell %s reserves differ: %+v vs %+v", base, n.ID, n, first)
+			}
+		}
+	}
+}
+
+// resourceVeinHeadID 把 "<planet>-res-<n>" 与 "<planet>-res-<n>-<cell>" 归到同一
+// 资源格：簇首是 ID 里没有额外 "-<cell>" 后缀的那个，其 Position 就是簇首格。
+func resourceVeinHeadID(id string) (string, bool) {
+	// "<planet>-res-<n>" 是簇首；"<planet>-res-<n>-<cell>" 是簇内 cell，
+	// 归到去掉最后一段的簇首 ID。只有末尾两段都是数字才算 cell。
+	idx := strings.LastIndex(id, "-")
+	if idx <= 0 {
+		return id, true
+	}
+	if _, err := strconv.Atoi(id[idx+1:]); err != nil {
+		return id, true
+	}
+	prev := strings.LastIndex(id[:idx], "-")
+	if prev > 0 {
+		if _, err := strconv.Atoi(id[prev+1 : idx]); err == nil {
+			return id[:idx], false
+		}
+	}
+	return id, true
 }

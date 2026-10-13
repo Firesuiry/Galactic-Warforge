@@ -23,13 +23,22 @@ type WorldSnapshot struct {
 	LogisticsBots   map[string]*model.LogisticsBotState   `json:"logistics_bots,omitempty"`
 	LogisticsDrones map[string]*model.LogisticsDroneState `json:"logistics_drones,omitempty"`
 	LogisticsShips  map[string]*model.LogisticsShipState  `json:"logistics_ships,omitempty"`
-	Resources       map[string]*model.ResourceNodeState   `json:"resources"`
-	Pipelines       *model.PipelineNetworkState           `json:"pipelines,omitempty"`
-	Construction    *model.ConstructionQueue              `json:"construction,omitempty"`
-	EnemyForces     *model.EnemyForceState                `json:"enemy_forces,omitempty"`
-	SensorContacts  map[string]*model.SensorContactState  `json:"sensor_contacts,omitempty"`
-	CombatRuntime   *model.CombatRuntimeState             `json:"combat_runtime,omitempty"`
-	Terrain         [][]terrain.TileType                  `json:"terrain"`
+	// ResourceDeltas 只存与资源基线的差异（剩余量/当前产速/耗尽），节点本身
+	// （种类/位置/储量上限/基础产速）由地图配置 + seed 确定性重建，见
+	// WorldState.ResourceBaseline。与基线一致的节点不出现在这里。
+	ResourceDeltas map[string]model.ResourceNodeDelta `json:"resource_deltas,omitempty"`
+	// ResourceBaseline 是资源节点静态字段的基线，不进 JSON：它可由地图配置 +
+	// seed 确定性重建。进程内快照（回放/回滚/自动存档的副本）由 CaptureWorld 直接
+	// 带上；磁盘快照读回后由 gamecore.NewFromSave 用地图模型重建并挂回。
+	ResourceBaseline map[string]model.ResourceBaselineEntry `json:"-"`
+	Pipelines        *model.PipelineNetworkState            `json:"pipelines,omitempty"`
+	Construction     *model.ConstructionQueue               `json:"construction,omitempty"`
+	EnemyForces      *model.EnemyForceState                 `json:"enemy_forces,omitempty"`
+	SensorContacts   map[string]*model.SensorContactState   `json:"sensor_contacts,omitempty"`
+	CombatRuntime    *model.CombatRuntimeState              `json:"combat_runtime,omitempty"`
+	// Terrain 是地形游程编码（非 buildable 格的行内游程）。只由地图配置 + seed
+	// 决定的整幅地形不进快照，见 TerrainRuns。
+	Terrain string `json:"terrain,omitempty"`
 }
 
 // BuildingSnapshot is a snapshot-friendly building payload.
@@ -88,13 +97,16 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 		LogisticsBots:   make(map[string]*model.LogisticsBotState, len(ws.LogisticsBots)),
 		LogisticsDrones: make(map[string]*model.LogisticsDroneState, len(ws.LogisticsDrones)),
 		LogisticsShips:  make(map[string]*model.LogisticsShipState, len(ws.LogisticsShips)),
-		Resources:       make(map[string]*model.ResourceNodeState, len(ws.Resources)),
-		Pipelines:       clonePipelineNetworkState(ws.Pipelines),
-		Construction:    cloneConstructionQueue(ws.Construction),
-		EnemyForces:     cloneEnemyForceState(ws.EnemyForces),
-		SensorContacts:  model.CloneSensorContactStateMap(ws.SensorContacts),
-		CombatRuntime:   model.CloneCombatRuntimeState(ws.CombatRuntime),
-		Terrain:         cloneTerrain(ws.Grid, ws.MapWidth, ws.MapHeight),
+		ResourceDeltas:  ws.ResourceDeltas(),
+		// 资源基线随进程内快照一起带上：回放/回滚/自动存档都用同一进程的
+		// WorldState 副本，不经过磁盘，无法也不该重新生成地图。
+		ResourceBaseline: cloneResourceBaseline(ws.ResourceBaseline),
+		Pipelines:        clonePipelineNetworkState(ws.Pipelines),
+		Construction:     cloneConstructionQueue(ws.Construction),
+		EnemyForces:      cloneEnemyForceState(ws.EnemyForces),
+		SensorContacts:   model.CloneSensorContactStateMap(ws.SensorContacts),
+		CombatRuntime:    model.CloneCombatRuntimeState(ws.CombatRuntime),
+		Terrain:          model.TerrainRuns(ws.Grid, ws.MapWidth, ws.MapHeight),
 	}
 
 	for id, ps := range ws.Players {
@@ -115,10 +127,6 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 	for id, ship := range ws.LogisticsShips {
 		snap.LogisticsShips[id] = cloneLogisticsShip(ship)
 	}
-	for id, r := range ws.Resources {
-		snap.Resources[id] = cloneResource(r)
-	}
-
 	return snap
 }
 
@@ -130,18 +138,22 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 	if snap.Surface.Topology != "cube_sphere" || snap.Surface.FaceSize < 1 || snap.MapWidth != 3*snap.Surface.FaceSize || snap.MapHeight != 2*snap.Surface.FaceSize {
 		return nil, fmt.Errorf("unsupported or inconsistent planetary surface: expected cube_sphere atlas 3N x 2N, got topology %q face_size %d atlas %dx%d; start a new game for legacy planar saves", snap.Surface.Topology, snap.Surface.FaceSize, snap.MapWidth, snap.MapHeight)
 	}
-	if err := validateTerrain(snap.Terrain, snap.MapWidth, snap.MapHeight); err != nil {
+	terrainGrid, err := decodeSnapshotTerrain(snap.Terrain, snap.MapWidth, snap.MapHeight)
+	if err != nil {
 		return nil, err
 	}
 
 	ws := model.NewWorldState(snap.PlanetID, snap.Surface.FaceSize)
 	ws.Tick = snap.Tick
 	ws.EntityCounter = snap.EntityCounter
+	// 资源基线：磁盘快照里没有（由地图配置 + seed 重建，见 gamecore.NewFromSave），
+	// 进程内快照由 CaptureWorld 带上；两者都没有时下面按「全部已变化」兜底。
+	ws.ResourceBaseline = cloneResourceBaseline(snap.ResourceBaseline)
 
 	// Restore terrain.
 	for y := 0; y < snap.MapHeight; y++ {
 		for x := 0; x < snap.MapWidth; x++ {
-			ws.Grid[y][x].Terrain = snap.Terrain[y][x]
+			ws.Grid[y][x].Terrain = terrainGrid[y][x]
 			ws.Grid[y][x].ResourceNodeID = ""
 			ws.Grid[y][x].BuildingID = ""
 		}
@@ -231,13 +243,62 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		ws.LogisticsShips[id] = cloneLogisticsShip(ship)
 	}
 
-	// Restore resources.
-	ws.Resources = make(map[string]*model.ResourceNodeState, len(snap.Resources))
-	for id, r := range snap.Resources {
-		if r == nil {
-			return nil, fmt.Errorf("resource snapshot missing for %s", id)
+	// Restore resources: 基线节点（静态字段由地图配置 + seed 重建）+ 快照里的差异。
+	// 与基线一致的节点不在差异表里，但必须照样建出来——它们仍能被开采、被渲染、
+	// 被查询层列出（只有「未变化」这一件事不进快照）。
+	ws.Resources = make(map[string]*model.ResourceNodeState, len(snap.ResourceBaseline)+len(snap.ResourceDeltas))
+	for id, base := range snap.ResourceBaseline {
+		if id == "" {
+			return nil, fmt.Errorf("resource baseline has an empty node id")
 		}
-		ws.Resources[id] = cloneResource(r)
+		if base.MaxAmount < 0 || base.BaseYield < 0 {
+			return nil, fmt.Errorf("resource baseline node %s has an invalid amount or yield", id)
+		}
+		node := &model.ResourceNodeState{
+			ID:           id,
+			PlanetID:     snap.PlanetID,
+			Kind:         base.Kind,
+			Behavior:     base.Behavior,
+			Position:     model.Position{X: base.X, Y: base.Y},
+			ClusterID:    base.ClusterID,
+			MaxAmount:    base.MaxAmount,
+			Remaining:    base.MaxAmount,
+			BaseYield:    base.BaseYield,
+			CurrentYield: base.BaseYield,
+			MinYield:     base.MinYield,
+			RegenPerTick: base.RegenPerTick,
+			DecayPerTick: base.DecayPerTick,
+			IsRare:       base.IsRare,
+		}
+		node.SyncDepleted()
+		ws.Resources[id] = node
+		// 基线节点就是 mapgen 直接产出的矿脉：读档后必须重新标记，
+		// 否则下一次存档会把每个资源节点整份写进快照（实测 0.8MB → 17MB）。
+		ws.MapResourceIDs[id] = true
+	}
+	for id, delta := range snap.ResourceDeltas {
+		if id == "" {
+			return nil, fmt.Errorf("resource snapshot has an empty node id")
+		}
+		if delta.Node != nil {
+			node := cloneResource(delta.Node)
+			if node == nil || node.ID != id {
+				return nil, fmt.Errorf("resource snapshot node %s has a mismatched payload", id)
+			}
+			node.SyncDepleted()
+			ws.Resources[id] = node
+			continue
+		}
+		node := ws.Resources[id]
+		if node == nil {
+			return nil, fmt.Errorf("resource snapshot node %s is not part of the map baseline", id)
+		}
+		node.Remaining = delta.Remaining
+		node.CurrentYield = delta.CurrentYield
+		if delta.Remaining < 0 || delta.Remaining > node.MaxAmount || node.CurrentYield < 0 || node.CurrentYield > node.BaseYield {
+			return nil, fmt.Errorf("resource snapshot node %s has an invalid delta", id)
+		}
+		node.SyncDepleted()
 	}
 	ws.Pipelines = clonePipelineNetworkState(snap.Pipelines)
 	ws.Construction = cloneConstructionQueue(snap.Construction)
@@ -286,7 +347,24 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 		cell.ResourceNodeID = id
 	}
 
+	// 可再生矿脉索引：结算每 tick 只扫这些（资源 cell 数在细分网格下是万级）。
+	indexRenewableResources(ws)
+
 	return ws, nil
+}
+
+// indexRenewableResources 重建可再生矿脉索引（与 gamecore.IndexRenewableResources
+// 同一口径；snapshot 包不能反向依赖 gamecore，故这里就地实现）。
+func indexRenewableResources(ws *model.WorldState) {
+	if ws == nil {
+		return
+	}
+	ws.RenewableResources = ws.RenewableResources[:0]
+	for _, node := range ws.Resources {
+		if node != nil && node.Behavior == "renewable" && node.RegenPerTick > 0 {
+			ws.RenewableResources = append(ws.RenewableResources, node)
+		}
+	}
 }
 
 func cloneEnemyForceState(state *model.EnemyForceState) *model.EnemyForceState {
@@ -299,32 +377,25 @@ func cloneEnemyForceState(state *model.EnemyForceState) *model.EnemyForceState {
 	return &out
 }
 
-func validateTerrain(terrainGrid [][]terrain.TileType, width, height int) error {
-	if len(terrainGrid) != height {
-		return fmt.Errorf("terrain height mismatch: %d != %d", len(terrainGrid), height)
-	}
-	for y := 0; y < height; y++ {
-		if len(terrainGrid[y]) != width {
-			return fmt.Errorf("terrain width mismatch at row %d: %d != %d", y, len(terrainGrid[y]), width)
-		}
-	}
-	return nil
+// TerrainRuns encodes a terrain atlas as row runs of non-buildable tiles.
+// 细分网格后整幅地形有 6×face_size² 个 cell（遭遇战 49.8 万格），逐格写进快照要
+// 5.5MB（缩进后 7.7MB）——而地形只由地图配置与 seed 决定、可由 mapgen 确定性重建，
+// 因此只存「与默认 buildable 不同的格」的游程（实测遭遇战 2597 条 / 77KB）。
+func TerrainRuns(grid [][]model.MapTile, width, height int) string {
+	return model.TerrainRuns(grid, width, height)
 }
 
-func cloneTerrain(grid [][]model.MapTile, width, height int) [][]terrain.TileType {
-	if width <= 0 || height <= 0 {
-		return nil
+// DecodeTerrainRuns rebuilds a full terrain atlas from TerrainRuns output.
+// 空串表示整幅地形都是 buildable（合法编码）。
+func DecodeTerrainRuns(encoded string, width, height int) ([][]terrain.TileType, error) {
+	return model.DecodeTerrainRuns(encoded, width, height)
+}
+
+// decodeSnapshotTerrain 校验并解码快照里的地形游程。
+func decodeSnapshotTerrain(encoded string, width, height int) ([][]terrain.TileType, error) {
+	grid, err := DecodeTerrainRuns(encoded, width, height)
+	if err != nil {
+		return nil, fmt.Errorf("terrain payload: %w", err)
 	}
-	terrainGrid := make([][]terrain.TileType, height)
-	for y := 0; y < height; y++ {
-		row := make([]terrain.TileType, width)
-		if y < len(grid) {
-			srcRow := grid[y]
-			for x := 0; x < width && x < len(srcRow); x++ {
-				row[x] = srcRow[x].Terrain
-			}
-		}
-		terrainGrid[y] = row
-	}
-	return terrainGrid
+	return grid, nil
 }

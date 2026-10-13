@@ -71,7 +71,9 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
 /** The arm reaches actual conveyor centers with a two-link elbow, including rotated cube seams. */
 function pose(arm: THREE.Object3D, motion: Motion, end: THREE.Vector3, carrying: boolean) {
   const reach = Math.hypot(end.x, end.z);
-  const length = Math.max(.46, motion.source.length() * .58, motion.target.length() * .58);
+  // 模型局部单位 = 1 cell（场景侧按 tileScale 统一缩放），细分网格后臂要够到相邻 cell 中心
+  // （mk1 的 range=1 就是紧贴一格），单段 0.58 时两段合计 1.16 > 1.0，够得着。
+  const length = Math.max(.58, motion.source.length() * .58, motion.target.length() * .58);
   const distance = Math.min(length * 1.999, Math.hypot(reach, end.y));
   const bend = Math.acos(THREE.MathUtils.clamp(distance / (length * 2), -1, 1));
   const pitch = Math.atan2(end.y, reach) + bend;
@@ -103,6 +105,6 @@ export function animateSorterArm(arm: THREE.Object3D, delta: number, active: boo
   const carrying = phase > .08 && phase < .62;
   const fraction = phase < .62 ? THREE.MathUtils.smoothstep(phase, .08, .62) : 1 - THREE.MathUtils.smoothstep(phase, .68, 1);
   const end = motion.source.clone().lerp(motion.target, fraction);
-  end.y += Math.sin(fraction * Math.PI) * .48;
+  end.y += Math.sin(fraction * Math.PI) * .55;
   pose(arm, motion, end, carrying);
 }

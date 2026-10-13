@@ -4,6 +4,7 @@ import type { FogMapView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView
 import { useShallow } from "zustand/react/shallow";
 
 import {
+  getBuildingFootprint,
   getFogState,
   getTerrainTile,
   getViewportTileBounds,
@@ -265,12 +266,32 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
       context.fillStyle = color;
       context.fillRect(offsetX + x * scale - size / 2, offsetY + y * scale - size / 2, size, size);
     };
+    /**
+     * 建筑按**整个占地**画（§4）：细分网格后 3×3/5×5 建筑只点一个 2px 点会看不出基地规模。
+     * 占地像素不足 2px 时退回单点，避免大图缩略图上糊成一片。
+     */
+    const buildingRect = (building: { position: { x: number; y: number; z: number } }, color: string, fallbackSize: number) => {
+      const footprint = getBuildingFootprint(building as never);
+      const width = footprint.width * scale;
+      const height = footprint.height * scale;
+      if (width < 2 || height < 2) {
+        dot(building.position.x + footprint.width / 2, building.position.y + footprint.height / 2, color, fallbackSize);
+        return;
+      }
+      context.fillStyle = color;
+      context.fillRect(
+        offsetX + building.position.x * scale,
+        offsetY + building.position.y * scale,
+        Math.max(width, 1.5),
+        Math.max(height, 1.5),
+      );
+    };
 
-    // 敌我标记：建筑=绿点、单位=蓝点、黑雾=红点、其他玩家=橙点（敌情只在可见区域出现，迷雾不泄露）
+    // 敌我标记：建筑=绿块（按占地）、单位=蓝点、黑雾=红点、其他玩家=橙点（敌情只在可见区域出现，迷雾不泄露）
     for (const building of Object.values(planet.buildings ?? {})) {
       if (building.owner_id !== session.playerId) continue;
       if (!getFogState(fog, Math.round(building.position.x), Math.round(building.position.y)).explored) continue;
-      dot(building.position.x, building.position.y, "#5ef7a1", 2.5);
+      buildingRect(building, "#5ef7a1", 2.5);
     }
     for (const unit of Object.values(planet.units ?? {})) {
       const pos = { x: Math.round(unit.position.x), y: Math.round(unit.position.y) };

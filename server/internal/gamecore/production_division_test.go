@@ -26,12 +26,14 @@ func stockProducerFor(b *model.Building, entry model.WorldUnitCatalogEntry) {
 	}
 }
 
-// 3.3：兵营出步兵/侦察，战车工厂出机甲/火炮/导弹车/维修车/补给车，机场出无人机。
+// 3.3：兵营出步兵/侦察，战车工厂出机甲/火炮/导弹车/维修车/补给车，机场出无人机，
+// 战场分析基站（HQ）出运输机器人（§2）。
 func TestProducerDivisionOfLabour(t *testing.T) {
 	plan := map[model.BuildingType][]string{
-		"barracks":        {"worker", "soldier", "scout"},
-		"vehicle_factory": {"mecha", "artillery", "missile_vehicle", "repair_vehicle", "supply_truck"},
-		"airfield":        {"attack_drone"},
+		"barracks":                  {"worker", "soldier", "scout"},
+		"vehicle_factory":           {"mecha", "artillery", "missile_vehicle", "repair_vehicle", "supply_truck"},
+		"airfield":                  {"attack_drone"},
+		"battlefield_analysis_base": {"transport_robot"},
 	}
 	ws := newRTTWorld(false)
 	grantAllTechs(ws, "p1")

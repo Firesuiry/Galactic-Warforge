@@ -1099,7 +1099,7 @@ techs:
         - {item_id: energy_matrix, quantity: 168}
         - {item_id: information_matrix, quantity: 168}
         - {item_id: gravity_matrix, quantity: 168}
-    effects: [{type: exploration_range, value: 1}]
+    effects: [{type: exploration_range, value: 3}]
     max_level: 4
   - id: mecha_core
     name: 机甲核心
@@ -1135,7 +1135,7 @@ techs:
     type: mecha
     level: 1
     cost: [{item_id: electromagnetic_matrix, quantity: 200}]
-    effects: [{type: move_speed, value: 2}]
+    effects: [{type: move_speed, value: 6}]
     max_level: 100
   - id: drone_engine
     name: 无人机引擎
@@ -1499,7 +1499,7 @@ techs:
         - {item_id: structure_matrix, quantity: 340}
         - {item_id: gravity_matrix, quantity: 340}
       6: [{item_id: universe_matrix, quantity: 800}]
-    effects: [{type: move_speed, value: 2}]
+    effects: [{type: move_speed, value: 6}]
     max_level: 6
   - id: mechanical_frame
     name: 机械骨骼
@@ -1591,7 +1591,7 @@ techs:
         - {item_id: structure_matrix, quantity: 408}
         - {item_id: information_matrix, quantity: 408}
         - {item_id: gravity_matrix, quantity: 408}
-    effects: [{type: distribution_range, value: 5}]
+    effects: [{type: distribution_range, value: 15}]
     max_level: 5
   - id: energy_circuit
     name: 能量回路

@@ -46,15 +46,15 @@ func blackFogTuningFor(difficulty string) blackFogTuning {
 		return blackFogTuning{}
 	case "easy":
 		return blackFogTuning{meterRate: 0.00008, waveSizeMul: 0.7, nestCap: 4, darkUnitCap: 40, initialNests: 1,
-			guardBase: 1, guardPerLvl: 1, guardMax: 4, ruinRadius: 10, ruinCooldown: 4000,
+			guardBase: 1, guardPerLvl: 1, guardMax: 4, ruinRadius: 30, ruinCooldown: 4000,
 			raidWaveCap: 4, raidUnitCap: 8}
 	case "hard":
 		return blackFogTuning{meterRate: 0.0003, waveSizeMul: 1.4, nestCap: 9, darkUnitCap: 90, initialNests: 3,
-			guardBase: 3, guardPerLvl: 2, guardMax: 10, ruinRadius: 14, ruinCooldown: 2400,
+			guardBase: 3, guardPerLvl: 2, guardMax: 10, ruinRadius: 42, ruinCooldown: 2400,
 			raidWaveCap: 8, raidUnitCap: 20}
 	default: // normal
 		return blackFogTuning{meterRate: 0.00015, waveSizeMul: 1.0, nestCap: 6, darkUnitCap: 60, initialNests: 2,
-			guardBase: 2, guardPerLvl: 1, guardMax: 6, ruinRadius: 12, ruinCooldown: 3000,
+			guardBase: 2, guardPerLvl: 1, guardMax: 6, ruinRadius: 36, ruinCooldown: 3000,
 			raidWaveCap: 6, raidUnitCap: 12}
 	}
 }
@@ -76,9 +76,9 @@ const (
 	// blackFogRaidReassignTicks 空闲黑雾单位重新指派袭击目标的间隔。
 	blackFogRaidReassignTicks = 40
 	// blackFogNestMinPlayerDistance 新巢穴距玩家建筑的最小距离（尽力满足）。
-	blackFogNestMinPlayerDistance = 50
+	blackFogNestMinPlayerDistance = 150
 	// blackFogGuardAggroPerLevel 守军守巢半径每级加成（E4：守巢半径随巢穴等级缩放）。
-	blackFogGuardAggroPerLevel = 2
+	blackFogGuardAggroPerLevel = 6
 )
 
 // settleEnemyForces 处理单个世界的黑雾威胁累积、巢穴管理与波次孵化。
@@ -294,10 +294,15 @@ func (gc *GameCore) spawnBlackFogNest(ws *model.WorldState, level int) *model.En
 		if nestSiteInRuinCooldown(ws, pos, tuning) {
 			continue
 		}
-		// 随尝试次数放宽距离要求，保证小地图也能生成。
-		need := minDist - attempt/8*10
-		if need < 8 {
-			need = 8
+		// 随尝试次数放宽距离要求，保证小地图也能生成。候选点由哈希直接给出、
+		// 与地图大小无关，而"距玩家建筑 ≥150"在 face 288 上命中率极低：早先
+		// 每次放宽只有 30 cell（细分网格前是 10 格），96 次尝试后下限才降到 150-330
+		// → 归到 24，绝大多数尝试都花在必然失败的 150 cell 上，一次 spawn 要
+		// 跑上百次 O(建筑数) 的距离检查（实测每个"该建巢"的 tick 都要 ~200ms）。
+		// 改成每次尝试放宽 60：下限 150→24 只需 3 组尝试。
+		need := minDist - attempt/8*60
+		if need < 24 {
+			need = 24
 		}
 		safe := true
 		for _, building := range ws.Buildings {
@@ -494,10 +499,10 @@ func newBlackFogUnit(ws *model.WorldState, pos model.Position, level int) *model
 	return unit
 }
 
-// blackFogSpawnTiles 巢穴周围的可进入产卵格（半径 1~3 环带扫描）。
+// blackFogSpawnTiles 巢穴周围的可进入产卵格（半径 1~9 环带扫描，细分网格下 ×3）。
 func blackFogSpawnTiles(ws *model.WorldState, center model.Position, want int) []model.Position {
 	var tiles []model.Position
-	for radius := 1; radius <= 3 && len(tiles) < want; radius++ {
+	for radius := 1; radius <= 9 && len(tiles) < want; radius++ {
 		for _, candidate := range ws.SurfaceDisc(center, radius) {
 			if ws.SurfaceDistance(center, candidate) != radius {
 				continue
@@ -718,7 +723,7 @@ func returnBlackFogUnitHome(ws *model.WorldState, unit *model.Unit) {
 			home, bestDist = nest, d
 		}
 	}
-	if home == nil || bestDist <= 4 {
+	if home == nil || bestDist <= 12 {
 		return
 	}
 	if path, ok := computeUnitPath(ws, unit.Position, home.Position, unit.ID); ok && len(path) > 1 {

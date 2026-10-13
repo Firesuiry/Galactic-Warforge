@@ -261,11 +261,12 @@ func sorterFindEndpoint(ws *model.WorldState, sorter *model.Building, dir model.
 			return sorterLink{id: targetID, dir: dir}, true
 		}
 		if target.Storage != nil {
+			// 分拣器连到建筑占地内任一 cell 即算连上（多格建筑不再是"必须正中锚点"）：
+			// 端口按方向取，offset 已统一收敛到锚点。
+			if !ws.BuildingOccupies(target, pos) {
+				return sorterLink{}, false
+			}
 			for _, port := range sortedIOPorts(target.Runtime.Params.IOPorts) {
-				portPos := portWorldPosition(ws, target, port)
-				if portPos.X != pos.X || portPos.Y != pos.Y {
-					continue
-				}
 				if (forInput && (port.Direction == model.PortOutput || port.Direction == model.PortBoth)) || (!forInput && (port.Direction == model.PortInput || port.Direction == model.PortBoth)) {
 					return sorterLink{id: targetID, dir: dir, port: port.ID}, true
 				}

@@ -307,27 +307,31 @@ func TestDarkFogRaidScenarioPlayerSurvivesAndCalms(t *testing.T) {
 	hq.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, hq)
 	// 基地：两座风机（袭击优先级最高）+ 一座仓库，外加弹药补给站。
-	for i, pos := range []model.Position{{X: 22, Y: 20}, {X: 18, Y: 20}, {X: 20, Y: 22}} {
+	// 细分网格：HQ 占 5×5（x20..24,y20..24），附属建筑必须摆到占地之外，
+	// 否则会压在 HQ 上（IndexBuilding 失败退化成锚点登记）。
+	for i, pos := range []model.Position{{X: 27, Y: 22}, {X: 14, Y: 22}, {X: 22, Y: 27}} {
 		b := newBuilding("base-"+string(rune('a'+i)), model.BuildingTypeWindTurbine, "p1", pos)
 		b.Runtime.State = model.BuildingWorkRunning
 		placeBuilding(ws, b)
 	}
-	supply := newBuilding("supply-tc07", model.BuildingTypeSupplyStation, "p1", model.Position{X: 20, Y: 18})
+	supply := newBuilding("supply-tc07", model.BuildingTypeSupplyStation, "p1", model.Position{X: 22, Y: 14})
 	supply.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, supply)
 	if _, _, err := supply.Storage.Load(model.ItemAmmoBullet, 4000); err != nil {
 		t.Fatalf("load supply station ammo: %v", err)
 	}
 
-	// 10 个步兵守家（射程 2、aggro 5，围着 HQ 站一圈）。
-	for _, d := range []model.Position{{X: 1, Y: 0}, {X: -1, Y: 0}, {X: 0, Y: 1}, {X: 1, Y: 1}, {X: -1, Y: -1},
-		{X: 2, Y: 0}, {X: -2, Y: 0}, {X: 0, Y: 2}, {X: 2, Y: 2}, {X: -2, Y: -2}} {
+	// 10 个步兵守家。细分网格：步兵射程 6、aggro 15，守军按 3 格一圈摆开
+	// （紧贴 HQ 的 5×5 占地会落在建筑里，摆不进单位）。
+	for _, d := range []model.Position{{X: 3, Y: 0}, {X: -3, Y: 0}, {X: 0, Y: 3}, {X: 3, Y: 3}, {X: -3, Y: -3},
+		{X: 6, Y: 0}, {X: -6, Y: 0}, {X: 0, Y: 6}, {X: 6, Y: 6}, {X: -6, Y: -6}} {
 		spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: home.X + d.X, Y: home.Y + d.Y})
 	}
 	mecha := findExecutorUnit(t, ws)
 
-	// 三处 level 4 巢穴（含被打的那座），距基地 40+ 格。
-	nests := []model.Position{{X: 60, Y: 60}, {X: 64, Y: 52}, {X: 55, Y: 66}}
+	// 三处 level 4 巢穴（含被打的那座），距基地 128 cell——细分网格后距离类数值 ×3，
+	// 原来的「40+ 格」在 cell 坐标下就是 120+，巢穴太近会让蜂群在玩家还手前就压到基地。
+	nests := []model.Position{{X: 143, Y: 15}, {X: 163, Y: 35}, {X: 128, Y: 40}}
 	for i, pos := range nests {
 		spawnE4Nest(ws, "nest-tc07-"+string(rune('a'+i)), 4, 220, pos)
 	}

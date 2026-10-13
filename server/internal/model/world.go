@@ -62,15 +62,30 @@ type WorldState struct {
 	// PaceOutput 生产配方时长倍率。0 表示 1。由结算管线按战场配置每 tick 写入，不进快照。
 	PaceOutput float64 `json:"-"`
 	// DarkFogCalmTicks 黑雾被激怒后恢复中立所需 tick。0 表示默认值。由结算管线按战场配置写入，不进快照。
-	DarkFogCalmTicks   int64                             `json:"-"`
-	PlanetID           string                            `json:"planet_id"`
-	MapWidth           int                               `json:"map_width"`
-	MapHeight          int                               `json:"map_height"`
-	Players            map[string]*PlayerState           `json:"players"`
-	Buildings          map[string]*Building              `json:"buildings"`
-	Units              map[string]*Unit                  `json:"units"`
-	Grid               [][]MapTile                       `json:"-"` // grid[y][x]
-	Resources          map[string]*ResourceNodeState     `json:"resources"`
+	DarkFogCalmTicks int64                         `json:"-"`
+	PlanetID         string                        `json:"planet_id"`
+	MapWidth         int                           `json:"map_width"`
+	MapHeight        int                           `json:"map_height"`
+	Players          map[string]*PlayerState       `json:"players"`
+	Buildings        map[string]*Building          `json:"buildings"`
+	Units            map[string]*Unit              `json:"units"`
+	Grid             [][]MapTile                   `json:"-"` // grid[y][x]
+	Resources        map[string]*ResourceNodeState `json:"resources"`
+	// ResourceBaseline 是地图生成（含 bootstrap 注入的开局矿簇）后、任何结算发生
+	// 之前的资源节点基线：`id -> {MaxAmount, BaseYield}`。细分网格后全图资源 cell
+	// 是万级（遭遇战 3.4 万），把每个节点的静态字段整表写进快照会让存档膨胀十倍
+	// 以上（实测 tick 0 快照 57MB，其中资源 10.4MB、地形 5.5MB）；而这些字段只由
+	// 地图配置与 seed 决定、可由 mapgen 确定性重建，因此快照只存与基线的差异
+	// （remaining/current_yield/depleted）。不进快照。
+	ResourceBaseline map[string]ResourceBaselineEntry `json:"-"`
+	// MapResourceIDs 是「由地图模型直接提供」的资源节点 id（mapgen 生成的矿脉）。
+	// bootstrap 注入的开局矿簇不在这里——它们由 gamecore 生成，读档时重建地图模型
+	// 拿不到，因此必须整节点写进快照。不进快照。
+	MapResourceIDs map[string]bool `json:"-"`
+	// RenewableResources 只含可再生矿脉（水/硫酸/木/植物燃料）的索引：细分网格
+	// 后资源 cell 数上了一个数量级，每 tick 的再生结算不能逐格扫描全表。
+	// 由 gamecore.IndexRenewableResources 在地图生成与读档后重建，不进快照。
+	RenewableResources []*ResourceNodeState              `json:"-"`
 	LogisticsStations  map[string]*LogisticsStationState `json:"-"`
 	LogisticsBots      map[string]*LogisticsBotState     `json:"-"`
 	LogisticsDrones    map[string]*LogisticsDroneState   `json:"-"`
@@ -114,6 +129,8 @@ func NewWorldState(planetID string, faceSize int) *WorldState {
 		Buildings:         make(map[string]*Building),
 		Units:             make(map[string]*Unit),
 		Resources:         make(map[string]*ResourceNodeState),
+		ResourceBaseline:  make(map[string]ResourceBaselineEntry),
+		MapResourceIDs:    make(map[string]bool),
 		LogisticsStations: make(map[string]*LogisticsStationState),
 		LogisticsBots:     make(map[string]*LogisticsBotState),
 		LogisticsDrones:   make(map[string]*LogisticsDroneState),

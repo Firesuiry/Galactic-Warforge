@@ -68,7 +68,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
     # 无开局物资包（2026-10-10）：背包为空，minerals/energy 只留「第一座矿机通电前」
@@ -94,7 +94,7 @@ players:
     bot: "easy"
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
     bootstrap: *skirmish_kit

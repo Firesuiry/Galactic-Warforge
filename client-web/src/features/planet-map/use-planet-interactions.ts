@@ -26,7 +26,7 @@ import type {
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
-import { getBuildingDisplayName, getItemDisplayName } from '@/features/planet-map/model';
+import { getBuildingDisplayName, getItemDisplayName, tileContainsBuilding } from '@/features/planet-map/model';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { reportLocalPreflightBlock } from '@/features/planet-commands/local-preflight';
 import {
@@ -41,11 +41,31 @@ import {
   resolveContextCommand,
 } from '@/features/planet-map/rts-commands';
 import { resolveSquadDeploy } from '@/features/planet-map/squad-commands';
+import { isTransportRobot, type HaulRouteDraft } from '@/features/planet-map/transport-haul';
 import { emitCommandMarker } from '@/features/planet-map/command-markers';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
 function reportLocalBlock(commandType: string, planetId: string, message: string, focus?: { buildingType?: string; position?: Position }) {
   reportLocalPreflightBlock(commandType, planetId, message, focus);
+}
+
+/** 点到的格子上属于哪个建筑（按 footprint 命中；多占建筑取第一个）。 */
+export function buildingAtTile(planet: PlanetRenderView, tile: TilePoint) {
+  const faceSize = planet.surface?.face_size ?? planet.map_width / 3;
+  return Object.values(planet.buildings ?? {}).find((building) =>
+    tileContainsBuilding(building, tile.x, tile.y, faceSize),
+  );
+}
+
+/** 运输机器人选择器：己方 + type=transport_robot（服务端只受理这类单位的 haul 指令）。 */
+export function selectedTransportRobotIds(
+  planet: PlanetRenderView,
+  selectedUnits: readonly string[],
+  playerId: string,
+  knownOwnUnits?: ReadonlyMap<string, Unit>,
+): string[] {
+  return commandableUnitIds(planet, selectedUnits, playerId, knownOwnUnits)
+    .filter((id) => isTransportRobot(planet.units?.[id] ?? knownOwnUnits?.get(id)));
 }
 
 /** 在指定 tile 上寻找攻击目标：优先敌军势力，其次非己方单位。 */
@@ -176,6 +196,25 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
     [client, planet],
   );
 
+  const submitHaulOrder = useCallback(
+    (selector: string[], route: HaulRouteDraft) => {
+      if (!planet) {
+        return;
+      }
+      void submitPlanetCommand({
+        commandType: 'unit_order',
+        planetId: planet.planet_id,
+        focus: { entityId: selector[0] },
+        execute: () => client.cmdHaul(selector, route.fromBuildingId, route.toBuildingId, route.itemId, planet.planet_id),
+        fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({
+          event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+          limit: 50,
+        }),
+      });
+    },
+    [client, planet],
+  );
+
   const interactTile = useCallback(
     (tile: TilePoint) => {
       if (!planet) {
@@ -184,6 +223,33 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
       const store = usePlanetViewStore.getState();
       const mode = store.interactionMode;
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
+
+      // §4 运输机器人「设置运输」：依次点起点建筑、终点建筑（同一格只认建筑）。
+      if (mode.kind === 'haul') {
+        const selector = selectedTransportRobotIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+        if (selector.length === 0) {
+          reportLocalBlock('unit_order', planet.planet_id, '没有选中的运输机器人', { position });
+          store.exitInteractionMode();
+          return;
+        }
+        const building = buildingAtTile(planet, tile);
+        if (!building) {
+          reportLocalBlock('unit_order', planet.planet_id, '请点击建筑（起点/终点必须是建筑）', { position });
+          return;
+        }
+        if (!mode.fromBuildingId) {
+          store.setInteractionMode({ ...mode, fromBuildingId: building.id });
+          return;
+        }
+        if (building.id === mode.fromBuildingId) {
+          reportLocalBlock('unit_order', planet.planet_id, '终点不能与起点相同', { position });
+          return;
+        }
+        // 两端都选好后立刻下达（物品留空 = 服务端取终点当前能接收的第一种）。
+        submitHaulOrder(selector, { fromBuildingId: mode.fromBuildingId, toBuildingId: building.id, itemId: mode.itemId });
+        store.exitInteractionMode();
+        return;
+      }
 
       if (mode.kind === 'build') {
         const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory, runtime);
@@ -287,7 +353,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
         store.exitInteractionMode();
       }
     },
-    [catalog, client, inventory, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitMove, submitUnitOrder],
+    [catalog, client, inventory, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitHaulOrder, submitMove, submitUnitOrder],
   );
 
   const contextTile = useCallback(

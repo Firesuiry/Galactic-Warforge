@@ -134,6 +134,44 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
+// regenResourceNodes 每 tick 只推进可再生矿脉（水/硫酸/木/植物燃料）。
+// 世界边长 ×3 后资源 cell 数上了一个数量级，逐格扫描会变成每 tick 的固定
+// 开销；这里维护一个只含可再生矿脉的索引，结算与地图生成时刷新，扫描量
+// 与可再生矿脉数同阶而不是与全图资源 cell 数同阶。
+func regenResourceNodes(ws *model.WorldState) {
+	if ws == nil {
+		return
+	}
+	for _, node := range ws.RenewableResources {
+		if node == nil {
+			continue
+		}
+		if node.Behavior != "renewable" || node.RegenPerTick <= 0 {
+			continue
+		}
+		if node.Remaining < node.MaxAmount {
+			node.Remaining += node.RegenPerTick
+			if node.Remaining > node.MaxAmount {
+				node.Remaining = node.MaxAmount
+			}
+			node.SyncDepleted()
+		}
+	}
+}
+
+// IndexRenewableResources 重建可再生矿脉索引（地图生成/读档后调用一次）。
+func IndexRenewableResources(ws *model.WorldState) {
+	if ws == nil {
+		return
+	}
+	ws.RenewableResources = ws.RenewableResources[:0]
+	for _, node := range ws.Resources {
+		if node != nil && node.Behavior == "renewable" && node.RegenPerTick > 0 {
+			ws.RenewableResources = append(ws.RenewableResources, node)
+		}
+	}
+}
+
 func scaleByPowerRatio(value int, ratio float64) int {
 	if value <= 0 {
 		return 0
@@ -222,37 +260,28 @@ func veinConsumption(extracted, veinsLevel int) int {
 }
 
 // coveredResourceNodeIDs returns the deterministic set of resource nodes the
-// building covers: its own tile plus every tile inside its coverage radius.
+// building covers: its whole footprint plus `max(1, coverage_radius)` rings
+// (DSP-style box-select mining), so a 3×3 miner no longer only reaches the
+// anchor cell's Chebyshev square.
 func coveredResourceNodeIDs(ws *model.WorldState, building *model.Building) []string {
 	if ws == nil || building == nil {
 		return nil
 	}
-	x, y := building.Position.X, building.Position.Y
-	if !ws.InBounds(x, y) {
+	if !ws.InBounds(building.Position.X, building.Position.Y) {
 		return nil
 	}
-	radius := 0
-	if def, ok := model.BuildingRuntimeDefinitionByID(building.Type); ok && def.Functions.Collect != nil {
-		radius = def.Functions.Collect.CoverageRadius
-	}
-	ids := make([]string, 0, 1)
+	ids := make([]string, 0, 4)
 	seen := make(map[string]struct{})
-	for dy := -radius; dy <= radius; dy++ {
-		for dx := -radius; dx <= radius; dx++ {
-			nx, ny := x+dx, y+dy
-			if !ws.InBounds(nx, ny) {
-				continue
-			}
-			nodeID := ws.Grid[ny][nx].ResourceNodeID
-			if nodeID == "" {
-				continue
-			}
-			if _, dup := seen[nodeID]; dup {
-				continue
-			}
-			seen[nodeID] = struct{}{}
-			ids = append(ids, nodeID)
+	for _, cell := range model.CollectorCoverageCells(ws, building.Type, building.Rotation, building.Position) {
+		nodeID := ws.Grid[cell.Y][cell.X].ResourceNodeID
+		if nodeID == "" {
+			continue
 		}
+		if _, dup := seen[nodeID]; dup {
+			continue
+		}
+		seen[nodeID] = struct{}{}
+		ids = append(ids, nodeID)
 	}
 	sort.Strings(ids)
 	return ids
@@ -345,27 +374,6 @@ func sortedMiningItemIDs(byItem map[string]int) []string {
 	return ids
 }
 
-func regenResourceNodes(ws *model.WorldState) {
-	if ws == nil {
-		return
-	}
-	for _, node := range ws.Resources {
-		if node == nil {
-			continue
-		}
-		if node.Behavior != "renewable" || node.RegenPerTick <= 0 {
-			continue
-		}
-		if node.Remaining < node.MaxAmount {
-			node.Remaining += node.RegenPerTick
-			if node.Remaining > node.MaxAmount {
-				node.Remaining = node.MaxAmount
-			}
-			node.SyncDepleted()
-		}
-	}
-}
-
 func syncCollectorResourceKind(ws *model.WorldState, building *model.Building) {
 	if ws == nil || building == nil || building.Runtime.Functions.Collect == nil {
 		return
@@ -399,6 +407,11 @@ func collectorResourceKind(ws *model.WorldState, building *model.Building) strin
 	return node.Kind
 }
 
+// resourceNodeForBuilding resolves the resource kind a collector reports. The
+// building covers its whole footprint plus rings, so the anchor cell is only
+// one candidate: the first covered node (row-major, matching
+// model.coveredResourceNode) wins, which keeps the reported kind deterministic
+// and identical to the pre-build validation.
 func resourceNodeForBuilding(ws *model.WorldState, building *model.Building) *model.ResourceNodeState {
 	if ws == nil || building == nil {
 		return nil
@@ -406,9 +419,10 @@ func resourceNodeForBuilding(ws *model.WorldState, building *model.Building) *mo
 	if !ws.InBounds(building.Position.X, building.Position.Y) {
 		return nil
 	}
-	nodeID := ws.Grid[building.Position.Y][building.Position.X].ResourceNodeID
-	if nodeID == "" {
-		return nil
+	for _, cell := range model.CollectorCoverageCells(ws, building.Type, building.Rotation, building.Position) {
+		if nodeID := ws.Grid[cell.Y][cell.X].ResourceNodeID; nodeID != "" {
+			return ws.Resources[nodeID]
+		}
 	}
-	return ws.Resources[nodeID]
+	return nil
 }

@@ -10,7 +10,10 @@ import (
 	"siliconworld/internal/model"
 )
 
-const CurrentVersion = 1
+// CurrentVersion 细分网格（1 格 = 3×3 cell）后坐标语义改变，旧存档一律拒绝加载，
+// 不写兼容层（与当年 cube_sphere 迁移同样处理）。版本 1 = 旧网格；
+// 版本 3 = 快照只存地形游程与资源差异（可由地图配置 + seed 重建的部分不入快照）。
+const CurrentVersion = 3
 
 // Snapshot captures a tick-level world snapshot with versioned payload.
 type Snapshot struct {
@@ -75,7 +78,8 @@ func CaptureRuntime(worlds map[string]*model.WorldState, activePlanetID string, 
 	return snap
 }
 
-// Encode serializes a snapshot to JSON.
+// Encode serializes a snapshot to JSON. 快照里不存可由地图配置 + seed 确定性重建
+// 的整幅地形与资源静态字段（见 WorldSnapshot.Terrain / ResourceDeltas）。
 func Encode(snap *Snapshot) ([]byte, error) {
 	if snap == nil {
 		return nil, errors.New("snapshot is nil")
@@ -84,7 +88,7 @@ func Encode(snap *Snapshot) ([]byte, error) {
 		snap.Version = CurrentVersion
 	}
 	if snap.Version != CurrentVersion {
-		return nil, fmt.Errorf("unsupported snapshot version %d", snap.Version)
+		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
 	}
 	if snap.Timestamp.IsZero() {
 		snap.Timestamp = time.Now().UTC()
@@ -92,6 +96,8 @@ func Encode(snap *Snapshot) ([]byte, error) {
 	if snap.World == nil && len(snap.PlanetWorlds) == 0 {
 		return nil, errors.New("snapshot missing world state")
 	}
+	// ResourceBaseline 标了 json:"-"，不会进 JSON；它随进程内快照保留，
+	// 供回放/回滚/自动存档在内存里直接还原（写盘快照读回后由地图配置重建）。
 	return json.MarshalIndent(snap, "", "  ")
 }
 
@@ -108,7 +114,7 @@ func Decode(data []byte) (*Snapshot, error) {
 		return nil, errors.New("snapshot version required")
 	}
 	if snap.Version != CurrentVersion {
-		return nil, fmt.Errorf("unsupported snapshot version %d", snap.Version)
+		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
 	}
 	return &snap, nil
 }

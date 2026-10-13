@@ -13,7 +13,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
     bootstrap:
@@ -86,7 +86,7 @@ players:
     permissions: ["*"]
     executor:
       build_efficiency: 1.0
-      operate_range: 6
+      operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
     bootstrap:
@@ -159,38 +159,38 @@ scenario_bootstrap:
       buildings:
         - owner_id: "p1"
           building_type: "tesla_tower"
-          x: 5
-          y: 3
+          x: 15
+          y: 9
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 4
-          y: 5
+          x: 12
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 6
-          y: 5
+          x: 18
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 8
-          y: 5
+          x: 24
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "wind_turbine"
-          x: 10
-          y: 5
+          x: 30
+          y: 15
           state: "running"
         - owner_id: "p1"
           building_type: "recomposing_assembler"
-          x: 7
-          y: 3
+          x: 21
+          y: 9
           state: "running"
         - owner_id: "p1"
           building_type: "planetary_logistics_station"
-          x: 9
-          y: 3
+          x: 27
+          y: 9
           state: "running"
           inventory:
             - item_id: ammo_bullet
@@ -199,8 +199,8 @@ scenario_bootstrap:
               quantity: 16
         - owner_id: "p1"
           building_type: "planetary_logistics_station"
-          x: 9
-          y: 1
+          x: 27
+          y: 3
           state: "running"
           inventory:
             - item_id: gear
@@ -211,8 +211,8 @@ scenario_bootstrap:
               quantity: 6
         - owner_id: "p1"
           building_type: "interstellar_logistics_station"
-          x: 11
-          y: 3
+          x: 33
+          y: 9
           state: "running"
           inventory:
             - item_id: ammo_bullet
@@ -225,8 +225,8 @@ scenario_bootstrap:
               quantity: 6
         - owner_id: "p1"
           building_type: "supply_station"
-          x: 11
-          y: 1
+          x: 33
+          y: 3
           state: "running"
           inventory:
             - item_id: ammo_bullet
@@ -235,40 +235,61 @@ scenario_bootstrap:
               quantity: 60
             - item_id: ammo_missile
               quantity: 40
+        # 运输机器人（§2）试玩夹具：p1 起点储物仓（有铁矿）→ 终点储物仓。
+        # 两仓紧邻预置电厂（HQ 由 runtime_registry 生成在出生点，拉线距离只有
+        # 3 cell，故用电力感应塔把电接过去），便于用 CLI `haul` 看 phase 与库存增长。
+        - owner_id: "p1"
+          building_type: "tesla_tower"
+          x: 15
+          y: 12
+          state: "running"
+        - owner_id: "p1"
+          building_type: "depot_mk1"
+          x: 15
+          y: 16
+          state: "running"
+          inventory:
+            - item_id: iron_ore
+              quantity: 60
+        - owner_id: "p1"
+          building_type: "depot_mk2"
+          x: 15
+          y: 24
+          state: "running"
         - owner_id: "p2"
           building_type: "tesla_tower"
-          x: 42
-          y: 44
+          x: 126
+          y: 132
           state: "running"
         - owner_id: "p2"
           building_type: "wind_turbine"
-          x: 41
-          y: 42
+          x: 123
+          y: 126
           state: "running"
         - owner_id: "p2"
           building_type: "wind_turbine"
-          x: 39
-          y: 42
+          x: 117
+          y: 126
           state: "running"
         - owner_id: "p2"
           building_type: "wind_turbine"
-          x: 37
-          y: 42
+          x: 111
+          y: 126
           state: "running"
         - owner_id: "p2"
           building_type: "wind_turbine"
-          x: 35
-          y: 42
+          x: 105
+          y: 126
           state: "running"
         - owner_id: "p2"
           building_type: "recomposing_assembler"
-          x: 40
-          y: 44
+          x: 120
+          y: 132
           state: "running"
         - owner_id: "p2"
           building_type: "planetary_logistics_station"
-          x: 38
-          y: 44
+          x: 114
+          y: 132
           state: "running"
           inventory:
             - item_id: ammo_bullet
@@ -277,8 +298,8 @@ scenario_bootstrap:
               quantity: 16
         - owner_id: "p2"
           building_type: "planetary_logistics_station"
-          x: 38
-          y: 46
+          x: 114
+          y: 138
           state: "running"
           inventory:
             - item_id: gear
@@ -289,8 +310,8 @@ scenario_bootstrap:
               quantity: 6
         - owner_id: "p2"
           building_type: "interstellar_logistics_station"
-          x: 36
-          y: 44
+          x: 108
+          y: 132
           state: "running"
           inventory:
             - item_id: ammo_bullet
@@ -303,8 +324,8 @@ scenario_bootstrap:
               quantity: 6
         - owner_id: "p2"
           building_type: "supply_station"
-          x: 36
-          y: 46
+          x: 108
+          y: 138
           state: "running"
           inventory:
             - item_id: ammo_bullet

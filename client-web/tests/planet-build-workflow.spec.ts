@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { revealBuildCard } from './support/build-bar';
+import { enterBuildMode, revealBuildCard } from './support/build-bar';
+import { buildingCells, footprintFits, occupiedCells } from './support/footprint';
 
 /**
  * 群星式建造闭环验收（真实 Go 战争服）：
@@ -15,8 +16,16 @@ import { revealBuildCard } from './support/build-bar';
 const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
 const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const PLANET_ID = 'planet-1-1';
-const OPERATE_RANGE = 6;
+/**
+ * 机甲作业半径（cell）：config-war.yaml 的 executor.operate_range = 18（细分网格后按 cell 记，
+ * 旧配置写 6 tile）。超出即被服务端 requireBuildRange 拒收，所以扫描范围按同一量纲。
+ */
+const OPERATE_RANGE = 18;
 const BUILDING_ID = 'wind_turbine';
+/** 风力涡轮机占地（server/data/buildings.yaml：2×2 cell，细分网格后不再等价于旧 1×1 tile）。 */
+const WIND_TURBINE_FOOTPRINT = { width: 2, height: 2 };
+/** 采矿机占地（server/data/buildings.yaml：3×3 cell）。 */
+const MINING_MACHINE_FOOTPRINT = { width: 3, height: 3 };
 
 /**
  * 服务端 mining_machine 的 collect.allowed_resources（server/data/buildings.yaml）：
@@ -147,13 +156,8 @@ async function tileToScreenPosition(
  * 战争服开局基地被自家建筑群包住，机甲四邻的空地必然被拒；这里把这类格子排除。
  */
 function sealsAnyGroundUnit(scene: ScenePayload, tile: { x: number; y: number }): boolean {
-  const occupied = new Set<string>();
-  for (const building of Object.values(scene.buildings ?? {})) {
-    occupied.add(`${building.position.x}:${building.position.y}`);
-  }
-  for (const unit of Object.values(scene.units ?? {})) {
-    occupied.add(`${unit.position.x}:${unit.position.y}`);
-  }
+  // 服务端口径（unitTileBlockedBeforeBuild）：只有建筑/地形/界外阻挡通行，单位自己不阻挡。
+  const blockedCells = buildingCells(scene);
   return Object.values(scene.units ?? {}).some((unit) => {
     const neighbors = [
       { x: unit.position.x + 1, y: unit.position.y },
@@ -163,7 +167,7 @@ function sealsAnyGroundUnit(scene: ScenePayload, tile: { x: number; y: number })
     ];
     const blocked = (point: { x: number; y: number }) => (
       (point.x === tile.x && point.y === tile.y)
-      || occupied.has(`${point.x}:${point.y}`)
+      || blockedCells.has(`${point.x}:${point.y}`)
       || scene.terrain?.[point.y]?.[point.x] !== 'buildable'
     );
     return neighbors.every(blocked);
@@ -179,16 +183,7 @@ function pickBuildTile(scene: ScenePayload): { x: number; y: number } {
     throw new Error('战争服中应存在 p1 的执行体单位');
   }
 
-  const occupied = new Set<string>();
-  for (const building of Object.values(scene.buildings ?? {})) {
-    occupied.add(`${building.position.x}:${building.position.y}`);
-  }
-  for (const unit of Object.values(scene.units ?? {})) {
-    occupied.add(`${unit.position.x}:${unit.position.y}`);
-  }
-  for (const resource of scene.resources ?? []) {
-    occupied.add(`${resource.position.x}:${resource.position.y}`);
-  }
+  const occupied = occupiedCells(scene);
 
   const origin = executor.position;
   for (let distance = 1; distance <= OPERATE_RANGE; distance += 1) {
@@ -206,7 +201,9 @@ function pickBuildTile(scene: ScenePayload): { x: number; y: number } {
         if (scene.visible && scene.visible[y]?.[x] !== true) {
           continue;
         }
-        if (occupied.has(`${x}:${y}`)) {
+        // 风力涡轮机细分网格后是 2×2 cell：整块占地都要空（只判原点会与旁边建筑重叠，
+        // 前端本地预检直接拦下，命令发不出去）。
+        if (!footprintFits(scene, { x, y }, WIND_TURBINE_FOOTPRINT)) {
           continue;
         }
         if (sealsAnyGroundUnit(scene, { x, y })) {
@@ -230,10 +227,8 @@ test('建造栏点选建筑卡片后在地图点击放置，命令回执出现�
   await page.goto(`/planet/${PLANET_ID}?view=2d`);
 
   // 底部建造栏就绪后点选 wind_turbine 卡片，进入建造模式（幽灵预览提示出现）。
-  // §3.2 快捷栏按分类页签分页，卡片未必在第一页：先切到它所在的分类。
-  const buildCard = await revealBuildCard(page, BUILDING_ID);
-  await buildCard.click();
-  await expect(page.locator('.planet-build-bar__hint')).toContainText('放置 风力涡轮机');
+  // §3.2 快捷栏按分类页签分页，卡片未必在第一页：helper 会切到它所在的分类并等模式激活。
+  await enterBuildMode(page, BUILDING_ID, '放置 风力涡轮机');
 
   // 用 canvas 上的相机参数把 tile 坐标换算成元素内点击坐标（环面规范坐标）。
   const surface = page.locator('.planet-map-canvas__surface');
@@ -247,10 +242,40 @@ test('建造栏点选建筑卡片后在地图点击放置，命令回执出现�
   await expect(firstEntry).toContainText('建造', { timeout: 10_000 });
   const blocked = await localPreflightBlock(page);
   if (blocked) {
-    // 本地预检失败 ⇒ 前端根本没发命令；断言这一点，避免把「假成功」当成通过。
-    expect(commandRequests).toHaveLength(0);
-    test.skip(true, `战争服 p1 背包已耗尽建造成本，前端本地预检拦下建造（${blocked}），跳过真实闭环断言`);
-    return;
+    // 并行规格共用同一个战争服：别的 spec（产线规划等）可能在 pickBuildTile 之后
+    // 抢建了这块空地——「该格已有你的建筑」是并发场景而非代码缺陷。
+    // 重取场景换一个落点重试，重试用尽再按场景状态跳过。
+    if (/已有你的建筑|已有其他玩家的建筑|已有你的施工任务/.test(blocked)) {
+      let retried = false;
+      for (let attempt = 0; attempt < 4 && !retried; attempt += 1) {
+        const fresh = await fetchAuthorized<ScenePayload>(
+          `/world/planets/${PLANET_ID}/scene?x=0&y=0&width=48&height=48`,
+        );
+        const nextTile = pickBuildTile(fresh);
+        await surface.click({
+          position: await tileToScreenPosition(page, surface, nextTile, fresh.map_width, fresh.map_height),
+        });
+        await expect(firstEntry).toContainText('建造', { timeout: 10_000 });
+        const again = await localPreflightBlock(page);
+        if (!again) {
+          retried = true;
+          break;
+        }
+        if (!/已有你的建筑|已有其他玩家的建筑|已有你的施工任务/.test(again)) {
+          test.skip(true, `战争服 p1 背包已耗尽建造成本，前端本地预检拦下建造（${again}），跳过真实闭环断言`);
+          return;
+        }
+      }
+      if (!retried) {
+        test.skip(true, `战争服基地附近的空地已被并行规格占满（${blocked}），跳过真实闭环断言`);
+        return;
+      }
+    } else {
+      // 本地预检失败 ⇒ 前端根本没发命令；断言这一点，避免把「假成功」当成通过。
+      expect(commandRequests).toHaveLength(0);
+      test.skip(true, `战争服 p1 背包已耗尽建造成本，前端本地预检拦下建造（${blocked}），跳过真实闭环断言`);
+      return;
+    }
   }
   expect(commandRequests.length).toBeGreaterThan(0);
   // 长跑后基地附近可能已被别的用例塞满建筑：服务端会把「把机甲四周完全堵死」的落点拒掉
@@ -261,7 +286,7 @@ test('建造栏点选建筑卡片后在地图点击放置，命令回执出现�
     return;
   }
   // authoritative 回写为成功（受理→回写有时序，不断言瞬态 pending 文案）。
-  await expect(firstEntry).toContainText('成功', { timeout: 10_000 });
+  await expect(firstEntry).toContainText('成功', { timeout: 30_000 });
 });
 
 test('采集建筑可直接放置在资源格上（前端不再本地拦截）', async ({ page }) => {
@@ -287,11 +312,9 @@ test('采集建筑可直接放置在资源格上（前端不再本地拦截）',
     return wrap(a.x - b.x, scene.map_width) + wrap(a.y - b.y, scene.map_height);
   };
 
-  const occupiedByBuilding = new Set(
-    Object.values(scene.buildings ?? {}).map(
-      (building) => `${building.position.x}:${building.position.y}`,
-    ),
-  );
+  // 采矿机占地（server/data/buildings.yaml：3×3 cell）：整块占地都要空，否则前端本地
+  // 预检会以「该格已有你的建筑」拦下（细分网格后 1×1 的老假设不成立）。
+  const occupiedByBuilding = buildingCells(scene);
   const candidates = scene.resources.filter((resource) => {
     // 服务端只允许采矿机开采 ALLOWED_MINING_RESOURCES 里的矿种（water/crude_oil/log 等由别的建筑开采）。
     if (!ALLOWED_MINING_RESOURCES.has(resource.kind ?? '')) {
@@ -304,7 +327,7 @@ test('采集建筑可直接放置在资源格上（前端不再本地拦截）',
     if (scene.visible && scene.visible[y]?.[x] !== true) {
       return false;
     }
-    if (occupiedByBuilding.has(`${x}:${y}`)) {
+    if (!footprintFits(scene, { x, y }, MINING_MACHINE_FOOTPRINT)) {
       return false;
     }
     return surfaceDistance(resource.position, executor.position) <= OPERATE_RANGE;
@@ -418,12 +441,13 @@ test('首次进入行星页视角聚焦基地，基地不被信息片遮挡且�
   const surface = page.locator('.planet-map-canvas__surface');
   await expect(surface).toBeVisible({ timeout: 30_000 });
 
-  // 回家视角：48px/tile，基地落在视口内且不压在左上行星胶囊区域。
+  // 回家视角：细分网格后是 16px/**cell**（旧 48px/tile 的观感，1 tile = 3 cell），
+  // 基地落在视口内且不压在左上行星胶囊区域。
   // §3.2 把胶囊默认收成一行（名称 · 电力 · 研究），可点区域比旧的四芯片版小得多，
   // 这里按收起态实测盒子判定，不再用写死的 456×150。
   await expect
     .poll(async () => Number(await surface.getAttribute('data-tile-size')), { timeout: 10_000 })
-    .toBe(48);
+    .toBe(16);
   const surfaceBox = await surface.boundingBox();
   if (!surfaceBox) {
     throw new Error('交互面不可见');

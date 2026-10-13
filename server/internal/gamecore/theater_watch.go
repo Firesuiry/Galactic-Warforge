@@ -10,7 +10,7 @@ import (
 // （非拥有者单位/建筑、黑雾巢穴等静态敌对势力）时向拥有者发
 // theater_zone_alert 告警事件；敌情持续期间按冷却重报，清空后自动复位。
 const (
-	theaterZoneDefaultRadius      = 8
+	theaterZoneDefaultRadius      = 24
 	theaterZoneAlertCooldownTicks = 300
 )
 

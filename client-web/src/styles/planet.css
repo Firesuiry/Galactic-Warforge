@@ -179,6 +179,20 @@
   border-radius:50%;
 }
 
+/* 运输机器人车顶货物点（§4）：有货才渲染，颜色 = 物品配色（与 2D 圆点/3D 方块同色） */
+.entity-node__cargo {
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:46%;
+  height:46%;
+  transform:translate(-50%,-50%);
+  border-radius:2px;
+  border:1px solid rgba(6,10,14,.75);
+  box-shadow:0 0 0 1px rgba(255,255,255,.12) inset;
+  pointer-events:none;
+}
+
 /* 2D 底部状态行（§3.2 复核）：过去它是画布网格的第二行、被快捷栏整条压住。
    现在浮在左下工具条列**上方**（--planet-hud-rail-top 由 PlanetMapToolbar 的
    ResizeObserver 实测写入），与工具条同一列：不与底部居中的快捷栏抢位置，
@@ -268,6 +282,23 @@
   color:#ffc46b;
   font-size:.78rem;
   line-height:1.5;
+}
+
+/* 传送带详情「货物色块」（§4）：带上每种物品一个方块，与 2D 圆点/3D 方块同色 */
+.planet-kv-list dd.planet-kv-list__swatches {
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+  justify-content:flex-end;
+}
+
+.planet-kv-list__swatch {
+  display:inline-block;
+  width:14px;
+  height:14px;
+  border-radius:2px;
+  border:1px solid rgba(0,0,0,.55);
+  box-shadow:0 0 0 1px rgba(255,255,255,.08) inset;
 }
 
 /* 建筑详情「取出」表单：物品下拉 + 数量 + 按钮 */

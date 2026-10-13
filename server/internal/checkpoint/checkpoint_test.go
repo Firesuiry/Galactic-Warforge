@@ -48,7 +48,8 @@ func TestStoreWriteReadListAndDuplicate(t *testing.T) {
 	world := model.NewWorldState("planet-1-1", 16)
 	world.Tick = 42
 	save := &gamedir.SaveFile{
-		FormatVersion: 1,
+		// 细分网格：夹具写当前存档版本（版本 1 = 旧网格，会被拒绝加载）。
+		FormatVersion: gamedir.CurrentFormatVersion,
 		Tick:          42,
 		Snapshot:      snapshot.Capture(world, nil),
 		RuntimeState:  gamedir.RuntimeState{ActivePlanetID: "planet-1-1"},

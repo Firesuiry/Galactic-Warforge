@@ -59,7 +59,7 @@ func f4BasePos(t *testing.T, ws *model.WorldState, playerID string) model.Positi
 
 func f4OpenTileNear(t *testing.T, ws *model.WorldState, center model.Position) model.Position {
 	t.Helper()
-	pos := findOpenTileNearLocked(ws, center, 8, 0)
+	pos := findOpenTileNearLocked(ws, center, 8, 0, model.Footprint{Width: 5, Height: 5})
 	if pos == nil {
 		t.Fatalf("no open tile near %+v on %s", center, ws.PlanetID)
 	}
@@ -286,7 +286,9 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 		t.Fatalf("scout should move on planet-1-1 to %+v, got %+v", destA, scout.Position)
 	}
 
-	// 跨行星同 ID：双方执行体在两颗行星上同号（各自的 u 序列）。
+	// 跨行星同 ID：手动把两颗行星的执行体改成同号，复现实体 ID 撞号。
+	// 细分网格后各行星的 ID 分配序列不再天然对齐（出生点/建筑占地都会消耗 ID），
+	// 所以这里显式构造撞号，测试的仍是「撞号时按焦点行星路由 + planet_id 消歧」。
 	execA := planetB.Players["p1"].ExecutorForPlanet("planet-1-1")
 	execB := planetB.Players["p1"].ExecutorForPlanet("planet-1-2")
 	if execA == nil || execB == nil {
@@ -297,9 +299,18 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	if unitA == nil || unitB == nil {
 		t.Fatalf("executor units missing: A=%v B=%v", unitA != nil, unitB != nil)
 	}
-	if execA.UnitID != execB.UnitID {
-		t.Fatalf("test expects colliding executor ids, got %s vs %s", execA.UnitID, execB.UnitID)
+	if unitA.Position != unitB.Position {
+		t.Fatalf("dual-planet fixture should mirror executors, got %+v vs %+v", unitA.Position, unitB.Position)
 	}
+	const collidingID = "u-dup-exec"
+	delete(planetA.Units, execA.UnitID)
+	delete(planetB.Units, execB.UnitID)
+	execA.UnitID, execB.UnitID = collidingID, collidingID
+	unitA.ID, unitB.ID = collidingID, collidingID
+	planetA.Units[collidingID] = unitA
+	planetB.Units[collidingID] = unitB
+	planetA.TileUnits[model.TileKey(unitA.Position.X, unitA.Position.Y)] = []string{collidingID}
+	planetB.TileUnits[model.TileKey(unitB.Position.X, unitB.Position.Y)] = []string{collidingID}
 
 	// 无消歧提示 → 落在焦点行星（p1 焦点 = planet-1-2）。
 	destFocus := f4OpenTileNear(t, planetB, unitB.Position)
@@ -309,6 +320,10 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	})
 	if res.Code != model.CodeOK {
 		t.Fatalf("focus-routed move failed: %s (%s)", res.Code, res.Message)
+	}
+	// 机甲按实时路径逐 tick 推进（不再瞬移），推进到目标格。
+	for i := 0; i < 120 && unitB.Position != destFocus; i++ {
+		core.processTick()
 	}
 	if unitB.Position != destFocus {
 		t.Fatalf("focus planet executor should move to %+v, got %+v", destFocus, unitB.Position)
@@ -322,6 +337,9 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	})
 	if res.Code != model.CodeOK {
 		t.Fatalf("explicit-planet move failed: %s (%s)", res.Code, res.Message)
+	}
+	for i := 0; i < 120 && unitA.Position != destExplicit; i++ {
+		core.processTick()
 	}
 	if unitA.Position != destExplicit {
 		t.Fatalf("planet-1-1 executor should move to %+v, got %+v", destExplicit, unitA.Position)

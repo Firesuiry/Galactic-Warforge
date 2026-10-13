@@ -303,6 +303,32 @@ export function tileContainsBuilding(building: Building, x: number, y: number, f
 }
 
 /**
+ * 建筑占地（cell 列表）：从 position（占地原点）按 footprint 逐格展开。
+ * 细分网格后 2D/3D/小地图/选中框都要按整块占地画，统一走这里，避免各写一份步进。
+ */
+export function buildingFootprintCells(building: Building, faceSize: number): TilePoint[] {
+  const { width, height } = getBuildingFootprint(building);
+  const origin = toTilePoint(building.position);
+  const cells: TilePoint[] = [];
+  for (let dy = 0; dy < height; dy += 1) {
+    for (let dx = 0; dx < width; dx += 1) {
+      cells.push(surfaceOffset(origin, dx, dy, faceSize));
+    }
+  }
+  return cells;
+}
+
+/**
+ * 占地是否与某个 tile 矩形相交（小地图按占地画方块、视口裁剪用）。
+ * 返回相交的 cell 列表（空 = 不相交）。
+ */
+export function buildingCellsInRect(building: Building, faceSize: number, minX: number, minY: number, maxX: number, maxY: number): TilePoint[] {
+  return buildingFootprintCells(building, faceSize).filter(
+    (cell) => cell.x >= minX && cell.x <= maxX && cell.y >= minY && cell.y <= maxY,
+  );
+}
+
+/**
  * 点格选中：建筑 > 单位 > 资源。
  *
  * 资源点是格子的**兜底**：格子上有建筑/单位时资源不参与选中，也不参与

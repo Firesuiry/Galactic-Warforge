@@ -173,6 +173,9 @@ func unitStatsFromDefinition(def UnitDefinition) Unit {
 	if def.CargoCapacity > 0 {
 		u.Cargo = make(ItemInventory)
 	}
+	if def.ID == UnitTypeTransportRobot {
+		u.Haul = &UnitHaulState{}
+	}
 	if def.Mecha != nil {
 		u.Mecha = newMechaState(*def.Mecha)
 	}

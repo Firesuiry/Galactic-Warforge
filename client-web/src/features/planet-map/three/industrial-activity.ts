@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { ConveyorDirection } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
+import { getItemColorValue } from '../item-colors';
 import { tileNormal, tileFrame, surfaceTileSize } from './projection';
 import { conveyorPaths, type ConveyorPath } from './conveyor-geometry';
 import { logisticsFlightNormal } from './logistics-flight';
@@ -32,7 +33,9 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
   const sources: ActivitySource[] = [];
   const fog = data.fog ?? ('bounds' in data.planet ? data.planet : undefined);
   const visible = (position: TilePoint) => Boolean(fog && getFogState(fog, Math.round(position.x), Math.round(position.y)).visible);
-  const itemColors = new Map(data.catalog?.items?.map(item => [item.id, item.color]));
+  // 物品配色走客户端配色表（item-colors）：服务端目录只按大类给色，矿石/材料各自同色，
+  // 细分网格后带上每格都要能分辨物品，不能再用目录色。目录色作为兜底。
+  const itemColors = new Map(data.catalog?.items?.map(item => [item.id, getItemColorValue(item.id, item.color)]));
   const definitions = new Map(data.catalog?.buildings?.map(building => [building.id, building]));
   const resources = new Map(data.planet.resources?.map(resource => [`${resource.position.x}:${resource.position.y}`, resource]));
   for (const building of Object.values(data.planet.buildings ?? {})) {
@@ -46,8 +49,7 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
       if (stack.quantity > 0) sources.push({ ...base, id: `${building.id}:cargo:${index}`, kind: 'cargo',
         itemId: stack.item_id, quantity: stack.quantity, direction: building.conveyor?.output, buildingId: building.id,
         color: itemColors.get(stack.item_id) ?? '#d8ae67' });
-    }
-    if (!running) continue;
+    }    if (!running) continue;
     const functions = building.runtime.functions;
     if ((functions?.energy?.output_per_tick ?? 0) > 0) sources.push({ ...base, id: `${building.id}:energy`, kind: 'energy', color: '#bfe7ff' });
     const definition = definitions.get(building.type);
@@ -87,10 +89,21 @@ interface SourcePosition {
   size: number;
   stackIndex: number;
   stackCount: number;
+  /** 该堆在同格 buffer 里的总件数（决定画几个方块）与本次渲染的方块序号。 */
+  stackQuantity: number;
+  cargoIndex: number;
+  cargoCount: number;
   prior?: THREE.Vector3;
   path?: ConveyorPath;
 }
 const LIMIT = 4096;
+/**
+ * 单格物料方块的目标边长（cell）：DSP 式「带上的小物件」——远小于带宽（0.52 cell），
+ * 一格内能看见多个、等间距沿带前进，不再是一个方块几乎占满带宽。
+ */
+export const BELT_CARGO_CELL = .3;
+/** 单堆最多画几个方块：一格 0.95 cell 的行程里 0.3 cell 的方块最多排 3 个不叠。 */
+export const BELT_CARGO_MAX_PER_STACK = 3;
 
 /** Two draw calls at most: instanced physical cargo plus a single soft particle cloud. */
 export class IndustrialActivity {
@@ -148,7 +161,8 @@ export class IndustrialActivity {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     const indices = new Map<string, number>();
-    this.entries = sources.map(source => {
+    const entries: SourcePosition[] = [];
+    for (const source of sources) {
       const normal = source.normal ?? tileNormal(source.position, faceSize);
       const { east, south } = tileFrame(source.position, faceSize);
       const tangent = source.direction === 'north' ? south.negate() : source.direction === 'south' ? south
@@ -159,10 +173,18 @@ export class IndustrialActivity {
       if (source.kind === 'cargo') indices.set(key, stackIndex + 1);
       const prior = this.observations.get(source.id);
       if (source.kind === 'flight') nextObservations.set(source.id, normal.clone());
-      return { source, color: new THREE.Color(source.color), normal, tangent, size, stackIndex, stackCount: counts.get(key) ?? 1,
+      const base = { source, color: new THREE.Color(source.color), normal, tangent, size, stackIndex, stackCount: counts.get(key) ?? 1,
         path: source.buildingId ? paths.get(source.buildingId) : undefined,
         prior: source.kind === 'flight' && prior && prior.distanceToSquared(normal) > 1e-12 ? prior : undefined };
-    });
+      if (source.kind !== 'cargo') { entries.push({ ...base, stackQuantity: 1, cargoIndex: 0, cargoCount: 1 }); continue; }
+      // 一堆 N 件画 N 个方块（上限 BELT_CARGO_MAX_PER_STACK）：一格内多个小方块等间距前进，
+      // 而不是一件一个满格大方块（DSP 式「带上的小物件」）。
+      const quantity = Math.max(1, Math.min(source.quantity ?? 1, BELT_CARGO_MAX_PER_STACK));
+      for (let cargoIndex = 0; cargoIndex < quantity; cargoIndex++) {
+        entries.push({ ...base, stackQuantity: quantity, cargoIndex, cargoCount: quantity });
+      }
+    }
+    this.entries = entries;
     if (newSnapshot) { this.observations = nextObservations; this.snapshotAge = 0; this.lastTick = tick; }
   }
 
@@ -180,14 +202,19 @@ export class IndustrialActivity {
       const { source, color, normal, tangent, size } = entry;
       if (source.kind === 'flight' ? options.logistics === false : options.buildings === false) continue;
       if (source.kind === 'energy' && options.power === false) continue;
-      const phase = (this.time * .55 + entry.stackIndex / entry.stackCount) % 1;
       if (source.kind === 'cargo') {
         const moving = source.active && source.direction && !['auto', ''].includes(source.direction);
-        const offset = (moving ? phase : (entry.stackIndex + .5) / entry.stackCount) - .5;
+        // 方块沿带前进的行程占带宽 0.95；方块 0.3 宽、错位 0.25（见 offset 处），
+        // 相切不叠：N 个方块正好铺满一个「格」的行程。
+        const lane = entry.stackIndex + entry.cargoIndex / entry.cargoCount;
+        const spread = entry.stackCount;
+        const phase = (this.time * .55 + lane / spread) % 1;
+        const offset = (moving ? phase : (lane + .5) / spread) - .5;
         if (entry.path) this.position.copy(entry.path.point(offset + .5)).addScaledVector(normal, size * .1);
         else this.position.copy(normal).multiplyScalar(this.radius + size * .29).addScaledVector(tangent, offset * size * .95);
         this.rotation.setFromUnitVectors(this.up, normal);
-        this.scale.setScalar(size * Math.min(.16, .5 / entry.stackCount));
+        // 细分网格：方块固定 0.3 cell 边长（DSP 式小物件），一格内可见多个、等间距前进。
+        this.scale.setScalar(size * BELT_CARGO_CELL);
         this.matrix.compose(this.position, this.rotation, this.scale);
         this.cargo.setMatrixAt(cargoCount, this.matrix);
         this.cargo.setColorAt(cargoCount++, color);

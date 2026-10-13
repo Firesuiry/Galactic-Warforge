@@ -18,6 +18,7 @@ import {
   type TilePoint,
 } from '@/features/planet-map/model';
 import { FACTION_LABEL, unitFaction, type UnitFaction } from '@/features/planet-map/rts-commands';
+import { describeHaul } from '@/features/planet-map/transport-haul';
 
 export interface HoverInfo {
   title: string;
@@ -47,7 +48,14 @@ export function describeHover(context: HoverContext, tile: TilePoint): HoverInfo
   const unit = getUnitList(planet).find((candidate) => at(candidate.position, tile));
   if (unit) {
     const faction = unitFaction(unit, playerId, darkFogHostile);
-    return { title: translateUnitType(unit.type), faction, ownerLabel: FACTION_LABEL[faction], detail: hp(unit.hp, unit.max_hp) };
+    // 运输机器人（§4）：悬停直接给阶段 + 已送达 + 载货，不用点开详情才知道在干什么。
+    const haul = describeHaul(unit, (itemId) => getItemDisplayName(catalog, itemId));
+    return {
+      title: translateUnitType(unit.type),
+      faction,
+      ownerLabel: FACTION_LABEL[faction],
+      detail: haul ? `${hp(unit.hp, unit.max_hp)} · ${haul}` : hp(unit.hp, unit.max_hp),
+    };
   }
   const building = getBuildingList(planet).find((candidate) => tileContainsBuilding(candidate, tile.x, tile.y, planet.map_width / 3));
   if (building) {
