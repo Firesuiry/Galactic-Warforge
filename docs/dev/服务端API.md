@@ -93,8 +93,8 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 焦点行星 `planet-1-1`；`p1` / `p2` 预置 `battlefield_analysis`、`prototype`、`precision_drone`、`corvette`、`destroyer` 及其依赖科技。
 - `planet-1-1` 预置已通电的 `battlefield_analysis_base`（部署枢纽）、`recomposing_assembler`、行星/星际物流站，以及双方各一座装满子弹、炮弹、导弹的 `supply_station`。
 - 不预建舰队、任务群或战区；单位仍须走 `blueprint_* → queue_military_production → industry.ready_payloads → deploy_squad | commission_fleet`。
-- `map` 配置的 `spawn_points: [{x, y}]` 可钉住出生点（midgame / war 钉在 `(3,3)` 与 `(44,44)`）；未配置时自动散布、距边缘至少 8 格并就近挪到矿脉旁。
-  - 配了 `spawn_points` 的地图在生成末尾还会做一次**可玩性连通性保证**（`mapgen.ensurePlayableConnectivity`，试玩报告 1009 阻断 A）：出生点之间、出生点到争夺中心必须有地面通路（必要时沿最短路开一条尽量窄的走廊）；每个出生点地面路径 24 格内保证有铁/铜/煤/石四种开局原矿（缺则 5–8 格内补一小簇，簇大小取 `planet.resources.cluster_min`，既不铺满整簇也不放远到基地电塔供不上电）；小于 200 格的孤立陆地会被抹掉资源并改为阻挡地形，避免单位走进去被困。通行判定与运行时一致（只有 `buildable` 地形可走，水/岩浆/blocked 均不可通行，跨面按球面邻接）。回归 `mapgen/connectivity_test.go`（100 个 seed，含 `pt1009-g2`）。
+- `map` 配置的 `spawn_points: [{x, y}]` 可钉住出生点（midgame / war 钉在 `(9,9)` 与 `(132,132)`，遭遇战钉在 `(54,144)` 与 `(231,144)`，都是 cell 坐标）；未配置时自动散布、距边缘至少 8 cell 并就近挪到矿脉旁。
+  - 配了 `spawn_points` 的地图在生成末尾还会做一次**可玩性连通性保证**（`mapgen.ensurePlayableConnectivity`，试玩报告 1009 阻断 A）：出生点之间、出生点到争夺中心必须有地面通路（必要时沿最短路开一条尽量窄的走廊）；每个出生点地面路径 72 cell 内保证有铁/铜/煤/石四种开局原矿（缺则 15–24 cell 内补一小簇，簇大小取 `planet.resources.cluster_min`，既不铺满整簇也不放远到基地电塔供不上电）；小于 1800 cell 的孤立陆地会被抹掉资源并改为阻挡地形，避免单位走进去被困。通行判定与运行时一致（只有 `buildable` 地形可走，水/岩浆/blocked 均不可通行，跨面按球面邻接）。回归 `mapgen/connectivity_test.go`（100 个 seed，含 `pt1009-g2`）。
 
 ## 3. 命令提交 `POST /commands`
 
@@ -260,7 +260,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.1 执行体与建造
 
-- 执行体是玩家的星球 `Unit`（`type=executor`），同时承担建造与机甲操作。`build`/`produce`/`upgrade`/`demolish` 要求执行体在操作范围内，或目标处于己方建造中心（带 `build_radius` 的建筑，目前为 `battlefield_analysis_base`，半径 24）覆盖内。超距失败消息为 `executor out of range: <distance> > <operate_range>`。
+- 执行体是玩家的星球 `Unit`（`type=executor`），同时承担建造与机甲操作。`build`/`produce`/`upgrade`/`demolish` 要求执行体在操作范围内，或目标处于己方建造中心（带 `build_radius` 的建筑，目前为 `battlefield_analysis_base`，半径 72 cell）覆盖内。超距失败消息为 `executor out of range: <distance> > <operate_range>`。
 - 并发上限按玩家跨全部行星聚合：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
@@ -268,7 +268,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。采矿机覆盖**占地内及外扩 1 圈**的资源 cell（矿脉在生成时按 cell 成簇）。
   - 围堵校验（三层，全部 `INVALID_TARGET`）：
     1. **四邻全堵死**：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，回执「会把<单位名>（x,y）四周完全堵死，最后一个出口（x,y）」。单位自身站在建造格上的情况由既有的占位校验处理。
-    2. **口袋（增量）**：若建造点 16 格内的己方地面单位本可以走到自家主基地、建造后走不到，回执「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
+    2. **口袋（增量）**：若建造点 48 cell 内的己方地面单位本可以走到自家主基地、建造后走不到，回执「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
     3. **基地绝对不变量**：对**所有玩家**，任何建造放下后该玩家的基地（`battlefield_analysis_base`）仍须能沿地面（地形 + 建筑 + 施工预留都算障碍）走到争夺中心（遭遇战地图出生点球面中点的资源簇；没有争夺中心时用对手基地）。不满足即拒绝，回执「会把基地与外界的通路封死（最后通道 x,y）」。与第 2 层不同，这一层不看"增量"，因此能拦住一圈圈逐步收紧的口袋（试玩报告 1010 阻断 A：bot 用 14 座建筑把自家基地封成 126 格口袋，22 个兵与执行体全部困死、整局 0 波进攻）。bot 的选址函数（`botBuildSpotNear` / 矿机点位 / 拉线电塔）复用同一套校验，会自动换格。
   - 占位回执会区分「该格已有你的施工任务：<建筑名>（排队中/建造中）」「该格已有你的建筑：<建筑名>」「该格已有其他玩家的建筑：<建筑名>」「该格已有其他玩家的施工任务：<建筑名>（…）」（试玩报告 1010 一般级 G）。
   - 垂直叠层：对已有同类研究站/生产建筑的格子再 `build` 同类建筑会叠到上层（`position.z` 递增），上限 `1 + vertical_construction` 等级；研究站叠层共享底层库存、吞吐线性叠加。拆除任一层会级联拆除其上所有层，各层分别退款并发 `entity_destroyed`。
@@ -316,7 +316,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.4 防御建筑与黑雾
 
-- 炮塔每 tick 自动选取射程内敌方目标并产生 `damage_applied`，按 `Combat.fire_rate` 冷却：`missile_turret` 耗 `ammo_missile`；`implosion_cannon` 耗 `shell_set`（可装 `crystal_shell_set`）；`plasma_turret` 耗 `plasma_capsule`；`laser_turret` 只耗电；`anti_air_turret`（射程 10，只打空中，耗 `ammo_missile`）还会击落敌方飞行中的物流无人机/配送机器人（`entity_destroyed.reason="shot_down"`，含 `cargo_lost`）；`artillery_turret`（射程 15、最小射程 4，只打地面）耗 `shell_set`/`crystal_shell_set`。缺弹发 `building_state_changed(reason=no_ammunition)` 停火，重装后恢复。
+- 炮塔每 tick 自动选取射程内敌方目标并产生 `damage_applied`，按 `Combat.fire_rate` 冷却：`missile_turret` 耗 `ammo_missile`；`implosion_cannon` 耗 `shell_set`（可装 `crystal_shell_set`）；`plasma_turret` 耗 `plasma_capsule`；`laser_turret` 只耗电；`anti_air_turret`（射程 30 cell，只打空中，耗 `ammo_missile`）还会击落敌方飞行中的物流无人机/配送机器人（`entity_destroyed.reason="shot_down"`，含 `cargo_lost`）；`artillery_turret`（射程 45 cell、最小射程 12 cell，只打地面）耗 `shell_set`/`crystal_shell_set`。缺弹发 `building_state_changed(reason=no_ammunition)` 停火，重装后恢复。
 - `jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator` 接入电网后才 `running`。行星护盾先吸收对建筑的所有外部伤害（`damage_applied.shield_absorbed` / `shield_remaining`）。
 - 黑雾：巢穴（`enemy_forces[]` 中的 hive，`strength` 即 HP，`level` 为等级）按威胁节奏孵化 `owner_id="dark_fog"` 单位，与玩家单位共用移动/交战结算。威胁值随全行星发电累积，决定巢穴等级、孵化间隔、波次规模和扩张；袭击优先级：电厂 > 矿区 > 物流线 > 炮塔 > 其他。巢穴位置由（行星, 序号）哈希确定性派生。
 - 黑雾被动：默认对所有玩家中立——不派进攻波次（只补守军，不发 `enemy_wave_incoming`），黑雾单位、巢穴不攻击中立玩家，新巢只建在离玩家建筑足够远的空地，不吞建筑。**只有「主动挑衅」才会激怒黑雾**：伤害黑雾建筑（巢穴/中继等静态强度点），或攻击一个当时**没有在攻击该玩家**的黑雾单位。**自卫还手不算挑衅**——对正在攻击自己/己方单位/己方建筑的黑雾单位（已锁定该玩家实体，或该玩家单位记着它是 `LastAttackerID`）开火，不新激怒、也不顺延敌对计时；否则黑雾只要在打你，自动还手就会把计时无限续下去，玩家永远回不到中立（试玩 1014 TC-07）。首次主动挑衅时黑雾对该玩家敌对到 `当前 tick + battlefield.dark_fog_calm_ticks`（默认 6000），此后**每次主动挑衅**再顺延，首次转敌对发 `dark_fog_provoked`。敌对期间波次只派向敌对玩家，黑雾单位、巢穴反击只打敌对玩家，玩家单位和炮塔也会自动打黑雾。到期恢复中立、发 `dark_fog_calmed`，奔袭中的黑雾撤销奔袭返回巢穴。bot 不主动攻击中立黑雾。

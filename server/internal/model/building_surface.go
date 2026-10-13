@@ -83,15 +83,33 @@ func (ws *WorldState) FootprintFits(origin Position, fp Footprint, btype Buildin
 }
 
 func (ws *WorldState) BuildingTiles(b *Building) ([]Position, error) {
-	fp := b.Runtime.Params.Footprint
-	if fp.Width == 0 && fp.Height == 0 {
-		def, ok := BuildingDefinitionByID(b.Type)
-		if !ok {
-			return nil, fmt.Errorf("未知建筑类型 %s", b.Type)
-		}
-		fp = def.Footprint
+	fp := ws.BuildingFootprint(b)
+	if fp.Width <= 0 || fp.Height <= 0 {
+		return nil, fmt.Errorf("占地无效")
 	}
 	return ws.FootprintTiles(b.Position, fp)
+}
+
+// BuildingFootprint 返回建筑实际占用的地面占地：配送器是叠在宿主仓库上的附件
+// （Z=1、不登记地面格），设计上「占地取所在仓库的占地」，因此这里返回宿主的
+// 占地，让外圈 IO / 路线端点等按宿主 3×3 计算，而不是配送器自己的数据值。
+// 宿主已失效时退回自身数据值（存档里允许保留失去宿主的配送器附件）。
+func (ws *WorldState) BuildingFootprint(b *Building) Footprint {
+	if b == nil {
+		return Footprint{}
+	}
+	if b.Type == BuildingTypeLogisticsDistributor {
+		if host := DistributorHost(ws, b); host != nil && host.ID != b.ID {
+			return ws.BuildingFootprint(host)
+		}
+	}
+	fp := b.Runtime.Params.Footprint
+	if fp.Width == 0 && fp.Height == 0 {
+		if def, ok := BuildingDefinitionByID(b.Type); ok {
+			fp = def.Footprint
+		}
+	}
+	return fp
 }
 
 // FoundationAt returns the terrain layer independently from occupying factories.
@@ -227,14 +245,7 @@ func (ws *WorldState) BuildingRingCells(b *Building) ([]Position, error) {
 	if b == nil {
 		return nil, fmt.Errorf("建筑不存在")
 	}
-	fp := b.Runtime.Params.Footprint
-	if fp.Width == 0 && fp.Height == 0 {
-		def, ok := BuildingDefinitionByID(b.Type)
-		if !ok {
-			return nil, fmt.Errorf("未知建筑类型 %s", b.Type)
-		}
-		fp = def.Footprint
-	}
+	fp := ws.BuildingFootprint(b)
 	if fp.Width <= 0 || fp.Height <= 0 {
 		return nil, fmt.Errorf("占地无效")
 	}

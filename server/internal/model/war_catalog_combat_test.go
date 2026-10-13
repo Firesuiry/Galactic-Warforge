@@ -59,3 +59,60 @@ func TestPublicBlueprintCombatClasses(t *testing.T) {
 		t.Fatalf("fleet armor = %s, want ship", armor)
 	}
 }
+
+// TestDerivedWarWeaponRangeMatchesPublicBlueprintScale 派生路径（war.yaml 里没有
+// 预置 runtime 档案的蓝图，走 ResolveWarBlueprintRuntimeProfile 现推）的武器射程
+// 必须与 public_blueprints 预置档案同一 cell 口径：细分网格前派生值漏 ×3 时，
+// 同一件武器组件在派生路径只有预置路径的 1/3 射程。
+func TestDerivedWarWeaponRangeMatchesPublicBlueprintScale(t *testing.T) {
+	catalog := PublicWarBlueprintCatalogIndex()
+	// 与 corvette（线圈炮阵列，kinetic，预置射程 72）同底盘、同组件的蓝图，
+	// 但用一个不在预置表里的 id，强制走派生路径。
+	base, ok := PresetWarBlueprintByID(ItemCorvette)
+	if !ok {
+		t.Fatal("expected corvette preset blueprint")
+	}
+	derived := base
+	derived.ID = "derived-coilgun-test"
+	derived.Name = "派生线圈炮测试舰"
+	derived.State = WarBlueprintStateDraft
+
+	if _, preset := WarBlueprintRuntimeProfileByID(derived.ID); preset {
+		t.Fatal("derived blueprint must not have a preset runtime profile")
+	}
+	if res := ValidateWarBlueprint(catalog, derived); !res.Valid {
+		t.Fatalf("derived blueprint must validate: %+v", res.Issues)
+	}
+
+	profile := ResolveWarBlueprintRuntimeProfile(derived)
+	if profile.FleetUnit == nil {
+		t.Fatalf("space blueprint must derive a fleet unit profile: %+v", profile)
+	}
+	// 线圈炮（kinetic）60 cell + ecm_suite 的 +6 cell = 66；漏 ×3 时会是 22。
+	if got := profile.FleetUnit.Weapon.Range; got != 66 {
+		t.Fatalf("derived kinetic weapon range = %v, want 66 cell (预置 72 的同一 cell 口径；漏 ×3 时是 22)", got)
+	}
+
+	// 组件级：三种武器类别的派生射程都是设计值的 3 倍。
+	components := []struct {
+		id   string
+		tag  string
+		rang float64
+	}{
+		{id: "plasma_lance", tag: "direct_fire", rang: 39},
+		{id: "swarm_missile_pod", tag: "missile", rang: 54},
+		{id: "coilgun_battery", tag: "kinetic", rang: 60},
+	}
+	for _, check := range components {
+		component, ok := catalog.ComponentByID(check.id)
+		if !ok {
+			t.Fatalf("missing war component %s", check.id)
+		}
+		if !hasWarComponentTag(component, check.tag) {
+			t.Fatalf("component %s should carry tag %s", check.id, check.tag)
+		}
+		if got := derivedWarWeapon(component).Range; got != check.rang {
+			t.Fatalf("derived %s range = %v, want %v cell", check.id, got, check.rang)
+		}
+	}
+}

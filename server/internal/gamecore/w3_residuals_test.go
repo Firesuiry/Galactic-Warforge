@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/snapshot"
 	"siliconworld/internal/terrain"
 )
 
@@ -304,10 +305,10 @@ func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 }
 
 // TestLogisticsBotValidateAllowsTechExtendedFlightBudget 远程航班预付能量上限
-// 按配送范围科技推导（2*(12+5*5)=74），不再是硬编码 24。
+// 按配送范围科技推导（2*(36+15*5)=222），不再是硬编码 24。
 func TestLogisticsBotValidateAllowsTechExtendedFlightBudget(t *testing.T) {
-	if model.MaxLogisticsBotFlightEnergy != 74 {
-		t.Fatalf("flight budget ceiling must derive to 2*(12+5*5)=74, got %d", model.MaxLogisticsBotFlightEnergy)
+	if model.MaxLogisticsBotFlightEnergy != 222 {
+		t.Fatalf("flight budget ceiling must derive to 2*(36+15*5)=222, got %d", model.MaxLogisticsBotFlightEnergy)
 	}
 
 	home := model.Position{X: 1, Y: 1}
@@ -332,6 +333,64 @@ func TestLogisticsBotValidateAllowsTechExtendedFlightBudget(t *testing.T) {
 	bot.EnergyRemaining = model.MaxLogisticsBotFlightEnergy + 1
 	if err := bot.Validate(); err == nil {
 		t.Fatal("flight budget above the tech-derived ceiling must be rejected")
+	}
+}
+
+// TestLogisticsBotMaxRangeFlightInstallsAndReloads 满级 distribution_range 下
+// 一趟超出旧上限的配送（79 cell，预付 2×79 = 158 能量 > 74）必须能安装，
+// 并能通过存档写入/读回的 Validate 门槛：上限漏 ×3（74）时这条会失败。
+func TestLogisticsBotMaxRangeFlightInstallsAndReloads(t *testing.T) {
+	ws, home, sink := distributorTestWorld(t)
+	// 只留一台远端配送器（sink），避免默认世界里更近的目标先被派单。
+	sink.Distributor.Mode = model.LogisticsStationModeNone
+	ws.Players["p1"].Tech = &model.PlayerTechState{
+		PlayerID:       "p1",
+		CompletedTechs: map[string]int{"distribution_logistics": 1, "distribution_range": 5},
+	}
+	home.Distributor.Mode = model.LogisticsStationModeSupply
+	home.Distributor.ItemID = model.ItemIronOre
+	// 一趟 2×79 的配送要预付 158 能量，默认 100 不够（充满到容量 1000）。
+	home.Distributor.Energy = home.Distributor.EnergyCapacity
+	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
+	ws.Players["p1"].Inventory[model.ItemLogisticsBot] = 1
+	core := &GameCore{}
+	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 1}}
+	if res, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd); res.Code != model.CodeOK || len(ws.LogisticsBots) != 1 {
+		t.Fatalf("install at max distribution_range must succeed: %+v", res)
+	}
+
+	// 把远端仓库放到满级航程内、且明确超出旧上限（2×37=74 能量）的位置，
+	// 让机器人飞一趟 2×79 = 158 能量的配送（航程 36 + 5×15 = 111 cell）。
+	far := newBuilding("far-depot", model.BuildingTypeDepotMk1, "p1", model.Position{X: 72, Y: 23})
+	far.Storage = model.NewStorageState(model.StorageModule{Capacity: 100, Slots: 4})
+	ws.Buildings[far.ID] = far
+	sink.Distributor = model.NewDistributorState(far.ID)
+	sink.Position = model.Position{X: 72, Y: 23, Z: 1}
+	sink.Distributor.ItemID, sink.Distributor.Mode, sink.Distributor.LocalStorage = model.ItemIronOre, model.LogisticsStationModeDemand, 10
+	sink.Distributor.Energy = 1000
+	sink.Runtime.State = model.BuildingWorkRunning
+
+	distributorTestTicks(t, ws, 1)
+	bot := ws.LogisticsBots["bot-1"]
+	if bot == nil || bot.EnergyCost != 2*79 {
+		t.Fatalf("max-range flight did not prepay 2×79 energy: %+v", bot)
+	}
+	if bot.EnergyCost <= 2*(12+5*5) {
+		t.Fatalf("flight budget %d does not exceed the pre-fine-grid ceiling 74", bot.EnergyCost)
+	}
+
+	// 存档写入 / 读回：同一份 bot 状态必须过 Validate（读档路径会逐条校验）。
+	snap := snapshot.CaptureWorld(ws)
+	restored, err := snap.Restore()
+	if err != nil {
+		t.Fatalf("restore world with a max-range flight: %v", err)
+	}
+	got := restored.LogisticsBots[bot.ID]
+	if got == nil || got.EnergyCost != bot.EnergyCost {
+		t.Fatalf("max-range flight lost across snapshot round trip: %+v", got)
+	}
+	if err := got.Validate(); err != nil {
+		t.Fatalf("restored bot must validate: %v", err)
 	}
 }
 

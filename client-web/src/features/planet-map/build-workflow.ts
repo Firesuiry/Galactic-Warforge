@@ -35,6 +35,12 @@ import {
   missingUnlockTechIds,
 } from "@/features/planet-map/tech-gate";
 
+/**
+ * 执行体操作范围兜底值（cell）：summary 缺 `executor.operate_range` 时用它，
+ * 与 server/config*.yaml 的 `executor.operate_range`（细分网格 ×3 后为 18）一致。
+ */
+export const DEFAULT_OPERATE_RANGE = 18;
+
 const BUILD_RECOMMENDATION_ORDER = [
   "wind_turbine",
   "matrix_lab",
@@ -339,7 +345,7 @@ function buildReachability(
   const moveRange = executor?.move_range;
   const operateRange = executorState?.operate_range;
   const distance = executor?.position && selectedPosition
-    ? surfaceDistanceWithin(executor.position, selectedPosition, planet.surface.face_size, operateRange ?? 16)
+    ? surfaceDistanceWithin(executor.position, selectedPosition, planet.surface.face_size, operateRange ?? DEFAULT_OPERATE_RANGE)
     : undefined;
 
   return {

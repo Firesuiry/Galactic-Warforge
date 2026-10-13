@@ -276,10 +276,6 @@ func conveyorHasItem(conveyor *model.ConveyorState, itemID string) bool {
 	return false
 }
 
-func portWorldPosition(ws *model.WorldState, building *model.Building, port model.IOPort) model.Position {
-	return ws.SurfaceOffset(building.Position, port.Offset.X, port.Offset.Y)
-}
-
 func outputDirectionOrder(building *model.Building, port model.IOPort) []model.ConveyorDirection {
 	if building == nil || building.Storage == nil {
 		return conveyorDirOrder

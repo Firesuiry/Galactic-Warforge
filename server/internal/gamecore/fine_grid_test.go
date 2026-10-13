@@ -78,6 +78,10 @@ func buildAndReturn(t *testing.T, core *GameCore, ws *model.WorldState, btype mo
 	if err != nil {
 		t.Fatalf("complete %s at %+v: %v", btype, pos, err)
 	}
+	// 真实结算路径（settleConstructionTasks）在完工后从队列移除任务并释放
+	// 预留格；这里同样释放，否则后续在同一占地上叠放（配送器）会被自己的
+	// 施工预留挡住。
+	ws.Construction.Remove(task.ID)
 	building := extractScenarioCreatedBuilding(events)
 	if building == nil {
 		t.Fatalf("complete %s at %+v produced no building", btype, pos)
@@ -339,68 +343,70 @@ func TestFineGridMechaMineRangeMatchesBotThreshold(t *testing.T) {
 // 7) 数据层：§1.1 的占地表逐条核对（防止后续改数据时悄悄退回 1×1）。
 func TestFineGridFootprintTableMatchesDesign(t *testing.T) {
 	want := map[model.BuildingType][2]int{
-		model.BuildingTypeBattlefieldAnalysisBase:    {5, 5},
-		model.BuildingTypeMiningMachine:              {3, 3},
-		model.BuildingTypeAdvancedMiningMachine:      {3, 3},
-		model.BuildingTypeWaterPump:                  {3, 3},
-		model.BuildingTypeOilExtractor:               {3, 3},
-		model.BuildingTypeArcSmelter:                 {3, 3},
-		model.BuildingTypePlaneSmelter:               {3, 3},
-		model.BuildingTypeNegentropySmelter:          {3, 3},
-		model.BuildingTypeAssemblingMachineMk1:       {3, 3},
-		model.BuildingTypeAssemblingMachineMk2:       {3, 3},
-		model.BuildingTypeAssemblingMachineMk3:       {3, 3},
-		model.BuildingTypeRecomposingAssembler:       {3, 3},
-		model.BuildingTypeMatrixLab:                  {3, 3},
-		model.BuildingTypeSelfEvolutionLab:           {3, 3},
-		model.BuildingTypeDepotMk1:                   {3, 3},
-		model.BuildingTypeDepotMk2:                   {3, 3},
-		model.BuildingTypeStorageTank:                {3, 3},
-		model.BuildingTypeSprayCoater:                {3, 3},
-		"barracks":                                   {3, 3},
-		model.BuildingTypeSupplyStation:              {3, 3},
-		model.BuildingTypeSolarPanel:                 {3, 3},
-		model.BuildingTypeThermalPowerPlant:          {3, 3},
-		model.BuildingTypeGeothermalPowerStation:     {3, 3},
-		model.BuildingTypeMiniFusionPowerPlant:       {3, 3},
-		model.BuildingTypeEnergyExchanger:            {3, 3},
-		model.BuildingTypeSatelliteSubstation:        {3, 3},
-		model.BuildingTypeWindTurbine:                {2, 2},
-		model.BuildingTypeAccumulator:                {2, 2},
-		model.BuildingTypeAccumulatorFull:            {2, 2},
-		model.BuildingTypeGaussTurret:                {2, 2},
-		model.BuildingTypeMissileTurret:              {2, 2},
-		model.BuildingTypeLaserTurret:                {2, 2},
-		model.BuildingTypePlasmaTurret:               {2, 2},
-		model.BuildingTypeSRPlasmaTurret:             {2, 2},
-		model.BuildingTypeImplosionCannon:            {2, 2},
-		model.BuildingTypeJammerTower:                {2, 2},
-		"anti_air_turret":                            {2, 2},
-		"artillery_turret":                           {2, 2},
-		model.BuildingTypeConveyorBeltMk1:            {1, 1},
-		model.BuildingTypeConveyorBeltMk2:            {1, 1},
-		model.BuildingTypeConveyorBeltMk3:            {1, 1},
-		model.BuildingTypeSplitter:                   {1, 1},
-		model.BuildingTypeAutomaticPiler:             {1, 1},
-		model.BuildingTypeTrafficMonitor:             {1, 1},
-		model.BuildingTypeSorterMk1:                  {1, 1},
-		model.BuildingTypeSorterMk2:                  {1, 1},
-		model.BuildingTypeSorterMk3:                  {1, 1},
-		model.BuildingTypePileSorter:                 {1, 1},
-		model.BuildingTypeTeslaTower:                 {1, 1},
-		model.BuildingTypeWirelessPowerTower:         {1, 1},
-		model.BuildingTypeSignalTower:                {1, 1},
-		model.BuildingTypeFoundation:                 {1, 1},
-		model.BuildingTypePlanetaryLogisticsStation:  {5, 5},
+		model.BuildingTypeBattlefieldAnalysisBase:      {5, 5},
+		model.BuildingTypeMiningMachine:                {3, 3},
+		model.BuildingTypeAdvancedMiningMachine:        {3, 3},
+		model.BuildingTypeWaterPump:                    {3, 3},
+		model.BuildingTypeOilExtractor:                 {3, 3},
+		model.BuildingTypeArcSmelter:                   {3, 3},
+		model.BuildingTypePlaneSmelter:                 {3, 3},
+		model.BuildingTypeNegentropySmelter:            {3, 3},
+		model.BuildingTypeAssemblingMachineMk1:         {3, 3},
+		model.BuildingTypeAssemblingMachineMk2:         {3, 3},
+		model.BuildingTypeAssemblingMachineMk3:         {3, 3},
+		model.BuildingTypeRecomposingAssembler:         {3, 3},
+		model.BuildingTypeMatrixLab:                    {3, 3},
+		model.BuildingTypeSelfEvolutionLab:             {3, 3},
+		model.BuildingTypeDepotMk1:                     {3, 3},
+		model.BuildingTypeDepotMk2:                     {3, 3},
+		model.BuildingTypeStorageTank:                  {3, 3},
+		model.BuildingTypeSprayCoater:                  {3, 3},
+		"barracks":                                     {3, 3},
+		model.BuildingTypeSupplyStation:                {3, 3},
+		model.BuildingTypeSolarPanel:                   {3, 3},
+		model.BuildingTypeThermalPowerPlant:            {3, 3},
+		model.BuildingTypeGeothermalPowerStation:       {3, 3},
+		model.BuildingTypeMiniFusionPowerPlant:         {3, 3},
+		model.BuildingTypeEnergyExchanger:              {3, 3},
+		model.BuildingTypeSatelliteSubstation:          {3, 3},
+		model.BuildingTypeWindTurbine:                  {2, 2},
+		model.BuildingTypeAccumulator:                  {2, 2},
+		model.BuildingTypeAccumulatorFull:              {2, 2},
+		model.BuildingTypeGaussTurret:                  {2, 2},
+		model.BuildingTypeMissileTurret:                {2, 2},
+		model.BuildingTypeLaserTurret:                  {2, 2},
+		model.BuildingTypePlasmaTurret:                 {2, 2},
+		model.BuildingTypeSRPlasmaTurret:               {2, 2},
+		model.BuildingTypeImplosionCannon:              {2, 2},
+		model.BuildingTypeJammerTower:                  {2, 2},
+		"anti_air_turret":                              {2, 2},
+		"artillery_turret":                             {2, 2},
+		model.BuildingTypeConveyorBeltMk1:              {1, 1},
+		model.BuildingTypeConveyorBeltMk2:              {1, 1},
+		model.BuildingTypeConveyorBeltMk3:              {1, 1},
+		model.BuildingTypeSplitter:                     {1, 1},
+		model.BuildingTypeAutomaticPiler:               {1, 1},
+		model.BuildingTypeTrafficMonitor:               {1, 1},
+		model.BuildingTypeSorterMk1:                    {1, 1},
+		model.BuildingTypeSorterMk2:                    {1, 1},
+		model.BuildingTypeSorterMk3:                    {1, 1},
+		model.BuildingTypePileSorter:                   {1, 1},
+		model.BuildingTypeTeslaTower:                   {1, 1},
+		model.BuildingTypeWirelessPowerTower:           {1, 1},
+		model.BuildingTypeSignalTower:                  {1, 1},
+		model.BuildingTypeFoundation:                   {1, 1},
+		model.BuildingTypePlanetaryLogisticsStation:    {5, 5},
 		model.BuildingTypeInterstellarLogisticsStation: {5, 5},
-		model.BuildingTypeMiniatureParticleCollider:  {5, 5},
-		model.BuildingTypeRayReceiver:                {5, 5},
-		model.BuildingTypeArtificialStar:             {5, 5},
-		model.BuildingTypePlanetaryShieldGenerator:   {5, 5},
-		model.BuildingTypeEMRailEjector:              {5, 5},
-		model.BuildingTypeVerticalLaunchingSilo:      {5, 5},
-		"vehicle_factory":                            {5, 5},
-		"airfield":                                   {5, 5},
+		model.BuildingTypeMiniatureParticleCollider:    {5, 5},
+		model.BuildingTypeRayReceiver:                  {5, 5},
+		model.BuildingTypeArtificialStar:               {5, 5},
+		model.BuildingTypePlanetaryShieldGenerator:     {5, 5},
+		model.BuildingTypeEMRailEjector:                {5, 5},
+		model.BuildingTypeVerticalLaunchingSilo:        {5, 5},
+		"vehicle_factory":                              {5, 5},
+		"airfield":                                     {5, 5},
+		// 配送器叠在宿主仓库上，占地取宿主（§1.2）；宿主仓库是 3×3。
+		model.BuildingTypeLogisticsDistributor: {3, 3},
 	}
 	for btype, size := range want {
 		def, ok := model.BuildingDefinitionByID(btype)
@@ -410,5 +416,56 @@ func TestFineGridFootprintTableMatchesDesign(t *testing.T) {
 		if def.Footprint.Width != size[0] || def.Footprint.Height != size[1] {
 			t.Errorf("%s footprint = %dx%d, want %dx%d", btype, def.Footprint.Width, def.Footprint.Height, size[0], size[1])
 		}
+	}
+}
+
+// 8) 配送器叠在宿主仓库上（§1.2）：占地取宿主的 3×3，不是数据文件里的独立值；
+// 它自己不占地面格，但外圈 IO / 路线端点必须按宿主 3×3 算。
+func TestFineGridDistributorTakesHostFootprint(t *testing.T) {
+	core, ws := fineGridCore(t)
+	origin := flatBuildSpot(t, ws, model.BuildingTypeDepotMk1, model.Position{X: 10, Y: 10})
+	depot := buildAndReturn(t, core, ws, model.BuildingTypeDepotMk1, origin)
+	grantTechs(ws, "p1", "distribution_logistics")
+
+	mounted := buildAndReturn(t, core, ws, model.BuildingTypeLogisticsDistributor, origin)
+	if mounted.Position.Z != 1 || mounted.Distributor == nil || mounted.Distributor.HostBuildingID != depot.ID {
+		t.Fatalf("distributor did not mount on the depot: %+v", mounted)
+	}
+
+	tiles, err := ws.BuildingTiles(mounted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tiles) != 9 {
+		t.Fatalf("distributor footprint = %d cell, want the host depot's 3×3 = 9", len(tiles))
+	}
+	for _, tile := range tiles {
+		if id := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]; id != depot.ID {
+			t.Fatalf("cell %+v registered to %q, want the host depot %s（配送器不占地面格）", tile, id, depot.ID)
+		}
+	}
+
+	// 外圈 = 宿主 3×3 的一圈（3×3 外圈是 4×4 减去 9 = 7 个格，立方体面上取不到折叠）。
+	ring, err := ws.BuildingRingCells(mounted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostRing, err := ws.BuildingRingCells(depot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ring) != len(hostRing) {
+		t.Fatalf("distributor ring = %d cell, want the host's %d", len(ring), len(hostRing))
+	}
+	for _, cell := range ring {
+		if ws.BuildingOccupies(mounted, cell) {
+			t.Fatalf("distributor ring cell %+v is inside its own footprint", cell)
+		}
+	}
+
+	// 拆掉宿主后配送器失去宿主：占地退回自身数据值，不能 panic。
+	delete(ws.Buildings, depot.ID)
+	if _, err := ws.BuildingTiles(mounted); err != nil {
+		t.Fatalf("orphaned distributor must still resolve a footprint: %v", err)
 	}
 }

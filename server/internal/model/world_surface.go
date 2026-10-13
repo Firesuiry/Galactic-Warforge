@@ -90,35 +90,3 @@ func (ws *WorldState) SurfacePath(start, target Position, budget int) ([]Positio
 func (ws *WorldState) SurfaceWithin(a, b Position, r int) bool {
 	return ws.Surface().Within(surface.Tile{X: a.X, Y: a.Y}, surface.Tile{X: b.X, Y: b.Y}, r)
 }
-
-// SurfaceOffsetDirection transports a building-local direction into the frame
-// of its offset port, following the same path as SurfaceOffset.
-func (ws *WorldState) SurfaceOffsetDirection(pos Position, dx, dy int, dir ConveyorDirection) ConveyorDirection {
-	xd, yd := ConveyorEast, ConveyorSouth
-	if dx < 0 {
-		xd = ConveyorWest
-		dx = -dx
-	}
-	if dy < 0 {
-		yd = ConveyorNorth
-		dy = -dy
-	}
-	for i := 0; i < dx; i++ {
-		var forward ConveyorDirection
-		pos, forward = ws.SurfaceStep(pos, xd)
-		for xd != forward {
-			xd = xd.Right()
-			yd = yd.Right()
-			dir = dir.Right()
-		}
-	}
-	for i := 0; i < dy; i++ {
-		var forward ConveyorDirection
-		pos, forward = ws.SurfaceStep(pos, yd)
-		for yd != forward {
-			yd = yd.Right()
-			dir = dir.Right()
-		}
-	}
-	return dir
-}

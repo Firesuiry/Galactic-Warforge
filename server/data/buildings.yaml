@@ -295,7 +295,7 @@ buildings:
     name: 物流配送器
     category: logistics_hub
     subcategory: logistics_hub
-    footprint: {width: 2, height: 2}
+    footprint: {width: 3, height: 3}
     build_cost:
       minerals: 40
       energy: 20
