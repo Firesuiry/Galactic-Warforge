@@ -76,13 +76,32 @@ export class IndustrialModels {
       const rotation = object.userData.industrialRotation as Omit<Rotation, 'object'> | undefined;
       if (rotation) this.rotations.push({ object, ...rotation });
     });
+    this.detachIndependentMaterials(group);
     return group;
+  }
+
+  /**
+   * 逐实例改色的节点（运输机器人车顶货箱）各拿一份材质。
+   *
+   * `Group.clone(true)` 共享材质对象，所以「上色」等于「给同型号所有单位 + 模板一起改色」。
+   * 模板与每个实例都必须各持一份：模板持共享铜色（未被污染），实例才能安全地按物品色写入。
+   */
+  private detachIndependentMaterials(group: THREE.Group) {
+    group.traverse((object) => {
+      if (object.userData.independentMaterial && object instanceof THREE.Mesh) {
+        object.material = (object.material as THREE.Material).clone();
+      }
+    });
   }
 
   private remember(key: string, group: THREE.Group): THREE.Group {
     // Three clones object transforms but shares immutable geometry and materials.
     // Snapshot refreshes allocate no vertex buffers and retain the original rotor pose.
-    this.templates.set(key, group.clone(true));
+    const template = group.clone(true);
+    this.detachIndependentMaterials(template);
+    this.templates.set(key, template);
+    // 首次实例同样要脱离模板材质，否则它的上色会顺着模板传染给后面每一个实例。
+    this.detachIndependentMaterials(group);
     return group;
   }
 
@@ -571,9 +590,12 @@ export class IndustrialModels {
     }
     if (type === 'transport_robot') {
       // 车顶货箱：有货才显示，颜色由场景按 haul.cargo.item_id 写入物品配色。
-      // batchStatic 之后单独加（合并静态网格会吞掉需要独立改色/显隐的节点）。
+      // 单独克隆一份材质（车顶要逐单位上色，不能写进共享的 copper 材质），
+      // 也不能进 batchStatic（合并静态网格会吞掉需要独立改色/显隐的节点）。
       const cargo = this.box(group, 'copper', [0.3, 0.14, 0.3], [0, 0.33, 0]);
       cargo.name = 'transport-robot-cargo';
+      cargo.material = (cargo.material as THREE.MeshStandardMaterial).clone();
+      cargo.userData.independentMaterial = true;
       cargo.visible = false;
     }
     return this.remember(key, group);

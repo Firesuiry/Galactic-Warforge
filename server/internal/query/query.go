@@ -664,7 +664,10 @@ func filterBuildingsInBounds(buildings map[string]*model.Building, bounds SceneB
 		if building == nil || !pointInBounds(building.Position, bounds) {
 			continue
 		}
-		out[id] = building
+		// 克隆：视图在响应编码时已经出了世界锁，把活的 Building 指针直接交给
+		// json.Encoder 会和结算协程并发读同一个 map（production/conveyor 等），
+		// 高 tick 率下就是 "concurrent map iteration and map write" 直接崩服。
+		out[id] = building.Clone()
 	}
 	return out
 }
@@ -678,7 +681,7 @@ func filterUnitsInBounds(units map[string]*model.Unit, bounds SceneBounds) map[s
 		if unit == nil || !pointInBounds(unit.Position, bounds) {
 			continue
 		}
-		out[id] = unit
+		out[id] = unit.Clone()
 	}
 	return out
 }
@@ -692,7 +695,7 @@ func filterResourcesInBounds(resources []*model.ResourceNodeState, bounds SceneB
 		if resource == nil || !pointInBounds(resource.Position, bounds) {
 			continue
 		}
-		out = append(out, resource)
+		out = append(out, resource.Clone())
 	}
 	return out
 }
@@ -711,7 +714,7 @@ func filterDynamicResourcesInBounds(resources map[string]*model.ResourceNodeStat
 	sort.Strings(ids)
 	out := make([]*model.ResourceNodeState, 0, len(ids))
 	for _, id := range ids {
-		out = append(out, resources[id])
+		out = append(out, resources[id].Clone())
 	}
 	return out
 }
@@ -752,8 +755,9 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 
 	if ws.PlanetID == planetID {
 		view.Terrain = sliceWorldTerrain(ws, SceneBounds{Width: ws.MapWidth, Height: ws.MapHeight})
-		view.Buildings = ql.vis.FilterBuildings(ws, playerID)
-		view.Units = ql.vis.FilterUnits(ws, playerID)
+		// 同 planetSceneWindow：响应编码在世界锁外进行，实体必须克隆后再交给编码器。
+		view.Buildings = cloneBuildings(ql.vis.FilterBuildings(ws, playerID))
+		view.Units = cloneUnits(ql.vis.FilterUnits(ws, playerID))
 		view.Resources = sortedResources(ws)
 	} else {
 		view.Buildings = map[string]*model.Building{}
@@ -762,6 +766,23 @@ func (ql *Layer) Planet(ws *model.WorldState, playerID, planetID string) (*Plane
 	}
 
 	return view, true
+}
+
+// cloneBuildings / cloneUnits：把可见性过滤的结果克隆一份，交给锁外的 JSON 编码器。
+func cloneBuildings(buildings map[string]*model.Building) map[string]*model.Building {
+	out := make(map[string]*model.Building, len(buildings))
+	for id, building := range buildings {
+		out[id] = building.Clone()
+	}
+	return out
+}
+
+func cloneUnits(units map[string]*model.Unit) map[string]*model.Unit {
+	out := make(map[string]*model.Unit, len(units))
+	for id, unit := range units {
+		out[id] = unit.Clone()
+	}
+	return out
 }
 
 // PlanetScene returns a viewport-sized planet slice for large-map rendering.

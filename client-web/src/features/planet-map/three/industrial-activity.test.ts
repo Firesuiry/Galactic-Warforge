@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
-import { collectActivity, IndustrialActivity, BELT_CARGO_CELL, BELT_CARGO_MAX_PER_STACK } from './industrial-activity';
+import { collectActivity, itemColor, IndustrialActivity, BELT_CARGO_CELL, BELT_CARGO_MAX_PER_STACK } from './industrial-activity';
 import { tileNormal, surfaceTileSize } from './projection';
 
 function fixture(): PlanetThreeData {
@@ -136,6 +136,32 @@ describe('authoritative industrial activity', () => {
       expect(scale.x).toBeCloseTo(size * BELT_CARGO_CELL, 5);
       expect(scale.x).toBeLessThan(size * .52);
     }
+    activity.destroy();
+  });
+
+  it('writes each belt cube the item colour in sRGB, and keeps the cargo material non-metallic', () => {
+    const data = fixture(); const building = factory();
+    // 目录只按大类给色（矿石同色、材料同色），带上必须用 item-colors 的逐物品色。
+    data.catalog!.items = [
+      { id: 'iron_ingot', color: '#74c0fc' }, { id: 'copper_ingot', color: '#74c0fc' }, { id: 'gear', color: '#74c0fc' },
+    ] as never;
+    building.conveyor!.buffer = [{ item_id: 'iron_ingot', quantity: 1 }, { item_id: 'copper_ingot', quantity: 1 }, { item_id: 'gear', quantity: 1 }];
+    data.planet.buildings!.b = building;
+    const world = new THREE.Group(); const activity = new IndustrialActivity(world);
+    activity.update(data); activity.animate(.1, 0);
+    const cargo = world.children[0].children[0] as THREE.InstancedMesh;
+    const material = cargo.material as THREE.MeshStandardMaterial;
+    // 金属度过高时实例色几乎全部来自环境反射，浅色物品（铁块/石材）会被压成同一种白。
+    expect(material.metalness).toBeLessThanOrEqual(.1);
+    const read = (index: number) => {
+      const c = new THREE.Color(); cargo.getColorAt(index, c);
+      return c.getHexString();
+    };
+    // 实例色必须与 item-colors 的 hex 同色（sRGB → 线性只做一次转换，不能两次或零次）。
+    expect(read(0)).toBe(itemColor('#c9d3dd').getHexString());
+    expect(read(1)).toBe(itemColor('#f08a45').getHexString());
+    expect(read(2)).toBe(itemColor('#e0b25c').getHexString());
+    expect(new Set([read(0), read(1), read(2)]).size).toBe(3);
     activity.destroy();
   });
 });

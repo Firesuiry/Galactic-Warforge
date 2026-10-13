@@ -11,7 +11,7 @@ import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
-import { tileNormal, normalTile, tileFrame, surfaceTileSize } from './three/projection';
+import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -483,12 +483,14 @@ export class PlanetThreeScene {
         move(`unit:${unit.id}`, unit.type, faction, unit.position, 'units', .72);
         // 血条（C2）：头顶 billboard，受击比例实时更新，按阵营着色；中立黑雾头顶挂「中立」标签
         this.syncUnitBar(this.moving.get(`unit:${unit.id}`), unit, faction);
-        // 运输机器人车顶货物方块：有货才显示，颜色取物品配色表。
+        // 运输机器人车顶货物方块：载货期间（装货/运送/卸货）都显示，颜色取物品配色表。
         const robot = this.moving.get(`unit:${unit.id}`)?.group.getObjectByName('transport-robot-cargo');
         if (robot instanceof THREE.Mesh) {
           const cargo = transportCargo(unit);
           robot.visible = Boolean(cargo);
           if (cargo) {
+            // 货箱材质是这台机器人独有的（IndustrialModels.unit 里为运输机器人单独克隆），
+            // 直接写色不会波及底盘/全场铜件——共享材质池被写色过一次，全场都会跟着变。
             const material = robot.material as THREE.MeshStandardMaterial;
             material.color.set(getItemColorValue(cargo.item_id, getItemCatalogEntry(this.data.catalog, cargo.item_id)?.color));
           }
@@ -812,8 +814,8 @@ export class PlanetThreeScene {
   /** 地块描边：贴地色带（WebGL 线宽恒 1px，近景几乎看不见）。 */
   private tileOutline(tile: TilePoint, color: string) {
     const size = this.data!.planet.surface.face_size;
-    const face = surfaceFace(tile, size);
-    const loop = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => tileNormal({ x: tile.x + x, y: tile.y + y }, size, face));
+    // 四角 = 相邻 cell 中心方向（tileQuad）：框就是 1 cell，不多不少。
+    const loop = tileQuad(tile, size);
     const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + this.tileScale() * 0.06, this.tileScale() * 0.045), this.markMaterial(color, 0.95));
     mesh.renderOrder = 12;
     return mesh;
