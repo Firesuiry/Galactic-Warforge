@@ -46,14 +46,15 @@ test('行星地图主视图截图基线', async ({ page }) => {
     await page.getByRole('button', { name: '收起调试' }).click();
     await expect(expandDebugButton).toBeVisible();
   }
-  // 等地形分块烘焙完成：连续两次截图像素一致再拍基线，避免高负载下拍到半渲染帧
+  // 等地形分块烘焙完成：连续两次截图像素一致再拍基线，避免高负载下拍到半渲染帧。
+  // 全量套件 4 worker 并行时地形分块重建会明显变慢，给足轮询窗口。
   let previousShot: Buffer | null = null;
   await expect.poll(async () => {
     const shot = await page.locator('.planet-map-shell').screenshot({ animations: 'disabled' });
     const settled = previousShot !== null && shot.equals(previousShot);
     previousShot = shot;
     return settled;
-  }, { timeout: 20_000, intervals: [600, 800, 1000, 1200, 1500] }).toBe(true);
+  }, { timeout: 60_000, intervals: [600, 800, 1000, 1200, 1500] }).toBe(true);
 
   const mapShell = page.locator('.planet-map-shell');
   const bounds = await mapShell.boundingBox();

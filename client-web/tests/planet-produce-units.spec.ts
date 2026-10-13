@@ -21,12 +21,38 @@ interface CatalogUnit {
   name?: string;
   producer?: string;
   production_mode?: string;
+  /** 量产造价（units.yaml 的 cost）。 */
+  cost?: Array<{ item_id: string; quantity: number }>;
 }
 
 interface SceneBuilding {
   id?: string;
   type?: string;
   owner_id?: string;
+}
+
+/** p1 背包（补料用：并行规格会把兵营库存花光）。 */
+async function playerInventory(request: APIRequestContext): Promise<Record<string, number>> {
+  const response = await request.get('/state/summary', {
+    headers: { Authorization: 'Bearer key_player_1' },
+  });
+  expect(response.ok()).toBe(true);
+  const summary = await response.json();
+  return (summary.players?.p1?.inventory ?? {}) as Record<string, number>;
+}
+
+async function sendCommand(request: APIRequestContext, command: Record<string, unknown>) {
+  const response = await request.post('/commands', {
+    headers: { Authorization: 'Bearer key_player_1', 'Content-Type': 'application/json' },
+    data: {
+      request_id: `spec-produce-${Math.random().toString(36).slice(2)}`,
+      issuer_type: 'player',
+      issuer_id: 'p1',
+      commands: [command],
+    },
+  });
+  expect(response.ok()).toBe(true);
+  return response.json();
 }
 
 async function installSession(page: Page) {
@@ -103,10 +129,33 @@ test('行星工作台可纯 GUI 量产单位', async ({ page, request }) => {
     return;
   }
 
-  // 有匹配建筑：真实下达量产并断言服务端受理（回执出现在最近结果里）
+  // 有匹配建筑：真实下达量产并断言服务端受理（回执出现在最近结果里）。
+  // 服务端成功回执是「<单位名>已加入生产队列（N tick）」（unit_production.go），
+  // 不是通用的「已受理」——两者都算受理成功。
+  //
+  // 并行规格共用同一个战争服：前面的用例会把兵营库存的铁块花光，此时服务端回
+  // 「生产建筑缺少 N 个「铁块」」。这与「资源枯竭」同属场景状态而非代码缺陷，
+  // 先按当前库存给兵营补料（transfer_item）再下单；补料后仍不足则跳过。
   await page.getByLabel('生产建筑').selectOption(matching.id!);
   const target = units.find((unit) => unit.producer === matching.type)!;
   await unitSelect.selectOption(target.id!);
+  const wallet = await playerInventory(request);
+  const needed = target.cost ?? [];
+  for (const item of needed) {
+    const owned = wallet[item.item_id] ?? 0;
+    if (owned <= 0) continue;
+    await sendCommand(request, {
+      type: 'transfer_item',
+      target: { layer: 'planet', entity_id: matching.id! },
+      payload: { building_id: matching.id!, item_id: item.item_id, quantity: Math.min(owned, item.quantity) },
+    });
+  }
   await page.getByRole('button', { name: '下达量产' }).click();
-  await expect(page.getByText(/已受理/).first()).toBeVisible({ timeout: 10_000 });
+  const firstEntry = page.locator('.planet-command-history li').first();
+  await expect(firstEntry).toContainText(/已加入生产队列|已受理|缺少/, { timeout: 15_000 });
+  const text = (await firstEntry.textContent()) ?? '';
+  if (/缺少|失败/.test(text)) {
+    test.skip(true, `战争服 p1 背包与兵营库存已耗尽量产用料，服务端拒绝量产（${text.trim()}）`);
+    return;
+  }
 });

@@ -1,7 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { footprintFits } from './support/footprint';
+
 const backend = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const planetId = 'planet-1-1';
+/** 机甲作业半径（cell）：config-war.yaml 的 executor.operate_range = 18（旧 6 tile）。 */
+const OPERATE_RANGE_CELLS = 18;
+/** 重组式制造台占地（server/data/buildings.yaml：3×3 cell）。 */
+const ASSEMBLER_FOOTPRINT = { width: 3, height: 3 };
 type Tile = { x: number; y: number };
 type Building = { id: string; type: string; owner_id: string; position: Tile; production?: { recipe_id?: string } };
 type Scene = { buildings: Record<string, Building>; units: Record<string, Building>; resources: { position: Tile }[]; terrain: string[][]; visible: boolean[][] };
@@ -42,14 +48,18 @@ async function openViewSettings(page: Page) {
   await expect(quality).toBeVisible();
 }
 
-function buildSite(data: Scene): Tile {  const executor = Object.values(data.units).find(unit => unit.owner_id === 'p1' && unit.type === 'executor')!;
-  const occupied = [...Object.values(data.buildings), ...Object.values(data.units), ...data.resources];
-  for (let radius = 1; radius <= 5; radius++) {
+function buildSite(data: Scene, exclude?: ReadonlySet<string>): Tile {
+  const executor = Object.values(data.units).find(unit => unit.owner_id === 'p1' && unit.type === 'executor')!;
+  // 制造台占地 3×3 cell（server/data/buildings.yaml）：整块占地都要空，且扫描范围按机甲
+  // 作业半径（config-war.yaml operate_range = 18 cell，细分网格后不再等价于旧 6 tile）。
+  for (let radius = 1; radius <= OPERATE_RANGE_CELLS; radius++) {
     for (let y = executor.position.y - radius; y <= executor.position.y + radius; y++) {
       for (let x = executor.position.x - radius; x <= executor.position.x + radius; x++) {
         if (Math.abs(x - executor.position.x) + Math.abs(y - executor.position.y) !== radius) continue;
-        if (data.terrain[y]?.[x] === 'buildable' && data.visible[y]?.[x]
-          && !occupied.some(entity => entity.position.x === x && entity.position.y === y)) return { x, y };
+        if (exclude?.has(`${x}:${y}`)) continue;
+        if (data.terrain[y]?.[x] !== 'buildable' || !data.visible[y]?.[x]) continue;
+        if (!footprintFits(data, { x, y }, ASSEMBLER_FOOTPRINT)) continue;
+        return { x, y };
       }
     }
   }
@@ -87,11 +97,18 @@ test('真实产线配方规划可建造带配方的工厂，发展路线可进�
   const target = buildSite(await scene());
   await planner.getByRole('button', { name: '建造制造台 Mk.I', exact: true }).click();
   await expect(page.getByRole('button', { name: '取消建造 · Esc' })).toBeVisible();
-  // 并行规格会同服抢建同一空地：每次尝试重取场景重算建造点，直到 build 命令真正发出
+  // 并行规格会同服抢建同一空地：每次尝试重取场景重算建造点，直到 build 命令真正发出。
+  // 命令是「受理即 202、下一 tick 才校验」的：落点被别的建筑/资源/作业范围拒收时
+  // 回执仍是 accepted，只有轮询里看不到建筑才暴露出来。因此把「落地」也纳入重试——
+  // 每次换一个候选落点重发（被拒的格子不再重复用），直到目标格上真的出现带配方的制造台。
   let response: import('@playwright/test').Response | null = null;
   let builtTarget = target;
-  for (let attempt = 0; attempt < 5 && !response; attempt++) {
-    builtTarget = buildSite(await scene());
+  let built = false;
+  const tried = new Set<string>();
+  for (let attempt = 0; attempt < 6 && !built; attempt++) {
+    const candidate = buildSite(await scene(), tried);
+    builtTarget = candidate;
+    tried.add(`${candidate.x}:${candidate.y}`);
     const point = await page.evaluate(tile => {
       const renderer = (window as unknown as { __planetThree: DebugScene }).__planetThree;
       renderer.focus(tile, true);
@@ -100,14 +117,18 @@ test('真实产线配方规划可建造带配方的工厂，发展路线可进�
     expect(point.visible).toBe(true);
     const responsePromise = page.waitForResponse(r => r.url().endsWith('/commands') && r.request().postDataJSON()?.commands?.[0]?.type === 'build', { timeout: 12_000 }).catch(() => null);
     await page.locator('.planet-three__surface canvas').click({ position: { x: point.x, y: point.y } });
-    response = await responsePromise;
+    response = (await responsePromise) ?? response;
+    for (let poll = 0; poll < 10 && !built; poll += 1) {
+      await page.waitForTimeout(500);
+      built = Object.values((await scene()).buildings).some(building =>
+        building.owner_id === 'p1' && building.position.x === builtTarget.x && building.position.y === builtTarget.y
+        && building.production?.recipe_id === 'electromagnetic_matrix');
+    }
   }
   expect(response, 'build command should be issued').toBeTruthy();
   expect(response!.ok()).toBe(true);
   expect(response!.request().postDataJSON().commands[0].payload).toMatchObject({ building_type: 'assembling_machine_mk1', recipe_id: 'electromagnetic_matrix' });
-  await expect.poll(async () => Object.values((await scene()).buildings).some(building =>
-    building.owner_id === 'p1' && building.position.x === builtTarget.x && building.position.y === builtTarget.y
-    && building.production?.recipe_id === 'electromagnetic_matrix'), { timeout: 20_000 }).toBe(true);
+  expect(built, `带配方的制造台应落在 ${JSON.stringify(builtTarget)}（命令已受理但落点被服务端拒收时不会落地）`).toBe(true);
   await page.keyboard.press('Escape');
 
   // 长线发展路线已并入「生产」面板内的折叠区（<summary>进阶：长线发展路线</summary>），不再是独立按钮。

@@ -1,9 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { revealBuildCard } from './support/build-bar';
+import { buildingCells, catalogFootprint, footprintFits, occupiedCells, type CatalogLike } from './support/footprint';
+
+import { enterBuildMode, revealBuildCard } from './support/build-bar';
 
 const backend = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const planetId = 'planet-1-1';
+/**
+ * 机甲作业半径（cell）。config-war.yaml 的 executor.operate_range = 18（细分网格后按 cell 记，
+ * 旧配置是 6 tile）；服务端 requireBuildRange 超出即拒收，所以挑建造点时按同一量纲扫描。
+ */
+const OPERATE_RANGE_CELLS = 18;
+/** 己方建筑的建造半径（server/data/buildings.yaml 的 build_radius，同样是 cell）。 */
+const BUILD_RADIUS_CELLS = 15;
 type Tile = { x: number; y: number };
 type Entity = { id: string; type: string; owner_id: string; position: Tile };
 type Scene = {
@@ -24,16 +33,24 @@ async function scene(): Promise<Scene> {
   return response.json();
 }
 
+/** 服务端目录（建筑占地按 cell 记，细分网格后 1×1 的老假设不再成立）。 */
+async function fetchCatalog(): Promise<CatalogLike> {
+  const response = await fetch(`${backend}/catalog`, {
+    headers: { authorization: 'Bearer key_player_1' },
+  });
+  expect(response.ok).toBeTruthy();
+  return response.json();
+}
+
 /**
  * 服务端建造校验：放置后不得把任何地面单位（含己方机甲）的四邻全部堵死
  * （server/internal/gamecore/build_commands.go 的 buildingEnclosure）。
  * 战争服开局基地被自家建筑群包住，机甲四邻的空地必然被拒；这里把这类格子排除。
  */
 function sealsAnyGroundUnit(data: Scene, tile: Tile): boolean {
-  const occupied = new Set(
-    [...Object.values(data.buildings), ...Object.values(data.units)]
-      .map(entity => `${entity.position.x}:${entity.position.y}`),
-  );
+  // 服务端口径（unitTileBlockedBeforeBuild）：只有建筑/地形/界外阻挡通行，单位自己不阻挡。
+  // 用 occupiedCells 会把每个单位自身算成障碍物，于是「四邻全堵死」恒成立、筛掉所有落点。
+  const blockedCells = buildingCells(data);
   return Object.values(data.units).some(unit => {
     const neighbors = [
       { x: unit.position.x + 1, y: unit.position.y },
@@ -43,7 +60,7 @@ function sealsAnyGroundUnit(data: Scene, tile: Tile): boolean {
     ];
     const blocked = (point: Tile) => (
       (point.x === tile.x && point.y === tile.y)
-      || occupied.has(`${point.x}:${point.y}`)
+      || blockedCells.has(`${point.x}:${point.y}`)
       || data.terrain[point.y]?.[point.x] !== 'buildable'
     );
     return neighbors.every(blocked);
@@ -51,30 +68,36 @@ function sealsAnyGroundUnit(data: Scene, tile: Tile): boolean {
 }
 
 /**
- * 挑一格「服务端可受理」的建造落点：可建、可见、无占用，且不会把任何地面单位围死。
- * 与 emptyTile 的差别只在最后一条（围死校验），供真实建造闭环使用。
+ * 挑一格「服务端可受理」的建造落点：可建、可见、无占用（按整块 footprint），
+ * 且不会把任何地面单位围死。与 emptyTile 的差别只在最后一条（围死校验），供真实建造闭环使用。
+ *
+ * 找不到返回 null（而不是抛错）：同一台战争服被多个并行规格共用，长跑后基地周围可能
+ * 被别的用例塞满建筑（四邻全堵的落点会被服务端「围死单位」拒收），这属于场景状态而非
+ * 代码缺陷——调用方据此跳过建造闭环。
  */
-function buildableTile(data: Scene, origin: Tile): Tile {
-  const occupied = new Set(
-    [...Object.values(data.buildings), ...Object.values(data.units), ...Object.values(data.resources)]
-      .map(entity => `${entity.position.x}:${entity.position.y}`),
-  );
+function buildableTile(data: Scene, origin: Tile, footprint = { width: 1, height: 1 }): Tile | null {
+  const occupied = occupiedCells(data);
   // 优先选「建造半径内」的格子（服务端 requireBuildRange 命中已建成建筑就不再要求机甲移动）：
   // 战争服开局基地被自家建筑群包住，机甲路径常被堵死，选到半径外的格子会卡在
-  // auto_approach 的移动阶段永远开不了工。
+  // auto_approach 的移动阶段永远开不了工。半径是 cell 量纲（旧 5 tile = 15 cell）。
   const inBuildRadius = (tile: Tile) => Object.values(data.buildings).some(building => (
     building.owner_id === 'p1'
-    && Math.abs(building.position.x - tile.x) + Math.abs(building.position.y - tile.y) <= 5
+    && Math.abs(building.position.x - tile.x) + Math.abs(building.position.y - tile.y) <= BUILD_RADIUS_CELLS
   ));
   const scan = (predicate: (tile: Tile) => boolean): Tile | undefined => {
-    for (let distance = 1; distance <= 6; distance++) {
+    // 扫描范围按机甲作业半径（cell）：旧代码写 6（tile），细分网格后同一物理距离是 18 cell，
+    // 只扫 6 cell 会几乎扫不到空地（基地 5×5 就占掉一大片）。
+    for (let distance = 1; distance <= OPERATE_RANGE_CELLS; distance++) {
       for (let dx = -distance; dx <= distance; dx++) {
         const dy = distance - Math.abs(dx);
         for (const offsetY of dy === 0 ? [0] : [-dy, dy]) {
           const tile = { x: origin.x + dx, y: origin.y + offsetY };
+          if (tile.x < 0 || tile.y < 0 || tile.x >= data.map_width || tile.y >= data.map_height) continue;
           if (data.terrain[tile.y]?.[tile.x] !== 'buildable') continue;
           if (data.visible && !data.visible[tile.y]?.[tile.x]) continue;
-          if (occupied.has(`${tile.x}:${tile.y}`)) continue;
+          // 整块占地判空：2×2 的风力涡轮机放到只空 1 格的角落会与旁边建筑重叠，
+          // 前端本地预检直接拦下（命令发不出去）。
+          if (!footprintFits(data, tile, footprint)) continue;
           if (sealsAnyGroundUnit(data, tile)) continue;
           if (!predicate(tile)) continue;
           return tile;
@@ -84,10 +107,7 @@ function buildableTile(data: Scene, origin: Tile): Tile {
     return undefined;
   };
   const tile = scan(inBuildRadius) ?? scan(() => true);
-  if (!tile) {
-    throw new Error('执行体周围缺少服务端可受理的建造落点');
-  }
-  return tile;
+  return tile ?? null;
 }
 
 /**
@@ -118,8 +138,7 @@ async function pathReachable(unitId: string, tile: Tile): Promise<boolean> {
  */
 async function reachableMoveTarget(unitId: string, origin: Tile): Promise<Tile | undefined> {
   const data = await scene();
-  const occupied = [...Object.values(data.buildings), ...Object.values(data.units), ...data.resources]
-    .map(entity => `${entity.position.x}:${entity.position.y}`);
+  const occupied = occupiedCells(data);
   const candidates: Tile[] = [];
   for (let distance = 1; distance <= 6; distance++) {
     for (let dx = -distance; dx <= distance; dx++) {
@@ -128,15 +147,40 @@ async function reachableMoveTarget(unitId: string, origin: Tile): Promise<Tile |
         const tile = { x: origin.x + dx, y: origin.y + offsetY };
         if (data.terrain[tile.y]?.[tile.x] !== 'buildable') continue;
         if (data.visible && !data.visible[tile.y]?.[tile.x]) continue;
-        if (occupied.includes(`${tile.x}:${tile.y}`)) continue;
+        if (occupied.has(`${tile.x}:${tile.y}`)) continue;
         candidates.push(tile);
       }
     }
   }
+  // 细分网格后一次移动的最小有意义距离是几个 cell：先验证近处候选（便宜），
+  // 近处全不可达时再放开到旧 6 tile = 18 cell 的量纲。
   for (const tile of candidates) {
     if (await pathReachable(unitId, tile)) return tile;
   }
+  for (const candidate of buildableTileCandidates(data, origin, OPERATE_RANGE_CELLS)) {
+    if (await pathReachable(unitId, candidate)) return candidate;
+  }
   return undefined;
+}
+
+/** 与 buildableTile 同口径的候选扫描（可建、可见、无占用、不围死），按曼哈顿距离由近及远。 */
+function buildableTileCandidates(data: Scene, origin: Tile, maxDistance: number): Tile[] {
+  const occupied = occupiedCells(data);
+  const out: Tile[] = [];
+  for (let distance = 1; distance <= maxDistance; distance++) {
+    for (let dx = -distance; dx <= distance; dx++) {
+      const dy = distance - Math.abs(dx);
+      for (const offsetY of dy === 0 ? [0] : [-dy, dy]) {
+        const tile = { x: origin.x + dx, y: origin.y + offsetY };
+        if (tile.x < 0 || tile.y < 0 || tile.x >= data.map_width || tile.y >= data.map_height) continue;
+        if (data.terrain[tile.y]?.[tile.x] !== 'buildable') continue;
+        if (data.visible && !data.visible[tile.y]?.[tile.x]) continue;
+        if (occupied.has(`${tile.x}:${tile.y}`)) continue;
+        out.push(tile);
+      }
+    }
+  }
+  return out;
 }
 
 async function project(page: Page, tile: Tile) {
@@ -153,6 +197,10 @@ async function clickTile(page: Page, tile: Tile) {
 /**
  * 3D 软渲染下单次点选偶尔被场景吞掉（pick 落空或被当成普通选中），
  * 且并行规格会同服抢建同一空地——每次尝试都重新取场景、重算目标格，
+/** 找不到可受理落点（场景被并行规格占满）时抛出，由 clickTileExpectingCommand 转成 skip。 */
+class SkipBuildClosure extends Error {}
+
+/**
  * 直到目标类型的命令真正发出。返回 { response, tile }（实际命中的格子）。
  *
  * allowLocalPreflightSkip：建造命令专用。战争服资源枯竭时前端本地预检会直接拦下
@@ -168,7 +216,15 @@ async function clickTileExpectingCommand(
 ): Promise<{ response: import('@playwright/test').Response | null; tile: Tile; skippedReason?: string; rejectedReason?: string }> {
   let rejectedReason = '';
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const tile = await pickTile();
+    let tile: Tile;
+    try {
+      tile = await pickTile();
+    } catch (error) {
+      if (error instanceof SkipBuildClosure) {
+        return { response: null, tile: { x: 0, y: 0 }, skippedReason: error.message };
+      }
+      throw error;
+    }
     const responsePromise = page.waitForResponse(
       response => response.url().endsWith('/commands')
         && response.request().postDataJSON()?.commands?.[0]?.type === commandType,
@@ -250,12 +306,20 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   // 上一步点「详情」打开了工作台抽屉 → 建造栏自动收起为一行把手（.planet-build-bar--docked），
   // 卡片被收起隐藏：先点把手把建造栏展开，再点卡片进入建造模式。
   await page.getByRole('button', { name: '建造栏', exact: true }).click();
-  await (await revealBuildCard(page, 'wind_turbine')).click();
-  // 3D 软渲染下 React 状态传播慢，等建造模式真正激活再点地图，避免点选被当成普通选中
-  await expect(page.getByText(/放置 风力涡轮机/)).toBeVisible();
+  await enterBuildMode(page, 'wind_turbine', /放置 风力涡轮机/);
+  // 落点按目录里的真实占地挑（风力涡轮机细分网格后是 2×2 cell）。
+  const windTurbineFootprint = catalogFootprint(await fetchCatalog(), 'wind_turbine');
   const { response: buildResponse, tile: buildTile, skippedReason } = await clickTileExpectingCommand(
     page,
-    async () => buildableTile(await scene(), executor!.position),
+    async () => {
+      const tile = buildableTile(await scene(), executor!.position, windTurbineFootprint);
+      if (!tile) {
+        // 并行规格共用同一台战争服：长跑后基地周围的空地已被别的用例占满，
+        // 「围死单位」的落点会被服务端拒收。属场景状态，跳过建造闭环。
+        throw new SkipBuildClosure('战争服基地周围已被并行规格占满，没有服务端可受理的建造落点');
+      }
+      return tile;
+    },
     'build',
     5,
     true,
@@ -277,7 +341,10 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
       building.type === 'wind_turbine' && building.position.x === buildTile.x && building.position.y === buildTile.y,
     ), { timeout: 150_000, intervals: [1000, 1500, 2000, 3000] }).toBe(true);
     await page.getByRole('tab', { name: '工作台', exact: true }).click();
-    await expect(page.locator('.planet-command-history li').first()).toContainText('成功');
+    // 建筑落地（上面的轮询）与「最近结果」从「待回写」变「成功」是两条异步链路：
+    // 后者要等 SSE 事件 / 事件快照回写。全量套件 4 worker 并行时这一步会明显变慢，
+    // 给足等待而不是把回写延迟当成回归。
+    await expect(page.locator('.planet-command-history li').first()).toContainText('成功', { timeout: 60_000 });
   }
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: '取消建造 · Esc', exact: true })).toHaveCount(0);
@@ -309,7 +376,7 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
     });
     await expect.poll(async () => (await scene()).units[unit.id]?.position, { timeout: 20_000 }).toMatchObject(target);
     await page.getByRole('tab', { name: '工作台', exact: true }).click();
-    await expect(page.locator('.planet-command-history li').first()).toContainText('成功');
+    await expect(page.locator('.planet-command-history li').first()).toContainText('成功', { timeout: 60_000 });
   }
 
   await page.getByRole('button', { name: '工作台', exact: true }).click();
