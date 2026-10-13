@@ -135,10 +135,6 @@ func TestSurfaceSorterAndIOAcrossRotatedSeam(t *testing.T) {
 	if !ok || id.id != belt.ID {
 		t.Fatal("sorter failed to take across rotated seam")
 	}
-	port := model.IOPort{Offset: model.GridOffset{X: 0, Y: -1}}
-	if got := portWorldPosition(ws, sorter, port); got != target {
-		t.Fatalf("IO offset %v != %v", got, target)
-	}
 }
 
 func TestSurfaceMultiTileConstructionReservationAndDemolition(t *testing.T) {

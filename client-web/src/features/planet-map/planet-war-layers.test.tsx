@@ -42,14 +42,15 @@ describe('PlanetSquadLayer', () => {
           squad('sq-3', { owner_id: 'p2', state: 'destroyed' }),
           squad('sq-4', { owner_id: 'p2', member_ids: [] }),
         ]}
-        tileSize={48}
+        tileSize={16}
       />,
     );
     const markers = screen.getAllByRole('button');
     expect(markers).toHaveLength(1);
     const hostile = screen.getByRole('button', { name: '敌方小队 sq-2' });
     expect(hostile).toHaveClass('planet-squad-marker--hostile');
-    expect(hostile.style.left).toBe('264px');
+    // offset 0 + (x 5 + 0.5) × 16px/cell = 88px
+    expect(hostile.style.left).toBe('88px');
     expect(hostile).toHaveTextContent('3');
     await user.click(hostile);
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sq-2' }), false);
@@ -64,7 +65,7 @@ describe('PlanetSquadLayer', () => {
         playerId="p1"
         selectedSquads={[]}
         squads={[]}
-        tileSize={48}
+        tileSize={16}
       />,
     );
     expect(container.firstChild).toBeNull();
@@ -85,7 +86,7 @@ describe('PlanetTheaterLayer', () => {
 
   it('只画当前行星的 zone，告警态带红色与脉动类名', () => {
     const { container } = render(
-      <PlanetTheaterLayer offsetX={0} offsetY={0} planetId="planet-1" theaters={theaters} tileSize={48} />,
+      <PlanetTheaterLayer offsetX={0} offsetY={0} planetId="planet-1" theaters={theaters} tileSize={16} />,
     );
     const circles = container.querySelectorAll('circle');
     expect(circles).toHaveLength(1);

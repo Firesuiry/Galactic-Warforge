@@ -366,10 +366,11 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 	targetOK := tileWalkableForUnit(ws, to, selfID)
 	targetIdx := int32(to.Y*ws.MapWidth + to.X)
 	// 终点邻域命中集（预算一次，BFS 中 O(1) 查询）。
+	// 细分网格：邻域容差 ×3（旧 1 格 → 3 cell），与寻路预算同一口径。
 	var nearSet map[int32]bool
 	if !targetOK {
 		nearSet = make(map[int32]bool, 32)
-		for _, candidate := range ws.SurfaceDisc(to, 2) {
+		for _, candidate := range ws.SurfaceDisc(to, 3) {
 			if candidate != to {
 				nearSet[int32(candidate.Y*ws.MapWidth+candidate.X)] = true
 			}

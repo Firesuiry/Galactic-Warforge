@@ -8,10 +8,11 @@ const (
 
 	// MaxLogisticsBotFlightEnergy is the largest prepaid flight budget a bot
 	// may carry: a round trip at the maximum delivery range. The range derives
-	// from the distributor base range (12) plus 5 per distribution_range tech
-	// level (MaxLevel 5 => 37 tiles), billed at 2 energy per tile of one-way
-	// distance, so the ceiling is 2*(12+5*5) = 74.
-	MaxLogisticsBotFlightEnergy = 2 * (12 + 5*5)
+	// from the distributor base range (36 cell) plus 15 cell per
+	// distribution_range tech level (MaxLevel 5 => 111 cell), billed at 2
+	// energy per cell of one-way distance, so the ceiling is
+	// 2*(36+15*5) = 222.
+	MaxLogisticsBotFlightEnergy = 2 * (36 + 15*5)
 )
 
 // LogisticsBotState owns its cargo and a finite prepaid flight budget.

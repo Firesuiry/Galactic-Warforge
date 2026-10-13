@@ -401,6 +401,8 @@ func TestFineGridFootprintTableMatchesDesign(t *testing.T) {
 		model.BuildingTypeVerticalLaunchingSilo:      {5, 5},
 		"vehicle_factory":                            {5, 5},
 		"airfield":                                   {5, 5},
+		// 配送器叠在宿主仓库上，占地取宿主（§1.2）；宿主仓库是 3×3。
+		model.BuildingTypeLogisticsDistributor:       {3, 3},
 	}
 	for btype, size := range want {
 		def, ok := model.BuildingDefinitionByID(btype)
@@ -410,5 +412,56 @@ func TestFineGridFootprintTableMatchesDesign(t *testing.T) {
 		if def.Footprint.Width != size[0] || def.Footprint.Height != size[1] {
 			t.Errorf("%s footprint = %dx%d, want %dx%d", btype, def.Footprint.Width, def.Footprint.Height, size[0], size[1])
 		}
+	}
+}
+
+// 8) 配送器叠在宿主仓库上（§1.2）：占地取宿主的 3×3，不是数据文件里的独立值；
+// 它自己不占地面格，但外圈 IO / 路线端点必须按宿主 3×3 算。
+func TestFineGridDistributorTakesHostFootprint(t *testing.T) {
+	core, ws := fineGridCore(t)
+	origin := flatBuildSpot(t, ws, model.BuildingTypeDepotMk1, model.Position{X: 10, Y: 10})
+	depot := buildAndReturn(t, core, ws, model.BuildingTypeDepotMk1, origin)
+	grantTechs(ws, "p1", "distribution_logistics")
+
+	mounted := buildAndReturn(t, core, ws, model.BuildingTypeLogisticsDistributor, origin)
+	if mounted.Position.Z != 1 || mounted.Distributor == nil || mounted.Distributor.HostBuildingID != depot.ID {
+		t.Fatalf("distributor did not mount on the depot: %+v", mounted)
+	}
+
+	tiles, err := ws.BuildingTiles(mounted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tiles) != 9 {
+		t.Fatalf("distributor footprint = %d cell, want the host depot's 3×3 = 9", len(tiles))
+	}
+	for _, tile := range tiles {
+		if id := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]; id != depot.ID {
+			t.Fatalf("cell %+v registered to %q, want the host depot %s（配送器不占地面格）", tile, id, depot.ID)
+		}
+	}
+
+	// 外圈 = 宿主 3×3 的一圈（3×3 外圈是 4×4 减去 9 = 7 个格，立方体面上取不到折叠）。
+	ring, err := ws.BuildingRingCells(mounted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostRing, err := ws.BuildingRingCells(depot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ring) != len(hostRing) {
+		t.Fatalf("distributor ring = %d cell, want the host's %d", len(ring), len(hostRing))
+	}
+	for _, cell := range ring {
+		if ws.BuildingOccupies(mounted, cell) {
+			t.Fatalf("distributor ring cell %+v is inside its own footprint", cell)
+		}
+	}
+
+	// 拆掉宿主后配送器失去宿主：占地退回自身数据值，不能 panic。
+	delete(ws.Buildings, depot.ID)
+	if _, err := ws.BuildingTiles(mounted); err != nil {
+		t.Fatalf("orphaned distributor must still resolve a footprint: %v", err)
 	}
 }
