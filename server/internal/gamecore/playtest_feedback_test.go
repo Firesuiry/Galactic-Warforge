@@ -308,11 +308,17 @@ func TestBuildConcurrencyLimitIsReportedAsWaitNotFailure(t *testing.T) {
 	}
 
 	// 细分网格：风机 2×2，三个施工点必须整块落位且互不重叠。
+	// 夹具选点必须避开基地门口：那里只剩两个出口格，取点太近会把自家基地
+	// 封死而被围死判定拒掉（本用例只关心并发排队，不关心围死）。
+	home, _ := botHomePosition(ws, "p1")
 	var placed []model.Position
 	fp := model.Footprint{Width: 2, Height: 2}
 	for _, p := range ws.SurfaceDisc(execUnit.Position, 12) {
 		if len(placed) >= 3 {
 			break
+		}
+		if ws.SurfaceDistance(p, home) < 10 {
+			continue
 		}
 		if !ws.FootprintFits(p, fp, model.BuildingTypeWindTurbine, "") {
 			continue
