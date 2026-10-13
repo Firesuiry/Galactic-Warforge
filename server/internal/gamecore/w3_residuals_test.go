@@ -337,16 +337,20 @@ func TestLogisticsBotValidateAllowsTechExtendedFlightBudget(t *testing.T) {
 }
 
 // TestLogisticsBotMaxRangeFlightInstallsAndReloads 满级 distribution_range 下
-// 真实最长航程（36 基础 + 5×15 = 111 cell）的机器人必须能安装，并能通过
-// 存档写入/读回的 Validate 门槛：上限漏 ×3（74）时这条会失败。
+// 一趟超出旧上限的配送（79 cell，预付 2×79 = 158 能量 > 74）必须能安装，
+// 并能通过存档写入/读回的 Validate 门槛：上限漏 ×3（74）时这条会失败。
 func TestLogisticsBotMaxRangeFlightInstallsAndReloads(t *testing.T) {
-	ws, home, _ := distributorTestWorld(t)
+	ws, home, sink := distributorTestWorld(t)
+	// 只留一台远端配送器（sink），避免默认世界里更近的目标先被派单。
+	sink.Distributor.Mode = model.LogisticsStationModeNone
 	ws.Players["p1"].Tech = &model.PlayerTechState{
 		PlayerID:       "p1",
 		CompletedTechs: map[string]int{"distribution_logistics": 1, "distribution_range": 5},
 	}
 	home.Distributor.Mode = model.LogisticsStationModeSupply
 	home.Distributor.ItemID = model.ItemIronOre
+	// 一趟 2×79 的配送要预付 158 能量，默认 100 不够（充满到容量 1000）。
+	home.Distributor.Energy = home.Distributor.EnergyCapacity
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 	ws.Players["p1"].Inventory[model.ItemLogisticsBot] = 1
 	core := &GameCore{}
@@ -355,20 +359,21 @@ func TestLogisticsBotMaxRangeFlightInstallsAndReloads(t *testing.T) {
 		t.Fatalf("install at max distribution_range must succeed: %+v", res)
 	}
 
-	// 把远端仓库放到满级航程内（36 + 5×15 = 111 cell），让机器人飞最远的一趟。
-	far := newBuilding("far-depot", model.BuildingTypeDepotMk1, "p1", model.Position{X: 110, Y: 8})
+	// 把远端仓库放到满级航程内、且明确超出旧上限（2×37=74 能量）的位置，
+	// 让机器人飞一趟 2×79 = 158 能量的配送（航程 36 + 5×15 = 111 cell）。
+	far := newBuilding("far-depot", model.BuildingTypeDepotMk1, "p1", model.Position{X: 72, Y: 23})
 	far.Storage = model.NewStorageState(model.StorageModule{Capacity: 100, Slots: 4})
 	ws.Buildings[far.ID] = far
-	target := newBuilding("far", model.BuildingTypeLogisticsDistributor, "p1", model.Position{X: 110, Y: 8, Z: 1})
-	target.Distributor = model.NewDistributorState(far.ID)
-	target.Distributor.ItemID, target.Distributor.Mode, target.Distributor.LocalStorage = model.ItemIronOre, model.LogisticsStationModeDemand, 10
-	target.Runtime.State = model.BuildingWorkRunning
-	ws.Buildings[target.ID] = target
+	sink.Distributor = model.NewDistributorState(far.ID)
+	sink.Position = model.Position{X: 72, Y: 23, Z: 1}
+	sink.Distributor.ItemID, sink.Distributor.Mode, sink.Distributor.LocalStorage = model.ItemIronOre, model.LogisticsStationModeDemand, 10
+	sink.Distributor.Energy = 1000
+	sink.Runtime.State = model.BuildingWorkRunning
 
 	distributorTestTicks(t, ws, 1)
-	bot := ws.LogisticsBots["a"]
-	if bot == nil || bot.EnergyCost != 2*110 {
-		t.Fatalf("max-range flight did not prepay 2×110 energy: %+v", bot)
+	bot := ws.LogisticsBots["bot-1"]
+	if bot == nil || bot.EnergyCost != 2*79 {
+		t.Fatalf("max-range flight did not prepay 2×79 energy: %+v", bot)
 	}
 	if bot.EnergyCost <= 2*(12+5*5) {
 		t.Fatalf("flight budget %d does not exceed the pre-fine-grid ceiling 74", bot.EnergyCost)

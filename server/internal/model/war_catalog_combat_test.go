@@ -88,15 +88,16 @@ func TestDerivedWarWeaponRangeMatchesPublicBlueprintScale(t *testing.T) {
 	if profile.FleetUnit == nil {
 		t.Fatalf("space blueprint must derive a fleet unit profile: %+v", profile)
 	}
-	if got := profile.FleetUnit.Weapon.Range; got != 60 {
-		t.Fatalf("derived kinetic weapon range = %v, want 60 cell (预置 72 的同一 cell 口径；漏 ×3 时是 20)", got)
+	// 线圈炮（kinetic）60 cell + ecm_suite 的 +6 cell = 66；漏 ×3 时会是 22。
+	if got := profile.FleetUnit.Weapon.Range; got != 66 {
+		t.Fatalf("derived kinetic weapon range = %v, want 66 cell (预置 72 的同一 cell 口径；漏 ×3 时是 22)", got)
 	}
 
 	// 组件级：三种武器类别的派生射程都是设计值的 3 倍。
 	components := []struct {
-		id    string
-		tag   string
-		rang  float64
+		id   string
+		tag  string
+		rang float64
 	}{
 		{id: "plasma_lance", tag: "direct_fire", rang: 39},
 		{id: "swarm_missile_pod", tag: "missile", rang: 54},

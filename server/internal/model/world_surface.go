@@ -90,4 +90,3 @@ func (ws *WorldState) SurfacePath(start, target Position, budget int) ([]Positio
 func (ws *WorldState) SurfaceWithin(a, b Position, r int) bool {
 	return ws.Surface().Within(surface.Tile{X: a.X, Y: a.Y}, surface.Tile{X: b.X, Y: b.Y}, r)
 }
-

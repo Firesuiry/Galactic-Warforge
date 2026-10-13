@@ -36,6 +36,11 @@ const (
 	// 需要更大的预算；预算同时是 pathFlood 的深度上限，浅层命中会提前结束，
 	// 因此放大只在真的需要绕远时才付出代价。
 	maxPathBudget = 4000
+	// targetNearRadius 终点不可进入（被建筑占地/地形挡住）时的终点邻域容差（cell）。
+	// 这是「停在目标旁边」的落点半径，不是距离类玩法数值：基地 HQ 占地 5×5 时
+	// 它本身就是 2 cell，容差保持 2 才能让单位贴住占地停下（细分网格前也是 2），
+	// 放大到 3 会让单位停在建筑外两格、够不着交互距离。
+	targetNearRadius = 2
 )
 
 // settleUnitMovement 推进所有世界单位的实时移动，返回到达/放弃事件。
@@ -339,8 +344,8 @@ func onUnitArrived(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 	return []*model.GameEvent{arrived}
 }
 
-// computePathNear 单次 BFS：到达终点本身（可进入时）或终点邻域（半径 1~2）中
-// 距终点最近的可进入格。
+// computePathNear 单次 BFS：到达终点本身（可进入时）或终点邻域
+// （半径 targetNearRadius）中距终点最近的可进入格。
 // 性能：epoch 戳扁平数组做已访问/父指针（零分配），建筑占位走 Grid.BuildingID
 // （零字符串分配）；大面积寻路下比 map+TileKey 版本快一个数量级。
 // avoidIdle 为 true 时把停着不动（无路径）的单位所在格当作障碍——被待命单位堵住后的重寻路用，
@@ -366,11 +371,10 @@ func computePathNear(ws *model.WorldState, from, to model.Position, selfID strin
 	targetOK := tileWalkableForUnit(ws, to, selfID)
 	targetIdx := int32(to.Y*ws.MapWidth + to.X)
 	// 终点邻域命中集（预算一次，BFS 中 O(1) 查询）。
-	// 细分网格：邻域容差 ×3（旧 1 格 → 3 cell），与寻路预算同一口径。
 	var nearSet map[int32]bool
 	if !targetOK {
 		nearSet = make(map[int32]bool, 32)
-		for _, candidate := range ws.SurfaceDisc(to, 3) {
+		for _, candidate := range ws.SurfaceDisc(to, targetNearRadius) {
 			if candidate != to {
 				nearSet[int32(candidate.Y*ws.MapWidth+candidate.X)] = true
 			}
