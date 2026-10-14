@@ -168,6 +168,13 @@ func (gc *GameCore) planBotCommands(ws *model.WorldState, playerID string, tunin
 		return nil
 	}
 	ctx := gc.surveyBotWorld(ws, playerID)
+	// 首攻门槛未开（BotFirstAttackTick 之前）：bot 只守不攻。这里在**决策输入**上
+	// 关掉进攻——「远征目标」的来源（敌方玩家建筑）与「来袭敌情」（含敌建筑）
+	// 一并清空，于是所有进攻出口（散兵 attack_move、军团 attack、编队）都无目标
+	// 可打，而防区内的防守反击不受影响（见 botMayAdvanceTo 与 botLegions）。
+	// 试玩 1015 §6-1：旧实现只有军团看门槛，散兵 attack_move 在首攻前就拆家；
+	// 门槛只堵一条路径必然漏（1014 的 bug-1014-lost-first-attack 是同一根因面）。
+	gc.applyBotOffenseGate(ws, ctx)
 	if ctx.home == nil {
 		return nil
 	}
@@ -332,7 +339,10 @@ func (gc *GameCore) botMilitary(ws *model.WorldState, playerID string, tuning bo
 		scan = tuning.turretThreat
 	}
 	threats := botIncomingThreats(ws, playerID, *ctx.home, scan, ctx.nests)
-	if ids, dest, ok := botRecallIDs(ws, ctx.loose, threats, tuning.defendRadius); ok {
+	// 散兵的进攻移动也要过首攻门槛（试玩 1015 §6-1：旧实现只有军团看
+	// BotFirstAttackTick，botRecallIDs 的 attack_move 不看，首攻前就能被派出去）。
+	if ids, dest, ok := botRecallIDs(ws, ctx.loose, threats, tuning.defendRadius); ok &&
+		gc.botMayAdvanceTo(ws, *ctx.home, dest, tuning.defendRadius) {
 		pos := dest
 		return issue(model.Command{
 			Type:    model.CmdUnitOrder,
@@ -346,7 +356,38 @@ func (gc *GameCore) botMilitary(ws *model.WorldState, playerID string, tuning bo
 	return gc.botLegions(ws, playerID, tuning, ctx, threats, issue)
 }
 
-// botIncomingThreats 收集半径内的敌对单位（含已敌对的黑雾）与巢穴。
+// botOffenseGateOpen 首攻门槛是否已开：BotFirstAttackTick 之前一律关闭
+// （开局发育期只守不攻）。这是「门槛」的唯一定义处，进攻路径都从这里取。
+func (gc *GameCore) botOffenseGateOpen(ws *model.WorldState) bool {
+	if gc == nil || gc.cfg == nil || ws == nil {
+		return true
+	}
+	return ws.Tick >= gc.cfg.Battlefield.BotFirstAttackTick
+}
+
+// botMayAdvanceTo 统一的进攻门控：门槛未开时，只有落在己方防区（home 为圆心、
+// defendRadius 为半径）内的目标才算防守反击，防区外的进攻性移动一律不得下发。
+// 散兵的 attack_move 与军团的 attack 都走这里——门槛只堵一条路径时，另一条
+// 就能在首攻前拆家（试玩 1015 §6-1，1014 的 bug-1014-lost-first-attack 同一根因面）。
+func (gc *GameCore) botMayAdvanceTo(ws *model.WorldState, home, target model.Position, defendRadius int) bool {
+	if gc.botOffenseGateOpen(ws) {
+		return true
+	}
+	return ws.SurfaceDistance(home, target) <= defendRadius
+}
+
+// applyBotOffenseGate 门槛未开时剥掉决策里的进攻输入（就地改 ctx）：
+// 敌方玩家建筑是「远征目标」的唯一来源（botAttackObjective 的基地目标与
+// raidSupply 的袭扰目标都从 enemyPlayers 取），清空它，进攻分支就没有目标可打。
+// 防守输入（ctx.nests 与来袭单位）保持原样：防区内的防守反击不受门槛影响。
+func (gc *GameCore) applyBotOffenseGate(ws *model.WorldState, ctx *botSurvey) {
+	if gc.botOffenseGateOpen(ws) {
+		return
+	}
+	ctx.enemyPlayers = nil
+}
+
+// botIncomingThreats 收集半径内的敌对单位（含已敌对的黑雾巢穴）。
 // 排序：距离，然后实体 ID，再 kind。
 func botIncomingThreats(ws *model.WorldState, playerID string, home model.Position, radius int, nests []*model.EnemyForce) []botThreat {
 	if ws == nil || radius < 0 {

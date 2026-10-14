@@ -332,9 +332,12 @@
   flex-basis:100%;
   margin:0;
 }
-/* 配方下拉改了但没点「应用配方」：明确标出「未应用」，避免看起来已经生效（试玩 1014 层 08/09）。 */
-.planet-recipe-form__pending {
-  color:#ffd88a;
+/* 配方下拉「选中即生效」的本次命令结果（试玩 1015 §6-5：反馈区必须写本次结果）。 */
+.planet-recipe-form__result {
+  color:#8fd6a0;
+}
+.planet-recipe-form__result--error {
+  color:#ff9a8a;
   font-weight:600;
 }
 /* 建筑详情 → 工作台直达入口（装入建筑 / 切换配方 / 量产单位） */

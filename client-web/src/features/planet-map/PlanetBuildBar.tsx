@@ -28,6 +28,7 @@ import {
   deriveBuildWorkflowView,
   describeBuildShortage,
   DIRECTION_LABELS,
+  initialBuildDirection,
   isConveyorBeltBuilding,
   listBuildingRecipes,
   nextBeltDirection,
@@ -345,7 +346,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                   if (active) {
                     exitInteractionMode();
                   } else {
-                    setInteractionMode({ kind: 'build', buildingType: entry.id, direction: 'auto' });
+                    setInteractionMode({ kind: 'build', buildingType: entry.id, direction: initialBuildDirection(entry.id) });
                   }
                 }}
               >

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { collectActivity, itemColor, IndustrialActivity, BELT_CARGO_CELL, BELT_CARGO_MAX_PER_STACK } from './industrial-activity';
+import { getItemColorValue } from '../item-colors';
 import { tileNormal, surfaceTileSize } from './projection';
 
 function fixture(): PlanetThreeData {
@@ -158,9 +159,11 @@ describe('authoritative industrial activity', () => {
       return c.getHexString();
     };
     // 实例色必须与 item-colors 的 hex 同色（sRGB → 线性只做一次转换，不能两次或零次）。
-    expect(read(0)).toBe(itemColor('#c9d3dd').getHexString());
-    expect(read(1)).toBe(itemColor('#f08a45').getHexString());
-    expect(read(2)).toBe(itemColor('#e0b25c').getHexString());
+    // 期望值取自配色表本身（而不是把 hex 抄在这里）：换色时测试跟着走，
+    // 真正断言的是「目录色被忽略、走的是 item-colors、且只转了一次 sRGB」。
+    expect(read(0)).toBe(itemColor(getItemColorValue('iron_ingot', '#74c0fc')).getHexString());
+    expect(read(1)).toBe(itemColor(getItemColorValue('copper_ingot', '#74c0fc')).getHexString());
+    expect(read(2)).toBe(itemColor(getItemColorValue('gear', '#74c0fc')).getHexString());
     expect(new Set([read(0), read(1), read(2)]).size).toBe(3);
     activity.destroy();
   });

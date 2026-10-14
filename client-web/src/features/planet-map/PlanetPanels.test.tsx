@@ -14,6 +14,7 @@ import { useSessionStore } from "@/stores/session";
 const { mockClient, mockSubmit } = vi.hoisted(() => ({
   mockClient: {
     cmdTransferItem: vi.fn(),
+    cmdSetRecipe: vi.fn(),
     fetchEventSnapshot: vi.fn().mockResolvedValue({ events: [] }),
   },
   mockSubmit: vi.fn(),
@@ -427,17 +428,53 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(select).toHaveValue("");
     expect(screen.queryByText(/不再参与研究/)).toBeNull();
 
-    // 切到生产配方：必须在按下「应用配方」之前就说明会退出研究。
+    // 切到生产配方：选中即提示会退出研究（不需要再点确认按钮）。
     fireEvent.change(select, { target: { value: "iron_ingot" } });
     expect(screen.getByText(/不再参与研究/)).toBeInTheDocument();
-    expect(screen.getByText(/清空当前生产进度/)).toBeInTheDocument();
-
-    // 切回「无配方」：警告消失。
-    fireEvent.change(select, { target: { value: "" } });
-    expect(screen.queryByText(/不再参与研究/)).toBeNull();
   });
 
-  it("回归（试玩 1014 层 08）：下拉选了配方但没点「应用配方」时明确提示「未应用」", () => {
+  it("回归（试玩 1015 §6-6）：产物阻塞时建筑详情给出「接出料传送带/运输机器人」的下一步", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-blocked"] = {
+      id: "b-blocked",
+      type: "assembling_machine_mk1",
+      owner_id: "p1",
+      position: { x: 6, y: 2, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 24,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 3, height: 3 },
+        },
+        functions: { production: { recipe_options: ["gear"] } },
+        // 服务端在产出无处可放时保持 state=running、reason=output_blocked
+        state: "running",
+        state_reason: "output_blocked",
+      },
+      storage: { inventory: { gear: 24 }, capacity: 24 },
+      production: { recipe_id: "gear" },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-blocked",
+      position: { x: 6, y: 2, z: 0 },
+    });
+
+    render(<PlanetEntityPanel planet={planet as never} />);
+
+    expect(screen.getByText("停机原因").nextSibling).toHaveTextContent("产物已满");
+    expect(screen.getByText("建议下一步").nextSibling).toHaveTextContent(
+      "产物已满：接一条出料传送带或用运输机器人取走",
+    );
+  });
+
+  it("回归（试玩 1015 §6-5）：下拉选择即直接下发 set_recipe，反馈区显示本次命令结果", async () => {
     const planet = createPlanet();
     (planet.buildings as Record<string, unknown>)["b-recipe"] = {
       id: "b-recipe",
@@ -475,19 +512,82 @@ describe("PlanetEntityPanel 建筑库存", () => {
       id: "b-recipe",
       position: { x: 5, y: 5, z: 0 },
     });
+    mockClient.cmdSetRecipe.mockResolvedValue({
+      request_id: "req-1",
+      accepted: true,
+      enqueue_tick: 12,
+      results: [{ command_index: 0, status: "executed", code: "OK", message: "配方已切换为「齿轮」" }],
+    });
+    mockSubmit.mockImplementation((input: { execute: () => Promise<unknown> }) => input.execute());
 
     render(<PlanetEntityPanel catalog={catalog} planet={planet as never} />);
 
     const select = screen.getByRole("combobox", { name: "切换配方" });
     expect(select).toHaveValue("iron_ingot");
-    expect(screen.queryByTestId("recipe-dirty-hint")).toBeNull();
+    // 旧实现要求点「应用配方」；现在表单里不该再有这个按钮。
+    expect(screen.queryByRole("button", { name: "应用配方" })).toBeNull();
+    expect(screen.getByTestId("recipe-result")).toHaveTextContent("选中即生效");
 
-    // 下拉改成齿轮但没点「应用配方」：必须明确写出「未应用」+ 当前真正生效的仍是铁块。
+    // 只改下拉（不点任何按钮）就必须下发 set_recipe。
     fireEvent.change(select, { target: { value: "gear" } });
-    const hint = screen.getByTestId("recipe-dirty-hint");
-    expect(hint).toHaveTextContent("未应用");
-    expect(hint).toHaveTextContent("齿轮");
-    expect(hint).toHaveTextContent("铁块");
+    await act(async () => {});
+    expect(mockClient.cmdSetRecipe).toHaveBeenCalledWith("b-recipe", "gear", "planet-1-1");
+    // 反馈区显示本次命令结果（服务端回执原话）。
+    expect(screen.getByTestId("recipe-result")).toHaveTextContent("配方已切换为「齿轮」");
+  });
+
+  it("回归（试玩 1015 §6-5）：配方命令被拒时反馈区给出拒绝原因", async () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-recipe"] = {
+      id: "b-recipe",
+      type: "assembling_machine_mk1",
+      owner_id: "p1",
+      position: { x: 5, y: 5, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          maintenance_cost: { minerals: 0, energy: 0 },
+          footprint: { width: 1, height: 1 },
+        },
+        functions: { production: { recipe_options: ["iron_ingot", "gear"] } },
+        state: "running",
+      },
+      storage: { inventory: {} },
+      production: { recipe_id: "iron_ingot" },
+    };
+    const catalog = {
+      items: [{ id: "iron_ingot", name: "铁块" }, { id: "gear", name: "齿轮" }],
+      recipes: [
+        { id: "iron_ingot", name: "铁块", building_types: ["assembling_machine_mk1"], inputs: [{ item_id: "iron_ore", quantity: 1 }], outputs: [{ item_id: "iron_ingot", quantity: 1 }], duration: 4 },
+        { id: "gear", name: "齿轮", building_types: ["assembling_machine_mk1"], inputs: [{ item_id: "iron_ingot", quantity: 1 }], outputs: [{ item_id: "gear", quantity: 1 }], duration: 4 },
+      ],
+    } as unknown as CatalogView;
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-recipe",
+      position: { x: 5, y: 5, z: 0 },
+    });
+    mockClient.cmdSetRecipe.mockResolvedValue({
+      request_id: "req-2",
+      accepted: false,
+      enqueue_tick: 12,
+      results: [{ command_index: 0, status: "failed", code: "INVALID_TARGET", message: "该建筑不支持此配方" }],
+    });
+    mockSubmit.mockImplementation((input: { execute: () => Promise<unknown> }) => input.execute());
+
+    render(<PlanetEntityPanel catalog={catalog} planet={planet as never} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "切换配方" }), { target: { value: "gear" } });
+    await act(async () => {});
+
+    const result = screen.getByTestId("recipe-result");
+    expect(result).toHaveTextContent("切换配方被拒");
+    expect(result).toHaveTextContent("该建筑不支持此配方");
   });
 
   it("建筑详情提供直达工作台的快捷入口（装入建筑/切换配方/量产）", () => {

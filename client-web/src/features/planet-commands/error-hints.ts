@@ -2,7 +2,8 @@ export type PlanetHintTone = "info" | "warning" | "error";
 export type PlanetHintSuggestedAction =
   | "move_executor"
   | "build_power"
-  | "inspect_power";
+  | "inspect_power"
+  | "inspect_logistics";
 
 export interface PlanetCommandHint {
   tone: PlanetHintTone;
@@ -53,6 +54,16 @@ export function resolvePlanetCommandHint(input: {
   }
 
   switch (source) {
+    case "output_blocked":
+      // 试玩 1015 §6-6：建筑详情在「产物阻塞」时必须给出可执行下一步——
+      // 产物缓存满了，产线要接出料传送带或用运输机器人取走。
+      return {
+        tone: "warning",
+        title: "产物已满",
+        detail: "这座建筑的产物缓存已满，新产出的物品无处可放，生产会停在原地。",
+        nextHint: "产物已满：接一条出料传送带或用运输机器人取走。",
+        suggestedAction: "inspect_logistics",
+      } satisfies PlanetCommandHint;
     case "power_out_of_range":
       return {
         tone: "warning",
