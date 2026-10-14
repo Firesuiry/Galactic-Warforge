@@ -282,26 +282,27 @@ describe('PlanetBuildBar', () => {
 
     await openCategory(user, '运输');
     await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
+    // 试玩 1015 §6-4：单格放置默认用建造栏显示的方向（东），不再落成 auto。
     expect(usePlanetViewStore.getState().interactionMode).toEqual({
       kind: 'build',
       buildingType: 'conveyor_belt_mk1',
-      direction: 'auto',
+      direction: 'east',
     });
 
-    // 按钮循环：auto → north → east
-    const directionButton = screen.getByRole('button', { name: /^方向：自动/ });
+    // 按钮循环：east → north → south
+    const directionButton = screen.getByRole('button', { name: /^方向：东/ });
     await user.click(directionButton);
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'north' });
     await user.click(screen.getByRole('button', { name: /^方向：北/ }));
-    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
-
-    // R 键循环：east → south → west → auto
-    await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'south' });
+
+    // R 键循环：south → west → auto（auto 是显式选项，排在最后）
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'west' });
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'auto' });
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
   });
 
   it('生产建筑建造模式：配方下拉选择后写入 interactionMode.recipeId', async () => {

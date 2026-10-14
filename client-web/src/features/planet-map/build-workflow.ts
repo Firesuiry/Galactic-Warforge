@@ -640,11 +640,25 @@ export function isConveyorBeltBuilding(buildingType: string) {
   return buildingType.startsWith("conveyor_belt");
 }
 
-/** 建造模式下传送带方向的循环顺序（R 键/按钮共用）。 */
-export const BELT_DIRECTION_CYCLE: Direction[] = ["auto", "north", "east", "south", "west"];
+/** 建造模式下传送带方向的循环顺序（R 键/按钮共用）：从「东」起，auto 只是显式选项。 */
+export const BELT_DIRECTION_CYCLE: Direction[] = ["east", "north", "south", "west", "auto"];
+
+/**
+ * 传送带单格放置的默认方向。
+ *
+ * 试玩 1015 §6-4：默认 auto 的带子**不带货**——服务端把 auto 原样存进 conveyor，
+ * 自动解析只在「相邻带已给出方向」时才成立，玩家第一次铺线必然踩坑（本段踩了两次）。
+ * 单格放置默认用建造栏显示的方向（R 旋转），auto 只作显式选项。
+ */
+export const DEFAULT_BELT_DIRECTION: Direction = "east";
+
+/** 进入建造模式时的初始方向：传送带默认「东」，其他建筑的 direction 无意义（保持 auto）。 */
+export function initialBuildDirection(buildingType: string): Direction {
+  return isConveyorBeltBuilding(buildingType) ? DEFAULT_BELT_DIRECTION : "auto";
+}
 
 export const DIRECTION_LABELS: Record<Direction, string> = {
-  auto: "自动",
+  auto: "自动（不解析方向，带子不带货）",
   north: "北",
   east: "东",
   south: "南",

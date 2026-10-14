@@ -28,6 +28,7 @@ import {
 } from "@/features/planet-commands/store";
 import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
+import { initialBuildDirection } from "@/features/planet-map/build-workflow";
 import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";
 import { notifyApproachingThreats } from "@/features/planet-map/attack-alerts";
 import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
@@ -628,7 +629,7 @@ export function PlanetPage() {
       setInteractionMode({
         kind: "build",
         buildingType: buildType.trim(),
-        direction: "auto",
+        direction: initialBuildDirection(buildType.trim()),
       });
     }
 
@@ -837,7 +838,7 @@ export function PlanetPage() {
                 setActiveDetailPanel("selection");
               }}
               onBuildRecipe={(buildingType, recipeId) => {
-                setInteractionMode({ kind: "build", buildingType, recipeId, direction: "auto" });
+                setInteractionMode({ kind: "build", buildingType, recipeId, direction: initialBuildDirection(buildingType) });
                 toggleDrawer(false);
               }}
             />
@@ -865,7 +866,7 @@ export function PlanetPage() {
                   return next;
                 });
                 const buildingType = destination.searchParams.get("build");
-                if (buildingType) setInteractionMode({ kind: "build", buildingType, direction: "auto" });
+                if (buildingType) setInteractionMode({ kind: "build", buildingType, direction: initialBuildDirection(buildingType) });
                 setActiveDetailPanel("workbench");
                 toggleDrawer(true);
               }}

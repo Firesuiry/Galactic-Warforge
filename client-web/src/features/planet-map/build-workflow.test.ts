@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { Building } from '@shared/types';
 
 import {
+  BELT_DIRECTION_CYCLE,
+  DIRECTION_LABELS,
   assessBuildTiles,
   compareBuildItems,
   describeBuildBlock,
   deriveBuildWorkflowView,
+  initialBuildDirection,
   isConveyorBeltBuilding,
   listBuildingRecipes,
   nextBeltDirection,
@@ -416,12 +419,26 @@ describe("传送带方向循环", () => {
     expect(isConveyorBeltBuilding("matrix_lab")).toBe(false);
   });
 
-  it("方向按 auto → north → east → south → west 循环", () => {
-    expect(nextBeltDirection("auto")).toBe("north");
-    expect(nextBeltDirection("north")).toBe("east");
-    expect(nextBeltDirection("east")).toBe("south");
+  it("方向按 east → north → south → west → auto 循环（默认东，auto 是显式选项）", () => {
+    expect(nextBeltDirection("east")).toBe("north");
+    expect(nextBeltDirection("north")).toBe("south");
     expect(nextBeltDirection("south")).toBe("west");
     expect(nextBeltDirection("west")).toBe("auto");
+    expect(nextBeltDirection("auto")).toBe("east");
+  });
+
+  it("传送带单格放置默认「东」，auto 只作显式选项（试玩 1015 §6-4：auto 带子不带货）", () => {
+    // 建造栏点传送带卡片 → 进入建造模式，方向必须是真实方向而不是 auto。
+    expect(initialBuildDirection("conveyor_belt_mk1")).toBe("east");
+    expect(initialBuildDirection("conveyor_belt_mk3")).toBe("east");
+    // 其他建筑的 direction 不参与语义（按 rotation 走），保持 auto 不引入噪声。
+    expect(initialBuildDirection("wind_turbine")).toBe("auto");
+    expect(initialBuildDirection("arc_smelter")).toBe("auto");
+    // 循环里 auto 排在最后：要连点 4 次才会回到「不解析方向」。
+    expect(BELT_DIRECTION_CYCLE[BELT_DIRECTION_CYCLE.length - 1]).toBe("auto");
+    expect(BELT_DIRECTION_CYCLE[0]).toBe("east");
+    // 「自动」标签必须写清它不解析方向，避免玩家再踩坑。
+    expect(DIRECTION_LABELS.auto).toContain("不带货");
   });
 });
 
