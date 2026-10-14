@@ -443,3 +443,18 @@ func fingerprintBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
+
+// DecodeSaveFile 解析一份 save.json 字节流（自动识别 gzip），**不做格式版本校验**。
+// 供只读用途（导出审计日志/命令日志、离线分析旧存档）使用；正式读档路径仍走
+// Dir.Load / Dir.LoadReadOnly，那里的版本校验会拒绝坐标语义不同的旧存档。
+func DecodeSaveFile(raw []byte) (*SaveFile, error) {
+	payload, err := maybeGunzip(raw)
+	if err != nil {
+		return nil, fmt.Errorf("decompress save.json: %w", err)
+	}
+	save := &SaveFile{}
+	if err := json.Unmarshal(payload, save); err != nil {
+		return nil, fmt.Errorf("parse save.json: %w", err)
+	}
+	return save, nil
+}

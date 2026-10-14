@@ -1,9 +1,19 @@
 {
-  "parent": null,
-  "note": "1014 遭遇战从零开局（无物资包：背包空、矿物 400、能量 100；bot easy，首攻 60000，时限 180000）。试玩服务端 tick_rate_override 2。",
-  "build": [
-    "服务端启动后自动开新局（seed skirmish-seed-001），tick 27 直接存档（第 14 轮第三次重建）"
+  "parent": "",
+  "note": "1014 遭遇战从零开局（无物资包：背包空、矿物 400、能量 100；bot easy，首攻 60000，时限 180000）。根层不读父档：按 server/config-skirmish.yaml + map-skirmish.yaml 开新局（seed skirmish-seed-001），推进到 tick 27 存档。",
+  "steps": [
+    {
+      "cmd": {
+        "type": "switch_active_planet",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        }
+      },
+      "note": "开局锚点：一条不会改局面的查询型命令（sync_active_planet 只改视图焦点）。根层的重建方式是按配置开新局，这条命令只是让「构建记录必须有步骤」这条约束成立。"
+    }
   ],
+  "end_tick": 27,
   "contract": {
     "checks": [
       {

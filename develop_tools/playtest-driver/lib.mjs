@@ -1,5 +1,26 @@
 // 试玩公共库：PT_OUT=本轮输出目录（截图、actions.log），P1V_WEB/P1V_SERVER 覆盖默认端口 4196/19630。
-import { chromium } from '/home/firesuiry/develop/siliconWorld/client-web/node_modules/@playwright/test/index.mjs';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// chromium 的解析不依赖当前 worktree 是否有 node_modules：按候选路径逐个尝试，
+// 都找不到才退回裸包名（worktree 里软链到主仓库时走第一条即可）。
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PLAYWRIGHT_CANDIDATES = [
+  process.env.SW_PLAYWRIGHT_ENTRY,
+  path.resolve(HERE, '../../client-web/node_modules/@playwright/test/index.mjs'),
+  '/home/firesuiry/develop/siliconWorld/client-web/node_modules/@playwright/test/index.mjs',
+].filter(Boolean);
+let chromiumMod = null;
+for (const candidate of PLAYWRIGHT_CANDIDATES) {
+  if (!existsSync(candidate)) continue;
+  chromiumMod = await import(candidate);
+  break;
+}
+if (!chromiumMod) {
+  chromiumMod = await import('@playwright/test');
+}
+export const { chromium } = chromiumMod;
 export const WEB = process.env.P1V_WEB ?? 'http://127.0.0.1:4196';
 export const SERVER = process.env.P1V_SERVER ?? 'http://127.0.0.1:19630';
 export const OUT = (process.env.PT_OUT ?? (() => { throw new Error('需要设置 PT_OUT（本轮输出目录）'); })()).replace(/\/?$/, '/');
