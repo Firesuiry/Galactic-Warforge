@@ -23,7 +23,7 @@ import {
 import { summarizeUnitSelection } from '@/features/planet-map/rts-commands';
 import { allAutoHaul, describeHaul, hasTransportRobot, isTransportRobot, transportHaulMode, transportHaulTask } from '@/features/planet-map/transport-haul';
 import { usePlanetViewStore } from '@/features/planet-map/store';
-import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
+import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_RANGE, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { translateBuildingState, translateUnitType } from '@/i18n/translate';
@@ -68,13 +68,13 @@ export function defaultMiningQuantity(remaining: number | undefined, energy: num
   return Math.max(1, Math.min(10, byEnergy, remaining ?? 10));
 }
 
-/** 机甲 2 格内可手动采集的固体矿点（机甲站在矿上时点格会选中机甲，这里给出入口）。 */
+/** 机甲 6 格内可手动采集的固体矿点（机甲站在矿上时点格会选中机甲，这里给出入口）。 */
 export function findNearbyMinableResource(planet: PlanetRenderView, catalog: CatalogView | undefined, position: Position) {
   const solid = new Set((catalog?.items ?? []).filter(item => item.form === 'solid').map(item => item.id));
   let best: { resource: NonNullable<PlanetRenderView['resources']>[number]; distance: number } | undefined;
   for (const resource of planet.resources ?? []) {
     if (resource.behavior !== 'finite' || !solid.has(resource.kind) || (resource.remaining ?? 0) <= 0) continue;
-    const distance = surfaceDistanceWithin(position, resource.position, planet.surface.face_size, 2);
+    const distance = surfaceDistanceWithin(position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE);
     if (distance !== undefined && (!best || distance < best.distance)) best = { resource, distance };
   }
   return best?.resource;
@@ -212,8 +212,8 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
     const resource = planet.resources?.find(entry => entry.id === selected.id);
     if (!resource) return null;
     const ownMechas = Object.values(planet.units ?? {}).filter(unit => unit.owner_id === session.playerId && unit.type === 'executor' && unit.mecha);
-    const mecha = ownMechas.find(unit => surfaceDistanceWithin(unit.position, resource.position, planet.surface.face_size, 2) !== undefined) ?? ownMechas[0];
-    const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, 2) !== undefined;
+    const mecha = ownMechas.find(unit => surfaceDistanceWithin(unit.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined) ?? ownMechas[0];
+    const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined;
     const solid = catalog?.items?.some(item => item.id === resource.kind && item.form === 'solid') && resource.behavior === 'finite';
     const quantity = quantityDraft?.resourceId === resource.id
       ? quantityDraft.value
@@ -225,7 +225,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
       <div className="planet-selection-bar__info">
         <strong>{getItemDisplayName(catalog, resource.kind)}</strong>
         <span className="planet-selection-bar__meta">剩余 {resource.remaining ?? '—'} · ({resource.position.x}, {resource.position.y})</span>
-        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? '请将机甲移动到矿点 2 格内' : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
+        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
       </div>
       {solid && mecha ? <form className="planet-selection-bar__actions" onSubmit={async event => {
         event.preventDefault();

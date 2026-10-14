@@ -7,7 +7,7 @@ import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { MechaLogisticsControls } from './MechaLogisticsControls';
-import { mechaCraftEnergyPerBatch } from './mecha-costs';
+import { mechaCraftEnergyPerBatch, MECHA_MINE_RANGE } from './mecha-costs';
 import { usePlanetViewStore } from './store';
 
 /** 补满所需燃料块数：按缺口向上取整，受背包持有量限制（服务端同样按缺口截断）。 */
@@ -166,7 +166,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
           <span>已完成 {job.completed_batches} / {totalBatches}</span>
         </div>
         <p>本批剩余 {job.remaining_ticks} tick · 剩余 {job.remaining_batches} 批 · 预计还需 {formatDuration(remainingTicks, tickRate)}</p>
-        <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? '距离矿点过远，回到 2 格内继续采集。' : job.state === 'inventory_full' ? '背包已满，装不下的产出不会丢失：腾出空位后自动继续。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
+        <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? `距离矿点过远，回到 ${MECHA_MINE_RANGE} 格内继续采集。` : job.state === 'inventory_full' ? '背包已满，装不下的产出不会丢失：腾出空位后自动继续。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
         {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(unit.id))}>取消机甲任务</button> : null}
       </section> : null}
       {canControl ? <form onSubmit={async event => {
