@@ -62,7 +62,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'entity_destroyed', 'building_state_changed', 'research_completed', 'production_alert',
   'traffic_monitor_alert', 'command_result', 'dark_fog_provoked', 'dark_fog_calmed',
   'rocket_launched', 'squad_deployed', 'fleet_commissioned', 'theater_zone_alert',
-  'supply_line_disrupted', 'victory_declared',
+  'supply_line_disrupted', 'victory_declared', 'fast_forward_finished',
 ] as const;
 
 /**

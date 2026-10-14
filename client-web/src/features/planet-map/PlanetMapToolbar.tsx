@@ -51,9 +51,10 @@ export function PlanetMapToolbar({
   planet,
   runtime,
 }: PlanetMapToolbarProps) {
-  const { camera, debugOpen, requestZoom, requestFocus, resetCamera, toggleDebugOpen } = usePlanetViewStore(
+  const { camera, debugMode, debugOpen, requestZoom, requestFocus, resetCamera, toggleDebugOpen } = usePlanetViewStore(
     useShallow((state) => ({
       camera: state.camera,
+      debugMode: state.debugMode,
       debugOpen: state.debugOpen,
       requestZoom: state.requestZoom,
       requestFocus: state.requestFocus,
@@ -107,17 +108,21 @@ export function PlanetMapToolbar({
       ) : null}
       <div className="planet-map-toolbar__rail" ref={railRef}>
         {/* 调试排在最上：展开的面板与底部状态行都浮在这一列上方，
-            调试图标在最上面时面板顶边位置与 rail 顶边一致，几何最稳。 */}
-        <button
-          aria-expanded={debugOpen}
-          aria-label={debugOpen ? "收起调试" : "展开调试"}
-          className="secondary-button planet-map-toolbar__button"
-          onClick={() => toggleDebugOpen()}
-          title={debugOpen ? "收起调试" : "展开调试"}
-          type="button"
-        >
-          <Bug size={18} strokeWidth={2} aria-hidden="true" />
-        </button>
+            调试图标在最上面时面板顶边位置与 rail 顶边一致，几何最稳。
+            图标默认隐藏（debugMode 关闭时不渲染），Ctrl+Shift+D 与调试面板一起显示；
+            面板本身是开发/测试工具，图标常驻会让普通玩家的左下角多一个无意义的入口。 */}
+        {debugMode ? (
+          <button
+            aria-expanded={debugOpen}
+            aria-label={debugOpen ? "收起调试" : "展开调试"}
+            className="secondary-button planet-map-toolbar__button"
+            onClick={() => toggleDebugOpen()}
+            title={debugOpen ? "收起调试" : `展开调试（Ctrl+Shift+D 隐藏）`}
+            type="button"
+          >
+            <Bug size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           aria-expanded={panelOpen}
           aria-label="图层与视角"

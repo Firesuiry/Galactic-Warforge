@@ -125,6 +125,33 @@ describe('usePlanetRtsHotkeys（C1 快捷键体系）', () => {
     expect(usePlanetViewStore.getState().selectedUnits).toEqual(['u-2']);
   });
 
+  it('Ctrl+Shift+D 切换调试模式（面板与工具条图标同源），普通 D 不触发', () => {
+    setup();
+    expect(usePlanetViewStore.getState().debugMode).toBe(false);
+
+    keydown('D', { ctrlKey: true, shiftKey: true });
+    expect(usePlanetViewStore.getState().debugMode).toBe(true);
+    expect(usePlanetViewStore.getState().debugOpen).toBe(true);
+
+    keydown('D', { ctrlKey: true, shiftKey: true });
+    expect(usePlanetViewStore.getState().debugMode).toBe(false);
+    expect(usePlanetViewStore.getState().debugOpen).toBe(false);
+
+    // 只有 D（无修饰键）不触发调试模式
+    keydown('d');
+    expect(usePlanetViewStore.getState().debugMode).toBe(false);
+  });
+
+  it('Ctrl+Shift+D 在输入框聚焦时不触发', () => {
+    setup();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+
+    keydown('D', { ctrlKey: true, shiftKey: true }, input);
+    expect(usePlanetViewStore.getState().debugMode).toBe(false);
+    input.remove();
+  });
+
   it('输入框聚焦时快捷键不生效', () => {
     setup();
     usePlanetViewStore.getState().setSelectedUnits(['u-2']);

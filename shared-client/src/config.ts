@@ -49,6 +49,8 @@ export const ALL_EVENT_TYPES = [
   // 黑雾被动敌对：玩家攻击黑雾后对其敌对，冷却后恢复中立
   'dark_fog_provoked',
   'dark_fog_calmed',
+  // 狂飙模式（POST /admin/advance）结束：客户端据此做一次全量刷新
+  'fast_forward_finished',
 ] as const;
 
 export const DEFAULT_EVENT_TYPES = [

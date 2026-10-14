@@ -2,6 +2,10 @@
  * RTS 快捷键体系（C1）：A 攻击移动 / S 停止 / H 坚守 / P 巡逻 / G 守卫，
  * Ctrl+1..9 记录编队、1..9 选取编队。输入框/文本域/下拉框聚焦时不抢按键
  * （沿用 PlanetMapPixi 的输入守卫模式）。2D/3D 共用：挂在 PlanetPage 一次。
+ *
+ * Ctrl+Shift+D：调试模式开关（调试面板与左下工具条的「调试」图标默认隐藏，
+ * 都由这一个快捷键控制）。放在本 hook 里是因为它已经统一处理输入守卫；
+ * 其余修饰键组合（Ctrl+数字、Ctrl/Alt 单按）不受影响。
  */
 
 import { useEffect } from 'react';
@@ -46,6 +50,13 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, interactions }: Use
       const store = usePlanetViewStore.getState();
       const playerId = session.playerId;
       const key = event.key;
+
+      // Ctrl+Shift+D：调试模式（面板 + 工具条调试图标一起显示/隐藏）。
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && key.toLowerCase() === 'd') {
+        store.toggleDebugMode();
+        event.preventDefault();
+        return;
+      }
 
       // Ctrl+数字：记录编队（当前多选集合，含阵亡过滤前的原始 id 由 prune 兜底）
       if ((event.ctrlKey || event.metaKey) && /^[1-9]$/.test(key)) {

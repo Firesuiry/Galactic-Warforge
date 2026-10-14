@@ -1426,6 +1426,14 @@ export function shouldRefreshAlerts(event: GameEventDetail) {
   return event.event_type === "production_alert";
 }
 
+/**
+ * 快进结束：服务端已把快进期间的高频事件降采样，客户端收到这条后做一次全量刷新
+ * （scene/runtime/networks/summary/stats/alerts 全部重拉），见 use-planet-realtime。
+ */
+export function shouldFullRefresh(event: GameEventDetail) {
+  return event.event_type === "fast_forward_finished";
+}
+
 export function shouldRefreshSummary(event: GameEventDetail) {
   return [
     "resource_changed",

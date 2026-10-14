@@ -514,6 +514,56 @@
   margin-top:14px;
 }
 
+/* 狂飙模式 / 快进区块（调试面板内）：表单行 + 停止条件勾选 + 开始/取消。 */
+.debug-panel__section {
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line-2);
+}
+
+.debug-panel__hint {
+  margin-left:6px;
+  font-weight:400;
+  color:var(--text-3);
+}
+
+.debug-panel__advance {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.debug-panel__advance-row {
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.debug-panel__advance-stops {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.debug-panel__advance-input {
+  flex:1 1 auto;
+  min-width:0;
+  padding:4px 8px;
+  border-radius:8px;
+  border:1px solid var(--line-2);
+  background:#0b1424;
+  color:inherit;
+}
+
+.debug-panel__advance-input:disabled {
+  opacity:.45;
+}
+
+.error-text {
+  margin:8px 0 0;
+  color:var(--danger, #ff7a7a);
+}
+
 .planet-detail-tabs {
   flex:0 0 auto;
   display:flex;

@@ -18,6 +18,7 @@ import {
   resolveCameraAxisOffset,
   resolveFocusCameraAxisOffset,
   resolveHomeTile,
+  shouldFullRefresh,
   resolveSelectionAtTile,
   resolveSelectionPosition,
   summarizeEvent,
@@ -608,5 +609,21 @@ describe('canReceiveTransferItems：装料下拉只列服务端真能收物品�
         runtime: { functions: {} },
       } as never),
     ).toBe(false);
+  });
+});
+
+
+describe('shouldFullRefresh：快进结束触发全量刷新', () => {
+  it('只有 fast_forward_finished 返回 true', () => {
+    const event = (eventType: string) => ({
+      event_id: 'evt-1',
+      tick: 100,
+      event_type: eventType,
+      visibility_scope: 'all',
+      payload: {},
+    });
+    expect(shouldFullRefresh(event('fast_forward_finished') as never)).toBe(true);
+    expect(shouldFullRefresh(event('tick_completed') as never)).toBe(false);
+    expect(shouldFullRefresh(event('production_alert') as never)).toBe(false);
   });
 });

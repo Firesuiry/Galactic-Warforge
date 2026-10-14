@@ -15,6 +15,7 @@ import {
   shouldRefreshPlanet,
   shouldRefreshStats,
   shouldRefreshSummary,
+  shouldFullRefresh,
 } from '@/features/planet-map/model';
 import { forwardGameEventToBattleBus } from '@/engine/battle-events';
 import { playPlanetEventAudio } from '@/features/audio/planet-audio';
@@ -170,14 +171,17 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       const refreshPlanet = shouldRefreshPlanet(event, options.planetId);
       const refreshSummary = shouldRefreshSummary(event);
       const refreshStats = shouldRefreshStats(event);
+      // 快进结束：快进期间的高频事件被服务端降采样过，这里一次性全量重拉
+      //（与 pullMissedEvents 同一套 flag），把降采样丢掉的部分补齐。
+      const refreshAll = shouldFullRefresh(event);
       invalidations.schedule({
-        scene: refreshPlanet || shouldRefreshFog(event, options.planetId),
-        runtime: refreshPlanet || refreshStats || refreshSummary,
-        networks: refreshPlanet || event.event_type === 'building_state_changed',
-        systemRuntime: refreshSummary || event.event_type === 'rocket_launched',
-        summary: refreshSummary,
-        stats: refreshStats,
-        alerts: shouldRefreshAlerts(event),
+        scene: refreshAll || refreshPlanet || shouldRefreshFog(event, options.planetId),
+        runtime: refreshAll || refreshPlanet || refreshStats || refreshSummary,
+        networks: refreshAll || refreshPlanet || event.event_type === 'building_state_changed',
+        systemRuntime: refreshAll || refreshSummary || event.event_type === 'rocket_launched',
+        summary: refreshAll || refreshSummary,
+        stats: refreshAll || refreshStats,
+        alerts: refreshAll || shouldRefreshAlerts(event),
       });
     });
 
