@@ -66,6 +66,12 @@ func (gc *GameCore) botLegions(ws *model.WorldState, playerID string, tuning bot
 		}
 		return issue(cmd)
 	}
+	// 首攻门槛未开（BotFirstAttackTick 之前）：不编队。编队的下一步必然是
+	// SquadOrderAttack，散兵在门槛前被拉成军团只会离开防区（试玩 1015 §6-1
+	// 的 t30019 编队 → t30251 拆家）。散兵留在防区里照样执行防守反击。
+	if !gc.botOffenseGateOpen(ws) {
+		return false
+	}
 	// 首波按 attackAt 封顶：散兵够门槛就编队，但只带 attackAt 个，其余留作
 	// 后续波次/守家（实测 normal 的 attackAt 门槛下，散兵会一直攒到 armyCap=14，
 	// 编队时把 14 个全带上，首波规模与「低难度小首波」的预设不符）。
@@ -199,12 +205,14 @@ func botLegionDecide(gc *GameCore, ws *model.WorldState, playerID string, tuning
 			return botLegionPlan{order: model.SquadOrderDefend, target: &pos}, true
 		}
 	}
-	if ws.Tick < gc.cfg.Battlefield.BotFirstAttackTick {
-		return botLegionPlan{}, false // 开局发育期：军团留守基地，不主动出击
-	}
 	target := gc.botAttackObjective(ws, playerID, tuning, ctx)
 	if target == nil {
 		return botLegionPlan{}, false
+	}
+	// 首攻门槛：与散兵 attack_move 共用同一门控（botMayAdvanceTo）。门槛未开时
+	// 只有防区内的目标算防守反击，防区外的进攻一律不发。
+	if !gc.botMayAdvanceTo(ws, home, *target, tuning.defendRadius) {
+		return botLegionPlan{}, false // 开局发育期：军团留守基地，不主动出击
 	}
 	return botLegionPlan{order: model.SquadOrderAttack, target: target}, true
 }
