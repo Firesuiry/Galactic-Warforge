@@ -179,9 +179,13 @@ function BuildingStorageSection({
   const [withdrawItemId, setWithdrawItemId] = useState("");
   const [withdrawQuantity, setWithdrawQuantity] = useState("1");
   const [withdrawPending, setWithdrawPending] = useState(false);
-  // 配方切换（set_recipe）：选中值先落到本地草稿，确认后下发。
-  const [recipeDraft, setRecipeDraft] = useState<string | null>(null);
+  // 配方切换（set_recipe）：下拉选中即直接下发（试玩 1015 §6-5：旧实现必须再点
+  // 「应用配方」，只选下拉时反馈区还停在上一条命令，看不出没生效）。
   const [recipePending, setRecipePending] = useState(false);
+  /** 本次配方命令的结果（成功/被拒的原话），直接显示在表单里。 */
+  const [recipeResult, setRecipeResult] = useState<{ ok: boolean; message: string } | null>(null);
+  /** 最近一次下发的选择：用于「退出研究模式」提示与下拉回显。 */
+  const [recipeSelection, setRecipeSelection] = useState<string | null>(null);
 
   const inventory = building.storage?.inventory;
   const inventorySummary = formatItemInventorySummary(catalog, inventory);
@@ -224,18 +228,19 @@ function BuildingStorageSection({
     () => listBuildingRecipes(catalog, building.type, completedTechIds ?? []),
     [catalog, building.type, completedTechIds],
   );
-  const currentRecipeId = recipeDraft ?? building.production?.recipe_id ?? "";
-  const recipeDirty = recipeDraft !== null && recipeDraft !== (building.production?.recipe_id ?? "");
-  const recipeSwitchDisabled = recipePending || !canControl || !planetId || !recipeDirty;
+  /**
+   * 当前生效的配方：以权威 production.recipe_id 为准（回写前先显示玩家刚选的值，
+   * 避免下拉「跳回去」）。
+   */
+  const currentRecipeId = building.production?.recipe_id ?? recipeSelection ?? "";
   /**
    * 研究站（matrix_lab / self_evolution_lab）从「无配方」切到生产配方 = 退出研究模式：
    * 服务端 isResearchLab 只认「Research 模块 + 空配方」的建筑，设了配方就不再算研究站，
    * 正在研究的科技会因缺少运行中的研究站而暂停（试玩 1013 bug-1013-4，当时界面零提示）。
    */
   const leavingResearchMode =
-    recipeDirty
-    && (building.production?.recipe_id ?? "") === ""
-    && (recipeDraft ?? "") !== ""
+    (building.production?.recipe_id ?? "") === ""
+    && (recipeSelection ?? "") !== ""
     && isResearchStationBuildingType(building.type);
   // 只在真正进入生产周期的建筑上给配方入口（纯采集建筑没有配方）。
   const supportsRecipe = Boolean(building.runtime?.functions?.production) && recipeOptions.length > 0;
@@ -244,14 +249,23 @@ function BuildingStorageSection({
     (unit) => unit.producer === building.type,
   );
 
-  async function submitRecipeSwitch() {
-    if (recipeSwitchDisabled) {
+  /**
+   * 下拉选择即下发（不再需要「应用配方」）：选中值先回显，命令结果写进表单反馈区。
+   * 同一选择重复选（值没变）不下发，避免误触重复命令。
+   */
+  async function switchRecipe(nextRecipeId: string) {
+    if (recipePending || !canControl || !planetId) {
       return;
     }
+    if (nextRecipeId === (building.production?.recipe_id ?? "")) {
+      setRecipeSelection(null);
+      return;
+    }
+    setRecipeSelection(nextRecipeId);
+    setRecipeResult(null);
     setRecipePending(true);
     try {
-      const nextRecipeId = recipeDraft ?? "";
-      await submitPlanetCommand({
+      const response = await submitPlanetCommand({
         commandType: "set_recipe",
         planetId,
         focus: { entityId: building.id },
@@ -262,7 +276,19 @@ function BuildingStorageSection({
             limit: 50,
           }),
       });
-      setRecipeDraft(null);
+      const target = nextRecipeId ? getRecipeDisplayName(catalog, nextRecipeId) : "无配方";
+      const resultMessage = response?.results
+        ?.map((result) => result.message?.trim())
+        .filter(Boolean)
+        .join(" / ");
+      if (!response) {
+        setRecipeResult({ ok: false, message: `切换配方提交失败：未能联系服务器，请重试（目标「${target}」）` });
+      } else if (response.accepted) {
+        // 优先回显服务端回执原话（它就是本次命令的结果），没有才用本地文案。
+        setRecipeResult({ ok: true, message: resultMessage || `已切换为「${target}」` });
+      } else {
+        setRecipeResult({ ok: false, message: `切换配方被拒：${resultMessage || "服务器未说明原因"}` });
+      }
     } finally {
       setRecipePending(false);
     }
@@ -393,22 +419,15 @@ function BuildingStorageSection({
         <form
           aria-label="切换配方表单"
           className="planet-recipe-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitRecipeSwitch();
-          }}
+          onSubmit={(event) => event.preventDefault()}
         >
           <label className="field">
             <span>切换配方</span>
             <select
               aria-label="切换配方"
               disabled={!canControl || recipePending}
-              onChange={(event) => setRecipeDraft(event.target.value)}
-              title={
-                recipeDirty
-                  ? `下拉里是「${getRecipeDisplayName(catalog, recipeDraft ?? "") || "无配方"}」，尚未应用；当前生效的仍是「${building.production?.recipe_id ? getRecipeDisplayName(catalog, building.production.recipe_id) : "无配方"}」`
-                  : "选中后点「应用配方」才生效"
-              }
+              onChange={(event) => void switchRecipe(event.target.value)}
+              title="选中即生效（无需再点确认）；切换会清空当前生产进度，库存保留"
               value={currentRecipeId}
             >
               <option value="">无配方（研究模式 / 空闲）</option>
@@ -419,36 +438,21 @@ function BuildingStorageSection({
               ))}
             </select>
           </label>
-          <button
-            className="secondary-button"
-            disabled={recipeSwitchDisabled}
-            title="切换后生产进度清零，库存保留"
-            type="submit"
-          >
-            {recipePending ? "切换中…" : "应用配方"}
-          </button>
           {/*
-            试玩 1014 层 08/09：下拉选中后不点「应用配方」不会生效，但界面看起来已经改了。
-            这里给一条明确的「未应用」提示，写清「下拉里选了什么」和「当前真正生效的是什么」。
+            试玩 1015 §6-5：下拉选择即下发，反馈区直接写本次命令结果——
+            旧实现要再点「应用配方」，只选下拉时反馈区还停在上一条命令，看不出没生效。
           */}
-          {recipeDirty ? (
-            <p
-              className="subtle-text planet-recipe-form__pending"
-              data-testid="recipe-dirty-hint"
-              role="status"
-            >
-              未应用：下拉已选「
-              {recipeDraft === "" ? "无配方" : getRecipeDisplayName(catalog, recipeDraft ?? "")}
-              」，当前生效的仍是「
-              {building.production?.recipe_id
-                ? getRecipeDisplayName(catalog, building.production.recipe_id)
-                : "无配方"}
-              」，点「应用配方」后才切换。
-            </p>
-          ) : null}
-          {recipeDirty ? (
-            <p className="subtle-text" role="status">切换配方会清空当前生产进度（已产出的产物与库存保留）。</p>
-          ) : null}
+          <p
+            className={`subtle-text planet-recipe-form__result${recipeResult && !recipeResult.ok ? " planet-recipe-form__result--error" : ""}`}
+            data-testid="recipe-result"
+            role="status"
+          >
+            {recipePending
+              ? "切换中…"
+              : recipeResult
+                ? recipeResult.message
+                : "选中即生效"}
+          </p>
           {leavingResearchMode ? (
             <p className="subtle-text planet-recipe-form__research-warning" role="status">
               切换后此研究站不再参与研究：服务端只把「无配方」的研究站算作研究站，
