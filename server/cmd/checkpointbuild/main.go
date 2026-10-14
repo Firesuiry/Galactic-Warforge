@@ -39,8 +39,9 @@ func main() {
 	player := flag.String("player", "p1", "导出时只取该玩家下过的命令")
 	fromTick := flag.Int64("from-tick", 0, "导出时的起始 tick")
 	toTick := flag.Int64("to-tick", 0, "导出时的结束 tick（0 = 不限）")
-	maxGap := flag.Int64("max-gap", 400, "导出时相邻命令间隔超过这么多 tick 就插入 advance_to_tick（0 = 不插）")
+	maxGap := flag.Int64("max-gap", -1, "导出时 advance_to_tick 的插入口径：<0 每条命令前都插（默认，按玩家节奏回放）；0 不插；>0 相邻命令间隔超过这么多 tick 才插")
 	replace := flag.Bool("replace", true, "覆盖同名存档点")
+	generate := flag.Bool("generate", false, "跑一遍脚本化开局，生成前期层（cp-root→cp-base）的构建记录")
 	flag.Parse()
 
 	base := *root
@@ -85,10 +86,32 @@ func main() {
 		return
 	}
 
-	if *layer == "" && *from == "" {
+	if *layer == "" && *from == "" && !*generate {
 		printTree(tree)
 		flag.Usage()
 		os.Exit(2)
+	}
+
+	if *generate {
+		runner, err := checkpointbuild.NewRunner(opts)
+		if err != nil {
+			log.Fatalf("装配重建环境: %v", err)
+		}
+		defer runner.Close()
+		specs, err := runner.GenerateEarlySpecs()
+		if err != nil {
+			log.Fatalf("脚本化生成构建记录: %v", err)
+		}
+		root := checkpointbuild.RootLayer()
+		specs[checkpointbuild.RootLayerName] = &root
+		if err := checkpointbuild.WriteSpecs(opts.SpecDir, specs); err != nil {
+			log.Fatalf("写构建记录: %v", err)
+		}
+		fmt.Printf("已生成 %d 层构建记录到 %s：\n", len(specs), opts.SpecDir)
+		for _, name := range checkpointbuild.SortedSpecNames(specs) {
+			fmt.Printf("  %-14s 步骤 %d（命令 %d）\n", name, len(specs[name].Steps), countCommands(specs[name].Steps))
+		}
+		return
 	}
 
 	runner, err := checkpointbuild.NewRunner(opts)
@@ -124,6 +147,17 @@ func main() {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+// countCommands 数一份构建记录里有多少条命令步骤。
+func countCommands(steps []checkpoint.BuildStep) int {
+	n := 0
+	for _, step := range steps {
+		if step.Cmd != nil {
+			n++
+		}
+	}
+	return n
 }
 
 func printTree(tree checkpointbuild.Tree) {
@@ -181,6 +215,12 @@ func runExport(opts checkpointbuild.Options, layer, player string, fromTick, toT
 		log.Fatalf("读构建记录 %s: %v", path, err)
 	}
 	spec.Steps = steps
+	// 落点 tick：导出的命令回放完只是把施工任务排进队列，建筑还没落成。把存档点
+	// 当时的 tick 记成 end_tick，重建时就会推进到同一 tick 再校验契约、存档。
+	// 没给 -to-tick 时不动原有 end_tick。
+	if toTick > 0 {
+		spec.EndTick = toTick
+	}
 	raw, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {
 		log.Fatalf("序列化: %v", err)

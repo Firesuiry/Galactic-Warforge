@@ -80,15 +80,21 @@ type BuildSpec struct {
 	Note string `json:"note,omitempty"`
 	// Steps 是有序步骤。
 	Steps []BuildStep `json:"steps"`
+	// EndTick 是这一层的落点 tick：重放完步骤后把世界推进到该 tick，再校验契约、
+	// 存档（0 = 不额外推进，停在最后一步的 tick）。
+	//
+	// 契约里的 building_count_gte / building_running_gte 看的是「此刻已落成的
+	// 建筑」——建造命令只是把施工任务排进队列，建筑要若干 tick 后才落地。脚本化
+	// 生成时这个字段就是脚本走到下一层之前的那个 tick；从试玩审计日志导出时，
+	// 填存档点当时的 tick（也就是 -to-tick）。
+	EndTick int64 `json:"end_tick,omitempty"`
 	// Contract 是这一层必须成立的条件。
 	Contract Contract `json:"contract"`
 }
 
-// Validate 校验整份构建记录。
+// Validate 校验整份构建记录。parent 为空只允许出现在根层（cp-root）：
+// 根层的重建方式是「按配置开新局」，没有父档可读。
 func (s BuildSpec) Validate() error {
-	if s.Parent == "" {
-		return fmt.Errorf("构建记录缺少 parent")
-	}
 	if len(s.Steps) == 0 {
 		return fmt.Errorf("构建记录没有任何步骤")
 	}
@@ -121,8 +127,11 @@ type ExportOptions struct {
 	PlayerID string
 	FromTick int64
 	ToTick   int64 // 0 = 不设上限
-	// MaxGapTicks 相邻两条命令之间超过这么多 tick 时插入 advance_to_tick 步骤；
-	// 0 表示不插（步骤之间只有命令）。
+	// MaxGapTicks 控制 advance_to_tick 的插入：
+	//   > 0  相邻两条命令之间超过这么多 tick 才插（压缩长等待）
+	//   = 0  不插（步骤之间只有命令，回放时命令会连在一起下发）
+	//   < 0  每条命令前都插（默认）：按玩家当初的节奏回放，命令之间的等待
+	//        （手搓、采矿、建筑落成）都由 tick 推进还原
 	MaxGapTicks int64
 }
 
@@ -175,7 +184,12 @@ func ExportBuildSteps(entries []*model.AuditEntry, opts ExportOptions) ([]BuildS
 	steps := make([]BuildStep, 0, len(kept)*2)
 	var lastTick int64
 	for i, item := range kept {
-		if opts.MaxGapTicks > 0 && i > 0 && item.tick-lastTick > opts.MaxGapTicks {
+		switch {
+		case opts.MaxGapTicks < 0:
+			// 逐条还原节奏：命令的 tick 就是玩家当初下它的 tick。
+			target := item.tick
+			steps = append(steps, BuildStep{AdvanceToTick: &target})
+		case opts.MaxGapTicks > 0 && i > 0 && item.tick-lastTick > opts.MaxGapTicks:
 			target := item.tick
 			steps = append(steps, BuildStep{AdvanceToTick: &target})
 		}

@@ -206,11 +206,23 @@ func (r *Runner) logf(format string, args ...any) {
 //
 // 返回的 LayerResult 里带「第几步、哪条命令、被拒原因」——命令被拒或契约不过
 // 本身就是回归信号，不要静默跳过。
-func (r *Runner) RebuildLayer(spec *checkpoint.BuildSpec, name string) LayerResult {
-	result := LayerResult{Name: name, Parent: spec.Parent}
+func (r *Runner) RebuildLayer(spec *checkpoint.BuildSpec, name string) (result LayerResult) {
+	result = LayerResult{Name: name, Parent: spec.Parent}
 	started := time.Now()
+	// 具名返回值：Elapsed 要在 return 之后才写得上（不然 defer 改的是副本，
+	// 报告里每层都显示 0s）。
 	defer func() { result.Elapsed = time.Since(started) }()
 
+	// 检查点目录里有没有这一层的父档。存档点本身不被 git 跟踪（.run/ 在
+	// .gitignore 里），换台机器/新克隆时树是空的——这时直接说清楚「先重建
+	// 父层」，而不是让 LoadCheckpoint 报一句不好懂的错误。
+	if spec.Parent != "" {
+		if _, err := os.Stat(filepath.Join(r.opts.CheckpointDir, spec.Parent, "save.json")); err != nil {
+			result.StepFailure = fmt.Sprintf("父档 %s 不在存档点目录 %s 里：先重建父层（checkpointbuild -layer %s）或从别处拷来",
+				spec.Parent, r.opts.CheckpointDir, spec.Parent)
+			return result
+		}
+	}
 	if spec.Parent == "" {
 		if err := r.rt.ResetToConfiguredNewGameFromFile(r.opts.ConfigPath); err != nil {
 			result.StepFailure = fmt.Sprintf("开新局失败: %v", err)
@@ -269,6 +281,20 @@ func (r *Runner) RebuildLayer(spec *checkpoint.BuildSpec, name string) LayerResu
 		}
 	}
 
+	// 落点 tick：最后一条建造命令只是把施工任务排进队列，建筑要等若干 tick 才落成。
+	// 契约里的 building_count_gte / building_running_gte 看的是「此刻已落成的建筑」，
+	// 所以存档前要按构建记录声明的 end_tick 把世界推到位。
+	if spec.EndTick > core.CurrentTick() {
+		if spec.EndTick-result.StartTick > maxTicks {
+			result.StepFailure = fmt.Sprintf("end_tick %d 超过单层 %d tick 上限", spec.EndTick, maxTicks)
+			return result
+		}
+		for core.CurrentTick() < spec.EndTick {
+			core.AdvanceTick()
+		}
+		r.logf("  推进到 end_tick %d", core.CurrentTick())
+	}
+
 	result.EndTick = core.CurrentTick()
 	result.Contract = core.EvaluateContract(spec.Contract)
 	if !result.Contract.Passed {
@@ -306,40 +332,18 @@ func (r *Runner) RebuildChain(tree Tree, names []string) []LayerResult {
 	return results
 }
 
-// runCommand 把一条命令交给命令队列并在下一 tick 结算，再用审计日志核对结果。
-// 返回的命令回执为空字符串表示被接受；err 非空是拒绝原因（第几步由调用方补）。
+// runCommand 把一条命令交给命令队列并在下一 tick 结算，返回回执与拒绝原因。
+// 走的是 gamecore.SubmitAndAdvance——与 POST /commands 同一条路径（入队 → 下一
+// tick 结算 → 读结果），因此重建时命令被拒的原因与线上完全一致。
 func runCommand(sess *startup.Session, cmd model.Command) (string, error) {
-	requestID := fmt.Sprintf("rebuild-%d-%s", sess.Core.CurrentTick(), cmd.Type)
-	req := &model.QueuedRequest{
-		Request: model.CommandRequest{
-			RequestID:  requestID,
-			IssuerType: "player",
-			IssuerID:   "p1",
-			Commands:   []model.Command{cmd},
-		},
-		PlayerID:    "p1",
-		EnqueueTick: sess.Core.CurrentTick(),
+	if sess == nil || sess.Core == nil {
+		return "", fmt.Errorf("没有活动对局")
 	}
-	if !sess.Queue.Enqueue(req) {
-		return "", fmt.Errorf("request_id 冲突")
-	}
-	sess.Core.AdvanceTick()
-
-	entries, err := sess.Core.QueryAudit(model.AuditQuery{RequestID: requestID})
+	result, err := sess.Core.SubmitAndAdvance("p1", cmd)
 	if err != nil {
-		return "", fmt.Errorf("读取审计日志: %v", err)
+		return "", err
 	}
-	if len(entries) == 0 {
-		return "", fmt.Errorf("审计日志里没有这条命令的结果")
-	}
-	entry := entries[len(entries)-1]
-	status, _ := entry.Details["status"].(string)
-	code, _ := entry.Details["code"].(string)
-	message, _ := entry.Details["message"].(string)
-	if status == string(model.StatusRejected) || status == string(model.StatusFailed) {
-		return "", fmt.Errorf("%s %s", code, message)
-	}
-	return message, nil
+	return result.Message, nil
 }
 
 // ExportFromAudit 从一局对局的审计日志导出构建步骤（回放玩家实际下过的命令）。

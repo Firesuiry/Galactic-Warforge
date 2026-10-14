@@ -1,23 +1,278 @@
 {
   "parent": "cp-root",
-  "note": "1014 L1 层 01（第二轮重建）：从 cp-root（tick 27）读档，只用网页 UI 手动采集 + 机甲面板手搓，建成第一座风力涡轮机 (21,48, state=running) 与电力感应塔。本层实际落地 4 座电塔：(20,46)/(20,45)/(21,46)/(21,47)——它们在凑料/试建阶段落地，位置上正好覆盖铜矿(20,47)、铁矿(19,45)、铜矿(21,43)、石矿(22,45)/(20,43)/(22,43)，下一层 cp-mining 建矿机可直接用；(20,44) 一格留作后续补塔位。契约用 building_running_gte（风机必须 state=running，防断电坏层）+ building_count_gte（电塔建成即可）。本层另存 bug-1014-local-block-no-toast（本地建造预检被拦时、工作台抽屉关闭状态下看不到持久反馈）。",
-  "build": [
-    "读档 cp-root（tick 27），等约 400 tick 后开始（起手第一个 UI 操作在 tick 433）",
-    "UI：选中机甲 u-5 →「移动」→ 点 (18,43)（tick 447 结算；机甲从 (18,47) 走到 (18,43)，脚下即铁矿(18,42)）",
-    "UI：点铁矿(18,42) →「采集脚下铁矿」→ 数量 14 →「手动采集」（tick 470；10 tick/件、3 核心能量/件）",
-    "UI：点铜矿(19,43) →「手动采集」×3（tick 615）；随后 tick 883 / 1828 / 2605 / 3288 又补采铁矿 ×3/×3/×4/×2",
-    "UI：机甲面板手搓 smelt_iron ×9（tick 934）、smelt_magnet ×2（tick 1490）、smelt_copper ×2（tick 1616）、smelt_magnet ×2（tick 1879）、smelt_copper ×1（tick 2004）、magnetic_coil ×1（tick 2065）、magnetic_coil ×1（tick 2226）、gear ×1（tick 2275）、smelt_iron ×2（tick 2397）、smelt_iron ×4（tick 2664）、smelt_magnet ×4（tick 3331）、smelt_copper ×1（tick 3949）、magnetic_coil ×2（tick 4018）",
-    "UI：建造栏「电力感应塔」→ 落地 (20,46)（tick 2145）/(20,45)（tick 2152）/(21,46)（tick 2360）/(21,47)（tick 2593）——凑料/试建阶段落地，全部 state=running",
-    "UI：建造栏「风力涡轮机」→ 点 (21,48)（tick 4096），建成 state=running，电力 generation 10 / consumption 2，玩家能量池随后涨到上限 10000",
-    "存档 cp-power（tick 4135，契约 5 条全过）；随后为验证反馈缺口只读排查，tick 5875 用 replace:true 重存一次（局面未再改动）"
+  "note": "L1 cp-power（脚本化重建）：从 cp-root 读档，建第一座风力涡轮机 + 第一座电力感应塔，玩家第一次拿到电。构建记录由引擎脚本化开局导出（无试玩记录时的兜底），重建即回放这批命令。",
+  "steps": [
+    {
+      "advance_to_tick": 27
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 1,
+          "resource_id": "res-8"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 37
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 1,
+          "recipe_id": "smelt_iron"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 97
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 1,
+          "recipe_id": "gear"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 117
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 6,
+          "resource_id": "res-8"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 177
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 6,
+          "recipe_id": "smelt_iron"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 537
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 4,
+          "resource_id": "res-8"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 577
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 4,
+          "recipe_id": "smelt_magnet"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 817
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 2,
+          "resource_id": "res-15"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 837
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 2,
+          "recipe_id": "smelt_copper"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 957
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 2,
+          "recipe_id": "magnetic_coil"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 1017
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 55,
+            "y": 142,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine",
+          "direction": "auto"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 1020
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 2,
+          "resource_id": "res-8"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 1040
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 2,
+          "recipe_id": "smelt_iron"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 1160
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 142,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "tesla_tower",
+          "direction": "auto"
+        }
+      }
+    }
   ],
+  "end_tick": 1163,
   "contract": {
     "checks": [
-      {"kind": "game_not_finished"},
-      {"kind": "player_alive", "player": "p1"},
-      {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 1},
-      {"kind": "building_count_gte", "player": "p1", "type": "tesla_tower", "n": 1},
-      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+      {
+        "kind": "game_not_finished"
+      },
+      {
+        "kind": "player_alive",
+        "player": "p1"
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 1
+      },
+      {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "tesla_tower",
+        "n": 1
+      },
+      {
+        "kind": "enemy_attack_seen",
+        "player": "p1"
+      }
     ]
   }
 }
