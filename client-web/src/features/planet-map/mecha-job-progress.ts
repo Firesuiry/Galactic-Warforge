@@ -20,6 +20,7 @@ import { useNotificationsStore } from '@/features/notifications/store';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { getRecipeDisplayName, getItemDisplayName } from '@/features/planet-map/model';
 import type { PlanetRenderView } from '@/features/planet-map/model';
+import { MECHA_MINE_RANGE } from '@/features/planet-map/mecha-costs';
 
 /** 服务端默认 10 tick/s（遭遇战预设）兜底；实际速率由调用方从 /games/current 传入。 */
 const DEFAULT_TICKS_PER_SECOND = 10;
@@ -70,7 +71,7 @@ function jobStateLabel(state: string): string | undefined {
     case 'no_energy':
       return '核心能量不足，补能后自动继续';
     case 'out_of_range':
-      return '距离矿点过远，回到 2 格内继续采集';
+      return `距离矿点过远，回到 ${MECHA_MINE_RANGE} 格内继续采集`;
     case 'inventory_full':
       return '背包已满，腾出空位后自动继续';
     default:

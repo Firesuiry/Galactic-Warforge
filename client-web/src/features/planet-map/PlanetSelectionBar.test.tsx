@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CatalogView } from '@shared/types';
 
-import { defaultMiningQuantity, PlanetSelectionBar } from '@/features/planet-map/PlanetSelectionBar';
+import { defaultMiningQuantity, findNearbyMinableResource, PlanetSelectionBar } from '@/features/planet-map/PlanetSelectionBar';
 import type { PlanetRenderView } from '@/features/planet-map/model';
 import { resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionStore } from '@/stores/session';
@@ -334,7 +334,7 @@ it('blocks distant or busy mecha and offers no mining control for another player
   planet.units!['u-1'].position = { x: 6, y: 6, z: 0 };
   const { rerender } = render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
-  expect(screen.getByText('请将机甲移动到矿点 2 格内')).toBeInTheDocument();
+  expect(screen.getByText('请将机甲移动到矿点 6 格内')).toBeInTheDocument();
   planet.units!['u-1'].position = { x: 1, y: 1, z: 0 };
   planet.units!['u-1'].mecha!.job = { kind: 'mine', resource_id: 'ore-1', remaining_ticks: 5, ticks_per_batch: 10, remaining_batches: 1, completed_batches: 0, energy_per_batch: 3, state: 'running' };
   rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
@@ -346,6 +346,30 @@ it('blocks distant or busy mecha and offers no mining control for another player
   planet.resources![0].kind = 'crude_oil';
   rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
   expect(screen.queryByRole('button', { name: '手动采集' })).toBeNull();
+});
+
+// 回归（试玩 1015）：前端判定半径曾写死 2 格，而服务端 execMineResource 已放宽到 6 格，
+// 导致机甲在 3–6 格处服务端可采、UI 却禁用「手动采集」。
+it('allows mining at the server-side 6-cell range boundary and blocks beyond it', () => {
+  const planet = miningPlanet();
+  planet.resources![0].position = { x: 0, y: 0, z: 0 };
+  const { rerender } = render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  for (const distance of [2, 3, 6]) {
+    planet.units!['u-1'].position = { x: distance, y: 0, z: 0 };
+    rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+    expect(screen.getByRole('button', { name: '手动采集' })).toBeEnabled();
+  }
+  planet.units!['u-1'].position = { x: 7, y: 0, z: 0 };
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
+  expect(screen.getByText('请将机甲移动到矿点 6 格内')).toBeInTheDocument();
+});
+
+it('findNearbyMinableResource uses the same 6-cell range as the server', () => {
+  const planet = miningPlanet();
+  planet.resources![0].position = { x: 0, y: 0, z: 0 };
+  expect(findNearbyMinableResource(planet, miningCatalog, { x: 6, y: 0, z: 0 })).toBe(planet.resources![0]);
+  expect(findNearbyMinableResource(planet, miningCatalog, { x: 7, y: 0, z: 0 })).toBeUndefined();
 });
 
 it('uses cube-sphere adjacency to allow mining across a face seam', () => {
