@@ -1,4 +1,7 @@
+import type { GameSummary } from "@shared/game";
+
 import { UnitProductionControls } from "./UnitProductionControls";
+import { DEBUG_PANEL_HOTKEY_LABEL, buildAdvanceRequest, defaultAdvanceForm, describeAdvanceResult, isAdminPlayer, type AdvanceFormState } from "./fast-forward";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useShallow } from "zustand/react/shallow";
@@ -1632,6 +1635,8 @@ interface PlanetDebugPanelProps {
   /** 行星地图截图捕获句柄（Pixi extract）；Pixi 尚未就绪时为 null。 */
   capture: PlanetMapCapture | null;
   currentTick: number;
+  /** 本局概要（GET /games/current）：判断 admin 身份与多人门禁提示。 */
+  game?: GameSummary;
   networks?: PlanetNetworksView;
   onPullEvents: () => Promise<void>;
   onRefreshFog: () => Promise<unknown>;
@@ -1644,6 +1649,7 @@ export function PlanetDebugPanel({
   catalog,
   capture,
   currentTick,
+  game,
   networks,
   onPullEvents,
   onRefreshFog,
@@ -1675,6 +1681,55 @@ export function PlanetDebugPanel({
     })),
   );
   const [shareMessage, setShareMessage] = useState("");
+  const client = useApiClient();
+  const session = useSessionSnapshot();
+  // 狂飙模式表单：默认「按 tick 数推进 500 tick」+ 三个停止条件全开。
+  const [advanceForm, setAdvanceForm] = useState<AdvanceFormState>(defaultAdvanceForm);
+  const [advanceBusy, setAdvanceBusy] = useState(false);
+  const [advanceError, setAdvanceError] = useState("");
+  const [advanceResult, setAdvanceResult] = useState("");
+  const adminAllowed = isAdminPlayer(game, session.playerId);
+
+  function patchAdvanceForm(patch: Partial<AdvanceFormState>) {
+    setAdvanceForm((form) => ({ ...form, ...patch }));
+  }
+
+  async function startAdvance() {
+    const built = buildAdvanceRequest(advanceForm, currentTick);
+    if ("error" in built) {
+      setAdvanceError(built.error);
+      return;
+    }
+    setAdvanceBusy(true);
+    setAdvanceError("");
+    setAdvanceResult("");
+    try {
+      const result = await client.sendAdvance(built.request);
+      setAdvanceResult(describeAdvanceResult(result));
+      // 快进结束时服务端也发 fast_forward_finished（SSE 侧统一做全量刷新），
+      // 这里直接调用能覆盖 SSE 未连接/降采样窗口的场合。
+      await onRefreshPlanet();
+    } catch (error) {
+      setAdvanceError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAdvanceBusy(false);
+    }
+  }
+
+  async function cancelAdvance() {
+    setAdvanceBusy(true);
+    setAdvanceError("");
+    try {
+      const result = await client.cancelAdvance();
+      if (!result.cancelled) {
+        setAdvanceResult("当前没有进行中的快进");
+      }
+    } catch (error) {
+      setAdvanceError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAdvanceBusy(false);
+    }
+  }
 
   function exportScreenshot() {
     // Pixi 舞台（底图 + 实体 + 交互叠加）经 extract 整体抓成 canvas，直接导出 PNG。
@@ -1777,7 +1832,117 @@ export function PlanetDebugPanel({
           收起态整个面板不渲染，不给地图留空壳。 */}
       {debugOpen ? (
         <div className="debug-panel__body">
-          <div className="section-title">调试面板</div>
+          <div className="section-title">
+            调试面板
+            <small className="debug-panel__hint">（{DEBUG_PANEL_HOTKEY_LABEL} 显示/隐藏）</small>
+          </div>
+
+          <div className="debug-panel__section">
+            <div className="section-title">狂飙模式 / 快进</div>
+            {adminAllowed ? (
+              <div className="debug-panel__advance">
+                {/* 280px 窄面板：单选项一行（文字不换行）排在输入框上方。
+                    过去 radio 与输入框同行，中文标签被挤成竖排三行。 */}
+                <div className="debug-panel__advance-modes" role="radiogroup">
+                  <label className="debug-panel__advance-mode">
+                    <input
+                      checked={advanceForm.mode === "ticks"}
+                      name="advance-mode"
+                      onChange={() => patchAdvanceForm({ mode: "ticks" })}
+                      type="radio"
+                    />
+                    <span>推进 tick 数</span>
+                  </label>
+                  <label className="debug-panel__advance-mode">
+                    <input
+                      checked={advanceForm.mode === "to_tick"}
+                      name="advance-mode"
+                      onChange={() => patchAdvanceForm({ mode: "to_tick" })}
+                      type="radio"
+                    />
+                    <span>推进到 tick</span>
+                  </label>
+                </div>
+                <input
+                  aria-label={advanceForm.mode === "ticks" ? "快进 tick 数" : "快进目标 tick"}
+                  className="debug-panel__advance-input"
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    advanceForm.mode === "ticks"
+                      ? patchAdvanceForm({ ticks: event.target.value })
+                      : patchAdvanceForm({ toTick: event.target.value })
+                  }
+                  type="text"
+                  value={advanceForm.mode === "ticks" ? advanceForm.ticks : advanceForm.toTick}
+                />
+                <div className="debug-panel__advance-stops">
+                  <label className="debug-panel__advance-stop">
+                    <input
+                      checked={advanceForm.stopOn.underAttack}
+                      onChange={(event) =>
+                        patchAdvanceForm({
+                          stopOn: { ...advanceForm.stopOn, underAttack: event.target.checked },
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span>受袭即停</span>
+                  </label>
+                  <label className="debug-panel__advance-stop">
+                    <input
+                      checked={advanceForm.stopOn.criticalAlert}
+                      onChange={(event) =>
+                        patchAdvanceForm({
+                          stopOn: { ...advanceForm.stopOn, criticalAlert: event.target.checked },
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span title="快进期间新出现的缺电 / 缺料停工告警">关键警报即停</span>
+                  </label>
+                  <label className="debug-panel__advance-stop">
+                    <input
+                      checked={advanceForm.stopOn.gameOver}
+                      onChange={(event) =>
+                        patchAdvanceForm({
+                          stopOn: { ...advanceForm.stopOn, gameOver: event.target.checked },
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span>对局结束即停</span>
+                  </label>
+                </div>
+                <div className="debug-panel__advance-row">
+                  <button
+                    className="secondary-button"
+                    disabled={advanceBusy}
+                    onClick={() => {
+                      void startAdvance();
+                    }}
+                    type="button"
+                  >
+                    {advanceBusy ? "快进中…" : "开始快进"}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      void cancelAdvance();
+                    }}
+                    type="button"
+                  >
+                    取消快进
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="subtle-text">
+                快进需要 admin 身份（当前账号不是 admin）。多人对局里也只有 admin 可以快进。
+              </p>
+            )}
+            {advanceError ? <p className="error-text">{advanceError}</p> : null}
+            {advanceResult ? <p className="subtle-text">{advanceResult}</p> : null}
+          </div>
           <dl className="planet-kv-list">
             <div>
               <dt>当前 tick</dt>

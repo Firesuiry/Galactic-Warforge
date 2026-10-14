@@ -2342,6 +2342,40 @@ export interface AlertSnapshotResponse {
   alerts: AlertEntry[];
 }
 
+/** 狂飙模式（POST /admin/advance）：停止条件三项默认 true，显式 false 才关闭。 */
+export interface AdvanceStopOn {
+  game_over?: boolean;
+  under_attack?: boolean;
+  critical_alert?: boolean;
+}
+
+/** 快进请求：to_tick 与 ticks 二选一（都给或都不给服务端返回 400）。 */
+export interface AdvanceRequest {
+  to_tick?: number;
+  ticks?: number;
+  stop_on?: AdvanceStopOn;
+}
+
+export type AdvanceStoppedReason =
+  | 'reached'
+  | 'game_over'
+  | 'under_attack'
+  | 'critical_alert'
+  | 'cancelled';
+
+export interface AdvanceResponse {
+  start_tick: number;
+  end_tick: number;
+  stopped_reason: AdvanceStoppedReason;
+  detail: string;
+  elapsed_ms: number;
+  ticks_per_sec: number;
+}
+
+export interface AdvanceCancelResponse {
+  cancelled: boolean;
+}
+
 export interface SaveRequest {
   reason?: string;
 }

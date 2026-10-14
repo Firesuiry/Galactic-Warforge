@@ -235,6 +235,28 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
         return null;
       }
       return { toast: { kind: 'success', title: '黑雾已恢复中立', body: '不主动攻击它就不会再来报复。' }, sfx: 'commandOk' };
+    // 狂飙模式结束：服务端已把快进期间的高频事件降采样，客户端收到这条后
+    // 会做一次全量刷新（use-planet-realtime），toast 只负责告诉玩家停在哪。
+    case 'fast_forward_finished': {
+      const endTick = asNumber(payload.end_tick);
+      const reason = asString(payload.stopped_reason);
+      const reasonLabel: Record<string, string> = {
+        reached: '到达目标',
+        game_over: '对局结束',
+        under_attack: '我方受袭',
+        critical_alert: '关键警报',
+        cancelled: '已取消',
+      };
+      return {
+        toast: {
+          kind: reason === 'under_attack' || reason === 'critical_alert' ? 'warning' : 'info',
+          title: `快进结束：停在 tick ${endTick ?? '?'}（${reasonLabel[reason] ?? (reason || '?')}）`,
+          body: asString(payload.detail) || undefined,
+          mergeKey: 'fast_forward_finished',
+        },
+        sfx: 'uiClick',
+      };
+    }
     case 'missile_salvo_fired': {
       const count = asNumber(payload.count) ?? asNumber(payload.salvo_size);
       return {

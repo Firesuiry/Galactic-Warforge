@@ -131,6 +131,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /checkpoints", s.auth(s.handleCheckpointSave))
 	mux.HandleFunc("POST /checkpoints/{name}/load", s.auth(s.handleCheckpointLoad))
 
+	// 狂飙模式 / 快进（仅 admin；多人对局另有门禁，见 advance.go）
+	mux.HandleFunc("POST /admin/advance", s.auth(s.handleAdvance))
+	mux.HandleFunc("POST /admin/advance/cancel", s.auth(s.handleAdvanceCancel))
+
 	// SSE event stream
 	mux.HandleFunc("GET /events/stream", s.auth(s.handleEventStream))
 	// Event snapshot

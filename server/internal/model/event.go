@@ -40,6 +40,9 @@ const (
 	EvtEnemyNestDestroyed        EventType = "enemy_nest_destroyed"
 	EvtDarkFogProvoked           EventType = "dark_fog_provoked"
 	EvtDarkFogCalmed             EventType = "dark_fog_calmed"
+	// EvtFastForwardFinished 狂飙模式（POST /admin/advance）结束：客户端收到后
+	// 做一次全量刷新（快进期间的高频事件已被服务端降采样）。
+	EvtFastForwardFinished EventType = "fast_forward_finished"
 )
 
 var allEventTypes = []EventType{
@@ -79,6 +82,7 @@ var allEventTypes = []EventType{
 	EvtEnemyNestDestroyed,
 	EvtDarkFogProvoked,
 	EvtDarkFogCalmed,
+	EvtFastForwardFinished,
 }
 
 var validEventTypes = func() map[EventType]struct{} {

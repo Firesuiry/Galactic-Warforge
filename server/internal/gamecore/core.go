@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"siliconworld/internal/config"
@@ -56,6 +57,12 @@ type GameCore struct {
 	// tickRateOverride 进程级 tick 速率覆盖（server.tick_rate_override，0 = 不覆盖）：
 	// 只影响 tick 循环调度与对外汇报，不写回存档。
 	tickRateOverride int
+	// 狂飙模式（advance.go）：advanceMu 保护下面两个惰性初始化字段；
+	// tickMutex 串行化定时 tick 与快进；fastForwarding 是 SSE 降采样的开关。
+	advanceMu      sync.Mutex
+	advanceRun     *advanceState
+	tickMutex      *sync.Mutex
+	fastForwarding atomic.Bool
 }
 
 // New creates a new GameCore, initialises the world map, and places player bases
@@ -279,7 +286,9 @@ func (gc *GameCore) Run() {
 			log.Println("[GameCore] tick loop stopped")
 			return
 		case <-ticker.C:
-			gc.processTick()
+			// runScheduledTick 先抢 tickMu：快进（advance.go）整段持有该锁，
+			// 期间定时 tick 被丢弃（Ticker 在接收端阻塞时自动丢节拍）。
+			gc.runScheduledTick()
 		}
 	}
 }
@@ -328,6 +337,12 @@ func (gc *GameCore) Stop() {
 
 // processTick runs a single tick
 func (gc *GameCore) processTick() {
+	gc.runTick()
+}
+
+// runTick 执行一个 tick 并返回本 tick 的当前 tick 号与对外事件（含 tick_completed）。
+// 快进（advance.go）需要逐 tick 检查停止条件，所以事件在这里返回而不是直接丢弃。
+func (gc *GameCore) runTick() (int64, []*model.GameEvent) {
 	start := time.Now()
 	gc.prof.reset(start)
 
@@ -411,7 +426,14 @@ func (gc *GameCore) processTick() {
 		}
 	}
 
-	gc.bus.Publish(allEvents)
+	// 快进期间对外发布的事件做降采样（事件历史已记全量）：客户端不会被
+	// 每 tick 的事件风暴刷屏，快进结束另有 fast_forward_finished 全量刷新。
+	published := allEvents
+	if gc.fastForwarding.Load() {
+		published = downsampleAdvanceEvents(allEvents, currentTick)
+	}
+	gc.bus.Publish(published)
+	return currentTick, allEvents
 }
 
 // executeRequest processes all commands in a queued request

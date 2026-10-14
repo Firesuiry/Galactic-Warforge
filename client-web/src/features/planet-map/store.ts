@@ -407,6 +407,12 @@ interface PlanetViewState {
   lastFullSyncAt: number | null;
   debugOpen: boolean;
   /**
+   * 调试模式（默认关闭）：控制左下图标列里的「调试」图标是否渲染。
+   * 调试面板与图标都默认隐藏，Ctrl+Shift+D 切换（见 use-planet-rts-hotkeys）；
+   * 不持久化——调试是会话内的临时视图，刷新后回到默认隐藏。
+   */
+  debugMode: boolean;
+  /**
    * 底部快捷栏是否收起为一行把手（覆盖式抽屉打开时避免遮挡抽屉底部；
    * 也用于玩家手动收起）。持久化到 localStorage：它是玩家的显示偏好，
    * 刷新页面不该弹回来。
@@ -468,6 +474,8 @@ interface PlanetViewActions {
   hydrateRecentAlerts: (alerts: AlertEntry[]) => void;
   appendRecentAlert: (alert: AlertEntry) => void;
   toggleDebugOpen: () => void;
+  /** 调试模式开关（Ctrl+Shift+D）：开启时同时展开调试面板。 */
+  toggleDebugMode: () => void;
   requestFocus: (position: TilePoint, zoomIndex?: number) => void;
   consumeFocusRequest: (nonce: number) => void;
   setHomeTile: (tile: TilePoint | null) => void;
@@ -548,6 +556,7 @@ function createInitialState(planetId = ''): PlanetViewState {
     lastEventId: '',
     lastFullSyncAt: null,
     debugOpen: false,
+    debugMode: false,
     buildBarDocked: readDockedPreference(),
     buildBarCategoriesOpen: true,
     craftRecipeId: '',
@@ -706,6 +715,12 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
       debugOpen: !state.debugOpen,
     }));
   },
+  toggleDebugMode: () => {
+    set((state) => {
+      const debugMode = !state.debugMode;
+      return { debugMode, debugOpen: debugMode };
+    });
+  },
   requestFocus: (position, zoomIndex) => {
     set(() => ({
       focusRequest: {
@@ -798,6 +813,7 @@ export function resetPlanetViewStore() {
     hydrateRecentAlerts: usePlanetViewStore.getState().hydrateRecentAlerts,
     appendRecentAlert: usePlanetViewStore.getState().appendRecentAlert,
     toggleDebugOpen: usePlanetViewStore.getState().toggleDebugOpen,
+    toggleDebugMode: usePlanetViewStore.getState().toggleDebugMode,
     requestFocus: usePlanetViewStore.getState().requestFocus,
     consumeFocusRequest: usePlanetViewStore.getState().consumeFocusRequest,
     setHomeTile: usePlanetViewStore.getState().setHomeTile,

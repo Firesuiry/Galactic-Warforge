@@ -193,3 +193,28 @@ describe('splitter public command', () => {
     for (const option of ['--inputs', '--outputs', '--input-priority', '--output-priority', '--filters']) assert.ok(help.includes(option));
   });
 });
+
+
+describe('fast-forward command registration', () => {
+  it('registers advance and advance_cancel with dedicated help', async () => {
+    assert.ok(COMMANDS.advance);
+    assert.ok(COMMANDS.advance_cancel);
+
+    const help = await dispatch('help advance', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(help, /advance <ticks> \[--to <tick>\]/);
+    assert.match(help, /--no-stop-attack/);
+    assert.match(help, /--no-stop-alert/);
+    assert.match(help, /--no-stop-gameover/);
+
+    const inline = await dispatch('advance --help', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(inline, /POST \/admin\/advance/);
+
+    const cancel = await dispatch('help advance_cancel', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(cancel, /advance_cancel/);
+  });
+
+  it('validates the target before calling the server', async () => {
+    const out = await dispatch('advance', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(out, /需要 <ticks> 或 --to <tick>/);
+  });
+});

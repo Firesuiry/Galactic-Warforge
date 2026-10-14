@@ -1064,6 +1064,7 @@ export function PlanetPage() {
           capture={captureRef.current}
           catalog={catalog}
           currentTick={planet.tick}
+          game={currentGameQuery.data}
           networks={networks}
           onPullEvents={pullMissedEvents}
           onRefreshFog={async () => {

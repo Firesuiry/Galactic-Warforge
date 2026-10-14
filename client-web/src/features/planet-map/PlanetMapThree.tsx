@@ -94,9 +94,9 @@ export function PlanetMapThree(props: Props) {
   }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugOpen } = usePlanetViewStore(useShallow(s => ({
+  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugMode, debugOpen } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
-    layers: s.layers, focusRequest: s.focusRequest, debugOpen: s.debugOpen,
+    layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen,
   })));
   // 悬停提示：hoveredTile 已由场景节流（格子变化才更新），这里只在格子/数据变化时重算文案。
   const hoverInfo = useMemo(() => (
@@ -575,17 +575,20 @@ export function PlanetMapThree(props: Props) {
           ) : null}
         </div>
         {/* 调试入口（§3.2 复核）：2D 的那条工具条在 3D 下整条不渲染，
-            所以 3D 的调试开关放在这一列的最后，面板同样浮在列上方。 */}
-        <button
-          aria-expanded={debugOpen}
-          aria-label={debugOpen ? "收起调试" : "展开调试"}
-          className="secondary-button planet-three__nav-btn"
-          onClick={() => usePlanetViewStore.getState().toggleDebugOpen()}
-          title={debugOpen ? "收起调试" : "展开调试"}
-          type="button"
-        >
-          <Bug size={16} strokeWidth={2} aria-hidden="true" />
-        </button>
+            所以 3D 的调试开关放在这一列的最后，面板同样浮在列上方。
+            默认隐藏（debugMode 关闭时不渲染），Ctrl+Shift+D 与 2D 同口径。 */}
+        {debugMode ? (
+          <button
+            aria-expanded={debugOpen}
+            aria-label={debugOpen ? "收起调试" : "展开调试"}
+            className="secondary-button planet-three__nav-btn"
+            onClick={() => usePlanetViewStore.getState().toggleDebugOpen()}
+            title={debugOpen ? "收起调试" : "展开调试（Ctrl+Shift+D 隐藏）"}
+            type="button"
+          >
+            <Bug size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
       <div className="planet-three__nav-status">
         {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}

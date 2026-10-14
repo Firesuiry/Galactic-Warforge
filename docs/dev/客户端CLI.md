@@ -239,7 +239,7 @@ agent_thread agent-war-director
 | `save` | `save [--reason <text>]` | Trigger manual save |
 | `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
-### 管理、调试与工具（23 条）
+### 管理、调试与工具（25 条）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
@@ -252,6 +252,8 @@ agent_thread agent-war-director
 | `alert_snapshot` | `alert_snapshot [options]` | Query production alert snapshot |
 | `replay` | `replay [options]` | Replay tick range |
 | `rollback` | `rollback [options]` | Rollback to tick |
+| `advance` | `advance <ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]` | 狂飙模式：快进到目标 tick（admin）；默认在我方受袭/新出现的关键警报（缺电、缺料停工）/对局结束时提前停下 |
+| `advance_cancel` | — | 取消进行中的快进（admin） |
 | `help` | `help [command]` | Show help |
 | `agent_list` | — | List agent-gateway agent profiles |
 | `agent_create` | `agent_create <name> --provider <provider_id> [--role <worker\|manager\|director>] [--can-create-agents <true\|false>] [--command-categories <csv>] [--planet-ids <csv>] [--dispatch-agent-ids <csv>] [--direct-message-agent-ids <csv>]` | Create an agent-gateway agent profile bound to the current player key |

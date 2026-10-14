@@ -353,6 +353,27 @@ describe('toastFromGameEvent 事件映射', () => {
   });
 });
 
+describe('fast_forward_finished toast', () => {
+  it('toast 文案是「快进结束：停在 tick X（原因）」，受袭/警报为 warning', () => {
+    const stopped = toastFromGameEvent(gameEvent('fast_forward_finished', {
+      start_tick: 100,
+      end_tick: 612,
+      stopped_reason: 'under_attack',
+      detail: '我方目标 u-1 在 tick 612 受到伤害',
+    }));
+    expect(stopped?.toast.kind).toBe('warning');
+    expect(stopped?.toast.title).toBe('快进结束：停在 tick 612（我方受袭）');
+    expect(stopped?.toast.body).toBe('我方目标 u-1 在 tick 612 受到伤害');
+    expect(stopped?.toast.mergeKey).toBe('fast_forward_finished');
+
+    const reached = toastFromGameEvent(gameEvent('fast_forward_finished', {
+      end_tick: 600, stopped_reason: 'reached',
+    }));
+    expect(reached?.toast.kind).toBe('info');
+    expect(reached?.toast.title).toBe('快进结束：停在 tick 600（到达目标）');
+  });
+});
+
 describe('notifications store', () => {
   it('push：可见上限 5 条，超出挤掉最旧的', () => {
     const store = useNotificationsStore.getState();

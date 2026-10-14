@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -993,7 +993,8 @@ describe("PlanetPage", () => {
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
     expect(screen.getAllByText("采矿机").length).toBeGreaterThan(0);
     expect(screen.getByText("运行中")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "展开调试" }));
+    // 调试默认隐藏：Ctrl+Shift+D 显示（面板与工具条图标同源），随后可点图标收起
+    fireEvent.keyDown(window, { key: "D", ctrlKey: true, shiftKey: true });
     expect(screen.getByText("调试面板")).toBeInTheDocument();
   });
 
@@ -1842,7 +1843,8 @@ describe("PlanetPage", () => {
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "展开调试" }));
+    // 调试默认隐藏，Ctrl+Shift+D 显示面板与工具条图标
+    fireEvent.keyDown(window, { key: "D", ctrlKey: true, shiftKey: true });
     expect(
       screen.getByRole("button", { name: "收起调试" }),
     ).toBeInTheDocument();

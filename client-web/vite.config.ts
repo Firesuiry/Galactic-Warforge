@@ -39,6 +39,7 @@ export default defineConfig({
       '/events': createProxyEntry(),
       '/alerts': createProxyEntry(),
       '/commands': createProxyEntry(),
+      '/admin': createProxyEntry(),
       '/save': createProxyEntry(),
       '/replay': createProxyEntry(),
       '/rollback': createProxyEntry(),
@@ -51,6 +52,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     css: true,
     globals: true,
-    exclude: [...configDefaults.exclude, 'tests/**'],
+    // tests/ 是 Playwright 视觉基线，tests-manual/ 是手工截图脚本：都不进 vitest。
+    exclude: [...configDefaults.exclude, 'tests/**', 'tests-manual/**'],
   },
 });

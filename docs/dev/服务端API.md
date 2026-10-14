@@ -545,6 +545,27 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`POST /rollback`**（仅 admin）：请求 `{to_tick}`（0 为当前 tick，不可超过当前）。响应同 replay 的计数与 `digest`，另含 `trimmed_command_log` / `trimmed_event_history` / `trimmed_alert_history` / `trimmed_snapshots`。
 
+**`POST /admin/advance`**（仅 admin，多人对局另有门禁）：狂飙模式——暂停定时节奏，连续结算 tick 直到目标 tick 或命中停止条件，然后按原速率恢复。
+
+```json
+{ "ticks": 500,
+  "stop_on": { "game_over": true, "under_attack": true, "critical_alert": false } }
+```
+
+- `ticks` 与 `to_tick` **必须且只能给一个**（`to_tick` 必须大于当前 tick，`ticks` 必须为正）；两者都给或都不给 → `400`；未知字段 → `400`。
+- `stop_on` 三项**默认全开**，只有显式传 `false` 才关闭：`game_over`（对局宣判结束）、`under_attack`（我方建筑/单位受到伤害或被摧毁；拆除与太阳帆寿终不算）、`critical_alert`（**快进开始后新出现的**高价值产线告警：缺电 `power_shortage`（含欠压停机）、缺料停工 `input_shortage`）。
+  - 常态产线告警刻意排除，它们不该打断「一路狂奔」：`output_blocked`（产物阻塞）、`throughput_drop`（产能下降）、`backlog`（堆积升高）、`unit_spawn_blocked`（出厂口被占满）。
+  - 快进开始前就已经成立的高价值告警（同一建筑同一类型）不算「新出现」，不会触发；只有快进期间新冒出来的才停下（`go test ./internal/gamecore/ -run TestAdvanceCriticalAlert` 覆盖）。
+- 「我方」口径 = 发起者所属玩家；发起者不在本局玩家表里（纯 admin 账号）时退回本局所有非 bot 玩家。
+- 多人门禁：本局非 bot 玩家多于发起者一人时，只有 `role=admin` 能快进，否则 `403` 并在 `error` 里说明原因（快进会一次性推进全局时间线，其他人类玩家没有叫停机会）。
+- 响应 `200`：`start_tick` / `end_tick` / `stopped_reason` / `detail` / `elapsed_ms` / `ticks_per_sec`。`stopped_reason` ∈ `reached` / `game_over` / `under_attack` / `critical_alert` / `cancelled`。
+- 同时只允许一个快进：已有快进在跑时再调返回 `409`。
+- 快进期间查询接口照常可用（世界读锁按 tick 释放）；高频事件被降采样（见 §7），结束时发一条 `fast_forward_finished`。
+- 快进只改「什么时候跑 tick」，不改「tick 怎么跑」：每个 tick 照常处理命令队列、发事件、写快照，因此快进前后存读档与回放口径不变（`go test ./internal/gamecore/ -run TestAdvance` 覆盖）。
+
+**`POST /admin/advance/cancel`**（仅 admin）：取消进行中的快进。响应 `{cancelled}`；没有快进时 `cancelled=false`（不是错误，客户端可能在上一次快进刚好结束时按下取消）。被取消的快进以 `stopped_reason=cancelled` 正常返回。
+
+
 ### 6.8 对局管理
 
 **`GET /games/current`**：任意登录玩家可调。
@@ -671,6 +692,7 @@ GameEvent：
 | `dark_fog_calmed` | 全员可见；`player_id`：黑雾对该玩家恢复中立 |
 | `enemy_wave_incoming` | 全员可见；只在有敌对玩家时发；`nest_id` / `planet_id` / `from` / `count`（本波单位总数）/ `guards`（守军补员数）/ `raiders`（进攻队数量，受 `raidWaveCap`/`raidUnitCap` 限制）/ `level` / `threat` / `wave_tick` / `unit_speed` / 目标信息；只补守军的波次不发 |
 | `enemy_nest_destroyed` | 全员可见；`nest_id` / `position` / `level` / `killed_by` / `killer_owner` / `source` / `drops[]` / `threat_meter` |
+| `fast_forward_finished` | 全员可见；狂飙模式（`POST /admin/advance`）结束：`start_tick` / `end_tick` / `stopped_reason` / `detail` / `elapsed_ms` / `ticks_per_sec`。客户端收到后做一次全量刷新 |
 
 ## 8. 关键概念与事实源
 
