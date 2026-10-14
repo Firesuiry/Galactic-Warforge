@@ -1841,8 +1841,10 @@ export function PlanetDebugPanel({
             <div className="section-title">狂飙模式 / 快进</div>
             {adminAllowed ? (
               <div className="debug-panel__advance">
-                <div className="debug-panel__advance-row">
-                  <label className="toggle-pill">
+                {/* 280px 窄面板：单选项一行（文字不换行）排在输入框上方。
+                    过去 radio 与输入框同行，中文标签被挤成竖排三行。 */}
+                <div className="debug-panel__advance-modes" role="radiogroup">
+                  <label className="debug-panel__advance-mode">
                     <input
                       checked={advanceForm.mode === "ticks"}
                       name="advance-mode"
@@ -1851,17 +1853,7 @@ export function PlanetDebugPanel({
                     />
                     <span>推进 tick 数</span>
                   </label>
-                  <input
-                    aria-label="快进 tick 数"
-                    className="debug-panel__advance-input"
-                    disabled={advanceForm.mode !== "ticks"}
-                    onChange={(event) => patchAdvanceForm({ ticks: event.target.value })}
-                    type="text"
-                    value={advanceForm.ticks}
-                  />
-                </div>
-                <div className="debug-panel__advance-row">
-                  <label className="toggle-pill">
+                  <label className="debug-panel__advance-mode">
                     <input
                       checked={advanceForm.mode === "to_tick"}
                       name="advance-mode"
@@ -1870,17 +1862,21 @@ export function PlanetDebugPanel({
                     />
                     <span>推进到 tick</span>
                   </label>
-                  <input
-                    aria-label="快进目标 tick"
-                    className="debug-panel__advance-input"
-                    disabled={advanceForm.mode !== "to_tick"}
-                    onChange={(event) => patchAdvanceForm({ toTick: event.target.value })}
-                    type="text"
-                    value={advanceForm.toTick}
-                  />
                 </div>
+                <input
+                  aria-label={advanceForm.mode === "ticks" ? "快进 tick 数" : "快进目标 tick"}
+                  className="debug-panel__advance-input"
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    advanceForm.mode === "ticks"
+                      ? patchAdvanceForm({ ticks: event.target.value })
+                      : patchAdvanceForm({ toTick: event.target.value })
+                  }
+                  type="text"
+                  value={advanceForm.mode === "ticks" ? advanceForm.ticks : advanceForm.toTick}
+                />
                 <div className="debug-panel__advance-stops">
-                  <label className="toggle-pill">
+                  <label className="debug-panel__advance-stop">
                     <input
                       checked={advanceForm.stopOn.underAttack}
                       onChange={(event) =>
@@ -1892,7 +1888,7 @@ export function PlanetDebugPanel({
                     />
                     <span>受袭即停</span>
                   </label>
-                  <label className="toggle-pill">
+                  <label className="debug-panel__advance-stop">
                     <input
                       checked={advanceForm.stopOn.criticalAlert}
                       onChange={(event) =>
@@ -1902,9 +1898,9 @@ export function PlanetDebugPanel({
                       }
                       type="checkbox"
                     />
-                    <span>关键警报即停</span>
+                    <span title="快进期间新出现的缺电 / 缺料停工告警">关键警报即停</span>
                   </label>
-                  <label className="toggle-pill">
+                  <label className="debug-panel__advance-stop">
                     <input
                       checked={advanceForm.stopOn.gameOver}
                       onChange={(event) =>

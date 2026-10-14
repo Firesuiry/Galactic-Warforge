@@ -541,10 +541,38 @@
   gap:8px;
 }
 
-.debug-panel__advance-stops {
+/* 单选项一行（文字不换行）+ 下方一个数字输入框：280px 窄面板里，radio 与输入框
+   同行会把中文标签挤成竖排三行（见 tmp/fast-forward/debug-panel-2d-result.png）。 */
+.debug-panel__advance-modes {
   display:flex;
-  flex-wrap:wrap;
-  gap:8px;
+  align-items:center;
+  gap:12px;
+  flex-wrap:nowrap;
+  font-size:.92rem;
+}
+
+.debug-panel__advance-mode {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+}
+
+/* 停止条件复选框：两列紧凑排列（三个标签在 252px 内容宽里两行内放得下，
+   且比 flex-wrap 的 2+1 参差排布整齐）。 */
+.debug-panel__advance-stops {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px 8px;
+  font-size:.88rem;
+}
+
+.debug-panel__advance-stop {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+  white-space:nowrap;
 }
 
 .debug-panel__advance-input {
