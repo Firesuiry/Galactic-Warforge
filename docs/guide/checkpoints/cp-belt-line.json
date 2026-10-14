@@ -1,0 +1,25 @@
+{
+  "parent": "cp-root",
+  "note": "1015 A 段：铁矿 → 铁块 → 齿轮的传送带产线（构建段，只发 /commands 建，不用「装入建筑」）。采矿机 b-56(55,137) 落在铁矿脉上 → 4 格传送带 (58..61,138, 输出=东) → 电弧熔炉 b-66(62,137, 配方 smelt_iron) → 4 格传送带 (65..68,138, 输出=东) → 分拣器 b-78(69,138) → 制造台 b-80(70,137, 配方 gear)；供电为风机 ×2 (57,141)/(60,141) + 电塔 ×3 (59,141)/(66,141)/(73,141)。p1 带开局物资包（铁块 60 / 齿轮 40 / 电路板 20 / 磁线圈 20 / 石砖 10，矿物 4000 / 能量 2000）——这是为聚焦验收 UI 与产线而给的，不是正常开局链。下游（B 段）可直接读档复用这条线，不必从零手搓。",
+  "build": [
+    "POST /games/new（admin）：seed skirmish-seed-001、easy、elimination；p1 bootstrap minerals 4000 / energy 2000 / inventory iron_ingot 60, gear 40, circuit_board 20, magnetic_coil 20, stone_brick 10；p2 bot easy",
+    "UI 建造栏「1电力」→ 风机 (57,141)、(60,141)；「4电网」→ 电塔 (59,141)、(66,141)、(73,141)（tick ~1400）",
+    "UI「3采集」→ 采矿机 (55,137)，落在铁矿脉上（tick ~2700）",
+    "UI「5运输」→ 传送带 (58..61,138)，每格先点方向控件切到「东」（输出=东）再点地图；否则默认 auto 不走货",
+    "UI「7精炼」→ 电弧熔炉 (62,137)；抽屉「选中对象」→ 切换配方 smelt_iron → 应用配方",
+    "UI「5运输」→ 传送带 (65..68,138)，同样输出=东",
+    "UI「5运输」→ 分拣器 (69,138)",
+    "UI「6生产」→ 制造台 Mk.I (70,137)；抽屉「选中对象」→ 切换配方 gear → 应用配方",
+    "空等到产线贯通（熔炉出铁块 → 分拣器搬运 → 制造台出齿轮），再存 cp-belt-line"
+  ],
+  "contract": {
+    "checks": [
+      {"kind": "game_not_finished"},
+      {"kind": "player_alive", "player": "p1"},
+      {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 1},
+      {"kind": "building_running_gte", "player": "p1", "type": "mining_machine", "n": 1},
+      {"kind": "building_running_gte", "player": "p1", "type": "arc_smelter", "n": 1},
+      {"kind": "building_running_gte", "player": "p1", "type": "assembling_machine_mk1", "n": 1}
+    ]
+  }
+}
