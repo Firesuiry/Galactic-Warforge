@@ -48,6 +48,10 @@ func TestAdvancedAssemblersRunAuthoritativeProductionTick(t *testing.T) {
 
 // Exercise the real belt IO + production + storage phases, including a blocked
 // output. Higher tiers must consume the same material per product, faster.
+//
+// 产出落点语义（试玩 1015 理顺）：成品只落「输出缓冲 → 主库存产出预留段」，
+// 原料只落「输入缓冲 → 主库存非预留段」。因此这里把下游堵死的方式是占满输出缓冲
+// 与预留段（fillProductLandingSpots），而不是往输入缓冲里塞占位料。
 func TestAssemblerTiersBeltIOPowerAndBackpressure(t *testing.T) {
 	for _, tc := range []struct {
 		kind     model.BuildingType
@@ -82,22 +86,22 @@ func TestAssemblerTiersBeltIOPowerAndBackpressure(t *testing.T) {
 				t.Fatal("no_power advanced production")
 			}
 			b.Runtime.State = model.BuildingWorkRunning
-			// Fill every output destination after inputs have been consumed.
-			b.Storage.EnsureInventory()[model.ItemStoneOre] = b.Storage.Capacity
-			b.Storage.EnsureInputBuffer()[model.ItemStoneOre] = b.Storage.InputBufferCapacity()
+			// Block every product landing spot (output buffer + output reserve) and
+			// fill the output belt, then run past the cycle time. The invariant is
+			// conservation: the batch stays pending and no extra gear appears.
+			fillProductLandingSpots(b.Storage, model.ItemGear)
 			output.Conveyor.Insert(model.ItemGear, output.Conveyor.AvailableCapacity())
+			storedBefore := b.ExportableItemQuantity(model.ItemGear)
 			for i := 0; i <= tc.duration+3; i++ {
 				ws.Tick++
 				settleProduction(ws)
 				settleStorage(ws)
 				settleBuildingIO(ws)
 			}
-			if len(b.Production.PendingOutputs) != 1 || b.Production.RemainingTicks != 0 || b.ExportableItemQuantity(model.ItemGear) != 0 {
+			if len(b.Production.PendingOutputs) != 1 || b.Production.RemainingTicks != 0 || b.ExportableItemQuantity(model.ItemGear) != storedBefore {
 				t.Fatalf("blocked production lost or duplicated its pending output: %+v %+v", b.Production, b.Storage)
 			}
-			delete(b.Storage.Inventory, model.ItemStoneOre)
-			delete(b.Storage.InputBuffer, model.ItemStoneOre)
-			delete(b.Storage.OutputBuffer, model.ItemStoneOre)
+			drainProductLandingSpots(b.Storage, model.ItemGear)
 			output.Conveyor.Take(output.Conveyor.TotalItems())
 			settleProduction(ws)
 			settleStorage(ws)

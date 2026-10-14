@@ -35,6 +35,46 @@ func fillProductionOutputSpace(storage *model.StorageState, outputItemID string)
 	}
 }
 
+// fillProductLandingSpots 占满一台机器产出的全部落点，模拟「下游完全不出货」：
+//   - 输出缓冲用该配方真正的成品填满（用与配方无关的物品会被 sanitizeOutputBuffer
+//     挪回主库存，反而腾出输出缓冲）；
+//   - 主库存的产出预留段也用成品占住（成品堆在预留区里等着被取走）；
+//   - 主库存其余空位与输入缓冲用与配方无关的石头矿填满（不会被当成原料消耗）。
+//
+// 调用后 OutputBufferSpace() == 0 且 ReservedSpace() == 0，任何整批产出都落不下
+// （落点语义见 model.StorageState.StoreProduct）。
+func fillProductLandingSpots(storage *model.StorageState, product string) {
+	if storage == nil {
+		return
+	}
+	if storage.OutputBufferCapacity() > 0 && product != "" {
+		storage.EnsureOutputBuffer()[product] = storage.OutputBufferCapacity()
+	}
+	if storage.InputBufferCapacity() > 0 {
+		storage.EnsureInputBuffer()[model.ItemStoneOre] = storage.InputBufferCapacity()
+	}
+	if product != "" && storage.Reserve > 0 {
+		storage.EnsureInventory()[product] += storage.Reserve
+	}
+	if room := storage.Capacity - storage.UsedInventory(); room > 0 {
+		storage.EnsureInventory()[model.ItemStoneOre] += room
+	}
+}
+
+// drainProductLandingSpots 腾空产出的全部落点：清掉输出缓冲、占位料（石头矿）与
+// 用来占住预留段的成品。其它物料（例如还没加工的原料）保持原样。
+func drainProductLandingSpots(storage *model.StorageState, products ...string) {
+	if storage == nil {
+		return
+	}
+	storage.OutputBuffer = nil
+	delete(storage.Inventory, model.ItemStoneOre)
+	delete(storage.InputBuffer, model.ItemStoneOre)
+	for _, product := range products {
+		delete(storage.Inventory, product)
+	}
+}
+
 // 回归（试玩 1014 层 04 P1）：把 60 个铁矿「装入」容量 24 的熔炉，旧实现把主库存
 // 塞到 24/24、输入缓冲 5/5，产出整批落不下，建筑表面 running 却永远不产出。
 // 现在装入受「容量 − 产出预留」限制，超出的留在背包，且回执说清实际装入量与原因。
@@ -150,16 +190,14 @@ func TestFullOutputReportsBlockedReason(t *testing.T) {
 	})
 
 	recipe, _ := model.Recipe("smelt_iron")
-	// 塞满所有落货位（输出缓冲 + 输入缓冲 + 产出预留之后的主库存），产出无处可放。
-	// 装入只把主库存填到「容量 − 预留」、输入缓冲填满，主库存里剩下的预留空位由
-	// 生产结算的产出逐步占满（产出走输出缓冲 → 输入缓冲 → 主库存）。
-	fillProductionOutputSpace(smelter.Storage, model.ItemIronIngot)
+	// 塞满产出的全部落点（输出缓冲 + 产出预留段 + 主库存其余空位），产出无处可放。
+	fillProductLandingSpots(smelter.Storage, model.ItemIronIngot)
 	advanceProduction(ws, recipe.Duration*8)
 
 	storage := smelter.Storage
-	if storage.OutputBufferSpace() > 0 || storage.InputBufferSpace() > 0 || storage.ReservedSpace() > 0 {
-		t.Fatalf("test premise broken: output room %d + input room %d + reserve room %d should be exhausted",
-			storage.OutputBufferSpace(), storage.InputBufferSpace(), storage.ReservedSpace())
+	if storage.OutputBufferSpace() > 0 || storage.ReservedSpace() > 0 {
+		t.Fatalf("test premise broken: output room %d + reserve room %d should be exhausted",
+			storage.OutputBufferSpace(), storage.ReservedSpace())
 	}
 	if smelter.Runtime.State != model.BuildingWorkRunning {
 		t.Fatalf("production cycle itself is fine, state must stay running, got %s", smelter.Runtime.State)

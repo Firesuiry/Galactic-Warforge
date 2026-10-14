@@ -165,29 +165,19 @@ func consumeRecipeInputs(storage *model.StorageState, recipe model.RecipeDefinit
 	}
 }
 
-// Commit the entire batch atomically. Feedback outputs are separate from the
-// unprocessed seed stock and can leave only after the production cycle completes.
-//
-// 「装入/传送带送料不会把建筑塞死」这件事由产出预留保证（见 model.StorageState.Reserve：
-// 主库存的可用量一律是「容量 − 预留」，Receive/Load/PreviewReceive/FlushInput 都走
-// StorageState.availableInventory），落货本身仍按原有顺序：反馈料只进输出缓冲（进主
-// 库存会被当成未处理原料消耗掉），普通产出走 Receive 的「输入缓冲 → 主库存」。整批
-// 任一项放不下就整批保留、下 tick 重试——输入侧永远给成品留着预留空位，所以
-// 「running 却不产出」在真实流程里不会再发生；万一还是落不下（预留被外部状态占满），
-// settleProduction 会写 output_blocked 让玩家在 runtime 里看见原因（试玩 1014 层 04 P1）。
+// Commit the entire batch atomically onto the product landing path:
+// output buffer → main inventory's output reserve (成品绝不进输入缓冲).
+// 整批任一项放不下就整批保留、下 tick 重试——输入路径永远给成品留着输出缓冲与
+// 产出预留，所以「running 却不产出」在真实流程里不会再发生；万一还是落不下
+// （预留被外部状态占满），settleProduction 会写 output_blocked 让玩家在 runtime
+// 里看见原因（试玩 1014 层 04 P1）。
 func storeProductionOutputs(building *model.Building, outputs []model.ItemAmount) bool {
 	if building == nil || building.Storage == nil {
 		return false
 	}
 	simulated := building.Storage.Clone()
 	for _, output := range outputs {
-		var accepted, remaining int
-		var err error
-		if building.IsFeedbackItem(output.ItemID) {
-			accepted, remaining, err = simulated.ReceiveOutput(output.ItemID, output.Quantity)
-		} else {
-			accepted, remaining, err = simulated.Receive(output.ItemID, output.Quantity)
-		}
+		accepted, remaining, err := simulated.StoreProduct(output.ItemID, output.Quantity)
 		if err != nil || accepted != output.Quantity || remaining != 0 {
 			return false
 		}
