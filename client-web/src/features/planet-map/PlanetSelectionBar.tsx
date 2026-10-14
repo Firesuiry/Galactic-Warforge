@@ -21,7 +21,7 @@ import {
   type PlanetRenderView,
 } from '@/features/planet-map/model';
 import { summarizeUnitSelection } from '@/features/planet-map/rts-commands';
-import { describeHaul, isTransportRobot, transportHaulRoute } from '@/features/planet-map/transport-haul';
+import { allAutoHaul, describeHaul, hasTransportRobot, isTransportRobot, transportHaulMode, transportHaulTask } from '@/features/planet-map/transport-haul';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
@@ -148,6 +148,11 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
       { label: '攻击', title: '右键点敌也可攻击', action: () => setInteractionMode({ kind: 'attack' }) },
       ...(robotIds.length > 0 ? [
         {
+          label: allAutoHaul(robotIds.map((id) => planet.units?.[id])) ? '自动搬运 ✓' : '自动搬运',
+          title: '切回全局自动搬运（出厂默认）：自动给本行星缺料的建筑送料',
+          action: () => submit('unit_order', () => client.cmdAutoHaul(robotIds), { entityId: robotIds[0] }),
+        },
+        {
           label: activeHaul ? (activeHaul.fromBuildingId ? '已选起点，点终点' : '点起点建筑') : '设置运输',
           title: '依次点击起点建筑、终点建筑，为选中的运输机器人设同一条路线',
           action: () => {
@@ -155,11 +160,11 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
             else setInteractionMode({ kind: 'haul' as const });
           },
         },
-        ...(robotIds.some((id) => transportHaulRoute(planet.units?.[id])) ? [{
-          label: '停止运输',
-          title: '清空这些机器人的路线',
+        {
+          label: '停止',
+          title: '停止搬运，原地待命（点「自动搬运」可恢复）',
           action: () => submit('unit_order', () => client.cmdUnitOrder(robotIds, 'stop'), { entityId: robotIds[0] }),
-        }] : []),
+        },
       ] : []),
       ...(orderEligible.length > 0 ? [
         { label: '攻击移动', title: 'A · 沿途交战推进', action: () => setInteractionMode({ kind: 'unit_order' as const, order: 'attack_move' as const }) },
@@ -322,7 +327,14 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           </span>
           {isTransportRobot(unit) ? (
             <span className="planet-selection-bar__meta">
-              {describeHaul(unit, (itemId) => getItemDisplayName(catalog, itemId)) ?? '未设路线'}
+              {describeHaul(
+                unit,
+                (itemId) => getItemDisplayName(catalog, itemId),
+                (buildingId) => {
+                  const building = planet.buildings?.[buildingId];
+                  return building ? getBuildingDisplayName(catalog, building.type) : undefined;
+                },
+              ) ?? (transportHaulMode(unit) === 'idle' ? '已停止' : '自动待命')}
             </span>
           ) : null}
           {unit.ammo_capacity?<AmmunitionBar current={unit.ammo??0} capacity={unit.ammo_capacity}/>:null}
@@ -407,9 +419,17 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
                 </button>
               </>
             ) : null}
-            {/* 运输机器人（§4）：设置运输 = 依次点起点/终点建筑，停止运输 = unit_order stop。 */}
+            {/* 运输机器人（§2.1）：自动搬运（出厂默认，切换按钮高亮）/ 设置运输（进入固定路线）/ 停止（进入待命）。 */}
             {isTransportRobot(unit) ? (
               <>
+                <button
+                  className={`secondary-button${transportHaulMode(unit) === 'auto' ? ' planet-selection-bar__active' : ''}`}
+                  type="button"
+                  title="切回全局自动搬运（出厂默认）：自动给本行星缺料的建筑送料"
+                  onClick={() => submit('unit_order', () => client.cmdAutoHaul(unit.id), { entityId: unit.id })}
+                >
+                  自动搬运
+                </button>
                 <button
                   className={`secondary-button${activeMode?.kind === 'haul' ? ' planet-selection-bar__active' : ''}`}
                   type="button"
@@ -427,16 +447,6 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
                     ? (activeMode.fromBuildingId ? '已选起点，点终点' : '点起点建筑')
                     : '设置运输'}
                 </button>
-                {transportHaulRoute(unit) ? (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    title="清空路线，机器人原地待命"
-                    onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
-                  >
-                    停止运输
-                  </button>
-                ) : null}
               </>
             ) : null}
           </div>

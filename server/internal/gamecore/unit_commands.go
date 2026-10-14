@@ -378,6 +378,16 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 				return *failure, nil
 			}
 			haulReply = message
+		case "auto_haul":
+			// §2.1：切回全局自动模式（出厂默认），清掉固定路线与认领。
+			if unit.Type != model.UnitTypeTransportRobot {
+				return mechaJobFailed(model.CodeInvalidTarget, fmt.Sprintf("%s不是运输机器人，只有运输机器人可以执行 auto_haul（自动搬运）指令", unitDisplayName(unit)))
+			}
+			message, failure := assignAutoHaul(unit)
+			if failure != nil {
+				return *failure, nil
+			}
+			haulReply = message
 		case "hold":
 			unit.ClearMovement()
 			unit.ClearEngagement()
@@ -473,7 +483,7 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	if order == "haul" && haulReply != "" {
+	if (order == "haul" || order == "auto_haul") && haulReply != "" {
 		res.Message = haulReply
 	} else {
 		res.Message = fmt.Sprintf("%d 个单位已执行 %s 指令", ordered, order)

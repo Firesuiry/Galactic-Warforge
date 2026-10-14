@@ -69,7 +69,7 @@ import {
   harvestPulseEnvelope,
   resolveHarvestPulse,
 } from '@/features/planet-map/planet-logistics-flow';
-import { transportCargo, transportHaulRoute, haulPhaseLabel } from '@/features/planet-map/transport-haul';
+import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, transportHaulTask } from '@/features/planet-map/transport-haul';
 import { buildGhostDirection, directionVector, isSorterBuilding } from '@/features/planet-map/logistics-direction';
 import { advanceLogisticsFlow, createLogisticsFlowSprite, logisticsFlowSpriteKey } from '@/features/planet-map/logistics-flow-marks';
 import { logisticsArrows, resolveLogisticsDirection } from '@/features/planet-map/logistics-direction';
@@ -88,7 +88,9 @@ import {
 import {
   canonicalTileIndex,
   getBuildingCatalogEntry,
+  getBuildingDisplayName,
   getBuildingFootprint,
+  getItemDisplayName,
   resolveSelectionPosition,
   toTilePoint,
   wrapMod,
@@ -2777,8 +2779,9 @@ export class PlanetScene {
         .stroke({ width: 2, color: COLOR_SELECTED });
     }
 
-    // 运输机器人路线（§4）：选中（单选或多选）的机器人带 haul 路线时，画起点→终点虚线 +
-    // 两端建筑占地框，终点附近标阶段中文（与选中条/详情面板同一文案）。
+    // 运输机器人任务（§2.1）：选中（单选或多选）的机器人有当前任务（自动派单或固定路线）时，
+    // 画起点→终点虚线 + 建筑占地框，并在终点附近标中文（自动模式「自动：送 铁矿 → 电弧熔炉」，
+    // 固定路线用阶段中文；与选中条/详情面板同一文案）。
     if (input.selectionVisible && this.baseInput) {
       const selectedIds = new Set<string>(input.selectedUnits ?? []);
       if (selected?.kind === 'unit') selectedIds.add(selected.id);
@@ -2786,23 +2789,30 @@ export class PlanetScene {
       const drawn = new Set<string>();
       for (const unitId of selectedIds) {
         const unit = planet.units?.[unitId];
-        const haul = transportHaulRoute(unit);
-        if (!haul || !unit) continue;
-        const key = `${haul.from_building_id}->${haul.to_building_id}`;
+        const task = transportHaulTask(unit);
+        if (!task || !unit) continue;
+        const key = `${task.from_building_id}->${task.to_building_id}`;
         if (drawn.has(key)) continue;
         drawn.add(key);
-        const from = planet.buildings?.[haul.from_building_id];
-        const to = planet.buildings?.[haul.to_building_id];
-        if (!from || !to) continue;
-        const a = toTilePoint(from.position);
+        // 自动模式车上带货改派时没有取货端：只画终点框与胶囊。
+        const from = task.from_building_id ? planet.buildings?.[task.from_building_id] : undefined;
+        const to = planet.buildings?.[task.to_building_id];
+        if (!to || (task.from_building_id && !from)) continue;
         const b = toTilePoint(to.position);
-        const ax = this.pxTileX(a.x) + (ts / 2), ay = this.pxTileY(a.y) + (ts / 2);
         const bx = this.pxTileX(b.x) + (ts / 2), by = this.pxTileY(b.y) + (ts / 2);
-        for (const [sx, sy, ex, ey] of buildDashSegments(ax, ay, bx, by, [ts * 0.42, ts * 0.3])) {
-          g.moveTo(sx, sy).lineTo(ex, ey);
+        let labelX = bx, labelY = by - ts * 0.6;
+        if (from) {
+          const a = toTilePoint(from.position);
+          const ax = this.pxTileX(a.x) + (ts / 2), ay = this.pxTileY(a.y) + (ts / 2);
+          for (const [sx, sy, ex, ey] of buildDashSegments(ax, ay, bx, by, [ts * 0.42, ts * 0.3])) {
+            g.moveTo(sx, sy).lineTo(ex, ey);
+          }
+          g.stroke({ width: 2.5, color: COLOR_UNIT_OWN, alpha: 0.9 });
+          labelX = (ax + bx) / 2;
+          labelY = (ay + by) / 2 - ts * 0.6;
         }
-        g.stroke({ width: 2.5, color: COLOR_UNIT_OWN, alpha: 0.9 });
-        for (const building of [from, to]) {
+        const boxes = from ? [from, to] : [to];
+        for (const building of boxes) {
           const footprint = getBuildingFootprint(building);
           const origin = toTilePoint(building.position);
           g.rect(
@@ -2812,8 +2822,15 @@ export class PlanetScene {
             Math.max(footprint.height * ts - 2, 2),
           ).stroke({ width: 2, color: COLOR_UNIT_OWN, alpha: 0.85 });
         }
-        // 阶段中文（前往取货/装货中/…）：贴在起点→终点连线中点，字号随 cell 缩放。
-        this.haulRouteLabel(haul.phase, (ax + bx) / 2, (ay + by) / 2 - ts * 0.6, ts);
+        const mode = transportHaulMode(unit);
+        const label = mode === 'auto'
+          ? describeAutoHaul(unit, (itemId) => getItemDisplayName(input.catalog, itemId),
+              (buildingId) => {
+                const building = planet.buildings?.[buildingId];
+                return building ? getBuildingDisplayName(input.catalog, building.type) : undefined;
+              })
+          : haulPhaseLabel(task.phase);
+        this.haulRouteLabel(label, labelX, labelY, ts);
       }
     }
 
@@ -2883,15 +2900,12 @@ export class PlanetScene {
   }
 
   /**
-   * 运输机器人路线阶段标签：文字按 cell 缩放（低缩放档不显示，字会糊成一团）。
+   * 运输机器人任务标签：文字按 cell 缩放（低缩放档不显示，字会糊成一团）。
    * 用 Graphics 之外的共享 Text 池代价高，这里只在近景档画一个贴图无关的矢量文字。
+   * label 是已算好的中文（自动模式「自动：送 铁矿 → 电弧熔炉」/ 固定路线阶段）。
    */
-  private haulRouteLabel(phase: string, cx: number, cy: number, ts: number) {
-    if (ts < 10) {
-      return;
-    }
-    const label = haulPhaseLabel(phase);
-    if (!label) {
+  private haulRouteLabel(label: string, cx: number, cy: number, ts: number) {
+    if (ts < 10 || !label) {
       return;
     }
     const size = Math.max(9, Math.min(14, ts * 0.7));

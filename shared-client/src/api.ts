@@ -626,7 +626,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop' | 'haul';
+  type UnitOrderKind = 'attack_move' | 'patrol' | 'guard' | 'hold' | 'follow' | 'retreat' | 'stop' | 'haul' | 'auto_haul';
 
   function cmdUnitOrder(selector: string | string[], order: UnitOrderKind, options: { position?: Position; targetEntityId?: string; planetId?: string; fromBuildingId?: string; toBuildingId?: string; itemId?: string } = {}) {
     return sendSingleCommand({
@@ -645,6 +645,11 @@ export function createApiClient(options: ApiClientOptions) {
   /** haul：运输机器人（transport_robot）在两座建筑之间往返搬运单一物品。 */
   function cmdHaul(selector: string | string[], fromBuildingId: string, toBuildingId: string, itemId?: string, planetId?: string) {
     return cmdUnitOrder(selector, 'haul', { fromBuildingId, toBuildingId, itemId, planetId });
+  }
+
+  /** auto_haul：运输机器人切回全局自动模式（§2.1，出厂默认）。 */
+  function cmdAutoHaul(selector: string | string[], planetId?: string) {
+    return cmdUnitOrder(selector, 'auto_haul', { planetId });
   }
 
   /** count：最多烧几块燃料（缺省 1），服务端烧到核心满为止。 */
@@ -1273,6 +1278,7 @@ export function createApiClient(options: ApiClientOptions) {
     cmdAttack,
     cmdUnitOrder,
     cmdHaul,
+    cmdAutoHaul,
     cmdRefuelMecha,
     cmdMineResource,
     cmdCraftItem,

@@ -48,8 +48,15 @@ export function describeHover(context: HoverContext, tile: TilePoint): HoverInfo
   const unit = getUnitList(planet).find((candidate) => at(candidate.position, tile));
   if (unit) {
     const faction = unitFaction(unit, playerId, darkFogHostile);
-    // 运输机器人（§4）：悬停直接给阶段 + 已送达 + 载货，不用点开详情才知道在干什么。
-    const haul = describeHaul(unit, (itemId) => getItemDisplayName(catalog, itemId));
+    // 运输机器人（§2.1）：悬停直接给模式/任务 + 已送达 + 载货，不用点开详情才知道在干什么。
+    const haul = describeHaul(
+      unit,
+      (itemId) => getItemDisplayName(catalog, itemId),
+      (buildingId) => {
+        const building = getBuildingList(planet).find((candidate) => candidate.id === buildingId);
+        return building ? getBuildingDisplayName(catalog, building.type) : undefined;
+      },
+    );
     return {
       title: translateUnitType(unit.type),
       faction,
