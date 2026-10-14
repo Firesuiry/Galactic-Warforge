@@ -111,18 +111,20 @@ var commandSpecs = []CommandStructureSpec{
 				if to == "" {
 					issues = append(issues, MissingFieldIssue("payload.to_building_id"))
 				}
+			case "auto_haul":
+				// §2.1：切回全局自动模式，不需要任何参数。
 			case "hold", "stop":
 			default:
 				issues = append(issues, InvalidValueIssue(
 					"payload.order",
-					"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop/haul",
-					"attack_move|patrol|guard|hold|follow|retreat|stop|haul",
+					"payload.order must be one of attack_move/patrol/guard/hold/follow/retreat/stop/haul/auto_haul",
+					"attack_move|patrol|guard|hold|follow|retreat|stop|haul|auto_haul",
 					order,
 				))
 			}
 			return issues
 		},
-		Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "haul（运输机器人专用）：需 payload.from_building_id + payload.to_building_id，可选 payload.item_id 锁定单一物品；两端须为己方同行星建筑，起点能取货、终点能收货。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
+		Constraints: []string{"R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。", "haul（运输机器人专用）：需 payload.from_building_id + payload.to_building_id，可选 payload.item_id 锁定单一物品；两端须为己方同行星建筑，起点能取货、终点能收货，进入固定路线模式。", "auto_haul（运输机器人专用，出厂默认模式）：无参数，切回全局自动搬运——每 10 tick 按本行星缺料建筑打分派单，无需求时原地待命。stop 进入待命（不清空自动模式的出厂默认，但会停止搬运）。", "F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。"},
 	},
 	{
 		Type:                  CmdRefuelMecha,

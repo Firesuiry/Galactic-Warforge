@@ -257,6 +257,22 @@ export async function cmdHaul(args: string[], { api }: CommandContext): Promise<
   }
 }
 
+/** auto_haul：把运输机器人切回全局自动模式（§2.1，出厂默认）。 */
+export async function cmdAutoHaul(args: string[], { api }: CommandContext): Promise<string> {
+  const parsed = parseArgs(args);
+  if (parsed.positionals.length < 1) {
+    return fmtError('Usage: auto_haul <unit_id[,unit_id...]> [--planet <planet_id>]');
+  }
+  const selector = parsed.positionals[0].includes(',')
+    ? parsed.positionals[0].split(',').map((v) => v.trim()).filter(Boolean)
+    : parsed.positionals[0];
+  try {
+    return fmtCommandResponse(await api.cmdAutoHaul(selector, getStringOption(parsed, 'planet')));
+  } catch (e) {
+    return fmtError(toErrorMessage(e));
+  }
+}
+
 export async function cmdAttack(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 2) {

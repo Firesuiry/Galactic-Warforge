@@ -1,9 +1,23 @@
 package model
 
-// 运输机器人（§2）的路线与行程状态。
+// 运输机器人（§2）的路线、模式与行程状态。
 //
-// 路线是玩家下达的持久意图（unit_order order=haul 写入），行程是每 tick 结算
-// 推进的运行时状态；两者都挂在单位上，随单位快照/克隆一起存读档。
+// 模式是玩家下达的持久意图（unit_order order=haul/auto_haul/stop 写入），
+// 路线是固定路线模式下的往返端点，行程是每 tick 结算推进的运行时状态；
+// 三者都挂在单位上，随单位快照/克隆一起存读档（含自动模式的在途认领 Claim，
+// 读档后由机器人当前任务直接恢复，不需要额外重建）。
+
+// HaulMode 运输机器人的模式（§2.1）。
+type HaulMode string
+
+const (
+	// HaulModeAuto 全局自动模式（出厂默认）：按本行星需求/供给自动派单。
+	HaulModeAuto HaulMode = "auto"
+	// HaulModeRoute 固定路线模式：玩家用 unit_order order=haul 指定的往返路线。
+	HaulModeRoute HaulMode = "route"
+	// HaulModeIdle 待命：不接自动派单，也没有固定路线。
+	HaulModeIdle HaulMode = "idle"
+)
 
 // HaulPhase 运输机器人的当前阶段。
 type HaulPhase string
@@ -21,19 +35,47 @@ const (
 	HaulPhaseWaitingSource HaulPhase = "waiting_source"
 	// HaulPhaseWaitingTarget 终点暂时收不下，在终点等。
 	HaulPhaseWaitingTarget HaulPhase = "waiting_target"
+	// HaulPhaseIdle 没有任务：原地待命（自动模式无需求，或已被停止）。
+	HaulPhaseIdle HaulPhase = "idle"
 )
 
-// UnitHaulState 运输机器人的路线与行程状态（unit JSON 的 haul 字段）。
+// HaulClaim 自动模式的一次在途认领（§2.1）：从 SupplyBuildingID 取 ItemID
+// 送往 DemandBuildingID，数量 Quantity。
 //
-// 路线字段（FromBuildingID/ToBuildingID/ItemID）由 haul 指令写入，
+// SupplyBuildingID 为空表示「货已在车上」（上一条任务剩下的货改派，或端点消失后
+// 回收的货）——需求端仍然成立，供给端不需要再去取。
+type HaulClaim struct {
+	SupplyBuildingID string `json:"supply_building_id,omitempty"`
+	DemandBuildingID string `json:"demand_building_id"`
+	ItemID           string `json:"item_id"`
+	Quantity         int    `json:"quantity"`
+}
+
+// Clone returns a deep copy of the claim.
+func (c *HaulClaim) Clone() *HaulClaim {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	return &out
+}
+
+// UnitHaulState 运输机器人的模式、路线与行程状态（unit JSON 的 haul 字段）。
+//
+// Mode 决定结算走哪条状态机（auto 自动派单 / route 固定路线 / idle 待命）；
+// 路线字段（FromBuildingID/ToBuildingID/ItemID）在两种有任务模式下都是
+// 「当前任务的取货建筑 → 送货建筑」（自动模式下由派单写入，供客户端画线）；
 // 行程字段（Phase/Cargo/DeliveredTotal）由结算推进。
 type UnitHaulState struct {
+	Mode           HaulMode   `json:"mode"`
 	FromBuildingID string     `json:"from_building_id"`
 	ToBuildingID   string     `json:"to_building_id"`
 	ItemID         string     `json:"item_id,omitempty"`
 	Phase          HaulPhase  `json:"phase"`
 	Cargo          ItemAmount `json:"cargo"`
 	DeliveredTotal int        `json:"delivered_total"`
+	// Claim 自动模式的在途认领（route/idle 模式下为空）。
+	Claim *HaulClaim `json:"claim,omitempty"`
 }
 
 // Clone returns a deep copy of the haul state for read-only snapshots.
@@ -42,6 +84,7 @@ func (h *UnitHaulState) Clone() *UnitHaulState {
 		return nil
 	}
 	out := *h
+	out.Claim = h.Claim.Clone()
 	return &out
 }
 
@@ -79,8 +122,9 @@ func (h *UnitHaulState) Unload(quantity int) {
 	}
 }
 
-// ClearHaul 清空路线与行程（stop 指令、端点建筑消失时调用）。
-func (h *UnitHaulState) ClearHaul() {
+// ClearRoute 清空当前任务（端点、货种、阶段、认领），保留模式与车上货物。
+// 端点建筑消失、供给取空、需求已满时调用：车上的货不能凭空消失（§2.1）。
+func (h *UnitHaulState) ClearRoute() {
 	if h == nil {
 		return
 	}
@@ -88,6 +132,25 @@ func (h *UnitHaulState) ClearHaul() {
 	h.ToBuildingID = ""
 	h.ItemID = ""
 	h.Phase = ""
-	h.Cargo = ItemAmount{}
+	h.Claim = nil
+}
+
+// ClearHaul 停止：清空当前任务并进入待命模式。车上货物保留（玩家重新下令后继续用）。
+func (h *UnitHaulState) ClearHaul() {
+	if h == nil {
+		return
+	}
+	h.ClearRoute()
+	h.Mode = HaulModeIdle
+	h.DeliveredTotal = 0
+}
+
+// SetMode 切换模式并清空当前任务（模式切换总是从干净状态开始）。
+func (h *UnitHaulState) SetMode(mode HaulMode) {
+	if h == nil {
+		return
+	}
+	h.ClearRoute()
+	h.Mode = mode
 	h.DeliveredTotal = 0
 }
