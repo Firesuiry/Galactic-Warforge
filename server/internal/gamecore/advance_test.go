@@ -215,6 +215,26 @@ func TestAdvanceCancel(t *testing.T) {
 	}
 }
 
+// 快进结束事件同时写进事件历史：断线客户端重连后走 /events/snapshot 补拉也能
+// 拿到「该全量刷新了」的信号（SSE 只覆盖在线订阅者）。
+func TestAdvanceFinishedEventRecordedInHistory(t *testing.T) {
+	core := newE2ETestCore(t)
+	if _, err := core.Advance(AdvanceSpec{Ticks: 3, StopOn: AdvanceStopOn{}}, nil); err != nil {
+		t.Fatalf("advance: %v", err)
+	}
+	if core.eventHistory == nil {
+		t.Fatal("test core must have an event history")
+	}
+	events, _, _, _ := core.eventHistory.Snapshot(
+		[]model.EventType{model.EvtFastForwardFinished}, "", 0, 10)
+	if len(events) != 1 {
+		t.Fatalf("event history must carry the finished event, got %d", len(events))
+	}
+	if reason, _ := events[0].Payload["stopped_reason"].(string); reason != model.AdvanceStoppedReached {
+		t.Fatalf("finished event reason = %q", reason)
+	}
+}
+
 // 并发：同一时刻只允许一个快进，第二次调用立刻返回 ErrAdvanceInProgress（不阻塞）。
 func TestAdvanceRejectsConcurrentRun(t *testing.T) {
 	core := newE2ETestCore(t)

@@ -200,7 +200,9 @@ func (gc *GameCore) Advance(spec AdvanceSpec, ownedTargets map[string]struct{}) 
 	}
 
 	// 快进结束事件：客户端据此做一次全量刷新（快进期间的高频事件已被降采样）。
-	gc.bus.Publish([]*model.GameEvent{{
+	// 同时写进事件历史：快进期间断线的客户端重连后走 /events/snapshot 补拉时，
+	// 也能拿到这条「该刷新了」的信号（SSE 只覆盖在线订阅者）。
+	finished := &model.GameEvent{
 		EventID:         fmt.Sprintf("evt-%d-advance-finished", result.EndTick),
 		Tick:            result.EndTick,
 		EventType:       model.EvtFastForwardFinished,
@@ -213,7 +215,11 @@ func (gc *GameCore) Advance(spec AdvanceSpec, ownedTargets map[string]struct{}) 
 			"elapsed_ms":     result.ElapsedMS,
 			"ticks_per_sec":  result.TicksPerSec,
 		},
-	}})
+	}
+	if gc.eventHistory != nil {
+		gc.eventHistory.Record([]*model.GameEvent{finished})
+	}
+	gc.bus.Publish([]*model.GameEvent{finished})
 	log.Printf("[GameCore] fast-forward %d → %d (%s, %.0f tick/s, %dms)",
 		result.StartTick, result.EndTick, result.StoppedReason, result.TicksPerSec, result.ElapsedMS)
 	return result, nil
