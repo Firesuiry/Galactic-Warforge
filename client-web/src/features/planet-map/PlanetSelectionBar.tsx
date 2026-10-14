@@ -184,10 +184,11 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           <span className="planet-selection-bar__hint">右键地面移动 · 右键敌人攻击 · Ctrl+数字编队</span>
         </div>
         <div className="planet-selection-bar__actions">
-          {orderButtons.map((button) => (
+          {orderButtons.map((button, index) => (
             <button
               className="secondary-button"
-              key={button.label}
+              // 运输机器人块与通用指令块都有「停止」，按 label 做 key 会重复。
+              key={`${button.label}-${index}`}
               title={button.title}
               type="button"
               onClick={() => {
