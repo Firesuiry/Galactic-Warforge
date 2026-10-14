@@ -64,7 +64,16 @@ import {
   cmdBuildDysonShell,
   cmdDemolishDyson,
 } from './action.js';
-import { cmdAlertSnapshot, cmdAudit, cmdEventSnapshot, cmdReplay, cmdRollback, cmdSave } from './debug.js';
+import {
+  cmdAdvance,
+  cmdAdvanceCancel,
+  cmdAlertSnapshot,
+  cmdAudit,
+  cmdEventSnapshot,
+  cmdReplay,
+  cmdRollback,
+  cmdSave,
+} from './debug.js';
 import { cmdCheckpoint } from './checkpoint.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
@@ -198,6 +207,8 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   checkpoint: { handler: cmdCheckpoint, completions: ['list', 'save', 'load'] },
   replay: { handler: cmdReplay },
   rollback: { handler: cmdRollback },
+  advance: { handler: cmdAdvance },
+  advance_cancel: { handler: cmdAdvanceCancel },
   help: { handler: cmdHelp, completions: [] },
 };
 

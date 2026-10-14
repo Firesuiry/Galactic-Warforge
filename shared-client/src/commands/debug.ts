@@ -3,7 +3,7 @@ import type { CommandContext } from './game-commands.js';
 import chalk from 'chalk';
 import { ALL_EVENT_TYPES, DEFAULT_EVENT_TYPES } from '../config.js';
 import { fmtError } from './format.js';
-import { getStringOption, hasFlag, parseArgs, parseIntegerArg } from './args.js';
+import { getStringOption, hasFlag, parseArgs, parseIntegerArg, type ParsedArgs } from './args.js';
 
 function parseOptionalInteger(value: string | undefined, label: string): number | undefined {
   if (value === undefined) {
@@ -206,6 +206,84 @@ export async function runSaveCommand(
 
 export async function cmdSave(args: string[], { api }: CommandContext): Promise<string> {
   return runSaveCommand(args, api.sendSave);
+}
+
+/** 把 CLI 的 --no-stop-* 开关翻成 stop_on：默认全开，出现该开关即关闭对应项。 */
+export function advanceStopOnFromArgs(parsed: ParsedArgs) {
+  return {
+    game_over: !hasFlag(parsed, 'no-stop-gameover'),
+    under_attack: !hasFlag(parsed, 'no-stop-attack'),
+    critical_alert: !hasFlag(parsed, 'no-stop-alert'),
+  };
+}
+
+const ADVANCE_HELP = `advance <ticks> [options]
+  <ticks>              Number of ticks to fast-forward (mutually exclusive with --to)
+  --to <tick>          Fast-forward to an absolute tick
+  --no-stop-attack     Do not stop when our buildings/units take damage
+  --no-stop-alert      Do not stop on critical alerts (power shortage / output blocked)
+  --no-stop-gameover   Do not stop when the match ends
+  --json               Print the raw response JSON
+
+Admin only; a multiplayer game (more than one non-bot player) requires the admin role.
+POST /admin/advance — see docs/dev/服务端API.md`;
+
+export async function cmdAdvance(args: string[], { api }: CommandContext): Promise<string> {
+  const parsed = parseArgs(args);
+
+  if (hasFlag(parsed, 'help')) {
+    return ADVANCE_HELP;
+  }
+
+  const ticksArg = parsed.positionals[0];
+  const toTick = parseOptionalInteger(getStringOption(parsed, 'to'), 'to');
+  if (ticksArg !== undefined && toTick !== undefined) {
+    return fmtError('advance: <ticks> 与 --to 只能给一个');
+  }
+  let ticks: number | undefined;
+  if (ticksArg !== undefined) {
+    ticks = parseIntegerArg(ticksArg);
+    if (ticks === undefined || ticks <= 0) {
+      return fmtError('advance: <ticks> 必须是正整数');
+    }
+  }
+  if (ticks === undefined && toTick === undefined) {
+    return fmtError('advance: 需要 <ticks> 或 --to <tick>');
+  }
+
+  try {
+    const result = await api.sendAdvance({
+      ...(ticks !== undefined ? { ticks } : { to_tick: toTick }),
+      stop_on: advanceStopOnFromArgs(parsed),
+    });
+    if (hasFlag(parsed, 'json')) {
+      return JSON.stringify(result, null, 2);
+    }
+    return [
+      `Fast-forward: tick ${chalk.cyan(result.start_tick.toString())} → ${chalk.cyan(result.end_tick.toString())}`,
+      `Stopped: ${chalk.yellow(result.stopped_reason)} ${chalk.dim(result.detail)}`,
+      `Elapsed: ${result.elapsed_ms}ms (${result.ticks_per_sec.toFixed(0)} tick/s)`,
+    ].join('\n');
+  } catch (e) {
+    return fmtError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+export async function cmdAdvanceCancel(args: string[], { api }: CommandContext): Promise<string> {
+  const parsed = parseArgs(args);
+  if (hasFlag(parsed, 'help')) {
+    return `advance_cancel
+  取消进行中的快进（admin）。没有快进时返回 cancelled=false。
+POST /admin/advance/cancel — see docs/dev/服务端API.md`;
+  }
+  try {
+    const result = await api.cancelAdvance();
+    return result.cancelled
+      ? 'Fast-forward cancelled.'
+      : chalk.dim('No fast-forward in progress.');
+  } catch (e) {
+    return fmtError(e instanceof Error ? e.message : String(e));
+  }
 }
 
 export async function cmdReplay(args: string[], { api }: CommandContext): Promise<string> {

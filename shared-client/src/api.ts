@@ -7,6 +7,9 @@ import {
   DEFAULT_SYSTEM_ID,
 } from './config.js';
 import type {
+  AdvanceCancelResponse,
+  AdvanceRequest,
+  AdvanceResponse,
   AlertSnapshotResponse,
   AuditResponse,
   Command,
@@ -548,6 +551,20 @@ export function createApiClient(options: ApiClientOptions) {
     return apiFetch<RollbackResponse>('/rollback', {
       method: 'POST',
       body: JSON.stringify(request),
+    });
+  }
+
+  // 狂飙模式（仅 admin；多人对局另有门禁）：快进到目标 tick，或取消进行中的快进。
+  function sendAdvance(request: AdvanceRequest): Promise<AdvanceResponse> {
+    return apiFetch<AdvanceResponse>('/admin/advance', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  function cancelAdvance(): Promise<AdvanceCancelResponse> {
+    return apiFetch<AdvanceCancelResponse>('/admin/advance/cancel', {
+      method: 'POST',
     });
   }
 
@@ -1376,6 +1393,8 @@ export function createApiClient(options: ApiClientOptions) {
     getServerUrl,
     loadCheckpoint,
     saveCheckpoint,
+    cancelAdvance,
+    sendAdvance,
     sendCommandRequest,
     sendCommands,
     sendReplay,
