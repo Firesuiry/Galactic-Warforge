@@ -279,6 +279,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `set_recipe`：原地切换配方，进度清零（`remaining_ticks`、`progress_fraction`、待产出）、库存保留；省略/空 `recipe_id` 时研究站回研究模式、生产建筑转空闲；校验失败原子拒绝（`recipe_id` 未知 / 该配方不支持此建筑类型 / 配方未研究解锁 / 建筑无 `Production` 模块 / 非本人建筑）。熔炉、制造台建成后随时可用它改配方，无需拆除重建；`target.entity_id` 是建筑 ID（可带 `target.planet_id` 跨行星消歧）。
 - `transfer_item`：`direction` 可选 `to_building`（默认，从背包装入，容量不足部分装填、只扣实际量）或 `to_player`（从主仓/输出缓存取出，受本行星执行体背包容量限制；只取出装得下的部分，回执写「已取出 N 个」，一个都装不下时 `INSUFFICIENT_RESOURCE` +「背包已满（N/容量）」）。**装入落点（试玩 1014 层 06/09/10/11/12）**：只有采掘类建筑（`mining_machine` / `advanced_mining_machine` / `water_pump` / `oil_extractor` / `orbital_collector`）会把主库存搬进输出缓存（它们的输出缓存就是出货口）；其余「无配方且无输出准入清单」的建筑（兵营、补给站、炮塔、储物仓 / 储液罐、物流站、研究模式研究站、战场分析基站等）装入的物料**留在主库存 `storage.inventory`**（UI「本地存储」立刻可见，可从详情「取出」），不再搬进 `output_buffer`——旧实现每 tick 无条件搬空主库存，玩家在「本地存储」只看到 0 /「-」，以为装料失败，要展开「输出缓存」才看得到。取货（皮带 / 分拣器 / 管道）走 `ExportableItemQuantity`（= `output_buffer` + `inventory`）、研究结算走 `OutputQuantity`，都不受影响。**背包（机甲背包）容量是硬上限**：所有入包路径（手搓产出、手动采集、取出、拆除/取消返还、配送机器人投递、黑雾战利品、卸下物流机器人）都由容量裁剪，超出的部分丢弃而不是溢出；`to_building` 目标建筑须有存储（`storage` 或已初始化的地面物流站），否则 `VALIDATION_FAILED`「目标建筑没有存储」——客户端装料下拉据此只列可接收物品的建筑。`to_player` 的两种失败分开报：「<建筑>里没有可取出的「<物品>」」是建筑里真没有该物品，「背包已满（N/200），装不下取出的「<物品>」」是执行体背包装不下（试玩报告 1013 C）。`to_building` 装入**研究模式**（未设配方）的 `matrix_lab` / `self_evolution_lab` 时只接受矩阵类物品，其它物品当场拒绝并说明「…处于研究模式，只接受矩阵（研究耗材）；「…」请送到制造台或仓库」——研究站不会消耗它们，收下只会把背包里的料锁死（试玩报告 1013 B）；把该站切到生产配方后即按普通制造建筑收料。地面物流站须先配物品槽，写入唯一站库 `logistics_station.inventory`；喷涂机只收增产剂；分馏塔与轨道采集器不开放装料。
   **产出预留（试玩 1014 层 04 P1）**：有配方的生产建筑，主库存顶端会按当前配方的一批产出量留出「产出预留」（`storage.reserve`，主库存槽位数），装入 / 皮带 / 分拣器 / 管道送料的主库存可用量都是 `容量 − 预留`，防止原料把成品落货位占满（旧实现把 60 铁矿塞进容量 24 的熔炉后，`pending_outputs` 永远落不下、建筑表面 `running` 却不产出）。装不完的部分**留在背包不扣**，回执写清实际装入量、差额与原因：「已装入 29 个「铁矿」至电弧熔炉，31 个留在背包（主库存 21/24 已到产出预留线（预留 3 个空位给成品「铁块」，先取出成品再装入））」。储物仓等没有配方的建筑 `reserve = 0`，装入仍可吃满容量。
+  **原料与成品走两条互不挤占的通道（试玩 1015）**：输入路径（装入 / 皮带 / 分拣器 / 管道 / `PreviewReceive`）只写**输入缓冲**与主库存的「容量 − 产出预留」段；成品路径（配方产物、副产物、采集产物）只写**输出缓冲**与主库存的**产出预留段**，**成品绝不进输入缓冲**。旧实现把成品也塞进输入缓冲，成品把输入缓冲占满后原料再也进不来、成品也落不下：建筑表面 `running`、每 tick `pending_outputs` 落货失败（实测电弧熔炉 `inventory{iron_ore:23}` + `input_buffer{iron_ingot:5}` + `output_buffer{}` + `pending_outputs[{iron_ingot:1}]`）。采集建筑（采矿机 / 抽水机 / 采油机 / 轨道采集器）没有配方、`reserve = 0`，落点同样是「输出缓冲 → 主库存」，但主库存不受预留约束（它的主库存就是出货缓冲，`settleStorage` 每 tick 把它搬进输出缓冲）。
 
 ### 5.2 机甲（执行体）
 
@@ -337,7 +338,8 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 喷涂机 `spray_coater`（`proliferator_mk1` 解锁，耗电 2）：北侧皮带或 `transfer_item` 补增产剂，西进东出。每份 Mk.I/II/III 提供 12/24/60 喷涂单位，每件货物耗 1 单位、获得 4/6/8 次效果；已喷涂货物直接通过；缺剂显示 `no_proliferator` 但货物原样通过。普通制造台的完整增产链路仍待补齐。
 - 对撞机 `miniature_particle_collider`（`miniature_collider` 解锁，耗电 24，建造须指定 `recipe_id`）：`deuterium_collision`（10 氢 → 5 氘，300 tick）、`strange_matter`（2 粒子容器 + 10 氘 + 2 铁块 → 1 奇异物质，480 tick，需 `strange_matter`）、`antimatter`（2 临界光子 → 2 反物质 + 2 氢，120 tick，需 `dirac_inversion`）。
 - `plasma_capsule`：1 钛合金 + 1 粒子容器 + 2 氢，60 tick，`plasma_turret` 解锁。
-- minerals 收入：采集建筑**实际挖出**量 × `MineralsKickback`（`mining_machine = 1.0`、`advanced_mining_machine = 0.5`、流体采集 0）直充矿物池，与本地存储是否接得下无关；计入 `production_stats.by_item["minerals"]`。`advanced_mining_machine` 的 `coverage_radius = 2` 可多脉同采。
+- minerals 收入：采集建筑**本 tick 实际落地**的量 × `MineralsKickback`（`mining_machine = 1.0`、`advanced_mining_machine = 0.5`、流体采集 0）直充矿物池；计入 `production_stats.by_item["minerals"]`。`advanced_mining_machine` 的 `coverage_radius = 2` 可多脉同采。
+- **矿脉消耗恒等于实际产出（试玩 1015）**：采集结算先「规划」本 tick 各覆盖矿脉的产量，再把产物按矿种落进本地存储（输出缓冲 → 主库存），**只按实际落地的数量扣矿脉**：不变量「矿脉 `remaining` 的减少量 == 实际产出量」对每种矿都成立。旧实现每 tick 无条件按全速扣矿脉，缓冲满后 8 个节点被抽干到 0 而矿石从未落地（试玩实测 tick 8000 全部枯竭、皮带与熔炉里一块矿石都没有）。**产出落不下就不扣矿脉、也不回充 minerals**：本地存储（主库存 + 输出缓冲）都满时该矿机 `output_blocked`，玩家取出矿石（或接上传送带）后自动恢复挖矿与收入。
 
 ### 5.6 物流
 
@@ -471,7 +473,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /world/planets/{planet_id}/inspect?entity_kind=&entity_id=|sector_id=`**：`entity_kind = building|unit|resource|sector`。返回 `planet_id` / `discovered` / `entity_kind` / `entity_id` / `title` 及对应 `building` / `unit` / `resource`。建筑与单位按可见性校验，不可见 404；资源在 runtime 未加载时回退静态地图。
 - `runtime.state = no_power` 时 `state_reason` 为 `under_power`（已接网但分不到电）或 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；燃料型发电机为 `no_fuel`。
-- `runtime.state = running` 时 `state_reason` 也可为 `output_blocked`：生产建筑的整批产出在输出缓冲、输入缓冲与「产出预留之后的主库存」三处都放不下，本 tick 的批次保留待重试（建筑本身仍在 `running`，只是产物出不去）。此时 `production_alerts` 同时报 `output_blocked`；腾出空间（取出成品 / 接上传送带）后下一 tick 自动恢复，`state_reason` 清空（试玩 1014 层 04 P1）。
+- `runtime.state = running` 时 `state_reason` 也可为 `output_blocked`：生产建筑的整批产出在**输出缓冲与产出预留段**两处都放不下（成品不再走输入缓冲，见 §5.1 的两条通道），本 tick 的批次保留待重试（建筑本身仍在 `running`，只是产物出不去）。此时 `production_alerts` 同时报 `output_blocked`；腾出空间（取出成品 / 接上传送带）后下一 tick 自动恢复，`state_reason` 清空（试玩 1014 层 04 P1）。**采集建筑**的 `output_blocked` 判据是「输出缓冲满且主库存也满」（它的主库存就是出货缓冲）。
 - 射线接收站逐 tick 电力结算不在 inspect 中暴露，用 summary / stats / networks 验证。
 
 **`GET /world/planets/{planet_id}/runtime`**：行星运行态。
@@ -533,7 +535,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 参数：`after_alert_id`（推荐）、`since_tick`、`limit`（默认 `alert_history_limit`）。
 - 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
 - 同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。
-- `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲、输入缓冲、产出预留之后的主库存三处都放不下），阻塞解除后告警随之停止。
+- `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。
 
 **`POST /save`**（仅 admin）：请求 `{reason?}`；响应 `ok` / `tick` / `saved_at` / `path` / `trigger`。只覆盖当前 `save.json`，写盘失败 500。
 

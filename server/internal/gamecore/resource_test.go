@@ -101,11 +101,14 @@ func TestOpeningBuildChainMiningRestoresMineralsIncome(t *testing.T) {
 	}
 }
 
-// Full local storage must not freeze minerals kickback: construction currency is
-// keyed off mined amount, while Storage only buffers items for logistics.
-// Regression for 2026-07-31 playtest: minerals plateaued at ~80 once the
-// mining_machine buffer filled (capacity 48) and no belts hauled ore away.
-func TestMineralsKickbackContinuesWhenStorageIsFull(t *testing.T) {
+// A full local storage blocks extraction: construction currency is keyed off
+// the amount that actually reached storage, so a jammed collector neither mines
+// nor credits minerals — the vein stays put instead of being drained into
+// nothing (试玩 1015：矿机缓冲满后仍全速扣矿，8 个节点被抽干而矿石从未落地).
+// Regression for 2026-07-31 playtest: minerals used to plateau once the buffer
+// filled; the fix is that the player sees output_blocked and hauls the ore out,
+// not that mining keeps running with nowhere to put the ore.
+func TestFullCollectorStorageStopsMiningAndKickback(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 1)
 	player := &model.PlayerState{
 		PlayerID:  "p1",
@@ -138,47 +141,52 @@ func TestMineralsKickbackContinuesWhenStorageIsFull(t *testing.T) {
 	}
 	ws.Buildings["miner"] = miner
 
-	// Fill every buffer/inventory slot so further Receive accepts nothing.
-	if miner.Storage == nil {
-		t.Fatal("expected mining machine storage")
-	}
-	for {
-		accepted, _, err := miner.Storage.Receive(model.ItemSiliconOre, 1<<20)
-		if err != nil {
-			t.Fatalf("prefill storage: %v", err)
-		}
-		if accepted == 0 {
-			break
-		}
-	}
-	preview, _, err := miner.Storage.PreviewReceive(model.ItemSiliconOre, 8)
-	if err != nil || preview != 0 {
-		t.Fatalf("expected full storage (preview accept 0), got preview=%d err=%v held=%d",
-			preview, err, totalStorageItems(miner.Storage))
+	// 先让矿机把本地缓冲填满（每 tick 挖 yield 个，跑够 tick 数就满）。
+	for i := 0; i < 64; i++ {
+		settleResources(ws)
 	}
 	heldBefore := totalStorageItems(miner.Storage)
+	if heldBefore <= 0 {
+		t.Fatal("expected the collector to mine into its local storage")
+	}
+	preview, _, err := miner.Storage.PreviewStoreProduct(model.ItemSiliconOre, 8)
+	if err != nil || preview != 0 {
+		t.Fatalf("expected full storage (product preview accept 0), got preview=%d err=%v held=%d",
+			preview, err, heldBefore)
+	}
 
 	prevMinerals := player.Resources.Minerals
 	prevRemaining := ws.Resources["r1"].Remaining
 	for tick := 0; tick < 12; tick++ {
 		settleResources(ws)
-		got := player.Resources.Minerals
-		if got <= prevMinerals {
-			t.Fatalf("tick %d: minerals stalled with full storage: %d -> %d", tick, prevMinerals, got)
+		if got := player.Resources.Minerals; got != prevMinerals {
+			t.Fatalf("tick %d: minerals must not grow while nothing can be stored: %d -> %d", tick, prevMinerals, got)
 		}
-		// Ore must still leave the vein even though nothing fits in the buffer.
-		if rem := ws.Resources["r1"].Remaining; rem >= prevRemaining {
-			t.Fatalf("tick %d: expected vein to keep depleting while storage full: %d -> %d", tick, prevRemaining, rem)
+		// The vein must not be drained while the products have nowhere to go.
+		if rem := ws.Resources["r1"].Remaining; rem != prevRemaining {
+			t.Fatalf("tick %d: vein must not deplete while storage is full: %d -> %d", tick, prevRemaining, rem)
 		}
 		if held := totalStorageItems(miner.Storage); held != heldBefore {
 			t.Fatalf("tick %d: storage should not grow when full (no haul): held %d -> %d", tick, heldBefore, held)
 		}
-		preview, _, err = miner.Storage.PreviewReceive(model.ItemSiliconOre, 8)
+		preview, _, err = miner.Storage.PreviewStoreProduct(model.ItemSiliconOre, 8)
 		if err != nil || preview != 0 {
 			t.Fatalf("tick %d: storage should stay full, preview=%d err=%v", tick, preview, err)
 		}
-		prevMinerals = got
+		prevMinerals = player.Resources.Minerals
 		prevRemaining = ws.Resources["r1"].Remaining
+	}
+
+	// Hauling the ore out resumes both extraction and the minerals kickback.
+	if _, _, err := miner.Storage.Provide(model.ItemSiliconOre, 8); err != nil {
+		t.Fatalf("drain collector: %v", err)
+	}
+	settleResources(ws)
+	if got := player.Resources.Minerals; got <= prevMinerals {
+		t.Fatalf("drained collector must resume the minerals kickback, got %d (was %d)", got, prevMinerals)
+	}
+	if rem := ws.Resources["r1"].Remaining; rem >= prevRemaining {
+		t.Fatalf("drained collector must resume mining, remaining %d (was %d)", rem, prevRemaining)
 	}
 }
 
